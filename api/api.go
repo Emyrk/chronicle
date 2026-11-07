@@ -390,6 +390,10 @@ func (api *API) Routes() chi.Router {
 					r.With(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanCreate_live_session_User)).Post("/live-sessions", api.liveSessions.Create)
 				}
 				r.Get("/me/storage", api.GetMyStorage)
+				r.Get("/me/ai-key", api.GetMyAIKey)
+				r.Post("/me/ai-key", api.CreateMyAIKey)
+				r.Post("/me/ai-key/rotate", api.RotateMyAIKey)
+				r.Delete("/me/ai-key", api.RevokeMyAIKey)
 				if api.Opts.Sidekick != nil {
 					r.Mount("/me/sidekicks", api.Opts.Sidekick.AccountRoutes())
 					r.Mount("/sidekick", api.Opts.Sidekick.StatusRoutes())

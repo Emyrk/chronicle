@@ -88,3 +88,43 @@ func TestAuthenticationMiddlewarePreservesExistingClaims(t *testing.T) {
 
 	require.Equal(t, http.StatusNoContent, rec.Code)
 }
+
+func TestAuthenticationMiddlewareRejectsAIKeys(t *testing.T) {
+	t.Parallel()
+
+	service := &Service{}
+	var state *AuthenticationContext
+	handler := service.AuthenticationMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		state = AuthenticationState(r)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	protected := service.Authenticated(false)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("an AI key reached a protected route")
+	}))
+
+	t.Run("Bearer", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/whoami", nil)
+		req.Header.Set("Authorization", "Bearer ck_00112233445566778899aabbccddeeff")
+		handler.ServeHTTP(httptest.NewRecorder(), req)
+		require.NotNil(t, state)
+		require.Nil(t, state.Claims)
+		require.ErrorIs(t, state.Error, ErrNotAuthorized)
+		require.ErrorContains(t, state.Error, "not as Bearer tokens")
+
+		res := httptest.NewRecorder()
+		service.AuthenticationMiddleware(protected).ServeHTTP(res, req)
+		require.Equal(t, http.StatusUnauthorized, res.Code)
+	})
+
+	t.Run("ClaimsFromAIKeyMiddleware", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/whoami", nil)
+		req = req.WithContext(WithClaims(req.Context(), &claims.Claims{Subject: uuid.New(), AIKeyID: uuid.New()}))
+		handler.ServeHTTP(httptest.NewRecorder(), req)
+		require.Nil(t, state.Claims)
+		require.ErrorIs(t, state.Error, ErrNotAuthorized)
+
+		res := httptest.NewRecorder()
+		service.AuthenticationMiddleware(protected).ServeHTTP(res, req)
+		require.Equal(t, http.StatusUnauthorized, res.Code)
+	})
+}

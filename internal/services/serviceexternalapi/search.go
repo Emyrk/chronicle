@@ -12,6 +12,7 @@ import (
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
+	"github.com/Emyrk/chronicle/internal/aikey"
 	"github.com/Emyrk/chronicle/internal/instancesearch"
 	"github.com/Emyrk/chronicle/internal/ratelimit"
 	"github.com/Emyrk/chronicle/internal/services/serviceinstancesearch"
@@ -32,10 +33,15 @@ type SearchResponse struct {
 	NextCursor string `json:"next_cursor,omitempty"`
 }
 
-// searchCaller is always anonymous: these routes take no credentials, so the
-// anonymous subset, limits and per-IP bucket apply.
+// searchCaller is the AI key's owner when the request carries a valid
+// ai_key, so their tier's budget, fields and sorts apply. Otherwise it is
+// anonymous: the anonymous subset, limits and per-IP bucket apply.
 func searchCaller(r *http.Request) serviceinstancesearch.Caller {
-	return serviceinstancesearch.Caller{TenantID: servicetenant.TenantIDFromContext(r.Context()), IP: externalClientIP(r)}
+	c := serviceinstancesearch.Caller{TenantID: servicetenant.TenantIDFromContext(r.Context()), IP: externalClientIP(r)}
+	if key, ok := aikey.FromContext(r.Context()); ok {
+		c.UserID = key.UserID
+	}
+	return c
 }
 
 // searchWhere reads the search tree from q (query text) or where (JSON).
@@ -143,6 +149,10 @@ func (s *Service) searchInstances(w http.ResponseWriter, r *http.Request) {
 		s.badSearch(w, r, c, false, start, msg, err)
 		return
 	}
+	if key, ok := aikey.FromContext(r.Context()); ok && q.Limit > key.Benefits.ResultsPerSearch {
+		writeKeyLimitTooLarge(w, r, key.Benefits)
+		return
+	}
 	page, result := s.search.Search(r.Context(), c, q)
 	serviceinstancesearch.WriteResult(w, r, result, false)
 	if result.Err != nil {
@@ -156,6 +166,19 @@ func (s *Service) searchInstances(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpapi.Write(r.Context(), w, http.StatusOK, resp)
+}
+
+// writeKeyLimitTooLarge rejects a page size above the key's tier, uncharged.
+func writeKeyLimitTooLarge(w http.ResponseWriter, r *http.Request, b chroniclesdk.AIKeyBenefits) {
+	resp := chroniclesdk.Response{Message: fmt.Sprintf("limit can be at most %d with this AI key.", b.ResultsPerSearch)}
+	for _, t := range aikey.AllTiers() {
+		if t.ResultsPerSearch > b.ResultsPerSearch {
+			resp.CallToAction = fmt.Sprintf("Supporters get up to %d results per search.", t.ResultsPerSearch)
+			resp.Link, resp.LinkText = "/supporter", "View supporter perks"
+			break
+		}
+	}
+	httpapi.Write(r.Context(), w, http.StatusForbidden, resp)
 }
 
 func (s *Service) searchExplain(w http.ResponseWriter, r *http.Request) {
@@ -224,15 +247,15 @@ func searchMarkdown(r *http.Request, resp SearchResponse) string {
 			if guild == "" {
 				guild = "-"
 			}
-			_, _ = fmt.Fprintf(&b, "| [%s](%s/instances/%s) | %s | %s | %s | %d |\n",
-				markdownCell.Replace(res.Name), origin, url.PathEscape(ref), res.StartedAt.UTC().Format("2006-01-02"),
+			_, _ = fmt.Fprintf(&b, "| [%s](%s) | %s | %s | %s | %d |\n",
+				markdownCell.Replace(res.Name), aikey.Link(r.Context(), origin+"/instances/"+url.PathEscape(ref)), res.StartedAt.UTC().Format("2006-01-02"),
 				markdownCell.Replace(res.RealmName), markdownCell.Replace(guild), res.BossesKilled)
 		}
 	}
 	if resp.NextCursor != "" {
 		next := r.URL.Query()
 		next.Set("cursor", resp.NextCursor)
-		_, _ = fmt.Fprintf(&b, "\n[Next page](%s%s?%s)\n", origin, r.URL.Path, next.Encode())
+		_, _ = fmt.Fprintf(&b, "\n[Next page](%s)\n", aikey.Link(r.Context(), origin+r.URL.Path+"?"+next.Encode()))
 	}
 	return b.String()
 }

@@ -6,6 +6,7 @@ import (
 
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/aikey"
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
 	"github.com/Emyrk/chronicle/internal/services/serviceinstancesearch"
@@ -64,6 +65,8 @@ type Service struct {
 	// search is the replica's shared instance-search service; it owns the
 	// concurrency cap and search rate buckets.
 	search *serviceinstancesearch.Service
+	// aiKeys authenticates ?ai_key= requests. Nil disables AI keys.
+	aiKeys *aikey.Authenticator
 
 	deathCache       *summaryCache[*deathSummary]
 	consumablesCache *summaryCache[*consumablesSummary]
@@ -84,8 +87,10 @@ func (s *Service) DependsOn() []string {
 }
 
 func (s *Service) Start(_ context.Context) error {
-	s.db = servicedbstore.DatabaseStore(s.broker)
+	store := servicedbstore.DatabaseStore(s.broker)
+	s.db = store
 	s.search = serviceinstancesearch.SearchService(s.broker)
+	s.aiKeys = aikey.NewAuthenticator(servicelogger.Logger(s.broker), store, s.searchTier)
 	s.setupRoutes()
 	servicelogger.Logger(s.broker).Info("external API service started")
 	return nil
@@ -93,12 +98,22 @@ func (s *Service) Start(_ context.Context) error {
 
 func (s *Service) setupRoutes() {
 	s.router = chi.NewRouter()
+	if s.aiKeys != nil {
+		s.router.Use(s.aiKeys.Middleware)
+	}
 	s.rateLimiter = newExternalIPLimiter()
 	s.openapi = newOpenAPIDocument()
 	summarySlots := make(chan struct{}, summaryMaxConcurrent)
 	s.deathCache = newSummaryCache[*deathSummary](summarySlots)
 	s.consumablesCache = newSummaryCache[*consumablesSummary](summarySlots)
 	s.registerRoutes()
+}
+
+// searchTier is the live supporter tier, from the same check that sets
+// search budgets.
+func (s *Service) searchTier(ctx context.Context, user uuid.UUID) (string, error) {
+	access, err := s.search.UserAccess(ctx, user)
+	return access.Tier, err
 }
 
 func (s *Service) Close(_ context.Context) error { return nil }

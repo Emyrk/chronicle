@@ -1,6 +1,7 @@
 package serviceexternalapi
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -20,6 +21,8 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/dbtestutil"
+	"github.com/Emyrk/chronicle/internal/aikey"
+	"github.com/Emyrk/chronicle/internal/billing"
 	"github.com/Emyrk/chronicle/internal/services/serviceinstancesearch"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/testutil"
@@ -29,6 +32,8 @@ type searchFixture struct {
 	router http.Handler
 	tenant uuid.UUID
 	runs   []uuid.UUID // Molten Core runs, newest first
+	// aiKeys maps a supporter tier to a working AI key whose owner has it.
+	aiKeys map[string]string
 }
 
 // newSearchFixture seeds one tenant with three Molten Core runs and one
@@ -72,6 +77,23 @@ func newSearchFixture(t *testing.T) *searchFixture {
 	}
 	instance("Onyxia's Lair", t0)
 
+	// One AI key per tier, each owned by a user at that tier.
+	f.aiKeys = map[string]string{}
+	tiers := map[uuid.UUID]string{}
+	for _, tier := range []string{billing.TierFree, billing.TierHonored} {
+		owner := uuid.New()
+		exec("INSERT INTO users (id, username, email) VALUES ($1, $2, $3)", owner, "k-"+owner.String()[:8], owner.String()+"@example.com")
+		secret, err := aikey.Generate()
+		require.NoError(t, err)
+		exec("INSERT INTO ai_keys (id, user_id, tenant_id, hashed_secret, expires_at) VALUES ($1, $2, $3, $4, now() + interval '1 hour')",
+			uuid.New(), owner, f.tenant, aikey.Hash(secret))
+		f.aiKeys[tier] = secret
+		tiers[owner] = tier
+	}
+	resolver := func(_ context.Context, user uuid.UUID) (serviceinstancesearch.UserAccess, error) {
+		return serviceinstancesearch.AccessForTier(cmp.Or(tiers[user], billing.TierFree)), nil
+	}
+
 	// A tenant-scoped store that really goes through RLS, as in production.
 	cfg, err = pgxpool.ParseConfig(connURL)
 	require.NoError(t, err)
@@ -84,7 +106,9 @@ func newSearchFixture(t *testing.T) *searchFixture {
 	require.NoError(t, err)
 	t.Cleanup(pool.Close)
 
-	svc := &Service{search: serviceinstancesearch.New(testutil.Logger(t), database.New(pool), prometheus.NewRegistry(), nil)}
+	store := database.New(pool)
+	svc := &Service{search: serviceinstancesearch.New(testutil.Logger(t), store, prometheus.NewRegistry(), resolver)}
+	svc.aiKeys = aikey.NewAuthenticator(testutil.Logger(t), store, svc.searchTier)
 	svc.setupRoutes()
 	router := chi.NewRouter()
 	router.Mount("/api/external/v1", svc)
@@ -260,6 +284,82 @@ func TestSearchGET(t *testing.T) {
 		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 		require.False(t, resp.Matched)
+	})
+}
+
+func TestSearchGETWithAIKey(t *testing.T) {
+	t.Parallel()
+	f := newSearchFixture(t)
+	free, honored := f.aiKeys[billing.TierFree], f.aiKeys[billing.TierHonored]
+	keyed := func(secret string, params ...string) string {
+		return searchPath(append(params, "ai_key", secret)...)
+	}
+
+	t.Run("LoggedInResults", func(t *testing.T) {
+		t.Parallel()
+		// Anonymous callers can't use player filters; a key's owner can.
+		advanced := `players.filter(p, p.class == "PRIEST").size() >= 3`
+		require.Equal(t, http.StatusForbidden, f.get(t, "192.0.2.20", searchPath("q", advanced)).Code)
+		rec := f.get(t, "192.0.2.20", keyed(free, "q", advanced))
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		require.NotEmpty(t, rec.Header().Get(serviceinstancesearch.CostHeader))
+		require.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
+		require.Equal(t, "no-referrer", rec.Header().Get("Referrer-Policy"))
+		require.Equal(t, "noindex", rec.Header().Get("X-Robots-Tag"))
+		require.NotEmpty(t, rec.Header().Get(aikey.ViewsRemainingTodayHeader))
+		// The user's search budget (100 burst), not the anonymous one (40).
+		require.Equal(t, "100", rec.Header().Get("RateLimit-Limit"))
+
+		resp := decodeSearch(t, f.get(t, "192.0.2.20", keyed(free, "q", mcText)))
+		require.Equal(t, f.runs, resultIDs(resp))
+	})
+
+	t.Run("ResultsPerSearchFollowsTier", func(t *testing.T) {
+		t.Parallel()
+		rec := f.get(t, "192.0.2.21", keyed(free, "limit", "26"))
+		require.Equal(t, http.StatusForbidden, rec.Code)
+		require.Contains(t, rec.Body.String(), "limit can be at most 25 with this AI key")
+		require.Equal(t, http.StatusOK, f.get(t, "192.0.2.21", keyed(free, "limit", "25")).Code)
+		require.Equal(t, http.StatusOK, f.get(t, "192.0.2.21", keyed(honored, "limit", "100")).Code)
+	})
+
+	t.Run("MarkdownLinksKeepKey", func(t *testing.T) {
+		t.Parallel()
+		rec := f.get(t, "192.0.2.22", keyed(honored, "q", mcText, "limit", "2", "format", "md"))
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		body := rec.Body.String()
+		require.Contains(t, body, "(http://example.com/instances/"+f.runs[0].String()+"?ai_key="+honored+")")
+		lines := strings.Split(strings.TrimSpace(body), "\n")
+		next := strings.TrimSuffix(strings.TrimPrefix(lines[len(lines)-1], "[Next page]("), ")")
+		require.Contains(t, next, "ai_key="+honored)
+
+		// A link-following agent stays keyed on the next page.
+		rec = f.get(t, "192.0.2.22", next)
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		require.Contains(t, rec.Body.String(), f.runs[2].String()+"?ai_key="+honored)
+		require.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
+	})
+
+	t.Run("Rejected", func(t *testing.T) {
+		t.Parallel()
+		unknown, err := aikey.Generate()
+		require.NoError(t, err)
+		rec := f.get(t, "192.0.2.23", keyed(unknown, "q", mcText))
+		require.Equal(t, http.StatusUnauthorized, rec.Code)
+		require.Contains(t, rec.Body.String(), "not valid")
+
+		req := httptest.NewRequest(http.MethodPost, "/api/external/v1"+keyed(free, "q", mcText), nil)
+		w := httptest.NewRecorder()
+		f.router.ServeHTTP(w, req.WithContext(servicetenant.WithTenantID(testutil.Context(t, testutil.WaitMedium), f.tenant)))
+		require.Equal(t, http.StatusForbidden, w.Code)
+		require.Contains(t, w.Body.String(), "only on GET")
+
+		// A key only works in its own community.
+		req = httptest.NewRequest(http.MethodGet, "/api/external/v1"+keyed(free, "q", mcText), nil)
+		w = httptest.NewRecorder()
+		f.router.ServeHTTP(w, req.WithContext(servicetenant.WithTenantID(testutil.Context(t, testutil.WaitMedium), uuid.New())))
+		require.Equal(t, http.StatusUnauthorized, w.Code)
+		require.Contains(t, w.Body.String(), "different Chronicle community")
 	})
 }
 

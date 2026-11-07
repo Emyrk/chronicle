@@ -21,6 +21,7 @@ import (
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/aikey"
 	"github.com/google/uuid"
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/jackc/pgx/v5"
@@ -431,14 +432,23 @@ func (f summaryFilter) match(pull SummaryPull) bool {
 	return f.attempt == 0 || f.attempt == pull.Attempt
 }
 
-// summaryLinks builds absolute Chronicle URLs from the request origin.
+// summaryLinks builds absolute Chronicle URLs from the request origin. On a
+// keyed request they carry the AI key, so an agent following them keeps access.
 type summaryLinks struct {
+	ctx    context.Context
 	origin string
 	realm  string
 }
 
 func newSummaryLinks(r *http.Request, instance SummaryInstance) summaryLinks {
-	return summaryLinks{origin: requestOrigin(r), realm: instance.RealmName}
+	return summaryLinks{ctx: r.Context(), origin: requestOrigin(r), realm: instance.RealmName}
+}
+
+func (l summaryLinks) link(u string) string {
+	if l.ctx == nil {
+		return u
+	}
+	return aikey.Link(l.ctx, u)
 }
 
 func (l summaryLinks) instance(instance SummaryInstance) SummaryInstance {
@@ -446,13 +456,13 @@ func (l summaryLinks) instance(instance SummaryInstance) SummaryInstance {
 	if ref == "" {
 		ref = instance.ID.String()
 	}
-	instance.URL = l.origin + "/instances/" + url.PathEscape(ref)
+	instance.URL = l.link(l.origin + "/instances/" + url.PathEscape(ref))
 	return instance
 }
 
 func (l summaryLinks) player(player SummaryPlayer) SummaryPlayer {
 	if l.realm != "" && player.Name != "" && player.Name != player.GUID {
-		player.URL = l.origin + "/armory/" + url.PathEscape(l.realm) + "/" + url.PathEscape(player.Name)
+		player.URL = l.link(l.origin + "/armory/" + url.PathEscape(l.realm) + "/" + url.PathEscape(player.Name))
 	}
 	return player
 }

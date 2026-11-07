@@ -29,4 +29,7 @@ type Claims struct {
 	// Version is the Chronicle version that issued this JWT.
 	// Used to reject old tokens when auth changes require re-login.
 	Version *string `json:"ver,omitempty"`
+	// AIKeyID is set when an AI key (?ai_key=) authenticated the request.
+	// AI keys are read-only and are never issued as JWTs.
+	AIKeyID uuid.UUID `json:"aikid,omitempty"`
 }
