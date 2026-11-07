@@ -113,3 +113,25 @@ also depend on vacuum/visibility-map state; do not extrapolate them to recently
 mutated tables without remeasurement.
 
 Safety tests: `python3 -m unittest discover -s scripts/leaderboardmock -p 'test_*.py'`.
+
+## Bounded duration demonstration (migrated local preview only)
+
+After seeding a dedicated mock database migrated through346, attach real synthetic
+source records to at most12 top player summaries per catalog boss:
+
+```sh
+python3 scripts/leaderboardmock/mock.py peak-examples \
+  --database-url 'postgresql://postgres:LOCAL_PASSWORD@127.0.0.1:55449/chronicle_lbmock_preview' \
+  --allow-local-writes --instance 'Molten Core'
+```
+
+The same loopback/name/marker safeguards apply. This adds an explicitly synthetic
+owner, unlisted log group, parsed group, instance, and actual encounter records;
+only the bounded sample receives matching peak encounter IDs and durations. It
+does not change raw scores, observation counts, or millions of other summaries.
+Records use a deterministic fixture namespace and reruns are supported. No uploaded
+raw log or clickable source link is claimed. The fixture deletes its source instance
+inside a savepoint, checks that summary provenance survives, and rolls that deletion
+back before committing the demo. Other summaries retain honest null provenance.
+
+The live preview's Ragnaros Peak first page now demonstrates non-null durations.

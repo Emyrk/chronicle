@@ -129,6 +129,47 @@ def seed(db, args):
     actual = db.run(f"SET app.tenant_bypass='true'; SELECT count(*),sum(observation_count) FROM leaderboard_player_boss_subjects WHERE tenant_id='{TENANT}';")
     print(json.dumps({"synthetic":True,"target":db.name,"summary_rows_and_represented_history":actual,"source_scale_reference":args.source_scale,"parameters":{k:v for k,v in vars(args).items() if k!='database_url'}}, indent=2))
 
+def peak_examples(db, args):
+    """Attach a bounded synthetic source chain, never replay or backfill history."""
+    db.check_marker()
+    instance = literal(args.instance)
+    db.run(f"""BEGIN; SET LOCAL app.tenant_bypass='true';
+    CREATE TEMP TABLE peak_examples ON COMMIT DROP AS
+    SELECT s.*, md5('lbmock-peak-example|'||s.instance_name||'|'||s.encounter_name||'|'||s.realm_id||'|'||s.player_guid||'|'||s.player_class||'|'||s.player_spec||'|'||s.player_sub_spec||'|'||s.metric)::uuid AS source_id,
+      (120000 + row_number() OVER (ORDER BY s.encounter_name,s.raw_peak DESC,s.player_guid,s.player_spec)*1000)::bigint AS duration_ms
+    FROM leaderboard_bosses b CROSS JOIN LATERAL (
+      SELECT * FROM leaderboard_player_boss_subjects s
+      WHERE s.tenant_id='{TENANT}' AND s.realm_id='{REALM}' AND s.instance_name={instance}
+       AND s.encounter_name=b.encounter_name AND s.difficulty_name='' AND s.max_players=0 AND s.metric='dps'
+      ORDER BY s.raw_peak DESC,s.player_guid,s.player_class,s.player_spec,s.player_sub_spec LIMIT 12
+    ) s WHERE b.instance_name={instance};
+    DO $$ BEGIN IF NOT EXISTS (SELECT FROM peak_examples) THEN RAISE EXCEPTION 'No seeded summaries for peak examples'; END IF; END $$;
+    INSERT INTO users(id,username,email) VALUES (md5('lbmock-peak-owner')::uuid,'Synthetic peak demonstration','lbmock-peak@example.invalid') ON CONFLICT(id) DO NOTHING;
+    INSERT INTO wow_log_groups(id,owner,unlisted) VALUES (md5('lbmock-peak-group|'||{instance})::uuid,md5('lbmock-peak-owner')::uuid,true) ON CONFLICT(id) DO NOTHING;
+    INSERT INTO parsed_log_group(id) VALUES (md5('lbmock-peak-group|'||{instance})::uuid) ON CONFLICT(id) DO NOTHING;
+    INSERT INTO log_instances(id,realm_id,log_group_id,name,recorder_name)
+      VALUES (md5('lbmock-peak-instance|'||{instance})::uuid,'{REALM}',md5('lbmock-peak-group|'||{instance})::uuid,{instance},'SYNTHETIC duration demonstration - no uploaded log') ON CONFLICT(id) DO NOTHING;
+    INSERT INTO log_instance_encounters(id,instance_id,name,remaining,boss,start_time,end_time,kill_type)
+      SELECT source_id,md5('lbmock-peak-instance|'||{instance})::uuid,encounter_name,ARRAY[]::wow_guid[],true,
+       '2026-01-01T00:00:00Z'::timestamptz,'2026-01-01T00:00:00Z'::timestamptz+duration_ms*interval '1 millisecond','clean'
+      FROM peak_examples ON CONFLICT(id) DO UPDATE SET end_time=EXCLUDED.end_time;
+    UPDATE leaderboard_player_boss_subjects s SET peak_encounter_id=p.source_id,peak_duration_ms=p.duration_ms FROM peak_examples p
+     WHERE s.tenant_id=p.tenant_id AND s.instance_name=p.instance_name AND s.encounter_name=p.encounter_name
+      AND s.difficulty_name=p.difficulty_name AND s.max_players=p.max_players AND s.realm_id=p.realm_id AND s.player_guid=p.player_guid
+      AND s.player_class=p.player_class AND s.player_spec=p.player_spec AND s.player_sub_spec=p.player_sub_spec AND s.metric=p.metric;
+    -- Exercise source retention: deletion cascades through the source chain but
+    -- never deletes or rejects summary provenance. Roll it back, preserving demo.
+    SAVEPOINT source_retention_check;
+    DELETE FROM log_instances WHERE id=md5('lbmock-peak-instance|'||{instance})::uuid;
+    DO $$ BEGIN
+      IF (SELECT count(*) FROM leaderboard_player_boss_subjects s JOIN peak_examples p ON s.peak_encounter_id=p.source_id) <> (SELECT count(*) FROM peak_examples)
+      THEN RAISE EXCEPTION 'Source deletion changed summary provenance'; END IF;
+    END $$;
+    ROLLBACK TO SAVEPOINT source_retention_check;
+    SELECT count(*) FROM peak_examples;
+    COMMIT;""")
+    print("Synthetic peak sources attached to at most 12 summaries per catalog boss; source-deletion rollback check passed. No raw uploaded log or public source link is claimed.")
+
 def bench(db, args):
     db.check_marker()
     # Benchmark the same enabled policy selection as the API, not disabled
@@ -164,7 +205,7 @@ def main():
     p.add_argument('--allow-local-writes',action='store_true',help='Required for initialization/seeding; never inferred from environment')
     p.add_argument('--prepare-migrated',action='store_true',help='Mark an already migrated dedicated mock dev database; requires write approval')
     p.add_argument('--init',action='store_true',help='Initialize EMPTY mock database from dump and configuration seeds')
-    p.add_argument('action',choices=['seed','fixture','bench'])
+    p.add_argument('action',choices=['seed','fixture','bench','peak-examples'])
     p.add_argument('--subjects',type=int,default=10000)
     p.add_argument('--cohorts',type=int,default=4)
     p.add_argument('--history',type=int,default=44)
@@ -189,7 +230,7 @@ def main():
     p.add_argument('--output',default='/tmp/leaderboard-benchmark.json')
     args=p.parse_args()
     if min(args.subjects,args.cohorts,args.history,args.repeats)<1 or not 0<=args.coverage<=100 or not 0<args.skew<=10: p.error('Invalid synthetic distribution bounds')
-    if (args.init or args.prepare_migrated or args.action in ('seed','fixture')) and not args.allow_local_writes: p.error('Explicit --allow-local-writes required')
+    if (args.init or args.prepare_migrated or args.action in ('seed','fixture','peak-examples')) and not args.allow_local_writes: p.error('Explicit --allow-local-writes required')
     if args.action=='bench' and ((args.kind=='renown') != (args.score=='renown') or (args.kind=='clear' and args.subject!='guild')): p.error('Invalid benchmark board/score combination')
     db=Database(args.database_url)
     if args.init and args.prepare_migrated: p.error('Choose init OR prepare-migrated')
@@ -197,6 +238,7 @@ def main():
     if args.prepare_migrated:
         db.run("SELECT 1 FROM leaderboard_player_boss_subjects LIMIT 0; CREATE TABLE leaderboard_mock_marker(key text PRIMARY KEY, value text NOT NULL); INSERT INTO leaderboard_mock_marker VALUES ('purpose','synthetic-only');")
     if args.action=='seed': seed(db,args)
+    elif args.action=='peak-examples': peak_examples(db,args)
     elif args.action=='fixture':
         db.check_marker()
         db.run("BEGIN;" + (ROOT / "internal/leaderboardread/testdata/read_fixture.sql").read_text() + "COMMIT;")

@@ -1,4 +1,7 @@
 import unittest
+import subprocess
+import sys
+from pathlib import Path
 from mock import validate_target, query_sql
 
 class SafetyTests(unittest.TestCase):
@@ -16,6 +19,11 @@ class SafetyTests(unittest.TestCase):
             'postgresql:///chronicle_lbmock_fixture',
         ]:
             with self.subTest(value=value), self.assertRaises(ValueError): validate_target(value)
+
+    def test_peak_examples_require_explicit_write_approval(self):
+        result = subprocess.run([sys.executable, str(Path(__file__).with_name("mock.py")), "peak-examples", "--database-url", "postgresql://test:local@127.0.0.1:55439/chronicle_lbmock_fixture"], capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Explicit --allow-local-writes required", result.stderr)
 
     def test_benchmark_uses_application_query(self):
         class Values(dict):
