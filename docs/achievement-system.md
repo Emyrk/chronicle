@@ -12,6 +12,7 @@ The proposed model uses:
 - Ranked achievement series for increasing proficiency in one concept.
 - Category Mastery achievements for completing the important series in a category.
 - Achievement points as a record of breadth, with cosmetics as the primary reward.
+- A visible global completion percentage for every achievement.
 - Semantic product events so achievements are independent of individual React components.
 
 This document inventories the current product, proposes an initial achievement catalog, and identifies the product and engineering decisions needed before implementation.
@@ -539,6 +540,58 @@ The launch catalog should prefer one-shot, set, and meta evaluators. Counters in
 
 For expression-based criteria, store a compact progress projection rather than replaying all historical events on every request.
 
+## Completion percentage
+
+Every achievement must display the percentage of users who have earned it. The standard label is:
+
+```text
+12.4% of users have this achievement
+```
+
+The percentage is part of the achievement contract, not an optional analytics view. It appears on achievement cards, detail views, search results, earned-achievement views, and Category Mastery or meta-achievement entries.
+
+### Calculation
+
+For a normal achievement:
+
+```text
+completion_percentage = earned_eligible_accounts / eligible_accounts * 100
+```
+
+Use one consistent account cohort across the active catalog so percentages remain comparable between achievements. The cohort should:
+
+- Count accounts, not characters.
+- Exclude deleted, banned, internal, test, and identified automated accounts.
+- Include accounts that have used an achievement-bearing Chronicle surface during the catalog's measurement window.
+- Include both supporters and non-supporters.
+- Apply the same retroactive-credit policy used by the achievement evaluator.
+
+Do not change the denominator per achievement based on the current report, device, server capabilities, or whether the account has discovered the feature. Those constraints can affect completion, but a custom denominator would make two displayed percentages mean different things.
+
+Retired achievements and Feats of Strength should freeze their percentage and denominator when they retire. Versioned replacement achievements begin a new percentage rather than inheriting the old definition's rate.
+
+### Display rules
+
+- Show one decimal place from `0.1%` through `99.9%`.
+- Show `Less than 0.1%` for a nonzero rate below `0.1%`.
+- Show `0%` only when no eligible account has earned the achievement.
+- Show `100%` only when every eligible account has earned it.
+- Hidden achievements still expose their completion percentage. Their name and criteria may remain hidden until earned.
+- Aggregate percentages never reveal which accounts earned an achievement.
+- Cache aggregate counts and update them asynchronously. Achievement completion itself must not wait for global percentage recomputation.
+
+The aggregate projection should retain at least:
+
+```text
+achievement_id
+achievement_version
+earned_eligible_account_count
+eligible_account_count
+completion_percentage
+calculated_at
+frozen_at
+```
+
 ## Retroactive credit
 
 Retroactive awards are desirable when Chronicle already has authoritative evidence:
@@ -589,6 +642,7 @@ The browser should provide:
 - Earned points and total available core points.
 - Series and rank presentation.
 - Category Mastery progress.
+- The percentage of users who have earned every listed achievement.
 - Search and filters for earned, in progress, hidden, and reward-bearing achievements.
 - Capability-aware descriptions so impossible actions are not promoted in the current context.
 - A clear link from an achievement to the relevant Chronicle feature where practical.
@@ -611,6 +665,7 @@ A completion toast should show:
 - Achievement name and icon.
 - Points earned.
 - Series rank or Category Mastery status.
+- The percentage of users who have earned it.
 - Reward, if any.
 - A link to inspect the category.
 
