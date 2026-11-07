@@ -40,13 +40,13 @@ func (api *API) OGRoutes() []frontend.OGRoute {
 		{
 			Pattern: "/instances/{idOrSlug}",
 			Resolve: func(r *http.Request) *frontend.OGData {
-				return api.instanceOG(ogHost(r), chi.URLParam(r, "idOrSlug"))
+				return api.instanceOG(r, ogHost(r), chi.URLParam(r, "idOrSlug"))
 			},
 		},
 		{
 			Pattern: "/s/{code}",
 			Resolve: func(r *http.Request) *frontend.OGData {
-				return api.shareOG(ogHost(r), chi.URLParam(r, "code"))
+				return api.shareOG(r, ogHost(r), chi.URLParam(r, "code"))
 			},
 		},
 		{
@@ -326,7 +326,7 @@ func talentOGImageParams(classSlug, build string) url.Values {
 	return params
 }
 
-func (api *API) instanceOG(host, idOrSlug string) *frontend.OGData {
+func (api *API) instanceOG(r *http.Request, host, idOrSlug string) *frontend.OGData {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -335,10 +335,10 @@ func (api *API) instanceOG(host, idOrSlug string) *frontend.OGData {
 		return nil
 	}
 
-	return api.buildInstanceOG(ctx, host, inst)
+	return api.buildInstanceOG(ctx, r, host, inst)
 }
 
-func (api *API) shareOG(host, code string) *frontend.OGData {
+func (api *API) shareOG(r *http.Request, host, code string) *frontend.OGData {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -361,10 +361,10 @@ func (api *API) shareOG(host, code string) *frontend.OGData {
 		return nil
 	}
 
-	return api.buildInstanceOG(ctx, host, inst)
+	return api.buildInstanceOG(ctx, r, host, inst)
 }
 
-func (api *API) buildInstanceOG(ctx context.Context, host string, inst database.LogInstancesGuild) *frontend.OGData {
+func (api *API) buildInstanceOG(ctx context.Context, r *http.Request, host string, inst database.LogInstancesGuild) *frontend.OGData {
 	db := api.Opts.Zed
 
 	encounters, _ := db.EncountersByInstanceID(ctx, inst.ID)
@@ -421,12 +421,26 @@ func (api *API) buildInstanceOG(ctx context.Context, host string, inst database.
 		host = inst.TenantSlug.String + "." + api.Opts.Tenant.PrimaryDomain()
 	}
 
-	return &frontend.OGData{
+	og := &frontend.OGData{
 		Title:       title.String(),
 		Description: desc.String(),
 		URL:         fmt.Sprintf("https://%s/instances/%s", host, identifier),
 		ImageURL:    instanceOGImageURL(host, inst.Name),
 	}
+	if card := api.raidCardImageURL(ctx, r, host, inst, raidCard{
+		Guild:    inst.GuildName.String,
+		Raid:     inst.Name,
+		Realm:    inst.RealmName,
+		Date:     startDate,
+		Players:  len(players),
+		Kills:    bossKills,
+		Bosses:   distinctBossEncounters(encounters),
+		Duration: dur,
+		Comp:     raidComposition(players),
+	}); card != "" {
+		og.ImageURL = card
+	}
+	return og
 }
 
 func instanceOGImageURL(host, instanceName string) string {

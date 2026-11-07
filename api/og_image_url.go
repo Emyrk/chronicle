@@ -22,7 +22,7 @@ const ogImageVersion = "1"
 // "product" is kept only when that name is empty. Every value goes through
 // sanitizeOGParam before signing. params is not modified.
 func (api *API) ogImageURL(r *http.Request, template string, params url.Values) string {
-	if api.Opts == nil || api.Opts.OGServiceURL == nil || api.Opts.OGSigningKey == "" {
+	if !api.ogServiceConfigured() {
 		return ""
 	}
 	return api.ogImageURLForProduct(r, template, seoProductName(api.resolvedSiteFlavor(r.Context())), params)
@@ -38,6 +38,12 @@ func (api *API) ogImageURLForProduct(r *http.Request, template, product string, 
 		host = ogHost(r)
 	}
 	return signedOGImageURL(api.Opts.OGServiceURL, api.Opts.OGSigningKey, template, host, product, params)
+}
+
+// ogServiceConfigured reports whether ogImageURL can sign URLs, so callers
+// can skip loading card data when it can't.
+func (api *API) ogServiceConfigured() bool {
+	return api.Opts != nil && api.Opts.OGServiceURL != nil && api.Opts.OGSigningKey != ""
 }
 
 func signedOGImageURL(base *url.URL, key, template, host, product string, params url.Values) string {
