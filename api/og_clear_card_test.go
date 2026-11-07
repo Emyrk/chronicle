@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"testing"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/dbtestutil"
 	"github.com/Emyrk/chronicle/internal/services/servicerankings"
+	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/Emyrk/chronicle/internal/timeparsepolicy"
 )
@@ -129,21 +131,57 @@ func TestClearRecordDelta(t *testing.T) {
 	t.Parallel()
 
 	start := time.Now()
-	self := clearSelf{instanceID: uuid.New(), durationMs: 2_092_000, start: start}
-	past := []clearPastRun{
-		{durationMs: 2_200_000, completed: start.Add(-48 * time.Hour)},
-		{durationMs: 2_156_400, completed: start.Add(-24 * time.Hour)}, // the record it broke
-		{durationMs: 2_000_000, completed: start.Add(time.Hour)},      // later: not a previous record
-		{durationMs: 2_090_000, completed: start.Add(time.Second)},    // a duplicate upload finishing with it
+	us, them := uuid.New(), uuid.New()
+	self := clearSelf{instanceID: uuid.New(), guildID: us, durationMs: 2_092_000, start: start}
+	board := []database.SpeedrunLeaderboardRow{
+		boardRow(us, 2_092_000, start.Add(time.Hour)), // our best: this run
+		boardRow(them, 2_190_000, start.Add(-72*time.Hour)),
 	}
-	delta := clearRecordDelta(past, self)
-	require.NotNil(t, delta)
-	require.Equal(t, -64, *delta)
+	board[0].InstanceID = self.instanceID
+	own := []clearPastRun{
+		{durationMs: 2_156_400, completed: start.Add(-7 * 24 * time.Hour)}, // the record it broke
+		{durationMs: 2_090_000, completed: start.Add(time.Second)},         // a duplicate upload finishing with it
+	}
 
-	require.Nil(t, clearRecordDelta(past[2:], self), "no earlier run: first record")
-	require.Nil(t, clearRecordDelta([]clearPastRun{{durationMs: 2_092_200, completed: start.Add(-time.Hour)}}, self), "under half a second")
-	require.Nil(t, clearRecordDelta([]clearPastRun{{durationMs: 2_000_000, completed: start.Add(-time.Hour)}}, self), "slower than the record")
-	require.Nil(t, clearRecordDelta(past, clearSelf{durationMs: 1}), "no start time")
+	t.Run("exact", func(t *testing.T) {
+		t.Parallel()
+		delta := clearRecordDelta(board, own, self, 100)
+		require.NotNil(t, delta)
+		require.Equal(t, -64, *delta, "vs the guild's own earlier run, not the other guild's")
+		delta = clearRecordDelta(board, nil, self, 100)
+		require.NotNil(t, delta)
+		require.Equal(t, -98, *delta, "only the other guild's run is earlier")
+	})
+
+	t.Run("another guild's best finished later and beats the previous record", func(t *testing.T) {
+		t.Parallel()
+		// That guild may have had an unseen earlier run that was the record.
+		later := append(slices.Clone(board), boardRow(uuid.New(), 2_120_000, start.Add(24*time.Hour)))
+		require.Nil(t, clearRecordDelta(later, own, self, 100))
+		// A later best slower than the previous record can't hide one faster.
+		slower := append(slices.Clone(board), boardRow(uuid.New(), 2_300_000, start.Add(24*time.Hour)))
+		require.NotNil(t, clearRecordDelta(slower, own, self, 100))
+	})
+
+	t.Run("full board ends faster than the previous record", func(t *testing.T) {
+		t.Parallel()
+		// A run past the cap could be faster than the previous record: with
+		// only this run on a full one-row board, the guild's 35:56 isn't
+		// provably the record.
+		require.Nil(t, clearRecordDelta(board[:1], own, self, 1))
+		delta := clearRecordDelta(board[:1], own, self, 2)
+		require.NotNil(t, delta, "board not full")
+		require.Equal(t, -64, *delta)
+		require.NotNil(t, clearRecordDelta(board, nil, self, 2), "full, but the previous record is its last row")
+	})
+
+	t.Run("no delta", func(t *testing.T) {
+		t.Parallel()
+		require.Nil(t, clearRecordDelta(board[:1], nil, self, 100), "no earlier run: first record")
+		require.Nil(t, clearRecordDelta(nil, []clearPastRun{{durationMs: 2_092_200, completed: start.Add(-time.Hour)}}, self, 100), "under half a second")
+		require.Nil(t, clearRecordDelta(nil, []clearPastRun{{durationMs: 2_000_000, completed: start.Add(-time.Hour)}}, self, 100), "slower than the record")
+		require.Nil(t, clearRecordDelta(board, own, clearSelf{durationMs: 1}, 100), "no start time")
+	})
 }
 
 func encounter(name string, kill database.KillType, end time.Time) database.LogInstanceEncounter {
@@ -167,15 +205,40 @@ func TestClearSplits(t *testing.T) {
 		encounter("Hakkar", database.KillTypeClean, at(1000)), // killed twice: first kill counts
 		{Name: "Trash", KillType: database.KillTypeClean, EndTime: database.Timestamptz(at(100))},
 	}
-	progression := []string{"High Priestess Jeklik", "Bloodlord Mandokir", "Hakkar"}
+	progression := []string{"High Priestess Jeklik", "Bloodlord Mandokir", "Hakkar", "High Priestess Arlokk"}
+	done := at(900)
 
-	require.Equal(t, []clearCardSplit{{"Jeklik", 200}, {"Mandokir", 300}, {"Hakkar", 400}}, clearSplits(encounters, progression, start))
+	require.Equal(t, []clearCardSplit{{"Jeklik", 200}, {"Mandokir", 300}, {"Hakkar", 400}}, clearSplits(encounters, progression, start, done))
 
-	// Without a registry list every boss kill counts.
-	require.Equal(t, []clearCardSplit{{"Jeklik", 200}, {"Gahz'ranka", 100}, {"Mandokir", 200}, {"Hakkar", 400}}, clearSplits(encounters, nil, start))
+	// Without a registry list every boss kill in the window counts.
+	require.Equal(t, []clearCardSplit{{"Jeklik", 200}, {"Gahz'ranka", 100}, {"Mandokir", 200}, {"Hakkar", 400}}, clearSplits(encounters, nil, start, done))
 
 	// No start time: the first split is unknown (0), the rest still add up.
-	require.Equal(t, []clearCardSplit{{"Jeklik", 0}, {"Mandokir", 300}, {"Hakkar", 400}}, clearSplits(encounters, progression, time.Time{}))
+	require.Equal(t, []clearCardSplit{{"Jeklik", 0}, {"Mandokir", 300}, {"Hakkar", 400}}, clearSplits(encounters, progression, time.Time{}, done))
+
+	t.Run("ZG: Arlokk after Hakkar runs past the completion", func(t *testing.T) {
+		t.Parallel()
+		// Only Mandokir, Jin'do and Hakkar are required, so the clear ends at
+		// Hakkar; a later Arlokk kill adds no segment and doesn't take the
+		// final label.
+		withArlokk := append(slices.Clone(encounters), encounter("High Priestess Arlokk", database.KillTypeClean, at(1200)))
+		splits := clearSplits(withArlokk, progression, start, done)
+		require.Equal(t, []clearCardSplit{{"Jeklik", 200}, {"Mandokir", 300}, {"Hakkar", 400}}, splits)
+		total := 0
+		for _, split := range splits {
+			total += split.Secs
+		}
+		require.Equal(t, 900, total, "splits add up to the timer")
+	})
+
+	t.Run("a kill at or before the ranked start is dropped", func(t *testing.T) {
+		t.Parallel()
+		// Ranked timing starts after the first boss (Ulduar starts after
+		// Flame Leviathan): no pre-run time bleeds into the next split.
+		ranked := at(250)
+		require.Equal(t, []clearCardSplit{{"Mandokir", 250}, {"Hakkar", 400}}, clearSplits(encounters, progression, ranked, done))
+		require.Equal(t, []clearCardSplit{{"Mandokir", 300}, {"Hakkar", 400}}, clearSplits(encounters, progression, at(200), done), "a kill exactly at the start")
+	})
 }
 
 func TestOGSplitName(t *testing.T) {
@@ -183,16 +246,35 @@ func TestOGSplitName(t *testing.T) {
 
 	for name, want := range map[string]string{
 		"Lucifron":                 "Lucifron",
-		"Baron Geddon":             "Geddon",
+		"Baron Geddon":             "Baron Geddon", // 12 characters: kept whole
 		"Majordomo Executus":       "Majordomo",
 		"Golemagg the Incinerator": "Golemagg",
 		"Sulfuron Harbinger":       "Sulfuron",
-		"The Prophet Skeram":       "Skeram",
 		"High Priestess Mar'li":    "Mar'li",
 		"Jin'do the Hexxer":        "Jin'do",
 		"Razorgore the Untamed":    "Razorgore",
 		"Broodlord Lashlayer":      "Lashlayer",
-		"Odd:Name,Here":            "OddNameHere",
+		"Odd:Name,Here":            "Odd",
+		// AQ40
+		"The Prophet Skeram":        "Skeram",
+		"Bug Family":                "Bug Family",
+		"Bug Family: Vem":           "Bug Family",
+		"Battleguard Sartura":       "Sartura",
+		"Fankriss the Unyielding":   "Fankriss",
+		"Princess Huhuran":          "Huhuran",
+		"Twin Emperors":             "Twins",
+		"Twin Emperors: Vek'nilash": "Twins",
+		"C'Thun":                    "C'Thun",
+		// Turtle: Karazhan, Emerald Sanctum
+		"Lord Blackwald II":      "Blackwald",
+		"Keeper Gnarlmoon":       "Gnarlmoon",
+		"Ley-Watcher Incantagos": "Incantagos",
+		"Echo of Medivh":         "Medivh",
+		"Brood Queen Araxxna":    "Araxxna",
+		"Clawlord Howlfang":      "Howlfang",
+		"Sanv Tas'dal":           "Sanv Tas'dal",
+		"Rupturan the Broken":    "Rupturan",
+		"Solnius the Awakener":   "Solnius",
 	} {
 		require.Equal(t, want, ogSplitName(name), name)
 	}
@@ -204,6 +286,29 @@ type slowBoardStore struct{ database.Store }
 func (slowBoardStore) SpeedrunLeaderboard(ctx context.Context, _ database.SpeedrunLeaderboardParams) ([]database.SpeedrunLeaderboardRow, error) {
 	<-ctx.Done()
 	return nil, ctx.Err()
+}
+
+// unlistedStore reports every log group as unlisted.
+type unlistedStore struct{ database.Store }
+
+func (unlistedStore) GetWoWLogGroupUnlisted(context.Context, uuid.UUID) (bool, error) {
+	return true, nil
+}
+
+// tenantStore serves a tenant's parse config and the root (Nil-tenant)
+// time-parse score, so the parse-disabled check is what decides.
+type tenantStore struct {
+	database.Store
+	parseConfig []byte
+}
+
+func (s tenantStore) GetTenantByID(_ context.Context, id uuid.UUID) (database.Tenant, error) {
+	return database.Tenant{ID: id, ParseConfig: s.parseConfig}, nil
+}
+
+func (s tenantStore) GetTimeParseScoreForContract(ctx context.Context, arg database.GetTimeParseScoreForContractParams) (database.TimeParseScore, error) {
+	arg.TenantID = uuid.Nil
+	return s.Store.GetTimeParseScoreForContract(ctx, arg)
 }
 
 // failingSpeedrunStore fails the speedrun lookup.
@@ -218,12 +323,16 @@ type clearFixture struct {
 	inst  database.LogInstancesGuild // the shared run: 34:52, a new realm record
 	low   database.LogInstancesGuild // qualified, time-parse 85
 	slow  database.LogInstancesGuild // qualified, not computed
+	pug   database.LogInstancesGuild // qualified, no guild, time-parse 95
+	lowc  database.LogInstancesGuild // qualified, low_confidence time-parse 92
+	hide  database.LogInstancesGuild // qualified, time-parse 96, log group unlisted
 }
 
 // seedClearCard stores three qualified Molten Core runs on one realm: the
 // guild's earlier record (35:56), another guild's run (36:30), and the shared
 // run (34:52) with a server clear-time parse of 98 (#6 of 318). A fourth run
-// has a time-parse of 85, a fifth has none.
+// has a time-parse of 85, a fifth has none; a guildless run, a low-confidence
+// one and an unlisted one follow.
 func seedClearCard(t *testing.T) clearFixture {
 	t.Helper()
 	pool, _ := dbtestutil.NewPGXPool(t)
@@ -263,7 +372,7 @@ func seedClearCard(t *testing.T) clearFixture {
 		require.NoError(t, store.InsertParsedLogGroup(ctx, logGroupID))
 		end := start.Add(time.Duration(secs) * time.Second)
 		_, err = store.InsertInstance(ctx, database.InsertInstanceParams{
-			ID: instanceID, RealmID: realmID, LogGroupID: logGroupID, GuildID: uuid.NullUUID{UUID: guildID, Valid: true},
+			ID: instanceID, RealmID: realmID, LogGroupID: logGroupID, GuildID: uuid.NullUUID{UUID: guildID, Valid: guildID != uuid.Nil},
 			Name: "Molten Core", Capabilities: []string{}, DifficultyName: "Normal", MaxPlayers: 40,
 			StartTime: database.Timestamptz(start), EndTime: database.Timestamptz(end),
 		})
@@ -280,7 +389,7 @@ func seedClearCard(t *testing.T) clearFixture {
 		}
 		ms := int64(secs) * 1000
 		require.NoError(t, store.InsertInstanceSpeedrun(ctx, database.InsertInstanceSpeedrunParams{
-			InstanceID: instanceID, InstanceName: "Molten Core", RealmID: realmID, GuildID: uuid.NullUUID{UUID: guildID, Valid: true},
+			InstanceID: instanceID, InstanceName: "Molten Core", RealmID: realmID, GuildID: uuid.NullUUID{UUID: guildID, Valid: guildID != uuid.Nil},
 			Qualified: true, StartTime: database.Timestamptz(start), CompletionTime: database.Timestamptz(end), DurationMs: ms,
 			RankedStartTime: database.Timestamptz(start), RankedCompletionTime: database.Timestamptz(end),
 			RankedDurationMs: pgtype.Int8{Int64: ms, Valid: true}, Proof: []byte(`{"proof":[]}`),
@@ -289,10 +398,10 @@ func seedClearCard(t *testing.T) clearFixture {
 		require.NoError(t, err)
 		return inst
 	}
-	score := func(inst database.LogInstancesGuild, display int16, rank, of int32) {
+	scoreWith := func(inst database.LogInstancesGuild, display int16, rank, of int32, statusName timeparsepolicy.Status) {
 		t.Helper()
 		ms := pgtype.Int8{Int64: 1, Valid: true}
-		status := pgtype.Text{String: string(timeparsepolicy.StatusOK), Valid: true}
+		status := pgtype.Text{String: string(statusName), Valid: true}
 		_, err := store.InsertTimeParseScore(ctx, database.InsertTimeParseScoreParams{
 			TenantID: uuid.Nil, InstanceID: inst.ID, RunID: inst.ID, LogGroupID: uuid.NullUUID{UUID: inst.LogGroupID, Valid: true},
 			RealmID: realmID, ClearDurationMs: ms,
@@ -305,6 +414,10 @@ func seedClearCard(t *testing.T) clearFixture {
 		})
 		require.NoError(t, err)
 	}
+	score := func(inst database.LogInstancesGuild, display int16, rank, of int32) {
+		t.Helper()
+		scoreWith(inst, display, rank, of, timeparsepolicy.StatusOK)
+	}
 
 	insertRun(nightfall.ID, day.AddDate(0, 0, -7), 2156, false) // 35:56, the previous record
 	insertRun(other.ID, day.AddDate(0, 0, -3), 2190, false)     // 36:30
@@ -313,7 +426,15 @@ func seedClearCard(t *testing.T) clearFixture {
 	low := insertRun(other.ID, day.AddDate(0, 0, 1), 2400, false)
 	score(low, 85, 40, 318)
 	slow := insertRun(other.ID, day.AddDate(0, 0, 2), 2500, false)
-	return clearFixture{store: store, inst: inst, low: low, slow: slow}
+	pug := insertRun(uuid.Nil, day.AddDate(0, 0, 3), 2300, false)
+	score(pug, 95, 9, 318)
+	lowc := insertRun(other.ID, day.AddDate(0, 0, 4), 2600, false)
+	scoreWith(lowc, 92, 15, 318, timeparsepolicy.StatusLowConfidence)
+	hide := insertRun(nightfall.ID, day.AddDate(0, 0, 5), 2700, false)
+	score(hide, 96, 8, 318)
+	_, err = store.MarkWoWLogGroupUnlisted(ctx, hide.LogGroupID)
+	require.NoError(t, err)
+	return clearFixture{store: store, inst: inst, low: low, slow: slow, pug: pug, lowc: lowc, hide: hide}
 }
 
 func TestLoadClearCard(t *testing.T) {
@@ -375,6 +496,50 @@ func TestLoadClearCard(t *testing.T) {
 		start := time.Now()
 		card, ok := apiWith(slowBoardStore{f.store}).loadClearCard(request(ctx), f.inst, nil)
 		require.Less(t, time.Since(start), clearCardTimeout+time.Second)
+		require.True(t, ok)
+		require.Equal(t, 98, card.Score)
+		require.Nil(t, card.RealmRank)
+		require.Nil(t, card.DeltaSecs)
+	})
+
+	t.Run("parse-disabled tenant keeps the raid card", func(t *testing.T) {
+		t.Parallel()
+		ctx := servicetenant.WithTenantID(testutil.Context(t, testutil.WaitShort), uuid.New())
+		_, ok := apiWith(tenantStore{Store: f.store, parseConfig: []byte(`{"cohort_mode":"disabled"}`)}).loadClearCard(request(ctx), f.inst, nil)
+		require.False(t, ok)
+		// The same tenant with parses on gets the clear card.
+		_, ok = apiWith(tenantStore{Store: f.store, parseConfig: []byte(`{"cohort_mode":"spec"}`)}).loadClearCard(request(ctx), f.inst, nil)
+		require.True(t, ok)
+	})
+
+	t.Run("no guild: Top N% fallback", func(t *testing.T) {
+		t.Parallel()
+		ctx := testutil.Context(t, testutil.WaitShort)
+		card, ok := apiWith(f.store).loadClearCard(request(ctx), f.pug, nil)
+		require.True(t, ok)
+		require.Equal(t, 95, card.Score)
+		require.Nil(t, card.RealmRank)
+		require.Nil(t, card.DeltaSecs)
+	})
+
+	t.Run("low_confidence time-parse qualifies", func(t *testing.T) {
+		t.Parallel()
+		ctx := testutil.Context(t, testutil.WaitShort)
+		card, ok := apiWith(f.store).loadClearCard(request(ctx), f.lowc, nil)
+		require.True(t, ok)
+		require.Equal(t, 92, card.Score)
+		require.NotNil(t, card.RealmRank)
+		require.Equal(t, 3, *card.RealmRank, "behind Nightfall's 34:52 and its own guild's 36:30")
+	})
+
+	t.Run("unlisted log group", func(t *testing.T) {
+		t.Parallel()
+		ctx := testutil.Context(t, testutil.WaitShort)
+		// The stored score isn't served for an unlisted log group: raid card.
+		_, ok := apiWith(f.store).loadClearCard(request(ctx), f.hide, nil)
+		require.False(t, ok)
+		// With a score, an unlisted run gets no realm rank or delta.
+		card, ok := apiWith(unlistedStore{f.store}).loadClearCard(request(ctx), f.inst, nil)
 		require.True(t, ok)
 		require.Equal(t, 98, card.Score)
 		require.Nil(t, card.RealmRank)

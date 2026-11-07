@@ -114,9 +114,16 @@ func (api *API) loadClearCard(r *http.Request, inst database.LogInstancesGuild, 
 		score       database.TimeParseScore
 		scoreOK     bool
 		progression []string
+		listed      bool
 	)
 	wg.Go(func() {
 		run, runErr = db.GetInstanceSpeedrun(ctx, inst.ID)
+	})
+	wg.Go(func() {
+		// GetInstanceSpeedrun doesn't check unlisted, but the board leaves
+		// unlisted runs out, so an unlisted run gets no realm rank or delta.
+		unlisted, err := db.GetWoWLogGroupUnlisted(ctx, inst.LogGroupID)
+		listed = err == nil && !unlisted
 	})
 	wg.Go(func() {
 		tenantID := servicetenant.TenantIDFromContext(ctx)
@@ -157,15 +164,16 @@ func (api *API) loadClearCard(r *http.Request, inst database.LogInstancesGuild, 
 		return clearCard{}, false
 	}
 
+	start := coalesceTime(run.RankedStartTime, run.StartTime)
 	card := clearCard{
 		DurationMs: durationMs,
 		Score:      int(score.ClearServerDisplayScore.Int16),
 		Rank:       int(score.ClearServerRank.Int32),
 		Of:         int(score.ClearServerSampleSize.Int32),
-		Splits:     clearSplits(encounters, progression, coalesceTime(run.RankedStartTime, run.StartTime)),
+		Splits:     clearSplits(encounters, progression, start, coalesceTime(run.RankedCompletionTime, run.CompletionTime)),
 	}
-	if !run.GuildID.Valid {
-		return card, true // the board only ranks guild runs
+	if !run.GuildID.Valid || !listed {
+		return card, true // the board only ranks listed guild runs
 	}
 
 	board := database.SpeedrunLeaderboardParams{
@@ -202,8 +210,9 @@ func (api *API) loadClearCard(r *http.Request, inst database.LogInstancesGuild, 
 	self := clearSelf{
 		instanceID:     inst.ID,
 		duplicateGroup: inst.DuplicateGroupID,
+		guildID:        run.GuildID.UUID,
 		durationMs:     durationMs,
-		start:          coalesceTime(run.RankedStartTime, run.StartTime),
+		start:          start,
 	}
 	rank, ok := clearRealmRank(realmRows, self, clearCardBoardLimit)
 	if !ok {
@@ -211,18 +220,13 @@ func (api *API) loadClearCard(r *http.Request, inst database.LogInstancesGuild, 
 	}
 	card.RealmRank = &rank
 	if rank == 1 && guildErr == nil {
-		past := make([]clearPastRun, 0, len(realmRows)+len(guildRuns))
-		for _, row := range realmRows {
-			if !self.is(row) && row.CompletionTime.Valid {
-				past = append(past, clearPastRun{durationMs: row.DurationMs, completed: row.CompletionTime.Time})
-			}
-		}
+		own := make([]clearPastRun, 0, len(guildRuns))
 		for _, row := range guildRuns {
 			if row.Qualified && row.InstanceID != inst.ID && row.DurationMs.Valid && row.CompletionTime.Valid {
-				past = append(past, clearPastRun{durationMs: row.DurationMs.Int64, completed: row.CompletionTime.Time})
+				own = append(own, clearPastRun{durationMs: row.DurationMs.Int64, completed: row.CompletionTime.Time})
 			}
 		}
-		card.DeltaSecs = clearRecordDelta(past, self)
+		card.DeltaSecs = clearRecordDelta(realmRows, own, self, clearCardBoardLimit)
 	}
 	return card, true
 }
@@ -231,6 +235,7 @@ func (api *API) loadClearCard(r *http.Request, inst database.LogInstancesGuild, 
 type clearSelf struct {
 	instanceID     uuid.UUID
 	duplicateGroup uuid.NullUUID
+	guildID        uuid.UUID
 	durationMs     int64
 	start          time.Time
 }
@@ -258,31 +263,54 @@ func clearRealmRank(rows []database.SpeedrunLeaderboardRow, self clearSelf, limi
 	return faster + 1, true
 }
 
-// clearPastRun is another qualified run on the realm board or by the guild.
+// clearPastRun is one of the guild's own earlier qualified runs.
 type clearPastRun struct {
 	durationMs int64
 	completed  time.Time
 }
 
 // clearRecordDelta is the run's time minus the realm record it broke, in
-// whole seconds (negative). The previous record is the fastest of runs that
-// finished before this one started: the realm board (each guild's best) plus
-// the guild's own earlier runs, so a guild beating its own record compares
-// to it. Requiring the finish before this start keeps duplicate uploads of
-// the same raid out. Another guild's slower run is missed when that guild's
-// best came later, since the board keeps only best runs. nil when there is
-// no earlier run or the run didn't beat it.
-func clearRecordDelta(past []clearPastRun, self clearSelf) *int {
+// whole seconds (negative). The previous record is the fastest run that
+// finished before this one started, among the realm board (each guild's
+// best) and the guild's own earlier runs, so a guild beating its own record
+// compares to it. Finishing before this start keeps duplicate uploads out.
+//
+// The board keeps only each guild's best, so an unseen earlier run could
+// have been a faster record. The delta is dropped unless it is provably
+// exact: when another guild's best finished at or after this start and beats
+// the previous record (that guild may have held an earlier, unseen record in
+// between), or when the board is full (limit rows) and the previous record
+// is slower than its last row (a run past the cap could be faster). nil also
+// when there is no earlier run or the run didn't beat it.
+func clearRecordDelta(board []database.SpeedrunLeaderboardRow, own []clearPastRun, self clearSelf, limit int) *int {
 	if self.start.IsZero() {
 		return nil
 	}
 	previous := int64(math.MaxInt64)
-	for _, run := range past {
-		if run.durationMs > 0 && run.completed.Before(self.start) {
-			previous = min(previous, run.durationMs)
+	consider := func(durationMs int64, completed time.Time) {
+		if durationMs > 0 && completed.Before(self.start) {
+			previous = min(previous, durationMs)
 		}
 	}
+	for _, row := range board {
+		if !self.is(row) && row.CompletionTime.Valid {
+			consider(row.DurationMs, row.CompletionTime.Time)
+		}
+	}
+	for _, run := range own {
+		consider(run.durationMs, run.completed)
+	}
 	if previous == math.MaxInt64 {
+		return nil
+	}
+	for _, row := range board {
+		later := !row.CompletionTime.Valid || !row.CompletionTime.Time.Before(self.start)
+		otherGuild := !row.GuildID.Valid || row.GuildID.UUID != self.guildID
+		if !self.is(row) && otherGuild && later && row.DurationMs < previous {
+			return nil
+		}
+	}
+	if len(board) >= limit && len(board) > 0 && previous > board[len(board)-1].DurationMs {
 		return nil
 	}
 	delta := int(math.Round(float64(self.durationMs-previous) / 1000))
@@ -293,11 +321,13 @@ func clearRecordDelta(past []clearPastRun, self clearSelf) *int {
 }
 
 // clearSplits returns the time from the run start (or the previous kill) to
-// each boss kill, in kill order, so the splits sum to the clear. With a
-// registry progression list only those bosses count, so optional bosses
-// (Gahz'ranka, Edge of Madness) don't add a split; a boss killed twice counts
-// once.
-func clearSplits(encounters []database.LogInstanceEncounter, progression []string, start time.Time) []clearCardSplit {
+// each boss kill inside the ranked window, in kill order, so the splits sum
+// to the clear. Kills at or before the start (ranked timing can start after
+// a boss, as Ulduar does after Flame Leviathan) and after the completion
+// (an optional boss after the last required one) are dropped. With a
+// registry progression list only those bosses count; a boss killed twice
+// counts once.
+func clearSplits(encounters []database.LogInstanceEncounter, progression []string, start, completion time.Time) []clearCardSplit {
 	listed := map[string]struct{}{}
 	for _, name := range progression {
 		listed[name] = struct{}{}
@@ -310,8 +340,12 @@ func clearSplits(encounters []database.LogInstanceEncounter, progression []strin
 		if _, ok := listed[e.Name]; len(listed) > 0 && !ok {
 			continue
 		}
-		if at, ok := firstKill[e.Name]; !ok || e.EndTime.Time.Before(at) {
-			firstKill[e.Name] = e.EndTime.Time
+		at := e.EndTime.Time
+		if (!start.IsZero() && !at.After(start)) || (!completion.IsZero() && at.After(completion)) {
+			continue
+		}
+		if prev, ok := firstKill[e.Name]; !ok || at.Before(prev) {
+			firstKill[e.Name] = at
 		}
 	}
 	type kill struct {
@@ -334,9 +368,29 @@ func clearSplits(encounters []database.LogInstanceEncounter, progression []strin
 		if name := ogSplitName(k.name); name != "" {
 			splits = append(splits, clearCardSplit{Name: name, Secs: secs})
 		}
-		previous = k.at
+		if k.at.After(previous) {
+			previous = k.at
+		}
 	}
 	return splits
+}
+
+// ogSplitNameMax is the longest boss name a split label keeps whole.
+const ogSplitNameMax = 12
+
+// ogSplitNames are short labels for long names the rules below get wrong.
+var ogSplitNames = map[string]string{
+	"Lord Blackwald II":      "Blackwald",
+	"Keeper Gnarlmoon":       "Gnarlmoon",
+	"Ley-Watcher Incantagos": "Incantagos",
+	"Echo of Medivh":         "Medivh",
+	"Twin Emperors":          "Twins",
+	"Four Horsemen":          "Horsemen",
+	"Eye of C'Thun":          "Eye",
+	"Brood Queen Araxxna":    "Araxxna",
+	"Clawlord Howlfang":      "Howlfang",
+	"Archdruid Kronn":        "Kronn",
+	"Chieftain Partath":      "Partath",
 }
 
 // ogBossTitles are leading words dropped from a split label, so "Baron
@@ -344,21 +398,32 @@ func clearSplits(encounters []database.LogInstanceEncounter, progression []strin
 var ogBossTitles = map[string]bool{
 	"The": true, "High": true, "Lord": true, "Lady": true, "Baron": true, "Bloodlord": true, "Broodlord": true,
 	"Princess": true, "Prince": true, "Battleguard": true, "Grand": true, "Instructor": true, "General": true,
-	"Emperor": true, "Twin": true, "Four": true,
+	"Emperor": true, "Master": true,
 }
 
-// ogSplitName is a boss's short split label: the part before " the ", then
-// the last word after a title or else the first word ("Majordomo Executus"
-// → "Majordomo"), without the list delimiters.
+// ogSplitName is a boss's short split label, without the list delimiters. A
+// grouped encounter ("Bug Family: Vem") uses its group name. A name of 12
+// characters or fewer stays whole; longer ones use ogSplitNames, else the
+// part before " the ", then the last word after a title or else the first
+// word ("Majordomo Executus" → "Majordomo").
 func ogSplitName(name string) string {
-	if i := strings.Index(name, " the "); i > 0 {
-		name = name[:i]
+	if group, _, ok := strings.Cut(name, ":"); ok {
+		name = group
 	}
-	if words := strings.Fields(name); len(words) > 1 {
-		if ogBossTitles[words[0]] {
-			name = words[len(words)-1]
-		} else {
-			name = words[0]
+	name = strings.TrimSpace(name)
+	if short, ok := ogSplitNames[name]; ok {
+		return ogCardName(short)
+	}
+	if len([]rune(name)) > ogSplitNameMax {
+		if i := strings.Index(name, " the "); i > 0 {
+			name = name[:i]
+		}
+		if words := strings.Fields(name); len(words) > 1 {
+			if ogBossTitles[words[0]] {
+				name = words[len(words)-1]
+			} else {
+				name = words[0]
+			}
 		}
 	}
 	return ogCardName(name)
