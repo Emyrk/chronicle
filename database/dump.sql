@@ -1887,6 +1887,8 @@ CREATE TABLE leaderboard_player_boss_subjects (
     projection_version integer NOT NULL,
     algorithm_version integer NOT NULL,
     computed_at timestamp with time zone DEFAULT now() NOT NULL,
+    peak_encounter_id uuid,
+    peak_duration_ms bigint,
     CONSTRAINT leaderboard_player_boss_subjects_algorithm_version_check CHECK ((algorithm_version > 0)),
     CONSTRAINT leaderboard_player_boss_subjects_encounter_name_check CHECK ((btrim(encounter_name) <> ''::text)),
     CONSTRAINT leaderboard_player_boss_subjects_instance_name_check CHECK ((btrim(instance_name) <> ''::text)),
@@ -3674,6 +3676,9 @@ ALTER TABLE ONLY leaderboard_player_boss_subjects
 
 ALTER TABLE ONLY leaderboard_player_observations
     ADD CONSTRAINT leaderboard_player_observations_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name, run_id, realm_id, player_guid, metric);
+
+ALTER TABLE leaderboard_player_boss_subjects
+    ADD CONSTRAINT leaderboard_player_peak_provenance_complete CHECK ((((peak_encounter_id IS NULL) AND (peak_duration_ms IS NULL)) OR ((peak_encounter_id IS NOT NULL) AND (peak_duration_ms IS NOT NULL) AND (peak_duration_ms > 0)))) NOT VALID;
 
 ALTER TABLE ONLY leaderboard_player_renown_counts
     ADD CONSTRAINT leaderboard_player_renown_counts_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, player_guid);

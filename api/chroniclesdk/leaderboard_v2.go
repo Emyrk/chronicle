@@ -15,22 +15,35 @@ type LeaderboardV2Response struct {
 	IncludedBosses []string             `json:"included_bosses"`
 }
 type LeaderboardV2Entry struct {
-	PlayerClass   string    `json:"player_class"`
-	PlayerSpec    string    `json:"player_spec"`
-	PlayerSubSpec string    `json:"player_sub_spec"`
-	RealmID       uuid.UUID `json:"realm_id"`
-	SubjectID     string    `json:"subject_id"`
-	Name          string    `json:"name"`
-	Score         float64   `json:"score"`
-	Peak          float64   `json:"peak"`
-	Mastery       float64   `json:"mastery"`
-	Renown        float64   `json:"renown"`
-	SampleCount   int64     `json:"sample_count"`
-	ComputedAt    time.Time `json:"computed_at"`
+	PlayerClass   string              `json:"player_class"`
+	PlayerSpec    string              `json:"player_spec"`
+	PlayerSubSpec string              `json:"player_sub_spec"`
+	RealmID       uuid.UUID           `json:"realm_id"`
+	SubjectID     string              `json:"subject_id"`
+	Name          string              `json:"name"`
+	Score         float64             `json:"score"`
+	Peak          float64             `json:"peak"`
+	Form          float64             `json:"form"`
+	Floor         float64             `json:"floor"`
+	Bosses        []LeaderboardV2Boss `json:"bosses"`
+	Mastery       float64             `json:"mastery"`
+	Renown        float64             `json:"renown"`
+	SampleCount   int64               `json:"sample_count"`
+	ComputedAt    time.Time           `json:"computed_at"`
 }
 type LeaderboardV2Cohort struct {
 	PlayerClass   string `json:"player_class"`
 	PlayerSpec    string `json:"player_spec"`
 	PlayerSubSpec string `json:"player_sub_spec"`
 	Metric        string `json:"metric"`
+}
+
+// LeaderboardV2Boss is page-bounded summary detail, never observation replay.
+// Missing summaries have zero peak/count; unavailable raw values stay null.
+type LeaderboardV2Boss struct {
+	EncounterName    string   `json:"encounter_name"`
+	Peak             float64  `json:"peak"`
+	RawPeak          *float64 `json:"raw_peak"`
+	DurationMS       *int64   `json:"duration_ms"`
+	ObservationCount int64    `json:"observation_count"`
 }

@@ -4,7 +4,7 @@ import { useState, type CSSProperties, type ReactNode } from "react"
 import { ArrowDown, ArrowRight, ChevronLeft, ChevronRight } from "lucide-react"
 import { RATING_METRICS, type RatingMetric } from "@/pages/Leaderboards/Ratings/ratingBoards.fixtures"
 import { cn } from "@/lib/utils"
-import { BoardSearch, MasteryPartCells, MasteryPartHeaders } from "@/pages/Leaderboards/Ratings/RatingFullList"
+import { BoardSearch, MasteryPartCells, MasteryPartHeaders, PublishedMasteryCells, PublishedMasteryHeaders, PeakComponents } from "@/pages/Leaderboards/Ratings/RatingFullList"
 import { BoardSkeleton } from "@/pages/Leaderboards/Ratings/RatingLeaderboard"
 import { BossPortrait, Emblem, RankMark } from "@/pages/Leaderboards/Ratings/RatingParts"
 import { METRIC_THEMES, type MetricTheme, type RatingView } from "@/pages/Leaderboards/Ratings/ratingThemes"
@@ -314,7 +314,7 @@ function GuildFullTable({
   const published = useQuery({queryKey:["hub-guild-v2-page",pageKey,page],queryFn:()=>live!.loadPage!({scope:oneBoss ? {boss:oneBoss} : {},metric,period:"all",query,page}),enabled:!!live?.loadPage,retry:false})
   const byGuild = (m: RatingMetric) => new Map(ratings[m].map((g) => [g.guild, g]))
   const scores = { peak: byGuild("peak"), mastery: byGuild("mastery"), renown: byGuild("renown") }
-  const ranked = live ? (published.data?.rows ?? []).map(row => ({rank:0,g:{guild:row.entry.name,guildId:row.entry.guid,score:row.entry.score,detail:row.entry.detail} as GuildRating})) : ratings[metric].map((g, i) => ({ rank: i + 1, g }))
+  const ranked = live ? (published.data?.rows ?? []).map(row => ({rank:0,g:{guild:row.entry.name,guildId:row.entry.guid,score:row.entry.score,detail:row.entry.detail,ms:row.entry.durationMs} as GuildRating})) : ratings[metric].map((g, i) => ({ rank: i + 1, g }))
   const needle = query.trim().toLowerCase()
   const rows = !live && needle ? ranked.filter((r) => r.g.guild.toLowerCase().includes(needle)) : ranked
   const top = ranked[0]?.g.score ?? 1
@@ -374,10 +374,10 @@ function GuildFullTable({
               ) : (
                 <>
                   <th className="w-32 px-3 py-2.5 text-left font-medium">{theme.label}</th>
-                  {view === "mastery" && <MasteryPartHeaders />}
+                  {view === "mastery" && (live ? <PublishedMasteryHeaders /> : <MasteryPartHeaders />)}
                   {view === "peak" && (
                     <>
-                      <th className="px-3 py-2.5 text-right font-medium">{timeLabel}</th>
+                      <th className="px-3 py-2.5 text-right font-medium">{live && !oneBoss ? "Boss peaks" : timeLabel}</th>
                       <th className="hidden px-3 py-2.5 text-left font-medium sm:table-cell">Date</th>
                     </>
                   )}
@@ -426,11 +426,11 @@ function GuildFullTable({
                         </span>
                       </div>
                     </td>
-                    {view === "mastery" && <MasteryPartCells parts={g.mastery} />}
+                    {view === "mastery" && (live ? <PublishedMasteryCells entry={published.data!.rows.find(row => row.entry.guid === g.guildId && row.entry.detail === g.detail)!.entry} /> : <MasteryPartCells parts={g.mastery} />)}
                     {view === "peak" && (
                       <>
                         <td className="px-3 py-2 text-right font-mono text-muted-foreground tabular-nums">
-                          {g.ms !== undefined ? formatClock(g.ms) : "—"}
+                          {live && !oneBoss ? (() => { const row = published.data!.rows.find(row => row.entry.guid === g.guildId && row.entry.detail === g.detail)!; return <PeakComponents entry={row.entry} scores={row.peakComponents} /> })() : g.ms !== undefined ? formatClock(g.ms) : "Unavailable"}
                         </td>
                         <td className="hidden px-3 py-2 text-xs text-muted-foreground sm:table-cell">{g.date}</td>
                       </>

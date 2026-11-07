@@ -70,6 +70,8 @@ SELECT s.realm_id, s.guild_id::text COLLATE "C" AS subject_id,
 ), grouped AS (
  SELECT realm_id, subject_id, player_class, player_spec, player_sub_spec,
  (sum(peak) / NULLIF(@denominator::integer, 0))::double precision AS peak,
+ (sum(form) / NULLIF(@denominator::integer, 0))::double precision AS form,
+ (sum(floor) / NULLIF(@denominator::integer, 0))::double precision AS floor,
  (sum(0.30 * peak + 0.50 * form + 0.20 * floor) / NULLIF(@denominator::integer, 0))::double precision AS mastery,
  sum(renown)::double precision AS renown, sum(sample_count)::bigint AS sample_count,
  min(computed_at) AS computed_at
@@ -79,6 +81,7 @@ SELECT s.realm_id, s.guild_id::text COLLATE "C" AS subject_id,
  FROM grouped
 ), page AS (
 SELECT realm_id, subject_id::text AS subject_id, player_class::text AS player_class, player_spec::text AS player_spec, player_sub_spec::text AS player_sub_spec, COALESCE(peak, 0)::double precision AS peak,
+ COALESCE(form, 0)::double precision AS form, COALESCE(floor, 0)::double precision AS floor,
  COALESCE(mastery, 0)::double precision AS mastery, renown, sample_count,
  computed_at::timestamptz AS computed_at, score
 FROM scored
@@ -102,3 +105,40 @@ WHERE tenant_id = @tenant_id::uuid AND instance_name = @instance_name::text
  AND difficulty_name = @difficulty_name::text AND max_players = @max_players::smallint
  AND encounter_name = ANY(@bosses::text[])
 ORDER BY player_class, player_spec, player_sub_spec, metric;
+
+-- name: ListLeaderboardV2PageBosses :many
+-- Only the returned score page is passed here, with aligned exact cohort arrays.
+-- Cross the bounded page with selection to retain missing bosses as zero peaks.
+WITH subjects AS (
+ SELECT unnest(@realms::uuid[]) AS realm_id, unnest(@subjects::text[]) AS subject_id,
+ unnest(@classes::text[]) AS player_class, unnest(@specs::text[]) AS player_spec,
+ unnest(@sub_specs::text[]) AS player_sub_spec
+), selected AS (
+ SELECT subjects.*, unnest(@bosses::text[]) AS encounter_name FROM subjects
+)
+SELECT p.realm_id::uuid AS realm_id, p.subject_id::text AS subject_id, p.player_class::text AS player_class, p.player_spec::text AS player_spec, p.player_sub_spec::text AS player_sub_spec, p.encounter_name::text AS encounter_name,
+ CASE WHEN b.best_metric > 0 THEN COALESCE(LEAST(100::double precision,100*s.raw_peak/b.best_metric),0) ELSE 0 END::double precision AS peak,
+ COALESCE(s.raw_peak,0)::double precision AS raw_peak, COALESCE(s.peak_duration_ms,0)::bigint AS duration_ms,
+ COALESCE(s.observation_count,0)::bigint AS observation_count
+FROM selected p
+LEFT JOIN leaderboard_player_boss_subjects s ON s.tenant_id= @tenant_id::uuid
+ AND s.instance_name= @instance_name::text AND s.difficulty_name= @difficulty_name::text AND s.max_players= @max_players::smallint
+ AND s.encounter_name=p.encounter_name AND s.realm_id=p.realm_id AND s.player_guid=p.subject_id
+ AND s.player_class=p.player_class AND s.player_spec=p.player_spec AND s.player_sub_spec=p.player_sub_spec AND s.metric= @metric::text
+LEFT JOIN leaderboard_player_boss_benchmarks b ON b.tenant_id=s.tenant_id AND b.instance_name=s.instance_name
+ AND b.difficulty_name=s.difficulty_name AND b.max_players=s.max_players AND b.encounter_name=s.encounter_name
+ AND b.player_class=s.player_class AND b.player_spec=s.player_spec AND b.player_sub_spec=s.player_sub_spec AND b.metric=s.metric
+WHERE @subject_kind::text='player'
+UNION ALL
+SELECT p.realm_id::uuid AS realm_id, p.subject_id::text AS subject_id, p.player_class::text AS player_class, p.player_spec::text AS player_spec, p.player_sub_spec::text AS player_sub_spec, p.encounter_name::text AS encounter_name,
+ CASE WHEN s.fastest_duration_ms > 0 AND b.best_duration_ms IS NOT NULL THEN LEAST(100::double precision,100.0*b.best_duration_ms/s.fastest_duration_ms) ELSE 0 END::double precision AS peak,
+ 0::double precision AS raw_peak, COALESCE(s.fastest_duration_ms,0)::bigint AS duration_ms,
+ COALESCE(s.observation_count,0)::bigint AS observation_count
+FROM selected p
+LEFT JOIN leaderboard_guild_boss_subjects s ON s.tenant_id= @tenant_id::uuid
+ AND s.instance_name= @instance_name::text AND s.difficulty_name= @difficulty_name::text AND s.max_players= @max_players::smallint
+ AND s.encounter_name=p.encounter_name AND s.realm_id=p.realm_id AND s.guild_id=p.subject_id::uuid
+LEFT JOIN leaderboard_guild_boss_benchmarks b ON b.tenant_id=s.tenant_id AND b.instance_name=s.instance_name
+ AND b.difficulty_name=s.difficulty_name AND b.max_players=s.max_players AND b.encounter_name=s.encounter_name
+WHERE @subject_kind::text='guild'
+ORDER BY realm_id,subject_id,player_class,player_spec,player_sub_spec,encounter_name;

@@ -12059,7 +12059,7 @@ func (q *sqlQuerier) ListLeaderboardDirtyRuns(ctx context.Context, tenantID uuid
 }
 
 const listLeaderboardPlayerBossSubjects = `-- name: ListLeaderboardPlayerBossSubjects :many
-SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid, observation_count, raw_peak, raw_form, raw_floor, projection_version, algorithm_version, computed_at FROM leaderboard_player_boss_subjects WHERE tenant_id = $1::uuid
+SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid, observation_count, raw_peak, raw_form, raw_floor, projection_version, algorithm_version, computed_at, peak_encounter_id, peak_duration_ms FROM leaderboard_player_boss_subjects WHERE tenant_id = $1::uuid
 `
 
 func (q *sqlQuerier) ListLeaderboardPlayerBossSubjects(ctx context.Context, tenantID uuid.UUID) ([]LeaderboardPlayerBossSubject, error) {
@@ -12090,6 +12090,8 @@ func (q *sqlQuerier) ListLeaderboardPlayerBossSubjects(ctx context.Context, tena
 			&i.ProjectionVersion,
 			&i.AlgorithmVersion,
 			&i.ComputedAt,
+			&i.PeakEncounterID,
+			&i.PeakDurationMs,
 		); err != nil {
 			return nil, err
 		}
@@ -12213,15 +12215,18 @@ SELECT s.realm_id, s.guild_id::text COLLATE "C" AS subject_id,
 ), grouped AS (
  SELECT realm_id, subject_id, player_class, player_spec, player_sub_spec,
  (sum(peak) / NULLIF($16::integer, 0))::double precision AS peak,
+ (sum(form) / NULLIF($16::integer, 0))::double precision AS form,
+ (sum(floor) / NULLIF($16::integer, 0))::double precision AS floor,
  (sum(0.30 * peak + 0.50 * form + 0.20 * floor) / NULLIF($16::integer, 0))::double precision AS mastery,
  sum(renown)::double precision AS renown, sum(sample_count)::bigint AS sample_count,
  min(computed_at) AS computed_at
  FROM contributions GROUP BY realm_id, subject_id, player_class, player_spec, player_sub_spec
 ), scored AS (
- SELECT realm_id, subject_id, player_class, player_spec, player_sub_spec, peak, mastery, renown, sample_count, computed_at, CASE $17::text WHEN 'peak' THEN peak WHEN 'mastery' THEN mastery ELSE renown END::double precision AS score
+ SELECT realm_id, subject_id, player_class, player_spec, player_sub_spec, peak, form, floor, mastery, renown, sample_count, computed_at, CASE $17::text WHEN 'peak' THEN peak WHEN 'mastery' THEN mastery ELSE renown END::double precision AS score
  FROM grouped
 ), page AS (
 SELECT realm_id, subject_id::text AS subject_id, player_class::text AS player_class, player_spec::text AS player_spec, player_sub_spec::text AS player_sub_spec, COALESCE(peak, 0)::double precision AS peak,
+ COALESCE(form, 0)::double precision AS form, COALESCE(floor, 0)::double precision AS floor,
  COALESCE(mastery, 0)::double precision AS mastery, renown, sample_count,
  computed_at::timestamptz AS computed_at, score
 FROM scored
@@ -12230,7 +12235,7 @@ WHERE NOT $18::boolean OR score < $19::double precision
 ORDER BY score DESC, realm_id, subject_id, player_class, player_spec, player_sub_spec
 LIMIT $25::integer
 )
-SELECT page.realm_id, page.subject_id, page.player_class, page.player_spec, page.player_sub_spec, page.peak, page.mastery, page.renown, page.sample_count, page.computed_at, page.score, COALESCE(CASE WHEN $1::text = 'player' THEN
+SELECT page.realm_id, page.subject_id, page.player_class, page.player_spec, page.player_sub_spec, page.peak, page.form, page.floor, page.mastery, page.renown, page.sample_count, page.computed_at, page.score, COALESCE(CASE WHEN $1::text = 'player' THEN
  (SELECT p.name FROM game_players p WHERE p.realm_id = page.realm_id AND p.id = page.subject_id)
  ELSE (SELECT g.name FROM guilds g WHERE g.realm_id = page.realm_id AND g.id::text = page.subject_id)
  END, page.subject_id)::text AS subject_name
@@ -12272,6 +12277,8 @@ type ListLeaderboardV2Row struct {
 	PlayerSpec    string             `db:"player_spec" json:"player_spec"`
 	PlayerSubSpec string             `db:"player_sub_spec" json:"player_sub_spec"`
 	Peak          float64            `db:"peak" json:"peak"`
+	Form          float64            `db:"form" json:"form"`
+	Floor         float64            `db:"floor" json:"floor"`
 	Mastery       float64            `db:"mastery" json:"mastery"`
 	Renown        float64            `db:"renown" json:"renown"`
 	SampleCount   int64              `db:"sample_count" json:"sample_count"`
@@ -12327,6 +12334,8 @@ func (q *sqlQuerier) ListLeaderboardV2(ctx context.Context, arg ListLeaderboardV
 			&i.PlayerSpec,
 			&i.PlayerSubSpec,
 			&i.Peak,
+			&i.Form,
+			&i.Floor,
 			&i.Mastery,
 			&i.Renown,
 			&i.SampleCount,
@@ -12388,6 +12397,116 @@ func (q *sqlQuerier) ListLeaderboardV2Cohorts(ctx context.Context, arg ListLeade
 			&i.PlayerSpec,
 			&i.PlayerSubSpec,
 			&i.Metric,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLeaderboardV2PageBosses = `-- name: ListLeaderboardV2PageBosses :many
+WITH subjects AS (
+ SELECT unnest($1::uuid[]) AS realm_id, unnest($2::text[]) AS subject_id,
+ unnest($3::text[]) AS player_class, unnest($4::text[]) AS player_spec,
+ unnest($5::text[]) AS player_sub_spec
+), selected AS (
+ SELECT subjects.realm_id, subjects.subject_id, subjects.player_class, subjects.player_spec, subjects.player_sub_spec, unnest($6::text[]) AS encounter_name FROM subjects
+)
+SELECT p.realm_id::uuid AS realm_id, p.subject_id::text AS subject_id, p.player_class::text AS player_class, p.player_spec::text AS player_spec, p.player_sub_spec::text AS player_sub_spec, p.encounter_name::text AS encounter_name,
+ CASE WHEN b.best_metric > 0 THEN COALESCE(LEAST(100::double precision,100*s.raw_peak/b.best_metric),0) ELSE 0 END::double precision AS peak,
+ COALESCE(s.raw_peak,0)::double precision AS raw_peak, COALESCE(s.peak_duration_ms,0)::bigint AS duration_ms,
+ COALESCE(s.observation_count,0)::bigint AS observation_count
+FROM selected p
+LEFT JOIN leaderboard_player_boss_subjects s ON s.tenant_id= $7::uuid
+ AND s.instance_name= $8::text AND s.difficulty_name= $9::text AND s.max_players= $10::smallint
+ AND s.encounter_name=p.encounter_name AND s.realm_id=p.realm_id AND s.player_guid=p.subject_id
+ AND s.player_class=p.player_class AND s.player_spec=p.player_spec AND s.player_sub_spec=p.player_sub_spec AND s.metric= $11::text
+LEFT JOIN leaderboard_player_boss_benchmarks b ON b.tenant_id=s.tenant_id AND b.instance_name=s.instance_name
+ AND b.difficulty_name=s.difficulty_name AND b.max_players=s.max_players AND b.encounter_name=s.encounter_name
+ AND b.player_class=s.player_class AND b.player_spec=s.player_spec AND b.player_sub_spec=s.player_sub_spec AND b.metric=s.metric
+WHERE $12::text='player'
+UNION ALL
+SELECT p.realm_id::uuid AS realm_id, p.subject_id::text AS subject_id, p.player_class::text AS player_class, p.player_spec::text AS player_spec, p.player_sub_spec::text AS player_sub_spec, p.encounter_name::text AS encounter_name,
+ CASE WHEN s.fastest_duration_ms > 0 AND b.best_duration_ms IS NOT NULL THEN LEAST(100::double precision,100.0*b.best_duration_ms/s.fastest_duration_ms) ELSE 0 END::double precision AS peak,
+ 0::double precision AS raw_peak, COALESCE(s.fastest_duration_ms,0)::bigint AS duration_ms,
+ COALESCE(s.observation_count,0)::bigint AS observation_count
+FROM selected p
+LEFT JOIN leaderboard_guild_boss_subjects s ON s.tenant_id= $7::uuid
+ AND s.instance_name= $8::text AND s.difficulty_name= $9::text AND s.max_players= $10::smallint
+ AND s.encounter_name=p.encounter_name AND s.realm_id=p.realm_id AND s.guild_id=p.subject_id::uuid
+LEFT JOIN leaderboard_guild_boss_benchmarks b ON b.tenant_id=s.tenant_id AND b.instance_name=s.instance_name
+ AND b.difficulty_name=s.difficulty_name AND b.max_players=s.max_players AND b.encounter_name=s.encounter_name
+WHERE $12::text='guild'
+ORDER BY realm_id,subject_id,player_class,player_spec,player_sub_spec,encounter_name
+`
+
+type ListLeaderboardV2PageBossesParams struct {
+	Realms         []uuid.UUID `db:"realms" json:"realms"`
+	Subjects       []string    `db:"subjects" json:"subjects"`
+	Classes        []string    `db:"classes" json:"classes"`
+	Specs          []string    `db:"specs" json:"specs"`
+	SubSpecs       []string    `db:"sub_specs" json:"sub_specs"`
+	Bosses         []string    `db:"bosses" json:"bosses"`
+	TenantID       uuid.UUID   `db:"tenant_id" json:"tenant_id"`
+	InstanceName   string      `db:"instance_name" json:"instance_name"`
+	DifficultyName string      `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16       `db:"max_players" json:"max_players"`
+	Metric         string      `db:"metric" json:"metric"`
+	SubjectKind    string      `db:"subject_kind" json:"subject_kind"`
+}
+
+type ListLeaderboardV2PageBossesRow struct {
+	RealmID          uuid.UUID `db:"realm_id" json:"realm_id"`
+	SubjectID        string    `db:"subject_id" json:"subject_id"`
+	PlayerClass      string    `db:"player_class" json:"player_class"`
+	PlayerSpec       string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec    string    `db:"player_sub_spec" json:"player_sub_spec"`
+	EncounterName    string    `db:"encounter_name" json:"encounter_name"`
+	Peak             float64   `db:"peak" json:"peak"`
+	RawPeak          float64   `db:"raw_peak" json:"raw_peak"`
+	DurationMs       int64     `db:"duration_ms" json:"duration_ms"`
+	ObservationCount int64     `db:"observation_count" json:"observation_count"`
+}
+
+// Only the returned score page is passed here, with aligned exact cohort arrays.
+// Cross the bounded page with selection to retain missing bosses as zero peaks.
+func (q *sqlQuerier) ListLeaderboardV2PageBosses(ctx context.Context, arg ListLeaderboardV2PageBossesParams) ([]ListLeaderboardV2PageBossesRow, error) {
+	rows, err := q.db.Query(ctx, listLeaderboardV2PageBosses,
+		arg.Realms,
+		arg.Subjects,
+		arg.Classes,
+		arg.Specs,
+		arg.SubSpecs,
+		arg.Bosses,
+		arg.TenantID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.Metric,
+		arg.SubjectKind,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLeaderboardV2PageBossesRow
+	for rows.Next() {
+		var i ListLeaderboardV2PageBossesRow
+		if err := rows.Scan(
+			&i.RealmID,
+			&i.SubjectID,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+			&i.EncounterName,
+			&i.Peak,
+			&i.RawPeak,
+			&i.DurationMs,
+			&i.ObservationCount,
 		); err != nil {
 			return nil, err
 		}

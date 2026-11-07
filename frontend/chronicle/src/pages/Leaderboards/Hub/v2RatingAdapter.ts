@@ -66,7 +66,7 @@ export function v2RatingParams(
 }
 export function v2PlayerEntry(
   row: LeaderboardV2Entry,
-  _params: URLSearchParams,
+  params: URLSearchParams,
   metric: RatingMetric,
 ): RatingEntry {
   return {
@@ -90,6 +90,11 @@ export function v2PlayerEntry(
           ? row.mastery
           : row.renown,
     detail: row.realm_id,
+    raw: row.bosses?.length === 1 ? row.bosses[0].raw_peak ?? undefined : undefined,
+    rawMetric: params.get("metric") === "hps" ? "HPS" : "DPS",
+    durationMs: row.bosses?.length === 1 ? row.bosses[0].duration_ms ?? undefined : undefined,
+    publishedMastery: metric !== "renown" ? { peak: row.peak, form: row.form, floor: row.floor } : undefined,
+    bossCounts: row.bosses?.map((boss) => ({ encounter_name: boss.encounter_name, count: boss.observation_count })),
   };
 }
 export function v2BoardURL(params: URLSearchParams) {
@@ -132,6 +137,7 @@ export function createV2Pager(context: V2RatingContext) {
       hasNextPage: !!response.next_cursor,
       rows: response.entries.map((row) => ({
         rank: 0,
+        peakComponents: row.bosses?.map((boss) => ({ encounter_name: boss.encounter_name, score: boss.peak })),
         entry: v2PlayerEntry(row, params, metric),
         scores:
           metric === "renown"
