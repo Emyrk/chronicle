@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ArrowLeft, BookOpen, Box, Braces, ChevronDown, Clock, FileCode, FileType2, FlaskConical, Globe2, Images, Lightbulb, Map, PawPrint, ScrollText, ShieldAlert, ShieldCheck, Sparkles, Swords, TimerReset, WandSparkles } from "lucide-react";
+import { ArrowLeft, BookOpen, Box, Braces, ChevronDown, Clock, FileCode, FileType2, FlaskConical, Globe2, Images, Lightbulb, Map, Network, PawPrint, ScrollText, ShieldAlert, ShieldCheck, Sparkles, Swords, TimerReset, WandSparkles } from "lucide-react";
 import { useDatasets, useSiteConfig } from "@/api/queries";
 import { Card } from "@/components/ui/Card/Card";
 import { useDatasetId, useIconBaseUrl } from "@/hooks/useDatasetId";
@@ -107,6 +107,12 @@ const TECHNICAL_LINKS: TechnicalLink[] = [
     description: "Inspect this tenant's leaderboard scoring and ranking configuration",
     href: "/leaderboards-v1/configuration",
     icon: <ScrollText className="h-4 w-4" />,
+  },
+  {
+    title: "Parser State Graph",
+    description: "Explore the snapshot state catalog: path tree, shared references, and dependencies",
+    href: "/technical/state-graph",
+    icon: <Network className="h-4 w-4" />,
   },
 ];
 
