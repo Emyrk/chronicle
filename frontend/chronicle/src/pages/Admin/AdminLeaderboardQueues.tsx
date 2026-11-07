@@ -5,6 +5,54 @@ import {
   useLeaderboardQueues,
 } from "@/api/leaderboardQueues";
 import { Button } from "@/components/ui/button";
+import {
+  HintTooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/Tooltip/tooltip";
+
+function QueueColumnHelp({
+  label,
+  description,
+}: {
+  label: string;
+  description: string;
+}) {
+  return (
+    <HintTooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          aria-label={`${label}: ${description}`}
+          className="cursor-help border-b border-dotted border-muted-foreground/50 font-medium"
+        >
+          {label}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-xs text-left">
+        {description}
+      </TooltipContent>
+    </HintTooltip>
+  );
+}
+const QUEUE_COLUMNS = [
+  [
+    "Pending",
+    "All dirty keys currently stored in this family, including scheduled, claimed and backed-off work.",
+  ],
+  [
+    "Due",
+    "Processing time and retry backoff have both elapsed, and no unexpired worker lease is held.",
+  ],
+  [
+    "Claimed",
+    "Keys with an unexpired worker lease at collection time. This does not guarantee that a worker is actively making progress.",
+  ],
+  [
+    "Retrying",
+    "Keys currently backed off: retry_after is later than the queue snapshot time. Not a lifetime retry-attempt count.",
+  ],
+] as const;
 
 export function AdminLeaderboardQueues({
   tenantID,
@@ -90,26 +138,35 @@ export function AdminLeaderboardQueues({
                   <th scope="col" className="py-2 pr-4 font-medium">
                     Queue family
                   </th>
-                  {["Pending", "Due", "Claimed", "Retrying"].map((label) => (
+                  {QUEUE_COLUMNS.map(([label, description]) => (
                     <th
                       key={label}
                       scope="col"
                       className="px-2 py-2 text-right font-medium"
                     >
-                      {label}
+                      <QueueColumnHelp
+                        label={label}
+                        description={description}
+                      />
                     </th>
                   ))}
                   <th
                     scope="col"
                     className="whitespace-nowrap px-2 py-2 text-right font-medium"
                   >
-                    Oldest pending
+                    <QueueColumnHelp
+                      label="Oldest pending"
+                      description="Age since the oldest pending key was dirtied, measured using the response collection timestamp."
+                    />
                   </th>
                   <th
                     scope="col"
                     className="whitespace-nowrap pl-2 py-2 text-right font-medium"
                   >
-                    Oldest due
+                    <QueueColumnHelp
+                      label="Oldest due"
+                      description="Age since the earliest processing time among currently due keys. Due keys have elapsed backoff and no live lease."
+                    />
                   </th>
                 </tr>
               </thead>
@@ -162,7 +219,8 @@ export function AdminLeaderboardQueues({
       <p className="text-xs text-muted-foreground">
         Pending is the total work in each family. Due, claimed and retrying
         overlap with pending and must not be added together. These are current
-        counts, not lifetime processing totals.
+        counts, not lifetime processing totals. Retrying means currently backed
+        off, not cumulative retry attempts.
       </p>
     </section>
   );

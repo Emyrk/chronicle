@@ -1,12 +1,13 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useLeaderboardQueues } from "@/api/leaderboardQueues";
+import type { LeaderboardQueueDiagnostics } from "@/api/typesGenerated";
 import { AdminLeaderboardQueues } from "./AdminLeaderboardQueues";
 vi.mock("@/api/leaderboardQueues", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/api/leaderboardQueues")>()),
   useLeaderboardQueues: vi.fn(),
 }));
-const snapshot = {
+const snapshot: LeaderboardQueueDiagnostics = {
   tenant_id: "t",
   collected_at: "2026-01-01T01:02:00Z",
   queues: [
@@ -49,6 +50,24 @@ describe("always visible dirty queue dashboard", () => {
     expect(html).toContain("1h 2m");
     expect(html).toContain("2026-01-01 01:02:00 UTC");
     expect(html).toContain("must not be added together");
+    expect(html).toContain("retry_after is later than the queue snapshot time");
+    expect(html).toContain("no unexpired worker lease");
+    expect(html).toContain("Not a lifetime retry-attempt count");
+  });
+  it("keeps empty responses and invalid collection time visibly unknown", () => {
+    vi.mocked(useLeaderboardQueues).mockReturnValue({
+      data: { ...snapshot, queues: [], collected_at: "invalid" },
+      isError: false,
+      isPending: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useLeaderboardQueues>);
+    const html = renderToStaticMarkup(
+      <AdminLeaderboardQueues tenantID="t" tenantName="Turtle" />,
+    );
+    expect(html).not.toContain("0 pending keys");
+    expect(html).toContain("counts are unavailable");
+    expect(html).toContain("Unavailable");
   });
   it("retains stale snapshot on refresh errors", () => {
     vi.mocked(useLeaderboardQueues).mockReturnValue({

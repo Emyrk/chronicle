@@ -1,25 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
 import { operationJSON } from "./leaderboardOperations";
 
-// Temporary isolated alias for SDK LeaderboardQueueDiagnostics (rows are
-// LeaderboardQueueStatus) until the backend generation is integrated.
-export interface LeaderboardQueueSnapshot {
-  tenant_id: string;
-  collected_at: string;
-  queues: readonly {
-    family: string;
-    pending: number;
-    due: number;
-    claimed: number;
-    retrying: number;
-    oldest_pending_at?: string;
-    oldest_due_at?: string;
-  }[];
-}
+import type { LeaderboardQueueDiagnostics } from "./typesGenerated";
+export type {
+  LeaderboardQueueDiagnostics,
+  LeaderboardQueueStatus,
+} from "./typesGenerated";
+
 export const leaderboardQueueKey = (tenantID: string) =>
   ["admin", "leaderboard-queues", tenantID] as const;
 export async function fetchLeaderboardQueues(tenantID: string) {
-  const snapshot = await operationJSON<LeaderboardQueueSnapshot>(
+  const snapshot = await operationJSON<LeaderboardQueueDiagnostics>(
     `/api/v1/admin/leaderboard-queues?tenant_id=${encodeURIComponent(tenantID)}`,
   );
   if (snapshot.tenant_id !== tenantID)
