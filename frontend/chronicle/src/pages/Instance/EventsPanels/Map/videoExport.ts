@@ -44,6 +44,8 @@ export interface CanvasVideoExportOptions {
   signal?: AbortSignal;
   /** The image burned into the bottom-right of every frame (videoWatermark); null for none. */
   watermarkUrl?: string | null;
+  /** Draws over every encoded frame (never the live canvas), after `renderFrame` resolves. */
+  overlay?: (context: CanvasRenderingContext2D, width: number, height: number) => void;
 }
 
 export interface CanvasVideoExportResult {
@@ -80,18 +82,18 @@ function whileHidden(signal: AbortSignal | undefined): Promise<void> {
  * plays smoothly at `fps` however slowly each frame renders. Pauses while the
  * tab is hidden; an abort cancels the encoder and throws an AbortError.
  *
- * Every frame is copied onto a 2D canvas with the Chronicle watermark drawn
- * over it, so the watermark is in the file but never on the live canvas. If
- * the watermark cannot load, frames are encoded straight from the canvas.
+ * Every frame is copied onto a 2D canvas with the Chronicle watermark (and
+ * `overlay`) drawn over it, so they are in the file but never on the live
+ * canvas. With neither, frames are encoded straight from the canvas.
  *
  * The file is built in memory (about 1 MB per second at 1080p), which keeps a
  * long fight's export to a few hundred megabytes.
  */
-export async function exportCanvasVideo({ canvas, fps, frameCount, codec, bitrate, renderFrame, onProgress, onPausedChange, signal, watermarkUrl }: CanvasVideoExportOptions): Promise<CanvasVideoExportResult> {
+export async function exportCanvasVideo({ canvas, fps, frameCount, codec, bitrate, renderFrame, onProgress, onPausedChange, signal, watermarkUrl, overlay }: CanvasVideoExportOptions): Promise<CanvasVideoExportResult> {
   if (!canEncodeVideo()) throw new Error("This browser has no WebCodecs VideoEncoder");
   const { width, height } = canvas;
   const logo = watermarkUrl === null ? null : await loadWatermark(watermarkUrl);
-  const watermarked = logo ? createWatermarkedCanvas(canvas, logo) : null;
+  const watermarked = logo || overlay ? createWatermarkedCanvas(canvas, logo, overlay) : null;
   const output = new Output({ format: new Mp4OutputFormat({ fastStart: "in-memory" }), target: new BufferTarget() });
   const source = new CanvasSource(watermarked?.canvas ?? canvas, { codec, bitrate, keyFrameInterval: 2 });
   output.addVideoTrack(source, { frameRate: fps });

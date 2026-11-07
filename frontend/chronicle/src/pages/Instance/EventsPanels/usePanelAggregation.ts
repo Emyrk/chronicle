@@ -46,7 +46,7 @@ export interface UsePanelAggregationResult<TResult> {
  * Convert PanelContext to serializable ProcessorContext for the worker.
  * Arrays are used for Sets since they can't be serialized through postMessage.
  */
-function toSerializableContext(
+export function toSerializableContext(
   ctx: PanelContext,
   panelOption: string | null,
   panelContext: Record<string, unknown> | null,
