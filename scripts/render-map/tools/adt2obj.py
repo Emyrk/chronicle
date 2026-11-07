@@ -31,7 +31,7 @@ import yaml
 from PIL import Image
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from wmo2obj import read_group, read_root  # noqa: E402
+from wmo2obj import read_group, read_root, texkey  # noqa: E402
 import m2obj  # noqa: E402
 
 TILE = 533.33333
@@ -196,16 +196,26 @@ def read_monolithic_adt(path):
 
     Legacy MCNK header offsets point directly at MCVT/MCLY/MCAL payloads. Reading them avoids
     treating MCNR bytes as nested chunk headers, which is unreliable in observed 1.12 files.
-    M2 placements are counted but intentionally not normalized into geometry.
+    M2 placements are counted but intentionally not normalized into geometry. WMO placements
+    resolve their name through MWID/MWMO and use the same placement shape as modern obj0 data.
     """
     with open(path, "rb") as source:
         buf = source.read()
-    out = {"chunks": [], "mh2o": None, "textures": [], "m2_placements": 0, "wmo_placements": 0}
+    out = {"chunks": [], "mh2o": None, "textures": [], "m2_placements": 0, "wmo_placements": []}
+    mwmo = b""
+    mwid = []
+    unresolved_wmos = []
     for tag, off, size in chunks(buf):
         if off + size > len(buf):
             raise ValueError("malformed top-level %s chunk size %d" % (tag, size))
         if tag == "MTEX":
             out["textures"] = read_mtex(buf[off:off + size])
+        elif tag == "MWMO":
+            mwmo = buf[off:off + size]
+        elif tag == "MWID":
+            if size % 4:
+                raise ValueError("malformed MWID size %d" % size)
+            mwid = list(struct.unpack_from("<%dI" % (size // 4), buf, off))
         elif tag == "MH2O":
             out["mh2o"] = (buf, off, size)
         elif tag == "MDDF":
@@ -215,7 +225,16 @@ def read_monolithic_adt(path):
         elif tag == "MODF":
             if size % 64:
                 raise ValueError("malformed MODF size %d" % size)
-            out["wmo_placements"] += size // 64
+            for i in range(size // 64):
+                o = off + 64 * i
+                name_index, uid = struct.unpack_from("<II", buf, o)
+                pos = struct.unpack_from("<3f", buf, o + 8)
+                rot = struct.unpack_from("<3f", buf, o + 20)
+                bmin = struct.unpack_from("<3f", buf, o + 32)
+                bmax = struct.unpack_from("<3f", buf, o + 44)
+                flags, dset, nset, _padding = struct.unpack_from("<4H", buf, o + 56)
+                unresolved_wmos.append({"name_index": name_index, "uid": uid, "pos": pos, "rot": rot,
+                                        "bmin": bmin, "bmax": bmax, "flags": flags, "scale": 1.0})
         elif tag == "MCNK":
             if size < 128:
                 raise ValueError("malformed MCNK header size %d" % size)
@@ -249,9 +268,19 @@ def read_monolithic_adt(path):
                                   "holes_hi": None, "holes_lo": holes_lo, "heights": heights,
                                   "layers": layers, "alphas": alphas})
     out["chunks"].sort(key=lambda c: (c["iy"], c["ix"]))
-    if out["wmo_placements"]:
-        raise SystemExit("legacy monolithic ADT contains %d WMO placement(s); MODF terrain placement support "
-                         "is not implemented, refusing to omit them" % out["wmo_placements"])
+    for placement in unresolved_wmos:
+        name_index = placement.pop("name_index")
+        if name_index >= len(mwid):
+            raise ValueError("MODF name index %d outside MWID (%d entries)" % (name_index, len(mwid)))
+        name_offset = mwid[name_index]
+        if name_offset >= len(mwmo):
+            raise ValueError("MWID offset %d outside MWMO (%d bytes)" % (name_offset, len(mwmo)))
+        end = mwmo.find(b"\0", name_offset)
+        if end < 0:
+            raise ValueError("unterminated MWMO name at offset %d" % name_offset)
+        placement["name"] = mwmo[name_offset:end].decode("ascii")
+        placement["fid"] = legacy_wmo_key(placement["name"])
+        out["wmo_placements"].append(placement)
     return out
 
 
@@ -420,6 +449,12 @@ class Obj:
 # ------------------------------------------------------------------ terrain tile
 
 BAKE_VERSION = 2  # in the atlas filename: 1 = 1 texel in N, nearest; 2 = box-prefiltered to the sampled density, bilinear
+
+
+def legacy_wmo_key(name):
+    """Stable filesystem/material key for a named MPQ WMO."""
+    import hashlib
+    return "legacy_" + hashlib.sha256(name.lower().replace("/", "\\").encode("utf-8")).hexdigest()[:16]
 
 
 def legacy_texture_key(name):
@@ -617,8 +652,9 @@ def main():
             if quads:
                 obj.quads("liquid_%s" % tag, quads, "liquid")
                 stats["water_quads"] += len(quads)
-        # WMO placements. Legacy monolithic ADTs were rejected above if MODF was present.
-        placements = [] if layout == "monolithic-1.12" else read_obj0_modf(os.path.join(raw, "adt", tag + "_obj0.adt"))
+        # WMO placements. Legacy monolithic ADTs resolve named MWID/MWMO entries in read_monolithic_adt.
+        placements = root["wmo_placements"] if layout == "monolithic-1.12" else read_obj0_modf(
+            os.path.join(raw, "adt", tag + "_obj0.adt"))
         for n, pl in enumerate(placements):
             # keep a WMO whose MODF extents overlap the crop (not just its origin: the Lordaeron palace
             # dome's origin sits outside a walls-only crop while the dome itself is in the middle of it)
@@ -634,19 +670,20 @@ def main():
                 continue
             if pl["fid"] not in wmo_cache:
                 momt, gfids = read_root(os.path.join(wdir, "root.wmo"))
-                groups = [read_group(os.path.join(wdir, "groups", "group_%03d.wmo" % gi))
-                          if gfids[gi] else {"tris": [], "verts": []}  # GFID slot 0 = unused group
-                          for gi in range(len(gfids))]
+                groups = []
+                for gi in range(len(gfids)):
+                    group_path = os.path.join(wdir, "groups", "group_%03d.wmo" % gi)
+                    groups.append(read_group(group_path) if os.path.exists(group_path) else {"tris": [], "verts": []})
                 wmo_cache[pl["fid"]] = (momt, groups)
                 for mi, m in enumerate(momt):
-                    key = m.get("texfid")
+                    key = texkey(m)
                     png = os.path.join(wdir, "obj", "textures", "%s.png" % key) if key else None
-                    obj.material("wmo%d_mat_%d_b%d" % (pl["fid"], mi, m["blend"]), png if png and os.path.exists(png) else None)
+                    obj.material("wmo%s_mat_%d_b%d" % (pl["fid"], mi, m["blend"]), png if png and os.path.exists(png) else None)
             momt, groups = wmo_cache[pl["fid"]]
             err = verify_convention(wmo_bbox(os.path.join(wdir, "root.wmo")), pl)
             stats["max_placement_bbox_error_yd"] = max(stats.get("max_placement_bbox_error_yd", 0), round(float(err), 3))
             if err > 1.0:
-                raise SystemExit("WMO %d placement does not reproduce its MODF extents (error %.1f yd); the rotation "
+                raise SystemExit("WMO %s placement does not reproduce its MODF extents (error %.1f yd); the rotation "
                                  "convention in placement_matrix() does not hold for this file: %s" % (pl["fid"], err, pl))
             for gi, g in enumerate(groups):
                 if not g["tris"]:
@@ -655,15 +692,15 @@ def main():
                 uvs = np.asarray(g["uvs"]) if len(g["uvs"]) == len(g["verts"]) else None
                 if uvs is not None:
                     uvs = np.stack([uvs[:, 0], 1 - uvs[:, 1]], axis=1)
-                tris = [(i0, i1, i2, "wmo%d_mat_%d_b%d" % (pl["fid"], m, momt[m]["blend"] if m < len(momt) else 0))
+                tris = [(i0, i1, i2, "wmo%s_mat_%d_b%d" % (pl["fid"], m, momt[m]["blend"] if m < len(momt) else 0))
                         for (m, i0, i1, i2) in sorted(g["tris"])]
-                obj.mesh("wmo_%d_%s_%d_group_%03d" % (pl["fid"], tag, n, gi), W, tris, uvs)
+                obj.mesh("wmo_%s_%s_%d_group_%03d" % (pl["fid"], tag, n, gi), W, tris, uvs)
                 if g.get("liquid"):
                     lq = []
                     for q in g["liquid"]:
                         Wq, _ = place_vertices(list(q), pl)
                         lq.append([tuple(v) for v in Wq])
-                    obj.quads("liquid_wmo_%d_%s_%d_%03d" % (pl["fid"], tag, n, gi), lq, "liquid")
+                    obj.quads("liquid_wmo_%s_%s_%d_%03d" % (pl["fid"], tag, n, gi), lq, "liquid")
             stats["wmo_instances"] += 1
         # M2 doodads (spike)
         if a.m2 and layout != "monolithic-1.12":

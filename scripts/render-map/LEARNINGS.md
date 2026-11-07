@@ -7,7 +7,7 @@ reason it is here; the rules themselves live in README / the render-map skill (`
 
 - **Monolithic does not mean nested-chunk scanning works.** Emerald's `MCNK` data after `MCNR` is not reliable to iterate as generic chunks. The 1.12 header offsets at 0x14/0x1c/0x24 point directly to the `MCVT`/`MCLY`/`MCAL` payloads; validate those ranges and normalize them in memory for the existing terrain pipeline.
 - **Legacy splat alpha is packed.** Observed Emerald layers use 2048-byte 4-bit `MCAL`, two pixels per byte. Named `MTEX` BLPs must resolve through the MPQ chain, and provenance must retain each winning archive.
-- **Omission must be explicit.** M2 placements are counted and documented but not meshed. A monolithic terrain ADT with `MODF` aborts, because silently dropping placed WMO geometry would produce a plausible but incomplete map.
+- **Omission must be explicit.** M2 placements are counted and documented but not meshed. Monolithic terrain `MODF` placements now resolve named WMOs through `MWID`/`MWMO`, deduplicate by unique ID, and verify transformed bounds; before that support existed, the extractor aborted rather than produce a plausible but incomplete map.
 
 ## 2026-10-18 — Blackwing Lair (placed WMO, `placed_wmo:`)
 
