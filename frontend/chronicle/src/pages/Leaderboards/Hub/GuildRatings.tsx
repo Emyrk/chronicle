@@ -5,7 +5,7 @@ import { ArrowDown, ArrowRight, ChevronLeft, ChevronRight } from "lucide-react"
 import { RATING_METRICS, type RatingMetric } from "@/pages/Leaderboards/Ratings/ratingBoards.fixtures"
 import { cn } from "@/lib/utils"
 import { BoardSearch, MasteryPartCells, MasteryPartHeaders, PublishedMasteryCells, PublishedMasteryHeaders, PeakComponents } from "@/pages/Leaderboards/Ratings/RatingFullList"
-import { BoardSkeleton } from "@/pages/Leaderboards/Ratings/RatingLeaderboard"
+import { BoardSkeleton, BossMetricSkeleton } from "@/pages/Leaderboards/Ratings/RatingLeaderboard"
 import { BossPortrait, Emblem, RankMark } from "@/pages/Leaderboards/Ratings/RatingParts"
 import { METRIC_THEMES, type MetricTheme, type RatingView } from "@/pages/Leaderboards/Ratings/ratingThemes"
 import { formatClock, guildRatings, type GuildRating } from "./hub.fixtures"
@@ -15,6 +15,7 @@ import { guildAttributes } from "@/components/EntityMenu/leaderboardEntities"
 export interface GuildRatingData {
   live?: RatingLiveData
   ratings: Record<RatingMetric, GuildRating[]>
+  perBossState?: (boss: string) => Partial<Record<RatingMetric, { pending?: boolean; error?: string }>>
   perBoss: (boss: string) => Record<RatingMetric, GuildRating[]> | undefined
   pending?: boolean
   error?: string
@@ -167,11 +168,10 @@ export function GuildRatingBoards({
       </section>
     )
   }
-  if (data?.pending) return <BoardSkeleton />
 
   return (
     <div className="space-y-5" style={{ "--metric": theme.accent } as CSSProperties}>
-      {expanded ? (
+      {data?.pending ? <BoardSkeleton /> : expanded ? (
         <GuildFullTable
           toolbar={toolbar}
           label={label}
@@ -220,6 +220,7 @@ export function GuildRatingBoards({
               <BossBoard
                 key={boss}
                 boss={boss}
+                states={data?.perBossState?.(boss)}
                 ratings={data ? (data.perBoss(boss) ?? EMPTY_GUILD_RATINGS) : guildRatings([boss], allBosses, instanceName, 3)}
                 view={view}
                 onOpen={() => onBoss(boss)}
@@ -459,12 +460,14 @@ function GuildFullTable({
 
 /** One boss: #1 per metric on the overview, top three on a single metric. */
 function BossBoard({
+  states,
   boss,
   ratings: r,
   view,
   onOpen,
 }: {
   boss: string
+  states?: Partial<Record<RatingMetric, { pending?: boolean; error?: string }>>
   ratings: Record<RatingMetric, GuildRating[]>
   view: RatingView
   onOpen: () => void
@@ -476,6 +479,7 @@ function BossBoard({
     <button
       type="button"
       onClick={onOpen}
+      aria-busy={Object.values(states ?? {}).some(state => state.pending)}
       aria-label={boss}
       className="group flex cursor-pointer flex-col overflow-hidden rounded-xl border bg-card text-left transition-colors hover:border-white/20"
     >
@@ -484,8 +488,11 @@ function BossBoard({
         <span className="truncate font-wow text-base group-hover:text-primary">{boss}</span>
       </div>
       <ol className="text-xs">
-        {rows.map(({ metric, g }, i) => {
+        {(view === "overview" ? RATING_METRICS.map(metric => ({metric,g:r[metric][0]})) : rows).map(({ metric, g }, i) => {
           const t = METRIC_THEMES[metric]
+          if (states?.[metric]?.pending) return <BossMetricSkeleton key={metric} boss={boss} label={t.label} />
+          if (states?.[metric]?.error) return <li key={metric} role="alert" title={states[metric]?.error} className="h-7 truncate px-3 py-1.5 text-muted-foreground">{states[metric]?.error}</li>
+          if (!g) return <li key={metric} className="h-7 px-3 py-1.5 text-muted-foreground">No ranked kills</li>
           return (
             <li key={metric + g.guild} className="flex items-center gap-2 px-3 py-1.5">
               {view === "overview" ? (

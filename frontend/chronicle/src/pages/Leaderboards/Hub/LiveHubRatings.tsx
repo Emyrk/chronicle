@@ -226,6 +226,14 @@ export function LiveHubRatings(props: LiveHubRatingsProps) {
           );
         return { peak: map(0), mastery: map(1), renown: map(2) };
       },
+      perBossState: (boss) => {
+        const index = targets.findIndex((target) => target.boss === boss);
+        if (index < 0) return {};
+        return Object.fromEntries(RATING_METRICS.map((metric, offset) => {
+          const query = allQueries[index * 3 + offset];
+          return [metric, query.isError ? { error: query.error.message } : !query.data ? { pending: true } : {}];
+        }));
+      },
       pending: !!context && queries.some((q) => q.isPending),
       error: !context
         ? "No enabled instance variant."
