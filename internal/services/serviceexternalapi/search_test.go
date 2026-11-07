@@ -31,6 +31,7 @@ import (
 type searchFixture struct {
 	router http.Handler
 	tenant uuid.UUID
+	realm  string
 	runs   []uuid.UUID // Molten Core runs, newest first
 	// aiKeys maps a supporter tier to a working AI key whose owner has it.
 	aiKeys map[string]string
@@ -61,7 +62,8 @@ func newSearchFixture(t *testing.T) *searchFixture {
 	suffix := realm.String()[:8]
 	exec("INSERT INTO tenants (id, name, include_in_all) VALUES ($1, $2, false)", f.tenant, "tenant-"+suffix)
 	exec("INSERT INTO wow_servers (id, name, tenant_id) VALUES ($1, $2, $3)", server, "server-"+suffix, f.tenant)
-	exec("INSERT INTO wow_server_realms (id, server_id, name) VALUES ($1, $2, $3)", realm, server, "Nordanaar-"+suffix)
+	f.realm = "Nordanaar-" + suffix
+	exec("INSERT INTO wow_server_realms (id, server_id, name) VALUES ($1, $2, $3)", realm, server, f.realm)
 	exec("INSERT INTO guilds (id, realm_id, name) VALUES ($1, $2, 'Alpha | Omega')", guild, realm)
 	t0 := time.Date(2026, 10, 15, 19, 0, 0, 0, time.UTC)
 	instance := func(name string, start time.Time) uuid.UUID {
@@ -107,11 +109,12 @@ func newSearchFixture(t *testing.T) *searchFixture {
 	t.Cleanup(pool.Close)
 
 	store := database.New(pool)
-	svc := &Service{search: serviceinstancesearch.New(testutil.Logger(t), store, prometheus.NewRegistry(), resolver)}
+	svc := &Service{db: store, search: serviceinstancesearch.New(testutil.Logger(t), store, prometheus.NewRegistry(), resolver)}
 	svc.aiKeys = aikey.NewAuthenticator(testutil.Logger(t), store, svc.searchTier)
 	svc.setupRoutes()
 	router := chi.NewRouter()
 	router.Mount("/api/external/v1", svc)
+	router.NotFound(svc.MountAgentViews(router, http.NotFoundHandler()).ServeHTTP)
 	f.router = router
 	return f
 }
@@ -329,8 +332,7 @@ func TestSearchGETWithAIKey(t *testing.T) {
 		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 		body := rec.Body.String()
 		require.Contains(t, body, "(http://example.com/instances/"+f.runs[0].String()+"?ai_key="+honored+")")
-		lines := strings.Split(strings.TrimSpace(body), "\n")
-		next := strings.TrimSuffix(strings.TrimPrefix(lines[len(lines)-1], "[Next page]("), ")")
+		next := followLink(t, body, "Next page")
 		require.Contains(t, next, "ai_key="+honored)
 
 		// A link-following agent stays keyed on the next page.

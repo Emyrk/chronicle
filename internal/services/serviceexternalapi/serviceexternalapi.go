@@ -2,6 +2,7 @@ package serviceexternalapi
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 
 	"github.com/Emyrk/chronicle/api/httpapi"
@@ -54,10 +55,15 @@ type externalAPIStore interface {
 	GetParseScoreResultsForInstance(context.Context, uuid.UUID) ([]database.ParseScoreResult, error)
 	InstanceEvent(context.Context, database.InstanceEventParams) (database.LogInstanceEvent, error)
 	ListConsumableDisambiguationsByDataset(context.Context, uuid.UUID) ([]database.ListConsumableDisambiguationsByDatasetRow, error)
+	GetUserByID(context.Context, uuid.UUID) (database.ChronicleUser, error)
+	GetGuildByID(context.Context, uuid.UUID) (database.GetGuildByIDRow, error)
+	GetWoWServerRealm(context.Context, uuid.UUID) (database.WowServerRealm, error)
+	GetWoWServerRealmByName(context.Context, string) (database.WowServerRealm, error)
 }
 
 type Service struct {
 	broker      *services.Services
+	logger      *slog.Logger
 	db          externalAPIStore
 	router      chi.Router
 	rateLimiter *externalIPLimiter
@@ -89,6 +95,7 @@ func (s *Service) DependsOn() []string {
 func (s *Service) Start(_ context.Context) error {
 	store := servicedbstore.DatabaseStore(s.broker)
 	s.db = store
+	s.logger = servicelogger.Logger(s.broker)
 	s.search = serviceinstancesearch.SearchService(s.broker)
 	s.aiKeys = aikey.NewAuthenticator(servicelogger.Logger(s.broker), store, s.searchTier)
 	s.setupRoutes()
