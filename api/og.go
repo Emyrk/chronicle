@@ -368,16 +368,12 @@ func (api *API) buildInstanceOG(ctx context.Context, r *http.Request, host strin
 	db := api.Opts.Zed
 
 	encounters, _ := db.EncountersByInstanceID(ctx, inst.ID)
-	players, _ := db.InstancePlayersByInstanceID(ctx, inst.ID)
+	players, playersErr := db.InstancePlayersByInstanceID(ctx, inst.ID)
 
-	bossKills := 0
 	var startDate time.Time
 	var endDate time.Time
 	var combatDuration time.Duration
 	for _, e := range encounters {
-		if e.Boss && (e.KillType == database.KillTypeClean || e.KillType == database.KillTypePartial) {
-			bossKills++
-		}
 		if e.StartTime.Valid && e.EndTime.Valid {
 			combatDuration += e.EndTime.Time.Sub(e.StartTime.Time)
 		}
@@ -427,18 +423,24 @@ func (api *API) buildInstanceOG(ctx context.Context, r *http.Request, host strin
 		URL:         fmt.Sprintf("https://%s/instances/%s", host, identifier),
 		ImageURL:    instanceOGImageURL(host, inst.Name),
 	}
-	if card := api.raidCardImageURL(ctx, r, host, inst, raidCard{
-		Guild:    inst.GuildName.String,
-		Raid:     inst.Name,
-		Realm:    inst.RealmName,
-		Date:     startDate,
-		Players:  len(players),
-		Kills:    bossKills,
-		Bosses:   distinctBossEncounters(encounters),
-		Duration: dur,
-		Comp:     raidComposition(players),
-	}); card != "" {
-		og.ImageURL = card
+	if api.ogServiceConfigured() {
+		base := raidCard{
+			Host:     host,
+			Guild:    inst.GuildName.String,
+			Raid:     inst.Name,
+			Realm:    inst.RealmName,
+			Date:     startDate,
+			Duration: dur,
+		}
+		if playersErr == nil {
+			n := len(players)
+			base.Players = &n
+			base.Comp = raidComposition(players)
+		}
+		card := api.loadRaidCard(r, inst, encounters, base)
+		if imageURL := api.ogImageURL(r, "raid", raidCardParams(card)); imageURL != "" {
+			og.ImageURL = imageURL
+		}
 	}
 	return og
 }

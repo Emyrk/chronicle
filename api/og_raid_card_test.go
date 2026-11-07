@@ -1,6 +1,9 @@
 package api
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"testing"
 	"time"
@@ -8,19 +11,24 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/authz"
+	"github.com/Emyrk/chronicle/database/dbtestutil"
+	"github.com/Emyrk/chronicle/internal/testutil"
 )
 
 func TestRaidCardParams(t *testing.T) {
 	t.Parallel()
 
-	wipes, avg := 0, 81
+	wipes, avg, players := 0, 81, 40
 	card := raidCard{
+		Host:     "forever.chronicleclassic.com",
 		Guild:    "Nightfall",
 		Raid:     "Molten Core",
 		Realm:    "Nordanaar",
 		Date:     time.Date(2026, 11, 6, 21, 30, 0, 0, time.UTC),
-		Players:  40,
+		Players:  &players,
 		Kills:    10,
 		Bosses:   10,
 		Duration: 6727 * time.Second,
@@ -34,6 +42,7 @@ func TestRaidCardParams(t *testing.T) {
 	}
 
 	require.Equal(t, url.Values{
+		"host":    {"forever.chronicleclassic.com"},
 		"guild":   {"Nightfall"},
 		"raid":    {"Molten Core"},
 		"realm":   {"Nordanaar"},
@@ -54,7 +63,6 @@ func TestRaidCardParams(t *testing.T) {
 	base, err := url.Parse("https://og.example.com/")
 	require.NoError(t, err)
 	params := raidCardParams(card)
-	params.Set("host", "forever.chronicleclassic.com")
 	signed, err := url.Parse(signedOGImageURL(base, "k", "raid", params.Get("host"), "WoW Forever", params))
 	require.NoError(t, err)
 	q := signed.Query()
@@ -69,8 +77,9 @@ func TestRaidCardParamsFallbacks(t *testing.T) {
 	t.Parallel()
 
 	// A PUG dungeon: no guild, no ranked bosses, no parse, no known art.
-	params := raidCardParams(raidCard{Raid: "Karazhan Crypts", Realm: "Nordanaar", Players: 5, Kills: 4, Bosses: 6})
-	for _, key := range []string{"guild", "top", "avg", "wipes", "comp", "date", "dur"} {
+	// The players query failed: no players param rather than "0 players".
+	params := raidCardParams(raidCard{Raid: "Karazhan Crypts", Realm: "Nordanaar", Kills: 4, Bosses: 6})
+	for _, key := range []string{"host", "guild", "players", "top", "avg", "wipes", "comp", "date", "dur"} {
 		require.False(t, params.Has(key), key)
 	}
 	require.Equal(t, "karazhan-crypts", params.Get("art"))
@@ -134,29 +143,89 @@ func TestRaidComposition(t *testing.T) {
 	}, raidComposition(players))
 }
 
-func TestRaidAvgParse(t *testing.T) {
+func TestRaidBossProgress(t *testing.T) {
 	t.Parallel()
 
-	result := func(guid, role, status string, score float64) database.ParseScoreResult {
-		return database.ParseScoreResult{PlayerGuid: guid, PlayerRole: role, Status: status, PreciseScore: score}
-	}
-	dps := []database.ParseScoreResult{
-		result("a", "dps", "ok", 90),
-		result("a", "dps", "low_confidence", 70), // a: 80
-		result("b", "tank", "ok", 50),            // b: 50
-		result("b", "tank", "sample_too_small", 0),
-		result("h", "heal", "ok", 1), // healers read from HPS
-	}
-	hps := []database.ParseScoreResult{
-		result("h", "heal", "ok", 95), // h: 95
-		result("a", "dps", "ok", 5),
-	}
-	avg := raidAvgParse(dps, hps)
-	require.NotNil(t, avg)
-	require.Equal(t, 75, *avg) // (80 + 50 + 95) / 3
+	progression, count := registry.RegistryForFlavor(nil, database.WoWFlavor{database.FlavorVanilla}).ProgressionBosses("Zul'Gurub")
+	require.Len(t, progression, 8)
+	require.NotNil(t, count)
+	require.Equal(t, 8, *count)
 
-	require.Nil(t, raidAvgParse(nil, nil))
-	require.Nil(t, raidAvgParse([]database.ParseScoreResult{result("a", "dps", "sample_too_small", 40)}, nil))
+	kill := func(names ...string) []database.LogInstanceEncounter {
+		out := make([]database.LogInstanceEncounter, 0, len(names))
+		for _, name := range names {
+			out = append(out, database.LogInstanceEncounter{Name: name, Boss: true, KillType: database.KillTypeClean})
+		}
+		return out
+	}
+	// Gahz'ranka and an Edge of Madness boss are optional.
+	optional := kill("Gahz'ranka", "Hazza'rah")
+
+	t.Run("FullClearPlusOptional", func(t *testing.T) {
+		t.Parallel()
+		kills, total := raidBossProgress(append(kill(progression...), optional...), progression, count)
+		require.Equal(t, 8, kills)
+		require.Equal(t, 8, total)
+		params := raidCardParams(raidCard{Raid: "Zul'Gurub", Kills: kills, Bosses: total})
+		require.Equal(t, "8", params.Get("kills"))
+		require.Equal(t, "8", params.Get("bosses"))
+	})
+
+	t.Run("PartialPlusOptionalIsNotAClear", func(t *testing.T) {
+		t.Parallel()
+		encounters := append(kill(progression[:6]...), optional...)
+		// A wipe on a progression boss doesn't count either.
+		encounters = append(encounters, database.LogInstanceEncounter{Name: progression[6], Boss: true, KillType: database.KillTypeWipe})
+		kills, total := raidBossProgress(encounters, progression, count)
+		require.Equal(t, 6, kills)
+		require.Equal(t, 8, total)
+	})
+
+	t.Run("NoProgressionList", func(t *testing.T) {
+		t.Parallel()
+		encounters := append(kill("A", "B", "A"), database.LogInstanceEncounter{Name: "C", Boss: true, KillType: database.KillTypeWipe})
+		kills, total := raidBossProgress(encounters, nil, nil)
+		require.Equal(t, 2, kills)
+		require.Equal(t, 3, total)
+	})
+}
+
+// loadRaidCard on a real store: the parallel queries finish (or time out)
+// before it returns, and a failed or empty part keeps base's value.
+func TestLoadRaidCard(t *testing.T) {
+	t.Parallel()
+
+	db, _ := dbtestutil.NewDB(t)
+	api := &API{Opts: &Options{Zed: authz.NewDatabaseOnly(testutil.Logger(t), db)}}
+	inst := database.LogInstancesGuild{ID: uuid.New(), Name: "Zul'Gurub"}
+	players := 20
+	base := raidCard{Raid: "Zul'Gurub", Players: &players}
+	encounters := []database.LogInstanceEncounter{{Name: "Hakkar", Boss: true, KillType: database.KillTypeClean}}
+
+	t.Run("UnknownInstance", func(t *testing.T) {
+		t.Parallel()
+		ctx := testutil.Context(t, testutil.WaitShort)
+		r := httptest.NewRequest(http.MethodGet, "/instances/x", nil).WithContext(ctx)
+		card := api.loadRaidCard(r, inst, encounters, base)
+		require.Equal(t, &players, card.Players)
+		require.Equal(t, 1, card.Kills) // no registry: distinct kills
+		require.Equal(t, 1, card.Bosses)
+		require.Nil(t, card.Wipes)
+		require.Empty(t, card.Top)
+		require.Nil(t, card.AvgParse)
+	})
+
+	t.Run("CanceledRequest", func(t *testing.T) {
+		t.Parallel()
+		ctx, cancel := context.WithCancel(testutil.Context(t, testutil.WaitShort))
+		cancel()
+		r := httptest.NewRequest(http.MethodGet, "/instances/x", nil).WithContext(ctx)
+		start := time.Now()
+		card := api.loadRaidCard(r, inst, encounters, base)
+		require.Less(t, time.Since(start), raidCardTimeout)
+		require.Equal(t, base.Raid, card.Raid)
+		require.Nil(t, card.Wipes)
+	})
 }
 
 func TestOGArtSlug(t *testing.T) {

@@ -9,13 +9,12 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Emyrk/chronicle/database"
 	overviewmetricsversion "github.com/Emyrk/chronicle/internal/overviewmetrics"
-	"github.com/Emyrk/chronicle/internal/parsepolicy"
-	"github.com/Emyrk/chronicle/internal/services/servicetenant"
-	"github.com/Emyrk/chronicle/internal/wowspec"
+	"github.com/Emyrk/chronicle/internal/services/servicerankings"
 )
 
 const (
@@ -26,11 +25,12 @@ const (
 // raidCard is what the OG service's raid template draws (template=raid). The
 // parse (#1666) and clear-time (#1668) cards reuse raidCardParams.
 type raidCard struct {
+	Host     string // tenant host, drawn in the footer
 	Guild    string
 	Raid     string
 	Realm    string
 	Date     time.Time
-	Players  int
+	Players  *int // nil = unknown
 	Kills    int
 	Bosses   int // 0 = unknown
 	Duration time.Duration
@@ -51,8 +51,9 @@ type raidCardClass struct {
 	Count int
 }
 
-// raidCardParams encodes card into the raid template's query params. host,
-// product, template and v are added by ogImageURL.
+// raidCardParams encodes card into the raid template's query params, for
+// ogImageURL(r, "raid", raidCardParams(card)). ogImageURL adds product,
+// template and v.
 func raidCardParams(card raidCard) url.Values {
 	q := url.Values{}
 	setIf := func(k, v string) {
@@ -60,13 +61,17 @@ func raidCardParams(card raidCard) url.Values {
 			q.Set(k, v)
 		}
 	}
+	setIf("host", card.Host)
 	setIf("guild", card.Guild)
 	setIf("raid", card.Raid)
 	setIf("realm", card.Realm)
 	if !card.Date.IsZero() {
-		q.Set("date", card.Date.UTC().Format(time.DateOnly))
+		// Same zone as the page description's date.
+		q.Set("date", card.Date.Format(time.DateOnly))
 	}
-	q.Set("players", strconv.Itoa(card.Players))
+	if card.Players != nil {
+		q.Set("players", strconv.Itoa(*card.Players))
+	}
 	q.Set("kills", strconv.Itoa(card.Kills))
 	if card.Bosses > 0 {
 		q.Set("bosses", strconv.Itoa(card.Bosses))
@@ -98,56 +103,102 @@ func raidCardParams(card raidCard) url.Values {
 	return q
 }
 
-// raidCardImageURL loads what the card needs beyond buildInstanceOG's
-// encounters and players, and returns the signed image URL, or "" when the OG
-// service is not configured. Each extra query is optional: on error its part
-// of the card is left out. r supplies the tenant (for RLS and parse scores)
-// and the site flavor; ctx carries the page-serve timeout.
-func (api *API) raidCardImageURL(ctx context.Context, r *http.Request, host string, inst database.LogInstancesGuild, card raidCard) string {
-	if !api.ogServiceConfigured() {
-		return ""
-	}
-	tenant := servicetenant.TenantFromContext(r.Context())
-	if tenant != nil {
-		ctx = servicetenant.WithTenant(ctx, *tenant)
-	}
+// raidCardTimeout bounds loadRaidCard. OG data resolves on every HTML load
+// of the page, browsers included, so the card must not hold up the first
+// byte for long.
+const raidCardTimeout = 1500 * time.Millisecond
+
+// loadRaidCard fills in what base can't get from data the page already
+// loaded: boss progress, wipes, top DPS and avg parse. The queries run in
+// parallel under raidCardTimeout, derived from r's context (which also
+// carries the tenant). Each part is optional: when its query fails or times
+// out, that part is left off the card (boss progress falls back to the log).
+func (api *API) loadRaidCard(r *http.Request, inst database.LogInstancesGuild, encounters []database.LogInstanceEncounter, base raidCard) raidCard {
+	ctx, cancel := context.WithTimeout(r.Context(), raidCardTimeout)
+	defer cancel()
 	db := api.Opts.Zed
+	card := base
 
-	if metrics, err := db.GetInstanceOverviewMetrics(ctx, database.GetInstanceOverviewMetricsParams{
-		InstanceID:     inst.ID,
-		MetricsVersion: overviewmetricsversion.CurrentVersion,
-	}); err == nil {
-		wipes := int(metrics.WipeCount)
-		card.Wipes = &wipes
-	}
+	// Each goroutine writes only its own variables; all are read after Wait.
+	var (
+		wg                 sync.WaitGroup
+		progression        []string
+		bossCount          *int
+		wipes, avg         *int
+		records            []database.EncounterDpsRanking
+		recordsErr, avgErr error
+	)
+	wg.Go(func() {
+		if api.Chronicle != nil {
+			progression, bossCount = api.Chronicle.RegistryForFlavor(api.resolvedSiteFlavor(ctx)).ProgressionBosses(inst.Name)
+		}
+	})
+	wg.Go(func() {
+		metrics, err := db.GetInstanceOverviewMetrics(ctx, database.GetInstanceOverviewMetricsParams{
+			InstanceID:     inst.ID,
+			MetricsVersion: overviewmetricsversion.CurrentVersion,
+		})
+		if err == nil {
+			n := int(metrics.WipeCount)
+			wipes = &n
+		}
+	})
+	wg.Go(func() {
+		records, recordsErr = db.InstanceRankingRecords(ctx, inst.ID)
+	})
+	wg.Go(func() {
+		var n int
+		var ok bool
+		n, ok, avgErr = servicerankings.InstanceAverageParse(ctx, db, inst.ID)
+		if ok {
+			avg = &n
+		}
+	})
+	wg.Wait()
 
-	if records, err := db.InstanceRankingRecords(ctx, inst.ID); err == nil {
+	card.Kills, card.Bosses = raidBossProgress(encounters, progression, bossCount)
+	card.Wipes = wipes
+	if recordsErr == nil {
 		card.Top = raidTopDPS(records, raidCardTopN)
 	}
 	// Avg parse only reads alongside ranked bosses; dungeons and custom raids
 	// show bosses, duration and wipes instead.
-	if len(card.Top) > 0 {
-		tenantID := servicetenant.TenantIDFromContext(ctx)
-		dps, dpsErr := db.ListPersistedParseScoreResultsForInstance(ctx, database.ListPersistedParseScoreResultsForInstanceParams{
-			TenantID: tenantID, InstanceID: inst.ID, Metric: string(parsepolicy.MetricDPS),
-		})
-		hps, hpsErr := db.ListPersistedParseScoreResultsForInstance(ctx, database.ListPersistedParseScoreResultsForInstanceParams{
-			TenantID: tenantID, InstanceID: inst.ID, Metric: string(parsepolicy.MetricHPS),
-		})
-		if dpsErr == nil && hpsErr == nil {
-			card.AvgParse = raidAvgParse(dps, hps)
+	if avgErr == nil && len(card.Top) > 0 {
+		card.AvgParse = avg
+	}
+	return card
+}
+
+// raidBossProgress returns the card's kills and boss total. With a registry
+// progression list, kills are the distinct listed encounters killed (so
+// optional bosses such as Gahz'ranka don't count) and the total is the
+// registry's count. Without one, kills are distinct boss kills out of the
+// distinct boss encounters the log reached.
+func raidBossProgress(encounters []database.LogInstanceEncounter, progression []string, count *int) (kills, total int) {
+	killed := map[string]struct{}{}
+	reached := map[string]struct{}{}
+	for _, e := range encounters {
+		if !e.Boss {
+			continue
+		}
+		reached[e.Name] = struct{}{}
+		if e.KillType == database.KillTypeClean || e.KillType == database.KillTypePartial {
+			killed[e.Name] = struct{}{}
 		}
 	}
-
-	if api.Chronicle != nil {
-		if count := api.Chronicle.RegistryForFlavor(api.resolvedSiteFlavor(r.Context())).ProgressionBossCount(inst.Name); count != nil {
-			card.Bosses = *count
+	if len(progression) == 0 {
+		return len(killed), len(reached)
+	}
+	for _, name := range progression {
+		if _, ok := killed[name]; ok {
+			kills++
 		}
 	}
-
-	params := raidCardParams(card)
-	params.Set("host", host)
-	return api.ogImageURL(r, "raid", params)
+	total = len(progression)
+	if count != nil && *count > 0 {
+		total = *count
+	}
+	return min(kills, total), total
 }
 
 // raidTopDPS ranks players by damage ÷ time across the instance's ranked boss
@@ -224,44 +275,6 @@ func raidComposition(players []database.LogInstancePlayer) []raidCardClass {
 	return comp
 }
 
-// raidAvgParse is the mean of every player's average parse: HPS rows for
-// healers, DPS rows for everyone else, counting only scored bosses (ok or
-// low confidence), as the instance parses endpoint does. nil when nobody has
-// a scored boss.
-func raidAvgParse(dps, hps []database.ParseScoreResult) *int {
-	scored := func(rows []database.ParseScoreResult, healers bool) map[string][]float64 {
-		out := map[string][]float64{}
-		for _, row := range rows {
-			if (row.PlayerRole == wowspec.RoleHeal) != healers {
-				continue
-			}
-			if row.Status != string(parsepolicy.StatusOK) && row.Status != string(parsepolicy.StatusLowConfidence) {
-				continue
-			}
-			out[row.PlayerGuid] = append(out[row.PlayerGuid], row.PreciseScore)
-		}
-		return out
-	}
-
-	var sum float64
-	var players int
-	for _, byPlayer := range []map[string][]float64{scored(dps, false), scored(hps, true)} {
-		for _, scores := range byPlayer {
-			avg, ok := parsepolicy.AverageParse(scores, len(scores))
-			if !ok {
-				continue
-			}
-			sum += avg.PreciseScore
-			players++
-		}
-	}
-	if players == 0 {
-		return nil
-	}
-	avg := parsepolicy.RoundDisplay(sum / float64(players))
-	return &avg
-}
-
 // ogClassSlug turns a DB class (WARRIOR, DEATH_KNIGHT, Warrior) into the
 // card's class key (warrior, deathknight).
 func ogClassSlug(class string) string {
@@ -287,15 +300,3 @@ func ogArtSlug(instanceName string) string {
 }
 
 var ogNonAlnum = regexp.MustCompile(`[^a-z0-9]+`)
-
-// distinctBossEncounters counts the boss encounters the log reached (killed
-// or not): the card's boss total when the registry has no count.
-func distinctBossEncounters(encounters []database.LogInstanceEncounter) int {
-	seen := map[string]struct{}{}
-	for _, e := range encounters {
-		if e.Boss {
-			seen[e.Name] = struct{}{}
-		}
-	}
-	return len(seen)
-}

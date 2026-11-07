@@ -86,7 +86,8 @@ function StatRow({ stats }: { stats: Array<{ value: string; label: string; color
 }
 
 function TopDamage({ entries }: { entries: RaidTopEntry[] }) {
-  const max = entries[0].dps;
+  // Don't trust the param order: scale to the largest entry.
+  const max = Math.max(1, ...entries.map(entry => entry.dps));
   return (
     <div
       style={{
@@ -101,8 +102,8 @@ function TopDamage({ entries }: { entries: RaidTopEntry[] }) {
       }}
     >
       <span style={{ fontSize: 19, fontWeight: 700, letterSpacing: '0.14em', color: COLORS.muted }}>TOP DAMAGE</span>
-      {entries.map(entry => (
-        <div key={entry.name} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {entries.map((entry, index) => (
+        <div key={index} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 26 }}>
             <span style={{ color: classColor(entry.className), fontWeight: 600 }}>{entry.name}</span>
             <span style={{ fontWeight: 700 }}>{thousands(entry.dps)}</span>
@@ -242,9 +243,9 @@ async function render(_props: ThemeProps, context: ThemeContext): Promise<React.
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {total > 0 ? (
             <div style={{ display: 'flex', height: 12, gap: 3 }}>
-              {comp.map(entry => (
+              {comp.map((entry, index) => (
                 <div
-                  key={entry.className}
+                  key={index}
                   style={{ display: 'flex', flexGrow: entry.count, flexBasis: 0, height: '100%', borderRadius: 3, background: classColor(entry.className) }}
                 />
               ))}

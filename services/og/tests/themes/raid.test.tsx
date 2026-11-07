@@ -100,6 +100,12 @@ describe('raid card', () => {
     }
   });
 
+  test('top bars scale to the largest entry even when unsorted', async () => {
+    const json = await tree(query({ top: 'Small:mage:500,Big:warrior:1000,Same:rogue:500' }));
+    const widths = [...json.matchAll(/"width":"(\d+\.\d)%"/g)].map(m => m[1]);
+    expect(widths).toEqual(['50.0', '100.0', '50.0']);
+  });
+
   test('fallback: no art draws the gold glow', async () => {
     const network = spyNetwork();
     const json = await tree(query({ art: null }));
