@@ -53,6 +53,7 @@ export function mergeRunEncounters(encounters: Map<string, MapEncounterPositions
   const events: ReplayEffectEvent[] = [];
   const heals = new Map<string, ReplayEffectEvent[]>();
   const debuffsByUnit = new Map<string, MapDebuff[]>();
+  const activePlayerGuids = new Set<string>();
   for (const encounter of ordered) {
     appendAll(positionsByUnit, encounter.positionsByUnit);
     appendAll(healthByUnit, encounter.healthByUnit);
@@ -60,6 +61,7 @@ export function mergeRunEncounters(encounters: Map<string, MapEncounterPositions
     appendAll(effects.deathsByUnit, encounter.effects.deathsByUnit);
     appendAll(effects.resurrectsByUnit, encounter.effects.resurrectsByUnit);
     appendAll(heals, encounter.effects.healsByUnit);
+    for (const guid of encounter.activePlayerGuids) activePlayerGuids.add(guid);
     appendAll(debuffsByUnit, encounter.debuffsByUnit);
   }
   for (const [guid, list] of debuffsByUnit) debuffsByUnit.set(guid, sortedByTime(list, (debuff) => debuff.startMs));
@@ -77,6 +79,7 @@ export function mergeRunEncounters(encounters: Map<string, MapEncounterPositions
     healthByUnit,
     effects,
     debuffsByUnit,
+    activePlayerGuids: [...activePlayerGuids],
   };
 }
 
@@ -84,7 +87,7 @@ export function mergeRunEncounters(encounters: Map<string, MapEncounterPositions
 export function runSignature(encounters: Map<string, MapEncounterPositions>): string {
   let signature = String(encounters.size);
   for (const encounter of encounters.values()) {
-    signature += `|${encounter.encounterId}:${encounter.endMs}:${encounter.positionsByUnit.size}:${encounter.effects.events.length}`;
+    signature += `|${encounter.encounterId}:${encounter.endMs}:${encounter.positionsByUnit.size}:${encounter.effects.events.length}:${encounter.activePlayerGuids.length}`;
   }
   return signature;
 }
