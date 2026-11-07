@@ -104,6 +104,15 @@ func (api *API) LeaderboardV2(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out := chroniclesdk.LeaderboardV2Response{Status: "ready", Entries: []chroniclesdk.LeaderboardV2Entry{}, IncludedBosses: selection.Bosses}
+	operations, err := db.ActiveLeaderboardOperation(ctx, tenant.ID)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	if len(operations) > 0 {
+		out.Maintenance = operationMaintenance(operations[0])
+	}
+
 	fingerprint := leaderboardread.Fingerprint(tenant.ID, req, selection)
 	var cursor leaderboardread.Cursor
 	if q.Get("cursor") != "" {

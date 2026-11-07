@@ -13101,6 +13101,911 @@ func (q *sqlQuerier) LeaderboardD2Clock(ctx context.Context) (pgtype.Timestamptz
 	return column_1, err
 }
 
+const repairOperationGuildBossBenchmarks = `-- name: RepairOperationGuildBossBenchmarks :one
+WITH page AS MATERIALIZED (
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name FROM leaderboard_guild_boss_benchmarks WHERE tenant_id= $1::uuid AND computed_at<= $2::timestamptz
+ AND (instance_name, difficulty_name, max_players, encounter_name)>(COALESCE(($3::jsonb->>'instance_name')::text,''::text), COALESCE(($3::jsonb->>'difficulty_name')::text,''::text), COALESCE(($3::jsonb->>'max_players')::smallint,-1::smallint), COALESCE(($3::jsonb->>'encounter_name')::text,''::text)) ORDER BY instance_name, difficulty_name, max_players, encounter_name LIMIT 100
+), enqueued AS (
+ INSERT INTO leaderboard_dirty_guild_boss_benchmarks (tenant_id, instance_name, difficulty_name, max_players, encounter_name,process_after)
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name,clock_timestamp() FROM page
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name) DO UPDATE SET revision=leaderboard_dirty_guild_boss_benchmarks.revision+1,dirtied_at=clock_timestamp(),process_after=LEAST(leaderboard_dirty_guild_boss_benchmarks.process_after,EXCLUDED.process_after) RETURNING 1
+) SELECT (SELECT count(*) FROM enqueued)::bigint AS page_count,COALESCE((SELECT to_jsonb(page) FROM page ORDER BY instance_name DESC, difficulty_name DESC, max_players DESC, encounter_name DESC LIMIT 1),'{}'::jsonb)::jsonb AS last_cursor
+`
+
+type RepairOperationGuildBossBenchmarksParams struct {
+	TenantID    uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	Cutoff      pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	CursorScope []byte             `db:"cursor_scope" json:"cursor_scope"`
+}
+
+type RepairOperationGuildBossBenchmarksRow struct {
+	PageCount  int64  `db:"page_count" json:"page_count"`
+	LastCursor []byte `db:"last_cursor" json:"last_cursor"`
+}
+
+func (q *sqlQuerier) RepairOperationGuildBossBenchmarks(ctx context.Context, arg RepairOperationGuildBossBenchmarksParams) (RepairOperationGuildBossBenchmarksRow, error) {
+	row := q.db.QueryRow(ctx, repairOperationGuildBossBenchmarks, arg.TenantID, arg.Cutoff, arg.CursorScope)
+	var i RepairOperationGuildBossBenchmarksRow
+	err := row.Scan(&i.PageCount, &i.LastCursor)
+	return i, err
+}
+
+const repairOperationGuildBossSubjects = `-- name: RepairOperationGuildBossSubjects :one
+WITH page AS MATERIALIZED (
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id FROM leaderboard_guild_boss_subjects WHERE tenant_id= $1::uuid AND computed_at<= $2::timestamptz
+ AND (instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id)>(COALESCE(($3::jsonb->>'instance_name')::text,''::text), COALESCE(($3::jsonb->>'difficulty_name')::text,''::text), COALESCE(($3::jsonb->>'max_players')::smallint,-1::smallint), COALESCE(($3::jsonb->>'encounter_name')::text,''::text), COALESCE(($3::jsonb->>'realm_id')::uuid,'00000000-0000-0000-0000-000000000000'::uuid), COALESCE(($3::jsonb->>'guild_id')::uuid,'00000000-0000-0000-0000-000000000000'::uuid)) ORDER BY instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id LIMIT 100
+), enqueued AS (
+ INSERT INTO leaderboard_dirty_guild_boss_subjects (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id,process_after)
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id,clock_timestamp() FROM page
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id) DO UPDATE SET revision=leaderboard_dirty_guild_boss_subjects.revision+1,dirtied_at=clock_timestamp(),process_after=LEAST(leaderboard_dirty_guild_boss_subjects.process_after,EXCLUDED.process_after) RETURNING 1
+) SELECT (SELECT count(*) FROM enqueued)::bigint AS page_count,COALESCE((SELECT to_jsonb(page) FROM page ORDER BY instance_name DESC, difficulty_name DESC, max_players DESC, encounter_name DESC, realm_id DESC, guild_id DESC LIMIT 1),'{}'::jsonb)::jsonb AS last_cursor
+`
+
+type RepairOperationGuildBossSubjectsParams struct {
+	TenantID    uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	Cutoff      pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	CursorScope []byte             `db:"cursor_scope" json:"cursor_scope"`
+}
+
+type RepairOperationGuildBossSubjectsRow struct {
+	PageCount  int64  `db:"page_count" json:"page_count"`
+	LastCursor []byte `db:"last_cursor" json:"last_cursor"`
+}
+
+func (q *sqlQuerier) RepairOperationGuildBossSubjects(ctx context.Context, arg RepairOperationGuildBossSubjectsParams) (RepairOperationGuildBossSubjectsRow, error) {
+	row := q.db.QueryRow(ctx, repairOperationGuildBossSubjects, arg.TenantID, arg.Cutoff, arg.CursorScope)
+	var i RepairOperationGuildBossSubjectsRow
+	err := row.Scan(&i.PageCount, &i.LastCursor)
+	return i, err
+}
+
+const repairOperationGuildClearBenchmarks = `-- name: RepairOperationGuildClearBenchmarks :one
+WITH page AS MATERIALIZED (
+ SELECT tenant_id, instance_name, difficulty_name, max_players FROM leaderboard_guild_clear_benchmarks WHERE tenant_id= $1::uuid AND computed_at<= $2::timestamptz
+ AND (instance_name, difficulty_name, max_players)>(COALESCE(($3::jsonb->>'instance_name')::text,''::text), COALESCE(($3::jsonb->>'difficulty_name')::text,''::text), COALESCE(($3::jsonb->>'max_players')::smallint,-1::smallint)) ORDER BY instance_name, difficulty_name, max_players LIMIT 100
+), enqueued AS (
+ INSERT INTO leaderboard_dirty_guild_clear_benchmarks (tenant_id, instance_name, difficulty_name, max_players,process_after)
+ SELECT tenant_id, instance_name, difficulty_name, max_players,clock_timestamp() FROM page
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players) DO UPDATE SET revision=leaderboard_dirty_guild_clear_benchmarks.revision+1,dirtied_at=clock_timestamp(),process_after=LEAST(leaderboard_dirty_guild_clear_benchmarks.process_after,EXCLUDED.process_after) RETURNING 1
+) SELECT (SELECT count(*) FROM enqueued)::bigint AS page_count,COALESCE((SELECT to_jsonb(page) FROM page ORDER BY instance_name DESC, difficulty_name DESC, max_players DESC LIMIT 1),'{}'::jsonb)::jsonb AS last_cursor
+`
+
+type RepairOperationGuildClearBenchmarksParams struct {
+	TenantID    uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	Cutoff      pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	CursorScope []byte             `db:"cursor_scope" json:"cursor_scope"`
+}
+
+type RepairOperationGuildClearBenchmarksRow struct {
+	PageCount  int64  `db:"page_count" json:"page_count"`
+	LastCursor []byte `db:"last_cursor" json:"last_cursor"`
+}
+
+func (q *sqlQuerier) RepairOperationGuildClearBenchmarks(ctx context.Context, arg RepairOperationGuildClearBenchmarksParams) (RepairOperationGuildClearBenchmarksRow, error) {
+	row := q.db.QueryRow(ctx, repairOperationGuildClearBenchmarks, arg.TenantID, arg.Cutoff, arg.CursorScope)
+	var i RepairOperationGuildClearBenchmarksRow
+	err := row.Scan(&i.PageCount, &i.LastCursor)
+	return i, err
+}
+
+const repairOperationGuildClearSubjects = `-- name: RepairOperationGuildClearSubjects :one
+WITH page AS MATERIALIZED (
+ SELECT tenant_id, instance_name, difficulty_name, max_players, realm_id, guild_id FROM leaderboard_guild_clear_subjects WHERE tenant_id= $1::uuid AND computed_at<= $2::timestamptz
+ AND (instance_name, difficulty_name, max_players, realm_id, guild_id)>(COALESCE(($3::jsonb->>'instance_name')::text,''::text), COALESCE(($3::jsonb->>'difficulty_name')::text,''::text), COALESCE(($3::jsonb->>'max_players')::smallint,-1::smallint), COALESCE(($3::jsonb->>'realm_id')::uuid,'00000000-0000-0000-0000-000000000000'::uuid), COALESCE(($3::jsonb->>'guild_id')::uuid,'00000000-0000-0000-0000-000000000000'::uuid)) ORDER BY instance_name, difficulty_name, max_players, realm_id, guild_id LIMIT 100
+), enqueued AS (
+ INSERT INTO leaderboard_dirty_guild_clear_subjects (tenant_id, instance_name, difficulty_name, max_players, realm_id, guild_id,process_after)
+ SELECT tenant_id, instance_name, difficulty_name, max_players, realm_id, guild_id,clock_timestamp() FROM page
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, realm_id, guild_id) DO UPDATE SET revision=leaderboard_dirty_guild_clear_subjects.revision+1,dirtied_at=clock_timestamp(),process_after=LEAST(leaderboard_dirty_guild_clear_subjects.process_after,EXCLUDED.process_after) RETURNING 1
+) SELECT (SELECT count(*) FROM enqueued)::bigint AS page_count,COALESCE((SELECT to_jsonb(page) FROM page ORDER BY instance_name DESC, difficulty_name DESC, max_players DESC, realm_id DESC, guild_id DESC LIMIT 1),'{}'::jsonb)::jsonb AS last_cursor
+`
+
+type RepairOperationGuildClearSubjectsParams struct {
+	TenantID    uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	Cutoff      pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	CursorScope []byte             `db:"cursor_scope" json:"cursor_scope"`
+}
+
+type RepairOperationGuildClearSubjectsRow struct {
+	PageCount  int64  `db:"page_count" json:"page_count"`
+	LastCursor []byte `db:"last_cursor" json:"last_cursor"`
+}
+
+func (q *sqlQuerier) RepairOperationGuildClearSubjects(ctx context.Context, arg RepairOperationGuildClearSubjectsParams) (RepairOperationGuildClearSubjectsRow, error) {
+	row := q.db.QueryRow(ctx, repairOperationGuildClearSubjects, arg.TenantID, arg.Cutoff, arg.CursorScope)
+	var i RepairOperationGuildClearSubjectsRow
+	err := row.Scan(&i.PageCount, &i.LastCursor)
+	return i, err
+}
+
+const repairOperationGuildRenownCounts = `-- name: RepairOperationGuildRenownCounts :one
+WITH page AS MATERIALIZED (
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id FROM leaderboard_guild_renown_counts WHERE tenant_id= $1::uuid AND computed_at<= $2::timestamptz
+ AND (instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id)>(COALESCE(($3::jsonb->>'instance_name')::text,''::text), COALESCE(($3::jsonb->>'difficulty_name')::text,''::text), COALESCE(($3::jsonb->>'max_players')::smallint,-1::smallint), COALESCE(($3::jsonb->>'encounter_name')::text,''::text), COALESCE(($3::jsonb->>'realm_id')::uuid,'00000000-0000-0000-0000-000000000000'::uuid), COALESCE(($3::jsonb->>'guild_id')::uuid,'00000000-0000-0000-0000-000000000000'::uuid)) ORDER BY instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id LIMIT 100
+), enqueued AS (
+ INSERT INTO leaderboard_dirty_guild_renown (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id,process_after)
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id,clock_timestamp() FROM page
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id) DO UPDATE SET revision=leaderboard_dirty_guild_renown.revision+1,dirtied_at=clock_timestamp(),process_after=LEAST(leaderboard_dirty_guild_renown.process_after,EXCLUDED.process_after) RETURNING 1
+) SELECT (SELECT count(*) FROM enqueued)::bigint AS page_count,COALESCE((SELECT to_jsonb(page) FROM page ORDER BY instance_name DESC, difficulty_name DESC, max_players DESC, encounter_name DESC, realm_id DESC, guild_id DESC LIMIT 1),'{}'::jsonb)::jsonb AS last_cursor
+`
+
+type RepairOperationGuildRenownCountsParams struct {
+	TenantID    uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	Cutoff      pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	CursorScope []byte             `db:"cursor_scope" json:"cursor_scope"`
+}
+
+type RepairOperationGuildRenownCountsRow struct {
+	PageCount  int64  `db:"page_count" json:"page_count"`
+	LastCursor []byte `db:"last_cursor" json:"last_cursor"`
+}
+
+func (q *sqlQuerier) RepairOperationGuildRenownCounts(ctx context.Context, arg RepairOperationGuildRenownCountsParams) (RepairOperationGuildRenownCountsRow, error) {
+	row := q.db.QueryRow(ctx, repairOperationGuildRenownCounts, arg.TenantID, arg.Cutoff, arg.CursorScope)
+	var i RepairOperationGuildRenownCountsRow
+	err := row.Scan(&i.PageCount, &i.LastCursor)
+	return i, err
+}
+
+const repairOperationPlayerBossBenchmarks = `-- name: RepairOperationPlayerBossBenchmarks :one
+WITH page AS MATERIALIZED (
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric FROM leaderboard_player_boss_benchmarks WHERE tenant_id= $1::uuid AND computed_at<= $2::timestamptz
+ AND (instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric)>(COALESCE(($3::jsonb->>'instance_name')::text,''::text), COALESCE(($3::jsonb->>'difficulty_name')::text,''::text), COALESCE(($3::jsonb->>'max_players')::smallint,-1::smallint), COALESCE(($3::jsonb->>'encounter_name')::text,''::text), COALESCE(($3::jsonb->>'player_class')::text,''::text), COALESCE(($3::jsonb->>'player_spec')::text,''::text), COALESCE(($3::jsonb->>'player_sub_spec')::text,''::text), COALESCE(($3::jsonb->>'metric')::text,''::text)) ORDER BY instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric LIMIT 100
+), enqueued AS (
+ INSERT INTO leaderboard_dirty_player_boss_benchmarks (tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric,process_after)
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric,clock_timestamp() FROM page
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric) DO UPDATE SET revision=leaderboard_dirty_player_boss_benchmarks.revision+1,dirtied_at=clock_timestamp(),process_after=LEAST(leaderboard_dirty_player_boss_benchmarks.process_after,EXCLUDED.process_after) RETURNING 1
+) SELECT (SELECT count(*) FROM enqueued)::bigint AS page_count,COALESCE((SELECT to_jsonb(page) FROM page ORDER BY instance_name DESC, difficulty_name DESC, max_players DESC, encounter_name DESC, player_class DESC, player_spec DESC, player_sub_spec DESC, metric DESC LIMIT 1),'{}'::jsonb)::jsonb AS last_cursor
+`
+
+type RepairOperationPlayerBossBenchmarksParams struct {
+	TenantID    uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	Cutoff      pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	CursorScope []byte             `db:"cursor_scope" json:"cursor_scope"`
+}
+
+type RepairOperationPlayerBossBenchmarksRow struct {
+	PageCount  int64  `db:"page_count" json:"page_count"`
+	LastCursor []byte `db:"last_cursor" json:"last_cursor"`
+}
+
+func (q *sqlQuerier) RepairOperationPlayerBossBenchmarks(ctx context.Context, arg RepairOperationPlayerBossBenchmarksParams) (RepairOperationPlayerBossBenchmarksRow, error) {
+	row := q.db.QueryRow(ctx, repairOperationPlayerBossBenchmarks, arg.TenantID, arg.Cutoff, arg.CursorScope)
+	var i RepairOperationPlayerBossBenchmarksRow
+	err := row.Scan(&i.PageCount, &i.LastCursor)
+	return i, err
+}
+
+const repairOperationPlayerBossSubjects = `-- name: RepairOperationPlayerBossSubjects :one
+WITH page AS MATERIALIZED (
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid FROM leaderboard_player_boss_subjects WHERE tenant_id= $1::uuid AND computed_at<= $2::timestamptz
+ AND (instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid)>(COALESCE(($3::jsonb->>'instance_name')::text,''::text), COALESCE(($3::jsonb->>'difficulty_name')::text,''::text), COALESCE(($3::jsonb->>'max_players')::smallint,-1::smallint), COALESCE(($3::jsonb->>'encounter_name')::text,''::text), COALESCE(($3::jsonb->>'player_class')::text,''::text), COALESCE(($3::jsonb->>'player_spec')::text,''::text), COALESCE(($3::jsonb->>'player_sub_spec')::text,''::text), COALESCE(($3::jsonb->>'metric')::text,''::text), COALESCE(($3::jsonb->>'realm_id')::uuid,'00000000-0000-0000-0000-000000000000'::uuid), COALESCE(($3::jsonb->>'player_guid')::text,''::text)) ORDER BY instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid LIMIT 100
+), enqueued AS (
+ INSERT INTO leaderboard_dirty_player_boss_subjects (tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid,process_after)
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid,clock_timestamp() FROM page
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid) DO UPDATE SET revision=leaderboard_dirty_player_boss_subjects.revision+1,dirtied_at=clock_timestamp(),process_after=LEAST(leaderboard_dirty_player_boss_subjects.process_after,EXCLUDED.process_after) RETURNING 1
+) SELECT (SELECT count(*) FROM enqueued)::bigint AS page_count,COALESCE((SELECT to_jsonb(page) FROM page ORDER BY instance_name DESC, difficulty_name DESC, max_players DESC, encounter_name DESC, player_class DESC, player_spec DESC, player_sub_spec DESC, metric DESC, realm_id DESC, player_guid DESC LIMIT 1),'{}'::jsonb)::jsonb AS last_cursor
+`
+
+type RepairOperationPlayerBossSubjectsParams struct {
+	TenantID    uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	Cutoff      pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	CursorScope []byte             `db:"cursor_scope" json:"cursor_scope"`
+}
+
+type RepairOperationPlayerBossSubjectsRow struct {
+	PageCount  int64  `db:"page_count" json:"page_count"`
+	LastCursor []byte `db:"last_cursor" json:"last_cursor"`
+}
+
+func (q *sqlQuerier) RepairOperationPlayerBossSubjects(ctx context.Context, arg RepairOperationPlayerBossSubjectsParams) (RepairOperationPlayerBossSubjectsRow, error) {
+	row := q.db.QueryRow(ctx, repairOperationPlayerBossSubjects, arg.TenantID, arg.Cutoff, arg.CursorScope)
+	var i RepairOperationPlayerBossSubjectsRow
+	err := row.Scan(&i.PageCount, &i.LastCursor)
+	return i, err
+}
+
+const repairOperationPlayerRenownCounts = `-- name: RepairOperationPlayerRenownCounts :one
+WITH page AS MATERIALIZED (
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, player_guid FROM leaderboard_player_renown_counts WHERE tenant_id= $1::uuid AND computed_at<= $2::timestamptz
+ AND (instance_name, difficulty_name, max_players, encounter_name, realm_id, player_guid)>(COALESCE(($3::jsonb->>'instance_name')::text,''::text), COALESCE(($3::jsonb->>'difficulty_name')::text,''::text), COALESCE(($3::jsonb->>'max_players')::smallint,-1::smallint), COALESCE(($3::jsonb->>'encounter_name')::text,''::text), COALESCE(($3::jsonb->>'realm_id')::uuid,'00000000-0000-0000-0000-000000000000'::uuid), COALESCE(($3::jsonb->>'player_guid')::text,''::text)) ORDER BY instance_name, difficulty_name, max_players, encounter_name, realm_id, player_guid LIMIT 100
+), enqueued AS (
+ INSERT INTO leaderboard_dirty_player_renown (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, player_guid,process_after)
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, player_guid,clock_timestamp() FROM page
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, player_guid) DO UPDATE SET revision=leaderboard_dirty_player_renown.revision+1,dirtied_at=clock_timestamp(),process_after=LEAST(leaderboard_dirty_player_renown.process_after,EXCLUDED.process_after) RETURNING 1
+) SELECT (SELECT count(*) FROM enqueued)::bigint AS page_count,COALESCE((SELECT to_jsonb(page) FROM page ORDER BY instance_name DESC, difficulty_name DESC, max_players DESC, encounter_name DESC, realm_id DESC, player_guid DESC LIMIT 1),'{}'::jsonb)::jsonb AS last_cursor
+`
+
+type RepairOperationPlayerRenownCountsParams struct {
+	TenantID    uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	Cutoff      pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	CursorScope []byte             `db:"cursor_scope" json:"cursor_scope"`
+}
+
+type RepairOperationPlayerRenownCountsRow struct {
+	PageCount  int64  `db:"page_count" json:"page_count"`
+	LastCursor []byte `db:"last_cursor" json:"last_cursor"`
+}
+
+func (q *sqlQuerier) RepairOperationPlayerRenownCounts(ctx context.Context, arg RepairOperationPlayerRenownCountsParams) (RepairOperationPlayerRenownCountsRow, error) {
+	row := q.db.QueryRow(ctx, repairOperationPlayerRenownCounts, arg.TenantID, arg.Cutoff, arg.CursorScope)
+	var i RepairOperationPlayerRenownCountsRow
+	err := row.Scan(&i.PageCount, &i.LastCursor)
+	return i, err
+}
+
+const activeLeaderboardOperation = `-- name: ActiveLeaderboardOperation :many
+SELECT id, tenant_id, requested_by, purpose, scope, run_id, before_date, cutoff, state, phase, cursor_scope, cursor_realm, cursor_date, cursor_id, discovered, missing_dates, discovery_complete, started_at, completed_at, last_progress_at, retry_count, retry_after, last_error FROM leaderboard_operations WHERE tenant_id= $1 AND state<>'completed'
+`
+
+func (q *sqlQuerier) ActiveLeaderboardOperation(ctx context.Context, tenantID uuid.UUID) ([]LeaderboardOperation, error) {
+	rows, err := q.db.Query(ctx, activeLeaderboardOperation, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LeaderboardOperation
+	for rows.Next() {
+		var i LeaderboardOperation
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.RequestedBy,
+			&i.Purpose,
+			&i.Scope,
+			&i.RunID,
+			&i.BeforeDate,
+			&i.Cutoff,
+			&i.State,
+			&i.Phase,
+			&i.CursorScope,
+			&i.CursorRealm,
+			&i.CursorDate,
+			&i.CursorID,
+			&i.Discovered,
+			&i.MissingDates,
+			&i.DiscoveryComplete,
+			&i.StartedAt,
+			&i.CompletedAt,
+			&i.LastProgressAt,
+			&i.RetryCount,
+			&i.RetryAfter,
+			&i.LastError,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const advanceLeaderboardOperation = `-- name: AdvanceLeaderboardOperation :exec
+UPDATE leaderboard_operations SET cursor_realm= $1,cursor_date= $2,cursor_id= $3,
+phase= $4,discovered=discovered+ $5::bigint,last_progress_at=clock_timestamp(),last_error=''
+WHERE id= $6 AND tenant_id= $7
+`
+
+type AdvanceLeaderboardOperationParams struct {
+	CursorRealm uuid.UUID          `db:"cursor_realm" json:"cursor_realm"`
+	CursorDate  pgtype.Timestamptz `db:"cursor_date" json:"cursor_date"`
+	CursorID    uuid.UUID          `db:"cursor_id" json:"cursor_id"`
+	Phase       string             `db:"phase" json:"phase"`
+	PageCount   int64              `db:"page_count" json:"page_count"`
+	ID          uuid.UUID          `db:"id" json:"id"`
+	TenantID    uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) AdvanceLeaderboardOperation(ctx context.Context, arg AdvanceLeaderboardOperationParams) error {
+	_, err := q.db.Exec(ctx, advanceLeaderboardOperation,
+		arg.CursorRealm,
+		arg.CursorDate,
+		arg.CursorID,
+		arg.Phase,
+		arg.PageCount,
+		arg.ID,
+		arg.TenantID,
+	)
+	return err
+}
+
+const advanceLeaderboardOperationPhase = `-- name: AdvanceLeaderboardOperationPhase :exec
+UPDATE leaderboard_operations SET phase= $1,cursor_id='00000000-0000-0000-0000-000000000000',cursor_scope='{}',last_progress_at=clock_timestamp()
+WHERE id= $2 AND tenant_id= $3
+`
+
+type AdvanceLeaderboardOperationPhaseParams struct {
+	Phase    string    `db:"phase" json:"phase"`
+	ID       uuid.UUID `db:"id" json:"id"`
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) AdvanceLeaderboardOperationPhase(ctx context.Context, arg AdvanceLeaderboardOperationPhaseParams) error {
+	_, err := q.db.Exec(ctx, advanceLeaderboardOperationPhase, arg.Phase, arg.ID, arg.TenantID)
+	return err
+}
+
+const advanceLeaderboardOperationScope = `-- name: AdvanceLeaderboardOperationScope :exec
+UPDATE leaderboard_operations SET cursor_scope= $1::jsonb,discovered=discovered+ $2::bigint,last_progress_at=clock_timestamp(),last_error=''
+WHERE id= $3 AND tenant_id= $4
+`
+
+type AdvanceLeaderboardOperationScopeParams struct {
+	CursorScope []byte    `db:"cursor_scope" json:"cursor_scope"`
+	PageCount   int64     `db:"page_count" json:"page_count"`
+	ID          uuid.UUID `db:"id" json:"id"`
+	TenantID    uuid.UUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) AdvanceLeaderboardOperationScope(ctx context.Context, arg AdvanceLeaderboardOperationScopeParams) error {
+	_, err := q.db.Exec(ctx, advanceLeaderboardOperationScope,
+		arg.CursorScope,
+		arg.PageCount,
+		arg.ID,
+		arg.TenantID,
+	)
+	return err
+}
+
+const completeLeaderboardOperation = `-- name: CompleteLeaderboardOperation :exec
+UPDATE leaderboard_operations o SET state='completed',completed_at=clock_timestamp(),last_progress_at=clock_timestamp()
+WHERE o.id= $1 AND o.tenant_id= $2 AND state='draining' AND discovery_complete
+AND NOT EXISTS(SELECT 1 FROM leaderboard_dirty_runs d WHERE d.tenant_id=o.tenant_id)
+AND NOT EXISTS(SELECT 1 FROM leaderboard_dirty_guild_boss_benchmarks d WHERE d.tenant_id=o.tenant_id)
+AND NOT EXISTS(SELECT 1 FROM leaderboard_dirty_guild_boss_subjects d WHERE d.tenant_id=o.tenant_id)
+AND NOT EXISTS(SELECT 1 FROM leaderboard_dirty_guild_clear_benchmarks d WHERE d.tenant_id=o.tenant_id)
+AND NOT EXISTS(SELECT 1 FROM leaderboard_dirty_guild_clear_subjects d WHERE d.tenant_id=o.tenant_id)
+AND NOT EXISTS(SELECT 1 FROM leaderboard_dirty_guild_renown d WHERE d.tenant_id=o.tenant_id)
+AND NOT EXISTS(SELECT 1 FROM leaderboard_dirty_player_boss_benchmarks d WHERE d.tenant_id=o.tenant_id)
+AND NOT EXISTS(SELECT 1 FROM leaderboard_dirty_player_boss_subjects d WHERE d.tenant_id=o.tenant_id)
+AND NOT EXISTS(SELECT 1 FROM leaderboard_dirty_player_renown d WHERE d.tenant_id=o.tenant_id)
+`
+
+type CompleteLeaderboardOperationParams struct {
+	ID       uuid.UUID `db:"id" json:"id"`
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) CompleteLeaderboardOperation(ctx context.Context, arg CompleteLeaderboardOperationParams) error {
+	_, err := q.db.Exec(ctx, completeLeaderboardOperation, arg.ID, arg.TenantID)
+	return err
+}
+
+const countLeaderboardOperationMissingDates = `-- name: CountLeaderboardOperationMissingDates :one
+SELECT count(*) FROM ranking_runs rr JOIN wow_server_realms r ON r.id=rr.realm_id
+JOIN wow_servers s ON s.id=r.server_id WHERE s.tenant_id= $1::uuid AND rr.end_time IS NULL
+`
+
+func (q *sqlQuerier) CountLeaderboardOperationMissingDates(ctx context.Context, tenantID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countLeaderboardOperationMissingDates, tenantID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const createLeaderboardOperation = `-- name: CreateLeaderboardOperation :one
+INSERT INTO leaderboard_operations(tenant_id,requested_by,purpose,scope,run_id,before_date)
+VALUES ($1,$2,$3,$4,$5::uuid,$6::date) RETURNING id, tenant_id, requested_by, purpose, scope, run_id, before_date, cutoff, state, phase, cursor_scope, cursor_realm, cursor_date, cursor_id, discovered, missing_dates, discovery_complete, started_at, completed_at, last_progress_at, retry_count, retry_after, last_error
+`
+
+type CreateLeaderboardOperationParams struct {
+	TenantID    uuid.UUID     `db:"tenant_id" json:"tenant_id"`
+	RequestedBy uuid.UUID     `db:"requested_by" json:"requested_by"`
+	Purpose     string        `db:"purpose" json:"purpose"`
+	Scope       string        `db:"scope" json:"scope"`
+	RunID       uuid.NullUUID `db:"run_id" json:"run_id"`
+	BeforeDate  pgtype.Date   `db:"before_date" json:"before_date"`
+}
+
+func (q *sqlQuerier) CreateLeaderboardOperation(ctx context.Context, arg CreateLeaderboardOperationParams) (LeaderboardOperation, error) {
+	row := q.db.QueryRow(ctx, createLeaderboardOperation,
+		arg.TenantID,
+		arg.RequestedBy,
+		arg.Purpose,
+		arg.Scope,
+		arg.RunID,
+		arg.BeforeDate,
+	)
+	var i LeaderboardOperation
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.RequestedBy,
+		&i.Purpose,
+		&i.Scope,
+		&i.RunID,
+		&i.BeforeDate,
+		&i.Cutoff,
+		&i.State,
+		&i.Phase,
+		&i.CursorScope,
+		&i.CursorRealm,
+		&i.CursorDate,
+		&i.CursorID,
+		&i.Discovered,
+		&i.MissingDates,
+		&i.DiscoveryComplete,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.LastProgressAt,
+		&i.RetryCount,
+		&i.RetryAfter,
+		&i.LastError,
+	)
+	return i, err
+}
+
+const discoverLeaderboardOperationEvidence = `-- name: DiscoverLeaderboardOperationEvidence :many
+SELECT DISTINCT run_id FROM (
+(SELECT DISTINCT run_id FROM leaderboard_player_observations WHERE tenant_id= $1::uuid AND observed_at<= $2::timestamptz AND run_id> $3::uuid ORDER BY run_id LIMIT 100)
+UNION ALL
+(SELECT DISTINCT run_id FROM leaderboard_guild_boss_observations WHERE tenant_id= $1::uuid AND observed_at<= $2::timestamptz AND run_id> $3::uuid ORDER BY run_id LIMIT 100)
+UNION ALL
+(SELECT DISTINCT run_id FROM leaderboard_guild_clear_observations WHERE tenant_id= $1::uuid AND observed_at<= $2::timestamptz AND run_id> $3::uuid ORDER BY run_id LIMIT 100)
+UNION ALL
+(SELECT DISTINCT run_id FROM leaderboard_player_renown_facts WHERE tenant_id= $1::uuid AND observed_at<= $2::timestamptz AND run_id> $3::uuid ORDER BY run_id LIMIT 100)
+UNION ALL
+(SELECT DISTINCT run_id FROM leaderboard_guild_renown_facts WHERE tenant_id= $1::uuid AND observed_at<= $2::timestamptz AND run_id> $3::uuid ORDER BY run_id LIMIT 100)
+) candidates ORDER BY run_id LIMIT 100
+`
+
+type DiscoverLeaderboardOperationEvidenceParams struct {
+	TenantID uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	Cutoff   pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	AfterID  uuid.UUID          `db:"after_id" json:"after_id"`
+}
+
+func (q *sqlQuerier) DiscoverLeaderboardOperationEvidence(ctx context.Context, arg DiscoverLeaderboardOperationEvidenceParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, discoverLeaderboardOperationEvidence, arg.TenantID, arg.Cutoff, arg.AfterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var run_id uuid.UUID
+		if err := rows.Scan(&run_id); err != nil {
+			return nil, err
+		}
+		items = append(items, run_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const discoverLeaderboardOperationRuns = `-- name: DiscoverLeaderboardOperationRuns :many
+SELECT run_id,end_time FROM ranking_runs
+WHERE realm_id= $1 AND end_time< $2::timestamptz
+ AND EXISTS(SELECT 1 FROM wow_server_realms r JOIN wow_servers s ON s.id=r.server_id WHERE r.id=ranking_runs.realm_id AND s.tenant_id= $3::uuid)
+ AND (end_time,run_id)>($4::timestamptz,$5::uuid)
+ORDER BY end_time,run_id LIMIT 100
+`
+
+type DiscoverLeaderboardOperationRunsParams struct {
+	RealmID    uuid.UUID          `db:"realm_id" json:"realm_id"`
+	BeforeTime pgtype.Timestamptz `db:"before_time" json:"before_time"`
+	TenantID   uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	AfterDate  pgtype.Timestamptz `db:"after_date" json:"after_date"`
+	AfterID    uuid.UUID          `db:"after_id" json:"after_id"`
+}
+
+type DiscoverLeaderboardOperationRunsRow struct {
+	RunID   uuid.UUID          `db:"run_id" json:"run_id"`
+	EndTime pgtype.Timestamptz `db:"end_time" json:"end_time"`
+}
+
+// Event-time scope, not an ingestion snapshot. The existing realm/end index
+// supports a bounded chronological page; run_id breaks equal-date ties.
+func (q *sqlQuerier) DiscoverLeaderboardOperationRuns(ctx context.Context, arg DiscoverLeaderboardOperationRunsParams) ([]DiscoverLeaderboardOperationRunsRow, error) {
+	rows, err := q.db.Query(ctx, discoverLeaderboardOperationRuns,
+		arg.RealmID,
+		arg.BeforeTime,
+		arg.TenantID,
+		arg.AfterDate,
+		arg.AfterID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DiscoverLeaderboardOperationRunsRow
+	for rows.Next() {
+		var i DiscoverLeaderboardOperationRunsRow
+		if err := rows.Scan(&i.RunID, &i.EndTime); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const drainLeaderboardOperation = `-- name: DrainLeaderboardOperation :exec
+UPDATE leaderboard_operations SET discovery_complete=true,state='draining',last_progress_at=clock_timestamp()
+WHERE id= $1 AND tenant_id= $2
+`
+
+type DrainLeaderboardOperationParams struct {
+	ID       uuid.UUID `db:"id" json:"id"`
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) DrainLeaderboardOperation(ctx context.Context, arg DrainLeaderboardOperationParams) error {
+	_, err := q.db.Exec(ctx, drainLeaderboardOperation, arg.ID, arg.TenantID)
+	return err
+}
+
+const getLeaderboardOperation = `-- name: GetLeaderboardOperation :one
+SELECT id, tenant_id, requested_by, purpose, scope, run_id, before_date, cutoff, state, phase, cursor_scope, cursor_realm, cursor_date, cursor_id, discovered, missing_dates, discovery_complete, started_at, completed_at, last_progress_at, retry_count, retry_after, last_error FROM leaderboard_operations WHERE id= $1 AND tenant_id= $2
+`
+
+type GetLeaderboardOperationParams struct {
+	ID       uuid.UUID `db:"id" json:"id"`
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) GetLeaderboardOperation(ctx context.Context, arg GetLeaderboardOperationParams) (LeaderboardOperation, error) {
+	row := q.db.QueryRow(ctx, getLeaderboardOperation, arg.ID, arg.TenantID)
+	var i LeaderboardOperation
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.RequestedBy,
+		&i.Purpose,
+		&i.Scope,
+		&i.RunID,
+		&i.BeforeDate,
+		&i.Cutoff,
+		&i.State,
+		&i.Phase,
+		&i.CursorScope,
+		&i.CursorRealm,
+		&i.CursorDate,
+		&i.CursorID,
+		&i.Discovered,
+		&i.MissingDates,
+		&i.DiscoveryComplete,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.LastProgressAt,
+		&i.RetryCount,
+		&i.RetryAfter,
+		&i.LastError,
+	)
+	return i, err
+}
+
+const leaderboardOperationBacklog = `-- name: LeaderboardOperationBacklog :one
+WITH queues AS (
+SELECT 'd1'::text AS level,count(*)::bigint AS pending,min(dirtied_at) AS oldest,coalesce(sum(attempts),0)::bigint AS retries FROM leaderboard_dirty_runs WHERE tenant_id= $1::uuid
+UNION ALL
+SELECT 'd2'::text AS level,count(*)::bigint AS pending,min(dirtied_at) AS oldest,coalesce(sum(attempts),0)::bigint AS retries FROM leaderboard_dirty_guild_boss_benchmarks WHERE tenant_id= $1::uuid
+UNION ALL
+SELECT 'd2'::text AS level,count(*)::bigint AS pending,min(dirtied_at) AS oldest,coalesce(sum(attempts),0)::bigint AS retries FROM leaderboard_dirty_guild_boss_subjects WHERE tenant_id= $1::uuid
+UNION ALL
+SELECT 'd2'::text AS level,count(*)::bigint AS pending,min(dirtied_at) AS oldest,coalesce(sum(attempts),0)::bigint AS retries FROM leaderboard_dirty_guild_clear_benchmarks WHERE tenant_id= $1::uuid
+UNION ALL
+SELECT 'd2'::text AS level,count(*)::bigint AS pending,min(dirtied_at) AS oldest,coalesce(sum(attempts),0)::bigint AS retries FROM leaderboard_dirty_guild_clear_subjects WHERE tenant_id= $1::uuid
+UNION ALL
+SELECT 'd2'::text AS level,count(*)::bigint AS pending,min(dirtied_at) AS oldest,coalesce(sum(attempts),0)::bigint AS retries FROM leaderboard_dirty_guild_renown WHERE tenant_id= $1::uuid
+UNION ALL
+SELECT 'd2'::text AS level,count(*)::bigint AS pending,min(dirtied_at) AS oldest,coalesce(sum(attempts),0)::bigint AS retries FROM leaderboard_dirty_player_boss_benchmarks WHERE tenant_id= $1::uuid
+UNION ALL
+SELECT 'd2'::text AS level,count(*)::bigint AS pending,min(dirtied_at) AS oldest,coalesce(sum(attempts),0)::bigint AS retries FROM leaderboard_dirty_player_boss_subjects WHERE tenant_id= $1::uuid
+UNION ALL
+SELECT 'd2'::text AS level,count(*)::bigint AS pending,min(dirtied_at) AS oldest,coalesce(sum(attempts),0)::bigint AS retries FROM leaderboard_dirty_player_renown WHERE tenant_id= $1::uuid
+) SELECT coalesce(sum(pending) FILTER(WHERE level='d1'),0)::bigint AS d1_pending,coalesce(sum(pending) FILTER(WHERE level='d2'),0)::bigint AS d2_pending,min(oldest)::timestamptz AS oldest_pending_at,sum(retries)::bigint AS pending_retries FROM queues
+`
+
+type LeaderboardOperationBacklogRow struct {
+	D1Pending       int64              `db:"d1_pending" json:"d1_pending"`
+	D2Pending       int64              `db:"d2_pending" json:"d2_pending"`
+	OldestPendingAt pgtype.Timestamptz `db:"oldest_pending_at" json:"oldest_pending_at"`
+	PendingRetries  int64              `db:"pending_retries" json:"pending_retries"`
+}
+
+func (q *sqlQuerier) LeaderboardOperationBacklog(ctx context.Context, tenantID uuid.UUID) (LeaderboardOperationBacklogRow, error) {
+	row := q.db.QueryRow(ctx, leaderboardOperationBacklog, tenantID)
+	var i LeaderboardOperationBacklogRow
+	err := row.Scan(
+		&i.D1Pending,
+		&i.D2Pending,
+		&i.OldestPendingAt,
+		&i.PendingRetries,
+	)
+	return i, err
+}
+
+const listDueLeaderboardOperations = `-- name: ListDueLeaderboardOperations :many
+SELECT id,tenant_id FROM leaderboard_operations WHERE tenant_id> $1::uuid
+AND state IN ('discovering','draining') AND retry_after<=clock_timestamp()
+ORDER BY tenant_id LIMIT 100
+`
+
+type ListDueLeaderboardOperationsRow struct {
+	ID       uuid.UUID `db:"id" json:"id"`
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) ListDueLeaderboardOperations(ctx context.Context, afterTenant uuid.UUID) ([]ListDueLeaderboardOperationsRow, error) {
+	rows, err := q.db.Query(ctx, listDueLeaderboardOperations, afterTenant)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDueLeaderboardOperationsRow
+	for rows.Next() {
+		var i ListDueLeaderboardOperationsRow
+		if err := rows.Scan(&i.ID, &i.TenantID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLeaderboardOperations = `-- name: ListLeaderboardOperations :many
+SELECT id, tenant_id, requested_by, purpose, scope, run_id, before_date, cutoff, state, phase, cursor_scope, cursor_realm, cursor_date, cursor_id, discovered, missing_dates, discovery_complete, started_at, completed_at, last_progress_at, retry_count, retry_after, last_error FROM leaderboard_operations WHERE tenant_id= $1 ORDER BY started_at DESC,id LIMIT 50
+`
+
+func (q *sqlQuerier) ListLeaderboardOperations(ctx context.Context, tenantID uuid.UUID) ([]LeaderboardOperation, error) {
+	rows, err := q.db.Query(ctx, listLeaderboardOperations, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LeaderboardOperation
+	for rows.Next() {
+		var i LeaderboardOperation
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.RequestedBy,
+			&i.Purpose,
+			&i.Scope,
+			&i.RunID,
+			&i.BeforeDate,
+			&i.Cutoff,
+			&i.State,
+			&i.Phase,
+			&i.CursorScope,
+			&i.CursorRealm,
+			&i.CursorDate,
+			&i.CursorID,
+			&i.Discovered,
+			&i.MissingDates,
+			&i.DiscoveryComplete,
+			&i.StartedAt,
+			&i.CompletedAt,
+			&i.LastProgressAt,
+			&i.RetryCount,
+			&i.RetryAfter,
+			&i.LastError,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockLeaderboardOperation = `-- name: LockLeaderboardOperation :one
+SELECT id, tenant_id, requested_by, purpose, scope, run_id, before_date, cutoff, state, phase, cursor_scope, cursor_realm, cursor_date, cursor_id, discovered, missing_dates, discovery_complete, started_at, completed_at, last_progress_at, retry_count, retry_after, last_error FROM leaderboard_operations WHERE id= $1 AND tenant_id= $2 FOR UPDATE
+`
+
+type LockLeaderboardOperationParams struct {
+	ID       uuid.UUID `db:"id" json:"id"`
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) LockLeaderboardOperation(ctx context.Context, arg LockLeaderboardOperationParams) (LeaderboardOperation, error) {
+	row := q.db.QueryRow(ctx, lockLeaderboardOperation, arg.ID, arg.TenantID)
+	var i LeaderboardOperation
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.RequestedBy,
+		&i.Purpose,
+		&i.Scope,
+		&i.RunID,
+		&i.BeforeDate,
+		&i.Cutoff,
+		&i.State,
+		&i.Phase,
+		&i.CursorScope,
+		&i.CursorRealm,
+		&i.CursorDate,
+		&i.CursorID,
+		&i.Discovered,
+		&i.MissingDates,
+		&i.DiscoveryComplete,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.LastProgressAt,
+		&i.RetryCount,
+		&i.RetryAfter,
+		&i.LastError,
+	)
+	return i, err
+}
+
+const lookupLeaderboardOperation = `-- name: LookupLeaderboardOperation :one
+SELECT id, tenant_id, requested_by, purpose, scope, run_id, before_date, cutoff, state, phase, cursor_scope, cursor_realm, cursor_date, cursor_id, discovered, missing_dates, discovery_complete, started_at, completed_at, last_progress_at, retry_count, retry_after, last_error FROM leaderboard_operations WHERE id= $1
+`
+
+// Authorized admin lookup only; RLS still applies.
+func (q *sqlQuerier) LookupLeaderboardOperation(ctx context.Context, id uuid.UUID) (LeaderboardOperation, error) {
+	row := q.db.QueryRow(ctx, lookupLeaderboardOperation, id)
+	var i LeaderboardOperation
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.RequestedBy,
+		&i.Purpose,
+		&i.Scope,
+		&i.RunID,
+		&i.BeforeDate,
+		&i.Cutoff,
+		&i.State,
+		&i.Phase,
+		&i.CursorScope,
+		&i.CursorRealm,
+		&i.CursorDate,
+		&i.CursorID,
+		&i.Discovered,
+		&i.MissingDates,
+		&i.DiscoveryComplete,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.LastProgressAt,
+		&i.RetryCount,
+		&i.RetryAfter,
+		&i.LastError,
+	)
+	return i, err
+}
+
+const nextLeaderboardOperationRealm = `-- name: NextLeaderboardOperationRealm :one
+SELECT r.id FROM wow_server_realms r JOIN wow_servers s ON s.id=r.server_id
+WHERE s.tenant_id= $1::uuid AND r.id> $2::uuid ORDER BY r.id LIMIT 1
+`
+
+type NextLeaderboardOperationRealmParams struct {
+	TenantID   uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	AfterRealm uuid.UUID `db:"after_realm" json:"after_realm"`
+}
+
+func (q *sqlQuerier) NextLeaderboardOperationRealm(ctx context.Context, arg NextLeaderboardOperationRealmParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, nextLeaderboardOperationRealm, arg.TenantID, arg.AfterRealm)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const pauseLeaderboardOperation = `-- name: PauseLeaderboardOperation :one
+UPDATE leaderboard_operations SET state='paused'
+WHERE id= $1 AND tenant_id= $2 AND state<>'completed' RETURNING id, tenant_id, requested_by, purpose, scope, run_id, before_date, cutoff, state, phase, cursor_scope, cursor_realm, cursor_date, cursor_id, discovered, missing_dates, discovery_complete, started_at, completed_at, last_progress_at, retry_count, retry_after, last_error
+`
+
+type PauseLeaderboardOperationParams struct {
+	ID       uuid.UUID `db:"id" json:"id"`
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) PauseLeaderboardOperation(ctx context.Context, arg PauseLeaderboardOperationParams) (LeaderboardOperation, error) {
+	row := q.db.QueryRow(ctx, pauseLeaderboardOperation, arg.ID, arg.TenantID)
+	var i LeaderboardOperation
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.RequestedBy,
+		&i.Purpose,
+		&i.Scope,
+		&i.RunID,
+		&i.BeforeDate,
+		&i.Cutoff,
+		&i.State,
+		&i.Phase,
+		&i.CursorScope,
+		&i.CursorRealm,
+		&i.CursorDate,
+		&i.CursorID,
+		&i.Discovered,
+		&i.MissingDates,
+		&i.DiscoveryComplete,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.LastProgressAt,
+		&i.RetryCount,
+		&i.RetryAfter,
+		&i.LastError,
+	)
+	return i, err
+}
+
+const resumeLeaderboardOperation = `-- name: ResumeLeaderboardOperation :one
+UPDATE leaderboard_operations SET state=CASE WHEN discovery_complete THEN 'draining' ELSE 'discovering' END,retry_after='-infinity'
+WHERE id= $1 AND tenant_id= $2 AND state='paused' RETURNING id, tenant_id, requested_by, purpose, scope, run_id, before_date, cutoff, state, phase, cursor_scope, cursor_realm, cursor_date, cursor_id, discovered, missing_dates, discovery_complete, started_at, completed_at, last_progress_at, retry_count, retry_after, last_error
+`
+
+type ResumeLeaderboardOperationParams struct {
+	ID       uuid.UUID `db:"id" json:"id"`
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) ResumeLeaderboardOperation(ctx context.Context, arg ResumeLeaderboardOperationParams) (LeaderboardOperation, error) {
+	row := q.db.QueryRow(ctx, resumeLeaderboardOperation, arg.ID, arg.TenantID)
+	var i LeaderboardOperation
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.RequestedBy,
+		&i.Purpose,
+		&i.Scope,
+		&i.RunID,
+		&i.BeforeDate,
+		&i.Cutoff,
+		&i.State,
+		&i.Phase,
+		&i.CursorScope,
+		&i.CursorRealm,
+		&i.CursorDate,
+		&i.CursorID,
+		&i.Discovered,
+		&i.MissingDates,
+		&i.DiscoveryComplete,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.LastProgressAt,
+		&i.RetryCount,
+		&i.RetryAfter,
+		&i.LastError,
+	)
+	return i, err
+}
+
+const retryLeaderboardOperation = `-- name: RetryLeaderboardOperation :exec
+UPDATE leaderboard_operations SET retry_count=retry_count+1,last_error= $1,
+retry_after=clock_timestamp()+interval '30 seconds' WHERE id= $2 AND tenant_id= $3 AND state<>'completed'
+`
+
+type RetryLeaderboardOperationParams struct {
+	LastError string    `db:"last_error" json:"last_error"`
+	ID        uuid.UUID `db:"id" json:"id"`
+	TenantID  uuid.UUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) RetryLeaderboardOperation(ctx context.Context, arg RetryLeaderboardOperationParams) error {
+	_, err := q.db.Exec(ctx, retryLeaderboardOperation, arg.LastError, arg.ID, arg.TenantID)
+	return err
+}
+
+const setLeaderboardOperationMissingDates = `-- name: SetLeaderboardOperationMissingDates :exec
+UPDATE leaderboard_operations SET missing_dates= $1 WHERE id= $2 AND tenant_id= $3
+`
+
+type SetLeaderboardOperationMissingDatesParams struct {
+	MissingDates int64     `db:"missing_dates" json:"missing_dates"`
+	ID           uuid.UUID `db:"id" json:"id"`
+	TenantID     uuid.UUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) SetLeaderboardOperationMissingDates(ctx context.Context, arg SetLeaderboardOperationMissingDatesParams) error {
+	_, err := q.db.Exec(ctx, setLeaderboardOperationMissingDates, arg.MissingDates, arg.ID, arg.TenantID)
+	return err
+}
+
 const deleteLeaderboardRunEvidence = `-- name: DeleteLeaderboardRunEvidence :exec
 WITH deleted0 AS (DELETE FROM leaderboard_player_observations WHERE tenant_id= $1::uuid AND run_id= $2::uuid RETURNING 1),
 deleted1 AS (DELETE FROM leaderboard_guild_boss_observations WHERE tenant_id= $1::uuid AND run_id= $2::uuid RETURNING 1),
