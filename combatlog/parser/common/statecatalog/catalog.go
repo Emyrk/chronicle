@@ -52,31 +52,31 @@ func Target() (stategraph.Graph, error) {
 			return registry.Value("/root/shared/consume-tracker", TypeConsumes, metadata("State.ConsumeTracker", "combatlog/parser/common/encounters/consumer.go"))
 		},
 		func() error {
-			return registry.Value("/root/encounters", TypeEncounterState, metadata("encounters.State", "combatlog/parser/common/encounters/consumer.go"))
+			return registry.Value("/root/parse-state", TypeEncounterState, metadata("parse-wide encounters.State coordinator", "combatlog/parser/common/encounters/consumer.go"))
 		},
 		func() error {
-			return registry.Reference("/root/encounters/units", "/root/shared/units", TypeUnits, nil)
+			return registry.Reference("/root/parse-state/units", "/root/shared/units", TypeUnits, nil)
 		},
 		func() error {
-			return registry.Reference("/root/encounters/vehicles", "/root/shared/vehicles", TypeVehicles, nil)
+			return registry.Reference("/root/parse-state/vehicles", "/root/shared/vehicles", TypeVehicles, nil)
 		},
 		func() error {
-			return registry.Reference("/root/encounters/raid-groups", "/root/shared/raid-groups", TypeRaidGroups, nil)
+			return registry.Reference("/root/parse-state/raid-groups", "/root/shared/raid-groups", TypeRaidGroups, nil)
 		},
 		func() error {
-			return registry.Reference("/root/encounters/auras", "/root/shared/auras", TypeAuras, nil)
+			return registry.Reference("/root/parse-state/auras", "/root/shared/auras", TypeAuras, nil)
 		},
 		func() error {
-			return registry.Reference("/root/encounters/consume-tracker", "/root/shared/consume-tracker", TypeConsumes, nil)
+			return registry.Reference("/root/parse-state/consume-tracker", "/root/shared/consume-tracker", TypeConsumes, nil)
 		},
 		func() error {
-			return registry.Directory("/root/encounters/instances", metadata("State.Instances aliases", "combatlog/parser/common/encounters/consumer.go"))
+			return registry.Directory("/root/parse-state/instances", metadata("State.Instances aliases", "combatlog/parser/common/encounters/consumer.go"))
 		},
 		func() error {
-			return registry.Reference("/root/encounters/current-instance", "/root/instances/0000", TypeHookable, metadata("State.CurrentInstance", "combatlog/parser/common/encounters/consumer.go"))
+			return registry.Reference("/root/parse-state/current-instance", "/root/instances/0000", TypeHookable, metadata("State.CurrentInstance", "combatlog/parser/common/encounters/consumer.go"))
 		},
 		func() error {
-			return registry.Reference("/root/encounters/instances/0000", "/root/instances/0000", TypeHookable, metadata("State.Instances[0]", "combatlog/parser/common/encounters/consumer.go"))
+			return registry.Reference("/root/parse-state/instances/0000", "/root/instances/0000", TypeHookable, metadata("State.Instances[0]", "combatlog/parser/common/encounters/consumer.go"))
 		},
 		func() error {
 			return registry.Directory("/root/instances", metadata("instances discovered in parse order", "combatlog/parser/common/encounters/consumer.go"))
@@ -106,6 +106,10 @@ func Target() (stategraph.Graph, error) {
 		}
 	}
 
+	if err := addCharacterCatalog(registry); err != nil {
+		return stategraph.Graph{}, err
+	}
+
 	for _, target := range []string{
 		"/root/shared/units",
 		"/root/shared/vehicles",
@@ -113,7 +117,7 @@ func Target() (stategraph.Graph, error) {
 		"/root/shared/auras",
 		"/root/shared/consume-tracker",
 	} {
-		if err := registry.DependsOn("/root/encounters", target); err != nil {
+		if err := registry.DependsOn("/root/parse-state", target); err != nil {
 			return stategraph.Graph{}, err
 		}
 		if err := registry.DependsOn("/root/instances/0000", target); err != nil {

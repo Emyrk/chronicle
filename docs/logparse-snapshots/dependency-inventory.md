@@ -173,7 +173,7 @@ This layout is illustrative. The inventory phase may refine names while preservi
 /root/shared/raid-groups
 /root/shared/auras
 /root/shared/consume-tracker
-/root/encounters-state
+/root/parse-state
 /root/instances
 /root/instances/0000
 /root/instances/0000/units                    -> /root/shared/units
