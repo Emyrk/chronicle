@@ -342,6 +342,40 @@ func TestSearchGETWithAIKey(t *testing.T) {
 		require.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
 	})
 
+	t.Run("HonoredFields", func(t *testing.T) {
+		t.Parallel()
+		parse := `players.exists(p, p.class == "MAGE" && p.parse >= 90)`
+		rec := f.get(t, "192.0.2.24", keyed(free, "q", parse))
+		require.Equal(t, http.StatusForbidden, rec.Code, rec.Body.String())
+		require.Contains(t, rec.Body.String(), "Searching by player.parse is an Honored supporter perk.")
+
+		rec = f.get(t, "192.0.2.24", keyed(free, "q", parse, "format", "md"))
+		require.Equal(t, http.StatusForbidden, rec.Code, rec.Body.String())
+		require.Equal(t, "text/markdown; charset=utf-8", rec.Header().Get("Content-Type"))
+		body := rec.Body.String()
+		require.Contains(t, body, "Searching by player.parse is an Honored supporter perk.")
+		require.Contains(t, body, "(http://example.com/supporter)")
+		require.NotContains(t, body, free)
+
+		rec = f.get(t, "192.0.2.24", "/raidlogs/search/explain?"+url.Values{"q": {parse}, "instance_id": {f.runs[0].String()}, "ai_key": {free}}.Encode())
+		require.Equal(t, http.StatusForbidden, rec.Code, rec.Body.String())
+		require.Contains(t, rec.Body.String(), "Honored supporter perk")
+
+		require.Equal(t, http.StatusOK, f.get(t, "192.0.2.25", keyed(honored, "q", parse)).Code)
+	})
+
+	t.Run("MenuHidesHonoredFields", func(t *testing.T) {
+		t.Parallel()
+		mage := `players.exists(p, p.class == "MAGE")`
+		rec := f.get(t, "192.0.2.26", keyed(free, "q", mage, "format", "md"))
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		require.Contains(t, rec.Body.String(), "Same player's role is tank")
+		require.NotContains(t, rec.Body.String(), "Same player parsed")
+		rec = f.get(t, "192.0.2.27", keyed(honored, "q", mage, "format", "md"))
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		require.Contains(t, rec.Body.String(), "Same player parsed 90+")
+	})
+
 	t.Run("Rejected", func(t *testing.T) {
 		t.Parallel()
 		unknown, err := aikey.Generate()

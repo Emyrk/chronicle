@@ -125,11 +125,11 @@ func (s *Service) llmsBody(w http.ResponseWriter, r *http.Request) string {
 	}
 
 	writeLLMsFields(&b, fields)
-	writeLLMsExamples(&b, links)
+	writeLLMsExamples(&b, links, key.Benefits.Tier)
 	writeLLMsTiers(&b, key)
 	b.WriteString("\n## Errors\n\n" +
 		"- 401: the key is invalid, expired, revoked or from another community. Ask the user for a fresh Copy for AI link.\n" +
-		"- 403: the request needs a higher tier (a sort, or a larger limit) or used a non-GET method. Say what the message says; don't retry.\n" +
+		"- 403: the request needs a higher tier (a field, a sort, or a larger limit) or used a non-GET method. Say what the message says; don't retry.\n" +
 		"- 429: too many requests. Wait the Retry-After seconds, then retry once. Daily limits reset over 24 hours.\n" +
 		"- 400: the search text is wrong. detail gives the position; fix the search and try again.\n" +
 		"- 503: Chronicle is busy. Wait the Retry-After seconds and retry.\n")
@@ -137,7 +137,7 @@ func (s *Service) llmsBody(w http.ResponseWriter, r *http.Request) string {
 }
 
 func writeLLMsFields(b *strings.Builder, fields chroniclesdk.InstanceSearchFieldsResponse) {
-	b.WriteString("\n## Search fields\n\nMinimum: \"anyone\" works without a key; \"key\" needs this key (any tier). Cost adds to the search budget.\n\n" +
+	b.WriteString("\n## Search fields\n\nMinimum: \"anyone\" works without a key; \"key\" needs this key (any tier); a tier name (Honored) needs a key at that tier or above, anywhere in the search. Cost adds to the search budget.\n\n" +
 		"| Field | Type | Minimum | Cost | Description |\n|---|---|---|---|---|\n")
 	for _, f := range fields.Fields {
 		typ := f.Type
@@ -148,8 +148,11 @@ func writeLLMsFields(b *strings.Builder, fields chroniclesdk.InstanceSearchField
 			typ += ": " + strings.Join(f.Enum, ", ")
 		}
 		minimum := "key"
-		if f.Anonymous {
+		switch {
+		case f.Anonymous:
 			minimum = "anyone"
+		case f.MinimumTier != "" && f.MinimumTier != chroniclesdk.InstanceSearchSortTierFree:
+			minimum = titleCase(string(f.MinimumTier))
 		}
 		_, _ = fmt.Fprintf(b, "| %s | %s | %s | %d | %s |\n", f.Name, markdownCell.Replace(typ), minimum, f.Cost, markdownCell.Replace(f.Doc))
 	}
@@ -159,23 +162,29 @@ func writeLLMsFields(b *strings.Builder, fields chroniclesdk.InstanceSearchField
 	}
 }
 
-func writeLLMsExamples(b *strings.Builder, links agentLinks) {
+// writeLLMsExamples lists example searches, marking the ones that need a
+// higher tier than the key's.
+func writeLLMsExamples(b *strings.Builder, links agentLinks, tier string) {
 	since := time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -30).Format(time.RFC3339)
-	examples := []struct{ label, q string }{
-		{"Molten Core runs", `instance.name == "Molten Core"`},
-		{"Runs in the last 30 days", `instance.started_at >= timestamp("` + since + `")`},
-		{"Ragnaros kills", `encounters.exists(e, e.name == "Ragnaros" && e.killed == true)`},
-		{"Runs with 5 or more wipes on any boss", `encounters.filter(e, e.boss == true && e.outcome == "wipe").size() >= 5`},
-		{"Runs with a Feral druid tank", `players.exists(p, p.class == "DRUID" && p.spec == "Feral" && p.role == "tank")`},
-		{"Runs with at least 3 priests", `players.filter(p, p.class == "PRIEST").size() >= 3`},
-		{"Runs where a mage parsed 95+", `players.exists(p, p.class == "MAGE" && p.parse >= 95)`},
-		{"Fast clears (clear-time parse 90+)", `instance.clear_parse >= 90`},
-		{"Blackwing Lair full clears with no deaths", `instance.name == "Blackwing Lair" && instance.bosses_killed >= 8 && instance.deaths == 0`},
-		{"A player by name", `players.exists(p, p.name == "Example")`},
+	examples := []struct{ label, q, field string }{
+		{"Molten Core runs", `instance.name == "Molten Core"`, ""},
+		{"Runs in the last 30 days", `instance.started_at >= timestamp("` + since + `")`, ""},
+		{"Ragnaros kills", `encounters.exists(e, e.name == "Ragnaros" && e.killed == true)`, ""},
+		{"Runs with 5 or more wipes on any boss", `encounters.filter(e, e.boss == true && e.outcome == "wipe").size() >= 5`, ""},
+		{"Runs with a Feral druid tank", `players.exists(p, p.class == "DRUID" && p.spec == "Feral" && p.role == "tank")`, ""},
+		{"Runs with at least 3 priests", `players.filter(p, p.class == "PRIEST").size() >= 3`, ""},
+		{"Runs where a mage parsed 95+", `players.exists(p, p.class == "MAGE" && p.parse >= 95)`, "player.parse"},
+		{"Fast clears (clear-time parse 90+)", `instance.clear_parse >= 90`, ""},
+		{"Blackwing Lair full clears with no deaths", `instance.name == "Blackwing Lair" && instance.bosses_killed >= 8 && instance.deaths == 0`, ""},
+		{"A player by name", `players.exists(p, p.name == "Example")`, ""},
 	}
 	b.WriteString("\n## Example searches\n\n")
 	for _, ex := range examples {
 		v := url.Values{"format": {"md"}, "q": {ex.q}}
+		if ex.field != "" && !serviceinstancesearch.FieldAllowed(tier, ex.field) {
+			_, _ = fmt.Fprintf(b, "- %s (needs %s; this key can't run it)\n", ex.label, titleCase(string(instancesearch.FieldMinimumTier(ex.field))))
+			continue
+		}
 		_, _ = fmt.Fprintf(b, "- %s\n", markdownLink(ex.label, links.agent(externalAPIPrefix+"/raidlogs/search?"+v.Encode())))
 	}
 }
@@ -200,6 +209,6 @@ func writeLLMsTiers(b *strings.Builder, key aikey.Key) {
 		_, _ = fmt.Fprintf(b, "| %s | %d | %d | %d | %.0f | %s |\n", name, t.ViewsPerMinute, t.ViewsPerDay, t.ResultsPerSearch,
 			serviceinstancesearch.LimitForTier(t.Tier).Burst, strings.Join(lifetimes, ", "))
 	}
-	b.WriteString("\nSorts also have a minimum tier (see Sorts). If the user asks for something their tier can't do, say so; the upgrade page is " +
+	b.WriteString("\nSome fields and sorts also have a minimum tier (see Search fields and Sorts). If the user asks for something their tier can't do, say so; the upgrade page is " +
 		"Chronicle's supporter page.\n")
 }

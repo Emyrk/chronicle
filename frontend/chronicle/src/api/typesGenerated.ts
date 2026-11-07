@@ -3206,6 +3206,11 @@ export interface InstanceSearchField {
      * Cost is the field's weight in a query's cost.
      */
     readonly cost: number;
+    /**
+     * MinimumTier is the lowest supporter tier that may filter on the field,
+     * anywhere in the tree. The server answers 403 below it.
+     */
+    readonly minimum_tier: InstanceSearchSortTier;
 }
 
 // From chroniclesdk/instance_search.go
@@ -3472,6 +3477,10 @@ export interface InstanceSearchSortOption {
 }
 
 // From chroniclesdk/instance_search.go
+/**
+ * InstanceSearchSortTier is the lowest supporter tier that may use a sort or
+ * a field.
+ */
 export type InstanceSearchSortTier = "free" | "honored" | "revered";
 
 export const InstanceSearchSortTiers: InstanceSearchSortTier[] = ["free", "honored", "revered"];

@@ -57,6 +57,8 @@ const (
 	InstanceSearchSortDesc InstanceSearchSortDirection = "desc"
 )
 
+// InstanceSearchSortTier is the lowest supporter tier that may use a sort or
+// a field.
 type InstanceSearchSortTier string
 
 const (
@@ -260,6 +262,9 @@ type InstanceSearchField struct {
 	Anonymous bool `json:"anonymous"`
 	// Cost is the field's weight in a query's cost.
 	Cost int `json:"cost"`
+	// MinimumTier is the lowest supporter tier that may filter on the field,
+	// anywhere in the tree. The server answers 403 below it.
+	MinimumTier InstanceSearchSortTier `json:"minimum_tier"`
 }
 
 // InstanceSearchFieldsResponse is GET /api/v1/raidlogs/search/fields.

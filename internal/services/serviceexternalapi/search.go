@@ -154,8 +154,12 @@ func (s *Service) searchInstances(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	page, result := s.search.Search(r.Context(), c, q)
-	serviceinstancesearch.WriteResult(w, r, result, false)
-	if result.Err != nil {
+	if status, errResp := serviceinstancesearch.ResultError(w, result, false); status != 0 {
+		if format == "md" {
+			writeMarkdown(w, status, searchErrorMarkdown(r, errResp))
+		} else {
+			httpapi.Write(r.Context(), w, status, errResp)
+		}
 		return
 	}
 	resp := SearchResponse{Results: page.Results, NextCursor: encodeSearchCursor(page.Next)}
@@ -232,6 +236,25 @@ var markdownCell = strings.NewReplacer(
 	"\n", " ", "\r", " ",
 )
 
+// searchErrorMarkdown renders a failed format=md search, such as a field
+// the key's tier can't use. The supporter link is for the user, so it never
+// carries the key.
+func searchErrorMarkdown(r *http.Request, resp chroniclesdk.Response) string {
+	var b strings.Builder
+	b.WriteString("# Search failed\n\n" + resp.Message + "\n")
+	if resp.Detail != "" {
+		b.WriteString("\n" + markdownCell.Replace(resp.Detail) + "\n")
+	}
+	if resp.CallToAction != "" {
+		b.WriteString("\n" + resp.CallToAction)
+		if resp.Link != "" {
+			b.WriteString(" " + markdownLink(resp.LinkText+" (for the user)", requestOrigin(r)+resp.Link))
+		}
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
 // searchMarkdown renders a compact table for AI agents.
 func searchMarkdown(r *http.Request, resp SearchResponse) string {
 	origin := requestOrigin(r)
@@ -269,7 +292,7 @@ func (s *Service) registerSearchRoutes() {
 	}
 	searchErrors := map[string]OpenAPIResponse{
 		"400": {Description: "The search could not be read or compiled. detail gives the parse position or the compiler error."},
-		"403": {Description: "The search uses something only logged-in users may use."},
+		"403": {Description: "The search uses something only logged-in users may use, or a field or sort above the caller's supporter tier (see minimum_tier in /raidlogs/search/fields)."},
 	}
 	withErrors := func(ok map[string]OpenAPIResponse, codes ...string) map[string]OpenAPIResponse {
 		for _, code := range codes {
@@ -309,11 +332,11 @@ func (s *Service) registerSearchRoutes() {
 	s.register(http.MethodGet, "/raidlogs/search/fields", OpenAPIOperation{
 		Tags:        []string{"Search"},
 		Summary:     "List search fields",
-		Description: "Returns the search fields, operators, sorts, cost model and anonymous limits. Fields with anonymous: true may be used without logging in.",
+		Description: "Returns the search fields, operators, sorts, cost model and anonymous limits. Fields with anonymous: true may be used without logging in; minimum_tier is the lowest supporter tier that may filter on a field.",
 		Responses: okResponse(chroniclesdk.InstanceSearchFieldsResponse{
 			Fields: []chroniclesdk.InstanceSearchField{{
 				Name: "instance.name", Scope: "instance", Type: "string", Ops: []chroniclesdk.InstanceSearchOp{"=", "!=", "in", "not_in", "contains", "starts_with"},
-				Doc: "Zone name, e.g. Molten Core.", Anonymous: true, Cost: 1,
+				Doc: "Zone name, e.g. Molten Core.", Anonymous: true, Cost: 1, MinimumTier: chroniclesdk.InstanceSearchSortTierFree,
 			}},
 			MaxNodes: instancesearch.DefaultMaxNodes, MaxDepth: instancesearch.DefaultMaxDepth, AnonymousMaxPredicates: 6, AnonymousMaxLimit: 25,
 		}),

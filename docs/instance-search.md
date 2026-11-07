@@ -204,6 +204,7 @@ Keyset pagination on `(sort_key, li.id)` like `ListRecentInstances`. The fixed s
 - **Concurrency cap.** At most 6 searches run at once per process, so searches can't use up the shared connection pool. Searches beyond that return 503.
 - **Timeout.** A 5s statement timeout runs in a read-only transaction.
 - **Anonymous subset.** Anonymous callers get a small subset of cheap instance-level filters. Everything else returns 403 with a log-in prompt.
+- **Honored fields.** Each field has a minimum supporter tier, published as `minimum_tier` by the field-list endpoint. Player parse, DPS, HPS and item level, and boss, trash and idle time need Honored. The service checks every field in the tree (nested in `or`, `not` and quantifiers too) before charging, for search and explain and for every caller (session, bearer token, AI key, Discord bot, site assistant), and answers 403 naming the tier. The search page builds its field locks from `minimum_tier`. The Blocks / Code lock is editor-only; the server gates fields, not query shapes. A shared link that uses Honored fields shows a free viewer the supporter upsell instead of results.
 - **Metrics and slow log.** Metrics cover duration by outcome, cost and field usage. Searches slower than 2s, or that time out, are logged with the query as CEL text.
 - **No bypass.** Searching with an admin-bypass context is refused.
 
