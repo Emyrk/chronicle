@@ -544,6 +544,70 @@ func AllRiverJobStateValues() []RiverJobState {
 	}
 }
 
+type UploadSource string
+
+const (
+	UploadSourceUnknown  UploadSource = "unknown"
+	UploadSourceWeb      UploadSource = "web"
+	UploadSourceSidekick UploadSource = "sidekick"
+	UploadSourceServer   UploadSource = "server"
+)
+
+func (e *UploadSource) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = UploadSource(s)
+	case string:
+		*e = UploadSource(s)
+	default:
+		return fmt.Errorf("unsupported scan type for UploadSource: %T", src)
+	}
+	return nil
+}
+
+type NullUploadSource struct {
+	UploadSource UploadSource `json:"upload_source"`
+	Valid        bool         `json:"valid"` // Valid is true if UploadSource is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullUploadSource) Scan(value interface{}) error {
+	if value == nil {
+		ns.UploadSource, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.UploadSource.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullUploadSource) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.UploadSource), nil
+}
+
+func (e UploadSource) Valid() bool {
+	switch e {
+	case UploadSourceUnknown,
+		UploadSourceWeb,
+		UploadSourceSidekick,
+		UploadSourceServer:
+		return true
+	}
+	return false
+}
+
+func AllUploadSourceValues() []UploadSource {
+	return []UploadSource{
+		UploadSourceUnknown,
+		UploadSourceWeb,
+		UploadSourceSidekick,
+		UploadSourceServer,
+	}
+}
+
 type WowPlayableClass string
 
 const (
@@ -2034,6 +2098,7 @@ type LogInstancesGuild struct {
 	TenantIncludeInAll      bool               `db:"tenant_include_in_all" json:"tenant_include_in_all"`
 	Format                  NullLogFormat      `db:"format" json:"format"`
 	Flavor                  []string           `db:"flavor" json:"flavor"`
+	UploadSource            UploadSource       `db:"upload_source" json:"upload_source"`
 }
 
 type LuaProject struct {
@@ -2800,6 +2865,7 @@ type WoWLogGroup struct {
 	InvalidReason   string             `db:"invalid_reason" json:"invalid_reason"`
 	ParseGeneration int64              `db:"parse_generation" json:"parse_generation"`
 	Unlisted        bool               `db:"unlisted" json:"unlisted"`
+	UploadSource    UploadSource       `db:"upload_source" json:"upload_source"`
 }
 
 type World struct {

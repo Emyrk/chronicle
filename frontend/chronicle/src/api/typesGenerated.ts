@@ -7039,6 +7039,7 @@ export interface WoWInstance {
     readonly tenant_include_in_all?: boolean;
     readonly owner_ads_free: boolean;
     readonly log_group_id: string;
+    readonly upload_source: string;
     readonly unlisted: boolean;
     readonly name: string;
     readonly slug: string;
@@ -7116,6 +7117,7 @@ export interface WoWLogGroup {
     readonly log_type: string;
     readonly format?: string;
     readonly flavor?: readonly string[];
+    readonly upload_source: string;
     readonly unlisted: boolean;
     readonly invalidated_at?: string;
     readonly invalid_reason?: string;
