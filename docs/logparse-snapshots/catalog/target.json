@@ -1,0 +1,223 @@
+{
+  "version": 1,
+  "root": "/root",
+  "nodes": [
+    {
+      "path": "/root",
+      "kind": "directory",
+      "metadata": {
+        "label": "parser snapshot root",
+        "source": "combatlog/parser/common/encounters/consumer.go"
+      }
+    },
+    {
+      "path": "/root/encounters",
+      "kind": "value",
+      "type": "github.com/Emyrk/chronicle/combatlog/parser/common/encounters.State",
+      "metadata": {
+        "label": "encounters.State",
+        "source": "combatlog/parser/common/encounters/consumer.go"
+      }
+    },
+    {
+      "path": "/root/encounters/auras",
+      "kind": "reference",
+      "type": "github.com/Emyrk/chronicle/combatlog/parser/common/auras.Tracking",
+      "target": "/root/shared/auras"
+    },
+    {
+      "path": "/root/encounters/consume-tracker",
+      "kind": "reference",
+      "type": "github.com/Emyrk/chronicle/combatlog/parser/common/consumeevidence.Tracker",
+      "target": "/root/shared/consume-tracker"
+    },
+    {
+      "path": "/root/encounters/current-instance",
+      "kind": "reference",
+      "type": "github.com/Emyrk/chronicle/combatlog/parser/common/instances.Hookable",
+      "target": "/root/instances/0000",
+      "metadata": {
+        "label": "State.CurrentInstance",
+        "source": "combatlog/parser/common/encounters/consumer.go"
+      }
+    },
+    {
+      "path": "/root/encounters/instances",
+      "kind": "directory",
+      "metadata": {
+        "label": "State.Instances aliases",
+        "source": "combatlog/parser/common/encounters/consumer.go"
+      }
+    },
+    {
+      "path": "/root/encounters/instances/0000",
+      "kind": "reference",
+      "type": "github.com/Emyrk/chronicle/combatlog/parser/common/instances.Hookable",
+      "target": "/root/instances/0000",
+      "metadata": {
+        "label": "State.Instances[0]",
+        "source": "combatlog/parser/common/encounters/consumer.go"
+      }
+    },
+    {
+      "path": "/root/encounters/raid-groups",
+      "kind": "reference",
+      "type": "github.com/Emyrk/chronicle/combatlog/parser/common/raidgroups.Tracker",
+      "target": "/root/shared/raid-groups"
+    },
+    {
+      "path": "/root/encounters/units",
+      "kind": "reference",
+      "type": "github.com/Emyrk/chronicle/combatlog/parser/common/unitdb.Units",
+      "target": "/root/shared/units"
+    },
+    {
+      "path": "/root/encounters/vehicles",
+      "kind": "reference",
+      "type": "github.com/Emyrk/chronicle/combatlog/parser/common/vehicles.Tracker",
+      "target": "/root/shared/vehicles"
+    },
+    {
+      "path": "/root/instances",
+      "kind": "directory",
+      "metadata": {
+        "label": "instances discovered in parse order",
+        "source": "combatlog/parser/common/encounters/consumer.go"
+      }
+    },
+    {
+      "path": "/root/instances/0000",
+      "kind": "value",
+      "type": "github.com/Emyrk/chronicle/combatlog/parser/common/instances.Hookable",
+      "metadata": {
+        "label": "representative instance",
+        "source": "combatlog/parser/common/instances/hookable.go"
+      }
+    },
+    {
+      "path": "/root/instances/0000/auras",
+      "kind": "reference",
+      "type": "github.com/Emyrk/chronicle/combatlog/parser/common/auras.Tracking",
+      "target": "/root/shared/auras"
+    },
+    {
+      "path": "/root/instances/0000/consume-tracker",
+      "kind": "reference",
+      "type": "github.com/Emyrk/chronicle/combatlog/parser/common/consumeevidence.Tracker",
+      "target": "/root/shared/consume-tracker"
+    },
+    {
+      "path": "/root/instances/0000/raid-groups",
+      "kind": "reference",
+      "type": "github.com/Emyrk/chronicle/combatlog/parser/common/raidgroups.Tracker",
+      "target": "/root/shared/raid-groups"
+    },
+    {
+      "path": "/root/instances/0000/units",
+      "kind": "reference",
+      "type": "github.com/Emyrk/chronicle/combatlog/parser/common/unitdb.Units",
+      "target": "/root/shared/units"
+    },
+    {
+      "path": "/root/instances/0000/vehicles",
+      "kind": "reference",
+      "type": "github.com/Emyrk/chronicle/combatlog/parser/common/vehicles.Tracker",
+      "target": "/root/shared/vehicles"
+    },
+    {
+      "path": "/root/shared",
+      "kind": "directory",
+      "metadata": {
+        "label": "parse-wide shared state",
+        "source": "combatlog/parser/common/encounters/consumer.go"
+      }
+    },
+    {
+      "path": "/root/shared/auras",
+      "kind": "value",
+      "type": "github.com/Emyrk/chronicle/combatlog/parser/common/auras.Tracking",
+      "metadata": {
+        "label": "State.Auras",
+        "source": "combatlog/parser/common/encounters/consumer.go"
+      }
+    },
+    {
+      "path": "/root/shared/consume-tracker",
+      "kind": "value",
+      "type": "github.com/Emyrk/chronicle/combatlog/parser/common/consumeevidence.Tracker",
+      "metadata": {
+        "label": "State.ConsumeTracker",
+        "source": "combatlog/parser/common/encounters/consumer.go"
+      }
+    },
+    {
+      "path": "/root/shared/raid-groups",
+      "kind": "value",
+      "type": "github.com/Emyrk/chronicle/combatlog/parser/common/raidgroups.Tracker",
+      "metadata": {
+        "label": "State.RaidGroups",
+        "source": "combatlog/parser/common/encounters/consumer.go"
+      }
+    },
+    {
+      "path": "/root/shared/units",
+      "kind": "value",
+      "type": "github.com/Emyrk/chronicle/combatlog/parser/common/unitdb.Units",
+      "metadata": {
+        "label": "State.Units",
+        "source": "combatlog/parser/common/encounters/consumer.go"
+      }
+    },
+    {
+      "path": "/root/shared/vehicles",
+      "kind": "value",
+      "type": "github.com/Emyrk/chronicle/combatlog/parser/common/vehicles.Tracker",
+      "metadata": {
+        "label": "State.Vehicles",
+        "source": "combatlog/parser/common/encounters/consumer.go"
+      }
+    }
+  ],
+  "dependencies": [
+    {
+      "from": "/root/encounters",
+      "to": "/root/shared/auras"
+    },
+    {
+      "from": "/root/encounters",
+      "to": "/root/shared/consume-tracker"
+    },
+    {
+      "from": "/root/encounters",
+      "to": "/root/shared/raid-groups"
+    },
+    {
+      "from": "/root/encounters",
+      "to": "/root/shared/units"
+    },
+    {
+      "from": "/root/encounters",
+      "to": "/root/shared/vehicles"
+    },
+    {
+      "from": "/root/instances/0000",
+      "to": "/root/shared/auras"
+    },
+    {
+      "from": "/root/instances/0000",
+      "to": "/root/shared/consume-tracker"
+    },
+    {
+      "from": "/root/instances/0000",
+      "to": "/root/shared/raid-groups"
+    },
+    {
+      "from": "/root/instances/0000",
+      "to": "/root/shared/units"
+    },
+    {
+      "from": "/root/instances/0000",
+      "to": "/root/shared/vehicles"
+    }
+  ]
+}
