@@ -84,6 +84,7 @@ import {
 import { deadUnitVisualState } from "./mapDeathVisibility";
 import type { MapMarkerKind, MapSceneGround, MapUnitHealth } from "./useMapScene";
 import { publishedModelGeometryScale, publishedModelGroupScale } from "./modelSizing";
+import { cachedModelAsset, modelAnimationState, modelAnimationTimeSeconds, selectModelAnimation, usesStaticDeathFallback, type ModelLocomotion } from "./modelAnimation";
 
 /** Ground plane width in scene units; depth follows the artwork's aspect. */
 export const GROUND_WIDTH = 100;
@@ -479,8 +480,12 @@ export interface MapScene3DUnit {
   health: MapUnitHealth | null;
   /** Published model URL from the shared miniature manifest. */
   miniatureUrl: string | undefined;
+  /** Optional lazy animation-pack URL for an original game model. */
+  animationUrl?: string;
   /** The published model is an original game model. */
   gameModel?: boolean;
+  /** Movement state derived from replay positions. */
+  locomotion?: ModelLocomotion;
   /** Replay the original Rookery Whelp's Stand clip for continuous wing flaps. */
   flapWings?: boolean;
   /** Manual size multiplier configured in the Miniature Foundry. */
@@ -564,6 +569,22 @@ interface BossMini {
   deadLift: number;
 }
 
+interface AnimatedGameModel {
+  root: THREE.Object3D;
+  mixer: THREE.AnimationMixer;
+  clips: Map<string, THREE.AnimationClip>;
+  animationUrl: string;
+  packRequested: boolean;
+  packLoaded: boolean;
+  packFailed: boolean;
+  stateKey: string | null;
+  clipName: string | null;
+}
+
+interface AnimatedGameModelTemplate extends WalkAvatarTemplate {
+  box: THREE.Box3;
+}
+
 interface FlappingWhelp {
   mixer: THREE.AnimationMixer;
   root: THREE.Object3D;
@@ -617,7 +638,10 @@ interface UnitObject {
   health: MapUnitHealth | null;
   /** Published miniature or original-model URL; the primitive shows until it loads. */
   miniatureUrl: string | undefined;
+  animationUrl: string | undefined;
   gameModel: boolean;
+  locomotion: ModelLocomotion;
+  animatedGameModel: AnimatedGameModel | null;
   flapWings: boolean;
   flappingWhelp: FlappingWhelp | null;
   mapScale: number;
@@ -846,6 +870,27 @@ function loadFlappingWhelp(url: string): Promise<WalkAvatarTemplate> {
     flappingWhelpTemplates.set(url, template);
   }
   return template;
+}
+
+// Original game models retain their skinned base hierarchy. Animation packs are
+// fetched separately after a visible unit has attached the base model.
+const animatedGameModelTemplates = new Map<string, Promise<AnimatedGameModelTemplate>>();
+const gameModelAnimationPacks = new Map<string, Promise<THREE.AnimationClip[]>>();
+
+function loadAnimatedGameModel(url: string): Promise<AnimatedGameModelTemplate> {
+  return cachedModelAsset(animatedGameModelTemplates, url, () =>
+    gltfLoader().then((loader) => loader.loadAsync(url)).then((gltf) => ({
+      scene: gltf.scene,
+      clips: gltf.animations,
+      box: new THREE.Box3().setFromObject(gltf.scene),
+    })),
+  );
+}
+
+function loadGameModelAnimationPack(url: string): Promise<THREE.AnimationClip[]> {
+  return cachedModelAsset(gameModelAnimationPacks, url, () =>
+    gltfLoader().then((loader) => loader.loadAsync(url)).then((gltf) => gltf.animations),
+  );
 }
 
 function createWalkAvatarModel(template: WalkAvatarTemplate): WalkAvatarModel {
@@ -1505,7 +1550,7 @@ export class MapScene3D {
       seen.add(unit.guid);
       let object = this.units.get(unit.guid);
       const calloutKey = unit.callout ? `${unit.callout.title}|${unit.callout.subtitle}|${unit.callout.marker}` : "";
-      if (object && (object.kind !== unit.kind || object.miniatureUrl !== unit.miniatureUrl || object.gameModel !== Boolean(unit.gameModel) || object.mapScale !== (unit.mapScale ?? 1) || object.worldHeight !== unit.worldHeight || object.calloutKey !== calloutKey || object.flapWings !== Boolean(unit.flapWings))) {
+      if (object && (object.kind !== unit.kind || object.miniatureUrl !== unit.miniatureUrl || object.animationUrl !== unit.animationUrl || object.gameModel !== Boolean(unit.gameModel) || object.mapScale !== (unit.mapScale ?? 1) || object.worldHeight !== unit.worldHeight || object.calloutKey !== calloutKey || object.flapWings !== Boolean(unit.flapWings))) {
         this.removeUnit(unit.guid);
         object = undefined;
       }
@@ -1516,6 +1561,7 @@ export class MapScene3D {
       object.worldY = unit.worldY;
       object.loggedZ = unit.z;
       object.sampleMs = unit.atMs;
+      object.locomotion = unit.locomotion ?? "Stand";
       object.healthFraction = unit.healthFraction ?? null;
       object.powerLevel = unit.power ?? null;
       object.owner = unit.owner;
@@ -1544,6 +1590,7 @@ export class MapScene3D {
       object.coneMaterial.opacity = opacity;
       object.token.shadow.material.opacity = opacity;
       object.token.edge.material.opacity = opacity;
+      if (object.token.chip) object.token.chip.material.opacity = opacity;
       setBodyColor(object);
     }
     for (const guid of [...this.units.keys()]) {
@@ -2920,7 +2967,10 @@ export class MapScene3D {
       floorTracked: false,
       health: unit.health,
       miniatureUrl: unit.miniatureUrl,
+      animationUrl: unit.animationUrl,
       gameModel: Boolean(unit.gameModel),
+      locomotion: unit.locomotion ?? "Stand",
+      animatedGameModel: null,
       flapWings: Boolean(unit.flapWings),
       flappingWhelp: null,
       mapScale: unit.mapScale ?? 1,
@@ -2935,7 +2985,9 @@ export class MapScene3D {
     this.applyTokenFace(object);
     group.scale.setScalar(this.scaleOf(object));
     this.units.set(unit.guid, object);
-    if (object.miniatureUrl) {
+    if (object.miniatureUrl && object.gameModel && object.animationUrl) {
+      this.requestAnimatedGameModel(object);
+    } else if (object.miniatureUrl) {
       const mini = this.requestBossMini(object.miniatureUrl, object.gameModel, object.mapScale, object.worldHeight);
       if (mini) this.applyBossMini(object, mini);
     }
@@ -2996,6 +3048,138 @@ export class MapScene3D {
       object.bodyMaterial.needsUpdate = true;
     }
     object.bodyMaterial.color.setHex(object.boss && object.dead ? 0x777777 : 0xffffff);
+  }
+
+  private requestAnimatedGameModel(object: UnitObject) {
+    const url = object.miniatureUrl;
+    const animationUrl = object.animationUrl;
+    if (!url || !animationUrl || object.animatedGameModel) return;
+    const guid = object.group.userData.guid as string;
+    this.bossMinisLoading++;
+    void loadAnimatedGameModel(url).then((template) => {
+      if (this.disposed || this.units.get(guid) !== object || object.miniatureUrl !== url || object.animationUrl !== animationUrl) return;
+      const root = cloneSkinned(template.scene);
+      const nativeHeight = Math.max(1e-3, template.box.max.y - template.box.min.y);
+      let scale = publishedModelGeometryScale(true, nativeHeight, object.mapScale, object.worldHeight);
+      const guardian = !object.boss && object.kind === "pet";
+      if (guardian) scale *= Math.max(1, MIN_GUARDIAN_MODEL_HEIGHT / (nativeHeight * scale));
+      root.scale.setScalar(scale);
+      root.rotation.y = BOSS_MINI_YAW;
+      const materials: (THREE.MeshLambertMaterial | THREE.MeshStandardMaterial)[] = [];
+      root.traverse((child) => {
+        const mesh = child as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        const clone = (source: THREE.Material) => {
+          const material = source.clone() as THREE.MeshStandardMaterial;
+          material.transparent = true;
+          materials.push(material);
+          return material;
+        };
+        mesh.material = Array.isArray(mesh.material) ? mesh.material.map(clone) : clone(mesh.material);
+      });
+      for (const material of object.bodyMaterials) material.dispose();
+      const hidden = new THREE.MeshLambertMaterial({ visible: false });
+      object.body.material = hidden;
+      object.bodyMaterial = materials[0] ?? hidden;
+      object.bodyMaterials = [hidden, ...materials];
+      object.textured = true;
+      object.mini = true;
+      object.body.scale.setScalar(1);
+      object.body.position.y = 0;
+      object.body.rotation.set(0, 0, 0);
+      object.modelBase = guardian ? object.token.face : 0;
+      root.position.y = object.modelBase - template.box.min.y * scale;
+      object.body.add(root);
+      this.applyRetainedModelLayout(object, template.box, scale);
+      const clips = new Map(template.clips.map((clip) => [clip.name, clip]));
+      object.animatedGameModel = {
+        root,
+        mixer: new THREE.AnimationMixer(root),
+        clips,
+        animationUrl,
+        packRequested: false,
+        packLoaded: false,
+        packFailed: false,
+        stateKey: null,
+        clipName: null,
+      };
+      setBodyColor(object);
+      this.applyTokenFace(object);
+      this.requestRender();
+    }).catch((error) => console.error("Failed to load animated game model", url, error)).finally(() => {
+      this.bossMinisLoading--;
+      this.requestRender();
+    });
+  }
+
+  private applyRetainedModelLayout(object: UnitObject, nativeBox: THREE.Box3, scale: number) {
+    const { token } = object;
+    const guardian = !object.boss && object.kind === "pet";
+    if (guardian) {
+      if (!token.chip) {
+        token.chip = new THREE.Mesh(this.tokenPlane, new THREE.MeshBasicMaterial({
+          transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3,
+        }));
+        token.chip.scale.setScalar(token.radius);
+        token.chip.position.y = token.face;
+        object.group.add(token.chip);
+      }
+    } else {
+      token.radius = MINI_TOKEN_RADIUS;
+      token.edge.visible = false;
+      token.face = TOKEN_GROUND.underside;
+      token.halo.position.y = token.pin.position.y = token.face + TOKEN_LIFT.halo;
+      token.arc.position.y = token.face + TOKEN_LIFT.arc;
+      token.debuff.position.y = token.face + TOKEN_LIFT.debuff;
+      token.debuff.scale.setScalar(MINI_TOKEN_RADIUS * DEBUFF_PLANE);
+      object.cone.position.y = token.face + TOKEN_LIFT.marks;
+      if (token.ticks) token.ticks.position.y = token.face + TOKEN_LIFT.marks;
+      for (const [part, size] of [[token.halo, TOKEN_PLANE.halo], [token.pin, TOKEN_PLANE.pin], [token.arc, TOKEN_PLANE.arc], [token.shadow, TOKEN_PLANE.shadow]] as const) {
+        part.scale.setScalar(MINI_TOKEN_RADIUS * size);
+      }
+      token.columns.position.y = token.face;
+      layoutColumns(token.columns, MINI_TOKEN_RADIUS);
+      if (token.bossSpire) token.bossSpire.visible = false;
+      if (object.boss && !token.sigil) {
+        token.sigil = new THREE.Mesh(this.tokenPlane, new THREE.MeshBasicMaterial({
+          map: this.tokenTextures.sigil(), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+        }));
+        token.sigil.scale.setScalar(MINI_TOKEN_RADIUS * TOKEN_PLANE.sigil);
+        token.sigil.position.y = token.face;
+        token.ticks?.scale.setScalar(MINI_TOKEN_RADIUS * TOKEN_PLANE.sigil);
+        object.group.add(token.sigil);
+      }
+      if (object.boss) object.cone.scale.setScalar(MINI_TOKEN_RADIUS * MARKS_SCALE);
+      else object.cone.visible = false;
+    }
+    const top = object.modelBase + (nativeBox.max.y - nativeBox.min.y) * scale;
+    object.barHeight = Math.max(BAR_HEIGHT, top + BOSS_MINI_BAR_GAP);
+    object.labelHeight = object.barHeight + LABEL_HEIGHT - BAR_HEIGHT;
+    // Static death fallback rotates -z into +y, so lift the back of the model
+    // to the floor when a source Death clip is unavailable.
+    object.deadLift = object.modelBase - nativeBox.min.z * scale;
+  }
+
+  private requestGameModelAnimationPack(object: UnitObject, model: AnimatedGameModel) {
+    if (model.packRequested || model.packFailed) return;
+    model.packRequested = true;
+    const guid = object.group.userData.guid as string;
+    this.bossMinisLoading++;
+    void loadGameModelAnimationPack(model.animationUrl).then((clips) => {
+      if (this.disposed || this.units.get(guid) !== object || object.animatedGameModel !== model) return;
+      for (const clip of clips) model.clips.set(clip.name, clip);
+      model.packLoaded = true;
+      model.stateKey = null;
+      this.requestRender();
+    }).catch((error) => {
+      // Do not retry every render frame. Changing the manifest URL recreates
+      // the unit and permits a fresh request.
+      model.packFailed = true;
+      console.error("Failed to load game-model animation pack", model.animationUrl, error);
+    }).finally(() => {
+      this.bossMinisLoading--;
+      this.requestRender();
+    });
   }
 
   // Returns the published unit model if loaded, starting its load on first use.
@@ -3254,6 +3438,10 @@ export class MapScene3D {
       object.calloutMarker.material.map?.dispose();
       object.calloutMarker.material.dispose();
     }
+    if (object.animatedGameModel) {
+      object.animatedGameModel.mixer.stopAllAction();
+      object.animatedGameModel.mixer.uncacheRoot(object.animatedGameModel.root);
+    }
     if (object.flappingWhelp) {
       object.flappingWhelp.mixer.stopAllAction();
       object.flappingWhelp.mixer.uncacheRoot(object.flappingWhelp.root);
@@ -3367,6 +3555,42 @@ export class MapScene3D {
       active = true;
     }
     return active;
+  }
+
+  private updateGameModelAnimations(fx: EncounterEffects | null, cursorMs: number): boolean {
+    let visible = false;
+    for (const object of this.units.values()) {
+      const model = object.animatedGameModel;
+      if (!model || !object.group.visible) continue;
+      visible = true;
+      const guid = object.group.userData.guid as string;
+      const deadSinceMs = fx ? deathStartedAt(fx, guid, cursorMs) : null;
+      const state = modelAnimationState(fx, guid, cursorMs, object.locomotion, this.unitCasts.has(guid), deadSinceMs);
+      const clipName = selectModelAnimation(model.clips, state.candidates);
+      const needsPack = state.candidates.some((candidate) => candidate !== "Stand")
+        && (!clipName || !state.candidates.includes(clipName) || clipName === "Stand");
+      if (needsPack) this.requestGameModelAnimationPack(object, model);
+      const deathFallback = usesStaticDeathFallback(deadSinceMs, clipName, model.packLoaded || model.packFailed);
+      object.body.rotation.x = deathFallback ? -Math.PI / 2 : 0;
+      object.body.position.y = deathFallback ? object.deadLift : object.modelBase;
+      if (!clipName) continue;
+      const clip = model.clips.get(clipName);
+      if (!clip || clip.duration <= 0) continue;
+      if (model.stateKey !== state.key || model.clipName !== clipName) {
+        model.mixer.stopAllAction();
+        const action = model.mixer.clipAction(clip);
+        action.reset();
+        action.clampWhenFinished = !state.loop;
+        action.setLoop(state.loop ? THREE.LoopRepeat : THREE.LoopOnce, state.loop ? Infinity : 1);
+        action.play();
+        model.stateKey = state.key;
+        model.clipName = clipName;
+      }
+      const action = model.mixer.clipAction(clip);
+      action.time = modelAnimationTimeSeconds(cursorMs, state.startedAtMs, clip.duration, state.loop);
+      model.mixer.update(0);
+    }
+    return visible && this.clock.playing;
   }
 
   // Applies the effects at the effect clock's current time. Returns whether
@@ -3508,7 +3732,8 @@ export class MapScene3D {
     // Icons first: combat text on a unit with icons floats above them.
     this.updateCastIcons(fx, cursorMs);
     this.updateCombatText(fx, cursorMs);
-    return fx !== null && clock.playing;
+    const modelsAnimating = this.updateGameModelAnimations(fx, cursorMs);
+    return (fx !== null && clock.playing) || modelsAnimating;
   }
 
   private updateCombatText(fx: EncounterEffects | null, cursorMs: number) {
@@ -3945,8 +4170,12 @@ export class MapScene3D {
     if (object.dead === dead) return;
     object.dead = dead;
     if (object.mini) {
-      object.body.rotation.x = dead ? -Math.PI / 2 : 0;
-      object.body.position.y = dead ? object.deadLift : object.modelBase;
+      // Retained skinned models use their source Death clip; static flattened
+      // models still lie down because they have no skeleton to pose.
+      if (!object.animatedGameModel) {
+        object.body.rotation.x = dead ? -Math.PI / 2 : 0;
+        object.body.position.y = dead ? object.deadLift : object.modelBase;
+      }
       setBodyColor(object);
     }
     this.applyTokenFace(object);

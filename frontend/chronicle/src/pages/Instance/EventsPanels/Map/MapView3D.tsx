@@ -10,6 +10,7 @@ import { useSmoothReplayTime } from "../RotationTimeline/useSmoothReplayTime";
 import { useSpellMeta } from "../RotationTimeline/useSpellMeta";
 import { replayModel, type PublishedUnitModelUrls } from "./bossMinis";
 import { shouldFlapWings } from "./whelpAnimation";
+import { movementAnimation } from "./modelAnimation";
 import type { MapPositionSample } from "./map.processor";
 import { cameraPoseAt, type MapCameraMark, type MapCameraPose } from "./cameraPath";
 import { DISPEL_KINDS, DISPEL_ORDER, type DispelKind } from "./unitTokenArt";
@@ -360,6 +361,13 @@ export default function MapView3D({
         : marker.sample;
       const point = sample === marker.sample ? marker.point : projectSample(sample) ?? marker.point;
       const model = replayModel(marker.entry, unitModelUrls, effectSettings.gameModelsOnly);
+      let previousSample: MapPositionSample | undefined;
+      for (let index = marker.positions.length - 1; index >= 0; index--) {
+        if (marker.positions[index].timestampMs < sample.timestampMs) {
+          previousSample = marker.positions[index];
+          break;
+        }
+      }
       const trail = effectSettings.trailSeconds > 0
         ? movementTrailPoints(marker.positions, sample, effectSettings.trailSeconds * 1000, marker.kind === "player", projectSample)
         : undefined;
@@ -376,7 +384,9 @@ export default function MapView3D({
         name: marker.name,
         health: showBars ? marker.health : null,
         miniatureUrl: model?.url,
+        animationUrl: model?.animationUrl,
         gameModel: model?.kind === "game",
+        locomotion: worldCoordinates && !marker.held ? movementAnimation(sample, previousSample) : "Stand",
         flapWings: shouldFlapWings(marker.entry, model?.kind),
         mapScale: model?.mapScale ?? 1,
         worldHeight: model?.worldHeight,
@@ -392,7 +402,7 @@ export default function MapView3D({
       }];
     });
     scene.setUnits(units);
-  }, [bossGuids, dispelOf, effectSettings.gameModelsOnly, effectSettings.trailSeconds, frozen, markers, projectSample, showBars, smoothMs, specializations, unitCallouts, unitModelUrls]);
+  }, [bossGuids, dispelOf, effectSettings.gameModelsOnly, effectSettings.trailSeconds, frozen, markers, projectSample, showBars, smoothMs, specializations, unitCallouts, unitModelUrls, worldCoordinates]);
 
   useEffect(() => {
     sceneRef.current?.setUnitRoles(unitRoles ?? NO_ROLES);
