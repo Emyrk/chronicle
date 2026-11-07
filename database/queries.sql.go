@@ -8057,6 +8057,18 @@ func (q *sqlQuerier) BulkUpsertGuildPagePanels(ctx context.Context, dollar_1 []b
 	return err
 }
 
+const countGuildPlayers = `-- name: CountGuildPlayers :one
+SELECT COUNT(*) FROM game_players WHERE guild_id = $1::uuid
+`
+
+// Characters seen in this guild, for the guild card's member count.
+func (q *sqlQuerier) CountGuildPlayers(ctx context.Context, guildID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countGuildPlayers, guildID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countGuilds = `-- name: CountGuilds :one
 SELECT COUNT(*) FROM guilds g
 WHERE ($1::text = '' OR g.name ILIKE '%' || $1 || '%')
