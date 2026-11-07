@@ -18,6 +18,11 @@ export const OG_THEMES = [
     description: 'A talent calculator build: spec in class colour, the point split and a bar per tree.',
   },
   {
+    key: 'character',
+    label: 'Character',
+    description: 'Armory character card: class emblem, level line, parse, item level and kills, and the best three bosses.',
+  },
+  {
     key: 'brand',
     label: 'Brand',
     description: 'Chronicle\'s wordmark, a tagline and up to two site counts. The fallback for every Chronicle card.',

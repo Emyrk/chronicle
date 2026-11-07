@@ -52,7 +52,7 @@ func (api *API) OGRoutes() []frontend.OGRoute {
 		{
 			Pattern: "/armory/{realm}/{player}",
 			Resolve: func(r *http.Request) *frontend.OGData {
-				return api.armoryOG(ogHost(r), chi.URLParam(r, "realm"), chi.URLParam(r, "player"))
+				return api.armoryOG(r, chi.URLParam(r, "realm"), chi.URLParam(r, "player"))
 			},
 		},
 		{
@@ -431,9 +431,11 @@ func instanceOGImageURL(host, instanceName string) string {
 	return fmt.Sprintf("https://%s%s", host, imagePath)
 }
 
-func (api *API) armoryOG(host, realm, player string) *frontend.OGData {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func (api *API) armoryOG(r *http.Request, realm, player string) *frontend.OGData {
+	// The request context carries the tenant, which scopes the lookups.
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
+	host := ogHost(r)
 
 	db := api.Opts.Zed
 
@@ -480,16 +482,28 @@ func (api *API) armoryOG(host, realm, player string) *frontend.OGData {
 	class = strings.ToLower(class)
 	class = strings.ToUpper(string(class[0])) + class[1:]
 
-	desc.WriteString(fmt.Sprintf("%s%s (%s) — %d %s %s",
+	level := ""
+	if p.Level > 0 {
+		level = fmt.Sprintf("%d ", p.Level)
+	}
+	fmt.Fprintf(&desc, "%s%s (%s) — %s%s %s",
 		p.Name, guild, p.RealmName,
-		60, race, class,
-	))
+		level, race, class,
+	)
 
-	return &frontend.OGData{
+	og := &frontend.OGData{
 		Title:       title.String(),
 		Description: desc.String(),
 		URL:         fmt.Sprintf("https://%s/armory/%s/%s", host, realm, p.ID),
 	}
+	// Skip the stat lookups when there's no OG service to draw the card.
+	if api.Opts.OGServiceURL != nil && api.Opts.OGSigningKey != "" {
+		params := characterCardParams(p, race, class, api.fetchCharacterCardStats(ctx, p))
+		if u := api.ogImageURL(r, "character", params); u != "" {
+			og.ImageURL = u
+		}
+	}
+	return og
 }
 
 func resolveInstance(ctx context.Context, db *authz.Authz, idOrSlug string) (database.LogInstancesGuild, error) {
