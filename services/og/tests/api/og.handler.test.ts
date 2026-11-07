@@ -4,6 +4,7 @@ import { NextRequest } from 'next/server';
 import { createElement } from 'react';
 import { themes } from '../../app/api/og/themes';
 import * as remoteImage from '../../app/lib/og-remote-image';
+import { signOgParams } from '../../app/lib/og-signature';
 import type { ThemeContext, ThemeFont, ThemeProps } from '../../app/api/og/themes/types';
 
 const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
@@ -70,6 +71,7 @@ beforeEach(() => {
   state.renders = [];
   delete process.env.OG_API_PATH;
   delete process.env.OG_SECRET;
+  delete process.env.OG_SIGNING_KEY;
   stubThemes();
 });
 
@@ -77,6 +79,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   delete process.env.OG_API_PATH;
   delete process.env.OG_SECRET;
+  delete process.env.OG_SIGNING_KEY;
 });
 
 describe('route keys', () => {
@@ -227,5 +230,60 @@ describe('response', () => {
       delete themes.modern.coversCjk;
     }
     expect(fontHosts()).toEqual([]);
+  });
+});
+
+describe('signed params', () => {
+  const KEY = 'test-og-signing-key';
+  const signedUrl = (query: string) => {
+    const params = new URLSearchParams(query);
+    params.set('sig', signOgParams(KEY, params));
+    return `https://example.com/api/og?${params}`;
+  };
+
+  test('renders a correctly signed request as asked', async () => {
+    const { response, rendered } = await render(signedUrl('template=chronicle&title=Hello'), 'og', {
+      OG_SIGNING_KEY: KEY,
+    });
+    expect(response.status).toBe(200);
+    expect(rendered?.theme).toBe('chronicle');
+    expect(rendered?.props.title).toBe('Hello');
+    expect(rendered?.context.searchParams.get('title')).toBe('Hello');
+  });
+
+  test.each([
+    ['unsigned', 'https://example.com/api/og?template=chronicle&title=Forged'],
+    ['forged', 'https://example.com/api/og?template=chronicle&title=Forged&sig=00000000000000000000000000000000'],
+  ])('renders the fallback with 200 for an %s request', async (_name, url) => {
+    const { response, rendered } = await render(url, 'og', { OG_SIGNING_KEY: KEY });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Content-Type')).toBe('image/png');
+    expect(rendered?.theme).toBe('modern');
+    expect(rendered?.props.title).toBe('Chronicle');
+    expect(rendered?.context.searchParams.has('title')).toBe(true);
+    expect(rendered?.context.searchParams.get('title')).not.toBe('Forged');
+  });
+
+  test('renders the fallback when a signed param is changed', async () => {
+    const url = signedUrl('template=chronicle&title=Hello').replace('title=Hello', 'title=Changed');
+    const { rendered } = await render(url, 'og', { OG_SIGNING_KEY: KEY });
+    expect(rendered?.theme).toBe('modern');
+    expect(rendered?.props.title).toBe('Chronicle');
+  });
+
+  test('never fetches images from a rejected request', async () => {
+    const network = mockNetwork();
+    const { rendered } = await render('https://example.com/api/og?image=https://cdn.example.com/hero.png', 'og', {
+      OG_SIGNING_KEY: KEY,
+    });
+    expect(rendered?.props.imageSrc).toBeNull();
+    expect(network).not.toHaveBeenCalled();
+    expect(remoteImage.remoteImageDeps.fetch).not.toHaveBeenCalled();
+  });
+
+  test('accepts unsigned requests when no key is set', async () => {
+    const { rendered } = await render('https://example.com/api/og?template=chronicle&title=Hello');
+    expect(rendered?.theme).toBe('chronicle');
+    expect(rendered?.props.title).toBe('Hello');
   });
 });
