@@ -11,7 +11,8 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "preview:links": "node scripts/preview-links.mjs"
   },
   "dependencies": {
     "next": "^16.4.3",

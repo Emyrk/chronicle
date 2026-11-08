@@ -1,0 +1,288 @@
+[
+  {
+    "id": "brand-default",
+    "group": "Brand",
+    "label": "Brand fallback",
+    "description": "Default Chronicle identity when a route has no dedicated image or a card lookup fails.",
+    "pageExample": "/",
+    "note": "Used across static pages and as the safe fallback.",
+    "params": {
+      "template": "brand",
+      "title": "Every pull, every parse, every wipe.",
+      "excerpt": "Free raid log analysis for World of Warcraft",
+      "host": "chronicleclassic.com"
+    }
+  },
+  {
+    "id": "brand-stats",
+    "group": "Brand",
+    "label": "Brand with site stats",
+    "description": "Brand card after the asynchronous site totals cache has loaded.",
+    "pageExample": "/recent",
+    "note": "Count pills disappear independently when a value is unavailable.",
+    "params": {
+      "template": "brand",
+      "title": "Every pull, every parse, every wipe.",
+      "excerpt": "Free raid log analysis for WoW Forever",
+      "stat1": "18427:raids logged",
+      "stat2": "263904:bosses killed",
+      "host": "forever.chronicleclassic.com",
+      "product": "WoW Forever"
+    }
+  },
+  {
+    "id": "talents-empty",
+    "group": "Talents",
+    "label": "Talent calculator",
+    "description": "Class calculator before a build has allocated any points.",
+    "pageExample": "/talents/mage",
+    "params": {
+      "template": "talents",
+      "class": "mage",
+      "host": "chronicleclassic.com"
+    }
+  },
+  {
+    "id": "talents-build",
+    "group": "Talents",
+    "label": "Talent build",
+    "description": "A shared class build with inferred spec and points per tree.",
+    "pageExample": "/talents/mage?build=2305000000000000000000-0055300002032501312-",
+    "params": {
+      "template": "talents",
+      "class": "mage",
+      "spec": "Fire",
+      "points": "10-32-0",
+      "host": "chronicleclassic.com"
+    }
+  },
+  {
+    "id": "talents-pet",
+    "group": "Talents",
+    "label": "Hunter pet build",
+    "description": "Pet calculators use one point total instead of three class trees.",
+    "pageExample": "/talents/pet?build=5551--",
+    "params": {
+      "template": "talents",
+      "class": "pet",
+      "points": "16",
+      "host": "chronicleclassic.com"
+    }
+  },
+  {
+    "id": "character-history",
+    "group": "Character",
+    "label": "Character history",
+    "description": "Released Armory card showing stable history signals without choosing between healing and damage performance.",
+    "pageExample": "/armory/turtle/Playername",
+    "params": {
+      "template": "character",
+      "name": "Aeloria",
+      "class": "priest",
+      "spec": "Holy",
+      "race": "Night Elf",
+      "gender": "female",
+      "level": "60",
+      "guild": "Moonlit Vanguard",
+      "ilvl": "72",
+      "seen": "Nov 2026",
+      "host": "chronicleclassic.com",
+      "logs": "14"
+    }
+  },
+  {
+    "id": "character-parse",
+    "group": "Character",
+    "label": "Character performance",
+    "description": "Preserved performance-card design. Not selected by Chronicle until healing versus damage spec and metric selection is settled.",
+    "pageExample": "/armory/turtle/Playername",
+    "params": {
+      "template": "character",
+      "name": "Ravenshield",
+      "class": "warrior",
+      "spec": "Fury",
+      "race": "Human",
+      "gender": "male",
+      "level": "60",
+      "guild": "No Quarter",
+      "parse": "96.4",
+      "ilvl": "79",
+      "kills": "37",
+      "best": "Patchwerk:99,Loatheb:97,Nefarian:96",
+      "host": "chronicleclassic.com"
+    },
+    "status": "Not released"
+  },
+  {
+    "id": "guild-roster",
+    "group": "Guild",
+    "label": "Guild activity fallback",
+    "description": "Fallback for a guild with no logged boss kills in a recognized progression raid.",
+    "pageExample": "/g/{guild-id}",
+    "params": {
+      "template": "guild",
+      "name": "Adventure Company",
+      "members": "54",
+      "since": "2025-03",
+      "raids": "42",
+      "accent": "#5f8fa6",
+      "host": "chronicleclassic.com"
+    },
+    "note": "Current rule: shown only when no progression rows can be built. It shows estimated raid nights without player names or aggregate scores."
+  },
+  {
+    "id": "guild-progression",
+    "group": "Guild",
+    "label": "Guild progression",
+    "description": "Guild card after at least one boss kill is logged in a recognized progression raid.",
+    "pageExample": "/g/{guild-id}",
+    "params": {
+      "template": "guild",
+      "name": "No Quarter",
+      "members": "68",
+      "since": "2024-08",
+      "prog": "MC:10:10,BWL:8:8,AQ40:9:9,NAXX:13:15",
+      "best": "4237",
+      "bestraid": "Naxxramas",
+      "icon": "https://cdn.discordapp.com/icons/1470042728896139468/1339c5e33f0cb237475752c52d20e5fc.png?size=1024",
+      "accent": "#89744d",
+      "host": "chronicleclassic.com"
+    },
+    "note": "Current rule: any recognized progression boss kill selects this variant. It shows up to four of the furthest raids with kills."
+  },
+  {
+    "id": "raid-report",
+    "group": "Raid",
+    "label": "Raid report",
+    "description": "General raid report selected when the run does not qualify for a fast-clear card.",
+    "pageExample": "/instances/{id-or-slug}",
+    "note": "This is the normal instance-page card.",
+    "params": {
+      "template": "raid",
+      "guild": "No Quarter",
+      "raid": "Naxxramas",
+      "date": "2026-11-07",
+      "dur": "8924",
+      "wipes": "8",
+      "players": "40",
+      "killparses": "78,84,91,67,95,88,72,93,86,81,97,75,90",
+      "killavg": "84",
+      "top": "Ravenshield:warrior:1343,Aeloria:priest:1288,Starcaller:mage:1255",
+      "heal": "Aeloria:priest:1102",
+      "comp": "warrior:8,priest:6,mage:6,rogue:5,warlock:4,hunter:4,paladin:4,druid:3",
+      "art": "naxxramas",
+      "host": "chronicleclassic.com",
+      "kills": "13",
+      "bosses": "15"
+    }
+  },
+  {
+    "id": "parse-ranked",
+    "group": "Boss share",
+    "label": "Ranked damage parse",
+    "description": "Preserved player-parse design. Not selected by Chronicle: boss shares ignore selected players and use the boss kill card.",
+    "pageExample": "/s/{share-code}",
+    "status": "Not released",
+    "params": {
+      "template": "parse",
+      "player": "Ravenshield",
+      "class": "warrior",
+      "spec": "Fury",
+      "boss": "Patchwerk",
+      "raid": "Naxxramas",
+      "guild": "No Quarter",
+      "metric": "dps",
+      "value": "1342.6",
+      "dur": "188",
+      "score": "99",
+      "rank": "12",
+      "of": "8421",
+      "host": "chronicleclassic.com"
+    }
+  },
+  {
+    "id": "parse-unranked",
+    "group": "Boss share",
+    "label": "Boss kill",
+    "description": "Any share of one boss kill: kill time and the fight's top DPS and top HPS. Selected players are ignored.",
+    "pageExample": "/s/{share-code}",
+    "note": "Selected when a share link contains one boss kill, whatever players it selects.",
+    "params": {
+      "template": "parse",
+      "boss": "Nefarian",
+      "raid": "Blackwing Lair",
+      "guild": "Adventure Company",
+      "dur": "326",
+      "top": "Ravenshield:warrior:1102",
+      "heal": "Aeloria:priest:964",
+      "host": "chronicleclassic.com"
+    }
+  },
+  {
+    "id": "parse-healing",
+    "group": "Boss share",
+    "label": "Ranked healing parse",
+    "description": "Preserved healer variant of the player-parse design. Not selected by Chronicle.",
+    "pageExample": "/s/{share-code}",
+    "status": "Not released",
+    "params": {
+      "template": "parse",
+      "player": "Aeloria",
+      "class": "priest",
+      "spec": "Holy",
+      "boss": "Loatheb",
+      "raid": "Naxxramas",
+      "guild": "Moonlit Vanguard",
+      "metric": "hps",
+      "value": "1128.4",
+      "dur": "291",
+      "score": "97",
+      "rank": "34",
+      "of": "6932",
+      "host": "chronicleclassic.com"
+    }
+  },
+  {
+    "id": "clear-realm-rank",
+    "group": "Fast clear",
+    "label": "Realm-ranked clear",
+    "description": "Qualified clear with an explicit realm rank and record delta.",
+    "pageExample": "/instances/{id-or-slug}",
+    "note": "Selected instead of the raid card when the time parse is 90 or higher.",
+    "params": {
+      "template": "clear",
+      "guild": "No Quarter",
+      "raid": "Blackwing Lair",
+      "ms": "2945000",
+      "score": "99",
+      "rank": "6",
+      "of": "1248",
+      "realmrank": "2",
+      "delta": "-84",
+      "wipes": "0",
+      "players": "40",
+      "splits": "Razorgore:284,Vaelastrasz:426,Broodlord:711,Firemaw:1054,Ebonroc:1268,Flamegor:1442,Chromaggus:1948,Nefarian:2945",
+      "host": "chronicleclassic.com"
+    }
+  },
+  {
+    "id": "clear-percentile",
+    "group": "Fast clear",
+    "label": "Percentile clear",
+    "description": "Qualified clear without a realm rank, using the time-parse percentile fallback.",
+    "pageExample": "/instances/{id-or-slug}",
+    "params": {
+      "template": "clear",
+      "guild": "Moonlit Vanguard",
+      "raid": "Molten Core",
+      "ms": "3712000",
+      "score": "93",
+      "rank": "77",
+      "of": "1167",
+      "wipes": "2",
+      "players": "38",
+      "splits": "Lucifron:331,Magmadar:627,Gehennas:1004,Garr:1358,Baron Geddon:1692,Shazzrah:1908,Sulfuron:2291,Golemagg:2604,Majordomo:3120,Ragnaros:3712",
+      "host": "chronicleclassic.com"
+    }
+  }
+]

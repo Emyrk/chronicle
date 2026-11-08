@@ -87,6 +87,20 @@ func (api *API) isUnlistedInstancePath(r *http.Request) bool {
 	return err == nil && instance.Unlisted
 }
 
+// ogHost returns a validated request host for canonical URL construction.
+func ogHost(r *http.Request) string {
+	host := strings.ToLower(r.Host)
+	for _, ch := range host {
+		if (ch < 'a' || ch > 'z') && (ch < '0' || ch > '9') && ch != '.' && ch != '-' && ch != ':' {
+			return "chronicleclassic.com"
+		}
+	}
+	if host == "" {
+		return "chronicleclassic.com"
+	}
+	return host
+}
+
 func canonicalRequestURL(api *API, r *http.Request) string {
 	path := r.URL.EscapedPath()
 	if path == "" {

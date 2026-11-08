@@ -65,6 +65,65 @@ When spell golden fields or semantics change, run `make update-spell-goldens`
 then review and commit the golden TSV diffs. The `-update` flag regenerates golden
 values; do not pass it to `go test ./...`.
 
+## Internal Go service boundaries
+
+Use `internal/services/service<domain>` to keep business capabilities out of transport packages and prevent large feature areas from accumulating in `api` or another unrelated package.
+
+### Create or extract a service when
+
+These are design signals, not a checklist. Prefer the smallest cohesive boundary that has clear ownership.
+
+- The code represents a named product or infrastructure capability with its own vocabulary and invariants.
+- It orchestrates several queries, caches, workers, external clients, or other services.
+- More than one transport or caller may need the capability.
+- The feature needs an explicit lifecycle, configuration, dependency ordering, or process-owned state.
+- Keeping it in the current package would make that package own both transport concerns and business decisions.
+
+Do not create a service only to hold a pure helper, one small handler, shared types, or a thin database-query wrapper. Keep those near their caller until a real capability boundary appears.
+
+### Boundary rules
+
+- Transport packages such as `api` own HTTP parsing, authentication middleware, response formatting, and narrow route wiring. Services own business decisions and orchestration.
+- A service must not import its transport adapter. For example, `internal/services/servicefoo` must not import `api`; define a narrow interface in the caller or move shared contracts to a lower-level package.
+- Pass dependencies explicitly through an `Options` struct or constructor. Do not reach through another service's private fields or use package globals as a service locator.
+- Expose the smallest useful API. Prefer capability methods or a narrow provider interface over exporting the service's storage, caches, or implementation types.
+- Keep service-owned tests with the service. Leave adapter contract and wiring tests in the transport package.
+- Preserve optional-feature behavior at the boundary. If a dependency or integration is optional, define and test the disabled behavior instead of spreading nil/config checks through callers.
+- Avoid grab-bag services. If the proposed package name is vague, or its responsibilities cannot be described in one sentence, refine the boundary before adding it.
+
+### Plain service object versus broker-managed service
+
+Start with a plain constructed object when the capability only needs dependencies and methods. Make it a broker-managed `services.Servicer` only when it needs startup or shutdown work, CLI/environment options, dependency ordering, background workers, or independent process-level ownership.
+
+For a broker-managed service:
+
+1. Add a stable name in `internal/services/servicenames.go`.
+2. Declare `DependsOn` and `Configures` edges without creating cycles.
+3. Register it in the server composition root.
+4. Keep `Start` bounded and return only after the service is ready.
+5. Make `Close` honor cancellation and release owned workers or resources.
+
+Before implementing an extraction, state what the service owns, what remains with the caller, and the narrow interface between them. Treat that boundary as an architectural decision and get user approval when it is not already explicit in the request.
+
+## Open Graph card refactor
+
+The generated OG card feature was originally merged as one large train spanning page metadata lookup, ranking aggregation, signed URL serialization, and the standalone renderer. Preserve the shipped behavior while splitting that layout into smaller, reviewable responsibilities.
+
+- Treat commit `f1c4e8368` as the behavioral baseline for this refactor. The stack's restoration commit reproduces that tree before preview tooling or refactors.
+- Open Graph metadata resolution, card selection, signing, and renderer-specific lookups belong in `internal/services/serviceog`; the `api` package only owns the narrow route-provider interface and frontend wiring.
+- The generated-image renderer is optional. With no renderer URL or signing key, `serviceog` must preserve the pre-existing static metadata and skip generated-card lookups.
+- The released Armory card is history-only. Keep the Character Performance renderer for design review, but do not select it until healing-versus-damage spec and metric selection is defined.
+- Guild card logos may use Chronicle-hosted images or exact Discord guild-icon URLs under `https://cdn.discordapp.com/icons/`; reject other external hosts and normalize Discord WebP icons to PNG for the renderer.
+- Guild cards must not include player lists or aggregate player scores until guild-level scoring is ready; the activity fallback shows only estimated raid nights.
+- Generated OG cards and metadata must not display or serialize server/realm names; route URLs may still carry the realm identifier required for navigation.
+- Boss share cards ignore selected players: a share of one boss kill shows the kill time and the fight's top DPS and top HPS. Keep the player-parse renderer for design review, but do not select it.
+- Raid report cards use server-wide per-boss kill-time parses and their average; do not restore the player-average parse metric.
+- Refactors must preserve page metadata, card selection thresholds, and rendered query parameters unless the user explicitly approves a behavior change.
+- Keep the Go signer and TypeScript verifier byte-compatible. Any signature change must update the shared vectors and both test suites together.
+- Use `cd services/og && pnpm preview:links -- <url...>` to compare the actual metadata and image selected for real Chronicle links before and after a refactor.
+- Record accepted OG design decisions in this section as they are finalized. Do not turn tentative refactor ideas into repository rules.
+- Root CI validates `services/og` with tests, typechecking, a Docker build, and a container smoke test. Tagged releases push `emyrk/chronicle-og` and redeploy Railway's `chronicle-og` service. Still run the service's checks directly before committing renderer changes.
+
 ## Essential Commands
 
 ### Build

@@ -24,6 +24,7 @@ function encounter(encounterId: string, startMs: number, endMs: number, units: R
     positionsByUnit: new Map(Object.entries(units).map(([guid, times]) => [guid, times.map((time) => sample(time))])),
     healthByUnit: new Map(),
     debuffsByUnit: new Map(),
+    activePlayerGuids: [],
     effects: createEncounterEffects(),
   };
 }
@@ -44,6 +45,16 @@ describe("mergeRunEncounters", () => {
     expect(run?.positionsByUnit.get("p1")?.map((entry) => entry.timestampMs)).toEqual([0, 2_000, 5_000, 8_000]);
     expect(run?.positionsByUnit.get("mob")).toHaveLength(1);
     expect(run?.effects.events.map((event) => event.timestampMs)).toEqual([1_000, 6_000]);
+  });
+
+  it("unions active contributors across encounters", () => {
+    const first = encounter("a", 0, 1_000, { p1: [0] });
+    const second = encounter("b", 2_000, 3_000, { p2: [2_000] });
+    first.activePlayerGuids.push("p1");
+    second.activePlayerGuids.push("p2");
+
+    expect(mergeRunEncounters(new Map([["a", first], ["b", second]]))?.activePlayerGuids)
+      .toEqual(["p1", "p2"]);
   });
 
   it("does not mutate the processed encounters", () => {

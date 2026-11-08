@@ -17,6 +17,9 @@ import {
   recentInstantAt,
   latestResourceAt,
   resourceDeathStartedAt,
+  filterRaidFramePlayersByOption,
+  raidFramePlayerGuidsFromOption,
+  raidFramePlayerGuidsOption,
   raidFramesProcessor,
 } from "./raidFrames.processor";
 
@@ -266,6 +269,24 @@ describe("resourceDeathStartedAt", () => {
     expect(resourceDeathStartedAt(samples, 4_999)).toBe(2_000);
     expect(resourceDeathStartedAt(samples, 5_000)).toBeNull();
     expect(resourceDeathStartedAt(samples, 9_000)).toBe(8_000);
+  });
+});
+
+describe("raid frame player options", () => {
+  it("round-trips a full-fight contributor allowlist", () => {
+    const option = raidFramePlayerGuidsOption([PLAYER, OTHER_PLAYER]);
+    expect(raidFramePlayerGuidsFromOption(option)).toEqual(new Set([PLAYER, OTHER_PLAYER]));
+  });
+
+  it("keeps only full-fight contributors in the player nameplate grid", () => {
+    const players = [[PLAYER, "Healer"], [OTHER_PLAYER, "Mage"]] as const;
+    expect(filterRaidFramePlayersByOption(players, raidFramePlayerGuidsOption([OTHER_PLAYER])))
+      .toEqual([[OTHER_PLAYER, "Mage"]]);
+  });
+
+  it("distinguishes no allowlist from an empty contributor set", () => {
+    expect(raidFramePlayerGuidsFromOption(null)).toBeNull();
+    expect(raidFramePlayerGuidsFromOption(raidFramePlayerGuidsOption([]))).toEqual(new Set());
   });
 });
 

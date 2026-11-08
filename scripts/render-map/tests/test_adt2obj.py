@@ -65,10 +65,27 @@ class MonolithicAdtTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "malformed MCNK MCVT offset"):
             adt2obj.read_monolithic_adt(path)
 
-    def test_wmo_placements_are_refused(self):
-        path = self.write(chunk("MODF", bytes(64)))
-        with self.assertRaisesRegex(SystemExit, "WMO placement.*refusing to omit"):
-            adt2obj.read_monolithic_adt(path)
+    def test_wmo_placements_resolve_named_mwmo_entries(self):
+        names = b"World\\Wmo\\A.wmo\0World\\Wmo\\B.wmo\0"
+        second = names.index(b"World\\Wmo\\B.wmo")
+        modf = struct.pack(
+            "<II12f4H",
+            1, 77,
+            1.0, 2.0, 3.0,
+            4.0, 5.0, 6.0,
+            -7.0, -8.0, -9.0,
+            10.0, 11.0, 12.0,
+            3, 0, 0, 0,
+        )
+        path = self.write(chunk("MWMO", names) + chunk("MWID", struct.pack("<2I", 0, second)) +
+                          chunk("MODF", modf))
+        parsed = adt2obj.read_monolithic_adt(path)
+        self.assertEqual(len(parsed["wmo_placements"]), 1)
+        placement = parsed["wmo_placements"][0]
+        self.assertEqual(placement["name"], "World\\Wmo\\B.wmo")
+        self.assertEqual(placement["uid"], 77)
+        self.assertEqual(placement["scale"], 1.0)
+        self.assertEqual(placement["fid"], adt2obj.legacy_wmo_key(placement["name"]))
 
     def test_texture_keys_are_case_and_separator_stable(self):
         self.assertEqual(adt2obj.legacy_texture_key("Tileset/A.blp"),

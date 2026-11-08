@@ -327,12 +327,12 @@ client's `Data/` read-only through StormLib (built into `cache/mpq/`, pinned by
   case, set `allow_stale_placement_bounds: true`. Position and rotation still come from the MODF, while
   `fetch.json` records the extent error, `bounds_verified: false`, and `stale_bounds_allowed: true`.
 - **Render a fork's 1.12 terrain map** with the same `source: mpq`, `client`, and `directory` fields.
-  Active `MAIN` tiles are fetched by name as `raw/adt/XX_YY.adt`; named minimap and `MTEX` BLPs are
-  resolved through the same archive chain. `fetch.json` records `layout: monolithic-1.12`, tile range,
-  MPHD flags, texture names and archive winners, archive/file hashes, and omitted M2 counts. The reader
-  supports legacy monolithic `MCNK` heights and holes, `MCLY`, 2048-byte 4-bit `MCAL`, and optional
-  `MH2O`. M2 doodads are counted but not meshed. Any ADT `MODF` placement aborts rather than silently
-  dropping WMO geometry; add explicit legacy MODF support before rendering such a terrain map.
+  Active `MAIN` tiles are fetched by name as `raw/adt/XX_YY.adt`; named minimap, `MTEX` BLPs, and
+  `MWID`/`MWMO`-referenced placed WMOs are resolved through the same archive chain. `fetch.json` records
+  `layout: monolithic-1.12`, tile range, MPHD flags, texture/WMO names and archive winners,
+  archive/file hashes, placement counts, and omitted M2 counts. The reader supports legacy monolithic
+  `MCNK` heights and holes, `MCLY`, 2048-byte 4-bit `MCAL`, optional `MH2O`, and deduplicated `MODF`
+  placements with bounding-box transform verification. M2 doodads are counted but not meshed.
 - Inventory of what a fork's custom patches touch: `mpq_inventory.py --custom-from <first custom
   archive>` (OctoWoW: patch-3..A) writes it as Markdown.
 

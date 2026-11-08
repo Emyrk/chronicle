@@ -845,6 +845,17 @@ WHERE edr.player_guid = @player_guid
 GROUP BY edr.instance_name, edr.encounter_name, edr.difficulty_name, edr.max_players
 ORDER BY edr.instance_name, edr.encounter_name;
 
+-- name: GetCharacterLogCount :one
+-- Count canonical listed raid logs in which the character has at least one
+-- ranked boss kill. Duplicate uploads of the same raid night count once.
+SELECT COUNT(DISTINCT COALESCE(li.duplicate_group_id, edr.instance_id))::INT
+FROM encounter_dps_rankings edr
+JOIN log_instances li ON li.id = edr.instance_id
+JOIN wow_log_groups log_group ON log_group.id = li.log_group_id AND NOT log_group.unlisted
+WHERE edr.player_guid = @player_guid
+  AND (sqlc.narg(realm_id)::uuid IS NULL OR edr.realm_id = sqlc.narg(realm_id))
+  AND edr.encounter_id IS NOT NULL;
+
 -- name: GetCharacterPerformanceRuns :many
 -- Return complete canonical runs for one character and a selected boss set.
 -- Raw DPS/HPS is aggregated from the persisted representative upload. Cached

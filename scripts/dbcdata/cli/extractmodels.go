@@ -30,6 +30,7 @@ func ExtractModelsCmd() *serpent.Command {
 	var outDir string
 	var models []string
 	var list bool
+	var splitAnimations bool
 
 	return &serpent.Command{
 		Use:   "extract-models",
@@ -45,9 +46,15 @@ func ExtractModelsCmd() *serpent.Command {
 			},
 			{
 				Name:        "model",
-				Description: `Model path in the client, e.g. Creature\Chicken\Chicken.m2. Repeatable; append "=Texture\Path.blp" to override a creature skin.`,
+				Description: `Model path in the client, e.g. Creature\Chicken\Chicken.m2. Repeatable; append "=Texture\Path.blp" to override a creature skin, or separate up to three texture slots with |.`,
 				Flag:        "model",
 				Value:       serpent.StringArrayOf(&models),
+			},
+			{
+				Name:        "split animations",
+				Description: "Write a skinned base GLB with Stand plus a separate .anim.glb containing the remaining animation clips.",
+				Flag:        "split-animations",
+				Value:       serpent.BoolOf(&splitAnimations),
 			},
 			{
 				Name:        "list",
@@ -102,10 +109,7 @@ func ExtractModelsCmd() *serpent.Command {
 
 			for _, spec := range models {
 				modelPath, skin, _ := strings.Cut(spec, "=")
-				slots := skins[strings.ToLower(modelPath)]
-				if skin != "" {
-					slots[0] = skin
-				}
+				slots := applySkinOverrides(skins[strings.ToLower(modelPath)], skin)
 				glb, info, err := convertM2(modelPath, slots, readFile)
 				if err != nil {
 					_, _ = fmt.Fprintf(inv.Stderr, "  SKIP %s: %v\n", modelPath, err)
@@ -113,29 +117,125 @@ func ExtractModelsCmd() *serpent.Command {
 				}
 				name := strings.ToLower(strings.TrimSuffix(path.Base(strings.ReplaceAll(modelPath, `\`, "/")), path.Ext(modelPath)))
 				out := filepath.Join(outDir, name+".glb")
+				animationOut := ""
+				animationSize := 0
+				if splitAnimations {
+					var animationGLB []byte
+					glb, animationGLB, err = splitAnimationGLB(glb)
+					if err != nil {
+						return fmt.Errorf("split %s animations: %w", modelPath, err)
+					}
+					animationSize = len(animationGLB)
+					animationOut = filepath.Join(outDir, name+".anim.glb")
+					if err := os.WriteFile(animationOut, animationGLB, 0o644); err != nil {
+						return fmt.Errorf("write %s: %w", animationOut, err)
+					}
+				}
 				if err := os.WriteFile(out, glb, 0o644); err != nil {
 					return fmt.Errorf("write %s: %w", out, err)
 				}
-				_, _ = fmt.Fprintf(inv.Stdout, "  %s -> %s (%d KB) %s\n", modelPath, out, len(glb)/1024, info)
+				if splitAnimations {
+					_, _ = fmt.Fprintf(inv.Stdout, "  %s -> %s (%d KB) + %s (%d KB) %s\n", modelPath, out, len(glb)/1024, animationOut, animationSize/1024, info)
+				} else {
+					_, _ = fmt.Fprintf(inv.Stdout, "  %s -> %s (%d KB) %s\n", modelPath, out, len(glb)/1024, info)
+				}
 			}
 			return nil
 		},
 	}
 }
 
-// Animation IDs (AnimationData.dbc) worth exporting, with the clip names the
-// map plays.
+func applySkinOverrides(slots [3]string, spec string) [3]string {
+	if spec == "" {
+		return slots
+	}
+	for i, texture := range strings.SplitN(spec, "|", len(slots)) {
+		if texture = strings.TrimSpace(texture); texture != "" {
+			slots[i] = texture
+		}
+	}
+	return slots
+}
+
+// Animation IDs (AnimationData.dbc) worth exporting. Locomotion clips drive
+// walk mode; combat clips stay available to consumers that animate the GLB.
 var m2ExportAnimations = map[uint16]string{
-	0:  "Stand",
-	4:  "Walk",
-	5:  "Run",
-	13: "WalkBackwards",
-	37: "JumpStart",
-	38: "Jump",
-	39: "JumpEnd",
-	40: "Fall",
-	41: "SwimIdle",
-	42: "Swim",
+	0:   "Stand",
+	1:   "Death",
+	4:   "Walk",
+	5:   "Run",
+	8:   "StandWound",
+	9:   "CombatWound",
+	10:  "CombatCritical",
+	13:  "WalkBackwards",
+	14:  "Stun",
+	16:  "AttackUnarmed",
+	17:  "Attack1H",
+	18:  "Attack2H",
+	19:  "Attack2HL",
+	20:  "ParryUnarmed",
+	21:  "Parry1H",
+	22:  "Parry2H",
+	23:  "Parry2HL",
+	24:  "ShieldBlock",
+	25:  "ReadyUnarmed",
+	26:  "Ready1H",
+	27:  "Ready2H",
+	28:  "Ready2HL",
+	29:  "ReadyBow",
+	30:  "Dodge",
+	32:  "SpellCast",
+	37:  "JumpStart",
+	38:  "Jump",
+	39:  "JumpEnd",
+	40:  "Fall",
+	41:  "SwimIdle",
+	42:  "Swim",
+	46:  "AttackBow",
+	48:  "ReadyRifle",
+	49:  "AttackRifle",
+	51:  "ReadySpellDirected",
+	52:  "ReadySpellOmni",
+	53:  "SpellCastDirected",
+	54:  "SpellCastOmni",
+	55:  "BattleRoar",
+	57:  "Special1H",
+	58:  "Special2H",
+	59:  "ShieldBash",
+	85:  "Attack1HPierce",
+	87:  "AttackOff",
+	88:  "AttackOffPierce",
+	95:  "Kick",
+	107: "AttackThrown",
+	108: "ReadyThrown",
+	118: "SpecialUnarmed",
+	121: "Knockdown",
+	124: "ChannelCastDirected",
+	125: "ChannelCastOmni",
+	126: "Whirlwind",
+	127: "Birth",
+	181: "DragonStomp",
+	201: "Submerge",
+	202: "Submerged",
+}
+
+// Locomotion consumers expect one canonical clip name. Combat models may have
+// several sequences with the same AnimationData ID, so retain those variants
+// with stable numeric suffixes (for example AttackUnarmed2).
+var m2SingleVariationAnimations = map[uint16]bool{
+	0: true, 4: true, 5: true, 13: true, 37: true,
+	38: true, 39: true, 40: true, 41: true, 42: true,
+}
+
+func m2AnimationClipName(id uint16, variation int) (string, bool) {
+	name, ok := m2ExportAnimations[id]
+	if !ok || (variation > 0 && m2SingleVariationAnimations[id]) {
+		return "", false
+	}
+	if variation > 0 {
+		name += fmt.Sprint(variation + 1)
+	}
+	return name, true
 }
 
 type m2Array struct{ count, offset uint32 }
@@ -381,16 +481,18 @@ func convertM2(modelPath string, skins [3]string, readFile func(string) ([]byte,
 	meshNode := b.node(map[string]any{"name": "mesh", "mesh": mesh, "skin": 0})
 	root := b.node(map[string]any{"name": "model", "children": append([]int{meshNode}, rootBones...)})
 
-	// Animations: the first sequence of each exported ID.
+	// Animations: one canonical locomotion sequence and every combat variant.
 	var exported []string
-	seen := map[uint16]bool{}
+	seen := map[uint16]int{}
 	for si, seq := range sequences {
-		name, ok := m2ExportAnimations[seq.id]
-		// The first sequence of each ID is its main variation.
-		if !ok || seen[seq.id] {
+		variation := seen[seq.id]
+		name, ok := m2AnimationClipName(seq.id, variation)
+		if _, exportedID := m2ExportAnimations[seq.id]; exportedID {
+			seen[seq.id]++
+		}
+		if !ok {
 			continue
 		}
-		seen[seq.id] = true
 		duration := float32(seq.end-seq.start) / 1000
 		var channels, samplers []map[string]any
 		addChannel := func(node int, pathName string, times []float32, values []float32, kind string, step bool) {

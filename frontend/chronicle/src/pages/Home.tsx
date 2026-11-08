@@ -36,6 +36,10 @@ import { getInstanceCategory } from "@/pages/Logs/utils/instanceCategory";
 import { seoProductName } from "@/lib/seo";
 import { Podium } from "@/pages/Leaderboard/Podium";
 import { RaidCard } from "@/pages/Recent/RaidCard";
+import {
+  guildAttributes,
+  rankingPlayerAttributes,
+} from "@/components/EntityMenu/leaderboardEntities";
 
 const STALE_TIME = 5 * 60 * 1000; // 5 minutes
 const ROTATE_SECS = 5 * 60; // rotate the spotlight every 5 minutes
@@ -852,6 +856,7 @@ function RaidSpotlight() {
                 <span
                   className="font-medium truncate"
                   style={{ color: CLASS_CSS_VAR[entry.player_class] }}
+                  {...rankingPlayerAttributes(entry)}
                 >
                   {entry.player_name}
                 </span>
@@ -862,7 +867,10 @@ function RaidSpotlight() {
                   {entry.player_spec}
                 </span>
                 <span className="font-mono font-bold text-right">{Math.round(entry.dps)}/s</span>
-                <span className="hidden md:block text-xs text-muted-foreground text-right truncate">
+                <span
+                  className="hidden md:block text-xs text-muted-foreground text-right truncate"
+                  {...guildAttributes(entry.guild_id, entry.guild_name)}
+                >
                   {entry.guild_name}
                 </span>
               </div>
@@ -895,7 +903,12 @@ function RaidSpotlight() {
                       <span className="font-mono text-xs text-muted-foreground w-4">{i + 1}</span>
                       {g ? (
                         <>
-                          <span className="flex-1 font-medium truncate">{g.guild_name}</span>
+                          <span
+                            className="flex-1 font-medium truncate"
+                            {...guildAttributes(g.guild_id, g.guild_name)}
+                          >
+                            {g.guild_name}
+                          </span>
                           <div className="w-16 h-1.5 rounded-full bg-muted overflow-hidden">
                             <div
                               className="h-full bg-primary"

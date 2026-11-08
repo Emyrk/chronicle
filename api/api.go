@@ -125,6 +125,9 @@ type Options struct {
 	// ShortLinkDomain is the domain used for short share links (e.g. "chrn.link").
 	// If empty, short links use same-origin paths instead.
 	ShortLinkDomain string
+	// OG resolves route-specific Open Graph metadata. When nil, OGRoutes uses a
+	// static-only service so pages retain their pre-generated metadata.
+	OG OGService
 	// LandingFeaturedID is the deployment default for the /start hero's
 	// featured instance, used when the site setting is empty.
 	LandingFeaturedID uuid.UUID

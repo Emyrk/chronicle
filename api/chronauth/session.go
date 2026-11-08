@@ -15,6 +15,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/gorilla/sessions"
+	"golang.org/x/oauth2"
 )
 
 type authContextKey struct{}
@@ -161,7 +162,7 @@ func (s *Service) AuthenticationMiddleware(next http.Handler) http.Handler {
 			// If the token is expiring, try to refresh it
 			err := s.RefreshSession(r.Context(), w, r, &c)
 			if err != nil && !errors.Is(err, ErrRefreshSkipped) {
-				s.logger.Error("failed to refresh session",
+				s.logger.Log(r.Context(), refreshFailureLogLevel(err), "failed to refresh session",
 					slog.String("error", err.Error()),
 					slog.String("user_id", c.Subject.String()),
 					slog.String("session_id", c.ID.String()),
@@ -174,6 +175,14 @@ func (s *Service) AuthenticationMiddleware(next http.Handler) http.Handler {
 			Error:  nil,
 		}))
 	})
+}
+
+func refreshFailureLogLevel(err error) slog.Level {
+	var retrieveErr *oauth2.RetrieveError
+	if errors.As(err, &retrieveErr) && retrieveErr.ErrorCode == "invalid_grant" {
+		return slog.LevelDebug
+	}
+	return slog.LevelError
 }
 
 // RawSessionJWT returns the raw signed JWT stored in the request's session

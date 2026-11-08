@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -159,6 +160,39 @@ func requireResponseCookie(t *testing.T, recorder *httptest.ResponseRecorder, na
 	}
 	t.Fatalf("response did not set cookie %q", name)
 	return nil
+}
+
+func TestRefreshFailureLogLevel(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		err  error
+		want slog.Level
+	}{
+		{
+			name: "wrapped invalid grant",
+			err:  fmt.Errorf("refresh token: %w", &oauth2.RetrieveError{ErrorCode: "invalid_grant"}),
+			want: slog.LevelDebug,
+		},
+		{
+			name: "different OAuth error",
+			err:  &oauth2.RetrieveError{ErrorCode: "invalid_client"},
+			want: slog.LevelError,
+		},
+		{
+			name: "matching error text only",
+			err:  errors.New(`oauth2: "invalid_grant" "Invalid refresh token"`),
+			want: slog.LevelError,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, refreshFailureLogLevel(tt.err))
+		})
+	}
 }
 
 func TestRefreshSessionUsesTransactionConnection(t *testing.T) {

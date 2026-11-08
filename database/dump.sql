@@ -79,6 +79,13 @@ CREATE TYPE river_job_state AS ENUM (
     'scheduled'
 );
 
+CREATE TYPE upload_source AS ENUM (
+    'unknown',
+    'web',
+    'sidekick',
+    'server'
+);
+
 CREATE DOMAIN wow_guid AS text
 	CONSTRAINT wow_guid_check CHECK ((VALUE ~ '^0x[0-9A-Fa-f]{16}$'::text));
 
@@ -409,7 +416,8 @@ CREATE TABLE wow_log_groups (
     invalidated_at timestamp with time zone,
     invalid_reason text DEFAULT ''::text NOT NULL,
     parse_generation bigint DEFAULT 1 NOT NULL,
-    unlisted boolean DEFAULT false NOT NULL
+    unlisted boolean DEFAULT false NOT NULL,
+    upload_source upload_source DEFAULT 'unknown'::upload_source NOT NULL
 );
 
 CREATE VIEW chronicle_users AS
@@ -1646,7 +1654,8 @@ CREATE VIEW log_instances_guild AS
     t.slug AS tenant_slug,
     COALESCE(t.include_in_all, true) AS tenant_include_in_all,
     wlg.format,
-    wlg.flavor
+    wlg.flavor,
+    wlg.upload_source
    FROM ((((((public.log_instances li
      JOIN wow_log_groups wlg ON ((wlg.id = li.log_group_id)))
      JOIN parsed_log_group plg ON (((plg.id = li.log_group_id) AND (plg.parse_generation = wlg.parse_generation) AND (plg.finalized_at IS NOT NULL))))

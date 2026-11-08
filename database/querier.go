@@ -64,6 +64,8 @@ type sqlcQuerier interface {
 	CountActiveRegressionJobs(ctx context.Context) (int64, error)
 	CountAllWoWLogGroups(ctx context.Context, arg CountAllWoWLogGroupsParams) (int32, error)
 	CountGuildDiscordInstallationsByDiscordGuildID(ctx context.Context, discordGuildID string) (int64, error)
+	// Characters seen in this guild, for the guild card's member count.
+	CountGuildPlayers(ctx context.Context, guildID uuid.UUID) (int64, error)
 	CountGuilds(ctx context.Context, arg CountGuildsParams) (int64, error)
 	CountLuaProjectStars(ctx context.Context, projectIds []uuid.UUID) ([]CountLuaProjectStarsRow, error)
 	CountLuaProjectsByOwner(ctx context.Context, ownerID uuid.UUID) (int64, error)
@@ -266,6 +268,9 @@ type sqlcQuerier interface {
 	// (encounter_id IS NULL) are excluded. Duplicate uploads of the same raid
 	// night are collapsed via duplicate_group_id.
 	GetCharacterEncounterStats(ctx context.Context, arg GetCharacterEncounterStatsParams) ([]GetCharacterEncounterStatsRow, error)
+	// Count canonical listed raid logs in which the character has at least one
+	// ranked boss kill. Duplicate uploads of the same raid night count once.
+	GetCharacterLogCount(ctx context.Context, arg GetCharacterLogCountParams) (int32, error)
 	// Loot received by one character, newest first. Duplicate uploads of the
 	// same raid night are collapsed by (run, item, nth drop): each uploader's
 	// clock differs, so drops are matched by their order within the upload

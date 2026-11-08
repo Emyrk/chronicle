@@ -449,24 +449,3 @@ export async function loadRemoteImage(
   if ('rejection' in result) return { url, host, dataUrl: null, rejection: result.rejection };
   return { url, host, dataUrl: result.dataUrl, rejection: null };
 }
-
-// Ghost and other CMSes sometimes leave Unsplash query params unencoded, so they
-// arrive as top-level params of the OG request. Put them back on the image URL.
-export function reconstructImageUrl(searchParams: URLSearchParams): string {
-  const rawImage = searchParams.get('image') ?? '';
-
-  let parsed: URL;
-  try {
-    parsed = new URL(rawImage);
-    if (parsed.hostname !== 'images.unsplash.com') return rawImage;
-  } catch {
-    return rawImage;
-  }
-
-  const knownParams = ['crop', 'cs', 'fit', 'fm', 'ixid', 'ixlib', 'q', 'w', 'h'];
-  for (const param of knownParams) {
-    const value = searchParams.get(param);
-    if (value) parsed.searchParams.set(param, value);
-  }
-  return parsed.toString();
-}

@@ -36,6 +36,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 	"github.com/Emyrk/chronicle/internal/services/servicemail"
 	"github.com/Emyrk/chronicle/internal/services/serviceoauth"
+	"github.com/Emyrk/chronicle/internal/services/serviceog"
 	"github.com/Emyrk/chronicle/internal/services/servicepgxpool"
 	"github.com/Emyrk/chronicle/internal/services/serviceprometheus"
 	"github.com/Emyrk/chronicle/internal/services/servicerankings"
@@ -92,6 +93,8 @@ type Service struct {
 	nitroPaySiteID           string
 	ga4MeasurementID         string
 	shortLinkDomain          string
+	ogServiceURL             *url.URL
+	ogSigningKey             string
 	landingFeaturedID        string
 	clientUploadsDisabled    bool
 	zugzugURL                string
@@ -112,6 +115,7 @@ func New(broker *services.Services) *Service {
 		saffronURL:               new(url.URL),
 		ocrURL:                   new(url.URL),
 		adsTxtURL:                new(url.URL),
+		ogServiceURL:             new(url.URL),
 		liveSignalingInternalURL: new(url.URL),
 		liveSignalingPublicURL:   new(url.URL),
 	}
@@ -235,6 +239,10 @@ func (s *Service) Start(ctx context.Context) error {
 	if s.adsTxtURL.Scheme == "" {
 		adsTxtURL = nil
 	}
+	ogServiceURL := s.ogServiceURL
+	if s.ogServiceURL.Scheme == "" {
+		ogServiceURL = nil
+	}
 	liveInternalURL := s.liveSignalingInternalURL
 	if liveInternalURL.Scheme == "" {
 		liveInternalURL = nil
@@ -256,6 +264,17 @@ func (s *Service) Start(ctx context.Context) error {
 
 	billingService := servicebilling.Billing(s.broker)
 	billingService.SetAccessURL(au)
+
+	ogSvc := serviceog.New(serviceog.Options{
+		Logger:       logger,
+		Zed:          zed,
+		Chronicle:    chron,
+		Tenant:       tenantSvc,
+		Dataset:      datasetSvc,
+		AccessURL:    au,
+		OGServiceURL: ogServiceURL,
+		OGSigningKey: s.ogSigningKey,
+	})
 
 	handler, err := api.New(ctx, api.Options{
 		Logger:                logger,
@@ -287,6 +306,7 @@ func (s *Service) Start(ctx context.Context) error {
 		NitroPaySiteID:           s.nitroPaySiteID,
 		GA4ID:                    s.ga4MeasurementID,
 		ShortLinkDomain:          s.shortLinkDomain,
+		OG:                       ogSvc,
 		LandingFeaturedID:        landingFeaturedID,
 		ClientUploadsDisabled:    s.clientUploadsDisabled,
 		BillingEnabled:           servicebilling.BillingEnabled(s.broker),
@@ -448,6 +468,24 @@ func (s *Service) Options() serpent.OptionSet {
 			Env:         "CHRONICLE_SHORT_LINK_DOMAIN",
 			Default:     "",
 			Value:       serpent.StringOf(&s.shortLinkDomain),
+		},
+		{
+			Name:        "OG Service URL",
+			Description: "Optional base URL of the OG image service (services/og), e.g. https://og.chronicleclassic.com. Generated Open Graph images are used only when this and the OG signing key are set.",
+			Required:    false,
+			Flag:        "og-service-url",
+			Env:         "CHRONICLE_OG_SERVICE_URL",
+			Default:     "",
+			Value:       serpent.URLOf(s.ogServiceURL),
+		},
+		{
+			Name:        "OG Signing Key",
+			Description: "Secret HMAC key that signs OG image service URLs. Must match the OG service's signing key.",
+			Required:    false,
+			Flag:        "og-signing-key",
+			Env:         "CHRONICLE_OG_SIGNING_KEY",
+			Default:     "",
+			Value:       serpent.StringOf(&s.ogSigningKey),
 		},
 		{
 			Name:        "Landing Featured Instance",

@@ -12,11 +12,13 @@ import { useUnitInspect } from "../UnitInspectContext";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import {
   activeCastAt,
+  filterRaidFramePlayersByOption,
   incomingHealsAt,
   enemyFrameUnits,
   repeatedEnemyNames,
   latestResourceAt,
   orderRaidFramePlayers,
+  RAID_FRAME_PLAYER_GUIDS_OPTION,
   resourceDeathStartedAt,
   raidFramesProcessor,
   type RaidFrameCast,
@@ -665,7 +667,7 @@ function RaidFramesContent(props: PanelRenderProps<RaidFramesResult>) {
     ? enemies
         .filter(({ guid }) => !hideDeadEnemies || enemyOpacity(guid) > 0)
         .map(({ guid, name }) => [guid, { name, class: "enemy" }] as const)
-    : Object.entries(instancePlayers)
+    : filterRaidFramePlayersByOption(Object.entries(instancePlayers), props.panelOption)
       .sort(([, left], [, right]) => left.class.localeCompare(right.class) || left.name.localeCompare(right.name));
   if (players.length === 0) {
     return overlay ? null : enemiesMode
@@ -811,7 +813,7 @@ export function createRaidFramesPanel(): PanelDefinition<RaidFramesResult, RaidF
     disableCardFlip: true,
     supportsFiltering: false,
     checkboxLabel: "Values",
-    renderOnlyOptionTokens: ["cb"],
+    renderOnlyOptionTokens: ["cb", RAID_FRAME_PLAYER_GUIDS_OPTION],
     render: (props) => <RaidFramesContent {...props} />,
   };
 }

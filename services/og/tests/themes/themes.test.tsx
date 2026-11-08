@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { ImageResponse } from 'next/og';
 import { themes } from '../../app/api/og/themes';
-import { publicImage } from '../../app/api/og/themes/public-files';
 import type { ThemeContext, ThemeProps } from '../../app/api/og/themes/types';
 import { OG_THEMES } from '../../app/lib/og-themes';
 
@@ -14,31 +13,13 @@ const context = (query = ''): ThemeContext => ({
 });
 
 const minimal: ThemeProps = {
-  title: 'Untitled',
-  site: 'Blog',
-  excerpt: '',
-  author: '',
-  date: '',
-  tag: '',
-  readingTime: '',
   accent: null,
-  imageSrc: null,
   iconSrc: null,
-  avatarSrc: null,
 };
 
 const full: ThemeProps = {
-  title: 'How we cut our edge render times by sixty percent without touching the renderer at all',
-  site: 'buxx.me',
-  excerpt: 'Do not go gentle into that good night. Old age should burn and rave at close of day; rage, rage against the dying of the light.',
-  author: 'bunizao',
-  date: 'Jan 5, 2026',
-  tag: 'Engineering',
-  readingTime: '5 min read',
   accent: '#3366ff',
-  imageSrc: PNG,
   iconSrc: PNG,
-  avatarSrc: PNG,
 };
 
 let fetchSpy: ReturnType<typeof vi.spyOn> | null = null;
@@ -61,16 +42,6 @@ afterEach(() => {
 describe('theme registry', () => {
   test('every advertised theme has a renderer', () => {
     expect(Object.keys(themes).sort()).toEqual(OG_THEMES.map(theme => theme.key).sort());
-  });
-});
-
-describe('starfield', () => {
-  test.each(['modern'] as const)('%s draws it only when there is no cover', async key => {
-    const starfield = await publicImage('default-bg.jpg');
-    const tree = async (props: ThemeProps) => JSON.stringify(await themes[key].render(props, context()));
-
-    expect(await tree(minimal)).toContain(starfield);
-    expect(await tree({ ...minimal, imageSrc: PNG })).not.toContain(starfield);
   });
 });
 

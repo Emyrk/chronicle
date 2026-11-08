@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { HitTypeCrit, HitTypeHit, HitTypeMainHand, HitTypeMiss, HitTypePeriodic } from "@/lib/hittype/hittype";
-import { AuraState, AuraTransition, type AuraProcessorEvent, type DamageProcessorEvent, type ProcessorContext, type UnitPositionProcessorEvent, type UnitResourcesProcessorEvent } from "../processorTypes";
+import { AuraState, AuraTransition, type AuraProcessorEvent, type DamageProcessorEvent, type HealProcessorEvent, type ProcessorContext, type UnitPositionProcessorEvent, type UnitResourcesProcessorEvent } from "../processorTypes";
 import { activeDebuffsAt, mapProcessor, type MapProcessorEvent } from "./map.processor";
 
 const context: ProcessorContext = {
@@ -71,6 +71,60 @@ describe("mapProcessor", () => {
       context,
     );
     expect(state.encounters.get("other")?.positionsByUnit.get("player")).toHaveLength(1);
+  });
+
+  it("tracks only players who deal damage or effective healing, including pet owners", () => {
+    const state = mapProcessor.createState();
+    const start = new Date("2026-10-07T20:00:00Z");
+    const playerContext: ProcessorContext = {
+      ...context,
+      players: {
+        warrior: { name: "Warrior", class: "Warrior" },
+        priest: { name: "Priest", class: "Priest" },
+        hunter: { name: "Hunter", class: "Hunter" },
+        inactive: { name: "Inactive", class: "Mage" },
+      },
+      units: {
+        pet: { name: "Pet", owner: "hunter", entry: 1 },
+      },
+    };
+    const meta = { index: 0, offsetMilli: 500, activity: [], activityCount: 0, isSynthetic: false };
+    const damage = (caster: string, amount: number): DamageProcessorEvent => ({
+      ...meta,
+      type: "damage",
+      caster,
+      sourceName: "Attack",
+      target: "boss",
+      hitType: HitTypeHit,
+      amount,
+      schools: [2],
+      tailers: [],
+      tailerCount: 0,
+      spellId: null,
+      spellAttackOutcome: null,
+      overkill: 0,
+    });
+    const heal = (caster: string, amount: number, overheal: number): HealProcessorEvent => ({
+      ...meta,
+      type: "heal",
+      caster,
+      sourceName: "Heal",
+      target: "warrior",
+      hitType: HitTypeHit,
+      amount,
+      overheal,
+      absorbed: 0,
+      schools: [3],
+      spellId: 2054,
+      spellAttackOutcome: null,
+    });
+
+    mapProcessor.processEvent(state, damage("warrior", 500), "encounter", start, "damage", playerContext);
+    mapProcessor.processEvent(state, heal("priest", 600, 100), "encounter", start, "heal", playerContext);
+    mapProcessor.processEvent(state, damage("pet", 300), "encounter", start, "damage", playerContext);
+    mapProcessor.processEvent(state, heal("inactive", 500, 500), "encounter", start, "heal", playerContext);
+
+    expect(state.encounters.get("encounter")?.activePlayerGuids).toEqual(["warrior", "priest", "hunter"]);
   });
 
   describe("effects", () => {

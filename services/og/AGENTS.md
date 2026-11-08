@@ -1,6 +1,6 @@
 # services/og – agent guide
 
-A standalone Next.js 16 service that renders 1200×630 Open Graph PNGs with `next/og` (Satori) on the Node.js runtime: `GET /api/og?title=…&template=…`. It deploys on its own (Docker / Railway, Root Directory `services/og`). The Go server, the frontend, the Makefile and CI neither build nor test it, and no workflow runs on its paths, so run the checks below yourself. User-facing docs live in [README.md](README.md); this file only covers how to work on the service.
+A standalone Next.js 16 service that renders 1200×630 Open Graph PNGs with `next/og` (Satori) on the Node.js runtime: `GET /api/og?title=…&template=…`. Root CI runs its tests, typecheck, Docker build, and container smoke test; tagged releases push `emyrk/chronicle-og` and redeploy Railway's `chronicle-og` service. Run the checks below yourself before committing. User-facing docs live in [README.md](README.md); this file only covers how to work on the service.
 
 ## Commands
 
@@ -19,12 +19,14 @@ Before you commit, `pnpm test && pnpm build` must pass. See [Environment variabl
 
 ## File map
 
-- `app/api/og/handler.tsx`: reads and caps the query, resolves `theme`/`template`, fetches images, picks the fonts, renders and sets the cache headers
+- `app/api/og/handler.tsx`: checks the signature, resolves `theme`/`template`, validates `accent`, fetches `icon`, loads the card's fonts, renders and sets the cache headers
 - `app/api/og/themes/`: one file per template, registered in `index.ts`
 - `app/api/og/themes/types.ts`: the theme contract (`ThemeProps`, `ThemeDefinition`)
-- `app/api/og/themes/shared.tsx`: `loadFontsourceFamily`, `fitFontSize`, `Img`, `Cover`, `FILL`
+- `app/api/og/themes/shared.tsx`: `loadFontsourceFamily`, `fitFontSize`, `Img`, `FILL`
+- `app/api/og/themes/kit.tsx`: the Chronicle card kit: param helpers, header/footer chrome, class and parse colours, durations, bundled logos and raid art
+- `app/lib/og-signature.ts`: `OG_SIGNING_KEY` signed-URL check; vectors in `tests/fixtures/og-sig-vectors.json`
 - `app/api/og/themes/public-files.ts`: `readPublicFile` / `publicImage`, which read bundled files from disk
-- `app/lib/og-themes.ts`: template keys, labels and the default (`modern`)
+- `app/lib/og-themes.ts`: template keys, labels and the fallback for unknown names (`brand`)
 - `app/lib/og-remote-image.ts`: the SSRF-checked image download and DoH resolution
 - `tests/themes/`: renders every registered template and checks that its fonts load from disk
 
@@ -41,4 +43,4 @@ Before you commit, `pnpm test && pnpm build` must pass. See [Environment variabl
 
 ## Adding a template
 
-Follow [Adding a template](README.md#adding-a-template). `app/api/og/themes/chronicle.tsx` is the smallest complete example.
+Follow [Adding a template](README.md#adding-a-template). `app/api/og/themes/brand.tsx` is the smallest complete example.

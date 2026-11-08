@@ -496,6 +496,7 @@ def fetch_mpq_terrain(a, cfg, mdir, raw, need, chain, get, got, wdt):
     sys.path.insert(0, HERE)
     import adt2obj
     import mpq_chain
+    import wmo2obj
 
     directory = cfg["directory"]
     tiles = wdt_tiles(wdt)
@@ -507,6 +508,8 @@ def fetch_mpq_terrain(a, cfg, mdir, raw, need, chain, get, got, wdt):
         os.makedirs(os.path.join(raw, "minimap"), exist_ok=True)
 
     texture_names = set()
+    named_wmos = {}
+    wmo_placement_count = 0
     m2_count = 0
     normalized_tiles = []
     sizes = set()
@@ -518,6 +521,9 @@ def fetch_mpq_terrain(a, cfg, mdir, raw, need, chain, get, got, wdt):
         adt_path = get(adt_name, adt_rel)
         parsed = adt2obj.read_monolithic_adt(adt_path)
         texture_names.update(parsed["textures"])
+        for placement in parsed["wmo_placements"]:
+            named_wmos[placement["fid"]] = placement["name"]
+        wmo_placement_count += len(parsed["wmo_placements"])
         m2_count += parsed["m2_placements"]
         row = {"x": x, "y": y, "adt": adt_rel.replace(os.sep, "/"), "adt_name": adt_name}
         if use_minimap:
@@ -550,6 +556,33 @@ def fetch_mpq_terrain(a, cfg, mdir, raw, need, chain, get, got, wdt):
         texture_rows.append({"name": winner[2], "key": key, "archive": winner[0],
                              "archives": [h[0] for h in chain.files[name.lower().replace("/", "\\")]]})
 
+    wmo_rows = []
+    for key, name in sorted(named_wmos.items()):
+        wdir = os.path.join(raw, "wmo", key)
+        os.makedirs(os.path.join(wdir, "groups"), exist_ok=True)
+        os.makedirs(os.path.join(wdir, "textures"), exist_ok=True)
+        root = get(name, os.path.join("wmo", key, "root.wmo"))
+        momt, group_slots = wmo2obj.read_root(root)
+        stem = name[:-4]
+        groups = [stem + "_%03d.wmo" % i for i in range(len(group_slots))]
+        for i, group_name in enumerate(groups):
+            get(group_name, os.path.join("wmo", key, "groups", "group_%03d.wmo" % i))
+        texnames = sorted({m["texname"] for m in momt if m.get("texname")})
+        missing = []
+        for texname in texnames:
+            if chain.winner(texname):
+                get(texname, os.path.join("wmo", key, "textures", "%s.blp" % wmo2obj.texkey({"texname": texname})))
+            else:
+                missing.append(texname)
+        obj_path = os.path.join(wdir, "obj", "w.obj")
+        if need(obj_path):
+            sh([sys.executable, "-I", os.path.join(HERE, "wmo2obj.py"), wdir, "--out", obj_path],
+               stderr=subprocess.DEVNULL)
+        wmo_rows.append({"key": key, "name": name, "groups": groups, "textures": texnames,
+                         "textures_missing": missing})
+        log("legacy terrain WMO %s: %d groups, %d textures (%d missing)" %
+            (name, len(groups), len(texnames), len(missing)))
+
     xs, ys = [t["x"] for t in normalized_tiles], [t["y"] for t in normalized_tiles]
     files = {}
     for dp, _, fns in os.walk(raw):
@@ -567,7 +600,8 @@ def fetch_mpq_terrain(a, cfg, mdir, raw, need, chain, get, got, wdt):
         "tile_range": {"x": [min(xs), max(xs)], "y": [min(ys), max(ys)]},
         "mphd_flags": wdt_mphd_flags(wdt), "crop": cfg.get("crop"),
         "crop_tiles": [[t["x"], t["y"]] for t in normalized_tiles if tile_in_crop(t, cfg.get("crop"))],
-        "terrain_textures": texture_rows, "m2_placements_omitted": m2_count, "wmo_fids": [],
+        "terrain_textures": texture_rows, "m2_placements_omitted": m2_count,
+        "wmo_placements": wmo_placement_count, "wmos": wmo_rows, "wmo_fids": [],
         "files": files,
     }
     json.dump(prov, open(os.path.join(mdir, "fetch.json"), "w"), indent=2)
@@ -582,8 +616,8 @@ def fetch_mpq_terrain(a, cfg, mdir, raw, need, chain, get, got, wdt):
             path = os.path.join(dp, fn)
             prov["files"][os.path.relpath(path, raw)] = sha(path)
     json.dump(prov, open(os.path.join(mdir, "fetch.json"), "w"), indent=2)
-    log("done: legacy terrain, %d tiles, %d textures, %d M2 placements omitted" %
-        (len(normalized_tiles), len(texture_rows), m2_count))
+    log("done: legacy terrain, %d tiles, %d textures, %d WMO placements, %d M2 placements omitted" %
+        (len(normalized_tiles), len(texture_rows), wmo_placement_count, m2_count))
 
 
 def fetch_mpq_wmo(a, cfg, mdir, raw, need, chain=None, get=None, got=None, wdt=None):
