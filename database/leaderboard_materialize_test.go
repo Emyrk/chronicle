@@ -389,7 +389,7 @@ func TestMaterializeIndexMigration(t *testing.T) {
 	_, err = conn.Exec(ctx, "RESET ROLE")
 	require.NoError(t, err)
 	for _, direction := range []string{"down", "up"} {
-		script, err := os.ReadFile("migrations/000347_leaderboard_evidence_benchmarks." + direction + ".sql")
+		script, err := os.ReadFile("migrations/000348_leaderboard_evidence_benchmarks." + direction + ".sql")
 		require.NoError(t, err)
 		_, err = conn.Exec(ctx, string(script))
 		require.NoError(t, err)

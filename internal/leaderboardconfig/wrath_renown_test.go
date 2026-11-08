@@ -133,7 +133,7 @@ func TestWrathRenown(t *testing.T) {
 
 // Executing a migration as a whole is intentionally not a sqlc application query.
 func wrathMigration(ctx context.Context, pool *pgxpool.Pool, direction string) error {
-	data, err := os.ReadFile("../../database/migrations/000343_leaderboard_wrath_renown." + direction + ".sql")
+	data, err := os.ReadFile("../../database/migrations/000344_leaderboard_wrath_renown." + direction + ".sql")
 	if err != nil {
 		return err
 	}

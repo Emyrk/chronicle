@@ -53,7 +53,7 @@ func TestLeaderboardRawMigrationRoundTrip(t *testing.T) {
 	_, err = conn.Exec(ctx, "RESET ROLE")
 	require.NoError(t, err)
 	for _, direction := range []string{"down", "up"} {
-		script, err := os.ReadFile("migrations/000344_leaderboard_raw_evidence." + direction + ".sql")
+		script, err := os.ReadFile("migrations/000345_leaderboard_raw_evidence." + direction + ".sql")
 		require.NoError(t, err)
 		_, err = conn.Exec(ctx, string(script))
 		require.NoError(t, err)
