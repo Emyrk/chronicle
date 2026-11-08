@@ -1,0 +1,249 @@
+-- name: EnqueueLeaderboardPlayerBossBenchmark :exec
+INSERT INTO leaderboard_dirty_player_boss_benchmarks (tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, process_after)
+VALUES (@tenant_id::uuid, @instance_name::text, @difficulty_name::text, @max_players::smallint, @encounter_name::text, @player_class::text, @player_spec::text, @player_sub_spec::text, @metric::text, @process_after::timestamptz)
+ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric) DO UPDATE
+SET revision = leaderboard_dirty_player_boss_benchmarks.revision + 1, dirtied_at = clock_timestamp(),
+    process_after = LEAST(leaderboard_dirty_player_boss_benchmarks.process_after, EXCLUDED.process_after);
+
+-- name: ClaimLeaderboardPlayerBossBenchmark :many
+WITH candidates AS (
+ SELECT * FROM leaderboard_dirty_player_boss_benchmarks
+ WHERE tenant_id = @tenant_id::uuid AND process_after <= clock_timestamp()
+   AND retry_after <= clock_timestamp()
+   AND (locked_until IS NULL OR locked_until <= clock_timestamp())
+ ORDER BY process_after, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric
+ LIMIT @limit_count::integer FOR UPDATE SKIP LOCKED
+)
+UPDATE leaderboard_dirty_player_boss_benchmarks d SET claim_token = gen_random_uuid(), claimed_revision = d.revision,
+    locked_until = clock_timestamp() + interval '15 minutes'
+FROM candidates c WHERE d.tenant_id = c.tenant_id AND d.instance_name = c.instance_name AND d.difficulty_name = c.difficulty_name AND d.max_players = c.max_players AND d.encounter_name = c.encounter_name AND d.player_class = c.player_class AND d.player_spec = c.player_spec AND d.player_sub_spec = c.player_sub_spec AND d.metric = c.metric
+RETURNING d.*;
+
+-- name: RetryLeaderboardPlayerBossBenchmark :batchexec
+UPDATE leaderboard_dirty_player_boss_benchmarks
+SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
+    attempts = LEAST(attempts + 1, 30),
+    retry_after = clock_timestamp() + make_interval(secs => LEAST(300, 5 * power(2, LEAST(attempts, 6)))::double precision)
+WHERE tenant_id = @tenant_id::uuid AND instance_name = @instance_name::text AND difficulty_name = @difficulty_name::text AND max_players = @max_players::smallint AND encounter_name = @encounter_name::text AND player_class = @player_class::text AND player_spec = @player_spec::text AND player_sub_spec = @player_sub_spec::text AND metric = @metric::text AND claim_token = @claim_token::uuid AND claimed_revision = @claimed_revision::bigint;
+
+-- name: EnqueueLeaderboardPlayerBossSubject :exec
+INSERT INTO leaderboard_dirty_player_boss_subjects (tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid, process_after)
+VALUES (@tenant_id::uuid, @instance_name::text, @difficulty_name::text, @max_players::smallint, @encounter_name::text, @player_class::text, @player_spec::text, @player_sub_spec::text, @metric::text, @realm_id::uuid, @player_guid::text, @process_after::timestamptz)
+ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid) DO UPDATE
+SET revision = leaderboard_dirty_player_boss_subjects.revision + 1, dirtied_at = clock_timestamp(),
+    process_after = LEAST(leaderboard_dirty_player_boss_subjects.process_after, EXCLUDED.process_after);
+
+-- name: ClaimLeaderboardPlayerBossSubject :many
+WITH candidates AS (
+ SELECT * FROM leaderboard_dirty_player_boss_subjects
+ WHERE tenant_id = @tenant_id::uuid AND process_after <= clock_timestamp()
+   AND retry_after <= clock_timestamp()
+   AND (locked_until IS NULL OR locked_until <= clock_timestamp())
+ ORDER BY process_after, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid
+ LIMIT @limit_count::integer FOR UPDATE SKIP LOCKED
+)
+UPDATE leaderboard_dirty_player_boss_subjects d SET claim_token = gen_random_uuid(), claimed_revision = d.revision,
+    locked_until = clock_timestamp() + interval '15 minutes'
+FROM candidates c WHERE d.tenant_id = c.tenant_id AND d.instance_name = c.instance_name AND d.difficulty_name = c.difficulty_name AND d.max_players = c.max_players AND d.encounter_name = c.encounter_name AND d.player_class = c.player_class AND d.player_spec = c.player_spec AND d.player_sub_spec = c.player_sub_spec AND d.metric = c.metric AND d.realm_id = c.realm_id AND d.player_guid = c.player_guid
+RETURNING d.*;
+
+-- name: RetryLeaderboardPlayerBossSubject :batchexec
+UPDATE leaderboard_dirty_player_boss_subjects
+SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
+    attempts = LEAST(attempts + 1, 30),
+    retry_after = clock_timestamp() + make_interval(secs => LEAST(300, 5 * power(2, LEAST(attempts, 6)))::double precision)
+WHERE tenant_id = @tenant_id::uuid AND instance_name = @instance_name::text AND difficulty_name = @difficulty_name::text AND max_players = @max_players::smallint AND encounter_name = @encounter_name::text AND player_class = @player_class::text AND player_spec = @player_spec::text AND player_sub_spec = @player_sub_spec::text AND metric = @metric::text AND realm_id = @realm_id::uuid AND player_guid = @player_guid::text AND claim_token = @claim_token::uuid AND claimed_revision = @claimed_revision::bigint;
+
+-- name: EnqueueLeaderboardGuildBossBenchmark :exec
+INSERT INTO leaderboard_dirty_guild_boss_benchmarks (tenant_id, instance_name, difficulty_name, max_players, encounter_name, process_after)
+VALUES (@tenant_id::uuid, @instance_name::text, @difficulty_name::text, @max_players::smallint, @encounter_name::text, @process_after::timestamptz)
+ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name) DO UPDATE
+SET revision = leaderboard_dirty_guild_boss_benchmarks.revision + 1, dirtied_at = clock_timestamp(),
+    process_after = LEAST(leaderboard_dirty_guild_boss_benchmarks.process_after, EXCLUDED.process_after);
+
+-- name: ClaimLeaderboardGuildBossBenchmark :many
+WITH candidates AS (
+ SELECT * FROM leaderboard_dirty_guild_boss_benchmarks
+ WHERE tenant_id = @tenant_id::uuid AND process_after <= clock_timestamp()
+   AND retry_after <= clock_timestamp()
+   AND (locked_until IS NULL OR locked_until <= clock_timestamp())
+ ORDER BY process_after, instance_name, difficulty_name, max_players, encounter_name
+ LIMIT @limit_count::integer FOR UPDATE SKIP LOCKED
+)
+UPDATE leaderboard_dirty_guild_boss_benchmarks d SET claim_token = gen_random_uuid(), claimed_revision = d.revision,
+    locked_until = clock_timestamp() + interval '15 minutes'
+FROM candidates c WHERE d.tenant_id = c.tenant_id AND d.instance_name = c.instance_name AND d.difficulty_name = c.difficulty_name AND d.max_players = c.max_players AND d.encounter_name = c.encounter_name
+RETURNING d.*;
+
+-- name: RetryLeaderboardGuildBossBenchmark :batchexec
+UPDATE leaderboard_dirty_guild_boss_benchmarks
+SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
+    attempts = LEAST(attempts + 1, 30),
+    retry_after = clock_timestamp() + make_interval(secs => LEAST(300, 5 * power(2, LEAST(attempts, 6)))::double precision)
+WHERE tenant_id = @tenant_id::uuid AND instance_name = @instance_name::text AND difficulty_name = @difficulty_name::text AND max_players = @max_players::smallint AND encounter_name = @encounter_name::text AND claim_token = @claim_token::uuid AND claimed_revision = @claimed_revision::bigint;
+
+-- name: EnqueueLeaderboardGuildBossSubject :exec
+INSERT INTO leaderboard_dirty_guild_boss_subjects (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id, process_after)
+VALUES (@tenant_id::uuid, @instance_name::text, @difficulty_name::text, @max_players::smallint, @encounter_name::text, @realm_id::uuid, @guild_id::uuid, @process_after::timestamptz)
+ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id) DO UPDATE
+SET revision = leaderboard_dirty_guild_boss_subjects.revision + 1, dirtied_at = clock_timestamp(),
+    process_after = LEAST(leaderboard_dirty_guild_boss_subjects.process_after, EXCLUDED.process_after);
+
+-- name: ClaimLeaderboardGuildBossSubject :many
+WITH candidates AS (
+ SELECT * FROM leaderboard_dirty_guild_boss_subjects
+ WHERE tenant_id = @tenant_id::uuid AND process_after <= clock_timestamp()
+   AND retry_after <= clock_timestamp()
+   AND (locked_until IS NULL OR locked_until <= clock_timestamp())
+ ORDER BY process_after, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id
+ LIMIT @limit_count::integer FOR UPDATE SKIP LOCKED
+)
+UPDATE leaderboard_dirty_guild_boss_subjects d SET claim_token = gen_random_uuid(), claimed_revision = d.revision,
+    locked_until = clock_timestamp() + interval '15 minutes'
+FROM candidates c WHERE d.tenant_id = c.tenant_id AND d.instance_name = c.instance_name AND d.difficulty_name = c.difficulty_name AND d.max_players = c.max_players AND d.encounter_name = c.encounter_name AND d.realm_id = c.realm_id AND d.guild_id = c.guild_id
+RETURNING d.*;
+
+-- name: RetryLeaderboardGuildBossSubject :batchexec
+UPDATE leaderboard_dirty_guild_boss_subjects
+SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
+    attempts = LEAST(attempts + 1, 30),
+    retry_after = clock_timestamp() + make_interval(secs => LEAST(300, 5 * power(2, LEAST(attempts, 6)))::double precision)
+WHERE tenant_id = @tenant_id::uuid AND instance_name = @instance_name::text AND difficulty_name = @difficulty_name::text AND max_players = @max_players::smallint AND encounter_name = @encounter_name::text AND realm_id = @realm_id::uuid AND guild_id = @guild_id::uuid AND claim_token = @claim_token::uuid AND claimed_revision = @claimed_revision::bigint;
+
+-- name: EnqueueLeaderboardGuildClearBenchmark :exec
+INSERT INTO leaderboard_dirty_guild_clear_benchmarks (tenant_id, instance_name, difficulty_name, max_players, process_after)
+VALUES (@tenant_id::uuid, @instance_name::text, @difficulty_name::text, @max_players::smallint, @process_after::timestamptz)
+ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players) DO UPDATE
+SET revision = leaderboard_dirty_guild_clear_benchmarks.revision + 1, dirtied_at = clock_timestamp(),
+    process_after = LEAST(leaderboard_dirty_guild_clear_benchmarks.process_after, EXCLUDED.process_after);
+
+-- name: ClaimLeaderboardGuildClearBenchmark :many
+WITH candidates AS (
+ SELECT * FROM leaderboard_dirty_guild_clear_benchmarks
+ WHERE tenant_id = @tenant_id::uuid AND process_after <= clock_timestamp()
+   AND retry_after <= clock_timestamp()
+   AND (locked_until IS NULL OR locked_until <= clock_timestamp())
+ ORDER BY process_after, instance_name, difficulty_name, max_players
+ LIMIT @limit_count::integer FOR UPDATE SKIP LOCKED
+)
+UPDATE leaderboard_dirty_guild_clear_benchmarks d SET claim_token = gen_random_uuid(), claimed_revision = d.revision,
+    locked_until = clock_timestamp() + interval '15 minutes'
+FROM candidates c WHERE d.tenant_id = c.tenant_id AND d.instance_name = c.instance_name AND d.difficulty_name = c.difficulty_name AND d.max_players = c.max_players
+RETURNING d.*;
+
+-- name: RetryLeaderboardGuildClearBenchmark :batchexec
+UPDATE leaderboard_dirty_guild_clear_benchmarks
+SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
+    attempts = LEAST(attempts + 1, 30),
+    retry_after = clock_timestamp() + make_interval(secs => LEAST(300, 5 * power(2, LEAST(attempts, 6)))::double precision)
+WHERE tenant_id = @tenant_id::uuid AND instance_name = @instance_name::text AND difficulty_name = @difficulty_name::text AND max_players = @max_players::smallint AND claim_token = @claim_token::uuid AND claimed_revision = @claimed_revision::bigint;
+
+-- name: EnqueueLeaderboardGuildClearSubject :exec
+INSERT INTO leaderboard_dirty_guild_clear_subjects (tenant_id, instance_name, difficulty_name, max_players, realm_id, guild_id, process_after)
+VALUES (@tenant_id::uuid, @instance_name::text, @difficulty_name::text, @max_players::smallint, @realm_id::uuid, @guild_id::uuid, @process_after::timestamptz)
+ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, realm_id, guild_id) DO UPDATE
+SET revision = leaderboard_dirty_guild_clear_subjects.revision + 1, dirtied_at = clock_timestamp(),
+    process_after = LEAST(leaderboard_dirty_guild_clear_subjects.process_after, EXCLUDED.process_after);
+
+-- name: ClaimLeaderboardGuildClearSubject :many
+WITH candidates AS (
+ SELECT * FROM leaderboard_dirty_guild_clear_subjects
+ WHERE tenant_id = @tenant_id::uuid AND process_after <= clock_timestamp()
+   AND retry_after <= clock_timestamp()
+   AND (locked_until IS NULL OR locked_until <= clock_timestamp())
+ ORDER BY process_after, instance_name, difficulty_name, max_players, realm_id, guild_id
+ LIMIT @limit_count::integer FOR UPDATE SKIP LOCKED
+)
+UPDATE leaderboard_dirty_guild_clear_subjects d SET claim_token = gen_random_uuid(), claimed_revision = d.revision,
+    locked_until = clock_timestamp() + interval '15 minutes'
+FROM candidates c WHERE d.tenant_id = c.tenant_id AND d.instance_name = c.instance_name AND d.difficulty_name = c.difficulty_name AND d.max_players = c.max_players AND d.realm_id = c.realm_id AND d.guild_id = c.guild_id
+RETURNING d.*;
+
+-- name: RetryLeaderboardGuildClearSubject :batchexec
+UPDATE leaderboard_dirty_guild_clear_subjects
+SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
+    attempts = LEAST(attempts + 1, 30),
+    retry_after = clock_timestamp() + make_interval(secs => LEAST(300, 5 * power(2, LEAST(attempts, 6)))::double precision)
+WHERE tenant_id = @tenant_id::uuid AND instance_name = @instance_name::text AND difficulty_name = @difficulty_name::text AND max_players = @max_players::smallint AND realm_id = @realm_id::uuid AND guild_id = @guild_id::uuid AND claim_token = @claim_token::uuid AND claimed_revision = @claimed_revision::bigint;
+
+-- name: EnqueueLeaderboardPlayerRenownCount :exec
+INSERT INTO leaderboard_dirty_player_renown (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, player_guid, process_after)
+VALUES (@tenant_id::uuid, @instance_name::text, @difficulty_name::text, @max_players::smallint, @encounter_name::text, @realm_id::uuid, @player_guid::text, @process_after::timestamptz)
+ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, player_guid) DO UPDATE
+SET revision = leaderboard_dirty_player_renown.revision + 1, dirtied_at = clock_timestamp(),
+    process_after = LEAST(leaderboard_dirty_player_renown.process_after, EXCLUDED.process_after);
+
+-- name: ClaimLeaderboardPlayerRenownCount :many
+WITH candidates AS (
+ SELECT * FROM leaderboard_dirty_player_renown
+ WHERE tenant_id = @tenant_id::uuid AND process_after <= clock_timestamp()
+   AND retry_after <= clock_timestamp()
+   AND (locked_until IS NULL OR locked_until <= clock_timestamp())
+ ORDER BY process_after, instance_name, difficulty_name, max_players, encounter_name, realm_id, player_guid
+ LIMIT @limit_count::integer FOR UPDATE SKIP LOCKED
+)
+UPDATE leaderboard_dirty_player_renown d SET claim_token = gen_random_uuid(), claimed_revision = d.revision,
+    locked_until = clock_timestamp() + interval '15 minutes'
+FROM candidates c WHERE d.tenant_id = c.tenant_id AND d.instance_name = c.instance_name AND d.difficulty_name = c.difficulty_name AND d.max_players = c.max_players AND d.encounter_name = c.encounter_name AND d.realm_id = c.realm_id AND d.player_guid = c.player_guid
+RETURNING d.*;
+
+-- name: RetryLeaderboardPlayerRenownCount :batchexec
+UPDATE leaderboard_dirty_player_renown
+SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
+    attempts = LEAST(attempts + 1, 30),
+    retry_after = clock_timestamp() + make_interval(secs => LEAST(300, 5 * power(2, LEAST(attempts, 6)))::double precision)
+WHERE tenant_id = @tenant_id::uuid AND instance_name = @instance_name::text AND difficulty_name = @difficulty_name::text AND max_players = @max_players::smallint AND encounter_name = @encounter_name::text AND realm_id = @realm_id::uuid AND player_guid = @player_guid::text AND claim_token = @claim_token::uuid AND claimed_revision = @claimed_revision::bigint;
+
+-- name: EnqueueLeaderboardGuildRenownCount :exec
+INSERT INTO leaderboard_dirty_guild_renown (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id, process_after)
+VALUES (@tenant_id::uuid, @instance_name::text, @difficulty_name::text, @max_players::smallint, @encounter_name::text, @realm_id::uuid, @guild_id::uuid, @process_after::timestamptz)
+ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id) DO UPDATE
+SET revision = leaderboard_dirty_guild_renown.revision + 1, dirtied_at = clock_timestamp(),
+    process_after = LEAST(leaderboard_dirty_guild_renown.process_after, EXCLUDED.process_after);
+
+-- name: ClaimLeaderboardGuildRenownCount :many
+WITH candidates AS (
+ SELECT * FROM leaderboard_dirty_guild_renown
+ WHERE tenant_id = @tenant_id::uuid AND process_after <= clock_timestamp()
+   AND retry_after <= clock_timestamp()
+   AND (locked_until IS NULL OR locked_until <= clock_timestamp())
+ ORDER BY process_after, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id
+ LIMIT @limit_count::integer FOR UPDATE SKIP LOCKED
+)
+UPDATE leaderboard_dirty_guild_renown d SET claim_token = gen_random_uuid(), claimed_revision = d.revision,
+    locked_until = clock_timestamp() + interval '15 minutes'
+FROM candidates c WHERE d.tenant_id = c.tenant_id AND d.instance_name = c.instance_name AND d.difficulty_name = c.difficulty_name AND d.max_players = c.max_players AND d.encounter_name = c.encounter_name AND d.realm_id = c.realm_id AND d.guild_id = c.guild_id
+RETURNING d.*;
+
+-- name: RetryLeaderboardGuildRenownCount :batchexec
+UPDATE leaderboard_dirty_guild_renown
+SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
+    attempts = LEAST(attempts + 1, 30),
+    retry_after = clock_timestamp() + make_interval(secs => LEAST(300, 5 * power(2, LEAST(attempts, 6)))::double precision)
+WHERE tenant_id = @tenant_id::uuid AND instance_name = @instance_name::text AND difficulty_name = @difficulty_name::text AND max_players = @max_players::smallint AND encounter_name = @encounter_name::text AND realm_id = @realm_id::uuid AND guild_id = @guild_id::uuid AND claim_token = @claim_token::uuid AND claimed_revision = @claimed_revision::bigint;
+
+-- name: ListDueLeaderboardD2 :many
+WITH due AS (
+SELECT tenant_id, 0::integer AS family FROM leaderboard_dirty_player_boss_benchmarks WHERE process_after <= clock_timestamp() AND retry_after <= clock_timestamp() AND (locked_until IS NULL OR locked_until <= clock_timestamp()) GROUP BY tenant_id
+UNION ALL
+SELECT tenant_id, 1::integer AS family FROM leaderboard_dirty_player_boss_subjects WHERE process_after <= clock_timestamp() AND retry_after <= clock_timestamp() AND (locked_until IS NULL OR locked_until <= clock_timestamp()) GROUP BY tenant_id
+UNION ALL
+SELECT tenant_id, 2::integer AS family FROM leaderboard_dirty_guild_boss_benchmarks WHERE process_after <= clock_timestamp() AND retry_after <= clock_timestamp() AND (locked_until IS NULL OR locked_until <= clock_timestamp()) GROUP BY tenant_id
+UNION ALL
+SELECT tenant_id, 3::integer AS family FROM leaderboard_dirty_guild_boss_subjects WHERE process_after <= clock_timestamp() AND retry_after <= clock_timestamp() AND (locked_until IS NULL OR locked_until <= clock_timestamp()) GROUP BY tenant_id
+UNION ALL
+SELECT tenant_id, 4::integer AS family FROM leaderboard_dirty_guild_clear_benchmarks WHERE process_after <= clock_timestamp() AND retry_after <= clock_timestamp() AND (locked_until IS NULL OR locked_until <= clock_timestamp()) GROUP BY tenant_id
+UNION ALL
+SELECT tenant_id, 5::integer AS family FROM leaderboard_dirty_guild_clear_subjects WHERE process_after <= clock_timestamp() AND retry_after <= clock_timestamp() AND (locked_until IS NULL OR locked_until <= clock_timestamp()) GROUP BY tenant_id
+UNION ALL
+SELECT tenant_id, 6::integer AS family FROM leaderboard_dirty_player_renown WHERE process_after <= clock_timestamp() AND retry_after <= clock_timestamp() AND (locked_until IS NULL OR locked_until <= clock_timestamp()) GROUP BY tenant_id
+UNION ALL
+SELECT tenant_id, 7::integer AS family FROM leaderboard_dirty_guild_renown WHERE process_after <= clock_timestamp() AND retry_after <= clock_timestamp() AND (locked_until IS NULL OR locked_until <= clock_timestamp()) GROUP BY tenant_id
+)
+SELECT tenant_id, family FROM due
+WHERE (tenant_id, family) > (@after_tenant::uuid, @after_family::integer)
+ORDER BY tenant_id, family LIMIT @limit_count::integer;
+
+-- name: SetLeaderboardWorkerTimeouts :exec
+SELECT set_config('statement_timeout', @statement_timeout::text, true),
+       set_config('lock_timeout', '5s', true);

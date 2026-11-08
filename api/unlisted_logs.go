@@ -3,6 +3,8 @@ package api
 import (
 	"net/http"
 
+	"github.com/Emyrk/chronicle/internal/services/serviceratings"
+
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/api/httpmw"
@@ -38,13 +40,19 @@ func (api *API) MarkLogUnlisted(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	sourceCtx, resolveErr := serviceratings.GroupSourceContext(ctx, api.Zed, logGroupID)
+	if resolveErr != nil {
+		httpapi.InternalServerError(w, resolveErr)
+		return
+	}
+	ctx = sourceCtx
 	current, err := api.Zed.GetWoWLogGroupUnlisted(ctx, logGroupID)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
 	if !current {
-		if _, err := api.Zed.MarkWoWLogGroupUnlisted(ctx, logGroupID); err != nil {
+		if err := api.Chronicle.MarkWoWLogGroupUnlisted(ctx, logGroupID); err != nil {
 			httpapi.InternalServerError(w, err)
 			return
 		}

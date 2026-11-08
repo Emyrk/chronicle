@@ -4,11 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"log/slog"
 	"net/http"
 	"slices"
 	"strconv"
 	"time"
+
+	"github.com/Emyrk/chronicle/internal/services/serviceratings"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/db2sdk"
@@ -554,18 +555,31 @@ func (api *API) UngroupInstance(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	inst := httpmw.Instance(ctx)
 
-	unlinked, err := api.Opts.Zed.UnlinkDuplicateGroup(ctx, inst.ID)
+	sourceCtx, resolveErr := serviceratings.SourceContext(ctx, api.Opts.Zed, []uuid.UUID{inst.ID})
+	if resolveErr != nil {
+		httpapi.InternalServerError(w, resolveErr)
+		return
+	}
+	ctx = sourceCtx
+	var unlinked database.UnlinkDuplicateGroupRow
+	err := api.Opts.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
+		ids := []uuid.UUID{inst.ID, inst.DuplicateGroupID.UUID}
+		if err := serviceratings.EnqueueSourceRepairTx(ctx, tx, ids); err != nil {
+			return err
+		}
+		var err error
+		unlinked, err = tx.UnlinkDuplicateGroup(ctx, inst.ID)
+		if err != nil {
+			return err
+		}
+		if err := serviceratings.EnqueueSourceRepairTx(ctx, tx, []uuid.UUID{inst.ID, unlinked.PreviousGroupID.UUID, unlinked.NewGroupID.UUID}); err != nil {
+			return err
+		}
+		return api.Chronicle.EnqueueRankingRunRefreshTx(ctx, tx, inst.ID, unlinked.PreviousGroupID.UUID, unlinked.NewGroupID.UUID)
+	}, nil)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
-	}
-	if err := api.Chronicle.EnqueueRankingRunRefresh(
-		ctx,
-		inst.ID,
-		unlinked.PreviousGroupID.UUID,
-		unlinked.NewGroupID.UUID,
-	); err != nil {
-		slog.WarnContext(ctx, "failed to enqueue ranking run refresh after unlink", slog.Any("error", err))
 	}
 
 	httpapi.Write(ctx, w, http.StatusNoContent, nil)

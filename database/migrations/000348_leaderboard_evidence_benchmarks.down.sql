@@ -1,0 +1,5 @@
+BEGIN;
+DROP INDEX leaderboard_guild_clear_observations_best_idx;
+DROP INDEX leaderboard_guild_boss_observations_best_idx;
+DROP INDEX leaderboard_player_observations_best_idx;
+COMMIT;

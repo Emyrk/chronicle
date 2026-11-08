@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react"
+import { LeaderboardMaintenanceNotice } from "./LeaderboardMaintenanceNotice"
 import { cn } from "@/lib/utils"
 import { useQuery } from "@tanstack/react-query"
 import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom"
@@ -11,7 +12,7 @@ import { HubLoadError, LeaderboardsHubApp } from "./Hub/HubLanding"
 import { LeaderboardHub, Overview, SkeletonRows, type HubLiveTabContext } from "./Hub/LeaderboardHub"
 import { LiveHubOverview } from "./Hub/LiveHubOverview"
 import { LiveHubRatings } from "./Hub/LiveHubRatings"
-import { BoardSkeleton, MetricTabs, PeriodToggle } from "./Ratings/RatingLeaderboard"
+import { BoardSkeleton, MetricTabs } from "./Ratings/RatingLeaderboard"
 import { RulesetInstanceView } from "./RulesetInstanceView"
 import { PerformancesTab } from "./Hub/PerformancesTab"
 import { SpeedrunsTab } from "./Hub/SpeedrunsTab"
@@ -40,7 +41,7 @@ export function LeaderboardsLiveHub() {
   // The page's summary is instance metadata (cohorts, realms, roster); it does not depend on the
   // selected bosses, so picking a boss never reloads the page. Content fetches its own selection.
   const summary = useHubSummary({ instanceName: instance ?? undefined, tab: instance ? undefined : tab, realmIDs, performance: "dps",
-    cohort: requestedCohort }, siteConfig !== undefined && !rootRatingsDisabled)
+    cohort: requestedCohort, metadataOnly: !!instance && tab !== "overview" }, siteConfig !== undefined && !rootRatingsDisabled)
   const available = summary.data?.realms ?? []
   const activeRealm = realmIDs.length === 1 ? available.find((row) => row.id === realmIDs[0]) : undefined
   const selectedRealmIDs = activeRealm ? [activeRealm.id] : realmIDs.length > 1 ? realmIDs : []
@@ -75,6 +76,7 @@ export function LeaderboardsLiveHub() {
   const stale = !loading && summary.isPlaceholderData
   return <div className="flex min-w-0 gap-6">
     <div className="min-w-0 flex-1">
+      <LeaderboardMaintenanceNotice tenantID={siteConfig?.tenant?.id} />
       <LeaderboardsHubApp instance={instance ?? undefined} onInstance={(name) => choose("instance", name)}
         tab={tab} onTab={chooseTab} realm={realm} onRealm={(name) => choose("realm_ids", available.find((row) => row.name === name)?.id)}
         realms={[ALL_REALMS, ...available.map((row) => row.name)]} instances={summary.data?.instances ?? []} landingPreviews={summary.data?.landing_previews}
@@ -144,7 +146,7 @@ function LiveInstanceHub({ instanceName, names, summary, stale, realm, realmIDs,
     bosses,
     optionalBosses: new Set<string>(),
     realms: [ALL_REALMS, ...summary.realms.map((row) => row.name)],
-    specsFor: (cls: string) => summary.filters?.find((row) => row.player_class === cls)?.specs.map((row) => row.spec) ?? [],
+    specsFor: (cls: string, role: "dps" | "healing") => summary.cohorts ? [...new Set(summary.cohorts.filter(row => row.player_class === cls && row.metric === (role === "healing" ? "hps" : "dps")).map(row => row.player_spec))] : summary.filters?.find((row) => row.player_class === cls)?.specs.map((row) => row.spec) ?? [],
     subSpecsFor: (cls: string, spec: string) => summary.filters?.find((row) => row.player_class === cls)?.specs.find((row) => row.spec === spec)?.sub_specs.filter(Boolean) as string[] ?? [],
     // Difficulty and size: one button per published combination, shown when there is a choice.
     cohortPicker: raids.length > 1 ? <div role="group" aria-label="Difficulty and size" className="flex rounded-md border bg-background/60 p-0.5 text-xs">
@@ -222,12 +224,12 @@ function LiveHubContent({ context, summary, stale = false, requestedEncounters =
   if (stale) return <LoadingContent context={context} overview={overview} />
   if (!overview && realmIDs.length > 1) return <p role="status" className="rounded-xl border bg-card p-8 text-sm text-muted-foreground">Choose one realm or All realms in the Hub selector. This view cannot apply multiple realms.</p>
   if (overview) return <LiveHubOverview context={context} summary={summary} requestedEncounters={requestedEncounters} realmName={realmName} realmIDs={realmIDs} bosses={bosses} />
-  if (context.tab === "ratings") return <LiveHubRatings instanceName={instanceName} bosses={bosses.filter((name) => name !== "Trash")}
+  if (context.tab === "ratings") return <LiveHubRatings summary={summary} instanceName={instanceName} bosses={bosses.filter((name) => name !== "Trash")}
     selected={picked.filter((name) => name !== "Trash")} scope={scope} onScope={context.onScope} view={context.ratingView} onView={context.onView}
     period={context.period} subject={subject === "guilds" ? "guild" : "player"} realmIDs={realmIDs} role={role}
     cohort={chosen ? { difficulty: chosen.difficulty_name, maxPlayers: chosen.max_players } : undefined}
     where={boss ?? (picked.length > 1 ? `${picked.length} bosses` : instanceName)}
-    toolbar={<div className="flex flex-wrap items-center gap-2"><MetricTabs view={context.ratingView} onView={context.onView} /><PeriodToggle value={context.period} onChange={context.onPeriod} /></div>} />
+    toolbar={<div className="flex flex-wrap items-center gap-2"><MetricTabs view={context.ratingView} onView={context.onView} /><span className="px-2 text-xs text-muted-foreground">All-time</span></div>} />
   if (context.tab === "rulesets") return <RulesetInstanceView instanceName={instanceName} embedded />
   if (context.tab === "performances") return !exact ? <CohortPrompt raids={raids} /> :
     <PerformancesTab instanceName={instanceName} scope={scope} role={role} subject={subject} bosses={picked}

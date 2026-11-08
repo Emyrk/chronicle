@@ -14,11 +14,13 @@ import (
 
 type sqlcQuerier interface {
 	AbandonAwaitingInferenceRun(ctx context.Context, arg AbandonAwaitingInferenceRunParams) (InferenceRun, error)
+	AcknowledgeLeaderboardRun(ctx context.Context, arg AcknowledgeLeaderboardRunParams) error
 	AcquireParseScoreLock(ctx context.Context, lockKey string) error
 	// Serialize refresh snapshots and commits across logical-run identity changes.
 	AcquireRankingRunRefreshLock(ctx context.Context) error
 	AcquireTimeParseScoreLock(ctx context.Context, instanceID string) error
 	ActivateDiscordMembershipGrantCheckOnLogin(ctx context.Context, arg ActivateDiscordMembershipGrantCheckOnLoginParams) (ActivateDiscordMembershipGrantCheckOnLoginRow, error)
+	ActiveLeaderboardOperation(ctx context.Context, tenantID uuid.UUID) ([]LeaderboardOperation, error)
 	// size_bytes is the logical uncompressed size. compressed_size_bytes remains
 	// NULL when the base object is not compressed; hash continues to identify the
 	// immutable base object, while each append part carries its own hash.
@@ -26,6 +28,9 @@ type sqlcQuerier interface {
 	AddUserFavoriteGuild(ctx context.Context, arg AddUserFavoriteGuildParams) (pgtype.Bool, error)
 	AddUserFavoritePlayer(ctx context.Context, arg AddUserFavoritePlayerParams) error
 	AdminListOutdatedParserVersionInstances(ctx context.Context, arg AdminListOutdatedParserVersionInstancesParams) ([]AdminListOutdatedParserVersionInstancesRow, error)
+	AdvanceLeaderboardOperation(ctx context.Context, arg AdvanceLeaderboardOperationParams) error
+	AdvanceLeaderboardOperationPhase(ctx context.Context, arg AdvanceLeaderboardOperationPhaseParams) error
+	AdvanceLeaderboardOperationScope(ctx context.Context, arg AdvanceLeaderboardOperationScopeParams) error
 	AdvanceWoWLogGroupParseGeneration(ctx context.Context, id uuid.UUID) (int64, error)
 	AssignWorldToServer(ctx context.Context, arg AssignWorldToServerParams) error
 	BulkUpsertGuildPagePanels(ctx context.Context, dollar_1 []byte) error
@@ -34,6 +39,15 @@ type sqlcQuerier interface {
 	CensusPlayerCounts(ctx context.Context, arg CensusPlayerCountsParams) ([]CensusPlayerCountsRow, error)
 	ClaimDiscordAnnouncementDelivery(ctx context.Context, id uuid.UUID) (GuildDiscordLogAnnouncement, error)
 	ClaimDueDiscordMembershipGrantChecks(ctx context.Context, arg ClaimDueDiscordMembershipGrantChecksParams) ([]ClaimDueDiscordMembershipGrantChecksRow, error)
+	ClaimLeaderboardGuildBossBenchmark(ctx context.Context, arg ClaimLeaderboardGuildBossBenchmarkParams) ([]LeaderboardDirtyGuildBossBenchmark, error)
+	ClaimLeaderboardGuildBossSubject(ctx context.Context, arg ClaimLeaderboardGuildBossSubjectParams) ([]LeaderboardDirtyGuildBossSubject, error)
+	ClaimLeaderboardGuildClearBenchmark(ctx context.Context, arg ClaimLeaderboardGuildClearBenchmarkParams) ([]LeaderboardDirtyGuildClearBenchmark, error)
+	ClaimLeaderboardGuildClearSubject(ctx context.Context, arg ClaimLeaderboardGuildClearSubjectParams) ([]LeaderboardDirtyGuildClearSubject, error)
+	ClaimLeaderboardGuildRenownCount(ctx context.Context, arg ClaimLeaderboardGuildRenownCountParams) ([]LeaderboardDirtyGuildRenown, error)
+	ClaimLeaderboardPlayerBossBenchmark(ctx context.Context, arg ClaimLeaderboardPlayerBossBenchmarkParams) ([]LeaderboardDirtyPlayerBossBenchmark, error)
+	ClaimLeaderboardPlayerBossSubject(ctx context.Context, arg ClaimLeaderboardPlayerBossSubjectParams) ([]LeaderboardDirtyPlayerBossSubject, error)
+	ClaimLeaderboardPlayerRenownCount(ctx context.Context, arg ClaimLeaderboardPlayerRenownCountParams) ([]LeaderboardDirtyPlayerRenown, error)
+	ClaimLeaderboardRun(ctx context.Context, tenantID uuid.UUID) ([]LeaderboardDirtyRun, error)
 	ClaimLuaProjectArtifactGarbage(ctx context.Context, asOf pgtype.Timestamptz) ([]string, error)
 	ClearApplicationReviewsByReviewer(ctx context.Context, userID uuid.NullUUID) error
 	ClearDiscordMembershipGrantCheckClaim(ctx context.Context, arg ClearDiscordMembershipGrantCheckClaimParams) (int64, error)
@@ -54,7 +68,21 @@ type sqlcQuerier interface {
 	CompleteDiscordMembershipGrantCheckMember(ctx context.Context, arg CompleteDiscordMembershipGrantCheckMemberParams) (DiscordMembershipGrantCheck, error)
 	CompleteDiscordMembershipGrantCheckNonMember(ctx context.Context, arg CompleteDiscordMembershipGrantCheckNonMemberParams) (DiscordMembershipGrantCheck, error)
 	CompleteInferenceClientToolRequest(ctx context.Context, arg CompleteInferenceClientToolRequestParams) (InferenceClientToolRequest, error)
+	CompleteLeaderboardOperation(ctx context.Context, arg CompleteLeaderboardOperationParams) error
 	CompleteProofEvidenceCleanup(ctx context.Context, arg CompleteProofEvidenceCleanupParams) error
+	ComputeLeaderboardGuildBossBenchmark(ctx context.Context, arg []ComputeLeaderboardGuildBossBenchmarkParams) *ComputeLeaderboardGuildBossBenchmarkBatchResults
+	ComputeLeaderboardGuildBossSubject(ctx context.Context, arg []ComputeLeaderboardGuildBossSubjectParams) *ComputeLeaderboardGuildBossSubjectBatchResults
+	ComputeLeaderboardGuildClearBenchmark(ctx context.Context, arg []ComputeLeaderboardGuildClearBenchmarkParams) *ComputeLeaderboardGuildClearBenchmarkBatchResults
+	ComputeLeaderboardGuildClearSubject(ctx context.Context, arg []ComputeLeaderboardGuildClearSubjectParams) *ComputeLeaderboardGuildClearSubjectBatchResults
+	ComputeLeaderboardGuildRenownCount(ctx context.Context, arg []ComputeLeaderboardGuildRenownCountParams) *ComputeLeaderboardGuildRenownCountBatchResults
+	// Single maintained calculation source. Compute returns one typed record even
+	// for empty evidence. Workers buffer at most 100 records, then publish in a
+	// separate SHORT transaction. Never hold dirty-row locks while sorting history.
+	// Compatibility singleton wrappers explicitly opt into unfenced manual writes;
+	// worker publication must use ownership fencing and never sets manual=true.
+	ComputeLeaderboardPlayerBossBenchmark(ctx context.Context, arg []ComputeLeaderboardPlayerBossBenchmarkParams) *ComputeLeaderboardPlayerBossBenchmarkBatchResults
+	ComputeLeaderboardPlayerBossSubject(ctx context.Context, arg []ComputeLeaderboardPlayerBossSubjectParams) *ComputeLeaderboardPlayerBossSubjectBatchResults
+	ComputeLeaderboardPlayerRenownCount(ctx context.Context, arg []ComputeLeaderboardPlayerRenownCountParams) *ComputeLeaderboardPlayerRenownCountBatchResults
 	ConsumeGuildDiscordInstallState(ctx context.Context, state string) (GuildDiscordInstallState, error)
 	ConsumeInferenceOAuthTransaction(ctx context.Context, arg ConsumeInferenceOAuthTransactionParams) (InferenceOauthTransaction, error)
 	ConsumeLuaProjectUpload(ctx context.Context, objectKey string) (string, error)
@@ -67,6 +95,7 @@ type sqlcQuerier interface {
 	// Characters seen in this guild, for the guild card's member count.
 	CountGuildPlayers(ctx context.Context, guildID uuid.UUID) (int64, error)
 	CountGuilds(ctx context.Context, arg CountGuildsParams) (int64, error)
+	CountLeaderboardOperationMissingDates(ctx context.Context, tenantID uuid.UUID) (int64, error)
 	CountLuaProjectStars(ctx context.Context, projectIds []uuid.UUID) ([]CountLuaProjectStarsRow, error)
 	CountLuaProjectsByOwner(ctx context.Context, ownerID uuid.UUID) (int64, error)
 	CountRaidCompositionsByUser(ctx context.Context, arg CountRaidCompositionsByUserParams) (int64, error)
@@ -93,6 +122,7 @@ type sqlcQuerier interface {
 	CreateGuildDiscordInstallState(ctx context.Context, arg CreateGuildDiscordInstallStateParams) (GuildDiscordInstallState, error)
 	// Guild Join Requests
 	CreateGuildJoinRequest(ctx context.Context, arg CreateGuildJoinRequestParams) (GuildJoinRequest, error)
+	CreateLeaderboardOperation(ctx context.Context, arg CreateLeaderboardOperationParams) (LeaderboardOperation, error)
 	CreateLuaProject(ctx context.Context, arg CreateLuaProjectParams) (LuaProject, error)
 	// Tags the current main. Bumping the revision keeps a stale page from tagging a newer main by mistake.
 	CreateLuaProjectRelease(ctx context.Context, arg CreateLuaProjectReleaseParams) (LuaProjectRelease, error)
@@ -141,6 +171,7 @@ type sqlcQuerier interface {
 	DeleteIdleRateLimitBuckets(ctx context.Context, idleBefore pgtype.Timestamptz) (int64, error)
 	DeleteInferenceConnectionByOwner(ctx context.Context, arg DeleteInferenceConnectionByOwnerParams) error
 	DeleteItemTemplatesByEntries(ctx context.Context, arg DeleteItemTemplatesByEntriesParams) error
+	DeleteLeaderboardRunEvidence(ctx context.Context, arg DeleteLeaderboardRunEvidenceParams) error
 	DeleteLogInstanceByIDAndGroup(ctx context.Context, arg DeleteLogInstanceByIDAndGroupParams) (uuid.UUID, error)
 	DeleteLogInstancesByIDs(ctx context.Context, ids []uuid.UUID) (int64, error)
 	// Queue every stored package before cascades remove the project's dependent rows.
@@ -205,7 +236,22 @@ type sqlcQuerier interface {
 	// Applied only inside a read-only transaction for that one query.
 	DisableNestedLoopForTransaction(ctx context.Context) error
 	DisconnectSidekickInstallation(ctx context.Context, arg DisconnectSidekickInstallationParams) (SidekickInstallation, error)
+	DiscoverLeaderboardOperationEvidence(ctx context.Context, arg DiscoverLeaderboardOperationEvidenceParams) ([]uuid.UUID, error)
+	// Event-time scope, not an ingestion snapshot. The existing realm/end index
+	// supports a bounded chronological page; run_id breaks equal-date ties.
+	DiscoverLeaderboardOperationRuns(ctx context.Context, arg DiscoverLeaderboardOperationRunsParams) ([]DiscoverLeaderboardOperationRunsRow, error)
+	DrainLeaderboardOperation(ctx context.Context, arg DrainLeaderboardOperationParams) error
 	EncountersByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceEncounter, error)
+	EnqueueLeaderboardGuildBossBenchmark(ctx context.Context, arg EnqueueLeaderboardGuildBossBenchmarkParams) error
+	EnqueueLeaderboardGuildBossSubject(ctx context.Context, arg EnqueueLeaderboardGuildBossSubjectParams) error
+	EnqueueLeaderboardGuildClearBenchmark(ctx context.Context, arg EnqueueLeaderboardGuildClearBenchmarkParams) error
+	EnqueueLeaderboardGuildClearSubject(ctx context.Context, arg EnqueueLeaderboardGuildClearSubjectParams) error
+	EnqueueLeaderboardGuildRenownCount(ctx context.Context, arg EnqueueLeaderboardGuildRenownCountParams) error
+	EnqueueLeaderboardPlayerBossBenchmark(ctx context.Context, arg EnqueueLeaderboardPlayerBossBenchmarkParams) error
+	EnqueueLeaderboardPlayerBossSubject(ctx context.Context, arg EnqueueLeaderboardPlayerBossSubjectParams) error
+	EnqueueLeaderboardPlayerRenownCount(ctx context.Context, arg EnqueueLeaderboardPlayerRenownCountParams) error
+	EnqueueLeaderboardRun(ctx context.Context, arg EnqueueLeaderboardRunParams) error
+	EnqueueLeaderboardRunEvidenceScopes(ctx context.Context, arg EnqueueLeaderboardRunEvidenceScopesParams) error
 	EnsureDeploymentToken(ctx context.Context, deploymentToken pgtype.Text) (pgtype.Text, error)
 	ExpireInferenceClientToolRequest(ctx context.Context, arg ExpireInferenceClientToolRequestParams) (InferenceClientToolRequest, error)
 	ExpireStaleInferenceRuns(ctx context.Context) (int64, error)
@@ -387,6 +433,7 @@ type sqlcQuerier interface {
 	GetItemTemplatesByNames(ctx context.Context, arg GetItemTemplatesByNamesParams) ([]WorldItemTemplate, error)
 	GetItemTemplatesBySetID(ctx context.Context, arg GetItemTemplatesBySetIDParams) ([]GetItemTemplatesBySetIDRow, error)
 	GetLatestRegressionSnapshot(ctx context.Context, fixtureID uuid.UUID) (RegressionSnapshot, error)
+	GetLeaderboardOperation(ctx context.Context, arg GetLeaderboardOperationParams) (LeaderboardOperation, error)
 	GetLogFile(ctx context.Context, id uuid.UUID) (LogFile, error)
 	GetLogFilePart(ctx context.Context, id uuid.UUID) (LogFilePart, error)
 	GetLogGroupArtifact(ctx context.Context, arg GetLogGroupArtifactParams) (LogGroupArtifact, error)
@@ -573,6 +620,8 @@ type sqlcQuerier interface {
 	// cannot fill the whole board.
 	GuildTopParses(ctx context.Context, arg GuildTopParsesParams) ([]GuildTopParsesRow, error)
 	HasBillingEntitlement(ctx context.Context, arg HasBillingEntitlementParams) (bool, error)
+	HasDueLeaderboardD1(ctx context.Context, tenantID uuid.UUID) (bool, error)
+	HasDueLeaderboardD2(ctx context.Context, arg HasDueLeaderboardD2Params) (bool, error)
 	HasInstanceDpsRankings(ctx context.Context, instanceID uuid.UUID) (bool, error)
 	HasParseScoreResultsForTenantInstance(ctx context.Context, arg HasParseScoreResultsForTenantInstanceParams) (bool, error)
 	IgnoreConsumableEffectIfCandidate(ctx context.Context, arg IgnoreConsumableEffectIfCandidateParams) (IgnoreConsumableEffectIfCandidateRow, error)
@@ -611,6 +660,19 @@ type sqlcQuerier interface {
 	InsertInstanceRaidGroupSnapshot(ctx context.Context, arg InsertInstanceRaidGroupSnapshotParams) error
 	InsertInstanceSpeedrun(ctx context.Context, arg InsertInstanceSpeedrunParams) error
 	InsertInstanceUnits(ctx context.Context, arg []InsertInstanceUnitsParams) *InsertInstanceUnitsBatchResults
+	InsertLeaderboardBossOverrides(ctx context.Context, arg InsertLeaderboardBossOverridesParams) error
+	InsertLeaderboardBossRenown(ctx context.Context, arg InsertLeaderboardBossRenownParams) error
+	InsertLeaderboardBosses(ctx context.Context, arg InsertLeaderboardBossesParams) error
+	InsertLeaderboardInstanceOverrides(ctx context.Context, arg InsertLeaderboardInstanceOverridesParams) error
+	InsertLeaderboardInstanceVariants(ctx context.Context, arg InsertLeaderboardInstanceVariantsParams) error
+	InsertLeaderboardInstances(ctx context.Context, instanceName string) error
+	InsertLeaderboardLayers(ctx context.Context, arg InsertLeaderboardLayersParams) error
+	InsertLeaderboardMemberOverrides(ctx context.Context, arg InsertLeaderboardMemberOverridesParams) error
+	InsertLeaderboardSetMembers(ctx context.Context, arg InsertLeaderboardSetMembersParams) error
+	InsertLeaderboardSetOverrides(ctx context.Context, arg InsertLeaderboardSetOverridesParams) error
+	InsertLeaderboardSets(ctx context.Context, arg InsertLeaderboardSetsParams) error
+	InsertLeaderboardVariantOverrides(ctx context.Context, arg InsertLeaderboardVariantOverridesParams) error
+	InsertLeaderboardVariantRenown(ctx context.Context, arg InsertLeaderboardVariantRenownParams) error
 	InsertLogFile(ctx context.Context, arg InsertLogFileParams) (LogFile, error)
 	InsertLogGroupArtifact(ctx context.Context, arg InsertLogGroupArtifactParams) (LogGroupArtifact, error)
 	InsertLogInstanceEvents(ctx context.Context, arg []InsertLogInstanceEventsParams) *InsertLogInstanceEventsBatchResults
@@ -695,6 +757,15 @@ type sqlcQuerier interface {
 	// The tenant scope: wow_server_realms' RLS policy hides other tenants' realms
 	// (log_instances has no policy of its own).
 	LandingPositionalInstances(ctx context.Context, limitCount int32) ([]LandingPositionalInstancesRow, error)
+	// Shared database clock for operational diagnostics; leases never use Go time.
+	LeaderboardD2Clock(ctx context.Context) (pgtype.Timestamptz, error)
+	LeaderboardMetricOperationProgress(ctx context.Context, tenantID uuid.UUID) ([]LeaderboardMetricOperationProgressRow, error)
+	LeaderboardOperationBacklog(ctx context.Context, tenantID uuid.UUID) (LeaderboardOperationBacklogRow, error)
+	LeaderboardQueueDiagnostics(ctx context.Context, tenantID uuid.UUID) ([]LeaderboardQueueDiagnosticsRow, error)
+	LeaderboardRunClaimUnexpired(ctx context.Context, arg LeaderboardRunClaimUnexpiredParams) (bool, error)
+	// Capture BEFORE source changes. Input may contain instance or logical-run IDs.
+	// Old evidence survives source deletion/tenant movement and supplies old keys.
+	LeaderboardRunKeysForIDs(ctx context.Context, ids []uuid.UUID) ([]LeaderboardRunKeysForIDsRow, error)
 	ListActiveAdminTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
 	ListActivePublicTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
 	ListAdminActiveCustomPanelInstallations(ctx context.Context) ([]ListAdminActiveCustomPanelInstallationsRow, error)
@@ -728,6 +799,9 @@ type sqlcQuerier interface {
 	ListDiscordAnnouncementEncounters(ctx context.Context, instanceID uuid.UUID) ([]ListDiscordAnnouncementEncountersRow, error)
 	ListDiscordAnnouncementSources(ctx context.Context, announcementID uuid.UUID) ([]GuildDiscordLogAnnouncementSource, error)
 	ListDistinctInstanceNames(ctx context.Context) ([]string, error)
+	ListDueLeaderboardD2(ctx context.Context, arg ListDueLeaderboardD2Params) ([]ListDueLeaderboardD2Row, error)
+	ListDueLeaderboardOperations(ctx context.Context, afterTenant uuid.UUID) ([]ListDueLeaderboardOperationsRow, error)
+	ListDueLeaderboardRuns(ctx context.Context, arg ListDueLeaderboardRunsParams) ([]uuid.UUID, error)
 	ListExternalAPICharacterLogs(ctx context.Context, arg ListExternalAPICharacterLogsParams) ([]ListExternalAPICharacterLogsRow, error)
 	// Returns the logs excluded by duplicate-group deduplication for each selected
 	// leaderboard instance. The selected instance is the canonical leaderboard log
@@ -766,6 +840,27 @@ type sqlcQuerier interface {
 	ListInstancesMissingParseReceiptWindowed(ctx context.Context, arg ListInstancesMissingParseReceiptWindowedParams) ([]ListInstancesMissingParseReceiptWindowedRow, error)
 	ListInstancesMissingTimeParseScores(ctx context.Context, arg ListInstancesMissingTimeParseScoresParams) ([]ListInstancesMissingTimeParseScoresRow, error)
 	ListItemPricingRealms(ctx context.Context) ([]ListItemPricingRealmsRow, error)
+	ListLeaderboardDirtyRuns(ctx context.Context, tenantID uuid.UUID) ([]LeaderboardDirtyRun, error)
+	ListLeaderboardLayers(ctx context.Context) ([]LeaderboardLayer, error)
+	ListLeaderboardMetricTenants(ctx context.Context, afterID uuid.UUID) ([]uuid.UUID, error)
+	ListLeaderboardOperations(ctx context.Context, tenantID uuid.UUID) ([]LeaderboardOperation, error)
+	ListLeaderboardPlayerBossSubjects(ctx context.Context, tenantID uuid.UUID) ([]LeaderboardPlayerBossSubject, error)
+	ListLeaderboardPlayerObservations(ctx context.Context, tenantID uuid.UUID) ([]LeaderboardPlayerObservation, error)
+	// Read current benchmarks and current resolved awards, never replay observations.
+	// Boss arrays are enabled exact identities resolved by the API. The fixed
+	// denominator includes missing bosses; filtering never shrinks it per subject.
+	// Names are display metadata: retrieve them only after the authoritative score
+	// page. Name/search filtering above still occurs before aggregation.
+	ListLeaderboardV2(ctx context.Context, arg ListLeaderboardV2Params) ([]ListLeaderboardV2Row, error)
+	ListLeaderboardV2Cohorts(ctx context.Context, arg ListLeaderboardV2CohortsParams) ([]ListLeaderboardV2CohortsRow, error)
+	// Only the returned score page is passed here, with aligned exact cohort arrays.
+	// Cross the bounded page with selection to retain missing bosses as zero peaks.
+	ListLeaderboardV2PageBosses(ctx context.Context, arg ListLeaderboardV2PageBossesParams) ([]ListLeaderboardV2PageBossesRow, error)
+	// Companion metric for the returned performance page; no cohort double-counting.
+	ListLeaderboardV2PageRenown(ctx context.Context, arg ListLeaderboardV2PageRenownParams) ([]ListLeaderboardV2PageRenownRow, error)
+	// Bounded page x eligible benchmark cohorts x selected bosses. Never blend specs
+	// boss-by-boss: rank only complete fixed-denominator candidate aggregates.
+	ListLeaderboardV2PlayerCompanions(ctx context.Context, arg ListLeaderboardV2PlayerCompanionsParams) ([]ListLeaderboardV2PlayerCompanionsRow, error)
 	ListLogFilePartsForDeletion(ctx context.Context, logFileID uuid.UUID) ([]LogFilePart, error)
 	ListLogGroupArtifacts(ctx context.Context, logGroupID uuid.UUID) ([]LogGroupArtifact, error)
 	ListLogGroupArtifactsForParse(ctx context.Context, logGroupID uuid.UUID) ([]LogGroupArtifact, error)
@@ -887,6 +982,12 @@ type sqlcQuerier interface {
 	ListWoWServers(ctx context.Context) ([]WowServer, error)
 	ListWoWServersByTenantID(ctx context.Context, tenantID uuid.NullUUID) ([]WowServer, error)
 	ListWorlds(ctx context.Context) ([]World, error)
+	// Future direct writers call BEFORE source mutation in the same transaction.
+	// An overlap increments revision without invalidating the active owner's token.
+	// A new row is only a serialization placeholder; remove it after publication.
+	LockLeaderboardDirectPublication(ctx context.Context, arg LockLeaderboardDirectPublicationParams) (bool, error)
+	LockLeaderboardOperation(ctx context.Context, arg LockLeaderboardOperationParams) (LeaderboardOperation, error)
+	LockLeaderboardRunClaim(ctx context.Context, arg LockLeaderboardRunClaimParams) (LeaderboardDirtyRun, error)
 	LockLogFilePartSequence(ctx context.Context, logFileID uuid.UUID) (uuid.UUID, error)
 	// Serializes module creation for one owner so concurrent requests cannot exceed the quota.
 	LockLuaProjectOwner(ctx context.Context, ownerID uuid.UUID) (uuid.UUID, error)
@@ -899,6 +1000,8 @@ type sqlcQuerier interface {
 	LockUserStorageQuota(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	LockUsersForUpdate(ctx context.Context, ids []uuid.UUID) ([]uuid.UUID, error)
 	LockWoWLogGroupParseGeneration(ctx context.Context, id uuid.UUID) (int64, error)
+	// Authorized admin lookup only; RLS still applies.
+	LookupLeaderboardOperation(ctx context.Context, id uuid.UUID) (LeaderboardOperation, error)
 	MarkBillingWebhookEventProcessed(ctx context.Context, stripeEventID string) error
 	MarkEmailVerified(ctx context.Context, userAuthID uuid.UUID) error
 	MarkLogFilePartFailed(ctx context.Context, arg MarkLogFilePartFailedParams) error
@@ -906,11 +1009,16 @@ type sqlcQuerier interface {
 	MarkWhatsNewRead(ctx context.Context, arg MarkWhatsNewReadParams) (UserWhatsNewState, error)
 	MarkWoWLogGroupUnlisted(ctx context.Context, id uuid.UUID) (WoWLogGroup, error)
 	MoveDiscordAnnouncementSources(ctx context.Context, arg MoveDiscordAnnouncementSourcesParams) error
+	NextLeaderboardOperationRealm(ctx context.Context, arg NextLeaderboardOperationRealmParams) (uuid.UUID, error)
 	PauseEphemeralInferenceRun(ctx context.Context, arg PauseEphemeralInferenceRunParams) (InferenceRun, error)
 	PauseInferenceRun(ctx context.Context, arg PauseInferenceRunParams) (InferenceRun, error)
+	PauseLeaderboardOperation(ctx context.Context, arg PauseLeaderboardOperationParams) (LeaderboardOperation, error)
 	// Returns a bucket's current (refilled) token level without changing it. A
 	// bucket that does not exist yet is full.
 	PeekRateLimitTokens(ctx context.Context, arg PeekRateLimitTokensParams) (float64, error)
+	// One statement snapshot: no source, canonical, or dirty-row locks. Missing
+	// stages yield only available evidence. No normalized parse score is selected.
+	ProjectLeaderboardRun(ctx context.Context, arg ProjectLeaderboardRunParams) ([]ProjectLeaderboardRunRow, error)
 	PruneLuaProjectArtifacts(ctx context.Context, id uuid.UUID) error
 	PruneParsedInstanceFromLogOutput(ctx context.Context, arg PruneParsedInstanceFromLogOutputParams) error
 	// Removes summary cards whose instance/difficulty/player-count combination no
@@ -919,6 +1027,14 @@ type sqlcQuerier interface {
 	PublicInstance(ctx context.Context, id uuid.UUID) (LogInstancesGuild, error)
 	PublicInstanceBySlug(ctx context.Context, hashedSlug pgtype.Text) (LogInstancesGuild, error)
 	PublishCacheGeneration(ctx context.Context, arg PublishCacheGenerationParams) (PublishCacheGenerationRow, error)
+	PublishLeaderboardGuildBossBenchmark(ctx context.Context, arg []PublishLeaderboardGuildBossBenchmarkParams) *PublishLeaderboardGuildBossBenchmarkBatchResults
+	PublishLeaderboardGuildBossSubject(ctx context.Context, arg []PublishLeaderboardGuildBossSubjectParams) *PublishLeaderboardGuildBossSubjectBatchResults
+	PublishLeaderboardGuildClearBenchmark(ctx context.Context, arg []PublishLeaderboardGuildClearBenchmarkParams) *PublishLeaderboardGuildClearBenchmarkBatchResults
+	PublishLeaderboardGuildClearSubject(ctx context.Context, arg []PublishLeaderboardGuildClearSubjectParams) *PublishLeaderboardGuildClearSubjectBatchResults
+	PublishLeaderboardGuildRenownCount(ctx context.Context, arg []PublishLeaderboardGuildRenownCountParams) *PublishLeaderboardGuildRenownCountBatchResults
+	PublishLeaderboardPlayerBossBenchmark(ctx context.Context, arg []PublishLeaderboardPlayerBossBenchmarkParams) *PublishLeaderboardPlayerBossBenchmarkBatchResults
+	PublishLeaderboardPlayerBossSubject(ctx context.Context, arg []PublishLeaderboardPlayerBossSubjectParams) *PublishLeaderboardPlayerBossSubjectBatchResults
+	PublishLeaderboardPlayerRenownCount(ctx context.Context, arg []PublishLeaderboardPlayerRenownCountParams) *PublishLeaderboardPlayerRenownCountBatchResults
 	PutLuaProjectArtifact(ctx context.Context, arg PutLuaProjectArtifactParams) (string, error)
 	RankingRunByID(ctx context.Context, runID uuid.UUID) (RankingRun, error)
 	RankingRunIdentitiesByInstanceIDs(ctx context.Context, instanceIds []uuid.UUID) ([]RankingRunIdentitiesByInstanceIDsRow, error)
@@ -1011,8 +1127,22 @@ type sqlcQuerier interface {
 	RefreshTimeParseClearTimeMembershipsForLogGroup(ctx context.Context, arg RefreshTimeParseClearTimeMembershipsForLogGroupParams) (RefreshTimeParseClearTimeMembershipsForLogGroupRow, error)
 	RegisterLuaProjectUpload(ctx context.Context, objectKey string) error
 	ReleaseAdvisoryLock(ctx context.Context, lockKey int64) (bool, error)
+	RemoveLeaderboardDirectPlaceholder(ctx context.Context, arg RemoveLeaderboardDirectPlaceholderParams) error
 	RenameSidekickInstallation(ctx context.Context, arg RenameSidekickInstallationParams) (SidekickInstallation, error)
 	RepairDiscordMembershipGrantChecks(ctx context.Context, arg RepairDiscordMembershipGrantChecksParams) ([]DiscordMembershipGrantCheck, error)
+	RepairOperationGuildBossBenchmarks(ctx context.Context, arg RepairOperationGuildBossBenchmarksParams) (RepairOperationGuildBossBenchmarksRow, error)
+	RepairOperationGuildBossSubjects(ctx context.Context, arg RepairOperationGuildBossSubjectsParams) (RepairOperationGuildBossSubjectsRow, error)
+	RepairOperationGuildClearBenchmarks(ctx context.Context, arg RepairOperationGuildClearBenchmarksParams) (RepairOperationGuildClearBenchmarksRow, error)
+	RepairOperationGuildClearSubjects(ctx context.Context, arg RepairOperationGuildClearSubjectsParams) (RepairOperationGuildClearSubjectsRow, error)
+	RepairOperationGuildRenownCounts(ctx context.Context, arg RepairOperationGuildRenownCountsParams) (RepairOperationGuildRenownCountsRow, error)
+	RepairOperationPlayerBossBenchmarks(ctx context.Context, arg RepairOperationPlayerBossBenchmarksParams) (RepairOperationPlayerBossBenchmarksRow, error)
+	RepairOperationPlayerBossSubjects(ctx context.Context, arg RepairOperationPlayerBossSubjectsParams) (RepairOperationPlayerBossSubjectsRow, error)
+	RepairOperationPlayerRenownCounts(ctx context.Context, arg RepairOperationPlayerRenownCountsParams) (RepairOperationPlayerRenownCountsRow, error)
+	ReplaceLeaderboardGuildBossObservation(ctx context.Context, arg []ReplaceLeaderboardGuildBossObservationParams) *ReplaceLeaderboardGuildBossObservationBatchResults
+	ReplaceLeaderboardGuildClearObservation(ctx context.Context, arg []ReplaceLeaderboardGuildClearObservationParams) *ReplaceLeaderboardGuildClearObservationBatchResults
+	ReplaceLeaderboardGuildRenownFact(ctx context.Context, arg []ReplaceLeaderboardGuildRenownFactParams) *ReplaceLeaderboardGuildRenownFactBatchResults
+	ReplaceLeaderboardPlayerObservation(ctx context.Context, arg []ReplaceLeaderboardPlayerObservationParams) *ReplaceLeaderboardPlayerObservationBatchResults
+	ReplaceLeaderboardPlayerRenownFact(ctx context.Context, arg []ReplaceLeaderboardPlayerRenownFactParams) *ReplaceLeaderboardPlayerRenownFactBatchResults
 	ReserveLogFilePart(ctx context.Context, arg ReserveLogFilePartParams) (LogFilePart, error)
 	// Resolves the dataset for a realm. Precedence:
 	//   server.default_dataset_id > tenant.default_dataset_id.
@@ -1026,8 +1156,23 @@ type sqlcQuerier interface {
 	ResolveDatasetWithFlavorByRealm(ctx context.Context, id uuid.UUID) (ResolveDatasetWithFlavorByRealmRow, error)
 	ResolveExternalAPIRealm(ctx context.Context, arg ResolveExternalAPIRealmParams) (ResolveExternalAPIRealmRow, error)
 	ResolveExternalAPIServer(ctx context.Context, server string) (ResolveExternalAPIServerRow, error)
+	// Strict set inclusion, not tag count, determines precedence independently for
+	// each assigned property. NULL properties never enter the assignment relation.
+	// A conflict returns diagnostics ONLY, never a partially resolved configuration.
+	ResolveLeaderboardConfiguration(ctx context.Context, flavors []string) ([]ResolveLeaderboardConfigurationRow, error)
 	ResolveSidekickIssuesExcept(ctx context.Context, arg ResolveSidekickIssuesExceptParams) (int64, error)
 	ResumeInferenceRun(ctx context.Context, arg ResumeInferenceRunParams) (InferenceRun, error)
+	ResumeLeaderboardOperation(ctx context.Context, arg ResumeLeaderboardOperationParams) (LeaderboardOperation, error)
+	RetryLeaderboardGuildBossBenchmark(ctx context.Context, arg []RetryLeaderboardGuildBossBenchmarkParams) *RetryLeaderboardGuildBossBenchmarkBatchResults
+	RetryLeaderboardGuildBossSubject(ctx context.Context, arg []RetryLeaderboardGuildBossSubjectParams) *RetryLeaderboardGuildBossSubjectBatchResults
+	RetryLeaderboardGuildClearBenchmark(ctx context.Context, arg []RetryLeaderboardGuildClearBenchmarkParams) *RetryLeaderboardGuildClearBenchmarkBatchResults
+	RetryLeaderboardGuildClearSubject(ctx context.Context, arg []RetryLeaderboardGuildClearSubjectParams) *RetryLeaderboardGuildClearSubjectBatchResults
+	RetryLeaderboardGuildRenownCount(ctx context.Context, arg []RetryLeaderboardGuildRenownCountParams) *RetryLeaderboardGuildRenownCountBatchResults
+	RetryLeaderboardOperation(ctx context.Context, arg RetryLeaderboardOperationParams) error
+	RetryLeaderboardPlayerBossBenchmark(ctx context.Context, arg []RetryLeaderboardPlayerBossBenchmarkParams) *RetryLeaderboardPlayerBossBenchmarkBatchResults
+	RetryLeaderboardPlayerBossSubject(ctx context.Context, arg []RetryLeaderboardPlayerBossSubjectParams) *RetryLeaderboardPlayerBossSubjectBatchResults
+	RetryLeaderboardPlayerRenownCount(ctx context.Context, arg []RetryLeaderboardPlayerRenownCountParams) *RetryLeaderboardPlayerRenownCountBatchResults
+	RetryLeaderboardRun(ctx context.Context, arg RetryLeaderboardRunParams) error
 	// Revokes the user's unrevoked key in a community.
 	RevokeAIKeys(ctx context.Context, arg RevokeAIKeysParams) (int64, error)
 	RevokeActiveSidekickOAuthGrants(ctx context.Context, sidekickID uuid.UUID) ([]string, error)
@@ -1052,6 +1197,8 @@ type sqlcQuerier interface {
 	SetDuplicateGroupIDs(ctx context.Context, arg SetDuplicateGroupIDsParams) error
 	// Replaces one top-level key, leaving the user's other settings untouched.
 	SetInferenceUserConfigKey(ctx context.Context, arg SetInferenceUserConfigKeyParams) error
+	SetLeaderboardOperationMissingDates(ctx context.Context, arg SetLeaderboardOperationMissingDatesParams) error
+	SetLeaderboardWorkerTimeouts(ctx context.Context, statementTimeout string) error
 	SetLuaProjectDraft(ctx context.Context, arg SetLuaProjectDraftParams) (LuaProject, error)
 	// Leaves updated_at alone: it dates main. A null flavor keeps the current tags.
 	SetLuaProjectSettings(ctx context.Context, arg SetLuaProjectSettingsParams) (LuaProject, error)

@@ -1,0 +1,12 @@
+-- name: HasDueLeaderboardD1 :one
+SELECT EXISTS(SELECT 1 FROM leaderboard_dirty_runs WHERE tenant_id= @tenant_id::uuid AND process_after<=clock_timestamp() AND retry_after<=clock_timestamp() AND (locked_until IS NULL OR locked_until<=clock_timestamp()))::boolean;
+
+-- name: HasDueLeaderboardD2 :one
+SELECT ((@family::integer=0 AND EXISTS(SELECT 1 FROM leaderboard_dirty_player_boss_benchmarks WHERE tenant_id= @tenant_id::uuid AND process_after<=clock_timestamp() AND retry_after<=clock_timestamp() AND (locked_until IS NULL OR locked_until<=clock_timestamp()))) OR
+(@family::integer=1 AND EXISTS(SELECT 1 FROM leaderboard_dirty_player_boss_subjects WHERE tenant_id= @tenant_id::uuid AND process_after<=clock_timestamp() AND retry_after<=clock_timestamp() AND (locked_until IS NULL OR locked_until<=clock_timestamp()))) OR
+(@family::integer=2 AND EXISTS(SELECT 1 FROM leaderboard_dirty_guild_boss_benchmarks WHERE tenant_id= @tenant_id::uuid AND process_after<=clock_timestamp() AND retry_after<=clock_timestamp() AND (locked_until IS NULL OR locked_until<=clock_timestamp()))) OR
+(@family::integer=3 AND EXISTS(SELECT 1 FROM leaderboard_dirty_guild_boss_subjects WHERE tenant_id= @tenant_id::uuid AND process_after<=clock_timestamp() AND retry_after<=clock_timestamp() AND (locked_until IS NULL OR locked_until<=clock_timestamp()))) OR
+(@family::integer=4 AND EXISTS(SELECT 1 FROM leaderboard_dirty_guild_clear_benchmarks WHERE tenant_id= @tenant_id::uuid AND process_after<=clock_timestamp() AND retry_after<=clock_timestamp() AND (locked_until IS NULL OR locked_until<=clock_timestamp()))) OR
+(@family::integer=5 AND EXISTS(SELECT 1 FROM leaderboard_dirty_guild_clear_subjects WHERE tenant_id= @tenant_id::uuid AND process_after<=clock_timestamp() AND retry_after<=clock_timestamp() AND (locked_until IS NULL OR locked_until<=clock_timestamp()))) OR
+(@family::integer=6 AND EXISTS(SELECT 1 FROM leaderboard_dirty_player_renown WHERE tenant_id= @tenant_id::uuid AND process_after<=clock_timestamp() AND retry_after<=clock_timestamp() AND (locked_until IS NULL OR locked_until<=clock_timestamp()))) OR
+(@family::integer=7 AND EXISTS(SELECT 1 FROM leaderboard_dirty_guild_renown WHERE tenant_id= @tenant_id::uuid AND process_after<=clock_timestamp() AND retry_after<=clock_timestamp() AND (locked_until IS NULL OR locked_until<=clock_timestamp()))))::boolean;

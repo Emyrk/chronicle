@@ -52,12 +52,13 @@ The River queue depth and oldest-job-age gauges are database-global values colle
 
 ## Included Grafana dashboards
 
-Chronicle includes four importable dashboards:
+Chronicle includes five importable dashboards:
 
 - [`docs/grafana/chronicle-operations.json`](grafana/chronicle-operations.json) covers service health, instance search, Sidekick, parser outcomes and bottlenecks, River queues, cache behavior, authentication, UI usage, maintenance, and leader election.
 - [`docs/grafana/chronicle-http-traffic.json`](grafana/chronicle-http-traffic.json) investigates HTTP request volume, rate, and latency by route template and method.
 - [`docs/grafana/chronicle-external-api.json`](grafana/chronicle-external-api.json) measures external developer API call volume over time, request rate, endpoint popularity, and latency while excluding health checks by default.
 - [`docs/grafana/chronicle-discord-http.json`](grafana/chronicle-discord-http.json) attributes outbound Discord requests, errors, rate limits, and latency to bounded logical sources.
+- [`docs/grafana/chronicle-leaderboards.json`](grafana/chronicle-leaderboards.json) follows leaderboard queue freshness, dirty scopes, committed processing, historical operations, shared River scheduling, and public HTTP reads. Its database gauges exclude stale/failed snapshots before replica deduplication; absent telemetry is never converted to healthy zero. See [leaderboard observability](leaderboard-v2/observability.md) for metric semantics.
 
 See [`docs/grafana/README.md`](grafana/README.md) for import and file-provisioning instructions.
 

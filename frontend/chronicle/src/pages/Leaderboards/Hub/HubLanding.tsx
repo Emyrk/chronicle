@@ -196,7 +196,7 @@ function HubLanding({
               <LiveCardBody tab={tab} preview={preview} />
               <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
                 <Skull className="h-3 w-3" />
-                {row.total_kills.toLocaleString()} recorded kills
+                {row.total_kills ? `${row.total_kills.toLocaleString()} recorded kills` : "Configured instance"}
               </div>
             </InstanceCard>
           </div>

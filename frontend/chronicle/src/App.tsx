@@ -119,6 +119,7 @@ const WDBTab = lazy(() => import("./pages/GameData/WDBTab").then(({ WDBTab }) =>
 const ImportSQLTab = lazy(() => import("./pages/GameData/ImportSQLTab").then(({ ImportSQLTab }) => ({ default: ImportSQLTab })))
 const DBCTab = lazy(() => import("./pages/GameData/DBCTab").then(({ DBCTab }) => ({ default: DBCTab })))
 const DatasetsTab = lazy(() => import("./pages/GameData/DatasetsTab").then(({ DatasetsTab }) => ({ default: DatasetsTab })))
+const LeaderboardConfigurationPage = lazy(() => import("./pages/Leaderboards/Configuration").then(({ ConfigurationPage }) => ({ default: ConfigurationPage })))
 const LeaderboardsV2 = lazy(() => import("./pages/Leaderboards/LeaderboardsLiveHub").then(({ LeaderboardsLiveHub }) => ({ default: LeaderboardsLiveHub })))
 const LeaderboardsPage = lazy(() => import("./pages/Leaderboards/LeaderboardsPage").then(({ LeaderboardsPage }) => ({ default: LeaderboardsPage })))
 const LegacyLeaderboardsRedirect = lazy(() => import("./pages/Leaderboards/LeaderboardsPage").then(({ LegacyLeaderboardsRedirect }) => ({ default: LegacyLeaderboardsRedirect })))
@@ -226,6 +227,7 @@ function App() {
         {/* The live hub stays unlinked at /leaderboard-v2 until it replaces the classic index. */}
         <Route path="/leaderboard-v2" element={<LeaderboardsV2 />} />
         <Route path="/leaderboard-v2/:tab" element={<LeaderboardsV2 />} />
+        <Route path="/leaderboards/configuration" element={<LeaderboardConfigurationPage />} />
         <Route path="/leaderboards" element={<LegacyLeaderboardsRedirect />} />
         <Route path="/leaderboards/statistics" element={<LeaderboardsPage mode="statistics" />} />
         <Route path="/leaderboards/speedruns" element={<LeaderboardsPage mode="speedruns" />} />

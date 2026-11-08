@@ -78,6 +78,30 @@ const (
 	FlavorNightmareOfUrsol FlavorTag = "nightmare-of-ursol"
 )
 
+// LeaderboardRelevant explicitly classifies tags that may select shared leaderboard
+// configuration. Server identity tags never specialize leaderboard configuration.
+func (t FlavorTag) LeaderboardRelevant() bool {
+	switch t {
+	case FlavorVanilla, FlavorTBC, FlavorWrath, FlavorNightmareOfUrsol, FlavorVanillaPlus:
+		return true
+	default:
+		return false
+	}
+}
+
+// LeaderboardFlavors returns the sorted, deduplicated relevant subset without
+// mutating f. An empty projection is nil.
+func (f WoWFlavor) LeaderboardFlavors() WoWFlavor {
+	var result WoWFlavor
+	for _, tag := range f {
+		if tag.LeaderboardRelevant() && !result.Has(tag) {
+			result = append(result, tag)
+		}
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i] < result[j] })
+	return result
+}
+
 // AllFlavorTagValues returns every known FlavorTag. Keep in sync with the
 // constants above.
 func AllFlavorTagValues() []FlavorTag {

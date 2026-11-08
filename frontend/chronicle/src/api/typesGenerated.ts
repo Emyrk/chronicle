@@ -95,6 +95,126 @@ export interface CreateAIKeyRequest {
     readonly private_data?: boolean;
 }
 
+// From chroniclesdk/leaderboard_v2.go
+/**
+ * LeaderboardV2Boss is page-bounded summary detail, never observation replay.
+ * Missing summaries have zero peak/count; unavailable raw values stay null.
+ */
+export interface LeaderboardV2Boss {
+    readonly encounter_name: string;
+    readonly peak: number;
+    readonly raw_peak: number | null;
+    readonly duration_ms: number | null;
+    readonly observation_count: number;
+}
+
+// From chroniclesdk/leaderboard_v2.go
+export interface LeaderboardV2Cohort {
+    readonly player_class: string;
+    readonly player_spec: string;
+    readonly player_sub_spec: string;
+    readonly metric: string;
+}
+
+// From chroniclesdk/leaderboard_v2.go
+/**
+ * LeaderboardV2Companion identifies the winning whole-selection cohort.
+ */
+export interface LeaderboardV2Companion {
+    readonly score: number;
+    readonly player_class: string;
+    readonly player_spec: string;
+    readonly player_sub_spec: string;
+}
+
+// From chroniclesdk/leaderboard_v2.go
+export interface LeaderboardV2Entry {
+    readonly realm_name: string;
+    readonly peak_companion: LeaderboardV2Companion | null;
+    readonly mastery_companion: LeaderboardV2Companion | null;
+    readonly player_class: string;
+    readonly player_spec: string;
+    readonly player_sub_spec: string;
+    readonly realm_id: string;
+    readonly subject_id: string;
+    readonly name: string;
+    readonly score: number;
+    readonly peak: number;
+    readonly form: number;
+    readonly floor: number;
+    readonly bosses: readonly LeaderboardV2Boss[];
+    readonly mastery: number;
+    readonly renown: number;
+    readonly sample_count: number;
+    readonly computed_at: string;
+}
+
+// From chroniclesdk/leaderboard_v2.go
+/**
+ * LeaderboardV2Response is a preview read over all-time raw summaries, not a
+ * claim that evidence ingestion or refresh workers are installed.
+ */
+export interface LeaderboardV2Response {
+    readonly maintenance?: LeaderboardMaintenance;
+    readonly status: string;
+    readonly message: string;
+    readonly entries: readonly LeaderboardV2Entry[];
+    readonly next_cursor?: string;
+    readonly included_bosses: readonly string[];
+}
+
+// From chroniclesdk/leaderboard_configuration.go
+/**
+ * LeaderboardConfiguration is a read-only view of shared policy for the request tenant.
+ * Matching layers are not per-field provenance. Rows are empty on conflict.
+ */
+export interface LeaderboardConfiguration {
+    readonly tenant_id: string | null;
+    readonly tenant_name: string;
+    readonly dataset_id: string;
+    readonly dataset_name: string;
+    readonly dataset_flavor: readonly string[];
+    readonly additional_flavor: readonly string[];
+    readonly effective_flavor: readonly string[];
+    readonly leaderboard_flavor: readonly string[];
+    readonly layers: readonly LeaderboardConfigurationLayer[];
+    readonly rows: readonly LeaderboardConfigurationRow[];
+    readonly conflict: string;
+    /**
+     * Tenants lists the tenants the root site may inspect. Empty on tenant sites.
+     */
+    readonly tenants: readonly LeaderboardConfigurationTenant[];
+}
+
+// From chroniclesdk/leaderboard_configuration.go
+export interface LeaderboardConfigurationLayer {
+    readonly key: string;
+    readonly required_flavors: readonly string[];
+}
+
+// From chroniclesdk/leaderboard_configuration.go
+export interface LeaderboardConfigurationRow {
+    readonly kind: string;
+    readonly instance_name: string;
+    readonly encounter_name: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly set_key: string;
+    readonly set_name: string;
+    readonly position: number;
+    readonly points: number;
+    readonly has_points: boolean;
+}
+
+// From chroniclesdk/leaderboard_configuration.go
+export interface LeaderboardConfigurationTenant {
+    readonly id: string;
+    readonly slug: string | null;
+    readonly name: string;
+    readonly square_logo: string;
+    readonly discoverable: boolean;
+}
+
 // From chroniclesdk/account.go
 export interface AccountDataCount {
     readonly group_key: string;
@@ -7325,4 +7445,88 @@ export type WoWUnitType = 2 | 3 | 1 | 0 | 4;
 
 export const WoWUnitTypes: WoWUnitType[] = [2, 3, 1, 0, 4];
 
+
+// From chroniclesdk/leaderboard_operations.go
+/**
+ * BeforeDate is an exclusive UTC day boundary (YYYY-MM-DD), defaulting to today.
+ */
+export interface CreateLeaderboardOperationRequest {
+    readonly tenant_id: string;
+    readonly purpose: string;
+    readonly scope: string;
+    readonly before_date?: string;
+    readonly run_id?: string;
+}
+
+// From chroniclesdk/leaderboard_operations.go
+export interface LeaderboardMaintenance {
+    readonly missing_dates: number;
+    readonly date_basis: string;
+    readonly kind: string;
+    readonly state: string;
+    readonly message: string;
+    readonly before_date: string;
+    readonly cutoff: string;
+}
+
+// From chroniclesdk/leaderboard_operations.go
+export interface LeaderboardMaintenanceResponse {
+    readonly maintenance: LeaderboardMaintenance | null;
+}
+
+// From chroniclesdk/leaderboard_operations.go
+export interface LeaderboardOperation {
+    readonly backlog?: LeaderboardOperationBacklog;
+    readonly missing_dates: number;
+    readonly date_basis: string;
+    readonly id: string;
+    readonly tenant_id: string;
+    readonly requested_by: string;
+    readonly purpose: string;
+    readonly scope: string;
+    readonly run_id?: string;
+    readonly before_date: string;
+    readonly cutoff: string;
+    readonly state: string;
+    readonly phase: string;
+    readonly discovered: number;
+    readonly discovery_complete: boolean;
+    readonly started_at: string;
+    readonly completed_at?: string;
+    readonly last_progress_at: string;
+    readonly retry_count: number;
+    readonly last_error: string;
+}
+
+// From chroniclesdk/leaderboard_operations.go
+export interface LeaderboardOperationBacklog {
+    readonly d1_pending: number;
+    readonly d2_pending: number;
+    readonly oldest_pending_at?: string;
+    readonly pending_retries: number;
+}
+
+// From chroniclesdk/leaderboard_operations.go
+export interface LeaderboardOperationList {
+    readonly operations: readonly LeaderboardOperation[];
+}
+
+
+// From chroniclesdk/leaderboard_queues.go
+export interface LeaderboardQueueDiagnostics {
+    readonly tenant_id: string;
+    readonly collected_at: string;
+    readonly queues: readonly LeaderboardQueueStatus[];
+}
+
+// From chroniclesdk/leaderboard_queues.go
+export interface LeaderboardQueueStatus {
+    readonly family: string;
+    readonly pending: number;
+    readonly due: number;
+    readonly claimed: number;
+    readonly retrying: number;
+    readonly oldest_pending_at?: string;
+    readonly oldest_due_at?: string;
+}
 

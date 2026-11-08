@@ -19,6 +19,723 @@ var (
 	ErrBatchAlreadyClosed = errors.New("batch already closed")
 )
 
+const computeLeaderboardGuildBossBenchmark = `-- name: ComputeLeaderboardGuildBossBenchmark :batchone
+WITH calculated AS (
+    SELECT duration_ms AS best_duration_ms
+    FROM leaderboard_guild_boss_observations
+    WHERE tenant_id = $1::uuid
+      AND instance_name = $2::text
+      AND difficulty_name = $3::text
+      AND max_players = $4::smallint
+      AND encounter_name = $5::text
+    ORDER BY duration_ms ASC
+    LIMIT 1
+)
+SELECT COALESCE(c.best_duration_ms, 0)::bigint AS best_duration_ms,
+       (c.best_duration_ms IS NOT NULL)::boolean AS has_evidence
+FROM (SELECT 1) singleton LEFT JOIN calculated c ON true
+`
+
+type ComputeLeaderboardGuildBossBenchmarkBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type ComputeLeaderboardGuildBossBenchmarkParams struct {
+	TenantID       uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName   string    `db:"instance_name" json:"instance_name"`
+	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16     `db:"max_players" json:"max_players"`
+	EncounterName  string    `db:"encounter_name" json:"encounter_name"`
+}
+
+type ComputeLeaderboardGuildBossBenchmarkRow struct {
+	BestDurationMs int64 `db:"best_duration_ms" json:"best_duration_ms"`
+	HasEvidence    bool  `db:"has_evidence" json:"has_evidence"`
+}
+
+func (q *sqlQuerier) ComputeLeaderboardGuildBossBenchmark(ctx context.Context, arg []ComputeLeaderboardGuildBossBenchmarkParams) *ComputeLeaderboardGuildBossBenchmarkBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.EncounterName,
+		}
+		batch.Queue(computeLeaderboardGuildBossBenchmark, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &ComputeLeaderboardGuildBossBenchmarkBatchResults{br, len(arg), false}
+}
+
+func (b *ComputeLeaderboardGuildBossBenchmarkBatchResults) QueryRow(f func(int, ComputeLeaderboardGuildBossBenchmarkRow, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		var i ComputeLeaderboardGuildBossBenchmarkRow
+		if b.closed {
+			if f != nil {
+				f(t, i, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		row := b.br.QueryRow()
+		err := row.Scan(&i.BestDurationMs, &i.HasEvidence)
+		if f != nil {
+			f(t, i, err)
+		}
+	}
+}
+
+func (b *ComputeLeaderboardGuildBossBenchmarkBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const computeLeaderboardGuildBossSubject = `-- name: ComputeLeaderboardGuildBossSubject :batchone
+WITH scoped AS MATERIALIZED (
+    SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, run_id, source_instance_id, realm_id, guild_id, source_time_parse_score_id, source_encounter_id, duration_ms, projection_version, observed_at FROM leaderboard_guild_boss_observations WHERE tenant_id = $1::uuid
+      AND instance_name = $2::text
+      AND difficulty_name = $3::text
+      AND max_players = $4::smallint
+      AND encounter_name = $5::text
+      AND realm_id = $6::uuid
+      AND guild_id = $7::uuid
+), ranked AS (
+    SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, run_id, source_instance_id, realm_id, guild_id, source_time_parse_score_id, source_encounter_id, duration_ms, projection_version, observed_at, row_number() OVER (ORDER BY duration_ms DESC, run_id) AS position,
+           count(*) OVER () AS observations
+    FROM scoped
+), statistics AS (
+    SELECT count(*)::bigint AS observation_count,
+           min(duration_ms) AS fastest_duration_ms,
+           COALESCE(avg(1.0::double precision / duration_ms) FILTER (WHERE position > observations * 2 / 5 AND position < observations), 0)::double precision AS form_mean_inverse_ms,
+           COALESCE(avg(1.0::double precision / duration_ms) FILTER (WHERE position > observations / 5 AND position <= observations * 2 / 5), 0)::double precision AS floor_mean_inverse_ms
+    FROM ranked HAVING count(*) > 0
+), calculated AS (SELECT observation_count, fastest_duration_ms, form_mean_inverse_ms, floor_mean_inverse_ms FROM statistics)
+SELECT COALESCE(c.observation_count, 0)::bigint AS observation_count, COALESCE(c.fastest_duration_ms, 0)::bigint AS fastest_duration_ms, COALESCE(c.form_mean_inverse_ms, 0)::double precision AS form_mean_inverse_ms, COALESCE(c.floor_mean_inverse_ms, 0)::double precision AS floor_mean_inverse_ms,
+       (c.observation_count IS NOT NULL)::boolean AS has_evidence
+FROM (SELECT 1) singleton LEFT JOIN calculated c ON true
+`
+
+type ComputeLeaderboardGuildBossSubjectBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type ComputeLeaderboardGuildBossSubjectParams struct {
+	TenantID       uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName   string    `db:"instance_name" json:"instance_name"`
+	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16     `db:"max_players" json:"max_players"`
+	EncounterName  string    `db:"encounter_name" json:"encounter_name"`
+	RealmID        uuid.UUID `db:"realm_id" json:"realm_id"`
+	GuildID        uuid.UUID `db:"guild_id" json:"guild_id"`
+}
+
+type ComputeLeaderboardGuildBossSubjectRow struct {
+	ObservationCount   int64   `db:"observation_count" json:"observation_count"`
+	FastestDurationMs  int64   `db:"fastest_duration_ms" json:"fastest_duration_ms"`
+	FormMeanInverseMs  float64 `db:"form_mean_inverse_ms" json:"form_mean_inverse_ms"`
+	FloorMeanInverseMs float64 `db:"floor_mean_inverse_ms" json:"floor_mean_inverse_ms"`
+	HasEvidence        bool    `db:"has_evidence" json:"has_evidence"`
+}
+
+func (q *sqlQuerier) ComputeLeaderboardGuildBossSubject(ctx context.Context, arg []ComputeLeaderboardGuildBossSubjectParams) *ComputeLeaderboardGuildBossSubjectBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.EncounterName,
+			a.RealmID,
+			a.GuildID,
+		}
+		batch.Queue(computeLeaderboardGuildBossSubject, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &ComputeLeaderboardGuildBossSubjectBatchResults{br, len(arg), false}
+}
+
+func (b *ComputeLeaderboardGuildBossSubjectBatchResults) QueryRow(f func(int, ComputeLeaderboardGuildBossSubjectRow, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		var i ComputeLeaderboardGuildBossSubjectRow
+		if b.closed {
+			if f != nil {
+				f(t, i, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		row := b.br.QueryRow()
+		err := row.Scan(
+			&i.ObservationCount,
+			&i.FastestDurationMs,
+			&i.FormMeanInverseMs,
+			&i.FloorMeanInverseMs,
+			&i.HasEvidence,
+		)
+		if f != nil {
+			f(t, i, err)
+		}
+	}
+}
+
+func (b *ComputeLeaderboardGuildBossSubjectBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const computeLeaderboardGuildClearBenchmark = `-- name: ComputeLeaderboardGuildClearBenchmark :batchone
+WITH calculated AS (
+    SELECT duration_ms AS best_duration_ms
+    FROM leaderboard_guild_clear_observations
+    WHERE tenant_id = $1::uuid
+      AND instance_name = $2::text
+      AND difficulty_name = $3::text
+      AND max_players = $4::smallint
+    ORDER BY duration_ms ASC
+    LIMIT 1
+)
+SELECT COALESCE(c.best_duration_ms, 0)::bigint AS best_duration_ms,
+       (c.best_duration_ms IS NOT NULL)::boolean AS has_evidence
+FROM (SELECT 1) singleton LEFT JOIN calculated c ON true
+`
+
+type ComputeLeaderboardGuildClearBenchmarkBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type ComputeLeaderboardGuildClearBenchmarkParams struct {
+	TenantID       uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName   string    `db:"instance_name" json:"instance_name"`
+	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16     `db:"max_players" json:"max_players"`
+}
+
+type ComputeLeaderboardGuildClearBenchmarkRow struct {
+	BestDurationMs int64 `db:"best_duration_ms" json:"best_duration_ms"`
+	HasEvidence    bool  `db:"has_evidence" json:"has_evidence"`
+}
+
+func (q *sqlQuerier) ComputeLeaderboardGuildClearBenchmark(ctx context.Context, arg []ComputeLeaderboardGuildClearBenchmarkParams) *ComputeLeaderboardGuildClearBenchmarkBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+		}
+		batch.Queue(computeLeaderboardGuildClearBenchmark, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &ComputeLeaderboardGuildClearBenchmarkBatchResults{br, len(arg), false}
+}
+
+func (b *ComputeLeaderboardGuildClearBenchmarkBatchResults) QueryRow(f func(int, ComputeLeaderboardGuildClearBenchmarkRow, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		var i ComputeLeaderboardGuildClearBenchmarkRow
+		if b.closed {
+			if f != nil {
+				f(t, i, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		row := b.br.QueryRow()
+		err := row.Scan(&i.BestDurationMs, &i.HasEvidence)
+		if f != nil {
+			f(t, i, err)
+		}
+	}
+}
+
+func (b *ComputeLeaderboardGuildClearBenchmarkBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const computeLeaderboardGuildClearSubject = `-- name: ComputeLeaderboardGuildClearSubject :batchone
+WITH scoped AS MATERIALIZED (
+    SELECT tenant_id, instance_name, difficulty_name, max_players, run_id, source_instance_id, realm_id, guild_id, source_time_parse_score_id, duration_ms, projection_version, observed_at FROM leaderboard_guild_clear_observations WHERE tenant_id = $1::uuid
+      AND instance_name = $2::text
+      AND difficulty_name = $3::text
+      AND max_players = $4::smallint
+      AND realm_id = $5::uuid
+      AND guild_id = $6::uuid
+), ranked AS (
+    SELECT tenant_id, instance_name, difficulty_name, max_players, run_id, source_instance_id, realm_id, guild_id, source_time_parse_score_id, duration_ms, projection_version, observed_at, row_number() OVER (ORDER BY duration_ms DESC, run_id) AS position,
+           count(*) OVER () AS observations
+    FROM scoped
+), statistics AS (
+    SELECT count(*)::bigint AS observation_count,
+           min(duration_ms) AS fastest_duration_ms,
+           COALESCE(avg(1.0::double precision / duration_ms) FILTER (WHERE position > observations * 2 / 5 AND position < observations), 0)::double precision AS form_mean_inverse_ms,
+           COALESCE(avg(1.0::double precision / duration_ms) FILTER (WHERE position > observations / 5 AND position <= observations * 2 / 5), 0)::double precision AS floor_mean_inverse_ms
+    FROM ranked HAVING count(*) > 0
+), calculated AS (SELECT observation_count, fastest_duration_ms, form_mean_inverse_ms, floor_mean_inverse_ms FROM statistics)
+SELECT COALESCE(c.observation_count, 0)::bigint AS observation_count, COALESCE(c.fastest_duration_ms, 0)::bigint AS fastest_duration_ms, COALESCE(c.form_mean_inverse_ms, 0)::double precision AS form_mean_inverse_ms, COALESCE(c.floor_mean_inverse_ms, 0)::double precision AS floor_mean_inverse_ms,
+       (c.observation_count IS NOT NULL)::boolean AS has_evidence
+FROM (SELECT 1) singleton LEFT JOIN calculated c ON true
+`
+
+type ComputeLeaderboardGuildClearSubjectBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type ComputeLeaderboardGuildClearSubjectParams struct {
+	TenantID       uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName   string    `db:"instance_name" json:"instance_name"`
+	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16     `db:"max_players" json:"max_players"`
+	RealmID        uuid.UUID `db:"realm_id" json:"realm_id"`
+	GuildID        uuid.UUID `db:"guild_id" json:"guild_id"`
+}
+
+type ComputeLeaderboardGuildClearSubjectRow struct {
+	ObservationCount   int64   `db:"observation_count" json:"observation_count"`
+	FastestDurationMs  int64   `db:"fastest_duration_ms" json:"fastest_duration_ms"`
+	FormMeanInverseMs  float64 `db:"form_mean_inverse_ms" json:"form_mean_inverse_ms"`
+	FloorMeanInverseMs float64 `db:"floor_mean_inverse_ms" json:"floor_mean_inverse_ms"`
+	HasEvidence        bool    `db:"has_evidence" json:"has_evidence"`
+}
+
+func (q *sqlQuerier) ComputeLeaderboardGuildClearSubject(ctx context.Context, arg []ComputeLeaderboardGuildClearSubjectParams) *ComputeLeaderboardGuildClearSubjectBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.RealmID,
+			a.GuildID,
+		}
+		batch.Queue(computeLeaderboardGuildClearSubject, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &ComputeLeaderboardGuildClearSubjectBatchResults{br, len(arg), false}
+}
+
+func (b *ComputeLeaderboardGuildClearSubjectBatchResults) QueryRow(f func(int, ComputeLeaderboardGuildClearSubjectRow, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		var i ComputeLeaderboardGuildClearSubjectRow
+		if b.closed {
+			if f != nil {
+				f(t, i, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		row := b.br.QueryRow()
+		err := row.Scan(
+			&i.ObservationCount,
+			&i.FastestDurationMs,
+			&i.FormMeanInverseMs,
+			&i.FloorMeanInverseMs,
+			&i.HasEvidence,
+		)
+		if f != nil {
+			f(t, i, err)
+		}
+	}
+}
+
+func (b *ComputeLeaderboardGuildClearSubjectBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const computeLeaderboardGuildRenownCount = `-- name: ComputeLeaderboardGuildRenownCount :batchone
+WITH calculated AS (
+    SELECT count(*)::bigint AS kill_count FROM leaderboard_guild_renown_facts
+    WHERE tenant_id = $1::uuid
+      AND instance_name = $2::text
+      AND difficulty_name = $3::text
+      AND max_players = $4::smallint
+      AND encounter_name = $5::text
+      AND realm_id = $6::uuid
+      AND guild_id = $7::uuid
+    HAVING count(*) > 0
+)
+SELECT COALESCE(c.kill_count, 0)::bigint AS kill_count,
+       (c.kill_count IS NOT NULL)::boolean AS has_evidence
+FROM (SELECT 1) singleton LEFT JOIN calculated c ON true
+`
+
+type ComputeLeaderboardGuildRenownCountBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type ComputeLeaderboardGuildRenownCountParams struct {
+	TenantID       uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName   string    `db:"instance_name" json:"instance_name"`
+	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16     `db:"max_players" json:"max_players"`
+	EncounterName  string    `db:"encounter_name" json:"encounter_name"`
+	RealmID        uuid.UUID `db:"realm_id" json:"realm_id"`
+	GuildID        uuid.UUID `db:"guild_id" json:"guild_id"`
+}
+
+type ComputeLeaderboardGuildRenownCountRow struct {
+	KillCount   int64 `db:"kill_count" json:"kill_count"`
+	HasEvidence bool  `db:"has_evidence" json:"has_evidence"`
+}
+
+func (q *sqlQuerier) ComputeLeaderboardGuildRenownCount(ctx context.Context, arg []ComputeLeaderboardGuildRenownCountParams) *ComputeLeaderboardGuildRenownCountBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.EncounterName,
+			a.RealmID,
+			a.GuildID,
+		}
+		batch.Queue(computeLeaderboardGuildRenownCount, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &ComputeLeaderboardGuildRenownCountBatchResults{br, len(arg), false}
+}
+
+func (b *ComputeLeaderboardGuildRenownCountBatchResults) QueryRow(f func(int, ComputeLeaderboardGuildRenownCountRow, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		var i ComputeLeaderboardGuildRenownCountRow
+		if b.closed {
+			if f != nil {
+				f(t, i, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		row := b.br.QueryRow()
+		err := row.Scan(&i.KillCount, &i.HasEvidence)
+		if f != nil {
+			f(t, i, err)
+		}
+	}
+}
+
+func (b *ComputeLeaderboardGuildRenownCountBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const computeLeaderboardPlayerBossBenchmark = `-- name: ComputeLeaderboardPlayerBossBenchmark :batchone
+
+WITH calculated AS (
+    SELECT metric_value AS best_metric
+    FROM leaderboard_player_observations
+    WHERE tenant_id = $1::uuid
+      AND instance_name = $2::text
+      AND difficulty_name = $3::text
+      AND max_players = $4::smallint
+      AND encounter_name = $5::text
+      AND player_class = $6::text
+      AND player_spec = $7::text
+      AND player_sub_spec = $8::text
+      AND metric = $9::text
+    ORDER BY metric_value DESC
+    LIMIT 1
+)
+SELECT COALESCE(c.best_metric, 0)::double precision AS best_metric,
+       (c.best_metric IS NOT NULL)::boolean AS has_evidence
+FROM (SELECT 1) singleton LEFT JOIN calculated c ON true
+`
+
+type ComputeLeaderboardPlayerBossBenchmarkBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type ComputeLeaderboardPlayerBossBenchmarkParams struct {
+	TenantID       uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName   string    `db:"instance_name" json:"instance_name"`
+	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16     `db:"max_players" json:"max_players"`
+	EncounterName  string    `db:"encounter_name" json:"encounter_name"`
+	PlayerClass    string    `db:"player_class" json:"player_class"`
+	PlayerSpec     string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec  string    `db:"player_sub_spec" json:"player_sub_spec"`
+	Metric         string    `db:"metric" json:"metric"`
+}
+
+type ComputeLeaderboardPlayerBossBenchmarkRow struct {
+	BestMetric  float64 `db:"best_metric" json:"best_metric"`
+	HasEvidence bool    `db:"has_evidence" json:"has_evidence"`
+}
+
+// Single maintained calculation source. Compute returns one typed record even
+// for empty evidence. Workers buffer at most 100 records, then publish in a
+// separate SHORT transaction. Never hold dirty-row locks while sorting history.
+// Compatibility singleton wrappers explicitly opt into unfenced manual writes;
+// worker publication must use ownership fencing and never sets manual=true.
+func (q *sqlQuerier) ComputeLeaderboardPlayerBossBenchmark(ctx context.Context, arg []ComputeLeaderboardPlayerBossBenchmarkParams) *ComputeLeaderboardPlayerBossBenchmarkBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.EncounterName,
+			a.PlayerClass,
+			a.PlayerSpec,
+			a.PlayerSubSpec,
+			a.Metric,
+		}
+		batch.Queue(computeLeaderboardPlayerBossBenchmark, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &ComputeLeaderboardPlayerBossBenchmarkBatchResults{br, len(arg), false}
+}
+
+func (b *ComputeLeaderboardPlayerBossBenchmarkBatchResults) QueryRow(f func(int, ComputeLeaderboardPlayerBossBenchmarkRow, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		var i ComputeLeaderboardPlayerBossBenchmarkRow
+		if b.closed {
+			if f != nil {
+				f(t, i, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		row := b.br.QueryRow()
+		err := row.Scan(&i.BestMetric, &i.HasEvidence)
+		if f != nil {
+			f(t, i, err)
+		}
+	}
+}
+
+func (b *ComputeLeaderboardPlayerBossBenchmarkBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const computeLeaderboardPlayerBossSubject = `-- name: ComputeLeaderboardPlayerBossSubject :batchone
+WITH scoped AS MATERIALIZED (
+    SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, run_id, source_instance_id, realm_id, player_guid, source_encounter_id, source_ranking_id, player_class, player_spec, player_sub_spec, metric, metric_value, projection_version, observed_at FROM leaderboard_player_observations WHERE tenant_id = $1::uuid
+      AND instance_name = $2::text
+      AND difficulty_name = $3::text
+      AND max_players = $4::smallint
+      AND encounter_name = $5::text
+      AND player_class = $6::text
+      AND player_spec = $7::text
+      AND player_sub_spec = $8::text
+      AND metric = $9::text
+      AND realm_id = $10::uuid
+      AND player_guid = $11::text
+), ranked AS (
+    SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, run_id, source_instance_id, realm_id, player_guid, source_encounter_id, source_ranking_id, player_class, player_spec, player_sub_spec, metric, metric_value, projection_version, observed_at, row_number() OVER (ORDER BY metric_value ASC, run_id) AS position,
+           count(*) OVER () AS observations
+    FROM scoped
+), statistics AS (
+    SELECT count(*)::bigint AS observation_count,
+           max(metric_value) AS raw_peak,
+           COALESCE(avg(metric_value) FILTER (WHERE position > observations * 2 / 5 AND position < observations), 0)::double precision AS raw_form,
+           COALESCE(avg(metric_value) FILTER (WHERE position > observations / 5 AND position <= observations * 2 / 5), 0)::double precision AS raw_floor
+    FROM ranked HAVING count(*) > 0
+), peak AS (
+    SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, run_id, source_instance_id, realm_id, player_guid, source_encounter_id, source_ranking_id, player_class, player_spec, player_sub_spec, metric, metric_value, projection_version, observed_at FROM scoped ORDER BY metric_value DESC, source_encounter_id ASC, run_id ASC LIMIT 1
+), provenance AS (
+    -- Do not substitute another observation when the actual peak source is gone.
+    -- Source joins are identity-qualified, not just a coincidental encounter UUID.
+    SELECT e.id, floor(extract(epoch FROM (e.end_time - e.start_time)) * 1000)::bigint AS duration_ms
+    FROM peak p
+    JOIN log_instance_encounters e ON e.id = p.source_encounter_id
+      AND e.instance_id = p.source_instance_id AND e.name = p.encounter_name
+    JOIN log_instances i ON i.id = e.instance_id AND i.realm_id = p.realm_id
+      AND i.name = p.instance_name AND i.difficulty_name = p.difficulty_name AND i.max_players = p.max_players
+    JOIN wow_server_realms r ON r.id = i.realm_id
+    JOIN wow_servers s ON s.id = r.server_id AND s.tenant_id = p.tenant_id
+    WHERE e.end_time > e.start_time
+      AND floor(extract(epoch FROM (e.end_time - e.start_time)) * 1000) > 0
+), calculated AS (
+    SELECT statistics.observation_count, statistics.raw_peak, statistics.raw_form, statistics.raw_floor, provenance.id AS peak_encounter_id, provenance.duration_ms AS peak_duration_ms
+    FROM statistics LEFT JOIN provenance ON true
+)
+SELECT COALESCE(c.observation_count, 0)::bigint AS observation_count, COALESCE(c.raw_peak, 0)::double precision AS raw_peak, COALESCE(c.raw_form, 0)::double precision AS raw_form, COALESCE(c.raw_floor, 0)::double precision AS raw_floor, c.peak_encounter_id, c.peak_duration_ms,
+       (c.observation_count IS NOT NULL)::boolean AS has_evidence
+FROM (SELECT 1) singleton LEFT JOIN calculated c ON true
+`
+
+type ComputeLeaderboardPlayerBossSubjectBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type ComputeLeaderboardPlayerBossSubjectParams struct {
+	TenantID       uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName   string    `db:"instance_name" json:"instance_name"`
+	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16     `db:"max_players" json:"max_players"`
+	EncounterName  string    `db:"encounter_name" json:"encounter_name"`
+	PlayerClass    string    `db:"player_class" json:"player_class"`
+	PlayerSpec     string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec  string    `db:"player_sub_spec" json:"player_sub_spec"`
+	Metric         string    `db:"metric" json:"metric"`
+	RealmID        uuid.UUID `db:"realm_id" json:"realm_id"`
+	PlayerGuid     string    `db:"player_guid" json:"player_guid"`
+}
+
+type ComputeLeaderboardPlayerBossSubjectRow struct {
+	ObservationCount int64         `db:"observation_count" json:"observation_count"`
+	RawPeak          float64       `db:"raw_peak" json:"raw_peak"`
+	RawForm          float64       `db:"raw_form" json:"raw_form"`
+	RawFloor         float64       `db:"raw_floor" json:"raw_floor"`
+	PeakEncounterID  uuid.NullUUID `db:"peak_encounter_id" json:"peak_encounter_id"`
+	PeakDurationMs   pgtype.Int8   `db:"peak_duration_ms" json:"peak_duration_ms"`
+	HasEvidence      bool          `db:"has_evidence" json:"has_evidence"`
+}
+
+func (q *sqlQuerier) ComputeLeaderboardPlayerBossSubject(ctx context.Context, arg []ComputeLeaderboardPlayerBossSubjectParams) *ComputeLeaderboardPlayerBossSubjectBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.EncounterName,
+			a.PlayerClass,
+			a.PlayerSpec,
+			a.PlayerSubSpec,
+			a.Metric,
+			a.RealmID,
+			a.PlayerGuid,
+		}
+		batch.Queue(computeLeaderboardPlayerBossSubject, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &ComputeLeaderboardPlayerBossSubjectBatchResults{br, len(arg), false}
+}
+
+func (b *ComputeLeaderboardPlayerBossSubjectBatchResults) QueryRow(f func(int, ComputeLeaderboardPlayerBossSubjectRow, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		var i ComputeLeaderboardPlayerBossSubjectRow
+		if b.closed {
+			if f != nil {
+				f(t, i, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		row := b.br.QueryRow()
+		err := row.Scan(
+			&i.ObservationCount,
+			&i.RawPeak,
+			&i.RawForm,
+			&i.RawFloor,
+			&i.PeakEncounterID,
+			&i.PeakDurationMs,
+			&i.HasEvidence,
+		)
+		if f != nil {
+			f(t, i, err)
+		}
+	}
+}
+
+func (b *ComputeLeaderboardPlayerBossSubjectBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const computeLeaderboardPlayerRenownCount = `-- name: ComputeLeaderboardPlayerRenownCount :batchone
+WITH calculated AS (
+    SELECT count(*)::bigint AS kill_count FROM leaderboard_player_renown_facts
+    WHERE tenant_id = $1::uuid
+      AND instance_name = $2::text
+      AND difficulty_name = $3::text
+      AND max_players = $4::smallint
+      AND encounter_name = $5::text
+      AND realm_id = $6::uuid
+      AND player_guid = $7::text
+    HAVING count(*) > 0
+)
+SELECT COALESCE(c.kill_count, 0)::bigint AS kill_count,
+       (c.kill_count IS NOT NULL)::boolean AS has_evidence
+FROM (SELECT 1) singleton LEFT JOIN calculated c ON true
+`
+
+type ComputeLeaderboardPlayerRenownCountBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type ComputeLeaderboardPlayerRenownCountParams struct {
+	TenantID       uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName   string    `db:"instance_name" json:"instance_name"`
+	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16     `db:"max_players" json:"max_players"`
+	EncounterName  string    `db:"encounter_name" json:"encounter_name"`
+	RealmID        uuid.UUID `db:"realm_id" json:"realm_id"`
+	PlayerGuid     string    `db:"player_guid" json:"player_guid"`
+}
+
+type ComputeLeaderboardPlayerRenownCountRow struct {
+	KillCount   int64 `db:"kill_count" json:"kill_count"`
+	HasEvidence bool  `db:"has_evidence" json:"has_evidence"`
+}
+
+func (q *sqlQuerier) ComputeLeaderboardPlayerRenownCount(ctx context.Context, arg []ComputeLeaderboardPlayerRenownCountParams) *ComputeLeaderboardPlayerRenownCountBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.EncounterName,
+			a.RealmID,
+			a.PlayerGuid,
+		}
+		batch.Queue(computeLeaderboardPlayerRenownCount, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &ComputeLeaderboardPlayerRenownCountBatchResults{br, len(arg), false}
+}
+
+func (b *ComputeLeaderboardPlayerRenownCountBatchResults) QueryRow(f func(int, ComputeLeaderboardPlayerRenownCountRow, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		var i ComputeLeaderboardPlayerRenownCountRow
+		if b.closed {
+			if f != nil {
+				f(t, i, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		row := b.br.QueryRow()
+		err := row.Scan(&i.KillCount, &i.HasEvidence)
+		if f != nil {
+			f(t, i, err)
+		}
+	}
+}
+
+func (b *ComputeLeaderboardPlayerRenownCountBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
 const copyLegacySpellEffects = `-- name: CopyLegacySpellEffects :batchexec
 INSERT INTO dbc_spell_effects (
   dataset_id, spell_id, difficulty_id, effect_index, source_id,
@@ -726,6 +1443,1809 @@ func (b *InsertLogInstanceEventsBatchResults) Exec(f func(int, error)) {
 }
 
 func (b *InsertLogInstanceEventsBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const publishLeaderboardGuildBossBenchmark = `-- name: PublishLeaderboardGuildBossBenchmark :batchone
+WITH locked AS MATERIALIZED (
+ SELECT d.tenant_id, d.instance_name, d.difficulty_name, d.max_players, d.encounter_name, d.revision, d.dirtied_at, d.process_after, d.claim_token, d.claimed_revision, d.locked_until, d.retry_after, d.attempts FROM leaderboard_dirty_guild_boss_benchmarks d
+ WHERE d.tenant_id = $1::uuid AND d.instance_name = $2::text AND d.difficulty_name = $3::text AND d.max_players = $4::smallint AND d.encounter_name = $5::text
+   AND d.claim_token = $6::uuid AND d.claimed_revision = $7::bigint
+   AND d.locked_until > clock_timestamp()
+ FOR UPDATE
+), allowed AS MATERIALIZED (
+ SELECT 1 FROM locked WHERE locked_until > clock_timestamp()
+ UNION ALL SELECT 1 WHERE $8::boolean
+), written AS (
+ INSERT INTO leaderboard_guild_boss_benchmarks (tenant_id, instance_name, difficulty_name, max_players, encounter_name, best_duration_ms, projection_version, algorithm_version, computed_at)
+ SELECT $1::uuid, $2::text, $3::text, $4::smallint, $5::text, $9::bigint, $10::integer, $11::integer, statement_timestamp()
+ WHERE $12::boolean AND EXISTS (SELECT 1 FROM allowed)
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name) DO UPDATE SET
+ best_duration_ms = EXCLUDED.best_duration_ms,
+ projection_version = EXCLUDED.projection_version,
+ algorithm_version = EXCLUDED.algorithm_version,
+ computed_at = EXCLUDED.computed_at
+ RETURNING 1
+), erased AS (
+ DELETE FROM leaderboard_guild_boss_benchmarks WHERE tenant_id = $1::uuid AND instance_name = $2::text AND difficulty_name = $3::text AND max_players = $4::smallint AND encounter_name = $5::text
+ AND NOT $12::boolean AND EXISTS (SELECT 1 FROM allowed)
+ RETURNING 1
+), acknowledged AS (
+ DELETE FROM leaderboard_dirty_guild_boss_benchmarks d USING locked l
+ WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND l.revision = l.claimed_revision
+   AND EXISTS (SELECT 1 FROM allowed)
+ RETURNING 1
+), released AS (
+UPDATE leaderboard_dirty_guild_boss_benchmarks d
+SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
+    attempts = 0, retry_after = '-infinity'
+FROM locked l
+WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND l.revision <> l.claimed_revision
+  AND EXISTS (SELECT 1 FROM allowed) RETURNING 1
+)
+SELECT EXISTS(SELECT 1 FROM allowed)::boolean AS published
+`
+
+type PublishLeaderboardGuildBossBenchmarkBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type PublishLeaderboardGuildBossBenchmarkParams struct {
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	EncounterName     string    `db:"encounter_name" json:"encounter_name"`
+	ClaimToken        uuid.UUID `db:"claim_token" json:"claim_token"`
+	ClaimedRevision   int64     `db:"claimed_revision" json:"claimed_revision"`
+	UnfencedManual    bool      `db:"unfenced_manual" json:"unfenced_manual"`
+	BestDurationMs    int64     `db:"best_duration_ms" json:"best_duration_ms"`
+	ProjectionVersion int32     `db:"projection_version" json:"projection_version"`
+	AlgorithmVersion  int32     `db:"algorithm_version" json:"algorithm_version"`
+	HasEvidence       bool      `db:"has_evidence" json:"has_evidence"`
+}
+
+func (q *sqlQuerier) PublishLeaderboardGuildBossBenchmark(ctx context.Context, arg []PublishLeaderboardGuildBossBenchmarkParams) *PublishLeaderboardGuildBossBenchmarkBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.EncounterName,
+			a.ClaimToken,
+			a.ClaimedRevision,
+			a.UnfencedManual,
+			a.BestDurationMs,
+			a.ProjectionVersion,
+			a.AlgorithmVersion,
+			a.HasEvidence,
+		}
+		batch.Queue(publishLeaderboardGuildBossBenchmark, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &PublishLeaderboardGuildBossBenchmarkBatchResults{br, len(arg), false}
+}
+
+func (b *PublishLeaderboardGuildBossBenchmarkBatchResults) QueryRow(f func(int, bool, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		var published bool
+		if b.closed {
+			if f != nil {
+				f(t, published, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		row := b.br.QueryRow()
+		err := row.Scan(&published)
+		if f != nil {
+			f(t, published, err)
+		}
+	}
+}
+
+func (b *PublishLeaderboardGuildBossBenchmarkBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const publishLeaderboardGuildBossSubject = `-- name: PublishLeaderboardGuildBossSubject :batchone
+WITH locked AS MATERIALIZED (
+ SELECT d.tenant_id, d.instance_name, d.difficulty_name, d.max_players, d.encounter_name, d.realm_id, d.guild_id, d.revision, d.dirtied_at, d.process_after, d.claim_token, d.claimed_revision, d.locked_until, d.retry_after, d.attempts FROM leaderboard_dirty_guild_boss_subjects d
+ WHERE d.tenant_id = $1::uuid AND d.instance_name = $2::text AND d.difficulty_name = $3::text AND d.max_players = $4::smallint AND d.encounter_name = $5::text AND d.realm_id = $6::uuid AND d.guild_id = $7::uuid
+   AND d.claim_token = $8::uuid AND d.claimed_revision = $9::bigint
+   AND d.locked_until > clock_timestamp()
+ FOR UPDATE
+), allowed AS MATERIALIZED (
+ SELECT 1 FROM locked WHERE locked_until > clock_timestamp()
+ UNION ALL SELECT 1 WHERE $10::boolean
+), written AS (
+ INSERT INTO leaderboard_guild_boss_subjects (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id, observation_count, fastest_duration_ms, form_mean_inverse_ms, floor_mean_inverse_ms, projection_version, algorithm_version, computed_at)
+ SELECT $1::uuid, $2::text, $3::text, $4::smallint, $5::text, $6::uuid, $7::uuid, $11::bigint, $12::bigint, $13::double precision, $14::double precision, $15::integer, $16::integer, statement_timestamp()
+ WHERE $17::boolean AND EXISTS (SELECT 1 FROM allowed)
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id) DO UPDATE SET
+ observation_count = EXCLUDED.observation_count,
+ fastest_duration_ms = EXCLUDED.fastest_duration_ms,
+ form_mean_inverse_ms = EXCLUDED.form_mean_inverse_ms,
+ floor_mean_inverse_ms = EXCLUDED.floor_mean_inverse_ms,
+ projection_version = EXCLUDED.projection_version,
+ algorithm_version = EXCLUDED.algorithm_version,
+ computed_at = EXCLUDED.computed_at
+ RETURNING 1
+), erased AS (
+ DELETE FROM leaderboard_guild_boss_subjects WHERE tenant_id = $1::uuid AND instance_name = $2::text AND difficulty_name = $3::text AND max_players = $4::smallint AND encounter_name = $5::text AND realm_id = $6::uuid AND guild_id = $7::uuid
+ AND NOT $17::boolean AND EXISTS (SELECT 1 FROM allowed)
+ RETURNING 1
+), acknowledged AS (
+ DELETE FROM leaderboard_dirty_guild_boss_subjects d USING locked l
+ WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.realm_id = l.realm_id AND d.guild_id = l.guild_id AND l.revision = l.claimed_revision
+   AND EXISTS (SELECT 1 FROM allowed)
+ RETURNING 1
+), released AS (
+UPDATE leaderboard_dirty_guild_boss_subjects d
+SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
+    attempts = 0, retry_after = '-infinity'
+FROM locked l
+WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.realm_id = l.realm_id AND d.guild_id = l.guild_id AND l.revision <> l.claimed_revision
+  AND EXISTS (SELECT 1 FROM allowed) RETURNING 1
+)
+SELECT EXISTS(SELECT 1 FROM allowed)::boolean AS published
+`
+
+type PublishLeaderboardGuildBossSubjectBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type PublishLeaderboardGuildBossSubjectParams struct {
+	TenantID           uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName       string    `db:"instance_name" json:"instance_name"`
+	DifficultyName     string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers         int16     `db:"max_players" json:"max_players"`
+	EncounterName      string    `db:"encounter_name" json:"encounter_name"`
+	RealmID            uuid.UUID `db:"realm_id" json:"realm_id"`
+	GuildID            uuid.UUID `db:"guild_id" json:"guild_id"`
+	ClaimToken         uuid.UUID `db:"claim_token" json:"claim_token"`
+	ClaimedRevision    int64     `db:"claimed_revision" json:"claimed_revision"`
+	UnfencedManual     bool      `db:"unfenced_manual" json:"unfenced_manual"`
+	ObservationCount   int64     `db:"observation_count" json:"observation_count"`
+	FastestDurationMs  int64     `db:"fastest_duration_ms" json:"fastest_duration_ms"`
+	FormMeanInverseMs  float64   `db:"form_mean_inverse_ms" json:"form_mean_inverse_ms"`
+	FloorMeanInverseMs float64   `db:"floor_mean_inverse_ms" json:"floor_mean_inverse_ms"`
+	ProjectionVersion  int32     `db:"projection_version" json:"projection_version"`
+	AlgorithmVersion   int32     `db:"algorithm_version" json:"algorithm_version"`
+	HasEvidence        bool      `db:"has_evidence" json:"has_evidence"`
+}
+
+func (q *sqlQuerier) PublishLeaderboardGuildBossSubject(ctx context.Context, arg []PublishLeaderboardGuildBossSubjectParams) *PublishLeaderboardGuildBossSubjectBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.EncounterName,
+			a.RealmID,
+			a.GuildID,
+			a.ClaimToken,
+			a.ClaimedRevision,
+			a.UnfencedManual,
+			a.ObservationCount,
+			a.FastestDurationMs,
+			a.FormMeanInverseMs,
+			a.FloorMeanInverseMs,
+			a.ProjectionVersion,
+			a.AlgorithmVersion,
+			a.HasEvidence,
+		}
+		batch.Queue(publishLeaderboardGuildBossSubject, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &PublishLeaderboardGuildBossSubjectBatchResults{br, len(arg), false}
+}
+
+func (b *PublishLeaderboardGuildBossSubjectBatchResults) QueryRow(f func(int, bool, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		var published bool
+		if b.closed {
+			if f != nil {
+				f(t, published, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		row := b.br.QueryRow()
+		err := row.Scan(&published)
+		if f != nil {
+			f(t, published, err)
+		}
+	}
+}
+
+func (b *PublishLeaderboardGuildBossSubjectBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const publishLeaderboardGuildClearBenchmark = `-- name: PublishLeaderboardGuildClearBenchmark :batchone
+WITH locked AS MATERIALIZED (
+ SELECT d.tenant_id, d.instance_name, d.difficulty_name, d.max_players, d.revision, d.dirtied_at, d.process_after, d.claim_token, d.claimed_revision, d.locked_until, d.retry_after, d.attempts FROM leaderboard_dirty_guild_clear_benchmarks d
+ WHERE d.tenant_id = $1::uuid AND d.instance_name = $2::text AND d.difficulty_name = $3::text AND d.max_players = $4::smallint
+   AND d.claim_token = $5::uuid AND d.claimed_revision = $6::bigint
+   AND d.locked_until > clock_timestamp()
+ FOR UPDATE
+), allowed AS MATERIALIZED (
+ SELECT 1 FROM locked WHERE locked_until > clock_timestamp()
+ UNION ALL SELECT 1 WHERE $7::boolean
+), written AS (
+ INSERT INTO leaderboard_guild_clear_benchmarks (tenant_id, instance_name, difficulty_name, max_players, best_duration_ms, projection_version, algorithm_version, computed_at)
+ SELECT $1::uuid, $2::text, $3::text, $4::smallint, $8::bigint, $9::integer, $10::integer, statement_timestamp()
+ WHERE $11::boolean AND EXISTS (SELECT 1 FROM allowed)
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players) DO UPDATE SET
+ best_duration_ms = EXCLUDED.best_duration_ms,
+ projection_version = EXCLUDED.projection_version,
+ algorithm_version = EXCLUDED.algorithm_version,
+ computed_at = EXCLUDED.computed_at
+ RETURNING 1
+), erased AS (
+ DELETE FROM leaderboard_guild_clear_benchmarks WHERE tenant_id = $1::uuid AND instance_name = $2::text AND difficulty_name = $3::text AND max_players = $4::smallint
+ AND NOT $11::boolean AND EXISTS (SELECT 1 FROM allowed)
+ RETURNING 1
+), acknowledged AS (
+ DELETE FROM leaderboard_dirty_guild_clear_benchmarks d USING locked l
+ WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND l.revision = l.claimed_revision
+   AND EXISTS (SELECT 1 FROM allowed)
+ RETURNING 1
+), released AS (
+UPDATE leaderboard_dirty_guild_clear_benchmarks d
+SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
+    attempts = 0, retry_after = '-infinity'
+FROM locked l
+WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND l.revision <> l.claimed_revision
+  AND EXISTS (SELECT 1 FROM allowed) RETURNING 1
+)
+SELECT EXISTS(SELECT 1 FROM allowed)::boolean AS published
+`
+
+type PublishLeaderboardGuildClearBenchmarkBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type PublishLeaderboardGuildClearBenchmarkParams struct {
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	ClaimToken        uuid.UUID `db:"claim_token" json:"claim_token"`
+	ClaimedRevision   int64     `db:"claimed_revision" json:"claimed_revision"`
+	UnfencedManual    bool      `db:"unfenced_manual" json:"unfenced_manual"`
+	BestDurationMs    int64     `db:"best_duration_ms" json:"best_duration_ms"`
+	ProjectionVersion int32     `db:"projection_version" json:"projection_version"`
+	AlgorithmVersion  int32     `db:"algorithm_version" json:"algorithm_version"`
+	HasEvidence       bool      `db:"has_evidence" json:"has_evidence"`
+}
+
+func (q *sqlQuerier) PublishLeaderboardGuildClearBenchmark(ctx context.Context, arg []PublishLeaderboardGuildClearBenchmarkParams) *PublishLeaderboardGuildClearBenchmarkBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.ClaimToken,
+			a.ClaimedRevision,
+			a.UnfencedManual,
+			a.BestDurationMs,
+			a.ProjectionVersion,
+			a.AlgorithmVersion,
+			a.HasEvidence,
+		}
+		batch.Queue(publishLeaderboardGuildClearBenchmark, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &PublishLeaderboardGuildClearBenchmarkBatchResults{br, len(arg), false}
+}
+
+func (b *PublishLeaderboardGuildClearBenchmarkBatchResults) QueryRow(f func(int, bool, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		var published bool
+		if b.closed {
+			if f != nil {
+				f(t, published, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		row := b.br.QueryRow()
+		err := row.Scan(&published)
+		if f != nil {
+			f(t, published, err)
+		}
+	}
+}
+
+func (b *PublishLeaderboardGuildClearBenchmarkBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const publishLeaderboardGuildClearSubject = `-- name: PublishLeaderboardGuildClearSubject :batchone
+WITH locked AS MATERIALIZED (
+ SELECT d.tenant_id, d.instance_name, d.difficulty_name, d.max_players, d.realm_id, d.guild_id, d.revision, d.dirtied_at, d.process_after, d.claim_token, d.claimed_revision, d.locked_until, d.retry_after, d.attempts FROM leaderboard_dirty_guild_clear_subjects d
+ WHERE d.tenant_id = $1::uuid AND d.instance_name = $2::text AND d.difficulty_name = $3::text AND d.max_players = $4::smallint AND d.realm_id = $5::uuid AND d.guild_id = $6::uuid
+   AND d.claim_token = $7::uuid AND d.claimed_revision = $8::bigint
+   AND d.locked_until > clock_timestamp()
+ FOR UPDATE
+), allowed AS MATERIALIZED (
+ SELECT 1 FROM locked WHERE locked_until > clock_timestamp()
+ UNION ALL SELECT 1 WHERE $9::boolean
+), written AS (
+ INSERT INTO leaderboard_guild_clear_subjects (tenant_id, instance_name, difficulty_name, max_players, realm_id, guild_id, observation_count, fastest_duration_ms, form_mean_inverse_ms, floor_mean_inverse_ms, projection_version, algorithm_version, computed_at)
+ SELECT $1::uuid, $2::text, $3::text, $4::smallint, $5::uuid, $6::uuid, $10::bigint, $11::bigint, $12::double precision, $13::double precision, $14::integer, $15::integer, statement_timestamp()
+ WHERE $16::boolean AND EXISTS (SELECT 1 FROM allowed)
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, realm_id, guild_id) DO UPDATE SET
+ observation_count = EXCLUDED.observation_count,
+ fastest_duration_ms = EXCLUDED.fastest_duration_ms,
+ form_mean_inverse_ms = EXCLUDED.form_mean_inverse_ms,
+ floor_mean_inverse_ms = EXCLUDED.floor_mean_inverse_ms,
+ projection_version = EXCLUDED.projection_version,
+ algorithm_version = EXCLUDED.algorithm_version,
+ computed_at = EXCLUDED.computed_at
+ RETURNING 1
+), erased AS (
+ DELETE FROM leaderboard_guild_clear_subjects WHERE tenant_id = $1::uuid AND instance_name = $2::text AND difficulty_name = $3::text AND max_players = $4::smallint AND realm_id = $5::uuid AND guild_id = $6::uuid
+ AND NOT $16::boolean AND EXISTS (SELECT 1 FROM allowed)
+ RETURNING 1
+), acknowledged AS (
+ DELETE FROM leaderboard_dirty_guild_clear_subjects d USING locked l
+ WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.realm_id = l.realm_id AND d.guild_id = l.guild_id AND l.revision = l.claimed_revision
+   AND EXISTS (SELECT 1 FROM allowed)
+ RETURNING 1
+), released AS (
+UPDATE leaderboard_dirty_guild_clear_subjects d
+SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
+    attempts = 0, retry_after = '-infinity'
+FROM locked l
+WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.realm_id = l.realm_id AND d.guild_id = l.guild_id AND l.revision <> l.claimed_revision
+  AND EXISTS (SELECT 1 FROM allowed) RETURNING 1
+)
+SELECT EXISTS(SELECT 1 FROM allowed)::boolean AS published
+`
+
+type PublishLeaderboardGuildClearSubjectBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type PublishLeaderboardGuildClearSubjectParams struct {
+	TenantID           uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName       string    `db:"instance_name" json:"instance_name"`
+	DifficultyName     string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers         int16     `db:"max_players" json:"max_players"`
+	RealmID            uuid.UUID `db:"realm_id" json:"realm_id"`
+	GuildID            uuid.UUID `db:"guild_id" json:"guild_id"`
+	ClaimToken         uuid.UUID `db:"claim_token" json:"claim_token"`
+	ClaimedRevision    int64     `db:"claimed_revision" json:"claimed_revision"`
+	UnfencedManual     bool      `db:"unfenced_manual" json:"unfenced_manual"`
+	ObservationCount   int64     `db:"observation_count" json:"observation_count"`
+	FastestDurationMs  int64     `db:"fastest_duration_ms" json:"fastest_duration_ms"`
+	FormMeanInverseMs  float64   `db:"form_mean_inverse_ms" json:"form_mean_inverse_ms"`
+	FloorMeanInverseMs float64   `db:"floor_mean_inverse_ms" json:"floor_mean_inverse_ms"`
+	ProjectionVersion  int32     `db:"projection_version" json:"projection_version"`
+	AlgorithmVersion   int32     `db:"algorithm_version" json:"algorithm_version"`
+	HasEvidence        bool      `db:"has_evidence" json:"has_evidence"`
+}
+
+func (q *sqlQuerier) PublishLeaderboardGuildClearSubject(ctx context.Context, arg []PublishLeaderboardGuildClearSubjectParams) *PublishLeaderboardGuildClearSubjectBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.RealmID,
+			a.GuildID,
+			a.ClaimToken,
+			a.ClaimedRevision,
+			a.UnfencedManual,
+			a.ObservationCount,
+			a.FastestDurationMs,
+			a.FormMeanInverseMs,
+			a.FloorMeanInverseMs,
+			a.ProjectionVersion,
+			a.AlgorithmVersion,
+			a.HasEvidence,
+		}
+		batch.Queue(publishLeaderboardGuildClearSubject, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &PublishLeaderboardGuildClearSubjectBatchResults{br, len(arg), false}
+}
+
+func (b *PublishLeaderboardGuildClearSubjectBatchResults) QueryRow(f func(int, bool, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		var published bool
+		if b.closed {
+			if f != nil {
+				f(t, published, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		row := b.br.QueryRow()
+		err := row.Scan(&published)
+		if f != nil {
+			f(t, published, err)
+		}
+	}
+}
+
+func (b *PublishLeaderboardGuildClearSubjectBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const publishLeaderboardGuildRenownCount = `-- name: PublishLeaderboardGuildRenownCount :batchone
+WITH locked AS MATERIALIZED (
+ SELECT d.tenant_id, d.instance_name, d.difficulty_name, d.max_players, d.encounter_name, d.realm_id, d.guild_id, d.revision, d.dirtied_at, d.process_after, d.claim_token, d.claimed_revision, d.locked_until, d.retry_after, d.attempts FROM leaderboard_dirty_guild_renown d
+ WHERE d.tenant_id = $1::uuid AND d.instance_name = $2::text AND d.difficulty_name = $3::text AND d.max_players = $4::smallint AND d.encounter_name = $5::text AND d.realm_id = $6::uuid AND d.guild_id = $7::uuid
+   AND d.claim_token = $8::uuid AND d.claimed_revision = $9::bigint
+   AND d.locked_until > clock_timestamp()
+ FOR UPDATE
+), allowed AS MATERIALIZED (
+ SELECT 1 FROM locked WHERE locked_until > clock_timestamp()
+ UNION ALL SELECT 1 WHERE $10::boolean
+), written AS (
+ INSERT INTO leaderboard_guild_renown_counts (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id, kill_count, projection_version, algorithm_version, computed_at)
+ SELECT $1::uuid, $2::text, $3::text, $4::smallint, $5::text, $6::uuid, $7::uuid, $11::bigint, $12::integer, $13::integer, statement_timestamp()
+ WHERE $14::boolean AND EXISTS (SELECT 1 FROM allowed)
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id) DO UPDATE SET
+ kill_count = EXCLUDED.kill_count,
+ projection_version = EXCLUDED.projection_version,
+ algorithm_version = EXCLUDED.algorithm_version,
+ computed_at = EXCLUDED.computed_at
+ RETURNING 1
+), erased AS (
+ DELETE FROM leaderboard_guild_renown_counts WHERE tenant_id = $1::uuid AND instance_name = $2::text AND difficulty_name = $3::text AND max_players = $4::smallint AND encounter_name = $5::text AND realm_id = $6::uuid AND guild_id = $7::uuid
+ AND NOT $14::boolean AND EXISTS (SELECT 1 FROM allowed)
+ RETURNING 1
+), acknowledged AS (
+ DELETE FROM leaderboard_dirty_guild_renown d USING locked l
+ WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.realm_id = l.realm_id AND d.guild_id = l.guild_id AND l.revision = l.claimed_revision
+   AND EXISTS (SELECT 1 FROM allowed)
+ RETURNING 1
+), released AS (
+UPDATE leaderboard_dirty_guild_renown d
+SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
+    attempts = 0, retry_after = '-infinity'
+FROM locked l
+WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.realm_id = l.realm_id AND d.guild_id = l.guild_id AND l.revision <> l.claimed_revision
+  AND EXISTS (SELECT 1 FROM allowed) RETURNING 1
+)
+SELECT EXISTS(SELECT 1 FROM allowed)::boolean AS published
+`
+
+type PublishLeaderboardGuildRenownCountBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type PublishLeaderboardGuildRenownCountParams struct {
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	EncounterName     string    `db:"encounter_name" json:"encounter_name"`
+	RealmID           uuid.UUID `db:"realm_id" json:"realm_id"`
+	GuildID           uuid.UUID `db:"guild_id" json:"guild_id"`
+	ClaimToken        uuid.UUID `db:"claim_token" json:"claim_token"`
+	ClaimedRevision   int64     `db:"claimed_revision" json:"claimed_revision"`
+	UnfencedManual    bool      `db:"unfenced_manual" json:"unfenced_manual"`
+	KillCount         int64     `db:"kill_count" json:"kill_count"`
+	ProjectionVersion int32     `db:"projection_version" json:"projection_version"`
+	AlgorithmVersion  int32     `db:"algorithm_version" json:"algorithm_version"`
+	HasEvidence       bool      `db:"has_evidence" json:"has_evidence"`
+}
+
+func (q *sqlQuerier) PublishLeaderboardGuildRenownCount(ctx context.Context, arg []PublishLeaderboardGuildRenownCountParams) *PublishLeaderboardGuildRenownCountBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.EncounterName,
+			a.RealmID,
+			a.GuildID,
+			a.ClaimToken,
+			a.ClaimedRevision,
+			a.UnfencedManual,
+			a.KillCount,
+			a.ProjectionVersion,
+			a.AlgorithmVersion,
+			a.HasEvidence,
+		}
+		batch.Queue(publishLeaderboardGuildRenownCount, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &PublishLeaderboardGuildRenownCountBatchResults{br, len(arg), false}
+}
+
+func (b *PublishLeaderboardGuildRenownCountBatchResults) QueryRow(f func(int, bool, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		var published bool
+		if b.closed {
+			if f != nil {
+				f(t, published, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		row := b.br.QueryRow()
+		err := row.Scan(&published)
+		if f != nil {
+			f(t, published, err)
+		}
+	}
+}
+
+func (b *PublishLeaderboardGuildRenownCountBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const publishLeaderboardPlayerBossBenchmark = `-- name: PublishLeaderboardPlayerBossBenchmark :batchone
+WITH locked AS MATERIALIZED (
+ SELECT d.tenant_id, d.instance_name, d.difficulty_name, d.max_players, d.encounter_name, d.player_class, d.player_spec, d.player_sub_spec, d.metric, d.revision, d.dirtied_at, d.process_after, d.claim_token, d.claimed_revision, d.locked_until, d.retry_after, d.attempts FROM leaderboard_dirty_player_boss_benchmarks d
+ WHERE d.tenant_id = $1::uuid AND d.instance_name = $2::text AND d.difficulty_name = $3::text AND d.max_players = $4::smallint AND d.encounter_name = $5::text AND d.player_class = $6::text AND d.player_spec = $7::text AND d.player_sub_spec = $8::text AND d.metric = $9::text
+   AND d.claim_token = $10::uuid AND d.claimed_revision = $11::bigint
+   AND d.locked_until > clock_timestamp()
+ FOR UPDATE
+), allowed AS MATERIALIZED (
+ SELECT 1 FROM locked WHERE locked_until > clock_timestamp()
+ UNION ALL SELECT 1 WHERE $12::boolean
+), written AS (
+ INSERT INTO leaderboard_player_boss_benchmarks (tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, best_metric, projection_version, algorithm_version, computed_at)
+ SELECT $1::uuid, $2::text, $3::text, $4::smallint, $5::text, $6::text, $7::text, $8::text, $9::text, $13::double precision, $14::integer, $15::integer, statement_timestamp()
+ WHERE $16::boolean AND EXISTS (SELECT 1 FROM allowed)
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric) DO UPDATE SET
+ best_metric = EXCLUDED.best_metric,
+ projection_version = EXCLUDED.projection_version,
+ algorithm_version = EXCLUDED.algorithm_version,
+ computed_at = EXCLUDED.computed_at
+ RETURNING 1
+), erased AS (
+ DELETE FROM leaderboard_player_boss_benchmarks WHERE tenant_id = $1::uuid AND instance_name = $2::text AND difficulty_name = $3::text AND max_players = $4::smallint AND encounter_name = $5::text AND player_class = $6::text AND player_spec = $7::text AND player_sub_spec = $8::text AND metric = $9::text
+ AND NOT $16::boolean AND EXISTS (SELECT 1 FROM allowed)
+ RETURNING 1
+), acknowledged AS (
+ DELETE FROM leaderboard_dirty_player_boss_benchmarks d USING locked l
+ WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.player_class = l.player_class AND d.player_spec = l.player_spec AND d.player_sub_spec = l.player_sub_spec AND d.metric = l.metric AND l.revision = l.claimed_revision
+   AND EXISTS (SELECT 1 FROM allowed)
+ RETURNING 1
+), released AS (
+UPDATE leaderboard_dirty_player_boss_benchmarks d
+SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
+    attempts = 0, retry_after = '-infinity'
+FROM locked l
+WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.player_class = l.player_class AND d.player_spec = l.player_spec AND d.player_sub_spec = l.player_sub_spec AND d.metric = l.metric AND l.revision <> l.claimed_revision
+  AND EXISTS (SELECT 1 FROM allowed) RETURNING 1
+)
+SELECT EXISTS(SELECT 1 FROM allowed)::boolean AS published
+`
+
+type PublishLeaderboardPlayerBossBenchmarkBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type PublishLeaderboardPlayerBossBenchmarkParams struct {
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	EncounterName     string    `db:"encounter_name" json:"encounter_name"`
+	PlayerClass       string    `db:"player_class" json:"player_class"`
+	PlayerSpec        string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string    `db:"player_sub_spec" json:"player_sub_spec"`
+	Metric            string    `db:"metric" json:"metric"`
+	ClaimToken        uuid.UUID `db:"claim_token" json:"claim_token"`
+	ClaimedRevision   int64     `db:"claimed_revision" json:"claimed_revision"`
+	UnfencedManual    bool      `db:"unfenced_manual" json:"unfenced_manual"`
+	BestMetric        float64   `db:"best_metric" json:"best_metric"`
+	ProjectionVersion int32     `db:"projection_version" json:"projection_version"`
+	AlgorithmVersion  int32     `db:"algorithm_version" json:"algorithm_version"`
+	HasEvidence       bool      `db:"has_evidence" json:"has_evidence"`
+}
+
+func (q *sqlQuerier) PublishLeaderboardPlayerBossBenchmark(ctx context.Context, arg []PublishLeaderboardPlayerBossBenchmarkParams) *PublishLeaderboardPlayerBossBenchmarkBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.EncounterName,
+			a.PlayerClass,
+			a.PlayerSpec,
+			a.PlayerSubSpec,
+			a.Metric,
+			a.ClaimToken,
+			a.ClaimedRevision,
+			a.UnfencedManual,
+			a.BestMetric,
+			a.ProjectionVersion,
+			a.AlgorithmVersion,
+			a.HasEvidence,
+		}
+		batch.Queue(publishLeaderboardPlayerBossBenchmark, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &PublishLeaderboardPlayerBossBenchmarkBatchResults{br, len(arg), false}
+}
+
+func (b *PublishLeaderboardPlayerBossBenchmarkBatchResults) QueryRow(f func(int, bool, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		var published bool
+		if b.closed {
+			if f != nil {
+				f(t, published, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		row := b.br.QueryRow()
+		err := row.Scan(&published)
+		if f != nil {
+			f(t, published, err)
+		}
+	}
+}
+
+func (b *PublishLeaderboardPlayerBossBenchmarkBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const publishLeaderboardPlayerBossSubject = `-- name: PublishLeaderboardPlayerBossSubject :batchone
+WITH locked AS MATERIALIZED (
+ SELECT d.tenant_id, d.instance_name, d.difficulty_name, d.max_players, d.encounter_name, d.player_class, d.player_spec, d.player_sub_spec, d.metric, d.realm_id, d.player_guid, d.revision, d.dirtied_at, d.process_after, d.claim_token, d.claimed_revision, d.locked_until, d.retry_after, d.attempts FROM leaderboard_dirty_player_boss_subjects d
+ WHERE d.tenant_id = $1::uuid AND d.instance_name = $2::text AND d.difficulty_name = $3::text AND d.max_players = $4::smallint AND d.encounter_name = $5::text AND d.player_class = $6::text AND d.player_spec = $7::text AND d.player_sub_spec = $8::text AND d.metric = $9::text AND d.realm_id = $10::uuid AND d.player_guid = $11::text
+   AND d.claim_token = $12::uuid AND d.claimed_revision = $13::bigint
+   AND d.locked_until > clock_timestamp()
+ FOR UPDATE
+), allowed AS MATERIALIZED (
+ SELECT 1 FROM locked WHERE locked_until > clock_timestamp()
+ UNION ALL SELECT 1 WHERE $14::boolean
+), written AS (
+ INSERT INTO leaderboard_player_boss_subjects (tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid, observation_count, raw_peak, raw_form, raw_floor, peak_encounter_id, peak_duration_ms, projection_version, algorithm_version, computed_at)
+ SELECT $1::uuid, $2::text, $3::text, $4::smallint, $5::text, $6::text, $7::text, $8::text, $9::text, $10::uuid, $11::text, $15::bigint, $16::double precision, $17::double precision, $18::double precision, $19::uuid, $20::bigint, $21::integer, $22::integer, statement_timestamp()
+ WHERE $23::boolean AND EXISTS (SELECT 1 FROM allowed)
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid) DO UPDATE SET
+ observation_count = EXCLUDED.observation_count,
+ raw_peak = EXCLUDED.raw_peak,
+ raw_form = EXCLUDED.raw_form,
+ raw_floor = EXCLUDED.raw_floor,
+ peak_encounter_id = EXCLUDED.peak_encounter_id,
+ peak_duration_ms = EXCLUDED.peak_duration_ms,
+ projection_version = EXCLUDED.projection_version,
+ algorithm_version = EXCLUDED.algorithm_version,
+ computed_at = EXCLUDED.computed_at
+ RETURNING 1
+), erased AS (
+ DELETE FROM leaderboard_player_boss_subjects WHERE tenant_id = $1::uuid AND instance_name = $2::text AND difficulty_name = $3::text AND max_players = $4::smallint AND encounter_name = $5::text AND player_class = $6::text AND player_spec = $7::text AND player_sub_spec = $8::text AND metric = $9::text AND realm_id = $10::uuid AND player_guid = $11::text
+ AND NOT $23::boolean AND EXISTS (SELECT 1 FROM allowed)
+ RETURNING 1
+), acknowledged AS (
+ DELETE FROM leaderboard_dirty_player_boss_subjects d USING locked l
+ WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.player_class = l.player_class AND d.player_spec = l.player_spec AND d.player_sub_spec = l.player_sub_spec AND d.metric = l.metric AND d.realm_id = l.realm_id AND d.player_guid = l.player_guid AND l.revision = l.claimed_revision
+   AND EXISTS (SELECT 1 FROM allowed)
+ RETURNING 1
+), released AS (
+UPDATE leaderboard_dirty_player_boss_subjects d
+SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
+    attempts = 0, retry_after = '-infinity'
+FROM locked l
+WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.player_class = l.player_class AND d.player_spec = l.player_spec AND d.player_sub_spec = l.player_sub_spec AND d.metric = l.metric AND d.realm_id = l.realm_id AND d.player_guid = l.player_guid AND l.revision <> l.claimed_revision
+  AND EXISTS (SELECT 1 FROM allowed) RETURNING 1
+)
+SELECT EXISTS(SELECT 1 FROM allowed)::boolean AS published
+`
+
+type PublishLeaderboardPlayerBossSubjectBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type PublishLeaderboardPlayerBossSubjectParams struct {
+	TenantID          uuid.UUID     `db:"tenant_id" json:"tenant_id"`
+	InstanceName      string        `db:"instance_name" json:"instance_name"`
+	DifficultyName    string        `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16         `db:"max_players" json:"max_players"`
+	EncounterName     string        `db:"encounter_name" json:"encounter_name"`
+	PlayerClass       string        `db:"player_class" json:"player_class"`
+	PlayerSpec        string        `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string        `db:"player_sub_spec" json:"player_sub_spec"`
+	Metric            string        `db:"metric" json:"metric"`
+	RealmID           uuid.UUID     `db:"realm_id" json:"realm_id"`
+	PlayerGuid        string        `db:"player_guid" json:"player_guid"`
+	ClaimToken        uuid.UUID     `db:"claim_token" json:"claim_token"`
+	ClaimedRevision   int64         `db:"claimed_revision" json:"claimed_revision"`
+	UnfencedManual    bool          `db:"unfenced_manual" json:"unfenced_manual"`
+	ObservationCount  int64         `db:"observation_count" json:"observation_count"`
+	RawPeak           float64       `db:"raw_peak" json:"raw_peak"`
+	RawForm           float64       `db:"raw_form" json:"raw_form"`
+	RawFloor          float64       `db:"raw_floor" json:"raw_floor"`
+	PeakEncounterID   uuid.NullUUID `db:"peak_encounter_id" json:"peak_encounter_id"`
+	PeakDurationMs    pgtype.Int8   `db:"peak_duration_ms" json:"peak_duration_ms"`
+	ProjectionVersion int32         `db:"projection_version" json:"projection_version"`
+	AlgorithmVersion  int32         `db:"algorithm_version" json:"algorithm_version"`
+	HasEvidence       bool          `db:"has_evidence" json:"has_evidence"`
+}
+
+func (q *sqlQuerier) PublishLeaderboardPlayerBossSubject(ctx context.Context, arg []PublishLeaderboardPlayerBossSubjectParams) *PublishLeaderboardPlayerBossSubjectBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.EncounterName,
+			a.PlayerClass,
+			a.PlayerSpec,
+			a.PlayerSubSpec,
+			a.Metric,
+			a.RealmID,
+			a.PlayerGuid,
+			a.ClaimToken,
+			a.ClaimedRevision,
+			a.UnfencedManual,
+			a.ObservationCount,
+			a.RawPeak,
+			a.RawForm,
+			a.RawFloor,
+			a.PeakEncounterID,
+			a.PeakDurationMs,
+			a.ProjectionVersion,
+			a.AlgorithmVersion,
+			a.HasEvidence,
+		}
+		batch.Queue(publishLeaderboardPlayerBossSubject, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &PublishLeaderboardPlayerBossSubjectBatchResults{br, len(arg), false}
+}
+
+func (b *PublishLeaderboardPlayerBossSubjectBatchResults) QueryRow(f func(int, bool, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		var published bool
+		if b.closed {
+			if f != nil {
+				f(t, published, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		row := b.br.QueryRow()
+		err := row.Scan(&published)
+		if f != nil {
+			f(t, published, err)
+		}
+	}
+}
+
+func (b *PublishLeaderboardPlayerBossSubjectBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const publishLeaderboardPlayerRenownCount = `-- name: PublishLeaderboardPlayerRenownCount :batchone
+WITH locked AS MATERIALIZED (
+ SELECT d.tenant_id, d.instance_name, d.difficulty_name, d.max_players, d.encounter_name, d.realm_id, d.player_guid, d.revision, d.dirtied_at, d.process_after, d.claim_token, d.claimed_revision, d.locked_until, d.retry_after, d.attempts FROM leaderboard_dirty_player_renown d
+ WHERE d.tenant_id = $1::uuid AND d.instance_name = $2::text AND d.difficulty_name = $3::text AND d.max_players = $4::smallint AND d.encounter_name = $5::text AND d.realm_id = $6::uuid AND d.player_guid = $7::text
+   AND d.claim_token = $8::uuid AND d.claimed_revision = $9::bigint
+   AND d.locked_until > clock_timestamp()
+ FOR UPDATE
+), allowed AS MATERIALIZED (
+ SELECT 1 FROM locked WHERE locked_until > clock_timestamp()
+ UNION ALL SELECT 1 WHERE $10::boolean
+), written AS (
+ INSERT INTO leaderboard_player_renown_counts (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, player_guid, kill_count, projection_version, algorithm_version, computed_at)
+ SELECT $1::uuid, $2::text, $3::text, $4::smallint, $5::text, $6::uuid, $7::text, $11::bigint, $12::integer, $13::integer, statement_timestamp()
+ WHERE $14::boolean AND EXISTS (SELECT 1 FROM allowed)
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, player_guid) DO UPDATE SET
+ kill_count = EXCLUDED.kill_count,
+ projection_version = EXCLUDED.projection_version,
+ algorithm_version = EXCLUDED.algorithm_version,
+ computed_at = EXCLUDED.computed_at
+ RETURNING 1
+), erased AS (
+ DELETE FROM leaderboard_player_renown_counts WHERE tenant_id = $1::uuid AND instance_name = $2::text AND difficulty_name = $3::text AND max_players = $4::smallint AND encounter_name = $5::text AND realm_id = $6::uuid AND player_guid = $7::text
+ AND NOT $14::boolean AND EXISTS (SELECT 1 FROM allowed)
+ RETURNING 1
+), acknowledged AS (
+ DELETE FROM leaderboard_dirty_player_renown d USING locked l
+ WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.realm_id = l.realm_id AND d.player_guid = l.player_guid AND l.revision = l.claimed_revision
+   AND EXISTS (SELECT 1 FROM allowed)
+ RETURNING 1
+), released AS (
+UPDATE leaderboard_dirty_player_renown d
+SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
+    attempts = 0, retry_after = '-infinity'
+FROM locked l
+WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.realm_id = l.realm_id AND d.player_guid = l.player_guid AND l.revision <> l.claimed_revision
+  AND EXISTS (SELECT 1 FROM allowed) RETURNING 1
+)
+SELECT EXISTS(SELECT 1 FROM allowed)::boolean AS published
+`
+
+type PublishLeaderboardPlayerRenownCountBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type PublishLeaderboardPlayerRenownCountParams struct {
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	EncounterName     string    `db:"encounter_name" json:"encounter_name"`
+	RealmID           uuid.UUID `db:"realm_id" json:"realm_id"`
+	PlayerGuid        string    `db:"player_guid" json:"player_guid"`
+	ClaimToken        uuid.UUID `db:"claim_token" json:"claim_token"`
+	ClaimedRevision   int64     `db:"claimed_revision" json:"claimed_revision"`
+	UnfencedManual    bool      `db:"unfenced_manual" json:"unfenced_manual"`
+	KillCount         int64     `db:"kill_count" json:"kill_count"`
+	ProjectionVersion int32     `db:"projection_version" json:"projection_version"`
+	AlgorithmVersion  int32     `db:"algorithm_version" json:"algorithm_version"`
+	HasEvidence       bool      `db:"has_evidence" json:"has_evidence"`
+}
+
+func (q *sqlQuerier) PublishLeaderboardPlayerRenownCount(ctx context.Context, arg []PublishLeaderboardPlayerRenownCountParams) *PublishLeaderboardPlayerRenownCountBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.EncounterName,
+			a.RealmID,
+			a.PlayerGuid,
+			a.ClaimToken,
+			a.ClaimedRevision,
+			a.UnfencedManual,
+			a.KillCount,
+			a.ProjectionVersion,
+			a.AlgorithmVersion,
+			a.HasEvidence,
+		}
+		batch.Queue(publishLeaderboardPlayerRenownCount, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &PublishLeaderboardPlayerRenownCountBatchResults{br, len(arg), false}
+}
+
+func (b *PublishLeaderboardPlayerRenownCountBatchResults) QueryRow(f func(int, bool, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		var published bool
+		if b.closed {
+			if f != nil {
+				f(t, published, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		row := b.br.QueryRow()
+		err := row.Scan(&published)
+		if f != nil {
+			f(t, published, err)
+		}
+	}
+}
+
+func (b *PublishLeaderboardPlayerRenownCountBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const replaceLeaderboardGuildBossObservation = `-- name: ReplaceLeaderboardGuildBossObservation :batchexec
+INSERT INTO leaderboard_guild_boss_observations (tenant_id, instance_name, difficulty_name, max_players, encounter_name, run_id, source_instance_id, realm_id, guild_id, source_time_parse_score_id, source_encounter_id, duration_ms, projection_version, observed_at)
+VALUES ($1::uuid, $2::text, $3::text, $4::smallint, $5::text, $6::uuid, $7::uuid, $8::uuid, $9::uuid, $10::uuid, $11::uuid, $12::bigint, 1, clock_timestamp())
+`
+
+type ReplaceLeaderboardGuildBossObservationBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type ReplaceLeaderboardGuildBossObservationParams struct {
+	TenantID               uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName           string    `db:"instance_name" json:"instance_name"`
+	DifficultyName         string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers             int16     `db:"max_players" json:"max_players"`
+	EncounterName          string    `db:"encounter_name" json:"encounter_name"`
+	RunID                  uuid.UUID `db:"run_id" json:"run_id"`
+	SourceInstanceID       uuid.UUID `db:"source_instance_id" json:"source_instance_id"`
+	RealmID                uuid.UUID `db:"realm_id" json:"realm_id"`
+	GuildID                uuid.UUID `db:"guild_id" json:"guild_id"`
+	SourceTimeParseScoreID uuid.UUID `db:"source_time_parse_score_id" json:"source_time_parse_score_id"`
+	SourceEncounterID      uuid.UUID `db:"source_encounter_id" json:"source_encounter_id"`
+	DurationMs             int64     `db:"duration_ms" json:"duration_ms"`
+}
+
+func (q *sqlQuerier) ReplaceLeaderboardGuildBossObservation(ctx context.Context, arg []ReplaceLeaderboardGuildBossObservationParams) *ReplaceLeaderboardGuildBossObservationBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.EncounterName,
+			a.RunID,
+			a.SourceInstanceID,
+			a.RealmID,
+			a.GuildID,
+			a.SourceTimeParseScoreID,
+			a.SourceEncounterID,
+			a.DurationMs,
+		}
+		batch.Queue(replaceLeaderboardGuildBossObservation, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &ReplaceLeaderboardGuildBossObservationBatchResults{br, len(arg), false}
+}
+
+func (b *ReplaceLeaderboardGuildBossObservationBatchResults) Exec(f func(int, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		if b.closed {
+			if f != nil {
+				f(t, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		_, err := b.br.Exec()
+		if f != nil {
+			f(t, err)
+		}
+	}
+}
+
+func (b *ReplaceLeaderboardGuildBossObservationBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const replaceLeaderboardGuildClearObservation = `-- name: ReplaceLeaderboardGuildClearObservation :batchexec
+INSERT INTO leaderboard_guild_clear_observations (tenant_id, instance_name, difficulty_name, max_players, run_id, source_instance_id, realm_id, guild_id, source_time_parse_score_id, duration_ms, projection_version, observed_at)
+VALUES ($1::uuid, $2::text, $3::text, $4::smallint, $5::uuid, $6::uuid, $7::uuid, $8::uuid, $9::uuid, $10::bigint, 1, clock_timestamp())
+`
+
+type ReplaceLeaderboardGuildClearObservationBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type ReplaceLeaderboardGuildClearObservationParams struct {
+	TenantID               uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName           string    `db:"instance_name" json:"instance_name"`
+	DifficultyName         string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers             int16     `db:"max_players" json:"max_players"`
+	RunID                  uuid.UUID `db:"run_id" json:"run_id"`
+	SourceInstanceID       uuid.UUID `db:"source_instance_id" json:"source_instance_id"`
+	RealmID                uuid.UUID `db:"realm_id" json:"realm_id"`
+	GuildID                uuid.UUID `db:"guild_id" json:"guild_id"`
+	SourceTimeParseScoreID uuid.UUID `db:"source_time_parse_score_id" json:"source_time_parse_score_id"`
+	DurationMs             int64     `db:"duration_ms" json:"duration_ms"`
+}
+
+func (q *sqlQuerier) ReplaceLeaderboardGuildClearObservation(ctx context.Context, arg []ReplaceLeaderboardGuildClearObservationParams) *ReplaceLeaderboardGuildClearObservationBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.RunID,
+			a.SourceInstanceID,
+			a.RealmID,
+			a.GuildID,
+			a.SourceTimeParseScoreID,
+			a.DurationMs,
+		}
+		batch.Queue(replaceLeaderboardGuildClearObservation, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &ReplaceLeaderboardGuildClearObservationBatchResults{br, len(arg), false}
+}
+
+func (b *ReplaceLeaderboardGuildClearObservationBatchResults) Exec(f func(int, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		if b.closed {
+			if f != nil {
+				f(t, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		_, err := b.br.Exec()
+		if f != nil {
+			f(t, err)
+		}
+	}
+}
+
+func (b *ReplaceLeaderboardGuildClearObservationBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const replaceLeaderboardGuildRenownFact = `-- name: ReplaceLeaderboardGuildRenownFact :batchexec
+INSERT INTO leaderboard_guild_renown_facts (tenant_id, instance_name, difficulty_name, max_players, encounter_name, run_id, source_instance_id, realm_id, guild_id, source_encounter_id, projection_version, observed_at)
+VALUES ($1::uuid, $2::text, $3::text, $4::smallint, $5::text, $6::uuid, $7::uuid, $8::uuid, $9::uuid, $10::uuid, 1, clock_timestamp())
+`
+
+type ReplaceLeaderboardGuildRenownFactBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type ReplaceLeaderboardGuildRenownFactParams struct {
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	EncounterName     string    `db:"encounter_name" json:"encounter_name"`
+	RunID             uuid.UUID `db:"run_id" json:"run_id"`
+	SourceInstanceID  uuid.UUID `db:"source_instance_id" json:"source_instance_id"`
+	RealmID           uuid.UUID `db:"realm_id" json:"realm_id"`
+	GuildID           uuid.UUID `db:"guild_id" json:"guild_id"`
+	SourceEncounterID uuid.UUID `db:"source_encounter_id" json:"source_encounter_id"`
+}
+
+func (q *sqlQuerier) ReplaceLeaderboardGuildRenownFact(ctx context.Context, arg []ReplaceLeaderboardGuildRenownFactParams) *ReplaceLeaderboardGuildRenownFactBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.EncounterName,
+			a.RunID,
+			a.SourceInstanceID,
+			a.RealmID,
+			a.GuildID,
+			a.SourceEncounterID,
+		}
+		batch.Queue(replaceLeaderboardGuildRenownFact, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &ReplaceLeaderboardGuildRenownFactBatchResults{br, len(arg), false}
+}
+
+func (b *ReplaceLeaderboardGuildRenownFactBatchResults) Exec(f func(int, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		if b.closed {
+			if f != nil {
+				f(t, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		_, err := b.br.Exec()
+		if f != nil {
+			f(t, err)
+		}
+	}
+}
+
+func (b *ReplaceLeaderboardGuildRenownFactBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const replaceLeaderboardPlayerObservation = `-- name: ReplaceLeaderboardPlayerObservation :batchexec
+INSERT INTO leaderboard_player_observations (tenant_id, instance_name, difficulty_name, max_players, encounter_name, run_id, source_instance_id, realm_id, player_guid, source_encounter_id, source_ranking_id, player_class, player_spec, player_sub_spec, metric, metric_value, projection_version, observed_at)
+VALUES ($1::uuid, $2::text, $3::text, $4::smallint, $5::text, $6::uuid, $7::uuid, $8::uuid, $9::text, $10::uuid, $11::uuid, $12::text, $13::text, $14::text, $15::text, $16::double precision, 1, clock_timestamp())
+`
+
+type ReplaceLeaderboardPlayerObservationBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type ReplaceLeaderboardPlayerObservationParams struct {
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	EncounterName     string    `db:"encounter_name" json:"encounter_name"`
+	RunID             uuid.UUID `db:"run_id" json:"run_id"`
+	SourceInstanceID  uuid.UUID `db:"source_instance_id" json:"source_instance_id"`
+	RealmID           uuid.UUID `db:"realm_id" json:"realm_id"`
+	PlayerGuid        string    `db:"player_guid" json:"player_guid"`
+	SourceEncounterID uuid.UUID `db:"source_encounter_id" json:"source_encounter_id"`
+	SourceRankingID   uuid.UUID `db:"source_ranking_id" json:"source_ranking_id"`
+	PlayerClass       string    `db:"player_class" json:"player_class"`
+	PlayerSpec        string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string    `db:"player_sub_spec" json:"player_sub_spec"`
+	Metric            string    `db:"metric" json:"metric"`
+	MetricValue       float64   `db:"metric_value" json:"metric_value"`
+}
+
+func (q *sqlQuerier) ReplaceLeaderboardPlayerObservation(ctx context.Context, arg []ReplaceLeaderboardPlayerObservationParams) *ReplaceLeaderboardPlayerObservationBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.EncounterName,
+			a.RunID,
+			a.SourceInstanceID,
+			a.RealmID,
+			a.PlayerGuid,
+			a.SourceEncounterID,
+			a.SourceRankingID,
+			a.PlayerClass,
+			a.PlayerSpec,
+			a.PlayerSubSpec,
+			a.Metric,
+			a.MetricValue,
+		}
+		batch.Queue(replaceLeaderboardPlayerObservation, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &ReplaceLeaderboardPlayerObservationBatchResults{br, len(arg), false}
+}
+
+func (b *ReplaceLeaderboardPlayerObservationBatchResults) Exec(f func(int, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		if b.closed {
+			if f != nil {
+				f(t, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		_, err := b.br.Exec()
+		if f != nil {
+			f(t, err)
+		}
+	}
+}
+
+func (b *ReplaceLeaderboardPlayerObservationBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const replaceLeaderboardPlayerRenownFact = `-- name: ReplaceLeaderboardPlayerRenownFact :batchexec
+INSERT INTO leaderboard_player_renown_facts (tenant_id, instance_name, difficulty_name, max_players, encounter_name, run_id, source_instance_id, realm_id, player_guid, source_encounter_id, projection_version, observed_at)
+VALUES ($1::uuid, $2::text, $3::text, $4::smallint, $5::text, $6::uuid, $7::uuid, $8::uuid, $9::text, $10::uuid, 1, clock_timestamp())
+`
+
+type ReplaceLeaderboardPlayerRenownFactBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type ReplaceLeaderboardPlayerRenownFactParams struct {
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	EncounterName     string    `db:"encounter_name" json:"encounter_name"`
+	RunID             uuid.UUID `db:"run_id" json:"run_id"`
+	SourceInstanceID  uuid.UUID `db:"source_instance_id" json:"source_instance_id"`
+	RealmID           uuid.UUID `db:"realm_id" json:"realm_id"`
+	PlayerGuid        string    `db:"player_guid" json:"player_guid"`
+	SourceEncounterID uuid.UUID `db:"source_encounter_id" json:"source_encounter_id"`
+}
+
+func (q *sqlQuerier) ReplaceLeaderboardPlayerRenownFact(ctx context.Context, arg []ReplaceLeaderboardPlayerRenownFactParams) *ReplaceLeaderboardPlayerRenownFactBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.EncounterName,
+			a.RunID,
+			a.SourceInstanceID,
+			a.RealmID,
+			a.PlayerGuid,
+			a.SourceEncounterID,
+		}
+		batch.Queue(replaceLeaderboardPlayerRenownFact, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &ReplaceLeaderboardPlayerRenownFactBatchResults{br, len(arg), false}
+}
+
+func (b *ReplaceLeaderboardPlayerRenownFactBatchResults) Exec(f func(int, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		if b.closed {
+			if f != nil {
+				f(t, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		_, err := b.br.Exec()
+		if f != nil {
+			f(t, err)
+		}
+	}
+}
+
+func (b *ReplaceLeaderboardPlayerRenownFactBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const retryLeaderboardGuildBossBenchmark = `-- name: RetryLeaderboardGuildBossBenchmark :batchexec
+UPDATE leaderboard_dirty_guild_boss_benchmarks
+SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
+    attempts = LEAST(attempts + 1, 30),
+    retry_after = clock_timestamp() + make_interval(secs => LEAST(300, 5 * power(2, LEAST(attempts, 6)))::double precision)
+WHERE tenant_id = $1::uuid AND instance_name = $2::text AND difficulty_name = $3::text AND max_players = $4::smallint AND encounter_name = $5::text AND claim_token = $6::uuid AND claimed_revision = $7::bigint
+`
+
+type RetryLeaderboardGuildBossBenchmarkBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type RetryLeaderboardGuildBossBenchmarkParams struct {
+	TenantID        uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName    string    `db:"instance_name" json:"instance_name"`
+	DifficultyName  string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers      int16     `db:"max_players" json:"max_players"`
+	EncounterName   string    `db:"encounter_name" json:"encounter_name"`
+	ClaimToken      uuid.UUID `db:"claim_token" json:"claim_token"`
+	ClaimedRevision int64     `db:"claimed_revision" json:"claimed_revision"`
+}
+
+func (q *sqlQuerier) RetryLeaderboardGuildBossBenchmark(ctx context.Context, arg []RetryLeaderboardGuildBossBenchmarkParams) *RetryLeaderboardGuildBossBenchmarkBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.EncounterName,
+			a.ClaimToken,
+			a.ClaimedRevision,
+		}
+		batch.Queue(retryLeaderboardGuildBossBenchmark, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &RetryLeaderboardGuildBossBenchmarkBatchResults{br, len(arg), false}
+}
+
+func (b *RetryLeaderboardGuildBossBenchmarkBatchResults) Exec(f func(int, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		if b.closed {
+			if f != nil {
+				f(t, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		_, err := b.br.Exec()
+		if f != nil {
+			f(t, err)
+		}
+	}
+}
+
+func (b *RetryLeaderboardGuildBossBenchmarkBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const retryLeaderboardGuildBossSubject = `-- name: RetryLeaderboardGuildBossSubject :batchexec
+UPDATE leaderboard_dirty_guild_boss_subjects
+SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
+    attempts = LEAST(attempts + 1, 30),
+    retry_after = clock_timestamp() + make_interval(secs => LEAST(300, 5 * power(2, LEAST(attempts, 6)))::double precision)
+WHERE tenant_id = $1::uuid AND instance_name = $2::text AND difficulty_name = $3::text AND max_players = $4::smallint AND encounter_name = $5::text AND realm_id = $6::uuid AND guild_id = $7::uuid AND claim_token = $8::uuid AND claimed_revision = $9::bigint
+`
+
+type RetryLeaderboardGuildBossSubjectBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type RetryLeaderboardGuildBossSubjectParams struct {
+	TenantID        uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName    string    `db:"instance_name" json:"instance_name"`
+	DifficultyName  string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers      int16     `db:"max_players" json:"max_players"`
+	EncounterName   string    `db:"encounter_name" json:"encounter_name"`
+	RealmID         uuid.UUID `db:"realm_id" json:"realm_id"`
+	GuildID         uuid.UUID `db:"guild_id" json:"guild_id"`
+	ClaimToken      uuid.UUID `db:"claim_token" json:"claim_token"`
+	ClaimedRevision int64     `db:"claimed_revision" json:"claimed_revision"`
+}
+
+func (q *sqlQuerier) RetryLeaderboardGuildBossSubject(ctx context.Context, arg []RetryLeaderboardGuildBossSubjectParams) *RetryLeaderboardGuildBossSubjectBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.EncounterName,
+			a.RealmID,
+			a.GuildID,
+			a.ClaimToken,
+			a.ClaimedRevision,
+		}
+		batch.Queue(retryLeaderboardGuildBossSubject, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &RetryLeaderboardGuildBossSubjectBatchResults{br, len(arg), false}
+}
+
+func (b *RetryLeaderboardGuildBossSubjectBatchResults) Exec(f func(int, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		if b.closed {
+			if f != nil {
+				f(t, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		_, err := b.br.Exec()
+		if f != nil {
+			f(t, err)
+		}
+	}
+}
+
+func (b *RetryLeaderboardGuildBossSubjectBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const retryLeaderboardGuildClearBenchmark = `-- name: RetryLeaderboardGuildClearBenchmark :batchexec
+UPDATE leaderboard_dirty_guild_clear_benchmarks
+SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
+    attempts = LEAST(attempts + 1, 30),
+    retry_after = clock_timestamp() + make_interval(secs => LEAST(300, 5 * power(2, LEAST(attempts, 6)))::double precision)
+WHERE tenant_id = $1::uuid AND instance_name = $2::text AND difficulty_name = $3::text AND max_players = $4::smallint AND claim_token = $5::uuid AND claimed_revision = $6::bigint
+`
+
+type RetryLeaderboardGuildClearBenchmarkBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type RetryLeaderboardGuildClearBenchmarkParams struct {
+	TenantID        uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName    string    `db:"instance_name" json:"instance_name"`
+	DifficultyName  string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers      int16     `db:"max_players" json:"max_players"`
+	ClaimToken      uuid.UUID `db:"claim_token" json:"claim_token"`
+	ClaimedRevision int64     `db:"claimed_revision" json:"claimed_revision"`
+}
+
+func (q *sqlQuerier) RetryLeaderboardGuildClearBenchmark(ctx context.Context, arg []RetryLeaderboardGuildClearBenchmarkParams) *RetryLeaderboardGuildClearBenchmarkBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.ClaimToken,
+			a.ClaimedRevision,
+		}
+		batch.Queue(retryLeaderboardGuildClearBenchmark, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &RetryLeaderboardGuildClearBenchmarkBatchResults{br, len(arg), false}
+}
+
+func (b *RetryLeaderboardGuildClearBenchmarkBatchResults) Exec(f func(int, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		if b.closed {
+			if f != nil {
+				f(t, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		_, err := b.br.Exec()
+		if f != nil {
+			f(t, err)
+		}
+	}
+}
+
+func (b *RetryLeaderboardGuildClearBenchmarkBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const retryLeaderboardGuildClearSubject = `-- name: RetryLeaderboardGuildClearSubject :batchexec
+UPDATE leaderboard_dirty_guild_clear_subjects
+SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
+    attempts = LEAST(attempts + 1, 30),
+    retry_after = clock_timestamp() + make_interval(secs => LEAST(300, 5 * power(2, LEAST(attempts, 6)))::double precision)
+WHERE tenant_id = $1::uuid AND instance_name = $2::text AND difficulty_name = $3::text AND max_players = $4::smallint AND realm_id = $5::uuid AND guild_id = $6::uuid AND claim_token = $7::uuid AND claimed_revision = $8::bigint
+`
+
+type RetryLeaderboardGuildClearSubjectBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type RetryLeaderboardGuildClearSubjectParams struct {
+	TenantID        uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName    string    `db:"instance_name" json:"instance_name"`
+	DifficultyName  string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers      int16     `db:"max_players" json:"max_players"`
+	RealmID         uuid.UUID `db:"realm_id" json:"realm_id"`
+	GuildID         uuid.UUID `db:"guild_id" json:"guild_id"`
+	ClaimToken      uuid.UUID `db:"claim_token" json:"claim_token"`
+	ClaimedRevision int64     `db:"claimed_revision" json:"claimed_revision"`
+}
+
+func (q *sqlQuerier) RetryLeaderboardGuildClearSubject(ctx context.Context, arg []RetryLeaderboardGuildClearSubjectParams) *RetryLeaderboardGuildClearSubjectBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.RealmID,
+			a.GuildID,
+			a.ClaimToken,
+			a.ClaimedRevision,
+		}
+		batch.Queue(retryLeaderboardGuildClearSubject, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &RetryLeaderboardGuildClearSubjectBatchResults{br, len(arg), false}
+}
+
+func (b *RetryLeaderboardGuildClearSubjectBatchResults) Exec(f func(int, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		if b.closed {
+			if f != nil {
+				f(t, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		_, err := b.br.Exec()
+		if f != nil {
+			f(t, err)
+		}
+	}
+}
+
+func (b *RetryLeaderboardGuildClearSubjectBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const retryLeaderboardGuildRenownCount = `-- name: RetryLeaderboardGuildRenownCount :batchexec
+UPDATE leaderboard_dirty_guild_renown
+SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
+    attempts = LEAST(attempts + 1, 30),
+    retry_after = clock_timestamp() + make_interval(secs => LEAST(300, 5 * power(2, LEAST(attempts, 6)))::double precision)
+WHERE tenant_id = $1::uuid AND instance_name = $2::text AND difficulty_name = $3::text AND max_players = $4::smallint AND encounter_name = $5::text AND realm_id = $6::uuid AND guild_id = $7::uuid AND claim_token = $8::uuid AND claimed_revision = $9::bigint
+`
+
+type RetryLeaderboardGuildRenownCountBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type RetryLeaderboardGuildRenownCountParams struct {
+	TenantID        uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName    string    `db:"instance_name" json:"instance_name"`
+	DifficultyName  string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers      int16     `db:"max_players" json:"max_players"`
+	EncounterName   string    `db:"encounter_name" json:"encounter_name"`
+	RealmID         uuid.UUID `db:"realm_id" json:"realm_id"`
+	GuildID         uuid.UUID `db:"guild_id" json:"guild_id"`
+	ClaimToken      uuid.UUID `db:"claim_token" json:"claim_token"`
+	ClaimedRevision int64     `db:"claimed_revision" json:"claimed_revision"`
+}
+
+func (q *sqlQuerier) RetryLeaderboardGuildRenownCount(ctx context.Context, arg []RetryLeaderboardGuildRenownCountParams) *RetryLeaderboardGuildRenownCountBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.EncounterName,
+			a.RealmID,
+			a.GuildID,
+			a.ClaimToken,
+			a.ClaimedRevision,
+		}
+		batch.Queue(retryLeaderboardGuildRenownCount, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &RetryLeaderboardGuildRenownCountBatchResults{br, len(arg), false}
+}
+
+func (b *RetryLeaderboardGuildRenownCountBatchResults) Exec(f func(int, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		if b.closed {
+			if f != nil {
+				f(t, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		_, err := b.br.Exec()
+		if f != nil {
+			f(t, err)
+		}
+	}
+}
+
+func (b *RetryLeaderboardGuildRenownCountBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const retryLeaderboardPlayerBossBenchmark = `-- name: RetryLeaderboardPlayerBossBenchmark :batchexec
+UPDATE leaderboard_dirty_player_boss_benchmarks
+SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
+    attempts = LEAST(attempts + 1, 30),
+    retry_after = clock_timestamp() + make_interval(secs => LEAST(300, 5 * power(2, LEAST(attempts, 6)))::double precision)
+WHERE tenant_id = $1::uuid AND instance_name = $2::text AND difficulty_name = $3::text AND max_players = $4::smallint AND encounter_name = $5::text AND player_class = $6::text AND player_spec = $7::text AND player_sub_spec = $8::text AND metric = $9::text AND claim_token = $10::uuid AND claimed_revision = $11::bigint
+`
+
+type RetryLeaderboardPlayerBossBenchmarkBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type RetryLeaderboardPlayerBossBenchmarkParams struct {
+	TenantID        uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName    string    `db:"instance_name" json:"instance_name"`
+	DifficultyName  string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers      int16     `db:"max_players" json:"max_players"`
+	EncounterName   string    `db:"encounter_name" json:"encounter_name"`
+	PlayerClass     string    `db:"player_class" json:"player_class"`
+	PlayerSpec      string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec   string    `db:"player_sub_spec" json:"player_sub_spec"`
+	Metric          string    `db:"metric" json:"metric"`
+	ClaimToken      uuid.UUID `db:"claim_token" json:"claim_token"`
+	ClaimedRevision int64     `db:"claimed_revision" json:"claimed_revision"`
+}
+
+func (q *sqlQuerier) RetryLeaderboardPlayerBossBenchmark(ctx context.Context, arg []RetryLeaderboardPlayerBossBenchmarkParams) *RetryLeaderboardPlayerBossBenchmarkBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.EncounterName,
+			a.PlayerClass,
+			a.PlayerSpec,
+			a.PlayerSubSpec,
+			a.Metric,
+			a.ClaimToken,
+			a.ClaimedRevision,
+		}
+		batch.Queue(retryLeaderboardPlayerBossBenchmark, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &RetryLeaderboardPlayerBossBenchmarkBatchResults{br, len(arg), false}
+}
+
+func (b *RetryLeaderboardPlayerBossBenchmarkBatchResults) Exec(f func(int, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		if b.closed {
+			if f != nil {
+				f(t, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		_, err := b.br.Exec()
+		if f != nil {
+			f(t, err)
+		}
+	}
+}
+
+func (b *RetryLeaderboardPlayerBossBenchmarkBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const retryLeaderboardPlayerBossSubject = `-- name: RetryLeaderboardPlayerBossSubject :batchexec
+UPDATE leaderboard_dirty_player_boss_subjects
+SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
+    attempts = LEAST(attempts + 1, 30),
+    retry_after = clock_timestamp() + make_interval(secs => LEAST(300, 5 * power(2, LEAST(attempts, 6)))::double precision)
+WHERE tenant_id = $1::uuid AND instance_name = $2::text AND difficulty_name = $3::text AND max_players = $4::smallint AND encounter_name = $5::text AND player_class = $6::text AND player_spec = $7::text AND player_sub_spec = $8::text AND metric = $9::text AND realm_id = $10::uuid AND player_guid = $11::text AND claim_token = $12::uuid AND claimed_revision = $13::bigint
+`
+
+type RetryLeaderboardPlayerBossSubjectBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type RetryLeaderboardPlayerBossSubjectParams struct {
+	TenantID        uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName    string    `db:"instance_name" json:"instance_name"`
+	DifficultyName  string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers      int16     `db:"max_players" json:"max_players"`
+	EncounterName   string    `db:"encounter_name" json:"encounter_name"`
+	PlayerClass     string    `db:"player_class" json:"player_class"`
+	PlayerSpec      string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec   string    `db:"player_sub_spec" json:"player_sub_spec"`
+	Metric          string    `db:"metric" json:"metric"`
+	RealmID         uuid.UUID `db:"realm_id" json:"realm_id"`
+	PlayerGuid      string    `db:"player_guid" json:"player_guid"`
+	ClaimToken      uuid.UUID `db:"claim_token" json:"claim_token"`
+	ClaimedRevision int64     `db:"claimed_revision" json:"claimed_revision"`
+}
+
+func (q *sqlQuerier) RetryLeaderboardPlayerBossSubject(ctx context.Context, arg []RetryLeaderboardPlayerBossSubjectParams) *RetryLeaderboardPlayerBossSubjectBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.EncounterName,
+			a.PlayerClass,
+			a.PlayerSpec,
+			a.PlayerSubSpec,
+			a.Metric,
+			a.RealmID,
+			a.PlayerGuid,
+			a.ClaimToken,
+			a.ClaimedRevision,
+		}
+		batch.Queue(retryLeaderboardPlayerBossSubject, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &RetryLeaderboardPlayerBossSubjectBatchResults{br, len(arg), false}
+}
+
+func (b *RetryLeaderboardPlayerBossSubjectBatchResults) Exec(f func(int, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		if b.closed {
+			if f != nil {
+				f(t, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		_, err := b.br.Exec()
+		if f != nil {
+			f(t, err)
+		}
+	}
+}
+
+func (b *RetryLeaderboardPlayerBossSubjectBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const retryLeaderboardPlayerRenownCount = `-- name: RetryLeaderboardPlayerRenownCount :batchexec
+UPDATE leaderboard_dirty_player_renown
+SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
+    attempts = LEAST(attempts + 1, 30),
+    retry_after = clock_timestamp() + make_interval(secs => LEAST(300, 5 * power(2, LEAST(attempts, 6)))::double precision)
+WHERE tenant_id = $1::uuid AND instance_name = $2::text AND difficulty_name = $3::text AND max_players = $4::smallint AND encounter_name = $5::text AND realm_id = $6::uuid AND player_guid = $7::text AND claim_token = $8::uuid AND claimed_revision = $9::bigint
+`
+
+type RetryLeaderboardPlayerRenownCountBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type RetryLeaderboardPlayerRenownCountParams struct {
+	TenantID        uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName    string    `db:"instance_name" json:"instance_name"`
+	DifficultyName  string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers      int16     `db:"max_players" json:"max_players"`
+	EncounterName   string    `db:"encounter_name" json:"encounter_name"`
+	RealmID         uuid.UUID `db:"realm_id" json:"realm_id"`
+	PlayerGuid      string    `db:"player_guid" json:"player_guid"`
+	ClaimToken      uuid.UUID `db:"claim_token" json:"claim_token"`
+	ClaimedRevision int64     `db:"claimed_revision" json:"claimed_revision"`
+}
+
+func (q *sqlQuerier) RetryLeaderboardPlayerRenownCount(ctx context.Context, arg []RetryLeaderboardPlayerRenownCountParams) *RetryLeaderboardPlayerRenownCountBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.EncounterName,
+			a.RealmID,
+			a.PlayerGuid,
+			a.ClaimToken,
+			a.ClaimedRevision,
+		}
+		batch.Queue(retryLeaderboardPlayerRenownCount, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &RetryLeaderboardPlayerRenownCountBatchResults{br, len(arg), false}
+}
+
+func (b *RetryLeaderboardPlayerRenownCountBatchResults) Exec(f func(int, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		if b.closed {
+			if f != nil {
+				f(t, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		_, err := b.br.Exec()
+		if f != nil {
+			f(t, err)
+		}
+	}
+}
+
+func (b *RetryLeaderboardPlayerRenownCountBatchResults) Close() error {
 	b.closed = true
 	return b.br.Close()
 }

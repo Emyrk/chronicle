@@ -18,6 +18,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Emyrk/chronicle/internal/services/serviceratings"
+
 	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/db2sdk"
@@ -1016,6 +1018,11 @@ func (c *Chronicle) WoWLogGroup(ctx context.Context, groupID uuid.UUID) (*chroni
 }
 
 func (c *Chronicle) InvalidateWoWLogGroup(ctx context.Context, logID uuid.UUID, reason string) error {
+	sourceCtx, resolveErr := serviceratings.GroupSourceContext(ctx, c.Zed, logID)
+	if resolveErr != nil {
+		return resolveErr
+	}
+	ctx = sourceCtx
 	var identities []database.RankingRunIdentitiesByLogGroupIDRow
 	if err := c.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
 		if err := tx.AcquireRankingRunRefreshLock(ctx); err != nil {
@@ -1026,7 +1033,17 @@ func (c *Chronicle) InvalidateWoWLogGroup(ctx context.Context, logID uuid.UUID, 
 		if err != nil {
 			return fmt.Errorf("load ranking run identities: %w", err)
 		}
-		return tx.InvalidateWoWLogGroup(ctx, database.InvalidateWoWLogGroupParams{LogGroupID: logID, Reason: reason})
+		// Match reparse/raw publication: group row before D1 row.
+		if _, err := tx.LockWoWLogGroupParseGeneration(ctx, logID); err != nil {
+			return err
+		}
+		if err := serviceratings.EnqueueSourceRepairTx(ctx, tx, rankingRunLogGroupIdentitySeeds(identities)); err != nil {
+			return err
+		}
+		if err := tx.InvalidateWoWLogGroup(ctx, database.InvalidateWoWLogGroupParams{LogGroupID: logID, Reason: reason}); err != nil {
+			return err
+		}
+		return c.EnqueueRankingRunRefreshTx(ctx, tx, rankingRunLogGroupIdentitySeeds(identities)...)
 	}, nil); err != nil {
 		return fmt.Errorf("invalidate log group: %w", err)
 	}
@@ -1066,13 +1083,15 @@ func (c *Chronicle) InvalidateWoWLogGroup(ctx context.Context, logID uuid.UUID, 
 		}
 	}
 
-	if err := c.EnqueueRankingRunRefresh(ctx, rankingRunLogGroupIdentitySeeds(identities)...); err != nil {
-		slog.WarnContext(ctx, "failed to enqueue ranking run refresh after log invalidation", slog.Any("error", err))
-	}
 	return nil
 }
 
 func (c *Chronicle) ClearWoWLogGroupInvalidation(ctx context.Context, logID uuid.UUID) error {
+	sourceCtx, resolveErr := serviceratings.GroupSourceContext(ctx, c.Zed, logID)
+	if resolveErr != nil {
+		return resolveErr
+	}
+	ctx = sourceCtx
 	var identities []database.RankingRunIdentitiesByLogGroupIDRow
 	if err := c.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
 		if err := tx.AcquireRankingRunRefreshLock(ctx); err != nil {
@@ -1083,7 +1102,17 @@ func (c *Chronicle) ClearWoWLogGroupInvalidation(ctx context.Context, logID uuid
 		if err != nil {
 			return fmt.Errorf("load ranking run identities: %w", err)
 		}
-		return tx.ClearWoWLogGroupInvalidation(ctx, logID)
+		// Match reparse/raw publication: group row before D1 row.
+		if _, err := tx.LockWoWLogGroupParseGeneration(ctx, logID); err != nil {
+			return err
+		}
+		if err := serviceratings.EnqueueSourceRepairTx(ctx, tx, rankingRunLogGroupIdentitySeeds(identities)); err != nil {
+			return err
+		}
+		if err := tx.ClearWoWLogGroupInvalidation(ctx, logID); err != nil {
+			return err
+		}
+		return c.EnqueueRankingRunRefreshTx(ctx, tx, rankingRunLogGroupIdentitySeeds(identities)...)
 	}, nil); err != nil {
 		return fmt.Errorf("clear log group invalidation: %w", err)
 	}
@@ -1101,14 +1130,15 @@ func (c *Chronicle) ClearWoWLogGroupInvalidation(ctx context.Context, logID uuid
 		return fmt.Errorf("restore boss-kill memberships after clearing invalidation: %w", err)
 	}
 
-	if err := c.EnqueueRankingRunRefresh(ctx, rankingRunLogGroupIdentitySeeds(identities)...); err != nil {
-		slog.WarnContext(ctx, "failed to enqueue ranking run refresh after clearing log invalidation", slog.Any("error", err))
-	}
 	return nil
 }
 
 func (c *Chronicle) DeleteWoWLogGroup(ctx context.Context, logID uuid.UUID) error {
-	var identities []database.RankingRunIdentitiesByLogGroupIDRow
+	sourceCtx, resolveErr := serviceratings.GroupSourceContext(ctx, c.Zed, logID)
+	if resolveErr != nil {
+		return resolveErr
+	}
+	ctx = sourceCtx
 	// Capture replacement cohorts before the deleted source disappears.
 	runIDs := make([]uuid.UUID, 0)
 	oldIdentities, err := c.Zed.RankingRunIdentitiesByLogGroupID(ctx, logID)
@@ -1148,11 +1178,17 @@ func (c *Chronicle) DeleteWoWLogGroup(ctx context.Context, logID uuid.UUID) erro
 		if err != nil {
 			return fmt.Errorf("load current ranking identities: %w", err)
 		}
+		// Match reparse/raw publication: group row before D1 row.
+		if _, err := tx.LockWoWLogGroupParseGeneration(ctx, logID); err != nil {
+			return err
+		}
+		if err := serviceratings.EnqueueSourceRepairTx(ctx, tx, rankingRunLogGroupIdentitySeeds(current)); err != nil {
+			return err
+		}
 		if err := tx.DeleteWoWLogGroup(ctx, logID); err != nil {
 			return err
 		}
-		identities = current
-		return nil
+		return c.EnqueueRankingRunRefreshTx(ctx, tx, rankingRunLogGroupIdentitySeeds(current)...)
 	}, nil); err != nil {
 		return fmt.Errorf("delete log group: %w", err)
 	}
@@ -1170,9 +1206,6 @@ func (c *Chronicle) DeleteWoWLogGroup(ctx context.Context, logID uuid.UUID) erro
 		}); refreshErr != nil {
 			return fmt.Errorf("refresh boss-kill memberships after log group deletion: %w", refreshErr)
 		}
-	}
-	if err := c.EnqueueRankingRunRefresh(ctx, rankingRunLogGroupIdentitySeeds(identities)...); err != nil {
-		slog.WarnContext(ctx, "failed to enqueue ranking run refresh after log group deletion", slog.Any("error", err))
 	}
 	return nil
 }
@@ -1214,7 +1247,11 @@ func (c *Chronicle) DeleteWoWLogGroupFiles(ctx context.Context, logID uuid.UUID)
 }
 
 func (c *Chronicle) DeleteWoWLogInstance(ctx context.Context, logID, instanceID uuid.UUID) error {
-	var identities []database.RankingRunIdentitiesByInstanceIDsRow
+	sourceCtx, resolveErr := serviceratings.GroupSourceContext(ctx, c.Zed, logID)
+	if resolveErr != nil {
+		return resolveErr
+	}
+	ctx = sourceCtx
 	oldIdentities, err := c.Zed.RankingRunIdentitiesByInstanceIDs(ctx, []uuid.UUID{instanceID})
 	if err != nil {
 		return fmt.Errorf("load ranking run identity: %w", err)
@@ -1237,11 +1274,13 @@ func (c *Chronicle) DeleteWoWLogInstance(ctx context.Context, logID, instanceID 
 		if err != nil {
 			return err
 		}
+		if err := serviceratings.EnqueueSourceRepairTx(ctx, tx, []uuid.UUID{instanceID}); err != nil {
+			return err
+		}
 		if _, err := tx.DeleteLogInstanceByIDAndGroup(ctx, database.DeleteLogInstanceByIDAndGroupParams{ID: instanceID, LogGroupID: logID}); err != nil {
 			return err
 		}
-		identities = current
-		return nil
+		return c.EnqueueRankingRunRefreshTx(ctx, tx, rankingRunIdentitySeeds(current)...)
 	}, nil)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -1276,9 +1315,6 @@ func (c *Chronicle) DeleteWoWLogInstance(ctx context.Context, logID, instanceID 
 		InstanceID: instanceID.String(), LogGroupID: logID.String(),
 	}); err != nil {
 		return fmt.Errorf("prune deleted instance from output: %w", err)
-	}
-	if err := c.EnqueueRankingRunRefresh(ctx, rankingRunIdentitySeeds(identities)...); err != nil {
-		slog.WarnContext(ctx, "failed to enqueue ranking run refresh after instance deletion", slog.Any("error", err))
 	}
 	return nil
 }

@@ -1,5 +1,9 @@
 # Tenant ratings: evolving catch-up board
 
+> [!IMPORTANT]
+> This document describes an earlier catch-up design. The authoritative replacement
+> contract is [`docs/leaderboard-v2/`](leaderboard-v2/README.md).
+
 Status: proposed design, not implemented. This document is the contract for replacing full-generation publication; [the current upload-to-rating walkthrough](instance-upload-ratings.tex) describes today's code, not the target behavior.
 
 ## Decision and scope

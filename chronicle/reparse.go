@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/Emyrk/chronicle/internal/services/serviceratings"
+
 	"github.com/Emyrk/chronicle/chronicle/riverqueue"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue/rankingargs"
 	"github.com/Emyrk/chronicle/database"
@@ -122,6 +124,11 @@ func (w *WorkerLogReparse) Work(ctx context.Context, job *river.Job[ArgsLogRepar
 }
 
 func (c *Chronicle) EnqueueReParseLog(ctx context.Context, logID uuid.UUID, verbose bool, identityMode bool, profile bool, realmID uuid.UUID) (*rivertype.JobInsertResult, error) {
+	sourceCtx, resolveErr := serviceratings.GroupSourceContext(ctx, c.Zed, logID)
+	if resolveErr != nil {
+		return nil, resolveErr
+	}
+	ctx = sourceCtx
 	var result *rivertype.JobInsertResult
 	err := c.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
 		pgxTx, ok := tx.PGXTx()
@@ -146,6 +153,9 @@ func (c *Chronicle) enqueueReParseLog(ctx context.Context, db database.Store, tx
 		return nil, fmt.Errorf("advance parse generation: %w", err)
 	}
 
+	if err := c.EnqueueRankingRunRefreshTx(ctx, db, rankingRunLogGroupIdentitySeeds(identities)...); err != nil {
+		return nil, err
+	}
 	metadata, err := json.Marshal(logReparseMetadata{
 		PreviousRankingRunIDs: rankingargs.NormalizeIDs(rankingRunLogGroupIdentitySeeds(identities)),
 	})

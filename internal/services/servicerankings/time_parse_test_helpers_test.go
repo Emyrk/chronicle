@@ -25,7 +25,7 @@ func setupTimeParseTest(t *testing.T) (*pgxpool.Pool, database.Store, uuid.UUID)
 	t.Helper()
 
 	pool, _ := dbtestutil.NewPGXPool(t)
-	store := database.New(pool)
+	store := tenantTransactionStore{database.New(pool)}
 	ctx := testutil.Context(t, testutil.WaitShort)
 
 	serverID := uuid.New()

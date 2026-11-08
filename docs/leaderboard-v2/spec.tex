@@ -1,0 +1,500 @@
+\documentclass[11pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{hyperref}
+
+\definecolor{ink}{HTML}{192B36}
+\definecolor{accent}{HTML}{24746B}
+\definecolor{muted}{HTML}{53666E}
+\hypersetup{colorlinks=true,linkcolor=accent,urlcolor=accent,pdftitle={Chronicle Leaderboards from First Principles},pdfauthor={Chronicle}}
+
+\setlength{\emergencystretch}{3em}
+\setlength{\parskip}{0.55em}
+\setlength{\parindent}{0pt}
+\setlist[itemize]{leftmargin=1.4em,topsep=2pt,itemsep=2pt}
+\renewcommand{\arraystretch}{1.2}
+\newcommand{\field}[1]{\texttt{#1}}
+
+\title{\textbf{Chronicle Leaderboards from First Principles}}
+\author{Chronicle specification}
+\date{November 2026}
+
+\begin{document}
+\maketitle
+
+\section{Purpose}
+This document defines the leaderboard model from its source data upward. The next delivery is schema-only evidence, sufficient statistics, kill counts, and dirty-work storage for all-time tenant-scoped ratings.
+
+\subsection{Delivery status and scope}
+Configuration work is complete in PRs 1622, 1624, 1633, and 1634, followed by configuration inspector PR 1636 and Wrath migration 344. The next PR adds only tables, constraints, indexes, and schema tests. Workers, serving queries, historical backfill, and UI cutover are later work. Prior ratings have been removed; PR 1625 preserves parse scoring. No legacy-rating rollback is promised.
+
+All rating evidence, statistics, and Renown counts are all-time only. There are no rolling180day or season dimensions, expiry jobs, or finalized-season retention exceptions. Career/cross-instance portfolios remain out of scope. Source deletion and invalidation continue to retract evidence and dirty affected scopes.
+
+Boss and clear cohorts are tenant scoped and separate both difficulty and raid size. Realm qualifies player and guild identity, not benchmark cohorts. DPS and HPS remain separate permitted observations. Mutually exclusive damage-versus-healing eligibility per player/boss is future observation policy, not a current constraint.
+
+Raw projection and algorithm versions are operational repair metadata, separate from the composed configuration used at read time. Reads ignore both version fields, including different benchmark and subject versions. Rare changes are repaired in place; mixed old and new summaries may temporarily be visible. There is no version snapshot or old-leaderboard serving path. Projection rules describe source-to-canonical eligible evidence transformations, deduplication, and player cohort classification. This specification does not invent a new provenance scheme or assign one ruleset ID to composed policy. Current benchmark and award changes must not force rewrites of otherwise unchanged raw subject statistics or kill counts.
+
+\section{Core observations}
+The model has player observations and guild observations.
+
+\subsection{Core values and identities}
+\begin{center}
+\begin{tabularx}{\linewidth}{@{}>{\bfseries}p{0.19\linewidth}p{0.35\linewidth}X@{}}
+\toprule
+Value & Definition & Rule \\
+\midrule
+Boss & $B=(i,e,d,z)$ & exact flat boss identity, instance variant dimensions \\
+Clear & $C=(i,d,z)$ & instance, difficulty, player size \\
+Player & $P=(r,u)$ & realm, player GUID \\
+Guild & $G=(r,g)$ & realm, guild ID \\
+Specialization & $S=(s,b)$ & spec, subspec \\
+Canonical run & $R=\field{ranking\_\allowbreak runs.\allowbreak run\_\allowbreak id}$ & $R\mapsto\field{representative\_\allowbreak instance\_\allowbreak id}$ \\
+Player metrics & $M_P=\{\mathrm{DPS},\mathrm{HPS}\}$ & $m\in M_P$ \\
+Guild metrics & $M_G=\{\mathrm{kill\ time},\mathrm{clear\ time}\}$ & $m\in M_G$ \\
+Player observation & $\operatorname{id}(O_P)=(R,B,P,m)$ & $m\in M_P$ \\
+Guild kill observation & $\operatorname{id}(O_{GK})=(R,B,G,m)$ & $m=\mathrm{kill\ time}$ \\
+Guild clear observation & $\operatorname{id}(O_{GC})=(R,C,G,m)$ & $m=\mathrm{clear\ time}$ \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+All tuple equality is componentwise. Bosses are flat identities, not logical parents with boss-variant children. Sartharion 0D, 1D, 2D, and 3D are distinct bosses. Instance variants describe difficulty and raid size; the tuple notation below describes source dimensions, not a prescribed catalog schema.
+
+\[
+\begin{aligned}
+B&=(\field{instance},\field{encounter},\field{difficulty},\field{player\_\allowbreak size}),\\
+C&=(\field{instance},\field{difficulty},\field{player\_\allowbreak size}),\\
+P&=(\field{realm},\field{player\_\allowbreak guid}),\\
+G&=(\field{realm},\field{guild\_\allowbreak id}),\\
+S&=(\field{spec},\field{sub\_\allowbreak spec}).
+\end{aligned}
+\]
+
+\subsection{Player observation}
+\begin{verbatim}
+PlayerObservation O_P {
+    run: R
+    instance
+    boss: B
+    player: P
+    class
+    specialization: S
+    metric: m in M_P
+    metric_value
+    killed_at
+}
+\end{verbatim}
+
+The observation stores the raw DPS or HPS value. Its normalized score is derived from the current benchmark of its complete cohort.
+
+\subsection{Guild observations}
+\noindent
+\begin{minipage}[t]{0.48\linewidth}
+\small
+\begin{verbatim}
+GuildKillObservation O_GK {
+    run: R
+    instance
+    boss: B
+    guild: G
+    metric: kill_time
+    metric_value
+    killed_at
+}
+\end{verbatim}
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.48\linewidth}
+\small
+\begin{verbatim}
+GuildClearObservation O_GC {
+    run: R
+    instance
+    clear: C
+    guild: G
+    metric: clear_time
+    metric_value
+    cleared_at
+}
+\end{verbatim}
+\end{minipage}
+
+The observation stores the raw duration. Its normalized score is derived from the current fastest duration in its complete cohort. The source instance is provenance and is not part of an observation identity.
+
+\subsection{Source relations}
+Let
+\[
+\begin{aligned}
+\operatorname{canonical}(O)
+  &\Longleftrightarrow O.\field{instance}=\operatorname{representative}(O.R),\\
+\operatorname{visible}(O)
+  &\Longleftrightarrow \neg O.\field{unlisted}\land\neg O.\field{invalidated}.
+\end{aligned}
+\]
+
+\begin{center}
+\begin{tabularx}{\linewidth}{@{}>{\bfseries}p{0.16\linewidth}p{0.34\linewidth}X@{}}
+\toprule
+Relation & Source & Cardinality \\
+\midrule
+$\mathcal{O}_P$ & \field{encounter\_\allowbreak dps\_\allowbreak rankings} & One source ranking produces one raw observation for each $m\in M_P$: $1:2$. \\
+$\mathcal{O}_{GK}$ & \field{time\_\allowbreak parse\_\allowbreak boss\_\allowbreak scores} joined to its parent \field{time\_\allowbreak parse\_\allowbreak scores} & One boss-score row produces one raw guild kill observation: $1:1$. \\
+$\mathcal{O}_{GC}$ & \field{time\_\allowbreak parse\_\allowbreak scores} with non-null \field{clear\_\allowbreak duration\_\allowbreak ms} & One time-parse row produces one raw guild clear observation: $1:1$. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+Every source row must be canonical and visible, and guild observations require a non-null guild. \field{ranking\_\allowbreak runs} defines $\operatorname{representative}(R)$. Persisted parse-score results are not inputs to the rebuilt rating model.
+
+\section{Cohorts}
+A cohort contains comparable observations. The ranked subject is not part of the cohort identity.
+
+\begin{center}
+\begin{tabularx}{\linewidth}{@{}>{\bfseries}p{0.20\linewidth}p{0.27\linewidth}X@{}}
+\toprule
+Cohort & Identity & Observation set \\
+\midrule
+Player boss & $H_P=(B,c,S,m)$ & $\{O\in\mathcal{O}_P\mid O.B=B\land O.c=c\land O.S=S\land O.m=m\}$ \\
+Guild boss kill & $H_{GK}=(B,m)$ & $\{O\in\mathcal{O}_{GK}\mid O.B=B\land O.m=m\}$ \\
+Guild clear & $H_{GC}=(C,m)$ & $\{O\in\mathcal{O}_{GC}\mid O.C=C\land O.m=m\}$ \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+Here $c$ is player class. Each displayed cohort is evaluated within exactly one tenant. Realm identifies the player or guild subject but does not partition the boss or clear benchmark cohort. Boss and clear identities include both difficulty and raid size, so neither may be pooled. The current contract has no season or rolling-window dimension.
+
+\section{Derived rankings}
+
+\subsection{Scope and selected observations}
+For every current result, including Renown, $W(O)=\mathrm{true}$ selects all eligible canonical evidence. The notation $W$ is retained only to keep the formulas readable; it is not a physical window identity. No rolling180day, other rolling window, or season is implemented. All-time does not authorize retention of deleted or invalidated source evidence.
+
+For player $P$ and player cohort $H_P$:
+\[
+  A_P(P,H_P,W)=\{O\in H_P\mid O.P=P,\ W(O)\}.
+\]
+For guild $G$ and guild cohort $H_G\in\{H_{GK},H_{GC}\}$:
+\[
+  A_G(G,H_G,W)=\{O\in H_G\mid O.G=G,\ W(O)\}.
+\]
+In the definitions below, $A$ denotes either selected set.
+
+\subsection{Cohort benchmarks, Peak, Form, and Floor}
+Each cohort has one current best raw metric value. Let $\beta(H)$ denote that benchmark. For player DPS/HPS cohorts, larger values are better:
+\[
+  \beta(H_P)=\max_{O\in H_P} O.\field{metric\_\allowbreak value}.
+\]
+For guild kill-time and clear-time cohorts, smaller values are better:
+\[
+  \beta(H_G)=\min_{O\in H_G} O.\field{metric\_\allowbreak value}.
+\]
+
+Normalize every observation against the current benchmark of its cohort. For DPS/HPS:
+\[
+  p_H(O)=
+  \begin{cases}
+  0, & \beta(H)=0,\\
+  100\min\left(1,\dfrac{O.\field{metric\_\allowbreak value}}{\beta(H)}\right),
+    & \beta(H)>0.
+  \end{cases}
+\]
+For kill and clear times:
+\[
+  p_H(O)=100\min\left(1,
+    \frac{\beta(H)}{O.\field{metric\_\allowbreak value}}
+  \right).
+\]
+Guild durations are strictly positive. For a coherent evidence and benchmark state, the ratios already lie in $[0,100]$. The clamp is a display safeguard during temporary benchmark/statistic skew, not a reason to materialize normalized bands. Observations preserve raw \field{metric\_\allowbreak value}; normalized scores are derived from the current cohort benchmark and are not immutable observation payload.
+
+For one selected subject set $A$, order the current normalized scores
+\[
+  x_1\le x_2\le\cdots\le x_n,
+  \qquad x_j=p_H(O_j).
+\]
+Let
+\[
+  a=\left\lfloor0.20n\right\rfloor,
+  \qquad
+  b=\left\lfloor0.40n\right\rfloor.
+\]
+Define the bands:
+\[
+\begin{aligned}
+A_{\mathrm{ignored}} &= \{x_1,\ldots,x_a\},\\
+A_{\mathrm{floor}} &= \{x_{a+1},\ldots,x_b\},\\
+A_{\mathrm{form}} &= \{x_{b+1},\ldots,x_{n-1}\},\\
+A_{\mathrm{peak}} &= \{x_n\}.
+\end{aligned}
+\]
+For any empty band $E$, define
+\[
+  \operatorname{avg}(E)=0.
+\]
+Then
+\[
+\begin{aligned}
+\operatorname{Peak}(A) &= x_n,\\
+\operatorname{Form}(A) &= \operatorname{avg}(A_{\mathrm{form}}),\\
+\operatorname{Floor}(A) &= \operatorname{avg}(A_{\mathrm{floor}}).
+\end{aligned}
+\]
+
+Mastery is
+\[
+  \operatorname{Mastery}(A)
+  =0.30\operatorname{Peak}(A)
+  +0.50\operatorname{Form}(A)
+  +0.20\operatorname{Floor}(A).
+\]
+
+The maximum Mastery by observation count is:
+\[
+\begin{array}{c|ccc}
+n & 1 & 2 & \ge 3\\
+\hline
+\max\operatorname{Mastery} & 30 & 80 & 100
+\end{array}
+\]
+
+For current normalized scores $A=\{1,2,3,4,5,6,7,8,9,10\}$:
+\[
+  \operatorname{Mastery}(A)
+  =0.30(10)+0.50\operatorname{avg}(5,6,7,8,9)
+  +0.20\operatorname{avg}(3,4).
+\]
+
+\subsection{Benchmark-independent sufficient statistics}
+Materialize count and three sufficient statistics, not normalized scores. For each observation define a performance value
+\[
+ y(O)=\begin{cases}
+ O.\field{metric\_value}, & \text{player DPS/HPS},\\
+ 1/O.\field{metric\_value}, & \text{guild duration}.
+ \end{cases}
+\]
+Sort $y_1\le\cdots\le y_n$ and use exactly the same index boundaries $a$ and $b$ and the same empty-band zero convention as above. Store
+\[
+\begin{aligned}
+ n&=\lvert A\rvert,\\
+ p_{\mathrm{raw}}&=y_n,\\
+ f_{\mathrm{raw}}&=\operatorname{avg}(y_{b+1},\ldots,y_{n-1}),\\
+ l_{\mathrm{raw}}&=\operatorname{avg}(y_{a+1},\ldots,y_b).
+\end{aligned}
+\]
+For players these are raw metric Peak and arithmetic band means. For guilds they are peak reciprocal duration and arithmetic means of reciprocal durations. Do not substitute the reciprocal of an arithmetic mean duration: it does not preserve the score formula. Duration units must be consistent between evidence, reciprocals, and benchmarks.
+
+At read time, use the shared current cohort benchmark to define
+\[
+ k(H)=\begin{cases}
+ 0, & \text{player and }\beta(H)=0,\\
+ 100/\beta(H), & \text{player and }\beta(H)>0,\\
+ 100\beta(H), & \text{guild}.
+ \end{cases}
+\]
+For a coherent state, derive
+\[
+\begin{aligned}
+ \operatorname{Peak}&=k(H)p_{\mathrm{raw}},\\
+ \operatorname{Form}&=k(H)f_{\mathrm{raw}},\\
+ \operatorname{Floor}&=k(H)l_{\mathrm{raw}},\\
+ \operatorname{Mastery}&=k(H)\left(0.30p_{\mathrm{raw}}
+                  +0.50f_{\mathrm{raw}}+0.20l_{\mathrm{raw}}\right).
+\end{aligned}
+\]
+Scaling by the same nonnegative factor preserves the band ordering and averages, so this exactly reproduces the existing formulas, including the zero-benchmark case and small-sample ceilings. Clamping during transient mismatched states does not imply equality to recomputing every individually clamped observation; the exact equivalence is for a coherent state.
+
+A benchmark-only change changes all derived scores at reads, but does not fan out dirty subject statistics. A subject's statistics become dirty only when its underlying evidence or projection semantics change. Remove the statistics row when no observations remain. Normalized Peak, Form, Floor, and Mastery are not persisted subject payload.
+
+\subsection{Renown}
+Player kill facts project away the metric:
+\[
+  K_P=\operatorname{distinct}
+  \{(O.R,O.B,O.P)\mid O\in\mathcal{O}_P\}.
+\]
+Guild kill facts are
+\[
+  K_G=\operatorname{distinct}
+  \{(O.R,O.B,O.G)\mid O\in\mathcal{O}_{GK}\}.
+\]
+
+Their identities are
+\[
+  \operatorname{id}(K_P)=(R,B,P),
+  \qquad
+  \operatorname{id}(K_G)=(R,B,G).
+\]
+Kill facts are metric-independent canonical evidence, maintained independently of scoring statistics. The displayed projection removes the metric; it must not require a normalized result or award value to exist. DPS and HPS from the same kill cannot create two facts. Retained timestamps are source payload, not window boundaries.
+
+Let $\rho(B)\ge0$ be the effective configured Renown award for boss $B$, including its instance-variant override, and let $E(B)$ mean that configuration enables the boss for Renown. Set membership does not determine $E$. Disabled bosses contribute nothing without erasing parsed history. Renown is all-time, with $W=\mathrm{true}$. Then
+\[
+  \operatorname{Renown}_P(P,W)
+  =\sum_{K\in K_P\,:\,K.P=P\land W(K)\land E(K.B)}\rho(K.B),
+\]
+\[
+  \operatorname{Renown}_G(G,W)
+  =\sum_{K\in K_G\,:\,K.G=G\land W(K)\land E(K.B)}\rho(K.B).
+\]
+
+Materialize a canonical eligible kill count $N(q,B)$ for each realm-qualified subject $q$ and exact boss plus instance variant $B$, including difficulty and raid size. The equivalent current Renown read is
+\[
+ \operatorname{Renown}(q)=\sum_{B:E(B)}N(q,B)\rho(B).
+\]
+Counts are independent of metric and award values. A zero award does not erase a kill count; a changed award changes current points without rebuilding counts. Current eligibility determines which counts contribute. There are no frozen points in the summary. Source retraction removes the corresponding fact and updates the count; independent canonical kills each count once. Renown does not depend on metric value, cohort benchmark, Peak, Mastery, or clear completion.
+
+\section{Instance aggregation}
+For a selected named encounter set, let $\mathcal{B}(i,d,z)$ be its effective, explicitly listed bosses for instance $i$, difficulty $d$, and player size $z$. The set selection is implicit in the formulas below. Excluded bosses are removed from this set and its denominator, not zero-filled. Missing evidence for an included boss is zero-filled. Never divide by zero for an empty effective set; its API presentation remains a later read-contract decision.
+
+For a subject $q$, window $W$, and boss $B\in\mathcal{B}(i,d,z)$, define missing boss values as zero:
+\[
+\widehat{\operatorname{Peak}}_B(q,W)=
+\begin{cases}
+\operatorname{Peak}_B(q,W), & \text{if defined},\\
+0, & \text{otherwise},
+\end{cases}
+\]
+\[
+\widehat{\operatorname{Mastery}}_B(q,W)=
+\begin{cases}
+\operatorname{Mastery}_B(q,W), & \text{if defined},\\
+0, & \text{otherwise}.
+\end{cases}
+\]
+
+Instance Peak and Mastery are equal-weight averages over every eligible boss:
+\[
+\operatorname{InstancePeak}(q,i,d,z,W)
+=\frac{1}{\lvert\mathcal{B}(i,d,z)\rvert}
+\sum_{B\in\mathcal{B}(i,d,z)}
+\widehat{\operatorname{Peak}}_B(q,W),
+\]
+\[
+\operatorname{InstanceMastery}(q,i,d,z,W)
+=\frac{1}{\lvert\mathcal{B}(i,d,z)\rvert}
+\sum_{B\in\mathcal{B}(i,d,z)}
+\widehat{\operatorname{Mastery}}_B(q,W).
+\]
+
+\section{Deferred portfolios}
+Career and cross-instance portfolios are out of current scope. Do not create portfolio schema, seed memberships or weights, or implement portfolio read aggregation. No season schema, finalized-season evidence retention, or rolling window is approved as part of this work.
+
+\section{Logical invariants}
+\begin{enumerate}
+  \item Only the representative instance selected by \field{ranking\_\allowbreak runs} contributes observations.
+  \item Unlisted and invalidated runs contribute no observations or Renown facts.
+  \item Boss, clear, player, guild, and specialization equality is componentwise tuple equality.
+  \item One player observation is unique by $(R,B,P,m)$.
+  \item One guild boss-kill observation is unique by $(R,B,G,\mathrm{kill\ time})$.
+  \item One guild clear observation is unique by $(R,C,G,\mathrm{clear\ time})$.
+  \item Observations store raw metrics and do not store immutable normalized parse scores.
+  \item A player kill fact is unique by $(R,B,P)$; a guild kill fact is unique by $(R,B,G)$.
+  \item DPS and HPS observations from the same player kill produce one player Renown fact.
+  \item Every complete cohort has at most one current benchmark. Player benchmarks are maximum raw DPS/HPS; guild benchmarks are minimum raw durations.
+  \item Peak, Form, Floor, and Mastery normalize observations against the current benchmark of exactly one cohort.
+  \item $A_{\mathrm{ignored}}$, $A_{\mathrm{floor}}$, $A_{\mathrm{form}}$, and $A_{\mathrm{peak}}$ are disjoint and partition $A$.
+  \item Empty Mastery bands have average zero.
+  \item Peak and Mastery are in $[0,100]$ for valid nonnegative player metrics and positive guild durations.
+  \item A benchmark-only change does not dirty subject sufficient statistics; all normalized scores use the shared current benchmark at reads.
+  \item Boss and clear Peak, Form, Floor, and Mastery are derived from count and raw metric or reciprocal-duration band statistics with the current cohort benchmark; normalized scores are not stored per subject.
+  \item Missing selected bosses contribute zero to group Peak and Mastery.
+  \item Every selected boss has equal weight.
+  \item Instance encounter-set and arbitrary boss-group Peak and Mastery are calculated at read time. Aggregate result rows are not materialized in the initial physical design.
+  \item Renown is a linear sum of configured canonical boss-kill awards.
+  \item Renown is independent of metric value, Peak, Mastery, and clear completion.
+  \item A run belongs to exactly one non-null rating tenant. Its observations, Renown facts, cohorts, and results are projected only within that tenant.
+  \item Matching global configuration layers compose by required-flavor subset and strict-superset precedence. Conflicting incomparable matches are rejected; rating data is never shared or copied between tenants.
+  \item Boss/clear benchmarks are tenant scoped; subjects additionally carry realm identity. Every current scope is all-time, with difficulty and raid size kept separate. DPS and HPS remain separate permitted observations.
+\end{enumerate}
+
+\section{Database schema}
+
+\subsection{Physical conventions}
+Ratings use exact single-tenant ownership. Every canonical run belongs to exactly one rating tenant, determined by
+\[
+\field{ranking\_\allowbreak runs.\allowbreak realm\_\allowbreak id}
+\rightarrow\field{wow\_\allowbreak server\_\allowbreak realms.\allowbreak server\_\allowbreak id}
+\rightarrow\field{wow\_\allowbreak servers.\allowbreak tenant\_\allowbreak id}.
+\]
+The owning \field{tenant\_\allowbreak id} must be non-null. If the source server has a null tenant, rating derivation rejects the run. It does not map the run to a zero UUID, default tenant, root tenant, or any tenant selected by \field{include\_\allowbreak in\_\allowbreak all}. A run, observation, Renown fact, cohort, and result is materialized for that one tenant only.
+
+Every proposed rating-data relation is tenant scoped and every rating-data primary key contains \field{tenant\_\allowbreak id}. Global flavor sets and rulesets are shared configuration, not rating data. Source rows retain their existing global identities. All source-to-projection operations require exact equality between the requested tenant and the run's derived owning tenant. Tenant relations use forced RLS with exact equality to \field{app.\allowbreak tenant\_\allowbreak id}; no fallback tenant is substituted when the setting is absent. The administrative bypass may perform maintenance across tenants, but it may not change a row's derived ownership or copy evidence between tenants.
+
+Realm identity remains \field{wow\_\allowbreak server\_\allowbreak realms.\allowbreak id}; guild identity is the pair $(\field{realm\_\allowbreak id},\field{guild\_\allowbreak id})$ even though \field{guilds.\allowbreak id} is globally unique. The next schema PR supplies the physical tables, constraints, indexes, and tests. This document specifies semantics without assigning new physical table names.
+
+Stable-key replacement applies to raw statistics and kill counts. Boss/clear observation, benchmark, subject, and dirty keys retain the tenant-scoped cohort contract, with realm in subject identity and both difficulty and raid size in the encounter identity. Raw projection metadata must not be conflated with composed current read policy or used to gate reads. Benchmark or award changes alone do not invalidate raw statistics or counts; this document adds no new provenance representation.
+
+Database constraints are local and structural: keys, uniqueness, valid scalar values, and required dimensions. There are no integrity triggers. Evidence keeps source identifiers as payload without source-deletion cascades or foreign keys that block source deletion. Tenant/source agreement, canonical representative selection, source visibility, and cross-relation identity correctness are enforced by the evidence writer and reconciler, not integrity triggers or source FKs.
+
+The data flow is source data $\longrightarrow$ canonical evidence $\longrightarrow$ summaries. Source deletion enqueues coarse repair and leaves evidence intact until the reconciler can preserve the old scope keys and enqueue summary work. Evidence and pending repair therefore remain available after their source is gone. This temporary stale projection is repairable work, not a retention policy.
+
+\subsection{Source and oracle relations}
+Prior ratings have been removed; parse scoring is preserved by merged PR 1625. Retired rating tables are neither migration inputs nor a rollback target. Rebuild replacement data from the following preserved authoritative source relations:
+\begin{center}
+\begin{tabularx}{\linewidth}{@{}>{\bfseries}p{0.27\linewidth}X@{}}
+\toprule
+Relation & Use \\
+\midrule
+\field{ranking\_\allowbreak runs} & Canonical run, representative instance, and source realm. \\
+\field{encounter\_\allowbreak dps\_\allowbreak rankings} & Raw player DPS/HPS values and player/boss dimensions. \\
+\field{time\_\allowbreak parse\_\allowbreak scores} & Guild, realm, run, and raw clear duration. \\
+\field{time\_\allowbreak parse\_\allowbreak boss\_\allowbreak scores} & Raw guild boss duration. \\
+\field{log\_\allowbreak instances}, \field{wow\_\allowbreak log\_\allowbreak groups} & Invalidation, listing visibility, and provenance. \\
+\field{wow\_\allowbreak server\_\allowbreak realms}, \field{wow\_\allowbreak servers}, \field{guilds} & Exact rating-tenant, realm, and guild identity. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+For ratings, the source realm's owning server must have exactly one non-null \field{tenant\_\allowbreak id}. That tenant is copied into every derived row. No rating derivation uses \field{COALESCE} to a root identifier, \field{include\_\allowbreak in\_\allowbreak all}, or a second tenant projection. A nullable source tenant makes the run ineligible until ownership is explicit.
+
+The rebuilt model does not consume persisted player or guild parse scores. Player metrics use \field{encounter\_\allowbreak dps\_\allowbreak rankings.\allowbreak dps} and \field{encounter\_\allowbreak dps\_\allowbreak rankings.\allowbreak hps}. Guild boss metrics use \field{time\_\allowbreak parse\_\allowbreak boss\_\allowbreak scores.\allowbreak duration\_\allowbreak ms}; guild clear metrics use \field{time\_\allowbreak parse\_\allowbreak scores.\allowbreak clear\_\allowbreak duration\_\allowbreak ms}. The corresponding precise-score, display-score, rank, sample-size, status, window, and policy-version columns are not rating inputs.
+
+\begin{sloppypar}
+A player source row joins \field{encounter\_\allowbreak dps\_\allowbreak rankings.\allowbreak instance\_\allowbreak id} to \field{ranking\_\allowbreak runs.\allowbreak representative\_\allowbreak instance\_\allowbreak id}. A guild time-parse source row must match the canonical \field{run\_\allowbreak id}, representative \field{instance\_\allowbreak id}, source \field{realm\_\allowbreak id}, exact tenant, and guild identity. Its parent representative instance must join a listed \field{wow\_\allowbreak log\_\allowbreak groups} row and have null \field{invalidated\_\allowbreak at}. A boss row additionally binds its \field{encounter\_\allowbreak id} to an encounter in that representative instance. The writer and reconciler enforce these predicates; they are not optional caller filters or integrity-trigger checks.
+\end{sloppypar}
+
+Observation projections copy only the fields required for stable tuple identity, raw-metric normalization, and score computation. This avoids repeated multi-table source joins. They remain retractable projections: deleting, replacing, unlisting, or invalidating source evidence must remove the corresponding observations and Renown facts from their one owning tenant.
+
+\subsection{Shared configuration catalog and flavor layers}
+The database is the intended source for leaderboard configuration. Parser mechanics remain in Go. Foundation work does not change existing UI behavior or move combat-log interpretation into SQL.
+
+Leaderboard-relevant flavors are explicitly classified in \field{database/flavor.\allowbreak go}: initially \field{vanilla}, \field{tbc}, \field{wrath}, \field{nightmare-of-ursol}, and \field{vanillaplus}. Server tags such as \field{octowow}, \field{capybara}, and \field{ravencraft} are ignored for layer matching. Let $L$ be that classified vocabulary:
+\[
+ F(T)=\bigl(\{\operatorname{dataset\_flavor}(T)\}
+       \cup\operatorname{tenant\_flavors}(T)\bigr)\cap L.
+\]
+Normalize and deduplicate this unordered set. A global configuration layer with required-flavor set $Q$ matches exactly when $Q\subseteq F(T)$. It is not an exact full-set ruleset lookup. For two matching layers, $Q_2$ is more specific than $Q_1$ only if $Q_1\subsetneq Q_2$. Cardinality, input order, and server tags do not break ties. Conflicting assignments from incomparable matching layers are rejected. Compatible assignments may compose. Configuration is globally shared; tenant evidence and results remain separate.
+
+The structural catalog contains instances, instance variants (difficulty and raid size), flat bosses, named ordered encounter sets, and explicit ordered set memberships. There is no logical boss parent or boss-variant entity. Sartharion 0D/1D/2D/3D are distinct exact bosses. Sets select exact bosses; the default Sartharion selection is 0D, with no best-variant substitution.
+
+Boss, instance, set, and member overrides support explicit exclusion. An absent override inherits; it does not mean disabled or zero. Disabled bosses leave effective sets, aggregate denominators, and Renown eligibility. Excluded instances, sets, or members remove their affected selection; set membership alone does not determine Renown eligibility. Parsed history is unchanged by configuration exclusion.
+
+Renown has boss defaults and instance-variant overrides. Explicit zero is a real award override, distinct from absence. Awards are independent of encounter-set membership. Vanilla awards are not automatically zeroed for TBC or Wrath. Seed values must be explicit reviewed data from historical calibration. Known values in migration 313 may be an authoring reference, but deployment must not execute or read old migrations or retired rating tables. Do not invent new awards or difficulty variants.
+
+\subsection{Next PR: schema only}
+The next PR stores canonical raw player and guild evidence, independent metric-free kill facts, shared cohort benchmarks, count and raw Peak/Form/Floor sufficient statistics, per-subject exact-boss/variant kill counts, and coalesced dirty work. Physical table names are chosen by the schema implementation, not guessed here.
+
+Local structural constraints and indexes support deduplicated keys, tenant and realm-qualified subject dimensions, separate difficulty and raid size, valid nonnegative finite player values and positive durations, and efficient evidence repair and scope refresh. Cross-relation tenant/source/canonical correctness belongs to the writer and reconciler. Do not add integrity triggers or source FKs that cascade away evidence or block source deletion. Summary counts and raw values must have suitable validity constraints. No normalized score or frozen Renown points are required. Empty subject evidence removes its statistic row; count summaries must stop contributing when their facts disappear.
+
+The PR includes schema and constraint tests only, not worker functions, serving queries, historical scans/backfill, scheduler wiring, or UI cutover. Later algorithm tests must establish numerical equivalence of raw and reciprocal sufficient statistics with the existing bands, including empty bands and the one/two/three-perfect-observation ceilings.
+
+\subsection{Direct evidence writes, D1 repair, and D2 summaries}
+The normal path is source data $\longrightarrow$ canonical evidence $\longrightarrow$ summary. Normal ingestion and actions directly write or update canonical observations and independent kill facts and enqueue D2 for the union of affected old/new scopes in the same transaction. Canonical, tenant, and source correctness are writer responsibilities. Normal uploads do not have to pass through D1 or wait for a mandatory 30-minute D1 debounce.
+
+D1 is rare, coarse canonical-run repair for historical data, corrections, and source deletion. It may be less efficient than the normal path. The source deletion action enqueues D1 and leaves evidence intact; no source cascade or evidence FK may erase evidence or block deletion. The reconciler reads authoritative remaining source data, captures old evidence scope keys, derives the replacement evidence (empty if the source is gone or ineligible), and enqueues D2 for the union of old/new scopes before replacing or removing the projection. D2 enqueue and evidence replacement/removal commit atomically in the same transaction. Thus removing stale evidence cannot lose the summary repair obligation. Visibility, invalidation, canonical replacement, or subject movement must likewise repair both old and new scopes, whether handled by a direct writer or D1. No finalized-season retention exception is approved.
+
+D2 is normal, frequent, exact result-scope work for shared cohort benchmarks, subject raw sufficient statistics, and subject/boss/variant Renown kill counts. It consumes canonical evidence, not a mandatory source rescan. Benchmark-only changes do not enqueue all cohort subjects; award-only changes do not rebuild counts. Evidence changes refresh directly affected scopes even when benchmark values are unchanged.
+
+Both D1 and D2 jobs coalesce by their logical keys and carry revision-safe work metadata. Later processors acknowledge only the complete key and revision they processed; newer revisions survive races and failed work remains retryable. Due-work metadata supports bounded scheduling, but no new fixed delay or per-upload D1 debounce is required. Scheduling and any optional repair pacing belong to later worker implementation. The current PR adds structural storage, constraints, indexes, and schema tests only, with no integrity triggers or running workers.
+
+\subsection{Later serving and maintenance}
+PostgreSQL will derive raw evidence projections and sufficient statistics with bounded set-based operations. Go owns orchestration and endpoints; parser mechanics remain in Go. Serving computes normalized scores from current shared benchmarks, and Renown from kill counts and current effective awards. Configuration layers select the current read policy; raw projection and algorithm versions are operational metadata ignored by reads, with no new provenance scheme prescribed here.
+
+Current exact encounter sets still determine boss aggregation and exclusions. Missing included bosses contribute zero, while excluded bosses leave the denominator. All reads remain all-time. Career/cross-instance aggregation, rolling180day, seasons, and finalized-season retention remain out of scope. Historical backfill, performance measurements, worker implementation, serving, and UI cutover require later PRs.
+
+\end{document}

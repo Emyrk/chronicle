@@ -655,6 +655,7 @@ export function boxPlotStats(boss: string | undefined, role: HubRole): RankingsB
 
 /** A guild on a rating board: its runs are rated like a player's parses. */
 export interface GuildRating {
+  realmLabel?: string
   guild: string
   guildId?: string
   logo?: string

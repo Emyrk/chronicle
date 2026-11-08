@@ -2,6 +2,12 @@
 version: "2"
 linters:
   exclusions:
+    rules:
+      # sqlc emits deferred Close calls in batch readers. Callers must still
+      # explicitly drain and Close batches, checking both errors (see ratings).
+      - path: '^database/batch\.go$'
+        linters: [errcheck]
+        text: 'Error return value of `b\.br\.Close` is not checked'
     paths:
       - "cmd/wasm/main\\.go$"
       - "database/gen/dump/.*"

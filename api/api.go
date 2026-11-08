@@ -508,6 +508,14 @@ func (api *API) Routes() chi.Router {
 			// Admin routes - require admin or technical_admin role
 			r.Route("/admin", func(r chi.Router) {
 				r.Use(api.Auth.Authenticated(false))
+				r.With(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User)).Get("/leaderboard-queues", api.AdminLeaderboardQueues)
+				r.Route("/leaderboard-operations", func(r chi.Router) {
+					r.Use(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User))
+					r.Get("/", api.AdminListLeaderboardOperations)
+					r.Post("/", api.AdminCreateLeaderboardOperation)
+					r.Get("/{operationID}", api.AdminLeaderboardOperation)
+					r.Post("/{operationID}/{action:pause|resume}", api.AdminLeaderboardOperation)
+				})
 				r.With(
 					httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User),
 				).Get("/notices", api.AdminListTelemetryNotices)
@@ -799,6 +807,10 @@ func (api *API) Routes() chi.Router {
 					})
 				})
 			})
+
+			r.With(api.Auth.Authenticated(true)).Get("/leaderboard-configuration", api.LeaderboardConfiguration)
+			r.With(api.Auth.Authenticated(true)).Get("/leaderboards-v2", api.LeaderboardV2)
+			r.With(api.Auth.Authenticated(true)).Get("/leaderboards-v2/maintenance", api.LeaderboardMaintenance)
 
 			if api.Opts.Rankings != nil {
 				r.Mount("/rankings", api.Opts.Rankings)

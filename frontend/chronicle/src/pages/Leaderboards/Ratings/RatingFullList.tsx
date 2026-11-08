@@ -63,7 +63,7 @@ export function RatingFullList({
   const [page, setPage] = useState(0)
   const metric = view === "overview" ? sortBy : view
   const showPeakComponents = view === "peak" && !!live && encounterCount > 1
-  const showPeakRun = view === "peak" && !live && encounterCount <= 1
+  const showPeakRun = view === "peak" && encounterCount <= 1
   const theme = METRIC_THEMES[view]
 
   const fixtureRows = useMemo<FullRow[]>(() => {
@@ -88,7 +88,7 @@ export function RatingFullList({
     retry: false,
   })
   const state = live?.loadPage
-    ? published.isError ? { status: "error" as const, error: "Published ratings unavailable." }
+    ? published.isError ? { status: "error" as const, error: published.error?.message || "Published ratings unavailable." }
       : published.data ? { status: "ready" as const, data: published.data } : { status: "loading" as const }
     : live?.page?.(selection)
   const livePage = state?.status === "ready" ? state.data : undefined
@@ -144,11 +144,11 @@ export function RatingFullList({
       </div>
 
       <div className="styled-scrollbar overflow-x-auto">
-        <table className="w-full min-w-[42rem] text-sm">
+        <table className="w-full min-w-[42rem] table-auto text-sm">
           <thead className="border-b bg-black/10 text-[11px] tracking-wider text-muted-foreground uppercase">
             <tr>
               <th className="w-14 px-4 py-2.5 text-left font-medium sm:px-5">#</th>
-              <th className="w-px px-2 py-2.5 pr-8 text-left font-medium whitespace-nowrap">Character</th>
+              <th className="w-[22%] px-2 py-2.5 pr-6 text-left font-medium whitespace-nowrap">Character</th>
               {/* The ranking's own number sits next to the name; supporting columns follow to the right. */}
               {view === "overview" ? (
                 RATING_METRICS.map((m) => {
@@ -177,23 +177,24 @@ export function RatingFullList({
               ) : (
                 <>
                   <th className="w-32 px-3 py-2.5 text-left font-medium">{theme.label}</th>
-                  {view === "mastery" && (live ? ["Peak", "Form", "Floor", "Eligible kills"].map((label) => <th key={label} className="px-3 py-2.5 text-right font-medium">{label}</th>) : <MasteryPartHeaders />)}
+                  {view === "mastery" && (live ? <PublishedMasteryHeaders /> : <MasteryPartHeaders />)}
                   {showPeakComponents && (
-                    <th className="px-3 py-2.5 text-left font-medium" title="Peak is the mean of every boss's best score; a boss without a kill counts as 0.">
+                    <th className="w-[28%] px-3 py-2.5 text-left font-medium" title="Peak is the mean of every boss's best score; a boss without a kill counts as 0.">
                       Boss peaks <span className="ml-1 hidden tracking-normal normal-case opacity-70 md:inline">· mean of {encounterCount}, misses count 0</span>
                     </th>
                   )}
                   {showPeakRun && (
                     <>
+                      {live && <th className="px-3 py-2.5 text-right font-medium">{rows[0]?.entry.rawMetric ?? "DPS/HPS"}</th>}
                       <th className="px-3 py-2.5 text-right font-medium">Kill time</th>
                       <th className="hidden px-3 py-2.5 text-left font-medium sm:table-cell">Date</th>
                     </>
                   )}
-                  <th className="hidden px-3 py-2.5 text-left font-medium lg:table-cell">Record</th>
                 </>
               )}
-              <th className="hidden px-2 py-2.5 text-left font-medium md:table-cell">Spec</th>
-              <th className="hidden px-2 py-2.5 pr-4 text-left font-medium sm:pr-5 md:table-cell">Sub-spec</th>
+              <th className="hidden w-48 whitespace-nowrap px-3 py-2.5 text-left font-medium lg:table-cell">Realm</th>
+              <th className="hidden w-40 px-2 py-2.5 text-left font-medium md:table-cell">Spec</th>
+              <th className="hidden w-36 px-2 py-2.5 pr-4 text-left font-medium sm:pr-5 md:table-cell">Sub-spec</th>
             </tr>
           </thead>
           <tbody>
@@ -205,7 +206,7 @@ export function RatingFullList({
             {visible.map(({ rank, entry, scores, peakComponents, peakRun: liveRun }) => (
               <tr key={entry.id} className="border-b border-white/5 transition-colors last:border-b-0 hover:bg-white/[.025]">
                 <td className="px-4 py-2 sm:px-5">
-                  <RankMark rank={rank} size="sm" />
+                  {live?.ranksKnown !== false && <RankMark rank={rank} size="sm" />}
                 </td>
                 <td className="px-2 py-2 pr-8 whitespace-nowrap">
                   <div className="flex min-w-0 items-center gap-2.5">
@@ -232,7 +233,8 @@ export function RatingFullList({
                         className={cn("px-3 py-2 font-mono tabular-nums", sortBy !== m && "text-muted-foreground")}
                         style={sortBy === m && rank === 1 ? { color: METRIC_THEMES[m].accent } : undefined}
                       >
-                        {score ? METRIC_THEMES[m].format(score.score) : "—"}
+                        {score ? METRIC_THEMES[m].format(score.score) : <span title="No performance summary in the selected role and cohort filters">—</span>}
+                        {score?.cohortLabel && <span className="mt-0.5 block text-[10px] text-muted-foreground" title={`Best whole-selection ${METRIC_THEMES[m].label}: ${score.cohortLabel}`}>{score.cohortLabel}</span>}
                         {m === "peak" && score?.raw ? <RawTag raw={score.raw} className="ml-1.5" /> : null}
                       </td>
                     )
@@ -254,18 +256,19 @@ export function RatingFullList({
                       </div>
                     </td>
                     {view === "mastery" && (live ? <PublishedMasteryCells entry={entry} /> : <MasteryPartCells parts={entry.mastery} />)}
-                    {showPeakComponents && <td className="w-full px-3 py-2"><PeakComponents entry={entry} scores={peakComponents} /></td>}
+                    {showPeakComponents && <td className="px-3 py-2"><PeakComponents entry={entry} scores={peakComponents} /></td>}
                     {showPeakRun && (() => {
-                      const run = liveRun ?? peakRun(entry.id, scope.boss)
+                      const run = live ? { ms: entry.durationMs, date: liveRun?.date } : liveRun ?? peakRun(entry.id, scope.boss)
                       return <>
-                        <td className="px-3 py-2 text-right font-mono text-muted-foreground tabular-nums">{formatClock(run.ms)}</td>
-                        <td className="hidden px-3 py-2 text-xs text-muted-foreground sm:table-cell">{run.date}</td>
+                        {live && <td className="px-3 py-2 text-right font-mono text-muted-foreground tabular-nums">{entry.raw === undefined ? "Unavailable" : entry.raw.toFixed(1)}</td>}
+                        <td className="px-3 py-2 text-right font-mono text-muted-foreground tabular-nums">{run.ms === undefined ? <span title="Peak encounter duration has not been recorded for this summary.">Unavailable</span> : formatClock(run.ms)}</td>
+                        <td className="hidden px-3 py-2 text-xs text-muted-foreground sm:table-cell">{run.date ?? "Unavailable"}</td>
                       </>
                     })()}
-                    <td className="hidden px-3 py-2 text-xs text-muted-foreground lg:table-cell">{entry.detail}</td>
                   </>
                 )}
-                <td className="hidden px-2 py-2 text-muted-foreground md:table-cell">{entry.spec}</td>
+                <td className="hidden whitespace-nowrap px-3 py-2 text-xs text-muted-foreground lg:table-cell">{entry.realmLabel || "Unknown realm"}</td>
+                <td className="hidden px-2 py-2 text-muted-foreground md:table-cell"><span className="inline-flex items-center gap-1.5 whitespace-nowrap">{entry.spec && <SpecIcon cls={entry.cls} spec={entry.spec} className="size-4 shrink-0 rounded-sm" />}<span>{entry.spec || "—"}</span></span></td>
                 <td className="hidden px-2 py-2 pr-4 text-muted-foreground sm:pr-5 md:table-cell">{entry.subSpec}</td>
               </tr>
             ))}
@@ -282,7 +285,7 @@ export function RatingFullList({
 
       <div className="flex items-center justify-between gap-3 border-t px-4 py-2.5 text-xs text-muted-foreground sm:px-5">
         <span>
-          {live && (query.trim() || live.ranksKnown === false)
+          {live?.ranksKnown === false ? `${visible.length} results · no global ranks` : live && query.trim()
             ? `${visible.length ? `${current * PAGE_SIZE + 1}–${current * PAGE_SIZE + visible.length}` : "0"} of ${total} matches${visible.length ? ` · global ranks ${visible[0].rank}–${visible[visible.length - 1].rank}` : ""}`
             : `${visible.length === 0 ? "0" : live ? `${visible[0].rank}–${visible[visible.length - 1].rank}` : `${current * PAGE_SIZE + 1}–${Math.min((current + 1) * PAGE_SIZE, filtered.length)}`} of ${live && livePage?.total === undefined ? "published ratings" : total}`}
         </span>
@@ -308,7 +311,7 @@ type BossPeak = { encounter_name: string; score: number }
  * Every boss's best score as one bar each; the row's Peak is their mean, misses counted as 0.
  * Clicking opens the full per-boss breakdown in a dialog.
  */
-function PeakComponents({ entry, scores }: { entry: RatingEntry; scores?: readonly BossPeak[] }) {
+export function PeakComponents({ entry, scores }: { entry: RatingEntry; scores?: readonly BossPeak[] }) {
   if (!scores?.length) return <span className="text-muted-foreground">—</span>
   const missed = scores.filter((boss) => boss.score <= 0).length
   return (
@@ -372,10 +375,20 @@ function PeakComponents({ entry, scores }: { entry: RatingEntry; scores?: readon
   )
 }
 
-function PublishedMasteryCells({ entry }: { entry: RatingEntry }) {
+export function PublishedMasteryHeaders() {
+ return <>{["Peak", "Form", "Floor", "3-kill progress"].map(label => <th key={label} className="px-3 py-2.5 text-right font-medium">{label}</th>)}</>
+}
+
+export function PublishedMasteryCells({ entry }: { entry: RatingEntry }) {
   const parts = entry.publishedMastery
-  const cells = [parts?.peak, parts?.form, parts?.floor, parts?.eligibleKills]
-  return <>{cells.map((value, i) => <td key={i} className="px-3 py-2 text-right font-mono text-muted-foreground tabular-nums">{value === undefined ? "—" : i === 3 ? value : value.toFixed(1)}</td>)}</>
+  const cells = [parts?.peak, parts?.form, parts?.floor]
+  const counts = entry.bossCounts
+  const progress = counts?.length ? counts.reduce((sum, boss) => sum + Math.min(boss.count, 3), 0) / (3 * counts.length) : 0
+  const description = counts?.map((boss) => `${boss.encounter_name}: ${Math.min(boss.count, 3)}/3 (${boss.count} observations)`).join("; ") ?? "No boss counts available"
+  return <>{cells.map((value, i) => <td key={i} className="px-3 py-2 text-right font-mono text-muted-foreground tabular-nums">{value === undefined ? "—" : value.toFixed(1)}</td>)}
+    <td className="px-3 py-2 text-right font-mono text-muted-foreground tabular-nums"><span tabIndex={0} title={description} aria-label={`Progress toward three kills per selected boss: ${description}`}>{counts ? `${Math.round(progress * 100)}%` : "—"}</span></td>
+  </>
+
 }
 
 function PageButton({ disabled, onClick, label, children }: { disabled: boolean; onClick: () => void; label: string; children: React.ReactNode }) {

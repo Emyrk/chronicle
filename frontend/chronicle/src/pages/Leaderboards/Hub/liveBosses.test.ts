@@ -10,6 +10,17 @@ describe("live Hub encounter roster", () => {
     expect(liveHubBosses(recorded, new Set(["Ragnaros"]), defaultSet, true)).toEqual(["Ragnaros", "Baron Geddon", "Trash"])
   })
 
+  it("offers hard-mode bosses alongside the default bosses without changing the preset", () => {
+    const sets = [
+      { id: "default", label: "Normal", encounters: ["Erennius", "Solnius"] },
+      { id: "hard", label: "Hard Mode", encounters: ["Solnius (Hard Mode)", "Erennius"] },
+    ]
+    expect(liveHubBosses([], new Set(sets[0].encounters), sets)).toEqual([
+      "Erennius", "Solnius", "Solnius (Hard Mode)",
+    ])
+    expect(sets[0].encounters).toEqual(["Erennius", "Solnius"])
+  })
+
   it("falls back to the progression roster and never treats Trash as a boss", () => {
     expect(liveHubBosses(recorded, new Set(["Ragnaros"]))).toEqual(["Ragnaros"])
     expect(liveHubBosses(recorded)).toEqual(["Baron Geddon", "Gehennas", "Ragnaros"])

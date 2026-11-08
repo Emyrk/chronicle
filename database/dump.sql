@@ -164,6 +164,13 @@ BEGIN
 END;
 $$;
 
+CREATE FUNCTION leaderboard_sorted_flavors(tags text[]) RETURNS text[]
+    LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+    AS $$
+    SELECT COALESCE(array_agg(DISTINCT tag ORDER BY tag), '{}'::text[])
+    FROM unnest(tags) tag WHERE tag IS NOT NULL AND btrim(tag) <> ''
+$$;
+
 CREATE FUNCTION rate_limit_refill(tokens double precision, updated_at timestamp with time zone, rate_per_second double precision, burst double precision) RETURNS double precision
     LANGUAGE sql STABLE
     AS $$
@@ -1442,6 +1449,688 @@ CREATE TABLE item_daily_prices (
 );
 
 ALTER TABLE ONLY item_daily_prices FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE leaderboard_boss_overrides (
+    layer_key text NOT NULL,
+    instance_name text NOT NULL,
+    encounter_name text NOT NULL,
+    enabled boolean NOT NULL
+);
+
+CREATE TABLE leaderboard_boss_renown (
+    layer_key text NOT NULL,
+    instance_name text NOT NULL,
+    encounter_name text NOT NULL,
+    points double precision NOT NULL,
+    CONSTRAINT leaderboard_boss_renown_points_check CHECK (((points >= (0)::double precision) AND (points < 'Infinity'::double precision)))
+);
+
+CREATE TABLE leaderboard_bosses (
+    instance_name text NOT NULL,
+    encounter_name text NOT NULL,
+    CONSTRAINT leaderboard_bosses_encounter_name_check CHECK ((btrim(encounter_name) <> ''::text))
+);
+
+CREATE TABLE leaderboard_dirty_guild_boss_benchmarks (
+    tenant_id uuid NOT NULL,
+    instance_name text NOT NULL,
+    difficulty_name text NOT NULL,
+    max_players smallint NOT NULL,
+    encounter_name text NOT NULL,
+    revision bigint DEFAULT 1 NOT NULL,
+    dirtied_at timestamp with time zone DEFAULT now() NOT NULL,
+    process_after timestamp with time zone DEFAULT now() NOT NULL,
+    claim_token uuid,
+    claimed_revision bigint,
+    locked_until timestamp with time zone,
+    retry_after timestamp with time zone DEFAULT '-infinity'::timestamp with time zone NOT NULL,
+    attempts integer DEFAULT 0 NOT NULL,
+    CONSTRAINT leaderboard_dirty_guild_boss_benchmarks_attempts_check CHECK ((attempts >= 0)),
+    CONSTRAINT leaderboard_dirty_guild_boss_benchmarks_claim_complete CHECK ((((claim_token IS NULL) AND (claimed_revision IS NULL) AND (locked_until IS NULL)) OR ((claim_token IS NOT NULL) AND (claimed_revision IS NOT NULL) AND (claimed_revision > 0) AND (locked_until IS NOT NULL)))),
+    CONSTRAINT leaderboard_dirty_guild_boss_benchmarks_encounter_name_check CHECK ((btrim(encounter_name) <> ''::text)),
+    CONSTRAINT leaderboard_dirty_guild_boss_benchmarks_instance_name_check CHECK ((btrim(instance_name) <> ''::text)),
+    CONSTRAINT leaderboard_dirty_guild_boss_benchmarks_max_players_check CHECK ((max_players >= 0)),
+    CONSTRAINT leaderboard_dirty_guild_boss_benchmarks_revision_check CHECK ((revision > 0))
+);
+
+ALTER TABLE ONLY leaderboard_dirty_guild_boss_benchmarks FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE leaderboard_dirty_guild_boss_subjects (
+    tenant_id uuid NOT NULL,
+    instance_name text NOT NULL,
+    difficulty_name text NOT NULL,
+    max_players smallint NOT NULL,
+    encounter_name text NOT NULL,
+    realm_id uuid NOT NULL,
+    guild_id uuid NOT NULL,
+    revision bigint DEFAULT 1 NOT NULL,
+    dirtied_at timestamp with time zone DEFAULT now() NOT NULL,
+    process_after timestamp with time zone DEFAULT now() NOT NULL,
+    claim_token uuid,
+    claimed_revision bigint,
+    locked_until timestamp with time zone,
+    retry_after timestamp with time zone DEFAULT '-infinity'::timestamp with time zone NOT NULL,
+    attempts integer DEFAULT 0 NOT NULL,
+    CONSTRAINT leaderboard_dirty_guild_boss_subjects_attempts_check CHECK ((attempts >= 0)),
+    CONSTRAINT leaderboard_dirty_guild_boss_subjects_claim_complete CHECK ((((claim_token IS NULL) AND (claimed_revision IS NULL) AND (locked_until IS NULL)) OR ((claim_token IS NOT NULL) AND (claimed_revision IS NOT NULL) AND (claimed_revision > 0) AND (locked_until IS NOT NULL)))),
+    CONSTRAINT leaderboard_dirty_guild_boss_subjects_encounter_name_check CHECK ((btrim(encounter_name) <> ''::text)),
+    CONSTRAINT leaderboard_dirty_guild_boss_subjects_instance_name_check CHECK ((btrim(instance_name) <> ''::text)),
+    CONSTRAINT leaderboard_dirty_guild_boss_subjects_max_players_check CHECK ((max_players >= 0)),
+    CONSTRAINT leaderboard_dirty_guild_boss_subjects_revision_check CHECK ((revision > 0))
+);
+
+ALTER TABLE ONLY leaderboard_dirty_guild_boss_subjects FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE leaderboard_dirty_guild_clear_benchmarks (
+    tenant_id uuid NOT NULL,
+    instance_name text NOT NULL,
+    difficulty_name text NOT NULL,
+    max_players smallint NOT NULL,
+    revision bigint DEFAULT 1 NOT NULL,
+    dirtied_at timestamp with time zone DEFAULT now() NOT NULL,
+    process_after timestamp with time zone DEFAULT now() NOT NULL,
+    claim_token uuid,
+    claimed_revision bigint,
+    locked_until timestamp with time zone,
+    retry_after timestamp with time zone DEFAULT '-infinity'::timestamp with time zone NOT NULL,
+    attempts integer DEFAULT 0 NOT NULL,
+    CONSTRAINT leaderboard_dirty_guild_clear_benchmarks_attempts_check CHECK ((attempts >= 0)),
+    CONSTRAINT leaderboard_dirty_guild_clear_benchmarks_claim_complete CHECK ((((claim_token IS NULL) AND (claimed_revision IS NULL) AND (locked_until IS NULL)) OR ((claim_token IS NOT NULL) AND (claimed_revision IS NOT NULL) AND (claimed_revision > 0) AND (locked_until IS NOT NULL)))),
+    CONSTRAINT leaderboard_dirty_guild_clear_benchmarks_instance_name_check CHECK ((btrim(instance_name) <> ''::text)),
+    CONSTRAINT leaderboard_dirty_guild_clear_benchmarks_max_players_check CHECK ((max_players >= 0)),
+    CONSTRAINT leaderboard_dirty_guild_clear_benchmarks_revision_check CHECK ((revision > 0))
+);
+
+ALTER TABLE ONLY leaderboard_dirty_guild_clear_benchmarks FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE leaderboard_dirty_guild_clear_subjects (
+    tenant_id uuid NOT NULL,
+    instance_name text NOT NULL,
+    difficulty_name text NOT NULL,
+    max_players smallint NOT NULL,
+    realm_id uuid NOT NULL,
+    guild_id uuid NOT NULL,
+    revision bigint DEFAULT 1 NOT NULL,
+    dirtied_at timestamp with time zone DEFAULT now() NOT NULL,
+    process_after timestamp with time zone DEFAULT now() NOT NULL,
+    claim_token uuid,
+    claimed_revision bigint,
+    locked_until timestamp with time zone,
+    retry_after timestamp with time zone DEFAULT '-infinity'::timestamp with time zone NOT NULL,
+    attempts integer DEFAULT 0 NOT NULL,
+    CONSTRAINT leaderboard_dirty_guild_clear_subjects_attempts_check CHECK ((attempts >= 0)),
+    CONSTRAINT leaderboard_dirty_guild_clear_subjects_claim_complete CHECK ((((claim_token IS NULL) AND (claimed_revision IS NULL) AND (locked_until IS NULL)) OR ((claim_token IS NOT NULL) AND (claimed_revision IS NOT NULL) AND (claimed_revision > 0) AND (locked_until IS NOT NULL)))),
+    CONSTRAINT leaderboard_dirty_guild_clear_subjects_instance_name_check CHECK ((btrim(instance_name) <> ''::text)),
+    CONSTRAINT leaderboard_dirty_guild_clear_subjects_max_players_check CHECK ((max_players >= 0)),
+    CONSTRAINT leaderboard_dirty_guild_clear_subjects_revision_check CHECK ((revision > 0))
+);
+
+ALTER TABLE ONLY leaderboard_dirty_guild_clear_subjects FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE leaderboard_dirty_guild_renown (
+    tenant_id uuid NOT NULL,
+    instance_name text NOT NULL,
+    difficulty_name text NOT NULL,
+    max_players smallint NOT NULL,
+    encounter_name text NOT NULL,
+    realm_id uuid NOT NULL,
+    guild_id uuid NOT NULL,
+    revision bigint DEFAULT 1 NOT NULL,
+    dirtied_at timestamp with time zone DEFAULT now() NOT NULL,
+    process_after timestamp with time zone DEFAULT now() NOT NULL,
+    claim_token uuid,
+    claimed_revision bigint,
+    locked_until timestamp with time zone,
+    retry_after timestamp with time zone DEFAULT '-infinity'::timestamp with time zone NOT NULL,
+    attempts integer DEFAULT 0 NOT NULL,
+    CONSTRAINT leaderboard_dirty_guild_renown_attempts_check CHECK ((attempts >= 0)),
+    CONSTRAINT leaderboard_dirty_guild_renown_claim_complete CHECK ((((claim_token IS NULL) AND (claimed_revision IS NULL) AND (locked_until IS NULL)) OR ((claim_token IS NOT NULL) AND (claimed_revision IS NOT NULL) AND (claimed_revision > 0) AND (locked_until IS NOT NULL)))),
+    CONSTRAINT leaderboard_dirty_guild_renown_encounter_name_check CHECK ((btrim(encounter_name) <> ''::text)),
+    CONSTRAINT leaderboard_dirty_guild_renown_instance_name_check CHECK ((btrim(instance_name) <> ''::text)),
+    CONSTRAINT leaderboard_dirty_guild_renown_max_players_check CHECK ((max_players >= 0)),
+    CONSTRAINT leaderboard_dirty_guild_renown_revision_check CHECK ((revision > 0))
+);
+
+ALTER TABLE ONLY leaderboard_dirty_guild_renown FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE leaderboard_dirty_player_boss_benchmarks (
+    tenant_id uuid NOT NULL,
+    instance_name text NOT NULL,
+    difficulty_name text NOT NULL,
+    max_players smallint NOT NULL,
+    encounter_name text NOT NULL,
+    player_class text NOT NULL,
+    player_spec text NOT NULL,
+    player_sub_spec text NOT NULL,
+    metric text NOT NULL,
+    revision bigint DEFAULT 1 NOT NULL,
+    dirtied_at timestamp with time zone DEFAULT now() NOT NULL,
+    process_after timestamp with time zone DEFAULT now() NOT NULL,
+    claim_token uuid,
+    claimed_revision bigint,
+    locked_until timestamp with time zone,
+    retry_after timestamp with time zone DEFAULT '-infinity'::timestamp with time zone NOT NULL,
+    attempts integer DEFAULT 0 NOT NULL,
+    CONSTRAINT leaderboard_dirty_player_boss_benchmarks_attempts_check CHECK ((attempts >= 0)),
+    CONSTRAINT leaderboard_dirty_player_boss_benchmarks_claim_complete CHECK ((((claim_token IS NULL) AND (claimed_revision IS NULL) AND (locked_until IS NULL)) OR ((claim_token IS NOT NULL) AND (claimed_revision IS NOT NULL) AND (claimed_revision > 0) AND (locked_until IS NOT NULL)))),
+    CONSTRAINT leaderboard_dirty_player_boss_benchmarks_encounter_name_check CHECK ((btrim(encounter_name) <> ''::text)),
+    CONSTRAINT leaderboard_dirty_player_boss_benchmarks_instance_name_check CHECK ((btrim(instance_name) <> ''::text)),
+    CONSTRAINT leaderboard_dirty_player_boss_benchmarks_max_players_check CHECK ((max_players >= 0)),
+    CONSTRAINT leaderboard_dirty_player_boss_benchmarks_metric_check CHECK ((metric = ANY (ARRAY['dps'::text, 'hps'::text]))),
+    CONSTRAINT leaderboard_dirty_player_boss_benchmarks_player_class_check CHECK ((btrim(player_class) <> ''::text)),
+    CONSTRAINT leaderboard_dirty_player_boss_benchmarks_player_spec_check CHECK ((btrim(player_spec) <> ''::text)),
+    CONSTRAINT leaderboard_dirty_player_boss_benchmarks_revision_check CHECK ((revision > 0))
+);
+
+ALTER TABLE ONLY leaderboard_dirty_player_boss_benchmarks FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE leaderboard_dirty_player_boss_subjects (
+    tenant_id uuid NOT NULL,
+    instance_name text NOT NULL,
+    difficulty_name text NOT NULL,
+    max_players smallint NOT NULL,
+    encounter_name text NOT NULL,
+    player_class text NOT NULL,
+    player_spec text NOT NULL,
+    player_sub_spec text NOT NULL,
+    metric text NOT NULL,
+    realm_id uuid NOT NULL,
+    player_guid text NOT NULL,
+    revision bigint DEFAULT 1 NOT NULL,
+    dirtied_at timestamp with time zone DEFAULT now() NOT NULL,
+    process_after timestamp with time zone DEFAULT now() NOT NULL,
+    claim_token uuid,
+    claimed_revision bigint,
+    locked_until timestamp with time zone,
+    retry_after timestamp with time zone DEFAULT '-infinity'::timestamp with time zone NOT NULL,
+    attempts integer DEFAULT 0 NOT NULL,
+    CONSTRAINT leaderboard_dirty_player_boss_subjects_attempts_check CHECK ((attempts >= 0)),
+    CONSTRAINT leaderboard_dirty_player_boss_subjects_claim_complete CHECK ((((claim_token IS NULL) AND (claimed_revision IS NULL) AND (locked_until IS NULL)) OR ((claim_token IS NOT NULL) AND (claimed_revision IS NOT NULL) AND (claimed_revision > 0) AND (locked_until IS NOT NULL)))),
+    CONSTRAINT leaderboard_dirty_player_boss_subjects_encounter_name_check CHECK ((btrim(encounter_name) <> ''::text)),
+    CONSTRAINT leaderboard_dirty_player_boss_subjects_instance_name_check CHECK ((btrim(instance_name) <> ''::text)),
+    CONSTRAINT leaderboard_dirty_player_boss_subjects_max_players_check CHECK ((max_players >= 0)),
+    CONSTRAINT leaderboard_dirty_player_boss_subjects_metric_check CHECK ((metric = ANY (ARRAY['dps'::text, 'hps'::text]))),
+    CONSTRAINT leaderboard_dirty_player_boss_subjects_player_class_check CHECK ((btrim(player_class) <> ''::text)),
+    CONSTRAINT leaderboard_dirty_player_boss_subjects_player_guid_check CHECK ((btrim(player_guid) <> ''::text)),
+    CONSTRAINT leaderboard_dirty_player_boss_subjects_player_spec_check CHECK ((btrim(player_spec) <> ''::text)),
+    CONSTRAINT leaderboard_dirty_player_boss_subjects_revision_check CHECK ((revision > 0))
+);
+
+ALTER TABLE ONLY leaderboard_dirty_player_boss_subjects FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE leaderboard_dirty_player_renown (
+    tenant_id uuid NOT NULL,
+    instance_name text NOT NULL,
+    difficulty_name text NOT NULL,
+    max_players smallint NOT NULL,
+    encounter_name text NOT NULL,
+    realm_id uuid NOT NULL,
+    player_guid text NOT NULL,
+    revision bigint DEFAULT 1 NOT NULL,
+    dirtied_at timestamp with time zone DEFAULT now() NOT NULL,
+    process_after timestamp with time zone DEFAULT now() NOT NULL,
+    claim_token uuid,
+    claimed_revision bigint,
+    locked_until timestamp with time zone,
+    retry_after timestamp with time zone DEFAULT '-infinity'::timestamp with time zone NOT NULL,
+    attempts integer DEFAULT 0 NOT NULL,
+    CONSTRAINT leaderboard_dirty_player_renown_attempts_check CHECK ((attempts >= 0)),
+    CONSTRAINT leaderboard_dirty_player_renown_claim_complete CHECK ((((claim_token IS NULL) AND (claimed_revision IS NULL) AND (locked_until IS NULL)) OR ((claim_token IS NOT NULL) AND (claimed_revision IS NOT NULL) AND (claimed_revision > 0) AND (locked_until IS NOT NULL)))),
+    CONSTRAINT leaderboard_dirty_player_renown_encounter_name_check CHECK ((btrim(encounter_name) <> ''::text)),
+    CONSTRAINT leaderboard_dirty_player_renown_instance_name_check CHECK ((btrim(instance_name) <> ''::text)),
+    CONSTRAINT leaderboard_dirty_player_renown_max_players_check CHECK ((max_players >= 0)),
+    CONSTRAINT leaderboard_dirty_player_renown_player_guid_check CHECK ((btrim(player_guid) <> ''::text)),
+    CONSTRAINT leaderboard_dirty_player_renown_revision_check CHECK ((revision > 0))
+);
+
+ALTER TABLE ONLY leaderboard_dirty_player_renown FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE leaderboard_dirty_runs (
+    tenant_id uuid NOT NULL,
+    run_id uuid NOT NULL,
+    revision bigint DEFAULT 1 NOT NULL,
+    dirtied_at timestamp with time zone DEFAULT now() NOT NULL,
+    process_after timestamp with time zone DEFAULT now() NOT NULL,
+    claim_token uuid,
+    claimed_revision bigint,
+    locked_until timestamp with time zone,
+    retry_after timestamp with time zone DEFAULT '-infinity'::timestamp with time zone NOT NULL,
+    attempts integer DEFAULT 0 NOT NULL,
+    CONSTRAINT leaderboard_dirty_runs_attempts_check CHECK ((attempts >= 0)),
+    CONSTRAINT leaderboard_dirty_runs_claim_complete CHECK ((((claim_token IS NULL) AND (claimed_revision IS NULL) AND (locked_until IS NULL)) OR ((claim_token IS NOT NULL) AND (claimed_revision IS NOT NULL) AND (claimed_revision > 0) AND (locked_until IS NOT NULL)))),
+    CONSTRAINT leaderboard_dirty_runs_revision_check CHECK ((revision > 0))
+);
+
+ALTER TABLE ONLY leaderboard_dirty_runs FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE leaderboard_guild_boss_benchmarks (
+    tenant_id uuid NOT NULL,
+    instance_name text NOT NULL,
+    difficulty_name text NOT NULL,
+    max_players smallint NOT NULL,
+    encounter_name text NOT NULL,
+    best_duration_ms bigint NOT NULL,
+    projection_version integer NOT NULL,
+    algorithm_version integer NOT NULL,
+    computed_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT leaderboard_guild_boss_benchmarks_algorithm_version_check CHECK ((algorithm_version > 0)),
+    CONSTRAINT leaderboard_guild_boss_benchmarks_best_duration_ms_check CHECK ((best_duration_ms > 0)),
+    CONSTRAINT leaderboard_guild_boss_benchmarks_encounter_name_check CHECK ((btrim(encounter_name) <> ''::text)),
+    CONSTRAINT leaderboard_guild_boss_benchmarks_instance_name_check CHECK ((btrim(instance_name) <> ''::text)),
+    CONSTRAINT leaderboard_guild_boss_benchmarks_max_players_check CHECK ((max_players >= 0)),
+    CONSTRAINT leaderboard_guild_boss_benchmarks_projection_version_check CHECK ((projection_version > 0))
+);
+
+ALTER TABLE ONLY leaderboard_guild_boss_benchmarks FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE leaderboard_guild_boss_observations (
+    tenant_id uuid NOT NULL,
+    instance_name text NOT NULL,
+    difficulty_name text NOT NULL,
+    max_players smallint NOT NULL,
+    encounter_name text NOT NULL,
+    run_id uuid NOT NULL,
+    source_instance_id uuid NOT NULL,
+    realm_id uuid NOT NULL,
+    guild_id uuid NOT NULL,
+    source_time_parse_score_id uuid NOT NULL,
+    source_encounter_id uuid NOT NULL,
+    duration_ms bigint NOT NULL,
+    projection_version integer NOT NULL,
+    observed_at timestamp with time zone NOT NULL,
+    CONSTRAINT leaderboard_guild_boss_observations_duration_ms_check CHECK ((duration_ms > 0)),
+    CONSTRAINT leaderboard_guild_boss_observations_encounter_name_check CHECK ((btrim(encounter_name) <> ''::text)),
+    CONSTRAINT leaderboard_guild_boss_observations_instance_name_check CHECK ((btrim(instance_name) <> ''::text)),
+    CONSTRAINT leaderboard_guild_boss_observations_max_players_check CHECK ((max_players >= 0)),
+    CONSTRAINT leaderboard_guild_boss_observations_projection_version_check CHECK ((projection_version > 0))
+);
+
+ALTER TABLE ONLY leaderboard_guild_boss_observations FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE leaderboard_guild_boss_subjects (
+    tenant_id uuid NOT NULL,
+    instance_name text NOT NULL,
+    difficulty_name text NOT NULL,
+    max_players smallint NOT NULL,
+    encounter_name text NOT NULL,
+    realm_id uuid NOT NULL,
+    guild_id uuid NOT NULL,
+    observation_count bigint NOT NULL,
+    fastest_duration_ms bigint NOT NULL,
+    form_mean_inverse_ms double precision NOT NULL,
+    floor_mean_inverse_ms double precision NOT NULL,
+    projection_version integer NOT NULL,
+    algorithm_version integer NOT NULL,
+    computed_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT leaderboard_guild_boss_subjects_algorithm_version_check CHECK ((algorithm_version > 0)),
+    CONSTRAINT leaderboard_guild_boss_subjects_encounter_name_check CHECK ((btrim(encounter_name) <> ''::text)),
+    CONSTRAINT leaderboard_guild_boss_subjects_fastest_duration_ms_check CHECK ((fastest_duration_ms > 0)),
+    CONSTRAINT leaderboard_guild_boss_subjects_floor_mean_inverse_ms_check CHECK (((floor_mean_inverse_ms >= (0)::double precision) AND (floor_mean_inverse_ms < 'Infinity'::double precision))),
+    CONSTRAINT leaderboard_guild_boss_subjects_form_mean_inverse_ms_check CHECK (((form_mean_inverse_ms >= (0)::double precision) AND (form_mean_inverse_ms < 'Infinity'::double precision))),
+    CONSTRAINT leaderboard_guild_boss_subjects_instance_name_check CHECK ((btrim(instance_name) <> ''::text)),
+    CONSTRAINT leaderboard_guild_boss_subjects_max_players_check CHECK ((max_players >= 0)),
+    CONSTRAINT leaderboard_guild_boss_subjects_observation_count_check CHECK ((observation_count > 0)),
+    CONSTRAINT leaderboard_guild_boss_subjects_projection_version_check CHECK ((projection_version > 0))
+);
+
+ALTER TABLE ONLY leaderboard_guild_boss_subjects FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE leaderboard_guild_clear_benchmarks (
+    tenant_id uuid NOT NULL,
+    instance_name text NOT NULL,
+    difficulty_name text NOT NULL,
+    max_players smallint NOT NULL,
+    best_duration_ms bigint NOT NULL,
+    projection_version integer NOT NULL,
+    algorithm_version integer NOT NULL,
+    computed_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT leaderboard_guild_clear_benchmarks_algorithm_version_check CHECK ((algorithm_version > 0)),
+    CONSTRAINT leaderboard_guild_clear_benchmarks_best_duration_ms_check CHECK ((best_duration_ms > 0)),
+    CONSTRAINT leaderboard_guild_clear_benchmarks_instance_name_check CHECK ((btrim(instance_name) <> ''::text)),
+    CONSTRAINT leaderboard_guild_clear_benchmarks_max_players_check CHECK ((max_players >= 0)),
+    CONSTRAINT leaderboard_guild_clear_benchmarks_projection_version_check CHECK ((projection_version > 0))
+);
+
+ALTER TABLE ONLY leaderboard_guild_clear_benchmarks FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE leaderboard_guild_clear_observations (
+    tenant_id uuid NOT NULL,
+    instance_name text NOT NULL,
+    difficulty_name text NOT NULL,
+    max_players smallint NOT NULL,
+    run_id uuid NOT NULL,
+    source_instance_id uuid NOT NULL,
+    realm_id uuid NOT NULL,
+    guild_id uuid NOT NULL,
+    source_time_parse_score_id uuid NOT NULL,
+    duration_ms bigint NOT NULL,
+    projection_version integer NOT NULL,
+    observed_at timestamp with time zone NOT NULL,
+    CONSTRAINT leaderboard_guild_clear_observations_duration_ms_check CHECK ((duration_ms > 0)),
+    CONSTRAINT leaderboard_guild_clear_observations_instance_name_check CHECK ((btrim(instance_name) <> ''::text)),
+    CONSTRAINT leaderboard_guild_clear_observations_max_players_check CHECK ((max_players >= 0)),
+    CONSTRAINT leaderboard_guild_clear_observations_projection_version_check CHECK ((projection_version > 0))
+);
+
+ALTER TABLE ONLY leaderboard_guild_clear_observations FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE leaderboard_guild_clear_subjects (
+    tenant_id uuid NOT NULL,
+    instance_name text NOT NULL,
+    difficulty_name text NOT NULL,
+    max_players smallint NOT NULL,
+    realm_id uuid NOT NULL,
+    guild_id uuid NOT NULL,
+    observation_count bigint NOT NULL,
+    fastest_duration_ms bigint NOT NULL,
+    form_mean_inverse_ms double precision NOT NULL,
+    floor_mean_inverse_ms double precision NOT NULL,
+    projection_version integer NOT NULL,
+    algorithm_version integer NOT NULL,
+    computed_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT leaderboard_guild_clear_subjects_algorithm_version_check CHECK ((algorithm_version > 0)),
+    CONSTRAINT leaderboard_guild_clear_subjects_fastest_duration_ms_check CHECK ((fastest_duration_ms > 0)),
+    CONSTRAINT leaderboard_guild_clear_subjects_floor_mean_inverse_ms_check CHECK (((floor_mean_inverse_ms >= (0)::double precision) AND (floor_mean_inverse_ms < 'Infinity'::double precision))),
+    CONSTRAINT leaderboard_guild_clear_subjects_form_mean_inverse_ms_check CHECK (((form_mean_inverse_ms >= (0)::double precision) AND (form_mean_inverse_ms < 'Infinity'::double precision))),
+    CONSTRAINT leaderboard_guild_clear_subjects_instance_name_check CHECK ((btrim(instance_name) <> ''::text)),
+    CONSTRAINT leaderboard_guild_clear_subjects_max_players_check CHECK ((max_players >= 0)),
+    CONSTRAINT leaderboard_guild_clear_subjects_observation_count_check CHECK ((observation_count > 0)),
+    CONSTRAINT leaderboard_guild_clear_subjects_projection_version_check CHECK ((projection_version > 0))
+);
+
+ALTER TABLE ONLY leaderboard_guild_clear_subjects FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE leaderboard_guild_renown_counts (
+    tenant_id uuid NOT NULL,
+    instance_name text NOT NULL,
+    difficulty_name text NOT NULL,
+    max_players smallint NOT NULL,
+    encounter_name text NOT NULL,
+    realm_id uuid NOT NULL,
+    guild_id uuid NOT NULL,
+    kill_count bigint NOT NULL,
+    projection_version integer NOT NULL,
+    algorithm_version integer NOT NULL,
+    computed_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT leaderboard_guild_renown_counts_algorithm_version_check CHECK ((algorithm_version > 0)),
+    CONSTRAINT leaderboard_guild_renown_counts_encounter_name_check CHECK ((btrim(encounter_name) <> ''::text)),
+    CONSTRAINT leaderboard_guild_renown_counts_instance_name_check CHECK ((btrim(instance_name) <> ''::text)),
+    CONSTRAINT leaderboard_guild_renown_counts_kill_count_check CHECK ((kill_count > 0)),
+    CONSTRAINT leaderboard_guild_renown_counts_max_players_check CHECK ((max_players >= 0)),
+    CONSTRAINT leaderboard_guild_renown_counts_projection_version_check CHECK ((projection_version > 0))
+);
+
+ALTER TABLE ONLY leaderboard_guild_renown_counts FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE leaderboard_guild_renown_facts (
+    tenant_id uuid NOT NULL,
+    instance_name text NOT NULL,
+    difficulty_name text NOT NULL,
+    max_players smallint NOT NULL,
+    encounter_name text NOT NULL,
+    run_id uuid NOT NULL,
+    source_instance_id uuid NOT NULL,
+    realm_id uuid NOT NULL,
+    guild_id uuid NOT NULL,
+    source_encounter_id uuid NOT NULL,
+    projection_version integer NOT NULL,
+    observed_at timestamp with time zone NOT NULL,
+    CONSTRAINT leaderboard_guild_renown_facts_encounter_name_check CHECK ((btrim(encounter_name) <> ''::text)),
+    CONSTRAINT leaderboard_guild_renown_facts_instance_name_check CHECK ((btrim(instance_name) <> ''::text)),
+    CONSTRAINT leaderboard_guild_renown_facts_max_players_check CHECK ((max_players >= 0)),
+    CONSTRAINT leaderboard_guild_renown_facts_projection_version_check CHECK ((projection_version > 0))
+);
+
+ALTER TABLE ONLY leaderboard_guild_renown_facts FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE leaderboard_instance_overrides (
+    layer_key text NOT NULL,
+    instance_name text NOT NULL,
+    enabled boolean NOT NULL
+);
+
+CREATE TABLE leaderboard_instance_variants (
+    instance_name text NOT NULL,
+    difficulty_name text NOT NULL,
+    max_players smallint NOT NULL,
+    CONSTRAINT leaderboard_instance_variants_max_players_check CHECK ((max_players > 0))
+);
+
+CREATE TABLE leaderboard_instances (
+    instance_name text NOT NULL,
+    CONSTRAINT leaderboard_instances_instance_name_check CHECK ((btrim(instance_name) <> ''::text))
+);
+
+CREATE TABLE leaderboard_layers (
+    key text NOT NULL,
+    required_flavors text[] NOT NULL,
+    CONSTRAINT leaderboard_layers_key_check CHECK ((btrim(key) <> ''::text)),
+    CONSTRAINT leaderboard_layers_required_flavors_check CHECK ((required_flavors = leaderboard_sorted_flavors(required_flavors)))
+);
+
+CREATE TABLE leaderboard_member_overrides (
+    layer_key text NOT NULL,
+    instance_name text NOT NULL,
+    set_key text NOT NULL,
+    encounter_name text NOT NULL,
+    enabled boolean,
+    "position" integer,
+    CONSTRAINT leaderboard_member_overrides_check CHECK (((enabled IS NOT NULL) OR ("position" IS NOT NULL))),
+    CONSTRAINT leaderboard_member_overrides_position_check CHECK (("position" > 0))
+);
+
+CREATE TABLE leaderboard_operations (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    requested_by uuid NOT NULL,
+    purpose text NOT NULL,
+    scope text NOT NULL,
+    run_id uuid,
+    before_date date NOT NULL,
+    cutoff timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    state text DEFAULT 'discovering'::text NOT NULL,
+    phase text DEFAULT 'runs'::text NOT NULL,
+    cursor_scope jsonb DEFAULT '{}'::jsonb NOT NULL,
+    cursor_realm uuid DEFAULT '00000000-0000-0000-0000-000000000000'::uuid NOT NULL,
+    cursor_date timestamp with time zone DEFAULT '-infinity'::timestamp with time zone NOT NULL,
+    cursor_id uuid DEFAULT '00000000-0000-0000-0000-000000000000'::uuid NOT NULL,
+    discovered bigint DEFAULT 0 NOT NULL,
+    missing_dates bigint DEFAULT 0 NOT NULL,
+    discovery_complete boolean DEFAULT false NOT NULL,
+    started_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    completed_at timestamp with time zone,
+    last_progress_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    retry_count integer DEFAULT 0 NOT NULL,
+    retry_after timestamp with time zone DEFAULT '-infinity'::timestamp with time zone NOT NULL,
+    last_error text DEFAULT ''::text NOT NULL,
+    CONSTRAINT leaderboard_operations_check CHECK (((scope = 'run'::text) = (run_id IS NOT NULL))),
+    CONSTRAINT leaderboard_operations_purpose_check CHECK ((purpose = ANY (ARRAY['bootstrap'::text, 'repair'::text]))),
+    CONSTRAINT leaderboard_operations_scope_check CHECK ((scope = ANY (ARRAY['tenant'::text, 'run'::text]))),
+    CONSTRAINT leaderboard_operations_state_check CHECK ((state = ANY (ARRAY['discovering'::text, 'draining'::text, 'paused'::text, 'completed'::text])))
+);
+
+ALTER TABLE ONLY leaderboard_operations FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE leaderboard_player_boss_benchmarks (
+    tenant_id uuid NOT NULL,
+    instance_name text NOT NULL,
+    difficulty_name text NOT NULL,
+    max_players smallint NOT NULL,
+    encounter_name text NOT NULL,
+    player_class text NOT NULL,
+    player_spec text NOT NULL,
+    player_sub_spec text NOT NULL,
+    metric text NOT NULL,
+    best_metric double precision NOT NULL,
+    projection_version integer NOT NULL,
+    algorithm_version integer NOT NULL,
+    computed_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT leaderboard_player_boss_benchmarks_algorithm_version_check CHECK ((algorithm_version > 0)),
+    CONSTRAINT leaderboard_player_boss_benchmarks_best_metric_check CHECK (((best_metric >= (0)::double precision) AND (best_metric < 'Infinity'::double precision))),
+    CONSTRAINT leaderboard_player_boss_benchmarks_encounter_name_check CHECK ((btrim(encounter_name) <> ''::text)),
+    CONSTRAINT leaderboard_player_boss_benchmarks_instance_name_check CHECK ((btrim(instance_name) <> ''::text)),
+    CONSTRAINT leaderboard_player_boss_benchmarks_max_players_check CHECK ((max_players >= 0)),
+    CONSTRAINT leaderboard_player_boss_benchmarks_metric_check CHECK ((metric = ANY (ARRAY['dps'::text, 'hps'::text]))),
+    CONSTRAINT leaderboard_player_boss_benchmarks_player_class_check CHECK ((btrim(player_class) <> ''::text)),
+    CONSTRAINT leaderboard_player_boss_benchmarks_player_spec_check CHECK ((btrim(player_spec) <> ''::text)),
+    CONSTRAINT leaderboard_player_boss_benchmarks_projection_version_check CHECK ((projection_version > 0))
+);
+
+ALTER TABLE ONLY leaderboard_player_boss_benchmarks FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE leaderboard_player_boss_subjects (
+    tenant_id uuid NOT NULL,
+    instance_name text NOT NULL,
+    difficulty_name text NOT NULL,
+    max_players smallint NOT NULL,
+    encounter_name text NOT NULL,
+    player_class text NOT NULL,
+    player_spec text NOT NULL,
+    player_sub_spec text NOT NULL,
+    metric text NOT NULL,
+    realm_id uuid NOT NULL,
+    player_guid text NOT NULL,
+    observation_count bigint NOT NULL,
+    raw_peak double precision NOT NULL,
+    raw_form double precision NOT NULL,
+    raw_floor double precision NOT NULL,
+    projection_version integer NOT NULL,
+    algorithm_version integer NOT NULL,
+    computed_at timestamp with time zone DEFAULT now() NOT NULL,
+    peak_encounter_id uuid,
+    peak_duration_ms bigint,
+    CONSTRAINT leaderboard_player_boss_subjects_algorithm_version_check CHECK ((algorithm_version > 0)),
+    CONSTRAINT leaderboard_player_boss_subjects_encounter_name_check CHECK ((btrim(encounter_name) <> ''::text)),
+    CONSTRAINT leaderboard_player_boss_subjects_instance_name_check CHECK ((btrim(instance_name) <> ''::text)),
+    CONSTRAINT leaderboard_player_boss_subjects_max_players_check CHECK ((max_players >= 0)),
+    CONSTRAINT leaderboard_player_boss_subjects_metric_check CHECK ((metric = ANY (ARRAY['dps'::text, 'hps'::text]))),
+    CONSTRAINT leaderboard_player_boss_subjects_observation_count_check CHECK ((observation_count > 0)),
+    CONSTRAINT leaderboard_player_boss_subjects_player_class_check CHECK ((btrim(player_class) <> ''::text)),
+    CONSTRAINT leaderboard_player_boss_subjects_player_guid_check CHECK ((btrim(player_guid) <> ''::text)),
+    CONSTRAINT leaderboard_player_boss_subjects_player_spec_check CHECK ((btrim(player_spec) <> ''::text)),
+    CONSTRAINT leaderboard_player_boss_subjects_projection_version_check CHECK ((projection_version > 0)),
+    CONSTRAINT leaderboard_player_boss_subjects_raw_floor_check CHECK (((raw_floor >= (0)::double precision) AND (raw_floor < 'Infinity'::double precision))),
+    CONSTRAINT leaderboard_player_boss_subjects_raw_form_check CHECK (((raw_form >= (0)::double precision) AND (raw_form < 'Infinity'::double precision))),
+    CONSTRAINT leaderboard_player_boss_subjects_raw_peak_check CHECK (((raw_peak >= (0)::double precision) AND (raw_peak < 'Infinity'::double precision)))
+);
+
+ALTER TABLE ONLY leaderboard_player_boss_subjects FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE leaderboard_player_observations (
+    tenant_id uuid NOT NULL,
+    instance_name text NOT NULL,
+    difficulty_name text NOT NULL,
+    max_players smallint NOT NULL,
+    encounter_name text NOT NULL,
+    run_id uuid NOT NULL,
+    source_instance_id uuid NOT NULL,
+    realm_id uuid NOT NULL,
+    player_guid text NOT NULL,
+    source_encounter_id uuid NOT NULL,
+    source_ranking_id uuid NOT NULL,
+    player_class text NOT NULL,
+    player_spec text NOT NULL,
+    player_sub_spec text NOT NULL,
+    metric text NOT NULL,
+    metric_value double precision NOT NULL,
+    projection_version integer NOT NULL,
+    observed_at timestamp with time zone NOT NULL,
+    CONSTRAINT leaderboard_player_observations_encounter_name_check CHECK ((btrim(encounter_name) <> ''::text)),
+    CONSTRAINT leaderboard_player_observations_instance_name_check CHECK ((btrim(instance_name) <> ''::text)),
+    CONSTRAINT leaderboard_player_observations_max_players_check CHECK ((max_players >= 0)),
+    CONSTRAINT leaderboard_player_observations_metric_check CHECK ((metric = ANY (ARRAY['dps'::text, 'hps'::text]))),
+    CONSTRAINT leaderboard_player_observations_metric_value_check CHECK (((metric_value >= (0)::double precision) AND (metric_value < 'Infinity'::double precision))),
+    CONSTRAINT leaderboard_player_observations_player_class_check CHECK ((btrim(player_class) <> ''::text)),
+    CONSTRAINT leaderboard_player_observations_player_guid_check CHECK ((btrim(player_guid) <> ''::text)),
+    CONSTRAINT leaderboard_player_observations_player_spec_check CHECK ((btrim(player_spec) <> ''::text)),
+    CONSTRAINT leaderboard_player_observations_projection_version_check CHECK ((projection_version > 0))
+);
+
+ALTER TABLE ONLY leaderboard_player_observations FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE leaderboard_player_renown_counts (
+    tenant_id uuid NOT NULL,
+    instance_name text NOT NULL,
+    difficulty_name text NOT NULL,
+    max_players smallint NOT NULL,
+    encounter_name text NOT NULL,
+    realm_id uuid NOT NULL,
+    player_guid text NOT NULL,
+    kill_count bigint NOT NULL,
+    projection_version integer NOT NULL,
+    algorithm_version integer NOT NULL,
+    computed_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT leaderboard_player_renown_counts_algorithm_version_check CHECK ((algorithm_version > 0)),
+    CONSTRAINT leaderboard_player_renown_counts_encounter_name_check CHECK ((btrim(encounter_name) <> ''::text)),
+    CONSTRAINT leaderboard_player_renown_counts_instance_name_check CHECK ((btrim(instance_name) <> ''::text)),
+    CONSTRAINT leaderboard_player_renown_counts_kill_count_check CHECK ((kill_count > 0)),
+    CONSTRAINT leaderboard_player_renown_counts_max_players_check CHECK ((max_players >= 0)),
+    CONSTRAINT leaderboard_player_renown_counts_player_guid_check CHECK ((btrim(player_guid) <> ''::text)),
+    CONSTRAINT leaderboard_player_renown_counts_projection_version_check CHECK ((projection_version > 0))
+);
+
+ALTER TABLE ONLY leaderboard_player_renown_counts FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE leaderboard_player_renown_facts (
+    tenant_id uuid NOT NULL,
+    instance_name text NOT NULL,
+    difficulty_name text NOT NULL,
+    max_players smallint NOT NULL,
+    encounter_name text NOT NULL,
+    run_id uuid NOT NULL,
+    source_instance_id uuid NOT NULL,
+    realm_id uuid NOT NULL,
+    player_guid text NOT NULL,
+    source_encounter_id uuid NOT NULL,
+    projection_version integer NOT NULL,
+    observed_at timestamp with time zone NOT NULL,
+    CONSTRAINT leaderboard_player_renown_facts_encounter_name_check CHECK ((btrim(encounter_name) <> ''::text)),
+    CONSTRAINT leaderboard_player_renown_facts_instance_name_check CHECK ((btrim(instance_name) <> ''::text)),
+    CONSTRAINT leaderboard_player_renown_facts_max_players_check CHECK ((max_players >= 0)),
+    CONSTRAINT leaderboard_player_renown_facts_player_guid_check CHECK ((btrim(player_guid) <> ''::text)),
+    CONSTRAINT leaderboard_player_renown_facts_projection_version_check CHECK ((projection_version > 0))
+);
+
+ALTER TABLE ONLY leaderboard_player_renown_facts FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE leaderboard_set_members (
+    instance_name text NOT NULL,
+    set_key text NOT NULL,
+    encounter_name text NOT NULL
+);
+
+CREATE TABLE leaderboard_set_overrides (
+    layer_key text NOT NULL,
+    instance_name text NOT NULL,
+    set_key text NOT NULL,
+    enabled boolean NOT NULL
+);
+
+CREATE TABLE leaderboard_sets (
+    instance_name text NOT NULL,
+    set_key text NOT NULL,
+    name text NOT NULL,
+    CONSTRAINT leaderboard_sets_name_check CHECK ((btrim(name) <> ''::text)),
+    CONSTRAINT leaderboard_sets_set_key_check CHECK ((btrim(set_key) <> ''::text))
+);
+
+CREATE TABLE leaderboard_variant_overrides (
+    layer_key text NOT NULL,
+    instance_name text NOT NULL,
+    difficulty_name text NOT NULL,
+    max_players smallint NOT NULL,
+    enabled boolean NOT NULL
+);
+
+CREATE TABLE leaderboard_variant_renown (
+    layer_key text NOT NULL,
+    instance_name text NOT NULL,
+    encounter_name text NOT NULL,
+    difficulty_name text NOT NULL,
+    max_players smallint NOT NULL,
+    points double precision NOT NULL,
+    CONSTRAINT leaderboard_variant_renown_points_check CHECK (((points >= (0)::double precision) AND (points < 'Infinity'::double precision)))
+);
 
 CREATE TABLE log_instance_encounter_damage_unit_summary (
     encounter_id uuid NOT NULL,
@@ -3017,6 +3706,120 @@ ALTER TABLE ONLY instance_speedruns
 ALTER TABLE ONLY item_daily_prices
     ADD CONSTRAINT item_daily_prices_pkey PRIMARY KEY (realm_id, auction_house_faction, item_id, price_date);
 
+ALTER TABLE ONLY leaderboard_boss_overrides
+    ADD CONSTRAINT leaderboard_boss_overrides_pkey PRIMARY KEY (layer_key, instance_name, encounter_name);
+
+ALTER TABLE ONLY leaderboard_boss_renown
+    ADD CONSTRAINT leaderboard_boss_renown_pkey PRIMARY KEY (layer_key, instance_name, encounter_name);
+
+ALTER TABLE ONLY leaderboard_bosses
+    ADD CONSTRAINT leaderboard_bosses_pkey PRIMARY KEY (instance_name, encounter_name);
+
+ALTER TABLE ONLY leaderboard_dirty_guild_boss_benchmarks
+    ADD CONSTRAINT leaderboard_dirty_guild_boss_benchmarks_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name);
+
+ALTER TABLE ONLY leaderboard_dirty_guild_boss_subjects
+    ADD CONSTRAINT leaderboard_dirty_guild_boss_subjects_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id);
+
+ALTER TABLE ONLY leaderboard_dirty_guild_clear_benchmarks
+    ADD CONSTRAINT leaderboard_dirty_guild_clear_benchmarks_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players);
+
+ALTER TABLE ONLY leaderboard_dirty_guild_clear_subjects
+    ADD CONSTRAINT leaderboard_dirty_guild_clear_subjects_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, realm_id, guild_id);
+
+ALTER TABLE ONLY leaderboard_dirty_guild_renown
+    ADD CONSTRAINT leaderboard_dirty_guild_renown_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id);
+
+ALTER TABLE ONLY leaderboard_dirty_player_boss_benchmarks
+    ADD CONSTRAINT leaderboard_dirty_player_boss_benchmarks_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric);
+
+ALTER TABLE ONLY leaderboard_dirty_player_boss_subjects
+    ADD CONSTRAINT leaderboard_dirty_player_boss_subjects_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid);
+
+ALTER TABLE ONLY leaderboard_dirty_player_renown
+    ADD CONSTRAINT leaderboard_dirty_player_renown_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, player_guid);
+
+ALTER TABLE ONLY leaderboard_dirty_runs
+    ADD CONSTRAINT leaderboard_dirty_runs_pkey PRIMARY KEY (tenant_id, run_id);
+
+ALTER TABLE ONLY leaderboard_guild_boss_benchmarks
+    ADD CONSTRAINT leaderboard_guild_boss_benchmarks_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name);
+
+ALTER TABLE ONLY leaderboard_guild_boss_observations
+    ADD CONSTRAINT leaderboard_guild_boss_observations_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name, run_id, realm_id, guild_id);
+
+ALTER TABLE ONLY leaderboard_guild_boss_subjects
+    ADD CONSTRAINT leaderboard_guild_boss_subjects_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id);
+
+ALTER TABLE ONLY leaderboard_guild_clear_benchmarks
+    ADD CONSTRAINT leaderboard_guild_clear_benchmarks_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players);
+
+ALTER TABLE ONLY leaderboard_guild_clear_observations
+    ADD CONSTRAINT leaderboard_guild_clear_observations_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, run_id, realm_id, guild_id);
+
+ALTER TABLE ONLY leaderboard_guild_clear_subjects
+    ADD CONSTRAINT leaderboard_guild_clear_subjects_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, realm_id, guild_id);
+
+ALTER TABLE ONLY leaderboard_guild_renown_counts
+    ADD CONSTRAINT leaderboard_guild_renown_counts_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id);
+
+ALTER TABLE ONLY leaderboard_guild_renown_facts
+    ADD CONSTRAINT leaderboard_guild_renown_facts_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name, run_id, realm_id, guild_id);
+
+ALTER TABLE ONLY leaderboard_instance_overrides
+    ADD CONSTRAINT leaderboard_instance_overrides_pkey PRIMARY KEY (layer_key, instance_name);
+
+ALTER TABLE ONLY leaderboard_instance_variants
+    ADD CONSTRAINT leaderboard_instance_variants_pkey PRIMARY KEY (instance_name, difficulty_name, max_players);
+
+ALTER TABLE ONLY leaderboard_instances
+    ADD CONSTRAINT leaderboard_instances_pkey PRIMARY KEY (instance_name);
+
+ALTER TABLE ONLY leaderboard_layers
+    ADD CONSTRAINT leaderboard_layers_pkey PRIMARY KEY (key);
+
+ALTER TABLE ONLY leaderboard_layers
+    ADD CONSTRAINT leaderboard_layers_required_flavors_key UNIQUE (required_flavors);
+
+ALTER TABLE ONLY leaderboard_member_overrides
+    ADD CONSTRAINT leaderboard_member_overrides_pkey PRIMARY KEY (layer_key, instance_name, set_key, encounter_name);
+
+ALTER TABLE ONLY leaderboard_operations
+    ADD CONSTRAINT leaderboard_operations_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY leaderboard_player_boss_benchmarks
+    ADD CONSTRAINT leaderboard_player_boss_benchmarks_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric);
+
+ALTER TABLE ONLY leaderboard_player_boss_subjects
+    ADD CONSTRAINT leaderboard_player_boss_subjects_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid);
+
+ALTER TABLE ONLY leaderboard_player_observations
+    ADD CONSTRAINT leaderboard_player_observations_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name, run_id, realm_id, player_guid, metric);
+
+ALTER TABLE leaderboard_player_boss_subjects
+    ADD CONSTRAINT leaderboard_player_peak_provenance_complete CHECK ((((peak_encounter_id IS NULL) AND (peak_duration_ms IS NULL)) OR ((peak_encounter_id IS NOT NULL) AND (peak_duration_ms IS NOT NULL) AND (peak_duration_ms > 0)))) NOT VALID;
+
+ALTER TABLE ONLY leaderboard_player_renown_counts
+    ADD CONSTRAINT leaderboard_player_renown_counts_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, player_guid);
+
+ALTER TABLE ONLY leaderboard_player_renown_facts
+    ADD CONSTRAINT leaderboard_player_renown_facts_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name, run_id, realm_id, player_guid);
+
+ALTER TABLE ONLY leaderboard_set_members
+    ADD CONSTRAINT leaderboard_set_members_pkey PRIMARY KEY (instance_name, set_key, encounter_name);
+
+ALTER TABLE ONLY leaderboard_set_overrides
+    ADD CONSTRAINT leaderboard_set_overrides_pkey PRIMARY KEY (layer_key, instance_name, set_key);
+
+ALTER TABLE ONLY leaderboard_sets
+    ADD CONSTRAINT leaderboard_sets_pkey PRIMARY KEY (instance_name, set_key);
+
+ALTER TABLE ONLY leaderboard_variant_overrides
+    ADD CONSTRAINT leaderboard_variant_overrides_pkey PRIMARY KEY (layer_key, instance_name, difficulty_name, max_players);
+
+ALTER TABLE ONLY leaderboard_variant_renown
+    ADD CONSTRAINT leaderboard_variant_renown_pkey PRIMARY KEY (layer_key, instance_name, encounter_name, difficulty_name, max_players);
+
 ALTER TABLE ONLY log_file_parts
     ADD CONSTRAINT log_file_parts_log_file_id_sequence_key UNIQUE (log_file_id, sequence);
 
@@ -3608,6 +4411,76 @@ CREATE INDEX instance_speedruns_cohort_lookup_idx ON instance_speedruns USING bt
 
 CREATE INDEX item_daily_prices_future_lookup_idx ON item_daily_prices USING btree (realm_id, auction_house_faction, item_id, price_date) WHERE (price_copper IS NOT NULL);
 
+CREATE INDEX leaderboard_dirty_guild_boss_benchmarks_due_idx ON leaderboard_dirty_guild_boss_benchmarks USING btree (process_after, tenant_id);
+
+CREATE INDEX leaderboard_dirty_guild_boss_subjects_due_idx ON leaderboard_dirty_guild_boss_subjects USING btree (process_after, tenant_id);
+
+CREATE INDEX leaderboard_dirty_guild_clear_benchmarks_due_idx ON leaderboard_dirty_guild_clear_benchmarks USING btree (process_after, tenant_id);
+
+CREATE INDEX leaderboard_dirty_guild_clear_subjects_due_idx ON leaderboard_dirty_guild_clear_subjects USING btree (process_after, tenant_id);
+
+CREATE INDEX leaderboard_dirty_guild_renown_due_idx ON leaderboard_dirty_guild_renown USING btree (process_after, tenant_id);
+
+CREATE INDEX leaderboard_dirty_player_boss_benchmarks_due_idx ON leaderboard_dirty_player_boss_benchmarks USING btree (process_after, tenant_id);
+
+CREATE INDEX leaderboard_dirty_player_boss_subjects_due_idx ON leaderboard_dirty_player_boss_subjects USING btree (process_after, tenant_id);
+
+CREATE INDEX leaderboard_dirty_player_renown_due_idx ON leaderboard_dirty_player_renown USING btree (process_after, tenant_id);
+
+CREATE INDEX leaderboard_dirty_runs_due_idx ON leaderboard_dirty_runs USING btree (process_after, tenant_id);
+
+CREATE INDEX leaderboard_guild_boss_observations_best_idx ON leaderboard_guild_boss_observations USING btree (tenant_id, instance_name, difficulty_name, max_players, encounter_name, duration_ms);
+
+CREATE INDEX leaderboard_guild_boss_observations_run_idx ON leaderboard_guild_boss_observations USING btree (tenant_id, run_id);
+
+CREATE INDEX leaderboard_guild_boss_observations_run_lookup_idx ON leaderboard_guild_boss_observations USING btree (run_id);
+
+CREATE INDEX leaderboard_guild_boss_observations_scope_idx ON leaderboard_guild_boss_observations USING btree (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id);
+
+CREATE INDEX leaderboard_guild_boss_observations_source_lookup_idx ON leaderboard_guild_boss_observations USING btree (source_instance_id);
+
+CREATE INDEX leaderboard_guild_clear_observations_best_idx ON leaderboard_guild_clear_observations USING btree (tenant_id, instance_name, difficulty_name, max_players, duration_ms);
+
+CREATE INDEX leaderboard_guild_clear_observations_run_idx ON leaderboard_guild_clear_observations USING btree (tenant_id, run_id);
+
+CREATE INDEX leaderboard_guild_clear_observations_run_lookup_idx ON leaderboard_guild_clear_observations USING btree (run_id);
+
+CREATE INDEX leaderboard_guild_clear_observations_scope_idx ON leaderboard_guild_clear_observations USING btree (tenant_id, instance_name, difficulty_name, max_players, realm_id, guild_id);
+
+CREATE INDEX leaderboard_guild_clear_observations_source_lookup_idx ON leaderboard_guild_clear_observations USING btree (source_instance_id);
+
+CREATE INDEX leaderboard_guild_renown_facts_run_idx ON leaderboard_guild_renown_facts USING btree (tenant_id, run_id);
+
+CREATE INDEX leaderboard_guild_renown_facts_run_lookup_idx ON leaderboard_guild_renown_facts USING btree (run_id);
+
+CREATE INDEX leaderboard_guild_renown_facts_scope_idx ON leaderboard_guild_renown_facts USING btree (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id);
+
+CREATE INDEX leaderboard_guild_renown_facts_source_lookup_idx ON leaderboard_guild_renown_facts USING btree (source_instance_id);
+
+CREATE INDEX leaderboard_operations_history ON leaderboard_operations USING btree (tenant_id, started_at DESC, id);
+
+CREATE UNIQUE INDEX leaderboard_operations_unfinished ON leaderboard_operations USING btree (tenant_id) WHERE (state <> 'completed'::text);
+
+CREATE INDEX leaderboard_player_boss_read_idx ON leaderboard_player_boss_subjects USING btree (tenant_id, instance_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid, encounter_name) INCLUDE (raw_peak, raw_form, raw_floor, observation_count, computed_at);
+
+CREATE INDEX leaderboard_player_observations_best_idx ON leaderboard_player_observations USING btree (tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, metric_value DESC);
+
+CREATE INDEX leaderboard_player_observations_run_idx ON leaderboard_player_observations USING btree (tenant_id, run_id);
+
+CREATE INDEX leaderboard_player_observations_run_lookup_idx ON leaderboard_player_observations USING btree (run_id);
+
+CREATE INDEX leaderboard_player_observations_scope_idx ON leaderboard_player_observations USING btree (tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid);
+
+CREATE INDEX leaderboard_player_observations_source_lookup_idx ON leaderboard_player_observations USING btree (source_instance_id);
+
+CREATE INDEX leaderboard_player_renown_facts_run_idx ON leaderboard_player_renown_facts USING btree (tenant_id, run_id);
+
+CREATE INDEX leaderboard_player_renown_facts_run_lookup_idx ON leaderboard_player_renown_facts USING btree (run_id);
+
+CREATE INDEX leaderboard_player_renown_facts_scope_idx ON leaderboard_player_renown_facts USING btree (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, player_guid);
+
+CREATE INDEX leaderboard_player_renown_facts_source_lookup_idx ON leaderboard_player_renown_facts USING btree (source_instance_id);
+
 CREATE INDEX log_file_parts_pending_idx ON log_file_parts USING btree (log_file_id, created_at) WHERE (status = 'pending'::text);
 
 CREATE UNIQUE INDEX log_file_parts_source_sequence_idx ON log_file_parts USING btree (log_file_id, source_sequence) WHERE (source_sequence IS NOT NULL);
@@ -4007,6 +4880,69 @@ ALTER TABLE ONLY instance_speedruns
 ALTER TABLE ONLY item_daily_prices
     ADD CONSTRAINT item_daily_prices_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id) ON DELETE CASCADE;
 
+ALTER TABLE ONLY leaderboard_boss_overrides
+    ADD CONSTRAINT leaderboard_boss_overrides_instance_name_encounter_name_fkey FOREIGN KEY (instance_name, encounter_name) REFERENCES leaderboard_bosses(instance_name, encounter_name);
+
+ALTER TABLE ONLY leaderboard_boss_overrides
+    ADD CONSTRAINT leaderboard_boss_overrides_layer_key_fkey FOREIGN KEY (layer_key) REFERENCES leaderboard_layers(key);
+
+ALTER TABLE ONLY leaderboard_boss_renown
+    ADD CONSTRAINT leaderboard_boss_renown_instance_name_encounter_name_fkey FOREIGN KEY (instance_name, encounter_name) REFERENCES leaderboard_bosses(instance_name, encounter_name);
+
+ALTER TABLE ONLY leaderboard_boss_renown
+    ADD CONSTRAINT leaderboard_boss_renown_layer_key_fkey FOREIGN KEY (layer_key) REFERENCES leaderboard_layers(key);
+
+ALTER TABLE ONLY leaderboard_bosses
+    ADD CONSTRAINT leaderboard_bosses_instance_name_fkey FOREIGN KEY (instance_name) REFERENCES leaderboard_instances(instance_name);
+
+ALTER TABLE ONLY leaderboard_instance_overrides
+    ADD CONSTRAINT leaderboard_instance_overrides_instance_name_fkey FOREIGN KEY (instance_name) REFERENCES leaderboard_instances(instance_name);
+
+ALTER TABLE ONLY leaderboard_instance_overrides
+    ADD CONSTRAINT leaderboard_instance_overrides_layer_key_fkey FOREIGN KEY (layer_key) REFERENCES leaderboard_layers(key);
+
+ALTER TABLE ONLY leaderboard_instance_variants
+    ADD CONSTRAINT leaderboard_instance_variants_instance_name_fkey FOREIGN KEY (instance_name) REFERENCES leaderboard_instances(instance_name);
+
+ALTER TABLE ONLY leaderboard_member_overrides
+    ADD CONSTRAINT leaderboard_member_overrides_instance_name_set_key_encount_fkey FOREIGN KEY (instance_name, set_key, encounter_name) REFERENCES leaderboard_set_members(instance_name, set_key, encounter_name);
+
+ALTER TABLE ONLY leaderboard_member_overrides
+    ADD CONSTRAINT leaderboard_member_overrides_layer_key_fkey FOREIGN KEY (layer_key) REFERENCES leaderboard_layers(key);
+
+ALTER TABLE ONLY leaderboard_operations
+    ADD CONSTRAINT leaderboard_operations_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES tenants(id);
+
+ALTER TABLE ONLY leaderboard_set_members
+    ADD CONSTRAINT leaderboard_set_members_instance_name_encounter_name_fkey FOREIGN KEY (instance_name, encounter_name) REFERENCES leaderboard_bosses(instance_name, encounter_name);
+
+ALTER TABLE ONLY leaderboard_set_members
+    ADD CONSTRAINT leaderboard_set_members_instance_name_set_key_fkey FOREIGN KEY (instance_name, set_key) REFERENCES leaderboard_sets(instance_name, set_key);
+
+ALTER TABLE ONLY leaderboard_set_overrides
+    ADD CONSTRAINT leaderboard_set_overrides_instance_name_set_key_fkey FOREIGN KEY (instance_name, set_key) REFERENCES leaderboard_sets(instance_name, set_key);
+
+ALTER TABLE ONLY leaderboard_set_overrides
+    ADD CONSTRAINT leaderboard_set_overrides_layer_key_fkey FOREIGN KEY (layer_key) REFERENCES leaderboard_layers(key);
+
+ALTER TABLE ONLY leaderboard_sets
+    ADD CONSTRAINT leaderboard_sets_instance_name_fkey FOREIGN KEY (instance_name) REFERENCES leaderboard_instances(instance_name);
+
+ALTER TABLE ONLY leaderboard_variant_overrides
+    ADD CONSTRAINT leaderboard_variant_overrides_instance_name_difficulty_nam_fkey FOREIGN KEY (instance_name, difficulty_name, max_players) REFERENCES leaderboard_instance_variants(instance_name, difficulty_name, max_players);
+
+ALTER TABLE ONLY leaderboard_variant_overrides
+    ADD CONSTRAINT leaderboard_variant_overrides_layer_key_fkey FOREIGN KEY (layer_key) REFERENCES leaderboard_layers(key);
+
+ALTER TABLE ONLY leaderboard_variant_renown
+    ADD CONSTRAINT leaderboard_variant_renown_instance_name_difficulty_name_m_fkey FOREIGN KEY (instance_name, difficulty_name, max_players) REFERENCES leaderboard_instance_variants(instance_name, difficulty_name, max_players);
+
+ALTER TABLE ONLY leaderboard_variant_renown
+    ADD CONSTRAINT leaderboard_variant_renown_instance_name_encounter_name_fkey FOREIGN KEY (instance_name, encounter_name) REFERENCES leaderboard_bosses(instance_name, encounter_name);
+
+ALTER TABLE ONLY leaderboard_variant_renown
+    ADD CONSTRAINT leaderboard_variant_renown_layer_key_fkey FOREIGN KEY (layer_key) REFERENCES leaderboard_layers(key);
+
 ALTER TABLE ONLY log_file
     ADD CONSTRAINT log_file_owner_fkey FOREIGN KEY (owner) REFERENCES users(id);
 
@@ -4373,6 +5309,52 @@ ALTER TABLE guild_renown_kill_facts ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE item_daily_prices ENABLE ROW LEVEL SECURITY;
 
+ALTER TABLE leaderboard_dirty_guild_boss_benchmarks ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE leaderboard_dirty_guild_boss_subjects ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE leaderboard_dirty_guild_clear_benchmarks ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE leaderboard_dirty_guild_clear_subjects ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE leaderboard_dirty_guild_renown ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE leaderboard_dirty_player_boss_benchmarks ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE leaderboard_dirty_player_boss_subjects ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE leaderboard_dirty_player_renown ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE leaderboard_dirty_runs ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE leaderboard_guild_boss_benchmarks ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE leaderboard_guild_boss_observations ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE leaderboard_guild_boss_subjects ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE leaderboard_guild_clear_benchmarks ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE leaderboard_guild_clear_observations ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE leaderboard_guild_clear_subjects ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE leaderboard_guild_renown_counts ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE leaderboard_guild_renown_facts ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE leaderboard_operations ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE leaderboard_player_boss_benchmarks ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE leaderboard_player_boss_subjects ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE leaderboard_player_observations ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE leaderboard_player_renown_counts ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE leaderboard_player_renown_facts ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE renown_kill_facts ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY tenant_admin_bypass ON encounter_dps_rankings USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
@@ -4380,6 +5362,52 @@ CREATE POLICY tenant_admin_bypass ON encounter_dps_rankings USING ((current_sett
 CREATE POLICY tenant_admin_bypass ON guild_renown_kill_facts USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON item_daily_prices USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON leaderboard_dirty_guild_boss_benchmarks USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON leaderboard_dirty_guild_boss_subjects USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON leaderboard_dirty_guild_clear_benchmarks USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON leaderboard_dirty_guild_clear_subjects USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON leaderboard_dirty_guild_renown USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON leaderboard_dirty_player_boss_benchmarks USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON leaderboard_dirty_player_boss_subjects USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON leaderboard_dirty_player_renown USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON leaderboard_dirty_runs USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON leaderboard_guild_boss_benchmarks USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON leaderboard_guild_boss_observations USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON leaderboard_guild_boss_subjects USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON leaderboard_guild_clear_benchmarks USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON leaderboard_guild_clear_observations USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON leaderboard_guild_clear_subjects USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON leaderboard_guild_renown_counts USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON leaderboard_guild_renown_facts USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON leaderboard_operations USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON leaderboard_player_boss_benchmarks USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON leaderboard_player_boss_subjects USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON leaderboard_player_observations USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON leaderboard_player_renown_counts USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON leaderboard_player_renown_facts USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON renown_kill_facts USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
@@ -4397,6 +5425,52 @@ CREATE POLICY tenant_isolation ON guild_renown_kill_facts USING ((realm_id IN ( 
    FROM (public.wow_server_realms realm
      JOIN wow_servers server ON ((server.id = realm.server_id)))
   WHERE (COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid) = guild_renown_kill_facts.tenant_id))));
+
+CREATE POLICY tenant_isolation ON leaderboard_dirty_guild_boss_benchmarks USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
+
+CREATE POLICY tenant_isolation ON leaderboard_dirty_guild_boss_subjects USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
+
+CREATE POLICY tenant_isolation ON leaderboard_dirty_guild_clear_benchmarks USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
+
+CREATE POLICY tenant_isolation ON leaderboard_dirty_guild_clear_subjects USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
+
+CREATE POLICY tenant_isolation ON leaderboard_dirty_guild_renown USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
+
+CREATE POLICY tenant_isolation ON leaderboard_dirty_player_boss_benchmarks USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
+
+CREATE POLICY tenant_isolation ON leaderboard_dirty_player_boss_subjects USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
+
+CREATE POLICY tenant_isolation ON leaderboard_dirty_player_renown USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
+
+CREATE POLICY tenant_isolation ON leaderboard_dirty_runs USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
+
+CREATE POLICY tenant_isolation ON leaderboard_guild_boss_benchmarks USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
+
+CREATE POLICY tenant_isolation ON leaderboard_guild_boss_observations USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
+
+CREATE POLICY tenant_isolation ON leaderboard_guild_boss_subjects USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
+
+CREATE POLICY tenant_isolation ON leaderboard_guild_clear_benchmarks USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
+
+CREATE POLICY tenant_isolation ON leaderboard_guild_clear_observations USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
+
+CREATE POLICY tenant_isolation ON leaderboard_guild_clear_subjects USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
+
+CREATE POLICY tenant_isolation ON leaderboard_guild_renown_counts USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
+
+CREATE POLICY tenant_isolation ON leaderboard_guild_renown_facts USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
+
+CREATE POLICY tenant_isolation ON leaderboard_operations USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
+
+CREATE POLICY tenant_isolation ON leaderboard_player_boss_benchmarks USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
+
+CREATE POLICY tenant_isolation ON leaderboard_player_boss_subjects USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
+
+CREATE POLICY tenant_isolation ON leaderboard_player_observations USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
+
+CREATE POLICY tenant_isolation ON leaderboard_player_renown_counts USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
+
+CREATE POLICY tenant_isolation ON leaderboard_player_renown_facts USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
 
 CREATE POLICY tenant_isolation ON renown_kill_facts USING ((realm_id IN ( SELECT wow_server_realms.id
    FROM wow_server_realms)));

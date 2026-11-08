@@ -9,6 +9,7 @@ import (
 
 	"github.com/Emyrk/chronicle/chronicle/riverqueue/rankingargs"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/services/serviceratings"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -83,6 +84,10 @@ func refreshRankingRunsTx(ctx context.Context, tx database.Store, ids []uuid.UUI
 		return output, nil
 	}
 
+	runs, err := serviceratings.PrepareDirectRunsTx(ctx, tx, affectedIDs)
+	if err != nil {
+		return output, fmt.Errorf("prepare leaderboard canonical publication: %w", err)
+	}
 	sources, err := tx.RankingRunSources(ctx, affectedIDs)
 	if err != nil {
 		return output, fmt.Errorf("resolve ranking run sources: %w", err)
@@ -123,6 +128,9 @@ func refreshRankingRunsTx(ctx context.Context, tx database.Store, ids []uuid.UUI
 			output.UpdatedCount++
 		}
 
+	}
+	if err := serviceratings.PublishDirectRunsTx(ctx, tx, runs); err != nil {
+		return output, fmt.Errorf("publish leaderboard canonical evidence: %w", err)
 	}
 	return output, nil
 }

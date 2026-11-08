@@ -1,0 +1,10 @@
+BEGIN;
+ALTER TABLE leaderboard_dirty_guild_renown DROP CONSTRAINT leaderboard_dirty_guild_renown_claim_complete, DROP COLUMN claim_token, DROP COLUMN claimed_revision, DROP COLUMN locked_until, DROP COLUMN retry_after, DROP COLUMN attempts;
+ALTER TABLE leaderboard_dirty_player_renown DROP CONSTRAINT leaderboard_dirty_player_renown_claim_complete, DROP COLUMN claim_token, DROP COLUMN claimed_revision, DROP COLUMN locked_until, DROP COLUMN retry_after, DROP COLUMN attempts;
+ALTER TABLE leaderboard_dirty_guild_clear_subjects DROP CONSTRAINT leaderboard_dirty_guild_clear_subjects_claim_complete, DROP COLUMN claim_token, DROP COLUMN claimed_revision, DROP COLUMN locked_until, DROP COLUMN retry_after, DROP COLUMN attempts;
+ALTER TABLE leaderboard_dirty_guild_clear_benchmarks DROP CONSTRAINT leaderboard_dirty_guild_clear_benchmarks_claim_complete, DROP COLUMN claim_token, DROP COLUMN claimed_revision, DROP COLUMN locked_until, DROP COLUMN retry_after, DROP COLUMN attempts;
+ALTER TABLE leaderboard_dirty_guild_boss_subjects DROP CONSTRAINT leaderboard_dirty_guild_boss_subjects_claim_complete, DROP COLUMN claim_token, DROP COLUMN claimed_revision, DROP COLUMN locked_until, DROP COLUMN retry_after, DROP COLUMN attempts;
+ALTER TABLE leaderboard_dirty_guild_boss_benchmarks DROP CONSTRAINT leaderboard_dirty_guild_boss_benchmarks_claim_complete, DROP COLUMN claim_token, DROP COLUMN claimed_revision, DROP COLUMN locked_until, DROP COLUMN retry_after, DROP COLUMN attempts;
+ALTER TABLE leaderboard_dirty_player_boss_subjects DROP CONSTRAINT leaderboard_dirty_player_boss_subjects_claim_complete, DROP COLUMN claim_token, DROP COLUMN claimed_revision, DROP COLUMN locked_until, DROP COLUMN retry_after, DROP COLUMN attempts;
+ALTER TABLE leaderboard_dirty_player_boss_benchmarks DROP CONSTRAINT leaderboard_dirty_player_boss_benchmarks_claim_complete, DROP COLUMN claim_token, DROP COLUMN claimed_revision, DROP COLUMN locked_until, DROP COLUMN retry_after, DROP COLUMN attempts;
+COMMIT;
