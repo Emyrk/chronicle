@@ -146,6 +146,7 @@ export function RatingsPage() {
       <BenchmarkSection benchmark={benchmark} setBenchmark={setBenchmark} rawPeak={rating.rawPeak} />
       <SmallSamples />
       <MultipleBosses />
+      <DpsOrHps />
       <Guilds />
       <Cohorts />
 
@@ -655,6 +656,50 @@ function MultipleBosses() {
   )
 }
 
+function DpsOrHps() {
+  const examples = [
+    { who: "Fury Warrior", dps: 1150, hps: 40 },
+    { who: "Holy Priest", dps: 90, hps: 820 },
+    { who: "Shadow Priest", dps: 610, hps: 650 },
+  ]
+  return (
+    <Section title="DPS or HPS?">
+      <p className="mb-3 text-muted-foreground">
+        Each kill counts toward <strong>either</strong> DPS or HPS, never both. Chronicle takes whichever of the two
+        numbers is higher for that kill (DPS wins a tie). The kill is then rated only on that board.
+      </p>
+      <table className="mb-3 text-sm tabular-nums">
+        <thead>
+          <tr className="text-muted-foreground">
+            <th className="pr-6 text-left font-medium">Player</th>
+            <th className="pr-6 text-right font-medium">DPS</th>
+            <th className="pr-6 text-right font-medium">HPS</th>
+            <th className="text-left font-medium">Counts as</th>
+          </tr>
+        </thead>
+        <tbody>
+          {examples.map((e) => {
+            const dps = e.dps >= e.hps
+            return (
+              <tr key={e.who}>
+                <td className="pr-6">{e.who}</td>
+                <td className={cn("pr-6 text-right", !dps && "text-muted-foreground")}>{fmtInt(e.dps)}</td>
+                <td className={cn("pr-6 text-right", dps && "text-muted-foreground")}>{fmtInt(e.hps)}</td>
+                <td className="font-medium">{dps ? "DPS" : "HPS"}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+      <p className="text-muted-foreground">
+        This is decided kill by kill. If a Shadow Priest heals more than they damage on one fight, that kill is rated
+        as HPS. Their other kills stay on the DPS board. Renown doesn't care which one was picked: each kill earns its
+        award once.
+      </p>
+    </Section>
+  )
+}
+
 function Guilds() {
   return (
     <Section title="Guild Ratings">
@@ -683,10 +728,7 @@ function Cohorts() {
         <li>Ratings count your whole history. There are no seasons or rolling windows.</li>
         <li>Only clean boss kills count. Wipes, trash, unlisted logs, and invalidated raids don't.</li>
         <li>Duplicate uploads of the same raid count once.</li>
-        <li>
-          Each kill counts as DPS or HPS, whichever number is higher. If you play more than one spec, each spec is
-          rated separately.
-        </li>
+        <li>If you play more than one spec, each spec is rated separately.</li>
         <li>Renown awards can differ by difficulty or raid size. They're set per boss, not by performance.</li>
       </ul>
     </Section>
