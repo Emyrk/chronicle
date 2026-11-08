@@ -2,6 +2,73 @@
 
 import type { GUID } from "@/lib/guid/guid";
 
+// From chroniclesdk/leaderboard_v2.go
+/**
+ * LeaderboardV2Boss is page-bounded summary detail, never observation replay.
+ * Missing summaries have zero peak/count; unavailable raw values stay null.
+ */
+export interface LeaderboardV2Boss {
+    readonly encounter_name: string;
+    readonly peak: number;
+    readonly raw_peak: number | null;
+    readonly duration_ms: number | null;
+    readonly observation_count: number;
+}
+
+// From chroniclesdk/leaderboard_v2.go
+export interface LeaderboardV2Cohort {
+    readonly player_class: string;
+    readonly player_spec: string;
+    readonly player_sub_spec: string;
+    readonly metric: string;
+}
+
+// From chroniclesdk/leaderboard_v2.go
+/**
+ * LeaderboardV2Companion identifies the winning whole-selection cohort.
+ */
+export interface LeaderboardV2Companion {
+    readonly score: number;
+    readonly player_class: string;
+    readonly player_spec: string;
+    readonly player_sub_spec: string;
+}
+
+// From chroniclesdk/leaderboard_v2.go
+export interface LeaderboardV2Entry {
+    readonly realm_name: string;
+    readonly peak_companion: LeaderboardV2Companion | null;
+    readonly mastery_companion: LeaderboardV2Companion | null;
+    readonly player_class: string;
+    readonly player_spec: string;
+    readonly player_sub_spec: string;
+    readonly realm_id: string;
+    readonly subject_id: string;
+    readonly name: string;
+    readonly score: number;
+    readonly peak: number;
+    readonly form: number;
+    readonly floor: number;
+    readonly bosses: readonly LeaderboardV2Boss[];
+    readonly mastery: number;
+    readonly renown: number;
+    readonly sample_count: number;
+    readonly computed_at: string;
+}
+
+// From chroniclesdk/leaderboard_v2.go
+/**
+ * LeaderboardV2Response is a preview read over all-time raw summaries, not a
+ * claim that evidence ingestion or refresh workers are installed.
+ */
+export interface LeaderboardV2Response {
+    readonly status: string;
+    readonly message: string;
+    readonly entries: readonly LeaderboardV2Entry[];
+    readonly next_cursor?: string;
+    readonly included_bosses: readonly string[];
+}
+
 // From chroniclesdk/leaderboard_configuration.go
 /**
  * LeaderboardConfiguration is a read-only view of shared policy for the request tenant.

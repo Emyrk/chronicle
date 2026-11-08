@@ -111,7 +111,7 @@ export function RatingBoards({
 
   return (
     <div className="space-y-5" style={{ "--metric": theme.accent } as CSSProperties} data-metric={view}>
-      {live && <LiveRatingCatchup />}
+      {live && live.catchupStatus !== false && <LiveRatingCatchup />}
       {/* Metric taglines (METRIC_THEMES[*].tagline) are hidden for now to save vertical space; they come back later. */}
       {/* The top: the board, or (opened, searched, or a spec, which has no smaller boards) the full table. */}
       {pending?.status === "error" ? (
@@ -155,32 +155,35 @@ export function RatingBoards({
           <section aria-label={`By ${childBy}`} className="space-y-3">
             <h2 className="px-1 text-sm font-semibold">By {childBy}</h2>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
-              {(readyBoards[0] ?? boards[0]).around.map((board) => (
-                <SideFrame key={board.id} board={board} by={childBy} label={theme.label} onOpen={() => onScope(board.scope)}>
-                  {boards.map((b) => {
-                    const t = METRIC_THEMES[b.metric]
-                    const entry = b.around.find((x) => x.id === board.id)?.entries[0]
-                    return entry ? (
-                      <CompactRow
-                        key={b.metric}
-                        entry={entry}
-                        theme={t}
-                        lead={<t.icon className="size-3.5 shrink-0" style={{ color: t.accent }} aria-label={t.label} />}
-                      />
-                    ) : (
-                      <li key={b.metric} className="px-3 py-1.5 text-xs text-muted-foreground">
-                        {live && b.center.status === "error" ? "Exact cohort required" : "No ranked kills"}
-                      </li>
-                    )
+              {(live ? (bosses ?? []).map((boss) => ({ ...scope, boss })) : (readyBoards[0] ?? boards[0]).around.map((board) => board.scope)).map((target) => {
+                const states = boards.map((b) => live ? live.board({ scope: target, metric: b.metric, period, cohort: live.cohort }) : { status: "ready" as const, data: b.around.find((board) => board.scope.boss === target.boss)! })
+                const board: RatingLiveBoard = { id: target.boss!, kind: "boss", scope: target, title: target.boss!, subtitle: "", entries: [] }
+                return <SideFrame key={target.boss} board={board} by={childBy} label={theme.label} busy={states.some(state => state.status === "loading")} onOpen={() => onScope(target)}>
+                  {states.map((state, i) => {
+                    const metric = boards[i].metric
+                    const t = METRIC_THEMES[metric]
+                    if (state.status === "loading") return <BossMetricSkeleton key={metric} boss={target.boss!} label={t.label} />
+                    if (state.status === "error") return <li key={metric} role="alert" title={state.error} className="h-7 truncate px-3 py-1.5 text-xs text-muted-foreground">{state.error}</li>
+                    const entry = state.data?.entries[0]
+                    return entry ? <CompactRow key={metric} entry={entry} theme={t} lead={<t.icon className="size-3.5 shrink-0" style={{ color: t.accent }} aria-label={t.label} />} /> : <li key={metric} className="h-7 px-3 py-1.5 text-xs text-muted-foreground">No ranked kills</li>
                   })}
                 </SideFrame>
-              ))}
+              })}
             </div>
           </section>
         </>
       )}
     </div>
   )
+}
+
+/** Same 28px metric-row footprint as resolved compact player/guild cards. */
+export function BossMetricSkeleton({ boss, label }: { boss: string; label: string }) {
+ return <li role="status" aria-label={`Loading ${boss} ${label}`} className="flex h-7 items-center gap-2 px-3 py-1.5">
+  <span aria-hidden className="size-3.5 shrink-0 animate-pulse rounded bg-white/[.06] motion-reduce:animate-none" />
+  <span aria-hidden className="h-3 flex-1 animate-pulse rounded bg-white/[.06] motion-reduce:animate-none" />
+  <span aria-hidden className="h-3 w-9 animate-pulse rounded bg-white/[.06] motion-reduce:animate-none" />
+ </li>
 }
 
 /** The board's frame and rows while it loads. */
@@ -377,7 +380,7 @@ function CompactRow({ entry, theme, lead }: { entry: RatingEntry; theme: MetricT
   return (
     <li
       className="flex items-center gap-2 px-3 py-1.5"
-      title={`${entry.name}${entry.guild ? ` <${entry.guild}>` : ""} · ${entry.spec} · ${entry.detail}`}
+      title={`${entry.name}${entry.guild ? ` <${entry.guild}>` : ""} · ${entry.spec} · ${entry.realmLabel ?? entry.detail}`}
     >
       {lead}
       <SpecIcon cls={entry.cls} spec={entry.spec} className="size-4 shrink-0 rounded-sm" />
@@ -392,6 +395,7 @@ function CompactRow({ entry, theme, lead }: { entry: RatingEntry; theme: MetricT
 
 /** A board one level down. The whole header narrows the pickers to it. */
 function SideFrame({
+  busy,
   board,
   by,
   label,
@@ -399,6 +403,7 @@ function SideFrame({
   children,
 }: {
   board: RatingLiveBoard
+  busy?: boolean
   /** What this card stands for: a boss card under a class or spec filter is still a boss card. */
   by: ChildKind
   label: string
@@ -411,6 +416,7 @@ function SideFrame({
   return (
     <section
       aria-label={`${title} ${label} leaderboard`}
+      aria-busy={busy}
       className="flex flex-col overflow-hidden rounded-xl border bg-card/60 transition-colors hover:border-white/15"
     >
       <button

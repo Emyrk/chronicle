@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { useQuery } from "@tanstack/react-query"
+import { GuildRatingBoards } from "../Hub/GuildRatings"
 import { RatingFullList } from "./RatingFullList"
 import type { RatingLiveData } from "./ratingLiveData"
 
@@ -24,6 +25,12 @@ describe("Storybook full-list live data", () => {
     const html = renderToStaticMarkup(<RatingFullList scope={{}} title="Molten Core" encounterCount={2} period="180d"
       view="peak" query="" onQuery={vi.fn()} live={live} />)
     expect(html).toContain("Boss peaks")
+    expect(html).not.toContain('<td class="w-full')
+    expect(html).toContain('w-[22%]')
+    expect(html).toContain('w-[28%]')
+    expect(html).toContain('table-auto')
+    expect(html).toContain('inline-flex items-center gap-1.5 whitespace-nowrap')
+    expect(html).toContain('/c/icons/spec_mage_fire.png')
     expect(html).toContain("mean of 2, misses count 0")
     expect(html).toContain("2 bosses · 1 missed")
     expect(html).toContain('title="Lucifron: no kill"')
@@ -31,6 +38,21 @@ describe("Storybook full-list live data", () => {
     expect(html).not.toContain("Total kill time")
     expect(html).not.toContain(">Date</th>")
   })
+
+  for (const subject of ["player", "guild"] as const) {
+    it(`shows readable ${subject} realms without changing same-name identities`, () => {
+      const rows = ["11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222"].map((realm, i) => ({rank:0,entry:{...entry,id:realm+":same",guid:"same",realm,detail:realm,realmLabel:i===0?"Synthetic realm":undefined,score:80+i}}));
+      vi.mocked(useQuery).mockReturnValue({isError:false,data:{rows,page:0,hasPreviousPage:false,hasNextPage:false}} as ReturnType<typeof useQuery>);
+      const html = renderToStaticMarkup(subject === "player" ? <RatingFullList scope={{}} title="Raid" period="all" view="overview" query="" onQuery={vi.fn()} live={live} /> : <GuildRatingBoards instanceName="Raid" view="peak" onView={vi.fn()} allBosses={["A","B"]} where="Raid" onBoss={vi.fn()} data={{live,ratings:{peak:[],mastery:[],renown:[]},perBoss:()=>undefined}} />);
+      const visible = html.replace(/<[^>]*>/g, "");
+      expect(html).toContain(">Realm</th>");
+      expect(html).not.toContain(">Record</th>");
+      expect(visible).toContain("Synthetic realm");
+      expect(visible).toContain("Unknown realm");
+      expect(visible).not.toContain("11111111-1111");
+      expect(visible).not.toContain("22222222-2222");
+    });
+  }
 
   it("renders the published ranks and scores in the existing table", () => {
     vi.mocked(useQuery).mockReturnValue({ isError: false, data: {

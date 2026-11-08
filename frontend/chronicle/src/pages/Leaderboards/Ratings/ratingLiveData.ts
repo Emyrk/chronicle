@@ -38,6 +38,8 @@ export type RatingLivePage = {
 
 /** Supply already-fetched data; the host owns API queries, cursor state, and exact cohort mapping. */
 export interface RatingLiveData {
+  /** New summary reads do not imply that a historical catch-up worker exists. */
+  catchupStatus?: boolean
   /** Realm-filtered pages have no published global rank number. */
   ranksKnown?: boolean
   cohort?: RatingLiveCohort
