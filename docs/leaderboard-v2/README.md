@@ -10,13 +10,22 @@ plan](implementation-plan.md) defines the intended Graphite stack and validation
 gates.
 
 The [table relationships](table-relationships.md) reference maps migration 344
-tables to evidence, summary, and repair responsibilities. The [read preview](read-preview.md)
+tables to evidence, summary, and repair responsibilities. The
+[read preview](read-preview.md)
 documents `/leaderboard-v2`, local synthetic fixtures, and measured SQL plans.
 
 The replacement is a clean implementation. Prior ratings are removed; merged PR
 1625 preserves parse scoring. Retired rating tables are neither migration or
-seed inputs nor a rollback target. Existing leaderboard routes stay unchanged until a later cutover. The isolated
+seed inputs nor a rollback target. Existing leaderboard routes stay unchanged
+until a later cutover. The isolated
 read preview does not install evidence writers or refresh workers.
+
+## Next implementation work
+
+The [materialization plan](materialization-plan.md) is the durable handoff for
+six remaining implementation PRs after the accepted read preview: D2 calculation,
+D2 orchestration, D1 repair, direct evidence/action integration, historical
+bootstrap/operations, and rollout validation. Caching remains deferred.
 
 ## Authority
 
@@ -99,8 +108,9 @@ Raw projection and algorithm versions are repair metadata ignored by reads;
 in-place repair may temporarily expose mixed versions. They are not composed
 read-policy versions or a snapshot mechanism.
 
-See the [implementation plan](implementation-plan.md) for the schema-only
-boundary and later maintenance/read validation. Cutover needs a disable/revert
+See the [materialization plan](materialization-plan.md) for remaining pipeline
+work and rollout validation; the [earlier plan](implementation-plan.md) records
+the schema delivery boundary. Cutover needs a disable/revert
 strategy, not rollback to removed legacy ratings.
 
 ## Documentation validation

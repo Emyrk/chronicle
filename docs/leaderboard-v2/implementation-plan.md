@@ -1,5 +1,11 @@
 # Leaderboard v2 implementation plan
 
+> Historical foundation/schema plan. Schema PR #1638 and read preview PR #1639
+> are implemented in the current stack. The
+> [materialization plan](materialization-plan.md) supersedes the sequencing and
+> future-tense schema/read status below; it preserves the calculation and repair
+> invariants and plans the remaining real-data pipeline. No workers exist yet.
+
 ## Completed configuration foundation
 
 - PR 1622: specification.
