@@ -12028,6 +12028,538 @@ func (q *sqlQuerier) ListLeaderboardLayers(ctx context.Context) ([]LeaderboardLa
 	return items, nil
 }
 
+const materializeLeaderboardGuildBossBenchmark = `-- name: MaterializeLeaderboardGuildBossBenchmark :exec
+WITH calculated AS (
+    SELECT duration_ms AS best_duration_ms
+    FROM leaderboard_guild_boss_observations
+    WHERE tenant_id = $1::uuid
+      AND instance_name = $2::text
+      AND difficulty_name = $3::text
+      AND max_players = $4::smallint
+      AND encounter_name = $5::text
+    ORDER BY duration_ms ASC
+    LIMIT 1
+), written AS (
+    INSERT INTO leaderboard_guild_boss_benchmarks (tenant_id, instance_name, difficulty_name, max_players, encounter_name, best_duration_ms, projection_version, algorithm_version, computed_at)
+    SELECT $1::uuid, $2::text, $3::text, $4::smallint, $5::text, best_duration_ms, $6::integer, $7::integer, statement_timestamp() FROM calculated
+    ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name) DO UPDATE SET
+        best_duration_ms = EXCLUDED.best_duration_ms,
+        projection_version = EXCLUDED.projection_version,
+        algorithm_version = EXCLUDED.algorithm_version,
+        computed_at = EXCLUDED.computed_at
+    RETURNING 1
+)
+DELETE FROM leaderboard_guild_boss_benchmarks
+WHERE tenant_id = $1::uuid
+      AND instance_name = $2::text
+      AND difficulty_name = $3::text
+      AND max_players = $4::smallint
+      AND encounter_name = $5::text
+  AND NOT EXISTS (SELECT 1 FROM calculated)
+`
+
+type MaterializeLeaderboardGuildBossBenchmarkParams struct {
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	EncounterName     string    `db:"encounter_name" json:"encounter_name"`
+	ProjectionVersion int32     `db:"projection_version" json:"projection_version"`
+	AlgorithmVersion  int32     `db:"algorithm_version" json:"algorithm_version"`
+}
+
+func (q *sqlQuerier) MaterializeLeaderboardGuildBossBenchmark(ctx context.Context, arg MaterializeLeaderboardGuildBossBenchmarkParams) error {
+	_, err := q.db.Exec(ctx, materializeLeaderboardGuildBossBenchmark,
+		arg.TenantID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.EncounterName,
+		arg.ProjectionVersion,
+		arg.AlgorithmVersion,
+	)
+	return err
+}
+
+const materializeLeaderboardGuildBossSubject = `-- name: MaterializeLeaderboardGuildBossSubject :exec
+WITH scoped AS MATERIALIZED (
+    SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, run_id, source_instance_id, realm_id, guild_id, source_time_parse_score_id, source_encounter_id, duration_ms, projection_version, observed_at FROM leaderboard_guild_boss_observations WHERE tenant_id = $1::uuid
+      AND instance_name = $2::text
+      AND difficulty_name = $3::text
+      AND max_players = $4::smallint
+      AND encounter_name = $5::text
+      AND realm_id = $6::uuid
+      AND guild_id = $7::uuid
+), ranked AS (
+    SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, run_id, source_instance_id, realm_id, guild_id, source_time_parse_score_id, source_encounter_id, duration_ms, projection_version, observed_at, row_number() OVER (ORDER BY duration_ms DESC, run_id) AS position,
+           count(*) OVER () AS observations
+    FROM scoped
+), statistics AS (
+    SELECT count(*)::bigint AS observation_count,
+           min(duration_ms) AS fastest_duration_ms,
+           COALESCE(avg(1.0::double precision / duration_ms) FILTER (WHERE position > observations * 2 / 5 AND position < observations), 0)::double precision AS form_mean_inverse_ms,
+           COALESCE(avg(1.0::double precision / duration_ms) FILTER (WHERE position > observations / 5 AND position <= observations * 2 / 5), 0)::double precision AS floor_mean_inverse_ms
+    FROM ranked HAVING count(*) > 0
+), calculated AS (SELECT observation_count, fastest_duration_ms, form_mean_inverse_ms, floor_mean_inverse_ms FROM statistics), written AS (
+    INSERT INTO leaderboard_guild_boss_subjects (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id, observation_count, fastest_duration_ms, form_mean_inverse_ms, floor_mean_inverse_ms, projection_version, algorithm_version, computed_at)
+    SELECT $1::uuid, $2::text, $3::text, $4::smallint, $5::text, $6::uuid, $7::uuid, observation_count, fastest_duration_ms, form_mean_inverse_ms, floor_mean_inverse_ms, $8::integer, $9::integer, statement_timestamp() FROM calculated
+    ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id) DO UPDATE SET
+        observation_count = EXCLUDED.observation_count,
+        fastest_duration_ms = EXCLUDED.fastest_duration_ms,
+        form_mean_inverse_ms = EXCLUDED.form_mean_inverse_ms,
+        floor_mean_inverse_ms = EXCLUDED.floor_mean_inverse_ms,
+        projection_version = EXCLUDED.projection_version,
+        algorithm_version = EXCLUDED.algorithm_version,
+        computed_at = EXCLUDED.computed_at
+    RETURNING 1
+)
+DELETE FROM leaderboard_guild_boss_subjects
+WHERE tenant_id = $1::uuid
+      AND instance_name = $2::text
+      AND difficulty_name = $3::text
+      AND max_players = $4::smallint
+      AND encounter_name = $5::text
+      AND realm_id = $6::uuid
+      AND guild_id = $7::uuid
+  AND NOT EXISTS (SELECT 1 FROM calculated)
+`
+
+type MaterializeLeaderboardGuildBossSubjectParams struct {
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	EncounterName     string    `db:"encounter_name" json:"encounter_name"`
+	RealmID           uuid.UUID `db:"realm_id" json:"realm_id"`
+	GuildID           uuid.UUID `db:"guild_id" json:"guild_id"`
+	ProjectionVersion int32     `db:"projection_version" json:"projection_version"`
+	AlgorithmVersion  int32     `db:"algorithm_version" json:"algorithm_version"`
+}
+
+func (q *sqlQuerier) MaterializeLeaderboardGuildBossSubject(ctx context.Context, arg MaterializeLeaderboardGuildBossSubjectParams) error {
+	_, err := q.db.Exec(ctx, materializeLeaderboardGuildBossSubject,
+		arg.TenantID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.EncounterName,
+		arg.RealmID,
+		arg.GuildID,
+		arg.ProjectionVersion,
+		arg.AlgorithmVersion,
+	)
+	return err
+}
+
+const materializeLeaderboardGuildClearBenchmark = `-- name: MaterializeLeaderboardGuildClearBenchmark :exec
+WITH calculated AS (
+    SELECT duration_ms AS best_duration_ms
+    FROM leaderboard_guild_clear_observations
+    WHERE tenant_id = $1::uuid
+      AND instance_name = $2::text
+      AND difficulty_name = $3::text
+      AND max_players = $4::smallint
+    ORDER BY duration_ms ASC
+    LIMIT 1
+), written AS (
+    INSERT INTO leaderboard_guild_clear_benchmarks (tenant_id, instance_name, difficulty_name, max_players, best_duration_ms, projection_version, algorithm_version, computed_at)
+    SELECT $1::uuid, $2::text, $3::text, $4::smallint, best_duration_ms, $5::integer, $6::integer, statement_timestamp() FROM calculated
+    ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players) DO UPDATE SET
+        best_duration_ms = EXCLUDED.best_duration_ms,
+        projection_version = EXCLUDED.projection_version,
+        algorithm_version = EXCLUDED.algorithm_version,
+        computed_at = EXCLUDED.computed_at
+    RETURNING 1
+)
+DELETE FROM leaderboard_guild_clear_benchmarks
+WHERE tenant_id = $1::uuid
+      AND instance_name = $2::text
+      AND difficulty_name = $3::text
+      AND max_players = $4::smallint
+  AND NOT EXISTS (SELECT 1 FROM calculated)
+`
+
+type MaterializeLeaderboardGuildClearBenchmarkParams struct {
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	ProjectionVersion int32     `db:"projection_version" json:"projection_version"`
+	AlgorithmVersion  int32     `db:"algorithm_version" json:"algorithm_version"`
+}
+
+func (q *sqlQuerier) MaterializeLeaderboardGuildClearBenchmark(ctx context.Context, arg MaterializeLeaderboardGuildClearBenchmarkParams) error {
+	_, err := q.db.Exec(ctx, materializeLeaderboardGuildClearBenchmark,
+		arg.TenantID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.ProjectionVersion,
+		arg.AlgorithmVersion,
+	)
+	return err
+}
+
+const materializeLeaderboardGuildClearSubject = `-- name: MaterializeLeaderboardGuildClearSubject :exec
+WITH scoped AS MATERIALIZED (
+    SELECT tenant_id, instance_name, difficulty_name, max_players, run_id, source_instance_id, realm_id, guild_id, source_time_parse_score_id, duration_ms, projection_version, observed_at FROM leaderboard_guild_clear_observations WHERE tenant_id = $1::uuid
+      AND instance_name = $2::text
+      AND difficulty_name = $3::text
+      AND max_players = $4::smallint
+      AND realm_id = $5::uuid
+      AND guild_id = $6::uuid
+), ranked AS (
+    SELECT tenant_id, instance_name, difficulty_name, max_players, run_id, source_instance_id, realm_id, guild_id, source_time_parse_score_id, duration_ms, projection_version, observed_at, row_number() OVER (ORDER BY duration_ms DESC, run_id) AS position,
+           count(*) OVER () AS observations
+    FROM scoped
+), statistics AS (
+    SELECT count(*)::bigint AS observation_count,
+           min(duration_ms) AS fastest_duration_ms,
+           COALESCE(avg(1.0::double precision / duration_ms) FILTER (WHERE position > observations * 2 / 5 AND position < observations), 0)::double precision AS form_mean_inverse_ms,
+           COALESCE(avg(1.0::double precision / duration_ms) FILTER (WHERE position > observations / 5 AND position <= observations * 2 / 5), 0)::double precision AS floor_mean_inverse_ms
+    FROM ranked HAVING count(*) > 0
+), calculated AS (SELECT observation_count, fastest_duration_ms, form_mean_inverse_ms, floor_mean_inverse_ms FROM statistics), written AS (
+    INSERT INTO leaderboard_guild_clear_subjects (tenant_id, instance_name, difficulty_name, max_players, realm_id, guild_id, observation_count, fastest_duration_ms, form_mean_inverse_ms, floor_mean_inverse_ms, projection_version, algorithm_version, computed_at)
+    SELECT $1::uuid, $2::text, $3::text, $4::smallint, $5::uuid, $6::uuid, observation_count, fastest_duration_ms, form_mean_inverse_ms, floor_mean_inverse_ms, $7::integer, $8::integer, statement_timestamp() FROM calculated
+    ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, realm_id, guild_id) DO UPDATE SET
+        observation_count = EXCLUDED.observation_count,
+        fastest_duration_ms = EXCLUDED.fastest_duration_ms,
+        form_mean_inverse_ms = EXCLUDED.form_mean_inverse_ms,
+        floor_mean_inverse_ms = EXCLUDED.floor_mean_inverse_ms,
+        projection_version = EXCLUDED.projection_version,
+        algorithm_version = EXCLUDED.algorithm_version,
+        computed_at = EXCLUDED.computed_at
+    RETURNING 1
+)
+DELETE FROM leaderboard_guild_clear_subjects
+WHERE tenant_id = $1::uuid
+      AND instance_name = $2::text
+      AND difficulty_name = $3::text
+      AND max_players = $4::smallint
+      AND realm_id = $5::uuid
+      AND guild_id = $6::uuid
+  AND NOT EXISTS (SELECT 1 FROM calculated)
+`
+
+type MaterializeLeaderboardGuildClearSubjectParams struct {
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	RealmID           uuid.UUID `db:"realm_id" json:"realm_id"`
+	GuildID           uuid.UUID `db:"guild_id" json:"guild_id"`
+	ProjectionVersion int32     `db:"projection_version" json:"projection_version"`
+	AlgorithmVersion  int32     `db:"algorithm_version" json:"algorithm_version"`
+}
+
+func (q *sqlQuerier) MaterializeLeaderboardGuildClearSubject(ctx context.Context, arg MaterializeLeaderboardGuildClearSubjectParams) error {
+	_, err := q.db.Exec(ctx, materializeLeaderboardGuildClearSubject,
+		arg.TenantID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.RealmID,
+		arg.GuildID,
+		arg.ProjectionVersion,
+		arg.AlgorithmVersion,
+	)
+	return err
+}
+
+const materializeLeaderboardGuildRenownCount = `-- name: MaterializeLeaderboardGuildRenownCount :exec
+WITH calculated AS (
+    SELECT count(*)::bigint AS kill_count FROM leaderboard_guild_renown_facts
+    WHERE tenant_id = $1::uuid
+      AND instance_name = $2::text
+      AND difficulty_name = $3::text
+      AND max_players = $4::smallint
+      AND encounter_name = $5::text
+      AND realm_id = $6::uuid
+      AND guild_id = $7::uuid
+    HAVING count(*) > 0
+), written AS (
+    INSERT INTO leaderboard_guild_renown_counts (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id, kill_count, projection_version, algorithm_version, computed_at)
+    SELECT $1::uuid, $2::text, $3::text, $4::smallint, $5::text, $6::uuid, $7::uuid, kill_count, $8::integer, $9::integer, statement_timestamp() FROM calculated
+    ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id) DO UPDATE SET
+        kill_count = EXCLUDED.kill_count, projection_version = EXCLUDED.projection_version,
+        algorithm_version = EXCLUDED.algorithm_version, computed_at = EXCLUDED.computed_at
+    RETURNING 1
+)
+DELETE FROM leaderboard_guild_renown_counts
+WHERE tenant_id = $1::uuid
+      AND instance_name = $2::text
+      AND difficulty_name = $3::text
+      AND max_players = $4::smallint
+      AND encounter_name = $5::text
+      AND realm_id = $6::uuid
+      AND guild_id = $7::uuid
+  AND NOT EXISTS (SELECT 1 FROM calculated)
+`
+
+type MaterializeLeaderboardGuildRenownCountParams struct {
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	EncounterName     string    `db:"encounter_name" json:"encounter_name"`
+	RealmID           uuid.UUID `db:"realm_id" json:"realm_id"`
+	GuildID           uuid.UUID `db:"guild_id" json:"guild_id"`
+	ProjectionVersion int32     `db:"projection_version" json:"projection_version"`
+	AlgorithmVersion  int32     `db:"algorithm_version" json:"algorithm_version"`
+}
+
+func (q *sqlQuerier) MaterializeLeaderboardGuildRenownCount(ctx context.Context, arg MaterializeLeaderboardGuildRenownCountParams) error {
+	_, err := q.db.Exec(ctx, materializeLeaderboardGuildRenownCount,
+		arg.TenantID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.EncounterName,
+		arg.RealmID,
+		arg.GuildID,
+		arg.ProjectionVersion,
+		arg.AlgorithmVersion,
+	)
+	return err
+}
+
+const materializeLeaderboardPlayerBossBenchmark = `-- name: MaterializeLeaderboardPlayerBossBenchmark :exec
+
+WITH calculated AS (
+    SELECT metric_value AS best_metric
+    FROM leaderboard_player_observations
+    WHERE tenant_id = $1::uuid
+      AND instance_name = $2::text
+      AND difficulty_name = $3::text
+      AND max_players = $4::smallint
+      AND encounter_name = $5::text
+      AND player_class = $6::text
+      AND player_spec = $7::text
+      AND player_sub_spec = $8::text
+      AND metric = $9::text
+    ORDER BY metric_value DESC
+    LIMIT 1
+), written AS (
+    INSERT INTO leaderboard_player_boss_benchmarks (tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, best_metric, projection_version, algorithm_version, computed_at)
+    SELECT $1::uuid, $2::text, $3::text, $4::smallint, $5::text, $6::text, $7::text, $8::text, $9::text, best_metric, $10::integer, $11::integer, statement_timestamp() FROM calculated
+    ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric) DO UPDATE SET
+        best_metric = EXCLUDED.best_metric,
+        projection_version = EXCLUDED.projection_version,
+        algorithm_version = EXCLUDED.algorithm_version,
+        computed_at = EXCLUDED.computed_at
+    RETURNING 1
+)
+DELETE FROM leaderboard_player_boss_benchmarks
+WHERE tenant_id = $1::uuid
+      AND instance_name = $2::text
+      AND difficulty_name = $3::text
+      AND max_players = $4::smallint
+      AND encounter_name = $5::text
+      AND player_class = $6::text
+      AND player_spec = $7::text
+      AND player_sub_spec = $8::text
+      AND metric = $9::text
+  AND NOT EXISTS (SELECT 1 FROM calculated)
+`
+
+type MaterializeLeaderboardPlayerBossBenchmarkParams struct {
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	EncounterName     string    `db:"encounter_name" json:"encounter_name"`
+	PlayerClass       string    `db:"player_class" json:"player_class"`
+	PlayerSpec        string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string    `db:"player_sub_spec" json:"player_sub_spec"`
+	Metric            string    `db:"metric" json:"metric"`
+	ProjectionVersion int32     `db:"projection_version" json:"projection_version"`
+	AlgorithmVersion  int32     `db:"algorithm_version" json:"algorithm_version"`
+}
+
+// These callable calculations publish one exact scope from one statement snapshot.
+// Evidence is already canonical/eligible; compatibility versions are metadata,
+// not filters. Callers own transactions and future revision/publication fencing.
+// No producer, queue acknowledgement, or concurrency fence is installed here.
+func (q *sqlQuerier) MaterializeLeaderboardPlayerBossBenchmark(ctx context.Context, arg MaterializeLeaderboardPlayerBossBenchmarkParams) error {
+	_, err := q.db.Exec(ctx, materializeLeaderboardPlayerBossBenchmark,
+		arg.TenantID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.EncounterName,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.Metric,
+		arg.ProjectionVersion,
+		arg.AlgorithmVersion,
+	)
+	return err
+}
+
+const materializeLeaderboardPlayerBossSubject = `-- name: MaterializeLeaderboardPlayerBossSubject :exec
+WITH scoped AS MATERIALIZED (
+    SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, run_id, source_instance_id, realm_id, player_guid, source_encounter_id, source_ranking_id, player_class, player_spec, player_sub_spec, metric, metric_value, projection_version, observed_at FROM leaderboard_player_observations WHERE tenant_id = $1::uuid
+      AND instance_name = $2::text
+      AND difficulty_name = $3::text
+      AND max_players = $4::smallint
+      AND encounter_name = $5::text
+      AND player_class = $6::text
+      AND player_spec = $7::text
+      AND player_sub_spec = $8::text
+      AND metric = $9::text
+      AND realm_id = $10::uuid
+      AND player_guid = $11::text
+), ranked AS (
+    SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, run_id, source_instance_id, realm_id, player_guid, source_encounter_id, source_ranking_id, player_class, player_spec, player_sub_spec, metric, metric_value, projection_version, observed_at, row_number() OVER (ORDER BY metric_value ASC, run_id) AS position,
+           count(*) OVER () AS observations
+    FROM scoped
+), statistics AS (
+    SELECT count(*)::bigint AS observation_count,
+           max(metric_value) AS raw_peak,
+           COALESCE(avg(metric_value) FILTER (WHERE position > observations * 2 / 5 AND position < observations), 0)::double precision AS raw_form,
+           COALESCE(avg(metric_value) FILTER (WHERE position > observations / 5 AND position <= observations * 2 / 5), 0)::double precision AS raw_floor
+    FROM ranked HAVING count(*) > 0
+), peak AS (
+    SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, run_id, source_instance_id, realm_id, player_guid, source_encounter_id, source_ranking_id, player_class, player_spec, player_sub_spec, metric, metric_value, projection_version, observed_at FROM scoped ORDER BY metric_value DESC, source_encounter_id ASC, run_id ASC LIMIT 1
+), provenance AS (
+    -- Do not substitute another observation when the actual peak source is gone.
+    -- Source joins are identity-qualified, not just a coincidental encounter UUID.
+    SELECT e.id, floor(extract(epoch FROM (e.end_time - e.start_time)) * 1000)::bigint AS duration_ms
+    FROM peak p
+    JOIN log_instance_encounters e ON e.id = p.source_encounter_id
+      AND e.instance_id = p.source_instance_id AND e.name = p.encounter_name
+    JOIN log_instances i ON i.id = e.instance_id AND i.realm_id = p.realm_id
+      AND i.name = p.instance_name AND i.difficulty_name = p.difficulty_name AND i.max_players = p.max_players
+    JOIN wow_server_realms r ON r.id = i.realm_id
+    JOIN wow_servers s ON s.id = r.server_id AND s.tenant_id = p.tenant_id
+    WHERE e.end_time > e.start_time
+      AND floor(extract(epoch FROM (e.end_time - e.start_time)) * 1000) > 0
+), calculated AS (
+    SELECT statistics.observation_count, statistics.raw_peak, statistics.raw_form, statistics.raw_floor, provenance.id AS peak_encounter_id, provenance.duration_ms AS peak_duration_ms
+    FROM statistics LEFT JOIN provenance ON true
+), written AS (
+    INSERT INTO leaderboard_player_boss_subjects (tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid, observation_count, raw_peak, raw_form, raw_floor, peak_encounter_id, peak_duration_ms, projection_version, algorithm_version, computed_at)
+    SELECT $1::uuid, $2::text, $3::text, $4::smallint, $5::text, $6::text, $7::text, $8::text, $9::text, $10::uuid, $11::text, observation_count, raw_peak, raw_form, raw_floor, peak_encounter_id, peak_duration_ms, $12::integer, $13::integer, statement_timestamp() FROM calculated
+    ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid) DO UPDATE SET
+        observation_count = EXCLUDED.observation_count,
+        raw_peak = EXCLUDED.raw_peak,
+        raw_form = EXCLUDED.raw_form,
+        raw_floor = EXCLUDED.raw_floor,
+        peak_encounter_id = EXCLUDED.peak_encounter_id,
+        peak_duration_ms = EXCLUDED.peak_duration_ms,
+        projection_version = EXCLUDED.projection_version,
+        algorithm_version = EXCLUDED.algorithm_version,
+        computed_at = EXCLUDED.computed_at
+    RETURNING 1
+)
+DELETE FROM leaderboard_player_boss_subjects
+WHERE tenant_id = $1::uuid
+      AND instance_name = $2::text
+      AND difficulty_name = $3::text
+      AND max_players = $4::smallint
+      AND encounter_name = $5::text
+      AND player_class = $6::text
+      AND player_spec = $7::text
+      AND player_sub_spec = $8::text
+      AND metric = $9::text
+      AND realm_id = $10::uuid
+      AND player_guid = $11::text
+  AND NOT EXISTS (SELECT 1 FROM calculated)
+`
+
+type MaterializeLeaderboardPlayerBossSubjectParams struct {
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	EncounterName     string    `db:"encounter_name" json:"encounter_name"`
+	PlayerClass       string    `db:"player_class" json:"player_class"`
+	PlayerSpec        string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string    `db:"player_sub_spec" json:"player_sub_spec"`
+	Metric            string    `db:"metric" json:"metric"`
+	RealmID           uuid.UUID `db:"realm_id" json:"realm_id"`
+	PlayerGuid        string    `db:"player_guid" json:"player_guid"`
+	ProjectionVersion int32     `db:"projection_version" json:"projection_version"`
+	AlgorithmVersion  int32     `db:"algorithm_version" json:"algorithm_version"`
+}
+
+func (q *sqlQuerier) MaterializeLeaderboardPlayerBossSubject(ctx context.Context, arg MaterializeLeaderboardPlayerBossSubjectParams) error {
+	_, err := q.db.Exec(ctx, materializeLeaderboardPlayerBossSubject,
+		arg.TenantID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.EncounterName,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.Metric,
+		arg.RealmID,
+		arg.PlayerGuid,
+		arg.ProjectionVersion,
+		arg.AlgorithmVersion,
+	)
+	return err
+}
+
+const materializeLeaderboardPlayerRenownCount = `-- name: MaterializeLeaderboardPlayerRenownCount :exec
+WITH calculated AS (
+    SELECT count(*)::bigint AS kill_count FROM leaderboard_player_renown_facts
+    WHERE tenant_id = $1::uuid
+      AND instance_name = $2::text
+      AND difficulty_name = $3::text
+      AND max_players = $4::smallint
+      AND encounter_name = $5::text
+      AND realm_id = $6::uuid
+      AND player_guid = $7::text
+    HAVING count(*) > 0
+), written AS (
+    INSERT INTO leaderboard_player_renown_counts (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, player_guid, kill_count, projection_version, algorithm_version, computed_at)
+    SELECT $1::uuid, $2::text, $3::text, $4::smallint, $5::text, $6::uuid, $7::text, kill_count, $8::integer, $9::integer, statement_timestamp() FROM calculated
+    ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, player_guid) DO UPDATE SET
+        kill_count = EXCLUDED.kill_count, projection_version = EXCLUDED.projection_version,
+        algorithm_version = EXCLUDED.algorithm_version, computed_at = EXCLUDED.computed_at
+    RETURNING 1
+)
+DELETE FROM leaderboard_player_renown_counts
+WHERE tenant_id = $1::uuid
+      AND instance_name = $2::text
+      AND difficulty_name = $3::text
+      AND max_players = $4::smallint
+      AND encounter_name = $5::text
+      AND realm_id = $6::uuid
+      AND player_guid = $7::text
+  AND NOT EXISTS (SELECT 1 FROM calculated)
+`
+
+type MaterializeLeaderboardPlayerRenownCountParams struct {
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	EncounterName     string    `db:"encounter_name" json:"encounter_name"`
+	RealmID           uuid.UUID `db:"realm_id" json:"realm_id"`
+	PlayerGuid        string    `db:"player_guid" json:"player_guid"`
+	ProjectionVersion int32     `db:"projection_version" json:"projection_version"`
+	AlgorithmVersion  int32     `db:"algorithm_version" json:"algorithm_version"`
+}
+
+func (q *sqlQuerier) MaterializeLeaderboardPlayerRenownCount(ctx context.Context, arg MaterializeLeaderboardPlayerRenownCountParams) error {
+	_, err := q.db.Exec(ctx, materializeLeaderboardPlayerRenownCount,
+		arg.TenantID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.EncounterName,
+		arg.RealmID,
+		arg.PlayerGuid,
+		arg.ProjectionVersion,
+		arg.AlgorithmVersion,
+	)
+	return err
+}
+
 const listLeaderboardDirtyRuns = `-- name: ListLeaderboardDirtyRuns :many
 SELECT tenant_id, run_id, revision, dirtied_at, process_after FROM leaderboard_dirty_runs WHERE tenant_id = $1::uuid
 `
