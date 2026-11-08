@@ -25,7 +25,8 @@ import {
   type FollowSprings,
   type FollowTrack,
   type GlidePose,
-  chooseYaw,
+  heldYawChoices,
+  nearestOpenYaw,
   FOLLOW_YAW_CANDIDATES_DEG,
   FOLLOW_YAW_MAX_RATE,
   FOLLOW_YAW_SMOOTH_SECONDS,
@@ -738,37 +739,146 @@ describe("follow track yaw", () => {
     expect(led.jerk).toBeLessThan(2 * DEG);
   });
 
-  it("turns a blocked base yaw to the nearest clear one", () => {
-    const straight = (ms: number) => [0, 1, 2].map((i) => unit(`p${i}`, (ms / 1000) * 7 + i, 0));
-    // The cave blocks from 40 degrees one side of behind to 70 the other: only -60 and beyond are clear on that side.
+  /** A stub probe: `clear(sample, offsetDeg)` says whether candidate `offsetDeg` around the base is clear at the n-th sample probed. */
+  const stubProbe = (base: number, clear: (sample: number, offsetDeg: number) => boolean) => {
+    let sample = -1;
     const calls: number[] = [];
     const probe: FollowYawProbe = {
-      clearYaw: (_x, _z, _radius, yaw) => {
-        calls.push(yaw);
-        const off = wrapAngle(yaw - BEHIND_X) / DEG;
-        return off < -40 || off > 70;
+      sample: () => {
+        sample++;
+        calls[sample] = 0;
+      },
+      clearYaw: (yaw) => {
+        calls[sample]!++;
+        return clear(sample, Math.round(wrapAngle(yaw - base) / DEG));
       },
     };
+    return { probe, calls };
+  };
+
+  it("turns a blocked base yaw to the nearest clear one, probing only until each side's nearest is known", () => {
+    const straight = (ms: number) => [0, 1, 2].map((i) => unit(`p${i}`, (ms / 1000) * 7 + i, 0));
+    // The cave blocks from 40 degrees one side of behind to 70 the other: only -60 and beyond are clear on that side.
+    const { probe, calls } = stubProbe(BEHIND_X, (_, off) => off < -40 || off > 70);
     const track = buildFollowTrack({ startMs: 0, endMs: 60_000, unitsAt: straight, scale: 1, probe })!;
-    expect(calls.length).toBe(track.x.length * FOLLOW_YAW_CANDIDATES_DEG.length);
     expect(angleOff(keyAt(track, 30_000).yaw, BEHIND_X - 60 * DEG)).toBeLessThan(DEG);
-    // The alternatives stay on the track: base, and which candidates were clear.
+    // The alternatives stay on the track: base, which candidates were probed, which were clear, and the choice.
     const i = Math.round(30_000 / track.sampleMs);
     expect(angleOff(track.baseYaw[i]!, BEHIND_X)).toBeLessThan(DEG);
-    const open = FOLLOW_YAW_CANDIDATES_DEG.filter((_, k) => track.yawOpen[i]! & (1 << k));
-    expect(open).toEqual([-60, 90, -90, 135, -135, 180]);
+    const listed = (mask: number) => FOLLOW_YAW_CANDIDATES_DEG.filter((_, k) => mask & (1 << k));
+    // 0, 30, -30, 60 blocked; -60 is the nearest clear on the right, 90 on the left: stop there.
+    expect(listed(track.yawProbed[i]!)).toEqual([0, 30, -30, 60, -60, 90]);
+    expect(listed(track.yawOpen[i]!)).toEqual([-60, 90]);
+    expect(FOLLOW_YAW_CANDIDATES_DEG[track.yawChoice[i]!]).toBe(-60);
+    expect(calls[i]).toBe(6);
+    // A clear base takes one ray.
+    const open = stubProbe(BEHIND_X, () => true);
+    buildFollowTrack({ startMs: 0, endMs: 60_000, unitsAt: straight, scale: 1, probe: open.probe });
+    expect(open.calls.every((n) => n === 1)).toBe(true);
     // Without a probe every candidate counts as clear and the base wins.
     const free = buildFollowTrack({ startMs: 0, endMs: 60_000, unitsAt: straight, scale: 1 })!;
     expect(free.yawOpen[i]).toBe((1 << FOLLOW_YAW_CANDIDATES_DEG.length) - 1);
     expect(angleOff(keyAt(free, 30_000).yaw, BEHIND_X)).toBeLessThan(DEG);
   });
 
-  it("chooseYaw: nearest clear candidate, a tie going to the side nearer the last yaw, the base when nothing is clear", () => {
+  it("gives each sample's probe the framed units' own height", () => {
+    // Walking down a ramp: the height at each sample, not the one at build time.
+    const ramp = (ms: number) => [0, 1, 2].map((i) => ({ ...unit(`p${i}`, (ms / 1000) * 7 + i, 0), height: -ms / 1000 + i }));
+    const heights: (number | undefined)[] = [];
+    buildFollowTrack({ startMs: 0, endMs: 20_000, unitsAt: ramp, scale: 1, probe: { sample: (_x, _z, _r, height) => heights.push(height), clearYaw: () => true } });
+    // The median of the three (i = 1).
+    expect(heights[0]).toBeCloseTo(1, 9);
+    expect(heights[40]).toBeCloseTo(-10 + 1, 9);
+    // Unknown heights stay unknown.
+    const none: (number | undefined)[] = [];
+    buildFollowTrack({ startMs: 0, endMs: 5_000, unitsAt: corner, scale: 1, probe: { sample: (_x, _z, _r, height) => none.push(height), clearYaw: () => true } });
+    expect(none.every((height) => height === undefined)).toBe(true);
+  });
+
+  // A group walks in along +x for 10 s, then stands (a fight) for the rest.
+  const standing = (ms: number) => {
+    const t = Math.min(ms / 1000, 10);
+    return [0, 1, 2, 3].map((i) => unit(`p${i}`, t * 6 + (i % 2), i));
+  };
+  // The total turn, and the worst distance from any probed choice (base + a candidate), over the fight.
+  const fightYaw = (track: FollowTrack, fromMs: number) => {
+    let worstOffChoice = 0;
+    for (let ms = fromMs; ms <= track.endMs; ms += 250) {
+      const yaw = keyAt(track, ms).yaw;
+      worstOffChoice = Math.max(worstOffChoice, Math.min(...FOLLOW_YAW_CANDIDATES_DEG.map((deg) => angleOff(yaw, BEHIND_X + deg * DEG))));
+    }
+    return { turn: Math.abs(keyAt(track, track.endMs).yaw - keyAt(track, fromMs).yaw), worstOffChoice };
+  };
+
+  it("does not spin through a fight when the clear yaw flips half a turn or side to side every sample (review 1728)", () => {
+    for (const [name, pair] of [["0/180", [0, 180]], ["+90/-90", [90, -90]]] as const) {
+      // From 15 s, only one of the pair is clear, alternating every sample.
+      const { probe } = stubProbe(BEHIND_X, (sample, off) => (sample > 60 ? off === pair[sample % 2] : true));
+      const track = buildFollowTrack({ startMs: 0, endMs: 300_000, unitsAt: standing, scale: 1, probe })!;
+      const { turn, worstOffChoice } = fightYaw(track, 20_000);
+      console.info(`flip ${name} every sample: turned ${(turn / DEG).toFixed(1)} deg, at most ${(worstOffChoice / DEG).toFixed(1)} deg off a probed choice`);
+      expect(turn).toBeLessThan(DEG);
+      expect(worstOffChoice).toBeLessThan(DEG);
+    }
+  });
+
+  it("does not spin, nor settle sideways, when the clear yaw flips every 0.25-2.5 s", () => {
+    for (const pair of [[0, 180], [90, -90]] as const) {
+      let seed = 3;
+      const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+      let state = 0;
+      let left = 0;
+      const { probe } = stubProbe(BEHIND_X, (sample, off) => {
+        if (sample <= 60) return true;
+        if (off === 0) {
+          // Once per sample (the base is always probed first): count the run down.
+          if (left-- <= 0) {
+            state ^= 1;
+            left = 1 + Math.floor(random() * 10);
+          }
+        }
+        return off === pair[state];
+      });
+      const track = buildFollowTrack({ startMs: 0, endMs: 300_000, unitsAt: standing, scale: 1, probe })!;
+      const { turn, worstOffChoice } = fightYaw(track, 20_000);
+      console.info(`flip ${pair.join("/")} in 0.25-2.5 s runs: turned ${(turn / DEG).toFixed(1)} deg, at most ${(worstOffChoice / DEG).toFixed(1)} deg off a probed choice`);
+      expect(turn).toBeLessThan(DEG);
+      expect(worstOffChoice).toBeLessThan(DEG);
+    }
+  });
+
+  it("takes a new clear yaw that holds past the dwell, and still never accumulates a turn", () => {
+    // The clear yaw flips 0 <-> 180 in runs of 1-10 s: some runs outlast the dwell and are taken.
+    let seed = 11;
+    const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    const runs: number[] = [];
+    for (let at = 60; at < 1_300; at += 4 + Math.floor(random() * 36)) runs.push(at);
+    const stateAt = (sample: number) => runs.filter((at) => at <= sample).length % 2;
+    const { probe } = stubProbe(BEHIND_X, (sample, off) => (sample <= 60 ? true : off === (stateAt(sample) ? 180 : 0)));
+    const track = buildFollowTrack({ startMs: 0, endMs: 300_000, unitsAt: standing, scale: 1, probe })!;
+    const choices = new Set(Array.from(track.yawChoice).map((k) => FOLLOW_YAW_CANDIDATES_DEG[k]));
+    expect(choices).toEqual(new Set([0, 180]));
+    // Every yaw on the track lies between the two choices on one side (no laps): within half a turn of the base.
+    for (const yaw of track.yaw) expect(Math.abs(yaw - BEHIND_X)).toBeLessThanOrEqual(Math.PI + 1e-9);
+  });
+
+  it("heldYawChoices: a new choice takes over only after the dwell; nothing clear keeps the held one", () => {
     const bit = (deg: number) => 1 << FOLLOW_YAW_CANDIDATES_DEG.indexOf(deg);
-    expect(chooseYaw(0, bit(30) | bit(-30), -0.4)).toBeCloseTo(-30 * DEG, 9);
-    expect(chooseYaw(0, bit(30) | bit(-30), 0.4)).toBeCloseTo(30 * DEG, 9);
-    expect(chooseYaw(0, bit(90) | bit(-60), 0)).toBeCloseTo(-60 * DEG, 9);
-    expect(chooseYaw(1, 0, 0)).toBe(1);
+    const at = (deg: number) => FOLLOW_YAW_CANDIDATES_DEG.indexOf(deg);
+    const open = Uint16Array.from([bit(0), bit(30), bit(30), bit(0), bit(30), bit(30), bit(30), 0, bit(0)]);
+    expect(Array.from(heldYawChoices(open, 3))).toEqual([at(0), at(0), at(0), at(0), at(0), at(0), at(30), at(30), at(30)]);
+    // The first sample takes its own choice; dwell 1 switches at once.
+    expect(Array.from(heldYawChoices(Uint16Array.from([bit(60), bit(0)]), 1))).toEqual([at(60), at(0)]);
+  });
+
+  it("nearestOpenYaw: nearest clear candidate, a tie going to the side held, -1 when nothing is clear", () => {
+    const bit = (deg: number) => 1 << FOLLOW_YAW_CANDIDATES_DEG.indexOf(deg);
+    const at = (deg: number) => FOLLOW_YAW_CANDIDATES_DEG.indexOf(deg);
+    expect(nearestOpenYaw(bit(30) | bit(-30), -1)).toBe(at(-30));
+    expect(nearestOpenYaw(bit(30) | bit(-30), 1)).toBe(at(30));
+    expect(nearestOpenYaw(bit(30) | bit(-30))).toBe(at(30));
+    expect(nearestOpenYaw(bit(90) | bit(-60))).toBe(at(-60));
+    expect(nearestOpenYaw(0)).toBe(-1);
   });
 
   it("hands the yaw spring over after a cut turning with the track, at rest when paused", () => {
@@ -785,17 +895,33 @@ describe("follow track yaw", () => {
     // From 3 rad to -3 rad is 0.28 rad the short way, across pi.
     expect(glidePoseAt(from, to, 0.5, out).yaw).toBeCloseTo(3 + (2 * Math.PI - 6) / 2, 9);
     expect(glidePoseAt(from, to, 1, out).yaw).toBeCloseTo(-3 + 2 * Math.PI, 9);
-    // A 45 degree turn takes long enough that its eased peak stays at the cap; a half turn takes the longest glide.
-    expect(glideDurationMs(0, 1, Math.PI / 4)).toBeCloseTo((1000 * (Math.PI / 4) * Math.PI) / (2 * FOLLOW_YAW_MAX_RATE), 6);
-    expect(glideDurationMs(0, 1, Math.PI)).toBe(GLIDE_MAX_MS);
+    // Any turn takes long enough that its eased peak stays at the cap, even past GLIDE_MAX_MS.
+    for (const turn of [Math.PI / 4, Math.PI / 2, Math.PI]) {
+      const ms = glideDurationMs(0, 1, turn);
+      expect(ms).toBeCloseTo((1000 * turn * Math.PI) / (2 * FOLLOW_YAW_MAX_RATE), 6);
+      let peak = 0;
+      for (let t = 0; t <= 1; t += 0.001) {
+        const a = glidePoseAt({ ...from, yaw: 0 }, { ...to, yaw: turn }, t, out).yaw!;
+        const b = glidePoseAt({ ...from, yaw: 0 }, { ...to, yaw: turn }, t + 0.001, out).yaw!;
+        peak = Math.max(peak, Math.abs(b - a) / ((0.001 * ms) / 1000));
+      }
+      expect(peak).toBeLessThanOrEqual(FOLLOW_YAW_MAX_RATE * 1.001);
+    }
+    expect(glideDurationMs(0, 1, Math.PI)).toBeGreaterThan(GLIDE_MAX_MS);
+    // A long move still takes no longer than GLIDE_MAX_MS.
+    expect(glideDurationMs(10_000, 1)).toBe(GLIDE_MAX_MS);
   });
 
   it("probes in slices too: no slice runs past its budget by more than one sample's probes", () => {
     let clock = 0;
+    // Only half a turn round is clear, so every candidate is probed: 0.5 ms a floor, 0.1 ms a ray.
     const probe: FollowYawProbe = {
+      sample: () => {
+        clock += 0.5;
+      },
       clearYaw: () => {
         clock += 0.1;
-        return true;
+        return false;
       },
     };
     const build = startFollowTrackBuild({ startMs: 0, endMs: 120_000, unitsAt: corner, scale: 1, probe }, () => clock);
@@ -808,10 +934,10 @@ describe("follow track yaw", () => {
       slices++;
       if (finished) break;
     }
-    // 481 samples of 10 probes at 0.1 ms each: about 80 slices.
-    expect(slices).toBeGreaterThan(70);
-    expect(longest).toBeLessThanOrEqual(6 + FOLLOW_YAW_CANDIDATES_DEG.length * 0.1 + 1e-9);
-    const whole = buildFollowTrack({ startMs: 0, endMs: 120_000, unitsAt: corner, scale: 1, probe: { clearYaw: () => true } })!;
+    // 481 samples of 1.5 ms each: about 120 slices.
+    expect(slices).toBeGreaterThan(110);
+    expect(longest).toBeLessThanOrEqual(6 + 1.5 + 1e-9);
+    const whole = buildFollowTrack({ startMs: 0, endMs: 120_000, unitsAt: corner, scale: 1, probe: { sample: () => {}, clearYaw: () => false } })!;
     expect(Array.from(build.result!.yaw)).toEqual(Array.from(whole.yaw));
   });
 });

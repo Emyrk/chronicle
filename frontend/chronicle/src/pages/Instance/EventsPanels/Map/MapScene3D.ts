@@ -33,7 +33,7 @@ import {
 import { participantHue, participantLabel, type LiveMapPresence } from "../../liveSessionProtocol";
 import { actionForKey, cameraAngles, cameraCollisionDistance, cameraOffset, clampMobileMapInput, DEFAULT_AD_STRAFE, easeAngleToward, freeCamTravelSpeed, IDLE_MOBILE_MAP_INPUT, lookDrag, planarStep, pointerLossEndsDrag, rightDragWalkAxes, setWalkMouseButton, shouldFollowWalkCamera, walkCameraSettling, walkDragButton, walkMovementYaw, walkMouseControl, WALK_TOGGLE_KEY, wheelZoomDistance, type MapControlAction, type MobileMapInput } from "./mapControls";
 import { unwrapCompassRadians } from "./mapCompassModel";
-import { createShotHold, FOLLOW_CENTRE_WINDOW_MS, FOLLOW_SLICE_MS, followSprings, followYawStep, handOverFollowSpring, handOverFollowYaw, startFollowTrackBuild, wrapAngle, type FollowTrackBuild, followKeyAt, glideDurationMs, glidePoseAt, holdShot, isReplayJump, type FollowKey, type FollowTrack, type GlidePose } from "./followCamera";
+import { createShotHold, FOLLOW_CENTRE_WINDOW_MS, FOLLOW_SLICE_MS, followSprings, followYawStep, handOverFollowSpring, handOverFollowYaw, startFollowTrackBuild, wrapAngle, type FollowTrackBuild, followKeyAt, glideDurationMs, glidePoseAt, holdShot, isReplayJump, type FollowKey, type FollowTrack, type FollowYawProbe, type GlidePose } from "./followCamera";
 import { BOSS_SPIRE, bossSpireCastGlow, CAST_ARC_TEXTURE_STEPS, DEAD_RING, DEBUFF_PLANE, DISPEL_COLORS, DROP_LINE, drawUnitPlate, ENEMY_RED, guardianWell, HALO_COLORS, MARKS_SCALE, OWNER_LINE, TARGET_LINE, TRAIL_LINE, UNIT_PLATE, unitPlateSize, type UnitPlateInfo, TOKEN_LAYOUT, type DispelKind, type HaloKind } from "./unitTokenArt";
 import { UnitTokenTextures } from "./unitTokens";
 import type { PlanInput, PlanItem, PlanMarkerIcon, PlanPoint } from "./plan/mapPlan";
@@ -380,6 +380,8 @@ export interface MapSceneDirector {
 export interface MapSceneFollowUnit {
   guid: string;
   point: MapPoint;
+  /** Logged world height (yards), when the log has one: the yaw probe finds the floor below it. */
+  z?: number;
   player: boolean;
   boss: boolean;
   dead: boolean;
@@ -1868,10 +1870,14 @@ export class MapScene3D {
       subjectGuid: inputs.subject,
       speed: inputs.speed,
       initialYaw: this.cameraYaw(),
-      probe: { clearYaw: (x, z, radius, yaw) => this.clearYaw(x, z, radius, yaw) },
+      probe: this.followYawProbe(inputs.scale),
       unitsAt: (ms) => source.unitsAt(ms).map((unit): DirectorUnit => {
         const { x, z } = mapPointToScene(unit.point, aspect, GROUND_WIDTH);
-        return { guid: unit.guid, x, z, player: unit.player, boss: unit.boss, dead: unit.dead };
+        // The sample's own height: logged, or the unit's floor track then (no-Z logs).
+        const track = unit.z === undefined ? this.floorTracks?.units.get(unit.guid) : undefined;
+        const floor = track ? floorTrackAt(track, ms, x, z, FLOOR_TRACK_TOLERANCE_YARDS * inputs.scale) : null;
+        const height = unit.z ?? (floor === null ? undefined : floor / inputs.scale);
+        return { guid: unit.guid, x, z, player: unit.player, boss: unit.boss, dead: unit.dead, height };
       }),
     });
     const slice = () => {
@@ -2546,22 +2552,36 @@ export class MapScene3D {
     return !this.meshBlocks(from, to);
   }
 
-  // The follow track's yaw probe: whether the base shot at `yaw` framing
-  // `radius` around (x, z) has a clear line, aimed as updateDirector aims it.
-  private clearYaw(x: number, z: number, radius: number, yaw: number): boolean {
-    const mesh = this.dungeonMesh;
-    if (!mesh) return true;
-    const distance = frameDistance(radius, {
-      verticalFov: (this.camera.fov * Math.PI) / 180,
-      aspect: this.camera.aspect,
-      elevationDeg: CINEMATIC_ELEVATION_DEG,
-      scale: mesh.scale,
-    });
-    const ahead = AIM_AHEAD_FRACTION * Math.max(radius, MIN_FRAME_RADIUS_YARDS * mesh.scale);
-    const aimX = x - Math.sin(yaw) * ahead;
-    const aimZ = z - Math.cos(yaw) * ahead;
-    const floor = this.floorHeights.heightAt("follow-yaw", aimX, aimZ, this.cameraCeiling());
-    return this.shotLineClear(aimX, floor, aimZ, distance, yaw, CINEMATIC_ELEVATION_DEG);
+  // The follow track's yaw probe: per sample, the floor below the framing
+  // (found once, below that sample's units) and the base shot's distance;
+  // per yaw, the line from the framing to where updateDirector puts the
+  // camera at the base elevation (the aim point sits AIM_AHEAD_FRACTION of
+  // the radius past the framing, away from it).
+  private followYawProbe(scale: number): FollowYawProbe {
+    const from = new THREE.Vector3();
+    const to = new THREE.Vector3();
+    const elevation = (CINEMATIC_ELEVATION_DEG * Math.PI) / 180;
+    let out = 0;
+    let up = 0;
+    return {
+      sample: (x, z, radius, height) => {
+        const floor = this.dungeonMesh ? this.sampleFloor(x, z, this.probeCeiling(height, scale)) ?? 0 : 0;
+        from.set(x, floor + MESH_PLAYER_HEIGHT_YARDS * scale, z);
+        const distance = frameDistance(radius, {
+          verticalFov: (this.camera.fov * Math.PI) / 180,
+          aspect: this.camera.aspect,
+          elevationDeg: CINEMATIC_ELEVATION_DEG,
+          scale,
+        });
+        out = Math.cos(elevation) * distance - AIM_AHEAD_FRACTION * Math.max(radius, MIN_FRAME_RADIUS_YARDS * scale);
+        up = floor + Math.sin(elevation) * distance;
+      },
+      clearYaw: (yaw) => {
+        if (!this.dungeonMesh) return true;
+        to.set(from.x + Math.sin(yaw) * out, up, from.z + Math.cos(yaw) * out);
+        return !this.meshBlocks(from, to);
+      },
+    };
   }
 
   // How close a shot blocked even from overhead comes in.
@@ -2637,11 +2657,17 @@ export class MapScene3D {
     // the spring, as the position); otherwise whatever the user last orbited to.
     const yawLed = track ? followKeyAt(track, replayMs + springs!.yawLeadMs, this.followYawKey).yaw : null;
     const yaw = key ? key.yaw : this.cameraYaw();
+    // The yaw the camera actually sits at: the spring's (rate-capped, so up to
+    // half a turn off the track's for a few seconds after Follow or a new
+    // track), or the track's on a cut. The aim offset and the line of sight
+    // use it; glide and cut targets use the track's.
+    const cutting = this.directorSnapPending || (jumped && now < this.directorCutUntil);
+    const placedYaw = key && !cutting ? this.directorYaw.value : yaw;
     // The aim point sits past the fight, away from the camera, so the fight
     // reads below the centre line with the room above it.
     const ahead = AIM_AHEAD_FRACTION * radius;
-    const aimX = centreX - Math.sin(yaw) * ahead;
-    const aimZ = centreZ - Math.cos(yaw) * ahead;
+    const aimX = centreX - Math.sin(placedYaw) * ahead;
+    const aimZ = centreZ - Math.cos(placedYaw) * ahead;
     const fitted = frameDistance(frameRadius, {
       verticalFov: (this.camera.fov * Math.PI) / 180,
       aspect: this.camera.aspect,
@@ -2665,9 +2691,9 @@ export class MapScene3D {
     }
     // The position spring chases the led aim point; the line of sight, a
     // glide and a cut use the goal (where the group is).
-    const springX = led ? led.x - Math.sin(led.yaw) * ahead : goal.x;
-    const springZ = led ? led.z - Math.cos(led.yaw) * ahead : goal.z;
-    const raw = this.clearShot(goal.x, goal.z, goal.distance, yaw);
+    const springX = led ? led.x - Math.sin(placedYaw) * ahead : goal.x;
+    const springZ = led ? led.z - Math.cos(placedYaw) * ahead : goal.z;
+    const raw = this.clearShot(goal.x, goal.z, goal.distance, placedYaw);
     const hold = holdShot(this.shotHold, raw.elevation, raw.distance < goal.distance, now);
     const shotElevation = hold.elevationDeg;
     const shotDistance = hold.shortened ? this.shortenedShot(goal.distance) : goal.distance;
@@ -2687,6 +2713,8 @@ export class MapScene3D {
         from.yaw = this.directorYaw.value;
         from.vyaw = this.directorYaw.velocity;
         const turn = key ? yaw - from.yaw : 0;
+        // A track lost mid-glide keeps this target rather than swinging back.
+        this.glideTo.yaw = key ? yaw : from.yaw;
         // Started a frame back, so this frame already moves (no one-frame stall).
         this.directorGlide = { start: now - dt * 1000, duration: glideDurationMs(Math.hypot(goal.x - from.x, goal.z - from.z), mesh.scale, turn) };
       }
@@ -2708,12 +2736,13 @@ export class MapScene3D {
     const glide = this.directorGlide;
     if (glide) {
       const to = this.glideTo;
-      to.x = goal.x;
-      to.z = goal.z;
+      // Landing where the group is, at the track's yaw (not the yaw the camera is still turning from).
+      to.x = key ? centreX - Math.sin(yaw) * ahead : goal.x;
+      to.z = key ? centreZ - Math.cos(yaw) * ahead : goal.z;
       to.distance = shotDistance;
       to.elevationDeg = shotElevation;
-      // Without a track the glide keeps its yaw (the camera's, which this glide is placing).
-      to.yaw = key ? yaw : this.glideFrom.yaw;
+      // Without a track the glide keeps the yaw it was heading for (the camera's yaw is this glide's own).
+      if (key) to.yaw = yaw;
       const t = Math.min(1, (now - glide.start) / glide.duration);
       const lastX = this.directorX.value;
       const lastZ = this.directorZ.value;
