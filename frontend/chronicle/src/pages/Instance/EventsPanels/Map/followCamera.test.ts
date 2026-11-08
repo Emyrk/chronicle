@@ -25,6 +25,14 @@ import {
   type FollowSprings,
   type FollowTrack,
   type GlidePose,
+  chooseYaw,
+  FOLLOW_YAW_CANDIDATES_DEG,
+  FOLLOW_YAW_MAX_RATE,
+  FOLLOW_YAW_SMOOTH_SECONDS,
+  followYawStep,
+  handOverFollowYaw,
+  wrapAngle,
+  type FollowYawProbe,
 } from "./followCamera";
 
 const FRAME_MS = 1000 / 60;
@@ -91,8 +99,8 @@ function zigzagGroup(ms: number, pace = 7): DirectorUnit[] {
 
 // The worst rate of change of the centre (yd/s) and of that rate (yd/s²),
 // and of the radius (yd/s), sampling `at` at 60 fps over `durationMs`.
-function motion(durationMs: number, at: (ms: number) => FollowKey) {
-  let previous: FollowKey | null = null;
+function motion(durationMs: number, at: (ms: number) => Pick<FollowKey, "x" | "z" | "radius">) {
+  let previous: Pick<FollowKey, "x" | "z" | "radius"> | null = null;
   let previousVelocity: [number, number] | null = null;
   let speed = 0;
   let acceleration = 0;
@@ -131,7 +139,7 @@ describe("buildFollowTrack", () => {
   it("is continuous through walking, a straggler leaving and a boss engaging", () => {
     const track = buildFollowTrack({ startMs: 0, endMs: durationMs, unitsAt: walkingGroup, scale: 1 })!;
     expect(track).not.toBeNull();
-    const out: FollowKey = { x: 0, z: 0, radius: 0 };
+    const out: FollowKey = { x: 0, z: 0, radius: 0, yaw: 0 };
     const smooth = motion(durationMs, (ms) => followKeyAt(track, ms, out));
     // Bounded velocity (the group walks at 6 yd/s) and acceleration, and the
     // frame size eases instead of jumping.
@@ -143,7 +151,7 @@ describe("buildFollowTrack", () => {
   it("looks ahead: the centre starts moving before the group does", () => {
     const standThenWalk = (ms: number) => [0, 1, 2].map((i) => unit(`p${i}`, (ms < 10_000 ? 0 : (ms - 10_000) / 1000 * 6) + i, 0));
     const track = buildFollowTrack({ startMs: 0, endMs: 20_000, unitsAt: standThenWalk, scale: 1 })!;
-    const out: FollowKey = { x: 0, z: 0, radius: 0 };
+    const out: FollowKey = { x: 0, z: 0, radius: 0, yaw: 0 };
     const before = followKeyAt(track, 8_000, out).x;
     const stillBefore = followKeyAt(track, 6_000, out).x;
     expect(before).toBeGreaterThan(stillBefore);
@@ -151,7 +159,7 @@ describe("buildFollowTrack", () => {
 
   it("keeps everyone framed inside the shot's headroom, whatever the smoothing", () => {
     const track = buildFollowTrack({ startMs: 0, endMs: durationMs, unitsAt: walkingGroup, scale: 1 })!;
-    const out: FollowKey = { x: 0, z: 0, radius: 0 };
+    const out: FollowKey = { x: 0, z: 0, radius: 0, yaw: 0 };
     // Who the per-frame rule frames at each sample.
     const framedAt: Set<string>[] = [];
     let inFrame = new Set<string>();
@@ -178,7 +186,7 @@ describe("buildFollowTrack", () => {
       ? [unit("a", 0, 0), unit("b", 4, 0)]
       : ms < 30_000 ? [] : [unit("a", 300, 0), unit("b", 304, 0)];
     const track = buildFollowTrack({ startMs: 0, endMs: 40_000, unitsAt: away, scale: 1 })!;
-    const out: FollowKey = { x: 0, z: 0, radius: 0 };
+    const out: FollowKey = { x: 0, z: 0, radius: 0, yaw: 0 };
     const glide = motion(40_000, (ms) => followKeyAt(track, ms, out));
     // 300 yd over the 6 s triangular centre window peaks near 100 yd/s,
     // eased in and out; a one-frame jump would be 18,000 yd/s.
@@ -189,7 +197,7 @@ describe("buildFollowTrack", () => {
 
   it("stays continuous at a fast speed, with a centre window capped in replay time", () => {
     const fast = buildFollowTrack({ startMs: 0, endMs: durationMs, unitsAt: walkingGroup, scale: 1, speed: 32 })!;
-    const out: FollowKey = { x: 0, z: 0, radius: 0 };
+    const out: FollowKey = { x: 0, z: 0, radius: 0, yaw: 0 };
     // In replay time the fast track is as smooth as the 1x one.
     const smooth = motion(durationMs, (ms) => followKeyAt(fast, ms, out));
     expect(smooth.speed).toBeLessThan(15);
@@ -207,7 +215,7 @@ describe("buildFollowTrack", () => {
     // A group runs a cave-like zigzag (40 yd legs, alternating +x and +z) for ten minutes, on foot or mounted.
     const unitsAt = (ms: number) => zigzagGroup(ms, pace);
     const track = buildFollowTrack({ startMs: 0, endMs: 600_000, unitsAt, scale: 1, speed: 32 })!;
-    const out: FollowKey = { x: 0, z: 0, radius: 0 };
+    const out: FollowKey = { x: 0, z: 0, radius: 0, yaw: 0 };
     // The clamp holds at every sample; between them the Catmull-Rom can swing
     // a little past it (about 1.6 yd at a mounted pace).
     let inFrame = new Set<string>();
@@ -228,7 +236,7 @@ describe("buildFollowTrack", () => {
     const lag = (speed: number) => {
       const end = 600_000;
       const track = buildFollowTrack({ startMs: 0, endMs: end, unitsAt: zigzagGroup, scale: 1, speed })!;
-      const out: FollowKey = { x: 0, z: 0, radius: 0 };
+      const out: FollowKey = { x: 0, z: 0, radius: 0, yaw: 0 };
       followKeyAt(track, 0, out);
       const x = { value: out.x, velocity: 0 };
       const z = { value: out.z, velocity: 0 };
@@ -270,7 +278,7 @@ describe("followSprings", () => {
   const preview = (smooth: number, goalMs: (replayMs: number) => number, drops = false) => {
     const speed = 32;
     const track = buildFollowTrack({ startMs: 0, endMs: 3_000_000, unitsAt: (ms) => [0, 1, 2].map((i) => unit(`p${i}`, (ms / 1000) * 7 + i, 0)), scale: 1, speed })!;
-    const out: FollowKey = { x: 0, z: 0, radius: 0 };
+    const out: FollowKey = { x: 0, z: 0, radius: 0, yaw: 0 };
     const x = { value: 1, velocity: 0 };
     let last: { now: number; x: number; velocity: number } | null = null;
     let jerk = 0;
@@ -326,7 +334,7 @@ describe("followSprings", () => {
     const unitsAt = (ms: number) => [0, 1, 2].map((i) => unit(`p${i}`, (ms / 1000) * pace + i - 1, 0));
     const track = buildFollowTrack({ startMs: 0, endMs: 600_000, unitsAt, scale: 1, speed })!;
     const springs = followSprings(speed, true);
-    const out: FollowKey = { x: 0, z: 0, radius: 0 };
+    const out: FollowKey = { x: 0, z: 0, radius: 0, yaw: 0 };
     const x: DampedValue = { value: 0, velocity: 0 };
     const startMs = arrive(track, springs, x);
     let worst = 0;
@@ -343,14 +351,14 @@ describe("followSprings", () => {
   it.each([[8, 7], [32, 7], [32, 14]])("hands over to the led spring after a cut without running ahead (%ix, %i yd/s)", (speed, pace) => {
     const startMs = 200_000;
     const cut = afterHandover(speed, pace, (track, springs, x) => {
-      const out: FollowKey = { x: 0, z: 0, radius: 0 };
+      const out: FollowKey = { x: 0, z: 0, radius: 0, yaw: 0 };
       const at = followKeyAt(track, startMs, out).x;
       handOverFollowSpring(x, at, followKeyAt(track, startMs + springs.leadMs, out).x, springs);
       return startMs;
     });
     // Snapped onto the led goal at rest instead, it starts the whole lead ahead.
     const naive = afterHandover(speed, pace, (track, springs, x) => {
-      x.value = followKeyAt(track, startMs + springs.leadMs, { x: 0, z: 0, radius: 0 }).x;
+      x.value = followKeyAt(track, startMs + springs.leadMs, { x: 0, z: 0, radius: 0, yaw: 0 }).x;
       return startMs;
     });
     console.info(`cut at ${speed}x, ${pace} yd/s: off the group at most ${cut.toFixed(2)} yd (snapped onto the led goal: ${naive.toFixed(0)} yd)`);
@@ -362,7 +370,7 @@ describe("followSprings", () => {
     const glide = afterHandover(speed, pace, (track, _springs, x) => {
       // A replay jump to 200 s: the glide (as updateDirector runs it) from
       // 300 yd away onto where the group is, riding along as it moves.
-      const out: FollowKey = { x: 0, z: 0, radius: 0 };
+      const out: FollowKey = { x: 0, z: 0, radius: 0, yaw: 0 };
       const jumpMs = 200_000;
       const from: GlidePose = { x: followKeyAt(track, jumpMs, out).x - 300, z: 0, distance: 30, elevationDeg: 28 };
       const to: GlidePose = { x: 0, z: 0, distance: 30, elevationDeg: 28 };
@@ -391,11 +399,14 @@ describe("followSprings", () => {
       leadMs: FOLLOW_SMOOTH_SECONDS * 1_000,
       distance: DISTANCE_SMOOTH_SECONDS,
       distanceLeadMs: DISTANCE_SMOOTH_SECONDS * 1_000,
+      yaw: FOLLOW_YAW_SMOOTH_SECONDS,
+      yawLeadMs: FOLLOW_YAW_SMOOTH_SECONDS * 1_000,
     });
+    expect(followSprings(32, true).yawLeadMs).toBeCloseTo(32 * FOLLOW_YAW_SMOOTH_SECONDS * 1_000, 6);
     expect(followSprings(32, true).leadMs).toBeCloseTo(32 * FOLLOW_SMOOTH_SECONDS * 1_000, 6);
     expect(followSprings(32, true).distanceLeadMs).toBeCloseTo(32 * DISTANCE_SMOOTH_SECONDS * 1_000, 6);
     // Paused, a short seek eases in on the real-time springs rather than cutting.
-    expect(followSprings(32, false)).toEqual({ ...followSprings(1, true), leadMs: 0, distanceLeadMs: 0 });
+    expect(followSprings(32, false)).toEqual({ ...followSprings(1, true), leadMs: 0, distanceLeadMs: 0, yawLeadMs: 0 });
   });
 
   it("a cut while paused hands over at rest", () => {
@@ -579,9 +590,228 @@ describe("startFollowTrackBuild", () => {
     expect(buildFollowTrack({ startMs: 0, endMs: 10_000, unitsAt: walkingGroup, scale: 1, subjectGuid: "mob-1" })).toBeNull();
     // A followed player who is in it gets a track centred on them.
     const track = buildFollowTrack({ startMs: 0, endMs: 10_000, unitsAt: walkingGroup, scale: 1, subjectGuid: "p4" })!;
-    const out: FollowKey = { x: 0, z: 0, radius: 0 };
+    const out: FollowKey = { x: 0, z: 0, radius: 0, yaw: 0 };
     const key = followKeyAt(track, 5_000, out);
     const p4 = walkingGroup(5_000).find((candidate) => candidate.guid === "p4")!;
     expect(Math.hypot(key.x - p4.x, key.z - p4.z)).toBeLessThan(2);
+  });
+});
+
+describe("follow track yaw", () => {
+  const DEG = Math.PI / 180;
+  // Behind travel along +x, and along +z (the camera sits at (sin yaw, cos yaw) from the aim).
+  const BEHIND_X = -Math.PI / 2;
+  const BEHIND_Z = Math.PI;
+  const angleOff = (a: number, b: number) => Math.abs(wrapAngle(a - b));
+  const keyAt = (track: FollowTrack, ms: number) => followKeyAt(track, ms, { x: 0, z: 0, radius: 0, yaw: 0 });
+
+  /** Three players walk +x at 7 yd/s for 60 s, then turn and walk +z for 60 s. */
+  const corner = (ms: number) => {
+    const t = Math.min(ms, 120_000) / 1000;
+    const x = Math.min(t, 60) * 7;
+    const z = Math.max(0, t - 60) * 7;
+    return [0, 1, 2].map((i) => unit(`p${i}`, x + i, z));
+  };
+
+  it("turns with the path: behind the group on each leg, turning before the corner", () => {
+    const track = buildFollowTrack({ startMs: 0, endMs: 120_000, unitsAt: corner, scale: 1 })!;
+    expect(angleOff(keyAt(track, 30_000).yaw, BEHIND_X)).toBeLessThan(DEG);
+    expect(angleOff(keyAt(track, 100_000).yaw, BEHIND_Z)).toBeLessThan(DEG);
+    // Look-ahead: already turning before the group reaches the corner.
+    expect(angleOff(keyAt(track, 59_000).yaw, BEHIND_X)).toBeGreaterThan(5 * DEG);
+    // And it turns the short way (90 degrees), not round through the other side.
+    const swept = Math.abs(keyAt(track, 100_000).yaw - keyAt(track, 30_000).yaw);
+    expect(swept).toBeCloseTo(Math.PI / 2, 2);
+  });
+
+  it("holds steady while the group stands (a fight) instead of spinning", () => {
+    // Walk +x for 20 s, then stand for 60 s shuffling 2 yd about in every direction.
+    const fight = (ms: number) => {
+      const t = ms / 1000;
+      const x = Math.min(t, 20) * 7;
+      return [0, 1, 2, 3].map((i) => {
+        const shuffle = t > 20 ? 2 * Math.sin(t * (1.3 + i) + i) : 0;
+        return unit(`p${i}`, x + shuffle, Math.cos(t * (0.7 + i)) * (t > 20 ? 2 : 0) + i);
+      });
+    };
+    const track = buildFollowTrack({ startMs: 0, endMs: 80_000, unitsAt: fight, scale: 1 })!;
+    let worst = 0;
+    for (let ms = 30_000; ms <= 80_000; ms += 250) worst = Math.max(worst, angleOff(keyAt(track, ms).yaw, BEHIND_X));
+    console.info(`fight: worst yaw drift ${(worst / DEG).toFixed(1)} deg over 50 s of shuffling`);
+    expect(worst / DEG).toBeLessThan(5);
+  });
+
+  it("starts on the first move's yaw, and keeps the initial yaw when nobody ever moves", () => {
+    const later = (ms: number) => [0, 1].map((i) => unit(`p${i}`, Math.max(0, ms / 1000 - 30) * 7 + i, 0));
+    const track = buildFollowTrack({ startMs: 0, endMs: 60_000, unitsAt: later, scale: 1, initialYaw: 1 })!;
+    expect(angleOff(keyAt(track, 0).yaw, BEHIND_X)).toBeLessThan(DEG);
+    const still = buildFollowTrack({ startMs: 0, endMs: 60_000, unitsAt: () => [unit("p0", 5, 5)], scale: 1, initialYaw: 1 })!;
+    expect(keyAt(still, 30_000).yaw).toBeCloseTo(1, 9);
+  });
+
+  /** Five players walking a staircase of `leg` yd legs at 7 yd/s, alternately +x and +z: a 90 degree turn every leg. */
+  const stairs = (leg: number) => (ms: number) => {
+    const run = (ms / 1000) * 7;
+    const i = Math.floor(run / leg);
+    const along = run - i * leg;
+    const x = Math.ceil(i / 2) * leg + (i % 2 === 0 ? along : 0);
+    const z = Math.floor(i / 2) * leg + (i % 2 === 1 ? along : 0);
+    return [[0, 0], [2, 1], [-2, 1], [1, -2], [-1, -2]].map(([dx, dz], k) => unit(`p${k}`, x + dx!, z + dz!));
+  };
+
+  it("unwraps across +-pi: a group walking circles turns on and on, never spinning back", () => {
+    // A 40 yd circle walked anticlockwise at 7 yd/s: about 36 s a lap, five laps.
+    const circle = (ms: number) => {
+      const a = ((ms / 1000) * 7) / 40;
+      return [unit("p0", 40 * Math.cos(a), 40 * Math.sin(a))];
+    };
+    const track = buildFollowTrack({ startMs: 0, endMs: 180_000, unitsAt: circle, scale: 1 })!;
+    let previous = keyAt(track, 0).yaw;
+    for (let ms = FRAME_MS; ms <= 180_000; ms += FRAME_MS) {
+      const yaw = keyAt(track, ms).yaw;
+      expect(Math.abs(yaw - previous)).toBeLessThan(0.05);
+      previous = yaw;
+    }
+    // Several whole turns, one way.
+    expect(Math.abs(keyAt(track, 170_000).yaw - keyAt(track, 10_000).yaw)).toBeGreaterThan(4 * Math.PI);
+    // The spring turns the short way across the seam too.
+    const spring = { value: Math.PI - 0.05, velocity: 0 };
+    followYawStep(spring, -Math.PI + 0.05, FOLLOW_YAW_SMOOTH_SECONDS, 1);
+    expect(spring.value).toBeGreaterThan(Math.PI - 0.05);
+    expect(spring.value).toBeLessThanOrEqual(Math.PI + 0.05 + 1e-9);
+  });
+
+  it("caps the track's turn rate in real time, at 1x and 32x", () => {
+    const worstTurn = (speed: number, leg: number, yawWindowMs?: number) => {
+      const track = buildFollowTrack({ startMs: 0, endMs: 1_200_000, unitsAt: stairs(leg), scale: 1, speed, yawWindowMs })!;
+      let worst = 0;
+      const step = FRAME_MS * speed;
+      let previous = keyAt(track, 0).yaw;
+      for (let ms = step; ms <= 1_200_000; ms += step) {
+        const yaw = keyAt(track, ms).yaw;
+        worst = Math.max(worst, Math.abs(yaw - previous) / (FRAME_MS / 1000));
+        previous = yaw;
+      }
+      return worst;
+    };
+    for (const [speed, leg] of [[1, 60], [32, 1_200]] as const) {
+      // The default window alone keeps a sharp corner under the cap.
+      const smoothed = worstTurn(speed, leg);
+      // With almost no yaw window, the cap is what holds it.
+      const capped = worstTurn(speed, leg, 250);
+      console.info(`stairs ${speed}x: worst track turn ${(smoothed / DEG).toFixed(1)} deg/s, ${(capped / DEG).toFixed(1)} with a 250 ms window (cap ${(FOLLOW_YAW_MAX_RATE / DEG).toFixed(0)})`);
+      expect(smoothed).toBeLessThan(FOLLOW_YAW_MAX_RATE);
+      // (At 1x the centre's own window spreads a corner over seconds; at 32x it is a fifth of a second of real time.)
+      if (speed === 32) expect(capped).toBeGreaterThan(FOLLOW_YAW_MAX_RATE * 0.9);
+      // Catmull-Rom between capped samples can overshoot a sample's chord a little.
+      expect(capped).toBeLessThan(FOLLOW_YAW_MAX_RATE * 1.3);
+    }
+  });
+
+  it("never turns more than the rate cap in a frame, without stutter, on the 32x preview clock", () => {
+    const speed = 32;
+    const span = 3_000_000;
+    const track = buildFollowTrack({ startMs: 0, endMs: span, unitsAt: stairs(1_200), scale: 1, speed })!;
+    const run = (smooth: number, lead: number) => {
+      const spring: DampedValue = { value: keyAt(track, 0).yaw, velocity: 0 };
+      let last: { now: number; yaw: number; rate: number } | null = null;
+      let worstStep = 0;
+      let jerk = 0;
+      previewPlayback(speed, span, 60_000, (now, replayMs) => {
+        const dt = last ? (now - last.now) / 1000 : FRAME_MS / 1000;
+        const yaw = followYawStep(spring, keyAt(track, replayMs + lead).yaw, smooth, dt);
+        const rate = last ? (yaw - last.yaw) / dt : 0;
+        worstStep = Math.max(worstStep, Math.abs(rate));
+        if (last && now > 2_000) jerk = Math.max(jerk, Math.abs(rate - last.rate));
+        last = { now, yaw, rate };
+      }, false);
+      return { worstStep, jerk };
+    };
+    const springs = followSprings(speed, true);
+    const led = run(springs.yaw, springs.yawLeadMs);
+    const copying = run(FOLLOW_YAW_SMOOTH_SECONDS / speed, 0);
+    console.info(`32x preview yaw: led worst ${(led.worstStep / DEG).toFixed(1)} deg/s, jerk ${(led.jerk / DEG).toFixed(2)} deg/s per frame; short spring jerk ${(copying.jerk / DEG).toFixed(2)}`);
+    expect(led.worstStep).toBeLessThanOrEqual(FOLLOW_YAW_MAX_RATE + 1e-9);
+    // The turns are real (the camera does turn), but its rate changes smoothly frame to frame.
+    expect(led.worstStep).toBeGreaterThan(FOLLOW_YAW_MAX_RATE / 2);
+    expect(led.jerk).toBeLessThan(copying.jerk);
+    expect(led.jerk).toBeLessThan(2 * DEG);
+  });
+
+  it("turns a blocked base yaw to the nearest clear one", () => {
+    const straight = (ms: number) => [0, 1, 2].map((i) => unit(`p${i}`, (ms / 1000) * 7 + i, 0));
+    // The cave blocks from 40 degrees one side of behind to 70 the other: only -60 and beyond are clear on that side.
+    const calls: number[] = [];
+    const probe: FollowYawProbe = {
+      clearYaw: (_x, _z, _radius, yaw) => {
+        calls.push(yaw);
+        const off = wrapAngle(yaw - BEHIND_X) / DEG;
+        return off < -40 || off > 70;
+      },
+    };
+    const track = buildFollowTrack({ startMs: 0, endMs: 60_000, unitsAt: straight, scale: 1, probe })!;
+    expect(calls.length).toBe(track.x.length * FOLLOW_YAW_CANDIDATES_DEG.length);
+    expect(angleOff(keyAt(track, 30_000).yaw, BEHIND_X - 60 * DEG)).toBeLessThan(DEG);
+    // The alternatives stay on the track: base, and which candidates were clear.
+    const i = Math.round(30_000 / track.sampleMs);
+    expect(angleOff(track.baseYaw[i]!, BEHIND_X)).toBeLessThan(DEG);
+    const open = FOLLOW_YAW_CANDIDATES_DEG.filter((_, k) => track.yawOpen[i]! & (1 << k));
+    expect(open).toEqual([-60, 90, -90, 135, -135, 180]);
+    // Without a probe every candidate counts as clear and the base wins.
+    const free = buildFollowTrack({ startMs: 0, endMs: 60_000, unitsAt: straight, scale: 1 })!;
+    expect(free.yawOpen[i]).toBe((1 << FOLLOW_YAW_CANDIDATES_DEG.length) - 1);
+    expect(angleOff(keyAt(free, 30_000).yaw, BEHIND_X)).toBeLessThan(DEG);
+  });
+
+  it("chooseYaw: nearest clear candidate, a tie going to the side nearer the last yaw, the base when nothing is clear", () => {
+    const bit = (deg: number) => 1 << FOLLOW_YAW_CANDIDATES_DEG.indexOf(deg);
+    expect(chooseYaw(0, bit(30) | bit(-30), -0.4)).toBeCloseTo(-30 * DEG, 9);
+    expect(chooseYaw(0, bit(30) | bit(-30), 0.4)).toBeCloseTo(30 * DEG, 9);
+    expect(chooseYaw(0, bit(90) | bit(-60), 0)).toBeCloseTo(-60 * DEG, 9);
+    expect(chooseYaw(1, 0, 0)).toBe(1);
+  });
+
+  it("hands the yaw spring over after a cut turning with the track, at rest when paused", () => {
+    const playing = handOverFollowYaw({ value: 0, velocity: 0 }, 1, 1.1, followSprings(8, true));
+    expect(playing.value).toBe(1);
+    expect(playing.velocity).toBeCloseTo(0.1 / FOLLOW_YAW_SMOOTH_SECONDS, 9);
+    expect(handOverFollowYaw({ value: 0, velocity: 3 }, 1, 1, followSprings(8, false))).toEqual({ value: 1, velocity: 0 });
+  });
+
+  it("a glide turns along the shortest arc, slowly enough for a big turn", () => {
+    const from: GlidePose = { x: 0, z: 0, distance: 10, elevationDeg: 30, yaw: 3 };
+    const to: GlidePose = { x: 0, z: 0, distance: 10, elevationDeg: 30, yaw: -3 };
+    const out: GlidePose = { x: 0, z: 0, distance: 0, elevationDeg: 0 };
+    // From 3 rad to -3 rad is 0.28 rad the short way, across pi.
+    expect(glidePoseAt(from, to, 0.5, out).yaw).toBeCloseTo(3 + (2 * Math.PI - 6) / 2, 9);
+    expect(glidePoseAt(from, to, 1, out).yaw).toBeCloseTo(-3 + 2 * Math.PI, 9);
+    // A 45 degree turn takes long enough that its eased peak stays at the cap; a half turn takes the longest glide.
+    expect(glideDurationMs(0, 1, Math.PI / 4)).toBeCloseTo((1000 * (Math.PI / 4) * Math.PI) / (2 * FOLLOW_YAW_MAX_RATE), 6);
+    expect(glideDurationMs(0, 1, Math.PI)).toBe(GLIDE_MAX_MS);
+  });
+
+  it("probes in slices too: no slice runs past its budget by more than one sample's probes", () => {
+    let clock = 0;
+    const probe: FollowYawProbe = {
+      clearYaw: () => {
+        clock += 0.1;
+        return true;
+      },
+    };
+    const build = startFollowTrackBuild({ startMs: 0, endMs: 120_000, unitsAt: corner, scale: 1, probe }, () => clock);
+    let longest = 0;
+    let slices = 0;
+    for (;;) {
+      const before = clock;
+      const finished = build.step(6);
+      longest = Math.max(longest, clock - before);
+      slices++;
+      if (finished) break;
+    }
+    // 481 samples of 10 probes at 0.1 ms each: about 80 slices.
+    expect(slices).toBeGreaterThan(70);
+    expect(longest).toBeLessThanOrEqual(6 + FOLLOW_YAW_CANDIDATES_DEG.length * 0.1 + 1e-9);
+    const whole = buildFollowTrack({ startMs: 0, endMs: 120_000, unitsAt: corner, scale: 1, probe: { clearYaw: () => true } })!;
+    expect(Array.from(build.result!.yaw)).toEqual(Array.from(whole.yaw));
   });
 });
