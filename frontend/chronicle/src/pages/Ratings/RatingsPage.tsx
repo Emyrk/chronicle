@@ -1,9 +1,10 @@
 import { useState, type ReactNode } from "react"
 import { Link } from "react-router-dom"
-import { ArrowRight, BarChart3, Crown, Layers, Medal, Percent, TrendingDown } from "lucide-react"
+import { ArrowRight, BarChart3, Percent, TrendingDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { parseColor } from "@/pages/Instance/parseColors"
 import { ToolsBackLink } from "@/pages/Tools/ToolsBackLink"
+import { METRIC_THEMES } from "@/pages/Leaderboards/Ratings/ratingThemes"
 import { MASTERY_WEIGHTS, averageAcrossBosses, normalize, ratePlayerBoss, type Band } from "./ratingMath"
 
 // Example player: a Fury Warrior's Nefarian kills, in chronological order.
@@ -32,14 +33,23 @@ const OTHER_BWL_BOSSES = [
   { name: "Chromaggus", kills: 10, award: 2 },
 ]
 
+const RATING_ACCENT = {
+  peak: METRIC_THEMES.peak.accent,
+  mastery: METRIC_THEMES.mastery.accent,
+  renown: METRIC_THEMES.renown.accent,
+}
+const PeakIcon = METRIC_THEMES.peak.icon
+const MasteryIcon = METRIC_THEMES.mastery.icon
+const RenownIcon = METRIC_THEMES.renown.icon
+
 type Lens = "performance" | "parse" | "peak" | "mastery" | "renown"
 
 const LENSES: { id: Lens; label: string; icon: ReactNode; kind: "metric" | "rating" }[] = [
   { id: "performance", label: "Performance", icon: <BarChart3 className="h-4 w-4" />, kind: "metric" },
   { id: "parse", label: "Parse", icon: <Percent className="h-4 w-4" />, kind: "metric" },
-  { id: "peak", label: "Peak", icon: <Crown className="h-4 w-4" />, kind: "rating" },
-  { id: "mastery", label: "Mastery", icon: <Layers className="h-4 w-4" />, kind: "rating" },
-  { id: "renown", label: "Renown", icon: <Medal className="h-4 w-4" />, kind: "rating" },
+  { id: "peak", label: "Peak", icon: <PeakIcon className="h-4 w-4" style={{ color: RATING_ACCENT.peak }} />, kind: "rating" },
+  { id: "mastery", label: "Mastery", icon: <MasteryIcon className="h-4 w-4" style={{ color: RATING_ACCENT.mastery }} />, kind: "rating" },
+  { id: "renown", label: "Renown", icon: <RenownIcon className="h-4 w-4" style={{ color: RATING_ACCENT.renown }} />, kind: "rating" },
 ]
 
 const BAND_STYLE: Record<Band, { bar: string; label: string; swatch: string }> = {
@@ -162,36 +172,59 @@ function Overview() {
     },
   ]
   const ratings = [
-    { icon: <Crown className="h-5 w-5" />, title: "Peak", body: "Your best kill against the best kill ever recorded in your cohort." },
     {
-      icon: <Layers className="h-5 w-5" />,
+      icon: <PeakIcon className="h-5 w-5" />,
+      accent: RATING_ACCENT.peak,
+      title: "Peak",
+      body: "Your best kill against the best kill ever recorded in your cohort.",
+    },
+    {
+      icon: <MasteryIcon className="h-5 w-5" />,
+      accent: RATING_ACCENT.mastery,
       title: "Mastery",
       body: "How consistently you perform: your best kill, your typical kills, and your weaker kills, blended.",
     },
-    { icon: <Medal className="h-5 w-5" />, title: "Renown", body: "Points for every boss you've killed. It only goes up." },
+    {
+      icon: <RenownIcon className="h-5 w-5" />,
+      accent: RATING_ACCENT.renown,
+      title: "Renown",
+      body: "Points for every boss you've killed. It only goes up.",
+    },
   ]
+  // One grid so all five cards share a width and row height. Headings sit in
+  // row 1 on desktop; on mobile they stay above their own cards.
   return (
-    <section className="mb-10 grid gap-4 rounded-xl border bg-card p-4 md:grid-cols-[2fr_auto_3fr] md:items-center">
-      <div>
-        <h2 className="mb-3 text-sm font-semibold">Per-kill metrics</h2>
-        <div className="grid gap-3 sm:grid-cols-2">{metrics.map((m) => <OverviewCard key={m.title} {...m} />)}</div>
-      </div>
-      <ArrowRight className="mx-auto hidden h-5 w-5 text-muted-foreground md:block" />
-      <div>
-        <h2 className="mb-3 text-sm font-semibold">
-          Ratings <span className="font-normal text-muted-foreground">(your whole history)</span>
-        </h2>
-        <div className="grid gap-3 sm:grid-cols-3">{ratings.map((m) => <OverviewCard key={m.title} {...m} />)}</div>
-      </div>
+    <section className="mb-10 grid grid-cols-2 gap-3 rounded-xl border bg-card p-4 md:grid-cols-[1fr_1fr_auto_1fr_1fr_1fr]">
+      <h2 className="col-span-2 text-sm font-semibold md:col-start-1 md:row-start-1">Per-kill metrics</h2>
+      {metrics.map((m) => (
+        <OverviewCard key={m.title} {...m} />
+      ))}
+      <ArrowRight className="hidden h-5 w-5 self-center text-muted-foreground md:row-start-2 md:block" />
+      <h2 className="col-span-2 mt-2 text-sm font-semibold md:col-span-3 md:col-start-4 md:row-start-1 md:mt-0">
+        Ratings <span className="font-normal text-muted-foreground">(your whole history)</span>
+      </h2>
+      {ratings.map((m) => (
+        <OverviewCard key={m.title} {...m} />
+      ))}
     </section>
   )
 }
 
-function OverviewCard({ icon, title, body }: { icon: ReactNode; title: string; body: string }) {
+function OverviewCard({ icon, title, body, accent }: { icon: ReactNode; title: string; body: string; accent?: string }) {
   return (
-    <div className="rounded-lg border bg-background/40 p-3">
-      <div className="mb-2 inline-flex rounded-md bg-sky-500/10 p-2 text-sky-400">{icon}</div>
-      <div className="font-semibold">{title}</div>
+    <div
+      className="flex h-full flex-col rounded-lg border bg-background/40 p-3 md:row-start-2"
+      style={accent ? { boxShadow: `inset 0 2px 0 ${accent}` } : undefined}
+    >
+      <div
+        className="mb-2 inline-flex self-start rounded-md p-2 text-muted-foreground"
+        style={accent ? { color: accent, backgroundColor: `color-mix(in srgb, ${accent} 14%, transparent)` } : { backgroundColor: "var(--color-muted)" }}
+      >
+        {icon}
+      </div>
+      <div className="font-semibold" style={accent ? { color: accent } : undefined}>
+        {title}
+      </div>
       <p className="text-sm text-muted-foreground">{body}</p>
     </div>
   )
