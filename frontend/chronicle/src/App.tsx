@@ -14,6 +14,7 @@ const RefundPolicy = lazy(() => import("./pages/RefundPolicy").then(({ RefundPol
 const Disclaimer = lazy(() => import("./pages/Disclaimer").then(({ Disclaimer }) => ({ default: Disclaimer })))
 const SupportedInstances = lazy(() => import("./pages/SupportedInstances").then(({ SupportedInstances }) => ({ default: SupportedInstances })))
 const Terms = lazy(() => import("./pages/Terms").then(({ Terms }) => ({ default: Terms })))
+const RatingsPage = lazy(() => import("./pages/Ratings/RatingsPage").then(({ RatingsPage }) => ({ default: RatingsPage })))
 const ParsingPage = lazy(() => import("./pages/Parsing/ParsingPage").then(({ ParsingPage }) => ({ default: ParsingPage })))
 const Start2Page = lazy(() => import("./pages/Landing/Start2Page").then(({ Start2Page }) => ({ default: Start2Page })))
 const CohortViewerPage = lazy(() => import("./pages/Parsing/CohortViewerPage").then(({ CohortViewerPage }) => ({ default: CohortViewerPage })))
@@ -329,6 +330,7 @@ function App() {
         <Route path="/terms" element={<Terms />} />
         <Route path="/parsing" element={<ParsingPage />} />
         <Route path="/parsing/cohorts" element={<CohortViewerPage />} />
+        <Route path="/ratings" element={<RatingsPage />} />
         <Route path="/speedrunning" element={<SpeedrunningPage />} />
         <Route path="/map-legend" element={<MapLegendPage />} />
         <Route path="/subspecs" element={<SubspecsPage />} />

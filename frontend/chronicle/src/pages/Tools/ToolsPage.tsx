@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom"
-import { Swords, FileText, Youtube, Code, Shirt, Users, Timer, BookOpen, GitBranch, ChartNoAxesCombined, Blocks, Puzzle, Map, Search } from "lucide-react"
+import { Swords, FileText, Youtube, Code, Shirt, Users, Timer, BookOpen, GitBranch, ChartNoAxesCombined, Blocks, Puzzle, Map, Search, Crown } from "lucide-react"
 
 const faq = [
   {
@@ -7,6 +7,12 @@ const faq = [
     description: "Learn how Chronicle calculates parse scores and comparison cohorts.",
     to: "/parsing",
     icon: <FileText className="h-6 w-6" />,
+  },
+  {
+    name: "Ratings",
+    description: "Learn how Peak, Mastery, and Renown summarize your kill history.",
+    to: "/ratings",
+    icon: <Crown className="h-6 w-6" />,
   },
   {
     name: "Speedrunning",
