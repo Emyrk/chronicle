@@ -2247,6 +2247,7 @@ type LeaderboardOperation struct {
 	RetryCount        int32              `db:"retry_count" json:"retry_count"`
 	RetryAfter        pgtype.Timestamptz `db:"retry_after" json:"retry_after"`
 	LastError         string             `db:"last_error" json:"last_error"`
+	AfterDate         pgtype.Date        `db:"after_date" json:"after_date"`
 }
 
 type LeaderboardPlayerBossBenchmark struct {

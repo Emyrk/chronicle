@@ -1,6 +1,6 @@
 -- name: CreateLeaderboardOperation :one
-INSERT INTO leaderboard_operations(tenant_id,requested_by,purpose,scope,run_id,before_date)
-VALUES (@tenant_id,@requested_by,@purpose,@scope,sqlc.narg('run_id')::uuid,@before_date::date) RETURNING *;
+INSERT INTO leaderboard_operations(tenant_id,requested_by,purpose,scope,run_id,after_date,before_date)
+VALUES (@tenant_id,@requested_by,@purpose,@scope,sqlc.narg('run_id')::uuid,sqlc.narg('after_date')::date,@before_date::date) RETURNING *;
 
 -- name: ListLeaderboardOperations :many
 SELECT * FROM leaderboard_operations WHERE tenant_id= @tenant_id ORDER BY started_at DESC,id LIMIT 50;
@@ -65,7 +65,9 @@ WHERE s.tenant_id= @tenant_id::uuid AND r.id> @after_realm::uuid ORDER BY r.id L
 -- Event-time scope, not an ingestion snapshot. The existing realm/end index
 -- supports a bounded chronological page; run_id breaks equal-date ties.
 SELECT run_id,end_time FROM ranking_runs
-WHERE realm_id= @realm_id AND end_time< @before_time::timestamptz
+WHERE realm_id= @realm_id
+ AND (sqlc.narg('range_start')::timestamptz IS NULL OR end_time>=sqlc.narg('range_start')::timestamptz)
+ AND end_time< @before_time::timestamptz
  AND EXISTS(SELECT 1 FROM wow_server_realms r JOIN wow_servers s ON s.id=r.server_id WHERE r.id=ranking_runs.realm_id AND s.tenant_id= @tenant_id::uuid)
  AND (end_time,run_id)>(@after_date::timestamptz,@after_id::uuid)
 ORDER BY end_time,run_id LIMIT 100;

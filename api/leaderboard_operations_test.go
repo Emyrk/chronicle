@@ -16,12 +16,24 @@ func TestParseLeaderboardOperation(t *testing.T) {
 	req := chroniclesdk.CreateLeaderboardOperationRequest{TenantID: uuid.New(), Purpose: "bootstrap", Scope: "tenant"}
 	p, err := parseLeaderboardOperation(req, now)
 	require.NoError(t, err)
-	require.Equal(t, "2026-11-07", p.BeforeDate.Time.Format("2006-01-02"))
-	for _, date := range []string{"2026-11-08", "invalid", "2026-02-30"} {
+	require.Equal(t, "2026-11-08", p.BeforeDate.Time.Format("2006-01-02"))
+	for _, date := range []string{"invalid", "2026-02-30"} {
 		req.BeforeDate = date
 		_, err = parseLeaderboardOperation(req, now)
 		require.Error(t, err)
 	}
+	req.BeforeDate = "2026-11-10"
+	req.AfterDate = "2026-11-08"
+	p, err = parseLeaderboardOperation(req, now)
+	require.NoError(t, err)
+	require.Equal(t, "2026-11-08", p.AfterDate.Time.Format("2006-01-02"))
+	require.Equal(t, "2026-11-10", p.BeforeDate.Time.Format("2006-01-02"))
+	for _, date := range []string{"invalid", "2026-11-10", "2026-11-11"} {
+		req.AfterDate = date
+		_, err = parseLeaderboardOperation(req, now)
+		require.Error(t, err)
+	}
+	req.AfterDate = ""
 	req.BeforeDate = "2026-01-01"
 	p, err = parseLeaderboardOperation(req, now)
 	require.NoError(t, err)

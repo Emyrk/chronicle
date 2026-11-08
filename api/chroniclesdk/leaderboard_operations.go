@@ -5,11 +5,13 @@ import (
 	"time"
 )
 
-// BeforeDate is an exclusive UTC day boundary (YYYY-MM-DD), defaulting to today.
+// AfterDate is an optional inclusive UTC day boundary (YYYY-MM-DD).
+// BeforeDate is an exclusive UTC day boundary (YYYY-MM-DD), defaulting to tomorrow.
 type CreateLeaderboardOperationRequest struct {
 	TenantID   uuid.UUID  `json:"tenant_id"`
 	Purpose    string     `json:"purpose"`
 	Scope      string     `json:"scope"`
+	AfterDate  string     `json:"after_date,omitempty"`
 	BeforeDate string     `json:"before_date,omitempty"`
 	RunID      *uuid.UUID `json:"run_id,omitempty"`
 }
@@ -24,6 +26,7 @@ type LeaderboardOperation struct {
 	Purpose           string                       `json:"purpose"`
 	Scope             string                       `json:"scope"`
 	RunID             *uuid.UUID                   `json:"run_id,omitempty"`
+	AfterDate         string                       `json:"after_date,omitempty"`
 	BeforeDate        string                       `json:"before_date"`
 	Cutoff            time.Time                    `json:"cutoff"`
 	State             string                       `json:"state"`
@@ -47,6 +50,7 @@ type LeaderboardMaintenance struct {
 	Kind         string    `json:"kind"`
 	State        string    `json:"state"`
 	Message      string    `json:"message"`
+	AfterDate    string    `json:"after_date,omitempty"`
 	BeforeDate   string    `json:"before_date"`
 	Cutoff       time.Time `json:"cutoff"`
 }

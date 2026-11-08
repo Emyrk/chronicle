@@ -165,7 +165,11 @@ func (w *OperationWorker) Step(ctx context.Context, tenant, id uuid.UUID) error 
 			}
 			op.CursorRealm = realm
 		}
-		rows, err := tx.DiscoverLeaderboardOperationRuns(ctx, database.DiscoverLeaderboardOperationRunsParams{TenantID: tenant, RealmID: op.CursorRealm, BeforeTime: database.Timestamptz(op.BeforeDate.Time), AfterDate: op.CursorDate, AfterID: op.CursorID})
+		rangeStart := pgtype.Timestamptz{}
+		if op.AfterDate.Valid {
+			rangeStart = database.Timestamptz(op.AfterDate.Time)
+		}
+		rows, err := tx.DiscoverLeaderboardOperationRuns(ctx, database.DiscoverLeaderboardOperationRunsParams{TenantID: tenant, RealmID: op.CursorRealm, RangeStart: rangeStart, BeforeTime: database.Timestamptz(op.BeforeDate.Time), AfterDate: op.CursorDate, AfterID: op.CursorID})
 		if err != nil {
 			return err
 		}

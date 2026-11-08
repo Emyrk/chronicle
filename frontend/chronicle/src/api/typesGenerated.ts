@@ -7346,12 +7346,14 @@ export const WoWUnitTypes: WoWUnitType[] = [2, 3, 1, 0, 4];
 
 // From chroniclesdk/leaderboard_operations.go
 /**
- * BeforeDate is an exclusive UTC day boundary (YYYY-MM-DD), defaulting to today.
+ * AfterDate is an optional inclusive UTC day boundary (YYYY-MM-DD).
+ * BeforeDate is an exclusive UTC day boundary (YYYY-MM-DD), defaulting to tomorrow.
  */
 export interface CreateLeaderboardOperationRequest {
     readonly tenant_id: string;
     readonly purpose: string;
     readonly scope: string;
+    readonly after_date?: string;
     readonly before_date?: string;
     readonly run_id?: string;
 }
@@ -7363,6 +7365,7 @@ export interface LeaderboardMaintenance {
     readonly kind: string;
     readonly state: string;
     readonly message: string;
+    readonly after_date?: string;
     readonly before_date: string;
     readonly cutoff: string;
 }
@@ -7383,6 +7386,7 @@ export interface LeaderboardOperation {
     readonly purpose: string;
     readonly scope: string;
     readonly run_id?: string;
+    readonly after_date?: string;
     readonly before_date: string;
     readonly cutoff: string;
     readonly state: string;

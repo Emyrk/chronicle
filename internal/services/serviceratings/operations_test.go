@@ -57,7 +57,7 @@ func TestOperationDatePagesResumeAndMissingDates(t *testing.T) {
 	ctx := s.tenantctx()
 	s.exec(`INSERT INTO log_instances SELECT(jsonb_populate_record(NULL::log_instances,to_jsonb(i)||jsonb_build_object('id',gen_random_uuid(),'hashed_slug',NULL))).* FROM log_instances i CROSS JOIN generate_series(1,101) WHERE i.id=$1`, s.instance)
 	s.exec(`INSERT INTO ranking_runs SELECT(jsonb_populate_record(NULL::ranking_runs,to_jsonb(r)||jsonb_build_object('run_id',i.id,'representative_instance_id',i.id,'end_time','2026-01-01T00:00:00Z'))).* FROM ranking_runs r CROSS JOIN log_instances i WHERE r.run_id=$1 AND i.id<>$2`, s.run, s.instance)
-	op, err := s.db.CreateLeaderboardOperation(ctx, database.CreateLeaderboardOperationParams{TenantID: s.tenant, RequestedBy: uuid.New(), Purpose: "bootstrap", Scope: "tenant", BeforeDate: pgtype.Date{Time: time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC), Valid: true}})
+	op, err := s.db.CreateLeaderboardOperation(ctx, database.CreateLeaderboardOperationParams{TenantID: s.tenant, RequestedBy: uuid.New(), Purpose: "bootstrap", Scope: "tenant", AfterDate: pgtype.Date{Time: time.Date(2025, 12, 31, 0, 0, 0, 0, time.UTC), Valid: true}, BeforeDate: pgtype.Date{Time: time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC), Valid: true}})
 	require.NoError(t, err)
 	worker := &OperationWorker{Store: s.db}
 	require.NoError(t, worker.Step(ctx, s.tenant, op.ID))
@@ -95,6 +95,27 @@ func TestOperationDatePagesResumeAndMissingDates(t *testing.T) {
 	var count int
 	require.NoError(t, s.row(`SELECT count(*) FROM leaderboard_dirty_runs WHERE tenant_id=$1`, s.tenant).Scan(&count))
 	require.Equal(t, 101, count)
+}
+
+func TestOperationDateRangeExcludesRunsBeforeInclusiveStart(t *testing.T) {
+	t.Parallel()
+	s := newSourceFixture(t)
+	ctx := s.tenantctx()
+	s.exec(`UPDATE ranking_runs SET end_time='2026-01-01T00:00:00Z' WHERE run_id=$1`, s.run)
+	op, err := s.db.CreateLeaderboardOperation(ctx, database.CreateLeaderboardOperationParams{
+		TenantID:    s.tenant,
+		RequestedBy: uuid.New(),
+		Purpose:     "bootstrap",
+		Scope:       "tenant",
+		AfterDate:   pgtype.Date{Time: time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC), Valid: true},
+		BeforeDate:  pgtype.Date{Time: time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC), Valid: true},
+	})
+	require.NoError(t, err)
+	require.NoError(t, (&OperationWorker{Store: s.db}).Step(ctx, s.tenant, op.ID))
+	op, err = s.db.GetLeaderboardOperation(ctx, database.GetLeaderboardOperationParams{ID: op.ID, TenantID: s.tenant})
+	require.NoError(t, err)
+	require.Zero(t, op.Discovered)
+	require.Equal(t, "evidence", op.Phase)
 }
 
 func TestOperationRepairsOrphanEvidenceAndResults(t *testing.T) {

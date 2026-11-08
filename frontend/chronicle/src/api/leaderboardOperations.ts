@@ -17,6 +17,11 @@ export const operationKey = (tenantID: string) =>
 export function utcToday(now = new Date()): string {
   return now.toISOString().slice(0, 10);
 }
+export function utcTomorrow(now = new Date()): string {
+  const tomorrow = new Date(now);
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+  return utcToday(tomorrow);
+}
 export function operationActive(operation: LeaderboardOperation): boolean {
   return operation.state !== "completed";
 }
@@ -122,7 +127,7 @@ export function operationPhaseDescription(
   if (operation.phase === "runs")
     return operation.scope === "run"
       ? "Explicit single-run discovery; missing completion dates are allowed."
-      : "Canonical run discovery by completion date (exclusive UTC cutoff).";
+      : "Canonical run discovery by completion date (inclusive UTC start, exclusive UTC end).";
   if (operation.phase === "evidence")
     return "All-time evidence reconciliation; not limited by the run completion date.";
   if (RESULT_PHASES.has(operation.phase))
