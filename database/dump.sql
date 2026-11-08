@@ -164,6 +164,13 @@ BEGIN
 END;
 $$;
 
+CREATE FUNCTION leaderboard_sorted_flavors(tags text[]) RETURNS text[]
+    LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+    AS $$
+    SELECT COALESCE(array_agg(DISTINCT tag ORDER BY tag), '{}'::text[])
+    FROM unnest(tags) tag WHERE tag IS NOT NULL AND btrim(tag) <> ''
+$$;
+
 CREATE FUNCTION rate_limit_refill(tokens double precision, updated_at timestamp with time zone, rate_per_second double precision, burst double precision) RETURNS double precision
     LANGUAGE sql STABLE
     AS $$
@@ -1427,6 +1434,102 @@ CREATE TABLE item_daily_prices (
 );
 
 ALTER TABLE ONLY item_daily_prices FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE leaderboard_boss_overrides (
+    layer_key text NOT NULL,
+    instance_name text NOT NULL,
+    encounter_name text NOT NULL,
+    enabled boolean NOT NULL
+);
+
+CREATE TABLE leaderboard_boss_renown (
+    layer_key text NOT NULL,
+    instance_name text NOT NULL,
+    encounter_name text NOT NULL,
+    points double precision NOT NULL,
+    CONSTRAINT leaderboard_boss_renown_points_check CHECK (((points >= (0)::double precision) AND (points < 'Infinity'::double precision)))
+);
+
+CREATE TABLE leaderboard_bosses (
+    instance_name text NOT NULL,
+    encounter_name text NOT NULL,
+    CONSTRAINT leaderboard_bosses_encounter_name_check CHECK ((btrim(encounter_name) <> ''::text))
+);
+
+CREATE TABLE leaderboard_instance_overrides (
+    layer_key text NOT NULL,
+    instance_name text NOT NULL,
+    enabled boolean NOT NULL
+);
+
+CREATE TABLE leaderboard_instance_variants (
+    instance_name text NOT NULL,
+    difficulty_name text NOT NULL,
+    max_players smallint NOT NULL,
+    CONSTRAINT leaderboard_instance_variants_max_players_check CHECK ((max_players > 0))
+);
+
+CREATE TABLE leaderboard_instances (
+    instance_name text NOT NULL,
+    CONSTRAINT leaderboard_instances_instance_name_check CHECK ((btrim(instance_name) <> ''::text))
+);
+
+CREATE TABLE leaderboard_layers (
+    key text NOT NULL,
+    required_flavors text[] NOT NULL,
+    CONSTRAINT leaderboard_layers_key_check CHECK ((btrim(key) <> ''::text)),
+    CONSTRAINT leaderboard_layers_required_flavors_check CHECK ((required_flavors = leaderboard_sorted_flavors(required_flavors)))
+);
+
+CREATE TABLE leaderboard_member_overrides (
+    layer_key text NOT NULL,
+    instance_name text NOT NULL,
+    set_key text NOT NULL,
+    encounter_name text NOT NULL,
+    enabled boolean,
+    "position" integer,
+    CONSTRAINT leaderboard_member_overrides_check CHECK (((enabled IS NOT NULL) OR ("position" IS NOT NULL))),
+    CONSTRAINT leaderboard_member_overrides_position_check CHECK (("position" > 0))
+);
+
+CREATE TABLE leaderboard_set_members (
+    instance_name text NOT NULL,
+    set_key text NOT NULL,
+    encounter_name text NOT NULL
+);
+
+CREATE TABLE leaderboard_set_overrides (
+    layer_key text NOT NULL,
+    instance_name text NOT NULL,
+    set_key text NOT NULL,
+    enabled boolean NOT NULL
+);
+
+CREATE TABLE leaderboard_sets (
+    instance_name text NOT NULL,
+    set_key text NOT NULL,
+    name text NOT NULL,
+    CONSTRAINT leaderboard_sets_name_check CHECK ((btrim(name) <> ''::text)),
+    CONSTRAINT leaderboard_sets_set_key_check CHECK ((btrim(set_key) <> ''::text))
+);
+
+CREATE TABLE leaderboard_variant_overrides (
+    layer_key text NOT NULL,
+    instance_name text NOT NULL,
+    difficulty_name text NOT NULL,
+    max_players smallint NOT NULL,
+    enabled boolean NOT NULL
+);
+
+CREATE TABLE leaderboard_variant_renown (
+    layer_key text NOT NULL,
+    instance_name text NOT NULL,
+    encounter_name text NOT NULL,
+    difficulty_name text NOT NULL,
+    max_players smallint NOT NULL,
+    points double precision NOT NULL,
+    CONSTRAINT leaderboard_variant_renown_points_check CHECK (((points >= (0)::double precision) AND (points < 'Infinity'::double precision)))
+);
 
 CREATE TABLE log_instance_encounter_damage_unit_summary (
     encounter_id uuid NOT NULL,
@@ -2996,6 +3099,48 @@ ALTER TABLE ONLY instance_speedruns
 ALTER TABLE ONLY item_daily_prices
     ADD CONSTRAINT item_daily_prices_pkey PRIMARY KEY (realm_id, auction_house_faction, item_id, price_date);
 
+ALTER TABLE ONLY leaderboard_boss_overrides
+    ADD CONSTRAINT leaderboard_boss_overrides_pkey PRIMARY KEY (layer_key, instance_name, encounter_name);
+
+ALTER TABLE ONLY leaderboard_boss_renown
+    ADD CONSTRAINT leaderboard_boss_renown_pkey PRIMARY KEY (layer_key, instance_name, encounter_name);
+
+ALTER TABLE ONLY leaderboard_bosses
+    ADD CONSTRAINT leaderboard_bosses_pkey PRIMARY KEY (instance_name, encounter_name);
+
+ALTER TABLE ONLY leaderboard_instance_overrides
+    ADD CONSTRAINT leaderboard_instance_overrides_pkey PRIMARY KEY (layer_key, instance_name);
+
+ALTER TABLE ONLY leaderboard_instance_variants
+    ADD CONSTRAINT leaderboard_instance_variants_pkey PRIMARY KEY (instance_name, difficulty_name, max_players);
+
+ALTER TABLE ONLY leaderboard_instances
+    ADD CONSTRAINT leaderboard_instances_pkey PRIMARY KEY (instance_name);
+
+ALTER TABLE ONLY leaderboard_layers
+    ADD CONSTRAINT leaderboard_layers_pkey PRIMARY KEY (key);
+
+ALTER TABLE ONLY leaderboard_layers
+    ADD CONSTRAINT leaderboard_layers_required_flavors_key UNIQUE (required_flavors);
+
+ALTER TABLE ONLY leaderboard_member_overrides
+    ADD CONSTRAINT leaderboard_member_overrides_pkey PRIMARY KEY (layer_key, instance_name, set_key, encounter_name);
+
+ALTER TABLE ONLY leaderboard_set_members
+    ADD CONSTRAINT leaderboard_set_members_pkey PRIMARY KEY (instance_name, set_key, encounter_name);
+
+ALTER TABLE ONLY leaderboard_set_overrides
+    ADD CONSTRAINT leaderboard_set_overrides_pkey PRIMARY KEY (layer_key, instance_name, set_key);
+
+ALTER TABLE ONLY leaderboard_sets
+    ADD CONSTRAINT leaderboard_sets_pkey PRIMARY KEY (instance_name, set_key);
+
+ALTER TABLE ONLY leaderboard_variant_overrides
+    ADD CONSTRAINT leaderboard_variant_overrides_pkey PRIMARY KEY (layer_key, instance_name, difficulty_name, max_players);
+
+ALTER TABLE ONLY leaderboard_variant_renown
+    ADD CONSTRAINT leaderboard_variant_renown_pkey PRIMARY KEY (layer_key, instance_name, encounter_name, difficulty_name, max_players);
+
 ALTER TABLE ONLY log_file_parts
     ADD CONSTRAINT log_file_parts_log_file_id_sequence_key UNIQUE (log_file_id, sequence);
 
@@ -3977,6 +4122,66 @@ ALTER TABLE ONLY instance_speedruns
 
 ALTER TABLE ONLY item_daily_prices
     ADD CONSTRAINT item_daily_prices_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY leaderboard_boss_overrides
+    ADD CONSTRAINT leaderboard_boss_overrides_instance_name_encounter_name_fkey FOREIGN KEY (instance_name, encounter_name) REFERENCES leaderboard_bosses(instance_name, encounter_name);
+
+ALTER TABLE ONLY leaderboard_boss_overrides
+    ADD CONSTRAINT leaderboard_boss_overrides_layer_key_fkey FOREIGN KEY (layer_key) REFERENCES leaderboard_layers(key);
+
+ALTER TABLE ONLY leaderboard_boss_renown
+    ADD CONSTRAINT leaderboard_boss_renown_instance_name_encounter_name_fkey FOREIGN KEY (instance_name, encounter_name) REFERENCES leaderboard_bosses(instance_name, encounter_name);
+
+ALTER TABLE ONLY leaderboard_boss_renown
+    ADD CONSTRAINT leaderboard_boss_renown_layer_key_fkey FOREIGN KEY (layer_key) REFERENCES leaderboard_layers(key);
+
+ALTER TABLE ONLY leaderboard_bosses
+    ADD CONSTRAINT leaderboard_bosses_instance_name_fkey FOREIGN KEY (instance_name) REFERENCES leaderboard_instances(instance_name);
+
+ALTER TABLE ONLY leaderboard_instance_overrides
+    ADD CONSTRAINT leaderboard_instance_overrides_instance_name_fkey FOREIGN KEY (instance_name) REFERENCES leaderboard_instances(instance_name);
+
+ALTER TABLE ONLY leaderboard_instance_overrides
+    ADD CONSTRAINT leaderboard_instance_overrides_layer_key_fkey FOREIGN KEY (layer_key) REFERENCES leaderboard_layers(key);
+
+ALTER TABLE ONLY leaderboard_instance_variants
+    ADD CONSTRAINT leaderboard_instance_variants_instance_name_fkey FOREIGN KEY (instance_name) REFERENCES leaderboard_instances(instance_name);
+
+ALTER TABLE ONLY leaderboard_member_overrides
+    ADD CONSTRAINT leaderboard_member_overrides_instance_name_set_key_encount_fkey FOREIGN KEY (instance_name, set_key, encounter_name) REFERENCES leaderboard_set_members(instance_name, set_key, encounter_name);
+
+ALTER TABLE ONLY leaderboard_member_overrides
+    ADD CONSTRAINT leaderboard_member_overrides_layer_key_fkey FOREIGN KEY (layer_key) REFERENCES leaderboard_layers(key);
+
+ALTER TABLE ONLY leaderboard_set_members
+    ADD CONSTRAINT leaderboard_set_members_instance_name_encounter_name_fkey FOREIGN KEY (instance_name, encounter_name) REFERENCES leaderboard_bosses(instance_name, encounter_name);
+
+ALTER TABLE ONLY leaderboard_set_members
+    ADD CONSTRAINT leaderboard_set_members_instance_name_set_key_fkey FOREIGN KEY (instance_name, set_key) REFERENCES leaderboard_sets(instance_name, set_key);
+
+ALTER TABLE ONLY leaderboard_set_overrides
+    ADD CONSTRAINT leaderboard_set_overrides_instance_name_set_key_fkey FOREIGN KEY (instance_name, set_key) REFERENCES leaderboard_sets(instance_name, set_key);
+
+ALTER TABLE ONLY leaderboard_set_overrides
+    ADD CONSTRAINT leaderboard_set_overrides_layer_key_fkey FOREIGN KEY (layer_key) REFERENCES leaderboard_layers(key);
+
+ALTER TABLE ONLY leaderboard_sets
+    ADD CONSTRAINT leaderboard_sets_instance_name_fkey FOREIGN KEY (instance_name) REFERENCES leaderboard_instances(instance_name);
+
+ALTER TABLE ONLY leaderboard_variant_overrides
+    ADD CONSTRAINT leaderboard_variant_overrides_instance_name_difficulty_nam_fkey FOREIGN KEY (instance_name, difficulty_name, max_players) REFERENCES leaderboard_instance_variants(instance_name, difficulty_name, max_players);
+
+ALTER TABLE ONLY leaderboard_variant_overrides
+    ADD CONSTRAINT leaderboard_variant_overrides_layer_key_fkey FOREIGN KEY (layer_key) REFERENCES leaderboard_layers(key);
+
+ALTER TABLE ONLY leaderboard_variant_renown
+    ADD CONSTRAINT leaderboard_variant_renown_instance_name_difficulty_name_m_fkey FOREIGN KEY (instance_name, difficulty_name, max_players) REFERENCES leaderboard_instance_variants(instance_name, difficulty_name, max_players);
+
+ALTER TABLE ONLY leaderboard_variant_renown
+    ADD CONSTRAINT leaderboard_variant_renown_instance_name_encounter_name_fkey FOREIGN KEY (instance_name, encounter_name) REFERENCES leaderboard_bosses(instance_name, encounter_name);
+
+ALTER TABLE ONLY leaderboard_variant_renown
+    ADD CONSTRAINT leaderboard_variant_renown_layer_key_fkey FOREIGN KEY (layer_key) REFERENCES leaderboard_layers(key);
 
 ALTER TABLE ONLY log_file
     ADD CONSTRAINT log_file_owner_fkey FOREIGN KEY (owner) REFERENCES users(id);
