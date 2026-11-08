@@ -69,7 +69,7 @@ export function RatingsPage() {
       <p className="mb-2 text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">Understanding your stats</p>
       <h1 className="mb-2 text-3xl font-bold">How Ratings Work</h1>
       <p className="mb-8 max-w-3xl text-muted-foreground">
-        Two per-kill numbers describe what you did on one boss kill. Three ratings summarize your whole history on
+        Two numbers describe what you did on one boss kill. Three ratings summarize your whole history on
         a boss, an encounter set, or a group of bosses. Ratings power Chronicle's Peak, Mastery, and Renown
         leaderboards.
       </p>
