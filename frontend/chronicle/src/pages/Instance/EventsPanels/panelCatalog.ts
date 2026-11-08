@@ -53,6 +53,7 @@ export const PANEL_AI_DESCRIPTIONS: Record<BuiltinPanelType, string> = {
   interrupt_log: "Provides a chronological log of interrupt events and the casts they stopped.",
   loot: "Lists recorded loot drops, filterable by item quality and loot category.",
   ranking_records: "Shows ranking records and score entries associated with the instance.",
+  rating_evidence: "Explains the persisted V2 player and guild inputs that feed Peak, Mastery, and Renown ratings.",
   logging_metadata: "Displays combat-log provenance and metadata such as logger, client, and session details.",
   raid_composition: "Shows roster composition, groups, classes, specializations or talents, and related raid metadata.",
   absorbed_damage: "Summarizes damage prevented by shields and absorb effects and who provided or received them.",

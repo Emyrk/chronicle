@@ -631,6 +631,7 @@ const PANEL_CODES: Record<PanelType, string> = {
   all_activity: 'aa',
   empty: 'e',
   ranking_records: 'rkr',
+  rating_evidence: 'rte',
   leaderboard: 'lb',
   // Class: Druid
   innervate: 'inn',

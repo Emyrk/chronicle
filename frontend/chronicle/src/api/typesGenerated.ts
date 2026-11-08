@@ -2,6 +2,96 @@
 
 import type { GUID } from "@/lib/guid/guid";
 
+// From chroniclesdk/rating_evidence.go
+/**
+ * InstanceRatingEvidenceResponse exposes the persisted raw inputs from one
+ * canonical raid run that feed the V2 Peak, Mastery, and Renown ratings.
+ */
+export interface InstanceRatingEvidenceResponse {
+    readonly available: boolean;
+    readonly reason?: string;
+    readonly run_id?: string;
+    readonly representative_instance_id?: string;
+    readonly player: InstanceRatingPlayerEvidence;
+    readonly guild: InstanceRatingGuildEvidence;
+}
+
+// From chroniclesdk/rating_evidence.go
+export interface InstanceRatingGuildBossObservation {
+    readonly encounter_name: string;
+    readonly guild_id: string;
+    readonly guild_name?: string;
+    readonly duration_ms: number;
+    readonly source_instance_id: string;
+    readonly source_encounter_id: string;
+    readonly source_time_parse_score_id: string;
+    readonly projection_version: number;
+    readonly observed_at: string;
+}
+
+// From chroniclesdk/rating_evidence.go
+export interface InstanceRatingGuildClearObservation {
+    readonly guild_id: string;
+    readonly guild_name?: string;
+    readonly duration_ms: number;
+    readonly source_instance_id: string;
+    readonly source_time_parse_score_id: string;
+    readonly projection_version: number;
+    readonly observed_at: string;
+}
+
+// From chroniclesdk/rating_evidence.go
+export interface InstanceRatingGuildEvidence {
+    readonly boss_times: readonly InstanceRatingGuildBossObservation[];
+    readonly clear_times: readonly InstanceRatingGuildClearObservation[];
+    readonly renown: readonly InstanceRatingGuildRenownFact[];
+}
+
+// From chroniclesdk/rating_evidence.go
+export interface InstanceRatingGuildRenownFact {
+    readonly encounter_name: string;
+    readonly guild_id: string;
+    readonly guild_name?: string;
+    readonly source_instance_id: string;
+    readonly source_encounter_id: string;
+    readonly projection_version: number;
+    readonly observed_at: string;
+}
+
+// From chroniclesdk/rating_evidence.go
+export interface InstanceRatingPlayerEvidence {
+    readonly observations: readonly InstanceRatingPlayerObservation[];
+    readonly renown: readonly InstanceRatingPlayerRenownFact[];
+}
+
+// From chroniclesdk/rating_evidence.go
+export interface InstanceRatingPlayerObservation {
+    readonly encounter_name: string;
+    readonly player_guid: string;
+    readonly player_name?: string;
+    readonly player_class: string;
+    readonly player_spec: string;
+    readonly player_sub_spec?: string;
+    readonly metric: string;
+    readonly metric_value: number;
+    readonly source_instance_id: string;
+    readonly source_encounter_id: string;
+    readonly source_ranking_id: string;
+    readonly projection_version: number;
+    readonly observed_at: string;
+}
+
+// From chroniclesdk/rating_evidence.go
+export interface InstanceRatingPlayerRenownFact {
+    readonly encounter_name: string;
+    readonly player_guid: string;
+    readonly player_name?: string;
+    readonly source_instance_id: string;
+    readonly source_encounter_id: string;
+    readonly projection_version: number;
+    readonly observed_at: string;
+}
+
 // From chroniclesdk/leaderboard_v2.go
 /**
  * LeaderboardV2Boss is page-bounded summary detail, never observation replay.

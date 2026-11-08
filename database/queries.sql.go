@@ -13197,6 +13197,369 @@ func (q *sqlQuerier) ListLeaderboardMetricTenants(ctx context.Context, afterID u
 	return items, nil
 }
 
+const getInstanceRatingEvidenceRun = `-- name: GetInstanceRatingEvidenceRun :one
+SELECT
+    li.id AS requested_instance_id,
+    COALESCE(li.duplicate_group_id, li.id) AS run_id,
+    rr.representative_instance_id,
+    (li.invalidated_at IS NOT NULL)::boolean AS invalidated
+FROM log_instances li
+JOIN wow_log_groups lg ON lg.id = li.log_group_id AND NOT lg.unlisted
+JOIN wow_server_realms realm ON realm.id = li.realm_id
+JOIN wow_servers server ON server.id = realm.server_id AND server.tenant_id = $1::uuid
+LEFT JOIN ranking_runs rr ON rr.run_id = COALESCE(li.duplicate_group_id, li.id)
+WHERE li.id = $2::uuid
+`
+
+type GetInstanceRatingEvidenceRunParams struct {
+	TenantID   uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceID uuid.UUID `db:"instance_id" json:"instance_id"`
+}
+
+type GetInstanceRatingEvidenceRunRow struct {
+	RequestedInstanceID      uuid.UUID     `db:"requested_instance_id" json:"requested_instance_id"`
+	RunID                    uuid.UUID     `db:"run_id" json:"run_id"`
+	RepresentativeInstanceID uuid.NullUUID `db:"representative_instance_id" json:"representative_instance_id"`
+	Invalidated              bool          `db:"invalidated" json:"invalidated"`
+}
+
+func (q *sqlQuerier) GetInstanceRatingEvidenceRun(ctx context.Context, arg GetInstanceRatingEvidenceRunParams) (GetInstanceRatingEvidenceRunRow, error) {
+	row := q.db.QueryRow(ctx, getInstanceRatingEvidenceRun, arg.TenantID, arg.InstanceID)
+	var i GetInstanceRatingEvidenceRunRow
+	err := row.Scan(
+		&i.RequestedInstanceID,
+		&i.RunID,
+		&i.RepresentativeInstanceID,
+		&i.Invalidated,
+	)
+	return i, err
+}
+
+const listInstanceRatingGuildBossObservations = `-- name: ListInstanceRatingGuildBossObservations :many
+SELECT
+    observation.encounter_name,
+    observation.guild_id,
+    COALESCE(guild.name, '')::text AS guild_name,
+    observation.duration_ms,
+    observation.source_instance_id,
+    observation.source_encounter_id,
+    observation.source_time_parse_score_id,
+    observation.projection_version,
+    observation.observed_at
+FROM leaderboard_guild_boss_observations observation
+LEFT JOIN guilds guild ON guild.id = observation.guild_id AND guild.realm_id = observation.realm_id
+WHERE observation.tenant_id = $1::uuid
+  AND observation.run_id = $2::uuid
+ORDER BY observation.encounter_name, observation.guild_id
+`
+
+type ListInstanceRatingGuildBossObservationsParams struct {
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RunID    uuid.UUID `db:"run_id" json:"run_id"`
+}
+
+type ListInstanceRatingGuildBossObservationsRow struct {
+	EncounterName          string             `db:"encounter_name" json:"encounter_name"`
+	GuildID                uuid.UUID          `db:"guild_id" json:"guild_id"`
+	GuildName              string             `db:"guild_name" json:"guild_name"`
+	DurationMs             int64              `db:"duration_ms" json:"duration_ms"`
+	SourceInstanceID       uuid.UUID          `db:"source_instance_id" json:"source_instance_id"`
+	SourceEncounterID      uuid.UUID          `db:"source_encounter_id" json:"source_encounter_id"`
+	SourceTimeParseScoreID uuid.UUID          `db:"source_time_parse_score_id" json:"source_time_parse_score_id"`
+	ProjectionVersion      int32              `db:"projection_version" json:"projection_version"`
+	ObservedAt             pgtype.Timestamptz `db:"observed_at" json:"observed_at"`
+}
+
+func (q *sqlQuerier) ListInstanceRatingGuildBossObservations(ctx context.Context, arg ListInstanceRatingGuildBossObservationsParams) ([]ListInstanceRatingGuildBossObservationsRow, error) {
+	rows, err := q.db.Query(ctx, listInstanceRatingGuildBossObservations, arg.TenantID, arg.RunID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListInstanceRatingGuildBossObservationsRow
+	for rows.Next() {
+		var i ListInstanceRatingGuildBossObservationsRow
+		if err := rows.Scan(
+			&i.EncounterName,
+			&i.GuildID,
+			&i.GuildName,
+			&i.DurationMs,
+			&i.SourceInstanceID,
+			&i.SourceEncounterID,
+			&i.SourceTimeParseScoreID,
+			&i.ProjectionVersion,
+			&i.ObservedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listInstanceRatingGuildClearObservations = `-- name: ListInstanceRatingGuildClearObservations :many
+SELECT
+    observation.guild_id,
+    COALESCE(guild.name, '')::text AS guild_name,
+    observation.duration_ms,
+    observation.source_instance_id,
+    observation.source_time_parse_score_id,
+    observation.projection_version,
+    observation.observed_at
+FROM leaderboard_guild_clear_observations observation
+LEFT JOIN guilds guild ON guild.id = observation.guild_id AND guild.realm_id = observation.realm_id
+WHERE observation.tenant_id = $1::uuid
+  AND observation.run_id = $2::uuid
+ORDER BY observation.guild_id
+`
+
+type ListInstanceRatingGuildClearObservationsParams struct {
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RunID    uuid.UUID `db:"run_id" json:"run_id"`
+}
+
+type ListInstanceRatingGuildClearObservationsRow struct {
+	GuildID                uuid.UUID          `db:"guild_id" json:"guild_id"`
+	GuildName              string             `db:"guild_name" json:"guild_name"`
+	DurationMs             int64              `db:"duration_ms" json:"duration_ms"`
+	SourceInstanceID       uuid.UUID          `db:"source_instance_id" json:"source_instance_id"`
+	SourceTimeParseScoreID uuid.UUID          `db:"source_time_parse_score_id" json:"source_time_parse_score_id"`
+	ProjectionVersion      int32              `db:"projection_version" json:"projection_version"`
+	ObservedAt             pgtype.Timestamptz `db:"observed_at" json:"observed_at"`
+}
+
+func (q *sqlQuerier) ListInstanceRatingGuildClearObservations(ctx context.Context, arg ListInstanceRatingGuildClearObservationsParams) ([]ListInstanceRatingGuildClearObservationsRow, error) {
+	rows, err := q.db.Query(ctx, listInstanceRatingGuildClearObservations, arg.TenantID, arg.RunID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListInstanceRatingGuildClearObservationsRow
+	for rows.Next() {
+		var i ListInstanceRatingGuildClearObservationsRow
+		if err := rows.Scan(
+			&i.GuildID,
+			&i.GuildName,
+			&i.DurationMs,
+			&i.SourceInstanceID,
+			&i.SourceTimeParseScoreID,
+			&i.ProjectionVersion,
+			&i.ObservedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listInstanceRatingGuildRenownFacts = `-- name: ListInstanceRatingGuildRenownFacts :many
+SELECT
+    fact.encounter_name,
+    fact.guild_id,
+    COALESCE(guild.name, '')::text AS guild_name,
+    fact.source_instance_id,
+    fact.source_encounter_id,
+    fact.projection_version,
+    fact.observed_at
+FROM leaderboard_guild_renown_facts fact
+LEFT JOIN guilds guild ON guild.id = fact.guild_id AND guild.realm_id = fact.realm_id
+WHERE fact.tenant_id = $1::uuid
+  AND fact.run_id = $2::uuid
+ORDER BY fact.encounter_name, fact.guild_id
+`
+
+type ListInstanceRatingGuildRenownFactsParams struct {
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RunID    uuid.UUID `db:"run_id" json:"run_id"`
+}
+
+type ListInstanceRatingGuildRenownFactsRow struct {
+	EncounterName     string             `db:"encounter_name" json:"encounter_name"`
+	GuildID           uuid.UUID          `db:"guild_id" json:"guild_id"`
+	GuildName         string             `db:"guild_name" json:"guild_name"`
+	SourceInstanceID  uuid.UUID          `db:"source_instance_id" json:"source_instance_id"`
+	SourceEncounterID uuid.UUID          `db:"source_encounter_id" json:"source_encounter_id"`
+	ProjectionVersion int32              `db:"projection_version" json:"projection_version"`
+	ObservedAt        pgtype.Timestamptz `db:"observed_at" json:"observed_at"`
+}
+
+func (q *sqlQuerier) ListInstanceRatingGuildRenownFacts(ctx context.Context, arg ListInstanceRatingGuildRenownFactsParams) ([]ListInstanceRatingGuildRenownFactsRow, error) {
+	rows, err := q.db.Query(ctx, listInstanceRatingGuildRenownFacts, arg.TenantID, arg.RunID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListInstanceRatingGuildRenownFactsRow
+	for rows.Next() {
+		var i ListInstanceRatingGuildRenownFactsRow
+		if err := rows.Scan(
+			&i.EncounterName,
+			&i.GuildID,
+			&i.GuildName,
+			&i.SourceInstanceID,
+			&i.SourceEncounterID,
+			&i.ProjectionVersion,
+			&i.ObservedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listInstanceRatingPlayerObservations = `-- name: ListInstanceRatingPlayerObservations :many
+SELECT
+    observation.encounter_name,
+    observation.player_guid,
+    COALESCE(ranking.player_name, '')::text AS player_name,
+    observation.player_class,
+    observation.player_spec,
+    observation.player_sub_spec,
+    observation.metric,
+    observation.metric_value,
+    observation.source_instance_id,
+    observation.source_encounter_id,
+    observation.source_ranking_id,
+    observation.projection_version,
+    observation.observed_at
+FROM leaderboard_player_observations observation
+LEFT JOIN encounter_dps_rankings ranking
+    ON ranking.id = observation.source_ranking_id
+   AND ranking.instance_id = observation.source_instance_id
+   AND ranking.encounter_id = observation.source_encounter_id
+   AND ranking.player_guid = observation.player_guid
+WHERE observation.tenant_id = $1::uuid
+  AND observation.run_id = $2::uuid
+ORDER BY observation.encounter_name, observation.player_guid
+`
+
+type ListInstanceRatingPlayerObservationsParams struct {
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RunID    uuid.UUID `db:"run_id" json:"run_id"`
+}
+
+type ListInstanceRatingPlayerObservationsRow struct {
+	EncounterName     string             `db:"encounter_name" json:"encounter_name"`
+	PlayerGuid        string             `db:"player_guid" json:"player_guid"`
+	PlayerName        string             `db:"player_name" json:"player_name"`
+	PlayerClass       string             `db:"player_class" json:"player_class"`
+	PlayerSpec        string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string             `db:"player_sub_spec" json:"player_sub_spec"`
+	Metric            string             `db:"metric" json:"metric"`
+	MetricValue       float64            `db:"metric_value" json:"metric_value"`
+	SourceInstanceID  uuid.UUID          `db:"source_instance_id" json:"source_instance_id"`
+	SourceEncounterID uuid.UUID          `db:"source_encounter_id" json:"source_encounter_id"`
+	SourceRankingID   uuid.UUID          `db:"source_ranking_id" json:"source_ranking_id"`
+	ProjectionVersion int32              `db:"projection_version" json:"projection_version"`
+	ObservedAt        pgtype.Timestamptz `db:"observed_at" json:"observed_at"`
+}
+
+func (q *sqlQuerier) ListInstanceRatingPlayerObservations(ctx context.Context, arg ListInstanceRatingPlayerObservationsParams) ([]ListInstanceRatingPlayerObservationsRow, error) {
+	rows, err := q.db.Query(ctx, listInstanceRatingPlayerObservations, arg.TenantID, arg.RunID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListInstanceRatingPlayerObservationsRow
+	for rows.Next() {
+		var i ListInstanceRatingPlayerObservationsRow
+		if err := rows.Scan(
+			&i.EncounterName,
+			&i.PlayerGuid,
+			&i.PlayerName,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+			&i.Metric,
+			&i.MetricValue,
+			&i.SourceInstanceID,
+			&i.SourceEncounterID,
+			&i.SourceRankingID,
+			&i.ProjectionVersion,
+			&i.ObservedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listInstanceRatingPlayerRenownFacts = `-- name: ListInstanceRatingPlayerRenownFacts :many
+SELECT
+    fact.encounter_name,
+    fact.player_guid,
+    COALESCE(player.name, '')::text AS player_name,
+    fact.source_instance_id,
+    fact.source_encounter_id,
+    fact.projection_version,
+    fact.observed_at
+FROM leaderboard_player_renown_facts fact
+LEFT JOIN log_instance_players player
+    ON player.instance_id = fact.source_instance_id
+   AND player.unit_guid::text = fact.player_guid
+WHERE fact.tenant_id = $1::uuid
+  AND fact.run_id = $2::uuid
+ORDER BY fact.encounter_name, fact.player_guid
+`
+
+type ListInstanceRatingPlayerRenownFactsParams struct {
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RunID    uuid.UUID `db:"run_id" json:"run_id"`
+}
+
+type ListInstanceRatingPlayerRenownFactsRow struct {
+	EncounterName     string             `db:"encounter_name" json:"encounter_name"`
+	PlayerGuid        string             `db:"player_guid" json:"player_guid"`
+	PlayerName        string             `db:"player_name" json:"player_name"`
+	SourceInstanceID  uuid.UUID          `db:"source_instance_id" json:"source_instance_id"`
+	SourceEncounterID uuid.UUID          `db:"source_encounter_id" json:"source_encounter_id"`
+	ProjectionVersion int32              `db:"projection_version" json:"projection_version"`
+	ObservedAt        pgtype.Timestamptz `db:"observed_at" json:"observed_at"`
+}
+
+func (q *sqlQuerier) ListInstanceRatingPlayerRenownFacts(ctx context.Context, arg ListInstanceRatingPlayerRenownFactsParams) ([]ListInstanceRatingPlayerRenownFactsRow, error) {
+	rows, err := q.db.Query(ctx, listInstanceRatingPlayerRenownFacts, arg.TenantID, arg.RunID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListInstanceRatingPlayerRenownFactsRow
+	for rows.Next() {
+		var i ListInstanceRatingPlayerRenownFactsRow
+		if err := rows.Scan(
+			&i.EncounterName,
+			&i.PlayerGuid,
+			&i.PlayerName,
+			&i.SourceInstanceID,
+			&i.SourceEncounterID,
+			&i.ProjectionVersion,
+			&i.ObservedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const leaderboardRunKeysForIDs = `-- name: LeaderboardRunKeysForIDs :many
 WITH keys AS (
  SELECT s.tenant_id, COALESCE(li.duplicate_group_id,li.id) AS run_id
