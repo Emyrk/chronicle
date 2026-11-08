@@ -80,6 +80,7 @@ import { createUnitLookupPanel } from "./UnitLookup/UnitLookup";
 import { createEquipmentPanel } from "./Equipment/Equipment";
 import { createLootPanel } from "./LootPanel/LootPanel";
 import { createRankingRecordsPanel } from "./RankingRecords/RankingRecords";
+import { createRatingEvidencePanel } from "./RatingEvidence/RatingEvidence";
 import { createLoggingMetadataPanel } from "./LoggingMetadata/LoggingMetadata";
 import { createRaidCompositionPanel } from "./RaidComposition/RaidComposition";
 import { createMapPanel } from "./Map/Map";
@@ -172,6 +173,7 @@ const BUILTIN_PANELS = {
   interrupt_log: createInterruptLogPanel(),
   loot: createLootPanel(),
   ranking_records: createRankingRecordsPanel(),
+  rating_evidence: createRatingEvidencePanel(),
   logging_metadata: createLoggingMetadataPanel(),
   raid_composition: createRaidCompositionPanel(),
   absorbed_damage: createAbsorbedDamagePanel(),

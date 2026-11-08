@@ -78,7 +78,7 @@ export const PANEL_CATEGORIES: PanelCategory[] = [
   },
   {
     label: "Utility",
-    items: ["roles", "raid_composition", "timeline", "rotations", "spell_count", "comparison", "all_activity", "metrics", "periods", "pulls_and_cleanup", "possession", "vehicle", "unit_lookup", "equipment", "guilds", "loot", "logging_metadata", "companion_stats", "leaderboard", "ranking_records", "empty"],
+    items: ["roles", "raid_composition", "timeline", "rotations", "spell_count", "comparison", "all_activity", "metrics", "periods", "pulls_and_cleanup", "possession", "vehicle", "unit_lookup", "equipment", "guilds", "loot", "logging_metadata", "companion_stats", "leaderboard", "ranking_records", "rating_evidence", "empty"],
     icon: <Toolbox className="h-4 w-4" />,
   },
 ];
@@ -142,6 +142,7 @@ const PANEL_DESCRIPTIONS: Partial<Record<BuiltinPanelType, string>> = {
   companion_stats: "Stats reported by the companion addon.",
   leaderboard: "How this clear ranks on the speedrun leaderboards.",
   ranking_records: "The DPS and HPS ranking rows recorded for this log.",
+  rating_evidence: "Persisted V2 Peak, Mastery, and Renown inputs for players and the guild.",
   empty: "A blank panel.",
 };
 

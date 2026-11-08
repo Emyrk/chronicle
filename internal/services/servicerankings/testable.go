@@ -34,6 +34,11 @@ func (ts *TestableParsesService) HandleInstanceParses(w http.ResponseWriter, r *
 	handleInstanceParsesWithStore(ts.store, ts.logger, w, r)
 }
 
+// HandleInstanceRatingEvidence exposes the persisted rating evidence handler for tests.
+func (ts *TestableService) HandleInstanceRatingEvidence(w http.ResponseWriter, r *http.Request) {
+	handleInstanceRatingEvidenceWithStore(ts.store, w, r)
+}
+
 // HandleInstanceParses exposes the instance parses handler for tests.
 func (ts *TestableService) HandleInstanceParses(w http.ResponseWriter, r *http.Request) {
 	handleInstanceParsesWithStore(ts.store, ts.logger, w, r)

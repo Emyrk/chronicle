@@ -123,6 +123,7 @@ func (s *Service) setupRoutes() {
 	s.router.Get("/success-rates", s.handleSuccessRates)
 
 	// Parse and time-parse results and cohort transparency.
+	s.router.Get("/instances/{instanceID}/rating-evidence", s.handleInstanceRatingEvidence)
 	s.router.Get("/instances/{instanceID}/parses", s.handleInstanceParses)
 	s.router.Get("/instances/{instanceID}/time-parses", s.handleInstanceTimeParses)
 	s.router.Get("/characters/{playerGUID}/parses", s.handleCharacterParseHistory)
