@@ -1,7 +1,8 @@
 # Chronicle Grafana dashboards
 
-Chronicle includes four ready-to-import dashboards for its Prometheus metrics:
+Chronicle includes five ready-to-import dashboards for its Prometheus metrics:
 
+- `chronicle-leaderboards.json` covers durable leaderboard queues, collection freshness, processing outcomes, historical operations, River scheduling, and public reads.
 - `chronicle-operations.json` covers service health and background processing.
 - `chronicle-http-traffic.json` investigates HTTP request volume, rate, and latency by route template and method.
 - `chronicle-external-api.json` measures external developer API usage, call volume over time, endpoint popularity, request rate, and latency.
@@ -32,7 +33,7 @@ All dashboards target Grafana 10 or newer and use only built-in panels.
 4. Select the Prometheus datasource that scrapes Chronicle.
 5. Select the appropriate **Prometheus job** variable.
 
-The dashboard UIDs are `chronicle-operations`, `chronicle-http-traffic`, `chronicle-external-api`, and `chronicle-discord-http`. Importing a newer version with the same UID updates the corresponding existing dashboard.
+The dashboard UIDs are `chronicle-operations`, `chronicle-http-traffic`, `chronicle-external-api`, `chronicle-discord-http`, and `chronicle-leaderboards`. Importing a newer version with the same UID updates the corresponding existing dashboard.
 
 ## File provisioning
 
@@ -43,6 +44,7 @@ Copy one or more dashboard JSON files into a directory visible to Grafana, for e
 /etc/grafana/provisioning/dashboards/chronicle/chronicle-http-traffic.json
 /etc/grafana/provisioning/dashboards/chronicle/chronicle-external-api.json
 /etc/grafana/provisioning/dashboards/chronicle/chronicle-discord-http.json
+/etc/grafana/provisioning/dashboards/chronicle/chronicle-leaderboards.json
 ```
 
 Create a dashboard provider such as `/etc/grafana/provisioning/dashboards/chronicle.yml`:
@@ -75,6 +77,7 @@ services:
       - ./docs/grafana/chronicle-http-traffic.json:/etc/grafana/provisioning/dashboards/chronicle/chronicle-http-traffic.json:ro
       - ./docs/grafana/chronicle-external-api.json:/etc/grafana/provisioning/dashboards/chronicle/chronicle-external-api.json:ro
       - ./docs/grafana/chronicle-discord-http.json:/etc/grafana/provisioning/dashboards/chronicle/chronicle-discord-http.json:ro
+      - ./docs/grafana/chronicle-leaderboards.json:/etc/grafana/provisioning/dashboards/chronicle/chronicle-leaderboards.json:ro
       - ./deploy/grafana/chronicle.yml:/etc/grafana/provisioning/dashboards/chronicle.yml:ro
 ```
 
@@ -100,6 +103,20 @@ The dashboard reports completed origin requests observed by Chronicle and labels
 
 The `source` label is a bounded logical operation such as `gateway`, `membership_sync`, `raid_announcement`, or `oauth_token`. It never contains user, guild, channel, message, command, or job identifiers. Requests without an explicit source appear as `unattributed`, which makes new uninstrumented call sites visible without introducing unbounded cardinality.
 
+## Leaderboard dashboard
+
+`chronicle-leaderboards.json` follows the feature from durable dirty queues through worker publication and historical discovery to public HTTP reads. See [leaderboard metric semantics](../leaderboard-v2/observability.md) for the underlying collection and instrumentation contract.
+
+- Select a deployment job, replicas, tenant UUIDs, and dirty-queue families. Operation panels deliberately ignore the family filter; collector, River, and HTTP panels have no tenant/family attribution.
+- **Check snapshot health first.** Queue and operation gauges exclude snapshots whose last collection failed or whose last successful snapshot exceeds the selected freshness budget (300 seconds by default). Missing series remain unknown, not zero. Snapshot age and collection outcomes remain visible independently of this filter. A missing replica cannot report its own failure; use the operations dashboard's scrape availability panels as well.
+- Database-global gauges use `max` across fresh selected replicas, never `sum`. Pending already includes delayed, leased, and retry-backed-off keys; the state counts are not disjoint. Zero oldest timestamps are omitted, so an empty queue has no oldest-age series. Confirm emptiness with its fresh count, not absence of an age.
+- Process-local counters use reset-aware rates; histogram buckets are summed before p95 calculation. Publication counters reflect committed scopes (including deletions), not source events or a durable accounting ledger. A retry submission can commit as a fenced no-op. Attempt latency includes failures.
+- Operation gauges describe the latest persisted operation, including completed operations. Obligations are not unique runs or a completion percentage and reset for new operations. Last-progress age is **not** an active-stall detector. Committed pages include drain checks, not necessarily discovery advancement; consult the admin operation view for state and cursors.
+- River queue gauges cover the **shared `rankings` queue**, including non-leaderboard jobs. Only execution counters/histograms are restricted to the six leaderboard job kinds. River collection failures are deployment-wide; these gauges do not carry the leaderboard snapshot freshness contract.
+- HTTP charts show completed origin requests for `/api/v1/leaderboards-v2` and its maintenance endpoint, aggregated across HTTP tenant labels. They cannot distinguish status codes, individual callers, CDN responses, or per-query database time. No direct-source publication, WAL, or database lock-wait telemetry is invented.
+
+The freshness budget is an operator setting, not an SLO. Large tenant fleets may need a larger budget because collection is bounded and paginated. These panels do not provision alerts.
+
 ## Variables
 
 | Variable | Purpose |
@@ -107,10 +124,12 @@ The `source` label is a bounded logical operation such as `gateway`, `membership
 | `datasource` | Prometheus datasource containing Chronicle metrics |
 | `job` | One Prometheus scrape job, usually one Chronicle deployment or environment |
 | `instance` | Chronicle replicas used by process-local panels |
-| `tenant` | Root or tenant-slug activity for HTTP, UI, and authentication panels |
+| `tenant` | Root or tenant-slug activity for HTTP, UI, and authentication; tenant UUID on the leaderboard dashboard |
 | `method` | HTTP methods on traffic and Discord dashboards |
 | `source` | Bounded logical callers on the Discord dashboard |
 | `status` | Discord HTTP status codes or the `error` transport outcome |
+| `family` | Durable leaderboard dirty-queue families |
+| `freshness` | Maximum successful leaderboard snapshot age, in seconds |
 | `queue` | River queues |
 | `route` | API route templates |
 | `cache` | In-process cache names |
