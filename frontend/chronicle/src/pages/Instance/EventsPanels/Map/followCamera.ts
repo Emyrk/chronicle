@@ -41,10 +41,9 @@ export const FOLLOW_SUBJECT_WINDOW_MS = 1_000;
 /** The springs only smooth what the track leaves over, so they can be quick. */
 export const FOLLOW_SMOOTH_SECONDS = 0.3;
 /**
- * The springs run on real time while the track moves on replay time, so their
- * lag grows with the speed: with a track they shorten by the speed (the same
- * lag in yards at any speed). The distance spring also eases the line-of-sight
- * shortened shot, so it never goes below this (chronicle-1723).
+ * The distance spring runs on real time while the track's radius moves on
+ * replay time, so with a track it shortens by the speed; it also eases the
+ * line-of-sight shortened shot, so never below this (chronicle-1723).
  */
 export const FOLLOW_DISTANCE_MIN_SMOOTH_SECONDS = 0.2;
 /**
@@ -140,11 +139,30 @@ export function followWindowStretch(speed: number): number {
   return Math.min(Math.max(1, speed), FOLLOW_MAX_WINDOW_STRETCH);
 }
 
-/** The real-time smoothing of the position and distance springs while following a track at `speed`. */
-export function followSpringSeconds(speed: number): { position: number; distance: number } {
-  const stretch = Math.max(1, speed);
+/** How the Director's springs follow a track. */
+export interface FollowSprings {
+  /** The position spring's smoothing (real seconds). */
+  position: number;
+  /** How far ahead (replay ms) the position spring's goal is sampled. */
+  leadMs: number;
+  /** The distance spring's smoothing (real seconds). */
+  distance: number;
+}
+
+/**
+ * The springs while following a track at `speed`. The track moves on replay
+ * time and the springs on real time: a critically damped spring trails a
+ * steady move by its smoothing time, which is `speed` times as much replay at
+ * a fast speed (tens of yards at 32x). So the position spring keeps its real
+ * time smoothing (it filters the replay clock's coarse ticks and eases a
+ * short seek) and its goal is sampled that far ahead, which cancels the trail
+ * (chronicle-1723). Paused, there is no lead, and the springs are 1x's.
+ */
+export function followSprings(speed: number, playing: boolean): FollowSprings {
+  const stretch = playing ? Math.max(1, speed) : 1;
   return {
-    position: FOLLOW_SMOOTH_SECONDS / stretch,
+    position: FOLLOW_SMOOTH_SECONDS,
+    leadMs: playing ? stretch * FOLLOW_SMOOTH_SECONDS * 1_000 : 0,
     distance: Math.max(FOLLOW_DISTANCE_MIN_SMOOTH_SECONDS, DISTANCE_SMOOTH_SECONDS / stretch),
   };
 }
@@ -344,10 +362,11 @@ export function followKeyAt(track: FollowTrack, ms: number, out: FollowKey): Fol
 /**
  * Whether the replay clock moved from `previousMs` to `ms` by more than
  * playback explains (`expectedMs` of play at `speed`): a seek, a skipped
- * gap between encounters, or a loop back to the start.
+ * gap between encounters, or a loop back to the start. Only playback
+ * re-anchors by more at a fast speed: paused, any seek past FOLLOW_JUMP_MS is one.
  */
-export function isReplayJump(previousMs: number, ms: number, expectedMs: number, speed: number): boolean {
-  return Math.abs(ms - previousMs - expectedMs) > Math.max(FOLLOW_JUMP_MS, FOLLOW_JUMP_REAL_MS * speed);
+export function isReplayJump(previousMs: number, ms: number, expectedMs: number, speed: number, playing = true): boolean {
+  return Math.abs(ms - previousMs - expectedMs) > Math.max(FOLLOW_JUMP_MS, playing ? FOLLOW_JUMP_REAL_MS * speed : 0);
 }
 
 /** What the line-of-sight check currently holds the shot at. */

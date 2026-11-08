@@ -9,7 +9,7 @@ import {
   FOLLOW_JUMP_MS,
   FOLLOW_MAX_WINDOW_STRETCH,
   FOLLOW_SMOOTH_SECONDS,
-  followSpringSeconds,
+  followSprings,
   followKeyAt,
   GLIDE_MAX_MS,
   GLIDE_MIN_MS,
@@ -47,9 +47,38 @@ function walkingGroup(ms: number): DirectorUnit[] {
   return units;
 }
 
-/** Five players running a zigzag at 7 yd/s: 40 yd legs, alternately +x and +z. */
-function zigzagGroup(ms: number): DirectorUnit[] {
-  const run = (ms / 1000) * 7;
+/**
+ * The Summary mini preview's replay clock at `speed`: an interval tick every
+ * 250 ms (+-15 ms) reads the cursor, React commits it 0-20 ms later and
+ * stamps the clock then, and the scene runs the clock ahead of its stamp by
+ * at most 250 ms of real time (MapScene3D.replayNow). Frames at 60 fps, one
+ * in fifty dropped to 100 ms unless `drops` is false. Calls `frame` with the real time and the
+ * replay time the scene reads. The cursor loops over `spanMs`.
+ */
+function previewPlayback(speed: number, spanMs: number, durationMs: number, frame: (now: number, replayMs: number) => void, drops = true) {
+  let seed = 7;
+  const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  let clockMs = 0;
+  let clockAt = 0;
+  let nextTick = 250;
+  let pending: { ms: number; at: number } | null = null;
+  for (let now = 0; now < durationMs; now += drops && random() < 0.02 ? 100 : FRAME_MS) {
+    while (nextTick <= now) {
+      pending = { ms: (nextTick * speed) % spanMs, at: nextTick + random() * 20 };
+      nextTick += 250 + (random() - 0.5) * 30;
+    }
+    if (pending && pending.at <= now) {
+      clockMs = pending.ms;
+      clockAt = pending.at;
+      pending = null;
+    }
+    frame(now, clockMs + Math.min(now - clockAt, 250) * speed);
+  }
+}
+
+/** Five players running a zigzag at `pace` yd/s (7 on foot, 14 mounted): 40 yd legs, alternately +x and +z. */
+function zigzagGroup(ms: number, pace = 7): DirectorUnit[] {
+  const run = (ms / 1000) * pace;
   const leg = Math.floor(run / 40);
   const along = run - leg * 40;
   const x = Math.ceil(leg / 2) * 40 + (leg % 2 === 0 ? along : 0);
@@ -171,25 +200,27 @@ describe("buildFollowTrack", () => {
     expect(followKeyAt(track, 60_000 - 1_000, out).x).toBeGreaterThan(1);
   });
 
-  it("keeps the centre near the framed units on a zigzag path at 32x, never cutting its corners", () => {
-    // A group runs a cave-like zigzag (7 yd/s, 40 yd legs, alternating +x and +z) for ten minutes.
-    const track = buildFollowTrack({ startMs: 0, endMs: 600_000, unitsAt: zigzagGroup, scale: 1, speed: 32 })!;
+  it.each([7, 14])("keeps the centre near the framed units on a zigzag path at 32x, never cutting its corners (%i yd/s)", (pace) => {
+    // A group runs a cave-like zigzag (40 yd legs, alternating +x and +z) for ten minutes, on foot or mounted.
+    const unitsAt = (ms: number) => zigzagGroup(ms, pace);
+    const track = buildFollowTrack({ startMs: 0, endMs: 600_000, unitsAt, scale: 1, speed: 32 })!;
     const out: FollowKey = { x: 0, z: 0, radius: 0 };
-    // At every sample, and between them (the Catmull-Rom can swing a little past).
+    // The clamp holds at every sample; between them the Catmull-Rom can swing
+    // a little past it (about 1.6 yd at a mounted pace).
     let inFrame = new Set<string>();
     for (let ms = 0; ms <= 600_000; ms += 100) {
-      const frame = directorFrame(zigzagGroup(ms), inFrame)!;
+      const frame = directorFrame(unitsAt(ms), inFrame)!;
       inFrame = new Set(frame.guids);
       const key = followKeyAt(track, ms, out);
-      const bound = ms % track.sampleMs === 0 ? FOLLOW_CENTRE_CLAMP_YARDS + 1e-6 : FOLLOW_CENTRE_CLAMP_YARDS + 1.5;
+      const bound = ms % track.sampleMs === 0 ? FOLLOW_CENTRE_CLAMP_YARDS + 1e-6 : FOLLOW_CENTRE_CLAMP_YARDS + 2;
       expect(Math.hypot(key.x - frame.x, key.z - frame.z)).toBeLessThanOrEqual(bound);
       // The cover radius stays the group's size, not swollen by an off-centre point.
-      expect(key.radius).toBeLessThan(FOLLOW_CENTRE_CLAMP_YARDS + 5);
+      expect(key.radius).toBeLessThan(FOLLOW_CENTRE_CLAMP_YARDS + 6);
     }
   });
 
   it("keeps the aim on a moving group at 1x, 8x and 32x (harness)", () => {
-    // The scene's position springs on the track (60 fps), against the framed
+    // The scene's position spring on the track, led by its trail (60 fps), against the framed
     // units' circle; the ends are left out (the windows clamp there).
     const lag = (speed: number) => {
       const end = 600_000;
@@ -198,13 +229,13 @@ describe("buildFollowTrack", () => {
       followKeyAt(track, 0, out);
       const x = { value: out.x, velocity: 0 };
       const z = { value: out.z, velocity: 0 };
-      const smooth = followSpringSeconds(speed).position;
+      const { position: smooth, leadMs } = followSprings(speed, true);
       let max = 0;
       let sum = 0;
       let count = 0;
       for (let real = 0; real * speed <= end; real += FRAME_MS) {
         const ms = real * speed;
-        const key = followKeyAt(track, ms, out);
+        const key = followKeyAt(track, ms + leadMs, out);
         smoothDamp(x, key.x, smooth, FRAME_MS / 1000);
         smoothDamp(z, key.z, smooth, FRAME_MS / 1000);
         if (ms < 20_000 || ms > end - 120_000) continue;
@@ -219,8 +250,10 @@ describe("buildFollowTrack", () => {
     };
     for (const speed of [1, 8, 32]) {
       const { max, mean } = lag(speed);
-      expect(max).toBeLessThan(FOLLOW_CENTRE_CLAMP_YARDS + 1);
-      expect(mean).toBeLessThan(7);
+      // The track's centre holds the clamp; the 0.3 s spring on it rounds a
+      // 32x corner (about 10 s of replay) a little further.
+      expect(max).toBeLessThan(FOLLOW_CENTRE_CLAMP_YARDS + 3);
+      expect(mean).toBeLessThan(8);
     }
   });
 
@@ -229,13 +262,57 @@ describe("buildFollowTrack", () => {
   });
 });
 
-describe("followSpringSeconds", () => {
-  it("shortens the springs by the speed, so they trail the track by the same yards at any speed", () => {
-    expect(followSpringSeconds(1).position).toBe(FOLLOW_SMOOTH_SECONDS);
-    expect(followSpringSeconds(32).position).toBeCloseTo(FOLLOW_SMOOTH_SECONDS / 32, 9);
+describe("followSprings", () => {
+  // The camera on a group walking +x at 7 yd/s in the 32x preview, its goal sampled from the track at `goalMs`.
+  // No dropped frames here: across one, the frame-to-frame velocity reads a
+  // jump whatever the spring (the old one included).
+  const preview = (smooth: number, goalMs: (replayMs: number) => number) => {
+    const speed = 32;
+    const track = buildFollowTrack({ startMs: 0, endMs: 3_000_000, unitsAt: (ms) => [0, 1, 2].map((i) => unit(`p${i}`, (ms / 1000) * 7 + i, 0)), scale: 1, speed })!;
+    const out: FollowKey = { x: 0, z: 0, radius: 0 };
+    const x = { value: 1, velocity: 0 };
+    let last: { now: number; x: number; velocity: number } | null = null;
+    let jerk = 0;
+    let lag = 0;
+    previewPlayback(speed, 3_000_000, 60_000, (now, replayMs) => {
+      const dt = last ? (now - last.now) / 1000 : FRAME_MS / 1000;
+      smoothDamp(x, followKeyAt(track, goalMs(replayMs), out).x, smooth, dt);
+      const velocity = last ? (x.value - last.x) / dt : 0;
+      if (now > 2_000 && last) {
+        jerk = Math.max(jerk, Math.abs(velocity - last.velocity));
+        // Against where the group really is (the cursor, not the stepped clock).
+        lag = Math.max(lag, Math.abs(x.value - ((now * speed) / 1000 * 7 + 1)));
+      }
+      last = { now, x: x.value, velocity };
+    }, false);
+    return { jerk, lag };
+  };
+
+  it("keeps the 32x preview's clock ticks out of the camera, without the spring's trail", () => {
+    const springs = followSprings(32, true);
+    const led = preview(springs.position, (replayMs) => replayMs + springs.leadMs);
+    // The old spring on the track: smooth, but tens of yards behind.
+    const trailing = preview(FOLLOW_SMOOTH_SECONDS, (replayMs) => replayMs);
+    // A spring short enough to keep up copies each tick's step into the camera.
+    const copying = preview(FOLLOW_SMOOTH_SECONDS / 32, (replayMs) => replayMs);
+    const report = (name: string, run: { jerk: number; lag: number }) => `${name} jerk ${run.jerk.toFixed(0)} yd/s, off ${run.lag.toFixed(1)} yd`;
+    console.info(`32x preview: ${report("led", led)}; ${report("trailing", trailing)}; ${report("copying", copying)}`);
+    expect(trailing.lag).toBeGreaterThan(50);
+    expect(copying.jerk).toBeGreaterThan(200);
+    // Led, the camera changes speed as little as with the old spring.
+    expect(led.jerk).toBeLessThan(trailing.jerk + 1);
+    expect(led.jerk).toBeLessThan(5);
+    // The clock itself runs up to ~20 ms x 32 behind the cursor, or 250 ms x 32 ahead on a late tick.
+    expect(led.lag).toBeLessThan(10);
+  });
+
+  it("leads by the position spring's trail while playing; paused, no lead and 1x springs", () => {
+    expect(followSprings(1, true)).toMatchObject({ position: FOLLOW_SMOOTH_SECONDS, leadMs: FOLLOW_SMOOTH_SECONDS * 1_000 });
+    expect(followSprings(32, true).leadMs).toBeCloseTo(32 * FOLLOW_SMOOTH_SECONDS * 1_000, 6);
     // The distance spring still eases a shortened shot in.
-    expect(followSpringSeconds(32).distance).toBeGreaterThanOrEqual(0.2);
-    expect(followSpringSeconds(0.5)).toEqual(followSpringSeconds(1));
+    expect(followSprings(32, true).distance).toBeGreaterThanOrEqual(0.2);
+    // Paused, a short seek eases in as at 1x rather than cutting.
+    expect(followSprings(32, false)).toEqual({ ...followSprings(1, true), leadMs: 0 });
   });
 });
 
@@ -294,31 +371,24 @@ describe("isReplayJump", () => {
   });
 
   it("sees no jump in steady 32x preview playback, only its loop", () => {
-    // The Summary mini preview: a 250 ms interval tick (late by up to 120 ms
-    // on a busy page) re-anchors the clock, which the scene runs ahead of by
-    // at most 250 ms of real time; frames come at 60 fps with a dropped one now and then.
     const speed = 32;
     const spanMs = 45 * 60_000;
-    const cursorAt = (real: number) => (real * speed) % spanMs;
-    let clockMs = 0;
-    let clockAt = 0;
-    let nextTick = 250;
     let previous: { ms: number; at: number } | null = null;
     let jumps = 0;
-    let seed = 1;
-    const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-    for (let now = 0; now < 2.5 * (spanMs / speed); now += random() < 0.02 ? 100 : FRAME_MS) {
-      while (nextTick <= now) {
-        clockMs = cursorAt(nextTick);
-        clockAt = nextTick;
-        nextTick += 250 + random() * 120;
-      }
-      const replayMs = clockMs + Math.min(now - clockAt, 250) * speed;
+    previewPlayback(speed, spanMs, 2.5 * (spanMs / speed), (now, replayMs) => {
       if (previous && isReplayJump(previous.ms, replayMs, (now - previous.at) * speed, speed)) jumps++;
       previous = { ms: replayMs, at: now };
-    }
+    });
     // Two loops back to the start, and nothing else.
     expect(jumps).toBe(2);
+  });
+
+  it("only allows fast playback's slop while playing: a paused seek of a few seconds is a jump", () => {
+    // Playing at 32x, a 5 s step could be a tick re-anchoring the clock.
+    expect(isReplayJump(0, 5_000, 0, 32, true)).toBe(false);
+    // Paused, nothing re-anchors: it is a seek, and glides.
+    expect(isReplayJump(0, 5_000, 0, 32, false)).toBe(true);
+    expect(isReplayJump(0, FOLLOW_JUMP_MS - 1, 0, 32, false)).toBe(false);
   });
 });
 
