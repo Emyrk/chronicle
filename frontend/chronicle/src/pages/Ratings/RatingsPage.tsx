@@ -54,8 +54,8 @@ const LENSES: { id: Lens; label: string; icon: ReactNode; kind: "metric" | "rati
 
 const BAND_STYLE: Record<Band, { bar: string; label: string; swatch: string }> = {
   ignored: { bar: "bg-muted-foreground/25", label: "Ignored (bottom 20%)", swatch: "bg-muted-foreground/25" },
-  floor: { bar: "bg-sky-800", label: "Floor (next 20%)", swatch: "bg-sky-800" },
-  form: { bar: "bg-sky-500", label: "Form (the rest)", swatch: "bg-sky-500" },
+  floor: { bar: "bg-emerald-500", label: "Floor (next 20%)", swatch: "bg-emerald-500" },
+  form: { bar: "bg-sky-400", label: "Form (the rest)", swatch: "bg-sky-400" },
   peak: { bar: "bg-amber-400", label: "Peak (best kill)", swatch: "bg-amber-400" },
 }
 
