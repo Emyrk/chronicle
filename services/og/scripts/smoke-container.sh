@@ -5,13 +5,13 @@ image=${1:-chronicle-og}
 container=''
 trap 'if [[ -n "$container" ]]; then docker rm -f "$container" >/dev/null; fi' EXIT
 for enabled in false true; do
-  container=$(docker run --detach --rm \
+  container=$(docker run --detach \
     --env OG_API_ONLY=true --env OG_METRICS_ENABLED="$enabled" \
     --env OG_METRICS_HOST=0.0.0.0 --env OG_METRICS_TOKEN=smoke-only-token "$image")
   # Retry readiness only. Assertions below never retry failures.
   ready=false
   for attempt in {1..30}; do
-    if docker exec "$container" node -e "fetch('http://127.0.0.1:3000/api/debug').then(()=>{}).catch(()=>process.exit(1))" 2>/dev/null; then
+    if docker exec "$container" node -e "fetch('http://127.0.0.1:3000/api/debug', {signal: AbortSignal.timeout(2000)}).then(()=>{}).catch(()=>process.exit(1))" 2>/dev/null; then
       ready=true; break
     fi
     sleep 1
@@ -19,26 +19,27 @@ for enabled in false true; do
   if [[ "$ready" != true ]]; then docker logs "$container"; exit 1; fi
   docker exec -i --env TEST_METRICS_ENABLED="$enabled" "$container" node --input-type=module <<'JS'
 import assert from 'node:assert/strict';
+const request = (url, options = {}) => fetch(url, { ...options, signal: AbortSignal.timeout(10000) });
 const publicURL = 'http://127.0.0.1:3000';
 const privateURL = 'http://127.0.0.1:9091/metrics';
 const enabled = process.env.TEST_METRICS_ENABLED === 'true';
 for (const path of ['/metrics', '/api/metrics']) {
-  assert.equal((await fetch(publicURL + path)).status, 404);
+  assert.equal((await request(publicURL + path)).status, 404);
 }
 if (!enabled) {
-  await assert.rejects(fetch(privateURL));
+  await assert.rejects(request(privateURL));
 } else {
-  assert.equal((await fetch(privateURL)).status, 401);
-  assert.equal((await fetch(privateURL, {headers:{Authorization:'Bearer wrong'}})).status, 401);
+  assert.equal((await request(privateURL)).status, 401);
+  assert.equal((await request(privateURL, {headers:{Authorization:'Bearer wrong'}})).status, 401);
 }
 const scrape = async () => {
-  const response = await fetch(privateURL, {headers:{Authorization:'Bearer smoke-only-token'}});
+  const response = await request(privateURL, {headers:{Authorization:'Bearer smoke-only-token'}});
   assert.equal(response.status, 200);
   assert.match(response.headers.get('content-type'), /text\/plain/);
   return response.text();
 };
 if (enabled) assert.doesNotMatch(await scrape(), /og_render_requests_total\{theme="brand",outcome="success"\}/);
-const response = await fetch(publicURL + '/api/og?template=brand');
+const response = await request(publicURL + '/api/og?template=brand');
 assert.equal(response.status, 200);
 const png = Buffer.from(await response.arrayBuffer());
 assert.equal(png.subarray(0,8).toString('hex'), '89504e470d0a1a0a');
@@ -50,6 +51,22 @@ if (enabled) {
 }
 console.log(`Container smoke passed (metrics=${enabled})`);
 JS
-  docker rm -f "$container" >/dev/null
+  # Verify SIGTERM exits cleanly, rather than masking a stuck listener with rm -f.
+  docker stop --time 10 "$container" >/dev/null
+  # Node/Next may preserve SIGTERM's conventional 143 exit status.
+  status=$(docker inspect --format '{{.State.ExitCode}}' "$container")
+  test "$status" = 0 || test "$status" = 143
+  docker rm "$container" >/dev/null
+  container=''
+done
+
+# Enabled metrics must refuse startup without an independent token.
+for token in '' same-as-signing; do
+  container=$(docker run --detach --env OG_METRICS_ENABLED=true \
+    --env OG_SIGNING_KEY=same-as-signing --env OG_METRICS_TOKEN="$token" "$image")
+  status=$(timeout 15 docker wait "$container")
+  test "$status" != 0
+  docker logs "$container" 2>&1 | grep -q 'OG_METRICS_TOKEN must be set and distinct'
+  docker rm "$container" >/dev/null
   container=''
 done
