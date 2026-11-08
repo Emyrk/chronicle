@@ -443,6 +443,23 @@ def fetch_terrain(a, cfg, mdir, raw, product, region, build, wdt_fid, how, tiles
     minimap_summary = "%dpx" % prov["tile_px"] if prov["tile_px"] else "no minimap"
     log("done: terrain, %d tiles (%s; crop: %d tiles), %s" % (len(tiles), minimap_summary, len(sel),
                                                               json.dumps(prov["adt_stats"])))
+    warn_if_placed_wmo_dungeon(a.slug, mdir, prov)
+
+
+def warn_if_placed_wmo_dungeon(slug, mdir, prov):
+    """Print a loud warning and record fetch.json `classification` when this terrain fetch is a placed-WMO dungeon
+    (Deadmines shape; tools/classify_map.py has the rule). Purely additive: it reads raw/, writes nothing else, and
+    a classifier failure is logged, never raised, so the exit code and every other byte stay as before."""
+    try:
+        import classify_map
+        c = classify_map.classify(mdir, os.path.join(ROOT, "cache", "community-listfile.csv"), with_drops="if_warn")
+        block = classify_map.warning_block(c, slug)
+        if block:
+            print(block, file=sys.stderr)
+            prov["classification"] = classify_map.public(c)
+            json.dump(prov, open(os.path.join(mdir, "fetch.json"), "w"), indent=2)
+    except Exception as err:  # noqa: BLE001
+        log("classification skipped: %r" % (err,))
 
 
 # ------------------------------------------------------------------ 1.12 MPQ client (named WMO and monolithic terrain maps)

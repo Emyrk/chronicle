@@ -240,7 +240,8 @@ reference_bg: 12,17,20          # that image's flat background colour
 ```
 2. `tools/fetch_map.py <slug>`. It detects the kind. It aborts, on purpose, on multi-WMO
    or rotated/translated placements, and on terrain tiles without minimap ids — extend
-   deliberately.
+   deliberately. A terrain fetch that turns out to be a placed-WMO dungeon prints a warning block
+   (see "Placed-WMO dungeons (Deadmines)" below); it does not abort.
 3. `tools/render_set.py <slug> first`. Open `textured.png`; if the map is rotated against
    what you want, change `rot` and render again (new version).
 
@@ -468,6 +469,100 @@ faces render transparent. `--floors-only` additionally drops walls. The camera f
 computed on the full model before any pass drops objects, so all passes share one frame.
 Alpha = not-geometry everywhere, so a pass doubles as a floor mask.
 
+## Placed-WMO dungeons (Deadmines)
+
+A third map shape, which `fetch_map.py` files under `terrain` because the WDT has ADT tiles: the dungeon is
+a handful of WMOs placed through `MODF`, mostly **buried under filler terrain**, next to overworld WMOs from
+the same tiles. The terrain-kind GLB export's buried cull deletes exactly the dungeon, nothing aborts, and the
+result is a silently bad GLB. Deadmines (map 36) was the first; its working recipe is below.
+
+`tools/classify_map.py <slug>` reads the fetched `raw/` (read-only) and says which shape a map is; `fetch_map.py`
+runs it after a terrain fetch and prints a warning block (and writes `fetch.json` `classification`) when it
+fires. Nothing else changes: exit code, files and OBJ bytes are as before, and a classifier error is logged, not raised.
+
+```bash
+.venv/bin/python -I tools/classify_map.py deadmines          # table, flags, suggested map.yaml
+.venv/bin/python -I tools/classify_map.py deadmines --json
+```
+
+What it reports, per placed WMO (MODF entries deduplicated by uniqueID): fid, uid, groups, placed bbox, z vs
+the terrain under its footprint, and the **buried** share (area whose centroid lies > 0.5 yd under the terrain
+surface; faces over a terrain hole or outside the fetched root ADTs never count). Flags:
+
+| flag | rule | Deadmines |
+|---|---|---|
+| backdrop group | xy diagonal > 10x the WMO's median group diagonal AND area > all its other groups together | 108483 g045: 28.5x, 6.1x (1,534 yd diagonal, 1.19 M sq yd) |
+| dressing candidate | another listfile directory than the main WMO and >= 3 yd from it (no listfile: >= 20 yd). A list to opt out of, not a verdict | the 8 greatwall WMOs (113966 x4, 113970 x4) **and** the two excavation platforms, which are dungeon |
+| mostly buried | buried share >= 0.5 (informational) | 108483: 0.65 (backdrop excluded) |
+| roof-drop outlier | interior group (MOGP 0x2000) whose p95 ceiling drop passes the default `--roof-max-drop 25` by > 5; drop = a downward face's centroid down to the nearest upward face of the same group | 108483 g021 (the Mast Room): p50 27.5, p95 64.5, max 65.3 yd; suggests `--roof-max-drop 70` |
+
+**The warning** fires on a backdrop group, or on a dominant interior WMO (>= 50% of the covered interior-group
+area) with >= 95% of that interior area buried. "Mostly buried" alone cannot be the trigger: Lordaeron's Undercity
+is 63% buried and Zul'Gurub's cave WMOs are 88-92% buried, both by design.
+
+| map (terrain fetch) | backdrop groups | dominant interior WMO: share of interior area / of it buried | warning |
+|---|---|---|---|
+| Deadmines | 108483 g045 (28.5x, 6.1x) | 108483: 0.94 / 0.991 (0.85 / 0.98 with a crop-only `raw/`) | **yes** |
+| Ruins of Lordaeron | none (the Undercity's big groups are 11-13x the median diagonal but 0.05-0.06x the others' area) | Undercity: 0.98 / 0.856 | no |
+| Zul'Gurub | none | md_mushroomcave05: 0.26 / 0.997 | no |
+| Excavation Site: Wetlands | none | md_mushroomcave04: 0.34 / 1.00 | no |
+| Ruins of Ahn'Qiraj | none | ahn_qiraj_facade: 0.59 / 0.00 | no |
+
+Wailing Caverns and Ragefire are `wmo` kind (a global WMO): the terrain path, and so the classifier, never runs.
+The thresholds are constants at the top of `classify_map.py`; the margins on the dominant-interior rule are thin
+(Lordaeron 0.856 vs Deadmines 0.98), so re-check them when a new map shape turns up.
+
+### The recipe (Deadmines, `v005-glb-cove-crop-tight`)
+
+Everything is `map.yaml` plus `--glb-args`:
+
+```yaml
+crop: {x: [-230, 25], y: [-930, -690]}   # the cove basin ONLY, see below
+frame_include_all: true
+object_exclude_prefix: wmo_108483_33_31_0_group_045,wmo_113966,wmo_113970   # backdrop g045 + greatwall dressing
+```
+
+```bash
+.venv/bin/python -I tools/render_set.py deadmines glb --glb --glb-args "--keep-buried --roof-cull --roof-max-drop 70" --note "..."
+```
+
+1. **Crop to the basin where the dungeon needs terrain**, nowhere else. The dungeon is the WMOs, but Ironclad
+   Cove's floor, shore and water (ADT/MH2O, the ship sits on the seabed) are terrain; 7% of the log samples stand
+   on that shore. Terrain over the tunnels is z 86-369 against tunnels at z 47-87, so any terrain kept there
+   lids the mines. Dropping all terrain loses the cove (92.6% of log samples on geometry instead of 100%).
+2. **`frame_include_all: true`**: placed WMOs outside the crop stay whole and set the frame (render_set otherwise
+   frames on `terrain_` and the export bisects the tunnels away).
+3. **Exclude the backdrop group and the dressing.** The backdrop sets the frame to 1,084 yd and survives every cull
+   as floating sheets; the greatwall WMOs sit 40-200 yd above the cove, unreachable.
+4. **`--keep-buried`**: the buried cull is what deletes the dungeon. **`--roof-cull --roof-max-drop N`** opens the
+   interiors; N from `classify_map` (the default 25 leaves 1,592 ceiling triangles over the Mast Room).
+
+Traps:
+
+- **Exclude prefixes carry tile and index.** Object names are `wmo_<fid>_<tile>_<index>_group_<gi>`: the first
+  tile the placement is found in, so `…_32_31_0_…` before the crop becomes `…_33_31_0_…` after it. Re-read the
+  prefix (`classify_map` prints the real names) after any fetch or crop change.
+- **Crop snapping can lid tunnels.** A chunk is kept when its +x/+y corner is >= the crop minimum and its -x/-y
+  corner <= the maximum, so the mesh reaches up to one 33.3-yd chunk past each crop edge. A crop reaching
+  north of y -690 put terrain over the east tunnels (> 8 yd under the top: 4.2% -> 19.2% of samples); y [-960, ...]
+  snapped to y -967 and lidded the exit-tunnel doorway with a 33-yd chunk row (x to 66.7, cliff corners to z 231).
+- **The minimap IoU is meaningless**: the frame is WMO-dominated against two minimap tiles (IoU 0.27 here).
+- **Do not publish on a bare `classify_map` suggestion.** It proposes the exclusions and the reach, not the crop;
+  check the result against a log (`check_log_positions.py`: samples on geometry, top-minus-floor per region).
+
+### Survey (47 instance WDTs, build 70532; pinned 70374 has the same WDTs)
+
+| shape | maps |
+|---|---|
+| 14 global WMO (`wmo` kind, fine) | Stockade, Wailing Caverns, Blackfathom, Uldaman, Gnomeregan, Sunken Temple, BRS / LBRS / UBRS, BRD, Onyxia, Maraudon, Ragefire, Molten Core, Dire Maul |
+| ~9 Deadmines shape (this section) | Deadmines, Razorfen Kraul, Shadowfang, Scholomance, AQ40, Zul'Farrak (hybrid), Demon Fall Canyon, Crystal Vale, Karazhan Crypts, Excavation-Site-like Forever caves |
+| 5 WMOs on flat z = 0 slabs | Scarlet Monastery, Razorfen Downs, Hall of Thanes: `placed_wmo` works per WMO |
+| `placed_wmo`-able | Stratholme, Naxxramas |
+
+Recurring quirks: an oversized backdrop group inside the dungeon WMO (7 maps), foreign overworld WMOs in the same
+tiles, real terrain needed alongside, interior ceilings over 25 yd. `classify_map` has only been run on the five
+terrain fetches in the table above; the other maps of this table are from the survey, not from it.
+
 ## Known limits
 
 - Doodads (M2 props: mushrooms, roots, bones, braziers) are not exported; the small white
@@ -534,7 +629,7 @@ scripts/render-map/            (this repo: code + docs only)
   tools/          fetch_map.py  render_set.py  preview.py  blender_topdown.py  wmo2obj.py  adt2obj.py
                   composite_water.py  align_to_real.py  export_glb.py  casc/{cascget.cpp,CASCLIB_COMMIT}
                   mpq_chain.py  mpq_wmo_diff.py  mpq_inventory.py  mpq/{mpqget.cpp,STORMLIB_COMMIT}
-                  chronicle_render.py  check_log_positions.py  view_glb.py  rmconfig.py  (+ m2/diag spikes)
+                  chronicle_render.py  check_log_positions.py  view_glb.py  rmconfig.py  classify_map.py  (+ m2/diag spikes)
   local.example.yaml  LOCAL.example.md   -> local.yaml / LOCAL.md (gitignored; or ~/.config/chronicle-render-map/)
   .venv/          (gitignored)
 
