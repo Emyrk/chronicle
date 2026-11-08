@@ -1,7 +1,7 @@
 # Historical backfill and repair operations
 
 Operations are explicitly requested by an authorized administrator; service startup
-only resumes already-persisted operations. Migration 351 creates an empty audit table
+only resumes already-persisted operations. Migration 352 creates an empty audit table
 and indexes on that new table. It performs no source rewrite or historical scan.
 
 ## Scope and dates
@@ -25,7 +25,11 @@ reconciliation again. The fixed event upper boundary never moves on resume.
 
 ## Phases and transaction boundaries
 
-Each job handles one page (at most 100) or one phase transition. Canonical discovery
+Each transaction handles one page (at most 100) or one phase transition. A job
+processes up to 10 pages promptly, within its shared 10-minute timeout. It yields
+the same River job for 1 second when discovery remains ready, avoiding self-insert
+deduplication. It checks pause/state at every transaction and stops when draining
+is blocked; a final completion check does not loop on pending work. Canonical discovery
 is chronological. Separate repair phases walk already-held evidence by indexed
 run UUID and eight result families by their full primary keys. These repair phases
 reconcile all-time existing data, including orphan rows, rather than discover new
@@ -86,3 +90,26 @@ sorting; LIMIT bounds returned/enqueued work, not every examined index tuple.
 No populated-source index was added. These figures are not production throughput,
 WAL estimates, or guarantees. Application operation pages also have a 30-second
 context deadline.
+
+
+## Prompt continuation and recovery
+
+D1 and D2 jobs also process up to 10 pages per invocation using separate existing
+claim/compute/publication transactions. D1 pages contain one run; D2 pages contain
+at most 100 scopes. After a productive cap, an indexed due-work probe determines
+whether to snooze the SAME job for 1 second. River snooze does not consume an attempt
+or create another same-args job. Empty, leased-only, future-only, and retry-backed-off
+queues stop immediately. The shared job context bounds the whole burst; existing
+per-page transaction deadlines and ownership fences remain unchanged.
+
+Dispatcher cursor pages are enqueued promptly rather than waiting 30 seconds per
+page. The 30-second periodic scans remain recovery/newly-due-work discovery, not a
+batch throttle. Discovery nudges tenant D1/D2 workers, and productive D1 nudges D2.
+Nudges are best effort after commit: failures are exposed through
+`events_total{phase="dispatch_nudge",outcome="failed"}` and never undo committed
+work or counters. Active-job uniqueness may coalesce a nudge; workers' due probes
+and periodic scans recover races where work arrives just after an idle check.
+
+This improves queue utilization without a single unbounded drain transaction or
+continuous busy-spin. Fixed burst limits and a 1-second River yield provide chances
+for other tenants/jobs to run; they do not guarantee a particular completion rate.

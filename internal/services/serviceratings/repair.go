@@ -16,7 +16,9 @@ import (
 // Projection is deliberately outside the claim/publication transactions.
 type RepairWorker struct {
 	river.WorkerDefaults[ArgsRepair]
-	Store database.Store
+	Store   database.Store
+	Metrics *Metrics
+	Queue   JobInserter
 }
 type ArgsRepair struct {
 	TenantID uuid.UUID `json:"tenant_id"`
@@ -29,7 +31,19 @@ func (w *RepairWorker) Work(ctx context.Context, job *river.Job[ArgsRepair]) err
 	if !DispatchEnabled {
 		return nil
 	}
-	_, err := w.Drain(ctx, job.Args.TenantID)
+	ctx, cancel := context.WithTimeout(ctx, WorkTimeout)
+	defer cancel()
+	worked := false
+	err := continueWork(ctx, func(ctx context.Context) (bool, error) {
+		processed, err := w.Drain(ctx, job.Args.TenantID)
+		worked = worked || processed
+		return processed, err
+	}, func(ctx context.Context) (bool, error) {
+		return w.Store.HasDueLeaderboardD1(servicetenant.WithTenantID(ctx, job.Args.TenantID), job.Args.TenantID)
+	})
+	if worked {
+		nudgeDownstream(ctx, w.Queue, w.Metrics, job.Args.TenantID, false)
+	}
 	return err
 }
 func (w *RepairWorker) Drain(ctx context.Context, tenant uuid.UUID) (bool, error) {
@@ -49,7 +63,9 @@ func (w *RepairWorker) Drain(ctx context.Context, tenant uuid.UUID) (bool, error
 		return false, err
 	}
 	c := claims[0]
+	start := time.Now()
 	rows, err := ComputeProjection(ctx, w.Store, tenant, c.RunID)
+	w.Metrics.elapsed(tenant, "runs", "compute", start, err)
 	if err == nil {
 		err = w.publish(ctx, c, rows)
 	}
@@ -58,13 +74,20 @@ func (w *RepairWorker) Drain(ctx context.Context, tenant uuid.UUID) (bool, error
 	}
 	cleanup, stop := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer stop()
+	start = time.Now()
 	retryErr := w.Store.RetryLeaderboardRun(cleanup, database.RetryLeaderboardRunParams{TenantID: tenant, RunID: c.RunID, ClaimToken: c.ClaimToken.UUID, ClaimedRevision: c.ClaimedRevision.Int64})
+	w.Metrics.elapsed(tenant, "runs", "retry", start, retryErr)
+	if retryErr == nil {
+		w.Metrics.event(tenant, "runs", "retry", "committed_attempt", 1)
+	}
 	return false, errors.Join(err, retryErr)
 }
 func (w *RepairWorker) publish(ctx context.Context, c database.LeaderboardDirtyRun, rows []database.ProjectLeaderboardRunRow) error {
 	ctx, cancel := context.WithTimeout(ctx, PublicationTimeout)
 	defer cancel()
-	return w.Store.InTx(ctx, func(tx database.Store) error {
+	start := time.Now()
+	published := false
+	err := w.Store.InTx(ctx, func(tx database.Store) error {
 		if err := tx.SetLeaderboardWorkerTimeouts(ctx, "30s"); err != nil {
 			return err
 		}
@@ -91,8 +114,19 @@ func (w *RepairWorker) publish(ctx context.Context, c database.LeaderboardDirtyR
 		if !valid {
 			return fmt.Errorf("repair lease expired during publication")
 		}
-		return tx.AcknowledgeLeaderboardRun(ctx, database.AcknowledgeLeaderboardRunParams(args))
+		err = tx.AcknowledgeLeaderboardRun(ctx, database.AcknowledgeLeaderboardRunParams(args))
+		published = err == nil
+		return err
 	}, nil)
+	w.Metrics.elapsed(c.TenantID, "runs", "publish", start, err)
+	if err == nil {
+		outcome := "fenced"
+		if published {
+			outcome = "committed"
+		}
+		w.Metrics.event(c.TenantID, "runs", "publish", outcome, 1)
+	}
+	return err
 }
 
 type ArgsRepairDispatch struct {
@@ -131,7 +165,7 @@ func (d *RepairDispatcher) dispatch(ctx context.Context, args ArgsRepairDispatch
 		}
 	}
 	if more {
-		_, err = d.Queue.Insert(ctx, ArgsRepairDispatch{AfterTenant: tenants[len(tenants)-1]}, &river.InsertOpts{ScheduledAt: time.Now().Add(DispatchInterval)})
+		_, err = d.Queue.Insert(ctx, ArgsRepairDispatch{AfterTenant: tenants[len(tenants)-1]}, nil)
 	}
 	return err
 }

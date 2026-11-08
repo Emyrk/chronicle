@@ -14,6 +14,13 @@ const mocks = vi.hoisted(() => ({
   mutate: vi.fn(),
   operations: [] as unknown[],
 }));
+vi.mock("./AdminLeaderboardQueues", () => ({
+  AdminLeaderboardQueues: ({ tenantName }: { tenantName: string }) => (
+    <section aria-label={`${tenantName} leaderboard dirty queues`}>
+      Dirty queues
+    </section>
+  ),
+}));
 vi.mock("@/api/queries", () => ({ useAdminTenants: () => ({ data: [] }) }));
 vi.mock("@/api/leaderboardOperations", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/api/leaderboardOperations")>()),
@@ -65,6 +72,7 @@ describe("tenant leaderboard operations", () => {
       <TenantLeaderboardOperations tenantID="tenant-a" tenantName="Turtle" />,
     );
     expect(html).toContain("Backfill Turtle");
+    expect(html).toContain("Turtle leaderboard dirty queues");
     expect(html).toContain("Uses the same pipeline as Repair tenant");
     expect(html).toContain("including runs already represented");
     expect(html).toContain("Records a repair and shows a recalculation notice");

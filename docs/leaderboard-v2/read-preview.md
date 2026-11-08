@@ -145,7 +145,7 @@ exact-cohort index comparison measured 431.6ms without the covering index versus
 reads; it does not make the all-class aggregate meet the target. No version
 columns participate in index eligibility or query filtering.
 
-Migration345 adds only that measured covering index on the new summary table.
+Migration346 adds only that measured covering index on the new summary table.
 It does not scan historical source/evidence tables or backfill results. Building
 an index still scans the target summary table and blocks writes with ordinary
 `CREATE INDEX`; if this previously schema-only table has since been populated,
@@ -173,7 +173,7 @@ database targets.
 
 ## Peak provenance
 
-Migration346 adds nullable `peak_encounter_id` and `peak_duration_ms` to player
+Migration347 adds nullable `peak_encounter_id` and `peak_duration_ms` to player
 boss summaries. They identify the **same observation as raw_peak**, not the
 fastest kill. Both must be present (positive duration) or absent. There is no
 source foreign key and source deletion/retention is not blocked. The CHECK is

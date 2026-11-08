@@ -1,6 +1,6 @@
 # Leaderboard v2 table relationships
 
-[Migration 344](../../database/migrations/000344_leaderboard_raw_evidence.up.sql)
+[Migration 345](../../database/migrations/000345_leaderboard_raw_evidence.up.sql)
 creates **22 tables: 5 evidence, 8 results, and 9 dirty-work tables**. This is a
 functional map, not an FK diagram. The schema and isolated current-policy read preview exist; writers,
 reconciliation, and D2 workers remain future implementation.

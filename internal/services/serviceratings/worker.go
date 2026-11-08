@@ -38,7 +38,10 @@ const (
 
 type DrainResult struct{ Claimed, Processed, Failed int }
 
-type Worker struct{ Store database.Store }
+type Worker struct {
+	Store   database.Store
+	Metrics *Metrics
+}
 
 // Drain claims ONE family page (<=100 total), computes every full history without
 // dirty-row locks, then publishes all results in a short independent transaction.
@@ -48,6 +51,9 @@ func (w *Worker) Drain(ctx context.Context, tenant uuid.UUID, family Family) (Dr
 		return DrainResult{}, fmt.Errorf("D2 drain requires tenant-scoped context, not admin bypass")
 	}
 	ctx, cancel := context.WithTimeout(servicetenant.WithTenantID(ctx, tenant), WorkTimeout)
+	if family >= 0 && int(family) < len(metricFamilies) {
+		ctx = withMetricScope(ctx, w.Metrics, tenant, metricFamilies[family])
+	}
 	defer cancel()
 	switch family {
 	case FamilyPlayerBossBenchmark:
@@ -71,7 +77,7 @@ func (w *Worker) Drain(ctx context.Context, tenant uuid.UUID, family Family) (Dr
 						ProjectionVersion: 1, AlgorithmVersion: 1, ClaimToken: c.ClaimToken.UUID, ClaimedRevision: c.ClaimedRevision.Int64,
 					}
 				}
-				return consume(tx.PublishLeaderboardPlayerBossBenchmark(ctx, params))
+				return consumePublished(ctx, tx.PublishLeaderboardPlayerBossBenchmark(ctx, params))
 			},
 			func(ctx context.Context, tx database.Store, claims []database.LeaderboardDirtyPlayerBossBenchmark) error {
 				params := make([]database.RetryLeaderboardPlayerBossBenchmarkParams, len(claims))
@@ -101,7 +107,7 @@ func (w *Worker) Drain(ctx context.Context, tenant uuid.UUID, family Family) (Dr
 						ProjectionVersion: 1, AlgorithmVersion: 1, ClaimToken: c.ClaimToken.UUID, ClaimedRevision: c.ClaimedRevision.Int64,
 					}
 				}
-				return consume(tx.PublishLeaderboardPlayerBossSubject(ctx, params))
+				return consumePublished(ctx, tx.PublishLeaderboardPlayerBossSubject(ctx, params))
 			},
 			func(ctx context.Context, tx database.Store, claims []database.LeaderboardDirtyPlayerBossSubject) error {
 				params := make([]database.RetryLeaderboardPlayerBossSubjectParams, len(claims))
@@ -131,7 +137,7 @@ func (w *Worker) Drain(ctx context.Context, tenant uuid.UUID, family Family) (Dr
 						ProjectionVersion: 1, AlgorithmVersion: 1, ClaimToken: c.ClaimToken.UUID, ClaimedRevision: c.ClaimedRevision.Int64,
 					}
 				}
-				return consume(tx.PublishLeaderboardGuildBossBenchmark(ctx, params))
+				return consumePublished(ctx, tx.PublishLeaderboardGuildBossBenchmark(ctx, params))
 			},
 			func(ctx context.Context, tx database.Store, claims []database.LeaderboardDirtyGuildBossBenchmark) error {
 				params := make([]database.RetryLeaderboardGuildBossBenchmarkParams, len(claims))
@@ -161,7 +167,7 @@ func (w *Worker) Drain(ctx context.Context, tenant uuid.UUID, family Family) (Dr
 						ProjectionVersion: 1, AlgorithmVersion: 1, ClaimToken: c.ClaimToken.UUID, ClaimedRevision: c.ClaimedRevision.Int64,
 					}
 				}
-				return consume(tx.PublishLeaderboardGuildBossSubject(ctx, params))
+				return consumePublished(ctx, tx.PublishLeaderboardGuildBossSubject(ctx, params))
 			},
 			func(ctx context.Context, tx database.Store, claims []database.LeaderboardDirtyGuildBossSubject) error {
 				params := make([]database.RetryLeaderboardGuildBossSubjectParams, len(claims))
@@ -191,7 +197,7 @@ func (w *Worker) Drain(ctx context.Context, tenant uuid.UUID, family Family) (Dr
 						ProjectionVersion: 1, AlgorithmVersion: 1, ClaimToken: c.ClaimToken.UUID, ClaimedRevision: c.ClaimedRevision.Int64,
 					}
 				}
-				return consume(tx.PublishLeaderboardGuildClearBenchmark(ctx, params))
+				return consumePublished(ctx, tx.PublishLeaderboardGuildClearBenchmark(ctx, params))
 			},
 			func(ctx context.Context, tx database.Store, claims []database.LeaderboardDirtyGuildClearBenchmark) error {
 				params := make([]database.RetryLeaderboardGuildClearBenchmarkParams, len(claims))
@@ -221,7 +227,7 @@ func (w *Worker) Drain(ctx context.Context, tenant uuid.UUID, family Family) (Dr
 						ProjectionVersion: 1, AlgorithmVersion: 1, ClaimToken: c.ClaimToken.UUID, ClaimedRevision: c.ClaimedRevision.Int64,
 					}
 				}
-				return consume(tx.PublishLeaderboardGuildClearSubject(ctx, params))
+				return consumePublished(ctx, tx.PublishLeaderboardGuildClearSubject(ctx, params))
 			},
 			func(ctx context.Context, tx database.Store, claims []database.LeaderboardDirtyGuildClearSubject) error {
 				params := make([]database.RetryLeaderboardGuildClearSubjectParams, len(claims))
@@ -251,7 +257,7 @@ func (w *Worker) Drain(ctx context.Context, tenant uuid.UUID, family Family) (Dr
 						ProjectionVersion: 1, AlgorithmVersion: 1, ClaimToken: c.ClaimToken.UUID, ClaimedRevision: c.ClaimedRevision.Int64,
 					}
 				}
-				return consume(tx.PublishLeaderboardPlayerRenownCount(ctx, params))
+				return consumePublished(ctx, tx.PublishLeaderboardPlayerRenownCount(ctx, params))
 			},
 			func(ctx context.Context, tx database.Store, claims []database.LeaderboardDirtyPlayerRenown) error {
 				params := make([]database.RetryLeaderboardPlayerRenownCountParams, len(claims))
@@ -281,7 +287,7 @@ func (w *Worker) Drain(ctx context.Context, tenant uuid.UUID, family Family) (Dr
 						ProjectionVersion: 1, AlgorithmVersion: 1, ClaimToken: c.ClaimToken.UUID, ClaimedRevision: c.ClaimedRevision.Int64,
 					}
 				}
-				return consume(tx.PublishLeaderboardGuildRenownCount(ctx, params))
+				return consumePublished(ctx, tx.PublishLeaderboardGuildRenownCount(ctx, params))
 			},
 			func(ctx context.Context, tx database.Store, claims []database.LeaderboardDirtyGuildRenown) error {
 				params := make([]database.RetryLeaderboardGuildRenownCountParams, len(claims))
@@ -325,14 +331,14 @@ func collect[R any](batch batchOne[R], n int) ([]R, error) {
 	}
 	return rows, errors.Join(first, closeErr)
 }
-func consume(batch batchExec) error {
+func consume(exec batchExec) error {
 	var first error
-	batch.Exec(func(_ int, err error) {
+	exec.Exec(func(_ int, err error) {
 		if first == nil {
 			first = err
 		}
 	})
-	return errors.Join(first, batch.Close())
+	return errors.Join(first, exec.Close())
 }
 
 func drainFamily[C, R any](ctx context.Context, store database.Store,
@@ -356,6 +362,7 @@ func drainFamily[C, R any](ctx context.Context, store database.Store,
 			return err
 		}
 		var rows []R
+		computeStart := time.Now()
 		// No queue/result writes or dirty-row locks occur during compute. Explicit
 		// transaction exists only to set database-side timeouts and drain one batch.
 		err := store.InTx(ctx, func(tx database.Store) error {
@@ -366,29 +373,45 @@ func drainFamily[C, R any](ctx context.Context, store database.Store,
 			rows, err = compute(ctx, tx, items)
 			return err
 		}, nil)
+		observeMetricDuration(ctx, "compute", computeStart, err)
 		if err != nil {
 			return fmt.Errorf("compute: %w", err)
 		}
 		pubctx, cancel := context.WithTimeout(ctx, PublicationTimeout)
 		defer cancel()
-		return store.InTx(pubctx, func(tx database.Store) error {
+		outcome := &publicationOutcome{}
+		pubctx = context.WithValue(pubctx, publicationOutcomeKey{}, outcome)
+		publishStart := time.Now()
+		err = store.InTx(pubctx, func(tx database.Store) error {
 			if err := tx.SetLeaderboardWorkerTimeouts(pubctx, "30s"); err != nil {
 				return err
 			}
 			return publish(pubctx, tx, items, rows)
 		}, nil)
+		observeMetricDuration(ctx, "publish", publishStart, err)
+		if err == nil {
+			observeMetricEvent(ctx, "publish", "committed", outcome.published)
+			observeMetricEvent(ctx, "publish", "fenced", outcome.fenced)
+		}
+		return err
 	}
 	release := func(items []C) error {
 		// Cleanup is bounded but survives cancellation. Token checks mean this cannot
 		// release a replacement owner. Failed cleanup is safe: lease expiry recovers.
 		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
-		return store.InTx(cleanup, func(tx database.Store) error {
+		start := time.Now()
+		err := store.InTx(cleanup, func(tx database.Store) error {
 			if err := tx.SetLeaderboardWorkerTimeouts(cleanup, "5s"); err != nil {
 				return err
 			}
 			return retry(cleanup, tx, items)
 		}, nil)
+		observeMetricDuration(ctx, "retry", start, err)
+		if err == nil {
+			observeMetricEvent(ctx, "retry", "committed_attempt", len(items))
+		}
+		return err
 	}
 	err = process(claims)
 	if err == nil {

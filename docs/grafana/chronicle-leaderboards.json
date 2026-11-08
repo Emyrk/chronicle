@@ -1,0 +1,2899 @@
+{
+  "__requires": [
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "10.0.0"
+    },
+    {
+      "type": "datasource",
+      "id": "prometheus",
+      "name": "Prometheus",
+      "version": "1.0.0"
+    },
+    {
+      "type": "panel",
+      "id": "timeseries",
+      "name": "Time series",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "stat",
+      "name": "Stat",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "text",
+      "name": "Text",
+      "version": ""
+    }
+  ],
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "Leaderboard v2 durable queues, freshness, committed processing, historical operations, shared River scheduling and public HTTP reads. DB gauges are replica-deduplicated; no data is not health.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "doc",
+      "includeVars": false,
+      "keepTime": false,
+      "tags": [],
+      "targetBlank": true,
+      "title": "Chronicle Prometheus guide",
+      "tooltip": "Dashboard and metric documentation in the Chronicle repository",
+      "type": "link",
+      "url": "https://github.com/Emyrk/chronicle/blob/main/docs/prometheus-grafana.md"
+    },
+    {
+      "title": "Leaderboard observability semantics",
+      "url": "https://github.com/Emyrk/chronicle/blob/main/docs/leaderboard-v2/observability.md",
+      "type": "link",
+      "targetBlank": true
+    }
+  ],
+  "liveNow": false,
+  "panels": [
+    {
+      "type": "text",
+      "title": "Read this dashboard safely",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 5
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**Database truth vs process events:** pending includes delayed, claimed and retry-backed-off keys; due/claimed/backoff overlap with pending. Do not add state counts. Queue panels require a successful snapshot younger than **$freshness seconds** and deduplicate replicas with **max**, never sum. Missing/stale data stays missing\u2014not zero or green health.\n\n**Filters:** Tenant is a UUID and family selects dirty scopes. Operation panels ignore family. Collection failures, River and HTTP have no tenant/family labels and remain deployment-wide. River queue gauges cover the shared `rankings` queue; execution charts select leaderboard job kinds only. Completed operations still have a last-progress timestamp: **no active-stall or completion-percentage claim**. No direct-source publication counters, WAL/lock metrics, HTTP status codes or tenant-level HTTP attribution exist here."
+      },
+      "id": 1
+    },
+    {
+      "type": "row",
+      "title": "Snapshot health \u2014 interpret queues only with fresh collection",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 24,
+        "h": 1
+      },
+      "id": 2
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Per replica; positive timestamps only. Missing/zero before first success is not a fresh observation.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "s",
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "No data / unknown"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 6,
+        "w": 6,
+        "h": 8
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "time() - (chronicle_leaderboard_queue_snapshot_timestamp_seconds{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\"} > 0)",
+          "legendFormat": "{{tenant}} \u00b7 {{instance}}",
+          "refId": "A",
+          "range": true
+        }
+      ],
+      "title": "Last successful snapshot age",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Minimum across replicas exposes any last-attempt failure; missing series remains unknown.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "short",
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "No data / unknown"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 6,
+        "w": 6,
+        "h": 8
+      },
+      "id": 4,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "min by (tenant) (chronicle_leaderboard_queue_collection_success{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\"})",
+          "legendFormat": "{{tenant}}",
+          "refId": "A",
+          "range": true
+        }
+      ],
+      "title": "Collection success \u2014 worst selected replica",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Number of observed replica snapshots with timestamp zero. Missing series is unknown, not zero.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "short",
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "No data / unknown"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 6,
+        "w": 6,
+        "h": 8
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (tenant) (chronicle_leaderboard_queue_snapshot_timestamp_seconds{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\"} == bool 0)",
+          "legendFormat": "{{tenant}}",
+          "refId": "A",
+          "range": true
+        }
+      ],
+      "title": "No successful collection yet",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Process-local collector outcomes summed across replicas. Includes failed tenant reads and failed tenant listing; tenant/family filters do not apply.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "ops",
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "No data / unknown"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 6,
+        "w": 6,
+        "h": 8
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (outcome) (rate(chronicle_leaderboard_queue_collections_total{job=~\"$job\", instance=~\"$instance\"}[$__rate_interval]))",
+          "legendFormat": "{{outcome}}",
+          "refId": "A",
+          "range": true
+        }
+      ],
+      "title": "Collection outcomes / second (deployment)",
+      "type": "timeseries"
+    },
+    {
+      "type": "row",
+      "title": "Durable D1 / D2 queues \u2014 max across fresh replicas, not partitions",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 24,
+        "h": 1
+      },
+      "id": 7
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "All persisted dirty keys, including delayed, backed-off and leased work. Requires fresh successful snapshots; max across replicas. No data means unknown.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "short",
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "No data / unknown"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 15,
+        "w": 6,
+        "h": 8
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "max by (tenant, family) (chronicle_leaderboard_queue_pending{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\", family=~\"$family\"} and on (job, instance, tenant) ((chronicle_leaderboard_queue_snapshot_timestamp_seconds{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\"} > 0) and (time() - chronicle_leaderboard_queue_snapshot_timestamp_seconds{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\"} < $freshness) and (chronicle_leaderboard_queue_collection_success{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\"} == 1)))",
+          "legendFormat": "{{tenant}} \u00b7 {{family}}",
+          "refId": "A",
+          "range": true
+        }
+      ],
+      "title": "Pending dirty keys",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "process_after and retry_after elapsed and no live lease. Requires fresh successful snapshots; max across replicas. No data means unknown.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "short",
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "No data / unknown"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 15,
+        "w": 6,
+        "h": 8
+      },
+      "id": 9,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "max by (tenant, family) (chronicle_leaderboard_queue_due{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\", family=~\"$family\"} and on (job, instance, tenant) ((chronicle_leaderboard_queue_snapshot_timestamp_seconds{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\"} > 0) and (time() - chronicle_leaderboard_queue_snapshot_timestamp_seconds{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\"} < $freshness) and (chronicle_leaderboard_queue_collection_success{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\"} == 1)))",
+          "legendFormat": "{{tenant}} \u00b7 {{family}}",
+          "refId": "A",
+          "range": true
+        }
+      ],
+      "title": "Due / claimable keys",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Unexpired lease; not proof of worker progress. Requires fresh successful snapshots; max across replicas. No data means unknown.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "short",
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "No data / unknown"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 15,
+        "w": 6,
+        "h": 8
+      },
+      "id": 10,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "max by (tenant, family) (chronicle_leaderboard_queue_claimed{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\", family=~\"$family\"} and on (job, instance, tenant) ((chronicle_leaderboard_queue_snapshot_timestamp_seconds{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\"} > 0) and (time() - chronicle_leaderboard_queue_snapshot_timestamp_seconds{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\"} < $freshness) and (chronicle_leaderboard_queue_collection_success{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\"} == 1)))",
+          "legendFormat": "{{tenant}} \u00b7 {{family}}",
+          "refId": "A",
+          "range": true
+        }
+      ],
+      "title": "Live leased keys",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "retry_after is in the future, not a cumulative retry-attempt count. Requires fresh successful snapshots; max across replicas. No data means unknown.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "short",
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "No data / unknown"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 15,
+        "w": 6,
+        "h": 8
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "max by (tenant, family) (chronicle_leaderboard_queue_retrying{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\", family=~\"$family\"} and on (job, instance, tenant) ((chronicle_leaderboard_queue_snapshot_timestamp_seconds{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\"} > 0) and (time() - chronicle_leaderboard_queue_snapshot_timestamp_seconds{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\"} < $freshness) and (chronicle_leaderboard_queue_collection_success{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\"} == 1)))",
+          "legendFormat": "{{tenant}} \u00b7 {{family}}",
+          "refId": "A",
+          "range": true
+        }
+      ],
+      "title": "Retry backoff keys",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Age since oldest dirtied_at; repeated mutations can refresh it. Zero timestamps are empty queues and omitted; absent data is not healthy zero.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "s",
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "No data / unknown"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 23,
+        "w": 12,
+        "h": 8
+      },
+      "id": 12,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "max by (tenant, family) ((time() - (chronicle_leaderboard_queue_oldest_pending_timestamp_seconds{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\", family=~\"$family\"} > 0)) and on (job, instance, tenant) ((chronicle_leaderboard_queue_snapshot_timestamp_seconds{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\"} > 0) and (time() - chronicle_leaderboard_queue_snapshot_timestamp_seconds{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\"} < $freshness) and (chronicle_leaderboard_queue_collection_success{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\"} == 1)))",
+          "legendFormat": "{{tenant}} \u00b7 {{family}}",
+          "refId": "A",
+          "range": true
+        }
+      ],
+      "title": "Oldest pending age (fresh replicas)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Age since oldest process_after among claimable rows; not upload/event age. Max age among fresh replicas is conservative. Empty timestamps omitted.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "s",
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "No data / unknown"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 23,
+        "w": 12,
+        "h": 8
+      },
+      "id": 13,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "max by (tenant, family) ((time() - (chronicle_leaderboard_queue_oldest_due_timestamp_seconds{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\", family=~\"$family\"} > 0)) and on (job, instance, tenant) ((chronicle_leaderboard_queue_snapshot_timestamp_seconds{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\"} > 0) and (time() - chronicle_leaderboard_queue_snapshot_timestamp_seconds{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\"} < $freshness) and (chronicle_leaderboard_queue_collection_success{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\"} == 1)))",
+          "legendFormat": "{{tenant}} \u00b7 {{family}}",
+          "refId": "A",
+          "range": true
+        }
+      ],
+      "title": "Oldest due age (fresh replicas)",
+      "type": "timeseries"
+    },
+    {
+      "type": "row",
+      "title": "Processing attempts and committed outcomes \u2014 not an accounting ledger",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 31,
+        "w": 24,
+        "h": 1
+      },
+      "id": 14
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Only after transaction commit: committed includes deleting results with no evidence; fenced is a successful no-op rejected by ownership/lease guards. Not rows inserted; process crash can undercount.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "ops",
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "No data / unknown"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      },
+      "id": 15,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (tenant, family, outcome) (rate(chronicle_leaderboard_events_total{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\", family=~\"$family\", phase=\"publish\", outcome=~\"committed|fenced\"}[$__rate_interval]))",
+          "legendFormat": "{{tenant}} \u00b7 {{family}} \u00b7 {{outcome}}",
+          "refId": "A",
+          "range": true
+        }
+      ],
+      "title": "Publication committed / fenced scopes per second",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Committed retry submissions can be token-fenced no-ops; not affected-row counts. Dispatch nudges are scheduling attempts, not completions.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "ops",
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "No data / unknown"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      },
+      "id": 16,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (tenant, family, phase, outcome) (rate(chronicle_leaderboard_events_total{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\", family=~\"$family\", phase=~\"retry|dispatch_nudge\"}[$__rate_interval]))",
+          "legendFormat": "{{tenant}} \u00b7 {{family}} \u00b7 {{phase}} \u00b7 {{outcome}}",
+          "refId": "A",
+          "range": true
+        }
+      ],
+      "title": "Retry submissions and dispatcher nudges / second",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Compute/publication/retry durations include failed attempts. Histogram buckets summed across replicas before quantile.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "s",
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "No data / unknown"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 40,
+        "w": 12,
+        "h": 8
+      },
+      "id": 17,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le, tenant, family, phase, outcome) (rate(chronicle_leaderboard_phase_duration_seconds_bucket{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\", family=~\"$family\"}[$__rate_interval])))",
+          "legendFormat": "{{tenant}} \u00b7 {{family}} \u00b7 {{phase}} \u00b7 {{outcome}}",
+          "refId": "A",
+          "range": true
+        }
+      ],
+      "title": "Phase attempt p95",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Histogram count measures attempts, unlike committed event counters. Includes failures and is not successful throughput.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "ops",
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "No data / unknown"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 40,
+        "w": 12,
+        "h": 8
+      },
+      "id": 18,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (tenant, family, phase, outcome) (rate(chronicle_leaderboard_phase_duration_seconds_count{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\", family=~\"$family\"}[$__rate_interval]))",
+          "legendFormat": "{{tenant}} \u00b7 {{family}} \u00b7 {{phase}} \u00b7 {{outcome}}",
+          "refId": "A",
+          "range": true
+        }
+      ],
+      "title": "Phase attempt rate by outcome",
+      "type": "timeseries"
+    },
+    {
+      "type": "row",
+      "title": "Latest persisted operation \u2014 obligations, not unique runs or completion percentage",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 48,
+        "w": 24,
+        "h": 1
+      },
+      "id": 19
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Gauge resets for new operation; no rate or percentage. Latest persisted operation may be completed. Family filter does not apply; phase can change between replica snapshots.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "short",
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "No data / unknown"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 49,
+        "w": 8,
+        "h": 8
+      },
+      "id": 20,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "max by (tenant, phase) (chronicle_leaderboard_operation_obligations{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\"} and on (job, instance, tenant) ((chronicle_leaderboard_queue_snapshot_timestamp_seconds{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\"} > 0) and (time() - chronicle_leaderboard_queue_snapshot_timestamp_seconds{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\"} < $freshness) and (chronicle_leaderboard_queue_collection_success{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\"} == 1)))",
+          "legendFormat": "{{tenant}} \u00b7 {{phase}}",
+          "refId": "A",
+          "range": true
+        }
+      ],
+      "title": "Latest operation discovered obligations",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Latest persisted operation may already be completed. No active-state metric exists; never alert on this age alone. Uses latest positive progress timestamp among fresh replicas.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "s",
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "No data / unknown"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 49,
+        "w": 8,
+        "h": 8
+      },
+      "id": 21,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "time() - max by (tenant) ((chronicle_leaderboard_operation_last_progress_timestamp_seconds{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\"} > 0) and on (job, instance, tenant) ((chronicle_leaderboard_queue_snapshot_timestamp_seconds{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\"} > 0) and (time() - chronicle_leaderboard_queue_snapshot_timestamp_seconds{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\"} < $freshness) and (chronicle_leaderboard_queue_collection_success{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\"} == 1)))",
+          "legendFormat": "{{tenant}}",
+          "refId": "A",
+          "range": true
+        }
+      ],
+      "title": "Latest operation last-progress age (not stall detection)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Includes drain-check transactions, not only advancing discovery. No unique-run count or completion percentage. Ignores dirty family filter.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "ops",
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "No data / unknown"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 49,
+        "w": 8,
+        "h": 8
+      },
+      "id": 22,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (tenant, phase) (rate(chronicle_leaderboard_events_total{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\", family=\"operation\", outcome=\"committed_page\"}[$__rate_interval]))",
+          "legendFormat": "{{tenant}} \u00b7 {{phase}}",
+          "refId": "A",
+          "range": true
+        }
+      ],
+      "title": "Committed operation pages / second",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "All phase attempts including failures; source runs are date scoped while evidence/result reconciliation is all-time. No active operation identity or percentage metric.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "s",
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "No data / unknown"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 57,
+        "w": 24,
+        "h": 7
+      },
+      "id": 23,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le, tenant, phase, outcome) (rate(chronicle_leaderboard_phase_duration_seconds_bucket{job=~\"$job\", instance=~\"$instance\", tenant=~\"$tenant\", family=\"operation\"}[$__rate_interval])))",
+          "legendFormat": "{{tenant}} \u00b7 {{phase}} \u00b7 {{outcome}}",
+          "refId": "A",
+          "range": true
+        }
+      ],
+      "title": "Operation page attempt p95",
+      "type": "timeseries"
+    },
+    {
+      "type": "row",
+      "title": "River scheduler \u2014 shared rankings queue; leaderboard execution kinds only",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 64,
+        "w": 24,
+        "h": 1
+      },
+      "id": 24
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "DB-global queue gauge, max across replicas; no kind or tenant label. Includes non-leaderboard rankings jobs; do not sum replica copies.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "short",
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "No data / unknown"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 65,
+        "w": 8,
+        "h": 8
+      },
+      "id": 25,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "max by (queue, state) (chronicle_river_queue_jobs{job=~\"$job\", instance=~\"$instance\", queue=\"rankings\"})",
+          "legendFormat": "{{queue}} \u00b7 {{state}}",
+          "refId": "A",
+          "range": true
+        }
+      ],
+      "title": "Shared rankings River queue by state",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "DB-global oldest age by state, max across replicas. Includes other ranking jobs. No tenant/family filter.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "s",
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "No data / unknown"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 65,
+        "w": 8,
+        "h": 8
+      },
+      "id": 26,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "max by (queue, state) (chronicle_river_queue_oldest_job_age_seconds{job=~\"$job\", instance=~\"$instance\", queue=\"rankings\"})",
+          "legendFormat": "{{queue}} \u00b7 {{state}}",
+          "refId": "A",
+          "range": true
+        }
+      ],
+      "title": "Shared rankings oldest active job age",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Process-local execution events, summed once by kind/result. No tenant label; queue totals are not multiplied by joining job kinds.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "ops",
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "No data / unknown"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 65,
+        "w": 8,
+        "h": 8
+      },
+      "id": 27,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (kind, result) (rate(chronicle_river_jobs_total{job=~\"$job\", instance=~\"$instance\", queue=\"rankings\", kind=~\"leaderboard-(d1-repair|d1-dispatch|d2-drain|d2-dispatch|operation-page|operation-dispatch)\"}[$__rate_interval]))",
+          "legendFormat": "{{kind}} \u00b7 {{result}}",
+          "refId": "A",
+          "range": true
+        }
+      ],
+      "title": "Leaderboard River outcomes / second",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Process-local histogram buckets summed across selected replicas; leaderboard kinds only. No tenant/family attribution.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "s",
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "No data / unknown"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 73,
+        "w": 8,
+        "h": 8
+      },
+      "id": 28,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le, kind) (rate(chronicle_river_job_queue_wait_duration_seconds_bucket{job=~\"$job\", instance=~\"$instance\", queue=\"rankings\", kind=~\"leaderboard-(d1-repair|d1-dispatch|d2-drain|d2-dispatch|operation-page|operation-dispatch)\"}[$__rate_interval])))",
+          "legendFormat": "{{kind}}",
+          "refId": "A",
+          "range": true
+        }
+      ],
+      "title": "Leaderboard River wait p95",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Process-local histogram buckets summed across selected replicas; leaderboard kinds only. No tenant/family attribution.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "s",
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "No data / unknown"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 73,
+        "w": 8,
+        "h": 8
+      },
+      "id": 29,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le, kind) (rate(chronicle_river_job_run_duration_seconds_bucket{job=~\"$job\", instance=~\"$instance\", queue=\"rankings\", kind=~\"leaderboard-(d1-repair|d1-dispatch|d2-drain|d2-dispatch|operation-page|operation-dispatch)\"}[$__rate_interval])))",
+          "legendFormat": "{{kind}}",
+          "refId": "A",
+          "range": true
+        }
+      ],
+      "title": "Leaderboard River worker p95",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Process-local histogram buckets summed across selected replicas; leaderboard kinds only. No tenant/family attribution.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "s",
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "No data / unknown"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 73,
+        "w": 8,
+        "h": 8
+      },
+      "id": 30,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le, kind) (rate(chronicle_river_job_complete_duration_seconds_bucket{job=~\"$job\", instance=~\"$instance\", queue=\"rankings\", kind=~\"leaderboard-(d1-repair|d1-dispatch|d2-drain|d2-dispatch|operation-page|operation-dispatch)\"}[$__rate_interval])))",
+          "legendFormat": "{{kind}}",
+          "refId": "A",
+          "range": true
+        }
+      ],
+      "title": "Leaderboard River result-persistence p95",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "All River queue collection failures in the deployment, not tenant-specific. Missing counter series is not a verified zero.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "ops",
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "No data / unknown"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 81,
+        "w": 24,
+        "h": 6
+      },
+      "id": 31,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(chronicle_river_queue_metrics_collection_failures_total{job=~\"$job\", instance=~\"$instance\"}[$__rate_interval]))",
+          "legendFormat": "collection failures",
+          "refId": "A",
+          "range": true
+        }
+      ],
+      "title": "River queue metric collection failures / second",
+      "type": "timeseries"
+    },
+    {
+      "type": "row",
+      "title": "Public leaderboard HTTP \u2014 origin requests; no tenant or status-code labels",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 87,
+        "w": 24,
+        "h": 1
+      },
+      "id": 32
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Matched route templates, including maintenance separately; completed origin requests only. No status-code/caller/tenant dimensions; tenant/family filters do not apply.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "reqps",
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "No data / unknown"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 88,
+        "w": 12,
+        "h": 8
+      },
+      "id": 33,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (path, method) (rate(chronicle_api_requests_processed_total{job=~\"$job\", instance=~\"$instance\", path=~\"/api/v1/leaderboards-v2(/maintenance)?\"}[$__rate_interval]))",
+          "legendFormat": "{{method}} {{path}}",
+          "refId": "A",
+          "range": true
+        }
+      ],
+      "title": "Public leaderboard request rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Includes all observed responses; cannot distinguish success/error. Histogram buckets summed across replicas before calculating route/method p95.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "s",
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "No data / unknown"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 88,
+        "w": 12,
+        "h": 8
+      },
+      "id": 34,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le, path, method) (rate(chronicle_api_request_latencies_seconds_bucket{job=~\"$job\", instance=~\"$instance\", path=~\"/api/v1/leaderboards-v2(/maintenance)?\"}[$__rate_interval])))",
+          "legendFormat": "{{method}} {{path}}",
+          "refId": "A",
+          "range": true
+        }
+      ],
+      "title": "Public leaderboard request latency p95",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": [
+    "chronicle",
+    "prometheus",
+    "leaderboards"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "label": "Prometheus",
+        "multi": false,
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "definition": "label_values(chronicle_api_concurrent_requests, job)",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Prometheus job",
+        "multi": false,
+        "name": "job",
+        "options": [],
+        "query": {
+          "query": "label_values(chronicle_api_concurrent_requests, job)",
+          "refId": "PrometheusVariableQueryEditor-Job"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "definition": "label_values(chronicle_api_requests_processed_total{job=~\"$job\"}, instance)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Replica",
+        "multi": true,
+        "name": "instance",
+        "options": [],
+        "query": {
+          "query": "label_values(chronicle_api_requests_processed_total{job=~\"$job\"}, instance)",
+          "refId": "PrometheusVariableQueryEditor-Instance"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query",
+        "allValue": ".*"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "definition": "label_values(chronicle_leaderboard_queue_snapshot_timestamp_seconds{job=~\"$job\"}, tenant)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Tenant UUID",
+        "multi": true,
+        "name": "tenant",
+        "options": [],
+        "query": {
+          "query": "label_values(chronicle_leaderboard_queue_snapshot_timestamp_seconds{job=~\"$job\"}, tenant)",
+          "refId": "PrometheusVariableQueryEditor-tenant"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query",
+        "allValue": ".*"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "definition": "label_values(chronicle_leaderboard_queue_pending{job=~\"$job\", tenant=~\"$tenant\"}, family)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Dirty family",
+        "multi": true,
+        "name": "family",
+        "options": [],
+        "query": {
+          "query": "label_values(chronicle_leaderboard_queue_pending{job=~\"$job\", tenant=~\"$tenant\"}, family)",
+          "refId": "PrometheusVariableQueryEditor-family"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query",
+        "allValue": ".*"
+      },
+      {
+        "name": "freshness",
+        "label": "Max snapshot age (seconds)",
+        "type": "custom",
+        "query": "120,300,600,1800",
+        "current": {
+          "selected": true,
+          "text": "300",
+          "value": "300"
+        },
+        "options": [
+          {
+            "selected": false,
+            "text": "120",
+            "value": "120"
+          },
+          {
+            "selected": true,
+            "text": "300",
+            "value": "300"
+          },
+          {
+            "selected": false,
+            "text": "600",
+            "value": "600"
+          },
+          {
+            "selected": false,
+            "text": "1800",
+            "value": "1800"
+          }
+        ],
+        "hide": 0,
+        "multi": false,
+        "includeAll": false,
+        "skipUrlSync": false
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Chronicle Leaderboards",
+  "uid": "chronicle-leaderboards",
+  "version": 1
+}

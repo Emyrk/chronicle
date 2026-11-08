@@ -12028,6 +12028,40 @@ func (q *sqlQuerier) ListLeaderboardLayers(ctx context.Context) ([]LeaderboardLa
 	return items, nil
 }
 
+const hasDueLeaderboardD1 = `-- name: HasDueLeaderboardD1 :one
+SELECT EXISTS(SELECT 1 FROM leaderboard_dirty_runs WHERE tenant_id= $1::uuid AND process_after<=clock_timestamp() AND retry_after<=clock_timestamp() AND (locked_until IS NULL OR locked_until<=clock_timestamp()))::boolean
+`
+
+func (q *sqlQuerier) HasDueLeaderboardD1(ctx context.Context, tenantID uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, hasDueLeaderboardD1, tenantID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const hasDueLeaderboardD2 = `-- name: HasDueLeaderboardD2 :one
+SELECT (($1::integer=0 AND EXISTS(SELECT 1 FROM leaderboard_dirty_player_boss_benchmarks WHERE tenant_id= $2::uuid AND process_after<=clock_timestamp() AND retry_after<=clock_timestamp() AND (locked_until IS NULL OR locked_until<=clock_timestamp()))) OR
+($1::integer=1 AND EXISTS(SELECT 1 FROM leaderboard_dirty_player_boss_subjects WHERE tenant_id= $2::uuid AND process_after<=clock_timestamp() AND retry_after<=clock_timestamp() AND (locked_until IS NULL OR locked_until<=clock_timestamp()))) OR
+($1::integer=2 AND EXISTS(SELECT 1 FROM leaderboard_dirty_guild_boss_benchmarks WHERE tenant_id= $2::uuid AND process_after<=clock_timestamp() AND retry_after<=clock_timestamp() AND (locked_until IS NULL OR locked_until<=clock_timestamp()))) OR
+($1::integer=3 AND EXISTS(SELECT 1 FROM leaderboard_dirty_guild_boss_subjects WHERE tenant_id= $2::uuid AND process_after<=clock_timestamp() AND retry_after<=clock_timestamp() AND (locked_until IS NULL OR locked_until<=clock_timestamp()))) OR
+($1::integer=4 AND EXISTS(SELECT 1 FROM leaderboard_dirty_guild_clear_benchmarks WHERE tenant_id= $2::uuid AND process_after<=clock_timestamp() AND retry_after<=clock_timestamp() AND (locked_until IS NULL OR locked_until<=clock_timestamp()))) OR
+($1::integer=5 AND EXISTS(SELECT 1 FROM leaderboard_dirty_guild_clear_subjects WHERE tenant_id= $2::uuid AND process_after<=clock_timestamp() AND retry_after<=clock_timestamp() AND (locked_until IS NULL OR locked_until<=clock_timestamp()))) OR
+($1::integer=6 AND EXISTS(SELECT 1 FROM leaderboard_dirty_player_renown WHERE tenant_id= $2::uuid AND process_after<=clock_timestamp() AND retry_after<=clock_timestamp() AND (locked_until IS NULL OR locked_until<=clock_timestamp()))) OR
+($1::integer=7 AND EXISTS(SELECT 1 FROM leaderboard_dirty_guild_renown WHERE tenant_id= $2::uuid AND process_after<=clock_timestamp() AND retry_after<=clock_timestamp() AND (locked_until IS NULL OR locked_until<=clock_timestamp()))))::boolean
+`
+
+type HasDueLeaderboardD2Params struct {
+	Family   int32     `db:"family" json:"family"`
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) HasDueLeaderboardD2(ctx context.Context, arg HasDueLeaderboardD2Params) (bool, error) {
+	row := q.db.QueryRow(ctx, hasDueLeaderboardD2, arg.Family, arg.TenantID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const acknowledgeLeaderboardRun = `-- name: AcknowledgeLeaderboardRun :exec
 WITH removed AS (
  DELETE FROM leaderboard_dirty_runs WHERE tenant_id= $1::uuid AND run_id= $2::uuid
@@ -13042,6 +13076,125 @@ SELECT set_config('statement_timeout', $1::text, true),
 func (q *sqlQuerier) SetLeaderboardWorkerTimeouts(ctx context.Context, statementTimeout string) error {
 	_, err := q.db.Exec(ctx, setLeaderboardWorkerTimeouts, statementTimeout)
 	return err
+}
+
+const leaderboardMetricOperationProgress = `-- name: LeaderboardMetricOperationProgress :many
+SELECT phase,state,discovered,last_progress_at FROM leaderboard_operations
+WHERE tenant_id= $1::uuid ORDER BY started_at DESC,id LIMIT 1
+`
+
+type LeaderboardMetricOperationProgressRow struct {
+	Phase          string             `db:"phase" json:"phase"`
+	State          string             `db:"state" json:"state"`
+	Discovered     int64              `db:"discovered" json:"discovered"`
+	LastProgressAt pgtype.Timestamptz `db:"last_progress_at" json:"last_progress_at"`
+}
+
+func (q *sqlQuerier) LeaderboardMetricOperationProgress(ctx context.Context, tenantID uuid.UUID) ([]LeaderboardMetricOperationProgressRow, error) {
+	rows, err := q.db.Query(ctx, leaderboardMetricOperationProgress, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LeaderboardMetricOperationProgressRow
+	for rows.Next() {
+		var i LeaderboardMetricOperationProgressRow
+		if err := rows.Scan(
+			&i.Phase,
+			&i.State,
+			&i.Discovered,
+			&i.LastProgressAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const leaderboardQueueDiagnostics = `-- name: LeaderboardQueueDiagnostics :many
+SELECT 'runs'::text AS family,count(*)::bigint AS pending,count(*) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::bigint AS due,count(*) FILTER(WHERE locked_until>statement_timestamp())::bigint AS claimed,count(*) FILTER(WHERE retry_after>statement_timestamp())::bigint AS retrying,min(dirtied_at)::timestamptz AS oldest_pending_at,min(process_after) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::timestamptz AS oldest_due_at FROM leaderboard_dirty_runs WHERE tenant_id= $1::uuid
+UNION ALL
+SELECT 'player_boss_benchmarks'::text AS family,count(*)::bigint AS pending,count(*) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::bigint AS due,count(*) FILTER(WHERE locked_until>statement_timestamp())::bigint AS claimed,count(*) FILTER(WHERE retry_after>statement_timestamp())::bigint AS retrying,min(dirtied_at)::timestamptz AS oldest_pending_at,min(process_after) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::timestamptz AS oldest_due_at FROM leaderboard_dirty_player_boss_benchmarks WHERE tenant_id= $1::uuid
+UNION ALL
+SELECT 'player_boss_subjects'::text AS family,count(*)::bigint AS pending,count(*) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::bigint AS due,count(*) FILTER(WHERE locked_until>statement_timestamp())::bigint AS claimed,count(*) FILTER(WHERE retry_after>statement_timestamp())::bigint AS retrying,min(dirtied_at)::timestamptz AS oldest_pending_at,min(process_after) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::timestamptz AS oldest_due_at FROM leaderboard_dirty_player_boss_subjects WHERE tenant_id= $1::uuid
+UNION ALL
+SELECT 'guild_boss_benchmarks'::text AS family,count(*)::bigint AS pending,count(*) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::bigint AS due,count(*) FILTER(WHERE locked_until>statement_timestamp())::bigint AS claimed,count(*) FILTER(WHERE retry_after>statement_timestamp())::bigint AS retrying,min(dirtied_at)::timestamptz AS oldest_pending_at,min(process_after) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::timestamptz AS oldest_due_at FROM leaderboard_dirty_guild_boss_benchmarks WHERE tenant_id= $1::uuid
+UNION ALL
+SELECT 'guild_boss_subjects'::text AS family,count(*)::bigint AS pending,count(*) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::bigint AS due,count(*) FILTER(WHERE locked_until>statement_timestamp())::bigint AS claimed,count(*) FILTER(WHERE retry_after>statement_timestamp())::bigint AS retrying,min(dirtied_at)::timestamptz AS oldest_pending_at,min(process_after) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::timestamptz AS oldest_due_at FROM leaderboard_dirty_guild_boss_subjects WHERE tenant_id= $1::uuid
+UNION ALL
+SELECT 'guild_clear_benchmarks'::text AS family,count(*)::bigint AS pending,count(*) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::bigint AS due,count(*) FILTER(WHERE locked_until>statement_timestamp())::bigint AS claimed,count(*) FILTER(WHERE retry_after>statement_timestamp())::bigint AS retrying,min(dirtied_at)::timestamptz AS oldest_pending_at,min(process_after) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::timestamptz AS oldest_due_at FROM leaderboard_dirty_guild_clear_benchmarks WHERE tenant_id= $1::uuid
+UNION ALL
+SELECT 'guild_clear_subjects'::text AS family,count(*)::bigint AS pending,count(*) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::bigint AS due,count(*) FILTER(WHERE locked_until>statement_timestamp())::bigint AS claimed,count(*) FILTER(WHERE retry_after>statement_timestamp())::bigint AS retrying,min(dirtied_at)::timestamptz AS oldest_pending_at,min(process_after) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::timestamptz AS oldest_due_at FROM leaderboard_dirty_guild_clear_subjects WHERE tenant_id= $1::uuid
+UNION ALL
+SELECT 'player_renown'::text AS family,count(*)::bigint AS pending,count(*) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::bigint AS due,count(*) FILTER(WHERE locked_until>statement_timestamp())::bigint AS claimed,count(*) FILTER(WHERE retry_after>statement_timestamp())::bigint AS retrying,min(dirtied_at)::timestamptz AS oldest_pending_at,min(process_after) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::timestamptz AS oldest_due_at FROM leaderboard_dirty_player_renown WHERE tenant_id= $1::uuid
+UNION ALL
+SELECT 'guild_renown'::text AS family,count(*)::bigint AS pending,count(*) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::bigint AS due,count(*) FILTER(WHERE locked_until>statement_timestamp())::bigint AS claimed,count(*) FILTER(WHERE retry_after>statement_timestamp())::bigint AS retrying,min(dirtied_at)::timestamptz AS oldest_pending_at,min(process_after) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::timestamptz AS oldest_due_at FROM leaderboard_dirty_guild_renown WHERE tenant_id= $1::uuid
+`
+
+type LeaderboardQueueDiagnosticsRow struct {
+	Family          string             `db:"family" json:"family"`
+	Pending         int64              `db:"pending" json:"pending"`
+	Due             int64              `db:"due" json:"due"`
+	Claimed         int64              `db:"claimed" json:"claimed"`
+	Retrying        int64              `db:"retrying" json:"retrying"`
+	OldestPendingAt pgtype.Timestamptz `db:"oldest_pending_at" json:"oldest_pending_at"`
+	OldestDueAt     pgtype.Timestamptz `db:"oldest_due_at" json:"oldest_due_at"`
+}
+
+func (q *sqlQuerier) LeaderboardQueueDiagnostics(ctx context.Context, tenantID uuid.UUID) ([]LeaderboardQueueDiagnosticsRow, error) {
+	rows, err := q.db.Query(ctx, leaderboardQueueDiagnostics, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LeaderboardQueueDiagnosticsRow
+	for rows.Next() {
+		var i LeaderboardQueueDiagnosticsRow
+		if err := rows.Scan(
+			&i.Family,
+			&i.Pending,
+			&i.Due,
+			&i.Claimed,
+			&i.Retrying,
+			&i.OldestPendingAt,
+			&i.OldestDueAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLeaderboardMetricTenants = `-- name: ListLeaderboardMetricTenants :many
+SELECT id FROM tenants WHERE id> $1::uuid ORDER BY id LIMIT 100
+`
+
+func (q *sqlQuerier) ListLeaderboardMetricTenants(ctx context.Context, afterID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listLeaderboardMetricTenants, afterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const leaderboardRunKeysForIDs = `-- name: LeaderboardRunKeysForIDs :many

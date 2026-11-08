@@ -24,7 +24,7 @@ SELECT COALESCE(c.best_metric, 0)::double precision AS best_metric,
        (c.best_metric IS NOT NULL)::boolean AS has_evidence
 FROM (SELECT 1) singleton LEFT JOIN calculated c ON true;
 
--- name: PublishLeaderboardPlayerBossBenchmark :batchexec
+-- name: PublishLeaderboardPlayerBossBenchmark :batchone
 WITH locked AS MATERIALIZED (
  SELECT d.* FROM leaderboard_dirty_player_boss_benchmarks d
  WHERE d.tenant_id = @tenant_id::uuid AND d.instance_name = @instance_name::text AND d.difficulty_name = @difficulty_name::text AND d.max_players = @max_players::smallint AND d.encounter_name = @encounter_name::text AND d.player_class = @player_class::text AND d.player_spec = @player_spec::text AND d.player_sub_spec = @player_sub_spec::text AND d.metric = @metric::text
@@ -53,13 +53,15 @@ WITH locked AS MATERIALIZED (
  WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.player_class = l.player_class AND d.player_spec = l.player_spec AND d.player_sub_spec = l.player_sub_spec AND d.metric = l.metric AND l.revision = l.claimed_revision
    AND EXISTS (SELECT 1 FROM allowed)
  RETURNING 1
-)
+), released AS (
 UPDATE leaderboard_dirty_player_boss_benchmarks d
 SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
     attempts = 0, retry_after = '-infinity'
 FROM locked l
 WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.player_class = l.player_class AND d.player_spec = l.player_spec AND d.player_sub_spec = l.player_sub_spec AND d.metric = l.metric AND l.revision <> l.claimed_revision
-  AND EXISTS (SELECT 1 FROM allowed);
+  AND EXISTS (SELECT 1 FROM allowed) RETURNING 1
+)
+SELECT EXISTS(SELECT 1 FROM allowed)::boolean AS published;
 
 -- name: ComputeLeaderboardPlayerBossSubject :batchone
 WITH scoped AS MATERIALIZED (
@@ -107,7 +109,7 @@ SELECT COALESCE(c.observation_count, 0)::bigint AS observation_count, COALESCE(c
        (c.observation_count IS NOT NULL)::boolean AS has_evidence
 FROM (SELECT 1) singleton LEFT JOIN calculated c ON true;
 
--- name: PublishLeaderboardPlayerBossSubject :batchexec
+-- name: PublishLeaderboardPlayerBossSubject :batchone
 WITH locked AS MATERIALIZED (
  SELECT d.* FROM leaderboard_dirty_player_boss_subjects d
  WHERE d.tenant_id = @tenant_id::uuid AND d.instance_name = @instance_name::text AND d.difficulty_name = @difficulty_name::text AND d.max_players = @max_players::smallint AND d.encounter_name = @encounter_name::text AND d.player_class = @player_class::text AND d.player_spec = @player_spec::text AND d.player_sub_spec = @player_sub_spec::text AND d.metric = @metric::text AND d.realm_id = @realm_id::uuid AND d.player_guid = @player_guid::text
@@ -141,13 +143,15 @@ WITH locked AS MATERIALIZED (
  WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.player_class = l.player_class AND d.player_spec = l.player_spec AND d.player_sub_spec = l.player_sub_spec AND d.metric = l.metric AND d.realm_id = l.realm_id AND d.player_guid = l.player_guid AND l.revision = l.claimed_revision
    AND EXISTS (SELECT 1 FROM allowed)
  RETURNING 1
-)
+), released AS (
 UPDATE leaderboard_dirty_player_boss_subjects d
 SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
     attempts = 0, retry_after = '-infinity'
 FROM locked l
 WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.player_class = l.player_class AND d.player_spec = l.player_spec AND d.player_sub_spec = l.player_sub_spec AND d.metric = l.metric AND d.realm_id = l.realm_id AND d.player_guid = l.player_guid AND l.revision <> l.claimed_revision
-  AND EXISTS (SELECT 1 FROM allowed);
+  AND EXISTS (SELECT 1 FROM allowed) RETURNING 1
+)
+SELECT EXISTS(SELECT 1 FROM allowed)::boolean AS published;
 
 -- name: ComputeLeaderboardGuildBossBenchmark :batchone
 WITH calculated AS (
@@ -165,7 +169,7 @@ SELECT COALESCE(c.best_duration_ms, 0)::bigint AS best_duration_ms,
        (c.best_duration_ms IS NOT NULL)::boolean AS has_evidence
 FROM (SELECT 1) singleton LEFT JOIN calculated c ON true;
 
--- name: PublishLeaderboardGuildBossBenchmark :batchexec
+-- name: PublishLeaderboardGuildBossBenchmark :batchone
 WITH locked AS MATERIALIZED (
  SELECT d.* FROM leaderboard_dirty_guild_boss_benchmarks d
  WHERE d.tenant_id = @tenant_id::uuid AND d.instance_name = @instance_name::text AND d.difficulty_name = @difficulty_name::text AND d.max_players = @max_players::smallint AND d.encounter_name = @encounter_name::text
@@ -194,13 +198,15 @@ WITH locked AS MATERIALIZED (
  WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND l.revision = l.claimed_revision
    AND EXISTS (SELECT 1 FROM allowed)
  RETURNING 1
-)
+), released AS (
 UPDATE leaderboard_dirty_guild_boss_benchmarks d
 SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
     attempts = 0, retry_after = '-infinity'
 FROM locked l
 WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND l.revision <> l.claimed_revision
-  AND EXISTS (SELECT 1 FROM allowed);
+  AND EXISTS (SELECT 1 FROM allowed) RETURNING 1
+)
+SELECT EXISTS(SELECT 1 FROM allowed)::boolean AS published;
 
 -- name: ComputeLeaderboardGuildBossSubject :batchone
 WITH scoped AS MATERIALIZED (
@@ -226,7 +232,7 @@ SELECT COALESCE(c.observation_count, 0)::bigint AS observation_count, COALESCE(c
        (c.observation_count IS NOT NULL)::boolean AS has_evidence
 FROM (SELECT 1) singleton LEFT JOIN calculated c ON true;
 
--- name: PublishLeaderboardGuildBossSubject :batchexec
+-- name: PublishLeaderboardGuildBossSubject :batchone
 WITH locked AS MATERIALIZED (
  SELECT d.* FROM leaderboard_dirty_guild_boss_subjects d
  WHERE d.tenant_id = @tenant_id::uuid AND d.instance_name = @instance_name::text AND d.difficulty_name = @difficulty_name::text AND d.max_players = @max_players::smallint AND d.encounter_name = @encounter_name::text AND d.realm_id = @realm_id::uuid AND d.guild_id = @guild_id::uuid
@@ -258,13 +264,15 @@ WITH locked AS MATERIALIZED (
  WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.realm_id = l.realm_id AND d.guild_id = l.guild_id AND l.revision = l.claimed_revision
    AND EXISTS (SELECT 1 FROM allowed)
  RETURNING 1
-)
+), released AS (
 UPDATE leaderboard_dirty_guild_boss_subjects d
 SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
     attempts = 0, retry_after = '-infinity'
 FROM locked l
 WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.realm_id = l.realm_id AND d.guild_id = l.guild_id AND l.revision <> l.claimed_revision
-  AND EXISTS (SELECT 1 FROM allowed);
+  AND EXISTS (SELECT 1 FROM allowed) RETURNING 1
+)
+SELECT EXISTS(SELECT 1 FROM allowed)::boolean AS published;
 
 -- name: ComputeLeaderboardGuildClearBenchmark :batchone
 WITH calculated AS (
@@ -281,7 +289,7 @@ SELECT COALESCE(c.best_duration_ms, 0)::bigint AS best_duration_ms,
        (c.best_duration_ms IS NOT NULL)::boolean AS has_evidence
 FROM (SELECT 1) singleton LEFT JOIN calculated c ON true;
 
--- name: PublishLeaderboardGuildClearBenchmark :batchexec
+-- name: PublishLeaderboardGuildClearBenchmark :batchone
 WITH locked AS MATERIALIZED (
  SELECT d.* FROM leaderboard_dirty_guild_clear_benchmarks d
  WHERE d.tenant_id = @tenant_id::uuid AND d.instance_name = @instance_name::text AND d.difficulty_name = @difficulty_name::text AND d.max_players = @max_players::smallint
@@ -310,13 +318,15 @@ WITH locked AS MATERIALIZED (
  WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND l.revision = l.claimed_revision
    AND EXISTS (SELECT 1 FROM allowed)
  RETURNING 1
-)
+), released AS (
 UPDATE leaderboard_dirty_guild_clear_benchmarks d
 SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
     attempts = 0, retry_after = '-infinity'
 FROM locked l
 WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND l.revision <> l.claimed_revision
-  AND EXISTS (SELECT 1 FROM allowed);
+  AND EXISTS (SELECT 1 FROM allowed) RETURNING 1
+)
+SELECT EXISTS(SELECT 1 FROM allowed)::boolean AS published;
 
 -- name: ComputeLeaderboardGuildClearSubject :batchone
 WITH scoped AS MATERIALIZED (
@@ -341,7 +351,7 @@ SELECT COALESCE(c.observation_count, 0)::bigint AS observation_count, COALESCE(c
        (c.observation_count IS NOT NULL)::boolean AS has_evidence
 FROM (SELECT 1) singleton LEFT JOIN calculated c ON true;
 
--- name: PublishLeaderboardGuildClearSubject :batchexec
+-- name: PublishLeaderboardGuildClearSubject :batchone
 WITH locked AS MATERIALIZED (
  SELECT d.* FROM leaderboard_dirty_guild_clear_subjects d
  WHERE d.tenant_id = @tenant_id::uuid AND d.instance_name = @instance_name::text AND d.difficulty_name = @difficulty_name::text AND d.max_players = @max_players::smallint AND d.realm_id = @realm_id::uuid AND d.guild_id = @guild_id::uuid
@@ -373,13 +383,15 @@ WITH locked AS MATERIALIZED (
  WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.realm_id = l.realm_id AND d.guild_id = l.guild_id AND l.revision = l.claimed_revision
    AND EXISTS (SELECT 1 FROM allowed)
  RETURNING 1
-)
+), released AS (
 UPDATE leaderboard_dirty_guild_clear_subjects d
 SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
     attempts = 0, retry_after = '-infinity'
 FROM locked l
 WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.realm_id = l.realm_id AND d.guild_id = l.guild_id AND l.revision <> l.claimed_revision
-  AND EXISTS (SELECT 1 FROM allowed);
+  AND EXISTS (SELECT 1 FROM allowed) RETURNING 1
+)
+SELECT EXISTS(SELECT 1 FROM allowed)::boolean AS published;
 
 -- name: ComputeLeaderboardPlayerRenownCount :batchone
 WITH calculated AS (
@@ -397,7 +409,7 @@ SELECT COALESCE(c.kill_count, 0)::bigint AS kill_count,
        (c.kill_count IS NOT NULL)::boolean AS has_evidence
 FROM (SELECT 1) singleton LEFT JOIN calculated c ON true;
 
--- name: PublishLeaderboardPlayerRenownCount :batchexec
+-- name: PublishLeaderboardPlayerRenownCount :batchone
 WITH locked AS MATERIALIZED (
  SELECT d.* FROM leaderboard_dirty_player_renown d
  WHERE d.tenant_id = @tenant_id::uuid AND d.instance_name = @instance_name::text AND d.difficulty_name = @difficulty_name::text AND d.max_players = @max_players::smallint AND d.encounter_name = @encounter_name::text AND d.realm_id = @realm_id::uuid AND d.player_guid = @player_guid::text
@@ -426,13 +438,15 @@ WITH locked AS MATERIALIZED (
  WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.realm_id = l.realm_id AND d.player_guid = l.player_guid AND l.revision = l.claimed_revision
    AND EXISTS (SELECT 1 FROM allowed)
  RETURNING 1
-)
+), released AS (
 UPDATE leaderboard_dirty_player_renown d
 SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
     attempts = 0, retry_after = '-infinity'
 FROM locked l
 WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.realm_id = l.realm_id AND d.player_guid = l.player_guid AND l.revision <> l.claimed_revision
-  AND EXISTS (SELECT 1 FROM allowed);
+  AND EXISTS (SELECT 1 FROM allowed) RETURNING 1
+)
+SELECT EXISTS(SELECT 1 FROM allowed)::boolean AS published;
 
 -- name: ComputeLeaderboardGuildRenownCount :batchone
 WITH calculated AS (
@@ -450,7 +464,7 @@ SELECT COALESCE(c.kill_count, 0)::bigint AS kill_count,
        (c.kill_count IS NOT NULL)::boolean AS has_evidence
 FROM (SELECT 1) singleton LEFT JOIN calculated c ON true;
 
--- name: PublishLeaderboardGuildRenownCount :batchexec
+-- name: PublishLeaderboardGuildRenownCount :batchone
 WITH locked AS MATERIALIZED (
  SELECT d.* FROM leaderboard_dirty_guild_renown d
  WHERE d.tenant_id = @tenant_id::uuid AND d.instance_name = @instance_name::text AND d.difficulty_name = @difficulty_name::text AND d.max_players = @max_players::smallint AND d.encounter_name = @encounter_name::text AND d.realm_id = @realm_id::uuid AND d.guild_id = @guild_id::uuid
@@ -479,13 +493,15 @@ WITH locked AS MATERIALIZED (
  WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.realm_id = l.realm_id AND d.guild_id = l.guild_id AND l.revision = l.claimed_revision
    AND EXISTS (SELECT 1 FROM allowed)
  RETURNING 1
-)
+), released AS (
 UPDATE leaderboard_dirty_guild_renown d
 SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
     attempts = 0, retry_after = '-infinity'
 FROM locked l
 WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.realm_id = l.realm_id AND d.guild_id = l.guild_id AND l.revision <> l.claimed_revision
-  AND EXISTS (SELECT 1 FROM allowed);
+  AND EXISTS (SELECT 1 FROM allowed) RETURNING 1
+)
+SELECT EXISTS(SELECT 1 FROM allowed)::boolean AS published;
 
 -- name: LeaderboardD2Clock :one
 -- Shared database clock for operational diagnostics; leases never use Go time.

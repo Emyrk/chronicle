@@ -41,7 +41,7 @@ failure reconciliation remain as idempotent compatibility/final-snapshot request
 for previously queued jobs; they are no longer the sole delivery guarantee for
 new source mutations.
 
-Migration350 adds leading run/source btree lookup indexes to each evidence family.
+Migration351 adds leading run/source btree lookup indexes to each evidence family.
 A combined five-index GIN array design was tested and rejected: forced-RLS plans
 still scanned all 50000 unrelated rows (~13ms). The ten narrow btree indexes allow
 BitmapOr lookup by either identity under the real policies; the same fixture

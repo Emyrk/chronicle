@@ -617,6 +617,8 @@ type sqlcQuerier interface {
 	// cannot fill the whole board.
 	GuildTopParses(ctx context.Context, arg GuildTopParsesParams) ([]GuildTopParsesRow, error)
 	HasBillingEntitlement(ctx context.Context, arg HasBillingEntitlementParams) (bool, error)
+	HasDueLeaderboardD1(ctx context.Context, tenantID uuid.UUID) (bool, error)
+	HasDueLeaderboardD2(ctx context.Context, arg HasDueLeaderboardD2Params) (bool, error)
 	HasInstanceDpsRankings(ctx context.Context, instanceID uuid.UUID) (bool, error)
 	HasParseScoreResultsForTenantInstance(ctx context.Context, arg HasParseScoreResultsForTenantInstanceParams) (bool, error)
 	IgnoreConsumableEffectIfCandidate(ctx context.Context, arg IgnoreConsumableEffectIfCandidateParams) (IgnoreConsumableEffectIfCandidateRow, error)
@@ -753,7 +755,9 @@ type sqlcQuerier interface {
 	LandingPositionalInstances(ctx context.Context, limitCount int32) ([]LandingPositionalInstancesRow, error)
 	// Shared database clock for operational diagnostics; leases never use Go time.
 	LeaderboardD2Clock(ctx context.Context) (pgtype.Timestamptz, error)
+	LeaderboardMetricOperationProgress(ctx context.Context, tenantID uuid.UUID) ([]LeaderboardMetricOperationProgressRow, error)
 	LeaderboardOperationBacklog(ctx context.Context, tenantID uuid.UUID) (LeaderboardOperationBacklogRow, error)
+	LeaderboardQueueDiagnostics(ctx context.Context, tenantID uuid.UUID) ([]LeaderboardQueueDiagnosticsRow, error)
 	LeaderboardRunClaimUnexpired(ctx context.Context, arg LeaderboardRunClaimUnexpiredParams) (bool, error)
 	// Capture BEFORE source changes. Input may contain instance or logical-run IDs.
 	// Old evidence survives source deletion/tenant movement and supplies old keys.
@@ -834,6 +838,7 @@ type sqlcQuerier interface {
 	ListItemPricingRealms(ctx context.Context) ([]ListItemPricingRealmsRow, error)
 	ListLeaderboardDirtyRuns(ctx context.Context, tenantID uuid.UUID) ([]LeaderboardDirtyRun, error)
 	ListLeaderboardLayers(ctx context.Context) ([]LeaderboardLayer, error)
+	ListLeaderboardMetricTenants(ctx context.Context, afterID uuid.UUID) ([]uuid.UUID, error)
 	ListLeaderboardOperations(ctx context.Context, tenantID uuid.UUID) ([]LeaderboardOperation, error)
 	ListLeaderboardPlayerBossSubjects(ctx context.Context, tenantID uuid.UUID) ([]LeaderboardPlayerBossSubject, error)
 	ListLeaderboardPlayerObservations(ctx context.Context, tenantID uuid.UUID) ([]LeaderboardPlayerObservation, error)

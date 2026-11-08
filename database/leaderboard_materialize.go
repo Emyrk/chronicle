@@ -138,7 +138,7 @@ func (q *sqlQuerier) MaterializeLeaderboardPlayerBossBenchmark(ctx context.Conte
 		BestMetric:  row.BestMetric,
 		HasEvidence: row.HasEvidence, ProjectionVersion: arg.ProjectionVersion, AlgorithmVersion: arg.AlgorithmVersion, UnfencedManual: true,
 	}})
-	published.Exec(func(_ int, err error) {
+	published.QueryRow(func(_ int, _ bool, err error) {
 		if firstErr == nil {
 			firstErr = err
 		}
@@ -172,7 +172,7 @@ func (q *sqlQuerier) MaterializeLeaderboardPlayerBossSubject(ctx context.Context
 		ObservationCount: row.ObservationCount, RawPeak: row.RawPeak, RawForm: row.RawForm, RawFloor: row.RawFloor, PeakEncounterID: row.PeakEncounterID, PeakDurationMs: row.PeakDurationMs,
 		HasEvidence: row.HasEvidence, ProjectionVersion: arg.ProjectionVersion, AlgorithmVersion: arg.AlgorithmVersion, UnfencedManual: true,
 	}})
-	published.Exec(func(_ int, err error) {
+	published.QueryRow(func(_ int, _ bool, err error) {
 		if firstErr == nil {
 			firstErr = err
 		}
@@ -206,7 +206,7 @@ func (q *sqlQuerier) MaterializeLeaderboardGuildBossBenchmark(ctx context.Contex
 		BestDurationMs: row.BestDurationMs,
 		HasEvidence:    row.HasEvidence, ProjectionVersion: arg.ProjectionVersion, AlgorithmVersion: arg.AlgorithmVersion, UnfencedManual: true,
 	}})
-	published.Exec(func(_ int, err error) {
+	published.QueryRow(func(_ int, _ bool, err error) {
 		if firstErr == nil {
 			firstErr = err
 		}
@@ -240,7 +240,7 @@ func (q *sqlQuerier) MaterializeLeaderboardGuildBossSubject(ctx context.Context,
 		ObservationCount: row.ObservationCount, FastestDurationMs: row.FastestDurationMs, FormMeanInverseMs: row.FormMeanInverseMs, FloorMeanInverseMs: row.FloorMeanInverseMs,
 		HasEvidence: row.HasEvidence, ProjectionVersion: arg.ProjectionVersion, AlgorithmVersion: arg.AlgorithmVersion, UnfencedManual: true,
 	}})
-	published.Exec(func(_ int, err error) {
+	published.QueryRow(func(_ int, _ bool, err error) {
 		if firstErr == nil {
 			firstErr = err
 		}
@@ -274,7 +274,7 @@ func (q *sqlQuerier) MaterializeLeaderboardGuildClearBenchmark(ctx context.Conte
 		BestDurationMs: row.BestDurationMs,
 		HasEvidence:    row.HasEvidence, ProjectionVersion: arg.ProjectionVersion, AlgorithmVersion: arg.AlgorithmVersion, UnfencedManual: true,
 	}})
-	published.Exec(func(_ int, err error) {
+	published.QueryRow(func(_ int, _ bool, err error) {
 		if firstErr == nil {
 			firstErr = err
 		}
@@ -308,7 +308,7 @@ func (q *sqlQuerier) MaterializeLeaderboardGuildClearSubject(ctx context.Context
 		ObservationCount: row.ObservationCount, FastestDurationMs: row.FastestDurationMs, FormMeanInverseMs: row.FormMeanInverseMs, FloorMeanInverseMs: row.FloorMeanInverseMs,
 		HasEvidence: row.HasEvidence, ProjectionVersion: arg.ProjectionVersion, AlgorithmVersion: arg.AlgorithmVersion, UnfencedManual: true,
 	}})
-	published.Exec(func(_ int, err error) {
+	published.QueryRow(func(_ int, _ bool, err error) {
 		if firstErr == nil {
 			firstErr = err
 		}
@@ -342,7 +342,7 @@ func (q *sqlQuerier) MaterializeLeaderboardPlayerRenownCount(ctx context.Context
 		KillCount:   row.KillCount,
 		HasEvidence: row.HasEvidence, ProjectionVersion: arg.ProjectionVersion, AlgorithmVersion: arg.AlgorithmVersion, UnfencedManual: true,
 	}})
-	published.Exec(func(_ int, err error) {
+	published.QueryRow(func(_ int, _ bool, err error) {
 		if firstErr == nil {
 			firstErr = err
 		}
@@ -376,7 +376,7 @@ func (q *sqlQuerier) MaterializeLeaderboardGuildRenownCount(ctx context.Context,
 		KillCount:   row.KillCount,
 		HasEvidence: row.HasEvidence, ProjectionVersion: arg.ProjectionVersion, AlgorithmVersion: arg.AlgorithmVersion, UnfencedManual: true,
 	}})
-	published.Exec(func(_ int, err error) {
+	published.QueryRow(func(_ int, _ bool, err error) {
 		if firstErr == nil {
 			firstErr = err
 		}
