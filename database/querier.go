@@ -1035,6 +1035,10 @@ type sqlcQuerier interface {
 	ResolveDatasetWithFlavorByRealm(ctx context.Context, id uuid.UUID) (ResolveDatasetWithFlavorByRealmRow, error)
 	ResolveExternalAPIRealm(ctx context.Context, arg ResolveExternalAPIRealmParams) (ResolveExternalAPIRealmRow, error)
 	ResolveExternalAPIServer(ctx context.Context, server string) (ResolveExternalAPIServerRow, error)
+	// Strict set inclusion, not tag count, determines precedence independently for
+	// each assigned property. NULL properties never enter the assignment relation.
+	// A conflict returns diagnostics ONLY, never a partially resolved configuration.
+	ResolveLeaderboardConfiguration(ctx context.Context, flavors []string) ([]ResolveLeaderboardConfigurationRow, error)
 	ResolveSidekickIssuesExcept(ctx context.Context, arg ResolveSidekickIssuesExceptParams) (int64, error)
 	ResumeInferenceRun(ctx context.Context, arg ResumeInferenceRunParams) (InferenceRun, error)
 	RevokeActiveSidekickOAuthGrants(ctx context.Context, sidekickID uuid.UUID) ([]string, error)
