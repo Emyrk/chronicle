@@ -1920,107 +1920,147 @@ type LeaderboardBossRenown struct {
 }
 
 type LeaderboardDirtyGuildBossBenchmark struct {
-	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
-	InstanceName   string             `db:"instance_name" json:"instance_name"`
-	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
-	MaxPlayers     int16              `db:"max_players" json:"max_players"`
-	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
-	Revision       int64              `db:"revision" json:"revision"`
-	DirtiedAt      pgtype.Timestamptz `db:"dirtied_at" json:"dirtied_at"`
-	ProcessAfter   pgtype.Timestamptz `db:"process_after" json:"process_after"`
+	TenantID        uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	InstanceName    string             `db:"instance_name" json:"instance_name"`
+	DifficultyName  string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers      int16              `db:"max_players" json:"max_players"`
+	EncounterName   string             `db:"encounter_name" json:"encounter_name"`
+	Revision        int64              `db:"revision" json:"revision"`
+	DirtiedAt       pgtype.Timestamptz `db:"dirtied_at" json:"dirtied_at"`
+	ProcessAfter    pgtype.Timestamptz `db:"process_after" json:"process_after"`
+	ClaimToken      uuid.NullUUID      `db:"claim_token" json:"claim_token"`
+	ClaimedRevision pgtype.Int8        `db:"claimed_revision" json:"claimed_revision"`
+	LockedUntil     pgtype.Timestamptz `db:"locked_until" json:"locked_until"`
+	RetryAfter      pgtype.Timestamptz `db:"retry_after" json:"retry_after"`
+	Attempts        int32              `db:"attempts" json:"attempts"`
 }
 
 type LeaderboardDirtyGuildBossSubject struct {
-	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
-	InstanceName   string             `db:"instance_name" json:"instance_name"`
-	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
-	MaxPlayers     int16              `db:"max_players" json:"max_players"`
-	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
-	RealmID        uuid.UUID          `db:"realm_id" json:"realm_id"`
-	GuildID        uuid.UUID          `db:"guild_id" json:"guild_id"`
-	Revision       int64              `db:"revision" json:"revision"`
-	DirtiedAt      pgtype.Timestamptz `db:"dirtied_at" json:"dirtied_at"`
-	ProcessAfter   pgtype.Timestamptz `db:"process_after" json:"process_after"`
+	TenantID        uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	InstanceName    string             `db:"instance_name" json:"instance_name"`
+	DifficultyName  string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers      int16              `db:"max_players" json:"max_players"`
+	EncounterName   string             `db:"encounter_name" json:"encounter_name"`
+	RealmID         uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID         uuid.UUID          `db:"guild_id" json:"guild_id"`
+	Revision        int64              `db:"revision" json:"revision"`
+	DirtiedAt       pgtype.Timestamptz `db:"dirtied_at" json:"dirtied_at"`
+	ProcessAfter    pgtype.Timestamptz `db:"process_after" json:"process_after"`
+	ClaimToken      uuid.NullUUID      `db:"claim_token" json:"claim_token"`
+	ClaimedRevision pgtype.Int8        `db:"claimed_revision" json:"claimed_revision"`
+	LockedUntil     pgtype.Timestamptz `db:"locked_until" json:"locked_until"`
+	RetryAfter      pgtype.Timestamptz `db:"retry_after" json:"retry_after"`
+	Attempts        int32              `db:"attempts" json:"attempts"`
 }
 
 type LeaderboardDirtyGuildClearBenchmark struct {
-	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
-	InstanceName   string             `db:"instance_name" json:"instance_name"`
-	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
-	MaxPlayers     int16              `db:"max_players" json:"max_players"`
-	Revision       int64              `db:"revision" json:"revision"`
-	DirtiedAt      pgtype.Timestamptz `db:"dirtied_at" json:"dirtied_at"`
-	ProcessAfter   pgtype.Timestamptz `db:"process_after" json:"process_after"`
+	TenantID        uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	InstanceName    string             `db:"instance_name" json:"instance_name"`
+	DifficultyName  string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers      int16              `db:"max_players" json:"max_players"`
+	Revision        int64              `db:"revision" json:"revision"`
+	DirtiedAt       pgtype.Timestamptz `db:"dirtied_at" json:"dirtied_at"`
+	ProcessAfter    pgtype.Timestamptz `db:"process_after" json:"process_after"`
+	ClaimToken      uuid.NullUUID      `db:"claim_token" json:"claim_token"`
+	ClaimedRevision pgtype.Int8        `db:"claimed_revision" json:"claimed_revision"`
+	LockedUntil     pgtype.Timestamptz `db:"locked_until" json:"locked_until"`
+	RetryAfter      pgtype.Timestamptz `db:"retry_after" json:"retry_after"`
+	Attempts        int32              `db:"attempts" json:"attempts"`
 }
 
 type LeaderboardDirtyGuildClearSubject struct {
-	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
-	InstanceName   string             `db:"instance_name" json:"instance_name"`
-	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
-	MaxPlayers     int16              `db:"max_players" json:"max_players"`
-	RealmID        uuid.UUID          `db:"realm_id" json:"realm_id"`
-	GuildID        uuid.UUID          `db:"guild_id" json:"guild_id"`
-	Revision       int64              `db:"revision" json:"revision"`
-	DirtiedAt      pgtype.Timestamptz `db:"dirtied_at" json:"dirtied_at"`
-	ProcessAfter   pgtype.Timestamptz `db:"process_after" json:"process_after"`
+	TenantID        uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	InstanceName    string             `db:"instance_name" json:"instance_name"`
+	DifficultyName  string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers      int16              `db:"max_players" json:"max_players"`
+	RealmID         uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID         uuid.UUID          `db:"guild_id" json:"guild_id"`
+	Revision        int64              `db:"revision" json:"revision"`
+	DirtiedAt       pgtype.Timestamptz `db:"dirtied_at" json:"dirtied_at"`
+	ProcessAfter    pgtype.Timestamptz `db:"process_after" json:"process_after"`
+	ClaimToken      uuid.NullUUID      `db:"claim_token" json:"claim_token"`
+	ClaimedRevision pgtype.Int8        `db:"claimed_revision" json:"claimed_revision"`
+	LockedUntil     pgtype.Timestamptz `db:"locked_until" json:"locked_until"`
+	RetryAfter      pgtype.Timestamptz `db:"retry_after" json:"retry_after"`
+	Attempts        int32              `db:"attempts" json:"attempts"`
 }
 
 type LeaderboardDirtyGuildRenown struct {
-	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
-	InstanceName   string             `db:"instance_name" json:"instance_name"`
-	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
-	MaxPlayers     int16              `db:"max_players" json:"max_players"`
-	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
-	RealmID        uuid.UUID          `db:"realm_id" json:"realm_id"`
-	GuildID        uuid.UUID          `db:"guild_id" json:"guild_id"`
-	Revision       int64              `db:"revision" json:"revision"`
-	DirtiedAt      pgtype.Timestamptz `db:"dirtied_at" json:"dirtied_at"`
-	ProcessAfter   pgtype.Timestamptz `db:"process_after" json:"process_after"`
+	TenantID        uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	InstanceName    string             `db:"instance_name" json:"instance_name"`
+	DifficultyName  string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers      int16              `db:"max_players" json:"max_players"`
+	EncounterName   string             `db:"encounter_name" json:"encounter_name"`
+	RealmID         uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID         uuid.UUID          `db:"guild_id" json:"guild_id"`
+	Revision        int64              `db:"revision" json:"revision"`
+	DirtiedAt       pgtype.Timestamptz `db:"dirtied_at" json:"dirtied_at"`
+	ProcessAfter    pgtype.Timestamptz `db:"process_after" json:"process_after"`
+	ClaimToken      uuid.NullUUID      `db:"claim_token" json:"claim_token"`
+	ClaimedRevision pgtype.Int8        `db:"claimed_revision" json:"claimed_revision"`
+	LockedUntil     pgtype.Timestamptz `db:"locked_until" json:"locked_until"`
+	RetryAfter      pgtype.Timestamptz `db:"retry_after" json:"retry_after"`
+	Attempts        int32              `db:"attempts" json:"attempts"`
 }
 
 type LeaderboardDirtyPlayerBossBenchmark struct {
-	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
-	InstanceName   string             `db:"instance_name" json:"instance_name"`
-	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
-	MaxPlayers     int16              `db:"max_players" json:"max_players"`
-	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
-	PlayerClass    string             `db:"player_class" json:"player_class"`
-	PlayerSpec     string             `db:"player_spec" json:"player_spec"`
-	PlayerSubSpec  string             `db:"player_sub_spec" json:"player_sub_spec"`
-	Metric         string             `db:"metric" json:"metric"`
-	Revision       int64              `db:"revision" json:"revision"`
-	DirtiedAt      pgtype.Timestamptz `db:"dirtied_at" json:"dirtied_at"`
-	ProcessAfter   pgtype.Timestamptz `db:"process_after" json:"process_after"`
+	TenantID        uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	InstanceName    string             `db:"instance_name" json:"instance_name"`
+	DifficultyName  string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers      int16              `db:"max_players" json:"max_players"`
+	EncounterName   string             `db:"encounter_name" json:"encounter_name"`
+	PlayerClass     string             `db:"player_class" json:"player_class"`
+	PlayerSpec      string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec   string             `db:"player_sub_spec" json:"player_sub_spec"`
+	Metric          string             `db:"metric" json:"metric"`
+	Revision        int64              `db:"revision" json:"revision"`
+	DirtiedAt       pgtype.Timestamptz `db:"dirtied_at" json:"dirtied_at"`
+	ProcessAfter    pgtype.Timestamptz `db:"process_after" json:"process_after"`
+	ClaimToken      uuid.NullUUID      `db:"claim_token" json:"claim_token"`
+	ClaimedRevision pgtype.Int8        `db:"claimed_revision" json:"claimed_revision"`
+	LockedUntil     pgtype.Timestamptz `db:"locked_until" json:"locked_until"`
+	RetryAfter      pgtype.Timestamptz `db:"retry_after" json:"retry_after"`
+	Attempts        int32              `db:"attempts" json:"attempts"`
 }
 
 type LeaderboardDirtyPlayerBossSubject struct {
-	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
-	InstanceName   string             `db:"instance_name" json:"instance_name"`
-	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
-	MaxPlayers     int16              `db:"max_players" json:"max_players"`
-	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
-	PlayerClass    string             `db:"player_class" json:"player_class"`
-	PlayerSpec     string             `db:"player_spec" json:"player_spec"`
-	PlayerSubSpec  string             `db:"player_sub_spec" json:"player_sub_spec"`
-	Metric         string             `db:"metric" json:"metric"`
-	RealmID        uuid.UUID          `db:"realm_id" json:"realm_id"`
-	PlayerGuid     string             `db:"player_guid" json:"player_guid"`
-	Revision       int64              `db:"revision" json:"revision"`
-	DirtiedAt      pgtype.Timestamptz `db:"dirtied_at" json:"dirtied_at"`
-	ProcessAfter   pgtype.Timestamptz `db:"process_after" json:"process_after"`
+	TenantID        uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	InstanceName    string             `db:"instance_name" json:"instance_name"`
+	DifficultyName  string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers      int16              `db:"max_players" json:"max_players"`
+	EncounterName   string             `db:"encounter_name" json:"encounter_name"`
+	PlayerClass     string             `db:"player_class" json:"player_class"`
+	PlayerSpec      string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec   string             `db:"player_sub_spec" json:"player_sub_spec"`
+	Metric          string             `db:"metric" json:"metric"`
+	RealmID         uuid.UUID          `db:"realm_id" json:"realm_id"`
+	PlayerGuid      string             `db:"player_guid" json:"player_guid"`
+	Revision        int64              `db:"revision" json:"revision"`
+	DirtiedAt       pgtype.Timestamptz `db:"dirtied_at" json:"dirtied_at"`
+	ProcessAfter    pgtype.Timestamptz `db:"process_after" json:"process_after"`
+	ClaimToken      uuid.NullUUID      `db:"claim_token" json:"claim_token"`
+	ClaimedRevision pgtype.Int8        `db:"claimed_revision" json:"claimed_revision"`
+	LockedUntil     pgtype.Timestamptz `db:"locked_until" json:"locked_until"`
+	RetryAfter      pgtype.Timestamptz `db:"retry_after" json:"retry_after"`
+	Attempts        int32              `db:"attempts" json:"attempts"`
 }
 
 type LeaderboardDirtyPlayerRenown struct {
-	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
-	InstanceName   string             `db:"instance_name" json:"instance_name"`
-	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
-	MaxPlayers     int16              `db:"max_players" json:"max_players"`
-	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
-	RealmID        uuid.UUID          `db:"realm_id" json:"realm_id"`
-	PlayerGuid     string             `db:"player_guid" json:"player_guid"`
-	Revision       int64              `db:"revision" json:"revision"`
-	DirtiedAt      pgtype.Timestamptz `db:"dirtied_at" json:"dirtied_at"`
-	ProcessAfter   pgtype.Timestamptz `db:"process_after" json:"process_after"`
+	TenantID        uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	InstanceName    string             `db:"instance_name" json:"instance_name"`
+	DifficultyName  string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers      int16              `db:"max_players" json:"max_players"`
+	EncounterName   string             `db:"encounter_name" json:"encounter_name"`
+	RealmID         uuid.UUID          `db:"realm_id" json:"realm_id"`
+	PlayerGuid      string             `db:"player_guid" json:"player_guid"`
+	Revision        int64              `db:"revision" json:"revision"`
+	DirtiedAt       pgtype.Timestamptz `db:"dirtied_at" json:"dirtied_at"`
+	ProcessAfter    pgtype.Timestamptz `db:"process_after" json:"process_after"`
+	ClaimToken      uuid.NullUUID      `db:"claim_token" json:"claim_token"`
+	ClaimedRevision pgtype.Int8        `db:"claimed_revision" json:"claimed_revision"`
+	LockedUntil     pgtype.Timestamptz `db:"locked_until" json:"locked_until"`
+	RetryAfter      pgtype.Timestamptz `db:"retry_after" json:"retry_after"`
+	Attempts        int32              `db:"attempts" json:"attempts"`
 }
 
 type LeaderboardDirtyRun struct {

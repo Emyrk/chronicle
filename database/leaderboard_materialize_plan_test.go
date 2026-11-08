@@ -15,8 +15,8 @@ import (
 )
 
 // Opt-in measurements use only a new dbtestutil database. They neither connect to
-// production nor touch a preview fixture. EXPLAIN ANALYZE executes publication;
-// everything is rolled back with the fixture transaction at the end.
+// production nor touch a preview fixture. EXPLAIN ANALYZE measures the typed
+// computation queries; publication is measured separately by worker tests.
 func TestMaterializeScopedPlans(t *testing.T) {
 	if os.Getenv("CHRONICLE_MEASURE_MATERIALIZE") != "1" {
 		t.Skip("opt-in local EXPLAIN ANALYZE measurements")
@@ -68,6 +68,9 @@ func TestMaterializeScopedPlans(t *testing.T) {
 	for _, part := range parts[1:] {
 		lines := strings.SplitN(part, "\n", 2)
 		name := strings.Fields(lines[0])[0]
+		if !strings.HasPrefix(name, "ComputeLeaderboard") {
+			continue
+		}
 		queries[name] = argPattern.ReplaceAllStringFunc(lines[1], func(s string) string { return replacements[s[1:]] })
 	}
 	measure := func(label string, n int, benchmarksOnly bool) {
