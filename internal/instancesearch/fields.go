@@ -515,7 +515,7 @@ var (
 		"DEATH_KNIGHT", "MONK", "DEMON_HUNTER",
 	}
 	races = []string{
-		"Human", "Dwarf", "NightElf", "Gnome", "Draenei", "Orc", "Scourge", "Tauren", "Troll", "Goblin", "BloodElf",
+		"Human", "Dwarf", "NightElf", "Gnome", "Draenei", "Skyborne", "Orc", "Scourge", "Tauren", "Troll", "Goblin", "BloodElf",
 	}
 	outcomes = []string{"clean", "partial", "wipe", "reset"}
 	// roles are the values stored in encounter_dps_rankings.player_role.

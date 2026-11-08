@@ -374,6 +374,46 @@ func ParseHeroClasses(name string) (HeroClasses, error) {
 }
 
 const (
+	// HeroFactionAlliance is a HeroFaction of type Alliance.
+	HeroFactionAlliance HeroFaction = "Alliance"
+	// HeroFactionHorde is a HeroFaction of type Horde.
+	HeroFactionHorde HeroFaction = "Horde"
+)
+
+var ErrInvalidHeroFaction = errors.New("not a valid HeroFaction")
+
+// String implements the Stringer interface.
+func (x HeroFaction) String() string {
+	return string(x)
+}
+
+// IsValid provides a quick way to determine if the typed value is
+// part of the allowed enumerated values
+func (x HeroFaction) IsValid() bool {
+	_, err := ParseHeroFaction(string(x))
+	return err == nil
+}
+
+var _HeroFactionValue = map[string]HeroFaction{
+	"Alliance": HeroFactionAlliance,
+	"alliance": HeroFactionAlliance,
+	"Horde":    HeroFactionHorde,
+	"horde":    HeroFactionHorde,
+}
+
+// ParseHeroFaction attempts to convert a string to a HeroFaction.
+func ParseHeroFaction(name string) (HeroFaction, error) {
+	if x, ok := _HeroFactionValue[name]; ok {
+		return x, nil
+	}
+	// Case insensitive parse, do a separate lookup to prevent unnecessary cost of lowercasing a string if we don't need to.
+	if x, ok := _HeroFactionValue[strings.ToLower(name)]; ok {
+		return x, nil
+	}
+	return HeroFaction(""), fmt.Errorf("%s is %w", name, ErrInvalidHeroFaction)
+}
+
+const (
 	// HeroGenderNotSet is a HeroGender of type NotSet.
 	HeroGenderNotSet HeroGender = iota
 	// HeroGenderUnknown is a HeroGender of type Unknown.
@@ -456,6 +496,8 @@ const (
 	HeroRacesBloodElf HeroRaces = "BloodElf"
 	// HeroRacesDraenei is a HeroRaces of type Draenei.
 	HeroRacesDraenei HeroRaces = "Draenei"
+	// HeroRacesSkyborne is a HeroRaces of type Skyborne.
+	HeroRacesSkyborne HeroRaces = "Skyborne"
 	// HeroRacesUnknown is a HeroRaces of type Unknown.
 	HeroRacesUnknown HeroRaces = "Unknown"
 )
@@ -497,6 +539,8 @@ var _HeroRacesValue = map[string]HeroRaces{
 	"bloodelf": HeroRacesBloodElf,
 	"Draenei":  HeroRacesDraenei,
 	"draenei":  HeroRacesDraenei,
+	"Skyborne": HeroRacesSkyborne,
+	"skyborne": HeroRacesSkyborne,
 	"Unknown":  HeroRacesUnknown,
 	"unknown":  HeroRacesUnknown,
 }

@@ -401,13 +401,14 @@ const censusPlayerCounts = `-- name: CensusPlayerCounts :many
 SELECT
   gp.class,
   gp.race,
+  gp.faction,
   COUNT(*) AS count
 FROM game_players gp
 JOIN wow_server_realms wsr ON wsr.id = gp.realm_id
 WHERE gp.updated_at >= $1::timestamptz
   AND (cardinality($2::uuid[]) = 0 OR gp.realm_id = ANY($2::uuid[]))
-GROUP BY gp.class, gp.race
-ORDER BY gp.class, gp.race
+GROUP BY gp.class, gp.race, gp.faction
+ORDER BY gp.class, gp.race, gp.faction
 `
 
 type CensusPlayerCountsParams struct {
@@ -416,9 +417,10 @@ type CensusPlayerCountsParams struct {
 }
 
 type CensusPlayerCountsRow struct {
-	Class WowPlayableClass `db:"class" json:"class"`
-	Race  WowPlayableRace  `db:"race" json:"race"`
-	Count int64            `db:"count" json:"count"`
+	Class   WowPlayableClass     `db:"class" json:"class"`
+	Race    WowPlayableRace      `db:"race" json:"race"`
+	Faction NullWowPlayerFaction `db:"faction" json:"faction"`
+	Count   int64                `db:"count" json:"count"`
 }
 
 // JOINs wow_server_realms so RLS tenant filtering cascades.
@@ -431,7 +433,12 @@ func (q *sqlQuerier) CensusPlayerCounts(ctx context.Context, arg CensusPlayerCou
 	var items []CensusPlayerCountsRow
 	for rows.Next() {
 		var i CensusPlayerCountsRow
-		if err := rows.Scan(&i.Class, &i.Race, &i.Count); err != nil {
+		if err := rows.Scan(
+			&i.Class,
+			&i.Race,
+			&i.Faction,
+			&i.Count,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -444,7 +451,7 @@ func (q *sqlQuerier) CensusPlayerCounts(ctx context.Context, arg CensusPlayerCou
 
 const getGamePlayerByGUID = `-- name: GetGamePlayerByGUID :one
 SELECT
-  gp.id, gp.realm_id, gp.created_at, gp.guild_id, gp.name, gp.class, gp.gender, gp.race, gp.gear, gp.updated_at, gp.updated_from_instance, gp.level, gp.talents,
+  gp.id, gp.realm_id, gp.created_at, gp.guild_id, gp.name, gp.class, gp.gender, gp.race, gp.gear, gp.updated_at, gp.updated_from_instance, gp.level, gp.talents, gp.faction,
   COALESCE(wow_server_realms.name, 'Unknown') as realm_name,
   g.name as guild_name
 FROM
@@ -463,21 +470,22 @@ type GetGamePlayerByGUIDParams struct {
 }
 
 type GetGamePlayerByGUIDRow struct {
-	ID                  guid.GUID          `db:"id" json:"id"`
-	RealmID             uuid.UUID          `db:"realm_id" json:"realm_id"`
-	CreatedAt           pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	GuildID             uuid.NullUUID      `db:"guild_id" json:"guild_id"`
-	Name                string             `db:"name" json:"name"`
-	Class               WowPlayableClass   `db:"class" json:"class"`
-	Gender              WowPlayableGender  `db:"gender" json:"gender"`
-	Race                WowPlayableRace    `db:"race" json:"race"`
-	Gear                *PlayerOutfit      `db:"gear" json:"gear"`
-	UpdatedAt           pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
-	UpdatedFromInstance uuid.NullUUID      `db:"updated_from_instance" json:"updated_from_instance"`
-	Level               int16              `db:"level" json:"level"`
-	Talents             *PlayerTalents     `db:"talents" json:"talents"`
-	RealmName           string             `db:"realm_name" json:"realm_name"`
-	GuildName           pgtype.Text        `db:"guild_name" json:"guild_name"`
+	ID                  guid.GUID            `db:"id" json:"id"`
+	RealmID             uuid.UUID            `db:"realm_id" json:"realm_id"`
+	CreatedAt           pgtype.Timestamptz   `db:"created_at" json:"created_at"`
+	GuildID             uuid.NullUUID        `db:"guild_id" json:"guild_id"`
+	Name                string               `db:"name" json:"name"`
+	Class               WowPlayableClass     `db:"class" json:"class"`
+	Gender              WowPlayableGender    `db:"gender" json:"gender"`
+	Race                WowPlayableRace      `db:"race" json:"race"`
+	Gear                *PlayerOutfit        `db:"gear" json:"gear"`
+	UpdatedAt           pgtype.Timestamptz   `db:"updated_at" json:"updated_at"`
+	UpdatedFromInstance uuid.NullUUID        `db:"updated_from_instance" json:"updated_from_instance"`
+	Level               int16                `db:"level" json:"level"`
+	Talents             *PlayerTalents       `db:"talents" json:"talents"`
+	Faction             NullWowPlayerFaction `db:"faction" json:"faction"`
+	RealmName           string               `db:"realm_name" json:"realm_name"`
+	GuildName           pgtype.Text          `db:"guild_name" json:"guild_name"`
 }
 
 func (q *sqlQuerier) GetGamePlayerByGUID(ctx context.Context, arg GetGamePlayerByGUIDParams) (GetGamePlayerByGUIDRow, error) {
@@ -497,6 +505,7 @@ func (q *sqlQuerier) GetGamePlayerByGUID(ctx context.Context, arg GetGamePlayerB
 		&i.UpdatedFromInstance,
 		&i.Level,
 		&i.Talents,
+		&i.Faction,
 		&i.RealmName,
 		&i.GuildName,
 	)
@@ -11253,7 +11262,7 @@ func (q *sqlQuerier) ListInferenceInstanceEncounters(ctx context.Context, instan
 }
 
 const listInferenceInstancePlayers = `-- name: ListInferenceInstancePlayers :many
-SELECT instance_id, unit_guid, name, level, class, race, guild_id
+SELECT instance_id, unit_guid, name, level, class, race, guild_id, faction
 FROM log_instance_players
 WHERE instance_id = $1
 ORDER BY name, unit_guid
@@ -11277,6 +11286,7 @@ func (q *sqlQuerier) ListInferenceInstancePlayers(ctx context.Context, instanceI
 			&i.Class,
 			&i.Race,
 			&i.GuildID,
+			&i.Faction,
 		); err != nil {
 			return nil, err
 		}
@@ -20399,7 +20409,7 @@ func (q *sqlQuerier) InstancePlayerSpecs(ctx context.Context, instanceID uuid.UU
 
 const instancePlayersByInstanceID = `-- name: InstancePlayersByInstanceID :many
 SELECT
-  instance_id, unit_guid, name, level, class, race, guild_id
+  instance_id, unit_guid, name, level, class, race, guild_id, faction
 FROM
   log_instance_players
 WHERE
@@ -20423,6 +20433,7 @@ func (q *sqlQuerier) InstancePlayersByInstanceID(ctx context.Context, instanceID
 			&i.Class,
 			&i.Race,
 			&i.GuildID,
+			&i.Faction,
 		); err != nil {
 			return nil, err
 		}

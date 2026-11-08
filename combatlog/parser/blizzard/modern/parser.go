@@ -439,6 +439,10 @@ func (p *Parser) combatantInfo(ts time.Time, m *wotlk.Matched, _ string) ([]mess
 	default:
 		return nil, fmt.Errorf("blizzard COMBATANT_INFO has unsupported combat log version %d", p.version)
 	}
+	var faction *types.HeroFaction
+	if v22 != nil {
+		faction = factionFromTeamID(v22.TeamID)
+	}
 	result := make([]messages.Message, 0, 1+len(pullAuras))
 	result = append(result, &messages.Combatant{
 		MessageBase: messages.Base(ts),
@@ -449,6 +453,7 @@ func (p *Parser) combatantInfo(ts time.Time, m *wotlk.Matched, _ string) ([]mess
 			HeroClass:      heroClass,
 			Gender:         -1,
 			Race:           "Unknown",
+			Faction:        faction,
 			GearSetups:     gear,
 			Talents:        talents,
 			PullAurasKnown: pullAurasKnown,
@@ -459,6 +464,19 @@ func (p *Parser) combatantInfo(ts time.Time, m *wotlk.Matched, _ string) ([]mess
 		result = append(result, aura)
 	}
 	return result, nil
+}
+
+func factionFromTeamID(teamID int32) *types.HeroFaction {
+	var faction types.HeroFaction
+	switch teamID {
+	case 0:
+		faction = types.HeroFactionHorde
+	case 1:
+		faction = types.HeroFactionAlliance
+	default:
+		return nil
+	}
+	return &faction
 }
 
 func (p *Parser) parsePullAuras(ts time.Time, target guid.GUID, raw string) ([]*messages.Aura, error) {

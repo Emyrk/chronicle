@@ -1,0 +1,2 @@
+-- PostgreSQL does not support removing enum values.
+-- Skyborne will remain in the enum after rollback.

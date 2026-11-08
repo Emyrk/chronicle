@@ -156,7 +156,13 @@ func (api *API) InstanceItemPrices(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	faction, reason, err := instancePricingFaction(ctx, api.Opts.Zed, inst.ID, config.PricingAuctionHouse.String)
+	faction, reason, err := instancePricingFaction(
+		ctx,
+		api.Opts.Zed,
+		inst.ID,
+		config.PricingAuctionHouse.String,
+		database.FlavorFromStrings(inst.Flavor),
+	)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
@@ -211,7 +217,13 @@ type instancePlayersStore interface {
 	InstancePlayersByInstanceID(context.Context, uuid.UUID) ([]database.LogInstancePlayer, error)
 }
 
-func instancePricingFaction(ctx context.Context, db instancePlayersStore, instanceID uuid.UUID, mode string) (chroniclesdk.AuctionHouseFaction, string, error) {
+func instancePricingFaction(
+	ctx context.Context,
+	db instancePlayersStore,
+	instanceID uuid.UUID,
+	mode string,
+	flavor database.WoWFlavor,
+) (chroniclesdk.AuctionHouseFaction, string, error) {
 	if mode == string(chroniclesdk.PricingAuctionHouseMerged) {
 		return chroniclesdk.AuctionHouseFactionMerged, "", nil
 	}
@@ -225,7 +237,7 @@ func instancePricingFaction(ctx context.Context, db instancePlayersStore, instan
 	}
 	var found chroniclesdk.AuctionHouseFaction
 	for _, player := range players {
-		faction := raceFaction(player.Race)
+		faction := pricingFaction(resolvePlayerFaction(player.Faction, player.Race, flavor))
 		if faction == "" {
 			continue
 		}
@@ -240,20 +252,14 @@ func instancePricingFaction(ctx context.Context, db instancePlayersStore, instan
 	return found, "", nil
 }
 
-func raceFaction(race database.WowPlayableRace) chroniclesdk.AuctionHouseFaction {
-	switch race {
-	case database.WowPlayableRaceHuman,
-		database.WowPlayableRaceGnome,
-		database.WowPlayableRaceDwarf,
-		database.WowPlayableRaceNightElf,
-		database.WowPlayableRaceDraenei:
+func pricingFaction(faction database.NullWowPlayerFaction) chroniclesdk.AuctionHouseFaction {
+	if !faction.Valid {
+		return ""
+	}
+	switch faction.WowPlayerFaction {
+	case database.WowPlayerFactionAlliance:
 		return chroniclesdk.AuctionHouseFactionAlliance
-	case database.WowPlayableRaceScourge,
-		database.WowPlayableRaceOrc,
-		database.WowPlayableRaceTroll,
-		database.WowPlayableRaceTauren,
-		database.WowPlayableRaceGoblin,
-		database.WowPlayableRaceBloodElf:
+	case database.WowPlayerFactionHorde:
 		return chroniclesdk.AuctionHouseFactionHorde
 	default:
 		return ""

@@ -54,7 +54,7 @@ Use inside `any_player` / `count_players`. All fields in one quantifier refer to
 | `player.name` | string | =, !=, in, not_in, contains, starts_with |  | Character name. |
 | `player.guid` | string | =, !=, in, not_in, contains, starts_with |  | Character GUID, e.g. "0x0000000000012345". |
 | `player.class` | enum: WARRIOR, PALADIN, HUNTER, ROGUE, PRIEST, SHAMAN, MAGE, WARLOCK, DRUID, DEATH_KNIGHT, MONK, DEMON_HUNTER | =, !=, in, not_in |  | Class. |
-| `player.race` | enum: Human, Dwarf, NightElf, Gnome, Draenei, Orc, Scourge, Tauren, Troll, Goblin, BloodElf | =, !=, in, not_in |  | Race. |
+| `player.race` | enum: Human, Dwarf, NightElf, Gnome, Draenei, Skyborne, Orc, Scourge, Tauren, Troll, Goblin, BloodElf | =, !=, in, not_in |  | Race. |
 | `player.level` | int | =, !=, <, <=, >, >=, between |  | Level. |
 | `player.guild` | string | =, !=, in, not_in, contains, starts_with |  | Guild name at the time of the run. |
 | `player.guild_id` | uuid | =, !=, in, not_in |  | Guild ID at the time of the run. |

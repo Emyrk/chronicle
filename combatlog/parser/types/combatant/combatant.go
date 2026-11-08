@@ -64,6 +64,7 @@ type Combatant struct {
 	HeroClass types.HeroClasses
 	Gender    types.HeroGender
 	Race      types.HeroRaces
+	Faction   *types.HeroFaction
 	PetName   string
 
 	Guild      *Guild
@@ -99,6 +100,9 @@ func (c *Combatant) SafeMergeExisting(existing Combatant) {
 	}
 	if c.Race == types.HeroRacesUnknown || c.Race == "" {
 		c.Race = existing.Race
+	}
+	if c.Faction == nil {
+		c.Faction = existing.Faction
 	}
 }
 

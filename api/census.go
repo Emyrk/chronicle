@@ -12,6 +12,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/db2sdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
+	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/database"
 )
 
@@ -86,10 +87,16 @@ func (api *API) Census(w http.ResponseWriter, r *http.Request) {
 
 	entries := make([]chroniclesdk.CensusEntry, 0, len(rows))
 	for _, row := range rows {
+		var faction *types.HeroFaction
+		if row.Faction.Valid {
+			value := types.HeroFaction(row.Faction.WowPlayerFaction)
+			faction = &value
+		}
 		entries = append(entries, chroniclesdk.CensusEntry{
-			Class: db2sdk.HeroClass(row.Class).String(),
-			Race:  db2sdk.HeroRace(row.Race).String(),
-			Count: row.Count,
+			Class:   db2sdk.HeroClass(row.Class).String(),
+			Race:    db2sdk.HeroRace(row.Race).String(),
+			Faction: faction,
+			Count:   row.Count,
 		})
 	}
 

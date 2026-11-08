@@ -13,19 +13,20 @@ RETURNING *
 INSERT INTO
   game_players (
     id, realm_id, name, guild_id,
-    class, gender, race,
+    class, gender, race, faction,
     gear, level, talents,
     updated_from_instance,
     updated_at
   )
 VALUES
-  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 ON CONFLICT (id, realm_id) DO UPDATE
   SET name = EXCLUDED.name,
       guild_id = EXCLUDED.guild_id,
       class = EXCLUDED.class,
       race = EXCLUDED.race,
       gender = EXCLUDED.gender,
+      faction = COALESCE(EXCLUDED.faction, game_players.faction),
       gear = CASE
         WHEN EXCLUDED.gear IS NOT NULL AND EXCLUDED.gear != '[]'::jsonb
         THEN EXCLUDED.gear
@@ -138,10 +139,11 @@ OFFSET @result_offset
 SELECT
   gp.class,
   gp.race,
+  gp.faction,
   COUNT(*) AS count
 FROM game_players gp
 JOIN wow_server_realms wsr ON wsr.id = gp.realm_id
 WHERE gp.updated_at >= @updated_after::timestamptz
   AND (cardinality(@realm_ids::uuid[]) = 0 OR gp.realm_id = ANY(@realm_ids::uuid[]))
-GROUP BY gp.class, gp.race
-ORDER BY gp.class, gp.race;
+GROUP BY gp.class, gp.race, gp.faction
+ORDER BY gp.class, gp.race, gp.faction;
