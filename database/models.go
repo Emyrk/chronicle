@@ -2064,11 +2064,16 @@ type LeaderboardDirtyPlayerRenown struct {
 }
 
 type LeaderboardDirtyRun struct {
-	TenantID     uuid.UUID          `db:"tenant_id" json:"tenant_id"`
-	RunID        uuid.UUID          `db:"run_id" json:"run_id"`
-	Revision     int64              `db:"revision" json:"revision"`
-	DirtiedAt    pgtype.Timestamptz `db:"dirtied_at" json:"dirtied_at"`
-	ProcessAfter pgtype.Timestamptz `db:"process_after" json:"process_after"`
+	TenantID        uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RunID           uuid.UUID          `db:"run_id" json:"run_id"`
+	Revision        int64              `db:"revision" json:"revision"`
+	DirtiedAt       pgtype.Timestamptz `db:"dirtied_at" json:"dirtied_at"`
+	ProcessAfter    pgtype.Timestamptz `db:"process_after" json:"process_after"`
+	ClaimToken      uuid.NullUUID      `db:"claim_token" json:"claim_token"`
+	ClaimedRevision pgtype.Int8        `db:"claimed_revision" json:"claimed_revision"`
+	LockedUntil     pgtype.Timestamptz `db:"locked_until" json:"locked_until"`
+	RetryAfter      pgtype.Timestamptz `db:"retry_after" json:"retry_after"`
+	Attempts        int32              `db:"attempts" json:"attempts"`
 }
 
 type LeaderboardGuildBossBenchmark struct {

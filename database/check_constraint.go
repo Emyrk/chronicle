@@ -116,6 +116,8 @@ const (
 	CheckLeaderboardDirtyPlayerRenownMaxPlayersCheck             CheckConstraint = "leaderboard_dirty_player_renown_max_players_check"             // leaderboard_dirty_player_renown
 	CheckLeaderboardDirtyPlayerRenownPlayerGuidCheck             CheckConstraint = "leaderboard_dirty_player_renown_player_guid_check"             // leaderboard_dirty_player_renown
 	CheckLeaderboardDirtyPlayerRenownRevisionCheck               CheckConstraint = "leaderboard_dirty_player_renown_revision_check"                // leaderboard_dirty_player_renown
+	CheckLeaderboardDirtyRunsAttemptsCheck                       CheckConstraint = "leaderboard_dirty_runs_attempts_check"                         // leaderboard_dirty_runs
+	CheckLeaderboardDirtyRunsClaimComplete                       CheckConstraint = "leaderboard_dirty_runs_claim_complete"                         // leaderboard_dirty_runs
 	CheckLeaderboardDirtyRunsRevisionCheck                       CheckConstraint = "leaderboard_dirty_runs_revision_check"                         // leaderboard_dirty_runs
 	CheckLeaderboardGuildBossBenchmarksAlgorithmVersionCheck     CheckConstraint = "leaderboard_guild_boss_benchmarks_algorithm_version_check"     // leaderboard_guild_boss_benchmarks
 	CheckLeaderboardGuildBossBenchmarksBestDurationMsCheck       CheckConstraint = "leaderboard_guild_boss_benchmarks_best_duration_ms_check"      // leaderboard_guild_boss_benchmarks

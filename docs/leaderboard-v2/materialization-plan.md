@@ -235,6 +235,28 @@ and enqueues all affected old/new D2 scopes before replacement in one transactio
 Register bounded rare repair processing with fairness and retries. Repair can
 rescan a whole run; it must not hold unrelated tenant/work-queue locks.
 
+### Accepted D1 eventual-consistency contract
+
+Reuse the 10-minute work deadline and 15-minute database-clock ownership lease.
+A short transaction claims one due run. Compute its canonical projection from a
+single consistent SQL snapshot outside dirty-row, source, and global locks.
+There is no source-generation table or per-run advisory lock.
+
+A separate bounded publication transaction locks/rechecks D1 token, claimed
+revision, and lease, captures the **current** old evidence keys, enqueues old/new
+D2 obligations, and replaces/removes evidence atomically. An owned stale snapshot
+may publish after the dirty revision advances: delete D1 only for an exact
+claimed/current revision match; otherwise clear ownership and preserve pending
+work. Expired/replaced owners may not publish. This deliberately accepts delayed
+convergence while a run is still receiving uploads.
+
+PR4 direct writers must serialize on the same dirty-run row in their source/
+evidence transaction and increment an overlapping claim's revision **without
+invalidating its token**. Ordinary direct publication needs no persistent D1
+obligation when no repair/claim exists. Deletion, merge/unlink, and tenant movement
+must retain obligations for every old/new logical identity. No source hook is
+activated in PR3. See [shared projector contract](d1-projector-protocol.md).
+
 **Refactor/acceptance:** preserve `database/ranking_runs_test.go` and
 `chronicle/log_unlisted_test.go` coverage; add D1 evidence/summary obligations to
 those fixtures. Repair absent source rows to empty evidence without a source FK.

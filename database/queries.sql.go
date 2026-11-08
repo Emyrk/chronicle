@@ -12028,6 +12028,246 @@ func (q *sqlQuerier) ListLeaderboardLayers(ctx context.Context) ([]LeaderboardLa
 	return items, nil
 }
 
+const acknowledgeLeaderboardRun = `-- name: AcknowledgeLeaderboardRun :exec
+WITH removed AS (
+ DELETE FROM leaderboard_dirty_runs WHERE tenant_id= $1::uuid AND run_id= $2::uuid
+ AND claim_token= $3::uuid AND claimed_revision= $4::bigint AND revision=claimed_revision RETURNING 1
+)
+UPDATE leaderboard_dirty_runs SET claim_token=NULL,claimed_revision=NULL,locked_until=NULL,attempts=0,retry_after='-infinity'
+WHERE tenant_id= $1::uuid AND run_id= $2::uuid
+ AND claim_token= $3::uuid AND claimed_revision= $4::bigint AND revision<>claimed_revision
+`
+
+type AcknowledgeLeaderboardRunParams struct {
+	TenantID        uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RunID           uuid.UUID `db:"run_id" json:"run_id"`
+	ClaimToken      uuid.UUID `db:"claim_token" json:"claim_token"`
+	ClaimedRevision int64     `db:"claimed_revision" json:"claimed_revision"`
+}
+
+func (q *sqlQuerier) AcknowledgeLeaderboardRun(ctx context.Context, arg AcknowledgeLeaderboardRunParams) error {
+	_, err := q.db.Exec(ctx, acknowledgeLeaderboardRun,
+		arg.TenantID,
+		arg.RunID,
+		arg.ClaimToken,
+		arg.ClaimedRevision,
+	)
+	return err
+}
+
+const claimLeaderboardRun = `-- name: ClaimLeaderboardRun :many
+WITH candidate AS (
+ SELECT tenant_id, run_id, revision, dirtied_at, process_after, claim_token, claimed_revision, locked_until, retry_after, attempts FROM leaderboard_dirty_runs WHERE tenant_id= $1::uuid
+ AND process_after<=clock_timestamp() AND retry_after<=clock_timestamp()
+ AND (locked_until IS NULL OR locked_until<=clock_timestamp())
+ ORDER BY process_after,run_id LIMIT 1 FOR UPDATE SKIP LOCKED
+)
+UPDATE leaderboard_dirty_runs d SET claim_token=gen_random_uuid(),claimed_revision=d.revision,
+ locked_until=clock_timestamp()+interval '15 minutes'
+FROM candidate c WHERE d.tenant_id=c.tenant_id AND d.run_id=c.run_id RETURNING d.tenant_id, d.run_id, d.revision, d.dirtied_at, d.process_after, d.claim_token, d.claimed_revision, d.locked_until, d.retry_after, d.attempts
+`
+
+func (q *sqlQuerier) ClaimLeaderboardRun(ctx context.Context, tenantID uuid.UUID) ([]LeaderboardDirtyRun, error) {
+	rows, err := q.db.Query(ctx, claimLeaderboardRun, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LeaderboardDirtyRun
+	for rows.Next() {
+		var i LeaderboardDirtyRun
+		if err := rows.Scan(
+			&i.TenantID,
+			&i.RunID,
+			&i.Revision,
+			&i.DirtiedAt,
+			&i.ProcessAfter,
+			&i.ClaimToken,
+			&i.ClaimedRevision,
+			&i.LockedUntil,
+			&i.RetryAfter,
+			&i.Attempts,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const enqueueLeaderboardRun = `-- name: EnqueueLeaderboardRun :exec
+INSERT INTO leaderboard_dirty_runs (tenant_id,run_id,process_after)
+VALUES ($1::uuid,$2::uuid,$3::timestamptz)
+ON CONFLICT (tenant_id,run_id) DO UPDATE SET revision=leaderboard_dirty_runs.revision+1,
+ dirtied_at=clock_timestamp(),process_after=LEAST(leaderboard_dirty_runs.process_after,EXCLUDED.process_after)
+`
+
+type EnqueueLeaderboardRunParams struct {
+	TenantID     uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RunID        uuid.UUID          `db:"run_id" json:"run_id"`
+	ProcessAfter pgtype.Timestamptz `db:"process_after" json:"process_after"`
+}
+
+func (q *sqlQuerier) EnqueueLeaderboardRun(ctx context.Context, arg EnqueueLeaderboardRunParams) error {
+	_, err := q.db.Exec(ctx, enqueueLeaderboardRun, arg.TenantID, arg.RunID, arg.ProcessAfter)
+	return err
+}
+
+const leaderboardRunClaimUnexpired = `-- name: LeaderboardRunClaimUnexpired :one
+SELECT EXISTS(SELECT 1 FROM leaderboard_dirty_runs WHERE tenant_id= $1::uuid AND run_id= $2::uuid
+ AND claim_token= $3::uuid AND claimed_revision= $4::bigint AND locked_until>clock_timestamp())::boolean
+`
+
+type LeaderboardRunClaimUnexpiredParams struct {
+	TenantID        uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RunID           uuid.UUID `db:"run_id" json:"run_id"`
+	ClaimToken      uuid.UUID `db:"claim_token" json:"claim_token"`
+	ClaimedRevision int64     `db:"claimed_revision" json:"claimed_revision"`
+}
+
+func (q *sqlQuerier) LeaderboardRunClaimUnexpired(ctx context.Context, arg LeaderboardRunClaimUnexpiredParams) (bool, error) {
+	row := q.db.QueryRow(ctx, leaderboardRunClaimUnexpired,
+		arg.TenantID,
+		arg.RunID,
+		arg.ClaimToken,
+		arg.ClaimedRevision,
+	)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const listDueLeaderboardRuns = `-- name: ListDueLeaderboardRuns :many
+SELECT DISTINCT tenant_id FROM leaderboard_dirty_runs WHERE tenant_id> $1::uuid
+ AND process_after<=clock_timestamp() AND retry_after<=clock_timestamp()
+ AND (locked_until IS NULL OR locked_until<=clock_timestamp())
+ORDER BY tenant_id LIMIT $2::integer
+`
+
+type ListDueLeaderboardRunsParams struct {
+	AfterTenant uuid.UUID `db:"after_tenant" json:"after_tenant"`
+	LimitCount  int32     `db:"limit_count" json:"limit_count"`
+}
+
+func (q *sqlQuerier) ListDueLeaderboardRuns(ctx context.Context, arg ListDueLeaderboardRunsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listDueLeaderboardRuns, arg.AfterTenant, arg.LimitCount)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var tenant_id uuid.UUID
+		if err := rows.Scan(&tenant_id); err != nil {
+			return nil, err
+		}
+		items = append(items, tenant_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockLeaderboardDirectPublication = `-- name: LockLeaderboardDirectPublication :one
+INSERT INTO leaderboard_dirty_runs (tenant_id,run_id) VALUES ($1::uuid,$2::uuid)
+ON CONFLICT (tenant_id,run_id) DO UPDATE SET
+ revision=leaderboard_dirty_runs.revision+CASE WHEN leaderboard_dirty_runs.claim_token IS NOT NULL THEN 1 ELSE 0 END,
+ dirtied_at=clock_timestamp()
+RETURNING (xmax=0)::boolean AS created
+`
+
+type LockLeaderboardDirectPublicationParams struct {
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RunID    uuid.UUID `db:"run_id" json:"run_id"`
+}
+
+// Future direct writers call BEFORE source mutation in the same transaction.
+// An overlap increments revision without invalidating the active owner's token.
+// A new row is only a serialization placeholder; remove it after publication.
+func (q *sqlQuerier) LockLeaderboardDirectPublication(ctx context.Context, arg LockLeaderboardDirectPublicationParams) (bool, error) {
+	row := q.db.QueryRow(ctx, lockLeaderboardDirectPublication, arg.TenantID, arg.RunID)
+	var created bool
+	err := row.Scan(&created)
+	return created, err
+}
+
+const lockLeaderboardRunClaim = `-- name: LockLeaderboardRunClaim :one
+SELECT tenant_id, run_id, revision, dirtied_at, process_after, claim_token, claimed_revision, locked_until, retry_after, attempts FROM leaderboard_dirty_runs WHERE tenant_id= $1::uuid AND run_id= $2::uuid
+ AND claim_token= $3::uuid AND claimed_revision= $4::bigint
+ AND locked_until>clock_timestamp() FOR UPDATE
+`
+
+type LockLeaderboardRunClaimParams struct {
+	TenantID        uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RunID           uuid.UUID `db:"run_id" json:"run_id"`
+	ClaimToken      uuid.UUID `db:"claim_token" json:"claim_token"`
+	ClaimedRevision int64     `db:"claimed_revision" json:"claimed_revision"`
+}
+
+func (q *sqlQuerier) LockLeaderboardRunClaim(ctx context.Context, arg LockLeaderboardRunClaimParams) (LeaderboardDirtyRun, error) {
+	row := q.db.QueryRow(ctx, lockLeaderboardRunClaim,
+		arg.TenantID,
+		arg.RunID,
+		arg.ClaimToken,
+		arg.ClaimedRevision,
+	)
+	var i LeaderboardDirtyRun
+	err := row.Scan(
+		&i.TenantID,
+		&i.RunID,
+		&i.Revision,
+		&i.DirtiedAt,
+		&i.ProcessAfter,
+		&i.ClaimToken,
+		&i.ClaimedRevision,
+		&i.LockedUntil,
+		&i.RetryAfter,
+		&i.Attempts,
+	)
+	return i, err
+}
+
+const removeLeaderboardDirectPlaceholder = `-- name: RemoveLeaderboardDirectPlaceholder :exec
+DELETE FROM leaderboard_dirty_runs WHERE tenant_id= $1::uuid AND run_id= $2::uuid AND claim_token IS NULL AND revision=1
+`
+
+type RemoveLeaderboardDirectPlaceholderParams struct {
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RunID    uuid.UUID `db:"run_id" json:"run_id"`
+}
+
+func (q *sqlQuerier) RemoveLeaderboardDirectPlaceholder(ctx context.Context, arg RemoveLeaderboardDirectPlaceholderParams) error {
+	_, err := q.db.Exec(ctx, removeLeaderboardDirectPlaceholder, arg.TenantID, arg.RunID)
+	return err
+}
+
+const retryLeaderboardRun = `-- name: RetryLeaderboardRun :exec
+UPDATE leaderboard_dirty_runs SET claim_token=NULL,claimed_revision=NULL,locked_until=NULL,
+ attempts=LEAST(attempts+1,30),retry_after=clock_timestamp()+make_interval(secs=>LEAST(300,5*power(2,LEAST(attempts,6)))::double precision)
+WHERE tenant_id= $1::uuid AND run_id= $2::uuid AND claim_token= $3::uuid AND claimed_revision= $4::bigint
+`
+
+type RetryLeaderboardRunParams struct {
+	TenantID        uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RunID           uuid.UUID `db:"run_id" json:"run_id"`
+	ClaimToken      uuid.UUID `db:"claim_token" json:"claim_token"`
+	ClaimedRevision int64     `db:"claimed_revision" json:"claimed_revision"`
+}
+
+func (q *sqlQuerier) RetryLeaderboardRun(ctx context.Context, arg RetryLeaderboardRunParams) error {
+	_, err := q.db.Exec(ctx, retryLeaderboardRun,
+		arg.TenantID,
+		arg.RunID,
+		arg.ClaimToken,
+		arg.ClaimedRevision,
+	)
+	return err
+}
+
 const claimLeaderboardGuildBossBenchmark = `-- name: ClaimLeaderboardGuildBossBenchmark :many
 WITH candidates AS (
  SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, revision, dirtied_at, process_after, claim_token, claimed_revision, locked_until, retry_after, attempts FROM leaderboard_dirty_guild_boss_benchmarks
@@ -12816,8 +13056,213 @@ func (q *sqlQuerier) LeaderboardD2Clock(ctx context.Context) (pgtype.Timestamptz
 	return column_1, err
 }
 
+const deleteLeaderboardRunEvidence = `-- name: DeleteLeaderboardRunEvidence :exec
+WITH deleted0 AS (DELETE FROM leaderboard_player_observations WHERE tenant_id= $1::uuid AND run_id= $2::uuid RETURNING 1),
+deleted1 AS (DELETE FROM leaderboard_guild_boss_observations WHERE tenant_id= $1::uuid AND run_id= $2::uuid RETURNING 1),
+deleted2 AS (DELETE FROM leaderboard_guild_clear_observations WHERE tenant_id= $1::uuid AND run_id= $2::uuid RETURNING 1),
+deleted3 AS (DELETE FROM leaderboard_player_renown_facts WHERE tenant_id= $1::uuid AND run_id= $2::uuid RETURNING 1),
+deleted4 AS (DELETE FROM leaderboard_guild_renown_facts WHERE tenant_id= $1::uuid AND run_id= $2::uuid RETURNING 1)
+SELECT 1
+`
+
+type DeleteLeaderboardRunEvidenceParams struct {
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RunID    uuid.UUID `db:"run_id" json:"run_id"`
+}
+
+func (q *sqlQuerier) DeleteLeaderboardRunEvidence(ctx context.Context, arg DeleteLeaderboardRunEvidenceParams) error {
+	_, err := q.db.Exec(ctx, deleteLeaderboardRunEvidence, arg.TenantID, arg.RunID)
+	return err
+}
+
+const enqueueLeaderboardRunEvidenceScopes = `-- name: EnqueueLeaderboardRunEvidenceScopes :exec
+WITH PlayerBossBenchmark AS (
+ INSERT INTO leaderboard_dirty_player_boss_benchmarks (tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, process_after)
+ SELECT scopes.tenant_id, scopes.instance_name, scopes.difficulty_name, scopes.max_players, scopes.encounter_name, scopes.player_class, scopes.player_spec, scopes.player_sub_spec, scopes.metric, clock_timestamp() FROM (SELECT DISTINCT tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric FROM leaderboard_player_observations WHERE tenant_id= $1::uuid AND run_id= $2::uuid) scopes
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric) DO UPDATE SET revision=leaderboard_dirty_player_boss_benchmarks.revision+1, dirtied_at=clock_timestamp(), process_after=LEAST(leaderboard_dirty_player_boss_benchmarks.process_after,EXCLUDED.process_after) RETURNING 1
+),
+PlayerBossSubject AS (
+ INSERT INTO leaderboard_dirty_player_boss_subjects (tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid, process_after)
+ SELECT scopes.tenant_id, scopes.instance_name, scopes.difficulty_name, scopes.max_players, scopes.encounter_name, scopes.player_class, scopes.player_spec, scopes.player_sub_spec, scopes.metric, scopes.realm_id, scopes.player_guid, clock_timestamp() FROM (SELECT DISTINCT tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid FROM leaderboard_player_observations WHERE tenant_id= $1::uuid AND run_id= $2::uuid) scopes
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid) DO UPDATE SET revision=leaderboard_dirty_player_boss_subjects.revision+1, dirtied_at=clock_timestamp(), process_after=LEAST(leaderboard_dirty_player_boss_subjects.process_after,EXCLUDED.process_after) RETURNING 1
+),
+GuildBossBenchmark AS (
+ INSERT INTO leaderboard_dirty_guild_boss_benchmarks (tenant_id, instance_name, difficulty_name, max_players, encounter_name, process_after)
+ SELECT scopes.tenant_id, scopes.instance_name, scopes.difficulty_name, scopes.max_players, scopes.encounter_name, clock_timestamp() FROM (SELECT DISTINCT tenant_id, instance_name, difficulty_name, max_players, encounter_name FROM leaderboard_guild_boss_observations WHERE tenant_id= $1::uuid AND run_id= $2::uuid) scopes
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name) DO UPDATE SET revision=leaderboard_dirty_guild_boss_benchmarks.revision+1, dirtied_at=clock_timestamp(), process_after=LEAST(leaderboard_dirty_guild_boss_benchmarks.process_after,EXCLUDED.process_after) RETURNING 1
+),
+GuildBossSubject AS (
+ INSERT INTO leaderboard_dirty_guild_boss_subjects (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id, process_after)
+ SELECT scopes.tenant_id, scopes.instance_name, scopes.difficulty_name, scopes.max_players, scopes.encounter_name, scopes.realm_id, scopes.guild_id, clock_timestamp() FROM (SELECT DISTINCT tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id FROM leaderboard_guild_boss_observations WHERE tenant_id= $1::uuid AND run_id= $2::uuid) scopes
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id) DO UPDATE SET revision=leaderboard_dirty_guild_boss_subjects.revision+1, dirtied_at=clock_timestamp(), process_after=LEAST(leaderboard_dirty_guild_boss_subjects.process_after,EXCLUDED.process_after) RETURNING 1
+),
+GuildClearBenchmark AS (
+ INSERT INTO leaderboard_dirty_guild_clear_benchmarks (tenant_id, instance_name, difficulty_name, max_players, process_after)
+ SELECT scopes.tenant_id, scopes.instance_name, scopes.difficulty_name, scopes.max_players, clock_timestamp() FROM (SELECT DISTINCT tenant_id, instance_name, difficulty_name, max_players FROM leaderboard_guild_clear_observations WHERE tenant_id= $1::uuid AND run_id= $2::uuid) scopes
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players) DO UPDATE SET revision=leaderboard_dirty_guild_clear_benchmarks.revision+1, dirtied_at=clock_timestamp(), process_after=LEAST(leaderboard_dirty_guild_clear_benchmarks.process_after,EXCLUDED.process_after) RETURNING 1
+),
+GuildClearSubject AS (
+ INSERT INTO leaderboard_dirty_guild_clear_subjects (tenant_id, instance_name, difficulty_name, max_players, realm_id, guild_id, process_after)
+ SELECT scopes.tenant_id, scopes.instance_name, scopes.difficulty_name, scopes.max_players, scopes.realm_id, scopes.guild_id, clock_timestamp() FROM (SELECT DISTINCT tenant_id, instance_name, difficulty_name, max_players, realm_id, guild_id FROM leaderboard_guild_clear_observations WHERE tenant_id= $1::uuid AND run_id= $2::uuid) scopes
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, realm_id, guild_id) DO UPDATE SET revision=leaderboard_dirty_guild_clear_subjects.revision+1, dirtied_at=clock_timestamp(), process_after=LEAST(leaderboard_dirty_guild_clear_subjects.process_after,EXCLUDED.process_after) RETURNING 1
+),
+PlayerRenownCount AS (
+ INSERT INTO leaderboard_dirty_player_renown (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, player_guid, process_after)
+ SELECT scopes.tenant_id, scopes.instance_name, scopes.difficulty_name, scopes.max_players, scopes.encounter_name, scopes.realm_id, scopes.player_guid, clock_timestamp() FROM (SELECT DISTINCT tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, player_guid FROM leaderboard_player_renown_facts WHERE tenant_id= $1::uuid AND run_id= $2::uuid) scopes
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, player_guid) DO UPDATE SET revision=leaderboard_dirty_player_renown.revision+1, dirtied_at=clock_timestamp(), process_after=LEAST(leaderboard_dirty_player_renown.process_after,EXCLUDED.process_after) RETURNING 1
+),
+GuildRenownCount AS (
+ INSERT INTO leaderboard_dirty_guild_renown (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id, process_after)
+ SELECT scopes.tenant_id, scopes.instance_name, scopes.difficulty_name, scopes.max_players, scopes.encounter_name, scopes.realm_id, scopes.guild_id, clock_timestamp() FROM (SELECT DISTINCT tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id FROM leaderboard_guild_renown_facts WHERE tenant_id= $1::uuid AND run_id= $2::uuid) scopes
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id) DO UPDATE SET revision=leaderboard_dirty_guild_renown.revision+1, dirtied_at=clock_timestamp(), process_after=LEAST(leaderboard_dirty_guild_renown.process_after,EXCLUDED.process_after) RETURNING 1
+)
+SELECT 1
+`
+
+type EnqueueLeaderboardRunEvidenceScopesParams struct {
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RunID    uuid.UUID `db:"run_id" json:"run_id"`
+}
+
+func (q *sqlQuerier) EnqueueLeaderboardRunEvidenceScopes(ctx context.Context, arg EnqueueLeaderboardRunEvidenceScopesParams) error {
+	_, err := q.db.Exec(ctx, enqueueLeaderboardRunEvidenceScopes, arg.TenantID, arg.RunID)
+	return err
+}
+
+const projectLeaderboardRun = `-- name: ProjectLeaderboardRun :many
+WITH source AS MATERIALIZED (
+ SELECT rr.run_id, li.id AS source_instance_id, li.realm_id, li.guild_id,
+        li.name AS instance_name, li.difficulty_name, li.max_players::smallint AS max_players,
+        s.tenant_id
+ FROM ranking_runs rr
+ JOIN log_instances li ON li.id=rr.representative_instance_id
+  AND COALESCE(li.duplicate_group_id,li.id)=rr.run_id
+  AND li.realm_id=rr.realm_id AND li.name=rr.instance_name
+  AND li.difficulty_name=rr.difficulty_name AND li.max_players=rr.max_players
+ JOIN wow_log_groups lg ON lg.id=li.log_group_id AND NOT lg.unlisted
+ JOIN wow_server_realms r ON r.id=li.realm_id
+ JOIN wow_servers s ON s.id=r.server_id AND s.tenant_id= $1::uuid
+ WHERE rr.run_id= $2::uuid AND li.invalidated_at IS NULL
+), players AS MATERIALIZED (
+ SELECT s.run_id, s.source_instance_id, s.realm_id, s.guild_id, s.instance_name, s.difficulty_name, s.max_players, s.tenant_id, d.id AS ranking_id, d.player_guid, d.player_class,d.player_spec,d.player_sub_spec,
+        d.dps,d.hps,e.id AS encounter_id,e.name AS encounter_name
+ FROM source s JOIN encounter_dps_rankings d ON d.instance_id=s.source_instance_id
+  AND d.realm_id=s.realm_id AND d.instance_name=s.instance_name
+  AND d.difficulty_name=s.difficulty_name AND d.max_players=s.max_players
+ JOIN log_instance_encounters e ON e.id=d.encounter_id AND e.instance_id=s.source_instance_id
+  AND e.name=d.encounter_name AND e.boss AND e.kill_type='clean'
+ WHERE btrim(d.player_guid)<>'' AND btrim(d.player_class)<>'' AND btrim(d.player_spec)<>''
+), player_metrics AS MATERIALIZED (
+ SELECT players.run_id, players.source_instance_id, players.realm_id, players.guild_id, players.instance_name, players.difficulty_name, players.max_players, players.tenant_id, players.ranking_id, players.player_guid, players.player_class, players.player_spec, players.player_sub_spec, players.dps, players.hps, players.encounter_id, players.encounter_name, 'dps'::text AS metric,dps AS metric_value FROM players
+ UNION ALL SELECT players.run_id, players.source_instance_id, players.realm_id, players.guild_id, players.instance_name, players.difficulty_name, players.max_players, players.tenant_id, players.ranking_id, players.player_guid, players.player_class, players.player_spec, players.player_sub_spec, players.dps, players.hps, players.encounter_id, players.encounter_name, 'hps'::text AS metric,hps AS metric_value FROM players
+), guild_source AS MATERIALIZED (
+ SELECT s.run_id, s.source_instance_id, s.realm_id, s.guild_id, s.instance_name, s.difficulty_name, s.max_players, s.tenant_id FROM source s JOIN guilds g ON g.id=s.guild_id AND g.realm_id=s.realm_id
+), guild_times AS MATERIALIZED (
+ SELECT s.run_id, s.source_instance_id, s.realm_id, s.guild_id, s.instance_name, s.difficulty_name, s.max_players, s.tenant_id, t.id AS time_score_id,t.clear_duration_ms
+ FROM guild_source s JOIN time_parse_scores t ON t.instance_id=s.source_instance_id
+  AND t.run_id=s.run_id AND t.tenant_id=s.tenant_id AND t.realm_id=s.realm_id AND t.guild_id=s.guild_id
+), guild_bosses AS MATERIALIZED (
+ SELECT s.run_id, s.source_instance_id, s.realm_id, s.guild_id, s.instance_name, s.difficulty_name, s.max_players, s.tenant_id, s.time_score_id, s.clear_duration_ms, b.duration_ms,e.id AS encounter_id,e.name AS encounter_name
+ FROM guild_times s JOIN time_parse_boss_scores b ON b.time_parse_score_id=s.time_score_id
+ JOIN log_instance_encounters e ON e.id=b.encounter_id AND e.instance_id=s.source_instance_id
+  AND e.name=b.encounter_name AND e.boss AND e.kill_type='clean'
+ WHERE b.duration_ms>0
+), projected AS (
+(SELECT DISTINCT ON (s.encounter_name,s.player_guid,s.player_class,s.player_spec,s.player_sub_spec,s.metric) 1::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.difficulty_name AS difficulty_name, s.max_players AS max_players, s.encounter_name AS encounter_name, s.player_guid AS player_guid, s.player_class AS player_class, s.player_spec AS player_spec, s.player_sub_spec AS player_sub_spec, s.metric AS metric, s.metric_value AS metric_value, '00000000-0000-0000-0000-000000000000'::uuid AS guild_id, s.encounter_id AS source_encounter_id, s.ranking_id AS source_ranking_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_time_parse_score_id, 0::bigint AS duration_ms
+ FROM player_metrics s WHERE s.metric_value>=0 AND s.metric_value<'Infinity'::double precision
+ ORDER BY s.encounter_name,s.player_guid,s.player_class,s.player_spec,s.player_sub_spec,metric,metric_value DESC,source_encounter_id,source_ranking_id)
+UNION ALL
+(SELECT DISTINCT ON (s.encounter_name) 2::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.difficulty_name AS difficulty_name, s.max_players AS max_players, s.encounter_name AS encounter_name, ''::text AS player_guid, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, s.guild_id AS guild_id, s.encounter_id AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, s.time_score_id AS source_time_parse_score_id, s.duration_ms AS duration_ms
+ FROM guild_bosses s
+ ORDER BY s.encounter_name,s.duration_ms,s.encounter_id)
+UNION ALL
+(SELECT DISTINCT ON (s.guild_id) 3::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.difficulty_name AS difficulty_name, s.max_players AS max_players, ''::text AS encounter_name, ''::text AS player_guid, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, s.guild_id AS guild_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, s.time_score_id AS source_time_parse_score_id, s.clear_duration_ms AS duration_ms
+ FROM guild_times s WHERE s.clear_duration_ms>0
+ ORDER BY s.guild_id,s.clear_duration_ms,s.time_score_id)
+UNION ALL
+(SELECT DISTINCT ON (s.encounter_name,s.player_guid) 4::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.difficulty_name AS difficulty_name, s.max_players AS max_players, s.encounter_name AS encounter_name, s.player_guid AS player_guid, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, '00000000-0000-0000-0000-000000000000'::uuid AS guild_id, s.encounter_id AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_time_parse_score_id, 0::bigint AS duration_ms
+ FROM players s
+ ORDER BY s.encounter_name,s.player_guid,s.encounter_id)
+UNION ALL
+(SELECT DISTINCT ON (e.name) 5::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.difficulty_name AS difficulty_name, s.max_players AS max_players, e.name AS encounter_name, ''::text AS player_guid, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, s.guild_id AS guild_id, e.id AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_time_parse_score_id, 0::bigint AS duration_ms
+ FROM guild_source s JOIN log_instance_encounters e ON e.instance_id=s.source_instance_id AND e.boss AND e.kill_type='clean'
+ ORDER BY e.name,e.id)
+) SELECT kind, tenant_id, run_id, source_instance_id, realm_id, instance_name, difficulty_name, max_players, encounter_name, player_guid, player_class, player_spec, player_sub_spec, metric, metric_value, guild_id, source_encounter_id, source_ranking_id, source_time_parse_score_id, duration_ms FROM projected
+`
+
+type ProjectLeaderboardRunParams struct {
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RunID    uuid.UUID `db:"run_id" json:"run_id"`
+}
+
+type ProjectLeaderboardRunRow struct {
+	Kind                   int32         `db:"kind" json:"kind"`
+	TenantID               uuid.NullUUID `db:"tenant_id" json:"tenant_id"`
+	RunID                  uuid.UUID     `db:"run_id" json:"run_id"`
+	SourceInstanceID       uuid.UUID     `db:"source_instance_id" json:"source_instance_id"`
+	RealmID                uuid.UUID     `db:"realm_id" json:"realm_id"`
+	InstanceName           string        `db:"instance_name" json:"instance_name"`
+	DifficultyName         string        `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers             int16         `db:"max_players" json:"max_players"`
+	EncounterName          string        `db:"encounter_name" json:"encounter_name"`
+	PlayerGuid             string        `db:"player_guid" json:"player_guid"`
+	PlayerClass            string        `db:"player_class" json:"player_class"`
+	PlayerSpec             string        `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec          string        `db:"player_sub_spec" json:"player_sub_spec"`
+	Metric                 string        `db:"metric" json:"metric"`
+	MetricValue            float64       `db:"metric_value" json:"metric_value"`
+	GuildID                uuid.UUID     `db:"guild_id" json:"guild_id"`
+	SourceEncounterID      uuid.UUID     `db:"source_encounter_id" json:"source_encounter_id"`
+	SourceRankingID        uuid.UUID     `db:"source_ranking_id" json:"source_ranking_id"`
+	SourceTimeParseScoreID uuid.UUID     `db:"source_time_parse_score_id" json:"source_time_parse_score_id"`
+	DurationMs             int64         `db:"duration_ms" json:"duration_ms"`
+}
+
+// One statement snapshot: no source, canonical, or dirty-row locks. Missing
+// stages yield only available evidence. No normalized parse score is selected.
+func (q *sqlQuerier) ProjectLeaderboardRun(ctx context.Context, arg ProjectLeaderboardRunParams) ([]ProjectLeaderboardRunRow, error) {
+	rows, err := q.db.Query(ctx, projectLeaderboardRun, arg.TenantID, arg.RunID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ProjectLeaderboardRunRow
+	for rows.Next() {
+		var i ProjectLeaderboardRunRow
+		if err := rows.Scan(
+			&i.Kind,
+			&i.TenantID,
+			&i.RunID,
+			&i.SourceInstanceID,
+			&i.RealmID,
+			&i.InstanceName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.EncounterName,
+			&i.PlayerGuid,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+			&i.Metric,
+			&i.MetricValue,
+			&i.GuildID,
+			&i.SourceEncounterID,
+			&i.SourceRankingID,
+			&i.SourceTimeParseScoreID,
+			&i.DurationMs,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLeaderboardDirtyRuns = `-- name: ListLeaderboardDirtyRuns :many
-SELECT tenant_id, run_id, revision, dirtied_at, process_after FROM leaderboard_dirty_runs WHERE tenant_id = $1::uuid
+SELECT tenant_id, run_id, revision, dirtied_at, process_after, claim_token, claimed_revision, locked_until, retry_after, attempts FROM leaderboard_dirty_runs WHERE tenant_id = $1::uuid
 `
 
 func (q *sqlQuerier) ListLeaderboardDirtyRuns(ctx context.Context, tenantID uuid.UUID) ([]LeaderboardDirtyRun, error) {
@@ -12835,6 +13280,11 @@ func (q *sqlQuerier) ListLeaderboardDirtyRuns(ctx context.Context, tenantID uuid
 			&i.Revision,
 			&i.DirtiedAt,
 			&i.ProcessAfter,
+			&i.ClaimToken,
+			&i.ClaimedRevision,
+			&i.LockedUntil,
+			&i.RetryAfter,
+			&i.Attempts,
 		); err != nil {
 			return nil, err
 		}

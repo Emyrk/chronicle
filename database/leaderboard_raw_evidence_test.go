@@ -58,6 +58,20 @@ func TestLeaderboardRawMigrationRoundTrip(t *testing.T) {
 		_, err = conn.Exec(ctx, string(script))
 		require.NoError(t, err)
 	}
+	// Restore subsequent additive migrations before exercising the current
+	// generated queries: the D1 row now includes ownership/retry columns.
+	for _, migration := range []string{
+		"000346_leaderboard_player_read_index",
+		"000347_leaderboard_peak_provenance",
+		"000348_leaderboard_evidence_benchmarks",
+		"000349_leaderboard_d2_claims",
+		"000350_leaderboard_d1_claims",
+	} {
+		script, err := os.ReadFile("migrations/" + migration + ".up.sql")
+		require.NoError(t, err)
+		_, err = conn.Exec(ctx, string(script))
+		require.NoError(t, err)
+	}
 	_, err = conn.Exec(ctx, "SET ROLE chronicle")
 	require.NoError(t, err)
 	store := database.NewQueries(conn)
