@@ -11,6 +11,7 @@ import (
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
+	"github.com/Emyrk/chronicle/internal/aikey"
 	"golang.org/x/time/rate"
 )
 
@@ -60,6 +61,12 @@ func (l *externalIPLimiter) middleware(next http.Handler) http.Handler {
 
 func (l *externalIPLimiter) middlewareWithCost(cost int, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Keyed requests were already charged to the key's own view buckets.
+		// AI fetchers share IPs, so they must not share an IP bucket too.
+		if _, ok := aikey.FromContext(r.Context()); ok {
+			next.ServeHTTP(w, r)
+			return
+		}
 		limiter := l.get(externalClientIP(r))
 		allowed := limiter.AllowN(time.Now(), cost)
 		l.setHeaders(w, limiter)

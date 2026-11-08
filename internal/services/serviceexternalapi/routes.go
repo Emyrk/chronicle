@@ -153,6 +153,58 @@ func (s *Service) registerRoutes() {
 		}}),
 	}, s.getInstanceRankingRecordsBySlug)
 
+	s.registerWithRateLimitCost(http.MethodGet, "/raidlogs/instances/{instance_id}/deaths", summaryRequestCost, OpenAPIOperation{
+		Tags:    []string{"Raid Instance"},
+		Summary: "Get player deaths per boss pull",
+		Description: "Returns player deaths on each boss pull (kills and wipes) in time order: time into the pull, player, class and role, the killing blow, " +
+			"and the last few damage and heal events the player received in the 10 seconds before death. Each pull reports its outcome, total deaths and first death. " +
+			"Responses include at most 300 individual deaths; later pulls keep their counts and truncated is set. Filter with encounter and attempt. " +
+			"Set format=md for compact markdown tables with absolute links. Results are cached per instance. " +
+			"Each request costs five standard requests of rate limit; when summaries are busy the response is 503 with Retry-After.",
+		Parameters: summaryParameters(),
+		Responses: summaryOKResponse(DeathsResponse{
+			Instance: SummaryInstance{Name: "Molten Core", Slug: "example-instance", RealmName: "Example Realm", URL: "https://chronicle.example/instances/example-instance"},
+			Pulls: []DeathPull{{
+				SummaryPull: SummaryPull{Encounter: "Ragnaros", Attempt: 1, Outcome: "wipe", DurationMs: 192000},
+				TotalDeaths: 1, FirstDeath: &FirstDeath{Player: "Example", TimeIntoPullMs: 45000},
+				Deaths: []PlayerDeath{{
+					TimeIntoPullMs: 45000, Killer: "Ragnaros",
+					Player:      SummaryPlayer{GUID: "0x0000000000000001", Name: "Example", Class: "WARRIOR", Role: "tank", URL: "https://chronicle.example/armory/Example%20Realm/Example"},
+					KillingBlow: &KillingBlow{Ability: "Wrath of Ragnaros", Source: "Ragnaros", Amount: 2345, Overkill: 300},
+					Recap:       []DeathRecapEntry{{TimeIntoPullMs: 44000, Type: "damage", Ability: "Melee", Source: "Ragnaros", Amount: 1200}},
+				}},
+			}},
+		}, "# Deaths: [Molten Core](https://chronicle.example/instances/example-instance)\n\n## Ragnaros, attempt 1 (wipe, 3:12)\n\n1 deaths. First: Example at 0:45.\n\n"+
+			"| Time | Player | Class | Role | Killing blow | Last hits before death |\n|---|---|---|---|---|---|\n"+
+			"| 0:45 | [Example](https://chronicle.example/armory/Example%20Realm/Example) | WARRIOR | tank | Wrath of Ragnaros 2345 by Ragnaros (overkill 300) | Melee -1200 (Ragnaros) |\n"),
+	}, s.getInstanceDeaths)
+
+	s.registerWithRateLimitCost(http.MethodGet, "/raidlogs/instances/{instance_id}/consumables", summaryRequestCost, OpenAPIOperation{
+		Tags:    []string{"Raid Instance"},
+		Summary: "Get consumables per boss pull and player",
+		Description: "Returns the consumables each player used or had active on each boss pull, plus per-player totals for the whole instance. " +
+			"Counts are physical uses, grouped by item with the same rules as the Consumables panel; candidate_item_ids lists possible items when a use is ambiguous. " +
+			"active_at_pull counts buffs already active when the pull started. Filter pulls with encounter and attempt. " +
+			"Set format=md for compact markdown tables with absolute links. Results are cached per instance. " +
+			"Each request costs five standard requests of rate limit; when summaries are busy the response is 503 with Retry-After.",
+		Parameters: summaryParameters(),
+		Responses: summaryOKResponse(ConsumablesResponse{
+			Instance: SummaryInstance{Name: "Molten Core", Slug: "example-instance", RealmName: "Example Realm", URL: "https://chronicle.example/instances/example-instance"},
+			Pulls: []ConsumablePull{{
+				SummaryPull: SummaryPull{Encounter: "Ragnaros", Attempt: 1, Outcome: "kill", DurationMs: 192000},
+				Players: []PlayerConsumables{{
+					Player: SummaryPlayer{GUID: "0x0000000000000001", Name: "Example", Class: "WARRIOR", URL: "https://chronicle.example/armory/Example%20Realm/Example"},
+					Total:  1, Consumables: []ConsumableCount{{Name: "Flask of the Titans", ItemID: int32Pointer(13510), Count: 1, ActiveAtPull: 1}},
+				}},
+			}},
+			Players: []PlayerConsumables{{
+				Player: SummaryPlayer{GUID: "0x0000000000000001", Name: "Example", Class: "WARRIOR", URL: "https://chronicle.example/armory/Example%20Realm/Example"},
+				Total:  1, Consumables: []ConsumableCount{{Name: "Flask of the Titans", ItemID: int32Pointer(13510), Count: 1, ActiveAtPull: 1}},
+			}},
+		}, "# Consumables: [Molten Core](https://chronicle.example/instances/example-instance)\n\n## Ragnaros, attempt 1 (kill)\n\n"+
+			"| Player | Class | Uses | Consumables |\n|---|---|---|---|\n| [Example](https://chronicle.example/armory/Example%20Realm/Example) | WARRIOR | 1 | Flask of the Titans (pre-pull) |\n"),
+	}, s.getInstanceConsumables)
+
 	s.registerWithRateLimitCost(http.MethodGet, "/raidlogs/instances/{instance_id}/events/{type}", externalEventsRequestCost, OpenAPIOperation{
 		Tags:        []string{"Raid Instance"},
 		Summary:     "Get a raid-instance event stream",
@@ -230,6 +282,8 @@ func (s *Service) registerRoutes() {
 			}},
 		}),
 	}, s.listSpeedrunLeaderboard)
+
+	s.registerSearchRoutes()
 
 	s.register(http.MethodGet, "/openapi.json", OpenAPIOperation{
 		Tags:        []string{"General"},

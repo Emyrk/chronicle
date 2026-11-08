@@ -18,7 +18,8 @@
       "metric": false,
       "on": false,
       "anonymous": true,
-      "cost": 2
+      "cost": 2,
+      "minimum_tier": "free"
     },
     {
       "name": "instance.realm",
@@ -38,7 +39,8 @@
       "metric": false,
       "on": false,
       "anonymous": true,
-      "cost": 2
+      "cost": 2,
+      "minimum_tier": "free"
     },
     {
       "name": "instance.realm_id",
@@ -56,7 +58,8 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 2
+      "cost": 2,
+      "minimum_tier": "free"
     },
     {
       "name": "instance.guild",
@@ -76,7 +79,8 @@
       "metric": false,
       "on": false,
       "anonymous": true,
-      "cost": 2
+      "cost": 2,
+      "minimum_tier": "free"
     },
     {
       "name": "instance.guild_id",
@@ -94,7 +98,8 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 2
+      "cost": 2,
+      "minimum_tier": "free"
     },
     {
       "name": "instance.started_at",
@@ -115,7 +120,8 @@
       "metric": false,
       "on": false,
       "anonymous": true,
-      "cost": 2
+      "cost": 2,
+      "minimum_tier": "free"
     },
     {
       "name": "instance.difficulty",
@@ -135,7 +141,8 @@
       "metric": false,
       "on": false,
       "anonymous": true,
-      "cost": 2
+      "cost": 2,
+      "minimum_tier": "free"
     },
     {
       "name": "instance.max_players",
@@ -156,7 +163,8 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 2
+      "cost": 2,
+      "minimum_tier": "free"
     },
     {
       "name": "instance.category",
@@ -178,7 +186,8 @@
       "metric": false,
       "on": false,
       "anonymous": true,
-      "cost": 2
+      "cost": 2,
+      "minimum_tier": "free"
     },
     {
       "name": "instance.recorder",
@@ -198,7 +207,8 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 2
+      "cost": 2,
+      "minimum_tier": "free"
     },
     {
       "name": "instance.has_video",
@@ -214,7 +224,8 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 4
+      "cost": 4,
+      "minimum_tier": "free"
     },
     {
       "name": "instance.capability",
@@ -241,7 +252,8 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 2
+      "cost": 2,
+      "minimum_tier": "free"
     },
     {
       "name": "instance.player_count",
@@ -262,7 +274,8 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 8
+      "cost": 8,
+      "minimum_tier": "free"
     },
     {
       "name": "instance.bosses_killed",
@@ -283,7 +296,8 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 4
+      "cost": 4,
+      "minimum_tier": "free"
     },
     {
       "name": "instance.wipes",
@@ -304,7 +318,8 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 4
+      "cost": 4,
+      "minimum_tier": "free"
     },
     {
       "name": "instance.deaths",
@@ -325,7 +340,8 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 4
+      "cost": 4,
+      "minimum_tier": "free"
     },
     {
       "name": "instance.clear_time_ms",
@@ -347,7 +363,8 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 4
+      "cost": 4,
+      "minimum_tier": "free"
     },
     {
       "name": "instance.clear_qualified",
@@ -363,7 +380,8 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 4
+      "cost": 4,
+      "minimum_tier": "free"
     },
     {
       "name": "instance.boss_time_ms",
@@ -385,7 +403,8 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 20
+      "cost": 20,
+      "minimum_tier": "honored"
     },
     {
       "name": "instance.trash_time_ms",
@@ -407,7 +426,8 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 20
+      "cost": 20,
+      "minimum_tier": "honored"
     },
     {
       "name": "instance.idle_time_ms",
@@ -429,7 +449,8 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 20
+      "cost": 20,
+      "minimum_tier": "honored"
     },
     {
       "name": "instance.clear_parse",
@@ -451,7 +472,8 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 6
+      "cost": 6,
+      "minimum_tier": "free"
     },
     {
       "name": "instance.kill_time_parse",
@@ -473,7 +495,8 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 8
+      "cost": 8,
+      "minimum_tier": "free"
     },
     {
       "name": "instance.kill_time_ms",
@@ -495,7 +518,8 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 6
+      "cost": 6,
+      "minimum_tier": "free"
     },
     {
       "name": "encounter.name",
@@ -515,7 +539,8 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 2
+      "cost": 2,
+      "minimum_tier": "free"
     },
     {
       "name": "encounter.boss",
@@ -531,7 +556,8 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 2
+      "cost": 2,
+      "minimum_tier": "free"
     },
     {
       "name": "encounter.outcome",
@@ -555,7 +581,8 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 2
+      "cost": 2,
+      "minimum_tier": "free"
     },
     {
       "name": "encounter.killed",
@@ -571,7 +598,8 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 2
+      "cost": 2,
+      "minimum_tier": "free"
     },
     {
       "name": "encounter.duration_ms",
@@ -593,7 +621,8 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 2
+      "cost": 2,
+      "minimum_tier": "free"
     },
     {
       "name": "encounter.kill_time_parse",
@@ -615,7 +644,8 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 8
+      "cost": 8,
+      "minimum_tier": "free"
     },
     {
       "name": "player.name",
@@ -635,7 +665,8 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 2
+      "cost": 2,
+      "minimum_tier": "free"
     },
     {
       "name": "player.guid",
@@ -655,7 +686,8 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 2
+      "cost": 2,
+      "minimum_tier": "free"
     },
     {
       "name": "player.class",
@@ -687,7 +719,8 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 2
+      "cost": 2,
+      "minimum_tier": "free"
     },
     {
       "name": "player.race",
@@ -718,7 +751,8 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 2
+      "cost": 2,
+      "minimum_tier": "free"
     },
     {
       "name": "player.level",
@@ -739,7 +773,8 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 2
+      "cost": 2,
+      "minimum_tier": "free"
     },
     {
       "name": "player.guild",
@@ -759,7 +794,8 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 4
+      "cost": 4,
+      "minimum_tier": "free"
     },
     {
       "name": "player.guild_id",
@@ -777,7 +813,8 @@
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 2
+      "cost": 2,
+      "minimum_tier": "free"
     },
     {
       "name": "player.spec",
@@ -797,7 +834,8 @@
       "metric": false,
       "on": true,
       "anonymous": false,
-      "cost": 6
+      "cost": 6,
+      "minimum_tier": "free"
     },
     {
       "name": "player.sub_spec",
@@ -817,7 +855,8 @@
       "metric": false,
       "on": true,
       "anonymous": false,
-      "cost": 6
+      "cost": 6,
+      "minimum_tier": "free"
     },
     {
       "name": "player.role",
@@ -840,7 +879,8 @@
       "metric": false,
       "on": true,
       "anonymous": false,
-      "cost": 6
+      "cost": 6,
+      "minimum_tier": "free"
     },
     {
       "name": "player.dps",
@@ -861,7 +901,8 @@
       "metric": false,
       "on": true,
       "anonymous": false,
-      "cost": 6
+      "cost": 6,
+      "minimum_tier": "honored"
     },
     {
       "name": "player.hps",
@@ -882,7 +923,8 @@
       "metric": false,
       "on": true,
       "anonymous": false,
-      "cost": 6
+      "cost": 6,
+      "minimum_tier": "honored"
     },
     {
       "name": "player.deaths",
@@ -903,7 +945,8 @@
       "metric": false,
       "on": true,
       "anonymous": false,
-      "cost": 6
+      "cost": 6,
+      "minimum_tier": "free"
     },
     {
       "name": "player.avg_ilvl",
@@ -924,7 +967,8 @@
       "metric": false,
       "on": true,
       "anonymous": false,
-      "cost": 6
+      "cost": 6,
+      "minimum_tier": "honored"
     },
     {
       "name": "player.parse",
@@ -946,7 +990,8 @@
       "metric": true,
       "on": false,
       "anonymous": false,
-      "cost": 21
+      "cost": 21,
+      "minimum_tier": "honored"
     }
   ],
   "sorts": [

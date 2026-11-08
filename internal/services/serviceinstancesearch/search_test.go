@@ -139,3 +139,78 @@ func TestSearchGoCaller(t *testing.T) {
 	require.Equal(t, 1, result.Cost)
 	require.False(t, errors.Is(result.Err, ErrInvalid))
 }
+
+func TestFieldTierRequirements(t *testing.T) {
+	t.Parallel()
+	db, _ := dbtestutil.NewDB(t)
+	tiers := map[uuid.UUID]string{}
+	free, honored := uuid.New(), uuid.New()
+	tiers[free], tiers[honored] = "free", "honored"
+	s := New(testutil.Logger(t), db, prometheus.NewRegistry(), func(_ context.Context, user uuid.UUID) (UserAccess, error) {
+		return AccessForTier(tiers[user]), nil
+	})
+	s.search = func(context.Context, database.Store, instancesearch.Compiled, instancesearch.SearchOptions) (instancesearch.Page, error) {
+		return instancesearch.Page{Results: []instancesearch.Result{}}, nil
+	}
+	s.explain = func(context.Context, database.Store, instancesearch.CompiledExplain, instancesearch.SearchOptions) (instancesearch.Explanation, error) {
+		return instancesearch.Explanation{}, nil
+	}
+	s.runtimeCost = func(time.Duration) int { return 0 }
+
+	pred := func(field string, op chroniclesdk.InstanceSearchOp, value any) chroniclesdk.InstanceSearchNode {
+		return chroniclesdk.InstanceSearchNode{Field: field, Op: op, Value: value}
+	}
+	parse := pred("player.parse", chroniclesdk.InstanceSearchOpGte, 90)
+	class := pred("player.class", chroniclesdk.InstanceSearchOpEq, "MAGE")
+	zone := pred("instance.name", chroniclesdk.InstanceSearchOpEq, "Molten Core")
+	idle := pred("instance.idle_time_ms", chroniclesdk.InstanceSearchOpLte, 60000)
+	trees := map[string]chroniclesdk.InstanceSearchNode{
+		"AnyPlayer":    {AnyPlayer: &parse},
+		"Or":           {Or: []chroniclesdk.InstanceSearchNode{zone, idle}},
+		"Not":          {Not: &idle},
+		"CountPlayers": {CountPlayers: &chroniclesdk.InstanceSearchCount{Where: &chroniclesdk.InstanceSearchNode{And: []chroniclesdk.InstanceSearchNode{class, parse}}, Op: chroniclesdk.InstanceSearchOpGte, Value: 1}},
+		"NestedOrInPlayer": {And: []chroniclesdk.InstanceSearchNode{zone, {AnyPlayer: &chroniclesdk.InstanceSearchNode{
+			Or: []chroniclesdk.InstanceSearchNode{class, pred("player.dps", chroniclesdk.InstanceSearchOpGte, 1000)}}}}},
+	}
+	for name, tree := range trees {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx := testutil.Context(t, testutil.WaitShort)
+			q := chroniclesdk.InstanceSearchQuery{Where: &tree}
+
+			_, result := s.Search(ctx, Caller{UserID: free, TenantID: uuid.New()}, q)
+			require.ErrorIs(t, result.Err, ErrSupporterRequired)
+			require.Equal(t, "honored", result.RequiredTier)
+			require.NotEmpty(t, result.RequiredField)
+			_, result = s.Explain(ctx, Caller{UserID: free, TenantID: uuid.New()}, q, uuid.New())
+			require.ErrorIs(t, result.Err, ErrSupporterRequired)
+			require.Equal(t, "honored", result.RequiredTier)
+
+			_, result = s.Search(ctx, Caller{UserID: honored, TenantID: uuid.New()}, q)
+			require.NoError(t, result.Err)
+			_, result = s.Explain(ctx, Caller{UserID: honored, TenantID: uuid.New()}, q, uuid.New())
+			require.NoError(t, result.Err)
+		})
+	}
+
+	t.Run("FreeFieldsStayFree", func(t *testing.T) {
+		t.Parallel()
+		ctx := testutil.Context(t, testutil.WaitShort)
+		tree := chroniclesdk.InstanceSearchNode{And: []chroniclesdk.InstanceSearchNode{zone, {AnyPlayer: &class}}}
+		_, result := s.Search(ctx, Caller{UserID: free, TenantID: uuid.New()}, chroniclesdk.InstanceSearchQuery{Where: &tree})
+		require.NoError(t, result.Err)
+	})
+
+	t.Run("RejectedSearchIsNotCharged", func(t *testing.T) {
+		t.Parallel()
+		ctx := testutil.Context(t, testutil.WaitShort)
+		// An unknown user resolves to the free tier.
+		caller := Caller{UserID: uuid.New(), TenantID: uuid.New()}
+		tree := chroniclesdk.InstanceSearchNode{AnyPlayer: &parse}
+		_, result := s.Search(ctx, caller, chroniclesdk.InstanceSearchQuery{Where: &tree})
+		require.ErrorIs(t, result.Err, ErrSupporterRequired)
+		status, _, err := s.Peek(ctx, caller)
+		require.NoError(t, err)
+		require.Equal(t, 100.0, status.Remaining)
+	})
+}

@@ -60,6 +60,8 @@ players.filter(p, p.class == "PRIEST").size() >= 3
 
 They have a per-IP bucket. Everything else returns 403 "Log in to use advanced search."
 
+**Supporter tiers.** Each field has a `MinimumTier` (empty = free), published as `minimum_tier` in `GET /search/fields` and in `fields.md`. The costly fields need Honored: `player.parse`, `player.dps`, `player.hps`, `player.avg_ilvl`, `instance.boss_time_ms`, `instance.trash_time_ms`, `instance.idle_time_ms`. `serviceinstancesearch.run` checks every field in `Compiled.Fields`, which includes fields nested in `and` / `or` / `not` and the quantifiers, against the caller's tier. Below the minimum it returns `ErrSupporterRequired` with `RequiredTier` and `RequiredField`: a 403 "Searching by <field> is an Honored supporter perk.", uncharged. Search and explain share this path, and so do session users, bearer tokens, AI keys (`/api/external/v1`, a key acts at its owner's tier) and in-process callers (Discord bot, site assistant). Anonymous callers get the log-in 403 first. Sorts have their own `minimum_tier` (below). The Blocks / Code editor lock is UI-only: the server does not gate query shapes.
+
 **Cost.** `Compiled.Cost` adds up per-field weights (`field.Cost`, default 2), plus 2 per `or`, 1 per `not`, 4 per `any_*` and 10 per `count_*`, plus a base of 1. The rate limiter charges that static cost before execution, then 10 additional tokens per second of execution (rounded up):
 - logged-in users: 60 tokens a minute, with burst 100 for free users, 300 for Honored, 800 for Revered and 2000 for Exalted
 - anonymous: 20 tokens a minute, burst 40 per IP

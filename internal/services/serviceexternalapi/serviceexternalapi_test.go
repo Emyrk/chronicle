@@ -92,18 +92,19 @@ func TestOpenAPISpec(t *testing.T) {
 		{Name: "Explore", Description: "Discover servers, realms, recent raids, and leaderboards."},
 		{Name: "Characters", Description: "Look up characters and their raid history."},
 		{Name: "Raid Instance", Description: "Inspect one parsed raid instance and its data."},
+		{Name: "Search", Description: "Search raid runs with Chronicle's search query language. Anonymous callers get the public subset."},
 		{Name: "General", Description: "API health and contract endpoints."},
 	}, document.Tags)
 
 	characterLogs, ok := document.Paths["/characters/{server}/{realm}/{character}/instances"]["get"]
 	require.True(t, ok)
-	require.Len(t, characterLogs.Parameters, 5)
+	require.Len(t, characterLogs.Parameters, 6)
 	require.Equal(t, "page_size", characterLogs.Parameters[4].Name)
 
 	individualLeaderboard, ok := document.Paths["/leaderboards"]["get"]
 	require.True(t, ok)
 	require.Equal(t, "Get the individual performance leaderboard", individualLeaderboard.Summary)
-	require.Len(t, individualLeaderboard.Parameters, 14)
+	require.Len(t, individualLeaderboard.Parameters, 15)
 	require.Equal(t, "instance_names", individualLeaderboard.Parameters[0].Name)
 	require.Equal(t, "metric", individualLeaderboard.Parameters[10].Name)
 	require.Equal(t, "offset", individualLeaderboard.Parameters[13].Name)
@@ -113,7 +114,7 @@ func TestOpenAPISpec(t *testing.T) {
 
 	leaderboard, ok := document.Paths["/leaderboards/speedruns"]["get"]
 	require.True(t, ok)
-	require.Len(t, leaderboard.Parameters, 10)
+	require.Len(t, leaderboard.Parameters, 11)
 	require.Equal(t, "instance_name", leaderboard.Parameters[0].Name)
 	require.True(t, leaderboard.Parameters[0].Required)
 	require.Equal(t, []string{"Explore"}, leaderboard.Tags)
@@ -124,7 +125,7 @@ func TestOpenAPISpec(t *testing.T) {
 	recent, ok := document.Paths["/raidlogs/recent"]["get"]
 	require.True(t, ok)
 	require.Equal(t, "List recent raid activity", recent.Summary)
-	require.Len(t, recent.Parameters, 8)
+	require.Len(t, recent.Parameters, 9)
 	require.Equal(t, "after_date", recent.Parameters[0].Name)
 	require.Equal(t, "upload_after", recent.Parameters[1].Name)
 	require.Equal(t, []string{"Explore"}, recent.Tags)
@@ -133,7 +134,7 @@ func TestOpenAPISpec(t *testing.T) {
 	instance, ok := document.Paths["/raidlogs/instances/{instance_id}"]["get"]
 	require.True(t, ok)
 	require.Equal(t, "Get a raid instance", instance.Summary)
-	require.Len(t, instance.Parameters, 2)
+	require.Len(t, instance.Parameters, 3)
 	require.Equal(t, []string{"Raid Instance"}, instance.Tags)
 	require.Equal(t, "instance_id", instance.Parameters[0].Name)
 	require.Equal(t, "attendance_only", instance.Parameters[1].Name)
@@ -143,13 +144,13 @@ func TestOpenAPISpec(t *testing.T) {
 	rankingRecords, ok := document.Paths["/raidlogs/instances/{instance_id}/ranking-records"]["get"]
 	require.True(t, ok)
 	require.Equal(t, "Get raid-instance DPS and HPS metrics", rankingRecords.Summary)
-	require.Len(t, rankingRecords.Parameters, 1)
+	require.Len(t, rankingRecords.Parameters, 2)
 	require.Equal(t, "instance_id", rankingRecords.Parameters[0].Name)
 
 	events, ok := document.Paths["/raidlogs/instances/{instance_id}/events/{type}"]["get"]
 	require.True(t, ok)
 	require.Equal(t, "Get a raid-instance event stream", events.Summary)
-	require.Len(t, events.Parameters, 2)
+	require.Len(t, events.Parameters, 3)
 	require.Contains(t, events.Responses["200"].Content, "application/octet-stream")
 	require.Contains(t, events.Responses, "429")
 
@@ -158,4 +159,13 @@ func TestOpenAPISpec(t *testing.T) {
 	require.Equal(t, "Check API health", health.Summary)
 	require.Contains(t, health.Responses, "200")
 	require.NotContains(t, health.Responses, "429")
+	require.Empty(t, health.Parameters)
+
+	// Every data route documents the optional AI key last.
+	for _, op := range []OpenAPIOperation{characterLogs, individualLeaderboard, leaderboard, recent, instance, rankingRecords, events} {
+		last := op.Parameters[len(op.Parameters)-1]
+		require.Equal(t, "ai_key", last.Name, op.Summary)
+		require.False(t, last.Required, op.Summary)
+		require.Contains(t, op.Responses, "401", op.Summary)
+	}
 }

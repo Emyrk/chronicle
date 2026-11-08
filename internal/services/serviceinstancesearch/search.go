@@ -51,6 +51,11 @@ func tierAtLeast(tier, minimum string) bool {
 	return rank[tier] >= rank[minimum]
 }
 
+// FieldAllowed reports whether a caller at tier may filter on field.
+func FieldAllowed(tier, field string) bool {
+	return tierAtLeast(tier, string(instancesearch.FieldMinimumTier(field)))
+}
+
 // Caller is an explicit identity and tenant selection. A nil UserID identifies
 // an anonymous caller, bucketed by IP. A user is bucketed by UUID across both
 // HTTP and internal consumers; neither identity nor tenant is taken from ctx.
@@ -88,7 +93,10 @@ type Result struct {
 	Status       ratelimit.Status
 	RetryAfter   time.Duration
 	RequiredTier string
-	Err          error
+	// RequiredField is the field that needs RequiredTier. Empty when a sort
+	// needs it.
+	RequiredField string
+	Err           error
 }
 
 var (
@@ -127,6 +135,11 @@ func (s *Service) ObserveInvalidBody(c Caller, explain bool, start time.Time) {
 func (s *Service) Slots() chan struct{} { return s.slots } // Useful for deterministic admission tests.
 func (s *Service) SetUserAccessResolver(resolver UserAccessResolver) {
 	s.resolveUserAccess = resolver
+}
+
+// UserAccess resolves a user's live supporter tier and search budget.
+func (s *Service) UserAccess(ctx context.Context, user uuid.UUID) (UserAccess, error) {
+	return s.resolveUserAccess(ctx, user)
 }
 func (s *Service) kind(c Caller) string {
 	if c.UserID != uuid.Nil {
@@ -232,6 +245,15 @@ func (s *Service) run(ctx context.Context, c Caller, q chroniclesdk.InstanceSear
 		if err = instancesearch.CheckAnonymous(q); err != nil {
 			result.Status, _ = limiter.PeekWithLimit(ctx, subject, limit)
 			return fail(errors.Join(ErrLoginRequired, err), "login_required")
+		}
+	}
+	// Fields lists every predicate in the tree, inside and / or / not and
+	// the quantifiers too, so this gates nested uses.
+	for _, field := range compiled.Fields {
+		if !FieldAllowed(access.Tier, field) {
+			result.RequiredTier, result.RequiredField = string(instancesearch.FieldMinimumTier(field)), field
+			result.Status, _ = limiter.PeekWithLimit(ctx, subject, limit)
+			return fail(ErrSupporterRequired, "supporter_required")
 		}
 	}
 	take, err := limiter.TakeWithLimit(ctx, subject, float64(result.Cost), limit)

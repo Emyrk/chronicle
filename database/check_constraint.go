@@ -172,6 +172,10 @@ const (
 	CheckLeaderboardLayersRequiredFlavorsCheck                   CheckConstraint = "leaderboard_layers_required_flavors_check"                     // leaderboard_layers
 	CheckLeaderboardMemberOverridesCheck                         CheckConstraint = "leaderboard_member_overrides_check"                            // leaderboard_member_overrides
 	CheckLeaderboardMemberOverridesPositionCheck                 CheckConstraint = "leaderboard_member_overrides_position_check"                   // leaderboard_member_overrides
+	CheckLeaderboardOperationsCheck                              CheckConstraint = "leaderboard_operations_check"                                  // leaderboard_operations
+	CheckLeaderboardOperationsPurposeCheck                       CheckConstraint = "leaderboard_operations_purpose_check"                          // leaderboard_operations
+	CheckLeaderboardOperationsScopeCheck                         CheckConstraint = "leaderboard_operations_scope_check"                            // leaderboard_operations
+	CheckLeaderboardOperationsStateCheck                         CheckConstraint = "leaderboard_operations_state_check"                            // leaderboard_operations
 	CheckLeaderboardPlayerBossBenchmarksAlgorithmVersionCheck    CheckConstraint = "leaderboard_player_boss_benchmarks_algorithm_version_check"    // leaderboard_player_boss_benchmarks
 	CheckLeaderboardPlayerBossBenchmarksBestMetricCheck          CheckConstraint = "leaderboard_player_boss_benchmarks_best_metric_check"          // leaderboard_player_boss_benchmarks
 	CheckLeaderboardPlayerBossBenchmarksEncounterNameCheck       CheckConstraint = "leaderboard_player_boss_benchmarks_encounter_name_check"       // leaderboard_player_boss_benchmarks

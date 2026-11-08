@@ -1,16 +1,26 @@
 import { describe, expect, it } from "vitest";
 import type { InstanceSearchFieldsResponse } from "@/api/typesGenerated";
 import fixture from "./fixtures/searchFields.json";
-import { HONORED_FIELDS, fieldLock, treeNeedsHonored } from "./fieldTiers";
+import { fieldLock, honoredFields, treeNeedsHonored as needsHonored } from "./fieldTiers";
 import { KINDS } from "./sentenceKinds";
 import { emptyForm, formToTree, type SearchForm } from "./queryModel";
 
 const desc = fixture as unknown as InstanceSearchFieldsResponse;
 const field = (name: string) => desc.fields.find((f) => f.name === name)!;
+const honored = honoredFields(desc.fields);
+const treeNeedsHonored = (n: Parameters<typeof needsHonored>[0]) => needsHonored(n, honored);
 
 describe("fieldTiers", () => {
-  it("names real fields", () => {
-    for (const name of HONORED_FIELDS) expect(desc.fields.some((f) => f.name === name), name).toBe(true);
+  it("reads the Honored fields from minimum_tier", () => {
+    expect([...honored].sort()).toEqual([
+      "instance.boss_time_ms",
+      "instance.idle_time_ms",
+      "instance.trash_time_ms",
+      "player.avg_ilvl",
+      "player.dps",
+      "player.hps",
+      "player.parse",
+    ]);
   });
 
   it("locks by tier", () => {

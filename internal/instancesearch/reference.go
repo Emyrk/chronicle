@@ -10,7 +10,9 @@ import (
 func FieldReference() string {
 	var b strings.Builder
 	b.WriteString("<!-- Generated from internal/instancesearch/fields.go by TestFieldReference. Do not edit. -->\n")
-	b.WriteString("# Instance search fields\n")
+	b.WriteString("# Instance search fields\n\n")
+	b.WriteString("Tier is the lowest supporter tier that may filter on the field, anywhere in the tree. " +
+		"serviceinstancesearch answers 403 (ErrSupporterRequired) below it, on search and explain.\n")
 	for _, k := range []scopeKind{scopeInstance, scopeEncounter, scopePlayer} {
 		switch k {
 		case scopeInstance:
@@ -20,7 +22,7 @@ func FieldReference() string {
 		case scopePlayer:
 			b.WriteString("\n## Player fields\n\nUse inside `any_player` / `count_players`. All fields in one quantifier refer to the same player.\n\n")
 		}
-		b.WriteString("| Field | Type | Ops | Options | Description |\n|---|---|---|---|---|\n")
+		b.WriteString("| Field | Type | Ops | Options | Tier | Description |\n|---|---|---|---|---|---|\n")
 		for _, f := range fields {
 			if f.Scope != k {
 				continue
@@ -45,8 +47,8 @@ func FieldReference() string {
 			if f.On {
 				opts = append(opts, "on")
 			}
-			fmt.Fprintf(&b, "| `%s` | %s | %s | %s | %s |\n",
-				f.Name, typ, joinOps(f.Type.ops()), strings.Join(opts, ", "), f.Doc)
+			fmt.Fprintf(&b, "| `%s` | %s | %s | %s | %s | %s |\n",
+				f.Name, typ, joinOps(f.Type.ops()), strings.Join(opts, ", "), FieldMinimumTier(f.Name), f.Doc)
 		}
 	}
 	return b.String()

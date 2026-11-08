@@ -870,6 +870,21 @@ type AddonAuthor struct {
 	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
+type AiKey struct {
+	ID            uuid.UUID          `db:"id" json:"id"`
+	UserID        uuid.UUID          `db:"user_id" json:"user_id"`
+	TenantID      uuid.NullUUID      `db:"tenant_id" json:"tenant_id"`
+	TenantScopeID uuid.NullUUID      `db:"tenant_scope_id" json:"tenant_scope_id"`
+	HashedSecret  []byte             `db:"hashed_secret" json:"hashed_secret"`
+	PrivateData   bool               `db:"private_data" json:"private_data"`
+	CreatedAt     pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	ExpiresAt     pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
+	RevokedAt     pgtype.Timestamptz `db:"revoked_at" json:"revoked_at"`
+	LastUsedAt    pgtype.Timestamptz `db:"last_used_at" json:"last_used_at"`
+	LastUserAgent string             `db:"last_user_agent" json:"last_user_agent"`
+	RequestCount  int64              `db:"request_count" json:"request_count"`
+}
+
 type ApplicationModificationRequest struct {
 	ID            uuid.UUID          `db:"id" json:"id"`
 	ApplicationID uuid.UUID          `db:"application_id" json:"application_id"`

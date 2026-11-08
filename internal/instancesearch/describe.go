@@ -27,19 +27,20 @@ func Describe() chroniclesdk.InstanceSearchFieldsResponse {
 			cost = defaultFieldCost
 		}
 		out.Fields = append(out.Fields, chroniclesdk.InstanceSearchField{
-			Name:       f.Name,
-			Scope:      chroniclesdk.InstanceSearchFieldScope(f.Scope.String()),
-			Type:       string(f.Type),
-			Enum:       f.Enum,
-			Ops:        f.Type.ops(),
-			Unit:       f.Unit,
-			Doc:        f.Doc,
-			Bosses:     f.Bosses,
-			ParseScope: f.ParseScope,
-			Metric:     f.Metric,
-			On:         f.On,
-			Anonymous:  slices.Contains(AnonymousFields, f.Name),
-			Cost:       cost,
+			Name:        f.Name,
+			Scope:       chroniclesdk.InstanceSearchFieldScope(f.Scope.String()),
+			Type:        string(f.Type),
+			Enum:        f.Enum,
+			Ops:         f.Type.ops(),
+			Unit:        f.Unit,
+			Doc:         f.Doc,
+			Bosses:      f.Bosses,
+			ParseScope:  f.ParseScope,
+			Metric:      f.Metric,
+			On:          f.On,
+			Anonymous:   slices.Contains(AnonymousFields, f.Name),
+			Cost:        cost,
+			MinimumTier: FieldMinimumTier(f.Name),
 		})
 	}
 	return out

@@ -2,12 +2,15 @@ package serviceexternalapi
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/aikey"
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
+	"github.com/Emyrk/chronicle/internal/services/serviceinstancesearch"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 	"github.com/coder/serpent"
 	"github.com/go-chi/chi/v5"
@@ -51,14 +54,28 @@ type externalAPIStore interface {
 	InstanceRankingRecords(context.Context, uuid.UUID) ([]database.EncounterDpsRanking, error)
 	GetParseScoreResultsForInstance(context.Context, uuid.UUID) ([]database.ParseScoreResult, error)
 	InstanceEvent(context.Context, database.InstanceEventParams) (database.LogInstanceEvent, error)
+	ListConsumableDisambiguationsByDataset(context.Context, uuid.UUID) ([]database.ListConsumableDisambiguationsByDatasetRow, error)
+	GetUserByID(context.Context, uuid.UUID) (database.ChronicleUser, error)
+	GetGuildByID(context.Context, uuid.UUID) (database.GetGuildByIDRow, error)
+	GetWoWServerRealm(context.Context, uuid.UUID) (database.WowServerRealm, error)
+	GetWoWServerRealmByName(context.Context, string) (database.WowServerRealm, error)
 }
 
 type Service struct {
 	broker      *services.Services
+	logger      *slog.Logger
 	db          externalAPIStore
 	router      chi.Router
 	rateLimiter *externalIPLimiter
 	openapi     OpenAPIDocument
+	// search is the replica's shared instance-search service; it owns the
+	// concurrency cap and search rate buckets.
+	search *serviceinstancesearch.Service
+	// aiKeys authenticates ?ai_key= requests. Nil disables AI keys.
+	aiKeys *aikey.Authenticator
+
+	deathCache       *summaryCache[*deathSummary]
+	consumablesCache *summaryCache[*consumablesSummary]
 }
 
 func New(broker *services.Services) *Service {
@@ -71,11 +88,16 @@ func (s *Service) DependsOn() []string {
 	return []string{
 		servicelogger.OnLogger(),
 		servicedbstore.OnDatabaseStore(),
+		serviceinstancesearch.OnSearch(),
 	}
 }
 
 func (s *Service) Start(_ context.Context) error {
-	s.db = servicedbstore.DatabaseStore(s.broker)
+	store := servicedbstore.DatabaseStore(s.broker)
+	s.db = store
+	s.logger = servicelogger.Logger(s.broker)
+	s.search = serviceinstancesearch.SearchService(s.broker)
+	s.aiKeys = aikey.NewAuthenticator(servicelogger.Logger(s.broker), store, s.searchTier)
 	s.setupRoutes()
 	servicelogger.Logger(s.broker).Info("external API service started")
 	return nil
@@ -83,9 +105,22 @@ func (s *Service) Start(_ context.Context) error {
 
 func (s *Service) setupRoutes() {
 	s.router = chi.NewRouter()
+	if s.aiKeys != nil {
+		s.router.Use(s.aiKeys.Middleware)
+	}
 	s.rateLimiter = newExternalIPLimiter()
 	s.openapi = newOpenAPIDocument()
+	summarySlots := make(chan struct{}, summaryMaxConcurrent)
+	s.deathCache = newSummaryCache[*deathSummary](summarySlots)
+	s.consumablesCache = newSummaryCache[*consumablesSummary](summarySlots)
 	s.registerRoutes()
+}
+
+// searchTier is the live supporter tier, from the same check that sets
+// search budgets.
+func (s *Service) searchTier(ctx context.Context, user uuid.UUID) (string, error) {
+	access, err := s.search.UserAccess(ctx, user)
+	return access.Tier, err
 }
 
 func (s *Service) Close(_ context.Context) error { return nil }

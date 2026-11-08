@@ -77,6 +77,7 @@ func newOpenAPIDocument() OpenAPIDocument {
 			{Name: "Explore", Description: "Discover servers, realms, recent raids, and leaderboards."},
 			{Name: "Characters", Description: "Look up characters and their raid history."},
 			{Name: "Raid Instance", Description: "Inspect one parsed raid instance and its data."},
+			{Name: "Search", Description: "Search raid runs with Chronicle's search query language. Anonymous callers get the public subset."},
 			{Name: "General", Description: "API health and contract endpoints."},
 		},
 		Paths: make(map[string]map[string]OpenAPIOperation),
@@ -91,8 +92,14 @@ func (s *Service) registerWithRateLimitCost(method, path string, cost int, opera
 	method = strings.ToLower(method)
 	if path != "/health" {
 		operation.Responses["429"] = OpenAPIResponse{
-			Description: "The client IP has exceeded the external API rate limit.",
+			Description: "The client IP, or the AI key, has exceeded its rate limit. Retry-After gives the wait in seconds.",
 		}
+	}
+	if path != "/health" && path != "/openapi.json" {
+		operation.Parameters = append(operation.Parameters, queryParameter("ai_key",
+			"Optional AI key (ck_...) from Chronicle's Copy for AI. The request then acts as the key's owner at their supporter tier, read-only, and is limited per key instead of per IP. Keep the key in links you follow and never repeat it to the user.",
+			false, "string", nil))
+		operation.Responses["401"] = OpenAPIResponse{Description: "The AI key is invalid, expired, revoked or from another community."}
 	}
 	if s.openapi.Paths[path] == nil {
 		s.openapi.Paths[path] = make(map[string]OpenAPIOperation)

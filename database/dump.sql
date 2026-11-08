@@ -231,6 +231,21 @@ CREATE TABLE addon_authors (
     CONSTRAINT addon_authors_name_check CHECK (((name ~ '^[a-z0-9]+(-[a-z0-9]+)*$'::text) AND ((char_length(name) >= 2) AND (char_length(name) <= 32))))
 );
 
+CREATE TABLE ai_keys (
+    id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    tenant_id uuid,
+    tenant_scope_id uuid GENERATED ALWAYS AS (COALESCE(tenant_id, '00000000-0000-0000-0000-000000000000'::uuid)) STORED,
+    hashed_secret bytea NOT NULL,
+    private_data boolean DEFAULT false NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    revoked_at timestamp with time zone,
+    last_used_at timestamp with time zone,
+    last_user_agent text DEFAULT ''::text NOT NULL,
+    request_count bigint DEFAULT 0 NOT NULL
+);
+
 CREATE TABLE application_modification_requests (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     application_id uuid NOT NULL,
@@ -3409,6 +3424,12 @@ ALTER TABLE ONLY addon_authors
 ALTER TABLE ONLY addon_authors
     ADD CONSTRAINT addon_authors_pkey PRIMARY KEY (user_id);
 
+ALTER TABLE ONLY ai_keys
+    ADD CONSTRAINT ai_keys_hashed_secret_key UNIQUE (hashed_secret);
+
+ALTER TABLE ONLY ai_keys
+    ADD CONSTRAINT ai_keys_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY application_modification_requests
     ADD CONSTRAINT application_modification_requests_pkey PRIMARY KEY (id);
 
@@ -4152,6 +4173,8 @@ ALTER TABLE ONLY wow_servers
 
 CREATE UNIQUE INDEX account_purges_active_user ON account_purges USING btree (user_id) WHERE (status = ANY (ARRAY['pending'::text, 'running'::text]));
 
+CREATE UNIQUE INDEX ai_keys_one_unrevoked_per_user_tenant ON ai_keys USING btree (user_id, tenant_scope_id) WHERE (revoked_at IS NULL);
+
 CREATE INDEX billing_entitlements_user_key_idx ON billing_entitlements USING btree (user_id, entitlement_key);
 
 CREATE INDEX billing_reconciliation_runs_started_at_idx ON billing_reconciliation_runs USING btree (started_at DESC);
@@ -4574,6 +4597,12 @@ CREATE TRIGGER trigger_insert_default_data_grant AFTER INSERT ON users FOR EACH 
 
 ALTER TABLE ONLY addon_authors
     ADD CONSTRAINT addon_authors_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY ai_keys
+    ADD CONSTRAINT ai_keys_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY ai_keys
+    ADD CONSTRAINT ai_keys_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY application_modification_requests
     ADD CONSTRAINT application_modification_requests_application_id_fkey FOREIGN KEY (application_id) REFERENCES server_applications(id) ON DELETE CASCADE;

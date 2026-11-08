@@ -119,6 +119,42 @@ func TestInstanceSearch(t *testing.T) {
 		}
 	})
 
+	t.Run("FieldTierRequirements", func(t *testing.T) {
+		t.Parallel()
+		// player.parse nested in a quantifier needs Honored, on search and explain.
+		parse := `{"any_player": {"or": [{"field": "player.class", "op": "=", "value": "MAGE"}, {"field": "player.parse", "op": ">=", "value": 90}]}}`
+		explain := `{"instance_id": "` + uuid.NewString() + `", "query": {"where": ` + parse + `}}`
+		for _, tc := range []struct {
+			tier                  string
+			search, explainStatus int
+		}{
+			{"free", http.StatusForbidden, http.StatusForbidden},
+			// No run exists, so an allowed explain reaches the 404.
+			{"honored", http.StatusOK, http.StatusNotFound},
+		} {
+			t.Run(tc.tier, func(t *testing.T) {
+				t.Parallel()
+				api, _ := newInstanceSearchAPI(t)
+				api.instanceSearch.SetUserAccessResolver(func(context.Context, uuid.UUID) (serviceinstancesearch.UserAccess, error) {
+					return serviceinstancesearch.AccessForTier(tc.tier), nil
+				})
+				rec := doSearch(t, api, uuid.New(), "10.0.0.1", `{"where": `+parse+`}`)
+				require.Equal(t, tc.search, rec.Code, rec.Body.String())
+				rec2 := doExplain(t, api, uuid.New(), explain)
+				require.Equal(t, tc.explainStatus, rec2.Code, rec2.Body.String())
+				if tc.search != http.StatusForbidden {
+					return
+				}
+				for _, r := range []*httptest.ResponseRecorder{rec, rec2} {
+					var resp chroniclesdk.Response
+					require.NoError(t, json.Unmarshal(r.Body.Bytes(), &resp))
+					require.Equal(t, "Searching by player.parse is an Honored supporter perk.", resp.Message)
+					require.Equal(t, "/supporter", resp.Link)
+				}
+			})
+		}
+	})
+
 	t.Run("Invalid", func(t *testing.T) {
 		t.Parallel()
 		api, _ := newInstanceSearchAPI(t)
@@ -150,7 +186,7 @@ func TestInstanceSearch(t *testing.T) {
 		api, _ := newInstanceSearchAPI(t)
 		preds := make([]string, 40)
 		for i := range preds {
-			preds[i] = `{"field": "instance.idle_time_ms", "op": "<", "value": 1}`
+			preds[i] = `{"field": "instance.player_count", "op": "<", "value": 1}`
 		}
 		rec := doSearch(t, api, uuid.New(), "10.0.0.1", `{"where": {"and": [`+strings.Join(preds, ",")+`]}}`)
 		require.Equal(t, http.StatusTooManyRequests, rec.Code)
@@ -178,7 +214,7 @@ func TestInstanceSearch(t *testing.T) {
 		user := uuid.New()
 		heavy := make([]string, 40)
 		for i := range heavy {
-			heavy[i] = `{"field": "instance.idle_time_ms", "op": "<", "value": 1}`
+			heavy[i] = `{"field": "instance.player_count", "op": "<", "value": 1}`
 		}
 
 		cases := []struct {
@@ -192,7 +228,7 @@ func TestInstanceSearch(t *testing.T) {
 			{"Invalid", user, `{"where": {"field": "instance.nope", "op": "=", "value": 1}}`, http.StatusBadRequest, ""},
 			{"OK", user, simpleSearch, http.StatusOK, "3"},
 			{"LoginRequired", uuid.Nil, advancedSearch, http.StatusForbidden, "13"},
-			{"TooComplex", user, `{"where": {"and": [` + strings.Join(heavy, ",") + `]}}`, http.StatusTooManyRequests, "801"},
+			{"TooComplex", user, `{"where": {"and": [` + strings.Join(heavy, ",") + `]}}`, http.StatusTooManyRequests, "321"},
 		}
 		for _, tc := range cases {
 			rec := doSearch(t, api, tc.user, "10.0.0.9", tc.body)

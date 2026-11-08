@@ -40,7 +40,7 @@ import { addRecentSearch, loadRecentSearches, saveRecentSearches, type RecentSea
 import { HonoredLockTooltip } from "./HonoredLockTooltip";
 import { EXAMPLES, type SearchExample } from "./examples";
 import { SentenceForm } from "./SentenceForm";
-import { treeNeedsHonored } from "./fieldTiers";
+import { honoredFields, treeNeedsHonored } from "./fieldTiers";
 import { bossOptions, realmOptions, zoneOptions } from "./searchOptions";
 import {
   buildQuery,
@@ -57,6 +57,9 @@ import {
 } from "./queryModel";
 import { planSearchDraftUpdate } from "./searchInferenceDraft";
 import { SearchError, runSearch, useSearchFields, useSearchLimit, type SearchBudget } from "./searchApi";
+import { CopyForAI } from "@/features/aiKey/CopyForAI";
+import { searchAIURL, searchEqualsValue } from "@/features/aiKey/aiLinks";
+import { formatClassLabel } from "@/pages/ArmoryPage/characterDisplay";
 
 type Mode = "form" | "blocks" | "code";
 
@@ -119,9 +122,9 @@ export function InstanceSearchPage() {
   const setParams: typeof writeParams = (...args) => { bumpDraftRevision(); writeParams(...args); };
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const supporter = useSupporterTier();
-  // Code and the costly fields (fieldTiers.ts) are an Honored perk (UI only;
-  // the server accepts the same queries from anyone logged in). Form and
-  // Blocks are open to everyone. Assume unlocked while the session loads so
+  // Code and the costly fields (fieldTiers.ts) are an Honored perk. The
+  // server enforces the fields; the Code lock is UI-only. Form and Blocks
+  // are open to everyone. Assume unlocked while the session loads so
   // supporters never see a flash of locks.
   const advancedUnlocked = supporter.isLoading || supporter.atLeast("honored");
   const [showUpsell, setShowUpsell] = useState(false);
@@ -132,6 +135,13 @@ export function InstanceSearchPage() {
   // The submitted search lives in the URL so it can be shared.
   const submittedParam = params.get("q");
   const submittedTree = useMemo(() => decodeQuery(submittedParam), [submittedParam]);
+  const aiPromptValues = useMemo(() => {
+    const cls = searchEqualsValue(submittedTree, "player.class");
+    return {
+      realm: searchEqualsValue(submittedTree, "instance.realm"),
+      class: cls ? formatClassLabel(cls) : null,
+    };
+  }, [submittedTree]);
   const sortFieldParam = params.get("sort");
   const sortDirectionParam = params.get("order");
   const sortScopeParam = params.get("sort_scope");
@@ -141,6 +151,12 @@ export function InstanceSearchPage() {
     [sortFieldParam, sortDirectionParam, sortScopeParam, sortBossParam],
   );
   const selectedSort: InstanceSearchSort = submittedSort ?? DEFAULT_SORT;
+  // The AI gets car 1's keyed GET search (markdown), with the same where tree
+  // and sort the POST search sends; /search itself has no agent view.
+  const aiSearchURL = useMemo(
+    () => searchAIURL(window.location.origin, buildQuery(submittedTree, undefined, submittedSort)),
+    [submittedTree, submittedSort],
+  );
   const [draftSort, writeDraftSort] = useState<InstanceSearchSort>(() => selectedSort);
   const setDraftSort = (sort: InstanceSearchSort) => { bumpDraftRevision(); writeDraftSort(sort); };
   // Logged-out users can view a shared block / code search read-only.
@@ -241,8 +257,10 @@ export function InstanceSearchPage() {
   const enumOf = (name: string) => fields.data?.fields.find((f) => f.name === name)?.enum ?? [];
 
   const anonBlocked = !isAuthenticated && mode === "form" && !formIsBasic(form);
-  // Honored-only fields (UI-only lock, like Code).
-  const honoredBlocked = !advancedUnlocked && !preview && treeNeedsHonored(draftTree);
+  // Honored-only fields (minimum_tier from /search/fields; the server
+  // answers 403 without Honored).
+  const honored = useMemo(() => honoredFields(fields.data?.fields), [fields.data]);
+  const honoredBlocked = !advancedUnlocked && !preview && treeNeedsHonored(draftTree, honored);
   const draftSortOption = fields.data?.sorts.find((option) => option.field === draftSort.field);
   const sortBlocked = draftSortOption ? !sortTierUnlocked(draftSortOption.minimum_tier, supporter.tier, supporter.isLoading) : false;
 
@@ -354,6 +372,9 @@ export function InstanceSearchPage() {
   const limit = useSearchLimit();
   const lastPage = results.data?.pages[results.data.pages.length - 1];
   const error = results.error instanceof SearchError ? results.error : null;
+  // A shared search with Honored fields is refused for viewers without
+  // Honored; they get the upsell instead of an error.
+  const honoredRefused = error?.status === 403 && error.link === "/supporter" && !advancedUnlocked && treeNeedsHonored(submittedTree, honored);
   const searchBudget = lastPage?.budget ?? error?.budget ?? null;
   const recordBudget = useCallback(
     (next: SearchBudget) => {
@@ -442,7 +463,10 @@ export function InstanceSearchPage() {
             </Link>
           </p>
         </div>
-        <BudgetLine budget={budget} lastCost={lastCost} lastRuntimeCost={lastRuntimeCost} pending={collapsed ? null : (liveCost?.total ?? null)} />
+        <div className="flex flex-col items-end gap-2">
+          <BudgetLine budget={budget} lastCost={lastCost} lastRuntimeCost={lastRuntimeCost} pending={collapsed ? null : (liveCost?.total ?? null)} />
+          <CopyForAI page="search" values={aiPromptValues} url={aiSearchURL} />
+        </div>
       </div>
 
       {collapsed ? (
@@ -508,8 +532,8 @@ export function InstanceSearchPage() {
           <RecentSearchesMenu recent={recent} onPick={pickRecent} onClear={clearRecent} />
         </div>
       </div>
-      {!advancedUnlocked && (showUpsell || mode === "code" || honoredBlocked) && (
-        <HonoredUpsell loggedIn={isAuthenticated} note={preview ? "You're previewing an example. " : mode === "code" ? "You're viewing a shared search. " : honoredBlocked ? "This search uses Honored conditions. " : ""} />
+      {!advancedUnlocked && (showUpsell || mode === "code" || honoredBlocked || honoredRefused) && (
+        <HonoredUpsell loggedIn={isAuthenticated} note={preview ? "You're previewing an example. " : mode === "code" ? "You're viewing a shared search. " : honoredBlocked || honoredRefused ? "This search uses Honored conditions. " : ""} />
       )}
 
       {fields.isLoading ? (
@@ -605,7 +629,7 @@ export function InstanceSearchPage() {
       </>
       )}
 
-      {error && <ErrorBox error={error} />}
+      {error && !honoredRefused && <ErrorBox error={error} />}
       {results.error && !error && <ErrorBox error={new SearchError("Search failed.", 0)} />}
 
       {submittedParam !== null && !results.error && (

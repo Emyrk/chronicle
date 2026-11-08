@@ -3,28 +3,23 @@ import type { Node } from "./queryModel";
 
 /*
  * Who can search by a field. Anonymous users get the server's anonymous
- * fields; logged-in users get everything else except the costly fields below,
- * which are for Honored supporters. The Honored lock is UI-only (the server
- * accepts these from anyone logged in), like the Code editor's.
+ * fields; logged-in users get everything else except the costly fields
+ * (player parses and stats, boss / trash / idle time), which are for Honored
+ * supporters. GET /search/fields reports each field's minimum_tier and the
+ * server answers 403 below it. The Code editor's lock is UI-only.
  */
 
-/** The costly fields: player parses and stats, and boss / trash / idle time. */
-export const HONORED_FIELDS: ReadonlySet<string> = new Set([
-  "player.parse",
-  "player.dps",
-  "player.hps",
-  "player.avg_ilvl",
-  "instance.boss_time_ms",
-  "instance.trash_time_ms",
-  "instance.idle_time_ms",
-]);
+/** The fields only Honored supporters can search by, from GET /search/fields. */
+export function honoredFields(fields: readonly InstanceSearchField[] | undefined): ReadonlySet<string> {
+  return new Set((fields ?? []).filter((f) => f.minimum_tier === "honored").map((f) => f.name));
+}
 
 export type FieldLock = "honored" | "login";
 
 /** Why the viewer can't use a field, or null when they can. Unknown access (undefined) counts as allowed. */
 export function fieldLock(field: InstanceSearchField, access: { honored?: boolean; loggedIn?: boolean }): FieldLock | null {
   if (access.loggedIn === false && !field.anonymous) return "login";
-  if (access.honored === false && HONORED_FIELDS.has(field.name)) return "honored";
+  if (access.honored === false && field.minimum_tier === "honored") return "honored";
   return null;
 }
 
@@ -36,7 +31,7 @@ export function treeFields(n: Node | undefined): string[] {
   return kids.flatMap((k) => treeFields(k));
 }
 
-/** True when the tree uses a field only Honored supporters can search by. */
-export function treeNeedsHonored(n: Node | undefined): boolean {
-  return treeFields(n).some((f) => HONORED_FIELDS.has(f));
+/** True when the tree uses one of the honored fields (see honoredFields). */
+export function treeNeedsHonored(n: Node | undefined, honored: ReadonlySet<string>): boolean {
+  return treeFields(n).some((f) => honored.has(f));
 }

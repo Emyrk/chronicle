@@ -292,6 +292,7 @@ func (s *Service) Start(ctx context.Context) error {
 		Assets:                assets,
 		InternalGameData:      gamedata,
 		ExternalAPI:           externalAPI,
+		AgentViews:            externalAPI,
 		OAuth:                 oauthService,
 		Sidekick:              sidekickService,
 		Rankings:              rankings,

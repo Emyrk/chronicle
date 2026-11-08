@@ -13,6 +13,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 )
@@ -55,8 +56,29 @@ type fakeExternalAPIStore struct {
 	event                 database.LogInstanceEvent
 	eventErr              error
 	eventParams           database.InstanceEventParams
+	events                map[string][]byte
+	eventCalls            map[string]int
+	disambiguations       []database.ListConsumableDisambiguationsByDatasetRow
 	recent                []database.ListExternalAPIRecentInstancesRow
 	recentParams          database.ListExternalAPIRecentInstancesParams
+	user                  database.ChronicleUser
+	guild                 database.GetGuildByIDRow
+	guildErr              error
+	realmByName           database.WowServerRealm
+	realmByNameErr        error
+}
+
+func (f *fakeExternalAPIStore) GetUserByID(context.Context, uuid.UUID) (database.ChronicleUser, error) {
+	return f.user, nil
+}
+func (f *fakeExternalAPIStore) GetGuildByID(context.Context, uuid.UUID) (database.GetGuildByIDRow, error) {
+	return f.guild, f.guildErr
+}
+func (f *fakeExternalAPIStore) GetWoWServerRealm(context.Context, uuid.UUID) (database.WowServerRealm, error) {
+	return f.realmByName, f.realmByNameErr
+}
+func (f *fakeExternalAPIStore) GetWoWServerRealmByName(context.Context, string) (database.WowServerRealm, error) {
+	return f.realmByName, f.realmByNameErr
 }
 
 func (f *fakeExternalAPIStore) ListExternalAPIServers(context.Context) ([]database.ListExternalAPIServersRow, error) {
@@ -132,7 +154,22 @@ func (f *fakeExternalAPIStore) GetParseScoreResultsForInstance(_ context.Context
 
 func (f *fakeExternalAPIStore) InstanceEvent(_ context.Context, params database.InstanceEventParams) (database.LogInstanceEvent, error) {
 	f.eventParams = params
+	if f.events != nil {
+		if f.eventCalls == nil {
+			f.eventCalls = make(map[string]int)
+		}
+		f.eventCalls[params.Type]++
+		payload, ok := f.events[params.Type]
+		if !ok {
+			return database.LogInstanceEvent{}, pgx.ErrNoRows
+		}
+		return database.LogInstanceEvent{InstanceID: params.InstanceID, Type: database.LogInstanceEventType(params.Type), Events: payload}, nil
+	}
 	return f.event, f.eventErr
+}
+
+func (f *fakeExternalAPIStore) ListConsumableDisambiguationsByDataset(context.Context, uuid.UUID) ([]database.ListConsumableDisambiguationsByDatasetRow, error) {
+	return f.disambiguations, nil
 }
 
 func (f *fakeExternalAPIStore) ListExternalAPIRecentInstances(_ context.Context, params database.ListExternalAPIRecentInstancesParams) ([]database.ListExternalAPIRecentInstancesRow, error) {

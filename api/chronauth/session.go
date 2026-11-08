@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/api/chronauth/claims"
+	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/gorilla/sessions"
@@ -85,6 +86,10 @@ func (s *Service) AuthenticationMiddleware(next http.Handler) http.Handler {
 		// not trigger a logout (there is no session to clear) and tokens are
 		// never auto-refreshed — clients re-authenticate when they expire.
 		if token := bearerToken(r); token != "" {
+			if strings.HasPrefix(token, chroniclesdk.AIKeyPrefix) {
+				next.ServeHTTP(w, withState(r, &AuthenticationContext{Error: errAIKeyNotAccepted}))
+				return
+			}
 			c, err := s.sessions.ValidateSession(token)
 			if err != nil {
 				next.ServeHTTP(w, withState(r, &AuthenticationContext{
@@ -217,6 +222,8 @@ func MustAuthenticatedClaims(ctx context.Context) *claims.Claims {
 
 var (
 	ErrNotAuthorized = errors.New("not authorized")
+	// errAIKeyNotAccepted rejects an AI key used as a Bearer token.
+	errAIKeyNotAccepted = fmt.Errorf("AI keys only work as ?ai_key= on read-only GET links, not as Bearer tokens: %w", ErrNotAuthorized)
 )
 
 func (s *Service) Authenticated(optional bool) func(next http.Handler) http.Handler {

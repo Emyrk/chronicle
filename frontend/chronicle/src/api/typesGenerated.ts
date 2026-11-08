@@ -2,6 +2,99 @@
 
 import type { GUID } from "@/lib/guid/guid";
 
+// From chroniclesdk/ai_key.go
+/**
+ * AIKey describes a key without its secret.
+ */
+export interface AIKey {
+    readonly id: string;
+    readonly created_at: string;
+    readonly expires_at: string;
+    readonly expired: boolean;
+    readonly private_data: boolean;
+    readonly last_used_at?: string;
+    readonly last_user_agent?: string;
+    readonly request_count: number;
+}
+
+// From chroniclesdk/ai_key.go
+/**
+ * AIKeyBenefits are what an AI key may do at one supporter tier.
+ */
+export interface AIKeyBenefits {
+    readonly tier: string;
+    /**
+     * LifetimeHours are the key lifetimes the owner may choose, shortest first.
+     */
+    readonly lifetime_hours: readonly number[];
+    /**
+     * ViewsPerMinute and ViewsPerDay cap the requests made with one key.
+     */
+    readonly views_per_minute: number;
+    readonly views_per_day: number;
+    /**
+     * ResultsPerSearch is the largest search page size.
+     */
+    readonly results_per_search: number;
+    /**
+     * PrivateData is whether the owner may let the key read private data.
+     */
+    readonly private_data: boolean;
+}
+
+// From chroniclesdk/ai_key.go
+/**
+ * AIKeyPrefix starts every AI key secret.
+ */
+export const AIKeyPrefix = "ck_";
+
+// From chroniclesdk/ai_key.go
+/**
+ * AIKeyQueryParam is the query parameter that carries an AI key on GET links.
+ */
+export const AIKeyQueryParam = "ai_key";
+
+// From chroniclesdk/ai_key.go
+/**
+ * AIKeySecretResponse returns a key. Secret is set only when this request
+ * created the key; it is never shown again.
+ */
+export interface AIKeySecretResponse {
+    readonly key: AIKey;
+    readonly created: boolean;
+    readonly secret?: string;
+}
+
+// From chroniclesdk/ai_key.go
+/**
+ * AIKeyUsage is GET /me/ai-key: the current key (if any) and the caller's
+ * tier benefits.
+ */
+export interface AIKeyUsage {
+    readonly key?: AIKey;
+    /**
+     * ViewsRemainingToday is how many requests the key may still make today.
+     */
+    readonly views_remaining_today: number;
+    readonly benefits: AIKeyBenefits;
+    /**
+     * Tiers lists every tier's benefits, lowest first, for upgrade messages.
+     */
+    readonly tiers: readonly AIKeyBenefits[];
+}
+
+// From chroniclesdk/ai_key.go
+/**
+ * CreateAIKeyRequest picks the lifetime and private-data opt-in of a new key.
+ */
+export interface CreateAIKeyRequest {
+    /**
+     * LifetimeHours must be one of the tier's options. Zero picks the default.
+     */
+    readonly lifetime_hours?: number;
+    readonly private_data?: boolean;
+}
+
 // From chroniclesdk/leaderboard_v2.go
 /**
  * LeaderboardV2Boss is page-bounded summary detail, never observation replay.
@@ -3233,6 +3326,11 @@ export interface InstanceSearchField {
      * Cost is the field's weight in a query's cost.
      */
     readonly cost: number;
+    /**
+     * MinimumTier is the lowest supporter tier that may filter on the field,
+     * anywhere in the tree. The server answers 403 below it.
+     */
+    readonly minimum_tier: InstanceSearchSortTier;
 }
 
 // From chroniclesdk/instance_search.go
@@ -3499,6 +3597,10 @@ export interface InstanceSearchSortOption {
 }
 
 // From chroniclesdk/instance_search.go
+/**
+ * InstanceSearchSortTier is the lowest supporter tier that may use a sort or
+ * a field.
+ */
 export type InstanceSearchSortTier = "free" | "honored" | "revered";
 
 export const InstanceSearchSortTiers: InstanceSearchSortTier[] = ["free", "honored", "revered"];

@@ -99,6 +99,7 @@ type Options struct {
 	Assets                http.Handler
 	InternalGameData      http.Handler
 	ExternalAPI           http.Handler
+	AgentViews            AgentViews // nil serves the SPA without agent views
 	OAuth                 OAuthHandler
 	Sidekick              SidekickService
 	Rankings              http.Handler
@@ -305,6 +306,12 @@ func New(ctx context.Context, opts Options) (*API, error) {
 	return api, nil
 }
 
+// AgentViews mounts the AI agent page views on the site router and returns
+// the SPA handler to use for everything else.
+type AgentViews interface {
+	MountAgentViews(r chi.Router, spa http.Handler) http.Handler
+}
+
 func (api *API) Routes() chi.Router {
 	r := chi.NewRouter()
 	var liveConnectSources []string
@@ -393,6 +400,10 @@ func (api *API) Routes() chi.Router {
 					r.With(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanCreate_live_session_User)).Post("/live-sessions", api.liveSessions.Create)
 				}
 				r.Get("/me/storage", api.GetMyStorage)
+				r.Get("/me/ai-key", api.GetMyAIKey)
+				r.Post("/me/ai-key", api.CreateMyAIKey)
+				r.Post("/me/ai-key/rotate", api.RotateMyAIKey)
+				r.Delete("/me/ai-key", api.RevokeMyAIKey)
 				if api.Opts.Sidekick != nil {
 					r.Mount("/me/sidekicks", api.Opts.Sidekick.AccountRoutes())
 					r.Mount("/sidekick", api.Opts.Sidekick.StatusRoutes())
@@ -873,7 +884,11 @@ func (api *API) Routes() chi.Router {
 		}
 	})
 
-	r.NotFound(frontend.Handler(frontend.FS(), api.OGRoutes(), api.brandingResolver, api.blogFlavorResolver).ServeHTTP)
+	spa := frontend.Handler(frontend.FS(), api.OGRoutes(), api.brandingResolver, api.blogFlavorResolver)
+	if api.Opts.AgentViews != nil {
+		spa = api.Opts.AgentViews.MountAgentViews(r, spa)
+	}
+	r.NotFound(spa.ServeHTTP)
 
 	return r
 }

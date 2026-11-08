@@ -1,8 +1,9 @@
+import { clearAIKeyStorage } from "@/features/aiKey/aiKeyStore";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { Bell, Blocks, CreditCard, HardDrive, LayoutTemplate, Download, Upload, Plus, BookOpenText, Save, Pencil, Trash, Share2, Copy, Eye, Laptop, Monitor, Smartphone, Menu, X, User, Swords, Star, LayoutPanelTop, BadgeCheck, Crown, Camera, RefreshCw, Lock, Sparkles, Bot } from "lucide-react";
+import { Bell, Blocks, CreditCard, HardDrive, LayoutTemplate, Download, Upload, Plus, BookOpenText, Save, Pencil, Trash, Share2, Copy, Eye, Laptop, Monitor, Smartphone, Menu, X, User, Swords, Star, LayoutPanelTop, BadgeCheck, Crown, Camera, RefreshCw, Lock, Sparkles, Bot, KeyRound } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
   useInstance,
@@ -85,6 +86,7 @@ import { DiscordIcon } from "@/components/icons/DiscordIcon";
 export { BillingSettings } from "./Settings/BillingSettings";
 export { CustomPanelSettings } from "./Settings/CustomPanelSettings";
 export { SidekickSettings } from "./Settings/SidekickSettings";
+export { AIAccessSettings } from "./Settings/AIAccessSettings";
 export { NotificationSettings } from "./Settings/NotificationSettings";
 
 const LAYOUT_LAB_INSTANCE_REFERENCE_STORAGE_KEY = "layout-lab.instance-reference";
@@ -135,6 +137,7 @@ const allTabs: Tab[] = [
   // { path: "/account/privacy", label: "Privacy", icon: Shield },
   // { path: "/account/appearance", label: "Appearance", icon: Palette },
   { path: "/account/ai", label: "AI assistant", icon: Bot },
+  { path: "/account/ai-access", label: "AI access", icon: KeyRound },
   { path: "/account/sidekick", label: "Sidekick", icon: Laptop },
   { path: "/account/developer-panels", label: "Developer panels", icon: Blocks },
   { path: "/account/layout-book", label: "Layout Book", icon: BookOpenText },
@@ -294,6 +297,7 @@ export function ProfileSettings() {
   const switchToDiscordAccount = async () => {
     await fetch("/auth/logout", { method: "POST" });
     clearInstanceDefaultsCache();
+    clearAIKeyStorage();
     // OAuth runs on the main domain; tenants pass a full URL so it relays back.
     window.location.href = siteConfig?.tenant && siteConfig.access_url
       ? `${siteConfig.access_url}/auth/discord?from=${encodeURIComponent(`${window.location.origin}/account/settings`)}`
