@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query"
 import { ArrowDown, Check, ChevronLeft, ChevronRight, Search } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
+import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip"
 import { CLASS_CSS_VAR } from "@/pages/Rankings/classDisplay"
 import {
   RATING_METRICS,
@@ -384,9 +385,20 @@ export function PublishedMasteryCells({ entry }: { entry: RatingEntry }) {
   const cells = [parts?.peak, parts?.form, parts?.floor]
   const counts = entry.bossCounts
   const progress = counts?.length ? counts.reduce((sum, boss) => sum + Math.min(boss.count, 3), 0) / (3 * counts.length) : 0
-  const description = counts?.map((boss) => `${boss.encounter_name}: ${Math.min(boss.count, 3)}/3 (${boss.count} observations)`).join("; ") ?? "No boss counts available"
+  const missing = counts?.filter((boss) => boss.count < 3) ?? []
+ const description = !counts ? "No boss counts available" : !counts.length ? "No selected bosses" : missing.length
+   ? `Missing eligible kills: ${missing.map((boss) => `${boss.encounter_name}: ${3 - boss.count} more (${boss.count}/3)`).join("; ")}`
+   : "Complete: at least three eligible kills for every selected boss"
+ const explanation = "Counts apply to this row's cohort and DPS/HPS metric. This is coverage progress, not your Mastery score."
   return <>{cells.map((value, i) => <td key={i} className="px-3 py-2 text-right font-mono text-muted-foreground tabular-nums">{value === undefined ? "—" : value.toFixed(1)}</td>)}
-    <td className="px-3 py-2 text-right font-mono text-muted-foreground tabular-nums"><span tabIndex={0} title={description} aria-label={`Progress toward three kills per selected boss: ${description}`}>{counts ? `${Math.round(progress * 100)}%` : "—"}</span></td>
+    <td className="px-3 py-2 text-right font-mono text-muted-foreground tabular-nums"><HintTooltip>
+      <TooltipTrigger asChild><span tabIndex={0} className="cursor-help underline decoration-dotted underline-offset-4" aria-label={`Progress toward three kills per selected boss: ${description}. ${explanation}`}>{counts ? `${Math.round(progress * 100)}%` : "—"}</span></TooltipTrigger>
+      <TooltipContent side="top" sideOffset={6} className="max-w-sm space-y-2 p-3 text-left">
+        <p className="font-semibold">{missing.length ? "Kills needed for 100% coverage" : description}</p>
+        {missing.length > 0 && <ul className="max-h-60 space-y-1 overflow-y-auto styled-scrollbar">{missing.map((boss) => <li key={boss.encounter_name} className="flex justify-between gap-4"><span>{boss.encounter_name}</span><span className="shrink-0 font-mono">{3 - boss.count} more · {boss.count}/3</span></li>)}</ul>}
+        <p className="text-zinc-300 leading-relaxed">{explanation}</p>
+      </TooltipContent>
+    </HintTooltip></td>
   </>
 
 }
