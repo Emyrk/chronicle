@@ -294,6 +294,8 @@ retain repair obligations if normal production is paused.
 
 ## PR 5: resumable historical bootstrap and repair operations
 
+Implementation protocol and API: [operations.md](operations.md).
+
 **Red:** checkpoint/resume after crashes, bounded discovery pages, tenant fairness,
 source mutation during scan, cutoff completion, and version repair of already
 existing evidence/results. Validate progress across both discovery and queue

@@ -17,11 +17,13 @@ import (
 )
 
 type Service struct {
-	broker           *services.Services
-	Dispatcher       *Dispatcher
-	TenantWorker     *TenantWorker
-	RepairWorker     *RepairWorker
-	RepairDispatcher *RepairDispatcher
+	OperationDispatcher *OperationDispatcher
+	OperationWorker     *OperationWorker
+	broker              *services.Services
+	Dispatcher          *Dispatcher
+	TenantWorker        *TenantWorker
+	RepairWorker        *RepairWorker
+	RepairDispatcher    *RepairDispatcher
 }
 
 func New(broker *services.Services) *Service     { return &Service{broker: broker} }
@@ -36,6 +38,8 @@ func (*Service) Options() serpent.OptionSet { return nil } // Deliberately no ru
 func (s *Service) Start(context.Context) error {
 	store := servicedbstore.DatabaseStore(s.broker)
 	s.Dispatcher = &Dispatcher{Store: store}
+	s.OperationDispatcher = &OperationDispatcher{Store: store}
+	s.OperationWorker = &OperationWorker{Store: store}
 	s.RepairWorker = &RepairWorker{Store: store}
 	s.RepairDispatcher = &RepairDispatcher{Store: store}
 	s.TenantWorker = &TenantWorker{Worker: &Worker{Store: store}}

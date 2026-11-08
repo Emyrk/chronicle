@@ -2223,6 +2223,32 @@ type LeaderboardMemberOverride struct {
 	Position      pgtype.Int4 `db:"position" json:"position"`
 }
 
+type LeaderboardOperation struct {
+	ID                uuid.UUID          `db:"id" json:"id"`
+	TenantID          uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RequestedBy       uuid.UUID          `db:"requested_by" json:"requested_by"`
+	Purpose           string             `db:"purpose" json:"purpose"`
+	Scope             string             `db:"scope" json:"scope"`
+	RunID             uuid.NullUUID      `db:"run_id" json:"run_id"`
+	BeforeDate        pgtype.Date        `db:"before_date" json:"before_date"`
+	Cutoff            pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	State             string             `db:"state" json:"state"`
+	Phase             string             `db:"phase" json:"phase"`
+	CursorScope       []byte             `db:"cursor_scope" json:"cursor_scope"`
+	CursorRealm       uuid.UUID          `db:"cursor_realm" json:"cursor_realm"`
+	CursorDate        pgtype.Timestamptz `db:"cursor_date" json:"cursor_date"`
+	CursorID          uuid.UUID          `db:"cursor_id" json:"cursor_id"`
+	Discovered        int64              `db:"discovered" json:"discovered"`
+	MissingDates      int64              `db:"missing_dates" json:"missing_dates"`
+	DiscoveryComplete bool               `db:"discovery_complete" json:"discovery_complete"`
+	StartedAt         pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	CompletedAt       pgtype.Timestamptz `db:"completed_at" json:"completed_at"`
+	LastProgressAt    pgtype.Timestamptz `db:"last_progress_at" json:"last_progress_at"`
+	RetryCount        int32              `db:"retry_count" json:"retry_count"`
+	RetryAfter        pgtype.Timestamptz `db:"retry_after" json:"retry_after"`
+	LastError         string             `db:"last_error" json:"last_error"`
+}
+
 type LeaderboardPlayerBossBenchmark struct {
 	TenantID          uuid.UUID          `db:"tenant_id" json:"tenant_id"`
 	InstanceName      string             `db:"instance_name" json:"instance_name"`

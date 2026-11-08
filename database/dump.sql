@@ -1904,6 +1904,38 @@ CREATE TABLE leaderboard_member_overrides (
     CONSTRAINT leaderboard_member_overrides_position_check CHECK (("position" > 0))
 );
 
+CREATE TABLE leaderboard_operations (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    requested_by uuid NOT NULL,
+    purpose text NOT NULL,
+    scope text NOT NULL,
+    run_id uuid,
+    before_date date NOT NULL,
+    cutoff timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    state text DEFAULT 'discovering'::text NOT NULL,
+    phase text DEFAULT 'runs'::text NOT NULL,
+    cursor_scope jsonb DEFAULT '{}'::jsonb NOT NULL,
+    cursor_realm uuid DEFAULT '00000000-0000-0000-0000-000000000000'::uuid NOT NULL,
+    cursor_date timestamp with time zone DEFAULT '-infinity'::timestamp with time zone NOT NULL,
+    cursor_id uuid DEFAULT '00000000-0000-0000-0000-000000000000'::uuid NOT NULL,
+    discovered bigint DEFAULT 0 NOT NULL,
+    missing_dates bigint DEFAULT 0 NOT NULL,
+    discovery_complete boolean DEFAULT false NOT NULL,
+    started_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    completed_at timestamp with time zone,
+    last_progress_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    retry_count integer DEFAULT 0 NOT NULL,
+    retry_after timestamp with time zone DEFAULT '-infinity'::timestamp with time zone NOT NULL,
+    last_error text DEFAULT ''::text NOT NULL,
+    CONSTRAINT leaderboard_operations_check CHECK (((scope = 'run'::text) = (run_id IS NOT NULL))),
+    CONSTRAINT leaderboard_operations_purpose_check CHECK ((purpose = ANY (ARRAY['bootstrap'::text, 'repair'::text]))),
+    CONSTRAINT leaderboard_operations_scope_check CHECK ((scope = ANY (ARRAY['tenant'::text, 'run'::text]))),
+    CONSTRAINT leaderboard_operations_state_check CHECK ((state = ANY (ARRAY['discovering'::text, 'draining'::text, 'paused'::text, 'completed'::text])))
+);
+
+ALTER TABLE ONLY leaderboard_operations FORCE ROW LEVEL SECURITY;
+
 CREATE TABLE leaderboard_player_boss_benchmarks (
     tenant_id uuid NOT NULL,
     instance_name text NOT NULL,
@@ -3731,6 +3763,9 @@ ALTER TABLE ONLY leaderboard_layers
 ALTER TABLE ONLY leaderboard_member_overrides
     ADD CONSTRAINT leaderboard_member_overrides_pkey PRIMARY KEY (layer_key, instance_name, set_key, encounter_name);
 
+ALTER TABLE ONLY leaderboard_operations
+    ADD CONSTRAINT leaderboard_operations_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY leaderboard_player_boss_benchmarks
     ADD CONSTRAINT leaderboard_player_boss_benchmarks_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric);
 
@@ -4399,6 +4434,10 @@ CREATE INDEX leaderboard_guild_renown_facts_scope_idx ON leaderboard_guild_renow
 
 CREATE INDEX leaderboard_guild_renown_facts_source_lookup_idx ON leaderboard_guild_renown_facts USING btree (source_instance_id);
 
+CREATE INDEX leaderboard_operations_history ON leaderboard_operations USING btree (tenant_id, started_at DESC, id);
+
+CREATE UNIQUE INDEX leaderboard_operations_unfinished ON leaderboard_operations USING btree (tenant_id) WHERE (state <> 'completed'::text);
+
 CREATE INDEX leaderboard_player_boss_read_idx ON leaderboard_player_boss_subjects USING btree (tenant_id, instance_name, difficulty_name, max_players, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid, encounter_name) INCLUDE (raw_peak, raw_form, raw_floor, observation_count, computed_at);
 
 CREATE INDEX leaderboard_player_observations_best_idx ON leaderboard_player_observations USING btree (tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, metric_value DESC);
@@ -4842,6 +4881,9 @@ ALTER TABLE ONLY leaderboard_member_overrides
 ALTER TABLE ONLY leaderboard_member_overrides
     ADD CONSTRAINT leaderboard_member_overrides_layer_key_fkey FOREIGN KEY (layer_key) REFERENCES leaderboard_layers(key);
 
+ALTER TABLE ONLY leaderboard_operations
+    ADD CONSTRAINT leaderboard_operations_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES tenants(id);
+
 ALTER TABLE ONLY leaderboard_set_members
     ADD CONSTRAINT leaderboard_set_members_instance_name_encounter_name_fkey FOREIGN KEY (instance_name, encounter_name) REFERENCES leaderboard_bosses(instance_name, encounter_name);
 
@@ -5272,6 +5314,8 @@ ALTER TABLE leaderboard_guild_renown_counts ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE leaderboard_guild_renown_facts ENABLE ROW LEVEL SECURITY;
 
+ALTER TABLE leaderboard_operations ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE leaderboard_player_boss_benchmarks ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE leaderboard_player_boss_subjects ENABLE ROW LEVEL SECURITY;
@@ -5323,6 +5367,8 @@ CREATE POLICY tenant_admin_bypass ON leaderboard_guild_clear_subjects USING ((cu
 CREATE POLICY tenant_admin_bypass ON leaderboard_guild_renown_counts USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON leaderboard_guild_renown_facts USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON leaderboard_operations USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON leaderboard_player_boss_benchmarks USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
@@ -5384,6 +5430,8 @@ CREATE POLICY tenant_isolation ON leaderboard_guild_clear_subjects USING ((tenan
 CREATE POLICY tenant_isolation ON leaderboard_guild_renown_counts USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
 
 CREATE POLICY tenant_isolation ON leaderboard_guild_renown_facts USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
+
+CREATE POLICY tenant_isolation ON leaderboard_operations USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
 
 CREATE POLICY tenant_isolation ON leaderboard_player_boss_benchmarks USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
 

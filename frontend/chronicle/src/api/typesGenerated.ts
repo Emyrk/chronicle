@@ -62,6 +62,7 @@ export interface LeaderboardV2Entry {
  * claim that evidence ingestion or refresh workers are installed.
  */
 export interface LeaderboardV2Response {
+    readonly maintenance?: LeaderboardMaintenance;
     readonly status: string;
     readonly message: string;
     readonly entries: readonly LeaderboardV2Entry[];
@@ -7342,4 +7343,69 @@ export type WoWUnitType = 2 | 3 | 1 | 0 | 4;
 
 export const WoWUnitTypes: WoWUnitType[] = [2, 3, 1, 0, 4];
 
+
+// From chroniclesdk/leaderboard_operations.go
+/**
+ * BeforeDate is an exclusive UTC day boundary (YYYY-MM-DD), defaulting to today.
+ */
+export interface CreateLeaderboardOperationRequest {
+    readonly tenant_id: string;
+    readonly purpose: string;
+    readonly scope: string;
+    readonly before_date?: string;
+    readonly run_id?: string;
+}
+
+// From chroniclesdk/leaderboard_operations.go
+export interface LeaderboardMaintenance {
+    readonly missing_dates: number;
+    readonly date_basis: string;
+    readonly kind: string;
+    readonly state: string;
+    readonly message: string;
+    readonly before_date: string;
+    readonly cutoff: string;
+}
+
+// From chroniclesdk/leaderboard_operations.go
+export interface LeaderboardMaintenanceResponse {
+    readonly maintenance: LeaderboardMaintenance | null;
+}
+
+// From chroniclesdk/leaderboard_operations.go
+export interface LeaderboardOperation {
+    readonly backlog?: LeaderboardOperationBacklog;
+    readonly missing_dates: number;
+    readonly date_basis: string;
+    readonly id: string;
+    readonly tenant_id: string;
+    readonly requested_by: string;
+    readonly purpose: string;
+    readonly scope: string;
+    readonly run_id?: string;
+    readonly before_date: string;
+    readonly cutoff: string;
+    readonly state: string;
+    readonly phase: string;
+    readonly discovered: number;
+    readonly discovery_complete: boolean;
+    readonly started_at: string;
+    readonly completed_at?: string;
+    readonly last_progress_at: string;
+    readonly retry_count: number;
+    readonly last_error: string;
+}
+
+// From chroniclesdk/leaderboard_operations.go
+export interface LeaderboardOperationBacklog {
+    readonly d1_pending: number;
+    readonly d2_pending: number;
+    readonly oldest_pending_at?: string;
+    readonly pending_retries: number;
+}
+
+// From chroniclesdk/leaderboard_operations.go
+export interface LeaderboardOperationList {
+    readonly operations: readonly LeaderboardOperation[];
+}
 

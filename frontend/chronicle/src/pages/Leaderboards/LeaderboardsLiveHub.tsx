@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react"
+import { LeaderboardMaintenanceNotice } from "./LeaderboardMaintenanceNotice"
 import { cn } from "@/lib/utils"
 import { useQuery } from "@tanstack/react-query"
 import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom"
@@ -75,6 +76,7 @@ export function LeaderboardsLiveHub() {
   const stale = !loading && summary.isPlaceholderData
   return <div className="flex min-w-0 gap-6">
     <div className="min-w-0 flex-1">
+      <LeaderboardMaintenanceNotice tenantID={siteConfig?.tenant?.id} />
       <LeaderboardsHubApp instance={instance ?? undefined} onInstance={(name) => choose("instance", name)}
         tab={tab} onTab={chooseTab} realm={realm} onRealm={(name) => choose("realm_ids", available.find((row) => row.name === name)?.id)}
         realms={[ALL_REALMS, ...available.map((row) => row.name)]} instances={summary.data?.instances ?? []} landingPreviews={summary.data?.landing_previews}

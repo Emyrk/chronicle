@@ -8,11 +8,12 @@ import (
 // LeaderboardV2Response is a preview read over all-time raw summaries, not a
 // claim that evidence ingestion or refresh workers are installed.
 type LeaderboardV2Response struct {
-	Status         string               `json:"status"`
-	Message        string               `json:"message"`
-	Entries        []LeaderboardV2Entry `json:"entries"`
-	NextCursor     string               `json:"next_cursor,omitempty"`
-	IncludedBosses []string             `json:"included_bosses"`
+	Maintenance    *LeaderboardMaintenance `json:"maintenance,omitempty"`
+	Status         string                  `json:"status"`
+	Message        string                  `json:"message"`
+	Entries        []LeaderboardV2Entry    `json:"entries"`
+	NextCursor     string                  `json:"next_cursor,omitempty"`
+	IncludedBosses []string                `json:"included_bosses"`
 }
 type LeaderboardV2Entry struct {
 	RealmName        string                  `json:"realm_name"`
