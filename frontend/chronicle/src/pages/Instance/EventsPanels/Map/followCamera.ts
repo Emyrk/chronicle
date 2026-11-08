@@ -17,6 +17,7 @@ import {
   BOSS_ENGAGE_YARDS,
   CINEMATIC_ELEVATION_DEG,
   directorFrame,
+  DISTANCE_SMOOTH_SECONDS,
   MIN_FRAME_RADIUS_YARDS,
   STRAGGLER_CUTOFF_YARDS,
   STRAGGLER_RELEASE_YARDS,
@@ -39,6 +40,29 @@ export const FOLLOW_RADIUS_PEAK_MS = 500;
 export const FOLLOW_SUBJECT_WINDOW_MS = 1_000;
 /** The springs only smooth what the track leaves over, so they can be quick. */
 export const FOLLOW_SMOOTH_SECONDS = 0.3;
+/**
+ * The springs run on real time while the track moves on replay time, so their
+ * lag grows with the speed: with a track they shorten by the speed (the same
+ * lag in yards at any speed). The distance spring also eases the line-of-sight
+ * shortened shot, so it never goes below this (chronicle-1723).
+ */
+export const FOLLOW_DISTANCE_MIN_SMOOTH_SECONDS = 0.2;
+/**
+ * Fast playback stretches the sample spacing and the centre window, but only
+ * up to these factors of the 1x values (so at most 1 s between samples and a
+ * 6 s centre window, in replay time): averaging minutes of a winding cave path
+ * cuts its bends into the rock (chronicle-1723). The radius windows keep
+ * stretching with the speed, which keeps a fast shot calm.
+ */
+export const FOLLOW_MAX_SAMPLE_STRETCH = 4;
+export const FOLLOW_MAX_WINDOW_STRETCH = 2;
+/**
+ * The smoothed centre never sits further than this from the per-sample
+ * framing (the framed units' circle), except where the framing itself jumps
+ * (more than twice this between samples: a gap, a teleport), whose slide is
+ * left alone.
+ */
+export const FOLLOW_CENTRE_CLAMP_YARDS = 12;
 /**
  * The replay clock moving more than playback explains by this much is a jump,
  * or by FOLLOW_JUMP_REAL_MS of play at a fast speed (a tick re-anchoring the
@@ -67,7 +91,7 @@ export interface FollowTrackOptions {
   scale: number;
   /** Follow this unit instead of the group. */
   subjectGuid?: string | null;
-  /** Replay ms per real ms: sampling and windows stretch with it, so a fast replay moves the camera as calmly as a real-time one. */
+  /** Replay ms per real ms: sampling and windows stretch with it (the centre's only up to FOLLOW_MAX_WINDOW_STRETCH), so a fast replay stays calm. */
   speed?: number;
   sampleMs?: number;
   /** Half-widths of the centre and radius windows (replay ms at 1x); the defaults when left out. */
@@ -111,6 +135,20 @@ export interface FollowTrackBuild {
   readonly result: FollowTrack | null;
 }
 
+/** How much the centre window (replay time) stretches at `speed`. */
+export function followWindowStretch(speed: number): number {
+  return Math.min(Math.max(1, speed), FOLLOW_MAX_WINDOW_STRETCH);
+}
+
+/** The real-time smoothing of the position and distance springs while following a track at `speed`. */
+export function followSpringSeconds(speed: number): { position: number; distance: number } {
+  const stretch = Math.max(1, speed);
+  return {
+    position: FOLLOW_SMOOTH_SECONDS / stretch,
+    distance: Math.max(FOLLOW_DISTANCE_MIN_SMOOTH_SECONDS, DISTANCE_SMOOTH_SECONDS / stretch),
+  };
+}
+
 // A moving average over `half` samples either side, in O(n) with a running sum.
 function movingMean(values: ArrayLike<number>, half: number): Float64Array {
   const n = values.length;
@@ -137,7 +175,7 @@ export function startFollowTrackBuild(options: FollowTrackOptions, now: () => nu
   const { startMs, endMs, unitsAt, scale, subjectGuid = null } = options;
   const speed = Math.max(1, options.speed ?? 1);
   const baseSampleMs = options.sampleMs ?? FOLLOW_SAMPLE_MS;
-  const sampleMs = baseSampleMs * speed;
+  const sampleMs = baseSampleMs * Math.min(speed, FOLLOW_MAX_SAMPLE_STRETCH);
   const span = Math.max(0, endMs - startMs);
   const count = Math.max(1, Math.ceil(span / sampleMs) + 1);
   const frameOptions = {
@@ -165,6 +203,7 @@ export function startFollowTrackBuild(options: FollowTrackOptions, now: () => nu
   let done = false;
   let result: FollowTrack | null = null;
   const minRadius = MIN_FRAME_RADIUS_YARDS * scale;
+  const clamp = FOLLOW_CENTRE_CLAMP_YARDS * scale;
 
   // Gaps (nobody to frame) hold the nearest framing on either side, so the
   // centred window glides into the next one before the group appears there.
@@ -182,9 +221,28 @@ export function startFollowTrackBuild(options: FollowTrackOptions, now: () => nu
       rawZ[i] = rawZ[from]!;
       framed[i] = framed[from]!;
     }
-    const half = Math.max(1, Math.round((subjectGuid ? FOLLOW_SUBJECT_WINDOW_MS : options.centreWindowMs ?? FOLLOW_CENTRE_WINDOW_MS) / baseSampleMs / 2));
+    const windowMs = (subjectGuid ? FOLLOW_SUBJECT_WINDOW_MS : options.centreWindowMs ?? FOLLOW_CENTRE_WINDOW_MS) * followWindowStretch(speed);
+    const half = Math.max(1, Math.round(windowMs / sampleMs / 2));
     xs = movingMean(movingMean(rawX, half), half);
     zs = movingMean(movingMean(rawZ, half), half);
+    // Keep the centre near the framing it smooths, so a bend is not cut into
+    // the rock; within the window of a jump in the framing, its slide stays.
+    const jumps = new Int32Array(count + 1);
+    for (let i = 1; i < count; i++) {
+      const jumped = Math.hypot(rawX[i]! - rawX[i - 1]!, rawZ[i]! - rawZ[i - 1]!) > 2 * clamp;
+      jumps[i + 1] = jumps[i]! + (jumped ? 1 : 0);
+    }
+    const reach = 2 * half;
+    for (let i = 0; i < count; i++) {
+      // Any jump into a sample within the window (2 * half either side) leaves it be.
+      if (jumps[Math.min(count, i + reach + 1)]! - jumps[Math.max(0, i - reach) + 1]! > 0) continue;
+      const dx = xs[i]! - rawX[i]!;
+      const dz = zs[i]! - rawZ[i]!;
+      const off = Math.hypot(dx, dz);
+      if (off <= clamp) continue;
+      xs[i] = rawX[i]! + (dx * clamp) / off;
+      zs[i] = rawZ[i]! + (dz * clamp) / off;
+    }
     cover = new Float64Array(count);
     return true;
   };
@@ -196,8 +254,8 @@ export function startFollowTrackBuild(options: FollowTrackOptions, now: () => nu
   // hold the frame at its widest (chronicle-1579 review: that backed the
   // camera into the cave walls).
   const finish = () => {
-    const peakHalf = Math.max(1, Math.round(FOLLOW_RADIUS_PEAK_MS / baseSampleMs));
-    const meanHalf = Math.max(1, Math.round((options.radiusWindowMs ?? FOLLOW_RADIUS_WINDOW_MS) / baseSampleMs / 2));
+    const peakHalf = Math.max(1, Math.round((FOLLOW_RADIUS_PEAK_MS * speed) / sampleMs));
+    const meanHalf = Math.max(1, Math.round(((options.radiusWindowMs ?? FOLLOW_RADIUS_WINDOW_MS) * speed) / sampleMs / 2));
     const radii = movingMean(movingMean(windowed(Array.from(cover!), peakHalf, "max"), meanHalf), meanHalf);
     result = { startMs, endMs: startMs + span, sampleMs, subjectGuid, speed, x: xs!, z: zs!, radius: Float64Array.from(radii) };
   };

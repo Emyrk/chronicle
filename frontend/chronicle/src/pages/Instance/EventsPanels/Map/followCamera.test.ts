@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { directorFrame, FRAME_FILL, MIN_FRAME_RADIUS_YARDS, type DirectorUnit } from "./cameraDirector";
+import { directorFrame, FRAME_FILL, MIN_FRAME_RADIUS_YARDS, smoothDamp, type DirectorUnit } from "./cameraDirector";
 import {
   buildFollowTrack,
   startFollowTrackBuild,
   createShotHold,
+  FOLLOW_CENTRE_CLAMP_YARDS,
+  FOLLOW_CENTRE_WINDOW_MS,
   FOLLOW_JUMP_MS,
+  FOLLOW_MAX_WINDOW_STRETCH,
+  FOLLOW_SMOOTH_SECONDS,
+  followSpringSeconds,
   followKeyAt,
   GLIDE_MAX_MS,
   GLIDE_MIN_MS,
@@ -40,6 +45,16 @@ function walkingGroup(ms: number): DirectorUnit[] {
   });
   units.push(unit("boss", 150, 0, { player: false, boss: true }));
   return units;
+}
+
+/** Five players running a zigzag at 7 yd/s: 40 yd legs, alternately +x and +z. */
+function zigzagGroup(ms: number): DirectorUnit[] {
+  const run = (ms / 1000) * 7;
+  const leg = Math.floor(run / 40);
+  const along = run - leg * 40;
+  const x = Math.ceil(leg / 2) * 40 + (leg % 2 === 0 ? along : 0);
+  const z = Math.floor(leg / 2) * 40 + (leg % 2 === 1 ? along : 0);
+  return [[0, 0], [2, 1], [-2, 1], [1, -2], [-1, -2]].map(([dx, dz], i) => unit(`p${i}`, x + dx!, z + dz!));
 }
 
 // The worst rate of change of the centre (yd/s) and of that rate (yd/s²),
@@ -140,17 +155,87 @@ describe("buildFollowTrack", () => {
     expect(followKeyAt(track, 40_000, out).x).toBeCloseTo(302, 0);
   });
 
-  it("stretches its windows with the playback speed, keeping the same calm in real time", () => {
-    const fast = buildFollowTrack({ startMs: 0, endMs: durationMs * 4, unitsAt: (ms) => walkingGroup(ms / 4), scale: 1, speed: 4 })!;
+  it("stays continuous at a fast speed, with a centre window capped in replay time", () => {
+    const fast = buildFollowTrack({ startMs: 0, endMs: durationMs, unitsAt: walkingGroup, scale: 1, speed: 32 })!;
     const out: FollowKey = { x: 0, z: 0, radius: 0 };
-    // At 4x, real time t shows replay 4t: the same motion as the 1x fixture.
-    const smooth = motion(durationMs, (ms) => followKeyAt(fast, ms * 4, out));
+    // In replay time the fast track is as smooth as the 1x one.
+    const smooth = motion(durationMs, (ms) => followKeyAt(fast, ms, out));
     expect(smooth.speed).toBeLessThan(15);
     expect(smooth.acceleration).toBeLessThan(40);
+    // But it looks ahead no further than the capped window: at 32x the old
+    // stretch (32 x 3 s) started moving a minute and a half early.
+    const standThenWalk = (ms: number) => [0, 1, 2].map((i) => unit(`p${i}`, (ms < 60_000 ? 0 : (ms - 60_000) / 1000 * 6) + i, 0));
+    const track = buildFollowTrack({ startMs: 0, endMs: 120_000, unitsAt: standThenWalk, scale: 1, speed: 32 })!;
+    const window = FOLLOW_CENTRE_WINDOW_MS * FOLLOW_MAX_WINDOW_STRETCH;
+    expect(followKeyAt(track, 60_000 - window - 1_000, out).x).toBeCloseTo(1, 6);
+    expect(followKeyAt(track, 60_000 - 1_000, out).x).toBeGreaterThan(1);
+  });
+
+  it("keeps the centre near the framed units on a zigzag path at 32x, never cutting its corners", () => {
+    // A group runs a cave-like zigzag (7 yd/s, 40 yd legs, alternating +x and +z) for ten minutes.
+    const track = buildFollowTrack({ startMs: 0, endMs: 600_000, unitsAt: zigzagGroup, scale: 1, speed: 32 })!;
+    const out: FollowKey = { x: 0, z: 0, radius: 0 };
+    // At every sample, and between them (the Catmull-Rom can swing a little past).
+    let inFrame = new Set<string>();
+    for (let ms = 0; ms <= 600_000; ms += 100) {
+      const frame = directorFrame(zigzagGroup(ms), inFrame)!;
+      inFrame = new Set(frame.guids);
+      const key = followKeyAt(track, ms, out);
+      const bound = ms % track.sampleMs === 0 ? FOLLOW_CENTRE_CLAMP_YARDS + 1e-6 : FOLLOW_CENTRE_CLAMP_YARDS + 1.5;
+      expect(Math.hypot(key.x - frame.x, key.z - frame.z)).toBeLessThanOrEqual(bound);
+      // The cover radius stays the group's size, not swollen by an off-centre point.
+      expect(key.radius).toBeLessThan(FOLLOW_CENTRE_CLAMP_YARDS + 5);
+    }
+  });
+
+  it("keeps the aim on a moving group at 1x, 8x and 32x (harness)", () => {
+    // The scene's position springs on the track (60 fps), against the framed
+    // units' circle; the ends are left out (the windows clamp there).
+    const lag = (speed: number) => {
+      const end = 600_000;
+      const track = buildFollowTrack({ startMs: 0, endMs: end, unitsAt: zigzagGroup, scale: 1, speed })!;
+      const out: FollowKey = { x: 0, z: 0, radius: 0 };
+      followKeyAt(track, 0, out);
+      const x = { value: out.x, velocity: 0 };
+      const z = { value: out.z, velocity: 0 };
+      const smooth = followSpringSeconds(speed).position;
+      let max = 0;
+      let sum = 0;
+      let count = 0;
+      for (let real = 0; real * speed <= end; real += FRAME_MS) {
+        const ms = real * speed;
+        const key = followKeyAt(track, ms, out);
+        smoothDamp(x, key.x, smooth, FRAME_MS / 1000);
+        smoothDamp(z, key.z, smooth, FRAME_MS / 1000);
+        if (ms < 20_000 || ms > end - 120_000) continue;
+        const frame = directorFrame(zigzagGroup(ms))!;
+        const off = Math.hypot(x.value - frame.x, z.value - frame.z);
+        max = Math.max(max, off);
+        sum += off;
+        count++;
+      }
+      console.info(`follow aim vs group at ${speed}x: max ${max.toFixed(1)} yd, mean ${(sum / count).toFixed(1)} yd`);
+      return { max, mean: sum / count };
+    };
+    for (const speed of [1, 8, 32]) {
+      const { max, mean } = lag(speed);
+      expect(max).toBeLessThan(FOLLOW_CENTRE_CLAMP_YARDS + 1);
+      expect(mean).toBeLessThan(7);
+    }
   });
 
   it("is null with nobody ever framed", () => {
     expect(buildFollowTrack({ startMs: 0, endMs: 5_000, unitsAt: () => [], scale: 1 })).toBeNull();
+  });
+});
+
+describe("followSpringSeconds", () => {
+  it("shortens the springs by the speed, so they trail the track by the same yards at any speed", () => {
+    expect(followSpringSeconds(1).position).toBe(FOLLOW_SMOOTH_SECONDS);
+    expect(followSpringSeconds(32).position).toBeCloseTo(FOLLOW_SMOOTH_SECONDS / 32, 9);
+    // The distance spring still eases a shortened shot in.
+    expect(followSpringSeconds(32).distance).toBeGreaterThanOrEqual(0.2);
+    expect(followSpringSeconds(0.5)).toEqual(followSpringSeconds(1));
   });
 });
 
@@ -206,6 +291,34 @@ describe("isReplayJump", () => {
     expect(isReplayJump(0, FOLLOW_JUMP_MS * 2, 16 * 8, 8)).toBe(false);
     // But a 10 s gap skipped at 8x is still a jump.
     expect(isReplayJump(0, 10_000, 16 * 8, 8)).toBe(true);
+  });
+
+  it("sees no jump in steady 32x preview playback, only its loop", () => {
+    // The Summary mini preview: a 250 ms interval tick (late by up to 120 ms
+    // on a busy page) re-anchors the clock, which the scene runs ahead of by
+    // at most 250 ms of real time; frames come at 60 fps with a dropped one now and then.
+    const speed = 32;
+    const spanMs = 45 * 60_000;
+    const cursorAt = (real: number) => (real * speed) % spanMs;
+    let clockMs = 0;
+    let clockAt = 0;
+    let nextTick = 250;
+    let previous: { ms: number; at: number } | null = null;
+    let jumps = 0;
+    let seed = 1;
+    const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    for (let now = 0; now < 2.5 * (spanMs / speed); now += random() < 0.02 ? 100 : FRAME_MS) {
+      while (nextTick <= now) {
+        clockMs = cursorAt(nextTick);
+        clockAt = nextTick;
+        nextTick += 250 + random() * 120;
+      }
+      const replayMs = clockMs + Math.min(now - clockAt, 250) * speed;
+      if (previous && isReplayJump(previous.ms, replayMs, (now - previous.at) * speed, speed)) jumps++;
+      previous = { ms: replayMs, at: now };
+    }
+    // Two loops back to the start, and nothing else.
+    expect(jumps).toBe(2);
   });
 });
 

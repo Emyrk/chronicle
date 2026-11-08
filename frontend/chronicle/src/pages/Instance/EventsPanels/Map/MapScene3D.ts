@@ -33,7 +33,7 @@ import {
 import { participantHue, participantLabel, type LiveMapPresence } from "../../liveSessionProtocol";
 import { actionForKey, cameraAngles, cameraCollisionDistance, cameraOffset, clampMobileMapInput, DEFAULT_AD_STRAFE, easeAngleToward, freeCamTravelSpeed, IDLE_MOBILE_MAP_INPUT, lookDrag, planarStep, pointerLossEndsDrag, rightDragWalkAxes, setWalkMouseButton, shouldFollowWalkCamera, walkCameraSettling, walkDragButton, walkMovementYaw, walkMouseControl, WALK_TOGGLE_KEY, wheelZoomDistance, type MapControlAction, type MobileMapInput } from "./mapControls";
 import { unwrapCompassRadians } from "./mapCompassModel";
-import { createShotHold, FOLLOW_CENTRE_WINDOW_MS, FOLLOW_SLICE_MS, startFollowTrackBuild, type FollowTrackBuild, FOLLOW_SMOOTH_SECONDS, followKeyAt, glideDurationMs, glidePoseAt, holdShot, isReplayJump, type FollowKey, type FollowTrack, type GlidePose } from "./followCamera";
+import { createShotHold, FOLLOW_CENTRE_WINDOW_MS, FOLLOW_SLICE_MS, followSpringSeconds, followWindowStretch, startFollowTrackBuild, type FollowTrackBuild, followKeyAt, glideDurationMs, glidePoseAt, holdShot, isReplayJump, type FollowKey, type FollowTrack, type GlidePose } from "./followCamera";
 import { BOSS_SPIRE, bossSpireCastGlow, CAST_ARC_TEXTURE_STEPS, DEAD_RING, DEBUFF_PLANE, DISPEL_COLORS, DROP_LINE, drawUnitPlate, ENEMY_RED, guardianWell, HALO_COLORS, MARKS_SCALE, OWNER_LINE, TARGET_LINE, TRAIL_LINE, UNIT_PLATE, unitPlateSize, type UnitPlateInfo, TOKEN_LAYOUT, type DispelKind, type HaloKind } from "./unitTokenArt";
 import { UnitTokenTextures } from "./unitTokens";
 import type { PlanInput, PlanItem, PlanMarkerIcon, PlanPoint } from "./plan/mapPlan";
@@ -1832,7 +1832,7 @@ export class MapScene3D {
     const fits = this.followInputsMatch(built, source.key, subject, mesh.scale);
     const stale = !fits
       || built!.speed !== speed
-      || (source.endMs > built!.endMs && replayMs > built!.endMs - FOLLOW_CENTRE_WINDOW_MS * speed);
+      || (source.endMs > built!.endMs && replayMs > built!.endMs - FOLLOW_CENTRE_WINDOW_MS * followWindowStretch(speed));
     const pending = this.followBuild?.inputs ?? null;
     if (stale && !(this.followInputsMatch(pending, source.key, subject, mesh.scale) && pending!.speed === speed)) {
       this.startFollowBuild(source, { key: source.key, subject, aspect: this.aspect, scale: mesh.scale, speed, endMs: source.endMs });
@@ -2675,10 +2675,12 @@ export class MapScene3D {
       return true;
     }
 
-    const smooth = key ? FOLLOW_SMOOTH_SECONDS : TARGET_SMOOTH_SECONDS;
+    // The track moves on replay time: its springs shorten with the speed, or they trail it.
+    const springs = key ? followSpringSeconds(this.clock.speed) : null;
+    const smooth = springs ? springs.position : TARGET_SMOOTH_SECONDS;
     const x = smoothDamp(this.directorX, goal.x, smooth, dt);
     const z = smoothDamp(this.directorZ, goal.z, smooth, dt);
-    const distance = smoothDamp(this.directorDistance, shotDistance, DISTANCE_SMOOTH_SECONDS, dt);
+    const distance = smoothDamp(this.directorDistance, shotDistance, springs ? springs.distance : DISTANCE_SMOOTH_SECONDS, dt);
     const elevation = smoothDamp(this.directorElevation, shotElevation, TARGET_SMOOTH_SECONDS, dt);
     const reach = this.directorReachFor(distance, dt, false);
     this.placeDirectorCamera(x, z, reach, elevation, yaw);
