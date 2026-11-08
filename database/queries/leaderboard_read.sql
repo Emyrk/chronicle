@@ -193,3 +193,39 @@ candidates AS (
 SELECT realm_id::uuid AS realm_id,subject_id::text AS subject_id,player_class,player_spec,player_sub_spec,'peak'::text AS metric,peak::double precision AS score FROM ranked WHERE peak_rank=1
 UNION ALL
 SELECT realm_id::uuid AS realm_id,subject_id::text AS subject_id,player_class,player_spec,player_sub_spec,'mastery'::text AS metric,mastery::double precision AS score FROM ranked WHERE mastery_rank=1;
+
+-- name: ListLeaderboardV2PlayerHistory :many
+-- One character's canonical evidence, for the ratings education page. Observations
+-- have no player-first index, so start from the player's rankings (indexed by
+-- player_guid), derive each canonical run, and probe the observation primary key.
+WITH runs AS MATERIALIZED (
+ SELECT DISTINCT d.instance_name, d.difficulty_name, d.max_players, d.encounter_name,
+        COALESCE(li.duplicate_group_id, li.id) AS run_id
+ FROM encounter_dps_rankings d
+ JOIN log_instances li ON li.id = d.instance_id
+ WHERE d.player_guid = @player_guid::text AND d.realm_id = @realm_id::uuid AND d.encounter_id IS NOT NULL
+)
+SELECT o.instance_name, o.difficulty_name, o.max_players, o.encounter_name,
+       o.player_class, o.player_spec, o.player_sub_spec, o.metric, o.metric_value,
+       e.start_time AS killed_at,
+       COALESCE(b.best_metric, 0)::double precision AS best_metric,
+       COALESCE(p.display_score, 0)::smallint AS parse, (p.display_score IS NOT NULL)::boolean AS has_parse
+FROM runs r
+JOIN leaderboard_player_observations o ON o.tenant_id = @tenant_id::uuid
+ AND o.instance_name = r.instance_name AND o.difficulty_name = r.difficulty_name AND o.max_players = r.max_players
+ AND o.encounter_name = r.encounter_name AND o.run_id = r.run_id
+ AND o.realm_id = @realm_id::uuid AND o.player_guid = @player_guid::text
+JOIN log_instance_encounters e ON e.id = o.source_encounter_id
+LEFT JOIN leaderboard_player_boss_benchmarks b ON b.tenant_id = o.tenant_id AND b.instance_name = o.instance_name
+ AND b.difficulty_name = o.difficulty_name AND b.max_players = o.max_players AND b.encounter_name = o.encounter_name
+ AND b.player_class = o.player_class AND b.player_spec = o.player_spec AND b.player_sub_spec = o.player_sub_spec AND b.metric = o.metric
+LEFT JOIN LATERAL (
+ SELECT ps.display_score FROM parse_score_results ps
+ WHERE ps.tenant_id = o.tenant_id AND ps.instance_id = o.source_instance_id AND ps.player_guid = o.player_guid
+   AND ps.metric = o.metric AND ps.encounter_name = o.encounter_name AND ps.status IN ('ok', 'low_confidence')
+ ORDER BY ps.created_at DESC, ps.precise_score DESC
+ LIMIT 1
+) p ON true
+ORDER BY o.instance_name, o.difficulty_name, o.max_players, o.encounter_name,
+         o.player_class, o.player_spec, o.player_sub_spec, o.metric, e.start_time, o.run_id
+LIMIT 5000;

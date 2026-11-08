@@ -863,6 +863,10 @@ type sqlcQuerier interface {
 	// Bounded page x eligible benchmark cohorts x selected bosses. Never blend specs
 	// boss-by-boss: rank only complete fixed-denominator candidate aggregates.
 	ListLeaderboardV2PlayerCompanions(ctx context.Context, arg ListLeaderboardV2PlayerCompanionsParams) ([]ListLeaderboardV2PlayerCompanionsRow, error)
+	// One character's canonical evidence, for the ratings education page. Observations
+	// have no player-first index, so start from the player's rankings (indexed by
+	// player_guid), derive each canonical run, and probe the observation primary key.
+	ListLeaderboardV2PlayerHistory(ctx context.Context, arg ListLeaderboardV2PlayerHistoryParams) ([]ListLeaderboardV2PlayerHistoryRow, error)
 	ListLogFilePartsForDeletion(ctx context.Context, logFileID uuid.UUID) ([]LogFilePart, error)
 	ListLogGroupArtifacts(ctx context.Context, logGroupID uuid.UUID) ([]LogGroupArtifact, error)
 	ListLogGroupArtifactsForParse(ctx context.Context, logGroupID uuid.UUID) ([]LogGroupArtifact, error)

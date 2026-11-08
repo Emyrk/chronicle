@@ -148,6 +148,54 @@ export interface LeaderboardV2Entry {
 
 // From chroniclesdk/leaderboard_v2.go
 /**
+ * LeaderboardV2PlayerHistory is one character's canonical rating evidence,
+ * grouped by exact boss and cohort, for explaining how ratings are derived.
+ */
+export interface LeaderboardV2PlayerHistory {
+    readonly groups: readonly LeaderboardV2PlayerHistoryGroup[];
+    /**
+     * Truncated is true when the character has more kills than one response returns.
+     */
+    readonly truncated: boolean;
+}
+
+// From chroniclesdk/leaderboard_v2.go
+export interface LeaderboardV2PlayerHistoryGroup {
+    readonly instance_name: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly encounter_name: string;
+    readonly player_class: string;
+    readonly player_spec: string;
+    readonly player_sub_spec: string;
+    readonly metric: string;
+    /**
+     * Benchmark is the cohort's current all-time best raw metric.
+     */
+    readonly benchmark: number;
+    /**
+     * RenownAward is the current award for one kill of this boss variant.
+     */
+    readonly renown_award: number;
+    /**
+     * RenownKills counts this character's kills of the boss across every cohort.
+     */
+    readonly renown_kills: number;
+    readonly kills: readonly LeaderboardV2PlayerHistoryKill[];
+}
+
+// From chroniclesdk/leaderboard_v2.go
+export interface LeaderboardV2PlayerHistoryKill {
+    readonly killed_at: string;
+    readonly value: number;
+    /**
+     * Parse is the kill's most recent parse score, when one exists.
+     */
+    readonly parse?: number;
+}
+
+// From chroniclesdk/leaderboard_v2.go
+/**
  * LeaderboardV2Response is a preview read over all-time raw summaries, not a
  * claim that evidence ingestion or refresh workers are installed.
  */

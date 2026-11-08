@@ -800,6 +800,7 @@ func (api *API) Routes() chi.Router {
 			r.With(api.Auth.Authenticated(true)).Get("/leaderboard-configuration", api.LeaderboardConfiguration)
 			r.With(api.Auth.Authenticated(true)).Get("/leaderboards-v2", api.LeaderboardV2)
 			r.With(api.Auth.Authenticated(true)).Get("/leaderboards-v2/maintenance", api.LeaderboardMaintenance)
+			r.With(api.Auth.Authenticated(true)).Get("/leaderboards-v2/player-history", api.LeaderboardV2PlayerHistory)
 
 			if api.Opts.Rankings != nil {
 				r.Mount("/rankings", api.Opts.Rankings)

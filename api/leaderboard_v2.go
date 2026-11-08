@@ -60,10 +60,7 @@ func (api *API) LeaderboardV2(w http.ResponseWriter, r *http.Request) {
 		httpapi.Write(ctx, w, http.StatusConflict, chroniclesdk.Response{Message: config.Conflict})
 		return
 	}
-	rows := make([]database.ResolveLeaderboardConfigurationRow, 0, len(config.Rows))
-	for _, row := range config.Rows {
-		rows = append(rows, database.ResolveLeaderboardConfigurationRow{Kind: row.Kind, InstanceName: row.InstanceName, EncounterName: row.EncounterName, DifficultyName: row.DifficultyName, MaxPlayers: row.MaxPlayers, SetKey: row.SetKey, HasPoints: row.HasPoints, Points: row.Points})
-	}
+	rows := selectionRows(config)
 	// Cohort discovery validates the same instance/variant, using set-independent
 	// enabled bosses. The discovery response itself does not produce Renown scores.
 	selectionReq := req
@@ -260,4 +257,111 @@ func (api *API) LeaderboardV2(w http.ResponseWriter, r *http.Request) {
 		out.Message = "No summaries match this selection. The preview does not populate or refresh evidence."
 	}
 	httpapi.Write(ctx, w, http.StatusOK, out)
+}
+
+// playerHistoryLimit bounds one response; it matches the query's LIMIT.
+const playerHistoryLimit = 5000
+
+// LeaderboardV2PlayerHistory returns one character's canonical kills grouped by
+// exact boss and cohort, with the current benchmark and Renown award. Bosses or
+// variants that are not enabled for the tenant's boards are omitted.
+func (api *API) LeaderboardV2PlayerHistory(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	tenant := servicetenant.TenantFromContext(ctx)
+	if tenant == nil {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "Open a tenant site to view rating history."})
+		return
+	}
+	q := r.URL.Query()
+	realm, err := uuid.Parse(q.Get("realm"))
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "invalid realm ID"})
+		return
+	}
+	player := strings.TrimSpace(q.Get("player"))
+	if player == "" || len(player) > 64 {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "player is required"})
+		return
+	}
+
+	db := database.New(api.Opts.Pool)
+	config, err := inspectLeaderboardConfiguration(ctx, db, tenant)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	if config.Conflict != "" {
+		httpapi.Write(ctx, w, http.StatusConflict, chroniclesdk.Response{Message: config.Conflict})
+		return
+	}
+	rows, err := db.ListLeaderboardV2PlayerHistory(ctx, database.ListLeaderboardV2PlayerHistoryParams{TenantID: tenant.ID, RealmID: realm, PlayerGuid: player})
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	httpapi.Write(ctx, w, http.StatusOK, buildPlayerHistory(selectionRows(config), rows))
+}
+
+func buildPlayerHistory(config []database.ResolveLeaderboardConfigurationRow, rows []database.ListLeaderboardV2PlayerHistoryRow) chroniclesdk.LeaderboardV2PlayerHistory {
+	out := chroniclesdk.LeaderboardV2PlayerHistory{Groups: []chroniclesdk.LeaderboardV2PlayerHistoryGroup{}, Truncated: len(rows) >= playerHistoryLimit}
+	type boss struct {
+		Instance, Difficulty, Encounter string
+		MaxPlayers                      int16
+	}
+	type award struct {
+		points float64
+		ok     bool
+	}
+	awards := map[boss]award{}
+	kills := map[boss]int64{}
+	for _, row := range rows {
+		kills[boss{row.InstanceName, row.DifficultyName, row.EncounterName, row.MaxPlayers}]++
+	}
+	for _, row := range rows {
+		key := boss{row.InstanceName, row.DifficultyName, row.EncounterName, row.MaxPlayers}
+		a, seen := awards[key]
+		if !seen {
+			// The same resolution the Renown board uses for a single exact boss.
+			selection, err := leaderboardread.Select(config, leaderboardread.Request{Instance: row.InstanceName, Difficulty: row.DifficultyName, MaxPlayers: row.MaxPlayers, Subject: "player", Kind: "renown", Score: "renown", Boss: row.EncounterName})
+			a = award{ok: err == nil && len(selection.Awards) == 1}
+			if a.ok {
+				a.points = selection.Awards[0]
+			}
+			awards[key] = a
+		}
+		if !a.ok {
+			continue
+		}
+		n := len(out.Groups)
+		if n == 0 || !sameHistoryGroup(out.Groups[n-1], row) {
+			out.Groups = append(out.Groups, chroniclesdk.LeaderboardV2PlayerHistoryGroup{
+				InstanceName: row.InstanceName, DifficultyName: row.DifficultyName, MaxPlayers: row.MaxPlayers, EncounterName: row.EncounterName,
+				PlayerClass: row.PlayerClass, PlayerSpec: row.PlayerSpec, PlayerSubSpec: row.PlayerSubSpec, Metric: row.Metric,
+				Benchmark: row.BestMetric, RenownAward: a.points, RenownKills: kills[key], Kills: []chroniclesdk.LeaderboardV2PlayerHistoryKill{},
+			})
+			n++
+		}
+		kill := chroniclesdk.LeaderboardV2PlayerHistoryKill{KilledAt: row.KilledAt.Time, Value: row.MetricValue}
+		if row.HasParse {
+			parse := row.Parse
+			kill.Parse = &parse
+		}
+		out.Groups[n-1].Kills = append(out.Groups[n-1].Kills, kill)
+	}
+	return out
+}
+
+// sameHistoryGroup relies on the query ordering rows by group identity.
+func sameHistoryGroup(g chroniclesdk.LeaderboardV2PlayerHistoryGroup, row database.ListLeaderboardV2PlayerHistoryRow) bool {
+	return g.InstanceName == row.InstanceName && g.DifficultyName == row.DifficultyName && g.MaxPlayers == row.MaxPlayers &&
+		g.EncounterName == row.EncounterName && g.PlayerClass == row.PlayerClass && g.PlayerSpec == row.PlayerSpec &&
+		g.PlayerSubSpec == row.PlayerSubSpec && g.Metric == row.Metric
+}
+
+func selectionRows(config chroniclesdk.LeaderboardConfiguration) []database.ResolveLeaderboardConfigurationRow {
+	rows := make([]database.ResolveLeaderboardConfigurationRow, 0, len(config.Rows))
+	for _, row := range config.Rows {
+		rows = append(rows, database.ResolveLeaderboardConfigurationRow{Kind: row.Kind, InstanceName: row.InstanceName, EncounterName: row.EncounterName, DifficultyName: row.DifficultyName, MaxPlayers: row.MaxPlayers, SetKey: row.SetKey, HasPoints: row.HasPoints, Points: row.Points})
+	}
+	return rows
 }

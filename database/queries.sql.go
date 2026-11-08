@@ -15418,6 +15418,99 @@ func (q *sqlQuerier) ListLeaderboardV2PlayerCompanions(ctx context.Context, arg 
 	return items, nil
 }
 
+const listLeaderboardV2PlayerHistory = `-- name: ListLeaderboardV2PlayerHistory :many
+WITH runs AS MATERIALIZED (
+ SELECT DISTINCT d.instance_name, d.difficulty_name, d.max_players, d.encounter_name,
+        COALESCE(li.duplicate_group_id, li.id) AS run_id
+ FROM encounter_dps_rankings d
+ JOIN log_instances li ON li.id = d.instance_id
+ WHERE d.player_guid = $3::text AND d.realm_id = $2::uuid AND d.encounter_id IS NOT NULL
+)
+SELECT o.instance_name, o.difficulty_name, o.max_players, o.encounter_name,
+       o.player_class, o.player_spec, o.player_sub_spec, o.metric, o.metric_value,
+       e.start_time AS killed_at,
+       COALESCE(b.best_metric, 0)::double precision AS best_metric,
+       COALESCE(p.display_score, 0)::smallint AS parse, (p.display_score IS NOT NULL)::boolean AS has_parse
+FROM runs r
+JOIN leaderboard_player_observations o ON o.tenant_id = $1::uuid
+ AND o.instance_name = r.instance_name AND o.difficulty_name = r.difficulty_name AND o.max_players = r.max_players
+ AND o.encounter_name = r.encounter_name AND o.run_id = r.run_id
+ AND o.realm_id = $2::uuid AND o.player_guid = $3::text
+JOIN log_instance_encounters e ON e.id = o.source_encounter_id
+LEFT JOIN leaderboard_player_boss_benchmarks b ON b.tenant_id = o.tenant_id AND b.instance_name = o.instance_name
+ AND b.difficulty_name = o.difficulty_name AND b.max_players = o.max_players AND b.encounter_name = o.encounter_name
+ AND b.player_class = o.player_class AND b.player_spec = o.player_spec AND b.player_sub_spec = o.player_sub_spec AND b.metric = o.metric
+LEFT JOIN LATERAL (
+ SELECT ps.display_score FROM parse_score_results ps
+ WHERE ps.tenant_id = o.tenant_id AND ps.instance_id = o.source_instance_id AND ps.player_guid = o.player_guid
+   AND ps.metric = o.metric AND ps.encounter_name = o.encounter_name AND ps.status IN ('ok', 'low_confidence')
+ ORDER BY ps.created_at DESC, ps.precise_score DESC
+ LIMIT 1
+) p ON true
+ORDER BY o.instance_name, o.difficulty_name, o.max_players, o.encounter_name,
+         o.player_class, o.player_spec, o.player_sub_spec, o.metric, e.start_time, o.run_id
+LIMIT 5000
+`
+
+type ListLeaderboardV2PlayerHistoryParams struct {
+	TenantID   uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RealmID    uuid.UUID `db:"realm_id" json:"realm_id"`
+	PlayerGuid string    `db:"player_guid" json:"player_guid"`
+}
+
+type ListLeaderboardV2PlayerHistoryRow struct {
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16              `db:"max_players" json:"max_players"`
+	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
+	PlayerClass    string             `db:"player_class" json:"player_class"`
+	PlayerSpec     string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec  string             `db:"player_sub_spec" json:"player_sub_spec"`
+	Metric         string             `db:"metric" json:"metric"`
+	MetricValue    float64            `db:"metric_value" json:"metric_value"`
+	KilledAt       pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	BestMetric     float64            `db:"best_metric" json:"best_metric"`
+	Parse          int16              `db:"parse" json:"parse"`
+	HasParse       bool               `db:"has_parse" json:"has_parse"`
+}
+
+// One character's canonical evidence, for the ratings education page. Observations
+// have no player-first index, so start from the player's rankings (indexed by
+// player_guid), derive each canonical run, and probe the observation primary key.
+func (q *sqlQuerier) ListLeaderboardV2PlayerHistory(ctx context.Context, arg ListLeaderboardV2PlayerHistoryParams) ([]ListLeaderboardV2PlayerHistoryRow, error) {
+	rows, err := q.db.Query(ctx, listLeaderboardV2PlayerHistory, arg.TenantID, arg.RealmID, arg.PlayerGuid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLeaderboardV2PlayerHistoryRow
+	for rows.Next() {
+		var i ListLeaderboardV2PlayerHistoryRow
+		if err := rows.Scan(
+			&i.InstanceName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.EncounterName,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+			&i.Metric,
+			&i.MetricValue,
+			&i.KilledAt,
+			&i.BestMetric,
+			&i.Parse,
+			&i.HasParse,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const resolveLeaderboardConfiguration = `-- name: ResolveLeaderboardConfiguration :many
 WITH assignments AS (
 SELECT layer_key, ARRAY['instance', instance_name]::text[] AS identity, 'enabled'::text AS property, enabled::integer::double precision AS value FROM leaderboard_instance_overrides WHERE enabled IS NOT NULL

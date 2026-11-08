@@ -52,6 +52,39 @@ type LeaderboardV2Boss struct {
 	ObservationCount int64    `json:"observation_count"`
 }
 
+// LeaderboardV2PlayerHistory is one character's canonical rating evidence,
+// grouped by exact boss and cohort, for explaining how ratings are derived.
+type LeaderboardV2PlayerHistory struct {
+	Groups []LeaderboardV2PlayerHistoryGroup `json:"groups"`
+	// Truncated is true when the character has more kills than one response returns.
+	Truncated bool `json:"truncated"`
+}
+
+type LeaderboardV2PlayerHistoryGroup struct {
+	InstanceName   string `json:"instance_name"`
+	DifficultyName string `json:"difficulty_name"`
+	MaxPlayers     int16  `json:"max_players"`
+	EncounterName  string `json:"encounter_name"`
+	PlayerClass    string `json:"player_class"`
+	PlayerSpec     string `json:"player_spec"`
+	PlayerSubSpec  string `json:"player_sub_spec"`
+	Metric         string `json:"metric"`
+	// Benchmark is the cohort's current all-time best raw metric.
+	Benchmark float64 `json:"benchmark"`
+	// RenownAward is the current award for one kill of this boss variant.
+	RenownAward float64 `json:"renown_award"`
+	// RenownKills counts this character's kills of the boss across every cohort.
+	RenownKills int64                            `json:"renown_kills"`
+	Kills       []LeaderboardV2PlayerHistoryKill `json:"kills"`
+}
+
+type LeaderboardV2PlayerHistoryKill struct {
+	KilledAt time.Time `json:"killed_at"`
+	Value    float64   `json:"value"`
+	// Parse is the kill's most recent parse score, when one exists.
+	Parse *int16 `json:"parse,omitempty"`
+}
+
 // LeaderboardV2Companion identifies the winning whole-selection cohort.
 type LeaderboardV2Companion struct {
 	Score         float64 `json:"score"`

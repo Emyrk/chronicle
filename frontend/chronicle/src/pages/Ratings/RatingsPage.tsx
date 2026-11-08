@@ -6,23 +6,24 @@ import { parseColor } from "@/pages/Instance/parseColors"
 import { ToolsBackLink } from "@/pages/Tools/ToolsBackLink"
 import { METRIC_THEMES } from "@/pages/Leaderboards/Ratings/ratingThemes"
 import { MASTERY_WEIGHTS, averageAcrossBosses, normalize, ratePlayerBoss, type Band } from "./ratingMath"
+import { groupKey, groupLabel, useMyRatingData, type RatingDataset } from "./useMyRatingData"
 
 // Example player: a Fury Warrior's Nefarian kills, in chronological order.
 // Parses are illustrative 60-day-window scores; ratings never read them.
-const EXAMPLE_KILLS = [
-  { dps: 1000, parse: 92 },
-  { dps: 820, parse: 68 },
-  { dps: 1120, parse: 98 },
-  { dps: 1080, parse: 96 },
-  { dps: 1060, parse: 94 },
-  { dps: 1150, parse: 100 },
-  { dps: 1090, parse: 97 },
-  { dps: 1130, parse: 99 },
-  { dps: 1070, parse: 95 },
-  { dps: 1140, parse: 99 },
-]
-const TODAY_BENCHMARK = 1180
-const NEFARIAN_AWARD = 9 // vanilla seed in migration 000343
+const EXAMPLE: RatingDataset = {
+  key: "example",
+  bossName: "Nefarian",
+  cohortLabel: "Fury Warrior",
+  unit: "DPS",
+  kills: [1000, 820, 1120, 1080, 1060, 1150, 1090, 1130, 1070, 1140].map((value, i) => ({
+    value,
+    parse: [92, 68, 98, 96, 94, 100, 97, 99, 95, 99][i],
+  })),
+  benchmark: 1180,
+  award: 9, // vanilla seed in migration 000343
+  renownKills: 10,
+  example: true,
+}
 const OTHER_BWL_BOSSES = [
   { name: "Razorgore the Untamed", kills: 12, award: 2 },
   { name: "Vaelastrasz the Corrupt", kills: 12, award: 2 },
@@ -32,6 +33,8 @@ const OTHER_BWL_BOSSES = [
   { name: "Flamegor", kills: 11, award: 2 },
   { name: "Chromaggus", kills: 10, award: 2 },
 ]
+/** Above this many kills, per-bar value labels would overlap. */
+const MAX_LABELLED_BARS = 14
 
 const RATING_ACCENT = {
   peak: METRIC_THEMES.peak.accent,
@@ -43,6 +46,7 @@ const MasteryIcon = METRIC_THEMES.mastery.icon
 const RenownIcon = METRIC_THEMES.renown.icon
 
 type Lens = "performance" | "parse" | "peak" | "mastery" | "renown"
+type Source = "example" | "mine"
 
 const LENSES: { id: Lens; label: string; icon: ReactNode; kind: "metric" | "rating" }[] = [
   { id: "performance", label: "Performance", icon: <BarChart3 className="h-4 w-4" />, kind: "metric" },
@@ -61,14 +65,26 @@ const BAND_STYLE: Record<Band, { bar: string; label: string; swatch: string }> =
 
 const fmt = (n: number, digits = 1) => n.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits })
 const fmtInt = (n: number) => Math.round(n).toLocaleString()
+const fmtDate = (iso?: string) => (iso ? new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "")
 
 export function RatingsPage() {
   const [lens, setLens] = useState<Lens>("mastery")
-  const [killCount, setKillCount] = useState(EXAMPLE_KILLS.length)
-  const [benchmark, setBenchmark] = useState(TODAY_BENCHMARK)
+  const [source, setSource] = useState<Source>("example")
+  // Slider positions belong to one dataset; switching datasets resets them.
+  const [sliders, setSliders] = useState<{ key: string; killCount?: number; benchmark?: number }>({ key: "" })
+  const my = useMyRatingData(source === "mine")
 
-  const kills = EXAMPLE_KILLS.slice(0, killCount)
-  const rating = ratePlayerBoss(kills.map((k) => k.dps), benchmark)
+  const dataset = source === "mine" ? my.dataset : EXAMPLE
+  // The benchmark section keeps teaching with the example while My data is unavailable.
+  const shown = dataset ?? EXAMPLE
+  const own = sliders.key === shown.key ? sliders : { key: shown.key }
+  const killCount = Math.min(own.killCount ?? shown.kills.length, shown.kills.length)
+  const benchmark = own.benchmark ?? shown.benchmark
+  const setKillCount = (n: number) => setSliders({ ...own, killCount: n })
+  const setBenchmark = (n: number) => setSliders({ ...own, benchmark: n })
+
+  const kills = shown.kills.slice(0, killCount)
+  const rating = ratePlayerBoss(kills.map((k) => k.value), benchmark)
   const bandByIndex = new Map(rating.bands.map((b) => [b.index, b.band]))
   const peakIndex = rating.bands.at(-1)?.index ?? -1
 
@@ -88,10 +104,40 @@ export function RatingsPage() {
 
       {/* Interactive example */}
       <section className="mb-10">
-        <h2 className="mb-1 text-2xl font-semibold">See It in Action</h2>
-        <p className="mb-4 text-muted-foreground">
-          One example player's Nefarian kills as a Fury Warrior, viewed through each lens.
-        </p>
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="mb-1 text-2xl font-semibold">See It in Action</h2>
+            <p className="text-muted-foreground">
+              {source === "example"
+                ? "One example player's Nefarian kills as a Fury Warrior, viewed through each lens."
+                : "Your own kills on one boss, viewed through each lens."}
+            </p>
+          </div>
+          <div className="inline-flex rounded-lg border bg-card p-1" role="radiogroup" aria-label="Data source">
+            {(
+              [
+                ["example", "Example player"],
+                ["mine", "My data"],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                role="radio"
+                aria-checked={source === id}
+                onClick={() => setSource(id)}
+                className={cn(
+                  "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                  source === id ? "bg-sky-500/15 text-foreground" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {source === "mine" && <MyDataPicker my={my} />}
 
         <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-5" role="tablist" aria-label="Metric lens">
           {LENSES.map((l) => (
@@ -114,36 +160,53 @@ export function RatingsPage() {
           ))}
         </div>
 
-        <div className="rounded-xl border bg-card p-4 sm:p-6">
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,17rem)_minmax(0,1fr)]">
-            <LensExplanation lens={lens} rating={rating} benchmark={benchmark} killCount={killCount} />
-            <div className="min-w-0">
-              <KillChart
-                lens={lens}
-                kills={kills}
-                benchmark={benchmark}
-                bandByIndex={bandByIndex}
-                peakIndex={peakIndex}
-              />
-              <label className="mt-4 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-                <span className="whitespace-nowrap">Kills logged: <strong className="text-foreground tabular-nums">{killCount}</strong></span>
-                <input
-                  type="range"
-                  min={1}
-                  max={EXAMPLE_KILLS.length}
-                  value={killCount}
-                  onChange={(e) => setKillCount(Number(e.target.value))}
-                  className="min-w-40 flex-1 accent-sky-500"
+        {dataset ? (
+          <div className="rounded-xl border bg-card p-4 sm:p-6">
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,17rem)_minmax(0,1fr)]">
+              <LensExplanation lens={lens} rating={rating} dataset={dataset} benchmark={benchmark} killCount={killCount} />
+              <div className="min-w-0">
+                <KillChart
+                  lens={lens}
+                  dataset={dataset}
+                  killCount={killCount}
+                  benchmark={benchmark}
+                  bandByIndex={bandByIndex}
+                  peakIndex={peakIndex}
                 />
-              </label>
+                <label className="mt-4 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                  <span className="whitespace-nowrap">
+                    Kills logged: <strong className="text-foreground tabular-nums">{killCount}</strong>
+                  </span>
+                  <input
+                    type="range"
+                    min={1}
+                    max={dataset.kills.length}
+                    value={killCount}
+                    disabled={dataset.kills.length < 2}
+                    onChange={(e) => setKillCount(Number(e.target.value))}
+                    className="min-w-40 flex-1 accent-sky-500"
+                  />
+                </label>
+              </div>
             </div>
-          </div>
 
-          <KillTable kills={kills} lens={lens} bandByIndex={bandByIndex} peakIndex={peakIndex} benchmark={benchmark} />
-        </div>
+            <KillTable
+              kills={kills}
+              unit={dataset.unit}
+              lens={lens}
+              bandByIndex={bandByIndex}
+              peakIndex={peakIndex}
+              benchmark={benchmark}
+            />
+          </div>
+        ) : (
+          <div className="rounded-xl border border-dashed bg-card/50 p-8 text-center text-muted-foreground">
+            <MyDataStatus my={my} />
+          </div>
+        )}
       </section>
 
-      <BenchmarkSection benchmark={benchmark} setBenchmark={setBenchmark} rawPeak={rating.rawPeak} />
+      <BenchmarkSection dataset={shown} benchmark={benchmark} setBenchmark={setBenchmark} rawPeak={rating.rawPeak} />
       <SmallSamples />
       <MultipleBosses />
       <DpsOrHps />
@@ -161,6 +224,77 @@ export function RatingsPage() {
       </section>
     </div>
   )
+}
+
+type MyData = ReturnType<typeof useMyRatingData>
+
+const selectClass =
+  "h-9 min-w-0 max-w-full rounded-md border bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-sky-400"
+
+function MyDataPicker({ my }: { my: MyData }) {
+  if (my.characters.length === 0) return null
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
+      <label className="flex w-full min-w-0 items-center gap-2 text-muted-foreground sm:w-auto">
+        Character
+        <select
+          className={cn(selectClass, "flex-1 sm:flex-none")}
+          value={my.character ? `${my.character.realm_id}|${my.character.character_guid}` : ""}
+          onChange={(e) => my.selectCharacter(e.target.value)}
+        >
+          {my.characters.map((c) => (
+            <option key={c.link_id} value={`${c.realm_id}|${c.character_guid}`}>
+              {c.name} ({c.realm_name})
+            </option>
+          ))}
+        </select>
+      </label>
+      {my.groups.length > 0 && (
+        <label className="flex w-full min-w-0 items-center gap-2 text-muted-foreground sm:w-auto sm:flex-1">
+          Boss
+          <select
+            className={cn(selectClass, "flex-1")}
+            value={my.group ? groupKey(my.group) : ""}
+            onChange={(e) => my.selectGroup(e.target.value)}
+          >
+            {my.groups.map((g) => (
+              <option key={groupKey(g)} value={groupKey(g)}>
+                {groupLabel(g)}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {my.truncated && (
+        <p className="w-full text-xs text-amber-300">Showing your most recent history only; this character has a lot of kills.</p>
+      )}
+    </div>
+  )
+}
+
+function MyDataStatus({ my }: { my: MyData }) {
+  switch (my.state.status) {
+    case "signed-out":
+      return <p>Sign in and link your character to see your own kills here.</p>
+    case "loading":
+      return <p>Loading your kills…</p>
+    case "no-characters":
+      return (
+        <p>
+          You haven't linked a character yet.{" "}
+          <Link to="/settings" className="font-medium text-blue-400 hover:text-blue-300">
+            Link one in Settings
+          </Link>
+          .
+        </p>
+      )
+    case "no-kills":
+      return <p>{my.character?.name ?? "This character"} has no rated boss kills on this server yet.</p>
+    case "error":
+      return <p>{my.state.message || "Could not load your rating history."}</p>
+    default:
+      return null
+  }
 }
 
 function Overview() {
@@ -234,25 +368,29 @@ function OverviewCard({ icon, title, body, accent }: { icon: ReactNode; title: s
 function LensExplanation({
   lens,
   rating,
+  dataset,
   benchmark,
   killCount,
 }: {
   lens: Lens
   rating: ReturnType<typeof ratePlayerBoss>
+  dataset: RatingDataset
   benchmark: number
   killCount: number
 }) {
+  const { unit, cohortLabel, bossName, award } = dataset
   switch (lens) {
     case "performance":
       return (
         <div>
           <h3 className="text-xl font-semibold">Performance</h3>
           <p className="mt-2 text-sm text-muted-foreground">
-            The DPS or HPS you actually did on each kill. Everything else on this page starts from these numbers.
+            The {unit} {dataset.example ? "" : "you "}actually did on each kill. Everything else on this page starts
+            from these numbers.
           </p>
           <p className="mt-2 text-sm text-muted-foreground">
-            The dashed line is the <strong>benchmark</strong>: the best {fmtInt(benchmark)} DPS any Fury Warrior on
-            the server has ever done on this boss.
+            The dashed line is the <strong>benchmark</strong>: the best {fmtInt(benchmark)} {unit} any {cohortLabel} on
+            the server has ever done on {bossName}.
           </p>
         </div>
       )
@@ -266,7 +404,10 @@ function LensExplanation({
           </p>
           <p className="mt-2 text-sm text-muted-foreground">
             Ratings don't use parses. They go back to your raw performance and compare it to today's all-time
-            benchmark. That's why kill #6 parsed 100 but its Peak is lower: someone has beaten it since.
+            benchmark.{" "}
+            {dataset.example
+              ? "That's why kill #6 parsed 100 but its Peak is lower: someone has beaten it since."
+              : "A kill that parsed 100 can still have a Peak below 100 if someone has beaten it since."}
           </p>
         </div>
       )
@@ -305,38 +446,51 @@ function LensExplanation({
         </div>
       )
     case "renown": {
-      const nef = killCount * NEFARIAN_AWARD
+      // The example scales with the slider; real Renown counts every kill of the boss.
+      const renownKills = dataset.example ? killCount : dataset.renownKills
+      const points = renownKills * award
       const others = OTHER_BWL_BOSSES.reduce((s, b) => s + b.kills * b.award, 0)
       return (
         <div>
           <h3 className="text-xl font-semibold">Renown</h3>
           <p className="mt-2 text-sm text-muted-foreground">
             Every boss has a Renown award. Each kill earns that award, however you performed. Harder bosses are worth
-            more: Nefarian is worth {NEFARIAN_AWARD}, and the rest of Blackwing Lair is worth 2 each.
+            more:{" "}
+            {dataset.example
+              ? `Nefarian is worth ${award}, and the rest of Blackwing Lair is worth 2 each.`
+              : `${bossName} is worth ${fmtInt(award)} per kill here.`}
           </p>
           <p className="mt-2 font-mono text-xs text-muted-foreground">
-            Nefarian: {killCount} kills × {NEFARIAN_AWARD} = {nef}
+            {bossName}: {renownKills} kills × {fmtInt(award)} = {fmtInt(points)}
           </p>
-          <Score label="Nefarian Renown" value={String(nef)} />
-          <details className="mt-3 text-sm text-muted-foreground">
-            <summary className="cursor-pointer">All of Blackwing Lair: {nef + others}</summary>
-            <ul className="mt-2 space-y-0.5 text-xs tabular-nums">
-              {OTHER_BWL_BOSSES.map((b) => (
-                <li key={b.name} className="flex justify-between gap-2">
-                  <span className="truncate">{b.name}</span>
+          <Score label={`${bossName} Renown`} value={fmtInt(points)} />
+          {!dataset.example && renownKills > dataset.kills.length && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Includes kills as another spec or counted as {unit === "DPS" ? "HPS" : "DPS"}. Renown counts every kill
+              once.
+            </p>
+          )}
+          {dataset.example && (
+            <details className="mt-3 text-sm text-muted-foreground">
+              <summary className="cursor-pointer">All of Blackwing Lair: {points + others}</summary>
+              <ul className="mt-2 space-y-0.5 text-xs tabular-nums">
+                {OTHER_BWL_BOSSES.map((b) => (
+                  <li key={b.name} className="flex justify-between gap-2">
+                    <span className="truncate">{b.name}</span>
+                    <span>
+                      {b.kills} × {b.award} = {b.kills * b.award}
+                    </span>
+                  </li>
+                ))}
+                <li className="flex justify-between gap-2">
+                  <span>Nefarian</span>
                   <span>
-                    {b.kills} × {b.award} = {b.kills * b.award}
+                    {renownKills} × {award} = {points}
                   </span>
                 </li>
-              ))}
-              <li className="flex justify-between gap-2">
-                <span>Nefarian</span>
-                <span>
-                  {killCount} × {NEFARIAN_AWARD} = {nef}
-                </span>
-              </li>
-            </ul>
-          </details>
+              </ul>
+            </details>
+          )}
         </div>
       )
     }
@@ -366,21 +520,25 @@ function WeightRow({ label, weight, value, swatch }: { label: string; weight: nu
 
 function KillChart({
   lens,
-  kills,
+  dataset,
+  killCount,
   benchmark,
   bandByIndex,
   peakIndex,
 }: {
   lens: Lens
-  kills: typeof EXAMPLE_KILLS
+  dataset: RatingDataset
+  killCount: number
   benchmark: number
   bandByIndex: Map<number, Band>
   peakIndex: number
 }) {
+  const all = dataset.kills
   // Floor the axis so differences between kills stay visible.
-  const axisMin = 600
-  const axisMax = Math.max(benchmark, ...EXAMPLE_KILLS.map((k) => k.dps)) * 1.1
+  const axisMin = Math.max(0, Math.min(...all.map((k) => k.value)) * 0.75)
+  const axisMax = Math.max(benchmark, ...all.map((k) => k.value)) * 1.1
   const pct = (v: number) => (100 * (v - axisMin)) / (axisMax - axisMin)
+  const labelled = all.length <= MAX_LABELLED_BARS
 
   const barClass = (i: number) => {
     switch (lens) {
@@ -395,16 +553,16 @@ function KillChart({
     }
   }
   const label = (i: number) => {
-    const k = kills[i]
+    const k = all[i]
     switch (lens) {
       case "parse":
-        return <span className={parseColor(k.parse)}>{k.parse}</span>
+        return k.parse === undefined ? "—" : <span className={parseColor(k.parse)}>{k.parse}</span>
       case "renown":
-        return <span className="text-violet-300">+{NEFARIAN_AWARD}</span>
+        return <span className="text-violet-300">+{fmtInt(dataset.award)}</span>
       case "peak":
-        return i === peakIndex ? <span className="text-amber-300">{fmtInt(k.dps)}</span> : null
+        return i === peakIndex ? <span className="text-amber-300">{fmtInt(k.value)}</span> : null
       default:
-        return fmtInt(k.dps)
+        return fmtInt(k.value)
     }
   }
 
@@ -420,20 +578,22 @@ function KillChart({
             Benchmark {fmtInt(benchmark)}
           </span>
         </div>
-        <div className="flex h-full items-end gap-1 sm:gap-2">
-          {EXAMPLE_KILLS.map((k, i) => {
-            const shown = i < kills.length
+        <div className={cn("flex h-full items-end", all.length > 20 ? "gap-px" : "gap-1 sm:gap-2")}>
+          {all.map((k, i) => {
+            const shown = i < killCount
             return (
               <div key={i} className="flex h-full min-w-0 flex-1 flex-col justify-end">
                 {shown && (
                   <>
-                    <div className="mb-1 truncate text-center text-[10px] tabular-nums text-muted-foreground sm:text-xs">
-                      {label(i)}
-                    </div>
+                    {(labelled || (lens === "peak" && i === peakIndex)) && (
+                      <div className="mb-1 truncate text-center text-[10px] tabular-nums text-muted-foreground sm:text-xs">
+                        {label(i)}
+                      </div>
+                    )}
                     <div
                       className={cn("rounded-t transition-all", barClass(i))}
-                      style={{ height: lens === "renown" ? "60%" : `${pct(k.dps)}%` }}
-                      title={`Kill #${i + 1}: ${fmtInt(k.dps)} DPS`}
+                      style={{ height: lens === "renown" ? "60%" : `${pct(k.value)}%` }}
+                      title={`Kill #${i + 1}${k.killedAt ? ` (${fmtDate(k.killedAt)})` : ""}: ${fmtInt(k.value)} ${dataset.unit}${k.parse === undefined ? "" : `, parse ${k.parse}`}`}
                     />
                   </>
                 )}
@@ -442,10 +602,10 @@ function KillChart({
           })}
         </div>
       </div>
-      <div className="flex gap-1 border-t pt-1 sm:gap-2">
-        {EXAMPLE_KILLS.map((_, i) => (
+      <div className={cn("flex border-t pt-1", all.length > 20 ? "gap-px" : "gap-1 sm:gap-2")}>
+        {all.map((_, i) => (
           <div key={i} className="min-w-0 flex-1 text-center text-[10px] text-muted-foreground sm:text-xs">
-            #{i + 1}
+            {labelled || i === 0 || i === all.length - 1 || (i + 1) % 10 === 0 ? `#${i + 1}` : ""}
           </div>
         ))}
       </div>
@@ -465,53 +625,69 @@ function KillChart({
 
 function KillTable({
   kills,
+  unit,
   lens,
   bandByIndex,
   peakIndex,
   benchmark,
 }: {
-  kills: typeof EXAMPLE_KILLS
+  kills: RatingDataset["kills"]
+  unit: RatingDataset["unit"]
   lens: Lens
   bandByIndex: Map<number, Band>
   peakIndex: number
   benchmark: number
 }) {
   const dim = (i: number) => (lens === "mastery" && bandByIndex.get(i) === "ignored") || (lens === "peak" && i !== peakIndex)
+  const dated = kills.some((k) => k.killedAt)
   return (
     <div className="styled-scrollbar mt-6 overflow-x-auto">
       <table className="w-full min-w-[36rem] text-sm tabular-nums">
         <thead>
           <tr className="border-b text-muted-foreground">
-            <th className="py-2 pr-3 text-left font-medium">Kill</th>
-            {kills.map((_, i) => (
-              <th key={i} className={cn("px-2 py-2 text-right font-medium", dim(i) && "opacity-40")}>
+            <th className="sticky left-0 bg-card py-2 pr-3 text-left font-medium">Kill</th>
+            {kills.map((k, i) => (
+              <th key={i} className={cn("px-2 py-2 text-right font-medium", dim(i) && "opacity-40")} title={fmtDate(k.killedAt)}>
                 #{i + 1}
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
+          {dated && (
+            <tr className="border-b">
+              <td className="sticky left-0 bg-card py-2 pr-3 text-muted-foreground">Date</td>
+              {kills.map((k, i) => (
+                <td key={i} className={cn("whitespace-nowrap px-2 py-2 text-right text-xs text-muted-foreground", dim(i) && "opacity-40")}>
+                  {k.killedAt ? new Date(k.killedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : ""}
+                </td>
+              ))}
+            </tr>
+          )}
           <tr className="border-b">
-            <td className="py-2 pr-3 text-muted-foreground">Performance (DPS)</td>
+            <td className="sticky left-0 bg-card py-2 pr-3 text-muted-foreground">Performance ({unit})</td>
             {kills.map((k, i) => (
               <td key={i} className={cn("px-2 py-2 text-right", dim(i) && "opacity-40")}>
-                {fmtInt(k.dps)}
+                {fmtInt(k.value)}
               </td>
             ))}
           </tr>
           <tr className="border-b">
-            <td className="py-2 pr-3 text-muted-foreground">Parse (at the time)</td>
+            <td className="sticky left-0 bg-card py-2 pr-3 text-muted-foreground">Parse (at the time)</td>
             {kills.map((k, i) => (
-              <td key={i} className={cn("px-2 py-2 text-right", parseColor(k.parse), dim(i) && "opacity-40")}>
-                {k.parse}
+              <td
+                key={i}
+                className={cn("px-2 py-2 text-right", k.parse === undefined ? "text-muted-foreground" : parseColor(k.parse), dim(i) && "opacity-40")}
+              >
+                {k.parse ?? "—"}
               </td>
             ))}
           </tr>
           <tr>
-            <td className="py-2 pr-3 text-muted-foreground">vs. benchmark today</td>
+            <td className="sticky left-0 bg-card py-2 pr-3 text-muted-foreground">vs. benchmark today</td>
             {kills.map((k, i) => (
               <td key={i} className={cn("px-2 py-2 text-right", dim(i) && "opacity-40")}>
-                {fmt(normalize(k.dps, benchmark))}
+                {fmt(normalize(k.value, benchmark))}
               </td>
             ))}
           </tr>
@@ -522,16 +698,20 @@ function KillTable({
 }
 
 function BenchmarkSection({
+  dataset,
   benchmark,
   setBenchmark,
   rawPeak,
 }: {
+  dataset: RatingDataset
   benchmark: number
   setBenchmark: (n: number) => void
   rawPeak: number
 }) {
-  const todayPeak = normalize(rawPeak, TODAY_BENCHMARK)
+  const today = dataset.benchmark
+  const todayPeak = normalize(rawPeak, today)
   const nowPeak = normalize(rawPeak, benchmark)
+  const step = Math.max(1, Math.round(today / 120))
   return (
     <section className="mb-10 grid gap-6 rounded-xl border bg-card p-4 sm:p-6 lg:grid-cols-2">
       <div>
@@ -546,14 +726,14 @@ function BenchmarkSection({
         </p>
         <p className="text-muted-foreground">
           The benchmark covers all time, so it only goes up, unless the log holding the record is removed. Drag the
-          slider to set a new record and watch the example above update.
+          slider to set a new record and watch the {dataset.example ? "example" : "chart"} above update.
         </p>
       </div>
       <div className="rounded-lg border bg-background/40 p-4">
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-sm">
           <div>
             <div className="mb-1 inline-block rounded-full bg-muted px-2 py-0.5 text-xs">Today</div>
-            <div className="text-muted-foreground">Benchmark {fmtInt(TODAY_BENCHMARK)}</div>
+            <div className="text-muted-foreground">Benchmark {fmtInt(today)}</div>
             <div className="text-3xl font-bold tabular-nums">{fmt(todayPeak)}</div>
             <div className="text-xs text-muted-foreground">Peak</div>
           </div>
@@ -566,12 +746,12 @@ function BenchmarkSection({
           </div>
         </div>
         <label className="mt-4 block text-sm text-muted-foreground">
-          New server record: <strong className="tabular-nums text-foreground">{fmtInt(benchmark)} DPS</strong>
+          New server record: <strong className="tabular-nums text-foreground">{fmtInt(benchmark)} {dataset.unit}</strong>
           <input
             type="range"
-            min={TODAY_BENCHMARK}
-            max={1500}
-            step={10}
+            min={today}
+            max={today * 1.3}
+            step={step}
             value={benchmark}
             onChange={(e) => setBenchmark(Number(e.target.value))}
             className="mt-2 block w-full accent-sky-500"
@@ -581,6 +761,7 @@ function BenchmarkSection({
     </section>
   )
 }
+
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
