@@ -17,6 +17,8 @@ import {
   BOSS_ENGAGE_YARDS,
   CINEMATIC_ELEVATION_DEG,
   directorFrame,
+  DISTANCE_SMOOTH_SECONDS,
+  type DampedValue,
   MIN_FRAME_RADIUS_YARDS,
   STRAGGLER_CUTOFF_YARDS,
   STRAGGLER_RELEASE_YARDS,
@@ -39,6 +41,22 @@ export const FOLLOW_RADIUS_PEAK_MS = 500;
 export const FOLLOW_SUBJECT_WINDOW_MS = 1_000;
 /** The springs only smooth what the track leaves over, so they can be quick. */
 export const FOLLOW_SMOOTH_SECONDS = 0.3;
+/**
+ * Fast playback stretches the sample spacing and the centre window, but only
+ * up to these factors of the 1x values (so at most 1 s between samples and a
+ * 6 s centre window, in replay time): averaging minutes of a winding cave path
+ * cuts its bends into the rock (chronicle-1723). The radius windows keep
+ * stretching with the speed, which keeps a fast shot calm.
+ */
+export const FOLLOW_MAX_SAMPLE_STRETCH = 4;
+export const FOLLOW_MAX_WINDOW_STRETCH = 2;
+/**
+ * The smoothed centre never sits further than this from the per-sample
+ * framing (the framed units' circle), except where the framing itself jumps
+ * (more than twice this between samples: a gap, a teleport), whose slide is
+ * left alone.
+ */
+export const FOLLOW_CENTRE_CLAMP_YARDS = 12;
 /**
  * The replay clock moving more than playback explains by this much is a jump,
  * or by FOLLOW_JUMP_REAL_MS of play at a fast speed (a tick re-anchoring the
@@ -67,7 +85,7 @@ export interface FollowTrackOptions {
   scale: number;
   /** Follow this unit instead of the group. */
   subjectGuid?: string | null;
-  /** Replay ms per real ms: sampling and windows stretch with it, so a fast replay moves the camera as calmly as a real-time one. */
+  /** Replay ms per real ms: sampling and windows stretch with it (the centre's only up to FOLLOW_MAX_WINDOW_STRETCH), so a fast replay stays calm. */
   speed?: number;
   sampleMs?: number;
   /** Half-widths of the centre and radius windows (replay ms at 1x); the defaults when left out. */
@@ -111,6 +129,55 @@ export interface FollowTrackBuild {
   readonly result: FollowTrack | null;
 }
 
+/** How much the centre window (replay time) stretches at `speed`. */
+export function followWindowStretch(speed: number): number {
+  return Math.min(Math.max(1, speed), FOLLOW_MAX_WINDOW_STRETCH);
+}
+
+/** How the Director's springs follow a track. */
+export interface FollowSprings {
+  /** The position spring's smoothing (real seconds). */
+  position: number;
+  /** How far ahead (replay ms) the position spring's goal is sampled. */
+  leadMs: number;
+  /** The distance spring's smoothing (real seconds). */
+  distance: number;
+  /** How far ahead (replay ms) the radius the distance is fitted to is sampled. */
+  distanceLeadMs: number;
+}
+
+/**
+ * The springs while following a track at `speed`. The track moves on replay
+ * time and the springs on real time: a critically damped spring trails a
+ * steady move by its smoothing time, which is `speed` times as much replay at
+ * a fast speed (tens of yards at 32x). So the springs keep their real-time
+ * smoothing (it filters the replay clock's coarse ticks and eases a short
+ * seek or a shortened shot), and each goal is sampled that far ahead, which
+ * cancels the trail (chronicle-1723). Paused, there is no lead.
+ */
+export function followSprings(speed: number, playing: boolean): FollowSprings {
+  const replayPerSecond = playing ? Math.max(1, speed) * 1_000 : 0;
+  return {
+    position: FOLLOW_SMOOTH_SECONDS,
+    leadMs: replayPerSecond * FOLLOW_SMOOTH_SECONDS,
+    distance: DISTANCE_SMOOTH_SECONDS,
+    distanceLeadMs: replayPerSecond * DISTANCE_SMOOTH_SECONDS,
+  };
+}
+
+/**
+ * Hands a position spring over to a led goal without a jump: the spring sits
+ * on `at` (where the group is) moving at the track's speed, which is where a
+ * spring that has been chasing `led` (its goal, `springs.leadMs` ahead) settles.
+ * Use it after a cut; a glide that lands on `at` hands over with that velocity
+ * already. Mutates and returns `spring`.
+ */
+export function handOverFollowSpring(spring: DampedValue, at: number, led: number, springs: FollowSprings): DampedValue {
+  spring.value = at;
+  spring.velocity = springs.leadMs > 0 ? (led - at) / springs.position : 0;
+  return spring;
+}
+
 // A moving average over `half` samples either side, in O(n) with a running sum.
 function movingMean(values: ArrayLike<number>, half: number): Float64Array {
   const n = values.length;
@@ -137,7 +204,7 @@ export function startFollowTrackBuild(options: FollowTrackOptions, now: () => nu
   const { startMs, endMs, unitsAt, scale, subjectGuid = null } = options;
   const speed = Math.max(1, options.speed ?? 1);
   const baseSampleMs = options.sampleMs ?? FOLLOW_SAMPLE_MS;
-  const sampleMs = baseSampleMs * speed;
+  const sampleMs = baseSampleMs * Math.min(speed, FOLLOW_MAX_SAMPLE_STRETCH);
   const span = Math.max(0, endMs - startMs);
   const count = Math.max(1, Math.ceil(span / sampleMs) + 1);
   const frameOptions = {
@@ -165,6 +232,7 @@ export function startFollowTrackBuild(options: FollowTrackOptions, now: () => nu
   let done = false;
   let result: FollowTrack | null = null;
   const minRadius = MIN_FRAME_RADIUS_YARDS * scale;
+  const clamp = FOLLOW_CENTRE_CLAMP_YARDS * scale;
 
   // Gaps (nobody to frame) hold the nearest framing on either side, so the
   // centred window glides into the next one before the group appears there.
@@ -182,9 +250,28 @@ export function startFollowTrackBuild(options: FollowTrackOptions, now: () => nu
       rawZ[i] = rawZ[from]!;
       framed[i] = framed[from]!;
     }
-    const half = Math.max(1, Math.round((subjectGuid ? FOLLOW_SUBJECT_WINDOW_MS : options.centreWindowMs ?? FOLLOW_CENTRE_WINDOW_MS) / baseSampleMs / 2));
+    const windowMs = (subjectGuid ? FOLLOW_SUBJECT_WINDOW_MS : options.centreWindowMs ?? FOLLOW_CENTRE_WINDOW_MS) * followWindowStretch(speed);
+    const half = Math.max(1, Math.round(windowMs / sampleMs / 2));
     xs = movingMean(movingMean(rawX, half), half);
     zs = movingMean(movingMean(rawZ, half), half);
+    // Keep the centre near the framing it smooths, so a bend is not cut into
+    // the rock; within the window of a jump in the framing, its slide stays.
+    const jumps = new Int32Array(count + 1);
+    for (let i = 1; i < count; i++) {
+      const jumped = Math.hypot(rawX[i]! - rawX[i - 1]!, rawZ[i]! - rawZ[i - 1]!) > 2 * clamp;
+      jumps[i + 1] = jumps[i]! + (jumped ? 1 : 0);
+    }
+    const reach = 2 * half;
+    for (let i = 0; i < count; i++) {
+      // Any jump into a sample within the window (2 * half either side) leaves it be.
+      if (jumps[Math.min(count, i + reach + 1)]! - jumps[Math.max(0, i - reach) + 1]! > 0) continue;
+      const dx = xs[i]! - rawX[i]!;
+      const dz = zs[i]! - rawZ[i]!;
+      const off = Math.hypot(dx, dz);
+      if (off <= clamp) continue;
+      xs[i] = rawX[i]! + (dx * clamp) / off;
+      zs[i] = rawZ[i]! + (dz * clamp) / off;
+    }
     cover = new Float64Array(count);
     return true;
   };
@@ -196,8 +283,8 @@ export function startFollowTrackBuild(options: FollowTrackOptions, now: () => nu
   // hold the frame at its widest (chronicle-1579 review: that backed the
   // camera into the cave walls).
   const finish = () => {
-    const peakHalf = Math.max(1, Math.round(FOLLOW_RADIUS_PEAK_MS / baseSampleMs));
-    const meanHalf = Math.max(1, Math.round((options.radiusWindowMs ?? FOLLOW_RADIUS_WINDOW_MS) / baseSampleMs / 2));
+    const peakHalf = Math.max(1, Math.round((FOLLOW_RADIUS_PEAK_MS * speed) / sampleMs));
+    const meanHalf = Math.max(1, Math.round(((options.radiusWindowMs ?? FOLLOW_RADIUS_WINDOW_MS) * speed) / sampleMs / 2));
     const radii = movingMean(movingMean(windowed(Array.from(cover!), peakHalf, "max"), meanHalf), meanHalf);
     result = { startMs, endMs: startMs + span, sampleMs, subjectGuid, speed, x: xs!, z: zs!, radius: Float64Array.from(radii) };
   };
@@ -286,10 +373,11 @@ export function followKeyAt(track: FollowTrack, ms: number, out: FollowKey): Fol
 /**
  * Whether the replay clock moved from `previousMs` to `ms` by more than
  * playback explains (`expectedMs` of play at `speed`): a seek, a skipped
- * gap between encounters, or a loop back to the start.
+ * gap between encounters, or a loop back to the start. Only playback
+ * re-anchors by more at a fast speed: paused, any seek past FOLLOW_JUMP_MS is one.
  */
-export function isReplayJump(previousMs: number, ms: number, expectedMs: number, speed: number): boolean {
-  return Math.abs(ms - previousMs - expectedMs) > Math.max(FOLLOW_JUMP_MS, FOLLOW_JUMP_REAL_MS * speed);
+export function isReplayJump(previousMs: number, ms: number, expectedMs: number, speed: number, playing = true): boolean {
+  return Math.abs(ms - previousMs - expectedMs) > Math.max(FOLLOW_JUMP_MS, playing ? FOLLOW_JUMP_REAL_MS * speed : 0);
 }
 
 /** What the line-of-sight check currently holds the shot at. */
