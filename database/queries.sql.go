@@ -12004,6 +12004,30 @@ func (q *sqlQuerier) InsertLeaderboardVariantRenown(ctx context.Context, arg Ins
 	return err
 }
 
+const listLeaderboardLayers = `-- name: ListLeaderboardLayers :many
+SELECT key, required_flavors FROM leaderboard_layers ORDER BY key
+`
+
+func (q *sqlQuerier) ListLeaderboardLayers(ctx context.Context) ([]LeaderboardLayer, error) {
+	rows, err := q.db.Query(ctx, listLeaderboardLayers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LeaderboardLayer
+	for rows.Next() {
+		var i LeaderboardLayer
+		if err := rows.Scan(&i.Key, &i.RequiredFlavors); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const resolveLeaderboardConfiguration = `-- name: ResolveLeaderboardConfiguration :many
 WITH assignments AS (
 SELECT layer_key, ARRAY['instance', instance_name]::text[] AS identity, 'enabled'::text AS property, enabled::integer::double precision AS value FROM leaderboard_instance_overrides WHERE enabled IS NOT NULL
@@ -12095,7 +12119,7 @@ UNION ALL
 SELECT 'conflict'::text, identity[2]::text, array_to_string(identity, '/')::text,
        ''::text, 0::smallint, ''::text, 0::integer, 0::double precision, false::boolean, property::text, ''::text
 FROM conflicts
-ORDER BY kind, instance_name, set_key, position, encounter_name, difficulty_name, max_players
+ORDER BY kind, instance_name, set_key, position, encounter_name, difficulty_name, max_players, conflicting_property
 `
 
 type ResolveLeaderboardConfigurationRow struct {

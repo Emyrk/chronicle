@@ -50,3 +50,5 @@ VALUES ($1, $2, $3, $4);
 INSERT INTO leaderboard_variant_renown (layer_key, instance_name, encounter_name, difficulty_name, max_players, points)
 VALUES ($1, $2, $3, $4, $5, $6);
 
+-- name: ListLeaderboardLayers :many
+SELECT key, required_flavors FROM leaderboard_layers ORDER BY key;
