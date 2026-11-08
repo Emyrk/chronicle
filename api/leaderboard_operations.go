@@ -19,6 +19,9 @@ import (
 
 func leaderboardOperationSDK(o database.LeaderboardOperation) chroniclesdk.LeaderboardOperation {
 	out := chroniclesdk.LeaderboardOperation{MissingDates: o.MissingDates, DateBasis: "run_end_time", ID: o.ID, TenantID: o.TenantID, RequestedBy: o.RequestedBy, Purpose: o.Purpose, Scope: o.Scope, BeforeDate: o.BeforeDate.Time.Format("2006-01-02"), Cutoff: o.Cutoff.Time, State: o.State, Phase: o.Phase, Discovered: o.Discovered, DiscoveryComplete: o.DiscoveryComplete, StartedAt: o.StartedAt.Time, LastProgressAt: o.LastProgressAt.Time, RetryCount: o.RetryCount, LastError: o.LastError}
+	if o.AfterDate.Valid {
+		out.AfterDate = o.AfterDate.Time.Format("2006-01-02")
+	}
 	if o.RunID.Valid {
 		out.RunID = &o.RunID.UUID
 	}
@@ -49,7 +52,7 @@ func parseLeaderboardOperation(req chroniclesdk.CreateLeaderboardOperationReques
 		p.RunID = uuid.NullUUID{UUID: *req.RunID, Valid: true}
 	}
 	today := now.UTC().Truncate(24 * time.Hour)
-	before := today
+	before := today.AddDate(0, 0, 1)
 	if req.BeforeDate != "" {
 		var err error
 		before, err = time.Parse("2006-01-02", req.BeforeDate)
@@ -57,8 +60,15 @@ func parseLeaderboardOperation(req chroniclesdk.CreateLeaderboardOperationReques
 			return p, errors.New("before_date must be YYYY-MM-DD (exclusive UTC)")
 		}
 	}
-	if before.After(today) {
-		return p, errors.New("before_date cannot be after today UTC")
+	if req.AfterDate != "" {
+		after, err := time.Parse("2006-01-02", req.AfterDate)
+		if err != nil {
+			return p, errors.New("after_date must be YYYY-MM-DD (inclusive UTC)")
+		}
+		if !after.Before(before) {
+			return p, errors.New("after_date must be before before_date")
+		}
+		p.AfterDate = pgtype.Date{Time: after, Valid: true}
 	}
 	p.BeforeDate = pgtype.Date{Time: before, Valid: true}
 	return p, nil
@@ -162,11 +172,18 @@ func operationMaintenance(op database.LeaderboardOperation) *chroniclesdk.Leader
 	if op.Purpose == "bootstrap" {
 		kind, message = "partial_coverage", "Historical leaderboard coverage is incomplete while backfill is in progress."
 	}
-	message += " Runs completed before " + op.BeforeDate.Time.Format("2006-01-02") + " 00:00 UTC."
+	afterDate := ""
+	if op.AfterDate.Valid {
+		afterDate = op.AfterDate.Time.Format("2006-01-02")
+		message += " Runs completed from " + afterDate + " 00:00 UTC (inclusive)"
+	} else {
+		message += " Runs completed"
+	}
+	message += " before " + op.BeforeDate.Time.Format("2006-01-02") + " 00:00 UTC."
 	if op.MissingDates > 0 {
 		message += " Runs without completion dates are excluded; use specific-run repair."
 	}
-	return &chroniclesdk.LeaderboardMaintenance{Kind: kind, State: op.State, Message: message, BeforeDate: op.BeforeDate.Time.Format("2006-01-02"), Cutoff: op.Cutoff.Time, MissingDates: op.MissingDates, DateBasis: "run_end_time"}
+	return &chroniclesdk.LeaderboardMaintenance{Kind: kind, State: op.State, Message: message, AfterDate: afterDate, BeforeDate: op.BeforeDate.Time.Format("2006-01-02"), Cutoff: op.Cutoff.Time, MissingDates: op.MissingDates, DateBasis: "run_end_time"}
 }
 
 func (api *API) LeaderboardMaintenance(w http.ResponseWriter, r *http.Request) {

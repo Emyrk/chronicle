@@ -6,6 +6,7 @@ import {
 } from "./AdminLeaderboardOperations";
 import {
   utcToday,
+  utcTomorrow,
   operationActive,
   operationPhaseDescription,
   type LeaderboardOperation,
@@ -46,6 +47,7 @@ const operation: LeaderboardOperation = {
   requested_by: "admin-a",
   purpose: "bootstrap",
   scope: "tenant",
+  after_date: "2026-10-01",
   before_date: "2026-11-07",
   cutoff: "2026-11-07T09:00:00Z",
   date_basis: "run_end_time",
@@ -64,8 +66,10 @@ describe("tenant leaderboard operations", () => {
     mocks.operations = [];
     mocks.mutate.mockReset();
   });
-  it("defaults to today's UTC date rather than the local date", () => {
-    expect(utcToday(new Date("2026-11-06T19:00:00-08:00"))).toBe("2026-11-07");
+  it("calculates UTC today and defaults the exclusive end to tomorrow", () => {
+    const now = new Date("2026-11-06T19:00:00-08:00");
+    expect(utcToday(now)).toBe("2026-11-07");
+    expect(utcTomorrow(now)).toBe("2026-11-08");
   });
   it("renders tenant-local backfill, repair and explicit completion date semantics", () => {
     const html = renderToStaticMarkup(
@@ -77,8 +81,12 @@ describe("tenant leaderboard operations", () => {
     expect(html).toContain("including runs already represented");
     expect(html).toContain("Records a repair and shows a recalculation notice");
     expect(html).toContain("Ignores the date cutoff");
+    expect(html).toContain("Runs completed from");
+    expect(html).toContain("Optional · 00:00 UTC (inclusive)");
     expect(html).toContain("Runs completed before");
     expect(html).toContain("00:00 UTC (exclusive)");
+    expect(html).toContain("defaults to tomorrow");
+    expect(html).not.toContain("max=\"");
     expect(html).toContain("Single-run repair");
     expect(html).toContain("without a completion date");
   });
@@ -93,7 +101,8 @@ describe("tenant leaderboard operations", () => {
     expect(html).toContain("admin-a");
     expect(html).toContain("27 obligations / keys discovered");
     expect(html).toContain("3 runs have no completion date");
-    expect(html).toContain("2026-11-07 00:00 UTC");
+    expect(html).toContain("2026-10-01 00:00 UTC (inclusive)");
+    expect(html).toContain("2026-11-07 00:00 UTC (exclusive)");
   });
   it("distinguishes dated discovery from all-time evidence and result reconciliation", () => {
     expect(operationPhaseDescription(operation)).toContain(

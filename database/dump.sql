@@ -1928,6 +1928,7 @@ CREATE TABLE leaderboard_operations (
     retry_count integer DEFAULT 0 NOT NULL,
     retry_after timestamp with time zone DEFAULT '-infinity'::timestamp with time zone NOT NULL,
     last_error text DEFAULT ''::text NOT NULL,
+    after_date date,
     CONSTRAINT leaderboard_operations_check CHECK (((scope = 'run'::text) = (run_id IS NOT NULL))),
     CONSTRAINT leaderboard_operations_purpose_check CHECK ((purpose = ANY (ARRAY['bootstrap'::text, 'repair'::text]))),
     CONSTRAINT leaderboard_operations_scope_check CHECK ((scope = ANY (ARRAY['tenant'::text, 'run'::text]))),

@@ -17,7 +17,7 @@ import {
   operationKey,
   operationPhaseDescription,
   sortedOperations,
-  utcToday,
+  utcTomorrow,
   useLeaderboardOperationAction,
   useLeaderboardOperations,
   useLeaderboardOperationDetail,
@@ -125,8 +125,10 @@ export function TenantLeaderboardOperations({
   tenantID: string;
   tenantName: string;
 }) {
-  const [beforeDate, setBeforeDate] = useState(utcToday);
+  const [afterDate, setAfterDate] = useState("");
+  const [beforeDate, setBeforeDate] = useState(utcTomorrow);
   const [runID, setRunID] = useState("");
+  const invalidDateRange = !!afterDate && !!beforeDate && afterDate >= beforeDate;
   const operations = useLeaderboardOperations(tenantID);
   const action = useLeaderboardOperationAction(tenantID);
   const rows = sortedOperations(operations.data?.operations ?? []);
@@ -153,24 +155,37 @@ export function TenantLeaderboardOperations({
       <AdminLeaderboardQueues tenantID={tenantID} tenantName={tenantName} />
       <div className="flex flex-wrap items-end gap-3">
         <label className="space-y-1 text-sm">
+          <span className="block">Runs completed from</span>
+          <input
+            aria-label={`${tenantName} completion start date`}
+            type="date"
+            value={afterDate}
+            onChange={(event) => setAfterDate(event.target.value)}
+            className="h-9 rounded-md border bg-background px-3"
+          />
+          <span className="block text-xs text-muted-foreground">
+            Optional · 00:00 UTC (inclusive)
+          </span>
+        </label>
+        <label className="space-y-1 text-sm">
           <span className="block">Runs completed before</span>
           <input
-            aria-label={`${tenantName} completion cutoff date`}
+            aria-label={`${tenantName} completion end date`}
             type="date"
-            max={utcToday()}
             required
             value={beforeDate}
             onChange={(event) => setBeforeDate(event.target.value)}
             className="h-9 rounded-md border bg-background px-3"
           />
+          <span className="block text-xs text-muted-foreground">
+            00:00 UTC (exclusive)
+          </span>
         </label>
-        <span className="pb-2 text-xs text-muted-foreground">
-          00:00 UTC (exclusive)
-        </span>
-        <OperationHelp title="Populate historical coverage" description="Process runs completed before the selected UTC date, including runs already represented, then reconcile existing all-time evidence and results. Uses the same pipeline as Repair tenant; records a backfill and shows an incomplete-coverage notice.">
+        <OperationHelp title="Populate historical coverage" description="Process runs completed in the selected UTC date range, including runs already represented, then reconcile existing all-time evidence and results. Uses the same pipeline as Repair tenant; records a backfill and shows an incomplete-coverage notice.">
         <Button
           disabled={
             !beforeDate ||
+            invalidDateRange ||
             action.isPending ||
             !!active ||
             operations.isPending ||
@@ -181,6 +196,7 @@ export function TenantLeaderboardOperations({
               tenant_id: tenantID,
               purpose: "bootstrap",
               scope: "tenant",
+              after_date: afterDate || undefined,
               before_date: beforeDate,
             })
           }
@@ -193,6 +209,7 @@ export function TenantLeaderboardOperations({
           variant="outline"
           disabled={
             !beforeDate ||
+            invalidDateRange ||
             action.isPending ||
             !!active ||
             operations.isPending ||
@@ -203,6 +220,7 @@ export function TenantLeaderboardOperations({
               tenant_id: tenantID,
               purpose: "repair",
               scope: "tenant",
+              after_date: afterDate || undefined,
               before_date: beforeDate,
             })
           }
@@ -211,10 +229,17 @@ export function TenantLeaderboardOperations({
         </Button>
         </OperationHelp>
       </div>
+      {invalidDateRange && (
+        <p role="alert" className="text-xs text-destructive">
+          The start date must be before the exclusive end date.
+        </p>
+      )}
       <p className="text-xs text-muted-foreground">
-        Uses run completion time, not upload time. Runs without a completion
-        date are not covered by a date scan. The cutoff is not an ingestion
-        snapshot.
+        Uses run completion time, not upload time. The end date defaults to
+        tomorrow so runs completed today are included, and it may be set further
+        into the future. The operation scans current data; it does not wait for
+        future runs. Runs without a completion date are not covered by a date
+        scan. The range is not an ingestion snapshot.
       </p>
       <div className="flex flex-wrap items-end gap-3">
         <label className="min-w-64 flex-1 space-y-1 text-sm">
@@ -320,7 +345,7 @@ export function TenantLeaderboardOperations({
                 <tr className="border-b text-muted-foreground">
                   {[
                     "Operation / scope",
-                    "Run discovery before",
+                    "Run discovery range",
                     "Progress",
                     "Audit",
                   ].map((label) => (
@@ -348,7 +373,7 @@ export function TenantLeaderboardOperations({
                     <td className="whitespace-nowrap px-2 py-3">
                       {operation.scope === "run"
                         ? "Single run"
-                        : `${operation.before_date} 00:00 UTC (exclusive)`}
+                        : `${operation.after_date ? `${operation.after_date} 00:00 UTC (inclusive) → ` : "All history → "}${operation.before_date} 00:00 UTC (exclusive)`}
                     </td>
                     <td className="min-w-64 px-2 py-3">
                       <OperationSummary operation={operation} />

@@ -15,7 +15,8 @@ describe("leaderboard operation requests", () => {
       tenant_id: "a",
       purpose: "bootstrap",
       scope: "tenant",
-      before_date: "2026-11-07",
+      after_date: "2026-10-01",
+      before_date: "2026-11-09",
     });
     expect(fetch.mock.calls[0]).toEqual([
       "/api/v1/admin/leaderboard-operations",
@@ -26,7 +27,8 @@ describe("leaderboard operation requests", () => {
           tenant_id: "a",
           purpose: "bootstrap",
           scope: "tenant",
-          before_date: "2026-11-07",
+          after_date: "2026-10-01",
+          before_date: "2026-11-09",
         }),
       },
     ]);

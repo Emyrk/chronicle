@@ -13487,7 +13487,7 @@ func (q *sqlQuerier) RepairOperationPlayerRenownCounts(ctx context.Context, arg 
 }
 
 const activeLeaderboardOperation = `-- name: ActiveLeaderboardOperation :many
-SELECT id, tenant_id, requested_by, purpose, scope, run_id, before_date, cutoff, state, phase, cursor_scope, cursor_realm, cursor_date, cursor_id, discovered, missing_dates, discovery_complete, started_at, completed_at, last_progress_at, retry_count, retry_after, last_error FROM leaderboard_operations WHERE tenant_id= $1 AND state<>'completed'
+SELECT id, tenant_id, requested_by, purpose, scope, run_id, before_date, cutoff, state, phase, cursor_scope, cursor_realm, cursor_date, cursor_id, discovered, missing_dates, discovery_complete, started_at, completed_at, last_progress_at, retry_count, retry_after, last_error, after_date FROM leaderboard_operations WHERE tenant_id= $1 AND state<>'completed'
 `
 
 func (q *sqlQuerier) ActiveLeaderboardOperation(ctx context.Context, tenantID uuid.UUID) ([]LeaderboardOperation, error) {
@@ -13523,6 +13523,7 @@ func (q *sqlQuerier) ActiveLeaderboardOperation(ctx context.Context, tenantID uu
 			&i.RetryCount,
 			&i.RetryAfter,
 			&i.LastError,
+			&i.AfterDate,
 		); err != nil {
 			return nil, err
 		}
@@ -13638,8 +13639,8 @@ func (q *sqlQuerier) CountLeaderboardOperationMissingDates(ctx context.Context, 
 }
 
 const createLeaderboardOperation = `-- name: CreateLeaderboardOperation :one
-INSERT INTO leaderboard_operations(tenant_id,requested_by,purpose,scope,run_id,before_date)
-VALUES ($1,$2,$3,$4,$5::uuid,$6::date) RETURNING id, tenant_id, requested_by, purpose, scope, run_id, before_date, cutoff, state, phase, cursor_scope, cursor_realm, cursor_date, cursor_id, discovered, missing_dates, discovery_complete, started_at, completed_at, last_progress_at, retry_count, retry_after, last_error
+INSERT INTO leaderboard_operations(tenant_id,requested_by,purpose,scope,run_id,after_date,before_date)
+VALUES ($1,$2,$3,$4,$5::uuid,$6::date,$7::date) RETURNING id, tenant_id, requested_by, purpose, scope, run_id, before_date, cutoff, state, phase, cursor_scope, cursor_realm, cursor_date, cursor_id, discovered, missing_dates, discovery_complete, started_at, completed_at, last_progress_at, retry_count, retry_after, last_error, after_date
 `
 
 type CreateLeaderboardOperationParams struct {
@@ -13648,6 +13649,7 @@ type CreateLeaderboardOperationParams struct {
 	Purpose     string        `db:"purpose" json:"purpose"`
 	Scope       string        `db:"scope" json:"scope"`
 	RunID       uuid.NullUUID `db:"run_id" json:"run_id"`
+	AfterDate   pgtype.Date   `db:"after_date" json:"after_date"`
 	BeforeDate  pgtype.Date   `db:"before_date" json:"before_date"`
 }
 
@@ -13658,6 +13660,7 @@ func (q *sqlQuerier) CreateLeaderboardOperation(ctx context.Context, arg CreateL
 		arg.Purpose,
 		arg.Scope,
 		arg.RunID,
+		arg.AfterDate,
 		arg.BeforeDate,
 	)
 	var i LeaderboardOperation
@@ -13685,6 +13688,7 @@ func (q *sqlQuerier) CreateLeaderboardOperation(ctx context.Context, arg CreateL
 		&i.RetryCount,
 		&i.RetryAfter,
 		&i.LastError,
+		&i.AfterDate,
 	)
 	return i, err
 }
@@ -13731,14 +13735,17 @@ func (q *sqlQuerier) DiscoverLeaderboardOperationEvidence(ctx context.Context, a
 
 const discoverLeaderboardOperationRuns = `-- name: DiscoverLeaderboardOperationRuns :many
 SELECT run_id,end_time FROM ranking_runs
-WHERE realm_id= $1 AND end_time< $2::timestamptz
- AND EXISTS(SELECT 1 FROM wow_server_realms r JOIN wow_servers s ON s.id=r.server_id WHERE r.id=ranking_runs.realm_id AND s.tenant_id= $3::uuid)
- AND (end_time,run_id)>($4::timestamptz,$5::uuid)
+WHERE realm_id= $1
+ AND ($2::timestamptz IS NULL OR end_time>=$2::timestamptz)
+ AND end_time< $3::timestamptz
+ AND EXISTS(SELECT 1 FROM wow_server_realms r JOIN wow_servers s ON s.id=r.server_id WHERE r.id=ranking_runs.realm_id AND s.tenant_id= $4::uuid)
+ AND (end_time,run_id)>($5::timestamptz,$6::uuid)
 ORDER BY end_time,run_id LIMIT 100
 `
 
 type DiscoverLeaderboardOperationRunsParams struct {
 	RealmID    uuid.UUID          `db:"realm_id" json:"realm_id"`
+	RangeStart pgtype.Timestamptz `db:"range_start" json:"range_start"`
 	BeforeTime pgtype.Timestamptz `db:"before_time" json:"before_time"`
 	TenantID   uuid.UUID          `db:"tenant_id" json:"tenant_id"`
 	AfterDate  pgtype.Timestamptz `db:"after_date" json:"after_date"`
@@ -13755,6 +13762,7 @@ type DiscoverLeaderboardOperationRunsRow struct {
 func (q *sqlQuerier) DiscoverLeaderboardOperationRuns(ctx context.Context, arg DiscoverLeaderboardOperationRunsParams) ([]DiscoverLeaderboardOperationRunsRow, error) {
 	rows, err := q.db.Query(ctx, discoverLeaderboardOperationRuns,
 		arg.RealmID,
+		arg.RangeStart,
 		arg.BeforeTime,
 		arg.TenantID,
 		arg.AfterDate,
@@ -13794,7 +13802,7 @@ func (q *sqlQuerier) DrainLeaderboardOperation(ctx context.Context, arg DrainLea
 }
 
 const getLeaderboardOperation = `-- name: GetLeaderboardOperation :one
-SELECT id, tenant_id, requested_by, purpose, scope, run_id, before_date, cutoff, state, phase, cursor_scope, cursor_realm, cursor_date, cursor_id, discovered, missing_dates, discovery_complete, started_at, completed_at, last_progress_at, retry_count, retry_after, last_error FROM leaderboard_operations WHERE id= $1 AND tenant_id= $2
+SELECT id, tenant_id, requested_by, purpose, scope, run_id, before_date, cutoff, state, phase, cursor_scope, cursor_realm, cursor_date, cursor_id, discovered, missing_dates, discovery_complete, started_at, completed_at, last_progress_at, retry_count, retry_after, last_error, after_date FROM leaderboard_operations WHERE id= $1 AND tenant_id= $2
 `
 
 type GetLeaderboardOperationParams struct {
@@ -13829,6 +13837,7 @@ func (q *sqlQuerier) GetLeaderboardOperation(ctx context.Context, arg GetLeaderb
 		&i.RetryCount,
 		&i.RetryAfter,
 		&i.LastError,
+		&i.AfterDate,
 	)
 	return i, err
 }
@@ -13906,7 +13915,7 @@ func (q *sqlQuerier) ListDueLeaderboardOperations(ctx context.Context, afterTena
 }
 
 const listLeaderboardOperations = `-- name: ListLeaderboardOperations :many
-SELECT id, tenant_id, requested_by, purpose, scope, run_id, before_date, cutoff, state, phase, cursor_scope, cursor_realm, cursor_date, cursor_id, discovered, missing_dates, discovery_complete, started_at, completed_at, last_progress_at, retry_count, retry_after, last_error FROM leaderboard_operations WHERE tenant_id= $1 ORDER BY started_at DESC,id LIMIT 50
+SELECT id, tenant_id, requested_by, purpose, scope, run_id, before_date, cutoff, state, phase, cursor_scope, cursor_realm, cursor_date, cursor_id, discovered, missing_dates, discovery_complete, started_at, completed_at, last_progress_at, retry_count, retry_after, last_error, after_date FROM leaderboard_operations WHERE tenant_id= $1 ORDER BY started_at DESC,id LIMIT 50
 `
 
 func (q *sqlQuerier) ListLeaderboardOperations(ctx context.Context, tenantID uuid.UUID) ([]LeaderboardOperation, error) {
@@ -13942,6 +13951,7 @@ func (q *sqlQuerier) ListLeaderboardOperations(ctx context.Context, tenantID uui
 			&i.RetryCount,
 			&i.RetryAfter,
 			&i.LastError,
+			&i.AfterDate,
 		); err != nil {
 			return nil, err
 		}
@@ -13954,7 +13964,7 @@ func (q *sqlQuerier) ListLeaderboardOperations(ctx context.Context, tenantID uui
 }
 
 const lockLeaderboardOperation = `-- name: LockLeaderboardOperation :one
-SELECT id, tenant_id, requested_by, purpose, scope, run_id, before_date, cutoff, state, phase, cursor_scope, cursor_realm, cursor_date, cursor_id, discovered, missing_dates, discovery_complete, started_at, completed_at, last_progress_at, retry_count, retry_after, last_error FROM leaderboard_operations WHERE id= $1 AND tenant_id= $2 FOR UPDATE
+SELECT id, tenant_id, requested_by, purpose, scope, run_id, before_date, cutoff, state, phase, cursor_scope, cursor_realm, cursor_date, cursor_id, discovered, missing_dates, discovery_complete, started_at, completed_at, last_progress_at, retry_count, retry_after, last_error, after_date FROM leaderboard_operations WHERE id= $1 AND tenant_id= $2 FOR UPDATE
 `
 
 type LockLeaderboardOperationParams struct {
@@ -13989,12 +13999,13 @@ func (q *sqlQuerier) LockLeaderboardOperation(ctx context.Context, arg LockLeade
 		&i.RetryCount,
 		&i.RetryAfter,
 		&i.LastError,
+		&i.AfterDate,
 	)
 	return i, err
 }
 
 const lookupLeaderboardOperation = `-- name: LookupLeaderboardOperation :one
-SELECT id, tenant_id, requested_by, purpose, scope, run_id, before_date, cutoff, state, phase, cursor_scope, cursor_realm, cursor_date, cursor_id, discovered, missing_dates, discovery_complete, started_at, completed_at, last_progress_at, retry_count, retry_after, last_error FROM leaderboard_operations WHERE id= $1
+SELECT id, tenant_id, requested_by, purpose, scope, run_id, before_date, cutoff, state, phase, cursor_scope, cursor_realm, cursor_date, cursor_id, discovered, missing_dates, discovery_complete, started_at, completed_at, last_progress_at, retry_count, retry_after, last_error, after_date FROM leaderboard_operations WHERE id= $1
 `
 
 // Authorized admin lookup only; RLS still applies.
@@ -14025,6 +14036,7 @@ func (q *sqlQuerier) LookupLeaderboardOperation(ctx context.Context, id uuid.UUI
 		&i.RetryCount,
 		&i.RetryAfter,
 		&i.LastError,
+		&i.AfterDate,
 	)
 	return i, err
 }
@@ -14048,7 +14060,7 @@ func (q *sqlQuerier) NextLeaderboardOperationRealm(ctx context.Context, arg Next
 
 const pauseLeaderboardOperation = `-- name: PauseLeaderboardOperation :one
 UPDATE leaderboard_operations SET state='paused'
-WHERE id= $1 AND tenant_id= $2 AND state<>'completed' RETURNING id, tenant_id, requested_by, purpose, scope, run_id, before_date, cutoff, state, phase, cursor_scope, cursor_realm, cursor_date, cursor_id, discovered, missing_dates, discovery_complete, started_at, completed_at, last_progress_at, retry_count, retry_after, last_error
+WHERE id= $1 AND tenant_id= $2 AND state<>'completed' RETURNING id, tenant_id, requested_by, purpose, scope, run_id, before_date, cutoff, state, phase, cursor_scope, cursor_realm, cursor_date, cursor_id, discovered, missing_dates, discovery_complete, started_at, completed_at, last_progress_at, retry_count, retry_after, last_error, after_date
 `
 
 type PauseLeaderboardOperationParams struct {
@@ -14083,13 +14095,14 @@ func (q *sqlQuerier) PauseLeaderboardOperation(ctx context.Context, arg PauseLea
 		&i.RetryCount,
 		&i.RetryAfter,
 		&i.LastError,
+		&i.AfterDate,
 	)
 	return i, err
 }
 
 const resumeLeaderboardOperation = `-- name: ResumeLeaderboardOperation :one
 UPDATE leaderboard_operations SET state=CASE WHEN discovery_complete THEN 'draining' ELSE 'discovering' END,retry_after='-infinity'
-WHERE id= $1 AND tenant_id= $2 AND state='paused' RETURNING id, tenant_id, requested_by, purpose, scope, run_id, before_date, cutoff, state, phase, cursor_scope, cursor_realm, cursor_date, cursor_id, discovered, missing_dates, discovery_complete, started_at, completed_at, last_progress_at, retry_count, retry_after, last_error
+WHERE id= $1 AND tenant_id= $2 AND state='paused' RETURNING id, tenant_id, requested_by, purpose, scope, run_id, before_date, cutoff, state, phase, cursor_scope, cursor_realm, cursor_date, cursor_id, discovered, missing_dates, discovery_complete, started_at, completed_at, last_progress_at, retry_count, retry_after, last_error, after_date
 `
 
 type ResumeLeaderboardOperationParams struct {
@@ -14124,6 +14137,7 @@ func (q *sqlQuerier) ResumeLeaderboardOperation(ctx context.Context, arg ResumeL
 		&i.RetryCount,
 		&i.RetryAfter,
 		&i.LastError,
+		&i.AfterDate,
 	)
 	return i, err
 }
