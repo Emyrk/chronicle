@@ -15,8 +15,9 @@ All scopes are all-time. There are no rolling180day or season keys, expiry jobs,
 or finalized-season retention exceptions. Career/cross-instance portfolios
 remain out of scope. Deletion and invalidation must retract source evidence.
 
-DPS and HPS remain separate observations. Mutually exclusive damage versus
-healing eligibility per player/boss is future policy, not a current constraint.
+DPS and HPS are separate cohorts and boards. Each player kill qualifies for
+exactly one of them: the greater positive finite raw value wins, with DPS
+winning ties. This is per kill, not a role classification.
 Parser mechanics remain in Go. Prior ratings are removed; PR 1625 preserves
 parse scoring. No legacy-rating rollback is promised.
 

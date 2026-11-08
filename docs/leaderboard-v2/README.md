@@ -103,7 +103,8 @@ Writers and reconcilers enforce tenant/source/canonical correctness.
 Career/cross-instance portfolios remain out of scope.
 
 Boss/clear cohorts separate difficulty and raid size within one tenant; realm
-qualifies subject identity, not benchmarks. DPS/HPS remain separately permitted.
+qualifies subject identity, not benchmarks. DPS and HPS are separate cohorts; each
+player kill qualifies for one of them (greater raw value, DPS on ties).
 Raw projection and algorithm versions are repair metadata ignored by reads;
 in-place repair may temporarily expose mixed versions. They are not composed
 read-policy versions or a snapshot mechanism.

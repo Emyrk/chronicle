@@ -30,7 +30,7 @@ wiring, or UI cutover belong in this PR.
 ### Approved storage semantics
 
 - Canonical deduplicated evidence preserves raw DPS, HPS, and guild durations.
-  DPS/HPS remain separately permitted; mutual exclusion is future policy.
+  DPS and HPS are separate cohorts; each player kill qualifies for one of them.
 - All scopes are all-time. No rolling180day or season dimensions, expiry, or
   finalized-season retention. Career/cross-instance portfolios remain deferred.
 - Benchmarks are tenant scoped. Realm qualifies player/guild subjects, not

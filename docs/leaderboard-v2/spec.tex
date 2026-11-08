@@ -39,7 +39,7 @@ Configuration work is complete in PRs 1622, 1624, 1633, and 1634, followed by co
 
 All rating evidence, statistics, and Renown counts are all-time only. There are no rolling180day or season dimensions, expiry jobs, or finalized-season retention exceptions. Career/cross-instance portfolios remain out of scope. Source deletion and invalidation continue to retract evidence and dirty affected scopes.
 
-Boss and clear cohorts are tenant scoped and separate both difficulty and raid size. Realm qualifies player and guild identity, not benchmark cohorts. DPS and HPS remain separate permitted observations. Mutually exclusive damage-versus-healing eligibility per player/boss is future observation policy, not a current constraint.
+Boss and clear cohorts are tenant scoped and separate both difficulty and raid size. Realm qualifies player and guild identity, not benchmark cohorts. DPS and HPS are separate cohorts. Each player kill qualifies for exactly one of them: the greater positive finite raw value, with DPS winning ties. This is decided per kill, not by role.
 
 Raw projection and algorithm versions are operational repair metadata, separate from the composed configuration used at read time. Reads ignore both version fields, including different benchmark and subject versions. Rare changes are repaired in place; mixed old and new summaries may temporarily be visible. There is no version snapshot or old-leaderboard serving path. Projection rules describe source-to-canonical eligible evidence transformations, deduplication, and player cohort classification. This specification does not invent a new provenance scheme or assign one ruleset ID to composed policy. Current benchmark and award changes must not force rewrites of otherwise unchanged raw subject statistics or kill counts.
 
@@ -409,7 +409,7 @@ Career and cross-instance portfolios are out of current scope. Do not create por
   \item Renown is independent of metric value, Peak, Mastery, and clear completion.
   \item A run belongs to exactly one non-null rating tenant. Its observations, Renown facts, cohorts, and results are projected only within that tenant.
   \item Matching global configuration layers compose by required-flavor subset and strict-superset precedence. Conflicting incomparable matches are rejected; rating data is never shared or copied between tenants.
-  \item Boss/clear benchmarks are tenant scoped; subjects additionally carry realm identity. Every current scope is all-time, with difficulty and raid size kept separate. DPS and HPS remain separate permitted observations.
+  \item Boss/clear benchmarks are tenant scoped; subjects additionally carry realm identity. Every current scope is all-time, with difficulty and raid size kept separate. DPS and HPS are separate cohorts, and each player kill qualifies for exactly one of them.
 \end{enumerate}
 
 \section{Database schema}
