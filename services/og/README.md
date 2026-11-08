@@ -6,7 +6,7 @@ A standalone service that renders 1200×630 Open Graph images from a single URL:
 GET /api/og?template=raid&guild=Nightfall&raid=Molten+Core
 ```
 
-It is a Next.js 16 app that renders with `next/og` (Satori) on the Node.js runtime. It lives in the Chronicle monorepo but shares nothing with it: its own `package.json` and `pnpm-lock.yaml`, its own Dockerfile, no workspace, and nothing in the Go server, frontend, Makefile or CI depends on it.
+It is a Next.js 16 app that renders with `next/og` (Satori) on the Node.js runtime. It lives in the Chronicle monorepo but shares nothing with it: its own `package.json` and `pnpm-lock.yaml`, its own Dockerfile, no workspace, and its own root CI build and release job. The Go service signs URLs consumed by this renderer.
 
 Based on [bunizao/ogis](https://github.com/bunizao/ogis) (MIT, © Peter Amende and bunizao); see [Credits](#credits). This copy keeps the handler, the server-side image pipeline with its SSRF checks and DNS fallback, and the theme contract; upstream's generic templates are removed, and every template is a Chronicle card.
 
@@ -63,6 +63,36 @@ Production releases use the same image-backed Railway flow as `livesessiond`. Cr
 
 Put a cache in front of it. Responses carry `cache-control: public, max-age=0, s-maxage=86400, stale-while-revalidate=604800`; a CDN (Cloudflare, Bunny) or caching proxy honours that, and without one every crawler hit renders the image again.
 
+### Private Prometheus metrics
+
+Metrics are opt-in and run on a **different port**, never on `/api/metrics` or `/metrics` on the public Next port. Next's Node instrumentation hook starts the listener in both standalone Docker and `next start`; no custom server is needed. Invalid enabled configuration fails startup. The listener is process-local and does not keep the process alive after Next shuts down.
+
+Set `OG_METRICS_ENABLED=true` and a dedicated `OG_METRICS_TOKEN`. Default binding is `127.0.0.1:9091`. For Railway, explicitly bind `OG_METRICS_HOST=::` and scrape the service's private DNS name on 9091 from a Prometheus service in the same private network. Keep the public Railway domain routed only to `PORT`. Do not configure a public domain, TCP proxy, or public host port for metrics. No deployed settings are changed automatically. For local Docker access, bind inside the container to `0.0.0.0` and publish only to host loopback (`-p 127.0.0.1:9091:9091`).
+
+Example Prometheus job (adapt private DNS and mount a token file):
+
+```yaml
+- job_name: chronicle-og
+  metrics_path: /metrics
+  authorization:
+    type: Bearer
+    credentials_file: /etc/prometheus/chronicle-og-token
+  static_configs:
+    - targets: ['chronicle-og.railway.internal:9091']
+```
+
+The dedicated prom-client registry exports:
+
+- `og_render_requests_total{theme,outcome}`: completed attempts, outcomes `success`, `failure`, or `cancelled`.
+- `og_render_in_flight{theme}`: preparation or body streams still active.
+- `og_render_preparation_seconds{theme}`: fonts, remote images, template preparation and ImageResponse construction.
+- `og_render_duration_seconds{theme,outcome}`: total time through stream completion/failure/cancellation, not just ImageResponse construction.
+- `og_render_bytes_total{theme}`: emitted PNG bytes, including partial responses. These are application bytes, not confirmed client delivery.
+
+Themes are normalized before labeling; unsigned/invalid signatures render and count as `brand`. Unknown route keys are not render attempts. No user data, URLs, tokens, or signatures become labels. Counters reset on restart and are per replica; scrape each replica when deployment discovery supports it. CDN cache hits never reach this service and are not counted. Preparation failures and stream failures share the failure outcome; preparation timing includes failed preparation attempts.
+
+Validate the real standalone lifecycle with `services/og/scripts/smoke-container.sh <image>` from the root after building. It tests disabled and authenticated metrics, absence of a public metrics endpoint, and exact rendered request/byte counters from a real PNG.
+
 ### Outbound access
 
 Theme fonts ship with the app and are read from disk, so the server never requests its own URL. It does reach out for:
@@ -80,6 +110,10 @@ Theme fonts ship with the app and are read from disk, so the server never reques
 | `OG_API_PATH` | Also serve the endpoint at `/api/<OG_API_PATH>` (one segment: letters, digits, `_`, `-`). `/api/og` always works |
 | `OG_ENABLE_DEBUG` | `true` enables `/api/debug`, which takes the same query and explains why the `icon` was accepted or rejected |
 | `OG_SIGNING_KEY` | HMAC key shared with the Chronicle server. When set, every request must carry a valid `sig` (see [Signed URLs](#signed-urls)); others render the fallback card. Unset accepts unsigned requests (local dev) |
+| `OG_METRICS_ENABLED` | `true` starts a separate private HTTP listener; disabled by default |
+| `OG_METRICS_PORT` | Metrics port, default `9091`; must differ from `PORT` |
+| `OG_METRICS_HOST` | Bind address, default `127.0.0.1`; use `::` for Railway private IPv6 networking or `0.0.0.0` for private IPv4 networks |
+| `OG_METRICS_TOKEN` | Required when metrics are enabled, distinct from `OG_SIGNING_KEY`; scrape with `Authorization: Bearer <token>` |
 | `OG_SECRET` | Legacy upstream option: keeps an `/api/og_xxxxxxxxxxxx` path derived from it working. Not needed for new deployments |
 
 No other configuration or `.env` file is required.
@@ -97,7 +131,7 @@ Every other param belongs to a card and is listed with its template below. Card 
 
 #### Chronicle card params
 
-Chronicle cards render from query params only: no database, no API call and no fetch to Chronicle. `api/og.go` already has the data when it serves the page, so it writes everything a card needs into the (signed) image URL. Every card takes:
+Chronicle cards render from query params only: no database, no API call and no fetch to Chronicle. `internal/services/serviceog` already has the data when it serves the page, so it writes everything a card needs into the (signed) image URL. Every card takes:
 
 | Param | Max length | Notes |
 |-------|-----------|-------|
