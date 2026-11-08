@@ -1,5 +1,9 @@
 # Mastery and Renown rating model
 
+> [!IMPORTANT]
+> This document describes an earlier exploratory model. The authoritative replacement
+> contract is [`docs/leaderboard-v2/`](leaderboard-v2/README.md).
+
 **Start with the [white-paper pitch](mastery-renown-white-paper.md)** for the questions, motivation, and decision gate. This document is the technical companion, not the introduction.
 
 Status: exploratory specification
