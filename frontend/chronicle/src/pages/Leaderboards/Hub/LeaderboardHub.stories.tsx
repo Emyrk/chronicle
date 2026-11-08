@@ -61,6 +61,17 @@ type Story = StoryObj<typeof meta>
 /** Raid overview: clear-time podium, ratings/Renown/performance/parse cards, then a card per boss with its model. */
 export const RaidOverview: Story = {}
 
+/** On phones, encounters open from the same bottom-left floating control used by instance pages. */
+export const MobileEncounterDrawer: Story = {
+  parameters: { viewport: { defaultViewport: "mobile1" } },
+  play: async ({ canvasElement }) => {
+    const page = within(canvasElement.ownerDocument.body)
+    await userEvent.click(await page.findByRole("button", { name: "Show encounters" }))
+    await expect(page.getByRole("dialog", { name: "Encounter selector" })).toBeInTheDocument()
+    await expect(page.getByRole("button", { name: "Close encounters" })).toBeInTheDocument()
+  },
+}
+
 /** Clicking a boss card narrows the page to that boss: kill-time podium, kill stats, the same cards for the boss. */
 export const BossOverview: Story = {
   play: async ({ canvasElement }) => {
