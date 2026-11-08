@@ -1,7 +1,9 @@
 import { Fragment, useState, type ReactNode } from "react"
-import { ArrowRight, Check, ChevronDown, ChevronLeft, HeartPulse, Swords, Timer, PanelLeft, Globe } from "lucide-react"
+import { createPortal } from "react-dom"
+import { ArrowRight, Check, ChevronDown, ChevronLeft, HeartPulse, Swords, Timer, PanelLeft, Globe, List, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import type { SpeedrunLeaderboardEntry } from "@/api/typesGenerated"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/DropdownMenu/DropdownMenu"
 import { CLASS_CSS_VAR, CLASS_DISPLAY } from "@/pages/Rankings/classDisplay"
@@ -222,7 +224,9 @@ export function LeaderboardHub({
   /** Two or more bosses combined; one boss is the boss view, none is the full clear. */
   const set = chosen.length > 1 ? chosen : undefined
   const [subject, setSubject] = useState<HubSubject>(initialSubject)
+  const isMobile = useIsMobile()
   const [encountersOpen, setEncountersOpenState] = useState(() => readEncountersOpen())
+  const [mobileEncountersOpen, setMobileEncountersOpen] = useState(false)
   const setEncountersOpen = (open: boolean) => {
     setEncountersOpenState(open)
     try {
@@ -415,7 +419,7 @@ export function LeaderboardHub({
             {/* Rulesets describe the whole instance; encounter selection does not apply. */}
             {tab !== "rulesets" &&
               (encountersOpen ? (
-                <div className="shrink-0 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:w-[267px] lg:self-start lg:overflow-y-auto lg:border-r lg:pt-1 lg:pr-4 styled-scrollbar">
+                <div className="hidden shrink-0 lg:sticky lg:top-4 lg:block lg:max-h-[calc(100vh-2rem)] lg:w-[267px] lg:self-start lg:overflow-y-auto lg:border-r lg:pt-1 lg:pr-4 styled-scrollbar">
                   <EncounterSidebar
                     bosses={bosses}
                     optional={live ? live.optionalBosses ?? new Set<string>() : OPTIONAL_BOSSES}
@@ -532,6 +536,46 @@ export function LeaderboardHub({
           {!live && <p className="px-1 text-xs text-muted-foreground/70">Mock data for design review. Names, guilds, and numbers are generated.</p>}
         </div>
       </div>
+      {tab !== "rulesets" && isMobile && createPortal(
+        <>
+          {mobileEncountersOpen && (
+            <>
+              <div
+                aria-hidden="true"
+                className="fixed inset-0 z-40 bg-black/50"
+                onClick={() => setMobileEncountersOpen(false)}
+              />
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-label="Encounter selector"
+                className="fixed inset-y-0 left-0 z-50 w-[267px] max-w-[calc(100vw-3rem)] overflow-y-auto border-r bg-background p-4 shadow-lg styled-scrollbar"
+              >
+                <EncounterSidebar
+                  bosses={bosses}
+                  optional={live ? live.optionalBosses ?? new Set<string>() : OPTIONAL_BOSSES}
+                  trash={live && tab === "performances" ? new Set(["Trash"]) : undefined}
+                  selection={selection}
+                  onSelect={selectEncounter}
+                  onCollapse={() => setMobileEncountersOpen(false)}
+                />
+              </div>
+            </>
+          )}
+          <Button
+            variant="default"
+            size="icon"
+            onClick={() => setMobileEncountersOpen((open) => !open)}
+            data-floating-corner="bottom-left"
+            className="fixed bottom-[calc(2rem+var(--compare-tray-offset,0px))] left-8 z-50 h-14 w-14 rounded-full shadow-lg"
+            title={mobileEncountersOpen ? "Close encounters" : "Show encounters"}
+            aria-label={mobileEncountersOpen ? "Close encounters" : "Show encounters"}
+          >
+            {mobileEncountersOpen ? <X className="h-5 w-5" /> : <List className="h-5 w-5" />}
+          </Button>
+        </>,
+        document.body,
+      )}
     </div>
   )
 }
