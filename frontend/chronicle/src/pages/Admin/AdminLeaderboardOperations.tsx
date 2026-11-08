@@ -1,16 +1,34 @@
 import { useState, type ReactNode } from "react";
+import { useQueries, type UseQueryOptions } from "@tanstack/react-query";
 import { AdminLeaderboardQueues } from "./AdminLeaderboardQueues";
 import { Loader2 } from "lucide-react";
 import { useAdminTenants } from "@/api/queries";
+import type { LeaderboardOperationList, Tenant } from "@/api/typesGenerated";
 import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
+  fetchLeaderboardOperations,
   operationActive,
+  operationKey,
   operationPhaseDescription,
+  sortedOperations,
   utcToday,
   useLeaderboardOperationAction,
   useLeaderboardOperations,
   useLeaderboardOperationDetail,
   type LeaderboardOperation,
 } from "@/api/leaderboardOperations";
+import {
+  fetchLeaderboardQueues,
+  leaderboardQueueKey,
+  totalPendingKeys,
+} from "@/api/leaderboardQueues";
+import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
 import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
@@ -111,9 +129,7 @@ export function TenantLeaderboardOperations({
   const [runID, setRunID] = useState("");
   const operations = useLeaderboardOperations(tenantID);
   const action = useLeaderboardOperationAction(tenantID);
-  const rows = [...(operations.data?.operations ?? [])].sort((a, b) =>
-    b.started_at.localeCompare(a.started_at),
-  );
+  const rows = sortedOperations(operations.data?.operations ?? []);
   const activeSummary = rows.find(operationActive);
   const detail = useLeaderboardOperationDetail(tenantID, activeSummary?.id);
   const active =
@@ -352,16 +368,167 @@ export function TenantLeaderboardOperations({
     </Card>
   );
 }
+interface TenantAttention {
+  tenant: Tenant;
+  /** undefined while loading or when counts are unavailable; never conflated with zero. */
+  pending: number | undefined;
+  activeOperation: LeaderboardOperation | undefined;
+  lastError: string | undefined;
+  lastCompletedAt: string | undefined;
+  /** False until both the dirty-queue and operation-history fetches for this tenant resolve. */
+  settled: boolean;
+}
+
+/** Unsettled tenants default to needing attention rather than flashing idle first. */
+function needsAttention(status: TenantAttention): boolean {
+  return (
+    !status.settled ||
+    !!status.pending ||
+    !!status.activeOperation ||
+    !!status.lastError
+  );
+}
+
+function attentionScore(status: TenantAttention): number {
+  if (!status.settled) return Number.POSITIVE_INFINITY;
+  return (
+    (status.lastError ? 2_000_000_000 : 0) +
+    (status.activeOperation ? 1_000_000_000 : 0) +
+    (status.pending ?? 0)
+  );
+}
+
+function tileStatusDotClass(status: TenantAttention): string {
+  if (status.lastError) return "bg-red-500";
+  if (status.activeOperation || status.pending) return "bg-amber-500";
+  return "bg-emerald-500";
+}
+
+function tileSubtitle(status: TenantAttention): string {
+  if (status.lastError) return "error · needs attention";
+  if (status.activeOperation) {
+    return `${status.activeOperation.state} · ${status.activeOperation.phase.replaceAll("_", " ")}`;
+  }
+  if (status.pending) return `${status.pending.toLocaleString()} pending keys`;
+  return "0 pending keys";
+}
+
+function TenantTile({
+  status,
+  onOpen,
+}: {
+  status: TenantAttention;
+  onOpen: () => void;
+}) {
+  const { tenant } = status;
+  const attention = needsAttention(status);
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className={cn(
+        "flex flex-col items-start gap-1 rounded-md border p-2.5 text-left text-xs transition-colors hover:border-foreground/30",
+        attention
+          ? "border-amber-900/50 bg-amber-500/5 hover:bg-amber-500/10"
+          : "bg-muted/10 hover:bg-muted/40",
+      )}
+    >
+      <span className="flex w-full items-center gap-1.5">
+        <span
+          aria-hidden="true"
+          className={cn(
+            "size-1.5 shrink-0 rounded-full",
+            tileStatusDotClass(status),
+          )}
+        />
+        <span className="truncate font-medium text-foreground">
+          {tenant.name}
+        </span>
+      </span>
+      <span className="truncate text-muted-foreground">
+        {tileSubtitle(status)}
+      </span>
+      {!attention && status.lastCompletedAt && (
+        <span className="truncate text-muted-foreground">
+          synced {dateTime(status.lastCompletedAt)}
+        </span>
+      )}
+      {status.lastError && (
+        <span className="line-clamp-1 text-destructive">
+          {status.lastError}
+        </span>
+      )}
+    </button>
+  );
+}
+
 export function AdminLeaderboardOperations() {
   const tenants = useAdminTenants();
+  const tenantList = tenants.data ?? [];
+  const [openTenant, setOpenTenant] = useState<Tenant | null>(null);
+  const queueQueries = useQueries({
+    queries: tenantList.map((tenant) => ({
+      queryKey: leaderboardQueueKey(tenant.id),
+      queryFn: () => fetchLeaderboardQueues(tenant.id),
+      enabled: !!tenant.id,
+      refetchInterval: 15_000,
+      retry: false,
+    })),
+  });
+  const operationQueries = useQueries({
+    queries: tenantList.map(
+      (tenant): UseQueryOptions<LeaderboardOperationList> => ({
+        queryKey: operationKey(tenant.id),
+        queryFn: () => fetchLeaderboardOperations(tenant.id),
+        retry: false,
+        refetchInterval: (query) =>
+          query.state.data?.operations.some(operationActive) ? 15_000 : false,
+      }),
+    ),
+  });
+
+  const statuses: TenantAttention[] = tenantList.map((tenant, index) => {
+    const queueQuery = queueQueries[index];
+    const operationQuery = operationQueries[index];
+    const rows = sortedOperations(operationQuery.data?.operations ?? []);
+    return {
+      tenant,
+      pending: totalPendingKeys(queueQuery.data),
+      activeOperation: rows.find(operationActive),
+      lastError: rows[0]?.last_error || undefined,
+      lastCompletedAt: rows[0]?.completed_at,
+      settled: !queueQuery.isPending && !operationQuery.isPending,
+    };
+  });
+  const sorted = [...statuses].sort(
+    (a, b) =>
+      attentionScore(b) - attentionScore(a) ||
+      a.tenant.name.localeCompare(b.tenant.name),
+  );
+  const attentionCount = statuses.filter(needsAttention).length;
+  const idleCount = statuses.length - attentionCount;
+
   return (
     <div className="space-y-4">
       <div>
         <h2 className="text-xl font-semibold">Leaderboard operations</h2>
         <p className="text-sm text-muted-foreground">
           Backfill historical runs or repair existing results. Discovery and
-          queued processing are separate phases.
+          queued processing are separate phases. Every tenant is a tile,
+          worst first — click one to manage it.
         </p>
+        {!!statuses.length && (
+          <p className="mt-2 text-xs">
+            <span
+              className={
+                attentionCount ? "text-amber-400" : "text-emerald-400"
+              }
+            >
+              {attentionCount} need attention
+            </span>
+            <span className="text-muted-foreground"> · {idleCount} idle</span>
+          </p>
+        )}
       </div>
       {tenants.isPending ? (
         <p role="status">Loading tenants…</p>
@@ -369,15 +536,45 @@ export function AdminLeaderboardOperations() {
         <p role="alert" className="text-destructive">
           {tenants.error.message}
         </p>
+      ) : tenantList.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No tenants found.</p>
       ) : (
-        tenants.data?.map((tenant) => (
-          <TenantLeaderboardOperations
-            key={tenant.id}
-            tenantID={tenant.id}
-            tenantName={tenant.name}
-          />
-        ))
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+          {sorted.map((status) => (
+            <TenantTile
+              key={status.tenant.id}
+              status={status}
+              onOpen={() => setOpenTenant(status.tenant)}
+            />
+          ))}
+        </div>
       )}
+      <Sheet
+        open={!!openTenant}
+        onOpenChange={(open) => {
+          if (!open) setOpenTenant(null);
+        }}
+      >
+        <SheetContent
+          side="right"
+          className="w-full gap-0 overflow-y-auto p-0 sm:max-w-3xl lg:max-w-4xl"
+        >
+          <SheetHeader className="border-b">
+            <SheetTitle>{openTenant?.name}</SheetTitle>
+            <SheetDescription>
+              Leaderboard operations for this tenant.
+            </SheetDescription>
+          </SheetHeader>
+          {openTenant && (
+            <div className="p-4">
+              <TenantLeaderboardOperations
+                tenantID={openTenant.id}
+                tenantName={openTenant.name}
+              />
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

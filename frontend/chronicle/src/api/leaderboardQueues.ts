@@ -27,6 +27,15 @@ export function useLeaderboardQueues(tenantID: string) {
   });
 }
 
+/** Total current work across every family, or undefined when unknown (no families reported). */
+export function totalPendingKeys(
+  snapshot: LeaderboardQueueDiagnostics | undefined,
+): number | undefined {
+  return snapshot?.queues.length
+    ? snapshot.queues.reduce((sum, row) => sum + row.pending, 0)
+    : undefined;
+}
+
 /** Age at the database snapshot time, not a client-maintained counter. */
 export function queueWorkAge(
   oldest: string | undefined,

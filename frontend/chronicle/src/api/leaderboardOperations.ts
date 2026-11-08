@@ -20,6 +20,14 @@ export function utcToday(now = new Date()): string {
 export function operationActive(operation: LeaderboardOperation): boolean {
   return operation.state !== "completed";
 }
+/** Most recently started operation first. */
+export function sortedOperations(
+  operations: readonly LeaderboardOperation[],
+): LeaderboardOperation[] {
+  return [...operations].sort((a, b) =>
+    b.started_at.localeCompare(a.started_at),
+  );
+}
 export async function operationJSON<T>(
   url: string,
   init?: RequestInit,
@@ -34,13 +42,15 @@ export async function operationJSON<T>(
   }
   return response.json() as Promise<T>;
 }
+export function fetchLeaderboardOperations(tenantID: string) {
+  return operationJSON<LeaderboardOperationList>(
+    `/api/v1/admin/leaderboard-operations?tenant_id=${encodeURIComponent(tenantID)}`,
+  );
+}
 export function useLeaderboardOperations(tenantID: string) {
   return useQuery({
     queryKey: operationKey(tenantID),
-    queryFn: () =>
-      operationJSON<LeaderboardOperationList>(
-        `/api/v1/admin/leaderboard-operations?tenant_id=${encodeURIComponent(tenantID)}`,
-      ),
+    queryFn: () => fetchLeaderboardOperations(tenantID),
     retry: false,
     refetchInterval: (query) =>
       query.state.data?.operations.some(operationActive) ? 15_000 : false,

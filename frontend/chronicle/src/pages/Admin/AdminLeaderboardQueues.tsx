@@ -2,6 +2,7 @@ import { Loader2, RefreshCw } from "lucide-react";
 import {
   queueFamilyLabel,
   queueWorkAge,
+  totalPendingKeys,
   useLeaderboardQueues,
 } from "@/api/leaderboardQueues";
 import { Button } from "@/components/ui/button";
@@ -63,9 +64,7 @@ export function AdminLeaderboardQueues({
 }) {
   const query = useLeaderboardQueues(tenantID);
   const snapshot = query.data;
-  const pending = snapshot?.queues.length
-    ? snapshot.queues.reduce((sum, row) => sum + row.pending, 0)
-    : undefined;
+  const pending = totalPendingKeys(snapshot);
   const collected = snapshot ? new Date(snapshot.collected_at) : undefined;
   const collectedLabel =
     collected && Number.isFinite(collected.getTime())
