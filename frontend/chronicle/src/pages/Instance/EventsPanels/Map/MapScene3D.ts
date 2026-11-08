@@ -33,7 +33,7 @@ import {
 import { participantHue, participantLabel, type LiveMapPresence } from "../../liveSessionProtocol";
 import { actionForKey, cameraAngles, cameraCollisionDistance, cameraOffset, clampMobileMapInput, DEFAULT_AD_STRAFE, easeAngleToward, freeCamTravelSpeed, IDLE_MOBILE_MAP_INPUT, lookDrag, planarStep, pointerLossEndsDrag, rightDragWalkAxes, setWalkMouseButton, shouldFollowWalkCamera, walkCameraSettling, walkDragButton, walkMovementYaw, walkMouseControl, WALK_TOGGLE_KEY, wheelZoomDistance, type MapControlAction, type MobileMapInput } from "./mapControls";
 import { unwrapCompassRadians } from "./mapCompassModel";
-import { createShotHold, FOLLOW_CENTRE_WINDOW_MS, FOLLOW_SLICE_MS, followSprings, startFollowTrackBuild, type FollowTrackBuild, followKeyAt, glideDurationMs, glidePoseAt, holdShot, isReplayJump, type FollowKey, type FollowTrack, type GlidePose } from "./followCamera";
+import { createShotHold, FOLLOW_CENTRE_WINDOW_MS, FOLLOW_SLICE_MS, followSprings, handOverFollowSpring, startFollowTrackBuild, type FollowTrackBuild, followKeyAt, glideDurationMs, glidePoseAt, holdShot, isReplayJump, type FollowKey, type FollowTrack, type GlidePose } from "./followCamera";
 import { BOSS_SPIRE, bossSpireCastGlow, CAST_ARC_TEXTURE_STEPS, DEAD_RING, DEBUFF_PLANE, DISPEL_COLORS, DROP_LINE, drawUnitPlate, ENEMY_RED, guardianWell, HALO_COLORS, MARKS_SCALE, OWNER_LINE, TARGET_LINE, TRAIL_LINE, UNIT_PLATE, unitPlateSize, type UnitPlateInfo, TOKEN_LAYOUT, type DispelKind, type HaloKind } from "./unitTokenArt";
 import { UnitTokenTextures } from "./unitTokens";
 import type { PlanInput, PlanItem, PlanMarkerIcon, PlanPoint } from "./plan/mapPlan";
@@ -1074,7 +1074,10 @@ export class MapScene3D {
   // Whether the replay was playing at the Director's last frame: a pause or
   // resume re-anchors the jump check rather than reading as a jump.
   private directorReplayPlaying = false;
+  // The track where the group is, and the position and distance springs' goals (sampled ahead by their trails).
   private readonly followKey: FollowKey = { x: 0, z: 0, radius: 0 };
+  private readonly followLedKey: FollowKey = { x: 0, z: 0, radius: 0 };
+  private readonly followSizedKey: FollowKey = { x: 0, z: 0, radius: 0 };
   // The replay time the Director last framed, and when, to spot a jump.
   private directorReplayMs: number | null = null;
   private directorReplayAt = 0;
@@ -2587,12 +2590,15 @@ export class MapScene3D {
     this.directorReplayAt = now;
     this.directorReplayPlaying = this.clock.playing;
 
-    // Sampled ahead by the position spring's trail, which the spring then takes back.
+    // Where the group is, and the springs' goals: sampled ahead by each
+    // spring's trail, which the spring then takes back.
     const springs = track ? followSprings(this.clock.speed, this.clock.playing) : null;
-    const key = track ? followKeyAt(track, replayMs + springs!.leadMs, this.followKey) : null;
+    const key = track ? followKeyAt(track, replayMs, this.followKey) : null;
+    const led = track ? followKeyAt(track, replayMs + springs!.leadMs, this.followLedKey) : null;
+    const sized = track ? followKeyAt(track, replayMs + springs!.distanceLeadMs, this.followSizedKey) : null;
     const centreX = key ? key.x : frame!.x;
     const centreZ = key ? key.z : frame!.z;
-    const frameRadius = key ? key.radius : frame!.radius;
+    const frameRadius = sized ? sized.radius : frame!.radius;
     const radius = Math.max(frameRadius, MIN_FRAME_RADIUS_YARDS * mesh.scale);
     const yaw = this.cameraYaw();
     // The aim point sits past the fight, away from the camera, so the fight
@@ -2621,6 +2627,10 @@ export class MapScene3D {
       }
       if (exceedsDeadZone(goal.distance, fitted, DISTANCE_DEAD_ZONE)) goal.distance = fitted;
     }
+    // The position spring chases the led aim point; the line of sight, a
+    // glide and a cut use the goal (where the group is).
+    const springX = led ? led.x - Math.sin(yaw) * ahead : goal.x;
+    const springZ = led ? led.z - Math.cos(yaw) * ahead : goal.z;
     const raw = this.clearShot(goal.x, goal.z, goal.distance, yaw);
     const hold = holdShot(this.shotHold, raw.elevation, raw.distance < goal.distance, now);
     const shotElevation = hold.elevationDeg;
@@ -2646,8 +2656,9 @@ export class MapScene3D {
     if (this.directorSnapPending) {
       this.directorSnapPending = false;
       this.directorGlide = null;
-      const x = snapDampedValue(this.directorX, goal.x);
-      const z = snapDampedValue(this.directorZ, goal.z);
+      // On the group, already moving with it, so the led spring has nothing to take back.
+      const x = springs ? handOverFollowSpring(this.directorX, goal.x, springX, springs).value : snapDampedValue(this.directorX, goal.x);
+      const z = springs ? handOverFollowSpring(this.directorZ, goal.z, springZ, springs).value : snapDampedValue(this.directorZ, goal.z);
       const distance = snapDampedValue(this.directorDistance, shotDistance);
       const elevation = snapDampedValue(this.directorElevation, shotElevation);
       this.placeDirectorCamera(x, z, this.directorReachFor(distance, dt, true), elevation, yaw);
@@ -2679,8 +2690,8 @@ export class MapScene3D {
     }
 
     const smooth = springs ? springs.position : TARGET_SMOOTH_SECONDS;
-    const x = smoothDamp(this.directorX, goal.x, smooth, dt);
-    const z = smoothDamp(this.directorZ, goal.z, smooth, dt);
+    const x = smoothDamp(this.directorX, springX, smooth, dt);
+    const z = smoothDamp(this.directorZ, springZ, smooth, dt);
     const distance = smoothDamp(this.directorDistance, shotDistance, springs ? springs.distance : DISTANCE_SMOOTH_SECONDS, dt);
     const elevation = smoothDamp(this.directorElevation, shotElevation, TARGET_SMOOTH_SECONDS, dt);
     const reach = this.directorReachFor(distance, dt, false);

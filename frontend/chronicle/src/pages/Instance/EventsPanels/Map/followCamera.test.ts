@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { directorFrame, FRAME_FILL, MIN_FRAME_RADIUS_YARDS, smoothDamp, type DirectorUnit } from "./cameraDirector";
+import { directorFrame, DISTANCE_SMOOTH_SECONDS, FRAME_FILL, MIN_FRAME_RADIUS_YARDS, smoothDamp, type DampedValue, type DirectorUnit } from "./cameraDirector";
 import {
   buildFollowTrack,
   startFollowTrackBuild,
@@ -10,6 +10,7 @@ import {
   FOLLOW_MAX_WINDOW_STRETCH,
   FOLLOW_SMOOTH_SECONDS,
   followSprings,
+  handOverFollowSpring,
   followKeyAt,
   GLIDE_MAX_MS,
   GLIDE_MIN_MS,
@@ -21,6 +22,8 @@ import {
   isReplayJump,
   SHOT_RELEASE_MS,
   type FollowKey,
+  type FollowSprings,
+  type FollowTrack,
   type GlidePose,
 } from "./followCamera";
 
@@ -264,9 +267,7 @@ describe("buildFollowTrack", () => {
 
 describe("followSprings", () => {
   // The camera on a group walking +x at 7 yd/s in the 32x preview, its goal sampled from the track at `goalMs`.
-  // No dropped frames here: across one, the frame-to-frame velocity reads a
-  // jump whatever the spring (the old one included).
-  const preview = (smooth: number, goalMs: (replayMs: number) => number) => {
+  const preview = (smooth: number, goalMs: (replayMs: number) => number, drops = false) => {
     const speed = 32;
     const track = buildFollowTrack({ startMs: 0, endMs: 3_000_000, unitsAt: (ms) => [0, 1, 2].map((i) => unit(`p${i}`, (ms / 1000) * 7 + i, 0)), scale: 1, speed })!;
     const out: FollowKey = { x: 0, z: 0, radius: 0 };
@@ -284,7 +285,7 @@ describe("followSprings", () => {
         lag = Math.max(lag, Math.abs(x.value - ((now * speed) / 1000 * 7 + 1)));
       }
       last = { now, x: x.value, velocity };
-    }, false);
+    }, drops);
     return { jerk, lag };
   };
 
@@ -306,14 +307,102 @@ describe("followSprings", () => {
     expect(led.lag).toBeLessThan(10);
   });
 
-  it("leads by the position spring's trail while playing; paused, no lead and 1x springs", () => {
-    expect(followSprings(1, true)).toMatchObject({ position: FOLLOW_SMOOTH_SECONDS, leadMs: FOLLOW_SMOOTH_SECONDS * 1_000 });
-    expect(followSprings(32, true).leadMs).toBeCloseTo(32 * FOLLOW_SMOOTH_SECONDS * 1_000, 6);
-    // The distance spring still eases a shortened shot in.
-    expect(followSprings(32, true).distance).toBeGreaterThanOrEqual(0.2);
-    // Paused, a short seek eases in as at 1x rather than cutting.
-    expect(followSprings(32, false)).toEqual({ ...followSprings(1, true), leadMs: 0 });
+  it("stays on the group with dropped frames too", () => {
+    const springs = followSprings(32, true);
+    const led = preview(springs.position, (replayMs) => replayMs + springs.leadMs, true);
+    const trailing = preview(FOLLOW_SMOOTH_SECONDS, (replayMs) => replayMs, true);
+    console.info(`32x preview, dropped frames: led jerk ${led.jerk.toFixed(0)} yd/s, off ${led.lag.toFixed(1)} yd; trailing jerk ${trailing.jerk.toFixed(0)} yd/s`);
+    // Across a 100 ms frame the frame-to-frame velocity reads a step whatever
+    // the spring: the led one reads no more than the old one did.
+    expect(led.jerk).toBeLessThan(trailing.jerk + 1);
+    expect(led.lag).toBeLessThan(10);
   });
+
+  // A group walking +x at `pace` yd/s; the camera arrives on it at real time 0
+  // by `arrive` (from a cut or a glide), then the position spring chases the
+  // led goal as MapScene3D.updateDirector does. Returns the worst distance
+  // between the camera and the group over the 2 s after.
+  const afterHandover = (speed: number, pace: number, arrive: (track: FollowTrack, springs: FollowSprings, x: DampedValue) => number) => {
+    const unitsAt = (ms: number) => [0, 1, 2].map((i) => unit(`p${i}`, (ms / 1000) * pace + i - 1, 0));
+    const track = buildFollowTrack({ startMs: 0, endMs: 600_000, unitsAt, scale: 1, speed })!;
+    const springs = followSprings(speed, true);
+    const out: FollowKey = { x: 0, z: 0, radius: 0 };
+    const x: DampedValue = { value: 0, velocity: 0 };
+    const startMs = arrive(track, springs, x);
+    let worst = 0;
+    for (let real = FRAME_MS; real <= 2_000; real += FRAME_MS) {
+      const ms = startMs + real * speed;
+      smoothDamp(x, followKeyAt(track, ms + springs.leadMs, out).x, springs.position, FRAME_MS / 1000);
+      worst = Math.max(worst, Math.abs(x.value - (ms / 1000) * pace));
+    }
+    return worst;
+  };
+  // At 60 fps the spring's steady trail is about half a frame of travel past the lead's cancelling.
+  const halfFrame = (speed: number, pace: number) => 0.5 * (FRAME_MS / 1000) * speed * pace + 0.1;
+
+  it.each([[8, 7], [32, 7], [32, 14]])("hands over to the led spring after a cut without running ahead (%ix, %i yd/s)", (speed, pace) => {
+    const startMs = 200_000;
+    const cut = afterHandover(speed, pace, (track, springs, x) => {
+      const out: FollowKey = { x: 0, z: 0, radius: 0 };
+      const at = followKeyAt(track, startMs, out).x;
+      handOverFollowSpring(x, at, followKeyAt(track, startMs + springs.leadMs, out).x, springs);
+      return startMs;
+    });
+    // Snapped onto the led goal at rest instead, it starts the whole lead ahead.
+    const naive = afterHandover(speed, pace, (track, springs, x) => {
+      x.value = followKeyAt(track, startMs + springs.leadMs, { x: 0, z: 0, radius: 0 }).x;
+      return startMs;
+    });
+    console.info(`cut at ${speed}x, ${pace} yd/s: off the group at most ${cut.toFixed(2)} yd (snapped onto the led goal: ${naive.toFixed(0)} yd)`);
+    expect(naive).toBeGreaterThan(0.25 * speed * pace);
+    expect(cut).toBeLessThan(halfFrame(speed, pace));
+  });
+
+  it.each([[8, 7], [32, 7], [32, 14]])("hands over to the led spring after a glide without running ahead (%ix, %i yd/s)", (speed, pace) => {
+    const glide = afterHandover(speed, pace, (track, _springs, x) => {
+      // A replay jump to 200 s: the glide (as updateDirector runs it) from
+      // 300 yd away onto where the group is, riding along as it moves.
+      const out: FollowKey = { x: 0, z: 0, radius: 0 };
+      const jumpMs = 200_000;
+      const from: GlidePose = { x: followKeyAt(track, jumpMs, out).x - 300, z: 0, distance: 30, elevationDeg: 28 };
+      const to: GlidePose = { x: 0, z: 0, distance: 30, elevationDeg: 28 };
+      const pose: GlidePose = { x: 0, z: 0, distance: 0, elevationDeg: 0 };
+      const duration = glideDurationMs(300, 1);
+      x.value = from.x;
+      let real = 0;
+      for (;;) {
+        real += FRAME_MS;
+        to.x = followKeyAt(track, jumpMs + real * speed, out).x;
+        const t = Math.min(1, real / duration);
+        const last = x.value;
+        glidePoseAt(from, to, t, pose, duration);
+        x.value = pose.x;
+        x.velocity = (pose.x - last) / (FRAME_MS / 1000);
+        if (t >= 1) return jumpMs + real * speed;
+      }
+    });
+    console.info(`glide at ${speed}x, ${pace} yd/s: off the group at most ${glide.toFixed(2)} yd after it lands`);
+    expect(glide).toBeLessThan(halfFrame(speed, pace));
+  });
+
+  it("matches each spring's lead to its trail; paused, no lead", () => {
+    expect(followSprings(1, true)).toEqual({
+      position: FOLLOW_SMOOTH_SECONDS,
+      leadMs: FOLLOW_SMOOTH_SECONDS * 1_000,
+      distance: DISTANCE_SMOOTH_SECONDS,
+      distanceLeadMs: DISTANCE_SMOOTH_SECONDS * 1_000,
+    });
+    expect(followSprings(32, true).leadMs).toBeCloseTo(32 * FOLLOW_SMOOTH_SECONDS * 1_000, 6);
+    expect(followSprings(32, true).distanceLeadMs).toBeCloseTo(32 * DISTANCE_SMOOTH_SECONDS * 1_000, 6);
+    // Paused, a short seek eases in on the real-time springs rather than cutting.
+    expect(followSprings(32, false)).toEqual({ ...followSprings(1, true), leadMs: 0, distanceLeadMs: 0 });
+  });
+
+  it("a cut while paused hands over at rest", () => {
+    const x = handOverFollowSpring({ value: 0, velocity: 5 }, 10, 10, followSprings(32, false));
+    expect(x).toEqual({ value: 10, velocity: 0 });
+  });
+
 });
 
 describe("holdShot", () => {

@@ -18,6 +18,7 @@ import {
   CINEMATIC_ELEVATION_DEG,
   directorFrame,
   DISTANCE_SMOOTH_SECONDS,
+  type DampedValue,
   MIN_FRAME_RADIUS_YARDS,
   STRAGGLER_CUTOFF_YARDS,
   STRAGGLER_RELEASE_YARDS,
@@ -40,12 +41,6 @@ export const FOLLOW_RADIUS_PEAK_MS = 500;
 export const FOLLOW_SUBJECT_WINDOW_MS = 1_000;
 /** The springs only smooth what the track leaves over, so they can be quick. */
 export const FOLLOW_SMOOTH_SECONDS = 0.3;
-/**
- * The distance spring runs on real time while the track's radius moves on
- * replay time, so with a track it shortens by the speed; it also eases the
- * line-of-sight shortened shot, so never below this (chronicle-1723).
- */
-export const FOLLOW_DISTANCE_MIN_SMOOTH_SECONDS = 0.2;
 /**
  * Fast playback stretches the sample spacing and the centre window, but only
  * up to these factors of the 1x values (so at most 1 s between samples and a
@@ -147,24 +142,40 @@ export interface FollowSprings {
   leadMs: number;
   /** The distance spring's smoothing (real seconds). */
   distance: number;
+  /** How far ahead (replay ms) the radius the distance is fitted to is sampled. */
+  distanceLeadMs: number;
 }
 
 /**
  * The springs while following a track at `speed`. The track moves on replay
  * time and the springs on real time: a critically damped spring trails a
  * steady move by its smoothing time, which is `speed` times as much replay at
- * a fast speed (tens of yards at 32x). So the position spring keeps its real
- * time smoothing (it filters the replay clock's coarse ticks and eases a
- * short seek) and its goal is sampled that far ahead, which cancels the trail
- * (chronicle-1723). Paused, there is no lead, and the springs are 1x's.
+ * a fast speed (tens of yards at 32x). So the springs keep their real-time
+ * smoothing (it filters the replay clock's coarse ticks and eases a short
+ * seek or a shortened shot), and each goal is sampled that far ahead, which
+ * cancels the trail (chronicle-1723). Paused, there is no lead.
  */
 export function followSprings(speed: number, playing: boolean): FollowSprings {
-  const stretch = playing ? Math.max(1, speed) : 1;
+  const replayPerSecond = playing ? Math.max(1, speed) * 1_000 : 0;
   return {
     position: FOLLOW_SMOOTH_SECONDS,
-    leadMs: playing ? stretch * FOLLOW_SMOOTH_SECONDS * 1_000 : 0,
-    distance: Math.max(FOLLOW_DISTANCE_MIN_SMOOTH_SECONDS, DISTANCE_SMOOTH_SECONDS / stretch),
+    leadMs: replayPerSecond * FOLLOW_SMOOTH_SECONDS,
+    distance: DISTANCE_SMOOTH_SECONDS,
+    distanceLeadMs: replayPerSecond * DISTANCE_SMOOTH_SECONDS,
   };
+}
+
+/**
+ * Hands a position spring over to a led goal without a jump: the spring sits
+ * on `at` (where the group is) moving at the track's speed, which is where a
+ * spring that has been chasing `led` (its goal, `springs.leadMs` ahead) settles.
+ * Use it after a cut; a glide that lands on `at` hands over with that velocity
+ * already. Mutates and returns `spring`.
+ */
+export function handOverFollowSpring(spring: DampedValue, at: number, led: number, springs: FollowSprings): DampedValue {
+  spring.value = at;
+  spring.velocity = springs.leadMs > 0 ? (led - at) / springs.position : 0;
+  return spring;
 }
 
 // A moving average over `half` samples either side, in O(n) with a running sum.
