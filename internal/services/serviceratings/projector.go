@@ -3,6 +3,7 @@ package serviceratings
 import (
 	"context"
 	"fmt"
+
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/google/uuid"
@@ -29,6 +30,12 @@ func PublishProjectionTx(ctx context.Context, tx database.StoreQueries, tenant, 
 	if servicetenant.IsBypass(ctx) || servicetenant.TenantIDFromContext(ctx) != tenant {
 		return fmt.Errorf("publication tenant mismatch")
 	}
+	return publishProjectionTx(ctx, tx, tenant, run, rows)
+}
+
+// Internal integration boundary also supports existing privileged source
+// transactions. Every statement remains explicitly qualified by tenant/run.
+func publishProjectionTx(ctx context.Context, tx database.StoreQueries, tenant, run uuid.UUID, rows []database.ProjectLeaderboardRunRow) error {
 	for _, r := range rows {
 		if !r.TenantID.Valid || r.TenantID.UUID != tenant || r.RunID != run || r.Kind < 1 || r.Kind > 5 {
 			return fmt.Errorf("invalid projection identity")

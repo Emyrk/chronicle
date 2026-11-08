@@ -265,6 +265,12 @@ as an explicit repair capability, ready before normal writers can be enabled.
 
 ## PR 4: normal writers and source-action integration
 
+**Implementation status:** normal canonical/player/duration publication and
+source-action D1 obligations are integrated. `DispatchEnabled` is true by explicit
+user approval; D1/D2 periodic scans process existing dirt only, with no historical
+discovery or backfill. See [integration map](source-integration.md).
+
+
 **Red:** end-to-end source-to-evidence tests at parse/ranking publication, canonical
 representative change, user delete, retention delete, visibility/invalidation,
 and reparse. Capture both old and new identities. Failure at any transaction
@@ -358,3 +364,15 @@ with measurements and operator sign-off, not a claim that 1.23s meets 200ms.
 - Before PR 5: choose durable progress storage and notice surface; before rollout,
   approve operational freshness and latency limits from measured production-like
   workloads. These are bounded implementation gates, not new rating policy.
+
+### Source metric selection policy
+
+The shared direct/D1 projector compares raw DPS and HPS per player/boss fight,
+not roles or normalized scores. Both rates use the same source ranking duration.
+Filter to positive finite candidates before comparing; the greatest value wins,
+with DPS winning positive ties. An invalid counterpart does not suppress a valid
+positive candidate. With no eligible positive candidate, especially 0/0, omit both
+player performance and player Renown kill evidence. Guild credit is independent.
+Renown remains once per player/boss regardless of selected metric or spec. Repair
+retracts old observations/facts and enqueues both old and new D2 scopes. The generic
+storage and calculation engine retain independent support for both metrics.

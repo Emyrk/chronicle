@@ -1,0 +1,12 @@
+BEGIN;
+DROP INDEX leaderboard_player_observations_run_lookup_idx;
+DROP INDEX leaderboard_player_observations_source_lookup_idx;
+DROP INDEX leaderboard_guild_boss_observations_run_lookup_idx;
+DROP INDEX leaderboard_guild_boss_observations_source_lookup_idx;
+DROP INDEX leaderboard_guild_clear_observations_run_lookup_idx;
+DROP INDEX leaderboard_guild_clear_observations_source_lookup_idx;
+DROP INDEX leaderboard_player_renown_facts_run_lookup_idx;
+DROP INDEX leaderboard_player_renown_facts_source_lookup_idx;
+DROP INDEX leaderboard_guild_renown_facts_run_lookup_idx;
+DROP INDEX leaderboard_guild_renown_facts_source_lookup_idx;
+COMMIT;

@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/Emyrk/chronicle/internal/services/serviceratings"
+
 	"github.com/Emyrk/chronicle/chronicle/riverqueue/rankingargs"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/google/uuid"
@@ -34,4 +36,11 @@ func rankingRunLogGroupIdentitySeeds(rows []database.RankingRunIdentitiesByLogGr
 		ids = append(ids, row.InstanceID, row.RunID)
 	}
 	return ids
+}
+
+// EnqueueRankingRunRefreshTx commits canonical membership repair with its source
+// mutation. Missing queue fails closed for tenant-backed leaderboard sources.
+// Legacy database-only fixtures with no leaderboard tenant have no such work.
+func (c *Chronicle) EnqueueRankingRunRefreshTx(ctx context.Context, tx database.Store, ids ...uuid.UUID) error {
+	return serviceratings.EnqueueCanonicalRefreshTx(ctx, tx, c.queue, ids)
 }

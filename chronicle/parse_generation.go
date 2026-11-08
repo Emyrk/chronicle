@@ -5,6 +5,8 @@ import (
 	"errors"
 	"log/slog"
 
+	"github.com/Emyrk/chronicle/internal/services/serviceratings"
+
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/google/uuid"
@@ -118,6 +120,13 @@ func advanceParseGeneration(ctx context.Context, db database.Store, logID uuid.U
 		return 0, err
 	}
 	if clearParsed {
+		identities, err := db.RankingRunIdentitiesByLogGroupID(ctx, logID)
+		if err != nil {
+			return 0, err
+		}
+		if err := serviceratings.EnqueueSourceRepairTx(ctx, db, rankingRunLogGroupIdentitySeeds(identities)); err != nil {
+			return 0, err
+		}
 		if err := db.DeleteAllParsedLogsByGroupID(ctx, logID); err != nil {
 			return 0, err
 		}
@@ -147,7 +156,17 @@ func (c *Chronicle) stageParseGeneration(ctx context.Context, logID uuid.UUID, g
 		if err := lockExpectedParseGeneration(ctx, tx, logID, generation); err != nil {
 			return err
 		}
+		identities, err := tx.RankingRunIdentitiesByLogGroupID(ctx, logID)
+		if err != nil {
+			return err
+		}
+		if err := serviceratings.EnqueueSourceRepairTx(ctx, tx, rankingRunLogGroupIdentitySeeds(identities)); err != nil {
+			return err
+		}
 		if err := tx.DeleteAllParsedLogsByGroupID(ctx, logID); err != nil {
+			return err
+		}
+		if err := c.EnqueueRankingRunRefreshTx(ctx, tx, rankingRunLogGroupIdentitySeeds(identities)...); err != nil {
 			return err
 		}
 		return tx.InsertStagedParsedLogGroup(ctx, database.InsertStagedParsedLogGroupParams{

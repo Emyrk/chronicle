@@ -11,6 +11,7 @@ import (
 	"github.com/Emyrk/chronicle/chronicle/riverqueue/parseargs"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue/riverconst"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/services/serviceratings"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/timeparsepolicy"
 	"github.com/google/uuid"
@@ -155,6 +156,10 @@ func (w *WorkerComputeTimeParseScores) Work(ctx context.Context, job *river.Job[
 			}
 		}
 
+		runs, err := serviceratings.PrepareDirectRunsTx(ctx, tx, []uuid.UUID{args.InstanceID})
+		if err != nil {
+			return err
+		}
 		if err := tx.DeleteTimeParseScoreForContract(ctx, database.DeleteTimeParseScoreForContractParams{
 			TenantID: args.TenantID, InstanceID: args.InstanceID, LookbackDays: TimeParseScoreLookbackDays,
 			PolicyVersion: policyVersion, QueryVersion: queryVersion,
@@ -199,7 +204,7 @@ func (w *WorkerComputeTimeParseScores) Work(ctx context.Context, job *river.Job[
 				return fmt.Errorf("insert time parse boss score: %w", err)
 			}
 		}
-		return nil
+		return serviceratings.PublishDirectRunsTx(ctx, tx, runs)
 	}, nil)
 }
 

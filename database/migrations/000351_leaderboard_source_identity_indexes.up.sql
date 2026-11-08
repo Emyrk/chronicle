@@ -1,0 +1,15 @@
+-- Point lookups must work under forced RLS. GIN array-overlap expressions do
+-- not yield index scans under these policies; measured btree BitmapOr does.
+-- Tables are confirmed empty for this deployment.
+BEGIN;
+CREATE INDEX leaderboard_player_observations_run_lookup_idx ON leaderboard_player_observations (run_id);
+CREATE INDEX leaderboard_player_observations_source_lookup_idx ON leaderboard_player_observations (source_instance_id);
+CREATE INDEX leaderboard_guild_boss_observations_run_lookup_idx ON leaderboard_guild_boss_observations (run_id);
+CREATE INDEX leaderboard_guild_boss_observations_source_lookup_idx ON leaderboard_guild_boss_observations (source_instance_id);
+CREATE INDEX leaderboard_guild_clear_observations_run_lookup_idx ON leaderboard_guild_clear_observations (run_id);
+CREATE INDEX leaderboard_guild_clear_observations_source_lookup_idx ON leaderboard_guild_clear_observations (source_instance_id);
+CREATE INDEX leaderboard_player_renown_facts_run_lookup_idx ON leaderboard_player_renown_facts (run_id);
+CREATE INDEX leaderboard_player_renown_facts_source_lookup_idx ON leaderboard_player_renown_facts (source_instance_id);
+CREATE INDEX leaderboard_guild_renown_facts_run_lookup_idx ON leaderboard_guild_renown_facts (run_id);
+CREATE INDEX leaderboard_guild_renown_facts_source_lookup_idx ON leaderboard_guild_renown_facts (source_instance_id);
+COMMIT;

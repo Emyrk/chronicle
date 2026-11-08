@@ -7,6 +7,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"math"
 	"os"
 	"testing"
 	"time"
@@ -100,13 +101,13 @@ func TestProjectionFamiliesAndReplay(t *testing.T) {
 	t.Parallel()
 	s := newSourceFixture(t)
 	rows := s.compute()
-	require.Len(t, rows, 4) // DPS,HPS, metric-free player/guild kills despite missing times.
+	require.Len(t, rows, 3) // Winning metric and metric-free player/guild kills despite missing times.
 	s.times()
 	rows = s.compute()
-	require.Len(t, rows, 6)
+	require.Len(t, rows, 5)
 	require.NoError(t, s.direct(rows))
 	require.NoError(t, s.direct(rows))
-	for table, want := range map[string]int{"player_observations": 2, "guild_boss_observations": 1, "guild_clear_observations": 1, "player_renown_facts": 1, "guild_renown_facts": 1} {
+	for table, want := range map[string]int{"player_observations": 1, "guild_boss_observations": 1, "guild_clear_observations": 1, "player_renown_facts": 1, "guild_renown_facts": 1} {
 		var n int
 		require.NoError(t, s.row("SELECT count(*) FROM leaderboard_"+table+" WHERE tenant_id=$1", s.tenant).Scan(&n))
 		require.Equal(t, want, n)
@@ -215,7 +216,9 @@ func TestProjectionEligibilityAndRollback(t *testing.T) {
 			}
 			rows := s.compute()
 			switch scenario {
-			case "wrong_guild", "wrong_realm", "wrong_variant":
+			case "wrong_guild":
+				require.Len(t, rows, 2)
+			case "wrong_realm", "wrong_variant":
 				require.Len(t, rows, 3)
 			default:
 				require.Empty(t, rows)
@@ -231,7 +234,7 @@ func TestProjectionEligibilityAndRollback(t *testing.T) {
 			require.ErrorIs(t, err, sentinel)
 			var n int
 			require.NoError(t, s.row(`SELECT count(*) FROM leaderboard_player_observations WHERE tenant_id=$1`, s.tenant).Scan(&n))
-			require.Equal(t, 2, n)
+			require.Equal(t, 1, n)
 			require.NoError(t, s.direct(rows))
 		})
 	}
@@ -255,7 +258,7 @@ func TestRepairDeletionAfterCaptureAndExpiry(t *testing.T) {
 	s.exec(`DELETE FROM log_instances WHERE id=$1`, s.instance)
 	require.NoError(t, w.publish(s.tenantctx(), next, a)) // accepted stale snapshot, pending obligation survives.
 	require.NoError(t, s.row(`SELECT count(*) FROM leaderboard_player_observations WHERE tenant_id=$1`, s.tenant).Scan(&n))
-	require.Equal(t, 2, n)
+	require.Equal(t, 1, n)
 	_, err := w.Drain(s.ctx, s.tenant)
 	require.NoError(t, err)
 	require.NoError(t, s.row(`SELECT count(*) FROM leaderboard_player_observations WHERE tenant_id=$1`, s.tenant).Scan(&n))
@@ -281,12 +284,12 @@ func TestProjectionTenantMovementAndCanonicalMergeUnlink(t *testing.T) {
 		require.Zero(t, count)
 		s.tenant = newTenant
 		rows := s.compute()
-		require.Len(t, rows, 4)
+		require.Len(t, rows, 3)
 		require.NoError(t, s.direct(rows))
 		require.NoError(t, s.row(`SELECT count(*) FROM leaderboard_dirty_player_boss_subjects WHERE tenant_id=$1`, oldTenant).Scan(&count))
-		require.Equal(t, 2, count)
+		require.Equal(t, 1, count)
 		require.NoError(t, s.row(`SELECT count(*) FROM leaderboard_dirty_player_boss_subjects WHERE tenant_id=$1`, newTenant).Scan(&count))
-		require.Equal(t, 2, count)
+		require.Equal(t, 1, count)
 	})
 	t.Run("merge and unlink", func(t *testing.T) {
 		t.Parallel()
@@ -305,7 +308,7 @@ func TestProjectionTenantMovementAndCanonicalMergeUnlink(t *testing.T) {
 		require.NoError(t, s.direct(s.compute()))
 		var count int
 		require.NoError(t, s.row(`SELECT count(*) FROM leaderboard_player_observations WHERE tenant_id=$1 AND run_id=$2`, s.tenant, merged).Scan(&count))
-		require.Equal(t, 2, count)
+		require.Equal(t, 1, count)
 		s.exec(`UPDATE log_instances SET duplicate_group_id=NULL WHERE id=$1`, s.instance)
 		s.exec(`UPDATE ranking_runs SET run_id=$1 WHERE run_id=$2`, oldRun, merged)
 		s.enqueueRun()
@@ -409,7 +412,7 @@ func TestMeasureRunProjection(t *testing.T) {
 		start := time.Now()
 		rows := s.compute()
 		compute := time.Since(start)
-		require.Len(t, rows, 1465)
+		require.Len(t, rows, 985)
 		start = time.Now()
 		require.NoError(t, s.direct(rows))
 		publish := time.Since(start)
@@ -476,7 +479,7 @@ func TestProjectionRollbackBetweenObligationAndReplacement(t *testing.T) {
 	require.Equal(t, before, after)
 	var count int
 	require.NoError(t, s.row(`SELECT count(*) FROM leaderboard_player_observations WHERE tenant_id=$1`, s.tenant).Scan(&count))
-	require.Equal(t, 2, count)
+	require.Equal(t, 1, count)
 }
 func TestRepairCancellationReleasesWithBackoff(t *testing.T) {
 	t.Parallel()
@@ -501,4 +504,111 @@ func TestRepairCancellationReleasesWithBackoff(t *testing.T) {
 	require.False(t, token.Valid)
 	require.Equal(t, 1, attempts)
 	require.True(t, backoff)
+}
+
+func TestProjectionRawMetricWinner(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, metric string
+		dps, hps     float64
+	}{
+		{"damage", "dps", 100, 25},
+		{"positive_tie", "dps", 100, 100},
+		{"healing", "hps", 25, 100},
+		{"damage_only", "dps", 100, 0},
+		{"healing_only", "hps", 0, 100},
+		{"invalid_healing_nan", "dps", 100, math.NaN()},
+		{"invalid_healing_inf", "dps", 100, math.Inf(1)},
+		{"invalid_healing_negative_inf", "dps", 100, math.Inf(-1)},
+		{"invalid_healing_negative", "dps", 100, -1},
+		{"invalid_damage_nan", "hps", math.NaN(), 100},
+		{"invalid_damage_inf", "hps", math.Inf(1), 100},
+		{"invalid_damage_negative_inf", "hps", math.Inf(-1), 100},
+		{"invalid_damage_negative", "hps", -1, 100},
+		{"zero", "", 0, 0},
+		{"neither_eligible", "", math.NaN(), math.Inf(1)},
+		{"zero_and_negative", "", 0, -1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := newSourceFixture(t)
+			// Class/spec are intentionally unchanged even when healing wins.
+			s.exec(`UPDATE encounter_dps_rankings SET dps=$2,hps=$3 WHERE instance_id=$1`, s.instance, tc.dps, tc.hps)
+			rows := s.compute()
+			var metrics []string
+			var kills int
+			for _, row := range rows {
+				if row.Kind == 1 {
+					metrics = append(metrics, row.Metric)
+				}
+				if row.Kind == 4 {
+					kills++
+				}
+			}
+			if tc.metric == "" {
+				require.Empty(t, metrics)
+				require.Zero(t, kills)
+			} else {
+				require.Equal(t, []string{tc.metric}, metrics)
+				require.Equal(t, 1, kills)
+			}
+		})
+	}
+}
+
+func TestProjectionZeroPairRepairRetractsPlayerEvidence(t *testing.T) {
+	t.Parallel()
+	s := newSourceFixture(t)
+	require.NoError(t, s.direct(s.compute()))
+	s.exec(`DELETE FROM leaderboard_dirty_player_boss_subjects WHERE tenant_id=$1`, s.tenant)
+	s.exec(`DELETE FROM leaderboard_dirty_player_renown WHERE tenant_id=$1`, s.tenant)
+	s.exec(`UPDATE encounter_dps_rankings SET dps=0,hps=0 WHERE instance_id=$1`, s.instance)
+	rows := s.compute()
+	require.Len(t, rows, 1)
+	require.EqualValues(t, 5, rows[0].Kind) // Guild kill survives the player's zero metrics.
+	s.enqueueRun()
+	processed, err := (&RepairWorker{Store: s.db}).Drain(s.ctx, s.tenant)
+	require.NoError(t, err)
+	require.True(t, processed)
+	for _, table := range []string{"player_observations", "player_renown_facts"} {
+		var count int
+		require.NoError(t, s.row("SELECT count(*) FROM leaderboard_"+table+" WHERE tenant_id=$1", s.tenant).Scan(&count))
+		require.Zero(t, count)
+	}
+	for _, table := range []string{"guild_renown_facts", "dirty_player_boss_subjects", "dirty_player_renown"} {
+		var count int
+		require.NoError(t, s.row("SELECT count(*) FROM leaderboard_"+table+" WHERE tenant_id=$1", s.tenant).Scan(&count))
+		require.Positive(t, count)
+	}
+}
+
+func TestProjectionPositiveTieRepairRetractsOldHealing(t *testing.T) {
+	t.Parallel()
+	s := newSourceFixture(t)
+	s.exec(`UPDATE encounter_dps_rankings SET dps=25,hps=100 WHERE instance_id=$1`, s.instance)
+	rows := s.compute()
+	// Seed legacy dual evidence through the generic publisher, which still supports both metrics.
+	for _, row := range rows {
+		if row.Kind == 1 {
+			row.Metric = "dps"
+			row.MetricValue = 25
+			rows = append(rows, row)
+			break
+		}
+	}
+	require.NoError(t, s.direct(rows))
+	s.exec(`DELETE FROM leaderboard_dirty_player_boss_subjects WHERE tenant_id=$1`, s.tenant)
+	s.exec(`UPDATE encounter_dps_rankings SET dps=100,hps=100 WHERE instance_id=$1`, s.instance)
+	s.enqueueRun()
+	processed, err := (&RepairWorker{Store: s.db}).Drain(s.ctx, s.tenant)
+	require.NoError(t, err)
+	require.True(t, processed)
+	var metrics []string
+	require.NoError(t, s.row(`SELECT array_agg(metric ORDER BY metric) FROM leaderboard_player_observations WHERE tenant_id=$1`, s.tenant).Scan(&metrics))
+	require.Equal(t, []string{"dps"}, metrics)
+	var count int
+	require.NoError(t, s.row(`SELECT count(*) FROM leaderboard_player_renown_facts WHERE tenant_id=$1`, s.tenant).Scan(&count))
+	require.Equal(t, 1, count)
+	require.NoError(t, s.row(`SELECT array_agg(metric ORDER BY metric) FROM leaderboard_dirty_player_boss_subjects WHERE tenant_id=$1`, s.tenant).Scan(&metrics))
+	require.Equal(t, []string{"dps", "hps"}, metrics)
 }

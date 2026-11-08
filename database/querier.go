@@ -741,6 +741,9 @@ type sqlcQuerier interface {
 	// Shared database clock for operational diagnostics; leases never use Go time.
 	LeaderboardD2Clock(ctx context.Context) (pgtype.Timestamptz, error)
 	LeaderboardRunClaimUnexpired(ctx context.Context, arg LeaderboardRunClaimUnexpiredParams) (bool, error)
+	// Capture BEFORE source changes. Input may contain instance or logical-run IDs.
+	// Old evidence survives source deletion/tenant movement and supplies old keys.
+	LeaderboardRunKeysForIDs(ctx context.Context, ids []uuid.UUID) ([]LeaderboardRunKeysForIDsRow, error)
 	ListActiveAdminTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
 	ListActivePublicTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
 	ListAdminActiveCustomPanelInstallations(ctx context.Context) ([]ListAdminActiveCustomPanelInstallationsRow, error)

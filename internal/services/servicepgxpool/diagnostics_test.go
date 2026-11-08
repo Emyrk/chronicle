@@ -42,6 +42,36 @@ func TestQuerySummary(t *testing.T) {
 	}
 }
 
+func TestPoolDiagnosticsQueryEndWithoutStart(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.November, 6, 12, 0, 0, 0, time.UTC)
+	for name, ctx := range map[string]context.Context{
+		"missing start":    context.Background(),
+		"zero start":       context.WithValue(context.Background(), queryStartKey{}, traceStart{}),
+		"acquisition only": context.WithValue(context.Background(), traceStartKey{}, traceStart{at: now.Add(-time.Minute)}),
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			var logs bytes.Buffer
+			diagnostics := newPoolDiagnostics(slog.New(slog.NewJSONHandler(&logs, nil)))
+			diagnostics.now = func() time.Time { return now }
+			conn := &pgx.Conn{}
+			activity := connectionActivity{acquiredAt: now, query: "SELECT 1", queryAt: now}
+			diagnostics.active[conn] = activity
+
+			diagnostics.TraceQueryEnd(ctx, conn, pgx.TraceQueryEndData{})
+
+			if logs.Len() != 0 {
+				t.Fatalf("unpaired query end logged a warning: %s", logs.String())
+			}
+			if diagnostics.active[conn] != activity {
+				t.Fatal("unpaired query end changed connection activity")
+			}
+		})
+	}
+}
+
 func TestPoolDiagnosticsLogsSlowActivity(t *testing.T) {
 	t.Parallel()
 

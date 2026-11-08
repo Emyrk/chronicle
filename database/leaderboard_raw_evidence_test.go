@@ -66,6 +66,7 @@ func TestLeaderboardRawMigrationRoundTrip(t *testing.T) {
 		"000348_leaderboard_evidence_benchmarks",
 		"000349_leaderboard_d2_claims",
 		"000350_leaderboard_d1_claims",
+		"000351_leaderboard_source_identity_indexes",
 	} {
 		script, err := os.ReadFile("migrations/" + migration + ".up.sql")
 		require.NoError(t, err)

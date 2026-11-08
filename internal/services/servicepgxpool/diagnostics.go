@@ -22,6 +22,7 @@ const (
 )
 
 type traceStartKey struct{}
+type queryStartKey struct{}
 
 type traceStart struct {
 	at       time.Time
@@ -120,11 +121,17 @@ func (d *poolDiagnostics) TraceQueryStart(ctx context.Context, conn *pgx.Conn, d
 	}
 	d.mu.Unlock()
 
-	return context.WithValue(ctx, traceStartKey{}, start)
+	return context.WithValue(ctx, queryStartKey{}, start)
 }
 
 func (d *poolDiagnostics) TraceQueryEnd(ctx context.Context, conn *pgx.Conn, data pgx.TraceQueryEndData) {
-	start, _ := ctx.Value(traceStartKey{}).(traceStart)
+	start, ok := ctx.Value(queryStartKey{}).(traceStart)
+	// pgx batch rows can invoke QueryEnd without QueryStart when no batch
+	// tracer is installed. Never time those rows from the zero time (or from
+	// a pool acquisition), nor clear activity belonging to another query.
+	if !ok || start.at.IsZero() {
+		return
+	}
 	duration := d.now().Sub(start.at)
 
 	d.mu.Lock()
