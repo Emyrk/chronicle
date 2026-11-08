@@ -328,7 +328,7 @@ func talentOGImageParams(classSlug, build string) url.Values {
 }
 
 func (s *Service) instanceOG(r *http.Request, host, idOrSlug string) *frontend.OGData {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
 	inst, err := resolveInstance(ctx, s.store, idOrSlug)
@@ -340,7 +340,7 @@ func (s *Service) instanceOG(r *http.Request, host, idOrSlug string) *frontend.O
 }
 
 func (s *Service) shareOG(r *http.Request, host, code string) *frontend.OGData {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
 	db := s.store
