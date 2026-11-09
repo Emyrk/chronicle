@@ -130,7 +130,7 @@ export interface HubLiveTabContext {
   onScope: (scope: RatingScope) => void
   onRole: (role: HubRole) => void
   /** The Overview's framing, computed once by the hub so live and Storybook read the same. */
-  overview: Pick<OverviewProps, "kind" | "set" | "where" | "noRole">
+  overview: Pick<OverviewProps, "kind" | "set" | "where" | "noRole" | "onGuildRatings">
 }
 
 export interface HubLiveData {
@@ -264,6 +264,10 @@ export function LeaderboardHub({
     setRatingView(view)
     setTab("ratings")
   }
+  const openGuildRatings = (view: RatingView) => {
+    setSubject("guilds")
+    openRatings(view)
+  }
   const ratingToolbar = (
     <div className="flex flex-wrap items-center gap-2">
       <MetricTabs view={ratingView} onView={setRatingView} />
@@ -294,7 +298,7 @@ export function LeaderboardHub({
     onView: setRatingView, onStatisticsView: setStatisticsView, onPeriod: setPeriod, selection,
     setSelection: selectEncounter, onTab: setTab, onRatings: openRatings,
     onStatistics: openStatistics, onScope: setScope, onRole: changeRole,
-    overview: { kind, set, where, noRole: !!scope.cls && (live ? live.specsFor : specsFor)(scope.cls, role).length === 0 },
+    overview: { kind, set, where, noRole: !!scope.cls && (live ? live.specsFor : specsFor)(scope.cls, role).length === 0, onGuildRatings: openGuildRatings },
   }
 
   // Guilds mode tints the page gold, the Guilds toggle's color: a faint wash from the top, a gold-edged
@@ -744,11 +748,13 @@ export interface OverviewProps {
   onScope: (scope: RatingScope) => void
   onTab: (tab: HubTab) => void
   onRatings: (view: RatingView) => void
+  /** Opens a ratings board in guild mode. */
+  onGuildRatings: (view: RatingView) => void
   onStatistics: (view: StatisticsView) => void
   onRole: (role: HubRole) => void
 }
 
-export function Overview({ data, instanceName, scope, role, subject, kind, set, where, noRole, onScope, onTab, onRatings, onStatistics, onRole }: OverviewProps) {
+export function Overview({ data, instanceName, scope, role, subject, kind, set, where, noRole, onScope, onTab, onRatings, onGuildRatings, onStatistics, onRole }: OverviewProps) {
   const roleLabel = role === "dps" ? "DPS" : "HPS"
   const guilds = subject === "guilds"
   const { pending } = data
@@ -816,13 +822,13 @@ export function Overview({ data, instanceName, scope, role, subject, kind, set, 
               {filled(data.guildClears, pending, (rows) => <GuildList rows={rows} format={(v) => String(v)} bars />)}
             </Card>
           ) : (
-            <Card title={`Guild Renown · ${where}`} metric="renown" action={{ label: "Renown", onClick: () => onRatings("renown") }}>
+            <Card title={`Guild Renown · ${where}`} metric="renown" action={{ label: "Renown", onClick: () => onGuildRatings("renown") }}>
               {filled(data.guildRenown, pending, (rows) => (
                 <GuildList rows={rows.slice(0, GUILD_RENOWN_ROWS)} format={(v) => v.toLocaleString()} bars showDetail accent={METRIC_THEMES.renown.accent} />
               ), GUILD_RENOWN_ROWS)}
               <button
                 type="button"
-                onClick={() => onRatings("renown")}
+                onClick={() => onGuildRatings("renown")}
                 className="mt-auto flex cursor-pointer items-center gap-1 border-t border-white/5 px-4 py-2.5 text-xs font-medium transition-colors hover:bg-white/[.04] hover:underline"
                 style={{ color: METRIC_THEMES.renown.accent }}
               >
