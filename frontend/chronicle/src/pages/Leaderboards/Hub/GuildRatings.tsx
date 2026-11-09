@@ -69,7 +69,7 @@ export function MetricColumns({ columns, onOpen, ranksKnown = true }: { columns?
               ))}
               {columns?.[m].map((r, i) => (
                 <li key={r.id} className="flex items-center gap-2 border-b border-white/5 px-3 py-2.5 last:border-b-0">
-                  <span className="w-3 font-mono text-xs text-muted-foreground">{ranksKnown ? i + 1 : ""}</span>
+                  {ranksKnown && <span className="w-3 font-mono text-xs text-muted-foreground">{i + 1}</span>}
                   <span className="flex min-w-0 flex-1 items-center gap-2 text-sm font-medium">{r.name}</span>
                   {r.raw && <span className="shrink-0 font-mono text-[11px] text-muted-foreground tabular-nums">{r.raw}</span>}
                   <span className="font-mono text-sm tabular-nums" style={i === 0 ? { color: t.accent } : undefined}>
@@ -102,7 +102,13 @@ export function GuildName({ guild, guildId, logo, size = "size-5" }: { guild: st
       {logo ? (
         <img src={logo} alt="" className={`${size} shrink-0 rounded-full object-cover`} />
       ) : (
-        <span className={`${size} shrink-0`} aria-hidden />
+        // No logo: a muted initial keeps names aligned with logo rows without leaving a blank gap.
+        <span
+          className={`${size} flex shrink-0 items-center justify-center rounded-full bg-white/[.06] text-[10px] font-semibold text-muted-foreground uppercase ring-1 ring-white/10`}
+          aria-hidden
+        >
+          {guild.trim().charAt(0)}
+        </span>
       )}
       <span className="truncate" {...guildAttributes(guildId, guild)}>{guild}</span>
     </>

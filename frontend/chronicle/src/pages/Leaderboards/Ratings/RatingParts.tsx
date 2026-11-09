@@ -31,7 +31,8 @@ export function EntryRow({ entry, rank, theme, size }: { entry: RatingEntry; ran
   const lg = size === "lg"
   return (
     <li className={cn("flex items-center gap-3 border-b border-white/5 last:border-b-0", lg ? "px-4 py-3 sm:px-5" : "px-3 py-2")}>
-      {rank === undefined ? <span aria-label="Global rank unavailable for realm filter" className={cn("shrink-0", lg ? "size-8" : "size-6")} /> : <RankMark rank={rank} size={size} />}
+      {/* Without a rank (live boards) the row starts at the entity instead of an empty slot. */}
+      {rank !== undefined && <RankMark rank={rank} size={size} />}
       <SpecIcon cls={entry.cls} spec={entry.spec} className={cn("shrink-0 rounded-sm", lg ? "size-7" : "size-5")} />
       <span className="min-w-0 flex-1">
         <span className="flex min-w-0 items-baseline gap-1.5">
@@ -45,7 +46,7 @@ export function EntryRow({ entry, rank, theme, size }: { entry: RatingEntry; ran
           {entry.guild && <span className="min-w-0 truncate text-xs text-muted-foreground">&lt;{entry.guild}&gt;</span>}
         </span>
         <span className="block truncate text-[11px] text-muted-foreground">
-          {entry.spec} · {entry.realmLabel?.trim() || "Unknown realm"}
+          {[entry.spec, entry.realmLabel?.trim() || "Unknown realm"].filter(Boolean).join(" · ")}
         </span>
       </span>
       {entry.raw ? <RawTag raw={entry.raw} /> : null}
