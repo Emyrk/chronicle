@@ -750,17 +750,20 @@ export type { InstanceTheme, ParticleStyle }
 interface PodiumProps {
   entries: SpeedrunLeaderboardEntry[]
   instanceName: string
+  /** Drop the steps' minimum heights and the bottom margin, for a lone winner on a phone. */
+  compact?: boolean
 }
 
-export function Podium({ entries, instanceName }: PodiumProps) {
+export function Podium({ entries, instanceName, compact }: PodiumProps) {
   if (entries.length === 0) return null
   const theme = INSTANCE_THEMES[instanceName] ?? DEFAULT_THEME
 
   return (
-    <div className="flex items-end justify-center gap-6 mb-10">
+    <div className={`flex items-end justify-center gap-6 ${compact ? "mb-4" : "mb-10"}`}>
       {PODIUM_ORDER.map((rank, displayIdx) => {
         const entry = entries[rank]
-        if (!entry) return <div key={rank} className="w-48" />
+        // Spacers keep a lone #2 beside #1; a lone winner needs none (and a phone has no room for them).
+        if (!entry) return entries.length > 1 ? <div key={rank} className="w-48" /> : null
         const colors = MEDAL_COLORS[rank]
         const style = PODIUM_STYLES[displayIdx]
         const isFirst = rank === 0
@@ -776,7 +779,7 @@ export function Podium({ entries, instanceName }: PodiumProps) {
             key={entry.instance_id}
             to={`/instances/${entry.slug || entry.instance_id}`}
             className={`relative overflow-hidden
-              ${style.width} ${style.minH} ${style.pad} rounded-xl border bg-gradient-to-b flex flex-col items-center justify-end text-center
+              ${style.width} ${compact ? "" : style.minH} ${style.pad} rounded-xl border bg-gradient-to-b flex flex-col items-center justify-end text-center
               transition-all duration-200 hover:-translate-y-2
               ${isFirst ? "" : colors.bg} ${isFirst ? "" : colors.border}
             `}

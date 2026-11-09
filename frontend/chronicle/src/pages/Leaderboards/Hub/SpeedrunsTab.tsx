@@ -144,7 +144,13 @@ function ClearBoard({ instanceName, bosses, live, story }: { instanceName: strin
     <div className="space-y-5">
       <section className="relative overflow-hidden rounded-xl border bg-card px-4 pt-10">
         <span className="absolute top-3 left-4 text-xs font-medium text-muted-foreground">{what}</span>
-        <Podium entries={runs.slice(0, 3)} instanceName={instanceName} />
+        {/* A phone has room for the winner only; the table below lists the rest. */}
+        <div className="sm:hidden">
+          <Podium entries={runs.slice(0, 1)} instanceName={instanceName} compact />
+        </div>
+        <div className="hidden sm:block">
+          <Podium entries={runs.slice(0, 3)} instanceName={instanceName} />
+        </div>
       </section>
       <section aria-label={what} className="overflow-hidden rounded-xl border bg-card">
         <table className="w-full text-sm">
