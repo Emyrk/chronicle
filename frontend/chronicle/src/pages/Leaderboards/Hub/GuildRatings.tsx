@@ -351,8 +351,9 @@ function GuildFullTable({
         <table className="w-full min-w-[42rem] table-auto text-sm">
           <thead className="border-b bg-black/10 text-[11px] tracking-wider text-muted-foreground uppercase">
             <tr>
-              <th className="w-14 px-4 py-2.5 text-left font-medium sm:px-5">#</th>
-              <th className="w-[26%] px-2 py-2.5 pr-6 text-left font-medium whitespace-nowrap">Guild</th>
+              {/* Live boards have no global rank, so "#" would only ever be empty. */}
+              {!live && <th className="w-14 px-4 py-2.5 text-left font-medium sm:px-5">#</th>}
+              <th className={cn("w-[26%] px-2 py-2.5 pr-6 text-left font-medium whitespace-nowrap", live && "pl-4 sm:pl-5")}>Guild</th>
               {view === "overview" ? (
                 RATING_METRICS.map((m) => {
                   const t = METRIC_THEMES[m]
@@ -392,10 +393,12 @@ function GuildFullTable({
           <tbody>
             {rows.map(({ rank, g }) => (
               <tr key={g.guildId ? `${g.detail}:${g.guildId}` : g.guild} className="border-b border-white/5 transition-colors last:border-b-0 hover:bg-white/[.025]">
-                <td className="px-4 py-2 sm:px-5">
-                  {!live && <RankMark rank={rank} size="sm" />}
-                </td>
-                <td className="px-2 py-2 pr-8 whitespace-nowrap">
+                {!live && (
+                  <td className="px-4 py-2 sm:px-5">
+                    <RankMark rank={rank} size="sm" />
+                  </td>
+                )}
+                <td className={cn("px-2 py-2 pr-8 whitespace-nowrap", live && "pl-4 sm:pl-5")}>
                   <span className="flex items-center gap-2.5 font-medium">
                     <GuildName guild={g.guild} guildId={g.guildId} logo={g.logo} size="size-6" />
                   </span>
