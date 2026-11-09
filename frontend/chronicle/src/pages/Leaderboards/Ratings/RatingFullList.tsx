@@ -461,13 +461,14 @@ function MasteryPhoneLine({ entry, live }: { entry: RatingEntry; live: boolean }
 }
 
 /**
- * What each Mastery part means, per boss: kills are sorted from worst to best parse, each parse a
- * percentage of the best in the row's spec. A multi-boss row averages bosses, misses counting as 0.
+ * What each Mastery part means, per boss. Nothing here is a parse: every part is the row's raw DPS/HPS
+ * against the boss benchmark (the rank-1 DPS/HPS for its spec), so all three fall when the benchmark
+ * is beaten. A multi-boss row averages bosses, misses counting as 0.
  */
 const PUBLISHED_MASTERY_COLUMNS: { label: string; title: string; body: string }[] = [
-  { label: "Peak", title: "Peak · 30% of Mastery", body: "Your single best parse on the boss." },
-  { label: "Form", title: "Form · 50% of Mastery", body: "Your typical good kill: the average of your parses above the 40th percentile, leaving out your single best." },
-  { label: "Floor", title: "Floor · 20% of Mastery", body: "Your off nights: the average of your 20th–40th percentile parses. The bottom 20% of kills are ignored." },
+  { label: "Peak", title: "Peak · 30% of Mastery", body: "Your best DPS/HPS on the boss against the benchmark: the rank-1 DPS/HPS for your spec. If someone beats the benchmark, your Peak goes down." },
+  { label: "Form", title: "Form · 50% of Mastery", body: "Your typical good kill: the average DPS/HPS of your kills above the 40th percentile, leaving out your best, against the benchmark for your spec." },
+  { label: "Floor", title: "Floor · 20% of Mastery", body: "Your off nights: the average DPS/HPS of your 20th–40th percentile kills against the benchmark for your spec. Your bottom 20% of kills are ignored." },
   { label: "3-kill progress", title: "3-kill progress", body: "Kills toward three per selected boss. Form and Floor need at least three kills of a boss and count as 0 until then. This is coverage, not your score." },
 ]
 
@@ -575,8 +576,8 @@ export function MasteryPartHeaders() {
   return (
     <>
       {[
-        ["Peak", "Best parse"],
-        ["Form", "Typical recent parse"],
+        ["Peak", "Best DPS/HPS against the benchmark"],
+        ["Form", "Typical DPS/HPS against the benchmark"],
         ["Floor", "The lower end of play"],
         ["Evidence", "Kills toward the five per boss that end the ranking discount. Across a raid: every boss counts."],
       ].map(([label, hint]) => (
