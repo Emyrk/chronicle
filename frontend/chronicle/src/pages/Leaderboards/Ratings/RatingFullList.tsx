@@ -67,7 +67,9 @@ export function RatingFullList({
   const showPeakComponents = view === "peak" && !!live && encounterCount > 1
   const showPeakRun = view === "peak" && encounterCount <= 1
   /** Boards whose phone layout fits the screen without sideways scrolling. */
-  const phoneFits = view === "overview" || view === "peak"
+  const phoneFits = view === "overview" || view === "peak" || view === "mastery"
+  /** Boards whose extra columns fold under the score on a phone. */
+  const phoneFolds = view === "peak" || view === "mastery"
   /** The single-boss peak's kill: published duration when live, else the row's (or fixture) run. */
   const runFor = (entry: RatingEntry, liveRun?: { ms: number; date: string }): { ms?: number; date?: string } =>
     live ? { ms: entry.durationMs, date: liveRun?.date } : liveRun ?? peakRun(entry.id, scope.boss)
@@ -204,7 +206,10 @@ export function RatingFullList({
                 </>
               ) : (
                 <>
-                  <th className={cn("w-32 px-3 py-2.5 text-left font-medium", view === "peak" && "pr-4 text-right sm:pr-3 sm:text-left")}>{theme.label}</th>
+                  <th className={cn("w-32 px-3 py-2.5 text-left font-medium", phoneFolds && "pr-4 text-right sm:pr-3 sm:text-left")}>
+                    {theme.label}
+                    {view === "mastery" && <span className="block text-[10px] tracking-normal normal-case opacity-70 sm:hidden">Peak / Form / Floor · kills</span>}
+                  </th>
                   {view === "mastery" && (live ? <PublishedMasteryHeaders /> : <MasteryPartHeaders />)}
                   {showPeakComponents && (
                     <th className="hidden w-[28%] px-3 py-2.5 text-left font-medium sm:table-cell" title="Peak is the mean of every boss's best score; a boss without a kill counts as 0.">
@@ -288,8 +293,8 @@ export function RatingFullList({
                   </>
                 ) : (
                   <>
-                    <td className={cn("px-3 py-2", view === "peak" && "pr-4 sm:pr-3")}>
-                      <div className={cn("flex flex-col items-start gap-1", view === "peak" && "items-end sm:items-start")}>
+                    <td className={cn("px-3 py-2", phoneFolds && "pr-4 sm:pr-3")}>
+                      <div className={cn("flex flex-col items-start gap-1", phoneFolds && "items-end sm:items-start")}>
                         <span className="font-mono text-base tabular-nums" style={rank === 1 ? { color: theme.accent } : undefined}>
                           {theme.format(entry.score)}
                           {/* A phone moves the raw number under the score, beside the kill time. */}
@@ -306,6 +311,7 @@ export function RatingFullList({
                           const parts = [entry.raw ? `${Math.round(entry.raw).toLocaleString()}/s` : undefined, ms === undefined ? undefined : formatClock(ms)].filter(Boolean)
                           return parts.length ? <span className="font-mono text-[11px] text-muted-foreground tabular-nums sm:hidden">{parts.join(" · ")}</span> : null
                         })()}
+                        {view === "mastery" && <MasteryPhoneLine entry={entry} live={!!live} />}
                       </div>
                     </td>
                     {view === "mastery" && (live ? <PublishedMasteryCells entry={entry} /> : <MasteryPartCells parts={entry.mastery} />)}
@@ -428,8 +434,34 @@ export function PeakComponents({ entry, scores }: { entry: RatingEntry; scores?:
   )
 }
 
+/** A phone's one-line Mastery breakdown under the score: Peak/Form/Floor in fixed slots, then kill coverage. */
+function MasteryPhoneLine({ entry, live }: { entry: RatingEntry; live: boolean }) {
+  let values: (number | undefined)[]
+  let coverage: number | undefined
+  if (live) {
+    const parts = entry.publishedMastery
+    values = [parts?.peak, parts?.form, parts?.floor]
+    const counts = entry.bossCounts
+    coverage = counts?.length ? counts.reduce((sum, boss) => sum + Math.min(boss.count, 3), 0) / (3 * counts.length) : undefined
+  } else {
+    values = [entry.mastery?.peak, entry.mastery?.form, entry.mastery?.floor]
+    coverage = entry.mastery?.evidence
+  }
+  return (
+    <span className="font-mono text-[11px] whitespace-nowrap text-muted-foreground tabular-nums sm:hidden">
+      {values.map((value, i) => (
+        <span key={i}>
+          {i > 0 && "/"}
+          <span className="inline-block w-[5ch] text-right">{value === undefined ? "—" : value.toFixed(1)}</span>
+        </span>
+      ))}
+      {coverage !== undefined && <><span className="mx-0.5">·</span><span className="inline-block w-[4ch] text-right">{Math.min(100, Math.round(coverage * 100))}%</span></>}
+    </span>
+  )
+}
+
 export function PublishedMasteryHeaders() {
- return <>{["Peak", "Form", "Floor", "3-kill progress"].map(label => <th key={label} className="px-3 py-2.5 text-right font-medium">{label}</th>)}</>
+ return <>{["Peak", "Form", "Floor", "3-kill progress"].map(label => <th key={label} className="hidden px-3 py-2.5 text-right font-medium sm:table-cell">{label}</th>)}</>
 }
 
 export function PublishedMasteryCells({ entry }: { entry: RatingEntry }) {
@@ -442,8 +474,8 @@ export function PublishedMasteryCells({ entry }: { entry: RatingEntry }) {
    ? `Missing eligible kills: ${missing.map((boss) => `${boss.encounter_name}: ${3 - boss.count} more (${boss.count}/3)`).join("; ")}`
    : "Complete: at least three eligible kills for every selected boss"
  const explanation = "Counts apply to this row's cohort and DPS/HPS metric. This is coverage progress, not your Mastery score."
-  return <>{cells.map((value, i) => <td key={i} className="px-3 py-2 text-right font-mono text-muted-foreground tabular-nums">{value === undefined ? "—" : value.toFixed(1)}</td>)}
-    <td className="px-3 py-2 text-right font-mono text-muted-foreground tabular-nums"><HintTooltip>
+  return <>{cells.map((value, i) => <td key={i} className="hidden px-3 py-2 text-right font-mono text-muted-foreground tabular-nums sm:table-cell">{value === undefined ? "—" : value.toFixed(1)}</td>)}
+    <td className="hidden px-3 py-2 text-right font-mono text-muted-foreground tabular-nums sm:table-cell"><HintTooltip>
       <TooltipTrigger asChild><span tabIndex={0} className="cursor-help underline decoration-dotted underline-offset-4" aria-label={`Progress toward three kills per selected boss: ${description}. ${explanation}`}>{counts ? `${Math.round(progress * 100)}%` : "—"}</span></TooltipTrigger>
       <TooltipContent side="top" sideOffset={6} className="max-w-sm space-y-2 p-3 text-left">
         <p className="font-semibold">{missing.length ? "Kills needed for 100% coverage" : description}</p>
@@ -518,7 +550,7 @@ export function MasteryPartHeaders() {
         ["Floor", "The lower end of play"],
         ["Evidence", "Kills toward the five per boss that end the ranking discount. Across a raid: every boss counts."],
       ].map(([label, hint]) => (
-        <th key={label} title={hint} className="px-3 py-2.5 text-right font-medium">
+        <th key={label} title={hint} className="hidden px-3 py-2.5 text-right font-medium sm:table-cell">
           {label}
         </th>
       ))}
@@ -527,8 +559,8 @@ export function MasteryPartHeaders() {
 }
 
 export function MasteryPartCells({ parts }: { parts?: MasteryParts }) {
-  if (!parts) return <td colSpan={4} />
-  const cell = "px-3 py-2 text-right font-mono text-muted-foreground tabular-nums"
+  if (!parts) return <td colSpan={4} className="hidden sm:table-cell" />
+  const cell = "hidden px-3 py-2 text-right font-mono text-muted-foreground tabular-nums sm:table-cell"
   const percent = Math.round(parts.evidence * 100)
   return (
     <>
