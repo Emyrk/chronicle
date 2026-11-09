@@ -23,6 +23,7 @@ import { dungeonMeshBytes, dungeonMeshLiquid, dungeonMeshUrl } from "./dungeonMe
 import { mapProcessor, type MapProcessorEvent, type MapResult } from "./map.processor";
 import type { MapLivePresence } from "./MapView3D";
 import { MapFloorPicker } from "./MapFloorPicker";
+import { EncounterFloorProvider } from "./useEncounterFloor";
 import { MapOverview2D } from "./MapOverview2D";
 import {
   flatMapYardStep,
@@ -1460,6 +1461,6 @@ export function createMapPanel({ mini = false }: { mini?: boolean } = {}): Panel
     hoverHeader: () => true,
     supportsFiltering: false,
     underConstruction: true,
-    render: (props) => <MapContent {...props} forceMini={mini} />,
+    render: (props) => <EncounterFloorProvider><MapContent {...props} forceMini={mini} /></EncounterFloorProvider>,
   };
 }
