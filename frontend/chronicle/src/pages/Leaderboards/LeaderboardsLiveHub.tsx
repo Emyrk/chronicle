@@ -94,7 +94,8 @@ export function LeaderboardsLiveHub() {
   // page's (empty) boards.
   const loading = !summary.data && !failed
   const stale = !loading && summary.isPlaceholderData
-  return <div className="flex min-w-0 gap-6">
+  // The ad rail only shows from 2xl; below that its empty wrapper must not cost a gap of width.
+  return <div className="flex min-w-0 2xl:gap-6">
     <div className="min-w-0 flex-1">
       <LeaderboardMaintenanceNotice tenantID={siteConfig?.tenant?.id} />
       <LeaderboardsHubApp instance={instance ?? undefined} onInstance={chooseInstance}
