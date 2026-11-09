@@ -17,7 +17,10 @@ import { peakWithRaw } from "./peakDisplay"
 import { cohortLabel } from "./cohortLabel"
 import { entityAttributes } from "@/components/EntityMenu/entity"
 import { guildAttributes } from "@/components/EntityMenu/leaderboardEntities"
-import { compareByRaidProgression } from "@/pages/Logs/utils/instanceProgressionOrder"
+import {
+  compareByRaidProgression,
+  groupByRaidLevel,
+} from "@/pages/Logs/utils/instanceProgressionOrder"
 import { RulesetsLanding } from "@/pages/Leaderboards/RulesetsLanding"
 
 /**
@@ -269,10 +272,12 @@ function HubLanding({
       .filter((inst) => !publishedNames.has(inst.instance_name))
       .map((inst) => inst.instance_name))]
     const raids = published.filter((inst) => inst.category === "raid")
+    const raidGroups = groupByRaidLevel(
+      raids,
+      (raid) => raid.instance_name,
+      supportedInstances,
+    )
     if (supportedInstances) {
-      raids.sort((left, right) =>
-        compareByRaidProgression(left.instance_name, right.instance_name, supportedInstances),
-      )
       unavailable.sort((left, right) => compareByRaidProgression(left, right, supportedInstances))
     }
     const dungeons = published.filter((inst) => inst.category === "dungeon")
@@ -281,9 +286,16 @@ function HubLanding({
       <div className="mx-auto w-full max-w-[1920px] space-y-6 px-3 py-4 sm:px-4 sm:py-8">
         {landingNotice}
         {published.length === 0 && <p>No published instances yet.</p>}
-        {raids.length > 0 && <section className="space-y-5">
+        {raidGroups.length > 0 && <section className="space-y-5">
           <h2 className="text-lg font-semibold text-muted-foreground">Raids</h2>
-          <div className="space-y-3">{grid(raids)}</div>
+          {raidGroups.map((group) => (
+            <div key={group.level ?? "other"} className="space-y-3">
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground/70">
+                {group.level ? `Level ${group.level}` : "Other"}
+              </h3>
+              {grid(group.items)}
+            </div>
+          ))}
         </section>}
         {dungeons.length > 0 && <section className="space-y-3">
           <h2 className="text-lg font-semibold text-muted-foreground">Dungeons</h2>

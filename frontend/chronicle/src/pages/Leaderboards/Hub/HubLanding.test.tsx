@@ -45,27 +45,37 @@ describe("live Hub landing", () => {
     expect(markup).toContain('href="/leaderboard-v2/Upper-Karazhan"')
   })
 
-  it("orders raid cards by progression tier while keeping cohorts together", () => {
+  it("separates raid cards by level tier and keeps cohorts together", () => {
     const raidInstances = [
       { ...instances[0], instance_name: "Molten Core", difficulty_name: "Heroic", max_players: 25 },
       { ...instances[0], instance_name: "Blackwing Lair" },
       { ...instances[0], instance_name: "Molten Core" },
-      { ...instances[0], instance_name: "Naxxramas" },
+      { ...instances[0], instance_name: "Karazhan" },
+      { ...instances[0], instance_name: "Ulduar" },
     ] satisfies RankingsInstanceSummary[]
     const supportedInstances = [
       { name: "Molten Core", category: "raid", raid_progression_order: 100 },
       { name: "Blackwing Lair", category: "raid", raid_progression_order: 300 },
-      { name: "Naxxramas", category: "raid", raid_progression_order: 700 },
+      { name: "Karazhan", category: "raid", raid_progression_order: 1000 },
+      { name: "Ulduar", category: "raid", raid_progression_order: 2100 },
     ] satisfies SupportedInstance[]
 
     const markup = render({ instances: raidInstances, supportedInstances })
-    const naxxramas = markup.indexOf("Naxxramas")
+    const level80 = markup.indexOf("Level 80")
+    const level70 = markup.indexOf("Level 70")
+    const level60 = markup.indexOf("Level 60")
+    const ulduar = markup.indexOf("Ulduar")
+    const karazhan = markup.indexOf("Karazhan")
     const blackwingLair = markup.indexOf("Blackwing Lair")
     const firstMoltenCore = markup.indexOf("Molten Core")
     const lastMoltenCore = markup.lastIndexOf("Molten Core")
 
-    expect(naxxramas).toBeGreaterThan(-1)
-    expect(naxxramas).toBeLessThan(blackwingLair)
+    expect(level80).toBeGreaterThan(-1)
+    expect(level80).toBeLessThan(ulduar)
+    expect(ulduar).toBeLessThan(level70)
+    expect(level70).toBeLessThan(karazhan)
+    expect(karazhan).toBeLessThan(level60)
+    expect(level60).toBeLessThan(blackwingLair)
     expect(blackwingLair).toBeLessThan(firstMoltenCore)
     expect(lastMoltenCore).toBeGreaterThan(firstMoltenCore)
   })
