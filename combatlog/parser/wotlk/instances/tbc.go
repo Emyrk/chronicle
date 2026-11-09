@@ -841,9 +841,13 @@ var KarazhanFactory = &instances.CommonFactory{
 // HyjalSummitHostiles returns creature entry IDs for Hyjal Summit (map 534).
 func HyjalSummitHostiles() map[uint32]instances.Identity {
 	hostile := make(map[uint32]instances.Identity)
-	instances.LoadAdds(hostile, map[uint32]string{
+
+	for entry, name := range map[uint32]string{
 		3794:  "Druid of the Talon",
 		3795:  "Druid of the Claw",
+		17772: "Lady Jaina Proudmoore",
+		17852: "Thrall",
+		17854: "Dire Wolf",
 		17919: "Alliance Footman",
 		17920: "Alliance Knight",
 		17921: "Alliance Rifleman",
@@ -859,15 +863,37 @@ func HyjalSummitHostiles() map[uint32]instances.Identity {
 		17943: "Night Elf Archer",
 		17944: "Dryad",
 		17945: "Night Elf Huntress",
+		17948: "Tyrande Whisperwind",
+		18001: "Guardian Elemental",
+		18036: "Horde Healing Ward",
 		18485: "Night Elf Ancient of War",
 		18486: "Night Elf Ancient of Lore",
 		18487: "Night Elf Ancient Protector",
 		18502: "Night Elf Wisp",
+	} {
+		hostile[entry] = instances.Identity{Affiliation: types.AffiliationFriendly, Name: name}
+	}
+
+	instances.LoadAdds(hostile, map[uint32]string{
+		17818: "Towering Infernal",
+		17864: "Lesser Doomguard",
+		17895: "Ghoul",
+		17897: "Crypt Fiend",
+		17898: "Abomination",
+		17899: "Shadowy Necromancer",
+		17902: "Skeleton Invader",
+		17903: "Skeleton Mage",
+		17905: "Banshee",
+		17906: "Gargoyle",
+		17907: "Frost Wyrm",
+		17908: "Giant Infernal",
+		17916: "Fel Stalker",
 	})
 	instances.LoadBosses(hostile, map[uint32]string{
-		17772: "Lady Jaina Proudmoore",
-		17852: "Thrall",
-		17948: "Tyrande Whisperwind",
+		17767: "Rage Winterchill",
+		17808: "Anetheron",
+		17842: "Azgalor",
+		17888: "Kaz'rogal",
 		17968: "Archimonde",
 	})
 	return hostile

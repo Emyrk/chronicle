@@ -46,10 +46,12 @@ func (us *Units) Classify(g guid.GUID) UnitClassification {
 
 	if info, ok := us.Info[g]; ok {
 		c.Relation.Owner = info.Owner
-		// Vehicle control is reconstructed after parsing from delayed addon
-		// messages. Until that timeline is available, CanCooperate cannot
-		// reliably describe whether the vehicle belongs to the raid.
-		if c.Type != UnitTypeVehicle {
+		if info.Affiliation != AffiliationUnknown {
+			c.Affiliation = info.Affiliation
+		} else if c.Type != UnitTypeVehicle {
+			// Vehicle control is reconstructed after parsing from delayed addon
+			// messages. Until that timeline is available, CanCooperate cannot
+			// reliably describe whether the vehicle belongs to the raid.
 			if info.CanCooperate {
 				c.Affiliation = AffiliationFriendly
 			} else {
@@ -255,9 +257,10 @@ func (us *Units) Update(u unitinfo.Info) {
 	}
 
 	if _, possessed := us.Possessed[u.Guid]; possessed && exists {
-		// UNIT_INFO reflects temporary control in CanCooperate. Keep the unit's
-		// permanent affiliation so it reverts correctly when possession ends.
+		// UNIT_INFO reflects temporary control in its affiliation fields. Keep the
+		// unit's permanent affiliation so it reverts correctly when possession ends.
 		u.CanCooperate = existing.CanCooperate
+		u.Affiliation = existing.Affiliation
 	}
 
 	if u.Guid.IsPet() && u.Owner == nil && existing.Owner != nil {

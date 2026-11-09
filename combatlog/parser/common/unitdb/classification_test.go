@@ -7,6 +7,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/Gophercraft/core/i18n"
@@ -108,6 +109,27 @@ func TestClassify_Basic(t *testing.T) {
 		assert.Equal(t, unitdb.UnitTypeCreature, c.Type)
 		assert.Equal(t, unitdb.AffiliationUnknown, c.Affiliation)
 	})
+}
+
+func TestClassify_ExplicitAffiliation(t *testing.T) {
+	t.Parallel()
+
+	friendlyGUID := mustGUID("0x0030000000000002")
+	neutralVehicleGUID := mustGUID("0x0050000000000003")
+	units := unitdb.New()
+	units.Update(unitinfo.Info{
+		Guid:         friendlyGUID,
+		CanCooperate: false,
+		Affiliation:  types.AffiliationFriendly,
+	})
+	units.Update(unitinfo.Info{
+		Guid:         neutralVehicleGUID,
+		CanCooperate: false,
+		Affiliation:  types.AffiliationNeutral,
+	})
+
+	assert.Equal(t, unitdb.AffiliationFriendly, units.Classify(friendlyGUID).Affiliation)
+	assert.Equal(t, unitdb.AffiliationNeutral, units.Classify(neutralVehicleGUID).Affiliation)
 }
 
 func TestClassify_WithOwner(t *testing.T) {
@@ -280,6 +302,7 @@ func TestUpdate_PossessionDoesNotPersistTemporaryAffiliation(t *testing.T) {
 		Guid:         mobGUID,
 		Name:         "Razorgore the Untamed",
 		CanCooperate: false,
+		Affiliation:  types.AffiliationHostile,
 	})
 	units.SetPossessed(mobGUID, playerGUID, makeSpell("Possess"), now, 0)
 
@@ -290,6 +313,7 @@ func TestUpdate_PossessionDoesNotPersistTemporaryAffiliation(t *testing.T) {
 		Name:         "Razorgore the Untamed",
 		Owner:        &playerGUID,
 		CanCooperate: true,
+		Affiliation:  types.AffiliationFriendly,
 	})
 
 	units.ClearPossessed(mobGUID)
