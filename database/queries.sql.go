@@ -15103,7 +15103,11 @@ SELECT page.realm_id, page.subject_id, page.player_class, page.player_spec, page
  -- player_class. Look up the character's class for coloring; never use it as identity.
  COALESCE(NULLIF(page.player_class, ''), CASE WHEN $1::text = 'player' THEN
  (SELECT p.class::text FROM game_players p WHERE p.realm_id = page.realm_id AND p.id = page.subject_id)
- END, '')::text AS subject_class
+ END, '')::text AS subject_class,
+ -- Display only: a player's current guild, empty for guild boards and guildless players.
+ COALESCE(CASE WHEN $1::text = 'player' THEN
+ (SELECT g.name FROM game_players p JOIN guilds g ON g.id = p.guild_id WHERE p.realm_id = page.realm_id AND p.id = page.subject_id)
+ END, '')::text AS guild_name
 FROM page ORDER BY score DESC, realm_id, subject_id, player_class, player_spec, player_sub_spec
 `
 
@@ -15152,6 +15156,7 @@ type ListLeaderboardV2Row struct {
 	RealmName     string             `db:"realm_name" json:"realm_name"`
 	SubjectName   string             `db:"subject_name" json:"subject_name"`
 	SubjectClass  string             `db:"subject_class" json:"subject_class"`
+	GuildName     string             `db:"guild_name" json:"guild_name"`
 }
 
 // Read current benchmarks and current resolved awards, never replay observations.
@@ -15211,6 +15216,7 @@ func (q *sqlQuerier) ListLeaderboardV2(ctx context.Context, arg ListLeaderboardV
 			&i.RealmName,
 			&i.SubjectName,
 			&i.SubjectClass,
+			&i.GuildName,
 		); err != nil {
 			return nil, err
 		}

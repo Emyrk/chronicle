@@ -140,6 +140,10 @@ export interface LeaderboardV2Entry {
      * cohort boards and is looked up for Renown rows, which have no PlayerClass.
      */
     readonly subject_class: string;
+    /**
+     * GuildName is a player's current guild for display; empty for guilds and guildless players.
+     */
+    readonly guild_name: string;
     readonly score: number;
     readonly peak: number;
     readonly form: number;

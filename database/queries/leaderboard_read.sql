@@ -101,7 +101,11 @@ SELECT page.*, COALESCE((SELECT NULLIF(r.name,'') FROM wow_server_realms r WHERE
  -- player_class. Look up the character's class for coloring; never use it as identity.
  COALESCE(NULLIF(page.player_class, ''), CASE WHEN @subject_kind::text = 'player' THEN
  (SELECT p.class::text FROM game_players p WHERE p.realm_id = page.realm_id AND p.id = page.subject_id)
- END, '')::text AS subject_class
+ END, '')::text AS subject_class,
+ -- Display only: a player's current guild, empty for guild boards and guildless players.
+ COALESCE(CASE WHEN @subject_kind::text = 'player' THEN
+ (SELECT g.name FROM game_players p JOIN guilds g ON g.id = p.guild_id WHERE p.realm_id = page.realm_id AND p.id = page.subject_id)
+ END, '')::text AS guild_name
 FROM page ORDER BY score DESC, realm_id, subject_id, player_class, player_spec, player_sub_spec;
 
 -- name: ListLeaderboardV2Cohorts :many

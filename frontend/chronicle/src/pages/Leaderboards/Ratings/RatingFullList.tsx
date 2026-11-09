@@ -252,15 +252,26 @@ export function RatingFullList({
                   <div className="flex min-w-0 items-center gap-2.5">
                     <SpecIcon cls={entry.cls} spec={entry.spec} className="size-6 shrink-0 rounded-sm" />
                     <div className="min-w-0">
-                      <div className="flex min-w-0 items-baseline gap-1.5">
-                        <span className="shrink-0 font-medium" style={{ color: CLASS_CSS_VAR[entry.cls] }} {...ratingEntryAttributes(entry)}>
-                          {entry.name}
-                        </span>
-                        {entry.guild && <span className="truncate text-xs text-muted-foreground">&lt;{entry.guild}&gt;</span>}
-                      </div>
-                      <div className="text-[11px] text-muted-foreground md:hidden">
-                        {[entry.spec, entry.subSpec].filter(Boolean).join(" · ")}
-                      </div>
+                      <span className="block font-medium" style={{ color: CLASS_CSS_VAR[entry.cls] }} {...ratingEntryAttributes(entry)}>
+                        {entry.name}
+                      </span>
+                      {(() => {
+                        // The second line: spec (phones only; wider screens have a Spec column) and guild.
+                        const spec = [entry.spec, entry.subSpec].filter(Boolean).join(" · ")
+                        if (!spec && !entry.guild) return null
+                        return (
+                          <div className="flex min-w-[7rem] text-[11px] text-muted-foreground sm:min-w-[8.5rem]">
+                            {spec && <span className="shrink-0 md:hidden">{spec}</span>}
+                            {/* Zero-width basis: past the line's minimum width the guild never widens the
+                                column; it fills the room the name and spec leave and truncates. */}
+                            {entry.guild && (
+                              <span className="w-0 min-w-0 flex-1 truncate" title={entry.guild}>
+                                {spec && <span className="md:hidden">{"\u00a0·\u00a0"}</span>}&lt;{entry.guild}&gt;
+                              </span>
+                            )}
+                          </div>
+                        )
+                      })()}
                     </div>
                   </div>
                 </td>

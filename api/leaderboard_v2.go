@@ -149,7 +149,7 @@ func (api *API) LeaderboardV2(w http.ResponseWriter, r *http.Request) {
 		result = result[:limit]
 	}
 	for _, row := range result {
-		out.Entries = append(out.Entries, chroniclesdk.LeaderboardV2Entry{RealmID: row.RealmID, RealmName: row.RealmName, SubjectID: row.SubjectID, PlayerClass: row.PlayerClass, PlayerSpec: row.PlayerSpec, PlayerSubSpec: row.PlayerSubSpec, Name: row.SubjectName, SubjectClass: row.SubjectClass, Score: row.Score, Peak: row.Peak, Form: row.Form, Floor: row.Floor, Bosses: []chroniclesdk.LeaderboardV2Boss{}, Mastery: row.Mastery, Renown: row.Renown, SampleCount: row.SampleCount, ComputedAt: row.ComputedAt.Time})
+		out.Entries = append(out.Entries, chroniclesdk.LeaderboardV2Entry{RealmID: row.RealmID, RealmName: row.RealmName, SubjectID: row.SubjectID, PlayerClass: row.PlayerClass, PlayerSpec: row.PlayerSpec, PlayerSubSpec: row.PlayerSubSpec, Name: row.SubjectName, SubjectClass: row.SubjectClass, GuildName: row.GuildName, Score: row.Score, Peak: row.Peak, Form: row.Form, Floor: row.Floor, Bosses: []chroniclesdk.LeaderboardV2Boss{}, Mastery: row.Mastery, Renown: row.Renown, SampleCount: row.SampleCount, ComputedAt: row.ComputedAt.Time})
 	}
 	// Enrich only the actual returned page, not the look-ahead row or all candidates.
 	if (req.Kind == "boss" || (req.Kind == "renown" && req.Subject == "guild")) && len(out.Entries) > 0 {
