@@ -186,3 +186,32 @@ func TestHighlightPerformanceExactVanillaCohortAndRealmID(t *testing.T) {
 	require.Len(t, preview.Statistics, 1)
 	require.Equal(t, float64(100), preview.Statistics[0].MedianDPS)
 }
+
+type changingHighlightConfig struct {
+	highlightStore
+	reads int
+}
+
+func (s *changingHighlightConfig) ResolveLeaderboardConfiguration(context.Context, []string) ([]database.ResolveLeaderboardConfigurationRow, error) {
+	s.reads++
+	config := append([]database.ResolveLeaderboardConfigurationRow{}, s.config...)
+	if s.reads > 1 {
+		config[2].Points++
+	}
+	return config, nil
+}
+func TestHighlightPolicyChangeDuringRefreshCannotPublish(t *testing.T) {
+	t.Parallel()
+	s := newSourceFixture(t)
+	store := highlightStore{Store: s.db, config: highlightConfig()}
+	cohort := HighlightCohort{"Fixture raid", "Normal", 40}
+	require.NoError(t, RefreshHighlights(s.tenantctx(), store, s.tenant, uuid.Nil, cohort))
+	before, err := s.db.ListLeaderboardHighlights(s.tenantctx(), database.ListLeaderboardHighlightsParams{TenantID: s.tenant})
+	require.NoError(t, err)
+	require.Len(t, before, 1)
+	changing := &changingHighlightConfig{highlightStore: store}
+	require.ErrorContains(t, RefreshHighlights(s.tenantctx(), changing, s.tenant, uuid.Nil, cohort), "configuration changed")
+	after, err := s.db.ListLeaderboardHighlights(s.tenantctx(), database.ListLeaderboardHighlightsParams{TenantID: s.tenant})
+	require.NoError(t, err)
+	require.Equal(t, before, after)
+}

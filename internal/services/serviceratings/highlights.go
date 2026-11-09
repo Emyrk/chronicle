@@ -231,5 +231,15 @@ func RefreshHighlights(ctx context.Context, store database.Store, tenant, realm 
 	if len(payload) > 256*1024 {
 		return fmt.Errorf("highlight payload exceeds bound")
 	}
+	// Recheck resolved policy after expensive reads. Do not publish a result
+	// already known to describe an obsolete default set. Public reads also gate
+	// on fingerprint, covering a policy change after this final check.
+	current, currentCohorts, err := HighlightConfiguration(ctx, store, tenant)
+	if err != nil {
+		return err
+	}
+	if !slices.Contains(currentCohorts, c) || HighlightFingerprint(current, c) != HighlightFingerprint(rows, c) {
+		return fmt.Errorf("highlight configuration changed during refresh")
+	}
 	return store.PublishLeaderboardHighlights(ctx, database.PublishLeaderboardHighlightsParams{TenantID: tenant, RealmScope: realm, InstanceName: c.Instance, DifficultyName: c.Difficulty, MaxPlayers: c.Size, ConfigurationFingerprint: HighlightFingerprint(rows, c), Payload: payload, RefreshStartedAt: database.Timestamptz(started)})
 }
