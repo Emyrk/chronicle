@@ -36,6 +36,20 @@ import {
   glideTurnMs,
   unwrapNear,
   type FollowYawProbe,
+  climbElevations,
+  directorPullIn,
+  fallbackShot,
+  choiceMasks,
+  shotCheckDue,
+  steepPullIn,
+  releaseSteepShot,
+  FOLLOW_SHOT_CHECK_MS,
+  type FollowYawSight,
+  type ShotAnswer,
+  FOLLOW_SIGHT_STRIDE,
+  FOLLOW_STEEP_ELEVATION_DEG,
+  seesFraming,
+  sightPicks,
 } from "./followCamera";
 
 const FRAME_MS = 1000 / 60;
@@ -1011,5 +1025,478 @@ describe("follow track yaw", () => {
     expect(longest).toBeLessThanOrEqual(6 + 1.5 + 1e-9);
     const whole = buildFollowTrack({ startMs: 0, endMs: 120_000, unitsAt: corner, scale: 1, probe: { sample: () => {}, clearYaw: () => false } })!;
     expect(Array.from(build.result!.yaw)).toEqual(Array.from(whole.yaw));
+  });
+});
+
+describe("line of sight to the framed units (chronicle-1725)", () => {
+  const CLIMB = climbElevations(28, 5, 50);
+  const DEG = Math.PI / 180;
+  // Walking +x, the camera sits behind at -x: yaw -90 degrees.
+  const BEHIND_X = -Math.PI / 2;
+  const keyAt = (track: FollowTrack, ms: number) => followKeyAt(track, ms, { x: 0, z: 0, radius: 0, yaw: 0 });
+  // A seeded random, so flicker tests are repeatable.
+  const seeded = (seed: number) => () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+
+  it("climbs in steps up to the cap", () => {
+    expect(CLIMB).toEqual([28, 33, 38, 43, 48, 50]);
+  });
+
+  it("checks the boss and at most five players, spread through the framing", () => {
+    const picks: number[] = [];
+    // A 5-man: everyone.
+    expect(sightPicks(5, () => false, picks)).toEqual([0, 1, 2, 3, 4]);
+    // The boss first, wherever it sits in the list.
+    expect(sightPicks(6, (i) => i === 3, picks)).toEqual([3, 0, 1, 2, 4, 5]);
+    // A raid of 40 with a boss: the boss and every eighth player.
+    const raid = sightPicks(41, (i) => i === 40, picks);
+    expect(raid).toEqual([40, 0, 8, 16, 24, 32]);
+    // Never more than six, even with several bosses.
+    expect(sightPicks(10, (i) => i < 3, picks)).toHaveLength(6);
+    expect(sightPicks(0, () => false, picks)).toEqual([]);
+  });
+
+  it("needs the boss and most (60%) of the players checked", () => {
+    const boss = (i: number) => i === 0;
+    const sees = (clear: boolean[]) => seesFraming(clear.length, boss, (i) => clear[i]!);
+    // Boss and 3 of 5 players: seen.
+    expect(sees([true, true, true, true, false, false])).toBe(true);
+    // Boss and 2 of 5: not.
+    expect(sees([true, true, true, false, false, false])).toBe(false);
+    // Every player but no boss: not.
+    expect(sees([false, true, true, true, true, true])).toBe(false);
+    // No boss framed: 3 of 5 players.
+    expect(seesFraming(5, () => false, (i) => i < 3)).toBe(true);
+    expect(seesFraming(5, () => false, (i) => i < 2)).toBe(false);
+    // One player: that one. Nobody framed: nothing to hide.
+    expect(seesFraming(1, () => false, () => false)).toBe(false);
+    expect(seesFraming(0, () => false, () => false)).toBe(true);
+    // A boss alone.
+    expect(seesFraming(1, () => true, () => true)).toBe(true);
+  });
+
+  it("casts no more rays than the answer needs", () => {
+    const boss = (i: number) => i === 0;
+    let rays = 0;
+    const count = (clear: boolean) => () => (rays++, clear);
+    // A blocked boss: one ray.
+    seesFraming(6, boss, count(false));
+    expect(rays).toBe(1);
+    // Everything clear: the boss and three players.
+    rays = 0;
+    seesFraming(6, boss, count(true));
+    expect(rays).toBe(4);
+    // Players blocked: the boss and three players (the third miss settles it).
+    rays = 0;
+    seesFraming(6, boss, (i) => (rays++, i === 0));
+    expect(rays).toBe(4);
+  });
+
+  it("climbs before it shortens, and asks in that order", () => {
+    const asked: string[] = [];
+    const answer = (ok: (deg: number, shortened: boolean) => FollowYawSight) => fallbackShot(CLIMB, (deg, shortened) => {
+      asked.push(`${deg}${shortened ? "s" : ""}`);
+      return ok(deg, shortened);
+    });
+    // Clear at the base: no climb.
+    expect(answer(() => true)).toEqual({ elevationDeg: 28, shortened: false });
+    expect(asked).toEqual(["28"]);
+    // A modest climb is enough.
+    asked.length = 0;
+    expect(answer((deg, shortened) => !shortened && deg >= 43)).toEqual({ elevationDeg: 43, shortened: false });
+    expect(asked).toEqual(["28", "33", "38", "43"]);
+    // A shortened shot sees from lower than the full one does: still every full climb first.
+    asked.length = 0;
+    expect(answer((deg, shortened) => shortened || deg >= 50)).toEqual({ elevationDeg: 50, shortened: false });
+    // Nothing at the full distance: the lowest shortened shot that sees.
+    asked.length = 0;
+    expect(answer((deg, shortened) => shortened && deg >= 38)).toEqual({ elevationDeg: 38, shortened: true });
+    expect(asked).toEqual(["28", "33", "38", "43", "48", "50", "28s", "38s"]);
+    // Nothing sees the framing: the highest shot with a clear aim line,
+    // shortened first, from the answers already asked (no more rays).
+    asked.length = 0;
+    expect(answer((deg, shortened) => !shortened && deg <= 38 && "aim")).toEqual({ elevationDeg: 38, shortened: false });
+    expect(asked).toHaveLength(CLIMB.length + 3);
+    asked.length = 0;
+    expect(answer((deg, shortened) => (shortened ? deg <= 38 && "aim" : deg <= 38 && "aim"))).toEqual({ elevationDeg: 38, shortened: true });
+    expect(asked).toHaveLength(CLIMB.length + 3);
+    // Elevation first: a clear full 48 beats a clear shortened 28 (review 1732b).
+    asked.length = 0;
+    expect(answer((deg, shortened) => (shortened ? deg === 28 && "aim" : deg >= 43 && deg <= 48 && "aim"))).toEqual({ elevationDeg: 48, shortened: false });
+    // Blocked even on the aim line everywhere: the base elevation, shortened.
+    // The wall pulls the camera in, but not looking steeply down at the floor.
+    asked.length = 0;
+    expect(answer(() => false)).toEqual({ elevationDeg: 28, shortened: true });
+    expect(asked).toHaveLength(CLIMB.length + 3);
+  });
+
+  it("lets a wall pull the camera in at any elevation, and flags a steep close-up", () => {
+    // The wall wins: never kept on its far side (in the rock), steep or not.
+    expect(directorPullIn(30, 3, 0.75, 1)).toBeCloseTo(2.25, 9);
+    expect(directorPullIn(30, 20, 0.75, 1)).toBeCloseTo(19.25, 9);
+    expect(directorPullIn(30, 0.5, 0.75, 1)).toBe(1);
+    expect(directorPullIn(30, null, 0.75, 1)).toBeNull();
+    // Pulled in under 10 out: a floor close-up only past 40 degrees.
+    const allowed = directorPullIn(30, 4, 0.75, 1);
+    expect(steepPullIn(FOLLOW_STEEP_ELEVATION_DEG - 0.1, allowed, 10)).toBe(false);
+    expect(steepPullIn(FOLLOW_STEEP_ELEVATION_DEG, allowed, 10)).toBe(false);
+    expect(steepPullIn(FOLLOW_STEEP_ELEVATION_DEG + 0.01, allowed, 10)).toBe(true);
+    expect(steepPullIn(50, directorPullIn(30, 12, 0.75, 1), 10)).toBe(false);
+    expect(steepPullIn(50, null, 10)).toBe(false);
+  });
+
+  // The Director's per-frame line-of-sight loop (MapScene3D.updateDirector),
+  // modelled with the pure parts: a check every FOLLOW_SHOT_CHECK_MS or at
+  // once on a cut or jump, the hold, the steep pull-in releasing a held steep
+  // shot (releaseSteepShot), and the elevation spring. `answer(now, poseClear)`
+  // is the raw answer; `poseClear(deg)` says whether a steep shot clears the
+  // wall from the camera's own pose (clearShot's pose check). `wall(elevation)`
+  // is the wall's distance on the camera's own line (null: none).
+  const directorLoop = (durationMs: number, answer: (now: number, poseClear: (deg: number) => boolean) => ShotAnswer, wall: (elevationDeg: number) => number | null, jumps: number[] = []) => {
+    const hold = createShotHold();
+    const elevation: DampedValue = { value: hold.elevationDeg, velocity: 0 };
+    let raw: ShotAnswer | null = null;
+    let checkAt = 0;
+    let release = false;
+    let shallow: ShotAnswer | null = null;
+    let allowed: number | null = null;
+    let checks = 0;
+    const frames: { now: number; elevation: number; allowed: number | null; held: number }[] = [];
+    const poseClear = (deg: number) => {
+      const hit = wall(deg);
+      return hit === null || hit - 0.75 >= 10;
+    };
+    for (let now = 0; now <= durationMs; now += FRAME_MS) {
+      if (hold.elevationDeg <= FOLLOW_STEEP_ELEVATION_DEG) release = false;
+      else if (steepPullIn(elevation.value, allowed, 10)) release = true;
+      const jumped = jumps.some((at) => at > now - FRAME_MS && at <= now);
+      if (shotCheckDue(now, checkAt, raw !== null, jumped)) {
+        raw = answer(now, poseClear);
+        checkAt = now + FOLLOW_SHOT_CHECK_MS;
+        checks++;
+        if (raw.elevationDeg <= FOLLOW_STEEP_ELEVATION_DEG) shallow = raw;
+        if (release && releaseSteepShot(hold, raw, now, shallow)) release = false;
+      }
+      holdShot(hold, raw!.elevationDeg, raw!.shortened, now);
+      smoothDamp(elevation, hold.elevationDeg, 0.6, FRAME_MS / 1000);
+      const hit = wall(elevation.value);
+      allowed = directorPullIn(30, hit, 0.75, 1);
+      frames.push({ now, elevation: elevation.value, allowed, held: hold.elevationDeg });
+    }
+    return { frames, checks };
+  };
+
+  it("asks every 100 ms, and at once on a jump or a cut", () => {
+    const asked: number[] = [];
+    const { checks } = directorLoop(1_000, (now) => (asked.push(now), { elevationDeg: 28, shortened: false }), () => null, [455]);
+    // On the 60 fps clock: the first frame at or past each 100 ms, plus the jump's frame.
+    expect(checks).toBe(asked.length);
+    expect(asked.some((now) => now >= 455 && now < 455 + FRAME_MS)).toBe(true);
+    for (let i = 1; i < asked.length; i++) {
+      const gap = asked[i]! - asked[i - 1]!;
+      const jump = asked[i]! >= 455 && asked[i]! < 455 + FRAME_MS;
+      if (!jump) expect(gap).toBeLessThanOrEqual(FOLLOW_SHOT_CHECK_MS + FRAME_MS + 1e-9);
+      // Never more often than every 100 ms, but for the jump (which restarts the count).
+      if (!jump && !(asked[i - 1]! >= 455 && asked[i - 1]! < 455 + FRAME_MS)) expect(gap).toBeGreaterThanOrEqual(FOLLOW_SHOT_CHECK_MS - 1e-6);
+    }
+    expect(checks).toBeLessThanOrEqual(1_000 / FOLLOW_SHOT_CHECK_MS + 2);
+    expect(shotCheckDue(50, 100, true, false)).toBe(false);
+    expect(shotCheckDue(100, 100, true, false)).toBe(true);
+    expect(shotCheckDue(50, 100, false, false)).toBe(true);
+    expect(shotCheckDue(50, 100, true, true)).toBe(true);
+  });
+
+  it("comes down at once when a wall pulls the steep camera in close", () => {
+    // The answer climbs to 50 for a second (the group behind a pillar), then
+    // asks for 33; meanwhile, a wall 4 yd out stands on the camera's line
+    // above 40 degrees (the spring's lagging position, say).
+    const answer = (now: number): ShotAnswer => (now < 1_000 ? { elevationDeg: 50, shortened: false } : { elevationDeg: 33, shortened: false });
+    const wall = (deg: number) => (deg > 40 ? 4 : null);
+    const { frames } = directorLoop(4_000, answer, wall);
+    // The hold lets go within one check of the 33 answer, not SHOT_RELEASE_MS later.
+    const down = frames.find((frame) => frame.now >= 1_000 && frame.held === 33)!;
+    expect(down.now).toBeLessThan(1_000 + 2 * FOLLOW_SHOT_CHECK_MS);
+    // Steep and pulled in close only while the spring comes down through 40.
+    const close = frames.filter((frame) => frame.now >= 1_000 && steepPullIn(frame.elevation, frame.allowed, 10));
+    expect(close.length * FRAME_MS).toBeLessThan(1_000);
+    // Without the wall the same answers wait out the hold.
+    const free = directorLoop(4_000, answer, () => null).frames.find((frame) => frame.now >= 1_000 && frame.held === 33)!;
+    expect(free.now).toBeGreaterThanOrEqual(1_000 + SHOT_RELEASE_MS);
+  });
+
+  // Reversals of the elevation spring's direction, and how long it is steep
+  // and pulled in close, after the first `settleMs`.
+  const bobbing = (frames: { now: number; elevation: number; allowed: number | null }[], settleMs = 0) => {
+    let reversals = 0;
+    let lastDirection = 0;
+    let steepClose = 0;
+    for (let i = 1; i < frames.length; i++) {
+      const step = frames[i]!.elevation - frames[i - 1]!.elevation;
+      const direction = Math.abs(step) > 1e-3 ? Math.sign(step) : 0;
+      if (frames[i]!.now < settleMs) continue;
+      if (direction && lastDirection && direction !== lastDirection) reversals++;
+      if (direction) lastDirection = direction;
+      if (steepPullIn(frames[i]!.elevation, frames[i]!.allowed, 10)) steepClose += FRAME_MS;
+    }
+    return { reversals, steepCloseMs: steepClose };
+  };
+
+  it("does not bob when the steep answer flickers while the camera's own line is walled (review 1732b)", () => {
+    // The answer at the goal flickers between {50, full} and {28, shortened};
+    // the camera's own line has a wall 4 yd out above 40 degrees. Before
+    // the fix: 153 reversals between 31 and 48 degrees in 60 s, 40 s steep and close.
+    const wall = (deg: number) => (deg > 40 ? 4 : null);
+    for (const odds of [0.5, 0.2, 0.05]) {
+      const random = seeded(7);
+      const flicker = () => random() < odds;
+      // With clearShot's pose check, the steep answer is turned down where the camera stands.
+      const checked = directorLoop(60_000, (_now, poseClear) => (flicker() || !poseClear(50) ? { elevationDeg: 28, shortened: true } : { elevationDeg: 50, shortened: false }), wall).frames;
+      const pose = bobbing(checked);
+      expect(pose.reversals).toBeLessThanOrEqual(1);
+      expect(pose.steepCloseMs).toBe(0);
+      // Without it (the pose check cannot see the wall), the release alone:
+      // a steep answer comes back only after holding SHOT_RELEASE_MS, so the
+      // camera rises at most once per release.
+      const random2 = seeded(7);
+      const blind = directorLoop(60_000, () => (random2() < odds ? { elevationDeg: 28, shortened: true } : { elevationDeg: 50, shortened: false }), wall).frames;
+      const alone = bobbing(blind, 5_000);
+      // Each release doubles the wait (1.5, 3, 6, 12, 24 s): a handful of
+      // rises in a minute, each steep and close only until the next check.
+      expect(alone.reversals).toBeLessThanOrEqual(12);
+      expect(alone.steepCloseMs).toBeLessThan(3_000);
+      console.info(`flicker ${odds}: pose-checked ${pose.reversals} reversals, ${(pose.steepCloseMs / 1000).toFixed(1)} s steep and close; release alone ${alone.reversals} reversals, ${(alone.steepCloseMs / 1000).toFixed(1)} s`);
+    }
+  });
+
+  it("keeps a released steep answer from winning straight back, then lets it in once it holds", () => {
+    const hold = createShotHold();
+    holdShot(hold, 50, false, 0);
+    // A second release doubles the wait.
+    const twice = createShotHold();
+    releaseSteepShot(twice, { elevationDeg: 28, shortened: false }, 0);
+    holdShot(twice, 50, false, 100);
+    holdShot(twice, 50, false, 100 + SHOT_RELEASE_MS);
+    expect(twice.elevationDeg).toBe(50);
+    releaseSteepShot(twice, { elevationDeg: 28, shortened: false }, 2_000);
+    holdShot(twice, 50, false, 2_100);
+    holdShot(twice, 50, false, 2_100 + SHOT_RELEASE_MS);
+    expect(twice.elevationDeg).toBe(28);
+    holdShot(twice, 50, false, 2_100 + 2 * SHOT_RELEASE_MS);
+    expect(twice.elevationDeg).toBe(50);
+    // Once steep answers go quiet, the back-off resets: the next release waits SHOT_RELEASE_MS again.
+    holdShot(twice, 28, false, 10_000);
+    holdShot(twice, 28, false, 10_000 + SHOT_RELEASE_MS);
+    expect(twice.steepReleases).toBe(0);
+    holdShot(twice, 50, false, 12_000);
+    releaseSteepShot(twice, { elevationDeg: 28, shortened: false }, 12_100);
+    holdShot(twice, 50, false, 12_200);
+    holdShot(twice, 50, false, 12_200 + SHOT_RELEASE_MS);
+    expect(twice.elevationDeg).toBe(50);
+    // A steep answer does not release on its own (it waits for one that is
+    // not), but falls back to the last shallow answer when there is one.
+    expect(releaseSteepShot(hold, { elevationDeg: 48, shortened: false }, 100)).toBe(false);
+    expect(hold.elevationDeg).toBe(50);
+    const fallback = createShotHold();
+    holdShot(fallback, 50, false, 0);
+    expect(releaseSteepShot(fallback, { elevationDeg: 48, shortened: false }, 100, { elevationDeg: 33, shortened: false })).toBe(true);
+    expect(fallback).toMatchObject({ elevationDeg: 33, shortened: false });
+    expect(releaseSteepShot(hold, { elevationDeg: 28, shortened: true }, 200)).toBe(true);
+    expect(hold).toMatchObject({ elevationDeg: 28, shortened: true });
+    // 50 asked again at once: blocked, it counts as lower.
+    holdShot(hold, 50, false, 300);
+    expect(hold.elevationDeg).toBe(28);
+    // A flicker back to the held answer starts the count over.
+    holdShot(hold, 28, true, 400);
+    holdShot(hold, 50, false, 500);
+    holdShot(hold, 50, false, 500 + SHOT_RELEASE_MS - 1);
+    expect(hold.elevationDeg).toBe(28);
+    // Held steadily for the release time, it comes in, and the block lifts.
+    holdShot(hold, 50, false, 500 + SHOT_RELEASE_MS);
+    expect(hold.elevationDeg).toBe(50);
+    expect(hold.steepBlockedMs).toBeNull();
+    // With no steep answer asked for the release time, the block lifts by itself.
+    const quiet = createShotHold();
+    releaseSteepShot(quiet, { elevationDeg: 28, shortened: false }, 0);
+    holdShot(quiet, 28, false, SHOT_RELEASE_MS);
+    holdShot(quiet, 50, false, SHOT_RELEASE_MS + 100);
+    expect(quiet.elevationDeg).toBe(50);
+    // A shallow climb is not blocked.
+    const shallow = createShotHold();
+    releaseSteepShot(shallow, { elevationDeg: 28, shortened: false }, 0);
+    holdShot(shallow, 38, false, 100);
+    expect(shallow.elevationDeg).toBe(38);
+  });
+
+  it("does not drop a held full 50-degree shot for one shortened 28-degree answer", () => {
+    // The review's case: held at 50, full; one check asks for 28 shortened,
+    // then back to 50 full. Shortened only outranks full at the same height or higher.
+    const hold = createShotHold();
+    holdShot(hold, 50, false, 0);
+    holdShot(hold, 28, true, 100);
+    expect(hold).toMatchObject({ elevationDeg: 50, shortened: false });
+    holdShot(hold, 50, false, 200);
+    expect(hold).toMatchObject({ elevationDeg: 50, shortened: false, lowerSinceMs: null });
+    // Shortened at the same elevation (or higher) is still taken at once.
+    holdShot(hold, 50, true, 300);
+    expect(hold).toMatchObject({ elevationDeg: 50, shortened: true });
+    // Flicker between the two every check for a minute: the camera never drops.
+    const flicker = createShotHold();
+    holdShot(flicker, 50, false, 0);
+    let changes = 0;
+    for (let now = 100; now < 60_000; now += 100) {
+      const before = `${flicker.elevationDeg}|${flicker.shortened}`;
+      if (Math.floor(now / 100) % 2 === 0) holdShot(flicker, 50, false, now);
+      else holdShot(flicker, 28, true, now);
+      if (`${flicker.elevationDeg}|${flicker.shortened}` !== before) changes++;
+    }
+    expect(changes).toBe(0);
+    // Asking for the lower shortened shot steadily, it comes down after the release time.
+    holdShot(flicker, 28, true, 70_000);
+    holdShot(flicker, 28, true, 70_000 + SHOT_RELEASE_MS);
+    expect(flicker).toMatchObject({ elevationDeg: 28, shortened: true });
+  });
+
+  it("holds the answer while each unit's line flickers from check to check", () => {
+    // Every 100 ms check, each of the boss and five players is seen from the
+    // base elevation with even odds (a pillar edge), and always from 43 degrees up.
+    const random = seeded(11);
+    const hold = createShotHold();
+    let rawChanges = 0;
+    let heldChanges = 0;
+    let lastRaw = -1;
+    let lastHeld = hold.elevationDeg;
+    for (let now = 0; now < 60_000; now += 100) {
+      const clear = Array.from({ length: 6 }, () => random() < 0.5);
+      const raw = fallbackShot(CLIMB, (deg) => deg >= 43 || seesFraming(6, (i) => i === 0, (i) => clear[i]!));
+      if (raw.elevationDeg !== lastRaw) rawChanges++;
+      lastRaw = raw.elevationDeg;
+      holdShot(hold, raw.elevationDeg, raw.shortened, now);
+      if (hold.elevationDeg !== lastHeld) heldChanges++;
+      lastHeld = hold.elevationDeg;
+    }
+    // The raw answer flips hundreds of times; the shot climbs once and stays.
+    expect(rawChanges).toBeGreaterThan(100);
+    expect(heldChanges).toBe(1);
+    expect(hold.elevationDeg).toBe(43);
+  });
+
+  it("gives the probe each sample's boss and players, as the framing changes", () => {
+    // Five players walk +x; one strays out of the frame and back every few
+    // samples, and the boss is framed only in the second half.
+    const random = seeded(5);
+    const strays: boolean[] = [];
+    const units = (ms: number) => {
+      const i = Math.round(ms / 250);
+      strays[i] ??= random() < 0.4;
+      const walked = (ms / 1000) * 3;
+      const group = [0, 1, 2, 3].map((k) => unit(`p${k}`, walked + k, 0, { height: 5 + k }));
+      group.push(unit("p4", walked + (strays[i] ? 60 : 4), 0));
+      if (ms >= 10_000) group.push(unit("boss", walked + 10, 0, { player: false, boss: true, height: 7 }));
+      return group;
+    };
+    const seen: { count: number; boss: boolean; heights: number[]; hasStray: boolean }[] = [];
+    const probe: FollowYawProbe = {
+      sample: (_x, _z, _r, _h, targets) => {
+        const count = targets.length / FOLLOW_SIGHT_STRIDE;
+        const heights: number[] = [];
+        let boss = false;
+        let hasStray = false;
+        for (let k = 0; k < count; k++) {
+          heights.push(targets[k * FOLLOW_SIGHT_STRIDE + 2]!);
+          if (targets[k * FOLLOW_SIGHT_STRIDE + 3] === 1) boss = true;
+          if (targets[k * FOLLOW_SIGHT_STRIDE]! > (seen.length * 250 / 1000) * 3 + 30) hasStray = true;
+        }
+        seen.push({ count, boss, heights, hasStray });
+      },
+      clearYaw: () => true,
+    };
+    buildFollowTrack({ startMs: 0, endMs: 20_000, unitsAt: units, scale: 1, probe });
+    expect(seen).toHaveLength(81);
+    for (let i = 0; i < seen.length; i++) {
+      const sample = seen[i]!;
+      // The straggler is never a sight target while it is out of the frame.
+      expect(sample.hasStray).toBe(false);
+      expect(sample.boss).toBe(i * 250 >= 10_000);
+      // Each target's own height; NaN for the one without.
+      expect(sample.heights.slice(sample.boss ? 1 : 0, (sample.boss ? 1 : 0) + 4)).toEqual([5, 6, 7, 8]);
+    }
+    // Both framings occur: the straggler in (5 players) and out (4).
+    const counts = new Set(seen.filter((sample) => !sample.boss).map((sample) => sample.count));
+    expect(counts).toEqual(new Set([4, 5]));
+  });
+
+  it("turns to a yaw that sees the group before it climbs", () => {
+    // Walking +x. Behind the group (and 30 degrees either side), a pillar
+    // hides three of the five players from the base elevation, though the
+    // aim line is clear; from 60 degrees round all five are seen. From
+    // 43 degrees up, every yaw sees them.
+    const straight = (ms: number) => [0, 1, 2, 3, 4].map((i) => unit(`p${i}`, (ms / 1000) * 7 + i, i % 2));
+    const hiddenFrom = (offsetDeg: number, elevationDeg: number) => elevationDeg < 43 && Math.abs(offsetDeg) <= 30;
+    let offset = 0;
+    let count = 0;
+    const probe: FollowYawProbe = {
+      sample: (_x, _z, _r, _h, targets) => void (count = targets.length / FOLLOW_SIGHT_STRIDE),
+      clearYaw: (yaw) => {
+        offset = Math.round(wrapAngle(yaw - BEHIND_X) / DEG);
+        return seesFraming(count, () => false, (k) => !(hiddenFrom(offset, 28) && k < 3));
+      },
+    };
+    const track = buildFollowTrack({ startMs: 0, endMs: 60_000, unitsAt: straight, scale: 1, probe })!;
+    const i = Math.round(30_000 / track.sampleMs);
+    // The track turned (nearest clear: 60 degrees round)...
+    expect(Math.abs(FOLLOW_YAW_CANDIDATES_DEG[track.yawChoice[i]!]!)).toBe(60);
+    // ...so the shot at its yaw needs no climb.
+    const turned = Math.round(wrapAngle(keyAt(track, 30_000).yaw - BEHIND_X) / DEG);
+    const shot = fallbackShot(CLIMB, (deg) => seesFraming(5, () => false, (k) => !(hiddenFrom(turned, deg) && k < 3)));
+    expect(shot).toEqual({ elevationDeg: 28, shortened: false });
+    // Held at the base yaw instead, it would have had to climb.
+    const behind = fallbackShot(CLIMB, (deg) => seesFraming(5, () => false, (k) => !(hiddenFrom(0, deg) && k < 3)));
+    expect(behind).toEqual({ elevationDeg: 43, shortened: false });
+  });
+
+  it("copies the sight targets across a gap with nobody framed", () => {
+    // The group is framed 0-5 s, gone 5-10 s, back from 10 s.
+    const unitsAt = (ms: number) => (ms >= 5_000 && ms < 10_000 ? [] : [0, 1, 2].map((i) => unit(`p${i}`, (ms / 1000) * 3 + i, i, { height: 4 + i })));
+    const seen: number[][] = [];
+    const probe: FollowYawProbe = {
+      sample: (_x, _z, _r, _h, targets) => {
+        const xs: number[] = [];
+        for (let k = 0; k < targets.length; k += FOLLOW_SIGHT_STRIDE) xs.push(targets[k]!);
+        seen.push(xs);
+      },
+      clearYaw: () => true,
+    };
+    buildFollowTrack({ startMs: 0, endMs: 15_000, unitsAt, scale: 1, probe });
+    // Each gap sample holds the last framing before it (the units at 4.75 s), heights included.
+    const last = [14.25, 15.25, 16.25];
+    for (let i = 20; i < 40; i++) for (let k = 0; k < 3; k++) expect(seen[i]![k]).toBeCloseTo(last[k]!, 4);
+    expect(seen[40]![0]).toBeCloseTo(30, 4);
+  });
+
+  it("keeps the camera off the wall where no yaw sees the framing", () => {
+    // A boss tanked against a wall: no candidate sees the framing, but the
+    // aim line is clear only from 90 degrees round and beyond on one side.
+    const straight = (ms: number) => [0, 1, 2].map((i) => unit(`p${i}`, (ms / 1000) * 7 + i, 0));
+    const probe: FollowYawProbe = {
+      sample: () => {},
+      clearYaw: (yaw) => (Math.round(wrapAngle(yaw - BEHIND_X) / DEG) >= 90 ? "aim" : false),
+    };
+    const track = buildFollowTrack({ startMs: 0, endMs: 60_000, unitsAt: straight, scale: 1, probe })!;
+    const i = Math.round(30_000 / track.sampleMs);
+    expect(track.yawOpen[i]).toBe(0);
+    const listed = (mask: number) => FOLLOW_YAW_CANDIDATES_DEG.filter((_, k) => mask & (1 << k));
+    // Nothing sees, so every candidate was probed and the aim mask is whole.
+    expect(listed(track.yawAimOpen[i]!)).toEqual([90, 135, 180]);
+    expect(FOLLOW_YAW_CANDIDATES_DEG[track.yawChoice[i]!]).toBe(90);
+    expect(Math.abs(wrapAngle(keyAt(track, 30_000).yaw - (BEHIND_X + 90 * DEG)))).toBeLessThan(DEG);
+    // Where some yaw does see the framing, that tier wins over a nearer clear aim line.
+    const tiered = buildFollowTrack({ startMs: 0, endMs: 60_000, unitsAt: straight, scale: 1, probe: {
+      sample: () => {},
+      clearYaw: (yaw) => {
+        const off = Math.round(wrapAngle(yaw - BEHIND_X) / DEG);
+        return off === -90 ? true : off >= 30 ? "aim" : false;
+      },
+    } })!;
+    expect(FOLLOW_YAW_CANDIDATES_DEG[tiered.yawChoice[i]!]).toBe(-90);
+    expect(Array.from(choiceMasks(Uint16Array.of(0, 4), Uint16Array.of(6, 7)))).toEqual([6, 4]);
   });
 });

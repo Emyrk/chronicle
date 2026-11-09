@@ -33,7 +33,7 @@ import {
 import { participantHue, participantLabel, type LiveMapPresence } from "../../liveSessionProtocol";
 import { actionForKey, cameraAngles, cameraCollisionDistance, cameraOffset, clampMobileMapInput, DEFAULT_AD_STRAFE, easeAngleToward, freeCamTravelSpeed, IDLE_MOBILE_MAP_INPUT, lookDrag, planarStep, pointerLossEndsDrag, rightDragWalkAxes, setWalkMouseButton, shouldFollowWalkCamera, walkCameraSettling, walkDragButton, walkMovementYaw, walkMouseControl, WALK_TOGGLE_KEY, wheelZoomDistance, type MapControlAction, type MobileMapInput } from "./mapControls";
 import { unwrapCompassRadians } from "./mapCompassModel";
-import { createShotHold, FOLLOW_CENTRE_WINDOW_MS, FOLLOW_SLICE_MS, followSprings, followYawStep, handOverFollowSpring, handOverFollowYaw, startFollowTrackBuild, wrapAngle, type FollowTrackBuild, followKeyAt, glideDurationMs, glidePoseAt, glideTurnMs, unwrapNear, holdShot, isReplayJump, type FollowKey, type FollowTrack, type FollowYawProbe, type GlidePose } from "./followCamera";
+import { climbElevations, createShotHold, directorPullIn, fallbackShot, FOLLOW_CENTRE_WINDOW_MS, FOLLOW_SHOT_CHECK_MS, FOLLOW_STEEP_ELEVATION_DEG, releaseSteepShot, shotCheckDue, steepPullIn, FOLLOW_SIGHT_STRIDE, FOLLOW_STEEP_MIN_DISTANCE_YARDS, seesFraming, sightPicks, type ShotAnswer, FOLLOW_SLICE_MS, followSprings, followYawStep, handOverFollowSpring, handOverFollowYaw, startFollowTrackBuild, wrapAngle, type FollowTrackBuild, followKeyAt, glideDurationMs, glidePoseAt, glideTurnMs, unwrapNear, holdShot, isReplayJump, type FollowKey, type FollowTrack, type FollowYawProbe, type GlidePose } from "./followCamera";
 import { BOSS_SPIRE, bossSpireCastGlow, CAST_ARC_TEXTURE_STEPS, DEAD_RING, DEBUFF_PLANE, DISPEL_COLORS, DROP_LINE, drawUnitPlate, ENEMY_RED, guardianWell, HALO_COLORS, MARKS_SCALE, OWNER_LINE, TARGET_LINE, TRAIL_LINE, UNIT_PLATE, unitPlateSize, type UnitPlateInfo, TOKEN_LAYOUT, type DispelKind, type HaloKind } from "./unitTokenArt";
 import { UnitTokenTextures } from "./unitTokens";
 import type { PlanInput, PlanItem, PlanMarkerIcon, PlanPoint } from "./plan/mapPlan";
@@ -332,6 +332,8 @@ const DIRECTOR_SETTLED_YAW = 1e-3;
 const DIRECTOR_MAX_STEP_SECONDS = 0.1;
 // With even the highest elevation blocked, the shot comes this much closer.
 const CLEAR_SHOT_SHORTEN = 0.75;
+// The elevations the Director's line of sight climbs through.
+const DIRECTOR_CLIMB = climbElevations(CINEMATIC_ELEVATION_DEG, CINEMATIC_ELEVATION_STEP_DEG, MAX_CINEMATIC_ELEVATION_DEG);
 // A wall pulls the Director's camera in over about this long (seconds) instead
 // of in one frame; it eases back out at the distance spring's pace.
 const DIRECTOR_COLLISION_IN_SECONDS = 0.25;
@@ -1092,6 +1094,23 @@ export class MapScene3D {
   private directorCutUntil = 0;
   // Line-of-sight hysteresis, so the shot cannot flip frame to frame.
   private readonly shotHold = createShotHold();
+  // The last line-of-sight answer, and when it may be asked again (FOLLOW_SHOT_CHECK_MS).
+  private shotRaw: ShotAnswer | null = null;
+  private shotCheckAt = 0;
+  // A wall pulled the steep camera in close: the next answer that is not steep replaces the held one.
+  private shotRelease = false;
+  // The last answer that was not steep: a release falls back to it when the answer is steep.
+  private shotShallow: ShotAnswer | null = null;
+  // The camera's actual target for the steep check (clearShot), and scratch vectors for it.
+  private readonly shotPose = { x: 0, z: 0, floor: 0 };
+  private readonly directorPoseAim = new THREE.Vector3();
+  private readonly directorPoseEye = new THREE.Vector3();
+  // The framed units the line-of-sight answer keeps in sight (sightPicks), at player height.
+  private readonly sightFramed: string[] = [];
+  private readonly sightPicked: number[] = [];
+  private readonly sightTargets: THREE.Vector3[] = [];
+  private readonly sightBoss: boolean[] = [];
+  private sightCount = 0;
   // The glide across a replay jump, from the pose the camera had.
   // The yaw turns on its own clock, `turn` ms, when a big turn needs longer than the move.
   private directorGlide: { start: number; duration: number; turn: number } | null = null;
@@ -1813,6 +1832,9 @@ export class MapScene3D {
     this.directorReplayMs = null;
     this.directorGlide = null;
     Object.assign(this.shotHold, createShotHold());
+    this.shotRaw = null;
+    this.shotRelease = false;
+    this.shotShallow = null;
   }
 
   /**
@@ -1953,7 +1975,7 @@ export class MapScene3D {
       toPlane: (point) => mapPointToScene(point, this.aspect, GROUND_WIDTH),
       probe: {
         floorAt: (x, z) => this.floorHeights.heightAt("drone", x, z, this.cameraCeiling()),
-        clearShot: (x, z, distance, yaw) => this.clearShot(x, z, distance, yaw),
+        clearShot: (x, z, distance, yaw) => this.droneClearShot(x, z, distance, yaw),
       },
     };
   }
@@ -2508,7 +2530,7 @@ export class MapScene3D {
     if (this.directing() && this.directorWant !== null) {
       const want = this.directorWant;
       const hit = want > 0 ? this.meshHitDistance(from, this.collisionEye.copy(direction).multiplyScalar(want).add(from)) : null;
-      this.directorAllowed = hit === null ? null : Math.max(Math.min(want, this.controls.minDistance), hit - ORBIT_COLLISION_PADDING);
+      this.directorAllowed = directorPullIn(want, hit, ORBIT_COLLISION_PADDING, this.controls.minDistance);
       this.orbitWantDistance = shown;
       return false;
     }
@@ -2530,33 +2552,78 @@ export class MapScene3D {
     return { distance, easing: distance < want && (hit === null || hit - padding > distance) };
   }
 
-  // The lowest cinematic elevation with a clear line to the fight, climbing in
-  // steps when the cave blocks it; the shot shortens only if even the highest
-  // one is blocked.
-  private clearShot(x: number, z: number, distance: number, yaw: number): { elevation: number; distance: number } {
-    const floor = this.floorHeights.heightAt("director-shot", x, z, this.cameraCeiling());
-    for (let elevationDeg = CINEMATIC_ELEVATION_DEG; ; elevationDeg += CINEMATIC_ELEVATION_STEP_DEG) {
-      const capped = Math.min(elevationDeg, MAX_CINEMATIC_ELEVATION_DEG);
-      if (this.shotLineClear(x, floor, z, distance, yaw, capped)) return { elevation: capped, distance };
-      if (capped >= MAX_CINEMATIC_ELEVATION_DEG) {
-        // Still blocked overhead: come in closer instead.
-        return { elevation: capped, distance: this.shortenedShot(distance) };
+  // The line-of-sight answer at `yaw` (the track has already turned it to a
+  // clear side where it could): the lowest cinematic elevation whose camera
+  // is clear of the cave toward the aim point and sees the framed units,
+  // climbing in steps; the shot shortens only if no climb does (fallbackShot).
+  // `floor` is the floor below (x, z).
+  // With a `pose` (where the camera's spring actually holds its target, and
+  // the floor there), a steep shot must also stay clear of a wall closer than
+  // FOLLOW_STEEP_MIN_DISTANCE_YARDS from there: its line from the goal can be
+  // clear while the camera's own is not (the led spring, floor differences),
+  // and a wall that pulls a steep camera in shows only the floor.
+  private clearShot(x: number, floor: number, z: number, distance: number, yaw: number, pose: { x: number; z: number; floor: number } | null = null): ShotAnswer {
+    const lift = MESH_PLAYER_HEIGHT_YARDS * (this.dungeonMesh?.scale ?? 1);
+    const steepMin = FOLLOW_STEEP_MIN_DISTANCE_YARDS * (this.dungeonMesh?.scale ?? 1);
+    return fallbackShot(DIRECTOR_CLIMB, (elevationDeg, shortened) => {
+      // From the fight's own height, not the floor the ray would graze.
+      const aim = this.directorAim.set(x, floor + lift, z);
+      const out = shortened ? this.shortenedShot(distance) : distance;
+      const elevation = (elevationDeg * Math.PI) / 180;
+      const eye = this.directorEye.set(
+        x + Math.sin(yaw) * Math.cos(elevation) * out,
+        floor + Math.sin(elevation) * out,
+        z + Math.cos(yaw) * Math.cos(elevation) * out,
+      );
+      // A wall on the aim line would pull the camera in: not this shot.
+      if (this.meshBlocks(aim, eye)) return false;
+      if (pose && elevationDeg > FOLLOW_STEEP_ELEVATION_DEG) {
+        const from = this.directorPoseAim.set(pose.x, pose.floor + lift, pose.z);
+        const to = this.directorPoseEye.set(
+          pose.x + Math.sin(yaw) * Math.cos(elevation) * out,
+          pose.floor + Math.sin(elevation) * out,
+          pose.z + Math.cos(yaw) * Math.cos(elevation) * out,
+        );
+        const hit = this.meshHitDistance(from, to);
+        if (hit !== null && hit - ORBIT_COLLISION_PADDING < steepMin) return false;
       }
-    }
+      return seesFraming(this.sightCount, (k) => this.sightBoss[k]!, (k) => !this.meshBlocks(eye, this.sightTargets[k]!)) || "aim";
+    });
   }
 
-  // Whether the line from the fight at (x, z) (standing on `floor`) to a
-  // camera `distance` out along `yaw`, `elevationDeg` up, misses the cave.
-  private shotLineClear(x: number, floor: number, z: number, distance: number, yaw: number, elevationDeg: number): boolean {
-    // From the fight's own height, not the floor the ray would graze.
-    const from = this.directorAim.set(x, floor + MESH_PLAYER_HEIGHT_YARDS * (this.dungeonMesh?.scale ?? 1), z);
-    const elevation = (elevationDeg * Math.PI) / 180;
-    const to = this.directorEye.set(
-      x + Math.sin(yaw) * Math.cos(elevation) * distance,
-      floor + Math.sin(elevation) * distance,
-      z + Math.cos(yaw) * Math.cos(elevation) * distance,
-    );
-    return !this.meshBlocks(from, to);
+  // The video drone's line of sight (unchanged by chronicle-1725): the lowest
+  // cinematic elevation with a clear line to the aim point, climbing in steps;
+  // the shot shortens only if even the highest one is blocked.
+  private droneClearShot(x: number, z: number, distance: number, yaw: number): { elevation: number; distance: number } {
+    const floor = this.floorHeights.heightAt("director-shot", x, z, this.cameraCeiling());
+    const aim = this.directorAim.set(x, floor + MESH_PLAYER_HEIGHT_YARDS * (this.dungeonMesh?.scale ?? 1), z);
+    for (const elevationDeg of DIRECTOR_CLIMB) {
+      const elevation = (elevationDeg * Math.PI) / 180;
+      const eye = this.directorEye.set(
+        x + Math.sin(yaw) * Math.cos(elevation) * distance,
+        floor + Math.sin(elevation) * distance,
+        z + Math.cos(yaw) * Math.cos(elevation) * distance,
+      );
+      if (!this.meshBlocks(aim, eye)) return { elevation: elevationDeg, distance };
+    }
+    // Still blocked overhead: come in closer instead.
+    return { elevation: MAX_CINEMATIC_ELEVATION_DEG, distance: this.shortenedShot(distance) };
+  }
+
+  // Re-reads the framed units the line of sight checks: the boss and up to
+  // FOLLOW_SIGHT_MAX_PLAYERS players, at player height above where they stand.
+  private readSightTargets(bossGuids: ReadonlySet<string>, scale: number) {
+    const framed = this.sightFramed;
+    framed.length = 0;
+    for (const guid of this.directorInFrame) if (this.units.has(guid)) framed.push(guid);
+    const picked = sightPicks(framed.length, (k) => bossGuids.has(framed[k]!), this.sightPicked);
+    for (let j = 0; j < picked.length; j++) {
+      const guid = framed[picked[j]!]!;
+      const { base } = this.units.get(guid)!;
+      (this.sightTargets[j] ??= new THREE.Vector3()).set(base.x, base.y + MESH_PLAYER_HEIGHT_YARDS * scale, base.z);
+      this.sightBoss[j] = bossGuids.has(guid);
+    }
+    this.sightCount = picked.length;
   }
 
   // The follow track's yaw probe: per sample, the floor below the framing
@@ -2568,15 +2635,28 @@ export class MapScene3D {
     const from = new THREE.Vector3();
     const to = new THREE.Vector3();
     const elevation = (CINEMATIC_ELEVATION_DEG * Math.PI) / 180;
+    const lift = MESH_PLAYER_HEIGHT_YARDS * scale;
+    const targets: THREE.Vector3[] = [];
+    const boss: boolean[] = [];
+    let count = 0;
     let out = 0;
     let up = 0;
     return {
-      sample: (x, z, radius, height) => {
+      sample: (x, z, radius, height, framed) => {
         if (!this.dungeonMesh) return false;
         // No floor below (a chasm, off the mesh): skip the sample rather than cast from y = 0.
         const floor = this.sampleFloor(x, z, this.probeCeiling(height, scale));
         if (floor === null) return false;
-        from.set(x, floor + MESH_PLAYER_HEIGHT_YARDS * scale, z);
+        from.set(x, floor + lift, z);
+        // The framed units at player height: over their own logged or tracked
+        // height, else over the framing's floor (no extra floor rays).
+        count = framed.length / FOLLOW_SIGHT_STRIDE;
+        for (let k = 0; k < count; k++) {
+          const at = k * FOLLOW_SIGHT_STRIDE;
+          const own = framed[at + 2]!;
+          (targets[k] ??= new THREE.Vector3()).set(framed[at]!, (Number.isNaN(own) ? floor : own * scale) + lift, framed[at + 1]!);
+          boss[k] = framed[at + 3] === 1;
+        }
         const distance = frameDistance(radius, {
           verticalFov: (this.camera.fov * Math.PI) / 180,
           aspect: this.camera.aspect,
@@ -2590,7 +2670,8 @@ export class MapScene3D {
       clearYaw: (yaw) => {
         if (!this.dungeonMesh) return true;
         to.set(from.x + Math.sin(yaw) * out, up, from.z + Math.cos(yaw) * out);
-        return !this.meshBlocks(from, to);
+        if (this.meshBlocks(from, to)) return false;
+        return seesFraming(count, (k) => boss[k]!, (k) => !this.meshBlocks(to, targets[k]!)) || "aim";
       },
     };
   }
@@ -2704,8 +2785,36 @@ export class MapScene3D {
     // glide and a cut use the goal (where the group is).
     const springX = led ? led.x - Math.sin(placedYaw) * ahead : goal.x;
     const springZ = led ? led.z - Math.cos(placedYaw) * ahead : goal.z;
-    const raw = this.clearShot(goal.x, goal.z, goal.distance, placedYaw);
-    const hold = holdShot(this.shotHold, raw.elevation, raw.distance < goal.distance, now);
+    // While the held shot is steep, a wall that pulled the camera in close
+    // (last frame's collision) releases it for the next answer that is not;
+    // steep answers then cannot win straight back (releaseSteepShot).
+    if (this.shotHold.elevationDeg <= FOLLOW_STEEP_ELEVATION_DEG) this.shotRelease = false;
+    else if (steepPullIn(this.directorElevation.value, this.directorAllowed, FOLLOW_STEEP_MIN_DISTANCE_YARDS * mesh.scale)) this.shotRelease = true;
+    // Asked again every FOLLOW_SHOT_CHECK_MS, and at once on a cut or a jump.
+    if (shotCheckDue(now, this.shotCheckAt, this.shotRaw !== null, cutting || jumped)) {
+      this.readSightTargets(director.bossGuids, mesh.scale);
+      // Gliding (from the jump's frame on), the shot lands at the track's yaw
+      // where the group is: check there, not at the yaw the camera turns
+      // through. Otherwise, where the camera is headed, steep shots also
+      // checked from where its spring actually holds it.
+      const gliding = key !== null && (jumped || this.directorGlide !== null);
+      const checkYaw = gliding ? yaw : placedYaw;
+      const checkX = gliding ? centreX - Math.sin(yaw) * ahead : goal.x;
+      const checkZ = gliding ? centreZ - Math.cos(yaw) * ahead : goal.z;
+      const floor = this.floorHeights.heightAt("director-shot", checkX, checkZ, this.cameraCeiling());
+      let pose: { x: number; z: number; floor: number } | null = null;
+      if (!gliding && !cutting) {
+        pose = this.shotPose;
+        pose.x = this.directorX.value;
+        pose.z = this.directorZ.value;
+        pose.floor = this.pivotFloor(pose.x, pose.z);
+      }
+      this.shotRaw = this.clearShot(checkX, floor, checkZ, goal.distance, checkYaw, pose);
+      this.shotCheckAt = now + FOLLOW_SHOT_CHECK_MS;
+      if (this.shotRaw.elevationDeg <= FOLLOW_STEEP_ELEVATION_DEG) this.shotShallow = this.shotRaw;
+      if (this.shotRelease && releaseSteepShot(this.shotHold, this.shotRaw, now, this.shotShallow)) this.shotRelease = false;
+    }
+    const hold = holdShot(this.shotHold, this.shotRaw!.elevationDeg, this.shotRaw!.shortened, now);
     const shotElevation = hold.elevationDeg;
     const shotDistance = hold.shortened ? this.shortenedShot(goal.distance) : goal.distance;
 
