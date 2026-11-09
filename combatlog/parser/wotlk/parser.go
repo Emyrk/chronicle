@@ -206,7 +206,9 @@ func (p *Parser) advance(_ context.Context) (_ []messages.Message, final error) 
 	ok := p.scanner.Scan()
 	if !ok {
 		if err := p.scanner.Err(); err != nil {
-			return nil, err
+			// Scanner errors are permanent. Retrying Advance would only return the
+			// same error forever, so tell consumers to stop processing this log.
+			return nil, parseerrors.AsFatalError(err)
 		}
 		return nil, io.EOF
 	}

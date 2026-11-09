@@ -331,6 +331,23 @@ func TestTransformV22EmitsUnitTelemetry(t *testing.T) {
 	assert.Contains(t, lines[2], `,18,42,5,0,20,40,3,4,20,1`)
 }
 
+func TestTransformV22EmitsTelemetryForAnonymousEventUnits(t *testing.T) {
+	t.Parallel()
+
+	r := newTransformReader(strings.NewReader(""))
+	_, err := r.transform(`11/8/2026 20:36:59.970-1  COMBAT_LOG_VERSION,22,ADVANCED_LOG_ENABLED,1,BUILD_VERSION,1.60.1,PROJECT_ID,18`)
+	require.NoError(t, err)
+
+	line := `11/8/2026 21:33:02.148-1  SPELL_CAST_SUCCESS,0000000000000000,nil,0x10a48,0x80000000,0000000000000000,nil,0x80000000,0x80000000,11523,"Activate Bomb 03",0x1,Creature-0-6843-90-14082-7800-000070EB68,0000000000000000,6054,12095,138,0,2421,0,0,0,1,0,0,0,-529.45,670.99,0,0.7777,34`
+	converted, err := r.transform(line)
+	require.NoError(t, err)
+	lines := strings.Split(converted, "\n")
+	require.Len(t, lines, 3)
+	assert.Contains(t, lines[0], `SPELL_CAST_SUCCESS`)
+	assert.Contains(t, lines[1], `BLIZZARD_UNIT_POSITION,`)
+	assert.Contains(t, lines[2], `BLIZZARD_UNIT_RESOURCES,`)
+}
+
 func TestTransformV22SwingDamageLandedKeepsUnitTelemetry(t *testing.T) {
 	t.Parallel()
 
