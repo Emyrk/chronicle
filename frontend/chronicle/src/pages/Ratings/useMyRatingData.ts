@@ -31,10 +31,29 @@ export function groupKey(g: LeaderboardV2PlayerHistoryGroup): string {
   return [g.instance_name, g.difficulty_name, g.max_players, g.encounter_name, g.player_class, g.player_spec, g.player_sub_spec, g.metric].join("|")
 }
 
+/** A raid is an instance variant: difficulty and raid size are separate boards. */
+export function raidKey(g: LeaderboardV2PlayerHistoryGroup): string {
+  return [g.instance_name, g.difficulty_name, g.max_players].join("|")
+}
+
+export interface MyRaid {
+  key: string
+  label: string
+  kills: number
+}
+
+function killWord(n: number): string {
+  return `${n} ${n === 1 ? "kill" : "kills"}`
+}
+
+export function raidLabel(raid: MyRaid): string {
+  return `${raid.label} · ${killWord(raid.kills)}`
+}
+
+/** Within one raid, the boss name, spec, and metric identify the option. */
 export function groupLabel(g: LeaderboardV2PlayerHistoryGroup): string {
-  const variant = variantLabel(g)
   const spec = [g.player_sub_spec, g.player_spec, formatClassLabel(g.player_class)].filter(Boolean).join(" ")
-  return `${g.encounter_name}${variant ? ` (${variant})` : ""} · ${spec} ${g.metric.toUpperCase()} · ${g.kills.length} ${g.kills.length === 1 ? "kill" : "kills"}`
+  return `${g.encounter_name} · ${spec} ${g.metric.toUpperCase()} · ${killWord(g.kills.length)}`
 }
 
 export function datasetFromGroup(character: LinkedCharacter, g: LeaderboardV2PlayerHistoryGroup): RatingDataset {
@@ -69,6 +88,7 @@ export function useMyRatingData(enabled: boolean) {
   const { isAuthenticated, isLoading: authLoading } = useAuth()
   const characters = useMyCharacters({ enabled: enabled && isAuthenticated })
   const [characterKey, setCharacterKey] = useState("")
+  const [raidChoice, setRaidChoice] = useState("")
   const [groupChoice, setGroupChoice] = useState("")
 
   const list = characters.data ?? []
@@ -83,8 +103,18 @@ export function useMyRatingData(enabled: boolean) {
     retry: false,
   })
 
-  // Most-killed first: that is where the bands are most interesting.
-  const groups = [...(history.data?.groups ?? [])].sort((a, b) => b.kills.length - a.kills.length)
+  // Most-killed first, for raids and bosses: that is where the bands are most interesting.
+  const allGroups = history.data?.groups ?? []
+  const raidMap = new Map<string, MyRaid>()
+  for (const g of allGroups) {
+    const key = raidKey(g)
+    const raid = raidMap.get(key) ?? { key, label: [g.instance_name, variantLabel(g)].filter(Boolean).join(" "), kills: 0 }
+    raid.kills += g.kills.length
+    raidMap.set(key, raid)
+  }
+  const raids = [...raidMap.values()].sort((a, b) => b.kills - a.kills)
+  const raid = raids.find((r) => r.key === raidChoice) ?? raids[0]
+  const groups = allGroups.filter((g) => raidKey(g) === raid?.key).sort((a, b) => b.kills.length - a.kills.length)
   const group = groups.find((g) => groupKey(g) === groupChoice) ?? groups[0]
 
   let state: MyDataState = { status: "ready" }
@@ -100,6 +130,13 @@ export function useMyRatingData(enabled: boolean) {
     character,
     selectCharacter: (key: string) => {
       setCharacterKey(key)
+      setRaidChoice("")
+      setGroupChoice("")
+    },
+    raids,
+    raid,
+    selectRaid: (key: string) => {
+      setRaidChoice(key)
       setGroupChoice("")
     },
     groups,

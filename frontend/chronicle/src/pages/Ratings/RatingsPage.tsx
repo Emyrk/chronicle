@@ -6,7 +6,7 @@ import { parseColor } from "@/pages/Instance/parseColors"
 import { ToolsBackLink } from "@/pages/Tools/ToolsBackLink"
 import { METRIC_THEMES } from "@/pages/Leaderboards/Ratings/ratingThemes"
 import { MASTERY_WEIGHTS, averageAcrossBosses, normalize, ratePlayerBoss, type Band } from "./ratingMath"
-import { groupKey, groupLabel, useMyRatingData, type RatingDataset } from "./useMyRatingData"
+import { groupKey, groupLabel, raidLabel, useMyRatingData, type RatingDataset } from "./useMyRatingData"
 
 // Example player: a Fury Warrior's Nefarian kills, in chronological order.
 // Parses are illustrative 60-day-window scores; ratings never read them.
@@ -249,6 +249,22 @@ function MyDataPicker({ my }: { my: MyData }) {
           ))}
         </select>
       </label>
+      {my.raids.length > 0 && (
+        <label className="flex w-full min-w-0 items-center gap-2 text-muted-foreground sm:w-auto">
+          Raid
+          <select
+            className={cn(selectClass, "flex-1 sm:flex-none")}
+            value={my.raid?.key ?? ""}
+            onChange={(e) => my.selectRaid(e.target.value)}
+          >
+            {my.raids.map((r) => (
+              <option key={r.key} value={r.key}>
+                {raidLabel(r)}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       {my.groups.length > 0 && (
         <label className="flex w-full min-w-0 items-center gap-2 text-muted-foreground sm:w-auto sm:flex-1">
           Boss
