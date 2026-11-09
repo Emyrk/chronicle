@@ -36,8 +36,8 @@ export function SpeedrunsTab({
   const setView = onView ?? setOwnView
   const chosen = selectedBosses(selection, bosses)
   return (
-    <div className="space-y-5">
-      <nav aria-label="Speedrun board" className="inline-flex rounded-md border bg-card p-0.5 text-sm">
+    <div className="space-y-3 sm:space-y-5">
+      <nav aria-label="Speedrun board" className="inline-flex rounded-md border bg-card p-0.5 text-xs sm:text-sm">
         {(
           [
             ["clear", "Full clear"],
@@ -50,7 +50,7 @@ export function SpeedrunsTab({
             aria-pressed={view === id}
             onClick={() => setView(id)}
             className={cn(
-              "cursor-pointer rounded px-3 py-1.5 font-medium transition-colors",
+              "cursor-pointer rounded px-2.5 py-1 font-medium transition-colors sm:px-3 sm:py-1.5",
               view === id ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
             )}
           >
@@ -141,9 +141,10 @@ function ClearBoard({ instanceName, bosses, live, story }: { instanceName: strin
   if (!story && runs.length === 0) return <Status>No speedruns found for the current filters.</Status>
 
   return (
-    <div className="space-y-5">
-      <section className="relative overflow-hidden rounded-xl border bg-card px-4 pt-10">
-        <span className="absolute top-3 left-4 text-xs font-medium text-muted-foreground">{what}</span>
+    <div className="space-y-3 sm:space-y-5">
+      {/* On a phone the board switch above already says "Full clear", so the label gives way to the winner. */}
+      <section className="relative overflow-hidden rounded-xl border bg-card px-4 pt-4 sm:pt-10">
+        <span className="absolute top-3 left-4 hidden text-xs font-medium text-muted-foreground sm:inline">{what}</span>
         {/* A phone has room for the winner only; the table below lists the rest. */}
         <div className="sm:hidden">
           <Podium entries={runs.slice(0, 1)} instanceName={instanceName} compact />
