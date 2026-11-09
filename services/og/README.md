@@ -51,10 +51,10 @@ For local end-to-end page testing, run Chronicle with `CHRONICLE_OG_SERVICE_URL`
 
 ## Docker
 
-The Dockerfile builds Next's standalone server (`NEXT_OUTPUT=standalone`) and runs it as the `node` user on port 3000. The build context is this directory:
+The Dockerfile builds Next's standalone server (`NEXT_OUTPUT=standalone`) and runs it as the `node` user on port 3000. Its repository-root build context lets it copy the shared instance configuration and loading-screen assets into the image:
 
 ```bash
-docker build -t chronicle-og services/og
+docker build -t chronicle-og -f services/og/Dockerfile .
 docker run --rm -p 3000:3000 -e OG_API_ONLY=true chronicle-og
 curl -o hello.png 'http://localhost:3000/api/og?title=Hello&template=chronicle'
 ```
@@ -107,7 +107,7 @@ Chronicle cards render from query params only: no database, no API call and no f
 | `sig` | | Signature, see [Signed URLs](#signed-urls) |
 | `v` | | Cache buster; ignored by the renderer but covered by `sig` |
 
-`art` slugs are the instance name lowercased, apostrophes dropped and other runs of non-alphanumerics turned into `-` (`artSlug()` in `kit.tsx`): `molten-core`, `blackwing-lair`, `zulgurub`, `ruins-of-ahnqiraj`, `temple-of-ahnqiraj`, `naxxramas`, `onyxias-lair`, `emerald-sanctum`, `tower-of-karazhan`, `lower-tower-of-karazhan`, `upper-tower-of-karazhan`. The JPGs in `public/raids/` are the same 3:2 centre crops of the web app's loading screens that `frontend.InstanceOGImage` serves.
+`art` slugs are the instance name lowercased, apostrophes dropped and other runs of non-alphanumerics turned into `-` (`artSlug()` in `kit.tsx`). Available slugs come from `frontend/instance-config.json`. The Docker build copies that config and its referenced WebP loading screens into the image, so the renderer and chronicled use the same mapping and source artwork without a runtime network request.
 
 Each card documents its own params next to its template below.
 
