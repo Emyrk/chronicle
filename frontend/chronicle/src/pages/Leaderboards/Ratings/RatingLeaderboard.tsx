@@ -217,7 +217,7 @@ export function BoardSkeleton() {
  */
 export function MetricTabs({ view, onView, className }: { view: RatingView; onView: (view: RatingView) => void; className?: string }) {
   return (
-    <nav className={cn("relative flex rounded-md border bg-background/60 p-0.5", className)} aria-label="Rating metric">
+    <nav className={cn("relative flex max-w-full overflow-x-auto rounded-md border bg-background/60 p-0.5", className)} aria-label="Rating metric">
       {VIEW_ORDER.map((m) => {
         const t = METRIC_THEMES[m]
         const active = m === view
@@ -238,12 +238,14 @@ export function MetricTabs({ view, onView, className }: { view: RatingView; onVi
                 : undefined
             }
             className={cn(
-              "flex shrink-0 cursor-pointer items-center gap-1.5 rounded px-2.5 py-1.5 text-xs font-medium transition-colors",
+              "flex shrink-0 cursor-pointer items-center gap-1.5 rounded px-2 py-1.5 text-xs font-medium transition-colors sm:px-2.5",
               !active && "text-muted-foreground hover:text-foreground",
             )}
           >
-            <t.icon className="size-3.5" />
-            {t.label}
+            {/* A phone keeps the labels and drops the icons so all four fit. */}
+            <t.icon className="hidden size-3.5 sm:block" />
+            {/* "Ranked Mastery" pushed the switch off a phone screen; the board header still names it in full. */}
+            {m === "mastery" ? "Mastery" : t.label}
           </button>
         )
       })}

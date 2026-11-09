@@ -252,7 +252,7 @@ function LiveHubContent({ context, summary, stale = false, requestedEncounters =
     period={context.period} subject={subject === "guilds" ? "guild" : "player"} realmIDs={realmIDs} role={role}
     cohort={chosen ? { difficulty: chosen.difficulty_name, maxPlayers: chosen.max_players } : undefined}
     where={boss ?? (picked.length > 1 ? `${picked.length} bosses` : instanceName)}
-    toolbar={<div className="flex flex-wrap items-center gap-2"><MetricTabs view={context.ratingView} onView={context.onView} /><span className="px-2 text-xs text-muted-foreground">All-time</span></div>} />
+    toolbar={<div className="flex min-w-0 max-w-full flex-wrap items-center gap-2"><MetricTabs view={context.ratingView} onView={context.onView} /><span className="absolute top-3 right-4 text-xs text-muted-foreground sm:static sm:px-2">All-time</span></div>} />
   if (context.tab === "rulesets") return <RulesetInstanceView instanceName={instanceName} embedded />
   if (context.tab === "performances") return !exact ? <CohortPrompt raids={raids} /> :
     <PerformancesTab instanceName={instanceName} scope={scope} role={role} subject={subject} bosses={picked}

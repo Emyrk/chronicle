@@ -218,7 +218,7 @@ export const RatingsTab: Story = {
     await userEvent.type(list.getByRole("textbox", { name: "Find character or guild" }), "zzzz")
     await expect(list.getByText("No characters match.")).toBeInTheDocument()
     // A single metric is the table alone: no way back to boards, no boss cards.
-    await userEvent.click(tabs().getByRole("button", { name: "Ranked Mastery" }))
+    await userEvent.click(tabs().getByRole("button", { name: "Mastery" }))
     const mastery = within(await canvas.findByRole("region", { name: /Ranked Mastery full list/ }))
     await expect(mastery.queryByRole("button", { name: "Back to boards" })).not.toBeInTheDocument()
     await expect(canvas.queryByRole("region", { name: "By boss" })).not.toBeInTheDocument()
