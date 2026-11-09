@@ -55,6 +55,8 @@ export interface DirectorUnit {
   player: boolean;
   boss: boolean;
   dead: boolean;
+  /** Where the unit stands (logged or tracked height, yards), when known; only the follow track's yaw probe reads it. */
+  height?: number;
 }
 
 /** The circle the camera has to cover, and who is inside it. */
