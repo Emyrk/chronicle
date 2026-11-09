@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Chronicle · Battleground view mockup (Warsong Gulch)</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root{
+  --bg:#2f2f2f; --card:#2a2a2a; --pop:#262626; --border:#3a3a3a; --fg:#e8e9eb; --muted:#b5b2ae;
+  --primary:#5F8FA6; --primary-dk:#2b4a5c; --gold:#9a8558; --warn:#C79C6E;
+  --ally:#60a5fa; --horde:#ef4444; --ally-dim:#1f3a5c; --horde-dim:#5a2020;
+  --warrior:#C79C6E; --paladin:#F58CBA; --hunter:#ABD473; --rogue:#FFF569; --priest:#FFFFFF;
+  --shaman:#0070DE; --mage:#69CCF0; --warlock:#9482C9; --druid:#FF7D0A;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.4 Inter,system-ui,Segoe UI,sans-serif}
+.mono{font-family:"Roboto Mono",ui-monospace,Menlo,monospace}
+.muted{color:var(--muted)}
+.page{max-width:1640px;margin:0 auto;padding:12px;display:grid;gap:12px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:12px;position:relative;min-width:0}
+.card>h3{margin:0 0 8px;font-size:13px;font-weight:500;display:flex;align-items:center;gap:8px}
+.card>h3 .sub{color:var(--muted);font-weight:400;font-size:11px}
+.grow{flex:1}
+.chip{font-size:11px;padding:3px 8px;border-radius:3px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer}
+.chip.on{background:var(--primary);border-color:var(--primary);color:#fff}
+/* data-source badges */
+.src{display:none;font-size:10px;padding:1px 6px;border-radius:3px;font-weight:500;white-space:nowrap}
+body.showsrc .src{display:inline-block}
+.src.log{background:#1f4d2e;color:#8ee6a8}.src.derive{background:#4d431f;color:#f0d77a}.src.addon{background:#5a2424;color:#ffa3a3}.src.client{background:#3a2a55;color:#cdb4ff}
+/* header */
+.head{display:flex;align-items:center;gap:20px;padding:14px 16px;background:linear-gradient(90deg,#1f3a5c55,var(--card) 35%,var(--card) 65%,#5a202055)}
+.head h1{font:600 20px "Friz Quadrata",Georgia,serif;margin:0}
+.score{display:flex;align-items:center;gap:14px;margin:0 auto}
+.score .n{font:700 34px "Roboto Mono",monospace;width:34px;text-align:center}
+.score .team{font-size:12px;text-transform:uppercase;letter-spacing:.08em}
+.pill{font-size:11px;padding:3px 8px;border-radius:3px;border:1px solid var(--border);background:var(--pop)}
+.result{background:#1f4d2e;color:#8ee6a8;border-color:#2c6b40;font-weight:600}
+.flagstat{display:flex;flex-direction:column;gap:4px;font-size:11px}
+/* main grid */
+.main{display:grid;grid-template-columns:250px minmax(0,1fr) 410px;gap:12px}
+@media(max-width:1250px){.main{grid-template-columns:230px minmax(0,1fr)}.right{grid-column:1/-1}}
+@media(max-width:900px){.main{grid-template-columns:minmax(0,1fr)}.main>.card:nth-child(2){order:-1}.moments{max-height:240px!important}.head{flex-wrap:wrap}.frames{width:112px}.stage{height:640px}}
+/* moments */
+.moments{max-height:716px;overflow:auto;display:flex;flex-direction:column;gap:2px}
+.mo{display:grid;grid-template-columns:38px 16px 1fr;gap:6px;padding:5px 6px;border-radius:3px;cursor:pointer;font-size:12px;align-items:start;border-left:2px solid transparent}
+.mo:hover{background:#333}.mo.cur{background:var(--primary-dk);border-left-color:var(--primary)}
+.mo.future{opacity:.55}.mo .t{color:var(--muted);font-size:11px}
+.mo.cap{font-weight:600}
+.A{color:var(--ally)}.H{color:var(--horde)}
+/* map */
+.stage{position:relative;height:716px;background:radial-gradient(ellipse at center,#20261f,#151515);border-radius:4px;overflow:hidden;border:1px solid #1c1c1c}
+.stage svg{position:absolute;left:50%;top:0;height:100%;transform:translateX(-50%)}
+.ovl{position:absolute;display:flex;gap:4px;z-index:2}
+.ob{background:rgba(0,0,0,.75);border:1px solid rgba(0,0,0,.8);color:rgba(255,255,255,.7);font-size:11px;padding:4px 8px;border-radius:2px;cursor:pointer}
+.ob.on{color:#fff;border-color:var(--primary);box-shadow:inset 0 0 0 1px var(--primary)}
+.frames{position:absolute;top:10px;width:150px;background:rgba(0,0,0,.6);border-radius:3px;padding:6px;z-index:2;font-size:11px}
+.frames .ttl{font-size:10px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}
+.fr{position:relative;height:17px;margin-bottom:2px;background:#111;border-radius:2px;overflow:hidden}
+.fr i{position:absolute;inset:0;opacity:.45}
+.fr span{position:relative;padding-left:5px;line-height:17px;text-shadow:0 1px 1px #000}
+.fr b{position:absolute;right:4px;top:0;line-height:17px;font-weight:400}
+.fr.dead{opacity:.4}
+.fog{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);background:rgba(0,0,0,.7);padding:4px 10px;border-radius:3px;font-size:11px;color:var(--muted);z-index:2;white-space:nowrap}
+/* timeline */
+.tl{display:grid;grid-template-columns:110px 1fr;row-gap:5px;align-items:center}
+.tl .lab{font-size:11px;color:var(--muted)}
+.lane{position:relative;height:20px;background:#222;border-radius:2px}
+.seg{position:absolute;top:2px;bottom:2px;border-radius:2px;font-size:10px;line-height:16px;padding:0 4px;overflow:hidden;white-space:nowrap;color:#fff}
+.seg.A{background:#2f6fbd}.seg.H{background:#b93030}
+.seg.drop{background-image:repeating-linear-gradient(135deg,transparent 0 5px,rgba(0,0,0,.28) 5px 10px)}
+.mk{position:absolute;top:-3px;transform:translateX(-50%);font-size:13px;line-height:1;cursor:pointer}
+.hist{position:relative;height:54px;background:#222;border-radius:2px;display:flex;align-items:stretch}
+.hist .b{flex:1;display:flex;flex-direction:column;justify-content:center;padding:0 .5px}
+.hist .u{background:var(--ally);opacity:.85;margin-top:auto}.hist .d{background:var(--horde);opacity:.85;margin-bottom:auto}
+.hist .mid{height:1px;background:#555}
+.track{position:relative;grid-column:2;height:0}
+.ph{position:absolute;top:0;width:2px;background:var(--warn);pointer-events:none;z-index:3}
+.ph::before{content:"";position:absolute;left:-6px;top:-7px;width:14px;height:14px;border-radius:50%;background:var(--warn)}
+.scrub{grid-column:2;position:relative;height:18px;cursor:pointer}
+.scrub .rail{position:absolute;left:0;right:0;top:7px;height:4px;background:#444;border-radius:2px}
+.scrub .fill{position:absolute;left:0;top:7px;height:4px;background:var(--warn);border-radius:2px}
+.ticks{grid-column:2;display:flex;justify-content:space-between;font-size:10px;color:var(--muted)}
+.ctl{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.play{width:30px;height:26px;background:var(--primary);border:0;border-radius:3px;color:#fff;cursor:pointer;font-size:12px}
+.clock{color:var(--warn);font-size:13px}
+/* tables */
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{font-weight:500;color:var(--muted);font-size:11px;text-align:right;padding:3px 5px;border-bottom:1px solid var(--border);cursor:pointer}
+th:first-child,td:first-child{text-align:left}
+td{padding:3px 5px;text-align:right;border-bottom:1px solid #303030}
+td.bar{position:relative;min-width:76px}
+td.bar i{position:absolute;left:0;top:3px;bottom:3px;opacity:.28;border-radius:2px}
+td.bar span{position:relative}
+.teamhdr{font-size:11px;text-transform:uppercase;letter-spacing:.08em;margin:8px 0 2px;display:flex;justify-content:space-between}
+.row3{display:grid;grid-template-columns:1.1fr 1fr 1fr;gap:12px}
+@media(max-width:1250px){.row3{grid-template-columns:1fr}}
+.kf{display:flex;gap:6px;align-items:center;padding:3px 0;border-bottom:1px solid #303030;font-size:12px}
+.kf .t{width:38px;color:var(--muted);font-size:11px}
+.cmp{display:grid;grid-template-columns:1fr 130px 1fr;gap:6px;align-items:center;margin-bottom:6px;font-size:11px}
+.cmp .l,.cmp .r{height:14px;background:#222;border-radius:2px;position:relative}
+.cmp .l i{position:absolute;right:0;top:0;bottom:0;background:var(--ally);border-radius:2px}
+.cmp .r i{position:absolute;left:0;top:0;bottom:0;background:var(--horde);border-radius:2px}
+.cmp .l b,.cmp .r b{position:absolute;top:-1px;font-weight:500;font-size:10.5px}
+.cmp .l b{right:4px}.cmp .r b{left:4px}
+.cmp .m{text-align:center;color:var(--muted)}
+.variants{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:1250px){.variants{grid-template-columns:1fr}}
+.seg.N{background:#555}.seg.C{background:repeating-linear-gradient(135deg,#777 0 4px,#444 4px 8px)}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--muted);align-items:center}
+.legend .src{display:inline-block}
+.note{font-size:11px;color:var(--muted);margin-top:8px}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- HEADER -->
+  <div class="card head">
+    <div>
+      <h1>Warsong Gulch</h1>
+      <div class="muted" style="font-size:12px">Turtle WoW · Nordanaar · 9 Nov 2026, 21:14 · recorded by <span style="color:var(--mage)">Thessaly</span></div>
+      <div style="margin-top:6px;display:flex;gap:6px">
+        <span class="pill result">Victory</span><span class="pill mono">17:05</span><span class="pill">10 v 10</span><span class="pill">Battleground</span>
+      </div>
+    </div>
+    <div class="score">
+      <div style="text-align:right"><div class="team A">Alliance</div><div class="muted" style="font-size:11px">&lt;Dawnguard&gt; premade ×5</div></div>
+      <div class="n A" id="sA">0</div><div class="muted">–</div><div class="n H" id="sH">0</div>
+      <div><div class="team H">Horde</div><div class="muted" style="font-size:11px">pick-up group</div></div>
+      <span class="src addon" title="Score needs the world-state / BG system message addon line">new addon line</span>
+    </div>
+    <div class="flagstat">
+      <div><span class="H">⚑ Horde flag:</span> <span id="fsH"></span></div>
+      <div><span class="A">⚑ Alliance flag:</span> <span id="fsA"></span></div>
+    </div>
+    <button class="chip" id="srcbtn" style="align-self:flex-start">Data sources</button>
+  </div>
+
+  <div class="card" id="legend" style="display:none;padding:8px 12px">
+    <div class="legend">
+      <b style="color:var(--fg)">Where each frame's data comes from:</b>
+      <span><span class="src log">in log today</span> already written by ChronicleCompanion</span>
+      <span><span class="src derive">backend derive</span> in the log, needs new parsing</span>
+      <span><span class="src addon">new addon line</span> not captured yet</span>
+      <span><span class="src client">client limit</span> depends on ClassicAPI / log range</span>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main">
+    <div class="card">
+      <h3>Match moments <span class="src derive">backend derive</span><span class="src addon">new addon line</span></h3>
+      <div style="display:flex;gap:4px;margin-bottom:8px">
+        <button class="chip on" data-f="all">All</button><button class="chip" data-f="flag">Flags</button><button class="chip" data-f="fight">Fights</button>
+      </div>
+      <div class="moments" id="moments"></div>
+    </div>
+
+    <div class="card">
+      <h3>Battlefield <span class="sub">whole match · replaces the boss replay</span><span class="grow"></span>
+        <span class="src log">in log today · own team positions</span><span class="src client">client limit · enemy positions</span></h3>
+      <div class="stage">
+        <div class="frames" style="left:10px" id="frA"><div class="ttl A">Alliance</div></div>
+        <div class="frames" style="right:10px" id="frH"><div class="ttl H">Horde</div></div>
+        <div class="ovl" style="left:10px;bottom:10px">
+          <button class="ob on" title="Camera follows a flag carrier">Follow: flag carrier ▾</button><button class="ob">Fit</button>
+        </div>
+        <div class="ovl" style="right:10px;bottom:10px">
+          <button class="ob on" data-l="trail">Trails</button><button class="ob on" data-l="deaths">Deaths</button><button class="ob" data-l="heat">Kill heatmap</button><button class="ob">3D</button>
+        </div>
+        <svg viewBox="0 0 600 760" id="map">
+          <defs><radialGradient id="hg"><stop offset="0" stop-color="#ffb020" stop-opacity=".5"/><stop offset="1" stop-color="#ffb020" stop-opacity="0"/></radialGradient></defs>
+          <!-- schematic terrain; real build uses the published zone art / 3D mesh for map 489 -->
+          <path d="M150 20 H450 Q490 20 495 70 L520 250 Q560 380 520 510 L495 690 Q490 740 450 740 H150 Q110 740 105 690 L80 510 Q40 380 80 250 L105 70 Q110 20 150 20Z" fill="#2c3a2a" stroke="#445a40" stroke-width="2"/>
+          <ellipse cx="300" cy="380" rx="170" ry="120" fill="#34452f"/>
+          <path d="M300 130 Q230 250 290 380 Q350 510 300 630" fill="none" stroke="#4a4436" stroke-width="16" stroke-linecap="round" opacity=".7"/>
+          <path d="M200 130 Q150 300 190 420 M400 630 Q450 460 410 340" fill="none" stroke="#4a4436" stroke-width="8" stroke-linecap="round" opacity=".5" stroke-dasharray="3 10"/>
+          <g><rect x="215" y="34" width="170" height="92" rx="5" fill="#1f3a5c" stroke="#60a5fa" stroke-width="1.5"/><rect x="270" y="48" width="60" height="44" rx="3" fill="#16283f" stroke="#60a5fa" stroke-opacity=".5"/>
+            <text x="300" y="118" text-anchor="middle" font-size="11" fill="#9cc7ff">Silverwing Hold</text></g>
+          <g><rect x="215" y="634" width="170" height="92" rx="5" fill="#5a2020" stroke="#ef4444" stroke-width="1.5"/><rect x="270" y="668" width="60" height="44" rx="3" fill="#3d1515" stroke="#ef4444" stroke-opacity=".5"/>
+            <text x="300" y="652" text-anchor="middle" font-size="11" fill="#ffaaaa">Warsong Lumber Mill</text></g>
+          <g font-size="9.5" fill="#9aa39a" text-anchor="middle">
+            <circle cx="445" cy="200" r="9" fill="none" stroke="#60a5fa" stroke-dasharray="2 2"/><text x="445" y="222">Alliance GY</text>
+            <circle cx="155" cy="560" r="9" fill="none" stroke="#ef4444" stroke-dasharray="2 2"/><text x="155" y="582">Horde GY</text>
+            <rect x="143" y="290" width="14" height="14" fill="#3c3c2c" stroke="#8a8"/><text x="150" y="318">speed</text>
+            <rect x="443" y="456" width="14" height="14" fill="#3c3c2c" stroke="#8a8"/><text x="450" y="484">speed</text>
+            <rect x="443" y="300" width="14" height="14" fill="#3c3c2c" stroke="#a88"/><text x="450" y="328">berserk</text>
+            <rect x="143" y="446" width="14" height="14" fill="#3c3c2c" stroke="#88a"/><text x="150" y="474">restore</text>
+            <text x="300" y="384" font-size="11" fill="#70806c">midfield</text>
+          </g>
+          <g id="heat" style="display:none"></g>
+          <g id="trails"></g><g id="skulls"></g><g id="dots"></g><g id="flags"></g>
+        </svg>
+      </div>
+      <div class="note">Enemies are solid while inside the recorder's log range · hollow = last seen. Terrain is a schematic placeholder for the real map art / 3D mesh.</div>
+    </div>
+
+    <div class="card right">
+      <h3>Scoreboard <span class="sub">click a column to sort</span><span class="grow"></span><span class="src derive">backend derive · KB, dmg, heal</span><span class="src addon">new addon line · HK, honor</span></h3>
+      <div id="board"></div>
+    </div>
+  </div>
+
+  <!-- TIMELINE -->
+  <div class="card">
+    <h3>Match timeline <span class="sub">objective lanes + kills · the scrubber drives the map</span><span class="grow"></span>
+      <span class="src derive">backend derive · flag carried (carrier aura)</span><span class="src addon">new addon line · capture / return / score</span></h3>
+    <div class="ctl">
+      <button class="play" id="play">▶</button>
+      <span class="clock mono" id="clock"></span>
+      <span id="speeds" style="display:flex;gap:4px"></span>
+      <span class="grow"></span>
+      <span class="muted" style="font-size:11px"><span class="A">▮</span> Alliance carrying / killing &nbsp; <span class="H">▮</span> Horde carrying / killing &nbsp; ▨ carrier died &nbsp; ★ capture &nbsp; ↩ return</span>
+    </div>
+    <div class="tl" id="tl">
+      <div class="lab">Score</div><div class="lane" id="lScore"></div>
+      <div class="lab H">Horde flag</div><div class="lane" id="lHF"></div>
+      <div class="lab A">Alliance flag</div><div class="lane" id="lAF"></div>
+      <div class="lab">Kills / 15 s</div><div class="hist" id="hist"></div>
+      <div class="track"><div class="ph" id="ph"></div></div>
+      <div class="scrub" id="scrub"><div class="rail"></div><div class="fill" id="fill"></div></div>
+      <div class="ticks mono"><span>0:00</span><span>3:00</span><span>6:00</span><span>9:00</span><span>12:00</span><span>15:00</span><span>17:05</span></div>
+    </div>
+  </div>
+
+  <!-- DETAIL ROW -->
+  <div class="row3">
+    <div class="card">
+      <h3>Flag carriers <span class="grow"></span><span class="src derive">backend derive</span></h3>
+      <table id="fc"></table>
+      <div class="note">Replaces boss-centric panels: who carried, for how long, and what it cost to keep them alive.</div>
+    </div>
+    <div class="card">
+      <h3>Kill feed <span class="sub">around the playhead</span><span class="grow"></span><span class="src derive">backend derive · killer = last hit</span></h3>
+      <div id="feed"></div>
+    </div>
+    <div class="card">
+      <h3>Team comparison <span class="grow"></span><span class="src derive">backend derive</span></h3>
+      <div id="cmp"></div>
+    </div>
+  </div>
+
+  <!-- VARIANTS -->
+  <div class="variants">
+    <div class="card">
+      <h3>Arathi Basin — same frame, different lanes <span class="sub">resource race + one lane per base</span><span class="grow"></span><span class="src addon">new addon line</span></h3>
+      <div class="tl" id="ab"></div>
+      <div class="note">Highlights become base assaults / captures / defends; the big number is the resource race to 2000.</div>
+    </div>
+    <div class="card">
+      <h3>Alterac Valley — same frame, different lanes <span class="sub">front line + towers, graveyards, commanders</span><span class="grow"></span><span class="src addon">new addon line</span><span class="src log">in log today · NPC kills</span></h3>
+      <div class="tl" id="av"></div>
+      <div class="note">40 v 40: the map shows the front line (average raid position) rather than every skirmish; bosses return here (Balinda, Galvangar, Vanndar, Drek'Thar).</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const T=1025, CLS={warrior:'#C79C6E',paladin:'#F58CBA',hunter:'#ABD473',rogue:'#FFF569',priest:'#FFFFFF',shaman:'#0070DE',mage:'#69CCF0',warlock:'#9482C9',druid:'#FF7D0A'};
+let seed=7;const rnd=()=>{seed=(seed*16807)%2147483647;return seed/2147483647};
+const mk=(team,list)=>list.map(([n,c,heal],i)=>({n,c,team,heal:!!heal,role:i<3?'off':i<7?'mid':'def',ax:170+260*rnd(),p1:rnd()*6,p2:rnd()*6}));
+const P=[...mk('A',[['Lyrae','druid'],['Brannoc','warrior'],['Quillon','rogue'],['Thessaly','mage'],['Aldwin','paladin',1],['Marrow','hunter'],['Sefi','priest',1],['Edda','warlock'],['Tovin','warrior'],['Wrenna','priest',1]]),
+         ...mk('H',[['Grukk','warrior'],['Zulrah','shaman'],['Morgash','rogue'],['Vexa','warlock'],['Tahu','druid',1],['Krenna','hunter'],['Oshk','shaman',1],['Sizz','mage'],['Ragh','warrior'],['Dreva','priest',1]])];
+const by=n=>P.find(p=>p.n===n);
+// flag lanes: HF = Horde flag (carried by Alliance), AF = Alliance flag (carried by Horde)
+const HF=[{s:70,e:185,by:'Lyrae',end:'cap'},{s:290,e:430,by:'Lyrae',end:'drop',k:'Morgash'},{s:540,e:605,by:'Brannoc',end:'cap'},{s:680,e:850,by:'Lyrae',end:'drop',k:'Vexa'},{s:920,e:1025,by:'Lyrae',end:'cap'}];
+const AF=[{s:85,e:160,by:'Grukk',end:'drop',k:'Thessaly'},{s:260,e:460,by:'Zulrah',end:'cap'},{s:660,e:875,by:'Grukk',end:'cap'},{s:940,e:1000,by:'Zulrah',end:'drop',k:'Thessaly'}];
+const fmt=t=>Math.floor(t/60)+':'+String(Math.floor(t%60)).padStart(2,'0');
+const lerp=(a,b,f)=>a+(b-a)*f, pct=t=>(t/T*100)+'%';
+const PATH={A:[[300,690],[365,560],[330,380],[245,215],[300,72]],H:[[300,72],[240,200],[272,380],[352,545],[300,690]]};
+function along(pts,u){u=Math.max(0,Math.min(1,u));const n=pts.length-1,i=Math.min(n-1,Math.floor(u*n)),f=u*n-i;return[lerp(pts[i][0],pts[i+1][0],f),lerp(pts[i][1],pts[i+1][1],f)]}
+const segOf=(p,t)=>(p.team==='A'?HF:AF).find(s=>s.by===p.n&&t>=s.s&&t<=s.e);
+function fcPos(s,team,t){const u=Math.min((t-s.s)/Math.min(s.e-s.s,75),1);return along(PATH[team],s.end==='drop'?u*.62:u)}
+function teamFC(team,t){const s=(team==='A'?HF:AF).find(s=>t>=s.s&&t<=s.e);return s?{s,pos:fcPos(s,team,t)}:null}
+function pos(p,t){
+  const s=segOf(p,t);if(s)return fcPos(s,p.team,t);
+  const own=p.team==='A'?110:650,en=p.team==='A'?610:150;
+  let x=p.ax+55*Math.sin(t/37+p.p1),y=(p.role==='off'?en:p.role==='mid'?380:own)+70*Math.sin(t/53+p.p2);
+  const fc=teamFC(p.team,t);
+  if(fc&&p.role!=='def'){x=lerp(x,fc.pos[0]+75*Math.sin(p.p1*3),.45);y=lerp(y,fc.pos[1]+75*Math.cos(p.p2*3),.45)}
+  const efc=teamFC(p.team==='A'?'H':'A',t);
+  if(efc&&p.role==='def'){x=lerp(x,efc.pos[0],.35);y=lerp(y,efc.pos[1],.35)}
+  return[x,y]}
+// kills
+const hot=[160,185,372,430,460,605,700,850,875,1000];
+let K=[];
+for(let i=0;i<64;i++){const t=rnd()<.65?hot[Math.floor(rnd()*hot.length)]+(rnd()-.5)*70:40+rnd()*980;const kt=rnd()<.54?'A':'H';
+  const ks=P.filter(p=>p.team===kt&&!p.heal),vs=P.filter(p=>p.team!==kt);K.push({t:Math.max(30,Math.min(T-2,t)),k:ks[Math.floor(rnd()*ks.length)].n,v:vs[Math.floor(rnd()*vs.length)].n})}
+[...HF,...AF].filter(s=>s.k).forEach(s=>K.push({t:s.e,k:s.k,v:s.by,fc:1}));
+K.sort((a,b)=>a.t-b.t);K.forEach(k=>{k.p=pos(by(k.v),k.t)});
+// moments
+let M=[{t:0,ty:'flag',tx:'Gates open',team:''}];
+const add=(lane,flagName,carTeam)=>lane.forEach(s=>{const o=carTeam==='A'?'H':'A';
+  M.push({t:s.s,ty:'flag',team:carTeam,tx:`<b>${s.by}</b> picks up the ${flagName} flag`,ic:'⚑'});
+  if(s.end==='cap')M.push({t:s.e,ty:'flag',team:carTeam,cap:1,tx:`<b>${s.by}</b> captures — ${carTeam==='A'?'Alliance':'Horde'} scores`,ic:'★'});
+  else{M.push({t:s.e,ty:'flag',team:o,tx:`<b>${s.k}</b> kills carrier ${s.by}`,ic:'☠'});M.push({t:s.e+4,ty:'flag',team:o,tx:`${flagName} flag returned by <b>${s.k}</b>`,ic:'↩'})}});
+add(HF,'Horde','A');add(AF,'Alliance','H');
+M.push({t:372,ty:'fight',team:'',tx:'Midfield team fight · 7 kills in 25 s',ic:'⚔'},{t:700,ty:'fight',team:'A',tx:'<b>Thessaly</b> · 4 kills without dying',ic:'⚔'},{t:760,ty:'fight',team:'',tx:'Standoff · both flags held 2:50',ic:'⏳'},{t:1025,ty:'flag',team:'A',tx:'Alliance wins 3 – 2',ic:'🏆',cap:1});
+M.sort((a,b)=>a.t-b.t);
+const $=id=>document.getElementById(id);
+$('moments').innerHTML=M.map((m,i)=>`<div class="mo ${m.cap?'cap':''}" data-i="${i}" data-ty="${m.ty}"><span class="t mono">${fmt(m.t)}</span><span class="${m.team}">${m.ic||'•'}</span><span>${m.tx}</span></div>`).join('');
+// timeline lanes
+const segs=(lane,team)=>lane.map(s=>`<div class="seg ${team} ${s.end==='drop'?'drop':''}" style="left:${pct(s.s)};width:${pct(s.e-s.s)}" title="${s.by} ${fmt(s.s)}–${fmt(s.e)}">${s.by}</div>`+
+  (s.end==='cap'?`<span class="mk ${team}" style="left:${pct(s.e)}" data-t="${s.e}">★</span>`:`<span class="mk ${team==='A'?'H':'A'}" style="left:${pct(s.e+4)}" data-t="${s.e}">↩</span>`)).join('');
+$('lHF').innerHTML=segs(HF,'A');$('lAF').innerHTML=segs(AF,'H');
+const caps=[...HF.filter(s=>s.end==='cap').map(s=>({t:s.e,team:'A'})),...AF.filter(s=>s.end==='cap').map(s=>({t:s.e,team:'H'}))].sort((a,b)=>a.t-b.t);
+{let a=0,h=0,prev=0,html='';caps.forEach(c=>{html+=`<div class="seg" style="left:${pct(prev)};width:${pct(c.t-prev)};background:transparent;color:var(--muted);border-right:2px solid ${c.team==='A'?'var(--ally)':'var(--horde)'}"><span class="mono">${a} – ${h}</span></div>`;c.team==='A'?a++:h++;prev=c.t});$('lScore').innerHTML=html}
+{const n=Math.ceil(T/15),u=Array(n).fill(0),d=Array(n).fill(0);K.forEach(k=>(by(k.k).team==='A'?u:d)[Math.floor(k.t/15)]++);
+ $('hist').innerHTML=u.map((v,i)=>`<div class="b"><div class="u" style="height:${v*8}px"></div><div class="mid"></div><div class="d" style="height:${d[i]*8}px"></div></div>`).join('')}
+// scoreboard
+P.forEach(p=>{p.kb=K.filter(k=>k.k===p.n).length;p.d=K.filter(k=>k.v===p.n).length;p.hk=p.kb*2+Math.floor(rnd()*14)+4;
+  p.dmg=Math.round((p.heal?12+rnd()*18:55+rnd()*70+p.kb*6)*10)/10;p.hl=Math.round((p.heal?85+rnd()*70:rnd()*14)*10)/10;
+  p.caps=[...HF,...AF].filter(s=>s.by===p.n&&s.end==='cap').length;p.ret=[...HF,...AF].filter(s=>s.k===p.n).length});
+let sortKey='dmg';
+function board(){const cols=[['kb','KB'],['d','D'],['hk','HK'],['dmg','Dmg'],['hl','Heal'],['caps','⚑'],['ret','↩']];const mx={dmg:Math.max(...P.map(p=>p.dmg)),hl:Math.max(...P.map(p=>p.hl))};
+  $('board').innerHTML=['A','H'].map(tm=>{const ps=P.filter(p=>p.team===tm).sort((a,b)=>b[sortKey]-a[sortKey]);const sum=k=>ps.reduce((s,p)=>s+p[k],0);
+   return `<div class="teamhdr ${tm}"><span>${tm==='A'?'Alliance':'Horde'}</span><span class="mono muted">${sum('kb')} KB · ${Math.round(sum('dmg'))}k dmg · ${Math.round(sum('hl'))}k heal</span></div><table><tr><th>Player</th>${cols.map(c=>`<th data-k="${c[0]}" style="${c[0]===sortKey?'color:var(--fg)':''}">${c[1]}</th>`).join('')}</tr>`+
+   ps.map(p=>`<tr><td style="color:${CLS[p.c]}">${p.n}</td>${cols.map(([k])=>k==='dmg'||k==='hl'?`<td class="bar mono"><i style="width:${p[k]/mx[k]*100}%;background:${tm==='A'?'var(--ally)':'var(--horde)'}"></i><span>${p[k].toFixed(1)}k</span></td>`:`<td class="mono">${p[k]||'<span class=muted>·</span>'}</td>`).join('')}</tr>`).join('')+'</table>'}).join('');
+  document.querySelectorAll('#board th[data-k]').forEach(th=>th.onclick=()=>{sortKey=th.dataset.k;board()})}
+board();
+// flag carriers
+{const rows={};[...HF.map(s=>({...s,team:'A'})),...AF.map(s=>({...s,team:'H'}))].forEach(s=>{const r=rows[s.by]??={n:s.by,team:s.team,pick:0,cap:0,hold:0};r.pick++;r.cap+=s.end==='cap';r.hold+=s.e-s.s});
+ $('fc').innerHTML='<tr><th>Carrier</th><th>Pick-ups</th><th>Caps</th><th>Hold time</th><th>Dmg taken carrying</th><th>Healing received</th></tr>'+Object.values(rows).sort((a,b)=>b.hold-a.hold).map(r=>`<tr><td style="color:${CLS[by(r.n).c]}">${r.n} <span class="${r.team}">⚑</span></td><td class="mono">${r.pick}</td><td class="mono">${r.cap}</td><td class="mono">${fmt(r.hold)}</td><td class="mono">${(r.hold*.11).toFixed(1)}k</td><td class="mono">${(r.hold*.085).toFixed(1)}k</td></tr>`).join('')}
+// comparison
+{const s=(tm,k)=>P.filter(p=>p.team===tm).reduce((a,p)=>a+p[k],0);const hold=l=>l.reduce((a,x)=>a+x.e-x.s,0);
+ const rows=[['Damage to players',s('A','dmg'),s('H','dmg'),'k'],['Healing',s('A','hl'),s('H','hl'),'k'],['Killing blows',s('A','kb'),s('H','kb'),''],['Time holding enemy flag',hold(HF),hold(AF),'t'],['Crowd control applied',212,168,'s'],['Dispels / cleanses',47,31,''],['Flag returns',2,2,'']];
+ $('cmp').innerHTML=rows.map(([l,a,h,u])=>{const m=Math.max(a,h),f=v=>u==='t'?fmt(v):Math.round(v)+u;return `<div class="cmp"><div class="l"><i style="width:${a/m*100}%"></i><b>${f(a)}</b></div><div class="m">${l}</div><div class="r"><i style="width:${h/m*100}%"></i><b>${f(h)}</b></div></div>`}).join('')}
+// map elements
+const NS='http://www.w3.org/2000/svg',el=(t,a,par)=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);par.appendChild(e);return e};
+P.forEach(p=>{p.dot=el('circle',{r:6.5,fill:CLS[p.c],stroke:p.team==='A'?'#60a5fa':'#ef4444','stroke-width':2.5},$('dots'));
+  p.lbl=el('text',{'font-size':9,fill:'#ddd','text-anchor':'middle',style:'paint-order:stroke;stroke:#000;stroke-width:2px'},$('dots'));p.lbl.textContent=p.n;
+  const f=document.createElement('div');f.className='fr';f.innerHTML=`<i style="background:${CLS[p.c]}"></i><span style="color:${CLS[p.c]}">${p.n}</span><b class="mono"></b>`;$(p.team==='A'?'frA':'frH').appendChild(f);p.fr=f});
+K.forEach(k=>el('circle',{cx:k.p[0],cy:k.p[1],r:34,fill:'url(#hg)'},$('heat')));
+const trA=el('polyline',{fill:'none',stroke:'#60a5fa','stroke-width':3,'stroke-opacity':.7,'stroke-dasharray':'2 5','stroke-linecap':'round'},$('trails')),
+      trH=el('polyline',{fill:'none',stroke:'#ef4444','stroke-width':3,'stroke-opacity':.7,'stroke-dasharray':'2 5','stroke-linecap':'round'},$('trails'));
+const flagEl={A:el('text',{'font-size':20,fill:'#ef4444',style:'paint-order:stroke;stroke:#000;stroke-width:3px'},$('flags')),H:el('text',{'font-size':20,fill:'#60a5fa',style:'paint-order:stroke;stroke:#000;stroke-width:3px'},$('flags'))};
+flagEl.A.textContent='⚑';flagEl.H.textContent='⚑';
+let now=400,playing=false,speed=8,layers={trail:true,deaths:true,heat:false};
+function render(){
+  $('clock').textContent=fmt(now)+' / '+fmt(T);$('fill').style.width=pct(now);
+  const ph=$('ph'),tl=$('tl');ph.style.left=pct(now);ph.style.top=-(tl.querySelector('.track').offsetTop-tl.querySelector('.lane').offsetTop)+'px';ph.style.height=(tl.querySelector('.track').offsetTop-tl.querySelector('.lane').offsetTop+14)+'px';
+  let a=0,h=0;caps.forEach(c=>{if(c.t<=now)c.team==='A'?a++:h++});$('sA').textContent=a;$('sH').textContent=h;
+  const rec=pos(by('Thessaly'),now);
+  P.forEach(p=>{const [x,y]=pos(p,now);const last=K.filter(k=>k.v===p.n&&k.t<=now).pop();const dead=last&&now-last.t<18;
+    const far=p.team==='H'&&Math.hypot(x-rec[0],y-rec[1])>240;
+    p.dot.setAttribute('cx',x);p.dot.setAttribute('cy',y);p.dot.setAttribute('opacity',dead?0:far?.35:1);p.dot.setAttribute('fill',far?'none':CLS[p.c]);
+    p.lbl.setAttribute('x',x);p.lbl.setAttribute('y',y-10);p.lbl.setAttribute('opacity',dead?0:far?.35:1);
+    const hp=dead?0:Math.round(62+38*Math.sin(now/9+p.p1*7)**2);p.fr.className='fr'+(dead?' dead':'');p.fr.firstChild.style.right=(100-hp)+'%';p.fr.lastChild.textContent=dead?'dead':(segOf(p,now)?'⚑ ':'')+hp+'%'});
+  const st=(lane,team,elF,tr,home)=>{const s=lane.find(s=>now>=s.s&&now<=s.e);
+    if(s){const [x,y]=fcPos(s,team,now);elF.setAttribute('x',x+5);elF.setAttribute('y',y-8);
+      const pts=[];for(let t=Math.max(s.s,now-60);t<=now;t+=3)pts.push(fcPos(s,team,t).join(','));tr.setAttribute('points',layers.trail?pts.join(' '):'');
+      return `carried by <b style="color:${CLS[by(s.by).c]}">${s.by}</b> <span class="mono muted">${fmt(now-s.s)}</span>`}
+    elF.setAttribute('x',home[0]-6);elF.setAttribute('y',home[1]+8);tr.setAttribute('points','');
+    const d=lane.find(s=>s.end==='drop'&&now>s.e&&now<s.e+4);return d?'<span style="color:#f0d77a">dropped</span>':'<span class="muted">at base</span>'};
+  $('fsH').innerHTML=st(HF,'A',flagEl.H,trA,[300,690]);$('fsA').innerHTML=st(AF,'H',flagEl.A,trH,[300,72]);
+  $('skulls').innerHTML=layers.deaths?K.filter(k=>k.t<=now&&now-k.t<14).map(k=>`<text x="${k.p[0]}" y="${k.p[1]}" font-size="14" text-anchor="middle" fill="${by(k.v).team==='A'?'#60a5fa':'#ef4444'}" opacity="${1-(now-k.t)/14}" style="paint-order:stroke;stroke:#000;stroke-width:2px">☠</text>`).join(''):'';
+  $('heat').style.display=layers.heat?'':'none';
+  let cur=-1;M.forEach((m,i)=>{if(m.t<=now)cur=i});document.querySelectorAll('.mo').forEach((e,i)=>{e.classList.toggle('cur',i===cur);e.classList.toggle('future',i>cur)});
+  const near=K.filter(k=>k.t<=now).slice(-9).reverse();
+  $('feed').innerHTML=near.map(k=>{const a=by(k.k),v=by(k.v);return `<div class="kf"><span class="t mono">${fmt(k.t)}</span><span style="color:${CLS[a.c]}">${a.n}</span><span class="${a.team}">⚔</span><span style="color:${CLS[v.c]}">${v.n}</span>${k.fc?'<span class="pill" style="margin-left:auto;color:#f0d77a">flag carrier</span>':''}</div>`}).join('')||'<div class="muted">No kills yet</div>'}
+// controls
+[1,4,8,16].forEach(s=>{const b=document.createElement('button');b.className='chip'+(s===speed?' on':'');b.textContent=s+'×';b.onclick=()=>{speed=s;document.querySelectorAll('#speeds .chip').forEach(c=>c.classList.toggle('on',c===b))};$('speeds').appendChild(b)});
+$('play').onclick=()=>{playing=!playing;$('play').textContent=playing?'❚❚':'▶';if(now>=T)now=0;last=performance.now();if(playing)requestAnimationFrame(tick)};
+let last=0;function tick(ts){if(!playing)return;now=Math.min(T,now+(ts-last)/1000*speed);last=ts;render();if(now>=T){playing=false;$('play').textContent='▶'}else requestAnimationFrame(tick)}
+const seek=e=>{const r=$('scrub').getBoundingClientRect();now=Math.max(0,Math.min(T,(e.clientX-r.left)/r.width*T));render()};
+let drag=false;$('scrub').onmousedown=e=>{drag=true;seek(e)};window.onmousemove=e=>drag&&seek(e);window.onmouseup=()=>drag=false;
+document.querySelectorAll('.mo').forEach(e=>e.onclick=()=>{now=Math.max(0,M[e.dataset.i].t-1);render()});
+document.querySelectorAll('.mk').forEach(e=>e.onclick=()=>{now=+e.dataset.t-1;render()});
+document.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-f]').forEach(c=>c.classList.toggle('on',c===b));document.querySelectorAll('.mo').forEach(m=>m.style.display=b.dataset.f==='all'||m.dataset.ty===b.dataset.f?'':'none')});
+document.querySelectorAll('[data-l]').forEach(b=>b.onclick=()=>{layers[b.dataset.l]=!layers[b.dataset.l];b.classList.toggle('on');render()});
+$('srcbtn').onclick=()=>{document.body.classList.toggle('showsrc');$('srcbtn').classList.toggle('on');$('legend').style.display=document.body.classList.contains('showsrc')?'':'none'};
+// variants
+const lane=(lab,parts,cls='')=>{let x=0;return `<div class="lab ${cls}">${lab}</div><div class="lane">`+parts.map(([w,c,tx])=>{const h=`<div class="seg ${c}" style="left:${x}%;width:${w}%">${tx||''}</div>`;x+=w;return h}).join('')+'</div>'};
+const line=(lab,series,h=54)=>`<div class="lab">${lab}</div><div class="lane" style="height:${h}px"><svg viewBox="0 0 100 ${h}" preserveAspectRatio="none" style="width:100%;height:100%;display:block">`+series.map(([col,pts])=>`<polyline fill="none" stroke="${col}" stroke-width="2" vector-effect="non-scaling-stroke" points="${pts.map(([x,y])=>x+','+(h-y*h)).join(' ')}"/>`).join('')+'</svg></div>';
+$('ab').innerHTML=line('Resources → 2000',[['#60a5fa',[[0,0],[10,.04],[30,.3],[55,.52],[80,.86],[92,1]]],['#ef4444',[[0,0],[10,.06],[30,.22],[55,.5],[80,.7],[92,.78]]]])+
+  lane('Stables',[[6,'N'],[3,'C'],[91,'A']])+lane('Lumber Mill',[[8,'N'],[3,'C'],[30,'A'],[3,'C'],[22,'H'],[3,'C'],[31,'A']])+lane('Blacksmith',[[9,'N'],[3,'C'],[20,'H'],[3,'C'],[40,'A'],[3,'C'],[22,'A']])+
+  lane('Gold Mine',[[8,'N'],[3,'C'],[45,'H'],[3,'C'],[41,'A']])+lane('Farm',[[6,'N'],[3,'C'],[91,'H']]);
+$('av').innerHTML=line('Front line (N ↔ S)',[['#C79C6E',[[0,.5],[8,.5],[20,.62],[35,.55],[50,.38],[65,.3],[80,.18],[100,.05]]]],46)+
+  lane('Alliance bunkers',[[58,'A','4 standing'],[20,'C','Stonehearth burning'],[22,'A','3 standing']],'A')+lane('Horde towers',[[30,'H','4 standing'],[18,'C','Iceblood'],[14,'H','3'],[16,'C','Tower Point'],[22,'H','1 standing']],'H')+
+  lane('Snowfall GY',[[12,'N'],[4,'C'],[30,'H'],[4,'C'],[50,'A']])+lane('Iceblood GY',[[44,'H'],[4,'C'],[52,'A']])+lane('Frostwolf GY',[[78,'H'],[4,'C'],[18,'A']])+
+  lane('Commanders',[[26,'N','Balinda ☠ 6:10'],[20,'N','Galvangar ☠ 11:40'],[54,'N','Drek\'Thar ☠ 24:55 — Alliance wins']]);
+render();window.addEventListener('resize',render);
+</script>
+</body>
+</html>
