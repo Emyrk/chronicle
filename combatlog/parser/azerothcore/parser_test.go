@@ -348,3 +348,36 @@ func TestZulFarrakBossEncounterRegression(t *testing.T) {
 	require.Nil(t, result.UnknownUnits)
 	require.EqualValues(t, 4, p.Metrics().TotalLinesParsed)
 }
+
+func TestHyjalFriendlyLeaderIsNotEncounterHostile(t *testing.T) {
+	t.Parallel()
+
+	ctx := parsectx.WithType(context.Background(), database.LogTypeAzerothcoreClientside)
+	reg := registry.RegistryForFlavor(slog.Default(), database.WoWFlavor{database.FlavorVanilla, database.FlavorWrath})
+	jainaGUID := creatureGUID(17772, 1)
+	winterchillGUID := creatureGUID(17767, 2)
+	logData := strings.Join([]string{
+		`1777340510851  CHRONICLE_HEADER,"","3.3.5a",12340`,
+		`1777340510851  CHRONICLE_ZONE_INFO,"Hyjal Summit",534,230,"raid"`,
+		fmt.Sprintf(`1777340511000  SPELL_DAMAGE,0x%016X,"Lady Jaina Proudmoore",0x0,0x%016X,"Rage Winterchill",0x0,1,"Test Spell",0x1,10,0,1,0,0,0,nil,nil,nil`, uint64(jainaGUID), uint64(winterchillGUID)),
+		fmt.Sprintf(`1777340512000  UNIT_DIED,0x0000000000000000,nil,0x80000000,0x%016X,"Rage Winterchill",0xa48`, uint64(winterchillGUID)),
+	}, "\n")
+
+	p, err := New(ctx, slog.Default(), strings.NewReader(logData), stubSpellDB{}, nil)
+	require.NoError(t, err)
+
+	output := encounters.New(ctx, slog.Default(), reg)
+	c := consumers.New(slog.Default(), output)
+	require.NoError(t, c.ConsumeAll(ctx, p))
+	require.Len(t, output.Instances, 1)
+
+	result, err := output.Instances[0].Finalize(ctx)
+	require.NoError(t, err)
+	require.Len(t, result.Encounters, 1)
+	enc := result.Encounters[0]
+	require.Equal(t, "Rage Winterchill", enc.Name)
+	require.True(t, enc.Boss)
+	require.Contains(t, enc.Combat.Hostiles, winterchillGUID)
+	require.NotContains(t, enc.Combat.Hostiles, jainaGUID)
+	require.Nil(t, result.UnknownUnits)
+}
