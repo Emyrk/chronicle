@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "datasetID": "b69b601c-d247-44c6-9cb6-3f71053fd052",
+  "mapID": 90,
+  "instance": "FrBOsyBr9SulZoke",
+  "timeBasis": "Encounter start offsets in whole seconds relative to first encounter start. These are encounter labels, not floor transition times.",
+  "zToleranceYards": 3,
+  "options": {
+    "evidenceWindowMs": 2000,
+    "continuityMs": 15000
+  },
+  "labels": [
+    {
+      "encounterID": "b2935866-09c3-4ee9-8d80-cb26b9246056",
+      "startOffsetSeconds": 0,
+      "floor": 1
+    },
+    {
+      "encounterID": "936b2f42-a507-4711-af4e-792de681fd47",
+      "startOffsetSeconds": 793,
+      "floor": 2
+    },
+    {
+      "encounterID": "0f683349-9a3a-419e-ab41-d10635989daa",
+      "startOffsetSeconds": 2238,
+      "floor": 4
+    },
+    {
+      "encounterID": "9032fede-2a2d-4b46-a6b9-19bf4dff2ef8",
+      "startOffsetSeconds": 2543,
+      "floor": 3
+    },
+    {
+      "encounterID": "624f94da-8468-429d-9216-82ed9cfbc8ac",
+      "startOffsetSeconds": 2687,
+      "floor": 3
+    },
+    {
+      "encounterID": "0fbba056-6c07-4cf9-a64b-9f20052a2193",
+      "startOffsetSeconds": 3709,
+      "floor": 2
+    }
+  ],
+  "geometry": [
+    {
+      "floor": 1,
+      "path": "3d/90-floor-1-e27a6431b0e3a625-gnomeregan-floor-1-open-top.glb",
+      "sha256": "e27a6431b0e3a625ef3f9cef13a5d6291f56d88f17b7962f88fd84743c66b61a"
+    },
+    {
+      "floor": 2,
+      "path": "3d/90-floor-2-13a2aa5f4e83fdf7-gnomeregan-floor-2-open-top.glb",
+      "sha256": "13a2aa5f4e83fdf77f975b385710a9abb2512e6153d07c14f6f31cd7654193b7"
+    },
+    {
+      "floor": 3,
+      "path": "3d/90-floor-3-df49a1ec14810d06-gnomeregan-floor-3-open-top.glb",
+      "sha256": "df49a1ec14810d06b6915762388804a46bab0d4f4769f5f89b2f8af86b591f99"
+    },
+    {
+      "floor": 4,
+      "path": "3d/90-floor-4-33d1daf31e7ccf84-gnomeregan-floor-4-open-top.glb",
+      "sha256": "33d1daf31e7ccf842786b7e1614f0527c1be5227ec968bffe86ecc7cd25f7d56"
+    }
+  ]
+}
