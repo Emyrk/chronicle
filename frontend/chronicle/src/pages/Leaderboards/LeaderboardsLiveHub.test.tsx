@@ -31,6 +31,7 @@ vi.mock("@/api/rankingsQueries", () => ({
 }))
 vi.mock("@/api/queries", () => ({
   useSiteConfig: vi.fn(() => ({ data: { root_tenant_ratings_disabled: false }, isPending: false, isError: false })),
+  useSupportedInstances: () => ({ data: [{ name: "Molten Core", category: "raid", raid_progression_order: 100 }] }),
   useRealms: () => ({ data: [{ id: "realm-id", name: "Nordanaar" }], isPending: false, isError: false }),
   useSupportedInstanceProgressionBosses: () => ({ data: new Map([["Molten Core", new Set(["Ragnaros"])]]), isPending: false, isError: false }),
   useSupportedInstanceRankingEncounterSets: () => ({ data: new Map([["Molten Core", [{ id: "", label: "Default", encounters: ["Ragnaros"] }]]]), isPending: false, isError: false }),
