@@ -39,6 +39,13 @@ describe("encounter floor selection", () => {
     expect(memory.correction("a")).toBeNull();
     expect(memory.choose("a", 0, () => estimate([{ x: 3 }]), true).floor).toBe(1);
   });
+  it("does not freeze an incomplete first frame before encounter data is ready", () => {
+    const memory = new EncounterFloorMemory();
+    expect(memory.choose("a", 0, () => estimate([{ x: 1 }]), false).floor).toBe(1);
+    expect(memory.has("a")).toBe(false);
+    expect(memory.choose("a", 0, () => estimate([{ x: 2 }]), true).floor).toBe(2);
+    expect(memory.choose("a", 0, () => estimate([{ x: 3 }]), true).floor).toBe(2);
+  });
   it("does not use a later visited encounter as chronological history", () => {
     const memory = new EncounterFloorMemory();
     memory.choose("future", 100, () => estimate([{ x: 2 }]), true);

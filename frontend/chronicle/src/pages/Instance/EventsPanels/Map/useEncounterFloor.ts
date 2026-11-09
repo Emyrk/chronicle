@@ -32,10 +32,12 @@ export function useEncounterFloor(props: PanelRenderProps<MapResult>, map: WowMa
   const manualFloorNumber = memory.correction(anchorID);
   const positions = props.result.encounters.get(anchorID);
   const pending = enabled && query.isPending;
+  // Map uses syncDataMode:"full": aggregation publishes the complete worker
+  // result before clearing processing, so first-frame partial data is not frozen.
   const estimate = memory.choose(anchorID, Date.parse(anchor?.start_time ?? ""), previous => estimateEncounterFloor(
     positions, map?.mapID ?? 0, map?.floors.map(floor => floor.floor) ?? [],
     new Set(Object.keys(instance.players ?? {})), enabled ? query.data : undefined, previous,
-  ), Boolean(map && positions) && !props.loading && !props.processing && !pending);
+  ), Boolean(map && positions) && !props.loading && !props.processing && !props.error && !pending);
   return {
     anchor,
     selectedFloorNumber: manualFloorNumber ?? estimate.floor,
