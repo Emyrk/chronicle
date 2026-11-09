@@ -102,6 +102,17 @@ func (w *OperationWorker) Work(ctx context.Context, j *river.Job[ArgsOperationPa
 	if worked {
 		nudgeDownstream(ctx, w.Queue, w.Metrics, j.Args.TenantID, true)
 	}
+	if err == nil && w.Queue != nil {
+		current, readErr := w.Store.GetLeaderboardOperation(ctx, database.GetLeaderboardOperationParams{ID: j.Args.OperationID, TenantID: j.Args.TenantID})
+		if readErr == nil && current.State == "completed" {
+			_, enqueueErr := w.Queue.Insert(ctx, ArgsHighlightDispatch{TenantID: j.Args.TenantID}, nil)
+			outcome := "success"
+			if enqueueErr != nil {
+				outcome = "failed"
+			}
+			w.Metrics.event(j.Args.TenantID, "highlights", "dispatch_nudge", outcome, 1)
+		}
+	}
 	var snooze *river.JobSnoozeError
 	if err != nil && !errors.As(err, &snooze) {
 		cleanup, cancel := context.WithTimeout(servicetenant.WithTenantID(context.WithoutCancel(ctx), j.Args.TenantID), 5*time.Second)

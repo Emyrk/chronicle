@@ -1,3 +1,4 @@
+import { AdminLeaderboardHighlights } from "./AdminLeaderboardHighlights";
 import { useState, type ReactNode } from "react";
 import { useQueries, type UseQueryOptions } from "@tanstack/react-query";
 import { AdminLeaderboardQueues } from "./AdminLeaderboardQueues";
@@ -153,6 +154,7 @@ export function TenantLeaderboardOperations({
         )}
       </div>
       <AdminLeaderboardQueues tenantID={tenantID} tenantName={tenantName} />
+      <AdminLeaderboardHighlights tenantID={tenantID} />
       <div className="flex flex-wrap items-end gap-3">
         <label className="space-y-1 text-sm">
           <span className="block">Runs completed from</span>

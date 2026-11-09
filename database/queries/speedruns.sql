@@ -178,6 +178,7 @@ JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
       AND sr.qualified = true
       AND (NOT @use_ranked_timing::boolean OR sr.boss_to_boss_duration_ms IS NOT NULL)
       AND sr.guild_id IS NOT NULL
+      AND (COALESCE(cardinality(@realm_ids::uuid[]),0)=0 OR li.realm_id=ANY(@realm_ids::uuid[]))
       AND CASE
           WHEN cardinality(@realm_names :: text[]) > 0 THEN
               COALESCE(wsr.name, '') = ANY(@realm_names :: text[])

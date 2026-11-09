@@ -498,6 +498,7 @@ func (api *API) Routes() chi.Router {
 			r.Route("/admin", func(r chi.Router) {
 				r.Use(api.Auth.Authenticated(false))
 				r.With(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User)).Get("/leaderboard-queues", api.AdminLeaderboardQueues)
+				r.With(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User)).Post("/leaderboard-highlights/refresh", api.AdminRefreshLeaderboardHighlights)
 				r.Route("/leaderboard-operations", func(r chi.Router) {
 					r.Use(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User))
 					r.Get("/", api.AdminListLeaderboardOperations)
@@ -799,6 +800,7 @@ func (api *API) Routes() chi.Router {
 
 			r.With(api.Auth.Authenticated(true)).Get("/leaderboard-configuration", api.LeaderboardConfiguration)
 			r.With(api.Auth.Authenticated(true)).Get("/leaderboards-v2", api.LeaderboardV2)
+			r.With(api.Auth.Authenticated(true)).Get("/leaderboards-v2/highlights", api.LeaderboardHighlights)
 			r.With(api.Auth.Authenticated(true)).Get("/leaderboards-v2/maintenance", api.LeaderboardMaintenance)
 			r.With(api.Auth.Authenticated(true)).Get("/leaderboards-v2/player-history", api.LeaderboardV2PlayerHistory)
 

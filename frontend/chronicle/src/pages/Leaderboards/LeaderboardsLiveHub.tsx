@@ -1,3 +1,4 @@
+import { landingRealmError, useLandingHighlights } from "./Hub/landingHighlights"
 import { useState, type ReactNode } from "react"
 import { LeaderboardMaintenanceNotice } from "./LeaderboardMaintenanceNotice"
 import { cn } from "@/lib/utils"
@@ -44,9 +45,13 @@ export function LeaderboardsLiveHub() {
   const summary = useHubSummary({ instanceName: instance ?? undefined, tab: instance ? undefined : tab, realmIDs, performance: "dps",
     cohort: requestedCohort, metadataOnly: !!instance && tab !== "overview" }, siteConfig !== undefined && !rootRatingsDisabled)
   const available = summary.data?.realms ?? []
+  const highlightsSelectionError = summary.data ? landingRealmError(realmIDs, available) : undefined
+  const highlights = useLandingHighlights(siteConfig?.tenant?.id, realmIDs[0],
+    !instance && !!summary.data && !summary.isPlaceholderData && !highlightsSelectionError && !rootRatingsDisabled && tab !== "rulesets" && tab !== "parsing")
+  const highlightsScopeError = highlightsSelectionError ?? (highlights.data?.status === "unsupported_scope" ? "Choose All realms or one realm to view highlights" : undefined)
   const activeRealm = realmIDs.length === 1 ? available.find((row) => row.id === realmIDs[0]) : undefined
   const selectedRealmIDs = activeRealm ? [activeRealm.id] : realmIDs.length > 1 ? realmIDs : []
-  const realm = activeRealm?.name ?? ALL_REALMS
+  const realm = !instance && highlightsSelectionError ? "Select a realm" : activeRealm?.name ?? ALL_REALMS
   const names = [...new Set((summary.data?.instances ?? []).map((row) => row.instance_name))]
   const choose = (key: "realm_ids" | "encounters", value?: string) => setParams(hubParams(params, key, value))
   const tabParams = (next: ReturnType<typeof v2Selection>["tab"]) => {
@@ -95,7 +100,12 @@ export function LeaderboardsLiveHub() {
       <LeaderboardsHubApp instance={instance ?? undefined} onInstance={chooseInstance}
         instanceHref={instanceHref} tabHref={tabHref} allInstancesHref={allInstancesHref}
         tab={tab} onTab={chooseTab} realm={realm} onRealm={(name) => choose("realm_ids", available.find((row) => row.name === name)?.id)}
-        realms={[ALL_REALMS, ...available.map((row) => row.name)]} instances={summary.data?.instances ?? []} supportedInstances={supportedInstances} landingPreviews={summary.data?.landing_previews}
+        realms={[ALL_REALMS, ...available.map((row) => row.name)]} instances={summary.data?.instances ?? []} supportedInstances={supportedInstances} landingPreviews={highlightsScopeError ? [] : highlights.data?.landing_previews}
+        landingSnapshots={highlightsScopeError || highlights.isError && !highlights.data ? undefined : highlights.data?.snapshots ?? []}
+        landingBlocked={!!highlightsScopeError || !highlights.data}
+        landingNotice={highlightsScopeError ? <p role="status">{highlightsScopeError}</p>
+          : highlights.isError ? <HubLoadError title="Highlights could not be refreshed" message={highlights.data ? "Showing the last loaded highlights. Their update times are shown on each card." : "Highlights could not be loaded. This does not mean there are no qualifying entries."} onRetry={() => void highlights.refetch()} retrying={highlights.isFetching} />
+          : highlights.isFetching && !highlights.data ? <p role="status">Loading highlights…</p> : undefined}
         loading={loading || stale} error={loadError}
         onOpenCohort={(name, cohort) => navigate(instanceHref(name, cohort))}
         renderInstance={(name) => !summary.data ? <LoadingInstanceHub error={loadError} instanceName={name} tab={tab} onTab={chooseTab} tabHref={tabHref}

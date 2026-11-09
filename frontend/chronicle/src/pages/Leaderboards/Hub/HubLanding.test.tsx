@@ -114,3 +114,48 @@ describe("live Hub landing", () => {
     expect(unavailable).not.toContain("Fastest full clear")
   })
 })
+
+describe("persisted highlight status", () => {
+  const snapshot = { instance_name: "Molten Core", difficulty_name: "Normal", max_players: 40,
+    configuration_fingerprint: "policy", refreshed_at: "2026-11-09T12:00:00Z" }
+  it("distinguishes unprepared from published empty without losing configured cards", () => {
+    const pending = render({ landingSnapshots: [{ ...snapshot, status: "not_prepared" }] })
+    expect(pending).toContain("Highlights awaiting refresh")
+    expect(pending).not.toContain("No qualifying highlights")
+    const empty = render({ landingSnapshots: [{ ...snapshot, status: "empty" }] })
+    expect(empty).toContain("No qualifying highlights")
+    expect(empty).toContain('dateTime="2026-11-09T12:00:00Z"')
+  })
+  it("labels stale published snapshots", () => {
+    expect(render({ landingSnapshots: [{ ...snapshot, status: "stale" }] })).toContain("Stale highlights")
+  })
+  it("keeps the realm selector and cards but does not claim empty results on selection or transport errors", () => {
+    const markup = render({ landingBlocked: true, landingNotice: <p>Choose All realms or one realm to view highlights</p> })
+    expect(markup).toContain("Realm: Nordanaar")
+    expect(markup).toContain("Choose All realms or one realm")
+    expect(markup).not.toContain("No published highlights")
+    expect(markup).not.toContain("Highlights awaiting refresh")
+  })
+})
+
+describe("all persisted card tabs", () => {
+  const snapshot = { instance_name: "Molten Core", difficulty_name: "Normal", max_players: 40, configuration_fingerprint: "policy", refreshed_at: "2026-11-09T12:00:00Z" }
+  const emptyPreview = { ...snapshot, player: { peak: [], ranked_mastery: [], renown: [] }, guild: { peak: [], ranked_mastery: [], renown: [] }, speedruns: [], performances: [], statistics: [] }
+  for (const tab of ["overview", "ratings", "speedruns", "performances", "statistics"] as const) {
+    it(`${tab} distinguishes preparing, empty, and stale policy`, () => {
+      expect(render({ tab, landingSnapshots: [{ ...snapshot, status: "not_prepared" }] })).toContain("Highlights awaiting refresh")
+      const rebuilding = render({ tab, landingSnapshots: [{ ...snapshot, status: "rebuilding" }] })
+      expect(rebuilding).toContain("Highlights awaiting refresh")
+      expect(rebuilding).not.toContain("No published highlights")
+      expect(rebuilding).not.toContain("No qualifying")
+      expect(render({ tab, landingSnapshots: [{ ...snapshot, status: "empty" }], landingPreviews: [emptyPreview] })).toContain("No qualifying highlights")
+      const withheld = render({ tab, landingSnapshots: [{ ...snapshot, status: "stale" }] })
+      expect(withheld).toContain("Stale highlights withheld until refresh")
+      expect(withheld).not.toContain("No qualifying")
+      const agedEmpty = render({ tab, landingSnapshots: [{ ...snapshot, status: "stale" }], landingPreviews: [emptyPreview] })
+      expect(agedEmpty).toContain("Stale highlights")
+      expect(agedEmpty).toContain("2026-11-09T12:00:00Z")
+      expect(agedEmpty).not.toContain("withheld")
+    })
+  }
+})

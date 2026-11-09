@@ -756,6 +756,7 @@ type sqlcQuerier interface {
 	LandingPositionalInstances(ctx context.Context, limitCount int32) ([]LandingPositionalInstancesRow, error)
 	// Shared database clock for operational diagnostics; leases never use Go time.
 	LeaderboardD2Clock(ctx context.Context) (pgtype.Timestamptz, error)
+	LeaderboardHighlightRealms(ctx context.Context, tenantID uuid.UUID) ([]uuid.UUID, error)
 	LeaderboardMetricOperationProgress(ctx context.Context, tenantID uuid.UUID) ([]LeaderboardMetricOperationProgressRow, error)
 	LeaderboardOperationBacklog(ctx context.Context, tenantID uuid.UUID) (LeaderboardOperationBacklogRow, error)
 	LeaderboardQueueDiagnostics(ctx context.Context, tenantID uuid.UUID) ([]LeaderboardQueueDiagnosticsRow, error)
@@ -843,6 +844,7 @@ type sqlcQuerier interface {
 	ListInstancesMissingTimeParseScores(ctx context.Context, arg ListInstancesMissingTimeParseScoresParams) ([]ListInstancesMissingTimeParseScoresRow, error)
 	ListItemPricingRealms(ctx context.Context) ([]ListItemPricingRealmsRow, error)
 	ListLeaderboardDirtyRuns(ctx context.Context, tenantID uuid.UUID) ([]LeaderboardDirtyRun, error)
+	ListLeaderboardHighlights(ctx context.Context, arg ListLeaderboardHighlightsParams) ([]LeaderboardHighlight, error)
 	ListLeaderboardLayers(ctx context.Context) ([]LeaderboardLayer, error)
 	ListLeaderboardMetricTenants(ctx context.Context, afterID uuid.UUID) ([]uuid.UUID, error)
 	ListLeaderboardOperations(ctx context.Context, tenantID uuid.UUID) ([]LeaderboardOperation, error)
@@ -1038,6 +1040,7 @@ type sqlcQuerier interface {
 	PublishLeaderboardGuildClearBenchmark(ctx context.Context, arg []PublishLeaderboardGuildClearBenchmarkParams) *PublishLeaderboardGuildClearBenchmarkBatchResults
 	PublishLeaderboardGuildClearSubject(ctx context.Context, arg []PublishLeaderboardGuildClearSubjectParams) *PublishLeaderboardGuildClearSubjectBatchResults
 	PublishLeaderboardGuildRenownCount(ctx context.Context, arg []PublishLeaderboardGuildRenownCountParams) *PublishLeaderboardGuildRenownCountBatchResults
+	PublishLeaderboardHighlights(ctx context.Context, arg PublishLeaderboardHighlightsParams) error
 	PublishLeaderboardPlayerBossBenchmark(ctx context.Context, arg []PublishLeaderboardPlayerBossBenchmarkParams) *PublishLeaderboardPlayerBossBenchmarkBatchResults
 	PublishLeaderboardPlayerBossSubject(ctx context.Context, arg []PublishLeaderboardPlayerBossSubjectParams) *PublishLeaderboardPlayerBossSubjectBatchResults
 	PublishLeaderboardPlayerRenownCount(ctx context.Context, arg []PublishLeaderboardPlayerRenownCountParams) *PublishLeaderboardPlayerRenownCountBatchResults

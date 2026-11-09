@@ -2193,6 +2193,18 @@ type LeaderboardGuildRenownFact struct {
 	ObservedAt        pgtype.Timestamptz `db:"observed_at" json:"observed_at"`
 }
 
+type LeaderboardHighlight struct {
+	TenantID                 uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	InstanceName             string             `db:"instance_name" json:"instance_name"`
+	DifficultyName           string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers               int16              `db:"max_players" json:"max_players"`
+	RealmScope               uuid.UUID          `db:"realm_scope" json:"realm_scope"`
+	ConfigurationFingerprint string             `db:"configuration_fingerprint" json:"configuration_fingerprint"`
+	Payload                  []byte             `db:"payload" json:"payload"`
+	RefreshStartedAt         pgtype.Timestamptz `db:"refresh_started_at" json:"refresh_started_at"`
+	RefreshedAt              pgtype.Timestamptz `db:"refreshed_at" json:"refreshed_at"`
+}
+
 type LeaderboardInstance struct {
 	InstanceName string `db:"instance_name" json:"instance_name"`
 }

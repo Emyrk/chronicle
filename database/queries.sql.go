@@ -13560,6 +13560,101 @@ func (q *sqlQuerier) ListInstanceRatingPlayerRenownFacts(ctx context.Context, ar
 	return items, nil
 }
 
+const leaderboardHighlightRealms = `-- name: LeaderboardHighlightRealms :many
+SELECT r.id FROM wow_server_realms r JOIN wow_servers s ON s.id=r.server_id WHERE s.tenant_id= $1::uuid ORDER BY r.id
+`
+
+func (q *sqlQuerier) LeaderboardHighlightRealms(ctx context.Context, tenantID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, leaderboardHighlightRealms, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLeaderboardHighlights = `-- name: ListLeaderboardHighlights :many
+SELECT tenant_id, instance_name, difficulty_name, max_players, realm_scope, configuration_fingerprint, payload, refresh_started_at, refreshed_at FROM leaderboard_highlights WHERE tenant_id= $1::uuid AND realm_scope= $2::uuid ORDER BY instance_name,difficulty_name,max_players LIMIT 256
+`
+
+type ListLeaderboardHighlightsParams struct {
+	TenantID   uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RealmScope uuid.UUID `db:"realm_scope" json:"realm_scope"`
+}
+
+func (q *sqlQuerier) ListLeaderboardHighlights(ctx context.Context, arg ListLeaderboardHighlightsParams) ([]LeaderboardHighlight, error) {
+	rows, err := q.db.Query(ctx, listLeaderboardHighlights, arg.TenantID, arg.RealmScope)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LeaderboardHighlight
+	for rows.Next() {
+		var i LeaderboardHighlight
+		if err := rows.Scan(
+			&i.TenantID,
+			&i.InstanceName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.RealmScope,
+			&i.ConfigurationFingerprint,
+			&i.Payload,
+			&i.RefreshStartedAt,
+			&i.RefreshedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const publishLeaderboardHighlights = `-- name: PublishLeaderboardHighlights :exec
+INSERT INTO leaderboard_highlights(tenant_id,instance_name,difficulty_name,max_players,realm_scope,configuration_fingerprint,payload,refresh_started_at)
+VALUES ($1::uuid,$2::text,$3::text,$4::smallint,$5::uuid,$6::text,$7::jsonb,$8::timestamptz)
+ON CONFLICT(tenant_id,instance_name,difficulty_name,max_players,realm_scope) DO UPDATE SET configuration_fingerprint=EXCLUDED.configuration_fingerprint,payload=EXCLUDED.payload,refresh_started_at=EXCLUDED.refresh_started_at,refreshed_at=clock_timestamp()
+WHERE leaderboard_highlights.refresh_started_at<=EXCLUDED.refresh_started_at
+`
+
+type PublishLeaderboardHighlightsParams struct {
+	TenantID                 uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	InstanceName             string             `db:"instance_name" json:"instance_name"`
+	DifficultyName           string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers               int16              `db:"max_players" json:"max_players"`
+	RealmScope               uuid.UUID          `db:"realm_scope" json:"realm_scope"`
+	ConfigurationFingerprint string             `db:"configuration_fingerprint" json:"configuration_fingerprint"`
+	Payload                  []byte             `db:"payload" json:"payload"`
+	RefreshStartedAt         pgtype.Timestamptz `db:"refresh_started_at" json:"refresh_started_at"`
+}
+
+func (q *sqlQuerier) PublishLeaderboardHighlights(ctx context.Context, arg PublishLeaderboardHighlightsParams) error {
+	_, err := q.db.Exec(ctx, publishLeaderboardHighlights,
+		arg.TenantID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.RealmScope,
+		arg.ConfigurationFingerprint,
+		arg.Payload,
+		arg.RefreshStartedAt,
+	)
+	return err
+}
+
 const leaderboardRunKeysForIDs = `-- name: LeaderboardRunKeysForIDs :many
 WITH keys AS (
  SELECT s.tenant_id, COALESCE(li.duplicate_group_id,li.id) AS run_id
@@ -23490,24 +23585,25 @@ JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NO
         WHEN cardinality($3 :: text[]) > 0 THEN edr.encounter_name = ANY($3 :: text[])
         ELSE true
     END
+    AND (COALESCE(cardinality($4::uuid[]),0)=0 OR edr.realm_id=ANY($4::uuid[]))
     AND CASE
-        WHEN cardinality($4 :: text[]) > 0 THEN edr.realm_name = ANY($4 :: text[])
+        WHEN cardinality($5 :: text[]) > 0 THEN edr.realm_name = ANY($5 :: text[])
         ELSE true
     END
     AND CASE
-        WHEN $5 :: text != '' THEN edr.player_role = $5
+        WHEN $6 :: text != '' THEN edr.player_role = $6
         ELSE true
     END
     AND CASE
-        WHEN $6 :: bigint > 0 THEN edr.killed_at >= now() - make_interval(days => $6::int)
+        WHEN $7 :: bigint > 0 THEN edr.killed_at >= now() - make_interval(days => $7::int)
         ELSE true
     END
     AND CASE
-        WHEN cardinality($7 :: text[]) > 0 THEN edr.difficulty_name = ANY($7 :: text[])
+        WHEN cardinality($8 :: text[]) > 0 THEN edr.difficulty_name = ANY($8 :: text[])
         ELSE true
     END
     AND CASE
-        WHEN $8::boolean OR $9 :: smallint > 0 THEN edr.max_players = $9
+        WHEN $9::boolean OR $10 :: smallint > 0 THEN edr.max_players = $10
         ELSE true
     END
 ),
@@ -23523,7 +23619,7 @@ ranking_rows AS (
         FROM filtered_rankings candidate
         WHERE candidate.encounter_id IS NULL
         ORDER BY candidate.player_guid, candidate.encounter_name, candidate.run_id,
-            (CASE WHEN $10 :: text = 'hps' THEN candidate.hps ELSE candidate.dps END) DESC,
+            (CASE WHEN $11 :: text = 'hps' THEN candidate.hps ELSE candidate.dps END) DESC,
             candidate.killed_at DESC,
             candidate.id ASC
     ) trash
@@ -23541,7 +23637,7 @@ per_run AS (
         d.player_class,
         d.player_spec,
         d.player_sub_spec,
-        (CASE WHEN $10 :: text = 'hps'
+        (CASE WHEN $11 :: text = 'hps'
             THEN SUM(d.healing_done + d.absorbed_done)::double precision / NULLIF(SUM(d.duration_secs), 0)
             ELSE SUM(d.damage_done)::double precision / NULLIF(SUM(d.duration_secs), 0)
         END)::double precision AS metric_value
@@ -23590,16 +23686,17 @@ ORDER BY s.median_dps DESC
 `
 
 type RankingsBoxPlotStatsParams struct {
-	GroupByClass     bool     `db:"group_by_class" json:"group_by_class"`
-	InstanceNames    []string `db:"instance_names" json:"instance_names"`
-	EncounterNames   []string `db:"encounter_names" json:"encounter_names"`
-	RealmNames       []string `db:"realm_names" json:"realm_names"`
-	Role             string   `db:"role" json:"role"`
-	SinceDays        int64    `db:"since_days" json:"since_days"`
-	DifficultyNames  []string `db:"difficulty_names" json:"difficulty_names"`
-	ExactCohort      bool     `db:"exact_cohort" json:"exact_cohort"`
-	FilterMaxPlayers int16    `db:"filter_max_players" json:"filter_max_players"`
-	Metric           string   `db:"metric" json:"metric"`
+	GroupByClass     bool        `db:"group_by_class" json:"group_by_class"`
+	InstanceNames    []string    `db:"instance_names" json:"instance_names"`
+	EncounterNames   []string    `db:"encounter_names" json:"encounter_names"`
+	RealmIds         []uuid.UUID `db:"realm_ids" json:"realm_ids"`
+	RealmNames       []string    `db:"realm_names" json:"realm_names"`
+	Role             string      `db:"role" json:"role"`
+	SinceDays        int64       `db:"since_days" json:"since_days"`
+	DifficultyNames  []string    `db:"difficulty_names" json:"difficulty_names"`
+	ExactCohort      bool        `db:"exact_cohort" json:"exact_cohort"`
+	FilterMaxPlayers int16       `db:"filter_max_players" json:"filter_max_players"`
+	Metric           string      `db:"metric" json:"metric"`
 }
 
 type RankingsBoxPlotStatsRow struct {
@@ -23628,6 +23725,7 @@ func (q *sqlQuerier) RankingsBoxPlotStats(ctx context.Context, arg RankingsBoxPl
 		arg.GroupByClass,
 		arg.InstanceNames,
 		arg.EncounterNames,
+		arg.RealmIds,
 		arg.RealmNames,
 		arg.Role,
 		arg.SinceDays,
@@ -24356,8 +24454,9 @@ JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NO
         WHEN cardinality($7 :: text[]) > 0 THEN edr.encounter_name = ANY($7 :: text[])
         ELSE true
     END
+    AND (COALESCE(cardinality($8::uuid[]),0)=0 OR edr.realm_id=ANY($8::uuid[]))
     AND CASE
-        WHEN cardinality($8 :: text[]) > 0 THEN edr.realm_name = ANY($8 :: text[])
+        WHEN cardinality($9 :: text[]) > 0 THEN edr.realm_name = ANY($9 :: text[])
         ELSE true
     END
     AND CASE
@@ -24377,19 +24476,19 @@ JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NO
         ELSE true
     END
     AND CASE
-        WHEN $9 :: bigint > 0 THEN edr.killed_at >= now() - make_interval(days => $9::int)
+        WHEN $10 :: bigint > 0 THEN edr.killed_at >= now() - make_interval(days => $10::int)
         ELSE true
     END
     AND CASE
-        WHEN $10 :: bool THEN edr.player_class != 'Unknown' AND edr.player_spec != 'Unknown'
+        WHEN $11 :: bool THEN edr.player_class != 'Unknown' AND edr.player_spec != 'Unknown'
         ELSE true
     END
     AND CASE
-        WHEN cardinality($11 :: text[]) > 0 THEN edr.difficulty_name = ANY($11 :: text[])
+        WHEN cardinality($12 :: text[]) > 0 THEN edr.difficulty_name = ANY($12 :: text[])
         ELSE true
     END
     AND CASE
-        WHEN $12::boolean OR $13 :: smallint > 0 THEN edr.max_players = $13
+        WHEN $13::boolean OR $14 :: smallint > 0 THEN edr.max_players = $14
         ELSE true
     END
     AND (CASE WHEN $1 :: text = 'hps' THEN edr.hps ELSE edr.dps END) > 0
@@ -24461,8 +24560,8 @@ paged AS (
     WHERE (CASE WHEN $1 :: text = 'hps' THEN bpp.hps ELSE bpp.dps END) > 0
     ORDER BY (CASE WHEN $1 :: text = 'hps' THEN bpp.hps ELSE bpp.dps END) DESC,
         bpp.player_guid ASC
-    LIMIT $15::bigint
-    OFFSET $14::bigint
+    LIMIT $16::bigint
+    OFFSET $15::bigint
 ),
 hydration_rows AS (
     SELECT
@@ -24559,21 +24658,22 @@ ORDER BY (CASE WHEN $1 :: text = 'hps' THEN p.hps ELSE p.dps END) DESC,
 `
 
 type RankingsLeaderboardParams struct {
-	Metric           string   `db:"metric" json:"metric"`
-	Class            string   `db:"class" json:"class"`
-	Spec             string   `db:"spec" json:"spec"`
-	SubSpec          string   `db:"sub_spec" json:"sub_spec"`
-	Role             string   `db:"role" json:"role"`
-	InstanceNames    []string `db:"instance_names" json:"instance_names"`
-	EncounterNames   []string `db:"encounter_names" json:"encounter_names"`
-	RealmNames       []string `db:"realm_names" json:"realm_names"`
-	SinceDays        int64    `db:"since_days" json:"since_days"`
-	HideUnknowns     bool     `db:"hide_unknowns" json:"hide_unknowns"`
-	DifficultyNames  []string `db:"difficulty_names" json:"difficulty_names"`
-	ExactCohort      bool     `db:"exact_cohort" json:"exact_cohort"`
-	FilterMaxPlayers int16    `db:"filter_max_players" json:"filter_max_players"`
-	QueryOffset      int64    `db:"query_offset" json:"query_offset"`
-	QueryLimit       int64    `db:"query_limit" json:"query_limit"`
+	Metric           string      `db:"metric" json:"metric"`
+	Class            string      `db:"class" json:"class"`
+	Spec             string      `db:"spec" json:"spec"`
+	SubSpec          string      `db:"sub_spec" json:"sub_spec"`
+	Role             string      `db:"role" json:"role"`
+	InstanceNames    []string    `db:"instance_names" json:"instance_names"`
+	EncounterNames   []string    `db:"encounter_names" json:"encounter_names"`
+	RealmIds         []uuid.UUID `db:"realm_ids" json:"realm_ids"`
+	RealmNames       []string    `db:"realm_names" json:"realm_names"`
+	SinceDays        int64       `db:"since_days" json:"since_days"`
+	HideUnknowns     bool        `db:"hide_unknowns" json:"hide_unknowns"`
+	DifficultyNames  []string    `db:"difficulty_names" json:"difficulty_names"`
+	ExactCohort      bool        `db:"exact_cohort" json:"exact_cohort"`
+	FilterMaxPlayers int16       `db:"filter_max_players" json:"filter_max_players"`
+	QueryOffset      int64       `db:"query_offset" json:"query_offset"`
+	QueryLimit       int64       `db:"query_limit" json:"query_limit"`
 }
 
 type RankingsLeaderboardRow struct {
@@ -24633,6 +24733,7 @@ func (q *sqlQuerier) RankingsLeaderboard(ctx context.Context, arg RankingsLeader
 		arg.Role,
 		arg.InstanceNames,
 		arg.EncounterNames,
+		arg.RealmIds,
 		arg.RealmNames,
 		arg.SinceDays,
 		arg.HideUnknowns,
@@ -28380,28 +28481,29 @@ JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
       AND sr.qualified = true
       AND (NOT $5::boolean OR sr.boss_to_boss_duration_ms IS NOT NULL)
       AND sr.guild_id IS NOT NULL
+      AND (COALESCE(cardinality($7::uuid[]),0)=0 OR li.realm_id=ANY($7::uuid[]))
       AND CASE
-          WHEN cardinality($7 :: text[]) > 0 THEN
-              COALESCE(wsr.name, '') = ANY($7 :: text[])
+          WHEN cardinality($8 :: text[]) > 0 THEN
+              COALESCE(wsr.name, '') = ANY($8 :: text[])
           ELSE true
       END
       AND CASE
-          WHEN $8 :: text != '' THEN sr.guild_id = $8 :: uuid
+          WHEN $9 :: text != '' THEN sr.guild_id = $9 :: uuid
           ELSE true
       END
       AND CASE
-          WHEN $9 :: bigint > 0 THEN
+          WHEN $10 :: bigint > 0 THEN
               CASE WHEN $5::boolean
                   THEN sr.boss_to_boss_completion_time
                   ELSE COALESCE(sr.ranked_completion_time, sr.completion_time)
-              END >= now() - make_interval(days => $9::int)
+              END >= now() - make_interval(days => $10::int)
           ELSE true
       END
       AND CASE
-          WHEN $10 :: boolean THEN li.difficulty_name = $11 :: text
+          WHEN $11 :: boolean THEN li.difficulty_name = $12 :: text
           ELSE true
       END
-      AND (NOT $12::boolean OR li.max_players = $13::smallint)
+      AND (NOT $13::boolean OR li.max_players = $14::smallint)
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
         CASE WHEN $5::boolean
             THEN sr.boss_to_boss_duration_ms
@@ -28410,11 +28512,11 @@ JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
 ),
 best AS (
     SELECT DISTINCT ON (
-        CASE WHEN $8 :: text = '' THEN guild_id END
+        CASE WHEN $9 :: text = '' THEN guild_id END
     ) instance_id, instance_name, difficulty_name, guild_id, duration_ms, start_time, completion_time, qualified, addon_version, hashed_slug, duplicate_group_id, parser_version, guild_name, realm_name, player_count, guild_logo_url, has_youtube_video, youtube_url
     FROM deduped
     ORDER BY
-        CASE WHEN $8 :: text = '' THEN guild_id END,
+        CASE WHEN $9 :: text = '' THEN guild_id END,
         duration_ms ASC
 )
 SELECT instance_id, instance_name, difficulty_name, guild_id, duration_ms, start_time, completion_time, qualified, addon_version, hashed_slug, duplicate_group_id, parser_version, guild_name, realm_name, player_count, guild_logo_url, has_youtube_video, youtube_url FROM best
@@ -28426,19 +28528,20 @@ OFFSET $3::bigint
 `
 
 type SpeedrunLeaderboardParams struct {
-	MinPlayers               int64    `db:"min_players" json:"min_players"`
-	MaxPlayers               int64    `db:"max_players" json:"max_players"`
-	ResultOffset             int64    `db:"result_offset" json:"result_offset"`
-	ResultLimit              int64    `db:"result_limit" json:"result_limit"`
-	UseRankedTiming          bool     `db:"use_ranked_timing" json:"use_ranked_timing"`
-	InstanceName             string   `db:"instance_name" json:"instance_name"`
-	RealmNames               []string `db:"realm_names" json:"realm_names"`
-	GuildID                  string   `db:"guild_id" json:"guild_id"`
-	SinceDays                int64    `db:"since_days" json:"since_days"`
-	FilterDifficulty         bool     `db:"filter_difficulty" json:"filter_difficulty"`
-	DifficultyName           string   `db:"difficulty_name" json:"difficulty_name"`
-	FilterInstanceMaxPlayers bool     `db:"filter_instance_max_players" json:"filter_instance_max_players"`
-	InstanceMaxPlayers       int16    `db:"instance_max_players" json:"instance_max_players"`
+	MinPlayers               int64       `db:"min_players" json:"min_players"`
+	MaxPlayers               int64       `db:"max_players" json:"max_players"`
+	ResultOffset             int64       `db:"result_offset" json:"result_offset"`
+	ResultLimit              int64       `db:"result_limit" json:"result_limit"`
+	UseRankedTiming          bool        `db:"use_ranked_timing" json:"use_ranked_timing"`
+	InstanceName             string      `db:"instance_name" json:"instance_name"`
+	RealmIds                 []uuid.UUID `db:"realm_ids" json:"realm_ids"`
+	RealmNames               []string    `db:"realm_names" json:"realm_names"`
+	GuildID                  string      `db:"guild_id" json:"guild_id"`
+	SinceDays                int64       `db:"since_days" json:"since_days"`
+	FilterDifficulty         bool        `db:"filter_difficulty" json:"filter_difficulty"`
+	DifficultyName           string      `db:"difficulty_name" json:"difficulty_name"`
+	FilterInstanceMaxPlayers bool        `db:"filter_instance_max_players" json:"filter_instance_max_players"`
+	InstanceMaxPlayers       int16       `db:"instance_max_players" json:"instance_max_players"`
 }
 
 type SpeedrunLeaderboardRow struct {
@@ -28479,6 +28582,7 @@ func (q *sqlQuerier) SpeedrunLeaderboard(ctx context.Context, arg SpeedrunLeader
 		arg.ResultLimit,
 		arg.UseRankedTiming,
 		arg.InstanceName,
+		arg.RealmIds,
 		arg.RealmNames,
 		arg.GuildID,
 		arg.SinceDays,
