@@ -226,6 +226,7 @@ export function MetricTabs({ view, onView, className }: { view: RatingView; onVi
             key={m}
             type="button"
             aria-pressed={active}
+            title={t.question}
             onClick={() => onView(m)}
             style={
               active

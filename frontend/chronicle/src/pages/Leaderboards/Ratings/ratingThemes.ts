@@ -10,6 +10,8 @@ export interface MetricTheme {
   /** Accent used sparingly so the active metric is recognizable at a glance. */
   accent: string
   tagline: string
+  /** The question this rating answers, shown on the leaderboard and the /ratings explainer. */
+  question?: string
   format: (score: number) => string
 }
 
@@ -26,6 +28,7 @@ export const METRIC_THEMES: Record<RatingView, MetricTheme> = {
     icon: Flame,
     accent: "#e2b25a",
     tagline: "One best kill, scored against the spec record.",
+    question: "What is the best I have ever done?",
     format: (v) => v.toFixed(1),
   },
   mastery: {
@@ -33,6 +36,7 @@ export const METRIC_THEMES: Record<RatingView, MetricTheme> = {
     icon: ShieldCheck,
     accent: "#72aac6",
     tagline: "Repeatable strength, weighted by how much evidence backs it.",
+    question: "What performance is to be expected of this player?",
     format: (v) => v.toFixed(1),
   },
   renown: {
@@ -40,6 +44,7 @@ export const METRIC_THEMES: Record<RatingView, MetricTheme> = {
     icon: Crown,
     accent: "#b394e6",
     tagline: "Kills and clears witnessed. History, not skill.",
+    question: "How much content has this player done?",
     format: (v) => Math.round(v).toLocaleString(),
   },
 }

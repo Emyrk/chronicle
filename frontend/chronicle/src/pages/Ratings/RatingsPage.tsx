@@ -45,6 +45,15 @@ const PeakIcon = METRIC_THEMES.peak.icon
 const MasteryIcon = METRIC_THEMES.mastery.icon
 const RenownIcon = METRIC_THEMES.renown.icon
 
+/** The question each number answers. Ratings share their wording with the leaderboard. */
+const QUESTION: Record<Lens, string> = {
+  performance: "What did I do on this fight?",
+  parse: "How well did I do on this fight compared to my peers?",
+  peak: METRIC_THEMES.peak.question!,
+  mastery: METRIC_THEMES.mastery.question!,
+  renown: METRIC_THEMES.renown.question!,
+}
+
 type Lens = "performance" | "parse" | "peak" | "mastery" | "renown"
 type Source = "example" | "mine"
 
@@ -315,10 +324,11 @@ function MyDataStatus({ my }: { my: MyData }) {
 
 function Overview() {
   const metrics = [
-    { icon: <BarChart3 className="h-5 w-5" />, title: "Performance", body: "Your raw DPS or HPS on one boss kill." },
+    { icon: <BarChart3 className="h-5 w-5" />, title: "Performance", question: QUESTION.performance, body: "Your raw DPS or HPS on one boss kill." },
     {
       icon: <Percent className="h-5 w-5" />,
       title: "Parse",
+      question: QUESTION.parse,
       body: "That performance scored 0–100 against kills from the 60 days before the raid.",
     },
   ]
@@ -327,18 +337,21 @@ function Overview() {
       icon: <PeakIcon className="h-5 w-5" />,
       accent: RATING_ACCENT.peak,
       title: "Peak",
+      question: QUESTION.peak,
       body: "Your best kill against the best kill ever recorded in your cohort.",
     },
     {
       icon: <MasteryIcon className="h-5 w-5" />,
       accent: RATING_ACCENT.mastery,
       title: "Mastery",
+      question: QUESTION.mastery,
       body: "How consistently you perform: your best kill, your typical kills, and your weaker kills, blended.",
     },
     {
       icon: <RenownIcon className="h-5 w-5" />,
       accent: RATING_ACCENT.renown,
       title: "Renown",
+      question: QUESTION.renown,
       body: "Points for every boss you've killed. It only goes up.",
     },
   ]
@@ -361,7 +374,7 @@ function Overview() {
   )
 }
 
-function OverviewCard({ icon, title, body, accent }: { icon: ReactNode; title: string; body: string; accent?: string }) {
+function OverviewCard({ icon, title, question, body, accent }: { icon: ReactNode; title: string; question: string; body: string; accent?: string }) {
   return (
     <div
       className="flex h-full flex-col rounded-lg border bg-background/40 p-3 md:row-start-2"
@@ -376,8 +389,18 @@ function OverviewCard({ icon, title, body, accent }: { icon: ReactNode; title: s
       <div className="font-semibold" style={accent ? { color: accent } : undefined}>
         {title}
       </div>
+      <p className="mb-1 text-sm font-medium italic text-foreground/85">{question}</p>
       <p className="text-sm text-muted-foreground">{body}</p>
     </div>
+  )
+}
+
+function LensQuestion({ lens }: { lens: Lens }) {
+  const accent = lens === "peak" || lens === "mastery" || lens === "renown" ? RATING_ACCENT[lens] : undefined
+  return (
+    <p className="mt-1 text-sm font-medium italic" style={accent ? { color: accent } : undefined}>
+      {QUESTION[lens]}
+    </p>
   )
 }
 
@@ -400,6 +423,7 @@ function LensExplanation({
       return (
         <div>
           <h3 className="text-xl font-semibold">Performance</h3>
+          <LensQuestion lens="performance" />
           <p className="mt-2 text-sm text-muted-foreground">
             The {unit} {dataset.example ? "" : "you "}actually did on each kill. Everything else on this page starts
             from these numbers.
@@ -414,6 +438,7 @@ function LensExplanation({
       return (
         <div>
           <h3 className="text-xl font-semibold">Parse</h3>
+          <LensQuestion lens="parse" />
           <p className="mt-2 text-sm text-muted-foreground">
             Each kill compared to similar kills from the 60 days before that raid. A parse tells you how one kill
             stacked up at the time.
@@ -431,6 +456,7 @@ function LensExplanation({
       return (
         <div>
           <h3 className="text-xl font-semibold">Peak</h3>
+          <LensQuestion lens="peak" />
           <p className="mt-2 text-sm text-muted-foreground">Your single best kill, against the benchmark.</p>
           <p className="mt-2 font-mono text-xs text-muted-foreground">
             100 × {fmtInt(rating.rawPeak)} ÷ {fmtInt(benchmark)}
@@ -443,6 +469,7 @@ function LensExplanation({
       return (
         <div>
           <h3 className="text-xl font-semibold">Mastery</h3>
+          <LensQuestion lens="mastery" />
           <p className="mt-2 text-sm text-muted-foreground">
             Sort your kills from worst to best. The worst 20% are ignored. The next 20% are your <strong>Floor</strong>,
             your best kill is your <strong>Peak</strong>, and everything between is your <strong>Form</strong>.
@@ -469,6 +496,7 @@ function LensExplanation({
       return (
         <div>
           <h3 className="text-xl font-semibold">Renown</h3>
+          <LensQuestion lens="renown" />
           <p className="mt-2 text-sm text-muted-foreground">
             Every boss has a Renown award. Each kill earns that award, however you performed. Harder bosses are worth
             more:{" "}

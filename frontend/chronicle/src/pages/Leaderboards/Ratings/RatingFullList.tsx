@@ -128,7 +128,9 @@ export function RatingFullList({
           </Emblem>
           <div className="min-w-0">
             <h2 className="truncate font-wow text-xl leading-tight">{title}</h2>
-            <p className="text-xs text-muted-foreground">{state && state.status !== "ready" ? "Published ratings" : live && livePage?.total === undefined ? "Published rankings" : `${total} ranked`}</p>
+            <p className="text-xs text-muted-foreground">{state && state.status !== "ready" ? "Published ratings" : live && livePage?.total === undefined ? "Published rankings" : `${total} ranked`}
+              {theme.question && <span className="hidden sm:inline"> · {theme.question}</span>}
+            </p>
           </div>
         </div>
         {toolbar}
