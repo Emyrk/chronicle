@@ -4,6 +4,7 @@ import type {
   LeaderboardV2Cohort,
   HubRatingBoard,
   LeaderboardV2Response,
+  RankingsInstanceSummary,
   RankingsLeaderboardResponse,
   SpeedrunLeaderboardEntry,
 } from "@/api/typesGenerated";
@@ -32,26 +33,47 @@ export function resolvedHubMetadata(
   request: HubSummaryRequest,
   realms: readonly { id: string; name: string }[],
   cohorts: readonly LeaderboardV2Cohort[],
+  publishedInstances?: readonly RankingsInstanceSummary[],
 ): ResolvedHubSummary {
   if (config.conflict) throw new Error(config.conflict);
   if (!config.tenant_id)
     throw new Error("Visit a specific server to see ratings");
+  const publishedByName = new Map<string, readonly RankingsInstanceSummary[]>();
+  for (const instance of publishedInstances ?? []) {
+    publishedByName.set(instance.instance_name, [
+      ...(publishedByName.get(instance.instance_name) ?? []),
+      instance,
+    ]);
+  }
   const instances = config.rows
     .filter((row) => row.kind === "instance")
     .flatMap((row) => {
       const variants = config.rows.filter(
         (v) => v.kind === "variant" && v.instance_name === row.instance_name,
       );
+      const published = publishedByName.get(row.instance_name) ?? [];
       return (
         variants.length ? variants : [{ difficulty_name: "", max_players: 0 }]
-      ).map((v) => ({
-        instance_name: row.instance_name,
-        difficulty_name: v.difficulty_name,
-        max_players: v.max_players,
-        category: "raid",
-        total_kills: 0,
-        top_players: [],
-      }));
+      ).map((v) => {
+        const matchingPublished = variants.length
+          ? published.filter(
+              (instance) =>
+                instance.difficulty_name === v.difficulty_name &&
+                instance.max_players === v.max_players,
+            )
+          : published;
+        return {
+          instance_name: row.instance_name,
+          difficulty_name: v.difficulty_name,
+          max_players: v.max_players,
+          category: matchingPublished[0]?.category || "raid",
+          total_kills: matchingPublished.reduce(
+            (total, instance) => total + instance.total_kills,
+            0,
+          ),
+          top_players: [],
+        };
+      });
     });
   const choices = instances.filter(
     (row) => row.instance_name === request.instanceName,
@@ -188,11 +210,18 @@ function overviewBoardURLs(
 export async function fetchResolvedHubSummary(
   request: HubSummaryRequest,
 ): Promise<ResolvedHubSummary> {
-  const [config, realms] = await Promise.all([
+  const [config, realms, publishedInstances] = await Promise.all([
     hubJSON<LeaderboardConfiguration>("/api/v1/leaderboard-configuration"),
     hubJSON<{ id: string; name: string }[]>("/api/v1/realms"),
+    hubJSON<RankingsInstanceSummary[]>("/api/v1/rankings/instances"),
   ]);
-  const metadata = resolvedHubMetadata(config, request, realms, []);
+  const metadata = resolvedHubMetadata(
+    config,
+    request,
+    realms,
+    [],
+    publishedInstances,
+  );
   if (!request.instanceName || !metadata.selected_cohort) return metadata;
   const p = new URLSearchParams({
     view: "cohorts",
@@ -203,7 +232,13 @@ export async function fetchResolvedHubSummary(
   const cohorts = await hubJSON<LeaderboardV2Cohort[]>(
     `/api/v1/leaderboards-v2?${p}`,
   );
-  const result = resolvedHubMetadata(config, request, realms, cohorts);
+  const result = resolvedHubMetadata(
+    config,
+    request,
+    realms,
+    cohorts,
+    publishedInstances,
+  );
   if (request.metadataOnly) return result;
   const board: {
     player: {

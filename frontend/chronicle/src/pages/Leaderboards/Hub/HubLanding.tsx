@@ -2,7 +2,7 @@ import type { LeaderboardHighlightSnapshot } from "@/api/typesGenerated"
 import { useState, type ReactNode } from "react"
 import { Link } from "react-router-dom"
 import type { HubLandingPreview, RankingsInstanceSummary, SupportedInstance } from "@/api/typesGenerated"
-import { AlertTriangle, RotateCw, Skull, Swords, Timer } from "lucide-react"
+import { AlertTriangle, ArrowRight, RotateCw, Skull, Swords, Timer } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { CLASS_CSS_VAR, CLASS_DISPLAY } from "@/pages/Rankings/classDisplay"
 import { InstanceCard } from "@/pages/Rankings/InstanceCard"
@@ -239,18 +239,24 @@ function HubLanding({
         })}
       </div>
     )
-    const raids = instances.filter((inst) => inst.category === "raid")
+    const published = instances.filter((inst) => inst.total_kills > 0)
+    const publishedNames = new Set(published.map((inst) => inst.instance_name))
+    const unavailable = [...new Set(instances
+      .filter((inst) => !publishedNames.has(inst.instance_name))
+      .map((inst) => inst.instance_name))]
+    const raids = published.filter((inst) => inst.category === "raid")
     if (supportedInstances) {
       raids.sort((left, right) =>
         compareByRaidProgression(left.instance_name, right.instance_name, supportedInstances),
       )
+      unavailable.sort((left, right) => compareByRaidProgression(left, right, supportedInstances))
     }
-    const dungeons = instances.filter((inst) => inst.category === "dungeon")
-    const other = instances.filter((inst) => inst.category !== "raid" && inst.category !== "dungeon")
+    const dungeons = published.filter((inst) => inst.category === "dungeon")
+    const other = published.filter((inst) => inst.category !== "raid" && inst.category !== "dungeon")
     return (
       <div className="mx-auto w-full max-w-[1920px] space-y-6 px-3 py-4 sm:px-4 sm:py-8">
         {landingNotice}
-        {instances.length === 0 && <p>No published instances yet.</p>}
+        {published.length === 0 && <p>No published instances yet.</p>}
         {raids.length > 0 && <section className="space-y-5">
           <h2 className="text-lg font-semibold text-muted-foreground">Raids</h2>
           <div className="space-y-3">{grid(raids)}</div>
@@ -262,6 +268,29 @@ function HubLanding({
         {other.length > 0 && <section className="space-y-3">
           <h2 className="text-lg font-semibold text-muted-foreground">Other instances</h2>
           {grid(other)}
+        </section>}
+        {unavailable.length > 0 && <section className="space-y-3 border-t pt-5">
+          <div>
+            <h2 className="text-sm font-semibold text-muted-foreground">Configured instances without rankings</h2>
+            <p className="mt-1 text-xs text-muted-foreground/70">Open an instance to view its configured encounters and rules.</p>
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {unavailable.map((name) => (
+              <div key={name} onClickCapture={instanceHref ? undefined : (event) => {
+                event.preventDefault()
+                onOpen(name)
+              }}>
+                <Link to={instanceHref?.(name) ?? "#"}
+                  className="group flex items-center gap-3 rounded-lg border border-dashed bg-card/30 px-3 py-2.5 text-muted-foreground/70 opacity-75 transition-colors hover:border-muted-foreground/40 hover:bg-card/50 hover:text-muted-foreground hover:opacity-100">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium">{name}</span>
+                    <span className="block text-[10px] tracking-wide uppercase">No rankings yet</span>
+                  </span>
+                  <ArrowRight className="size-3.5 shrink-0 opacity-50 transition-transform group-hover:translate-x-0.5 group-hover:opacity-80" />
+                </Link>
+              </div>
+            ))}
+          </div>
         </section>}
       </div>
     )
