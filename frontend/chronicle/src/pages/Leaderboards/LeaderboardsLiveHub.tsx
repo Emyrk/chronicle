@@ -48,9 +48,7 @@ export function LeaderboardsLiveHub() {
   const realm = activeRealm?.name ?? ALL_REALMS
   const names = [...new Set((summary.data?.instances ?? []).map((row) => row.instance_name))]
   const choose = (key: "realm_ids" | "encounters", value?: string) => setParams(hubParams(params, key, value))
-  const chooseInstance = (next?: string) => navigate(hubPath(tab, instance === next ? params : hubInstanceParams(params), next))
-  // Each tab is its own path; the query (bosses, realm, cohort) carries over.
-  const chooseTab = (next: ReturnType<typeof v2Selection>["tab"]) => {
+  const tabParams = (next: ReturnType<typeof v2Selection>["tab"]) => {
     const updated = new URLSearchParams(params)
     // Trash is a Performances encounter only.
     if (next !== "performances" && encounters.includes("Trash")) {
@@ -59,8 +57,21 @@ export function LeaderboardsLiveHub() {
       else updated.delete("encounters")
       updated.delete("encounter")
     }
-    navigate(hubPath(next, updated, instance))
+    return updated
   }
+  const tabHref = (next: ReturnType<typeof v2Selection>["tab"]) => hubPath(next, tabParams(next), instance)
+  const instanceHref = (next: string, cohort?: { difficulty: string; maxPlayers: number }) => {
+    const updated = instance === next ? new URLSearchParams(params) : hubInstanceParams(params)
+    if (cohort) {
+      updated.set("difficulty", cohort.difficulty)
+      updated.set("size", String(cohort.maxPlayers))
+    }
+    return hubPath(tab, updated, next)
+  }
+  const allInstancesHref = hubPath(tab, hubInstanceParams(params))
+  const chooseInstance = (next?: string) => navigate(next ? instanceHref(next) : allInstancesHref)
+  // Each tab is its own path; the query (bosses, realm, cohort) carries over.
+  const chooseTab = (next: ReturnType<typeof v2Selection>["tab"]) => navigate(tabHref(next))
   if (params.get("tab") === "speedrun" || params.get("tab") === "leaderboard") return <Navigate to={legacyLeaderboardsTarget(params)} replace />
   // Older links put the instance and/or tab in the query. Rewrite both into path segments.
   if (params.has("instance") || params.has("tab")) {
@@ -81,18 +92,14 @@ export function LeaderboardsLiveHub() {
     <div className="min-w-0 flex-1">
       <LeaderboardMaintenanceNotice tenantID={siteConfig?.tenant?.id} />
       <LeaderboardsHubApp instance={instance ?? undefined} onInstance={chooseInstance}
+        instanceHref={instanceHref} tabHref={tabHref} allInstancesHref={allInstancesHref}
         tab={tab} onTab={chooseTab} realm={realm} onRealm={(name) => choose("realm_ids", available.find((row) => row.name === name)?.id)}
         realms={[ALL_REALMS, ...available.map((row) => row.name)]} instances={summary.data?.instances ?? []} landingPreviews={summary.data?.landing_previews}
         loading={loading || stale} error={loadError}
-        onOpenCohort={(name, cohort) => {
-          // A card is one difficulty/size: open the instance on it.
-          const next = hubInstanceParams(params)
-          next.set("difficulty", cohort.difficulty)
-          next.set("size", String(cohort.maxPlayers))
-          navigate(hubPath(tab, next, name))
-        }}
-        renderInstance={(name) => !summary.data ? <LoadingInstanceHub error={loadError} instanceName={name} tab={tab} onTab={chooseTab} realm={realm} onInstance={() => chooseInstance()} /> : <LiveInstanceHub instanceName={name} names={names} summary={summary.data!} stale={stale} realm={realm}
-          realmIDs={selectedRealmIDs} encounters={encounters} tab={tab}
+        onOpenCohort={(name, cohort) => navigate(instanceHref(name, cohort))}
+        renderInstance={(name) => !summary.data ? <LoadingInstanceHub error={loadError} instanceName={name} tab={tab} onTab={chooseTab} tabHref={tabHref}
+          allInstancesHref={allInstancesHref} realm={realm} onInstance={() => chooseInstance()} /> : <LiveInstanceHub instanceName={name} names={names} summary={summary.data!} stale={stale} realm={realm}
+          realmIDs={selectedRealmIDs} encounters={encounters} tab={tab} tabHref={tabHref} allInstancesHref={allInstancesHref}
           onInstance={chooseInstance} onTab={chooseTab}
           onRealm={(name) => choose("realm_ids", available.find((row) => row.name === name)?.id)}
           difficulty={params.get("difficulty")} size={params.get("size")}
@@ -105,8 +112,9 @@ export function LeaderboardsLiveHub() {
 
 /** The instance page's frame while its summary loads: every summary card shows its skeleton rows.
  * With an error (the first load failed) the frame stays and the content is that error. */
-function LoadingInstanceHub({ instanceName, tab, onTab, realm, onInstance, error }: {
+function LoadingInstanceHub({ instanceName, tab, onTab, tabHref, allInstancesHref, realm, onInstance, error }: {
   instanceName: string; tab: ReturnType<typeof v2Selection>["tab"]; onTab: (tab: ReturnType<typeof v2Selection>["tab"]) => void
+  tabHref: (tab: ReturnType<typeof v2Selection>["tab"]) => string; allInstancesHref: string
   realm: string; onInstance: () => void; error?: ReactNode
 }) {
   const live = {
@@ -114,7 +122,8 @@ function LoadingInstanceHub({ instanceName, tab, onTab, realm, onInstance, error
     renderOverview: (context: HubLiveTabContext) => error ?? <LoadingContent context={context} overview />,
     renderTab: (context: HubLiveTabContext) => error ?? <LoadingContent context={context} />,
   }
-  return <LeaderboardHub live={live} instanceName={instanceName} onAllInstances={onInstance} tab={tab} onTab={onTab} realm={realm} onRealm={() => {}} />
+  return <LeaderboardHub live={live} instanceName={instanceName} onAllInstances={onInstance} allInstancesHref={allInstancesHref}
+    tab={tab} onTab={onTab} tabHref={tabHref} realm={realm} onRealm={() => {}} />
 }
 
 /** A tab's or the Overview's skeleton rows while the page summary loads. */
@@ -125,9 +134,10 @@ function LoadingContent({ context, overview = false }: { context: HubLiveTabCont
   return context.tab === "ratings" ? <BoardSkeleton /> : <div className="overflow-hidden rounded-xl border bg-card"><SkeletonRows rows={10} /></div>
 }
 
-function LiveInstanceHub({ instanceName, names, summary, stale, realm, realmIDs, encounters, tab, difficulty, size, onInstance, onTab, onRealm, onCohort, onEncounters }: {
+function LiveInstanceHub({ instanceName, names, summary, stale, realm, realmIDs, encounters, tab, tabHref, allInstancesHref, difficulty, size, onInstance, onTab, onRealm, onCohort, onEncounters }: {
   instanceName: string; names: string[]; summary: HubSummary; stale: boolean; realm: string; realmIDs: string[]; encounters: readonly string[]
-  tab: ReturnType<typeof v2Selection>["tab"]; difficulty: string | null; size: string | null
+  tab: ReturnType<typeof v2Selection>["tab"]; tabHref: (tab: ReturnType<typeof v2Selection>["tab"]) => string; allInstancesHref: string
+  difficulty: string | null; size: string | null
   onInstance: (name?: string) => void; onTab: (tab: ReturnType<typeof v2Selection>["tab"]) => void
   onRealm: (name: string) => void; onCohort: (difficulty: string, size: string) => void; onEncounters: (bosses: readonly string[]) => void
 }) {
@@ -165,8 +175,8 @@ function LiveInstanceHub({ instanceName, names, summary, stale, realm, realmIDs,
     renderOverview: (context: HubLiveTabContext) => <LiveHubContent context={context} summary={summary} stale={stale} realmName={realmName} realmIDs={realmIDs} cohort={cohort} bosses={bosses} overview />,
     renderTab: (context: HubLiveTabContext) => <LiveHubContent context={context} summary={summary} stale={stale} realmName={realmName} realmIDs={realmIDs} cohort={cohort} bosses={bosses} />,
   }
-  return <LeaderboardHub live={live} instanceName={instanceName} instances={names} onAllInstances={() => onInstance()}
-    onSwitchInstance={(next) => onInstance(next)} tab={tab} onTab={onTab} realm={realm} onRealm={onRealm}
+  return <LeaderboardHub live={live} instanceName={instanceName} instances={names} onAllInstances={() => onInstance()} allInstancesHref={allInstancesHref}
+    onSwitchInstance={(next) => onInstance(next)} tab={tab} onTab={onTab} tabHref={tabHref} realm={realm} onRealm={onRealm}
     initialBosses={chosen.length ? chosen : undefined} />
 }
 

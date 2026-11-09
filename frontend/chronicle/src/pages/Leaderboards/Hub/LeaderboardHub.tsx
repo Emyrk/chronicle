@@ -1,5 +1,6 @@
 import { Fragment, useState, type ReactNode } from "react"
 import { createPortal } from "react-dom"
+import { Link } from "react-router-dom"
 import { ArrowRight, Check, ChevronDown, ChevronLeft, HeartPulse, Swords, Timer, PanelLeft, Globe, List, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -161,12 +162,16 @@ export interface LeaderboardHubProps {
   initialStatisticsView?: StatisticsView
   /** Back to the instance grid. */
   onAllInstances?: () => void
+  /** Crawlable URL back to the instance grid. */
+  allInstancesHref?: string
   /** Instances the title can switch to; switching keeps the tab and filters. */
   instances?: readonly string[]
   onSwitchInstance?: (instance: string) => void
   /** Controlled tab, so the choice carries between the instance grid and the instance. */
   tab?: HubTab
   onTab?: (tab: HubTab) => void
+  /** Crawlable URL for a leaderboard tab. */
+  tabHref?: (tab: HubTab) => string
   /** Controlled realm (the app shares it with the instance grid); otherwise the page keeps its own. */
   realm?: string
   onRealm?: (realm: string) => void
@@ -190,10 +195,12 @@ export function LeaderboardHub({
   initialRatingView = "overview",
   initialStatisticsView = "specs",
   onAllInstances,
+  allInstancesHref,
   instances,
   onSwitchInstance,
   tab: controlledTab,
   onTab,
+  tabHref,
   realm: controlledRealm,
   onRealm,
   initialRealm,
@@ -322,7 +329,16 @@ export function LeaderboardHub({
                   aria-label="Breadcrumb"
                   className="flex flex-wrap items-center gap-1.5 text-[11px] font-medium tracking-wider text-muted-foreground uppercase"
                 >
-                  {onAllInstances ? (
+                  {allInstancesHref ? (
+                    <Link
+                      to={allInstancesHref}
+                      title="All instances"
+                      className="-ml-0.5 inline-flex cursor-pointer items-center gap-1 uppercase transition-colors hover:text-foreground"
+                    >
+                      <ChevronLeft className="size-3.5" />
+                      Leaderboards
+                    </Link>
+                  ) : onAllInstances ? (
                     <button
                       type="button"
                       onClick={onAllInstances}
@@ -358,23 +374,20 @@ export function LeaderboardHub({
               </div>
             </div>
             <nav className="relative flex overflow-x-auto border-t border-white/5 px-2 sm:px-4" aria-label="Leaderboard section">
-              {TABS.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  aria-pressed={t.id === tab}
-                  onClick={() => setTab(t.id)}
-                  className={cn(
-                    "cursor-pointer flex shrink-0 items-center gap-2 border-b-2 px-3 py-3 text-sm font-medium transition-colors sm:px-4",
-                    t.id === tab
-                      ? "border-primary text-foreground"
-                      : "border-transparent text-muted-foreground hover:border-muted-foreground/30 hover:text-foreground",
-                  )}
-                >
-                  <t.icon className={cn("size-4", t.id === tab && "text-primary")} />
-                  {t.label}
-                </button>
-              ))}
+              {TABS.map((t) => {
+                const className = cn(
+                  "cursor-pointer flex shrink-0 items-center gap-2 border-b-2 px-3 py-3 text-sm font-medium transition-colors sm:px-4",
+                  t.id === tab
+                    ? "border-primary text-foreground"
+                    : "border-transparent text-muted-foreground hover:border-muted-foreground/30 hover:text-foreground",
+                )
+                const content = <><t.icon className={cn("size-4", t.id === tab && "text-primary")} />{t.label}</>
+                return tabHref ? (
+                  <Link key={t.id} to={tabHref(t.id)} aria-current={t.id === tab ? "page" : undefined} className={className}>{content}</Link>
+                ) : (
+                  <button key={t.id} type="button" aria-pressed={t.id === tab} onClick={() => setTab(t.id)} className={className}>{content}</button>
+                )
+              })}
             </nav>
             <ScopeBar
               scope={scope}
