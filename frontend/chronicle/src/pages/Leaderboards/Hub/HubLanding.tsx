@@ -222,7 +222,7 @@ function HubLanding({
           }}>
             <InstanceCard name={row.instance_name} to={instanceHref?.(row.instance_name, cohort) ?? "#"} badge={several ? cohortLabel(row) : undefined}>
               {landingBlocked ? null : landingSnapshots !== undefined && tab !== "parsing" ? <>
-                {!snapshot || snapshot.status === "not_prepared" || snapshot.status === "stale" && !preview ? <><UnavailableHighlight label="Highlights awaiting refresh" />{snapshot?.status === "stale" && <div className="text-[10px] text-muted-foreground">Stale highlights withheld until refresh</div>}</> : <>
+                {!snapshot || snapshot.status === "not_prepared" || snapshot.status === "rebuilding" || snapshot.status === "stale" && !preview ? <><UnavailableHighlight label="Highlights awaiting refresh" />{snapshot?.status === "stale" && <div className="text-[10px] text-muted-foreground">Stale highlights withheld until refresh</div>}</> : <>
                   {snapshot.status === "empty" ? <UnavailableHighlight label="No qualifying highlights" /> : <LiveCardBody tab={tab} preview={preview} />}
                   <div className="text-[10px] text-muted-foreground">
                     {snapshot.status === "stale" && "Stale highlights · "}

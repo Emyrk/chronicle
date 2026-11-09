@@ -144,6 +144,10 @@ describe("all persisted card tabs", () => {
   for (const tab of ["overview", "ratings", "speedruns", "performances", "statistics"] as const) {
     it(`${tab} distinguishes preparing, empty, and stale policy`, () => {
       expect(render({ tab, landingSnapshots: [{ ...snapshot, status: "not_prepared" }] })).toContain("Highlights awaiting refresh")
+      const rebuilding = render({ tab, landingSnapshots: [{ ...snapshot, status: "rebuilding" }] })
+      expect(rebuilding).toContain("Highlights awaiting refresh")
+      expect(rebuilding).not.toContain("No published highlights")
+      expect(rebuilding).not.toContain("No qualifying")
       expect(render({ tab, landingSnapshots: [{ ...snapshot, status: "empty" }], landingPreviews: [emptyPreview] })).toContain("No qualifying highlights")
       const withheld = render({ tab, landingSnapshots: [{ ...snapshot, status: "stale" }] })
       expect(withheld).toContain("Stale highlights withheld until refresh")
