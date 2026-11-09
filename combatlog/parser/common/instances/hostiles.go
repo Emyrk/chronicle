@@ -1920,6 +1920,7 @@ func GnomereganHostiles() map[uint32]Identity {
 		6207:  "Caverndeep Ambusher",
 		6211:  "Caverndeep Reaver",
 		6212:  "Dark Iron Agent",
+		6215:  "Chomper",
 		6218:  "Irradiated Slime",
 		6219:  "Corrosive Lurker",
 		6220:  "Irradiated Horror",
@@ -1946,7 +1947,6 @@ func GnomereganHostiles() map[uint32]Identity {
 	})
 	LoadBosses(hostile, map[uint32]string{
 		7361: "Grubbis",
-		6215: "Grubbis", // "Chomper",
 		6229: "Crowd Pummeler 9-60",
 		6235: "Electrocutioner 6000",
 		7079: "Viscous Fallout",
