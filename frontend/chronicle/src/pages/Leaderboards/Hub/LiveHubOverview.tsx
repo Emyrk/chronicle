@@ -1,19 +1,21 @@
+import { useQuery } from "@tanstack/react-query";
+import type { SpeedrunLeaderboardEntry } from "@/api/typesGenerated";
 import {
   useRankingsKillTimeLeaderboard,
   useRankingsKillTimes,
+  useRankingsLeaderboard,
   useRankingsStats,
   useRankingsSuccessRates,
 } from "@/api/rankingsQueries";
-import { useHubSummary, type HubSummary } from "./hubSummaryAdapter";
+import type { HubSummary } from "./hubSummaryAdapter";
 import { Overview, type HubLiveTabContext } from "./LeaderboardHub";
 import { liveOverviewData } from "./liveOverviewData";
+import { fetchResolvedHubRatings, hubJSON } from "./resolvedHubAdapter";
 
 export interface LiveHubOverviewProps {
   context: HubLiveTabContext;
   /** The page's summary: the overview reuses it while the scope matches its request. */
   summary: HubSummary;
-  /** Bosses in the page summary's request (empty: the preset). */
-  requestedEncounters?: readonly string[];
   /** Performance and statistics endpoints filter by realm name; ratings by realm ID. */
   realmName?: string;
   realmIDs: readonly string[];
@@ -25,7 +27,6 @@ export interface LiveHubOverviewProps {
 export function LiveHubOverview({
   context,
   summary: pageSummary,
-  requestedEncounters = [],
   realmName,
   realmIDs,
   bosses,
@@ -38,30 +39,18 @@ export function LiveHubOverview({
   const cohort = pageSummary.selected_cohort ?? undefined;
   // Trash is a Performances encounter; the overview's boards are boss boards.
   const chosen = context.selection.kind === "bosses" ? context.selection.bosses.filter((name) => name !== "Trash") : [];
-  // The page summary answers the default scope; any other scope is its own CDN-cacheable summary URL.
-  const changedScope =
-    role !== "dps" ||
-    !!scope.cls ||
-    !!scope.spec ||
-    !!scope.subSpec ||
-    chosen.join(",") !== requestedEncounters.join(",");
-  const refreshed = useHubSummary(
-    {
-      instanceName,
-      encounters: chosen,
-      cohort: cohort
-        ? { difficulty: cohort.difficulty_name, maxPlayers: cohort.max_players }
-        : undefined,
-      performance: metric,
-      cls: scope.cls,
-      spec: scope.spec,
-      subSpec: scope.subSpec,
-      realmIDs,
-    },
-    changedScope,
-  );
-  // A new scope keeps the last summary as placeholder data; show skeletons until its own arrives.
-  const summary = changedScope ? (refreshed.isPlaceholderData ? undefined : refreshed.data) : pageSummary;
+  const request = {
+    instanceName,
+    encounters: chosen,
+    cohort: cohort
+      ? { difficulty: cohort.difficulty_name, maxPlayers: cohort.max_players }
+      : undefined,
+    performance: metric,
+    cls: scope.cls,
+    spec: scope.spec,
+    subSpec: scope.subSpec,
+    realmIDs,
+  } as const;
   const exact = cohort
     ? {
         difficulty_names: cohort.difficulty_name,
@@ -69,6 +58,48 @@ export function LiveHubOverview({
         exact_cohort: true,
       }
     : undefined;
+  const characters = subject === "characters";
+  const ratings = useQuery({
+    queryKey: ["hub-overview-ratings", request],
+    queryFn: () => fetchResolvedHubRatings(request, pageSummary),
+    enabled: !!cohort && realmIDs.length <= 1,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+  const pickedNames = (chosen.length ? chosen : bosses).join(",") || undefined;
+  const performance = useRankingsLeaderboard(
+    {
+      instance_names: instanceName,
+      encounter_names: pickedNames,
+      difficulty_names: cohort?.difficulty_name,
+      max_players: cohort?.max_players,
+      exact_cohort: !!cohort,
+      class: scope.cls,
+      spec: scope.spec,
+      sub_spec: scope.subSpec,
+      metric,
+      realm_names: realmName,
+      limit: 5,
+    },
+    !!cohort && characters,
+    { retry: false },
+  );
+  const speedruns = useQuery<SpeedrunLeaderboardEntry[]>({
+    queryKey: ["hub-overview-speedruns", instanceName, realmName, cohort?.difficulty_name, cohort?.max_players],
+    queryFn: () => {
+      const query = new URLSearchParams({
+        instance_name: instanceName,
+        difficulty_name: cohort!.difficulty_name,
+        instance_max_players: String(cohort!.max_players),
+        timing: "full",
+      });
+      if (realmName) query.append("realm_name", realmName);
+      return hubJSON<SpeedrunLeaderboardEntry[]>(`/api/v1/rankings/speedrun?${query}`);
+    },
+    enabled: !!cohort && !scope.boss,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
   // Shared with the Statistics tab's queries, so switching tabs reuses them.
   const statsParams = {
     instance_names: instanceName,
@@ -77,11 +108,11 @@ export function LiveHubOverview({
     ...exact,
   };
   // Spec spreads only appear on character boards; Guilds mode never draws them.
-  const characters = subject === "characters";
-  const stats = useRankingsStats({ ...statsParams, metric }, !!exact && characters);
+  const stats = useRankingsStats({ ...statsParams, metric }, !!exact && characters, { retry: false });
   const offRoleStats = useRankingsStats(
     { ...statsParams, metric: metric === "dps" ? "hps" : "dps" },
     !!exact && characters && !!scope.cls,
+    { retry: false },
   );
   // Kill counts and times are not realm-filtered, and kill times mix raid sizes; only show them where that cannot mislead.
   const instanceWide = !realmName && raids.length === 1;
@@ -112,32 +143,41 @@ export function LiveHubOverview({
         No published raid data for {instanceName} yet.
       </p>
     );
-  if (changedScope && refreshed.isError)
-    return (
-      <p
-        role="alert"
-        className="rounded-xl border bg-card p-8 text-sm text-muted-foreground"
-      >
-        Could not load the raid overview.
-      </p>
-    );
-  const data = summary
-    ? liveOverviewData({
-        summary,
-        bosses,
-        scope,
-        role,
-        subject,
-        stats: exact ? stats.data : undefined,
-        offRoleStats: exact && scope.cls ? offRoleStats.data : undefined,
-        successRates: !realmName && cohort ? successRates.data : undefined,
-        killTimes: instanceWide ? killTimes.data : undefined,
-        bossKills:
-          instanceWide && scope.boss ? bossKills.data?.entries : undefined,
-        unfiltered: !realmName && !scope.cls,
-        pending: stats.isPending && !!exact && characters,
-      })
-    : { pending: true };
+  const summary: HubSummary = {
+    ...pageSummary,
+    ratings: {
+      raid: ratings.data ?? pageSummary.ratings.raid,
+      bosses: pageSummary.ratings.bosses,
+    },
+    performances: performance.data?.entries ?? [],
+    speedruns: speedruns.data?.slice(0, 5) ?? [],
+  };
+  const data = liveOverviewData({
+    summary,
+    bosses,
+    scope,
+    role,
+    subject,
+    stats: exact ? stats.data : undefined,
+    offRoleStats: exact && scope.cls ? offRoleStats.data : undefined,
+    successRates: !realmName && cohort ? successRates.data : undefined,
+    killTimes: instanceWide ? killTimes.data : undefined,
+    bossKills:
+      instanceWide && scope.boss ? bossKills.data?.entries : undefined,
+    unfiltered: !realmName && !scope.cls,
+    sections: {
+      ratings: { pending: ratings.isPending, error: ratings.isError },
+      performances: { pending: performance.isPending, error: performance.isError },
+      speedruns: scope.boss
+        ? { pending: bossKills.isPending, error: bossKills.isError }
+        : { pending: speedruns.isPending, error: speedruns.isError },
+      statistics: { pending: stats.isPending && !!exact && characters, error: stats.isError },
+      bosses: {
+        pending: successRates.isPending || killTimes.isPending,
+        error: successRates.isError || killTimes.isError,
+      },
+    },
+  });
 
   return (
     <Overview

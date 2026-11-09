@@ -148,6 +148,7 @@ describe("live Storybook Hub", () => {
     expect(html).toContain('href="/leaderboard-v2?realm_ids=realm-id"')
     expect(html).not.toContain("Mock data for design review")
     expect(html).not.toContain("Ratings realms:")
+    expect(vi.mocked(useHubSummary).mock.calls[0][0]).toMatchObject({ metadataOnly: true })
     expect(useHubSummary).toHaveBeenCalledTimes(1)
   })
   it("uses the configured Turtle roster and exposes Trash only under Performances", () => {

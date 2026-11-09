@@ -16,7 +16,6 @@ import { MetricTabs, PeriodToggle, RatingBoards } from "@/pages/Leaderboards/Rat
 import { BossPortrait, SpecIcon } from "@/pages/Leaderboards/Ratings/RatingParts"
 import { METRIC_THEMES, scopeTitle, type RatingView } from "@/pages/Leaderboards/Ratings/ratingThemes"
 import { ScopeBar } from "@/pages/Leaderboards/Ratings/ScopeBar"
-import { useBossModelImage } from "./bossModels"
 import { formatPeakRaw, peakWithRaw } from "./peakDisplay"
 import { TABS, type HubTab } from "./hubTabs"
 import { EncounterSidebar } from "./EncounterSidebar"
@@ -659,6 +658,19 @@ function InstanceTitle({
  * Everything the Overview draws, already scoped to the page's boss, class, spec, role, and realm.
  * A missing slot means the data is not published for this scope: its card keeps its place and says so.
  */
+export interface OverviewSectionState {
+  pending?: boolean
+  error?: boolean
+}
+
+export interface OverviewSectionStates {
+  ratings?: OverviewSectionState
+  performances?: OverviewSectionState
+  speedruns?: OverviewSectionState
+  statistics?: OverviewSectionState
+  bosses?: OverviewSectionState
+}
+
 export interface OverviewData {
   /** Fastest runs, fastest first: the podium shows three, the guild card all of them. */
   speedruns?: readonly SpeedrunLeaderboardEntry[]
@@ -678,14 +690,21 @@ export interface OverviewData {
   boss?: LiveBossSummary
   bosses?: readonly LiveBossSummary[]
   optionalBosses?: ReadonlySet<string>
+  /** Independent request state for live overview sections. */
+  sections?: OverviewSectionStates
   /** Still loading: empty slots read as loading rather than unpublished. */
   pending?: boolean
 }
 
 /** A card body for a slot without rows: skeleton rows while loading, else why it is empty. */
-function Empty({ pending, rows, text = "Not published for this selection yet" }: { pending?: boolean; rows?: number; text?: string }) {
-  if (pending) return <SkeletonRows rows={rows} />
-  return <p className="px-4 py-6 text-center text-xs text-muted-foreground">{text}</p>
+function Empty({ pending, rows, text = "Not published for this selection yet", error = false }: {
+  pending?: boolean
+  rows?: number
+  text?: string
+  error?: boolean
+}) {
+  if (pending && !error) return <SkeletonRows rows={rows} />
+  return <p role={error ? "alert" : undefined} className="px-4 py-6 text-center text-xs text-muted-foreground">{text}</p>
 }
 
 /** Placeholder rows in a card's row rhythm while its data loads. */
@@ -718,8 +737,18 @@ function BossGridSkeleton() {
 }
 
 /** Each card lists a fixed number of rows; its skeleton shows that many while loading. */
-function filled<T>(rows: readonly T[] | undefined, pending: boolean | undefined, render: (rows: readonly T[]) => ReactNode, skeletonRows?: number) {
-  return rows?.length ? render(rows) : <Empty pending={pending} rows={skeletonRows} text={rows ? "No entries yet" : undefined} />
+function filled<T>(
+  rows: readonly T[] | undefined,
+  state: OverviewSectionState | boolean | undefined,
+  render: (rows: readonly T[]) => ReactNode,
+  skeletonRows?: number,
+  errorText = "Could not load this section",
+) {
+  const resolved = typeof state === "object" ? state : { pending: state }
+  return rows?.length
+    ? render(rows)
+    : <Empty pending={resolved.pending} error={resolved.error} rows={skeletonRows}
+        text={resolved.error ? errorText : rows ? "No entries yet" : undefined} />
 }
 
 /** Rows on the overview cards whose lists have a fixed length. */
@@ -750,9 +779,16 @@ export function Overview({ data, instanceName, scope, role, subject, kind, set, 
   const roleLabel = role === "dps" ? "DPS" : "HPS"
   const guilds = subject === "guilds"
   const { pending } = data
+  const section = (name: keyof OverviewSectionStates): OverviewSectionState =>
+    data.sections?.[name] ?? { pending }
+  const ratingsState = section("ratings")
+  const performancesState = section("performances")
+  const speedrunsState = section("speedruns")
+  const statisticsState = section("statistics")
+  const bossesState = section("bosses")
   const spreadCard = (
     <Card title={`Typical ${roleLabel} parse by spec`} action={{ label: "Box plot", onClick: () => onStatistics("specs") }}>
-      {filled(data.specSpreads, pending, (rows) => <SpecSpreads rows={rows.slice(0, SPEC_SPREAD_ROWS)} />, SPEC_SPREAD_ROWS)}
+      {filled(data.specSpreads, statisticsState, (rows) => <SpecSpreads rows={rows.slice(0, SPEC_SPREAD_ROWS)} />, SPEC_SPREAD_ROWS, "Could not load statistics")}
     </Card>
   )
 
@@ -771,7 +807,8 @@ export function Overview({ data, instanceName, scope, role, subject, kind, set, 
           set={data.speedrunsAreClears ? undefined : set}
           onOpen={() => onTab("speedruns")}
           entries={data.speedruns?.slice(0, 3)}
-          pending={pending}
+          pending={speedrunsState.pending}
+          error={speedrunsState.error}
         />
       )}
       {scope.boss && <BossStats boss={data.boss ?? { boss: scope.boss }} />}
@@ -784,13 +821,15 @@ export function Overview({ data, instanceName, scope, role, subject, kind, set, 
         <div className="grid gap-5 lg:grid-cols-[1.55fr_1fr]">
           {/* Filled row by row, so each pair of cards shares a top edge and height. */}
           <Card title={`${guilds ? "Guild Ratings" : "Ratings"} · ${where}`} action={{ label: "Ratings", onClick: () => onRatings("overview") }}>
-            {guilds ? (
+            {ratingsState.error ? (
+              <Empty error text="Could not load ratings" />
+            ) : ratingsState.pending ? (
+              <MetricColumns onOpen={onRatings} />
+            ) : guilds ? (
               // A guild run is rated like a player's parse: its time against the fastest.
-              data.guildRatings ? <GuildRatingLeaders ratings={data.guildRatings} onOpen={onRatings} /> : pending ? <MetricColumns onOpen={onRatings} /> : <Empty />
+              data.guildRatings ? <GuildRatingLeaders ratings={data.guildRatings} onOpen={onRatings} /> : <Empty />
             ) : data.ratings ? (
               <RatingLeaders leaders={data.ratings} role={role} onOpen={onRatings} />
-            ) : pending ? (
-              <MetricColumns onOpen={onRatings} />
             ) : (
               <Empty />
             )}
@@ -801,9 +840,9 @@ export function Overview({ data, instanceName, scope, role, subject, kind, set, 
               action={{ label: "Box plot", onClick: () => onStatistics("specs") }}
               className="lg:row-span-2"
             >
-              {filled(data.specSpreads, pending, (rows) => (
+              {filled(data.specSpreads, statisticsState, (rows) => (
                 <SpecStandingList rows={rows} scope={scope} onPick={(cls, spec, subSpec) => onScope({ boss: scope.boss, cls, spec, subSpec })} />
-              ), SPEC_SPREAD_ROWS)}
+              ), SPEC_SPREAD_ROWS, "Could not load statistics")}
             </Card>
           ) : guilds ? (
             // Renown is already a column of Guild Ratings; this slot counts clears instead.
@@ -815,9 +854,9 @@ export function Overview({ data, instanceName, scope, role, subject, kind, set, 
             </Card>
           ) : (
             <Card title={`Guild Renown · ${where}`} metric="renown" action={{ label: "Renown", onClick: () => onRatings("renown") }}>
-              {filled(data.guildRenown, pending, (rows) => (
+              {filled(data.guildRenown, ratingsState, (rows) => (
                 <GuildList rows={rows.slice(0, GUILD_RENOWN_ROWS)} format={(v) => v.toLocaleString()} bars showDetail accent={METRIC_THEMES.renown.accent} />
-              ), GUILD_RENOWN_ROWS)}
+              ), GUILD_RENOWN_ROWS, "Could not load ratings")}
               <button
                 type="button"
                 onClick={() => onRatings("renown")}
@@ -835,11 +874,11 @@ export function Overview({ data, instanceName, scope, role, subject, kind, set, 
               title={`Best Performances (${set ? "Total kill time" : scope.boss ? "Kill time" : "Clear time"}) · ${where}`}
               action={{ label: "Speedruns", onClick: () => onTab("speedruns") }}
             >
-              {filled(data.speedruns, pending, (runs) => <RunList runs={runs} />, PERFORMANCE_ROWS)}
+              {filled(data.speedruns, speedrunsState, (runs) => <RunList runs={runs} />, PERFORMANCE_ROWS, "Could not load speedruns")}
             </Card>
           ) : (
             <Card title={`Best Performances (${roleLabel}) · ${where}`} action={{ label: "Performances", onClick: () => onTab("performances") }}>
-              {filled(data.performances, pending, (rows) => <ThroughputList rows={rows.slice(0, PERFORMANCE_ROWS)} />, PERFORMANCE_ROWS)}
+              {filled(data.performances, performancesState, (rows) => <ThroughputList rows={rows.slice(0, PERFORMANCE_ROWS)} />, PERFORMANCE_ROWS, "Could not load best performances")}
             </Card>
           )}
           {guilds ? (
@@ -855,6 +894,11 @@ export function Overview({ data, instanceName, scope, role, subject, kind, set, 
         </div>
       )}
 
+      {!scope.boss && data.bosses && bossesState.error && (
+        <p role="alert" className="rounded-xl border bg-card px-4 py-3 text-xs text-muted-foreground">
+          Boss cards are available, but their statistics could not be loaded.
+        </p>
+      )}
       {!scope.boss && !data.bosses && pending && <BossGridSkeleton />}
       {!scope.boss && data.bosses && (
         <BossGrid role={role} only={set} onBoss={(boss) => onScope({ ...scope, boss })} summaries={data.bosses} optionalBosses={data.optionalBosses} />
@@ -1083,12 +1127,14 @@ export function SpeedHero({
   onOpen,
   entries,
   pending,
+  error,
 }: {
   instanceName: string
   scope: RatingScope
   set?: readonly string[]
   onOpen: () => void
   entries?: readonly SpeedrunLeaderboardEntry[]
+  error?: boolean
   pending?: boolean
 }) {
   return (
@@ -1110,6 +1156,10 @@ export function SpeedHero({
             <Podium entries={[...entries]} instanceName={instanceName} />
           </div>
         </>
+      ) : error ? (
+        <p role="alert" className="relative px-4 pt-10 pb-8 text-center text-sm text-muted-foreground">
+          Could not load speedruns
+        </p>
       ) : pending ? (
         // The podium's three steps, second / first / third.
         <div role="status" aria-label="Loading" className="relative flex items-end justify-center gap-4 px-4 pt-10 pb-6">
@@ -1119,7 +1169,7 @@ export function SpeedHero({
         </div>
       ) : (
         <p className="relative px-4 pt-10 pb-8 text-center text-sm text-muted-foreground">
-          {pending ? "Loading…" : entries ? "No qualifying runs yet" : "Not published for this selection yet"}
+          {entries ? "No qualifying runs yet" : "Not published for this selection yet"}
         </p>
       )}
     </section>
@@ -1199,7 +1249,6 @@ export function BossGrid({
 }
 
 function BossCard({ summary: b, role, optional, onOpen }: { summary: LiveBossSummary; role: HubRole; optional: boolean; onOpen: () => void }) {
-  const model = useBossModelImage(b.boss)
   const rate = b.kills !== undefined && b.attempts ? (b.kills / b.attempts) * 100 : undefined
   return (
     <button
@@ -1208,31 +1257,15 @@ function BossCard({ summary: b, role, optional, onOpen }: { summary: LiveBossSum
       aria-label={b.boss}
       className={cn(
         "group relative isolate flex cursor-pointer flex-col overflow-hidden rounded-xl border text-left transition-colors hover:border-white/20",
-        // Optional bosses read as secondary: dashed frame, darker card, muted model.
+        // Optional bosses read as secondary: dashed frame, darker card, muted portrait.
         optional ? "border-dashed bg-card/40" : "bg-card",
       )}
     >
-      {/* The model stands at the right edge, fading out behind the stats. */}
       <div aria-hidden className="absolute inset-y-0 right-0 -z-10 w-1/2">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_60%_at_65%_45%,rgba(255,255,255,.08),transparent_70%)]" />
-        {model ? (
-          <img
-            src={model}
-            alt=""
-            className={cn(
-              "absolute inset-0 size-full scale-110 object-cover object-[50%_30%] transition duration-300 group-hover:scale-[1.32] group-hover:opacity-100 group-hover:grayscale-0",
-              optional ? "opacity-50 grayscale-[60%]" : "opacity-80",
-            )}
-            style={{
-              maskImage: "linear-gradient(to right, transparent, black 30%)",
-              WebkitMaskImage: "linear-gradient(to right, transparent, black 30%)",
-            }}
-          />
-        ) : (
-          <span className="absolute top-3 right-3 opacity-60">
-            <BossPortrait boss={b.boss} size="lg" />
-          </span>
-        )}
+        <span className={cn("absolute top-3 right-3 opacity-60", optional && "opacity-40 grayscale")}>
+          <BossPortrait boss={b.boss} size="lg" />
+        </span>
       </div>
 
       <div className="w-[56%] px-3 pt-3 pb-2">

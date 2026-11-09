@@ -43,7 +43,7 @@ export function LeaderboardsLiveHub() {
   // The page's summary is instance metadata (cohorts, realms, roster); it does not depend on the
   // selected bosses, so picking a boss never reloads the page. Content fetches its own selection.
   const summary = useHubSummary({ instanceName: instance ?? undefined, tab: instance ? undefined : tab, realmIDs, performance: "dps",
-    cohort: requestedCohort, metadataOnly: !!instance && tab !== "overview" }, siteConfig !== undefined && !rootRatingsDisabled)
+    cohort: requestedCohort, metadataOnly: !!instance }, siteConfig !== undefined && !rootRatingsDisabled)
   const available = summary.data?.realms ?? []
   const highlightsSelectionError = summary.data ? landingRealmError(realmIDs, available) : undefined
   const highlights = useLandingHighlights(siteConfig?.tenant?.id, realmIDs[0],
@@ -191,8 +191,8 @@ function LiveInstanceHub({ instanceName, names, summary, stale, realm, realmIDs,
     initialBosses={chosen.length ? chosen : undefined} />
 }
 
-function LiveHubContent({ context, summary, stale = false, requestedEncounters = [], realmName, realmIDs, cohort, bosses, overview = false }: {
-  context: HubLiveTabContext; summary: HubSummary; stale?: boolean; requestedEncounters?: readonly string[]; realmName?: string; realmIDs: readonly string[]
+function LiveHubContent({ context, summary, stale = false, realmName, realmIDs, cohort, bosses, overview = false }: {
+  context: HubLiveTabContext; summary: HubSummary; stale?: boolean; realmName?: string; realmIDs: readonly string[]
   cohort?: { difficulty_name: string; max_players: number }; bosses: readonly string[]; overview?: boolean
 }) {
   const { instanceName, scope, role, subject, selection, onTab } = context
@@ -246,7 +246,7 @@ function LiveHubContent({ context, summary, stale = false, requestedEncounters =
   // The summary belongs to the previous request; its boards would read as empty ones.
   if (stale) return <LoadingContent context={context} overview={overview} />
   if (!overview && realmIDs.length > 1) return <p role="status" className="rounded-xl border bg-card p-8 text-sm text-muted-foreground">Choose one realm or All realms in the Hub selector. This view cannot apply multiple realms.</p>
-  if (overview) return <LiveHubOverview context={context} summary={summary} requestedEncounters={requestedEncounters} realmName={realmName} realmIDs={realmIDs} bosses={bosses} />
+  if (overview) return <LiveHubOverview context={context} summary={summary} realmName={realmName} realmIDs={realmIDs} bosses={bosses} />
   if (context.tab === "ratings") return <LiveHubRatings summary={summary} instanceName={instanceName} bosses={bosses.filter((name) => name !== "Trash")}
     selected={picked.filter((name) => name !== "Trash")} scope={scope} onScope={context.onScope} view={context.ratingView} onView={context.onView}
     period={context.period} subject={subject === "guilds" ? "guild" : "player"} realmIDs={realmIDs} role={role}
