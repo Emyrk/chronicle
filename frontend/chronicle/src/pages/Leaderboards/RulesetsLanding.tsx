@@ -6,7 +6,10 @@ import { groupByRaidLevel } from "@/pages/Logs/utils/instanceProgressionOrder"
 import { InstanceCard } from "../Rankings/InstanceCard"
 import { rulesetEntries, type RulesetEntry } from "./damageRuleRows"
 
-export function RulesetsLanding() {
+export function RulesetsLanding({ instanceHref, onOpen }: {
+  instanceHref?: (instance: string) => string
+  onOpen?: (instance: string) => void
+} = {}) {
   const { data, isLoading, isError } = useSupportedInstances()
 
   if (isLoading) {
@@ -44,32 +47,36 @@ export function RulesetsLanding() {
         const renownTotal = entry.renownRules?.reduce((sum, rule) => sum + rule.points, 0) ?? 0
         const RenownIcon = METRIC_THEMES.renown.icon
         return (
-          <InstanceCard
-            key={entry.name}
-            name={entry.name}
-            to={`/leaderboards/ruleset?instance=${encodeURIComponent(entry.name)}`}
-          >
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
-              {entry.speedrunRules && (
-                <span className="flex items-center gap-1">
-                  <Timer className="h-3 w-3" />
-                  {requirementCount} speedrun {requirementCount === 1 ? "requirement" : "requirements"}
-                </span>
-              )}
-              {(entry.renownRules?.length ?? 0) > 0 && (
-                <span className="flex items-center gap-1">
-                  <RenownIcon className="h-3 w-3" style={{ color: METRIC_THEMES.renown.accent }} />
-                  {renownTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })} Renown
-                </span>
-              )}
-              {entry.damageRuleCount > 0 && (
-                <span className="flex items-center gap-1">
-                  <Swords className="h-3 w-3" />
-                  {entry.damageRuleCount} DPS target {entry.damageRuleCount === 1 ? "rule" : "rules"}
-                </span>
-              )}
-            </div>
-          </InstanceCard>
+          <div key={entry.name} onClickCapture={!onOpen ? undefined : (event) => {
+            event.preventDefault()
+            onOpen(entry.name)
+          }}>
+            <InstanceCard
+              name={entry.name}
+              to={instanceHref?.(entry.name) ?? `/leaderboards/ruleset?instance=${encodeURIComponent(entry.name)}`}
+            >
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
+                {entry.speedrunRules && (
+                  <span className="flex items-center gap-1">
+                    <Timer className="h-3 w-3" />
+                    {requirementCount} speedrun {requirementCount === 1 ? "requirement" : "requirements"}
+                  </span>
+                )}
+                {(entry.renownRules?.length ?? 0) > 0 && (
+                  <span className="flex items-center gap-1">
+                    <RenownIcon className="h-3 w-3" style={{ color: METRIC_THEMES.renown.accent }} />
+                    {renownTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })} Renown
+                  </span>
+                )}
+                {entry.damageRuleCount > 0 && (
+                  <span className="flex items-center gap-1">
+                    <Swords className="h-3 w-3" />
+                    {entry.damageRuleCount} DPS target {entry.damageRuleCount === 1 ? "rule" : "rules"}
+                  </span>
+                )}
+              </div>
+            </InstanceCard>
+          </div>
         )
       })}
     </div>
