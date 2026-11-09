@@ -2,6 +2,9 @@
 // Cards render from query params only (no database, no API, no fetch to
 // Chronicle); api/og.go writes every value into the signed image URL.
 import { capText, sanitizeText } from '@/app/lib/og-text';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import sharp from 'sharp';
 import { loadCjkFonts } from './cjk-fonts';
 import { publicImage, readPublicFile } from './public-files';
 import { loadFontsourceFamily } from './shared';
@@ -159,25 +162,12 @@ export function wordmarkImage(): Promise<string> {
   return publicImage(WORDMARK.file);
 }
 
-// Raid loading screens: 512×341 (3:2) centre crops of the web app's
-// loadingscreens/*.webp, the same framing frontend.InstanceOGImage serves.
-// Slug = instance name, lowercased, apostrophes dropped, other runs of
-// non-alphanumerics as '-' (see artSlug).
-const RAID_ART: Readonly<Record<string, string>> = {
-  'molten-core': 'raids/molten-core.jpg',
-  'blackwing-lair': 'raids/blackwing-lair.jpg',
-  'zulgurub': 'raids/zulgurub.jpg',
-  'ruins-of-ahnqiraj': 'raids/ruins-of-ahnqiraj.jpg',
-  'temple-of-ahnqiraj': 'raids/temple-of-ahnqiraj.jpg',
-  'naxxramas': 'raids/naxxramas.jpg',
-  'onyxias-lair': 'raids/onyxias-lair.jpg',
-  'emerald-sanctum': 'raids/emerald-sanctum.jpg',
-  'tower-of-karazhan': 'raids/karazhan.jpg',
-  'lower-tower-of-karazhan': 'raids/karazhan.jpg',
-  'upper-tower-of-karazhan': 'raids/karazhan.jpg',
-};
+const LOADING_SCREEN_PREFIX = '/c/images/loadingscreens/';
 
-export const ART_SLUGS = Object.keys(RAID_ART);
+type InstanceConfig = Record<string, { background?: unknown }>;
+
+let raidArtPromise: Promise<ReadonlyMap<string, string>> | undefined;
+const raidArtImageCache = new Map<string, Promise<string>>();
 
 export function artSlug(instanceName: string): string {
   return instanceName
@@ -187,11 +177,76 @@ export function artSlug(instanceName: string): string {
     .replace(/^-|-$/g, '');
 }
 
-// The bundled image for `art=<slug>` as a data URL, read from disk. Unknown or
-// missing slug → null; never a network request.
+function frontendDir(): string {
+  return process.env.CHRONICLE_FRONTEND_DIR ?? path.resolve(process.cwd(), '../../frontend');
+}
+
+async function loadRaidArt(): Promise<ReadonlyMap<string, string>> {
+  const root = frontendDir();
+  const raw = await readFile(path.join(root, 'instance-config.json'), 'utf8');
+  const configs = JSON.parse(raw) as InstanceConfig;
+  const art = new Map<string, string>();
+
+  for (const [instanceName, config] of Object.entries(configs)) {
+    const background = config.background;
+    if (typeof background !== 'string' || !background.startsWith(LOADING_SCREEN_PREFIX) || !background.endsWith('.webp')) continue;
+
+    const filename = background.slice(LOADING_SCREEN_PREFIX.length);
+    if (!filename || filename.includes('/')) continue;
+
+    art.set(artSlug(instanceName), path.join(root, 'chronicle/public', background.slice(1)));
+  }
+
+  return art;
+}
+
+function raidArt(): Promise<ReadonlyMap<string, string>> {
+  raidArtPromise ??= loadRaidArt();
+  return raidArtPromise;
+}
+
+export async function artSlugs(): Promise<string[]> {
+  return [...(await raidArt()).keys()];
+}
+
+async function encodeRaidArt(file: string): Promise<string> {
+  const { width, height } = await sharp(file).metadata();
+  if (!width || !height) throw new Error(`loading screen has no dimensions: ${file}`);
+
+  let cropWidth = width;
+  let cropHeight = height;
+  if (width * 2 > height * 3) cropWidth = Math.floor(height * 3 / 2);
+  else cropHeight = Math.floor(width * 2 / 3);
+
+  const encoded = await sharp(file)
+    .extract({
+      left: Math.floor((width - cropWidth) / 2),
+      top: Math.floor((height - cropHeight) / 2),
+      width: cropWidth,
+      height: cropHeight,
+    })
+    .jpeg({ quality: 90 })
+    .toBuffer();
+  return `data:image/jpeg;base64,${encoded.toString('base64')}`;
+}
+
+function raidArtImage(file: string): Promise<string> {
+  let pending = raidArtImageCache.get(file);
+  if (!pending) {
+    pending = encodeRaidArt(file);
+    raidArtImageCache.set(file, pending);
+    pending.catch(() => raidArtImageCache.delete(file));
+  }
+  return pending;
+}
+
+// The loading screen configured for `art=<slug>` as a 3:2 center-cropped JPEG,
+// using the same frontend config, source WebP and framing as chronicled. Unknown
+// slugs return null and rendering never makes a network request.
 export async function artImage(context: ThemeContext): Promise<string | null> {
   const slug = context.searchParams.get('art') ?? '';
-  return Object.hasOwn(RAID_ART, slug) ? publicImage(RAID_ART[slug]) : null;
+  const file = (await raidArt()).get(slug);
+  return file ? raidArtImage(file) : null;
 }
 
 // Class, spec and race icons: 64×64 PNGs in public/icons. Class and spec are

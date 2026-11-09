@@ -10,6 +10,8 @@ on:
       - 'go.mod'
       - 'go.sum'
       - 'services/og/**'
+      - 'frontend/instance-config.json'
+      - 'frontend/chronicle/public/c/images/loadingscreens/**'
       - '.github/workflows/go-checks.yml'
   push:
     branches:
@@ -256,7 +258,7 @@ jobs:
 
       - uses: docker/build-push-action@v6
         with:
-          context: services/og
+          context: .
           file: services/og/Dockerfile
           load: ${{ github.ref_type != 'tag' }}
           push: ${{ github.ref_type == 'tag' }}

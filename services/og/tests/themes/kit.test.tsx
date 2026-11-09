@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { ImageResponse } from 'next/og';
 import {
-  ART_SLUGS,
   artImage,
   artSlug,
+  artSlugs,
   chromeParams,
   classColor,
   COLORS,
@@ -149,9 +149,13 @@ describe('art', () => {
     expect(artSlug("Zul'Gurub")).toBe('zulgurub');
   });
 
-  test('every slug resolves to a bundled JPEG without a network call', async () => {
+  test('every configured loading screen resolves to a generated JPEG without a network call', async () => {
     const networkCalls = spyNetwork();
-    for (const slug of ART_SLUGS) {
+    const slugs = await artSlugs();
+    expect(slugs).toContain('molten-core');
+    expect(slugs).toContain('karazhan-crypts');
+
+    for (const slug of slugs) {
       const src = await artImage(context(`art=${slug}`));
       expect(src?.startsWith('data:image/jpeg;base64,'), slug).toBe(true);
     }
