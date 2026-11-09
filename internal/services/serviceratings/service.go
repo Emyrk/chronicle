@@ -18,6 +18,8 @@ import (
 )
 
 type Service struct {
+	HighlightDispatcher *HighlightDispatcher
+	HighlightWorker     *HighlightWorker
 	metrics             *Metrics
 	cancelMetrics       context.CancelFunc
 	metricsDone         chan struct{}
@@ -46,6 +48,8 @@ func (s *Service) Start(ctx context.Context) error {
 		return err
 	}
 	store := servicedbstore.DatabaseStore(s.broker)
+	s.HighlightDispatcher = &HighlightDispatcher{Store: store}
+	s.HighlightWorker = &HighlightWorker{Store: store}
 	s.Dispatcher = &Dispatcher{Store: store}
 	s.OperationDispatcher = &OperationDispatcher{Store: store}
 	s.OperationWorker = &OperationWorker{Store: store}

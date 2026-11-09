@@ -2562,7 +2562,7 @@ export interface HubBossRating extends HubRatingBoard {
     readonly encounter_name: string;
 }
 
-// From chroniclesdk/rating_hub_summary.go
+// From chroniclesdk/leaderboard_highlights.go
 export interface HubGuildRatingEntry {
     readonly realm_id: string;
     readonly realm_name: string;
@@ -2571,20 +2571,14 @@ export interface HubGuildRatingEntry {
     readonly score: number;
 }
 
-// From chroniclesdk/rating_hub_summary.go
+// From chroniclesdk/leaderboard_highlights.go
 export interface HubGuildRatings {
     readonly peak: readonly HubGuildRatingEntry[];
     readonly ranked_mastery: readonly HubGuildRatingEntry[];
     readonly renown: readonly HubGuildRatingEntry[];
 }
 
-// From chroniclesdk/rating_hub_summary.go
-/**
- * HubLandingPreview contains published, bounded highlights for one instance cohort.
- * Performances are each player's best complete run, aggregated across its encounters.
- * Aggregate top-player DPS remains separately in HubSummary.Instances[].top_players.
- * Statistics are per-run DPS distributions by class/spec, from the v1 box plot.
- */
+// From chroniclesdk/leaderboard_highlights.go
 export interface HubLandingPreview {
     readonly instance_name: string;
     readonly difficulty_name: string;
@@ -2596,10 +2590,7 @@ export interface HubLandingPreview {
     readonly speedruns: readonly SpeedrunLeaderboardEntry[];
 }
 
-// From chroniclesdk/rating_hub_summary.go
-/**
- * Compact published score identities are sufficient for preview cards.
- */
+// From chroniclesdk/leaderboard_highlights.go
 export interface HubPlayerRatingEntry {
     readonly realm_id: string;
     readonly realm_name: string;
@@ -2609,14 +2600,10 @@ export interface HubPlayerRatingEntry {
     readonly player_spec: string;
     readonly player_sub_spec: string;
     readonly score: number;
-    /**
-     * PeakRaw is the DPS or HPS behind a Peak score: the kill's on a boss board,
-     * the mean of the player's best per boss on a raid board. Unset otherwise.
-     */
     readonly peak_raw?: number;
 }
 
-// From chroniclesdk/rating_hub_summary.go
+// From chroniclesdk/leaderboard_highlights.go
 export interface HubPlayerRatings {
     readonly peak: readonly HubPlayerRatingEntry[];
     readonly ranked_mastery: readonly HubPlayerRatingEntry[];
@@ -7568,5 +7555,27 @@ export interface LeaderboardQueueStatus {
     readonly retrying: number;
     readonly oldest_pending_at?: string;
     readonly oldest_due_at?: string;
+}
+
+// From chroniclesdk/leaderboard_highlights.go
+export interface LeaderboardHighlightSnapshot {
+    readonly instance_name: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly status: string;
+    readonly refreshed_at?: string;
+    readonly configuration_fingerprint: string;
+}
+
+// From chroniclesdk/leaderboard_highlights.go
+export interface LeaderboardHighlightsResponse {
+    readonly status: string;
+    readonly landing_previews: readonly HubLandingPreview[];
+    readonly snapshots: readonly LeaderboardHighlightSnapshot[];
+}
+
+// From chroniclesdk/leaderboard_highlights.go
+export interface RefreshLeaderboardHighlightsRequest {
+    readonly tenant_id: string;
 }
 

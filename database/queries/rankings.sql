@@ -391,6 +391,7 @@ JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NO
         WHEN cardinality(@encounter_names :: text[]) > 0 THEN edr.encounter_name = ANY(@encounter_names :: text[])
         ELSE true
     END
+    AND (COALESCE(cardinality(@realm_ids::uuid[]),0)=0 OR edr.realm_id=ANY(@realm_ids::uuid[]))
     AND CASE
         WHEN cardinality(@realm_names :: text[]) > 0 THEN edr.realm_name = ANY(@realm_names :: text[])
         ELSE true
@@ -700,6 +701,7 @@ JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NO
         WHEN cardinality(@encounter_names :: text[]) > 0 THEN edr.encounter_name = ANY(@encounter_names :: text[])
         ELSE true
     END
+    AND (COALESCE(cardinality(@realm_ids::uuid[]),0)=0 OR edr.realm_id=ANY(@realm_ids::uuid[]))
     AND CASE
         WHEN cardinality(@realm_names :: text[]) > 0 THEN edr.realm_name = ANY(@realm_names :: text[])
         ELSE true

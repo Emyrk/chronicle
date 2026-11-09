@@ -188,6 +188,10 @@ func (s *Service) Start(ctx context.Context) error {
 	// dirt; no startup discovery or historical backfill is scheduled.
 	ratings := serviceratings.Ratings(s.broker)
 	ratings.Dispatcher.Queue = q
+	ratings.HighlightDispatcher.Queue = q
+	riverqueue.AddWorker(q, ratings.HighlightDispatcher)
+	riverqueue.AddWorker(q, ratings.HighlightWorker)
+	q.AddPeriodicJob(river.NewPeriodicJob(river.PeriodicInterval(time.Hour), func() (river.JobArgs, *river.InsertOpts) { return serviceratings.ArgsHighlightDispatch{}, nil }, &river.PeriodicJobOpts{ID: "leaderboard-highlights-hourly", RunOnStart: false}))
 	ratings.OperationDispatcher.Queue = q
 	ratings.OperationWorker.Queue = q
 	ratings.RepairWorker.Queue = q
