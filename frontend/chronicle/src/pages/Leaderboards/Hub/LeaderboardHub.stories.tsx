@@ -61,6 +61,25 @@ type Story = StoryObj<typeof meta>
 /** Raid overview: clear-time podium, ratings/Renown/performance/parse cards, then a card per boss with its model. */
 export const RaidOverview: Story = {}
 
+/** The mobile header keeps the current filter summary visible and expands the full controls on demand. */
+export const MobileHeader: Story = {
+  parameters: { viewport: { defaultViewport: "mobile1" } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    const filters = canvas.getByRole("button", { name: /Filters/ })
+    await expect(filters).toHaveAttribute("aria-expanded", "false")
+    await expect(canvas.getByText("DPS · Characters")).toBeInTheDocument()
+    const classes = canvas.getByLabelText("All 9 classes selected")
+    await expect(within(classes).getAllByRole("img")).toHaveLength(4)
+    await expect(within(classes).getByText("+5")).toBeInTheDocument()
+    await userEvent.click(filters)
+    await expect(filters).toHaveAttribute("aria-expanded", "true")
+    await expect(canvas.getByRole("group", { name: "Class" })).toBeInTheDocument()
+    await expect(canvas.getByRole("group", { name: "Role" })).toBeInTheDocument()
+    await expect(canvas.getByRole("group", { name: "Rank" })).toBeInTheDocument()
+  },
+}
+
 /** On phones, encounters open from the same bottom-left floating control used by instance pages. */
 export const MobileEncounterDrawer: Story = {
   parameters: { viewport: { defaultViewport: "mobile1" } },

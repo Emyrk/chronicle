@@ -1,5 +1,5 @@
-import { Fragment, type ReactNode } from "react"
-import { ChevronDown, ChevronRight, RotateCcw } from "lucide-react"
+import { Fragment, useState, type ReactNode } from "react"
+import { ChevronDown, ChevronRight, RotateCcw, SlidersHorizontal } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   DropdownMenu,
@@ -26,6 +26,9 @@ export function ScopeBar({
   showBoss = true,
   classDisabled,
   extra,
+  compact = false,
+  compactSummary,
+  compactIndicator,
 }: {
   scope: RatingScope
   specs: string[]
@@ -41,14 +44,17 @@ export function ScopeBar({
   classDisabled?: string
   /** Extra controls (role, characters/guilds) placed at the end of the bar. */
   extra?: ReactNode
+  /** Collapse the controls behind one compact trigger on narrow layouts. */
+  compact?: boolean
+  /** Current choices shown beside the compact trigger. */
+  compactSummary?: ReactNode
+  /** Compact visual summary, such as selected class icons. */
+  compactIndicator?: ReactNode
 }) {
   const ALL = "all"
-  return (
-    <div
-      className="relative flex flex-wrap items-center gap-2 border-t border-white/5 bg-black/20 px-3 py-2.5 sm:px-5"
-      role="group"
-      aria-label="Leaderboard scope"
-    >
+  const [compactOpen, setCompactOpen] = useState(false)
+  const controls = (
+    <>
       {showBoss && (
         <>
           <Picker
@@ -90,6 +96,41 @@ export function ScopeBar({
           </button>
         )}
       </div>
+    </>
+  )
+
+  if (compact) {
+    return (
+      <div className="relative border-t border-white/10 bg-card/90 backdrop-blur-sm" role="group" aria-label="Leaderboard scope">
+        <button
+          type="button"
+          aria-expanded={compactOpen}
+          aria-controls="leaderboard-mobile-filters"
+          onClick={() => setCompactOpen((open) => !open)}
+          className="flex w-full cursor-pointer items-center gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-white/[.03]"
+        >
+          <SlidersHorizontal className="size-4 shrink-0 text-primary" aria-hidden />
+          <span className="text-xs font-semibold">Filters</span>
+          <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{compactSummary}</span>
+          {compactIndicator}
+          <ChevronDown className={cn("size-4 shrink-0 text-muted-foreground transition-transform", compactOpen && "rotate-180")} aria-hidden />
+        </button>
+        {compactOpen && (
+          <div id="leaderboard-mobile-filters" className="flex flex-wrap items-center gap-2 border-t border-white/5 px-3 py-3">
+            {controls}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div
+      className="relative flex flex-wrap items-center gap-2 border-t border-white/5 bg-black/20 px-3 py-2.5 sm:px-5"
+      role="group"
+      aria-label="Leaderboard scope"
+    >
+      {controls}
     </div>
   )
 }
