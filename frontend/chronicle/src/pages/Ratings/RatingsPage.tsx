@@ -355,21 +355,27 @@ function Overview() {
       body: "Points for every boss you've killed. It only goes up.",
     },
   ]
-  // One grid so all five cards share a width and row height. Headings sit in
-  // row 1 on desktop; on mobile they stay above their own cards.
+  // Two rows: the per-kill metrics, then the ratings built from them. Cards in a row share a height.
   return (
-    <section className="mb-10 grid grid-cols-2 gap-3 rounded-xl border bg-card p-4 md:grid-cols-[1fr_1fr_auto_1fr_1fr_1fr]">
-      <h2 className="col-span-2 text-sm font-semibold md:col-start-1 md:row-start-1">Per-kill metrics</h2>
-      {metrics.map((m) => (
-        <OverviewCard key={m.title} {...m} />
-      ))}
-      <ArrowRight className="hidden h-5 w-5 self-center text-muted-foreground md:row-start-2 md:block" />
-      <h2 className="col-span-2 mt-2 text-sm font-semibold md:col-span-3 md:col-start-4 md:row-start-1 md:mt-0">
-        Ratings <span className="font-normal text-muted-foreground">(your whole history)</span>
-      </h2>
-      {ratings.map((m) => (
-        <OverviewCard key={m.title} {...m} />
-      ))}
+    <section className="mb-10 space-y-5 rounded-xl border bg-card p-4 sm:p-5">
+      <div>
+        <h2 className="mb-2 text-sm font-semibold">Per-kill metrics</h2>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {metrics.map((m) => (
+            <OverviewCard key={m.title} {...m} />
+          ))}
+        </div>
+      </div>
+      <div>
+        <h2 className="mb-2 text-sm font-semibold">
+          Ratings <span className="font-normal text-muted-foreground">(your whole history, built from those kills)</span>
+        </h2>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {ratings.map((m) => (
+            <OverviewCard key={m.title} {...m} />
+          ))}
+        </div>
+      </div>
     </section>
   )
 }
@@ -377,19 +383,21 @@ function Overview() {
 function OverviewCard({ icon, title, question, body, accent }: { icon: ReactNode; title: string; question: string; body: string; accent?: string }) {
   return (
     <div
-      className="flex h-full flex-col rounded-lg border bg-background/40 p-3 md:row-start-2"
+      className="flex h-full flex-col rounded-lg border bg-background/40 p-4"
       style={accent ? { boxShadow: `inset 0 2px 0 ${accent}` } : undefined}
     >
-      <div
-        className="mb-2 inline-flex self-start rounded-md p-2 text-muted-foreground"
-        style={accent ? { color: accent, backgroundColor: `color-mix(in srgb, ${accent} 14%, transparent)` } : { backgroundColor: "var(--color-muted)" }}
-      >
-        {icon}
+      <div className="mb-2 flex items-center gap-2.5">
+        <div
+          className="inline-flex rounded-md p-1.5 text-muted-foreground"
+          style={accent ? { color: accent, backgroundColor: `color-mix(in srgb, ${accent} 14%, transparent)` } : { backgroundColor: "var(--color-muted)" }}
+        >
+          {icon}
+        </div>
+        <div className="font-semibold" style={accent ? { color: accent } : undefined}>
+          {title}
+        </div>
       </div>
-      <div className="font-semibold" style={accent ? { color: accent } : undefined}>
-        {title}
-      </div>
-      <p className="mb-1 text-sm font-medium italic text-foreground/85">{question}</p>
+      <p className="mb-1.5 text-sm font-medium italic text-foreground/85">{question}</p>
       <p className="text-sm text-muted-foreground">{body}</p>
     </div>
   )
