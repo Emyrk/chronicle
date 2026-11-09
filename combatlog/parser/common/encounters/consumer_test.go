@@ -58,6 +58,55 @@ func TestZoneInstanceMetadataUpgradeCreatesInstance(t *testing.T) {
 	require.Equal(t, "Timbermaw Hold", state.CurrentInstance.Name())
 }
 
+func TestSyntheticZoneAdoptsLateCompanionDifficulty(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	state := NewWithInstanceResolver(ctx, logger, func(_ bool, firstZone zone.Zone, db *unitdb.Units) *instances.Hookable {
+		if firstZone.Name != "ulduar" {
+			return nil
+		}
+		return instances.NewHookable(ctx, logger, db, firstZone, instances.InstanceParams{
+			Name:        "Ulduar",
+			MatchesZone: func(z zone.Zone) bool { return z.Name == "ulduar" },
+			Idf:         identifier.NewIdentifier(map[uint32]instances.Identity{}),
+		})
+	})
+
+	seen := time.Date(2026, time.November, 8, 10, 5, 36, 0, time.UTC)
+	state.Zone(messages.Zone{
+		MessageBase: messages.Base(seen, messages.WithSynthetic()),
+		Zone: zone.Zone{
+			Seen:       seen,
+			Name:       "ulduar",
+			IsInstance: true,
+		},
+	})
+	require.Len(t, state.Instances, 1)
+	instance := state.CurrentInstance
+	require.NotNil(t, instance)
+	require.False(t, instance.CurrentZone.HasDifficulty())
+
+	state.Zone(messages.Zone{Zone: zone.Zone{
+		Seen:            seen.Add(5 * time.Minute),
+		Name:            "ulduar",
+		InstanceType:    "raid",
+		IsInstance:      true,
+		DifficultyIndex: 1,
+		DifficultyName:  "10 Player",
+		MaxPlayers:      10,
+		SubZone:         "The Scrapyard",
+	}})
+
+	require.Len(t, state.Instances, 1)
+	require.Same(t, instance, state.CurrentInstance)
+	require.Equal(t, 1, instance.CurrentZone.DifficultyIndex)
+	require.Equal(t, "10 Player", instance.CurrentZone.DifficultyName)
+	require.Equal(t, 10, instance.CurrentZone.MaxPlayers)
+	require.Equal(t, "The Scrapyard", instance.CurrentZone.SubZone)
+}
+
 func TestZoneReentryDoesNotReuseDifferentDifficulty(t *testing.T) {
 	t.Parallel()
 
