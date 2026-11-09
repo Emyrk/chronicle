@@ -164,6 +164,19 @@ export function LeaderboardsHubApp({
   )
 }
 
+function formatSnapshotAge(refreshedAt: string, now = Date.now()): string {
+  const elapsedMs = Math.max(0, now - new Date(refreshedAt).getTime())
+  const elapsedMinutes = Math.floor(elapsedMs / 60_000)
+
+  if (elapsedMinutes < 1) return "Updated just now"
+  if (elapsedMinutes < 60) return `Updated ${elapsedMinutes} ${elapsedMinutes === 1 ? "minute" : "minutes"} ago`
+
+  const elapsedHours = Math.floor(elapsedMinutes / 60)
+  if (elapsedHours < 24) return `Updated ${elapsedHours} hr ago`
+
+  return "Updated >1d ago"
+}
+
 function HubLanding({
   tab,
   onOpen,
@@ -216,6 +229,13 @@ function HubLanding({
           const snapshot = landingSnapshots?.find((item) =>
             item.instance_name === row.instance_name && item.difficulty_name === row.difficulty_name && item.max_players === row.max_players)
           const cohort = { difficulty: row.difficulty_name, maxPlayers: row.max_players }
+          const showSnapshotAge = !landingBlocked
+            && landingSnapshots !== undefined
+            && tab !== "parsing"
+            && snapshot?.refreshed_at
+            && snapshot.status !== "not_prepared"
+            && snapshot.status !== "rebuilding"
+            && !(snapshot.status === "stale" && !preview)
           return <div key={`${row.instance_name}|${row.difficulty_name}|${row.max_players}`} onClickCapture={instanceHref ? undefined : (e) => {
             e.preventDefault()
             onOpen(row.instance_name, cohort)
@@ -224,15 +244,19 @@ function HubLanding({
               {landingBlocked ? null : landingSnapshots !== undefined && tab !== "parsing" ? <>
                 {!snapshot || snapshot.status === "not_prepared" || snapshot.status === "rebuilding" || snapshot.status === "stale" && !preview ? <><UnavailableHighlight label="Highlights awaiting refresh" />{snapshot?.status === "stale" && <div className="text-[10px] text-muted-foreground">Stale highlights withheld until refresh</div>}</> : <>
                   {snapshot.status === "empty" ? <UnavailableHighlight label="No qualifying highlights" /> : <LiveCardBody tab={tab} preview={preview} />}
-                  <div className="text-[10px] text-muted-foreground">
-                    {snapshot.status === "stale" && "Stale highlights · "}
-                    {snapshot.refreshed_at && <>Updated <time dateTime={snapshot.refreshed_at}>{snapshot.refreshed_at}</time></>}
-                  </div>
                 </>}
               </> : <LiveCardBody tab={tab} preview={preview} />}
-              <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                <Skull className="h-3 w-3" />
-                {row.total_kills ? `${row.total_kills.toLocaleString()} recorded kills` : "Configured instance"}
+              <div className="flex items-end justify-between gap-2 text-[10px] text-muted-foreground">
+                <div className="flex items-center gap-1">
+                  <Skull className="h-3 w-3" />
+                  {row.total_kills ? `${row.total_kills.toLocaleString()} recorded kills` : "Configured instance"}
+                </div>
+                {showSnapshotAge && snapshot && (
+                  <time className="shrink-0 text-right" dateTime={snapshot.refreshed_at} title={snapshot.refreshed_at}>
+                    {snapshot.status === "stale" && "Stale · "}
+                    {formatSnapshotAge(snapshot.refreshed_at)}
+                  </time>
+                )}
               </div>
             </InstanceCard>
           </div>

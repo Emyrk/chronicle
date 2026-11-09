@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server"
 import { MemoryRouter } from "react-router-dom"
-import { describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import type { RankingsInstanceSummary, SupportedInstance } from "@/api/typesGenerated"
 import { LeaderboardsHubApp } from "./HubLanding"
 
@@ -115,6 +115,10 @@ describe("live Hub landing", () => {
   })
 })
 
+afterEach(() => {
+  vi.useRealTimers()
+})
+
 describe("persisted highlight status", () => {
   const snapshot = { instance_name: "Molten Core", difficulty_name: "Normal", max_players: 40,
     configuration_fingerprint: "policy", refreshed_at: "2026-11-09T12:00:00Z" }
@@ -126,6 +130,21 @@ describe("persisted highlight status", () => {
     expect(empty).toContain("No qualifying highlights")
     expect(empty).toContain('dateTime="2026-11-09T12:00:00Z"')
   })
+  it("shows a compact relative refresh age at the bottom right", () => {
+    vi.useFakeTimers()
+
+    vi.setSystemTime(new Date("2026-11-09T12:42:00Z"))
+    const minutes = render({ landingSnapshots: [{ ...snapshot, status: "empty" }] })
+    expect(minutes).toContain("items-end justify-between")
+    expect(minutes).toContain("Updated 42 minutes ago")
+
+    vi.setSystemTime(new Date("2026-11-09T15:00:00Z"))
+    expect(render({ landingSnapshots: [{ ...snapshot, status: "empty" }] })).toContain("Updated 3 hr ago")
+
+    vi.setSystemTime(new Date("2026-11-10T13:00:00Z"))
+    expect(render({ landingSnapshots: [{ ...snapshot, status: "empty" }] })).toContain("Updated &gt;1d ago")
+  })
+
   it("labels stale published snapshots", () => {
     expect(render({ landingSnapshots: [{ ...snapshot, status: "stale" }] })).toContain("Stale highlights")
   })
