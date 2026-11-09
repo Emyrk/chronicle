@@ -4,6 +4,7 @@ import type { RankingsEntry } from "@/api/typesGenerated"
 import { RankingsLoadingState } from "./RankingsLoadingState"
 import { CLASS_CSS_VAR, CLASS_DISPLAY } from "./classDisplay"
 import { navigateWithModifiers } from "@/lib/navigation"
+import { cn } from "@/lib/utils"
 import { guildAttributes, rankingPlayerAttributes } from "@/components/EntityMenu/leaderboardEntities"
 
 const MEDAL_ICONS: Record<number, string> = { 1: "🥇", 2: "🥈", 3: "🥉" }
@@ -30,6 +31,8 @@ interface RankingsTableProps {
   entries: RankedEntry[]
   loading?: boolean
   metric?: "dps" | "hps"
+  /** Extra classes for the phone card list, e.g. to run it edge to edge. */
+  mobileListClassName?: string
 }
 
 function metricValue(entry: RankedEntry, metric: "dps" | "hps"): number {
@@ -42,7 +45,7 @@ function metricTitle(entry: RankedEntry, metric: "dps" | "hps"): string | undefi
   return `Effective healing: ${entry.healing_done.toLocaleString()} · Absorbed: ${entry.absorbed_done.toLocaleString()} · Total: ${total.toLocaleString()}`
 }
 
-export function RankingsTable({ entries, loading = false, metric = "dps" }: RankingsTableProps) {
+export function RankingsTable({ entries, loading = false, metric = "dps", mobileListClassName }: RankingsTableProps) {
   const navigate = useNavigate()
 
   if (loading) return <RankingsLoadingState />
@@ -58,7 +61,7 @@ export function RankingsTable({ entries, loading = false, metric = "dps" }: Rank
   return (
     <>
       {/* Mobile card rows */}
-      <div className="divide-y overflow-hidden rounded-xl border md:hidden">
+      <div className={cn("divide-y overflow-hidden rounded-xl border md:hidden", mobileListClassName)}>
         {entries.map((entry, i) => (
           <Link
             key={`${entry.player_name}-${entry.killed_at}-${i}`}

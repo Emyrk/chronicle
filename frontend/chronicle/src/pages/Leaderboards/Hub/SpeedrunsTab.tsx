@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react"
 import { Timer, Users } from "lucide-react"
 import type { KillTimeLeaderboardEntry, SpeedrunLeaderboardEntry } from "@/api/typesGenerated"
 import { cn } from "@/lib/utils"
+import { MOBILE_EDGE_TO_EDGE } from "@/pages/Leaderboards/Hub/edgeToEdge"
 import { guildAttributes, killAttributes, speedrunClearAttributes } from "@/components/EntityMenu/leaderboardEntities"
 import { Podium } from "@/pages/Leaderboard/Podium"
 import { formatClock, speedruns } from "./hub.fixtures"
@@ -159,7 +160,7 @@ function ClearBoard({ instanceName, bosses, live, story, switcher }: { instanceN
           <Podium entries={runs.slice(0, 3)} instanceName={instanceName} />
         </div>
       </section>
-      <section aria-label={what} className="overflow-hidden rounded-xl border bg-card">
+      <section aria-label={what} className={cn("overflow-hidden rounded-xl border bg-card", MOBILE_EDGE_TO_EDGE)}>
         <table className="w-full text-sm">
           <thead className="border-b text-[11px] tracking-wider text-muted-foreground uppercase">
             <tr>

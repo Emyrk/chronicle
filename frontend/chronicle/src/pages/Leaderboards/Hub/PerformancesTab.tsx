@@ -2,6 +2,7 @@ import { Timer } from "lucide-react"
 import type { RankingsLeaderboardResponse } from "@/api/typesGenerated"
 import { CLASS_DISPLAY } from "@/pages/Rankings/classDisplay"
 import { RankingsTable } from "@/pages/Rankings/RankingsTable"
+import { MOBILE_EDGE_TO_EDGE } from "@/pages/Leaderboards/Hub/edgeToEdge"
 import type { RatingScope } from "@/pages/Leaderboards/Ratings/ratingBoards.fixtures"
 import { performanceEntries, type HubRole, type HubSubject } from "./hub.fixtures"
 
@@ -70,6 +71,7 @@ export function PerformancesTab({
           entries={live ? (live.response?.entries.map((entry, i) => ({ ...entry, rank: i + 1 })) ?? []) : performanceEntries(scope, role, instanceName, bosses)}
           metric={metric}
           loading={live ? (live.loading || !live.response) : undefined}
+          mobileListClassName={MOBILE_EDGE_TO_EDGE}
         />
       )}
     </div>

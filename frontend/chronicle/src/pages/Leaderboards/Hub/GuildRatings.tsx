@@ -4,6 +4,7 @@ import { useState, type CSSProperties, type ReactNode } from "react"
 import { ArrowDown, ArrowRight, ChevronLeft, ChevronRight } from "lucide-react"
 import { RATING_METRICS, type RatingMetric } from "@/pages/Leaderboards/Ratings/ratingBoards.fixtures"
 import { cn } from "@/lib/utils"
+import { MOBILE_EDGE_TO_EDGE } from "@/pages/Leaderboards/Hub/edgeToEdge"
 import { BoardSearch, MasteryPartCells, MasteryPartHeaders, PublishedMasteryCells, PublishedMasteryHeaders, PeakComponents } from "@/pages/Leaderboards/Ratings/RatingFullList"
 import { BoardSkeleton, BossMetricSkeleton } from "@/pages/Leaderboards/Ratings/RatingLeaderboard"
 import { BossPortrait, Emblem, RankMark } from "@/pages/Leaderboards/Ratings/RatingParts"
@@ -323,7 +324,7 @@ function GuildFullTable({
   const timeLabel = oneBoss ? "Kill time" : kindLabel === "Bosses" ? "Total kill time" : "Clear time"
 
   return (
-    <section aria-label={`${label} full list`} className="relative overflow-hidden rounded-xl border bg-card">
+    <section aria-label={`${label} full list`} className={cn("relative overflow-hidden rounded-xl border bg-card", MOBILE_EDGE_TO_EDGE)}>
       <BoardHeader
         oneBoss={oneBoss}
         title={title}

@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query"
 import { ArrowDown, Check, ChevronLeft, ChevronRight, Search } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
+import { MOBILE_EDGE_TO_EDGE } from "@/pages/Leaderboards/Hub/edgeToEdge"
 import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip"
 import { CLASS_CSS_VAR } from "@/pages/Rankings/classDisplay"
 import {
@@ -105,7 +106,7 @@ export function RatingFullList({
   const total = livePage?.total ?? (live ? visible.length : filtered.length)
 
   return (
-    <section aria-label={`${title} ${theme.label} full list`} className="overflow-hidden rounded-xl border bg-card">
+    <section aria-label={`${title} ${theme.label} full list`} className={cn("overflow-hidden rounded-xl border bg-card", MOBILE_EDGE_TO_EDGE)}>
       <div className="@container relative flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-4 py-3">
         <div
           aria-hidden
