@@ -328,6 +328,12 @@ function GuildFullTable({
   const rows = !live && needle ? ranked.filter((r) => r.g.guild.toLowerCase().includes(needle)) : ranked
   const top = ranked[0]?.g.score ?? 1
   const timeLabel = oneBoss ? "Kill time" : kindLabel === "Bosses" ? "Total kill time" : "Clear time"
+  /** Live multi-boss Peak shows each boss's bar; one boss (or the fixtures) shows a run time instead. */
+  const bossBars = live && !oneBoss
+  const peakBars = (g: GuildRating) => {
+    const row = published.data?.rows.find((row) => row.entry.guid === g.guildId && row.entry.detail === g.detail)
+    return row ? <PeakComponents entry={row.entry} scores={row.peakComponents} /> : null
+  }
 
   return (
     <section aria-label={`${label} full list`} className={cn("relative overflow-hidden rounded-xl border bg-card", MOBILE_EDGE_TO_EDGE)}>
@@ -354,7 +360,8 @@ function GuildFullTable({
       </BoardHeader>
 
       <div className="styled-scrollbar overflow-x-auto border-t">
-        <table className="w-full min-w-[42rem] table-auto text-sm">
+        {/* Peak folds its extra columns on a phone, matching the character board; other views still scroll. */}
+        <table className={cn("w-full table-auto text-sm", view === "peak" ? "sm:min-w-[42rem]" : "min-w-[42rem]")}>
           <thead className="border-b bg-black/10 text-[11px] tracking-wider text-muted-foreground uppercase">
             <tr>
               {/* Live boards have no global rank, so "#" would only ever be empty. */}
@@ -383,11 +390,13 @@ function GuildFullTable({
                 })
               ) : (
                 <>
-                  <th className="w-32 px-3 py-2.5 text-left font-medium">{theme.label}</th>
+                  {/* Phones: the boss bars sit between the name and the right-aligned score. */}
+                  {view === "peak" && bossBars && <th className="px-2 py-2.5 text-left font-medium sm:hidden">Bosses</th>}
+                  <th className={cn("w-32 px-3 py-2.5 text-left font-medium", view === "peak" && "pr-4 text-right sm:pr-3 sm:text-left")}>{theme.label}</th>
                   {view === "mastery" && (live ? <PublishedMasteryHeaders /> : <MasteryPartHeaders />)}
                   {view === "peak" && (
                     <>
-                      <th className="px-3 py-2.5 text-right font-medium">{live && !oneBoss ? "Boss peaks" : timeLabel}</th>
+                      <th className={cn("hidden px-3 py-2.5 font-medium sm:table-cell", bossBars ? "text-left" : "text-right")}>{bossBars ? "Boss peaks" : timeLabel}</th>
                       <th className="hidden px-3 py-2.5 text-left font-medium sm:table-cell">Date</th>
                     </>
                   )}
@@ -404,8 +413,10 @@ function GuildFullTable({
                     <RankMark rank={rank} size="sm" />
                   </td>
                 )}
-                <td className={cn("px-2 py-2 pr-8 whitespace-nowrap", live && "pl-4 sm:pl-5")}>
-                  <span className="flex items-center gap-2.5 font-medium">
+                <td className={cn("px-2 py-2 pr-2 whitespace-nowrap sm:pr-8", live && "pl-4 sm:pl-5")}>
+                  {/* Capped on phones so a long guild name truncates instead of widening the table; tighter
+                      when the boss bars share the row. */}
+                  <span className={cn("flex items-center gap-2.5 font-medium sm:max-w-none", view === "peak" && bossBars ? "max-w-[8.5rem]" : "max-w-[12rem]")}>
                     <GuildName guild={g.guild} guildId={g.guildId} logo={g.logo} size="size-6" />
                   </span>
                 </td>
@@ -425,8 +436,9 @@ function GuildFullTable({
                   })
                 ) : (
                   <>
-                    <td className="px-3 py-2">
-                      <div className="flex flex-col items-start gap-1">
+                    {view === "peak" && bossBars && <td className="px-2 py-2 sm:hidden">{peakBars(g)}</td>}
+                    <td className={cn("px-3 py-2", view === "peak" && "pr-4 sm:pr-3")}>
+                      <div className={cn("flex flex-col items-start gap-1", view === "peak" && "items-end sm:items-start")}>
                         <span className="font-mono text-base tabular-nums" style={rank === 1 ? { color: theme.accent } : undefined}>
                           {theme.format(g.score)}
                         </span>
@@ -436,13 +448,17 @@ function GuildFullTable({
                             style={{ width: `${(g.score / top) * 100}%` }}
                           />
                         </span>
+                        {/* Phones fold the run time under the score, as the character board does. */}
+                        {view === "peak" && !bossBars && g.ms !== undefined && (
+                          <span className="font-mono text-[11px] text-muted-foreground tabular-nums sm:hidden">{formatClock(g.ms)}</span>
+                        )}
                       </div>
                     </td>
                     {view === "mastery" && (live ? <PublishedMasteryCells entry={published.data!.rows.find(row => row.entry.guid === g.guildId && row.entry.detail === g.detail)!.entry} /> : <MasteryPartCells parts={g.mastery} />)}
                     {view === "peak" && (
                       <>
-                        <td className="px-3 py-2 text-right font-mono text-muted-foreground tabular-nums">
-                          {live && !oneBoss ? (() => { const row = published.data!.rows.find(row => row.entry.guid === g.guildId && row.entry.detail === g.detail)!; return <PeakComponents entry={row.entry} scores={row.peakComponents} /> })() : g.ms !== undefined ? formatClock(g.ms) : "Unavailable"}
+                        <td className={cn("hidden px-3 py-2 font-mono text-muted-foreground tabular-nums sm:table-cell", !bossBars && "text-right")}>
+                          {bossBars ? peakBars(g) : g.ms !== undefined ? formatClock(g.ms) : "Unavailable"}
                         </td>
                         <td className="hidden px-3 py-2 text-xs text-muted-foreground sm:table-cell">{g.date}</td>
                       </>

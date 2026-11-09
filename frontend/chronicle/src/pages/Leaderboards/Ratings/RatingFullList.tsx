@@ -205,6 +205,8 @@ export function RatingFullList({
                 </>
               ) : (
                 <>
+                  {/* Phones: the boss bars sit between the name and the right-aligned score. */}
+                  {showPeakComponents && <th className="px-2 py-2.5 text-left font-medium sm:hidden">Bosses</th>}
                   <th className={cn("w-32 px-3 py-2.5 text-left font-medium", phoneFolds && "pr-4 text-right sm:pr-3 sm:text-left")}>
                     {theme.label}
                     <HeaderHint {...METRIC_HINTS[view]} className="ml-1 align-middle" />
@@ -309,6 +311,7 @@ export function RatingFullList({
                   </>
                 ) : (
                   <>
+                    {showPeakComponents && <td className="px-2 py-2 sm:hidden"><PeakComponents entry={entry} scores={peakComponents} /></td>}
                     <td className={cn("px-3 py-2", phoneFolds && "pr-4 sm:pr-3")}>
                       <div className={cn("flex flex-col items-start gap-1", phoneFolds && "items-end sm:items-start")}>
                         <span className="font-mono text-base tabular-nums" style={rank === 1 ? { color: theme.accent } : undefined}>
@@ -413,7 +416,8 @@ export function PeakComponents({ entry, scores }: { entry: RatingEntry; scores?:
                 />
               ))}
             </span>
-            <span className="whitespace-nowrap">{scores.length} bosses{missed ? ` · ${missed} missed` : ""}</span>
+            {/* Phones show the bars alone; the breakdown dialog still names every boss. */}
+            <span className="hidden whitespace-nowrap sm:inline">{scores.length} bosses{missed ? ` · ${missed} missed` : ""}</span>
             <ChevronRight className="size-3.5" />
           </button>
         </DialogTrigger>
