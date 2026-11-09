@@ -33,7 +33,7 @@ import {
 import { participantHue, participantLabel, type LiveMapPresence } from "../../liveSessionProtocol";
 import { actionForKey, cameraAngles, cameraCollisionDistance, cameraOffset, clampMobileMapInput, DEFAULT_AD_STRAFE, easeAngleToward, freeCamTravelSpeed, IDLE_MOBILE_MAP_INPUT, lookDrag, planarStep, pointerLossEndsDrag, rightDragWalkAxes, setWalkMouseButton, shouldFollowWalkCamera, walkCameraSettling, walkDragButton, walkMovementYaw, walkMouseControl, WALK_TOGGLE_KEY, wheelZoomDistance, type MapControlAction, type MobileMapInput } from "./mapControls";
 import { unwrapCompassRadians } from "./mapCompassModel";
-import { climbElevations, createShotHold, directorPullIn, fallbackShot, FOLLOW_CENTRE_WINDOW_MS, FOLLOW_SHOT_CHECK_MS, shotCheckDue, steepPullIn, FOLLOW_SIGHT_STRIDE, FOLLOW_STEEP_MIN_DISTANCE_YARDS, seesFraming, sightPicks, type ShotAnswer, FOLLOW_SLICE_MS, followSprings, followYawStep, handOverFollowSpring, handOverFollowYaw, startFollowTrackBuild, wrapAngle, type FollowTrackBuild, followKeyAt, glideDurationMs, glidePoseAt, glideTurnMs, unwrapNear, holdShot, isReplayJump, type FollowKey, type FollowTrack, type FollowYawProbe, type GlidePose } from "./followCamera";
+import { climbElevations, createShotHold, directorPullIn, fallbackShot, FOLLOW_CENTRE_WINDOW_MS, FOLLOW_SHOT_CHECK_MS, FOLLOW_STEEP_ELEVATION_DEG, releaseSteepShot, shotCheckDue, steepPullIn, FOLLOW_SIGHT_STRIDE, FOLLOW_STEEP_MIN_DISTANCE_YARDS, seesFraming, sightPicks, type ShotAnswer, FOLLOW_SLICE_MS, followSprings, followYawStep, handOverFollowSpring, handOverFollowYaw, startFollowTrackBuild, wrapAngle, type FollowTrackBuild, followKeyAt, glideDurationMs, glidePoseAt, glideTurnMs, unwrapNear, holdShot, isReplayJump, type FollowKey, type FollowTrack, type FollowYawProbe, type GlidePose } from "./followCamera";
 import { BOSS_SPIRE, bossSpireCastGlow, CAST_ARC_TEXTURE_STEPS, DEAD_RING, DEBUFF_PLANE, DISPEL_COLORS, DROP_LINE, drawUnitPlate, ENEMY_RED, guardianWell, HALO_COLORS, MARKS_SCALE, OWNER_LINE, TARGET_LINE, TRAIL_LINE, UNIT_PLATE, unitPlateSize, type UnitPlateInfo, TOKEN_LAYOUT, type DispelKind, type HaloKind } from "./unitTokenArt";
 import { UnitTokenTextures } from "./unitTokens";
 import type { PlanInput, PlanItem, PlanMarkerIcon, PlanPoint } from "./plan/mapPlan";
@@ -1097,8 +1097,14 @@ export class MapScene3D {
   // The last line-of-sight answer, and when it may be asked again (FOLLOW_SHOT_CHECK_MS).
   private shotRaw: ShotAnswer | null = null;
   private shotCheckAt = 0;
-  // A wall pulled the steep camera in close: the next answer replaces the held one.
+  // A wall pulled the steep camera in close: the next answer that is not steep replaces the held one.
   private shotRelease = false;
+  // The last answer that was not steep: a release falls back to it when the answer is steep.
+  private shotShallow: ShotAnswer | null = null;
+  // The camera's actual target for the steep check (clearShot), and scratch vectors for it.
+  private readonly shotPose = { x: 0, z: 0, floor: 0 };
+  private readonly directorPoseAim = new THREE.Vector3();
+  private readonly directorPoseEye = new THREE.Vector3();
   // The framed units the line-of-sight answer keeps in sight (sightPicks), at player height.
   private readonly sightFramed: string[] = [];
   private readonly sightPicked: number[] = [];
@@ -1828,6 +1834,7 @@ export class MapScene3D {
     Object.assign(this.shotHold, createShotHold());
     this.shotRaw = null;
     this.shotRelease = false;
+    this.shotShallow = null;
   }
 
   /**
@@ -2550,10 +2557,17 @@ export class MapScene3D {
   // is clear of the cave toward the aim point and sees the framed units,
   // climbing in steps; the shot shortens only if no climb does (fallbackShot).
   // `floor` is the floor below (x, z).
-  private clearShot(x: number, floor: number, z: number, distance: number, yaw: number): ShotAnswer {
-    // From the fight's own height, not the floor the ray would graze.
-    const aim = this.directorAim.set(x, floor + MESH_PLAYER_HEIGHT_YARDS * (this.dungeonMesh?.scale ?? 1), z);
+  // With a `pose` (where the camera's spring actually holds its target, and
+  // the floor there), a steep shot must also stay clear of a wall closer than
+  // FOLLOW_STEEP_MIN_DISTANCE_YARDS from there: its line from the goal can be
+  // clear while the camera's own is not (the led spring, floor differences),
+  // and a wall that pulls a steep camera in shows only the floor.
+  private clearShot(x: number, floor: number, z: number, distance: number, yaw: number, pose: { x: number; z: number; floor: number } | null = null): ShotAnswer {
+    const lift = MESH_PLAYER_HEIGHT_YARDS * (this.dungeonMesh?.scale ?? 1);
+    const steepMin = FOLLOW_STEEP_MIN_DISTANCE_YARDS * (this.dungeonMesh?.scale ?? 1);
     return fallbackShot(DIRECTOR_CLIMB, (elevationDeg, shortened) => {
+      // From the fight's own height, not the floor the ray would graze.
+      const aim = this.directorAim.set(x, floor + lift, z);
       const out = shortened ? this.shortenedShot(distance) : distance;
       const elevation = (elevationDeg * Math.PI) / 180;
       const eye = this.directorEye.set(
@@ -2563,6 +2577,16 @@ export class MapScene3D {
       );
       // A wall on the aim line would pull the camera in: not this shot.
       if (this.meshBlocks(aim, eye)) return false;
+      if (pose && elevationDeg > FOLLOW_STEEP_ELEVATION_DEG) {
+        const from = this.directorPoseAim.set(pose.x, pose.floor + lift, pose.z);
+        const to = this.directorPoseEye.set(
+          pose.x + Math.sin(yaw) * Math.cos(elevation) * out,
+          pose.floor + Math.sin(elevation) * out,
+          pose.z + Math.cos(yaw) * Math.cos(elevation) * out,
+        );
+        const hit = this.meshHitDistance(from, to);
+        if (hit !== null && hit - ORBIT_COLLISION_PADDING < steepMin) return false;
+      }
       return seesFraming(this.sightCount, (k) => this.sightBoss[k]!, (k) => !this.meshBlocks(eye, this.sightTargets[k]!)) || "aim";
     });
   }
@@ -2761,23 +2785,34 @@ export class MapScene3D {
     // glide and a cut use the goal (where the group is).
     const springX = led ? led.x - Math.sin(placedYaw) * ahead : goal.x;
     const springZ = led ? led.z - Math.cos(placedYaw) * ahead : goal.z;
-    // A wall pulled the steep camera in close (last frame's collision): the
-    // next answer replaces the held one at once, so a lower clear shot wins.
-    if (steepPullIn(this.directorElevation.value, this.directorAllowed, FOLLOW_STEEP_MIN_DISTANCE_YARDS * mesh.scale)) this.shotRelease = true;
+    // While the held shot is steep, a wall that pulled the camera in close
+    // (last frame's collision) releases it for the next answer that is not;
+    // steep answers then cannot win straight back (releaseSteepShot).
+    if (this.shotHold.elevationDeg <= FOLLOW_STEEP_ELEVATION_DEG) this.shotRelease = false;
+    else if (steepPullIn(this.directorElevation.value, this.directorAllowed, FOLLOW_STEEP_MIN_DISTANCE_YARDS * mesh.scale)) this.shotRelease = true;
     // Asked again every FOLLOW_SHOT_CHECK_MS, and at once on a cut or a jump.
-    let fresh = false;
     if (shotCheckDue(now, this.shotCheckAt, this.shotRaw !== null, cutting || jumped)) {
       this.readSightTargets(director.bossGuids, mesh.scale);
-      const floor = this.floorHeights.heightAt("director-shot", goal.x, goal.z, this.cameraCeiling());
-      // A jump glides to the track's yaw (a cut snaps to it): check that one,
-      // not the yaw the camera is leaving.
-      this.shotRaw = this.clearShot(goal.x, floor, goal.z, goal.distance, jumped ? yaw : placedYaw);
+      // Gliding (from the jump's frame on), the shot lands at the track's yaw
+      // where the group is: check there, not at the yaw the camera turns
+      // through. Otherwise, where the camera is headed, steep shots also
+      // checked from where its spring actually holds it.
+      const gliding = key !== null && (jumped || this.directorGlide !== null);
+      const checkYaw = gliding ? yaw : placedYaw;
+      const checkX = gliding ? centreX - Math.sin(yaw) * ahead : goal.x;
+      const checkZ = gliding ? centreZ - Math.cos(yaw) * ahead : goal.z;
+      const floor = this.floorHeights.heightAt("director-shot", checkX, checkZ, this.cameraCeiling());
+      let pose: { x: number; z: number; floor: number } | null = null;
+      if (!gliding && !cutting) {
+        pose = this.shotPose;
+        pose.x = this.directorX.value;
+        pose.z = this.directorZ.value;
+        pose.floor = this.pivotFloor(pose.x, pose.z);
+      }
+      this.shotRaw = this.clearShot(checkX, floor, checkZ, goal.distance, checkYaw, pose);
       this.shotCheckAt = now + FOLLOW_SHOT_CHECK_MS;
-      fresh = true;
-    }
-    if (fresh && this.shotRelease) {
-      this.shotRelease = false;
-      Object.assign(this.shotHold, { elevationDeg: this.shotRaw!.elevationDeg, shortened: this.shotRaw!.shortened, lowerSinceMs: null });
+      if (this.shotRaw.elevationDeg <= FOLLOW_STEEP_ELEVATION_DEG) this.shotShallow = this.shotRaw;
+      if (this.shotRelease && releaseSteepShot(this.shotHold, this.shotRaw, now, this.shotShallow)) this.shotRelease = false;
     }
     const hold = holdShot(this.shotHold, this.shotRaw!.elevationDeg, this.shotRaw!.shortened, now);
     const shotElevation = hold.elevationDeg;

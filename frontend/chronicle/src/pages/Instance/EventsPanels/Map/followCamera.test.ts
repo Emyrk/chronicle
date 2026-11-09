@@ -42,6 +42,7 @@ import {
   choiceMasks,
   shotCheckDue,
   steepPullIn,
+  releaseSteepShot,
   FOLLOW_SHOT_CHECK_MS,
   type FollowYawSight,
   type ShotAnswer,
@@ -1116,8 +1117,11 @@ describe("line of sight to the framed units (chronicle-1725)", () => {
     expect(answer((deg, shortened) => !shortened && deg <= 38 && "aim")).toEqual({ elevationDeg: 38, shortened: false });
     expect(asked).toHaveLength(CLIMB.length + 3);
     asked.length = 0;
-    expect(answer((deg, shortened) => (shortened ? deg <= 38 && "aim" : "aim"))).toEqual({ elevationDeg: 38, shortened: true });
+    expect(answer((deg, shortened) => (shortened ? deg <= 38 && "aim" : deg <= 38 && "aim"))).toEqual({ elevationDeg: 38, shortened: true });
     expect(asked).toHaveLength(CLIMB.length + 3);
+    // Elevation first: a clear full 48 beats a clear shortened 28 (review 1732b).
+    asked.length = 0;
+    expect(answer((deg, shortened) => (shortened ? deg === 28 && "aim" : deg >= 43 && deg <= 48 && "aim"))).toEqual({ elevationDeg: 48, shortened: false });
     // Blocked even on the aim line everywhere: the base elevation, shortened.
     // The wall pulls the camera in, but not looking steeply down at the floor.
     asked.length = 0;
@@ -1142,29 +1146,35 @@ describe("line of sight to the framed units (chronicle-1725)", () => {
 
   // The Director's per-frame line-of-sight loop (MapScene3D.updateDirector),
   // modelled with the pure parts: a check every FOLLOW_SHOT_CHECK_MS or at
-  // once on a cut or jump, the hold, the steep pull-in releasing the hold,
-  // and the elevation spring. `answer(now)` is the raw answer, `wall(elevation)`
-  // the wall's distance on the camera's own line (null: none).
-  const directorLoop = (durationMs: number, answer: (now: number) => ShotAnswer, wall: (elevationDeg: number) => number | null, jumps: number[] = []) => {
+  // once on a cut or jump, the hold, the steep pull-in releasing a held steep
+  // shot (releaseSteepShot), and the elevation spring. `answer(now, poseClear)`
+  // is the raw answer; `poseClear(deg)` says whether a steep shot clears the
+  // wall from the camera's own pose (clearShot's pose check). `wall(elevation)`
+  // is the wall's distance on the camera's own line (null: none).
+  const directorLoop = (durationMs: number, answer: (now: number, poseClear: (deg: number) => boolean) => ShotAnswer, wall: (elevationDeg: number) => number | null, jumps: number[] = []) => {
     const hold = createShotHold();
     const elevation: DampedValue = { value: hold.elevationDeg, velocity: 0 };
     let raw: ShotAnswer | null = null;
     let checkAt = 0;
     let release = false;
+    let shallow: ShotAnswer | null = null;
     let allowed: number | null = null;
     let checks = 0;
     const frames: { now: number; elevation: number; allowed: number | null; held: number }[] = [];
+    const poseClear = (deg: number) => {
+      const hit = wall(deg);
+      return hit === null || hit - 0.75 >= 10;
+    };
     for (let now = 0; now <= durationMs; now += FRAME_MS) {
-      if (steepPullIn(elevation.value, allowed, 10)) release = true;
+      if (hold.elevationDeg <= FOLLOW_STEEP_ELEVATION_DEG) release = false;
+      else if (steepPullIn(elevation.value, allowed, 10)) release = true;
       const jumped = jumps.some((at) => at > now - FRAME_MS && at <= now);
       if (shotCheckDue(now, checkAt, raw !== null, jumped)) {
-        raw = answer(now);
+        raw = answer(now, poseClear);
         checkAt = now + FOLLOW_SHOT_CHECK_MS;
         checks++;
-        if (release) {
-          release = false;
-          Object.assign(hold, { elevationDeg: raw.elevationDeg, shortened: raw.shortened, lowerSinceMs: null });
-        }
+        if (raw.elevationDeg <= FOLLOW_STEEP_ELEVATION_DEG) shallow = raw;
+        if (release && releaseSteepShot(hold, raw, now, shallow)) release = false;
       }
       holdShot(hold, raw!.elevationDeg, raw!.shortened, now);
       smoothDamp(elevation, hold.elevationDeg, 0.6, FRAME_MS / 1000);
@@ -1205,14 +1215,115 @@ describe("line of sight to the framed units (chronicle-1725)", () => {
     // The hold lets go within one check of the 33 answer, not SHOT_RELEASE_MS later.
     const down = frames.find((frame) => frame.now >= 1_000 && frame.held === 33)!;
     expect(down.now).toBeLessThan(1_000 + 2 * FOLLOW_SHOT_CHECK_MS);
-    // The wall always wins: no frame keeps the camera past it.
-    for (const frame of frames) if (frame.elevation > 40) expect(frame.allowed).toBeCloseTo(3.25, 9);
     // Steep and pulled in close only while the spring comes down through 40.
     const close = frames.filter((frame) => frame.now >= 1_000 && steepPullIn(frame.elevation, frame.allowed, 10));
     expect(close.length * FRAME_MS).toBeLessThan(1_000);
     // Without the wall the same answers wait out the hold.
     const free = directorLoop(4_000, answer, () => null).frames.find((frame) => frame.now >= 1_000 && frame.held === 33)!;
     expect(free.now).toBeGreaterThanOrEqual(1_000 + SHOT_RELEASE_MS);
+  });
+
+  // Reversals of the elevation spring's direction, and how long it is steep
+  // and pulled in close, after the first `settleMs`.
+  const bobbing = (frames: { now: number; elevation: number; allowed: number | null }[], settleMs = 0) => {
+    let reversals = 0;
+    let lastDirection = 0;
+    let steepClose = 0;
+    for (let i = 1; i < frames.length; i++) {
+      const step = frames[i]!.elevation - frames[i - 1]!.elevation;
+      const direction = Math.abs(step) > 1e-3 ? Math.sign(step) : 0;
+      if (frames[i]!.now < settleMs) continue;
+      if (direction && lastDirection && direction !== lastDirection) reversals++;
+      if (direction) lastDirection = direction;
+      if (steepPullIn(frames[i]!.elevation, frames[i]!.allowed, 10)) steepClose += FRAME_MS;
+    }
+    return { reversals, steepCloseMs: steepClose };
+  };
+
+  it("does not bob when the steep answer flickers while the camera's own line is walled (review 1732b)", () => {
+    // The answer at the goal flickers between {50, full} and {28, shortened};
+    // the camera's own line has a wall 4 yd out above 40 degrees. Before
+    // the fix: 153 reversals between 31 and 48 degrees in 60 s, 40 s steep and close.
+    const wall = (deg: number) => (deg > 40 ? 4 : null);
+    for (const odds of [0.5, 0.2, 0.05]) {
+      const random = seeded(7);
+      const flicker = () => random() < odds;
+      // With clearShot's pose check, the steep answer is turned down where the camera stands.
+      const checked = directorLoop(60_000, (_now, poseClear) => (flicker() || !poseClear(50) ? { elevationDeg: 28, shortened: true } : { elevationDeg: 50, shortened: false }), wall).frames;
+      const pose = bobbing(checked);
+      expect(pose.reversals).toBeLessThanOrEqual(1);
+      expect(pose.steepCloseMs).toBe(0);
+      // Without it (the pose check cannot see the wall), the release alone:
+      // a steep answer comes back only after holding SHOT_RELEASE_MS, so the
+      // camera rises at most once per release.
+      const random2 = seeded(7);
+      const blind = directorLoop(60_000, () => (random2() < odds ? { elevationDeg: 28, shortened: true } : { elevationDeg: 50, shortened: false }), wall).frames;
+      const alone = bobbing(blind, 5_000);
+      // Each release doubles the wait (1.5, 3, 6, 12, 24 s): a handful of
+      // rises in a minute, each steep and close only until the next check.
+      expect(alone.reversals).toBeLessThanOrEqual(12);
+      expect(alone.steepCloseMs).toBeLessThan(3_000);
+      console.info(`flicker ${odds}: pose-checked ${pose.reversals} reversals, ${(pose.steepCloseMs / 1000).toFixed(1)} s steep and close; release alone ${alone.reversals} reversals, ${(alone.steepCloseMs / 1000).toFixed(1)} s`);
+    }
+  });
+
+  it("keeps a released steep answer from winning straight back, then lets it in once it holds", () => {
+    const hold = createShotHold();
+    holdShot(hold, 50, false, 0);
+    // A second release doubles the wait.
+    const twice = createShotHold();
+    releaseSteepShot(twice, { elevationDeg: 28, shortened: false }, 0);
+    holdShot(twice, 50, false, 100);
+    holdShot(twice, 50, false, 100 + SHOT_RELEASE_MS);
+    expect(twice.elevationDeg).toBe(50);
+    releaseSteepShot(twice, { elevationDeg: 28, shortened: false }, 2_000);
+    holdShot(twice, 50, false, 2_100);
+    holdShot(twice, 50, false, 2_100 + SHOT_RELEASE_MS);
+    expect(twice.elevationDeg).toBe(28);
+    holdShot(twice, 50, false, 2_100 + 2 * SHOT_RELEASE_MS);
+    expect(twice.elevationDeg).toBe(50);
+    // Once steep answers go quiet, the back-off resets: the next release waits SHOT_RELEASE_MS again.
+    holdShot(twice, 28, false, 10_000);
+    holdShot(twice, 28, false, 10_000 + SHOT_RELEASE_MS);
+    expect(twice.steepReleases).toBe(0);
+    holdShot(twice, 50, false, 12_000);
+    releaseSteepShot(twice, { elevationDeg: 28, shortened: false }, 12_100);
+    holdShot(twice, 50, false, 12_200);
+    holdShot(twice, 50, false, 12_200 + SHOT_RELEASE_MS);
+    expect(twice.elevationDeg).toBe(50);
+    // A steep answer does not release on its own (it waits for one that is
+    // not), but falls back to the last shallow answer when there is one.
+    expect(releaseSteepShot(hold, { elevationDeg: 48, shortened: false }, 100)).toBe(false);
+    expect(hold.elevationDeg).toBe(50);
+    const fallback = createShotHold();
+    holdShot(fallback, 50, false, 0);
+    expect(releaseSteepShot(fallback, { elevationDeg: 48, shortened: false }, 100, { elevationDeg: 33, shortened: false })).toBe(true);
+    expect(fallback).toMatchObject({ elevationDeg: 33, shortened: false });
+    expect(releaseSteepShot(hold, { elevationDeg: 28, shortened: true }, 200)).toBe(true);
+    expect(hold).toMatchObject({ elevationDeg: 28, shortened: true });
+    // 50 asked again at once: blocked, it counts as lower.
+    holdShot(hold, 50, false, 300);
+    expect(hold.elevationDeg).toBe(28);
+    // A flicker back to the held answer starts the count over.
+    holdShot(hold, 28, true, 400);
+    holdShot(hold, 50, false, 500);
+    holdShot(hold, 50, false, 500 + SHOT_RELEASE_MS - 1);
+    expect(hold.elevationDeg).toBe(28);
+    // Held steadily for the release time, it comes in, and the block lifts.
+    holdShot(hold, 50, false, 500 + SHOT_RELEASE_MS);
+    expect(hold.elevationDeg).toBe(50);
+    expect(hold.steepBlockedMs).toBeNull();
+    // With no steep answer asked for the release time, the block lifts by itself.
+    const quiet = createShotHold();
+    releaseSteepShot(quiet, { elevationDeg: 28, shortened: false }, 0);
+    holdShot(quiet, 28, false, SHOT_RELEASE_MS);
+    holdShot(quiet, 50, false, SHOT_RELEASE_MS + 100);
+    expect(quiet.elevationDeg).toBe(50);
+    // A shallow climb is not blocked.
+    const shallow = createShotHold();
+    releaseSteepShot(shallow, { elevationDeg: 28, shortened: false }, 0);
+    holdShot(shallow, 38, false, 100);
+    expect(shallow.elevationDeg).toBe(38);
   });
 
   it("does not drop a held full 50-degree shot for one shortened 28-degree answer", () => {

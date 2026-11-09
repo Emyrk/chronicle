@@ -813,13 +813,16 @@ export function fallbackShot(elevations: readonly number[], sees: (elevationDeg:
     if (sight === true) return { elevationDeg, shortened: true };
     short.push(sight);
   }
-  // Nothing sees the framing: from highest down (more of the group shows
-  // over what hides it), the closer shot first, wherever the aim line is clear.
-  const clearShort = short.lastIndexOf("aim");
-  if (clearShort >= 0) return { elevationDeg: shorter[clearShort]!, shortened: true };
-  const clearFull = full.lastIndexOf("aim");
-  if (clearFull >= 0) return { elevationDeg: elevations[clearFull]!, shortened: false };
-  return { elevationDeg: elevations[0]!, shortened: true };
+  // Nothing sees the framing: the highest shot whose aim line is clear (more
+  // of the group shows over what hides it), the closer one first at the same
+  // elevation, as holdShot ranks them.
+  let best: ShotAnswer | null = null;
+  const consider = (elevationDeg: number, shortened: boolean) => {
+    if (!best || elevationDeg > best.elevationDeg || (elevationDeg === best.elevationDeg && shortened && !best.shortened)) best = { elevationDeg, shortened };
+  };
+  full.forEach((sight, k) => sight === "aim" && consider(elevations[k]!, false));
+  short.forEach((sight, k) => sight === "aim" && consider(shorter[k]!, true));
+  return best ?? { elevationDeg: elevations[0]!, shortened: true };
 }
 
 /**
@@ -838,9 +841,9 @@ export function directorPullIn(want: number, hit: number | null, padding: number
 /**
  * Whether a wall has pulled the camera (allowed `allowed` scene units out;
  * null: not held in) closer than `steepMinDistance` while it looks down
- * steeper than FOLLOW_STEEP_ELEVATION_DEG: a close-up of the floor. The
- * Director then lets the line-of-sight hold go at its next answer, so a
- * lower clear shot wins at once instead of after SHOT_RELEASE_MS.
+ * steeper than FOLLOW_STEEP_ELEVATION_DEG: a close-up of the floor. While
+ * the held shot is steep, the Director then releases it for its next answer
+ * that is not (releaseSteepShot), instead of waiting out SHOT_RELEASE_MS.
  */
 export function steepPullIn(elevationDeg: number, allowed: number | null, steepMinDistance: number): boolean {
   return allowed !== null && elevationDeg > FOLLOW_STEEP_ELEVATION_DEG && allowed < steepMinDistance;
@@ -917,10 +920,48 @@ export interface ShotHold {
   shortened: boolean;
   /** When the raw answer first asked for less than the held one, or null. */
   lowerSinceMs: number | null;
+  /**
+   * Set when a wall pulled the steep shot in (releaseSteepShot): a steep
+   * answer (above FOLLOW_STEEP_ELEVATION_DEG) then counts as lower than any
+   * other, so it only comes back once asked for SHOT_RELEASE_MS without a
+   * break, and a flickering one cannot bob the camera. The release time; null
+   * when none is blocked. It lifts once a steep answer is taken, or none has
+   * been asked for SHOT_RELEASE_MS (a later climb is a new need).
+   */
+  steepBlockedMs: number | null;
+  /** When a steep answer was last asked (or a release), or null. */
+  steepAskedMs: number | null;
+  /**
+   * Releases since steep answers last went quiet: each one doubles how long
+   * a blocked steep answer must hold to come back (up to 16 times
+   * SHOT_RELEASE_MS), so a wall that keeps pulling the steep shot in stops
+   * it bobbing up and down.
+   */
+  steepReleases: number;
 }
 
 export function createShotHold(): ShotHold {
-  return { elevationDeg: CINEMATIC_ELEVATION_DEG, shortened: false, lowerSinceMs: null };
+  return { elevationDeg: CINEMATIC_ELEVATION_DEG, shortened: false, lowerSinceMs: null, steepBlockedMs: null, steepAskedMs: null, steepReleases: 0 };
+}
+
+/**
+ * A wall pulled the held steep shot in close (steepPullIn): takes `answer`
+ * at once when it is not steep (else `shallow`, the last answer that was
+ * not), and blocks steep answers from winning back at once
+ * (ShotHold.steepBlockedMs): they come in like any lower answer, once asked
+ * SHOT_RELEASE_MS without a break. Without either, it waits. True when the
+ * hold was released. Mutates `hold`.
+ */
+export function releaseSteepShot(hold: ShotHold, answer: ShotAnswer, nowMs: number, shallow: ShotAnswer | null = null): boolean {
+  const to = answer.elevationDeg <= FOLLOW_STEEP_ELEVATION_DEG ? answer : shallow;
+  if (!to || to.elevationDeg > FOLLOW_STEEP_ELEVATION_DEG) return false;
+  hold.elevationDeg = to.elevationDeg;
+  hold.shortened = to.shortened;
+  hold.lowerSinceMs = null;
+  hold.steepBlockedMs = nowMs;
+  hold.steepAskedMs = nowMs;
+  hold.steepReleases++;
+  return true;
 }
 
 // Higher means further from the base shot. Elevation first: a shortened
@@ -941,7 +982,16 @@ function shotRank(elevationDeg: number, shortened: boolean): number {
  */
 export function holdShot(hold: ShotHold, elevationDeg: number, shortened: boolean, nowMs: number, releaseMs = SHOT_RELEASE_MS): ShotHold {
   const held = shotRank(hold.elevationDeg, hold.shortened);
-  const next = shotRank(elevationDeg, shortened);
+  const steep = elevationDeg > FOLLOW_STEEP_ELEVATION_DEG;
+  if (steep) hold.steepAskedMs = nowMs;
+  else if (hold.steepAskedMs !== null && nowMs - hold.steepAskedMs >= releaseMs) {
+    // Steep answers went quiet: the block and the back-off lift.
+    hold.steepAskedMs = null;
+    hold.steepBlockedMs = null;
+    hold.steepReleases = 0;
+  }
+  const blocked = steep && hold.steepBlockedMs !== null;
+  const next = blocked ? Number.NEGATIVE_INFINITY : shotRank(elevationDeg, shortened);
   if (next > held) {
     hold.elevationDeg = elevationDeg;
     hold.shortened = shortened;
@@ -950,10 +1000,11 @@ export function holdShot(hold: ShotHold, elevationDeg: number, shortened: boolea
     hold.lowerSinceMs = null;
   } else if (hold.lowerSinceMs === null) {
     hold.lowerSinceMs = nowMs;
-  } else if (nowMs - hold.lowerSinceMs >= releaseMs) {
+  } else if (nowMs - hold.lowerSinceMs >= (blocked ? releaseMs * 2 ** Math.min(Math.max(0, hold.steepReleases - 1), 4) : releaseMs)) {
     hold.elevationDeg = elevationDeg;
     hold.shortened = shortened;
     hold.lowerSinceMs = null;
+    if (blocked) hold.steepBlockedMs = null;
   }
   return hold;
 }
