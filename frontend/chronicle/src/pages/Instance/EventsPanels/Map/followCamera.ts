@@ -116,8 +116,9 @@ export const FOLLOW_SIGHT_SLOTS = 1 + FOLLOW_SIGHT_MAX_PLAYERS;
 /** Numbers per sight target in a track's targets: x, z, height (yards; NaN when unknown), boss (1 or 0). */
 export const FOLLOW_SIGHT_STRIDE = 4;
 /**
- * Steeper than this (degrees above the horizon), a camera pulled in by a wall
- * stops FOLLOW_STEEP_MIN_DISTANCE_YARDS out: closer, it shows only the floor.
+ * Steeper than this (degrees above the horizon) and pulled in by a wall
+ * closer than FOLLOW_STEEP_MIN_DISTANCE_YARDS, the camera shows only the
+ * floor: the Director lets the held answer go for a lower one (steepPullIn).
  */
 export const FOLLOW_STEEP_ELEVATION_DEG = 40;
 export const FOLLOW_STEEP_MIN_DISTANCE_YARDS = 10;
@@ -175,12 +176,17 @@ export interface FollowYawProbe {
    */
   sample(x: number, z: number, radius: number, height: number | undefined, targets: Float32Array): boolean | void;
   /**
-   * Whether a camera at `yaw` (the base shot: base elevation, fitted
-   * distance) is clear of the cave toward the sample last readied and sees
-   * its framing (seesFraming).
+   * How a camera at `yaw` (the base shot: base elevation, fitted distance)
+   * does against the sample last readied: true when it is clear of the cave
+   * toward the aim point and sees the framing (seesFraming); "aim" when only
+   * its line to the aim point is clear (no wall between them, but the framed
+   * units are hidden); false when the cave blocks even that.
    */
-  clearYaw(yaw: number): boolean;
+  clearYaw(yaw: number): FollowYawSight;
 }
+
+/** clearYaw's answer: sees the framing (true), only a clear aim line ("aim"), or blocked (false). */
+export type FollowYawSight = boolean | "aim";
 
 /** The smoothed framing over a replay span; sample it with followKeyAt. */
 export interface FollowTrack {
@@ -202,8 +208,15 @@ export interface FollowTrack {
    * base itself is clear); all set without a probe.
    */
   yawProbed: Uint16Array;
-  /** Per sample: bit k set when candidate k was probed and had a clear line (all set without a probe). */
+  /** Per sample: bit k set when candidate k was probed and saw the framing (all set without a probe). */
   yawOpen: Uint16Array;
+  /**
+   * Per sample: bit k set when candidate k was probed and its line to the aim
+   * point was clear (a superset of `yawOpen`; all set without a probe). Where
+   * no candidate sees the framing, the choice falls back to these, so the
+   * camera still keeps off the walls.
+   */
+  yawAimOpen: Uint16Array;
   /** Per sample: the candidate index the yaw was built from (after the dwell); -1 when none was clear and the base stands. */
   yawChoice: Int8Array;
 }
@@ -379,6 +392,7 @@ export function startFollowTrackBuild(options: FollowTrackOptions, now: () => nu
   let radii: Float64Array | null = null;
   let baseYaw: Float64Array | null = null;
   let yawOpen: Uint16Array | null = null;
+  let yawAimOpen: Uint16Array | null = null;
   let yawProbed: Uint16Array | null = null;
   let choice: Int8Array | null = null;
   let chosen: Float64Array | null = null;
@@ -449,9 +463,11 @@ export function startFollowTrackBuild(options: FollowTrackOptions, now: () => nu
   const startYaw = () => {
     baseYaw = baseYaws(xs!, zs!, FOLLOW_YAW_MOVING_YPS * scale * (sampleMs / 1_000), options.initialYaw ?? 0);
     yawOpen = new Uint16Array(count);
+    yawAimOpen = new Uint16Array(count);
     yawProbed = new Uint16Array(count);
     if (!probe) {
       yawOpen.fill(ALL_YAWS_OPEN);
+      yawAimOpen.fill(ALL_YAWS_OPEN);
       yawProbed.fill(ALL_YAWS_OPEN);
     }
   };
@@ -463,7 +479,7 @@ export function startFollowTrackBuild(options: FollowTrackOptions, now: () => nu
   // capped at FOLLOW_YAW_MAX_RATE of real time.
   const choose = () => {
     const dwell = Math.max(1, Math.round((FOLLOW_YAW_DWELL_MS * yawStretch) / sampleMs));
-    choice = heldYawChoices(yawOpen!, dwell);
+    choice = heldYawChoices(choiceMasks(yawOpen!, yawAimOpen!), dwell);
     chosen = new Float64Array(count);
     for (let i = 0; i < count; i++) chosen[i] = baseYaw![i]! + (choice[i]! < 0 ? 0 : YAW_CANDIDATES[choice[i]!]!);
   };
@@ -471,7 +487,7 @@ export function startFollowTrackBuild(options: FollowTrackOptions, now: () => nu
     const half = Math.max(1, Math.round(((options.yawWindowMs ?? FOLLOW_YAW_WINDOW_MS) * yawStretch) / sampleMs / 2));
     const maxStep = (FOLLOW_YAW_MAX_RATE * sampleMs) / (speed * 1_000);
     const yaw = rateLimited(movingMean(movingMean(chosen!, half), half), maxStep);
-    result = { startMs, endMs: startMs + span, sampleMs, subjectGuid, speed, x: xs!, z: zs!, radius: radii!, yaw, baseYaw: baseYaw!, yawProbed: yawProbed!, yawOpen: yawOpen!, yawChoice: choice! };
+    result = { startMs, endMs: startMs + span, sampleMs, subjectGuid, speed, x: xs!, z: zs!, radius: radii!, yaw, baseYaw: baseYaw!, yawProbed: yawProbed!, yawOpen: yawOpen!, yawAimOpen: yawAimOpen!, yawChoice: choice! };
   };
 
   return {
@@ -550,6 +566,7 @@ export function startFollowTrackBuild(options: FollowTrackOptions, now: () => nu
         if (probe.sample(xs![probed]!, zs![probed]!, radii[probed]!, Number.isNaN(height) ? undefined : height, targets) !== false) {
           const probedYaws = probeYaws(probe, baseYaw![probed]!);
           yawOpen![probed] = probedYaws.open;
+          yawAimOpen![probed] = probedYaws.aim;
           yawProbed![probed] = probedYaws.probed;
         }
         probed++;
@@ -612,16 +629,22 @@ function medianFramedHeight(units: readonly DirectorUnit[], inFrame: ReadonlySet
 }
 
 // Probes the candidate yaws around `base` nearest first, stopping once the
-// base is clear or the nearest clear yaw on each side is known (half a turn
-// counts as both sides). Returns which were probed and which were clear.
-function probeYaws(probe: FollowYawProbe, base: number): { probed: number; open: number } {
+// base sees the framing or the nearest yaw that does on each side is known
+// (half a turn counts as both sides). Returns which were probed, which saw
+// the framing and which had a clear aim line (where none sees the framing,
+// every candidate was probed, so that mask is whole).
+function probeYaws(probe: FollowYawProbe, base: number): { probed: number; open: number; aim: number } {
   let probed = 0;
   let open = 0;
+  let aim = 0;
   let left = false;
   let right = false;
   for (let k = 0; k < YAW_CANDIDATES.length; k++) {
     probed |= 1 << k;
-    if (!probe.clearYaw(base + YAW_CANDIDATES[k]!)) continue;
+    const sight = probe.clearYaw(base + YAW_CANDIDATES[k]!);
+    if (sight === false) continue;
+    aim |= 1 << k;
+    if (sight !== true) continue;
     open |= 1 << k;
     const off = FOLLOW_YAW_CANDIDATES_DEG[k]!;
     if (off === 0) break;
@@ -629,7 +652,18 @@ function probeYaws(probe: FollowYawProbe, base: number): { probed: number; open:
     if (off < 0 || off === 180) right = true;
     if (left && right) break;
   }
-  return { probed, open };
+  return { probed, open, aim };
+}
+
+/**
+ * The masks the yaw choice reads, per sample: the yaws that see the framing
+ * where any does, else those with a clear aim line (keeping the camera off
+ * the wall where nothing sees the group, as before chronicle-1725).
+ */
+export function choiceMasks(open: Uint16Array, aimOpen: Uint16Array): Uint16Array {
+  const out = new Uint16Array(open.length);
+  for (let i = 0; i < open.length; i++) out[i] = open[i]! !== 0 ? open[i]! : aimOpen[i]!;
+  return out;
 }
 
 /**
@@ -749,33 +783,72 @@ export function climbElevations(baseDeg: number, stepDeg: number, maxDeg: number
 }
 
 /**
- * The fallback once the yaw is set (the track turns first, chronicle-1724):
- * the lowest of `elevations` whose camera at the full distance is clear and
- * sees the framing (a modest climb); else the lowest of the base, middle and
- * top ones that does at the shortened distance (shortening last); else the
- * top, shortened, as before. `sees(elevationDeg, shortened)` answers for one
- * shot; it is asked in that order and no more than needed.
+ * The fallback once the yaw is set (the track turns first, chronicle-1724).
+ * `sees(elevationDeg, shortened)` answers for one shot as clearYaw does (true:
+ * clear and sees the framing; "aim": only the aim line is clear; false:
+ * blocked). In order:
+ * 1. the lowest of `elevations` that sees the framing at the full distance (a
+ *    modest climb);
+ * 2. the lowest of the base, middle and top that does at the shortened
+ *    distance (shortening last);
+ * 3. where nothing sees the framing, the highest shot with a clear aim line
+ *    (the camera at least sits clear of the cave, not pulled in, and from
+ *    higher up more of the group shows over what hides it), shortened first;
+ * 4. with even the aim line blocked everywhere, the base elevation shortened:
+ *    the wall will pull the camera in, and that close it must not look
+ *    steeply down at the floor.
+ * Each shot is asked at most once, and only until the answer is known.
  */
-export function fallbackShot(elevations: readonly number[], sees: (elevationDeg: number, shortened: boolean) => boolean): ShotAnswer {
-  for (const elevationDeg of elevations) if (sees(elevationDeg, false)) return { elevationDeg, shortened: false };
-  const top = elevations[elevations.length - 1]!;
-  const shortened = new Set([elevations[0]!, elevations[(elevations.length - 1) >> 1]!, top]);
-  for (const elevationDeg of shortened) if (sees(elevationDeg, true)) return { elevationDeg, shortened: true };
-  return { elevationDeg: top, shortened: true };
+export function fallbackShot(elevations: readonly number[], sees: (elevationDeg: number, shortened: boolean) => FollowYawSight): ShotAnswer {
+  const full: FollowYawSight[] = [];
+  for (const elevationDeg of elevations) {
+    const sight = sees(elevationDeg, false);
+    if (sight === true) return { elevationDeg, shortened: false };
+    full.push(sight);
+  }
+  const shorter = [...new Set([elevations[0]!, elevations[(elevations.length - 1) >> 1]!, elevations[elevations.length - 1]!])];
+  const short: FollowYawSight[] = [];
+  for (const elevationDeg of shorter) {
+    const sight = sees(elevationDeg, true);
+    if (sight === true) return { elevationDeg, shortened: true };
+    short.push(sight);
+  }
+  // Nothing sees the framing: from highest down (more of the group shows
+  // over what hides it), the closer shot first, wherever the aim line is clear.
+  const clearShort = short.lastIndexOf("aim");
+  if (clearShort >= 0) return { elevationDeg: shorter[clearShort]!, shortened: true };
+  const clearFull = full.lastIndexOf("aim");
+  if (clearFull >= 0) return { elevationDeg: elevations[clearFull]!, shortened: false };
+  return { elevationDeg: elevations[0]!, shortened: true };
 }
 
 /**
  * How far out the Director's camera may sit with a wall `hit` scene units
  * out along its line (null: no wall), wanting `want`: `padding` short of the
- * wall, but never under `minDistance`, nor under `steepMinDistance` while
- * the camera is steeper than FOLLOW_STEEP_ELEVATION_DEG (a close-up that
- * steep is all floor; the line-of-sight answer climbs or shortens to a shot
- * that needs no pull-in instead). Null when nothing holds it in.
+ * wall, but never under `minDistance`. Null when nothing holds it in. The
+ * wall always wins: a camera kept out past it would sit in the rock or above
+ * the ceiling. A steep camera pulled in close is undone by the answer
+ * instead (steepPullIn).
  */
-export function directorPullIn(want: number, hit: number | null, padding: number, elevationDeg: number, minDistance: number, steepMinDistance: number): number | null {
+export function directorPullIn(want: number, hit: number | null, padding: number, minDistance: number): number | null {
   if (hit === null) return null;
-  const floor = elevationDeg > FOLLOW_STEEP_ELEVATION_DEG ? Math.max(minDistance, steepMinDistance) : minDistance;
-  return Math.max(Math.min(want, floor), hit - padding);
+  return Math.max(Math.min(want, minDistance), hit - padding);
+}
+
+/**
+ * Whether a wall has pulled the camera (allowed `allowed` scene units out;
+ * null: not held in) closer than `steepMinDistance` while it looks down
+ * steeper than FOLLOW_STEEP_ELEVATION_DEG: a close-up of the floor. The
+ * Director then lets the line-of-sight hold go at its next answer, so a
+ * lower clear shot wins at once instead of after SHOT_RELEASE_MS.
+ */
+export function steepPullIn(elevationDeg: number, allowed: number | null, steepMinDistance: number): boolean {
+  return allowed !== null && elevationDeg > FOLLOW_STEEP_ELEVATION_DEG && allowed < steepMinDistance;
+}
+
+/** Whether the Director asks for a new line-of-sight answer this frame: every FOLLOW_SHOT_CHECK_MS, at once on a cut or a jump, and when it has none. */
+export function shotCheckDue(nowMs: number, checkAtMs: number, hasAnswer: boolean, cutOrJump: boolean): boolean {
+  return !hasAnswer || cutOrJump || nowMs >= checkAtMs;
 }
 
 // Caps each step at `maxStep`, forwards and backwards, and averages the two,
@@ -850,13 +923,18 @@ export function createShotHold(): ShotHold {
   return { elevationDeg: CINEMATIC_ELEVATION_DEG, shortened: false, lowerSinceMs: null };
 }
 
+// Higher means further from the base shot. Elevation first: a shortened
+// shot only outranks a full one at the same elevation or higher, so a
+// shortened answer at a lower elevation waits out the release like any lower
+// answer (chronicle-1725 review: it used to drop a full 50-degree shot to 28
+// degrees on one flicker).
 function shotRank(elevationDeg: number, shortened: boolean): number {
-  return elevationDeg + (shortened ? 1_000 : 0);
+  return 2 * elevationDeg + (shortened ? 1 : 0);
 }
 
 /**
  * Hysteresis for the line-of-sight answer: a higher elevation (or the
- * shortened shot) is taken at once, so the fight is not hidden, but the shot
+ * shortened shot at the same elevation) is taken at once, so the fight is not hidden, but the shot
  * only comes back down once every answer for SHOT_RELEASE_MS asked for less.
  * A ray that flips between blocked and clear frame to frame therefore moves
  * the camera once, not back and forth. Mutates and returns `hold`.

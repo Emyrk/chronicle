@@ -33,7 +33,7 @@ import {
 import { participantHue, participantLabel, type LiveMapPresence } from "../../liveSessionProtocol";
 import { actionForKey, cameraAngles, cameraCollisionDistance, cameraOffset, clampMobileMapInput, DEFAULT_AD_STRAFE, easeAngleToward, freeCamTravelSpeed, IDLE_MOBILE_MAP_INPUT, lookDrag, planarStep, pointerLossEndsDrag, rightDragWalkAxes, setWalkMouseButton, shouldFollowWalkCamera, walkCameraSettling, walkDragButton, walkMovementYaw, walkMouseControl, WALK_TOGGLE_KEY, wheelZoomDistance, type MapControlAction, type MobileMapInput } from "./mapControls";
 import { unwrapCompassRadians } from "./mapCompassModel";
-import { climbElevations, createShotHold, directorPullIn, fallbackShot, FOLLOW_CENTRE_WINDOW_MS, FOLLOW_SHOT_CHECK_MS, FOLLOW_SIGHT_STRIDE, FOLLOW_STEEP_MIN_DISTANCE_YARDS, seesFraming, sightPicks, type ShotAnswer, FOLLOW_SLICE_MS, followSprings, followYawStep, handOverFollowSpring, handOverFollowYaw, startFollowTrackBuild, wrapAngle, type FollowTrackBuild, followKeyAt, glideDurationMs, glidePoseAt, glideTurnMs, unwrapNear, holdShot, isReplayJump, type FollowKey, type FollowTrack, type FollowYawProbe, type GlidePose } from "./followCamera";
+import { climbElevations, createShotHold, directorPullIn, fallbackShot, FOLLOW_CENTRE_WINDOW_MS, FOLLOW_SHOT_CHECK_MS, shotCheckDue, steepPullIn, FOLLOW_SIGHT_STRIDE, FOLLOW_STEEP_MIN_DISTANCE_YARDS, seesFraming, sightPicks, type ShotAnswer, FOLLOW_SLICE_MS, followSprings, followYawStep, handOverFollowSpring, handOverFollowYaw, startFollowTrackBuild, wrapAngle, type FollowTrackBuild, followKeyAt, glideDurationMs, glidePoseAt, glideTurnMs, unwrapNear, holdShot, isReplayJump, type FollowKey, type FollowTrack, type FollowYawProbe, type GlidePose } from "./followCamera";
 import { BOSS_SPIRE, bossSpireCastGlow, CAST_ARC_TEXTURE_STEPS, DEAD_RING, DEBUFF_PLANE, DISPEL_COLORS, DROP_LINE, drawUnitPlate, ENEMY_RED, guardianWell, HALO_COLORS, MARKS_SCALE, OWNER_LINE, TARGET_LINE, TRAIL_LINE, UNIT_PLATE, unitPlateSize, type UnitPlateInfo, TOKEN_LAYOUT, type DispelKind, type HaloKind } from "./unitTokenArt";
 import { UnitTokenTextures } from "./unitTokens";
 import type { PlanInput, PlanItem, PlanMarkerIcon, PlanPoint } from "./plan/mapPlan";
@@ -1097,6 +1097,8 @@ export class MapScene3D {
   // The last line-of-sight answer, and when it may be asked again (FOLLOW_SHOT_CHECK_MS).
   private shotRaw: ShotAnswer | null = null;
   private shotCheckAt = 0;
+  // A wall pulled the steep camera in close: the next answer replaces the held one.
+  private shotRelease = false;
   // The framed units the line-of-sight answer keeps in sight (sightPicks), at player height.
   private readonly sightFramed: string[] = [];
   private readonly sightPicked: number[] = [];
@@ -1825,6 +1827,7 @@ export class MapScene3D {
     this.directorGlide = null;
     Object.assign(this.shotHold, createShotHold());
     this.shotRaw = null;
+    this.shotRelease = false;
   }
 
   /**
@@ -2520,7 +2523,7 @@ export class MapScene3D {
     if (this.directing() && this.directorWant !== null) {
       const want = this.directorWant;
       const hit = want > 0 ? this.meshHitDistance(from, this.collisionEye.copy(direction).multiplyScalar(want).add(from)) : null;
-      this.directorAllowed = directorPullIn(want, hit, ORBIT_COLLISION_PADDING, this.directorElevation.value, this.controls.minDistance, FOLLOW_STEEP_MIN_DISTANCE_YARDS * mesh.scale);
+      this.directorAllowed = directorPullIn(want, hit, ORBIT_COLLISION_PADDING, this.controls.minDistance);
       this.orbitWantDistance = shown;
       return false;
     }
@@ -2560,7 +2563,7 @@ export class MapScene3D {
       );
       // A wall on the aim line would pull the camera in: not this shot.
       if (this.meshBlocks(aim, eye)) return false;
-      return seesFraming(this.sightCount, (k) => this.sightBoss[k]!, (k) => !this.meshBlocks(eye, this.sightTargets[k]!));
+      return seesFraming(this.sightCount, (k) => this.sightBoss[k]!, (k) => !this.meshBlocks(eye, this.sightTargets[k]!)) || "aim";
     });
   }
 
@@ -2644,7 +2647,7 @@ export class MapScene3D {
         if (!this.dungeonMesh) return true;
         to.set(from.x + Math.sin(yaw) * out, up, from.z + Math.cos(yaw) * out);
         if (this.meshBlocks(from, to)) return false;
-        return seesFraming(count, (k) => boss[k]!, (k) => !this.meshBlocks(to, targets[k]!));
+        return seesFraming(count, (k) => boss[k]!, (k) => !this.meshBlocks(to, targets[k]!)) || "aim";
       },
     };
   }
@@ -2758,14 +2761,25 @@ export class MapScene3D {
     // glide and a cut use the goal (where the group is).
     const springX = led ? led.x - Math.sin(placedYaw) * ahead : goal.x;
     const springZ = led ? led.z - Math.cos(placedYaw) * ahead : goal.z;
+    // A wall pulled the steep camera in close (last frame's collision): the
+    // next answer replaces the held one at once, so a lower clear shot wins.
+    if (steepPullIn(this.directorElevation.value, this.directorAllowed, FOLLOW_STEEP_MIN_DISTANCE_YARDS * mesh.scale)) this.shotRelease = true;
     // Asked again every FOLLOW_SHOT_CHECK_MS, and at once on a cut or a jump.
-    if (this.shotRaw === null || now >= this.shotCheckAt || cutting || jumped) {
+    let fresh = false;
+    if (shotCheckDue(now, this.shotCheckAt, this.shotRaw !== null, cutting || jumped)) {
       this.readSightTargets(director.bossGuids, mesh.scale);
       const floor = this.floorHeights.heightAt("director-shot", goal.x, goal.z, this.cameraCeiling());
-      this.shotRaw = this.clearShot(goal.x, floor, goal.z, goal.distance, placedYaw);
+      // A jump glides to the track's yaw (a cut snaps to it): check that one,
+      // not the yaw the camera is leaving.
+      this.shotRaw = this.clearShot(goal.x, floor, goal.z, goal.distance, jumped ? yaw : placedYaw);
       this.shotCheckAt = now + FOLLOW_SHOT_CHECK_MS;
+      fresh = true;
     }
-    const hold = holdShot(this.shotHold, this.shotRaw.elevationDeg, this.shotRaw.shortened, now);
+    if (fresh && this.shotRelease) {
+      this.shotRelease = false;
+      Object.assign(this.shotHold, { elevationDeg: this.shotRaw!.elevationDeg, shortened: this.shotRaw!.shortened, lowerSinceMs: null });
+    }
+    const hold = holdShot(this.shotHold, this.shotRaw!.elevationDeg, this.shotRaw!.shortened, now);
     const shotElevation = hold.elevationDeg;
     const shotDistance = hold.shortened ? this.shortenedShot(goal.distance) : goal.distance;
 
