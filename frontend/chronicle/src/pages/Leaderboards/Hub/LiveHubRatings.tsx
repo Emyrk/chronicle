@@ -198,6 +198,7 @@ export function LiveHubRatings(props: LiveHubRatingsProps) {
         (queries[i].data?.response.entries ?? []).map((row) => ({
           guild: row.name,
           guildId: row.subject_id,
+          logo: row.logo_url || undefined,
           identity: `${row.realm_id}:${row.subject_id}`,
           score: row.score,
           detail: row.realm_id,
@@ -214,6 +215,7 @@ export function LiveHubRatings(props: LiveHubRatingsProps) {
             (row) => ({
               guild: row.name,
               guildId: row.subject_id,
+              logo: row.logo_url || undefined,
               score: row.score,
               detail: row.realm_id,
             }),

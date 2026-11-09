@@ -144,6 +144,10 @@ export interface LeaderboardV2Entry {
      * GuildName is a player's current guild for display; empty for guilds and guildless players.
      */
     readonly guild_name: string;
+    /**
+     * LogoURL is a guild subject's page logo for display; empty for players and guilds without one.
+     */
+    readonly logo_url: string;
     readonly score: number;
     readonly peak: number;
     readonly form: number;

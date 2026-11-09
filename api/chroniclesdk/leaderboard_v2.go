@@ -29,7 +29,9 @@ type LeaderboardV2Entry struct {
 	// cohort boards and is looked up for Renown rows, which have no PlayerClass.
 	SubjectClass string `json:"subject_class"`
 	// GuildName is a player's current guild for display; empty for guilds and guildless players.
-	GuildName   string              `json:"guild_name"`
+	GuildName string `json:"guild_name"`
+	// LogoURL is a guild subject's page logo for display; empty for players and guilds without one.
+	LogoURL     string              `json:"logo_url"`
 	Score       float64             `json:"score"`
 	Peak        float64             `json:"peak"`
 	Form        float64             `json:"form"`

@@ -418,6 +418,26 @@ VALUES ('00000000-0000-4000-8000-000000000001','Class raid','',0,'Ragnaros','000
 	require.Empty(t, rows[0].PlayerClass, "identity stays classless")
 	require.Equal(t, "WARLOCK", rows[0].SubjectClass)
 	require.Equal(t, "Shadow Pact", rows[0].GuildName)
+	require.Empty(t, rows[0].LogoUrl, "players carry no logo")
 	require.Empty(t, rows[1].SubjectClass, "an unknown character has no class")
 	require.Empty(t, rows[1].GuildName, "an unknown character has no guild")
+
+	// Guild boards return the guild page's logo; a guild without a page has none.
+	_, err = conn.Exec(ctx, `
+INSERT INTO guilds (id, realm_id, name) VALUES ('00000000-0000-4000-8000-0000000000a6', '00000000-0000-4000-8000-0000000000a2', 'No Page');
+INSERT INTO guild_pages (guild_id, theme) VALUES ('00000000-0000-4000-8000-0000000000a5', '{"logo_url": "/static/guilds/shadow-pact.png"}');
+INSERT INTO leaderboard_guild_renown_counts (tenant_id,instance_name,difficulty_name,max_players,encounter_name,realm_id,guild_id,kill_count,projection_version,algorithm_version)
+VALUES ('00000000-0000-4000-8000-000000000001','Class raid','',0,'Ragnaros','00000000-0000-4000-8000-0000000000a2','00000000-0000-4000-8000-0000000000a5',2,1,1),
+       ('00000000-0000-4000-8000-000000000001','Class raid','',0,'Ragnaros','00000000-0000-4000-8000-0000000000a2','00000000-0000-4000-8000-0000000000a6',1,1,1);`)
+	require.NoError(t, err)
+	guilds, err := database.NewQueries(conn).ListLeaderboardV2(ctx, database.ListLeaderboardV2Params{
+		TenantID: uuid.MustParse("00000000-0000-4000-8000-000000000001"), InstanceName: "Class raid", SubjectKind: "guild", BoardKind: "renown", ScoreMetric: "renown",
+		Bosses: []string{"Ragnaros"}, Awards: []float64{5}, Denominator: 1, PageSize: 50,
+	})
+	require.NoError(t, err)
+	require.Len(t, guilds, 2)
+	require.Equal(t, "Shadow Pact", guilds[0].SubjectName)
+	require.Equal(t, "/static/guilds/shadow-pact.png", guilds[0].LogoUrl)
+	require.Empty(t, guilds[1].LogoUrl)
+	require.Empty(t, guilds[0].GuildName, "guild rows carry no player guild")
 }

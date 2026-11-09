@@ -15107,7 +15107,11 @@ SELECT page.realm_id, page.subject_id, page.player_class, page.player_spec, page
  -- Display only: a player's current guild, empty for guild boards and guildless players.
  COALESCE(CASE WHEN $1::text = 'player' THEN
  (SELECT g.name FROM game_players p JOIN guilds g ON g.id = p.guild_id WHERE p.realm_id = page.realm_id AND p.id = page.subject_id)
- END, '')::text AS guild_name
+ END, '')::text AS guild_name,
+ -- Display only: a guild subject's page logo, empty for players and guilds without one.
+ COALESCE(CASE WHEN $1::text = 'guild' THEN
+ (SELECT gp.theme->>'logo_url' FROM guild_pages gp WHERE gp.guild_id = page.subject_id::uuid)
+ END, '')::text AS logo_url
 FROM page ORDER BY score DESC, realm_id, subject_id, player_class, player_spec, player_sub_spec
 `
 
@@ -15157,6 +15161,7 @@ type ListLeaderboardV2Row struct {
 	SubjectName   string             `db:"subject_name" json:"subject_name"`
 	SubjectClass  string             `db:"subject_class" json:"subject_class"`
 	GuildName     string             `db:"guild_name" json:"guild_name"`
+	LogoUrl       string             `db:"logo_url" json:"logo_url"`
 }
 
 // Read current benchmarks and current resolved awards, never replay observations.
@@ -15217,6 +15222,7 @@ func (q *sqlQuerier) ListLeaderboardV2(ctx context.Context, arg ListLeaderboardV
 			&i.SubjectName,
 			&i.SubjectClass,
 			&i.GuildName,
+			&i.LogoUrl,
 		); err != nil {
 			return nil, err
 		}

@@ -19,6 +19,8 @@ export interface RatingEntry {
   realmLabel?: string
   guid?: string
   guild?: string
+  /** Guild subjects only: the guild page's logo, for display. */
+  logo?: string
   cls: string
   spec: string
   /** Generated build label for the visual sub-spec drill-down; not player data. */
