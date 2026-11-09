@@ -104,6 +104,8 @@ export function RatingFullList({
   const current = livePage?.page ?? Math.min(page, pages - 1)
   const visible = live ? filtered : filtered.slice(current * PAGE_SIZE, (current + 1) * PAGE_SIZE)
   const total = livePage?.total ?? (live ? visible.length : filtered.length)
+  // Live boards without a global rank leave "#" empty; drop the column instead.
+  const ranksShown = live?.ranksKnown !== false
 
   return (
     <section aria-label={`${title} ${theme.label} full list`} className={cn("overflow-hidden rounded-xl border bg-card", MOBILE_EDGE_TO_EDGE)}>
@@ -153,17 +155,25 @@ export function RatingFullList({
       </div>
 
       <div className="styled-scrollbar overflow-x-auto">
-        <table className="w-full min-w-[42rem] table-auto text-sm">
+        {/* The overview folds its three scores into one column on a phone, so only it can drop the scroll width. */}
+        <table className={cn("w-full table-auto text-sm", view === "overview" ? "sm:min-w-[42rem]" : "min-w-[42rem]")}>
           <thead className="border-b bg-black/10 text-[11px] tracking-wider text-muted-foreground uppercase">
             <tr>
-              <th className="w-14 px-4 py-2.5 text-left font-medium sm:px-5">#</th>
-              <th className="w-[22%] px-2 py-2.5 pr-6 text-left font-medium whitespace-nowrap">Character</th>
+              {ranksShown && <th className="w-14 px-4 py-2.5 text-left font-medium sm:px-5">#</th>}
+              <th className={cn("w-[22%] px-2 py-2.5 pr-2 text-left font-medium whitespace-nowrap sm:pr-6", !ranksShown && "pl-4 sm:pl-5")}>Character</th>
               {/* The ranking's own number sits next to the name; supporting columns follow to the right. */}
               {view === "overview" ? (
-                RATING_METRICS.map((m) => {
+                <>
+                {/* A phone gets all three scores in one column, in a fixed order with no re-sorting. */}
+                <th className="px-3 py-2.5 pr-4 text-right font-medium tracking-normal whitespace-nowrap sm:hidden">
+                  {RATING_METRICS.map((m, i) => (
+                    <span key={m}>{i > 0 && " / "}<span style={{ color: METRIC_THEMES[m].accent }}>{METRIC_THEMES[m].label.replace("Ranked ", "")}</span></span>
+                  ))}
+                </th>
+                {RATING_METRICS.map((m) => {
                   const t = METRIC_THEMES[m]
                   return (
-                    <th key={m} className="px-3 py-2.5 text-left font-medium">
+                    <th key={m} className="hidden px-3 py-2.5 text-left font-medium sm:table-cell">
                       <button
                         type="button"
                         onClick={() => {
@@ -182,7 +192,8 @@ export function RatingFullList({
                       </button>
                     </th>
                   )
-                })
+                })}
+                </>
               ) : (
                 <>
                   <th className="w-32 px-3 py-2.5 text-left font-medium">{theme.label}</th>
@@ -214,10 +225,12 @@ export function RatingFullList({
             )}
             {visible.map(({ rank, entry, scores, peakComponents, peakRun: liveRun }) => (
               <tr key={entry.id} className="border-b border-white/5 transition-colors last:border-b-0 hover:bg-white/[.025]">
-                <td className="px-4 py-2 sm:px-5">
-                  {live?.ranksKnown !== false && <RankMark rank={rank} size="sm" />}
-                </td>
-                <td className="px-2 py-2 pr-8 whitespace-nowrap">
+                {ranksShown && (
+                  <td className="px-4 py-2 sm:px-5">
+                    <RankMark rank={rank} size="sm" />
+                  </td>
+                )}
+                <td className={cn("px-2 py-2 pr-2 whitespace-nowrap sm:pr-8", !ranksShown && "pl-4 sm:pl-5")}>
                   <div className="flex min-w-0 items-center gap-2.5">
                     <SpecIcon cls={entry.cls} spec={entry.spec} className="size-6 shrink-0 rounded-sm" />
                     <div className="min-w-0">
@@ -234,12 +247,26 @@ export function RatingFullList({
                   </div>
                 </td>
                 {view === "overview" ? (
-                  RATING_METRICS.map((m) => {
+                  <>
+                  <td className="px-3 py-2 pr-4 text-right font-mono whitespace-nowrap tabular-nums sm:hidden">
+                    {RATING_METRICS.map((m, i) => {
+                      const score = scores[m]
+                      return (
+                        <span key={m}>
+                          {i > 0 && <span className="text-muted-foreground">/</span>}
+                          <span style={score ? { color: METRIC_THEMES[m].accent } : undefined} className={score ? undefined : "text-muted-foreground"}>
+                            {score ? METRIC_THEMES[m].format(score.score) : "—"}
+                          </span>
+                        </span>
+                      )
+                    })}
+                  </td>
+                  {RATING_METRICS.map((m) => {
                     const score = scores[m]
                     return (
                       <td
                         key={m}
-                        className={cn("px-3 py-2 font-mono tabular-nums", sortBy !== m && "text-muted-foreground")}
+                        className={cn("hidden px-3 py-2 font-mono tabular-nums sm:table-cell", sortBy !== m && "text-muted-foreground")}
                         style={sortBy === m && rank === 1 ? { color: METRIC_THEMES[m].accent } : undefined}
                       >
                         {score ? METRIC_THEMES[m].format(score.score) : <span title="No performance summary in the selected role and cohort filters">—</span>}
@@ -247,7 +274,8 @@ export function RatingFullList({
                         {m === "peak" && score?.raw ? <RawTag raw={score.raw} className="ml-1.5" /> : null}
                       </td>
                     )
-                  })
+                  })}
+                  </>
                 ) : (
                   <>
                     <td className="px-3 py-2">
