@@ -73,9 +73,9 @@ export function RealmPicker({
         )}
       >
         <Globe className="size-4 text-muted-foreground" />
-        <span className="flex flex-col leading-tight">
-          <span className="text-[10px] tracking-wider text-muted-foreground uppercase">Realm</span>
-          <span className="font-medium">{realm}</span>
+        <span className="flex min-w-0 flex-col leading-tight">
+          <span className="hidden text-[10px] tracking-wider text-muted-foreground uppercase sm:block">Realm</span>
+          <span className="truncate font-medium">{realm}</span>
         </span>
         <ChevronDown className="ml-1 size-4 text-muted-foreground" />
       </DropdownMenuTrigger>
@@ -290,6 +290,15 @@ export function LeaderboardHub({
   // Guilds mode tints the page gold, the Guilds toggle's color: a faint wash from the top, a gold-edged
   // banner, and a "Guilds" crumb. Characters is the default and stays neutral.
   const guildMode = subject === "guilds"
+  const compactFilterSummary = [
+    scope.cls ? CLASS_DISPLAY[scope.cls] : undefined,
+    scope.spec,
+    scope.subSpec,
+    role === "dps" ? "DPS" : "Healing",
+    subject === "characters" ? "Characters" : "Guilds",
+  ]
+    .filter(Boolean)
+    .join(" · ")
   return (
     <div
       className="min-h-screen w-full bg-background text-foreground transition-[background] duration-500"
@@ -315,12 +324,12 @@ export function LeaderboardHub({
           >
             <img src={getInstanceBackground(instanceName)} alt="" className="absolute inset-0 h-full w-full object-cover opacity-60" />
             <div className="absolute inset-0 bg-gradient-to-t from-card via-card/80 to-card/30" />
-            <div className="relative flex min-w-0 flex-wrap items-end gap-4 px-4 pt-6 pb-4 sm:px-6 sm:pt-10">
-              <div className="min-w-0">
+            <div className="relative flex min-w-0 items-end gap-3 px-3 pt-4 pb-3 sm:flex-wrap sm:gap-4 sm:px-6 sm:pt-10 sm:pb-4">
+              <div className="min-w-0 flex-1">
                 {/* Breadcrumb: the parent is the way back to the grid; the rest names the current scope. */}
                 <nav
                   aria-label="Breadcrumb"
-                  className="flex flex-wrap items-center gap-1.5 text-[11px] font-medium tracking-wider text-muted-foreground uppercase"
+                  className="hidden flex-wrap items-center gap-1.5 text-[11px] font-medium tracking-wider text-muted-foreground uppercase sm:flex"
                 >
                   {onAllInstances ? (
                     <button
@@ -350,11 +359,11 @@ export function LeaderboardHub({
                   {scope.boss && (live ? live.optionalBosses?.has(scope.boss) : OPTIONAL_BOSSES.has(scope.boss)) && <span className="text-muted-foreground/70">· Optional</span>}
                 </nav>
                 {/* The realm sits beside the title: together they name what every board below ranks. */}
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <div className="flex min-w-0 items-center justify-between gap-3 sm:flex-wrap sm:justify-start sm:gap-x-4 sm:gap-y-2">
                   <InstanceTitle instanceName={instanceName} instances={instances} onSwitch={onSwitchInstance} />
-                  <RealmPicker realm={realm} realms={realms} onChange={setRealm} />
+                  <RealmPicker realm={realm} realms={realms} onChange={setRealm} className="shrink-0" />
                 </div>
-                {set && <p className="mt-1 text-xs text-muted-foreground">Combined: {set.join(", ")} · ratings averaged, time is total kill time</p>}
+                {set && <p className="mt-1 hidden text-xs text-muted-foreground sm:block">Combined: {set.join(", ")} · ratings averaged, time is total kill time</p>}
               </div>
             </div>
             <nav className="relative flex overflow-x-auto border-t border-white/5 px-2 sm:px-4" aria-label="Leaderboard section">
@@ -387,6 +396,8 @@ export function LeaderboardHub({
                 if (!next.boss && !next.cls && !next.spec) selectEncounter(FULL_CLEAR)
                 setClassScope({ cls: next.cls, spec: next.spec, subSpec: next.subSpec })
               }}
+              compact={isMobile}
+              compactSummary={compactFilterSummary}
               extra={
                 <>
                   {live?.cohortPicker}
@@ -590,13 +601,13 @@ function InstanceTitle({
   instances?: readonly string[]
   onSwitch?: (instance: string) => void
 }) {
-  const heading = <h1 className="font-wow text-2xl sm:text-3xl">{instanceName}</h1>
-  if (!instances?.length || !onSwitch) return <div className="mt-1">{heading}</div>
+  const heading = <h1 className="truncate font-wow text-xl sm:text-3xl">{instanceName}</h1>
+  if (!instances?.length || !onSwitch) return <div className="mt-1 min-w-0">{heading}</div>
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label={`${instanceName}, switch instance`}
-        className="mt-0.5 -ml-2 flex cursor-pointer items-center gap-2 rounded-lg px-2 py-0.5 outline-none hover:bg-white/5 focus-visible:ring-2 focus-visible:ring-ring"
+        className="mt-0.5 -ml-2 flex min-w-0 max-w-full cursor-pointer items-center gap-1.5 rounded-lg px-2 py-0.5 outline-none hover:bg-white/5 focus-visible:ring-2 focus-visible:ring-ring sm:gap-2"
       >
         {heading}
         <ChevronDown className="size-5 text-muted-foreground" />
