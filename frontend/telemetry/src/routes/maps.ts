@@ -189,7 +189,6 @@ async function verifyDraftAssets(bucket: R2Bucket, namespace: MapManifestNamespa
   for (const entry of draft.meshes.instances) {
     const support = entry.floorSupport;
     if (!support) continue;
-    if (!support.validated) throw new TypeError("unvalidated floorSupport is local-preview-only");
     for (const reference of [support, ...support.sources]) {
       const object = await bucket.get(`${root(namespace)}/${reference.path}`);
       if (!object) throw new TypeError(`floorSupport missing or stale asset: ${reference.path}`);

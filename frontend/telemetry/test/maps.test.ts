@@ -238,10 +238,11 @@ test("Map Foundry keeps missing multipart floor as a legacy map-level upload", a
   assert.equal(body.floor, undefined);
 });
 
-test("support upload is explicit and hash-pinned; unvalidated drafts cannot publish", async () => {
+test("support upload is explicit and hash-pinned; unvalidated drafts publish only with intact sources", async () => {
   const bucket = new FakeBucket();
   await seed(bucket);
-  const identity = { version: 1, datasetID: "test", mapID: 43, frame: "wow-yup-mirrored-x", floorIDs: [0], sources: [{ floor: 0, path: "3d/floor.glb", sha256: "b".repeat(64) }] };
+  const sourceHash = Buffer.from(await crypto.subtle.digest("SHA-256", glb())).toString("hex");
+  const identity = { version: 1, datasetID: "test", mapID: 43, frame: "wow-yup-mirrored-x", floorIDs: [0], sources: [{ floor: 0, path: "3d/floor.glb", sha256: sourceHash }] };
   const payload = JSON.stringify({ ...identity, encoding: "indexed-f32-le-u32-le", floors: [{ floor: 0, positions: Buffer.from(new Float32Array([0, 0, 0, 1, 0, 0, 0, 0, 1]).buffer).toString("base64"), indices: Buffer.from(new Uint32Array([0, 1, 2]).buffer).toString("base64") }] });
   const hash = Buffer.from(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(payload))).toString("hex");
   const support = { ...identity, sha256: hash, path: `support/43-${hash}.json`, validated: false };
@@ -260,15 +261,16 @@ test("support upload is explicit and hash-pinned; unvalidated drafts cannot publ
   const draft = await saved.json() as { draft_version: string };
   const publish = await request(bucket, "/internal/api/v1/maps/forever/publish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ version: draft.draft_version }) });
   assert.equal(publish.status, 400, await publish.clone().text());
-  assert.match(await publish.text(), /local-preview-only/);
+  assert.match(await publish.text(), /missing or stale asset/);
   assert.equal(await bucket.get("forever/maps/manifest.json"), null);
-  meshes[0].floorSupport.validated = true;
-  const resaved = await request(bucket, "/internal/api/v1/maps/forever/draft", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ version: draft.draft_version, meshes, renders: [] }) });
-  assert.equal(resaved.status, 200);
-  const next = await resaved.json() as { draft_version: string };
-  await bucket.put("forever/maps/3d/floor.glb", glb());
-  const stale = await request(bucket, "/internal/api/v1/maps/forever/publish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ version: next.draft_version }) });
+  await bucket.put("forever/maps/3d/floor.glb", new Uint8Array([1, 2, 3]));
+  const stale = await request(bucket, "/internal/api/v1/maps/forever/publish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ version: draft.draft_version }) });
   assert.equal(stale.status, 400);
   assert.match(await stale.text(), /stale asset/);
   assert.equal(await bucket.get("forever/maps/manifest.json"), null);
+  await bucket.put("forever/maps/3d/floor.glb", glb());
+  const intact = await request(bucket, "/internal/api/v1/maps/forever/publish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ version: draft.draft_version }) });
+  assert.equal(intact.status, 200, await intact.clone().text());
+  const published = await bucket.json("forever/maps/manifest.json") as { instances: { floorSupport?: unknown }[] };
+  assert.deepEqual(published.instances[0].floorSupport, support);
 });

@@ -252,7 +252,8 @@ must match the descriptor. Validation bounds decoded data to 32 MiB total and
 one million vertices per floor, rejects nonfinite coordinates and out-of-range
 indices. Geometrically degenerate projected triangles are left to the consumer.
 
-`validated:false` is local-preview-only: upload and draft are allowed, publication
-is rejected. Publication of validated descriptors also verifies the artifact and
-every source GLB's bytes against their hashes. No runtime loading or activation is
-introduced by this optional metadata contract. No artifacts are published by tests.
+`validated` records evaluation provenance, not publication eligibility or a floor-accuracy
+claim. Both values may be uploaded, staged, and published for best-effort floor
+estimates. Publication always verifies the artifact and every source GLB's bytes
+against their hashes, regardless of evaluation status. These integrity checks do
+not establish floor accuracy. Tests use an in-memory bucket, never production.

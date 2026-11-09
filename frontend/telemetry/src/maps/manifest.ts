@@ -149,7 +149,7 @@ export interface MapFloorSupport {
   frame: "wow-yup-mirrored-x";
   floorIDs: number[];
   sources: { floor: number; path: string; sha256: string }[];
-  /** False artifacts are local-preview-only, never default runtime inputs. */
+  /** Evaluation provenance only, not a publication gate or floor-accuracy guarantee. */
   validated: boolean;
 }
 
