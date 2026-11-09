@@ -29,6 +29,22 @@ describe("live Hub landing", () => {
     expect(markup).not.toContain("Mock data for design review")
   })
 
+  it("shows configured instances without rankings as compact links below published cards", () => {
+    const markup = render({
+      instances: [
+        ...instances,
+        { ...instances[0], instance_name: "Upper Karazhan", total_kills: 0 },
+      ],
+      instanceHref: (name) => `/leaderboard-v2/${name.replaceAll(" ", "-")}`,
+    })
+
+    expect(markup.indexOf("Upper Karazhan")).toBeGreaterThan(markup.indexOf("Blackrock Depths"))
+    expect(markup).toContain("Configured instances without rankings")
+    expect(markup).toContain("Open an instance to view its configured encounters and rules.")
+    expect(markup).toContain("No rankings yet")
+    expect(markup).toContain('href="/leaderboard-v2/Upper-Karazhan"')
+  })
+
   it("orders raid cards by progression tier while keeping cohorts together", () => {
     const raidInstances = [
       { ...instances[0], instance_name: "Molten Core", difficulty_name: "Heroic", max_players: 25 },

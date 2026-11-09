@@ -18,6 +18,7 @@ describe("resolved Hub overview boards", () => {
       let data: unknown;
       if (url === "/api/v1/leaderboard-configuration") data = configuration;
       else if (url === "/api/v1/realms") data = [{ id: "realm", name: "Realm" }];
+      else if (url === "/api/v1/rankings/instances") data = [{ instance_name: "Raid", difficulty_name: "Normal", max_players: 40, category: "raid", total_kills: 12, top_players: [] }];
       else if (url.includes("view=cohorts")) data = [{ player_class: "MAGE", player_spec: "Frost", player_sub_spec: "", metric: "dps" }];
       else if (url.startsWith("/api/v1/leaderboards-v2?")) data = { entries: [] };
       else if (url.startsWith("/api/v1/rankings/leaderboard?")) data = { entries: [performance], total_count: 1 };

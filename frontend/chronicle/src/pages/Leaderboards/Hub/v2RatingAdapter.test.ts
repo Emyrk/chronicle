@@ -61,6 +61,38 @@ describe("existing Hub adapter", () => {
       ),
     ).toThrow("specific server");
   });
+  it("marks configured instances without published tenant rankings", () => {
+    const data = resolvedHubMetadata(
+      {
+        ...configuration,
+        rows: [
+          ...configuration.rows,
+          { ...configuration.rows[0], instance_name: "Upper Karazhan" },
+        ],
+      },
+      { performance: "dps" },
+      [],
+      [],
+      [
+        {
+          instance_name: "Raid",
+          difficulty_name: "Normal",
+          max_players: 40,
+          category: "raid",
+          total_kills: 12,
+          top_players: [],
+        },
+      ],
+    );
+
+    expect(data.instances).toEqual([
+      expect.objectContaining({ instance_name: "Raid", total_kills: 12 }),
+      expect.objectContaining({
+        instance_name: "Upper Karazhan",
+        total_kills: 0,
+      }),
+    ]);
+  });
   it("defaults to all cohorts and narrows only explicit class/spec filters", () => {
     const all = v2RatingParams(context, {}, "mastery");
     expect(Object.fromEntries(all)).toMatchObject({
