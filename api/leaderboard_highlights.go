@@ -113,6 +113,10 @@ func (api *API) AdminRefreshLeaderboardHighlights(w http.ResponseWriter, r *http
 }
 
 func highlightSnapshotResponse(config []database.ResolveLeaderboardConfigurationRow, cohorts []serviceratings.HighlightCohort, stored []database.LeaderboardHighlight) (chroniclesdk.LeaderboardHighlightsResponse, bool, error) {
+	return highlightSnapshotResponseAt(config, cohorts, stored, time.Now())
+}
+
+func highlightSnapshotResponseAt(config []database.ResolveLeaderboardConfigurationRow, cohorts []serviceratings.HighlightCohort, stored []database.LeaderboardHighlight, now time.Time) (chroniclesdk.LeaderboardHighlightsResponse, bool, error) {
 	out := chroniclesdk.LeaderboardHighlightsResponse{Status: "ready", LandingPreviews: []chroniclesdk.HubLandingPreview{}, Snapshots: []chroniclesdk.LeaderboardHighlightSnapshot{}}
 	needRefresh := false
 	for _, c := range cohorts {
@@ -135,7 +139,7 @@ func highlightSnapshotResponse(config []database.ResolveLeaderboardConfiguration
 			if serviceratings.HighlightEmpty(preview) {
 				metadata.Status = "empty"
 			}
-			if row.RefreshedAt.Time.Before(time.Now().Add(-time.Hour)) {
+			if row.RefreshedAt.Time.Before(now.Add(-2 * time.Hour)) {
 				metadata.Status = "stale"
 			}
 			out.LandingPreviews = append(out.LandingPreviews, preview)

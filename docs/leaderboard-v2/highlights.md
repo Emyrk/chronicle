@@ -65,9 +65,9 @@ status is `ready`, `partial`, or `unsupported_scope`. Snapshot metadata contains
 instance/difficulty/size, configuration fingerprint, optional refreshed_at and
 `not_prepared`, `rebuilding`, `stale`, `ready`, or `empty` status. `empty` means a successful
 calculation with no highlights; absence is not an empty calculation. Configuration-mismatched (`rebuilding`) payload is never served. Same-fingerprint
-snapshots older than one hour are marked `stale` but may still be displayed. Failed refresh with unchanged configuration continues
+snapshots older than two hours are marked `stale` but may still be displayed. Failed refresh with unchanged configuration continues
 serving the old successful payload and its old timestamp, marked `stale` after
-one hour. Refresh nudges use stable River args and active-job uniqueness; GET
+two hours. Refresh nudges use stable River args and active-job uniqueness; GET
 requests do not calculate highlights. Repeated singular/plural realm parameters
 are unsupported, not silently reduced to the first value.
 

@@ -73,3 +73,30 @@ func TestHighlightsRepeatedRealmParametersNeverFallback(t *testing.T) {
 		require.Contains(t, rec.Body.String(), "unsupported_scope")
 	}
 }
+
+func TestHighlightStalenessTwoHourBoundary(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	c := serviceratings.HighlightCohort{Instance: "Raid", Difficulty: "Normal", Size: 40}
+	config := []database.ResolveLeaderboardConfigurationRow{{Kind: "instance", InstanceName: "Raid"}}
+	for _, tc := range []struct {
+		name   string
+		age    time.Duration
+		status string
+	}{{"recent", time.Hour, "empty"}, {"before_boundary", 2*time.Hour - time.Nanosecond, "empty"}, {"boundary", 2 * time.Hour, "empty"}, {"after_boundary", 2*time.Hour + time.Nanosecond, "stale"}, {"older", 3 * time.Hour, "stale"}} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			row := database.LeaderboardHighlight{InstanceName: c.Instance, DifficultyName: c.Difficulty, MaxPlayers: c.Size, ConfigurationFingerprint: serviceratings.HighlightFingerprint(config, c), Payload: []byte(`{}`), RefreshedAt: database.Timestamptz(now.Add(-tc.age))}
+			out, refresh, err := highlightSnapshotResponseAt(config, []serviceratings.HighlightCohort{c}, []database.LeaderboardHighlight{row}, now)
+			require.NoError(t, err)
+			require.Equal(t, tc.status, out.Snapshots[0].Status)
+			require.Len(t, out.LandingPreviews, 1)
+			require.Equal(t, tc.status == "stale", refresh)
+			if tc.status == "stale" {
+				require.Equal(t, "partial", out.Status)
+			} else {
+				require.Equal(t, "ready", out.Status)
+			}
+		})
+	}
+}
