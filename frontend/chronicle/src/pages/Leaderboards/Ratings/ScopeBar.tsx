@@ -28,6 +28,7 @@ export function ScopeBar({
   extra,
   compact = false,
   compactSummary,
+  compactIndicator,
 }: {
   scope: RatingScope
   specs: string[]
@@ -47,6 +48,8 @@ export function ScopeBar({
   compact?: boolean
   /** Current choices shown beside the compact trigger. */
   compactSummary?: ReactNode
+  /** Compact visual summary, such as selected class icons. */
+  compactIndicator?: ReactNode
 }) {
   const ALL = "all"
   const [compactOpen, setCompactOpen] = useState(false)
@@ -109,6 +112,7 @@ export function ScopeBar({
           <SlidersHorizontal className="size-4 shrink-0 text-primary" aria-hidden />
           <span className="text-xs font-semibold">Filters</span>
           <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{compactSummary}</span>
+          {compactIndicator}
           <ChevronDown className={cn("size-4 shrink-0 text-muted-foreground transition-transform", compactOpen && "rotate-180")} aria-hidden />
         </button>
         {compactOpen && (
