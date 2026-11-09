@@ -33,7 +33,7 @@ import {
 import { participantHue, participantLabel, type LiveMapPresence } from "../../liveSessionProtocol";
 import { actionForKey, cameraAngles, cameraCollisionDistance, cameraOffset, clampMobileMapInput, DEFAULT_AD_STRAFE, easeAngleToward, freeCamTravelSpeed, IDLE_MOBILE_MAP_INPUT, lookDrag, planarStep, pointerLossEndsDrag, rightDragWalkAxes, setWalkMouseButton, shouldFollowWalkCamera, walkCameraSettling, walkDragButton, walkMovementYaw, walkMouseControl, WALK_TOGGLE_KEY, wheelZoomDistance, type MapControlAction, type MobileMapInput } from "./mapControls";
 import { unwrapCompassRadians } from "./mapCompassModel";
-import { createShotHold, FOLLOW_CENTRE_WINDOW_MS, FOLLOW_SLICE_MS, followSprings, followYawStep, handOverFollowSpring, handOverFollowYaw, startFollowTrackBuild, wrapAngle, type FollowTrackBuild, followKeyAt, glideDurationMs, glidePoseAt, holdShot, isReplayJump, type FollowKey, type FollowTrack, type FollowYawProbe, type GlidePose } from "./followCamera";
+import { createShotHold, FOLLOW_CENTRE_WINDOW_MS, FOLLOW_SLICE_MS, followSprings, followYawStep, handOverFollowSpring, handOverFollowYaw, startFollowTrackBuild, wrapAngle, type FollowTrackBuild, followKeyAt, glideDurationMs, glidePoseAt, glideTurnMs, unwrapNear, holdShot, isReplayJump, type FollowKey, type FollowTrack, type FollowYawProbe, type GlidePose } from "./followCamera";
 import { BOSS_SPIRE, bossSpireCastGlow, CAST_ARC_TEXTURE_STEPS, DEAD_RING, DEBUFF_PLANE, DISPEL_COLORS, DROP_LINE, drawUnitPlate, ENEMY_RED, guardianWell, HALO_COLORS, MARKS_SCALE, OWNER_LINE, TARGET_LINE, TRAIL_LINE, UNIT_PLATE, unitPlateSize, type UnitPlateInfo, TOKEN_LAYOUT, type DispelKind, type HaloKind } from "./unitTokenArt";
 import { UnitTokenTextures } from "./unitTokens";
 import type { PlanInput, PlanItem, PlanMarkerIcon, PlanPoint } from "./plan/mapPlan";
@@ -429,6 +429,8 @@ interface FollowTrackInputs {
   scale: number;
   speed: number;
   endMs: number;
+  /** The no-Z floor tracks the yaw probe read units' heights from (null before they land: their arrival rebuilds the track). */
+  floors: FloorTracks | null;
 }
 
 /** The fight the mesh camera is locked to: its centre (artwork point) and Fit zoom. */
@@ -1091,7 +1093,8 @@ export class MapScene3D {
   // Line-of-sight hysteresis, so the shot cannot flip frame to frame.
   private readonly shotHold = createShotHold();
   // The glide across a replay jump, from the pose the camera had.
-  private directorGlide: { start: number; duration: number } | null = null;
+  // The yaw turns on its own clock, `turn` ms, when a big turn needs longer than the move.
+  private directorGlide: { start: number; duration: number; turn: number } | null = null;
   private readonly glideFrom: GlidePose = { x: 0, z: 0, distance: 0, elevationDeg: 0 };
   private readonly glideTo: GlidePose = { x: 0, z: 0, distance: 0, elevationDeg: 0 };
   private readonly glidePose: GlidePose = { x: 0, z: 0, distance: 0, elevationDeg: 0 };
@@ -1846,10 +1849,14 @@ export class MapScene3D {
     const stale = !fits
       || built!.speed !== speed
       // Not the (capped) centre window: the margin stays 3 s of real time at any speed, longer than a sliced rebuild takes.
-      || (source.endMs > built!.endMs && replayMs > built!.endMs - FOLLOW_CENTRE_WINDOW_MS * speed);
+      || (source.endMs > built!.endMs && replayMs > built!.endMs - FOLLOW_CENTRE_WINDOW_MS * speed)
+      // Built before the no-Z floor tracks landed (a slower build): the yaw
+      // probe reads units' heights from them. Later changes to them (growth)
+      // are picked up by the next rebuild.
+      || (built!.floors === null && this.floorTracks !== null);
     const pending = this.followBuild?.inputs ?? null;
-    if (stale && !(this.followInputsMatch(pending, source.key, subject, mesh.scale) && pending!.speed === speed)) {
-      this.startFollowBuild(source, { key: source.key, subject, aspect: this.aspect, scale: mesh.scale, speed, endMs: source.endMs });
+    if (stale && !(this.followInputsMatch(pending, source.key, subject, mesh.scale) && pending!.speed === speed && (pending!.floors !== null || this.floorTracks === null))) {
+      this.startFollowBuild(source, { key: source.key, subject, aspect: this.aspect, scale: mesh.scale, speed, endMs: source.endMs, floors: this.floorTracks });
     }
     return fits ? this.followTrack : null;
   }
@@ -1874,7 +1881,7 @@ export class MapScene3D {
       unitsAt: (ms) => source.unitsAt(ms).map((unit): DirectorUnit => {
         const { x, z } = mapPointToScene(unit.point, aspect, GROUND_WIDTH);
         // The sample's own height: logged, or the unit's floor track then (no-Z logs).
-        const track = unit.z === undefined ? this.floorTracks?.units.get(unit.guid) : undefined;
+        const track = unit.z === undefined ? inputs.floors?.units.get(unit.guid) : undefined;
         const floor = track ? floorTrackAt(track, ms, x, z, FLOOR_TRACK_TOLERANCE_YARDS * inputs.scale) : null;
         const height = unit.z ?? (floor === null ? undefined : floor / inputs.scale);
         return { guid: unit.guid, x, z, player: unit.player, boss: unit.boss, dead: unit.dead, height };
@@ -2565,7 +2572,10 @@ export class MapScene3D {
     let up = 0;
     return {
       sample: (x, z, radius, height) => {
-        const floor = this.dungeonMesh ? this.sampleFloor(x, z, this.probeCeiling(height, scale)) ?? 0 : 0;
+        if (!this.dungeonMesh) return false;
+        // No floor below (a chasm, off the mesh): skip the sample rather than cast from y = 0.
+        const floor = this.sampleFloor(x, z, this.probeCeiling(height, scale));
+        if (floor === null) return false;
         from.set(x, floor + MESH_PLAYER_HEIGHT_YARDS * scale, z);
         const distance = frameDistance(radius, {
           verticalFov: (this.camera.fov * Math.PI) / 180,
@@ -2575,6 +2585,7 @@ export class MapScene3D {
         });
         out = Math.cos(elevation) * distance - AIM_AHEAD_FRACTION * Math.max(radius, MIN_FRAME_RADIUS_YARDS * scale);
         up = floor + Math.sin(elevation) * distance;
+        return true;
       },
       clearYaw: (yaw) => {
         if (!this.dungeonMesh) return true;
@@ -2712,11 +2723,12 @@ export class MapScene3D {
         from.vz = this.directorZ.velocity;
         from.yaw = this.directorYaw.value;
         from.vyaw = this.directorYaw.velocity;
-        const turn = key ? yaw - from.yaw : 0;
-        // A track lost mid-glide keeps this target rather than swinging back.
-        this.glideTo.yaw = key ? yaw : from.yaw;
+        // The turn's direction is fixed here (the short way now), and a track
+        // lost mid-glide keeps this target rather than swinging back.
+        this.glideTo.yaw = key ? unwrapNear(yaw, from.yaw) : from.yaw;
+        const duration = glideDurationMs(Math.hypot(goal.x - from.x, goal.z - from.z), mesh.scale);
         // Started a frame back, so this frame already moves (no one-frame stall).
-        this.directorGlide = { start: now - dt * 1000, duration: glideDurationMs(Math.hypot(goal.x - from.x, goal.z - from.z), mesh.scale, turn) };
+        this.directorGlide = { start: now - dt * 1000, duration, turn: glideTurnMs(this.glideTo.yaw - from.yaw, duration) };
       }
     }
 
@@ -2741,13 +2753,15 @@ export class MapScene3D {
       to.z = key ? centreZ - Math.cos(yaw) * ahead : goal.z;
       to.distance = shotDistance;
       to.elevationDeg = shotElevation;
-      // Without a track the glide keeps the yaw it was heading for (the camera's yaw is this glide's own).
-      if (key) to.yaw = yaw;
+      // The target follows the track near where it was (never flipping the
+      // turn); without a track it keeps the yaw it was heading for.
+      if (key) to.yaw = unwrapNear(yaw, to.yaw!);
       const t = Math.min(1, (now - glide.start) / glide.duration);
+      const turnT = Math.min(1, (now - glide.start) / glide.turn);
       const lastX = this.directorX.value;
       const lastZ = this.directorZ.value;
       const lastYaw = this.directorYaw.value;
-      const pose = glidePoseAt(this.glideFrom, to, t, this.glidePose, glide.duration);
+      const pose = glidePoseAt(this.glideFrom, to, t, this.glidePose, glide.duration, turnT, glide.turn);
       // The springs ride along (velocity too), so the springs, or another
       // jump's glide, carry on from here without a corner.
       snapDampedValue(this.directorX, pose.x);
@@ -2758,7 +2772,7 @@ export class MapScene3D {
       snapDampedValue(this.directorElevation, pose.elevationDeg);
       snapDampedValue(this.directorYaw, pose.yaw!);
       this.directorYaw.velocity = (pose.yaw! - lastYaw) / dt;
-      if (t >= 1) this.directorGlide = null;
+      if (t >= 1 && turnT >= 1) this.directorGlide = null;
       this.placeDirectorCamera(pose.x, pose.z, this.directorReachFor(pose.distance, dt, false), pose.elevationDeg, pose.yaw!);
       return true;
     }

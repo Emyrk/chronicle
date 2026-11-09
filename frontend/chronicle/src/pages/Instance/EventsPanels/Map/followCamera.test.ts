@@ -33,6 +33,8 @@ import {
   followYawStep,
   handOverFollowYaw,
   wrapAngle,
+  glideTurnMs,
+  unwrapNear,
   type FollowYawProbe,
 } from "./followCamera";
 
@@ -696,12 +698,15 @@ describe("follow track yaw", () => {
       return worst;
     };
     for (const [speed, leg] of [[1, 60], [32, 1_200]] as const) {
-      // The default window alone keeps a sharp corner under the cap.
+      // The default window: at 1x it alone keeps a sharp corner under the cap;
+      // at 32x (stretched only FOLLOW_MAX_YAW_STRETCH) the cap is what holds it.
       const smoothed = worstTurn(speed, leg);
       // With almost no yaw window, the cap is what holds it.
       const capped = worstTurn(speed, leg, 250);
       console.info(`stairs ${speed}x: worst track turn ${(smoothed / DEG).toFixed(1)} deg/s, ${(capped / DEG).toFixed(1)} with a 250 ms window (cap ${(FOLLOW_YAW_MAX_RATE / DEG).toFixed(0)})`);
-      expect(smoothed).toBeLessThan(FOLLOW_YAW_MAX_RATE);
+      if (speed === 1) expect(smoothed).toBeLessThan(FOLLOW_YAW_MAX_RATE);
+      else expect(smoothed).toBeGreaterThan(FOLLOW_YAW_MAX_RATE * 0.9);
+      expect(smoothed).toBeLessThan(FOLLOW_YAW_MAX_RATE * 1.3);
       // (At 1x the centre's own window spreads a corner over seconds; at 32x it is a fifth of a second of real time.)
       if (speed === 32) expect(capped).toBeGreaterThan(FOLLOW_YAW_MAX_RATE * 0.9);
       // Catmull-Rom between capped samples can overshoot a sample's chord a little.
@@ -785,13 +790,13 @@ describe("follow track yaw", () => {
     // Walking down a ramp: the height at each sample, not the one at build time.
     const ramp = (ms: number) => [0, 1, 2].map((i) => ({ ...unit(`p${i}`, (ms / 1000) * 7 + i, 0), height: -ms / 1000 + i }));
     const heights: (number | undefined)[] = [];
-    buildFollowTrack({ startMs: 0, endMs: 20_000, unitsAt: ramp, scale: 1, probe: { sample: (_x, _z, _r, height) => heights.push(height), clearYaw: () => true } });
+    buildFollowTrack({ startMs: 0, endMs: 20_000, unitsAt: ramp, scale: 1, probe: { sample: (_x, _z, _r, height) => void heights.push(height), clearYaw: () => true } });
     // The median of the three (i = 1).
     expect(heights[0]).toBeCloseTo(1, 9);
     expect(heights[40]).toBeCloseTo(-10 + 1, 9);
     // Unknown heights stay unknown.
     const none: (number | undefined)[] = [];
-    buildFollowTrack({ startMs: 0, endMs: 5_000, unitsAt: corner, scale: 1, probe: { sample: (_x, _z, _r, height) => none.push(height), clearYaw: () => true } });
+    buildFollowTrack({ startMs: 0, endMs: 5_000, unitsAt: corner, scale: 1, probe: { sample: (_x, _z, _r, height) => void none.push(height), clearYaw: () => true } });
     expect(none.every((height) => height === undefined)).toBe(true);
   });
 
@@ -807,6 +812,9 @@ describe("follow track yaw", () => {
       const yaw = keyAt(track, ms).yaw;
       worstOffChoice = Math.max(worstOffChoice, Math.min(...FOLLOW_YAW_CANDIDATES_DEG.map((deg) => angleOff(yaw, BEHIND_X + deg * DEG))));
     }
+    // A blocked base (+90/-90 pairs) gives way once, to one side, and stays.
+    const switches = Array.from(track.yawChoice).filter((k, j, all) => j > 0 && k !== all[j - 1]).length;
+    expect(switches).toBeLessThanOrEqual(1);
     return { turn: Math.abs(keyAt(track, track.endMs).yaw - keyAt(track, fromMs).yaw), worstOffChoice };
   };
 
@@ -815,7 +823,7 @@ describe("follow track yaw", () => {
       // From 15 s, only one of the pair is clear, alternating every sample.
       const { probe } = stubProbe(BEHIND_X, (sample, off) => (sample > 60 ? off === pair[sample % 2] : true));
       const track = buildFollowTrack({ startMs: 0, endMs: 300_000, unitsAt: standing, scale: 1, probe })!;
-      const { turn, worstOffChoice } = fightYaw(track, 20_000);
+      const { turn, worstOffChoice } = fightYaw(track, 30_000);
       console.info(`flip ${name} every sample: turned ${(turn / DEG).toFixed(1)} deg, at most ${(worstOffChoice / DEG).toFixed(1)} deg off a probed choice`);
       expect(turn).toBeLessThan(DEG);
       expect(worstOffChoice).toBeLessThan(DEG);
@@ -840,7 +848,7 @@ describe("follow track yaw", () => {
         return off === pair[state];
       });
       const track = buildFollowTrack({ startMs: 0, endMs: 300_000, unitsAt: standing, scale: 1, probe })!;
-      const { turn, worstOffChoice } = fightYaw(track, 20_000);
+      const { turn, worstOffChoice } = fightYaw(track, 30_000);
       console.info(`flip ${pair.join("/")} in 0.25-2.5 s runs: turned ${(turn / DEG).toFixed(1)} deg, at most ${(worstOffChoice / DEG).toFixed(1)} deg off a probed choice`);
       expect(turn).toBeLessThan(DEG);
       expect(worstOffChoice).toBeLessThan(DEG);
@@ -862,11 +870,51 @@ describe("follow track yaw", () => {
     for (const yaw of track.yaw) expect(Math.abs(yaw - BEHIND_X)).toBeLessThanOrEqual(Math.PI + 1e-9);
   });
 
-  it("heldYawChoices: a new choice takes over only after the dwell; nothing clear keeps the held one", () => {
+  // Walking +x with the base blocked from 10 s on; `open(sample)` says which offsets are clear.
+  const walkingBlocked = (open: (sample: number) => number[]) => {
+    const walking = (ms: number) => [0, 1, 2, 3].map((i) => unit(`p${i}`, (ms / 1000) * 6 + (i % 2), i));
+    const { probe } = stubProbe(BEHIND_X, (sample, off) => (sample < 40 ? true : open(sample).includes(off)));
+    return buildFollowTrack({ startMs: 0, endMs: 120_000, unitsAt: walking, scale: 1, probe })!;
+  };
+
+  it("turns off a blocked base while walking even when the clear side moves between +30 and +60 each sample (review 1728b)", () => {
+    const track = walkingBlocked((sample) => (sample % 2 ? [30] : [60]));
+    const i = Math.round(60_000 / track.sampleMs);
+    expect([30, 60]).toContain(FOLLOW_YAW_CANDIDATES_DEG[track.yawChoice[i]!]);
+    // It switched once and stays (the held +30 or +60 is asked for again every other sample).
+    const switches = Array.from(track.yawChoice).filter((k, j, all) => j > 0 && k !== all[j - 1]).length;
+    expect(switches).toBe(1);
+    expect(angleOff(keyAt(track, 60_000).yaw, BEHIND_X)).toBeGreaterThan(25 * DEG);
+  });
+
+  it("turns off a blocked base while walking even when one sample in eight has nothing clear (review 1728b)", () => {
+    const track = walkingBlocked((sample) => (sample % 8 === 0 ? [] : [60]));
+    expect(FOLLOW_YAW_CANDIDATES_DEG[track.yawChoice[Math.round(60_000 / track.sampleMs)]!]).toBe(60);
+    expect(angleOff(keyAt(track, 60_000).yaw, BEHIND_X + 60 * DEG)).toBeLessThan(DEG);
+  });
+
+  it("skips a sample the probe cannot tell (no floor): it keeps the held choice", () => {
+    let sample = -1;
+    const probe: FollowYawProbe = {
+      // From 10 s on, every other sample has no floor below; the rest have only +60 clear.
+      sample: () => ++sample < 40 || sample % 2 === 0,
+      clearYaw: (yaw) => sample < 40 || Math.round(wrapAngle(yaw - BEHIND_X) / DEG) === 60,
+    };
+    const walking = (ms: number) => [0, 1, 2, 3].map((i) => unit(`p${i}`, (ms / 1000) * 6 + (i % 2), i));
+    const track = buildFollowTrack({ startMs: 0, endMs: 120_000, unitsAt: walking, scale: 1, probe })!;
+    const i = Math.round(60_000 / track.sampleMs);
+    expect(track.yawProbed[i % 2 ? i : i + 1]).toBe(0);
+    expect(FOLLOW_YAW_CANDIDATES_DEG[track.yawChoice[i]!]).toBe(60);
+  });
+
+  it("heldYawChoices: a new choice takes over only after the dwell; nothing clear pauses the count", () => {
     const bit = (deg: number) => 1 << FOLLOW_YAW_CANDIDATES_DEG.indexOf(deg);
     const at = (deg: number) => FOLLOW_YAW_CANDIDATES_DEG.indexOf(deg);
-    const open = Uint16Array.from([bit(0), bit(30), bit(30), bit(0), bit(30), bit(30), bit(30), 0, bit(0)]);
-    expect(Array.from(heldYawChoices(open, 3))).toEqual([at(0), at(0), at(0), at(0), at(0), at(0), at(30), at(30), at(30)]);
+    const open = Uint16Array.from([bit(0), bit(30), bit(30), bit(0), bit(30), 0, bit(30), bit(30), bit(0)]);
+    // Asking for the held 0 again starts the count over; the empty sample only pauses it.
+    expect(Array.from(heldYawChoices(open, 3))).toEqual([at(0), at(0), at(0), at(0), at(0), at(0), at(0), at(30), at(30)]);
+    // The clear side moving between candidates still counts as away, and the latest one asked for takes over.
+    expect(Array.from(heldYawChoices(Uint16Array.from([bit(0), bit(30), bit(60), bit(30), bit(60)]), 3))).toEqual([at(0), at(0), at(0), at(30), at(30)]);
     // The first sample takes its own choice; dwell 1 switches at once.
     expect(Array.from(heldYawChoices(Uint16Array.from([bit(60), bit(0)]), 1))).toEqual([at(60), at(0)]);
   });
@@ -888,28 +936,52 @@ describe("follow track yaw", () => {
     expect(handOverFollowYaw({ value: 0, velocity: 3 }, 1, 1, followSprings(8, false))).toEqual({ value: 1, velocity: 0 });
   });
 
-  it("a glide turns along the shortest arc, slowly enough for a big turn", () => {
+  it("a glide turns along the yaw it is given, slowly enough for a big turn, the move keeping its own length", () => {
     const from: GlidePose = { x: 0, z: 0, distance: 10, elevationDeg: 30, yaw: 3 };
-    const to: GlidePose = { x: 0, z: 0, distance: 10, elevationDeg: 30, yaw: -3 };
+    const to: GlidePose = { x: 0, z: 0, distance: 10, elevationDeg: 30, yaw: unwrapNear(-3, 3) };
     const out: GlidePose = { x: 0, z: 0, distance: 0, elevationDeg: 0 };
-    // From 3 rad to -3 rad is 0.28 rad the short way, across pi.
+    // From 3 rad to -3 rad is 0.28 rad the short way, across pi (the caller unwraps the target).
     expect(glidePoseAt(from, to, 0.5, out).yaw).toBeCloseTo(3 + (2 * Math.PI - 6) / 2, 9);
     expect(glidePoseAt(from, to, 1, out).yaw).toBeCloseTo(-3 + 2 * Math.PI, 9);
-    // Any turn takes long enough that its eased peak stays at the cap, even past GLIDE_MAX_MS.
+    // Any turn's clock is long enough that its eased peak stays at the cap, even past GLIDE_MAX_MS...
     for (const turn of [Math.PI / 4, Math.PI / 2, Math.PI]) {
-      const ms = glideDurationMs(0, 1, turn);
-      expect(ms).toBeCloseTo((1000 * turn * Math.PI) / (2 * FOLLOW_YAW_MAX_RATE), 6);
+      const ms = glideTurnMs(turn, GLIDE_MIN_MS);
+      expect(ms).toBeCloseTo(Math.max(GLIDE_MIN_MS, (1000 * turn * Math.PI) / (2 * FOLLOW_YAW_MAX_RATE)), 6);
       let peak = 0;
       for (let t = 0; t <= 1; t += 0.001) {
-        const a = glidePoseAt({ ...from, yaw: 0 }, { ...to, yaw: turn }, t, out).yaw!;
-        const b = glidePoseAt({ ...from, yaw: 0 }, { ...to, yaw: turn }, t + 0.001, out).yaw!;
+        const a = glidePoseAt({ ...from, yaw: 0 }, { ...to, yaw: turn }, 1, out, GLIDE_MIN_MS, t, ms).yaw!;
+        const b = glidePoseAt({ ...from, yaw: 0 }, { ...to, yaw: turn }, 1, out, GLIDE_MIN_MS, t + 0.001, ms).yaw!;
         peak = Math.max(peak, Math.abs(b - a) / ((0.001 * ms) / 1000));
       }
       expect(peak).toBeLessThanOrEqual(FOLLOW_YAW_MAX_RATE * 1.001);
     }
-    expect(glideDurationMs(0, 1, Math.PI)).toBeGreaterThan(GLIDE_MAX_MS);
-    // A long move still takes no longer than GLIDE_MAX_MS.
+    expect(glideTurnMs(Math.PI, GLIDE_MAX_MS)).toBeGreaterThan(GLIDE_MAX_MS);
+    // ...while the move keeps car 1's length, GLIDE_MAX_MS at most.
     expect(glideDurationMs(10_000, 1)).toBe(GLIDE_MAX_MS);
+    expect(glideTurnMs(0.1, 2_000)).toBe(2_000);
+  });
+
+  it("a glide whose target drifts across the opposite direction keeps turning the same way (review 1728b)", () => {
+    // As MapScene3D.updateDirector glides: a 177 degree turn, the track's yaw drifting 6 degrees past half a turn meanwhile.
+    const from: GlidePose = { x: 0, z: 0, distance: 10, elevationDeg: 30, yaw: 0, vyaw: 0 };
+    const trackYaw = (t: number) => Math.PI - 3 * DEG + 6 * DEG * t;
+    const to: GlidePose = { x: 0, z: 0, distance: 10, elevationDeg: 30, yaw: unwrapNear(trackYaw(0), from.yaw!) };
+    const moveMs = GLIDE_MIN_MS;
+    const turnMs = glideTurnMs(to.yaw! - from.yaw!, moveMs);
+    const out: GlidePose = { x: 0, z: 0, distance: 0, elevationDeg: 0 };
+    let previous = 0;
+    let worst = 0;
+    for (let now = FRAME_MS; now <= turnMs + FRAME_MS; now += FRAME_MS) {
+      const turnT = Math.min(1, now / turnMs);
+      to.yaw = unwrapNear(trackYaw(turnT), to.yaw!);
+      const yaw = glidePoseAt(from, to, Math.min(1, now / moveMs), out, moveMs, turnT, turnMs).yaw!;
+      worst = Math.max(worst, Math.abs(yaw - previous) / (FRAME_MS / 1000));
+      previous = yaw;
+    }
+    console.info(`drifting half-turn glide: worst ${(worst / DEG).toFixed(1)} deg/s, ends at ${(previous / DEG).toFixed(1)} deg`);
+    // Without the fixed direction this snapped about 180 degrees in one frame.
+    expect(worst).toBeLessThan(FOLLOW_YAW_MAX_RATE * 1.1);
+    expect(previous).toBeCloseTo(Math.PI + 3 * DEG, 6);
   });
 
   it("probes in slices too: no slice runs past its budget by more than one sample's probes", () => {
