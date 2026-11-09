@@ -24304,12 +24304,17 @@ WITH deduped AS (
       AND lie.kill_type = 'clean'
       AND lie.name = ANY($3::text[])
       AND cardinality($3::text[]) <= 64
+      AND li.guild_id IS NOT NULL
     ORDER BY lie.name, COALESCE(li.duplicate_group_id, li.id),
              EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) ASC
-), ranked AS (
-    SELECT d.encounter_id, d.encounter_name, d.instance_id, d.log_hashed_slug, d.instance_name, d.guild_name, d.guild_id, d.realm_name, d.duration_secs, d.killed_at, row_number() OVER (PARTITION BY d.encounter_name ORDER BY d.duration_secs ASC, d.killed_at ASC) AS position
+), best_per_guild AS (
+    SELECT DISTINCT ON (d.encounter_name, d.guild_id) d.encounter_id, d.encounter_name, d.instance_id, d.log_hashed_slug, d.instance_name, d.guild_name, d.guild_id, d.realm_name, d.duration_secs, d.killed_at
     FROM deduped d
     WHERE d.duration_secs > 0
+    ORDER BY d.encounter_name, d.guild_id, d.duration_secs ASC, d.killed_at ASC
+), ranked AS (
+    SELECT b.encounter_id, b.encounter_name, b.instance_id, b.log_hashed_slug, b.instance_name, b.guild_name, b.guild_id, b.realm_name, b.duration_secs, b.killed_at, row_number() OVER (PARTITION BY b.encounter_name ORDER BY b.duration_secs ASC, b.killed_at ASC) AS position
+    FROM best_per_guild b
 )
 SELECT encounter_id, encounter_name, instance_id, log_hashed_slug, instance_name, guild_name, guild_id,
        realm_name, duration_secs, killed_at
@@ -24337,8 +24342,10 @@ type RankingsKillTimeTopPerEncounterRow struct {
 	KilledAt      pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
 }
 
-// The fastest clean kills of each chosen boss in one round trip, deduplicated
-// across duplicate log groups like RankingsKillTimeLeaderboard.
+// The fastest clean guild kills of each chosen boss in one round trip, deduplicated
+// across duplicate log groups like RankingsKillTimeLeaderboard. Each guild ranks once
+// per boss with its fastest kill, as on the full-clear speedrun board; kills without
+// a guild are excluded.
 func (q *sqlQuerier) RankingsKillTimeTopPerEncounter(ctx context.Context, arg RankingsKillTimeTopPerEncounterParams) ([]RankingsKillTimeTopPerEncounterRow, error) {
 	rows, err := q.db.Query(ctx, rankingsKillTimeTopPerEncounter, arg.PerEncounter, arg.InstanceName, arg.EncounterNames)
 	if err != nil {

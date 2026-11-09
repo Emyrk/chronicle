@@ -1208,8 +1208,10 @@ ORDER BY d.duration_secs ASC
 LIMIT @query_limit::bigint OFFSET @query_offset::bigint;
 
 -- name: RankingsKillTimeTopPerEncounter :many
--- The fastest clean kills of each chosen boss in one round trip, deduplicated
--- across duplicate log groups like RankingsKillTimeLeaderboard.
+-- The fastest clean guild kills of each chosen boss in one round trip, deduplicated
+-- across duplicate log groups like RankingsKillTimeLeaderboard. Each guild ranks once
+-- per boss with its fastest kill, as on the full-clear speedrun board; kills without
+-- a guild are excluded.
 WITH deduped AS (
     SELECT DISTINCT ON (lie.name, COALESCE(li.duplicate_group_id, li.id))
         lie.id AS encounter_id,
@@ -1232,12 +1234,17 @@ WITH deduped AS (
       AND lie.kill_type = 'clean'
       AND lie.name = ANY(@encounter_names::text[])
       AND cardinality(@encounter_names::text[]) <= 64
+      AND li.guild_id IS NOT NULL
     ORDER BY lie.name, COALESCE(li.duplicate_group_id, li.id),
              EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) ASC
-), ranked AS (
-    SELECT d.*, row_number() OVER (PARTITION BY d.encounter_name ORDER BY d.duration_secs ASC, d.killed_at ASC) AS position
+), best_per_guild AS (
+    SELECT DISTINCT ON (d.encounter_name, d.guild_id) d.*
     FROM deduped d
     WHERE d.duration_secs > 0
+    ORDER BY d.encounter_name, d.guild_id, d.duration_secs ASC, d.killed_at ASC
+), ranked AS (
+    SELECT b.*, row_number() OVER (PARTITION BY b.encounter_name ORDER BY b.duration_secs ASC, b.killed_at ASC) AS position
+    FROM best_per_guild b
 )
 SELECT encounter_id, encounter_name, instance_id, log_hashed_slug, instance_name, guild_name, guild_id,
        realm_name, duration_secs, killed_at

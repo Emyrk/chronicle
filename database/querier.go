@@ -1082,8 +1082,10 @@ type sqlcQuerier interface {
 	// Box plot stats on encounter duration (seconds) per encounter name.
 	// Deduplicates encounters across duplicate log groups.
 	RankingsKillTimeStats(ctx context.Context, arg RankingsKillTimeStatsParams) ([]RankingsKillTimeStatsRow, error)
-	// The fastest clean kills of each chosen boss in one round trip, deduplicated
-	// across duplicate log groups like RankingsKillTimeLeaderboard.
+	// The fastest clean guild kills of each chosen boss in one round trip, deduplicated
+	// across duplicate log groups like RankingsKillTimeLeaderboard. Each guild ranks once
+	// per boss with its fastest kill, as on the full-clear speedrun board; kills without
+	// a guild are excluded.
 	RankingsKillTimeTopPerEncounter(ctx context.Context, arg RankingsKillTimeTopPerEncounterParams) ([]RankingsKillTimeTopPerEncounterRow, error)
 	// Returns paginated DPS rankings showing each player's best single run.
 	// A "run" is one instance_id (deduplicated by duplicate_group_id).
