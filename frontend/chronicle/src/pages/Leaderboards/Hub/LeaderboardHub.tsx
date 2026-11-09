@@ -10,7 +10,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { CLASS_CSS_VAR, CLASS_DISPLAY } from "@/pages/Rankings/classDisplay"
 import { ClassIcon } from "@/pages/RaidPlanner/ClassIcon"
 import { getInstanceBackground, getInstanceConfig } from "@/pages/Logs/utils/instanceImages"
-import { Podium } from "@/pages/Leaderboard/Podium"
+import { Podium, PodiumList } from "@/pages/Leaderboard/Podium"
 import { CLASS_ORDER, RATING_METRICS, scopeKind, type RatingMetric, type RatingPeriod, type RatingScope } from "@/pages/Leaderboards/Ratings/ratingBoards.fixtures"
 import { MetricTabs, PeriodToggle, RatingBoards } from "@/pages/Leaderboards/Ratings/RatingLeaderboard"
 import { BossPortrait, SpecIcon } from "@/pages/Leaderboards/Ratings/RatingParts"
@@ -1102,14 +1102,19 @@ export function SpeedHero({
       </span>
       <CardLink label="Speedruns" onClick={onOpen} className="absolute top-3 right-4 z-10" />
       {entries?.length ? (
-        <div className="relative px-4 pt-10">
-          <Podium entries={[...entries]} instanceName={instanceName} />
-        </div>
+        <>
+          <div className="relative px-4 pt-9 pb-2 sm:hidden">
+            <PodiumList entries={[...entries]} instanceName={instanceName} />
+          </div>
+          <div className="relative hidden px-4 pt-10 sm:block">
+            <Podium entries={[...entries]} instanceName={instanceName} />
+          </div>
+        </>
       ) : pending ? (
         // The podium's three steps, second / first / third.
         <div role="status" aria-label="Loading" className="relative flex items-end justify-center gap-4 px-4 pt-10 pb-6">
           {["h-28", "h-36", "h-24"].map((h, i) => (
-            <span key={i} className={cn("w-40 animate-pulse rounded-xl bg-white/[.06]", h)} />
+            <span key={i} className={cn("w-24 animate-pulse rounded-xl bg-white/[.06] sm:w-40", h)} />
           ))}
         </div>
       ) : (

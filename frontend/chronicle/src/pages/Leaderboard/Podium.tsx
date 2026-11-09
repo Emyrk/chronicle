@@ -827,3 +827,45 @@ export function Podium({ entries, instanceName }: PodiumProps) {
     </div>
   )
 }
+
+/** The podium as a compact ranked list, for widths too narrow for three side-by-side steps. */
+export function PodiumList({ entries, instanceName }: PodiumProps) {
+  if (entries.length === 0) return null
+  return (
+    <ol className="divide-y divide-white/10">
+      {entries.slice(0, 3).map((entry, rank) => (
+        <li key={entry.instance_id}>
+          <Link
+            to={`/instances/${entry.slug || entry.instance_id}`}
+            className="flex items-center gap-3 py-2 transition-colors hover:bg-white/5"
+          >
+            <span className="w-6 shrink-0 text-center text-lg leading-none">{MEDAL_COLORS[rank].medal}</span>
+            {entry.guild_logo_url && (
+              <img src={entry.guild_logo_url} alt="" className="h-7 w-7 shrink-0 rounded-full object-cover ring-1 ring-white/20" />
+            )}
+            <span className="min-w-0 flex-1">
+              <span
+                className={`block truncate text-sm font-semibold ${rank === 0 ? "text-white" : MEDAL_COLORS[rank].text}`}
+                {...guildAttributes(entry.guild_id, entry.guild_name)}
+              >
+                {entry.guild_name || "Unknown Guild"}
+              </span>
+              <span className="flex items-center gap-1.5 truncate text-[11px] text-muted-foreground">
+                {entry.player_count > 0 && (
+                  <span className="flex items-center gap-0.5"><Users className="h-3 w-3" />{entry.player_count}</span>
+                )}
+                <span className="truncate">{entry.realm_name}</span>
+                <span className="shrink-0" title={formatDate(entry.completion_time)}>
+                  · {new Date(entry.completion_time).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                </span>
+              </span>
+            </span>
+            <span className="shrink-0 font-mono text-base font-bold tabular-nums text-foreground">
+              <span {...speedrunClearAttributes(entry, instanceName)}>{formatDuration(entry.duration_ms)}</span>
+            </span>
+          </Link>
+        </li>
+      ))}
+    </ol>
+  )
+}
