@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import { Timer, Users } from "lucide-react"
 import type { KillTimeLeaderboardEntry, SpeedrunLeaderboardEntry } from "@/api/typesGenerated"
 import { cn } from "@/lib/utils"
@@ -35,34 +35,36 @@ export function SpeedrunsTab({
   const view = controlledView ?? ownView
   const setView = onView ?? setOwnView
   const chosen = selectedBosses(selection, bosses)
-  return (
+  const switcher = (
+    <nav aria-label="Speedrun board" className="inline-flex rounded-md border bg-card p-0.5 text-xs sm:text-sm">
+      {(
+        [
+          ["clear", "Full clear"],
+          ["kills", `Kill times${chosen.length ? ` · ${chosen.length === 1 ? chosen[0] : `${chosen.length} bosses`}` : ""}`],
+        ] as const
+      ).map(([id, label]) => (
+        <button
+          key={id}
+          type="button"
+          aria-pressed={view === id}
+          onClick={() => setView(id)}
+          className={cn(
+            "cursor-pointer rounded px-2.5 py-1 font-medium transition-colors sm:px-3 sm:py-1.5",
+            view === id ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {label}
+        </button>
+      ))}
+    </nav>
+  )
+  // Full clears carry the switch in the podium card's header; kill times have no podium, so it sits above.
+  return view === "clear" ? (
+    <ClearBoard instanceName={instanceName} live={live?.clears} story={!live} bosses={bosses} switcher={switcher} />
+  ) : (
     <div className="space-y-3 sm:space-y-5">
-      <nav aria-label="Speedrun board" className="inline-flex rounded-md border bg-card p-0.5 text-xs sm:text-sm">
-        {(
-          [
-            ["clear", "Full clear"],
-            ["kills", `Kill times${chosen.length ? ` · ${chosen.length === 1 ? chosen[0] : `${chosen.length} bosses`}` : ""}`],
-          ] as const
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            aria-pressed={view === id}
-            onClick={() => setView(id)}
-            className={cn(
-              "cursor-pointer rounded px-2.5 py-1 font-medium transition-colors sm:px-3 sm:py-1.5",
-              view === id ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {label}
-          </button>
-        ))}
-      </nav>
-      {view === "clear" ? (
-        <ClearBoard instanceName={instanceName} live={live?.clears} story={!live} bosses={bosses} />
-      ) : (
-        <KillTimes instanceName={instanceName} bosses={chosen} allBosses={bosses} live={live?.kills} story={!live} />
-      )}
+      {switcher}
+      <KillTimes instanceName={instanceName} bosses={chosen} allBosses={bosses} live={live?.kills} story={!live} />
     </div>
   )
 }
@@ -133,23 +135,27 @@ function KillTimes({
 }
 
 /** Fastest full clears: the podium and the table below it. */
-function ClearBoard({ instanceName, bosses, live, story }: { instanceName: string; bosses: readonly string[]; live?: LiveList<SpeedrunLeaderboardEntry>; story: boolean }) {
+function ClearBoard({ instanceName, bosses, live, story, switcher }: { instanceName: string; bosses: readonly string[]; live?: LiveList<SpeedrunLeaderboardEntry>; story: boolean; switcher: ReactNode }) {
   const runs = story ? speedruns(undefined, bosses, instanceName) : (live?.entries ?? [])
   const what = "Fastest full clears"
-  if (live?.error) return <Status alert>Could not load speedruns: {live.error.message}</Status>
-  if (!story && (live?.loading || !live?.entries)) return <Status>Loading speedruns…</Status>
-  if (!story && runs.length === 0) return <Status>No speedruns found for the current filters.</Status>
+  const status = (children: ReactNode, alert?: boolean) => (
+    <div className="space-y-3 sm:space-y-5">{switcher}<Status alert={alert}>{children}</Status></div>
+  )
+  if (live?.error) return status(<>Could not load speedruns: {live.error.message}</>, true)
+  if (!story && (live?.loading || !live?.entries)) return status("Loading speedruns…")
+  if (!story && runs.length === 0) return status("No speedruns found for the current filters.")
 
   return (
     <div className="space-y-3 sm:space-y-5">
-      {/* On a phone the board switch above already says "Full clear", so the label gives way to the winner. */}
-      <section className="relative overflow-hidden rounded-xl border bg-card px-4 pt-4 sm:pt-10">
-        <span className="absolute top-3 left-4 hidden text-xs font-medium text-muted-foreground sm:inline">{what}</span>
+      {/* The board switch heads the podium card: a row above the steps until the screen is wide enough
+          for the empty corner beside the shorter #2 step, where it costs no height. */}
+      <section className="relative overflow-hidden rounded-xl border bg-card">
+        <div className="relative z-10 px-3 pt-3 sm:px-4 xl:absolute xl:top-3 xl:left-4 xl:p-0">{switcher}</div>
         {/* A phone has room for the winner only; the table below lists the rest. */}
-        <div className="sm:hidden">
+        <div className="px-4 pt-3 sm:hidden">
           <Podium entries={runs.slice(0, 1)} instanceName={instanceName} compact />
         </div>
-        <div className="hidden sm:block">
+        <div className="hidden px-4 pt-4 sm:block xl:pt-10">
           <Podium entries={runs.slice(0, 3)} instanceName={instanceName} />
         </div>
       </section>
