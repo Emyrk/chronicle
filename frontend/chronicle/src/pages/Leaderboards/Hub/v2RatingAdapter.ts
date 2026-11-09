@@ -114,6 +114,14 @@ export function v2BoardURL(params: URLSearchParams) {
 /** Translate existing Previous/Next page controls into request-bound cursor history.
  * Never invent a total or global rank, replay all observations, or request offsets.
  */
+/** A one-boss row's peak kill, dated for the Peak board's Date column; undefined without a date. */
+export function v2PeakRun(row: LeaderboardV2Entry): { ms: number; date: string } | undefined {
+  const boss = row.bosses?.length === 1 ? row.bosses[0] : undefined;
+  if (!boss?.killed_at) return undefined;
+  const date = new Date(boss.killed_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return { ms: boss.duration_ms ?? 0, date };
+}
+
 export function createV2Pager(context: V2RatingContext) {
   const cursors = new Map<string, Map<number, string>>();
   return async ({
@@ -148,6 +156,7 @@ export function createV2Pager(context: V2RatingContext) {
       rows: response.entries.map((row) => ({
         rank: 0,
         peakComponents: row.bosses?.map((boss) => ({ encounter_name: boss.encounter_name, score: boss.peak })),
+        peakRun: v2PeakRun(row),
         entry: v2PlayerEntry(row, params, metric),
         scores:
           metric === "renown"

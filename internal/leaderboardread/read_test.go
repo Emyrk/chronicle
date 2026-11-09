@@ -284,6 +284,7 @@ func TestPageBossDetails(t *testing.T) {
 	require.Equal(t, 100.0, rows[0].Peak)
 	require.Equal(t, 100.0, rows[0].RawPeak)
 	require.EqualValues(t, 130000, rows[0].DurationMs)
+	require.False(t, rows[0].PeakAt.Valid, "a peak encounter missing from log_instance_encounters has no date")
 	require.Zero(t, rows[1].Peak)
 	require.Zero(t, rows[1].ObservationCount)
 	require.Zero(t, rows[1].DurationMs)
@@ -317,6 +318,7 @@ func TestPageBossDetails(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 200, rows[0].DurationMs)
 	require.Equal(t, 50.0, rows[0].Peak)
+	require.False(t, rows[0].PeakAt.Valid, "guild bosses carry no peak date")
 }
 
 func TestIndependentWholeSelectionCompanions(t *testing.T) {

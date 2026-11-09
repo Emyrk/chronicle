@@ -57,6 +57,8 @@ type LeaderboardV2Boss struct {
 	RawPeak          *float64 `json:"raw_peak"`
 	DurationMS       *int64   `json:"duration_ms"`
 	ObservationCount int64    `json:"observation_count"`
+	// KilledAt is when the player's peak kill happened; absent for guilds and missing bosses.
+	KilledAt *time.Time `json:"killed_at,omitempty"`
 }
 
 // LeaderboardV2PlayerHistory is one character's canonical rating evidence,

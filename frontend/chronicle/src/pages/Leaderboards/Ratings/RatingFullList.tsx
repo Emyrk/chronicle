@@ -340,7 +340,7 @@ export function RatingFullList({
                       return <>
                         {live && <td className="hidden px-3 py-2 text-right font-mono text-muted-foreground tabular-nums sm:table-cell">{entry.raw === undefined ? "Unavailable" : entry.raw.toFixed(1)}</td>}
                         <td className="hidden px-3 py-2 text-right font-mono text-muted-foreground tabular-nums sm:table-cell">{run.ms === undefined ? <span title="Peak encounter duration has not been recorded for this summary.">Unavailable</span> : formatClock(run.ms)}</td>
-                        <td className="hidden px-3 py-2 text-xs text-muted-foreground sm:table-cell">{run.date ?? "Unavailable"}</td>
+                        <td className="hidden px-3 py-2 text-xs whitespace-nowrap text-muted-foreground sm:table-cell">{run.date ?? "Unavailable"}</td>
                       </>
                     })()}
                   </>

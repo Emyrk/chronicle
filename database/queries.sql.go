@@ -15302,7 +15302,9 @@ SELECT p.realm_id::uuid AS realm_id, p.subject_id::text AS subject_id, p.player_
  CASE WHEN b.best_metric > 0 THEN LEAST(100::double precision,100*s.raw_form/b.best_metric) ELSE 0 END::double precision AS form,
  CASE WHEN b.best_metric > 0 THEN LEAST(100::double precision,100*s.raw_floor/b.best_metric) ELSE 0 END::double precision AS floor,
  COALESCE(s.raw_peak,0)::double precision AS raw_peak, COALESCE(s.peak_duration_ms,0)::bigint AS duration_ms,
- COALESCE(s.observation_count,0)::bigint AS observation_count
+ COALESCE(s.observation_count,0)::bigint AS observation_count,
+ -- When the peak kill happened, for display: the peak encounter's end, looked up by primary key.
+ pe.end_time::timestamptz AS peak_at
 FROM selected p
 LEFT JOIN leaderboard_player_boss_subjects s ON s.tenant_id= $7::uuid
  AND s.instance_name= $8::text AND s.difficulty_name= $9::text AND s.max_players= $10::smallint
@@ -15311,6 +15313,7 @@ LEFT JOIN leaderboard_player_boss_subjects s ON s.tenant_id= $7::uuid
 LEFT JOIN leaderboard_player_boss_benchmarks b ON b.tenant_id=s.tenant_id AND b.instance_name=s.instance_name
  AND b.difficulty_name=s.difficulty_name AND b.max_players=s.max_players AND b.encounter_name=s.encounter_name
  AND b.player_class=s.player_class AND b.player_spec=s.player_spec AND b.player_sub_spec=s.player_sub_spec AND b.metric=s.metric
+LEFT JOIN log_instance_encounters pe ON pe.id = s.peak_encounter_id
 WHERE $12::text='player'
 UNION ALL
 SELECT p.realm_id::uuid AS realm_id, p.subject_id::text AS subject_id, p.player_class::text AS player_class, p.player_spec::text AS player_spec, p.player_sub_spec::text AS player_sub_spec, p.encounter_name::text AS encounter_name,
@@ -15318,7 +15321,8 @@ SELECT p.realm_id::uuid AS realm_id, p.subject_id::text AS subject_id, p.player_
  CASE WHEN b.best_duration_ms IS NOT NULL THEN LEAST(100::double precision,100*b.best_duration_ms*s.form_mean_inverse_ms) ELSE 0 END::double precision AS form,
  CASE WHEN b.best_duration_ms IS NOT NULL THEN LEAST(100::double precision,100*b.best_duration_ms*s.floor_mean_inverse_ms) ELSE 0 END::double precision AS floor,
  0::double precision AS raw_peak, COALESCE(s.fastest_duration_ms,0)::bigint AS duration_ms,
- COALESCE(s.observation_count,0)::bigint AS observation_count
+ COALESCE(s.observation_count,0)::bigint AS observation_count,
+ NULL::timestamptz AS peak_at
 FROM selected p
 LEFT JOIN leaderboard_guild_boss_subjects s ON s.tenant_id= $7::uuid
  AND s.instance_name= $8::text AND s.difficulty_name= $9::text AND s.max_players= $10::smallint
@@ -15345,18 +15349,19 @@ type ListLeaderboardV2PageBossesParams struct {
 }
 
 type ListLeaderboardV2PageBossesRow struct {
-	RealmID          uuid.UUID `db:"realm_id" json:"realm_id"`
-	SubjectID        string    `db:"subject_id" json:"subject_id"`
-	PlayerClass      string    `db:"player_class" json:"player_class"`
-	PlayerSpec       string    `db:"player_spec" json:"player_spec"`
-	PlayerSubSpec    string    `db:"player_sub_spec" json:"player_sub_spec"`
-	EncounterName    string    `db:"encounter_name" json:"encounter_name"`
-	Peak             float64   `db:"peak" json:"peak"`
-	Form             float64   `db:"form" json:"form"`
-	Floor            float64   `db:"floor" json:"floor"`
-	RawPeak          float64   `db:"raw_peak" json:"raw_peak"`
-	DurationMs       int64     `db:"duration_ms" json:"duration_ms"`
-	ObservationCount int64     `db:"observation_count" json:"observation_count"`
+	RealmID          uuid.UUID          `db:"realm_id" json:"realm_id"`
+	SubjectID        string             `db:"subject_id" json:"subject_id"`
+	PlayerClass      string             `db:"player_class" json:"player_class"`
+	PlayerSpec       string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec    string             `db:"player_sub_spec" json:"player_sub_spec"`
+	EncounterName    string             `db:"encounter_name" json:"encounter_name"`
+	Peak             float64            `db:"peak" json:"peak"`
+	Form             float64            `db:"form" json:"form"`
+	Floor            float64            `db:"floor" json:"floor"`
+	RawPeak          float64            `db:"raw_peak" json:"raw_peak"`
+	DurationMs       int64              `db:"duration_ms" json:"duration_ms"`
+	ObservationCount int64              `db:"observation_count" json:"observation_count"`
+	PeakAt           pgtype.Timestamptz `db:"peak_at" json:"peak_at"`
 }
 
 // Only the returned score page is passed here, with aligned exact cohort arrays.
@@ -15396,6 +15401,7 @@ func (q *sqlQuerier) ListLeaderboardV2PageBosses(ctx context.Context, arg ListLe
 			&i.RawPeak,
 			&i.DurationMs,
 			&i.ObservationCount,
+			&i.PeakAt,
 		); err != nil {
 			return nil, err
 		}

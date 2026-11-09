@@ -103,6 +103,10 @@ export interface LeaderboardV2Boss {
     readonly raw_peak: number | null;
     readonly duration_ms: number | null;
     readonly observation_count: number;
+    /**
+     * KilledAt is when the player's peak kill happened; absent for guilds and missing bosses.
+     */
+    readonly killed_at?: string;
 }
 
 // From chroniclesdk/leaderboard_v2.go

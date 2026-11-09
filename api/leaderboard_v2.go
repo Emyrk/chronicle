@@ -184,6 +184,9 @@ func (api *API) LeaderboardV2(w http.ResponseWriter, r *http.Request) {
 			if boss.DurationMs > 0 {
 				detail.DurationMS = &boss.DurationMs
 			}
+			if boss.PeakAt.Valid {
+				detail.KilledAt = &boss.PeakAt.Time
+			}
 			if req.Kind == "renown" {
 				denominator := float64(len(selection.Bosses))
 				out.Entries[i].Peak += boss.Peak / denominator

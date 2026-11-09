@@ -3,6 +3,7 @@ import { configuration } from "./v2RatingAdapter.testdata";
 import { resolvedHubMetadata } from "./resolvedHubAdapter";
 import {
   createV2Pager,
+  v2PeakRun,
   v2RatingParams,
   v2PlayerEntry,
   type V2RatingContext,
@@ -270,6 +271,11 @@ it("preserves returned cohort identity for two specs of the same player", () => 
   expect(frost.cls).toBe("MAGE");
   expect(frost.spec).toBe("Frost");
   expect(frost.guild).toBe("Arcane Circle");
+  // A one-boss row's peak kill is dated for the Date column; without a date, or across bosses, there is none.
+  expect(v2PeakRun(common)).toBeUndefined();
+  const dated = { ...common, bosses: [{ ...common.bosses[0], duration_ms: 57000, killed_at: "2026-09-07T20:00:00Z" }] };
+  expect(v2PeakRun(dated)).toEqual({ ms: 57000, date: "Sep 7, 2026" });
+  expect(v2PeakRun({ ...dated, bosses: [...dated.bosses, dated.bosses[0]] })).toBeUndefined();
   expect(frost.logo).toBeUndefined();
   expect(v2PlayerEntry({ ...common, logo_url: "/logo.png" }, new URLSearchParams(), "peak").logo).toBe("/logo.png");
   expect(v2PlayerEntry({ ...common, guild_name: "" }, new URLSearchParams(), "peak").guild).toBeUndefined();
