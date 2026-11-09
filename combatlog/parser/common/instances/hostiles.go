@@ -713,6 +713,7 @@ func RazorfenKraulHostiles() map[uint32]Identity {
 		4421:  "Charlga Razorflank",
 		4842:  "Earthcaller Halmgar",
 		62503: "Rotthorn",
+		6168:  "Roogug",
 	})
 
 	return hostile
