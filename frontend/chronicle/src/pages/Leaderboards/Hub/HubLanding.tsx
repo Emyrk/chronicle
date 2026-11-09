@@ -290,9 +290,10 @@ function HubLanding({
           <h2 className="text-lg font-semibold text-muted-foreground">Raids</h2>
           {raidGroups.map((group) => (
             <div key={group.level ?? "other"} className="space-y-3">
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground/70">
+              {/* A single tier needs no level heading. */}
+              {raidGroups.length > 1 && <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground/70">
                 {group.level ? `Level ${group.level}` : "Other"}
-              </h3>
+              </h3>}
               {grid(group.items)}
             </div>
           ))}
@@ -355,10 +356,7 @@ function HubLanding({
     <div className="mx-auto w-full max-w-[1920px] space-y-6 px-3 py-4 sm:px-4 sm:py-8">
       <section className="space-y-5">
         <h2 className="text-lg font-semibold text-muted-foreground">Raids</h2>
-        <div className="space-y-3">
-          <h3 className="text-sm font-semibold tracking-wide text-muted-foreground/70 uppercase">Level 60</h3>
-          {grid(all.filter((i) => i.kind === "raid"))}
-        </div>
+        {grid(all.filter((i) => i.kind === "raid"))}
       </section>
       <section className="space-y-3">
         <h2 className="text-lg font-semibold text-muted-foreground">Dungeons</h2>
