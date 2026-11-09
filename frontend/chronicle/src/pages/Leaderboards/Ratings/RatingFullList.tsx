@@ -66,10 +66,8 @@ export function RatingFullList({
   const metric = view === "overview" ? sortBy : view
   const showPeakComponents = view === "peak" && !!live && encounterCount > 1
   const showPeakRun = view === "peak" && encounterCount <= 1
-  /** Boards whose phone layout fits the screen without sideways scrolling. */
-  const phoneFits = view === "overview" || view === "peak" || view === "mastery"
-  /** Boards whose extra columns fold under the score on a phone. */
-  const phoneFolds = view === "peak" || view === "mastery"
+  /** Single-metric boards: on a phone the score sits right-aligned, any extra columns folded under it. */
+  const phoneFolds = view !== "overview"
   /** The single-boss peak's kill: published duration when live, else the row's (or fixture) run. */
   const runFor = (entry: RatingEntry, liveRun?: { ms: number; date: string }): { ms?: number; date?: string } =>
     live ? { ms: entry.durationMs, date: liveRun?.date } : liveRun ?? peakRun(entry.id, scope.boss)
@@ -165,8 +163,8 @@ export function RatingFullList({
       </div>
 
       <div className="styled-scrollbar overflow-x-auto">
-        {/* The overview and Peak boards fold their extra columns away on a phone, so they can drop the scroll width. */}
-        <table className={cn("w-full table-auto text-sm", phoneFits ? "sm:min-w-[42rem]" : "min-w-[42rem]")}>
+        {/* Every board folds its extra columns away on a phone, so only wider screens need the scroll width. */}
+        <table className="w-full table-auto text-sm sm:min-w-[42rem]">
           <thead className="border-b bg-black/10 text-[11px] tracking-wider text-muted-foreground uppercase">
             <tr>
               {ranksShown && <th className="w-14 px-4 py-2.5 text-left font-medium sm:px-5">#</th>}
@@ -228,8 +226,13 @@ export function RatingFullList({
                 </>
               )}
               <th className="hidden w-48 whitespace-nowrap px-3 py-2.5 text-left font-medium lg:table-cell">Realm</th>
-              <th className="hidden w-40 px-2 py-2.5 text-left font-medium md:table-cell">Spec</th>
-              <th className="hidden w-36 px-2 py-2.5 pr-4 text-left font-medium sm:pr-5 md:table-cell">Sub-spec</th>
+              {/* Renown counts kills per character, not per spec, so its rows have no spec to show. */}
+              {view !== "renown" && (
+                <>
+                  <th className="hidden w-40 px-2 py-2.5 text-left font-medium md:table-cell">Spec</th>
+                  <th className="hidden w-36 px-2 py-2.5 pr-4 text-left font-medium sm:pr-5 md:table-cell">Sub-spec</th>
+                </>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -329,8 +332,12 @@ export function RatingFullList({
                   </>
                 )}
                 <td className="hidden whitespace-nowrap px-3 py-2 text-xs text-muted-foreground lg:table-cell">{entry.realmLabel || "Unknown realm"}</td>
-                <td className="hidden px-2 py-2 text-muted-foreground md:table-cell"><span className="inline-flex items-center gap-1.5 whitespace-nowrap">{entry.spec && <SpecIcon cls={entry.cls} spec={entry.spec} className="size-4 shrink-0 rounded-sm" />}<span>{entry.spec || "—"}</span></span></td>
-                <td className="hidden px-2 py-2 pr-4 text-muted-foreground sm:pr-5 md:table-cell">{entry.subSpec}</td>
+                {view !== "renown" && (
+                  <>
+                    <td className="hidden px-2 py-2 text-muted-foreground md:table-cell"><span className="inline-flex items-center gap-1.5 whitespace-nowrap">{entry.spec && <SpecIcon cls={entry.cls} spec={entry.spec} className="size-4 shrink-0 rounded-sm" />}<span>{entry.spec || "—"}</span></span></td>
+                    <td className="hidden px-2 py-2 pr-4 text-muted-foreground sm:pr-5 md:table-cell">{entry.subSpec}</td>
+                  </>
+                )}
               </tr>
             ))}
             {(!state || state.status === "ready") && visible.length === 0 && (
