@@ -189,6 +189,15 @@ export function MapLegend() {
         </Ground>
       </Section>
 
+      <Section id="floors" title="Dungeon floors" note="Manual floor selection takes priority, followed by recorded floor telemetry.">
+        <p className="text-sm text-muted-foreground">
+          Validated multi-floor maps can estimate the party&apos;s display floor from geometry and recent player positions.
+          Replay may look ahead up to five seconds within the same encounter to resolve uncertainty; cached start positions are not fresh evidence.
+          This is not a floor assignment for every individual player. Missing or uncertain support keeps the existing first-floor fallback, and you can select a floor manually.
+          Unvalidated support is available only in a development preview, not enabled by default.
+        </p>
+      </Section>
+
       <Section id="tokens" title="Unit tokens" note="Flat discs that lie on the ground, so the space above them stays free for one live value.">
         <Grid>
           <Card title="Player" demo={<Ground><At x={50} y={55}><Token {...MAGE} facing={20} /></At></Ground>}>

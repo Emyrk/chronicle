@@ -7,8 +7,9 @@ description: Extracts and validates dataset-specific multi-floor support for Chr
 
 Treat this as calibration, not an invitation to label a run by elapsed time.
 Read `render-map` and `replay-map` first. Published artwork alone does not
-establish correct inference. The current tooling is offline only; it does not
-change Replay Map's manual override, explicit-floor voting, or first-floor fallback.
+establish correct inference. Replay loads optional versioned support artifacts. Manual override and explicit-floor
+telemetry stay authoritative. Missing, stale, invalid or unvalidated support keeps
+the existing first-floor fallback. No generated artifact is enabled by default.
 
 ## Inputs and boundaries
 
@@ -28,16 +29,31 @@ training/calibration runs from held-out validation runs before enabling inferenc
 
 1. Install frontend dependencies with `pnpm install --frozen-lockfile` in
    `frontend/chronicle`. Requires Node 22 with `--experimental-strip-types`.
-2. Create an external directory, such as `/tmp/chronicle-floor`. Download:
-   - `https://icons.chronicleclassic.com/forever/maps/manifest.json` to `manifest.json`.
-   - `https://forever.chronicleclassic.com/api/v1/raidlogs/instances/FrBOsyBr9SulZoke`
-     to `instance.json`.
-   - The same instance API URL plus `/events/unit_position` to `positions.bin`.
-   - Each map 90 floor's `mesh.path`, relative to the manifest URL directory,
-     to `floor-1.glb` through `floor-4.glb`.
-   API requests need `Origin: https://forever.chronicleclassic.com`,
-   `Referer: https://forever.chronicleclassic.com/`, `Sec-Fetch-Site: same-origin`,
-   `Sec-Fetch-Mode: cors`, and a browser User-Agent. Check HTTP failures before parsing.
+2. Download exact inputs outside Git. Run from the repository root:
+
+   ```sh
+   export W=/tmp/chronicle-floor
+   mkdir -p "$W"
+   curl -fL https://icons.chronicleclassic.com/forever/maps/manifest.json -o "$W/manifest.json"
+   API=https://forever.chronicleclassic.com/api/v1/raidlogs/instances/FrBOsyBr9SulZoke
+   for item in metadata positions; do
+     URL="$API"; OUT=instance.json
+     if [ "$item" = positions ]; then URL="$API/events/unit_position"; OUT=positions.bin; fi
+     curl -fL -H 'Origin: https://forever.chronicleclassic.com' \
+       -H 'Referer: https://forever.chronicleclassic.com/' \
+       -H 'Sec-Fetch-Site: same-origin' -H 'Sec-Fetch-Mode: cors' \
+       -A 'Mozilla/5.0 Chrome/130' "$URL" -o "$W/$OUT" || exit 1
+   done
+   python3 - <<'PYDOWNLOAD'
+   import json, os, pathlib, subprocess
+   root = pathlib.Path(os.environ['W'])
+   manifest = json.loads((root / 'manifest.json').read_text())
+   for floor in next(m for m in manifest['instances'] if m['mapID'] == 90)['floors']:
+       subprocess.run(['curl', '-fL', 'https://icons.chronicleclassic.com/forever/maps/' + floor['mesh']['path'],
+                       '-o', str(root / ('floor-%s.glb' % floor['floor']))], check=True)
+   PYDOWNLOAD
+   ```
+
 3. From `frontend/chronicle`, run:
 
    ```sh
@@ -47,16 +63,20 @@ training/calibration runs from held-out validation runs before enabling inferenc
    ```
 
 4. Inspect external `floor-report.json`. Exit 2 means an annotated start was wrong
-   or unknown, not a tool crash. `support-v1/floor-N.json` contains derived indexed
-   geometry with dataset/map/frame/source SHA-256 provenance. Do not commit it.
-   `gnomeregan-result.json` is the checked-in aggregate baseline, not a success claim.
+   or unknown, or candidate parity failed, not a tool crash. Other nonzero codes
+   indicate input/tool failures. `support/<mapID>-<sha256>.json` contains indexed
+   geometry; `floor-support-descriptor.json` pins its checksum, dataset/map/frame,
+   floor IDs and source mesh SHA-256s. Do not commit derived assets or diagnostic
+   observations. `gnomeregan-result.json` records the single-log calibration result,
+   not held-out accuracy. Require `uncovered === 0` separately from the anchor gate.
 
 ## Onboard another dungeon
 
 1. Publish or obtain correctly partitioned per-floor meshes using `render-map`.
    Numeric floor membership must be verified before inference. Bounds are only a
    broad-phase check: Gnomeregan's overlapping bounds cannot distinguish its floors.
-2. Copy the fixture shape in `scripts/floor-inference/gnomeregan-forever.json`.
+2. From `frontend/chronicle`, copy the fixture shape in
+   `scripts/floor-inference/gnomeregan-forever.json`.
    Replace dataset, map, instance, labels and geometry source paths and SHA-256s.
    Hash the exact downloaded bytes (`sha256sum floor-*.glb`). Never silently refresh
    pinned hashes when artwork changes; create a reviewed calibration revision.
@@ -81,23 +101,64 @@ Callers partition by dataset, map and coordinate space and supply party members
 only. Keep inferred results separate from raw `sample.floor`. Manual floor choice
 remains above any automatic selection in the caller. Explicit telemetry wins over
 geometry; conflicting telemetry remains unknown. Each unit gets one recent vote.
-Geometry requires a strict party majority of singleton candidates. Ambiguous
-positions may retain an anchor briefly, but do not refresh its age.
+Geometry requires a singleton anchor compatible with every recent party sample.
+Contradictory or unsupported samples prevent a fresh geometric anchor. Ambiguous
+positions may retain an anchor briefly, but do not refresh its age. Synthetic
+cached snapshots never vote, including those retimestamped to encounter start.
+Offline replay can fill unknowns from fresh evidence up to five seconds ahead,
+within the same encounter and without crossing sample gaps over two seconds.
+It never overwrites known geometric or explicit telemetry estimates. Live causal
+callers omit lookahead. This is a party display estimate, not individual truth.
 
 The fixture uses a two-second party evidence window and a 15-second maximum
 continuity age as conservative experimental limits, not calibrated universal
 constants. Logged Z permits support within three yards, also an explicit
 experimental tolerance. Record and validate any changes on held-out runs.
 
-Stop runtime activation when coverage fails, annotated starts are wrong/unknown,
+Stop runtime activation when `uncovered !== 0`, annotated starts are wrong/unknown,
 frame registration is unverified, or only one calibration log has been tested.
-Gnomeregan currently fails two of six start labels despite complete union coverage.
-The engine must not conceal that uncertainty by picking the first candidate.
+Ambiguous coverage is reported separately; it is not an uncovered sample and it
+is not proof of correctness. Gnomeregan passes six calibration anchors only after
+synthetic provenance handling and bounded replay lookahead. No held-out run has
+been validated, so its descriptor remains `validated: false`. Never infer general
+accuracy from six anchors. See `frontend/chronicle/scripts/floor-inference/DIAGNOSIS.md`.
 
-Runtime integration and support-artifact hosting are **not implemented** here.
-Before adding them, agree on a compact versioned artifact and dataset-keyed loading
-contract. Do not download every full textured floor mesh during ordinary replay as
-an unreviewed shortcut. Preserve manual override and explicit telemetry precedence,
-add integration tests, update the replay legend, and verify forward/backward seeking
-and missing assets before shipping. Parser enrichment additionally needs a separate
-inferred-source/version field rather than overwriting the raw telemetry floor.
+## Artifact and local preview contract
+
+The texture-free artifact uses `indexed-f32-le-u32-le`: base64 little-endian
+float32 XYZ vertices and uint32 triangle indices per floor. It preserves source
+geometry precision, not a raster approximation. The validator reports raw JSON,
+gzip and original GLB byte counts and compares every observed candidate set against
+mesh raycasts. Require zero candidate mismatches. The runtime validates provenance,
+SHA-256, bounds allocation sizes, indexes projected triangles and uses optional Z.
+
+`useMapScene` precomputes separate tracks per encounter, independent of playback
+seek order. Descriptor loading uses React Query keyed by descriptor and icon base.
+No parser/schema rewrite is needed; `map.processor.ts` retains existing synthetic
+provenance, while inferred floors never replace raw `sample.floor`.
+
+For local preview, add the descriptor as the instance's `floorSupport` in a local
+copy of the manifest and route that manifest plus `support/` requests to the
+external files. Run Vite on port 5199 and open the real instance with
+`?floorInferencePreview=1`. This bypasses `validated:false` only in development;
+it does not bypass hashes, dataset/map identity or source-path checks. Keep the
+backend and real position stream available. Do not change production manifests
+just to preview. Test manual floors, explicit telemetry, forward/backward seeks,
+missing artifacts, stale source paths and switching datasets. Update the legend
+whenever user-facing behavior changes.
+
+## Foundry staging and publication
+
+Only on explicit operator approval, stage the JSON through the Foundry's dedicated
+multipart `assets/support` endpoint with `mapID`, `file` and JSON `floorSupport`
+descriptor fields, under the normal authenticated namespace route. Use the existing
+Foundry authentication flow; never embed credentials in this skill or scripts.
+Do not use generic arbitrary JSON uploads or assume ZIP imports include support.
+Inspect `frontend/telemetry/src/routes/maps.ts` for the current route prefix.
+
+Drafts may contain `validated:false` for preview. Publication must reject that
+state. Complete held-out evaluation and inspect the support/source byte hashes
+before a reviewed descriptor sets `validated:true`. Publishing verifies actual
+support and source mesh bytes and rejects stale paths or checksums. When source
+meshes change, regenerate and revalidate the support artifact rather than retaining
+old provenance. Production publication remains a separate operator approval.

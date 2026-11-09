@@ -5,6 +5,18 @@ const row = (timestampMs: number, unit: string, candidates: number[], floor?: nu
 const options = { evidenceWindowMs: 1000, continuityMs: 5000 };
 
 describe("floor inference", () => {
+  it("ignores synthetic cached snapshots and resolves offline starts only with bounded fresh evidence", () => {
+    const rows = [{ ...row(0, "a", [1]), synthetic: true }, row(500, "a", [2])];
+    expect(inferFloorTrack(rows, options)[0].floor).toBeNull();
+    expect(inferFloorTrack(rows, { ...options, lookaheadMs: 1000 })[0]).toMatchObject({ floor: 2, source: "lookahead" });
+    expect(inferFloorTrack(rows, { ...options, lookaheadMs: 100 })[0].floor).toBeNull();
+  });
+  it("requires compatible party support and never smooths conflicting telemetry or gaps", () => {
+    expect(inferFloorTrack([row(0, "a", [1]), row(0, "b", [1, 2])], options)[0].floor).toBe(1);
+    const rows = [row(0, "a", [1, 2], 1), row(0, "b", [1, 2], 2), row(500, "a", [2])];
+    expect(inferFloorTrack(rows, { ...options, lookaheadMs: 5000 })[0].floor).toBeNull();
+    expect(inferFloorTrack([{ ...row(0, "a", [1]), synthetic: true }, row(4000, "a", [2])], { ...options, lookaheadMs: 5000 })[0].floor).toBeNull();
+  });
   it("keeps overlaps unknown until independent party evidence anchors them", () => {
     const track = inferFloorTrack([row(0, "a", [1, 2]), row(1000, "a", [2]), row(2000, "a", [1, 2])], options);
     expect(track.map(x => [x.floor, x.source])).toEqual([[null, "unknown"], [2, "geometry"], [2, "continuity"]]);

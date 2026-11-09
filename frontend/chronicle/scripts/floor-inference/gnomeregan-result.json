@@ -1,13 +1,20 @@
 {
-  "passed": false,
-  "evaluationScope": "Single calibration run; no held-out evaluation",
+  "passed": true,
+  "measurements": {
+    "sourceGLBBytes": 14776332,
+    "supportJSONBytes": 7578679,
+    "supportGzipBytes": 2240951,
+    "candidateMismatches": 0
+  },
+  "evaluationScope": "Single labeled calibration run; independent coverage-only run recorded separately",
   "heldOutValidated": false,
   "version": 1,
   "datasetID": "b69b601c-d247-44c6-9cb6-3f71053fd052",
   "mapID": 90,
   "options": {
     "evidenceWindowMs": 2000,
-    "continuityMs": 15000
+    "continuityMs": 15000,
+    "lookaheadMs": 5000
   },
   "geometry": [
     {
@@ -48,13 +55,13 @@
       "verifiedStartOffsetSeconds": 0,
       "verifiedOffsetSeconds": 0,
       "estimates": {
-        "1": 38,
-        "unknown": 74
+        "1": 70,
+        "unknown": 42
       },
       "atStart": {
         "timestampMs": 1794173831324,
         "floor": 1,
-        "source": "geometry"
+        "source": "lookahead"
       }
     },
     {
@@ -64,13 +71,12 @@
       "verifiedStartOffsetSeconds": 793.266,
       "verifiedOffsetSeconds": 793.266,
       "estimates": {
-        "1": 9,
-        "2": 91
+        "2": 100
       },
       "atStart": {
         "timestampMs": 1794174624590,
-        "floor": 1,
-        "source": "geometry"
+        "floor": 2,
+        "source": "lookahead"
       }
     },
     {
@@ -85,7 +91,7 @@
       "atStart": {
         "timestampMs": 1794176069860,
         "floor": 4,
-        "source": "geometry"
+        "source": "lookahead"
       }
     },
     {
@@ -126,13 +132,11 @@
       "verifiedStartOffsetSeconds": 3709.852,
       "verifiedOffsetSeconds": 3709.852,
       "estimates": {
-        "2": 79,
-        "3": 11,
-        "unknown": 50
+        "2": 140
       },
       "atStart": {
         "timestampMs": 1794177541176,
-        "floor": 3,
+        "floor": 2,
         "source": "geometry"
       }
     }

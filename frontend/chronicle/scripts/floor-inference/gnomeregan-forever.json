@@ -7,7 +7,8 @@
   "zToleranceYards": 3,
   "options": {
     "evidenceWindowMs": 2000,
-    "continuityMs": 15000
+    "continuityMs": 15000,
+    "lookaheadMs": 5000
   },
   "labels": [
     {
@@ -72,7 +73,7 @@
   "provenance": {
     "annotationSource": "Operator-provided encounter-start labels, not transition times",
     "offsetVerification": "Public instance encounter start_time minus earliest encounter start_time",
-    "evaluationScope": "Single calibration run; no held-out log has been evaluated",
+    "evaluationScope": "Single labeled calibration run; independent coverage-only run recorded separately",
     "heldOutValidated": false
   }
 }

@@ -2,11 +2,12 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createHash } from 'node:crypto';
-import { gunzipSync } from 'node:zlib';
+import { gunzipSync, gzipSync } from 'node:zlib';
 import { spawnSync } from 'node:child_process';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshBVH } from 'three-mesh-bvh';
+import { indexFloorSupport } from '../../src/pages/Instance/EventsPanels/Map/floorSupport.ts';
 import { inferFloorTrack, inferredFloorAt } from '../../src/pages/Instance/EventsPanels/Map/floorInference.ts';
 
 const [directory, fixturePath] = process.argv.slice(2);
@@ -117,13 +118,13 @@ while (state.offset < bytes.length) {
       const hits = bvh.raycast(ray, THREE.DoubleSide);
       return hits.some(hit => f.get(7) === undefined || Math.abs(hit.point.y - f.get(7)) <= fixture.zToleranceYards);
     })).map(floor => floor.floor);
-    observations.push({ timestampMs, unit, candidates, synthetic: Boolean(meta.get(4)), floor: f.has(8) ? Number(f.get(8)) : undefined, encounterID });
+    observations.push({ timestampMs, unit, x, y, z: f.get(7), candidates, synthetic: Boolean(meta.get(4)), floor: f.has(8) ? Number(f.get(8)) : undefined, encounterID });
   }
   if (state.offset !== end || decoded !== count) throw new Error('Encounter framing mismatch');
 }
 // External diagnostic data only: includes player identifiers and must never enter Git.
 await writeFile(resolve(root, 'floor-observations.json'), JSON.stringify(observations));
-const track = inferFloorTrack(observations, fixture.options);
+const track = [...encounters.keys()].flatMap(id => inferFloorTrack(observations.filter(row => row.encounterID === id), fixture.options)).sort((a, b) => a.timestampMs - b.timestampMs);
 await writeFile(resolve(root, 'floor-track.json'), JSON.stringify(track));
 const firstMs = Math.min(...instance.encounters.map(e => Date.parse(e.start_time)));
 const labels = fixture.labels.map(label => {
@@ -137,14 +138,48 @@ const labels = fixture.labels.map(label => {
   for (const estimate of estimates) counts[estimate.floor ?? 'unknown'] = (counts[estimate.floor ?? 'unknown'] ?? 0) + 1;
   return { ...label, verifiedOffsetSeconds: offsetSeconds, estimates: counts, atStart: inferredFloorAt(track, Date.parse(encounter.start_time), fixture.options.evidenceWindowMs) };
 });
-// Versioned geometry artifact for future serving. Do not commit this derived asset.
-await mkdir(resolve(root, 'support-v1'), { recursive: true });
-for (const floor of support) {
-  const geometries = floor.geometries.map(({ geometry }) => ({ positions: Array.from(geometry.attributes.position.array), indices: Array.from(geometry.index.array) }));
-  await writeFile(resolve(root, `support-v1/floor-${floor.floor}.json`), JSON.stringify({ version: 1, datasetID: fixture.datasetID, mapID: fixture.mapID, frame: 'wow-yup-mirrored-x', sourcePath: floor.path, sha256: floor.sha256, geometries }));
+// Compact indexed float32 geometry, no textures and no lossy rasterization.
+const encode = (values, floating) => {
+  const bytes = Buffer.alloc(values.length * 4);
+  values.forEach((value, index) => floating ? bytes.writeFloatLE(value, index * 4) : bytes.writeUInt32LE(value, index * 4));
+  return bytes.toString('base64');
+};
+const artifact = {
+  version: 1, datasetID: fixture.datasetID, mapID: fixture.mapID,
+  frame: 'wow-yup-mirrored-x', floorIDs: support.map(floor => floor.floor),
+  sources: support.map(({ floor, path, sha256 }) => ({ floor, path, sha256 })),
+  encoding: 'indexed-f32-le-u32-le',
+  floors: support.map(floor => {
+    const positions = []; const indices = [];
+    for (const { geometry } of floor.geometries) {
+      const offset = positions.length / 3;
+      for (const value of geometry.index.array) indices.push(value + offset);
+      for (const value of geometry.attributes.position.array) positions.push(value);
+    }
+    return { floor: floor.floor, positions: encode(positions, true), indices: encode(indices, false) };
+  }),
+};
+const artifactBytes = Buffer.from(JSON.stringify(artifact));
+const descriptor = {
+  version: 1, path: `support/${fixture.mapID}-${sha(artifactBytes)}.json`, sha256: sha(artifactBytes),
+  datasetID: fixture.datasetID, mapID: fixture.mapID, frame: artifact.frame,
+  floorIDs: artifact.floorIDs, sources: artifact.sources, validated: false,
+};
+await mkdir(resolve(root, 'support'), { recursive: true });
+await writeFile(resolve(root, descriptor.path), artifactBytes);
+await writeFile(resolve(root, 'floor-support-descriptor.json'), JSON.stringify(descriptor, null, 2));
+const index = indexFloorSupport(artifact, descriptor);
+let candidateMismatches = 0;
+for (const observation of observations) {
+  const actual = index.candidates(observation.x, observation.y, observation.z);
+  if (JSON.stringify(actual) !== JSON.stringify(observation.candidates)) candidateMismatches++;
 }
-const passed = labels.every(label => label.atStart?.floor === label.floor);
-const report = { passed, evaluationScope: "Single calibration run; no held-out evaluation", heldOutValidated: false, version: 1, datasetID: fixture.datasetID, mapID: fixture.mapID, options: fixture.options, geometry: support.map(({ floor, path, sha256 }) => ({ floor, path, sha256 })), telemetry, samples: observations.length, uncovered: observations.filter(o => !o.candidates.length).length, ambiguous: observations.filter(o => o.candidates.length > 1).length, labels };
+const measurements = {
+  sourceGLBBytes: (await Promise.all(support.map(floor => readFile(resolve(root, `floor-${floor.floor}.glb`))))).reduce((sum, bytes) => sum + bytes.length, 0),
+  supportJSONBytes: artifactBytes.length, supportGzipBytes: gzipSync(artifactBytes).length, candidateMismatches,
+};
+const passed = labels.length > 0 && observations.every(row => row.candidates.length > 0) && candidateMismatches === 0 && labels.every(label => label.atStart?.floor === label.floor);
+const report = { passed, measurements, evaluationScope: fixture.provenance?.evaluationScope ?? "Unspecified evaluation scope", heldOutValidated: false, version: 1, datasetID: fixture.datasetID, mapID: fixture.mapID, options: fixture.options, geometry: support.map(({ floor, path, sha256 }) => ({ floor, path, sha256 })), telemetry, samples: observations.length, uncovered: observations.filter(o => !o.candidates.length).length, ambiguous: observations.filter(o => o.candidates.length > 1).length, labels };
 await writeFile(resolve(root, 'floor-report.json'), JSON.stringify(report, null, 2));
 console.log(JSON.stringify(report, null, 2));
 

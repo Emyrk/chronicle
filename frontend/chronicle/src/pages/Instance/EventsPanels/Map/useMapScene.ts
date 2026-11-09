@@ -1,3 +1,6 @@
+import { fetchFloorSupport, usableFloorSupport } from "./floorSupport";
+import { replayFloorTracks, replayFloorAt } from "./replayFloorInference";
+import { mapAssetUrl } from "@/pages/Technical/mapGallery";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
@@ -413,6 +416,31 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
     )
     : null;
   const [floorNumber, setFloorNumber] = useState<number | null>(null);
+  // Preview is deliberately development-only until independent validation approves
+  // this dataset's descriptor. Production never activates validated:false artifacts.
+  const supportPreview = import.meta.env.DEV && typeof window !== "undefined"
+    && new URLSearchParams(window.location.search).get("floorInferencePreview") === "1";
+  const supportDescriptor = artwork?.kind === "instance" ? artwork.instance.floorSupport : undefined;
+  const supportEnabled = !normalizedUIMap && artwork?.kind === "instance" && Boolean(iconBaseUrl)
+    && usableFloorSupport(supportDescriptor, props.context.instance.datasetId, artworkMapId ?? 0, artwork.instance.floors, supportPreview);
+  const supportQuery = useQuery({
+    queryKey: ["map-floor-support", iconBaseUrl, supportDescriptor],
+    enabled: supportEnabled,
+    retry: false,
+    staleTime: Infinity,
+    queryFn: ({ signal }) => fetchFloorSupport(mapAssetUrl(iconBaseUrl!, supportDescriptor!.path), supportDescriptor!, signal),
+  });
+  const inferenceSignature = runSignature(props.result.encounters);
+  const floorTracks = useMemo(() => supportEnabled && supportQuery.data
+    ? replayFloorTracks(props.result.encounters,
+      new Map(props.context.instance.encounters.map(e => [e.id, e.mapId ?? 0])),
+      new Set(Object.keys(props.context.instance.players ?? {})), artworkMapId ?? 0, supportQuery.data)
+    : new Map(),
+  // Rebuild after streamed appends, never after playback seek alone.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [supportEnabled, supportQuery.data, props.result.encounters, props.context.instance.encounters, props.context.instance.players, artworkMapId, inferenceSignature]);
+  const inferredFloor = replayFloorAt(floorTracks, props.result.encounters, cursorMs);
+
 
   if (!iconBaseUrl) return { status: "message", title: "Map artwork unavailable", detail: "This instance's dataset has no icon base URL." };
   if (manifestQuery.isLoading || props.loading) {
@@ -438,6 +466,7 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
       artwork.instance,
       floorNumber,
       visibleUnits.filter((unit) => unit.sample.mapId === mapId).map((unit) => unit.sample),
+      inferredFloor?.floor ?? null,
     )
     : null;
   const selectedFloor = artwork.kind === "instance"
