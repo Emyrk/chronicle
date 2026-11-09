@@ -330,6 +330,12 @@ func (s *State) matchOrCreateInstance(z messages.Zone) {
 		}
 		s.CurrentInstance = inst
 		inst.UpdateMapID(z.MapID)
+		if z.HasDifficulty() {
+			// A synthetic zone can create the instance before the companion's real
+			// zone message arrives. Preserve the existing hookable, but adopt the
+			// authoritative difficulty metadata from the real message.
+			inst.UpdateZoneDifficulty(z.Zone)
+		}
 		matched = true
 		s.logger.Info("Matched existing instance",
 			slog.String("name", inst.Name()),
