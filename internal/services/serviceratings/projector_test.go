@@ -509,31 +509,38 @@ func TestRepairCancellationReleasesWithBackoff(t *testing.T) {
 func TestProjectionRawMetricWinner(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name, metric string
-		dps, hps     float64
+		name, class, spec, metric string
+		dps, hps                  float64
+		kills                     int
 	}{
-		{"damage", "dps", 100, 25},
-		{"positive_tie", "dps", 100, 100},
-		{"healing", "hps", 25, 100},
-		{"damage_only", "dps", 100, 0},
-		{"healing_only", "hps", 0, 100},
-		{"invalid_healing_nan", "dps", 100, math.NaN()},
-		{"invalid_healing_inf", "dps", 100, math.Inf(1)},
-		{"invalid_healing_negative_inf", "dps", 100, math.Inf(-1)},
-		{"invalid_healing_negative", "dps", 100, -1},
-		{"invalid_damage_nan", "hps", math.NaN(), 100},
-		{"invalid_damage_inf", "hps", math.Inf(1), 100},
-		{"invalid_damage_negative_inf", "hps", math.Inf(-1), 100},
-		{"invalid_damage_negative", "hps", -1, 100},
-		{"zero", "", 0, 0},
-		{"neither_eligible", "", math.NaN(), math.Inf(1)},
-		{"zero_and_negative", "", 0, -1},
+		{"damage", "MAGE", "Frost", "dps", 100, 25, 1},
+		{"positive_tie", "MAGE", "Frost", "dps", 100, 100, 1},
+		{"non_healer_forced_to_damage", "MAGE", "Frost", "dps", 25, 100, 1},
+		{"non_healer_without_damage", "MAGE", "Frost", "", 0, 100, 1},
+		{"holy_priest_healing", "PRIEST", "Holy", "hps", 25, 100, 1},
+		{"discipline_priest_healing", "PRIEST", "Discipline", "hps", 25, 100, 1},
+		{"restoration_druid_healing", "DRUID", "Restoration", "hps", 25, 100, 1},
+		{"restoration_shaman_healing", "SHAMAN", "Restoration", "hps", 25, 100, 1},
+		{"holy_paladin_healing", "PALADIN", "Holy", "hps", 25, 100, 1},
+		{"damage_only", "MAGE", "Frost", "dps", 100, 0, 1},
+		{"unknown_spec", "MAGE", "unknown", "", 100, 25, 1},
+		{"empty_spec", "MAGE", "", "", 100, 25, 0},
+		{"invalid_healing_nan", "MAGE", "Frost", "dps", 100, math.NaN(), 1},
+		{"invalid_healing_inf", "MAGE", "Frost", "dps", 100, math.Inf(1), 1},
+		{"invalid_healing_negative_inf", "MAGE", "Frost", "dps", 100, math.Inf(-1), 1},
+		{"invalid_healing_negative", "MAGE", "Frost", "dps", 100, -1, 1},
+		{"invalid_damage_nan", "PRIEST", "Holy", "hps", math.NaN(), 100, 1},
+		{"invalid_damage_inf", "PRIEST", "Holy", "hps", math.Inf(1), 100, 1},
+		{"invalid_damage_negative_inf", "PRIEST", "Holy", "hps", math.Inf(-1), 100, 1},
+		{"invalid_damage_negative", "PRIEST", "Holy", "hps", -1, 100, 1},
+		{"zero", "MAGE", "Frost", "", 0, 0, 0},
+		{"neither_eligible", "MAGE", "Frost", "", math.NaN(), math.Inf(1), 0},
+		{"zero_and_negative", "MAGE", "Frost", "", 0, -1, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			s := newSourceFixture(t)
-			// Class/spec are intentionally unchanged even when healing wins.
-			s.exec(`UPDATE encounter_dps_rankings SET dps=$2,hps=$3 WHERE instance_id=$1`, s.instance, tc.dps, tc.hps)
+			s.exec(`UPDATE encounter_dps_rankings SET player_class=$2,player_spec=$3,dps=$4,hps=$5 WHERE instance_id=$1`, s.instance, tc.class, tc.spec, tc.dps, tc.hps)
 			rows := s.compute()
 			var metrics []string
 			var kills int
@@ -545,15 +552,50 @@ func TestProjectionRawMetricWinner(t *testing.T) {
 					kills++
 				}
 			}
+			require.Equal(t, tc.kills, kills)
 			if tc.metric == "" {
 				require.Empty(t, metrics)
-				require.Zero(t, kills)
 			} else {
 				require.Equal(t, []string{tc.metric}, metrics)
-				require.Equal(t, 1, kills)
 			}
 		})
 	}
+}
+
+func TestProjectionClassModeIgnoresSpecs(t *testing.T) {
+	t.Parallel()
+	s := newSourceFixture(t)
+	s.exec(`UPDATE tenants SET parse_config='{"cohort_mode":"class"}' WHERE id=$1`, s.tenant)
+	s.exec(`UPDATE encounter_dps_rankings SET player_spec='',player_sub_spec='Smite',dps=25,hps=100 WHERE instance_id=$1`, s.instance)
+
+	rows := s.compute()
+	var observation *database.ProjectLeaderboardRunRow
+	for i := range rows {
+		if rows[i].Kind == 1 {
+			observation = &rows[i]
+			break
+		}
+	}
+	require.NotNil(t, observation)
+	require.Equal(t, "hps", observation.Metric)
+	require.Equal(t, "Class", observation.PlayerSpec)
+	require.Empty(t, observation.PlayerSubSpec)
+}
+
+func TestProjectionDisabledModeIgnoresHealerClassification(t *testing.T) {
+	t.Parallel()
+	s := newSourceFixture(t)
+	s.exec(`UPDATE tenants SET parse_config='{"cohort_mode":"disabled"}' WHERE id=$1`, s.tenant)
+	s.exec(`UPDATE encounter_dps_rankings SET dps=25,hps=100 WHERE instance_id=$1`, s.instance)
+
+	rows := s.compute()
+	var metric string
+	for _, row := range rows {
+		if row.Kind == 1 {
+			metric = row.Metric
+		}
+	}
+	require.Equal(t, "hps", metric)
 }
 
 func TestProjectionZeroPairRepairRetractsPlayerEvidence(t *testing.T) {
@@ -585,7 +627,7 @@ func TestProjectionZeroPairRepairRetractsPlayerEvidence(t *testing.T) {
 func TestProjectionPositiveTieRepairRetractsOldHealing(t *testing.T) {
 	t.Parallel()
 	s := newSourceFixture(t)
-	s.exec(`UPDATE encounter_dps_rankings SET dps=25,hps=100 WHERE instance_id=$1`, s.instance)
+	s.exec(`UPDATE encounter_dps_rankings SET player_class='PRIEST',player_spec='Holy',dps=25,hps=100 WHERE instance_id=$1`, s.instance)
 	rows := s.compute()
 	// Seed legacy dual evidence through the generic publisher, which still supports both metrics.
 	for _, row := range rows {
