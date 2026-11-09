@@ -45,7 +45,7 @@ by hourly refresh. Admins can explicitly request a tenant refresh.
 
 A configuration fingerprint hashes the resolved instance policy (default-set
 membership, awards, variants) plus snapshot algorithm version. Public reads resolve
-current policy and suppress snapshots whose fingerprint differs, returning `stale`
+current policy and suppress snapshots whose fingerprint differs, returning `rebuilding`
 metadata and nudging refresh. This covers configuration changes regardless of
 whether they arrive through seed/SQL tooling or tenant flavor/dataset changes.
 There is no separate mutable configuration API in this code path; changed policy
@@ -63,10 +63,13 @@ next hourly refresh; `refreshed_at` is exposed honestly.
 Public response: `{status,landing_previews,snapshots}`. Root is rejected. Top-level
 status is `ready`, `partial`, or `unsupported_scope`. Snapshot metadata contains
 instance/difficulty/size, configuration fingerprint, optional refreshed_at and
-`not_prepared`, `stale`, `ready`, or `empty` status. `empty` means a successful
-calculation with no highlights; absence is not an empty calculation. Stale-policy
-payload is never served. Failed refresh with unchanged configuration continues
-serving the old successful payload and its old timestamp.
+`not_prepared`, `rebuilding`, `stale`, `ready`, or `empty` status. `empty` means a successful
+calculation with no highlights; absence is not an empty calculation. Configuration-mismatched (`rebuilding`) payload is never served. Same-fingerprint
+snapshots older than one hour are marked `stale` but may still be displayed. Failed refresh with unchanged configuration continues
+serving the old successful payload and its old timestamp, marked `stale` after
+one hour. Refresh nudges use stable River args and active-job uniqueness; GET
+requests do not calculate highlights. Repeated singular/plural realm parameters
+are unsupported, not silently reduced to the first value.
 
 `landing_previews` matches the existing `HubLandingPreview` card contract. The
 parent/frontend integration should merge this response into the adapter currently

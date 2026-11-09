@@ -45,7 +45,7 @@ func TestHighlightSnapshotStatesDoNotServeStalePolicy(t *testing.T) {
 	out, refresh, err = highlightSnapshotResponse(config, []serviceratings.HighlightCohort{c}, []database.LeaderboardHighlight{row})
 	require.NoError(t, err)
 	require.True(t, refresh)
-	require.Equal(t, "stale", out.Snapshots[0].Status)
+	require.Equal(t, "rebuilding", out.Snapshots[0].Status)
 	require.Empty(t, out.LandingPreviews)
 	row.ConfigurationFingerprint = serviceratings.HighlightFingerprint(config, c)
 	out, refresh, err = highlightSnapshotResponse(config, []serviceratings.HighlightCohort{c}, []database.LeaderboardHighlight{row})
@@ -53,4 +53,23 @@ func TestHighlightSnapshotStatesDoNotServeStalePolicy(t *testing.T) {
 	require.False(t, refresh)
 	require.Equal(t, "empty", out.Snapshots[0].Status)
 	require.Len(t, out.LandingPreviews, 1)
+	row.RefreshedAt = database.Timestamptz(time.Now().Add(-2 * time.Hour))
+	out, refresh, err = highlightSnapshotResponse(config, []serviceratings.HighlightCohort{c}, []database.LeaderboardHighlight{row})
+	require.NoError(t, err)
+	require.True(t, refresh)
+	require.Equal(t, "stale", out.Snapshots[0].Status)
+	require.Len(t, out.LandingPreviews, 1)
+
+}
+
+func TestHighlightsRepeatedRealmParametersNeverFallback(t *testing.T) {
+	t.Parallel()
+	for _, query := range []string{"realm=" + uuid.NewString() + "&realm=" + uuid.NewString(), "realm_ids=" + uuid.NewString() + "&realm_ids=" + uuid.NewString()} {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/leaderboards-v2/highlights?"+query, nil)
+		req = req.WithContext(servicetenant.WithTenantID(req.Context(), uuid.New()))
+		rec := httptest.NewRecorder()
+		(&API{}).LeaderboardHighlights(rec, req)
+		require.Equal(t, 200, rec.Code)
+		require.Contains(t, rec.Body.String(), "unsupported_scope")
+	}
 }

@@ -165,3 +165,24 @@ func TestHighlightDispatcherIncludesAllAndIndividualRealms(t *testing.T) {
 	require.True(t, realms[s.realm])
 	require.True(t, realms[second])
 }
+
+func TestHighlightPerformanceExactVanillaCohortAndRealmID(t *testing.T) {
+	t.Parallel()
+	s := newSourceFixture(t)
+	s.exec(`UPDATE log_instances SET difficulty_name='',max_players=0 WHERE id=$1`, s.instance)
+	s.exec(`UPDATE encounter_dps_rankings SET difficulty_name='',max_players=0 WHERE instance_id=$1`, s.instance)
+	otherRealm := uuid.New()
+	s.exec(`INSERT INTO wow_server_realms(id,server_id,name) VALUES($1,$2,'Other projection realm')`, otherRealm, s.server)
+	s.exec(`INSERT INTO encounter_dps_rankings SELECT(jsonb_populate_record(NULL::encounter_dps_rankings,to_jsonb(d)||jsonb_build_object('id',gen_random_uuid(),'player_guid','OtherDifficulty','difficulty_name','Heroic','max_players',40,'dps',900))).* FROM encounter_dps_rankings d WHERE instance_id=$1`, s.instance)
+	s.exec(`INSERT INTO encounter_dps_rankings SELECT(jsonb_populate_record(NULL::encounter_dps_rankings,to_jsonb(d)||jsonb_build_object('id',gen_random_uuid(),'player_guid','OtherRealm','realm_id',$2::uuid,'dps',800))).* FROM encounter_dps_rankings d WHERE instance_id=$1 AND player_guid='Player'`, s.instance, otherRealm)
+	config := highlightConfig()
+	config = append(config[:1], config[2:]...)
+	preview, err := BuildHighlights(s.tenantctx(), s.db, s.tenant, s.realm, HighlightCohort{Instance: "Fixture raid"}, config)
+	require.NoError(t, err)
+	require.Len(t, preview.Performances, 1)
+	require.Equal(t, "Player", preview.Performances[0].PlayerGUID)
+	require.EqualValues(t, 0, preview.Performances[0].MaxPlayers)
+	require.Equal(t, "", preview.Performances[0].DifficultyName)
+	require.Len(t, preview.Statistics, 1)
+	require.Equal(t, float64(100), preview.Statistics[0].MedianDPS)
+}

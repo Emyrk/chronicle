@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
-	"github.com/Emyrk/chronicle/api/db2sdk"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/leaderboardconfig"
 	"github.com/Emyrk/chronicle/internal/leaderboardread"
@@ -191,7 +190,11 @@ func BuildHighlights(ctx context.Context, store database.Store, tenant, realm uu
 		return out, err
 	}
 	for _, r := range clears {
-		out.Speedruns = append(out.Speedruns, db2sdk.SpeedrunLeaderboardEntry(r))
+		entry := chroniclesdk.SpeedrunLeaderboardEntry{InstanceID: r.InstanceID, Slug: r.HashedSlug.String, DifficultyName: r.DifficultyName, DurationMs: r.DurationMs, GuildID: r.GuildID.UUID, GuildName: r.GuildName, RealmName: r.RealmName, StartTime: r.StartTime.Time, CompletionTime: r.CompletionTime.Time, PlayerCount: r.PlayerCount, GuildLogoURL: r.GuildLogoUrl, ParserVersion: r.ParserVersion, AddonVersion: r.AddonVersion}
+		if r.DuplicateGroupID.Valid {
+			entry.DuplicateGroupID = &r.DuplicateGroupID.UUID
+		}
+		out.Speedruns = append(out.Speedruns, entry)
 	}
 	return out, nil
 }

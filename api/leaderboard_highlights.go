@@ -27,6 +27,11 @@ func (api *API) LeaderboardHighlights(w http.ResponseWriter, r *http.Request) {
 	out := chroniclesdk.LeaderboardHighlightsResponse{Status: "ready", LandingPreviews: []chroniclesdk.HubLandingPreview{}, Snapshots: []chroniclesdk.LeaderboardHighlightSnapshot{}}
 	q := r.URL.Query()
 	ids := q["realm"]
+	if len(q["realm_ids"]) > 1 {
+		out.Status = "unsupported_scope"
+		httpapi.Write(ctx, w, 200, out)
+		return
+	}
 	if q.Get("realm_ids") != "" {
 		ids = append(ids, strings.Split(q.Get("realm_ids"), ",")...)
 	}
@@ -119,7 +124,7 @@ func highlightSnapshotResponse(config []database.ResolveLeaderboardConfiguration
 			}
 			metadata.RefreshedAt = &row.RefreshedAt.Time
 			if row.ConfigurationFingerprint != fingerprint {
-				metadata.Status = "stale"
+				metadata.Status = "rebuilding"
 				break
 			}
 			var preview chroniclesdk.HubLandingPreview
@@ -130,10 +135,13 @@ func highlightSnapshotResponse(config []database.ResolveLeaderboardConfiguration
 			if serviceratings.HighlightEmpty(preview) {
 				metadata.Status = "empty"
 			}
+			if row.RefreshedAt.Time.Before(time.Now().Add(-time.Hour)) {
+				metadata.Status = "stale"
+			}
 			out.LandingPreviews = append(out.LandingPreviews, preview)
 			break
 		}
-		if metadata.Status == "not_prepared" || metadata.Status == "stale" {
+		if metadata.Status == "not_prepared" || metadata.Status == "rebuilding" || metadata.Status == "stale" {
 			needRefresh = true
 			out.Status = "partial"
 		}
