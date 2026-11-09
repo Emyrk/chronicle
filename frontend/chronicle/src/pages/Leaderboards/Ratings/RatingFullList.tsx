@@ -254,7 +254,9 @@ export function RatingFullList({
                       return (
                         <span key={m}>
                           {i > 0 && <span className="text-muted-foreground">/</span>}
-                          <span style={score ? { color: METRIC_THEMES[m].accent } : undefined} className={score ? undefined : "text-muted-foreground"}>
+                          {/* Fixed-width slots so every row's slashes line up: XXX.X for the ratings, and room
+                              for a five-digit Renown count. */}
+                          <span style={score ? { color: METRIC_THEMES[m].accent } : undefined} className={cn("inline-block text-right", m === "renown" ? "w-[6ch]" : "w-[5ch]", !score && "text-muted-foreground")}>
                             {score ? METRIC_THEMES[m].format(score.score) : "—"}
                           </span>
                         </span>
