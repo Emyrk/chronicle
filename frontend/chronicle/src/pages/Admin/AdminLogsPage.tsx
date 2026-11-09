@@ -52,9 +52,24 @@ function LogRow({ log, selected, onToggleSelected }: LogRowProps) {
               {log.state}
             </span>
           </div>
-          <span className="text-xs text-muted-foreground">
-            by {log.owner_name || "Unknown"}
-          </span>
+          <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+            <span>by {log.owner_name || "Unknown"}</span>
+            {log.tenant_names.map((tenant) => (
+              <span key={tenant} className="rounded bg-blue-500/15 px-1.5 py-0.5 text-blue-400" title="Tenant">
+                {tenant}
+              </span>
+            ))}
+            {log.format && (
+              <span className="rounded bg-muted px-1.5 py-0.5 font-mono" title="Format">
+                {log.format}
+              </span>
+            )}
+            {log.flavors.map((flavor) => (
+              <span key={flavor} className="rounded border border-border px-1.5 py-0.5 font-mono" title="Flavor">
+                {flavor}
+              </span>
+            ))}
+          </div>
         </div>
         {log.instance_names && log.instance_names.length > 0 && (
           <span className="text-xs text-muted-foreground truncate max-w-32" title={log.instance_names.join(", ")}>

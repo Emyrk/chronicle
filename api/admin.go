@@ -483,19 +483,16 @@ func (a *API) AdminListLogs(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		// Extract instance names from interface{}
-		var instanceNames []string
-		if l.InstanceNames != nil {
-			if names, ok := l.InstanceNames.([]interface{}); ok {
-				for _, n := range names {
-					if s, ok := n.(string); ok {
-						instanceNames = append(instanceNames, s)
-					}
-				}
-			}
+		instanceNames := adminLogStrings(l.InstanceNames)
+		tenantNames := adminLogStrings(l.TenantNames)
+
+		var format string
+		if l.WoWLogGroup.Format.Valid {
+			format = string(l.WoWLogGroup.Format.LogFormat)
 		}
-		if instanceNames == nil {
-			instanceNames = []string{}
+		flavors := l.WoWLogGroup.Flavor
+		if flavors == nil {
+			flavors = []string{}
 		}
 
 		var invalidatedAt *time.Time
@@ -514,10 +511,29 @@ func (a *API) AdminListLogs(w http.ResponseWriter, r *http.Request) {
 			InvalidatedAt: invalidatedAt,
 			InvalidReason: l.WoWLogGroup.InvalidReason,
 			InstanceNames: instanceNames,
+			TenantNames:   tenantNames,
+			Format:        format,
+			Flavors:       flavors,
 		}
 	}
 
 	httpapi.Write(ctx, w, http.StatusOK, resp)
+}
+
+// adminLogStrings converts a sqlc-untyped text[] aggregate into a non-nil slice.
+func adminLogStrings(v interface{}) []string {
+	out := []string{}
+	switch vals := v.(type) {
+	case []string:
+		out = append(out, vals...)
+	case []interface{}:
+		for _, n := range vals {
+			if s, ok := n.(string); ok {
+				out = append(out, s)
+			}
+		}
+	}
+	return out
 }
 
 // AdminListInstanceNames returns all distinct instance names for filtering.

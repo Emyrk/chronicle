@@ -113,6 +113,10 @@ type AdminLog struct {
 	InvalidatedAt *time.Time `json:"invalidated_at,omitempty"`
 	InvalidReason string     `json:"invalid_reason,omitempty"`
 	InstanceNames []string   `json:"instance_names"`
+	// TenantNames are the tenants that own the realms this log was parsed into.
+	TenantNames []string `json:"tenant_names"`
+	Format      string   `json:"format,omitempty"`
+	Flavors     []string `json:"flavors"`
 }
 
 type AdminBulkLogRequest struct {

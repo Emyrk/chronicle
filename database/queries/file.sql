@@ -225,7 +225,8 @@ SELECT
   files_agg.total_size_bytes,
   instances_output.output AS processing_output,
   instances_agg.instance_names,
-  instances_agg.first_instance_name
+  instances_agg.first_instance_name,
+  tenants_agg.tenant_names
 FROM
   wow_log_groups
     LEFT JOIN users u ON u.id = wow_log_groups.owner
@@ -319,6 +320,19 @@ FROM
           )
       ) inst_names
     ) instances_agg ON true
+    -- Tenants resolved from parsed instance realms, or server upload realms
+    LEFT JOIN LATERAL (
+      SELECT
+        COALESCE(array_agg(DISTINCT t.name ORDER BY t.name), ARRAY[]::text[]) AS tenant_names
+      FROM (
+        SELECT li.realm_id FROM log_instances li WHERE li.log_group_id = wow_log_groups.id
+        UNION
+        SELECT sm.realm_id FROM server_upload_meta sm WHERE sm.log_group_id = wow_log_groups.id AND sm.realm_id IS NOT NULL
+      ) realms
+      JOIN wow_server_realms wsr ON wsr.id = realms.realm_id
+      JOIN wow_servers ws ON ws.id = wsr.server_id
+      JOIN tenants t ON t.id = ws.tenant_id
+    ) tenants_agg ON true
 WHERE
   -- Filter by user ID (skip if nil UUID)
   CASE WHEN @filter_user_id::uuid != '00000000-0000-0000-0000-000000000000'::uuid

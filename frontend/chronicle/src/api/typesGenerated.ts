@@ -531,6 +531,12 @@ export interface AdminLog {
     readonly invalidated_at?: string;
     readonly invalid_reason?: string;
     readonly instance_names: readonly string[];
+    /**
+     * TenantNames are the tenants that own the realms this log was parsed into.
+     */
+    readonly tenant_names: readonly string[];
+    readonly format?: string;
+    readonly flavors: readonly string[];
 }
 
 // From chroniclesdk/user.go
