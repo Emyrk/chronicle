@@ -106,7 +106,7 @@ export function RatingFullList({
 
   return (
     <section aria-label={`${title} ${theme.label} full list`} className="overflow-hidden rounded-xl border bg-card">
-      <div className="relative flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-4 py-3">
+      <div className="@container relative flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-4 py-3">
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0"
@@ -128,12 +128,17 @@ export function RatingFullList({
           </Emblem>
           <div className="min-w-0">
             <h2 className="truncate font-wow text-xl leading-tight">{title}</h2>
-            <p className="text-xs text-muted-foreground">{state && state.status !== "ready" ? "Published ratings" : live && livePage?.total === undefined ? "Published rankings" : `${total} ranked`}
-              {theme.question && <span className="hidden sm:inline"> · {theme.question}</span>}
-            </p>
+            <p className="text-xs text-muted-foreground">{state && state.status !== "ready" ? "Published ratings" : live && livePage?.total === undefined ? "Published rankings" : `${total} ranked`}</p>
           </div>
         </div>
         {toolbar}
+        {/* Narrow headers already wrap the search box; the question shares its line. Wide headers
+            keep title, metrics, and search on one line, and the question sits below. */}
+        {theme.question && (
+          <p className="relative min-w-[14rem] flex-1 text-xs italic text-[color:var(--metric)] @min-[60rem]:order-last @min-[60rem]:basis-full">
+            {theme.question}
+          </p>
+        )}
         <div className="relative ml-auto w-full sm:w-auto">
           <BoardSearch
             query={query}
