@@ -1142,16 +1142,18 @@ export function BossStats({ boss }: { boss: LiveBossSummary }) {
     { label: "Success rate", value: rate === undefined ? "—" : `${rate.toFixed(0)}%`, bar: rate },
     { label: "Kills / pulls", value: boss.kills !== undefined && boss.attempts !== undefined ? `${boss.kills.toLocaleString()} / ${boss.attempts.toLocaleString()}` : "—" },
     { label: "Median kill", value: boss.medianKillMs === undefined ? "—" : formatClock(boss.medianKillMs) },
-    { label: "Fastest kill", value: boss.best ? formatClock(boss.best.ms) : "—", sub: boss.best?.guild },
+    // The speed podium above already names the fastest kill, so a phone skips it.
+    { label: "Fastest kill", value: boss.best ? formatClock(boss.best.ms) : "—", sub: boss.best?.guild, desktopOnly: true },
   ]
   return (
-    <section aria-label={`${boss.boss} stats`} className="grid grid-cols-2 overflow-hidden rounded-xl border bg-card sm:grid-cols-4 sm:divide-x">
+    // Supplementary numbers: one compact row on a phone, roomier cells from sm up.
+    <section aria-label={`${boss.boss} stats`} className="grid grid-cols-3 divide-x overflow-hidden rounded-xl border bg-card sm:grid-cols-4">
       {stats.map((s) => (
-        <div key={s.label} className="px-4 py-3">
-          <div className="text-[11px] tracking-wider text-muted-foreground uppercase">{s.label}</div>
-          <div className="mt-0.5 font-mono text-xl tabular-nums">{s.value}</div>
+        <div key={s.label} className={cn("min-w-0 px-3 py-2 sm:px-4 sm:py-3", s.desktopOnly && "hidden sm:block")}>
+          <div className="truncate text-[10px] tracking-wider text-muted-foreground uppercase sm:text-[11px]">{s.label}</div>
+          <div className="mt-0.5 truncate font-mono text-sm tabular-nums sm:text-xl">{s.value}</div>
           {s.bar !== undefined && (
-            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-red-500/30">
+            <div className="mt-1 h-1 overflow-hidden rounded-full bg-red-500/30 sm:mt-1.5 sm:h-1.5">
               <div className="h-full bg-green-500/70" style={{ width: `${s.bar}%` }} />
             </div>
           )}
