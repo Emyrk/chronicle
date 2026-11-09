@@ -24,7 +24,8 @@ const at = (url: string) => (Story: () => React.ReactNode) => (
   <MemoryRouter initialEntries={[url]}>
     <Routes>
       <Route path="/leaderboard-v2" element={<Story />} />
-      <Route path="/leaderboard-v2/:tab" element={<Story />} />
+      <Route path="/leaderboard-v2/:segment" element={<Story />} />
+      <Route path="/leaderboard-v2/:instance/:tab" element={<Story />} />
     </Routes>
   </MemoryRouter>
 )
@@ -42,12 +43,12 @@ export const LandingError: Story = {
 }
 
 export const InstanceLoading: Story = {
-  decorators: [at("/leaderboard-v2/ratings?instance=Molten+Core")],
+  decorators: [at("/leaderboard-v2/Molten-Core/ratings")],
   parameters: { msw: { handlers: pending } },
 }
 
 export const InstanceError: Story = {
-  decorators: [at("/leaderboard-v2/ratings?instance=Molten+Core")],
+  decorators: [at("/leaderboard-v2/Molten-Core/ratings")],
   parameters: { msw: { handlers: failing } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)

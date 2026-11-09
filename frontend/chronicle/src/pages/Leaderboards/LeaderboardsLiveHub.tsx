@@ -20,7 +20,7 @@ import { StatisticsTab, type LiveStatisticsData } from "./Hub/StatisticsTab"
 import { ParsingTab, type LiveParsingData } from "./Hub/ParsingTab"
 import { FULL_CLEAR, defaultSpeedrunsView, type EncounterSelection, type SpeedrunsView } from "./Hub/encounterSelection"
 import { liveHubBosses } from "./Hub/liveBosses"
-import { hubParams, hubPath, hubTab, v2Selection } from "./v2Selection"
+import { hubInstanceParams, hubParams, hubPath, hubTab, v2Selection } from "./v2Selection"
 import { legacyLeaderboardsTarget } from "./leaderboardsState"
 import { useSiteConfig } from "@/api/queries"
 
@@ -29,11 +29,11 @@ const ALL_REALMS = "All realms"
 /** The Storybook Hub is the page. Only its data source differs in production. */
 export function LeaderboardsLiveHub() {
   const [params, setParams] = useSearchParams()
-  const { tab: pathTab } = useParams()
+  const { segment, instance: pathInstance, tab: pathTab } = useParams()
   const navigate = useNavigate()
   const { data: siteConfig } = useSiteConfig()
   const rootRatingsDisabled = siteConfig?.tenant == null && siteConfig?.root_tenant_ratings_disabled === true
-  const { tab, instance, realmIDs, encounters } = v2Selection(params, pathTab)
+  const { tab, instance, realmIDs, encounters } = v2Selection(params, { segment, instance: pathInstance, tab: pathTab })
   const requestedSize = params.get("size")
   const parsedSize = requestedSize === null ? NaN : Number(requestedSize)
   const requestedCohort = params.has("difficulty") && Number.isInteger(parsedSize) && parsedSize >= 0 && parsedSize <= 32767
@@ -47,8 +47,9 @@ export function LeaderboardsLiveHub() {
   const selectedRealmIDs = activeRealm ? [activeRealm.id] : realmIDs.length > 1 ? realmIDs : []
   const realm = activeRealm?.name ?? ALL_REALMS
   const names = [...new Set((summary.data?.instances ?? []).map((row) => row.instance_name))]
-  const choose = (key: "instance" | "realm_ids" | "encounters", value?: string) => setParams(hubParams(params, key, value))
-  // Each tab is its own path; the query (instance, bosses, realm, cohort) carries over.
+  const choose = (key: "realm_ids" | "encounters", value?: string) => setParams(hubParams(params, key, value))
+  const chooseInstance = (next?: string) => navigate(hubPath(tab, instance === next ? params : hubInstanceParams(params), next))
+  // Each tab is its own path; the query (bosses, realm, cohort) carries over.
   const chooseTab = (next: ReturnType<typeof v2Selection>["tab"]) => {
     const updated = new URLSearchParams(params)
     // Trash is a Performances encounter only.
@@ -58,12 +59,14 @@ export function LeaderboardsLiveHub() {
       else updated.delete("encounters")
       updated.delete("encounter")
     }
-    navigate(hubPath(next, updated))
+    navigate(hubPath(next, updated, instance))
   }
   if (params.get("tab") === "speedrun" || params.get("tab") === "leaderboard") return <Navigate to={legacyLeaderboardsTarget(params)} replace />
-  // Older links put the tab in the query; an unknown or "overview" path segment is the Overview.
-  if (params.has("tab")) return <Navigate to={hubPath(hubTab(params.get("tab")) ?? tab, params)} replace />
-  if (pathTab !== undefined && (hubTab(pathTab) === undefined || pathTab === "overview")) return <Navigate to={hubPath("overview", params)} replace />
+  // Older links put the instance and/or tab in the query. Rewrite both into path segments.
+  if (params.has("instance") || params.has("tab")) {
+    return <Navigate to={hubPath(hubTab(params.get("tab")) ?? tab, params, params.get("instance") ?? instance)} replace />
+  }
+  if (pathTab !== undefined && (hubTab(pathTab) === undefined || pathTab === "overview")) return <Navigate to={hubPath("overview", params, instance)} replace />
   if (rootRatingsDisabled) return <p className="p-8 text-center text-muted-foreground">Visit a specific server to see ratings</p>
   // Only the first load (nothing on screen yet) fails the page: the hub keeps its frame, empty,
   // with the error where the boards would be.
@@ -77,20 +80,20 @@ export function LeaderboardsLiveHub() {
   return <div className="flex min-w-0 gap-6">
     <div className="min-w-0 flex-1">
       <LeaderboardMaintenanceNotice tenantID={siteConfig?.tenant?.id} />
-      <LeaderboardsHubApp instance={instance ?? undefined} onInstance={(name) => choose("instance", name)}
+      <LeaderboardsHubApp instance={instance ?? undefined} onInstance={chooseInstance}
         tab={tab} onTab={chooseTab} realm={realm} onRealm={(name) => choose("realm_ids", available.find((row) => row.name === name)?.id)}
         realms={[ALL_REALMS, ...available.map((row) => row.name)]} instances={summary.data?.instances ?? []} landingPreviews={summary.data?.landing_previews}
         loading={loading || stale} error={loadError}
         onOpenCohort={(name, cohort) => {
           // A card is one difficulty/size: open the instance on it.
-          const next = hubParams(params, "instance", name)
+          const next = hubInstanceParams(params)
           next.set("difficulty", cohort.difficulty)
           next.set("size", String(cohort.maxPlayers))
-          setParams(next)
+          navigate(hubPath(tab, next, name))
         }}
-        renderInstance={(name) => !summary.data ? <LoadingInstanceHub error={loadError} instanceName={name} tab={tab} onTab={chooseTab} realm={realm} onInstance={() => choose("instance")} /> : <LiveInstanceHub instanceName={name} names={names} summary={summary.data!} stale={stale} realm={realm}
+        renderInstance={(name) => !summary.data ? <LoadingInstanceHub error={loadError} instanceName={name} tab={tab} onTab={chooseTab} realm={realm} onInstance={() => chooseInstance()} /> : <LiveInstanceHub instanceName={name} names={names} summary={summary.data!} stale={stale} realm={realm}
           realmIDs={selectedRealmIDs} encounters={encounters} tab={tab}
-          onInstance={(next) => choose("instance", next)} onTab={chooseTab}
+          onInstance={chooseInstance} onTab={chooseTab}
           onRealm={(name) => choose("realm_ids", available.find((row) => row.name === name)?.id)}
           difficulty={params.get("difficulty")} size={params.get("size")}
           onCohort={(difficulty, size) => { const next = new URLSearchParams(params); if (size) { next.set("difficulty", difficulty); next.set("size", size) } else { next.delete("difficulty"); next.delete("size") } setParams(next) }}
