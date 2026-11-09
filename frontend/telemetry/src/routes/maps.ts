@@ -1,6 +1,9 @@
 import { Hono } from "hono";
 import {
   MAP_MANIFEST_FORMAT,
+  parseFloorSupport,
+  validateFloorSupportArtifact,
+  isFloorSupportAssetPath,
   MAP_MANIFEST_NAMESPACES,
   emptyMapManifest,
   isPreviewableMapAssetPath,
@@ -183,6 +186,18 @@ async function verifyDraftAssets(bucket: R2Bucket, namespace: MapManifestNamespa
     ...draft.renders.instances.flatMap((entry) => [entry.renders?.path, ...(entry.floors ?? []).map((floor) => floor.renders?.path)]),
     ...draft.meshes.instances.flatMap((entry) => [entry.mesh?.path, ...(entry.floors ?? []).map((floor) => floor.mesh?.path)]),
   ].filter((path): path is string => Boolean(path));
+  for (const entry of draft.meshes.instances) {
+    const support = entry.floorSupport;
+    if (!support) continue;
+    if (!support.validated) throw new TypeError("unvalidated floorSupport is local-preview-only");
+    for (const reference of [support, ...support.sources]) {
+      const object = await bucket.get(`${root(namespace)}/${reference.path}`);
+      if (!object) throw new TypeError(`floorSupport missing or stale asset: ${reference.path}`);
+      const bytes = new Uint8Array(await object.arrayBuffer());
+      if (await fullDigest(bytes) !== reference.sha256) throw new TypeError(`floorSupport missing or stale asset: ${reference.path}`);
+      if (reference === support) validateFloorSupportArtifact(JSON.parse(new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(bytes)), support);
+    }
+  }
   const missing: string[] = [];
   await Promise.all(paths.map(async (path) => {
     if (!(await bucket.head(`${root(namespace)}/${path}`))) missing.push(path);
@@ -244,6 +259,10 @@ function safeFilename(name: string, extension: string): string {
   return `${stem || "map"}.${extension}`;
 }
 
+async function fullDigest(bytes: Uint8Array): Promise<string> {
+  return [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].map((value) => value.toString(16).padStart(2, "0")).join("");
+}
+
 async function digest(bytes: Uint8Array): Promise<string> {
   const hash = await crypto.subtle.digest("SHA-256", bytes);
   return [...new Uint8Array(hash)].slice(0, 8).map((value) => value.toString(16).padStart(2, "0")).join("");
@@ -273,6 +292,7 @@ maps.get("/internal/api/v1/maps/:namespace", async (c) => {
         styled: instance.styled,
         renders: instance.renders,
         mesh: instance.mesh,
+        floorSupport: instance.floorSupport,
       })),
     }, 200, { "Cache-Control": "private, no-store" });
   } catch (error) {
@@ -300,6 +320,7 @@ maps.get("/internal/api/v1/maps/:namespace/instances/:mapID/preview", async (c) 
       styled: instance.styled,
       renders: instance.renders,
       mesh: instance.mesh,
+        floorSupport: instance.floorSupport,
       published_renders: publishedRenders?.renders,
       published_render_floors: publishedRenders?.floors ?? [],
       published_mesh: publishedMeshes?.mesh,
@@ -314,7 +335,7 @@ maps.on(["GET", "HEAD"], "/internal/api/v1/maps/:namespace/preview-assets/:layer
   const namespace = c.req.param("namespace");
   const assetPath = `${c.req.param("layer")}/${c.req.param("filename")}`;
   if (!isNamespace(namespace)) return c.json({ error: "Unsupported map namespace" }, 404);
-  if (!isPreviewableMapAssetPath(assetPath)) return c.json({ error: "Invalid map asset path" }, 400);
+  if (!isPreviewableMapAssetPath(assetPath) && !isFloorSupportAssetPath(assetPath)) return c.json({ error: "Invalid map asset path" }, 400);
   const key = `${root(namespace)}/${assetPath}`;
   const object = c.req.method === "HEAD" ? await c.env.MAPS.head(key) : await c.env.MAPS.get(key);
   if (!object) return c.json({ error: "Map asset not found" }, 404);
@@ -389,7 +410,7 @@ maps.post("/internal/api/v1/maps/:namespace/assets/:kind", async (c) => {
   const namespace = c.req.param("namespace");
   const kind = c.req.param("kind");
   if (!isNamespace(namespace)) return c.json({ error: "Unsupported map namespace" }, 404);
-  if (kind !== "renders" && kind !== "meshes") return c.json({ error: "Asset kind must be renders or meshes" }, 400);
+  if (kind !== "renders" && kind !== "meshes" && kind !== "support") return c.json({ error: "Asset kind must be renders, meshes, or support" }, 400);
   try {
     const contentLength = Number(c.req.header("Content-Length") ?? "0");
     if (Number.isFinite(contentLength) && contentLength > 100 * 1024 * 1024) {
@@ -412,6 +433,16 @@ maps.post("/internal/api/v1/maps/:namespace/assets/:kind", async (c) => {
     }
     if (file.size === 0 || file.size > 100 * 1024 * 1024) throw new TypeError("asset must be between 1 byte and 100 MB");
     const bytes = new Uint8Array(await file.arrayBuffer());
+    if (kind === "support") {
+      if (floor !== undefined || !file.name.endsWith(".json")) throw new TypeError("support must be instance-level JSON");
+      const support = parseFloorSupport(JSON.parse(String(body.floorSupport)));
+      if (support.mapID !== mapID) throw new TypeError("support mapID mismatch");
+      const hash = await fullDigest(bytes);
+      if (hash !== support.sha256 || support.path !== `support/${mapID}-${hash}.json`) throw new TypeError("support path or SHA-256 mismatch");
+      validateFloorSupportArtifact(JSON.parse(new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(bytes)), support);
+      await c.env.MAPS.put(`${root(namespace)}/${support.path}`, bytes, JSON_HEADERS);
+      return c.json({ path: support.path, sha256: hash }, 201);
+    }
     let dimensions: { width: number; height: number } | undefined;
     let extension: string;
     let contentType: string;

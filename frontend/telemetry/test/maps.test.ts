@@ -23,6 +23,7 @@ interface StoredObject {
   uploaded: Date;
   httpMetadata?: { contentType?: string; cacheControl?: string };
   json(): Promise<unknown>;
+  arrayBuffer(): Promise<ArrayBuffer>;
   writeHttpMetadata(headers: Headers): void;
   body: ReadableStream<Uint8Array>;
 }
@@ -53,6 +54,7 @@ class FakeBucket {
       uploaded: new Date(),
       httpMetadata: options.httpMetadata,
       async json() { return JSON.parse(new TextDecoder().decode(bytes)); },
+      async arrayBuffer() { return bytes.slice().buffer; },
       writeHttpMetadata(headers) {
         if (options.httpMetadata?.contentType) headers.set("Content-Type", options.httpMetadata.contentType);
         if (options.httpMetadata?.cacheControl) headers.set("Cache-Control", options.httpMetadata.cacheControl);
@@ -234,4 +236,39 @@ test("Map Foundry keeps missing multipart floor as a legacy map-level upload", a
   const body = await response.json() as { path: string; floor?: number };
   assert.match(body.path, /^renders\/43-[0-9a-f]{16}-legacy\.png$/);
   assert.equal(body.floor, undefined);
+});
+
+test("support upload is explicit and hash-pinned; unvalidated drafts cannot publish", async () => {
+  const bucket = new FakeBucket();
+  await seed(bucket);
+  const identity = { version: 1, datasetID: "test", mapID: 43, frame: "wow-yup-mirrored-x", floorIDs: [0], sources: [{ floor: 0, path: "3d/floor.glb", sha256: "b".repeat(64) }] };
+  const payload = JSON.stringify({ ...identity, encoding: "indexed-f32-le-u32-le", floors: [{ floor: 0, positions: Buffer.from(new Float32Array([0, 0, 0, 1, 0, 0, 0, 0, 1]).buffer).toString("base64"), indices: Buffer.from(new Uint32Array([0, 1, 2]).buffer).toString("base64") }] });
+  const hash = Buffer.from(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(payload))).toString("hex");
+  const support = { ...identity, sha256: hash, path: `support/43-${hash}.json`, validated: false };
+  const form = new FormData();
+  form.append("mapID", "43");
+  form.append("floorSupport", JSON.stringify(support));
+  form.append("file", new File([payload], "support.json"));
+  assert.equal((await request(bucket, "/internal/api/v1/maps/forever/assets/support", { method: "POST", body: form })).status, 201);
+  assert.equal((await request(bucket, "/internal/api/v1/maps/forever/assets/meshes", { method: "POST", body: form })).status, 400);
+  assert.equal((await request(bucket, `/internal/api/v1/maps/forever/preview-assets/${support.path}`)).status, 200);
+  form.set("floorSupport", JSON.stringify({ ...support, sha256: "a".repeat(64) }));
+  assert.equal((await request(bucket, "/internal/api/v1/maps/forever/assets/support", { method: "POST", body: form })).status, 400);
+  const meshes = [{ mapID: 43, floorSupport: support, floors: [{ floor: 0, mesh: { path: "3d/floor.glb", bounds: { minX: 0, maxX: 1, minY: 0, maxY: 1 }, zMin: 0, zMax: 1, frame: "wow-yup-mirrored-x" } }] }];
+  const saved = await request(bucket, "/internal/api/v1/maps/forever/draft", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ meshes, renders: [] }) });
+  assert.equal(saved.status, 200, await saved.clone().text());
+  const draft = await saved.json() as { draft_version: string };
+  const publish = await request(bucket, "/internal/api/v1/maps/forever/publish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ version: draft.draft_version }) });
+  assert.equal(publish.status, 400, await publish.clone().text());
+  assert.match(await publish.text(), /local-preview-only/);
+  assert.equal(await bucket.get("forever/maps/manifest.json"), null);
+  meshes[0].floorSupport.validated = true;
+  const resaved = await request(bucket, "/internal/api/v1/maps/forever/draft", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ version: draft.draft_version, meshes, renders: [] }) });
+  assert.equal(resaved.status, 200);
+  const next = await resaved.json() as { draft_version: string };
+  await bucket.put("forever/maps/3d/floor.glb", glb());
+  const stale = await request(bucket, "/internal/api/v1/maps/forever/publish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ version: next.draft_version }) });
+  assert.equal(stale.status, 400);
+  assert.match(await stale.text(), /stale asset/);
+  assert.equal(await bucket.get("forever/maps/manifest.json"), null);
 });

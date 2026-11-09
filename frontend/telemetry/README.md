@@ -226,3 +226,33 @@ The Chronicle replay Map panel fetches this root-level manifest once per cached 
 npm run typecheck
 npm run deploy
 ```
+
+### Optional floor support artifacts
+
+Map instances and `manifest.meshes.json` entries may carry `floorSupport`:
+`{version:1,path,sha256,datasetID,mapID,frame:"wow-yup-mirrored-x",floorIDs,sources:[{floor,path,sha256}],validated}`.
+The metadata contains no geometry. Sources must cover each unique floor once and
+match that floor's merged GLB path. SHA-256 values are full lowercase hex hashes.
+Recovery splits the descriptor into the meshes source and merges it back without
+changing native metadata. Replacing mesh paths requires replacing or removing the
+descriptor; stale descriptors fail the merge.
+
+The explicit API `POST /internal/api/v1/maps/:namespace/assets/support` accepts
+multipart `mapID`, `file` (JSON), and `floorSupport` (JSON descriptor). The path must
+be `support/<mapID>-<full-sha256>.json`, hashing the entire uploaded UTF-8 file.
+Ordinary image/GLB upload routes do not accept JSON. Save the returned reference
+on the instance's meshes draft entry using the existing draft API. The ZIP
+importer does not import support assets; use this explicit API instead.
+
+The payload is `{version:1,datasetID,mapID,frame,floorIDs,sources,
+encoding:"indexed-f32-le-u32-le",floors:[{floor,positions,indices}]}`. Positions
+are base64 little-endian Float32 XYZ triples in mesh frame with root centering
+removed; indices are base64 little-endian Uint32 triangle triples. Payload identity
+must match the descriptor. Validation bounds decoded data to 32 MiB total and
+one million vertices per floor, rejects nonfinite coordinates and out-of-range
+indices. Geometrically degenerate projected triangles are left to the consumer.
+
+`validated:false` is local-preview-only: upload and draft are allowed, publication
+is rejected. Publication of validated descriptors also verifies the artifact and
+every source GLB's bytes against their hashes. No runtime loading or activation is
+introduced by this optional metadata contract. No artifacts are published by tests.
