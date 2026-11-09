@@ -187,12 +187,6 @@ export function LiveHubRatings(props: LiveHubRatingsProps) {
         No enabled instance variant.
       </p>
     );
-  const notice = (
-    <p className="text-xs text-muted-foreground">
-      All-time. Renown sums the selected bosses in this variant, independent of
-      class filters. In-place repairs may temporarily mix calculation versions.
-    </p>
-  );
   if (subject === "guild") {
     const current =
       view === "overview"
@@ -244,7 +238,6 @@ export function LiveHubRatings(props: LiveHubRatingsProps) {
     };
     return (
       <div className="space-y-3">
-        {notice}
         <GuildRatingBoards
           instanceName={instanceName}
           view={view}
@@ -263,7 +256,6 @@ export function LiveHubRatings(props: LiveHubRatingsProps) {
   }
   return (
     <div className="space-y-3">
-      {notice}
       {view === "overview" && queries.find((q) => q.isError) && (
         <p role="status" className="text-sm text-muted-foreground">
           {queries.find((q) => q.isError)?.error?.message}

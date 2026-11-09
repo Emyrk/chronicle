@@ -21,11 +21,10 @@ vi.mock("@tanstack/react-query", () => ({
 
 const props:LiveHubRatingsProps={instanceName:"Raid",bosses:["A","B"],selected:[],scope:{cls:"MAGE",spec:"Frost"},onScope:vi.fn(),view:"overview",onView:vi.fn(),period:"all",subject:"player",role:"dps",cohort:{difficulty:"",maxPlayers:0},where:"Raid",summary:resolvedHubMetadata(configuration,{instanceName:"Raid",performance:"dps"},[],[{player_class:"MAGE",player_spec:"Frost",player_sub_spec:"",metric:"dps"}])}
 describe("existing Hub ratings on current-policy data",()=>{
- it("retains the existing boards and shows real entries with all-time and Renown scope notice",()=>{
+ it("retains the existing boards and shows real entries without the scope notice",()=>{
   const html=renderToStaticMarkup(<LiveHubRatings {...props}/> )
   expect(html).toContain("Actual player")
-  expect(html).toContain("All-time")
-  expect(html).toContain("of class filters")
+  expect(html).not.toContain("In-place repairs")
   expect(html).not.toContain("1,300/s")
  })
  for (const subject of ["player", "guild"] as const) {
