@@ -1,5 +1,6 @@
 import type { LeaderboardHighlightSnapshot } from "@/api/typesGenerated"
 import { useState, type ReactNode } from "react"
+import { useActiveTabInView } from "@/hooks/useActiveTabInView"
 import { Link } from "react-router-dom"
 import type { HubLandingPreview, RankingsInstanceSummary, SupportedInstance } from "@/api/typesGenerated"
 import { AlertTriangle, ArrowRight, RotateCw, Skull, Swords, Timer } from "lucide-react"
@@ -98,6 +99,7 @@ export function LeaderboardsHubApp({
   const [localRealm, setLocalRealm] = useHubRealm(availableRealms, hub.initialRealm)
   const instance = onInstance ? controlledInstance : localInstance
   const tab = controlledTab ?? localTab
+  const tabBarRef = useActiveTabInView<HTMLElement>(tab)
   const realm = controlledRealm ?? localRealm
   const setInstance = (next?: string) => onInstance ? onInstance(next) : setLocalInstance(next)
   const setTab = (next: HubTab) => onTab ? onTab(next) : setLocalTab(next)
@@ -112,7 +114,7 @@ export function LeaderboardsHubApp({
             {/* Realm first: it scopes every card in the grid. */}
             {availableRealms.length > 0 && <RealmPicker realm={realm} realms={availableRealms} onChange={setRealm} className="my-1.5 mr-3 shrink-0" />}
             <span className="mr-2 h-6 w-px shrink-0 bg-border" aria-hidden />
-            <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto" aria-label="Leaderboard section">
+            <nav ref={tabBarRef} className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto" aria-label="Leaderboard section">
               {TABS.map((t) => {
                 const className = cn(
                   "flex flex-1 cursor-pointer items-center justify-center gap-2 border-b-2 px-3 py-3 text-sm font-medium transition-colors sm:flex-none sm:px-4",

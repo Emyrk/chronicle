@@ -1,6 +1,7 @@
 import { Activity, BarChart3, ChartNoAxesGantt, type LucideIcon } from "lucide-react"
 import type { RankingsBoxPlotStats, RankingsKillTimeStats, RankingsSuccessRate } from "@/api/typesGenerated"
 import { useState } from "react"
+import { useActiveTabInView } from "@/hooks/useActiveTabInView"
 import { cn } from "@/lib/utils"
 import { Checkbox } from "@/components/ui/Checkbox/Checkbox"
 import { BoxPlotChart } from "@/pages/Rankings/BoxPlotChart"
@@ -66,6 +67,7 @@ export function StatisticsTab({
   const unit = role === "dps" ? "DPS" : "HPS"
   // Unknown class or spec rows are hidden by default, as on /leaderboards; the box plot can show them.
   const [showUnknowns, setShowUnknowns] = useState(false)
+  const viewBarRef = useActiveTabInView<HTMLElement>(view)
   const known = (rows: readonly RankingsBoxPlotStats[]) =>
     showUnknowns ? [...rows] : rows.filter((row) => row.player_class !== "Unknown" && row.player_spec !== "Unknown")
   // Full clear covers every boss for per-boss panels; required ones first, optional after.
@@ -74,7 +76,7 @@ export function StatisticsTab({
 
   return (
     <div className="space-y-5">
-      <nav className="flex overflow-x-auto rounded-xl border bg-card px-2 sm:px-4" aria-label="Statistics view">
+      <nav ref={viewBarRef} className="flex overflow-x-auto rounded-xl border bg-card px-2 sm:px-4" aria-label="Statistics view">
         {VIEWS.map((v) => (
           <button
             key={v.id}

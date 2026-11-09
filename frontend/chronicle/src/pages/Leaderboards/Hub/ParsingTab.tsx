@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { useActiveTabInView } from "@/hooks/useActiveTabInView"
 import type { ParseScoreSpread, TimeParseSpread } from "@/api/typesGenerated"
 import type { SpreadDifficultyOption } from "@/pages/Leaderboards/Parsing/spreadBands"
 import { BarChart3, Timer, UserRound, type LucideIcon } from "lucide-react"
@@ -78,6 +79,7 @@ export function ParsingTab({
 
   // Picking a spec in the hub opens its detail; the switch can still go back to the bar chart.
   const [view, setView] = useState<ParsingView>(scope.spec ? "spec" : "spreads")
+  const viewBarRef = useActiveTabInView<HTMLElement>(view)
 
   const killTimes = live && (!validDifficulty || !boss)
     ? liveState(undefined, "Kill-time parses (choose a boss and raid population)")
@@ -101,7 +103,7 @@ export function ParsingTab({
   return (
     <div className="space-y-5">
       {/* Today's parsing view switch, in the statistics sub-tab style. Class and spec come from the hub picker. */}
-      <nav className="flex overflow-x-auto rounded-xl border bg-card px-2 sm:px-4" aria-label="Parsing view">
+      <nav ref={viewBarRef} className="flex overflow-x-auto rounded-xl border bg-card px-2 sm:px-4" aria-label="Parsing view">
         {PARSING_VIEWS.map((v) => (
           <button
             key={v.id}

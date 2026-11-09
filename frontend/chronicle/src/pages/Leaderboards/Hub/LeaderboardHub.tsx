@@ -1,4 +1,5 @@
 import { Fragment, useState, type ReactNode } from "react"
+import { useActiveTabInView } from "@/hooks/useActiveTabInView"
 import { createPortal } from "react-dom"
 import { Link } from "react-router-dom"
 import { ArrowRight, Check, ChevronDown, ChevronLeft, HeartPulse, Swords, Timer, PanelLeft, Globe, List, X } from "lucide-react"
@@ -254,6 +255,7 @@ export function LeaderboardHub({
   const [role, setRole] = useState<HubRole>(initialRole)
   const [ownTab, setOwnTab] = useState<HubTab>(initialTab)
   const tab = controlledTab ?? ownTab
+  const tabBarRef = useActiveTabInView<HTMLElement>(tab)
   const setTab = onTab ?? setOwnTab
   const [ratingView, setRatingView] = useState<RatingView>(initialRatingView)
   const [period, setPeriod] = useState<RatingPeriod>("180d")
@@ -385,7 +387,7 @@ export function LeaderboardHub({
                 {set && <p className="mt-1 hidden text-xs text-muted-foreground sm:block">Combined: {set.join(", ")} · ratings averaged, time is total kill time</p>}
               </div>
             </div>
-            <nav className="relative flex overflow-x-auto border-t border-white/5 px-2 sm:px-4" aria-label="Leaderboard section">
+            <nav ref={tabBarRef} className="relative flex overflow-x-auto border-t border-white/5 px-2 sm:px-4" aria-label="Leaderboard section">
               {TABS.map((t) => {
                 const className = cn(
                   "cursor-pointer flex shrink-0 items-center gap-2 border-b-2 px-3 py-3 text-sm font-medium transition-colors sm:px-4",
