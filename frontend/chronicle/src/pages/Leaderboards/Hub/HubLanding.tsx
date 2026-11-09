@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react"
+import { Link } from "react-router-dom"
 import type { HubLandingPreview, RankingsInstanceSummary, SupportedInstance } from "@/api/typesGenerated"
 import { AlertTriangle, RotateCw, Skull, Swords, Timer } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -45,6 +46,12 @@ export interface LeaderboardsHubAppProps extends Omit<LeaderboardHubProps, "inst
   renderInstance?: (instance: string) => ReactNode
   /** Open an instance on one difficulty/size: live cards are one per published combination. */
   onOpenCohort?: (instance: string, cohort: { difficulty: string; maxPlayers: number }) => void
+  /** Crawlable URL for an instance card, optionally scoped to one published cohort. */
+  instanceHref?: (instance: string, cohort?: { difficulty: string; maxPlayers: number }) => string
+  /** Crawlable URL for a leaderboard tab. */
+  tabHref?: (tab: HubTab) => string
+  /** Crawlable URL back to the all-instances grid. */
+  allInstancesHref?: string
   /** The live summary is still loading: the grid shows skeleton cards. */
   loading?: boolean
   /** The live summary failed with nothing to show: the grid shows an empty frame with this error. */
@@ -66,6 +73,9 @@ export function LeaderboardsHubApp({
   landingPreviews,
   renderInstance,
   onOpenCohort,
+  instanceHref,
+  tabHref,
+  allInstancesHref,
   loading,
   error,
   ...hub
@@ -93,23 +103,20 @@ export function LeaderboardsHubApp({
             {availableRealms.length > 0 && <RealmPicker realm={realm} realms={availableRealms} onChange={setRealm} className="my-1.5 mr-3 shrink-0" />}
             <span className="mr-2 h-6 w-px shrink-0 bg-border" aria-hidden />
             <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto" aria-label="Leaderboard section">
-              {TABS.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  aria-pressed={t.id === tab}
-                  onClick={() => setTab(t.id)}
-                  className={cn(
-                    "flex flex-1 cursor-pointer items-center justify-center gap-2 border-b-2 px-3 py-3 text-sm font-medium transition-colors sm:flex-none sm:px-4",
-                    t.id === tab
-                      ? "border-[#5F8FA6] text-foreground"
-                      : "border-transparent text-muted-foreground hover:border-muted-foreground/30 hover:text-foreground",
-                  )}
-                >
-                  <t.icon className="h-4 w-4" />
-                  {t.label}
-                </button>
-              ))}
+              {TABS.map((t) => {
+                const className = cn(
+                  "flex flex-1 cursor-pointer items-center justify-center gap-2 border-b-2 px-3 py-3 text-sm font-medium transition-colors sm:flex-none sm:px-4",
+                  t.id === tab
+                    ? "border-[#5F8FA6] text-foreground"
+                    : "border-transparent text-muted-foreground hover:border-muted-foreground/30 hover:text-foreground",
+                )
+                const content = <><t.icon className="h-4 w-4" />{t.label}</>
+                return tabHref ? (
+                  <Link key={t.id} to={tabHref(t.id)} aria-current={t.id === tab ? "page" : undefined} className={className}>{content}</Link>
+                ) : (
+                  <button key={t.id} type="button" aria-pressed={t.id === tab} onClick={() => setTab(t.id)} className={className}>{content}</button>
+                )
+              })}
             </nav>
           </div>
         </div>
@@ -126,6 +133,8 @@ export function LeaderboardsHubApp({
             onRealm={setRealm}
             instances={instanceHeadlines().map((i) => i.name)}
             onSwitchInstance={setInstance}
+            allInstancesHref={allInstancesHref}
+            tabHref={tabHref}
           />
         )
       ) : (
@@ -133,6 +142,7 @@ export function LeaderboardsHubApp({
           key={realm}
           tab={tab}
           onOpen={(name, cohort) => (cohort && onOpenCohort ? onOpenCohort(name, cohort) : setInstance(name))}
+          instanceHref={instanceHref}
           instances={instances}
           supportedInstances={supportedInstances}
           landingPreviews={landingPreviews}
@@ -147,6 +157,7 @@ export function LeaderboardsHubApp({
 function HubLanding({
   tab,
   onOpen,
+  instanceHref,
   instances,
   supportedInstances,
   landingPreviews,
@@ -155,6 +166,7 @@ function HubLanding({
 }: {
   tab: HubTab
   onOpen: (instance: string, cohort?: { difficulty: string; maxPlayers: number }) => void
+  instanceHref?: (instance: string, cohort?: { difficulty: string; maxPlayers: number }) => string
   instances?: readonly RankingsInstanceSummary[]
   supportedInstances?: readonly SupportedInstance[]
   landingPreviews?: readonly HubLandingPreview[]
@@ -162,19 +174,9 @@ function HubLanding({
   error?: ReactNode
 }) {
   if (tab === "rulesets") {
-    // Today's rulesets grid as-is; its cards link to ?instance=<name>, opened in place.
     return (
-      <div
-        className="mx-auto w-full max-w-[1920px] px-3 py-4 sm:px-4 sm:py-8"
-        onClickCapture={(e) => {
-          const href = (e.target as HTMLElement).closest("a")?.getAttribute("href")
-          const name = href && new URL(href, "http://x").searchParams.get("instance")
-          if (!name) return
-          e.preventDefault()
-          onOpen(name)
-        }}
-      >
-        <RulesetsLanding />
+      <div className="mx-auto w-full max-w-[1920px] px-3 py-4 sm:px-4 sm:py-8">
+        <RulesetsLanding instanceHref={instanceHref} onOpen={instanceHref ? undefined : onOpen} />
       </div>
     )
   }
@@ -195,11 +197,12 @@ function HubLanding({
           const several = items.filter((other) => other.instance_name === row.instance_name).length > 1
           const preview = landingPreviews?.find((item) =>
             item.instance_name === row.instance_name && item.difficulty_name === row.difficulty_name && item.max_players === row.max_players)
-          return <div key={`${row.instance_name}|${row.difficulty_name}|${row.max_players}`} onClickCapture={(e) => {
+          const cohort = { difficulty: row.difficulty_name, maxPlayers: row.max_players }
+          return <div key={`${row.instance_name}|${row.difficulty_name}|${row.max_players}`} onClickCapture={instanceHref ? undefined : (e) => {
             e.preventDefault()
-            onOpen(row.instance_name, { difficulty: row.difficulty_name, maxPlayers: row.max_players })
+            onOpen(row.instance_name, cohort)
           }}>
-            <InstanceCard name={row.instance_name} to="#" badge={several ? cohortLabel(row) : undefined}>
+            <InstanceCard name={row.instance_name} to={instanceHref?.(row.instance_name, cohort) ?? "#"} badge={several ? cohortLabel(row) : undefined}>
               <LiveCardBody tab={tab} preview={preview} />
               <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
                 <Skull className="h-3 w-3" />
@@ -240,15 +243,15 @@ function HubLanding({
   const grid = (items: InstanceHeadline[]) => (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
       {items.map((inst) => (
-        // The real page links to /leaderboards/<tab>/<instance>; the mock swaps views in place.
+        // Production supplies crawlable routes; the fixture-only mock swaps views in place.
         <div
           key={inst.name}
-          onClickCapture={(e) => {
+          onClickCapture={instanceHref ? undefined : (e) => {
             e.preventDefault()
             onOpen(inst.name)
           }}
         >
-          <InstanceCard name={inst.name} to="#">
+          <InstanceCard name={inst.name} to={instanceHref?.(inst.name) ?? "#"}>
             <CardBody tab={tab} inst={inst} />
           </InstanceCard>
         </div>
