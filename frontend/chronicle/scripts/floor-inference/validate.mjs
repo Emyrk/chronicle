@@ -117,17 +117,21 @@ while (state.offset < bytes.length) {
       const hits = bvh.raycast(ray, THREE.DoubleSide);
       return hits.some(hit => f.get(7) === undefined || Math.abs(hit.point.y - f.get(7)) <= fixture.zToleranceYards);
     })).map(floor => floor.floor);
-    observations.push({ timestampMs, unit, candidates, floor: f.has(8) ? Number(f.get(8)) : undefined, encounterID });
+    observations.push({ timestampMs, unit, candidates, synthetic: Boolean(meta.get(4)), floor: f.has(8) ? Number(f.get(8)) : undefined, encounterID });
   }
   if (state.offset !== end || decoded !== count) throw new Error('Encounter framing mismatch');
 }
+// External diagnostic data only: includes player identifiers and must never enter Git.
+await writeFile(resolve(root, 'floor-observations.json'), JSON.stringify(observations));
 const track = inferFloorTrack(observations, fixture.options);
+await writeFile(resolve(root, 'floor-track.json'), JSON.stringify(track));
 const firstMs = Math.min(...instance.encounters.map(e => Date.parse(e.start_time)));
 const labels = fixture.labels.map(label => {
   const encounter = instance.encounters.find(e => e.id === label.encounterID);
   if (!encounter) throw new Error('Labeled encounter absent');
   const offsetSeconds = (Date.parse(encounter.start_time) - firstMs) / 1000;
-  if (Math.floor(offsetSeconds) !== label.startOffsetSeconds) throw new Error('Encounter start label mismatch');
+  if (Math.floor(offsetSeconds) !== label.startOffsetSeconds
+    || Math.abs(offsetSeconds - label.verifiedStartOffsetSeconds) > 0.001) throw new Error('Encounter start label mismatch');
   const estimates = track.filter(e => e.timestampMs >= Date.parse(encounter.start_time) && e.timestampMs <= Date.parse(encounter.end_time));
   const counts = {};
   for (const estimate of estimates) counts[estimate.floor ?? 'unknown'] = (counts[estimate.floor ?? 'unknown'] ?? 0) + 1;
@@ -140,7 +144,7 @@ for (const floor of support) {
   await writeFile(resolve(root, `support-v1/floor-${floor.floor}.json`), JSON.stringify({ version: 1, datasetID: fixture.datasetID, mapID: fixture.mapID, frame: 'wow-yup-mirrored-x', sourcePath: floor.path, sha256: floor.sha256, geometries }));
 }
 const passed = labels.every(label => label.atStart?.floor === label.floor);
-const report = { passed, version: 1, datasetID: fixture.datasetID, mapID: fixture.mapID, options: fixture.options, geometry: support.map(({ floor, path, sha256 }) => ({ floor, path, sha256 })), telemetry, samples: observations.length, uncovered: observations.filter(o => !o.candidates.length).length, ambiguous: observations.filter(o => o.candidates.length > 1).length, labels };
+const report = { passed, evaluationScope: "Single calibration run; no held-out evaluation", heldOutValidated: false, version: 1, datasetID: fixture.datasetID, mapID: fixture.mapID, options: fixture.options, geometry: support.map(({ floor, path, sha256 }) => ({ floor, path, sha256 })), telemetry, samples: observations.length, uncovered: observations.filter(o => !o.candidates.length).length, ambiguous: observations.filter(o => o.candidates.length > 1).length, labels };
 await writeFile(resolve(root, 'floor-report.json'), JSON.stringify(report, null, 2));
 console.log(JSON.stringify(report, null, 2));
 
