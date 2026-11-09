@@ -83,7 +83,8 @@ export function MetricColumns({ columns, onOpen, ranksKnown = true }: { columns?
               className="mt-auto flex cursor-pointer items-center gap-1 border-t border-white/5 px-3 py-2.5 text-xs font-medium transition-colors hover:bg-white/[.04] hover:underline"
               style={{ color: t.accent }}
             >
-              Full {t.label} board
+              {/* "Ranked Mastery" wraps the link onto two lines in a narrow column. */}
+              Full {m === "mastery" ? "Mastery" : t.label} board
               <ArrowRight className="size-3" />
             </button>
           </div>

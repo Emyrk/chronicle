@@ -163,7 +163,7 @@ export const RaidGuilds: Story = {
     await expect(canvas.getByRole("group", { name: "Class" }).closest("[aria-disabled]")).not.toBeNull()
     await expect(within(canvas.getByRole("navigation", { name: "Breadcrumb" })).getByText("Guilds")).toBeInTheDocument()
     // The metric link opens the full guild table on the Ratings tab straight away, no boss cards.
-    await userEvent.click(card.getByRole("button", { name: "Full Ranked Mastery board" }))
+    await userEvent.click(card.getByRole("button", { name: "Full Mastery board" }))
     await expect(await canvas.findByRole("region", { name: "Guild Ranked Mastery · MC full list" })).toBeInTheDocument()
     await expect(canvas.queryByRole("region", { name: "Boss boards" })).not.toBeInTheDocument()
   },
