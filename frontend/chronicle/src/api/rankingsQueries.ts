@@ -33,12 +33,23 @@ class RankingsAPIError extends Error {
   }
 }
 
-async function fetchJSON<T>(url: string): Promise<T> {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new RankingsAPIError(`Rankings API error: ${response.status}`, response.status);
+async function fetchJSON<T>(url: string, timeoutMs?: number): Promise<T> {
+  const controller = timeoutMs ? new AbortController() : undefined;
+  const timeout = timeoutMs
+    ? globalThis.setTimeout(
+        () => controller!.abort(new DOMException("Rankings request timed out", "TimeoutError")),
+        timeoutMs,
+      )
+    : undefined;
+  try {
+    const response = await fetch(url, controller ? { signal: controller.signal } : undefined);
+    if (!response.ok) {
+      throw new RankingsAPIError(`Rankings API error: ${response.status}`, response.status);
+    }
+    return response.json() as Promise<T>;
+  } finally {
+    if (timeout !== undefined) globalThis.clearTimeout(timeout);
   }
-  return response.json() as Promise<T>;
 }
 
 /**
@@ -161,6 +172,10 @@ export function useRankingsFilters(instanceName?: string) {
   });
 }
 
+interface RankingsQueryBehavior {
+  retry?: boolean | number;
+}
+
 export function useRankingsLeaderboard(params: {
   instance_names?: string;
   encounter_names?: string;
@@ -178,7 +193,7 @@ export function useRankingsLeaderboard(params: {
   exact_cohort?: boolean;
   limit?: number;
   offset?: number;
-}, enabled = true) {
+}, enabled = true, behavior?: RankingsQueryBehavior) {
   const searchParams = new URLSearchParams();
   if (params.instance_names) searchParams.set("instance_names", params.instance_names);
   if (params.encounter_names) searchParams.set("encounter_names", params.encounter_names);
@@ -201,7 +216,8 @@ export function useRankingsLeaderboard(params: {
   return useQuery({
     queryKey: ["rankings", "leaderboard", params],
     queryFn: () =>
-      fetchJSON<RankingsLeaderboardResponse>(`/api/v1/rankings/leaderboard${qs ? `?${qs}` : ""}`),
+      fetchJSON<RankingsLeaderboardResponse>(`/api/v1/rankings/leaderboard${qs ? `?${qs}` : ""}`, 15_000),
+    retry: behavior?.retry,
     staleTime: RANKINGS_STALE_TIME,
     enabled,
   });
@@ -219,7 +235,7 @@ export function useRankingsStats(params: {
   group_by_class?: boolean;
   max_players?: number;
   exact_cohort?: boolean;
-}, enabled = true) {
+}, enabled = true, behavior?: RankingsQueryBehavior) {
   const searchParams = new URLSearchParams();
   if (params.instance_names) searchParams.set("instance_names", params.instance_names);
   if (params.encounter_names) searchParams.set("encounter_names", params.encounter_names);
@@ -237,7 +253,8 @@ export function useRankingsStats(params: {
   return useQuery({
     queryKey: ["rankings", "stats", params],
     queryFn: () =>
-      fetchJSON<RankingsBoxPlotStats[]>(`/api/v1/rankings/stats${qs ? `?${qs}` : ""}`),
+      fetchJSON<RankingsBoxPlotStats[]>(`/api/v1/rankings/stats${qs ? `?${qs}` : ""}`, 15_000),
+    retry: behavior?.retry,
     staleTime: RANKINGS_STALE_TIME,
     enabled,
   });
@@ -259,7 +276,7 @@ export function useRankingsKillTimes(instanceName: string, period?: string, enab
   return useQuery({
     queryKey: ["rankings", "kill-times", instanceName, period],
     queryFn: () =>
-      fetchJSON<RankingsKillTimeStats[]>(`/api/v1/rankings/kill-times?${searchParams.toString()}`),
+      fetchJSON<RankingsKillTimeStats[]>(`/api/v1/rankings/kill-times?${searchParams.toString()}`, 15_000),
     staleTime: RANKINGS_STALE_TIME,
     enabled: enabled && !!instanceName,
   });
@@ -298,6 +315,7 @@ export function useRankingsSuccessRates(
     queryFn: () =>
       fetchJSON<RankingsSuccessRate[]>(
         `/api/v1/rankings/success-rates?${searchParams.toString()}`,
+        15_000,
       ),
     staleTime: RANKINGS_STALE_TIME,
     enabled: enabled && !!instanceName,
@@ -322,6 +340,7 @@ export function useRankingsKillTimeLeaderboard(params: {
     queryFn: () =>
       fetchJSON<KillTimeLeaderboardResponse>(
         `/api/v1/rankings/kill-time-leaderboard?${searchParams.toString()}`,
+        15_000,
       ),
     staleTime: RANKINGS_STALE_TIME,
     enabled: enabled && !!params.instance_name,
@@ -334,7 +353,7 @@ export function useRankingsKillTimesByBoss(instanceName: string, bosses: readonl
   return useQuery({
     queryKey: ["rankings", "kill-times-by-boss", instanceName, [...bosses], perBoss],
     queryFn: () =>
-      fetchJSON<KillTimeLeaderboardResponse>(`/api/v1/rankings/kill-time-leaderboard?${searchParams.toString()}`),
+      fetchJSON<KillTimeLeaderboardResponse>(`/api/v1/rankings/kill-time-leaderboard?${searchParams.toString()}`, 15_000),
     staleTime: RANKINGS_STALE_TIME,
     enabled: enabled && !!instanceName && bosses.length > 0,
   });

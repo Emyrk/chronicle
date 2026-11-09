@@ -1,16 +1,30 @@
 import { renderToStaticMarkup } from "react-dom/server"
+import { useQuery } from "@tanstack/react-query"
 import { MemoryRouter } from "react-router-dom"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { RankingsBoxPlotStats } from "@/api/typesGenerated"
-import { useHubSummary, type HubSummary } from "./hubSummaryAdapter"
+import { useRankingsLeaderboard } from "@/api/rankingsQueries"
+import type { HubSummary } from "./hubSummaryAdapter"
 import type { HubLiveTabContext } from "./LeaderboardHub"
 import { LiveHubOverview } from "./LiveHubOverview"
 import { liveOverviewData } from "./liveOverviewData"
 
-vi.mock("./hubSummaryAdapter", () => ({ useHubSummary: vi.fn() }))
+vi.mock("@tanstack/react-query", () => ({
+  useQuery: vi.fn(() => ({ isPending: false, isError: false, data: undefined })),
+}))
 vi.mock("@/api/rankingsQueries", () => {
   const idle = () => ({ isPending: false, isError: false, data: undefined })
-  return { useRankingsStats: vi.fn(idle), useRankingsSuccessRates: vi.fn(idle), useRankingsKillTimes: vi.fn(idle), useRankingsKillTimeLeaderboard: vi.fn(idle) }
+  return {
+    useRankingsLeaderboard: vi.fn(() => ({
+      isPending: false,
+      isError: false,
+      data: { entries: [{ id: "p1", player_guid: "war-1", player_name: "Actual Warrior", player_class: "WARRIOR", player_spec: "Fury", guild_name: "Actual Guild", dps: 1200.4, hps: 0 }] },
+    })),
+    useRankingsStats: vi.fn(idle),
+    useRankingsSuccessRates: vi.fn(idle),
+    useRankingsKillTimes: vi.fn(idle),
+    useRankingsKillTimeLeaderboard: vi.fn(idle),
+  }
 })
 
 const entry = { player_guid: "mage-1", player_name: "Actual Mage", player_class: "MAGE", player_spec: "Frost", player_sub_spec: "", score: 42, peak_raw: 1311.6, realm_id: "realm-1", realm_name: "Turtle" }
@@ -37,11 +51,16 @@ const context = (over: Partial<HubLiveTabContext> = {}) => ({
 
 beforeEach(() => {
   vi.clearAllMocks()
-  vi.mocked(useHubSummary).mockReturnValue({ isPending: false, isError: false, data: summary } as ReturnType<typeof useHubSummary>)
+  vi.mocked(useQuery).mockReturnValue({ isPending: false, isError: false, data: undefined } as ReturnType<typeof useQuery>)
+  vi.mocked(useRankingsLeaderboard).mockReturnValue({
+    isPending: false,
+    isError: false,
+    data: { entries: summary.performances },
+  } as ReturnType<typeof useRankingsLeaderboard>)
 })
 
 describe("live Hub overview", () => {
-  it("renders the Storybook Overview from the page summary without refetching it", () => {
+  it("renders ratings and best performances from independent requests", () => {
     const html = renderToStaticMarkup(
       <MemoryRouter>
         <LiveHubOverview context={context()} summary={summary} realmIDs={[]} bosses={["Ragnaros"]} />
@@ -54,17 +73,30 @@ describe("live Hub overview", () => {
     // Peak carries the DPS behind it, on the ratings card and the boss cards.
     expect(html).toContain("1,312 dps")
     expect(html).toContain("1,312/s")
-    expect(vi.mocked(useHubSummary).mock.calls[0][1]).toBe(false)
   })
 
-  it("requests one exact summary for a class scope", () => {
-    renderToStaticMarkup(
+  it("renders boss cards while ratings and Best Performances are still loading", () => {
+    vi.mocked(useQuery).mockReturnValue({ isPending: true, isError: false, data: undefined } as ReturnType<typeof useQuery>)
+    vi.mocked(useRankingsLeaderboard).mockReturnValue({ isPending: true, isError: false, data: undefined } as ReturnType<typeof useRankingsLeaderboard>)
+    const html = renderToStaticMarkup(
       <MemoryRouter>
-        <LiveHubOverview context={context({ scope: { cls: "MAGE", spec: "Frost" }, role: "healing" })} summary={summary} realmIDs={[]} bosses={["Ragnaros"]} />
+        <LiveHubOverview context={context()} summary={summary} realmIDs={[]} bosses={["Ragnaros"]} />
       </MemoryRouter>,
     )
-    expect(vi.mocked(useHubSummary).mock.calls[0][0]).toMatchObject({ instanceName: "Molten Core", cohort: { difficulty: "", maxPlayers: 0 }, performance: "hps", cls: "MAGE", spec: "Frost" })
-    expect(vi.mocked(useHubSummary).mock.calls[0][1]).toBe(true)
+    expect(html).toContain('aria-label="Ragnaros"')
+    expect(html).toContain("Ratings · Molten Core")
+    expect(html).toContain("Best Performances (DPS) · Molten Core")
+  })
+  it("shows a section error without replacing ratings or boss cards", () => {
+    vi.mocked(useRankingsLeaderboard).mockReturnValue({ isPending: false, isError: true, data: undefined } as ReturnType<typeof useRankingsLeaderboard>)
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <LiveHubOverview context={context()} summary={summary} realmIDs={[]} bosses={["Ragnaros"]} />
+      </MemoryRouter>,
+    )
+    expect(html).toContain("Could not load best performances")
+    expect(html).toContain("Actual Mage")
+    expect(html).toContain('aria-label="Ragnaros"')
   })
 })
 

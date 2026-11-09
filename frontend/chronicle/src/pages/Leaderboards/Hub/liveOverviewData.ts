@@ -45,6 +45,7 @@ export interface LiveOverviewSources {
   bossKills?: readonly KillTimeLeaderboardEntry[];
   /** Encounter totals ignore realm and class filters; only show them unfiltered. */
   unfiltered: boolean;
+  sections?: OverviewData["sections"];
   pending?: boolean;
 }
 
@@ -309,6 +310,7 @@ export function liveOverviewData(src: LiveOverviewSources): OverviewData {
         }
       : undefined,
     bosses,
+    sections: src.sections,
     pending: src.pending,
   };
 }

@@ -16,15 +16,33 @@ export type ResolvedHubSummary = HubSummary & {
   cohorts?: readonly LeaderboardV2Cohort[];
 };
 
-export async function hubJSON<T>(url: string): Promise<T> {
-  const response = await fetch(url);
-  if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    throw new Error(
-      body?.message || `Leaderboard request failed (${response.status})`,
-    );
+const HUB_REQUEST_TIMEOUT_MS = 15_000;
+
+export async function hubJSON<T>(
+  url: string,
+  signal?: AbortSignal,
+  timeoutMs = HUB_REQUEST_TIMEOUT_MS,
+): Promise<T> {
+  const controller = new AbortController();
+  const abort = () => controller.abort(signal?.reason);
+  signal?.addEventListener("abort", abort, { once: true });
+  const timeout = globalThis.setTimeout(
+    () => controller.abort(new DOMException("Leaderboard request timed out", "TimeoutError")),
+    timeoutMs,
+  );
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      throw new Error(
+        body?.message || `Leaderboard request failed (${response.status})`,
+      );
+    }
+    return response.json();
+  } finally {
+    globalThis.clearTimeout(timeout);
+    signal?.removeEventListener("abort", abort);
   }
-  return response.json();
 }
 
 /** Adapt resolved policy into the existing Hub's metadata contract, not a new UI. */
@@ -207,6 +225,90 @@ function overviewBoardURLs(
   };
 }
 
+export type ResolvedHubRaidRatings = {
+  player: {
+    peak: HubRatingBoard["player"]["peak"];
+    ranked_mastery: HubRatingBoard["player"]["peak"];
+    renown: HubRatingBoard["player"]["peak"];
+  };
+  guild: {
+    peak: HubRatingBoard["guild"]["peak"];
+    ranked_mastery: HubRatingBoard["guild"]["peak"];
+    renown: HubRatingBoard["guild"]["peak"];
+  };
+};
+
+export async function fetchResolvedHubRatings(
+  request: HubSummaryRequest,
+  summary: ResolvedHubSummary,
+): Promise<ResolvedHubRaidRatings> {
+  const board: ResolvedHubRaidRatings = {
+    player: { peak: [], ranked_mastery: [], renown: [] },
+    guild: { peak: [], ranked_mastery: [], renown: [] },
+  };
+  const config = summary.configuration;
+  const cohort = summary.selected_cohort;
+  if (!config || !cohort || !request.instanceName) return board;
+  const cohorts = summary.cohorts ?? [];
+
+  await Promise.all(
+    (["player", "guild"] as const).flatMap((subject) =>
+      (["peak", "mastery", "renown"] as const).map(async (metric) => {
+        let params: URLSearchParams;
+        try {
+          params = v2RatingParams(
+            {
+              configuration: config,
+              cohorts,
+              instance: request.instanceName!,
+              difficulty: cohort.difficulty_name,
+              size: cohort.max_players,
+              subject,
+              performance: request.performance,
+              selected: request.encounters ?? [],
+              realmIDs: request.realmIDs,
+            },
+            { cls: request.cls, spec: request.spec, subSpec: request.subSpec },
+            metric,
+          );
+        } catch {
+          return;
+        }
+        params.set("limit", "5");
+        const response = await hubJSON<LeaderboardV2Response>(
+          v2BoardURL(params),
+        );
+        const key = metric === "mastery" ? "ranked_mastery" : metric;
+        if (subject === "player") {
+          board.player[key] = response.entries.map((row) => ({
+            realm_id: row.realm_id,
+            realm_name:
+              summary.realms.find((realm) => realm.id === row.realm_id)?.name ??
+              row.realm_id,
+            player_guid: row.subject_id,
+            player_name: row.name,
+            player_class: row.player_class,
+            player_spec: row.player_spec,
+            player_sub_spec: row.player_sub_spec,
+            score: row.score,
+          }));
+        } else {
+          board.guild[key] = response.entries.map((row) => ({
+            realm_id: row.realm_id,
+            realm_name:
+              summary.realms.find((realm) => realm.id === row.realm_id)?.name ??
+              row.realm_id,
+            guild_id: row.subject_id,
+            guild_name: row.name,
+            score: row.score,
+          }));
+        }
+      }),
+    ),
+  );
+  return board;
+}
+
 export async function fetchResolvedHubSummary(
   request: HubSummaryRequest,
 ): Promise<ResolvedHubSummary> {
@@ -240,83 +342,15 @@ export async function fetchResolvedHubSummary(
     publishedInstances,
   );
   if (request.metadataOnly) return result;
-  const board: {
-    player: {
-      peak: HubRatingBoard["player"]["peak"];
-      ranked_mastery: HubRatingBoard["player"]["peak"];
-      renown: HubRatingBoard["player"]["peak"];
-    };
-    guild: {
-      peak: HubRatingBoard["guild"]["peak"];
-      ranked_mastery: HubRatingBoard["guild"]["peak"];
-      renown: HubRatingBoard["guild"]["peak"];
-    };
-  } = {
-    player: { peak: [], ranked_mastery: [], renown: [] },
-    guild: { peak: [], ranked_mastery: [], renown: [] },
-  };
-  await Promise.all(
-    (["player", "guild"] as const).flatMap((subject) =>
-      (["peak", "mastery", "renown"] as const).map(async (metric) => {
-        let params: URLSearchParams;
-        try {
-          params = v2RatingParams(
-            {
-              configuration: config,
-              cohorts,
-              instance: request.instanceName!,
-              difficulty: metadata.selected_cohort!.difficulty_name,
-              size: metadata.selected_cohort!.max_players,
-              subject,
-              performance: request.performance,
-              selected: request.encounters ?? [],
-              realmIDs: request.realmIDs,
-            },
-            { cls: request.cls, spec: request.spec, subSpec: request.subSpec },
-            metric,
-          );
-        } catch {
-          return;
-        } // Invalid instance/selection: do not synthesize scores.
-        params.set("limit", "5");
-        const response = await hubJSON<LeaderboardV2Response>(
-          v2BoardURL(params),
-        );
-        const key = metric === "mastery" ? "ranked_mastery" : metric;
-        if (subject === "player")
-          board.player[key] = response.entries.map((row) => ({
-            realm_id: row.realm_id,
-            realm_name:
-              realms.find((realm) => realm.id === row.realm_id)?.name ??
-              row.realm_id,
-            player_guid: row.subject_id,
-            player_name: row.name,
-            player_class: row.player_class,
-            player_spec: row.player_spec,
-            player_sub_spec: row.player_sub_spec,
-            score: row.score,
-          }));
-        else
-          board.guild[key] = response.entries.map((row) => ({
-            realm_id: row.realm_id,
-            realm_name:
-              realms.find((realm) => realm.id === row.realm_id)?.name ??
-              row.realm_id,
-            guild_id: row.subject_id,
-            guild_name: row.name,
-            score: row.score,
-          }));
-      }),
-    ),
-  );
   const urls = overviewBoardURLs(request, result);
-  const [performance, speedruns] = await Promise.all([
+  const [ratings, performance, speedruns] = await Promise.all([
+    fetchResolvedHubRatings(request, result),
     hubJSON<RankingsLeaderboardResponse>(urls.performances),
     hubJSON<SpeedrunLeaderboardEntry[]>(urls.speedruns),
   ]);
   return {
     ...result,
-    ratings: { raid: board, bosses: [] },
+    ratings: { raid: ratings, bosses: [] },
     performances: performance.entries,
     speedruns: speedruns.slice(0, 5),
   };
