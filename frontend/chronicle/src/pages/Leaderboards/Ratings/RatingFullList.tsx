@@ -249,7 +249,7 @@ export function RatingFullList({
                         {entry.guild && <span className="truncate text-xs text-muted-foreground">&lt;{entry.guild}&gt;</span>}
                       </div>
                       <div className="text-[11px] text-muted-foreground md:hidden">
-                        {entry.spec} · {entry.subSpec}
+                        {[entry.spec, entry.subSpec].filter(Boolean).join(" · ")}
                       </div>
                     </div>
                   </div>
