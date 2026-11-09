@@ -332,6 +332,8 @@ export function startFollowTrackBuild(options: FollowTrackOptions, now: () => nu
   let baseYaw: Float64Array | null = null;
   let yawOpen: Uint16Array | null = null;
   let yawProbed: Uint16Array | null = null;
+  let choice: Int8Array | null = null;
+  let chosen: Float64Array | null = null;
   let probed = 0;
   let done = false;
   let result: FollowTrack | null = null;
@@ -391,6 +393,8 @@ export function startFollowTrackBuild(options: FollowTrackOptions, now: () => nu
     const peakHalf = Math.max(1, Math.round((FOLLOW_RADIUS_PEAK_MS * speed) / sampleMs));
     const meanHalf = Math.max(1, Math.round(((options.radiusWindowMs ?? FOLLOW_RADIUS_WINDOW_MS) * speed) / sampleMs / 2));
     radii = Float64Array.from(movingMean(movingMean(windowed(Array.from(cover!), peakHalf, "max"), meanHalf), meanHalf));
+  };
+  const startYaw = () => {
     baseYaw = baseYaws(xs!, zs!, FOLLOW_YAW_MOVING_YPS * scale * (sampleMs / 1_000), options.initialYaw ?? 0);
     yawOpen = new Uint16Array(count);
     yawProbed = new Uint16Array(count);
@@ -405,15 +409,17 @@ export function startFollowTrackBuild(options: FollowTrackOptions, now: () => nu
   // unwrapped, so flipping between options half a turn apart adds no turn);
   // then smoothed over replay time (stretched fully with the speed) and
   // capped at FOLLOW_YAW_MAX_RATE of real time.
-  const finish = () => {
+  const choose = () => {
     const dwell = Math.max(1, Math.round((FOLLOW_YAW_DWELL_MS * speed) / sampleMs));
-    const choice = heldYawChoices(yawOpen!, dwell);
-    const chosen = new Float64Array(count);
+    choice = heldYawChoices(yawOpen!, dwell);
+    chosen = new Float64Array(count);
     for (let i = 0; i < count; i++) chosen[i] = baseYaw![i]! + (choice[i]! < 0 ? 0 : YAW_CANDIDATES[choice[i]!]!);
+  };
+  const finish = () => {
     const half = Math.max(1, Math.round(((options.yawWindowMs ?? FOLLOW_YAW_WINDOW_MS) * speed) / sampleMs / 2));
     const maxStep = (FOLLOW_YAW_MAX_RATE * sampleMs) / (speed * 1_000);
-    const yaw = rateLimited(movingMean(movingMean(chosen, half), half), maxStep);
-    result = { startMs, endMs: startMs + span, sampleMs, subjectGuid, speed, x: xs!, z: zs!, radius: radii!, yaw, baseYaw: baseYaw!, yawProbed: yawProbed!, yawOpen: yawOpen!, yawChoice: choice };
+    const yaw = rateLimited(movingMean(movingMean(chosen!, half), half), maxStep);
+    result = { startMs, endMs: startMs + span, sampleMs, subjectGuid, speed, x: xs!, z: zs!, radius: radii!, yaw, baseYaw: baseYaw!, yawProbed: yawProbed!, yawOpen: yawOpen!, yawChoice: choice! };
   };
 
   return {
@@ -467,6 +473,10 @@ export function startFollowTrackBuild(options: FollowTrackOptions, now: () => nu
         smoothRadius();
         return false;
       }
+      if (!baseYaw) {
+        startYaw();
+        return false;
+      }
       // The probe pass: each sample's candidate yaws against the cave.
       while (probe && probed < count) {
         const height = rawHeight[probed]!;
@@ -476,6 +486,10 @@ export function startFollowTrackBuild(options: FollowTrackOptions, now: () => nu
         yawProbed![probed] = probedYaws.probed;
         probed++;
         if (now() >= until) return false;
+      }
+      if (!chosen) {
+        choose();
+        return false;
       }
       finish();
       done = true;
