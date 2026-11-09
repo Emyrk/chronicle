@@ -1463,10 +1463,19 @@ export function useBulkReparseOutdatedInstances() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ instanceName, parserVersion }: { instanceName?: string; parserVersion?: string }) => {
+    mutationFn: async ({
+      instanceName,
+      parserVersion,
+      missingMetadata,
+    }: {
+      instanceName?: string;
+      parserVersion?: string;
+      missingMetadata?: boolean;
+    }) => {
       const params = new URLSearchParams();
       if (instanceName) params.set("instance_name", instanceName);
       if (parserVersion) params.set("parser_version", parserVersion);
+      if (missingMetadata) params.set("missing_metadata", "true");
       const url = "/api/v1/admin/outdated-instances/reparse" + (params.toString() ? `?${params}` : "");
       const response = await fetch(url, { method: "POST" });
       if (!response.ok) {
@@ -1821,13 +1830,14 @@ export function useAdminBulkReparseLogs() {
   });
 }
 
-export function useAdminOutdatedInstances(instanceName?: string, parserVersion?: string) {
+export function useAdminOutdatedInstances(instanceName?: string, parserVersion?: string, missingMetadata?: boolean) {
   return useQuery({
-    queryKey: ["admin", "outdated-instances", instanceName ?? "", parserVersion ?? ""],
+    queryKey: ["admin", "outdated-instances", instanceName ?? "", parserVersion ?? "", missingMetadata ?? false],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (instanceName) params.set("instance_name", instanceName);
       if (parserVersion) params.set("parser_version", parserVersion);
+      if (missingMetadata) params.set("missing_metadata", "true");
       const url = "/api/v1/admin/outdated-instances" + (params.toString() ? `?${params}` : "");
       const response = await fetch(url);
       if (!response.ok) throw new Error("Failed to fetch outdated instances");

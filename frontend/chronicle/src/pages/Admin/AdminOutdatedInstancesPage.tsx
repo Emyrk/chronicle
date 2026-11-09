@@ -20,7 +20,12 @@ export function AdminOutdatedInstancesPage() {
   const [debouncedFilter, setDebouncedFilter] = useState("");
   const [parserVersion, setParserVersion] = useState("");
   const [debouncedParserVersion, setDebouncedParserVersion] = useState("");
-  const { data, isLoading, error, refetch } = useAdminOutdatedInstances(debouncedFilter || undefined, debouncedParserVersion || undefined);
+  const [missingMetadata, setMissingMetadata] = useState(false);
+  const { data, isLoading, error, refetch } = useAdminOutdatedInstances(
+    debouncedFilter || undefined,
+    missingMetadata ? undefined : debouncedParserVersion || undefined,
+    missingMetadata
+  );
   const reparseLogGroup = useReparseLogGroup();
   const bulkReparse = useBulkReparseOutdatedInstances();
   const [reparsingIds, setReparsingIds] = useState<Set<string>>(new Set());
@@ -67,38 +72,41 @@ export function AdminOutdatedInstancesPage() {
   };
 
   const handleBulkReparse = () => {
-  bulkReparse.mutate(
-    {
-    instanceName: debouncedFilter || undefined,
-    parserVersion: debouncedParserVersion || undefined,
-    },
-    {
-    onSuccess: (result) => {
-      if (result.failed.length > 0) {
-      toast.warning("Bulk reparse partially queued", {
-        description: `${result.enqueued} of ${result.matched} logs were enqueued. ${result.failed.length} failed.`,
-      });
-      } else {
-      toast.success("Bulk reparse started", {
-        description: `${result.enqueued} logs were enqueued for reparse.`,
-      });
+    bulkReparse.mutate(
+      {
+        instanceName: debouncedFilter || undefined,
+        parserVersion: missingMetadata ? undefined : debouncedParserVersion || undefined,
+        missingMetadata,
+      },
+      {
+        onSuccess: (result) => {
+          if (result.failed.length > 0) {
+            toast.warning("Bulk reparse partially queued", {
+              description: `${result.enqueued} of ${result.matched} logs were enqueued. ${result.failed.length} failed.`,
+            });
+          } else {
+            toast.success("Bulk reparse started", {
+              description: `${result.enqueued} logs were enqueued for reparse.`,
+            });
+          }
+          refetch();
+        },
+        onError: (err) => {
+          toast.error("Failed to bulk reparse", {
+            description: err.message,
+          });
+        },
       }
-      refetch();
-    },
-    onError: (err) => {
-      toast.error("Failed to bulk reparse", {
-      description: err.message,
-      });
-    },
-    }
-  );
+    );
   };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <h1 className="text-2xl font-bold">Outdated Parser Instances</h1>
-        {data && (
+        <h1 className="text-2xl font-bold">
+          {missingMetadata ? "Instances Missing Difficulty Metadata" : "Outdated Parser Instances"}
+        </h1>
+        {data && !missingMetadata && (
           <span className="text-sm text-muted-foreground">
             Below: <code className="bg-muted px-1 rounded">{data.min_version}</code>
           </span>
@@ -106,7 +114,7 @@ export function AdminOutdatedInstancesPage() {
       </div>
 
       <Card className="p-4">
-        <div className="mb-4 flex gap-4">
+        <div className="mb-4 flex flex-wrap items-center gap-4">
           <div className="relative max-w-sm flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <input
@@ -117,27 +125,43 @@ export function AdminOutdatedInstancesPage() {
               className="w-full pl-9 pr-3 py-2 text-sm border rounded-md bg-background"
             />
           </div>
+          <label className="flex items-center gap-2 whitespace-nowrap text-sm">
+            <input
+              type="checkbox"
+              checked={missingMetadata}
+              onChange={(event) => setMissingMetadata(event.target.checked)}
+              className="h-4 w-4 rounded border-border"
+            />
+            Missing difficulty or player size
+          </label>
           <div className="relative max-w-xs">
             <input
               type="text"
               placeholder="Min parser version (e.g. v0.0.437)"
               value={parserVersion}
               onChange={(e) => handleParserVersionChange(e.target.value)}
+              disabled={missingMetadata}
               className="w-full px-3 py-2 text-sm border rounded-md bg-background font-mono"
             />
           </div>
-      <Button
-      variant="default"
-      disabled={bulkReparse.isPending || isLoading || !data || data.instances.length === 0}
-      onClick={handleBulkReparse}
-      >
-      {bulkReparse.isPending ? (
-        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-      ) : (
-        <RefreshCw className="h-4 w-4 mr-2" />
-      )}
-      Reparse All Filtered
-      </Button>
+          <Button
+            variant="default"
+            disabled={
+              bulkReparse.isPending ||
+              isLoading ||
+              !data ||
+              data.instances.length === 0 ||
+              (missingMetadata && !debouncedFilter)
+            }
+            onClick={handleBulkReparse}
+          >
+            {bulkReparse.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : (
+              <RefreshCw className="h-4 w-4 mr-2" />
+            )}
+            {missingMetadata ? "Reparse Matching Missing Metadata" : "Reparse All Filtered"}
+          </Button>
         </div>
       </Card>
 
@@ -154,7 +178,9 @@ export function AdminOutdatedInstancesPage() {
         )}
         {data && data.instances.length === 0 && (
           <div className="text-muted-foreground py-8 text-center">
-            All instances are on the latest parser version.
+            {missingMetadata
+              ? "No instances are missing difficulty or player-size metadata."
+              : "All instances are on the latest parser version."}
           </div>
         )}
         {data && data.instances.length > 0 && (
@@ -163,6 +189,8 @@ export function AdminOutdatedInstancesPage() {
               <thead>
                 <tr className="border-b text-left text-muted-foreground">
                   <th className="py-2 px-3">Instance</th>
+                  <th className="py-2 px-3">Difficulty</th>
+                  <th className="py-2 px-3">Players</th>
                   <th className="py-2 px-3">Elapsed</th>
                   <th className="py-2 px-3">Realm</th>
                   <th className="py-2 px-3">Uploader</th>
@@ -186,6 +214,8 @@ export function AdminOutdatedInstancesPage() {
                         instance.name
                       )}
                     </td>
+                    <td className="py-2 px-3">{instance.difficulty_name || "—"}</td>
+                    <td className="py-2 px-3">{instance.max_players > 0 ? instance.max_players : "—"}</td>
                     <td className="py-2 px-3 text-muted-foreground">
                       {instance.elapsed_seconds != null
                         ? formatElapsed(instance.elapsed_seconds)

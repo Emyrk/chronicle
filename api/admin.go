@@ -569,10 +569,13 @@ func (a *API) AdminListOutdatedInstances(w http.ResponseWriter, r *http.Request)
 	if nameFilter != "" {
 		instanceName = pgtype.Text{String: nameFilter, Valid: true}
 	}
+	missingMetadata := r.URL.Query().Get("missing_metadata") == "true"
 
 	rows, err := a.Opts.Zed.AdminListOutdatedParserVersionInstances(ctx, database.AdminListOutdatedParserVersionInstancesParams{
 		MinParserVersionNum: minParserVersionNum,
 		InstanceName:        instanceName,
+		MissingMetadata:     missingMetadata,
+		LimitCount:          50,
 	})
 	if err != nil {
 		httpapi.InternalServerError(w, err)
@@ -582,14 +585,16 @@ func (a *API) AdminListOutdatedInstances(w http.ResponseWriter, r *http.Request)
 	instances := make([]chroniclesdk.AdminOutdatedInstance, len(rows))
 	for i, row := range rows {
 		inst := chroniclesdk.AdminOutdatedInstance{
-			ID:            row.ID,
-			LogGroupID:    row.LogGroupID,
-			Name:          row.Name,
-			Slug:          row.HashedSlug.String,
-			ParserVersion: row.ParserVersion,
-			RealmName:     row.RealmName,
-			UploaderName:  row.UploaderName,
-			UploadedAt:    row.UploadedAt.Time,
+			ID:             row.ID,
+			LogGroupID:     row.LogGroupID,
+			Name:           row.Name,
+			Slug:           row.HashedSlug.String,
+			ParserVersion:  row.ParserVersion,
+			DifficultyName: row.DifficultyName,
+			MaxPlayers:     row.MaxPlayers,
+			RealmName:      row.RealmName,
+			UploaderName:   row.UploaderName,
+			UploadedAt:     row.UploadedAt.Time,
 		}
 		if row.StartTime.Valid && row.EndTime.Valid {
 			elapsed := row.EndTime.Time.Sub(row.StartTime.Time).Seconds()
@@ -766,10 +771,19 @@ func (a *API) AdminBulkReparseOutdatedInstances(w http.ResponseWriter, r *http.R
 	if nameFilter != "" {
 		instanceName = pgtype.Text{String: nameFilter, Valid: true}
 	}
+	missingMetadata := r.URL.Query().Get("missing_metadata") == "true"
+	if missingMetadata && !instanceName.Valid {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "Instance name is required when reparsing missing metadata",
+		})
+		return
+	}
 
 	rows, err := a.Opts.Zed.AdminListOutdatedParserVersionInstances(ctx, database.AdminListOutdatedParserVersionInstancesParams{
 		MinParserVersionNum: minParserVersionNum,
 		InstanceName:        instanceName,
+		MissingMetadata:     missingMetadata,
+		LimitCount:          0,
 	})
 	if err != nil {
 		httpapi.InternalServerError(w, err)
@@ -777,13 +791,19 @@ func (a *API) AdminBulkReparseOutdatedInstances(w http.ResponseWriter, r *http.R
 	}
 
 	resp := chroniclesdk.AdminBulkReparseResponse{
-		Matched:    len(rows),
 		Enqueued:   0,
 		MinVersion: minParserVersion,
 		Failed:     make([]chroniclesdk.AdminBulkReparseFailure, 0),
 	}
 
+	seenLogGroups := make(map[uuid.UUID]struct{}, len(rows))
 	for _, row := range rows {
+		if _, seen := seenLogGroups[row.LogGroupID]; seen {
+			continue
+		}
+		seenLogGroups[row.LogGroupID] = struct{}{}
+		resp.Matched++
+
 		_, enqueueErr := a.enqueueReparseLogGroup(ctx, row.LogGroupID, false, false, false, reparseOverride{})
 		if enqueueErr != nil {
 			resp.Failed = append(resp.Failed, chroniclesdk.AdminBulkReparseFailure{

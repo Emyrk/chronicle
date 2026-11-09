@@ -54,6 +54,8 @@ SELECT
   li.log_group_id,
   li.name,
   li.parser_version,
+  li.difficulty_name,
+  li.max_players,
   li.hashed_slug,
   wsr.name as realm_name,
   u.username as uploader_name,
@@ -68,11 +70,20 @@ JOIN wow_log_groups wlg ON wlg.id = plg.id
 JOIN users u ON u.id = wlg.owner
 JOIN wow_server_realms wsr ON wsr.id = li.realm_id
 WHERE (
-    -- Keep these multipliers in sync with internal/semverenc.
-    COALESCE(NULLIF(regexp_replace(split_part(trim(leading 'v' from split_part(li.parser_version, '+', 1)), '.', 1), '[^0-9].*$', ''), ''), '0')::bigint * 1000000000
-    + COALESCE(NULLIF(regexp_replace(split_part(trim(leading 'v' from split_part(li.parser_version, '+', 1)), '.', 2), '[^0-9].*$', ''), ''), '0')::bigint * 10000000
-    + COALESCE(NULLIF(regexp_replace(split_part(trim(leading 'v' from split_part(li.parser_version, '+', 1)), '.', 3), '[^0-9].*$', ''), ''), '0')::bigint * 10000
-  ) < @min_parser_version_num::bigint
+    (
+      NOT @missing_metadata::boolean
+      AND (
+        -- Keep these multipliers in sync with internal/semverenc.
+        COALESCE(NULLIF(regexp_replace(split_part(trim(leading 'v' from split_part(li.parser_version, '+', 1)), '.', 1), '[^0-9].*$', ''), ''), '0')::bigint * 1000000000
+        + COALESCE(NULLIF(regexp_replace(split_part(trim(leading 'v' from split_part(li.parser_version, '+', 1)), '.', 2), '[^0-9].*$', ''), ''), '0')::bigint * 10000000
+        + COALESCE(NULLIF(regexp_replace(split_part(trim(leading 'v' from split_part(li.parser_version, '+', 1)), '.', 3), '[^0-9].*$', ''), ''), '0')::bigint * 10000
+      ) < @min_parser_version_num::bigint
+    )
+    OR (
+      @missing_metadata::boolean
+      AND (btrim(li.difficulty_name) = '' OR li.max_players <= 0)
+    )
+  )
   AND (sqlc.narg('instance_name')::text IS NULL OR li.name ILIKE '%' || sqlc.narg('instance_name')::text || '%')
   AND EXISTS(
     SELECT 1 FROM log_file lf
@@ -80,5 +91,5 @@ WHERE (
     AND lf.storage_deleted_at IS NULL
   )
 ORDER BY (li.end_time - li.start_time) ASC NULLS LAST
-LIMIT 50;
+LIMIT NULLIF(@limit_count::int, 0);
 

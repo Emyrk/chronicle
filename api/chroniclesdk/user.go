@@ -190,6 +190,8 @@ type AdminOutdatedInstance struct {
 	Name           string    `json:"name"`
 	Slug           string    `json:"slug"`
 	ParserVersion  string    `json:"parser_version"`
+	DifficultyName string    `json:"difficulty_name"`
+	MaxPlayers     int32     `json:"max_players"`
 	RealmName      string    `json:"realm_name"`
 	UploaderName   string    `json:"uploader_name"`
 	UploadedAt     time.Time `json:"uploaded_at"`

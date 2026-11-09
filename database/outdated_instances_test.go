@@ -84,3 +84,81 @@ func TestAdminListOutdatedParserVersionInstancesUsesFullVersion(t *testing.T) {
 	}
 	require.ElementsMatch(t, []uuid.UUID{oldPreV1ID, oldV1ID}, gotIDs)
 }
+
+func TestAdminListOutdatedParserVersionInstancesFindsMissingMetadataByName(t *testing.T) {
+	t.Parallel()
+
+	_, store, realmID := setupParsesTest(t)
+	ctx := testutil.Context(t, testutil.WaitMedium)
+
+	userID := uuid.New()
+	_, err := store.InsertUser(ctx, database.InsertUserParams{
+		ID:       userID,
+		Username: "missing-metadata-user-" + userID.String()[:8],
+	})
+	require.NoError(t, err)
+
+	insertInstance := func(name, difficultyName string, maxPlayers int32) uuid.UUID {
+		t.Helper()
+
+		now := time.Now()
+		logGroupID := uuid.New()
+		_, err := store.InsertWoWLogGroup(ctx, database.InsertWoWLogGroupParams{
+			ID:        logGroupID,
+			Owner:     userID,
+			LogType:   database.LogTypeV1,
+			CreatedAt: database.Timestamptz(now),
+			UpdatedAt: database.Timestamptz(now),
+		})
+		require.NoError(t, err)
+		require.NoError(t, store.InsertParsedLogGroup(ctx, logGroupID))
+
+		_, err = store.InsertLogFile(ctx, database.InsertLogFileParams{
+			ID:        uuid.New(),
+			Owner:     userID,
+			Hash:      uuid.NewString(),
+			WowLogID:  logGroupID,
+			SizeBytes: 1,
+			MimeType:  "text/plain",
+			CreatedAt: database.Timestamptz(now),
+			UpdatedAt: database.Timestamptz(now),
+		})
+		require.NoError(t, err)
+
+		instanceID := uuid.New()
+		_, err = store.InsertInstance(ctx, database.InsertInstanceParams{
+			ID:             instanceID,
+			RealmID:        realmID,
+			LogGroupID:     logGroupID,
+			Name:           name,
+			DifficultyName: difficultyName,
+			MaxPlayers:     maxPlayers,
+			HashedSlug:     pgtype.Text{String: instanceID.String(), Valid: true},
+			StartTime:      database.Timestamptz(now),
+			EndTime:        database.Timestamptz(now.Add(time.Minute)),
+			Capabilities:   []string{},
+			ParserVersion:  "v1.0.999+current",
+		})
+		require.NoError(t, err)
+		return instanceID
+	}
+
+	missingBothID := insertInstance("Ulduar", "", 0)
+	missingSizeID := insertInstance("Ulduar", "25 Player", 0)
+	insertInstance("Ulduar", "25 Player", 25)
+	insertInstance("Naxxramas", "", 0)
+
+	rows, err := store.AdminListOutdatedParserVersionInstances(ctx, database.AdminListOutdatedParserVersionInstancesParams{
+		MinParserVersionNum: semverenc.Encode("v1.0.1"),
+		InstanceName:        pgtype.Text{String: "Ulduar", Valid: true},
+		MissingMetadata:     true,
+		LimitCount:          50,
+	})
+	require.NoError(t, err)
+
+	gotIDs := make([]uuid.UUID, 0, len(rows))
+	for _, row := range rows {
+		gotIDs = append(gotIDs, row.ID)
+	}
+	require.ElementsMatch(t, []uuid.UUID{missingBothID, missingSizeID}, gotIDs)
+}

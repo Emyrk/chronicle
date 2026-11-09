@@ -556,6 +556,8 @@ export interface AdminOutdatedInstance {
     readonly name: string;
     readonly slug: string;
     readonly parser_version: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
     readonly realm_name: string;
     readonly uploader_name: string;
     readonly uploaded_at: string;

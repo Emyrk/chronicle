@@ -25349,6 +25349,8 @@ SELECT
   li.log_group_id,
   li.name,
   li.parser_version,
+  li.difficulty_name,
+  li.max_players,
   li.hashed_slug,
   wsr.name as realm_name,
   u.username as uploader_name,
@@ -25363,41 +25365,59 @@ JOIN wow_log_groups wlg ON wlg.id = plg.id
 JOIN users u ON u.id = wlg.owner
 JOIN wow_server_realms wsr ON wsr.id = li.realm_id
 WHERE (
-    -- Keep these multipliers in sync with internal/semverenc.
-    COALESCE(NULLIF(regexp_replace(split_part(trim(leading 'v' from split_part(li.parser_version, '+', 1)), '.', 1), '[^0-9].*$', ''), ''), '0')::bigint * 1000000000
-    + COALESCE(NULLIF(regexp_replace(split_part(trim(leading 'v' from split_part(li.parser_version, '+', 1)), '.', 2), '[^0-9].*$', ''), ''), '0')::bigint * 10000000
-    + COALESCE(NULLIF(regexp_replace(split_part(trim(leading 'v' from split_part(li.parser_version, '+', 1)), '.', 3), '[^0-9].*$', ''), ''), '0')::bigint * 10000
-  ) < $1::bigint
-  AND ($2::text IS NULL OR li.name ILIKE '%' || $2::text || '%')
+    (
+      NOT $1::boolean
+      AND (
+        -- Keep these multipliers in sync with internal/semverenc.
+        COALESCE(NULLIF(regexp_replace(split_part(trim(leading 'v' from split_part(li.parser_version, '+', 1)), '.', 1), '[^0-9].*$', ''), ''), '0')::bigint * 1000000000
+        + COALESCE(NULLIF(regexp_replace(split_part(trim(leading 'v' from split_part(li.parser_version, '+', 1)), '.', 2), '[^0-9].*$', ''), ''), '0')::bigint * 10000000
+        + COALESCE(NULLIF(regexp_replace(split_part(trim(leading 'v' from split_part(li.parser_version, '+', 1)), '.', 3), '[^0-9].*$', ''), ''), '0')::bigint * 10000
+      ) < $2::bigint
+    )
+    OR (
+      $1::boolean
+      AND (btrim(li.difficulty_name) = '' OR li.max_players <= 0)
+    )
+  )
+  AND ($3::text IS NULL OR li.name ILIKE '%' || $3::text || '%')
   AND EXISTS(
     SELECT 1 FROM log_file lf
     WHERE lf.wow_log_id = li.log_group_id
     AND lf.storage_deleted_at IS NULL
   )
 ORDER BY (li.end_time - li.start_time) ASC NULLS LAST
-LIMIT 50
+LIMIT NULLIF($4::int, 0)
 `
 
 type AdminListOutdatedParserVersionInstancesParams struct {
+	MissingMetadata     bool        `db:"missing_metadata" json:"missing_metadata"`
 	MinParserVersionNum int64       `db:"min_parser_version_num" json:"min_parser_version_num"`
 	InstanceName        pgtype.Text `db:"instance_name" json:"instance_name"`
+	LimitCount          int32       `db:"limit_count" json:"limit_count"`
 }
 
 type AdminListOutdatedParserVersionInstancesRow struct {
-	ID            uuid.UUID          `db:"id" json:"id"`
-	LogGroupID    uuid.UUID          `db:"log_group_id" json:"log_group_id"`
-	Name          string             `db:"name" json:"name"`
-	ParserVersion string             `db:"parser_version" json:"parser_version"`
-	HashedSlug    pgtype.Text        `db:"hashed_slug" json:"hashed_slug"`
-	RealmName     string             `db:"realm_name" json:"realm_name"`
-	UploaderName  string             `db:"uploader_name" json:"uploader_name"`
-	UploadedAt    pgtype.Timestamptz `db:"uploaded_at" json:"uploaded_at"`
-	StartTime     pgtype.Timestamptz `db:"start_time" json:"start_time"`
-	EndTime       pgtype.Timestamptz `db:"end_time" json:"end_time"`
+	ID             uuid.UUID          `db:"id" json:"id"`
+	LogGroupID     uuid.UUID          `db:"log_group_id" json:"log_group_id"`
+	Name           string             `db:"name" json:"name"`
+	ParserVersion  string             `db:"parser_version" json:"parser_version"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int32              `db:"max_players" json:"max_players"`
+	HashedSlug     pgtype.Text        `db:"hashed_slug" json:"hashed_slug"`
+	RealmName      string             `db:"realm_name" json:"realm_name"`
+	UploaderName   string             `db:"uploader_name" json:"uploader_name"`
+	UploadedAt     pgtype.Timestamptz `db:"uploaded_at" json:"uploaded_at"`
+	StartTime      pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	EndTime        pgtype.Timestamptz `db:"end_time" json:"end_time"`
 }
 
 func (q *sqlQuerier) AdminListOutdatedParserVersionInstances(ctx context.Context, arg AdminListOutdatedParserVersionInstancesParams) ([]AdminListOutdatedParserVersionInstancesRow, error) {
-	rows, err := q.db.Query(ctx, adminListOutdatedParserVersionInstances, arg.MinParserVersionNum, arg.InstanceName)
+	rows, err := q.db.Query(ctx, adminListOutdatedParserVersionInstances,
+		arg.MissingMetadata,
+		arg.MinParserVersionNum,
+		arg.InstanceName,
+		arg.LimitCount,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -25410,6 +25430,8 @@ func (q *sqlQuerier) AdminListOutdatedParserVersionInstances(ctx context.Context
 			&i.LogGroupID,
 			&i.Name,
 			&i.ParserVersion,
+			&i.DifficultyName,
+			&i.MaxPlayers,
 			&i.HashedSlug,
 			&i.RealmName,
 			&i.UploaderName,
