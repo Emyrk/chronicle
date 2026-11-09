@@ -269,26 +269,7 @@ jobs:
 
       - name: Smoke test OG renderer container
         if: github.ref_type != 'tag'
-        run: |
-          docker run --detach --rm --name chronicle-og-smoke \
-            --env OG_API_ONLY=true \
-            --publish 18082:3000 \
-            emyrk/chronicle-og:latest
-          trap 'docker stop chronicle-og-smoke' EXIT
-          for attempt in {1..30}; do
-            if curl --fail --silent --show-error \
-              --output /tmp/chronicle-og.png \
-              http://127.0.0.1:18082/api/og; then
-              break
-            fi
-            if [[ "$attempt" == 30 ]]; then
-              docker logs chronicle-og-smoke
-              exit 1
-            fi
-            sleep 1
-          done
-          signature=$(od -An -tx1 -N8 /tmp/chronicle-og.png | tr -d ' \n')
-          test "$signature" = 89504e470d0a1a0a
+        run: services/og/scripts/smoke-container.sh emyrk/chronicle-og:latest
 
   deploy-og:
     name: Deploy OG renderer to Railway

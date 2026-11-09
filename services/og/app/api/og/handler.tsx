@@ -5,6 +5,7 @@ import { resolveOgRouteKeys } from '@/app/lib/og-route-keys';
 import { normalizeOgTheme } from '@/app/lib/og-themes';
 import { verifyOgSignature } from '@/app/lib/og-signature';
 import { themes } from './themes';
+import { measureOgRender } from '@/app/lib/og-metrics';
 
 const routeKeys = resolveOgRouteKeys();
 
@@ -38,35 +39,37 @@ export async function handleOgGet(request: NextRequest, routeKey: string): Promi
   const themeName = normalizeOgTheme(searchParams.get('theme') ?? searchParams.get('template'));
   const theme = themes[themeName];
 
-  // Cards load their own fonts, CJK name fallbacks included (loadNameFonts).
-  // `icon` (the guild logo) is the only remote image a card draws.
-  const [fonts, icon] = await Promise.all([theme.loadFonts(themeContext), loadRemoteImage(searchParams.get('icon'))]);
+  return measureOgRender(themeName, async () => {
+    // Cards load their own fonts, CJK name fallbacks included (loadNameFonts).
+    // `icon` (the guild logo) is the only remote image a card draws.
+    const [fonts, icon] = await Promise.all([theme.loadFonts(themeContext), loadRemoteImage(searchParams.get('icon'))]);
 
-  const props = {
-    accent: readAccent(searchParams.get('accent')),
-    iconSrc: icon.dataUrl,
-  };
+    const props = {
+      accent: readAccent(searchParams.get('accent')),
+      iconSrc: icon.dataUrl,
+    };
 
-  console.info(
-    'og.request',
-    JSON.stringify({
-      routeKey,
-      userAgent: request.headers.get('user-agent') || '',
-      theme: themeName,
-      signatureValid,
-      iconHost: icon.host,
-      iconRejection: searchParams.has('icon') ? icon.rejection : null,
-      urlLength: request.url.length,
-    })
-  );
+    console.info(
+      'og.request',
+      JSON.stringify({
+        routeKey,
+        userAgent: request.headers.get('user-agent') || '',
+        theme: themeName,
+        signatureValid,
+        iconHost: icon.host,
+        iconRejection: searchParams.has('icon') ? icon.rejection : null,
+        urlLength: request.url.length,
+      })
+    );
 
-  return new ImageResponse(await theme.render(props, themeContext), {
-    width: 1200,
-    height: 630,
-    fonts,
-    headers: {
-      // Replaces next/og's default, which tells caches to revalidate every time.
-      'cache-control': 'public, max-age=0, s-maxage=86400, stale-while-revalidate=604800',
-    },
-  });
+    return new ImageResponse(await theme.render(props, themeContext), {
+      width: 1200,
+      height: 630,
+      fonts,
+      headers: {
+        // Replaces next/og's default, which tells caches to revalidate every time.
+        'cache-control': 'public, max-age=0, s-maxage=86400, stale-while-revalidate=604800',
+      },
+    });
+  }, request.signal);
 }
