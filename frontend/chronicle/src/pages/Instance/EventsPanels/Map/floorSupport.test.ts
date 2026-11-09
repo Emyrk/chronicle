@@ -25,13 +25,13 @@ describe("floor support", () => {
     const index = await fetchFloorSupport("https://example.test/support.json", { ...descriptor, sha256 });
     expect(index.candidates(-2, 2)).toEqual([1]);
   });
-  it("gates unvalidated, absent, stale, wrong-dataset and wrong-floor descriptors", () => {
+  it("allows best-effort provenance while rejecting absent, stale, wrong-dataset and wrong-floor descriptors", () => {
     expect(usableFloorSupport(undefined, "dataset", 90, floors)).toBe(false);
-    expect(usableFloorSupport(descriptor, "dataset", 90, floors)).toBe(false);
-    expect(usableFloorSupport(descriptor, "dataset", 90, floors, true)).toBe(true);
+    expect(usableFloorSupport(descriptor, "dataset", 90, floors)).toBe(true);
+    expect(usableFloorSupport(descriptor, "dataset", 90, floors)).toBe(true);
     expect(usableFloorSupport({ ...descriptor, validated: true }, "other", 90, floors)).toBe(false);
-    expect(usableFloorSupport(descriptor, "dataset", 90, [{ floor: 1, mesh: { path: "3d/new.glb" } }], true)).toBe(false);
-    expect(usableFloorSupport(descriptor, "dataset", 90, [{ floor: 2 }], true)).toBe(false);
+    expect(usableFloorSupport(descriptor, "dataset", 90, [{ floor: 1, mesh: { path: "3d/new.glb" } }])).toBe(false);
+    expect(usableFloorSupport(descriptor, "dataset", 90, [{ floor: 2 }])).toBe(false);
   });
   it("projects exact triangles with correct axes and optional height", () => {
     const index = indexFloorSupport(artifact, descriptor);

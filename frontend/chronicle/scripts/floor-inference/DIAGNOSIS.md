@@ -1,7 +1,7 @@
 # Gnomeregan calibration diagnosis
 
-Runtime integration is implemented behind validated artifact metadata or an explicit
-development preview. No production artifact has been published or activated. An independent log has coverage-only evaluation, but no held-out
+Runtime integration uses best-effort encounter selection with strict artifact integrity
+checks. The chronological notes below describe earlier calibration iterations. No production artifact has been published or activated. An independent log has coverage-only evaluation, but no held-out
 floor labels have been supplied. The six anchors are calibration checks, not an accuracy estimate.
 
 The public stream contains 14,016 all-unit samples. The validator selects 9,039
@@ -66,9 +66,8 @@ retains exact float32 positions and indexed triangles; no lossy grid rasterizati
 The runtime uses a spatial index of triangle references for lookup.
 
 This remains one labeled calibration run, not held-out floor-accuracy evidence. The generated descriptor
-is `validated:false`; production/default activation remains gated. Local development
-can exercise the actual replay integration using `?floorInferencePreview=1` with
-local manifest/artifact routes. No production mutation was performed.
+is `validated:false`, which now records evaluation provenance rather than gating activation. Local development
+can exercise replay integration with local manifest/artifact routes. No production mutation was performed.
 
 ## Independent log, coverage-only check
 
@@ -79,4 +78,21 @@ It has 54 encounters and unit-position capability. Exact support projection give
 candidate mismatches. No operator floor labels were supplied for this run, so
 validation exits 2 rather than treating an empty label set as a pass.
 `gnomeregan-heldout-coverage.json` records this limited independent evidence.
-Held-out floor correctness and production activation remain blocked on labels.
+Held-out floor correctness remains unmeasured without labels; best-effort use is not blocked on them.
+
+## Encounter-sticky best-effort policy
+
+The operator replaced time-varying floor inference with one remembered best-fit
+floor per encounter. Runtime now scores fresh party samples, prefers explicit
+floor telemetry, uses plausible chronological history only to break ties and
+otherwise chooses deterministic floor order. Five selected encounters anchor on
+the earliest chronological selection. Whole-run selection retains that same floor.
+A manual correction belongs to that encounter; Auto restores its remembered estimate.
+No future streaming or seek can change a frozen choice. Panel-owned memory is scoped
+by dataset, instance, map and support revision.
+
+The six labeled encounters still choose 1, 2, 4, 3, 3, 2 under this policy. The
+first and last have overlap-dominated support and show the prominent uncertain
+picker. `gnomeregan-result.json` records candidate counts in `encounterEstimate`.
+`validated:false` is evaluation provenance, no longer an activation gate. Integrity
+and source-hash checks remain mandatory; no production artifact was published.

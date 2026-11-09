@@ -1,7 +1,6 @@
-import { fetchFloorSupport, usableFloorSupport } from "./floorSupport";
-import { replayFloorTracks, replayFloorAt } from "./replayFloorInference";
-import { mapAssetUrl } from "@/pages/Technical/mapGallery";
-import { useMemo, useState } from "react";
+import { firstFloorEncounter } from "./encounterFloor";
+import { useEncounterFloor } from "./useEncounterFloor";
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import {
@@ -37,7 +36,6 @@ import {
   replayDungeonSources,
   resolveDungeonMapCalibration,
   resolveMapArtwork,
-  resolveMapFloorNumber,
   selectHealthBars,
   selectMapEncounter,
   unitFocusBounds,
@@ -233,7 +231,9 @@ export type MapScene =
     /** Available when another floor may resolve the missing artwork. */
     floors?: number[];
     selectedFloorNumber?: number | null;
-    setFloorNumber?: (floor: number) => void;
+    setFloorNumber?: (floor: number | null) => void;
+    manualFloorNumber?: number | null;
+    floorUncertain?: boolean;
   }
   | {
     status: "ready";
@@ -244,7 +244,9 @@ export type MapScene =
     displayedMapId: number;
     floors: number[];
     selectedFloorNumber: number | null;
-    setFloorNumber: (floor: number) => void;
+    setFloorNumber: (floor: number | null) => void;
+    manualFloorNumber: number | null;
+    floorUncertain: boolean;
     overlayAvailable: boolean;
     syncEnabled: boolean;
     playing: boolean;
@@ -401,9 +403,7 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
   const mapId = dominantMapId(visibleUnits.map((unit) => unit.sample));
   const representativeSample = visibleUnits.find((unit) => unit.sample.mapId === mapId)?.sample;
   // A run has no single instance encounter: the first with a map stands in for artwork lookup.
-  const instanceEncounter = wholeRun
-    ? props.context.instance.encounters.find((candidate) => candidate.mapId)
-    : props.context.instance.encounters.find((candidate) => candidate.id === encounter?.encounterId);
+  const instanceEncounter = firstFloorEncounter(props.context.instance.encounters, props.context.selectedEncounterIds);
   const encounterMapId = instanceEncounter?.mapId ?? 0;
   const artworkMapId = encounterMapId || mapId;
   const normalizedUIMap = props.context.instance.positionCoordinateSpace === "ui-map-normalized";
@@ -415,33 +415,16 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
       props.context.instance.name,
     )
     : null;
-  const [floorNumber, setFloorNumber] = useState<number | null>(null);
-  // Preview is deliberately development-only until independent validation approves
-  // this dataset's descriptor. Production never activates validated:false artifacts.
-  const supportPreview = import.meta.env.DEV && typeof window !== "undefined"
-    && new URLSearchParams(window.location.search).get("floorInferencePreview") === "1";
-  const supportDescriptor = artwork?.kind === "instance" ? artwork.instance.floorSupport : undefined;
-  const supportEnabled = !normalizedUIMap && artwork?.kind === "instance" && Boolean(iconBaseUrl)
-    && usableFloorSupport(supportDescriptor, props.context.instance.datasetId, artworkMapId ?? 0, artwork.instance.floors, supportPreview);
-  const supportQuery = useQuery({
-    queryKey: ["map-floor-support", iconBaseUrl, supportDescriptor],
-    enabled: supportEnabled,
-    retry: false,
-    staleTime: Infinity,
-    queryFn: ({ signal }) => fetchFloorSupport(mapAssetUrl(iconBaseUrl!, supportDescriptor!.path), supportDescriptor!, signal),
-  });
-  const inferenceSignature = runSignature(props.result.encounters);
-  const floorTracks = useMemo(() => supportEnabled && supportQuery.data
-    ? replayFloorTracks(props.result.encounters,
-      new Map(props.context.instance.encounters.map(e => [e.id, e.mapId ?? 0])),
-      new Set(Object.keys(props.context.instance.players ?? {})), artworkMapId ?? 0, supportQuery.data)
-    : new Map(),
-  // Rebuild after streamed appends, never after playback seek alone.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  [supportEnabled, supportQuery.data, props.result.encounters, props.context.instance.encounters, props.context.instance.players, artworkMapId, inferenceSignature]);
-  const inferredFloor = replayFloorAt(floorTracks, props.result.encounters, cursorMs);
-
-
+  const floorSelection = useEncounterFloor(props, artwork?.kind === "instance" ? artwork.instance : undefined);
+  const { manualFloorNumber, floorUncertain, setFloorNumber } = floorSelection;
+  const floorControls = artwork?.kind === "instance" ? {
+    floors: artwork.instance.floors.map(floor => floor.floor),
+    selectedFloorNumber: floorSelection.selectedFloorNumber,
+    manualFloorNumber, floorUncertain, setFloorNumber,
+  } : {};
+  if (floorSelection.pending) return {
+    status: "message", title: "Choosing encounter floor", detail: "Loading geometry support. You can choose a floor manually while it loads.", ...floorControls,
+  };
   if (!iconBaseUrl) return { status: "message", title: "Map artwork unavailable", detail: "This instance's dataset has no icon base URL." };
   if (manifestQuery.isLoading || props.loading) {
     // The selected encounter's map is known before its telemetry is processed:
@@ -453,7 +436,7 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
   }
   if (manifestQuery.error) return { status: "message", title: "Map artwork unavailable", detail: manifestQuery.error.message };
   if (!encounter || visibleUnits.length === 0 || mapId === null || cursorMs === null) {
-    return { status: "message", title: "No position telemetry", detail: "This encounter does not contain unit-position data." };
+    return { status: "message", title: "No position telemetry", detail: "This encounter does not contain unit-position data.", ...floorControls };
   }
   if (!artwork) return { status: "message", title: `Map ${artworkMapId} is unavailable`, detail: "The active dataset does not publish artwork for this world map." };
 
@@ -461,14 +444,7 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
     ? artwork.map.art?.flatMap((art) => art.layers.map((layer) => ({ art, layer })))
       .find(({ layer }) => layer.width > 0 && layer.height > 0 && layer.tiles.length > 0)
     : undefined;
-  const selectedFloorNumber = artwork.kind === "instance"
-    ? resolveMapFloorNumber(
-      artwork.instance,
-      floorNumber,
-      visibleUnits.filter((unit) => unit.sample.mapId === mapId).map((unit) => unit.sample),
-      inferredFloor?.floor ?? null,
-    )
-    : null;
+  const selectedFloorNumber = artwork.kind === "instance" ? floorSelection.selectedFloorNumber : null;
   const selectedFloor = artwork.kind === "instance"
     ? artwork.instance.floors.find((floor) => floor.floor === selectedFloorNumber) ?? artwork.instance.floors[0]
     : undefined;
@@ -509,6 +485,8 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
       floors: artwork.instance.floors.map((floor) => floor.floor),
       selectedFloorNumber,
       setFloorNumber,
+      manualFloorNumber,
+      floorUncertain,
     } : {}),
   };
 
@@ -687,7 +665,8 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
     floors: artwork.kind === "instance" ? artwork.instance.floors.map((floor) => floor.floor) : [],
     selectedFloorNumber,
     setFloorNumber,
-    overlayAvailable: artwork.kind !== "instance" || overlayAvailable,
+    manualFloorNumber,
+    floorUncertain,    overlayAvailable: artwork.kind !== "instance" || overlayAvailable,
     syncEnabled: Boolean(sync?.enabled),
     playing: preview ? preview.playing : Boolean(sync?.enabled && sync.isPlaying),
     playbackSpeed: preview ? previewSpeed(encounter.endMs - encounter.startMs, preview.maxSpeed) : sync?.playbackSpeed ?? 1,

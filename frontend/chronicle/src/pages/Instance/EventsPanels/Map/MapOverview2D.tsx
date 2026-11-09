@@ -1,3 +1,4 @@
+import { useEncounterFloor } from "./useEncounterFloor";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Map as MapIcon, RotateCcw, Skull } from "lucide-react";
@@ -33,7 +34,6 @@ import {
   projectDungeonMapPoint,
   resolveDungeonMapCalibration,
   resolveMapArtwork,
-  resolveMapFloorNumber,
   selectMapJourneyEncounters,
   uiMapPoint,
   zoneMapPoint,
@@ -400,20 +400,14 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
     props.context.instance.name,
     representativeSample,
   ]);
-  const [floorNumber, setFloorNumber] = useState<number | null>(null);
+  const floorSelection = useEncounterFloor(props, artwork?.kind === "instance" ? artwork.instance : undefined);
+  const { selectedFloorNumber, manualFloorNumber, floorUncertain, setFloorNumber } = floorSelection;
   const [mapSource, setMapSource] = useState<"auto" | "styled" | "renders" | "art">("auto");
 
   const zoneSelection = artwork?.kind === "zone"
     ? artwork.map.art?.flatMap((art) => art.layers.map((layer) => ({ art, layer })))
       .find(({ layer }) => layer.width > 0 && layer.height > 0 && layer.tiles.length > 0)
     : undefined;
-  const selectedFloorNumber = artwork?.kind === "instance"
-    ? resolveMapFloorNumber(
-      artwork.instance,
-      floorNumber,
-      representativeSamples.filter((sample) => sample.mapId === mapId),
-    )
-    : null;
   const selectedFloor = artwork?.kind === "instance"
     ? artwork.instance.floors.find((floor) => floor.floor === selectedFloorNumber) ?? artwork.instance.floors[0]
     : undefined;
@@ -548,9 +542,16 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
 
   if (!iconBaseUrl) return <MapMessage title="Map assets unavailable" detail="This instance's dataset has no icon base URL." />;
   if (manifestQuery.isLoading || props.loading) return <MapMessage title="Loading map" detail="Fetching map assets and position telemetry…" />;
+  if (floorSelection.pending && artwork?.kind === "instance") return (
+    <MapMessage title="Choosing encounter floor" detail="Loading geometry and encounter samples. You can choose a floor manually while it loads.">
+      <MapFloorPicker floors={artwork.instance.floors.map(floor => floor.floor)} value={selectedFloorNumber} manualValue={manualFloorNumber} uncertain={floorUncertain} onChange={setFloorNumber} />
+    </MapMessage>
+  );
   if (manifestQuery.error) return <MapMessage title="Map assets unavailable" detail={manifestQuery.error.message} />;
   if (selectedEncounters.length === 0 || representativeSamples.length === 0 || mapId === null) {
-    return <MapMessage title="No position telemetry" detail="The selected encounters do not contain unit-position data." />;
+    return <MapMessage title="No position telemetry" detail="The selected encounters do not contain unit-position data.">
+      {artwork?.kind === "instance" && <MapFloorPicker floors={artwork.instance.floors.map(floor => floor.floor)} value={selectedFloorNumber} manualValue={manualFloorNumber} uncertain={floorUncertain} onChange={setFloorNumber} />}
+    </MapMessage>;
   }
   if (!artwork) return <MapMessage title={`Map ${artworkMapId} is unavailable`} detail="The active dataset does not publish artwork or rendered geometry for this world map." />;
   if (artwork.kind === "instance" && (isMeshOnlyInstance(artwork.instance) || (!canvas && selectedMesh))) {
@@ -559,6 +560,8 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
         <MapFloorPicker
           floors={artwork.instance.floors.map((floor) => floor.floor)}
           value={selectedFloorNumber}
+          manualValue={manualFloorNumber}
+          uncertain={floorUncertain}
           onChange={setFloorNumber}
         />
       </MapMessage>
@@ -570,6 +573,8 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
         <MapFloorPicker
           floors={artwork.instance.floors.map((floor) => floor.floor)}
           value={selectedFloorNumber}
+          manualValue={manualFloorNumber}
+          uncertain={floorUncertain}
           onChange={setFloorNumber}
         />
       )}
@@ -581,6 +586,11 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
 
   return (
     <div className="flex h-full min-h-0 flex-col">
+      {artwork.kind === "instance" && (
+        <div className="px-3 py-1" data-map-controls>
+          <MapFloorPicker floors={artwork.instance.floors.map(floor => floor.floor)} value={selectedFloorNumber} manualValue={manualFloorNumber} uncertain={floorUncertain} onChange={setFloorNumber} />
+        </div>
+      )}
       {!mini && <div className="flex items-center justify-between gap-2 px-3 py-1.5 text-[10px] text-muted-foreground">
         <div className="min-w-0 truncate">
           <span className="font-semibold text-foreground">{mapName}</span>
@@ -601,16 +611,7 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
           )}
           <span>{Math.round(mapScale * camera.scale * 100)}%</span>
           <span>{routes.length} encounters</span>
-          {artwork.kind === "instance" && artwork.instance.floors.length > 1 && (
-            <select
-              aria-label="Map floor"
-              value={selectedFloorNumber ?? ""}
-              onChange={(event) => setFloorNumber(Number(event.target.value))}
-              className="rounded border border-border bg-background px-1.5 py-0.5 text-[10px] text-foreground [color-scheme:dark]"
-            >
-              {artwork.instance.floors.map((floor) => <option key={floor.floor} value={floor.floor}>Floor {floor.floor}</option>)}
-            </select>
-          )}
+
         </div>
       </div>}
       <div ref={mapShellRef} className={`relative min-h-0 flex-1 overflow-hidden bg-[#11100d] ${mini ? "" : "mx-1 rounded-sm border border-white/15"}`}>

@@ -8,8 +8,9 @@ description: Extracts and validates dataset-specific multi-floor support for Chr
 Treat this as calibration, not an invitation to label a run by elapsed time.
 Read `render-map` and `replay-map` first. Published artwork alone does not
 establish correct inference. Replay loads optional versioned support artifacts. Manual override and explicit-floor
-telemetry stay authoritative. Missing, stale, invalid or unvalidated support keeps
-the existing first-floor fallback. No generated artifact is enabled by default.
+telemetry stay authoritative. Missing, stale or invalid support keeps a clearly marked best-effort fallback.
+`validated` records evaluation provenance, not permission to estimate floors. No
+artifact exists in production until separately staged and published.
 
 ## Inputs and boundaries
 
@@ -22,8 +23,8 @@ Do not publish anything without explicit operator approval.
 Use independent operator labels for **encounter starts**. Record encounter UUID,
 expected floor and the whole-second offset relative to the first encounter start.
 Never interpret those labels as transition timestamps. Match them to metadata;
-if the offset differs or multiple starts match, ask instead of guessing. Separate
-training/calibration runs from held-out validation runs before enabling inference.
+if the offset differs or multiple starts match, ask instead of guessing. Use independent runs when available, but do not block best-effort estimates on
+additional labels. Never describe calibration anchors as general accuracy.
 
 ## Reproduce the Gnomeregan evaluation
 
@@ -94,34 +95,45 @@ training/calibration runs from held-out validation runs before enabling inferenc
    telemetry precedence, ties, same-time duplicates, gaps and backward seeking.
    Test explicit Z separately if available. Ground-truth labels never enter inference.
 
-## Engine contract and failure gates
+## Encounter-level best-effort policy
 
-`Map/floorInference.ts` is a pure causal engine over candidate-floor observations.
-Callers partition by dataset, map and coordinate space and supply party members
-only. Keep inferred results separate from raw `sample.floor`. Manual floor choice
-remains above any automatic selection in the caller. Explicit telemetry wins over
-geometry; conflicting telemetry remains unknown. Each unit gets one recent vote.
-Geometry requires a singleton anchor compatible with every recent party sample.
-Contradictory or unsupported samples prevent a fresh geometric anchor. Ambiguous
-positions may retain an anchor briefly, but do not refresh its age. Synthetic
-cached snapshots never vote, including those retimestamped to encounter start.
-Offline replay can fill unknowns from fresh evidence up to five seconds ahead,
-within the same encounter and without crossing sample gaps over two seconds.
-It never overwrites known geometric or explicit telemetry estimates. Live causal
-callers omit lookahead. This is a party display estimate, not individual truth.
+`Map/encounterFloor.ts` selects one display floor per encounter. Score all fresh
+party samples against support candidates, splitting each sample's vote evenly
+across its candidate floors. Ignore synthetic cached snapshots. Logged floor votes
+win over geometry. Break equally scored plausible floors using the previous known
+chronological encounter's floor, including manual correction; otherwise use numeric
+floor order. Clear evidence always beats history. Record candidate counts and
+fresh-sample counts in diagnostics.
 
-The fixture uses a two-second party evidence window and a 15-second maximum
-continuity age as conservative experimental limits, not calibrated universal
-constants. Logged Z permits support within three yards, also an explicit
-experimental tolerance. Record and validate any changes on held-out runs.
+`useEncounterFloor.ts` freezes the first completed estimate. Later streaming,
+playback and backwards seeking never switch an existing encounter's floor. With
+multiple encounters selected, the earliest chronological selected encounter anchors
+the whole view, independent of selection array order. Whole-run mode uses the same
+anchor instead of switching floors mid-fight; no selection uses the earliest
+instance encounter. This deliberate display policy is not individual player truth.
 
-Stop runtime activation when `uncovered !== 0`, annotated starts are wrong/unknown,
-frame registration is unverified, or only one calibration log has been tested.
-Ambiguous coverage is reported separately; it is not an uncovered sample and it
-is not proof of correctness. Gnomeregan passes six calibration anchors only after
-synthetic provenance handling and bounded replay lookahead. No held-out run has
-been validated, so its descriptor remains `validated: false`. Never infer general
-accuracy from six anchors. See `frontend/chronicle/scripts/floor-inference/DIAGNOSIS.md`.
+Memory belongs to the Map panel and survives switching between overview and replay.
+It is keyed by dataset, instance, map and support revision, and is discarded when
+the panel unmounts. Manual corrections apply to the anchor encounter; Auto restores
+its remembered automatic estimate. Previously visited later encounters never seed
+an earlier encounter. New geometry revisions do not inherit old corrections.
+
+The selector says "Floor uncertain · choose a floor" when no fresh support exists,
+the best score is tied, or no majority of fresh samples uniquely supports the chosen
+floor. It remains visible for missing artwork. Users can choose a floor or return
+to Auto. A guessed floor must never masquerade as recorded floor telemetry.
+
+`floorInference.ts` and the validator's start-anchor estimates retain the earlier
+causal/lookahead diagnostic model; ordinary Replay Map now uses the encounter-level
+estimate. The report's `encounterEstimate` is the runtime policy evaluation.
+
+Block artifact use on wrong dataset/map/frame, source revision mismatch, malformed
+geometry or failed integrity checks. Report uncovered and ambiguous samples
+separately; neither complete coverage nor six matching anchors proves accuracy.
+Missing held-out labels or `validated:false` does not block best-effort use.
+Gnomeregan's six labeled encounters match the best-fit choices; overlap-dominated
+encounters still show uncertainty. Independent coverage-only results remain useful
+but must not be described as independent floor correctness.
 
 ## Artifact and local preview contract
 
@@ -132,16 +144,17 @@ gzip and original GLB byte counts and compares every observed candidate set agai
 mesh raycasts. Require zero candidate mismatches. The runtime validates provenance,
 SHA-256, bounds allocation sizes, indexes projected triangles and uses optional Z.
 
-`useMapScene` precomputes separate tracks per encounter, independent of playback
+`useEncounterFloor` freezes separate estimates per encounter, independent of playback
 seek order. Descriptor loading uses React Query keyed by descriptor and icon base.
 No parser/schema rewrite is needed; `map.processor.ts` retains existing synthetic
 provenance, while inferred floors never replace raw `sample.floor`.
 
 For local preview, add the descriptor as the instance's `floorSupport` in a local
 copy of the manifest and route that manifest plus `support/` requests to the
-external files. Run Vite on port 5199 and open the real instance with
-`?floorInferencePreview=1`. This bypasses `validated:false` only in development;
-it does not bypass hashes, dataset/map identity or source-path checks. Keep the
+external files. Run Vite on port 5199 and open the real instance. No validation-bypass query is
+needed: best-effort estimates accept `validated:false`, but hashes, dataset/map
+identity and source paths remain mandatory. Serve the artifact with a real local
+HTTP server rather than a multi-megabyte Playwright `route.fulfill` body. Keep the
 backend and real position stream available. Do not change production manifests
 just to preview. Test manual floors, explicit telemetry, forward/backward seeks,
 missing artifacts, stale source paths and switching datasets. Update the legend
@@ -156,9 +169,9 @@ Foundry authentication flow; never embed credentials in this skill or scripts.
 Do not use generic arbitrary JSON uploads or assume ZIP imports include support.
 Inspect `frontend/telemetry/src/routes/maps.ts` for the current route prefix.
 
-Drafts may contain `validated:false` for preview. Publication must reject that
-state. Complete held-out evaluation and inspect the support/source byte hashes
-before a reviewed descriptor sets `validated:true`. Publishing verifies actual
+Drafts and publication may retain `validated:false`; it truthfully records the
+absence of complete evaluation, not a promise of floor accuracy. Set it true only
+when the recorded evaluation supports that claim. Publishing verifies actual
 support and source mesh bytes and rejects stale paths or checksums. When source
 meshes change, regenerate and revalidate the support artifact rather than retaining
 old provenance. Production publication remains a separate operator approval.

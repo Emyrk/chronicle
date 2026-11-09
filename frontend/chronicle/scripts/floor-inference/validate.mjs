@@ -7,6 +7,7 @@ import { spawnSync } from 'node:child_process';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshBVH } from 'three-mesh-bvh';
+import { estimateEncounterFloor } from '../../src/pages/Instance/EventsPanels/Map/encounterFloor.ts';
 import { indexFloorSupport } from '../../src/pages/Instance/EventsPanels/Map/floorSupport.ts';
 import { inferFloorTrack, inferredFloorAt } from '../../src/pages/Instance/EventsPanels/Map/floorInference.ts';
 
@@ -174,6 +175,19 @@ for (const observation of observations) {
   const actual = index.candidates(observation.x, observation.y, observation.z);
   if (JSON.stringify(actual) !== JSON.stringify(observation.candidates)) candidateMismatches++;
 }
+const encounterEstimates = [];
+let previousFloor = null;
+for (const encounter of [...encounters.values()].sort((a, b) => Date.parse(a.start_time) - Date.parse(b.start_time))) {
+  const positionsByUnit = new Map();
+  for (const observation of observations.filter(row => row.encounterID === encounter.id)) {
+    const samples = positionsByUnit.get(observation.unit) ?? [];
+    samples.push({ ...observation, mapId: fixture.mapID }); positionsByUnit.set(observation.unit, samples);
+  }
+  const estimate = estimateEncounterFloor({ positionsByUnit }, fixture.mapID, artifact.floorIDs, players, index, previousFloor);
+  previousFloor = estimate.floor;
+  encounterEstimates.push({ encounterID: encounter.id, ...estimate });
+}
+for (const label of labels) label.encounterEstimate = encounterEstimates.find(value => value.encounterID === label.encounterID);
 const measurements = {
   sourceGLBBytes: (await Promise.all(support.map(floor => readFile(resolve(root, `floor-${floor.floor}.glb`))))).reduce((sum, bytes) => sum + bytes.length, 0),
   supportJSONBytes: artifactBytes.length, supportGzipBytes: gzipSync(artifactBytes).length, candidateMismatches,

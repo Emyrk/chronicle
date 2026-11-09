@@ -30,11 +30,10 @@ export function usableFloorSupport(
   datasetID: string | undefined,
   mapID: number,
   floors: readonly { floor: number; mesh?: { path: string } }[],
-  preview = false,
 ): descriptor is FloorSupportDescriptor {
   return Boolean(descriptor && descriptor.version === 1 && descriptor.frame === "wow-yup-mirrored-x"
     && descriptor.datasetID === datasetID && descriptor.mapID === mapID
-    && (descriptor.validated === true || preview) && HASH.test(descriptor.sha256)
+    && typeof descriptor.validated === "boolean" && HASH.test(descriptor.sha256)
     && /^support\/[a-zA-Z0-9_./-]+\.json$/.test(descriptor.path) && !descriptor.path.includes("..")
     && Array.isArray(descriptor.floorIDs) && descriptor.floorIDs.length === floors.length
     && new Set(descriptor.floorIDs).size === floors.length
