@@ -1818,6 +1818,11 @@ func ZulFarrakHostiles() map[uint32]Identity {
 		7795: "Hydromancer Velratha",
 	})
 
+	hostile[7607] = Identity{
+		Affiliation: types.AffiliationNeutral,
+		Name:        "Weegli Blastfuse",
+	}
+
 	return hostile
 }
 
