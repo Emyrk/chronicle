@@ -103,6 +103,31 @@ export const FOLLOW_YAW_SMOOTH_SECONDS = 0.6;
 /** A higher line-of-sight answer only drops back once lower ones have held this long (real time). */
 export const SHOT_RELEASE_MS = 1_500;
 
+/**
+ * A shot sees the framing when the camera has a clear line to the boss (when
+ * one is framed) and to at least this share of the framed players, at player
+ * height (chronicle-1725).
+ */
+export const FOLLOW_SIGHT_FRACTION = 0.6;
+/** At most this many framed players are checked per shot (spread through the framing), besides the boss. */
+export const FOLLOW_SIGHT_MAX_PLAYERS = 5;
+/** Sight targets kept per track sample: the boss and the players checked. */
+export const FOLLOW_SIGHT_SLOTS = 1 + FOLLOW_SIGHT_MAX_PLAYERS;
+/** Numbers per sight target in a track's targets: x, z, height (yards; NaN when unknown), boss (1 or 0). */
+export const FOLLOW_SIGHT_STRIDE = 4;
+/**
+ * Steeper than this (degrees above the horizon), a camera pulled in by a wall
+ * stops FOLLOW_STEEP_MIN_DISTANCE_YARDS out: closer, it shows only the floor.
+ */
+export const FOLLOW_STEEP_ELEVATION_DEG = 40;
+export const FOLLOW_STEEP_MIN_DISTANCE_YARDS = 10;
+/**
+ * The Director re-asks the line-of-sight answer at most this often (real ms),
+ * and on a cut or a jump: each answer casts a ray per framed unit checked, at
+ * each elevation it tries, and the hold below keeps it for longer anyway.
+ */
+export const FOLLOW_SHOT_CHECK_MS = 100;
+
 /** The glide across a replay jump: its speed (yards a second), and its shortest and longest length. */
 export const GLIDE_SPEED_YARDS_PER_S = 60;
 export const GLIDE_MIN_MS = 900;
@@ -142,12 +167,18 @@ export interface FollowYawProbe {
   /**
    * Readies one sample's probes: the framing at (x, z) covering `radius`,
    * its units standing at `height` (yards; undefined when unknown), so the
-   * floor is found once per sample, not once per yaw. False when it cannot
-   * tell (no floor below: a chasm, off the mesh): the sample is not probed
-   * and keeps the held choice.
+   * floor is found once per sample, not once per yaw. `targets` are the
+   * framed units to keep in sight (FOLLOW_SIGHT_STRIDE numbers each: x, z,
+   * height in yards or NaN, boss 1 or 0). False when it cannot tell (no floor
+   * below: a chasm, off the mesh): the sample is not probed and keeps the
+   * held choice.
    */
-  sample(x: number, z: number, radius: number, height: number | undefined): boolean | void;
-  /** Whether a camera at `yaw` (the base shot: base elevation, fitted distance) has a clear line to the sample last readied. */
+  sample(x: number, z: number, radius: number, height: number | undefined, targets: Float32Array): boolean | void;
+  /**
+   * Whether a camera at `yaw` (the base shot: base elevation, fitted
+   * distance) is clear of the cave toward the sample last readied and sees
+   * its framing (seesFraming).
+   */
   clearYaw(yaw: number): boolean;
 }
 
@@ -332,6 +363,12 @@ export function startFollowTrackBuild(options: FollowTrackOptions, now: () => nu
   const rawHeight = new Float64Array(count).fill(Number.NaN);
   const NONE = new Float64Array(0);
   const framed = new Array<Float64Array>(count).fill(NONE);
+  // The framed units the probe keeps in sight (sightPicks), FOLLOW_SIGHT_SLOTS per sample.
+  const sightStride = FOLLOW_SIGHT_SLOTS * FOLLOW_SIGHT_STRIDE;
+  const sight = probe ? new Float32Array(count * sightStride) : null;
+  const sightCount = probe ? new Uint8Array(count) : null;
+  const framedUnits: DirectorUnit[] = [];
+  const picks: number[] = [];
   let inFrame = new Set<string>();
   let subjectSeen = subjectGuid === null;
   let sampled = 0;
@@ -367,6 +404,10 @@ export function startFollowTrackBuild(options: FollowTrackOptions, now: () => nu
       rawZ[i] = rawZ[from]!;
       rawHeight[i] = rawHeight[from]!;
       framed[i] = framed[from]!;
+      if (sight) {
+        sight.copyWithin(i * sightStride, from * sightStride, (from + 1) * sightStride);
+        sightCount![i] = sightCount![from]!;
+      }
     }
     const windowMs = (subjectGuid ? FOLLOW_SUBJECT_WINDOW_MS : options.centreWindowMs ?? FOLLOW_CENTRE_WINDOW_MS) * followWindowStretch(speed);
     const half = Math.max(1, Math.round(windowMs / sampleMs / 2));
@@ -449,14 +490,28 @@ export function startFollowTrackBuild(options: FollowTrackOptions, now: () => nu
           rawZ[sampled] = frame.z;
           const points = new Float64Array(frame.guids.length * 2);
           let p = 0;
+          framedUnits.length = 0;
           for (const unit of units) {
             if (!inFrame.has(unit.guid)) continue;
             points[p++] = unit.x;
             points[p++] = unit.z;
+            framedUnits.push(unit);
             if (unit.guid === subjectGuid) subjectSeen = true;
           }
           framed[sampled] = p === points.length ? points : points.subarray(0, p);
           rawHeight[sampled] = medianFramedHeight(units, inFrame);
+          if (sight) {
+            sightPicks(framedUnits.length, (k) => framedUnits[k]!.boss, picks);
+            let at = sampled * sightStride;
+            for (const k of picks) {
+              const unit = framedUnits[k]!;
+              sight[at++] = unit.x;
+              sight[at++] = unit.z;
+              sight[at++] = unit.height ?? Number.NaN;
+              sight[at++] = unit.boss ? 1 : 0;
+            }
+            sightCount![sampled] = picks.length;
+          }
         }
         sampled++;
         if (now() >= until) return false;
@@ -491,7 +546,8 @@ export function startFollowTrackBuild(options: FollowTrackOptions, now: () => nu
       // The probe pass: each sample's candidate yaws against the cave.
       while (probe && probed < count) {
         const height = rawHeight[probed]!;
-        if (probe.sample(xs![probed]!, zs![probed]!, radii[probed]!, Number.isNaN(height) ? undefined : height) !== false) {
+        const targets = sight!.subarray(probed * sightStride, probed * sightStride + sightCount![probed]! * FOLLOW_SIGHT_STRIDE);
+        if (probe.sample(xs![probed]!, zs![probed]!, radii[probed]!, Number.isNaN(height) ? undefined : height, targets) !== false) {
           const probedYaws = probeYaws(probe, baseYaw![probed]!);
           yawOpen![probed] = probedYaws.open;
           yawProbed![probed] = probedYaws.probed;
@@ -623,6 +679,103 @@ export function heldYawChoices(open: Uint16Array, dwell: number): Int8Array {
     out[i] = held;
   }
   return out;
+}
+
+/**
+ * Which framed units a shot checks (indices into `count` units, written into
+ * `out`): the boss, then up to FOLLOW_SIGHT_MAX_PLAYERS players spread evenly
+ * through the rest, so a raid costs a handful of rays, not forty. At most
+ * FOLLOW_SIGHT_SLOTS in all.
+ */
+export function sightPicks(count: number, isBoss: (index: number) => boolean, out: number[], maxPlayers = FOLLOW_SIGHT_MAX_PLAYERS): number[] {
+  out.length = 0;
+  let players = 0;
+  for (let i = 0; i < count; i++) {
+    if (!isBoss(i)) players++;
+    else if (out.length < 1 + maxPlayers) out.push(i);
+  }
+  // Extra bosses (never more than one framed today) take players' slots.
+  const take = Math.min(players, maxPlayers, 1 + maxPlayers - out.length);
+  let player = 0;
+  let next = 0;
+  for (let i = 0; i < count && next < take; i++) {
+    if (isBoss(i)) continue;
+    // The player at rank floor(next * players / take) is the next one taken.
+    if (player++ === Math.floor((next * players) / take)) {
+      out.push(i);
+      next++;
+    }
+  }
+  return out;
+}
+
+/**
+ * Whether a shot sees the framing: every boss among the `count` targets has
+ * a clear line, and at least FOLLOW_SIGHT_FRACTION of the players do (all of
+ * them when that rounds to every one; none needed when there are none).
+ * Bosses are checked first and `clear` is only asked until the answer is
+ * known, so a blocked boss costs one ray.
+ */
+export function seesFraming(count: number, isBoss: (index: number) => boolean, clear: (index: number) => boolean, fraction = FOLLOW_SIGHT_FRACTION): boolean {
+  let players = 0;
+  for (let i = 0; i < count; i++) {
+    if (!isBoss(i)) players++;
+    else if (!clear(i)) return false;
+  }
+  const need = Math.ceil(players * fraction - 1e-9);
+  let seen = 0;
+  let missed = 0;
+  for (let i = 0; i < count && seen < need; i++) {
+    if (isBoss(i)) continue;
+    if (clear(i)) seen++;
+    else if (++missed > players - need) return false;
+  }
+  return seen >= need;
+}
+
+/** The line-of-sight answer: how high the shot climbs, and whether it comes in closer. */
+export interface ShotAnswer {
+  elevationDeg: number;
+  shortened: boolean;
+}
+
+/** The elevations the climb tries, base first: base, then steps, then the cap. */
+export function climbElevations(baseDeg: number, stepDeg: number, maxDeg: number): number[] {
+  const out: number[] = [];
+  for (let deg = baseDeg; ; deg += stepDeg) {
+    out.push(Math.min(deg, maxDeg));
+    if (deg >= maxDeg) return out;
+  }
+}
+
+/**
+ * The fallback once the yaw is set (the track turns first, chronicle-1724):
+ * the lowest of `elevations` whose camera at the full distance is clear and
+ * sees the framing (a modest climb); else the lowest of the base, middle and
+ * top ones that does at the shortened distance (shortening last); else the
+ * top, shortened, as before. `sees(elevationDeg, shortened)` answers for one
+ * shot; it is asked in that order and no more than needed.
+ */
+export function fallbackShot(elevations: readonly number[], sees: (elevationDeg: number, shortened: boolean) => boolean): ShotAnswer {
+  for (const elevationDeg of elevations) if (sees(elevationDeg, false)) return { elevationDeg, shortened: false };
+  const top = elevations[elevations.length - 1]!;
+  const shortened = new Set([elevations[0]!, elevations[(elevations.length - 1) >> 1]!, top]);
+  for (const elevationDeg of shortened) if (sees(elevationDeg, true)) return { elevationDeg, shortened: true };
+  return { elevationDeg: top, shortened: true };
+}
+
+/**
+ * How far out the Director's camera may sit with a wall `hit` scene units
+ * out along its line (null: no wall), wanting `want`: `padding` short of the
+ * wall, but never under `minDistance`, nor under `steepMinDistance` while
+ * the camera is steeper than FOLLOW_STEEP_ELEVATION_DEG (a close-up that
+ * steep is all floor; the line-of-sight answer climbs or shortens to a shot
+ * that needs no pull-in instead). Null when nothing holds it in.
+ */
+export function directorPullIn(want: number, hit: number | null, padding: number, elevationDeg: number, minDistance: number, steepMinDistance: number): number | null {
+  if (hit === null) return null;
+  const floor = elevationDeg > FOLLOW_STEEP_ELEVATION_DEG ? Math.max(minDistance, steepMinDistance) : minDistance;
+  return Math.max(Math.min(want, floor), hit - padding);
 }
 
 // Caps each step at `maxStep`, forwards and backwards, and averages the two,

@@ -36,6 +36,13 @@ import {
   glideTurnMs,
   unwrapNear,
   type FollowYawProbe,
+  climbElevations,
+  directorPullIn,
+  fallbackShot,
+  FOLLOW_SIGHT_STRIDE,
+  FOLLOW_STEEP_ELEVATION_DEG,
+  seesFraming,
+  sightPicks,
 } from "./followCamera";
 
 const FRAME_MS = 1000 / 60;
@@ -1011,5 +1018,205 @@ describe("follow track yaw", () => {
     expect(longest).toBeLessThanOrEqual(6 + 1.5 + 1e-9);
     const whole = buildFollowTrack({ startMs: 0, endMs: 120_000, unitsAt: corner, scale: 1, probe: { sample: () => {}, clearYaw: () => false } })!;
     expect(Array.from(build.result!.yaw)).toEqual(Array.from(whole.yaw));
+  });
+});
+
+describe("line of sight to the framed units (chronicle-1725)", () => {
+  const CLIMB = climbElevations(28, 5, 50);
+  const DEG = Math.PI / 180;
+  // Walking +x, the camera sits behind at -x: yaw -90 degrees.
+  const BEHIND_X = -Math.PI / 2;
+  const keyAt = (track: FollowTrack, ms: number) => followKeyAt(track, ms, { x: 0, z: 0, radius: 0, yaw: 0 });
+  // A seeded random, so flicker tests are repeatable.
+  const seeded = (seed: number) => () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+
+  it("climbs in steps up to the cap", () => {
+    expect(CLIMB).toEqual([28, 33, 38, 43, 48, 50]);
+  });
+
+  it("checks the boss and at most five players, spread through the framing", () => {
+    const picks: number[] = [];
+    // A 5-man: everyone.
+    expect(sightPicks(5, () => false, picks)).toEqual([0, 1, 2, 3, 4]);
+    // The boss first, wherever it sits in the list.
+    expect(sightPicks(6, (i) => i === 3, picks)).toEqual([3, 0, 1, 2, 4, 5]);
+    // A raid of 40 with a boss: the boss and every eighth player.
+    const raid = sightPicks(41, (i) => i === 40, picks);
+    expect(raid).toEqual([40, 0, 8, 16, 24, 32]);
+    // Never more than six, even with several bosses.
+    expect(sightPicks(10, (i) => i < 3, picks)).toHaveLength(6);
+    expect(sightPicks(0, () => false, picks)).toEqual([]);
+  });
+
+  it("needs the boss and most (60%) of the players checked", () => {
+    const boss = (i: number) => i === 0;
+    const sees = (clear: boolean[]) => seesFraming(clear.length, boss, (i) => clear[i]!);
+    // Boss and 3 of 5 players: seen.
+    expect(sees([true, true, true, true, false, false])).toBe(true);
+    // Boss and 2 of 5: not.
+    expect(sees([true, true, true, false, false, false])).toBe(false);
+    // Every player but no boss: not.
+    expect(sees([false, true, true, true, true, true])).toBe(false);
+    // No boss framed: 3 of 5 players.
+    expect(seesFraming(5, () => false, (i) => i < 3)).toBe(true);
+    expect(seesFraming(5, () => false, (i) => i < 2)).toBe(false);
+    // One player: that one. Nobody framed: nothing to hide.
+    expect(seesFraming(1, () => false, () => false)).toBe(false);
+    expect(seesFraming(0, () => false, () => false)).toBe(true);
+    // A boss alone.
+    expect(seesFraming(1, () => true, () => true)).toBe(true);
+  });
+
+  it("casts no more rays than the answer needs", () => {
+    const boss = (i: number) => i === 0;
+    let rays = 0;
+    const count = (clear: boolean) => () => (rays++, clear);
+    // A blocked boss: one ray.
+    seesFraming(6, boss, count(false));
+    expect(rays).toBe(1);
+    // Everything clear: the boss and three players.
+    rays = 0;
+    seesFraming(6, boss, count(true));
+    expect(rays).toBe(4);
+    // Players blocked: the boss and three players (the third miss settles it).
+    rays = 0;
+    seesFraming(6, boss, (i) => (rays++, i === 0));
+    expect(rays).toBe(4);
+  });
+
+  it("climbs before it shortens, and asks in that order", () => {
+    const asked: string[] = [];
+    const answer = (ok: (deg: number, shortened: boolean) => boolean) => fallbackShot(CLIMB, (deg, shortened) => {
+      asked.push(`${deg}${shortened ? "s" : ""}`);
+      return ok(deg, shortened);
+    });
+    // Clear at the base: no climb.
+    expect(answer(() => true)).toEqual({ elevationDeg: 28, shortened: false });
+    expect(asked).toEqual(["28"]);
+    // A modest climb is enough.
+    asked.length = 0;
+    expect(answer((deg, shortened) => !shortened && deg >= 43)).toEqual({ elevationDeg: 43, shortened: false });
+    expect(asked).toEqual(["28", "33", "38", "43"]);
+    // A shortened shot sees from lower than the full one does: still every full climb first.
+    asked.length = 0;
+    expect(answer((deg, shortened) => shortened || deg >= 50)).toEqual({ elevationDeg: 50, shortened: false });
+    // Nothing at the full distance: the lowest shortened shot that sees.
+    asked.length = 0;
+    expect(answer((deg, shortened) => shortened && deg >= 38)).toEqual({ elevationDeg: 38, shortened: true });
+    expect(asked).toEqual(["28", "33", "38", "43", "48", "50", "28s", "38s"]);
+    // Nothing anywhere: the top, shortened, as before.
+    asked.length = 0;
+    expect(answer(() => false)).toEqual({ elevationDeg: 50, shortened: true });
+    expect(asked).toHaveLength(CLIMB.length + 3);
+  });
+
+  it("never pulls a steep camera in closer than the floor-safe distance", () => {
+    // Shallow: a wall 3 out pulls the camera to 3 - padding (the old rule).
+    expect(directorPullIn(30, 3, 0.75, 28, 1, 10)).toBeCloseTo(2.25, 9);
+    // Steep: it stops at 10.
+    expect(directorPullIn(30, 3, 0.75, FOLLOW_STEEP_ELEVATION_DEG + 1, 1, 10)).toBe(10);
+    // A camera that wants less than that is not pushed out.
+    expect(directorPullIn(8, 3, 0.75, 50, 1, 10)).toBe(8);
+    // A wall past the floor-safe distance pulls in as before; no wall, no pull.
+    expect(directorPullIn(30, 20, 0.75, 50, 1, 10)).toBeCloseTo(19.25, 9);
+    expect(directorPullIn(30, null, 0.75, 50, 1, 10)).toBeNull();
+  });
+
+  it("holds the answer while each unit's line flickers from check to check", () => {
+    // Every 100 ms check, each of the boss and five players is seen from the
+    // base elevation with even odds (a pillar edge), and always from 43 degrees up.
+    const random = seeded(11);
+    const hold = createShotHold();
+    let rawChanges = 0;
+    let heldChanges = 0;
+    let lastRaw = -1;
+    let lastHeld = hold.elevationDeg;
+    for (let now = 0; now < 60_000; now += 100) {
+      const clear = Array.from({ length: 6 }, () => random() < 0.5);
+      const raw = fallbackShot(CLIMB, (deg) => deg >= 43 || seesFraming(6, (i) => i === 0, (i) => clear[i]!));
+      if (raw.elevationDeg !== lastRaw) rawChanges++;
+      lastRaw = raw.elevationDeg;
+      holdShot(hold, raw.elevationDeg, raw.shortened, now);
+      if (hold.elevationDeg !== lastHeld) heldChanges++;
+      lastHeld = hold.elevationDeg;
+    }
+    // The raw answer flips hundreds of times; the shot climbs once and stays.
+    expect(rawChanges).toBeGreaterThan(100);
+    expect(heldChanges).toBe(1);
+    expect(hold.elevationDeg).toBe(43);
+  });
+
+  it("gives the probe each sample's boss and players, as the framing changes", () => {
+    // Five players walk +x; one strays out of the frame and back every few
+    // samples, and the boss is framed only in the second half.
+    const random = seeded(5);
+    const strays: boolean[] = [];
+    const units = (ms: number) => {
+      const i = Math.round(ms / 250);
+      strays[i] ??= random() < 0.4;
+      const walked = (ms / 1000) * 3;
+      const group = [0, 1, 2, 3].map((k) => unit(`p${k}`, walked + k, 0, { height: 5 + k }));
+      group.push(unit("p4", walked + (strays[i] ? 60 : 4), 0));
+      if (ms >= 10_000) group.push(unit("boss", walked + 10, 0, { player: false, boss: true, height: 7 }));
+      return group;
+    };
+    const seen: { count: number; boss: boolean; heights: number[]; hasStray: boolean }[] = [];
+    const probe: FollowYawProbe = {
+      sample: (_x, _z, _r, _h, targets) => {
+        const count = targets.length / FOLLOW_SIGHT_STRIDE;
+        const heights: number[] = [];
+        let boss = false;
+        let hasStray = false;
+        for (let k = 0; k < count; k++) {
+          heights.push(targets[k * FOLLOW_SIGHT_STRIDE + 2]!);
+          if (targets[k * FOLLOW_SIGHT_STRIDE + 3] === 1) boss = true;
+          if (targets[k * FOLLOW_SIGHT_STRIDE]! > (seen.length * 250 / 1000) * 3 + 30) hasStray = true;
+        }
+        seen.push({ count, boss, heights, hasStray });
+      },
+      clearYaw: () => true,
+    };
+    buildFollowTrack({ startMs: 0, endMs: 20_000, unitsAt: units, scale: 1, probe });
+    expect(seen).toHaveLength(81);
+    for (let i = 0; i < seen.length; i++) {
+      const sample = seen[i]!;
+      // The straggler is never a sight target while it is out of the frame.
+      expect(sample.hasStray).toBe(false);
+      expect(sample.boss).toBe(i * 250 >= 10_000);
+      // Each target's own height; NaN for the one without.
+      expect(sample.heights.slice(sample.boss ? 1 : 0, (sample.boss ? 1 : 0) + 4)).toEqual([5, 6, 7, 8]);
+    }
+    // Both framings occur: the straggler in (5 players) and out (4).
+    const counts = new Set(seen.filter((sample) => !sample.boss).map((sample) => sample.count));
+    expect(counts).toEqual(new Set([4, 5]));
+  });
+
+  it("turns to a yaw that sees the group before it climbs", () => {
+    // Walking +x. Behind the group (and 30 degrees either side), a pillar
+    // hides three of the five players from the base elevation, though the
+    // aim line is clear; from 60 degrees round all five are seen. From
+    // 43 degrees up, every yaw sees them.
+    const straight = (ms: number) => [0, 1, 2, 3, 4].map((i) => unit(`p${i}`, (ms / 1000) * 7 + i, i % 2));
+    const hiddenFrom = (offsetDeg: number, elevationDeg: number) => elevationDeg < 43 && Math.abs(offsetDeg) <= 30;
+    let offset = 0;
+    let count = 0;
+    const probe: FollowYawProbe = {
+      sample: (_x, _z, _r, _h, targets) => void (count = targets.length / FOLLOW_SIGHT_STRIDE),
+      clearYaw: (yaw) => {
+        offset = Math.round(wrapAngle(yaw - BEHIND_X) / DEG);
+        return seesFraming(count, () => false, (k) => !(hiddenFrom(offset, 28) && k < 3));
+      },
+    };
+    const track = buildFollowTrack({ startMs: 0, endMs: 60_000, unitsAt: straight, scale: 1, probe })!;
+    const i = Math.round(30_000 / track.sampleMs);
+    // The track turned (nearest clear: 60 degrees round)...
+    expect(Math.abs(FOLLOW_YAW_CANDIDATES_DEG[track.yawChoice[i]!]!)).toBe(60);
+    // ...so the shot at its yaw needs no climb.
+    const turned = Math.round(wrapAngle(keyAt(track, 30_000).yaw - BEHIND_X) / DEG);
+    const shot = fallbackShot(CLIMB, (deg) => seesFraming(5, () => false, (k) => !(hiddenFrom(turned, deg) && k < 3)));
+    expect(shot).toEqual({ elevationDeg: 28, shortened: false });
+    // Held at the base yaw instead, it would have had to climb.
+    const behind = fallbackShot(CLIMB, (deg) => seesFraming(5, () => false, (k) => !(hiddenFrom(0, deg) && k < 3)));
+    expect(behind).toEqual({ elevationDeg: 43, shortened: false });
   });
 });
