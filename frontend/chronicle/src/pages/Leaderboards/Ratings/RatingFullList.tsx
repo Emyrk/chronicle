@@ -1,6 +1,6 @@
 import { useMemo, useState, type CSSProperties, type ReactNode } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { ArrowDown, Check, ChevronLeft, ChevronRight, Search } from "lucide-react"
+import { ArrowDown, Check, ChevronLeft, ChevronRight, Info, Search } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import { MOBILE_EDGE_TO_EDGE } from "@/pages/Leaderboards/Hub/edgeToEdge"
@@ -460,8 +460,38 @@ function MasteryPhoneLine({ entry, live }: { entry: RatingEntry; live: boolean }
   )
 }
 
+/**
+ * What each Mastery part means, per boss: kills are sorted from worst to best parse, each parse a
+ * percentage of the best in the row's spec. A multi-boss row averages bosses, misses counting as 0.
+ */
+const PUBLISHED_MASTERY_COLUMNS: { label: string; title: string; body: string }[] = [
+  { label: "Peak", title: "Peak · 30% of Mastery", body: "Your single best parse on the boss." },
+  { label: "Form", title: "Form · 50% of Mastery", body: "Your typical good kill: the average of your parses above the 40th percentile, leaving out your single best." },
+  { label: "Floor", title: "Floor · 20% of Mastery", body: "Your off nights: the average of your 20th–40th percentile parses. The bottom 20% of kills are ignored." },
+  { label: "3-kill progress", title: "3-kill progress", body: "Kills toward three per selected boss. Form and Floor need at least three kills of a boss and count as 0 until then. This is coverage, not your score." },
+]
+
 export function PublishedMasteryHeaders() {
- return <>{["Peak", "Form", "Floor", "3-kill progress"].map(label => <th key={label} className="hidden px-3 py-2.5 text-right font-medium sm:table-cell">{label}</th>)}</>
+  return (
+    <>
+      {PUBLISHED_MASTERY_COLUMNS.map((column) => (
+        <th key={column.label} className="hidden px-3 py-2.5 text-right font-medium sm:table-cell">
+          <HintTooltip>
+            <TooltipTrigger asChild>
+              <span tabIndex={0} className="inline-flex cursor-help items-center gap-1 whitespace-nowrap" aria-label={`${column.title}: ${column.body}`}>
+                {column.label}
+                <Info className="size-3 opacity-60" aria-hidden />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="top" sideOffset={6} className="max-w-xs space-y-1 p-3 text-left tracking-normal normal-case">
+              <p className="font-semibold">{column.title}</p>
+              <p className="leading-relaxed text-zinc-300">{column.body}</p>
+            </TooltipContent>
+          </HintTooltip>
+        </th>
+      ))}
+    </>
+  )
 }
 
 export function PublishedMasteryCells({ entry }: { entry: RatingEntry }) {
