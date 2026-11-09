@@ -19,6 +19,16 @@ describe("replay floor integration", () => {
     expect(replayFloorAt(tracks, encounters, 10000)).toBeNull();
     expect(JSON.stringify([...encounters.values()].map(e => [...e.positionsByUnit]))).toBe(before);
   });
+  it("does not use future evidence from an adjacent encounter even within the lookahead window", () => {
+    const first = encounter("a", 0);
+    first.endMs = 100;
+    first.positionsByUnit = new Map([["player", [{ timestampMs: 0, x: 1, y: 1, mapId: 90, synthetic: true }]]]);
+    const second = encounter("b", 200);
+    const encounters = new Map([["a", first], ["b", second]]);
+    const tracks = replayFloorTracks(encounters, new Map([["a", 90], ["b", 90]]), new Set(["player"]), 90, { candidates: () => [2] });
+    expect(replayFloorAt(tracks, encounters, 0)?.floor).toBeNull();
+    expect(replayFloorAt(tracks, encounters, 200)?.floor).toBe(2);
+  });
   it("keeps manual and explicit telemetry above the inferred display floor", () => {
     const instance = { floors: [{ floor: 1 }, { floor: 2 }, { floor: 3 }] } as WowMapInstance;
     const sample = { timestampMs: 0, x: 0, y: 0, mapId: 90, floor: 2 };

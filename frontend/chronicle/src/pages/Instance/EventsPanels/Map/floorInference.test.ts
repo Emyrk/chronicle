@@ -17,6 +17,19 @@ describe("floor inference", () => {
     expect(inferFloorTrack(rows, { ...options, lookaheadMs: 5000 })[0].floor).toBeNull();
     expect(inferFloorTrack([{ ...row(0, "a", [1]), synthetic: true }, row(4000, "a", [2])], { ...options, lookaheadMs: 5000 })[0].floor).toBeNull();
   });
+  it("does not let future telemetry overwrite an earlier geometric estimate", () => {
+    const track = inferFloorTrack([row(0, "a", [1]), row(500, "a", [2], 2)], { ...options, lookaheadMs: 5000 });
+    expect(track.map(value => [value.floor, value.source])).toEqual([[1, "geometry"], [2, "telemetry"]]);
+  });
+  it("does not refresh a stale anchor with synthetic cached votes", () => {
+    const track = inferFloorTrack([row(0, "a", [1]), { ...row(4000, "a", [1], 1), synthetic: true }, row(6000, "a", [1, 2])], options);
+    expect(track.map(value => value.floor)).toEqual([1, null, null]);
+  });
+  it("prefers fresh evidence to synthetic same-time duplicates regardless of order", () => {
+    const rows = [{ ...row(0, "a", [1], 1), synthetic: true }, row(0, "a", [2], 2)];
+    expect(inferFloorTrack(rows, options)).toEqual(inferFloorTrack([...rows].reverse(), options));
+    expect(inferFloorTrack(rows, options)[0]).toMatchObject({ floor: 2, source: "telemetry" });
+  });
   it("keeps overlaps unknown until independent party evidence anchors them", () => {
     const track = inferFloorTrack([row(0, "a", [1, 2]), row(1000, "a", [2]), row(2000, "a", [1, 2])], options);
     expect(track.map(x => [x.floor, x.source])).toEqual([[null, "unknown"], [2, "geometry"], [2, "continuity"]]);

@@ -43,6 +43,8 @@ describe("floor support", () => {
   });
   it("rejects mismatched provenance, invalid indices and nonfinite geometry", () => {
     expect(() => indexFloorSupport({ ...artifact, mapID: 91 }, descriptor)).toThrow();
+    expect(() => indexFloorSupport({ ...artifact, datasetID: "another-dataset" }, descriptor)).toThrow();
+    expect(() => indexFloorSupport({ ...artifact, sources: [{ ...descriptor.sources[0], sha256: "b".repeat(64) }] }, descriptor)).toThrow();
     for (const floor of [{ ...artifact.floors[0], indices: encode([0, 1, 99], false) }, { ...artifact.floors[0], positions: encode([NaN, 0, 0], true) }]) {
       expect(() => indexFloorSupport({ ...artifact, floors: [floor] }, descriptor)).toThrow();
     }
