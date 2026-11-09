@@ -1,4 +1,4 @@
-import type { LandingSnapshot } from "./landingHighlights"
+import type { LeaderboardHighlightSnapshot } from "@/api/typesGenerated"
 import { useState, type ReactNode } from "react"
 import { Link } from "react-router-dom"
 import type { HubLandingPreview, RankingsInstanceSummary, SupportedInstance } from "@/api/typesGenerated"
@@ -43,7 +43,7 @@ export interface LeaderboardsHubAppProps extends Omit<LeaderboardHubProps, "inst
   supportedInstances?: readonly SupportedInstance[]
   /** Bounded published board highlights for the live all-instances grid. */
   landingPreviews?: readonly HubLandingPreview[]
-  landingSnapshots?: readonly LandingSnapshot[]
+  landingSnapshots?: readonly LeaderboardHighlightSnapshot[]
   landingNotice?: ReactNode
   landingBlocked?: boolean
   /** Production instance view. Never render the fixture-only LeaderboardHub for live data. */
@@ -183,7 +183,7 @@ function HubLanding({
   instances?: readonly RankingsInstanceSummary[]
   supportedInstances?: readonly SupportedInstance[]
   landingPreviews?: readonly HubLandingPreview[]
-  landingSnapshots?: readonly LandingSnapshot[]
+  landingSnapshots?: readonly LeaderboardHighlightSnapshot[]
   landingNotice?: ReactNode
   landingBlocked?: boolean
   loading?: boolean
@@ -222,7 +222,7 @@ function HubLanding({
           }}>
             <InstanceCard name={row.instance_name} to={instanceHref?.(row.instance_name, cohort) ?? "#"} badge={several ? cohortLabel(row) : undefined}>
               {landingBlocked ? null : landingSnapshots !== undefined && tab !== "parsing" ? <>
-                {!snapshot || snapshot.status === "not_prepared" ? <UnavailableHighlight label="Highlights awaiting refresh" /> : <>
+                {!snapshot || snapshot.status === "not_prepared" || snapshot.status === "stale" && !preview ? <><UnavailableHighlight label="Highlights awaiting refresh" />{snapshot?.status === "stale" && <div className="text-[10px] text-muted-foreground">Stale highlights withheld until refresh</div>}</> : <>
                   {snapshot.status === "empty" ? <UnavailableHighlight label="No qualifying highlights" /> : <LiveCardBody tab={tab} preview={preview} />}
                   <div className="text-[10px] text-muted-foreground">
                     {snapshot.status === "stale" && "Stale highlights · "}

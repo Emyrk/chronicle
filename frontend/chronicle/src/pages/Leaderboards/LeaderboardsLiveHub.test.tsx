@@ -86,6 +86,12 @@ describe("live Storybook Hub", () => {
       expect(vi.mocked(useLandingHighlights).mock.calls.at(-1)?.[2]).toBe(false)
     }
   })
+  it("honors backend unsupported scope rather than treating its empty arrays as pending", () => {
+    vi.mocked(useLandingHighlights).mockReturnValue({ data: { status: "unsupported_scope", landing_previews: [], snapshots: [] }, isFetching: false, isError: false } as unknown as ReturnType<typeof useLandingHighlights>)
+    const html = hub("/leaderboard-v2")
+    expect(html).toContain("Choose All realms or one realm to view highlights")
+    expect(html).not.toContain("Highlights awaiting refresh")
+  })
   it("shows loading or fetch failure instead of published empty", () => {
     expect(hub("/leaderboard-v2")).toContain("Loading highlights")
     vi.mocked(useLandingHighlights).mockReturnValue({ data: undefined, isFetching: false, isError: true, refetch: vi.fn() } as unknown as ReturnType<typeof useLandingHighlights>)

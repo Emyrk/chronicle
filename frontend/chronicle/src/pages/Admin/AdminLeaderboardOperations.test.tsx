@@ -1,3 +1,4 @@
+vi.mock("./AdminLeaderboardHighlights", () => ({ AdminLeaderboardHighlights: () => <section>Refresh highlights</section> }));
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {

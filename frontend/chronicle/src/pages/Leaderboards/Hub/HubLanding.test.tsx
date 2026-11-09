@@ -137,3 +137,21 @@ describe("persisted highlight status", () => {
     expect(markup).not.toContain("Highlights awaiting refresh")
   })
 })
+
+describe("all persisted card tabs", () => {
+  const snapshot = { instance_name: "Molten Core", difficulty_name: "Normal", max_players: 40, configuration_fingerprint: "policy", refreshed_at: "2026-11-09T12:00:00Z" }
+  const emptyPreview = { ...snapshot, player: { peak: [], ranked_mastery: [], renown: [] }, guild: { peak: [], ranked_mastery: [], renown: [] }, speedruns: [], performances: [], statistics: [] }
+  for (const tab of ["overview", "ratings", "speedruns", "performances", "statistics"] as const) {
+    it(`${tab} distinguishes preparing, empty, and stale policy`, () => {
+      expect(render({ tab, landingSnapshots: [{ ...snapshot, status: "not_prepared" }] })).toContain("Highlights awaiting refresh")
+      expect(render({ tab, landingSnapshots: [{ ...snapshot, status: "empty" }], landingPreviews: [emptyPreview] })).toContain("No qualifying highlights")
+      const withheld = render({ tab, landingSnapshots: [{ ...snapshot, status: "stale" }] })
+      expect(withheld).toContain("Stale highlights withheld until refresh")
+      expect(withheld).not.toContain("No qualifying")
+      const agedEmpty = render({ tab, landingSnapshots: [{ ...snapshot, status: "stale" }], landingPreviews: [emptyPreview] })
+      expect(agedEmpty).toContain("Stale highlights")
+      expect(agedEmpty).toContain("2026-11-09T12:00:00Z")
+      expect(agedEmpty).not.toContain("withheld")
+    })
+  }
+})
