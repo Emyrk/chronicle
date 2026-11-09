@@ -96,7 +96,12 @@ SELECT page.*, COALESCE((SELECT NULLIF(r.name,'') FROM wow_server_realms r WHERE
  COALESCE(CASE WHEN @subject_kind::text = 'player' THEN
  (SELECT p.name FROM game_players p WHERE p.realm_id = page.realm_id AND p.id = page.subject_id)
  ELSE (SELECT g.name FROM guilds g WHERE g.realm_id = page.realm_id AND g.id::text = page.subject_id)
- END, page.subject_id)::text AS subject_name
+ END, page.subject_id)::text AS subject_name,
+ -- Display only: Renown counts are per player, not per class, so their rows carry no
+ -- player_class. Look up the character's class for coloring; never use it as identity.
+ COALESCE(NULLIF(page.player_class, ''), CASE WHEN @subject_kind::text = 'player' THEN
+ (SELECT p.class::text FROM game_players p WHERE p.realm_id = page.realm_id AND p.id = page.subject_id)
+ END, '')::text AS subject_class
 FROM page ORDER BY score DESC, realm_id, subject_id, player_class, player_spec, player_sub_spec;
 
 -- name: ListLeaderboardV2Cohorts :many

@@ -87,7 +87,8 @@ export function v2PlayerEntry(
     realm: row.realm_id,
     realmLabel: row.realm_name?.trim() || "Unknown realm",
     guid: row.subject_id,
-    cls: row.player_class,
+    // Renown rows have no cohort class; the character's class still colors the name and picks the icon.
+    cls: row.player_class || row.subject_class || "",
     spec: row.player_spec,
     subSpec: row.player_sub_spec,
     score:

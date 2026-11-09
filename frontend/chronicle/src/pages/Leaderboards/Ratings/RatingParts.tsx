@@ -8,7 +8,7 @@ import { RANK_COLORS, specIconUrl, type MetricTheme } from "./ratingThemes"
 import { ratingEntryAttributes } from "./ratingEntities"
 
 export function SpecIcon({ cls, spec, className }: { cls: string; spec: string; className?: string }) {
-  // Renown entries aggregate all classes, so they have no class/spec icon.
+  // Renown entries have no spec, so they show the class icon; without a class there is no icon.
   if (!cls) return null
   return (
     <img

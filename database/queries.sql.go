@@ -15075,7 +15075,12 @@ SELECT page.realm_id, page.subject_id, page.player_class, page.player_spec, page
  COALESCE(CASE WHEN $1::text = 'player' THEN
  (SELECT p.name FROM game_players p WHERE p.realm_id = page.realm_id AND p.id = page.subject_id)
  ELSE (SELECT g.name FROM guilds g WHERE g.realm_id = page.realm_id AND g.id::text = page.subject_id)
- END, page.subject_id)::text AS subject_name
+ END, page.subject_id)::text AS subject_name,
+ -- Display only: Renown counts are per player, not per class, so their rows carry no
+ -- player_class. Look up the character's class for coloring; never use it as identity.
+ COALESCE(NULLIF(page.player_class, ''), CASE WHEN $1::text = 'player' THEN
+ (SELECT p.class::text FROM game_players p WHERE p.realm_id = page.realm_id AND p.id = page.subject_id)
+ END, '')::text AS subject_class
 FROM page ORDER BY score DESC, realm_id, subject_id, player_class, player_spec, player_sub_spec
 `
 
@@ -15123,6 +15128,7 @@ type ListLeaderboardV2Row struct {
 	Score         float64            `db:"score" json:"score"`
 	RealmName     string             `db:"realm_name" json:"realm_name"`
 	SubjectName   string             `db:"subject_name" json:"subject_name"`
+	SubjectClass  string             `db:"subject_class" json:"subject_class"`
 }
 
 // Read current benchmarks and current resolved awards, never replay observations.
@@ -15181,6 +15187,7 @@ func (q *sqlQuerier) ListLeaderboardV2(ctx context.Context, arg ListLeaderboardV
 			&i.Score,
 			&i.RealmName,
 			&i.SubjectName,
+			&i.SubjectClass,
 		); err != nil {
 			return nil, err
 		}

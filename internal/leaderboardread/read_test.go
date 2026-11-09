@@ -385,3 +385,36 @@ func TestIndependentWholeSelectionCompanions(t *testing.T) {
 	require.Len(t, renown, 1)
 	require.Equal(t, 222.0, renown[0].Renown)
 }
+
+// Renown counts are per player, not per class, so their rows have no player_class.
+// The read still returns the character's class for display without changing identity.
+func TestRenownSubjectClass(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitLong)
+	pool, _ := dbtestutil.NewPGXPool(t)
+	conn, err := pool.Acquire(ctx)
+	require.NoError(t, err)
+	defer conn.Release()
+	_, err = conn.Exec(ctx, "BEGIN")
+	require.NoError(t, err)
+	defer func() { _, _ = conn.Exec(ctx, "ROLLBACK") }()
+	_, err = conn.Exec(ctx, `
+SET LOCAL app.tenant_bypass='true';
+INSERT INTO wow_servers (id, name) VALUES ('00000000-0000-4000-8000-0000000000a1', 'Class server');
+INSERT INTO wow_server_realms (id, server_id, name) VALUES ('00000000-0000-4000-8000-0000000000a2', '00000000-0000-4000-8000-0000000000a1', 'Class realm');
+INSERT INTO game_players (id, realm_id, name, class, gender, race) VALUES ('0x00000000000000A3', '00000000-0000-4000-8000-0000000000a2', 'Warlocky', 'WARLOCK', 'Female', 'Human');
+INSERT INTO leaderboard_player_renown_counts (tenant_id,instance_name,difficulty_name,max_players,encounter_name,realm_id,player_guid,kill_count,projection_version,algorithm_version)
+VALUES ('00000000-0000-4000-8000-000000000001','Class raid','',0,'Ragnaros','00000000-0000-4000-8000-0000000000a2','0x00000000000000A3',2,1,1),
+       ('00000000-0000-4000-8000-000000000001','Class raid','',0,'Ragnaros','00000000-0000-4000-8000-0000000000a2','0x00000000000000A4',1,1,1);`)
+	require.NoError(t, err)
+	rows, err := database.NewQueries(conn).ListLeaderboardV2(ctx, database.ListLeaderboardV2Params{
+		TenantID: uuid.MustParse("00000000-0000-4000-8000-000000000001"), InstanceName: "Class raid", SubjectKind: "player", BoardKind: "renown", ScoreMetric: "renown",
+		Bosses: []string{"Ragnaros"}, Awards: []float64{5}, Denominator: 1, PageSize: 50,
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	require.Equal(t, "Warlocky", rows[0].SubjectName)
+	require.Empty(t, rows[0].PlayerClass, "identity stays classless")
+	require.Equal(t, "WARLOCK", rows[0].SubjectClass)
+	require.Empty(t, rows[1].SubjectClass, "an unknown character has no class")
+}

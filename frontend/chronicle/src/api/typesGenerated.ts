@@ -135,6 +135,11 @@ export interface LeaderboardV2Entry {
     readonly realm_id: string;
     readonly subject_id: string;
     readonly name: string;
+    /**
+     * SubjectClass is the character's class for display. It equals PlayerClass on
+     * cohort boards and is looked up for Renown rows, which have no PlayerClass.
+     */
+    readonly subject_class: string;
     readonly score: number;
     readonly peak: number;
     readonly form: number;

@@ -247,6 +247,7 @@ it("preserves returned cohort identity for two specs of the same player", () => 
     player_class: "MAGE",
     player_spec: "Frost",
     player_sub_spec: "",
+    subject_class: "MAGE",
   };
   const frost = v2PlayerEntry(common, new URLSearchParams(), "peak");
   const arcane = v2PlayerEntry(
@@ -266,6 +267,10 @@ it("preserves returned cohort identity for two specs of the same player", () => 
   expect(frost.bossCounts).toEqual([{ encounter_name: "A", count: 5 }]);
   expect(frost.cls).toBe("MAGE");
   expect(frost.spec).toBe("Frost");
+  // Renown rows have no cohort class: the character's class colors the row, but identity stays classless.
+  const renown = v2PlayerEntry({ ...common, player_class: "", player_spec: "", subject_class: "WARLOCK" }, new URLSearchParams(), "renown");
+  expect(renown.cls).toBe("WARLOCK");
+  expect(renown.id).not.toContain("WARLOCK");
   expect(frost.id).not.toBe(arcane.id);
   expect(frost.guid).toBe(arcane.guid);
 });

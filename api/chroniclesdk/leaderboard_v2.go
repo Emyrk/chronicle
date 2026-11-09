@@ -25,15 +25,18 @@ type LeaderboardV2Entry struct {
 	RealmID          uuid.UUID               `json:"realm_id"`
 	SubjectID        string                  `json:"subject_id"`
 	Name             string                  `json:"name"`
-	Score            float64                 `json:"score"`
-	Peak             float64                 `json:"peak"`
-	Form             float64                 `json:"form"`
-	Floor            float64                 `json:"floor"`
-	Bosses           []LeaderboardV2Boss     `json:"bosses"`
-	Mastery          float64                 `json:"mastery"`
-	Renown           float64                 `json:"renown"`
-	SampleCount      int64                   `json:"sample_count"`
-	ComputedAt       time.Time               `json:"computed_at"`
+	// SubjectClass is the character's class for display. It equals PlayerClass on
+	// cohort boards and is looked up for Renown rows, which have no PlayerClass.
+	SubjectClass string              `json:"subject_class"`
+	Score        float64             `json:"score"`
+	Peak         float64             `json:"peak"`
+	Form         float64             `json:"form"`
+	Floor        float64             `json:"floor"`
+	Bosses       []LeaderboardV2Boss `json:"bosses"`
+	Mastery      float64             `json:"mastery"`
+	Renown       float64             `json:"renown"`
+	SampleCount  int64               `json:"sample_count"`
+	ComputedAt   time.Time           `json:"computed_at"`
 }
 type LeaderboardV2Cohort struct {
 	PlayerClass   string `json:"player_class"`
