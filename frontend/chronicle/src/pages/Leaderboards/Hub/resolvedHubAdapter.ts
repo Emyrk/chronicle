@@ -4,6 +4,8 @@ import type {
   LeaderboardV2Cohort,
   HubRatingBoard,
   LeaderboardV2Response,
+  RankingsLeaderboardResponse,
+  SpeedrunLeaderboardEntry,
 } from "@/api/typesGenerated";
 import { v2RatingParams, v2BoardURL } from "./v2RatingAdapter";
 import type { HubSummaryRequest } from "./hubSummaryAdapter";
@@ -143,6 +145,46 @@ export function resolvedHubMetadata(
   };
 }
 
+function overviewBoardURLs(
+  request: HubSummaryRequest,
+  summary: ResolvedHubSummary,
+): { performances: string; speedruns: string } {
+  const cohort = summary.selected_cohort!;
+  const selectedEncounters = request.encounters?.length
+    ? request.encounters
+    : summary.progression_bosses.length
+      ? summary.progression_bosses
+      : summary.encounters.map((row) => row.encounter_name);
+  const performance = new URLSearchParams({
+    instance_names: request.instanceName!,
+    encounter_names: selectedEncounters.filter((name) => name !== "Trash").join(","),
+    difficulty_names: cohort.difficulty_name,
+    exact_cohort: "true",
+    metric: request.performance,
+    limit: "5",
+  });
+  performance.set("max_players", String(cohort.max_players));
+  if (request.cls) performance.set("class", request.cls);
+  if (request.spec) performance.set("spec", request.spec);
+  if (request.subSpec) performance.set("sub_spec", request.subSpec);
+  const realmNames = summary.realms
+    .filter((realm) => request.realmIDs?.includes(realm.id))
+    .map((realm) => realm.name);
+  if (realmNames.length) performance.set("realm_names", realmNames.join(","));
+
+  const speedrun = new URLSearchParams({
+    instance_name: request.instanceName!,
+    difficulty_name: cohort.difficulty_name,
+    instance_max_players: String(cohort.max_players),
+    timing: "full",
+  });
+  realmNames.forEach((realm) => speedrun.append("realm_name", realm));
+  return {
+    performances: `/api/v1/rankings/leaderboard?${performance}`,
+    speedruns: `/api/v1/rankings/speedrun?${speedrun}`,
+  };
+}
+
 export async function fetchResolvedHubSummary(
   request: HubSummaryRequest,
 ): Promise<ResolvedHubSummary> {
@@ -232,5 +274,15 @@ export async function fetchResolvedHubSummary(
       }),
     ),
   );
-  return { ...result, ratings: { raid: board, bosses: [] } };
+  const urls = overviewBoardURLs(request, result);
+  const [performance, speedruns] = await Promise.all([
+    hubJSON<RankingsLeaderboardResponse>(urls.performances),
+    hubJSON<SpeedrunLeaderboardEntry[]>(urls.speedruns),
+  ]);
+  return {
+    ...result,
+    ratings: { raid: board, bosses: [] },
+    performances: performance.entries,
+    speedruns: speedruns.slice(0, 5),
+  };
 }

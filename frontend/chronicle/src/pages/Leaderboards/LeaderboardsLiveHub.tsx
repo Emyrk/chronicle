@@ -195,10 +195,9 @@ function LiveHubContent({ context, summary, stale = false, requestedEncounters =
   // encounter, Trash included.
   const pickedNames = (picked.length ? picked : bosses.filter((name) => name !== "Trash")).join(",") || undefined
   const exact = !!chosen
-  // Omit the legacy zero-size URL parameter; exact_cohort still selects size 0
-  // server-side, so a mixed-size raid cannot silently broaden this board.
+  // Preserve zero-size cohorts explicitly; exact_cohort distinguishes them from an unfiltered board.
   const performance = useRankingsLeaderboard({ instance_names: instanceName, encounter_names: pickedNames,
-    difficulty_names: chosen?.difficulty_name, max_players: chosen?.max_players || undefined, exact_cohort: !!chosen, class: scope.cls, spec: scope.spec, sub_spec: scope.subSpec,
+    difficulty_names: chosen?.difficulty_name, max_players: chosen?.max_players, exact_cohort: !!chosen, class: scope.cls, spec: scope.spec, sub_spec: scope.subSpec,
     metric: role === "healing" ? "hps" : "dps", realm_names: realmName, limit: 50,
   }, !overview && context.tab === "performances" && exact && realmIDs.length <= 1 && subject === "characters")
   // Speedruns shows one board at a time; only that board is fetched. Reset with the selection.
@@ -222,7 +221,7 @@ function LiveHubContent({ context, summary, stale = false, requestedEncounters =
     staleTime: 5 * 60 * 1000,
   })
   const stats = useRankingsStats({ instance_names: instanceName, encounter_names: pickedNames, difficulty_names: chosen?.difficulty_name,
-    max_players: chosen?.max_players || undefined, exact_cohort: !!chosen, realm_names: realmName, metric: role === "healing" ? "hps" : "dps" },
+    max_players: chosen?.max_players, exact_cohort: !!chosen, realm_names: realmName, metric: role === "healing" ? "hps" : "dps" },
     !overview && context.tab === "statistics" && exact)
   const clearTimes = useRankingsClearTimes(instanceName, undefined, !overview && context.tab === "statistics" && !realmName && exact)
   const killTimes = useRankingsKillTimes(instanceName, undefined, !overview && context.tab === "statistics" && !realmName && exact)

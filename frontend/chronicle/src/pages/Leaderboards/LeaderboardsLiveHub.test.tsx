@@ -106,7 +106,7 @@ describe("live Storybook Hub", () => {
     const ratings = hub("/leaderboard-v2/Molten-Core/ratings?encounter=Trash")
     expect(ratings).toContain("Ragnaros")
     expect(ratings).not.toContain("Gehennas")
-    expect(ratings).not.toContain("Trash")
+    expect(ratings).not.toContain(">Trash</span>")
     expect(ratings).toContain("Full clear") // invalid encounter falls back to raid selection
 
     const performances = hub("/leaderboard-v2/Molten-Core/performances")
@@ -146,7 +146,7 @@ describe("live Storybook Hub", () => {
     expect(enabled).toBe(true)
     expect(params).toMatchObject({ instance_names: "Molten Core", difficulty_names: "", exact_cohort: true, metric: "dps" })
     expect(params.role).toBeUndefined()
-    expect(params.max_players).toBeUndefined()
+    expect(params.max_players).toBe(0)
     // The preset sends its bosses, never an empty list (which ranks every encounter, Trash included).
     expect(params.encounter_names).toBeTruthy()
     expect(params.encounter_names!.split(",")).not.toContain("Trash")

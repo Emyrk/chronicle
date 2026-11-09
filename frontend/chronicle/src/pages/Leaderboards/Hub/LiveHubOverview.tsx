@@ -65,7 +65,7 @@ export function LiveHubOverview({
   const exact = cohort
     ? {
         difficulty_names: cohort.difficulty_name,
-        max_players: cohort.max_players || undefined,
+        max_players: cohort.max_players,
         exact_cohort: true,
       }
     : undefined;
