@@ -22,7 +22,7 @@ import { FULL_CLEAR, defaultSpeedrunsView, type EncounterSelection, type Speedru
 import { liveHubBosses } from "./Hub/liveBosses"
 import { hubInstanceParams, hubParams, hubPath, hubTab, v2Selection } from "./v2Selection"
 import { legacyLeaderboardsTarget } from "./leaderboardsState"
-import { useSiteConfig } from "@/api/queries"
+import { useSiteConfig, useSupportedInstances } from "@/api/queries"
 
 const ALL_REALMS = "All realms"
 
@@ -33,6 +33,7 @@ export function LeaderboardsLiveHub() {
   const navigate = useNavigate()
   const { data: siteConfig } = useSiteConfig()
   const rootRatingsDisabled = siteConfig?.tenant == null && siteConfig?.root_tenant_ratings_disabled === true
+  const { data: supportedInstances } = useSupportedInstances({ enabled: siteConfig !== undefined && !rootRatingsDisabled })
   const { tab, instance, realmIDs, encounters } = v2Selection(params, { segment, instance: pathInstance, tab: pathTab })
   const requestedSize = params.get("size")
   const parsedSize = requestedSize === null ? NaN : Number(requestedSize)
@@ -82,7 +83,7 @@ export function LeaderboardsLiveHub() {
       <LeaderboardMaintenanceNotice tenantID={siteConfig?.tenant?.id} />
       <LeaderboardsHubApp instance={instance ?? undefined} onInstance={chooseInstance}
         tab={tab} onTab={chooseTab} realm={realm} onRealm={(name) => choose("realm_ids", available.find((row) => row.name === name)?.id)}
-        realms={[ALL_REALMS, ...available.map((row) => row.name)]} instances={summary.data?.instances ?? []} landingPreviews={summary.data?.landing_previews}
+        realms={[ALL_REALMS, ...available.map((row) => row.name)]} instances={summary.data?.instances ?? []} supportedInstances={supportedInstances} landingPreviews={summary.data?.landing_previews}
         loading={loading || stale} error={loadError}
         onOpenCohort={(name, cohort) => {
           // A card is one difficulty/size: open the instance on it.

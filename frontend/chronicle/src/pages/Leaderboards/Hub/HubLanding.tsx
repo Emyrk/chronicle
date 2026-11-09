@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react"
-import type { HubLandingPreview, RankingsInstanceSummary } from "@/api/typesGenerated"
+import type { HubLandingPreview, RankingsInstanceSummary, SupportedInstance } from "@/api/typesGenerated"
 import { AlertTriangle, RotateCw, Skull, Swords, Timer } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { CLASS_CSS_VAR, CLASS_DISPLAY } from "@/pages/Rankings/classDisplay"
@@ -15,6 +15,7 @@ import { peakWithRaw } from "./peakDisplay"
 import { cohortLabel } from "./cohortLabel"
 import { entityAttributes } from "@/components/EntityMenu/entity"
 import { guildAttributes } from "@/components/EntityMenu/leaderboardEntities"
+import { compareByRaidProgression } from "@/pages/Logs/utils/instanceProgressionOrder"
 import { RulesetsLanding } from "@/pages/Leaderboards/RulesetsLanding"
 
 /**
@@ -36,6 +37,8 @@ export interface LeaderboardsHubAppProps extends Omit<LeaderboardHubProps, "inst
   realms?: readonly string[]
   /** Published instance cohorts. Supplying this switches the grid to live, non-fixture cards. */
   instances?: readonly RankingsInstanceSummary[]
+  /** Registered instance metadata used to order raid cards by progression tier. */
+  supportedInstances?: readonly SupportedInstance[]
   /** Bounded published board highlights for the live all-instances grid. */
   landingPreviews?: readonly HubLandingPreview[]
   /** Production instance view. Never render the fixture-only LeaderboardHub for live data. */
@@ -59,6 +62,7 @@ export function LeaderboardsHubApp({
   onRealm,
   realms,
   instances,
+  supportedInstances,
   landingPreviews,
   renderInstance,
   onOpenCohort,
@@ -130,6 +134,7 @@ export function LeaderboardsHubApp({
           tab={tab}
           onOpen={(name, cohort) => (cohort && onOpenCohort ? onOpenCohort(name, cohort) : setInstance(name))}
           instances={instances}
+          supportedInstances={supportedInstances}
           landingPreviews={landingPreviews}
           loading={loading}
           error={error}
@@ -143,6 +148,7 @@ function HubLanding({
   tab,
   onOpen,
   instances,
+  supportedInstances,
   landingPreviews,
   loading,
   error,
@@ -150,6 +156,7 @@ function HubLanding({
   tab: HubTab
   onOpen: (instance: string, cohort?: { difficulty: string; maxPlayers: number }) => void
   instances?: readonly RankingsInstanceSummary[]
+  supportedInstances?: readonly SupportedInstance[]
   landingPreviews?: readonly HubLandingPreview[]
   loading?: boolean
   error?: ReactNode
@@ -204,6 +211,11 @@ function HubLanding({
       </div>
     )
     const raids = instances.filter((inst) => inst.category === "raid")
+    if (supportedInstances) {
+      raids.sort((left, right) =>
+        compareByRaidProgression(left.instance_name, right.instance_name, supportedInstances),
+      )
+    }
     const dungeons = instances.filter((inst) => inst.category === "dungeon")
     const other = instances.filter((inst) => inst.category !== "raid" && inst.category !== "dungeon")
     return (

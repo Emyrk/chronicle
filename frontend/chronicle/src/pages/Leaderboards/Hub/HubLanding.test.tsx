@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server"
 import { MemoryRouter } from "react-router-dom"
 import { describe, expect, it } from "vitest"
-import type { RankingsInstanceSummary } from "@/api/typesGenerated"
+import type { RankingsInstanceSummary, SupportedInstance } from "@/api/typesGenerated"
 import { LeaderboardsHubApp } from "./HubLanding"
 
 const instances = [
@@ -27,6 +27,31 @@ describe("live Hub landing", () => {
     expect(markup).not.toContain("Fastest full clear")
     expect(markup).not.toContain("Guild Renown")
     expect(markup).not.toContain("Mock data for design review")
+  })
+
+  it("orders raid cards by progression tier while keeping cohorts together", () => {
+    const raidInstances = [
+      { ...instances[0], instance_name: "Molten Core", difficulty_name: "Heroic", max_players: 25 },
+      { ...instances[0], instance_name: "Blackwing Lair" },
+      { ...instances[0], instance_name: "Molten Core" },
+      { ...instances[0], instance_name: "Naxxramas" },
+    ] satisfies RankingsInstanceSummary[]
+    const supportedInstances = [
+      { name: "Molten Core", category: "raid", raid_progression_order: 100 },
+      { name: "Blackwing Lair", category: "raid", raid_progression_order: 300 },
+      { name: "Naxxramas", category: "raid", raid_progression_order: 700 },
+    ] satisfies SupportedInstance[]
+
+    const markup = render({ instances: raidInstances, supportedInstances })
+    const naxxramas = markup.indexOf("Naxxramas")
+    const blackwingLair = markup.indexOf("Blackwing Lair")
+    const firstMoltenCore = markup.indexOf("Molten Core")
+    const lastMoltenCore = markup.lastIndexOf("Molten Core")
+
+    expect(naxxramas).toBeGreaterThan(-1)
+    expect(naxxramas).toBeLessThan(blackwingLair)
+    expect(blackwingLair).toBeLessThan(firstMoltenCore)
+    expect(lastMoltenCore).toBeGreaterThan(firstMoltenCore)
   })
 
   it("shows the published board summaries for each tab instead of mock rows", () => {
