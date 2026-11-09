@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ArrowLeft, BookOpen, Box, Braces, ChevronDown, Clock, FileCode, FileType2, FlaskConical, Globe2, Images, Lightbulb, Map, PawPrint, ShieldAlert, ShieldCheck, Sparkles, Swords, TimerReset, WandSparkles } from "lucide-react";
+import { ArrowLeft, BookOpen, Box, Braces, ChevronDown, Clock, FileCode, FileType2, FlaskConical, Globe2, Images, Lightbulb, Map, PawPrint, ScrollText, ShieldAlert, ShieldCheck, Sparkles, Swords, TimerReset, WandSparkles } from "lucide-react";
 import { useDatasets, useSiteConfig } from "@/api/queries";
 import { Card } from "@/components/ui/Card/Card";
 import { useDatasetId, useIconBaseUrl } from "@/hooks/useDatasetId";
@@ -101,6 +101,12 @@ const TECHNICAL_LINKS: TechnicalLink[] = [
     description: "Visual talent tree viewer for all classes (from Talent.dbc)",
     href: "/technical/talent-trees",
     icon: <Sparkles className="h-4 w-4" />,
+  },
+  {
+    title: "Leaderboard Configuration",
+    description: "Inspect this tenant's leaderboard scoring and ranking configuration",
+    href: "/leaderboards/configuration",
+    icon: <ScrollText className="h-4 w-4" />,
   },
 ];
 
