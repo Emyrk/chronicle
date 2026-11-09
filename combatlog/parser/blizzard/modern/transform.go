@@ -223,15 +223,15 @@ func (r *transformReader) transform(line string) (string, error) {
 	return strings.Join(append([]string{converted}, telemetry...), "\n"), nil
 }
 
-// parseAdvancedCombatSnapshot uses infoGUID as the authoritative subject. WoW
-// Forever v22 cast events can describe the source, while landed damage and heal
-// events, including SWING_DAMAGE_LANDED, can describe the target. Checking both
-// event units avoids coupling the snapshot to either header position.
+// parseAdvancedCombatSnapshot uses infoGUID as the authoritative subject. It is
+// usually the source or target, but WoW Forever can emit events with both header
+// GUIDs empty while still identifying the unit in the advanced combat block.
 func (r *transformReader) parseAdvancedCombatSnapshot(fields []string, sourceGUID, targetGUID string) (*advancedCombatSnapshot, error) {
 	if len(fields) != v22AdvancedCombatFields {
 		return nil, fmt.Errorf("modern v22 advanced combat block has %d fields", len(fields))
 	}
-	if fields[0] != sourceGUID && fields[0] != targetGUID {
+	const zeroGUID = "0000000000000000"
+	if fields[0] != sourceGUID && fields[0] != targetGUID && (sourceGUID != zeroGUID || targetGUID != zeroGUID) {
 		return nil, fmt.Errorf("modern v22 advanced combat GUID %q does not match source or target", fields[0])
 	}
 
