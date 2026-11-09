@@ -183,7 +183,7 @@ export function RatingFullList({
                 {RATING_METRICS.map((m) => {
                   const t = METRIC_THEMES[m]
                   return (
-                    <th key={m} className="hidden px-3 py-2.5 text-left font-medium sm:table-cell">
+                    <th key={m} className="hidden px-3 py-2.5 text-left font-medium whitespace-nowrap sm:table-cell">
                       <button
                         type="button"
                         onClick={() => {
@@ -200,6 +200,7 @@ export function RatingFullList({
                         <span className="hidden sm:inline">{t.label}</span>
                         {sortBy === m && <ArrowDown className="size-3" />}
                       </button>
+                      <HeaderHint {...METRIC_HINTS[m]} className="ml-1 align-middle" />
                     </th>
                   )
                 })}
@@ -208,6 +209,7 @@ export function RatingFullList({
                 <>
                   <th className={cn("w-32 px-3 py-2.5 text-left font-medium", phoneFolds && "pr-4 text-right sm:pr-3 sm:text-left")}>
                     {theme.label}
+                    <HeaderHint {...METRIC_HINTS[view]} className="ml-1 align-middle" />
                     {view === "mastery" && <span className="block text-[10px] tracking-normal normal-case opacity-70 sm:hidden">Peak / Form / Floor · kills</span>}
                   </th>
                   {view === "mastery" && (live ? <PublishedMasteryHeaders /> : <MasteryPartHeaders />)}
@@ -460,6 +462,39 @@ function MasteryPhoneLine({ entry, live }: { entry: RatingEntry; live: boolean }
   )
 }
 
+/** What each rating means, for its column header's hint. Ratings are raw DPS/HPS against the benchmark, never parses. */
+const METRIC_HINTS: Record<RatingMetric, { title: string; body: string }> = {
+  peak: {
+    title: "Peak",
+    body: "Your best DPS/HPS on the boss against the benchmark: the rank-1 DPS/HPS for your spec. If someone beats the benchmark, your Peak goes down. Across several bosses it averages each boss's Peak, and a boss without a kill counts as 0.",
+  },
+  mastery: {
+    title: "Ranked Mastery",
+    body: "30% Peak + 50% Form + 20% Floor, each your DPS/HPS against the benchmark for your spec. Form and Floor count as 0 until you have three kills of a boss, so it rewards repeated strong kills, not one great one. Across several bosses it averages them, and a missed boss counts as 0.",
+  },
+  renown: {
+    title: "Renown",
+    body: "Content done: every kill of a selected boss earns that boss's points, summed across bosses, all-time. It does not depend on DPS/HPS, the benchmark, or class filters.",
+  },
+}
+
+/** A hover (or focus) hint beside a column header: a small info icon that explains the column. */
+function HeaderHint({ title, body, className }: { title: string; body: string; className?: string }) {
+  return (
+    <HintTooltip>
+      <TooltipTrigger asChild>
+        <span tabIndex={0} role="img" aria-label={`${title}: ${body}`} className={cn("inline-flex cursor-help", className)}>
+          <Info className="size-3 opacity-60" aria-hidden />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top" sideOffset={6} className="max-w-xs space-y-1 p-3 text-left tracking-normal normal-case">
+        <p className="font-semibold">{title}</p>
+        <p className="leading-relaxed text-zinc-300">{body}</p>
+      </TooltipContent>
+    </HintTooltip>
+  )
+}
+
 /**
  * What each Mastery part means, per boss. Nothing here is a parse: every part is the row's raw DPS/HPS
  * against the boss benchmark (the rank-1 DPS/HPS for its spec), so all three fall when the benchmark
@@ -476,19 +511,9 @@ export function PublishedMasteryHeaders() {
   return (
     <>
       {PUBLISHED_MASTERY_COLUMNS.map((column) => (
-        <th key={column.label} className="hidden px-3 py-2.5 text-right font-medium sm:table-cell">
-          <HintTooltip>
-            <TooltipTrigger asChild>
-              <span tabIndex={0} className="inline-flex cursor-help items-center gap-1 whitespace-nowrap" aria-label={`${column.title}: ${column.body}`}>
-                {column.label}
-                <Info className="size-3 opacity-60" aria-hidden />
-              </span>
-            </TooltipTrigger>
-            <TooltipContent side="top" sideOffset={6} className="max-w-xs space-y-1 p-3 text-left tracking-normal normal-case">
-              <p className="font-semibold">{column.title}</p>
-              <p className="leading-relaxed text-zinc-300">{column.body}</p>
-            </TooltipContent>
-          </HintTooltip>
+        <th key={column.label} className="hidden px-3 py-2.5 text-right font-medium whitespace-nowrap sm:table-cell">
+          {column.label}
+          <HeaderHint title={column.title} body={column.body} className="ml-1 align-middle" />
         </th>
       ))}
     </>
