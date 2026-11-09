@@ -189,12 +189,18 @@ export function MapLegend() {
         </Ground>
       </Section>
 
-      <Section id="floors" title="Dungeon floors" note="Manual floor selection takes priority, followed by recorded floor telemetry.">
+      <Section id="floors" title="Dungeon floors" note="Auto is a best-effort estimate, not a floor assignment for each player.">
         <p className="text-sm text-muted-foreground">
-          Validated multi-floor maps can estimate the party&apos;s display floor from geometry and recent player positions.
-          Replay may look ahead up to five seconds within the same encounter to resolve uncertainty; cached start positions are not fresh evidence.
-          This is not a floor assignment for every individual player. Missing or uncertain support keeps the existing first-floor fallback, and you can select a floor manually.
-          Unvalidated support is available only in a development preview, not enabled by default.
+          Auto chooses one display floor for the selected encounter and keeps it fixed while you play or scrub.
+          When several encounters are selected, the earliest chronological encounter anchors the entire view.
+          Whole-run views use that same anchor until the selection changes.
+          Recorded floor telemetry, geometry and player positions can help estimate the floor, but overlapping levels may remain ambiguous.
+        </p>
+        <p className="text-sm text-muted-foreground">
+          If the map says &quot;Floor uncertain · choose a floor&quot;, use the floor picker above the map to choose the artwork that fits.
+          Manual choices are remembered per anchor encounter, so returning to that encounter restores your choice.
+          Choose Auto to clear the manual choice and restore the computed estimate. The same picker is available in World settings,
+          and remains available when the selected floor has no artwork.
         </p>
       </Section>
 

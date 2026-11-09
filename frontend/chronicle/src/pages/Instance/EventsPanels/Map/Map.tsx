@@ -702,7 +702,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
   if (!ready) return scene.status === "message" ? (
     <MapMessage title={scene.title} detail={scene.detail}>
       {scene.floors && scene.setFloorNumber && (
-        <MapFloorPicker floors={scene.floors} value={scene.selectedFloorNumber ?? null} onChange={scene.setFloorNumber} />
+        <MapFloorPicker floors={scene.floors} value={scene.selectedFloorNumber ?? null} manualValue={scene.manualFloorNumber ?? null} uncertain={scene.floorUncertain ?? false} onChange={scene.setFloorNumber} />
       )}
     </MapMessage>
   ) : null;
@@ -876,6 +876,11 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
       )}
     >
       {!mobile && (props.headerSlot ? createPortal(headerControls, props.headerSlot) : <div className="flex justify-end px-1">{headerControls}</div>)}
+      {(ready.floors.length > 1 || ready.floorUncertain) && (
+        <div className="shrink-0 px-2 py-1">
+          <MapFloorPicker floors={ready.floors} value={ready.selectedFloorNumber} manualValue={ready.manualFloorNumber} uncertain={ready.floorUncertain} onChange={ready.setFloorNumber} />
+        </div>
+      )}
       {/* The card has no padding (hoverHeader): the full map keeps a thin window frame a hair inside it, the mini map runs to the edges. */}
       <div className={cn("group/map relative min-h-0 flex-1 overflow-hidden bg-black/70", !mini && !mobile && !immersive && "rounded-sm border border-white/15")}>
         {mobile && !mobileWorldOpen ? (
@@ -1207,7 +1212,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
                 onChange: setMapSource,
                 onReset: () => setMapSource("auto"),
               } : null}
-              floors={ready.floors.length > 1 ? { list: ready.floors, value: ready.selectedFloorNumber, onChange: ready.setFloorNumber } : null}
+              floors={ready.floors.length > 1 ? { list: ready.floors, value: ready.selectedFloorNumber, manualValue: ready.manualFloorNumber, uncertain: ready.floorUncertain, onChange: ready.setFloorNumber } : null}
               onTopDown={() => setTopDownKey((key) => key + 1)}
               adStrafe={adStrafe}
               onAdStrafe={setAdStrafe}
