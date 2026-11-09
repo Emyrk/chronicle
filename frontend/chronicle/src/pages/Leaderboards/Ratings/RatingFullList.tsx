@@ -66,6 +66,11 @@ export function RatingFullList({
   const metric = view === "overview" ? sortBy : view
   const showPeakComponents = view === "peak" && !!live && encounterCount > 1
   const showPeakRun = view === "peak" && encounterCount <= 1
+  /** Boards whose phone layout fits the screen without sideways scrolling. */
+  const phoneFits = view === "overview" || view === "peak"
+  /** The single-boss peak's kill: published duration when live, else the row's (or fixture) run. */
+  const runFor = (entry: RatingEntry, liveRun?: { ms: number; date: string }): { ms?: number; date?: string } =>
+    live ? { ms: entry.durationMs, date: liveRun?.date } : liveRun ?? peakRun(entry.id, scope.boss)
   const theme = METRIC_THEMES[view]
 
   const fixtureRows = useMemo<FullRow[]>(() => {
@@ -131,7 +136,10 @@ export function RatingFullList({
           </Emblem>
           <div className="min-w-0">
             <h2 className="truncate font-wow text-xl leading-tight">{title}</h2>
-            <p className="text-xs text-muted-foreground">{state && state.status !== "ready" ? "Published ratings" : live && livePage?.total === undefined ? "Published rankings" : `${total} ranked`}</p>
+            {/* Only a known count earns a subtitle; "Published rankings" said nothing. */}
+            {!(state && state.status !== "ready") && !(live && livePage?.total === undefined) && (
+              <p className="text-xs text-muted-foreground">{total} ranked</p>
+            )}
           </div>
         </div>
         {toolbar}
@@ -155,8 +163,8 @@ export function RatingFullList({
       </div>
 
       <div className="styled-scrollbar overflow-x-auto">
-        {/* The overview folds its three scores into one column on a phone, so only it can drop the scroll width. */}
-        <table className={cn("w-full table-auto text-sm", view === "overview" ? "sm:min-w-[42rem]" : "min-w-[42rem]")}>
+        {/* The overview and Peak boards fold their extra columns away on a phone, so they can drop the scroll width. */}
+        <table className={cn("w-full table-auto text-sm", phoneFits ? "sm:min-w-[42rem]" : "min-w-[42rem]")}>
           <thead className="border-b bg-black/10 text-[11px] tracking-wider text-muted-foreground uppercase">
             <tr>
               {ranksShown && <th className="w-14 px-4 py-2.5 text-left font-medium sm:px-5">#</th>}
@@ -196,17 +204,17 @@ export function RatingFullList({
                 </>
               ) : (
                 <>
-                  <th className="w-32 px-3 py-2.5 text-left font-medium">{theme.label}</th>
+                  <th className={cn("w-32 px-3 py-2.5 text-left font-medium", view === "peak" && "pr-4 text-right sm:pr-3 sm:text-left")}>{theme.label}</th>
                   {view === "mastery" && (live ? <PublishedMasteryHeaders /> : <MasteryPartHeaders />)}
                   {showPeakComponents && (
-                    <th className="w-[28%] px-3 py-2.5 text-left font-medium" title="Peak is the mean of every boss's best score; a boss without a kill counts as 0.">
+                    <th className="hidden w-[28%] px-3 py-2.5 text-left font-medium sm:table-cell" title="Peak is the mean of every boss's best score; a boss without a kill counts as 0.">
                       Boss peaks <span className="ml-1 hidden tracking-normal normal-case opacity-70 md:inline">· mean of {encounterCount}, misses count 0</span>
                     </th>
                   )}
                   {showPeakRun && (
                     <>
-                      {live && <th className="px-3 py-2.5 text-right font-medium">{rows[0]?.entry.rawMetric ?? "DPS/HPS"}</th>}
-                      <th className="px-3 py-2.5 text-right font-medium">Kill time</th>
+                      {live && <th className="hidden px-3 py-2.5 text-right font-medium sm:table-cell">{rows[0]?.entry.rawMetric ?? "DPS/HPS"}</th>}
+                      <th className="hidden px-3 py-2.5 text-right font-medium sm:table-cell">Kill time</th>
                       <th className="hidden px-3 py-2.5 text-left font-medium sm:table-cell">Date</th>
                     </>
                   )}
@@ -280,11 +288,12 @@ export function RatingFullList({
                   </>
                 ) : (
                   <>
-                    <td className="px-3 py-2">
-                      <div className="flex flex-col items-start gap-1">
+                    <td className={cn("px-3 py-2", view === "peak" && "pr-4 sm:pr-3")}>
+                      <div className={cn("flex flex-col items-start gap-1", view === "peak" && "items-end sm:items-start")}>
                         <span className="font-mono text-base tabular-nums" style={rank === 1 ? { color: theme.accent } : undefined}>
                           {theme.format(entry.score)}
-                          {view === "peak" && entry.raw ? <RawTag raw={entry.raw} className="ml-2" /> : null}
+                          {/* A phone moves the raw number under the score, beside the kill time. */}
+                          {view === "peak" && entry.raw ? <RawTag raw={entry.raw} className="ml-2 hidden sm:inline" /> : null}
                         </span>
                         <span className="h-0.5 w-20 overflow-hidden rounded-full bg-white/5">
                           <span
@@ -292,15 +301,20 @@ export function RatingFullList({
                             style={{ width: `${(entry.score / top) * 100}%` }}
                           />
                         </span>
+                        {view === "peak" && (() => {
+                          const ms = showPeakRun ? runFor(entry, liveRun).ms : undefined
+                          const parts = [entry.raw ? `${Math.round(entry.raw).toLocaleString()}/s` : undefined, ms === undefined ? undefined : formatClock(ms)].filter(Boolean)
+                          return parts.length ? <span className="font-mono text-[11px] text-muted-foreground tabular-nums sm:hidden">{parts.join(" · ")}</span> : null
+                        })()}
                       </div>
                     </td>
                     {view === "mastery" && (live ? <PublishedMasteryCells entry={entry} /> : <MasteryPartCells parts={entry.mastery} />)}
-                    {showPeakComponents && <td className="px-3 py-2"><PeakComponents entry={entry} scores={peakComponents} /></td>}
+                    {showPeakComponents && <td className="hidden px-3 py-2 sm:table-cell"><PeakComponents entry={entry} scores={peakComponents} /></td>}
                     {showPeakRun && (() => {
-                      const run = live ? { ms: entry.durationMs, date: liveRun?.date } : liveRun ?? peakRun(entry.id, scope.boss)
+                      const run = runFor(entry, liveRun)
                       return <>
-                        {live && <td className="px-3 py-2 text-right font-mono text-muted-foreground tabular-nums">{entry.raw === undefined ? "Unavailable" : entry.raw.toFixed(1)}</td>}
-                        <td className="px-3 py-2 text-right font-mono text-muted-foreground tabular-nums">{run.ms === undefined ? <span title="Peak encounter duration has not been recorded for this summary.">Unavailable</span> : formatClock(run.ms)}</td>
+                        {live && <td className="hidden px-3 py-2 text-right font-mono text-muted-foreground tabular-nums sm:table-cell">{entry.raw === undefined ? "Unavailable" : entry.raw.toFixed(1)}</td>}
+                        <td className="hidden px-3 py-2 text-right font-mono text-muted-foreground tabular-nums sm:table-cell">{run.ms === undefined ? <span title="Peak encounter duration has not been recorded for this summary.">Unavailable</span> : formatClock(run.ms)}</td>
                         <td className="hidden px-3 py-2 text-xs text-muted-foreground sm:table-cell">{run.date ?? "Unavailable"}</td>
                       </>
                     })()}
