@@ -1,3 +1,4 @@
+import { useLandingHighlights } from "./Hub/landingHighlights"
 import { renderToStaticMarkup } from "react-dom/server"
 import { MemoryRouter, Route, Routes } from "react-router-dom"
 import { beforeEach, describe, expect, it, vi } from "vitest"
@@ -17,6 +18,10 @@ const summary = { landing_previews: [], instances: [{ instance_name: "Molten Cor
   ratings: { raid: { player: { peak: [], ranked_mastery: [], renown: [] }, guild: { peak: [], ranked_mastery: [], renown: [] } }, bosses: [] },
   performances: [], speedruns: [],
 } as HubSummary
+vi.mock("./Hub/landingHighlights", async (importOriginal) => ({
+  ...await importOriginal<typeof import("./Hub/landingHighlights")>(),
+  useLandingHighlights: vi.fn(),
+}))
 vi.mock("./Hub/hubSummaryAdapter", () => ({ useHubSummary: vi.fn() }))
 vi.mock("@tanstack/react-query", () => ({ useQuery: () => ({ data: [], isPending: false, isError: false }) }))
 vi.mock("@/api/rankingsQueries", () => ({
@@ -61,7 +66,44 @@ describe("live Storybook Hub", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(useSiteConfig).mockReturnValue({ data: { root_tenant_ratings_disabled: false }, isPending: false, isError: false } as ReturnType<typeof useSiteConfig>)
+    vi.mocked(useLandingHighlights).mockReturnValue({ data: undefined, isFetching: true, isError: false, refetch: vi.fn() } as unknown as ReturnType<typeof useLandingHighlights>)
     setSummary(summary)
+  })
+  it("fetches only the exact supported landing realm scope", () => {
+    hub("/leaderboard-v2")
+    expect(useLandingHighlights).toHaveBeenLastCalledWith(undefined, undefined, true)
+    hub("/leaderboard-v2?realm_ids=realm-id")
+    expect(useLandingHighlights).toHaveBeenLastCalledWith(undefined, "realm-id", true)
+    hub("/leaderboard-v2/Molten-Core")
+    expect(useLandingHighlights).toHaveBeenLastCalledWith(undefined, undefined, false)
+  })
+  it("rejects multiple and unknown landing realms while leaving the selector available", () => {
+    for (const ids of ["realm-id,other", "unknown"]) {
+      const html = hub(`/leaderboard-v2?realm_ids=${ids}`)
+      expect(html).toContain("Choose All realms or one realm to view highlights")
+      expect(html).toContain("Realm: Select a realm")
+      expect(html).not.toContain("No published highlights")
+      expect(vi.mocked(useLandingHighlights).mock.calls.at(-1)?.[2]).toBe(false)
+    }
+  })
+  it("shows loading or fetch failure instead of published empty", () => {
+    expect(hub("/leaderboard-v2")).toContain("Loading highlights")
+    vi.mocked(useLandingHighlights).mockReturnValue({ data: undefined, isFetching: false, isError: true, refetch: vi.fn() } as unknown as ReturnType<typeof useLandingHighlights>)
+    const html = hub("/leaderboard-v2")
+    expect(html).toContain("Highlights could not be refreshed")
+    expect(html).toContain("Try again")
+    expect(html).not.toContain("No qualifying highlights")
+    expect(html).not.toContain("No published highlights")
+  })
+  it("keeps prior snapshot data visible on a same-scope refetch failure", () => {
+    vi.mocked(useLandingHighlights).mockReturnValue({ data: { status: "ready", landing_previews: [], snapshots: [{
+      instance_name: "Molten Core", difficulty_name: "Normal", max_players: 40, status: "empty",
+      configuration_fingerprint: "policy", refreshed_at: "2026-11-09T12:00:00Z",
+    }] }, isFetching: false, isError: true, refetch: vi.fn() } as unknown as ReturnType<typeof useLandingHighlights>)
+    const html = hub("/leaderboard-v2")
+    expect(html).toContain("Showing the last loaded highlights")
+    expect(html).toContain("No qualifying highlights")
+    expect(html).toContain("2026-11-09T12:00:00Z")
   })
   it("keeps the hub frame with an error card when the first summary load fails", () => {
     vi.mocked(useHubSummary).mockReturnValue({ data: undefined, isPending: false, isError: true, isFetching: false, refetch: vi.fn() } as unknown as ReturnType<typeof useHubSummary>)

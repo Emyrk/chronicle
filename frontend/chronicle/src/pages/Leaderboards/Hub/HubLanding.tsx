@@ -1,3 +1,4 @@
+import type { LandingSnapshot } from "./landingHighlights"
 import { useState, type ReactNode } from "react"
 import { Link } from "react-router-dom"
 import type { HubLandingPreview, RankingsInstanceSummary, SupportedInstance } from "@/api/typesGenerated"
@@ -42,6 +43,9 @@ export interface LeaderboardsHubAppProps extends Omit<LeaderboardHubProps, "inst
   supportedInstances?: readonly SupportedInstance[]
   /** Bounded published board highlights for the live all-instances grid. */
   landingPreviews?: readonly HubLandingPreview[]
+  landingSnapshots?: readonly LandingSnapshot[]
+  landingNotice?: ReactNode
+  landingBlocked?: boolean
   /** Production instance view. Never render the fixture-only LeaderboardHub for live data. */
   renderInstance?: (instance: string) => ReactNode
   /** Open an instance on one difficulty/size: live cards are one per published combination. */
@@ -71,6 +75,9 @@ export function LeaderboardsHubApp({
   instances,
   supportedInstances,
   landingPreviews,
+  landingSnapshots,
+  landingNotice,
+  landingBlocked,
   renderInstance,
   onOpenCohort,
   instanceHref,
@@ -146,6 +153,9 @@ export function LeaderboardsHubApp({
           instances={instances}
           supportedInstances={supportedInstances}
           landingPreviews={landingPreviews}
+          landingSnapshots={landingSnapshots}
+          landingNotice={landingNotice}
+          landingBlocked={landingBlocked}
           loading={loading}
           error={error}
         />
@@ -161,6 +171,9 @@ function HubLanding({
   instances,
   supportedInstances,
   landingPreviews,
+  landingSnapshots,
+  landingNotice,
+  landingBlocked,
   loading,
   error,
 }: {
@@ -170,6 +183,9 @@ function HubLanding({
   instances?: readonly RankingsInstanceSummary[]
   supportedInstances?: readonly SupportedInstance[]
   landingPreviews?: readonly HubLandingPreview[]
+  landingSnapshots?: readonly LandingSnapshot[]
+  landingNotice?: ReactNode
+  landingBlocked?: boolean
   loading?: boolean
   error?: ReactNode
 }) {
@@ -197,13 +213,23 @@ function HubLanding({
           const several = items.filter((other) => other.instance_name === row.instance_name).length > 1
           const preview = landingPreviews?.find((item) =>
             item.instance_name === row.instance_name && item.difficulty_name === row.difficulty_name && item.max_players === row.max_players)
+          const snapshot = landingSnapshots?.find((item) =>
+            item.instance_name === row.instance_name && item.difficulty_name === row.difficulty_name && item.max_players === row.max_players)
           const cohort = { difficulty: row.difficulty_name, maxPlayers: row.max_players }
           return <div key={`${row.instance_name}|${row.difficulty_name}|${row.max_players}`} onClickCapture={instanceHref ? undefined : (e) => {
             e.preventDefault()
             onOpen(row.instance_name, cohort)
           }}>
             <InstanceCard name={row.instance_name} to={instanceHref?.(row.instance_name, cohort) ?? "#"} badge={several ? cohortLabel(row) : undefined}>
-              <LiveCardBody tab={tab} preview={preview} />
+              {landingBlocked ? null : landingSnapshots !== undefined && tab !== "parsing" ? <>
+                {!snapshot || snapshot.status === "not_prepared" ? <UnavailableHighlight label="Highlights awaiting refresh" /> : <>
+                  {snapshot.status === "empty" ? <UnavailableHighlight label="No qualifying highlights" /> : <LiveCardBody tab={tab} preview={preview} />}
+                  <div className="text-[10px] text-muted-foreground">
+                    {snapshot.status === "stale" && "Stale highlights · "}
+                    {snapshot.refreshed_at && <>Updated <time dateTime={snapshot.refreshed_at}>{snapshot.refreshed_at}</time></>}
+                  </div>
+                </>}
+              </> : <LiveCardBody tab={tab} preview={preview} />}
               <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
                 <Skull className="h-3 w-3" />
                 {row.total_kills ? `${row.total_kills.toLocaleString()} recorded kills` : "Configured instance"}
@@ -223,6 +249,7 @@ function HubLanding({
     const other = instances.filter((inst) => inst.category !== "raid" && inst.category !== "dungeon")
     return (
       <div className="mx-auto w-full max-w-[1920px] space-y-6 px-3 py-4 sm:px-4 sm:py-8">
+        {landingNotice}
         {instances.length === 0 && <p>No published instances yet.</p>}
         {raids.length > 0 && <section className="space-y-5">
           <h2 className="text-lg font-semibold text-muted-foreground">Raids</h2>

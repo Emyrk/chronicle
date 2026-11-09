@@ -114,3 +114,26 @@ describe("live Hub landing", () => {
     expect(unavailable).not.toContain("Fastest full clear")
   })
 })
+
+describe("persisted highlight status", () => {
+  const snapshot = { instance_name: "Molten Core", difficulty_name: "Normal", max_players: 40,
+    configuration_fingerprint: "policy", refreshed_at: "2026-11-09T12:00:00Z" }
+  it("distinguishes unprepared from published empty without losing configured cards", () => {
+    const pending = render({ landingSnapshots: [{ ...snapshot, status: "not_prepared" }] })
+    expect(pending).toContain("Highlights awaiting refresh")
+    expect(pending).not.toContain("No qualifying highlights")
+    const empty = render({ landingSnapshots: [{ ...snapshot, status: "empty" }] })
+    expect(empty).toContain("No qualifying highlights")
+    expect(empty).toContain('dateTime="2026-11-09T12:00:00Z"')
+  })
+  it("labels stale published snapshots", () => {
+    expect(render({ landingSnapshots: [{ ...snapshot, status: "stale" }] })).toContain("Stale highlights")
+  })
+  it("keeps the realm selector and cards but does not claim empty results on selection or transport errors", () => {
+    const markup = render({ landingBlocked: true, landingNotice: <p>Choose All realms or one realm to view highlights</p> })
+    expect(markup).toContain("Realm: Nordanaar")
+    expect(markup).toContain("Choose All realms or one realm")
+    expect(markup).not.toContain("No published highlights")
+    expect(markup).not.toContain("Highlights awaiting refresh")
+  })
+})
