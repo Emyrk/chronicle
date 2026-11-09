@@ -1,4 +1,4 @@
-import { useMemo } from "react"
+import { useMemo, type ReactNode } from "react"
 import {
   Tooltip,
   TooltipContent,
@@ -166,6 +166,8 @@ interface BoxPlotChartProps {
   onRowClick?: (playerClass: string, playerSpec: string, playerSubSpec: string) => void
   /** When set, rows it rejects are dimmed (e.g. every spec shown, one class lit). */
   highlight?: (stats: RankingsBoxPlotStats) => boolean
+  /** Small controls for the chart, shown at the right of its header. */
+  actions?: ReactNode
 }
 
 export function BoxPlotChart({
@@ -175,6 +177,7 @@ export function BoxPlotChart({
   subtitle,
   onRowClick,
   highlight,
+  actions,
 }: BoxPlotChartProps) {
   const scaleMax = useMemo(() => {
     if (stats.length === 0) return 1200
@@ -189,8 +192,11 @@ export function BoxPlotChart({
     <div className="rounded-xl border bg-card p-3 sm:p-5">
       <div className="mb-3 flex flex-col gap-1 sm:mb-5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
         <h3 className="text-sm font-medium text-muted-foreground">{title}</h3>
-        {subtitle && (
-          <span className="text-xs text-muted-foreground/70">{subtitle}</span>
+        {(subtitle || actions) && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            {subtitle && <span className="text-xs text-muted-foreground/70">{subtitle}</span>}
+            {actions}
+          </div>
         )}
       </div>
 

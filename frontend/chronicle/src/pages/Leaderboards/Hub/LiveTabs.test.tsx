@@ -105,8 +105,16 @@ describe("Statistics unknowns", () => {
       <StatisticsTab instanceName="Molten Core" bosses={["Ragnaros"]} optional={new Set()} selection={{ kind: "clear" }} view="specs" onView={() => {}}
         scope={{}} role="dps" onScope={() => {}} live={{ specs: { status: "ready", data: [row("MAGE", "Fire", 900), row("Unknown", "Unknown", 999), row("WARRIOR", "Unknown", 800)] } }} />,
     )
-    expect(html).toContain("Show unknowns")
+    // The header toggle is offered, off: the unknown rows (median 999) stay hidden.
+    expect(html).toMatch(/aria-pressed="false"[^>]*>.*Unknown specs/)
     expect(html).toContain("Fire")
-    expect(html).not.toContain("Unknown") // case-sensitive: the toggle reads "Show unknowns"
+    expect(html).not.toContain("999")
+  })
+  it("offers no unknowns toggle when every row has a known class and spec", () => {
+    const html = renderToStaticMarkup(
+      <StatisticsTab instanceName="Molten Core" bosses={["Ragnaros"]} optional={new Set()} selection={{ kind: "clear" }} view="specs" onView={() => {}}
+        scope={{}} role="dps" onScope={() => {}} live={{ specs: { status: "ready", data: [row("MAGE", "Fire", 900)] } }} />,
+    )
+    expect(html).not.toContain("Unknown specs")
   })
 })

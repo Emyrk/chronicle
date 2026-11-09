@@ -1,9 +1,8 @@
-import { Activity, BarChart3, ChartNoAxesGantt, type LucideIcon } from "lucide-react"
+import { Activity, BarChart3, ChartNoAxesGantt, Eye, EyeOff, type LucideIcon } from "lucide-react"
 import type { RankingsBoxPlotStats, RankingsKillTimeStats, RankingsSuccessRate } from "@/api/typesGenerated"
 import { useState } from "react"
 import { useActiveTabInView } from "@/hooks/useActiveTabInView"
 import { cn } from "@/lib/utils"
-import { Checkbox } from "@/components/ui/Checkbox/Checkbox"
 import { BoxPlotChart } from "@/pages/Rankings/BoxPlotChart"
 import { CLASS_DISPLAY } from "@/pages/Rankings/classDisplay"
 import { KillTimeContent, SuccessRateContent } from "@/pages/Rankings/InstanceView"
@@ -68,8 +67,8 @@ export function StatisticsTab({
   // Unknown class or spec rows are hidden by default, as on /leaderboards; the box plot can show them.
   const [showUnknowns, setShowUnknowns] = useState(false)
   const viewBarRef = useActiveTabInView<HTMLElement>(view)
-  const known = (rows: readonly RankingsBoxPlotStats[]) =>
-    showUnknowns ? [...rows] : rows.filter((row) => row.player_class !== "Unknown" && row.player_spec !== "Unknown")
+  const isUnknown = (row: RankingsBoxPlotStats) => row.player_class === "Unknown" || row.player_spec === "Unknown"
+  const known = (rows: readonly RankingsBoxPlotStats[]) => (showUnknowns ? [...rows] : rows.filter((row) => !isUnknown(row)))
   // Full clear covers every boss for per-boss panels; required ones first, optional after.
   const ordered = [...bosses.filter((b) => !optional.has(b)), ...bosses.filter((b) => optional.has(b))]
   const chosen = selection.kind === "clear" ? ordered : selection.bosses
@@ -96,16 +95,27 @@ export function StatisticsTab({
         ))}
       </nav>
 
-      {view === "specs" && (
-        <label className="flex w-fit cursor-pointer items-center gap-2 px-1 text-xs text-muted-foreground select-none">
-          <Checkbox checked={showUnknowns} onCheckedChange={(checked) => setShowUnknowns(checked === true)} className="size-3.5" />
-          Show unknowns
-        </label>
-      )}
-      {view === "specs" && (live && live.specs?.status !== "ready" ? liveState(live.specs, "Spec distributions") : (
+      {view === "specs" && (live && live.specs?.status !== "ready" ? liveState(live.specs, "Spec distributions") : (() => {
+        const specRows = live ? (live.specs?.status === "ready" ? live.specs.data : []) : boxPlotStats(scope.boss, role)
+        return (
         // The overview's spec cards, full size: every spec in the role, the chosen class lit.
         <BoxPlotChart
-          stats={known(live ? (live.specs?.status === "ready" ? live.specs.data : []) : boxPlotStats(scope.boss, role))}
+          stats={known(specRows)}
+          actions={specRows.some(isUnknown) && (
+            // A header toggle, offered only when some runs have an unknown class or spec.
+            <button
+              type="button"
+              aria-pressed={showUnknowns}
+              onClick={() => setShowUnknowns(!showUnknowns)}
+              className={cn(
+                "inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium transition-colors",
+                showUnknowns ? "bg-muted text-foreground" : "bg-background/60 text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {showUnknowns ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
+              Unknown specs
+            </button>
+          )}
           title={`${unit} distribution by spec · ${scope.boss ?? instanceName}`}
           subtitle={
             scope.cls
@@ -122,7 +132,8 @@ export function StatisticsTab({
           }
           onRowClick={(cls, spec, subSpec) => onScope({ boss: scope.boss, cls, spec, subSpec: subSpec || undefined })}
         />
-      ))}
+        )
+      })())}
       {view === "killtimes" && (
         // As on today's board: the full-clear box sits on top, per-boss kill times below.
         <div className="space-y-4">
