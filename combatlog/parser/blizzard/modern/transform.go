@@ -224,14 +224,14 @@ func (r *transformReader) transform(line string) (string, error) {
 }
 
 // parseAdvancedCombatSnapshot uses infoGUID as the authoritative subject. It is
-// usually the source or target, but WoW Forever can emit events with both header
-// GUIDs empty while still identifying the unit in the advanced combat block.
+// usually the source or target, but WoW Forever can omit either event GUID while
+// still identifying that unit in the advanced combat block.
 func (r *transformReader) parseAdvancedCombatSnapshot(fields []string, sourceGUID, targetGUID string) (*advancedCombatSnapshot, error) {
 	if len(fields) != v22AdvancedCombatFields {
 		return nil, fmt.Errorf("modern v22 advanced combat block has %d fields", len(fields))
 	}
 	const zeroGUID = "0000000000000000"
-	if fields[0] != sourceGUID && fields[0] != targetGUID && (sourceGUID != zeroGUID || targetGUID != zeroGUID) {
+	if fields[0] != sourceGUID && fields[0] != targetGUID && sourceGUID != zeroGUID && targetGUID != zeroGUID {
 		return nil, fmt.Errorf("modern v22 advanced combat GUID %q does not match source or target", fields[0])
 	}
 
