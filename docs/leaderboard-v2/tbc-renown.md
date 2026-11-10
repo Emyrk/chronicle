@@ -24,18 +24,26 @@ is deliberately weighted above every other TBC raid: each configured boss is
 worth at least twice an ordinary tier-six boss, and M'uru awards twelve as the
 current parser-supported capstone.
 
-## Unranked raid scope
+## Ranked and Renown-only raid scope
 
-Gruul's Lair, Serpentshrine Cavern, and Tempest Keep retain their existing
-reviewed progression sets and ranked-average configuration.
+Gruul's Lair, Serpentshrine Cavern, Tempest Keep, Hyjal Summit, and Zul'Aman have
+reviewed default sets for boss parse leaderboards. Hyjal and Zul'Aman were added
+in migration `000360` after complete Crusader Storm uploads confirmed the exact
+boss names and kill coverage. Their career entries remain `include_average=false`
+and `include_renown=true`; ranked boss parses do not imply a new career weight.
 
-Karazhan, Magtheridon's Lair, Hyjal Summit, Black Temple, Zul'Aman, and Sunwell
-Plateau are cataloged for **Renown only**. Their instances and canonical bosses
-are enabled, and their career entries use `include_average=false` and
-`include_renown=true`. No set or member rows are created, so this change does
-not present their parser hostile order as an approved ranked progression set.
-Direct boss Renown and career Renown work; a default whole-raid selection still
-requires a future reviewed set.
+The reviewed sets were checked against complete live uploads returned by the
+Crusader Storm `/api/v1/raidlogs/recent` feed on November 10, 2026:
+
+- Hyjal Summit: `94O5-RcMlTHVVyO4` and `83VTaZ5M1RFH8Riq`, each with all five
+  clean boss kills in the configured order.
+- Zul'Aman: `b7gvszAphwC4n8x-`, with all six clean boss kills in the configured
+  order (`Akil'zon`, `Nalorakk`, `Jan'alai`, `Halazzi`, `Hex Lord Malacrass`,
+  `Zul'jin`).
+
+Karazhan, Magtheridon's Lair, Black Temple, and Sunwell Plateau remain cataloged
+for **Renown only**. No set or member rows are configured for them, so direct boss
+and career Renown work while default whole-raid selection remains deferred.
 
 Canonical identities come from `combatlog/parser/wotlk/instances/tbc.go`.
 Auxiliary identities are excluded. In particular:
