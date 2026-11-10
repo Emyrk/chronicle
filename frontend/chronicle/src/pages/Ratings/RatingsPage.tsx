@@ -1,8 +1,9 @@
 import { useState, type ReactNode } from "react"
 import { Link } from "react-router-dom"
-import { ArrowRight, BarChart3, Percent, TrendingDown } from "lucide-react"
+import { ArrowRight, BarChart3, Loader2, Percent, Search, TrendingDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { parseColor } from "@/pages/Instance/parseColors"
+import { formatClassLabel } from "@/pages/ArmoryPage/characterDisplay"
 import { ToolsBackLink } from "@/pages/Tools/ToolsBackLink"
 import { METRIC_THEMES } from "@/pages/Leaderboards/Ratings/ratingThemes"
 import { MASTERY_WEIGHTS, averageAcrossBosses, normalize, ratePlayerBoss, type Band } from "./ratingMath"
@@ -55,7 +56,7 @@ const QUESTION: Record<Lens, string> = {
 }
 
 type Lens = "performance" | "parse" | "peak" | "mastery" | "renown"
-type Source = "example" | "mine"
+type Source = "example" | "character"
 
 const LENSES: { id: Lens; label: string; icon: ReactNode; kind: "metric" | "rating" }[] = [
   { id: "performance", label: "Performance", icon: <BarChart3 className="h-4 w-4" />, kind: "metric" },
@@ -81,10 +82,10 @@ export function RatingsPage() {
   const [source, setSource] = useState<Source>("example")
   // Slider positions belong to one dataset; switching datasets resets them.
   const [sliders, setSliders] = useState<{ key: string; killCount?: number; benchmark?: number }>({ key: "" })
-  const my = useMyRatingData(source === "mine")
+  const my = useMyRatingData(source === "character")
 
-  const dataset = source === "mine" ? my.dataset : EXAMPLE
-  // The benchmark section keeps teaching with the example while My data is unavailable.
+  const dataset = source === "character" ? my.dataset : EXAMPLE
+  // The benchmark section keeps teaching with the example while no character data is available.
   const shown = dataset ?? EXAMPLE
   const own = sliders.key === shown.key ? sliders : { key: shown.key }
   const killCount = Math.min(own.killCount ?? shown.kills.length, shown.kills.length)
@@ -119,14 +120,16 @@ export function RatingsPage() {
             <p className="text-muted-foreground">
               {source === "example"
                 ? "One example player's Nefarian kills as a Fury Warrior, viewed through each lens."
-                : "Your own kills on one boss, viewed through each lens."}
+                : my.character
+                  ? `${my.character.name}'s kills on one boss, viewed through each lens.`
+                  : "Search the Armory to inspect any character's kills."}
             </p>
           </div>
           <div className="inline-flex rounded-lg border bg-card p-1" role="radiogroup" aria-label="Data source">
             {(
               [
                 ["example", "Example player"],
-                ["mine", "My data"],
+                ["character", "Armory character"],
               ] as const
             ).map(([id, label]) => (
               <button
@@ -146,7 +149,7 @@ export function RatingsPage() {
           </div>
         </div>
 
-        {source === "mine" && <MyDataPicker my={my} />}
+        {source === "character" && <MyDataPicker my={my} />}
 
         <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-5" role="tablist" aria-label="Metric lens">
           {LENSES.map((l) => (
@@ -241,57 +244,86 @@ const selectClass =
   "h-9 min-w-0 max-w-full rounded-md border bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-sky-400"
 
 function MyDataPicker({ my }: { my: MyData }) {
-  if (my.characters.length === 0) return null
+  const showResults = my.searchQuery.trim().length >= 2
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
-      <label className="flex w-full min-w-0 items-center gap-2 text-muted-foreground sm:w-auto">
-        Character
-        <select
-          className={cn(selectClass, "flex-1 sm:flex-none")}
-          value={my.character ? `${my.character.realm_id}|${my.character.character_guid}` : ""}
-          onChange={(e) => my.selectCharacter(e.target.value)}
-        >
-          {my.characters.map((c) => (
-            <option key={c.link_id} value={`${c.realm_id}|${c.character_guid}`}>
-              {c.name} ({c.realm_name})
-            </option>
-          ))}
-        </select>
-      </label>
-      {my.raids.length > 0 && (
-        <label className="flex w-full min-w-0 items-center gap-2 text-muted-foreground sm:w-auto">
-          Raid
-          <select
-            className={cn(selectClass, "flex-1 sm:flex-none")}
-            value={my.raid?.key ?? ""}
-            onChange={(e) => my.selectRaid(e.target.value)}
-          >
-            {my.raids.map((r) => (
-              <option key={r.key} value={r.key}>
-                {raidLabel(r)}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
-      {my.groups.length > 0 && (
-        <label className="flex w-full min-w-0 items-center gap-2 text-muted-foreground sm:w-auto sm:flex-1">
-          Boss
-          <select
-            className={cn(selectClass, "flex-1")}
-            value={my.group ? groupKey(my.group) : ""}
-            onChange={(e) => my.selectGroup(e.target.value)}
-          >
-            {my.groups.map((g) => (
-              <option key={groupKey(g)} value={groupKey(g)}>
-                {groupLabel(g)}
-              </option>
-            ))}
-          </select>
-        </label>
+    <div className="mb-4 space-y-3 text-sm">
+      <div className="relative max-w-xl">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <input
+          type="search"
+          value={my.searchQuery}
+          onChange={(event) => my.setSearchQuery(event.target.value)}
+          placeholder={my.character ? `Search for another character…` : "Search Armory characters…"}
+          className="h-10 w-full rounded-md border bg-background pl-9 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-sky-400"
+        />
+        {showResults && (
+          <div className="styled-scrollbar absolute z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-md border bg-popover shadow-lg">
+            {my.search.isLoading || my.search.isFetching ? (
+              <p className="flex items-center gap-2 p-3 text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> Searching…
+              </p>
+            ) : my.searchResults.length === 0 ? (
+              <p className="p-3 text-muted-foreground">No Armory characters match.</p>
+            ) : (
+              my.searchResults.slice(0, 12).map((player) => (
+                <button
+                  key={`${player.realm_id}|${player.id}`}
+                  type="button"
+                  onClick={() => my.selectCharacter(player)}
+                  className="flex w-full items-baseline gap-2 border-b px-3 py-2 text-left last:border-b-0 hover:bg-muted/60"
+                >
+                  <span className="font-medium text-foreground">{player.name}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {formatClassLabel(player.class)} · {player.realm_name}
+                    {player.guild_name && ` · <${player.guild_name}>`}
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+      {my.character && (
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="rounded-full border bg-card px-3 py-1.5 font-medium text-foreground">
+            {my.character.name} · {my.character.realm_name}
+          </span>
+          {my.raids.length > 0 && (
+            <label className="flex min-w-0 items-center gap-2 text-muted-foreground">
+              Raid
+              <select
+                className={selectClass}
+                value={my.raid?.key ?? ""}
+                onChange={(e) => my.selectRaid(e.target.value)}
+              >
+                {my.raids.map((r) => (
+                  <option key={r.key} value={r.key}>
+                    {raidLabel(r)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {my.groups.length > 0 && (
+            <label className="flex min-w-0 flex-1 items-center gap-2 text-muted-foreground">
+              Boss
+              <select
+                className={cn(selectClass, "flex-1")}
+                value={my.group ? groupKey(my.group) : ""}
+                onChange={(e) => my.selectGroup(e.target.value)}
+              >
+                {my.groups.map((g) => (
+                  <option key={groupKey(g)} value={groupKey(g)}>
+                    {groupLabel(g)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </div>
       )}
       {my.truncated && (
-        <p className="w-full text-xs text-amber-300">Showing your most recent history only; this character has a lot of kills.</p>
+        <p className="text-xs text-amber-300">Showing the most recent history only; this character has a lot of kills.</p>
       )}
     </div>
   )
@@ -299,24 +331,14 @@ function MyDataPicker({ my }: { my: MyData }) {
 
 function MyDataStatus({ my }: { my: MyData }) {
   switch (my.state.status) {
-    case "signed-out":
-      return <p>Sign in and link your character to see your own kills here.</p>
+    case "choose-character":
+      return <p>Search for an Armory character above to see their rated boss kills.</p>
     case "loading":
-      return <p>Loading your kills…</p>
-    case "no-characters":
-      return (
-        <p>
-          You haven't linked a character yet.{" "}
-          <Link to="/settings" className="font-medium text-blue-400 hover:text-blue-300">
-            Link one in Settings
-          </Link>
-          .
-        </p>
-      )
+      return <p>Loading {my.character?.name ?? "character"}’s kills…</p>
     case "no-kills":
       return <p>{my.character?.name ?? "This character"} has no rated boss kills on this server yet.</p>
     case "error":
-      return <p>{my.state.message || "Could not load your rating history."}</p>
+      return <p>{my.state.message || "Could not load this character's rating history."}</p>
     default:
       return null
   }
