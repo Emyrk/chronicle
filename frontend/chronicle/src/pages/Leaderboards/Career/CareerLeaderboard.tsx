@@ -3,7 +3,6 @@ import type { CareerLeaderboardBoard, CareerLeaderboardEntry, CareerLeaderboardR
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { cn } from "@/lib/utils"
-import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages"
 import { CLASS_CSS_VAR, CLASS_DISPLAY, SPEC_BY_CLASS } from "@/pages/Rankings/classDisplay"
 import { GuildName } from "../Hub/GuildRatings"
 import { HubBanner, Segmented, SkeletonRows } from "../Hub/LeaderboardHub"
@@ -64,7 +63,8 @@ export function CareerLeaderboard({ view, onView, filters, onFilters, realm, rea
       <div className="mx-auto w-full max-w-[1920px] space-y-5 px-3 py-4 sm:px-4 sm:py-8">
         <HubBanner
           guildMode={guildMode}
-          background={getInstanceBackground("")}
+          // Career spans every raid, so it uses Chronicle's own hero art rather than one raid's.
+          background="/c/images/herobackground.avif"
           allHref={allHref}
           crumbs={crumbs}
           title={<h1 className="truncate font-wow text-xl sm:text-3xl">Career</h1>}
