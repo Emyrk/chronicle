@@ -35,7 +35,7 @@ application bootstrap. For UI experiments, first initialize a **dedicated mock
 application database** with Chronicle's normal migrations, then use
 `--prepare-migrated --allow-local-writes seed` instead. Configure the dev server
 explicitly to use that same database and visit its `lbmock` tenant host at
-`/leaderboard-v2`. The fixture creates that tenant, a Vanilla dataset, realm,
+`/leaderboards`. The fixture creates that tenant, a Vanilla dataset, realm,
 players, guilds, summaries, and benchmarks. Authentication and other dev services
 remain the normal application setup; this script does not configure them.
 

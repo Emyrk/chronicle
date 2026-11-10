@@ -131,6 +131,7 @@ func TestTenantRobotsAndSitemap(t *testing.T) {
 	sitemap := httptest.NewRecorder()
 	api.sitemapXML(sitemap, tenantSEORequest(t, "/sitemap.xml", true))
 	require.Equal(t, http.StatusOK, sitemap.Code)
+	require.Contains(t, sitemap.Body.String(), "<loc>https://everlook.chronicleclassic.com/leaderboards</loc>")
 	require.Contains(t, sitemap.Body.String(), "https://everlook.chronicleclassic.com/leaderboards/statistics")
 	require.Contains(t, sitemap.Body.String(), "https://everlook.chronicleclassic.com/wowdb")
 	require.Contains(t, sitemap.Body.String(), "https://everlook.chronicleclassic.com/talents/warrior")

@@ -9,7 +9,7 @@ const siteConfig = http.get("/api/v1/site-config", () => HttpResponse.json({ roo
 const failing = [siteConfig, http.get(SUMMARY, () => HttpResponse.json({ message: "boom" }, { status: 500 }))]
 const pending = [siteConfig, http.get(SUMMARY, async () => { await delay("infinite"); return HttpResponse.json({}) })]
 
-/** The live /leaderboard-v2 page while its summary loads or after it fails. */
+/** The live /leaderboards page while its summary loads or after it fails. */
 const meta = {
   title: "Pages/Leaderboards/LiveHub",
   component: LeaderboardsLiveHub,
@@ -23,17 +23,17 @@ type Story = StoryObj<typeof meta>
 const at = (url: string) => (Story: () => React.ReactNode) => (
   <MemoryRouter initialEntries={[url]}>
     <Routes>
-      <Route path="/leaderboard-v2" element={<Story />} />
-      <Route path="/leaderboard-v2/:segment" element={<Story />} />
-      <Route path="/leaderboard-v2/:instance/:tab" element={<Story />} />
+      <Route path="/leaderboards" element={<Story />} />
+      <Route path="/leaderboards/:segment" element={<Story />} />
+      <Route path="/leaderboards/:instance/:tab" element={<Story />} />
     </Routes>
   </MemoryRouter>
 )
 
-export const LandingLoading: Story = { decorators: [at("/leaderboard-v2")], parameters: { msw: { handlers: pending } } }
+export const LandingLoading: Story = { decorators: [at("/leaderboards")], parameters: { msw: { handlers: pending } } }
 
 export const LandingError: Story = {
-  decorators: [at("/leaderboard-v2")],
+  decorators: [at("/leaderboards")],
   parameters: { msw: { handlers: failing } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -43,12 +43,12 @@ export const LandingError: Story = {
 }
 
 export const InstanceLoading: Story = {
-  decorators: [at("/leaderboard-v2/Molten-Core/ratings")],
+  decorators: [at("/leaderboards/Molten-Core/ratings")],
   parameters: { msw: { handlers: pending } },
 }
 
 export const InstanceError: Story = {
-  decorators: [at("/leaderboard-v2/Molten-Core/ratings")],
+  decorators: [at("/leaderboards/Molten-Core/ratings")],
   parameters: { msw: { handlers: failing } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)

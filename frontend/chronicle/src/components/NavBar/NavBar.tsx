@@ -169,7 +169,7 @@ export function NavBar() {
                 </Link>
               )}
               <Link
-                to="/leaderboards/statistics"
+                to="/leaderboards"
                 onClick={() => setMobileMenuOpen(false)}
                 className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors py-2"
               >
@@ -315,7 +315,7 @@ export function NavBar() {
               </DropdownMenuItem>
             )}
             <DropdownMenuItem asChild>
-              <Link to="/leaderboards/statistics" className="flex items-center gap-2">
+              <Link to="/leaderboards" className="flex items-center gap-2">
                 <Trophy className="h-4 w-4" />
                 Rankings
               </Link>

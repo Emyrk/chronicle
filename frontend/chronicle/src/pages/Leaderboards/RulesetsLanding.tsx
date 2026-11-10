@@ -54,7 +54,7 @@ export function RulesetsLanding({ instanceHref, onOpen }: {
           }}>
             <InstanceCard
               name={entry.name}
-              to={instanceHref?.(entry.name) ?? `/leaderboards/ruleset?instance=${encodeURIComponent(entry.name)}`}
+              to={instanceHref?.(entry.name) ?? `/leaderboards-v1/ruleset?instance=${encodeURIComponent(entry.name)}`}
             >
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
                 {entry.speedrunRules && (

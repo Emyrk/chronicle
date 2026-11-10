@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { hubInstanceParams, hubParams, hubPath, v2Selection } from "./v2Selection"
 
-describe("hidden leaderboard v2 selection", () => {
+describe("leaderboard hub selection", () => {
   it("opens the live overview without selecting a mock instance", () => {
     expect(v2Selection(new URLSearchParams())).toEqual({ tab: "overview", instance: null, encounters: [], realmIDs: [] })
   })
@@ -26,8 +26,8 @@ describe("hidden leaderboard v2 selection", () => {
 
   it("keeps realm selection while entering or leaving an instance", () => {
     const selected = new URLSearchParams("realm_ids=realm-1%2Crealm-2")
-    expect(hubPath("ratings", selected, "Molten Core")).toBe("/leaderboard-v2/Molten-Core/ratings?realm_ids=realm-1%2Crealm-2")
-    expect(hubPath("ratings", selected)).toBe("/leaderboard-v2/ratings?realm_ids=realm-1%2Crealm-2")
+    expect(hubPath("ratings", selected, "Molten Core")).toBe("/leaderboards/Molten-Core/ratings?realm_ids=realm-1%2Crealm-2")
+    expect(hubPath("ratings", selected)).toBe("/leaderboards/ratings?realm_ids=realm-1%2Crealm-2")
     expect(hubParams(selected, "realm_ids").has("realm_ids")).toBe(false)
   })
 
@@ -59,9 +59,9 @@ describe("hidden leaderboard v2 selection", () => {
 
   it("puts the instance and tab in the path and removes their legacy query parameters", () => {
     const params = new URLSearchParams("tab=ratings&instance=Molten+Core&encounters=Garr")
-    expect(hubPath("performances", params, "Molten Core")).toBe("/leaderboard-v2/Molten-Core/performances?encounters=Garr")
-    expect(hubPath("overview", params, "Molten Core")).toBe("/leaderboard-v2/Molten-Core?encounters=Garr")
-    expect(hubPath("ratings", params)).toBe("/leaderboard-v2/ratings?encounters=Garr")
-    expect(hubPath("overview", new URLSearchParams())).toBe("/leaderboard-v2")
+    expect(hubPath("performances", params, "Molten Core")).toBe("/leaderboards/Molten-Core/performances?encounters=Garr")
+    expect(hubPath("overview", params, "Molten Core")).toBe("/leaderboards/Molten-Core?encounters=Garr")
+    expect(hubPath("ratings", params)).toBe("/leaderboards/ratings?encounters=Garr")
+    expect(hubPath("overview", new URLSearchParams())).toBe("/leaderboards")
   })
 })
