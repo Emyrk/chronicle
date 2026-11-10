@@ -77,12 +77,6 @@ export function CareerRatingCard({ data, cohort, onCohortChange, isLoading, erro
                 color={METRIC_THEMES.peak.accent}
                 breakdown={summary.peak !== null && <WeightedBreakdown summary={summary} field="peak" />}
               />
-              <Stat
-                label="Renown"
-                value={Math.round(summary.renown).toLocaleString()}
-                color={METRIC_THEMES.renown.accent}
-                breakdown={<RenownBreakdown summary={summary} />}
-              />
             </div>
           </div>
         )}
@@ -190,51 +184,6 @@ function WeightedBreakdown({ summary, field }: { summary: CareerSummary; field: 
           {" · "}raids without kills count as zero
         </div>
       )}
-    </div>
-  );
-}
-
-/** Renown earned per raid: each boss kill's award, summed. */
-function RenownBreakdown({ summary }: { summary: CareerSummary }) {
-  const rows = summary.contributions
-    .filter((c) => c.include_renown && c.renown > 0)
-    .sort((a, b) => b.renown - a.renown);
-  return (
-    <div className="space-y-2">
-      <div className="font-semibold">Renown by raid</div>
-      {rows.length === 0 ? (
-        <div className="text-zinc-400">No Renown yet.</div>
-      ) : (
-        <table className="font-mono tabular-nums">
-          <thead>
-            <tr className="text-zinc-400">
-              <th className="pr-4 text-left font-normal">Raid</th>
-              <th className="pr-4 text-right font-normal">Kills</th>
-              <th className="text-right font-normal">Renown</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((c) => (
-              <tr key={raidName(c)}>
-                <td className="pr-4 font-sans">
-                  {raidName(c)}
-                  {!c.include_average && <span className="text-zinc-500"> · Renown only</span>}
-                </td>
-                <td className="pr-4 text-right">{c.eligible_renown_kills}</td>
-                <td className="text-right">{Math.round(c.renown).toLocaleString()}</td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr className="border-t border-white/10">
-              <td className="pt-1 pr-4 font-sans text-zinc-400">Total</td>
-              <td className="pt-1 pr-4 text-right">{rows.reduce((n, c) => n + c.eligible_renown_kills, 0)}</td>
-              <td className="pt-1 text-right">{Math.round(summary.renown).toLocaleString()}</td>
-            </tr>
-          </tfoot>
-        </table>
-      )}
-      <div className="text-zinc-400">Each boss kill earns its award. Weights do not apply.</div>
     </div>
   );
 }

@@ -7,7 +7,9 @@ import type { CareerPlayerResponse, LeaderboardV2PlayerHistory, SupportedInstanc
 import { TooltipProvider } from "@/components/ui/Tooltip/tooltip";
 import supportedInstances from "@/pages/Leaderboards/Hub/supportedInstances.fixture.json";
 import { CareerRatingCard } from "./CareerRatingCard";
+import { JourneyStatsCard } from "./JourneyStatsCard";
 import { RaidRatingsCard } from "./RaidRatingsCard";
+import { RenownStat } from "./RenownStat";
 import { buildRaidRatings, careerStatusText, cohortKey, defaultCohort } from "./careerRatingsModel";
 // Real capy responses captured 2026-11-10 (career + leaderboards-v2 player-history).
 import careerWarrior from "./fixtures/careerWarrior.json";
@@ -100,6 +102,26 @@ export const MasteryBreakdown: Story = {
     // Σ weight·mastery over every weighted raid, including the zero ones.
     await expect((await body.findAllByText("Naxxramas")).length).toBeGreaterThan(0);
     await expect((await body.findAllByText("Total")).length).toBeGreaterThan(0);
+  },
+};
+
+export const JourneyRenown: Story = {
+  name: "Journey card: all-spec Renown",
+  render: () => (
+    <div className="w-full lg:w-[480px]">
+      <JourneyStatsCard
+        timeInRaid="25h 5m"
+        itemsLooted="37"
+        renown={<RenownStat cohorts={(careerPriest as CareerPlayerResponse).cohorts} />}
+      />
+    </div>
+  ),
+  play: async ({ canvas }) => {
+    // Discipline 346 + Holy 61 + Shadow 131.
+    await expect(canvas.getByText("538")).toBeInTheDocument();
+    await userEvent.hover(canvas.getByText("538"));
+    const body = within(document.body);
+    await expect((await body.findAllByText("Renown by raid")).length).toBeGreaterThan(0);
   },
 };
 

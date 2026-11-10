@@ -24,6 +24,7 @@ import { IdentityHeader } from "./overview/IdentityHeader";
 import { ActivityHeaderCard, GearHeaderCard, TalentsHeaderCard } from "./TabHeaderCards";
 import { JourneyStatsCard } from "./overview/JourneyStatsCard";
 import { CareerRatingCard } from "./overview/CareerRatingCard";
+import { RenownStat } from "./overview/RenownStat";
 import { useCareerRatings } from "./overview/useCareerRatings";
 import { useRecentActivity } from "./overview/useRecentActivity";
 
@@ -113,7 +114,11 @@ function ArmoryPageContent({ player }: { player: ArmoryPlayer }) {
   const isOverview = activeTab === "overview";
   const activity = useRecentActivity(player, isOverview);
   const lootQuery = useArmoryLoot(player.realm_name, player.id, isOverview && mode === "journey");
-  const ratings = useCareerRatings(player, isOverview && mode === "performance");
+  // Journey shows all-spec Renown; Performance adds the boss-level history.
+  const ratings = useCareerRatings(player, {
+    career: isOverview,
+    history: isOverview && mode === "performance",
+  });
 
   const setMode = (nextMode: OverviewMode) => {
     const next = new URLSearchParams(searchParams);
@@ -240,6 +245,7 @@ function ArmoryPageContent({ player }: { player: ArmoryPlayer }) {
                           : String(lootQuery.data.items.length)
                         : null
                     }
+                    renown={ratings.career && <RenownStat cohorts={ratings.career.cohorts} />}
                   />
                 )}
                 {activeTab === "gear" && <GearHeaderCard player={player} />}

@@ -145,5 +145,6 @@ func TestBestCharacterRating(t *testing.T) {
 		cohort("Discipline", f(30.9), 346),
 		cohort("Smite", f(30.9), 100),
 	})
-	require.Equal(t, &characterRating{Spec: "Discipline", Mastery: 30.9, Peak: 60, Renown: 346}, best)
+	// Mastery and Peak come from the best spec; Renown adds up every spec.
+	require.Equal(t, &characterRating{Spec: "Discipline", Mastery: 30.9, Peak: 60, Renown: 900 + 131 + 346 + 100}, best)
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CareerPlayerResponse, LeaderboardV2PlayerHistory } from "@/api/typesGenerated";
-import { buildRaidRatings, cohortLabel, defaultCohort, raidCoverage } from "./careerRatingsModel";
+import { buildRaidRatings, characterRenown, cohortLabel, defaultCohort, raidCoverage } from "./careerRatingsModel";
 import careerWarrior from "./fixtures/careerWarrior.json";
 import historyWarrior from "./fixtures/historyWarrior.json";
 
@@ -28,6 +28,14 @@ describe("careerRatingsModel", () => {
     const brood = bwl.bosses.find((b) => b.encounterName === "Broodlord Lashlayer")!;
     expect(brood.kills).toBe(2);
     expect(brood.benchmark).toBeCloseTo(546.19, 1);
+  });
+
+  it("adds Renown across every spec", () => {
+    const renown = characterRenown(career.cohorts);
+    const perSpec = career.cohorts.reduce((n, c) => n + c.summary.renown, 0);
+    expect(renown.total).toBe(perSpec);
+    expect(renown.raids.reduce((n, r) => n + r.renown, 0)).toBe(perSpec);
+    expect(renown.specs.map((s) => s.label)).toEqual(["Fury", "Fury · Fury Prot"]);
   });
 
   it("counts weighted raids with kills", () => {

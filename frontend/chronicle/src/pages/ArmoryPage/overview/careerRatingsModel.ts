@@ -151,6 +151,51 @@ export function buildRaidRatings(
   );
 }
 
+export interface RenownRaid {
+  key: string;
+  label: string;
+  kills: number;
+  renown: number;
+  /** True when the raid never counts toward Mastery or Peak. */
+  renownOnly: boolean;
+}
+
+/**
+ * The character's Renown across every spec. Each kill belongs to exactly one
+ * spec, so the per-spec totals add up without double counting.
+ */
+export function characterRenown(cohorts: readonly CareerPlayerCohort[]): {
+  total: number;
+  raids: RenownRaid[];
+  specs: { label: string; renown: number }[];
+} {
+  const raids = new Map<string, RenownRaid>();
+  for (const cohort of cohorts) {
+    for (const c of cohort.summary.contributions) {
+      if (!c.include_renown || c.renown <= 0) continue;
+      const key = variantKey(c);
+      const raid = raids.get(key) ?? {
+        key,
+        label: [c.instance_name, c.difficulty_name, c.max_players > 0 ? `${c.max_players}` : ""].filter(Boolean).join(" "),
+        kills: 0,
+        renown: 0,
+        renownOnly: !c.include_average,
+      };
+      raid.kills += c.eligible_renown_kills;
+      raid.renown += c.renown;
+      raids.set(key, raid);
+    }
+  }
+  return {
+    total: cohorts.reduce((n, c) => n + c.summary.renown, 0),
+    raids: [...raids.values()].sort((a, b) => b.renown - a.renown),
+    specs: cohorts
+      .filter((c) => c.summary.renown > 0)
+      .map((c) => ({ label: cohortLabel(c), renown: c.summary.renown }))
+      .sort((a, b) => b.renown - a.renown),
+  };
+}
+
 /** How many weighted raids have at least one rated kill. */
 export function raidCoverage(cohort: CareerPlayerCohort): { rated: number; total: number } {
   const weighted = cohort.summary.contributions.filter((c) => c.include_average);

@@ -69,22 +69,30 @@ func (s *Service) fetchCharacterRating(ctx context.Context, p database.GetGamePl
 	return bestCharacterRating(result.Cohorts)
 }
 
+// bestCharacterRating picks the spec with the highest Mastery for Mastery and
+// Peak. Renown is the character's total: each kill belongs to one spec, so the
+// per-spec totals add up.
 func bestCharacterRating(cohorts []serviceratings.PlayerCareer) *characterRating {
-	var best *characterRating
-	for _, c := range cohorts {
+	var best *serviceratings.PlayerCareer
+	var renown float64
+	for i, c := range cohorts {
+		renown += c.Renown
 		if c.Mastery == nil {
 			continue
 		}
-		if best != nil && (*c.Mastery < best.Mastery || (*c.Mastery == best.Mastery && c.Renown <= best.Renown)) {
+		if best != nil && (*c.Mastery < *best.Mastery || (*c.Mastery == *best.Mastery && c.Renown <= best.Renown)) {
 			continue
 		}
-		peak := 0.0
-		if c.Peak != nil {
-			peak = *c.Peak
-		}
-		best = &characterRating{Spec: c.PlayerSpec, Mastery: *c.Mastery, Peak: peak, Renown: c.Renown}
+		best = &cohorts[i]
 	}
-	return best
+	if best == nil {
+		return nil
+	}
+	peak := 0.0
+	if best.Peak != nil {
+		peak = *best.Peak
+	}
+	return &characterRating{Spec: best.PlayerSpec, Mastery: *best.Mastery, Peak: peak, Renown: renown}
 }
 
 // characterSpec infers the spec from the player's talent points, or "" when

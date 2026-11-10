@@ -5,11 +5,14 @@ import { useSiteConfig, useSupportedInstanceProgressionBosses } from "@/api/quer
 import { buildRaidRatings, careerStatusText, cohortKey, defaultCohort } from "./careerRatingsModel";
 
 /** Career ratings for the Armory performance overview, with the selected spec. */
-export function useCareerRatings(player: ArmoryPlayer, enabled: boolean) {
+export function useCareerRatings(
+  player: ArmoryPlayer,
+  enabled: { career: boolean; history: boolean },
+) {
   const { data: config } = useSiteConfig();
   const tenantID = config?.tenant?.id;
-  const career = usePlayerCareer(tenantID, player.realm_name, player.id, enabled);
-  const history = usePlayerRatingHistory(tenantID, player.realm_id, player.id, enabled);
+  const career = usePlayerCareer(tenantID, player.realm_name, player.id, enabled.career);
+  const history = usePlayerRatingHistory(tenantID, player.realm_id, player.id, enabled.history);
   const { data: progressionBosses } = useSupportedInstanceProgressionBosses();
   const [selected, setSelected] = useState<string>();
 
