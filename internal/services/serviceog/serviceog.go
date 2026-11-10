@@ -9,6 +9,7 @@ import (
 
 	"github.com/Gophercraft/core/vsn"
 
+	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/chronicle"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
@@ -56,6 +57,7 @@ type Service struct {
 	signingKey   string
 	ogSiteStats  ogSiteStatsCache
 	ogCensus     ogTenantCache[[]database.CensusPlayerCountsRow]
+	ogHighlights ogTenantCache[[]chroniclesdk.HubLandingPreview]
 }
 
 func New(opts Options) *Service {

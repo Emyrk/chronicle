@@ -166,7 +166,19 @@ function BoardColumn({ board }: { board: Board }) {
         background: 'rgba(38, 38, 38, 0.82)',
       }}
     >
-      <span style={{ display: 'flex', fontSize: 19, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: COLORS.goldHi, marginBottom: 6 }}>
+      {/* Raid names as titles (hub landing) can run long; keep them on one line. */}
+      <span
+        style={{
+          display: 'block',
+          lineClamp: 1,
+          fontSize: fitFontSize(board.title, [[16, 19], [20, 16], [Infinity, 14]]),
+          fontWeight: 600,
+          letterSpacing: board.title.length > 16 ? '0.06em' : '0.12em',
+          textTransform: 'uppercase',
+          color: COLORS.goldHi,
+          marginBottom: 6,
+        }}
+      >
         {board.title}
       </span>
       {board.rows.map((row, index) => (
