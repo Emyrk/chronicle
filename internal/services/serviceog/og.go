@@ -82,6 +82,7 @@ func (s *Service) Routes() []frontend.OGRoute {
 			},
 		},
 	}...)
+	routes = append(routes, s.leaderboardRoutes()...)
 	// Any page without its own image, or whose lookup failed, gets the brand card.
 	for i := range routes {
 		routes[i].Resolve = s.withBrandOG(routes[i].Resolve)
@@ -141,27 +142,21 @@ func flavorStaticOG(pattern, productName string, metadata staticOGMetadata, cano
 			description = fmt.Sprintf("Analyze %s combat logs with damage, healing, death, rankings, and raid performance reports. Upload logs and compare players and guilds.", productName)
 		case "/recent":
 			description = fmt.Sprintf("Browse recently uploaded %s combat logs and raid performance reports.", productName)
-		case "/leaderboards/statistics":
-			description = fmt.Sprintf("Explore %s raid performance statistics, damage rankings, healing rankings, and player parses.", productName)
-		case "/leaderboards/speedruns":
-			description = fmt.Sprintf("Compare the fastest %s raid clears and guild speedrun rankings.", productName)
 		}
 	}
 	return &frontend.OGData{Title: metadata.Title, Description: description, URL: canonicalURL}
 }
 
 var staticOGRoutes = map[string]staticOGMetadata{
-	"/":                        {Title: "Raid Logs and Performance Analysis", Description: defaultSEODescription},
-	"/recent":                  {Title: "Recent Raids", Description: "Explore recently uploaded raid logs and performance reports."},
-	"/guilds":                  {Title: "Guilds", Description: "Find guild rosters, raid history, and performance analytics."},
-	"/armory":                  {Title: "Character Armory", Description: "Search character profiles, equipment, talents, and raid performance."},
-	"/leaderboards/statistics": {Title: "Raid Statistics", Description: "Explore raid performance statistics and player rankings."},
-	"/leaderboards/speedruns":  {Title: "Raid Speedruns", Description: "Compare the fastest raid clears and guild speedrun rankings."},
-	"/wowdb":                   {Title: "World of Warcraft Database", Description: "Explore game data and reference information."},
-	"/technical":               {Title: "Technical Reference", Description: "Explore Chronicle combat analysis references."},
-	"/census":                  {Title: "Realm Census", Description: "Explore character and population statistics."},
-	"/speedrunning":            {Title: "Speedrunning", Description: "Explore raid speedrunning records and performance."},
-	"/tools":                   {Title: "Tools", Description: "Explore Chronicle raid and character analysis tools."},
+	"/":             {Title: "Raid Logs and Performance Analysis", Description: defaultSEODescription},
+	"/recent":       {Title: "Recent Raids", Description: "Explore recently uploaded raid logs and performance reports."},
+	"/guilds":       {Title: "Guilds", Description: "Find guild rosters, raid history, and performance analytics."},
+	"/armory":       {Title: "Character Armory", Description: "Search character profiles, equipment, talents, and raid performance."},
+	"/wowdb":        {Title: "World of Warcraft Database", Description: "Explore game data and reference information."},
+	"/technical":    {Title: "Technical Reference", Description: "Explore Chronicle combat analysis references."},
+	"/census":       {Title: "Realm Census", Description: "Explore character and population statistics."},
+	"/speedrunning": {Title: "Speedrunning", Description: "Explore raid speedrunning records and performance."},
+	"/tools":        {Title: "Tools", Description: "Explore Chronicle raid and character analysis tools."},
 	"/download": {
 		Title:       "Chronicle Sidekick",
 		Description: "A free tray app for Windows, macOS and Linux that finds WoW, watches your combat log and uploads your raid to Chronicle in one click.",
