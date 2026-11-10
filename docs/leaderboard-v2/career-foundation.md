@@ -1,6 +1,6 @@
 # Career foundation investigation
 
-Status: accepted scoring contract, blocked full-raid definition. This change is
+Status: accepted explicit-weight scoring contract; numeric seed weights outstanding. This change is
 documentation only. `spec.tex` is authoritative, followed by `behavior.md`.
 No career schema, worker, API, or UI is implemented here.
 
@@ -26,47 +26,44 @@ No career schema, worker, API, or UI is implemented here.
   normal Wrath 10/25 variant awards. No career weight multiplier exists in that
   seed. The migration must remain immutable.
 
-## Exact configured-total ambiguity
+## Approved policy update
 
-The following are configuration arithmetic, **not approved career weights**.
-They can be checked without querying a live database.
+Explicit career weights supersede the earlier proposal to derive weights from
+configured full-raid Renown totals. Each weight belongs to the exact
+`(instance_name, difficulty_name, max_players)` tuple. Both 10/25 and Normal/Heroic
+remain independent. No numeric weights have been approved or invented here.
 
-| Raid | Default set total, 10/25 | All enabled identities total, 10/25 | Problem |
-|---|---:|---:|---|
-| Naxxramas | 20 / 30 | 20 / 30 | No distinction in reviewed seed |
-| Onyxia's Lair | 3 / 4.5 | 3 / 4.5 | No distinction in reviewed seed |
-| Eye of Eternity | 2 / 4 | 2 / 4 | No distinction in reviewed seed |
-| Ulduar | 36 / 54 | 38 / 57 | Flame Leviathan is outside default |
-| Vault of Archavon | 0 / 0 | 4 / 8 | Enabled empty default, four awarded bosses |
-| Obsidian Sanctum | 1 / 2 | 7 / 11 | Four mutually exclusive Sartharion identities |
+Average eligibility and Renown eligibility must be distinct:
 
-Sartharion 0D/1D/2D/3D awards are 1/1/2/3 for ten-player and 2/2/3/4 for
-twenty-five-player. A completion-group maximum would produce 3/4 instead of
-7/11. That is only a proposal. The shared catalog does not encode that grouping,
-and no grouping should be inferred by stripping suffixes from names.
+| Content | Career Mastery/Peak | Career Renown |
+|---|---|---|
+| Obsidian Sanctum | Excluded, no denominator weight | Explicitly included when flavor-allowed |
+| Optional bosses | Excluded from raid-wide inputs | Included when otherwise eligible |
+| Vanilla raids on Wrath | Excluded | Excluded, even when uploaded |
 
-Questions requiring a product decision:
+Sartharion completion groups and full-clear Renown totals are no longer blockers
+for career weights. Existing exact boss awards apply to actual eligible kills;
+do not substitute a group maximum or invent a synthetic clear award. Optional
+boss awards likewise remain available for Renown independently of average inputs.
 
-1. Does full raid include optional enabled bosses outside the default set? This
-   determines Ulduar and Vault totals and the raid-wide score selection.
-2. How do mutually exclusive alternatives contribute to configured full-raid
-   totals? Default-only, sum, and maximum have different meanings. If completion
-   groups are chosen, define them once in shared configuration and specify how
-   they relate to existing exact-boss raid scoring.
-3. What should a career return when no active variant has positive weight?
-   The mathematical contract forbids division by zero; API presentation remains
-   undecided. This does not justify inventing fallback weights.
+Remaining decisions:
+
+1. Approve explicit numeric career weights for the supported exact variants.
+2. Define API presentation for empty effective raid-wide boss selections and for
+   careers with no active positive weight. Never divide by zero or invent fallback
+   weights. Vault's enabled empty default set illustrates the existing empty-set
+   read-contract question, not a reason to include optional bosses in averages.
 
 ## Approved foundation constraints
 
-- Direct weight equals configured full-raid Renown, never earned Renown or kill
-  count. Do not introduce a separately maintained weight catalog.
+- Use an explicit career weight per exact variant, independent of configured or
+  earned Renown and kill counts. Read current weights without recounting kills.
 - The career-only allowed pool must exclude Vanilla on Wrath, including historical
-  uploads. Do not remove Vanilla globally from shared flavor composition.
+  uploads, for all career totals including Renown. Do not remove Vanilla globally from shared flavor composition.
 - Each exact difficulty/max_players tuple is independent. Activation is tenant-wide
   existence of a currently eligible canonical boss kill. It is retractable, not
   a permanent unlocked flag, and cannot depend on subject search/realm filters.
-- Active variants missing for a subject contribute zero while retaining their
+- Active average-eligible variants missing for a subject contribute zero while retaining their
   weight in the denominator. Award zero does not erase eligible kill evidence.
 - Retain both metric raid inputs, choose by career Mastery then unweighted eligible
   metric kill count then DPS, and persist the choice eventually. Peak follows
@@ -77,13 +74,14 @@ Questions requiring a product decision:
 
 ## Remaining implementation sequence
 
-1. Resolve the full-raid decisions above before implementing a pool or weights.
+1. Obtain approved numeric seed weights before seeding career weights.
    Specify the career allowed variant mapping separately from ordinary board
    configuration. Keep existing structures rather than extracting a new service.
-2. Add configuration-derived full-raid totals and exact-variant allowed-pool
-   resolution with tests for mixed flavors, Wrath historical Vanilla uploads,
-   independent 10/25 variants, optional bosses, explicit zero awards, and the
-   approved mutually exclusive alternative rule.
+2. Add explicit exact-variant career weights and allowed-pool resolution with
+   separate average/Renown eligibility. Test mixed flavors, Wrath historical
+   Vanilla uploads excluded from all career totals, independent 10/25 and
+   Normal/Heroic variants, Obsidian excluded only from averages, optional bosses
+   excluded only from average inputs, and explicit zero Renown awards.
 3. Add tenant-wide activation from eligible kill evidence or maintained summaries.
    Cover first kill, duplicate uploads, disabled bosses, source retraction, last
    kill removal, guildless kills, and reactivation. Do not scan live data during
@@ -103,6 +101,6 @@ Questions requiring a product decision:
 
 This investigation uses repository sources only. No live DB access, migration,
 backfill, production configuration edit, or behavioral code change was needed.
-Documentation validation checks source award arithmetic, internal consistency,
+Documentation validation checks policy consistency, obsolete derivation removal,
 and whitespace. A PDF build requires a TeX toolchain, not present in this checkout
 session.
