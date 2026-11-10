@@ -1163,8 +1163,8 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
           {(walking || show3D) && (
             <div className={cn(
               "pointer-events-none absolute left-1/2 z-30 flex w-max max-w-[calc(100%-1rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-x-3 gap-y-1 rounded-sm bg-black/75 px-2.5 py-1.5 text-[11px] text-white/80 shadow-[0_4px_16px_rgba(0,0,0,.5)]",
-              // Above the fullscreen Replay bar.
-              immersive ? "bottom-24" : "bottom-2",
+              // Above the camera/floor controls, or the fullscreen Replay bar.
+              immersive ? "bottom-24" : "bottom-12",
               // The camera keys work with the pointer over the map: their hint shows then.
               !walking && "opacity-0 transition-opacity group-hover/map:opacity-100",
             )}>
