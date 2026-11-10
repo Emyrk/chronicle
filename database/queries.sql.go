@@ -11774,6 +11774,261 @@ func (q *sqlQuerier) LandingPositionalInstances(ctx context.Context, limitCount 
 	return items, nil
 }
 
+const listCareerGuildBossInputs = `-- name: ListCareerGuildBossInputs :many
+SELECT s.encounter_name, 'kill_time'::text AS metric,
+LEAST(100::double precision, 100.0 * b.best_duration_ms / s.fastest_duration_ms)::double precision AS peak, LEAST(100::double precision, 100::double precision * b.best_duration_ms * s.form_mean_inverse_ms)::double precision AS form, LEAST(100::double precision, 100::double precision * b.best_duration_ms * s.floor_mean_inverse_ms)::double precision AS floor,
+ s.observation_count
+ FROM leaderboard_guild_boss_subjects s
+ JOIN leaderboard_guild_boss_benchmarks b ON b.tenant_id = s.tenant_id AND b.instance_name = s.instance_name AND b.difficulty_name = s.difficulty_name AND b.max_players = s.max_players AND b.encounter_name = s.encounter_name
+ WHERE s.tenant_id = $1::uuid AND s.realm_id = $2::uuid
+ AND s.instance_name = $3::text AND s.difficulty_name = $4::text AND s.max_players = $5::smallint
+ AND s.encounter_name = ANY($6::text[])
+ AND s.guild_id = $7::uuid
+ ORDER BY s.encounter_name
+`
+
+type ListCareerGuildBossInputsParams struct {
+	TenantID       uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RealmID        uuid.UUID `db:"realm_id" json:"realm_id"`
+	InstanceName   string    `db:"instance_name" json:"instance_name"`
+	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16     `db:"max_players" json:"max_players"`
+	Bosses         []string  `db:"bosses" json:"bosses"`
+	GuildID        uuid.UUID `db:"guild_id" json:"guild_id"`
+}
+
+type ListCareerGuildBossInputsRow struct {
+	EncounterName    string  `db:"encounter_name" json:"encounter_name"`
+	Metric           string  `db:"metric" json:"metric"`
+	Peak             float64 `db:"peak" json:"peak"`
+	Form             float64 `db:"form" json:"form"`
+	Floor            float64 `db:"floor" json:"floor"`
+	ObservationCount int64   `db:"observation_count" json:"observation_count"`
+}
+
+func (q *sqlQuerier) ListCareerGuildBossInputs(ctx context.Context, arg ListCareerGuildBossInputsParams) ([]ListCareerGuildBossInputsRow, error) {
+	rows, err := q.db.Query(ctx, listCareerGuildBossInputs,
+		arg.TenantID,
+		arg.RealmID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.Bosses,
+		arg.GuildID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCareerGuildBossInputsRow
+	for rows.Next() {
+		var i ListCareerGuildBossInputsRow
+		if err := rows.Scan(
+			&i.EncounterName,
+			&i.Metric,
+			&i.Peak,
+			&i.Form,
+			&i.Floor,
+			&i.ObservationCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCareerGuildRenownInputs = `-- name: ListCareerGuildRenownInputs :many
+SELECT encounter_name, count(*)::bigint AS kill_count
+FROM leaderboard_guild_renown_facts
+WHERE tenant_id = $1::uuid AND realm_id = $2::uuid
+ AND instance_name = $3::text AND difficulty_name = $4::text AND max_players = $5::smallint
+ AND encounter_name = ANY($6::text[])
+ AND guild_id = $7::uuid
+GROUP BY encounter_name ORDER BY encounter_name
+`
+
+type ListCareerGuildRenownInputsParams struct {
+	TenantID       uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RealmID        uuid.UUID `db:"realm_id" json:"realm_id"`
+	InstanceName   string    `db:"instance_name" json:"instance_name"`
+	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16     `db:"max_players" json:"max_players"`
+	Bosses         []string  `db:"bosses" json:"bosses"`
+	GuildID        uuid.UUID `db:"guild_id" json:"guild_id"`
+}
+
+type ListCareerGuildRenownInputsRow struct {
+	EncounterName string `db:"encounter_name" json:"encounter_name"`
+	KillCount     int64  `db:"kill_count" json:"kill_count"`
+}
+
+func (q *sqlQuerier) ListCareerGuildRenownInputs(ctx context.Context, arg ListCareerGuildRenownInputsParams) ([]ListCareerGuildRenownInputsRow, error) {
+	rows, err := q.db.Query(ctx, listCareerGuildRenownInputs,
+		arg.TenantID,
+		arg.RealmID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.Bosses,
+		arg.GuildID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCareerGuildRenownInputsRow
+	for rows.Next() {
+		var i ListCareerGuildRenownInputsRow
+		if err := rows.Scan(&i.EncounterName, &i.KillCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCareerPlayerBossInputs = `-- name: ListCareerPlayerBossInputs :many
+SELECT s.encounter_name, s.metric,
+CASE WHEN b.best_metric > 0 THEN LEAST(100::double precision, 100 * s.raw_peak / b.best_metric) ELSE 0::double precision END AS peak, CASE WHEN b.best_metric > 0 THEN LEAST(100::double precision, 100 * s.raw_form / b.best_metric) ELSE 0::double precision END AS form, CASE WHEN b.best_metric > 0 THEN LEAST(100::double precision, 100 * s.raw_floor / b.best_metric) ELSE 0::double precision END AS floor,
+ s.observation_count
+ FROM leaderboard_player_boss_subjects s
+ JOIN leaderboard_player_boss_benchmarks b ON b.tenant_id = s.tenant_id AND b.instance_name = s.instance_name AND b.difficulty_name = s.difficulty_name AND b.max_players = s.max_players AND b.encounter_name = s.encounter_name AND b.player_class = s.player_class AND b.player_spec = s.player_spec AND b.player_sub_spec = s.player_sub_spec AND b.metric = s.metric
+ WHERE s.tenant_id = $1::uuid AND s.realm_id = $2::uuid
+ AND s.instance_name = $3::text AND s.difficulty_name = $4::text AND s.max_players = $5::smallint
+ AND s.encounter_name = ANY($6::text[])
+ AND s.player_guid = $7::text AND s.player_class = $8::text
+ AND s.player_spec = $9::text AND s.player_sub_spec = $10::text
+ AND s.metric IN ('dps', 'hps')
+ ORDER BY s.encounter_name, s.metric
+`
+
+type ListCareerPlayerBossInputsParams struct {
+	TenantID       uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RealmID        uuid.UUID `db:"realm_id" json:"realm_id"`
+	InstanceName   string    `db:"instance_name" json:"instance_name"`
+	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16     `db:"max_players" json:"max_players"`
+	Bosses         []string  `db:"bosses" json:"bosses"`
+	PlayerGuid     string    `db:"player_guid" json:"player_guid"`
+	PlayerClass    string    `db:"player_class" json:"player_class"`
+	PlayerSpec     string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec  string    `db:"player_sub_spec" json:"player_sub_spec"`
+}
+
+type ListCareerPlayerBossInputsRow struct {
+	EncounterName    string  `db:"encounter_name" json:"encounter_name"`
+	Metric           string  `db:"metric" json:"metric"`
+	Peak             float64 `db:"peak" json:"peak"`
+	Form             float64 `db:"form" json:"form"`
+	Floor            float64 `db:"floor" json:"floor"`
+	ObservationCount int64   `db:"observation_count" json:"observation_count"`
+}
+
+func (q *sqlQuerier) ListCareerPlayerBossInputs(ctx context.Context, arg ListCareerPlayerBossInputsParams) ([]ListCareerPlayerBossInputsRow, error) {
+	rows, err := q.db.Query(ctx, listCareerPlayerBossInputs,
+		arg.TenantID,
+		arg.RealmID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.Bosses,
+		arg.PlayerGuid,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCareerPlayerBossInputsRow
+	for rows.Next() {
+		var i ListCareerPlayerBossInputsRow
+		if err := rows.Scan(
+			&i.EncounterName,
+			&i.Metric,
+			&i.Peak,
+			&i.Form,
+			&i.Floor,
+			&i.ObservationCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCareerPlayerRenownInputs = `-- name: ListCareerPlayerRenownInputs :many
+SELECT encounter_name, count(*)::bigint AS kill_count
+FROM leaderboard_career_renown_facts
+WHERE tenant_id = $1::uuid AND realm_id = $2::uuid
+ AND instance_name = $3::text AND difficulty_name = $4::text AND max_players = $5::smallint
+ AND encounter_name = ANY($6::text[])
+ AND player_guid = $7::text AND player_class = $8::text
+ AND player_spec = $9::text AND player_sub_spec = $10::text
+GROUP BY encounter_name ORDER BY encounter_name
+`
+
+type ListCareerPlayerRenownInputsParams struct {
+	TenantID       uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RealmID        uuid.UUID `db:"realm_id" json:"realm_id"`
+	InstanceName   string    `db:"instance_name" json:"instance_name"`
+	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16     `db:"max_players" json:"max_players"`
+	Bosses         []string  `db:"bosses" json:"bosses"`
+	PlayerGuid     string    `db:"player_guid" json:"player_guid"`
+	PlayerClass    string    `db:"player_class" json:"player_class"`
+	PlayerSpec     string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec  string    `db:"player_sub_spec" json:"player_sub_spec"`
+}
+
+type ListCareerPlayerRenownInputsRow struct {
+	EncounterName string `db:"encounter_name" json:"encounter_name"`
+	KillCount     int64  `db:"kill_count" json:"kill_count"`
+}
+
+func (q *sqlQuerier) ListCareerPlayerRenownInputs(ctx context.Context, arg ListCareerPlayerRenownInputsParams) ([]ListCareerPlayerRenownInputsRow, error) {
+	rows, err := q.db.Query(ctx, listCareerPlayerRenownInputs,
+		arg.TenantID,
+		arg.RealmID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.Bosses,
+		arg.PlayerGuid,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCareerPlayerRenownInputsRow
+	for rows.Next() {
+		var i ListCareerPlayerRenownInputsRow
+		if err := rows.Scan(&i.EncounterName, &i.KillCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const leaderboardCareerVariantActive = `-- name: LeaderboardCareerVariantActive :one
 SELECT (EXISTS (
     SELECT 1 FROM leaderboard_player_renown_facts
