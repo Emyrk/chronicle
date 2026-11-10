@@ -42,6 +42,9 @@ vi.mock("@/api/queries", () => ({
   useSupportedInstanceRankingEncounterSets: () => ({ data: new Map([["Molten Core", [{ id: "", label: "Default", encounters: ["Ragnaros"] }]]]), isPending: false, isError: false }),
 }))
 vi.mock("@/components/Ads/AdRailStack", () => ({ AdRailStack: () => null }))
+vi.mock("@/components/Ads/MobileBottomAd", () => ({
+  MobileBottomAd: ({ placement }: { placement: string }) => <div data-ad-placement={placement} />,
+}))
 vi.mock("./Hub/LiveHubRatings", () => ({ LiveHubRatings: ({ view, subject }: { view: string; subject: string }) => <p>Live ratings {view} {subject}</p> }))
 vi.mock("./Hub/LiveHubOverview", () => ({ LiveHubOverview: () => <p>Live overview</p> }))
 
@@ -69,6 +72,12 @@ describe("live Storybook Hub", () => {
     vi.mocked(useLandingHighlights).mockReturnValue({ data: undefined, isFetching: true, isError: false, refetch: vi.fn() } as unknown as ReturnType<typeof useLandingHighlights>)
     setSummary(summary)
   })
+  it("mounts the mobile bottom ad on active leaderboard routes", () => {
+    expect(hub("/leaderboards/Ruins-of-Ahn%27Qiraj?difficulty=&size=0")).toContain(
+      'data-ad-placement="rankings-mobile-bottom"',
+    )
+  })
+
   it("fetches only the exact supported landing realm scope", () => {
     hub("/leaderboards")
     expect(useLandingHighlights).toHaveBeenLastCalledWith(undefined, undefined, true)
