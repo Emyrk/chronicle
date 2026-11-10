@@ -11774,6 +11774,110 @@ func (q *sqlQuerier) LandingPositionalInstances(ctx context.Context, limitCount 
 	return items, nil
 }
 
+const leaderboardCareerVariantActive = `-- name: LeaderboardCareerVariantActive :one
+SELECT (EXISTS (
+    SELECT 1 FROM leaderboard_player_renown_facts
+    WHERE tenant_id = $1::uuid AND instance_name = $2::text
+      AND difficulty_name = $3::text AND max_players = $4::smallint
+      AND encounter_name = ANY($5::text[])
+) OR EXISTS (
+    SELECT 1 FROM leaderboard_guild_renown_facts
+    WHERE tenant_id = $1::uuid AND instance_name = $2::text
+      AND difficulty_name = $3::text AND max_players = $4::smallint
+      AND encounter_name = ANY($5::text[])
+))::boolean AS active
+`
+
+type LeaderboardCareerVariantActiveParams struct {
+	TenantID       uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName   string    `db:"instance_name" json:"instance_name"`
+	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16     `db:"max_players" json:"max_players"`
+	Bosses         []string  `db:"bosses" json:"bosses"`
+}
+
+// Input bosses are the CURRENT enabled exact boss identities from configuration,
+// including optional bosses and zero-award bosses. No subject/realm filter.
+// Fact retraction by D1 makes activation retractable without a sticky active row.
+func (q *sqlQuerier) LeaderboardCareerVariantActive(ctx context.Context, arg LeaderboardCareerVariantActiveParams) (bool, error) {
+	row := q.db.QueryRow(ctx, leaderboardCareerVariantActive,
+		arg.TenantID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.Bosses,
+	)
+	var active bool
+	err := row.Scan(&active)
+	return active, err
+}
+
+const listLeaderboardCareerVariants = `-- name: ListLeaderboardCareerVariants :many
+SELECT instance_name, difficulty_name, max_players, required_flavors, include_average, include_renown, weight FROM leaderboard_career_variants
+WHERE required_flavors <@ $1::text[]
+ORDER BY instance_name, difficulty_name, max_players
+`
+
+func (q *sqlQuerier) ListLeaderboardCareerVariants(ctx context.Context, flavors []string) ([]LeaderboardCareerVariant, error) {
+	rows, err := q.db.Query(ctx, listLeaderboardCareerVariants, flavors)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LeaderboardCareerVariant
+	for rows.Next() {
+		var i LeaderboardCareerVariant
+		if err := rows.Scan(
+			&i.InstanceName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.RequiredFlavors,
+			&i.IncludeAverage,
+			&i.IncludeRenown,
+			&i.Weight,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const upsertLeaderboardCareerVariant = `-- name: UpsertLeaderboardCareerVariant :exec
+INSERT INTO leaderboard_career_variants
+(instance_name, difficulty_name, max_players, required_flavors, include_average, include_renown, weight)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+ON CONFLICT (instance_name, difficulty_name, max_players) DO UPDATE SET
+required_flavors = EXCLUDED.required_flavors, include_average = EXCLUDED.include_average,
+include_renown = EXCLUDED.include_renown, weight = EXCLUDED.weight
+`
+
+type UpsertLeaderboardCareerVariantParams struct {
+	InstanceName    string        `db:"instance_name" json:"instance_name"`
+	DifficultyName  string        `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers      int16         `db:"max_players" json:"max_players"`
+	RequiredFlavors []string      `db:"required_flavors" json:"required_flavors"`
+	IncludeAverage  bool          `db:"include_average" json:"include_average"`
+	IncludeRenown   bool          `db:"include_renown" json:"include_renown"`
+	Weight          pgtype.Float8 `db:"weight" json:"weight"`
+}
+
+func (q *sqlQuerier) UpsertLeaderboardCareerVariant(ctx context.Context, arg UpsertLeaderboardCareerVariantParams) error {
+	_, err := q.db.Exec(ctx, upsertLeaderboardCareerVariant,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.RequiredFlavors,
+		arg.IncludeAverage,
+		arg.IncludeRenown,
+		arg.Weight,
+	)
+	return err
+}
+
 const insertLeaderboardBossOverrides = `-- name: InsertLeaderboardBossOverrides :exec
 INSERT INTO leaderboard_boss_overrides (layer_key, instance_name, encounter_name, enabled)
 VALUES ($1, $2, $3, $4)

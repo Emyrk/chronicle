@@ -1919,6 +1919,17 @@ type LeaderboardBossRenown struct {
 	Points        float64 `db:"points" json:"points"`
 }
 
+type LeaderboardCareerVariant struct {
+	InstanceName    string   `db:"instance_name" json:"instance_name"`
+	DifficultyName  string   `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers      int16    `db:"max_players" json:"max_players"`
+	RequiredFlavors []string `db:"required_flavors" json:"required_flavors"`
+	IncludeAverage  bool     `db:"include_average" json:"include_average"`
+	IncludeRenown   bool     `db:"include_renown" json:"include_renown"`
+	// Explicit career average weight. NULL is unconfigured and blocks active eligible averages. Never derived from Renown.
+	Weight pgtype.Float8 `db:"weight" json:"weight"`
+}
+
 type LeaderboardDirtyGuildBossBenchmark struct {
 	TenantID        uuid.UUID          `db:"tenant_id" json:"tenant_id"`
 	InstanceName    string             `db:"instance_name" json:"instance_name"`

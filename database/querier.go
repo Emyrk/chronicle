@@ -754,6 +754,10 @@ type sqlcQuerier interface {
 	// The tenant scope: wow_server_realms' RLS policy hides other tenants' realms
 	// (log_instances has no policy of its own).
 	LandingPositionalInstances(ctx context.Context, limitCount int32) ([]LandingPositionalInstancesRow, error)
+	// Input bosses are the CURRENT enabled exact boss identities from configuration,
+	// including optional bosses and zero-award bosses. No subject/realm filter.
+	// Fact retraction by D1 makes activation retractable without a sticky active row.
+	LeaderboardCareerVariantActive(ctx context.Context, arg LeaderboardCareerVariantActiveParams) (bool, error)
 	// Shared database clock for operational diagnostics; leases never use Go time.
 	LeaderboardD2Clock(ctx context.Context) (pgtype.Timestamptz, error)
 	LeaderboardHighlightRealms(ctx context.Context, tenantID uuid.UUID) ([]uuid.UUID, error)
@@ -843,6 +847,7 @@ type sqlcQuerier interface {
 	ListInstancesMissingParseReceiptWindowed(ctx context.Context, arg ListInstancesMissingParseReceiptWindowedParams) ([]ListInstancesMissingParseReceiptWindowedRow, error)
 	ListInstancesMissingTimeParseScores(ctx context.Context, arg ListInstancesMissingTimeParseScoresParams) ([]ListInstancesMissingTimeParseScoresRow, error)
 	ListItemPricingRealms(ctx context.Context) ([]ListItemPricingRealmsRow, error)
+	ListLeaderboardCareerVariants(ctx context.Context, flavors []string) ([]LeaderboardCareerVariant, error)
 	ListLeaderboardDirtyRuns(ctx context.Context, tenantID uuid.UUID) ([]LeaderboardDirtyRun, error)
 	ListLeaderboardHighlights(ctx context.Context, arg ListLeaderboardHighlightsParams) ([]LeaderboardHighlight, error)
 	ListLeaderboardLayers(ctx context.Context) ([]LeaderboardLayer, error)
@@ -1362,6 +1367,7 @@ type sqlcQuerier interface {
 	UpsertGuildSettings(ctx context.Context, arg UpsertGuildSettingsParams) (GuildSetting, error)
 	UpsertInstanceOverviewMetrics(ctx context.Context, arg UpsertInstanceOverviewMetricsParams) error
 	UpsertItemDailyPrice(ctx context.Context, arg []UpsertItemDailyPriceParams) *UpsertItemDailyPriceBatchResults
+	UpsertLeaderboardCareerVariant(ctx context.Context, arg UpsertLeaderboardCareerVariantParams) error
 	UpsertLuaProjectContributor(ctx context.Context, arg UpsertLuaProjectContributorParams) (LuaProjectContributor, error)
 	UpsertPendingModificationRequest(ctx context.Context, arg UpsertPendingModificationRequestParams) (ApplicationModificationRequest, error)
 	UpsertPlayerGearHistory(ctx context.Context, arg []UpsertPlayerGearHistoryParams) *UpsertPlayerGearHistoryBatchResults

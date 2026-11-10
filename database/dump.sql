@@ -1456,6 +1456,21 @@ CREATE TABLE leaderboard_bosses (
     CONSTRAINT leaderboard_bosses_encounter_name_check CHECK ((btrim(encounter_name) <> ''::text))
 );
 
+CREATE TABLE leaderboard_career_variants (
+    instance_name text NOT NULL,
+    difficulty_name text NOT NULL,
+    max_players smallint NOT NULL,
+    required_flavors text[] NOT NULL,
+    include_average boolean NOT NULL,
+    include_renown boolean NOT NULL,
+    weight double precision,
+    CONSTRAINT leaderboard_career_variants_max_players_check CHECK ((max_players >= 0)),
+    CONSTRAINT leaderboard_career_variants_required_flavors_check CHECK (((cardinality(required_flavors) > 0) AND (required_flavors = leaderboard_sorted_flavors(required_flavors)))),
+    CONSTRAINT leaderboard_career_variants_weight_check CHECK (((weight > (0)::double precision) AND (weight < 'Infinity'::double precision)))
+);
+
+COMMENT ON COLUMN leaderboard_career_variants.weight IS 'Explicit career average weight. NULL is unconfigured and blocks active eligible averages. Never derived from Renown.';
+
 CREATE TABLE leaderboard_dirty_guild_boss_benchmarks (
     tenant_id uuid NOT NULL,
     instance_name text NOT NULL,
@@ -3710,6 +3725,9 @@ ALTER TABLE ONLY leaderboard_boss_renown
 ALTER TABLE ONLY leaderboard_bosses
     ADD CONSTRAINT leaderboard_bosses_pkey PRIMARY KEY (instance_name, encounter_name);
 
+ALTER TABLE ONLY leaderboard_career_variants
+    ADD CONSTRAINT leaderboard_career_variants_pkey PRIMARY KEY (instance_name, difficulty_name, max_players);
+
 ALTER TABLE ONLY leaderboard_dirty_guild_boss_benchmarks
     ADD CONSTRAINT leaderboard_dirty_guild_boss_benchmarks_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name);
 
@@ -4884,6 +4902,9 @@ ALTER TABLE ONLY leaderboard_boss_renown
 
 ALTER TABLE ONLY leaderboard_bosses
     ADD CONSTRAINT leaderboard_bosses_instance_name_fkey FOREIGN KEY (instance_name) REFERENCES leaderboard_instances(instance_name);
+
+ALTER TABLE ONLY leaderboard_career_variants
+    ADD CONSTRAINT leaderboard_career_variants_instance_name_fkey FOREIGN KEY (instance_name) REFERENCES leaderboard_instances(instance_name);
 
 ALTER TABLE ONLY leaderboard_highlights
     ADD CONSTRAINT leaderboard_highlights_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES tenants(id);
