@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EncounterFloorMemory, encounterFloorScope, estimateEncounterFloor, firstFloorEncounter } from "./encounterFloor";
+import { EncounterFloorMemory, encounterFloorScope, estimateEncounterFloor, firstFloorEncounter, instanceNameFloorHint } from "./encounterFloor";
 import type { MapEncounterPositions, MapPositionSample } from "./map.processor";
 const encounter = (samples: Partial<MapPositionSample>[]): MapEncounterPositions => ({ positionsByUnit: new Map([["player", samples.map((sample, i) => ({ timestampMs: i, x: 1, y: 1, mapId: 90, ...sample }))]]) } as MapEncounterPositions);
 const players = new Set(["player"]);
@@ -18,6 +18,15 @@ describe("encounter floor selection", () => {
     expect(estimate([{ x: 2, floor: 3 }, { x: 2 }]).source).toBe("telemetry");
     expect(estimate([{ x: 2, floor: 3 }, { x: 2 }]).floor).toBe(3);
     expect(estimate([{ x: 1, synthetic: true }]).uncertain).toBe(true);
+  });
+  it("uses canonical Scarlet Monastery wing names after recorded telemetry and before geometry", () => {
+    expect(instanceNameFloorHint("Scarlet Monastery Graveyard")).toBe(1);
+    expect(instanceNameFloorHint("  scarlet   monastery library ")).toBe(2);
+    expect(instanceNameFloorHint("Scarlet Monastery Armory")).toBe(3);
+    expect(instanceNameFloorHint("Scarlet Monastery Cathedral")).toBe(4);
+    expect(instanceNameFloorHint("Scarlet Monastery")).toBeNull();
+    expect(estimateEncounterFloor(encounter([{ x: 1 }]), 90, [1, 2, 3, 4], players, support, null, 3)).toMatchObject({ floor: 3, source: "instance-name", uncertain: false });
+    expect(estimateEncounterFloor(encounter([{ x: 1, floor: 4 }]), 90, [1, 2, 3, 4], players, support, null, 3)).toMatchObject({ floor: 4, source: "telemetry" });
   });
   it("uses a plausible previous floor for ties, never overriding clear support", () => {
     expect(estimate([{ x: 9 }], 2)).toMatchObject({ floor: 2, uncertain: true, source: "previous" });

@@ -4,10 +4,21 @@ import type { FloorSupportIndex } from "./floorSupport";
 export interface FloorEncounter { id: string; start_time: string; mapId: number }
 export interface EncounterFloorEstimate {
   floor: number | null;
-  source: "telemetry" | "geometry" | "previous" | "fallback";
+  source: "telemetry" | "instance-name" | "geometry" | "previous" | "fallback";
   uncertain: boolean;
   freshSamples: number;
   candidateCounts: Record<number, number>;
+}
+
+const SCARLET_MONASTERY_FLOORS: Readonly<Record<string, number>> = {
+  "scarlet monastery graveyard": 1,
+  "scarlet monastery library": 2,
+  "scarlet monastery armory": 3,
+  "scarlet monastery cathedral": 4,
+};
+
+export function instanceNameFloorHint(instanceName: string): number | null {
+  return SCARLET_MONASTERY_FLOORS[instanceName.trim().toLowerCase().replace(/\s+/g, " ")] ?? null;
 }
 
 /** Selection order and playback time never change the view's anchor. Whole-run
@@ -31,6 +42,7 @@ export function estimateEncounterFloor(
   players: ReadonlySet<string>,
   support: FloorSupportIndex | undefined,
   previousFloor: number | null,
+  instanceNameHint: number | null = null,
 ): EncounterFloorEstimate {
   const available = [...new Set(floors)].sort((a, b) => a - b);
   const counts: Record<number, number> = {};
@@ -56,14 +68,15 @@ export function estimateEncounterFloor(
       }
     }
   }
-  const votes = explicit.size ? explicit : scores;
+  const hintedFloor = instanceNameHint !== null && available.includes(instanceNameHint) ? instanceNameHint : null;
+  const votes = explicit.size ? explicit : hintedFloor !== null ? new Map([[hintedFloor, 1]]) : scores;
   const best = Math.max(0, ...votes.values());
   const tied = available.filter(floor => Math.abs((votes.get(floor) ?? 0) - best) < 1e-9);
   const previous = previousFloor !== null && tied.includes(previousFloor) ? previousFloor : null;
   const floor = previous ?? tied[0] ?? available[0] ?? null;
   return { floor,
-    source: explicit.size ? "telemetry" : best > 0 ? previous !== null && tied.length > 1 ? "previous" : "geometry" : previous !== null ? "previous" : "fallback",
-    uncertain: floor === null || best === 0 || tied.length !== 1 || (!explicit.size && (singleton.get(floor) ?? 0) <= freshSamples / 2),
+    source: explicit.size ? "telemetry" : hintedFloor !== null ? "instance-name" : best > 0 ? previous !== null && tied.length > 1 ? "previous" : "geometry" : previous !== null ? "previous" : "fallback",
+    uncertain: floor === null || best === 0 || tied.length !== 1 || (hintedFloor === null && !explicit.size && (singleton.get(floor) ?? 0) <= freshSamples / 2),
     freshSamples, candidateCounts: counts };
 }
 

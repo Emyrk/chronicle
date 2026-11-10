@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { mapAssetUrl, type WowMapInstance } from "@/pages/Technical/mapGallery";
 import type { PanelRenderProps } from "../types";
 import type { MapResult } from "./map.processor";
-import { EncounterFloorMemory, encounterFloorScope, estimateEncounterFloor, firstFloorEncounter } from "./encounterFloor";
+import { EncounterFloorMemory, encounterFloorScope, estimateEncounterFloor, firstFloorEncounter, instanceNameFloorHint } from "./encounterFloor";
 import { fetchFloorSupport, usableFloorSupport } from "./floorSupport";
 
 export function useEncounterFloor(props: PanelRenderProps<MapResult>, map: WowMapInstance | undefined) {
@@ -36,7 +36,7 @@ export function useEncounterFloor(props: PanelRenderProps<MapResult>, map: WowMa
   // result before clearing processing, so first-frame partial data is not frozen.
   const estimate = memory.choose(anchorID, Date.parse(anchor?.start_time ?? ""), previous => estimateEncounterFloor(
     positions, map?.mapID ?? 0, map?.floors.map(floor => floor.floor) ?? [],
-    new Set(Object.keys(instance.players ?? {})), enabled ? query.data : undefined, previous,
+    new Set(Object.keys(instance.players ?? {})), enabled ? query.data : undefined, previous, instanceNameFloorHint(instance.name),
   ), Boolean(map && positions) && !props.loading && !props.processing && !props.error && !pending);
   return {
     anchor,
