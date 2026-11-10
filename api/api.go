@@ -45,6 +45,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/serviceproof"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/services/servicewhatsnew"
+	"github.com/Emyrk/chronicle/internal/tenantcache"
 	"github.com/authzed/gochugaru/rel"
 	"github.com/aws/smithy-go"
 	"github.com/go-chi/chi/v5"
@@ -184,8 +185,10 @@ type API struct {
 	luaArtifactBacklog prometheus.Gauge
 	uiUsageMetrics     *uiUsageMetrics
 	instanceSearch     *serviceinstancesearch.Service
-	discoveryStats     discoveryStatsCache
-	landing            landingFeaturedCache
+	// censusCache holds each tenant's default census (Census).
+	censusCache    tenantcache.Cache[[]database.CensusPlayerCountsRow]
+	discoveryStats discoveryStatsCache
+	landing        landingFeaturedCache
 	// landingMeshMaps overrides datasetMeshMaps (tests).
 	landingMeshMaps func(ctx context.Context, realmID uuid.UUID) (map[int32]bool, error)
 }

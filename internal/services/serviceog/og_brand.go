@@ -1,27 +1,16 @@
 package serviceog
 
 import (
-	"context"
-	"errors"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
-	"sync"
-	"time"
-
-	"github.com/google/uuid"
 
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/frontend"
-	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 )
 
 const (
-	brandOGTitle   = "Every pull, every parse, every wipe."
-	brandOGRefresh = time.Hour
-	// brandOGRetry is the wait after a failed SiteStats query.
-	brandOGRetry = 5 * time.Minute
+	brandOGTitle = "Every pull, every parse, every wipe."
 )
 
 // brandOGImageURL returns the signed brand card URL for r, or "" when the OG
@@ -33,7 +22,7 @@ func (s *Service) brandOGImageURL(r *http.Request) string {
 	}
 	var stats database.SiteStatsRow
 	if s.store != nil {
-		stats = s.ogSiteStats.get(r.Context(), s.logger, s.store.SiteStats)
+		stats = s.ogSiteStats.Get(r.Context(), s.logger, s.store.SiteStats)
 	}
 	product := seoProductName(s.resolvedSiteFlavor(r.Context()))
 	return s.ogImageURLForProduct(r, "brand", product, brandOGParams(product, stats))
@@ -89,81 +78,4 @@ func (s *Service) withBrandOG(resolve func(r *http.Request) *frontend.OGData) fu
 		og.ImageURL = image
 		return og
 	}
-}
-
-// ogTenantCache holds one value per tenant (uuid.Nil for the site itself;
-// queries are tenant-scoped by RLS). get never waits on the database: a stale
-// or missing entry starts one background refresh and returns what it has
-// (the zero value before the first refresh lands). A failed refresh keeps the
-// last value and retries after brandOGRetry.
-type ogTenantCache[T any] struct {
-	mu      sync.Mutex
-	entries map[uuid.UUID]*ogTenantEntry[T]
-}
-
-// ogSiteStatsCache holds the brand card's site counts.
-type ogSiteStatsCache = ogTenantCache[database.SiteStatsRow]
-
-type ogTenantEntry[T any] struct {
-	value       T
-	nextRefresh time.Time
-	refreshing  bool
-}
-
-func (c *ogTenantCache[T]) get(ctx context.Context, logger *slog.Logger, fetch func(context.Context) (T, error)) T {
-	key := uuid.Nil
-	if t := servicetenant.TenantFromContext(ctx); t != nil {
-		key = t.ID
-	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.entries == nil {
-		c.entries = make(map[uuid.UUID]*ogTenantEntry[T])
-	}
-	e := c.entries[key]
-	if e == nil {
-		e = &ogTenantEntry[T]{}
-		c.entries[key] = e
-	}
-	if !e.refreshing && !time.Now().Before(e.nextRefresh) {
-		e.refreshing = true
-		// Keep the request's tenant and actor for RLS, but not its cancellation.
-		refreshCtx := context.WithoutCancel(ctx)
-		go c.refresh(refreshCtx, logger, fetch, e)
-	}
-	return e.value
-}
-
-func (c *ogTenantCache[T]) refresh(ctx context.Context, logger *slog.Logger, fetch func(context.Context) (T, error), e *ogTenantEntry[T]) {
-	var (
-		value T
-		err   error
-	)
-	// Whatever happens, clear refreshing so the entry can refresh again; a
-	// panic counts as a failed query.
-	defer func() {
-		if p := recover(); p != nil {
-			if logger == nil {
-				logger = slog.Default()
-			}
-			logger.Error("og cache refresh panicked", slog.Any("panic", p))
-			err = errors.New("panic")
-		}
-
-		c.mu.Lock()
-		defer c.mu.Unlock()
-		e.refreshing = false
-		if err != nil {
-			// Keep the last good value; retry sooner than a full interval.
-			e.nextRefresh = time.Now().Add(brandOGRetry)
-			return
-		}
-		e.value = value
-		e.nextRefresh = time.Now().Add(brandOGRefresh)
-	}()
-
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-	value, err = fetch(ctx)
 }

@@ -27,7 +27,7 @@ func (s *Service) censusOG(r *http.Request) *frontend.OGData {
 	if !s.ogServiceConfigured() || s.store == nil {
 		return og
 	}
-	rows := s.ogCensus.get(r.Context(), s.logger, func(ctx context.Context) ([]database.CensusPlayerCountsRow, error) {
+	rows := s.ogCensus.Get(r.Context(), s.logger, func(ctx context.Context) ([]database.CensusPlayerCountsRow, error) {
 		return s.store.CensusPlayerCounts(ctx, database.CensusPlayerCountsParams{
 			UpdatedAfter: pgtype.Timestamptz{Time: time.Now().AddDate(0, 0, -censusOGDays), Valid: true},
 			RealmIds:     nil,

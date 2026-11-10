@@ -17,6 +17,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
+	"github.com/Emyrk/chronicle/internal/tenantcache"
 )
 
 const defaultSEODescription = "Chronicle provides combat log analysis for World of Warcraft communities. Upload combat logs to explore encounters, rankings, and performance insights."
@@ -55,9 +56,9 @@ type Service struct {
 	accessURL    *url.URL
 	imageBaseURL *url.URL
 	signingKey   string
-	ogSiteStats  ogSiteStatsCache
-	ogCensus     ogTenantCache[[]database.CensusPlayerCountsRow]
-	ogHighlights ogTenantCache[[]chroniclesdk.HubLandingPreview]
+	ogSiteStats  tenantcache.Cache[database.SiteStatsRow]
+	ogCensus     tenantcache.Cache[[]database.CensusPlayerCountsRow]
+	ogHighlights tenantcache.Cache[[]chroniclesdk.HubLandingPreview]
 }
 
 func New(opts Options) *Service {

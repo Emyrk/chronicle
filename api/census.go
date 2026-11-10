@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"time"
@@ -13,6 +14,9 @@ import (
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
 )
+
+// censusDefaultDays is the census page's default window.
+const censusDefaultDays = 90
 
 // Census returns player counts grouped by class and race.
 //
@@ -27,7 +31,7 @@ func (api *API) Census(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	// Parse days parameter (default 90, clamp 1-365)
-	days := 90
+	days := censusDefaultDays
 	if d := r.URL.Query().Get("days"); d != "" {
 		parsed, err := strconv.Atoi(d)
 		if err != nil || parsed < 1 {
@@ -49,15 +53,27 @@ func (api *API) Census(w http.ResponseWriter, r *http.Request) {
 		realmIDs = append(realmIDs, id)
 	}
 
-	updatedAfter := time.Now().AddDate(0, 0, -days)
-
-	rows, err := api.Opts.Zed.CensusPlayerCounts(ctx, database.CensusPlayerCountsParams{
-		UpdatedAfter: pgtype.Timestamptz{
-			Time:  updatedAfter,
-			Valid: true,
-		},
-		RealmIds: realmIDs,
-	})
+	fetch := func(ctx context.Context) ([]database.CensusPlayerCountsRow, error) {
+		return api.Opts.Zed.CensusPlayerCounts(ctx, database.CensusPlayerCountsParams{
+			UpdatedAfter: pgtype.Timestamptz{
+				Time:  time.Now().AddDate(0, 0, -days),
+				Valid: true,
+			},
+			RealmIds: realmIDs,
+		})
+	}
+	var (
+		rows []database.CensusPlayerCountsRow
+		err  error
+	)
+	// The page's default view scans the tenant's players, so it is cached per
+	// tenant (refreshed hourly in the background). Filtered views are rarer
+	// and keyed by request input, so they still query directly.
+	if days == censusDefaultDays && len(realmIDs) == 0 {
+		rows, err = api.censusCache.Load(ctx, api.Opts.Logger, fetch)
+	} else {
+		rows, err = fetch(ctx)
+	}
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
 			Response: chroniclesdk.Response{

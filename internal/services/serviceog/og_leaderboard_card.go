@@ -46,7 +46,7 @@ func (s *Service) leaderboardCardURL(r *http.Request, flavor database.WoWFlavor,
 		return ""
 	}
 	tenantID := tenant.ID
-	previews := s.ogHighlights.get(r.Context(), s.logger, func(ctx context.Context) ([]chroniclesdk.HubLandingPreview, error) {
+	previews := s.ogHighlights.Get(r.Context(), s.logger, func(ctx context.Context) ([]chroniclesdk.HubLandingPreview, error) {
 		rows, err := s.store.ListLeaderboardHighlights(ctx, database.ListLeaderboardHighlightsParams{TenantID: tenantID, RealmScope: uuid.Nil})
 		if err != nil {
 			return nil, err
