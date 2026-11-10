@@ -70,10 +70,17 @@ func TestComputeCareerInputs(t *testing.T) {
 	require.Equal(t, "kill_time", guild.Raids[0].Metric)
 	require.InDelta(t, 31, guild.Raids[0].Mastery, 1e-9)
 	require.Equal(t, got.Kills, guild.Kills)
+	// Renown-only evidence survives missing average evidence and weights.
+	pool.Variants[0].AverageBosses = []string{"Missing"}
+	renownOnly := compute(identity)
+	require.Empty(t, renownOnly.Raids)
+	require.Equal(t, got.Kills, renownOnly.Kills)
+	pool.Variants[0].AverageBosses = []string{"Boss", "Missing"}
 	// Tenant filtering remains explicit even under an administrative context.
 	otherTenant, err := ComputeCareerInputs(servicetenant.AdminBypass(f.ctx), f.db, uuid.New(), identity, pool)
 	require.NoError(t, err)
 	require.Empty(t, otherTenant.Kills)
+	require.Empty(t, otherTenant.Raids)
 	for _, raid := range otherTenant.Raids {
 		require.Zero(t, raid.EligibleKills)
 	}
@@ -86,6 +93,7 @@ func TestComputeCareerInputs(t *testing.T) {
 		pool.Variants[0].CareerKey = key
 		empty := compute(identity)
 		require.Empty(t, empty.Kills)
+		require.Empty(t, empty.Raids)
 		for _, raid := range empty.Raids {
 			require.Zero(t, raid.EligibleKills)
 		}
@@ -96,6 +104,7 @@ func TestComputeCareerInputs(t *testing.T) {
 		change(&other)
 		empty := compute(other)
 		require.Empty(t, empty.Kills)
+		require.Empty(t, empty.Raids)
 		for _, raid := range empty.Raids {
 			require.Zero(t, raid.Mastery)
 			require.Zero(t, raid.Peak)

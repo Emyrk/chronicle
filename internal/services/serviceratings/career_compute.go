@@ -81,7 +81,11 @@ func ComputeCareerInputs(ctx context.Context, db database.StoreQueries, tenant u
 				}
 			}
 			for _, metric := range metrics {
-				out.Raids = append(out.Raids, *raids[metric])
+				// Missing candidates belong to the reducer's zero-fill, not stored
+				// evidence. An empty result lets the publisher remove orphan rows.
+				if raids[metric].EligibleKills > 0 {
+					out.Raids = append(out.Raids, *raids[metric])
+				}
 			}
 		}
 		if variant.IncludeRenown && len(variant.RenownBosses) > 0 {
