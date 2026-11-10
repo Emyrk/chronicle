@@ -123,7 +123,7 @@ func (api *API) LeaderboardV2(w http.ResponseWriter, r *http.Request) {
 				Score: l.Score, Raw: l.Raw,
 			})
 		}
-		httpapi.Write(ctx, w, http.StatusOK, out)
+		writeCacheableLeaderboardResponse(ctx, w, http.StatusOK, out)
 		return
 	}
 	if q.Get("view") == "cohorts" {
@@ -136,7 +136,7 @@ func (api *API) LeaderboardV2(w http.ResponseWriter, r *http.Request) {
 		for _, c := range cohorts {
 			out = append(out, chroniclesdk.LeaderboardV2Cohort{PlayerClass: c.PlayerClass, PlayerSpec: c.PlayerSpec, PlayerSubSpec: c.PlayerSubSpec, Metric: c.Metric})
 		}
-		httpapi.Write(ctx, w, http.StatusOK, out)
+		writeCacheableLeaderboardResponse(ctx, w, http.StatusOK, out)
 		return
 	}
 	out := chroniclesdk.LeaderboardV2Response{Status: "ready", Entries: []chroniclesdk.LeaderboardV2Entry{}, IncludedBosses: selection.Bosses}
@@ -161,7 +161,7 @@ func (api *API) LeaderboardV2(w http.ResponseWriter, r *http.Request) {
 	if selection.Denominator == 0 || (req.Kind == "renown" && len(selection.Bosses) == 0) {
 		out.Status = "empty_selection"
 		out.Message = "This enabled selection contains no eligible bosses."
-		httpapi.Write(ctx, w, http.StatusOK, out)
+		writeCacheableLeaderboardResponse(ctx, w, http.StatusOK, out)
 		return
 	}
 	limit := int32(50)
@@ -299,7 +299,7 @@ func (api *API) LeaderboardV2(w http.ResponseWriter, r *http.Request) {
 		out.Status = "empty"
 		out.Message = "No summaries match this selection. The preview does not populate or refresh evidence."
 	}
-	httpapi.Write(ctx, w, http.StatusOK, out)
+	writeCacheableLeaderboardResponse(ctx, w, http.StatusOK, out)
 }
 
 // playerHistoryLimit bounds one response; it matches the query's LIMIT.
@@ -342,7 +342,7 @@ func (api *API) LeaderboardV2PlayerHistory(w http.ResponseWriter, r *http.Reques
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	httpapi.Write(ctx, w, http.StatusOK, buildPlayerHistory(selectionRows(config), rows))
+	writeCacheableLeaderboardResponse(ctx, w, http.StatusOK, buildPlayerHistory(selectionRows(config), rows))
 }
 
 func buildPlayerHistory(config []database.ResolveLeaderboardConfigurationRow, rows []database.ListLeaderboardV2PlayerHistoryRow) chroniclesdk.LeaderboardV2PlayerHistory {

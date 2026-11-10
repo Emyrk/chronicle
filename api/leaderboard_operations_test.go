@@ -52,5 +52,8 @@ func TestLeaderboardMaintenanceRejectsRoot(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/leaderboards-v2/maintenance?tenant_id="+uuid.NewString(), nil)
 	rec := httptest.NewRecorder()
 	(&API{}).LeaderboardMaintenance(rec, req)
+	require.Empty(t, rec.Header().Get("Cache-Control"))
+	require.Empty(t, rec.Header().Get("Cloudflare-CDN-Cache-Control"))
+	require.Empty(t, rec.Header().Get("Cache-Tag"))
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 }

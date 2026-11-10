@@ -7,12 +7,14 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/db2sdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	types "github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/httpcache"
 	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
@@ -101,15 +103,7 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.router.ServeHTTP(w, r)
 }
 func (s *Service) setupRoutes() {
-	s.router.Use(func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.Method == http.MethodGet {
-				w.Header().Set("Cache-Control", "public, max-age=300")
-				w.Header().Set("Cloudflare-CDN-Cache-Control", "public, max-age=900, stale-while-revalidate=60")
-			}
-			next.ServeHTTP(w, r)
-		})
-	})
+	s.router.Use(httpcache.CacheSuccessfulLeaderboardResponses(time.Now))
 	// DPS rankings
 	s.router.Get("/instances", s.handleInstances)
 	s.router.Get("/encounters", s.handleEncounters)

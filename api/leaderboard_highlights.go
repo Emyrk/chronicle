@@ -29,7 +29,7 @@ func (api *API) LeaderboardHighlights(w http.ResponseWriter, r *http.Request) {
 	ids := q["realm"]
 	if len(q["realm_ids"]) > 1 {
 		out.Status = "unsupported_scope"
-		httpapi.Write(ctx, w, 200, out)
+		writeCacheableLeaderboardResponse(ctx, w, http.StatusOK, out)
 		return
 	}
 	if q.Get("realm_ids") != "" {
@@ -37,7 +37,7 @@ func (api *API) LeaderboardHighlights(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(ids) > 1 {
 		out.Status = "unsupported_scope"
-		httpapi.Write(ctx, w, 200, out)
+		writeCacheableLeaderboardResponse(ctx, w, http.StatusOK, out)
 		return
 	}
 	realm := uuid.Nil
@@ -84,7 +84,7 @@ func (api *API) LeaderboardHighlights(w http.ResponseWriter, r *http.Request) {
 			api.Opts.Logger.WarnContext(ctx, "queue leaderboard highlight refresh", "error", enqueueErr)
 		}
 	}
-	httpapi.Write(ctx, w, 200, out)
+	writeCacheableLeaderboardResponse(ctx, w, http.StatusOK, out)
 }
 
 func (api *API) AdminRefreshLeaderboardHighlights(w http.ResponseWriter, r *http.Request) {

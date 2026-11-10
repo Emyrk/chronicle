@@ -201,5 +201,5 @@ func (api *API) LeaderboardMaintenance(w http.ResponseWriter, r *http.Request) {
 	if len(rows) > 0 {
 		out.Maintenance = operationMaintenance(rows[0])
 	}
-	httpapi.Write(r.Context(), w, 200, out)
+	writeCacheableLeaderboardResponse(r.Context(), w, http.StatusOK, out)
 }

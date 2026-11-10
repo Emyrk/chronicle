@@ -287,7 +287,9 @@ func TestListIndividualLeaderboardMatchesRankingsQueryContract(t *testing.T) {
 	service.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.Equal(t, "public, max-age=300", rec.Header().Get("Cache-Control"))
+	require.Equal(t, "public, max-age=60", rec.Header().Get("Cache-Control"))
+	require.Contains(t, rec.Header().Get("Cloudflare-CDN-Cache-Control"), "stale-while-revalidate=30")
+	require.Equal(t, "leaderboards", rec.Header().Get("Cache-Tag"))
 	require.Equal(t, "60", rec.Header().Get("RateLimit-Limit"))
 	require.Empty(t, rec.Header().Get("RateLimit-Remaining"))
 	require.Equal(t, database.RankingsLeaderboardParams{
@@ -372,7 +374,9 @@ func TestListSpeedrunLeaderboardIncludesCanonicalAndDuplicateLogs(t *testing.T) 
 	service.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.Equal(t, "public, max-age=300", rec.Header().Get("Cache-Control"))
+	require.Equal(t, "public, max-age=60", rec.Header().Get("Cache-Control"))
+	require.Contains(t, rec.Header().Get("Cloudflare-CDN-Cache-Control"), "stale-while-revalidate=30")
+	require.Equal(t, "leaderboards", rec.Header().Get("Cache-Tag"))
 	require.Equal(t, "60", rec.Header().Get("RateLimit-Limit"))
 	require.Empty(t, rec.Header().Get("RateLimit-Remaining"))
 	require.True(t, store.leaderboardParams.UseRankedTiming)
