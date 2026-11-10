@@ -41,7 +41,6 @@ const formatClasses: Record<AdFormat, string> = {
   rail: "hidden w-40 shrink-0 self-start",
   card: "flex h-full w-full self-start justify-center",
   sidebar: "hidden w-[250px] lg:block",
-  "mobile-banner": "flex w-full justify-center lg:hidden",
 }
 
 const railBreakpointClasses = {
@@ -69,7 +68,6 @@ const frameClasses: Record<AdFormat, string> = {
   rail: "min-h-[600px]",
   card: "w-[300px]",
   sidebar: "min-h-[250px]",
-  "mobile-banner": "min-h-[50px] w-[320px] max-w-full",
 }
 
 // Reserve room for the label above the creative and breathing room below it.
@@ -216,7 +214,6 @@ export function AdSlot({
   // Grid cards let the fallback fill the cell like its neighbours; only a
   // rendered creative needs the fixed frame and the advertisement label.
   const fallbackFillsCell = format === "card" && fallbackVisible
-  const showAdLabel = !fallbackFillsCell && format !== "mobile-banner"
 
   useEffect(() => {
     const adContainer = adContainerRef.current
@@ -293,7 +290,7 @@ export function AdSlot({
       data-ad-request-state={!showPreview && !showDemo ? requestState : undefined}
     >
       <div className={cn(fallbackFillsCell && "h-full w-full")}>
-        {showAdLabel && (adSiteConfig?.billing_enabled ? (
+        {fallbackFillsCell ? null : adSiteConfig?.billing_enabled ? (
           <Link
             to={session ? "/account/billing" : "/supporter"}
             title="Become a supporter to remove ads"
@@ -319,7 +316,7 @@ export function AdSlot({
           >
             Advertisement
           </div>
-        ))}
+        )}
 {usesFallbackFrame ? (
           <div
             className={cn(
