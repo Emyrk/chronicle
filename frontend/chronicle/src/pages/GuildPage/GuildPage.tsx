@@ -32,7 +32,9 @@ export function GuildPage() {
   const { guildId, tabSlug } = useParams<{ guildId: string; tabSlug?: string }>();
   const location = useLocation();
   const navigate = useNavigate();
-  const requestedTab = new URLSearchParams(location.search).get("tab") || tabSlug;
+  const searchParams = new URLSearchParams(location.search);
+  const requestedTab = searchParams.get("tab") || tabSlug;
+  const showCareerRatings = searchParams.get("debug") === "true";
   const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
   const [joinMessage, setJoinMessage] = useState("");
@@ -229,7 +231,7 @@ export function GuildPage() {
 
         {/* Content */}
         <div className="flex-1 min-w-0">
-          <GuildCareerCard guildID={pageConfig.guild.id} />
+          {showCareerRatings && <GuildCareerCard guildID={pageConfig.guild.id} />}
           {currentTab && (
             <GuildPageCanvas
               guild={pageConfig.guild}
