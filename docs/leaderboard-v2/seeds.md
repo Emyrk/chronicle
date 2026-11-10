@@ -1,7 +1,7 @@
 # Initial configuration seed review
 
-This document records migration `000342`. The later normal Wrath award seed and
-its expanded supported tuples are documented in [wrath-renown.md](wrath-renown.md).
+This document records migration `000342`. Later award calibrations are documented
+in [wrath-renown.md](wrath-renown.md) and [tbc-renown.md](tbc-renown.md).
 
 Migration `000342` contains literal values only. It never reads retired tables or
 old migration files during deployment. It does not scan historical log data.
@@ -44,7 +44,8 @@ Leviathan; the boss itself remains enabled. Emerald Sanctum's `hard` set selects
 
 ## Deliberate omissions
 
-- No speculative TBC or Wrath Renown awards or variant-specific awards.
+- The initial seed contains no speculative TBC or Wrath Renown awards or
+  variant-specific awards. Later reviewed calibrations are documented separately.
 - Only four exact difficulty/size tuples are seeded: `10 Player`/10 and
   `25 Player`/25 for Naxxramas and Onyxia's Lair, enabled by `wrath`.
   Evidence: `combatlog/parser/common/encounters/consumer_test.go` and

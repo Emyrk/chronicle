@@ -86,10 +86,8 @@ func TestInitialSeeds(t *testing.T) {
 			require.Equal(t, first, rows)
 		}
 	}
-	// Later Wrath variant calibration must not rewrite these initial boss defaults.
-	for _, r := range effective["tbc"] {
-		require.False(t, r.HasPoints, r)
-	}
+	// Later expansion calibrations must not add variants to these initial defaults.
+	require.Empty(t, selectKind(effective["tbc"], "variant"))
 	require.Empty(t, selectKind(effective["vanilla"], "variant"))
 	// Check exact sets against the live canonical registry factories, not just the snapshot.
 	for _, factory := range []*common.CommonFactory{wrath.UlduarFactory, wrath.ObsidianSanctumFactory} {

@@ -35,7 +35,11 @@ func TestCareerApprovedWeightSeeds(t *testing.T) {
 	}
 	before, err := db.ListLeaderboardCareerVariants(ctx, flavors)
 	require.NoError(t, err)
-	require.Len(t, before, 27)
+	require.Len(t, before, 33)
+	renownOnly := []string{
+		"Black Temple", "Hyjal Summit", "Karazhan", "Magtheridon's Lair",
+		"Obsidian Sanctum", "Sunwell Plateau", "Vault of Archavon", "Zul'Aman",
+	}
 	for _, r := range before {
 		key := leaderboardconfig.CareerKey{Instance: r.InstanceName, Difficulty: r.DifficultyName, MaxPlayers: r.MaxPlayers}
 		require.True(t, r.IncludeRenown)
@@ -43,7 +47,7 @@ func TestCareerApprovedWeightSeeds(t *testing.T) {
 			require.True(t, r.IncludeAverage)
 			require.Equal(t, pgtype.Float8{Float64: w, Valid: true}, r.Weight)
 		} else {
-			require.Contains(t, []string{"Obsidian Sanctum", "Vault of Archavon"}, r.InstanceName)
+			require.Contains(t, renownOnly, r.InstanceName)
 			require.False(t, r.IncludeAverage)
 			require.False(t, r.Weight.Valid)
 		}
