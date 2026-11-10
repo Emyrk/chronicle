@@ -1,0 +1,1863 @@
+{
+  "status": "ready",
+  "landing_previews": [
+    {
+      "instance_name": "Blackwing Lair",
+      "difficulty_name": "",
+      "max_players": 0,
+      "player": {
+        "peak": [
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x000000003B9C9BA1",
+            "player_name": "Terenya",
+            "player_class": "DRUID",
+            "player_spec": "Balance",
+            "player_sub_spec": "",
+            "score": 95.16495414466617,
+            "peak_raw": 773.4341376463525
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x000000003B9D6990",
+            "player_name": "Sollo",
+            "player_class": "WARRIOR",
+            "player_spec": "Arms",
+            "player_sub_spec": "",
+            "score": 94.64645547785143,
+            "peak_raw": 932.8332203508504
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x000000003B9D2439",
+            "player_name": "Xeli",
+            "player_class": "PRIEST",
+            "player_spec": "Discipline",
+            "player_sub_spec": "",
+            "score": 93.56413489479752,
+            "peak_raw": 757.4352189272184
+          }
+        ],
+        "ranked_mastery": [
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x000000003B9C8684",
+            "player_name": "Endorx",
+            "player_class": "ROGUE",
+            "player_spec": "Combat",
+            "player_sub_spec": "",
+            "score": 74.99499913458166
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x000000003B9DDF9D",
+            "player_name": "Vegueros",
+            "player_class": "WARLOCK",
+            "player_spec": "Demonology",
+            "player_sub_spec": "",
+            "score": 72.67834674908696
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x000000003B9EB582",
+            "player_name": "Joeligma",
+            "player_class": "PALADIN",
+            "player_spec": "Retribution",
+            "player_sub_spec": "",
+            "score": 72.48938675313993
+          }
+        ],
+        "renown": [
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x000000003B9B056B",
+            "player_name": "Gurky",
+            "player_class": "HUNTER",
+            "player_spec": "",
+            "player_sub_spec": "",
+            "score": 67
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x000000003B9B79C3",
+            "player_name": "Carok",
+            "player_class": "HUNTER",
+            "player_spec": "",
+            "player_sub_spec": "",
+            "score": 67
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x000000003B9B8E48",
+            "player_name": "Betonshaman",
+            "player_class": "SHAMAN",
+            "player_spec": "",
+            "player_sub_spec": "",
+            "score": 67
+          }
+        ]
+      },
+      "guild": {
+        "peak": [
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "c9e752d1-73ad-4d4f-9342-155225e7ff76",
+            "guild_name": "I Griefers Inc I",
+            "score": 84.24567558907853
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "ae97a670-a2b2-4939-8abc-4d02db1b0a59",
+            "guild_name": "Cleave",
+            "score": 83.54400246038982
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "d1d9aa7c-7987-4301-adcb-5aa694f3d594",
+            "guild_name": "Raid Therapy",
+            "score": 81.22116767044588
+          }
+        ],
+        "ranked_mastery": [
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "ae97a670-a2b2-4939-8abc-4d02db1b0a59",
+            "guild_name": "Cleave",
+            "score": 72.17041992957863
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "d1d9aa7c-7987-4301-adcb-5aa694f3d594",
+            "guild_name": "Raid Therapy",
+            "score": 66.95492296770327
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "773e2be7-40d5-47c0-9855-714e1092ef40",
+            "guild_name": "Mushroom Vendor",
+            "score": 66.79935340063764
+          }
+        ],
+        "renown": [
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "773e2be7-40d5-47c0-9855-714e1092ef40",
+            "guild_name": "Mushroom Vendor",
+            "score": 100
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "520391c3-8afa-45e2-841e-5543c3b3aa06",
+            "guild_name": "Fury",
+            "score": 75
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "6eb944c5-df02-4541-ad5d-e9a1d63b4ac5",
+            "guild_name": "strawberry fields",
+            "score": 75
+          }
+        ]
+      },
+      "performances": [
+        {
+          "id": "00000000-0000-0000-0000-000000000000",
+          "encounter_name": "Nefarian",
+          "instance_name": "Blackwing Lair",
+          "player_guid": "0x000000003B9AD226",
+          "player_name": "Gilford",
+          "player_class": "PALADIN",
+          "player_spec": "Retribution",
+          "player_role": "dps",
+          "player_level": 60,
+          "difficulty_name": "",
+          "max_players": 0,
+          "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+          "realm_name": "N'Zoth",
+          "guild_name": "nope",
+          "damage_done": 1048369,
+          "healing_done": 25878,
+          "absorbed_done": 3173,
+          "duration_secs": 1111.312,
+          "dps": 943.3615402335258,
+          "hps": 26.14117367579942,
+          "log_hashed_slug": "yKqV_D0s2PW7Qojs",
+          "killed_at": "2026-11-06T03:29:04.129Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-000000000000",
+          "encounter_name": "Nefarian",
+          "instance_name": "Blackwing Lair",
+          "player_guid": "0x000000003B9BF2EB",
+          "player_name": "Saunuri",
+          "player_class": "PALADIN",
+          "player_spec": "Retribution",
+          "player_role": "dps",
+          "player_level": 60,
+          "difficulty_name": "",
+          "max_players": 0,
+          "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+          "realm_name": "N'Zoth",
+          "guild_name": "Skyfury Vanguard",
+          "damage_done": 1132971,
+          "healing_done": 47505,
+          "absorbed_done": 3166,
+          "duration_secs": 1221.813,
+          "dps": 927.286745189321,
+          "hps": 41.47197648085263,
+          "log_hashed_slug": "g2iyahz2IJtajp2T",
+          "killed_at": "2026-11-08T19:30:09.234Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-000000000000",
+          "encounter_name": "Nefarian",
+          "instance_name": "Blackwing Lair",
+          "player_guid": "0x000000003B9ADDF5",
+          "player_name": "Ahmera",
+          "player_class": "ROGUE",
+          "player_spec": "Combat",
+          "player_role": "dps",
+          "player_level": 60,
+          "difficulty_name": "",
+          "max_players": 0,
+          "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+          "realm_name": "N'Zoth",
+          "guild_name": "The Silver Crusade",
+          "damage_done": 1123009,
+          "healing_done": 2138,
+          "absorbed_done": 2015,
+          "duration_secs": 1230.786,
+          "dps": 912.4323806088141,
+          "hps": 3.374266525618588,
+          "log_hashed_slug": "pAryo802Bk1znzcU",
+          "killed_at": "2026-11-01T19:38:34.657Z"
+        }
+      ],
+      "statistics": [
+        {
+          "player_class": "DRUID",
+          "player_spec": "Feral",
+          "player_sub_spec": "Cat",
+          "min_dps": 306.89144215838616,
+          "q1_dps": 486.75088188800316,
+          "median_dps": 615.2736422703115,
+          "q3_dps": 710.1871962298235,
+          "max_dps": 887.0313359532654,
+          "count": 76
+        },
+        {
+          "player_class": "PALADIN",
+          "player_spec": "Retribution",
+          "min_dps": 346.4000882412573,
+          "q1_dps": 473.01332890681545,
+          "median_dps": 608.6647252386122,
+          "q3_dps": 697.7366344753048,
+          "max_dps": 943.3615402335258,
+          "count": 123
+        },
+        {
+          "player_class": "ROGUE",
+          "player_spec": "Combat",
+          "min_dps": 289.26562656400523,
+          "q1_dps": 515.7640473852658,
+          "median_dps": 590.6058278325804,
+          "q3_dps": 668.4332674753251,
+          "max_dps": 912.4323806088141,
+          "count": 77
+        }
+      ],
+      "speedruns": [
+        {
+          "instance_id": "cfff0c34-f80d-416a-9ee4-a60aabcde1ae",
+          "slug": "GlQLhsz72wdin7NZ",
+          "difficulty_name": "",
+          "duration_ms": 2312986,
+          "guild_id": "d9b6225d-498d-4f35-b77b-a1c454a8d21b",
+          "guild_name": "Skull Emoji",
+          "realm_name": "N'Zoth",
+          "start_time": "2026-11-01T17:00:46.401Z",
+          "completion_time": "2026-11-01T17:39:19.387Z",
+          "player_count": 35,
+          "guild_logo_url": "https://cdn.discordapp.com/icons/1530219173576183828/b5bb955836a42662fb54f204f298f09a.webp",
+          "parser_version": "v1.0.194+v1.0.0-847-g0f36b6db8",
+          "addon_version": "0.38.8",
+          "duplicate_group_id": "fda47672-bb35-4af1-8ed8-b7678806a011"
+        },
+        {
+          "instance_id": "52bbb529-c229-4b7c-8801-654006735bbc",
+          "slug": "sNClJTsqRLJv2u4t",
+          "difficulty_name": "",
+          "duration_ms": 3614683,
+          "guild_id": "8942b0cf-09cd-4352-976b-82d1ba438bbc",
+          "guild_name": "Loot Goblins",
+          "realm_name": "N'Zoth",
+          "start_time": "2026-11-01T17:01:30.784Z",
+          "completion_time": "2026-11-01T18:01:45.467Z",
+          "player_count": 26,
+          "parser_version": "v1.0.194+v1.0.0-847-g0f36b6db8",
+          "addon_version": "0.37",
+          "duplicate_group_id": "ffdb2cd8-095d-4115-95cb-6050a975684d"
+        },
+        {
+          "instance_id": "edb109aa-09e5-44d6-b153-3800db633067",
+          "slug": "GAFIAF53_sPe5Pfy",
+          "difficulty_name": "",
+          "duration_ms": 4028754,
+          "guild_id": "773e2be7-40d5-47c0-9855-714e1092ef40",
+          "guild_name": "Mushroom Vendor",
+          "realm_name": "N'Zoth",
+          "start_time": "2026-11-01T17:53:18.497Z",
+          "completion_time": "2026-11-01T19:00:27.251Z",
+          "player_count": 27,
+          "guild_logo_url": "https://cdn.discordapp.com/icons/1427775994864861207/ff4d863b799400e49606ba808e6d607f.webp?size=1024",
+          "parser_version": "v1.0.194+v1.0.0-847-g0f36b6db8",
+          "addon_version": "0.35"
+        }
+      ]
+    },
+    {
+      "instance_name": "Emerald Sanctum",
+      "difficulty_name": "",
+      "max_players": 0,
+      "player": {
+        "peak": [],
+        "ranked_mastery": [],
+        "renown": []
+      },
+      "guild": {
+        "peak": [],
+        "ranked_mastery": [],
+        "renown": []
+      },
+      "performances": [],
+      "statistics": [],
+      "speedruns": []
+    },
+    {
+      "instance_name": "Lower Tower of Karazhan",
+      "difficulty_name": "",
+      "max_players": 0,
+      "player": {
+        "peak": [
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x000000003B9BE8EE",
+            "player_name": "Hungrig",
+            "player_class": "HUNTER",
+            "player_spec": "Survival",
+            "player_sub_spec": "",
+            "score": 100,
+            "peak_raw": 1347.8977891851093
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x000000003B9C7B4A",
+            "player_name": "Sunfirexx",
+            "player_class": "ROGUE",
+            "player_spec": "Combat",
+            "player_sub_spec": "",
+            "score": 100,
+            "peak_raw": 1406.6963168966565
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x000000003B9DF544",
+            "player_name": "Malal",
+            "player_class": "ROGUE",
+            "player_spec": "Assassination",
+            "player_sub_spec": "",
+            "score": 100,
+            "peak_raw": 1307.803730856552
+          }
+        ],
+        "ranked_mastery": [
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x000000003B9B056B",
+            "player_name": "Gurky",
+            "player_class": "HUNTER",
+            "player_spec": "Beast Mastery",
+            "player_sub_spec": "",
+            "score": 87.15172982308304
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x000000003B9C9161",
+            "player_name": "Theri",
+            "player_class": "WARLOCK",
+            "player_spec": "Affliction",
+            "player_sub_spec": "",
+            "score": 85.31752635877749
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x000000003B9BE8EE",
+            "player_name": "Hungrig",
+            "player_class": "HUNTER",
+            "player_spec": "Survival",
+            "player_sub_spec": "",
+            "score": 84.85153155793773
+          }
+        ],
+        "renown": [
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x000000003B9C4F0A",
+            "player_name": "Cupcakes",
+            "player_class": "WARLOCK",
+            "player_spec": "",
+            "player_sub_spec": "",
+            "score": 126
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x000000003B9C58C2",
+            "player_name": "Bonbon",
+            "player_class": "PRIEST",
+            "player_spec": "",
+            "player_sub_spec": "",
+            "score": 108
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x000000003B9BE476",
+            "player_name": "Lampovaja",
+            "player_class": "WARRIOR",
+            "player_spec": "",
+            "player_sub_spec": "",
+            "score": 107
+          }
+        ]
+      },
+      "guild": {
+        "peak": [
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "ae97a670-a2b2-4939-8abc-4d02db1b0a59",
+            "guild_name": "Cleave",
+            "score": 100
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "18727f02-8650-4bae-b941-a32c6c4b6acf",
+            "guild_name": "Amnesia",
+            "score": 68.66982338519509
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "d1d9aa7c-7987-4301-adcb-5aa694f3d594",
+            "guild_name": "Raid Therapy",
+            "score": 67.77150019449246
+          }
+        ],
+        "ranked_mastery": [
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "ae97a670-a2b2-4939-8abc-4d02db1b0a59",
+            "guild_name": "Cleave",
+            "score": 73.79259523431045
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "18727f02-8650-4bae-b941-a32c6c4b6acf",
+            "guild_name": "Amnesia",
+            "score": 57.11834045123156
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "d1d9aa7c-7987-4301-adcb-5aa694f3d594",
+            "guild_name": "Raid Therapy",
+            "score": 56.07447675941095
+          }
+        ],
+        "renown": [
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "6eb944c5-df02-4541-ad5d-e9a1d63b4ac5",
+            "guild_name": "strawberry fields",
+            "score": 197
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "3520d75f-8669-4106-adbb-28d40290e760",
+            "guild_name": "Smokey Tokers",
+            "score": 191
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "81224a56-467e-4575-ba52-6f5f037dc0ef",
+            "guild_name": "Remnant",
+            "score": 172
+          }
+        ]
+      },
+      "performances": [
+        {
+          "id": "00000000-0000-0000-0000-000000000000",
+          "encounter_name": "Lord Blackwald II",
+          "instance_name": "Lower Tower of Karazhan",
+          "player_guid": "0x000000003B9DDF9D",
+          "player_name": "Vegueros",
+          "player_class": "WARLOCK",
+          "player_spec": "Demonology",
+          "player_role": "dps",
+          "player_level": 60,
+          "difficulty_name": "",
+          "max_players": 0,
+          "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+          "realm_name": "N'Zoth",
+          "guild_name": "Cleave",
+          "damage_done": 217472,
+          "healing_done": 3870,
+          "absorbed_done": 0,
+          "duration_secs": 140.91400000000002,
+          "dps": 1543.2959109811657,
+          "hps": 27.463559334061905,
+          "log_hashed_slug": "nXSUFDSfj2hbgtn0",
+          "killed_at": "2026-10-31T14:45:05.057Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-000000000000",
+          "encounter_name": "Moroes",
+          "instance_name": "Lower Tower of Karazhan",
+          "player_guid": "0x000000003B9C7B4A",
+          "player_name": "Sunfirexx",
+          "player_class": "ROGUE",
+          "player_spec": "Combat",
+          "player_role": "dps",
+          "player_level": 60,
+          "difficulty_name": "",
+          "max_players": 0,
+          "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+          "realm_name": "N'Zoth",
+          "guild_name": "Booty Bay Boys",
+          "damage_done": 194612,
+          "healing_done": 15,
+          "absorbed_done": 0,
+          "duration_secs": 140.91400000000002,
+          "dps": 1381.0693046822882,
+          "hps": 0.1064479043955888,
+          "log_hashed_slug": "nXSUFDSfj2hbgtn0",
+          "killed_at": "2026-10-31T14:45:05.057Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-000000000000",
+          "encounter_name": "Lord Blackwald II",
+          "instance_name": "Lower Tower of Karazhan",
+          "player_guid": "0x000000003B9DF544",
+          "player_name": "Malal",
+          "player_class": "ROGUE",
+          "player_spec": "Assassination",
+          "player_role": "dps",
+          "player_level": 60,
+          "difficulty_name": "",
+          "max_players": 0,
+          "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+          "realm_name": "N'Zoth",
+          "guild_name": "Cleave",
+          "damage_done": 181128,
+          "healing_done": 0,
+          "absorbed_done": 0,
+          "duration_secs": 140.91400000000002,
+          "dps": 1285.3797351576138,
+          "hps": 0,
+          "log_hashed_slug": "nXSUFDSfj2hbgtn0",
+          "killed_at": "2026-10-31T14:45:05.057Z"
+        }
+      ],
+      "statistics": [
+        {
+          "player_class": "WARLOCK",
+          "player_spec": "Demonology",
+          "min_dps": 292.054244448184,
+          "q1_dps": 572.6822489409113,
+          "median_dps": 681.3263016811864,
+          "q3_dps": 824.3704351879131,
+          "max_dps": 1543.2959109811657,
+          "count": 97
+        },
+        {
+          "player_class": "HUNTER",
+          "player_spec": "Marksmanship",
+          "min_dps": 367.63975470130623,
+          "q1_dps": 504.54591559744216,
+          "median_dps": 657.6178761076153,
+          "q3_dps": 763.8254233463122,
+          "max_dps": 1179.0982284160227,
+          "count": 128
+        },
+        {
+          "player_class": "HUNTER",
+          "player_spec": "Beast Mastery",
+          "min_dps": 403.4899531341329,
+          "q1_dps": 510.6150137404716,
+          "median_dps": 638.1257985828784,
+          "q3_dps": 763.2185813118136,
+          "max_dps": 1259.6994861726494,
+          "count": 173
+        }
+      ],
+      "speedruns": [
+        {
+          "instance_id": "a7491a91-6793-45b8-9b39-b44f8026d9cc",
+          "slug": "04vkd4s72Nkr5OtZ",
+          "difficulty_name": "",
+          "duration_ms": 1198103,
+          "guild_id": "ae97a670-a2b2-4939-8abc-4d02db1b0a59",
+          "guild_name": "Cleave",
+          "realm_name": "N'Zoth",
+          "start_time": "2026-09-07T14:13:06.073Z",
+          "completion_time": "2026-09-07T14:33:04.176Z",
+          "player_count": 10,
+          "guild_logo_url": "https://i.imgur.com/sULEFUF.jpeg",
+          "parser_version": "v0.0.851+v0.0.496-798-g2b21ce9d",
+          "addon_version": "0.35",
+          "duplicate_group_id": "6c69a96d-81e0-44e4-ab2e-47065154217f"
+        },
+        {
+          "instance_id": "878e3ba7-6d02-4605-b8a4-f41804ee0171",
+          "slug": "XrFC8vT-mQ8CByl4",
+          "difficulty_name": "",
+          "duration_ms": 1356357,
+          "guild_id": "d9b6225d-498d-4f35-b77b-a1c454a8d21b",
+          "guild_name": "Skull Emoji",
+          "realm_name": "N'Zoth",
+          "start_time": "2026-08-31T14:17:07.21Z",
+          "completion_time": "2026-08-31T14:39:43.567Z",
+          "player_count": 10,
+          "guild_logo_url": "https://cdn.discordapp.com/icons/1530219173576183828/b5bb955836a42662fb54f204f298f09a.webp",
+          "parser_version": "v0.0.838+v0.0.496-771-g94347bf3",
+          "addon_version": "0.35",
+          "duplicate_group_id": "878e3ba7-6d02-4605-b8a4-f41804ee0171"
+        },
+        {
+          "instance_id": "d4cb49bf-9d16-47c4-b7d3-9ecce7807a1c",
+          "slug": "-gxErZ1a3NyTS_fO",
+          "difficulty_name": "",
+          "duration_ms": 1368593,
+          "guild_id": "18727f02-8650-4bae-b941-a32c6c4b6acf",
+          "guild_name": "Amnesia",
+          "realm_name": "N'Zoth",
+          "start_time": "2026-07-29T18:48:34.182Z",
+          "completion_time": "2026-07-29T19:11:22.775Z",
+          "player_count": 10,
+          "guild_logo_url": "https://i.imgur.com/cgm4goO.jpeg",
+          "parser_version": "v0.0.708+v0.0.496-409-g6117cfda",
+          "addon_version": "0.34"
+        }
+      ]
+    },
+    {
+      "instance_name": "Molten Core",
+      "difficulty_name": "",
+      "max_players": 0,
+      "player": {
+        "peak": [
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x000000003B9C9BA1",
+            "player_name": "Terenya",
+            "player_class": "DRUID",
+            "player_spec": "Balance",
+            "player_sub_spec": "",
+            "score": 98.42417900527903,
+            "peak_raw": 1100.775236352054
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x000000003B9D9424",
+            "player_name": "Notchupi",
+            "player_class": "DRUID",
+            "player_spec": "Feral",
+            "player_sub_spec": "Cat",
+            "score": 95.78662494310647,
+            "peak_raw": 1399.3657344416179
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x000000003B9B7B9F",
+            "player_name": "Mogwai",
+            "player_class": "HUNTER",
+            "player_spec": "Survival",
+            "player_sub_spec": "",
+            "score": 95.58766943300263,
+            "peak_raw": 1498.465690477379
+          }
+        ],
+        "ranked_mastery": [
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x000000003B9BE8EE",
+            "player_name": "Hungrig",
+            "player_class": "HUNTER",
+            "player_spec": "Survival",
+            "player_sub_spec": "",
+            "score": 83.13734030343893
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x000000003B9C9BA1",
+            "player_name": "Terenya",
+            "player_class": "DRUID",
+            "player_spec": "Balance",
+            "player_sub_spec": "",
+            "score": 81.6970449956734
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x000000003B9D9424",
+            "player_name": "Notchupi",
+            "player_class": "DRUID",
+            "player_spec": "Feral",
+            "player_sub_spec": "Cat",
+            "score": 80.58176503139346
+          }
+        ],
+        "renown": [
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x0000000000000836",
+            "player_name": "Skyroc",
+            "player_class": "WARRIOR",
+            "player_spec": "",
+            "player_sub_spec": "",
+            "score": 398
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x0000000000000C48",
+            "player_name": "Igzee",
+            "player_class": "WARRIOR",
+            "player_spec": "",
+            "player_sub_spec": "",
+            "score": 395
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x0000000000000E2C",
+            "player_name": "Darkshado",
+            "player_class": "ROGUE",
+            "player_spec": "",
+            "player_sub_spec": "",
+            "score": 391
+          }
+        ]
+      },
+      "guild": {
+        "peak": [
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "ae97a670-a2b2-4939-8abc-4d02db1b0a59",
+            "guild_name": "Cleave",
+            "score": 97.28569934837078
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "d9b6225d-498d-4f35-b77b-a1c454a8d21b",
+            "guild_name": "Skull Emoji",
+            "score": 87.74018567709955
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "18727f02-8650-4bae-b941-a32c6c4b6acf",
+            "guild_name": "Amnesia",
+            "score": 83.95374019833687
+          }
+        ],
+        "ranked_mastery": [
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "ae97a670-a2b2-4939-8abc-4d02db1b0a59",
+            "guild_name": "Cleave",
+            "score": 86.69984543662946
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "d9b6225d-498d-4f35-b77b-a1c454a8d21b",
+            "guild_name": "Skull Emoji",
+            "score": 77.64454564397836
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "18727f02-8650-4bae-b941-a32c6c4b6acf",
+            "guild_name": "Amnesia",
+            "score": 75.86509348400143
+          }
+        ],
+        "renown": [
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "bfb2ebce-37cb-41fc-b8b7-b6c09ad46161",
+            "guild_name": "The Ashen Banner",
+            "score": 517
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "b4e1ee1f-fc65-43ae-a9a9-b9a153553f1e",
+            "guild_name": "ThunderClan Warriors",
+            "score": 483
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "81224a56-467e-4575-ba52-6f5f037dc0ef",
+            "guild_name": "Remnant",
+            "score": 468
+          }
+        ]
+      },
+      "performances": [
+        {
+          "id": "00000000-0000-0000-0000-000000000000",
+          "encounter_name": "Lucifron",
+          "instance_name": "Molten Core",
+          "player_guid": "0x000000003B9AF3AE",
+          "player_name": "Gogus",
+          "player_class": "MAGE",
+          "player_spec": "Arcane",
+          "player_role": "dps",
+          "player_level": 60,
+          "difficulty_name": "",
+          "max_players": 0,
+          "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+          "realm_name": "N'Zoth",
+          "guild_name": "Skull Emoji",
+          "damage_done": 832523,
+          "healing_done": 0,
+          "absorbed_done": 5130,
+          "duration_secs": 562.507,
+          "dps": 1480.0224708314743,
+          "hps": 9.119886508079011,
+          "log_hashed_slug": "-UHjd7F76BJmUjMK",
+          "killed_at": "2026-10-26T19:38:43.889Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-000000000000",
+          "encounter_name": "Lucifron",
+          "instance_name": "Molten Core",
+          "player_guid": "0x000000003B9B7B9F",
+          "player_name": "Mogwai",
+          "player_class": "HUNTER",
+          "player_spec": "Survival",
+          "player_role": "dps",
+          "player_level": 60,
+          "difficulty_name": "",
+          "max_players": 0,
+          "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+          "realm_name": "N'Zoth",
+          "guild_name": "Skull Emoji",
+          "damage_done": 769298,
+          "healing_done": 12576,
+          "absorbed_done": 1325,
+          "duration_secs": 562.507,
+          "dps": 1367.6238695696234,
+          "hps": 24.712581354543147,
+          "log_hashed_slug": "-UHjd7F76BJmUjMK",
+          "killed_at": "2026-10-26T19:38:43.889Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-000000000000",
+          "encounter_name": "Majordomo Executus",
+          "instance_name": "Molten Core",
+          "player_guid": "0x000000003B9BAC8E",
+          "player_name": "Risen",
+          "player_class": "WARLOCK",
+          "player_spec": "Affliction/Demonology",
+          "player_role": "dps",
+          "player_level": 60,
+          "difficulty_name": "",
+          "max_players": 0,
+          "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+          "realm_name": "N'Zoth",
+          "guild_name": "Skull Emoji",
+          "damage_done": 727341,
+          "healing_done": 7007,
+          "absorbed_done": 2625,
+          "duration_secs": 545.401,
+          "dps": 1333.5894140274772,
+          "hps": 17.660400329298994,
+          "log_hashed_slug": "jBA_meJ_4D9MsC6q",
+          "killed_at": "2026-11-01T19:01:10.215Z"
+        }
+      ],
+      "statistics": [
+        {
+          "player_class": "ROGUE",
+          "player_spec": "Combat",
+          "min_dps": 276.5695494933374,
+          "q1_dps": 456.39214176332894,
+          "median_dps": 584.1256575542773,
+          "q3_dps": 721.9368335332852,
+          "max_dps": 1051.0645960854665,
+          "count": 584
+        },
+        {
+          "player_class": "HUNTER",
+          "player_spec": "Survival",
+          "min_dps": 284.39000638533776,
+          "q1_dps": 432.6104473591973,
+          "median_dps": 559.4570777814786,
+          "q3_dps": 733.4090775924424,
+          "max_dps": 1367.6238695696234,
+          "count": 460
+        },
+        {
+          "player_class": "HUNTER",
+          "player_spec": "Beast Mastery",
+          "min_dps": 294.49349670602186,
+          "q1_dps": 428.51643129178774,
+          "median_dps": 541.7042990389698,
+          "q3_dps": 699.8422652312861,
+          "max_dps": 1305.2194644111162,
+          "count": 915
+        }
+      ],
+      "speedruns": [
+        {
+          "instance_id": "1742cbd8-265b-4432-96d6-c6212bd294fc",
+          "slug": "J3YvQZaEzZv7nfZo",
+          "difficulty_name": "",
+          "duration_ms": 1891218,
+          "guild_id": "ae97a670-a2b2-4939-8abc-4d02db1b0a59",
+          "guild_name": "Cleave",
+          "realm_name": "N'Zoth",
+          "start_time": "2026-10-25T14:05:34.205Z",
+          "completion_time": "2026-10-25T14:37:05.423Z",
+          "player_count": 30,
+          "guild_logo_url": "https://i.imgur.com/sULEFUF.jpeg",
+          "parser_version": "v1.0.141+v1.0.0-595-gd0ba5c9e3",
+          "addon_version": "0.37",
+          "duplicate_group_id": "1742cbd8-265b-4432-96d6-c6212bd294fc"
+        },
+        {
+          "instance_id": "1710167e-68d6-4937-a051-6a1458c2eeea",
+          "slug": "SPzJjHvaZggAxEPw",
+          "difficulty_name": "",
+          "duration_ms": 1943594,
+          "guild_id": "d9b6225d-498d-4f35-b77b-a1c454a8d21b",
+          "guild_name": "Skull Emoji",
+          "realm_name": "N'Zoth",
+          "start_time": "2026-11-08T20:10:29.006Z",
+          "completion_time": "2026-11-08T20:42:52.6Z",
+          "player_count": 34,
+          "guild_logo_url": "https://cdn.discordapp.com/icons/1530219173576183828/b5bb955836a42662fb54f204f298f09a.webp",
+          "parser_version": "v1.0.239+v1.0.0-1057-gcb82c7f46",
+          "addon_version": "0.38.11",
+          "duplicate_group_id": "98fff898-0545-4cde-bd5c-01b68af1d42d"
+        },
+        {
+          "instance_id": "1e1eee4f-51d5-4c5f-ba4d-0791fb2be504",
+          "slug": "mR6EI91XU-LDQb9f",
+          "difficulty_name": "",
+          "duration_ms": 2128613,
+          "guild_id": "c9e752d1-73ad-4d4f-9342-155225e7ff76",
+          "guild_name": "I Griefers Inc I",
+          "realm_name": "N'Zoth",
+          "start_time": "2026-10-28T18:02:00.811Z",
+          "completion_time": "2026-10-28T18:37:29.424Z",
+          "player_count": 29,
+          "parser_version": "v1.0.171+v1.0.0-723-gdea975d32",
+          "addon_version": "0.35",
+          "duplicate_group_id": "9a104d46-4f5b-4938-a16d-e31df3c364fa"
+        }
+      ]
+    },
+    {
+      "instance_name": "Naxxramas",
+      "difficulty_name": "",
+      "max_players": 0,
+      "player": {
+        "peak": [],
+        "ranked_mastery": [],
+        "renown": []
+      },
+      "guild": {
+        "peak": [],
+        "ranked_mastery": [],
+        "renown": []
+      },
+      "performances": [],
+      "statistics": [],
+      "speedruns": []
+    },
+    {
+      "instance_name": "Onyxia's Lair",
+      "difficulty_name": "",
+      "max_players": 0,
+      "player": {
+        "peak": [
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x0000000000000D96",
+            "player_name": "Shambert",
+            "player_class": "SHAMAN",
+            "player_spec": "Elemental",
+            "player_sub_spec": "",
+            "score": 100,
+            "peak_raw": 796.3499258804045
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x000000003B9AD274",
+            "player_name": "Amathil",
+            "player_class": "ROGUE",
+            "player_spec": "Combat",
+            "player_sub_spec": "",
+            "score": 100,
+            "peak_raw": 1186.3675759339958
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x000000003B9AEE57",
+            "player_name": "Jonbovi",
+            "player_class": "SHAMAN",
+            "player_spec": "Enhancement",
+            "player_sub_spec": "Tank",
+            "score": 100,
+            "peak_raw": 702.8932596267447
+          }
+        ],
+        "ranked_mastery": [
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x00000000000002D1",
+            "player_name": "Blacktree",
+            "player_class": "HUNTER",
+            "player_spec": "Beast Mastery",
+            "player_sub_spec": "",
+            "score": 89.92502539697264
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x000000003B9B34F8",
+            "player_name": "Bro",
+            "player_class": "ROGUE",
+            "player_spec": "Subtlety",
+            "player_sub_spec": "",
+            "score": 88.51816689522539
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x000000003B9BE8EE",
+            "player_name": "Hungrig",
+            "player_class": "HUNTER",
+            "player_spec": "Survival",
+            "player_sub_spec": "",
+            "score": 87.63177406832278
+          }
+        ],
+        "renown": [
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x0000000000000836",
+            "player_name": "Skyroc",
+            "player_class": "WARRIOR",
+            "player_spec": "",
+            "player_sub_spec": "",
+            "score": 95
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x000000003B9AD226",
+            "player_name": "Gilford",
+            "player_class": "PALADIN",
+            "player_spec": "",
+            "player_sub_spec": "",
+            "score": 93
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x000000003B9B08BE",
+            "player_name": "Letitonatebe",
+            "player_class": "WARRIOR",
+            "player_spec": "",
+            "player_sub_spec": "",
+            "score": 84
+          }
+        ]
+      },
+      "guild": {
+        "peak": [
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "ae97a670-a2b2-4939-8abc-4d02db1b0a59",
+            "guild_name": "Cleave",
+            "score": 100
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "d9b6225d-498d-4f35-b77b-a1c454a8d21b",
+            "guild_name": "Skull Emoji",
+            "score": 94.44191533494721
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "6343d7d1-67b2-45bc-ae48-c5a1b0178688",
+            "guild_name": "MEGAPANZAS",
+            "score": 92.1139746760864
+          }
+        ],
+        "ranked_mastery": [
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "ae97a670-a2b2-4939-8abc-4d02db1b0a59",
+            "guild_name": "Cleave",
+            "score": 86.36869468102326
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "d9b6225d-498d-4f35-b77b-a1c454a8d21b",
+            "guild_name": "Skull Emoji",
+            "score": 83.17015211560721
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "6343d7d1-67b2-45bc-ae48-c5a1b0178688",
+            "guild_name": "MEGAPANZAS",
+            "score": 78.9118281373817
+          }
+        ],
+        "renown": [
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "81224a56-467e-4575-ba52-6f5f037dc0ef",
+            "guild_name": "Remnant",
+            "score": 88
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "6eb944c5-df02-4541-ad5d-e9a1d63b4ac5",
+            "guild_name": "strawberry fields",
+            "score": 86
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "bfb2ebce-37cb-41fc-b8b7-b6c09ad46161",
+            "guild_name": "The Ashen Banner",
+            "score": 82
+          }
+        ]
+      },
+      "performances": [
+        {
+          "id": "00000000-0000-0000-0000-000000000000",
+          "encounter_name": "Onyxia",
+          "instance_name": "Onyxia's Lair",
+          "player_guid": "0x000000003B9BAC8E",
+          "player_name": "Risen",
+          "player_class": "WARLOCK",
+          "player_spec": "Demonology",
+          "player_role": "dps",
+          "player_level": 60,
+          "difficulty_name": "",
+          "max_players": 0,
+          "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+          "realm_name": "N'Zoth",
+          "guild_name": "Skull Emoji",
+          "damage_done": 323941,
+          "healing_done": 4088,
+          "absorbed_done": 0,
+          "duration_secs": 253.596,
+          "dps": 1277.3900219246361,
+          "hps": 16.120128077729934,
+          "log_hashed_slug": "BPtafWfOYF9RhGoi",
+          "killed_at": "2026-11-01T19:20:47.046Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-000000000000",
+          "encounter_name": "Onyxia",
+          "instance_name": "Onyxia's Lair",
+          "player_guid": "0x000000003B9CB32F",
+          "player_name": "Deeps",
+          "player_class": "MAGE",
+          "player_spec": "Unknown",
+          "player_role": "dps",
+          "player_level": 60,
+          "difficulty_name": "",
+          "max_players": 0,
+          "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+          "realm_name": "N'Zoth",
+          "guild_name": "I Griefers Inc I",
+          "damage_done": 264846,
+          "healing_done": 589,
+          "absorbed_done": 0,
+          "duration_secs": 221.66,
+          "dps": 1194.829919696833,
+          "hps": 2.6572227736172516,
+          "log_hashed_slug": "kc5ys_hPN7KPukvJ",
+          "killed_at": "2026-11-04T19:34:38.948Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-000000000000",
+          "encounter_name": "Onyxia",
+          "instance_name": "Onyxia's Lair",
+          "player_guid": "0x000000003B9CA867",
+          "player_name": "Ravekitty",
+          "player_class": "DRUID",
+          "player_spec": "Unknown",
+          "player_role": "dps",
+          "player_level": 60,
+          "difficulty_name": "",
+          "max_players": 0,
+          "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+          "realm_name": "N'Zoth",
+          "guild_name": "Cleave",
+          "damage_done": 264602,
+          "healing_done": 0,
+          "absorbed_done": 0,
+          "duration_secs": 222.08100000000002,
+          "dps": 1191.466176755328,
+          "hps": 0,
+          "log_hashed_slug": "96UOgIORhTnNPvMX",
+          "killed_at": "2026-10-25T15:14:08.286Z"
+        }
+      ],
+      "statistics": [
+        {
+          "player_class": "ROGUE",
+          "player_spec": "Combat",
+          "min_dps": 268.829322663463,
+          "q1_dps": 430.3415030520084,
+          "median_dps": 574.9133195712252,
+          "q3_dps": 692.1108150104801,
+          "max_dps": 998.8466927623946,
+          "count": 648
+        },
+        {
+          "player_class": "HUNTER",
+          "player_spec": "Survival",
+          "min_dps": 285.6966741677614,
+          "q1_dps": 441.2223161167349,
+          "median_dps": 550.3357485359242,
+          "q3_dps": 691.6232846678656,
+          "max_dps": 1065.3901747528082,
+          "count": 543
+        },
+        {
+          "player_class": "HUNTER",
+          "player_spec": "Beast Mastery",
+          "min_dps": 292.1536174459341,
+          "q1_dps": 418.622411329109,
+          "median_dps": 527.3329013539324,
+          "q3_dps": 657.4234812363666,
+          "max_dps": 1180.9225477003147,
+          "count": 963
+        }
+      ],
+      "speedruns": [
+        {
+          "instance_id": "60787845-96b2-4991-8db5-cc022c4cd058",
+          "slug": "OoSy8IsNEtUmewVE",
+          "difficulty_name": "",
+          "duration_ms": 346910,
+          "guild_id": "ae97a670-a2b2-4939-8abc-4d02db1b0a59",
+          "guild_name": "Cleave",
+          "realm_name": "N'Zoth",
+          "start_time": "2026-10-04T14:10:52.943Z",
+          "completion_time": "2026-10-04T14:16:39.853Z",
+          "player_count": 30,
+          "guild_logo_url": "https://i.imgur.com/sULEFUF.jpeg",
+          "parser_version": "v1.0.9+v1.0.0-27-g94346040",
+          "addon_version": "0.37",
+          "duplicate_group_id": "1b194569-ecfd-40c8-87f6-d9f2620a932b"
+        },
+        {
+          "instance_id": "4977a462-e203-459c-8ae7-c745847a696a",
+          "slug": "ERePkbzlU91fTfXL",
+          "difficulty_name": "",
+          "duration_ms": 503306,
+          "guild_id": "784c0ebc-c8fb-42b7-ab7d-efb3e2ba5bdb",
+          "guild_name": "nope",
+          "realm_name": "N'Zoth",
+          "start_time": "2026-10-06T00:33:04.315Z",
+          "completion_time": "2026-10-06T00:41:27.621Z",
+          "player_count": 29,
+          "parser_version": "v1.0.21+v1.0.0-75-g43f2f7d1",
+          "addon_version": "0.35",
+          "duplicate_group_id": "3e80b632-02f3-4bde-87d8-d7ba640af071"
+        },
+        {
+          "instance_id": "433fcab1-3b14-4b81-b00e-c0a982d3d9eb",
+          "slug": "dy2ivT_zmOGoxFhg",
+          "difficulty_name": "",
+          "duration_ms": 516466,
+          "guild_id": "d9b6225d-498d-4f35-b77b-a1c454a8d21b",
+          "guild_name": "Skull Emoji",
+          "realm_name": "N'Zoth",
+          "start_time": "2026-10-11T18:43:15.121Z",
+          "completion_time": "2026-10-11T18:51:51.587Z",
+          "player_count": 30,
+          "guild_logo_url": "https://cdn.discordapp.com/icons/1530219173576183828/b5bb955836a42662fb54f204f298f09a.webp",
+          "parser_version": "v1.0.50+v1.0.0-157-ge961a7c3b",
+          "addon_version": "0.37",
+          "duplicate_group_id": "433fcab1-3b14-4b81-b00e-c0a982d3d9eb"
+        }
+      ]
+    },
+    {
+      "instance_name": "Ruins of Ahn'Qiraj",
+      "difficulty_name": "",
+      "max_players": 0,
+      "player": {
+        "peak": [],
+        "ranked_mastery": [],
+        "renown": []
+      },
+      "guild": {
+        "peak": [],
+        "ranked_mastery": [],
+        "renown": []
+      },
+      "performances": [],
+      "statistics": [],
+      "speedruns": []
+    },
+    {
+      "instance_name": "Temple of Ahn'Qiraj",
+      "difficulty_name": "",
+      "max_players": 0,
+      "player": {
+        "peak": [],
+        "ranked_mastery": [],
+        "renown": []
+      },
+      "guild": {
+        "peak": [],
+        "ranked_mastery": [],
+        "renown": []
+      },
+      "performances": [],
+      "statistics": [],
+      "speedruns": []
+    },
+    {
+      "instance_name": "Timbermaw Hold",
+      "difficulty_name": "",
+      "max_players": 0,
+      "player": {
+        "peak": [],
+        "ranked_mastery": [],
+        "renown": []
+      },
+      "guild": {
+        "peak": [],
+        "ranked_mastery": [],
+        "renown": []
+      },
+      "performances": [],
+      "statistics": [],
+      "speedruns": []
+    },
+    {
+      "instance_name": "Upper Tower of Karazhan",
+      "difficulty_name": "",
+      "max_players": 0,
+      "player": {
+        "peak": [],
+        "ranked_mastery": [],
+        "renown": []
+      },
+      "guild": {
+        "peak": [],
+        "ranked_mastery": [],
+        "renown": []
+      },
+      "performances": [],
+      "statistics": [],
+      "speedruns": []
+    },
+    {
+      "instance_name": "Zul'Gurub",
+      "difficulty_name": "",
+      "max_players": 0,
+      "player": {
+        "peak": [
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x000000003B9D79B8",
+            "player_name": "Genericname",
+            "player_class": "WARLOCK",
+            "player_spec": "Demonology",
+            "player_sub_spec": "",
+            "score": 100,
+            "peak_raw": 2222.3019631401557
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x000000003B9C9BA1",
+            "player_name": "Terenya",
+            "player_class": "DRUID",
+            "player_spec": "Balance",
+            "player_sub_spec": "",
+            "score": 98.36453841087156,
+            "peak_raw": 925.0724333418772
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x000000003B9D2439",
+            "player_name": "Xeli",
+            "player_class": "PRIEST",
+            "player_spec": "Discipline",
+            "player_sub_spec": "",
+            "score": 97.90069999601847,
+            "peak_raw": 967.8236019632699
+          }
+        ],
+        "ranked_mastery": [
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x000000003B9C9BA1",
+            "player_name": "Terenya",
+            "player_class": "DRUID",
+            "player_spec": "Balance",
+            "player_sub_spec": "",
+            "score": 85.86280710432968
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x000000003B9D2439",
+            "player_name": "Xeli",
+            "player_class": "PRIEST",
+            "player_spec": "Discipline",
+            "player_sub_spec": "",
+            "score": 85.26849750915945
+          },
+          {
+            "realm_id": "f2f546f9-3627-4882-bee2-ad15a839a8a1",
+            "realm_name": "C'Thun",
+            "player_guid": "0x000000003B9C4E27",
+            "player_name": "Cryogranny",
+            "player_class": "MAGE",
+            "player_spec": "Frost",
+            "player_sub_spec": "",
+            "score": 84.94034376231959
+          }
+        ],
+        "renown": [
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x000000003B9E6C49",
+            "player_name": "Kylshar",
+            "player_class": "SHAMAN",
+            "player_spec": "",
+            "player_sub_spec": "",
+            "score": 80
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x000000003B9CBE54",
+            "player_name": "Seat",
+            "player_class": "WARRIOR",
+            "player_spec": "",
+            "player_sub_spec": "",
+            "score": 79
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "player_guid": "0x000000003B9D2F77",
+            "player_name": "Rodent",
+            "player_class": "PALADIN",
+            "player_spec": "",
+            "player_sub_spec": "",
+            "score": 79
+          }
+        ]
+      },
+      "guild": {
+        "peak": [
+          {
+            "realm_id": "f2f546f9-3627-4882-bee2-ad15a839a8a1",
+            "realm_name": "C'Thun",
+            "guild_id": "11fe76a0-0144-458a-a6d4-ffe326693d65",
+            "guild_name": "Hell Fire",
+            "score": 89.38304917396904
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "ae97a670-a2b2-4939-8abc-4d02db1b0a59",
+            "guild_name": "Cleave",
+            "score": 88.37673246124706
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "6eb944c5-df02-4541-ad5d-e9a1d63b4ac5",
+            "guild_name": "strawberry fields",
+            "score": 87.79323003272859
+          }
+        ],
+        "ranked_mastery": [
+          {
+            "realm_id": "f2f546f9-3627-4882-bee2-ad15a839a8a1",
+            "realm_name": "C'Thun",
+            "guild_id": "11fe76a0-0144-458a-a6d4-ffe326693d65",
+            "guild_name": "Hell Fire",
+            "score": 76.16809802466776
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "ae97a670-a2b2-4939-8abc-4d02db1b0a59",
+            "guild_name": "Cleave",
+            "score": 75.20507821103878
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "10d47899-a7d5-459a-a46e-690066be0a75",
+            "guild_name": "Oktagon",
+            "score": 73.26838488915897
+          }
+        ],
+        "renown": [
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "520391c3-8afa-45e2-841e-5543c3b3aa06",
+            "guild_name": "Fury",
+            "score": 136
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "d1d9aa7c-7987-4301-adcb-5aa694f3d594",
+            "guild_name": "Raid Therapy",
+            "score": 130
+          },
+          {
+            "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+            "realm_name": "N'Zoth",
+            "guild_id": "6eb944c5-df02-4541-ad5d-e9a1d63b4ac5",
+            "guild_name": "strawberry fields",
+            "score": 127
+          }
+        ]
+      },
+      "performances": [
+        {
+          "id": "00000000-0000-0000-0000-000000000000",
+          "encounter_name": "Hakkar",
+          "instance_name": "Zul'Gurub",
+          "player_guid": "0x000000003B9D79B8",
+          "player_name": "Genericname",
+          "player_class": "WARLOCK",
+          "player_spec": "Demonology",
+          "player_role": "dps",
+          "player_level": 60,
+          "difficulty_name": "",
+          "max_players": 0,
+          "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+          "realm_name": "N'Zoth",
+          "guild_name": "Skill Issue",
+          "damage_done": 649507,
+          "healing_done": 11583,
+          "absorbed_done": 0,
+          "duration_secs": 377.82200000000006,
+          "dps": 1719.082001577462,
+          "hps": 30.65729364621435,
+          "log_hashed_slug": "109imBVSlGsZM-X_",
+          "killed_at": "2026-10-15T19:33:59.106Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-000000000000",
+          "encounter_name": "Hakkar",
+          "instance_name": "Zul'Gurub",
+          "player_guid": "0x000000003B9D3395",
+          "player_name": "Phxh",
+          "player_class": "HUNTER",
+          "player_spec": "Survival",
+          "player_role": "dps",
+          "player_level": 60,
+          "difficulty_name": "",
+          "max_players": 0,
+          "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+          "realm_name": "N'Zoth",
+          "guild_name": "strawberry fields",
+          "damage_done": 394385,
+          "healing_done": 1322,
+          "absorbed_done": 0,
+          "duration_secs": 309.809,
+          "dps": 1272.9940059843323,
+          "hps": 4.267145241100161,
+          "log_hashed_slug": "OpzRM_SgB_VAW2XZ",
+          "killed_at": "2026-10-03T01:21:45.291Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-000000000000",
+          "encounter_name": "Hakkar",
+          "instance_name": "Zul'Gurub",
+          "player_guid": "0x0000000000000B8B",
+          "player_name": "Maki",
+          "player_class": "WARRIOR",
+          "player_spec": "Fury",
+          "player_role": "tank",
+          "player_level": 60,
+          "difficulty_name": "",
+          "max_players": 0,
+          "realm_id": "492debcc-f4bd-4f86-b1e7-d9b921aeda4d",
+          "realm_name": "N'Zoth",
+          "guild_name": "Skull Emoji",
+          "damage_done": 349690,
+          "healing_done": 2777,
+          "absorbed_done": 0,
+          "duration_secs": 277.617,
+          "dps": 1259.6130640414672,
+          "hps": 10.002989730455987,
+          "log_hashed_slug": "bCgzVb7XUvDqAUpF",
+          "killed_at": "2026-10-17T18:48:41.459Z"
+        }
+      ],
+      "statistics": [
+        {
+          "player_class": "WARLOCK",
+          "player_spec": "Demonology",
+          "min_dps": 313.82535858052125,
+          "q1_dps": 473.67188659879815,
+          "median_dps": 637.4253951359443,
+          "q3_dps": 760.21434230907,
+          "max_dps": 1719.082001577462,
+          "count": 116
+        },
+        {
+          "player_class": "ROGUE",
+          "player_spec": "Combat",
+          "min_dps": 285.5128653135759,
+          "q1_dps": 444.1986353070049,
+          "median_dps": 598.7842913163911,
+          "q3_dps": 721.0746702194172,
+          "max_dps": 1216.2232755831658,
+          "count": 176
+        },
+        {
+          "player_class": "HUNTER",
+          "player_spec": "Beast Mastery",
+          "min_dps": 361.7896973647267,
+          "q1_dps": 489.84833424183154,
+          "median_dps": 598.1263986192977,
+          "q3_dps": 747.0225978204587,
+          "max_dps": 1194.374584288459,
+          "count": 329
+        }
+      ],
+      "speedruns": [
+        {
+          "instance_id": "003076e7-218a-46e3-a46e-a427b56f376b",
+          "slug": "2KD_m_GXf6UEVVK9",
+          "difficulty_name": "",
+          "duration_ms": 1261056,
+          "guild_id": "ae97a670-a2b2-4939-8abc-4d02db1b0a59",
+          "guild_name": "Cleave",
+          "realm_name": "N'Zoth",
+          "start_time": "2026-10-10T15:12:29.649Z",
+          "completion_time": "2026-10-10T15:33:30.705Z",
+          "player_count": 20,
+          "guild_logo_url": "https://i.imgur.com/sULEFUF.jpeg",
+          "parser_version": "v1.0.46+v1.0.0-147-g6ad4d70e",
+          "addon_version": "0.37",
+          "duplicate_group_id": "e50dec7b-1112-42a7-9410-8785c5afc81f"
+        },
+        {
+          "instance_id": "b973fb48-b91d-4372-9b6b-fe44dd03c547",
+          "slug": "tLi2etJbIcBxrGz3",
+          "difficulty_name": "",
+          "duration_ms": 1983843,
+          "guild_id": "c6bca9d5-c48e-485f-bd0a-cda14041b799",
+          "guild_name": "Ostatni Bastion",
+          "realm_name": "N'Zoth",
+          "start_time": "2026-10-09T17:58:34.217Z",
+          "completion_time": "2026-10-09T18:31:38.06Z",
+          "player_count": 18,
+          "parser_version": "v1.0.46+v1.0.0-147-g6ad4d70e",
+          "addon_version": "0.35",
+          "duplicate_group_id": "3eb09099-b039-4ac1-b005-9fc52c6c6c10"
+        },
+        {
+          "instance_id": "97f1f183-6781-46a6-b5e2-0234ebba5087",
+          "slug": "dMjr0J4HpqFJ72iq",
+          "difficulty_name": "",
+          "duration_ms": 2006321,
+          "guild_id": "6eb944c5-df02-4541-ad5d-e9a1d63b4ac5",
+          "guild_name": "strawberry fields",
+          "realm_name": "N'Zoth",
+          "start_time": "2026-10-12T15:24:57.205Z",
+          "completion_time": "2026-10-12T15:58:23.526Z",
+          "player_count": 12,
+          "guild_logo_url": "https://cdn.discordapp.com/icons/1421503833439211573/ee5e7ad37aacb17d4061ef9c83e773e1.webp?size=1024",
+          "parser_version": "v1.0.52+v1.0.0-161-g69f7e32b8",
+          "addon_version": "0.35",
+          "duplicate_group_id": "97f1f183-6781-46a6-b5e2-0234ebba5087"
+        }
+      ]
+    }
+  ],
+  "snapshots": [
+    {
+      "instance_name": "Blackwing Lair",
+      "difficulty_name": "",
+      "max_players": 0,
+      "status": "ready",
+      "refreshed_at": "2026-11-10T22:25:34.812789Z",
+      "configuration_fingerprint": "94ce29be50b7f8d9bfaa7ad8f08c819a43fbf2ed8e625f5186f62142de67a8a9"
+    },
+    {
+      "instance_name": "Emerald Sanctum",
+      "difficulty_name": "",
+      "max_players": 0,
+      "status": "empty",
+      "refreshed_at": "2026-11-10T22:26:05.081958Z",
+      "configuration_fingerprint": "df246ff1921550ff14f0135434b26870aac95ee2b6f13bf1c7c2e72451e93421"
+    },
+    {
+      "instance_name": "Lower Tower of Karazhan",
+      "difficulty_name": "",
+      "max_players": 0,
+      "status": "ready",
+      "refreshed_at": "2026-11-10T22:26:13.958701Z",
+      "configuration_fingerprint": "ab02e21f89f6ba4fd07e2041b9edd1dc4d8c9a7332bda5e82237d7ea9d9b7995"
+    },
+    {
+      "instance_name": "Molten Core",
+      "difficulty_name": "",
+      "max_players": 0,
+      "status": "ready",
+      "refreshed_at": "2026-11-10T22:26:25.488553Z",
+      "configuration_fingerprint": "30f4d9026666ede2330f396830969907f2beeb29559abfa0ade404c6b7271814"
+    },
+    {
+      "instance_name": "Naxxramas",
+      "difficulty_name": "",
+      "max_players": 0,
+      "status": "empty",
+      "refreshed_at": "2026-11-10T22:26:39.518667Z",
+      "configuration_fingerprint": "22d16738fadd27c0b593a6b0986a05c15490241890a3be06edcef963523b273f"
+    },
+    {
+      "instance_name": "Onyxia's Lair",
+      "difficulty_name": "",
+      "max_players": 0,
+      "status": "ready",
+      "refreshed_at": "2026-11-10T22:26:47.622657Z",
+      "configuration_fingerprint": "7813a023ce36102142d5df0d3d8a4253072d61df5984a0b2480f5ebdb610d46b"
+    },
+    {
+      "instance_name": "Ruins of Ahn'Qiraj",
+      "difficulty_name": "",
+      "max_players": 0,
+      "status": "empty",
+      "refreshed_at": "2026-11-10T22:26:51.697696Z",
+      "configuration_fingerprint": "190184581bcc55479b53b4d6ab11e47cc3fb9fc74c04445de771b6186680c9b1"
+    },
+    {
+      "instance_name": "Temple of Ahn'Qiraj",
+      "difficulty_name": "",
+      "max_players": 0,
+      "status": "empty",
+      "refreshed_at": "2026-11-10T22:26:52.738064Z",
+      "configuration_fingerprint": "2158c1c9db8aa66f185777814d7a01b8e81c09202d41954bc265a38ff82a8c30"
+    },
+    {
+      "instance_name": "Timbermaw Hold",
+      "difficulty_name": "",
+      "max_players": 0,
+      "status": "empty",
+      "refreshed_at": "2026-11-10T22:26:59.448206Z",
+      "configuration_fingerprint": "c48306cc06c01aa8251ee0a094d8fe715e060f9d4a57373f10c5f73d3a8a09f1"
+    },
+    {
+      "instance_name": "Upper Tower of Karazhan",
+      "difficulty_name": "",
+      "max_players": 0,
+      "status": "empty",
+      "refreshed_at": "2026-11-10T22:27:02.574497Z",
+      "configuration_fingerprint": "17e008b2f0853133cfd50fdba8ab4fb68fc8af69870582f680eae501cb49e00a"
+    },
+    {
+      "instance_name": "Zul'Gurub",
+      "difficulty_name": "",
+      "max_players": 0,
+      "status": "ready",
+      "refreshed_at": "2026-11-10T22:27:16.872601Z",
+      "configuration_fingerprint": "55df3450484448594c1ce3c0b6f24c28f20ab0af1e4931d8f11614d2bf602b98"
+    }
+  ]
+}

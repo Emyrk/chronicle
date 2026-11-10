@@ -1,0 +1,190 @@
+[
+  {
+    "instance_name": "Blackwing Lair",
+    "difficulty_name": "",
+    "max_players": 0,
+    "category": "raid",
+    "total_kills": 2270,
+    "top_players": [
+      {
+        "player_guid": "0x000000003B9AD226",
+        "player_name": "Gilford",
+        "realm_name": "N'Zoth",
+        "player_class": "PALADIN",
+        "dps": 943.3615402335258
+      },
+      {
+        "player_guid": "0x000000003B9BF2EB",
+        "player_name": "Saunuri",
+        "realm_name": "N'Zoth",
+        "player_class": "PALADIN",
+        "dps": 927.2867451893214
+      },
+      {
+        "player_guid": "0x000000003B9ADDF5",
+        "player_name": "Ahmera",
+        "realm_name": "N'Zoth",
+        "player_class": "ROGUE",
+        "dps": 912.4323806088144
+      }
+    ]
+  },
+  {
+    "instance_name": "Deadmines",
+    "difficulty_name": "",
+    "max_players": 0,
+    "category": "dungeon",
+    "total_kills": 5,
+    "top_players": [
+      {
+        "player_guid": "0x000000003B9C5EA0",
+        "player_name": "Apollyon",
+        "realm_name": "C'Thun",
+        "player_class": "PALADIN",
+        "dps": 55.41253843255345
+      },
+      {
+        "player_guid": "0x000000003B9C68D4",
+        "player_name": "Beattitude",
+        "realm_name": "C'Thun",
+        "player_class": "PRIEST",
+        "dps": 41.12560280925737
+      },
+      {
+        "player_guid": "0x000000003B9C5EA1",
+        "player_name": "Creeb",
+        "realm_name": "C'Thun",
+        "player_class": "MAGE",
+        "dps": 37.71852330334723
+      }
+    ]
+  },
+  {
+    "instance_name": "Lower Tower of Karazhan",
+    "difficulty_name": "",
+    "max_players": 0,
+    "category": "raid",
+    "total_kills": 2973,
+    "top_players": [
+      {
+        "player_guid": "0x000000003B9DDF9D",
+        "player_name": "Vegueros",
+        "realm_name": "N'Zoth",
+        "player_class": "WARLOCK",
+        "dps": 1543.295910981166
+      },
+      {
+        "player_guid": "0x000000003B9C7B4A",
+        "player_name": "Sunfirexx",
+        "realm_name": "N'Zoth",
+        "player_class": "ROGUE",
+        "dps": 1381.0693046822882
+      },
+      {
+        "player_guid": "0x000000003B9DF544",
+        "player_name": "Malal",
+        "realm_name": "N'Zoth",
+        "player_class": "ROGUE",
+        "dps": 1285.3797351576138
+      }
+    ]
+  },
+  {
+    "instance_name": "Molten Core",
+    "difficulty_name": "",
+    "max_players": 0,
+    "category": "raid",
+    "total_kills": 4927,
+    "top_players": [
+      {
+        "player_guid": "0x000000003B9AF3AE",
+        "player_name": "Gogus",
+        "realm_name": "N'Zoth",
+        "player_class": "MAGE",
+        "dps": 1480.0224708314743
+      },
+      {
+        "player_guid": "0x000000003B9B7B9F",
+        "player_name": "Mogwai",
+        "realm_name": "N'Zoth",
+        "player_class": "HUNTER",
+        "dps": 1367.623869569623
+      },
+      {
+        "player_guid": "0x000000003B9BAC8E",
+        "player_name": "Risen",
+        "realm_name": "N'Zoth",
+        "player_class": "WARLOCK",
+        "dps": 1333.5894140274772
+      }
+    ]
+  },
+  {
+    "instance_name": "Onyxia's Lair",
+    "difficulty_name": "",
+    "max_players": 0,
+    "category": "raid",
+    "total_kills": 3919,
+    "top_players": [
+      {
+        "player_guid": "0x000000003B9BAC8E",
+        "player_name": "Risen",
+        "realm_name": "N'Zoth",
+        "player_class": "WARLOCK",
+        "dps": 1277.3900219246361
+      },
+      {
+        "player_guid": "0x000000003B9CB32F",
+        "player_name": "Deeps",
+        "realm_name": "N'Zoth",
+        "player_class": "MAGE",
+        "dps": 1194.829919696833
+      },
+      {
+        "player_guid": "0x000000003B9CA867",
+        "player_name": "Ravekitty",
+        "realm_name": "N'Zoth",
+        "player_class": "DRUID",
+        "dps": 1191.466176755328
+      }
+    ]
+  },
+  {
+    "instance_name": "Ragefire Chasm",
+    "difficulty_name": "",
+    "max_players": 0,
+    "category": "dungeon",
+    "total_kills": 0,
+    "top_players": []
+  },
+  {
+    "instance_name": "Zul'Gurub",
+    "difficulty_name": "",
+    "max_players": 0,
+    "category": "raid",
+    "total_kills": 3250,
+    "top_players": [
+      {
+        "player_guid": "0x000000003B9C2B48",
+        "player_name": "Arkade",
+        "realm_name": "N'Zoth",
+        "player_class": "WARRIOR",
+        "dps": 1217.7923460004547
+      },
+      {
+        "player_guid": "0x000000003B9D3395",
+        "player_name": "Phxh",
+        "realm_name": "N'Zoth",
+        "player_class": "HUNTER",
+        "dps": 1200.2293175778668
+      },
+      {
+        "player_guid": "0x000000003B9C0774",
+        "player_name": "Kuw",
+        "realm_name": "N'Zoth",
+        "player_class": "HUNTER",
+        "dps": 1165.9586124461487
+      }
+    ]
+  }
+]

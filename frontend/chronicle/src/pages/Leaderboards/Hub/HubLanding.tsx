@@ -2,7 +2,7 @@ import type { LeaderboardHighlightSnapshot } from "@/api/typesGenerated"
 import { useState, type ReactNode } from "react"
 import { useActiveTabInView } from "@/hooks/useActiveTabInView"
 import { Link } from "react-router-dom"
-import type { HubLandingPreview, RankingsInstanceSummary, SupportedInstance } from "@/api/typesGenerated"
+import type { CareerLeaderboardEntry, HubLandingPreview, RankingsInstanceSummary, SupportedInstance } from "@/api/typesGenerated"
 import { AlertTriangle, ArrowRight, CircleHelp, RotateCw, Skull, Swords, Timer } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { CLASS_CSS_VAR, CLASS_DISPLAY } from "@/pages/Rankings/classDisplay"
@@ -68,6 +68,8 @@ export interface LeaderboardsHubAppProps extends Omit<LeaderboardHubProps, "inst
   loading?: boolean
   /** The live summary failed with nothing to show: the grid shows an empty frame with this error. */
   error?: ReactNode
+  /** A card placed first in the raid grid (the career card), for the tabs it returns one for. */
+  leadCard?: (tab: HubTab) => ReactNode
 }
 
 export function LeaderboardsHubApp({
@@ -94,6 +96,7 @@ export function LeaderboardsHubApp({
   allInstancesHref,
   loading,
   error,
+  leadCard,
   ...hub
 }: LeaderboardsHubAppProps) {
   const live = instances !== undefined
@@ -178,6 +181,7 @@ export function LeaderboardsHubApp({
           landingBlocked={landingBlocked}
           loading={loading}
           error={error}
+          leadCard={leadCard?.(tab)}
         />
       )}
     </div>
@@ -212,6 +216,7 @@ function HubLanding({
   landingBlocked,
   loading,
   error,
+  leadCard,
 }: {
   tab: HubTab
   onOpen: (instance: string, cohort?: { difficulty: string; maxPlayers: number }) => void
@@ -225,6 +230,8 @@ function HubLanding({
   landingBlocked?: boolean
   loading?: boolean
   error?: ReactNode
+  /** Drawn first in the first raid grid. */
+  leadCard?: ReactNode
 }) {
   if (tab === "rulesets") {
     return (
@@ -244,8 +251,9 @@ function HubLanding({
   if (loading) return <LandingSkeleton />
   if (instances !== undefined) {
     // One card per published difficulty/size, so each combination has its own headline.
-    const grid = (items: readonly RankingsInstanceSummary[]) => (
+    const grid = (items: readonly RankingsInstanceSummary[], lead?: ReactNode) => (
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {lead}
         {items.map((row) => {
           const several = items.filter((other) => other.instance_name === row.instance_name).length > 1
           const preview = landingPreviews?.find((item) =>
@@ -328,13 +336,13 @@ function HubLanding({
         {published.length === 0 && <p>No published instances yet.</p>}
         {raidGroups.length > 0 && <section className="space-y-5">
           <h2 className="text-lg font-semibold text-muted-foreground">Raids</h2>
-          {raidGroups.map((group) => (
+          {raidGroups.map((group, index) => (
             <div key={group.level ?? "other"} className="space-y-3">
               {/* A single tier needs no level heading. */}
               {raidGroups.length > 1 && <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground/70">
                 {group.level ? `Level ${group.level}` : "Other"}
               </h3>}
-              {grid(group.items)}
+              {grid(group.items, index === 0 ? leadCard : undefined)}
             </div>
           ))}
         </section>}
@@ -513,6 +521,64 @@ function LivePlayer({ entry }: { entry: { player_class: string; player_name: str
     ? entityAttributes({ kind: "character", realm: entry.realm_name, guid: entry.player_guid, name, className: entry.player_class }) : {}
   return <><span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: CLASS_CSS_VAR[entry.player_class] }} />
     <span className="truncate text-foreground/90" {...attributes}>{name}</span></>
+}
+
+/** The leaders shown on the career card: #1 of each board. */
+export interface CareerCardLeaders {
+  peak?: CareerLeaderboardEntry
+  mastery?: CareerLeaderboardEntry
+  renown?: CareerLeaderboardEntry
+  /** The #1 guild by career Mastery (Overview only). */
+  guild?: CareerLeaderboardEntry
+}
+
+const CAREER_GOLD = "#c4a66e"
+
+/**
+ * The career board's card in the raid grid: the same size and rows as a raid
+ * card, but gold-edged on Chronicle's own art and labelled "Every raid", so it
+ * reads as all raids together rather than one more raid.
+ */
+export function CareerCard({ to, tab, leaders, raids }: { to: string; tab: HubTab; leaders?: CareerCardLeaders; raids?: number }) {
+  const peak = METRIC_THEMES.peak
+  const mastery = METRIC_THEMES.mastery
+  const renown = METRIC_THEMES.renown
+  const player = (e: CareerLeaderboardEntry) => <LivePlayer entry={{ player_class: e.player_class, player_name: e.name, player_guid: e.subject_id, realm_name: e.realm_name }} />
+  const rows = leaders && <>
+    {leaders.peak?.peak != null && <Line icon={<peak.icon className="size-3" style={{ color: peak.accent }} />} value={peak.format(leaders.peak.peak)} title="Career Peak #1">{player(leaders.peak)}</Line>}
+    {leaders.mastery?.mastery != null && <Line icon={<mastery.icon className="size-3" style={{ color: mastery.accent }} />} value={mastery.format(leaders.mastery.mastery)} title="Career Mastery #1">{player(leaders.mastery)}</Line>}
+    {leaders.renown && <Line icon={<renown.icon className="size-3" style={{ color: renown.accent }} />} value={renown.format(leaders.renown.renown)} title="Career Renown #1, every spec">{player(leaders.renown)}</Line>}
+    {tab === "overview" && leaders.guild?.mastery != null && <Line icon={<mastery.icon className="size-3" style={{ color: mastery.accent }} />} value={mastery.format(leaders.guild.mastery)} title="Guild career Mastery #1"><GuildTag name={leaders.guild.name} id={leaders.guild.subject_id} /></Line>}
+  </>
+  return (
+    <Link
+      to={to}
+      className="group relative block aspect-[16/7] overflow-hidden rounded-xl border bg-card text-left transition-all hover:shadow-lg"
+      style={{
+        borderColor: `color-mix(in srgb, ${CAREER_GOLD} 45%, transparent)`,
+        boxShadow: `0 0 0 1px color-mix(in srgb, ${CAREER_GOLD} 12%, transparent), 0 8px 30px -12px color-mix(in srgb, ${CAREER_GOLD} 35%, transparent)`,
+      }}
+    >
+      <img src="/c/images/herobackground.avif" alt="" className="absolute inset-0 h-full w-full object-cover transition-transform group-hover:scale-105" />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/55 to-black/25" />
+      {raids ? (
+        <div className="absolute top-2.5 right-2.5 z-10 flex items-center gap-1 rounded-md border border-white/10 bg-black/60 px-2 py-1 text-xs font-semibold text-white backdrop-blur-sm">
+          {raids} raids
+        </div>
+      ) : null}
+      <div className="relative flex h-full flex-col justify-end p-4">
+        <div className="mb-2">
+          <span className="text-[10px] tracking-wider uppercase" style={{ color: CAREER_GOLD }}>Every raid</span>
+          <h2 className="text-lg leading-tight font-bold">Career</h2>
+        </div>
+        <div className="mb-2 space-y-0.5">{rows ?? <UnavailableHighlight label="Career ratings are being calculated" />}</div>
+        <div className="flex items-end justify-between gap-2 text-[10px] text-muted-foreground">
+          <span>Weighted across every raid</span>
+          <span className="shrink-0 transition-colors group-hover:text-foreground" style={{ color: CAREER_GOLD }}>View career →</span>
+        </div>
+      </div>
+    </Link>
+  )
 }
 
 /** A guild as other pages show it: amber and in angle brackets, so it never reads as a character. */
