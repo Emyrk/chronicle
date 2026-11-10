@@ -41,6 +41,7 @@ const formatClasses: Record<AdFormat, string> = {
   rail: "hidden w-40 shrink-0 self-start",
   card: "flex h-full w-full self-start justify-center",
   sidebar: "hidden w-[250px] lg:block",
+  "mobile-banner": "flex w-full justify-center lg:hidden",
 }
 
 const railBreakpointClasses = {
@@ -68,6 +69,7 @@ const frameClasses: Record<AdFormat, string> = {
   rail: "min-h-[600px]",
   card: "w-[300px]",
   sidebar: "min-h-[250px]",
+  "mobile-banner": "h-[100px] w-[300px]",
 }
 
 // Reserve room for the label above the creative and breathing room below it.
