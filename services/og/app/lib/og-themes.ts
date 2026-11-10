@@ -10,7 +10,7 @@ export const OG_THEMES = [
   {
     key: 'character',
     label: 'Character',
-    description: 'Armory character card: class emblem, level line, parse, item level and kills, and the best three bosses.',
+    description: 'Armory character card: class emblem, level line, and Mastery · Peak · Renown, or item level and history without ratings.',
   },
   {
     key: 'brand',

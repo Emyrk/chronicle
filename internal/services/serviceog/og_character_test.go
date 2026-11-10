@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/services/serviceratings"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 )
@@ -37,7 +38,7 @@ func TestCharacterCardParams(t *testing.T) {
 
 	logs := 14
 	stats := characterCardStats{Logs: &logs}
-	got := characterCardParams(characterCardFixture(), "Night Elf", "Druid", stats)
+	got := characterCardParams(characterCardFixture(), "Night Elf", "Druid", nil, stats)
 
 	require.Equal(t, url.Values{
 		"name":   {"Moonbrew"},
@@ -58,7 +59,7 @@ func TestCharacterCardParamsFallbacks(t *testing.T) {
 
 	t.Run("failed history lookup", func(t *testing.T) {
 		t.Parallel()
-		got := characterCardParams(characterCardFixture(), "Night Elf", "Druid", characterCardStats{})
+		got := characterCardParams(characterCardFixture(), "Night Elf", "Druid", nil, characterCardStats{})
 		require.Equal(t, "72", got.Get("ilvl"))
 		require.Equal(t, "Nov 2026", got.Get("seen"))
 		for _, key := range []string{"logs", "parse", "best", "kills"} {
@@ -74,7 +75,7 @@ func TestCharacterCardParamsFallbacks(t *testing.T) {
 		p.Level = 0
 		p.GuildName = pgtype.Text{}
 		p.Gender = database.WowPlayableGenderUnknown
-		got := characterCardParams(p, "Night Elf", "Druid", characterCardStats{})
+		got := characterCardParams(p, "Night Elf", "Druid", nil, characterCardStats{})
 		for _, key := range []string{"ilvl", "spec", "gender", "level", "guild", "logs", "parse", "best", "kills"} {
 			require.False(t, got.Has(key), key)
 		}
@@ -91,7 +92,7 @@ func TestCharacterCardSignedURL(t *testing.T) {
 	api := New(Options{OGServiceURL: base, OGSigningKey: "secret"})
 	r := httptest.NewRequest("GET", "https://forever.chronicleclassic.com/armory/Nordanaar/Moonbrew", nil)
 
-	params := characterCardParams(characterCardFixture(), "Night Elf", "Druid", characterCardStats{})
+	params := characterCardParams(characterCardFixture(), "Night Elf", "Druid", nil, characterCardStats{})
 	raw := api.ogImageURL(r, "character", params)
 	u, err := url.Parse(raw)
 	require.NoError(t, err)
@@ -105,4 +106,44 @@ func TestCharacterCardSignedURL(t *testing.T) {
 
 	// Unconfigured: no URL, so the page keeps today's image.
 	require.Empty(t, New(Options{}).ogImageURL(r, "character", params))
+}
+
+func TestCharacterCardParamsRatings(t *testing.T) {
+	t.Parallel()
+
+	rating := &characterRating{Spec: "Restoration", Mastery: 43.94, Peak: 53.9, Renown: 524.4}
+	got := characterCardParams(characterCardFixture(), "Night Elf", "Druid", rating, characterCardStats{})
+
+	require.Equal(t, url.Values{
+		"name":    {"Moonbrew"},
+		"class":   {"druid"},
+		"spec":    {"Restoration"},
+		"race":    {"Night Elf"},
+		"gender":  {"female"},
+		"level":   {"58"},
+		"guild":   {"Nightfall"},
+		"mastery": {"43.9"},
+		"peak":    {"53.9"},
+		"renown":  {"524"},
+	}, got)
+}
+
+func TestBestCharacterRating(t *testing.T) {
+	t.Parallel()
+
+	f := func(v float64) *float64 { return &v }
+	cohort := func(spec string, mastery *float64, renown float64) serviceratings.PlayerCareer {
+		return serviceratings.PlayerCareer{PlayerSpec: spec, CareerSummary: serviceratings.CareerSummary{Mastery: mastery, Peak: f(60), Renown: renown}}
+	}
+
+	require.Nil(t, bestCharacterRating(nil))
+	require.Nil(t, bestCharacterRating([]serviceratings.PlayerCareer{cohort("Holy", nil, 900)}))
+
+	best := bestCharacterRating([]serviceratings.PlayerCareer{
+		cohort("Holy", nil, 900),
+		cohort("Shadow", f(11.2), 131),
+		cohort("Discipline", f(30.9), 346),
+		cohort("Smite", f(30.9), 100),
+	})
+	require.Equal(t, &characterRating{Spec: "Discipline", Mastery: 30.9, Peak: 60, Renown: 346}, best)
 }

@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/services/serviceratings"
+	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/wowspec"
 	"github.com/google/uuid"
 )
@@ -38,6 +40,51 @@ func (s *Service) fetchCharacterCardStats(ctx context.Context, p database.GetGam
 	}
 	logs := int(count)
 	return characterCardStats{Logs: &logs}
+}
+
+// PlayerCareerReader reads a character's published career ratings for a tenant.
+type PlayerCareerReader func(ctx context.Context, tenant, realm uuid.UUID, guid string) (serviceratings.PlayerCareerResult, error)
+
+// characterRating is the career spec shown on the character card.
+type characterRating struct {
+	Spec    string
+	Mastery float64
+	Peak    float64
+	Renown  float64
+}
+
+// fetchCharacterRating returns the character's spec with the highest Mastery
+// (Renown breaks ties), or nil when ratings are unavailable, unready, or slow.
+func (s *Service) fetchCharacterRating(ctx context.Context, p database.GetGamePlayerByGUIDRow) *characterRating {
+	tenant := servicetenant.TenantIDFromContext(ctx)
+	if s.playerCareer == nil || tenant == uuid.Nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, characterCardStatTimeout)
+	defer cancel()
+	result, err := s.playerCareer(ctx, tenant, p.RealmID, p.ID.String())
+	if err != nil || result.Status != "ready" {
+		return nil
+	}
+	return bestCharacterRating(result.Cohorts)
+}
+
+func bestCharacterRating(cohorts []serviceratings.PlayerCareer) *characterRating {
+	var best *characterRating
+	for _, c := range cohorts {
+		if c.Mastery == nil {
+			continue
+		}
+		if best != nil && (*c.Mastery < best.Mastery || (*c.Mastery == best.Mastery && c.Renown <= best.Renown)) {
+			continue
+		}
+		peak := 0.0
+		if c.Peak != nil {
+			peak = *c.Peak
+		}
+		best = &characterRating{Spec: c.PlayerSpec, Mastery: *c.Mastery, Peak: peak, Renown: c.Renown}
+	}
+	return best
 }
 
 // characterSpec infers the spec from the player's talent points, or "" when
@@ -79,10 +126,10 @@ func characterAverageItemLevel(gear *database.PlayerOutfit) (avg int, ok bool) {
 	return int(math.Round(float64(sum) / float64(count))), true
 }
 
-// characterCardParams builds the released character-history card: item level,
-// canonical listed logs seen, and last seen. The performance renderer remains
-// available for design review but is not selected by Chronicle yet.
-func characterCardParams(p database.GetGamePlayerByGUIDRow, race, class string, stats characterCardStats) url.Values {
+// characterCardParams builds the character card. With a career rating it shows
+// Mastery, Peak, and Renown for that spec; otherwise item level, canonical
+// listed logs seen, and last seen. The parse renderer is not selected.
+func characterCardParams(p database.GetGamePlayerByGUIDRow, race, class string, rating *characterRating, stats characterCardStats) url.Values {
 	params := url.Values{}
 	params.Set("name", p.Name)
 	params.Set("class", strings.ToLower(class))
@@ -94,7 +141,9 @@ func characterCardParams(p database.GetGamePlayerByGUIDRow, race, class string, 
 	case database.WowPlayableGenderFemale:
 		params.Set("gender", "female")
 	}
-	if spec := characterSpec(p); spec != "" {
+	if rating != nil && rating.Spec != "" {
+		params.Set("spec", rating.Spec)
+	} else if spec := characterSpec(p); spec != "" {
 		params.Set("spec", spec)
 	}
 	if p.Level > 0 {
@@ -102,6 +151,12 @@ func characterCardParams(p database.GetGamePlayerByGUIDRow, race, class string, 
 	}
 	if p.GuildName.String != "" {
 		params.Set("guild", p.GuildName.String)
+	}
+	if rating != nil {
+		params.Set("mastery", strconv.FormatFloat(rating.Mastery, 'f', 1, 64))
+		params.Set("peak", strconv.FormatFloat(rating.Peak, 'f', 1, 64))
+		params.Set("renown", strconv.Itoa(int(math.Round(rating.Renown))))
+		return params
 	}
 	if ilvl, ok := characterAverageItemLevel(p.Gear); ok {
 		params.Set("ilvl", strconv.Itoa(ilvl))

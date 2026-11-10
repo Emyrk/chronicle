@@ -44,6 +44,8 @@ type Options struct {
 	AccessURL    *url.URL
 	OGServiceURL *url.URL
 	OGSigningKey string
+	// PlayerCareer is optional; without it character cards show history only.
+	PlayerCareer PlayerCareerReader
 }
 
 // Service resolves Open Graph metadata for Chronicle pages.
@@ -56,6 +58,7 @@ type Service struct {
 	accessURL    *url.URL
 	imageBaseURL *url.URL
 	signingKey   string
+	playerCareer PlayerCareerReader
 	ogSiteStats  tenantcache.Cache[database.SiteStatsRow]
 	ogCensus     tenantcache.Cache[[]database.CensusPlayerCountsRow]
 	ogHighlights tenantcache.Cache[[]chroniclesdk.HubLandingPreview]
@@ -71,6 +74,7 @@ func New(opts Options) *Service {
 		accessURL:    opts.AccessURL,
 		imageBaseURL: opts.OGServiceURL,
 		signingKey:   opts.OGSigningKey,
+		playerCareer: opts.PlayerCareer,
 	}
 }
 
