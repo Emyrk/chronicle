@@ -22,7 +22,7 @@ import { TABS, type HubTab } from "./hubTabs"
 import { HubTabHint } from "./HubTabHint"
 import { EncounterSidebar } from "./EncounterSidebar"
 import { GuildName, GuildRatingBoards, GuildRatingLeaders, MetricColumns } from "./GuildRatings"
-import { entityAttributes } from "@/components/EntityMenu/entity"
+import { entityAttributes, raidEntity } from "@/components/EntityMenu/entity"
 import { StatisticsTab, type StatisticsView } from "./StatisticsTab"
 import { SpeedrunsTab } from "./SpeedrunsTab"
 import { PerformancesTab } from "./PerformancesTab"
@@ -480,6 +480,7 @@ export function LeaderboardHub({
               (encountersOpen ? (
                 <div className="hidden shrink-0 lg:sticky lg:top-4 lg:block lg:max-h-[calc(100vh-2rem)] lg:w-[267px] lg:self-start lg:overflow-y-auto lg:border-r lg:pt-1 lg:pr-4 styled-scrollbar">
                   <EncounterSidebar
+                    instanceName={instanceName}
                     bosses={bosses}
                     preset={live?.presetBosses}
                     optional={live ? live.optionalBosses ?? new Set<string>() : OPTIONAL_BOSSES}
@@ -612,6 +613,7 @@ export function LeaderboardHub({
                 className="fixed inset-y-0 left-0 z-50 w-[267px] max-w-[calc(100vw-3rem)] overflow-y-auto border-r bg-background p-4 shadow-lg styled-scrollbar"
               >
                 <EncounterSidebar
+                  instanceName={instanceName}
                   bosses={bosses}
                   preset={live?.presetBosses}
                   optional={live ? live.optionalBosses ?? new Set<string>() : OPTIONAL_BOSSES}
@@ -651,7 +653,11 @@ function InstanceTitle({
   instances?: readonly string[]
   onSwitch?: (instance: string) => void
 }) {
-  const heading = <h1 className="truncate font-wow text-xl sm:text-3xl">{instanceName}</h1>
+  const heading = (
+    <h1 className="truncate font-wow text-xl sm:text-3xl" {...entityAttributes(raidEntity(instanceName))}>
+      {instanceName}
+    </h1>
+  )
   if (!instances?.length || !onSwitch) return <div className="mt-1 min-w-0">{heading}</div>
   return (
     <DropdownMenu>

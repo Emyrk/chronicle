@@ -1,5 +1,6 @@
 import type { ReactNode } from "react"
 import { CheckCircle, PanelLeftClose } from "lucide-react"
+import { bossEntity, entityAttributes } from "@/components/EntityMenu/entity"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { FULL_CLEAR, selectedBosses, toggleEncounter, type EncounterSelection } from "./encounterSelection"
@@ -10,6 +11,7 @@ import { FULL_CLEAR, selectedBosses, toggleEncounter, type EncounterSelection } 
  * Ctrl+Click adds or removes one. Selected bosses are always highlighted.
  */
 export function EncounterSidebar({
+  instanceName,
   bosses,
   preset: defaultBosses,
   optional,
@@ -18,6 +20,7 @@ export function EncounterSidebar({
   onSelect,
   onCollapse,
 }: {
+  instanceName: string
   bosses: readonly string[]
   preset?: readonly string[]
   optional: ReadonlySet<string>
@@ -64,20 +67,20 @@ export function EncounterSidebar({
       <div className="mt-3 space-y-4">
         <Section label="Bosses">
           {required.map((name) => (
-            <Row key={name} name={name} selected={chosen.has(name)} onClick={(combine) => pick(name, combine)} />
+            <Row key={name} instanceName={instanceName} name={name} selected={chosen.has(name)} onClick={(combine) => pick(name, combine)} />
           ))}
         </Section>
         {extra.length > 0 && (
           <Section label="Optional">
             {extra.map((name) => (
-              <Row key={name} name={name} selected={chosen.has(name)} subdued onClick={(combine) => pick(name, combine)} />
+              <Row key={name} instanceName={instanceName} name={name} selected={chosen.has(name)} subdued onClick={(combine) => pick(name, combine)} />
             ))}
           </Section>
         )}
         {trashNames.length > 0 && (
           <Section label="Trash">
             {trashNames.map((name) => (
-              <Row key={name} name={name} selected={chosen.has(name)} onClick={(combine) => pick(name, combine)} />
+              <Row key={name} instanceName={instanceName} name={name} selected={chosen.has(name)} onClick={(combine) => pick(name, combine)} />
             ))}
           </Section>
         )}
@@ -100,12 +103,14 @@ function Section({ label, children }: { label: string; children: ReactNode }) {
 }
 
 function Row({
+  instanceName,
   name,
   selected,
   subdued,
   title,
   onClick,
 }: {
+  instanceName: string
   name: string
   selected: boolean
   subdued?: boolean
@@ -115,6 +120,7 @@ function Row({
   return (
     <button
       type="button"
+      {...entityAttributes(bossEntity(instanceName, name))}
       aria-pressed={selected}
       onClick={(e) => onClick(e.ctrlKey || e.metaKey)}
       title={title ?? `${name}. Click to select, Ctrl+Click to toggle`}

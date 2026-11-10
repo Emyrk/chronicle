@@ -7,15 +7,17 @@ const bosses = ["Lucifron", "Magmadar", "Ragnaros"]
 
 describe("encounter sidebar", () => {
   it("shows the preset as every boss selected, with no Full clear entry", () => {
-    const html = renderToStaticMarkup(<EncounterSidebar bosses={bosses} optional={new Set()} selection={FULL_CLEAR} onSelect={vi.fn()} />)
+    const html = renderToStaticMarkup(<EncounterSidebar instanceName="Molten Core" bosses={bosses} optional={new Set()} selection={FULL_CLEAR} onSelect={vi.fn()} />)
     expect(html).not.toContain("Full clear")
     expect(html).toContain("3 of 3 selected")
     expect(html.match(/aria-pressed="true"/g)).toHaveLength(4) // three bosses and "All bosses"
+    expect(html.match(/data-entity-kind="encounter"/g)).toHaveLength(3)
+    expect(html).toContain("&quot;instanceName&quot;:&quot;Molten Core&quot;")
   })
 
   it("selects only the configured preset while still listing other bosses", () => {
     const emeraldBosses = ["Erennius", "Solnius", "Solnius (Hard Mode)"]
-    const html = renderToStaticMarkup(<EncounterSidebar bosses={emeraldBosses} preset={emeraldBosses.slice(0, 2)} optional={new Set()} selection={FULL_CLEAR} onSelect={vi.fn()} />)
+    const html = renderToStaticMarkup(<EncounterSidebar instanceName="Emerald Sanctum" bosses={emeraldBosses} preset={emeraldBosses.slice(0, 2)} optional={new Set()} selection={FULL_CLEAR} onSelect={vi.fn()} />)
     expect(html).toContain("2 of 2 selected")
     expect(html).toMatch(/aria-pressed="false"[^>]*title="Solnius \(Hard Mode\)\. Click to select, Ctrl\+Click to toggle"/)
     expect(html.match(/aria-pressed="true"/g)).toHaveLength(3) // two preset bosses and "All bosses"

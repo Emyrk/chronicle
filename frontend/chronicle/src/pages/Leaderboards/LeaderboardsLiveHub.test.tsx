@@ -142,6 +142,8 @@ describe("live Storybook Hub", () => {
     expect(html).toContain('aria-label="Realm: Nordanaar"')
     expect(html).toContain('aria-label="Leaderboard scope"')
     expect(html).toContain('aria-label="Encounters"')
+    expect(html).toContain('data-entity-kind="raid"')
+    expect(html).toContain('data-entity-kind="encounter"')
     expect(html).toContain("Ragnaros")
     expect(html).toContain("Live overview")
     expect(html).toContain('href="/leaderboards/Molten-Core/ratings?realm_ids=realm-id"')
