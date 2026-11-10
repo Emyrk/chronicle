@@ -12,8 +12,9 @@ statistics, kill counts, and dirty-work tables. The isolated
 backfill, scheduler wiring, or replacement of existing leaderboard routes.
 
 All scopes are all-time. There are no rolling180day or season keys, expiry jobs,
-or finalized-season retention exceptions. Career/cross-instance portfolios
-remain out of scope. Deletion and invalidation must retract source evidence.
+or finalized-season retention exceptions. Career aggregation has an approved
+next-stage contract below, but is not yet implemented. Deletion and invalidation
+must retract source evidence.
 
 DPS and HPS are separate cohorts and boards. Each player kill qualifies for
 exactly one of them: the greater positive finite raw value wins, with DPS
@@ -147,7 +148,8 @@ weight. Excluded bosses are removed from the effective selection and
 denominator, not counted as zero. Never divide by zero for an empty effective
 selection; its API presentation is a later read-contract decision. Instance
 encounter-set and arbitrary-group results are not initially materialized.
-Career/cross-instance portfolio aggregation is not part of this delivery.
+Career aggregation is a separate next-stage contract; it does not change these
+existing boss-group reads.
 
 Leaderboard results use deterministic ordered cursors. Peak boards order by
 derived Peak descending, then realm ID and subject ID ascending. Mastery and
@@ -164,6 +166,36 @@ mutation does not by itself invalidate a cursor; normal keyset pagination
 semantics apply while eventual updates converge. Pages are expected to contain
 at most about 50 rows. The product does not require exact ordinal ranks or
 arbitrary page numbers.
+
+## Career contract (not yet implemented)
+
+The authoritative formulas are in `spec.tex`, under Career aggregation contract.
+The [foundation investigation](career-foundation.md) records the blocking product
+choices and next implementation steps.
+
+- Each allowed exact instance/difficulty/max_players variant is independent.
+  Wrath excludes Vanilla raids from careers even when uploaded. This restriction
+  does not change the existing shared flavor resolver or existing boards.
+- A variant is active iff the tenant has at least one currently eligible canonical
+  boss kill in it. Losing the last eligible kill deactivates it. Neither a full
+  clear nor a kill by the displayed subject is required.
+- Career Mastery and Peak average raid-wide values using the configured full-raid
+  Renown total directly as the weight. Weights resolve at reads. Missing subject
+  results in active variants are zero-filled without shrinking the denominator.
+  Inactive/disallowed variants leave the denominator. Never divide by zero.
+- Career Renown sums eligible raid Renown without applying career weights again.
+- Players retain exact class/spec/subspec and realm-qualified identity. Preserve
+  both DPS and HPS raid inputs. Select the metric by career Mastery, then eligible
+  unweighted kill count in that metric and cohort, then DPS. Persist that choice
+  eventually; Peak uses the same metric. Renown stays metric-independent.
+- Guild careers use realm-qualified guild identity and boss-based raid-wide
+  kill-time values, not clear-time scores.
+
+Full-raid membership and mutually exclusive alternatives are **unresolved**.
+Default sets, all enabled bosses, and completion-group maxima are not equivalent.
+No proposed alternative rule is approved. Exact-cohort player Renown also needs
+additional projection support because existing counts omit class/spec/subspec.
+Do not implement weights or schema by silently choosing one of these policies.
 
 ## Renown
 

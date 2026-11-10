@@ -37,7 +37,7 @@ This document defines the leaderboard model from its source data upward. The nex
 \subsection{Delivery status and scope}
 Configuration work is complete in PRs 1622, 1624, 1633, and 1634, followed by configuration inspector PR 1636 and Wrath migration 344. The next PR adds only tables, constraints, indexes, and schema tests. Workers, serving queries, historical backfill, and UI cutover are later work. Prior ratings have been removed; PR 1625 preserves parse scoring. No legacy-rating rollback is promised.
 
-All rating evidence, statistics, and Renown counts are all-time only. There are no rolling180day or season dimensions, expiry jobs, or finalized-season retention exceptions. Career/cross-instance portfolios remain out of scope. Source deletion and invalidation continue to retract evidence and dirty affected scopes.
+All rating evidence, statistics, and Renown counts are all-time only. There are no rolling180day or season dimensions, expiry jobs, or finalized-season retention exceptions. Career aggregation is now approved as the next foundation, subject to the unresolved full-raid configuration decisions below; career storage and serving are not implemented by this specification update. Source deletion and invalidation continue to retract evidence and dirty affected scopes.
 
 Boss and clear cohorts are tenant scoped and separate both difficulty and raid size. Realm qualifies player and guild identity, not benchmark cohorts. DPS and HPS are separate cohorts. Each player kill qualifies for exactly one of them: the greater positive finite raw value, with DPS winning ties. This is decided per kill, not by role.
 
@@ -381,8 +381,35 @@ Instance Peak and Mastery are equal-weight averages over every eligible boss:
 \widehat{\operatorname{Mastery}}_B(q,W).
 \]
 
-\section{Deferred portfolios}
-Career and cross-instance portfolios are out of current scope. Do not create portfolio schema, seed memberships or weights, or implement portfolio read aggregation. No season schema, finalized-season evidence retention, or rolling window is approved as part of this work.
+\section{Career aggregation contract}
+This section defines approved career behavior, not shipped storage or serving. It supersedes the earlier deferral of career portfolios only. No season schema, finalized-season evidence retention, or rolling window is approved.
+
+\subsection{Pool and activation}
+A career raid variant is the exact tuple $v=(i,d,z)$. Ten-player and twenty-five-player variants are independent entries, never merged. Define $L_t$ as the allowed configured variant pool for tenant $t$. This is a career-only flavor policy: Wrath excludes Vanilla raids even if eligible historical uploads exist. Do not change the shared dataset-plus-tenant flavor resolver to enforce this restriction on existing boards. The concrete mapping from shared configuration to this pool remains to be implemented.
+
+Let $A_t\subseteq L_t$ contain exactly the variants with at least one currently eligible canonical boss kill in tenant $t$. Activation is tenant-wide, not subject-, realm-filter-, metric-, or specialization-dependent. A clear is not required. Removing or disabling the last eligible kill deactivates the variant. An award of zero alone does not erase a kill. Activation and retraction must converge with the existing evidence repair process; activation is not a permanent historical flag.
+
+\subsection{Weights and scores}
+Let $F(v)$ denote the configured full-raid Renown total. Career weight is directly $w(v)=F(v)$, with no second multiplier or separately maintained weight table. It uses configured awards, never a subject's earned points or kill counts. The definition of full-raid membership, especially mutually exclusive boss identities, remains blocked on the decision below.
+
+For either raid-wide score $X\in\{\operatorname{Mastery},\operatorname{Peak}\}$, define
+\[
+ \operatorname{CareerX}(q,m)=
+ \frac{\sum_{v\in A_t}w(v)\widehat{X}_v(q,m)}
+      {\sum_{v\in A_t}w(v)}.
+\]
+A missing subject result in an active variant contributes zero to the numerator but retains its full weight in the denominator. Inactive or disallowed variants contribute to neither. Weights are resolved at read time. Never divide by zero; presentation when the active weight sum is zero remains an API decision. Career Renown is the sum of eligible raid Renown, not a weighted average and not multiplied by $w(v)$ again.
+
+Player career identity preserves tenant, realm, player GUID, class, spec, and subspec exactly. Retain both DPS and HPS raid-wide inputs from the existing per-kill metric classification. Choose the career metric by greater career Mastery, then greater eligible unweighted kill count in that metric and exact career cohort, then DPS. Persist the chosen metric with eventual consistency. Career Peak uses that same metric, not its independently better metric. Career Renown remains metric-independent; it must not duplicate a kill or discard it because the chosen metric differs.
+
+Guild identity preserves tenant, realm, and guild ID. Guild career Mastery and Peak use boss-based raid-wide kill-time scores, not clear-time scores.
+
+\subsection{Unresolved full-raid definition}
+Current configuration represents flat bosses and named sets, not mutually exclusive completion groups. Obsidian Sanctum's four Sartharion identities award $1,1,2,3$ in ten-player and $2,2,3,4$ in twenty-five-player. Summing every identity yields $7$ and $11$, counting mutually exclusive alternatives together. The default set selects only 0D, yielding $1$ and $2$. A proposed completion-group maximum would yield $3$ and $4$, but is not an approved rule.
+
+Optional membership also matters: Ulduar's default totals are $36/54$, while including Flame Leviathan yields $38/57$. Vault of Archavon has an enabled empty default set, but its four enabled bosses total $4/8$. The product must define full-raid membership and alternative handling before weights or a career pool are implemented. This decision must also establish which raid-wide boss selection supplies scores, especially for empty defaults. Do not infer alternative groups from encounter names or silently select a subject's best variant.
+
+Existing player Renown facts and counts omit class, spec, and subspec. They cannot supply exact-specialization career Renown by joining current player metadata. A later implementation must preserve the kill's exact cohort without altering the existing metric-independent Renown contract. See \href{career-foundation.md}{career-foundation.md} for verified code references and the implementation sequence.
 
 \section{Logical invariants}
 \begin{enumerate}
