@@ -22,8 +22,8 @@ const (
 	careerBoardMaxLimit     = 250
 )
 
-// LeaderboardCareer ranks characters by career Mastery, Peak, or Renown. It
-// computes on every request; the response is cached at the edge.
+// LeaderboardCareer ranks characters by career Mastery, Peak, and Renown in one
+// response. It computes on every request; the response is cached at the edge.
 func (api *API) LeaderboardCareer(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
@@ -33,11 +33,6 @@ func (api *API) LeaderboardCareer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
-	sort := cmp.Or(q.Get("sort"), "mastery")
-	if sort != "mastery" && sort != "peak" && sort != "renown" {
-		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "sort must be mastery, peak, or renown"})
-		return
-	}
 	limit := careerBoardDefaultLimit
 	if raw := q.Get("limit"); raw != "" {
 		n, err := strconv.Atoi(raw)
@@ -67,29 +62,43 @@ func (api *API) LeaderboardCareer(w http.ResponseWriter, r *http.Request) {
 		writeCareerError(w, r, err)
 		return
 	}
-	ranked := rankCareerBoard(board.Entries, sort)
-	out := chroniclesdk.CareerLeaderboardResponse{Status: board.Status, Sort: sort, Total: len(ranked), Entries: []chroniclesdk.CareerLeaderboardEntry{}}
-	page := ranked[:min(limit, len(ranked))]
-	if len(page) > 0 {
-		realms := make([]uuid.UUID, len(page))
-		guids := make([]string, len(page))
-		for i, e := range page {
-			realms[i], guids[i] = e.RealmID, e.PlayerGUID
+	ranked := map[string][]serviceratings.CareerBoardEntry{}
+	for _, sort := range []string{"mastery", "peak", "renown"} {
+		ranked[sort] = rankCareerBoard(board.Entries, sort)
+	}
+
+	// One name lookup for every character shown on any board.
+	type nameKey struct {
+		realm uuid.UUID
+		guid  string
+	}
+	seen := map[nameKey]bool{}
+	var realms []uuid.UUID
+	var guids []string
+	for _, entries := range ranked {
+		for _, e := range entries[:min(limit, len(entries))] {
+			k := nameKey{e.RealmID, e.PlayerGUID}
+			if !seen[k] {
+				seen[k] = true
+				realms, guids = append(realms, e.RealmID), append(guids, e.PlayerGUID)
+			}
 		}
+	}
+	byKey := map[nameKey]database.ListLeaderboardCareerPlayerNamesRow{}
+	if len(realms) > 0 {
 		names, err := db.ListLeaderboardCareerPlayerNames(ctx, database.ListLeaderboardCareerPlayerNamesParams{RealmIds: realms, SubjectIds: guids})
 		if err != nil {
 			httpapi.InternalServerError(w, err)
 			return
 		}
-		type nameKey struct {
-			realm uuid.UUID
-			guid  string
-		}
-		byKey := make(map[nameKey]database.ListLeaderboardCareerPlayerNamesRow, len(names))
 		for _, n := range names {
 			byKey[nameKey{n.RealmID, n.SubjectID}] = n
 		}
-		for _, e := range page {
+	}
+	page := func(sort string) chroniclesdk.CareerLeaderboardBoard {
+		entries := ranked[sort]
+		out := chroniclesdk.CareerLeaderboardBoard{Total: len(entries), Entries: []chroniclesdk.CareerLeaderboardEntry{}}
+		for _, e := range entries[:min(limit, len(entries))] {
 			n := byKey[nameKey{e.RealmID, e.PlayerGUID}]
 			out.Entries = append(out.Entries, chroniclesdk.CareerLeaderboardEntry{
 				RealmID: e.RealmID.String(), RealmName: n.RealmName,
@@ -99,8 +108,11 @@ func (api *API) LeaderboardCareer(w http.ResponseWriter, r *http.Request) {
 				Mastery: e.Mastery, Peak: e.Peak, Renown: e.Renown,
 			})
 		}
+		return out
 	}
-	writeCacheableLeaderboardResponse(ctx, w, http.StatusOK, out)
+	writeCacheableLeaderboardResponse(ctx, w, http.StatusOK, chroniclesdk.CareerLeaderboardResponse{
+		Status: board.Status, Mastery: page("mastery"), Peak: page("peak"), Renown: page("renown"),
+	})
 }
 
 // rankCareerBoard keeps characters that have the sorted value and orders them

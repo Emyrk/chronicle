@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query"
-import type { CareerGuildResponse, CareerPlayerResponse, LeaderboardV2PlayerHistory } from "./typesGenerated"
+import type { CareerGuildResponse, CareerLeaderboardResponse, CareerPlayerResponse, LeaderboardV2PlayerHistory } from "./typesGenerated"
 
 export function playerCareerURL(realm: string, player: string) {
   return `/api/v1/armory/${encodeURIComponent(realm)}/${encodeURIComponent(player)}/career`
@@ -28,6 +28,15 @@ export function usePlayerRatingHistory(tenantID: string | undefined, realmID: st
   return useQuery({ queryKey: ["leaderboards-v2-player-history", tenantID, realmID, player],
     queryFn: () => fetchCareer<LeaderboardV2PlayerHistory>(playerRatingHistoryURL(realmID, player)),
     enabled: enabled && !!realmID && !!player, staleTime: 60_000, retry: false })
+}
+export function careerLeaderboardURL(limit: number) {
+  return `/api/v1/leaderboards-v2/career?${new URLSearchParams({ limit: String(limit) })}`
+}
+/** Characters ranked by career Mastery and Peak (best spec) and Renown (all specs), in one response. */
+export function useCareerLeaderboard(tenantID: string | undefined, limit: number) {
+  return useQuery({ queryKey: ["career", tenantID, "leaderboard", limit],
+    queryFn: () => fetchCareer<CareerLeaderboardResponse>(careerLeaderboardURL(limit)),
+    staleTime: 60_000, retry: false })
 }
 export function useGuildCareer(tenantID: string | undefined, guildID: string) {
   return useQuery({ queryKey: ["career", tenantID, "guild", guildID],

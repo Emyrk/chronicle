@@ -120,6 +120,7 @@ const ImportSQLTab = lazy(() => import("./pages/GameData/ImportSQLTab").then(({ 
 const DBCTab = lazy(() => import("./pages/GameData/DBCTab").then(({ DBCTab }) => ({ default: DBCTab })))
 const DatasetsTab = lazy(() => import("./pages/GameData/DatasetsTab").then(({ DatasetsTab }) => ({ default: DatasetsTab })))
 const LeaderboardConfigurationPage = lazy(() => import("./pages/Leaderboards/Configuration").then(({ ConfigurationPage }) => ({ default: ConfigurationPage })))
+const CareerLeaderboardPage = lazy(() => import("./pages/Leaderboards/Career/CareerLeaderboardPage").then(({ CareerLeaderboardPage }) => ({ default: CareerLeaderboardPage })))
 const LeaderboardsV2 = lazy(() => import("./pages/Leaderboards/LeaderboardsLiveHub").then(({ LeaderboardsLiveHub }) => ({ default: LeaderboardsLiveHub })))
 const LeaderboardsPage = lazy(() => import("./pages/Leaderboards/LeaderboardsPage").then(({ LeaderboardsPage }) => ({ default: LeaderboardsPage })))
 const LegacyLeaderboardsRedirect = lazy(() => import("./pages/Leaderboards/LeaderboardsPage").then(({ LegacyLeaderboardsRedirect }) => ({ default: LegacyLeaderboardsRedirect })))
@@ -226,6 +227,7 @@ function App() {
         <Route path="/raidplanner" element={<RaidPlannerPage />} />
         <Route path="/leaderboards" element={<LeaderboardsV2 />} />
         <Route path="/leaderboards/configuration" element={<Navigate to="/leaderboards-v1/configuration" replace />} />
+        <Route path="/leaderboards/career" element={<CareerLeaderboardPage />} />
         <Route path="/leaderboards/:segment" element={<LeaderboardsV2 />} />
         <Route path="/leaderboards/:instance/:tab" element={<LeaderboardsV2 />} />
         <Route path="/leaderboard-v2/*" element={<RenamedPathRedirect from="/leaderboard-v2" to="/leaderboards" />} />

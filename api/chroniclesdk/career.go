@@ -62,12 +62,18 @@ type CareerIssue struct {
 	Code           string `json:"code"`
 }
 
-// CareerLeaderboardResponse ranks characters by career Mastery, Peak, or Renown.
+// CareerLeaderboardResponse ranks characters by career Mastery, Peak, and Renown.
 // Mastery and Peak come from each character's spec with the highest Mastery;
 // Renown adds up every spec. Status explains unavailable Mastery and Peak.
 type CareerLeaderboardResponse struct {
-	Status  string                   `json:"status"`
-	Sort    string                   `json:"sort"`
+	Status  string                 `json:"status"`
+	Mastery CareerLeaderboardBoard `json:"mastery"`
+	Peak    CareerLeaderboardBoard `json:"peak"`
+	Renown  CareerLeaderboardBoard `json:"renown"`
+}
+
+// CareerLeaderboardBoard is the top of one ranking; Total counts every ranked character.
+type CareerLeaderboardBoard struct {
 	Total   int                      `json:"total"`
 	Entries []CareerLeaderboardEntry `json:"entries"`
 }
