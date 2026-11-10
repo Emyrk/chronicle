@@ -141,7 +141,7 @@ func characterCardParams(p database.GetGamePlayerByGUIDRow, race, class string, 
 	case database.WowPlayableGenderFemale:
 		params.Set("gender", "female")
 	}
-	if rating != nil && rating.Spec != "" {
+	if rating != nil && rating.Spec != "" && rating.Spec != "Unknown" {
 		params.Set("spec", rating.Spec)
 	} else if spec := characterSpec(p); spec != "" {
 		params.Set("spec", spec)

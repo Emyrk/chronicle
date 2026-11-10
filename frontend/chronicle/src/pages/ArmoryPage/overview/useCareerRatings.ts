@@ -29,7 +29,10 @@ export function useCareerRatings(player: ArmoryPlayer, enabled: boolean) {
     metric: cohort?.summary.chosen_metric ?? "dps",
     isLoading: career.isPending || (history.isPending && !history.isError),
     error,
-    emptyMessage: error ?? (career.data ? careerStatusText(career.data.status) : undefined),
+    emptyMessage:
+      error
+      ?? (cohort ? careerStatusText(cohort.summary.performance_status) : undefined)
+      ?? (career.data ? careerStatusText(career.data.status) : undefined),
   };
 }
 

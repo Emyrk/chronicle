@@ -179,6 +179,13 @@ func careerStoredSummary(pool leaderboardconfig.CareerPool, row database.Leaderb
 		return CareerSummary{}, fmt.Errorf("decode career inputs: %w", err)
 	}
 	out := ReduceCareer(pool, inputs, row.ChosenMetric)
+	// A computed subject with no DPS/HPS evidence never gets a metric (it may
+	// still have Renown). That is settled, not pending work.
+	if out.PerformanceStatus == "preparing" && row.ComputedAt.Valid &&
+		ReduceCareer(pool, inputs, "dps").PerformanceStatus == "no_evidence" &&
+		ReduceCareer(pool, inputs, "hps").PerformanceStatus == "no_evidence" {
+		out.PerformanceStatus = "no_evidence"
+	}
 	out.StoredPolicyFingerprint = row.PoolFingerprint
 	if row.ComputedAt.Valid {
 		at := row.ComputedAt.Time

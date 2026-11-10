@@ -123,6 +123,29 @@ export const WeightsPending: Story = {
   },
 };
 
+export const OneSpecPreparing: Story = {
+  name: "One spec still preparing",
+  args: {
+    career: {
+      ...warrior,
+      status: "preparing",
+      cohorts: [
+        { ...firstCohort, summary: { ...firstCohort.summary, refresh_pending: false } },
+        {
+          ...firstCohort,
+          player_spec: "Arms",
+          summary: { ...firstCohort.summary, mastery: null, peak: null, chosen_metric: null, performance_status: "preparing", renown: 6 },
+        },
+      ],
+    },
+    history: historyWarrior as LeaderboardV2PlayerHistory,
+  },
+  play: async ({ canvas }) => {
+    await expect(canvas.getByText("15.1")).toBeInTheDocument();
+    await expect(canvas.queryByText("Ratings are being calculated.")).not.toBeInTheDocument();
+  },
+};
+
 export const Preparing: Story = {
   args: { career: { ...warrior, status: "preparing", cohorts: [] } },
 };

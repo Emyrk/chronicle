@@ -1,10 +1,15 @@
 package serviceratings
 
 import (
+	"encoding/json"
 	"testing"
+	"time"
 
-	"github.com/Emyrk/chronicle/internal/leaderboardconfig"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
+
+	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/leaderboardconfig"
 )
 
 func TestCareerReduction(t *testing.T) {
@@ -71,4 +76,35 @@ func TestCareerUnavailableAndGuild(t *testing.T) {
 	require.Equal(t, "hps", ChooseCareerMetric(pool, inputs))
 	pool.Variants[0].Active = false
 	require.Equal(t, "no_active_raids", ReduceCareer(pool, inputs, "hps").PerformanceStatus)
+}
+
+func TestCareerStoredSummaryRenownOnly(t *testing.T) {
+	t.Parallel()
+	key := leaderboardconfig.CareerKey{Instance: "raid"}
+	weight := 1.0
+	pool := leaderboardconfig.CareerPool{Variants: []leaderboardconfig.CareerVariant{{
+		CareerKey: key, Active: true, IncludeAverage: true, IncludeRenown: true, Weight: &weight,
+		RenownBosses: []leaderboardconfig.CareerBoss{{Name: "Boss", Points: 2, HasPoints: true}},
+	}}}
+	computed := pgtype.Timestamptz{Time: time.Now(), Valid: true}
+
+	// Renown kills but no DPS/HPS evidence: no metric is ever chosen.
+	renownOnly, err := json.Marshal(CareerInputs{Kills: []CareerBossKills{{CareerKey: key, Boss: "Boss", Count: 3}}})
+	require.NoError(t, err)
+	got, err := careerStoredSummary(pool, database.LeaderboardCareerSubject{Inputs: renownOnly, ComputedAt: computed})
+	require.NoError(t, err)
+	require.Equal(t, "no_evidence", got.PerformanceStatus)
+	require.Equal(t, 6.0, got.Renown)
+
+	// Metric evidence without a stored choice is still awaiting publication.
+	withMetric, err := json.Marshal(CareerInputs{Raids: []CareerRaidInput{{CareerKey: key, Metric: "dps", Mastery: 50, Peak: 60, EligibleKills: 1}}})
+	require.NoError(t, err)
+	got, err = careerStoredSummary(pool, database.LeaderboardCareerSubject{Inputs: withMetric, ComputedAt: computed})
+	require.NoError(t, err)
+	require.Equal(t, "preparing", got.PerformanceStatus)
+
+	// Never computed: still preparing.
+	got, err = careerStoredSummary(pool, database.LeaderboardCareerSubject{Inputs: renownOnly})
+	require.NoError(t, err)
+	require.Equal(t, "preparing", got.PerformanceStatus)
 }

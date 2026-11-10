@@ -20,11 +20,12 @@ const formatScore = (v: number | null) => (v === null ? "—" : v.toFixed(1));
 /** Mastery, Peak, and Renown for one of the character's specs, beside the identity header. */
 export function CareerRatingCard({ data, cohort, onCohortChange, isLoading, error }: CareerRatingCardProps) {
   const summary = cohort?.summary;
+  // A spec's own status wins: one spec still preparing must not hide another's ratings.
   const message = error
     ?? (isLoading && !data ? "Loading ratings…" : undefined)
-    ?? (data ? careerStatusText(data.status) : undefined)
-    ?? (data && !cohort ? "No rated kills yet." : undefined)
-    ?? (summary ? careerStatusText(summary.performance_status) : undefined);
+    ?? (summary
+      ? careerStatusText(summary.performance_status)
+      : data && (careerStatusText(data.status) ?? "No rated kills yet."));
   const coverage = cohort ? raidCoverage(cohort) : undefined;
 
   return (
@@ -96,6 +97,13 @@ function Stat({ label, value, color, big }: { label: string; value: string; colo
   );
 }
 
+/** The spec icon, or the game's "?" icon when the spec is unknown. */
+function cohortIconUrl(c: CareerPlayerCohort): string {
+  return c.player_spec && c.player_spec !== "Unknown"
+    ? specializationIconUrl(c.player_class, c.player_spec)
+    : "/c/icons/class_unknown.png";
+}
+
 function CohortSelector({
   cohorts,
   selected,
@@ -124,9 +132,7 @@ function CohortSelector({
                 : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
             }`}
           >
-            {c.player_spec && (
-              <img src={specializationIconUrl(c.player_class, c.player_spec)} alt="" className="size-4 rounded-sm" />
-            )}
+            <img src={cohortIconUrl(c)} alt="" className="size-4 rounded-sm" />
             {label}
           </button>
         );
