@@ -14,6 +14,7 @@ import { useInstanceDefaultsCache } from "@/hooks/useInstanceDefaultsCache";
 import { useConfirmLinkNavigation } from "@/hooks/useConfirmLinkNavigation";
 import { type LayoutType, type PanelType } from "@/hooks/useUrlState";
 import { useTimeRangeContextOptional } from "./TimeRangeContext";
+import { setActionBarAdSuppression, shouldSuppressMobileAdForActionBar } from "./actionBarAdSuppression";
 import type { GridEditorItem } from "@/components/layout/GridLayoutEditor";
 import { buildLayoutSections, type LayoutSection } from "@/components/layout/layoutGroups";
 import type { ActivityPeriod, InstancePlayer } from "@/api/typesGenerated";
@@ -3297,6 +3298,21 @@ function InstancePageViewContent({
   const [shareContextMenu, setShareContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [actionBarOpen, setActionBarOpen] = useState(false);
   
+  useEffect(() => {
+    const root = document.documentElement;
+    setActionBarAdSuppression(
+      root,
+      shouldSuppressMobileAdForActionBar({
+        isMobile,
+        isEncounterView,
+        actionBarOpen,
+        suppressActionBar,
+      }),
+    );
+
+    return () => setActionBarAdSuppression(root, false);
+  }, [actionBarOpen, isEncounterView, isMobile, suppressActionBar]);
+
   // Handle encounter FAB click - mark as seen and toggle sidebar
   const handleEncounterButtonClick = () => {
     if (!hasSeenSelector) {

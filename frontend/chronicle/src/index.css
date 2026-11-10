@@ -595,6 +595,7 @@
 }
 
 /* Compare and Alt-context UI owns the mobile bottom edge while it is open. */
+html[data-layout-action-bar-open] [data-mobile-bottom-ad],
 html[data-entity-overlay-open] [data-mobile-bottom-ad] {
   display: none;
 }
