@@ -577,7 +577,7 @@ export function CareerCard({ to, tab, leaders, raids = [] }: { to: string; tab: 
         <div
           aria-hidden
           className="career-card-sheen pointer-events-none absolute inset-y-0 left-0 w-1/3 mix-blend-screen"
-          style={{ background: `linear-gradient(90deg, transparent, color-mix(in srgb, ${CAREER_GOLD} 35%, transparent) 40%, rgba(255, 240, 205, 0.35) 50%, color-mix(in srgb, ${CAREER_GOLD} 35%, transparent) 60%, transparent)` }}
+          style={{ background: `linear-gradient(90deg, transparent, color-mix(in srgb, ${CAREER_GOLD} 18%, transparent) 40%, rgba(255, 240, 205, 0.15) 50%, color-mix(in srgb, ${CAREER_GOLD} 18%, transparent) 60%, transparent)` }}
         />
         {shown.length > 0 && (
           <div className="absolute top-2.5 right-2.5 z-10 flex items-center" title={`Every raid: ${raids.join(", ")}`}>
