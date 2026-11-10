@@ -37,18 +37,19 @@ func main() {
 
 func run(ctx context.Context, arguments []string, output io.Writer) error {
 	if len(arguments) == 0 || (arguments[0] != "run" && arguments[0] != "export") {
-		return errors.New("usage: parser-baseline {run|export} --isolated-db --args args.json --expect-instances N [--storage DIR]; see README.md")
+		return errors.New("usage: parser-baseline {run|export} --isolated-db --fresh-armory-seed --args args.json --expect-instances N [--storage DIR]; see README.md")
 	}
 	flags := flag.NewFlagSet(arguments[0], flag.ContinueOnError)
 	argsPath := flags.String("args", "", "JSON ArgsLogParse file (explicit log, generation and realm required)")
 	storagePath := flags.String("storage", "", "local object-storage root (run only)")
 	isolated := flags.Bool("isolated-db", false, "confirm disposable, exclusively owned local DB and local storage")
+	freshArmory := flags.Bool("fresh-armory-seed", false, "attest shared armory tables were empty before this public parse")
 	expected := flags.Int("expect-instances", 0, "required exact number of published instances")
 	if err := flags.Parse(arguments[1:]); err != nil {
 		return err
 	}
-	if flags.NArg() != 0 || !*isolated || *expected < 1 || *argsPath == "" {
-		return errors.New("--isolated-db, --args and positive --expect-instances are required; positional arguments are not supported")
+	if flags.NArg() != 0 || !*isolated || !*freshArmory || *expected < 1 || *argsPath == "" {
+		return errors.New("--isolated-db, --fresh-armory-seed, --args and positive --expect-instances are required; positional arguments are not supported")
 	}
 	args, err := readArgs(*argsPath)
 	if err != nil {
@@ -144,6 +145,12 @@ func parse(ctx context.Context, store database.Store, pool *pgxpool.Pool, args c
 		if err == nil {
 			return errors.New("run requires a fresh seed without parsed_log_group output; restore the fixture")
 		}
+		return err
+	}
+	if group.WoWLogGroup.Unlisted {
+		return errors.New("baseline requires a public log for attributable armory provenance")
+	}
+	if err := requireEmptyArmory(ctx, store); err != nil {
 		return err
 	}
 	resolved, err := store.ResolveDatasetWithFlavorByRealm(ctx, args.RealmID)

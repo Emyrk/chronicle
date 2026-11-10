@@ -24233,6 +24233,80 @@ func (q *sqlQuerier) BaselineInstancePlayerGuilds(ctx context.Context, instanceI
 	return items, nil
 }
 
+const baselineLoot = `-- name: BaselineLoot :many
+SELECT loot.id, loot.instance_id, loot.realm_id, loot.source_guid, loot.source_ts, loot.received_guid, loot.received_ts, loot.item_id, loot.item_name, loot.loot_suffix, loot.quantity FROM instance_loot loot
+WHERE loot.instance_id IN (SELECT id FROM log_instances WHERE log_group_id = $1)
+`
+
+func (q *sqlQuerier) BaselineLoot(ctx context.Context, logGroupID uuid.UUID) ([]InstanceLoot, error) {
+	rows, err := q.db.Query(ctx, baselineLoot, logGroupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []InstanceLoot
+	for rows.Next() {
+		var i InstanceLoot
+		if err := rows.Scan(
+			&i.ID,
+			&i.InstanceID,
+			&i.RealmID,
+			&i.SourceGuid,
+			&i.SourceTs,
+			&i.ReceivedGuid,
+			&i.ReceivedTs,
+			&i.ItemID,
+			&i.ItemName,
+			&i.LootSuffix,
+			&i.Quantity,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const baselineOverview = `-- name: BaselineOverview :many
+SELECT metrics.instance_id, metrics.requirements_complete, metrics.player_deaths, metrics.wipe_count, metrics.top_incoming_damage_abilities, metrics.encounter_span_duration_ms, metrics.total_combat_duration_ms, metrics.total_boss_duration_ms, metrics.metrics_version, metrics.created_at, metrics.updated_at FROM instance_overview_metrics metrics
+WHERE metrics.instance_id IN (SELECT id FROM log_instances WHERE log_group_id = $1)
+`
+
+func (q *sqlQuerier) BaselineOverview(ctx context.Context, logGroupID uuid.UUID) ([]InstanceOverviewMetric, error) {
+	rows, err := q.db.Query(ctx, baselineOverview, logGroupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []InstanceOverviewMetric
+	for rows.Next() {
+		var i InstanceOverviewMetric
+		if err := rows.Scan(
+			&i.InstanceID,
+			&i.RequirementsComplete,
+			&i.PlayerDeaths,
+			&i.WipeCount,
+			&i.TopIncomingDamageAbilities,
+			&i.EncounterSpanDurationMs,
+			&i.TotalCombatDurationMs,
+			&i.TotalBossDurationMs,
+			&i.MetricsVersion,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const baselineParseMemberships = `-- name: BaselineParseMemberships :many
 SELECT membership.id, membership.tenant_id, membership.policy_version, membership.query_version, membership.run_id, membership.encounter_name, membership.player_guid, membership.instance_id, membership.log_group_id, membership.difficulty_name, membership.max_players, membership.player_class, membership.player_spec, membership.player_sub_spec, membership.killed_at, membership.dps, membership.hps FROM parse_score_memberships membership
 WHERE membership.log_group_id = $1 OR membership.run_id IN (
@@ -24278,6 +24352,108 @@ func (q *sqlQuerier) BaselineParseMemberships(ctx context.Context, logGroupID uu
 	return items, nil
 }
 
+const baselinePublishedGear = `-- name: BaselinePublishedGear :many
+SELECT gear.player_id, gear.realm_id, gear.instance_id, gear.gear, gear.avg_ilvl, gear.equipped_at, gear.created_at FROM game_player_gear_history gear
+WHERE gear.instance_id IN (SELECT id FROM log_instances WHERE log_group_id = $1)
+`
+
+func (q *sqlQuerier) BaselinePublishedGear(ctx context.Context, logGroupID uuid.UUID) ([]GamePlayerGearHistory, error) {
+	rows, err := q.db.Query(ctx, baselinePublishedGear, logGroupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GamePlayerGearHistory
+	for rows.Next() {
+		var i GamePlayerGearHistory
+		if err := rows.Scan(
+			&i.PlayerID,
+			&i.RealmID,
+			&i.InstanceID,
+			&i.Gear,
+			&i.AvgIlvl,
+			&i.EquippedAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const baselinePublishedGuilds = `-- name: BaselinePublishedGuilds :many
+SELECT guild.id, guild.realm_id, guild.name, guild.created_at FROM guilds guild
+WHERE guild.realm_id IN (SELECT realm_id FROM log_instances WHERE log_group_id = $1)
+`
+
+func (q *sqlQuerier) BaselinePublishedGuilds(ctx context.Context, logGroupID uuid.UUID) ([]Guild, error) {
+	rows, err := q.db.Query(ctx, baselinePublishedGuilds, logGroupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Guild
+	for rows.Next() {
+		var i Guild
+		if err := rows.Scan(
+			&i.ID,
+			&i.RealmID,
+			&i.Name,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const baselinePublishedPlayers = `-- name: BaselinePublishedPlayers :many
+SELECT player.id, player.realm_id, player.created_at, player.guild_id, player.name, player.class, player.gender, player.race, player.gear, player.updated_at, player.updated_from_instance, player.level, player.talents FROM game_players player
+WHERE player.updated_from_instance IN (SELECT id FROM log_instances WHERE log_group_id = $1)
+`
+
+func (q *sqlQuerier) BaselinePublishedPlayers(ctx context.Context, logGroupID uuid.UUID) ([]GamePlayer, error) {
+	rows, err := q.db.Query(ctx, baselinePublishedPlayers, logGroupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GamePlayer
+	for rows.Next() {
+		var i GamePlayer
+		if err := rows.Scan(
+			&i.ID,
+			&i.RealmID,
+			&i.CreatedAt,
+			&i.GuildID,
+			&i.Name,
+			&i.Class,
+			&i.Gender,
+			&i.Race,
+			&i.Gear,
+			&i.UpdatedAt,
+			&i.UpdatedFromInstance,
+			&i.Level,
+			&i.Talents,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const baselineRankingGuilds = `-- name: BaselineRankingGuilds :many
 SELECT guild.id, guild.realm_id, guild.name, guild.created_at FROM guilds guild
 WHERE guild.id IN (
@@ -24301,6 +24477,70 @@ func (q *sqlQuerier) BaselineRankingGuilds(ctx context.Context, logGroupID uuid.
 			&i.RealmID,
 			&i.Name,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const baselineSharedArmoryCounts = `-- name: BaselineSharedArmoryCounts :one
+SELECT (SELECT count(*) FROM guilds)::bigint AS guilds,
+       (SELECT count(*) FROM game_players)::bigint AS players,
+       (SELECT count(*) FROM game_player_gear_history)::bigint AS gear
+`
+
+type BaselineSharedArmoryCountsRow struct {
+	Guilds  int64 `db:"guilds" json:"guilds"`
+	Players int64 `db:"players" json:"players"`
+	Gear    int64 `db:"gear" json:"gear"`
+}
+
+// Baseline armory export requires a public parse with an empty shared armory
+// seed. Current-player rows do not otherwise provide a historical write set.
+func (q *sqlQuerier) BaselineSharedArmoryCounts(ctx context.Context) (BaselineSharedArmoryCountsRow, error) {
+	row := q.db.QueryRow(ctx, baselineSharedArmoryCounts)
+	var i BaselineSharedArmoryCountsRow
+	err := row.Scan(&i.Guilds, &i.Players, &i.Gear)
+	return i, err
+}
+
+const baselineSpeedruns = `-- name: BaselineSpeedruns :many
+SELECT speedrun.instance_id, speedrun.instance_name, speedrun.realm_id, speedrun.guild_id, speedrun.qualified, speedrun.start_time, speedrun.completion_time, speedrun.duration_ms, speedrun.proof, speedrun.created_at, speedrun.addon_version, speedrun.ranked_start_time, speedrun.ranked_completion_time, speedrun.ranked_duration_ms, speedrun.boss_to_boss_start_time, speedrun.boss_to_boss_completion_time, speedrun.boss_to_boss_duration_ms FROM instance_speedruns speedrun
+WHERE speedrun.instance_id IN (SELECT id FROM log_instances WHERE log_group_id = $1)
+`
+
+func (q *sqlQuerier) BaselineSpeedruns(ctx context.Context, logGroupID uuid.UUID) ([]InstanceSpeedrun, error) {
+	rows, err := q.db.Query(ctx, baselineSpeedruns, logGroupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []InstanceSpeedrun
+	for rows.Next() {
+		var i InstanceSpeedrun
+		if err := rows.Scan(
+			&i.InstanceID,
+			&i.InstanceName,
+			&i.RealmID,
+			&i.GuildID,
+			&i.Qualified,
+			&i.StartTime,
+			&i.CompletionTime,
+			&i.DurationMs,
+			&i.Proof,
+			&i.CreatedAt,
+			&i.AddonVersion,
+			&i.RankedStartTime,
+			&i.RankedCompletionTime,
+			&i.RankedDurationMs,
+			&i.BossToBossStartTime,
+			&i.BossToBossCompletionTime,
+			&i.BossToBossDurationMs,
 		); err != nil {
 			return nil, err
 		}

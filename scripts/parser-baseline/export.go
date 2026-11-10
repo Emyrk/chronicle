@@ -18,12 +18,10 @@ import (
 var instanceFields = []string{"id", "realm_id", "name", "capabilities", "recorder_name", "recorder_guid", "start_time", "end_time", "difficulty_name", "max_players", "dynamic_difficulty", "vehicle_control_intervals"}
 var encounterFields = []string{"id", "instance_id", "name", "remaining", "boss", "start_time", "end_time", "kill_type", "map_id", "ranking_start_offset_ms", "ranking_end_offset_ms"}
 
-var unsupportedTables = []string{
-	"guilds", "game_players", "game_player_gear_history", "instance_loot",
-	"instance_overview_metrics", "instance_speedruns",
-}
+var unsupportedTables = []string{}
 
 type artifact struct {
+	Publication       publicationOutput   `json:"publication"`
 	LogGroup          map[string]any      `json:"log_group"`
 	Rankings          rankingOutput       `json:"ranking_parity"`
 	Schema            string              `json:"schema"`
@@ -68,7 +66,7 @@ func export(ctx context.Context, db database.Store, logID uuid.UUID, generation 
 			return err
 		}
 		result = &artifact{
-			Schema: "chronicle-parser-baseline-v3", Coverage: "partial: log flavor, instances, encounters, combat structure, decoded events, rankings, synchronous memberships and referenced talents",
+			Schema: "chronicle-parser-baseline-v4", Coverage: "synchronous publication tables; explicit field allowlists; public fresh-armory single-log fixtures only",
 			Allowlist:         map[string][]string{"log_instances": instanceFields, "log_instance_encounters": encounterFields, "log_instance_events": {"instance_id", "type", "decoded_encounter_segments"}},
 			UnsupportedTables: unsupportedTables, Instances: make([]instanceOutput, 0, len(rows)),
 		}
@@ -78,10 +76,17 @@ func export(ctx context.Context, db database.Store, logID uuid.UUID, generation 
 		for table, fields := range structureFields {
 			result.Allowlist[table] = fields
 		}
+		for table, fields := range publicationFields {
+			result.Allowlist[table] = fields
+		}
+		result.Allowlist["log_instances"] = append(slices.Clone(instanceFields), "guild_id")
 		result.Allowlist["wow_log_groups"] = logGroupFields
 		group, err := tx.GetWoWLogGroupByID(ctx, logID)
 		if err != nil {
 			return err
+		}
+		if group.WoWLogGroup.Unlisted {
+			return fmt.Errorf("unlisted baseline publication has no attributable armory provenance")
 		}
 		result.LogGroup, err = logGroupValues(group.WoWLogGroup)
 		if err != nil {
@@ -131,6 +136,21 @@ func export(ctx context.Context, db database.Store, logID uuid.UUID, generation 
 				return err
 			}
 			result.Instances = append(result.Instances, out)
+		}
+		publication, err := loadPublication(ctx, tx, logID)
+		if err != nil {
+			return err
+		}
+		var guildKeys map[uuid.UUID]string
+		result.Publication, guildKeys, err = canonicalPublication(publication, rows, keys)
+		if err != nil {
+			return err
+		}
+		for i, row := range rows {
+			result.Instances[i].Instance["guild_id"] = nil
+			if row.GuildID.Valid {
+				result.Instances[i].Instance["guild_id"] = guildKeys[row.GuildID.UUID]
+			}
 		}
 		data, err := loadRankings(ctx, tx, logID)
 		if err != nil {
