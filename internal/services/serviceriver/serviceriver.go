@@ -192,7 +192,7 @@ func (s *Service) Start(ctx context.Context) error {
 	riverqueue.AddWorker(q, ratings.CareerDispatcher)
 	riverqueue.AddWorker(q, ratings.CareerDrainWorker)
 	q.AddPeriodicJob(river.NewPeriodicJob(river.PeriodicInterval(30*time.Second), func() (river.JobArgs, *river.InsertOpts) { return serviceratings.ArgsCareerDispatch{}, nil }, &river.PeriodicJobOpts{ID: "leaderboard-career-dispatch", RunOnStart: false}))
-	q.AddPeriodicJob(river.NewPeriodicJob(river.PeriodicInterval(5*time.Minute), func() (river.JobArgs, *river.InsertOpts) { return serviceratings.ArgsCareerDispatch{Sweep: true}, nil }, &river.PeriodicJobOpts{ID: "leaderboard-career-sweep", RunOnStart: false}))
+	q.AddPeriodicJob(river.NewPeriodicJob(river.PeriodicInterval(time.Hour), func() (river.JobArgs, *river.InsertOpts) { return serviceratings.ArgsCareerDispatch{Sweep: true}, nil }, &river.PeriodicJobOpts{ID: "leaderboard-career-sweep", RunOnStart: false}))
 	ratings.HighlightDispatcher.Queue = q
 	riverqueue.AddWorker(q, ratings.HighlightDispatcher)
 	riverqueue.AddWorker(q, ratings.HighlightWorker)

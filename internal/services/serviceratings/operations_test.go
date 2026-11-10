@@ -162,6 +162,7 @@ func TestOperationRepairsResultsWithoutEvidence(t *testing.T) {
 		_, err := (&Worker{Store: s.db}).Drain(s.ctx, s.tenant, f)
 		require.NoError(t, err)
 	}
+	makeCareerDue(s)
 	_, err = (&CareerWorker{Store: s.db}).Drain(ctx, s.tenant)
 	require.NoError(t, err)
 	require.NoError(t, w.Step(ctx, s.tenant, op.ID))
@@ -267,6 +268,7 @@ func TestOperationBootstrapEndToEnd(t *testing.T) {
 		_, err := (&Worker{Store: s.db}).Drain(s.ctx, s.tenant, family)
 		require.NoError(t, err)
 	}
+	makeCareerDue(s)
 	_, err = (&CareerWorker{Store: s.db}).Drain(ctx, s.tenant)
 	require.NoError(t, err)
 	// Periodic sweeps must not keep an otherwise drained operation open.

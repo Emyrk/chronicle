@@ -10,6 +10,30 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func makeCareerDue(s *sourceFixture) {
+	s.t.Helper()
+	s.exec(`UPDATE leaderboard_dirty_careers SET process_after=clock_timestamp()-interval '1 second' WHERE tenant_id=$1`, s.tenant)
+}
+
+func TestCareerEnqueueBoundedDebounce(t *testing.T) {
+	t.Parallel()
+	s := newSourceFixture(t)
+	ctx := s.tenantctx()
+
+	require.NoError(t, s.db.EnqueueLeaderboardCareer(ctx, s.tenant))
+	var debounced bool
+	require.NoError(t, s.row(`SELECT process_after-dirtied_at BETWEEN interval '29 seconds' AND interval '31 seconds' FROM leaderboard_dirty_careers WHERE tenant_id=$1`, s.tenant).Scan(&debounced))
+	require.True(t, debounced)
+
+	// A sustained burst can move the trailing edge, but never beyond five
+	// minutes from the beginning of the dirty period.
+	s.exec(`UPDATE leaderboard_dirty_careers SET dirtied_at=clock_timestamp()-interval '4 minutes 50 seconds' WHERE tenant_id=$1`, s.tenant)
+	require.NoError(t, s.db.EnqueueLeaderboardCareer(ctx, s.tenant))
+	var bounded bool
+	require.NoError(t, s.row(`SELECT process_after=dirtied_at+interval '5 minutes' FROM leaderboard_dirty_careers WHERE tenant_id=$1`, s.tenant).Scan(&bounded))
+	require.True(t, bounded)
+}
+
 func TestCareerQueueFencingAndSweep(t *testing.T) {
 	t.Parallel()
 	s := newSourceFixture(t)
@@ -19,6 +43,7 @@ func TestCareerQueueFencingAndSweep(t *testing.T) {
 	require.NoError(t, s.row(`SELECT required FROM leaderboard_dirty_careers WHERE tenant_id=$1`, s.tenant).Scan(&required))
 	require.False(t, required)
 	require.NoError(t, s.db.EnqueueLeaderboardCareer(ctx, s.tenant))
+	makeCareerDue(s)
 	first, err := s.db.ClaimLeaderboardCareer(ctx, s.tenant)
 	require.NoError(t, err)
 	_, err = s.db.ClaimLeaderboardCareer(ctx, s.tenant)
@@ -45,6 +70,7 @@ func TestCareerBoundedPassPreservesNewRevision(t *testing.T) {
 	ctx := s.tenantctx()
 	s.exec(`INSERT INTO leaderboard_career_identities(tenant_id,subject_kind,realm_id,subject_id,player_class,player_spec) SELECT $1,'player',$2,lpad(i::text,4,'0'),'MAGE','Frost' FROM generate_series(1,201) i`, s.tenant, s.realm)
 	require.NoError(t, s.db.EnqueueLeaderboardCareer(ctx, s.tenant))
+	makeCareerDue(s)
 	worker := CareerWorker{Store: s.db}
 	processed, err := worker.Drain(ctx, s.tenant)
 	require.NoError(t, err)
@@ -53,6 +79,7 @@ func TestCareerBoundedPassPreservesNewRevision(t *testing.T) {
 	require.NoError(t, s.row(`SELECT cursor_subject FROM leaderboard_dirty_careers WHERE tenant_id=$1`, s.tenant).Scan(&cursor))
 	require.Equal(t, "0100", cursor)
 	require.NoError(t, s.db.EnqueueLeaderboardCareer(ctx, s.tenant))
+	makeCareerDue(s)
 	_, err = worker.Drain(ctx, s.tenant)
 	require.NoError(t, err)
 	require.NoError(t, s.row(`SELECT cursor_subject FROM leaderboard_dirty_careers WHERE tenant_id=$1`, s.tenant).Scan(&cursor))
@@ -61,6 +88,7 @@ func TestCareerBoundedPassPreservesNewRevision(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, s.row(`SELECT cursor_subject FROM leaderboard_dirty_careers WHERE tenant_id=$1`, s.tenant).Scan(&cursor))
 	require.Empty(t, cursor)
+	makeCareerDue(s)
 	for range 3 {
 		_, err = worker.Drain(ctx, s.tenant)
 		require.NoError(t, err)
@@ -103,6 +131,7 @@ func TestCareerPublicationReadAndRetraction(t *testing.T) {
 	require.True(t, initial.Cohorts[0].RefreshPending)
 	require.Nil(t, initial.Cohorts[0].ChosenMetric)
 	worker := CareerWorker{Store: s.db}
+	makeCareerDue(s)
 	_, err = worker.Drain(ctx, s.tenant)
 	require.NoError(t, err)
 	rows, err := ReadPlayerCareer(ctx, s.db, s.tenant, s.realm, "Player")
@@ -126,6 +155,7 @@ func TestCareerPublicationReadAndRetraction(t *testing.T) {
 	pending, err := s.db.HasPendingLeaderboardCareer(ctx, s.tenant)
 	require.NoError(t, err)
 	require.True(t, pending)
+	makeCareerDue(s)
 	_, err = worker.Drain(ctx, s.tenant)
 	require.NoError(t, err)
 	rows, err = ReadPlayerCareer(ctx, s.db, s.tenant, s.realm, "Player")
@@ -153,6 +183,7 @@ func TestCareerPublicationReadAndRetraction(t *testing.T) {
 		_, err := (&Worker{Store: s.db}).Drain(ctx, s.tenant, family)
 		require.NoError(t, err)
 	}
+	makeCareerDue(s)
 	_, err = worker.Drain(ctx, s.tenant)
 	require.NoError(t, err)
 	rows, err = ReadPlayerCareer(ctx, s.db, s.tenant, s.realm, "Player")

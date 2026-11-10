@@ -58,7 +58,8 @@ func nudgeDownstream(ctx context.Context, queue JobInserter, metrics *Metrics, t
 	if includeD1 {
 		insert(ArgsRepair{TenantID: tenant}, "runs")
 	}
-	insert(ArgsCareerDrain{TenantID: tenant}, "careers")
+	// D2 publication dirties careers with a bounded debounce. The periodic career
+	// dispatcher picks them up once due, avoiding premature no-op drain jobs.
 	for family := Family(0); family < familyCount; family++ {
 		if ctx.Err() != nil {
 			return

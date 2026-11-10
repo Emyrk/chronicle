@@ -1,6 +1,13 @@
 -- name: EnqueueLeaderboardCareer :exec
-INSERT INTO leaderboard_dirty_careers(tenant_id) VALUES (@tenant_id::uuid)
-ON CONFLICT(tenant_id) DO UPDATE SET required=true,revision=leaderboard_dirty_careers.revision+1,dirtied_at=clock_timestamp(),process_after=LEAST(leaderboard_dirty_careers.process_after,clock_timestamp());
+INSERT INTO leaderboard_dirty_careers(tenant_id,process_after)
+VALUES (@tenant_id::uuid,clock_timestamp()+interval '30 seconds')
+ON CONFLICT(tenant_id) DO UPDATE SET
+ required=true,
+ revision=leaderboard_dirty_careers.revision+1,
+ dirtied_at=CASE WHEN leaderboard_dirty_careers.required THEN leaderboard_dirty_careers.dirtied_at ELSE clock_timestamp() END,
+ process_after=CASE WHEN leaderboard_dirty_careers.required
+  THEN LEAST(leaderboard_dirty_careers.dirtied_at+interval '5 minutes',clock_timestamp()+interval '30 seconds')
+  ELSE clock_timestamp()+interval '30 seconds' END;
 
 -- name: RememberLeaderboardCareerRunIdentities :exec
 INSERT INTO leaderboard_career_identities(tenant_id,subject_kind,realm_id,subject_id,player_class,player_spec,player_sub_spec)
@@ -50,6 +57,7 @@ WITH done AS (
  DELETE FROM leaderboard_dirty_careers WHERE tenant_id= @tenant_id::uuid AND claim_token= @claim_token::uuid AND claimed_revision= @claimed_revision::bigint AND revision=pass_revision RETURNING tenant_id
 )
 UPDATE leaderboard_dirty_careers SET cursor_kind='',cursor_realm='00000000-0000-0000-0000-000000000000',cursor_subject='',cursor_class='',cursor_spec='',cursor_sub_spec='',pass_revision=NULL,
+dirtied_at=clock_timestamp(),process_after=clock_timestamp()+interval '30 seconds',
 claim_token=NULL,claimed_revision=NULL,locked_until=NULL,attempts=0,retry_after='-infinity'
 WHERE tenant_id= @tenant_id::uuid AND claim_token= @claim_token::uuid AND claimed_revision= @claimed_revision::bigint AND revision<>pass_revision;
 

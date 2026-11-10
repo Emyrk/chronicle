@@ -12103,6 +12103,7 @@ WITH done AS (
  DELETE FROM leaderboard_dirty_careers WHERE tenant_id= $1::uuid AND claim_token= $2::uuid AND claimed_revision= $3::bigint AND revision=pass_revision RETURNING tenant_id
 )
 UPDATE leaderboard_dirty_careers SET cursor_kind='',cursor_realm='00000000-0000-0000-0000-000000000000',cursor_subject='',cursor_class='',cursor_spec='',cursor_sub_spec='',pass_revision=NULL,
+dirtied_at=clock_timestamp(),process_after=clock_timestamp()+interval '30 seconds',
 claim_token=NULL,claimed_revision=NULL,locked_until=NULL,attempts=0,retry_after='-infinity'
 WHERE tenant_id= $1::uuid AND claim_token= $2::uuid AND claimed_revision= $3::bigint AND revision<>pass_revision
 `
@@ -12146,8 +12147,15 @@ func (q *sqlQuerier) DeleteLeaderboardCareerSubject(ctx context.Context, arg Del
 }
 
 const enqueueLeaderboardCareer = `-- name: EnqueueLeaderboardCareer :exec
-INSERT INTO leaderboard_dirty_careers(tenant_id) VALUES ($1::uuid)
-ON CONFLICT(tenant_id) DO UPDATE SET required=true,revision=leaderboard_dirty_careers.revision+1,dirtied_at=clock_timestamp(),process_after=LEAST(leaderboard_dirty_careers.process_after,clock_timestamp())
+INSERT INTO leaderboard_dirty_careers(tenant_id,process_after)
+VALUES ($1::uuid,clock_timestamp()+interval '30 seconds')
+ON CONFLICT(tenant_id) DO UPDATE SET
+ required=true,
+ revision=leaderboard_dirty_careers.revision+1,
+ dirtied_at=CASE WHEN leaderboard_dirty_careers.required THEN leaderboard_dirty_careers.dirtied_at ELSE clock_timestamp() END,
+ process_after=CASE WHEN leaderboard_dirty_careers.required
+  THEN LEAST(leaderboard_dirty_careers.dirtied_at+interval '5 minutes',clock_timestamp()+interval '30 seconds')
+  ELSE clock_timestamp()+interval '30 seconds' END
 `
 
 func (q *sqlQuerier) EnqueueLeaderboardCareer(ctx context.Context, tenantID uuid.UUID) error {
