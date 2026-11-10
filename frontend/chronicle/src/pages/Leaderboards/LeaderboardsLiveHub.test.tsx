@@ -23,7 +23,7 @@ vi.mock("./Hub/landingHighlights", async (importOriginal) => ({
   useLandingHighlights: vi.fn(),
 }))
 vi.mock("./Hub/hubSummaryAdapter", () => ({ useHubSummary: vi.fn() }))
-vi.mock("@tanstack/react-query", () => ({ useQuery: () => ({ data: [], isPending: false, isError: false }) }))
+vi.mock("@tanstack/react-query", () => ({ keepPreviousData: undefined, useQuery: () => ({ data: [], isPending: false, isError: false }) }))
 vi.mock("@/api/rankingsQueries", () => ({
   useRankingsLeaderboard: vi.fn(() => ({ data: { entries: [] }, isPending: false, isError: false })),
   useRankingsStats: () => ({ data: [], isPending: false, isError: false }),

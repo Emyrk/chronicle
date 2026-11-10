@@ -17,6 +17,7 @@ import type {
   LeaderboardConfigurationTenant,
 } from "@/api/typesGenerated";
 import { Button } from "@/components/ui/button";
+import { awardFor, variantKey } from "./renownConfig";
 
 export function ConfigurationPage() {
   const [params] = useSearchParams();
@@ -129,22 +130,6 @@ function FlavorChips({
 }
 
 type Row = LeaderboardConfigurationRow;
-
-/** "" is the default (non-variant) award column. */
-function variantKey(row: Pick<Row, "difficulty_name" | "max_players">) {
-  return `${row.difficulty_name}/${row.max_players}`;
-}
-
-function awardFor(rows: readonly Row[], boss: string, variant: string) {
-  if (!variant)
-    return rows.find((r) => r.kind === "boss" && r.encounter_name === boss);
-  return rows.find(
-    (r) =>
-      r.kind === "boss_variant" &&
-      r.encounter_name === boss &&
-      variantKey(r) === variant,
-  );
-}
 
 /** The set that defines an instance's headline Renown total. */
 const DEFAULT_SET = "default";

@@ -51,15 +51,14 @@ describe("Leaderboard ruleset", () => {
       name: "Raid",
       category: "raid",
       progression_bosses: ["Second", "First"],
-      renown_rules: [
-        { encounter_name: "Optional B", points: 1 },
-        { encounter_name: "First", points: 3 },
-        { encounter_name: "Optional A", points: 0 },
-        { encounter_name: "Second", points: 2 },
-      ],
     }
-    const entry = rulesetEntries([instance])[0]
-    expect(renownRuleRows(entry).map((rule) => rule.encounter_name)).toEqual([
+    const entry = rulesetEntries([instance], new Map([["Raid", [{ difficulty_name: "", max_players: 0, rules: [] }]]]))[0]
+    expect(renownRuleRows(entry, [
+      { encounter_name: "Optional B", points: 1 },
+      { encounter_name: "First", points: 3 },
+      { encounter_name: "Optional A", points: 0 },
+      { encounter_name: "Second", points: 2 },
+    ]).map((rule) => rule.encounter_name)).toEqual([
       "Second", "First", "Optional A", "Optional B",
     ])
   })
@@ -69,23 +68,24 @@ describe("Leaderboard ruleset", () => {
       { name: "Unrestricted", category: "raid", raid_progression_order: 3000 },
       { name: "Early", category: "raid", raid_progression_order: 1000, damage_by_encounter: { Boss: { mode: "boss-only" } } },
       { name: "Empty", category: "raid", damage_by_encounter: {} },
-      { name: "Renown", category: "raid", raid_progression_order: 1500,
-        renown_rules: [{ encounter_name: "Boss", points: 2 }],
-      },
+      { name: "Renown", category: "raid", raid_progression_order: 1500 },
       { name: "Late", category: "raid", raid_progression_order: 2000,
         derived_names: ["Late Wing"],
         speedrun_rules: { requirements: [{ name: "Boss", entry_ids: [1], count: 1, category: "Bosses" }] },
         derived_speedrun_rules: { "Late Wing": { requirements: [{ name: "Trash", entry_ids: [2], count: 3, category: "Trash" }] } },
-        derived_renown_rules: { "Late Wing": [{ encounter_name: "Wing Boss", points: 4 }] },
         derived_raid_progression_orders: { "Late Wing": 2001 },
       },
     ]
-    expect(rulesetEntries(instances).map((entry) => entry.name)).toEqual(["Late Wing", "Late", "Renown", "Early"])
-    expect(rulesetEntries(instances).find((entry) => entry.name === "Late Wing")).toMatchObject({
+    const renown = new Map([
+      ["Renown", [{ difficulty_name: "", max_players: 0, rules: [{ encounter_name: "Boss", points: 2 }] }]],
+      ["Late Wing", [{ difficulty_name: "", max_players: 0, rules: [{ encounter_name: "Wing Boss", points: 4 }] }]],
+    ])
+    expect(rulesetEntries(instances, renown).map((entry) => entry.name)).toEqual(["Late Wing", "Late", "Renown", "Early"])
+    expect(rulesetEntries(instances, renown).find((entry) => entry.name === "Late Wing")).toMatchObject({
       derived: true,
       damageRuleCount: 0,
       speedrunRules: { requirements: [{ name: "Trash", count: 3 }] },
-      renownRules: [{ encounter_name: "Wing Boss", points: 4 }],
+      renownAwards: [{ rules: [{ encounter_name: "Wing Boss", points: 4 }] }],
     })
   })
 })

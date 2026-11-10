@@ -8,9 +8,9 @@ import { cn } from "@/lib/utils"
 import { damageRuleRows, formatLevelRange, renownRuleRows, rulesetEntries, type RankedTime } from "./damageRuleRows"
 import { SpeedrunRequirements } from "./SpeedrunRequirements"
 import { METRIC_THEMES } from "./Ratings/ratingThemes"
+import { awardsLabel, formatRenown, sumRenown, useRenownAwards } from "./renownConfig"
 
 const RENOWN = METRIC_THEMES.renown
-const formatRenown = (points: number) => points.toLocaleString(undefined, { maximumFractionDigits: 2 })
 
 function RulesSection({ id, icon, iconClassName, title, description, aside, children }: {
   id: string
@@ -114,11 +114,16 @@ function RenownShareBar({ rules, total }: { rules: readonly SupportedInstanceRen
 /** `embedded`: inside a page that already shows the instance banner, so only the summary chips are drawn. */
 export function RulesetInstanceView({ instanceName, embedded = false }: { instanceName: string; embedded?: boolean }) {
   const { data, isLoading, isError } = useSupportedInstances()
-  const entry = rulesetEntries(data ?? []).find((item) => item.name === instanceName)
+  const renown = useRenownAwards()
+  const entry = rulesetEntries(data ?? [], renown).find((item) => item.name === instanceName)
   const instance = entry?.instance ?? data?.find((item) => item.name === instanceName)
   const rows = instance && !entry?.derived ? damageRuleRows(instance) : []
-  const renownRows = entry ? renownRuleRows(entry) : []
-  const renownTotal = renownRows.reduce((sum, rule) => sum + rule.points, 0)
+  // One column per award variant; most instances only have the default.
+  const renownColumns = (entry?.renownAwards ?? []).map((awards) => {
+    const rules = renownRuleRows(entry!, awards.rules)
+    return { label: awardsLabel(awards), rules, total: sumRenown(rules) }
+  })
+  const labelColumns = renownColumns.length > 1
   const bossCount = entry?.speedrunRules?.requirements.filter((requirement) => requirement.category === "Bosses").length ?? 0
 
   if (isLoading) return <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
@@ -139,15 +144,16 @@ export function RulesetInstanceView({ instanceName, embedded = false }: { instan
           {entry.speedrunRules.level_range ? `Level ${formatLevelRange(entry.speedrunRules.level_range)}` : "Any level"}
         </span>
       )}
-      {renownRows.length > 0 && (
+      {renownColumns.map((column) => (
         <span
+          key={column.label}
           className="inline-flex items-center gap-1.5 rounded-full bg-black/40 px-2.5 py-1 ring-1 backdrop-blur-sm"
           style={{ "--tw-ring-color": `${RENOWN.accent}4d` } as CSSProperties}
         >
           <RENOWN.icon className="h-3 w-3" style={{ color: RENOWN.accent }} />
-          {formatRenown(renownTotal)} Renown per clear
+          {labelColumns && `${column.label}: `}{formatRenown(column.total)} Renown per clear
         </span>
-      )}
+      ))}
       {rows.length > 0 && (
         <span className="inline-flex items-center gap-1.5 rounded-full bg-black/40 px-2.5 py-1 ring-1 ring-[color:var(--tertiary)]/40 backdrop-blur-sm">
           <Swords className="h-3 w-3 text-[color:var(--tertiary)]" />
@@ -205,19 +211,27 @@ export function RulesetInstanceView({ instanceName, embedded = false }: { instan
         </div>
       )}
 
-      {renownRows.length > 0 && (
-        <section aria-labelledby="renown-policy" className="rounded-xl border bg-card px-4 py-3 sm:px-5">
-          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-            <h2 id="renown-policy" className="flex items-center gap-2 text-sm font-semibold">
-              <RENOWN.icon className="h-4 w-4" style={{ color: RENOWN.accent }} />
-              Renown per kill
-            </h2>
-            <span className="text-xs text-muted-foreground">
-              Instance total{" "}
-              <span className="font-mono text-sm font-semibold" style={{ color: RENOWN.accent }}>{formatRenown(renownTotal)}</span>
-            </span>
-          </div>
-          <RenownShareBar rules={renownRows} total={renownTotal} />
+      {renownColumns.length > 0 && (
+        <section aria-labelledby="renown-policy" className="space-y-4 rounded-xl border bg-card px-4 py-3 sm:px-5">
+          {renownColumns.map((column, i) => (
+            <div key={column.label}>
+              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+                {i === 0 ? (
+                  <h2 id="renown-policy" className="flex items-center gap-2 text-sm font-semibold">
+                    <RENOWN.icon className="h-4 w-4" style={{ color: RENOWN.accent }} />
+                    Renown per kill{labelColumns && <span className="font-normal text-muted-foreground">· {column.label}</span>}
+                  </h2>
+                ) : (
+                  <h3 className="text-sm text-muted-foreground">{column.label}</h3>
+                )}
+                <span className="text-xs text-muted-foreground">
+                  Instance total{" "}
+                  <span className="font-mono text-sm font-semibold" style={{ color: RENOWN.accent }}>{formatRenown(column.total)}</span>
+                </span>
+              </div>
+              <RenownShareBar rules={column.rules} total={column.total} />
+            </div>
+          ))}
         </section>
       )}
 

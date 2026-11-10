@@ -6,12 +6,14 @@ import type {
   SupportedInstanceSpeedrunRules,
 } from "@/api/typesGenerated"
 import { compareByRaidProgression } from "@/pages/Logs/utils/instanceProgressionOrder"
+import type { RenownAwards } from "./renownConfig"
 
 export interface RulesetEntry {
   name: string
   instance: SupportedInstance
   speedrunRules?: SupportedInstanceSpeedrunRules
-  renownRules?: readonly SupportedInstanceRenownRule[]
+  /** Per-kill Renown by award column, from the leaderboard configuration. */
+  renownAwards?: readonly RenownAwards[]
   damageRuleCount: number
   derived: boolean
 }
@@ -48,31 +50,32 @@ function encounterRules(instance: SupportedInstance): Record<string, SupportedIn
   return { ...(instance.damage_by_encounter ?? {}), ...(FRONTEND_DAMAGE_RULES[instance.name] ?? {}) }
 }
 
-/** Include DPS, speedrun, and Renown rules, including derived zones. */
-export function rulesetEntries(instances: readonly SupportedInstance[]): RulesetEntry[] {
+/** Include DPS, speedrun, and Renown rules, including derived zones. Renown comes from the leaderboard configuration. */
+export function rulesetEntries(instances: readonly SupportedInstance[], renown?: ReadonlyMap<string, readonly RenownAwards[]>): RulesetEntry[] {
   const entries: RulesetEntry[] = []
   for (const instance of instances) {
     const damageRuleCount = Object.keys(encounterRules(instance)).length
-    if (damageRuleCount > 0 || instance.speedrun_rules || instance.renown_rules?.length) {
+    const renownAwards = renown?.get(instance.name)
+    if (damageRuleCount > 0 || instance.speedrun_rules || renownAwards) {
       entries.push({
         name: instance.name,
         instance,
         speedrunRules: instance.speedrun_rules,
-        renownRules: instance.renown_rules,
+        renownAwards,
         damageRuleCount,
         derived: false,
       })
     }
     const derivedNames = new Set([
       ...Object.keys(instance.derived_speedrun_rules ?? {}),
-      ...Object.keys(instance.derived_renown_rules ?? {}),
+      ...(instance.derived_names ?? []).filter((name) => renown?.has(name)),
     ])
     for (const name of derivedNames) {
       entries.push({
         name,
         instance,
         speedrunRules: instance.derived_speedrun_rules?.[name],
-        renownRules: instance.derived_renown_rules?.[name],
+        renownAwards: renown?.get(name),
         damageRuleCount: 0,
         derived: true,
       })
@@ -118,9 +121,9 @@ export function damageRuleRows(instance: SupportedInstance) {
   }))
 }
 
-export function renownRuleRows(entry: RulesetEntry): readonly SupportedInstanceRenownRule[] {
+export function renownRuleRows(entry: RulesetEntry, rules: readonly SupportedInstanceRenownRule[]): readonly SupportedInstanceRenownRule[] {
   const order = entry.derived ? [] : (entry.instance.progression_bosses ?? [])
-  return [...(entry.renownRules ?? [])].sort((a, b) => {
+  return [...rules].sort((a, b) => {
     const aIndex = order.indexOf(a.encounter_name)
     const bIndex = order.indexOf(b.encounter_name)
     return (aIndex < 0 ? Infinity : aIndex) - (bIndex < 0 ? Infinity : bIndex)

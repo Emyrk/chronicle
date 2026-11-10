@@ -5,12 +5,14 @@ import { getInstanceCategory } from "@/pages/Logs/utils/instanceCategory"
 import { groupByRaidLevel } from "@/pages/Logs/utils/instanceProgressionOrder"
 import { InstanceCard } from "../Rankings/InstanceCard"
 import { rulesetEntries, type RulesetEntry } from "./damageRuleRows"
+import { awardsLabel, formatRenown, sumRenown, useRenownAwards } from "./renownConfig"
 
 export function RulesetsLanding({ instanceHref, onOpen }: {
   instanceHref?: (instance: string) => string
   onOpen?: (instance: string) => void
 } = {}) {
   const { data, isLoading, isError } = useSupportedInstances()
+  const renown = useRenownAwards()
 
   if (isLoading) {
     return (
@@ -23,7 +25,7 @@ export function RulesetsLanding({ instanceHref, onOpen }: {
     return <p className="py-12 text-center text-muted-foreground">Could not load rulesets. Please try again later.</p>
   }
 
-  const instances = rulesetEntries(data ?? [])
+  const instances = rulesetEntries(data ?? [], renown)
   if (instances.length === 0) {
     return (
       <div className="rounded-xl border p-8 text-center text-muted-foreground">
@@ -44,7 +46,6 @@ export function RulesetsLanding({ instanceHref, onOpen }: {
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
       {items.map((entry) => {
         const requirementCount = entry.speedrunRules?.requirements.length ?? 0
-        const renownTotal = entry.renownRules?.reduce((sum, rule) => sum + rule.points, 0) ?? 0
         const RenownIcon = METRIC_THEMES.renown.icon
         return (
           <div key={entry.name} onClickCapture={!onOpen ? undefined : (event) => {
@@ -62,10 +63,13 @@ export function RulesetsLanding({ instanceHref, onOpen }: {
                     {requirementCount} speedrun {requirementCount === 1 ? "requirement" : "requirements"}
                   </span>
                 )}
-                {(entry.renownRules?.length ?? 0) > 0 && (
-                  <span className="flex items-center gap-1">
+                {entry.renownAwards && (
+                  <span
+                    className="flex items-center gap-1"
+                    title={entry.renownAwards.map((a) => `${awardsLabel(a)}: ${formatRenown(sumRenown(a.rules))} Renown`).join("\n")}
+                  >
                     <RenownIcon className="h-3 w-3" style={{ color: METRIC_THEMES.renown.accent }} />
-                    {renownTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })} Renown
+                    {entry.renownAwards.map((a) => formatRenown(sumRenown(a.rules))).join(" / ")} Renown
                   </span>
                 )}
                 {entry.damageRuleCount > 0 && (

@@ -24,6 +24,7 @@ import { liveHubBosses } from "./Hub/liveBosses"
 import { hubInstanceParams, hubParams, hubPath, hubTab, v2Selection } from "./v2Selection"
 import { legacyLeaderboardsTarget } from "./leaderboardsState"
 import { useSiteConfig, useSupportedInstances } from "@/api/queries"
+import { useRenownAwards } from "./renownConfig"
 
 const ALL_REALMS = "All realms"
 
@@ -35,6 +36,7 @@ export function LeaderboardsLiveHub() {
   const { data: siteConfig } = useSiteConfig()
   const rootRatingsDisabled = siteConfig?.tenant == null && siteConfig?.root_tenant_ratings_disabled === true
   const { data: supportedInstances } = useSupportedInstances({ enabled: siteConfig !== undefined && !rootRatingsDisabled })
+  const renownAwards = useRenownAwards()
   const { tab, instance, realmIDs, encounters } = v2Selection(params, { segment, instance: pathInstance, tab: pathTab })
   const requestedSize = params.get("size")
   const parsedSize = requestedSize === null ? NaN : Number(requestedSize)
@@ -101,7 +103,7 @@ export function LeaderboardsLiveHub() {
       <LeaderboardsHubApp instance={instance ?? undefined} onInstance={chooseInstance}
         instanceHref={instanceHref} tabHref={tabHref} allInstancesHref={allInstancesHref}
         tab={tab} onTab={chooseTab} realm={realm} onRealm={(name) => choose("realm_ids", available.find((row) => row.name === name)?.id)}
-        realms={[ALL_REALMS, ...available.map((row) => row.name)]} instances={summary.data?.instances ?? []} supportedInstances={supportedInstances} landingPreviews={highlightsScopeError ? [] : highlights.data?.landing_previews}
+        realms={[ALL_REALMS, ...available.map((row) => row.name)]} instances={summary.data?.instances ?? []} supportedInstances={supportedInstances} renownAwards={renownAwards} landingPreviews={highlightsScopeError ? [] : highlights.data?.landing_previews}
         landingSnapshots={highlightsScopeError || highlights.isError && !highlights.data ? undefined : highlights.data?.snapshots ?? []}
         landingBlocked={!!highlightsScopeError || !highlights.data}
         landingNotice={highlightsScopeError ? <p role="status">{highlightsScopeError}</p>

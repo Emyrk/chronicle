@@ -23,6 +23,7 @@ import {
   groupByRaidLevel,
 } from "@/pages/Logs/utils/instanceProgressionOrder"
 import { RulesetsLanding } from "@/pages/Leaderboards/RulesetsLanding"
+import { awardsForCohort, formatRenown, sumRenown, type RenownAwards } from "@/pages/Leaderboards/renownConfig"
 
 /**
  * Leaderboards entry point, framed like today's /leaderboards: the tab bar
@@ -45,6 +46,8 @@ export interface LeaderboardsHubAppProps extends Omit<LeaderboardHubProps, "inst
   instances?: readonly RankingsInstanceSummary[]
   /** Registered instance metadata used to order raid cards by progression tier. */
   supportedInstances?: readonly SupportedInstance[]
+  /** Per-kill Renown by instance; the overview cards show what a clear of each cohort can grant. */
+  renownAwards?: ReadonlyMap<string, readonly RenownAwards[]>
   /** Bounded published board highlights for the live all-instances grid. */
   landingPreviews?: readonly HubLandingPreview[]
   landingSnapshots?: readonly LeaderboardHighlightSnapshot[]
@@ -78,6 +81,7 @@ export function LeaderboardsHubApp({
   realms,
   instances,
   supportedInstances,
+  renownAwards,
   landingPreviews,
   landingSnapshots,
   landingNotice,
@@ -157,6 +161,7 @@ export function LeaderboardsHubApp({
           instanceHref={instanceHref}
           instances={instances}
           supportedInstances={supportedInstances}
+          renownAwards={renownAwards}
           landingPreviews={landingPreviews}
           landingSnapshots={landingSnapshots}
           landingNotice={landingNotice}
@@ -182,12 +187,15 @@ function formatSnapshotAge(refreshedAt: string, now = Date.now()): string {
   return "Updated >1d ago"
 }
 
+const RenownIcon = METRIC_THEMES.renown.icon
+
 function HubLanding({
   tab,
   onOpen,
   instanceHref,
   instances,
   supportedInstances,
+  renownAwards,
   landingPreviews,
   landingSnapshots,
   landingNotice,
@@ -200,6 +208,7 @@ function HubLanding({
   instanceHref?: (instance: string, cohort?: { difficulty: string; maxPlayers: number }) => string
   instances?: readonly RankingsInstanceSummary[]
   supportedInstances?: readonly SupportedInstance[]
+  renownAwards?: ReadonlyMap<string, readonly RenownAwards[]>
   landingPreviews?: readonly HubLandingPreview[]
   landingSnapshots?: readonly LeaderboardHighlightSnapshot[]
   landingNotice?: ReactNode
@@ -234,6 +243,7 @@ function HubLanding({
           const snapshot = landingSnapshots?.find((item) =>
             item.instance_name === row.instance_name && item.difficulty_name === row.difficulty_name && item.max_players === row.max_players)
           const cohort = { difficulty: row.difficulty_name, maxPlayers: row.max_players }
+          const renown = tab === "overview" ? awardsForCohort(renownAwards?.get(row.instance_name), row.difficulty_name, row.max_players) : undefined
           const showSnapshotAge = !landingBlocked
             && landingSnapshots !== undefined
             && tab !== "parsing"
@@ -252,9 +262,17 @@ function HubLanding({
                 </>}
               </> : <LiveCardBody tab={tab} preview={preview} />}
               <div className="flex items-end justify-between gap-2 text-[10px] text-muted-foreground">
-                <div className="flex items-center gap-1">
-                  <Skull className="h-3 w-3" />
-                  {row.total_kills ? `${row.total_kills.toLocaleString()} recorded kills` : "Configured instance"}
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <span className="flex items-center gap-1">
+                    <Skull className="h-3 w-3" />
+                    {row.total_kills ? `${row.total_kills.toLocaleString()} recorded kills` : "Configured instance"}
+                  </span>
+                  {renown && (
+                    <span className="flex items-center gap-1" title="Renown granted for killing every boss once">
+                      <RenownIcon className="h-3 w-3" style={{ color: METRIC_THEMES.renown.accent }} />
+                      {formatRenown(sumRenown(renown.rules))} Renown
+                    </span>
+                  )}
                 </div>
                 {showSnapshotAge && snapshot && (
                   <time className="shrink-0 text-right" dateTime={snapshot.refreshed_at} title={snapshot.refreshed_at}>
