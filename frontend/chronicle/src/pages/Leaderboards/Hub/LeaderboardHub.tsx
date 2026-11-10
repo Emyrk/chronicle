@@ -1,8 +1,8 @@
-import { Fragment, useMemo, useState, type ReactNode } from "react"
+import { Fragment, useMemo, useState, type ReactNode, type Ref } from "react"
 import { useActiveTabInView } from "@/hooks/useActiveTabInView"
 import { createPortal } from "react-dom"
 import { Link } from "react-router-dom"
-import { ArrowRight, Check, ChevronDown, ChevronLeft, CircleHelp, HeartPulse, Swords, Timer, PanelLeft, Globe, List, X } from "lucide-react"
+import { ArrowRight, Check, ChevronDown, ChevronLeft, CircleHelp, HeartPulse, Swords, Timer, PanelLeft, Globe, List, X, type LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { useIsMobile } from "@/hooks/useIsMobile"
@@ -358,148 +358,78 @@ export function LeaderboardHub({
       {/* Full width like the statistics leaderboard. */}
       <div className="mx-auto w-full max-w-[1920px] px-3 py-4 sm:px-4 sm:py-8">
         <div className="min-w-0 space-y-5">
-          <header
-            className="relative overflow-hidden rounded-xl border bg-card transition-[border-color,box-shadow] duration-500"
-            style={
-              guildMode
-                ? {
-                    borderColor: `color-mix(in srgb, ${GUILD_GOLD} 35%, transparent)`,
-                    boxShadow: `0 0 0 1px color-mix(in srgb, ${GUILD_GOLD} 10%, transparent), 0 8px 40px -12px color-mix(in srgb, ${GUILD_GOLD} 25%, transparent)`,
+          <HubBanner
+            guildMode={guildMode}
+            background={getInstanceBackground(instanceName)}
+            allHref={allInstancesHref}
+            onAll={onAllInstances}
+            crumbs={crumbs}
+            crumbSuffix={scope.boss && (live ? live.optionalBosses?.has(scope.boss) : OPTIONAL_BOSSES.has(scope.boss)) && <span className="text-muted-foreground/70">· Optional</span>}
+            title={<InstanceTitle instanceName={instanceName} instances={instances} onSwitch={onSwitchInstance} />}
+            realm={realm}
+            realms={realms}
+            onRealm={setRealm}
+            subtitle={set && <p className="mt-1 hidden text-xs text-muted-foreground sm:block">Combined: {set.join(", ")} · ratings averaged, time is total kill time</p>}
+            tabs={TABS}
+            activeTab={tab}
+            tabHref={tabHref}
+            onTab={setTab}
+            tabBarRef={tabBarRef}
+            filters={
+                <ScopeBar
+                  scope={scope}
+                  classDisabled={subject === "guilds" ? "Guild ratings don't split by class. Switch to Characters to filter by class." : undefined}
+                  showBoss={false}
+                  specs={scope.cls ? (live ? live.specsFor : specsFor)(scope.cls, role) : []}
+                  subSpecs={scope.cls && scope.spec ? (live ? live.subSpecsFor : subSpecsFor)(scope.cls, scope.spec) : []}
+                  onChange={(next) => {
+                    // "Whole raid" clears everything, the encounter choice included.
+                    if (!next.boss && !next.cls && !next.spec) selectEncounter(FULL_CLEAR)
+                    setClassScope({ cls: next.cls, spec: next.spec, subSpec: next.subSpec })
+                  }}
+                  compact={isMobile}
+                  compactSummary={compactFilterSummary}
+                  compactIndicator={
+                    subject === "characters" ? (
+                      <span
+                        className="flex shrink-0 items-center"
+                        aria-label={scope.cls ? `${CLASS_DISPLAY[scope.cls]} selected` : `All ${CLASS_ORDER.length} classes selected`}
+                      >
+                        <span className="flex -space-x-1">
+                          {compactClasses.map((cls) => (
+                            <ClassIcon key={cls} cls={cls} className="size-4 rounded-sm border border-background/80" />
+                          ))}
+                        </span>
+                        {remainingCompactClasses > 0 && <span className="ml-1 text-[10px] font-medium text-muted-foreground">+{remainingCompactClasses}</span>}
+                      </span>
+                    ) : undefined
                   }
-                : undefined
-            }
-          >
-            <img src={getInstanceBackground(instanceName)} alt="" className="absolute inset-0 h-full w-full object-cover opacity-60" />
-            <div className="absolute inset-0 bg-gradient-to-t from-card via-card/80 to-card/30" />
-            {/* Desktop: the banner's corner links to the explainer for Peak, Mastery, and Renown. */}
-            <Link
-              to="/ratings"
-              title="How ratings work"
-              aria-label="How ratings work"
-              className="absolute top-3 right-4 z-10 hidden size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground sm:inline-flex"
-            >
-              <CircleHelp className="size-5" />
-            </Link>
-            <div className="relative flex min-w-0 items-end gap-3 px-3 pt-4 pb-3 sm:flex-wrap sm:gap-4 sm:px-6 sm:pt-10 sm:pb-4">
-              <div className="min-w-0 flex-1">
-                {/* Breadcrumb: the parent is the way back to the grid; the rest names the current scope. */}
-                <nav
-                  aria-label="Breadcrumb"
-                  className="hidden flex-wrap items-center gap-1.5 text-[11px] font-medium tracking-wider text-muted-foreground uppercase sm:flex"
-                >
-                  {allInstancesHref ? (
-                    <Link
-                      to={allInstancesHref}
-                      title="All instances"
-                      className="-ml-0.5 inline-flex cursor-pointer items-center gap-1 uppercase transition-colors hover:text-foreground"
-                    >
-                      <ChevronLeft className="size-3.5" />
-                      Leaderboards
-                    </Link>
-                  ) : onAllInstances ? (
-                    <button
-                      type="button"
-                      onClick={onAllInstances}
-                      title="All instances"
-                      className="-ml-0.5 inline-flex cursor-pointer items-center gap-1 uppercase transition-colors hover:text-foreground"
-                    >
-                      <ChevronLeft className="size-3.5" />
-                      Leaderboards
-                    </button>
-                  ) : (
-                    <span>Leaderboards</span>
-                  )}
-                  {guildMode && (
+                  extra={
                     <>
-                      <span className="opacity-50">/</span>
-                      <span style={{ color: GUILD_GOLD }}>Guilds</span>
+                      {live?.cohortPicker}
+                      <Segmented
+                        label="Role"
+                        value={role}
+                        options={[
+                          { value: "dps", label: "DPS", color: "#e5484d" },
+                          { value: "healing", label: "Healing", color: "#46a758" },
+                        ]}
+                        onChange={changeRole}
+                      />
+                      <Segmented
+                        label="Rank"
+                        value={subject}
+                        options={[
+                          { value: "characters", label: "Characters", color: "#5b9bd5" },
+                          { value: "guilds", label: "Guilds", color: GUILD_GOLD },
+                        ]}
+                        onChange={setSubject}
+                      />
                     </>
-                  )}
-                  {crumbs.map((c) => (
-                    <Fragment key={c.label}>
-                      <span className="opacity-50">/</span>
-                      <span style={c.color ? { color: c.color } : undefined}>{c.label}</span>
-                    </Fragment>
-                  ))}
-                  {scope.boss && (live ? live.optionalBosses?.has(scope.boss) : OPTIONAL_BOSSES.has(scope.boss)) && <span className="text-muted-foreground/70">· Optional</span>}
-                </nav>
-                {/* The realm sits beside the title: together they name what every board below ranks. */}
-                <div className="flex min-w-0 items-center justify-between gap-3 sm:flex-wrap sm:justify-start sm:gap-x-4 sm:gap-y-2">
-                  <InstanceTitle instanceName={instanceName} instances={instances} onSwitch={onSwitchInstance} />
-                  <RealmPicker realm={realm} realms={realms} onChange={setRealm} className="shrink-0" />
-                </div>
-                {set && <p className="mt-1 hidden text-xs text-muted-foreground sm:block">Combined: {set.join(", ")} · ratings averaged, time is total kill time</p>}
-              </div>
-            </div>
-            <nav ref={tabBarRef} className="relative flex overflow-x-auto border-t border-white/5 px-2 sm:px-4" aria-label="Leaderboard section">
-              {TABS.map((t) => {
-                const className = cn(
-                  "cursor-pointer flex shrink-0 items-center gap-2 border-b-2 px-3 py-3 text-sm font-medium transition-colors sm:px-4",
-                  t.id === tab
-                    ? "border-primary text-foreground"
-                    : "border-transparent text-muted-foreground hover:border-muted-foreground/30 hover:text-foreground",
-                )
-                const content = <><t.icon className={cn("size-4", t.id === tab && "text-primary")} />{t.label}</>
-                return <HubTabHint key={t.id} description={t.description}>{tabHref ? (
-                  <Link to={tabHref(t.id)} aria-current={t.id === tab ? "page" : undefined} className={className}>{content}</Link>
-                ) : (
-                  <button type="button" aria-pressed={t.id === tab} onClick={() => setTab(t.id)} className={className}>{content}</button>
-                )}</HubTabHint>
-              })}
-            </nav>
-            <ScopeBar
-              scope={scope}
-              classDisabled={subject === "guilds" ? "Guild ratings don't split by class. Switch to Characters to filter by class." : undefined}
-              showBoss={false}
-              specs={scope.cls ? (live ? live.specsFor : specsFor)(scope.cls, role) : []}
-              subSpecs={scope.cls && scope.spec ? (live ? live.subSpecsFor : subSpecsFor)(scope.cls, scope.spec) : []}
-              onChange={(next) => {
-                // "Whole raid" clears everything, the encounter choice included.
-                if (!next.boss && !next.cls && !next.spec) selectEncounter(FULL_CLEAR)
-                setClassScope({ cls: next.cls, spec: next.spec, subSpec: next.subSpec })
-              }}
-              compact={isMobile}
-              compactSummary={compactFilterSummary}
-              compactIndicator={
-                subject === "characters" ? (
-                  <span
-                    className="flex shrink-0 items-center"
-                    aria-label={scope.cls ? `${CLASS_DISPLAY[scope.cls]} selected` : `All ${CLASS_ORDER.length} classes selected`}
-                  >
-                    <span className="flex -space-x-1">
-                      {compactClasses.map((cls) => (
-                        <ClassIcon key={cls} cls={cls} className="size-4 rounded-sm border border-background/80" />
-                      ))}
-                    </span>
-                    {remainingCompactClasses > 0 && <span className="ml-1 text-[10px] font-medium text-muted-foreground">+{remainingCompactClasses}</span>}
-                  </span>
-                ) : undefined
-              }
-              extra={
-                <>
-                  {live?.cohortPicker}
-                  <Segmented
-                    label="Role"
-                    value={role}
-                    options={[
-                      { value: "dps", label: "DPS", color: "#e5484d" },
-                      { value: "healing", label: "Healing", color: "#46a758" },
-                    ]}
-                    onChange={changeRole}
-                  />
-                  <Segmented
-                    label="Rank"
-                    value={subject}
-                    options={[
-                      { value: "characters", label: "Characters", color: "#5b9bd5" },
-                      { value: "guilds", label: "Guilds", color: GUILD_GOLD },
-                    ]}
-                    onChange={setSubject}
-                  />
-                </>
-              }
-            />
-          </header>
+                  }
+                />
+            }
+          />
 
           {/* Banner spans the page; below it, the site's encounter column sits beside the content. */}
           {/* Keyed by realm: every board below is that realm's, so a switch rebuilds them. */}
@@ -763,6 +693,145 @@ function Empty({ pending, rows, text = "Not published for this selection yet", e
 }
 
 /** Placeholder rows in a card's row rhythm while its data loads. */
+/**
+ * The leaderboard banner: breadcrumb, title and realm, section tabs, and the
+ * filter bar. The instance hub and the career board share it; each supplies
+ * its own crumbs, title, tabs, and filters.
+ */
+export function HubBanner<T extends string>({
+  guildMode,
+  background,
+  allHref,
+  onAll,
+  crumbs,
+  crumbSuffix,
+  title,
+  realm,
+  realms,
+  onRealm,
+  subtitle,
+  tabs,
+  activeTab,
+  tabHref,
+  onTab,
+  tabBarRef,
+  filters,
+}: {
+  /** Guilds mode: a gold-edged banner and a "Guilds" crumb. */
+  guildMode: boolean
+  background: string
+  /** The way back to the leaderboards grid: a link, a callback, or plain text. */
+  allHref?: string
+  onAll?: () => void
+  crumbs: { label: string; color?: string }[]
+  crumbSuffix?: ReactNode
+  title: ReactNode
+  realm: string
+  realms: readonly string[]
+  onRealm: (realm: string) => void
+  subtitle?: ReactNode
+  tabs: readonly { id: T; label: string; icon: LucideIcon; description: string }[]
+  activeTab: T
+  tabHref?: (tab: T) => string
+  onTab: (tab: T) => void
+  tabBarRef?: Ref<HTMLElement>
+  filters: ReactNode
+}) {
+  return (
+    <header
+      className="relative overflow-hidden rounded-xl border bg-card transition-[border-color,box-shadow] duration-500"
+      style={
+        guildMode
+          ? {
+              borderColor: `color-mix(in srgb, ${GUILD_GOLD} 35%, transparent)`,
+              boxShadow: `0 0 0 1px color-mix(in srgb, ${GUILD_GOLD} 10%, transparent), 0 8px 40px -12px color-mix(in srgb, ${GUILD_GOLD} 25%, transparent)`,
+            }
+          : undefined
+      }
+    >
+      <img src={background} alt="" className="absolute inset-0 h-full w-full object-cover opacity-60" />
+      <div className="absolute inset-0 bg-gradient-to-t from-card via-card/80 to-card/30" />
+      {/* Desktop: the banner's corner links to the explainer for Peak, Mastery, and Renown. */}
+      <Link
+        to="/ratings"
+        title="How ratings work"
+        aria-label="How ratings work"
+        className="absolute top-3 right-4 z-10 hidden size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground sm:inline-flex"
+      >
+        <CircleHelp className="size-5" />
+      </Link>
+      <div className="relative flex min-w-0 items-end gap-3 px-3 pt-4 pb-3 sm:flex-wrap sm:gap-4 sm:px-6 sm:pt-10 sm:pb-4">
+        <div className="min-w-0 flex-1">
+          {/* Breadcrumb: the parent is the way back to the grid; the rest names the current scope. */}
+          <nav
+            aria-label="Breadcrumb"
+            className="hidden flex-wrap items-center gap-1.5 text-[11px] font-medium tracking-wider text-muted-foreground uppercase sm:flex"
+          >
+            {allHref ? (
+              <Link
+                to={allHref}
+                title="All instances"
+                className="-ml-0.5 inline-flex cursor-pointer items-center gap-1 uppercase transition-colors hover:text-foreground"
+              >
+                <ChevronLeft className="size-3.5" />
+                Leaderboards
+              </Link>
+            ) : onAll ? (
+              <button
+                type="button"
+                onClick={onAll}
+                title="All instances"
+                className="-ml-0.5 inline-flex cursor-pointer items-center gap-1 uppercase transition-colors hover:text-foreground"
+              >
+                <ChevronLeft className="size-3.5" />
+                Leaderboards
+              </button>
+            ) : (
+              <span>Leaderboards</span>
+            )}
+            {guildMode && (
+              <>
+                <span className="opacity-50">/</span>
+                <span style={{ color: GUILD_GOLD }}>Guilds</span>
+              </>
+            )}
+            {crumbs.map((c) => (
+              <Fragment key={c.label}>
+                <span className="opacity-50">/</span>
+                <span style={c.color ? { color: c.color } : undefined}>{c.label}</span>
+              </Fragment>
+            ))}
+            {crumbSuffix}
+          </nav>
+          {/* The realm sits beside the title: together they name what every board below ranks. */}
+          <div className="flex min-w-0 items-center justify-between gap-3 sm:flex-wrap sm:justify-start sm:gap-x-4 sm:gap-y-2">
+            {title}
+            <RealmPicker realm={realm} realms={realms} onChange={onRealm} className="shrink-0" />
+          </div>
+          {subtitle}
+        </div>
+      </div>
+      <nav ref={tabBarRef} className="relative flex overflow-x-auto border-t border-white/5 px-2 sm:px-4" aria-label="Leaderboard section">
+        {tabs.map((t) => {
+          const className = cn(
+            "cursor-pointer flex shrink-0 items-center gap-2 border-b-2 px-3 py-3 text-sm font-medium transition-colors sm:px-4",
+            t.id === activeTab
+              ? "border-primary text-foreground"
+              : "border-transparent text-muted-foreground hover:border-muted-foreground/30 hover:text-foreground",
+          )
+          const content = <><t.icon className={cn("size-4", t.id === activeTab && "text-primary")} />{t.label}</>
+          return <HubTabHint key={t.id} description={t.description}>{tabHref ? (
+            <Link to={tabHref(t.id)} aria-current={t.id === activeTab ? "page" : undefined} className={className}>{content}</Link>
+          ) : (
+            <button type="button" aria-pressed={t.id === activeTab} onClick={() => onTab(t.id)} className={className}>{content}</button>
+          )}</HubTabHint>
+        })}
+      </nav>
+      {filters}
+    </header>
+  )
+}
+
 export function SkeletonRows({ rows = 5 }: { rows?: number }) {
   return (
     <div role="status" aria-label="Loading" className="divide-y divide-white/5">
@@ -1649,7 +1718,7 @@ export function CardLink({ label, onClick, className }: { label: string; onClick
   )
 }
 
-function Segmented<T extends string>({
+export function Segmented<T extends string>({
   label,
   value,
   options,

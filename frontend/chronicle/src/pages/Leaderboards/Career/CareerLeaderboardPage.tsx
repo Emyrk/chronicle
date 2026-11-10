@@ -1,29 +1,66 @@
 import { useSearchParams } from "react-router-dom"
 import { useCareerLeaderboard } from "@/api/career"
 import { useSiteConfig } from "@/api/queries"
+import { useHubSummary } from "../Hub/hubSummaryAdapter"
 import type { RatingView } from "../Ratings/ratingThemes"
 import { CareerLeaderboard } from "./CareerLeaderboard"
-import type { CareerBoardsState } from "./careerLeaderboardModel"
+import { careerLeaderboardParams, type CareerBoardsState, type CareerFilters, type CareerRole } from "./careerLeaderboardModel"
 
-const VIEWS: RatingView[] = ["overview", "mastery", "peak", "renown"]
+const VIEWS: RatingView[] = ["overview", "peak", "mastery", "renown"]
+const ROLES: CareerRole[] = ["all", "dps", "healing"]
+const ALL_REALMS = "All realms"
 
-/** /leaderboards/career: the overall career boards, with the view in `?view=`. */
+/** /leaderboards/career: every filter lives in the URL so shared links keep it. */
 export function CareerLeaderboardPage() {
   const [params, setParams] = useSearchParams()
-  const requested = params.get("view") as RatingView | null
-  const view = requested && VIEWS.includes(requested) ? requested : "overview"
   const { data: config } = useSiteConfig()
-  const query = useCareerLeaderboard(config?.tenant?.id, 100)
+  // The same request the leaderboards landing makes, so its realm list is usually cached.
+  const summary = useHubSummary({ tab: "overview", realmIDs: [], performance: "dps" }, config !== undefined)
+  const realms = summary.data?.realms ?? []
+
+  const requestedView = params.get("view") as RatingView | null
+  const view = requestedView && VIEWS.includes(requestedView) ? requestedView : "overview"
+  const guilds = params.get("subject") === "guilds"
+  const requestedRole = params.get("role") as CareerRole | null
+  const realm = realms.find((r) => r.id === params.get("realm"))
+  const filters: CareerFilters = {
+    subject: guilds ? "guilds" : "characters",
+    role: !guilds && requestedRole && ROLES.includes(requestedRole) ? requestedRole : "all",
+    scope: guilds ? {} : { cls: params.get("class") ?? undefined, spec: params.get("spec") ?? undefined, subSpec: params.get("sub_spec") ?? undefined },
+    realmID: realm?.id,
+  }
+  const query = useCareerLeaderboard(config?.tenant?.id, careerLeaderboardParams(filters, 100))
   const state: CareerBoardsState = query.data
     ? { status: "ready", data: query.data }
     : query.isError
       ? { status: "error", error: query.error.message }
       : { status: "loading" }
-  const onView = (next: RatingView) => {
-    const updated = new URLSearchParams(params)
-    if (next === "overview") updated.delete("view")
-    else updated.set("view", next)
-    setParams(updated, { replace: true })
+
+  const update = (changes: Record<string, string | undefined>) => {
+    const next = new URLSearchParams(params)
+    for (const [key, value] of Object.entries(changes)) {
+      if (value) next.set(key, value)
+      else next.delete(key)
+    }
+    setParams(next, { replace: true })
   }
-  return <CareerLeaderboard view={view} onView={onView} state={state} />
+  return (
+    <CareerLeaderboard
+      view={view}
+      onView={(next) => update({ view: next === "overview" ? undefined : next })}
+      filters={filters}
+      onFilters={(next) => update({
+        subject: next.subject === "guilds" ? "guilds" : undefined,
+        role: next.role === "all" ? undefined : next.role,
+        class: next.scope.cls,
+        spec: next.scope.spec,
+        sub_spec: next.scope.subSpec,
+      })}
+      realm={realm?.name ?? ALL_REALMS}
+      realms={[ALL_REALMS, ...realms.map((r) => r.name)]}
+      onRealm={(name) => update({ realm: realms.find((r) => r.name === name)?.id })}
+      state={state}
+      allHref="/leaderboards"
+    />
+  )
 }

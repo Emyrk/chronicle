@@ -29,13 +29,11 @@ export function usePlayerRatingHistory(tenantID: string | undefined, realmID: st
     queryFn: () => fetchCareer<LeaderboardV2PlayerHistory>(playerRatingHistoryURL(realmID, player)),
     enabled: enabled && !!realmID && !!player, staleTime: 60_000, retry: false })
 }
-export function careerLeaderboardURL(limit: number) {
-  return `/api/v1/leaderboards-v2/career?${new URLSearchParams({ limit: String(limit) })}`
-}
-/** Characters ranked by career Mastery and Peak (best spec) and Renown (all specs), in one response. */
-export function useCareerLeaderboard(tenantID: string | undefined, limit: number) {
-  return useQuery({ queryKey: ["career", tenantID, "leaderboard", limit],
-    queryFn: () => fetchCareer<CareerLeaderboardResponse>(careerLeaderboardURL(limit)),
+/** Characters or guilds ranked by career Mastery, Peak, and Renown, in one response. */
+export function useCareerLeaderboard(tenantID: string | undefined, params: URLSearchParams) {
+  const url = `/api/v1/leaderboards-v2/career?${params}`
+  return useQuery({ queryKey: ["career", tenantID, "leaderboard", url],
+    queryFn: () => fetchCareer<CareerLeaderboardResponse>(url),
     staleTime: 60_000, retry: false })
 }
 export function useGuildCareer(tenantID: string | undefined, guildID: string) {
