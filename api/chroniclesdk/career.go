@@ -42,16 +42,17 @@ type CareerSummary struct {
 // CareerContribution identifies an exact configured raid variant. Backend values
 // already encode missing-subject zero contributions; clients must not recompute them.
 type CareerContribution struct {
-	InstanceName   string   `json:"instance_name"`
-	DifficultyName string   `json:"difficulty_name"`
-	MaxPlayers     int16    `json:"max_players"`
-	Weight         *float64 `json:"weight"`
-	IncludeAverage bool     `json:"include_average"`
-	IncludeRenown  bool     `json:"include_renown"`
-	Mastery        *float64 `json:"mastery"`
-	Peak           *float64 `json:"peak"`
-	Renown         float64  `json:"renown"`
-	EligibleKills  int64    `json:"eligible_kills"`
+	InstanceName        string   `json:"instance_name"`
+	DifficultyName      string   `json:"difficulty_name"`
+	MaxPlayers          int16    `json:"max_players"`
+	Weight              *float64 `json:"weight"`
+	IncludeAverage      bool     `json:"include_average"`
+	IncludeRenown       bool     `json:"include_renown"`
+	Mastery             *float64 `json:"mastery"`
+	Peak                *float64 `json:"peak"`
+	Renown              float64  `json:"renown"`
+	EligibleMetricKills int64    `json:"eligible_metric_kills"`
+	EligibleRenownKills int64    `json:"eligible_renown_kills"`
 }
 
 type CareerIssue struct {

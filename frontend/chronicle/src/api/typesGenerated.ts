@@ -7644,7 +7644,8 @@ export interface CareerContribution {
     readonly mastery: number | null;
     readonly peak: number | null;
     readonly renown: number;
-    readonly eligible_kills: number;
+    readonly eligible_metric_kills: number;
+    readonly eligible_renown_kills: number;
 }
 
 // From chroniclesdk/career.go
