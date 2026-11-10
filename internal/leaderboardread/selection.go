@@ -27,7 +27,7 @@ type Request struct {
 	Class, Spec, SubSpec, Metric                                     string
 	Realm                                                            uuid.UUID
 	Search                                                           string
-	FilterSubSpec                                                    bool
+	FilterSubSpec, ShowUnknowns                                      bool
 	CompanionMetric, CompanionClass, CompanionSpec, CompanionSubSpec string
 	CompanionFilterSubSpec                                           bool
 }

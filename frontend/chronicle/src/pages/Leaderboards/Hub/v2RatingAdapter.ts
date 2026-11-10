@@ -22,6 +22,7 @@ export interface V2RatingContext {
   performance: "dps" | "hps";
   selected: readonly string[];
   realmIDs?: readonly string[];
+  showUnknowns?: boolean;
 }
 export function v2RatingParams(
   context: V2RatingContext,
@@ -40,6 +41,7 @@ export function v2RatingParams(
   if ((context.realmIDs?.length ?? 0) > 1)
     throw new Error("Choose one realm or All realms.");
   if (context.realmIDs?.[0]) p.set("realm", context.realmIDs[0]);
+  if (context.showUnknowns) p.set("show_unknown", "true");
   if (search.trim()) p.set("search", search.trim());
   if (metric === "renown" && context.subject === "player") {
     p.set("companion_metric", context.performance);

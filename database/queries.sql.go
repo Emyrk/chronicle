@@ -15865,6 +15865,13 @@ SELECT s.realm_id, s.player_guid COLLATE "C" AS subject_id,
  AND ($10::text = '' OR s.player_class = $10::text)
  AND ($11::text = '' OR s.player_spec = $11::text)
  AND (NOT $12::boolean OR s.player_sub_spec = $13::text) AND s.metric = $14::text
+ AND ($15::boolean OR s.player_spec <> 'Unknown' OR NOT EXISTS (
+  SELECT 1 FROM leaderboard_player_boss_benchmarks known
+  WHERE known.tenant_id = s.tenant_id AND known.instance_name = s.instance_name
+   AND known.difficulty_name = s.difficulty_name AND known.max_players = s.max_players
+   AND known.encounter_name = ANY($9::text[]) AND known.metric = s.metric
+   AND known.player_spec <> 'Unknown'
+ ))
  UNION ALL
 SELECT s.realm_id, s.guild_id::text COLLATE "C" AS subject_id,
  ''::text COLLATE "C" AS player_class, ''::text COLLATE "C" AS player_spec, ''::text COLLATE "C" AS player_sub_spec,
@@ -15897,7 +15904,7 @@ SELECT s.realm_id, s.player_guid COLLATE "C" AS subject_id,
  s.kill_count * a.points AS renown, s.kill_count AS sample_count, s.computed_at
  FROM leaderboard_player_renown_counts s
  LEFT JOIN game_players m ON m.realm_id = s.realm_id AND m.id = s.player_guid
- JOIN (SELECT unnest($9::text[]) AS encounter_name, unnest($15::double precision[]) AS points) a ON a.encounter_name = s.encounter_name
+ JOIN (SELECT unnest($9::text[]) AS encounter_name, unnest($16::double precision[]) AS points) a ON a.encounter_name = s.encounter_name
  WHERE $1::text = 'player' AND $2::text = 'renown'
  AND s.tenant_id = $3::uuid AND s.instance_name = $4::text AND s.difficulty_name = $5::text AND s.max_players = $6::smallint
  AND ($7::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR s.realm_id = $7::uuid)
@@ -15909,22 +15916,22 @@ SELECT s.realm_id, s.guild_id::text COLLATE "C" AS subject_id,
  s.kill_count * a.points AS renown, s.kill_count AS sample_count, s.computed_at
  FROM leaderboard_guild_renown_counts s
  LEFT JOIN guilds m ON m.realm_id = s.realm_id AND m.id = s.guild_id
- JOIN (SELECT unnest($9::text[]) AS encounter_name, unnest($15::double precision[]) AS points) a ON a.encounter_name = s.encounter_name
+ JOIN (SELECT unnest($9::text[]) AS encounter_name, unnest($16::double precision[]) AS points) a ON a.encounter_name = s.encounter_name
  WHERE $1::text = 'guild' AND $2::text = 'renown'
  AND s.tenant_id = $3::uuid AND s.instance_name = $4::text AND s.difficulty_name = $5::text AND s.max_players = $6::smallint
  AND ($7::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR s.realm_id = $7::uuid)
  AND ($8::text = '' OR position(lower($8::text) IN lower(COALESCE(m.name, s.guild_id::text))) > 0)
 ), grouped AS (
  SELECT realm_id, subject_id, player_class, player_spec, player_sub_spec,
- (sum(peak) / NULLIF($16::integer, 0))::double precision AS peak,
- (sum(form) / NULLIF($16::integer, 0))::double precision AS form,
- (sum(floor) / NULLIF($16::integer, 0))::double precision AS floor,
- (sum(0.30 * peak + 0.50 * form + 0.20 * floor) / NULLIF($16::integer, 0))::double precision AS mastery,
+ (sum(peak) / NULLIF($17::integer, 0))::double precision AS peak,
+ (sum(form) / NULLIF($17::integer, 0))::double precision AS form,
+ (sum(floor) / NULLIF($17::integer, 0))::double precision AS floor,
+ (sum(0.30 * peak + 0.50 * form + 0.20 * floor) / NULLIF($17::integer, 0))::double precision AS mastery,
  sum(renown)::double precision AS renown, sum(sample_count)::bigint AS sample_count,
  min(computed_at) AS computed_at
  FROM contributions GROUP BY realm_id, subject_id, player_class, player_spec, player_sub_spec
 ), scored AS (
- SELECT realm_id, subject_id, player_class, player_spec, player_sub_spec, peak, form, floor, mastery, renown, sample_count, computed_at, CASE $17::text WHEN 'peak' THEN peak WHEN 'mastery' THEN mastery ELSE renown END::double precision AS score
+ SELECT realm_id, subject_id, player_class, player_spec, player_sub_spec, peak, form, floor, mastery, renown, sample_count, computed_at, CASE $18::text WHEN 'peak' THEN peak WHEN 'mastery' THEN mastery ELSE renown END::double precision AS score
  FROM grouped
 ), page AS (
 SELECT realm_id, subject_id::text AS subject_id, player_class::text AS player_class, player_spec::text AS player_spec, player_sub_spec::text AS player_sub_spec, COALESCE(peak, 0)::double precision AS peak,
@@ -15932,10 +15939,10 @@ SELECT realm_id, subject_id::text AS subject_id, player_class::text AS player_cl
  COALESCE(mastery, 0)::double precision AS mastery, renown, sample_count,
  computed_at::timestamptz AS computed_at, score
 FROM scored
-WHERE NOT $18::boolean OR score < $19::double precision
- OR (score = $19::double precision AND (realm_id, subject_id, player_class, player_spec, player_sub_spec) > ($20::uuid, $21::text, $22::text, $23::text, $24::text))
+WHERE NOT $19::boolean OR score < $20::double precision
+ OR (score = $20::double precision AND (realm_id, subject_id, player_class, player_spec, player_sub_spec) > ($21::uuid, $22::text, $23::text, $24::text, $25::text))
 ORDER BY score DESC, realm_id, subject_id, player_class, player_spec, player_sub_spec
-LIMIT $25::integer
+LIMIT $26::integer
 )
 SELECT page.realm_id, page.subject_id, page.player_class, page.player_spec, page.player_sub_spec, page.peak, page.form, page.floor, page.mastery, page.renown, page.sample_count, page.computed_at, page.score, COALESCE((SELECT NULLIF(r.name,'') FROM wow_server_realms r WHERE r.id=page.realm_id),'Unknown realm')::text AS realm_name,
  COALESCE(CASE WHEN $1::text = 'player' THEN
@@ -15973,6 +15980,7 @@ type ListLeaderboardV2Params struct {
 	FilterSubSpec  bool      `db:"filter_sub_spec" json:"filter_sub_spec"`
 	PlayerSubSpec  string    `db:"player_sub_spec" json:"player_sub_spec"`
 	Metric         string    `db:"metric" json:"metric"`
+	ShowUnknowns   bool      `db:"show_unknowns" json:"show_unknowns"`
 	Awards         []float64 `db:"awards" json:"awards"`
 	Denominator    int32     `db:"denominator" json:"denominator"`
 	ScoreMetric    string    `db:"score_metric" json:"score_metric"`
@@ -16028,6 +16036,7 @@ func (q *sqlQuerier) ListLeaderboardV2(ctx context.Context, arg ListLeaderboardV
 		arg.FilterSubSpec,
 		arg.PlayerSubSpec,
 		arg.Metric,
+		arg.ShowUnknowns,
 		arg.Awards,
 		arg.Denominator,
 		arg.ScoreMetric,
@@ -16096,6 +16105,13 @@ WITH boss_scores AS MATERIALIZED (
   AND ($8::text = '' OR s.player_class = $8::text)
   AND ($9::text = '' OR s.player_spec = $9::text)
   AND (NOT $10::boolean OR s.player_sub_spec = $11::text)
+  AND ($12::boolean OR s.player_spec <> 'Unknown' OR NOT EXISTS (
+   SELECT 1 FROM leaderboard_player_boss_benchmarks known
+   WHERE known.tenant_id = s.tenant_id AND known.instance_name = s.instance_name
+    AND known.difficulty_name = s.difficulty_name AND known.max_players = s.max_players
+    AND known.encounter_name = ANY($5::text[]) AND known.metric = s.metric
+    AND known.player_spec <> 'Unknown'
+  ))
 ), leaders AS (
  (SELECT DISTINCT ON (encounter_name) 'peak'::text AS kind, encounter_name, realm_id, subject_id, player_class, player_spec, player_sub_spec, peak AS score, raw_peak AS raw
   FROM boss_scores ORDER BY encounter_name, peak DESC, raw_peak DESC, realm_id, subject_id, player_class, player_spec, player_sub_spec)
@@ -16108,7 +16124,7 @@ WITH boss_scores AS MATERIALIZED (
  UNION ALL
  (SELECT DISTINCT ON (c.encounter_name) 'renown'::text, c.encounter_name, c.realm_id, c.player_guid::text, ''::text, ''::text, ''::text, (c.kill_count * a.points)::double precision, 0::double precision
   FROM leaderboard_player_renown_counts c
-  JOIN (SELECT unnest($5::text[]) AS encounter_name, unnest($12::double precision[]) AS points) a ON a.encounter_name = c.encounter_name
+  JOIN (SELECT unnest($5::text[]) AS encounter_name, unnest($13::double precision[]) AS points) a ON a.encounter_name = c.encounter_name
   WHERE c.tenant_id = $1::uuid AND c.instance_name = $2::text AND c.difficulty_name = $3::text AND c.max_players = $4::smallint
    AND ($7::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR c.realm_id = $7::uuid)
    AND c.kill_count * a.points > 0
@@ -16139,6 +16155,7 @@ type ListLeaderboardV2BossLeadersParams struct {
 	PlayerSpec     string    `db:"player_spec" json:"player_spec"`
 	FilterSubSpec  bool      `db:"filter_sub_spec" json:"filter_sub_spec"`
 	PlayerSubSpec  string    `db:"player_sub_spec" json:"player_sub_spec"`
+	ShowUnknowns   bool      `db:"show_unknowns" json:"show_unknowns"`
 	Awards         []float64 `db:"awards" json:"awards"`
 }
 
@@ -16176,6 +16193,7 @@ func (q *sqlQuerier) ListLeaderboardV2BossLeaders(ctx context.Context, arg ListL
 		arg.PlayerSpec,
 		arg.FilterSubSpec,
 		arg.PlayerSubSpec,
+		arg.ShowUnknowns,
 		arg.Awards,
 	)
 	if err != nil {
@@ -16211,12 +16229,19 @@ func (q *sqlQuerier) ListLeaderboardV2BossLeaders(ctx context.Context, arg ListL
 }
 
 const listLeaderboardV2Cohorts = `-- name: ListLeaderboardV2Cohorts :many
-SELECT DISTINCT player_class, player_spec, player_sub_spec, metric
-FROM leaderboard_player_boss_benchmarks
-WHERE tenant_id = $1::uuid AND instance_name = $2::text
- AND difficulty_name = $3::text AND max_players = $4::smallint
- AND encounter_name = ANY($5::text[])
-ORDER BY player_class, player_spec, player_sub_spec, metric
+SELECT DISTINCT b.player_class, b.player_spec, b.player_sub_spec, b.metric
+FROM leaderboard_player_boss_benchmarks b
+WHERE b.tenant_id = $1::uuid AND b.instance_name = $2::text
+ AND b.difficulty_name = $3::text AND b.max_players = $4::smallint
+ AND b.encounter_name = ANY($5::text[])
+ AND ($6::boolean OR b.player_spec <> 'Unknown' OR NOT EXISTS (
+  SELECT 1 FROM leaderboard_player_boss_benchmarks known
+  WHERE known.tenant_id = $1::uuid AND known.instance_name = $2::text
+   AND known.difficulty_name = $3::text AND known.max_players = $4::smallint
+   AND known.encounter_name = ANY($5::text[]) AND known.metric = b.metric
+   AND known.player_spec <> 'Unknown'
+ ))
+ORDER BY b.player_class, b.player_spec, b.player_sub_spec, b.metric
 `
 
 type ListLeaderboardV2CohortsParams struct {
@@ -16225,6 +16250,7 @@ type ListLeaderboardV2CohortsParams struct {
 	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
 	MaxPlayers     int16     `db:"max_players" json:"max_players"`
 	Bosses         []string  `db:"bosses" json:"bosses"`
+	ShowUnknowns   bool      `db:"show_unknowns" json:"show_unknowns"`
 }
 
 type ListLeaderboardV2CohortsRow struct {
@@ -16241,6 +16267,7 @@ func (q *sqlQuerier) ListLeaderboardV2Cohorts(ctx context.Context, arg ListLeade
 		arg.DifficultyName,
 		arg.MaxPlayers,
 		arg.Bosses,
+		arg.ShowUnknowns,
 	)
 	if err != nil {
 		return nil, err
@@ -16470,11 +16497,18 @@ cohorts AS (SELECT DISTINCT player_class,player_spec,player_sub_spec FROM leader
  AND max_players = $6::smallint AND metric = $7::text AND encounter_name=ANY($8::text[])
  AND ($9::text='' OR player_class = $9::text)
  AND ($10::text='' OR player_spec = $10::text)
- AND (NOT $11::boolean OR player_sub_spec = $12::text)),
+ AND (NOT $11::boolean OR player_sub_spec = $12::text)
+ AND ($13::boolean OR player_spec <> 'Unknown' OR NOT EXISTS (
+  SELECT 1 FROM leaderboard_player_boss_benchmarks known
+  WHERE known.tenant_id = $3::uuid AND known.instance_name = $4::text
+   AND known.difficulty_name = $5::text AND known.max_players = $6::smallint
+   AND known.metric = $7::text AND known.encounter_name = ANY($8::text[])
+   AND known.player_spec <> 'Unknown'
+ ))),
 candidates AS (
  SELECT p.realm_id,p.subject_id,c.player_class,c.player_spec,c.player_sub_spec,
- sum(CASE WHEN b.best_metric>0 THEN LEAST(100::double precision,100*s.raw_peak/b.best_metric) ELSE 0 END)/ $13::integer AS peak,
- sum(CASE WHEN b.best_metric>0 THEN .3*LEAST(100::double precision,100*s.raw_peak/b.best_metric)+.5*LEAST(100::double precision,100*s.raw_form/b.best_metric)+.2*LEAST(100::double precision,100*s.raw_floor/b.best_metric) ELSE 0 END)/ $13::integer AS mastery
+ sum(CASE WHEN b.best_metric>0 THEN LEAST(100::double precision,100*s.raw_peak/b.best_metric) ELSE 0 END)/ $14::integer AS peak,
+ sum(CASE WHEN b.best_metric>0 THEN .3*LEAST(100::double precision,100*s.raw_peak/b.best_metric)+.5*LEAST(100::double precision,100*s.raw_form/b.best_metric)+.2*LEAST(100::double precision,100*s.raw_floor/b.best_metric) ELSE 0 END)/ $14::integer AS mastery
  FROM page p CROSS JOIN cohorts c CROSS JOIN unnest($8::text[]) boss
  JOIN leaderboard_player_boss_subjects s ON s.tenant_id = $3::uuid AND s.instance_name = $4::text
  AND s.difficulty_name = $5::text AND s.max_players = $6::smallint AND s.encounter_name=boss
@@ -16503,6 +16537,7 @@ type ListLeaderboardV2PlayerCompanionsParams struct {
 	PlayerSpec     string      `db:"player_spec" json:"player_spec"`
 	FilterSubSpec  bool        `db:"filter_sub_spec" json:"filter_sub_spec"`
 	PlayerSubSpec  string      `db:"player_sub_spec" json:"player_sub_spec"`
+	ShowUnknowns   bool        `db:"show_unknowns" json:"show_unknowns"`
 	Denominator    int32       `db:"denominator" json:"denominator"`
 }
 
@@ -16532,6 +16567,7 @@ func (q *sqlQuerier) ListLeaderboardV2PlayerCompanions(ctx context.Context, arg 
 		arg.PlayerSpec,
 		arg.FilterSubSpec,
 		arg.PlayerSubSpec,
+		arg.ShowUnknowns,
 		arg.Denominator,
 	)
 	if err != nil {
