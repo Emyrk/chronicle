@@ -66,7 +66,8 @@ for token in '' same-as-signing; do
     --env OG_SIGNING_KEY=same-as-signing --env OG_METRICS_TOKEN="$token" "$image")
   status=$(timeout 15 docker wait "$container")
   test "$status" != 0
-  docker logs "$container" 2>&1 | grep -q 'OG_METRICS_TOKEN must be set and distinct'
+  # grep -q can close the pipe early, making docker logs exit 141 under pipefail.
+  docker logs "$container" 2>&1 | grep -F 'OG_METRICS_TOKEN must be set and distinct' >/dev/null
   docker rm "$container" >/dev/null
   container=''
 done
