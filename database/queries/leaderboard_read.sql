@@ -251,3 +251,57 @@ LEFT JOIN LATERAL (
 ORDER BY o.instance_name, o.difficulty_name, o.max_players, o.encounter_name,
          o.player_class, o.player_spec, o.player_sub_spec, o.metric, e.start_time, o.run_id
 LIMIT 5000;
+
+-- name: ListLeaderboardV2BossLeaders :many
+-- Each selected boss's #1 player for Peak, Ranked Mastery, Renown, and raw
+-- performance, in one round trip for the overview's boss cards. Peak and
+-- Mastery are the boss's own (denominator 1) normalized results, exactly as the
+-- raid board computes per boss before averaging; performance is the best raw
+-- DPS/HPS behind those results. Renown ignores performance cohort filters.
+WITH boss_scores AS MATERIALIZED (
+ SELECT s.encounter_name, s.realm_id, s.player_guid::text AS subject_id,
+  s.player_class::text AS player_class, s.player_spec::text AS player_spec, s.player_sub_spec::text AS player_sub_spec,
+  s.raw_peak,
+  CASE WHEN b.best_metric > 0 THEN LEAST(100::double precision, 100 * s.raw_peak / b.best_metric) ELSE 0 END::double precision AS peak,
+  CASE WHEN b.best_metric > 0 THEN
+   0.30 * LEAST(100::double precision, 100 * s.raw_peak / b.best_metric)
+   + 0.50 * LEAST(100::double precision, 100 * s.raw_form / b.best_metric)
+   + 0.20 * LEAST(100::double precision, 100 * s.raw_floor / b.best_metric)
+  ELSE 0 END::double precision AS mastery
+ FROM leaderboard_player_boss_subjects s
+ JOIN leaderboard_player_boss_benchmarks b ON b.tenant_id = s.tenant_id AND b.instance_name = s.instance_name AND b.difficulty_name = s.difficulty_name AND b.max_players = s.max_players AND b.encounter_name = s.encounter_name AND b.player_class = s.player_class AND b.player_spec = s.player_spec AND b.player_sub_spec = s.player_sub_spec AND b.metric = s.metric
+ WHERE s.tenant_id = @tenant_id::uuid AND s.instance_name = @instance_name::text AND s.difficulty_name = @difficulty_name::text AND s.max_players = @max_players::smallint
+  AND s.encounter_name = ANY(@bosses::text[]) AND s.metric = @metric::text
+  AND (@realm_filter::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR s.realm_id = @realm_filter::uuid)
+  AND (@player_class::text = '' OR s.player_class = @player_class::text)
+  AND (@player_spec::text = '' OR s.player_spec = @player_spec::text)
+  AND (NOT @filter_sub_spec::boolean OR s.player_sub_spec = @player_sub_spec::text)
+), leaders AS (
+ (SELECT DISTINCT ON (encounter_name) 'peak'::text AS kind, encounter_name, realm_id, subject_id, player_class, player_spec, player_sub_spec, peak AS score, raw_peak AS raw
+  FROM boss_scores ORDER BY encounter_name, peak DESC, raw_peak DESC, realm_id, subject_id, player_class, player_spec, player_sub_spec)
+ UNION ALL
+ (SELECT DISTINCT ON (encounter_name) 'mastery'::text, encounter_name, realm_id, subject_id, player_class, player_spec, player_sub_spec, mastery, raw_peak
+  FROM boss_scores ORDER BY encounter_name, mastery DESC, realm_id, subject_id, player_class, player_spec, player_sub_spec)
+ UNION ALL
+ (SELECT DISTINCT ON (encounter_name) 'performance'::text, encounter_name, realm_id, subject_id, player_class, player_spec, player_sub_spec, raw_peak, raw_peak
+  FROM boss_scores ORDER BY encounter_name, raw_peak DESC, realm_id, subject_id, player_class, player_spec, player_sub_spec)
+ UNION ALL
+ (SELECT DISTINCT ON (c.encounter_name) 'renown'::text, c.encounter_name, c.realm_id, c.player_guid::text, ''::text, ''::text, ''::text, (c.kill_count * a.points)::double precision, 0::double precision
+  FROM leaderboard_player_renown_counts c
+  JOIN (SELECT unnest(@bosses::text[]) AS encounter_name, unnest(@awards::double precision[]) AS points) a ON a.encounter_name = c.encounter_name
+  WHERE c.tenant_id = @tenant_id::uuid AND c.instance_name = @instance_name::text AND c.difficulty_name = @difficulty_name::text AND c.max_players = @max_players::smallint
+   AND (@realm_filter::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR c.realm_id = @realm_filter::uuid)
+   AND c.kill_count * a.points > 0
+  ORDER BY c.encounter_name, c.kill_count * a.points DESC, c.realm_id, c.player_guid)
+)
+SELECT leaders.kind::text AS kind, leaders.encounter_name::text AS encounter_name, leaders.realm_id::uuid AS realm_id, leaders.subject_id::text AS subject_id,
+ leaders.player_class::text AS player_class, leaders.player_spec::text AS player_spec, leaders.player_sub_spec::text AS player_sub_spec,
+ leaders.score::double precision AS score, leaders.raw::double precision AS raw,
+ COALESCE((SELECT NULLIF(r.name, '') FROM wow_server_realms r WHERE r.id = leaders.realm_id), 'Unknown realm')::text AS realm_name,
+ COALESCE(gp.name, leaders.subject_id)::text AS subject_name,
+ COALESCE(NULLIF(leaders.player_class, ''), gp.class::text, '')::text AS subject_class,
+ COALESCE(g.name, '')::text AS guild_name
+FROM leaders
+LEFT JOIN game_players gp ON gp.realm_id = leaders.realm_id AND gp.id = leaders.subject_id
+LEFT JOIN guilds g ON g.id = gp.guild_id
+ORDER BY leaders.encounter_name, leaders.kind;

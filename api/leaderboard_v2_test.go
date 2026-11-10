@@ -14,7 +14,7 @@ func TestLeaderboardV2RejectsUnownedScopes(t *testing.T) {
 	t.Parallel()
 	// No pool: all these invalid scopes must fail before accessing evidence/config.
 	api := &API{}
-	for _, query := range []string{"", "?tenant=someone", "?tenant_id=someone", "?dataset=someone", "?projection_version=2", "?algorithm_version=2"} {
+	for _, query := range []string{"", "?tenant=someone", "?tenant_id=someone", "?dataset=someone", "?projection_version=2", "?algorithm_version=2", "?view=boss-leaders&max_players=0", "?view=boss-leaders&max_players=0&metric=mana"} {
 		t.Run(query, func(t *testing.T) {
 			t.Parallel()
 			req := httptest.NewRequest(http.MethodGet, "/api/v1/leaderboards-v2"+query, nil)

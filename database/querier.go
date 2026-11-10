@@ -856,6 +856,12 @@ type sqlcQuerier interface {
 	// Names are display metadata: retrieve them only after the authoritative score
 	// page. Name/search filtering above still occurs before aggregation.
 	ListLeaderboardV2(ctx context.Context, arg ListLeaderboardV2Params) ([]ListLeaderboardV2Row, error)
+	// Each selected boss's #1 player for Peak, Ranked Mastery, Renown, and raw
+	// performance, in one round trip for the overview's boss cards. Peak and
+	// Mastery are the boss's own (denominator 1) normalized results, exactly as the
+	// raid board computes per boss before averaging; performance is the best raw
+	// DPS/HPS behind those results. Renown ignores performance cohort filters.
+	ListLeaderboardV2BossLeaders(ctx context.Context, arg ListLeaderboardV2BossLeadersParams) ([]ListLeaderboardV2BossLeadersRow, error)
 	ListLeaderboardV2Cohorts(ctx context.Context, arg ListLeaderboardV2CohortsParams) ([]ListLeaderboardV2CohortsRow, error)
 	// Only the returned score page is passed here, with aligned exact cohort arrays.
 	// Cross the bounded page with selection to retain missing bosses as zero peaks.

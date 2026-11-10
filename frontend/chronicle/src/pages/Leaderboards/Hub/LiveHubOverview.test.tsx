@@ -117,6 +117,23 @@ describe("liveOverviewData", () => {
     expect(data.bosses?.[0]).toMatchObject({ boss: "Ragnaros", kills: 12, topDps: 1532.69 })
   })
 
+  it("fills boss cards from the one-request boss leaders", () => {
+    const leader = (kind: string, name: string, cls: string, spec: string, score: number, raw = 0) => ({
+      encounter_name: "Ragnaros", kind, realm_id: "r", realm_name: "Realm", subject_id: name, name,
+      player_class: kind === "renown" ? "" : cls, player_spec: spec, player_sub_spec: "", subject_class: cls, guild_name: "Guild", score, raw,
+    })
+    const data = liveOverviewData({ ...base, scope: {}, bossLeaders: [
+      leader("peak", "Pyro", "MAGE", "Fire", 100, 1500), leader("mastery", "Evara", "WARLOCK", "Affliction", 88.2),
+      leader("renown", "Malal", "ROGUE", "", 43), leader("performance", "Igzee", "WARRIOR", "Fury", 1830.4, 1830.4),
+    ] })
+    const boss = data.bosses?.[0]
+    expect(boss?.ratings?.peak).toMatchObject({ score: 100, raw: 1500, player: { name: "Pyro", cls: "MAGE", spec: "Fire", guild: "Guild" } })
+    expect(boss?.ratings?.mastery).toMatchObject({ score: 88.2, raw: undefined, player: { name: "Evara" } })
+    // Renown rows carry no cohort class; the character's class still colors the card.
+    expect(boss?.ratings?.renown).toMatchObject({ score: 43, player: { name: "Malal", cls: "ROGUE" } })
+    expect(boss?.performance).toMatchObject({ value: 1830, player: { name: "Igzee" } })
+  })
+
   it("hides unfiltered encounter totals behind a filter", () => {
     const data = liveOverviewData({ ...base, unfiltered: false, scope: {} })
     expect(data.bosses?.[0].kills).toBeUndefined()

@@ -42,6 +42,27 @@ type LeaderboardV2Entry struct {
 	SampleCount int64               `json:"sample_count"`
 	ComputedAt  time.Time           `json:"computed_at"`
 }
+
+// LeaderboardV2BossLeader is one selected boss's #1 player for one board:
+// Kind is "peak", "mastery", "renown", or "performance" (best raw DPS/HPS).
+// Score is the board's value (raw DPS/HPS for performance); Raw is the leader's
+// raw DPS/HPS behind Peak and Mastery, and zero for Renown.
+type LeaderboardV2BossLeader struct {
+	EncounterName string    `json:"encounter_name"`
+	Kind          string    `json:"kind"`
+	RealmID       uuid.UUID `json:"realm_id"`
+	RealmName     string    `json:"realm_name"`
+	SubjectID     string    `json:"subject_id"`
+	Name          string    `json:"name"`
+	PlayerClass   string    `json:"player_class"`
+	PlayerSpec    string    `json:"player_spec"`
+	PlayerSubSpec string    `json:"player_sub_spec"`
+	SubjectClass  string    `json:"subject_class"`
+	GuildName     string    `json:"guild_name"`
+	Score         float64   `json:"score"`
+	Raw           float64   `json:"raw"`
+}
+
 type LeaderboardV2Cohort struct {
 	PlayerClass   string `json:"player_class"`
 	PlayerSpec    string `json:"player_spec"`

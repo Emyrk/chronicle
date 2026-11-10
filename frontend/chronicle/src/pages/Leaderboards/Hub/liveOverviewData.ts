@@ -1,5 +1,6 @@
 import type {
   KillTimeLeaderboardEntry,
+  LeaderboardV2BossLeader,
   RankingsBoxPlotStats,
   RankingsEntry,
   RankingsKillTimeStats,
@@ -43,6 +44,8 @@ export interface LiveOverviewSources {
   killTimes?: readonly RankingsKillTimeStats[];
   /** Fastest kills of the chosen boss. */
   bossKills?: readonly KillTimeLeaderboardEntry[];
+  /** Each boss's #1 per board and best raw performance (one v2 request); preferred over the summary's boss boards. */
+  bossLeaders?: readonly LeaderboardV2BossLeader[];
   /** Encounter totals ignore realm and class filters; only show them unfiltered. */
   unfiltered: boolean;
   sections?: OverviewData["sections"];
@@ -203,16 +206,37 @@ function cohortsInRole(
   });
 }
 
+/** A boss leader as the card's player: the character's class (Renown rows carry no cohort class) and guild. */
+function bossLeaderPlayer(l: LeaderboardV2BossLeader, role: HubRole): HubPlayer {
+  return {
+    id: l.subject_id,
+    name: l.name || l.subject_id,
+    realm: l.realm_name,
+    guild: l.guild_name,
+    cls: l.player_class || l.subject_class,
+    spec: l.player_spec,
+    subSpec: l.player_sub_spec || undefined,
+    role,
+    skill: 0,
+  };
+}
+
 function bossSummaries(src: LiveOverviewSources): LiveBossSummary[] {
-  const { summary, role, unfiltered } = src;
+  const { summary, role, unfiltered, bossLeaders } = src;
   return src.bosses.map((boss) => {
     const board = summary.ratings.bosses.find(
       (b) => b.encounter_name === boss,
     )?.player;
-    const top = (m: RatingMetric) => {
+    const leader = (kind: string) => bossLeaders?.find((l) => l.encounter_name === boss && l.kind === kind);
+    const top = (m: RatingMetric): RatingLeader | undefined => {
+      if (bossLeaders) {
+        const l = leader(m);
+        return l ? { player: bossLeaderPlayer(l, role), score: l.score, raw: m === "peak" ? l.raw : undefined } : undefined;
+      }
       const e = board?.[RATING_KEYS[m]][0];
       return e ? { player: player(e, role), score: e.score, raw: m === "peak" ? e.peak_raw : undefined } : undefined;
     };
+    const best = leader("performance");
     const rate = src.successRates?.find((r) => r.encounter_name === boss);
     const time = src.killTimes?.find((r) => r.encounter_name === boss);
     const encounter = summary.encounters.find((r) => r.encounter_name === boss);
@@ -226,6 +250,7 @@ function bossSummaries(src: LiveOverviewSources): LiveBossSummary[] {
         mastery: top("mastery"),
         renown: top("renown"),
       },
+      performance: best ? { player: bossLeaderPlayer(best, role), value: Math.round(best.score) } : undefined,
       topDps:
         unfiltered && role === "dps"
           ? encounter?.top_dps || undefined

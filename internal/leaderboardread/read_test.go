@@ -445,3 +445,56 @@ VALUES ('00000000-0000-4000-8000-000000000001','Class raid','',0,'Ragnaros','000
 	require.Empty(t, guilds[1].LogoUrl)
 	require.Empty(t, guilds[0].GuildName, "guild rows carry no player guild")
 }
+
+// The overview's boss cards read each boss's #1 for every board in one query;
+// exact scope, realm, and class filters behave like the boards they summarize.
+func TestBossLeaders(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitLong)
+	pool, _ := dbtestutil.NewPGXPool(t)
+	conn, err := pool.Acquire(ctx)
+	require.NoError(t, err)
+	defer conn.Release()
+	_, err = conn.Exec(ctx, "BEGIN")
+	require.NoError(t, err)
+	defer func() { _, _ = conn.Exec(ctx, "ROLLBACK") }()
+	fixture, err := os.ReadFile("testdata/read_fixture.sql")
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx, string(fixture))
+	require.NoError(t, err)
+	db := database.NewQueries(conn)
+	params := database.ListLeaderboardV2BossLeadersParams{
+		TenantID: uuid.MustParse("00000000-0000-4000-8000-000000000001"), InstanceName: "Test raid", Metric: "dps",
+		Bosses: []string{"Boss A", "Boss B"}, Awards: []float64{2, 5},
+	}
+	type leader struct {
+		Boss, Kind, Subject, Realm string
+		Score                      float64
+	}
+	read := func(p database.ListLeaderboardV2BossLeadersParams) []leader {
+		rows, err := db.ListLeaderboardV2BossLeaders(ctx, p)
+		require.NoError(t, err)
+		out := []leader{}
+		for _, row := range rows {
+			out = append(out, leader{row.EncounterName, row.Kind, row.SubjectID, row.RealmID.String()[34:], row.Score})
+		}
+		return out
+	}
+	// Ties break by realm, so Alice's realm 2 copy leads Boss A; Heroic/25 and the
+	// other tenant never enter; Renown is kills times each boss's award.
+	require.Equal(t, []leader{
+		{"Boss A", "mastery", "Alice", "02", 80}, {"Boss A", "peak", "Alice", "02", 100}, {"Boss A", "performance", "Alice", "02", 100}, {"Boss A", "renown", "Alice", "02", 6},
+		{"Boss B", "mastery", "Bob", "02", 80}, {"Boss B", "peak", "Bob", "02", 100}, {"Boss B", "performance", "Bob", "02", 100}, {"Boss B", "renown", "Alice", "02", 35},
+	}, read(params))
+
+	realm := params
+	realm.RealmFilter = uuid.MustParse("00000000-0000-4000-8000-000000000003")
+	require.Equal(t, []leader{
+		{"Boss A", "mastery", "Alice", "03", 80}, {"Boss A", "peak", "Alice", "03", 100}, {"Boss A", "performance", "Alice", "03", 100},
+	}, read(realm))
+
+	// A class with no rows empties the performance boards; Renown ignores class filters.
+	class := params
+	class.PlayerClass = "WARRIOR"
+	require.Equal(t, []leader{{"Boss A", "renown", "Alice", "02", 6}, {"Boss B", "renown", "Alice", "02", 35}}, read(class))
+}

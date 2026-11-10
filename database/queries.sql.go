@@ -15234,6 +15234,139 @@ func (q *sqlQuerier) ListLeaderboardV2(ctx context.Context, arg ListLeaderboardV
 	return items, nil
 }
 
+const listLeaderboardV2BossLeaders = `-- name: ListLeaderboardV2BossLeaders :many
+WITH boss_scores AS MATERIALIZED (
+ SELECT s.encounter_name, s.realm_id, s.player_guid::text AS subject_id,
+  s.player_class::text AS player_class, s.player_spec::text AS player_spec, s.player_sub_spec::text AS player_sub_spec,
+  s.raw_peak,
+  CASE WHEN b.best_metric > 0 THEN LEAST(100::double precision, 100 * s.raw_peak / b.best_metric) ELSE 0 END::double precision AS peak,
+  CASE WHEN b.best_metric > 0 THEN
+   0.30 * LEAST(100::double precision, 100 * s.raw_peak / b.best_metric)
+   + 0.50 * LEAST(100::double precision, 100 * s.raw_form / b.best_metric)
+   + 0.20 * LEAST(100::double precision, 100 * s.raw_floor / b.best_metric)
+  ELSE 0 END::double precision AS mastery
+ FROM leaderboard_player_boss_subjects s
+ JOIN leaderboard_player_boss_benchmarks b ON b.tenant_id = s.tenant_id AND b.instance_name = s.instance_name AND b.difficulty_name = s.difficulty_name AND b.max_players = s.max_players AND b.encounter_name = s.encounter_name AND b.player_class = s.player_class AND b.player_spec = s.player_spec AND b.player_sub_spec = s.player_sub_spec AND b.metric = s.metric
+ WHERE s.tenant_id = $1::uuid AND s.instance_name = $2::text AND s.difficulty_name = $3::text AND s.max_players = $4::smallint
+  AND s.encounter_name = ANY($5::text[]) AND s.metric = $6::text
+  AND ($7::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR s.realm_id = $7::uuid)
+  AND ($8::text = '' OR s.player_class = $8::text)
+  AND ($9::text = '' OR s.player_spec = $9::text)
+  AND (NOT $10::boolean OR s.player_sub_spec = $11::text)
+), leaders AS (
+ (SELECT DISTINCT ON (encounter_name) 'peak'::text AS kind, encounter_name, realm_id, subject_id, player_class, player_spec, player_sub_spec, peak AS score, raw_peak AS raw
+  FROM boss_scores ORDER BY encounter_name, peak DESC, raw_peak DESC, realm_id, subject_id, player_class, player_spec, player_sub_spec)
+ UNION ALL
+ (SELECT DISTINCT ON (encounter_name) 'mastery'::text, encounter_name, realm_id, subject_id, player_class, player_spec, player_sub_spec, mastery, raw_peak
+  FROM boss_scores ORDER BY encounter_name, mastery DESC, realm_id, subject_id, player_class, player_spec, player_sub_spec)
+ UNION ALL
+ (SELECT DISTINCT ON (encounter_name) 'performance'::text, encounter_name, realm_id, subject_id, player_class, player_spec, player_sub_spec, raw_peak, raw_peak
+  FROM boss_scores ORDER BY encounter_name, raw_peak DESC, realm_id, subject_id, player_class, player_spec, player_sub_spec)
+ UNION ALL
+ (SELECT DISTINCT ON (c.encounter_name) 'renown'::text, c.encounter_name, c.realm_id, c.player_guid::text, ''::text, ''::text, ''::text, (c.kill_count * a.points)::double precision, 0::double precision
+  FROM leaderboard_player_renown_counts c
+  JOIN (SELECT unnest($5::text[]) AS encounter_name, unnest($12::double precision[]) AS points) a ON a.encounter_name = c.encounter_name
+  WHERE c.tenant_id = $1::uuid AND c.instance_name = $2::text AND c.difficulty_name = $3::text AND c.max_players = $4::smallint
+   AND ($7::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR c.realm_id = $7::uuid)
+   AND c.kill_count * a.points > 0
+  ORDER BY c.encounter_name, c.kill_count * a.points DESC, c.realm_id, c.player_guid)
+)
+SELECT leaders.kind::text AS kind, leaders.encounter_name::text AS encounter_name, leaders.realm_id::uuid AS realm_id, leaders.subject_id::text AS subject_id,
+ leaders.player_class::text AS player_class, leaders.player_spec::text AS player_spec, leaders.player_sub_spec::text AS player_sub_spec,
+ leaders.score::double precision AS score, leaders.raw::double precision AS raw,
+ COALESCE((SELECT NULLIF(r.name, '') FROM wow_server_realms r WHERE r.id = leaders.realm_id), 'Unknown realm')::text AS realm_name,
+ COALESCE(gp.name, leaders.subject_id)::text AS subject_name,
+ COALESCE(NULLIF(leaders.player_class, ''), gp.class::text, '')::text AS subject_class,
+ COALESCE(g.name, '')::text AS guild_name
+FROM leaders
+LEFT JOIN game_players gp ON gp.realm_id = leaders.realm_id AND gp.id = leaders.subject_id
+LEFT JOIN guilds g ON g.id = gp.guild_id
+ORDER BY leaders.encounter_name, leaders.kind
+`
+
+type ListLeaderboardV2BossLeadersParams struct {
+	TenantID       uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName   string    `db:"instance_name" json:"instance_name"`
+	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16     `db:"max_players" json:"max_players"`
+	Bosses         []string  `db:"bosses" json:"bosses"`
+	Metric         string    `db:"metric" json:"metric"`
+	RealmFilter    uuid.UUID `db:"realm_filter" json:"realm_filter"`
+	PlayerClass    string    `db:"player_class" json:"player_class"`
+	PlayerSpec     string    `db:"player_spec" json:"player_spec"`
+	FilterSubSpec  bool      `db:"filter_sub_spec" json:"filter_sub_spec"`
+	PlayerSubSpec  string    `db:"player_sub_spec" json:"player_sub_spec"`
+	Awards         []float64 `db:"awards" json:"awards"`
+}
+
+type ListLeaderboardV2BossLeadersRow struct {
+	Kind          string    `db:"kind" json:"kind"`
+	EncounterName string    `db:"encounter_name" json:"encounter_name"`
+	RealmID       uuid.UUID `db:"realm_id" json:"realm_id"`
+	SubjectID     string    `db:"subject_id" json:"subject_id"`
+	PlayerClass   string    `db:"player_class" json:"player_class"`
+	PlayerSpec    string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec string    `db:"player_sub_spec" json:"player_sub_spec"`
+	Score         float64   `db:"score" json:"score"`
+	Raw           float64   `db:"raw" json:"raw"`
+	RealmName     string    `db:"realm_name" json:"realm_name"`
+	SubjectName   string    `db:"subject_name" json:"subject_name"`
+	SubjectClass  string    `db:"subject_class" json:"subject_class"`
+	GuildName     string    `db:"guild_name" json:"guild_name"`
+}
+
+// Each selected boss's #1 player for Peak, Ranked Mastery, Renown, and raw
+// performance, in one round trip for the overview's boss cards. Peak and
+// Mastery are the boss's own (denominator 1) normalized results, exactly as the
+// raid board computes per boss before averaging; performance is the best raw
+// DPS/HPS behind those results. Renown ignores performance cohort filters.
+func (q *sqlQuerier) ListLeaderboardV2BossLeaders(ctx context.Context, arg ListLeaderboardV2BossLeadersParams) ([]ListLeaderboardV2BossLeadersRow, error) {
+	rows, err := q.db.Query(ctx, listLeaderboardV2BossLeaders,
+		arg.TenantID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.Bosses,
+		arg.Metric,
+		arg.RealmFilter,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.FilterSubSpec,
+		arg.PlayerSubSpec,
+		arg.Awards,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLeaderboardV2BossLeadersRow
+	for rows.Next() {
+		var i ListLeaderboardV2BossLeadersRow
+		if err := rows.Scan(
+			&i.Kind,
+			&i.EncounterName,
+			&i.RealmID,
+			&i.SubjectID,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+			&i.Score,
+			&i.Raw,
+			&i.RealmName,
+			&i.SubjectName,
+			&i.SubjectClass,
+			&i.GuildName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLeaderboardV2Cohorts = `-- name: ListLeaderboardV2Cohorts :many
 SELECT DISTINCT player_class, player_spec, player_sub_spec, metric
 FROM leaderboard_player_boss_benchmarks

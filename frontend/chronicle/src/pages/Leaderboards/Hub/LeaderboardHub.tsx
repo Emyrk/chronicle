@@ -1356,7 +1356,7 @@ function BossCard({ summary: b, role, optional, onOpen }: { summary: LiveBossSum
         <BossStat
           icon={role === "dps" ? <Swords className="size-3.5 text-muted-foreground" /> : <HeartPulse className="size-3.5 text-muted-foreground" />}
           label={`Best performance (${role === "dps" ? "DPS" : "HPS"})`}
-          value={b.performance ? `${b.performance.value}/s` : role === "dps" && b.topDps !== undefined ? `${Math.round(b.topDps).toLocaleString()}/s` : "—"}
+          value={b.performance ? `${b.performance.value.toLocaleString()}/s` : role === "dps" && b.topDps !== undefined ? `${Math.round(b.topDps).toLocaleString()}/s` : "—"}
         >
           {b.performance && <PlayerName player={b.performance.player} />}
         </BossStat>

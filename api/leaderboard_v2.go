@@ -43,6 +43,10 @@ func (api *API) LeaderboardV2(w http.ResponseWriter, r *http.Request) {
 	req.CompanionSubSpec = q.Get("companion_sub_spec")
 	req.CompanionFilterSubSpec = q.Has("companion_sub_spec")
 
+	if q.Get("view") == "boss-leaders" && req.Metric != "dps" && req.Metric != "hps" {
+		bad("select DPS or HPS")
+		return
+	}
 	if q.Get("realm") != "" {
 		req.Realm, err = uuid.Parse(q.Get("realm"))
 		if err != nil {
@@ -64,6 +68,20 @@ func (api *API) LeaderboardV2(w http.ResponseWriter, r *http.Request) {
 	// Cohort discovery validates the same instance/variant, using set-independent
 	// enabled bosses. The discovery response itself does not produce Renown scores.
 	selectionReq := req
+	if q.Get("view") == "boss-leaders" {
+		// Boss cards resolve their bosses and Renown awards like the player Renown
+		// board; the performance cohort filters apply only to Peak/Mastery below.
+		selectionReq.Subject = "player"
+		selectionReq.Kind = "renown"
+		selectionReq.Score = "renown"
+		selectionReq.Class = ""
+		selectionReq.Spec = ""
+		selectionReq.SubSpec = ""
+		selectionReq.FilterSubSpec = false
+		selectionReq.Metric = ""
+		selectionReq.Search = ""
+		selectionReq.CompanionMetric = ""
+	}
 	if q.Get("view") == "cohorts" {
 		selectionReq.Subject = "player"
 		selectionReq.Kind = "renown"
@@ -85,6 +103,27 @@ func (api *API) LeaderboardV2(w http.ResponseWriter, r *http.Request) {
 	selection, err := leaderboardread.Select(rows, selectionReq)
 	if err != nil {
 		bad(err.Error())
+		return
+	}
+	if q.Get("view") == "boss-leaders" {
+		leaders, err := db.ListLeaderboardV2BossLeaders(ctx, database.ListLeaderboardV2BossLeadersParams{
+			TenantID: tenant.ID, InstanceName: req.Instance, DifficultyName: req.Difficulty, MaxPlayers: req.MaxPlayers,
+			Bosses: selection.Bosses, Awards: selection.Awards, Metric: req.Metric, RealmFilter: req.Realm,
+			PlayerClass: req.Class, PlayerSpec: req.Spec, FilterSubSpec: req.FilterSubSpec, PlayerSubSpec: req.SubSpec,
+		})
+		if err != nil {
+			httpapi.InternalServerError(w, err)
+			return
+		}
+		out := []chroniclesdk.LeaderboardV2BossLeader{}
+		for _, l := range leaders {
+			out = append(out, chroniclesdk.LeaderboardV2BossLeader{
+				EncounterName: l.EncounterName, Kind: l.Kind, RealmID: l.RealmID, RealmName: l.RealmName, SubjectID: l.SubjectID, Name: l.SubjectName,
+				PlayerClass: l.PlayerClass, PlayerSpec: l.PlayerSpec, PlayerSubSpec: l.PlayerSubSpec, SubjectClass: l.SubjectClass, GuildName: l.GuildName,
+				Score: l.Score, Raw: l.Raw,
+			})
+		}
+		httpapi.Write(ctx, w, http.StatusOK, out)
 		return
 	}
 	if q.Get("view") == "cohorts" {

@@ -114,6 +114,29 @@ export interface LeaderboardV2Boss {
 }
 
 // From chroniclesdk/leaderboard_v2.go
+/**
+ * LeaderboardV2BossLeader is one selected boss's #1 player for one board:
+ * Kind is "peak", "mastery", "renown", or "performance" (best raw DPS/HPS).
+ * Score is the board's value (raw DPS/HPS for performance); Raw is the leader's
+ * raw DPS/HPS behind Peak and Mastery, and zero for Renown.
+ */
+export interface LeaderboardV2BossLeader {
+    readonly encounter_name: string;
+    readonly kind: string;
+    readonly realm_id: string;
+    readonly realm_name: string;
+    readonly subject_id: string;
+    readonly name: string;
+    readonly player_class: string;
+    readonly player_spec: string;
+    readonly player_sub_spec: string;
+    readonly subject_class: string;
+    readonly guild_name: string;
+    readonly score: number;
+    readonly raw: number;
+}
+
+// From chroniclesdk/leaderboard_v2.go
 export interface LeaderboardV2Cohort {
     readonly player_class: string;
     readonly player_spec: string;

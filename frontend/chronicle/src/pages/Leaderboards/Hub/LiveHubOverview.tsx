@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import type { SpeedrunLeaderboardEntry } from "@/api/typesGenerated";
+import type { LeaderboardV2BossLeader, SpeedrunLeaderboardEntry } from "@/api/typesGenerated";
 import {
   useRankingsKillTimeLeaderboard,
   useRankingsKillTimes,
@@ -11,6 +11,7 @@ import type { HubSummary } from "./hubSummaryAdapter";
 import { Overview, type HubLiveTabContext } from "./LeaderboardHub";
 import { liveOverviewData } from "./liveOverviewData";
 import { fetchResolvedHubRatings, hubJSON } from "./resolvedHubAdapter";
+import { v2BoardURL } from "./v2RatingAdapter";
 
 export interface LiveHubOverviewProps {
   context: HubLiveTabContext;
@@ -129,6 +130,29 @@ export function LiveHubOverview({
     !realmName && !!cohort,
   );
   const killTimes = useRankingsKillTimes(instanceName, undefined, instanceWide);
+  // Every boss card's #1 per board and best performance, in one request for the whole roster.
+  const cardBosses = bosses.filter((name) => name !== "Trash");
+  const bossLeaders = useQuery<LeaderboardV2BossLeader[]>({
+    queryKey: ["hub-overview-boss-leaders", instanceName, cohort?.difficulty_name, cohort?.max_players, metric, scope.cls, scope.spec, scope.subSpec, realmIDs[0], cardBosses],
+    queryFn: () => {
+      const p = new URLSearchParams({
+        view: "boss-leaders",
+        instance: instanceName,
+        difficulty: cohort!.difficulty_name,
+        max_players: String(cohort!.max_players),
+        metric,
+      });
+      for (const name of [...new Set(cardBosses)].sort()) p.append("bosses", name);
+      if (scope.cls) p.set("class", scope.cls);
+      if (scope.spec) p.set("spec", scope.spec);
+      if (scope.subSpec !== undefined) p.set("sub_spec", scope.subSpec);
+      if (realmIDs[0]) p.set("realm", realmIDs[0]);
+      return hubJSON<LeaderboardV2BossLeader[]>(v2BoardURL(p));
+    },
+    enabled: !!cohort && realmIDs.length <= 1 && cardBosses.length > 0,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
   const bossKills = useRankingsKillTimeLeaderboard(
     { instance_name: instanceName, encounter_name: scope.boss, limit: 8 },
     instanceWide && !!scope.boss,
@@ -164,6 +188,7 @@ export function LiveHubOverview({
     killTimes: instanceWide ? killTimes.data : undefined,
     bossKills:
       instanceWide && scope.boss ? bossKills.data?.entries : undefined,
+    bossLeaders: bossLeaders.data,
     unfiltered: !realmName && !scope.cls,
     sections: {
       ratings: { pending: ratings.isPending, error: ratings.isError },
