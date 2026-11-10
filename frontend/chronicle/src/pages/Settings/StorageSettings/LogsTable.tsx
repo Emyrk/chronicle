@@ -1,6 +1,8 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Pin, PinOff } from "lucide-react";
+import { toast } from "sonner";
 import { useAuthorizationCheck, type WoWLogGroup } from "@/api/queries";
+import { useBulkUpdateRawFilesPinned } from "@/api/rawLogPinning";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/Checkbox/Checkbox";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card/Card";
@@ -10,7 +12,7 @@ import { formatBytes } from "@/lib/format";
 import { deriveLogStatus, getParsedInstances, getRawFileCounts } from "@/lib/logStatus";
 import { activeQuotaBytes, allTimeBytes } from "./logMetrics";
 import { LogRow } from "./LogRow";
-import type { LogRowViewModel, PendingAction, SortDirection, SortField } from "./types";
+import type { LogRowViewModel, PendingAction, PinFilter, SortDirection, SortField } from "./types";
 
 const PAGE_SIZE = 25;
 
@@ -102,6 +104,7 @@ function buildBaseRow(
   return {
     group,
     id: group.id,
+    pinned: group.raw_files_pinned ?? false,
     instancesLabel: buildInstancesLabel(instanceNames),
     instancesFullLabel: instanceNames.length > 0 ? instanceNames.join(", ") : "Unparsed upload",
     server: instances[0]?.server_name ?? instances[0]?.realm_name ?? "—",
@@ -124,6 +127,44 @@ function buildBaseRow(
   };
 }
 
+const PIN_FILTER_OPTIONS: { value: PinFilter; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "pinned", label: "Pinned" },
+  { value: "unpinned", label: "Unpinned" },
+];
+
+function PinFilterToggle({
+  value,
+  pinnedCount,
+  onChange,
+}: {
+  value: PinFilter;
+  pinnedCount: number;
+  onChange: (value: PinFilter) => void;
+}) {
+  return (
+    <div role="radiogroup" aria-label="Filter by pin" className="inline-flex h-9 items-center rounded-md border border-input p-0.5">
+      {PIN_FILTER_OPTIONS.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          role="radio"
+          aria-checked={value === option.value}
+          onClick={() => onChange(option.value)}
+          className={cn(
+            "inline-flex h-full items-center gap-1 rounded px-2.5 text-xs font-medium text-muted-foreground hover:text-foreground",
+            value === option.value && "bg-accent text-foreground",
+          )}
+        >
+          {option.value === "pinned" && <Pin className="size-3" />}
+          {option.label}
+          {option.value === "pinned" && <span className="text-muted-foreground">{pinnedCount}</span>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 interface LogsTableProps {
   logs: WoWLogGroup[];
   currentTenantName: string | null;
@@ -132,6 +173,8 @@ interface LogsTableProps {
 
 export function LogsTable({ logs, currentTenantName, onRequestDelete }: LogsTableProps) {
   const [search, setSearch] = useState("");
+  const [pinFilter, setPinFilter] = useState<PinFilter>("all");
+  const bulkPin = useBulkUpdateRawFilesPinned();
   const [sortField, setSortField] = useState<SortField>("raw");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [page, setPage] = useState(1);
@@ -145,11 +188,14 @@ export function LogsTable({ logs, currentTenantName, onRequestDelete }: LogsTabl
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return baseRows;
-    return baseRows.filter(
-      (row) => row.instancesFullLabel.toLowerCase().includes(q) || row.server.toLowerCase().includes(q),
-    );
-  }, [baseRows, search]);
+    return baseRows.filter((row) => {
+      if (pinFilter === "pinned" && !row.pinned) return false;
+      if (pinFilter === "unpinned" && row.pinned) return false;
+      return !q || row.instancesFullLabel.toLowerCase().includes(q) || row.server.toLowerCase().includes(q);
+    });
+  }, [baseRows, search, pinFilter]);
+
+  const pinnedCount = baseRows.filter((row) => row.pinned).length;
 
   const sorted = useMemo(() => {
     const rows = [...filtered];
@@ -245,6 +291,28 @@ export function LogsTable({ logs, currentTenantName, onRequestDelete }: LogsTabl
   const selectedGroups = logs.filter((g) => selected.has(g.id));
   const selectedRawBytes = selectedGroups.reduce((sum, g) => sum + activeQuotaBytes(g), 0);
 
+  // Pinning only protects active raw files, so skip logs whose raw files are gone.
+  const pinnableIds = selectedGroups.filter((g) => !g.raw_files_pinned && activeQuotaBytes(g) > 0).map((g) => g.id);
+  const unpinnableIds = selectedGroups.filter((g) => g.raw_files_pinned).map((g) => g.id);
+
+  function bulkSetPinned(logIds: string[], pinned: boolean) {
+    bulkPin.mutate(
+      { logIds, pinned },
+      {
+        onSuccess: ({ succeeded, failed }) => {
+          const verb = pinned ? "Pinned" : "Unpinned";
+          if (failed === 0) {
+            toast.success(`${verb} ${succeeded} log${succeeded === 1 ? "" : "s"}`);
+          } else {
+            toast.error(`${verb} ${succeeded} of ${succeeded + failed} logs`, {
+              description: `${failed} could not be updated. You may not have permission to change them.`,
+            });
+          }
+        },
+      },
+    );
+  }
+
   function requestBulkDeleteRaw() {
     const eligible = selectedGroups.filter((g) => {
       const status = deriveLogStatus(g);
@@ -266,15 +334,25 @@ export function LogsTable({ logs, currentTenantName, onRequestDelete }: LogsTabl
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <input
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-            placeholder="Search by instance or server"
-            className={inputClassName}
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              placeholder="Search by instance or server"
+              className={inputClassName}
+            />
+            <PinFilterToggle
+              value={pinFilter}
+              pinnedCount={pinnedCount}
+              onChange={(value) => {
+                setPinFilter(value);
+                setPage(1);
+              }}
+            />
+          </div>
           {selected.size > 0 && (
             <div className="flex items-center gap-3">
               <span className="text-sm text-muted-foreground">
@@ -283,6 +361,24 @@ export function LogsTable({ logs, currentTenantName, onRequestDelete }: LogsTabl
               <div className="flex items-center gap-2">
                 <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
                   Clear
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={unpinnableIds.length === 0 || bulkPin.isPending}
+                  onClick={() => bulkSetPinned(unpinnableIds, false)}
+                >
+                  <PinOff className="size-3.5" />
+                  Unpin{unpinnableIds.length > 0 && ` ${unpinnableIds.length}`}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={pinnableIds.length === 0 || bulkPin.isPending}
+                  onClick={() => bulkSetPinned(pinnableIds, true)}
+                >
+                  <Pin className="size-3.5" />
+                  Pin{pinnableIds.length > 0 && ` ${pinnableIds.length}`}
                 </Button>
                 <Button size="sm" variant="destructive" onClick={requestBulkDeleteRaw}>
                   Delete raw files

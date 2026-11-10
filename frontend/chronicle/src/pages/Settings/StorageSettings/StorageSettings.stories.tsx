@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { expect, userEvent, within } from "storybook/test";
 import { MemoryRouter } from "react-router-dom";
 import { TooltipProvider } from "@/components/ui/Tooltip/tooltip";
 import { StorageSettingsView } from "./index";
@@ -95,6 +96,7 @@ const mockLogs: WoWLogGroup[] = [
   },
   {
     id: "log-multi",
+    raw_files_pinned: true,
     owner: "user-123",
     created_at: "2026-08-11T09:00:00Z",
     updated_at: "2026-08-11T09:30:00Z",
@@ -153,6 +155,7 @@ const mockLogs: WoWLogGroup[] = [
   },
   {
     id: "log-partially-deleted",
+    raw_files_pinned: true,
     owner: "user-123",
     created_at: "2026-08-01T12:00:00Z",
     updated_at: "2026-08-01T12:30:00Z",
@@ -251,6 +254,19 @@ export default meta;
 type Story = StoryObj<typeof StorageSettingsView>;
 
 export const WithLogs: Story = {};
+
+export const PinnedFilter: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("radio", { name: /^Pinned/ }));
+    const rows = canvasElement.querySelectorAll("tbody tr");
+    await expect(rows).toHaveLength(2);
+    for (const row of rows) await expect(row).toHaveAttribute("data-pinned", "true");
+
+    await userEvent.click(canvas.getByRole("radio", { name: "Unpinned" }));
+    await expect(canvasElement.querySelectorAll("tbody tr[data-pinned]")).toHaveLength(0);
+  },
+};
 
 export const Loading: Story = {
   args: {

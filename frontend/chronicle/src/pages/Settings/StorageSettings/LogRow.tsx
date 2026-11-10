@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/DropdownMenu/DropdownMenu";
 import { TableCell, TableRow } from "@/components/Table/Table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
+import { cn } from "@/lib/utils";
 import { LogStatusBadge } from "./LogStatusBadge";
 import type { LogRowViewModel } from "./types";
 
@@ -36,11 +37,14 @@ export function LogRow({
   const updatePin = useUpdateRawFilesPinned(row.id);
   const pinned = updatePin.isPending && updatePin.variables !== undefined
     ? updatePin.variables
-    : row.group.raw_files_pinned;
+    : row.pinned;
 
   return (
     <>
-      <TableRow>
+      <TableRow
+        data-pinned={pinned || undefined}
+        className={cn(pinned && "bg-primary/15 shadow-[inset_3px_0_0_var(--color-primary)] hover:bg-primary/20")}
+      >
         <TableCell>
           <Checkbox checked={row.isSelected} onCheckedChange={() => onToggleSelect(row.id)} />
         </TableCell>
