@@ -561,9 +561,10 @@ export function CareerCard({ to, tab, leaders, raids = [] }: { to: string; tab: 
     // A gradient frame (padding over a gold gradient) rather than a flat border: the card reads as framed.
     <Link
       to={to}
-      className="group block aspect-[16/7] rounded-xl p-px text-left transition-shadow hover:shadow-lg"
+      // career-card-frame (index.css) drifts the gradient so light runs along the frame.
+      className="career-card-frame group block aspect-[16/7] rounded-xl p-px text-left transition-shadow hover:shadow-lg"
       style={{
-        backgroundImage: `linear-gradient(135deg, ${CAREER_GOLD}, color-mix(in srgb, ${CAREER_GOLD} 25%, transparent) 45%, color-mix(in srgb, ${CAREER_GOLD} 70%, transparent))`,
+        backgroundImage: `linear-gradient(120deg, color-mix(in srgb, ${CAREER_GOLD} 30%, transparent), ${CAREER_GOLD} 35%, color-mix(in srgb, ${CAREER_GOLD} 20%, transparent) 55%, ${CAREER_GOLD} 80%, color-mix(in srgb, ${CAREER_GOLD} 35%, transparent))`,
         boxShadow: `0 8px 30px -12px color-mix(in srgb, ${CAREER_GOLD} 45%, transparent)`,
       }}
     >
@@ -572,6 +573,12 @@ export function CareerCard({ to, tab, leaders, raids = [] }: { to: string; tab: 
         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/55 to-black/25" />
         {/* A faint gold wash from the top corner, where raid cards stay neutral. */}
         <div className="absolute inset-0" style={{ background: `radial-gradient(ellipse 70% 90% at 100% 0%, color-mix(in srgb, ${CAREER_GOLD} 22%, transparent), transparent 70%)` }} />
+        {/* A gold sheen sweeps across every few seconds (career-card-sheen in index.css). */}
+        <div
+          aria-hidden
+          className="career-card-sheen pointer-events-none absolute inset-y-0 left-0 w-1/3 mix-blend-screen"
+          style={{ background: `linear-gradient(90deg, transparent, color-mix(in srgb, ${CAREER_GOLD} 35%, transparent) 40%, rgba(255, 240, 205, 0.35) 50%, color-mix(in srgb, ${CAREER_GOLD} 35%, transparent) 60%, transparent)` }}
+        />
         {shown.length > 0 && (
           <div className="absolute top-2.5 right-2.5 z-10 flex items-center" title={`Every raid: ${raids.join(", ")}`}>
             <span className="flex -space-x-2">

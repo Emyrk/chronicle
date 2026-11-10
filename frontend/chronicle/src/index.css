@@ -257,6 +257,36 @@
   }
 }
 
+/* Career landing card: a gold sheen sweeps across every few seconds, and the
+   gold frame's gradient drifts back and forth. Both stop for reduced motion. */
+@keyframes career-card-sheen {
+  0%, 72% { transform: translateX(-160%) skewX(-18deg); }
+  100% { transform: translateX(360%) skewX(-18deg); }
+}
+
+@keyframes career-card-frame {
+  from { background-position: 0% 50%; }
+  to { background-position: 100% 50%; }
+}
+
+.career-card-sheen {
+  animation: career-card-sheen 7s ease-in-out infinite;
+}
+
+.career-card-frame {
+  background-size: 250% 250%;
+  animation: career-card-frame 6s ease-in-out infinite alternate;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .career-card-sheen {
+    display: none;
+  }
+  .career-card-frame {
+    animation: none;
+  }
+}
+
 /* Slow coin flip for the support banner's Chronicle-logo/heart medallion. */
 @keyframes support-banner-coin-flip {
   to {
