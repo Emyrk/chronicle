@@ -116,6 +116,19 @@ func TestTimbermawHoldFactoryMatchZoneAliases(t *testing.T) {
 	require.False(t, TimbermawHoldFactory.MatchZone(zone.Zone{Name: "荒芜巨岩"}))
 }
 
+func TestCathedralMograineAndWhitemaneAreOneEncounter(t *testing.T) {
+	t.Parallel()
+
+	hostiles := CathedralHostiles()
+	mograine := hostiles[3976]
+	whitemane := hostiles[3977]
+
+	require.Equal(t, "Mograine & Whitemane", mograine.EncounterName)
+	require.Equal(t, mograine.EncounterName, whitemane.EncounterName)
+	require.True(t, mograine.BossDeathDoesNotEndEncounter)
+	require.True(t, whitemane.BossDeathDoesNotEndEncounter)
+}
+
 func TestHeadlessHorsemanIsWrathOnly(t *testing.T) {
 	t.Parallel()
 

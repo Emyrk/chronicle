@@ -80,6 +80,17 @@ func CathedralHostiles() map[uint32]identifier.Identity {
 		4542: "High Inquisitor Fairbanks",
 	})
 
+	const mograineAndWhitemane = "Mograine & Whitemane"
+	mograine := hostile[3976]
+	mograine.EncounterName = mograineAndWhitemane
+	mograine.BossDeathDoesNotEndEncounter = true
+	hostile[3976] = mograine
+
+	whitemane := hostile[3977]
+	whitemane.EncounterName = mograineAndWhitemane
+	whitemane.BossDeathDoesNotEndEncounter = true
+	hostile[3977] = whitemane
+
 	return hostile
 }
 
