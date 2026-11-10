@@ -1,5 +1,18 @@
 [
   {
+    "id": "ratings",
+    "title": "How ratings work",
+    "description": "Chronicle now rates players across their whole history: Peak for your best kill, Mastery for what to expect from you, and Renown for how much you've done. A new page explains each one with an example player, or with your own kills.",
+    "publishedAt": "2026-11-09",
+    "rarity": "epic",
+    "tag": "Feature",
+    "icon": "inv_crown_01",
+    "flavor": "Measure thyself.",
+    "hintTitle": "How ratings work",
+    "hintDescription": "Peak, Mastery and Renown, explained with an example player or your own kills.",
+    "hintHref": "/ratings"
+  },
+  {
     "id": "instance-search",
     "title": "Instance search",
     "description": "Find any raid on Chronicle by zone, bosses, speed, parses and roster, then see exactly why each run matched. Build searches with a form, blocks or code.",

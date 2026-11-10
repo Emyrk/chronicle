@@ -27,6 +27,7 @@ import {
   YoutubeSyncPost,
 } from "./posts/announcements";
 import { InstanceSearchPost } from "./posts/instanceSearch";
+import { RatingsPost } from "./posts/ratings";
 
 export type BlogFlavorSet = readonly string[];
 
@@ -64,6 +65,7 @@ export interface BlogPostDefinition extends BlogPostMetadata {
 }
 
 const BLOG_COMPONENTS = {
+  ratings: RatingsPost,
   "instance-search": InstanceSearchPost,
   "alt-click-compare": EntityInspectorPost,
   "ranked-damage": RankedDamagePost,
@@ -101,6 +103,7 @@ function remotionVideo(load: LessonVideo["load"], durationInFrames: number): Les
 }
 
 const BLOG_VIDEOS = {
+  ratings: remotionVideo(() => import("@/pages/Ratings/videos/RatingsExplainer.video"), 1010),
   "instance-search": remotionVideo(() => import("@/pages/InstanceSearch/videos/InstanceSearch.video"), 970),
   "alt-click-compare": remotionVideo(() => import("@/pages/Instance/videos/EntityInspector.video"), 1256),
   "ranked-damage": remotionVideo(() => import("@/pages/Instance/videos/RankedDamage.video"), 900),
