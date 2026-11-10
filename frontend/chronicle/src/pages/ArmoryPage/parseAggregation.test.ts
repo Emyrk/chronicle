@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
-import type { CharacterEncounterStats, PlayerOutfit } from "@/api/typesGenerated";
-import { averageItemLevel, summarizeProgress } from "./parseAggregation";
+import type { CharacterEncounterStats, CharacterParse, PlayerOutfit } from "@/api/typesGenerated";
+import { averageItemLevel, bestScoreByInstance, summarizeProgress } from "./parseAggregation";
+
+describe("bestScoreByInstance", () => {
+  it("keeps the best score per instance", () => {
+    const parse = (instance_id: string, display_score: number) => ({ instance_id, display_score }) as CharacterParse;
+    const map = bestScoreByInstance([parse("a", 40), parse("a", 90), parse("b", 10)]);
+    expect(map.get("a")).toBe(90);
+    expect(map.get("b")).toBe(10);
+  });
+});
 
 function encounter(overrides: Partial<CharacterEncounterStats>): CharacterEncounterStats {
   return {

@@ -7,9 +7,10 @@ import {
   useSupportedInstanceBossCounts,
   useSupportedInstanceProgressionBosses,
 } from "@/api/queries";
-import { useCharacterEncounters } from "@/api/rankingsQueries";
-import { summarizeProgress } from "../parseAggregation";
+import { useCharacterEncounters, useCharacterParses } from "@/api/rankingsQueries";
+import { bestScoreByInstance, summarizeProgress } from "../parseAggregation";
 import type { CareerRatings } from "./useCareerRatings";
+import { defaultMetric } from "./util";
 import { useRecentActivity } from "./useRecentActivity";
 import { TalentsCard } from "./TalentsCard";
 import { GearStripCard } from "./GearStripCard";
@@ -42,6 +43,13 @@ export function OverviewTab({
     query: activityQuery,
     stats: activityStats,
   } = useRecentActivity(player);
+
+  // Performance mode: color calendar nights by their best parse.
+  const parsesQuery = useCharacterParses(isPerformance ? player.id : undefined, defaultMetric(player));
+  const nightScores = useMemo(
+    () => (isPerformance ? bestScoreByInstance(parsesQuery.data?.parses ?? []) : new Map<string, number>()),
+    [parsesQuery.data, isPerformance],
+  );
 
   // Journey mode: participation, progression, and loot.
   const encountersQuery = useCharacterEncounters(player.id, player.realm_id, !isPerformance);
@@ -81,6 +89,7 @@ export function OverviewTab({
       <div className="lg:col-span-7">
         <RaidCalendarCard
           instances={activityQuery.data?.instances}
+          nightScores={nightScores}
           start={activityStart}
           stats={activityStats}
           onOpenActivity={() => onOpenTab("activity")}

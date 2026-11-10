@@ -1,9 +1,24 @@
-import type { CharacterEncounterStats, PlayerOutfit } from "@/api/typesGenerated";
+import type { CharacterEncounterStats, CharacterParse, PlayerOutfit } from "@/api/typesGenerated";
 
 import {
   groupProgression,
   type ProgressionVariant,
 } from "@/components/ui/Progression/progression";
+
+/**
+ * Best display score per instance (raid night), for coloring calendar cells.
+ * Keyed by instance_id.
+ */
+export function bestScoreByInstance(parses: readonly CharacterParse[]): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const p of parses) {
+    const prev = map.get(p.instance_id);
+    if (prev === undefined || p.display_score > prev) {
+      map.set(p.instance_id, p.display_score);
+    }
+  }
+  return map;
+}
 
 export type RaidProgress = ProgressionVariant;
 
