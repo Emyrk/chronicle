@@ -16,6 +16,13 @@ import (
 
 var ErrCareerUnsupportedMode = errors.New("player career unavailable for configured cohort mode")
 
+type PlayerCareerResult struct {
+	Cohorts         []PlayerCareer
+	PoolFingerprint string
+	Issues          []leaderboardconfig.CareerIssue
+	Status          string
+}
+
 type PlayerCareer struct {
 	PlayerClass   string
 	PlayerSpec    string
@@ -36,13 +43,16 @@ func careerReadContext(ctx context.Context, tenant uuid.UUID) (context.Context, 
 
 // ReadPlayerCareer reads persisted exact-cohort candidates, never live source
 // observations. It resolves policy once in the same snapshot as stored results.
-func ReadPlayerCareer(ctx context.Context, store database.Store, tenant, realm uuid.UUID, guid string) ([]PlayerCareer, error) {
+func ReadPlayerCareer(ctx context.Context, store database.Store, tenant, realm uuid.UUID, guid string) (PlayerCareerResult, error) {
 	ctx, err := careerReadContext(ctx, tenant)
 	if err != nil {
-		return nil, err
+		return PlayerCareerResult{}, err
 	}
-	out := []PlayerCareer{}
+	out := PlayerCareerResult{Cohorts: []PlayerCareer{}}
 	err = store.InTx(ctx, func(tx database.Store) error {
+		if _, err := tx.RequireCareerRealm(ctx, database.RequireCareerRealmParams{TenantID: tenant, RealmID: realm}); err != nil {
+			return err
+		}
 		tenantRow, err := tx.GetTenantByID(ctx, tenant)
 		if err != nil {
 			return err
@@ -63,6 +73,9 @@ func ReadPlayerCareer(ctx context.Context, store database.Store, tenant, realm u
 		if err != nil {
 			return err
 		}
+		out.PoolFingerprint = pool.Fingerprint
+		out.Issues = pool.Issues
+		out.Status = ReduceCareer(pool, CareerInputs{}, "").PerformanceStatus
 		rows, err := tx.ReadLeaderboardPlayerCareers(ctx, database.ReadLeaderboardPlayerCareersParams{TenantID: tenant, RealmID: realm, PlayerGuid: guid})
 		if err != nil {
 			return err
@@ -77,7 +90,7 @@ func ReadPlayerCareer(ctx context.Context, store database.Store, tenant, realm u
 				return err
 			}
 			summary.RefreshPending = summary.RefreshPending || pending
-			out = append(out, PlayerCareer{row.PlayerClass, row.PlayerSpec, row.PlayerSubSpec, summary})
+			out.Cohorts = append(out.Cohorts, PlayerCareer{row.PlayerClass, row.PlayerSpec, row.PlayerSubSpec, summary})
 		}
 		missing, err := tx.ListUnmaterializedLeaderboardPlayerCareers(ctx, database.ListUnmaterializedLeaderboardPlayerCareersParams{TenantID: tenant, RealmID: realm, PlayerGuid: guid})
 		if err != nil {
@@ -102,7 +115,23 @@ func ReadPlayerCareer(ctx context.Context, store database.Store, tenant, realm u
 			seen[cohort] = true
 			summary := ReduceCareer(pool, CareerInputs{}, "")
 			summary.RefreshPending = true
-			out = append(out, PlayerCareer{row.PlayerClass, row.PlayerSpec, row.PlayerSubSpec, summary})
+			out.Cohorts = append(out.Cohorts, PlayerCareer{row.PlayerClass, row.PlayerSpec, row.PlayerSubSpec, summary})
+		}
+		if pool.AveragesReady() && out.Status == "preparing" {
+			out.Status = "no_evidence"
+			if pending {
+				out.Status = "preparing"
+			}
+			for _, cohort := range out.Cohorts {
+				if cohort.PerformanceStatus == "ready" {
+					out.Status = "ready"
+				}
+			}
+			for _, cohort := range out.Cohorts {
+				if cohort.PerformanceStatus == "preparing" {
+					out.Status = "preparing"
+				}
+			}
 		}
 		return nil
 	}, &pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
@@ -116,6 +145,9 @@ func ReadGuildCareer(ctx context.Context, store database.Store, tenant, guild uu
 	}
 	var out CareerSummary
 	err = store.InTx(ctx, func(tx database.Store) error {
+		if _, err := tx.RequireCareerGuild(ctx, database.RequireCareerGuildParams{TenantID: tenant, GuildID: guild}); err != nil {
+			return err
+		}
 		pool, err := CareerConfiguration(ctx, tx, tenant)
 		if err != nil {
 			return err

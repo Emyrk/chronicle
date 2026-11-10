@@ -81,3 +81,9 @@ FROM leaderboard_career_renown_facts f
 WHERE f.tenant_id= @tenant_id::uuid AND f.realm_id= @realm_id::uuid AND f.player_guid= @player_guid::text
 AND NOT EXISTS(SELECT 1 FROM leaderboard_career_subjects s WHERE s.tenant_id=f.tenant_id AND s.subject_kind='player' AND s.realm_id=f.realm_id AND s.subject_id=f.player_guid AND s.player_class=f.player_class AND s.player_spec=f.player_spec AND s.player_sub_spec=f.player_sub_spec)
 ORDER BY f.player_class,f.player_spec,f.player_sub_spec,f.instance_name,f.difficulty_name,f.max_players;
+
+-- name: RequireCareerRealm :one
+SELECT r.id FROM wow_server_realms r JOIN wow_servers s ON s.id=r.server_id WHERE r.id= @realm_id::uuid AND s.tenant_id= @tenant_id::uuid;
+
+-- name: RequireCareerGuild :one
+SELECT g.id FROM guilds g JOIN wow_server_realms r ON r.id=g.realm_id JOIN wow_servers s ON s.id=r.server_id WHERE g.id= @guild_id::uuid AND s.tenant_id= @tenant_id::uuid;

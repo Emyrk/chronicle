@@ -12437,6 +12437,38 @@ func (q *sqlQuerier) RememberLeaderboardCareerRunIdentities(ctx context.Context,
 	return err
 }
 
+const requireCareerGuild = `-- name: RequireCareerGuild :one
+SELECT g.id FROM guilds g JOIN wow_server_realms r ON r.id=g.realm_id JOIN wow_servers s ON s.id=r.server_id WHERE g.id= $1::uuid AND s.tenant_id= $2::uuid
+`
+
+type RequireCareerGuildParams struct {
+	GuildID  uuid.UUID `db:"guild_id" json:"guild_id"`
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) RequireCareerGuild(ctx context.Context, arg RequireCareerGuildParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, requireCareerGuild, arg.GuildID, arg.TenantID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const requireCareerRealm = `-- name: RequireCareerRealm :one
+SELECT r.id FROM wow_server_realms r JOIN wow_servers s ON s.id=r.server_id WHERE r.id= $1::uuid AND s.tenant_id= $2::uuid
+`
+
+type RequireCareerRealmParams struct {
+	RealmID  uuid.UUID `db:"realm_id" json:"realm_id"`
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) RequireCareerRealm(ctx context.Context, arg RequireCareerRealmParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, requireCareerRealm, arg.RealmID, arg.TenantID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const upsertLeaderboardCareerSubject = `-- name: UpsertLeaderboardCareerSubject :exec
 INSERT INTO leaderboard_career_subjects(tenant_id,subject_kind,realm_id,subject_id,player_class,player_spec,player_sub_spec,chosen_metric,inputs,pool_fingerprint)
 VALUES ($1::uuid,$2::text,$3::uuid,$4::text,$5::text,$6::text,$7::text,$8::text,$9::jsonb,$10::text)
