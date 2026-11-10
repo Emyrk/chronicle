@@ -10,6 +10,8 @@ import {
   FolderOpen,
 } from "lucide-react";
 import { compressFile } from "@/api/compress";
+import type { RawLogCleanup } from "@/api/typesGenerated";
+import { RawLogCleanupSummary } from "./RawLogCleanupSummary";
 import { VisibilityPicker } from "./VisibilityPicker";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/Card/Card";
@@ -24,6 +26,7 @@ interface UploadEntry {
   progress: number;
   logId?: string;
   error?: string;
+  cleanup?: RawLogCleanup;
 }
 
 function statusIcon(status: FileStatus) {
@@ -55,14 +58,23 @@ function statusLabel(status: FileStatus) {
   }
 }
 
-/** Upload a single file to the V2 endpoint. Returns the log_id on success. */
+class UploadError extends Error {
+  cleanup?: RawLogCleanup;
+
+  constructor(message: string, cleanup?: RawLogCleanup) {
+    super(message);
+    this.cleanup = cleanup;
+  }
+}
+
+/** Upload a single file to the V2 endpoint, retaining cleanup on either outcome. */
 async function uploadSingleFile(
   file: File,
   format: string,
   unlistedLog: boolean,
   onProgress: (pct: number) => void,
   onStatusChange: (status: FileStatus) => void,
-): Promise<string> {
+): Promise<{ logId: string; cleanup?: RawLogCleanup }> {
   onStatusChange("compressing");
   const formData = new FormData();
   const isAlreadyGzipped = file.name.endsWith(".gz");
@@ -89,19 +101,21 @@ async function uploadSingleFile(
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
           const data = JSON.parse(xhr.responseText);
-          resolve(data.log_id);
+          resolve({ logId: data.log_id, cleanup: data.cleanup });
         } catch {
-          resolve("");
+          resolve({ logId: "" });
         }
       } else {
         let msg = `Upload failed (${xhr.status})`;
+        let cleanup: RawLogCleanup | undefined;
         try {
           const data = JSON.parse(xhr.responseText);
           msg = data.message || msg;
+          cleanup = data.cleanup;
         } catch {
           /* ignore */
         }
-        reject(new Error(msg));
+        reject(new UploadError(msg, cleanup));
       }
     });
 
@@ -174,7 +188,7 @@ export function MultiUpload({ format, unlistedLog, canMarkUnlisted, onUnlistedLo
 
     // Reset errored entries back to pending
     for (const entry of pending) {
-      updateEntry(entry.id, { status: "pending", progress: 0, error: undefined });
+      updateEntry(entry.id, { status: "pending", progress: 0, error: undefined, cleanup: undefined });
     }
 
     // Process in batches of MAX_CONCURRENT
@@ -183,18 +197,19 @@ export function MultiUpload({ format, unlistedLog, canMarkUnlisted, onUnlistedLo
 
     async function processOne(entry: UploadEntry) {
       try {
-        const logId = await uploadSingleFile(
+        const result = await uploadSingleFile(
           entry.file,
           format,
           unlistedLog,
           (pct) => updateEntry(entry.id, { progress: pct }),
           (status) => updateEntry(entry.id, { status }),
         );
-        updateEntry(entry.id, { status: "done", progress: 100, logId });
+        updateEntry(entry.id, { status: "done", progress: 100, ...result });
       } catch (err) {
         updateEntry(entry.id, {
           status: "error",
           error: err instanceof Error ? err.message : String(err),
+          cleanup: err instanceof UploadError ? err.cleanup : undefined,
         });
       }
     }
@@ -336,6 +351,7 @@ export function MultiUpload({ format, unlistedLog, canMarkUnlisted, onUnlistedLo
                     />
                   </div>
                 )}
+                <RawLogCleanupSummary cleanup={entry.cleanup} />
                 {entry.status === "error" && (
                   <p className="text-xs text-red-500 mt-0.5">{entry.error}</p>
                 )}

@@ -58,7 +58,11 @@ func IsAPIError(err error) (*APIError, bool) {
 
 func HandleResponseError(ctx context.Context, rw http.ResponseWriter, err error, def APIError) {
 	if apiErr, ok := IsAPIError(err); ok {
-		Write(ctx, rw, apiErr.Status, apiErr.Response)
+		response := apiErr.Response
+		if def.Response.Cleanup != nil {
+			response.Cleanup = def.Response.Cleanup
+		}
+		Write(ctx, rw, apiErr.Status, response)
 		return
 	}
 
@@ -73,5 +77,6 @@ func HandleResponseError(ctx context.Context, rw http.ResponseWriter, err error,
 	Write(ctx, rw, status, chroniclesdk.Response{
 		Message: def.Response.Message,
 		Detail:  def.Response.Detail,
+		Cleanup: def.Response.Cleanup,
 	})
 }

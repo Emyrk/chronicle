@@ -22,6 +22,7 @@ export interface StorageSettingsViewProps {
   logsLoading: boolean;
   /** Name of the tenant currently being browsed (subdomain), or null on the root domain. */
   currentTenantName: string | null;
+  autoDeleteRawLogsAtStorageCapacity?: boolean;
   /** Billing is on and the account has no supporter tier yet. */
   showSupporterCallout?: boolean;
 }
@@ -32,6 +33,7 @@ export function StorageSettingsView({
   logs,
   logsLoading,
   currentTenantName,
+  autoDeleteRawLogsAtStorageCapacity = true,
   showSupporterCallout = false,
 }: StorageSettingsViewProps) {
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
@@ -58,7 +60,7 @@ export function StorageSettingsView({
         <>
           <StorageCallouts showDiscord={!hasDiscordMemberGrant(storage.grants)} showSupporter={showSupporterCallout} />
           <div className="grid gap-4 md:grid-cols-2">
-            <RawStorageCard storage={storage} />
+            <RawStorageCard storage={storage} autoDeleteRawLogsAtStorageCapacity={autoDeleteRawLogsAtStorageCapacity} />
             <ParsedDataCard storage={storage} />
           </div>
         </>
@@ -129,6 +131,7 @@ export function StorageSettings() {
       logs={logs}
       logsLoading={logsLoading}
       currentTenantName={siteConfig?.tenant?.name ?? null}
+      autoDeleteRawLogsAtStorageCapacity={session?.preferences.auto_delete_raw_logs_at_storage_capacity ?? true}
       showSupporterCallout={!!siteConfig?.billing_enabled && !session?.ads_free}
     />
   );

@@ -57,16 +57,17 @@ func User[T database.ChronicleUser | database.ListAllUsersRow](row T, roles []st
 		dataLimitUpdated = t
 	}
 	u := chroniclesdk.User{
-		ID:                     user.ID,
-		Username:               user.Username,
-		Email:                  user.Email,
-		DiscordID:              discordID,
-		Roles:                  roles,
-		CreatedAt:              user.CreatedAt.Time,
-		UpdatedAt:              user.UpdatedAt.Time,
-		MaxStorageBytes:        user.MaxStorageBytes,
-		MaxStorageBytesUpdated: dataLimitUpdated,
-		ConsumedStorageBytes:   user.ConsumedStorageBytes,
+		ID:                                 user.ID,
+		Username:                           user.Username,
+		Email:                              user.Email,
+		DiscordID:                          discordID,
+		Roles:                              roles,
+		CreatedAt:                          user.CreatedAt.Time,
+		UpdatedAt:                          user.UpdatedAt.Time,
+		MaxStorageBytes:                    user.MaxStorageBytes,
+		MaxStorageBytesUpdated:             dataLimitUpdated,
+		AutoDeleteRawLogsAtStorageCapacity: user.AutoDeleteRawLogsAtStorageCapacity,
+		ConsumedStorageBytes:               user.ConsumedStorageBytes,
 	}
 	if user.RawLogRetentionHours.Valid {
 		v := user.RawLogRetentionHours.Int32
@@ -88,6 +89,7 @@ func WoWLogGroupRow[T database.GetWoWLogGroupsByOwnerRow | database.GetWoWLogGro
 			LogType:          string(g.WoWLogGroup.LogType),
 			UploadSource:     string(g.WoWLogGroup.UploadSource),
 			Unlisted:         g.WoWLogGroup.Unlisted,
+			RawFilesPinned:   g.WoWLogGroup.RawFilesPinned,
 			InvalidatedAt:    invalidatedAt,
 			InvalidReason:    invalidReason,
 			Files:            slice.List(g.Files, WoWLogFile),
@@ -97,18 +99,19 @@ func WoWLogGroupRow[T database.GetWoWLogGroupsByOwnerRow | database.GetWoWLogGro
 	case database.GetWoWLogGroupByIDRow:
 		invalidatedAt, invalidReason := invalidation(g.WoWLogGroup.InvalidatedAt, g.WoWLogGroup.InvalidReason)
 		out := chroniclesdk.WoWLogGroup{
-			ID:            g.WoWLogGroup.ID,
-			Owner:         g.WoWLogGroup.Owner,
-			OwnerName:     g.OwnerName,
-			CreatedAt:     g.WoWLogGroup.CreatedAt,
-			UpdatedAt:     g.WoWLogGroup.UpdatedAt,
-			LogType:       string(g.WoWLogGroup.LogType),
-			UploadSource:  string(g.WoWLogGroup.UploadSource),
-			Unlisted:      g.WoWLogGroup.Unlisted,
-			Flavor:        g.WoWLogGroup.Flavor,
-			InvalidatedAt: invalidatedAt,
-			InvalidReason: invalidReason,
-			Files:         slice.List(g.Files, WoWLogFile),
+			ID:             g.WoWLogGroup.ID,
+			Owner:          g.WoWLogGroup.Owner,
+			OwnerName:      g.OwnerName,
+			CreatedAt:      g.WoWLogGroup.CreatedAt,
+			UpdatedAt:      g.WoWLogGroup.UpdatedAt,
+			LogType:        string(g.WoWLogGroup.LogType),
+			UploadSource:   string(g.WoWLogGroup.UploadSource),
+			Unlisted:       g.WoWLogGroup.Unlisted,
+			Flavor:         g.WoWLogGroup.Flavor,
+			RawFilesPinned: g.WoWLogGroup.RawFilesPinned,
+			InvalidatedAt:  invalidatedAt,
+			InvalidReason:  invalidReason,
+			Files:          slice.List(g.Files, WoWLogFile),
 		}
 		if g.WoWLogGroup.Format.Valid {
 			out.Format = string(g.WoWLogGroup.Format.LogFormat)

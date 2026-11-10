@@ -394,6 +394,7 @@ CREATE TABLE users (
     default_mobile_layout_id uuid,
     raw_log_retention_hours integer,
     character_cosmetics text DEFAULT 'enabled'::text NOT NULL,
+    auto_delete_raw_logs_at_storage_capacity boolean DEFAULT true NOT NULL,
     CONSTRAINT users_character_cosmetics_check CHECK ((character_cosmetics = ANY (ARRAY['enabled'::text, 'limited'::text, 'disabled'::text])))
 );
 
@@ -409,7 +410,8 @@ CREATE TABLE wow_log_groups (
     invalid_reason text DEFAULT ''::text NOT NULL,
     parse_generation bigint DEFAULT 1 NOT NULL,
     unlisted boolean DEFAULT false NOT NULL,
-    upload_source upload_source DEFAULT 'unknown'::upload_source NOT NULL
+    upload_source upload_source DEFAULT 'unknown'::upload_source NOT NULL,
+    raw_files_pinned boolean DEFAULT false NOT NULL
 );
 
 CREATE VIEW chronicle_users AS
@@ -422,6 +424,7 @@ CREATE VIEW chronicle_users AS
     u.default_mobile_layout_id,
     u.raw_log_retention_hours,
     u.character_cosmetics,
+    u.auto_delete_raw_logs_at_storage_capacity,
     COALESCE(sl.max_storage_bytes, (0)::numeric) AS max_storage_bytes,
     sl.updated_at AS data_limit_updated_at,
     COALESCE(storage.total_size_bytes, (0)::numeric) AS consumed_storage_bytes

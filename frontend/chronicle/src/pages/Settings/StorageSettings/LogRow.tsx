@@ -1,4 +1,6 @@
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Pin } from "lucide-react";
+import { toast } from "sonner";
+import { useUpdateRawFilesPinned } from "@/api/rawLogPinning";
 import { Checkbox } from "@/components/ui/Checkbox/Checkbox";
 import {
   DropdownMenu,
@@ -9,6 +11,7 @@ import {
 } from "@/components/ui/DropdownMenu/DropdownMenu";
 import { TableCell, TableRow } from "@/components/Table/Table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
+import { cn } from "@/lib/utils";
 import { LogStatusBadge } from "./LogStatusBadge";
 import type { LogRowViewModel } from "./types";
 
@@ -31,9 +34,17 @@ export function LogRow({
   onRequestDeleteParsed,
   onRequestDeleteEntire,
 }: LogRowProps) {
+  const updatePin = useUpdateRawFilesPinned(row.id);
+  const pinned = updatePin.isPending && updatePin.variables !== undefined
+    ? updatePin.variables
+    : row.pinned;
+
   return (
     <>
-      <TableRow>
+      <TableRow
+        data-pinned={pinned || undefined}
+        className={cn(pinned && "bg-primary/15 shadow-[inset_3px_0_0_var(--color-primary)] hover:bg-primary/20")}
+      >
         <TableCell>
           <Checkbox checked={row.isSelected} onCheckedChange={() => onToggleSelect(row.id)} />
         </TableCell>
@@ -75,6 +86,22 @@ export function LogRow({
         </TableCell>
         <TableCell>
           <div className="flex items-center justify-end gap-1">
+            <button
+              type="button"
+              aria-label={pinned ? "Unpin raw log" : "Pin raw log"}
+              aria-pressed={pinned}
+              title={pinned ? "Pinned raw files are protected from automatic cleanup" : "Protect raw files from automatic cleanup"}
+              disabled={!row.canDeleteFiles || row.storedBytes <= 0 || updatePin.isPending}
+              className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+              onClick={() => {
+                updatePin.mutate(!pinned, {
+                  onSuccess: () => toast.success(pinned ? "Raw log unpinned" : "Raw log pinned"),
+                  onError: (error) => toast.error("Failed to update raw-log pin", { description: error.message }),
+                });
+              }}
+            >
+              <Pin className={`size-4 ${pinned ? "fill-current text-primary" : ""}`} />
+            </button>
             <a
               href={`/logs/${row.id}`}
               target="_blank"

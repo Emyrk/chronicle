@@ -57,6 +57,9 @@ func (m CharacterCosmeticsDisplayMode) IsValid() bool {
 type Preferences struct {
 	HelpfulHints       bool                          `json:"helpful_hints"`
 	CharacterCosmetics CharacterCosmeticsDisplayMode `json:"character_cosmetics"`
+	// AutoDeleteRawLogsAtStorageCapacity allows Chronicle to remove the oldest
+	// unpinned, successfully parsed raw logs when a new upload needs space.
+	AutoDeleteRawLogsAtStorageCapacity bool `json:"auto_delete_raw_logs_at_storage_capacity"`
 	// RawLogRetentionHours is how long to keep raw log files in object storage
 	// after upload. nil means keep forever.
 	RawLogRetentionHours *int32 `json:"raw_log_retention_hours"`
@@ -64,6 +67,8 @@ type Preferences struct {
 
 // UpdatePreferencesRequest is the request body for updating user preferences.
 type UpdatePreferencesRequest struct {
+	// AutoDeleteRawLogsAtStorageCapacity controls quota cleanup. nil means no change.
+	AutoDeleteRawLogsAtStorageCapacity *bool `json:"auto_delete_raw_logs_at_storage_capacity"`
 	// RawLogRetentionHours controls raw log file retention. nil = no change, 0 = keep forever.
 	RawLogRetentionHours *int32 `json:"raw_log_retention_hours"`
 	// CharacterCosmetics controls how character cosmetics are displayed. nil means no change.
@@ -71,16 +76,17 @@ type UpdatePreferencesRequest struct {
 }
 
 type User struct {
-	ID                     uuid.UUID `json:"id"`
-	Username               string    `json:"username"`
-	Email                  string    `json:"email"`
-	DiscordID              string    `json:"discord_id,omitempty"`
-	Roles                  []string  `json:"roles"`
-	CreatedAt              time.Time `json:"created_at"`
-	UpdatedAt              time.Time `json:"updated_at"`
-	MaxStorageBytes        int64     `json:"max_storage_bytes"`
-	MaxStorageBytesUpdated time.Time `json:"max_storage_bytes_updated"`
-	ConsumedStorageBytes   int64     `json:"consumed_storage_bytes"`
+	ID                                 uuid.UUID `json:"id"`
+	Username                           string    `json:"username"`
+	Email                              string    `json:"email"`
+	DiscordID                          string    `json:"discord_id,omitempty"`
+	Roles                              []string  `json:"roles"`
+	CreatedAt                          time.Time `json:"created_at"`
+	UpdatedAt                          time.Time `json:"updated_at"`
+	MaxStorageBytes                    int64     `json:"max_storage_bytes"`
+	MaxStorageBytesUpdated             time.Time `json:"max_storage_bytes_updated"`
+	ConsumedStorageBytes               int64     `json:"consumed_storage_bytes"`
+	AutoDeleteRawLogsAtStorageCapacity bool      `json:"auto_delete_raw_logs_at_storage_capacity"`
 	// RawLogRetentionHours is how long to keep raw log files. nil means keep forever.
 	RawLogRetentionHours *int32 `json:"raw_log_retention_hours"`
 }

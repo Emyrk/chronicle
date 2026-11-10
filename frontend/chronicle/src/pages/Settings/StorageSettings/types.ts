@@ -28,6 +28,8 @@ export interface LogRowViewModel {
   deletedFileCount: number;
   encounterCount: number;
   note: string | null;
+  /** Raw files are protected from automatic storage cleanup. */
+  pinned: boolean;
   isSelected: boolean;
   isExpanded: boolean;
   rawDeleteDisabled: boolean;
@@ -43,4 +45,5 @@ export type PendingAction =
   | null;
 
 export type SortField = "date" | "raw" | "parsed";
+export type PinFilter = "all" | "pinned" | "unpinned";
 export type SortDirection = "asc" | "desc";

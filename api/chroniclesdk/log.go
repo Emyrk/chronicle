@@ -47,6 +47,8 @@ type WoWLogGroup struct {
 	UploadSource string             `json:"upload_source"`
 	Unlisted     bool               `json:"unlisted"`
 
+	RawFilesPinned bool `json:"raw_files_pinned"`
+
 	InvalidatedAt *time.Time `json:"invalidated_at,omitempty"`
 	InvalidReason string     `json:"invalid_reason,omitempty"`
 
@@ -57,6 +59,10 @@ type WoWLogGroup struct {
 	// streams (log_instance_events.events) for this log group. It does not
 	// count against the owner's raw storage allowance.
 	ParsedBytes int64 `json:"parsed_bytes"`
+}
+
+type UpdateRawFilesPinnedRequest struct {
+	Pinned bool `json:"pinned"`
 }
 
 type WoWLogFile struct {

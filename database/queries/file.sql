@@ -59,6 +59,13 @@ VALUES
 RETURNING *
 ;
 
+-- name: UpdateWoWLogGroupRawFilesPinned :one
+UPDATE wow_log_groups
+SET raw_files_pinned = @raw_files_pinned,
+    updated_at = NOW()
+WHERE id = @id
+RETURNING *;
+
 -- name: UpdateWoWLogGroupFlavor :exec
 -- Persists the resolved flavor back onto a log group after dataset-based
 -- resolution, so subsequent reparses use the correct value.
@@ -721,6 +728,30 @@ GROUP BY
   u.username
 ;
 
+-- name: ListRawLogGroupsForQuotaCleanup :many
+-- Oldest successfully parsed, unpinned groups are eligible for automatic raw-file cleanup.
+SELECT wlg.id
+FROM wow_log_groups wlg
+JOIN parsed_log_group plg ON plg.id = wlg.id
+  AND plg.parse_generation = wlg.parse_generation
+  AND plg.finalized_at IS NOT NULL
+WHERE wlg.owner = @owner
+  AND (@exclude_log_group_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR wlg.id <> @exclude_log_group_id)
+  AND NOT wlg.raw_files_pinned
+  AND (
+    EXISTS (
+      SELECT 1 FROM log_file lf
+      WHERE lf.wow_log_id = wlg.id
+        AND lf.storage_deleted_at IS NULL
+    )
+    OR EXISTS (
+      SELECT 1 FROM log_group_artifacts artifact
+      WHERE artifact.log_group_id = wlg.id
+        AND artifact.storage_deleted_at IS NULL
+    )
+  )
+ORDER BY wlg.created_at ASC, wlg.id ASC;
+
 -- name: GetExpiredRawLogGroups :many
 -- Returns log groups whose raw files are past their owner's retention window.
 -- Only considers users who have set a retention policy (non-NULL).
@@ -731,6 +762,7 @@ JOIN log_file lf ON lf.wow_log_id = wlg.id
 JOIN users u ON u.id = lf.owner
 WHERE
   u.raw_log_retention_hours IS NOT NULL
+  AND NOT wlg.raw_files_pinned
   AND lf.storage_deleted_at IS NULL
   AND lf.created_at < NOW() - make_interval(hours => u.raw_log_retention_hours)
 LIMIT $1

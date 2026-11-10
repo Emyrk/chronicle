@@ -68,3 +68,21 @@ describe("UploadView Sidekick storage", () => {
     expect(markup).not.toContain("ChronicleSidekickBridgeWoTLK.lua");
   });
 });
+
+describe("UploadView cleanup", () => {
+  const cleanup = { deleted_log_ids: ["older-log"] };
+
+  it("shows cleanup after a successful upload", () => {
+    const markup = render({ success: { message: "Uploaded", logId: "new-log", cleanup } });
+    expect(markup).toContain("Upload Successful");
+    expect(markup).toContain('href="/logs/older-log"');
+    expect(markup).toContain("Parsed reports are preserved.");
+  });
+
+  it("shows cleanup even when an upload fails", () => {
+    const markup = render({ error: { message: "Upload rejected", cleanup } });
+    expect(markup).toContain("Upload rejected");
+    expect(markup).toContain('href="/logs/older-log"');
+    expect(markup).toContain("Parsed reports are preserved.");
+  });
+});

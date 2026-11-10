@@ -202,6 +202,17 @@ func (a *API) UpdateMyPreferences(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.AutoDeleteRawLogsAtStorageCapacity != nil {
+		_, err := a.Opts.Zed.UpdateUserAutoDeleteRawLogsAtStorageCapacity(ctx, database.UpdateUserAutoDeleteRawLogsAtStorageCapacityParams{
+			ID:      state.Claims.Subject,
+			Enabled: *req.AutoDeleteRawLogsAtStorageCapacity,
+		})
+		if err != nil {
+			httpapi.InternalServerError(w, err)
+			return
+		}
+	}
+
 	if req.RawLogRetentionHours != nil {
 		val := *req.RawLogRetentionHours
 		var retentionHours pgtype.Int4
@@ -245,8 +256,9 @@ func (a *API) UpdateMyPreferences(w http.ResponseWriter, r *http.Request) {
 func userPreferences(user database.ChronicleUser) chroniclesdk.Preferences {
 	prefs := chroniclesdk.Preferences{
 		// Should allow people to disable hints if they want, but for now we'll just enable them by default
-		HelpfulHints:       true,
-		CharacterCosmetics: chroniclesdk.CharacterCosmeticsDisplayMode(user.CharacterCosmetics),
+		HelpfulHints:                       true,
+		AutoDeleteRawLogsAtStorageCapacity: user.AutoDeleteRawLogsAtStorageCapacity,
+		CharacterCosmetics:                 chroniclesdk.CharacterCosmeticsDisplayMode(user.CharacterCosmetics),
 	}
 	if user.RawLogRetentionHours.Valid {
 		v := user.RawLogRetentionHours.Int32

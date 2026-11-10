@@ -13,6 +13,7 @@ function user(id: string, username: string, email = `${username.toLowerCase()}@e
     max_storage_bytes: 0,
     max_storage_bytes_updated: "2026-01-01T00:00:00Z",
     consumed_storage_bytes: 0,
+    auto_delete_raw_logs_at_storage_capacity: true,
     raw_log_retention_hours: null,
   };
 }
