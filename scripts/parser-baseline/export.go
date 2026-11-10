@@ -22,11 +22,11 @@ var unsupportedTables = []string{
 	"log_instance_units", "log_instance_players", "log_instance_encounter_hostiles",
 	"log_instance_encounter_phases", "log_instance_raid_group_snapshots",
 	"guilds", "game_players", "game_player_gear_history", "instance_loot",
-	"instance_overview_metrics", "instance_speedruns", "encounter_dps_rankings", "talent_builds",
-	"parse_score_memberships", "time_parse_clear_time_memberships", "time_parse_boss_kill_memberships",
+	"instance_overview_metrics", "instance_speedruns",
 }
 
 type artifact struct {
+	Rankings          rankingOutput       `json:"ranking_parity"`
 	Schema            string              `json:"schema"`
 	Coverage          string              `json:"coverage"`
 	Allowlist         map[string][]string `json:"allowlist"`
@@ -68,10 +68,14 @@ func export(ctx context.Context, db database.Store, logID uuid.UUID, generation 
 			return err
 		}
 		result = &artifact{
-			Schema: "chronicle-parser-baseline-v1", Coverage: "partial: instances, encounters, decoded events only",
+			Schema: "chronicle-parser-baseline-v2", Coverage: "partial: instances, encounters, decoded events, rankings, synchronous memberships and referenced talents",
 			Allowlist:         map[string][]string{"log_instances": instanceFields, "log_instance_encounters": encounterFields, "log_instance_events": {"instance_id", "type", "decoded_encounter_segments"}},
 			UnsupportedTables: unsupportedTables, Instances: make([]instanceOutput, 0, len(rows)),
 		}
+		for table, fields := range map[string][]string{"encounter_dps_rankings": rankingFields, "talent_builds": talentFields, "parse_score_memberships": parseMembershipFields, "time_parse_clear_time_memberships": clearMembershipFields, "time_parse_boss_kill_memberships": bossMembershipFields} {
+			result.Allowlist[table] = fields
+		}
+		allEncounters := make(map[uuid.UUID]string)
 		slices.SortFunc(rows, func(a, b database.LogInstancesGuild) int { return strings.Compare(keys[a.ID], keys[b.ID]) })
 		for _, row := range rows {
 			encounters, err := tx.EncountersByInstanceID(ctx, row.ID)
@@ -84,6 +88,9 @@ func export(ctx context.Context, db database.Store, logID uuid.UUID, generation 
 			encounterIDs, err := encounterKeys(encounters, keys[row.ID])
 			if err != nil {
 				return err
+			}
+			for id, key := range encounterIDs {
+				allEncounters[id] = key
 			}
 			slices.SortFunc(encounters, func(a, b database.LogInstanceEncounter) int {
 				return strings.Compare(encounterIDs[a.ID], encounterIDs[b.ID])
@@ -105,7 +112,12 @@ func export(ctx context.Context, db database.Store, logID uuid.UUID, generation 
 			}
 			result.Instances = append(result.Instances, out)
 		}
-		return nil
+		data, err := loadRankings(ctx, tx, logID)
+		if err != nil {
+			return err
+		}
+		result.Rankings, err = canonicalRankings(data, logID, rows, keys, allEncounters)
+		return err
 	}, &pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	return result, err
 }

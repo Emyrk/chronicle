@@ -94,7 +94,7 @@ fields and ambiguous canonical identities fail. The underlying runner's nil
 return on stale-generation abort is **not** treated as publication proof. Empty
 or encounter-free logs are intentionally unsupported in this first slice.
 
-## Exact v1 allowlist
+## Exact v2 allowlist
 
 The artifact repeats its schema, partial-coverage warning and field allowlists.
 
@@ -125,6 +125,54 @@ version bookkeeping, publication wall-clock time, invalidation metadata and
 joined guild/tenant presentation fields. These omissions are explicit, not a
 generic timestamp/duration scrubber.
 
+## Ranking parity coverage (v2)
+
+The `ranking_parity` section exports these tables with explicit field allowlists
+in `rankings.go` and in each artifact:
+
+- `encounter_dps_rankings`: every column except `created_at` and
+  `log_hashed_slug`. This includes all damage/healing/absorb totals, unranked
+  damage, exact `duration_secs`/DPS/HPS, death/alive evidence, nullable item level,
+  class/spec/sub-spec/role/level, difficulty, names and `killed_at`.
+- `parse_score_memberships`, `time_parse_clear_time_memberships`,
+  `time_parse_boss_kill_memberships`: every column. Policy/query versions, tenant,
+  representative instance, logical run, player/spec dimensions, exact scores,
+  semantic timestamps and duration milliseconds remain visible.
+- Referenced `talent_builds`: every column except `created_at`, including dataset,
+  class, full layout, ordered talent summary, spec and nullable sub-spec.
+
+Generated row IDs become natural-key strings. Talent identity uses
+`(dataset_id, player_class, talent_layout)`; guild references use `(realm_id,
+name)` after looking up the actual referenced guild, not a denormalized name.
+Guild table coverage remains unsupported apart from this identity lookup.
+Instance/encounter references use the same mappings as the event export. Ranking
+identity uses instance, encounter, encounter name and player; trash rankings also
+include spec/sub-spec. Membership identity uses tenant, policy/query version and
+logical run, plus encounter/player where applicable. The selected log-group ID
+becomes `log-group`. Missing, ambiguous or inconsistent references fail closed.
+
+Queries include memberships for **all affected logical runs**, even when the
+representative belongs to another seeded log group. This version rejects such
+external representatives and duplicate-run anchors outside the exported group,
+rather than silently omitting their memberships or retaining unstable UUIDs.
+Use a fixture without cross-log duplicate groups for this slice. Full duplicate
+closure export remains a follow-up. Local duplicate anchors use their canonical
+instance key. Reference dataset/realm/tenant UUIDs remain unchanged and must
+match between fixtures.
+
+Rows are sorted by their semantic keys, never by random UUIDs. No event order is
+changed. SQL bigint values are re-encoded as exact JSON numbers; float64 evidence
+uses its exact round-trip representation without rounding. Empty ranking and
+membership arrays are permitted (unlisted/unrankable/zero-output cases can be
+legitimate), and any row-count/content difference is visible in the artifact.
+Publication checks alone cannot certify that an expected nonempty ranking cohort
+was produced: the baseline fixture must establish that expectation.
+
+The schema is now `chronicle-parser-baseline-v2`. Compare the **whole artifact**,
+including version, coverage, allowlists and unsupported-table inventory. `diff`
+returns nonzero for different coverage; never compare an intersection or strip
+coverage metadata. v1 and v2 artifacts are not comparable as equal coverage.
+
 ## Unsupported synchronous outputs
 
 All other tables are unsupported, notably:
@@ -138,9 +186,7 @@ All other tables are unsupported, notably:
   `combatlog/parser/common/loot/loot.go`, via `database/queries/armory.sql` and
   `database/queries/loot.sql`. `world_item_template` is a reference lookup for
   item metadata and low-quality loot filtering, not a parser output table.
-- `instance_overview_metrics`, `instance_speedruns`, `encounter_dps_rankings`,
-  `talent_builds`, `parse_score_memberships`,
-  `time_parse_clear_time_memberships`, `time_parse_boss_kill_memberships`.
+- `instance_overview_metrics`, `instance_speedruns`.
 
 Async computed scores, ranking-run refresh results and notification/River state
 are deliberately excluded. No retired `rating_*` schema is assumed. Extending
@@ -157,4 +203,6 @@ golangci-lint run ./scripts/parser-baseline/... ./chronicle/...
 Tests use isolated `dbtestutil` databases and cover missing/staged/stale outputs,
 instance/encounter/stream absence, scope isolation, canonical generated IDs,
 precision-sensitive timestamps/offsets/durations, malformed protobuf and local
-DB validation. No real production fixture is included or downloaded.
+DB validation. Ranking tests additionally cover randomized generated identities,
+reference failures, exact ranking evidence, all three membership refresh/read
+paths, talent references and affected-run scope isolation. No real production fixture is included or downloaded.

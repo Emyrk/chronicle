@@ -39,6 +39,15 @@ type sqlcQuerier interface {
 	// most batch_size primary-key entries, rather than searching an unbounded
 	// suffix for NULLs. Existing explicit Normal (empty string) is never overwritten.
 	BackfillEncounterDifficultyBatch(ctx context.Context, arg BackfillEncounterDifficultyBatchParams) (BackfillEncounterDifficultyBatchRow, error)
+	BaselineBossMemberships(ctx context.Context, logGroupID uuid.UUID) ([]TimeParseBossKillMembership, error)
+	BaselineClearMemberships(ctx context.Context, logGroupID uuid.UUID) ([]TimeParseClearTimeMembership, error)
+	// Read-only scoped queries for temporary parser baseline tooling. Membership
+	// refresh can select a representative outside this log group: include affected
+	// runs, not only rows whose representative belongs to the selected group.
+	BaselineEncounterRankings(ctx context.Context, logGroupID uuid.UUID) ([]EncounterDpsRanking, error)
+	BaselineParseMemberships(ctx context.Context, logGroupID uuid.UUID) ([]ParseScoreMembership, error)
+	BaselineRankingGuilds(ctx context.Context, logGroupID uuid.UUID) ([]Guild, error)
+	BaselineTalentBuilds(ctx context.Context, logGroupID uuid.UUID) ([]TalentBuild, error)
 	BulkUpsertGuildPagePanels(ctx context.Context, dollar_1 []byte) error
 	BumpLeaderboardHighlightGeneration(ctx context.Context, tenantID uuid.UUID) error
 	CancelEventRepairOperation(ctx context.Context, arg CancelEventRepairOperationParams) (EventRepairOperation, error)
@@ -133,19 +142,7 @@ type sqlcQuerier interface {
 	CountUserPanelLayoutsTotal(ctx context.Context, userID uuid.NullUUID) (int32, error)
 	CountUserTalentBuilds(ctx context.Context, arg CountUserTalentBuildsParams) (int64, error)
 	CreateEventRepairOperation(ctx context.Context, arg CreateEventRepairOperationParams) (EventRepairOperation, error)
-	// ============================================================
-	// Gear Lists
-	// ============================================================
-	CreateGearList(ctx context.Context, arg CreateGearListParams) (GearList, error)
-	// ============================================================
-	// Gear Progressions
-	// ============================================================
-	CreateGearProgression(ctx context.Context, arg CreateGearProgressionParams) (GearProgression, error)
-	// ============================================================
-	// Stat Weights
-	// ============================================================
-	CreateGearStatWeight(ctx context.Context, arg CreateGearStatWeightParams) (GearStatWeight, error)
-	// Discord Integration
+	// 	// Discord Integration
 	CreateGuildDiscordInstallState(ctx context.Context, arg CreateGuildDiscordInstallStateParams) (GuildDiscordInstallState, error)
 	// Guild Join Requests
 	CreateGuildJoinRequest(ctx context.Context, arg CreateGuildJoinRequestParams) (GuildJoinRequest, error)
