@@ -25,14 +25,14 @@ func TestRankCareerBoard(t *testing.T) {
 	f := func(v float64) *float64 { return &v }
 	realm := uuid.New()
 	entries := []serviceratings.CareerBoardEntry{
-		{RealmID: realm, PlayerGUID: "a", Mastery: f(40), Peak: f(70), Renown: 10},
-		{RealmID: realm, PlayerGUID: "b", Mastery: f(55), Peak: f(60), Renown: 300},
-		{RealmID: realm, PlayerGUID: "c", Renown: 900}, // Renown only
+		{RealmID: realm, SubjectID: "a", Mastery: f(40), Peak: f(70), Renown: 10},
+		{RealmID: realm, SubjectID: "b", Mastery: f(55), Peak: f(60), Renown: 300},
+		{RealmID: realm, SubjectID: "c", Renown: 900}, // Renown only
 	}
 	ids := func(sort string) []string {
 		var out []string
 		for _, e := range rankCareerBoard(entries, sort) {
-			out = append(out, e.PlayerGUID)
+			out = append(out, e.SubjectID)
 		}
 		return out
 	}

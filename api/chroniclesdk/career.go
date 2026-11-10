@@ -62,9 +62,10 @@ type CareerIssue struct {
 	Code           string `json:"code"`
 }
 
-// CareerLeaderboardResponse ranks characters by career Mastery, Peak, and Renown.
-// Mastery and Peak come from each character's spec with the highest Mastery;
-// Renown adds up every spec. Status explains unavailable Mastery and Peak.
+// CareerLeaderboardResponse ranks characters or guilds by career Mastery, Peak,
+// and Renown. A character's Mastery and Peak come from its spec with the
+// highest Mastery (or the filtered spec); Renown adds up every spec. Guilds use
+// kill-time Mastery and Peak. Status explains unavailable Mastery and Peak.
 type CareerLeaderboardResponse struct {
 	Status  string                 `json:"status"`
 	Mastery CareerLeaderboardBoard `json:"mastery"`
@@ -72,23 +73,51 @@ type CareerLeaderboardResponse struct {
 	Renown  CareerLeaderboardBoard `json:"renown"`
 }
 
-// CareerLeaderboardBoard is the top of one ranking; Total counts every ranked character.
+// CareerLeaderboardBoard is the top of one ranking; Total counts every ranked subject.
 type CareerLeaderboardBoard struct {
 	Total   int                      `json:"total"`
 	Entries []CareerLeaderboardEntry `json:"entries"`
 }
 
+// CareerLeaderboardEntry is a character (subject_id is its GUID) or a guild
+// (subject_id is the guild ID). Class, spec, and guild_name are characters only;
+// logo_url is guilds only.
 type CareerLeaderboardEntry struct {
+	SubjectID     string   `json:"subject_id"`
+	Name          string   `json:"name"`
 	RealmID       string   `json:"realm_id"`
 	RealmName     string   `json:"realm_name"`
-	PlayerGUID    string   `json:"player_guid"`
-	PlayerName    string   `json:"player_name"`
 	PlayerClass   string   `json:"player_class"`
-	GuildName     string   `json:"guild_name"`
 	PlayerSpec    string   `json:"player_spec"`
 	PlayerSubSpec string   `json:"player_sub_spec"`
+	GuildName     string   `json:"guild_name"`
+	LogoURL       string   `json:"logo_url"`
 	ChosenMetric  *string  `json:"chosen_metric"`
 	Mastery       *float64 `json:"mastery"`
 	Peak          *float64 `json:"peak"`
 	Renown        float64  `json:"renown"`
+	// Form, Floor, and kill progress are null until the subject's inputs are
+	// refreshed with them.
+	Form         *float64                `json:"form"`
+	Floor        *float64                `json:"floor"`
+	BossesKilled *int64                  `json:"bosses_killed"`
+	Bosses       *int64                  `json:"bosses"`
+	Raids        []CareerLeaderboardRaid `json:"raids"`
+}
+
+// CareerLeaderboardRaid is one weighted raid behind an entry's Mastery and Peak;
+// raids without kills are included at zero.
+type CareerLeaderboardRaid struct {
+	InstanceName   string  `json:"instance_name"`
+	DifficultyName string  `json:"difficulty_name"`
+	MaxPlayers     int     `json:"max_players"`
+	Weight         float64 `json:"weight"`
+	Mastery        float64 `json:"mastery"`
+	Peak           float64 `json:"peak"`
+	Kills          int64   `json:"kills"`
+	// Form, Floor, and BossesKilled are null until the inputs carry them.
+	Form         *float64 `json:"form"`
+	Floor        *float64 `json:"floor"`
+	BossesKilled *int64   `json:"bosses_killed"`
+	Bosses       int64    `json:"bosses"`
 }

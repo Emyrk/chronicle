@@ -78,6 +78,34 @@ func TestCareerUnavailableAndGuild(t *testing.T) {
 	require.Equal(t, "no_active_raids", ReduceCareer(pool, inputs, "hps").PerformanceStatus)
 }
 
+func TestCareerReductionParts(t *testing.T) {
+	t.Parallel()
+	a := leaderboardconfig.CareerKey{Instance: "a"}
+	b := leaderboardconfig.CareerKey{Instance: "b"}
+	w1, w3 := 1.0, 3.0
+	pool := leaderboardconfig.CareerPool{Variants: []leaderboardconfig.CareerVariant{
+		{CareerKey: a, Active: true, IncludeAverage: true, Weight: &w1, AverageBosses: []string{"x", "y"}},
+		{CareerKey: b, Active: true, IncludeAverage: true, Weight: &w3, AverageBosses: []string{"z"}},
+	}}
+	inputs := CareerInputs{Raids: []CareerRaidInput{
+		{CareerKey: a, Metric: "dps", Mastery: 40, Peak: 60, Form: 40, Floor: 20, EligibleKills: 4, BossesKilled: 2, Parts: true},
+	}}
+	got := ReduceCareer(pool, inputs, "dps")
+	require.Equal(t, "ready", got.PerformanceStatus)
+	// Raid b has no kills: it counts as zero with weight 3.
+	require.InDelta(t, 40.0/4, *got.Form, 1e-9)
+	require.InDelta(t, 20.0/4, *got.Floor, 1e-9)
+	require.Equal(t, int64(2), *got.BossesKilled)
+	require.Equal(t, int64(3), *got.Bosses)
+
+	// Inputs from before Form/Floor existed leave them unknown.
+	inputs.Raids[0].Parts = false
+	got = ReduceCareer(pool, inputs, "dps")
+	require.NotNil(t, got.Mastery)
+	require.Nil(t, got.Form)
+	require.Nil(t, got.BossesKilled)
+}
+
 func TestCareerStoredSummaryRenownOnly(t *testing.T) {
 	t.Parallel()
 	key := leaderboardconfig.CareerKey{Instance: "raid"}

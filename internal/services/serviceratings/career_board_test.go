@@ -23,38 +23,68 @@ func TestCombineCareerBoard(t *testing.T) {
 	}}}
 	computed := pgtype.Timestamptz{Time: time.Now(), Valid: true}
 	realm := uuid.New()
-	row := func(guid, spec string, mastery float64, kills int64) database.LeaderboardCareerSubject {
+	// dps/hps are each spec's Mastery per metric (0 = no evidence); the higher one is chosen.
+	row := func(kind, id, spec string, dps, hps float64, kills int64) database.LeaderboardCareerSubject {
 		inputs := CareerInputs{Kills: []CareerBossKills{{CareerKey: key, Boss: "Boss", Count: kills}}}
-		metric := ""
-		if mastery > 0 {
-			metric = "dps"
-			inputs.Raids = []CareerRaidInput{{CareerKey: key, Metric: "dps", Mastery: mastery, Peak: mastery + 10, EligibleKills: kills}}
+		chosen := ""
+		for _, m := range []struct {
+			metric string
+			value  float64
+		}{{"dps", dps}, {"hps", hps}} {
+			if m.value > 0 {
+				inputs.Raids = append(inputs.Raids, CareerRaidInput{CareerKey: key, Metric: m.metric, Mastery: m.value, Peak: m.value + 10, EligibleKills: kills})
+				if chosen == "" || (m.metric == "hps" && hps > dps) {
+					chosen = m.metric
+				}
+			}
+		}
+		if kind == "guild" {
+			chosen = "kill_time"
+			inputs.Raids = []CareerRaidInput{{CareerKey: key, Metric: "kill_time", Mastery: dps, Peak: dps + 10, EligibleKills: kills}}
 		}
 		raw, err := json.Marshal(inputs)
 		require.NoError(t, err)
-		return database.LeaderboardCareerSubject{RealmID: realm, SubjectID: guid, PlayerClass: "PRIEST", PlayerSpec: spec, ChosenMetric: metric, Inputs: raw, ComputedAt: computed}
+		return database.LeaderboardCareerSubject{SubjectKind: kind, RealmID: realm, SubjectID: id, PlayerClass: "PRIEST", PlayerSpec: spec, ChosenMetric: chosen, Inputs: raw, ComputedAt: computed}
+	}
+	players := []database.LeaderboardCareerSubject{
+		// a: Shadow has the best Mastery; Unknown's higher Mastery never qualifies.
+		row("player", "a", "Discipline", 30, 45, 3),
+		row("player", "a", "Shadow", 50, 0, 2),
+		row("player", "a", "Unknown", 90, 0, 1),
+		// b: Renown only, no Mastery anywhere.
+		row("player", "b", "Holy", 0, 0, 4),
 	}
 
-	got, err := combineCareerBoard(pool, []database.LeaderboardCareerSubject{
-		// a: Shadow has the best Mastery; Unknown's higher Mastery never qualifies.
-		row("a", "Discipline", 30, 3),
-		row("a", "Shadow", 50, 2),
-		row("a", "Unknown", 90, 1),
-		// b: Renown only, no Mastery anywhere.
-		row("b", "Holy", 0, 4),
-	})
+	got, err := combineCareerBoard(pool, players, CareerBoardFilter{})
 	require.NoError(t, err)
 	require.Len(t, got, 2)
+	require.Equal(t, "Shadow", got[0].PlayerSpec)
+	require.Equal(t, 50.0, *got[0].Mastery)
+	require.Equal(t, 60.0, *got[0].Peak)
+	require.Equal(t, "dps", *got[0].ChosenMetric)
+	require.Len(t, got[0].Contributions, 1)
+	require.Equal(t, 2.0*(3+2+1), got[0].Renown, "Renown adds every spec, Unknown included")
+	require.Nil(t, got[1].Mastery)
+	require.Equal(t, 8.0, got[1].Renown)
 
-	a := got[0]
-	require.Equal(t, "Shadow", a.PlayerSpec)
-	require.Equal(t, 50.0, *a.Mastery)
-	require.Equal(t, 60.0, *a.Peak)
-	require.Equal(t, "dps", *a.ChosenMetric)
-	require.Equal(t, 2.0*(3+2+1), a.Renown, "Renown adds every spec, Unknown included")
+	// HPS only: Discipline's healing (45) is the only HPS evidence.
+	got, err = combineCareerBoard(pool, players, CareerBoardFilter{Metric: "hps"})
+	require.NoError(t, err)
+	require.Equal(t, "Discipline", got[0].PlayerSpec)
+	require.Equal(t, 45.0, *got[0].Mastery)
+	require.Equal(t, "hps", *got[0].ChosenMetric)
 
-	b := got[1]
-	require.Nil(t, b.Mastery)
-	require.Empty(t, b.PlayerSpec)
-	require.Equal(t, 8.0, b.Renown)
+	// A spec filter takes Mastery from that spec and keeps only characters who played it.
+	got, err = combineCareerBoard(pool, players, CareerBoardFilter{Spec: "Discipline"})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	require.Equal(t, 45.0, *got[0].Mastery, "Discipline's chosen metric is HPS")
+	require.Equal(t, 12.0, got[0].Renown, "Renown still adds every spec")
+
+	// Guilds have one specless row each.
+	got, err = combineCareerBoard(pool, []database.LeaderboardCareerSubject{row("guild", uuid.NewString(), "", 70, 0, 5)}, CareerBoardFilter{Guilds: true})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	require.Equal(t, 70.0, *got[0].Mastery)
+	require.Equal(t, "kill_time", *got[0].ChosenMetric)
 }

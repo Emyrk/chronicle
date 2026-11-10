@@ -11955,6 +11955,46 @@ func (q *sqlQuerier) LandingPositionalInstances(ctx context.Context, limitCount 
 	return items, nil
 }
 
+const listLeaderboardCareerGuildNames = `-- name: ListLeaderboardCareerGuildNames :many
+SELECT g.id, g.name,
+ COALESCE((SELECT NULLIF(r.name, '') FROM wow_server_realms r WHERE r.id = g.realm_id), 'Unknown realm')::text AS realm_name,
+ COALESCE((SELECT gp.theme->>'logo_url' FROM guild_pages gp WHERE gp.guild_id = g.id), '')::text AS logo_url
+FROM guilds g WHERE g.id = ANY($1::uuid[])
+`
+
+type ListLeaderboardCareerGuildNamesRow struct {
+	ID        uuid.UUID `db:"id" json:"id"`
+	Name      string    `db:"name" json:"name"`
+	RealmName string    `db:"realm_name" json:"realm_name"`
+	LogoUrl   string    `db:"logo_url" json:"logo_url"`
+}
+
+// Display metadata for one page of guilds, looked up after ranking.
+func (q *sqlQuerier) ListLeaderboardCareerGuildNames(ctx context.Context, guildIds []uuid.UUID) ([]ListLeaderboardCareerGuildNamesRow, error) {
+	rows, err := q.db.Query(ctx, listLeaderboardCareerGuildNames, guildIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLeaderboardCareerGuildNamesRow
+	for rows.Next() {
+		var i ListLeaderboardCareerGuildNamesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.RealmName,
+			&i.LogoUrl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLeaderboardCareerPlayerNames = `-- name: ListLeaderboardCareerPlayerNames :many
 SELECT ids.realm_id::uuid AS realm_id, ids.subject_id::text AS subject_id,
  COALESCE(p.name, ids.subject_id)::text AS player_name,
@@ -12008,22 +12048,30 @@ func (q *sqlQuerier) ListLeaderboardCareerPlayerNames(ctx context.Context, arg L
 	return items, nil
 }
 
-const listLeaderboardCareerPlayerSubjects = `-- name: ListLeaderboardCareerPlayerSubjects :many
+const listLeaderboardCareerSubjects = `-- name: ListLeaderboardCareerSubjects :many
 SELECT tenant_id, subject_kind, realm_id, subject_id, player_class, player_spec, player_sub_spec, chosen_metric, inputs, pool_fingerprint, computed_at FROM leaderboard_career_subjects
-WHERE tenant_id = $1::uuid AND subject_kind = 'player'
- AND ($2::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR realm_id = $2::uuid)
+WHERE tenant_id = $1::uuid AND subject_kind = $2::text
+ AND ($3::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR realm_id = $3::uuid)
+ AND ($4::text = '' OR player_class = $4::text)
 ORDER BY realm_id, subject_id, player_class, player_spec, player_sub_spec
 `
 
-type ListLeaderboardCareerPlayerSubjectsParams struct {
+type ListLeaderboardCareerSubjectsParams struct {
 	TenantID    uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	SubjectKind string    `db:"subject_kind" json:"subject_kind"`
 	RealmFilter uuid.UUID `db:"realm_filter" json:"realm_filter"`
+	PlayerClass string    `db:"player_class" json:"player_class"`
 }
 
-// Every published player career row for the tenant. Mastery and Peak are
-// reduced in Go with the current weights, so rows carry inputs, not scores.
-func (q *sqlQuerier) ListLeaderboardCareerPlayerSubjects(ctx context.Context, arg ListLeaderboardCareerPlayerSubjectsParams) ([]LeaderboardCareerSubject, error) {
-	rows, err := q.db.Query(ctx, listLeaderboardCareerPlayerSubjects, arg.TenantID, arg.RealmFilter)
+// Every published career row of one subject kind for the tenant. Mastery and
+// Peak are reduced in Go with the current weights, so rows carry inputs.
+func (q *sqlQuerier) ListLeaderboardCareerSubjects(ctx context.Context, arg ListLeaderboardCareerSubjectsParams) ([]LeaderboardCareerSubject, error) {
+	rows, err := q.db.Query(ctx, listLeaderboardCareerSubjects,
+		arg.TenantID,
+		arg.SubjectKind,
+		arg.RealmFilter,
+		arg.PlayerClass,
+	)
 	if err != nil {
 		return nil, err
 	}

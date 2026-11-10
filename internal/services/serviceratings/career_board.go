@@ -2,6 +2,8 @@ package serviceratings
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -10,19 +12,39 @@ import (
 	"github.com/Emyrk/chronicle/internal/leaderboardconfig"
 )
 
-// CareerBoardEntry is one character on the overall career board. Mastery and
-// Peak come from the character's spec with the highest Mastery; Renown is the
-// sum across every spec, since each kill belongs to exactly one spec.
+// CareerBoardFilter scopes the overall career board.
+type CareerBoardFilter struct {
+	Realm uuid.UUID
+	// Guilds ranks guilds (kill-time Mastery and Peak) instead of characters.
+	Guilds bool
+	// Metric is "" for each spec's chosen metric, or "dps"/"hps" to score every
+	// spec with that metric. Characters only.
+	Metric string
+	// Class, Spec, and SubSpec narrow characters. A spec filter takes Mastery and
+	// Peak from that spec; Renown still adds up every spec.
+	Class, Spec, SubSpec string
+}
+
+// CareerBoardEntry is one character or guild on the overall career board.
+// For characters, Mastery and Peak come from the spec with the highest Mastery
+// (or the filtered spec); Renown is the sum across every spec, since each kill
+// belongs to exactly one spec.
 type CareerBoardEntry struct {
 	RealmID       uuid.UUID
-	PlayerGUID    string
+	SubjectID     string
 	PlayerClass   string
 	PlayerSpec    string
 	PlayerSubSpec string
 	ChosenMetric  *string
 	Mastery       *float64
 	Peak          *float64
+	Form          *float64
+	Floor         *float64
+	BossesKilled  *int64
+	Bosses        *int64
 	Renown        float64
+	// Contributions are the per-raid values behind Mastery and Peak.
+	Contributions []CareerContribution
 }
 
 type CareerBoard struct {
@@ -32,18 +54,23 @@ type CareerBoard struct {
 	Entries []CareerBoardEntry
 }
 
-// ReadCareerBoard reduces every published player career row with the current
-// weights and combines each character's specs. It computes on every call;
-// callers cache the response at the edge.
-func ReadCareerBoard(ctx context.Context, store database.Store, tenant, realm uuid.UUID) (CareerBoard, error) {
+// ReadCareerBoard reduces every published career row with the current weights
+// and combines each character's specs. It computes on every call; callers
+// cache the response at the edge.
+func ReadCareerBoard(ctx context.Context, store database.Store, tenant uuid.UUID, filter CareerBoardFilter) (CareerBoard, error) {
+	if filter.Metric != "" && filter.Metric != "dps" && filter.Metric != "hps" {
+		return CareerBoard{}, fmt.Errorf("unknown career metric %q", filter.Metric)
+	}
 	ctx, err := careerReadContext(ctx, tenant)
 	if err != nil {
 		return CareerBoard{}, err
 	}
 	var out CareerBoard
 	err = store.InTx(ctx, func(tx database.Store) error {
-		if err := requirePlayerCareerMode(ctx, tx, tenant); err != nil {
-			return err
+		if !filter.Guilds {
+			if err := requirePlayerCareerMode(ctx, tx, tenant); err != nil {
+				return err
+			}
 		}
 		pool, err := CareerConfiguration(ctx, tx, tenant)
 		if err != nil {
@@ -53,42 +80,68 @@ func ReadCareerBoard(ctx context.Context, store database.Store, tenant, realm uu
 		if !pool.AveragesReady() {
 			out.Status = ReduceCareer(pool, CareerInputs{}, "").PerformanceStatus
 		}
-		rows, err := tx.ListLeaderboardCareerPlayerSubjects(ctx, database.ListLeaderboardCareerPlayerSubjectsParams{TenantID: tenant, RealmFilter: realm})
+		kind, class := "player", filter.Class
+		if filter.Guilds {
+			kind, class = "guild", ""
+		}
+		rows, err := tx.ListLeaderboardCareerSubjects(ctx, database.ListLeaderboardCareerSubjectsParams{
+			TenantID: tenant, SubjectKind: kind, RealmFilter: filter.Realm, PlayerClass: class,
+		})
 		if err != nil {
 			return err
 		}
-		out.Entries, err = combineCareerBoard(pool, rows)
+		out.Entries, err = combineCareerBoard(pool, rows, filter)
 		return err
 	}, &pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	return out, err
 }
 
-// combineCareerBoard folds per-spec rows into one entry per character, in
-// first-seen order. Rows arrive sorted by character.
-func combineCareerBoard(pool leaderboardconfig.CareerPool, rows []database.LeaderboardCareerSubject) ([]CareerBoardEntry, error) {
-	type character struct {
+// careerBoardSummary scores one stored row: with its chosen metric, or with a
+// forced DPS/HPS metric when the board asks for one.
+func careerBoardSummary(pool leaderboardconfig.CareerPool, row database.LeaderboardCareerSubject, metric string) (CareerSummary, error) {
+	if metric == "" || row.SubjectKind == "guild" {
+		return careerStoredSummary(pool, row)
+	}
+	var inputs CareerInputs
+	if err := json.Unmarshal(row.Inputs, &inputs); err != nil {
+		return CareerSummary{}, fmt.Errorf("decode career inputs: %w", err)
+	}
+	return ReduceCareer(pool, inputs, metric), nil
+}
+
+// combineCareerBoard folds per-spec rows into one entry per subject, in
+// first-seen order. Rows arrive sorted by subject.
+func combineCareerBoard(pool leaderboardconfig.CareerPool, rows []database.LeaderboardCareerSubject, filter CareerBoardFilter) ([]CareerBoardEntry, error) {
+	type subject struct {
 		entry      CareerBoardEntry
 		bestRenown float64
 		hasBest    bool
+		// matched is true once a row passes the spec filter.
+		matched bool
 	}
 	var out []CareerBoardEntry
-	var current *character
+	var current *subject
 	flush := func() {
-		if current != nil && (current.hasBest || current.entry.Renown > 0) {
+		if current != nil && current.matched && (current.hasBest || current.entry.Renown > 0) {
 			out = append(out, current.entry)
 		}
 	}
 	for _, row := range rows {
-		summary, err := careerStoredSummary(pool, row)
+		summary, err := careerBoardSummary(pool, row, filter.Metric)
 		if err != nil {
 			return nil, err
 		}
-		if current == nil || current.entry.RealmID != row.RealmID || current.entry.PlayerGUID != row.SubjectID {
+		if current == nil || current.entry.RealmID != row.RealmID || current.entry.SubjectID != row.SubjectID {
 			flush()
-			current = &character{entry: CareerBoardEntry{RealmID: row.RealmID, PlayerGUID: row.SubjectID, PlayerClass: row.PlayerClass}}
+			current = &subject{entry: CareerBoardEntry{RealmID: row.RealmID, SubjectID: row.SubjectID, PlayerClass: row.PlayerClass}}
 		}
 		current.entry.Renown += summary.Renown
-		if !careerBoardBetter(summary, row.PlayerSpec, current.hasBest, current.entry.Mastery, current.bestRenown) {
+		if (filter.Spec != "" && row.PlayerSpec != filter.Spec) || (filter.SubSpec != "" && row.PlayerSubSpec != filter.SubSpec) {
+			continue
+		}
+		current.matched = true
+		guild := row.SubjectKind == "guild"
+		if !careerBoardBetter(summary, row.PlayerSpec, guild, current.hasBest, current.entry.Mastery, current.bestRenown) {
 			continue
 		}
 		current.hasBest = true
@@ -99,16 +152,19 @@ func combineCareerBoard(pool leaderboardconfig.CareerPool, rows []database.Leade
 		current.entry.ChosenMetric = summary.ChosenMetric
 		current.entry.Mastery = summary.Mastery
 		current.entry.Peak = summary.Peak
+		current.entry.Form, current.entry.Floor = summary.Form, summary.Floor
+		current.entry.BossesKilled, current.entry.Bosses = summary.BossesKilled, summary.Bosses
+		current.entry.Contributions = summary.Contributions
 	}
 	flush()
 	return out, nil
 }
 
-// careerBoardBetter reports whether a spec beats the character's current best:
-// higher Mastery, then more Renown. Specs without Mastery and Unknown specs
-// never qualify.
-func careerBoardBetter(candidate CareerSummary, spec string, hasBest bool, bestMastery *float64, bestRenown float64) bool {
-	if candidate.Mastery == nil || spec == "" || spec == "Unknown" {
+// careerBoardBetter reports whether a row beats the subject's current best:
+// higher Mastery, then more Renown. Rows without Mastery never qualify, nor do
+// a character's Unknown specs. Guild rows have no spec.
+func careerBoardBetter(candidate CareerSummary, spec string, guild, hasBest bool, bestMastery *float64, bestRenown float64) bool {
+	if candidate.Mastery == nil || (!guild && (spec == "" || spec == "Unknown")) {
 		return false
 	}
 	if !hasBest {
