@@ -54,6 +54,8 @@ const choiceLabel = (choice: RaidChoice) =>
 const TAB_LABELS: Record<EntityKind, Record<QuickTab, string>> = {
   character: { score: "Score", chart: "Chart" },
   guild: { score: "Clear", chart: "Chart" },
+  class: { score: "Stats", chart: "Stats" },
+  spec: { score: "Stats", chart: "Stats" },
   // Encounters and raids have one view (box plots), so their tabs are hidden.
   encounter: { score: "Kills", chart: "Kills" },
   raid: { score: "Clears", chart: "Clears" },

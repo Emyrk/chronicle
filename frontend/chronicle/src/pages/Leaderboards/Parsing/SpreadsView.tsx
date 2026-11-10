@@ -1,6 +1,7 @@
 import { useMemo } from "react"
 import { ChevronDown } from "lucide-react"
 import type { ParseScoreSpread } from "@/api/typesGenerated"
+import { classEntity, entityAttributes } from "@/components/EntityMenu/entity"
 import { Checkbox } from "@/components/ui/Checkbox/Checkbox"
 import {
   DropdownMenu,
@@ -87,6 +88,10 @@ export function SpreadsView({
               style={state === "shown" ? { borderColor: CLASS_CSS_VAR[playerClass] } : undefined}
             >
               <button
+                {...entityAttributes(classEntity(playerClass, className, [
+                  { label: "Specs", value: classSpreads.length.toLocaleString() },
+                  { label: "Kills", value: classSpreads.reduce((sum, spread) => sum + spread.sample_size, 0).toLocaleString() },
+                ]))}
                 type="button"
                 aria-pressed={state !== "hidden"}
                 title={state === "hidden" ? `Show ${className}` : `Hide ${className}`}

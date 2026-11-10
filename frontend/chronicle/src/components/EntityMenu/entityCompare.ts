@@ -45,6 +45,8 @@ export function useQuickRange(): [QuickRange, (range: QuickRange) => void] {
 export const KIND_LABEL: Record<EntityKind, { one: string; many: string }> = {
   character: { one: "player", many: "players" },
   guild: { one: "guild", many: "guilds" },
+  class: { one: "class", many: "classes" },
+  spec: { one: "spec", many: "specs" },
   encounter: { one: "encounter", many: "encounters" },
   raid: { one: "raid", many: "raids" },
 };
@@ -52,6 +54,8 @@ export const KIND_LABEL: Record<EntityKind, { one: string; many: string }> = {
 /** Same colors as the Alt outlines in index.css. */
 export function kindColor(kind: EntityKind): string {
   if (kind === "guild") return "var(--color-amber-400)";
+  if (kind === "class") return "var(--color-emerald-400)";
+  if (kind === "spec") return "var(--color-teal-400)";
   if (kind === "encounter") return "var(--color-rose-400)";
   if (kind === "raid") return "var(--color-violet-400)";
   return "var(--color-sky-400)";

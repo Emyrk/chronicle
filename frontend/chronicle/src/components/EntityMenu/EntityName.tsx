@@ -24,14 +24,14 @@ export function EntityName({
   /** Defaults to the entity's name. */
   children?: ReactNode;
 }) {
-  const color = entity.kind === "character" && entity.className ? getClassColorVar(entity.className) : undefined;
+  const color = "className" in entity && entity.className ? getClassColorVar(entity.className) : undefined;
   const props = {
     ...entityAttributes(entity),
     className: cn(link && "hover:underline", className),
     style: color ? { color, ...style } : style,
   };
   const content = children ?? entity.name;
-  if (!link) return <span {...props}>{content}</span>;
+  if (!link || entity.kind === "class" || entity.kind === "spec") return <span {...props}>{content}</span>;
   const to =
     entity.kind === "character"
       ? armoryUrl(entity)
