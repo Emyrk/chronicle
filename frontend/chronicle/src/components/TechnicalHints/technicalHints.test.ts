@@ -33,6 +33,8 @@ describe("static technical hints", () => {
     expect(byID.get("blog-armory-refresh")).toMatchObject({ title: "Player Armory", href: "/armory" });
     expect(byID.get("blog-talent-builder-refresh")).toMatchObject({ title: "Talent Calculator", href: "/talents" });
     expect(byID.get("blog-youtube-sync-refresh")).toMatchObject({ title: "YouTube Sync", href: "/youtube-sync-v3" });
+    expect(byID.get("tip-alt-mode")).toMatchObject({ title: "Alt mode", kind: "tip" });
+    expect(byID.get("tip-ratings")).toMatchObject({ title: "Ratings", href: "/ratings", action_label: "Explore ratings" });
     expect(byID.get("blog-consumables-panel")?.title).toBe("Consumable Tracking");
     expect(byID.has("blog-vehicle-support")).toBe(false);
   });
