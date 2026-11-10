@@ -1919,6 +1919,22 @@ type LeaderboardBossRenown struct {
 	Points        float64 `db:"points" json:"points"`
 }
 
+type LeaderboardCareerRenownFact struct {
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RunID             uuid.UUID `db:"run_id" json:"run_id"`
+	SourceInstanceID  uuid.UUID `db:"source_instance_id" json:"source_instance_id"`
+	RealmID           uuid.UUID `db:"realm_id" json:"realm_id"`
+	PlayerGuid        string    `db:"player_guid" json:"player_guid"`
+	PlayerClass       string    `db:"player_class" json:"player_class"`
+	PlayerSpec        string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string    `db:"player_sub_spec" json:"player_sub_spec"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	EncounterName     string    `db:"encounter_name" json:"encounter_name"`
+	SourceEncounterID uuid.UUID `db:"source_encounter_id" json:"source_encounter_id"`
+}
+
 type LeaderboardCareerVariant struct {
 	InstanceName    string   `db:"instance_name" json:"instance_name"`
 	DifficultyName  string   `db:"difficulty_name" json:"difficulty_name"`

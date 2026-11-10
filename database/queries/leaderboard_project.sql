@@ -85,6 +85,10 @@ UNION ALL
  FROM renown_players s
  ORDER BY s.encounter_name,s.player_guid,s.encounter_id)
 UNION ALL
+(SELECT DISTINCT ON (s.encounter_name,s.player_guid,s.player_class,s.player_spec,s.player_sub_spec) 6::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.difficulty_name AS difficulty_name, s.max_players AS max_players, s.encounter_name AS encounter_name, s.player_guid AS player_guid, s.player_class AS player_class, s.player_spec AS player_spec, s.player_sub_spec AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, '00000000-0000-0000-0000-000000000000'::uuid AS guild_id, s.encounter_id AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_time_parse_score_id, 0::bigint AS duration_ms
+ FROM renown_players s WHERE s.cohort_mode='spec'
+ ORDER BY s.encounter_name,s.player_guid,s.player_class,s.player_spec,s.player_sub_spec,s.encounter_id)
+UNION ALL
 (SELECT DISTINCT ON (e.name) 5::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.difficulty_name AS difficulty_name, s.max_players AS max_players, e.name AS encounter_name, ''::text AS player_guid, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, s.guild_id AS guild_id, e.id AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_time_parse_score_id, 0::bigint AS duration_ms
  FROM guild_source s JOIN log_instance_encounters e ON e.instance_id=s.source_instance_id AND e.boss AND e.kill_type='clean'
  ORDER BY e.name,e.id)
@@ -115,7 +119,8 @@ WITH deleted0 AS (DELETE FROM leaderboard_player_observations WHERE tenant_id= @
 deleted1 AS (DELETE FROM leaderboard_guild_boss_observations WHERE tenant_id= @tenant_id::uuid AND run_id= @run_id::uuid RETURNING 1),
 deleted2 AS (DELETE FROM leaderboard_guild_clear_observations WHERE tenant_id= @tenant_id::uuid AND run_id= @run_id::uuid RETURNING 1),
 deleted3 AS (DELETE FROM leaderboard_player_renown_facts WHERE tenant_id= @tenant_id::uuid AND run_id= @run_id::uuid RETURNING 1),
-deleted4 AS (DELETE FROM leaderboard_guild_renown_facts WHERE tenant_id= @tenant_id::uuid AND run_id= @run_id::uuid RETURNING 1)
+deleted4 AS (DELETE FROM leaderboard_guild_renown_facts WHERE tenant_id= @tenant_id::uuid AND run_id= @run_id::uuid RETURNING 1),
+deleted5 AS (DELETE FROM leaderboard_career_renown_facts WHERE tenant_id= @tenant_id::uuid AND run_id= @run_id::uuid RETURNING 1)
 SELECT 1;
 
 -- name: EnqueueLeaderboardRunEvidenceScopes :exec
@@ -160,3 +165,7 @@ GuildRenownCount AS (
  ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id) DO UPDATE SET revision=leaderboard_dirty_guild_renown.revision+1, dirtied_at=clock_timestamp(), process_after=LEAST(leaderboard_dirty_guild_renown.process_after,EXCLUDED.process_after) RETURNING 1
 )
 SELECT 1;
+
+-- name: ReplaceLeaderboardCareerRenownFact :batchexec
+INSERT INTO leaderboard_career_renown_facts (tenant_id,run_id,source_instance_id,realm_id,player_guid,player_class,player_spec,player_sub_spec,instance_name,difficulty_name,max_players,encounter_name,source_encounter_id)
+VALUES (@tenant_id::uuid,@run_id::uuid,@source_instance_id::uuid,@realm_id::uuid,@player_guid::text,@player_class::text,@player_spec::text,@player_sub_spec::text,@instance_name::text,@difficulty_name::text,@max_players::smallint,@encounter_name::text,@source_encounter_id::uuid);

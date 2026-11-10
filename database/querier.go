@@ -1160,6 +1160,7 @@ type sqlcQuerier interface {
 	RepairOperationPlayerBossBenchmarks(ctx context.Context, arg RepairOperationPlayerBossBenchmarksParams) (RepairOperationPlayerBossBenchmarksRow, error)
 	RepairOperationPlayerBossSubjects(ctx context.Context, arg RepairOperationPlayerBossSubjectsParams) (RepairOperationPlayerBossSubjectsRow, error)
 	RepairOperationPlayerRenownCounts(ctx context.Context, arg RepairOperationPlayerRenownCountsParams) (RepairOperationPlayerRenownCountsRow, error)
+	ReplaceLeaderboardCareerRenownFact(ctx context.Context, arg []ReplaceLeaderboardCareerRenownFactParams) *ReplaceLeaderboardCareerRenownFactBatchResults
 	ReplaceLeaderboardGuildBossObservation(ctx context.Context, arg []ReplaceLeaderboardGuildBossObservationParams) *ReplaceLeaderboardGuildBossObservationBatchResults
 	ReplaceLeaderboardGuildClearObservation(ctx context.Context, arg []ReplaceLeaderboardGuildClearObservationParams) *ReplaceLeaderboardGuildClearObservationBatchResults
 	ReplaceLeaderboardGuildRenownFact(ctx context.Context, arg []ReplaceLeaderboardGuildRenownFactParams) *ReplaceLeaderboardGuildRenownFactBatchResults

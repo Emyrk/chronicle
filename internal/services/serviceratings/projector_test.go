@@ -101,13 +101,13 @@ func TestProjectionFamiliesAndReplay(t *testing.T) {
 	t.Parallel()
 	s := newSourceFixture(t)
 	rows := s.compute()
-	require.Len(t, rows, 3) // Winning metric and metric-free player/guild kills despite missing times.
+	require.Len(t, rows, 4) // Winning metric, career cohort, and character/guild kills despite missing times.
 	s.times()
 	rows = s.compute()
-	require.Len(t, rows, 5)
+	require.Len(t, rows, 6)
 	require.NoError(t, s.direct(rows))
 	require.NoError(t, s.direct(rows))
-	for table, want := range map[string]int{"player_observations": 1, "guild_boss_observations": 1, "guild_clear_observations": 1, "player_renown_facts": 1, "guild_renown_facts": 1} {
+	for table, want := range map[string]int{"player_observations": 1, "guild_boss_observations": 1, "guild_clear_observations": 1, "player_renown_facts": 1, "guild_renown_facts": 1, "career_renown_facts": 1} {
 		var n int
 		require.NoError(t, s.row("SELECT count(*) FROM leaderboard_"+table+" WHERE tenant_id=$1", s.tenant).Scan(&n))
 		require.Equal(t, want, n)
@@ -217,7 +217,7 @@ func TestProjectionEligibilityAndRollback(t *testing.T) {
 			rows := s.compute()
 			switch scenario {
 			case "wrong_guild":
-				require.Len(t, rows, 2)
+				require.Len(t, rows, 3)
 			case "wrong_realm", "wrong_variant":
 				require.Len(t, rows, 3)
 			default:
@@ -284,7 +284,7 @@ func TestProjectionTenantMovementAndCanonicalMergeUnlink(t *testing.T) {
 		require.Zero(t, count)
 		s.tenant = newTenant
 		rows := s.compute()
-		require.Len(t, rows, 3)
+		require.Len(t, rows, 4)
 		require.NoError(t, s.direct(rows))
 		require.NoError(t, s.row(`SELECT count(*) FROM leaderboard_dirty_player_boss_subjects WHERE tenant_id=$1`, oldTenant).Scan(&count))
 		require.Equal(t, 1, count)
@@ -653,4 +653,32 @@ func TestProjectionPositiveTieRepairRetractsOldHealing(t *testing.T) {
 	require.Equal(t, 1, count)
 	require.NoError(t, s.row(`SELECT array_agg(metric ORDER BY metric) FROM leaderboard_dirty_player_boss_subjects WHERE tenant_id=$1`, s.tenant).Scan(&metrics))
 	require.Equal(t, []string{"dps", "hps"}, metrics)
+}
+
+func TestCareerRenownProjectionAttributionAndRetraction(t *testing.T) {
+	t.Parallel()
+	s := newSourceFixture(t)
+	require.NoError(t, s.direct(s.compute()))
+	var spec string
+	require.NoError(t, s.row(`SELECT player_spec FROM leaderboard_career_renown_facts WHERE tenant_id=$1`, s.tenant).Scan(&spec))
+	require.Equal(t, "Frost", spec)
+	s.exec(`UPDATE encounter_dps_rankings SET player_spec='Fire',player_sub_spec='Fire test' WHERE instance_id=$1`, s.instance)
+	require.NoError(t, s.direct(s.compute()))
+	var n int
+	require.NoError(t, s.row(`SELECT count(*) FROM leaderboard_career_renown_facts WHERE tenant_id=$1 AND player_spec='Frost'`, s.tenant).Scan(&n))
+	require.Zero(t, n)
+	require.NoError(t, s.row(`SELECT count(*) FROM leaderboard_career_renown_facts WHERE tenant_id=$1 AND player_spec='Fire' AND player_sub_spec='Fire test'`, s.tenant).Scan(&n))
+	require.Equal(t, 1, n)
+	// Class-only career policy is unresolved: do not attribute collapsed Class
+	// performance to a different raw specialization in career Renown.
+	s.exec(`UPDATE tenants SET parse_config='{"cohort_mode":"class"}' WHERE id=$1`, s.tenant)
+	require.NoError(t, s.direct(s.compute()))
+	require.NoError(t, s.row(`SELECT count(*) FROM leaderboard_career_renown_facts WHERE tenant_id=$1`, s.tenant).Scan(&n))
+	require.Zero(t, n)
+	s.exec(`UPDATE tenants SET parse_config='{"cohort_mode":"spec"}' WHERE id=$1`, s.tenant)
+	require.NoError(t, s.direct(s.compute()))
+	s.exec(`UPDATE wow_log_groups SET unlisted=true WHERE id=$1`, s.group)
+	require.NoError(t, s.direct(s.compute()))
+	require.NoError(t, s.row(`SELECT count(*) FROM leaderboard_career_renown_facts WHERE tenant_id=$1`, s.tenant).Scan(&n))
+	require.Zero(t, n)
 }
