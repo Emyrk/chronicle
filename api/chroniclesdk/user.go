@@ -128,6 +128,30 @@ type AdminInvalidateLogsRequest struct {
 	Reason string      `json:"reason"`
 }
 
+type AdminInvalidateInstanceRequest struct {
+	LogGroupID uuid.UUID `json:"log_group_id"`
+	InstanceID uuid.UUID `json:"instance_id"`
+	Reason     string    `json:"reason"`
+}
+
+type AdminInstanceRequest struct {
+	LogGroupID uuid.UUID `json:"log_group_id"`
+	InstanceID uuid.UUID `json:"instance_id"`
+}
+
+type AdminInvalidateEncounterRequest struct {
+	LogGroupID  uuid.UUID `json:"log_group_id"`
+	InstanceID  uuid.UUID `json:"instance_id"`
+	EncounterID uuid.UUID `json:"encounter_id"`
+	Reason      string    `json:"reason"`
+}
+
+type AdminEncounterRequest struct {
+	LogGroupID  uuid.UUID `json:"log_group_id"`
+	InstanceID  uuid.UUID `json:"instance_id"`
+	EncounterID uuid.UUID `json:"encounter_id"`
+}
+
 type AdminInvalidateLogsResponse struct {
 	Requested   int                   `json:"requested"`
 	Invalidated int                   `json:"invalidated"`

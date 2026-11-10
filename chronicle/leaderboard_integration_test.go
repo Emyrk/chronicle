@@ -27,7 +27,7 @@ import (
 
 func TestLeaderboardSourceActionsRetainRepairObligation(t *testing.T) {
 	t.Parallel()
-	for _, action := range []string{"delete_instance", "invalidate", "clear_invalidation", "reparse", "unlist_reparse_lock_order", "enqueue_failure"} {
+	for _, action := range []string{"delete_instance", "invalidate", "clear_invalidation", "invalidate_instance", "clear_instance_invalidation", "invalidate_encounter", "clear_encounter_invalidation", "reparse", "unlist_reparse_lock_order", "enqueue_failure"} {
 		t.Run(action, func(t *testing.T) {
 			t.Parallel()
 			ctx := testutil.Context(t, testutil.WaitLong)
@@ -113,6 +113,34 @@ func TestLeaderboardSourceActionsRetainRepairObligation(t *testing.T) {
 			case "clear_invalidation":
 				require.NoError(t, c.InvalidateWoWLogGroup(ctx, group, "test"))
 				require.NoError(t, c.ClearWoWLogGroupInvalidation(ctx, group))
+			case "invalidate_instance":
+				require.NoError(t, c.InvalidateWoWLogInstance(ctx, group, instance, "test instance"))
+				var invalidated bool
+				require.NoError(t, pool.QueryRow(admin, "SELECT invalidated_at IS NOT NULL FROM log_instances WHERE id=$1", instance).Scan(&invalidated))
+				var groupInvalidated bool
+				require.NoError(t, pool.QueryRow(admin, "SELECT invalidated_at IS NOT NULL FROM wow_log_groups WHERE id=$1", group).Scan(&groupInvalidated))
+				require.False(t, groupInvalidated)
+				require.True(t, invalidated)
+			case "clear_instance_invalidation":
+				require.NoError(t, c.InvalidateWoWLogInstance(ctx, group, instance, "test instance"))
+				require.NoError(t, c.ClearWoWLogInstanceInvalidation(ctx, group, instance))
+				var invalidated bool
+				require.NoError(t, pool.QueryRow(admin, "SELECT invalidated_at IS NOT NULL FROM log_instances WHERE id=$1", instance).Scan(&invalidated))
+				require.False(t, invalidated)
+			case "invalidate_encounter":
+				require.NoError(t, c.InvalidateWoWLogEncounter(ctx, group, instance, encounter, "test encounter"))
+				var invalidated bool
+				require.NoError(t, pool.QueryRow(admin, "SELECT invalidated_at IS NOT NULL FROM log_instance_encounters WHERE id=$1", encounter).Scan(&invalidated))
+				var instanceInvalidated bool
+				require.NoError(t, pool.QueryRow(admin, "SELECT invalidated_at IS NOT NULL FROM log_instances WHERE id=$1", instance).Scan(&instanceInvalidated))
+				require.False(t, instanceInvalidated)
+				require.True(t, invalidated)
+			case "clear_encounter_invalidation":
+				require.NoError(t, c.InvalidateWoWLogEncounter(ctx, group, instance, encounter, "test encounter"))
+				require.NoError(t, c.ClearWoWLogEncounterInvalidation(ctx, group, instance, encounter))
+				var invalidated bool
+				require.NoError(t, pool.QueryRow(admin, "SELECT invalidated_at IS NOT NULL FROM log_instance_encounters WHERE id=$1", encounter).Scan(&invalidated))
+				require.False(t, invalidated)
 			case "unlist_reparse_lock_order":
 				holder, err := pool.Begin(ctx)
 				require.NoError(t, err)

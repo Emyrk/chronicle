@@ -2549,6 +2549,8 @@ type LogInstanceEncounter struct {
 	MapID                int32              `db:"map_id" json:"map_id"`
 	RankingStartOffsetMs pgtype.Int8        `db:"ranking_start_offset_ms" json:"ranking_start_offset_ms"`
 	RankingEndOffsetMs   pgtype.Int8        `db:"ranking_end_offset_ms" json:"ranking_end_offset_ms"`
+	InvalidatedAt        pgtype.Timestamptz `db:"invalidated_at" json:"invalidated_at"`
+	InvalidReason        string             `db:"invalid_reason" json:"invalid_reason"`
 }
 
 type LogInstanceEncounterDamageUnitSummary struct {

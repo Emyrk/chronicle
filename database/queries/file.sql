@@ -440,6 +440,122 @@ SET invalidated_at = NULL,
     invalid_reason = ''
 WHERE wlg.id = @log_group_id;
 
+-- name: InvalidateLogInstance :one
+WITH invalidated_instance AS (
+  UPDATE log_instances li
+  SET invalidated_at = COALESCE(li.invalidated_at, now()),
+      invalid_reason = @reason,
+      updated_at = now()
+  WHERE li.id = @instance_id
+    AND li.log_group_id = @log_group_id
+  RETURNING li.id
+),
+deleted_rankings AS (
+  DELETE FROM encounter_dps_rankings
+  WHERE instance_id IN (SELECT id FROM invalidated_instance)
+),
+deleted_parse_results AS (
+  DELETE FROM parse_score_results
+  WHERE instance_id IN (SELECT id FROM invalidated_instance)
+),
+deleted_parse_receipts AS (
+  DELETE FROM parse_score_receipts
+  WHERE instance_id IN (SELECT id FROM invalidated_instance)
+),
+deleted_time_parse_scores AS (
+  DELETE FROM time_parse_scores
+  WHERE instance_id IN (SELECT id FROM invalidated_instance)
+),
+deleted_speedruns AS (
+  DELETE FROM instance_speedruns
+  WHERE instance_id IN (SELECT id FROM invalidated_instance)
+)
+SELECT count(*) FROM invalidated_instance;
+
+-- name: ClearLogInstanceInvalidation :execrows
+UPDATE log_instances li
+SET invalidated_at = NULL,
+    invalid_reason = '',
+    updated_at = now()
+WHERE li.id = @instance_id
+  AND li.log_group_id = @log_group_id;
+
+-- name: InvalidateLogEncounter :one
+WITH invalidated_encounter AS (
+  UPDATE log_instance_encounters lie
+  SET invalidated_at = COALESCE(lie.invalidated_at, now()),
+      invalid_reason = @reason
+  WHERE lie.id = @encounter_id
+    AND lie.instance_id = @instance_id
+    AND EXISTS (
+      SELECT 1 FROM log_instances li
+      WHERE li.id = @instance_id
+        AND li.log_group_id = @log_group_id
+    )
+  RETURNING lie.id, lie.instance_id, lie.name
+),
+deleted_rankings AS (
+  DELETE FROM encounter_dps_rankings edr
+  WHERE edr.encounter_id IN (SELECT id FROM invalidated_encounter)
+),
+deleted_parse_results AS (
+  DELETE FROM parse_score_results psr
+  USING invalidated_encounter invalid
+  WHERE psr.instance_id = invalid.instance_id
+    AND psr.encounter_name = invalid.name
+),
+deleted_boss_scores AS (
+  DELETE FROM time_parse_boss_scores tpbs
+  WHERE tpbs.encounter_id IN (SELECT id FROM invalidated_encounter)
+),
+deleted_boss_memberships AS (
+  DELETE FROM time_parse_boss_kill_memberships membership
+  USING invalidated_encounter invalid
+  WHERE membership.instance_id = invalid.instance_id
+    AND membership.encounter_name = invalid.name
+),
+deleted_clear_memberships AS (
+  DELETE FROM time_parse_clear_time_memberships membership
+  WHERE membership.instance_id IN (SELECT instance_id FROM invalidated_encounter)
+),
+cleared_clear_scores AS (
+  UPDATE time_parse_scores score
+  SET clear_duration_ms = NULL,
+      clear_server_precise_score = NULL,
+      clear_server_display_score = NULL,
+      clear_server_rank = NULL,
+      clear_server_sample_size = NULL,
+      clear_server_status = NULL,
+      clear_realm_precise_score = NULL,
+      clear_realm_display_score = NULL,
+      clear_realm_rank = NULL,
+      clear_realm_sample_size = NULL,
+      clear_realm_status = NULL,
+      clear_guild_precise_score = NULL,
+      clear_guild_display_score = NULL,
+      clear_guild_rank = NULL,
+      clear_guild_sample_size = NULL,
+      clear_guild_status = NULL
+  WHERE score.instance_id IN (SELECT instance_id FROM invalidated_encounter)
+),
+deleted_speedruns AS (
+  DELETE FROM instance_speedruns speedrun
+  WHERE speedrun.instance_id IN (SELECT instance_id FROM invalidated_encounter)
+)
+SELECT count(*) FROM invalidated_encounter;
+
+-- name: ClearLogEncounterInvalidation :execrows
+UPDATE log_instance_encounters lie
+SET invalidated_at = NULL,
+    invalid_reason = ''
+WHERE lie.id = @encounter_id
+  AND lie.instance_id = @instance_id
+  AND EXISTS (
+    SELECT 1 FROM log_instances li
+    WHERE li.id = @instance_id
+      AND li.log_group_id = @log_group_id
+  );
+
 -- name: ListDistinctInstanceNames :many
 SELECT DISTINCT name
 FROM (

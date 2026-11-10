@@ -6106,6 +6106,55 @@ func (q *sqlQuerier) ResolveExternalAPIServer(ctx context.Context, server string
 	return i, err
 }
 
+const clearLogEncounterInvalidation = `-- name: ClearLogEncounterInvalidation :execrows
+UPDATE log_instance_encounters lie
+SET invalidated_at = NULL,
+    invalid_reason = ''
+WHERE lie.id = $1
+  AND lie.instance_id = $2
+  AND EXISTS (
+    SELECT 1 FROM log_instances li
+    WHERE li.id = $2
+      AND li.log_group_id = $3
+  )
+`
+
+type ClearLogEncounterInvalidationParams struct {
+	EncounterID uuid.UUID `db:"encounter_id" json:"encounter_id"`
+	InstanceID  uuid.UUID `db:"instance_id" json:"instance_id"`
+	LogGroupID  uuid.UUID `db:"log_group_id" json:"log_group_id"`
+}
+
+func (q *sqlQuerier) ClearLogEncounterInvalidation(ctx context.Context, arg ClearLogEncounterInvalidationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, clearLogEncounterInvalidation, arg.EncounterID, arg.InstanceID, arg.LogGroupID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const clearLogInstanceInvalidation = `-- name: ClearLogInstanceInvalidation :execrows
+UPDATE log_instances li
+SET invalidated_at = NULL,
+    invalid_reason = '',
+    updated_at = now()
+WHERE li.id = $1
+  AND li.log_group_id = $2
+`
+
+type ClearLogInstanceInvalidationParams struct {
+	InstanceID uuid.UUID `db:"instance_id" json:"instance_id"`
+	LogGroupID uuid.UUID `db:"log_group_id" json:"log_group_id"`
+}
+
+func (q *sqlQuerier) ClearLogInstanceInvalidation(ctx context.Context, arg ClearLogInstanceInvalidationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, clearLogInstanceInvalidation, arg.InstanceID, arg.LogGroupID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const clearWoWLogGroupInvalidation = `-- name: ClearWoWLogGroupInvalidation :exec
 WITH restored_instances AS (
   UPDATE log_instances li
@@ -6714,6 +6763,136 @@ func (q *sqlQuerier) InsertWoWLogGroup(ctx context.Context, arg InsertWoWLogGrou
 		&i.UploadSource,
 	)
 	return i, err
+}
+
+const invalidateLogEncounter = `-- name: InvalidateLogEncounter :one
+WITH invalidated_encounter AS (
+  UPDATE log_instance_encounters lie
+  SET invalidated_at = COALESCE(lie.invalidated_at, now()),
+      invalid_reason = $1
+  WHERE lie.id = $2
+    AND lie.instance_id = $3
+    AND EXISTS (
+      SELECT 1 FROM log_instances li
+      WHERE li.id = $3
+        AND li.log_group_id = $4
+    )
+  RETURNING lie.id, lie.instance_id, lie.name
+),
+deleted_rankings AS (
+  DELETE FROM encounter_dps_rankings edr
+  WHERE edr.encounter_id IN (SELECT id FROM invalidated_encounter)
+),
+deleted_parse_results AS (
+  DELETE FROM parse_score_results psr
+  USING invalidated_encounter invalid
+  WHERE psr.instance_id = invalid.instance_id
+    AND psr.encounter_name = invalid.name
+),
+deleted_boss_scores AS (
+  DELETE FROM time_parse_boss_scores tpbs
+  WHERE tpbs.encounter_id IN (SELECT id FROM invalidated_encounter)
+),
+deleted_boss_memberships AS (
+  DELETE FROM time_parse_boss_kill_memberships membership
+  USING invalidated_encounter invalid
+  WHERE membership.instance_id = invalid.instance_id
+    AND membership.encounter_name = invalid.name
+),
+deleted_clear_memberships AS (
+  DELETE FROM time_parse_clear_time_memberships membership
+  WHERE membership.instance_id IN (SELECT instance_id FROM invalidated_encounter)
+),
+cleared_clear_scores AS (
+  UPDATE time_parse_scores score
+  SET clear_duration_ms = NULL,
+      clear_server_precise_score = NULL,
+      clear_server_display_score = NULL,
+      clear_server_rank = NULL,
+      clear_server_sample_size = NULL,
+      clear_server_status = NULL,
+      clear_realm_precise_score = NULL,
+      clear_realm_display_score = NULL,
+      clear_realm_rank = NULL,
+      clear_realm_sample_size = NULL,
+      clear_realm_status = NULL,
+      clear_guild_precise_score = NULL,
+      clear_guild_display_score = NULL,
+      clear_guild_rank = NULL,
+      clear_guild_sample_size = NULL,
+      clear_guild_status = NULL
+  WHERE score.instance_id IN (SELECT instance_id FROM invalidated_encounter)
+),
+deleted_speedruns AS (
+  DELETE FROM instance_speedruns speedrun
+  WHERE speedrun.instance_id IN (SELECT instance_id FROM invalidated_encounter)
+)
+SELECT count(*) FROM invalidated_encounter
+`
+
+type InvalidateLogEncounterParams struct {
+	Reason      string    `db:"reason" json:"reason"`
+	EncounterID uuid.UUID `db:"encounter_id" json:"encounter_id"`
+	InstanceID  uuid.UUID `db:"instance_id" json:"instance_id"`
+	LogGroupID  uuid.UUID `db:"log_group_id" json:"log_group_id"`
+}
+
+func (q *sqlQuerier) InvalidateLogEncounter(ctx context.Context, arg InvalidateLogEncounterParams) (int64, error) {
+	row := q.db.QueryRow(ctx, invalidateLogEncounter,
+		arg.Reason,
+		arg.EncounterID,
+		arg.InstanceID,
+		arg.LogGroupID,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const invalidateLogInstance = `-- name: InvalidateLogInstance :one
+WITH invalidated_instance AS (
+  UPDATE log_instances li
+  SET invalidated_at = COALESCE(li.invalidated_at, now()),
+      invalid_reason = $1,
+      updated_at = now()
+  WHERE li.id = $2
+    AND li.log_group_id = $3
+  RETURNING li.id
+),
+deleted_rankings AS (
+  DELETE FROM encounter_dps_rankings
+  WHERE instance_id IN (SELECT id FROM invalidated_instance)
+),
+deleted_parse_results AS (
+  DELETE FROM parse_score_results
+  WHERE instance_id IN (SELECT id FROM invalidated_instance)
+),
+deleted_parse_receipts AS (
+  DELETE FROM parse_score_receipts
+  WHERE instance_id IN (SELECT id FROM invalidated_instance)
+),
+deleted_time_parse_scores AS (
+  DELETE FROM time_parse_scores
+  WHERE instance_id IN (SELECT id FROM invalidated_instance)
+),
+deleted_speedruns AS (
+  DELETE FROM instance_speedruns
+  WHERE instance_id IN (SELECT id FROM invalidated_instance)
+)
+SELECT count(*) FROM invalidated_instance
+`
+
+type InvalidateLogInstanceParams struct {
+	Reason     string    `db:"reason" json:"reason"`
+	InstanceID uuid.UUID `db:"instance_id" json:"instance_id"`
+	LogGroupID uuid.UUID `db:"log_group_id" json:"log_group_id"`
+}
+
+func (q *sqlQuerier) InvalidateLogInstance(ctx context.Context, arg InvalidateLogInstanceParams) (int64, error) {
+	row := q.db.QueryRow(ctx, invalidateLogInstance, arg.Reason, arg.InstanceID, arg.LogGroupID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
 }
 
 const invalidateWoWLogGroup = `-- name: InvalidateWoWLogGroup :exec
@@ -10918,7 +11097,7 @@ func (q *sqlQuerier) ListInferenceContextUsageByUser(ctx context.Context, arg Li
 }
 
 const listInferenceInstanceEncounters = `-- name: ListInferenceInstanceEncounters :many
-SELECT id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id, ranking_start_offset_ms, ranking_end_offset_ms
+SELECT id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id, ranking_start_offset_ms, ranking_end_offset_ms, invalidated_at, invalid_reason
 FROM log_instance_encounters
 WHERE instance_id = $1
 ORDER BY start_time, id
@@ -10946,6 +11125,8 @@ func (q *sqlQuerier) ListInferenceInstanceEncounters(ctx context.Context, instan
 			&i.MapID,
 			&i.RankingStartOffsetMs,
 			&i.RankingEndOffsetMs,
+			&i.InvalidatedAt,
+			&i.InvalidReason,
 		); err != nil {
 			return nil, err
 		}
@@ -15590,7 +15771,7 @@ WITH source AS MATERIALIZED (
 ), players AS MATERIALIZED (
  SELECT s.run_id, s.source_instance_id, s.realm_id, s.guild_id, s.instance_name, s.difficulty_name, s.max_players, s.tenant_id, s.cohort_mode, d.id AS ranking_id, d.player_guid, d.player_class,
         -- Rating evidence requires a non-empty spec key. Class mode collapses every
-        -- source spec, including missing specs, into one stable class-only cohort.
+        -- source spec, including missing or unknown specs, into one stable class-only cohort.
         CASE WHEN s.cohort_mode='class' THEN 'Class' ELSE d.player_spec END::text AS player_spec,
         CASE WHEN s.cohort_mode='class' THEN '' ELSE d.player_sub_spec END::text AS player_sub_spec,
         d.dps,d.hps,e.id AS encounter_id,e.name AS encounter_name
@@ -19078,7 +19259,7 @@ func (q *sqlQuerier) DeleteLogInstanceByIDAndGroup(ctx context.Context, arg Dele
 
 const encountersByInstanceID = `-- name: EncountersByInstanceID :many
 SELECT
-  id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id, ranking_start_offset_ms, ranking_end_offset_ms
+  id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id, ranking_start_offset_ms, ranking_end_offset_ms, invalidated_at, invalid_reason
 FROM
   log_instance_encounters
 WHERE
@@ -19106,6 +19287,8 @@ func (q *sqlQuerier) EncountersByInstanceID(ctx context.Context, instanceID uuid
 			&i.MapID,
 			&i.RankingStartOffsetMs,
 			&i.RankingEndOffsetMs,
+			&i.InvalidatedAt,
+			&i.InvalidReason,
 		); err != nil {
 			return nil, err
 		}
@@ -19451,7 +19634,7 @@ INSERT INTO
   log_instance_encounters (id, instance_id, name, map_id, kill_type, remaining, boss, start_time, end_time, ranking_start_offset_ms, ranking_end_offset_ms)
 VALUES
   ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-RETURNING id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id, ranking_start_offset_ms, ranking_end_offset_ms
+RETURNING id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id, ranking_start_offset_ms, ranking_end_offset_ms, invalidated_at, invalid_reason
 `
 
 type InsertEncounterParams struct {
@@ -19495,6 +19678,8 @@ func (q *sqlQuerier) InsertEncounter(ctx context.Context, arg InsertEncounterPar
 		&i.MapID,
 		&i.RankingStartOffsetMs,
 		&i.RankingEndOffsetMs,
+		&i.InvalidatedAt,
+		&i.InvalidReason,
 	)
 	return i, err
 }

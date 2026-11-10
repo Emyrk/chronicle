@@ -831,6 +831,7 @@ func WoWHostile(hostile database.LogInstanceEncounterHostile) chroniclesdk.WoWEn
 }
 
 func WoWEncounter(encounter database.LogInstanceEncounter) chroniclesdk.WoWEncounter {
+	invalidatedAt, invalidReason := invalidation(encounter.InvalidatedAt, encounter.InvalidReason)
 	var window *chroniclesdk.WoWRankingWindow
 	if encounter.RankingStartOffsetMs.Valid && encounter.RankingEndOffsetMs.Valid {
 		start, end := encounter.RankingStartOffsetMs.Int64, encounter.RankingEndOffsetMs.Int64
@@ -852,6 +853,8 @@ func WoWEncounter(encounter database.LogInstanceEncounter) chroniclesdk.WoWEncou
 		Remaining:     encounter.Remaining,
 		StartTime:     encounter.StartTime.Time,
 		EndTime:       encounter.EndTime.Time,
+		InvalidatedAt: invalidatedAt,
+		InvalidReason: invalidReason,
 	}
 }
 

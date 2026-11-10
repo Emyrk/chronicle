@@ -79,6 +79,7 @@ import { RandomTip } from "@/components/RandomTip";
 import { InstanceActionBar } from "@/components/InstanceActionBar/InstanceActionBar";
 import { InstanceHelpSheet } from "@/components/HelpSheet";
 import { ENCOUNTER_TIPS, ENTITY_TIPS, CLASS_TOGGLE_TIPS } from "@/constants/tips";
+import { PartialInvalidBadge } from "./PartialInvalidBadge";
 import { InstanceMenu } from "./InstanceMenu";
 import { InstanceContentPage, type PageStateBinding } from "./Pages/InstanceContentPage";
 import {
@@ -4097,6 +4098,10 @@ function InstancePageViewContent({
     () => instance.encounters.filter((e) => selectedIds.includes(e.id)),
     [instance.encounters, selectedIds],
   );
+  const invalidEncounters = useMemo(
+    () => instance.encounters.filter((encounter) => encounter.invalidatedAt),
+    [instance.encounters],
+  );
   const activePhaseId = useMemo(() => activePhaseForTimeRange(
     selectedEncounters,
     timeRange?.enabled ?? false,
@@ -4363,6 +4368,7 @@ function InstancePageViewContent({
                 </TooltipContent>
               </Tooltip>
             )}
+            {!instance.invalidatedAt && <PartialInvalidBadge encounters={invalidEncounters} />}
             {duplicateGroupId && (
               <DuplicatesBadge instanceId={instance.id} duplicateGroupId={duplicateGroupId} />
             )}
@@ -4397,6 +4403,7 @@ function InstancePageViewContent({
                 logGroupId={instance.logGroupId}
                 instanceName={instance.name}
                 invalidated={Boolean(instance.invalidatedAt)}
+                selectedEncounter={selectedEncounters.length === 1 ? selectedEncounters[0] : undefined}
                 logDetailUrl={logDetailUrl}
                 layoutLabUrl={isEncounterView && !activePageType && activeLayoutId ? `/account/layout-lab?layoutId=${activeLayoutId}` : undefined}
                 duplicateGroupId={duplicateGroupId}
@@ -4578,6 +4585,7 @@ function InstancePageViewContent({
                 logGroupId={instance.logGroupId}
                 instanceName={instance.name}
                 invalidated={Boolean(instance.invalidatedAt)}
+                selectedEncounter={selectedEncounters.length === 1 ? selectedEncounters[0] : undefined}
                 logDetailUrl={logDetailUrl}
                 layoutLabUrl={isEncounterView && !activePageType && activeLayoutId ? `/account/layout-lab?layoutId=${activeLayoutId}` : undefined}
                 duplicateGroupId={duplicateGroupId}
