@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, userEvent } from "storybook/test";
+import { expect, userEvent, within } from "storybook/test";
 import { MemoryRouter } from "react-router-dom";
 import { selectSupportedInstanceProgressionBosses } from "@/api/queries";
 import type { CareerPlayerResponse, LeaderboardV2PlayerHistory, SupportedInstance } from "@/api/typesGenerated";
@@ -84,6 +84,22 @@ export const Warrior: Story = {
     await expect(canvas.getByText(/Updating/)).toBeInTheDocument();
     await userEvent.click(canvas.getByRole("button", { name: "Show Fury · Fury Prot ratings" }));
     await expect(canvas.getByText("5.3")).toBeInTheDocument();
+  },
+};
+
+export const MasteryBreakdown: Story = {
+  name: "Mastery breakdown tooltip",
+  args: {
+    career: careerWarrior as CareerPlayerResponse,
+    history: historyWarrior as LeaderboardV2PlayerHistory,
+  },
+  play: async ({ canvas }) => {
+    await userEvent.hover(canvas.getByText("15.1"));
+    const body = within(document.body);
+    await expect((await body.findAllByText("Mastery by raid")).length).toBeGreaterThan(0);
+    // Σ weight·mastery over every weighted raid, including the zero ones.
+    await expect((await body.findAllByText("Naxxramas")).length).toBeGreaterThan(0);
+    await expect((await body.findAllByText("Total")).length).toBeGreaterThan(0);
   },
 };
 

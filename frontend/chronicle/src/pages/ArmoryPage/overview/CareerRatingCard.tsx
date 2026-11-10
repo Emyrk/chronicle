@@ -1,7 +1,14 @@
+import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ArrowUpRight } from "lucide-react";
-import type { CareerPlayerCohort, CareerPlayerResponse } from "@/api/typesGenerated";
+import type {
+  CareerContribution,
+  CareerPlayerCohort,
+  CareerPlayerResponse,
+  CareerSummary,
+} from "@/api/typesGenerated";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/Card/Card";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { specializationIconUrl } from "@/config/specializationIcon";
 import { METRIC_THEMES } from "@/pages/Leaderboards/Ratings/ratingThemes";
 import { careerStatusText, cohortKey, cohortLabel, raidCoverage } from "./careerRatingsModel";
@@ -56,13 +63,25 @@ export function CareerRatingCard({ data, cohort, onCohortChange, isLoading, erro
       <CardContent className="flex grow flex-col justify-center gap-3">
         {summary && (
           <div className="flex items-end gap-6">
-            <Stat label="Mastery" value={formatScore(summary.mastery)} color={METRIC_THEMES.mastery.accent} big />
+            <Stat
+              label="Mastery"
+              value={formatScore(summary.mastery)}
+              color={METRIC_THEMES.mastery.accent}
+              big
+              breakdown={summary.mastery !== null && <WeightedBreakdown summary={summary} field="mastery" />}
+            />
             <div className="flex grow gap-6 border-l border-border pl-6">
-              <Stat label="Peak" value={formatScore(summary.peak)} color={METRIC_THEMES.peak.accent} />
+              <Stat
+                label="Peak"
+                value={formatScore(summary.peak)}
+                color={METRIC_THEMES.peak.accent}
+                breakdown={summary.peak !== null && <WeightedBreakdown summary={summary} field="peak" />}
+              />
               <Stat
                 label="Renown"
                 value={Math.round(summary.renown).toLocaleString()}
                 color={METRIC_THEMES.renown.accent}
+                breakdown={<RenownBreakdown summary={summary} />}
               />
             </div>
           </div>
@@ -83,9 +102,22 @@ export function CareerRatingCard({ data, cohort, onCohortChange, isLoading, erro
   );
 }
 
-function Stat({ label, value, color, big }: { label: string; value: string; color: string; big?: boolean }) {
-  return (
-    <div className="shrink-0">
+function Stat({
+  label,
+  value,
+  color,
+  big,
+  breakdown,
+}: {
+  label: string;
+  value: string;
+  color: string;
+  big?: boolean;
+  /** Shown on hover. */
+  breakdown?: ReactNode;
+}) {
+  const stat = (
+    <div className={`shrink-0 ${breakdown ? "cursor-help" : ""}`} tabIndex={breakdown ? 0 : undefined}>
       <div
         className={`font-mono leading-none font-bold tabular-nums ${big ? "text-5xl" : "text-2xl"}`}
         style={{ color }}
@@ -93,6 +125,116 @@ function Stat({ label, value, color, big }: { label: string; value: string; colo
         {value}
       </div>
       <div className="mt-2 text-xs text-muted-foreground">{label}</div>
+    </div>
+  );
+  if (!breakdown) return stat;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{stat}</TooltipTrigger>
+      <TooltipContent side="bottom" sideOffset={8} className="max-w-none px-3 py-2.5">
+        {breakdown}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+const raidName = (c: CareerContribution) =>
+  [c.instance_name, c.difficulty_name, c.max_players > 0 ? `${c.max_players}` : ""].filter(Boolean).join(" ");
+
+/** Weighted average of each raid's Mastery or Peak; raids without kills count as zero. */
+function WeightedBreakdown({ summary, field }: { summary: CareerSummary; field: "mastery" | "peak" }) {
+  const label = field === "mastery" ? "Mastery" : "Peak";
+  const rows = summary.contributions
+    .filter((c) => c.include_average)
+    .sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0) || raidName(a).localeCompare(raidName(b)));
+  const totalWeight = rows.reduce((n, c) => n + (c.weight ?? 0), 0);
+  const totalWeighted = rows.reduce((n, c) => n + (c.weight ?? 0) * (c[field] ?? 0), 0);
+  return (
+    <div className="space-y-2">
+      <div className="font-semibold">{label} by raid</div>
+      <table className="font-mono tabular-nums">
+        <thead>
+          <tr className="text-zinc-400">
+            <th className="pr-4 text-left font-normal">Raid</th>
+            <th className="pr-4 text-right font-normal">Weight</th>
+            <th className="pr-4 text-right font-normal">{label}</th>
+            <th className="text-right font-normal">Weighted</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((c) => {
+            const value = c[field] ?? 0;
+            const empty = c.eligible_metric_kills === 0;
+            return (
+              <tr key={raidName(c)} className={empty ? "text-zinc-500" : undefined}>
+                <td className="pr-4 font-sans">{raidName(c)}</td>
+                <td className="pr-4 text-right">{c.weight === null ? "—" : `×${c.weight}`}</td>
+                <td className="pr-4 text-right">{empty ? "0" : value.toFixed(1)}</td>
+                <td className="text-right">{((c.weight ?? 0) * value).toFixed(1)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+        <tfoot>
+          <tr className="border-t border-white/10">
+            <td className="pt-1 pr-4 font-sans text-zinc-400">Total</td>
+            <td className="pt-1 pr-4 text-right">{totalWeight}</td>
+            <td />
+            <td className="pt-1 text-right">{totalWeighted.toFixed(1)}</td>
+          </tr>
+        </tfoot>
+      </table>
+      {totalWeight > 0 && (
+        <div className="text-zinc-400">
+          {totalWeighted.toFixed(1)} ÷ {totalWeight} = <span className="text-zinc-100">{formatScore(summary[field])}</span>
+          {" · "}raids without kills count as zero
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Renown earned per raid: each boss kill's award, summed. */
+function RenownBreakdown({ summary }: { summary: CareerSummary }) {
+  const rows = summary.contributions
+    .filter((c) => c.include_renown && c.renown > 0)
+    .sort((a, b) => b.renown - a.renown);
+  return (
+    <div className="space-y-2">
+      <div className="font-semibold">Renown by raid</div>
+      {rows.length === 0 ? (
+        <div className="text-zinc-400">No Renown yet.</div>
+      ) : (
+        <table className="font-mono tabular-nums">
+          <thead>
+            <tr className="text-zinc-400">
+              <th className="pr-4 text-left font-normal">Raid</th>
+              <th className="pr-4 text-right font-normal">Kills</th>
+              <th className="text-right font-normal">Renown</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((c) => (
+              <tr key={raidName(c)}>
+                <td className="pr-4 font-sans">
+                  {raidName(c)}
+                  {!c.include_average && <span className="text-zinc-500"> · Renown only</span>}
+                </td>
+                <td className="pr-4 text-right">{c.eligible_renown_kills}</td>
+                <td className="text-right">{Math.round(c.renown).toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="border-t border-white/10">
+              <td className="pt-1 pr-4 font-sans text-zinc-400">Total</td>
+              <td className="pt-1 pr-4 text-right">{rows.reduce((n, c) => n + c.eligible_renown_kills, 0)}</td>
+              <td className="pt-1 text-right">{Math.round(summary.renown).toLocaleString()}</td>
+            </tr>
+          </tfoot>
+        </table>
+      )}
+      <div className="text-zinc-400">Each boss kill earns its award. Weights do not apply.</div>
     </div>
   );
 }
