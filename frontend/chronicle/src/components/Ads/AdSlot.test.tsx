@@ -699,8 +699,10 @@ describe("AdSlot", () => {
 
   it("recognizes supported local hosts", () => {
     expect(isLocalAdPreviewHost("localhost")).toBe(true)
+    expect(isLocalAdPreviewHost("turtle.localhost")).toBe(true)
     expect(isLocalAdPreviewHost("127.0.0.1")).toBe(true)
     expect(isLocalAdPreviewHost("chronicleclassic.com")).toBe(false)
+    expect(isLocalAdPreviewHost("localhost.chronicleclassic.com")).toBe(false)
   })
 
   it("requires both the preview flag and a local host", () => {
