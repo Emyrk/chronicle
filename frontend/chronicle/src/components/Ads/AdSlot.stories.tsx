@@ -2,7 +2,6 @@ import type { Meta, StoryObj } from "@storybook/react-vite"
 import { MemoryRouter } from "react-router-dom"
 import { AdRailStack } from "./AdRailStack"
 import { AdSlot } from "./AdSlot"
-import { MobileBottomAd } from "./MobileBottomAd"
 
 const meta = {
   title: "Ads/AdSlot",
@@ -168,37 +167,6 @@ export const MobileCard: Story = {
       <div className="mb-4 h-[200px] rounded-xl border bg-card" />
       <AdSlot {...args} />
       <div className="mt-4 h-[200px] rounded-xl border bg-card" />
-    </div>
-  ),
-}
-
-export const MobileBottomBanner: Story = {
-  args: {
-    placement: "rankings-mobile-bottom",
-    format: "mobile-banner",
-  },
-  parameters: {
-    viewport: { defaultViewport: "mobile1" },
-  },
-  render: (args) => (
-    <div className="min-h-[140vh] bg-background px-4 py-8 text-foreground">
-      <div className="mx-auto max-w-sm space-y-4 pb-8">
-        <div className="rounded-xl border bg-card p-4">
-          <div className="text-sm font-semibold">Mobile rankings</div>
-          <div className="mt-2 text-xs text-muted-foreground">Scroll to verify the banner stays anchored.</div>
-        </div>
-        {Array.from({ length: 6 }, (_, index) => (
-          <div key={index} className="h-24 rounded-xl border bg-card" />
-        ))}
-      </div>
-      <button
-        type="button"
-        className="fixed right-4 bottom-[calc(1rem+var(--mobile-ad-offset,0px))] z-50 size-12 rounded-full bg-primary text-primary-foreground shadow-xl"
-        aria-label="Open encounter filters"
-      >
-        ☰
-      </button>
-      <MobileBottomAd placement={args.placement} hostname={args.hostname} previewEnabled />
     </div>
   ),
 }

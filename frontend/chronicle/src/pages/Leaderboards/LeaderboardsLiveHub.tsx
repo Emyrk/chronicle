@@ -9,7 +9,6 @@ import { useRankingsKillTimesByBoss, useRankingsLeaderboard, useRankingsStats, u
 import { useHubSummary, type HubSummary } from "./Hub/hubSummaryAdapter"
 import { cohortLabel } from "./Hub/cohortLabel"
 import { AdRailStack } from "@/components/Ads/AdRailStack"
-import { MobileBottomAd } from "@/components/Ads/MobileBottomAd"
 import { HubLoadError, LeaderboardsHubApp } from "./Hub/HubLanding"
 import { LeaderboardHub, Overview, SkeletonRows, type HubLiveTabContext } from "./Hub/LeaderboardHub"
 import { LiveHubOverview } from "./Hub/LiveHubOverview"
@@ -138,7 +137,6 @@ export function LeaderboardsLiveHub() {
           onEncounters={(names) => choose("encounters", names.join(",") || undefined)} />} />
     </div>
     <AdRailStack primaryPlacement="leaderboards-right-rail" secondaryPlacement="leaderboards-right-rail-lower" />
-    <MobileBottomAd placement="rankings-mobile-bottom" />
   </div>
 }
 
