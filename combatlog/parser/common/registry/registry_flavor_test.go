@@ -328,8 +328,7 @@ func TestRankingEncounterSets(t *testing.T) {
 	turtle := RegistryForFlavor(nil, database.WoWFlavor{database.FlavorNightmareOfUrsol})
 	emeraldSanctum := instanceDetailByName(t, turtle, "Emerald Sanctum")
 	require.Equal(t, []instances.RankingEncounterSet{
-		{Label: "Normal", Encounters: []string{"Erennius", "Solnius"}},
-		{ID: "hard", Label: "Hard Mode", Encounters: []string{"Solnius (Hard Mode)"}},
+		{Label: "Normal", Encounters: []string{"Erennius", "Solnius", "Solnius (Hard Mode)"}},
 	}, emeraldSanctum.RankingEncounterSets)
 
 	wrath := RegistryForFlavor(nil, database.WoWFlavor{database.FlavorWrath})

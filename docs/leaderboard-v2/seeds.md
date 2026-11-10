@@ -39,8 +39,9 @@ assignments. Server identity tags never select these layers.
 
 The default Obsidian Sanctum set selects only `Sartharion` (0D). The `1d`, `2d`,
 and `3d` sets select separate exact bosses. The default Ulduar set excludes Flame
-Leviathan; the boss itself remains enabled. Emerald Sanctum's `hard` set selects
-`Solnius (Hard Mode)` without alternative-selection semantics.
+Leviathan; the boss itself remains enabled. Migration `000343` initially gave
+Emerald Sanctum a separate `hard` set. Migration `000355` corrects that model by
+adding `Solnius (Hard Mode)` as the third boss in its default set.
 
 ## Deliberate omissions
 

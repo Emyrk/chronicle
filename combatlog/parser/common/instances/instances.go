@@ -248,8 +248,7 @@ var (
 		},
 		RankingEncounterSets: func(database.WoWFlavor) []RankingEncounterSet {
 			return []RankingEncounterSet{
-				{Encounters: []string{"Erennius", "Solnius"}},
-				{ID: "hard", Label: "Hard Mode", Encounters: []string{"Solnius (Hard Mode)"}},
+				{Encounters: []string{"Erennius", "Solnius", "Solnius (Hard Mode)"}},
 			}
 		},
 		FlavoredRankings: func(database.WoWFlavor) *rankings.Rankings {

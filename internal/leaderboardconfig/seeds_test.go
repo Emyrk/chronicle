@@ -74,6 +74,7 @@ func TestInitialSeeds(t *testing.T) {
 	}
 	for _, r := range effective["nightmare-of-ursol"] {
 		require.False(t, r.InstanceName == "Molten Core" && r.EncounterName == "Gehennas")
+		require.False(t, r.InstanceName == "Emerald Sanctum" && r.SetKey == "hard")
 	}
 	// The three servers share identical relevant flavors, with no server-specific layer.
 	var first []database.ResolveLeaderboardConfigurationRow

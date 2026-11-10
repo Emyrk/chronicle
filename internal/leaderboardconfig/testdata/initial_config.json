@@ -43,15 +43,7 @@
       "name": "Normal",
       "bosses": [
         "Erennius",
-        "Solnius"
-      ]
-    },
-    {
-      "layer": "nightmare-of-ursol",
-      "instance": "Emerald Sanctum",
-      "key": "hard",
-      "name": "Hard Mode",
-      "bosses": [
+        "Solnius",
         "Solnius (Hard Mode)"
       ]
     },

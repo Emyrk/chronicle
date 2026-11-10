@@ -12,7 +12,7 @@ import (
 func TestResolveRankingEncounterNames(t *testing.T) {
 	t.Parallel()
 
-	service := &Service{registry: registry.RegistryForFlavor(nil, database.WoWFlavor{database.FlavorNightmareOfUrsol})}
+	service := &Service{registry: registry.RegistryForFlavor(nil, database.WoWFlavor{database.FlavorWrath})}
 
 	for _, tt := range []struct {
 		name       string
@@ -23,31 +23,31 @@ func TestResolveRankingEncounterNames(t *testing.T) {
 	}{
 		{
 			name:   "default empty ID",
-			query:  "instance_names=Emerald+Sanctum&encounter_set=",
-			want:   []string{"Erennius", "Solnius"},
+			query:  "instance_names=Obsidian+Sanctum&encounter_set=",
+			want:   []string{"Sartharion"},
 			wantOK: true,
 		},
 		{
 			name:   "named set",
-			query:  "instance_names=Emerald+Sanctum&encounter_set=hard",
-			want:   []string{"Solnius (Hard Mode)"},
+			query:  "instance_names=Obsidian+Sanctum&encounter_set=3d",
+			want:   []string{"Sartharion (3 Drakes)"},
 			wantOK: true,
 		},
 		{
 			name:   "explicit encounters take precedence",
-			query:  "instance_names=Emerald+Sanctum&encounter_set=hard&encounter_names=Erennius",
-			want:   []string{"Erennius"},
+			query:  "instance_names=Obsidian+Sanctum&encounter_set=3d&encounter_names=Sartharion",
+			want:   []string{"Sartharion"},
 			wantOK: true,
 		},
 		{
 			name:       "unknown set",
-			query:      "instance_names=Emerald+Sanctum&encounter_set=missing",
+			query:      "instance_names=Obsidian+Sanctum&encounter_set=missing",
 			wantOK:     false,
 			wantStatus: 400,
 		},
 		{
 			name:       "set requires one instance",
-			query:      "instance_names=Emerald+Sanctum,Molten+Core&encounter_set=",
+			query:      "instance_names=Obsidian+Sanctum,Naxxramas&encounter_set=",
 			wantOK:     false,
 			wantStatus: 400,
 		},
