@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"path"
 	"strconv"
 	"strings"
 	"sync"
@@ -87,6 +88,18 @@ func (s *Service) Routes() []frontend.OGRoute {
 	for i := range routes {
 		routes[i].Resolve = s.withBrandOG(routes[i].Resolve)
 	}
+	// Every other page (blog posts, tools, 404s) gets only the brand image; its
+	// own title and description stay as rendered. Chi tries this route last.
+	brandOnly := s.withBrandOG(func(*http.Request) *frontend.OGData { return &frontend.OGData{} })
+	routes = append(routes, frontend.OGRoute{
+		Pattern: "/*",
+		Resolve: func(r *http.Request) *frontend.OGData {
+			if path.Ext(r.URL.Path) != "" {
+				return nil // a static asset, not a page
+			}
+			return brandOnly(r)
+		},
+	})
 	return routes
 }
 

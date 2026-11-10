@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -268,4 +269,32 @@ func TestChooseOGImageURL(t *testing.T) {
 	u, err = url.Parse(api.ChooseOGImageURL(req, 0))
 	require.NoError(t, err)
 	require.Equal(t, "Free raid log analysis for World of Warcraft", u.Query().Get("excerpt"))
+}
+
+func TestBrandOGCatchAll(t *testing.T) {
+	t.Parallel()
+
+	resolve := func(api *Service, target string) *frontend.OGData {
+		r := chi.NewRouter()
+		var got *frontend.OGData
+		for _, route := range api.Routes() {
+			resolve := route.Resolve
+			r.Get(route.Pattern, func(_ http.ResponseWriter, r *http.Request) { got = resolve(r) })
+		}
+		r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, target, nil))
+		return got
+	}
+
+	api := testOGImageAPI(t, "https://og.example.com")
+	for _, page := range []string{"/blog/armory-refresh", "/blog", "/tools/some/deep/page", "/missing-page"} {
+		og := resolve(api, "https://chronicleclassic.com"+page)
+		require.NotNil(t, og, page)
+		require.Contains(t, og.ImageURL, "template=brand", page)
+		require.Empty(t, og.Title, "%s keeps its own rendered title", page)
+		require.Empty(t, og.URL, "%s keeps its own canonical URL", page)
+	}
+	require.Nil(t, resolve(api, "https://chronicleclassic.com/c/assets/index-abc.js"), "static assets get no OG")
+	require.Equal(t, "Leaderboards", resolve(api, "https://chronicleclassic.com/leaderboards").Title, "specific routes still win")
+	require.Empty(t, resolve(testOGImageAPI(t, ""), "https://chronicleclassic.com/blog/armory-refresh").ImageURL,
+		"no OG service → no image")
 }
