@@ -8,7 +8,7 @@ import {
   useSupportedInstanceProgressionBosses,
 } from "@/api/queries";
 import { useCharacterEncounters, useCharacterParses } from "@/api/rankingsQueries";
-import { bestScoreByInstance, summarizeProgress } from "../parseAggregation";
+import { averageScoreByInstance, bestScoreByInstance, summarizeProgress } from "../parseAggregation";
 import type { CareerRatings } from "./useCareerRatings";
 import { defaultMetric } from "./util";
 import { useRecentActivity } from "./useRecentActivity";
@@ -44,10 +44,15 @@ export function OverviewTab({
     stats: activityStats,
   } = useRecentActivity(player);
 
-  // Performance mode: color calendar nights by their best parse.
+  // Performance mode: calendar nights colored by their best parse, recent
+  // nights labeled with their average parse.
   const parsesQuery = useCharacterParses(isPerformance ? player.id : undefined, defaultMetric(player));
   const nightScores = useMemo(
     () => (isPerformance ? bestScoreByInstance(parsesQuery.data?.parses ?? []) : new Map<string, number>()),
+    [parsesQuery.data, isPerformance],
+  );
+  const nightAverages = useMemo(
+    () => (isPerformance ? averageScoreByInstance(parsesQuery.data?.parses ?? []) : new Map<string, number>()),
     [parsesQuery.data, isPerformance],
   );
 
@@ -109,6 +114,7 @@ export function OverviewTab({
           <div className="lg:col-span-12">
             <RecentNightsCard
               instances={activityQuery.data?.instances}
+              nightScores={nightAverages}
               onOpenActivity={() => onOpenTab("activity")}
             />
           </div>
@@ -138,6 +144,7 @@ export function OverviewTab({
           <div className="lg:col-span-7">
             <RecentNightsCard
               instances={activityQuery.data?.instances}
+              nightScores={nightScores}
               lootByInstance={lootByInstance}
               onOpenActivity={() => onOpenTab("activity")}
             />
