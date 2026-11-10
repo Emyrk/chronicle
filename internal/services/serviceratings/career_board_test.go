@@ -88,3 +88,36 @@ func TestCombineCareerBoard(t *testing.T) {
 	require.Equal(t, 70.0, *got[0].Mastery)
 	require.Equal(t, "kill_time", *got[0].ChosenMetric)
 }
+
+func TestCareerBoardRaidSelection(t *testing.T) {
+	t.Parallel()
+	a := leaderboardconfig.CareerKey{Instance: "a"}
+	b := leaderboardconfig.CareerKey{Instance: "b"}
+	vault := leaderboardconfig.CareerKey{Instance: "vault"}
+	w1, w3 := 1.0, 3.0
+	pool := leaderboardconfig.CareerPool{Variants: []leaderboardconfig.CareerVariant{
+		{CareerKey: a, Active: true, IncludeAverage: true, IncludeRenown: true, Weight: &w1, RenownBosses: []leaderboardconfig.CareerBoss{{Name: "x", Points: 2, HasPoints: true}}},
+		{CareerKey: b, Active: true, IncludeAverage: true, IncludeRenown: true, Weight: &w3, RenownBosses: []leaderboardconfig.CareerBoss{{Name: "y", Points: 5, HasPoints: true}}},
+		{CareerKey: vault, Active: true, IncludeRenown: true},
+	}}
+	inputs := CareerInputs{
+		Raids: []CareerRaidInput{{CareerKey: a, Metric: "dps", Mastery: 40, Peak: 50, EligibleKills: 1}, {CareerKey: b, Metric: "dps", Mastery: 80, Peak: 90, EligibleKills: 1}},
+		Kills: []CareerBossKills{{CareerKey: a, Boss: "x", Count: 1}, {CareerKey: b, Boss: "y", Count: 1}},
+	}
+
+	all := ReduceCareer(pool, inputs, "dps")
+	require.InDelta(t, (40*1+80*3)/4.0, *all.Mastery, 1e-9)
+	require.Equal(t, 7.0, all.Renown)
+
+	// Selecting raid a alone re-weights over a, and Renown counts a only.
+	onlyA := ReduceCareer(restrictCareerPool(pool, []leaderboardconfig.CareerKey{a}), inputs, "dps")
+	require.Equal(t, 40.0, *onlyA.Mastery)
+	require.Equal(t, 50.0, *onlyA.Peak)
+	require.Equal(t, 2.0, onlyA.Renown)
+
+	// The pool itself is untouched, and the options list every raid, heaviest first.
+	require.True(t, pool.Variants[1].Active)
+	options := careerRaidOptions(pool)
+	require.Equal(t, []string{"b", "a", "vault"}, []string{options[0].Instance, options[1].Instance, options[2].Instance})
+	require.False(t, options[2].IncludeAverage)
+}

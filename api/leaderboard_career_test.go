@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/Emyrk/chronicle/internal/leaderboardconfig"
 	"github.com/Emyrk/chronicle/internal/services/serviceratings"
 )
 
@@ -18,6 +19,22 @@ func TestLeaderboardCareerRejectsRoot(t *testing.T) {
 	(&API{}).LeaderboardCareer(rec, req)
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 	require.Empty(t, rec.Header().Get("Cache-Control"))
+}
+
+func TestCareerRaidKey(t *testing.T) {
+	t.Parallel()
+	for _, k := range []leaderboardconfig.CareerKey{
+		{Instance: "Onyxia's Lair"},
+		{Instance: "Naxxramas", Difficulty: "25 Player", MaxPlayers: 25},
+	} {
+		got, ok := parseCareerRaidKey(careerRaidKey(k))
+		require.True(t, ok)
+		require.Equal(t, k, got)
+	}
+	for _, bad := range []string{"", "Naxxramas", "Naxxramas|Normal", "|Normal|25", "Naxxramas|Normal|-1", "Naxxramas|Normal|big"} {
+		_, ok := parseCareerRaidKey(bad)
+		require.False(t, ok, bad)
+	}
 }
 
 func TestRankCareerBoard(t *testing.T) {

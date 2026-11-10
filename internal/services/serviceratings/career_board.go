@@ -1,9 +1,11 @@
 package serviceratings
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -23,6 +25,19 @@ type CareerBoardFilter struct {
 	// Class, Spec, and SubSpec narrow characters. A spec filter takes Mastery and
 	// Peak from that spec; Renown still adds up every spec.
 	Class, Spec, SubSpec string
+	// Raids narrows the board to these raids: Mastery and Peak become the
+	// weighted average over them alone, and Renown sums only them. Empty means
+	// every raid.
+	Raids []leaderboardconfig.CareerKey
+}
+
+// CareerRaidOption is one raid a career board can be narrowed to.
+type CareerRaidOption struct {
+	leaderboardconfig.CareerKey
+	// Weight is nil for raids that only count toward Renown.
+	Weight         *float64
+	IncludeAverage bool
+	IncludeRenown  bool
 }
 
 // CareerBoardEntry is one character or guild on the overall career board.
@@ -50,6 +65,51 @@ type CareerBoard struct {
 	// published regardless.
 	Status  string
 	Entries []CareerBoardEntry
+	// Raids are every raid the board can be narrowed to, whatever the filter,
+	// heaviest first.
+	Raids []CareerRaidOption
+}
+
+// careerRaidOptions lists the pool's active raids, heaviest first.
+func careerRaidOptions(pool leaderboardconfig.CareerPool) []CareerRaidOption {
+	var out []CareerRaidOption
+	for _, v := range pool.Variants {
+		if v.Active && (v.IncludeAverage || v.IncludeRenown) {
+			out = append(out, CareerRaidOption{CareerKey: v.CareerKey, Weight: v.Weight, IncludeAverage: v.IncludeAverage, IncludeRenown: v.IncludeRenown})
+		}
+	}
+	weight := func(o CareerRaidOption) float64 {
+		if o.Weight == nil || !o.IncludeAverage {
+			return 0
+		}
+		return *o.Weight
+	}
+	slices.SortStableFunc(out, func(a, b CareerRaidOption) int {
+		return cmp.Or(cmp.Compare(weight(b), weight(a)), cmp.Compare(a.Instance, b.Instance), cmp.Compare(a.Difficulty, b.Difficulty), cmp.Compare(a.MaxPlayers, b.MaxPlayers))
+	})
+	return out
+}
+
+// restrictCareerPool deactivates every raid outside the selection, so the
+// reducer's weighted denominator covers only the selected raids. Issues are
+// kept: a configuration problem still blocks averages rather than quietly
+// leaving a raid out.
+func restrictCareerPool(pool leaderboardconfig.CareerPool, raids []leaderboardconfig.CareerKey) leaderboardconfig.CareerPool {
+	if len(raids) == 0 {
+		return pool
+	}
+	keep := make(map[leaderboardconfig.CareerKey]bool, len(raids))
+	for _, k := range raids {
+		keep[k] = true
+	}
+	variants := slices.Clone(pool.Variants)
+	for i := range variants {
+		if !keep[variants[i].CareerKey] {
+			variants[i].Active = false
+		}
+	}
+	pool.Variants = variants
+	return pool
 }
 
 // ReadCareerBoard reduces every published career row with the current weights
@@ -74,6 +134,8 @@ func ReadCareerBoard(ctx context.Context, store database.Store, tenant uuid.UUID
 		if err != nil {
 			return err
 		}
+		out.Raids = careerRaidOptions(pool)
+		pool = restrictCareerPool(pool, filter.Raids)
 		out.Status = "ready"
 		if !pool.AveragesReady() {
 			out.Status = ReduceCareer(pool, CareerInputs{}, "").PerformanceStatus
