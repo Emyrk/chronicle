@@ -7667,6 +7667,35 @@ export interface CareerIssue {
 }
 
 // From chroniclesdk/career.go
+export interface CareerLeaderboardEntry {
+    readonly realm_id: string;
+    readonly realm_name: string;
+    readonly player_guid: string;
+    readonly player_name: string;
+    readonly player_class: string;
+    readonly guild_name: string;
+    readonly player_spec: string;
+    readonly player_sub_spec: string;
+    readonly chosen_metric: string | null;
+    readonly mastery: number | null;
+    readonly peak: number | null;
+    readonly renown: number;
+}
+
+// From chroniclesdk/career.go
+/**
+ * CareerLeaderboardResponse ranks characters by career Mastery, Peak, or Renown.
+ * Mastery and Peak come from each character's spec with the highest Mastery;
+ * Renown adds up every spec. Status explains unavailable Mastery and Peak.
+ */
+export interface CareerLeaderboardResponse {
+    readonly status: string;
+    readonly sort: string;
+    readonly total: number;
+    readonly entries: readonly CareerLeaderboardEntry[];
+}
+
+// From chroniclesdk/career.go
 export interface CareerPlayerCohort {
     readonly player_class: string;
     readonly player_spec: string;

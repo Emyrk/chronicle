@@ -41,6 +41,27 @@ func careerReadContext(ctx context.Context, tenant uuid.UUID) (context.Context, 
 	return servicetenant.WithTenantID(ctx, tenant), nil
 }
 
+// requirePlayerCareerMode rejects tenants whose cohort mode has no player careers.
+func requirePlayerCareerMode(ctx context.Context, tx database.Store, tenant uuid.UUID) error {
+	tenantRow, err := tx.GetTenantByID(ctx, tenant)
+	if err != nil {
+		return err
+	}
+	var config struct {
+		CohortMode string `json:"cohort_mode"`
+	}
+	if len(tenantRow.ParseConfig) > 0 {
+		if err := json.Unmarshal(tenantRow.ParseConfig, &config); err != nil {
+			return err
+		}
+	}
+	switch strings.ToLower(strings.TrimSpace(config.CohortMode)) {
+	case "class", "disabled":
+		return ErrCareerUnsupportedMode
+	}
+	return nil
+}
+
 // ReadPlayerCareer reads persisted exact-cohort candidates, never live source
 // observations. It resolves policy once in the same snapshot as stored results.
 func ReadPlayerCareer(ctx context.Context, store database.Store, tenant, realm uuid.UUID, guid string) (PlayerCareerResult, error) {
@@ -53,21 +74,8 @@ func ReadPlayerCareer(ctx context.Context, store database.Store, tenant, realm u
 		if _, err := tx.RequireCareerRealm(ctx, database.RequireCareerRealmParams{TenantID: tenant, RealmID: realm}); err != nil {
 			return err
 		}
-		tenantRow, err := tx.GetTenantByID(ctx, tenant)
-		if err != nil {
+		if err := requirePlayerCareerMode(ctx, tx, tenant); err != nil {
 			return err
-		}
-		var config struct {
-			CohortMode string `json:"cohort_mode"`
-		}
-		if len(tenantRow.ParseConfig) > 0 {
-			if err := json.Unmarshal(tenantRow.ParseConfig, &config); err != nil {
-				return err
-			}
-		}
-		switch strings.ToLower(strings.TrimSpace(config.CohortMode)) {
-		case "class", "disabled":
-			return ErrCareerUnsupportedMode
 		}
 		pool, err := CareerConfiguration(ctx, tx, tenant)
 		if err != nil {

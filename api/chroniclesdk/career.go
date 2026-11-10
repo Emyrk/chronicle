@@ -61,3 +61,28 @@ type CareerIssue struct {
 	MaxPlayers     int16  `json:"max_players"`
 	Code           string `json:"code"`
 }
+
+// CareerLeaderboardResponse ranks characters by career Mastery, Peak, or Renown.
+// Mastery and Peak come from each character's spec with the highest Mastery;
+// Renown adds up every spec. Status explains unavailable Mastery and Peak.
+type CareerLeaderboardResponse struct {
+	Status  string                   `json:"status"`
+	Sort    string                   `json:"sort"`
+	Total   int                      `json:"total"`
+	Entries []CareerLeaderboardEntry `json:"entries"`
+}
+
+type CareerLeaderboardEntry struct {
+	RealmID       string   `json:"realm_id"`
+	RealmName     string   `json:"realm_name"`
+	PlayerGUID    string   `json:"player_guid"`
+	PlayerName    string   `json:"player_name"`
+	PlayerClass   string   `json:"player_class"`
+	GuildName     string   `json:"guild_name"`
+	PlayerSpec    string   `json:"player_spec"`
+	PlayerSubSpec string   `json:"player_sub_spec"`
+	ChosenMetric  *string  `json:"chosen_metric"`
+	Mastery       *float64 `json:"mastery"`
+	Peak          *float64 `json:"peak"`
+	Renown        float64  `json:"renown"`
+}

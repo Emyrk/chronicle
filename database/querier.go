@@ -866,6 +866,11 @@ type sqlcQuerier interface {
 	ListInstancesMissingTimeParseScores(ctx context.Context, arg ListInstancesMissingTimeParseScoresParams) ([]ListInstancesMissingTimeParseScoresRow, error)
 	ListItemPricingRealms(ctx context.Context) ([]ListItemPricingRealmsRow, error)
 	ListLeaderboardCareerIdentityPage(ctx context.Context, arg ListLeaderboardCareerIdentityPageParams) ([]LeaderboardCareerIdentity, error)
+	// Display metadata for one page of characters, looked up after ranking.
+	ListLeaderboardCareerPlayerNames(ctx context.Context, arg ListLeaderboardCareerPlayerNamesParams) ([]ListLeaderboardCareerPlayerNamesRow, error)
+	// Every published player career row for the tenant. Mastery and Peak are
+	// reduced in Go with the current weights, so rows carry inputs, not scores.
+	ListLeaderboardCareerPlayerSubjects(ctx context.Context, arg ListLeaderboardCareerPlayerSubjectsParams) ([]LeaderboardCareerSubject, error)
 	ListLeaderboardCareerVariants(ctx context.Context, flavors []string) ([]LeaderboardCareerVariant, error)
 	ListLeaderboardDirtyRuns(ctx context.Context, tenantID uuid.UUID) ([]LeaderboardDirtyRun, error)
 	ListLeaderboardHighlights(ctx context.Context, arg ListLeaderboardHighlightsParams) ([]LeaderboardHighlight, error)
