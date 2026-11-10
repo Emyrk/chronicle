@@ -905,6 +905,11 @@ var HyjalSummitFactory = &instances.CommonFactory{
 	ZoneNames: []string{"hyjal summit", "the battle for mount hyjal"},
 	MapIDs:    []uint32{534},
 	Hostiles:  instances.FromMap(HyjalSummitHostiles()),
+	FlavoredRankings: func(fl database.WoWFlavor) *rankings.Rankings {
+		rules := HyjalSummitSpeedrunRequirements()
+		rules.Speedrun.LevelRange = instances.Level70Cap(fl)
+		return rules
+	},
 }
 
 // SerpentshrineCavernHostiles returns creature entry IDs for Serpentshrine Cavern (map 548).
@@ -1244,6 +1249,11 @@ var ZulAmanFactory = &instances.CommonFactory{
 	ZoneNames: []string{"zul'aman"},
 	MapIDs:    []uint32{568},
 	Hostiles:  instances.FromMap(ZulAmanHostiles()),
+	FlavoredRankings: func(fl database.WoWFlavor) *rankings.Rankings {
+		rules := ZulAmanSpeedrunRequirements()
+		rules.Speedrun.LevelRange = instances.Level70Cap(fl)
+		return rules
+	},
 }
 
 // SunwellPlateauHostiles returns creature entry IDs for Sunwell Plateau (map 580).

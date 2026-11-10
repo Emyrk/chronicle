@@ -70,6 +70,35 @@ func TempestKeepSpeedrunRequirements() *rankings.Rankings {
 	}
 }
 
+func HyjalSummitSpeedrunRequirements() *rankings.Rankings {
+	return &rankings.Rankings{
+		Speedrun: &rankings.SpeedrunRules{
+			Requirements: []rankings.SpeedrunRequirement{
+				{Name: "Rage Winterchill", EntryIDs: []uint32{17767}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+				{Name: "Anetheron", EntryIDs: []uint32{17808}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+				{Name: "Kaz'rogal", EntryIDs: []uint32{17888}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+				{Name: "Azgalor", EntryIDs: []uint32{17842}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+				{Name: "Archimonde", EntryIDs: []uint32{17968}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+			},
+		},
+	}
+}
+
+func ZulAmanSpeedrunRequirements() *rankings.Rankings {
+	return &rankings.Rankings{
+		Speedrun: &rankings.SpeedrunRules{
+			Requirements: []rankings.SpeedrunRequirement{
+				{Name: "Akil'zon", EntryIDs: []uint32{23574}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+				{Name: "Nalorakk", EntryIDs: []uint32{23576}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+				{Name: "Jan'alai", EntryIDs: []uint32{23578}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+				{Name: "Halazzi", EntryIDs: []uint32{23577}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+				{Name: "Hex Lord Malacrass", EntryIDs: []uint32{24239}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+				{Name: "Zul'jin", EntryIDs: []uint32{23863}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+			},
+		},
+	}
+}
+
 func UtgardeKeepSpeedrunRequirements() *rankings.Rankings {
 	return &rankings.Rankings{
 		Speedrun: &rankings.SpeedrunRules{

@@ -115,6 +115,45 @@ func TestTempestKeepSpeedrunRequirements(t *testing.T) {
 	}, wrathRules.Speedrun.LevelRange)
 }
 
+func TestHyjalSummitSpeedrunRequirements(t *testing.T) {
+	t.Parallel()
+
+	tbcRules := HyjalSummitFactory.FlavoredRankings(database.WoWFlavor{database.FlavorTBC})
+	require.NotNil(t, tbcRules)
+	require.NotNil(t, tbcRules.Speedrun)
+	require.Nil(t, tbcRules.Speedrun.LevelRange)
+	require.Equal(t, []rankings.SpeedrunRequirement{
+		{Name: "Rage Winterchill", EntryIDs: []uint32{17767}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Anetheron", EntryIDs: []uint32{17808}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Kaz'rogal", EntryIDs: []uint32{17888}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Azgalor", EntryIDs: []uint32{17842}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Archimonde", EntryIDs: []uint32{17968}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+	}, tbcRules.Speedrun.Requirements)
+
+	wrathRules := HyjalSummitFactory.FlavoredRankings(database.WoWFlavor{database.FlavorWrath})
+	require.Equal(t, &rankings.LevelRangeRequirement{MinLevel: 0, MaxLevel: 70}, wrathRules.Speedrun.LevelRange)
+}
+
+func TestZulAmanSpeedrunRequirements(t *testing.T) {
+	t.Parallel()
+
+	tbcRules := ZulAmanFactory.FlavoredRankings(database.WoWFlavor{database.FlavorTBC})
+	require.NotNil(t, tbcRules)
+	require.NotNil(t, tbcRules.Speedrun)
+	require.Nil(t, tbcRules.Speedrun.LevelRange)
+	require.Equal(t, []rankings.SpeedrunRequirement{
+		{Name: "Akil'zon", EntryIDs: []uint32{23574}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Nalorakk", EntryIDs: []uint32{23576}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Jan'alai", EntryIDs: []uint32{23578}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Halazzi", EntryIDs: []uint32{23577}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Hex Lord Malacrass", EntryIDs: []uint32{24239}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Zul'jin", EntryIDs: []uint32{23863}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+	}, tbcRules.Speedrun.Requirements)
+
+	wrathRules := ZulAmanFactory.FlavoredRankings(database.WoWFlavor{database.FlavorWrath})
+	require.Equal(t, &rankings.LevelRangeRequirement{MinLevel: 0, MaxLevel: 70}, wrathRules.Speedrun.LevelRange)
+}
+
 func TestGruulsLairSpeedrunRequirements(t *testing.T) {
 	t.Parallel()
 

@@ -1,8 +1,9 @@
 BEGIN;
 
 -- Reviewed default ranking sets from complete Crusader Storm raid uploads.
--- These use the existing implicit TBC difficulty tuple ('', 0); no speedrun,
--- difficulty, or career-average policy is introduced here.
+-- These use the existing implicit TBC difficulty tuple ('', 0). Speedrun
+-- requirements are wired separately in the parser; no difficulty variant or
+-- career-average policy is introduced here.
 INSERT INTO leaderboard_sets (instance_name, set_key, name) VALUES
     ('Hyjal Summit', 'default', 'Normal'),
     ('Zul''Aman', 'default', 'Normal');

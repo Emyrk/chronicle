@@ -41,6 +41,11 @@ Crusader Storm `/api/v1/raidlogs/recent` feed on November 10, 2026:
   order (`Akil'zon`, `Nalorakk`, `Jan'alai`, `Halazzi`, `Hex Lord Malacrass`,
   `Zul'jin`).
 
+The Hyjal and Zul'Aman factories also define parser-side speedrun requirements
+for the same boss rosters. This enables qualified fastest-clear results for new
+parses. Existing uploads need to be reparsed before they can populate the new
+speedrun boards.
+
 Karazhan, Magtheridon's Lair, Black Temple, and Sunwell Plateau remain cataloged
 for **Renown only**. No set or member rows are configured for them, so direct boss
 and career Renown work while default whole-raid selection remains deferred.
