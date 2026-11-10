@@ -37,8 +37,30 @@ export type RatingLivePage = {
   hasNextPage: boolean
 }
 
+/** How Peak's per-component bars and breakdown read. */
+export interface PeakComponentLabels {
+  /** Plural noun, lower case: "bosses". */
+  noun: string
+  /** Column header: "Boss peaks". */
+  header: string
+  /** Header note: "mean of 8, misses count 0". */
+  note: (count: number) => string
+  /** The breakdown dialog's description. */
+  description: (count: number) => string
+}
+
+/** The default: Peak is the plain mean of every boss, misses counting 0. */
+export const BOSS_PEAK_LABELS: PeakComponentLabels = {
+  noun: "bosses",
+  header: "Boss peaks",
+  note: (count) => `mean of ${count}, misses count 0`,
+  description: (count) => `Peak is the mean of all ${count} bosses' best scores; a boss without a kill counts as 0.`,
+}
+
 /** Supply already-fetched data; the host owns API queries, cursor state, and exact cohort mapping. */
 export interface RatingLiveData {
+  /** Peak's components when they are not bosses (career boards use weighted raids). */
+  peakLabels?: PeakComponentLabels
   /** New summary reads do not imply that a historical catch-up worker exists. */
   catchupStatus?: boolean
   /** Realm-filtered pages have no published global rank number. */

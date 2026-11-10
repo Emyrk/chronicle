@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -27,7 +28,8 @@ const (
 // at the edge.
 //
 // Query: subject=characters|guilds, metric=dps|hps (characters; default each
-// spec's chosen metric), class, spec, sub_spec (characters), realm, limit.
+// spec's chosen metric), class, spec, sub_spec (characters), realm, search
+// (name contains), offset, and limit (per board).
 func (api *API) LeaderboardCareer(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
@@ -66,6 +68,16 @@ func (api *API) LeaderboardCareer(w http.ResponseWriter, r *http.Request) {
 		}
 		limit = n
 	}
+	offset := 0
+	if raw := q.Get("offset"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 0 {
+			bad("offset must be zero or more")
+			return
+		}
+		offset = n
+	}
+	search := strings.TrimSpace(q.Get("search"))
 	db := database.New(api.Opts.Pool)
 	if raw := q.Get("realm"); raw != "" {
 		id, err := uuid.Parse(raw)
@@ -85,10 +97,21 @@ func (api *API) LeaderboardCareer(w http.ResponseWriter, r *http.Request) {
 		writeCareerError(w, r, err)
 		return
 	}
+	entries := board.Entries
+	if search != "" {
+		entries, err = careerBoardSearch(ctx, db, filter, search, entries)
+		if err != nil {
+			httpapi.InternalServerError(w, err)
+			return
+		}
+	}
+	// Ranks are computed before the page; search narrows the ranking itself.
+	totals := map[string]int{}
 	ranked := map[string][]serviceratings.CareerBoardEntry{}
 	for _, sort := range []string{"mastery", "peak", "renown"} {
-		entries := rankCareerBoard(board.Entries, sort)
-		ranked[sort] = entries[:min(limit, len(entries))]
+		all := rankCareerBoard(entries, sort)
+		totals[sort] = len(all)
+		ranked[sort] = all[min(offset, len(all)):min(offset+limit, len(all))]
 	}
 	names, err := careerBoardNames(ctx, db, filter.Guilds, ranked)
 	if err != nil {
@@ -96,7 +119,7 @@ func (api *API) LeaderboardCareer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	page := func(sort string) chroniclesdk.CareerLeaderboardBoard {
-		out := chroniclesdk.CareerLeaderboardBoard{Total: len(rankCareerBoard(board.Entries, sort)), Entries: []chroniclesdk.CareerLeaderboardEntry{}}
+		out := chroniclesdk.CareerLeaderboardBoard{Total: totals[sort], Entries: []chroniclesdk.CareerLeaderboardEntry{}}
 		for _, e := range ranked[sort] {
 			entry := names[careerNameKey{e.RealmID, e.SubjectID}]
 			entry.SubjectID, entry.RealmID = e.SubjectID, e.RealmID.String()
@@ -104,7 +127,7 @@ func (api *API) LeaderboardCareer(w http.ResponseWriter, r *http.Request) {
 			entry.PlayerClass = cmp.Or(e.PlayerClass, entry.PlayerClass)
 			entry.PlayerSpec, entry.PlayerSubSpec, entry.ChosenMetric = e.PlayerSpec, e.PlayerSubSpec, e.ChosenMetric
 			entry.Mastery, entry.Peak, entry.Renown = e.Mastery, e.Peak, e.Renown
-			entry.Form, entry.Floor, entry.BossesKilled, entry.Bosses = e.Form, e.Floor, e.BossesKilled, e.Bosses
+			entry.Form, entry.Floor = e.Form, e.Floor
 			entry.Raids = careerBoardRaids(e)
 			out.Entries = append(out.Entries, entry)
 		}
@@ -113,6 +136,35 @@ func (api *API) LeaderboardCareer(w http.ResponseWriter, r *http.Request) {
 	writeCacheableLeaderboardResponse(ctx, w, http.StatusOK, chroniclesdk.CareerLeaderboardResponse{
 		Status: board.Status, Mastery: page("mastery"), Peak: page("peak"), Renown: page("renown"),
 	})
+}
+
+// careerBoardSearch keeps subjects whose name contains the search text.
+func careerBoardSearch(ctx context.Context, db database.Store, filter serviceratings.CareerBoardFilter, search string, entries []serviceratings.CareerBoardEntry) ([]serviceratings.CareerBoardEntry, error) {
+	match := map[careerNameKey]bool{}
+	if filter.Guilds {
+		rows, err := db.SearchLeaderboardCareerGuilds(ctx, database.SearchLeaderboardCareerGuildsParams{Search: search, RealmFilter: filter.Realm})
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			match[careerNameKey{row.RealmID, row.SubjectID}] = true
+		}
+	} else {
+		rows, err := db.SearchLeaderboardCareerPlayers(ctx, database.SearchLeaderboardCareerPlayersParams{Search: search, RealmFilter: filter.Realm})
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			match[careerNameKey{row.RealmID, row.SubjectID}] = true
+		}
+	}
+	out := make([]serviceratings.CareerBoardEntry, 0, len(match))
+	for _, e := range entries {
+		if match[careerNameKey{e.RealmID, e.SubjectID}] {
+			out = append(out, e)
+		}
+	}
+	return out, nil
 }
 
 type careerNameKey struct {
@@ -189,11 +241,19 @@ func careerBoardRaids(e serviceratings.CareerBoardEntry) []chroniclesdk.CareerLe
 		}
 		raid := chroniclesdk.CareerLeaderboardRaid{
 			InstanceName: c.Instance, DifficultyName: c.Difficulty, MaxPlayers: int(c.MaxPlayers),
-			Weight: *c.Weight, Mastery: c.Mastery, Peak: c.Peak, Kills: c.EligibleMetricKills, Bosses: c.Bosses,
+			Weight: *c.Weight, Mastery: c.Mastery, Peak: c.Peak, Kills: c.EligibleMetricKills,
+			Bosses: []chroniclesdk.CareerLeaderboardRaidBoss{},
 		}
 		if c.Parts {
-			form, floor, killed := c.Form, c.Floor, c.BossesKilled
-			raid.Form, raid.Floor, raid.BossesKilled = &form, &floor, &killed
+			form, floor := c.Form, c.Floor
+			raid.Form, raid.Floor = &form, &floor
+			counts := map[string]int64{}
+			for _, b := range c.BossCounts {
+				counts[b.Boss] += b.Count
+			}
+			for _, boss := range c.AverageBosses {
+				raid.Bosses = append(raid.Bosses, chroniclesdk.CareerLeaderboardRaidBoss{EncounterName: boss, Count: counts[boss]})
+			}
 		}
 		out = append(out, raid)
 	}

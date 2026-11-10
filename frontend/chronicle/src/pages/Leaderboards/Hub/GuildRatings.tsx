@@ -6,6 +6,7 @@ import { RATING_METRICS, type RatingMetric } from "@/pages/Leaderboards/Ratings/
 import { cn } from "@/lib/utils"
 import { MOBILE_EDGE_TO_EDGE } from "@/pages/Leaderboards/Hub/edgeToEdge"
 import { BoardSearch, MasteryPartCells, MasteryPartHeaders, PublishedMasteryCells, PublishedMasteryHeaders, PeakComponents } from "@/pages/Leaderboards/Ratings/RatingFullList"
+import { BOSS_PEAK_LABELS } from "@/pages/Leaderboards/Ratings/ratingLiveData"
 import { BoardSkeleton, BossMetricSkeleton } from "@/pages/Leaderboards/Ratings/RatingLeaderboard"
 import { BossPortrait, Emblem, RankMark } from "@/pages/Leaderboards/Ratings/RatingParts"
 import { METRIC_THEMES, type MetricTheme, type RatingView } from "@/pages/Leaderboards/Ratings/ratingThemes"
@@ -220,7 +221,8 @@ export function GuildRatingBoards({
         </section>
       )}
 
-      {!tableOnly && (
+      {/* Boards without bosses (the career board) have no side boards to show. */}
+      {!tableOnly && (bosses ?? allBosses).length > 0 && (
         <section aria-label="Boss boards" className="space-y-3">
           <h2 className="px-1 text-sm font-semibold">By boss</h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
@@ -330,9 +332,10 @@ function GuildFullTable({
   const timeLabel = oneBoss ? "Kill time" : kindLabel === "Bosses" ? "Total kill time" : "Clear time"
   /** Live multi-boss Peak shows each boss's bar; one boss (or the fixtures) shows a run time instead. */
   const bossBars = live && !oneBoss
+  const peakLabels = live?.peakLabels ?? BOSS_PEAK_LABELS
   const peakBars = (g: GuildRating) => {
     const row = published.data?.rows.find((row) => row.entry.guid === g.guildId && row.entry.detail === g.detail)
-    return row ? <PeakComponents entry={row.entry} scores={row.peakComponents} /> : null
+    return row ? <PeakComponents entry={row.entry} scores={row.peakComponents} labels={peakLabels} /> : null
   }
 
   return (
@@ -391,12 +394,12 @@ function GuildFullTable({
               ) : (
                 <>
                   {/* Phones: the boss bars sit between the name and the right-aligned score. */}
-                  {view === "peak" && bossBars && <th className="px-2 py-2.5 text-left font-medium sm:hidden">Bosses</th>}
+                  {view === "peak" && bossBars && <th className="px-2 py-2.5 text-left font-medium capitalize sm:hidden">{peakLabels.noun}</th>}
                   <th className={cn("w-32 px-3 py-2.5 text-left font-medium", view === "peak" && "pr-4 text-right sm:pr-3 sm:text-left")}>{theme.label}</th>
                   {view === "mastery" && (live ? <PublishedMasteryHeaders /> : <MasteryPartHeaders />)}
                   {view === "peak" && (
                     <>
-                      <th className={cn("hidden px-3 py-2.5 font-medium sm:table-cell", bossBars ? "text-left" : "text-right")}>{bossBars ? "Boss peaks" : timeLabel}</th>
+                      <th className={cn("hidden px-3 py-2.5 font-medium sm:table-cell", bossBars ? "text-left" : "text-right")}>{bossBars ? peakLabels.header : timeLabel}</th>
                       <th className="hidden px-3 py-2.5 text-left font-medium sm:table-cell">Date</th>
                     </>
                   )}

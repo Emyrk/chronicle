@@ -19,7 +19,7 @@ import {
 import { BossPortrait, Emblem, RankMark, RawTag, ScopeMark, SpecIcon } from "./RatingParts"
 import { ratingEntryAttributes } from "./ratingEntities"
 import { METRIC_THEMES, type RatingView } from "./ratingThemes"
-import type { RatingLiveData } from "./ratingLiveData"
+import { BOSS_PEAK_LABELS, type PeakComponentLabels, type RatingLiveData } from "./ratingLiveData"
 
 const PAGE_SIZE = 50
 
@@ -73,6 +73,7 @@ export function RatingFullList({
   const runFor = (entry: RatingEntry, liveRun?: { ms: number; date: string; log?: string }): { ms?: number; date?: string; log?: string } =>
     live ? { ms: entry.durationMs, date: liveRun?.date, log: liveRun?.log } : liveRun ?? peakRun(entry.id, scope.boss)
   const theme = METRIC_THEMES[view]
+  const peakLabels = live?.peakLabels ?? BOSS_PEAK_LABELS
 
   const fixtureRows = useMemo<FullRow[]>(() => {
     if (live) return []
@@ -207,7 +208,7 @@ export function RatingFullList({
               ) : (
                 <>
                   {/* Phones: the boss bars sit between the name and the right-aligned score. */}
-                  {showPeakComponents && <th className="px-2 py-2.5 text-left font-medium sm:hidden">Bosses</th>}
+                  {showPeakComponents && <th className="px-2 py-2.5 text-left font-medium capitalize sm:hidden">{peakLabels.noun}</th>}
                   <th className={cn("w-32 px-3 py-2.5 text-left font-medium", phoneFolds && "pr-4 text-right sm:pr-3 sm:text-left")}>
                     {theme.label}
                     <HeaderHint {...METRIC_HINTS[view]} className="ml-1 align-middle" />
@@ -215,8 +216,8 @@ export function RatingFullList({
                   </th>
                   {view === "mastery" && (live ? <PublishedMasteryHeaders /> : <MasteryPartHeaders />)}
                   {showPeakComponents && (
-                    <th className="hidden w-[28%] px-3 py-2.5 text-left font-medium sm:table-cell" title="Peak is the mean of every boss's best score; a boss without a kill counts as 0.">
-                      Boss peaks <span className="ml-1 hidden tracking-normal normal-case opacity-70 md:inline">· mean of {encounterCount}, misses count 0</span>
+                    <th className="hidden w-[28%] px-3 py-2.5 text-left font-medium sm:table-cell" title={peakLabels.description(encounterCount)}>
+                      {peakLabels.header} <span className="ml-1 hidden tracking-normal normal-case opacity-70 md:inline">· {peakLabels.note(encounterCount)}</span>
                     </th>
                   )}
                   {showPeakRun && (
@@ -312,7 +313,7 @@ export function RatingFullList({
                   </>
                 ) : (
                   <>
-                    {showPeakComponents && <td className="px-2 py-2 sm:hidden"><PeakComponents entry={entry} scores={peakComponents} /></td>}
+                    {showPeakComponents && <td className="px-2 py-2 sm:hidden"><PeakComponents entry={entry} scores={peakComponents} labels={peakLabels} /></td>}
                     <td className={cn("px-3 py-2", phoneFolds && "pr-4 sm:pr-3")}>
                       <div className={cn("flex flex-col items-start gap-1", phoneFolds && "items-end sm:items-start")}>
                         <span className="font-mono text-base tabular-nums" style={rank === 1 ? { color: theme.accent } : undefined}>
@@ -335,7 +336,7 @@ export function RatingFullList({
                       </div>
                     </td>
                     {view === "mastery" && (live ? <PublishedMasteryCells entry={entry} /> : <MasteryPartCells parts={entry.mastery} />)}
-                    {showPeakComponents && <td className="hidden px-3 py-2 sm:table-cell"><PeakComponents entry={entry} scores={peakComponents} /></td>}
+                    {showPeakComponents && <td className="hidden px-3 py-2 sm:table-cell"><PeakComponents entry={entry} scores={peakComponents} labels={peakLabels} /></td>}
                     {showPeakRun && (() => {
                       const run = runFor(entry, liveRun)
                       return <>
@@ -401,7 +402,7 @@ type BossPeak = { encounter_name: string; score: number }
  * Every boss's best score as one bar each; the row's Peak is their mean, misses counted as 0.
  * Clicking opens the full per-boss breakdown in a dialog.
  */
-export function PeakComponents({ entry, scores }: { entry: RatingEntry; scores?: readonly BossPeak[] }) {
+export function PeakComponents({ entry, scores, labels = BOSS_PEAK_LABELS }: { entry: RatingEntry; scores?: readonly BossPeak[]; labels?: PeakComponentLabels }) {
   if (!scores?.length) return <span className="text-muted-foreground">—</span>
   const missed = scores.filter((boss) => boss.score <= 0).length
   return (
@@ -410,7 +411,7 @@ export function PeakComponents({ entry, scores }: { entry: RatingEntry; scores?:
         <DialogTrigger asChild>
           <button
             type="button"
-            aria-label={`Boss peaks for ${entry.name}`}
+            aria-label={`${labels.header} for ${entry.name}`}
             className="flex cursor-pointer items-center gap-2 rounded-md border border-white/[.07] bg-black/20 px-2 py-1 text-xs text-muted-foreground transition-colors hover:border-white/15 hover:text-foreground md:gap-3 md:px-2.5 md:py-1.5"
           >
             {/* One bar per boss: a glance at the shape before opening the breakdown. */}
@@ -425,7 +426,7 @@ export function PeakComponents({ entry, scores }: { entry: RatingEntry; scores?:
               ))}
             </span>
             {/* Phones show the bars alone; the breakdown dialog still names every boss. */}
-            <span className="hidden whitespace-nowrap sm:inline">{scores.length} bosses{missed ? ` · ${missed} missed` : ""}</span>
+            <span className="hidden whitespace-nowrap sm:inline">{scores.length} {labels.noun}{missed ? ` · ${missed} missed` : ""}</span>
             <ChevronRight className="size-3.5" />
           </button>
         </DialogTrigger>
@@ -436,7 +437,7 @@ export function PeakComponents({ entry, scores }: { entry: RatingEntry; scores?:
               <span className="font-mono text-[color:var(--metric)] tabular-nums">{METRIC_THEMES.peak.format(entry.score)}</span>
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Peak is the mean of all {scores.length} bosses' best scores; a boss without a kill counts as 0.
+              {labels.description(scores.length)}
             </DialogDescription>
           </DialogHeader>
           <ul className="styled-scrollbar grid gap-1.5 overflow-y-auto px-5 py-4">

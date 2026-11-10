@@ -40,8 +40,6 @@ type CareerBoardEntry struct {
 	Peak          *float64
 	Form          *float64
 	Floor         *float64
-	BossesKilled  *int64
-	Bosses        *int64
 	Renown        float64
 	// Contributions are the per-raid values behind Mastery and Peak.
 	Contributions []CareerContribution
@@ -153,7 +151,6 @@ func combineCareerBoard(pool leaderboardconfig.CareerPool, rows []database.Leade
 		current.entry.Mastery = summary.Mastery
 		current.entry.Peak = summary.Peak
 		current.entry.Form, current.entry.Floor = summary.Form, summary.Floor
-		current.entry.BossesKilled, current.entry.Bosses = summary.BossesKilled, summary.Bosses
 		current.entry.Contributions = summary.Contributions
 	}
 	flush()

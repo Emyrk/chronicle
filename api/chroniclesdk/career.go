@@ -96,13 +96,10 @@ type CareerLeaderboardEntry struct {
 	Mastery       *float64 `json:"mastery"`
 	Peak          *float64 `json:"peak"`
 	Renown        float64  `json:"renown"`
-	// Form, Floor, and kill progress are null until the subject's inputs are
-	// refreshed with them.
-	Form         *float64                `json:"form"`
-	Floor        *float64                `json:"floor"`
-	BossesKilled *int64                  `json:"bosses_killed"`
-	Bosses       *int64                  `json:"bosses"`
-	Raids        []CareerLeaderboardRaid `json:"raids"`
+	// Form and Floor are null until the subject's inputs are refreshed with them.
+	Form  *float64                `json:"form"`
+	Floor *float64                `json:"floor"`
+	Raids []CareerLeaderboardRaid `json:"raids"`
 }
 
 // CareerLeaderboardRaid is one weighted raid behind an entry's Mastery and Peak;
@@ -115,9 +112,14 @@ type CareerLeaderboardRaid struct {
 	Mastery        float64 `json:"mastery"`
 	Peak           float64 `json:"peak"`
 	Kills          int64   `json:"kills"`
-	// Form, Floor, and BossesKilled are null until the inputs carry them.
-	Form         *float64 `json:"form"`
-	Floor        *float64 `json:"floor"`
-	BossesKilled *int64   `json:"bosses_killed"`
-	Bosses       int64    `json:"bosses"`
+	// Form and Floor are null, and Bosses empty, until the inputs carry them.
+	Form   *float64                    `json:"form"`
+	Floor  *float64                    `json:"floor"`
+	Bosses []CareerLeaderboardRaidBoss `json:"bosses"`
+}
+
+// CareerLeaderboardRaidBoss is one average-eligible boss and its eligible kills (0 if none).
+type CareerLeaderboardRaidBoss struct {
+	EncounterName string `json:"encounter_name"`
+	Count         int64  `json:"count"`
 }

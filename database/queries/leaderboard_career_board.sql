@@ -24,3 +24,15 @@ SELECT g.id, g.name,
  COALESCE((SELECT NULLIF(r.name, '') FROM wow_server_realms r WHERE r.id = g.realm_id), 'Unknown realm')::text AS realm_name,
  COALESCE((SELECT gp.theme->>'logo_url' FROM guild_pages gp WHERE gp.guild_id = g.id), '')::text AS logo_url
 FROM guilds g WHERE g.id = ANY(@guild_ids::uuid[]);
+
+-- name: SearchLeaderboardCareerPlayers :many
+-- Characters whose name contains the search text, for filtering a ranked career board.
+SELECT realm_id, id::text AS subject_id FROM game_players
+WHERE position(lower(@search::text) IN lower(name)) > 0
+ AND (@realm_filter::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR realm_id = @realm_filter::uuid);
+
+-- name: SearchLeaderboardCareerGuilds :many
+-- Guilds whose name contains the search text, for filtering a ranked career board.
+SELECT realm_id, id::text AS subject_id FROM guilds
+WHERE position(lower(@search::text) IN lower(name)) > 0
+ AND (@realm_filter::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR realm_id = @realm_filter::uuid);

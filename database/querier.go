@@ -1236,6 +1236,10 @@ type sqlcQuerier interface {
 	SearchGamePlayers(ctx context.Context, arg SearchGamePlayersParams) ([]SearchGamePlayersRow, error)
 	SearchItemSets(ctx context.Context, arg SearchItemSetsParams) ([]SearchItemSetsRow, error)
 	SearchItemTemplates(ctx context.Context, arg SearchItemTemplatesParams) ([]SearchItemTemplatesRow, error)
+	// Guilds whose name contains the search text, for filtering a ranked career board.
+	SearchLeaderboardCareerGuilds(ctx context.Context, arg SearchLeaderboardCareerGuildsParams) ([]SearchLeaderboardCareerGuildsRow, error)
+	// Characters whose name contains the search text, for filtering a ranked career board.
+	SearchLeaderboardCareerPlayers(ctx context.Context, arg SearchLeaderboardCareerPlayersParams) ([]SearchLeaderboardCareerPlayersRow, error)
 	// Slot-aware enchant search for the gear builder. Joining through the
 	// spells that apply each enchant (effect 53 = enchant item, permanent)
 	// keeps only actually-applyable enchants and derives slot validity from

@@ -7696,13 +7696,10 @@ export interface CareerLeaderboardEntry {
     readonly peak: number | null;
     readonly renown: number;
     /**
-     * Form, Floor, and kill progress are null until the subject's inputs are
-     * refreshed with them.
+     * Form and Floor are null until the subject's inputs are refreshed with them.
      */
     readonly form: number | null;
     readonly floor: number | null;
-    readonly bosses_killed: number | null;
-    readonly bosses: number | null;
     readonly raids: readonly CareerLeaderboardRaid[];
 }
 
@@ -7720,12 +7717,20 @@ export interface CareerLeaderboardRaid {
     readonly peak: number;
     readonly kills: number;
     /**
-     * Form, Floor, and BossesKilled are null until the inputs carry them.
+     * Form and Floor are null, and Bosses empty, until the inputs carry them.
      */
     readonly form: number | null;
     readonly floor: number | null;
-    readonly bosses_killed: number | null;
-    readonly bosses: number;
+    readonly bosses: readonly CareerLeaderboardRaidBoss[];
+}
+
+// From chroniclesdk/career.go
+/**
+ * CareerLeaderboardRaidBoss is one average-eligible boss and its eligible kills (0 if none).
+ */
+export interface CareerLeaderboardRaidBoss {
+    readonly encounter_name: string;
+    readonly count: number;
 }
 
 // From chroniclesdk/career.go

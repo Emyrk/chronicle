@@ -2,6 +2,7 @@ package serviceratings
 
 import (
 	"testing"
+	"strings"
 	"time"
 
 	"github.com/Emyrk/chronicle/database"
@@ -169,6 +170,9 @@ func TestCareerPublicationReadAndRetraction(t *testing.T) {
 	guildNames, err := s.db.ListLeaderboardCareerGuildNames(ctx, []uuid.UUID{s.guild})
 	require.NoError(t, err)
 	require.Len(t, guildNames, 1)
+	found, err := s.db.SearchLeaderboardCareerGuilds(ctx, database.SearchLeaderboardCareerGuildsParams{Search: strings.ToUpper(guildNames[0].Name[:2])})
+	require.NoError(t, err)
+	require.Contains(t, found, database.SearchLeaderboardCareerGuildsRow{RealmID: s.realm, SubjectID: s.guild.String()}, "search is case-insensitive")
 	// A benchmark-only publication must refresh unchanged subjects' normalized inputs.
 	s.exec(`UPDATE leaderboard_player_observations SET metric_value=200 WHERE tenant_id=$1`, s.tenant)
 	s.enqueue(FamilyPlayerBossBenchmark, "Boss", time.Now().Add(-time.Minute))

@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { http, HttpResponse } from "msw"
 import type { Meta, StoryObj } from "@storybook/react-vite"
 import { expect, userEvent, within } from "storybook/test"
 import { MemoryRouter } from "react-router-dom"
@@ -17,9 +18,10 @@ function raids(mastery: number, peak: number, seed: number): CareerLeaderboardRa
     const killed = i === 0 && seed % 3 === 0 ? 0 : Math.max(1, bosses - ((seed + i) % 3))
     const scale = killed === 0 ? 0 : 0.8 + ((seed * 7 + i * 13) % 40) / 100
     return {
-      instance_name, difficulty_name: "", max_players: 0, weight, bosses,
+      instance_name, difficulty_name: "", max_players: 0, weight,
       mastery: Math.min(100, mastery * scale), peak: Math.min(100, peak * scale), kills: killed * 3,
-      form: Math.min(100, (mastery - 4) * scale), floor: Math.min(100, (mastery - 14) * scale), bosses_killed: killed,
+      form: Math.min(100, (mastery - 4) * scale), floor: Math.min(100, (mastery - 14) * scale),
+      bosses: Array.from({ length: bosses }, (_, b) => ({ encounter_name: `${instance_name} boss ${b + 1}`, count: b < killed ? 1 + ((seed + b) % 4) : 0 })),
     }
   })
 }
@@ -43,8 +45,7 @@ function character([name, cls, spec, guild, mastery, peak, renown]: (typeof ROST
     subject_id: `0x${(i + 1).toString(16).padStart(16, "0")}`, name, realm_id: "00000000-0000-0000-0000-000000000001", realm_name: "Nordanaar",
     player_class: cls, player_spec: spec, player_sub_spec: "", guild_name: guild, logo_url: "",
     chosen_metric: spec === "Holy" ? "hps" : "dps", mastery, peak, renown,
-    form: mastery - 4, floor: mastery - 14,
-    bosses_killed: r.reduce((n, x) => n + (x.bosses_killed ?? 0), 0), bosses: r.reduce((n, x) => n + x.bosses, 0), raids: r,
+    form: mastery - 4, floor: mastery - 14, raids: r,
   }
 }
 
@@ -53,8 +54,7 @@ function guild(name: string, mastery: number, peak: number, renown: number, i: n
   return {
     subject_id: `00000000-0000-0000-0000-00000000010${i}`, name, realm_id: "00000000-0000-0000-0000-000000000001", realm_name: "Nordanaar",
     player_class: "", player_spec: "", player_sub_spec: "", guild_name: "", logo_url: "", chosen_metric: "kill_time",
-    mastery, peak, renown, form: mastery - 5, floor: mastery - 12,
-    bosses_killed: r.reduce((n, x) => n + (x.bosses_killed ?? 0), 0), bosses: r.reduce((n, x) => n + x.bosses, 0), raids: r,
+    mastery, peak, renown, form: mastery - 5, floor: mastery - 12, raids: r,
   }
 }
 
@@ -80,15 +80,30 @@ function Harness({ initialView = "overview", initialFilters = { subject: "charac
   const state = fixed ?? { status: "ready", data: filters.subject === "guilds" ? guilds : characters }
   return (
     <CareerLeaderboard view={view} onView={setView} filters={filters} onFilters={setFilters}
-      realm={realm} realms={["All realms", "Nordanaar", "Tel'Abim"]} onRealm={setRealm} state={state} allHref="/leaderboards" />
+      realm={realm} realms={["All realms", "Nordanaar", "Tel'Abim"]} onRealm={setRealm} state={state}
+      request={new URLSearchParams({ subject: filters.subject })} allHref="/leaderboards" />
   )
 }
+
+/** The career endpoint over the fixtures: subject, search, offset, and limit. */
+const careerHandler = http.get("/api/v1/leaderboards-v2/career", ({ request }) => {
+  const url = new URL(request.url)
+  const source = url.searchParams.get("subject") === "guilds" ? guilds : characters
+  const search = url.searchParams.get("search")?.toLowerCase() ?? ""
+  const offset = Number(url.searchParams.get("offset") ?? 0)
+  const limit = Number(url.searchParams.get("limit") ?? 100)
+  const board = (key: "mastery" | "peak" | "renown") => {
+    const matches = source[key].entries.filter((e) => e.name.toLowerCase().includes(search))
+    return { total: search ? matches.length : source[key].total, entries: matches.slice(offset, offset + limit) }
+  }
+  return HttpResponse.json({ status: source.status, mastery: board("mastery"), peak: board("peak"), renown: board("renown") })
+})
 
 const meta = {
   title: "pages/Leaderboards/Career",
   component: Harness,
   decorators: [(Story) => <MemoryRouter><TooltipProvider><Story /></TooltipProvider></MemoryRouter>],
-  parameters: { layout: "fullscreen" },
+  parameters: { layout: "fullscreen", msw: { handlers: [careerHandler] } },
 } satisfies Meta<typeof Harness>
 
 export default meta
@@ -99,15 +114,17 @@ export const Overview: Story = {}
 export const Mastery: Story = {
   args: { initialView: "mastery" },
   play: async ({ canvas }) => {
-    for (const column of ["Peak", "Form", "Floor", "Kills"]) await expect(canvas.getByRole("columnheader", { name: column })).toBeInTheDocument()
+    // The hub's own Mastery columns.
+    for (const column of ["Peak", "Form", "Floor", "3-kill progress"]) await expect(await canvas.findByRole("columnheader", { name: new RegExp(`^${column}`) })).toBeInTheDocument()
   },
 }
 
 export const Peak: Story = {
   args: { initialView: "peak" },
   play: async ({ canvas }) => {
-    await userEvent.hover(canvas.getByLabelText("Peak by raid for Kelthis"))
-    await expect((await within(document.body).findAllByText("Peak by raid")).length).toBeGreaterThan(0)
+    // The hub's Peak bars and breakdown dialog, worded for weighted raids.
+    await userEvent.click((await canvas.findAllByRole("button", { name: "Raid peaks for Kelthis" }))[0])
+    await expect(await within(document.body).findByText(/weighted average of all 6 raids/)).toBeInTheDocument()
   },
 }
 

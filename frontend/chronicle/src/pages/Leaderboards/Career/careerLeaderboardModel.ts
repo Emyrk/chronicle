@@ -1,9 +1,6 @@
-import type { CareerLeaderboardEntry, CareerLeaderboardResponse } from "@/api/typesGenerated"
-import type { RatingEntry, RatingScope } from "../Ratings/ratingBoards.fixtures"
+import type { CareerLeaderboardResponse } from "@/api/typesGenerated"
+import type { RatingScope } from "../Ratings/ratingBoards.fixtures"
 import { METRIC_THEMES, type RatingView } from "../Ratings/ratingThemes"
-
-export type CareerMetric = "mastery" | "peak" | "renown"
-export const CAREER_METRICS: CareerMetric[] = ["mastery", "peak", "renown"]
 
 export type CareerSubject = "characters" | "guilds"
 /** "all" scores each spec with its chosen metric; DPS or Healing forces one. */
@@ -40,25 +37,6 @@ export function careerLeaderboardParams(filters: CareerFilters, limit: number): 
   }
   if (filters.realmID) params.set("realm", filters.realmID)
   return params
-}
-
-/** A character row in the shape the rating parts draw (spec icon, Alt+click identity). */
-export function careerRatingEntry(entry: CareerLeaderboardEntry, metric: CareerMetric): RatingEntry {
-  const renown = metric === "renown"
-  return {
-    id: `${entry.realm_id}|${entry.subject_id}`,
-    name: entry.name,
-    realm: entry.realm_name,
-    realmLabel: entry.realm_name,
-    guid: entry.subject_id,
-    guild: entry.guild_name || undefined,
-    cls: entry.player_class,
-    // Renown spans every spec, so its rows show the class instead of a spec.
-    spec: renown ? "" : entry.player_spec,
-    subSpec: renown ? "" : entry.player_sub_spec,
-    score: (renown ? entry.renown : entry[metric]) ?? 0,
-    detail: "",
-  }
 }
 
 export function raidLabel(raid: { instance_name: string; difficulty_name: string; max_players: number }): string {

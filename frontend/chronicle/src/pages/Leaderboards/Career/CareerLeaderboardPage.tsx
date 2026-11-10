@@ -29,7 +29,9 @@ export function CareerLeaderboardPage() {
     scope: guilds ? {} : { cls: params.get("class") ?? undefined, spec: params.get("spec") ?? undefined, subSpec: params.get("sub_spec") ?? undefined },
     realmID: realm?.id,
   }
-  const query = useCareerLeaderboard(config?.tenant?.id, careerLeaderboardParams(filters, 100))
+  // The boards show each metric's top; the full tables page separately.
+  const request = careerLeaderboardParams(filters, 25)
+  const query = useCareerLeaderboard(config?.tenant?.id, request)
   const state: CareerBoardsState = query.data
     ? { status: "ready", data: query.data }
     : query.isError
@@ -60,6 +62,7 @@ export function CareerLeaderboardPage() {
       realms={[ALL_REALMS, ...realms.map((r) => r.name)]}
       onRealm={(name) => update({ realm: realms.find((r) => r.name === name)?.id })}
       state={state}
+      request={request}
       allHref="/leaderboards"
     />
   )

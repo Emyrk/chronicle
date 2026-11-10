@@ -12102,6 +12102,80 @@ func (q *sqlQuerier) ListLeaderboardCareerSubjects(ctx context.Context, arg List
 	return items, nil
 }
 
+const searchLeaderboardCareerGuilds = `-- name: SearchLeaderboardCareerGuilds :many
+SELECT realm_id, id::text AS subject_id FROM guilds
+WHERE position(lower($1::text) IN lower(name)) > 0
+ AND ($2::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR realm_id = $2::uuid)
+`
+
+type SearchLeaderboardCareerGuildsParams struct {
+	Search      string    `db:"search" json:"search"`
+	RealmFilter uuid.UUID `db:"realm_filter" json:"realm_filter"`
+}
+
+type SearchLeaderboardCareerGuildsRow struct {
+	RealmID   uuid.UUID `db:"realm_id" json:"realm_id"`
+	SubjectID string    `db:"subject_id" json:"subject_id"`
+}
+
+// Guilds whose name contains the search text, for filtering a ranked career board.
+func (q *sqlQuerier) SearchLeaderboardCareerGuilds(ctx context.Context, arg SearchLeaderboardCareerGuildsParams) ([]SearchLeaderboardCareerGuildsRow, error) {
+	rows, err := q.db.Query(ctx, searchLeaderboardCareerGuilds, arg.Search, arg.RealmFilter)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SearchLeaderboardCareerGuildsRow
+	for rows.Next() {
+		var i SearchLeaderboardCareerGuildsRow
+		if err := rows.Scan(&i.RealmID, &i.SubjectID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const searchLeaderboardCareerPlayers = `-- name: SearchLeaderboardCareerPlayers :many
+SELECT realm_id, id::text AS subject_id FROM game_players
+WHERE position(lower($1::text) IN lower(name)) > 0
+ AND ($2::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR realm_id = $2::uuid)
+`
+
+type SearchLeaderboardCareerPlayersParams struct {
+	Search      string    `db:"search" json:"search"`
+	RealmFilter uuid.UUID `db:"realm_filter" json:"realm_filter"`
+}
+
+type SearchLeaderboardCareerPlayersRow struct {
+	RealmID   uuid.UUID `db:"realm_id" json:"realm_id"`
+	SubjectID string    `db:"subject_id" json:"subject_id"`
+}
+
+// Characters whose name contains the search text, for filtering a ranked career board.
+func (q *sqlQuerier) SearchLeaderboardCareerPlayers(ctx context.Context, arg SearchLeaderboardCareerPlayersParams) ([]SearchLeaderboardCareerPlayersRow, error) {
+	rows, err := q.db.Query(ctx, searchLeaderboardCareerPlayers, arg.Search, arg.RealmFilter)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SearchLeaderboardCareerPlayersRow
+	for rows.Next() {
+		var i SearchLeaderboardCareerPlayersRow
+		if err := rows.Scan(&i.RealmID, &i.SubjectID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCareerGuildBossInputs = `-- name: ListCareerGuildBossInputs :many
 SELECT s.encounter_name, 'kill_time'::text AS metric,
 LEAST(100::double precision, 100.0 * b.best_duration_ms / s.fastest_duration_ms)::double precision AS peak, LEAST(100::double precision, 100::double precision * b.best_duration_ms * s.form_mean_inverse_ms)::double precision AS form, LEAST(100::double precision, 100::double precision * b.best_duration_ms * s.floor_mean_inverse_ms)::double precision AS floor,

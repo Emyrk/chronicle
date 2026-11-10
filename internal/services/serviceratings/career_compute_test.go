@@ -66,7 +66,7 @@ func TestComputeCareerInputs(t *testing.T) {
 	require.True(t, got.Raids[0].Parts)
 	require.Equal(t, float64(30), got.Raids[0].Form)
 	require.Equal(t, float64(20), got.Raids[0].Floor)
-	require.Equal(t, int64(1), got.Raids[0].BossesKilled)
+	require.Equal(t, []CareerBossCount{{Boss: "Boss", Count: 3}}, got.Raids[0].BossCounts)
 	require.Equal(t, float64(50), got.Raids[1].Peak) // clamped before zero fill
 	require.Equal(t, int64(7), got.Raids[1].EligibleKills)
 	require.Equal(t, []CareerBossKills{{CareerKey: key, Boss: "Boss", Count: 1}, {CareerKey: key, Boss: "Optional", Count: 1}}, got.Kills)
