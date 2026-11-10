@@ -284,5 +284,211 @@
       "splits": "Lucifron:331,Magmadar:627,Gehennas:1004,Garr:1358,Baron Geddon:1692,Shazzrah:1908,Sulfuron:2291,Golemagg:2604,Majordomo:3120,Ragnaros:3712",
       "host": "chronicleclassic.com"
     }
+  },
+  {
+    "id": "leaderboard-hub",
+    "group": "Leaderboards",
+    "label": "Hub landing",
+    "description": "The three highest-progression raids, each with its top Peak player, top Mastery player and fastest-clear guild.",
+    "pageExample": "/leaderboards",
+    "note": "Real CapybaraCraft highlights, captured 2026-11-10.",
+    "params": {
+      "template": "leaderboard",
+      "host": "capy.chronicleclassic.com",
+      "product": "CapybaraCraft",
+      "chip": "Leaderboards",
+      "path": "/leaderboards",
+      "view": "Top raids",
+      "art": "upper-tower-of-karazhan",
+      "b1": "Upper Karazhan",
+      "r1": "双缝干涉:hunter:98.3:peak:Peak,双缝干涉:hunter:89.0:mastery:Mastery,南北:guild:2252:time:Fastest clear",
+      "b2": "Lower Karazhan",
+      "r2": "Thazdingo:shaman:100.0:peak:Peak,Gredash:hunter:91.5:mastery:Mastery,Hearthstone:guild:2166:time:Fastest clear",
+      "b3": "Timbermaw Hold",
+      "r3": "左脚:priest:90.0:peak:Peak,左脚:priest:27.0:mastery:Mastery"
+    }
+  },
+  {
+    "id": "leaderboard-instance",
+    "group": "Leaderboards",
+    "label": "Raid overview",
+    "description": "One raid's headline leaders: Peak, Mastery and fastest clears.",
+    "pageExample": "/leaderboards/Naxxramas",
+    "note": "Real CapybaraCraft highlights, captured 2026-11-10.",
+    "params": {
+      "template": "leaderboard",
+      "host": "capy.chronicleclassic.com",
+      "product": "CapybaraCraft",
+      "raid": "Naxxramas",
+      "art": "naxxramas",
+      "chip": "Leaderboards",
+      "path": "/leaderboards/Naxxramas",
+      "b1": "Peak",
+      "r1": "阿竒寶:shaman:97.8:peak:,巨刁:shaman:94.1:peak:Elemental,叫我小哥哥:priest:93.3:peak:",
+      "b2": "Mastery",
+      "r2": "天使之殤:warlock:82.7:mastery:Destruction,叶雯洁:paladin:80.4:mastery:Retribution,晴天喵喵:priest:77.2:mastery:Shadow",
+      "b3": "Fastest clear",
+      "r3": "烟沙屠魔:guild:5233:time:41 players,南北:guild:5492:time:36 players,天空之城:guild:5820:time:40 players"
+    }
+  },
+  {
+    "id": "leaderboard-peak",
+    "group": "Leaderboards",
+    "label": "Ratings: Peak",
+    "description": "A shared Peak board.",
+    "pageExample": "/leaderboards/Naxxramas/ratings?rating=peak",
+    "note": "Real CapybaraCraft highlights, captured 2026-11-10.",
+    "params": {
+      "template": "leaderboard",
+      "host": "capy.chronicleclassic.com",
+      "product": "CapybaraCraft",
+      "raid": "Naxxramas",
+      "art": "naxxramas",
+      "chip": "Ratings",
+      "view": "Peak",
+      "path": "/leaderboards/Naxxramas/ratings",
+      "b1": "Peak",
+      "r1": "阿竒寶:shaman:97.8:peak:,巨刁:shaman:94.1:peak:Elemental,叫我小哥哥:priest:93.3:peak:"
+    }
+  },
+  {
+    "id": "leaderboard-guild-renown",
+    "group": "Leaderboards",
+    "label": "Ratings: Guild Renown",
+    "description": "A shared guild Renown board.",
+    "pageExample": "/leaderboards/Molten-Core/ratings?rating=renown&subject=guild",
+    "note": "Real CapybaraCraft highlights, captured 2026-11-10.",
+    "params": {
+      "template": "leaderboard",
+      "host": "capy.chronicleclassic.com",
+      "product": "CapybaraCraft",
+      "raid": "Molten Core",
+      "art": "molten-core",
+      "chip": "Ratings",
+      "view": "Guild Renown",
+      "path": "/leaderboards/Molten-Core/ratings",
+      "b1": "Guild Renown",
+      "r1": "Zug Zug:guild:1118:renown:,下周见:guild:434:renown:,南北:guild:379:renown:"
+    }
+  },
+  {
+    "id": "leaderboard-speedruns",
+    "group": "Leaderboards",
+    "label": "Speedruns",
+    "description": "Fastest full clears.",
+    "pageExample": "/leaderboards/Blackwing-Lair/speedruns",
+    "note": "Real CapybaraCraft highlights, captured 2026-11-10.",
+    "params": {
+      "template": "leaderboard",
+      "host": "capy.chronicleclassic.com",
+      "product": "CapybaraCraft",
+      "raid": "Blackwing Lair",
+      "art": "blackwing-lair",
+      "chip": "Speedruns",
+      "view": "Fastest full clears",
+      "path": "/leaderboards/Blackwing-Lair/speedruns",
+      "b1": "Full clear",
+      "r1": "梦巴黎国际水汇:guild:2620:time:19 players,下周见:guild:2857:time:24 players,老伙计酒馆:guild:3024:time:32 players"
+    }
+  },
+  {
+    "id": "leaderboard-performances",
+    "group": "Leaderboards",
+    "label": "Performances",
+    "description": "Best single-fight DPS.",
+    "pageExample": "/leaderboards/Naxxramas/performances",
+    "note": "Real CapybaraCraft highlights, captured 2026-11-10.",
+    "params": {
+      "template": "leaderboard",
+      "host": "capy.chronicleclassic.com",
+      "product": "CapybaraCraft",
+      "raid": "Naxxramas",
+      "art": "naxxramas",
+      "chip": "Performances",
+      "view": "Best single-fight DPS",
+      "path": "/leaderboards/Naxxramas/performances",
+      "b1": "DPS",
+      "r1": "暗影剑锋:rogue:1636:gold:Thaddius,无彩李白:rogue:1566:gold:Thaddius,色孽欲魔:rogue:1515:gold:Thaddius"
+    }
+  },
+  {
+    "id": "leaderboard-parsing-hub",
+    "group": "Leaderboards",
+    "label": "Parsing (hub)",
+    "description": "The top raid's highest-Renown boss: the DPS each spec needs per parse tier.",
+    "pageExample": "/leaderboards/parsing",
+    "note": "Real CapybaraCraft highlights, captured 2026-11-10.",
+    "params": {
+      "template": "leaderboard",
+      "host": "capy.chronicleclassic.com",
+      "product": "CapybaraCraft",
+      "raid": "Upper Karazhan",
+      "art": "upper-tower-of-karazhan",
+      "chip": "Parsing",
+      "view": "Kruul · last 60 days",
+      "path": "/leaderboards/parsing",
+      "spreadtitle": "DPS by parse tier",
+      "spread": "Fire Mage:mage:1180:1491:1733:2232:2527:2555,Arcane Mage:mage:1158:1321:1493:1713:1829:1923,Demonology Warlock:warlock:1055:1261:1363:1459:1554:1554,Destruction Warlock:warlock:1025:1200:1394:1669:1839:2062,Marksmanship Hunter:hunter:941:1156:1351:1641:1899:2060"
+    }
+  },
+  {
+    "id": "leaderboard-parsing",
+    "group": "Leaderboards",
+    "label": "Parsing",
+    "description": "The raid's highest-Renown boss: the DPS each spec needs per parse tier.",
+    "pageExample": "/leaderboards/Naxxramas/parsing",
+    "note": "Real CapybaraCraft highlights, captured 2026-11-10.",
+    "params": {
+      "template": "leaderboard",
+      "host": "capy.chronicleclassic.com",
+      "product": "CapybaraCraft",
+      "raid": "Naxxramas",
+      "art": "naxxramas",
+      "chip": "Parsing",
+      "view": "Kel'Thuzad · last 60 days",
+      "path": "/leaderboards/Naxxramas/parsing",
+      "spreadtitle": "DPS by parse tier",
+      "spread": "Combat Rogue:rogue:516:617:720:859:964:1053,Destruction Warlock:warlock:441:560:711:925:1036:1121,Retribution Paladin:paladin:449:560:669:789:942:963,Arms Warrior:warrior:448:559:689:822:875:918,Enhancement Shaman:shaman:438:553:641:745:797:835"
+    }
+  },
+  {
+    "id": "leaderboard-rulesets",
+    "group": "Leaderboards",
+    "label": "Rulesets",
+    "description": "What counts in one raid: ranked bosses, speedrun kills and the Renown each boss awards.",
+    "pageExample": "/leaderboards/Naxxramas/rulesets",
+    "note": "Real CapybaraCraft highlights, captured 2026-11-10.",
+    "params": {
+      "template": "leaderboard",
+      "host": "capy.chronicleclassic.com",
+      "product": "CapybaraCraft",
+      "raid": "Naxxramas",
+      "art": "naxxramas",
+      "chip": "Rulesets",
+      "view": "What counts",
+      "path": "/leaderboards/Naxxramas/rulesets",
+      "b1": "Rules",
+      "r1": "Ranked bosses::15:plain:,Speedrun kills::20:plain:18 bosses and 2 adds,Renown per clear::50:renown:",
+      "awards": "Anub'Rekhan:3,Grand Widow Faerlina:3,Maexxna:3,Noth the Plaguebringer:3,Heigan the Unclean:3,Loatheb:3,Instructor Razuvious:3,Gothik the Harvester:3,Four Horsemen:3,Patchwerk:3,Grobbulus:3,Gluth:3,Thaddius:3,Sapphiron:3,Kel'Thuzad:8"
+    }
+  },
+  {
+    "id": "leaderboard-rulesets-hub",
+    "group": "Leaderboards",
+    "label": "Rulesets (hub)",
+    "description": "Renown per full clear for the top raids.",
+    "pageExample": "/leaderboards/rulesets",
+    "note": "Real CapybaraCraft highlights, captured 2026-11-10.",
+    "params": {
+      "template": "leaderboard",
+      "host": "capy.chronicleclassic.com",
+      "product": "CapybaraCraft",
+      "chip": "Rulesets",
+      "view": "Renown per full clear",
+      "path": "/leaderboards/rulesets",
+      "art": "upper-tower-of-karazhan",
+      "b1": "Renown per clear",
+      "r1": "Upper Karazhan::55:renown:9 bosses,Lower Karazhan::6:renown:5 bosses,Timbermaw Hold::35:renown:10 bosses"
+    }
   }
 ]

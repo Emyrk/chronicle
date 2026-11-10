@@ -3,6 +3,7 @@ import { brandTheme } from './brand';
 import { characterTheme } from './character';
 import { clearTheme } from './clear';
 import { guildTheme } from './guild';
+import { leaderboardTheme } from './leaderboard';
 import { parseTheme } from './parse';
 import { talentsTheme } from './talents';
 import { raidTheme } from './raid';
@@ -16,4 +17,5 @@ export const themes: Record<OgThemeKey, ThemeDefinition> = {
   raid: raidTheme,
   parse: parseTheme,
   clear: clearTheme,
+  leaderboard: leaderboardTheme,
 };

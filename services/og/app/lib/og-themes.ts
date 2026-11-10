@@ -37,6 +37,11 @@ export const OG_THEMES = [
     label: 'Clear time',
     description: 'A qualified fast clear: the timer, realm rank or Top N%, the record it broke and per-boss splits.',
   },
+  {
+    key: 'leaderboard',
+    label: 'Leaderboard',
+    description: 'A leaderboard hub page: the raid, then one tall board or up to three side-by-side boards of leaders, without rank numbers.',
+  },
 ] as const;
 
 export type OgThemeOption = (typeof OG_THEMES)[number];
