@@ -21,7 +21,9 @@ import { StatisticsTab, type LiveStatisticsData } from "./Hub/StatisticsTab"
 import { ParsingTab, type LiveParsingData } from "./Hub/ParsingTab"
 import { FULL_CLEAR, defaultSpeedrunsView, type EncounterSelection, type SpeedrunsView } from "./Hub/encounterSelection"
 import { liveHubBosses, liveHubPreset } from "./Hub/liveBosses"
-import { hubInstanceParams, hubParams, hubPath, hubTab, v2Selection } from "./v2Selection"
+import { hubInstanceParams, hubParams, hubPath, hubRatingParams, hubRatingView, hubSubject, hubSubjectParams, hubTab, v2Selection } from "./v2Selection"
+import type { RatingView } from "./Ratings/ratingThemes"
+import type { HubSubject } from "./Hub/hub.fixtures"
 import { legacyLeaderboardsTarget } from "./leaderboardsState"
 import { useSiteConfig, useSupportedInstances } from "@/api/queries"
 import { useRenownAwards } from "./renownConfig"
@@ -38,6 +40,8 @@ export function LeaderboardsLiveHub() {
   const { data: supportedInstances } = useSupportedInstances({ enabled: siteConfig !== undefined && !rootRatingsDisabled })
   const renownAwards = useRenownAwards()
   const { tab, instance, realmIDs, encounters } = v2Selection(params, { segment, instance: pathInstance, tab: pathTab })
+  const ratingView = hubRatingView(params)
+  const subject = hubSubject(params)
   const requestedSize = params.get("size")
   const parsedSize = requestedSize === null ? NaN : Number(requestedSize)
   const requestedCohort = params.has("difficulty") && Number.isInteger(parsedSize) && parsedSize >= 0 && parsedSize <= 32767
@@ -78,8 +82,12 @@ export function LeaderboardsLiveHub() {
   }
   const allInstancesHref = hubPath(tab, hubInstanceParams(params))
   const chooseInstance = (next?: string) => navigate(next ? instanceHref(next) : allInstancesHref)
-  // Each tab is its own path; the query (bosses, realm, cohort) carries over.
+  // Each tab is its own path; the query (bosses, realm, cohort, ratings board) carries over.
   const chooseTab = (next: ReturnType<typeof v2Selection>["tab"]) => navigate(tabHref(next))
+  const chooseRatingView = (view: RatingView) => navigate(hubPath(tab, hubRatingParams(params, view), instance), { replace: true })
+  const chooseSubject = (next: HubSubject) => navigate(hubPath(tab, hubSubjectParams(params, next), instance), { replace: true })
+  const openRatings = (view: RatingView) => navigate(hubPath("ratings", hubRatingParams(params, view), instance))
+  const openGuildRatings = (view: RatingView) => navigate(hubPath("ratings", hubRatingParams(hubSubjectParams(params, "guilds"), view), instance))
   if (params.get("tab") === "speedrun" || params.get("tab") === "leaderboard") return <Navigate to={legacyLeaderboardsTarget(params)} replace />
   // Older links put the instance and/or tab in the query. Rewrite both into path segments.
   if (params.has("instance") || params.has("tab")) {
@@ -112,9 +120,11 @@ export function LeaderboardsLiveHub() {
         loading={loading || stale} error={loadError}
         onOpenCohort={(name, cohort) => navigate(instanceHref(name, cohort))}
         renderInstance={(name) => !summary.data ? <LoadingInstanceHub error={loadError} instanceName={name} tab={tab} onTab={chooseTab} tabHref={tabHref}
-          allInstancesHref={allInstancesHref} realm={realm} onInstance={() => chooseInstance()} /> : <LiveInstanceHub instanceName={name} names={names} summary={summary.data!} stale={stale} realm={realm}
+          allInstancesHref={allInstancesHref} realm={realm} onInstance={() => chooseInstance()} ratingView={ratingView} onRatingView={chooseRatingView} onOpenRatings={openRatings}
+          subject={subject} onSubject={chooseSubject} onOpenGuildRatings={openGuildRatings} /> : <LiveInstanceHub instanceName={name} names={names} summary={summary.data!} stale={stale} realm={realm}
           realmIDs={selectedRealmIDs} encounters={encounters} tab={tab} tabHref={tabHref} allInstancesHref={allInstancesHref}
-          onInstance={chooseInstance} onTab={chooseTab}
+          onInstance={chooseInstance} onTab={chooseTab} ratingView={ratingView} onRatingView={chooseRatingView} onOpenRatings={openRatings}
+          subject={subject} onSubject={chooseSubject} onOpenGuildRatings={openGuildRatings}
           onRealm={(name) => choose("realm_ids", available.find((row) => row.name === name)?.id)}
           difficulty={params.get("difficulty")} size={params.get("size")}
           onCohort={(difficulty, size) => { const next = new URLSearchParams(params); if (size) { next.set("difficulty", difficulty); next.set("size", size) } else { next.delete("difficulty"); next.delete("size") } setParams(next) }}
@@ -126,10 +136,12 @@ export function LeaderboardsLiveHub() {
 
 /** The instance page's frame while its summary loads: every summary card shows its skeleton rows.
  * With an error (the first load failed) the frame stays and the content is that error. */
-function LoadingInstanceHub({ instanceName, tab, onTab, tabHref, allInstancesHref, realm, onInstance, error }: {
+function LoadingInstanceHub({ instanceName, tab, onTab, tabHref, allInstancesHref, realm, onInstance, ratingView, onRatingView, onOpenRatings, subject, onSubject, onOpenGuildRatings, error }: {
   instanceName: string; tab: ReturnType<typeof v2Selection>["tab"]; onTab: (tab: ReturnType<typeof v2Selection>["tab"]) => void
   tabHref: (tab: ReturnType<typeof v2Selection>["tab"]) => string; allInstancesHref: string
-  realm: string; onInstance: () => void; error?: ReactNode
+  realm: string; onInstance: () => void; ratingView: RatingView; onRatingView: (view: RatingView) => void
+  onOpenRatings: (view: RatingView) => void; subject: HubSubject; onSubject: (subject: HubSubject) => void
+  onOpenGuildRatings: (view: RatingView) => void; error?: ReactNode
 }) {
   const live = {
     bosses: [], realms: [realm], specsFor: () => [], subSpecsFor: () => [],
@@ -137,7 +149,9 @@ function LoadingInstanceHub({ instanceName, tab, onTab, tabHref, allInstancesHre
     renderTab: (context: HubLiveTabContext) => error ?? <LoadingContent context={context} />,
   }
   return <LeaderboardHub live={live} instanceName={instanceName} onAllInstances={onInstance} allInstancesHref={allInstancesHref}
-    tab={tab} onTab={onTab} tabHref={tabHref} realm={realm} onRealm={() => {}} />
+    tab={tab} onTab={onTab} tabHref={tabHref} realm={realm} onRealm={() => {}}
+    ratingView={ratingView} onRatingView={onRatingView} onOpenRatings={onOpenRatings}
+    subject={subject} onSubject={onSubject} onOpenGuildRatings={onOpenGuildRatings} />
 }
 
 /** A tab's or the Overview's skeleton rows while the page summary loads. */
@@ -148,11 +162,13 @@ function LoadingContent({ context, overview = false }: { context: HubLiveTabCont
   return context.tab === "ratings" ? <BoardSkeleton /> : <div className="overflow-hidden rounded-xl border bg-card"><SkeletonRows rows={10} /></div>
 }
 
-function LiveInstanceHub({ instanceName, names, summary, stale, realm, realmIDs, encounters, tab, tabHref, allInstancesHref, difficulty, size, onInstance, onTab, onRealm, onCohort, onEncounters }: {
+function LiveInstanceHub({ instanceName, names, summary, stale, realm, realmIDs, encounters, tab, tabHref, allInstancesHref, difficulty, size, onInstance, onTab, ratingView, onRatingView, onOpenRatings, subject, onSubject, onOpenGuildRatings, onRealm, onCohort, onEncounters }: {
   instanceName: string; names: string[]; summary: HubSummary; stale: boolean; realm: string; realmIDs: string[]; encounters: readonly string[]
   tab: ReturnType<typeof v2Selection>["tab"]; tabHref: (tab: ReturnType<typeof v2Selection>["tab"]) => string; allInstancesHref: string
   difficulty: string | null; size: string | null
   onInstance: (name?: string) => void; onTab: (tab: ReturnType<typeof v2Selection>["tab"]) => void
+  ratingView: RatingView; onRatingView: (view: RatingView) => void; onOpenRatings: (view: RatingView) => void
+  subject: HubSubject; onSubject: (subject: HubSubject) => void; onOpenGuildRatings: (view: RatingView) => void
   onRealm: (name: string) => void; onCohort: (difficulty: string, size: string) => void; onEncounters: (bosses: readonly string[]) => void
 }) {
   const raids = summary.instances.filter((row) => row.instance_name === instanceName && row.category === "raid")
@@ -195,6 +211,8 @@ function LiveInstanceHub({ instanceName, names, summary, stale, realm, realmIDs,
   }
   return <LeaderboardHub live={live} instanceName={instanceName} instances={names} onAllInstances={() => onInstance()} allInstancesHref={allInstancesHref}
     onSwitchInstance={(next) => onInstance(next)} tab={tab} onTab={onTab} tabHref={tabHref} realm={realm} onRealm={onRealm}
+    ratingView={ratingView} onRatingView={onRatingView} onOpenRatings={onOpenRatings}
+    subject={subject} onSubject={onSubject} onOpenGuildRatings={onOpenGuildRatings}
     initialBosses={chosen.length ? chosen : undefined} />
 }
 

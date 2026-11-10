@@ -42,7 +42,7 @@ vi.mock("@/api/queries", () => ({
   useSupportedInstanceRankingEncounterSets: () => ({ data: new Map([["Molten Core", [{ id: "", label: "Default", encounters: ["Ragnaros"] }]]]), isPending: false, isError: false }),
 }))
 vi.mock("@/components/Ads/AdRailStack", () => ({ AdRailStack: () => null }))
-vi.mock("./Hub/LiveHubRatings", () => ({ LiveHubRatings: () => <p>Live ratings</p> }))
+vi.mock("./Hub/LiveHubRatings", () => ({ LiveHubRatings: ({ view, subject }: { view: string; subject: string }) => <p>Live ratings {view} {subject}</p> }))
 vi.mock("./Hub/LiveHubOverview", () => ({ LiveHubOverview: () => <p>Live overview</p> }))
 
 function setSummary(data: HubSummary) {
@@ -153,6 +153,25 @@ describe("live Storybook Hub", () => {
     expect(vi.mocked(useHubSummary).mock.calls[0][0]).toMatchObject({ metadataOnly: true })
     expect(useHubSummary).toHaveBeenCalledTimes(1)
   })
+  it("opens shared ratings-board links and preserves the board across hub tabs", () => {
+    for (const view of ["peak", "mastery", "renown"] as const) {
+      const html = hub(`/leaderboards/Molten-Core/ratings?rating=${view}&realm_ids=realm-id`)
+      expect(html).toContain(`Live ratings ${view}`)
+      expect(html).toContain(`href="/leaderboards/Molten-Core?rating=${view}&amp;realm_ids=realm-id"`)
+    }
+
+    expect(hub("/leaderboards/Molten-Core/ratings?rating=unknown")).toContain("Live ratings overview")
+  })
+
+  it("opens shared guild links and preserves guild mode across hub tabs", () => {
+    const guilds = hub("/leaderboards/Molten-Core/ratings?rating=renown&subject=guild&realm_ids=realm-id")
+    expect(guilds).toContain("Live ratings renown guild")
+    expect(guilds).toContain('href="/leaderboards/Molten-Core?rating=renown&amp;subject=guild&amp;realm_ids=realm-id"')
+    expect(guilds).toContain(">Guilds<")
+
+    expect(hub("/leaderboards/Molten-Core/ratings?subject=unknown")).toContain("Live ratings overview player")
+  })
+
   it("uses the configured Turtle roster and exposes Trash only under Performances", () => {
     const ratings = hub("/leaderboards/Molten-Core/ratings?encounter=Trash")
     expect(ratings).toContain("Ragnaros")
