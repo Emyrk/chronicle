@@ -47,6 +47,8 @@ export interface MapPositionSample {
   floor?: number;
   /** Radians, when the log records it (an optional proto field); no facing is drawn without it. */
   facing?: number;
+  /** Cached telemetry retimestamped at encounter start, not a fresh measurement. */
+  synthetic?: boolean;
 }
 
 export interface MapHealthSample {
@@ -291,6 +293,7 @@ export const mapProcessor: PanelProcessor<MapResult, MapProcessorEvent> = {
       y: event.y,
       mapId: event.mapId,
     };
+    if (event.isSynthetic) sample.synthetic = true;
     if (event.z !== undefined) sample.z = event.z;
     if (event.floor !== undefined) sample.floor = event.floor;
     if (event.facing !== undefined) sample.facing = event.facing;

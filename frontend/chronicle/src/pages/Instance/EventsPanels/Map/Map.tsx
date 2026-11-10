@@ -23,6 +23,7 @@ import { dungeonMeshBytes, dungeonMeshLiquid, dungeonMeshUrl } from "./dungeonMe
 import { mapProcessor, type MapProcessorEvent, type MapResult } from "./map.processor";
 import type { MapLivePresence } from "./MapView3D";
 import { MapFloorPicker } from "./MapFloorPicker";
+import { EncounterFloorProvider } from "./EncounterFloorProvider";
 import { MapOverview2D } from "./MapOverview2D";
 import {
   flatMapYardStep,
@@ -702,7 +703,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
   if (!ready) return scene.status === "message" ? (
     <MapMessage title={scene.title} detail={scene.detail}>
       {scene.floors && scene.setFloorNumber && (
-        <MapFloorPicker floors={scene.floors} value={scene.selectedFloorNumber ?? null} onChange={scene.setFloorNumber} />
+        <MapFloorPicker floors={scene.floors} value={scene.selectedFloorNumber ?? null} manualValue={scene.manualFloorNumber ?? null} uncertain={scene.floorUncertain ?? false} onChange={scene.setFloorNumber} />
       )}
     </MapMessage>
   ) : null;
@@ -796,8 +797,11 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
     </div>
   );
 
+  const floorControls = (ready.floors.length > 1 || ready.floorUncertain) ? (
+    <MapFloorPicker compact floors={ready.floors} value={ready.selectedFloorNumber} manualValue={ready.manualFloorNumber} uncertain={ready.floorUncertain} onChange={ready.setFloorNumber} />
+  ) : null;
   const framingControls = (
-    <div className="absolute bottom-2 left-2 z-40 flex items-center gap-1">
+    <div data-map-controls className="absolute bottom-2 left-2 z-40 flex max-w-[calc(100%-1rem)] flex-wrap items-end gap-1">
       {/* Mini map: play/pause and speed lead the row (the preview's own clock, or the page's Replay once it is on). */}
       {mini && (
         <>
@@ -856,6 +860,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
         <Maximize className="h-3 w-3" />
         Reset
       </button>
+      {floorControls}
     </div>
   );
 
@@ -984,6 +989,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
           />
         )}
         {!mobile && framingControls}
+        {mobile && floorControls && <div className="absolute bottom-2 left-2 z-40 max-w-[calc(100%-1rem)]">{floorControls}</div>}
         {!mobile && mini && <ExpandMapButton context={props.context} overlay />}
         {!mobile && previewOn && (
           <>
@@ -1157,8 +1163,8 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
           {(walking || show3D) && (
             <div className={cn(
               "pointer-events-none absolute left-1/2 z-30 flex w-max max-w-[calc(100%-1rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-x-3 gap-y-1 rounded-sm bg-black/75 px-2.5 py-1.5 text-[11px] text-white/80 shadow-[0_4px_16px_rgba(0,0,0,.5)]",
-              // Above the fullscreen Replay bar.
-              immersive ? "bottom-24" : "bottom-2",
+              // Above the camera/floor controls, or the fullscreen Replay bar.
+              immersive ? "bottom-24" : "bottom-12",
               // The camera keys work with the pointer over the map: their hint shows then.
               !walking && "opacity-0 transition-opacity group-hover/map:opacity-100",
             )}>
@@ -1207,7 +1213,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
                 onChange: setMapSource,
                 onReset: () => setMapSource("auto"),
               } : null}
-              floors={ready.floors.length > 1 ? { list: ready.floors, value: ready.selectedFloorNumber, onChange: ready.setFloorNumber } : null}
+              floors={ready.floors.length > 1 ? { list: ready.floors, value: ready.selectedFloorNumber, manualValue: ready.manualFloorNumber, uncertain: ready.floorUncertain, onChange: ready.setFloorNumber } : null}
               onTopDown={() => setTopDownKey((key) => key + 1)}
               adStrafe={adStrafe}
               onAdStrafe={setAdStrafe}
@@ -1455,6 +1461,6 @@ export function createMapPanel({ mini = false }: { mini?: boolean } = {}): Panel
     hoverHeader: () => true,
     supportsFiltering: false,
     underConstruction: true,
-    render: (props) => <MapContent {...props} forceMini={mini} />,
+    render: (props) => <EncounterFloorProvider><MapContent {...props} forceMini={mini} /></EncounterFloorProvider>,
   };
 }

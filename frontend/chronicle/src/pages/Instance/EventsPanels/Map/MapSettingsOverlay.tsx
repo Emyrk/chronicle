@@ -1,3 +1,4 @@
+import { MapFloorPicker } from "./MapFloorPicker";
 import { useEffect, useState, type ReactNode } from "react";
 import { Bug, Gamepad2, Globe, PersonStanding, RotateCcw, Scan, Sparkles, UserRound, X, type LucideIcon } from "lucide-react";
 import { Switch } from "@/components/ui/Switch/Switch";
@@ -35,7 +36,7 @@ export interface MapSettingsOverlayProps {
     onChange: (source: SelectedReplayMapSource) => void;
     onReset: () => void;
   } | null;
-  floors: { list: number[]; value: number | null; onChange: (floor: number) => void } | null;
+  floors: { list: number[]; value: number | null; manualValue: number | null; uncertain: boolean; onChange: (floor: number | null) => void } | null;
   onTopDown: () => void;
   adStrafe: boolean;
   onAdStrafe: (on: boolean) => void;
@@ -249,10 +250,11 @@ export function MapSettingsOverlay({
             />
           )}
           {floors && (
-            <Choice
-              label="Floor"
-              value={floors.value ?? floors.list[0]}
-              options={floors.list.map((floor) => ({ value: floor, label: String(floor), title: `Floor ${floor}` }))}
+            <MapFloorPicker
+              floors={floors.list}
+              value={floors.value}
+              manualValue={floors.manualValue}
+              uncertain={floors.uncertain}
               onChange={floors.onChange}
             />
           )}

@@ -8,6 +8,8 @@ import {
   isPreviewableMapAssetPath,
   mergeMapManifests,
   parseMapLayer,
+  parseFloorSupport,
+  validateFloorSupportArtifact,
   parseMapManifest,
   recoverMapManifestBase,
   recoverMapManifestLayers,
@@ -327,4 +329,32 @@ test("rejects unknown fields recursively", () => {
   assert.throws(() => parseMapLayer({ ...layer({ mapID: 43, renders: { path: "renders/a.png", width: 1, height: 1, extra: true } }) }), /unknown field/);
   assert.throws(() => parseMapLayer({ ...layer({ mapID: 43, floors: [{ floor: 0, renders: { path: "renders/a.png", width: 1, height: 1 }, extra: true }] }) }), /unknown field/);
   assert.throws(() => parseMapManifest({ ...original(), maps: [{ ...original().maps[0], extra: true }] }), /unknown field/);
+});
+
+const support = {
+  version: 1, path: "support/43-test.json", sha256: "a".repeat(64), datasetID: "test-dataset", mapID: 43,
+  frame: "wow-yup-mirrored-x", floorIDs: [0], sources: [{ floor: 0, path: "3d/floor.glb", sha256: "b".repeat(64) }], validated: false,
+};
+
+test("floor support survives recovery and merge only with matching mesh paths", () => {
+  const base = { ...original(), instances: [{ ...original().instances[0], floors: [nativeFloor(0)] }] };
+  const meshes = layer({ mapID: 43, floorSupport: support, floors: [{ floor: 0, mesh: mesh("3d/floor.glb") }] });
+  const merged = mergeMapManifests(base, { meshes });
+  assert.deepEqual(merged.instances[0].floorSupport, support);
+  const recovered = recoverMapManifestBase(merged, "forever");
+  assert.equal(recovered.instances[0].floorSupport, undefined);
+  assert.deepEqual(mergeMapManifests(recovered, recoverMapManifestLayers(merged)), merged);
+  assert.throws(() => mergeMapManifests(base, { meshes: layer({ mapID: 43, floorSupport: support, floors: [{ floor: 0, mesh: mesh("3d/replaced.glb") }] }) }), /stale floorSupport/);
+  assert.throws(() => parseFloorSupport({ ...support, path: "support/../bad.json" }), /invalid/);
+  assert.throws(() => parseFloorSupport({ ...support, floorIDs: [0, 0] }), /unique/);
+  assert.throws(() => parseFloorSupport({ ...support, sha256: "bad" }), /SHA-256/);
+});
+
+test("support binary contract rejects invalid indices and mismatched identity", () => {
+  const descriptor = parseFloorSupport(support);
+  const { path, sha256, validated, ...identity } = descriptor;
+  const payload = { ...identity, encoding: "indexed-f32-le-u32-le", floors: [{ floor: 0, positions: Buffer.from(new Float32Array([0, 0, 0, 1, 0, 0, 0, 0, 1]).buffer).toString("base64"), indices: Buffer.from(new Uint32Array([0, 1, 2]).buffer).toString("base64") }] };
+  validateFloorSupportArtifact(payload, descriptor);
+  assert.throws(() => validateFloorSupportArtifact({ ...payload, mapID: 44 }, descriptor), /match/);
+  assert.throws(() => validateFloorSupportArtifact({ ...payload, floors: [{ ...payload.floors[0], indices: Buffer.from(new Uint32Array([0, 1, 3]).buffer).toString("base64") }] }, descriptor), /out of bounds/);
 });

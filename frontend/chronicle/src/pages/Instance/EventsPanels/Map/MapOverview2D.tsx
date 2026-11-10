@@ -1,3 +1,4 @@
+import { useEncounterFloor } from "./useEncounterFloor";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Map as MapIcon, RotateCcw, Skull } from "lucide-react";
@@ -33,7 +34,6 @@ import {
   projectDungeonMapPoint,
   resolveDungeonMapCalibration,
   resolveMapArtwork,
-  resolveMapFloorNumber,
   selectMapJourneyEncounters,
   uiMapPoint,
   zoneMapPoint,
@@ -400,20 +400,14 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
     props.context.instance.name,
     representativeSample,
   ]);
-  const [floorNumber, setFloorNumber] = useState<number | null>(null);
+  const floorSelection = useEncounterFloor(props, artwork?.kind === "instance" ? artwork.instance : undefined);
+  const { selectedFloorNumber, manualFloorNumber, floorUncertain, setFloorNumber } = floorSelection;
   const [mapSource, setMapSource] = useState<"auto" | "styled" | "renders" | "art">("auto");
 
   const zoneSelection = artwork?.kind === "zone"
     ? artwork.map.art?.flatMap((art) => art.layers.map((layer) => ({ art, layer })))
       .find(({ layer }) => layer.width > 0 && layer.height > 0 && layer.tiles.length > 0)
     : undefined;
-  const selectedFloorNumber = artwork?.kind === "instance"
-    ? resolveMapFloorNumber(
-      artwork.instance,
-      floorNumber,
-      representativeSamples.filter((sample) => sample.mapId === mapId),
-    )
-    : null;
   const selectedFloor = artwork?.kind === "instance"
     ? artwork.instance.floors.find((floor) => floor.floor === selectedFloorNumber) ?? artwork.instance.floors[0]
     : undefined;
@@ -548,9 +542,16 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
 
   if (!iconBaseUrl) return <MapMessage title="Map assets unavailable" detail="This instance's dataset has no icon base URL." />;
   if (manifestQuery.isLoading || props.loading) return <MapMessage title="Loading map" detail="Fetching map assets and position telemetry…" />;
+  if (floorSelection.pending && artwork?.kind === "instance") return (
+    <MapMessage title="Choosing encounter floor" detail="Loading geometry and encounter samples. You can choose a floor manually while it loads.">
+      <MapFloorPicker floors={artwork.instance.floors.map(floor => floor.floor)} value={selectedFloorNumber} manualValue={manualFloorNumber} uncertain={floorUncertain} onChange={setFloorNumber} />
+    </MapMessage>
+  );
   if (manifestQuery.error) return <MapMessage title="Map assets unavailable" detail={manifestQuery.error.message} />;
   if (selectedEncounters.length === 0 || representativeSamples.length === 0 || mapId === null) {
-    return <MapMessage title="No position telemetry" detail="The selected encounters do not contain unit-position data." />;
+    return <MapMessage title="No position telemetry" detail="The selected encounters do not contain unit-position data.">
+      {artwork?.kind === "instance" && <MapFloorPicker floors={artwork.instance.floors.map(floor => floor.floor)} value={selectedFloorNumber} manualValue={manualFloorNumber} uncertain={floorUncertain} onChange={setFloorNumber} />}
+    </MapMessage>;
   }
   if (!artwork) return <MapMessage title={`Map ${artworkMapId} is unavailable`} detail="The active dataset does not publish artwork or rendered geometry for this world map." />;
   if (artwork.kind === "instance" && (isMeshOnlyInstance(artwork.instance) || (!canvas && selectedMesh))) {
@@ -559,6 +560,8 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
         <MapFloorPicker
           floors={artwork.instance.floors.map((floor) => floor.floor)}
           value={selectedFloorNumber}
+          manualValue={manualFloorNumber}
+          uncertain={floorUncertain}
           onChange={setFloorNumber}
         />
       </MapMessage>
@@ -570,6 +573,8 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
         <MapFloorPicker
           floors={artwork.instance.floors.map((floor) => floor.floor)}
           value={selectedFloorNumber}
+          manualValue={manualFloorNumber}
+          uncertain={floorUncertain}
           onChange={setFloorNumber}
         />
       )}
@@ -601,16 +606,7 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
           )}
           <span>{Math.round(mapScale * camera.scale * 100)}%</span>
           <span>{routes.length} encounters</span>
-          {artwork.kind === "instance" && artwork.instance.floors.length > 1 && (
-            <select
-              aria-label="Map floor"
-              value={selectedFloorNumber ?? ""}
-              onChange={(event) => setFloorNumber(Number(event.target.value))}
-              className="rounded border border-border bg-background px-1.5 py-0.5 text-[10px] text-foreground [color-scheme:dark]"
-            >
-              {artwork.instance.floors.map((floor) => <option key={floor.floor} value={floor.floor}>Floor {floor.floor}</option>)}
-            </select>
-          )}
+
         </div>
       </div>}
       <div ref={mapShellRef} className={`relative min-h-0 flex-1 overflow-hidden bg-[#11100d] ${mini ? "" : "mx-1 rounded-sm border border-white/15"}`}>
@@ -708,29 +704,19 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
           ))}
           </div>
         </div>
-        {mini && (
-          <div className="pointer-events-none absolute bottom-1.5 left-1.5 z-30 rounded-sm bg-black/70 px-1.5 py-0.5 text-[9px] text-white/65">
-            Ctrl+scroll to zoom, click and drag to pan
+        <div data-map-controls className="absolute bottom-2 left-2 z-30 flex max-w-[calc(100%-1rem)] flex-wrap items-end gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-white/10 bg-black/80 px-2 py-1 text-[9px] text-white/65 shadow-lg backdrop-blur-sm">
+            <span>Ctrl + scroll to zoom · drag to pan</span>
+            {!mini && <div className="ml-1 flex overflow-hidden rounded border border-white/15 text-white/85">
+              <button type="button" aria-label="Zoom out" onClick={() => changeZoom(0.8)} className="px-2 py-0.5 hover:bg-white/10">−</button>
+              <button type="button" aria-label="Zoom in" onClick={() => changeZoom(1.25)} className="border-l border-white/15 px-2 py-0.5 hover:bg-white/10">+</button>
+            </div>}
+            {!mini && userCamera !== null && (
+              <button type="button" onClick={() => setUserCamera(null)} className="rounded border border-white/15 px-1.5 py-0.5 font-medium text-white/85 hover:bg-white/10">Reset</button>
+            )}
           </div>
-        )}
-        {!mini && <div data-map-controls className="absolute bottom-2 left-2 z-30 flex items-center gap-1.5 rounded-md border border-white/10 bg-black/80 px-2 py-1 text-[9px] text-white/65 shadow-lg backdrop-blur-sm">
-          <span>Ctrl + scroll to zoom</span>
-          <span className="text-white/25">·</span>
-          <span>drag to pan</span>
-          <div className="ml-1 flex overflow-hidden rounded border border-white/15 text-white/85">
-            <button type="button" aria-label="Zoom out" onClick={() => changeZoom(0.8)} className="px-2 py-0.5 hover:bg-white/10">−</button>
-            <button type="button" aria-label="Zoom in" onClick={() => changeZoom(1.25)} className="border-l border-white/15 px-2 py-0.5 hover:bg-white/10">+</button>
-          </div>
-          {userCamera !== null && (
-            <button
-              type="button"
-              onClick={() => setUserCamera(null)}
-              className="rounded border border-white/15 px-1.5 py-0.5 font-medium text-white/85 hover:bg-white/10"
-            >
-              Reset
-            </button>
-          )}
-        </div>}
+          {artwork.kind === "instance" && <MapFloorPicker compact floors={artwork.instance.floors.map(floor => floor.floor)} value={selectedFloorNumber} manualValue={manualFloorNumber} uncertain={floorUncertain} onChange={setFloorNumber} />}
+        </div>
         {!mini && routes.length > 0 && <RouteLegend
           routes={routes}
           onHoverEncounter={setHoveredEncounterId}

@@ -508,6 +508,7 @@ export function resolveMapFloorNumber(
   instance: WowMapInstance,
   requestedFloor: number | null,
   samples: readonly MapPositionSample[],
+  inferredFloor: number | null = null,
 ): number | null {
   const available = new Set(instance.floors.map((floor) => floor.floor));
   if (requestedFloor !== null && available.has(requestedFloor)) return requestedFloor;
@@ -527,6 +528,7 @@ export function resolveMapFloorNumber(
     }
   }
   if (detected !== null) return detected;
+  if (inferredFloor !== null && available.has(inferredFloor)) return inferredFloor;
 
   return instance.floors[0]?.floor ?? null;
 }

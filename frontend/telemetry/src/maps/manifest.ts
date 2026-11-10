@@ -139,7 +139,22 @@ export interface MapPlaceableMesh {
   liquid?: { color: string; opacity: number };
 }
 
+/** Optional metadata only; triangle data lives in the separately hashed JSON asset. */
+export interface MapFloorSupport {
+  version: 1;
+  path: string;
+  sha256: string;
+  datasetID: string;
+  mapID: number;
+  frame: "wow-yup-mirrored-x";
+  floorIDs: number[];
+  sources: { floor: number; path: string; sha256: string }[];
+  /** Evaluation provenance only, not a publication gate or floor-accuracy guarantee. */
+  validated: boolean;
+}
+
 export interface MapInstance {
+  floorSupport?: MapFloorSupport;
   mapID: number;
   name: string;
   instanceType: number;
@@ -192,7 +207,7 @@ export function recoverMapManifestBase(value: unknown, namespace: MapManifestNam
   }
   return {
     ...manifest,
-    instances: manifest.instances.map(({ styled: _styled, renders: _renders, mesh: _mesh, ...instance }) => ({
+    instances: manifest.instances.map(({ floorSupport: _floorSupport, styled: _styled, renders: _renders, mesh: _mesh, ...instance }) => ({
       ...instance,
       floors: instance.floors.map(({ preferred2D: _preferred2D, renders: _floorRenders, mesh: _floorMesh, ...floor }) => floor),
     })),
@@ -216,8 +231,8 @@ export function recoverMapManifestLayers(value: unknown): MapManifestLayers {
   });
   const meshes = manifest.instances.flatMap((instance) => {
     const floors = instance.floors.flatMap((floor) => floor.mesh ? [{ floor: floor.floor, mesh: floor.mesh }] : []);
-    return instance.mesh || floors.length > 0
-      ? [{ mapID: instance.mapID, name: instance.name, ...(instance.mesh ? { mesh: instance.mesh } : {}), ...(floors.length > 0 ? { floors } : {}) }]
+    return instance.floorSupport || instance.mesh || floors.length > 0
+      ? [{ mapID: instance.mapID, name: instance.name, ...(instance.floorSupport ? { floorSupport: instance.floorSupport } : {}), ...(instance.mesh ? { mesh: instance.mesh } : {}), ...(floors.length > 0 ? { floors } : {}) }]
       : [];
   });
   return {
@@ -235,6 +250,7 @@ export interface MapLayerFloor {
 }
 
 export interface MapLayerInstance {
+  floorSupport?: MapFloorSupport;
   mapID: number;
   name?: string;
   styled?: MapRenderedArtwork;
@@ -507,7 +523,7 @@ function parseMesh(value: unknown, context: string): MapPlaceableMesh {
 
 function parseInstance(value: unknown, context: string): MapInstance {
   const input = object(value, context, [
-    "mapID", "name", "instanceType", "directory", "floors", "styled", "renders", "mesh",
+    "mapID", "name", "instanceType", "directory", "floors", "styled", "renders", "mesh", "floorSupport",
   ]);
   const result: MapInstance = {
     mapID: integer(input.mapID, `${context}.mapID`, 0),
@@ -522,6 +538,7 @@ function parseInstance(value: unknown, context: string): MapInstance {
   if (styled) result.styled = styled;
   if (renders) result.renders = renders;
   if (meshes) result.mesh = meshes;
+  if (input.floorSupport !== undefined) result.floorSupport = parseFloorSupport(input.floorSupport);
   return result;
 }
 
@@ -549,7 +566,7 @@ export function parseMapLayer(value: unknown): MapLayerManifest {
     target: parseTarget(input.target, "map layer.target"),
     instances: array(input.instances ?? [], "map layer.instances").map((entry, index) => {
       const context = `map layer.instances[${index}]`;
-      const item = object(entry, context, ["mapID", "name", "styled", "renders", "mesh", "floors"]);
+      const item = object(entry, context, ["mapID", "name", "styled", "renders", "mesh", "floors", "floorSupport"]);
       const result: MapLayerInstance = { mapID: integer(item.mapID, `${context}.mapID`, 0) };
       if (hasOwn(item, "name")) result.name = string(item.name, `${context}.name`);
       const styled = optional(item.styled, (art) => parseRendered(art, `${context}.styled`));
@@ -571,6 +588,7 @@ export function parseMapLayer(value: unknown): MapLayerManifest {
       if (renders) result.renders = renders;
       if (meshes) result.mesh = meshes;
       if (floors) result.floors = floors;
+      if (item.floorSupport !== undefined) result.floorSupport = parseFloorSupport(item.floorSupport);
       return result;
     }),
   };
@@ -649,10 +667,12 @@ function mergeLayer(
       throw new TypeError(`conflicting names for manually created instance mapID ${entry.mapID}`);
     }
 
+    if (entry.floorSupport && kind !== "meshes") throw new TypeError("floorSupport belongs to meshes layer");
+    if (entry.floorSupport) instance.floorSupport = entry.floorSupport;
     const directFields = [entry.styled, entry.renders, entry.mesh].filter((field) => field !== undefined).length;
     const expectedDirect = kind === "styled" ? entry.styled : kind === "renders" ? entry.renders : entry.mesh;
     const floors = entry.floors ?? [];
-    if (directFields > (expectedDirect ? 1 : 0) || (!expectedDirect && floors.length === 0)) {
+    if (directFields > (expectedDirect ? 1 : 0) || (!expectedDirect && floors.length === 0 && !(kind === "meshes" && entry.floorSupport))) {
       throw new TypeError(`${kind} map layer mapID ${entry.mapID} must contain only its own artwork`);
     }
     if (kind === "styled" && floors.length > 0) {
@@ -701,7 +721,7 @@ export function mergeMapManifests(original: unknown, layers: MapManifestLayers =
   const instances = new Map<number, MapInstance>();
   for (const source of manifest.instances) {
     if (instances.has(source.mapID)) throw new TypeError(`duplicate original instance mapID ${source.mapID}`);
-    const { styled: _styled, renders: _renders, mesh: _mesh, ...metadata } = source;
+    const { floorSupport: _floorSupport, styled: _styled, renders: _renders, mesh: _mesh, ...metadata } = source;
     const floorNumbers = new Set<number>();
     const floors = metadata.floors.map(({ preferred2D: _preferred2D, renders: _floorRenders, mesh: _floorMesh, ...floor }) => {
       if (floorNumbers.has(floor.floor)) throw new TypeError(`duplicate original instance mapID ${source.mapID} floor ${floor.floor}`);
@@ -720,5 +740,75 @@ export function mergeMapManifests(original: unknown, layers: MapManifestLayers =
   for (const mapID of [...created.keys()].sort((left, right) => left - right)) {
     manifest.instances.push(created.get(mapID)!);
   }
+  for (const instance of manifest.instances) validateFloorSupportSources(instance);
   return manifest;
+}
+
+export function isFloorSupportAssetPath(path: string): boolean {
+  return validAssetPath(path, "support/") && /^support\/[a-zA-Z0-9_./-]+\.json$/.test(path);
+}
+
+export function parseFloorSupport(value: unknown): MapFloorSupport {
+  const input = object(value, "floorSupport", ["version", "path", "sha256", "datasetID", "mapID", "frame", "floorIDs", "sources", "validated"]);
+  const hash = (value: unknown): string => {
+    if (typeof value !== "string" || !/^[a-f0-9]{64}$/.test(value)) throw new TypeError("floorSupport requires lowercase SHA-256 hashes");
+    return value;
+  };
+  const path = string(input.path, "floorSupport.path");
+  const datasetID = string(input.datasetID, "floorSupport.datasetID");
+  const mapID = integer(input.mapID, "floorSupport.mapID");
+  if (input.version !== 1 || input.frame !== "wow-yup-mirrored-x" || typeof input.validated !== "boolean" || !datasetID.trim() || mapID <= 0 || !isFloorSupportAssetPath(path)) {
+    throw new TypeError("invalid floorSupport contract");
+  }
+  const floorIDs = array(input.floorIDs, "floorSupport.floorIDs").map((floor) => integer(floor, "floorSupport.floor"));
+  if (!floorIDs.length || new Set(floorIDs).size !== floorIDs.length) throw new TypeError("floorSupport requires unique floors");
+  const sources = array(input.sources, "floorSupport.sources").map((value) => {
+    const source = object(value, "floorSupport.source", ["floor", "path", "sha256"]);
+    const floor = integer(source.floor, "floorSupport.source.floor");
+    const path = string(source.path, "floorSupport.source.path");
+    if (!floorIDs.includes(floor) || !validAssetPath(path, "3d/") || !path.endsWith(".glb")) throw new TypeError("invalid floorSupport source");
+    return { floor, path, sha256: hash(source.sha256) };
+  });
+  if (sources.length !== floorIDs.length || new Set(sources.map((s) => s.floor)).size !== floorIDs.length) throw new TypeError("floorSupport requires one source per floor");
+  return { version: 1, path, sha256: hash(input.sha256), datasetID, mapID, frame: "wow-yup-mirrored-x", floorIDs, sources, validated: input.validated };
+}
+
+export function validateFloorSupportSources(instance: MapInstance): void {
+  const support = instance.floorSupport;
+  if (!support) return;
+  if (support.mapID !== instance.mapID || support.sources.some((source) => instance.floors.find((floor) => floor.floor === source.floor)?.mesh?.path !== source.path)) {
+    throw new TypeError(`stale floorSupport sources for mapID ${instance.mapID}`);
+  }
+}
+
+/** Validates bounded binary support payloads, without loading them into a renderer. */
+export function validateFloorSupportArtifact(value: unknown, descriptor: MapFloorSupport): void {
+  const input = object(value, "floor support artifact", ["version", "datasetID", "mapID", "frame", "floorIDs", "sources", "encoding", "floors"]);
+  const { encoding, floors, ...metadata } = input;
+  const parsed = parseFloorSupport({ ...metadata, path: descriptor.path, sha256: descriptor.sha256, validated: descriptor.validated });
+  if (JSON.stringify(parsed) !== JSON.stringify(descriptor) || encoding !== "indexed-f32-le-u32-le") throw new TypeError("floor support artifact does not match descriptor");
+  const entries = array(floors, "support floors");
+  if (entries.length !== descriptor.floorIDs.length) throw new TypeError("support floor count mismatch");
+  const seen = new Set<number>();
+  let totalBytes = 0;
+  const decode = (value: unknown): DataView => {
+    const text = string(value, "support binary");
+    if (text.length > 24 * 1024 * 1024 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(text)) throw new TypeError("invalid support base64");
+    const binary = atob(text);
+    totalBytes += binary.length;
+    if (totalBytes > 32 * 1024 * 1024 || binary.length === 0 || binary.length % 12 !== 0) throw new TypeError("invalid support binary length");
+    return new DataView(Uint8Array.from(binary, (c) => c.charCodeAt(0)).buffer);
+  };
+  for (const value of entries) {
+    const entry = object(value, "support floor", ["floor", "positions", "indices"]);
+    const floor = integer(entry.floor, "support floor ID");
+    if (seen.has(floor) || !descriptor.floorIDs.includes(floor)) throw new TypeError("invalid support floor ID");
+    seen.add(floor);
+    const positions = decode(entry.positions);
+    const indices = decode(entry.indices);
+    const vertices = positions.byteLength / 12;
+    if (vertices > 1_000_000) throw new TypeError("too many support vertices");
+    for (let i = 0; i < positions.byteLength; i += 4) if (!Number.isFinite(positions.getFloat32(i, true))) throw new TypeError("nonfinite support position");
+    for (let i = 0; i < indices.byteLength; i += 4) if (indices.getUint32(i, true) >= vertices) throw new TypeError("support index out of bounds");
+  }
 }

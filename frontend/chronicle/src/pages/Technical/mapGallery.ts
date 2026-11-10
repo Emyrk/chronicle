@@ -56,7 +56,21 @@ export interface WowMapOverlay {
   tiles: WowMapTile[];
 }
 
+/** Hash-pinned offline support geometry. Unvalidated data is local-preview-only. */
+export interface WowMapFloorSupport {
+  version: 1;
+  path: string;
+  sha256: string;
+  datasetID: string;
+  mapID: number;
+  frame: "wow-yup-mirrored-x";
+  floorIDs: number[];
+  sources: { floor: number; path: string; sha256: string }[];
+  validated: boolean;
+}
+
 export interface WowMapInstance {
+  floorSupport?: WowMapFloorSupport;
   mapID: number;
   name: string;
   instanceType: number;

@@ -46,6 +46,13 @@ describe("mapProcessor", () => {
     expect(encounter?.positionsByUnit.get("enemy")).toHaveLength(1);
   });
 
+  it("preserves synthetic snapshot provenance without changing raw floor telemetry", () => {
+    const state = mapProcessor.createState();
+    const start = new Date("2026-10-07T20:00:00Z");
+    mapProcessor.processEvent(state, { ...position("player", 0, 10, 20), floor: 2, isSynthetic: true }, "encounter", start, "unit_position", context);
+    expect(state.encounters.get("encounter")?.positionsByUnit.get("player")?.[0]).toMatchObject({ synthetic: true, floor: 2, x: 10, y: 20 });
+  });
+
   it("retains the dungeon floor when schema v3 reports it", () => {
     const state = mapProcessor.createState();
     const start = new Date("2026-10-07T20:00:00Z");

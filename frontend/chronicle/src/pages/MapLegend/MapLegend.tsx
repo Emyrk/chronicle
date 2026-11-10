@@ -189,6 +189,21 @@ export function MapLegend() {
         </Ground>
       </Section>
 
+      <Section id="floors" title="Dungeon floors" note="Auto is a best-effort estimate, not a floor assignment for each player.">
+        <p className="text-sm text-muted-foreground">
+          Auto chooses one display floor for the selected encounter and keeps it fixed while you play or scrub.
+          When several encounters are selected, the earliest chronological encounter anchors the entire view.
+          Whole-run views use that same anchor until the selection changes.
+          Recorded floor telemetry, geometry and player positions can help estimate the floor, but overlapping levels may remain ambiguous.
+        </p>
+        <p className="text-sm text-muted-foreground">
+          If the map says &quot;Floor uncertain · choose a floor&quot;, use the floating floor picker at the bottom-left of the map, beside the camera controls, to choose the artwork that fits.
+          Manual choices are remembered per anchor encounter, so returning to that encounter restores your choice.
+          Choose Auto to clear the manual choice and restore the computed estimate. The same picker is available in World settings,
+          and remains available when the selected floor has no artwork.
+        </p>
+      </Section>
+
       <Section id="tokens" title="Unit tokens" note="Flat discs that lie on the ground, so the space above them stays free for one live value.">
         <Grid>
           <Card title="Player" demo={<Ground><At x={50} y={55}><Token {...MAGE} facing={20} /></At></Ground>}>
