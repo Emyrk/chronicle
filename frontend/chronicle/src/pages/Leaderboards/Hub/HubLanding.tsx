@@ -3,7 +3,7 @@ import { useState, type ReactNode } from "react"
 import { useActiveTabInView } from "@/hooks/useActiveTabInView"
 import { Link } from "react-router-dom"
 import type { HubLandingPreview, RankingsInstanceSummary, SupportedInstance } from "@/api/typesGenerated"
-import { AlertTriangle, CircleHelp, RotateCw, Skull, Swords, Timer } from "lucide-react"
+import { AlertTriangle, ArrowRight, CircleHelp, RotateCw, Skull, Swords, Timer } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { CLASS_CSS_VAR, CLASS_DISPLAY } from "@/pages/Rankings/classDisplay"
 import { InstanceCard } from "@/pages/Rankings/InstanceCard"
@@ -349,16 +349,22 @@ function HubLanding({
         {unavailable.length > 0 && <section className="space-y-3 border-t pt-5">
           <div>
             <h2 className="text-sm font-semibold text-muted-foreground">Configured instances without rankings</h2>
-            <p className="mt-1 text-xs text-muted-foreground/70">These instances unlock after they record a kill or award Renown.</p>
+            <p className="mt-1 text-xs text-muted-foreground/70">Open an instance to view its configured encounters and rules.</p>
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {unavailable.map((name) => (
-              <div key={name} aria-disabled="true"
-                className="flex cursor-not-allowed items-center gap-3 rounded-lg border border-dashed bg-card/30 px-3 py-2.5 text-muted-foreground/70 opacity-60">
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium">{name}</span>
-                  <span className="block text-[10px] tracking-wide uppercase">No rankings or Renown yet</span>
-                </span>
+              <div key={name} onClickCapture={instanceHref ? undefined : (event) => {
+                event.preventDefault()
+                onOpen(name)
+              }}>
+                <Link to={instanceHref?.(name) ?? "#"}
+                  className="group flex items-center gap-3 rounded-lg border border-dashed bg-card/30 px-3 py-2.5 text-muted-foreground/70 opacity-60 transition-colors hover:border-muted-foreground/40 hover:bg-card/50 hover:text-muted-foreground hover:opacity-80">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium">{name}</span>
+                    <span className="block text-[10px] tracking-wide uppercase">No rankings or Renown yet</span>
+                  </span>
+                  <ArrowRight className="size-3.5 shrink-0 opacity-40 transition-transform group-hover:translate-x-0.5 group-hover:opacity-70" />
+                </Link>
               </div>
             ))}
           </div>

@@ -30,7 +30,7 @@ describe("live Hub landing", () => {
     expect(markup).not.toContain("Mock data for design review")
   })
 
-  it("shows configured instances without rankings as disabled rows below published cards", () => {
+  it("shows configured instances without rankings as de-emphasized links below published cards", () => {
     const markup = render({
       instances: [
         ...instances,
@@ -41,10 +41,10 @@ describe("live Hub landing", () => {
 
     expect(markup.indexOf("Upper Karazhan")).toBeGreaterThan(markup.indexOf("Blackrock Depths"))
     expect(markup).toContain("Configured instances without rankings")
-    expect(markup).toContain("These instances unlock after they record a kill or award Renown.")
+    expect(markup).toContain("Open an instance to view its configured encounters and rules.")
     expect(markup).toContain("No rankings or Renown yet")
-    expect(markup).toContain('aria-disabled="true"')
-    expect(markup).not.toContain('href="/leaderboards/Upper-Karazhan"')
+    expect(markup).not.toContain('aria-disabled="true"')
+    expect(markup).toContain('href="/leaderboards/Upper-Karazhan"')
   })
 
   it("keeps Renown-only cohorts in the main raid grid after Renown is awarded", () => {
@@ -81,7 +81,7 @@ describe("live Hub landing", () => {
     expect(markup).not.toContain("Eye of Eternity</span><span class=\"block text-[10px] tracking-wide uppercase\">No rankings or Renown yet")
   })
 
-  it("disables Renown-configured cohorts until a person or guild earns Renown", () => {
+  it("de-emphasizes Renown-configured cohorts until a person or guild earns Renown", () => {
     const eye = {
       category: "raid",
       instance_name: "Eye of Eternity",
@@ -102,7 +102,7 @@ describe("live Hub landing", () => {
     expect(markup).not.toContain("Eye of Eternity</h2>")
     expect(markup).toContain("Eye of Eternity")
     expect(markup).toContain("No rankings or Renown yet")
-    expect(markup).not.toContain('href="/leaderboards/Eye-of-Eternity"')
+    expect(markup).toContain('href="/leaderboards/Eye-of-Eternity"')
   })
 
   it("separates raid cards by level tier and keeps cohorts together", () => {
