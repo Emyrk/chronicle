@@ -641,6 +641,7 @@ func (api *API) Routes() chi.Router {
 					r.Get("/speedruns/history", api.GuildSpeedrunHistory)
 					r.Get("/characters", api.GuildCharacterRoster)
 					r.Get("/best-runs", api.GuildBestRuns)
+					r.Get("/career", api.GetGuildCareer)
 					r.Get("/encounters", api.GuildEncounterKills)
 					r.Get("/parses/top", api.GuildTopParses)
 					r.Get("/parses/runs", api.GuildRunParses)
@@ -710,6 +711,7 @@ func (api *API) Routes() chi.Router {
 			r.Get("/armory/{realm}/{player}", api.GetArmoryPlayer)
 			r.Get("/armory/{realm}/{player}/gear-history", api.GetArmoryPlayerGearHistory)
 			r.Get("/armory/{realm}/{player}/loot", api.GetArmoryPlayerLoot)
+			r.Get("/armory/{realm}/{player}/career", api.GetArmoryPlayerCareer)
 
 			// Public item pricing routes
 			r.Get("/item-pricing/realms", api.ItemPricingRealms)

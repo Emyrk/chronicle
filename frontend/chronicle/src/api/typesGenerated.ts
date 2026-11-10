@@ -7629,3 +7629,74 @@ export interface RefreshLeaderboardHighlightsRequest {
     readonly tenant_id: string;
 }
 
+// From chroniclesdk/career.go
+/**
+ * CareerContribution identifies an exact configured raid variant. Backend values
+ * already encode missing-subject zero contributions; clients must not recompute them.
+ */
+export interface CareerContribution {
+    readonly instance_name: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly weight: number | null;
+    readonly include_average: boolean;
+    readonly include_renown: boolean;
+    readonly mastery: number | null;
+    readonly peak: number | null;
+    readonly renown: number;
+    readonly eligible_metric_kills: number;
+    readonly eligible_renown_kills: number;
+}
+
+// From chroniclesdk/career.go
+export interface CareerGuildResponse {
+    readonly status: string;
+    readonly summary: CareerSummary;
+    readonly pool_fingerprint: string;
+    readonly issues: readonly CareerIssue[];
+}
+
+// From chroniclesdk/career.go
+export interface CareerIssue {
+    readonly instance_name: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly code: string;
+}
+
+// From chroniclesdk/career.go
+export interface CareerPlayerCohort {
+    readonly player_class: string;
+    readonly player_spec: string;
+    readonly player_sub_spec: string;
+    readonly summary: CareerSummary;
+}
+
+// From chroniclesdk/career.go
+/**
+ * CareerPlayerResponse keeps each exact specialization independent, including Renown.
+ * Collections are serialized as arrays, never null. Status is descriptive, not a score.
+ */
+export interface CareerPlayerResponse {
+    readonly status: string;
+    readonly cohorts: readonly CareerPlayerCohort[];
+    readonly pool_fingerprint: string;
+    readonly issues: readonly CareerIssue[];
+}
+
+// From chroniclesdk/career.go
+/**
+ * CareerSummary contains published components, never an opaque combined score.
+ * Null performance scores are unavailable, not zero. ChosenMetric is a stored
+ * player DPS/HPS choice (null before selection); guild kill-time scoring uses null.
+ */
+export interface CareerSummary {
+    readonly mastery: number | null;
+    readonly peak: number | null;
+    readonly renown: number;
+    readonly chosen_metric: string | null;
+    readonly performance_status: string;
+    readonly computed_at: string | null;
+    readonly refresh_pending: boolean;
+    readonly contributions: readonly CareerContribution[];
+}

@@ -1,3 +1,4 @@
+import { GuildCareerCard } from "@/components/Career/CareerCard";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useLocation, useNavigate, useParams, Link } from "react-router-dom";
@@ -228,6 +229,7 @@ export function GuildPage() {
 
         {/* Content */}
         <div className="flex-1 min-w-0">
+          <GuildCareerCard guildID={pageConfig.guild.id} />
           {currentTab && (
             <GuildPageCanvas
               guild={pageConfig.guild}
