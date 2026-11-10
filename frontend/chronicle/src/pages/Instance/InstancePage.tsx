@@ -28,6 +28,7 @@ import { useFocusMode } from "@/hooks/useFocusMode";
 import { InstanceAssistantChat } from "@/features/chat/InferenceChats";
 import { AdSuppressionProvider } from "@/components/Ads/AdSuppressionProvider";
 import { AdRailStack } from "@/components/Ads/AdRailStack";
+import { MobileBottomAd } from "@/components/Ads/MobileBottomAd";
 import { shouldShowAdPreview } from "@/components/Ads/adPreview";
 import { useAdSiteConfig } from "@/components/Ads/useAdSiteConfig";
 import { getReplayResetTimestamp, type SelectedEncounterTimes } from "./replaySelection";
@@ -482,6 +483,7 @@ export function InstancePage() {
                 />
               )}
             </div>
+            <MobileBottomAd placement="instance-mobile-bottom" />
             <InstanceAssistantChat key={instance.id} instanceId={instance.id} instanceName={instance.name} />
           </PlayerSpecializationProvider>
           </PlayerCosmeticsProvider>

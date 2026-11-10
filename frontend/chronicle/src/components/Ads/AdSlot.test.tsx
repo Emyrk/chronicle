@@ -7,6 +7,8 @@ import type { SiteConfig } from "@/api/typesGenerated"
 import { describe, expect, it, vi } from "vitest"
 import { AdRailStack } from "./AdRailStack"
 import { AdSlot } from "./AdSlot"
+import { MobileBottomAd } from "./MobileBottomAd"
+import { mobileAdOccupiedHeight } from "./mobileBottomAdLayout"
 import { adFallbackPresentation, adRequestStateForKey } from "./adRequestState"
 import { AdSuppressionProvider } from "./AdSuppressionProvider"
 import { adSizeLabel, adSizesForFormat } from "./adFormats"
@@ -169,6 +171,49 @@ describe("AdSlot", () => {
     expect(markup).not.toContain("min-[1920px]:w-[300px]")
     expect(markup).not.toContain("min-[2080px]:w-[300px]")
     expect(markup).toContain("2xl:block")
+  })
+
+  it("renders the fixed mobile banner size only below the desktop breakpoint", () => {
+    const markup = renderAdSlot(
+      <AdSlot placement="rankings-mobile-bottom" format="mobile-banner" hostname="localhost" previewEnabled />,
+    )
+
+    expect(adSizesForFormat("mobile-banner", false)).toEqual([
+      [320, 50],
+      [320, 100],
+      [300, 100],
+    ])
+    expect(adSizeLabel("mobile-banner", false)).toBe("320 × 50 / 320 × 100 / 300 × 100")
+    expect(markup).toContain("320 × 50 / 320 × 100 / 300 × 100")
+    expect(markup).toContain("min-h-[50px] w-[320px] max-w-full")
+    expect(markup).not.toContain(">Advertisement</")
+    expect(markup).toContain("lg:hidden")
+    expect(markup).toContain('data-ad-placement="rankings-mobile-bottom"')
+  })
+
+  it("reserves the full rendered creative height when it overflows the slot shell", () => {
+    const shell = {
+      scrollHeight: 50,
+      getBoundingClientRect: () => ({ height: 50, top: 700 }),
+      querySelectorAll: () => [{ getBoundingClientRect: () => ({ bottom: 800 }) }],
+    } as unknown as HTMLElement
+
+    expect(mobileAdOccupiedHeight(shell)).toBe(100)
+  })
+
+  it("anchors mobile banners and reserves their measured page offset", () => {
+    const markup = renderAdSlot(
+      <MobileBottomAd placement="instance-mobile-bottom" hostname="localhost" previewEnabled />,
+    )
+
+    expect(markup).toContain("fixed inset-x-0 bottom-0")
+    expect(markup).toContain("empty:hidden")
+    expect(markup).toContain("safe-area-inset-bottom")
+    expect(markup).not.toContain("bg-background")
+    expect(markup).not.toContain("border-t")
+    expect(markup).not.toContain("shadow-[0_-8px_24px")
+    expect(markup).toContain("h-[var(--mobile-ad-offset,0px)]")
+    expect(markup).toContain('data-ad-placement="instance-mobile-bottom"')
   })
 
   it("does not render a height-gated rail below its minimum viewport height", () => {
