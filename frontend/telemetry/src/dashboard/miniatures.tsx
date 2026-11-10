@@ -169,7 +169,7 @@ miniatureDashboard.get("/internal/miniatures", (c) => c.html(
         }
         function disposePreview() { if(preview){preview.dispose();preview=null;} }
         function disposeObject(root) { root.traverse(child=>{if(child.geometry)child.geometry.dispose();const materials=Array.isArray(child.material)?child.material:child.material?[child.material]:[];for(const material of materials){for(const value of Object.values(material)){if(value?.isTexture)value.dispose();}material.dispose();}}); }
-        function mountPreview(url,isGameModel,mapScale,worldHeight) {
+        function mountPreview(url,isGameModel,mapScale,worldHeight,animationUrl) {
           const stage=document.getElementById('model-stage'); if(!stage)return;
           const scene=new THREE.Scene();
           const camera=new THREE.PerspectiveCamera(35,1,.01,1000);
@@ -204,6 +204,16 @@ miniatureDashboard.get("/internal/miniatures", (c) => c.html(
             if(!mixer||!clips[index])return;
             mixer.stopAllAction();activeClip=clips[index];activeAction=mixer.clipAction(activeClip);activeAction.reset().play();playing=true;updateAnimationUI();
           }
+          function installClips(nextClips,preferredName) {
+            clips=nextClips;
+            if(!clips.length||!model){animationControls.hidden=true;return;}
+            if(!mixer)mixer=new THREE.AnimationMixer(model);
+            animationClip.innerHTML=clips.map((clip,index)=>'<option value="'+index+'">'+escapeHTML(clip.name||('Animation '+(index+1)))+' · '+formatTime(clip.duration)+' s</option>').join('');
+            const preferred=clips.findIndex(clip=>clip.name===preferredName);
+            const stand=clips.findIndex(clip=>/^stand$/i.test(clip.name));
+            const initial=preferred>=0?preferred:stand>=0?stand:0;
+            animationClip.value=String(initial);animationControls.hidden=false;selectClip(initial);
+          }
           animationClip?.addEventListener('change',event=>selectClip(Number(event.target.value)));
           animationPlay?.addEventListener('click',()=>{if(!activeAction)return;playing=!playing;updateAnimationUI();});
           animationRestart?.addEventListener('click',()=>{if(!activeAction)return;activeAction.reset().play();playing=true;mixer?.update(0);updateAnimationUI();});
@@ -223,7 +233,7 @@ miniatureDashboard.get("/internal/miniatures", (c) => c.html(
           function resize() { const width=Math.max(1,stage.clientWidth),height=Math.max(1,stage.clientHeight);renderer.setSize(width,height,false);camera.aspect=width/height;camera.updateProjectionMatrix(); }
           const observer=new ResizeObserver(resize);observer.observe(stage);resize();
           function animate() { if(disposed)return;frame=requestAnimationFrame(animate);const delta=Math.min(.05,clock.getDelta());if(playing)mixer?.update(delta*playbackSpeed);updateAnimationUI();controls.update();renderer.render(scene,camera); }
-          previewLoader.load(url,gltf=>{if(disposed){disposeObject(gltf.scene);return;}model=gltf.scene;model.traverse(child=>{if(child.isMesh){child.castShadow=true;child.receiveShadow=true;}});modelRoot.add(model);const nativeBox=new THREE.Box3().setFromObject(model);const nativeHeight=Math.max(.001,nativeBox.max.y-nativeBox.min.y);baseScale=worldHeight===undefined?(isGameModel?BASE_MODEL_HEIGHT/nativeHeight:BASE_MODEL_HEIGHT)*MESH_MODEL_SCALE:(worldHeight*PLAYER_GEOMETRY_HEIGHT)/(PLAYER_WORLD_HEIGHT*nativeHeight);clips=gltf.animations;if(clips.length){mixer=new THREE.AnimationMixer(model);animationClip.innerHTML=clips.map((clip,index)=>'<option value="'+index+'">'+escapeHTML(clip.name||('Animation '+(index+1)))+' · '+formatTime(clip.duration)+' s</option>').join('');const stand=clips.findIndex(clip=>/^stand$/i.test(clip.name));const initial=stand>=0?stand:0;animationClip.value=String(initial);animationControls.hidden=false;selectClip(initial);}fit();},undefined,error=>{if(disposed)return;console.error('Unable to load model preview',error);stage.insertAdjacentHTML('beforeend','<div class="preview-empty"><div><strong>Preview failed</strong>Open the asset to inspect it directly.</div></div>');});
+          previewLoader.load(url,gltf=>{if(disposed){disposeObject(gltf.scene);return;}model=gltf.scene;model.traverse(child=>{if(child.isMesh){child.castShadow=true;child.receiveShadow=true;}});modelRoot.add(model);const nativeBox=new THREE.Box3().setFromObject(model);const nativeHeight=Math.max(.001,nativeBox.max.y-nativeBox.min.y);baseScale=worldHeight===undefined?(isGameModel?BASE_MODEL_HEIGHT/nativeHeight:BASE_MODEL_HEIGHT)*MESH_MODEL_SCALE:(worldHeight*PLAYER_GEOMETRY_HEIGHT)/(PLAYER_WORLD_HEIGHT*nativeHeight);installClips(gltf.animations,'Stand');if(animationUrl){previewLoader.load(animationUrl,pack=>{if(disposed){disposeObject(pack.scene);return;}const preferred=activeClip?.name;const packClips=pack.animations;disposeObject(pack.scene);installClips([...gltf.animations,...packClips],preferred);},undefined,error=>{if(disposed)return;console.error('Unable to load animation preview',error);});}fit();},undefined,error=>{if(disposed)return;console.error('Unable to load model preview',error);stage.insertAdjacentHTML('beforeend','<div class="preview-empty"><div><strong>Preview failed</strong>Open the asset to inspect it directly.</div></div>');});
           animate();
           preview={setScale(scale){currentScale=scale;fit();},dispose(){disposed=true;cancelAnimationFrame(frame);observer.disconnect();controls.dispose();mixer?.stopAllAction();disposeObject(scene);renderer.dispose();renderer.domElement.remove();}};
         }
@@ -280,7 +290,7 @@ miniatureDashboard.get("/internal/miniatures", (c) => c.html(
           document.getElementById('animation-file')?.addEventListener('change',event=>upload(event.target.files[0],'animation_path'));
           document.getElementById('remove').addEventListener('click',remove);
           renderJSON();
-          if(hasPath){const entry=item.entry_ids[0];mountPreview(previewURL(item.path),isGameModel,item.map_scale||1,item.world_heights?.[entry]);}
+          if(hasPath){const entry=item.entry_ids[0];mountPreview(previewURL(item.path),isGameModel,item.map_scale||1,item.world_heights?.[entry],item.animation_path?previewURL(item.animation_path):null);}
         }
         function renderJSON(){const pre=document.getElementById('json');if(pre&&state)pre.textContent=JSON.stringify(state.draft,null,2);}
         function remove(){const selectedItem=current();if(!selectedItem)return;const {kind,item}=selectedItem;if(!confirm('Remove "'+(item.name||'this model')+'" from the draft? The uploaded GLB will remain in R2 until cleaned up separately.'))return;bulkSelected.delete(item);state.draft[kind]=collection(kind).filter(candidate=>candidate!==item);selected=items()[0] ? itemKey(items()[0].kind,items()[0].item) : null;markDirty();renderList();renderEditor();}
