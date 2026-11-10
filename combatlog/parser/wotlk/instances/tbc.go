@@ -1044,6 +1044,14 @@ var TempestKeepFactory = &instances.CommonFactory{
 // BlackTempleHostiles returns creature entry IDs for Black Temple (map 564).
 func BlackTempleHostiles() map[uint32]instances.Identity {
 	hostile := make(map[uint32]instances.Identity)
+
+	for entry, name := range map[uint32]string{
+		23089: "Akama",
+		23191: "Akama",
+	} {
+		hostile[entry] = instances.Identity{Affiliation: types.AffiliationFriendly, Name: name}
+	}
+
 	instances.LoadAdds(hostile, map[uint32]string{
 		22844: "Ashtongue Battlelord",
 		22845: "Ashtongue Mystic",
@@ -1086,7 +1094,6 @@ func BlackTempleHostiles() map[uint32]instances.Identity {
 		23047: "Shadowmoon Soldier",
 		23049: "Shadowmoon Weapon Master",
 		23084: "Black Temple Invis Stalker",
-		23089: "Akama",
 		23147: "Shadowmoon Grunt",
 		23158: "Seer Kanai",
 		23159: "Okuno",
@@ -1120,7 +1127,10 @@ func BlackTempleHostiles() map[uint32]instances.Identity {
 	})
 	instances.LoadBosses(hostile, map[uint32]string{
 		22841: "Shade of Akama",
-		22856: "Reliquary of the Lost",
+		22856: "Reliquary of Souls",
+		23418: "Reliquary of Souls",
+		23419: "Reliquary of Souls",
+		23420: "Reliquary of Souls",
 		22871: "Teron Gorefiend",
 		22887: "High Warlord Naj'entus",
 		22898: "Supremus",
@@ -1131,7 +1141,6 @@ func BlackTempleHostiles() map[uint32]instances.Identity {
 		22950: "High Nethermancer Zerevor",
 		22951: "Lady Malande",
 		22952: "Veras Darkshadow",
-		23191: "Akama",
 		23426: "The Illidari Council",
 	})
 	return hostile

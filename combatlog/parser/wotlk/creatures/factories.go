@@ -34,6 +34,8 @@ func NewCharacterFactories(flavor database.WoWFlavor) []characters.CharacterFact
 			NewLeotherasTheBlind,
 			// Tempest Keep
 			NewKaelThasEncounterCharacter,
+			// Black Temple
+			NewReliquaryEncounterCharacter,
 		)
 		cres = append(tbc, cres...)
 	}
