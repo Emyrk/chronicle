@@ -1,8 +1,9 @@
 # Career foundation investigation
 
-Status: configuration and activation foundation implemented; numeric seed weights
-remain outstanding. `spec.tex` is authoritative, followed by `behavior.md`.
-Career scoring workers, serving API, and UI are not implemented by this foundation.
+Status: configuration, activation, career projections, refresh workers, serving API,
+and Armory/guild cards are implemented on the career stack. Numeric production
+weights and class-only player policy remain outstanding. `spec.tex` is authoritative,
+followed by `behavior.md`. This feature has not been deployed.
 
 ## Verified current behavior
 
@@ -72,7 +73,7 @@ Remaining decisions:
   metric-independent eligible kills in that identity. Guild score inputs are
   boss-based kill-time raid values, not clear times.
 
-## Remaining implementation sequence
+## Original implementation sequence (historical plan; see rollout status above)
 
 1. Obtain approved numeric seed weights before seeding career weights.
    Specify the career allowed variant mapping separately from ordinary board
@@ -105,6 +106,39 @@ regression tests cover the additive migration, configuration constraints,
 activation/retraction, membership and fingerprints. No startup backfill or
 production configuration mutation is performed. A PDF build requires a TeX
 toolchain, not present in this checkout session.
+
+## Serving and rollout
+
+- Migration `000356` preserves historical exact-cohort player Renown facts without
+  changing existing character-wide Renown. Migration `000357` adds persisted
+  career inputs and a fenced tenant reconciliation queue. Neither performs a
+  historical startup backfill.
+- Historical player career Renown requires replaying D1 evidence through the
+  existing administrative backfill workflow. A career reconciliation alone cannot
+  recover historical subspec attribution that was never projected. Review the
+  backfill scope and operational cost before running it on a live deployment.
+- Refreshes page through at most 100 identities per step. Source and D2 changes
+  dirty career results, including benchmark changes. Periodic reconciliation
+  repairs policy changes. Sweep-only work does not block historical-operation
+  completion; required source/D2 work does.
+- Reads use current weights and awards with persisted inputs and metric choice.
+  `refresh_pending` reports queued work or a policy fingerprint mismatch. Missing
+  weights produce `weights_pending`; an empty default roster produces
+  `configuration_pending`; an empty active denominator produces `no_active_raids`.
+  No fallback weight or divide-by-zero score is published.
+- Endpoints are `GET /api/v1/armory/{realm}/{player}/career` and
+  `GET /api/v1/guilds/{guildID}/career`. They require a tenant site, reject query
+  overrides, and reject foreign subjects. Player responses retain pool metadata
+  even with zero cohorts. Guilds expose kill-time scores without a DPS/HPS choice.
+- Player class-only/disabled modes currently return an explicit unsupported-mode
+  response. Whether class-only career aggregation should follow the existing
+  class cohort is awaiting product approval; no mixed raw-spec/class attribution
+  is fabricated. Spec-mode player and guild paths are implemented.
+- Before rollout, approve and seed positive weights for all active average variants
+  and resolve any intentionally empty average roster (such as Vault). Configure new
+  difficulty/size tuples explicitly; Heroic entries are not inferred from Normal.
+- All validation uses local isolated databases. No live backfill, configuration
+  change, deployment, or additional PR has been performed by this implementation.
 
 ## Implemented foundation interface
 
