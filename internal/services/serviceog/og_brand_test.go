@@ -247,3 +247,25 @@ func TestOGSiteStatsCache(t *testing.T) {
 		require.Eventually(t, func() bool { return c.get(ctx, nil, q).LogsParsed == 3 }, 5*time.Second, 5*time.Millisecond)
 	})
 }
+
+func TestChooseOGImageURL(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest(http.MethodGet, "https://choose.chronicleclassic.com/instances/abc", nil)
+	require.Empty(t, testOGImageAPI(t, "").ChooseOGImageURL(req, 9), "no OG service → no image")
+
+	api := testOGImageAPI(t, "https://og.example.com")
+	u, err := url.Parse(api.ChooseOGImageURL(req, 9))
+	require.NoError(t, err)
+	q := u.Query()
+	require.Equal(t, "brand", q.Get("template"))
+	require.Equal(t, brandOGTitle, q.Get("title"))
+	require.Equal(t, "Raid logs for 9 World of Warcraft communities", q.Get("excerpt"))
+	require.Equal(t, "choose.chronicleclassic.com", q.Get("host"))
+	require.False(t, q.Has("product"), "the chooser has no tenant product")
+	require.NotEmpty(t, q.Get("sig"))
+
+	u, err = url.Parse(api.ChooseOGImageURL(req, 0))
+	require.NoError(t, err)
+	require.Equal(t, "Free raid log analysis for World of Warcraft", u.Query().Get("excerpt"))
+}

@@ -56,6 +56,20 @@ func brandOGParams(product string, stats database.SiteStatsRow) url.Values {
 	return params
 }
 
+// ChooseOGImageURL is the brand card for the community chooser
+// (servicechoose.OGImager), or "" when the OG service isn't configured. The
+// chooser has no tenant, so the card names no product and shows no site counts.
+func (s *Service) ChooseOGImageURL(r *http.Request, communities int) string {
+	if !s.ogServiceConfigured() {
+		return ""
+	}
+	excerpt := "Free raid log analysis for World of Warcraft"
+	if communities > 1 {
+		excerpt = "Raid logs for " + strconv.Itoa(communities) + " World of Warcraft communities"
+	}
+	return s.ogImageURLForProduct(r, "brand", "", url.Values{"title": {brandOGTitle}, "excerpt": {excerpt}})
+}
+
 // withBrandOG gives a page the brand card when its resolver sets no image,
 // including when its lookup fails (nil). With the OG service unset, the
 // resolver's result passes through untouched.

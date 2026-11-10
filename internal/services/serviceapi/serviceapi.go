@@ -275,6 +275,8 @@ func (s *Service) Start(ctx context.Context) error {
 		OGServiceURL: ogServiceURL,
 		OGSigningKey: s.ogSigningKey,
 	})
+	// The chooser subdomain previews with the brand card.
+	servicechoose.Choose(s.broker).SetOGImager(ogSvc)
 
 	handler, err := api.New(ctx, api.Options{
 		Logger:                logger,
