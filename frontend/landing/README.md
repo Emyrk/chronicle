@@ -38,7 +38,7 @@ Deployed to GitHub Pages via `.github/workflows/deploy-landing.yml` on push to `
 
 ### NitroPay ads.txt
 
-The landing site does not load NitroPay or render ad placements. The deployment workflow still reads the `NITROPAY_SITE_ID` GitHub Actions variable, downloads NitroPay's current managed ads.txt file, and publishes it as `https://chronicleclassic.com/ads.txt`. If the variable is unset, the build does not contain ads.txt.
+The landing site does not load NitroPay or render ad placements. The deployment workflow still reads the `NITROPAY_SITE_ID` GitHub Actions variable, downloads NitroPay's current managed ads.txt file, and publishes it as `https://chronicleclassic.com/ads.txt`. Because GitHub Pages cannot return a server-side redirect for that path, the workflow runs every six hours to keep the published copy current. If the variable is unset, the build does not contain ads.txt.
 
 Official Chronicle instances can use that authorization and enable NitroPay for tenants whose **Enable Ads** toggle is on:
 

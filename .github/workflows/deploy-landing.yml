@@ -6,6 +6,9 @@ on:
     paths:
       - "frontend/landing/**"
       - ".github/workflows/deploy-landing.yml"
+  schedule:
+    # GitHub Pages cannot redirect ads.txt, so regularly republish NitroPay's managed file.
+    - cron: "17 */6 * * *"
   workflow_dispatch:
 
 permissions:
