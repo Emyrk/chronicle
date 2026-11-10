@@ -33,6 +33,27 @@ describe("class and spec quick stats", () => {
     expect(html).toContain("Snapshot from where each was added");
   });
 
+  it("shows the leaderboard raid context for cohort comparisons", () => {
+    const entity = classEntity("MAGE", "Mage", [{ label: "Runs", value: "42" }]);
+    const html = renderToStaticMarkup(
+      <QuickStats
+        {...common}
+        kind="class"
+        entities={[entity]}
+        hidden={new Set()}
+        raid={{
+          instanceName: "Molten Core",
+          difficultyName: "Normal",
+          maxPlayers: 40,
+          bossNames: ["Lucifron", "Ragnaros"],
+        }}
+      />,
+    );
+
+    expect(html).toContain("Molten Core");
+    expect(html).toContain("Normal · 40-player · 2 bosses");
+  });
+
   it("renders spec snapshots and respects hidden pins", () => {
     const fire = specEntity("MAGE", "Mage", "Fire", undefined, [
       { label: "Typical", value: "1,234/s" },

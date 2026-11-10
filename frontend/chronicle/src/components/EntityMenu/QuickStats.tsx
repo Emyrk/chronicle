@@ -188,9 +188,9 @@ export default function QuickStats({
       </div>
       <div className="pt-2">
         {kind === "class" ? (
-          <CohortQuickStats kind="class" entities={classes} hidden={hidden} />
+          <CohortQuickStats kind="class" entities={classes} hidden={hidden} raid={raid} />
         ) : kind === "spec" ? (
-          <CohortQuickStats kind="spec" entities={specs} hidden={hidden} />
+          <CohortQuickStats kind="spec" entities={specs} hidden={hidden} raid={raid} />
         ) : kind === "character" ? (
           <PlayerQuickStats
             key={characters.map(entityKey).join()}
@@ -223,16 +223,26 @@ function CohortQuickStats({
   kind,
   entities,
   hidden,
+  raid,
 }: {
   kind: "class" | "spec";
   entities: CohortPin[];
   hidden: ReadonlySet<string>;
+  raid: EntityRaidContext | null;
 }) {
   const visible = entities.filter((entity) => !hidden.has(entityKey(entity)));
   if (visible.length === 0) return <Empty>Everything here is hidden. Shift+click a name to show it again.</Empty>;
+  const raidDetail = raid
+    ? [
+        raid.difficultyName,
+        raid.maxPlayers !== undefined ? `${raid.maxPlayers}-player` : "",
+        raid.bossNames.length === 0 ? "full raid" : `${raid.bossNames.length} ${raid.bossNames.length === 1 ? "boss" : "bosses"}`,
+      ].filter(Boolean).join(" · ")
+    : "";
 
   return (
     <div className="space-y-2.5">
+      {raid && <FightsLine instanceName={raid.instanceName} detail={raidDetail} />}
       <div className="flex items-baseline justify-between gap-3 px-0.5">
         <p className="text-[11px] text-muted-foreground">
           Comparing {visible.length} {visible.length === 1 ? kind : kind === "class" ? "classes" : "specs"}

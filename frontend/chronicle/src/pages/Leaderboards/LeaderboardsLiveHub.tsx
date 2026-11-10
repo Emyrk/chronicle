@@ -180,6 +180,7 @@ function LiveInstanceHub({ instanceName, names, summary, stale, realm, realmIDs,
     specsFor: (cls: string, role: "dps" | "healing") => summary.cohorts ? [...new Set(summary.cohorts.filter(row => row.player_class === cls && row.metric === (role === "healing" ? "hps" : "dps")).map(row => row.player_spec))] : summary.filters?.find((row) => row.player_class === cls)?.specs.map((row) => row.spec) ?? [],
     subSpecsFor: (cls: string, spec: string) => summary.filters?.find((row) => row.player_class === cls)?.specs.find((row) => row.spec === spec)?.sub_specs.filter(Boolean) as string[] ?? [],
     // Difficulty and size: one button per published combination, shown when there is a choice.
+    cohort: cohort ? { difficultyName: cohort.difficulty_name, maxPlayers: cohort.max_players } : undefined,
     cohortPicker: raids.length > 1 ? <div role="group" aria-label="Difficulty and size" className="flex rounded-md border bg-background/60 p-0.5 text-xs">
       {raids.map((row) => {
         const current = cohort?.difficulty_name === row.difficulty_name && cohort?.max_players === row.max_players
