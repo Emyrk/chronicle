@@ -51,7 +51,8 @@ AND NOT EXISTS(SELECT 1 FROM leaderboard_dirty_guild_clear_subjects d WHERE d.te
 AND NOT EXISTS(SELECT 1 FROM leaderboard_dirty_guild_renown d WHERE d.tenant_id=o.tenant_id)
 AND NOT EXISTS(SELECT 1 FROM leaderboard_dirty_player_boss_benchmarks d WHERE d.tenant_id=o.tenant_id)
 AND NOT EXISTS(SELECT 1 FROM leaderboard_dirty_player_boss_subjects d WHERE d.tenant_id=o.tenant_id)
-AND NOT EXISTS(SELECT 1 FROM leaderboard_dirty_player_renown d WHERE d.tenant_id=o.tenant_id);
+AND NOT EXISTS(SELECT 1 FROM leaderboard_dirty_player_renown d WHERE d.tenant_id=o.tenant_id)
+AND NOT EXISTS(SELECT 1 FROM leaderboard_dirty_careers d WHERE d.tenant_id=o.tenant_id AND d.required);
 
 -- name: LookupLeaderboardOperation :one
 -- Authorized admin lookup only; RLS still applies.

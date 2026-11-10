@@ -41,6 +41,10 @@ func publishProjectionTx(ctx context.Context, tx database.StoreQueries, tenant, 
 			return fmt.Errorf("invalid projection identity")
 		}
 	}
+	identities := database.RememberLeaderboardCareerRunIdentitiesParams{TenantID: tenant, RunID: run}
+	if err := tx.RememberLeaderboardCareerRunIdentities(ctx, identities); err != nil {
+		return err
+	}
 	scope := database.EnqueueLeaderboardRunEvidenceScopesParams{TenantID: tenant, RunID: run}
 	if err := tx.EnqueueLeaderboardRunEvidenceScopes(ctx, scope); err != nil {
 		return err
@@ -197,6 +201,12 @@ func publishProjectionTx(ctx context.Context, tx database.StoreQueries, tenant, 
 		if err := flush(); err != nil {
 			return err
 		}
+	}
+	if err := tx.RememberLeaderboardCareerRunIdentities(ctx, identities); err != nil {
+		return err
+	}
+	if err := tx.EnqueueLeaderboardCareer(ctx, tenant); err != nil {
+		return err
 	}
 	return tx.EnqueueLeaderboardRunEvidenceScopes(ctx, scope)
 }

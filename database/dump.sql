@@ -1456,6 +1456,19 @@ CREATE TABLE leaderboard_bosses (
     CONSTRAINT leaderboard_bosses_encounter_name_check CHECK ((btrim(encounter_name) <> ''::text))
 );
 
+CREATE TABLE leaderboard_career_identities (
+    tenant_id uuid NOT NULL,
+    subject_kind text NOT NULL,
+    realm_id uuid NOT NULL,
+    subject_id text NOT NULL,
+    player_class text DEFAULT ''::text NOT NULL,
+    player_spec text DEFAULT ''::text NOT NULL,
+    player_sub_spec text DEFAULT ''::text NOT NULL,
+    CONSTRAINT leaderboard_career_identities_subject_kind_check CHECK ((subject_kind = ANY (ARRAY['player'::text, 'guild'::text])))
+);
+
+ALTER TABLE ONLY leaderboard_career_identities FORCE ROW LEVEL SECURITY;
+
 CREATE TABLE leaderboard_career_renown_facts (
     tenant_id uuid NOT NULL,
     run_id uuid NOT NULL,
@@ -1474,6 +1487,25 @@ CREATE TABLE leaderboard_career_renown_facts (
 
 ALTER TABLE ONLY leaderboard_career_renown_facts FORCE ROW LEVEL SECURITY;
 
+CREATE TABLE leaderboard_career_subjects (
+    tenant_id uuid NOT NULL,
+    subject_kind text NOT NULL,
+    realm_id uuid NOT NULL,
+    subject_id text NOT NULL,
+    player_class text DEFAULT ''::text NOT NULL,
+    player_spec text DEFAULT ''::text NOT NULL,
+    player_sub_spec text DEFAULT ''::text NOT NULL,
+    chosen_metric text NOT NULL,
+    inputs jsonb NOT NULL,
+    pool_fingerprint text NOT NULL,
+    computed_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    CONSTRAINT leaderboard_career_identities_subject_kind_check CHECK ((subject_kind = ANY (ARRAY['player'::text, 'guild'::text]))),
+    CONSTRAINT leaderboard_career_subjects_chosen_metric_check CHECK ((chosen_metric = ANY (ARRAY[''::text, 'dps'::text, 'hps'::text, 'kill_time'::text]))),
+    CONSTRAINT leaderboard_career_subjects_inputs_check CHECK ((jsonb_typeof(inputs) = 'object'::text))
+);
+
+ALTER TABLE ONLY leaderboard_career_subjects FORCE ROW LEVEL SECURITY;
+
 CREATE TABLE leaderboard_career_variants (
     instance_name text NOT NULL,
     difficulty_name text NOT NULL,
@@ -1488,6 +1520,30 @@ CREATE TABLE leaderboard_career_variants (
 );
 
 COMMENT ON COLUMN leaderboard_career_variants.weight IS 'Explicit career average weight. NULL is unconfigured and blocks active eligible averages. Never derived from Renown.';
+
+CREATE TABLE leaderboard_dirty_careers (
+    tenant_id uuid NOT NULL,
+    revision bigint DEFAULT 1 NOT NULL,
+    required boolean DEFAULT true NOT NULL,
+    dirtied_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    process_after timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    claim_token uuid,
+    claimed_revision bigint,
+    locked_until timestamp with time zone,
+    retry_after timestamp with time zone DEFAULT '-infinity'::timestamp with time zone NOT NULL,
+    attempts integer DEFAULT 0 NOT NULL,
+    cursor_kind text DEFAULT ''::text NOT NULL,
+    cursor_realm uuid DEFAULT '00000000-0000-0000-0000-000000000000'::uuid NOT NULL,
+    cursor_subject text DEFAULT ''::text NOT NULL,
+    cursor_class text DEFAULT ''::text NOT NULL,
+    cursor_spec text DEFAULT ''::text NOT NULL,
+    cursor_sub_spec text DEFAULT ''::text NOT NULL,
+    pass_revision bigint,
+    CONSTRAINT leaderboard_dirty_careers_check CHECK ((((claim_token IS NULL) AND (claimed_revision IS NULL) AND (locked_until IS NULL)) OR ((claim_token IS NOT NULL) AND (claimed_revision IS NOT NULL) AND (locked_until IS NOT NULL)))),
+    CONSTRAINT leaderboard_dirty_careers_revision_check CHECK ((revision > 0))
+);
+
+ALTER TABLE ONLY leaderboard_dirty_careers FORCE ROW LEVEL SECURITY;
 
 CREATE TABLE leaderboard_dirty_guild_boss_benchmarks (
     tenant_id uuid NOT NULL,
@@ -3743,11 +3799,20 @@ ALTER TABLE ONLY leaderboard_boss_renown
 ALTER TABLE ONLY leaderboard_bosses
     ADD CONSTRAINT leaderboard_bosses_pkey PRIMARY KEY (instance_name, encounter_name);
 
+ALTER TABLE ONLY leaderboard_career_identities
+    ADD CONSTRAINT leaderboard_career_identities_pkey PRIMARY KEY (tenant_id, subject_kind, realm_id, subject_id, player_class, player_spec, player_sub_spec);
+
 ALTER TABLE ONLY leaderboard_career_renown_facts
     ADD CONSTRAINT leaderboard_career_renown_facts_pkey PRIMARY KEY (tenant_id, run_id, encounter_name, realm_id, player_guid, player_class, player_spec, player_sub_spec);
 
+ALTER TABLE ONLY leaderboard_career_subjects
+    ADD CONSTRAINT leaderboard_career_subjects_pkey PRIMARY KEY (tenant_id, subject_kind, realm_id, subject_id, player_class, player_spec, player_sub_spec);
+
 ALTER TABLE ONLY leaderboard_career_variants
     ADD CONSTRAINT leaderboard_career_variants_pkey PRIMARY KEY (instance_name, difficulty_name, max_players);
+
+ALTER TABLE ONLY leaderboard_dirty_careers
+    ADD CONSTRAINT leaderboard_dirty_careers_pkey PRIMARY KEY (tenant_id);
 
 ALTER TABLE ONLY leaderboard_dirty_guild_boss_benchmarks
     ADD CONSTRAINT leaderboard_dirty_guild_boss_benchmarks_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name);
@@ -5350,7 +5415,13 @@ ALTER TABLE guild_renown_kill_facts ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE item_daily_prices ENABLE ROW LEVEL SECURITY;
 
+ALTER TABLE leaderboard_career_identities ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE leaderboard_career_renown_facts ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE leaderboard_career_subjects ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE leaderboard_dirty_careers ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE leaderboard_dirty_guild_boss_benchmarks ENABLE ROW LEVEL SECURITY;
 
@@ -5408,7 +5479,13 @@ CREATE POLICY tenant_admin_bypass ON guild_renown_kill_facts USING ((current_set
 
 CREATE POLICY tenant_admin_bypass ON item_daily_prices USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
+CREATE POLICY tenant_admin_bypass ON leaderboard_career_identities USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
 CREATE POLICY tenant_admin_bypass ON leaderboard_career_renown_facts USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON leaderboard_career_subjects USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON leaderboard_dirty_careers USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON leaderboard_dirty_guild_boss_benchmarks USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
@@ -5475,7 +5552,13 @@ CREATE POLICY tenant_isolation ON guild_renown_kill_facts USING ((realm_id IN ( 
      JOIN wow_servers server ON ((server.id = realm.server_id)))
   WHERE (COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid) = guild_renown_kill_facts.tenant_id))));
 
+CREATE POLICY tenant_isolation ON leaderboard_career_identities USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
+
 CREATE POLICY tenant_isolation ON leaderboard_career_renown_facts USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
+
+CREATE POLICY tenant_isolation ON leaderboard_career_subjects USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
+
+CREATE POLICY tenant_isolation ON leaderboard_dirty_careers USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
 
 CREATE POLICY tenant_isolation ON leaderboard_dirty_guild_boss_benchmarks USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
 

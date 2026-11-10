@@ -12029,6 +12029,450 @@ func (q *sqlQuerier) ListCareerPlayerRenownInputs(ctx context.Context, arg ListC
 	return items, nil
 }
 
+const advanceLeaderboardCareer = `-- name: AdvanceLeaderboardCareer :exec
+UPDATE leaderboard_dirty_careers SET cursor_kind= $1::text,cursor_realm= $2::uuid,cursor_subject= $3::text,cursor_class= $4::text,cursor_spec= $5::text,cursor_sub_spec= $6::text,
+claim_token=NULL,claimed_revision=NULL,locked_until=NULL,attempts=0,retry_after='-infinity'
+WHERE tenant_id= $7::uuid AND claim_token= $8::uuid AND claimed_revision= $9::bigint
+`
+
+type AdvanceLeaderboardCareerParams struct {
+	CursorKind      string    `db:"cursor_kind" json:"cursor_kind"`
+	CursorRealm     uuid.UUID `db:"cursor_realm" json:"cursor_realm"`
+	CursorSubject   string    `db:"cursor_subject" json:"cursor_subject"`
+	CursorClass     string    `db:"cursor_class" json:"cursor_class"`
+	CursorSpec      string    `db:"cursor_spec" json:"cursor_spec"`
+	CursorSubSpec   string    `db:"cursor_sub_spec" json:"cursor_sub_spec"`
+	TenantID        uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	ClaimToken      uuid.UUID `db:"claim_token" json:"claim_token"`
+	ClaimedRevision int64     `db:"claimed_revision" json:"claimed_revision"`
+}
+
+func (q *sqlQuerier) AdvanceLeaderboardCareer(ctx context.Context, arg AdvanceLeaderboardCareerParams) error {
+	_, err := q.db.Exec(ctx, advanceLeaderboardCareer,
+		arg.CursorKind,
+		arg.CursorRealm,
+		arg.CursorSubject,
+		arg.CursorClass,
+		arg.CursorSpec,
+		arg.CursorSubSpec,
+		arg.TenantID,
+		arg.ClaimToken,
+		arg.ClaimedRevision,
+	)
+	return err
+}
+
+const claimLeaderboardCareer = `-- name: ClaimLeaderboardCareer :one
+WITH candidate AS (
+ SELECT tenant_id FROM leaderboard_dirty_careers
+ WHERE tenant_id= $1::uuid AND process_after<=clock_timestamp() AND retry_after<=clock_timestamp()
+ AND (locked_until IS NULL OR locked_until<=clock_timestamp()) FOR UPDATE SKIP LOCKED
+)
+UPDATE leaderboard_dirty_careers d SET claim_token=gen_random_uuid(),claimed_revision=d.revision,
+ pass_revision=COALESCE(d.pass_revision,d.revision), locked_until=clock_timestamp()+interval '15 minutes'
+FROM candidate c WHERE d.tenant_id=c.tenant_id RETURNING d.tenant_id, d.revision, d.required, d.dirtied_at, d.process_after, d.claim_token, d.claimed_revision, d.locked_until, d.retry_after, d.attempts, d.cursor_kind, d.cursor_realm, d.cursor_subject, d.cursor_class, d.cursor_spec, d.cursor_sub_spec, d.pass_revision
+`
+
+func (q *sqlQuerier) ClaimLeaderboardCareer(ctx context.Context, tenantID uuid.UUID) (LeaderboardDirtyCareer, error) {
+	row := q.db.QueryRow(ctx, claimLeaderboardCareer, tenantID)
+	var i LeaderboardDirtyCareer
+	err := row.Scan(
+		&i.TenantID,
+		&i.Revision,
+		&i.Required,
+		&i.DirtiedAt,
+		&i.ProcessAfter,
+		&i.ClaimToken,
+		&i.ClaimedRevision,
+		&i.LockedUntil,
+		&i.RetryAfter,
+		&i.Attempts,
+		&i.CursorKind,
+		&i.CursorRealm,
+		&i.CursorSubject,
+		&i.CursorClass,
+		&i.CursorSpec,
+		&i.CursorSubSpec,
+		&i.PassRevision,
+	)
+	return i, err
+}
+
+const completeLeaderboardCareer = `-- name: CompleteLeaderboardCareer :exec
+WITH done AS (
+ DELETE FROM leaderboard_dirty_careers WHERE tenant_id= $1::uuid AND claim_token= $2::uuid AND claimed_revision= $3::bigint AND revision=pass_revision RETURNING tenant_id
+)
+UPDATE leaderboard_dirty_careers SET cursor_kind='',cursor_realm='00000000-0000-0000-0000-000000000000',cursor_subject='',cursor_class='',cursor_spec='',cursor_sub_spec='',pass_revision=NULL,
+claim_token=NULL,claimed_revision=NULL,locked_until=NULL,attempts=0,retry_after='-infinity'
+WHERE tenant_id= $1::uuid AND claim_token= $2::uuid AND claimed_revision= $3::bigint AND revision<>pass_revision
+`
+
+type CompleteLeaderboardCareerParams struct {
+	TenantID        uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	ClaimToken      uuid.UUID `db:"claim_token" json:"claim_token"`
+	ClaimedRevision int64     `db:"claimed_revision" json:"claimed_revision"`
+}
+
+func (q *sqlQuerier) CompleteLeaderboardCareer(ctx context.Context, arg CompleteLeaderboardCareerParams) error {
+	_, err := q.db.Exec(ctx, completeLeaderboardCareer, arg.TenantID, arg.ClaimToken, arg.ClaimedRevision)
+	return err
+}
+
+const deleteLeaderboardCareerSubject = `-- name: DeleteLeaderboardCareerSubject :exec
+DELETE FROM leaderboard_career_subjects WHERE tenant_id= $1::uuid AND subject_kind= $2::text AND realm_id= $3::uuid AND subject_id= $4::text AND player_class= $5::text AND player_spec= $6::text AND player_sub_spec= $7::text
+`
+
+type DeleteLeaderboardCareerSubjectParams struct {
+	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	SubjectKind   string    `db:"subject_kind" json:"subject_kind"`
+	RealmID       uuid.UUID `db:"realm_id" json:"realm_id"`
+	SubjectID     string    `db:"subject_id" json:"subject_id"`
+	PlayerClass   string    `db:"player_class" json:"player_class"`
+	PlayerSpec    string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec string    `db:"player_sub_spec" json:"player_sub_spec"`
+}
+
+func (q *sqlQuerier) DeleteLeaderboardCareerSubject(ctx context.Context, arg DeleteLeaderboardCareerSubjectParams) error {
+	_, err := q.db.Exec(ctx, deleteLeaderboardCareerSubject,
+		arg.TenantID,
+		arg.SubjectKind,
+		arg.RealmID,
+		arg.SubjectID,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+	)
+	return err
+}
+
+const enqueueLeaderboardCareer = `-- name: EnqueueLeaderboardCareer :exec
+INSERT INTO leaderboard_dirty_careers(tenant_id) VALUES ($1::uuid)
+ON CONFLICT(tenant_id) DO UPDATE SET required=true,revision=leaderboard_dirty_careers.revision+1,dirtied_at=clock_timestamp(),process_after=LEAST(leaderboard_dirty_careers.process_after,clock_timestamp())
+`
+
+func (q *sqlQuerier) EnqueueLeaderboardCareer(ctx context.Context, tenantID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, enqueueLeaderboardCareer, tenantID)
+	return err
+}
+
+const ensureLeaderboardCareerSweep = `-- name: EnsureLeaderboardCareerSweep :exec
+INSERT INTO leaderboard_dirty_careers(tenant_id,required) VALUES ($1::uuid,false) ON CONFLICT DO NOTHING
+`
+
+func (q *sqlQuerier) EnsureLeaderboardCareerSweep(ctx context.Context, tenantID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, ensureLeaderboardCareerSweep, tenantID)
+	return err
+}
+
+const failLeaderboardCareer = `-- name: FailLeaderboardCareer :exec
+UPDATE leaderboard_dirty_careers SET claim_token=NULL,claimed_revision=NULL,locked_until=NULL,attempts=attempts+1,retry_after=clock_timestamp()+interval '30 seconds'
+WHERE tenant_id= $1::uuid AND claim_token= $2::uuid AND claimed_revision= $3::bigint
+`
+
+type FailLeaderboardCareerParams struct {
+	TenantID        uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	ClaimToken      uuid.UUID `db:"claim_token" json:"claim_token"`
+	ClaimedRevision int64     `db:"claimed_revision" json:"claimed_revision"`
+}
+
+func (q *sqlQuerier) FailLeaderboardCareer(ctx context.Context, arg FailLeaderboardCareerParams) error {
+	_, err := q.db.Exec(ctx, failLeaderboardCareer, arg.TenantID, arg.ClaimToken, arg.ClaimedRevision)
+	return err
+}
+
+const hasDueLeaderboardCareer = `-- name: HasDueLeaderboardCareer :one
+SELECT EXISTS(SELECT 1 FROM leaderboard_dirty_careers WHERE tenant_id= $1::uuid AND process_after<=clock_timestamp() AND retry_after<=clock_timestamp() AND (locked_until IS NULL OR locked_until<=clock_timestamp()))
+`
+
+func (q *sqlQuerier) HasDueLeaderboardCareer(ctx context.Context, tenantID uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, hasDueLeaderboardCareer, tenantID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const hasPendingLeaderboardCareer = `-- name: HasPendingLeaderboardCareer :one
+SELECT EXISTS(SELECT 1 FROM leaderboard_dirty_careers WHERE tenant_id= $1::uuid)
+`
+
+func (q *sqlQuerier) HasPendingLeaderboardCareer(ctx context.Context, tenantID uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, hasPendingLeaderboardCareer, tenantID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const listDueLeaderboardCareerTenants = `-- name: ListDueLeaderboardCareerTenants :many
+SELECT tenant_id FROM leaderboard_dirty_careers WHERE tenant_id> $1::uuid AND process_after<=clock_timestamp() AND retry_after<=clock_timestamp() AND (locked_until IS NULL OR locked_until<=clock_timestamp()) ORDER BY tenant_id LIMIT 100
+`
+
+func (q *sqlQuerier) ListDueLeaderboardCareerTenants(ctx context.Context, afterTenant uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listDueLeaderboardCareerTenants, afterTenant)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var tenant_id uuid.UUID
+		if err := rows.Scan(&tenant_id); err != nil {
+			return nil, err
+		}
+		items = append(items, tenant_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLeaderboardCareerIdentityPage = `-- name: ListLeaderboardCareerIdentityPage :many
+SELECT tenant_id, subject_kind, realm_id, subject_id, player_class, player_spec, player_sub_spec FROM leaderboard_career_identities
+WHERE tenant_id= $1::uuid AND
+(subject_kind,realm_id,subject_id,player_class,player_spec,player_sub_spec)>
+($2::text,$3::uuid,$4::text,$5::text,$6::text,$7::text)
+ORDER BY subject_kind,realm_id,subject_id,player_class,player_spec,player_sub_spec LIMIT 100
+`
+
+type ListLeaderboardCareerIdentityPageParams struct {
+	TenantID     uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	AfterKind    string    `db:"after_kind" json:"after_kind"`
+	AfterRealm   uuid.UUID `db:"after_realm" json:"after_realm"`
+	AfterSubject string    `db:"after_subject" json:"after_subject"`
+	AfterClass   string    `db:"after_class" json:"after_class"`
+	AfterSpec    string    `db:"after_spec" json:"after_spec"`
+	AfterSubSpec string    `db:"after_sub_spec" json:"after_sub_spec"`
+}
+
+func (q *sqlQuerier) ListLeaderboardCareerIdentityPage(ctx context.Context, arg ListLeaderboardCareerIdentityPageParams) ([]LeaderboardCareerIdentity, error) {
+	rows, err := q.db.Query(ctx, listLeaderboardCareerIdentityPage,
+		arg.TenantID,
+		arg.AfterKind,
+		arg.AfterRealm,
+		arg.AfterSubject,
+		arg.AfterClass,
+		arg.AfterSpec,
+		arg.AfterSubSpec,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LeaderboardCareerIdentity
+	for rows.Next() {
+		var i LeaderboardCareerIdentity
+		if err := rows.Scan(
+			&i.TenantID,
+			&i.SubjectKind,
+			&i.RealmID,
+			&i.SubjectID,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUnmaterializedLeaderboardPlayerCareers = `-- name: ListUnmaterializedLeaderboardPlayerCareers :many
+SELECT DISTINCT f.player_class,f.player_spec,f.player_sub_spec,f.instance_name,f.difficulty_name,f.max_players
+FROM leaderboard_career_renown_facts f
+WHERE f.tenant_id= $1::uuid AND f.realm_id= $2::uuid AND f.player_guid= $3::text
+AND NOT EXISTS(SELECT 1 FROM leaderboard_career_subjects s WHERE s.tenant_id=f.tenant_id AND s.subject_kind='player' AND s.realm_id=f.realm_id AND s.subject_id=f.player_guid AND s.player_class=f.player_class AND s.player_spec=f.player_spec AND s.player_sub_spec=f.player_sub_spec)
+ORDER BY f.player_class,f.player_spec,f.player_sub_spec,f.instance_name,f.difficulty_name,f.max_players
+`
+
+type ListUnmaterializedLeaderboardPlayerCareersParams struct {
+	TenantID   uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RealmID    uuid.UUID `db:"realm_id" json:"realm_id"`
+	PlayerGuid string    `db:"player_guid" json:"player_guid"`
+}
+
+type ListUnmaterializedLeaderboardPlayerCareersRow struct {
+	PlayerClass    string `db:"player_class" json:"player_class"`
+	PlayerSpec     string `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec  string `db:"player_sub_spec" json:"player_sub_spec"`
+	InstanceName   string `db:"instance_name" json:"instance_name"`
+	DifficultyName string `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16  `db:"max_players" json:"max_players"`
+}
+
+func (q *sqlQuerier) ListUnmaterializedLeaderboardPlayerCareers(ctx context.Context, arg ListUnmaterializedLeaderboardPlayerCareersParams) ([]ListUnmaterializedLeaderboardPlayerCareersRow, error) {
+	rows, err := q.db.Query(ctx, listUnmaterializedLeaderboardPlayerCareers, arg.TenantID, arg.RealmID, arg.PlayerGuid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUnmaterializedLeaderboardPlayerCareersRow
+	for rows.Next() {
+		var i ListUnmaterializedLeaderboardPlayerCareersRow
+		if err := rows.Scan(
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+			&i.InstanceName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockLeaderboardCareerPublication = `-- name: LockLeaderboardCareerPublication :one
+SELECT tenant_id FROM leaderboard_dirty_careers
+WHERE tenant_id= $1::uuid AND claim_token= $2::uuid
+AND claimed_revision= $3::bigint AND locked_until>clock_timestamp() FOR UPDATE
+`
+
+type LockLeaderboardCareerPublicationParams struct {
+	TenantID        uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	ClaimToken      uuid.UUID `db:"claim_token" json:"claim_token"`
+	ClaimedRevision int64     `db:"claimed_revision" json:"claimed_revision"`
+}
+
+func (q *sqlQuerier) LockLeaderboardCareerPublication(ctx context.Context, arg LockLeaderboardCareerPublicationParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockLeaderboardCareerPublication, arg.TenantID, arg.ClaimToken, arg.ClaimedRevision)
+	var tenant_id uuid.UUID
+	err := row.Scan(&tenant_id)
+	return tenant_id, err
+}
+
+const readLeaderboardGuildCareer = `-- name: ReadLeaderboardGuildCareer :one
+SELECT tenant_id, subject_kind, realm_id, subject_id, player_class, player_spec, player_sub_spec, chosen_metric, inputs, pool_fingerprint, computed_at FROM leaderboard_career_subjects WHERE tenant_id= $1::uuid AND subject_kind='guild' AND subject_id= $2::text
+`
+
+type ReadLeaderboardGuildCareerParams struct {
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	GuildID  string    `db:"guild_id" json:"guild_id"`
+}
+
+func (q *sqlQuerier) ReadLeaderboardGuildCareer(ctx context.Context, arg ReadLeaderboardGuildCareerParams) (LeaderboardCareerSubject, error) {
+	row := q.db.QueryRow(ctx, readLeaderboardGuildCareer, arg.TenantID, arg.GuildID)
+	var i LeaderboardCareerSubject
+	err := row.Scan(
+		&i.TenantID,
+		&i.SubjectKind,
+		&i.RealmID,
+		&i.SubjectID,
+		&i.PlayerClass,
+		&i.PlayerSpec,
+		&i.PlayerSubSpec,
+		&i.ChosenMetric,
+		&i.Inputs,
+		&i.PoolFingerprint,
+		&i.ComputedAt,
+	)
+	return i, err
+}
+
+const readLeaderboardPlayerCareers = `-- name: ReadLeaderboardPlayerCareers :many
+SELECT tenant_id, subject_kind, realm_id, subject_id, player_class, player_spec, player_sub_spec, chosen_metric, inputs, pool_fingerprint, computed_at FROM leaderboard_career_subjects WHERE tenant_id= $1::uuid AND subject_kind='player' AND realm_id= $2::uuid AND subject_id= $3::text ORDER BY player_class,player_spec,player_sub_spec
+`
+
+type ReadLeaderboardPlayerCareersParams struct {
+	TenantID   uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RealmID    uuid.UUID `db:"realm_id" json:"realm_id"`
+	PlayerGuid string    `db:"player_guid" json:"player_guid"`
+}
+
+func (q *sqlQuerier) ReadLeaderboardPlayerCareers(ctx context.Context, arg ReadLeaderboardPlayerCareersParams) ([]LeaderboardCareerSubject, error) {
+	rows, err := q.db.Query(ctx, readLeaderboardPlayerCareers, arg.TenantID, arg.RealmID, arg.PlayerGuid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LeaderboardCareerSubject
+	for rows.Next() {
+		var i LeaderboardCareerSubject
+		if err := rows.Scan(
+			&i.TenantID,
+			&i.SubjectKind,
+			&i.RealmID,
+			&i.SubjectID,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+			&i.ChosenMetric,
+			&i.Inputs,
+			&i.PoolFingerprint,
+			&i.ComputedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const rememberLeaderboardCareerRunIdentities = `-- name: RememberLeaderboardCareerRunIdentities :exec
+INSERT INTO leaderboard_career_identities(tenant_id,subject_kind,realm_id,subject_id,player_class,player_spec,player_sub_spec)
+SELECT tenant_id,'player',realm_id,player_guid,player_class,player_spec,player_sub_spec FROM leaderboard_career_renown_facts WHERE tenant_id= $1::uuid AND run_id= $2::uuid
+UNION
+SELECT tenant_id,'guild',realm_id,guild_id::text,'','','' FROM leaderboard_guild_renown_facts WHERE tenant_id= $1::uuid AND run_id= $2::uuid
+ON CONFLICT DO NOTHING
+`
+
+type RememberLeaderboardCareerRunIdentitiesParams struct {
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RunID    uuid.UUID `db:"run_id" json:"run_id"`
+}
+
+func (q *sqlQuerier) RememberLeaderboardCareerRunIdentities(ctx context.Context, arg RememberLeaderboardCareerRunIdentitiesParams) error {
+	_, err := q.db.Exec(ctx, rememberLeaderboardCareerRunIdentities, arg.TenantID, arg.RunID)
+	return err
+}
+
+const upsertLeaderboardCareerSubject = `-- name: UpsertLeaderboardCareerSubject :exec
+INSERT INTO leaderboard_career_subjects(tenant_id,subject_kind,realm_id,subject_id,player_class,player_spec,player_sub_spec,chosen_metric,inputs,pool_fingerprint)
+VALUES ($1::uuid,$2::text,$3::uuid,$4::text,$5::text,$6::text,$7::text,$8::text,$9::jsonb,$10::text)
+ON CONFLICT(tenant_id,subject_kind,realm_id,subject_id,player_class,player_spec,player_sub_spec)
+DO UPDATE SET chosen_metric=EXCLUDED.chosen_metric,inputs=EXCLUDED.inputs,pool_fingerprint=EXCLUDED.pool_fingerprint,computed_at=clock_timestamp()
+`
+
+type UpsertLeaderboardCareerSubjectParams struct {
+	TenantID        uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	SubjectKind     string    `db:"subject_kind" json:"subject_kind"`
+	RealmID         uuid.UUID `db:"realm_id" json:"realm_id"`
+	SubjectID       string    `db:"subject_id" json:"subject_id"`
+	PlayerClass     string    `db:"player_class" json:"player_class"`
+	PlayerSpec      string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec   string    `db:"player_sub_spec" json:"player_sub_spec"`
+	ChosenMetric    string    `db:"chosen_metric" json:"chosen_metric"`
+	Inputs          []byte    `db:"inputs" json:"inputs"`
+	PoolFingerprint string    `db:"pool_fingerprint" json:"pool_fingerprint"`
+}
+
+func (q *sqlQuerier) UpsertLeaderboardCareerSubject(ctx context.Context, arg UpsertLeaderboardCareerSubjectParams) error {
+	_, err := q.db.Exec(ctx, upsertLeaderboardCareerSubject,
+		arg.TenantID,
+		arg.SubjectKind,
+		arg.RealmID,
+		arg.SubjectID,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.ChosenMetric,
+		arg.Inputs,
+		arg.PoolFingerprint,
+	)
+	return err
+}
+
 const leaderboardCareerVariantActive = `-- name: LeaderboardCareerVariantActive :one
 SELECT (EXISTS (
     SELECT 1 FROM leaderboard_player_renown_facts
@@ -13508,6 +13952,8 @@ UNION ALL
 SELECT 'player_renown'::text AS family,count(*)::bigint AS pending,count(*) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::bigint AS due,count(*) FILTER(WHERE locked_until>statement_timestamp())::bigint AS claimed,count(*) FILTER(WHERE retry_after>statement_timestamp())::bigint AS retrying,min(dirtied_at)::timestamptz AS oldest_pending_at,min(process_after) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::timestamptz AS oldest_due_at FROM leaderboard_dirty_player_renown WHERE tenant_id= $1::uuid
 UNION ALL
 SELECT 'guild_renown'::text AS family,count(*)::bigint AS pending,count(*) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::bigint AS due,count(*) FILTER(WHERE locked_until>statement_timestamp())::bigint AS claimed,count(*) FILTER(WHERE retry_after>statement_timestamp())::bigint AS retrying,min(dirtied_at)::timestamptz AS oldest_pending_at,min(process_after) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::timestamptz AS oldest_due_at FROM leaderboard_dirty_guild_renown WHERE tenant_id= $1::uuid
+UNION ALL
+SELECT 'careers'::text AS family,count(*)::bigint AS pending,count(*) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::bigint AS due,count(*) FILTER(WHERE locked_until>statement_timestamp())::bigint AS claimed,count(*) FILTER(WHERE retry_after>statement_timestamp())::bigint AS retrying,min(dirtied_at)::timestamptz AS oldest_pending_at,min(process_after) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::timestamptz AS oldest_due_at FROM leaderboard_dirty_careers WHERE tenant_id= $1::uuid
 `
 
 type LeaderboardQueueDiagnosticsRow struct {
@@ -14447,6 +14893,7 @@ AND NOT EXISTS(SELECT 1 FROM leaderboard_dirty_guild_renown d WHERE d.tenant_id=
 AND NOT EXISTS(SELECT 1 FROM leaderboard_dirty_player_boss_benchmarks d WHERE d.tenant_id=o.tenant_id)
 AND NOT EXISTS(SELECT 1 FROM leaderboard_dirty_player_boss_subjects d WHERE d.tenant_id=o.tenant_id)
 AND NOT EXISTS(SELECT 1 FROM leaderboard_dirty_player_renown d WHERE d.tenant_id=o.tenant_id)
+AND NOT EXISTS(SELECT 1 FROM leaderboard_dirty_careers d WHERE d.tenant_id=o.tenant_id AND d.required)
 `
 
 type CompleteLeaderboardOperationParams struct {
