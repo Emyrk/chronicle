@@ -107,6 +107,10 @@ export interface LeaderboardV2Boss {
      * KilledAt is when the player's peak kill happened; absent for guilds and missing bosses.
      */
     readonly killed_at?: string;
+    /**
+     * PeakLog is the peak kill's log instance (hashed slug or id) while it is listed; absent otherwise.
+     */
+    readonly peak_log?: string;
 }
 
 // From chroniclesdk/leaderboard_v2.go

@@ -115,11 +115,11 @@ export function v2BoardURL(params: URLSearchParams) {
  * Never invent a total or global rank, replay all observations, or request offsets.
  */
 /** A one-boss row's peak kill, dated for the Peak board's Date column; undefined without a date. */
-export function v2PeakRun(row: LeaderboardV2Entry): { ms: number; date: string } | undefined {
+export function v2PeakRun(row: LeaderboardV2Entry): { ms: number; date: string; log?: string } | undefined {
   const boss = row.bosses?.length === 1 ? row.bosses[0] : undefined;
   if (!boss?.killed_at) return undefined;
   const date = new Date(boss.killed_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-  return { ms: boss.duration_ms ?? 0, date };
+  return { ms: boss.duration_ms ?? 0, date, log: boss.peak_log || undefined };
 }
 
 export function createV2Pager(context: V2RatingContext) {

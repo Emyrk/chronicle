@@ -59,6 +59,8 @@ type LeaderboardV2Boss struct {
 	ObservationCount int64    `json:"observation_count"`
 	// KilledAt is when the player's peak kill happened; absent for guilds and missing bosses.
 	KilledAt *time.Time `json:"killed_at,omitempty"`
+	// PeakLog is the peak kill's log instance (hashed slug or id) while it is listed; absent otherwise.
+	PeakLog string `json:"peak_log,omitempty"`
 }
 
 // LeaderboardV2PlayerHistory is one character's canonical rating evidence,

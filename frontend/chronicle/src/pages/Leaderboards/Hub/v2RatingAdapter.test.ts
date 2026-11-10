@@ -274,7 +274,8 @@ it("preserves returned cohort identity for two specs of the same player", () => 
   // A one-boss row's peak kill is dated for the Date column; without a date, or across bosses, there is none.
   expect(v2PeakRun(common)).toBeUndefined();
   const dated = { ...common, bosses: [{ ...common.bosses[0], duration_ms: 57000, killed_at: "2026-09-07T20:00:00Z" }] };
-  expect(v2PeakRun(dated)).toEqual({ ms: 57000, date: "Sep 7, 2026" });
+  expect(v2PeakRun(dated)).toEqual({ ms: 57000, date: "Sep 7, 2026", log: undefined });
+  expect(v2PeakRun({ ...dated, bosses: [{ ...dated.bosses[0], peak_log: "abc123" }] })?.log).toBe("abc123");
   expect(v2PeakRun({ ...dated, bosses: [...dated.bosses, dated.bosses[0]] })).toBeUndefined();
   expect(frost.logo).toBeUndefined();
   expect(v2PlayerEntry({ ...common, logo_url: "/logo.png" }, new URLSearchParams(), "peak").logo).toBe("/logo.png");

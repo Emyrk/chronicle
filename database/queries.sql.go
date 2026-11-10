@@ -15304,7 +15304,9 @@ SELECT p.realm_id::uuid AS realm_id, p.subject_id::text AS subject_id, p.player_
  COALESCE(s.raw_peak,0)::double precision AS raw_peak, COALESCE(s.peak_duration_ms,0)::bigint AS duration_ms,
  COALESCE(s.observation_count,0)::bigint AS observation_count,
  -- When the peak kill happened, for display: the peak encounter's end, looked up by primary key.
- pe.end_time::timestamptz AS peak_at
+ pe.end_time::timestamptz AS peak_at,
+ -- The peak kill's log, only while it is still listed and valid; empty otherwise.
+ COALESCE(NULLIF(pli.hashed_slug, ''), pli.id::text, '')::text AS peak_log
 FROM selected p
 LEFT JOIN leaderboard_player_boss_subjects s ON s.tenant_id= $7::uuid
  AND s.instance_name= $8::text AND s.difficulty_name= $9::text AND s.max_players= $10::smallint
@@ -15314,6 +15316,8 @@ LEFT JOIN leaderboard_player_boss_benchmarks b ON b.tenant_id=s.tenant_id AND b.
  AND b.difficulty_name=s.difficulty_name AND b.max_players=s.max_players AND b.encounter_name=s.encounter_name
  AND b.player_class=s.player_class AND b.player_spec=s.player_spec AND b.player_sub_spec=s.player_sub_spec AND b.metric=s.metric
 LEFT JOIN log_instance_encounters pe ON pe.id = s.peak_encounter_id
+LEFT JOIN (log_instances pli JOIN wow_log_groups plg ON plg.id = pli.log_group_id AND NOT plg.unlisted)
+ ON pli.id = pe.instance_id AND pli.invalidated_at IS NULL
 WHERE $12::text='player'
 UNION ALL
 SELECT p.realm_id::uuid AS realm_id, p.subject_id::text AS subject_id, p.player_class::text AS player_class, p.player_spec::text AS player_spec, p.player_sub_spec::text AS player_sub_spec, p.encounter_name::text AS encounter_name,
@@ -15322,7 +15326,8 @@ SELECT p.realm_id::uuid AS realm_id, p.subject_id::text AS subject_id, p.player_
  CASE WHEN b.best_duration_ms IS NOT NULL THEN LEAST(100::double precision,100*b.best_duration_ms*s.floor_mean_inverse_ms) ELSE 0 END::double precision AS floor,
  0::double precision AS raw_peak, COALESCE(s.fastest_duration_ms,0)::bigint AS duration_ms,
  COALESCE(s.observation_count,0)::bigint AS observation_count,
- NULL::timestamptz AS peak_at
+ NULL::timestamptz AS peak_at,
+ ''::text AS peak_log
 FROM selected p
 LEFT JOIN leaderboard_guild_boss_subjects s ON s.tenant_id= $7::uuid
  AND s.instance_name= $8::text AND s.difficulty_name= $9::text AND s.max_players= $10::smallint
@@ -15362,6 +15367,7 @@ type ListLeaderboardV2PageBossesRow struct {
 	DurationMs       int64              `db:"duration_ms" json:"duration_ms"`
 	ObservationCount int64              `db:"observation_count" json:"observation_count"`
 	PeakAt           pgtype.Timestamptz `db:"peak_at" json:"peak_at"`
+	PeakLog          string             `db:"peak_log" json:"peak_log"`
 }
 
 // Only the returned score page is passed here, with aligned exact cohort arrays.
@@ -15402,6 +15408,7 @@ func (q *sqlQuerier) ListLeaderboardV2PageBosses(ctx context.Context, arg ListLe
 			&i.DurationMs,
 			&i.ObservationCount,
 			&i.PeakAt,
+			&i.PeakLog,
 		); err != nil {
 			return nil, err
 		}

@@ -1,5 +1,6 @@
 import { useMemo, useState, type CSSProperties, type ReactNode } from "react"
 import { useQuery } from "@tanstack/react-query"
+import { Link } from "react-router-dom"
 import { ArrowDown, Check, ChevronLeft, ChevronRight, Info, Search } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
@@ -28,7 +29,7 @@ interface FullRow {
   entry: RatingEntry
   scores: Partial<Record<RatingMetric, RatingEntry>>
   peakComponents?: readonly { encounter_name: string; score: number }[]
-  peakRun?: { ms: number; date: string }
+  peakRun?: { ms: number; date: string; log?: string }
 }
 
 /**
@@ -69,8 +70,8 @@ export function RatingFullList({
   /** Single-metric boards: on a phone the score sits right-aligned, any extra columns folded under it. */
   const phoneFolds = view !== "overview"
   /** The single-boss peak's kill: published duration when live, else the row's (or fixture) run. */
-  const runFor = (entry: RatingEntry, liveRun?: { ms: number; date: string }): { ms?: number; date?: string } =>
-    live ? { ms: entry.durationMs, date: liveRun?.date } : liveRun ?? peakRun(entry.id, scope.boss)
+  const runFor = (entry: RatingEntry, liveRun?: { ms: number; date: string; log?: string }): { ms?: number; date?: string; log?: string } =>
+    live ? { ms: entry.durationMs, date: liveRun?.date, log: liveRun?.log } : liveRun ?? peakRun(entry.id, scope.boss)
   const theme = METRIC_THEMES[view]
 
   const fixtureRows = useMemo<FullRow[]>(() => {
@@ -340,7 +341,14 @@ export function RatingFullList({
                       return <>
                         {live && <td className="hidden px-3 py-2 text-right font-mono text-muted-foreground tabular-nums sm:table-cell">{entry.raw === undefined ? "Unavailable" : entry.raw.toFixed(1)}</td>}
                         <td className="hidden px-3 py-2 text-right font-mono text-muted-foreground tabular-nums sm:table-cell">{run.ms === undefined ? <span title="Peak encounter duration has not been recorded for this summary.">Unavailable</span> : formatClock(run.ms)}</td>
-                        <td className="hidden px-3 py-2 text-xs whitespace-nowrap text-muted-foreground sm:table-cell">{run.date ?? "Unavailable"}</td>
+                        <td className="hidden px-3 py-2 text-xs whitespace-nowrap text-muted-foreground sm:table-cell">
+                          {/* The date opens the log the peak kill came from, while that log is listed. */}
+                          {run.date && run.log ? (
+                            <Link to={`/instances/${run.log}`} className="underline decoration-dotted underline-offset-4 transition-colors hover:text-foreground">
+                              {run.date}
+                            </Link>
+                          ) : (run.date ?? "Unavailable")}
+                        </td>
                       </>
                     })()}
                   </>

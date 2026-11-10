@@ -27,7 +27,8 @@ export type RatingLivePage = {
     /** Chosen boss Peak scores, including zeros for missed bosses. */
     peakComponents?: readonly { encounter_name: string; score: number }[]
     /** Real kill metadata, when published. No synthetic timestamps on live pages. */
-    peakRun?: { ms: number; date: string }
+    /** The one-boss peak kill: its duration, date, and (while listed) its log instance. */
+    peakRun?: { ms: number; date: string; log?: string }
   }[]
   /** Optional because cursor-based published endpoints may not return a count. */
   total?: number
