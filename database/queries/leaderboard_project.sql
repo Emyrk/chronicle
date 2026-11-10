@@ -23,7 +23,7 @@ WITH source AS MATERIALIZED (
 ), players AS MATERIALIZED (
  SELECT s.*, d.id AS ranking_id, d.player_guid, d.player_class,
         -- Rating evidence requires a non-empty spec key. Class mode collapses every
-        -- source spec, including missing specs, into one stable class-only cohort.
+        -- source spec, including missing or unknown specs, into one stable class-only cohort.
         CASE WHEN s.cohort_mode='class' THEN 'Class' ELSE d.player_spec END::text AS player_spec,
         CASE WHEN s.cohort_mode='class' THEN '' ELSE d.player_sub_spec END::text AS player_sub_spec,
         d.dps,d.hps,e.id AS encounter_id,e.name AS encounter_name

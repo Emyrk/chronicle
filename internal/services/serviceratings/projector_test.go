@@ -564,22 +564,33 @@ func TestProjectionRawMetricWinner(t *testing.T) {
 
 func TestProjectionClassModeIgnoresSpecs(t *testing.T) {
 	t.Parallel()
-	s := newSourceFixture(t)
-	s.exec(`UPDATE tenants SET parse_config='{"cohort_mode":"class"}' WHERE id=$1`, s.tenant)
-	s.exec(`UPDATE encounter_dps_rankings SET player_spec='',player_sub_spec='Smite',dps=25,hps=100 WHERE instance_id=$1`, s.instance)
+	for _, tc := range []struct {
+		name string
+		spec string
+	}{
+		{name: "missing", spec: ""},
+		{name: "unknown", spec: "unknown"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := newSourceFixture(t)
+			s.exec(`UPDATE tenants SET parse_config='{"cohort_mode":"class"}' WHERE id=$1`, s.tenant)
+			s.exec(`UPDATE encounter_dps_rankings SET player_spec=$2,player_sub_spec='Smite',dps=25,hps=100 WHERE instance_id=$1`, s.instance, tc.spec)
 
-	rows := s.compute()
-	var observation *database.ProjectLeaderboardRunRow
-	for i := range rows {
-		if rows[i].Kind == 1 {
-			observation = &rows[i]
-			break
-		}
+			rows := s.compute()
+			var observation *database.ProjectLeaderboardRunRow
+			for i := range rows {
+				if rows[i].Kind == 1 {
+					observation = &rows[i]
+					break
+				}
+			}
+			require.NotNil(t, observation)
+			require.Equal(t, "hps", observation.Metric)
+			require.Equal(t, "Class", observation.PlayerSpec)
+			require.Empty(t, observation.PlayerSubSpec)
+		})
 	}
-	require.NotNil(t, observation)
-	require.Equal(t, "hps", observation.Metric)
-	require.Equal(t, "Class", observation.PlayerSpec)
-	require.Empty(t, observation.PlayerSubSpec)
 }
 
 func TestProjectionDisabledModeIgnoresHealerClassification(t *testing.T) {
