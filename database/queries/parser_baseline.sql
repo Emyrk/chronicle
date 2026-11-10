@@ -46,3 +46,34 @@ WHERE guild.id IN (
     SELECT player.guild_id FROM log_instance_players player
     WHERE player.instance_id = $1
 );
+
+-- Baseline armory export requires a public parse with an empty shared armory
+-- seed. Current-player rows do not otherwise provide a historical write set.
+-- name: BaselineSharedArmoryCounts :one
+SELECT (SELECT count(*) FROM guilds)::bigint AS guilds,
+       (SELECT count(*) FROM game_players)::bigint AS players,
+       (SELECT count(*) FROM game_player_gear_history)::bigint AS gear;
+
+-- name: BaselinePublishedGuilds :many
+SELECT guild.* FROM guilds guild
+WHERE guild.realm_id IN (SELECT realm_id FROM log_instances WHERE log_group_id = $1);
+
+-- name: BaselinePublishedPlayers :many
+SELECT player.* FROM game_players player
+WHERE player.updated_from_instance IN (SELECT id FROM log_instances WHERE log_group_id = $1);
+
+-- name: BaselinePublishedGear :many
+SELECT gear.* FROM game_player_gear_history gear
+WHERE gear.instance_id IN (SELECT id FROM log_instances WHERE log_group_id = $1);
+
+-- name: BaselineLoot :many
+SELECT loot.* FROM instance_loot loot
+WHERE loot.instance_id IN (SELECT id FROM log_instances WHERE log_group_id = $1);
+
+-- name: BaselineOverview :many
+SELECT metrics.* FROM instance_overview_metrics metrics
+WHERE metrics.instance_id IN (SELECT id FROM log_instances WHERE log_group_id = $1);
+
+-- name: BaselineSpeedruns :many
+SELECT speedrun.* FROM instance_speedruns speedrun
+WHERE speedrun.instance_id IN (SELECT id FROM log_instances WHERE log_group_id = $1);

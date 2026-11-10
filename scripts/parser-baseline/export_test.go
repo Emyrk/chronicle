@@ -203,6 +203,9 @@ func TestExportPublicationAndScope(t *testing.T) {
 		events = append(events, database.InsertLogInstanceEventsParams{InstanceID: instanceID, Type: kind, Events: gzipBytes(t, segmentBytes(t, encounterID, 0))})
 	}
 	require.NoError(t, db.InsertLogInstanceEvents(ctx, events).Close())
+	_, err = export(ctx, db, group, 1, 1)
+	require.ErrorContains(t, err, "missing mandatory overview")
+	require.NoError(t, db.UpsertInstanceOverviewMetrics(ctx, database.UpsertInstanceOverviewMetricsParams{InstanceID: instanceID, TopIncomingDamageAbilities: []database.OverviewIncomingDamageAbility{}}))
 	first, err := export(ctx, db, group, 1, 1)
 	require.NoError(t, err)
 	require.Len(t, first.Instances, 1)

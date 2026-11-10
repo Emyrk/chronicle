@@ -46,8 +46,17 @@ type sqlcQuerier interface {
 	// runs, not only rows whose representative belongs to the selected group.
 	BaselineEncounterRankings(ctx context.Context, logGroupID uuid.UUID) ([]EncounterDpsRanking, error)
 	BaselineInstancePlayerGuilds(ctx context.Context, instanceID uuid.UUID) ([]Guild, error)
+	BaselineLoot(ctx context.Context, logGroupID uuid.UUID) ([]InstanceLoot, error)
+	BaselineOverview(ctx context.Context, logGroupID uuid.UUID) ([]InstanceOverviewMetric, error)
 	BaselineParseMemberships(ctx context.Context, logGroupID uuid.UUID) ([]ParseScoreMembership, error)
+	BaselinePublishedGear(ctx context.Context, logGroupID uuid.UUID) ([]GamePlayerGearHistory, error)
+	BaselinePublishedGuilds(ctx context.Context, logGroupID uuid.UUID) ([]Guild, error)
+	BaselinePublishedPlayers(ctx context.Context, logGroupID uuid.UUID) ([]GamePlayer, error)
 	BaselineRankingGuilds(ctx context.Context, logGroupID uuid.UUID) ([]Guild, error)
+	// Baseline armory export requires a public parse with an empty shared armory
+	// seed. Current-player rows do not otherwise provide a historical write set.
+	BaselineSharedArmoryCounts(ctx context.Context) (BaselineSharedArmoryCountsRow, error)
+	BaselineSpeedruns(ctx context.Context, logGroupID uuid.UUID) ([]InstanceSpeedrun, error)
 	BaselineTalentBuilds(ctx context.Context, logGroupID uuid.UUID) ([]TalentBuild, error)
 	BulkUpsertGuildPagePanels(ctx context.Context, dollar_1 []byte) error
 	BumpLeaderboardHighlightGeneration(ctx context.Context, tenantID uuid.UUID) error

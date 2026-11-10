@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"io"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -31,5 +33,13 @@ func TestValidateDatabase(t *testing.T) {
 				require.Error(t, err)
 			}
 		})
+	}
+}
+
+func TestFreshArmoryAttestationRequired(t *testing.T) {
+	t.Parallel()
+	for _, command := range []string{"run", "export"} {
+		err := run(context.Background(), []string{command, "--isolated-db", "--args", "nonexistent.json", "--expect-instances", "1"}, io.Discard)
+		require.ErrorContains(t, err, "--fresh-armory-seed")
 	}
 }
