@@ -127,7 +127,11 @@ func BuildHighlights(ctx context.Context, store database.Store, tenant, realm uu
 			}
 			for _, row := range rows {
 				if subject == "player" {
-					entry := chroniclesdk.HubPlayerRatingEntry{RealmID: row.RealmID, RealmName: row.RealmName, PlayerGUID: row.SubjectID, PlayerName: row.SubjectName, PlayerClass: row.PlayerClass, PlayerSpec: row.PlayerSpec, PlayerSubSpec: row.PlayerSubSpec, Score: row.Score}
+					playerClass := row.PlayerClass
+					if playerClass == "" {
+						playerClass = row.SubjectClass
+					}
+					entry := chroniclesdk.HubPlayerRatingEntry{RealmID: row.RealmID, RealmName: row.RealmName, PlayerGUID: row.SubjectID, PlayerName: row.SubjectName, PlayerClass: playerClass, PlayerSpec: row.PlayerSpec, PlayerSubSpec: row.PlayerSubSpec, Score: row.Score}
 					switch score {
 					case "peak":
 						details, err := store.ListLeaderboardV2PageBosses(ctx, database.ListLeaderboardV2PageBossesParams{TenantID: tenant, InstanceName: c.Instance, DifficultyName: c.Difficulty, MaxPlayers: c.Size, Metric: "dps", SubjectKind: "player", Bosses: selected.Bosses, Realms: []uuid.UUID{row.RealmID}, Subjects: []string{row.SubjectID}, Classes: []string{row.PlayerClass}, Specs: []string{row.PlayerSpec}, SubSpecs: []string{row.PlayerSubSpec}})
