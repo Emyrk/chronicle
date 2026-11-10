@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query"
+import { keepPreviousData, useQuery } from "@tanstack/react-query"
 import type { CareerGuildResponse, CareerLeaderboardResponse, CareerPlayerResponse, LeaderboardV2PlayerHistory } from "./typesGenerated"
 
 export function playerCareerURL(realm: string, player: string) {
@@ -34,6 +34,8 @@ export function useCareerLeaderboard(tenantID: string | undefined, params: URLSe
   const url = `/api/v1/leaderboards-v2/career?${params}`
   return useQuery({ queryKey: ["career", tenantID, "leaderboard", url],
     queryFn: () => fetchCareer<CareerLeaderboardResponse>(url),
+    // Keep the last boards (and their raid list) while a new selection loads.
+    placeholderData: keepPreviousData,
     staleTime: 60_000, retry: false })
 }
 export function useGuildCareer(tenantID: string | undefined, guildID: string) {

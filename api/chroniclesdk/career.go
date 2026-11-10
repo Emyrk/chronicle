@@ -71,6 +71,21 @@ type CareerLeaderboardResponse struct {
 	Mastery CareerLeaderboardBoard `json:"mastery"`
 	Peak    CareerLeaderboardBoard `json:"peak"`
 	Renown  CareerLeaderboardBoard `json:"renown"`
+	// RaidOptions are every raid the board can be narrowed to with `raid`,
+	// whatever is selected, heaviest first.
+	RaidOptions []CareerLeaderboardRaidOption `json:"raid_options"`
+}
+
+// CareerLeaderboardRaidOption is one selectable raid. Key is the `raid` query value.
+type CareerLeaderboardRaidOption struct {
+	Key            string `json:"key"`
+	InstanceName   string `json:"instance_name"`
+	DifficultyName string `json:"difficulty_name"`
+	MaxPlayers     int    `json:"max_players"`
+	// Weight is null for raids that only count toward Renown.
+	Weight         *float64 `json:"weight"`
+	IncludeAverage bool     `json:"include_average"`
+	IncludeRenown  bool     `json:"include_renown"`
 }
 
 // CareerLeaderboardBoard is the top of one ranking; Total counts every ranked subject.

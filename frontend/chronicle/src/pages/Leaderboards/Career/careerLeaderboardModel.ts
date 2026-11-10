@@ -10,6 +10,8 @@ export interface CareerFilters {
   subject: CareerSubject
   role: CareerRole
   scope: RatingScope
+  /** Selected raid keys (raid_options[].key); empty is every raid. */
+  raids: string[]
   realmID?: string
 }
 
@@ -35,6 +37,7 @@ export function careerLeaderboardParams(filters: CareerFilters, limit: number): 
     if (filters.scope.spec) params.set("spec", filters.scope.spec)
     if (filters.scope.subSpec) params.set("sub_spec", filters.scope.subSpec)
   }
+  for (const raid of filters.raids) params.append("raid", raid)
   if (filters.realmID) params.set("realm", filters.realmID)
   return params
 }

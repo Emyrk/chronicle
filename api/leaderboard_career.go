@@ -14,6 +14,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/leaderboardconfig"
 	"github.com/Emyrk/chronicle/internal/services/serviceratings"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 )
@@ -28,8 +29,9 @@ const (
 // at the edge.
 //
 // Query: subject=characters|guilds, metric=dps|hps (characters; default each
-// spec's chosen metric), class, spec, sub_spec (characters), realm, search
-// (name contains), offset, and limit (per board).
+// spec's chosen metric), class, spec, sub_spec (characters), raid (repeatable,
+// `Instance|Difficulty|MaxPlayers` from raid_options; default every raid),
+// realm, search (name contains), offset, and limit (per board).
 func (api *API) LeaderboardCareer(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
@@ -78,6 +80,14 @@ func (api *API) LeaderboardCareer(w http.ResponseWriter, r *http.Request) {
 		offset = n
 	}
 	search := strings.TrimSpace(q.Get("search"))
+	for _, raw := range q["raid"] {
+		key, ok := parseCareerRaidKey(raw)
+		if !ok {
+			bad("raid must be Instance|Difficulty|MaxPlayers")
+			return
+		}
+		filter.Raids = append(filter.Raids, key)
+	}
 	db := database.New(api.Opts.Pool)
 	if raw := q.Get("realm"); raw != "" {
 		id, err := uuid.Parse(raw)
@@ -137,9 +147,33 @@ func (api *API) LeaderboardCareer(w http.ResponseWriter, r *http.Request) {
 		}
 		return out
 	}
+	options := make([]chroniclesdk.CareerLeaderboardRaidOption, 0, len(board.Raids))
+	for _, r := range board.Raids {
+		options = append(options, chroniclesdk.CareerLeaderboardRaidOption{
+			Key: careerRaidKey(r.CareerKey), InstanceName: r.Instance, DifficultyName: r.Difficulty, MaxPlayers: int(r.MaxPlayers),
+			Weight: r.Weight, IncludeAverage: r.IncludeAverage, IncludeRenown: r.IncludeRenown,
+		})
+	}
 	writeCacheableLeaderboardResponse(ctx, w, http.StatusOK, chroniclesdk.CareerLeaderboardResponse{
-		Status: board.Status, Mastery: page("mastery"), Peak: page("peak"), Renown: page("renown"),
+		Status: board.Status, Mastery: page("mastery"), Peak: page("peak"), Renown: page("renown"), RaidOptions: options,
 	})
+}
+
+// careerRaidKey is a raid's `raid` query value: Instance|Difficulty|MaxPlayers.
+func careerRaidKey(k leaderboardconfig.CareerKey) string {
+	return k.Instance + "|" + k.Difficulty + "|" + strconv.Itoa(int(k.MaxPlayers))
+}
+
+func parseCareerRaidKey(raw string) (leaderboardconfig.CareerKey, bool) {
+	parts := strings.Split(raw, "|")
+	if len(parts) != 3 || strings.TrimSpace(parts[0]) == "" {
+		return leaderboardconfig.CareerKey{}, false
+	}
+	size, err := strconv.ParseInt(parts[2], 10, 16)
+	if err != nil || size < 0 {
+		return leaderboardconfig.CareerKey{}, false
+	}
+	return leaderboardconfig.CareerKey{Instance: parts[0], Difficulty: parts[1], MaxPlayers: int16(size)}, true
 }
 
 // careerBoardSearch keeps subjects whose name contains the search text.

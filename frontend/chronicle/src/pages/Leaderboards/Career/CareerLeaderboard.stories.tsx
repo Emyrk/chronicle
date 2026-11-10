@@ -3,7 +3,7 @@ import { http, HttpResponse } from "msw"
 import type { Meta, StoryObj } from "@storybook/react-vite"
 import { expect, userEvent, within } from "storybook/test"
 import { MemoryRouter } from "react-router-dom"
-import type { CareerLeaderboardEntry, CareerLeaderboardRaid, CareerLeaderboardResponse } from "@/api/typesGenerated"
+import type { CareerLeaderboardEntry, CareerLeaderboardRaid, CareerLeaderboardRaidOption, CareerLeaderboardResponse } from "@/api/typesGenerated"
 import { TooltipProvider } from "@/components/ui/Tooltip/tooltip"
 import type { RatingView } from "../Ratings/ratingThemes"
 import { CareerLeaderboard } from "./CareerLeaderboard"
@@ -58,18 +58,42 @@ function guild(name: string, mastery: number, peak: number, renown: number, i: n
   }
 }
 
-function response(entries: CareerLeaderboardEntry[], total: number): CareerLeaderboardResponse {
-  const sortBy = (key: "mastery" | "peak" | "renown") => [...entries].sort((a, b) => (b[key] ?? 0) - (a[key] ?? 0))
-  return { status: "ready", mastery: { total, entries: sortBy("mastery") }, peak: { total, entries: sortBy("peak") }, renown: { total: total * 2, entries: sortBy("renown") } }
+// Every selectable raid, as the API lists them (a renown-only raid included).
+const RAID_OPTIONS: CareerLeaderboardRaidOption[] = [
+  ...RAIDS.map(([instance_name, weight]) => ({
+    key: `${instance_name}||0`, instance_name, difficulty_name: "", max_players: 0, weight, include_average: true, include_renown: true,
+  })),
+  { key: "Vault of Archavon||0", instance_name: "Vault of Archavon", difficulty_name: "", max_players: 0, weight: null, include_average: false, include_renown: true },
+]
+
+/** Narrows an entry to the selected raids the way the API does: weighted Mastery and Peak over just those raids. */
+function narrow(e: CareerLeaderboardEntry, keys: readonly string[]): CareerLeaderboardEntry {
+  if (!keys.length) return e
+  const raids = e.raids.filter((r) => keys.includes(`${r.instance_name}||0`))
+  const weight = raids.reduce((n, r) => n + r.weight, 0)
+  const avg = (f: (r: CareerLeaderboardRaid) => number) => (weight ? raids.reduce((n, r) => n + f(r) * r.weight, 0) / weight : 0)
+  const share = keys.length / RAID_OPTIONS.length
+  return { ...e, raids, mastery: avg((r) => r.mastery), peak: avg((r) => r.peak), form: avg((r) => r.form ?? 0), floor: avg((r) => r.floor ?? 0), renown: Math.round(e.renown * share) }
 }
 
-const characters = response(ROSTER.map(character), 1840)
-const guilds = response([
+function response(entries: CareerLeaderboardEntry[], total: number, keys: readonly string[] = []): CareerLeaderboardResponse {
+  const narrowed = entries.map((e) => narrow(e, keys))
+  const sortBy = (key: "mastery" | "peak" | "renown") => [...narrowed].sort((a, b) => (b[key] ?? 0) - (a[key] ?? 0))
+  return {
+    status: "ready", raid_options: RAID_OPTIONS,
+    mastery: { total, entries: sortBy("mastery") }, peak: { total, entries: sortBy("peak") }, renown: { total: total * 2, entries: sortBy("renown") },
+  }
+}
+
+const CHARACTERS = ROSTER.map(character)
+const GUILDS = [
   guild("No Quarter", 72.4, 88.1, 9120, 0), guild("Moonlit Vanguard", 66.0, 81.3, 7740, 1),
   guild("Ashen Court", 58.9, 77.0, 5310, 2), guild("Zug Zug", 51.2, 69.8, 6005, 3),
-], 120)
+]
+const characters = response(CHARACTERS, 1840)
+const respond = (subject: string, keys: readonly string[]) => (subject === "guilds" ? response(GUILDS, 120, keys) : response(CHARACTERS, 1840, keys))
 
-function Harness({ initialView = "overview", initialFilters = { subject: "characters", role: "all", scope: {} }, state: fixed }: {
+function Harness({ initialView = "overview", initialFilters = { subject: "characters", role: "all", scope: {}, raids: [] }, state: fixed }: {
   initialView?: RatingView
   initialFilters?: CareerFilters
   state?: CareerBoardsState
@@ -77,18 +101,18 @@ function Harness({ initialView = "overview", initialFilters = { subject: "charac
   const [view, setView] = useState<RatingView>(initialView)
   const [filters, setFilters] = useState<CareerFilters>(initialFilters)
   const [realm, setRealm] = useState("All realms")
-  const state = fixed ?? { status: "ready", data: filters.subject === "guilds" ? guilds : characters }
+  const state = fixed ?? { status: "ready", data: respond(filters.subject, filters.raids) }
   return (
     <CareerLeaderboard view={view} onView={setView} filters={filters} onFilters={setFilters}
       realm={realm} realms={["All realms", "Nordanaar", "Tel'Abim"]} onRealm={setRealm} state={state}
-      request={new URLSearchParams({ subject: filters.subject })} allHref="/leaderboards" />
+      request={new URLSearchParams([["subject", filters.subject], ...filters.raids.map((r) => ["raid", r])])} allHref="/leaderboards" />
   )
 }
 
 /** The career endpoint over the fixtures: subject, search, offset, and limit. */
 const careerHandler = http.get("/api/v1/leaderboards-v2/career", ({ request }) => {
   const url = new URL(request.url)
-  const source = url.searchParams.get("subject") === "guilds" ? guilds : characters
+  const source = respond(url.searchParams.get("subject") ?? "", url.searchParams.getAll("raid"))
   const search = url.searchParams.get("search")?.toLowerCase() ?? ""
   const offset = Number(url.searchParams.get("offset") ?? 0)
   const limit = Number(url.searchParams.get("limit") ?? 100)
@@ -96,7 +120,7 @@ const careerHandler = http.get("/api/v1/leaderboards-v2/career", ({ request }) =
     const matches = source[key].entries.filter((e) => e.name.toLowerCase().includes(search))
     return { total: search ? matches.length : source[key].total, entries: matches.slice(offset, offset + limit) }
   }
-  return HttpResponse.json({ status: source.status, mastery: board("mastery"), peak: board("peak"), renown: board("renown") })
+  return HttpResponse.json({ status: source.status, raid_options: RAID_OPTIONS, mastery: board("mastery"), peak: board("peak"), renown: board("renown") })
 })
 
 const meta = {
@@ -128,8 +152,24 @@ export const Peak: Story = {
   },
 }
 
+export const RaidSelection: Story = {
+  name: "Raid selector: Molten Core + Blackwing Lair",
+  args: { initialView: "mastery", initialFilters: { subject: "characters", role: "all", scope: {}, raids: ["Blackwing Lair||0", "Molten Core||0"] } },
+  play: async ({ canvas }) => {
+    const raids = canvas.getByRole("navigation", { name: "Raids" })
+    await expect(within(raids).getByRole("button", { name: /Blackwing Lair/ })).toHaveAttribute("aria-pressed", "true")
+    await expect(within(raids).getByRole("button", { name: /Naxxramas/ })).toHaveAttribute("aria-pressed", "false")
+    await expect(within(raids).getByText("2 of 7 selected")).toBeInTheDocument()
+    // Clicking a raid shows only it; All raids goes back to every raid.
+    await userEvent.click(within(raids).getByRole("button", { name: /Zul'Gurub/ }))
+    await expect(within(raids).getByText("1 of 7 selected")).toBeInTheDocument()
+    await userEvent.click(within(raids).getByRole("button", { name: "All raids" }))
+    await expect(within(raids).getByText("7 of 7 selected")).toBeInTheDocument()
+  },
+}
+
 export const Guilds: Story = {
-  args: { initialFilters: { subject: "guilds", role: "all", scope: {} } },
+  args: { initialFilters: { subject: "guilds", role: "all", scope: {}, raids: [] } },
   play: async ({ canvas }) => {
     await expect(canvas.getAllByText("No Quarter").length).toBeGreaterThan(0)
     await expect(canvas.queryByRole("group", { name: "Role" })).not.toBeInTheDocument()
@@ -137,7 +177,7 @@ export const Guilds: Story = {
 }
 
 export const SwitchToGuilds: Story = {
-  args: { initialFilters: { subject: "characters", role: "dps", scope: { cls: "WARRIOR" } } },
+  args: { initialFilters: { subject: "characters", role: "dps", scope: { cls: "WARRIOR" }, raids: [] } },
   play: async ({ canvas }) => {
     await userEvent.click(canvas.getAllByRole("button", { name: "Guilds" })[0])
     await expect(canvas.getAllByText("No Quarter").length).toBeGreaterThan(0)

@@ -7753,6 +7753,23 @@ export interface CareerLeaderboardRaidBoss {
 
 // From chroniclesdk/career.go
 /**
+ * CareerLeaderboardRaidOption is one selectable raid. Key is the `raid` query value.
+ */
+export interface CareerLeaderboardRaidOption {
+    readonly key: string;
+    readonly instance_name: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    /**
+     * Weight is null for raids that only count toward Renown.
+     */
+    readonly weight: number | null;
+    readonly include_average: boolean;
+    readonly include_renown: boolean;
+}
+
+// From chroniclesdk/career.go
+/**
  * CareerLeaderboardResponse ranks characters or guilds by career Mastery, Peak,
  * and Renown. A character's Mastery and Peak come from its spec with the
  * highest Mastery (or the filtered spec); Renown adds up every spec. Guilds use
@@ -7763,6 +7780,11 @@ export interface CareerLeaderboardResponse {
     readonly mastery: CareerLeaderboardBoard;
     readonly peak: CareerLeaderboardBoard;
     readonly renown: CareerLeaderboardBoard;
+    /**
+     * RaidOptions are every raid the board can be narrowed to with `raid`,
+     * whatever is selected, heaviest first.
+     */
+    readonly raid_options: readonly CareerLeaderboardRaidOption[];
 }
 
 // From chroniclesdk/career.go
