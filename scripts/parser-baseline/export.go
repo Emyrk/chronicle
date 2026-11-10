@@ -19,13 +19,12 @@ var instanceFields = []string{"id", "realm_id", "name", "capabilities", "recorde
 var encounterFields = []string{"id", "instance_id", "name", "remaining", "boss", "start_time", "end_time", "kill_type", "map_id", "ranking_start_offset_ms", "ranking_end_offset_ms"}
 
 var unsupportedTables = []string{
-	"log_instance_units", "log_instance_players", "log_instance_encounter_hostiles",
-	"log_instance_encounter_phases", "log_instance_raid_group_snapshots",
 	"guilds", "game_players", "game_player_gear_history", "instance_loot",
 	"instance_overview_metrics", "instance_speedruns",
 }
 
 type artifact struct {
+	LogGroup          map[string]any      `json:"log_group"`
 	Rankings          rankingOutput       `json:"ranking_parity"`
 	Schema            string              `json:"schema"`
 	Coverage          string              `json:"coverage"`
@@ -34,6 +33,7 @@ type artifact struct {
 	Instances         []instanceOutput    `json:"instances"`
 }
 type instanceOutput struct {
+	Structure  structureOutput                                  `json:"combat_structure"`
 	Instance   map[string]any                                   `json:"instance"`
 	Encounters []map[string]any                                 `json:"encounters"`
 	Events     map[database.LogInstanceEventType][]eventSegment `json:"events"`
@@ -68,12 +68,24 @@ func export(ctx context.Context, db database.Store, logID uuid.UUID, generation 
 			return err
 		}
 		result = &artifact{
-			Schema: "chronicle-parser-baseline-v2", Coverage: "partial: instances, encounters, decoded events, rankings, synchronous memberships and referenced talents",
+			Schema: "chronicle-parser-baseline-v3", Coverage: "partial: log flavor, instances, encounters, combat structure, decoded events, rankings, synchronous memberships and referenced talents",
 			Allowlist:         map[string][]string{"log_instances": instanceFields, "log_instance_encounters": encounterFields, "log_instance_events": {"instance_id", "type", "decoded_encounter_segments"}},
 			UnsupportedTables: unsupportedTables, Instances: make([]instanceOutput, 0, len(rows)),
 		}
 		for table, fields := range map[string][]string{"encounter_dps_rankings": rankingFields, "talent_builds": talentFields, "parse_score_memberships": parseMembershipFields, "time_parse_clear_time_memberships": clearMembershipFields, "time_parse_boss_kill_memberships": bossMembershipFields} {
 			result.Allowlist[table] = fields
+		}
+		for table, fields := range structureFields {
+			result.Allowlist[table] = fields
+		}
+		result.Allowlist["wow_log_groups"] = logGroupFields
+		group, err := tx.GetWoWLogGroupByID(ctx, logID)
+		if err != nil {
+			return err
+		}
+		result.LogGroup, err = logGroupValues(group.WoWLogGroup)
+		if err != nil {
+			return err
 		}
 		allEncounters := make(map[uuid.UUID]string)
 		slices.SortFunc(rows, func(a, b database.LogInstancesGuild) int { return strings.Compare(keys[a.ID], keys[b.ID]) })
@@ -109,6 +121,14 @@ func export(ctx context.Context, db database.Store, logID uuid.UUID, generation 
 					return fmt.Errorf("decode %s for %s: %w", kind, row.ID, err)
 				}
 				out.Events[kind] = decoded
+			}
+			structure, err := loadStructure(ctx, tx, row.ID)
+			if err != nil {
+				return err
+			}
+			out.Structure, err = canonicalStructure(structure, row.ID, keys[row.ID], encounterIDs)
+			if err != nil {
+				return err
 			}
 			result.Instances = append(result.Instances, out)
 		}

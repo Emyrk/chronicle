@@ -39,3 +39,10 @@ SELECT membership.* FROM time_parse_boss_kill_memberships membership
 WHERE membership.log_group_id = $1 OR membership.run_id IN (
     SELECT COALESCE(duplicate_group_id, id) FROM log_instances WHERE log_group_id = $1
 );
+
+-- name: BaselineInstancePlayerGuilds :many
+SELECT guild.* FROM guilds guild
+WHERE guild.id IN (
+    SELECT player.guild_id FROM log_instance_players player
+    WHERE player.instance_id = $1
+);

@@ -45,6 +45,7 @@ type sqlcQuerier interface {
 	// refresh can select a representative outside this log group: include affected
 	// runs, not only rows whose representative belongs to the selected group.
 	BaselineEncounterRankings(ctx context.Context, logGroupID uuid.UUID) ([]EncounterDpsRanking, error)
+	BaselineInstancePlayerGuilds(ctx context.Context, instanceID uuid.UUID) ([]Guild, error)
 	BaselineParseMemberships(ctx context.Context, logGroupID uuid.UUID) ([]ParseScoreMembership, error)
 	BaselineRankingGuilds(ctx context.Context, logGroupID uuid.UUID) ([]Guild, error)
 	BaselineTalentBuilds(ctx context.Context, logGroupID uuid.UUID) ([]TalentBuild, error)
