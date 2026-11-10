@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from "vitest"
 import { AdRailStack } from "./AdRailStack"
 import { AdSlot } from "./AdSlot"
 import { MobileBottomAd } from "./MobileBottomAd"
+import { mobileAdOccupiedHeight } from "./mobileBottomAdLayout"
 import { adFallbackPresentation, adRequestStateForKey } from "./adRequestState"
 import { AdSuppressionProvider } from "./AdSuppressionProvider"
 import { adSizeLabel, adSizesForFormat } from "./adFormats"
@@ -188,6 +189,16 @@ describe("AdSlot", () => {
     expect(markup).not.toContain(">Advertisement</")
     expect(markup).toContain("lg:hidden")
     expect(markup).toContain('data-ad-placement="rankings-mobile-bottom"')
+  })
+
+  it("reserves the full rendered creative height when it overflows the slot shell", () => {
+    const shell = {
+      scrollHeight: 50,
+      getBoundingClientRect: () => ({ height: 50, top: 700 }),
+      querySelectorAll: () => [{ getBoundingClientRect: () => ({ bottom: 800 }) }],
+    } as unknown as HTMLElement
+
+    expect(mobileAdOccupiedHeight(shell)).toBe(100)
   })
 
   it("anchors mobile banners and reserves their measured page offset", () => {
