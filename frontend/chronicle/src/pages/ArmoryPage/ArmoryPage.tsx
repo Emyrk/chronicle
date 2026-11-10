@@ -283,7 +283,9 @@ function ArmoryPageContent({ player }: { player: ArmoryPlayer }) {
           {/* Tab content: overview, gear, and talents stay in center column. */}
           {activeTab === "overview" && (
             <div className="mt-4">
-              <PlayerCareerCard realm={player.realm_name} player={player.id} />
+              {searchParams.get("debug") === "true" && (
+                <PlayerCareerCard realm={player.realm_name} player={player.id} />
+              )}
               <OverviewTab
                 player={player}
                 onOpenTab={openTab}
