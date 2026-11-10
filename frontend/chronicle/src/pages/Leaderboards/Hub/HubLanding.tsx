@@ -296,7 +296,10 @@ function HubLanding({
         })}
       </div>
     )
-    const published = instances.filter((inst) => inst.total_kills > 0)
+    // A configured Renown board is published leaderboard content even when the
+    // legacy instance summary has no DPS rows (for example, Renown-only raids).
+    const published = instances.filter((inst) => inst.total_kills > 0
+      || !!awardsForCohort(renownAwards?.get(inst.instance_name), inst.difficulty_name, inst.max_players))
     const publishedNames = new Set(published.map((inst) => inst.instance_name))
     const unavailable = [...new Set(instances
       .filter((inst) => !publishedNames.has(inst.instance_name))

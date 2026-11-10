@@ -267,6 +267,24 @@ describe("live Storybook Hub", () => {
     expect(params.encounter_names!.split(",")).not.toContain("Trash")
   })
 
+  it("omits Onyxia from ChromieCraft landing grids", () => {
+    const onyxia = {
+      ...summary.instances[0],
+      instance_name: "Onyxia's Lair",
+      difficulty_name: "25 Player",
+      max_players: 25,
+    }
+    setSummary({
+      ...summary,
+      instances: [...summary.instances, onyxia],
+      configuration: { effective_flavor: ["chromiecraft"] } as unknown as HubSummary["configuration"],
+    })
+
+    const html = hub("/leaderboards")
+    expect(html).toContain("Molten Core")
+    expect(html).not.toContain("Onyxia&#x27;s Lair")
+  })
+
   it("uses the Storybook landing grid with published cohorts", () => {
     const html = hub("/leaderboards")
     expect(html).toContain("Molten Core")

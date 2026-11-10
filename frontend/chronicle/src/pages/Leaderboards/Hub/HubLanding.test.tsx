@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { MemoryRouter } from "react-router-dom"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import type { RankingsInstanceSummary, SupportedInstance } from "@/api/typesGenerated"
+import type { RenownAwards } from "@/pages/Leaderboards/renownConfig"
 import { LeaderboardsHubApp } from "./HubLanding"
 
 const instances = [
@@ -43,6 +44,32 @@ describe("live Hub landing", () => {
     expect(markup).toContain("Open an instance to view its configured encounters and rules.")
     expect(markup).toContain("No rankings yet")
     expect(markup).toContain('href="/leaderboards/Upper-Karazhan"')
+  })
+
+  it("keeps Renown-configured cohorts in the main raid grid without DPS summaries", () => {
+    const eye = {
+      category: "raid",
+      instance_name: "Eye of Eternity",
+      difficulty_name: "25 Player",
+      max_players: 25,
+      total_kills: 0,
+      top_players: [],
+    } satisfies RankingsInstanceSummary
+    const renownAwards = new Map<string, RenownAwards[]>([["Eye of Eternity", [{
+      difficulty_name: "25 Player",
+      max_players: 25,
+      rules: [{ encounter_name: "Malygos", points: 4 }],
+    }]]])
+
+    const markup = render({ instances: [...instances, eye], renownAwards })
+    const eyeCard = markup.indexOf("Eye of Eternity</h2>")
+    const unavailable = markup.indexOf("Configured instances without rankings")
+
+    expect(eyeCard).toBeGreaterThan(-1)
+    expect(unavailable === -1 || eyeCard < unavailable).toBe(true)
+    expect(markup).toContain("Configured instance")
+    expect(markup).toContain("4 Renown")
+    expect(markup).not.toContain("Eye of Eternity</span><span class=\"block text-[10px] tracking-wide uppercase\">No rankings yet")
   })
 
   it("separates raid cards by level tier and keeps cohorts together", () => {

@@ -59,6 +59,11 @@ export function LeaderboardsLiveHub() {
   const selectedRealmIDs = activeRealm ? [activeRealm.id] : realmIDs.length > 1 ? realmIDs : []
   const realm = !instance && highlightsSelectionError ? "Select a realm" : activeRealm?.name ?? ALL_REALMS
   const names = [...new Set((summary.data?.instances ?? []).map((row) => row.instance_name))]
+  // ChromieCraft intentionally disables Onyxia rankings. Do not let the shared
+  // Wrath Renown configuration surface it as an otherwise empty landing card.
+  const landingInstances = summary.data?.instances.filter((row) =>
+    !(row.instance_name === "Onyxia's Lair"
+      && summary.data?.configuration?.effective_flavor.includes("chromiecraft"))) ?? []
   const choose = (key: "realm_ids" | "encounters", value?: string) => setParams(hubParams(params, key, value))
   const tabParams = (next: ReturnType<typeof v2Selection>["tab"]) => {
     const updated = new URLSearchParams(params)
@@ -111,7 +116,7 @@ export function LeaderboardsLiveHub() {
       <LeaderboardsHubApp instance={instance ?? undefined} onInstance={chooseInstance}
         instanceHref={instanceHref} tabHref={tabHref} allInstancesHref={allInstancesHref}
         tab={tab} onTab={chooseTab} realm={realm} onRealm={(name) => choose("realm_ids", available.find((row) => row.name === name)?.id)}
-        realms={[ALL_REALMS, ...available.map((row) => row.name)]} instances={summary.data?.instances ?? []} supportedInstances={supportedInstances} renownAwards={renownAwards} landingPreviews={highlightsScopeError ? [] : highlights.data?.landing_previews}
+        realms={[ALL_REALMS, ...available.map((row) => row.name)]} instances={landingInstances} supportedInstances={supportedInstances} renownAwards={renownAwards} landingPreviews={highlightsScopeError ? [] : highlights.data?.landing_previews}
         landingSnapshots={highlightsScopeError || highlights.isError && !highlights.data ? undefined : highlights.data?.snapshots ?? []}
         landingBlocked={!!highlightsScopeError || !highlights.data}
         landingNotice={highlightsScopeError ? <p role="status">{highlightsScopeError}</p>

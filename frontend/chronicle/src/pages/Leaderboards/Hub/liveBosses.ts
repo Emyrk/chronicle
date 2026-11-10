@@ -15,8 +15,13 @@ export function liveHubPreset(recorded: readonly string[], progression?: Readonl
 export function liveHubBosses(recorded: readonly string[], progression?: ReadonlySet<string>,
   rankingSets: readonly RankingEncounterSet[] = [], performances = false): string[] {
   const preset = liveHubPreset(recorded, progression, rankingSets)
-  const canonical = rankingSets.length ? [...preset, ...rankingSets.flatMap((set) => set.encounters)] : preset
-  const bosses = [...new Set(canonical)]
+  const setBosses = rankingSets.flatMap((set) => set.encounters)
+  // Renown-only raids may intentionally have an enabled but empty default set.
+  // Their configured boss roster is still the encounter picker roster.
+  const canonical = rankingSets.length
+    ? [...preset, ...(setBosses.length ? setBosses : recorded)]
+    : preset
+  const bosses = [...new Set(canonical.filter((name) => name !== "Trash"))]
   if (performances && recorded.includes("Trash")) bosses.push("Trash")
   return bosses
 }

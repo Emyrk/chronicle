@@ -23,6 +23,19 @@ describe("live Hub encounter roster", () => {
     ])
   })
 
+  it("offers configured bosses when the enabled default set is intentionally empty", () => {
+    const vault = [
+      "Archavon the Stone Watcher",
+      "Emalon the Storm Watcher",
+      "Koralon the Flame Watcher",
+      "Toravon the Ice Watcher",
+    ]
+    const emptyDefault = [{ id: "", label: "Normal", encounters: [] }]
+
+    expect(liveHubPreset(vault, new Set(), emptyDefault)).toEqual([])
+    expect(liveHubBosses(vault, new Set(), emptyDefault)).toEqual(vault)
+  })
+
   it("falls back to the progression roster and never treats Trash as a boss", () => {
     expect(liveHubBosses(recorded, new Set(["Ragnaros"]))).toEqual(["Ragnaros"])
     expect(liveHubBosses(recorded)).toEqual(["Baron Geddon", "Gehennas", "Ragnaros"])
