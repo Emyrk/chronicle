@@ -1,6 +1,12 @@
 import { useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { useSupportedInstanceProgressionBosses, useSupportedInstanceRankingEncounterSets } from "@/api/queries";
-import { useCharacterEncounters, useCharacterPerformances } from "@/api/rankingsQueries";
+import {
+  useCharacterEncounters,
+  useCharacterPerformances,
+  useRankingsEncounters,
+  useRankingsInstances,
+  useRankingsStats,
+} from "@/api/rankingsQueries";
 import type { CharacterPerformanceRun, GuildSpeedrunRun } from "@/api/typesGenerated";
 import { cn } from "@/lib/utils";
 import { Check, ChevronDown } from "lucide-react";
@@ -167,8 +173,8 @@ export default function QuickStats({
             onChange={chooseDisplay}
           />
         )}
-        {kind === "character" && (
-          <div className="flex gap-0.5 rounded-md bg-white/5 p-0.5" role="group" aria-label="Metric">
+        {(kind === "character" || kind === "class" || kind === "spec") && (
+          <div className="ml-auto flex gap-0.5 rounded-md bg-white/5 p-0.5" role="group" aria-label="Metric">
             {(["dps", "hps"] as const).map((option) => (
               <button
                 key={option}
@@ -188,9 +194,9 @@ export default function QuickStats({
       </div>
       <div className="pt-2">
         {kind === "class" ? (
-          <CohortQuickStats kind="class" entities={classes} hidden={hidden} raid={raid} />
+          <CohortQuickStats kind="class" entities={classes} hidden={hidden} raid={raid} picked={picked} onPick={onPick} metric={metric} />
         ) : kind === "spec" ? (
-          <CohortQuickStats kind="spec" entities={specs} hidden={hidden} raid={raid} />
+          <CohortQuickStats kind="spec" entities={specs} hidden={hidden} raid={raid} picked={picked} onPick={onPick} metric={metric} />
         ) : kind === "character" ? (
           <PlayerQuickStats
             key={characters.map(entityKey).join()}
@@ -218,76 +224,139 @@ export default function QuickStats({
 
 type CohortPin = ClassPin | SpecPin;
 
-/** Snapshot comparison for class and spec rows collected from leaderboard or parsing views. */
+function rankingChoiceKey(choice: RaidChoice): string {
+  return `${choice.instanceName}\u0000${choice.difficultyName ?? ""}\u0000${choice.maxPlayers ?? ""}`;
+}
+
+/** Live class/spec comparison for the raid population selected in the tray. */
 function CohortQuickStats({
   kind,
   entities,
   hidden,
   raid,
+  picked,
+  onPick,
+  metric,
 }: {
   kind: "class" | "spec";
   entities: CohortPin[];
   hidden: ReadonlySet<string>;
   raid: EntityRaidContext | null;
+  picked: RaidChoice | null;
+  onPick: (choice: RaidChoice | null) => void;
+  metric: Metric;
 }) {
   const visible = entities.filter((entity) => !hidden.has(entityKey(entity)));
-  if (visible.length === 0) return <Empty>Everything here is hidden. Shift+click a name to show it again.</Empty>;
-  const raidDetail = raid
+  const instances = useRankingsInstances();
+  const choices = [...new Map(
+    (instances.data ?? [])
+      .filter((instance) => instance.category === "raid")
+      .map((instance) => {
+        const choice: RaidChoice = {
+          instanceName: instance.instance_name,
+          difficultyName: instance.difficulty_name,
+          maxPlayers: instance.max_players,
+        };
+        return [rankingChoiceKey(choice), choice] as const;
+      }),
+  ).values()];
+  const pageChoice: RaidChoice | undefined = raid
+    ? { instanceName: raid.instanceName, difficultyName: raid.difficultyName, maxPlayers: raid.maxPlayers }
+    : undefined;
+  const selected = picked ?? pageChoice ?? choices[0];
+  const encounters = useRankingsEncounters(selected?.instanceName ?? "");
+  const bossNames = raid && !picked
+    ? raid.bossNames
+    : (encounters.data ?? []).map((encounter) => encounter.encounter_name).filter((name) => name !== "Trash");
+  const stats = useRankingsStats({
+    instance_names: selected?.instanceName,
+    encounter_names: bossNames.join(",") || undefined,
+    difficulty_names: selected?.difficultyName,
+    max_players: selected?.maxPlayers,
+    exact_cohort: selected !== undefined,
+    metric,
+    group_by_class: kind === "class",
+  }, visible.length > 0 && !!selected && bossNames.length > 0);
+  const loading = instances.isLoading || encounters.isLoading || stats.isLoading;
+  const selectedDetail = selected
     ? [
-        raid.difficultyName,
-        raid.maxPlayers !== undefined ? `${raid.maxPlayers}-player` : "",
-        raid.bossNames.length === 0 ? "full raid" : `${raid.bossNames.length} ${raid.bossNames.length === 1 ? "boss" : "bosses"}`,
+        selected.difficultyName,
+        selected.maxPlayers !== undefined ? `${selected.maxPlayers}-player` : "",
+        bossNames.length > 0 ? `${bossNames.length} ${bossNames.length === 1 ? "boss" : "bosses"}` : "full raid",
       ].filter(Boolean).join(" · ")
     : "";
+  const format = (value: number) => `${Math.round(value).toLocaleString()}/s`;
 
+  if (visible.length === 0) return <Empty>Everything here is hidden. Shift+click a name to show it again.</Empty>;
   return (
     <div className="space-y-2.5">
-      {raid && <FightsLine instanceName={raid.instanceName} detail={raidDetail} />}
+      <FightsLine
+        instanceName={selected?.instanceName ?? ""}
+        detail={selectedDetail}
+        picker={{ choices, picked, onPick, resetLabel: raid ? "This page's raid" : "Default raid" }}
+      />
       <div className="flex items-baseline justify-between gap-3 px-0.5">
         <p className="text-[11px] text-muted-foreground">
           Comparing {visible.length} {visible.length === 1 ? kind : kind === "class" ? "classes" : "specs"}
         </p>
-        <p className="text-[10px] text-muted-foreground/70">Snapshot from where each was added</p>
+        <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">{metric}</p>
       </div>
-      <div className="space-y-1.5">
-        {visible.map((entity) => {
-          const color = getClassColorVar(entity.className);
-          const stats = entity.stats ?? [];
-          return (
-            <section
-              key={entityKey(entity)}
-              aria-label={`${entity.name} statistics`}
-              className="overflow-hidden rounded-md border border-white/5 bg-white/[0.035]"
-              style={{ borderLeftColor: color, borderLeftWidth: 2 }}
-            >
-              <header className="flex min-w-0 items-center gap-2 px-2.5 py-1.5">
-                <img
-                  src={`/c/icons/class_${entity.className.toLowerCase()}.png`}
-                  alt=""
-                  className="h-4 w-4 shrink-0 rounded-sm"
-                  onError={(event) => { event.currentTarget.src = "/c/icons/class_unknown.png"; }}
-                />
-                <span className="truncate text-xs font-semibold" style={{ color }}>{entity.name}</span>
-                <span className="ml-auto shrink-0 text-[9px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                  {kind}
-                </span>
-              </header>
-              {stats.length > 0 ? (
-                <dl className="grid grid-cols-2 gap-x-4 gap-y-1 border-t border-white/5 px-2.5 py-2">
-                  {stats.map((stat) => (
-                    <div key={stat.label} className="flex min-w-0 items-baseline justify-between gap-2">
-                      <dt className="truncate text-[10px] uppercase tracking-wider text-muted-foreground">{stat.label}</dt>
-                      <dd className="shrink-0 font-mono text-xs font-semibold tabular-nums text-foreground">{stat.value}</dd>
-                    </div>
-                  ))}
-                </dl>
-              ) : (
-                <p className="border-t border-white/5 px-2.5 py-2 text-[11px] text-muted-foreground">No snapshot statistics were available.</p>
-              )}
-            </section>
-          );
-        })}
-      </div>
+      {loading ? (
+        <Empty>Loading comparison…</Empty>
+      ) : stats.isError ? (
+        <Empty>These statistics could not be loaded.</Empty>
+      ) : (
+        <div className="space-y-1.5">
+          {visible.map((entity) => {
+            const color = getClassColorVar(entity.className);
+            const row = stats.data?.find((candidate) =>
+              candidate.player_class === entity.className
+              && (entity.kind === "class" || (
+                candidate.player_spec === entity.specName
+                && (candidate.player_sub_spec ?? "") === (entity.subSpecName ?? "")
+              )),
+            );
+            return (
+              <section
+                key={entityKey(entity)}
+                aria-label={`${entity.name} statistics`}
+                className="overflow-hidden rounded-md border border-white/5 bg-white/[0.035]"
+                style={{ borderLeftColor: color, borderLeftWidth: 2 }}
+              >
+                <header className="flex min-w-0 items-center gap-2 px-2.5 py-1.5">
+                  <img
+                    src={`/c/icons/class_${entity.className.toLowerCase()}.png`}
+                    alt=""
+                    className="h-4 w-4 shrink-0 rounded-sm"
+                    onError={(event) => { event.currentTarget.src = "/c/icons/class_unknown.png"; }}
+                  />
+                  <span className="truncate text-xs font-semibold" style={{ color }}>{entity.name}</span>
+                  <span className="ml-auto shrink-0 text-[9px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                    {kind}
+                  </span>
+                </header>
+                {row ? (
+                  <dl className="grid grid-cols-2 gap-x-4 gap-y-1 border-t border-white/5 px-2.5 py-2">
+                    {[
+                      { label: "Best", value: format(row.max_dps) },
+                      { label: "Top 25%", value: format(row.q3_dps) },
+                      { label: "Typical", value: format(row.median_dps) },
+                      { label: "Runs", value: row.count.toLocaleString() },
+                    ].map((stat) => (
+                      <div key={stat.label} className="flex min-w-0 items-baseline justify-between gap-2">
+                        <dt className="truncate text-[10px] uppercase tracking-wider text-muted-foreground">{stat.label}</dt>
+                        <dd className="shrink-0 font-mono text-xs font-semibold tabular-nums text-foreground">{stat.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                ) : (
+                  <p className="border-t border-white/5 px-2.5 py-2 text-[11px] text-muted-foreground">No ranked {metric.toUpperCase()} runs for this selection.</p>
+                )}
+              </section>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -751,7 +820,7 @@ function FightsLine({
 }: {
   instanceName: string;
   detail?: string;
-  picker?: { choices: RaidChoice[]; picked: RaidChoice | null; onPick: (choice: RaidChoice | null) => void };
+  picker?: { choices: RaidChoice[]; picked: RaidChoice | null; onPick: (choice: RaidChoice | null) => void; resetLabel?: string };
 }) {
   if (!instanceName && !picker?.choices.length) return null;
   if (!picker || picker.choices.length === 0) {
@@ -776,7 +845,7 @@ function FightsLine({
         <DropdownMenuContent align="start" className="styled-scrollbar max-h-72 overflow-y-auto text-xs">
           <DropdownMenuItem onSelect={() => picker.onPick(null)}>
             <Check className={cn("h-3.5 w-3.5", pickedKey !== null && "invisible")} aria-hidden="true" />
-            Most recent raid
+            {picker.resetLabel ?? "Most recent raid"}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           {picker.choices.map((choice) => (
