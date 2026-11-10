@@ -39,5 +39,15 @@
     "id": "share-layout",
     "content": "Layouts can be shared so everyone in a raid can start from the same panel setup.",
     "context": "instance"
+  },
+  {
+    "id": "alt-mode",
+    "content": "Alt+click players, guilds, bosses, and raids to open their shortcuts and add them to compare. On a touch screen, press and hold instead."
+  },
+  {
+    "id": "ratings",
+    "content": "Peak, Mastery, and Renown measure your best performance, consistency, and experience. See how each rating is calculated.",
+    "href": "/ratings",
+    "actionLabel": "Explore ratings"
   }
 ]
