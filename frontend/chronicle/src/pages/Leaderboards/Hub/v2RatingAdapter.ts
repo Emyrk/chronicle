@@ -146,7 +146,9 @@ export function createV2Pager(context: V2RatingContext) {
     }
     const cursor = history.get(page);
     if (cursor === undefined)
-      throw new Error("Restart from the first page for this selection.");
+      throw new Error(
+        "Force-refresh the page, then restart from the first page for this selection.",
+      );
     if (cursor) params.set("cursor", cursor);
     const response = await hubJSON<LeaderboardV2Response>(v2BoardURL(params));
     if (response.next_cursor) history.set(page + 1, response.next_cursor);
