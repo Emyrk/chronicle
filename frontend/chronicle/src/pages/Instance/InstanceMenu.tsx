@@ -3,7 +3,12 @@ import { Menu, FileText, Copy, Upload, Download, RotateCcw, LayoutGrid, Clock, S
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import type { WoWLogGroupState } from "@/api/typesGenerated";
-import { useAdminClearLogInvalidation, useAdminInvalidateLogs } from "@/api/queries";
+import {
+  useAdminClearEncounterInvalidation,
+  useAdminClearInstanceInvalidation,
+  useAdminInvalidateEncounter,
+  useAdminInvalidateInstance,
+} from "@/api/queries";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -46,6 +51,11 @@ interface InstanceMenuProps {
   logGroupId?: string;
   instanceName: string;
   invalidated?: boolean;
+  selectedEncounter?: {
+    id: string;
+    name: string;
+    invalidatedAt?: string;
+  };
   /** Whether user has admin_logs permission */
   canAdminLogs?: boolean;
   /** Whether user has invalidate_logs permission */
@@ -74,15 +84,21 @@ export function InstanceMenu({
   logGroupId,
   instanceName,
   invalidated = false,
+  selectedEncounter,
   canAdminLogs,
   canInvalidateLogs,
 }: InstanceMenuProps) {
   const [showInvalidateConfirm, setShowInvalidateConfirm] = useState(false);
   const [showMarkValidConfirm, setShowMarkValidConfirm] = useState(false);
+  const [invalidationTarget, setInvalidationTarget] = useState<"instance" | "encounter">("instance");
   const [invalidReason, setInvalidReason] = useState("");
   const [isDownloadingLog, setIsDownloadingLog] = useState(false);
-  const invalidateLogs = useAdminInvalidateLogs();
-  const clearInvalidation = useAdminClearLogInvalidation();
+  const invalidateInstance = useAdminInvalidateInstance();
+  const invalidateEncounter = useAdminInvalidateEncounter();
+  const clearInstanceInvalidation = useAdminClearInstanceInvalidation();
+  const clearEncounterInvalidation = useAdminClearEncounterInvalidation();
+  const invalidationPending = invalidateInstance.isPending || invalidateEncounter.isPending;
+  const clearInvalidationPending = clearInstanceInvalidation.isPending || clearEncounterInvalidation.isPending;
   const handleCopyInstanceId = async () => {
     try {
       await navigator.clipboard.writeText(instanceId);
@@ -141,21 +157,24 @@ export function InstanceMenu({
     if (!logGroupId || !reason) return;
 
     try {
-      const result = await invalidateLogs.mutateAsync({
-        logIds: [logGroupId],
-        instanceIds: [instanceId],
-        reason,
-      });
-      if (result.failed.length > 0) {
-        throw new Error(result.failed[0]?.detail || "Failed to invalidate log");
+      if (invalidationTarget === "encounter" && selectedEncounter) {
+        await invalidateEncounter.mutateAsync({
+          logGroupId,
+          instanceId,
+          encounterId: selectedEncounter.id,
+          reason,
+        });
+      } else {
+        await invalidateInstance.mutateAsync({ logGroupId, instanceId, reason });
       }
-      toast.success("Log invalidated", {
-        description: "It remains visible, but no longer contributes parses or rankings.",
+      const targetLabel = invalidationTarget === "encounter" ? "Encounter" : "Raid instance";
+      toast.success(`${targetLabel} invalidated`, {
+        description: "It remains visible, but no longer contributes affected parses or rankings.",
       });
       setShowInvalidateConfirm(false);
       setInvalidReason("");
     } catch (err) {
-      toast.error("Failed to invalidate log", {
+      toast.error(`Failed to invalidate ${invalidationTarget}`, {
         description: err instanceof Error ? err.message : undefined,
       });
     }
@@ -165,23 +184,31 @@ export function InstanceMenu({
     if (!logGroupId) return;
 
     try {
-      const result = await clearInvalidation.mutateAsync({
-        logIds: [logGroupId],
-        instanceIds: [instanceId],
-      });
-      if (result.failed.length > 0) {
-        throw new Error(result.failed[0]?.detail || "Failed to mark log valid");
+      if (invalidationTarget === "encounter" && selectedEncounter) {
+        await clearEncounterInvalidation.mutateAsync({
+          logGroupId,
+          instanceId,
+          encounterId: selectedEncounter.id,
+        });
+      } else {
+        await clearInstanceInvalidation.mutateAsync({ logGroupId, instanceId });
       }
-      toast.success("Log marked valid", {
-        description: "Reparse the log to recreate rankings, parses, and speedrun results.",
+      const targetLabel = invalidationTarget === "encounter" ? "Encounter" : "Raid instance";
+      toast.success(`${targetLabel} marked valid`, {
+        description: "Reparse the log to recreate removed rankings and parse results.",
       });
       setShowMarkValidConfirm(false);
     } catch (err) {
-      toast.error("Failed to mark log valid", {
+      toast.error(`Failed to mark ${invalidationTarget} valid`, {
         description: err instanceof Error ? err.message : undefined,
       });
     }
   };
+
+  const targetKind = invalidationTarget === "encounter" ? "encounter" : "raid instance";
+  const targetName = invalidationTarget === "encounter" && selectedEncounter
+    ? selectedEncounter.name
+    : instanceName;
 
   return (
     <>
@@ -299,18 +326,47 @@ export function InstanceMenu({
 
         {canInvalidateLogs && logGroupId && !invalidated && (
           <DropdownMenuItem
-            onSelect={() => setShowInvalidateConfirm(true)}
+            onSelect={() => {
+              setInvalidationTarget("instance");
+              setShowInvalidateConfirm(true);
+            }}
             className="text-destructive focus:text-destructive"
           >
             <Ban className="h-4 w-4 mr-2" />
-            Invalidate log
+            Invalidate raid instance
           </DropdownMenuItem>
         )}
 
         {canInvalidateLogs && logGroupId && invalidated && (
-          <DropdownMenuItem onSelect={() => setShowMarkValidConfirm(true)}>
+          <DropdownMenuItem onSelect={() => {
+            setInvalidationTarget("instance");
+            setShowMarkValidConfirm(true);
+          }}>
             <Check className="h-4 w-4 mr-2" />
-            Mark log valid
+            Mark raid instance valid
+          </DropdownMenuItem>
+        )}
+
+        {canInvalidateLogs && logGroupId && selectedEncounter && !selectedEncounter.invalidatedAt && (
+          <DropdownMenuItem
+            onSelect={() => {
+              setInvalidationTarget("encounter");
+              setShowInvalidateConfirm(true);
+            }}
+            className="text-destructive focus:text-destructive"
+          >
+            <Ban className="h-4 w-4 mr-2" />
+            Invalidate selected encounter
+          </DropdownMenuItem>
+        )}
+
+        {canInvalidateLogs && logGroupId && selectedEncounter?.invalidatedAt && (
+          <DropdownMenuItem onSelect={() => {
+            setInvalidationTarget("encounter");
+            setShowMarkValidConfirm(true);
+          }}>
+            <Check className="h-4 w-4 mr-2" />
+            Mark selected encounter valid
           </DropdownMenuItem>
         )}
 
@@ -349,24 +405,26 @@ export function InstanceMenu({
       <Dialog
         open={showInvalidateConfirm}
         onOpenChange={(open) => {
-          if (invalidateLogs.isPending) return;
+          if (invalidationPending) return;
           setShowInvalidateConfirm(open);
           if (!open) setInvalidReason("");
         }}
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Invalidate this log group?</DialogTitle>
+            <DialogTitle>Invalidate this {targetKind}?</DialogTitle>
           </DialogHeader>
           <p className="text-sm font-semibold text-destructive">
-            Existing parses, rankings, and speedrun results will be removed.
+            Affected parses and rankings will be removed.
           </p>
           <DialogDescription>
-            The log and its instances will remain visible and can be marked valid again later. Marking it valid will not restore removed data; reparse it afterward to rebuild normal results.
+            The {targetKind} will remain visible. A later reparse recreates it without this manual invalidation marker.
           </DialogDescription>
           <div className="rounded-md bg-muted px-3 py-2 text-sm">
-            <span className="font-medium">{instanceName}</span>
-            <span className="ml-2 text-xs text-muted-foreground">{logGroupId}</span>
+            <span className="font-medium">{targetName}</span>
+            <span className="ml-2 text-xs text-muted-foreground">
+              {invalidationTarget === "encounter" ? selectedEncounter?.id : instanceId}
+            </span>
           </div>
           <div className="space-y-2">
             <label htmlFor="invalidate-log-reason" className="text-sm font-medium">
@@ -376,8 +434,8 @@ export function InstanceMenu({
               id="invalidate-log-reason"
               value={invalidReason}
               onChange={(event) => setInvalidReason(event.target.value)}
-              placeholder="Describe why this log is invalid"
-              disabled={invalidateLogs.isPending}
+              placeholder={`Describe why this ${targetKind} is invalid`}
+              disabled={invalidationPending}
               autoFocus
             />
           </div>
@@ -385,17 +443,17 @@ export function InstanceMenu({
             <Button
               variant="outline"
               onClick={() => setShowInvalidateConfirm(false)}
-              disabled={invalidateLogs.isPending}
+              disabled={invalidationPending}
             >
               Cancel
             </Button>
             <Button
               variant="destructive"
               onClick={() => void handleInvalidate()}
-              disabled={invalidateLogs.isPending || invalidReason.trim() === ""}
+              disabled={invalidationPending || invalidReason.trim() === ""}
             >
-              {invalidateLogs.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-              Invalidate log
+              {invalidationPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              Invalidate {targetKind}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -404,20 +462,22 @@ export function InstanceMenu({
       <Dialog
         open={showMarkValidConfirm}
         onOpenChange={(open) => {
-          if (clearInvalidation.isPending) return;
+          if (clearInvalidationPending) return;
           setShowMarkValidConfirm(open);
         }}
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Mark this log group valid?</DialogTitle>
+            <DialogTitle>Mark this {targetKind} valid?</DialogTitle>
           </DialogHeader>
           <DialogDescription>
-            This clears the invalid marker from the log and its instances. Previously removed parses, rankings, and speedrun results are not restored automatically.
+            This clears the invalid marker. Previously removed parses and rankings are not restored automatically.
           </DialogDescription>
           <div className="rounded-md bg-muted px-3 py-2 text-sm">
-            <span className="font-medium">{instanceName}</span>
-            <span className="ml-2 text-xs text-muted-foreground">{logGroupId}</span>
+            <span className="font-medium">{targetName}</span>
+            <span className="ml-2 text-xs text-muted-foreground">
+              {invalidationTarget === "encounter" ? selectedEncounter?.id : instanceId}
+            </span>
           </div>
           <p className="text-sm text-muted-foreground">
             Reparse the log afterward to rebuild its normal ranking and parse data.
@@ -426,12 +486,12 @@ export function InstanceMenu({
             <Button
               variant="outline"
               onClick={() => setShowMarkValidConfirm(false)}
-              disabled={clearInvalidation.isPending}
+              disabled={clearInvalidationPending}
             >
               Cancel
             </Button>
-            <Button onClick={() => void handleMarkValid()} disabled={clearInvalidation.isPending}>
-              {clearInvalidation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+            <Button onClick={() => void handleMarkValid()} disabled={clearInvalidationPending}>
+              {clearInvalidationPending && <Loader2 className="h-4 w-4 animate-spin" />}
               Mark valid
             </Button>
           </DialogFooter>

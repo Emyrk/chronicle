@@ -2266,7 +2266,9 @@ CREATE TABLE log_instance_encounters (
     kill_type kill_type NOT NULL,
     map_id integer DEFAULT 0 NOT NULL,
     ranking_start_offset_ms bigint,
-    ranking_end_offset_ms bigint
+    ranking_end_offset_ms bigint,
+    invalidated_at timestamp with time zone,
+    invalid_reason text DEFAULT ''::text NOT NULL
 );
 
 CREATE TABLE log_instance_events (

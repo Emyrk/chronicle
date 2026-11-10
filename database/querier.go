@@ -54,6 +54,8 @@ type sqlcQuerier interface {
 	ClearApplicationReviewsByReviewer(ctx context.Context, userID uuid.NullUUID) error
 	ClearDiscordMembershipGrantCheckClaim(ctx context.Context, arg ClearDiscordMembershipGrantCheckClaimParams) (int64, error)
 	ClearInferenceThreadByOwner(ctx context.Context, arg ClearInferenceThreadByOwnerParams) (InferenceThread, error)
+	ClearLogEncounterInvalidation(ctx context.Context, arg ClearLogEncounterInvalidationParams) (int64, error)
+	ClearLogInstanceInvalidation(ctx context.Context, arg ClearLogInstanceInvalidationParams) (int64, error)
 	ClearRealmsCreatedByUser(ctx context.Context, userID uuid.UUID) error
 	ClearResetToken(ctx context.Context, userAuthID uuid.UUID) error
 	// Servers, realms, and upload keys hold other players' data, so a purge only
@@ -737,6 +739,8 @@ type sqlcQuerier interface {
 	InstanceSpeedrunCohort(ctx context.Context, arg InstanceSpeedrunCohortParams) ([]InstanceSpeedrunCohortRow, error)
 	InstanceUnitsByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceUnit, error)
 	InstanceWithUnlisted(ctx context.Context, id uuid.UUID) (InstanceWithUnlistedRow, error)
+	InvalidateLogEncounter(ctx context.Context, arg InvalidateLogEncounterParams) (int64, error)
+	InvalidateLogInstance(ctx context.Context, arg InvalidateLogInstanceParams) (int64, error)
 	InvalidateOAuthDeviceSession(ctx context.Context, deviceSignature string) (int64, error)
 	InvalidateOAuthDeviceSessionsBySidekickInstallationID(ctx context.Context, sidekickInstallationID uuid.NullUUID) (int64, error)
 	InvalidateWoWLogGroup(ctx context.Context, arg InvalidateWoWLogGroupParams) error

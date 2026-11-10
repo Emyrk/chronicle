@@ -70,6 +70,8 @@ export interface Encounter {
   end_time: string;
   enemies?: EnemyUnit[];
   remaining?: string[]; // GUIDs of enemies that did not die
+  invalidatedAt?: string;
+  invalidReason?: string;
   /** Optional phases within this encounter (sorted by order). */
   phases?: EncounterPhase[];
   /** Interval scored for boss rankings, when shorter than the full encounter. */

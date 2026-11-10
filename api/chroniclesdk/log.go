@@ -211,6 +211,8 @@ type WoWEncounter struct {
 	Remaining     []guid.GUID       `json:"remaining,omitempty"`
 	StartTime     time.Time         `json:"start_time"`
 	EndTime       time.Time         `json:"end_time"`
+	InvalidatedAt *time.Time        `json:"invalidated_at,omitempty"`
+	InvalidReason string            `json:"invalid_reason,omitempty"`
 	RankingWindow *WoWRankingWindow `json:"ranking_window,omitempty"`
 }
 

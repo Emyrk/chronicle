@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -671,6 +672,78 @@ func (a *API) AdminClearLogInvalidation(w http.ResponseWriter, r *http.Request) 
 	}
 
 	httpapi.Write(ctx, w, http.StatusOK, resp)
+}
+
+func (a *API) AdminInvalidateInstance(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	var req chroniclesdk.AdminInvalidateInstanceRequest
+	if !httpapi.Read(ctx, w, r, &req) {
+		return
+	}
+	req.Reason = strings.TrimSpace(req.Reason)
+	if req.Reason == "" {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalidation reason is required"})
+		return
+	}
+	if err := a.Chronicle.InvalidateWoWLogInstance(ctx, req.LogGroupID, req.InstanceID, req.Reason); err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	a.enqueueRankingsSummaryRefresh(ctx, "instance invalidation")
+	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.Response{Message: "Instance invalidated"})
+}
+
+func (a *API) AdminClearInstanceInvalidation(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	var req chroniclesdk.AdminInstanceRequest
+	if !httpapi.Read(ctx, w, r, &req) {
+		return
+	}
+	if err := a.Chronicle.ClearWoWLogInstanceInvalidation(ctx, req.LogGroupID, req.InstanceID); err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	a.enqueueRankingsSummaryRefresh(ctx, "clearing instance invalidation")
+	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.Response{Message: "Instance marked valid"})
+}
+
+func (a *API) AdminInvalidateEncounter(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	var req chroniclesdk.AdminInvalidateEncounterRequest
+	if !httpapi.Read(ctx, w, r, &req) {
+		return
+	}
+	req.Reason = strings.TrimSpace(req.Reason)
+	if req.Reason == "" {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalidation reason is required"})
+		return
+	}
+	if err := a.Chronicle.InvalidateWoWLogEncounter(ctx, req.LogGroupID, req.InstanceID, req.EncounterID, req.Reason); err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	a.enqueueRankingsSummaryRefresh(ctx, "encounter invalidation")
+	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.Response{Message: "Encounter invalidated"})
+}
+
+func (a *API) AdminClearEncounterInvalidation(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	var req chroniclesdk.AdminEncounterRequest
+	if !httpapi.Read(ctx, w, r, &req) {
+		return
+	}
+	if err := a.Chronicle.ClearWoWLogEncounterInvalidation(ctx, req.LogGroupID, req.InstanceID, req.EncounterID); err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	a.enqueueRankingsSummaryRefresh(ctx, "clearing encounter invalidation")
+	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.Response{Message: "Encounter marked valid"})
+}
+
+func (a *API) enqueueRankingsSummaryRefresh(ctx context.Context, action string) {
+	if _, err := servicerankings.EnqueueRankingsSummaryRefreshAllTenants(ctx, database.New(a.Opts.Pool), a.Queues); err != nil {
+		slog.WarnContext(ctx, "failed to enqueue rankings summary refresh after "+action, slog.Any("error", err))
+	}
 }
 
 func (a *API) AdminBulkDeleteLogs(w http.ResponseWriter, r *http.Request) {

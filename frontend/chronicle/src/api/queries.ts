@@ -1739,6 +1739,51 @@ export function useAdminInvalidateLogs() {
   });
 }
 
+export function useAdminInvalidateInstance() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ logGroupId, instanceId, reason }: { logGroupId: string; instanceId: string; reason: string }) => {
+      const response = await fetch("/api/v1/admin/instances/invalidate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ log_group_id: logGroupId, instance_id: instanceId, reason }),
+      });
+      if (!response.ok) throw new Error("Failed to invalidate instance");
+      return response.json() as Promise<{ message: string }>;
+    },
+    onSuccess: (_data, { logGroupId, instanceId }) => {
+      queryClient.invalidateQueries({ queryKey: ["logGroup", logGroupId] });
+      queryClient.invalidateQueries({ queryKey: ["instance"] });
+      queryClient.invalidateQueries({ queryKey: ["instance-parses", instanceId] });
+      queryClient.invalidateQueries({ queryKey: ["instance-speedrun", instanceId] });
+      queryClient.invalidateQueries({ queryKey: ["instance-ranking-records", instanceId] });
+      queryClient.invalidateQueries({ queryKey: ["rankings"] });
+    },
+  });
+}
+
+export function useAdminInvalidateEncounter() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ logGroupId, instanceId, encounterId, reason }: { logGroupId: string; instanceId: string; encounterId: string; reason: string }) => {
+      const response = await fetch("/api/v1/admin/encounters/invalidate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ log_group_id: logGroupId, instance_id: instanceId, encounter_id: encounterId, reason }),
+      });
+      if (!response.ok) throw new Error("Failed to invalidate encounter");
+      return response.json() as Promise<{ message: string }>;
+    },
+    onSuccess: (_data, { instanceId }) => {
+      queryClient.invalidateQueries({ queryKey: ["instance"] });
+      queryClient.invalidateQueries({ queryKey: ["instance-parses", instanceId] });
+      queryClient.invalidateQueries({ queryKey: ["instance-speedrun", instanceId] });
+      queryClient.invalidateQueries({ queryKey: ["instance-ranking-records", instanceId] });
+      queryClient.invalidateQueries({ queryKey: ["rankings"] });
+    },
+  });
+}
+
 export function useAdminClearLogInvalidation() {
   const queryClient = useQueryClient();
 
@@ -1766,6 +1811,51 @@ export function useAdminClearLogInvalidation() {
         queryClient.invalidateQueries({ queryKey: ["instance-speedrun", instanceId] });
         queryClient.invalidateQueries({ queryKey: ["instance-ranking-records", instanceId] });
       }
+      queryClient.invalidateQueries({ queryKey: ["rankings"] });
+    },
+  });
+}
+
+export function useAdminClearInstanceInvalidation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ logGroupId, instanceId }: { logGroupId: string; instanceId: string }) => {
+      const response = await fetch("/api/v1/admin/instances/clear-invalidation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ log_group_id: logGroupId, instance_id: instanceId }),
+      });
+      if (!response.ok) throw new Error("Failed to mark instance valid");
+      return response.json() as Promise<{ message: string }>;
+    },
+    onSuccess: (_data, { logGroupId, instanceId }) => {
+      queryClient.invalidateQueries({ queryKey: ["logGroup", logGroupId] });
+      queryClient.invalidateQueries({ queryKey: ["instance"] });
+      queryClient.invalidateQueries({ queryKey: ["instance-parses", instanceId] });
+      queryClient.invalidateQueries({ queryKey: ["instance-speedrun", instanceId] });
+      queryClient.invalidateQueries({ queryKey: ["instance-ranking-records", instanceId] });
+      queryClient.invalidateQueries({ queryKey: ["rankings"] });
+    },
+  });
+}
+
+export function useAdminClearEncounterInvalidation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ logGroupId, instanceId, encounterId }: { logGroupId: string; instanceId: string; encounterId: string }) => {
+      const response = await fetch("/api/v1/admin/encounters/clear-invalidation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ log_group_id: logGroupId, instance_id: instanceId, encounter_id: encounterId }),
+      });
+      if (!response.ok) throw new Error("Failed to mark encounter valid");
+      return response.json() as Promise<{ message: string }>;
+    },
+    onSuccess: (_data, { instanceId }) => {
+      queryClient.invalidateQueries({ queryKey: ["instance"] });
+      queryClient.invalidateQueries({ queryKey: ["instance-parses", instanceId] });
+      queryClient.invalidateQueries({ queryKey: ["instance-speedrun", instanceId] });
+      queryClient.invalidateQueries({ queryKey: ["instance-ranking-records", instanceId] });
       queryClient.invalidateQueries({ queryKey: ["rankings"] });
     },
   });

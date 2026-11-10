@@ -7244,6 +7244,8 @@ export interface WoWEncounter {
     readonly remaining?: readonly GUID[];
     readonly start_time: string;
     readonly end_time: string;
+    readonly invalidated_at?: string;
+    readonly invalid_reason?: string;
     readonly ranking_window?: WoWRankingWindow;
 }
 
