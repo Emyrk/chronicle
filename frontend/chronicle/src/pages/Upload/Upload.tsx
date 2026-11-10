@@ -19,6 +19,8 @@ import { InstructionsSuperwow } from "./InstructionsSuperwow";
 import { InstructionsWotlk } from "./InstructionsWotlk";
 import { InstructionsChronicleCompanion } from "./InstructionsChronicleCompanion";
 import { InstructionsForever } from "./InstructionsForever";
+import type { RawLogCleanup } from "@/api/typesGenerated";
+import { RawLogCleanupSummary } from "./RawLogCleanupSummary";
 import { MultiUpload } from "./MultiUpload";
 import { VisibilityPicker } from "./VisibilityPicker";
 
@@ -125,8 +127,8 @@ export interface UploadViewProps {
   sidekickStorage: File | null;
   uploading: boolean;
   uploadProgress: number;
-  error: { message: string; call_to_action?: string; detail?: string; link?: string; link_text?: string } | null;
-  success: { message: string; logId: string } | null;
+  error: { message: string; call_to_action?: string; detail?: string; link?: string; link_text?: string; cleanup?: RawLogCleanup } | null;
+  success: { message: string; logId: string; cleanup?: RawLogCleanup } | null;
   onFileDrop: (file: File, type: "combat" | "raw" | "sidekick") => void;
   onUpload: () => void;
   useV2Upload: boolean;
@@ -245,6 +247,7 @@ export function UploadView({
               <h2 className="font-semibold text-lg">Upload Successful</h2>
               <p className="text-muted-foreground mt-1">{success.message}</p>
             </div>
+            <RawLogCleanupSummary cleanup={success.cleanup} />
             <Link to={`/logs/${success.logId}`}>
               <Button>
                 View Upload
@@ -260,6 +263,7 @@ export function UploadView({
               <AlertTitle>Upload Failed</AlertTitle>
               <AlertDescription>
                 {error.message}
+                <RawLogCleanupSummary cleanup={error.cleanup} />
                 {error.call_to_action && (
                   <p className="mt-2 text-sm">{error.call_to_action}</p>
                 )}
@@ -603,8 +607,8 @@ export function Upload() {
   const [sidekickStorage, setSidekickStorage] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [error, setError] = useState<{ message: string; call_to_action?: string; detail?: string; link?: string; link_text?: string } | null>(null);
-  const [success, setSuccess] = useState<{ message: string; logId: string } | null>(null);
+  const [error, setError] = useState<{ message: string; call_to_action?: string; detail?: string; link?: string; link_text?: string; cleanup?: RawLogCleanup } | null>(null);
+  const [success, setSuccess] = useState<{ message: string; logId: string; cleanup?: RawLogCleanup } | null>(null);
   const [searchParams] = useSearchParams();
   const isMultiple = searchParams.get("multiple") === "true";
   const showLegacy = searchParams.get("debug") === "true";
@@ -697,6 +701,7 @@ export function Upload() {
             setSuccess({
               message: "Your logs are being processed.",
               logId: data.log_id,
+              cleanup: data.cleanup,
             });
           } catch {
             setSuccess({ message: "Upload successful", logId: "" });
@@ -707,6 +712,7 @@ export function Upload() {
             // Special handling for 403 - missing role
             if (xhr.status === 403) {
               setError({
+                cleanup: data.cleanup,
                 message: "You don't have permission to upload logs.",
                 call_to_action:
                   "Ask for the alpha role in Discord to get upload access.",
@@ -720,6 +726,7 @@ export function Upload() {
                 detail: data.detail,
                 link: data.link,
                 link_text: data.link_text,
+                cleanup: data.cleanup,
               });
             }
           } catch {
