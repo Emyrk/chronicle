@@ -197,7 +197,7 @@ export function MapLegend() {
           Recorded floor telemetry, geometry and player positions can help estimate the floor, but overlapping levels may remain ambiguous.
         </p>
         <p className="text-sm text-muted-foreground">
-          If the map says &quot;Floor uncertain · choose a floor&quot;, use the floor picker above the map to choose the artwork that fits.
+          If the map says &quot;Floor uncertain · choose a floor&quot;, use the floating floor picker at the bottom-left of the map, beside the camera controls, to choose the artwork that fits.
           Manual choices are remembered per anchor encounter, so returning to that encounter restores your choice.
           Choose Auto to clear the manual choice and restore the computed estimate. The same picker is available in World settings,
           and remains available when the selected floor has no artwork.

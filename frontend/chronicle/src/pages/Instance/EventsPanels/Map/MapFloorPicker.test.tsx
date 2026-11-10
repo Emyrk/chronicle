@@ -27,6 +27,18 @@ describe("MapFloorPicker", () => {
     expect(markup).toContain('value="1"');
   });
 
+  it("keeps the floating variant compact, interactive and accessible", () => {
+    const markup = renderToStaticMarkup(<MapFloorPicker {...defaults} compact uncertain onChange={vi.fn()} />);
+    expect(markup).toContain("inline-flex max-w-full");
+    expect(markup).toContain("data-map-controls");
+    expect(markup).toContain("Floor uncertain · choose a floor");
+    expect(markup).toContain('aria-label="Map floor: Floor uncertain · choose a floor"');
+    expect(markup).toContain("Auto (Floor 2)");
+    const certain = renderToStaticMarkup(<MapFloorPicker {...defaults} compact onChange={vi.fn()} />);
+    expect(certain).toContain('class="sr-only">Floor</span>');
+    expect(certain).toContain('aria-label="Map floor"');
+  });
+
   it("does not add a redundant picker for a certain single-floor instance", () => {
     expect(renderToStaticMarkup(<MapFloorPicker {...defaults} floors={[1]} onChange={vi.fn()} />)).toBe("");
   });

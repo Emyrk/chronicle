@@ -586,11 +586,6 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {artwork.kind === "instance" && (
-        <div className="px-3 py-1" data-map-controls>
-          <MapFloorPicker floors={artwork.instance.floors.map(floor => floor.floor)} value={selectedFloorNumber} manualValue={manualFloorNumber} uncertain={floorUncertain} onChange={setFloorNumber} />
-        </div>
-      )}
       {!mini && <div className="flex items-center justify-between gap-2 px-3 py-1.5 text-[10px] text-muted-foreground">
         <div className="min-w-0 truncate">
           <span className="font-semibold text-foreground">{mapName}</span>
@@ -709,29 +704,19 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
           ))}
           </div>
         </div>
-        {mini && (
-          <div className="pointer-events-none absolute bottom-1.5 left-1.5 z-30 rounded-sm bg-black/70 px-1.5 py-0.5 text-[9px] text-white/65">
-            Ctrl+scroll to zoom, click and drag to pan
+        <div data-map-controls className="absolute bottom-2 left-2 z-30 flex max-w-[calc(100%-1rem)] flex-wrap items-end gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-white/10 bg-black/80 px-2 py-1 text-[9px] text-white/65 shadow-lg backdrop-blur-sm">
+            <span>Ctrl + scroll to zoom · drag to pan</span>
+            {!mini && <div className="ml-1 flex overflow-hidden rounded border border-white/15 text-white/85">
+              <button type="button" aria-label="Zoom out" onClick={() => changeZoom(0.8)} className="px-2 py-0.5 hover:bg-white/10">−</button>
+              <button type="button" aria-label="Zoom in" onClick={() => changeZoom(1.25)} className="border-l border-white/15 px-2 py-0.5 hover:bg-white/10">+</button>
+            </div>}
+            {!mini && userCamera !== null && (
+              <button type="button" onClick={() => setUserCamera(null)} className="rounded border border-white/15 px-1.5 py-0.5 font-medium text-white/85 hover:bg-white/10">Reset</button>
+            )}
           </div>
-        )}
-        {!mini && <div data-map-controls className="absolute bottom-2 left-2 z-30 flex items-center gap-1.5 rounded-md border border-white/10 bg-black/80 px-2 py-1 text-[9px] text-white/65 shadow-lg backdrop-blur-sm">
-          <span>Ctrl + scroll to zoom</span>
-          <span className="text-white/25">·</span>
-          <span>drag to pan</span>
-          <div className="ml-1 flex overflow-hidden rounded border border-white/15 text-white/85">
-            <button type="button" aria-label="Zoom out" onClick={() => changeZoom(0.8)} className="px-2 py-0.5 hover:bg-white/10">−</button>
-            <button type="button" aria-label="Zoom in" onClick={() => changeZoom(1.25)} className="border-l border-white/15 px-2 py-0.5 hover:bg-white/10">+</button>
-          </div>
-          {userCamera !== null && (
-            <button
-              type="button"
-              onClick={() => setUserCamera(null)}
-              className="rounded border border-white/15 px-1.5 py-0.5 font-medium text-white/85 hover:bg-white/10"
-            >
-              Reset
-            </button>
-          )}
-        </div>}
+          {artwork.kind === "instance" && <MapFloorPicker compact floors={artwork.instance.floors.map(floor => floor.floor)} value={selectedFloorNumber} manualValue={manualFloorNumber} uncertain={floorUncertain} onChange={setFloorNumber} />}
+        </div>
         {!mini && routes.length > 0 && <RouteLegend
           routes={routes}
           onHoverEncounter={setHoveredEncounterId}

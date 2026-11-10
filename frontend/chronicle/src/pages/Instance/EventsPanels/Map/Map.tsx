@@ -797,8 +797,11 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
     </div>
   );
 
+  const floorControls = (ready.floors.length > 1 || ready.floorUncertain) ? (
+    <MapFloorPicker compact floors={ready.floors} value={ready.selectedFloorNumber} manualValue={ready.manualFloorNumber} uncertain={ready.floorUncertain} onChange={ready.setFloorNumber} />
+  ) : null;
   const framingControls = (
-    <div className="absolute bottom-2 left-2 z-40 flex items-center gap-1">
+    <div data-map-controls className="absolute bottom-2 left-2 z-40 flex max-w-[calc(100%-1rem)] flex-wrap items-end gap-1">
       {/* Mini map: play/pause and speed lead the row (the preview's own clock, or the page's Replay once it is on). */}
       {mini && (
         <>
@@ -857,6 +860,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
         <Maximize className="h-3 w-3" />
         Reset
       </button>
+      {floorControls}
     </div>
   );
 
@@ -877,11 +881,6 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
       )}
     >
       {!mobile && (props.headerSlot ? createPortal(headerControls, props.headerSlot) : <div className="flex justify-end px-1">{headerControls}</div>)}
-      {(ready.floors.length > 1 || ready.floorUncertain) && (
-        <div className="shrink-0 px-2 py-1">
-          <MapFloorPicker floors={ready.floors} value={ready.selectedFloorNumber} manualValue={ready.manualFloorNumber} uncertain={ready.floorUncertain} onChange={ready.setFloorNumber} />
-        </div>
-      )}
       {/* The card has no padding (hoverHeader): the full map keeps a thin window frame a hair inside it, the mini map runs to the edges. */}
       <div className={cn("group/map relative min-h-0 flex-1 overflow-hidden bg-black/70", !mini && !mobile && !immersive && "rounded-sm border border-white/15")}>
         {mobile && !mobileWorldOpen ? (
@@ -990,6 +989,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
           />
         )}
         {!mobile && framingControls}
+        {mobile && floorControls && <div className="absolute bottom-2 left-2 z-40 max-w-[calc(100%-1rem)]">{floorControls}</div>}
         {!mobile && mini && <ExpandMapButton context={props.context} overlay />}
         {!mobile && previewOn && (
           <>
