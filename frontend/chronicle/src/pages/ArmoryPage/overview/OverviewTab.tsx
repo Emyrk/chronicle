@@ -7,24 +7,14 @@ import {
   useSupportedInstanceBossCounts,
   useSupportedInstanceProgressionBosses,
 } from "@/api/queries";
-import { useCharacterEncounters, useCharacterParses } from "@/api/rankingsQueries";
-import {
-  averageScoreByInstance,
-  bestScoreByInstance,
-  filterParsesBySpec,
-  summarizeProgress,
-  summarizeRaids,
-} from "../parseAggregation";
-import {
-  DEFAULT_PERFORMANCE_COMPARISON_STATE,
-  serializePerformanceComparisonState,
-} from "./performanceComparisonState";
-import type { ParseMetric } from "./util";
+import { useCharacterEncounters } from "@/api/rankingsQueries";
+import { summarizeProgress } from "../parseAggregation";
+import type { CareerRatings } from "./useCareerRatings";
 import { useRecentActivity } from "./useRecentActivity";
 import { TalentsCard } from "./TalentsCard";
 import { GearStripCard } from "./GearStripCard";
 import { RaidCalendarCard } from "./RaidCalendarCard";
-import { RaidScoresCard } from "./RaidScoresCard";
+import { RaidRatingsCard } from "./RaidRatingsCard";
 import { RecentNightsCard } from "./RecentNightsCard";
 import { ProgressionCard } from "./ProgressionCard";
 import { FirstKillsCard } from "./FirstKillsCard";
@@ -34,19 +24,13 @@ import { LootCard } from "./LootCard";
 interface OverviewTabProps {
   player: ArmoryPlayer;
   onOpenTab: (tab: "gear" | "talents" | "activity") => void;
-  metric: ParseMetric;
-  selectedSpec: string | null;
-  specs: string[];
-  onSpecChange: (spec: string | null) => void;
+  ratings: CareerRatings;
 }
 
 export function OverviewTab({
   player,
   onOpenTab,
-  metric,
-  selectedSpec,
-  specs,
-  onSpecChange,
+  ratings,
 }: OverviewTabProps) {
   const [searchParams] = useSearchParams();
   const isPerformance = searchParams.get("mode") === "performance";
@@ -58,29 +42,6 @@ export function OverviewTab({
     query: activityQuery,
     stats: activityStats,
   } = useRecentActivity(player);
-
-  // Performance mode: parse scores.
-  const parsesQuery = useCharacterParses(player.id, metric);
-  const parses = useMemo(() => parsesQuery.data?.parses ?? [], [parsesQuery.data]);
-  const raidScoreParses = useMemo(
-    () => filterParsesBySpec(parses, selectedSpec),
-    [parses, selectedSpec],
-  );
-  const raids = useMemo(() => summarizeRaids(raidScoreParses), [raidScoreParses]);
-  const nightScores = useMemo(
-    () =>
-      isPerformance
-        ? bestScoreByInstance(parses)
-        : new Map<string, number>(),
-    [parses, isPerformance],
-  );
-  const nightAverages = useMemo(
-    () =>
-      isPerformance
-        ? averageScoreByInstance(parses)
-        : new Map<string, number>(),
-    [parses, isPerformance],
-  );
 
   // Journey mode: participation, progression, and loot.
   const encountersQuery = useCharacterEncounters(player.id, player.realm_id, !isPerformance);
@@ -104,13 +65,6 @@ export function OverviewTab({
     return map;
   }, [lootQuery.data]);
 
-  const performanceHistoryPath = `/performance-history?${serializePerformanceComparisonState({
-    ...DEFAULT_PERFORMANCE_COMPARISON_STATE,
-    realmName: player.realm_name,
-    players: [{ id: player.id, realmName: player.realm_name, spec: null, subSpec: null, hidden: false }],
-    metric,
-  }).toString()}`;
-
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
       <div className="lg:col-span-12">
@@ -127,7 +81,6 @@ export function OverviewTab({
       <div className="lg:col-span-7">
         <RaidCalendarCard
           instances={activityQuery.data?.instances}
-          nightScores={nightScores}
           start={activityStart}
           stats={activityStats}
           onOpenActivity={() => onOpenTab("activity")}
@@ -137,22 +90,16 @@ export function OverviewTab({
         {isPerformance ? (
         <>
           <div className="lg:col-span-12">
-            <RaidScoresCard
-              raids={raids}
-              metric={metric}
-              performanceHistoryPath={performanceHistoryPath}
-              bossCounts={bossCounts}
-              playerClass={player.class}
-              specs={specs}
-              selectedSpec={selectedSpec}
-              onSpecChange={onSpecChange}
-              isLoading={parsesQuery.isLoading}
+            <RaidRatingsCard
+              raids={ratings.raids}
+              metric={ratings.metric}
+              isLoading={ratings.isLoading}
+              emptyMessage={ratings.emptyMessage}
             />
           </div>
           <div className="lg:col-span-12">
             <RecentNightsCard
               instances={activityQuery.data?.instances}
-              nightScores={nightAverages}
               onOpenActivity={() => onOpenTab("activity")}
             />
           </div>
@@ -182,7 +129,6 @@ export function OverviewTab({
           <div className="lg:col-span-7">
             <RecentNightsCard
               instances={activityQuery.data?.instances}
-              nightScores={nightScores}
               lootByInstance={lootByInstance}
               onOpenActivity={() => onOpenTab("activity")}
             />

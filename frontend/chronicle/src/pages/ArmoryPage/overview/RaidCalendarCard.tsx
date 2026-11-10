@@ -6,13 +6,10 @@ import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle }
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { formatDuration } from "@/pages/Logs/utils/calendarUtils";
 import { groupDuplicateInstances } from "@/utils/groupDuplicates";
-import { parseHexColor } from "@/pages/Instance/parseColors";
 import { ACTIVITY_WEEKS, type ActivityStats } from "./util";
 
 interface RaidCalendarCardProps {
   instances?: readonly RecentInstance[];
-  /** Best parse display score per instance_id, for cell coloring. */
-  nightScores: Map<string, number>;
   /** Start of the heatmap window (start of a week). */
   start: Date;
   stats: ActivityStats;
@@ -22,11 +19,10 @@ interface RaidCalendarCardProps {
 interface DayCell {
   date: Date;
   raids: RecentInstance[];
-  bestScore?: number;
 }
 
 /** GitHub-style heatmap of the last 12 weeks of raid nights. */
-export function RaidCalendarCard({ instances, nightScores, start, stats, onOpenActivity }: RaidCalendarCardProps) {
+export function RaidCalendarCard({ instances, start, stats, onOpenActivity }: RaidCalendarCardProps) {
   const weeks = useMemo(() => {
     const cells = new Map<string, DayCell>();
     const now = new Date();
@@ -39,10 +35,6 @@ export function RaidCalendarCard({ instances, nightScores, start, stats, onOpenA
       const cell = cells.get(format(date, "yyyy-MM-dd"));
       if (!cell) continue;
       cell.raids.push(inst);
-      const score = nightScores.get(inst.id);
-      if (score !== undefined && score > (cell.bestScore ?? -1)) {
-        cell.bestScore = score;
-      }
     }
 
     const weeks: DayCell[][] = Array.from({ length: ACTIVITY_WEEKS }, () => []);
@@ -53,7 +45,7 @@ export function RaidCalendarCard({ instances, nightScores, start, stats, onOpenA
       }
     }
     return weeks;
-  }, [instances, nightScores, start]);
+  }, [instances, start]);
 
   return (
     <Card className="gap-0 py-4">
@@ -98,7 +90,6 @@ export function RaidCalendarCard({ instances, nightScores, start, stats, onOpenA
                   <RaidedCell
                     key={d}
                     cell={cell}
-                    nightScores={nightScores}
                     onOpenActivity={onOpenActivity}
                   />
                 );
@@ -120,40 +111,29 @@ export function RaidCalendarCard({ instances, nightScores, start, stats, onOpenA
 }
 
 /**
- * A raid-night cell: hover shows the night's raids and best parse; click
+ * A raid-night cell: hover shows the night's raids; click
  * opens the log (single raid) or the full calendar (multiple raids).
  */
 function RaidedCell({
   cell,
-  nightScores,
   onOpenActivity,
 }: {
   cell: DayCell;
-  nightScores: Map<string, number>;
   onOpenActivity: () => void;
 }) {
   // Group duplicate uploads: a night with one raid uploaded twice still
-  // links straight to a log — preferring the upload the score came from.
+  // links straight to a log.
   const groups = groupDuplicateInstances([...cell.raids]);
-  const single =
-    groups.length === 1
-      ? (groups[0].find((g) => nightScores.has(g.id)) ?? groups[0][0])
-      : undefined;
+  const single = groups.length === 1 ? groups[0][0] : undefined;
   const cellClass =
     "block size-4 cursor-pointer rounded-xs transition-transform hover:scale-125 hover:ring-1 hover:ring-foreground/60";
-  const cellStyle = {
-    background:
-      cell.bestScore !== undefined
-        ? parseHexColor(cell.bestScore)
-        : "var(--color-green-400)",
-  };
+  const cellStyle = { background: "var(--color-green-400)" };
 
   const content = (
     <TooltipContent className="pointer-events-none" sideOffset={4}>
       <div className="mb-1 font-semibold">{format(cell.date, "EEE, MMM d")}</div>
       {groups.map((g) => {
-        const r = g.find((x) => nightScores.has(x.id)) ?? g[0];
-        const score = nightScores.get(r.id);
+        const r = g[0];
         const duration = formatDuration(r.duration_ms);
         return (
           <div key={r.id} className="flex items-baseline justify-between gap-4">
@@ -161,7 +141,6 @@ function RaidedCell({
               {r.name} · {r.boss_kills}/{r.boss_count}
               {duration ? ` · ${duration}` : ""}
             </span>
-            {score !== undefined && <span className="font-mono font-bold">{score}</span>}
           </div>
         );
       })}

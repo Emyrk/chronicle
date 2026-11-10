@@ -9,7 +9,6 @@ import { formatDuration } from "@/pages/Logs/utils/calendarUtils";
 import { groupDuplicateInstances } from "@/utils/groupDuplicates";
 import { iconUrl } from "@/config/iconUrl";
 import { useIconBaseUrl } from "@/hooks/useDatasetId";
-import { parseColor } from "@/pages/Instance/parseColors";
 import { getQualityBorderClass } from "../types";
 import { CursorTooltip, type CursorPos } from "./CursorTooltip";
 
@@ -18,15 +17,13 @@ const MAX_LOOT_ICONS = 4;
 
 interface RecentNightsCardProps {
   instances?: readonly RecentInstance[];
-  /** Average parse display score per instance_id. */
-  nightScores: Map<string, number>;
   /** Loot received per instance_id, for per-night loot icons. */
   lootByInstance?: Map<string, ArmoryLootItem[]>;
   onOpenActivity: () => void;
 }
 
-/** The last few raid nights, newest first, with the night's best parse. */
-export function RecentNightsCard({ instances, nightScores, lootByInstance, onOpenActivity }: RecentNightsCardProps) {
+/** The last few raid nights, newest first. */
+export function RecentNightsCard({ instances, lootByInstance, onOpenActivity }: RecentNightsCardProps) {
 
   const nights = useMemo(() => {
     const groups = groupDuplicateInstances([...(instances ?? [])]);
@@ -58,13 +55,9 @@ export function RecentNightsCard({ instances, nightScores, lootByInstance, onOpe
       </CardHeader>
       <CardContent className="flex flex-col">
         {nights.map((group) => {
-          // Among duplicate uploads of the night, prefer the one the parse
-          // scores came from, so the shown average and the linked log match.
-          const scored = group.find((g) => nightScores.has(g.id));
-          const inst = scored ?? group[0];
+          const inst = group[0];
           const date = new Date(inst.first_encounter_time);
           const duration = formatDuration(inst.duration_ms);
-          const avg = scored ? nightScores.get(scored.id) : undefined;
           const url = inst.slug ? `/instances/${inst.slug}` : `/instances/${inst.id}`;
           const loot = group
             .flatMap((g) => lootByInstance?.get(g.id) ?? [])
@@ -92,12 +85,6 @@ export function RecentNightsCard({ instances, nightScores, lootByInstance, onOpe
                   {loot.map((l, i) => (
                     <NightLootIcon key={`${l.item_id}-${i}`} item={l} />
                   ))}
-                </div>
-              )}
-              {avg !== undefined && (
-                <div className="shrink-0 text-right">
-                  <div className={`font-mono text-sm font-bold ${parseColor(avg)}`}>{avg}</div>
-                  <div className="text-xs text-muted-foreground">avg</div>
                 </div>
               )}
             </Link>
