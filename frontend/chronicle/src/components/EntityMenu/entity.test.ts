@@ -1,10 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { entityAttributes, parseEntity, performanceHistoryUrl, type EntityRef } from "./entity";
+import { classEntity, entityAttributes, parseEntity, performanceHistoryUrl, specEntity, type EntityRef } from "./entity";
 
 describe("entity attributes", () => {
   it("round-trips through the data attribute", () => {
     const entity: EntityRef = { kind: "character", realm: "Nordanaar", guid: "0x02", name: "Afflicted", className: "Warlock" };
     expect(parseEntity(entityAttributes(entity)["data-entity"])).toEqual(entity);
+  });
+
+  it("round-trips class and spec summaries", () => {
+    const stats = [{ label: "Typical", value: "1,234/s" }];
+    const playerClass = classEntity("MAGE", "Mage", stats);
+    const spec = specEntity("MAGE", "Mage", "Fire", undefined, stats);
+
+    expect(parseEntity(entityAttributes(playerClass)["data-entity"])).toEqual(playerClass);
+    expect(parseEntity(entityAttributes(spec)["data-entity"])).toEqual(spec);
+    expect(spec.name).toBe("Fire Mage");
   });
 
   it("rejects values that aren't entities", () => {

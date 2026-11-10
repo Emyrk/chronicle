@@ -601,6 +601,12 @@
 [data-entity-kind="guild"] {
   --entity-color: var(--color-amber-400);
 }
+[data-entity-kind="class"] {
+  --entity-color: var(--color-emerald-400);
+}
+[data-entity-kind="spec"] {
+  --entity-color: var(--color-teal-400);
+}
 [data-entity-kind="encounter"] {
   --entity-color: var(--color-rose-400);
 }

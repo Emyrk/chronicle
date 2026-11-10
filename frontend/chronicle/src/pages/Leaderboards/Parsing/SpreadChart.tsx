@@ -1,6 +1,7 @@
 import { useMemo } from "react"
 import { EyeOff } from "lucide-react"
 import type { ParseScoreSpread } from "@/api/typesGenerated"
+import { classEntity, entityAttributes, specEntity, type EntityStat } from "@/components/EntityMenu/entity"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/Tooltip/tooltip"
 import { cn } from "@/lib/utils"
 import { parseHexColor } from "@/pages/Instance/parseColors"
@@ -42,6 +43,25 @@ export function SpreadChart({
 }) {
   const scale = useMemo(() => spreadScale(spreads), [spreads])
 
+  const classStats = useMemo(() => {
+    const summaries = new Map<string, { cohorts: number; kills: number }>()
+    for (const spread of spreads) {
+      const summary = summaries.get(spread.player_class) ?? { cohorts: 0, kills: 0 }
+      summary.cohorts += 1
+      summary.kills += spread.sample_size
+      summaries.set(spread.player_class, summary)
+    }
+    return new Map(
+      [...summaries].map(([playerClass, summary]) => [
+        playerClass,
+        [
+          { label: "Specs", value: summary.cohorts.toLocaleString() },
+          { label: "Kills", value: summary.kills.toLocaleString() },
+        ] satisfies EntityStat[],
+      ]),
+    )
+  }, [spreads])
+
   return (
     <TooltipProvider>
       <div className="space-y-0.5">
@@ -64,6 +84,7 @@ export function SpreadChart({
           <SpreadRow
             key={spreadRowKey(spread)}
             spread={spread}
+            classStats={classStats.get(spread.player_class) ?? []}
             scale={scale}
             metricLabel={metricLabel}
             onClick={() => onRowClick(spread)}
@@ -124,12 +145,14 @@ function TrailingColumnSpacers() {
 
 function SpreadRow({
   spread,
+  classStats,
   scale,
   metricLabel,
   onClick,
   onHide,
 }: {
   spread: ParseScoreSpread
+  classStats: EntityStat[]
   scale: SpreadScale
   metricLabel: string
   onClick: () => void
@@ -145,24 +168,39 @@ function SpreadRow({
     const cutoff = spreadCutoff(spread, floor)
     return cutoff === null ? "—" : formatMetric(cutoff)
   }
+  const specStats: EntityStat[] = [
+    { label: "Best", value: `${formatMetric(spread.max)} ${metricLabel}` },
+    ...(scored ? [{ label: "95+", value: `${value(95)} ${metricLabel}` }] : []),
+    { label: "Typical", value: `${formatMetric(spread.median)} ${metricLabel}` },
+    { label: "Kills", value: spread.sample_size.toLocaleString() },
+  ]
 
   return (
     <div className="group flex items-center gap-3 rounded-md px-1 py-1 transition-colors hover:bg-muted/20">
       <Tooltip>
         <TooltipTrigger asChild>
           <button
+            {...entityAttributes(specEntity(
+              spread.player_class,
+              className,
+              spread.player_spec || "Unknown",
+              spread.player_sub_spec || undefined,
+              specStats,
+            ))}
             type="button"
             onClick={onClick}
             className="flex min-w-0 flex-1 items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 rounded-sm"
             aria-label={`${className} ${specLabel}: open spec details`}
           >
             <span className="flex w-24 shrink-0 items-center gap-1.5 text-xs sm:w-36">
-              <img
-                src={`/c/icons/class_${spread.player_class.toLowerCase()}.png`}
-                alt=""
-                className="h-4 w-4 shrink-0 rounded-sm"
-                onError={(e) => { e.currentTarget.src = "/c/icons/class_unknown.png" }}
-              />
+              <span {...entityAttributes(classEntity(spread.player_class, className, classStats))}>
+                <img
+                  src={`/c/icons/class_${spread.player_class.toLowerCase()}.png`}
+                  alt=""
+                  className="h-4 w-4 shrink-0 rounded-sm"
+                  onError={(e) => { e.currentTarget.src = "/c/icons/class_unknown.png" }}
+                />
+              </span>
               <span className="truncate font-medium" style={{ color }}>{specLabel}</span>
             </span>
 

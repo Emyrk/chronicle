@@ -110,6 +110,7 @@ function globalActions(entity: EntityRef): EntityAction[] {
       copy,
     ];
   }
+  if (entity.kind === "class" || entity.kind === "spec") return [copy];
   return [
     { id: "guild-page", label: "Guild page", icon: Shield, href: guildPageUrl(entity) },
     { id: "guild-history", label: "Clear-time history", icon: Timer, href: guildHistoryUrl(entity) },
@@ -369,7 +370,14 @@ export function EntityActionScope({ actions, children }: { actions: EntityAction
 }
 
 const MENU_WIDTH = 220;
-const KIND_TITLE = { character: "Player", guild: "Guild", encounter: "Encounter", raid: "Raid" } as const;
+const KIND_TITLE = {
+  character: "Player",
+  guild: "Guild",
+  class: "Class",
+  spec: "Spec",
+  encounter: "Encounter",
+  raid: "Raid",
+} as const;
 
 function EntityMenuPopover({ menu, actions, onClose }: { menu: OpenMenu; actions: EntityAction[]; onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -431,7 +439,7 @@ function EntityMenuPopover({ menu, actions, onClose }: { menu: OpenMenu; actions
       <div className="flex items-baseline gap-2 px-2 pt-1 pb-1.5">
         <span
           className="truncate text-sm font-semibold"
-          style={entity.kind === "character" && entity.className ? { color: getClassColorVar(entity.className) } : undefined}
+          style={"className" in entity && entity.className ? { color: getClassColorVar(entity.className) } : undefined}
         >
           {entity.name}
         </span>
@@ -439,6 +447,16 @@ function EntityMenuPopover({ menu, actions, onClose }: { menu: OpenMenu; actions
           {KIND_TITLE[entity.kind]}
         </span>
       </div>
+      {(entity.kind === "class" || entity.kind === "spec") && entity.stats && entity.stats.length > 0 && (
+        <dl className="mb-1 grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 border-y border-border/60 px-2 py-2 text-xs">
+          {entity.stats.map((stat) => (
+            <div key={stat.label} className="contents">
+              <dt className="text-muted-foreground">{stat.label}</dt>
+              <dd className="text-right font-mono font-medium tabular-nums text-foreground">{stat.value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
       {actions.map((action, index) => {
         const Icon = action.icon;
         const divider = index === menu.scoped.length && index > 0;

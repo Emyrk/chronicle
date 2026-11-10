@@ -4,6 +4,7 @@ import { ArrowLeft, BarChart3, CheckCircle, ChevronDown, CircleDashed, Loader2, 
 import { useSiteConfig, useSupportedInstanceProgressionBosses } from "@/api/queries"
 import { useParseScoreSpreads, useRankingsEncounters, useTimeParseSpreads } from "@/api/rankingsQueries"
 import type { ParseScoreSpread } from "@/api/typesGenerated"
+import { useEntityRaidContext, type EntityRaidContext } from "@/components/EntityMenu/entityMenuContext"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -139,6 +140,16 @@ export function ParsingInstanceView({ instanceName }: { instanceName: string }) 
       ),
     [allTimeSpreads, difficulty],
   )
+  const showingClear = view === "times" && params.get("clear") === "1"
+  const entityRaid = useMemo((): EntityRaidContext => ({
+    instanceName,
+    label: `${instanceName} parsing`,
+    difficultyName: difficulty?.difficultyName,
+    maxPlayers: difficulty?.maxPlayers,
+    bossNames: showingClear ? [] : boss ? [boss] : [],
+  }), [instanceName, difficulty?.difficultyName, difficulty?.maxPlayers, showingClear, boss])
+  useEntityRaidContext(entityRaid)
+
   // Picking a boss anywhere leaves the full-clear selection of the kill-times view.
   const selectBoss = (name: string) => update({ boss: name, clear: "" })
 

@@ -2,9 +2,24 @@
  * Things a person can Alt+click anywhere on the site. Any element that shows one carries
  * `data-entity` (see `entityAttributes`), and the entity menu reads it back.
  */
+export interface EntityStat {
+  label: string;
+  value: string;
+}
+
 export type EntityRef =
   | { kind: "character"; realm: string; guid: string; name: string; className?: string }
   | { kind: "guild"; id: string; name: string }
+  | { kind: "class"; id: string; name: string; className: string; stats?: EntityStat[] }
+  | {
+      kind: "spec";
+      id: string;
+      name: string;
+      className: string;
+      specName: string;
+      subSpecName?: string;
+      stats?: EntityStat[];
+    }
   /**
    * A boss. With a pull (from a log or a kill on the leaderboard) `id` is the log's encounter id and
    * the pull's log and time come along, so the tray can show it on any page and compare the same
@@ -61,6 +76,8 @@ export function parseEntity(value: string | null | undefined): EntityRef | null 
     const parsed = JSON.parse(value) as Partial<EntityRef> | null;
     if (parsed?.kind === "character" && parsed.realm && parsed.guid && parsed.name) return parsed as EntityRef;
     if (parsed?.kind === "guild" && parsed.id && parsed.name) return parsed as EntityRef;
+    if (parsed?.kind === "class" && parsed.id && parsed.name && parsed.className) return parsed as EntityRef;
+    if (parsed?.kind === "spec" && parsed.id && parsed.name && parsed.className && parsed.specName) return parsed as EntityRef;
     if (parsed?.kind === "encounter" && parsed.id && parsed.name && parsed.instanceName) return parsed as EntityRef;
     if (parsed?.kind === "raid" && parsed.id && parsed.name) return parsed as EntityRef;
   } catch {
@@ -79,6 +96,22 @@ export function closestEntity(target: EventTarget | null): { entity: EntityRef; 
 
 export function entityKey(entity: EntityRef): string {
   return entity.kind === "character" ? `character:${entity.realm}:${entity.guid}` : `${entity.kind}:${entity.id}`;
+}
+
+export function classEntity(className: string, displayName: string, stats?: EntityStat[]): EntityRef {
+  return { kind: "class", id: className, name: displayName, className, stats };
+}
+
+export function specEntity(
+  className: string,
+  classDisplayName: string,
+  specName: string,
+  subSpecName?: string,
+  stats?: EntityStat[],
+): EntityRef {
+  const id = `${className}:${specName}:${subSpecName ?? ""}`;
+  const specialization = subSpecName ? `${specName} (${subSpecName})` : specName;
+  return { kind: "spec", id, name: `${specialization} ${classDisplayName}`, className, specName, subSpecName, stats };
 }
 
 /** The id of a boss on its own, not a pull, e.g. a boss name on a leaderboard. */

@@ -1,4 +1,4 @@
-import { Fragment, useState, type ReactNode } from "react"
+import { Fragment, useMemo, useState, type ReactNode } from "react"
 import { useActiveTabInView } from "@/hooks/useActiveTabInView"
 import { createPortal } from "react-dom"
 import { Link } from "react-router-dom"
@@ -22,6 +22,7 @@ import { TABS, type HubTab } from "./hubTabs"
 import { HubTabHint } from "./HubTabHint"
 import { EncounterSidebar } from "./EncounterSidebar"
 import { GuildName, GuildRatingBoards, GuildRatingLeaders, MetricColumns } from "./GuildRatings"
+import { useEntityRaidContext } from "@/components/EntityMenu/entityMenuContext"
 import { entityAttributes, raidEntity } from "@/components/EntityMenu/entity"
 import { StatisticsTab, type StatisticsView } from "./StatisticsTab"
 import { SpeedrunsTab } from "./SpeedrunsTab"
@@ -29,6 +30,7 @@ import { PerformancesTab } from "./PerformancesTab"
 import { ParsingTab } from "./ParsingTab"
 import { RulesetInstanceView } from "@/pages/Leaderboards/RulesetInstanceView"
 import { FULL_CLEAR, type EncounterSelection } from "./encounterSelection"
+import { leaderboardRaidContext } from "./leaderboardRaidContext"
 import { HUB_REALMS, useHubRealm } from "./hubRealm"
 import { setMockRealm } from "@/pages/Leaderboards/Ratings/mockRealm"
 import {
@@ -141,6 +143,8 @@ export interface HubLiveData {
   /** Persist a selected encounter in the host URL without changing the Storybook path. */
   onSelection?: (selection: EncounterSelection) => void
   selection?: EncounterSelection
+  /** The published raid population selected by the page. */
+  cohort?: { difficultyName?: string; maxPlayers?: number }
   cohortPicker?: ReactNode
   realms: readonly string[]
   specsFor: (cls: string, role: HubRole) => string[]
@@ -254,6 +258,11 @@ export function LeaderboardHub({
     setClassScope({ cls: next.cls, spec: next.spec, subSpec: next.subSpec })
   }
   const bosses = live ? live.bosses : instanceBosses(instanceName)
+  const entityRaid = useMemo(
+    () => leaderboardRaidContext(instanceName, selection, bosses, live?.presetBosses ?? bosses, live?.cohort),
+    [instanceName, selection, bosses, live?.presetBosses, live?.cohort],
+  )
+  useEntityRaidContext(entityRaid)
   const [role, setRole] = useState<HubRole>(initialRole)
   const [ownTab, setOwnTab] = useState<HubTab>(initialTab)
   const tab = controlledTab ?? ownTab

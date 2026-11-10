@@ -6,6 +6,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/Tooltip/tooltip"
 import type { RankingsBoxPlotStats } from "@/api/typesGenerated"
+import { classEntity, entityAttributes, specEntity, type EntityStat } from "@/components/EntityMenu/entity"
 import { CLASS_CSS_VAR, CLASS_DISPLAY } from "./classDisplay"
 import { formatBoxPlotTick, getBoxPlotScale } from "./boxPlotScale"
 
@@ -13,20 +14,27 @@ import { formatBoxPlotTick, getBoxPlotScale } from "./boxPlotScale"
 
 interface BoxPlotRowProps {
   stats: RankingsBoxPlotStats
+  classStats: EntityStat[]
   scaleMax: number
   onClick?: () => void
   /** Fade the row so highlighted rows stand out. */
   dimmed?: boolean
 }
 
-function BoxPlotRow({ stats, scaleMax, onClick, dimmed }: BoxPlotRowProps) {
+function BoxPlotRow({ stats, classStats, scaleMax, onClick, dimmed }: BoxPlotRowProps) {
   const pct = (v: number) => `${(v / scaleMax) * 100}%`
   const color = CLASS_CSS_VAR[stats.player_class]
   const iqr = stats.q3_dps - stats.q1_dps
+  const className = CLASS_DISPLAY[stats.player_class] ?? stats.player_class
   const specLabel = stats.player_sub_spec ? `${stats.player_spec} (${stats.player_sub_spec})` : stats.player_spec
-  const label = specLabel
-    ? `${CLASS_DISPLAY[stats.player_class]} - ${specLabel}`
-    : CLASS_DISPLAY[stats.player_class]
+  const label = specLabel ? `${className} - ${specLabel}` : className
+  const specStats: EntityStat[] = [
+    { label: "Best", value: `${Math.round(stats.max_dps).toLocaleString()}/s` },
+    { label: "Top 25%", value: `${Math.round(stats.q3_dps).toLocaleString()}/s` },
+    { label: "Typical", value: `${Math.round(stats.median_dps).toLocaleString()}/s` },
+    { label: "Bottom 25%", value: `${Math.round(stats.q1_dps).toLocaleString()}/s` },
+    { label: "Runs", value: stats.count.toLocaleString() },
+  ]
 
   return (
     <Tooltip>
@@ -34,6 +42,7 @@ function BoxPlotRow({ stats, scaleMax, onClick, dimmed }: BoxPlotRowProps) {
         <div
           className={`group relative h-10 rounded-md border-l-2 pl-2 transition-colors hover:bg-muted/20 sm:flex sm:h-auto sm:items-center sm:gap-3 sm:border-l-0 sm:px-1 sm:py-1.5 ${onClick ? "cursor-pointer" : "cursor-default"} ${dimmed ? "opacity-40 hover:opacity-100" : ""}`}
           style={{ borderLeftColor: color }}
+          {...entityAttributes(specEntity(stats.player_class, className, stats.player_spec || "Unknown", stats.player_sub_spec ?? undefined, specStats))}
           onClick={onClick}
           role={onClick ? "button" : undefined}
           tabIndex={onClick ? 0 : undefined}
@@ -42,12 +51,14 @@ function BoxPlotRow({ stats, scaleMax, onClick, dimmed }: BoxPlotRowProps) {
           {/* Class label and mobile median overlap the top of the plot. */}
           <div className="absolute inset-x-2 top-0 z-10 flex items-center text-xs sm:static sm:w-32 sm:shrink-0">
             <span className="flex min-w-0 items-center gap-1.5 bg-card/90 pr-2 backdrop-blur-[1px] sm:bg-transparent sm:pr-0 sm:backdrop-blur-none">
-              <img
-                src={`/c/icons/class_${stats.player_class.toLowerCase()}.png`}
-                alt={CLASS_DISPLAY[stats.player_class] ?? stats.player_class}
-                className="h-4 w-4 shrink-0 rounded-sm"
-                onError={(e) => { e.currentTarget.src = "/c/icons/class_unknown.png" }}
-              />
+              <span {...entityAttributes(classEntity(stats.player_class, className, classStats))}>
+                <img
+                  src={`/c/icons/class_${stats.player_class.toLowerCase()}.png`}
+                  alt={className}
+                  className="h-4 w-4 shrink-0 rounded-sm"
+                  onError={(e) => { e.currentTarget.src = "/c/icons/class_unknown.png" }}
+                />
+              </span>
               <span className="truncate font-medium" style={{ color }}>
                 {specLabel || CLASS_DISPLAY[stats.player_class]}
               </span>
@@ -186,6 +197,25 @@ export function BoxPlotChart({
 
   const ticks = useMemo(() => getBoxPlotScale(scaleMax), [scaleMax])
 
+  const classStats = useMemo(() => {
+    const summaries = new Map<string, { cohorts: number; runs: number }>()
+    for (const row of stats) {
+      const summary = summaries.get(row.player_class) ?? { cohorts: 0, runs: 0 }
+      summary.cohorts += 1
+      summary.runs += row.count
+      summaries.set(row.player_class, summary)
+    }
+    return new Map(
+      [...summaries].map(([playerClass, summary]) => [
+        playerClass,
+        [
+          { label: "Specs", value: summary.cohorts.toLocaleString() },
+          { label: "Runs", value: summary.runs.toLocaleString() },
+        ] satisfies EntityStat[],
+      ]),
+    )
+  }, [stats])
+
   const mobileTicks = [0, ticks.max / 2, ticks.max]
 
   return (
@@ -213,6 +243,7 @@ export function BoxPlotChart({
               <BoxPlotRow
                 key={`${s.player_class}-${s.player_spec ?? ""}-${s.player_sub_spec ?? ""}`}
                 stats={s}
+                classStats={classStats.get(s.player_class) ?? []}
                 scaleMax={ticks.max}
                 dimmed={highlight ? !highlight(s) : false}
                 onClick={onRowClick ? () => onRowClick(s.player_class, s.player_spec, s.player_sub_spec ?? "") : undefined}
