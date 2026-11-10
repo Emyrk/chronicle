@@ -1,7 +1,20 @@
 BEGIN;
 
+-- Existing accounts opt out unless created on or after the fixed launch cutoff.
+-- Production preview: 1,637 accounts scanned, 150 updated (November 10, 2026).
+-- Preview before deployment:
+-- SELECT count(*) FROM users
+-- WHERE created_at >= TIMESTAMPTZ '2026-11-01 00:00:00+00';
 ALTER TABLE users
-  ADD COLUMN auto_delete_raw_logs_at_storage_capacity boolean NOT NULL DEFAULT true;
+  ADD COLUMN auto_delete_raw_logs_at_storage_capacity boolean NOT NULL DEFAULT false;
+
+UPDATE users
+SET auto_delete_raw_logs_at_storage_capacity = true
+WHERE created_at >= TIMESTAMPTZ '2026-11-01 00:00:00+00';
+
+-- Future accounts default on; this does not change existing rows.
+ALTER TABLE users
+  ALTER COLUMN auto_delete_raw_logs_at_storage_capacity SET DEFAULT true;
 
 ALTER TABLE wow_log_groups
   ADD COLUMN raw_files_pinned boolean NOT NULL DEFAULT false;
