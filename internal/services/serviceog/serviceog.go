@@ -55,6 +55,7 @@ type Service struct {
 	imageBaseURL *url.URL
 	signingKey   string
 	ogSiteStats  ogSiteStatsCache
+	ogCensus     ogTenantCache[[]database.CensusPlayerCountsRow]
 }
 
 func New(opts Options) *Service {
