@@ -99,6 +99,12 @@ func TestNotifySidekickUploadAccepted(t *testing.T) {
 	require.Equal(t, "Your combat log was received and is being processed.", queue.args.Message.Embeds[0].Description)
 	require.Equal(t, "https://capy.chronicle.example/logs/"+logGroupID.String(), queue.args.Message.Embeds[0].URL)
 	require.Equal(t, "sidekick-upload-accepted:"+logGroupID.String(), queue.args.UniqueKey)
+	report := &chroniclesdk.RawLogCleanup{DeletedLogIDs: []uuid.UUID{uuid.New()}}
+	require.NoError(t, bot.NotifySidekickUploadAcceptedWithCleanup(ctx, userID, logGroupID, tenant, report))
+	require.Contains(t, queue.args.Message.Embeds[0].Description, "https://capy.chronicle.example/logs/"+report.DeletedLogIDs[0].String())
+	require.Contains(t, queue.args.Message.Embeds[0].Description, "Parsed reports are preserved")
+	require.Equal(t, "sidekick-upload-accepted:"+logGroupID.String(), queue.args.UniqueKey)
+
 }
 
 func TestNotifySidekickAppendAccepted(t *testing.T) {
@@ -126,6 +132,11 @@ func TestNotifySidekickAppendAccepted(t *testing.T) {
 	require.Equal(t, "Your new combat log data was received. The previous log will automatically be updated.", queue.args.Message.Embeds[0].Description)
 	require.Equal(t, "https://capy.chronicle.example/logs/"+logGroupID.String(), queue.args.Message.Embeds[0].URL)
 	require.Equal(t, "sidekick-append-accepted:"+uploadID.String(), queue.args.UniqueKey)
+	report := &chroniclesdk.RawLogCleanup{DeletedLogIDs: []uuid.UUID{uuid.New()}}
+	require.NoError(t, bot.NotifySidekickAppendAcceptedWithCleanup(ctx, userID, logGroupID, uploadID, tenant, report))
+	require.Contains(t, queue.args.Message.Embeds[0].Description, "https://capy.chronicle.example/logs/"+report.DeletedLogIDs[0].String())
+	require.Equal(t, "sidekick-append-accepted:"+uploadID.String(), queue.args.UniqueKey)
+
 }
 
 func TestNotifyUploadProcessed(t *testing.T) {
@@ -168,4 +179,19 @@ func TestNotifyUploadProcessed(t *testing.T) {
 	// Only the categorized instance is announced, in the guild announcement format.
 	require.Len(t, queue.args.Message.Embeds, 1)
 	require.Equal(t, "RAID UPLOAD", queue.args.Message.Embeds[0].Author.Name)
+}
+
+func TestRawLogCleanupDescriptionBounded(t *testing.T) {
+	t.Parallel()
+	require.Empty(t, rawLogCleanupDescription("https://example.com", nil))
+	require.Empty(t, rawLogCleanupDescription("https://example.com", &chroniclesdk.RawLogCleanup{}))
+	report := &chroniclesdk.RawLogCleanup{}
+	for range 100 {
+		report.DeletedLogIDs = append(report.DeletedLogIDs, uuid.New())
+	}
+	description := rawLogCleanupDescription("https://example.com", report)
+	require.Contains(t, description, report.DeletedLogIDs[4].String())
+	require.NotContains(t, description, report.DeletedLogIDs[5].String())
+	require.Contains(t, description, "And 95 more logs.")
+	require.Less(t, len(description), 4096-200)
 }

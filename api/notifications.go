@@ -113,13 +113,13 @@ func (a *API) notifySidekickQuotaFailure(ctx context.Context, userID uuid.UUID) 
 
 // notifySidekickAppendAccepted is best effort; a failed notification never
 // fails the append.
-func (a *API) notifySidekickAppendAccepted(ctx context.Context, logGroupID, uploadID uuid.UUID) {
+func (a *API) notifySidekickAppendAccepted(ctx context.Context, logGroupID, uploadID uuid.UUID, report *chroniclesdk.RawLogCleanup) {
 	claims := chronauth.MustAuthenticatedClaims(ctx)
 	var tenantSlug pgtype.Text
 	if tenant := servicetenant.TenantFromContext(ctx); tenant != nil {
 		tenantSlug = tenant.Slug
 	}
-	if err := a.Opts.Bot.NotifySidekickAppendAccepted(ctx, claims.Subject, logGroupID, uploadID, tenantSlug); err != nil {
+	if err := a.Opts.Bot.NotifySidekickAppendAcceptedWithCleanup(ctx, claims.Subject, logGroupID, uploadID, tenantSlug, report); err != nil {
 		a.Opts.Logger.WarnContext(ctx, "failed to notify sidekick append accepted",
 			slog.String("log_group_id", logGroupID.String()), slog.Any("error", err))
 	}
@@ -127,13 +127,13 @@ func (a *API) notifySidekickAppendAccepted(ctx context.Context, logGroupID, uplo
 
 // notifySidekickUploadAccepted is best effort; a failed notification never
 // fails the upload.
-func (a *API) notifySidekickUploadAccepted(ctx context.Context, logGroupID uuid.UUID) {
+func (a *API) notifySidekickUploadAccepted(ctx context.Context, logGroupID uuid.UUID, report *chroniclesdk.RawLogCleanup) {
 	claims := chronauth.MustAuthenticatedClaims(ctx)
 	var tenantSlug pgtype.Text
 	if tenant := servicetenant.TenantFromContext(ctx); tenant != nil {
 		tenantSlug = tenant.Slug
 	}
-	if err := a.Opts.Bot.NotifySidekickUploadAccepted(ctx, claims.Subject, logGroupID, tenantSlug); err != nil {
+	if err := a.Opts.Bot.NotifySidekickUploadAcceptedWithCleanup(ctx, claims.Subject, logGroupID, tenantSlug, report); err != nil {
 		a.Opts.Logger.WarnContext(ctx, "failed to notify sidekick upload accepted",
 			slog.String("log_group_id", logGroupID.String()), slog.Any("error", err))
 	}

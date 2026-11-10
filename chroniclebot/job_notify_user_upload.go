@@ -60,6 +60,10 @@ func (b *Bot) NotifySidekickQuotaFailure(ctx context.Context, userID uuid.UUID, 
 // NotifySidekickUploadAccepted DMs the uploader that a Sidekick upload was
 // accepted, if they opted in.
 func (b *Bot) NotifySidekickUploadAccepted(ctx context.Context, userID, logGroupID uuid.UUID, tenantSlug pgtype.Text) error {
+	return b.NotifySidekickUploadAcceptedWithCleanup(ctx, userID, logGroupID, tenantSlug, nil)
+}
+
+func (b *Bot) NotifySidekickUploadAcceptedWithCleanup(ctx context.Context, userID, logGroupID uuid.UUID, tenantSlug pgtype.Text, report *chroniclesdk.RawLogCleanup) error {
 	return b.notifySidekickUploadAccepted(
 		ctx,
 		userID,
@@ -69,12 +73,17 @@ func (b *Bot) NotifySidekickUploadAccepted(ctx context.Context, userID, logGroup
 		"Upload accepted",
 		"Your combat log was received and is being processed.",
 		"sidekick-upload-accepted:"+logGroupID.String(),
+		report,
 	)
 }
 
 // NotifySidekickAppendAccepted DMs the uploader that a Sidekick append was
 // accepted, if they opted into Sidekick append notifications.
 func (b *Bot) NotifySidekickAppendAccepted(ctx context.Context, userID, logGroupID, uploadID uuid.UUID, tenantSlug pgtype.Text) error {
+	return b.NotifySidekickAppendAcceptedWithCleanup(ctx, userID, logGroupID, uploadID, tenantSlug, nil)
+}
+
+func (b *Bot) NotifySidekickAppendAcceptedWithCleanup(ctx context.Context, userID, logGroupID, uploadID uuid.UUID, tenantSlug pgtype.Text, report *chroniclesdk.RawLogCleanup) error {
 	return b.notifySidekickUploadAccepted(
 		ctx,
 		userID,
@@ -84,6 +93,7 @@ func (b *Bot) NotifySidekickAppendAccepted(ctx context.Context, userID, logGroup
 		"Log update accepted",
 		"Your new combat log data was received. The previous log will automatically be updated.",
 		"sidekick-append-accepted:"+uploadID.String(),
+		report,
 	)
 }
 
@@ -93,6 +103,7 @@ func (b *Bot) notifySidekickUploadAccepted(
 	tenantSlug pgtype.Text,
 	event chroniclesdk.NotificationEvent,
 	title, description, uniqueKey string,
+	report *chroniclesdk.RawLogCleanup,
 ) error {
 	if !b.Available() {
 		return nil
@@ -106,7 +117,7 @@ func (b *Bot) notifySidekickUploadAccepted(
 		Message: DiscordDirectMessage{Embeds: []*discordgo.MessageEmbed{{
 			Author:      &discordgo.MessageEmbedAuthor{Name: "SIDEKICK"},
 			Title:       title,
-			Description: description,
+			Description: description + rawLogCleanupDescription(b.tenantBaseURL(tenantSlug), report),
 			URL:         fmt.Sprintf("%s/logs/%s", b.tenantBaseURL(tenantSlug), logGroupID),
 			Color:       0x5865F2,
 		}}},
@@ -208,4 +219,20 @@ func (w *WorkerNotifyUploadProcessed) Work(ctx context.Context, job *river.Job[A
 		Message:   DiscordDirectMessage{Embeds: embeds},
 		UniqueKey: "upload-processed:" + job.Args.LogGroupID.String(),
 	})
+}
+
+// Keep cleanup links bounded well below Discord's 4096-character description limit.
+func rawLogCleanupDescription(baseURL string, report *chroniclesdk.RawLogCleanup) string {
+	if report == nil || len(report.DeletedLogIDs) == 0 {
+		return ""
+	}
+	text := "\n\nTo make room, raw files, parts, and artifacts were removed from these logs. Parsed reports are preserved:"
+	for i, id := range report.DeletedLogIDs {
+		if i == 5 {
+			text += fmt.Sprintf("\nAnd %d more logs.", len(report.DeletedLogIDs)-i)
+			break
+		}
+		text += fmt.Sprintf("\n[%s](%s/logs/%s)", id, baseURL, id)
+	}
+	return text
 }

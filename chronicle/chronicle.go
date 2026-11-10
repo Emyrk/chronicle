@@ -247,11 +247,12 @@ type UploadMeta struct {
 	Unlisted bool
 }
 
-func (c *Chronicle) freeStorageForUpload(ctx context.Context, user database.ChronicleUser, incomingStorageBytes int64, excludeLogGroupID uuid.UUID) (database.ChronicleUser, error) {
+func (c *Chronicle) freeStorageForUpload(ctx context.Context, user database.ChronicleUser, incomingStorageBytes int64, excludeLogGroupID uuid.UUID) (database.ChronicleUser, *chroniclesdk.RawLogCleanup, error) {
+	var report *chroniclesdk.RawLogCleanup
 	if incomingStorageBytes > user.MaxStorageBytes ||
 		user.ConsumedStorageBytes+incomingStorageBytes <= user.MaxStorageBytes ||
 		!user.AutoDeleteRawLogsAtStorageCapacity {
-		return user, nil
+		return user, report, nil
 	}
 
 	groups, err := c.Zed.ListRawLogGroupsForQuotaCleanup(ctx, database.ListRawLogGroupsForQuotaCleanupParams{
@@ -259,12 +260,16 @@ func (c *Chronicle) freeStorageForUpload(ctx context.Context, user database.Chro
 		ExcludeLogGroupID: excludeLogGroupID,
 	})
 	if err != nil {
-		return user, fmt.Errorf("list quota cleanup candidates: %w", err)
+		return user, report, fmt.Errorf("list quota cleanup candidates: %w", err)
 	}
 	for _, groupID := range groups {
 		if err := c.DeleteWoWLogGroupFiles(ctx, groupID); err != nil {
-			return user, fmt.Errorf("delete raw files for log group %s: %w", groupID, err)
+			return user, report, fmt.Errorf("delete raw files for log group %s: %w", groupID, err)
 		}
+		if report == nil {
+			report = &chroniclesdk.RawLogCleanup{}
+		}
+		report.DeletedLogIDs = append(report.DeletedLogIDs, groupID)
 		c.logger.InfoContext(ctx, "automatically deleted raw log files to free upload storage",
 			slog.String("user_id", user.ID.String()),
 			slog.String("log_group_id", groupID.String()),
@@ -272,21 +277,28 @@ func (c *Chronicle) freeStorageForUpload(ctx context.Context, user database.Chro
 
 		user, err = c.Zed.GetUserByID(ctx, user.ID)
 		if err != nil {
-			return user, fmt.Errorf("refresh user storage after cleanup: %w", err)
+			return user, report, fmt.Errorf("refresh user storage after cleanup: %w", err)
 		}
 		if user.ConsumedStorageBytes+incomingStorageBytes <= user.MaxStorageBytes {
 			break
 		}
 	}
-	return user, nil
+	return user, report, nil
 }
 
 func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, artifacts []ArtifactInput, logType database.LogType, realmID uuid.UUID, meta UploadMeta) (*database.WoWLogGroup, []database.LogFile, error) {
+	group, files, _, err := c.UploadLogsWithCleanup(ctx, inputs, artifacts, logType, realmID, meta)
+	return group, files, err
+}
+
+// UploadLogsWithCleanup reports raw storage deleted by this attempt, even on error.
+func (c *Chronicle) UploadLogsWithCleanup(ctx context.Context, inputs []UploadInput, artifacts []ArtifactInput, logType database.LogType, realmID uuid.UUID, meta UploadMeta) (*database.WoWLogGroup, []database.LogFile, *chroniclesdk.RawLogCleanup, error) {
+	var report *chroniclesdk.RawLogCleanup
 	clean := cleanup.New()
 	defer clean.Do()
 
 	if len(inputs) == 0 {
-		return nil, nil, fmt.Errorf("at least one file is required")
+		return nil, nil, report, fmt.Errorf("at least one file is required")
 	}
 
 	sidekickArtifactCount := 0
@@ -296,18 +308,18 @@ func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, artifa
 		}
 	}
 	if sidekickArtifactCount > 1 {
-		return nil, nil, fmt.Errorf("at most one Sidekick storage artifact is allowed for the base log file")
+		return nil, nil, report, fmt.Errorf("at most one Sidekick storage artifact is allowed for the base log file")
 	}
 
 	now := time.Now()
 	cl, ok := chronauth.AuthenticatedClaims(ctx)
 	if !ok {
-		return nil, nil, fmt.Errorf("upload file, no authenticated user")
+		return nil, nil, report, fmt.Errorf("upload file, no authenticated user")
 	}
 
 	user, err := c.Zed.GetUserByID(ctx, cl.Subject)
 	if err != nil {
-		return nil, nil, fmt.Errorf("fetch user: %w", err)
+		return nil, nil, report, fmt.Errorf("fetch user: %w", err)
 	}
 
 	// Save the files locally to disk first, then upload them to object storage.
@@ -337,7 +349,7 @@ func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, artifa
 		tmpPath := filepath.Join(c.TemporaryDirectory, tmp.String())
 		f, err := os.Create(tmpPath)
 		if err != nil {
-			return nil, nil, fmt.Errorf("create temp file: %w", err)
+			return nil, nil, report, fmt.Errorf("create temp file: %w", err)
 		}
 		//nolint:errcheck
 		defer f.Close()
@@ -353,21 +365,21 @@ func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, artifa
 			// Write compressed data to temp file
 			written, err := io.Copy(f, input.Reader)
 			if err != nil {
-				return nil, nil, fmt.Errorf("write compressed temp file: %w", err)
+				return nil, nil, report, fmt.Errorf("write compressed temp file: %w", err)
 			}
 
 			// Sync and seek back
 			if err := f.Sync(); err != nil {
-				return nil, nil, fmt.Errorf("flush temp file: %w", err)
+				return nil, nil, report, fmt.Errorf("flush temp file: %w", err)
 			}
 			if _, err := f.Seek(0, io.SeekStart); err != nil {
-				return nil, nil, fmt.Errorf("seek temp file: %w", err)
+				return nil, nil, report, fmt.Errorf("seek temp file: %w", err)
 			}
 
 			// Decompress from temp file to compute hash of original content
 			gzReader, err := gzip.NewReader(f)
 			if err != nil {
-				return nil, nil, fmt.Errorf("create gzip reader for hashing: %w", err)
+				return nil, nil, report, fmt.Errorf("create gzip reader for hashing: %w", err)
 			}
 
 			// Count original bytes while hashing
@@ -375,13 +387,13 @@ func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, artifa
 			hashWriter := io.MultiWriter(h, originalCounter)
 			if _, err := io.Copy(hashWriter, gzReader); err != nil {
 				_ = gzReader.Close()
-				return nil, nil, fmt.Errorf("hash decompressed content: %w", err)
+				return nil, nil, report, fmt.Errorf("hash decompressed content: %w", err)
 			}
 			_ = gzReader.Close()
 
 			// Seek back for storage upload
 			if _, err := f.Seek(0, io.SeekStart); err != nil {
-				return nil, nil, fmt.Errorf("seek temp file for upload: %w", err)
+				return nil, nil, report, fmt.Errorf("seek temp file for upload: %w", err)
 			}
 
 			meta.originalSize = originalCounter.count
@@ -391,22 +403,22 @@ func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, artifa
 			// Uncompressed: write to file and hash simultaneously
 			writer := io.MultiWriter(f, h)
 			if _, err := io.Copy(writer, input.Reader); err != nil {
-				return nil, nil, fmt.Errorf("write temp file: %w", err)
+				return nil, nil, report, fmt.Errorf("write temp file: %w", err)
 			}
 
 			if err := f.Sync(); err != nil {
-				return nil, nil, fmt.Errorf("flush temp file: %w", err)
+				return nil, nil, report, fmt.Errorf("flush temp file: %w", err)
 			}
 
 			// Get file size
 			info, err := f.Stat()
 			if err != nil {
-				return nil, nil, fmt.Errorf("stat temp file: %w", err)
+				return nil, nil, report, fmt.Errorf("stat temp file: %w", err)
 			}
 
 			// Reset so it can be read back
 			if _, err := f.Seek(0, io.SeekStart); err != nil {
-				return nil, nil, fmt.Errorf("seek temp file: %w", err)
+				return nil, nil, report, fmt.Errorf("seek temp file: %w", err)
 			}
 
 			meta.originalSize = info.Size()
@@ -424,20 +436,20 @@ func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, artifa
 	artifactFiles := make([]*os.File, 0, len(artifacts))
 	for i, artifact := range artifacts {
 		if artifact.Kind == "" {
-			return nil, nil, fmt.Errorf("artifact kind is required")
+			return nil, nil, report, fmt.Errorf("artifact kind is required")
 		}
 		if artifact.SchemaVersion <= 0 {
-			return nil, nil, fmt.Errorf("artifact %q has invalid schema version %d", artifact.Kind, artifact.SchemaVersion)
+			return nil, nil, report, fmt.Errorf("artifact %q has invalid schema version %d", artifact.Kind, artifact.SchemaVersion)
 		}
 		if artifact.MimeType == "" {
-			return nil, nil, fmt.Errorf("artifact %q MIME type is required", artifact.Kind)
+			return nil, nil, report, fmt.Errorf("artifact %q MIME type is required", artifact.Kind)
 		}
 
 		artifactIDs[i] = uuid.New()
 		tmpPath := filepath.Join(c.TemporaryDirectory, artifactIDs[i].String())
 		f, err := os.Create(tmpPath)
 		if err != nil {
-			return nil, nil, fmt.Errorf("create artifact temp file: %w", err)
+			return nil, nil, report, fmt.Errorf("create artifact temp file: %w", err)
 		}
 		//nolint:errcheck
 		defer f.Close()
@@ -445,13 +457,13 @@ func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, artifa
 		h := sha256.New()
 		written, err := io.Copy(io.MultiWriter(f, h), artifact.Reader)
 		if err != nil {
-			return nil, nil, fmt.Errorf("write artifact temp file: %w", err)
+			return nil, nil, report, fmt.Errorf("write artifact temp file: %w", err)
 		}
 		if err := f.Sync(); err != nil {
-			return nil, nil, fmt.Errorf("flush artifact temp file: %w", err)
+			return nil, nil, report, fmt.Errorf("flush artifact temp file: %w", err)
 		}
 		if _, err := f.Seek(0, io.SeekStart); err != nil {
-			return nil, nil, fmt.Errorf("seek artifact temp file: %w", err)
+			return nil, nil, report, fmt.Errorf("seek artifact temp file: %w", err)
 		}
 
 		artifactFiles = append(artifactFiles, f)
@@ -470,12 +482,12 @@ func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, artifa
 	for _, size := range artifactSizes {
 		incomingStorageBytes += size
 	}
-	user, err = c.freeStorageForUpload(ctx, user, incomingStorageBytes, uuid.Nil)
+	user, report, err = c.freeStorageForUpload(ctx, user, incomingStorageBytes, uuid.Nil)
 	if err != nil {
-		return nil, nil, fmt.Errorf("free storage for upload: %w", err)
+		return nil, nil, report, fmt.Errorf("free storage for upload: %w", err)
 	}
 	if user.ConsumedStorageBytes+incomingStorageBytes > user.MaxStorageBytes {
-		return nil, nil, httpapi.NewAPIError(
+		return nil, nil, report, httpapi.NewAPIError(
 			ErrUserStorageQuotaExceeded,
 			fmt.Sprintf("This upload would exceed the storage limit of %s; delete log files to free up space", humanize.Bytes(uint64(user.MaxStorageBytes))),
 			http.StatusBadRequest,
@@ -487,7 +499,7 @@ func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, artifa
 		seen := make(map[string]bool, len(hashes))
 		for _, h := range hashes {
 			if seen[h] {
-				return nil, nil, fmt.Errorf("the same file was uploaded twice; please upload different log files")
+				return nil, nil, report, fmt.Errorf("the same file was uploaded twice; please upload different log files")
 			}
 			seen[h] = true
 		}
@@ -607,7 +619,7 @@ func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, artifa
 		return nil
 	}, nil)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, report, err
 	}
 
 	clean.Add(func() { _ = c.Zed.DeleteWoWLogGroup(ctx, group.ID) })
@@ -625,7 +637,7 @@ func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, artifa
 			ContentType: ptr.Ref(contentType),
 		})
 		if err != nil {
-			return nil, nil, fmt.Errorf("upload log file to object storage: %w", err)
+			return nil, nil, report, fmt.Errorf("upload log file to object storage: %w", err)
 		}
 		clean.Add(func() { _, _ = c.Storage.RemoveFile(ctx, BucketRaidLogs, []string{storageObject.Key}) })
 	}
@@ -635,14 +647,14 @@ func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, artifa
 			ContentType: ptr.Ref(artifact.MimeType),
 		})
 		if err != nil {
-			return nil, nil, fmt.Errorf("upload log group artifact %q to object storage: %w", artifact.Kind, err)
+			return nil, nil, report, fmt.Errorf("upload log group artifact %q to object storage: %w", artifact.Kind, err)
 		}
 		clean.Add(func() { _, _ = c.Storage.RemoveFile(ctx, BucketRaidLogs, []string{storageObject.Key}) })
 	}
 
 	res, err := c.EnqueueParseLog(ctx, group, false, false, realmID)
 	if err != nil {
-		return nil, nil, fmt.Errorf("enqueue log parse job: %w", err)
+		return nil, nil, report, fmt.Errorf("enqueue log parse job: %w", err)
 	}
 	clean.Add(func() { _, _ = c.queue.JobDelete(ctx, res.Job.ID) })
 
@@ -650,7 +662,7 @@ func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, artifa
 	clean.Clear()
 
 	// The combat-log files and artifacts are now fully uploaded in the database and object storage.
-	return &group, dbFiles, nil
+	return &group, dbFiles, report, nil
 }
 
 var (
@@ -692,12 +704,20 @@ func userLogAppendQuotaError(owner database.ChronicleUser, compressedSize int64)
 // AppendServerLog stores a server-produced append without a user append limit
 // or owner storage quota check.
 func (c *Chronicle) AppendServerLog(ctx context.Context, group database.WoWLogGroup, newData io.Reader, realmID uuid.UUID, meta ServerLogAppendMeta) error {
-	return c.appendLog(ctx, group, newData, logAppendOptions{realmID: realmID, meta: meta})
+	_, err := c.appendLog(ctx, group, newData, logAppendOptions{realmID: realmID, meta: meta})
+	return err
 }
 
 // AppendUserLog stores a user-produced append. maxAppends <= 0 means unlimited.
 // User appends always enforce the owning user's storage quota.
 func (c *Chronicle) AppendUserLog(ctx context.Context, group database.WoWLogGroup, newData io.Reader, artifact *ArtifactInput, realmID uuid.UUID, meta LogAppendMeta, maxAppends int64) error {
+	_, err := c.AppendUserLogWithCleanup(ctx, group, newData, artifact, realmID, meta, maxAppends)
+	return err
+}
+
+// AppendUserLogWithCleanup reports only deletions made by this attempt.
+// Idempotent retries that find an already finalized append return no cleanup.
+func (c *Chronicle) AppendUserLogWithCleanup(ctx context.Context, group database.WoWLogGroup, newData io.Reader, artifact *ArtifactInput, realmID uuid.UUID, meta LogAppendMeta, maxAppends int64) (*chroniclesdk.RawLogCleanup, error) {
 	return c.appendLog(ctx, group, newData, logAppendOptions{
 		realmID:                  realmID,
 		meta:                     meta,
@@ -710,24 +730,25 @@ func (c *Chronicle) AppendUserLog(ctx context.Context, group database.WoWLogGrou
 // appendLog stores each append as an immutable object part. PostgreSQL is used
 // only for short reservation/finalization transactions; no connection is held
 // while the object is uploaded.
-func (c *Chronicle) appendLog(ctx context.Context, group database.WoWLogGroup, newData io.Reader, opts logAppendOptions) error {
+func (c *Chronicle) appendLog(ctx context.Context, group database.WoWLogGroup, newData io.Reader, opts logAppendOptions) (*chroniclesdk.RawLogCleanup, error) {
+	var report *chroniclesdk.RawLogCleanup
 	meta := opts.meta
 	files, err := c.Zed.GetWoWLogFilesByGroupID(ctx, group.ID)
 	if err != nil {
-		return fmt.Errorf("fetch log files for group %s: %w", group.ID, err)
+		return report, fmt.Errorf("fetch log files for group %s: %w", group.ID, err)
 	}
 	if len(files) != 1 {
-		return fmt.Errorf("server log group %s requires exactly one logical file, found %d", group.ID, len(files))
+		return report, fmt.Errorf("server log group %s requires exactly one logical file, found %d", group.ID, len(files))
 	}
 	file := files[0]
 	if file.StorageDeletedAt.Valid {
-		return fmt.Errorf("log file storage was deleted at %s", file.StorageDeletedAt.Time)
+		return report, fmt.Errorf("log file storage was deleted at %s", file.StorageDeletedAt.Time)
 	}
 	if meta.UploadID == uuid.Nil {
 		meta.UploadID = uuid.New()
 	}
 	if err := expireStaleLogFileParts(ctx, c.Zed, c.Storage, file.ID); err != nil {
-		return err
+		return report, err
 	}
 
 	partID := uuid.New()
@@ -762,13 +783,13 @@ func (c *Chronicle) appendLog(ctx context.Context, group database.WoWLogGroup, n
 		}
 		return nil
 	}, nil); err != nil {
-		return fmt.Errorf("reserve log part: %w", err)
+		return report, fmt.Errorf("reserve log part: %w", err)
 	}
 	if part.Status == "ready" {
-		return nil
+		return report, nil
 	}
 	if part.ReservationID != reservationID {
-		return ErrLogAppendInProgress
+		return report, ErrLogAppendInProgress
 	}
 
 	finalized := false
@@ -812,16 +833,16 @@ func (c *Chronicle) appendLog(ctx context.Context, group database.WoWLogGroup, n
 
 	compressed, err := io.ReadAll(newData)
 	if err != nil {
-		return fmt.Errorf("read server log part: %w", err)
+		return report, fmt.Errorf("read server log part: %w", err)
 	}
 	gzr, err := gzip.NewReader(bytes.NewReader(compressed))
 	if err != nil {
-		return fmt.Errorf("open server log part gzip: %w", err)
+		return report, fmt.Errorf("open server log part gzip: %w", err)
 	}
 	decompressedSize, err := io.Copy(io.Discard, gzr)
 	_ = gzr.Close()
 	if err != nil {
-		return fmt.Errorf("read server log part gzip: %w", err)
+		return report, fmt.Errorf("read server log part gzip: %w", err)
 	}
 	h := sha256.Sum256(compressed)
 	partHash := hex.EncodeToString(h[:])
@@ -832,17 +853,17 @@ func (c *Chronicle) appendLog(ctx context.Context, group database.WoWLogGroup, n
 	var artifactSize int64
 	if artifact := opts.artifact; artifact != nil {
 		if artifact.Kind == "" {
-			return fmt.Errorf("artifact kind is required")
+			return report, fmt.Errorf("artifact kind is required")
 		}
 		if artifact.SchemaVersion <= 0 {
-			return fmt.Errorf("artifact %q has invalid schema version %d", artifact.Kind, artifact.SchemaVersion)
+			return report, fmt.Errorf("artifact %q has invalid schema version %d", artifact.Kind, artifact.SchemaVersion)
 		}
 		if artifact.MimeType == "" {
-			return fmt.Errorf("artifact %q MIME type is required", artifact.Kind)
+			return report, fmt.Errorf("artifact %q MIME type is required", artifact.Kind)
 		}
 		artifactBytes, err = io.ReadAll(artifact.Reader)
 		if err != nil {
-			return fmt.Errorf("read log part artifact: %w", err)
+			return report, fmt.Errorf("read log part artifact: %w", err)
 		}
 		artifactDigest := sha256.Sum256(artifactBytes)
 		artifactHash = hex.EncodeToString(artifactDigest[:])
@@ -853,27 +874,27 @@ func (c *Chronicle) appendLog(ctx context.Context, group database.WoWLogGroup, n
 	if opts.enforceOwnerStorageQuota {
 		owner, err := c.Zed.GetUserByID(ctx, group.Owner)
 		if err != nil {
-			return fmt.Errorf("fetch log owner for storage quota: %w", err)
+			return report, fmt.Errorf("fetch log owner for storage quota: %w", err)
 		}
-		owner, err = c.freeStorageForUpload(ctx, owner, incomingStorageBytes, group.ID)
+		owner, report, err = c.freeStorageForUpload(ctx, owner, incomingStorageBytes, group.ID)
 		if err != nil {
-			return fmt.Errorf("free storage for log append: %w", err)
+			return report, fmt.Errorf("free storage for log append: %w", err)
 		}
 		if err := userLogAppendQuotaError(owner, incomingStorageBytes); err != nil {
-			return err
+			return report, err
 		}
 	}
 
 	if _, err := c.Storage.UploadFile(ctx, BucketRaidLogs, part.ObjectKey, bytes.NewReader(compressed),
 		storage.FileOptions{ContentType: ptr.Ref("application/gzip")}); err != nil {
-		return fmt.Errorf("upload server log part: %w", err)
+		return report, fmt.Errorf("upload server log part: %w", err)
 	}
 	uploaded = true
 
 	if artifact := opts.artifact; artifact != nil {
 		if _, err := c.Storage.UploadFile(ctx, BucketRaidLogs, artifactObjectKey, bytes.NewReader(artifactBytes),
 			storage.FileOptions{ContentType: ptr.Ref(artifact.MimeType)}); err != nil {
-			return fmt.Errorf("upload log part artifact: %w", err)
+			return report, fmt.Errorf("upload log part artifact: %w", err)
 		}
 		artifactUploaded = true
 	}
@@ -947,10 +968,10 @@ func (c *Chronicle) appendLog(ctx context.Context, group database.WoWLogGroup, n
 		}
 		return nil
 	}, nil); err != nil {
-		return err
+		return report, err
 	}
 	finalized = true
-	return nil
+	return report, nil
 }
 
 // countingWriter wraps a writer and counts bytes written

@@ -489,7 +489,8 @@ func (api *API) WoWLogAppend(w http.ResponseWriter, r *http.Request) {
 	if realm, realmErr := api.Zed.GetServerUploadMetaRealmID(ctx, logID); realmErr == nil && realm.Valid {
 		realmID = realm.UUID
 	}
-	if err := api.Chronicle.AppendUserLog(ctx, group.WoWLogGroup, file, artifactInput, realmID, meta, maxAppends); err != nil {
+	report, err := api.Chronicle.AppendUserLogWithCleanup(ctx, group.WoWLogGroup, file, artifactInput, realmID, meta, maxAppends)
+	if err != nil {
 		if errors.Is(err, chronicle.ErrUserStorageQuotaExceeded) && api.Opts.Sidekick != nil && api.Opts.Sidekick.IsSidekickRequest(ctx) {
 			api.notifySidekickQuotaFailure(ctx, group.WoWLogGroup.Owner)
 		}
@@ -504,25 +505,25 @@ func (api *API) WoWLogAppend(w http.ResponseWriter, r *http.Request) {
 			message = "This log append is already in progress"
 		}
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
-			Response: chroniclesdk.Response{Message: message, Detail: err.Error()},
+			Response: chroniclesdk.Response{Message: message, Detail: err.Error(), Cleanup: report},
 			Status:   status,
 		})
 		return
 	}
 
 	if api.Opts.Sidekick != nil && api.Opts.Sidekick.RecordAppend(ctx) {
-		api.notifySidekickAppendAccepted(ctx, logID, meta.UploadID)
+		api.notifySidekickAppendAccepted(ctx, logID, meta.UploadID, report)
 	}
 	files, err := api.Zed.GetWoWLogFilesByGroupID(ctx, logID)
 	if err != nil {
-		httpapi.InternalServerError(w, err)
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{Response: chroniclesdk.Response{Message: "Failed to fetch appended log files", Detail: err.Error(), Cleanup: report}})
 		return
 	}
 	fileIDs := make([]uuid.UUID, 0, len(files))
 	for _, logFile := range files {
 		fileIDs = append(fileIDs, logFile.ID)
 	}
-	httpapi.Write(ctx, w, http.StatusCreated, chroniclesdk.LogUploadResponse{LogID: logID, Files: fileIDs})
+	httpapi.Write(ctx, w, http.StatusCreated, chroniclesdk.LogUploadResponse{LogID: logID, Files: fileIDs, Cleanup: report})
 }
 
 func (api *API) WoWLogUpload(w http.ResponseWriter, r *http.Request) {
@@ -709,7 +710,7 @@ func (api *API) WoWLogUploadV2(w http.ResponseWriter, r *http.Request) {
 	}
 	meta.Unlisted = unlisted
 
-	group, files, err := api.Chronicle.UploadLogs(ctx, []chronicle.UploadInput{input}, artifactInputs, logType, uuid.Nil, meta)
+	group, files, report, err := api.Chronicle.UploadLogsWithCleanup(ctx, []chronicle.UploadInput{input}, artifactInputs, logType, uuid.Nil, meta)
 	if err != nil {
 		if errors.Is(err, chronicle.ErrUserStorageQuotaExceeded) && api.Opts.Sidekick != nil && api.Opts.Sidekick.IsSidekickRequest(ctx) {
 			api.notifySidekickQuotaFailure(ctx, chronauth.MustAuthenticatedClaims(ctx).Subject)
@@ -717,6 +718,7 @@ func (api *API) WoWLogUploadV2(w http.ResponseWriter, r *http.Request) {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
 			Response: chroniclesdk.Response{
 				Message: "Failed to process uploaded log file",
+				Cleanup: report,
 				Detail:  err.Error(),
 			},
 			Status: http.StatusInternalServerError,
@@ -725,7 +727,7 @@ func (api *API) WoWLogUploadV2(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if api.Opts.Sidekick != nil && api.Opts.Sidekick.RecordUpload(ctx) {
-		api.notifySidekickUploadAccepted(ctx, group.ID)
+		api.notifySidekickUploadAccepted(ctx, group.ID, report)
 	}
 
 	fileIDs := make([]uuid.UUID, 0, len(files))
@@ -734,7 +736,8 @@ func (api *API) WoWLogUploadV2(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpapi.Write(ctx, w, http.StatusCreated, chroniclesdk.LogUploadResponse{
-		LogID: group.ID,
-		Files: fileIDs,
+		LogID:   group.ID,
+		Cleanup: report,
+		Files:   fileIDs,
 	})
 }

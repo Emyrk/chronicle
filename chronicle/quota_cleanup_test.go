@@ -2,6 +2,8 @@ package chronicle
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -67,10 +69,26 @@ func TestFreeStorageForUploadDeletesOldestUnpinnedParsedRawLog(t *testing.T) {
 	require.NoError(t, err)
 	require.Greater(t, user.ConsumedStorageBytes, user.MaxStorageBytes)
 
-	updated, err := chron.freeStorageForUpload(ctx, user, 10, uuid.Nil)
+	// Neither opting out, an oversized upload, nor the active append target deletes anything.
+	optedOut := user
+	optedOut.AutoDeleteRawLogsAtStorageCapacity = false
+	_, report, err := chron.freeStorageForUpload(ctx, optedOut, 10, uuid.Nil)
 	require.NoError(t, err)
+	require.Nil(t, report)
+	_, report, err = chron.freeStorageForUpload(ctx, user, user.MaxStorageBytes+1, uuid.Nil)
+	require.NoError(t, err)
+	require.Nil(t, report)
+	_, report, err = chron.freeStorageForUpload(ctx, user, 10, unpinnedGroupID)
+	require.NoError(t, err)
+	require.Nil(t, report)
+	updated, report, err := chron.freeStorageForUpload(ctx, user, 10, uuid.Nil)
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{unpinnedGroupID}, report.DeletedLogIDs)
 	require.LessOrEqual(t, updated.ConsumedStorageBytes+10, updated.MaxStorageBytes)
 
+	_, report, err = chron.freeStorageForUpload(ctx, updated, 10, uuid.Nil)
+	require.NoError(t, err)
+	require.Nil(t, report, "a later attempt must not claim earlier deletions")
 	unpinnedFile, err := store.GetLogFile(ctx, unpinnedFileID)
 	require.NoError(t, err)
 	require.True(t, unpinnedFile.StorageDeletedAt.Valid)
@@ -84,4 +102,29 @@ func TestFreeStorageForUploadDeletesOldestUnpinnedParsedRawLog(t *testing.T) {
 	pinnedGroup, err := store.GetWoWLogGroupByID(ctx, pinnedGroupID)
 	require.NoError(t, err)
 	require.True(t, pinnedGroup.WoWLogGroup.RawFilesPinned)
+
+	// A failure after a successful deletion reports only the successful group.
+	firstID, _ := insertRawLog(time.Now().Add(-4*time.Hour), 20, false)
+	failedID, failedFileID := insertRawLog(time.Now().Add(-3*time.Hour), user.MaxStorageBytes, false)
+	user, err = store.GetUserByID(ctx, ownerID)
+	require.NoError(t, err)
+	chron.Storage = &failingCleanupStorage{ObjectStorage: objects, failPath: chron.logPath(failedFileID)}
+	_, report, err = chron.freeStorageForUpload(ctx, user, 10, uuid.Nil)
+	require.ErrorContains(t, err, "injected deletion failure")
+	require.Equal(t, []uuid.UUID{firstID}, report.DeletedLogIDs)
+	require.NotContains(t, report.DeletedLogIDs, failedID)
+}
+
+type failingCleanupStorage struct {
+	storage.ObjectStorage
+	failPath string
+}
+
+func (s *failingCleanupStorage) RemoveFile(ctx context.Context, bucket string, paths []string) ([]storage.FileUploadResponse, error) {
+	for _, path := range paths {
+		if path == s.failPath {
+			return nil, errors.New("injected deletion failure")
+		}
+	}
+	return s.ObjectStorage.RemoveFile(ctx, bucket, paths)
 }

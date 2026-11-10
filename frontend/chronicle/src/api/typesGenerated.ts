@@ -4256,6 +4256,7 @@ export interface LogParseReport {
 
 // From chroniclesdk/response.go
 export interface LogUploadResponse {
+    readonly cleanup?: RawLogCleanup;
     readonly log_id: string;
     readonly file_ids: readonly string[];
 }
@@ -5348,6 +5349,7 @@ export interface RequeueVersionResponse {
  * Response represents a generic HTTP response.
  */
 export interface Response {
+    readonly cleanup?: RawLogCleanup;
     /**
      * Message is an actionable message that depicts actions the request took.
      * These messages should be fully formed sentences with proper punctuation.
@@ -7717,4 +7719,8 @@ export interface CareerSummary {
     readonly computed_at: string | null;
     readonly refresh_pending: boolean;
     readonly contributions: readonly CareerContribution[];
+}
+
+export interface RawLogCleanup {
+    readonly deleted_log_ids: readonly string[];
 }

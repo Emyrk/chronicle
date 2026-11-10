@@ -4,6 +4,7 @@ import "github.com/google/uuid"
 
 // Response represents a generic HTTP response.
 type Response struct {
+	Cleanup *RawLogCleanup `json:"cleanup,omitempty"`
 	// Message is an actionable message that depicts actions the request took.
 	// These messages should be fully formed sentences with proper punctuation.
 	// Examples:
@@ -24,7 +25,14 @@ type Response struct {
 	Detail string `json:"detail,omitempty"`
 }
 
+// RawLogCleanup describes successful raw-storage deletions during this request only.
+// Parsed reports remain available.
+type RawLogCleanup struct {
+	DeletedLogIDs []uuid.UUID `json:"deleted_log_ids"`
+}
+
 type LogUploadResponse struct {
-	LogID uuid.UUID   `json:"log_id"`
-	Files []uuid.UUID `json:"file_ids"`
+	Cleanup *RawLogCleanup `json:"cleanup,omitempty"`
+	LogID   uuid.UUID      `json:"log_id"`
+	Files   []uuid.UUID    `json:"file_ids"`
 }
