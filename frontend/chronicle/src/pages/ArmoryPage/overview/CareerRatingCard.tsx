@@ -131,7 +131,7 @@ function Stat({
   return (
     <Tooltip>
       <TooltipTrigger asChild>{stat}</TooltipTrigger>
-      <TooltipContent side="bottom" sideOffset={8} className="max-w-none px-3 py-2.5">
+      <TooltipContent side="bottom" sideOffset={2} className="max-w-none px-3 py-2.5">
         {breakdown}
       </TooltipContent>
     </Tooltip>
