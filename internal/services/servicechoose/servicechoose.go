@@ -10,6 +10,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"html"
 	"net"
 	"net/http"
 	"net/url"
@@ -39,6 +40,21 @@ var chooseHTML []byte
 // <, > and &, so the payload cannot break out of its <script> element.
 var dataPlaceholder = []byte("{{CHOOSE_DATA}}")
 
+// metaPlaceholder is replaced with the page's Open Graph tags.
+var metaPlaceholder = []byte("{{CHOOSE_META}}")
+
+const (
+	ogTitle = "Choose your community"
+	ogSite  = "Chronicle"
+)
+
+// OGImager signs the chooser's social preview image (serviceog's brand card).
+// Without one, or when it returns "", the page keeps its title and
+// description but has no image.
+type OGImager interface {
+	ChooseOGImageURL(r *http.Request, communities int) string
+}
+
 const pageCSP = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; " +
 	"img-src 'self' data: https:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
 
@@ -61,6 +77,16 @@ type Service struct {
 	// order holds tenant slugs, most popular first, refreshed in the
 	// background. Tenants missing from it are listed after, by name.
 	order atomic.Pointer[[]string]
+	// og is set once during server wiring, before requests are served.
+	og OGImager
+}
+
+// SetOGImager gives the chooser page its preview image. Call it before the
+// server starts handling requests.
+func (s *Service) SetOGImager(og OGImager) {
+	if s != nil {
+		s.og = og
+	}
 }
 
 const (
@@ -308,15 +334,17 @@ func (s *Service) tenantDestination(t database.Tenant) Destination {
 }
 
 func (s *Service) servePage(w http.ResponseWriter, r *http.Request) {
+	destinations := s.Destinations()
 	data, err := json.Marshal(pageData{
 		ChooseHost:   r.Host,
-		Destinations: s.Destinations(),
+		Destinations: destinations,
 	})
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	body := bytes.Replace(chooseHTML, dataPlaceholder, data, 1)
+	body = bytes.Replace(body, metaPlaceholder, s.ogMeta(r, len(destinations)), 1)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	// Replaces the site-wide policy: this page is self-contained, but tenant
@@ -329,4 +357,35 @@ func (s *Service) servePage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, _ = w.Write(body)
+}
+
+// ogMeta is the chooser's Open Graph tags. Every choose link shares one
+// preview: without a community there is no page to describe.
+func (s *Service) ogMeta(r *http.Request, communities int) []byte {
+	description := "Chronicle raid logs for World of Warcraft communities. Pick yours and this link opens there."
+	if communities > 1 {
+		description = fmt.Sprintf("Chronicle raid logs for %d World of Warcraft communities. Pick yours and this link opens there.", communities)
+	}
+	tags := [][2]string{
+		{"og:type", "website"},
+		{"og:site_name", ogSite},
+		{"og:title", ogTitle},
+		{"og:description", description},
+		{"og:url", s.ChooseURL() + r.URL.EscapedPath()},
+	}
+	if s.og != nil {
+		if image := s.og.ChooseOGImageURL(r, communities); image != "" {
+			tags = append(tags, [2]string{"og:image", image}, [2]string{"twitter:card", "summary_large_image"})
+		}
+	}
+	var b bytes.Buffer
+	fmt.Fprintf(&b, "<meta name=\"description\" content=\"%s\">\n", html.EscapeString(description))
+	for _, tag := range tags {
+		attr := "property"
+		if strings.HasPrefix(tag[0], "twitter:") {
+			attr = "name"
+		}
+		fmt.Fprintf(&b, "<meta %s=\"%s\" content=\"%s\">\n", attr, tag[0], html.EscapeString(tag[1]))
+	}
+	return b.Bytes()
 }

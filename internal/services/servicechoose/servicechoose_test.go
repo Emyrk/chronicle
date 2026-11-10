@@ -166,11 +166,53 @@ func TestPageData(t *testing.T) {
 	require.Contains(t, body, "Hidden communities are not listed.")
 }
 
+type fakeImager struct{ communities int }
+
+func (f *fakeImager) ChooseOGImageURL(_ *http.Request, communities int) string {
+	f.communities = communities
+	return "https://og.example.com/api/og?template=brand&a=1&b=2"
+}
+
+func TestOGMeta(t *testing.T) {
+	t.Parallel()
+
+	serve := func(svc *servicechoose.Service) string {
+		req := httptest.NewRequest(http.MethodGet, "/instances/123", nil)
+		req.Host = "choose.localhost"
+		rec := httptest.NewRecorder()
+		svc.Middleware(http.NotFoundHandler(), http.NotFoundHandler()).ServeHTTP(rec, req)
+		require.Equal(t, http.StatusOK, rec.Code)
+		return rec.Body.String()
+	}
+
+	t.Run("NoImager", func(t *testing.T) {
+		t.Parallel()
+		body := serve(newService(t, "https://legacy.localhost"))
+		require.NotContains(t, body, "{{CHOOSE_META}}")
+		require.Contains(t, body, `<meta property="og:title" content="Choose your community">`)
+		require.Contains(t, body, `<meta property="og:description" content="Chronicle raid logs for 2 World of Warcraft communities. Pick yours and this link opens there.">`)
+		require.Contains(t, body, `<meta property="og:url" content="https://choose.localhost/instances/123">`)
+		require.NotContains(t, body, "og:image")
+	})
+
+	t.Run("WithImager", func(t *testing.T) {
+		t.Parallel()
+		svc := newService(t, "https://legacy.localhost")
+		imager := &fakeImager{}
+		svc.SetOGImager(imager)
+		body := serve(svc)
+		require.Equal(t, 2, imager.communities, "only discoverable communities count")
+		require.Contains(t, body, `<meta property="og:image" content="https://og.example.com/api/og?template=brand&amp;a=1&amp;b=2">`)
+		require.Contains(t, body, `<meta name="twitter:card" content="summary_large_image">`)
+	})
+}
+
 func TestDisabled(t *testing.T) {
 	t.Parallel()
 	var svc *servicechoose.Service
 	require.False(t, svc.Enabled())
 	require.Empty(t, svc.ChooseURL())
+	svc.SetOGImager(&fakeImager{}) // nil-safe
 
 	tenanted := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})
 	require.NotNil(t, svc.Middleware(nil, tenanted))
