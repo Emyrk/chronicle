@@ -49,13 +49,19 @@ func ComputeCareerInputs(ctx context.Context, db database.StoreQueries, tenant u
 			}
 			raids := make(map[string]*CareerRaidInput, len(metrics))
 			for _, metric := range metrics {
-				raids[metric] = &CareerRaidInput{CareerKey: variant.CareerKey, Metric: metric}
+				raids[metric] = &CareerRaidInput{CareerKey: variant.CareerKey, Metric: metric, Parts: true}
 			}
-			add := func(metric string, peak, form, floor float64, count int64) {
+			add := func(metric, boss string, peak, form, floor float64, count int64) {
 				raid := raids[metric]
-				raid.Peak += peak / float64(len(variant.AverageBosses))
-				raid.Mastery += (.30*peak + .50*form + .20*floor) / float64(len(variant.AverageBosses))
+				n := float64(len(variant.AverageBosses))
+				raid.Peak += peak / n
+				raid.Form += form / n
+				raid.Floor += floor / n
+				raid.Mastery += (.30*peak + .50*form + .20*floor) / n
 				raid.EligibleKills += count
+				if count > 0 {
+					raid.BossCounts = append(raid.BossCounts, CareerBossCount{Boss: boss, Count: count})
+				}
 			}
 			if identity.SubjectKind == "player" {
 				rows, err := db.ListCareerPlayerBossInputs(ctx, database.ListCareerPlayerBossInputsParams{
@@ -66,7 +72,7 @@ func ComputeCareerInputs(ctx context.Context, db database.StoreQueries, tenant u
 					return CareerInputs{}, fmt.Errorf("career boss inputs: %w", err)
 				}
 				for _, row := range rows {
-					add(row.Metric, row.Peak, row.Form, row.Floor, row.ObservationCount)
+					add(row.Metric, row.EncounterName, row.Peak, row.Form, row.Floor, row.ObservationCount)
 				}
 			} else {
 				rows, err := db.ListCareerGuildBossInputs(ctx, database.ListCareerGuildBossInputsParams{
@@ -77,7 +83,7 @@ func ComputeCareerInputs(ctx context.Context, db database.StoreQueries, tenant u
 					return CareerInputs{}, fmt.Errorf("career boss inputs: %w", err)
 				}
 				for _, row := range rows {
-					add(row.Metric, row.Peak, row.Form, row.Floor, row.ObservationCount)
+					add(row.Metric, row.EncounterName, row.Peak, row.Form, row.Floor, row.ObservationCount)
 				}
 			}
 			for _, metric := range metrics {

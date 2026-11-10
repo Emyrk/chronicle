@@ -11955,6 +11955,227 @@ func (q *sqlQuerier) LandingPositionalInstances(ctx context.Context, limitCount 
 	return items, nil
 }
 
+const listLeaderboardCareerGuildNames = `-- name: ListLeaderboardCareerGuildNames :many
+SELECT g.id, g.name,
+ COALESCE((SELECT NULLIF(r.name, '') FROM wow_server_realms r WHERE r.id = g.realm_id), 'Unknown realm')::text AS realm_name,
+ COALESCE((SELECT gp.theme->>'logo_url' FROM guild_pages gp WHERE gp.guild_id = g.id), '')::text AS logo_url
+FROM guilds g WHERE g.id = ANY($1::uuid[])
+`
+
+type ListLeaderboardCareerGuildNamesRow struct {
+	ID        uuid.UUID `db:"id" json:"id"`
+	Name      string    `db:"name" json:"name"`
+	RealmName string    `db:"realm_name" json:"realm_name"`
+	LogoUrl   string    `db:"logo_url" json:"logo_url"`
+}
+
+// Display metadata for one page of guilds, looked up after ranking.
+func (q *sqlQuerier) ListLeaderboardCareerGuildNames(ctx context.Context, guildIds []uuid.UUID) ([]ListLeaderboardCareerGuildNamesRow, error) {
+	rows, err := q.db.Query(ctx, listLeaderboardCareerGuildNames, guildIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLeaderboardCareerGuildNamesRow
+	for rows.Next() {
+		var i ListLeaderboardCareerGuildNamesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.RealmName,
+			&i.LogoUrl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLeaderboardCareerPlayerNames = `-- name: ListLeaderboardCareerPlayerNames :many
+SELECT ids.realm_id::uuid AS realm_id, ids.subject_id::text AS subject_id,
+ COALESCE(p.name, ids.subject_id)::text AS player_name,
+ COALESCE(p.class::text, '')::text AS player_class,
+ COALESCE(g.name, '')::text AS guild_name,
+ COALESCE((SELECT NULLIF(r.name, '') FROM wow_server_realms r WHERE r.id = ids.realm_id), 'Unknown realm')::text AS realm_name
+FROM (SELECT unnest($1::uuid[]) AS realm_id, unnest($2::text[]) AS subject_id) ids
+LEFT JOIN game_players p ON p.realm_id = ids.realm_id AND p.id = ids.subject_id
+LEFT JOIN guilds g ON g.id = p.guild_id
+`
+
+type ListLeaderboardCareerPlayerNamesParams struct {
+	RealmIds   []uuid.UUID `db:"realm_ids" json:"realm_ids"`
+	SubjectIds []string    `db:"subject_ids" json:"subject_ids"`
+}
+
+type ListLeaderboardCareerPlayerNamesRow struct {
+	RealmID     uuid.UUID `db:"realm_id" json:"realm_id"`
+	SubjectID   string    `db:"subject_id" json:"subject_id"`
+	PlayerName  string    `db:"player_name" json:"player_name"`
+	PlayerClass string    `db:"player_class" json:"player_class"`
+	GuildName   string    `db:"guild_name" json:"guild_name"`
+	RealmName   string    `db:"realm_name" json:"realm_name"`
+}
+
+// Display metadata for one page of characters, looked up after ranking.
+func (q *sqlQuerier) ListLeaderboardCareerPlayerNames(ctx context.Context, arg ListLeaderboardCareerPlayerNamesParams) ([]ListLeaderboardCareerPlayerNamesRow, error) {
+	rows, err := q.db.Query(ctx, listLeaderboardCareerPlayerNames, arg.RealmIds, arg.SubjectIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLeaderboardCareerPlayerNamesRow
+	for rows.Next() {
+		var i ListLeaderboardCareerPlayerNamesRow
+		if err := rows.Scan(
+			&i.RealmID,
+			&i.SubjectID,
+			&i.PlayerName,
+			&i.PlayerClass,
+			&i.GuildName,
+			&i.RealmName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLeaderboardCareerSubjects = `-- name: ListLeaderboardCareerSubjects :many
+SELECT tenant_id, subject_kind, realm_id, subject_id, player_class, player_spec, player_sub_spec, chosen_metric, inputs, pool_fingerprint, computed_at FROM leaderboard_career_subjects
+WHERE tenant_id = $1::uuid AND subject_kind = $2::text
+ AND ($3::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR realm_id = $3::uuid)
+ AND ($4::text = '' OR player_class = $4::text)
+ORDER BY realm_id, subject_id, player_class, player_spec, player_sub_spec
+`
+
+type ListLeaderboardCareerSubjectsParams struct {
+	TenantID    uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	SubjectKind string    `db:"subject_kind" json:"subject_kind"`
+	RealmFilter uuid.UUID `db:"realm_filter" json:"realm_filter"`
+	PlayerClass string    `db:"player_class" json:"player_class"`
+}
+
+// Every published career row of one subject kind for the tenant. Mastery and
+// Peak are reduced in Go with the current weights, so rows carry inputs.
+func (q *sqlQuerier) ListLeaderboardCareerSubjects(ctx context.Context, arg ListLeaderboardCareerSubjectsParams) ([]LeaderboardCareerSubject, error) {
+	rows, err := q.db.Query(ctx, listLeaderboardCareerSubjects,
+		arg.TenantID,
+		arg.SubjectKind,
+		arg.RealmFilter,
+		arg.PlayerClass,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LeaderboardCareerSubject
+	for rows.Next() {
+		var i LeaderboardCareerSubject
+		if err := rows.Scan(
+			&i.TenantID,
+			&i.SubjectKind,
+			&i.RealmID,
+			&i.SubjectID,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+			&i.ChosenMetric,
+			&i.Inputs,
+			&i.PoolFingerprint,
+			&i.ComputedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const searchLeaderboardCareerGuilds = `-- name: SearchLeaderboardCareerGuilds :many
+SELECT realm_id, id::text AS subject_id FROM guilds
+WHERE position(lower($1::text) IN lower(name)) > 0
+ AND ($2::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR realm_id = $2::uuid)
+`
+
+type SearchLeaderboardCareerGuildsParams struct {
+	Search      string    `db:"search" json:"search"`
+	RealmFilter uuid.UUID `db:"realm_filter" json:"realm_filter"`
+}
+
+type SearchLeaderboardCareerGuildsRow struct {
+	RealmID   uuid.UUID `db:"realm_id" json:"realm_id"`
+	SubjectID string    `db:"subject_id" json:"subject_id"`
+}
+
+// Guilds whose name contains the search text, for filtering a ranked career board.
+func (q *sqlQuerier) SearchLeaderboardCareerGuilds(ctx context.Context, arg SearchLeaderboardCareerGuildsParams) ([]SearchLeaderboardCareerGuildsRow, error) {
+	rows, err := q.db.Query(ctx, searchLeaderboardCareerGuilds, arg.Search, arg.RealmFilter)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SearchLeaderboardCareerGuildsRow
+	for rows.Next() {
+		var i SearchLeaderboardCareerGuildsRow
+		if err := rows.Scan(&i.RealmID, &i.SubjectID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const searchLeaderboardCareerPlayers = `-- name: SearchLeaderboardCareerPlayers :many
+SELECT realm_id, id::text AS subject_id FROM game_players
+WHERE position(lower($1::text) IN lower(name)) > 0
+ AND ($2::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR realm_id = $2::uuid)
+`
+
+type SearchLeaderboardCareerPlayersParams struct {
+	Search      string    `db:"search" json:"search"`
+	RealmFilter uuid.UUID `db:"realm_filter" json:"realm_filter"`
+}
+
+type SearchLeaderboardCareerPlayersRow struct {
+	RealmID   uuid.UUID `db:"realm_id" json:"realm_id"`
+	SubjectID string    `db:"subject_id" json:"subject_id"`
+}
+
+// Characters whose name contains the search text, for filtering a ranked career board.
+func (q *sqlQuerier) SearchLeaderboardCareerPlayers(ctx context.Context, arg SearchLeaderboardCareerPlayersParams) ([]SearchLeaderboardCareerPlayersRow, error) {
+	rows, err := q.db.Query(ctx, searchLeaderboardCareerPlayers, arg.Search, arg.RealmFilter)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SearchLeaderboardCareerPlayersRow
+	for rows.Next() {
+		var i SearchLeaderboardCareerPlayersRow
+		if err := rows.Scan(&i.RealmID, &i.SubjectID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCareerGuildBossInputs = `-- name: ListCareerGuildBossInputs :many
 SELECT s.encounter_name, 'kill_time'::text AS metric,
 LEAST(100::double precision, 100.0 * b.best_duration_ms / s.fastest_duration_ms)::double precision AS peak, LEAST(100::double precision, 100::double precision * b.best_duration_ms * s.form_mean_inverse_ms)::double precision AS form, LEAST(100::double precision, 100::double precision * b.best_duration_ms * s.floor_mean_inverse_ms)::double precision AS floor,

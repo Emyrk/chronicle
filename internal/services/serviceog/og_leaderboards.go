@@ -50,6 +50,8 @@ func (s *Service) leaderboardRoutes() []frontend.OGRoute {
 		}
 	}
 	return []frontend.OGRoute{
+		// Before {segment}, which would read "career" as a raid.
+		{Pattern: "/leaderboards/career", Resolve: s.careerOG},
 		{Pattern: "/leaderboards", Resolve: resolve("", "", "")},
 		{Pattern: "/leaderboards/{segment}", Resolve: resolve("segment", "", "")},
 		{Pattern: "/leaderboards/{instance}/{tab}", Resolve: resolve("", "instance", "tab")},

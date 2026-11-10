@@ -865,7 +865,14 @@ type sqlcQuerier interface {
 	ListInstancesMissingParseReceiptWindowed(ctx context.Context, arg ListInstancesMissingParseReceiptWindowedParams) ([]ListInstancesMissingParseReceiptWindowedRow, error)
 	ListInstancesMissingTimeParseScores(ctx context.Context, arg ListInstancesMissingTimeParseScoresParams) ([]ListInstancesMissingTimeParseScoresRow, error)
 	ListItemPricingRealms(ctx context.Context) ([]ListItemPricingRealmsRow, error)
+	// Display metadata for one page of guilds, looked up after ranking.
+	ListLeaderboardCareerGuildNames(ctx context.Context, guildIds []uuid.UUID) ([]ListLeaderboardCareerGuildNamesRow, error)
 	ListLeaderboardCareerIdentityPage(ctx context.Context, arg ListLeaderboardCareerIdentityPageParams) ([]LeaderboardCareerIdentity, error)
+	// Display metadata for one page of characters, looked up after ranking.
+	ListLeaderboardCareerPlayerNames(ctx context.Context, arg ListLeaderboardCareerPlayerNamesParams) ([]ListLeaderboardCareerPlayerNamesRow, error)
+	// Every published career row of one subject kind for the tenant. Mastery and
+	// Peak are reduced in Go with the current weights, so rows carry inputs.
+	ListLeaderboardCareerSubjects(ctx context.Context, arg ListLeaderboardCareerSubjectsParams) ([]LeaderboardCareerSubject, error)
 	ListLeaderboardCareerVariants(ctx context.Context, flavors []string) ([]LeaderboardCareerVariant, error)
 	ListLeaderboardDirtyRuns(ctx context.Context, tenantID uuid.UUID) ([]LeaderboardDirtyRun, error)
 	ListLeaderboardHighlights(ctx context.Context, arg ListLeaderboardHighlightsParams) ([]LeaderboardHighlight, error)
@@ -1229,6 +1236,10 @@ type sqlcQuerier interface {
 	SearchGamePlayers(ctx context.Context, arg SearchGamePlayersParams) ([]SearchGamePlayersRow, error)
 	SearchItemSets(ctx context.Context, arg SearchItemSetsParams) ([]SearchItemSetsRow, error)
 	SearchItemTemplates(ctx context.Context, arg SearchItemTemplatesParams) ([]SearchItemTemplatesRow, error)
+	// Guilds whose name contains the search text, for filtering a ranked career board.
+	SearchLeaderboardCareerGuilds(ctx context.Context, arg SearchLeaderboardCareerGuildsParams) ([]SearchLeaderboardCareerGuildsRow, error)
+	// Characters whose name contains the search text, for filtering a ranked career board.
+	SearchLeaderboardCareerPlayers(ctx context.Context, arg SearchLeaderboardCareerPlayersParams) ([]SearchLeaderboardCareerPlayersRow, error)
 	// Slot-aware enchant search for the gear builder. Joining through the
 	// spells that apply each enchant (effect 53 = enchant item, permanent)
 	// keeps only actually-applyable enchants and derives slot validity from

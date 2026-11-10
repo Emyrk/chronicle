@@ -61,3 +61,65 @@ type CareerIssue struct {
 	MaxPlayers     int16  `json:"max_players"`
 	Code           string `json:"code"`
 }
+
+// CareerLeaderboardResponse ranks characters or guilds by career Mastery, Peak,
+// and Renown. A character's Mastery and Peak come from its spec with the
+// highest Mastery (or the filtered spec); Renown adds up every spec. Guilds use
+// kill-time Mastery and Peak. Status explains unavailable Mastery and Peak.
+type CareerLeaderboardResponse struct {
+	Status  string                 `json:"status"`
+	Mastery CareerLeaderboardBoard `json:"mastery"`
+	Peak    CareerLeaderboardBoard `json:"peak"`
+	Renown  CareerLeaderboardBoard `json:"renown"`
+}
+
+// CareerLeaderboardBoard is the top of one ranking; Total counts every ranked subject.
+type CareerLeaderboardBoard struct {
+	Total   int                      `json:"total"`
+	Entries []CareerLeaderboardEntry `json:"entries"`
+}
+
+// CareerLeaderboardEntry is a character (subject_id is its GUID) or a guild
+// (subject_id is the guild ID). Class, spec, and guild_name are characters only;
+// logo_url is guilds only.
+type CareerLeaderboardEntry struct {
+	SubjectID     string   `json:"subject_id"`
+	Name          string   `json:"name"`
+	RealmID       string   `json:"realm_id"`
+	RealmName     string   `json:"realm_name"`
+	PlayerClass   string   `json:"player_class"`
+	PlayerSpec    string   `json:"player_spec"`
+	PlayerSubSpec string   `json:"player_sub_spec"`
+	GuildName     string   `json:"guild_name"`
+	LogoURL       string   `json:"logo_url"`
+	ChosenMetric  *string  `json:"chosen_metric"`
+	Mastery       *float64 `json:"mastery"`
+	Peak          *float64 `json:"peak"`
+	Renown        float64  `json:"renown"`
+	// Form and Floor are null until the subject's inputs are refreshed with them.
+	Form  *float64                `json:"form"`
+	Floor *float64                `json:"floor"`
+	Raids []CareerLeaderboardRaid `json:"raids"`
+}
+
+// CareerLeaderboardRaid is one weighted raid behind an entry's Mastery and Peak;
+// raids without kills are included at zero.
+type CareerLeaderboardRaid struct {
+	InstanceName   string  `json:"instance_name"`
+	DifficultyName string  `json:"difficulty_name"`
+	MaxPlayers     int     `json:"max_players"`
+	Weight         float64 `json:"weight"`
+	Mastery        float64 `json:"mastery"`
+	Peak           float64 `json:"peak"`
+	Kills          int64   `json:"kills"`
+	// Form and Floor are null, and Bosses empty, until the inputs carry them.
+	Form   *float64                    `json:"form"`
+	Floor  *float64                    `json:"floor"`
+	Bosses []CareerLeaderboardRaidBoss `json:"bosses"`
+}
+
+// CareerLeaderboardRaidBoss is one average-eligible boss and its eligible kills (0 if none).
+type CareerLeaderboardRaidBoss struct {
+	EncounterName string `json:"encounter_name"`
+	Count         int64  `json:"count"`
+}

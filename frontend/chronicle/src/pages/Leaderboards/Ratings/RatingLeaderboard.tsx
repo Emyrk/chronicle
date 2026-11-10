@@ -149,7 +149,8 @@ export function RatingBoards({
         />
       )}
 
-      {!tableOnly && (
+      {/* Live boards without bosses (the career board) have no side boards to show. */}
+      {!tableOnly && (!live || !!bosses?.length) && (
         <>
           {/* One compact card per boss (or class, or spec), the same size as the guild boards' cards. */}
           <section aria-label={`By ${childBy}`} className="space-y-3">

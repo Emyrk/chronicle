@@ -2,6 +2,7 @@ package serviceratings
 
 import (
 	"testing"
+	"strings"
 	"time"
 
 	"github.com/Emyrk/chronicle/database"
@@ -143,10 +144,39 @@ func TestCareerPublicationReadAndRetraction(t *testing.T) {
 	require.Equal(t, "dps", *rows.Cohorts[0].ChosenMetric)
 	require.NotNil(t, rows.Cohorts[0].ComputedAt)
 	require.False(t, rows.Cohorts[0].RefreshPending)
+	board, err := ReadCareerBoard(ctx, s.db, s.tenant, CareerBoardFilter{})
+	require.NoError(t, err)
+	require.Equal(t, "ready", board.Status)
+	require.Len(t, board.Entries, 1)
+	require.Equal(t, "Player", board.Entries[0].SubjectID)
+	require.Equal(t, 30.0, *board.Entries[0].Mastery)
+	require.Equal(t, 3.0, board.Entries[0].Renown)
+	leaders, err := ReadCareerLeaders(ctx, s.db, s.tenant, false, 5)
+	require.NoError(t, err)
+	require.Len(t, leaders.Boards["mastery"], 1)
+	require.NotEmpty(t, leaders.Boards["mastery"][0].Name)
+	scoped, err := ReadCareerBoard(ctx, s.db, s.tenant, CareerBoardFilter{Realm: uuid.New()})
+	require.NoError(t, err)
+	require.Empty(t, scoped.Entries, "a realm filter excludes other realms")
+	names, err := s.db.ListLeaderboardCareerPlayerNames(ctx, database.ListLeaderboardCareerPlayerNamesParams{RealmIds: []uuid.UUID{s.realm}, SubjectIds: []string{"Player"}})
+	require.NoError(t, err)
+	require.Len(t, names, 1)
+	require.NotEmpty(t, names[0].PlayerName)
 	guild, err := ReadGuildCareer(ctx, s.db, s.tenant, s.guild)
 	require.NoError(t, err)
 	require.Equal(t, "kill_time", *guild.ChosenMetric)
 	require.Equal(t, 30.0, *guild.Mastery)
+	guilds, err := ReadCareerBoard(ctx, s.db, s.tenant, CareerBoardFilter{Guilds: true})
+	require.NoError(t, err)
+	require.Len(t, guilds.Entries, 1)
+	require.Equal(t, s.guild.String(), guilds.Entries[0].SubjectID)
+	require.Equal(t, 30.0, *guilds.Entries[0].Mastery)
+	guildNames, err := s.db.ListLeaderboardCareerGuildNames(ctx, []uuid.UUID{s.guild})
+	require.NoError(t, err)
+	require.Len(t, guildNames, 1)
+	found, err := s.db.SearchLeaderboardCareerGuilds(ctx, database.SearchLeaderboardCareerGuildsParams{Search: strings.ToUpper(guildNames[0].Name[:2])})
+	require.NoError(t, err)
+	require.Contains(t, found, database.SearchLeaderboardCareerGuildsRow{RealmID: s.realm, SubjectID: s.guild.String()}, "search is case-insensitive")
 	// A benchmark-only publication must refresh unchanged subjects' normalized inputs.
 	s.exec(`UPDATE leaderboard_player_observations SET metric_value=200 WHERE tenant_id=$1`, s.tenant)
 	s.enqueue(FamilyPlayerBossBenchmark, "Boss", time.Now().Add(-time.Minute))
@@ -175,6 +205,8 @@ func TestCareerPublicationReadAndRetraction(t *testing.T) {
 	require.Equal(t, 7.0, rows.Cohorts[0].Renown)
 	s.exec(`UPDATE tenants SET parse_config='{"cohort_mode":"class"}' WHERE id=$1`, s.tenant)
 	_, err = ReadPlayerCareer(ctx, s.db, s.tenant, s.realm, "Player")
+	require.ErrorIs(t, err, ErrCareerUnsupportedMode)
+	_, err = ReadCareerBoard(ctx, s.db, s.tenant, CareerBoardFilter{})
 	require.ErrorIs(t, err, ErrCareerUnsupportedMode)
 	s.exec(`UPDATE tenants SET parse_config='{}' WHERE id=$1`, s.tenant)
 	s.exec(`UPDATE wow_log_groups SET unlisted=true WHERE id=$1`, s.group)

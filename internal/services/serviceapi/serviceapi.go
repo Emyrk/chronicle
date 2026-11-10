@@ -279,6 +279,9 @@ func (s *Service) Start(ctx context.Context) error {
 		PlayerCareer: func(ctx context.Context, tenant, realm uuid.UUID, guid string) (serviceratings.PlayerCareerResult, error) {
 			return serviceratings.ReadPlayerCareer(ctx, database.New(pool), tenant, realm, guid)
 		},
+		CareerLeaders: func(ctx context.Context, tenant uuid.UUID, guilds bool) (serviceratings.CareerLeaders, error) {
+			return serviceratings.ReadCareerLeaders(ctx, database.New(pool), tenant, guilds, 5)
+		},
 	})
 	// The chooser subdomain previews with the brand card.
 	servicechoose.Choose(s.broker).SetOGImager(ogSvc)

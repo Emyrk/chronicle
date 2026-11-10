@@ -7667,6 +7667,87 @@ export interface CareerIssue {
 }
 
 // From chroniclesdk/career.go
+/**
+ * CareerLeaderboardBoard is the top of one ranking; Total counts every ranked subject.
+ */
+export interface CareerLeaderboardBoard {
+    readonly total: number;
+    readonly entries: readonly CareerLeaderboardEntry[];
+}
+
+// From chroniclesdk/career.go
+/**
+ * CareerLeaderboardEntry is a character (subject_id is its GUID) or a guild
+ * (subject_id is the guild ID). Class, spec, and guild_name are characters only;
+ * logo_url is guilds only.
+ */
+export interface CareerLeaderboardEntry {
+    readonly subject_id: string;
+    readonly name: string;
+    readonly realm_id: string;
+    readonly realm_name: string;
+    readonly player_class: string;
+    readonly player_spec: string;
+    readonly player_sub_spec: string;
+    readonly guild_name: string;
+    readonly logo_url: string;
+    readonly chosen_metric: string | null;
+    readonly mastery: number | null;
+    readonly peak: number | null;
+    readonly renown: number;
+    /**
+     * Form and Floor are null until the subject's inputs are refreshed with them.
+     */
+    readonly form: number | null;
+    readonly floor: number | null;
+    readonly raids: readonly CareerLeaderboardRaid[];
+}
+
+// From chroniclesdk/career.go
+/**
+ * CareerLeaderboardRaid is one weighted raid behind an entry's Mastery and Peak;
+ * raids without kills are included at zero.
+ */
+export interface CareerLeaderboardRaid {
+    readonly instance_name: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly weight: number;
+    readonly mastery: number;
+    readonly peak: number;
+    readonly kills: number;
+    /**
+     * Form and Floor are null, and Bosses empty, until the inputs carry them.
+     */
+    readonly form: number | null;
+    readonly floor: number | null;
+    readonly bosses: readonly CareerLeaderboardRaidBoss[];
+}
+
+// From chroniclesdk/career.go
+/**
+ * CareerLeaderboardRaidBoss is one average-eligible boss and its eligible kills (0 if none).
+ */
+export interface CareerLeaderboardRaidBoss {
+    readonly encounter_name: string;
+    readonly count: number;
+}
+
+// From chroniclesdk/career.go
+/**
+ * CareerLeaderboardResponse ranks characters or guilds by career Mastery, Peak,
+ * and Renown. A character's Mastery and Peak come from its spec with the
+ * highest Mastery (or the filtered spec); Renown adds up every spec. Guilds use
+ * kill-time Mastery and Peak. Status explains unavailable Mastery and Peak.
+ */
+export interface CareerLeaderboardResponse {
+    readonly status: string;
+    readonly mastery: CareerLeaderboardBoard;
+    readonly peak: CareerLeaderboardBoard;
+    readonly renown: CareerLeaderboardBoard;
+}
+
+// From chroniclesdk/career.go
 export interface CareerPlayerCohort {
     readonly player_class: string;
     readonly player_spec: string;

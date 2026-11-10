@@ -16,6 +16,7 @@ import (
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/servicedataset"
+	"github.com/Emyrk/chronicle/internal/services/serviceratings"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/tenantcache"
 )
@@ -46,35 +47,41 @@ type Options struct {
 	OGSigningKey string
 	// PlayerCareer is optional; without it character cards show history only.
 	PlayerCareer PlayerCareerReader
+	// CareerLeaders is optional; without it /leaderboards/career keeps the brand card.
+	CareerLeaders CareerLeadersReader
 }
 
 // Service resolves Open Graph metadata for Chronicle pages.
 type Service struct {
-	logger       *slog.Logger
-	store        *authz.Authz
-	chronicle    *chronicle.Chronicle
-	tenant       *servicetenant.Service
-	dataset      *servicedataset.Service
-	accessURL    *url.URL
-	imageBaseURL *url.URL
-	signingKey   string
-	playerCareer PlayerCareerReader
-	ogSiteStats  tenantcache.Cache[database.SiteStatsRow]
-	ogCensus     tenantcache.Cache[[]database.CensusPlayerCountsRow]
-	ogHighlights tenantcache.Cache[[]chroniclesdk.HubLandingPreview]
+	logger          *slog.Logger
+	store           *authz.Authz
+	chronicle       *chronicle.Chronicle
+	tenant          *servicetenant.Service
+	dataset         *servicedataset.Service
+	accessURL       *url.URL
+	imageBaseURL    *url.URL
+	signingKey      string
+	playerCareer    PlayerCareerReader
+	careerLeaders   CareerLeadersReader
+	ogCareerPlayers tenantcache.Cache[serviceratings.CareerLeaders]
+	ogCareerGuilds  tenantcache.Cache[serviceratings.CareerLeaders]
+	ogSiteStats     tenantcache.Cache[database.SiteStatsRow]
+	ogCensus        tenantcache.Cache[[]database.CensusPlayerCountsRow]
+	ogHighlights    tenantcache.Cache[[]chroniclesdk.HubLandingPreview]
 }
 
 func New(opts Options) *Service {
 	return &Service{
-		logger:       opts.Logger,
-		store:        opts.Zed,
-		chronicle:    opts.Chronicle,
-		tenant:       opts.Tenant,
-		dataset:      opts.Dataset,
-		accessURL:    opts.AccessURL,
-		imageBaseURL: opts.OGServiceURL,
-		signingKey:   opts.OGSigningKey,
-		playerCareer: opts.PlayerCareer,
+		logger:        opts.Logger,
+		store:         opts.Zed,
+		chronicle:     opts.Chronicle,
+		tenant:        opts.Tenant,
+		dataset:       opts.Dataset,
+		accessURL:     opts.AccessURL,
+		imageBaseURL:  opts.OGServiceURL,
+		signingKey:    opts.OGSigningKey,
+		playerCareer:  opts.PlayerCareer,
+		careerLeaders: opts.CareerLeaders,
 	}
 }
 

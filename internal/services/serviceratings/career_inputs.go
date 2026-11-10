@@ -18,6 +18,18 @@ type CareerRaidInput struct {
 	Mastery       float64
 	Peak          float64
 	EligibleKills int64
+	// Parts marks inputs that carry Form, Floor, and BossCounts. Rows
+	// published before those fields existed read as unknown until refreshed.
+	Parts bool    `json:",omitempty"`
+	Form  float64 `json:",omitempty"`
+	Floor float64 `json:",omitempty"`
+	// BossCounts are this metric's eligible kills per boss with any.
+	BossCounts []CareerBossCount `json:",omitempty"`
+}
+
+type CareerBossCount struct {
+	Boss  string
+	Count int64
 }
 
 type CareerBossKills struct {
@@ -29,10 +41,14 @@ type CareerBossKills struct {
 // CareerSummary is a transport-free reduction of persisted inputs. Nil averages
 // mean configuration is blocked or there is no active positive denominator.
 type CareerSummary struct {
-	ChosenMetric            *string
-	PerformanceStatus       string
-	Mastery                 *float64
-	Peak                    *float64
+	ChosenMetric      *string
+	PerformanceStatus string
+	Mastery           *float64
+	Peak              *float64
+	// Form and Floor are weighted like Peak. Both are nil when Mastery is, or
+	// when any raid's inputs predate them.
+	Form                    *float64
+	Floor                   *float64
 	Renown                  float64
 	Issues                  []leaderboardconfig.CareerIssue
 	PoolFingerprint         string
@@ -52,6 +68,14 @@ type CareerContribution struct {
 	Renown              float64
 	EligibleMetricKills int64
 	EligibleRenownKills int64
+	// Parts is false when this raid's inputs predate Form, Floor, and BossCounts.
+	Parts bool
+	Form  float64
+	Floor float64
+	// AverageBosses are the raid's average-eligible bosses; BossCounts holds
+	// the chosen metric's kills for those with any.
+	AverageBosses []string
+	BossCounts    []CareerBossCount
 }
 
 // ReduceCareer applies current policy but never changes the persisted metric.
@@ -63,8 +87,9 @@ func ReduceCareer(pool leaderboardconfig.CareerPool, inputs CareerInputs, chosen
 	if validMetric {
 		out.ChosenMetric = &chosen
 	}
-	var denominator, mastery, peak float64
+	var denominator, mastery, peak, form, floor float64
 	var metricKills int64
+	parts := true
 	for _, variant := range pool.Variants {
 		if !variant.Active {
 			continue
@@ -85,11 +110,18 @@ func ReduceCareer(pool leaderboardconfig.CareerPool, inputs CareerInputs, chosen
 		}
 		out.Renown += contribution.Renown
 		if variant.IncludeAverage {
+			contribution.AverageBosses = variant.AverageBosses
+			// A raid without kills has known (zero) parts.
+			contribution.Parts = true
 			for _, raid := range inputs.Raids {
 				if raid.CareerKey == variant.CareerKey && raid.Metric == chosen {
 					contribution.Mastery += raid.Mastery
 					contribution.Peak += raid.Peak
 					contribution.EligibleMetricKills += raid.EligibleKills
+					contribution.Parts = contribution.Parts && raid.Parts
+					contribution.Form += raid.Form
+					contribution.Floor += raid.Floor
+					contribution.BossCounts = append(contribution.BossCounts, raid.BossCounts...)
 				}
 			}
 			metricKills += contribution.EligibleMetricKills
@@ -97,6 +129,9 @@ func ReduceCareer(pool leaderboardconfig.CareerPool, inputs CareerInputs, chosen
 				denominator += *variant.Weight
 				mastery += contribution.Mastery * *variant.Weight
 				peak += contribution.Peak * *variant.Weight
+				form += contribution.Form * *variant.Weight
+				floor += contribution.Floor * *variant.Weight
+				parts = parts && contribution.Parts
 			}
 		}
 		out.Contributions = append(out.Contributions, contribution)
@@ -119,6 +154,11 @@ func ReduceCareer(pool leaderboardconfig.CareerPool, inputs CareerInputs, chosen
 			mastery /= denominator
 			peak /= denominator
 			out.Mastery, out.Peak = &mastery, &peak
+			if parts {
+				form /= denominator
+				floor /= denominator
+				out.Form, out.Floor = &form, &floor
+			}
 		}
 	}
 	return out
