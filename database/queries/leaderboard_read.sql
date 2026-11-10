@@ -18,6 +18,13 @@ SELECT s.realm_id, s.player_guid COLLATE "C" AS subject_id,
  AND (@player_class::text = '' OR s.player_class = @player_class::text)
  AND (@player_spec::text = '' OR s.player_spec = @player_spec::text)
  AND (NOT @filter_sub_spec::boolean OR s.player_sub_spec = @player_sub_spec::text) AND s.metric = @metric::text
+ AND (@show_unknowns::boolean OR s.player_spec <> 'Unknown' OR NOT EXISTS (
+  SELECT 1 FROM leaderboard_player_boss_benchmarks known
+  WHERE known.tenant_id = s.tenant_id AND known.instance_name = s.instance_name
+   AND known.difficulty_name = s.difficulty_name AND known.max_players = s.max_players
+   AND known.encounter_name = ANY(@bosses::text[]) AND known.metric = s.metric
+   AND known.player_spec <> 'Unknown'
+ ))
  UNION ALL
 SELECT s.realm_id, s.guild_id::text COLLATE "C" AS subject_id,
  ''::text COLLATE "C" AS player_class, ''::text COLLATE "C" AS player_spec, ''::text COLLATE "C" AS player_sub_spec,
@@ -113,12 +120,19 @@ SELECT page.*, COALESCE((SELECT NULLIF(r.name,'') FROM wow_server_realms r WHERE
 FROM page ORDER BY score DESC, realm_id, subject_id, player_class, player_spec, player_sub_spec;
 
 -- name: ListLeaderboardV2Cohorts :many
-SELECT DISTINCT player_class, player_spec, player_sub_spec, metric
-FROM leaderboard_player_boss_benchmarks
-WHERE tenant_id = @tenant_id::uuid AND instance_name = @instance_name::text
- AND difficulty_name = @difficulty_name::text AND max_players = @max_players::smallint
- AND encounter_name = ANY(@bosses::text[])
-ORDER BY player_class, player_spec, player_sub_spec, metric;
+SELECT DISTINCT b.player_class, b.player_spec, b.player_sub_spec, b.metric
+FROM leaderboard_player_boss_benchmarks b
+WHERE b.tenant_id = @tenant_id::uuid AND b.instance_name = @instance_name::text
+ AND b.difficulty_name = @difficulty_name::text AND b.max_players = @max_players::smallint
+ AND b.encounter_name = ANY(@bosses::text[])
+ AND (@show_unknowns::boolean OR b.player_spec <> 'Unknown' OR NOT EXISTS (
+  SELECT 1 FROM leaderboard_player_boss_benchmarks known
+  WHERE known.tenant_id = @tenant_id::uuid AND known.instance_name = @instance_name::text
+   AND known.difficulty_name = @difficulty_name::text AND known.max_players = @max_players::smallint
+   AND known.encounter_name = ANY(@bosses::text[]) AND known.metric = b.metric
+   AND known.player_spec <> 'Unknown'
+ ))
+ORDER BY b.player_class, b.player_spec, b.player_sub_spec, b.metric;
 
 -- name: ListLeaderboardV2PageBosses :many
 -- Only the returned score page is passed here, with aligned exact cohort arrays.
@@ -197,7 +211,14 @@ cohorts AS (SELECT DISTINCT player_class,player_spec,player_sub_spec FROM leader
  AND max_players = @max_players::smallint AND metric = @metric::text AND encounter_name=ANY(@bosses::text[])
  AND (@player_class::text='' OR player_class = @player_class::text)
  AND (@player_spec::text='' OR player_spec = @player_spec::text)
- AND (NOT @filter_sub_spec::boolean OR player_sub_spec = @player_sub_spec::text)),
+ AND (NOT @filter_sub_spec::boolean OR player_sub_spec = @player_sub_spec::text)
+ AND (@show_unknowns::boolean OR player_spec <> 'Unknown' OR NOT EXISTS (
+  SELECT 1 FROM leaderboard_player_boss_benchmarks known
+  WHERE known.tenant_id = @tenant_id::uuid AND known.instance_name = @instance_name::text
+   AND known.difficulty_name = @difficulty_name::text AND known.max_players = @max_players::smallint
+   AND known.metric = @metric::text AND known.encounter_name = ANY(@bosses::text[])
+   AND known.player_spec <> 'Unknown'
+ ))),
 candidates AS (
  SELECT p.realm_id,p.subject_id,c.player_class,c.player_spec,c.player_sub_spec,
  sum(CASE WHEN b.best_metric>0 THEN LEAST(100::double precision,100*s.raw_peak/b.best_metric) ELSE 0 END)/ @denominator::integer AS peak,
@@ -276,6 +297,13 @@ WITH boss_scores AS MATERIALIZED (
   AND (@player_class::text = '' OR s.player_class = @player_class::text)
   AND (@player_spec::text = '' OR s.player_spec = @player_spec::text)
   AND (NOT @filter_sub_spec::boolean OR s.player_sub_spec = @player_sub_spec::text)
+  AND (@show_unknowns::boolean OR s.player_spec <> 'Unknown' OR NOT EXISTS (
+   SELECT 1 FROM leaderboard_player_boss_benchmarks known
+   WHERE known.tenant_id = s.tenant_id AND known.instance_name = s.instance_name
+    AND known.difficulty_name = s.difficulty_name AND known.max_players = s.max_players
+    AND known.encounter_name = ANY(@bosses::text[]) AND known.metric = s.metric
+    AND known.player_spec <> 'Unknown'
+  ))
 ), leaders AS (
  (SELECT DISTINCT ON (encounter_name) 'peak'::text AS kind, encounter_name, realm_id, subject_id, player_class, player_spec, player_sub_spec, peak AS score, raw_peak AS raw
   FROM boss_scores ORDER BY encounter_name, peak DESC, raw_peak DESC, realm_id, subject_id, player_class, player_spec, player_sub_spec)

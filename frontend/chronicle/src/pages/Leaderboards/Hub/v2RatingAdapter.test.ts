@@ -123,6 +123,19 @@ describe("existing Hub adapter", () => {
       ).getAll("bosses"),
     ).toEqual(["A", "B"]);
   });
+  it("keeps unknown specs hidden by default and opts in explicitly", () => {
+    expect(v2RatingParams(context, {}, "peak").has("show_unknown")).toBe(false);
+    expect(
+      v2RatingParams({ ...context, showUnknowns: true }, {}, "peak").get(
+        "show_unknown",
+      ),
+    ).toBe("true");
+    expect(
+      v2RatingParams({ ...context, showUnknowns: true }, {}, "renown").get(
+        "show_unknown",
+      ),
+    ).toBe("true");
+  });
   it("Renown follows boss selections and ignores class filters while retaining variant and realm", () => {
     const p = v2RatingParams(
       {

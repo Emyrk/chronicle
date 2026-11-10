@@ -51,6 +51,11 @@ describe("existing Hub ratings on current-policy data",()=>{
    expect(empty).not.toContain('Loading B')
   })
  }
+ it("offers unknown specs only for player ratings on tenants with specs", () => {
+  expect(renderToStaticMarkup(<LiveHubRatings {...props} />)).toContain("Show unknown specs")
+  expect(renderToStaticMarkup(<LiveHubRatings {...props} subject="guild" />)).not.toContain("Show unknown specs")
+  expect(renderToStaticMarkup(<LiveHubRatings {...props} summary={resolvedHubMetadata(configuration,{instanceName:"Raid",performance:"dps"},[],[])} />)).not.toContain("Show unknown specs")
+ })
  it("explicitly reports a missing configured variant",()=>{
   expect(renderToStaticMarkup(<LiveHubRatings {...props} cohort={undefined}/>)).toContain("No enabled instance variant")
  })

@@ -1,4 +1,6 @@
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
+import { Eye, EyeOff } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useQueries } from "@tanstack/react-query";
 import type { LeaderboardV2Response } from "@/api/typesGenerated";
 import { RatingBoards } from "@/pages/Leaderboards/Ratings/RatingLeaderboard";
@@ -55,6 +57,13 @@ export function LiveHubRatings(props: LiveHubRatingsProps) {
     toolbar,
     summary,
   } = props;
+  const [showUnknowns, setShowUnknowns] = useState(false);
+  const hasSpecs = !!summary?.cohorts?.some(
+    (cohort) =>
+      cohort.metric === (role === "healing" ? "hps" : "dps") &&
+      cohort.player_spec !== "" &&
+      cohort.player_spec !== "Unknown",
+  );
   const key = JSON.stringify([
     instanceName,
     selected,
@@ -63,6 +72,7 @@ export function LiveHubRatings(props: LiveHubRatingsProps) {
     role,
     subject,
     props.realmIDs,
+    showUnknowns,
     summary?.configuration,
     summary?.cohorts,
   ]);
@@ -79,6 +89,7 @@ export function LiveHubRatings(props: LiveHubRatingsProps) {
             performance: role === "healing" ? "hps" : "dps",
             selected,
             realmIDs: props.realmIDs,
+            showUnknowns,
           }
         : undefined,
     // The key includes the complete immutable request identity.
@@ -178,6 +189,31 @@ export function LiveHubRatings(props: LiveHubRatingsProps) {
       };
     },
   };
+  const ratingsToolbar = (
+    <div className="flex flex-wrap items-center gap-2">
+      {toolbar}
+      {subject === "player" && hasSpecs && (
+        <button
+          type="button"
+          aria-pressed={showUnknowns}
+          onClick={() => setShowUnknowns(!showUnknowns)}
+          className={cn(
+            "inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium transition-colors",
+            showUnknowns
+              ? "bg-muted text-foreground"
+              : "bg-background/60 text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {showUnknowns ? (
+            <Eye className="size-3.5" />
+          ) : (
+            <EyeOff className="size-3.5" />
+          )}
+          {showUnknowns ? "Hide unknown specs" : "Show unknown specs"}
+        </button>
+      )}
+    </div>
+  );
   if (!context)
     return (
       <p
@@ -271,7 +307,7 @@ export function LiveHubRatings(props: LiveHubRatingsProps) {
         view={view}
         onView={onView}
         period="all"
-        toolbar={toolbar}
+        toolbar={ratingsToolbar}
         live={live}
         title={where}
       />

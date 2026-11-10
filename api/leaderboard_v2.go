@@ -36,7 +36,7 @@ func (api *API) LeaderboardV2(w http.ResponseWriter, r *http.Request) {
 		bad("max_players must be a nonnegative integer")
 		return
 	}
-	req := leaderboardread.Request{Instance: q.Get("instance"), Difficulty: q.Get("difficulty"), MaxPlayers: int16(size), Subject: q.Get("subject"), Kind: q.Get("kind"), Score: q.Get("score"), Boss: q.Get("boss"), Bosses: q["bosses"], Set: q.Get("set"), Class: q.Get("class"), Spec: q.Get("spec"), SubSpec: q.Get("sub_spec"), FilterSubSpec: q.Has("sub_spec"), Metric: q.Get("metric"), Search: strings.TrimSpace(q.Get("search"))}
+	req := leaderboardread.Request{Instance: q.Get("instance"), Difficulty: q.Get("difficulty"), MaxPlayers: int16(size), Subject: q.Get("subject"), Kind: q.Get("kind"), Score: q.Get("score"), Boss: q.Get("boss"), Bosses: q["bosses"], Set: q.Get("set"), Class: q.Get("class"), Spec: q.Get("spec"), SubSpec: q.Get("sub_spec"), FilterSubSpec: q.Has("sub_spec"), ShowUnknowns: q.Get("show_unknown") == "true", Metric: q.Get("metric"), Search: strings.TrimSpace(q.Get("search"))}
 	req.CompanionMetric = q.Get("companion_metric")
 	req.CompanionClass = q.Get("companion_class")
 	req.CompanionSpec = q.Get("companion_spec")
@@ -109,7 +109,7 @@ func (api *API) LeaderboardV2(w http.ResponseWriter, r *http.Request) {
 		leaders, err := db.ListLeaderboardV2BossLeaders(ctx, database.ListLeaderboardV2BossLeadersParams{
 			TenantID: tenant.ID, InstanceName: req.Instance, DifficultyName: req.Difficulty, MaxPlayers: req.MaxPlayers,
 			Bosses: selection.Bosses, Awards: selection.Awards, Metric: req.Metric, RealmFilter: req.Realm,
-			PlayerClass: req.Class, PlayerSpec: req.Spec, FilterSubSpec: req.FilterSubSpec, PlayerSubSpec: req.SubSpec,
+			PlayerClass: req.Class, PlayerSpec: req.Spec, FilterSubSpec: req.FilterSubSpec, PlayerSubSpec: req.SubSpec, ShowUnknowns: req.ShowUnknowns,
 		})
 		if err != nil {
 			httpapi.InternalServerError(w, err)
@@ -127,7 +127,7 @@ func (api *API) LeaderboardV2(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if q.Get("view") == "cohorts" {
-		cohorts, err := db.ListLeaderboardV2Cohorts(ctx, database.ListLeaderboardV2CohortsParams{TenantID: tenant.ID, InstanceName: req.Instance, DifficultyName: req.Difficulty, MaxPlayers: req.MaxPlayers, Bosses: selection.Bosses})
+		cohorts, err := db.ListLeaderboardV2Cohorts(ctx, database.ListLeaderboardV2CohortsParams{TenantID: tenant.ID, InstanceName: req.Instance, DifficultyName: req.Difficulty, MaxPlayers: req.MaxPlayers, Bosses: selection.Bosses, ShowUnknowns: req.ShowUnknowns})
 		if err != nil {
 			httpapi.InternalServerError(w, err)
 			return
@@ -175,7 +175,7 @@ func (api *API) LeaderboardV2(w http.ResponseWriter, r *http.Request) {
 	}
 	result, err := db.ListLeaderboardV2(ctx, database.ListLeaderboardV2Params{
 		TenantID: tenant.ID, InstanceName: req.Instance, DifficultyName: req.Difficulty, MaxPlayers: req.MaxPlayers,
-		SubjectKind: req.Subject, BoardKind: req.Kind, ScoreMetric: req.Score, PlayerClass: req.Class, PlayerSpec: req.Spec, PlayerSubSpec: req.SubSpec, FilterSubSpec: req.FilterSubSpec, Metric: req.Metric,
+		SubjectKind: req.Subject, BoardKind: req.Kind, ScoreMetric: req.Score, PlayerClass: req.Class, PlayerSpec: req.Spec, PlayerSubSpec: req.SubSpec, FilterSubSpec: req.FilterSubSpec, ShowUnknowns: req.ShowUnknowns, Metric: req.Metric,
 		Bosses: selection.Bosses, Awards: selection.Awards, Denominator: selection.Denominator, RealmFilter: req.Realm, Search: req.Search,
 		PageSize: limit + 1, HasCursor: q.Get("cursor") != "", AfterScore: cursor.Score, AfterRealm: cursor.Realm, AfterSubject: cursor.Subject, AfterClass: cursor.Class, AfterSpec: cursor.Spec, AfterSubSpec: cursor.SubSpec,
 	})
@@ -268,7 +268,7 @@ func (api *API) LeaderboardV2(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if req.Kind == "renown" && req.Subject == "player" && req.CompanionMetric != "" && len(out.Entries) > 0 {
-		params := database.ListLeaderboardV2PlayerCompanionsParams{TenantID: tenant.ID, InstanceName: req.Instance, DifficultyName: req.Difficulty, MaxPlayers: req.MaxPlayers, Metric: req.CompanionMetric, PlayerClass: req.CompanionClass, PlayerSpec: req.CompanionSpec, PlayerSubSpec: req.CompanionSubSpec, FilterSubSpec: req.CompanionFilterSubSpec, Bosses: selection.Bosses, Denominator: int32(len(selection.Bosses))}
+		params := database.ListLeaderboardV2PlayerCompanionsParams{TenantID: tenant.ID, InstanceName: req.Instance, DifficultyName: req.Difficulty, MaxPlayers: req.MaxPlayers, Metric: req.CompanionMetric, PlayerClass: req.CompanionClass, PlayerSpec: req.CompanionSpec, PlayerSubSpec: req.CompanionSubSpec, FilterSubSpec: req.CompanionFilterSubSpec, ShowUnknowns: req.ShowUnknowns, Bosses: selection.Bosses, Denominator: int32(len(selection.Bosses))}
 		for _, entry := range out.Entries {
 			params.Realms = append(params.Realms, entry.RealmID)
 			params.Subjects = append(params.Subjects, entry.SubjectID)

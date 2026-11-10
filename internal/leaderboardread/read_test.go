@@ -170,6 +170,25 @@ func TestAllCohortsNormalizeIndependently(t *testing.T) {
 		require.Equal(t, "Frost", rows[2].PlayerSpec)
 		require.InDelta(t, 98, rows[2].Score, 1e-8)
 	}
+	cohorts, err := db.ListLeaderboardV2Cohorts(ctx, database.ListLeaderboardV2CohortsParams{TenantID: p.TenantID, InstanceName: p.InstanceName, Bosses: p.Bosses})
+	require.NoError(t, err)
+	require.Len(t, cohorts, 3)
+	allCohorts, err := db.ListLeaderboardV2Cohorts(ctx, database.ListLeaderboardV2CohortsParams{TenantID: p.TenantID, InstanceName: p.InstanceName, Bosses: p.Bosses, ShowUnknowns: true})
+	require.NoError(t, err)
+	require.Len(t, allCohorts, 4)
+	p.ShowUnknowns = true
+	withUnknown, err := db.ListLeaderboardV2(ctx, p)
+	require.NoError(t, err)
+	require.Len(t, withUnknown, 4)
+	require.Equal(t, "Unknown", withUnknown[0].PlayerSpec)
+	p.ShowUnknowns = false
+	specless, err := db.ListLeaderboardV2(ctx, database.ListLeaderboardV2Params{
+		TenantID: p.TenantID, InstanceName: "Specless raid", SubjectKind: "player", BoardKind: "boss", ScoreMetric: "peak",
+		Metric: "dps", Bosses: []string{"A"}, Denominator: 1, PageSize: 50,
+	})
+	require.NoError(t, err)
+	require.Len(t, specless, 1)
+	require.Equal(t, "Unknown", specless[0].PlayerSpec)
 	p.PageSize = 1
 	var identities []string
 	for range 3 {
@@ -351,6 +370,17 @@ func TestIndependentWholeSelectionCompanions(t *testing.T) {
 			require.Equal(t, 80.0, row.Score)
 		}
 	}
+	p.ShowUnknowns = true
+	rows, err = db.ListLeaderboardV2PlayerCompanions(ctx, p)
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	for _, row := range rows {
+		if row.Metric == "mastery" {
+			require.Equal(t, "Unknown", row.PlayerSpec)
+			require.Equal(t, 100.0, row.Score)
+		}
+	}
+	p.ShowUnknowns = false
 	// A perfect Arcane boss cannot be blended with another spec's B to win.
 	p.PlayerSpec = "Arcane"
 	rows, err = db.ListLeaderboardV2PlayerCompanions(ctx, p)
@@ -458,10 +488,12 @@ func TestBossLeaders(t *testing.T) {
 	_, err = conn.Exec(ctx, "BEGIN")
 	require.NoError(t, err)
 	defer func() { _, _ = conn.Exec(ctx, "ROLLBACK") }()
-	fixture, err := os.ReadFile("testdata/read_fixture.sql")
-	require.NoError(t, err)
-	_, err = conn.Exec(ctx, string(fixture))
-	require.NoError(t, err)
+	for _, file := range []string{"read_fixture.sql", "cross_cohort_fixture.sql"} {
+		fixture, err := os.ReadFile("testdata/" + file)
+		require.NoError(t, err)
+		_, err = conn.Exec(ctx, string(fixture))
+		require.NoError(t, err)
+	}
 	db := database.NewQueries(conn)
 	params := database.ListLeaderboardV2BossLeadersParams{
 		TenantID: uuid.MustParse("00000000-0000-4000-8000-000000000001"), InstanceName: "Test raid", Metric: "dps",
@@ -497,4 +529,13 @@ func TestBossLeaders(t *testing.T) {
 	class := params
 	class.PlayerClass = "WARRIOR"
 	require.Equal(t, []leader{{"Boss A", "renown", "Alice", "02", 6}, {"Boss B", "renown", "Alice", "02", 35}}, read(class))
+
+	withSpecs := database.ListLeaderboardV2BossLeadersParams{
+		TenantID: params.TenantID, InstanceName: "Cross raid", Metric: "dps", Bosses: []string{"A"}, Awards: []float64{0},
+	}
+	known := read(withSpecs)
+	require.Equal(t, "hunter", known[0].Subject)
+	withSpecs.ShowUnknowns = true
+	all := read(withSpecs)
+	require.Equal(t, "mystery", all[0].Subject)
 }
