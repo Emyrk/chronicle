@@ -180,7 +180,7 @@ export function RulesetInstanceView({ instanceName, embedded = false }: { instan
           </div>
           <div className="relative z-10 p-3 sm:p-4">
             <Link
-              to="/leaderboards/rulesets"
+              to="/leaderboards-v1/rulesets"
               className="mb-2 inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
             >
               <ArrowLeft className="h-3.5 w-3.5" />

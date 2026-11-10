@@ -152,7 +152,7 @@ function Content() {
 
   const url = frame < RULESET + SCENE_FADE / 2
     ? "chronicleclassic.com/instances/molten-core?encounter=Garr"
-    : "chronicleclassic.com/leaderboards/ruleset?instance=Molten+Core";
+    : "chronicleclassic.com/leaderboards-v1/ruleset?instance=Molten+Core";
 
   return (
     <>

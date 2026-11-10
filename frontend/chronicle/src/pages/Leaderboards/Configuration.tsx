@@ -230,7 +230,7 @@ export function ConfigurationView({
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <Link
-            to="/leaderboards/statistics"
+            to="/leaderboards-v1/statistics"
             className="mb-1 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft size={12} /> Leaderboards

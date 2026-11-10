@@ -35,14 +35,14 @@ describe("live Hub landing", () => {
         ...instances,
         { ...instances[0], instance_name: "Upper Karazhan", total_kills: 0 },
       ],
-      instanceHref: (name) => `/leaderboard-v2/${name.replaceAll(" ", "-")}`,
+      instanceHref: (name) => `/leaderboards/${name.replaceAll(" ", "-")}`,
     })
 
     expect(markup.indexOf("Upper Karazhan")).toBeGreaterThan(markup.indexOf("Blackrock Depths"))
     expect(markup).toContain("Configured instances without rankings")
     expect(markup).toContain("Open an instance to view its configured encounters and rules.")
     expect(markup).toContain("No rankings yet")
-    expect(markup).toContain('href="/leaderboard-v2/Upper-Karazhan"')
+    expect(markup).toContain('href="/leaderboards/Upper-Karazhan"')
   })
 
   it("separates raid cards by level tier and keeps cohorts together", () => {

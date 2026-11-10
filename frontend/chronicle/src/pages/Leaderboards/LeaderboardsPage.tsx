@@ -98,7 +98,7 @@ export function LeaderboardsPage({ mode }: { mode: LeaderboardsMode }) {
   // No instance selected — show the landing page
   return (
     <div className="mx-auto w-full max-w-[1920px] px-4 py-8">
-      <Link to="/leaderboards/configuration" className="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"><ScrollText className="h-4 w-4" /> Inspect tenant configuration</Link>
+      <Link to="/leaderboards-v1/configuration" className="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"><ScrollText className="h-4 w-4" /> Inspect tenant configuration</Link>
       {/* Tab bar for landing */}
       <div className="flex items-center gap-1 border-b mb-6">
         <TabButton

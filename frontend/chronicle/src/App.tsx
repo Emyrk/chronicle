@@ -224,17 +224,18 @@ function App() {
         <Route path="/armory/:realmName/:playerIdentifier" element={<ArmoryPage />} />
         <Route path="/sim" element={<SimPage />} />
         <Route path="/raidplanner" element={<RaidPlannerPage />} />
-        {/* The live hub stays unlinked at /leaderboard-v2 until it replaces the classic index. */}
-        <Route path="/leaderboard-v2" element={<LeaderboardsV2 />} />
-        <Route path="/leaderboard-v2/:segment" element={<LeaderboardsV2 />} />
-        <Route path="/leaderboard-v2/:instance/:tab" element={<LeaderboardsV2 />} />
-        <Route path="/leaderboards/configuration" element={<LeaderboardConfigurationPage />} />
-        <Route path="/leaderboards" element={<LegacyLeaderboardsRedirect />} />
-        <Route path="/leaderboards/statistics" element={<LeaderboardsPage mode="statistics" />} />
-        <Route path="/leaderboards/speedruns" element={<LeaderboardsPage mode="speedruns" />} />
-        <Route path="/leaderboards/ruleset" element={<LeaderboardsPage mode="ruleset" />} />
-        <Route path="/leaderboards/rulesets" element={<LeaderboardsPage mode="rulesets" />} />
-        <Route path="/leaderboards/parsing" element={<LeaderboardsPage mode="parsing" />} />
+        <Route path="/leaderboards" element={<LeaderboardsV2 />} />
+        <Route path="/leaderboards/configuration" element={<Navigate to="/leaderboards-v1/configuration" replace />} />
+        <Route path="/leaderboards/:segment" element={<LeaderboardsV2 />} />
+        <Route path="/leaderboards/:instance/:tab" element={<LeaderboardsV2 />} />
+        <Route path="/leaderboard-v2/*" element={<RenamedPathRedirect from="/leaderboard-v2" to="/leaderboards" />} />
+        <Route path="/leaderboards-v1/configuration" element={<LeaderboardConfigurationPage />} />
+        <Route path="/leaderboards-v1" element={<LegacyLeaderboardsRedirect />} />
+        <Route path="/leaderboards-v1/statistics" element={<LeaderboardsPage mode="statistics" />} />
+        <Route path="/leaderboards-v1/speedruns" element={<LeaderboardsPage mode="speedruns" />} />
+        <Route path="/leaderboards-v1/ruleset" element={<LeaderboardsPage mode="ruleset" />} />
+        <Route path="/leaderboards-v1/rulesets" element={<LeaderboardsPage mode="rulesets" />} />
+        <Route path="/leaderboards-v1/parsing" element={<LeaderboardsPage mode="parsing" />} />
         <Route path="/leaderboard" element={<LegacyLeaderboardsRedirect />} />
         <Route path="/rankings" element={<LegacyLeaderboardsRedirect />} />
         <Route path="/apply" element={<ApplyPage />} />

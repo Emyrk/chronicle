@@ -191,6 +191,7 @@ var sitemapPaths = []string{
 	"/recent",
 	"/guilds",
 	"/armory",
+	"/leaderboards",
 	"/leaderboards/statistics",
 	"/leaderboards/speedruns",
 	"/talents",

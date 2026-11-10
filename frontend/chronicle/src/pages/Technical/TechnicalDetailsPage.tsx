@@ -105,7 +105,7 @@ const TECHNICAL_LINKS: TechnicalLink[] = [
   {
     title: "Leaderboard Configuration",
     description: "Inspect this tenant's leaderboard scoring and ranking configuration",
-    href: "/leaderboards/configuration",
+    href: "/leaderboards-v1/configuration",
     icon: <ScrollText className="h-4 w-4" />,
   },
 ];

@@ -3,7 +3,7 @@ import { TABS, type HubTab } from "./Hub/hubTabs"
 const tabIDs = new Set<string>(TABS.map((tab) => tab.id))
 
 /** Where the hub lives; each tab but Overview is a path segment under it. */
-export const HUB_BASE = "/leaderboard-v2"
+export const HUB_BASE = "/leaderboards"
 
 /** A valid hub tab from a path segment (or the old `tab=` query); anything else is undefined. */
 export function hubTab(value: string | null | undefined): HubTab | undefined {
