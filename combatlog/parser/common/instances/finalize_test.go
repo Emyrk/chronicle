@@ -864,6 +864,117 @@ func TestBossDeathCanWaitForExplicitEncounterEnd(t *testing.T) {
 	require.Equal(t, death, h.completedFights[0].End)
 }
 
+func TestCathedralTurtleFightEndsAfterBothBossesDie(t *testing.T) {
+	t.Parallel()
+
+	ctx := parsectx.With(context.Background(), parsectx.Context{
+		Flavor: database.WoWFlavor{database.FlavorVanilla, database.FlavorTurtle},
+		Format: database.LogFormat112aCcAddon,
+	})
+	h := newFinalizeTestHookableWithContext(t, ctx, CathedralHostiles())
+	base := time.Date(2026, time.October, 20, 9, 19, 17, 0, time.UTC)
+	player := guid.GUID(1)
+	mograine := creatureGUID(3976, 1)
+	whitemane := creatureGUID(3977, 2)
+	for i, boss := range []guid.GUID{mograine, whitemane} {
+		require.NoError(t, h.Process(&messages.Damage{
+			MessageBase: messages.Base(base.Add(time.Duration(i) * time.Second)),
+			Caster:      &player,
+			Target:      boss,
+			Amount:      1,
+		}))
+	}
+
+	whitemaneDeath := base.Add(55 * time.Second)
+	require.NoError(t, h.Process(&messages.Slain{
+		MessageBase: messages.Base(whitemaneDeath),
+		Victim:      whitemane,
+		Killer:      &player,
+	}))
+	require.True(t, h.currentFight.active())
+	require.Empty(t, h.completedFights)
+
+	require.NoError(t, h.Process(&messages.Damage{
+		MessageBase: messages.Base(base.Add(70 * time.Second)),
+		Caster:      &mograine,
+		Target:      player,
+		Amount:      1,
+	}))
+
+	mograineDeath := base.Add(82 * time.Second)
+	require.NoError(t, h.Process(&messages.Slain{
+		MessageBase: messages.Base(mograineDeath),
+		Victim:      mograine,
+		Killer:      &player,
+	}))
+	require.Nil(t, h.currentFight)
+	require.Len(t, h.completedFights, 1)
+	require.Equal(t, base, h.completedFights[0].Start)
+	require.Equal(t, mograineDeath, h.completedFights[0].End)
+}
+
+func TestCathedralWhitemaneDeathWaitsForMograine(t *testing.T) {
+	t.Parallel()
+
+	ctx := parsectx.With(context.Background(), parsectx.Context{
+		Flavor: database.WoWFlavor{database.FlavorWoWForever},
+		Format: database.LogFormatV22Cleu,
+	})
+	h := newFinalizeTestHookableWithContext(t, ctx, CathedralHostiles())
+	base := time.Date(2026, time.November, 10, 12, 0, 35, 0, time.UTC)
+	require.NoError(t, h.Process(&messages.EncounterBoundary{
+		MessageBase: messages.Base(base),
+		Active:      true,
+		EncounterID: 450,
+		Name:        "High Inquisitor Whitemane",
+	}))
+
+	player := guid.GUID(1)
+	mograine := creatureGUID(3976, 1)
+	whitemane := creatureGUID(3977, 2)
+	for i, boss := range []guid.GUID{mograine, whitemane} {
+		require.NoError(t, h.Process(&messages.Damage{
+			MessageBase: messages.Base(base.Add(time.Duration(i+1) * time.Second)),
+			Caster:      &player,
+			Target:      boss,
+			Amount:      1,
+		}))
+	}
+
+	whitemaneDeath := base.Add(2*time.Minute + 47*time.Second)
+	require.NoError(t, h.Process(&messages.Slain{
+		MessageBase: messages.Base(whitemaneDeath),
+		Victim:      whitemane,
+		Killer:      &player,
+	}))
+	require.NotNil(t, h.currentFight)
+	require.True(t, h.currentFight.active())
+	require.Empty(t, h.completedFights)
+
+	mograineDeath := base.Add(3*time.Minute + 30*time.Second)
+	require.NoError(t, h.Process(&messages.Slain{
+		MessageBase: messages.Base(mograineDeath),
+		Victim:      mograine,
+		Killer:      &player,
+	}))
+	require.NotNil(t, h.currentFight)
+	require.True(t, h.currentFight.active())
+	require.Empty(t, h.completedFights)
+
+	success := true
+	require.NoError(t, h.Process(&messages.EncounterBoundary{
+		MessageBase: messages.Base(mograineDeath.Add(time.Millisecond)),
+		Active:      false,
+		EncounterID: 450,
+		Name:        "High Inquisitor Whitemane",
+		Success:     &success,
+	}))
+	require.Nil(t, h.currentFight)
+	require.Len(t, h.completedFights, 1)
+	require.Equal(t, base, h.completedFights[0].Start)
+	require.Equal(t, mograineDeath, h.completedFights[0].End)
+}
+
 func TestEncounterBoundaryKeepsFightActiveUntilEnd(t *testing.T) {
 	t.Parallel()
 
