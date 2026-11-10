@@ -41,12 +41,12 @@ const leaderboardOGInstanceLength = 48
 func (s *Service) leaderboardRoutes() []frontend.OGRoute {
 	resolve := func(segment, instance, tab string) func(r *http.Request) *frontend.OGData {
 		return func(r *http.Request) *frontend.OGData {
-			return leaderboardOG(
-				seoProductName(s.resolvedSiteFlavor(r.Context())),
-				canonicalRequestURL(s, r),
-				chi.URLParam(r, segment), chi.URLParam(r, instance), chi.URLParam(r, tab),
-				r.URL.Query(),
-			)
+			flavor := s.resolvedSiteFlavor(r.Context())
+			seg, inst, t := chi.URLParam(r, segment), chi.URLParam(r, instance), chi.URLParam(r, tab)
+			og := leaderboardOG(seoProductName(flavor), canonicalRequestURL(s, r), seg, inst, t, r.URL.Query())
+			tabID, instanceName := leaderboardOGSelection(seg, inst, t)
+			og.ImageURL = s.leaderboardCardURL(r, flavor, tabID, instanceName)
+			return og
 		}
 	}
 	return []frontend.OGRoute{
@@ -60,15 +60,7 @@ func (s *Service) leaderboardRoutes() []frontend.OGRoute {
 // known tab segment is a landing tab, any other lone segment is an instance
 // overview, and with two segments an unknown tab falls back to Overview.
 func leaderboardOG(productName, canonicalURL, segment, instanceSegment, tabSegment string, query url.Values) *frontend.OGData {
-	tabID := tabSegment
-	if instanceSegment == "" {
-		if _, ok := leaderboardOGTabs[segment]; ok {
-			tabID = segment
-		} else {
-			instanceSegment = segment
-		}
-	}
-	instance := leaderboardOGInstanceName(instanceSegment)
+	tabID, instance := leaderboardOGSelection(segment, instanceSegment, tabSegment)
 	tab, hasTab := leaderboardOGTabs[tabID]
 
 	scope := "Raid"
@@ -105,6 +97,23 @@ func leaderboardOG(productName, canonicalURL, segment, instanceSegment, tabSegme
 		lead += " for " + productName
 	}
 	return &frontend.OGData{Title: title, Description: lead + ". " + description, URL: canonicalURL}
+}
+
+// leaderboardOGSelection resolves a hub URL's tab ("" for Overview) and
+// instance name ("" for the hub landing), following v2Selection.
+func leaderboardOGSelection(segment, instanceSegment, tabSegment string) (tabID, instance string) {
+	tabID = tabSegment
+	if instanceSegment == "" {
+		if _, ok := leaderboardOGTabs[segment]; ok {
+			tabID = segment
+		} else {
+			instanceSegment = segment
+		}
+	}
+	if _, ok := leaderboardOGTabs[tabID]; !ok {
+		tabID = ""
+	}
+	return tabID, leaderboardOGInstanceName(instanceSegment)
 }
 
 // leaderboardOGInstanceName decodes an instance path segment the way the
