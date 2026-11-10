@@ -266,7 +266,8 @@ describe("live Storybook Hub", () => {
     const html = hub("/leaderboards/Molten-Core/performances?difficulty=Normal&size=40&page=3")
     const [params] = vi.mocked(useRankingsLeaderboard).mock.calls[0]
     expect(params).toMatchObject({ limit: 50, offset: 100 })
-    expect(html).toContain("101. Paged player")
+    expect(html).toContain(">101<")
+    expect(html).toContain("Paged player")
     expect(html).toContain("Page 3 of 3")
   })
 
