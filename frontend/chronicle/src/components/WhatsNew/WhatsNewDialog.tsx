@@ -6,6 +6,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { iconUrl } from "@/config/iconUrl";
+import { METRIC_THEMES } from "@/pages/Leaderboards/Ratings/ratingThemes";
+import { ratePlayerBoss, type Band } from "@/pages/Ratings/ratingMath";
 import { whatsNewLink } from "./trackedLinks";
 
 interface WhatsNewDialogProps {
@@ -14,37 +16,35 @@ interface WhatsNewDialogProps {
 }
 
 const HIGHLIGHTS = [
-  "Hold Alt (Option on Mac) to outline every player, guild, boss and raid you can inspect.",
-  "Alt+click one for a quick menu. On touch screens, press and hold.",
-  "Revered and Exalted see compared players' parses and full history right on the page; everyone else gets a preview and the history page.",
-  "Bosses and raids show kill and clear times against your server, realm and guild, free for everyone.",
+  "Peak: your best kill against the benchmark, the best DPS or HPS your spec has ever done on that boss.",
+  "Mastery: your best, typical and weaker kills blended, so one lucky kill isn't the whole story.",
+  "Renown: every boss kill earns that boss's award, however you performed. It only goes up.",
+  "How Ratings Work explains it all with an example player, or with your own kills.",
 ];
 
-// Outline colors match the real inspector: players, guilds, bosses, raids.
-const PREVIEW_NAMES = [
-  { name: "Frostbyte", text: "#69ccf0", outline: "#38bdf8" },
-  { name: "<Ember Pact>", text: "#fcd34d", outline: "#f59e0b" },
-  { name: "Ragnaros", text: "#f1f5f9", outline: "#fb7185" },
-  { name: "Molten Core", text: "#f1f5f9", outline: "#a78bfa" },
-];
+// The /ratings example: a Fury Warrior's Nefarian kills against a 1,180 DPS benchmark.
+const EXAMPLE_KILLS = [1000, 820, 1120, 1080, 1060, 1150, 1090, 1130, 1070, 1140];
+const EXAMPLE_BENCHMARK = 1180;
+const EXAMPLE_RENOWN = EXAMPLE_KILLS.length * 9;
+const BAND_COLOR: Record<Band, string> = { ignored: "#3f3f46", floor: "#10b981", form: "#38bdf8", peak: "#fbbf24" };
 
-// Kill-time box plots as percentages of the preview track: whiskers, box, median, this pull, parse.
-const PREVIEW_PLOTS = [
-  { scope: "Server", min: 6, q1: 26, median: 42, q3: 60, max: 92, pull: 22, parse: 81 },
-  { scope: "Realm", min: 12, q1: 30, median: 46, q3: 66, max: 94, pull: 22, parse: 79 },
-  { scope: "Guild", min: 19, q1: 25, median: 32, q3: 42, max: 52, pull: 22, parse: 92 },
-];
-
-// Styled as an epic item tooltip: a big feature that touches every page, short of a legendary launch.
+// Styled as an epic item tooltip: a big feature, short of a legendary launch.
 export function WhatsNewDialog({ open, onOpenChange }: WhatsNewDialogProps) {
   const close = () => onOpenChange(false);
+  const rating = ratePlayerBoss(EXAMPLE_KILLS, EXAMPLE_BENCHMARK);
+  const bandByIndex = new Map(rating.bands.map((b) => [b.index, b.band]));
+  const scores = [
+    { theme: METRIC_THEMES.peak, label: "Peak", value: rating.peak.toFixed(1) },
+    { theme: METRIC_THEMES.mastery, label: "Mastery", value: rating.mastery.toFixed(1) },
+    { theme: METRIC_THEMES.renown, label: "Renown", value: String(EXAMPLE_RENOWN) },
+  ];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[calc(100%-2rem)] max-w-[480px] gap-0 overflow-hidden rounded-md border border-[#5c6670] bg-[linear-gradient(180deg,rgba(10,16,28,0.98),rgba(6,8,16,0.98))] p-0 shadow-[0_24px_60px_rgba(0,0,0,0.7)] sm:max-w-[480px]">
         <div className="grid grid-cols-[56px_minmax(0,1fr)] items-center gap-4 px-6 pt-[22px]">
           <img
-            src={iconUrl("inv_misc_spyglass_02")}
+            src={iconUrl("inv_crown_01")}
             alt=""
             width={56}
             height={56}
@@ -55,39 +55,31 @@ export function WhatsNewDialog({ open, onOpenChange }: WhatsNewDialogProps) {
               Epic feature
             </span>
             <DialogTitle className="font-wow text-[28px] font-normal leading-tight text-quality-epic">
-              Alt+click to inspect
+              How ratings work
             </DialogTitle>
           </div>
         </div>
 
         <div className="flex flex-col gap-1 px-6 pb-6 pt-4 text-sm leading-relaxed">
-          <p className="text-foreground">Use: Inspect and compare anyone without leaving the page</p>
+          <p className="text-foreground">Use: Rate every player across their whole history</p>
 
-          <div aria-hidden className="mt-3 flex flex-col gap-3 rounded border border-quality-epic/30 bg-black/35 p-3 shadow-inner">
-            <div className="flex flex-wrap items-center gap-2">
-              <kbd className="rounded border border-b-2 border-white/25 bg-white/10 px-1.5 font-mono text-[11px] text-slate-200">Alt</kbd>
-              {PREVIEW_NAMES.map((entity) => (
+          <div aria-hidden className="mt-3 flex items-end gap-4 rounded border border-quality-epic/30 bg-black/35 p-3 shadow-inner">
+            <div className="flex h-14 flex-1 items-end gap-1">
+              {EXAMPLE_KILLS.map((value, i) => (
                 <span
-                  key={entity.name}
-                  className="rounded border border-dashed px-1 text-xs font-semibold"
-                  style={{ color: entity.text, borderColor: entity.outline }}
-                >
-                  {entity.name}
-                </span>
+                  key={i}
+                  className="flex-1 rounded-t-sm"
+                  style={{ height: `${((value - 600) / (EXAMPLE_BENCHMARK - 600)) * 100}%`, background: BAND_COLOR[bandByIndex.get(i) ?? "form"] }}
+                />
               ))}
             </div>
-            <div className="flex flex-col gap-1.5">
-              {PREVIEW_PLOTS.map((plot) => (
-                <div key={plot.scope} className="grid grid-cols-[48px_minmax(0,1fr)_20px] items-center gap-2">
-                  <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">{plot.scope}</span>
-                  <div className="relative h-3">
-                    <span className="absolute top-1/2 h-px bg-slate-500" style={{ left: `${plot.min}%`, width: `${plot.max - plot.min}%` }} />
-                    <span className="absolute inset-y-0.5 rounded-sm border border-slate-400/70 bg-white/10" style={{ left: `${plot.q1}%`, width: `${plot.q3 - plot.q1}%` }} />
-                    <span className="absolute inset-y-0 w-0.5 bg-white" style={{ left: `${plot.median}%` }} />
-                    <span className="absolute top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-sky-400" style={{ left: `${plot.pull}%` }} />
-                  </div>
-                  <span className="text-right font-mono text-xs font-semibold text-quality-epic">{plot.parse}</span>
-                </div>
+            <div className="flex flex-col gap-0.5">
+              {scores.map(({ theme, label, value }) => (
+                <span key={label} className="flex items-center gap-1.5 text-xs">
+                  <theme.icon className="h-3.5 w-3.5" style={{ color: theme.accent }} />
+                  <span className="w-14 text-muted-foreground">{label}</span>
+                  <span className="font-mono font-semibold" style={{ color: theme.accent }}>{value}</span>
+                </span>
               ))}
             </div>
           </div>
@@ -103,20 +95,20 @@ export function WhatsNewDialog({ open, onOpenChange }: WhatsNewDialogProps) {
             </ul>
           </DialogDescription>
 
-          <p className="mt-2 italic text-[#ffd100]">&ldquo;Know thy rivals.&rdquo;</p>
+          <p className="mt-2 italic text-[#ffd100]">&ldquo;Measure thyself.&rdquo;</p>
 
           <div className="mt-5 flex flex-wrap items-center gap-5">
             {/* Blog routes mount a separate app entry, so these links must reload the document. */}
             <a
-              href={whatsNewLink("/blog/alt-click-compare", "whats_new_primary", "alt-click-compare")}
+              href={whatsNewLink("/blog/ratings", "whats_new_primary", "ratings")}
               onClick={close}
               className="inline-flex items-center gap-2 rounded border border-quality-epic/80 bg-[linear-gradient(180deg,#8a3fd0,#5a2290)] px-[18px] py-2.5 text-sm font-semibold text-white transition-[filter] hover:brightness-110"
             >
-              Watch Alt+click in action
+              Watch how ratings work
               <ArrowRight className="h-4 w-4" />
             </a>
             <a
-              href={whatsNewLink("/blog", "whats_new_archive", "alt-click-compare")}
+              href={whatsNewLink("/blog", "whats_new_archive", "ratings")}
               onClick={close}
               className="text-sm text-muted-foreground transition-colors hover:text-foreground"
             >

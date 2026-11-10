@@ -55,6 +55,7 @@ import CharacterCosmeticsVideo from "../../../frontend/chronicle/src/pages/Insta
 import RankedDamageVideo from "../../../frontend/chronicle/src/pages/Instance/videos/RankedDamage.video";
 import EntityInspectorVideo from "../../../frontend/chronicle/src/pages/Instance/videos/EntityInspector.video";
 import InstanceSearchVideo from "../../../frontend/chronicle/src/pages/InstanceSearch/videos/InstanceSearch.video";
+import RatingsExplainerVideo from "../../../frontend/chronicle/src/pages/Ratings/videos/RatingsExplainer.video";
 import FavoritesPromo from "./FavoritesPromo";
 import CooldownUsagePromo from "./CooldownUsagePromo";
 import Maps3DAnnouncement, { MAPS_3D_ANNOUNCEMENT_DURATION } from "./Maps3DAnnouncement";
@@ -82,6 +83,7 @@ export const RemotionRoot: React.FC = () => {
         <Composition id="RankedDamage" component={RankedDamageVideo} durationInFrames={900} fps={30} width={1280} height={720} />
         <Composition id="EntityInspector" component={EntityInspectorVideo} durationInFrames={1256} fps={30} width={1280} height={720} />
         <Composition id="InstanceSearch" component={InstanceSearchVideo} durationInFrames={970} fps={30} width={1280} height={720} />
+        <Composition id="RatingsExplainer" component={RatingsExplainerVideo} durationInFrames={1010} fps={30} width={1280} height={720} />
       </Folder>
       <Folder name="DamageDoneLessons">
       <Composition
