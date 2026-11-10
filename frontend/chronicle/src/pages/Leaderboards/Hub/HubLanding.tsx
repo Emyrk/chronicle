@@ -3,7 +3,7 @@ import { useState, type ReactNode } from "react"
 import { useActiveTabInView } from "@/hooks/useActiveTabInView"
 import { Link } from "react-router-dom"
 import type { HubLandingPreview, RankingsInstanceSummary, SupportedInstance } from "@/api/typesGenerated"
-import { AlertTriangle, ArrowRight, CircleHelp, Crown, RotateCw, Skull, Swords, Timer } from "lucide-react"
+import { AlertTriangle, ArrowRight, CircleHelp, RotateCw, Skull, Swords, Timer } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { CLASS_CSS_VAR, CLASS_DISPLAY } from "@/pages/Rankings/classDisplay"
 import { InstanceCard } from "@/pages/Rankings/InstanceCard"
@@ -134,18 +134,6 @@ export function LeaderboardsHubApp({
                   <button type="button" aria-pressed={t.id === tab} onClick={() => setTab(t.id)} className={className}>{content}</button>
                 )}</HubTabHint>
               })}
-              {/* Career spans every raid, so it is its own page rather than a per-raid tab. */}
-              {live && (
-                <HubTabHint description="Every character across every raid: career Mastery, Peak, and Renown.">
-                  <Link
-                    to="/leaderboards/career"
-                    className="flex flex-1 cursor-pointer items-center justify-center gap-2 border-b-2 border-transparent px-3 py-3 text-sm font-medium text-muted-foreground transition-colors hover:border-muted-foreground/30 hover:text-foreground sm:flex-none sm:px-4"
-                  >
-                    <Crown className="h-4 w-4" />
-                    Career
-                  </Link>
-                </HubTabHint>
-              )}
             </nav>
             {/* Desktop: like the instance banner's corner, the bar ends with the explainer for Peak, Mastery, and Renown. */}
             <Link
