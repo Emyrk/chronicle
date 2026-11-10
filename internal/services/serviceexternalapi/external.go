@@ -14,6 +14,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	types "github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/httpcache"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -495,7 +496,7 @@ func (s *Service) listSpeedrunLeaderboard(w http.ResponseWriter, r *http.Request
 // eligible for Chronicle's shared CDN cache. The per-client remaining allowance
 // must not be stored in a response that Cloudflare can serve to other clients.
 func markLeaderboardCacheable(w http.ResponseWriter) {
-	w.Header().Set("Cache-Control", "public, max-age=300")
+	httpcache.MarkLeaderboardResponse(w, time.Now())
 	w.Header().Del("RateLimit-Remaining")
 }
 

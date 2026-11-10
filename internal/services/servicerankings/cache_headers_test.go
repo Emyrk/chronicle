@@ -14,33 +14,32 @@ func TestRankingsCacheHeaders(t *testing.T) {
 
 	service := &Service{router: chi.NewRouter()}
 	service.setupRoutes()
+	service.router.Get("/cache-test", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
 
-	for _, tt := range []struct {
-		name                string
-		method              string
-		wantCacheControl    string
-		wantCloudflareCache string
-	}{
-		{
-			name:                "GET responses are shared at the edge for fifteen minutes",
-			method:              http.MethodGet,
-			wantCacheControl:    "public, max-age=300",
-			wantCloudflareCache: "public, max-age=900, stale-while-revalidate=60",
-		},
-		{
-			name:   "non-GET responses are not cached",
-			method: http.MethodPost,
-		},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+	t.Run("successful GET responses share a common half-hour boundary", func(t *testing.T) {
+		t.Parallel()
 
-			recorder := httptest.NewRecorder()
-			request := httptest.NewRequest(tt.method, "/missing", nil)
-			service.ServeHTTP(recorder, request)
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/cache-test", nil)
+		service.ServeHTTP(recorder, request)
 
-			require.Equal(t, tt.wantCacheControl, recorder.Header().Get("Cache-Control"))
-			require.Equal(t, tt.wantCloudflareCache, recorder.Header().Get("Cloudflare-CDN-Cache-Control"))
-		})
-	}
+		require.Equal(t, "public, max-age=60", recorder.Header().Get("Cache-Control"))
+		require.Contains(t, recorder.Header().Get("Cloudflare-CDN-Cache-Control"), "stale-while-revalidate=30")
+		require.Equal(t, "leaderboards", recorder.Header().Get("Cache-Tag"))
+	})
+
+	t.Run("error responses are not cached", func(t *testing.T) {
+		t.Parallel()
+
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/missing", nil)
+		service.ServeHTTP(recorder, request)
+
+		require.Equal(t, http.StatusNotFound, recorder.Code)
+		require.Empty(t, recorder.Header().Get("Cache-Control"))
+		require.Empty(t, recorder.Header().Get("Cloudflare-CDN-Cache-Control"))
+		require.Empty(t, recorder.Header().Get("Cache-Tag"))
+	})
 }

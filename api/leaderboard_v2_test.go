@@ -23,6 +23,9 @@ func TestLeaderboardV2RejectsUnownedScopes(t *testing.T) {
 			}
 			rec := httptest.NewRecorder()
 			api.LeaderboardV2(rec, req)
+			require.Empty(t, rec.Header().Get("Cache-Control"))
+			require.Empty(t, rec.Header().Get("Cloudflare-CDN-Cache-Control"))
+			require.Empty(t, rec.Header().Get("Cache-Tag"))
 			require.Equal(t, http.StatusBadRequest, rec.Code)
 		})
 	}
