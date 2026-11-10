@@ -51,7 +51,7 @@ export function MobileBottomAd({
     <>
       <div
         ref={shellRef}
-        className="fixed inset-x-0 bottom-0 z-40 empty:hidden border-t border-border/70 bg-background/95 px-2 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(0,0,0,0.2)] backdrop-blur supports-[backdrop-filter]:bg-background/85 lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 empty:hidden pb-[env(safe-area-inset-bottom)] lg:hidden"
       >
         <AdSlot
           placement={placement}

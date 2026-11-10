@@ -177,10 +177,15 @@ describe("AdSlot", () => {
       <AdSlot placement="rankings-mobile-bottom" format="mobile-banner" hostname="localhost" previewEnabled />,
     )
 
-    expect(adSizesForFormat("mobile-banner", false)).toEqual([[300, 100]])
-    expect(adSizeLabel("mobile-banner", false)).toBe("300 × 100")
-    expect(markup).toContain("300 × 100")
-    expect(markup).toContain("h-[100px] w-[300px]")
+    expect(adSizesForFormat("mobile-banner", false)).toEqual([
+      [320, 50],
+      [320, 100],
+      [300, 100],
+    ])
+    expect(adSizeLabel("mobile-banner", false)).toBe("320 × 50 / 320 × 100 / 300 × 100")
+    expect(markup).toContain("320 × 50 / 320 × 100 / 300 × 100")
+    expect(markup).toContain("min-h-[50px] w-[320px] max-w-full")
+    expect(markup).not.toContain(">Advertisement</")
     expect(markup).toContain("lg:hidden")
     expect(markup).toContain('data-ad-placement="rankings-mobile-bottom"')
   })
@@ -193,6 +198,9 @@ describe("AdSlot", () => {
     expect(markup).toContain("fixed inset-x-0 bottom-0")
     expect(markup).toContain("empty:hidden")
     expect(markup).toContain("safe-area-inset-bottom")
+    expect(markup).not.toContain("bg-background")
+    expect(markup).not.toContain("border-t")
+    expect(markup).not.toContain("shadow-[0_-8px_24px")
     expect(markup).toContain("h-[var(--mobile-ad-offset,0px)]")
     expect(markup).toContain('data-ad-placement="instance-mobile-bottom"')
   })
