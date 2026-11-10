@@ -154,10 +154,10 @@ func TestOGSiteStatsCache(t *testing.T) {
 		q := &fakeSiteStats{row: database.SiteStatsRow{LogsParsed: 7, BossKills: 2}}
 		ctx := context.Background()
 
-		require.Zero(t, c.get(ctx, nil, q), "first read never waits on the query")
-		require.Eventually(t, func() bool { return c.get(ctx, nil, q).LogsParsed == 7 }, 5*time.Second, 5*time.Millisecond)
+		require.Zero(t, c.get(ctx, nil, q.SiteStats), "first read never waits on the query")
+		require.Eventually(t, func() bool { return c.get(ctx, nil, q.SiteStats).LogsParsed == 7 }, 5*time.Second, 5*time.Millisecond)
 		for range 5 {
-			require.Equal(t, int64(2), c.get(ctx, nil, q).BossKills)
+			require.Equal(t, int64(2), c.get(ctx, nil, q.SiteStats).BossKills)
 		}
 		require.Equal(t, int32(1), q.calls.Load())
 
@@ -167,8 +167,8 @@ func TestOGSiteStatsCache(t *testing.T) {
 		c.mu.Unlock()
 		expire(&c, uuid.Nil)
 		q.set(database.SiteStatsRow{LogsParsed: 8}, nil)
-		require.Equal(t, int64(7), c.get(ctx, nil, q).LogsParsed)
-		require.Eventually(t, func() bool { return c.get(ctx, nil, q).LogsParsed == 8 }, 5*time.Second, 5*time.Millisecond)
+		require.Equal(t, int64(7), c.get(ctx, nil, q.SiteStats).LogsParsed)
+		require.Eventually(t, func() bool { return c.get(ctx, nil, q.SiteStats).LogsParsed == 8 }, 5*time.Second, 5*time.Millisecond)
 		require.Equal(t, int32(2), q.calls.Load())
 	})
 
@@ -179,10 +179,10 @@ func TestOGSiteStatsCache(t *testing.T) {
 		tenant := &fakeSiteStats{row: database.SiteStatsRow{LogsParsed: 5}}
 		tctx := servicetenant.WithTenantID(context.Background(), uuid.New())
 
-		c.get(context.Background(), nil, site)
-		c.get(tctx, nil, tenant)
+		c.get(context.Background(), nil, site.SiteStats)
+		c.get(tctx, nil, tenant.SiteStats)
 		require.Eventually(t, func() bool {
-			return c.get(context.Background(), nil, site).LogsParsed == 100 && c.get(tctx, nil, tenant).LogsParsed == 5
+			return c.get(context.Background(), nil, site.SiteStats).LogsParsed == 100 && c.get(tctx, nil, tenant.SiteStats).LogsParsed == 5
 		}, 5*time.Second, 5*time.Millisecond)
 	})
 
@@ -194,7 +194,7 @@ func TestOGSiteStatsCache(t *testing.T) {
 		ctx, cancel := context.WithCancel(servicetenant.WithTenantID(context.Background(), tenantID))
 		cancel() // the request is already gone when the refresh runs
 
-		c.get(ctx, nil, q)
+		c.get(ctx, nil, q.SiteStats)
 		waitIdle(t, &c, tenantID)
 		q.mu.Lock()
 		defer q.mu.Unlock()
@@ -208,14 +208,14 @@ func TestOGSiteStatsCache(t *testing.T) {
 		q := &fakeSiteStats{row: database.SiteStatsRow{LogsParsed: 7}}
 		ctx := context.Background()
 
-		c.get(ctx, nil, q)
+		c.get(ctx, nil, q.SiteStats)
 		waitIdle(t, &c, uuid.Nil)
 		expire(&c, uuid.Nil)
 		q.set(database.SiteStatsRow{}, errors.New("db down"))
-		c.get(ctx, nil, q)
+		c.get(ctx, nil, q.SiteStats)
 		waitIdle(t, &c, uuid.Nil)
 
-		require.Equal(t, int64(7), c.get(ctx, nil, q).LogsParsed, "a failed query keeps the last counts")
+		require.Equal(t, int64(7), c.get(ctx, nil, q.SiteStats).LogsParsed, "a failed query keeps the last counts")
 		require.Equal(t, int32(2), q.calls.Load(), "no retry before brandOGRetry")
 		c.mu.Lock()
 		next := c.entries[uuid.Nil].nextRefresh
@@ -225,7 +225,7 @@ func TestOGSiteStatsCache(t *testing.T) {
 		// After the retry wait, the next read retries and picks up new counts.
 		expire(&c, uuid.Nil)
 		q.set(database.SiteStatsRow{LogsParsed: 9}, nil)
-		require.Eventually(t, func() bool { return c.get(ctx, nil, q).LogsParsed == 9 }, 5*time.Second, 5*time.Millisecond)
+		require.Eventually(t, func() bool { return c.get(ctx, nil, q.SiteStats).LogsParsed == 9 }, 5*time.Second, 5*time.Millisecond)
 	})
 
 	t.Run("PanicIsRecovered", func(t *testing.T) {
@@ -234,7 +234,7 @@ func TestOGSiteStatsCache(t *testing.T) {
 		q := &fakeSiteStats{panics: true}
 		ctx := context.Background()
 
-		c.get(ctx, nil, q)
+		c.get(ctx, nil, q.SiteStats)
 		waitIdle(t, &c, uuid.Nil)
 		c.mu.Lock()
 		require.WithinDuration(t, time.Now().Add(brandOGRetry), c.entries[uuid.Nil].nextRefresh, time.Minute)
@@ -245,7 +245,7 @@ func TestOGSiteStatsCache(t *testing.T) {
 		q.panics, q.row = false, database.SiteStatsRow{LogsParsed: 3}
 		q.mu.Unlock()
 		expire(&c, uuid.Nil)
-		require.Eventually(t, func() bool { return c.get(ctx, nil, q).LogsParsed == 3 }, 5*time.Second, 5*time.Millisecond)
+		require.Eventually(t, func() bool { return c.get(ctx, nil, q.SiteStats).LogsParsed == 3 }, 5*time.Second, 5*time.Millisecond)
 	})
 }
 

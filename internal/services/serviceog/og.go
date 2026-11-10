@@ -64,6 +64,10 @@ func (s *Service) Routes() []frontend.OGRoute {
 			},
 		},
 		{
+			Pattern: "/census",
+			Resolve: s.censusOG,
+		},
+		{
 			Pattern: "/talents",
 			Resolve: func(r *http.Request) *frontend.OGData {
 				return flavorTalentCalculatorOG(ogHost(r), seoProductName(s.resolvedSiteFlavor(r.Context())), "", "")
@@ -167,7 +171,6 @@ var staticOGRoutes = map[string]staticOGMetadata{
 	"/armory":       {Title: "Character Armory", Description: "Search character profiles, equipment, talents, and raid performance."},
 	"/wowdb":        {Title: "World of Warcraft Database", Description: "Explore game data and reference information."},
 	"/technical":    {Title: "Technical Reference", Description: "Explore Chronicle combat analysis references."},
-	"/census":       {Title: "Realm Census", Description: "Explore character and population statistics."},
 	"/speedrunning": {Title: "Speedrunning", Description: "Explore raid speedrunning records and performance."},
 	"/tools":        {Title: "Tools", Description: "Explore Chronicle raid and character analysis tools."},
 	"/download": {
