@@ -1,3 +1,4 @@
+import type { BossMechanicAnimationInterval } from "./bossMechanicAnimations";
 import { deepBreathPathForSpell, deepBreathPointForSpell, isDeepBreathPrimarySpell } from "./deepBreathLanes";
 
 /**
@@ -52,6 +53,8 @@ export interface EncounterEffects {
   /** Time-sorted death and resurrection timestamps per unit. */
   deathsByUnit: Map<string, number[]>;
   resurrectsByUnit: Map<string, number[]>;
+  /** Configured boss-mechanic aura lifetimes, per affected unit. */
+  bossMechanicAnimationsByUnit: Map<string, BossMechanicAnimationInterval[]>;
   /** Time-sorted heals with effective healing, per target. */
   healsByUnit: Map<string, ReplayEffectEvent[]>;
 }
@@ -209,7 +212,13 @@ export function formatHealAmount(amount: number): string {
 }
 
 export function createEncounterEffects(): EncounterEffects {
-  return { events: [], deathsByUnit: new Map(), resurrectsByUnit: new Map(), healsByUnit: new Map() };
+  return {
+    events: [],
+    deathsByUnit: new Map(),
+    resurrectsByUnit: new Map(),
+    bossMechanicAnimationsByUnit: new Map(),
+    healsByUnit: new Map(),
+  };
 }
 
 /**

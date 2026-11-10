@@ -1,3 +1,4 @@
+import { activeBossMechanicAnimation } from "./bossMechanicAnimations";
 import type { EncounterEffects, ReplayAttackKind, ReplayEffectEvent } from "./replayEffects";
 
 export type ModelLocomotion = "Stand" | "Walk" | "Run";
@@ -88,6 +89,17 @@ export function modelAnimationState(
 ): ModelAnimationState {
   if (deadSinceMs !== null) {
     return { candidates: ["Death"], startedAtMs: deadSinceMs, loop: false, key: `death:${deadSinceMs}` };
+  }
+  const mechanic = fx
+    ? activeBossMechanicAnimation(fx.bossMechanicAnimationsByUnit, guid, cursorMs)
+    : null;
+  if (mechanic) {
+    return {
+      candidates: mechanic.definition.candidates,
+      startedAtMs: mechanic.startedAtMs,
+      loop: mechanic.definition.loop,
+      key: `mechanic:${mechanic.definition.key}:${mechanic.startedAtMs}`,
+    };
   }
   if (casting) {
     return {

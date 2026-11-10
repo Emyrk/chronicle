@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { recordBossMechanicAnimationAura } from "./bossMechanicAnimations";
 import { addEffectEvent, createEncounterEffects, type ReplayEffectEvent } from "./replayEffects";
 import { cachedModelAsset, modelAnimationState, modelAnimationTimeSeconds, movementAnimation, selectModelAnimation, usesStaticDeathFallback } from "./modelAnimation";
 
@@ -64,6 +65,22 @@ describe("modelAnimation", () => {
       startedAtMs: 1050,
       loop: false,
     });
+  });
+
+  it("prioritizes a configured boss mechanic animation for its aura lifetime", () => {
+    const fx = createEncounterEffects();
+    recordBossMechanicAnimationAura(fx.bossMechanicAnimationsByUnit, "herod", 8989, 12_965, true);
+    recordBossMechanicAnimationAura(fx.bossMechanicAnimationsByUnit, "herod", 8989, 22_965, false);
+
+    expect(modelAnimationState(fx, "herod", 12_964, "Stand", false, null).candidates).toEqual(["Stand", "Stand"]);
+    expect(modelAnimationState(fx, "herod", 15_000, "Stand", true, null)).toMatchObject({
+      candidates: ["Whirlwind"],
+      startedAtMs: 12_965,
+      loop: true,
+      key: "mechanic:herod-whirlwind:12965",
+    });
+    expect(modelAnimationState(fx, "herod", 22_965, "Stand", false, null).candidates).toEqual(["Stand", "Stand"]);
+    expect(modelAnimationState(fx, "herod", 15_000, "Stand", true, 14_000).candidates).toEqual(["Death"]);
   });
 
   it("uses a static corpse only after a missing death clip is known", () => {

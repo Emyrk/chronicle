@@ -264,7 +264,7 @@ export function MapLegend() {
       <Section id="bosses" title="Bosses" note="A sigil, not a disc: bigger than a player, enemy red, its tick ring turning slowly. The three diamonds and the notch turn with its facing.">
         <Grid min={200}>
           <Card title="With a model" demo={<Ground height={170}><At x={50} y={70}><BossToken seconds={seconds} facing={200} /></At></Ground>}>
-            The boss&apos;s model stands on the sigil. Original game models animate from the replay: walking or running, attacking, casting, reacting to hits and dying. Extra clips load only when needed, fall back to the idle pose when absent, and follow pause or scrubbing exactly.
+            The boss&apos;s model stands on the sigil. Original game models animate from the replay: walking or running, attacking, casting, reacting to hits and dying. Configured boss mechanics use their matching clip for the full logged aura lifetime—for example, Herod loops Whirlwind until its buff ends. Extra clips load only when needed, fall back to the idle pose when absent, and follow pause or scrubbing exactly.
           </Card>
           <Card title="No model" demo={<Ground height={170}><At x={50} y={75}><BossToken seconds={seconds} facing={200} model={false} /></At></Ground>}>
             A red crystal stands on the sigil, turning slowly, so the boss still reads as a figure.

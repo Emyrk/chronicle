@@ -369,7 +369,10 @@ describe("mapProcessor", () => {
     send(aura(400, { state: AuraState.Modified, amount: 0 }));
     send(aura(500, { spellId: 300, isBuff: true }));
     send(aura(600, { target: "boss" }));
-    const debuffs = state.encounters.get("encounter")!.debuffsByUnit;
+    send(aura(700, { target: "boss", caster: "boss", spellId: 8989, spellName: "Whirlwind", isBuff: true }));
+    send(aura(10_700, { target: "boss", caster: "boss", spellId: 8989, spellName: "Whirlwind", amount: 0, state: AuraState.Removed, transition: AuraTransition.Removed, isBuff: true }));
+    const encounter = state.encounters.get("encounter")!;
+    const debuffs = encounter.debuffsByUnit;
     const at = start.getTime();
     expect(debuffs.get("player")).toEqual([
       { spellId: 100, startMs: at + 100, endMs: at + 400 },
@@ -378,6 +381,9 @@ describe("mapProcessor", () => {
     expect(debuffs.has("boss")).toBe(false);
     expect(activeDebuffsAt(debuffs.get("player")!, at + 350)).toEqual([100, 200]);
     expect(activeDebuffsAt(debuffs.get("player")!, at + 400)).toEqual([200]);
+    expect(encounter.effects.bossMechanicAnimationsByUnit.get("boss")).toEqual([
+      { definitionKey: "herod-whirlwind", spellId: 8989, startMs: at + 700, endMs: at + 10_700 },
+    ]);
     expect(activeDebuffsAt(debuffs.get("player")!, at + 50)).toEqual([]);
   });
 });

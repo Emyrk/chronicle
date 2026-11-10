@@ -28,6 +28,7 @@ import {
   type UnitPositionProcessorEvent,
   type UnitResourcesProcessorEvent,
 } from "../processorTypes";
+import { recordBossMechanicAnimationAura } from "./bossMechanicAnimations";
 import { latestPositionAt } from "./mapModel";
 import {
   addEffectEvent,
@@ -268,6 +269,15 @@ export const mapProcessor: PanelProcessor<MapResult, MapProcessorEvent> = {
       recordActivePlayer(encounter.activePlayerGuids, event, context);
     }
     if (event.type === "aura") {
+      if (event.spellId) {
+        recordBossMechanicAnimationAura(
+          encounter.effects.bossMechanicAnimationsByUnit,
+          event.target,
+          event.spellId,
+          timestampMs,
+          event.state !== AuraState.Removed && event.amount > 0,
+        );
+      }
       if (!event.isBuff && event.spellId && context.players[event.target]) addDebuff(encounter.debuffsByUnit, event, timestampMs);
       return;
     }
