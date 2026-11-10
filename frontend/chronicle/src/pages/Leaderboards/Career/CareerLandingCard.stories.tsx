@@ -19,6 +19,12 @@ function leader(name: string, guid: string, cls: string, spec: string, values: P
     chosen_metric: "dps", mastery: null, peak: null, renown: 0, form: null, floor: null, raids: [], ...values,
   }
 }
+// The weighted raids behind career ratings, heaviest first.
+const CAREER_RAIDS = [
+  "Naxxramas", "Upper Tower of Karazhan", "Temple of Ahn'Qiraj", "Blackwing Lair", "Molten Core", "Timbermaw Hold",
+  "Zul'Gurub", "Ruins of Ahn'Qiraj", "Onyxia's Lair", "Emerald Sanctum", "Lower Tower of Karazhan",
+]
+
 const LEADERS: CareerCardLeaders = {
   peak: leader("Terenya", "0x000000003B9C9BA1", "DRUID", "Balance", { peak: 71.4 }),
   mastery: leader("Hungrig", "0x000000003B9C4E27", "WARLOCK", "Destruction", { mastery: 58.2 }),
@@ -37,7 +43,7 @@ function Landing({ initialTab = "overview", career = true, leaders = LEADERS }: 
       landingPreviews={highlights.landing_previews as unknown as HubLandingPreview[]}
       landingSnapshots={highlights.snapshots as unknown as LeaderboardHighlightSnapshot[]}
       instanceHref={(name) => `/leaderboards/${name}`}
-      leadCard={career ? (t) => (t === "overview" || t === "ratings") && <CareerCard to="/leaderboards/career" tab={t} leaders={leaders} raids={11} /> : undefined}
+      leadCard={career ? (t) => (t === "overview" || t === "ratings") && <CareerCard to="/leaderboards/career" tab={t} leaders={leaders} raids={CAREER_RAIDS} /> : undefined}
     />
   )
 }

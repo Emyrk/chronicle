@@ -7,6 +7,8 @@ import { AlertTriangle, ArrowRight, CircleHelp, RotateCw, Skull, Swords, Timer }
 import { cn } from "@/lib/utils"
 import { CLASS_CSS_VAR, CLASS_DISPLAY } from "@/pages/Rankings/classDisplay"
 import { InstanceCard } from "@/pages/Rankings/InstanceCard"
+import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages"
+import { Laurel } from "@/pages/Leaderboards/Ratings/RatingParts"
 import { RATING_METRICS } from "@/pages/Leaderboards/Ratings/ratingBoards.fixtures"
 import { METRIC_THEMES } from "@/pages/Leaderboards/Ratings/ratingThemes"
 import { formatClock, instanceHeadlines, specStanding, type HubPlayer, type InstanceHeadline } from "./hub.fixtures"
@@ -534,12 +536,16 @@ export interface CareerCardLeaders {
 
 const CAREER_GOLD = "#c4a66e"
 
+/** Raid art circles on the career card before the rest collapse into "+N". */
+const CAREER_RAID_ART = 6
+
 /**
  * The career board's card in the raid grid: the same size and rows as a raid
- * card, but gold-edged on Chronicle's own art and labelled "Every raid", so it
- * reads as all raids together rather than one more raid.
+ * card, but framed in gold on Chronicle's own art, titled in gold beside a
+ * laurel, and carrying a strip of every raid's art, so it reads as all raids
+ * together rather than one more raid.
  */
-export function CareerCard({ to, tab, leaders, raids }: { to: string; tab: HubTab; leaders?: CareerCardLeaders; raids?: number }) {
+export function CareerCard({ to, tab, leaders, raids = [] }: { to: string; tab: HubTab; leaders?: CareerCardLeaders; raids?: readonly string[] }) {
   const peak = METRIC_THEMES.peak
   const mastery = METRIC_THEMES.mastery
   const renown = METRIC_THEMES.renown
@@ -550,31 +556,49 @@ export function CareerCard({ to, tab, leaders, raids }: { to: string; tab: HubTa
     {leaders.renown && <Line icon={<renown.icon className="size-3" style={{ color: renown.accent }} />} value={renown.format(leaders.renown.renown)} title="Career Renown #1, every spec">{player(leaders.renown)}</Line>}
     {tab === "overview" && leaders.guild?.mastery != null && <Line icon={<mastery.icon className="size-3" style={{ color: mastery.accent }} />} value={mastery.format(leaders.guild.mastery)} title="Guild career Mastery #1"><GuildTag name={leaders.guild.name} id={leaders.guild.subject_id} /></Line>}
   </>
+  const shown = raids.slice(0, CAREER_RAID_ART)
   return (
+    // A gradient frame (padding over a gold gradient) rather than a flat border: the card reads as framed.
     <Link
       to={to}
-      className="group relative block aspect-[16/7] overflow-hidden rounded-xl border bg-card text-left transition-all hover:shadow-lg"
+      className="group block aspect-[16/7] rounded-xl p-px text-left transition-shadow hover:shadow-lg"
       style={{
-        borderColor: `color-mix(in srgb, ${CAREER_GOLD} 45%, transparent)`,
-        boxShadow: `0 0 0 1px color-mix(in srgb, ${CAREER_GOLD} 12%, transparent), 0 8px 30px -12px color-mix(in srgb, ${CAREER_GOLD} 35%, transparent)`,
+        backgroundImage: `linear-gradient(135deg, ${CAREER_GOLD}, color-mix(in srgb, ${CAREER_GOLD} 25%, transparent) 45%, color-mix(in srgb, ${CAREER_GOLD} 70%, transparent))`,
+        boxShadow: `0 8px 30px -12px color-mix(in srgb, ${CAREER_GOLD} 45%, transparent)`,
       }}
     >
-      <img src="/c/images/herobackground.avif" alt="" className="absolute inset-0 h-full w-full object-cover transition-transform group-hover:scale-105" />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/55 to-black/25" />
-      {raids ? (
-        <div className="absolute top-2.5 right-2.5 z-10 flex items-center gap-1 rounded-md border border-white/10 bg-black/60 px-2 py-1 text-xs font-semibold text-white backdrop-blur-sm">
-          {raids} raids
-        </div>
-      ) : null}
-      <div className="relative flex h-full flex-col justify-end p-4">
-        <div className="mb-2">
-          <span className="text-[10px] tracking-wider uppercase" style={{ color: CAREER_GOLD }}>Every raid</span>
-          <h2 className="text-lg leading-tight font-bold">Career</h2>
-        </div>
-        <div className="mb-2 space-y-0.5">{rows ?? <UnavailableHighlight label="Career ratings are being calculated" />}</div>
-        <div className="flex items-end justify-between gap-2 text-[10px] text-muted-foreground">
-          <span>Weighted across every raid</span>
-          <span className="shrink-0 transition-colors group-hover:text-foreground" style={{ color: CAREER_GOLD }}>View career →</span>
+      <div className="relative h-full overflow-hidden rounded-[11px] bg-card">
+        <img src="/c/images/herobackground.avif" alt="" className="absolute inset-0 h-full w-full object-cover transition-transform group-hover:scale-105" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/55 to-black/25" />
+        {/* A faint gold wash from the top corner, where raid cards stay neutral. */}
+        <div className="absolute inset-0" style={{ background: `radial-gradient(ellipse 70% 90% at 100% 0%, color-mix(in srgb, ${CAREER_GOLD} 22%, transparent), transparent 70%)` }} />
+        {shown.length > 0 && (
+          <div className="absolute top-2.5 right-2.5 z-10 flex items-center" title={`Every raid: ${raids.join(", ")}`}>
+            <span className="flex -space-x-2">
+              {shown.map((raid) => (
+                <img key={raid} src={getInstanceBackground(raid)} alt="" className="size-7 rounded-full border-2 object-cover" style={{ borderColor: "#1c1611" }} />
+              ))}
+            </span>
+            {raids.length > shown.length && (
+              <span className="ml-1 rounded-full border border-white/10 bg-black/60 px-1.5 py-0.5 text-[10px] font-semibold text-white backdrop-blur-sm">
+                +{raids.length - shown.length}
+              </span>
+            )}
+          </div>
+        )}
+        <div className="relative flex h-full flex-col justify-end p-4">
+          <div className="mb-2">
+            <span className="text-[10px] tracking-wider uppercase" style={{ color: CAREER_GOLD }}>Every raid</span>
+            <h2 className="flex items-center gap-1.5 text-lg leading-tight font-bold" style={{ color: CAREER_GOLD }}>
+              <Laurel className="size-5" />
+              Career
+            </h2>
+          </div>
+          <div className="mb-2 space-y-0.5">{rows ?? <UnavailableHighlight label="Career ratings are being calculated" />}</div>
+          <div className="flex items-end justify-between gap-2 text-[10px] text-muted-foreground">
+            <span>Weighted across every raid</span>
+            <span className="shrink-0 transition-colors group-hover:text-foreground" style={{ color: CAREER_GOLD }}>View career →</span>
+          </div>
         </div>
       </div>
     </Link>
