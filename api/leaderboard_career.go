@@ -108,12 +108,14 @@ func (api *API) LeaderboardCareer(w http.ResponseWriter, r *http.Request) {
 	// Ranks are computed before the page; search narrows the ranking itself.
 	totals := map[string]int{}
 	ranked := map[string][]serviceratings.CareerBoardEntry{}
-	for _, sort := range []string{"mastery", "peak", "renown"} {
-		all := rankCareerBoard(entries, sort)
+	var shown []serviceratings.CareerBoardEntry
+	for _, sort := range serviceratings.CareerBoardSorts {
+		all := serviceratings.RankCareerBoard(entries, sort)
 		totals[sort] = len(all)
 		ranked[sort] = all[min(offset, len(all)):min(offset+limit, len(all))]
+		shown = append(shown, ranked[sort]...)
 	}
-	names, err := careerBoardNames(ctx, db, filter.Guilds, ranked)
+	names, err := serviceratings.CareerBoardNames(ctx, db, filter.Guilds, shown)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
@@ -121,10 +123,12 @@ func (api *API) LeaderboardCareer(w http.ResponseWriter, r *http.Request) {
 	page := func(sort string) chroniclesdk.CareerLeaderboardBoard {
 		out := chroniclesdk.CareerLeaderboardBoard{Total: totals[sort], Entries: []chroniclesdk.CareerLeaderboardEntry{}}
 		for _, e := range ranked[sort] {
-			entry := names[careerNameKey{e.RealmID, e.SubjectID}]
-			entry.SubjectID, entry.RealmID = e.SubjectID, e.RealmID.String()
-			entry.Name = cmp.Or(entry.Name, e.SubjectID)
-			entry.PlayerClass = cmp.Or(e.PlayerClass, entry.PlayerClass)
+			name := names[serviceratings.CareerSubjectKey{Realm: e.RealmID, ID: e.SubjectID}]
+			entry := chroniclesdk.CareerLeaderboardEntry{
+				SubjectID: e.SubjectID, Name: cmp.Or(name.Name, e.SubjectID),
+				RealmID: e.RealmID.String(), RealmName: name.RealmName,
+				PlayerClass: cmp.Or(e.PlayerClass, name.PlayerClass), GuildName: name.GuildName, LogoURL: name.LogoURL,
+			}
 			entry.PlayerSpec, entry.PlayerSubSpec, entry.ChosenMetric = e.PlayerSpec, e.PlayerSubSpec, e.ChosenMetric
 			entry.Mastery, entry.Peak, entry.Renown = e.Mastery, e.Peak, e.Renown
 			entry.Form, entry.Floor = e.Form, e.Floor
@@ -140,14 +144,14 @@ func (api *API) LeaderboardCareer(w http.ResponseWriter, r *http.Request) {
 
 // careerBoardSearch keeps subjects whose name contains the search text.
 func careerBoardSearch(ctx context.Context, db database.Store, filter serviceratings.CareerBoardFilter, search string, entries []serviceratings.CareerBoardEntry) ([]serviceratings.CareerBoardEntry, error) {
-	match := map[careerNameKey]bool{}
+	match := map[serviceratings.CareerSubjectKey]bool{}
 	if filter.Guilds {
 		rows, err := db.SearchLeaderboardCareerGuilds(ctx, database.SearchLeaderboardCareerGuildsParams{Search: search, RealmFilter: filter.Realm})
 		if err != nil {
 			return nil, err
 		}
 		for _, row := range rows {
-			match[careerNameKey{row.RealmID, row.SubjectID}] = true
+			match[serviceratings.CareerSubjectKey{Realm: row.RealmID, ID: row.SubjectID}] = true
 		}
 	} else {
 		rows, err := db.SearchLeaderboardCareerPlayers(ctx, database.SearchLeaderboardCareerPlayersParams{Search: search, RealmFilter: filter.Realm})
@@ -155,75 +159,13 @@ func careerBoardSearch(ctx context.Context, db database.Store, filter servicerat
 			return nil, err
 		}
 		for _, row := range rows {
-			match[careerNameKey{row.RealmID, row.SubjectID}] = true
+			match[serviceratings.CareerSubjectKey{Realm: row.RealmID, ID: row.SubjectID}] = true
 		}
 	}
 	out := make([]serviceratings.CareerBoardEntry, 0, len(match))
 	for _, e := range entries {
-		if match[careerNameKey{e.RealmID, e.SubjectID}] {
+		if match[serviceratings.CareerSubjectKey{Realm: e.RealmID, ID: e.SubjectID}] {
 			out = append(out, e)
-		}
-	}
-	return out, nil
-}
-
-type careerNameKey struct {
-	realm uuid.UUID
-	id    string
-}
-
-// careerBoardNames looks up display names once for every subject shown on any board.
-func careerBoardNames(ctx context.Context, db database.Store, guilds bool, ranked map[string][]serviceratings.CareerBoardEntry) (map[careerNameKey]chroniclesdk.CareerLeaderboardEntry, error) {
-	out := map[careerNameKey]chroniclesdk.CareerLeaderboardEntry{}
-	seen := map[careerNameKey]bool{}
-	var realms []uuid.UUID
-	var ids []string
-	var guildIDs []uuid.UUID
-	for _, entries := range ranked {
-		for _, e := range entries {
-			k := careerNameKey{e.RealmID, e.SubjectID}
-			if seen[k] {
-				continue
-			}
-			seen[k] = true
-			if guilds {
-				if id, err := uuid.Parse(e.SubjectID); err == nil {
-					guildIDs = append(guildIDs, id)
-				}
-				continue
-			}
-			realms, ids = append(realms, e.RealmID), append(ids, e.SubjectID)
-		}
-	}
-	if guilds {
-		if len(guildIDs) == 0 {
-			return out, nil
-		}
-		rows, err := db.ListLeaderboardCareerGuildNames(ctx, guildIDs)
-		if err != nil {
-			return nil, err
-		}
-		byID := map[string]database.ListLeaderboardCareerGuildNamesRow{}
-		for _, row := range rows {
-			byID[row.ID.String()] = row
-		}
-		for k := range seen {
-			if row, ok := byID[k.id]; ok {
-				out[k] = chroniclesdk.CareerLeaderboardEntry{Name: row.Name, RealmName: row.RealmName, LogoURL: row.LogoUrl}
-			}
-		}
-		return out, nil
-	}
-	if len(realms) == 0 {
-		return out, nil
-	}
-	rows, err := db.ListLeaderboardCareerPlayerNames(ctx, database.ListLeaderboardCareerPlayerNamesParams{RealmIds: realms, SubjectIds: ids})
-	if err != nil {
-		return nil, err
-	}
-	for _, row := range rows {
-		out[careerNameKey{row.RealmID, row.SubjectID}] = chroniclesdk.CareerLeaderboardEntry{
-			Name: row.PlayerName, RealmName: row.RealmName, PlayerClass: row.PlayerClass, GuildName: row.GuildName,
 		}
 	}
 	return out, nil
@@ -263,35 +205,3 @@ func careerBoardRaids(e serviceratings.CareerBoardEntry) []chroniclesdk.CareerLe
 	return out
 }
 
-// rankCareerBoard keeps subjects that have the sorted value and orders them
-// best first, breaking ties by identity so pages are stable.
-func rankCareerBoard(entries []serviceratings.CareerBoardEntry, sort string) []serviceratings.CareerBoardEntry {
-	value := func(e serviceratings.CareerBoardEntry) (float64, bool) {
-		switch sort {
-		case "peak":
-			if e.Peak == nil {
-				return 0, false
-			}
-			return *e.Peak, true
-		case "renown":
-			return e.Renown, e.Renown > 0
-		default:
-			if e.Mastery == nil {
-				return 0, false
-			}
-			return *e.Mastery, true
-		}
-	}
-	out := make([]serviceratings.CareerBoardEntry, 0, len(entries))
-	for _, e := range entries {
-		if _, ok := value(e); ok {
-			out = append(out, e)
-		}
-	}
-	slices.SortStableFunc(out, func(a, b serviceratings.CareerBoardEntry) int {
-		av, _ := value(a)
-		bv, _ := value(b)
-		return cmp.Or(cmp.Compare(bv, av), cmp.Compare(a.RealmID.String(), b.RealmID.String()), cmp.Compare(a.SubjectID, b.SubjectID))
-	})
-	return out
-}

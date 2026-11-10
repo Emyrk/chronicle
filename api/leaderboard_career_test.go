@@ -31,7 +31,7 @@ func TestRankCareerBoard(t *testing.T) {
 	}
 	ids := func(sort string) []string {
 		var out []string
-		for _, e := range rankCareerBoard(entries, sort) {
+		for _, e := range serviceratings.RankCareerBoard(entries, sort) {
 			out = append(out, e.SubjectID)
 		}
 		return out

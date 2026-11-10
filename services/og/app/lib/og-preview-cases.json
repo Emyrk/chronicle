@@ -393,6 +393,29 @@
     }
   },
   {
+    "id": "leaderboard-career",
+    "group": "Leaderboards",
+    "label": "Career",
+    "description": "The overall career board: Peak and Mastery from each character's strongest spec, Renown across every spec.",
+    "pageExample": "/leaderboards/career",
+    "note": "Illustrative characters.",
+    "params": {
+      "template": "leaderboard",
+      "host": "capy.chronicleclassic.com",
+      "product": "CapybaraCraft",
+      "raid": "Career",
+      "chip": "Leaderboards",
+      "view": "Every raid, weighted",
+      "path": "/leaderboards/career",
+      "b1": "Peak",
+      "r1": "Kelthis:mage:81.5:peak:Fire,Ravenshield:warrior:79.1:peak:Fury,Aeloria:priest:74.8:peak:Holy",
+      "b2": "Mastery",
+      "r2": "Aeloria:priest:61.2:mastery:Holy,Ravenshield:warrior:58.7:mastery:Fury,Moonbrew:druid:55.3:mastery:Feral",
+      "b3": "Renown",
+      "r3": "Thornwick:rogue:1530:renown:,Orrik:warrior:1388:renown:,Ravenshield:warrior:1204:renown:"
+    }
+  },
+  {
     "id": "leaderboard-speedruns",
     "group": "Leaderboards",
     "label": "Speedruns",
