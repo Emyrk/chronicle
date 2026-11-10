@@ -1,4 +1,6 @@
+import type { HubSubject } from "./Hub/hub.fixtures"
 import { TABS, type HubTab } from "./Hub/hubTabs"
+import { VIEW_ORDER, type RatingView } from "./Ratings/ratingThemes"
 
 const tabIDs = new Set<string>(TABS.map((tab) => tab.id))
 
@@ -39,6 +41,34 @@ export function hubParams(params: URLSearchParams, key: "realm_ids" | "encounter
   if (key === "encounters") next.delete("encounter")
   if (value) next.set(key, value)
   else next.delete(key)
+  return next
+}
+
+/** The selected ratings board from the shareable query, defaulting invalid or absent values. */
+export function hubRatingView(params: URLSearchParams): RatingView {
+  const value = params.get("rating")
+  return value && VIEW_ORDER.includes(value as RatingView) ? (value as RatingView) : "overview"
+}
+
+/** Keep the selected ratings board in the query; Overview is the clean default URL. */
+export function hubRatingParams(params: URLSearchParams, view: RatingView): URLSearchParams {
+  const next = new URLSearchParams(params)
+  if (view === "overview") next.delete("rating")
+  else next.set("rating", view)
+  return next
+}
+
+/** The selected leaderboard subject from the shareable query. */
+export function hubSubject(params: URLSearchParams): HubSubject {
+  const value = params.get("subject")
+  return value === "guild" || value === "guilds" ? "guilds" : "characters"
+}
+
+/** Keep guild mode in the query; Characters is the clean default URL. */
+export function hubSubjectParams(params: URLSearchParams, subject: HubSubject): URLSearchParams {
+  const next = new URLSearchParams(params)
+  if (subject === "characters") next.delete("subject")
+  else next.set("subject", "guild")
   return next
 }
 

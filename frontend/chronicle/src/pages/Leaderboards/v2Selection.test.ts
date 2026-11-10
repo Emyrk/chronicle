@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { hubInstanceParams, hubParams, hubPath, v2Selection } from "./v2Selection"
+import { hubInstanceParams, hubParams, hubPath, hubRatingParams, hubRatingView, hubSubject, hubSubjectParams, v2Selection } from "./v2Selection"
 
 describe("leaderboard hub selection", () => {
   it("opens the live overview without selecting a mock instance", () => {
@@ -38,6 +38,27 @@ describe("leaderboard hub selection", () => {
     const set = hubParams(params, "encounters", "Lucifron,Ragnaros")
     expect(v2Selection(set).encounters).toEqual(["Lucifron", "Ragnaros"])
     expect(set.has("encounter")).toBe(false)
+  })
+
+  it("keeps the selected ratings board in a shareable query", () => {
+    for (const view of ["peak", "mastery", "renown"] as const) {
+      const params = hubRatingParams(new URLSearchParams("realm_ids=realm-1"), view)
+      expect(hubRatingView(params)).toBe(view)
+      expect(hubPath("ratings", params, "Molten Core")).toBe(`/leaderboards/Molten-Core/ratings?realm_ids=realm-1&rating=${view}`)
+    }
+
+    expect(hubRatingView(new URLSearchParams("rating=unknown"))).toBe("overview")
+    expect(hubRatingParams(new URLSearchParams("rating=peak&realm_ids=realm-1"), "overview").toString()).toBe("realm_ids=realm-1")
+  })
+
+  it("keeps guild mode in a shareable query and uses characters as the clean default", () => {
+    const guilds = hubSubjectParams(new URLSearchParams("rating=renown"), "guilds")
+    expect(hubSubject(guilds)).toBe("guilds")
+    expect(hubPath("ratings", guilds, "Molten Core")).toBe("/leaderboards/Molten-Core/ratings?rating=renown&subject=guild")
+    expect(hubSubject(new URLSearchParams("subject=guilds"))).toBe("guilds")
+
+    expect(hubSubject(new URLSearchParams("subject=unknown"))).toBe("characters")
+    expect(hubSubjectParams(new URLSearchParams("subject=guild&rating=peak"), "characters").toString()).toBe("rating=peak")
   })
 
   it("drops instance-specific state when changing instances", () => {

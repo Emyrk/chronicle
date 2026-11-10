@@ -163,9 +163,19 @@ export interface LeaderboardHubProps {
   initialBosses?: string[]
   initialRole?: HubRole
   initialSubject?: HubSubject
+  /** Controlled character or guild view, so shared links preserve the subject. */
+  subject?: HubSubject
+  onSubject?: (subject: HubSubject) => void
+  /** Opens a guild ratings board and updates both route-backed selections together. */
+  onOpenGuildRatings?: (view: RatingView) => void
   initialTab?: HubTab
   /** Which rating board the Ratings tab opens on. */
   initialRatingView?: RatingView
+  /** Controlled rating board, so Overview, Peak, Mastery, and Renown can live in the URL. */
+  ratingView?: RatingView
+  onRatingView?: (view: RatingView) => void
+  /** Opens the Ratings tab and board together, for atomic route-backed navigation. */
+  onOpenRatings?: (view: RatingView) => void
   /** Which statistics view the Statistics tab opens on. */
   initialStatisticsView?: StatisticsView
   /** Back to the instance grid. */
@@ -199,8 +209,14 @@ export function LeaderboardHub({
   initialBosses,
   initialRole = "dps",
   initialSubject = "characters",
+  subject: controlledSubject,
+  onSubject,
+  onOpenGuildRatings,
   initialTab = "overview",
   initialRatingView = "overview",
+  ratingView: controlledRatingView,
+  onRatingView,
+  onOpenRatings,
   initialStatisticsView = "specs",
   onAllInstances,
   allInstancesHref,
@@ -238,7 +254,9 @@ export function LeaderboardHub({
   const chosen = selection.kind === "bosses" ? selection.bosses : []
   /** Two or more bosses combined; one boss is the boss view, none is the full clear. */
   const set = chosen.length > 1 ? chosen : undefined
-  const [subject, setSubject] = useState<HubSubject>(initialSubject)
+  const [ownSubject, setOwnSubject] = useState<HubSubject>(initialSubject)
+  const subject = controlledSubject ?? ownSubject
+  const setSubject = onSubject ?? setOwnSubject
   const isMobile = useIsMobile()
   const [encountersOpen, setEncountersOpenState] = useState(() => readEncountersOpen())
   const [mobileEncountersOpen, setMobileEncountersOpen] = useState(false)
@@ -268,17 +286,19 @@ export function LeaderboardHub({
   const tab = controlledTab ?? ownTab
   const tabBarRef = useActiveTabInView<HTMLElement>(tab)
   const setTab = onTab ?? setOwnTab
-  const [ratingView, setRatingView] = useState<RatingView>(initialRatingView)
+  const [ownRatingView, setOwnRatingView] = useState<RatingView>(initialRatingView)
+  const ratingView = controlledRatingView ?? ownRatingView
+  const setRatingView = onRatingView ?? setOwnRatingView
   const [period, setPeriod] = useState<RatingPeriod>("180d")
   const [statisticsView, setStatisticsView] = useState<StatisticsView>(initialStatisticsView)
-  const openRatings = (view: RatingView) => {
+  const openRatings = onOpenRatings ?? ((view: RatingView) => {
     setRatingView(view)
     setTab("ratings")
-  }
-  const openGuildRatings = (view: RatingView) => {
+  })
+  const openGuildRatings = onOpenGuildRatings ?? ((view: RatingView) => {
     setSubject("guilds")
     openRatings(view)
-  }
+  })
   const ratingToolbar = (
     <div className="flex flex-wrap items-center gap-2">
       <MetricTabs view={ratingView} onView={setRatingView} />
