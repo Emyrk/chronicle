@@ -659,7 +659,7 @@ export function LeaderboardHub({
             size="icon"
             onClick={() => setMobileEncountersOpen((open) => !open)}
             data-floating-corner="bottom-left"
-            className="fixed bottom-[calc(2rem+var(--compare-tray-offset,0px))] left-8 z-50 h-14 w-14 rounded-full shadow-lg"
+            className="fixed bottom-[calc(2rem+var(--compare-tray-offset,0px)+var(--mobile-ad-offset,0px))] left-8 z-50 h-14 w-14 rounded-full shadow-lg"
             title={mobileEncountersOpen ? "Close encounters" : "Show encounters"}
             aria-label={mobileEncountersOpen ? "Close encounters" : "Show encounters"}
           >
