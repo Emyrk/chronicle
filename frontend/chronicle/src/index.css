@@ -594,6 +594,11 @@
   background-color: oklch(0.5 0 0);
 }
 
+/* Compare and Alt-context UI owns the mobile bottom edge while it is open. */
+html[data-entity-overlay-open] [data-mobile-bottom-ad] {
+  display: none;
+}
+
 /* Holding Alt outlines everything the entity menu can open (EntityMenuProvider), colored by kind. */
 [data-entity] {
   --entity-color: var(--color-sky-400);

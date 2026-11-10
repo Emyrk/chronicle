@@ -22,6 +22,7 @@ import { useSupporterTier } from "@/hooks/useSupporterTier";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { CompareTray } from "./CompareTray";
 import { compareAction, kindColor, originLabelForPath, STATS_TIER, useComparePins, type PinOrigin } from "./entityCompare";
+import { setEntityOverlayOpen } from "./entityOverlay";
 
 import {
   EntityMenuContext,
@@ -140,6 +141,14 @@ export function EntityMenuProvider({ children }: { children: ReactNode }) {
   const revealedDocs = useRef(new Set<Document>());
   // An Alt press with nothing else in between toggles Firefox's menu bar on release.
   const altAlone = useRef(false);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const overlayOpen = menu !== null || compare.pins.length > 0 || expanded !== null;
+    setEntityOverlayOpen(root, overlayOpen);
+
+    return () => setEntityOverlayOpen(root, false);
+  }, [compare.pins.length, expanded, menu]);
 
   const setReveal = useCallback((doc: Document, on: boolean) => {
     if (on) {

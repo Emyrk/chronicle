@@ -60,6 +60,7 @@ export function MobileBottomAd({
     <>
       <div
         ref={shellRef}
+        data-mobile-bottom-ad=""
         className="fixed inset-x-0 bottom-0 z-40 empty:hidden pb-[env(safe-area-inset-bottom)] lg:hidden"
       >
         <AdSlot
@@ -69,7 +70,11 @@ export function MobileBottomAd({
           previewEnabled={previewEnabled}
         />
       </div>
-      <div aria-hidden="true" className="h-[var(--mobile-ad-offset,0px)] lg:hidden" />
+      <div
+        aria-hidden="true"
+        data-mobile-bottom-ad=""
+        className="h-[var(--mobile-ad-offset,0px)] lg:hidden"
+      />
     </>
   )
 }

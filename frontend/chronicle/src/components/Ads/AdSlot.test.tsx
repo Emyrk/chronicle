@@ -206,6 +206,7 @@ describe("AdSlot", () => {
       <MobileBottomAd placement="instance-mobile-bottom" hostname="localhost" previewEnabled />,
     )
 
+    expect(markup.match(/data-mobile-bottom-ad/g)).toHaveLength(2)
     expect(markup).toContain("fixed inset-x-0 bottom-0")
     expect(markup).toContain("empty:hidden")
     expect(markup).toContain("safe-area-inset-bottom")
