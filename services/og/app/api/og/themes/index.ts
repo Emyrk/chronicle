@@ -1,5 +1,6 @@
 import type { OgThemeKey } from '@/app/lib/og-themes';
 import { brandTheme } from './brand';
+import { censusTheme } from './census';
 import { characterTheme } from './character';
 import { clearTheme } from './clear';
 import { guildTheme } from './guild';
@@ -18,4 +19,5 @@ export const themes: Record<OgThemeKey, ThemeDefinition> = {
   parse: parseTheme,
   clear: clearTheme,
   leaderboard: leaderboardTheme,
+  census: censusTheme,
 };

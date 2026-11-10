@@ -42,6 +42,11 @@ export const OG_THEMES = [
     label: 'Leaderboard',
     description: 'A leaderboard hub page: the raid, then one tall board or up to three side-by-side boards of leaders, without rank numbers.',
   },
+  {
+    key: 'census',
+    label: 'Census',
+    description: 'Horde versus Alliance: each side\'s share and count of raiders seen in logs, with a clash bar and the margin.',
+  },
 ] as const;
 
 export type OgThemeOption = (typeof OG_THEMES)[number];

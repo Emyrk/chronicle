@@ -490,5 +490,37 @@
       "b1": "Renown per clear",
       "r1": "Upper Karazhan::55:renown:9 bosses,Lower Karazhan::6:renown:5 bosses,Timbermaw Hold::35:renown:10 bosses"
     }
+  },
+  {
+    "id": "census-capy",
+    "group": "Census",
+    "label": "Census · CapybaraCraft",
+    "description": "Horde versus Alliance among characters seen in raid logs over the last 90 days.",
+    "pageExample": "/census",
+    "note": "Real CapybaraCraft census, captured 2026-11-10. High Elves count for the Alliance on Nightmare of Ursol flavors.",
+    "params": {
+      "template": "census",
+      "horde": "8955",
+      "alliance": "14665",
+      "days": "90",
+      "host": "capy.chronicleclassic.com",
+      "product": "CapybaraCraft"
+    }
+  },
+  {
+    "id": "census-octo",
+    "group": "Census",
+    "label": "Census · OctoWoW",
+    "description": "Horde versus Alliance among characters seen in raid logs over the last 90 days.",
+    "pageExample": "/census",
+    "note": "Real OctoWoW census, captured 2026-11-10. High Elves count for the Alliance on Nightmare of Ursol flavors.",
+    "params": {
+      "template": "census",
+      "horde": "2746",
+      "alliance": "3747",
+      "days": "90",
+      "host": "octo.chronicleclassic.com",
+      "product": "OctoWoW"
+    }
   }
 ]
