@@ -13,6 +13,14 @@ describe("encounter sidebar", () => {
     expect(html.match(/aria-pressed="true"/g)).toHaveLength(4) // three bosses and "All bosses"
   })
 
+  it("selects only the configured preset while still listing other bosses", () => {
+    const emeraldBosses = ["Erennius", "Solnius", "Solnius (Hard Mode)"]
+    const html = renderToStaticMarkup(<EncounterSidebar bosses={emeraldBosses} preset={emeraldBosses.slice(0, 2)} optional={new Set()} selection={FULL_CLEAR} onSelect={vi.fn()} />)
+    expect(html).toContain("2 of 2 selected")
+    expect(html).toMatch(/aria-pressed="false"[^>]*title="Solnius \(Hard Mode\)\. Click to select, Ctrl\+Click to toggle"/)
+    expect(html.match(/aria-pressed="true"/g)).toHaveLength(3) // two preset bosses and "All bosses"
+  })
+
   it("picks one on click and adds or removes one on Ctrl+Click", () => {
     expect(toggleEncounter(FULL_CLEAR, bosses, bosses, "Magmadar", false)).toEqual({ kind: "bosses", bosses: ["Magmadar"] })
     expect(toggleEncounter(FULL_CLEAR, bosses, bosses, "Magmadar", true)).toEqual({ kind: "bosses", bosses: ["Lucifron", "Ragnaros"] })

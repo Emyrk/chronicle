@@ -134,6 +134,8 @@ export interface HubLiveTabContext {
 
 export interface HubLiveData {
   bosses: readonly string[]
+  /** Bosses represented by the default clear selection; other bosses remain individually selectable. */
+  presetBosses?: readonly string[]
   optionalBosses?: ReadonlySet<string>
   /** Persist a selected encounter in the host URL without changing the Storybook path. */
   onSelection?: (selection: EncounterSelection) => void
@@ -478,6 +480,7 @@ export function LeaderboardHub({
                 <div className="hidden shrink-0 lg:sticky lg:top-4 lg:block lg:max-h-[calc(100vh-2rem)] lg:w-[267px] lg:self-start lg:overflow-y-auto lg:border-r lg:pt-1 lg:pr-4 styled-scrollbar">
                   <EncounterSidebar
                     bosses={bosses}
+                    preset={live?.presetBosses}
                     optional={live ? live.optionalBosses ?? new Set<string>() : OPTIONAL_BOSSES}
                     trash={live && tab === "performances" ? new Set(["Trash"]) : undefined}
                     selection={selection}
@@ -609,6 +612,7 @@ export function LeaderboardHub({
               >
                 <EncounterSidebar
                   bosses={bosses}
+                  preset={live?.presetBosses}
                   optional={live ? live.optionalBosses ?? new Set<string>() : OPTIONAL_BOSSES}
                   trash={live && tab === "performances" ? new Set(["Trash"]) : undefined}
                   selection={selection}

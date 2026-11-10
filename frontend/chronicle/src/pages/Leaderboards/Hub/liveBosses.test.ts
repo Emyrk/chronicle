@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { liveHubBosses } from "./liveBosses"
+import { liveHubBosses, liveHubPreset } from "./liveBosses"
 
 const recorded = ["Baron Geddon", "Gehennas", "Ragnaros", "Trash"]
 const defaultSet = [{ id: "", label: "Default", encounters: ["Ragnaros", "Baron Geddon"] }]
@@ -12,13 +12,15 @@ describe("live Hub encounter roster", () => {
 
   it("offers hard-mode bosses alongside the default bosses without changing the preset", () => {
     const sets = [
-      { id: "default", label: "Normal", encounters: ["Erennius", "Solnius"] },
+      { id: "", label: "Normal", encounters: ["Erennius", "Solnius"] },
       { id: "hard", label: "Hard Mode", encounters: ["Solnius (Hard Mode)", "Erennius"] },
     ]
+    expect(liveHubPreset([], new Set(["Erennius", "Solnius", "Solnius (Hard Mode)"]), sets)).toEqual([
+      "Erennius", "Solnius",
+    ])
     expect(liveHubBosses([], new Set(sets[0].encounters), sets)).toEqual([
       "Erennius", "Solnius", "Solnius (Hard Mode)",
     ])
-    expect(sets[0].encounters).toEqual(["Erennius", "Solnius"])
   })
 
   it("falls back to the progression roster and never treats Trash as a boss", () => {

@@ -20,7 +20,7 @@ import { SpeedrunsTab } from "./Hub/SpeedrunsTab"
 import { StatisticsTab, type LiveStatisticsData } from "./Hub/StatisticsTab"
 import { ParsingTab, type LiveParsingData } from "./Hub/ParsingTab"
 import { FULL_CLEAR, defaultSpeedrunsView, type EncounterSelection, type SpeedrunsView } from "./Hub/encounterSelection"
-import { liveHubBosses } from "./Hub/liveBosses"
+import { liveHubBosses, liveHubPreset } from "./Hub/liveBosses"
 import { hubInstanceParams, hubParams, hubPath, hubTab, v2Selection } from "./v2Selection"
 import { legacyLeaderboardsTarget } from "./leaderboardsState"
 import { useSiteConfig, useSupportedInstances } from "@/api/queries"
@@ -162,8 +162,11 @@ function LiveInstanceHub({ instanceName, names, summary, stale, realm, realmIDs,
     ? raids.find((row) => row.difficulty_name === difficulty && String(row.max_players) === size)
     : undefined) ?? raids.find((row) => row.difficulty_name === resolved?.difficulty_name && row.max_players === resolved?.max_players)
   const realmName = realm === ALL_REALMS ? undefined : realm
-  const bosses = liveHubBosses(summary.encounters.map((row) => row.encounter_name),
-    new Set(summary.progression_bosses ?? []), summary.ranking_encounter_sets ?? [], tab === "performances")
+  const recordedBosses = summary.encounters.map((row) => row.encounter_name)
+  const progressionBosses = new Set(summary.progression_bosses ?? [])
+  const rankingSets = summary.ranking_encounter_sets ?? []
+  const presetBosses = liveHubPreset(recordedBosses, progressionBosses, rankingSets)
+  const bosses = liveHubBosses(recordedBosses, progressionBosses, rankingSets, tab === "performances")
   // Stale names (another instance, a removed boss) drop out; nothing left is the preset.
   const chosen = bosses.filter((name) => encounters.includes(name))
   const selection: EncounterSelection = chosen.length ? { kind: "bosses", bosses: chosen } : FULL_CLEAR
@@ -171,6 +174,7 @@ function LiveInstanceHub({ instanceName, names, summary, stale, realm, realmIDs,
     selection,
     onSelection: (next: EncounterSelection) => onEncounters(next.kind === "bosses" ? next.bosses : []),
     bosses,
+    presetBosses,
     optionalBosses: new Set<string>(),
     realms: [ALL_REALMS, ...summary.realms.map((row) => row.name)],
     specsFor: (cls: string, role: "dps" | "healing") => summary.cohorts ? [...new Set(summary.cohorts.filter(row => row.player_class === cls && row.metric === (role === "healing" ? "hps" : "dps")).map(row => row.player_spec))] : summary.filters?.find((row) => row.player_class === cls)?.specs.map((row) => row.spec) ?? [],

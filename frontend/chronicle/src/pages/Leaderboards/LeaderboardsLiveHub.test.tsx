@@ -164,6 +164,51 @@ describe("live Storybook Hub", () => {
     expect(performances).toContain("Full clear")
   })
 
+  it("uses the default encounter set as the clear preset while listing hard-mode bosses", () => {
+    setSummary({
+      ...summary,
+      instances: [{ ...summary.instances[0], instance_name: "Emerald Sanctum", difficulty_name: "", max_players: 0 }],
+      encounters: [
+        { encounter_name: "Erennius", total_kills: 12, top_dps: 1450 },
+        { encounter_name: "Solnius", total_kills: 10, top_dps: 1300 },
+        { encounter_name: "Solnius (Hard Mode)", total_kills: 5, top_dps: 1500 },
+      ],
+      progression_bosses: ["Erennius", "Solnius", "Solnius (Hard Mode)"],
+      ranking_encounter_sets: [
+        { id: "", label: "Normal", encounters: ["Erennius", "Solnius"] },
+        { id: "hard", label: "Hard Mode", encounters: ["Solnius (Hard Mode)"] },
+      ],
+      selected_cohort: { difficulty_name: "", max_players: 0 },
+    })
+    const html = hub("/leaderboard-v2/Emerald-Sanctum?difficulty=&size=0")
+    expect(html).toContain("2 of 2 selected")
+    expect(html).toMatch(/aria-pressed="false"[^>]*title="Solnius \(Hard Mode\)\. Click to select, Ctrl\+Click to toggle"/)
+  })
+
+  it("uses Sartharion 0D as the Obsidian Sanctum clear preset while listing drake variants", () => {
+    setSummary({
+      ...summary,
+      instances: [{ ...summary.instances[0], instance_name: "Obsidian Sanctum", difficulty_name: "10 Player", max_players: 10 }],
+      encounters: [
+        { encounter_name: "Sartharion", total_kills: 12, top_dps: 1450 },
+        { encounter_name: "Sartharion (1 Drake)", total_kills: 10, top_dps: 1500 },
+        { encounter_name: "Sartharion (2 Drakes)", total_kills: 8, top_dps: 1550 },
+        { encounter_name: "Sartharion (3 Drakes)", total_kills: 5, top_dps: 1600 },
+      ],
+      progression_bosses: ["Sartharion", "Sartharion (1 Drake)", "Sartharion (2 Drakes)", "Sartharion (3 Drakes)"],
+      ranking_encounter_sets: [
+        { id: "", label: "0D", encounters: ["Sartharion"] },
+        { id: "1d", label: "1D", encounters: ["Sartharion (1 Drake)"] },
+        { id: "2d", label: "2D", encounters: ["Sartharion (2 Drakes)"] },
+        { id: "3d", label: "3D", encounters: ["Sartharion (3 Drakes)"] },
+      ],
+      selected_cohort: { difficulty_name: "10 Player", max_players: 10 },
+    })
+    const html = hub("/leaderboard-v2/Obsidian-Sanctum/ratings?difficulty=10+Player&size=10")
+    expect(html).toContain("1 of 1 selected")
+    expect(html).toMatch(/aria-pressed="false"[^>]*title="Sartharion \(3 Drakes\)\. Click to select, Ctrl\+Click to toggle"/)
+  })
+
   it("hides the cohort selector for one raid cohort and uses it even with a stale URL choice", () => {
     const html = hub("/leaderboard-v2/Molten-Core?difficulty=Old&size=25")
     expect(html).not.toContain('aria-label="Raid cohort"')

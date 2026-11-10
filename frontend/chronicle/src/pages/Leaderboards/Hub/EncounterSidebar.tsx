@@ -11,6 +11,7 @@ import { FULL_CLEAR, selectedBosses, toggleEncounter, type EncounterSelection } 
  */
 export function EncounterSidebar({
   bosses,
+  preset: defaultBosses,
   optional,
   trash = new Set<string>(),
   selection,
@@ -18,6 +19,7 @@ export function EncounterSidebar({
   onCollapse,
 }: {
   bosses: readonly string[]
+  preset?: readonly string[]
   optional: ReadonlySet<string>
   trash?: ReadonlySet<string>
   selection: EncounterSelection
@@ -25,7 +27,7 @@ export function EncounterSidebar({
   /** Collapse the column to the left (the instance page's "Hide sidebar"). */
   onCollapse?: () => void
 }) {
-  const preset = bosses.filter((b) => !trash.has(b))
+  const preset = (defaultBosses ?? bosses).filter((b) => !trash.has(b))
   const chosen = new Set(selectedBosses(selection, preset))
   const required = bosses.filter((b) => !optional.has(b) && !trash.has(b))
   const extra = bosses.filter((b) => optional.has(b) && !trash.has(b))
