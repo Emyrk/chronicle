@@ -202,7 +202,7 @@ export function GuildRatingBoards({
         />
       ) : (
         <section aria-label={label} className="relative flex flex-col overflow-hidden rounded-xl border bg-card">
-          <BoardHeader oneBoss={oneBoss} title={title} theme={theme} subtitle={data?.live ? "All-time guild scores" : `${all.peak.length} guilds ranked`} toolbar={toolbar}>
+          <BoardHeader oneBoss={oneBoss} title={title} theme={theme} subtitle={data?.live ? undefined : `${all.peak.length} guilds ranked`} toolbar={toolbar}>
             <BoardSearch query={query} onQuery={setQuery} />
           </BoardHeader>
           <MetricColumns ranksKnown={!data?.live}
@@ -341,7 +341,7 @@ function GuildFullTable({
         oneBoss={oneBoss}
         title={title}
         theme={theme}
-        subtitle={live ? "All-time guild scores · no global rank" : `${ranked.length} guilds ranked`}
+        subtitle={live ? undefined : `${ranked.length} guilds ranked`}
         toolbar={toolbar}
         lead={
           onCollapse && (
