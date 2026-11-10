@@ -35,6 +35,8 @@ import type { EntityRaidContext } from "./entityMenuContext";
 
 type Character = Extract<EntityRef, { kind: "character" }>;
 type Guild = Extract<EntityRef, { kind: "guild" }>;
+type ClassPin = Extract<EntityRef, { kind: "class" }>;
+type SpecPin = Extract<EntityRef, { kind: "spec" }>;
 type EncounterPin = Extract<EntityRef, { kind: "encounter" }>;
 type RaidPin = Extract<EntityRef, { kind: "raid" }>;
 type QuickTab = "score" | "chart";
@@ -128,13 +130,15 @@ export default function QuickStats({
   };
   const characters = entities.filter((entity): entity is Character => entity.kind === "character");
   const guilds = entities.filter((entity): entity is Guild => entity.kind === "guild");
+  const classes = entities.filter((entity): entity is ClassPin => entity.kind === "class");
+  const specs = entities.filter((entity): entity is SpecPin => entity.kind === "spec");
   const encounters = entities.filter((entity): entity is EncounterPin => entity.kind === "encounter");
   const raids = entities.filter((entity): entity is RaidPin => entity.kind === "raid");
 
   return (
     <div aria-label="Quick stats" role="region">
       <div className="flex items-center gap-1">
-        <div role="tablist" aria-label="Quick stats view" className={cn("flex gap-0.5 rounded-md bg-white/5 p-0.5", (kind === "encounter" || kind === "raid") && "hidden")}>
+        <div role="tablist" aria-label="Quick stats view" className={cn("flex gap-0.5 rounded-md bg-white/5 p-0.5", (kind === "class" || kind === "spec" || kind === "encounter" || kind === "raid") && "hidden")}>
           {(["score", "chart"] as const).map((option) => (
             <button
               key={option}
@@ -183,7 +187,11 @@ export default function QuickStats({
         )}
       </div>
       <div className="pt-2">
-        {kind === "character" ? (
+        {kind === "class" ? (
+          <CohortQuickStats kind="class" entities={classes} hidden={hidden} />
+        ) : kind === "spec" ? (
+          <CohortQuickStats kind="spec" entities={specs} hidden={hidden} />
+        ) : kind === "character" ? (
           <PlayerQuickStats
             key={characters.map(entityKey).join()}
             characters={characters}
@@ -203,6 +211,72 @@ export default function QuickStats({
         ) : (
           <GuildQuickStats key={guilds.map(entityKey).join()} guilds={guilds} hidden={hidden} raid={raid} picked={picked} onPick={onPick} tab={tab} rangeDays={rangeDays} />
         )}
+      </div>
+    </div>
+  );
+}
+
+type CohortPin = ClassPin | SpecPin;
+
+/** Snapshot comparison for class and spec rows collected from leaderboard or parsing views. */
+function CohortQuickStats({
+  kind,
+  entities,
+  hidden,
+}: {
+  kind: "class" | "spec";
+  entities: CohortPin[];
+  hidden: ReadonlySet<string>;
+}) {
+  const visible = entities.filter((entity) => !hidden.has(entityKey(entity)));
+  if (visible.length === 0) return <Empty>Everything here is hidden. Shift+click a name to show it again.</Empty>;
+
+  return (
+    <div className="space-y-2.5">
+      <div className="flex items-baseline justify-between gap-3 px-0.5">
+        <p className="text-[11px] text-muted-foreground">
+          Comparing {visible.length} {visible.length === 1 ? kind : kind === "class" ? "classes" : "specs"}
+        </p>
+        <p className="text-[10px] text-muted-foreground/70">Snapshot from where each was added</p>
+      </div>
+      <div className="space-y-1.5">
+        {visible.map((entity) => {
+          const color = getClassColorVar(entity.className);
+          const stats = entity.stats ?? [];
+          return (
+            <section
+              key={entityKey(entity)}
+              aria-label={`${entity.name} statistics`}
+              className="overflow-hidden rounded-md border border-white/5 bg-white/[0.035]"
+              style={{ borderLeftColor: color, borderLeftWidth: 2 }}
+            >
+              <header className="flex min-w-0 items-center gap-2 px-2.5 py-1.5">
+                <img
+                  src={`/c/icons/class_${entity.className.toLowerCase()}.png`}
+                  alt=""
+                  className="h-4 w-4 shrink-0 rounded-sm"
+                  onError={(event) => { event.currentTarget.src = "/c/icons/class_unknown.png"; }}
+                />
+                <span className="truncate text-xs font-semibold" style={{ color }}>{entity.name}</span>
+                <span className="ml-auto shrink-0 text-[9px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                  {kind}
+                </span>
+              </header>
+              {stats.length > 0 ? (
+                <dl className="grid grid-cols-2 gap-x-4 gap-y-1 border-t border-white/5 px-2.5 py-2">
+                  {stats.map((stat) => (
+                    <div key={stat.label} className="flex min-w-0 items-baseline justify-between gap-2">
+                      <dt className="truncate text-[10px] uppercase tracking-wider text-muted-foreground">{stat.label}</dt>
+                      <dd className="shrink-0 font-mono text-xs font-semibold tabular-nums text-foreground">{stat.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              ) : (
+                <p className="border-t border-white/5 px-2.5 py-2 text-[11px] text-muted-foreground">No snapshot statistics were available.</p>
+              )}
+            </section>
+          );
+        })}
       </div>
     </div>
   );

@@ -342,9 +342,7 @@ export function EntityMenuProvider({ children }: { children: ReactNode }) {
             menu={menu}
             actions={[
               ...menu.scoped,
-              ...(menu.entity.kind === "class" || menu.entity.kind === "spec"
-                ? []
-                : [compareAction(menu.entity, compare.pins, compare.toggle, pinOrigin)]),
+              compareAction(menu.entity, compare.pins, compare.toggle, pinOrigin),
               ...globalActions(menu.entity),
             ]}
             onClose={closeMenu}

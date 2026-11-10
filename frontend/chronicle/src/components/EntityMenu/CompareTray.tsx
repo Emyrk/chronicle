@@ -63,16 +63,16 @@ export function CompareTray({
   // A raid picked per kind, for pages that don't show one; a page's own raid takes over while open.
   const [picked, setPicked] = useState<Partial<Record<EntityKind, RaidChoice>>>({});
   if (pins.length === 0) return null;
-  const groups = (["character", "guild", "encounter", "raid"] as const)
+  const groups = (["character", "guild", "class", "spec", "encounter", "raid"] as const)
     .map((kind) => ({ kind, entities: pins.filter((pin) => pin.kind === kind) }))
     .filter((group) => group.entities.length > 0);
   const latestKind = pins[pins.length - 1].kind;
   const kind =
     chosen && chosen.count === pins.length && groups.some((group) => group.kind === chosen.kind) ? chosen.kind : latestKind;
   const entities = groups.find((group) => group.kind === kind)!.entities;
-  // Encounter kill times and raid clear times are free and have no range or full view.
-  const isEncounter = kind === "encounter" || kind === "raid";
-  const showStats = canShowStats || isEncounter;
+  // Classes, specs, encounters and raids carry or fetch self-contained stats, so they are free and have no range or full view.
+  const isStatic = kind === "class" || kind === "spec" || kind === "encounter" || kind === "raid";
+  const showStats = canShowStats || isStatic;
   const link = kind === "character" || kind === "guild" ? pageLink(kind, entities, hidden) : null;
   const iconButton = "shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground";
   const footerClass =
@@ -136,7 +136,7 @@ export function CompareTray({
           <h2 className="text-xs font-semibold">Compare</h2>
         )}
         <span className="ml-auto min-w-0" />
-        {canShowStats && !isEncounter && (
+        {canShowStats && !isStatic && (
           <div className="flex shrink-0 gap-0.5 rounded-md bg-white/5 p-0.5" role="group" aria-label="Range">
             {QUICK_RANGES.map((option) => (
               <button
@@ -263,6 +263,9 @@ function PinDetails({ pin, hidden }: { pin: Pin; hidden: boolean }) {
   if (pin.kind === "character") {
     details.push(pin.realm);
     if (pin.className) details.push(pin.className);
+  } else if (pin.kind === "class" || pin.kind === "spec") {
+    if (pin.kind === "spec") details.push(pin.subSpecName ? `${pin.specName} · ${pin.subSpecName}` : pin.specName);
+    for (const stat of pin.stats ?? []) details.push(`${stat.label}: ${stat.value}`);
   } else if (pin.kind === "raid") {
     details.push([pin.difficultyName, pin.maxPlayers ? `${pin.maxPlayers}-player` : ""].filter(Boolean).join(" · ") || "All difficulties");
     if (pin.guildName) details.push(`<${pin.guildName}>`);
