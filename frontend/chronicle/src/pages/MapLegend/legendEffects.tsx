@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { FIRE_NOVA_COLOR, FIRE_NOVA_DURATION_MS } from "@/pages/Instance/EventsPanels/Map/bossRadialEffects";
 import {
   BEAM_MS,
   CAST_ICON_MS,
@@ -170,6 +171,32 @@ export function HealDemo({ seconds, crit = false }: { seconds: number; crit?: bo
   );
 }
 
+/** A boss-centered ground pulse expanding to the mechanic's logged radius. */
+export function FireNovaDemo({ seconds }: { seconds: number }) {
+  const p = phase(seconds, FIRE_NOVA_DURATION_MS);
+  const radius = p === null ? 0 : 4 + 28 * p;
+  return (
+    <Ground height={130}>
+      <At x={50} y={58}><Token kind="hostile" ring="#fb7185" facing={0} /></At>
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="pointer-events-none absolute inset-0 h-full w-full overflow-visible">
+        {p !== null && (
+          <ellipse
+            cx={50}
+            cy={58}
+            rx={radius}
+            ry={radius * 0.42}
+            fill="none"
+            stroke={FIRE_NOVA_COLOR}
+            strokeWidth={2.5}
+            vectorEffect="non-scaling-stroke"
+            opacity={1 - p}
+          />
+        )}
+      </svg>
+    </Ground>
+  );
+}
+
 /** Floating combat text: a spell name in its school colour, or a heal amount. */
 export function CombatTextDemo({ seconds }: { seconds: number }) {
   const p = phase(seconds, COMBAT_TEXT_MS);
@@ -263,6 +290,7 @@ export const EFFECT_TIMINGS = {
   hit: HIT_WOBBLE_MS,
   meleeFlash: MELEE_FLASH_MS,
   heal: HEAL_PULSE_MS,
+  fireNova: FIRE_NOVA_DURATION_MS,
   interrupt: INTERRUPT_MS,
   combatText: COMBAT_TEXT_MS,
   castIcon: CAST_ICON_MS,

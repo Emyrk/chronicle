@@ -60,6 +60,7 @@ import { projectMapDebugPoints, type MapDebugOverlay } from "./mapDebugOverlays"
 import {
   DEFAULT_EFFECT_OPTIONS,
   DEEP_BREATH_POINT_LINGER_MS,
+  deriveActiveBossRadialEffects,
   deriveActiveDeepBreaths,
   deriveActiveEffects,
   deriveCastIcons,
@@ -72,6 +73,7 @@ import {
   INTERRUPTED_PLAYER_ICON_MS,
   MAX_EFFECT_PRIMITIVES,
   schoolColor,
+  type ActiveBossRadialEffect,
   type ActiveDeepBreath,
   type ActiveEffect,
   type CastIcon,
@@ -101,6 +103,8 @@ const BEAM_HEIGHT = 1.5;
 const BOLT_WIDTH = 0.18;
 const DEBUG_PATH_SEGMENT_YARDS = 4;
 const MAX_DEEP_BREATH_POINTS = 20;
+const MAX_BOSS_RADIALS = 8;
+const BOSS_RADIAL_GROUND_LIFT = 0.1;
 const DEEP_BREATH_AREA_OPACITY = 0.12;
 const DEEP_BREATH_POINT_SIZE_PX = 7;
 const DEEP_BREATH_GROUND_LIFT = 0.12;
@@ -1111,6 +1115,7 @@ export class MapScene3D {
   // The effect clock's time at the last updateEffects, for the bars' heal chunk.
   private effectCursorMs = 0;
   private readonly activeEffects: ActiveEffect[] = [];
+  private readonly activeBossRadials: ActiveBossRadialEffect[] = [];
   private readonly activeDeepBreaths: ActiveDeepBreath[] = [];
   // The server path being drawn, fixed when it starts: Onyxia keeps flying and
   // turning afterwards, but the ground-target sequence stays in room space.
@@ -1128,6 +1133,7 @@ export class MapScene3D {
   private readonly beamColors = new Float32Array(MAX_EFFECT_PRIMITIVES * 6);
   private readonly beams: THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>;
   private readonly rings: THREE.InstancedMesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+  private readonly bossRadials: THREE.InstancedMesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   private readonly bolts: THREE.InstancedMesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   private readonly slashes: THREE.InstancedMesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   // Background, fill, heal chunk and absorb quads per bar.
@@ -1315,6 +1321,9 @@ export class MapScene3D {
     this.scene.add(this.trailLines);
     const glow = () => new THREE.MeshBasicMaterial({ transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
     this.rings = this.createPool(new THREE.RingGeometry(0.85, 1, 40).rotateX(-Math.PI / 2), glow(), MAX_EFFECT_PRIMITIVES);
+    this.bossRadials = this.createPool(new THREE.RingGeometry(0.9, 1, 64).rotateX(-Math.PI / 2), glow(), MAX_BOSS_RADIALS);
+    this.bossRadials.frustumCulled = false;
+    this.bossRadials.renderOrder = 2;
     // Spell bolts: unit boxes stretched along the source -> target segment.
     this.bolts = this.createPool(new THREE.BoxGeometry(1, 1, 1), glow(), MAX_EFFECT_PRIMITIVES);
     // Melee slashes: a third of a ring, centred on +x before rotation.
@@ -1380,6 +1389,7 @@ export class MapScene3D {
     this.scene.add(
       this.beams,
       this.rings,
+      this.bossRadials,
       this.bolts,
       this.slashes,
       this.deepBreathAreas,
@@ -3465,6 +3475,36 @@ export class MapScene3D {
     }
   }
 
+  private updateBossRadials(fx: EncounterEffects | null, cursorMs: number) {
+    const radials = fx
+      ? deriveActiveBossRadialEffects(fx, cursorMs, this.activeBossRadials)
+      : this.activeBossRadials;
+    if (!fx) radials.length = 0;
+    const yardScale = this.yardScale();
+    if (yardScale === null) {
+      this.commitPool(this.bossRadials, 0);
+      return;
+    }
+
+    let count = 0;
+    const filterGuids = this.effectOptions.filterGuids;
+    for (const radial of radials) {
+      const source = this.units.get(radial.source);
+      if ((filterGuids && !filterGuids.has(radial.source)) || !source || !source.group.visible || count >= MAX_BOSS_RADIALS) continue;
+      const radius = radial.radiusYards * yardScale * radial.progress;
+      if (radius <= 0) continue;
+      this.matrix.makeScale(radius, 1, radius).setPosition(
+        source.base.x,
+        source.base.y + BOSS_RADIAL_GROUND_LIFT * this.unitScale,
+        source.base.z,
+      );
+      this.bossRadials.setMatrixAt(count, this.matrix);
+      this.bossRadials.setColorAt(count, this.color.set(radial.color).multiplyScalar(1 - radial.progress));
+      count++;
+    }
+    this.commitPool(this.bossRadials, count);
+  }
+
   private hideDeepBreath() {
     this.deepBreathAreas.count = 0;
     this.deepBreathAreas.visible = false;
@@ -3617,6 +3657,7 @@ export class MapScene3D {
     if (fx) deriveUnitCasts(fx, cursorMs, this.unitCasts);
     else this.unitCasts.clear();
     this.updateHitFacings();
+    this.updateBossRadials(fx, cursorMs);
     this.updateDeepBreath(fx, cursorMs);
 
     let beamCount = 0;

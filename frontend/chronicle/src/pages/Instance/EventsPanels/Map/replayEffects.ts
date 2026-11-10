@@ -1,4 +1,5 @@
 import type { BossMechanicAnimationInterval } from "./bossMechanicAnimations";
+import { bossRadialEffectForSpell, MAX_BOSS_RADIAL_DURATION_MS } from "./bossRadialEffects";
 import { deepBreathPathForSpell, deepBreathPointForSpell, isDeepBreathPrimarySpell } from "./deepBreathLanes";
 
 /**
@@ -57,6 +58,17 @@ export interface EncounterEffects {
   bossMechanicAnimationsByUnit: Map<string, BossMechanicAnimationInterval[]>;
   /** Time-sorted heals with effective healing, per target. */
   healsByUnit: Map<string, ReplayEffectEvent[]>;
+}
+
+export interface ActiveBossRadialEffect {
+  key: string;
+  source: string;
+  spellId: number;
+  progress: number;
+  radiusYards: number;
+  color: string;
+  startMs: number;
+  endMs: number;
 }
 
 export interface ActiveDeepBreath {
@@ -284,6 +296,44 @@ export function eventWindow(events: readonly ReplayEffectEvent[], fromMs: number
   let end = lowerBound(events, toMs);
   while (end < events.length && events[end].timestampMs === toMs) end++;
   return [start, Math.max(start, end)];
+}
+
+export function deriveActiveBossRadialEffects(
+  fx: EncounterEffects,
+  cursorMs: number,
+  out: ActiveBossRadialEffect[] = [],
+): ActiveBossRadialEffect[] {
+  let count = 0;
+  const [start, end] = eventWindow(fx.events, cursorMs - MAX_BOSS_RADIAL_DURATION_MS, cursorMs);
+  for (let index = end - 1; index >= start; index--) {
+    const event = fx.events[index];
+    if (event.kind !== "cast_go" || event.spellId === null || !event.source) continue;
+    const definition = bossRadialEffectForSpell(event.spellId);
+    if (!definition) continue;
+    const ageMs = cursorMs - event.timestampMs;
+    if (ageMs < 0 || ageMs >= definition.durationMs) continue;
+    const radial = out[count] ?? (out[count] = {
+      key: "",
+      source: "",
+      spellId: 0,
+      progress: 0,
+      radiusYards: 0,
+      color: "",
+      startMs: 0,
+      endMs: 0,
+    });
+    radial.key = definition.key;
+    radial.source = event.source;
+    radial.spellId = event.spellId;
+    radial.progress = ageMs / definition.durationMs;
+    radial.radiusYards = definition.radiusYards;
+    radial.color = definition.color;
+    radial.startMs = event.timestampMs;
+    radial.endMs = event.timestampMs + definition.durationMs;
+    count++;
+  }
+  out.length = count;
+  return out;
 }
 
 interface DeepBreathCandidate {

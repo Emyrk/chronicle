@@ -17,6 +17,7 @@ import {
   CombatTextDemo,
   DEMO_SLOWDOWN,
   EFFECT_TIMINGS,
+  FireNovaDemo,
   HealDemo,
   HitDemo,
   MeleeDemo,
@@ -371,6 +372,9 @@ export function MapLegend() {
           </Card>
           <Card title="Melee" timing={`${ms(EFFECT_TIMINGS.lunge)} · ${ms(EFFECT_TIMINGS.slash)}`} demo={<MeleeDemo seconds={seconds} />}>
             The attacker lunges in and back and a slash sweeps across the target; melee abilities also burst under it.
+          </Card>
+          <Card title="Boss area attack" timing={ms(EFFECT_TIMINGS.fireNova)} demo={<FireNovaDemo seconds={seconds} />}>
+            Configured boss mechanics radiate a ground ring from their caster to the spell&apos;s logged radius. Taragaman&apos;s Fire Nova expands to ten yards.
           </Card>
           <Card title="Hit" timing={ms(EFFECT_TIMINGS.hit)} demo={<HitDemo seconds={seconds} />}>
             The target shakes and flashes in the damage&apos;s colour ({ms(EFFECT_TIMINGS.meleeFlash)} for melee).
