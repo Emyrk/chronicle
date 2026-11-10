@@ -1,5 +1,6 @@
-// Package leaderboardconfig resolves shared configuration only. It never reads
-// tenant evidence or changes parser/UI policy. All inheritance happens in SQL.
+// Package leaderboardconfig resolves shared configuration and the career pool.
+// Career activation reads tenant evidence; configuration inheritance stays in SQL.
+// It never changes parser or existing board policy.
 package leaderboardconfig
 
 import (

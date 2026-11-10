@@ -161,6 +161,13 @@ func TestWrathMigrationRoundTrip(t *testing.T) {
 		require.NoError(t, err)
 		before[i] = rows
 	}
+	// This test rolls back seed 344 in isolation. Remove later career seed
+	// references first; production rollback drops migration 355 before 344.
+	// Fixture setup is not an application query.
+	fixture, err := os.ReadFile("testdata/career_rollback_fixture.sql")
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, string(fixture))
+	require.NoError(t, err)
 	require.NoError(t, wrathMigration(ctx, pool, "down"))
 	for i, flavor := range flavors[:3] {
 		rows, err := leaderboardconfig.Resolve(ctx, db, flavor, nil)

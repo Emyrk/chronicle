@@ -1,8 +1,8 @@
 # Career foundation investigation
 
-Status: accepted explicit-weight scoring contract; numeric seed weights outstanding. This change is
-documentation only. `spec.tex` is authoritative, followed by `behavior.md`.
-No career schema, worker, API, or UI is implemented here.
+Status: configuration and activation foundation implemented; numeric seed weights
+remain outstanding. `spec.tex` is authoritative, followed by `behavior.md`.
+Career scoring workers, serving API, and UI are not implemented by this foundation.
 
 ## Verified current behavior
 
@@ -99,8 +99,57 @@ Remaining decisions:
 
 ## Validation boundary
 
-This investigation uses repository sources only. No live DB access, migration,
-backfill, production configuration edit, or behavioral code change was needed.
-Documentation validation checks policy consistency, obsolete derivation removal,
-and whitespace. A PDF build requires a TeX toolchain, not present in this checkout
-session.
+The initial investigation used repository sources only. Foundation validation
+uses isolated local test databases, never a live DB. Schema generation and Go
+regression tests cover the additive migration, configuration constraints,
+activation/retraction, membership and fingerprints. No startup backfill or
+production configuration mutation is performed. A PDF build requires a TeX
+toolchain, not present in this checkout session.
+
+## Implemented foundation interface
+
+Migration `000355` adds shared `leaderboard_career_variants` configuration, keyed
+by exact instance/difficulty/max_players. Weights are NULL or strictly positive
+finite values. NULL is unconfigured, not zero or an inferred weight. Initial
+records retain NULL weights, with separate average and Renown flags. They cover
+only existing reviewed Wrath tuples and the non-Wrath implicit empty-difficulty/0
+identity used by current reads. No new Heroic tuples are inferred. Additional
+variants need explicit career configuration and enabled shared configuration.
+The migration touches small configuration only, never historical evidence.
+
+`internal/leaderboardconfig.ResolveCareer` returns a deterministic `CareerPool`:
+
+- `Variants` preserve exact keys, flags, nullable weight, current `Active`, sorted
+  `AverageBosses`, and sorted `RenownBosses` with current awards/HasPoints.
+- `Issues` identify active average variants with missing weights or empty default
+  membership. Consumers must block the entire average, not omit those variants.
+  Renown remains available. `AveragesReady()` means no configuration blockers;
+  consumers must still handle an empty active denominator without division.
+- `Fingerprint` covers tenant, membership, awards, weights, activation, and issues.
+  Persist it alongside the eventual metric choice to detect policy changes. It
+  does not cover score/benchmark or eligible count changes; those must also dirty
+  or refresh the metric choice in the later projection implementation.
+
+Only enabled default-set members supply average inputs. This narrowly reuses the
+whole-raid default selection in `Hub/v2RatingAdapter.ts:58-62` and
+`leaderboardread/selection.go`, without reinterpreting other named sets. All
+otherwise enabled bosses can supply Renown and activation, including optional
+and zero-award bosses. Obsidian Sanctum's initial flags allow Renown only. Vault's
+empty default blocks active averages rather than silently shrinking the pool.
+
+`LeaderboardCareerVariantActive` performs tenant/exact-variant/boss-filtered
+EXISTS checks over player and guild Renown facts. Both fact tables already have
+primary keys and scope indexes beginning with tenant, instance, difficulty,
+max_players, encounter. The query does not scan source uploads or require guild
+membership, a clear, or nonzero awards. D1 fact retraction deactivates the last
+eligible kill; configuration exclusions are applied immediately in selection.
+
+Resolve the pool once per tenant read or worker batch, not separately per subject
+or card. It currently issues one bounded EXISTS query per configured variant.
+Pass a transaction-bound store with repeatable-read isolation if a coherent
+configuration/evidence snapshot is required. No process cache or invalidation
+protocol was added. Weight/configuration writes use the generated
+`UpsertLeaderboardCareerVariant`; later consumers must refresh choice state when
+the fingerprint changes. Existing shared flavor resolution remains unchanged;
+the career-only flavor projection permits only Wrath tags when Wrath is present,
+so uploaded Vanilla content cannot enter either career score or Renown.
