@@ -1,19 +1,28 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { TooltipProvider } from "@/components/ui/Tooltip/tooltip";
 import { StorageSettingsView } from "./index";
 
 function renderStorageSettings(autoDelete: boolean) {
   return renderToStaticMarkup(
     <QueryClientProvider client={new QueryClient()}>
-      <StorageSettingsView
-        storage={undefined}
-        storageLoading
+      <TooltipProvider>
+        <StorageSettingsView
+        storage={{
+          max_storage_bytes: 1000,
+          consumed_storage_bytes: 500,
+          parsed_storage_bytes: 0,
+          parsed_instance_count: 0,
+          grants: [],
+        }}
+        storageLoading={false}
         logs={undefined}
         logsLoading
         currentTenantName={null}
         autoDeleteRawLogsAtStorageCapacity={autoDelete}
       />
+      </TooltipProvider>
     </QueryClientProvider>,
   );
 }

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/Collapsible/Collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { formatBytes, formatExpirationDate, formatSource } from "@/lib/format";
+import { AutoCleanupToggle } from "./AutoCleanupToggle";
 import { buildForecastSentence } from "./grantMath";
 
 /** Usage-severity color for the bar fill and the "% used" text: <70% green, 70-90% yellow, 90-100% orange, 100%+ red. */
@@ -15,7 +16,13 @@ function usageColorClasses(percent: number): { bar: string; text: string } {
   return { bar: "bg-green-500", text: "text-green-500" };
 }
 
-export function RawStorageCard({ storage }: { storage: UserStorageInfo }) {
+export function RawStorageCard({
+  storage,
+  autoDeleteRawLogsAtStorageCapacity,
+}: {
+  storage: UserStorageInfo;
+  autoDeleteRawLogsAtStorageCapacity: boolean;
+}) {
   const [grantsOpen, setGrantsOpen] = useState(false);
 
   const usagePercent = storage.max_storage_bytes > 0
@@ -49,6 +56,7 @@ export function RawStorageCard({ storage }: { storage: UserStorageInfo }) {
             {availableBytes >= 0 ? `${formatBytes(availableBytes)} available` : `${formatBytes(-availableBytes)} over limit`}
           </span>
         </div>
+        <AutoCleanupToggle enabled={autoDeleteRawLogsAtStorageCapacity} />
         <p className="text-sm text-muted-foreground pt-3 border-t border-border">
           Raw files use your storage allowance. You can delete raw files after Chronicle parses them and keep the
           parsed reports. Raw files are still needed to investigate parser problems or re-parse the log later.
