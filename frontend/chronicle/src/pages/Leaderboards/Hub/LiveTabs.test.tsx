@@ -83,6 +83,17 @@ describe("Hub leaderboard live props", () => {
     expect(markup).not.toContain("mock-")
   })
 
+  it("numbers and paginates live performances from the requested page", () => {
+    const markup = renderToStaticMarkup(<PerformancesTab instanceName="Molten Core" scope={{ boss: "Ragnaros" }} role="dps" subject="characters"
+      bosses={["Ragnaros"]} where="Ragnaros" onSpeedruns={() => {}} page={2} pageSize={50} onPage={() => {}}
+      live={{ response: { entries: [performance], total_count: 101 } }} />)
+    expect(markup).toContain("51. Live player")
+    expect(markup).toContain("101 players")
+    expect(markup).toContain("Page 2 of 3")
+    expect(markup).toContain('aria-label="Previous page"')
+    expect(markup).toContain('aria-label="Next page"')
+  })
+
   it("distinguishes performance loading, empty, and error without showing fixtures", () => {
     expect(performances({})).toContain("Loading rankings")
     expect(performances({ loading: true, response })).not.toContain("Live player")

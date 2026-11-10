@@ -1,4 +1,5 @@
-import { Timer } from "lucide-react"
+import { ChevronLeft, ChevronRight, Timer } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import type { RankingsLeaderboardResponse } from "@/api/typesGenerated"
 import { CLASS_DISPLAY } from "@/pages/Rankings/classDisplay"
 import { RankingsTable } from "@/pages/Rankings/RankingsTable"
@@ -19,6 +20,9 @@ export function PerformancesTab({
   bosses,
   where,
   onSpeedruns,
+  page = 1,
+  pageSize = 50,
+  onPage,
   live,
 }: {
   instanceName: string
@@ -29,6 +33,9 @@ export function PerformancesTab({
   bosses: readonly string[]
   where: string
   onSpeedruns: () => void
+  page?: number
+  pageSize?: number
+  onPage?: (page: number) => void
   /** When provided, use only parent-loaded API results, never story fixtures. */
   live?: { response?: RankingsLeaderboardResponse; loading?: boolean; error?: Error | null }
 }) {
@@ -54,6 +61,9 @@ export function PerformancesTab({
     : scope.cls
       ? CLASS_DISPLAY[scope.cls]
       : "All players"
+  const totalCount = live?.response?.total_count ?? 0
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
+  const rankOffset = (page - 1) * pageSize
   return (
     <div className="space-y-3">
       <div className="flex items-baseline justify-between px-1">
@@ -67,12 +77,30 @@ export function PerformancesTab({
       {live?.error ? (
         <div role="alert" className="rounded-xl border p-8 text-center text-muted-foreground">Could not load performances: {live.error.message}</div>
       ) : (
-        <RankingsTable
-          entries={live ? (live.response?.entries.map((entry, i) => ({ ...entry, rank: i + 1 })) ?? []) : performanceEntries(scope, role, instanceName, bosses)}
-          metric={metric}
-          loading={live ? (live.loading || !live.response) : undefined}
-          mobileListClassName={MOBILE_EDGE_TO_EDGE}
-        />
+        <>
+          <RankingsTable
+            entries={live ? (live.response?.entries.map((entry, i) => ({ ...entry, rank: rankOffset + i + 1 })) ?? []) : performanceEntries(scope, role, instanceName, bosses)}
+            metric={metric}
+            loading={live ? (live.loading || !live.response) : undefined}
+            mobileListClassName={MOBILE_EDGE_TO_EDGE}
+          />
+          {onPage && totalPages > 1 && (
+            <div className="flex items-center justify-between px-1 pt-2">
+              <span className="text-xs text-muted-foreground">{totalCount.toLocaleString()} players</span>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" className="h-7 w-7 p-0" disabled={page <= 1}
+                  aria-label="Previous page" onClick={() => onPage(page - 1)}>
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="text-xs text-muted-foreground">Page {page} of {totalPages}</span>
+                <Button variant="outline" size="sm" className="h-7 w-7 p-0" disabled={page >= totalPages}
+                  aria-label="Next page" onClick={() => onPage(page + 1)}>
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   )

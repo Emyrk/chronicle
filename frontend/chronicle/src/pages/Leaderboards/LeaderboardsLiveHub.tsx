@@ -1,5 +1,5 @@
 import { landingRealmError, useLandingHighlights } from "./Hub/landingHighlights"
-import { useState, type ReactNode } from "react"
+import { useCallback, useState, type ReactNode } from "react"
 import { LeaderboardMaintenanceNotice } from "./LeaderboardMaintenanceNotice"
 import { cn } from "@/lib/utils"
 import { useQuery } from "@tanstack/react-query"
@@ -29,6 +29,7 @@ import { useSiteConfig, useSupportedInstances } from "@/api/queries"
 import { useRenownAwards } from "./renownConfig"
 
 const ALL_REALMS = "All realms"
+const PERFORMANCE_PAGE_SIZE = 50
 
 /** The Storybook Hub is the page. Only its data source differs in production. */
 export function LeaderboardsLiveHub() {
@@ -227,6 +228,17 @@ function LiveHubContent({ context, summary, stale = false, realmName, realmIDs, 
   cohort?: { difficulty_name: string; max_players: number }; bosses: readonly string[]; overview?: boolean
 }) {
   const { instanceName, scope, role, subject, selection, onTab } = context
+  const [params, setParams] = useSearchParams()
+  const rawPage = Number(params.get("page"))
+  const performancePage = Number.isInteger(rawPage) && rawPage >= 1 ? rawPage : 1
+  const setPerformancePage = useCallback((page: number) => {
+    setParams((previous) => {
+      const next = new URLSearchParams(previous)
+      if (page <= 1) next.delete("page")
+      else next.set("page", String(page))
+      return next
+    })
+  }, [setParams])
   const raids = summary.instances.filter((row) => row.instance_name === instanceName && row.category === "raid")
   const chosen = cohort && raids.some((row) => row.difficulty_name === cohort.difficulty_name && row.max_players === cohort.max_players) ? cohort : undefined
   // Hand-picked bosses (empty: the preset, i.e. whole-raid boards). One boss still has its own views.
@@ -239,7 +251,8 @@ function LiveHubContent({ context, summary, stale = false, realmName, realmIDs, 
   // Preserve zero-size cohorts explicitly; exact_cohort distinguishes them from an unfiltered board.
   const performance = useRankingsLeaderboard({ instance_names: instanceName, encounter_names: pickedNames,
     difficulty_names: chosen?.difficulty_name, max_players: chosen?.max_players, exact_cohort: !!chosen, class: scope.cls, spec: scope.spec, sub_spec: scope.subSpec,
-    metric: role === "healing" ? "hps" : "dps", realm_names: realmName, limit: 50,
+    metric: role === "healing" ? "hps" : "dps", realm_names: realmName, limit: PERFORMANCE_PAGE_SIZE,
+    offset: (performancePage - 1) * PERFORMANCE_PAGE_SIZE,
   }, !overview && context.tab === "performances" && exact && realmIDs.length <= 1 && subject === "characters")
   // Speedruns shows one board at a time; only that board is fetched. Reset with the selection.
   const [speedViewState, setSpeedView] = useState<{ key: string; view: SpeedrunsView }>()
@@ -288,6 +301,7 @@ function LiveHubContent({ context, summary, stale = false, realmName, realmIDs, 
   if (context.tab === "performances") return !exact ? <CohortPrompt raids={raids} /> :
     <PerformancesTab instanceName={instanceName} scope={scope} role={role} subject={subject} bosses={picked}
       where={boss ?? (picked.length > 1 ? `${picked.length} bosses` : instanceName)} onSpeedruns={() => onTab("speedruns")}
+      page={performancePage} pageSize={PERFORMANCE_PAGE_SIZE} onPage={setPerformancePage}
       live={{ response: performance.data, loading: performance.isPending, error: performance.isError ? performance.error : null }} />
   if (context.tab === "speedruns") return !exact ? <CohortPrompt raids={raids} /> :
     <SpeedrunsTab instanceName={instanceName} bosses={bosses} selection={selection}

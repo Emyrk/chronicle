@@ -253,6 +253,23 @@ describe("live Storybook Hub", () => {
     const missing = hub("/leaderboards/Molten-Core")
     expect(missing).toMatch(/aria-pressed="true"[^>]*>Normal · 40</)
   })
+  it("requests the selected performance page with a stable rank offset", () => {
+    vi.mocked(useRankingsLeaderboard).mockReturnValueOnce({
+      data: { entries: [{
+        player_name: "Paged player", player_class: "MAGE", player_spec: "Frost", realm_name: "Nordanaar",
+        log_hashed_slug: "paged-log", killed_at: "2026-11-01T00:00:00Z", dps: 1234, duration_secs: 90,
+        guild_id: "guild-id", guild_name: "Paged guild",
+      }], total_count: 101 },
+      isPending: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useRankingsLeaderboard>)
+    const html = hub("/leaderboards/Molten-Core/performances?difficulty=Normal&size=40&page=3")
+    const [params] = vi.mocked(useRankingsLeaderboard).mock.calls[0]
+    expect(params).toMatchObject({ limit: 50, offset: 100 })
+    expect(html).toContain("101. Paged player")
+    expect(html).toContain("Page 3 of 3")
+  })
+
   it("requests all-role performances without a zero-size URL parameter", () => {
     setSummary({ ...summary, instances: [{ ...summary.instances[0], difficulty_name: "", max_players: 0 }],
       selected_cohort: { difficulty_name: "", max_players: 0 } })
