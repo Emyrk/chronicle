@@ -1,0 +1,2334 @@
+{
+  "groups": [
+    {
+      "instance_name": "Blackwing Lair",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Broodlord Lashlayer",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 1360.048968036879,
+      "renown_award": 2,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-08-28T13:59:53.416Z",
+          "value": 809.430473372781
+        },
+        {
+          "killed_at": "2026-09-11T14:05:11.286Z",
+          "value": 788.1857348013403,
+          "parse": 81
+        },
+        {
+          "killed_at": "2026-09-22T12:14:26.93Z",
+          "value": 279.3602712316585,
+          "parse": 4
+        }
+      ]
+    },
+    {
+      "instance_name": "Blackwing Lair",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Chromaggus",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 985.5516202707623,
+      "renown_award": 2,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-08-28T14:39:47.829Z",
+          "value": 778.8107093511302
+        },
+        {
+          "killed_at": "2026-09-11T14:48:00.055Z",
+          "value": 834.7103961734679,
+          "parse": 96
+        }
+      ]
+    },
+    {
+      "instance_name": "Blackwing Lair",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Chromaggus",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "hps",
+      "benchmark": 160.61922974179214,
+      "renown_award": 2,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-09-22T12:49:50.161Z",
+          "value": 73.66162702395556,
+          "parse": 84
+        }
+      ]
+    },
+    {
+      "instance_name": "Blackwing Lair",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Ebonroc",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 1057.4794108891945,
+      "renown_award": 2,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-08-28T14:23:49.669Z",
+          "value": 829.2951028887088
+        },
+        {
+          "killed_at": "2026-09-11T14:26:10.146Z",
+          "value": 730.9577338129496,
+          "parse": 79
+        },
+        {
+          "killed_at": "2026-09-22T12:34:02.343Z",
+          "value": 287.2392724208161,
+          "parse": 5
+        }
+      ]
+    },
+    {
+      "instance_name": "Blackwing Lair",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Ezzel Darkbrewer",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 843.7666831438457,
+      "renown_award": 2,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-08-28T14:29:05.995Z",
+          "value": 779.683471784589
+        },
+        {
+          "killed_at": "2026-09-11T14:32:37.074Z",
+          "value": 750.0465048567246,
+          "parse": 95
+        },
+        {
+          "killed_at": "2026-09-22T12:38:29.693Z",
+          "value": 539.8244289220313,
+          "parse": 72
+        }
+      ]
+    },
+    {
+      "instance_name": "Blackwing Lair",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Firemaw",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 684.5902725208176,
+      "renown_award": 2,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-08-28T14:05:32.63Z",
+          "value": 513.3022717247463
+        },
+        {
+          "killed_at": "2026-09-11T14:16:33.783Z",
+          "value": 410.8163740051741,
+          "parse": 91
+        }
+      ]
+    },
+    {
+      "instance_name": "Blackwing Lair",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Firemaw",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "hps",
+      "benchmark": 453.11283325299416,
+      "renown_award": 2,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-09-22T12:23:50.598Z",
+          "value": 364.1677465604235,
+          "parse": 100
+        }
+      ]
+    },
+    {
+      "instance_name": "Blackwing Lair",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Flamegor",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 980.5501115090897,
+      "renown_award": 2,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-08-28T14:34:49.922Z",
+          "value": 938.0870732070971
+        },
+        {
+          "killed_at": "2026-09-11T14:43:03.69Z",
+          "value": 952.5124563479889,
+          "parse": 100
+        },
+        {
+          "killed_at": "2026-09-22T12:43:47.929Z",
+          "value": 489.93850144333345,
+          "parse": 28
+        }
+      ]
+    },
+    {
+      "instance_name": "Blackwing Lair",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Nefarian",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 947.3391456132856,
+      "renown_award": 9,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-08-28T14:46:14.976Z",
+          "value": 662.7285925882474
+        },
+        {
+          "killed_at": "2026-09-11T14:52:56.688Z",
+          "value": 811.9375343037001,
+          "parse": 97
+        }
+      ]
+    },
+    {
+      "instance_name": "Blackwing Lair",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Nefarian",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "hps",
+      "benchmark": 205.54947180674225,
+      "renown_award": 9,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-09-22T12:55:23.304Z",
+          "value": 70.72677044964904,
+          "parse": 91
+        }
+      ]
+    },
+    {
+      "instance_name": "Blackwing Lair",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Razorgore the Untamed",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 692.8716448912915,
+      "renown_award": 2,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-08-28T13:42:56.948Z",
+          "value": 647.0687011754399
+        },
+        {
+          "killed_at": "2026-09-11T13:50:44.52Z",
+          "value": 609.6445752740071,
+          "parse": 89
+        },
+        {
+          "killed_at": "2026-09-22T11:55:52.884Z",
+          "value": 403.9230275443511,
+          "parse": 54
+        }
+      ]
+    },
+    {
+      "instance_name": "Blackwing Lair",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Vaelastrasz the Corrupt",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 1281.6802213465248,
+      "renown_award": 2,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-08-28T13:50:10.776Z",
+          "value": 889.6152085010974
+        },
+        {
+          "killed_at": "2026-09-11T13:57:11.978Z",
+          "value": 953.1354395342179,
+          "parse": 95
+        },
+        {
+          "killed_at": "2026-09-22T12:03:36.822Z",
+          "value": 707.677559912854,
+          "parse": 51
+        }
+      ]
+    },
+    {
+      "instance_name": "Emerald Sanctum",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Solnius (Hard Mode)",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 706.4580993915337,
+      "renown_award": 5,
+      "renown_kills": 4,
+      "kills": [
+        {
+          "killed_at": "2026-08-27T12:49:29.721Z",
+          "value": 189.24012334514535
+        },
+        {
+          "killed_at": "2026-09-10T12:37:05.264Z",
+          "value": 459.6175856939251
+        }
+      ]
+    },
+    {
+      "instance_name": "Emerald Sanctum",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Solnius (Hard Mode)",
+      "player_class": "PRIEST",
+      "player_spec": "Holy",
+      "player_sub_spec": "",
+      "metric": "hps",
+      "benchmark": 540.8401632544712,
+      "renown_award": 5,
+      "renown_kills": 4,
+      "kills": [
+        {
+          "killed_at": "2026-08-13T14:18:46.027Z",
+          "value": 376.2848813595168
+        },
+        {
+          "killed_at": "2026-09-26T14:21:14.667Z",
+          "value": 444.2630289942854,
+          "parse": 97
+        }
+      ]
+    },
+    {
+      "instance_name": "Molten Core",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Baron Geddon",
+      "player_class": "PRIEST",
+      "player_spec": "Holy",
+      "player_sub_spec": "",
+      "metric": "hps",
+      "benchmark": 658.1964573268921,
+      "renown_award": 1,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-08-26T13:21:36.575Z",
+          "value": 380.0883227686484,
+          "parse": 92
+        },
+        {
+          "killed_at": "2026-09-08T14:06:10.564Z",
+          "value": 264.98572083869726
+        }
+      ]
+    },
+    {
+      "instance_name": "Molten Core",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Baron Geddon",
+      "player_class": "PRIEST",
+      "player_spec": "Shadow",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 843.7346134908912,
+      "renown_award": 1,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-08-11T14:01:36.308Z",
+          "value": 500.007567845737
+        }
+      ]
+    },
+    {
+      "instance_name": "Molten Core",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Basalthar & Smoldaris",
+      "player_class": "PRIEST",
+      "player_spec": "Holy",
+      "player_sub_spec": "",
+      "metric": "hps",
+      "benchmark": 1132.8043202733234,
+      "renown_award": 1,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-08-26T13:46:05.984Z",
+          "value": 790.8585379085854,
+          "parse": 95
+        },
+        {
+          "killed_at": "2026-09-08T14:30:29.903Z",
+          "value": 650.5882611176961
+        }
+      ]
+    },
+    {
+      "instance_name": "Molten Core",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Basalthar & Smoldaris",
+      "player_class": "PRIEST",
+      "player_spec": "Shadow",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 825.2591604228677,
+      "renown_award": 1,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-08-11T14:23:30.744Z",
+          "value": 557.1029534412687
+        }
+      ]
+    },
+    {
+      "instance_name": "Molten Core",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Garr",
+      "player_class": "PRIEST",
+      "player_spec": "Holy",
+      "player_sub_spec": "",
+      "metric": "hps",
+      "benchmark": 672.4490059719243,
+      "renown_award": 1,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-08-26T13:15:33.681Z",
+          "value": 593.9263298040956,
+          "parse": 100
+        },
+        {
+          "killed_at": "2026-09-08T13:59:51.212Z",
+          "value": 193.03595900326198
+        }
+      ]
+    },
+    {
+      "instance_name": "Molten Core",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Garr",
+      "player_class": "PRIEST",
+      "player_spec": "Shadow",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 931.9513194467515,
+      "renown_award": 1,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-08-11T13:55:14.878Z",
+          "value": 581.0925401111284
+        }
+      ]
+    },
+    {
+      "instance_name": "Molten Core",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Golemagg the Incinerator",
+      "player_class": "PRIEST",
+      "player_spec": "Holy",
+      "player_sub_spec": "",
+      "metric": "hps",
+      "benchmark": 960.692971534069,
+      "renown_award": 1,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-08-26T13:59:53.491Z",
+          "value": 241.21463855351,
+          "parse": 37
+        },
+        {
+          "killed_at": "2026-09-08T14:42:50.968Z",
+          "value": 355.9900833677661
+        }
+      ]
+    },
+    {
+      "instance_name": "Molten Core",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Golemagg the Incinerator",
+      "player_class": "PRIEST",
+      "player_spec": "Shadow",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 1204.0007274049826,
+      "renown_award": 1,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-08-11T14:34:46.745Z",
+          "value": 207.37275025468816
+        }
+      ]
+    },
+    {
+      "instance_name": "Molten Core",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Incindis",
+      "player_class": "PRIEST",
+      "player_spec": "Holy",
+      "player_sub_spec": "",
+      "metric": "hps",
+      "benchmark": 626.8838877896334,
+      "renown_award": 1,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-08-26T13:07:16.133Z",
+          "value": 400.90403812801287,
+          "parse": 96
+        },
+        {
+          "killed_at": "2026-09-08T13:52:07.418Z",
+          "value": 207.45920745920748
+        }
+      ]
+    },
+    {
+      "instance_name": "Molten Core",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Incindis",
+      "player_class": "PRIEST",
+      "player_spec": "Shadow",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 884.0883903684052,
+      "renown_award": 1,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-08-11T13:47:08.053Z",
+          "value": 678.7912616090671
+        }
+      ]
+    },
+    {
+      "instance_name": "Molten Core",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Lucifron",
+      "player_class": "PRIEST",
+      "player_spec": "Holy",
+      "player_sub_spec": "",
+      "metric": "hps",
+      "benchmark": 839.1062144095073,
+      "renown_award": 1,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-08-26T13:39:22.707Z",
+          "value": 358.0764516535505,
+          "parse": 86
+        },
+        {
+          "killed_at": "2026-09-08T14:23:37.488Z",
+          "value": 126.8182214092849
+        }
+      ]
+    },
+    {
+      "instance_name": "Molten Core",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Lucifron",
+      "player_class": "PRIEST",
+      "player_spec": "Shadow",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 751.5725533660559,
+      "renown_award": 1,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-08-11T14:17:36.978Z",
+          "value": 488.58887817422055
+        }
+      ]
+    },
+    {
+      "instance_name": "Molten Core",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Magmadar",
+      "player_class": "PRIEST",
+      "player_spec": "Holy",
+      "player_sub_spec": "",
+      "metric": "hps",
+      "benchmark": 922.0250178306907,
+      "renown_award": 1,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-08-26T13:43:31.616Z",
+          "value": 510.98993288590606,
+          "parse": 91
+        },
+        {
+          "killed_at": "2026-09-08T14:26:54.672Z",
+          "value": 661.8191541879216
+        }
+      ]
+    },
+    {
+      "instance_name": "Molten Core",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Magmadar",
+      "player_class": "PRIEST",
+      "player_spec": "Shadow",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 976.0826148375469,
+      "renown_award": 1,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-08-11T14:20:49.35Z",
+          "value": 527.5839104954715
+        }
+      ]
+    },
+    {
+      "instance_name": "Molten Core",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Majordomo Executus",
+      "player_class": "PRIEST",
+      "player_spec": "Holy",
+      "player_sub_spec": "",
+      "metric": "hps",
+      "benchmark": 1045.9549483430249,
+      "renown_award": 2,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-08-26T14:10:19.406Z",
+          "value": 590.8557847169014,
+          "parse": 95
+        },
+        {
+          "killed_at": "2026-09-08T14:58:54.916Z",
+          "value": 429.3463593674097
+        }
+      ]
+    },
+    {
+      "instance_name": "Molten Core",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Majordomo Executus",
+      "player_class": "PRIEST",
+      "player_spec": "Shadow",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 935.5975961642765,
+      "renown_award": 2,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-08-11T14:41:34.068Z",
+          "value": 531.2014740736888
+        }
+      ]
+    },
+    {
+      "instance_name": "Molten Core",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Ragnaros",
+      "player_class": "PRIEST",
+      "player_spec": "Holy",
+      "player_sub_spec": "",
+      "metric": "hps",
+      "benchmark": 445.0586717085322,
+      "renown_award": 5,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-08-26T14:18:14.425Z",
+          "value": 246.8537290044562,
+          "parse": 86
+        },
+        {
+          "killed_at": "2026-09-08T15:07:51.125Z",
+          "value": 175.80664421676101
+        }
+      ]
+    },
+    {
+      "instance_name": "Molten Core",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Ragnaros",
+      "player_class": "PRIEST",
+      "player_spec": "Shadow",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 862.7227028208437,
+      "renown_award": 5,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-08-11T14:50:18.957Z",
+          "value": 507.265667717901
+        }
+      ]
+    },
+    {
+      "instance_name": "Molten Core",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Shazzrah",
+      "player_class": "PRIEST",
+      "player_spec": "Holy",
+      "player_sub_spec": "",
+      "metric": "hps",
+      "benchmark": 1175.8583459296049,
+      "renown_award": 1,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-08-26T13:25:32.961Z",
+          "value": 708.1907546817645,
+          "parse": 93
+        },
+        {
+          "killed_at": "2026-09-08T14:08:15.185Z",
+          "value": 897.3229271567641
+        }
+      ]
+    },
+    {
+      "instance_name": "Molten Core",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Shazzrah",
+      "player_class": "PRIEST",
+      "player_spec": "Shadow",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 631.8309095835968,
+      "renown_award": 1,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-08-11T14:03:43.49Z",
+          "value": 267.9850534863957
+        }
+      ]
+    },
+    {
+      "instance_name": "Molten Core",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Sorcerer-Thane Thaurissan",
+      "player_class": "PRIEST",
+      "player_spec": "Holy",
+      "player_sub_spec": "",
+      "metric": "hps",
+      "benchmark": 978.0114389342261,
+      "renown_award": 1,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-08-26T13:53:44.62Z",
+          "value": 237.1100028850513,
+          "parse": 26
+        },
+        {
+          "killed_at": "2026-09-08T14:34:46.138Z",
+          "value": 561.0553041174522
+        }
+      ]
+    },
+    {
+      "instance_name": "Molten Core",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Sorcerer-Thane Thaurissan",
+      "player_class": "PRIEST",
+      "player_spec": "Shadow",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 953.7662337662337,
+      "renown_award": 1,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-08-11T14:28:23.143Z",
+          "value": 745.0319420245941
+        }
+      ]
+    },
+    {
+      "instance_name": "Molten Core",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Sulfuron Harbinger",
+      "player_class": "PRIEST",
+      "player_spec": "Holy",
+      "player_sub_spec": "",
+      "metric": "hps",
+      "benchmark": 1093.9621948981464,
+      "renown_award": 1,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-08-26T13:33:09.057Z",
+          "value": 360.45611230454114,
+          "parse": 69
+        },
+        {
+          "killed_at": "2026-09-08T14:17:12.672Z",
+          "value": 377.9078018055389
+        }
+      ]
+    },
+    {
+      "instance_name": "Molten Core",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Sulfuron Harbinger",
+      "player_class": "PRIEST",
+      "player_spec": "Shadow",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 935.530234813327,
+      "renown_award": 1,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-08-11T14:11:08.611Z",
+          "value": 609.696211063502
+        }
+      ]
+    },
+    {
+      "instance_name": "Naxxramas",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Anub'Rekhan",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 1372.8480522055775,
+      "renown_award": 3,
+      "renown_kills": 4,
+      "kills": [
+        {
+          "killed_at": "2026-10-19T12:07:36.274Z",
+          "value": 1049.2062377072211,
+          "parse": 77
+        },
+        {
+          "killed_at": "2026-10-26T13:01:33.522Z",
+          "value": 1372.8480522055775,
+          "parse": 100
+        },
+        {
+          "killed_at": "2026-11-02T12:03:43.014Z",
+          "value": 923.9909083783996,
+          "parse": 62
+        }
+      ]
+    },
+    {
+      "instance_name": "Naxxramas",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Anub'Rekhan",
+      "player_class": "PRIEST",
+      "player_spec": "Shadow",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 1463.2334559480018,
+      "renown_award": 3,
+      "renown_kills": 4,
+      "kills": [
+        {
+          "killed_at": "2026-11-09T12:12:46.06Z",
+          "value": 927.6515651829349,
+          "parse": 76
+        }
+      ]
+    },
+    {
+      "instance_name": "Naxxramas",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Four Horsemen",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 416.54637406978446,
+      "renown_award": 3,
+      "renown_kills": 4,
+      "kills": [
+        {
+          "killed_at": "2026-10-26T12:26:46.389Z",
+          "value": 197.33892079312415,
+          "parse": 31
+        },
+        {
+          "killed_at": "2026-11-02T13:06:46.738Z",
+          "value": 348.4192248468368,
+          "parse": 89
+        }
+      ]
+    },
+    {
+      "instance_name": "Naxxramas",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Four Horsemen",
+      "player_class": "PRIEST",
+      "player_spec": "Holy",
+      "player_sub_spec": "",
+      "metric": "hps",
+      "benchmark": 514.916556398693,
+      "renown_award": 3,
+      "renown_kills": 4,
+      "kills": [
+        {
+          "killed_at": "2026-10-19T13:14:23.54Z",
+          "value": 255.06963661933494,
+          "parse": 71
+        }
+      ]
+    },
+    {
+      "instance_name": "Naxxramas",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Four Horsemen",
+      "player_class": "PRIEST",
+      "player_spec": "Shadow",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 512.8500670872705,
+      "renown_award": 3,
+      "renown_kills": 4,
+      "kills": [
+        {
+          "killed_at": "2026-11-09T13:32:08.567Z",
+          "value": 182.75570911959292,
+          "parse": 37
+        }
+      ]
+    },
+    {
+      "instance_name": "Naxxramas",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Gluth",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 1169.7263988868538,
+      "renown_award": 3,
+      "renown_kills": 4,
+      "kills": [
+        {
+          "killed_at": "2026-10-26T13:59:36.375Z",
+          "value": 805.4506310510642,
+          "parse": 64
+        },
+        {
+          "killed_at": "2026-11-02T13:57:14.393Z",
+          "value": 1169.7263988868538,
+          "parse": 100
+        }
+      ]
+    },
+    {
+      "instance_name": "Naxxramas",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Gluth",
+      "player_class": "PRIEST",
+      "player_spec": "Shadow",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 1397.5632183908046,
+      "renown_award": 3,
+      "renown_kills": 4,
+      "kills": [
+        {
+          "killed_at": "2026-10-19T14:14:42.893Z",
+          "value": 831.4893408237863,
+          "parse": 70
+        },
+        {
+          "killed_at": "2026-11-09T14:30:53.402Z",
+          "value": 744.1353436681532,
+          "parse": 64
+        }
+      ]
+    },
+    {
+      "instance_name": "Naxxramas",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Gothik the Harvester",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 310.7121384435961,
+      "renown_award": 3,
+      "renown_kills": 4,
+      "kills": [
+        {
+          "killed_at": "2026-10-26T12:10:35.22Z",
+          "value": 263.1363286572345,
+          "parse": 93
+        },
+        {
+          "killed_at": "2026-11-02T12:41:30.889Z",
+          "value": 279.0634348950013,
+          "parse": 97
+        }
+      ]
+    },
+    {
+      "instance_name": "Naxxramas",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Gothik the Harvester",
+      "player_class": "PRIEST",
+      "player_spec": "Holy",
+      "player_sub_spec": "",
+      "metric": "hps",
+      "benchmark": 390.12229166529175,
+      "renown_award": 3,
+      "renown_kills": 4,
+      "kills": [
+        {
+          "killed_at": "2026-11-09T12:58:07.545Z",
+          "value": 120.98773616175009,
+          "parse": 50
+        }
+      ]
+    },
+    {
+      "instance_name": "Naxxramas",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Gothik the Harvester",
+      "player_class": "PRIEST",
+      "player_spec": "Shadow",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 278.59576458013225,
+      "renown_award": 3,
+      "renown_kills": 4,
+      "kills": [
+        {
+          "killed_at": "2026-10-19T12:48:56.176Z",
+          "value": 247.3278467537005,
+          "parse": 94
+        }
+      ]
+    },
+    {
+      "instance_name": "Naxxramas",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Grand Widow Faerlina",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 1213.0150696831213,
+      "renown_award": 3,
+      "renown_kills": 4,
+      "kills": [
+        {
+          "killed_at": "2026-10-19T12:18:31.97Z",
+          "value": 846.3330160209022,
+          "parse": 60
+        },
+        {
+          "killed_at": "2026-10-26T13:12:31.034Z",
+          "value": 1006.9030570681301,
+          "parse": 91
+        },
+        {
+          "killed_at": "2026-11-02T12:12:42.652Z",
+          "value": 1059.010615302006,
+          "parse": 93
+        }
+      ]
+    },
+    {
+      "instance_name": "Naxxramas",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Grand Widow Faerlina",
+      "player_class": "PRIEST",
+      "player_spec": "Shadow",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 1191.7475728155339,
+      "renown_award": 3,
+      "renown_kills": 4,
+      "kills": [
+        {
+          "killed_at": "2026-11-09T12:22:15.282Z",
+          "value": 776.0403868921303,
+          "parse": 71
+        }
+      ]
+    },
+    {
+      "instance_name": "Naxxramas",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Grobbulus",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 1045.3185417050267,
+      "renown_award": 3,
+      "renown_kills": 4,
+      "kills": [
+        {
+          "killed_at": "2026-10-26T13:55:36.689Z",
+          "value": 880.439399660185,
+          "parse": 76
+        },
+        {
+          "killed_at": "2026-11-02T13:50:19.073Z",
+          "value": 909.0029541144751,
+          "parse": 81
+        }
+      ]
+    },
+    {
+      "instance_name": "Naxxramas",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Grobbulus",
+      "player_class": "PRIEST",
+      "player_spec": "Shadow",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 1188.3237163683852,
+      "renown_award": 3,
+      "renown_kills": 4,
+      "kills": [
+        {
+          "killed_at": "2026-10-19T14:09:40.153Z",
+          "value": 800.4264301853168,
+          "parse": 64
+        },
+        {
+          "killed_at": "2026-11-09T14:27:14.103Z",
+          "value": 564.8994735764278,
+          "parse": 28
+        }
+      ]
+    },
+    {
+      "instance_name": "Naxxramas",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Heigan the Unclean",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 1066.2975891785754,
+      "renown_award": 3,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-10-26T12:45:30.551Z",
+          "value": 946.7650662155067,
+          "parse": 95
+        },
+        {
+          "killed_at": "2026-11-02T13:21:08.561Z",
+          "value": 826.1036812883867,
+          "parse": 63
+        }
+      ]
+    },
+    {
+      "instance_name": "Naxxramas",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Heigan the Unclean",
+      "player_class": "PRIEST",
+      "player_spec": "Shadow",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 1164.0940954435157,
+      "renown_award": 3,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-10-19T13:29:52.57Z",
+          "value": 856.9060034764005,
+          "parse": 80
+        }
+      ]
+    },
+    {
+      "instance_name": "Naxxramas",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Instructor Razuvious",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 1202.077906917358,
+      "renown_award": 3,
+      "renown_kills": 2,
+      "kills": [
+        {
+          "killed_at": "2026-11-02T12:34:03.138Z",
+          "value": 769.3540950624529,
+          "parse": 75
+        }
+      ]
+    },
+    {
+      "instance_name": "Naxxramas",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Instructor Razuvious",
+      "player_class": "PRIEST",
+      "player_spec": "Holy",
+      "player_sub_spec": "",
+      "metric": "hps",
+      "benchmark": 795.2691356718806,
+      "renown_award": 3,
+      "renown_kills": 2,
+      "kills": [
+        {
+          "killed_at": "2026-11-09T12:51:58.866Z",
+          "value": 136.59856946893984,
+          "parse": 43
+        }
+      ]
+    },
+    {
+      "instance_name": "Naxxramas",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Kel'Thuzad",
+      "player_class": "PRIEST",
+      "player_spec": "Shadow",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 640.1912226876626,
+      "renown_award": 8,
+      "renown_kills": 2,
+      "kills": [
+        {
+          "killed_at": "2026-11-02T14:19:00.656Z",
+          "value": 597.2882802934139,
+          "parse": 96
+        },
+        {
+          "killed_at": "2026-11-09T15:04:24.272Z",
+          "value": 476.09146697196593,
+          "parse": 80
+        }
+      ]
+    },
+    {
+      "instance_name": "Naxxramas",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Loatheb",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 1394.12215757154,
+      "renown_award": 3,
+      "renown_kills": 4,
+      "kills": [
+        {
+          "killed_at": "2026-10-26T12:50:09.399Z",
+          "value": 1148.1296883970651,
+          "parse": 84
+        },
+        {
+          "killed_at": "2026-11-02T13:25:46.296Z",
+          "value": 1210.88214864552,
+          "parse": 90
+        }
+      ]
+    },
+    {
+      "instance_name": "Naxxramas",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Loatheb",
+      "player_class": "PRIEST",
+      "player_spec": "Shadow",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 1198.6889557472753,
+      "renown_award": 3,
+      "renown_kills": 4,
+      "kills": [
+        {
+          "killed_at": "2026-10-19T13:35:13.174Z",
+          "value": 977.0115637335202,
+          "parse": 87
+        },
+        {
+          "killed_at": "2026-11-09T13:54:12.632Z",
+          "value": 813.0107236632231,
+          "parse": 61
+        }
+      ]
+    },
+    {
+      "instance_name": "Naxxramas",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Maexxna",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 1022.5990537662381,
+      "renown_award": 3,
+      "renown_kills": 4,
+      "kills": [
+        {
+          "killed_at": "2026-10-19T12:29:18.369Z",
+          "value": 723.031496062992,
+          "parse": 65
+        },
+        {
+          "killed_at": "2026-10-26T13:21:57.998Z",
+          "value": 912.8552950150907,
+          "parse": 100
+        },
+        {
+          "killed_at": "2026-11-02T12:22:53.567Z",
+          "value": 240.1312871462787,
+          "parse": 2
+        }
+      ]
+    },
+    {
+      "instance_name": "Naxxramas",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Maexxna",
+      "player_class": "PRIEST",
+      "player_spec": "Shadow",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 952.5063416786147,
+      "renown_award": 3,
+      "renown_kills": 4,
+      "kills": [
+        {
+          "killed_at": "2026-11-09T12:31:14.326Z",
+          "value": 490.75262900464656,
+          "parse": 31
+        }
+      ]
+    },
+    {
+      "instance_name": "Naxxramas",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Noth the Plaguebringer",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 1315.6718702173248,
+      "renown_award": 3,
+      "renown_kills": 4,
+      "kills": [
+        {
+          "killed_at": "2026-10-26T12:42:14.491Z",
+          "value": 1002.7870680044593,
+          "parse": 90
+        },
+        {
+          "killed_at": "2026-11-02T13:18:04.536Z",
+          "value": 917.017896511477,
+          "parse": 70
+        }
+      ]
+    },
+    {
+      "instance_name": "Naxxramas",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Noth the Plaguebringer",
+      "player_class": "PRIEST",
+      "player_spec": "Shadow",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 1081.493157344254,
+      "renown_award": 3,
+      "renown_kills": 4,
+      "kills": [
+        {
+          "killed_at": "2026-10-19T13:25:48.784Z",
+          "value": 812.8143450688826,
+          "parse": 58
+        },
+        {
+          "killed_at": "2026-11-09T13:43:55.958Z",
+          "value": 968.2099878676592,
+          "parse": 89
+        }
+      ]
+    },
+    {
+      "instance_name": "Naxxramas",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Patchwerk",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 1239.7697522801423,
+      "renown_award": 3,
+      "renown_kills": 4,
+      "kills": [
+        {
+          "killed_at": "2026-10-26T13:48:09.912Z",
+          "value": 1029.4629501783454,
+          "parse": 81
+        },
+        {
+          "killed_at": "2026-11-02T13:41:46.919Z",
+          "value": 1089.4139224179708,
+          "parse": 86
+        }
+      ]
+    },
+    {
+      "instance_name": "Naxxramas",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Patchwerk",
+      "player_class": "PRIEST",
+      "player_spec": "Shadow",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 1234.1282685196024,
+      "renown_award": 3,
+      "renown_kills": 4,
+      "kills": [
+        {
+          "killed_at": "2026-10-19T14:01:27.521Z",
+          "value": 880.8765311016773,
+          "parse": 41
+        },
+        {
+          "killed_at": "2026-11-09T14:18:30.981Z",
+          "value": 799.87340829548,
+          "parse": 46
+        }
+      ]
+    },
+    {
+      "instance_name": "Naxxramas",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Sapphiron",
+      "player_class": "PRIEST",
+      "player_spec": "Shadow",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 1411.0838231741686,
+      "renown_award": 3,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-10-19T14:28:59.639Z",
+          "value": 735.7523922432043,
+          "parse": 51
+        },
+        {
+          "killed_at": "2026-11-02T14:10:55.658Z",
+          "value": 821.5520666264475,
+          "parse": 79
+        },
+        {
+          "killed_at": "2026-11-09T14:41:46.004Z",
+          "value": 646.9452680998271,
+          "parse": 46
+        }
+      ]
+    },
+    {
+      "instance_name": "Naxxramas",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Thaddius",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 2111.3721618953605,
+      "renown_award": 3,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-11-02T14:02:46.487Z",
+          "value": 1435.1840439240293,
+          "parse": 70
+        }
+      ]
+    },
+    {
+      "instance_name": "Naxxramas",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Thaddius",
+      "player_class": "PRIEST",
+      "player_spec": "Shadow",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 1956.3585473538747,
+      "renown_award": 3,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-10-19T14:19:52.575Z",
+          "value": 1354.3875316893293,
+          "parse": 61
+        },
+        {
+          "killed_at": "2026-11-09T14:34:26.254Z",
+          "value": 1427.785018419001,
+          "parse": 76
+        }
+      ]
+    },
+    {
+      "instance_name": "Onyxia's Lair",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Broodcommander Axelus",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 1158.7494686854177,
+      "renown_award": 1,
+      "renown_kills": 1,
+      "kills": [
+        {
+          "killed_at": "2026-08-13T12:54:19.247Z",
+          "value": 719.0126050420167
+        }
+      ]
+    },
+    {
+      "instance_name": "Onyxia's Lair",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Onyxia",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 714.1306216243113,
+      "renown_award": 2,
+      "renown_kills": 2,
+      "kills": [
+        {
+          "killed_at": "2026-08-13T12:41:56.712Z",
+          "value": 469.1944031819559
+        }
+      ]
+    },
+    {
+      "instance_name": "Onyxia's Lair",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Onyxia",
+      "player_class": "PRIEST",
+      "player_spec": "Holy",
+      "player_sub_spec": "",
+      "metric": "hps",
+      "benchmark": 484.55873426941287,
+      "renown_award": 2,
+      "renown_kills": 2,
+      "kills": [
+        {
+          "killed_at": "2026-08-29T13:15:16.366Z",
+          "value": 291.89205913748384,
+          "parse": 87
+        }
+      ]
+    },
+    {
+      "instance_name": "Ruins of Ahn'Qiraj",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Ayamiss the Hunter",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 564.1236773848244,
+      "renown_award": 1,
+      "renown_kills": 1,
+      "kills": [
+        {
+          "killed_at": "2026-08-29T14:17:21.361Z",
+          "value": 564.1236773848244
+        }
+      ]
+    },
+    {
+      "instance_name": "Ruins of Ahn'Qiraj",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "General Rajaxx",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 549.162642556252,
+      "renown_award": 1,
+      "renown_kills": 2,
+      "kills": [
+        {
+          "killed_at": "2026-08-25T15:43:01.416Z",
+          "value": 549.162642556252
+        }
+      ]
+    },
+    {
+      "instance_name": "Ruins of Ahn'Qiraj",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "General Rajaxx",
+      "player_class": "PRIEST",
+      "player_spec": "Holy",
+      "player_sub_spec": "",
+      "metric": "hps",
+      "benchmark": 871.6179764259674,
+      "renown_award": 1,
+      "renown_kills": 2,
+      "kills": [
+        {
+          "killed_at": "2026-08-13T16:01:06.426Z",
+          "value": 484.5432856169052
+        }
+      ]
+    },
+    {
+      "instance_name": "Ruins of Ahn'Qiraj",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Kurinnaxx",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 694.9592034296778,
+      "renown_award": 1,
+      "renown_kills": 2,
+      "kills": [
+        {
+          "killed_at": "2026-08-25T15:32:50.297Z",
+          "value": 694.9592034296778
+        }
+      ]
+    },
+    {
+      "instance_name": "Ruins of Ahn'Qiraj",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Kurinnaxx",
+      "player_class": "PRIEST",
+      "player_spec": "Holy",
+      "player_sub_spec": "",
+      "metric": "hps",
+      "benchmark": 510.0766228133584,
+      "renown_award": 1,
+      "renown_kills": 2,
+      "kills": [
+        {
+          "killed_at": "2026-08-13T15:51:00.605Z",
+          "value": 138.66511318242343
+        }
+      ]
+    },
+    {
+      "instance_name": "Ruins of Ahn'Qiraj",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Moam",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 826.1951073539312,
+      "renown_award": 1,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-08-25T15:46:34.646Z",
+          "value": 698.7868425337892
+        },
+        {
+          "killed_at": "2026-08-29T14:01:26.116Z",
+          "value": 826.1951073539312
+        }
+      ]
+    },
+    {
+      "instance_name": "Ruins of Ahn'Qiraj",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Moam",
+      "player_class": "PRIEST",
+      "player_spec": "Holy",
+      "player_sub_spec": "",
+      "metric": "hps",
+      "benchmark": 143.47128792266227,
+      "renown_award": 1,
+      "renown_kills": 3,
+      "kills": [
+        {
+          "killed_at": "2026-08-13T16:04:44.633Z",
+          "value": 52.24527538577126
+        }
+      ]
+    },
+    {
+      "instance_name": "Ruins of Ahn'Qiraj",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Ossirian the Unscarred",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 390.50505253228704,
+      "renown_award": 3,
+      "renown_kills": 2,
+      "kills": [
+        {
+          "killed_at": "2026-08-29T14:09:12.879Z",
+          "value": 294.82706986005326
+        }
+      ]
+    },
+    {
+      "instance_name": "Ruins of Ahn'Qiraj",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Ossirian the Unscarred",
+      "player_class": "PRIEST",
+      "player_spec": "Holy",
+      "player_sub_spec": "",
+      "metric": "hps",
+      "benchmark": 321.2728642968326,
+      "renown_award": 3,
+      "renown_kills": 2,
+      "kills": [
+        {
+          "killed_at": "2026-08-13T16:12:47.433Z",
+          "value": 277.8602572317117
+        }
+      ]
+    },
+    {
+      "instance_name": "Temple of Ahn'Qiraj",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Battleguard Sartura",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 899.3817814786777,
+      "renown_award": 3,
+      "renown_kills": 6,
+      "kills": [
+        {
+          "killed_at": "2026-08-10T12:08:01.855Z",
+          "value": 838.4810994599845
+        },
+        {
+          "killed_at": "2026-08-31T12:14:55.25Z",
+          "value": 845.8457526080477,
+          "parse": 100
+        },
+        {
+          "killed_at": "2026-09-11T12:16:20.771Z",
+          "value": 738.1278499228462,
+          "parse": 70
+        },
+        {
+          "killed_at": "2026-09-28T12:22:59.186Z",
+          "value": 634.8881580599001,
+          "parse": 48
+        },
+        {
+          "killed_at": "2026-10-26T15:04:32.222Z",
+          "value": 899.3817814786777,
+          "parse": 100
+        }
+      ]
+    },
+    {
+      "instance_name": "Temple of Ahn'Qiraj",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Battleguard Sartura",
+      "player_class": "PRIEST",
+      "player_spec": "Shadow",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 781.5460317928017,
+      "renown_award": 3,
+      "renown_kills": 6,
+      "kills": [
+        {
+          "killed_at": "2026-08-28T12:07:06.875Z",
+          "value": 716.8713537653515
+        }
+      ]
+    },
+    {
+      "instance_name": "Temple of Ahn'Qiraj",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Bug Family",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 941.7297963363097,
+      "renown_award": 3,
+      "renown_kills": 5,
+      "kills": [
+        {
+          "killed_at": "2026-08-10T11:58:49.924Z",
+          "value": 818.0178203581137
+        },
+        {
+          "killed_at": "2026-08-31T12:08:56.28Z",
+          "value": 906.5351298156945,
+          "parse": 100
+        },
+        {
+          "killed_at": "2026-09-11T12:06:24.274Z",
+          "value": 507.96935779220075,
+          "parse": 27
+        },
+        {
+          "killed_at": "2026-09-28T12:12:33.832Z",
+          "value": 754.0110799338082,
+          "parse": 75
+        }
+      ]
+    },
+    {
+      "instance_name": "Temple of Ahn'Qiraj",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Bug Family",
+      "player_class": "PRIEST",
+      "player_spec": "Shadow",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 801.4827439284193,
+      "renown_award": 3,
+      "renown_kills": 5,
+      "kills": [
+        {
+          "killed_at": "2026-08-28T11:57:50.343Z",
+          "value": 574.8592758788433
+        }
+      ]
+    },
+    {
+      "instance_name": "Temple of Ahn'Qiraj",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "C'Thun",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 604.8861189155269,
+      "renown_award": 11,
+      "renown_kills": 6,
+      "kills": [
+        {
+          "killed_at": "2026-08-10T13:00:58.528Z",
+          "value": 554.5298471757056
+        },
+        {
+          "killed_at": "2026-08-31T12:51:29.87Z",
+          "value": 504.4950079273257,
+          "parse": 96
+        },
+        {
+          "killed_at": "2026-09-11T13:23:35.202Z",
+          "value": 315.9160613397902,
+          "parse": 36
+        },
+        {
+          "killed_at": "2026-09-28T13:18:26.274Z",
+          "value": 556.5588647801337,
+          "parse": 100
+        },
+        {
+          "killed_at": "2026-10-26T15:59:25.092Z",
+          "value": 532.3340451254592,
+          "parse": 95
+        }
+      ]
+    },
+    {
+      "instance_name": "Temple of Ahn'Qiraj",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "C'Thun",
+      "player_class": "PRIEST",
+      "player_spec": "Shadow",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 511.52174256674516,
+      "renown_award": 11,
+      "renown_kills": 6,
+      "kills": [
+        {
+          "killed_at": "2026-08-28T13:12:39.482Z",
+          "value": 420.8726340776842
+        }
+      ]
+    },
+    {
+      "instance_name": "Temple of Ahn'Qiraj",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Fankriss the Unyielding",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 1959.5224987685801,
+      "renown_award": 3,
+      "renown_kills": 6,
+      "kills": [
+        {
+          "killed_at": "2026-08-10T12:13:33.651Z",
+          "value": 1059.457772355186
+        },
+        {
+          "killed_at": "2026-08-31T12:18:34.653Z",
+          "value": 1278.2825728780933,
+          "parse": 94
+        },
+        {
+          "killed_at": "2026-09-11T12:22:39.353Z",
+          "value": 1092.199657556514,
+          "parse": 70
+        },
+        {
+          "killed_at": "2026-09-28T12:29:16.704Z",
+          "value": 1307.1217839895835,
+          "parse": 87
+        },
+        {
+          "killed_at": "2026-10-26T15:09:17.342Z",
+          "value": 1319.1843323285732,
+          "parse": 84
+        }
+      ]
+    },
+    {
+      "instance_name": "Temple of Ahn'Qiraj",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Fankriss the Unyielding",
+      "player_class": "PRIEST",
+      "player_spec": "Shadow",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 1155.3470292594786,
+      "renown_award": 3,
+      "renown_kills": 6,
+      "kills": [
+        {
+          "killed_at": "2026-08-28T12:10:09.985Z",
+          "value": 420.59233696551394
+        }
+      ]
+    },
+    {
+      "instance_name": "Temple of Ahn'Qiraj",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Ouro",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 1054.494592086859,
+      "renown_award": 3,
+      "renown_kills": 6,
+      "kills": [
+        {
+          "killed_at": "2026-08-10T12:48:22.478Z",
+          "value": 873.6285863020695
+        },
+        {
+          "killed_at": "2026-08-31T12:44:05.71Z",
+          "value": 838.2031546940327,
+          "parse": 68
+        },
+        {
+          "killed_at": "2026-09-11T13:14:15.768Z",
+          "value": 1047.3958996561823,
+          "parse": 100
+        },
+        {
+          "killed_at": "2026-09-28T13:04:56.687Z",
+          "value": 980.4166485641048,
+          "parse": 89
+        },
+        {
+          "killed_at": "2026-10-26T15:48:00.239Z",
+          "value": 654.0039204297952,
+          "parse": 21
+        }
+      ]
+    },
+    {
+      "instance_name": "Temple of Ahn'Qiraj",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Ouro",
+      "player_class": "PRIEST",
+      "player_spec": "Shadow",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 880.5872117811092,
+      "renown_award": 3,
+      "renown_kills": 6,
+      "kills": [
+        {
+          "killed_at": "2026-08-28T13:01:09.516Z",
+          "value": 880.5872117811092
+        }
+      ]
+    },
+    {
+      "instance_name": "Temple of Ahn'Qiraj",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Princess Huhuran",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 999.7442618758391,
+      "renown_award": 3,
+      "renown_kills": 6,
+      "kills": [
+        {
+          "killed_at": "2026-08-10T12:26:34.564Z",
+          "value": 623.4975221093557
+        },
+        {
+          "killed_at": "2026-08-31T12:29:10.746Z",
+          "value": 644.0278806525744,
+          "parse": 82
+        },
+        {
+          "killed_at": "2026-09-11T12:34:07.838Z",
+          "value": 588.8062288350266,
+          "parse": 61
+        },
+        {
+          "killed_at": "2026-09-28T12:42:44.994Z",
+          "value": 684.3557897377996,
+          "parse": 72
+        },
+        {
+          "killed_at": "2026-10-26T15:26:33.604Z",
+          "value": 768.5608913089652,
+          "parse": 82
+        }
+      ]
+    },
+    {
+      "instance_name": "Temple of Ahn'Qiraj",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Princess Huhuran",
+      "player_class": "PRIEST",
+      "player_spec": "Shadow",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 876.2071217979274,
+      "renown_award": 3,
+      "renown_kills": 6,
+      "kills": [
+        {
+          "killed_at": "2026-08-28T12:25:42.36Z",
+          "value": 876.2071217979274
+        }
+      ]
+    },
+    {
+      "instance_name": "Temple of Ahn'Qiraj",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "The Prophet Skeram",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 767.9705381266241,
+      "renown_award": 3,
+      "renown_kills": 6,
+      "kills": [
+        {
+          "killed_at": "2026-08-10T11:52:01.222Z",
+          "value": 586.2446410654018
+        },
+        {
+          "killed_at": "2026-08-31T12:03:47.734Z",
+          "value": 405.43654253331675,
+          "parse": 56
+        },
+        {
+          "killed_at": "2026-09-11T11:59:29.439Z",
+          "value": 767.9705381266241,
+          "parse": 100
+        },
+        {
+          "killed_at": "2026-09-28T12:04:38.918Z",
+          "value": 371.6531755915318,
+          "parse": 42
+        },
+        {
+          "killed_at": "2026-10-26T14:56:11.4Z",
+          "value": 710.2415997185245,
+          "parse": 98
+        }
+      ]
+    },
+    {
+      "instance_name": "Temple of Ahn'Qiraj",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "The Prophet Skeram",
+      "player_class": "PRIEST",
+      "player_spec": "Shadow",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 644.8202585443598,
+      "renown_award": 3,
+      "renown_kills": 6,
+      "kills": [
+        {
+          "killed_at": "2026-08-28T11:52:09.718Z",
+          "value": 500.7802291209419
+        }
+      ]
+    },
+    {
+      "instance_name": "Temple of Ahn'Qiraj",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Twin Emperors",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 779.4747117545216,
+      "renown_award": 3,
+      "renown_kills": 5,
+      "kills": [
+        {
+          "killed_at": "2026-08-10T12:34:43.274Z",
+          "value": 558.9116695843101
+        },
+        {
+          "killed_at": "2026-09-11T12:59:11.102Z",
+          "value": 458.04316206589954,
+          "parse": 55
+        },
+        {
+          "killed_at": "2026-09-28T12:51:41.444Z",
+          "value": 549.3010505525191,
+          "parse": 73
+        },
+        {
+          "killed_at": "2026-10-26T15:35:13.596Z",
+          "value": 663.2443435518367,
+          "parse": 96
+        }
+      ]
+    },
+    {
+      "instance_name": "Temple of Ahn'Qiraj",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Twin Emperors",
+      "player_class": "PRIEST",
+      "player_spec": "Shadow",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 664.7102073134713,
+      "renown_award": 3,
+      "renown_kills": 5,
+      "kills": [
+        {
+          "killed_at": "2026-08-28T12:47:42.128Z",
+          "value": 349.6916665730621
+        }
+      ]
+    },
+    {
+      "instance_name": "Temple of Ahn'Qiraj",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Viscidus",
+      "player_class": "PRIEST",
+      "player_spec": "Discipline",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 644.7464095688405,
+      "renown_award": 3,
+      "renown_kills": 6,
+      "kills": [
+        {
+          "killed_at": "2026-08-10T12:17:13.056Z",
+          "value": 222.82308161872956
+        },
+        {
+          "killed_at": "2026-08-31T12:20:48.402Z",
+          "value": 103.29515694015556,
+          "parse": 62
+        },
+        {
+          "killed_at": "2026-09-11T12:25:21.044Z",
+          "value": 380.1613065158462,
+          "parse": 89
+        },
+        {
+          "killed_at": "2026-09-28T12:32:57.671Z",
+          "value": 443.17775457367225,
+          "parse": 92
+        },
+        {
+          "killed_at": "2026-10-26T15:15:12.376Z",
+          "value": 193.34606979136544,
+          "parse": 62
+        }
+      ]
+    },
+    {
+      "instance_name": "Temple of Ahn'Qiraj",
+      "difficulty_name": "",
+      "max_players": 0,
+      "encounter_name": "Viscidus",
+      "player_class": "PRIEST",
+      "player_spec": "Shadow",
+      "player_sub_spec": "",
+      "metric": "dps",
+      "benchmark": 255.27545535252628,
+      "renown_award": 3,
+      "renown_kills": 6,
+      "kills": [
+        {
+          "killed_at": "2026-08-28T12:14:05.143Z",
+          "value": 87.75770844736363
+        }
+      ]
+    }
+  ],
+  "truncated": false
+}

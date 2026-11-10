@@ -108,7 +108,7 @@ func TestFetchCharacterCardStats(t *testing.T) {
 		stats := serviceWith(slowLogCountStore{store}).fetchCharacterCardStats(ctx, player)
 		require.Less(t, time.Since(start), characterCardStatTimeout+time.Second)
 		require.Nil(t, stats.Logs)
-		require.False(t, characterCardParams(player, "Human", "Warrior", stats).Has("logs"))
+		require.False(t, characterCardParams(player, "Human", "Warrior", nil, stats).Has("logs"))
 	})
 
 	t.Run("lookup fails", func(t *testing.T) {

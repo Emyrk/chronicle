@@ -1,8 +1,10 @@
 package serviceog
 
 import (
+	"cmp"
 	"context"
 	"fmt"
+	"math"
 	"net/http"
 	"net/url"
 	"path"
@@ -570,6 +572,12 @@ func (s *Service) armoryOG(r *http.Request, realm, player string) *frontend.OGDa
 		level, race, class,
 	)
 
+	rating := s.fetchCharacterRating(ctx, p)
+	if rating != nil {
+		fmt.Fprintf(&desc, " · %s Mastery %.1f · Peak %.1f · Renown %.0f",
+			cmp.Or(rating.Spec, class), rating.Mastery, rating.Peak, math.Round(rating.Renown))
+	}
+
 	og := &frontend.OGData{
 		Title:       title.String(),
 		Description: desc.String(),
@@ -577,7 +585,11 @@ func (s *Service) armoryOG(r *http.Request, realm, player string) *frontend.OGDa
 	}
 	// Skip the stat lookups when there's no OG service to draw the card.
 	if s.imageBaseURL != nil && s.signingKey != "" {
-		params := characterCardParams(p, race, class, s.fetchCharacterCardStats(ctx, p))
+		var stats characterCardStats
+		if rating == nil {
+			stats = s.fetchCharacterCardStats(ctx, p)
+		}
+		params := characterCardParams(p, race, class, rating, stats)
 		if u := s.ogImageURL(r, "character", params); u != "" {
 			og.ImageURL = u
 		}

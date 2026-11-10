@@ -55,6 +55,18 @@ describe('character card', () => {
     expect(json).not.toContain('Boss kills');
   });
 
+  test('career ratings: Mastery · Peak · Renown replace history, no pills', async () => {
+    const query = `${HISTORY}&mastery=43.9&peak=53&renown=1524&best=Ragnaros:99`;
+    const stats = characterStats(context(query));
+    expect(stats.map(stat => stat.label)).toEqual(['Mastery', 'Peak', 'Renown']);
+    expect(stats.map(stat => stat.value)).toEqual(['43.9', '53.0', '1,524']);
+    const json = await tree(query);
+    expect(json).not.toContain('Ragnaros');
+    expect(json).not.toContain('Logs seen');
+    // Malformed ratings fall back to the history card.
+    expect(labels(`${HISTORY}&mastery=abc`)).toEqual(['Item level', 'Logs seen', 'Last seen']);
+  });
+
   test('no gear: item level is dropped', () => {
     expect(labels(NO_GEAR)).toEqual(['Best avg parse', 'Boss kills']);
     expect(labels(`${IDENTITY}&logs=2`)).toEqual(['Logs seen']);

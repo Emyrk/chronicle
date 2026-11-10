@@ -2,8 +2,9 @@
 // name, level line, guild, three stats and up to three boss pills.
 //
 //   name, class, spec, race, gender (male|female, default male), level, guild
-//   parse, ilvl, kills, best=Ragnaros:99,Nefarian:97,C'Thun:88   (with parses)
-//   ilvl, raids, seen=Nov 2026                               (without parses)
+//   mastery=43.9, peak=53.9, renown=524                      (career ratings)
+//   ilvl, logs, seen=Nov 2026                                (history)
+//   parse, ilvl, kills, best=Ragnaros:99,...                 (unreleased parse design)
 //
 // Every stat is optional; the emblem needs only class + name's initial.
 import {
@@ -32,6 +33,9 @@ import type { ThemeContext, ThemeDefinition, ThemeFont, ThemeProps } from './typ
 const PANEL = 400;
 const MAX_BEST = 3;
 const PARSE_LABEL = 'Best avg parse';
+
+// Rating accents, matching the site's Mastery / Peak / Renown colours.
+const RATING_COLORS = { mastery: '#72aac6', peak: '#e2b25a', renown: '#b394e6' } as const;
 
 // One line, clipped with an ellipsis (Satori needs display block and a single string child).
 const ONE_LINE: React.CSSProperties = { display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' };
@@ -70,10 +74,26 @@ export function parseBest(items: string[]): Boss[] {
   return bosses.slice(0, MAX_BEST);
 }
 
-// The released history card shows ilvl · logs seen · last seen. Supplying a
-// parse still renders the preserved performance design for approval, but
-// Chronicle does not emit those params until metric/spec selection is settled.
+// A 0–100 rating with at most one decimal, or null.
+function ratingParam(context: ThemeContext, key: string): number | null {
+  const raw = param(context, key, 6);
+  return /^\d{1,3}(\.\d)?$/.test(raw) ? Math.min(100, Number(raw)) : null;
+}
+
+// Characters with career ratings show Mastery · Peak · Renown for their top
+// spec; others show the history card (ilvl · logs seen · last seen). Supplying
+// a parse still renders the preserved parse design for review, but Chronicle
+// does not select it.
 export function characterStats(context: ThemeContext): Stat[] {
+  const mastery = ratingParam(context, 'mastery');
+  if (mastery !== null) {
+    const ratings: Stat[] = [{ value: mastery.toFixed(1), label: 'Mastery', color: RATING_COLORS.mastery }];
+    const peak = ratingParam(context, 'peak');
+    if (peak !== null) ratings.push({ value: peak.toFixed(1), label: 'Peak', color: RATING_COLORS.peak });
+    const renown = intParam(context, 'renown', { min: 0, max: 9_999_999 });
+    if (renown !== null) ratings.push({ value: renown.toLocaleString('en-US'), label: 'Renown', color: RATING_COLORS.renown });
+    return ratings;
+  }
   const raw = param(context, 'parse', 6);
   const parse = /^\d{1,3}(\.\d)?$/.test(raw) ? Math.min(100, Number(raw)) : null;
   const ilvl = intParam(context, 'ilvl', { min: 0, max: 999 });

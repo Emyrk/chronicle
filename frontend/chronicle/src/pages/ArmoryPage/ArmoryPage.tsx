@@ -1,5 +1,3 @@
-import { PlayerCareerCard } from "@/components/Career/CareerCard";
-import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Shield, Calendar, Sparkles, LayoutDashboard, Hammer } from "lucide-react";
@@ -10,7 +8,6 @@ import {
   useMyFavorites,
   useToggleFavoritePlayer,
 } from "@/api/queries";
-import { useCharacterParses } from "@/api/rankingsQueries";
 import { Button } from "@/components/ui/button";
 import { AdRailStack } from "@/components/Ads/AdRailStack";
 import { AdSuppressionProvider } from "@/components/Ads/AdSuppressionProvider";
@@ -26,16 +23,10 @@ import { OverviewTab } from "./overview/OverviewTab";
 import { IdentityHeader } from "./overview/IdentityHeader";
 import { ActivityHeaderCard, GearHeaderCard, TalentsHeaderCard } from "./TabHeaderCards";
 import { JourneyStatsCard } from "./overview/JourneyStatsCard";
-import { ScoreCard } from "./overview/ScoreCard";
-import { defaultMetric, type ParseMetric } from "./overview/util";
+import { CareerRatingCard } from "./overview/CareerRatingCard";
+import { RenownStat } from "./overview/RenownStat";
+import { useCareerRatings } from "./overview/useCareerRatings";
 import { useRecentActivity } from "./overview/useRecentActivity";
-import {
-  filterParsesBySpec,
-  performanceSpecs,
-  scoreParses,
-  summarizeRaids,
-  topEncounters,
-} from "./parseAggregation";
 
 type OverviewMode = "journey" | "performance";
 
@@ -113,8 +104,6 @@ function ArmoryPageContent({ player }: { player: ArmoryPlayer }) {
   const activeTab = (searchParams.get("tab") as TabKey) || "overview";
   const mode: OverviewMode =
     searchParams.get("mode") === "performance" ? "performance" : "journey";
-  const [metric, setMetric] = useState<ParseMetric>(() => defaultMetric(player));
-  const [performanceSpec, setPerformanceSpec] = useState<string | null>(null);
   const { isAuthenticated } = useAuth();
   const favorites = useMyFavorites({ enabled: isAuthenticated });
   const toggleFavorite = useToggleFavoritePlayer();
@@ -125,22 +114,11 @@ function ArmoryPageContent({ player }: { player: ArmoryPlayer }) {
   const isOverview = activeTab === "overview";
   const activity = useRecentActivity(player, isOverview);
   const lootQuery = useArmoryLoot(player.realm_name, player.id, isOverview && mode === "journey");
-  const parsesQuery = useCharacterParses(
-    isOverview && mode === "performance" ? player.id : undefined,
-    metric,
-  );
-  const parses = useMemo(() => parsesQuery.data?.parses ?? [], [parsesQuery.data]);
-  const specs = useMemo(() => performanceSpecs(parses), [parses]);
-  const selectedSpec = performanceSpec && specs.includes(performanceSpec) ? performanceSpec : null;
-  const selectedParses = useMemo(
-    () => filterParsesBySpec(parses, selectedSpec),
-    [parses, selectedSpec],
-  );
-  const score = useMemo(() => scoreParses(selectedParses), [selectedParses]);
-  const top3 = useMemo(
-    () => topEncounters(summarizeRaids(selectedParses), 3),
-    [selectedParses],
-  );
+  // Journey shows all-spec Renown; Performance adds the boss-level history.
+  const ratings = useCareerRatings(player, {
+    career: isOverview,
+    history: isOverview && mode === "performance",
+  });
 
   const setMode = (nextMode: OverviewMode) => {
     const next = new URLSearchParams(searchParams);
@@ -249,16 +227,12 @@ function ArmoryPageContent({ player }: { player: ArmoryPlayer }) {
             <IdentityHeader player={player} titleAction={favoriteButton} actions={modeSelector}>
               <div className="w-full lg:w-[480px]">
                 {activeTab === "overview" && mode === "performance" && (
-                  <ScoreCard
-                    score={score}
-                    top3={top3}
-                    metric={metric}
-                    onMetricChange={setMetric}
-                    playerClass={player.class}
-                    specs={specs}
-                    selectedSpec={selectedSpec}
-                    onSpecChange={setPerformanceSpec}
-                    isLoading={parsesQuery.isLoading}
+                  <CareerRatingCard
+                    data={ratings.career}
+                    cohort={ratings.cohort}
+                    onCohortChange={ratings.setCohort}
+                    isLoading={ratings.isLoading}
+                    error={ratings.error}
                   />
                 )}
                 {activeTab === "overview" && mode === "journey" && (
@@ -271,6 +245,7 @@ function ArmoryPageContent({ player }: { player: ArmoryPlayer }) {
                           : String(lootQuery.data.items.length)
                         : null
                     }
+                    renown={ratings.career && <RenownStat cohorts={ratings.career.cohorts} />}
                   />
                 )}
                 {activeTab === "gear" && <GearHeaderCard player={player} />}
@@ -283,16 +258,10 @@ function ArmoryPageContent({ player }: { player: ArmoryPlayer }) {
           {/* Tab content: overview, gear, and talents stay in center column. */}
           {activeTab === "overview" && (
             <div className="mt-4">
-              {searchParams.get("debug") === "true" && (
-                <PlayerCareerCard realm={player.realm_name} player={player.id} />
-              )}
               <OverviewTab
                 player={player}
                 onOpenTab={openTab}
-                metric={metric}
-                selectedSpec={selectedSpec}
-                specs={specs}
-                onSpecChange={setPerformanceSpec}
+                ratings={ratings}
               />
             </div>
           )}

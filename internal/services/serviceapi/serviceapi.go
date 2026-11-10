@@ -18,6 +18,7 @@ import (
 	"github.com/Emyrk/chronicle/api/httpmw"
 	"github.com/Emyrk/chronicle/internal/itempricing"
 	"github.com/Emyrk/chronicle/internal/services"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/services/serviceaccessurl"
 	"github.com/Emyrk/chronicle/internal/services/serviceapplication"
 	"github.com/Emyrk/chronicle/internal/services/serviceassets"
@@ -40,6 +41,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicepgxpool"
 	"github.com/Emyrk/chronicle/internal/services/serviceprometheus"
 	"github.com/Emyrk/chronicle/internal/services/servicerankings"
+	"github.com/Emyrk/chronicle/internal/services/serviceratings"
 	"github.com/Emyrk/chronicle/internal/services/serviceriver"
 	"github.com/Emyrk/chronicle/internal/services/servicesidekick"
 	"github.com/Emyrk/chronicle/internal/services/servicestorage"
@@ -274,6 +276,9 @@ func (s *Service) Start(ctx context.Context) error {
 		AccessURL:    au,
 		OGServiceURL: ogServiceURL,
 		OGSigningKey: s.ogSigningKey,
+		PlayerCareer: func(ctx context.Context, tenant, realm uuid.UUID, guid string) (serviceratings.PlayerCareerResult, error) {
+			return serviceratings.ReadPlayerCareer(ctx, database.New(pool), tenant, realm, guid)
+		},
 	})
 	// The chooser subdomain previews with the brand card.
 	servicechoose.Choose(s.broker).SetOGImager(ogSvc)

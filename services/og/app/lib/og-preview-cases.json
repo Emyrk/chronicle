@@ -70,10 +70,31 @@
     }
   },
   {
+    "id": "character-ratings",
+    "group": "Character",
+    "label": "Character ratings",
+    "description": "Armory card for a character with career ratings: Mastery, Peak, and Renown for the spec with the highest Mastery.",
+    "pageExample": "/armory/turtle/Playername",
+    "params": {
+      "template": "character",
+      "name": "Ravenshield",
+      "class": "warrior",
+      "spec": "Fury",
+      "race": "Dwarf",
+      "gender": "female",
+      "level": "60",
+      "guild": "No Quarter",
+      "mastery": "43.9",
+      "peak": "53.9",
+      "renown": "524",
+      "host": "chronicleclassic.com"
+    }
+  },
+  {
     "id": "character-history",
     "group": "Character",
     "label": "Character history",
-    "description": "Released Armory card showing stable history signals without choosing between healing and damage performance.",
+    "description": "Armory card for a character without career ratings, showing stable history signals.",
     "pageExample": "/armory/turtle/Playername",
     "params": {
       "template": "character",
@@ -94,7 +115,7 @@
     "id": "character-parse",
     "group": "Character",
     "label": "Character performance",
-    "description": "Preserved performance-card design. Not selected by Chronicle until healing versus damage spec and metric selection is settled.",
+    "description": "Preserved parse-card design for review. Not selected by Chronicle; characters with ratings use the ratings card.",
     "pageExample": "/armory/turtle/Playername",
     "params": {
       "template": "character",
