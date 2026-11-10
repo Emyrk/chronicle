@@ -47,6 +47,9 @@ func (s highlightStore) GetDataset(context.Context, uuid.UUID) (database.Dataset
 func TestHighlightsUseExistingReadsAndKeepFailedSnapshot(t *testing.T) {
 	t.Parallel()
 	s := newSourceFixture(t)
+	const playerGUID = "0x00000000000000A3"
+	s.exec(`UPDATE encounter_dps_rankings SET player_guid=$2 WHERE instance_id=$1`, s.instance, playerGUID)
+	s.exec(`INSERT INTO game_players (id, realm_id, name, class, gender, race) VALUES ($1, $2, 'Player', 'MAGE', 'Female', 'Human')`, playerGUID, s.realm)
 	s.times()
 	require.NoError(t, s.direct(s.compute()))
 	for f := Family(0); f < familyCount; f++ {
@@ -66,6 +69,7 @@ func TestHighlightsUseExistingReadsAndKeepFailedSnapshot(t *testing.T) {
 	require.Equal(t, float64(100), *preview.Player.Peak[0].PeakRaw)
 	require.Len(t, preview.Player.Renown, 1)
 	require.Equal(t, float64(10), preview.Player.Renown[0].Score)
+	require.Equal(t, "MAGE", preview.Player.Renown[0].PlayerClass)
 	require.NoError(t, RefreshHighlights(s.tenantctx(), store, s.tenant, s.realm, cohort))
 	scoped, err := s.db.ListLeaderboardHighlights(s.tenantctx(), database.ListLeaderboardHighlightsParams{TenantID: s.tenant, RealmScope: s.realm})
 	require.NoError(t, err)
