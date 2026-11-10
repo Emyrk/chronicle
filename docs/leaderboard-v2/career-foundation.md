@@ -1,8 +1,9 @@
 # Career foundation investigation
 
 Status: configuration, activation, career projections, refresh workers, serving API,
-and Armory/guild cards are implemented on the career stack. Numeric production
-weights and class-only player policy remain outstanding. `spec.tex` is authoritative,
+and Armory/guild cards are implemented on the career stack. Migration 358 seeds
+approved weights and makes Vault Renown-only. Class-only careers are deferred
+for this release. `spec.tex` is authoritative,
 followed by `behavior.md`. This feature has not been deployed.
 
 ## Verified current behavior
@@ -32,13 +33,13 @@ followed by `behavior.md`. This feature has not been deployed.
 Explicit career weights supersede the earlier proposal to derive weights from
 configured full-raid Renown totals. Each weight belongs to the exact
 `(instance_name, difficulty_name, max_players)` tuple. Both 10/25 and Normal/Heroic
-remain independent. No numeric weights have been approved or invented here.
+remain independent. Approved numeric weights are recorded below.
 
 Average eligibility and Renown eligibility must be distinct:
 
 | Content | Career Mastery/Peak | Career Renown |
 |---|---|---|
-| Obsidian Sanctum | Excluded, no denominator weight | Explicitly included when flavor-allowed |
+| Obsidian Sanctum and Vault of Archavon | Excluded, no denominator weight | Explicitly included when flavor-allowed |
 | Optional bosses | Excluded from raid-wide inputs | Included when otherwise eligible |
 | Vanilla raids on Wrath | Excluded | Excluded, even when uploaded |
 
@@ -47,13 +48,44 @@ for career weights. Existing exact boss awards apply to actual eligible kills;
 do not substitute a group maximum or invent a synthetic clear award. Optional
 boss awards likewise remain available for Renown independently of average inputs.
 
-Remaining decisions:
+## Approved numeric weights (migration 358)
 
-1. Approve explicit numeric career weights for the supported exact variants.
-2. Define API presentation for empty effective raid-wide boss selections and for
-   careers with no active positive weight. Never divide by zero or invent fallback
-   weights. Vault's enabled empty default set illustrates the existing empty-set
-   read-contract question, not a reason to include optional bosses in averages.
+| Existing non-Wrath tuple, empty difficulty / 0 players | Weight |
+|---|---:|
+| Onyxia's Lair | 1 |
+| Zul'Gurub | 2 |
+| Ruins of Ahn'Qiraj | 2 |
+| Molten Core | 3 |
+| Blackwing Lair | 4 |
+| Temple of Ahn'Qiraj | 5 |
+| Naxxramas | 6 |
+| Emerald Sanctum | 1 |
+| Lower Tower of Karazhan | 1 |
+| Timbermaw Hold | 3 |
+| Upper Tower of Karazhan | 6 |
+| Scarlet Monastery | 2 |
+| Gruul's Lair | 1 |
+| Serpentshrine Cavern | 4 |
+| Tempest Keep | 3 |
+
+| Existing Wrath raid | 10 Player / 10 | 25 Player / 25 |
+|---|---:|---:|
+| Onyxia's Lair | 1 | 1.5 |
+| Eye of Eternity | 1 | 1.5 |
+| Naxxramas | 4 | 6 |
+| Ulduar | 6 | 9 |
+
+Obsidian Sanctum and Vault of Archavon both retain Renown eligibility and NULL
+weights, with average eligibility false. Vault's empty default is not an average
+blocker under this approved policy. Optional bosses remain excluded from average
+inputs and included in Renown. Wrath excludes Vanilla from every career total.
+
+Future supported Heroic variants use explicit entries at 1.5 times corresponding
+Normal weights. Migration 358 creates no new tuples. Its bounded updates touch at
+most 23 existing weight rows and two Vault flags, never historical evidence. Up
+fills NULL weights only. Down restores matching seeded weights to NULL and Vault
+average eligibility to true; later edited weights are preserved. Shared boss
+configuration and Renown awards are untouched.
 
 ## Approved foundation constraints
 
@@ -131,12 +163,12 @@ toolchain, not present in this checkout session.
   overrides, and reject foreign subjects. Player responses retain pool metadata
   even with zero cohorts. Guilds expose kill-time scores without a DPS/HPS choice.
 - Player class-only/disabled modes currently return an explicit unsupported-mode
-  response. Whether class-only career aggregation should follow the existing
-  class cohort is awaiting product approval; no mixed raw-spec/class attribution
-  is fabricated. Spec-mode player and guild paths are implemented.
-- Before rollout, approve and seed positive weights for all active average variants
-  and resolve any intentionally empty average roster (such as Vault). Configure new
-  difficulty/size tuples explicitly; Heroic entries are not inferred from Normal.
+  response. Class-only careers are explicitly deferred for this release. Future
+  class-only aggregation will treat class as the specialization cohort; no mixed
+  raw-spec/class attribution is fabricated now. Spec-mode and guild paths ship.
+- The user will run the existing repair/backfill workflow after merge. This change
+  does not run it or add a startup backfill. Migration 358 supplies approved
+  weights and Vault exclusion. New difficulty/size tuples require explicit config.
 - All validation uses local isolated databases. No live backfill, configuration
   change, deployment, or additional PR has been performed by this implementation.
 
@@ -168,8 +200,9 @@ Only enabled default-set members supply average inputs. This narrowly reuses the
 whole-raid default selection in `Hub/v2RatingAdapter.ts:58-62` and
 `leaderboardread/selection.go`, without reinterpreting other named sets. All
 otherwise enabled bosses can supply Renown and activation, including optional
-and zero-award bosses. Obsidian Sanctum's initial flags allow Renown only. Vault's
-empty default blocks active averages rather than silently shrinking the pool.
+and zero-award bosses. Obsidian Sanctum and Vault allow Renown only after
+migration 358. Other active average variants with empty defaults still block
+averages rather than silently shrinking the pool.
 
 `LeaderboardCareerVariantActive` performs tenant/exact-variant/boss-filtered
 EXISTS checks over player and guild Renown facts. Both fact tables already have

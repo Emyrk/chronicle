@@ -170,8 +170,8 @@ arbitrary page numbers.
 ## Career contract (not yet implemented)
 
 The authoritative formulas are in `spec.tex`, under Career aggregation contract.
-The [foundation investigation](career-foundation.md) records outstanding seed values and read-contract
-choices and next implementation steps.
+The [foundation investigation](career-foundation.md) records approved seed values, rollout policy,
+and implementation details.
 
 - Each allowed exact instance/difficulty/max_players variant is independent,
   including 10/25 and Normal/Heroic. Wrath excludes Vanilla raids from all career
@@ -182,11 +182,12 @@ choices and next implementation steps.
   clear nor a kill by the displayed subject is required.
 - Career Mastery and Peak average raid-wide values using an explicit career weight
   per exact variant, independent of Renown awards or earned counts. Weights resolve
-  at reads. Numeric seed values remain outstanding and must not be invented.
+  at reads. Migration 358 supplies the approved exact weights listed in
+  [career-foundation.md](career-foundation.md). No extra tuples are inferred.
   Missing subject results in active average-eligible variants are zero-filled
   without shrinking the denominator. Inactive/disallowed/average-excluded variants
   leave the denominator. Never divide by zero.
-- Obsidian Sanctum is excluded from career Mastery and Peak averages, including
+- Obsidian Sanctum and Vault of Archavon are excluded from career Mastery and Peak averages, including
   their denominator, but explicitly included in career Renown within the flavor
   whitelist. Average eligibility and Renown eligibility are separate policies.
 - Optional bosses are excluded from raid-wide Mastery/Peak inputs and included in
@@ -200,8 +201,10 @@ choices and next implementation steps.
   kill-time values, not clear-time scores.
 
 The explicit-weight decision supersedes Renown-derived weights. No Sartharion
-completion-group rule is needed for career weights. Numeric weights and empty or
-zero-denominator API presentation still need decisions. Exact-cohort player Renown
+completion-group rule is needed for career weights. Future supported Heroic variants use explicit entries at 1.5 times the
+corresponding Normal weight; unsupported Heroic tuples are not seeded. Class-only
+careers are deferred for this release, with class-as-spec aggregation reserved for
+a future implementation. Existing unsupported-mode behavior remains unchanged. Exact-cohort player Renown
 also needs additional projection support because existing counts omit
 class/spec/subspec. This documentation implements no production behavior.
 
