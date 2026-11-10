@@ -162,6 +162,8 @@ func TestOperationRepairsResultsWithoutEvidence(t *testing.T) {
 		_, err := (&Worker{Store: s.db}).Drain(s.ctx, s.tenant, f)
 		require.NoError(t, err)
 	}
+	_, err = (&CareerWorker{Store: s.db}).Drain(ctx, s.tenant)
+	require.NoError(t, err)
 	require.NoError(t, w.Step(ctx, s.tenant, op.ID))
 	var count int
 	require.NoError(t, s.row(`SELECT count(*) FROM leaderboard_player_boss_subjects WHERE tenant_id=$1`, s.tenant).Scan(&count))
@@ -265,6 +267,10 @@ func TestOperationBootstrapEndToEnd(t *testing.T) {
 		_, err := (&Worker{Store: s.db}).Drain(s.ctx, s.tenant, family)
 		require.NoError(t, err)
 	}
+	_, err = (&CareerWorker{Store: s.db}).Drain(ctx, s.tenant)
+	require.NoError(t, err)
+	// Periodic sweeps must not keep an otherwise drained operation open.
+	require.NoError(t, s.db.EnsureLeaderboardCareerSweep(ctx, s.tenant))
 	require.NoError(t, worker.Step(ctx, s.tenant, op.ID))
 	current, err := s.db.GetLeaderboardOperation(ctx, database.GetLeaderboardOperationParams{ID: op.ID, TenantID: s.tenant})
 	require.NoError(t, err)

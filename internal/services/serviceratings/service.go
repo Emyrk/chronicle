@@ -18,6 +18,8 @@ import (
 )
 
 type Service struct {
+	CareerDispatcher    *CareerDispatcher
+	CareerDrainWorker   *CareerDrainWorker
 	HighlightDispatcher *HighlightDispatcher
 	HighlightWorker     *HighlightWorker
 	metrics             *Metrics
@@ -48,6 +50,8 @@ func (s *Service) Start(ctx context.Context) error {
 		return err
 	}
 	store := servicedbstore.DatabaseStore(s.broker)
+	s.CareerDispatcher = &CareerDispatcher{Store: store}
+	s.CareerDrainWorker = &CareerDrainWorker{Worker: &CareerWorker{Store: store, Metrics: s.metrics}}
 	s.HighlightDispatcher = &HighlightDispatcher{Store: store}
 	s.HighlightWorker = &HighlightWorker{Store: store}
 	s.Dispatcher = &Dispatcher{Store: store}

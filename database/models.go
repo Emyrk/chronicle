@@ -1919,6 +1919,46 @@ type LeaderboardBossRenown struct {
 	Points        float64 `db:"points" json:"points"`
 }
 
+type LeaderboardCareerIdentity struct {
+	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	SubjectKind   string    `db:"subject_kind" json:"subject_kind"`
+	RealmID       uuid.UUID `db:"realm_id" json:"realm_id"`
+	SubjectID     string    `db:"subject_id" json:"subject_id"`
+	PlayerClass   string    `db:"player_class" json:"player_class"`
+	PlayerSpec    string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec string    `db:"player_sub_spec" json:"player_sub_spec"`
+}
+
+type LeaderboardCareerRenownFact struct {
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RunID             uuid.UUID `db:"run_id" json:"run_id"`
+	SourceInstanceID  uuid.UUID `db:"source_instance_id" json:"source_instance_id"`
+	RealmID           uuid.UUID `db:"realm_id" json:"realm_id"`
+	PlayerGuid        string    `db:"player_guid" json:"player_guid"`
+	PlayerClass       string    `db:"player_class" json:"player_class"`
+	PlayerSpec        string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string    `db:"player_sub_spec" json:"player_sub_spec"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	EncounterName     string    `db:"encounter_name" json:"encounter_name"`
+	SourceEncounterID uuid.UUID `db:"source_encounter_id" json:"source_encounter_id"`
+}
+
+type LeaderboardCareerSubject struct {
+	TenantID        uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	SubjectKind     string             `db:"subject_kind" json:"subject_kind"`
+	RealmID         uuid.UUID          `db:"realm_id" json:"realm_id"`
+	SubjectID       string             `db:"subject_id" json:"subject_id"`
+	PlayerClass     string             `db:"player_class" json:"player_class"`
+	PlayerSpec      string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec   string             `db:"player_sub_spec" json:"player_sub_spec"`
+	ChosenMetric    string             `db:"chosen_metric" json:"chosen_metric"`
+	Inputs          []byte             `db:"inputs" json:"inputs"`
+	PoolFingerprint string             `db:"pool_fingerprint" json:"pool_fingerprint"`
+	ComputedAt      pgtype.Timestamptz `db:"computed_at" json:"computed_at"`
+}
+
 type LeaderboardCareerVariant struct {
 	InstanceName    string   `db:"instance_name" json:"instance_name"`
 	DifficultyName  string   `db:"difficulty_name" json:"difficulty_name"`
@@ -1928,6 +1968,26 @@ type LeaderboardCareerVariant struct {
 	IncludeRenown   bool     `db:"include_renown" json:"include_renown"`
 	// Explicit career average weight. NULL is unconfigured and blocks active eligible averages. Never derived from Renown.
 	Weight pgtype.Float8 `db:"weight" json:"weight"`
+}
+
+type LeaderboardDirtyCareer struct {
+	TenantID        uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	Revision        int64              `db:"revision" json:"revision"`
+	Required        bool               `db:"required" json:"required"`
+	DirtiedAt       pgtype.Timestamptz `db:"dirtied_at" json:"dirtied_at"`
+	ProcessAfter    pgtype.Timestamptz `db:"process_after" json:"process_after"`
+	ClaimToken      uuid.NullUUID      `db:"claim_token" json:"claim_token"`
+	ClaimedRevision pgtype.Int8        `db:"claimed_revision" json:"claimed_revision"`
+	LockedUntil     pgtype.Timestamptz `db:"locked_until" json:"locked_until"`
+	RetryAfter      pgtype.Timestamptz `db:"retry_after" json:"retry_after"`
+	Attempts        int32              `db:"attempts" json:"attempts"`
+	CursorKind      string             `db:"cursor_kind" json:"cursor_kind"`
+	CursorRealm     uuid.UUID          `db:"cursor_realm" json:"cursor_realm"`
+	CursorSubject   string             `db:"cursor_subject" json:"cursor_subject"`
+	CursorClass     string             `db:"cursor_class" json:"cursor_class"`
+	CursorSpec      string             `db:"cursor_spec" json:"cursor_spec"`
+	CursorSubSpec   string             `db:"cursor_sub_spec" json:"cursor_sub_spec"`
+	PassRevision    pgtype.Int8        `db:"pass_revision" json:"pass_revision"`
 }
 
 type LeaderboardDirtyGuildBossBenchmark struct {

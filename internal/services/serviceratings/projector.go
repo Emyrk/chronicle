@@ -37,9 +37,13 @@ func PublishProjectionTx(ctx context.Context, tx database.StoreQueries, tenant, 
 // transactions. Every statement remains explicitly qualified by tenant/run.
 func publishProjectionTx(ctx context.Context, tx database.StoreQueries, tenant, run uuid.UUID, rows []database.ProjectLeaderboardRunRow) error {
 	for _, r := range rows {
-		if !r.TenantID.Valid || r.TenantID.UUID != tenant || r.RunID != run || r.Kind < 1 || r.Kind > 5 {
+		if !r.TenantID.Valid || r.TenantID.UUID != tenant || r.RunID != run || r.Kind < 1 || r.Kind > 6 {
 			return fmt.Errorf("invalid projection identity")
 		}
+	}
+	identities := database.RememberLeaderboardCareerRunIdentitiesParams{TenantID: tenant, RunID: run}
+	if err := tx.RememberLeaderboardCareerRunIdentities(ctx, identities); err != nil {
+		return err
 	}
 	scope := database.EnqueueLeaderboardRunEvidenceScopesParams{TenantID: tenant, RunID: run}
 	if err := tx.EnqueueLeaderboardRunEvidenceScopes(ctx, scope); err != nil {
@@ -47,6 +51,31 @@ func publishProjectionTx(ctx context.Context, tx database.StoreQueries, tenant, 
 	}
 	if err := tx.DeleteLeaderboardRunEvidence(ctx, database.DeleteLeaderboardRunEvidenceParams{TenantID: tenant, RunID: run}); err != nil {
 		return err
+	}
+	{
+		params := make([]database.ReplaceLeaderboardCareerRenownFactParams, 0, BatchSize)
+		flush := func() error {
+			if len(params) == 0 {
+				return nil
+			}
+			err := consume(tx.ReplaceLeaderboardCareerRenownFact(ctx, params))
+			params = params[:0]
+			return err
+		}
+		for _, r := range rows {
+			if r.Kind != 6 {
+				continue
+			}
+			params = append(params, database.ReplaceLeaderboardCareerRenownFactParams{TenantID: tenant, InstanceName: r.InstanceName, DifficultyName: r.DifficultyName, MaxPlayers: r.MaxPlayers, EncounterName: r.EncounterName, RunID: r.RunID, SourceInstanceID: r.SourceInstanceID, RealmID: r.RealmID, PlayerGuid: r.PlayerGuid, PlayerClass: r.PlayerClass, PlayerSpec: r.PlayerSpec, PlayerSubSpec: r.PlayerSubSpec, SourceEncounterID: r.SourceEncounterID})
+			if len(params) == BatchSize {
+				if err := flush(); err != nil {
+					return err
+				}
+			}
+		}
+		if err := flush(); err != nil {
+			return err
+		}
 	}
 	{
 		params := make([]database.ReplaceLeaderboardPlayerObservationParams, 0, BatchSize)
@@ -172,6 +201,12 @@ func publishProjectionTx(ctx context.Context, tx database.StoreQueries, tenant, 
 		if err := flush(); err != nil {
 			return err
 		}
+	}
+	if err := tx.RememberLeaderboardCareerRunIdentities(ctx, identities); err != nil {
+		return err
+	}
+	if err := tx.EnqueueLeaderboardCareer(ctx, tenant); err != nil {
+		return err
 	}
 	return tx.EnqueueLeaderboardRunEvidenceScopes(ctx, scope)
 }

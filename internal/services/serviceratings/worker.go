@@ -386,7 +386,15 @@ func drainFamily[C, R any](ctx context.Context, store database.Store,
 			if err := tx.SetLeaderboardWorkerTimeouts(pubctx, "30s"); err != nil {
 				return err
 			}
-			return publish(pubctx, tx, items, rows)
+			if err := publish(pubctx, tx, items, rows); err != nil {
+				return err
+			}
+			// Benchmark-only changes invalidate normalized career candidates too.
+			// The invalidation commits with D2 output, never on a fenced result.
+			if outcome.published > 0 {
+				return tx.EnqueueLeaderboardCareer(pubctx, servicetenant.TenantIDFromContext(pubctx))
+			}
+			return nil
 		}, nil)
 		observeMetricDuration(ctx, "publish", publishStart, err)
 		if err == nil {

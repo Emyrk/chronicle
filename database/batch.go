@@ -2368,6 +2368,78 @@ func (b *PublishLeaderboardPlayerRenownCountBatchResults) Close() error {
 	return b.br.Close()
 }
 
+const replaceLeaderboardCareerRenownFact = `-- name: ReplaceLeaderboardCareerRenownFact :batchexec
+INSERT INTO leaderboard_career_renown_facts (tenant_id,run_id,source_instance_id,realm_id,player_guid,player_class,player_spec,player_sub_spec,instance_name,difficulty_name,max_players,encounter_name,source_encounter_id)
+VALUES ($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::text,$6::text,$7::text,$8::text,$9::text,$10::text,$11::smallint,$12::text,$13::uuid)
+`
+
+type ReplaceLeaderboardCareerRenownFactBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type ReplaceLeaderboardCareerRenownFactParams struct {
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RunID             uuid.UUID `db:"run_id" json:"run_id"`
+	SourceInstanceID  uuid.UUID `db:"source_instance_id" json:"source_instance_id"`
+	RealmID           uuid.UUID `db:"realm_id" json:"realm_id"`
+	PlayerGuid        string    `db:"player_guid" json:"player_guid"`
+	PlayerClass       string    `db:"player_class" json:"player_class"`
+	PlayerSpec        string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string    `db:"player_sub_spec" json:"player_sub_spec"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	EncounterName     string    `db:"encounter_name" json:"encounter_name"`
+	SourceEncounterID uuid.UUID `db:"source_encounter_id" json:"source_encounter_id"`
+}
+
+func (q *sqlQuerier) ReplaceLeaderboardCareerRenownFact(ctx context.Context, arg []ReplaceLeaderboardCareerRenownFactParams) *ReplaceLeaderboardCareerRenownFactBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.RunID,
+			a.SourceInstanceID,
+			a.RealmID,
+			a.PlayerGuid,
+			a.PlayerClass,
+			a.PlayerSpec,
+			a.PlayerSubSpec,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.EncounterName,
+			a.SourceEncounterID,
+		}
+		batch.Queue(replaceLeaderboardCareerRenownFact, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &ReplaceLeaderboardCareerRenownFactBatchResults{br, len(arg), false}
+}
+
+func (b *ReplaceLeaderboardCareerRenownFactBatchResults) Exec(f func(int, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		if b.closed {
+			if f != nil {
+				f(t, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		_, err := b.br.Exec()
+		if f != nil {
+			f(t, err)
+		}
+	}
+}
+
+func (b *ReplaceLeaderboardCareerRenownFactBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
 const replaceLeaderboardGuildBossObservation = `-- name: ReplaceLeaderboardGuildBossObservation :batchexec
 INSERT INTO leaderboard_guild_boss_observations (tenant_id, instance_name, difficulty_name, max_players, encounter_name, run_id, source_instance_id, realm_id, guild_id, source_time_parse_score_id, source_encounter_id, duration_ms, projection_version, observed_at)
 VALUES ($1::uuid, $2::text, $3::text, $4::smallint, $5::text, $6::uuid, $7::uuid, $8::uuid, $9::uuid, $10::uuid, $11::uuid, $12::bigint, 1, clock_timestamp())
