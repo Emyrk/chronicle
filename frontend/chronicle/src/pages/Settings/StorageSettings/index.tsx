@@ -1,10 +1,13 @@
 import { useState } from "react";
-import { Play } from "lucide-react";
+import { Play, ShieldCheck } from "lucide-react";
 import { Navigate, useLocation } from "react-router-dom";
+import { toast } from "sonner";
 import { useLogGroups, useMyStorage, useSiteConfig, type UserStorageInfo, type WoWLogGroup } from "@/api/queries";
+import { useUpdateAutoDeleteRawLogsPreference } from "@/api/storagePreferences";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/Switch/Switch";
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
 import { cn } from "@/lib/utils";
 import { DiscordGrantCallout } from "./DiscordGrantCallout";
@@ -22,6 +25,7 @@ export interface StorageSettingsViewProps {
   logsLoading: boolean;
   /** Name of the tenant currently being browsed (subdomain), or null on the root domain. */
   currentTenantName: string | null;
+  autoDeleteRawLogsAtStorageCapacity?: boolean;
   /** Billing is on and the account has no supporter tier yet. */
   showSupporterCallout?: boolean;
 }
@@ -32,10 +36,15 @@ export function StorageSettingsView({
   logs,
   logsLoading,
   currentTenantName,
+  autoDeleteRawLogsAtStorageCapacity = true,
   showSupporterCallout = false,
 }: StorageSettingsViewProps) {
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [videoOpen, setVideoOpen] = useState(false);
+  const updateAutoDelete = useUpdateAutoDeleteRawLogsPreference();
+  const autoDeleteEnabled = updateAutoDelete.isPending && updateAutoDelete.variables !== undefined
+    ? updateAutoDelete.variables
+    : autoDeleteRawLogsAtStorageCapacity;
 
   return (
     <div className="flex flex-col gap-6">
@@ -63,6 +72,30 @@ export function StorageSettingsView({
           </div>
         </>
       )}
+
+      <div className="flex items-start justify-between gap-4 rounded-lg border bg-card p-5">
+        <div className="flex items-start gap-3">
+          <ShieldCheck className="mt-0.5 size-5 shrink-0 text-primary" />
+          <div>
+            <h2 className="text-sm font-semibold">Automatically prevent storage from filling up</h2>
+            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+              When an upload would exceed your limit, delete the oldest unpinned raw files that have finished parsing.
+              Parsed reports stay available. Pin any raw log you need to keep.
+            </p>
+          </div>
+        </div>
+        <Switch
+          checked={autoDeleteEnabled}
+          disabled={updateAutoDelete.isPending}
+          aria-label="Automatically delete old raw logs when storage is full"
+          onCheckedChange={(enabled) => {
+            updateAutoDelete.mutate(enabled, {
+              onSuccess: () => toast.success(enabled ? "Automatic storage cleanup enabled" : "Automatic storage cleanup disabled"),
+              onError: (error) => toast.error("Failed to update storage cleanup", { description: error.message }),
+            });
+          }}
+        />
+      </div>
 
       {logsLoading || !logs ? (
         <p className="text-sm text-muted-foreground">Loading your logs...</p>
@@ -129,6 +162,7 @@ export function StorageSettings() {
       logs={logs}
       logsLoading={logsLoading}
       currentTenantName={siteConfig?.tenant?.name ?? null}
+      autoDeleteRawLogsAtStorageCapacity={session?.preferences.auto_delete_raw_logs_at_storage_capacity ?? true}
       showSupporterCallout={!!siteConfig?.billing_enabled && !session?.ads_free}
     />
   );

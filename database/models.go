@@ -944,18 +944,19 @@ type CacheGeneration struct {
 }
 
 type ChronicleUser struct {
-	ID                     uuid.UUID          `db:"id" json:"id"`
-	Username               string             `db:"username" json:"username"`
-	Email                  string             `db:"email" json:"email"`
-	CreatedAt              pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	UpdatedAt              pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
-	DefaultDesktopLayoutID uuid.NullUUID      `db:"default_desktop_layout_id" json:"default_desktop_layout_id"`
-	DefaultMobileLayoutID  uuid.NullUUID      `db:"default_mobile_layout_id" json:"default_mobile_layout_id"`
-	RawLogRetentionHours   pgtype.Int4        `db:"raw_log_retention_hours" json:"raw_log_retention_hours"`
-	CharacterCosmetics     string             `db:"character_cosmetics" json:"character_cosmetics"`
-	MaxStorageBytes        int64              `db:"max_storage_bytes" json:"max_storage_bytes"`
-	DataLimitUpdatedAt     interface{}        `db:"data_limit_updated_at" json:"data_limit_updated_at"`
-	ConsumedStorageBytes   int64              `db:"consumed_storage_bytes" json:"consumed_storage_bytes"`
+	ID                                 uuid.UUID          `db:"id" json:"id"`
+	Username                           string             `db:"username" json:"username"`
+	Email                              string             `db:"email" json:"email"`
+	CreatedAt                          pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt                          pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	DefaultDesktopLayoutID             uuid.NullUUID      `db:"default_desktop_layout_id" json:"default_desktop_layout_id"`
+	DefaultMobileLayoutID              uuid.NullUUID      `db:"default_mobile_layout_id" json:"default_mobile_layout_id"`
+	RawLogRetentionHours               pgtype.Int4        `db:"raw_log_retention_hours" json:"raw_log_retention_hours"`
+	CharacterCosmetics                 string             `db:"character_cosmetics" json:"character_cosmetics"`
+	AutoDeleteRawLogsAtStorageCapacity bool               `db:"auto_delete_raw_logs_at_storage_capacity" json:"auto_delete_raw_logs_at_storage_capacity"`
+	MaxStorageBytes                    int64              `db:"max_storage_bytes" json:"max_storage_bytes"`
+	DataLimitUpdatedAt                 interface{}        `db:"data_limit_updated_at" json:"data_limit_updated_at"`
+	ConsumedStorageBytes               int64              `db:"consumed_storage_bytes" json:"consumed_storage_bytes"`
 }
 
 type ClassBuffIgnore struct {
@@ -3238,15 +3239,16 @@ type TimeParseScore struct {
 }
 
 type User struct {
-	ID                     uuid.UUID          `db:"id" json:"id"`
-	Username               string             `db:"username" json:"username"`
-	Email                  string             `db:"email" json:"email"`
-	CreatedAt              pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	UpdatedAt              pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
-	DefaultDesktopLayoutID uuid.NullUUID      `db:"default_desktop_layout_id" json:"default_desktop_layout_id"`
-	DefaultMobileLayoutID  uuid.NullUUID      `db:"default_mobile_layout_id" json:"default_mobile_layout_id"`
-	RawLogRetentionHours   pgtype.Int4        `db:"raw_log_retention_hours" json:"raw_log_retention_hours"`
-	CharacterCosmetics     string             `db:"character_cosmetics" json:"character_cosmetics"`
+	ID                                 uuid.UUID          `db:"id" json:"id"`
+	Username                           string             `db:"username" json:"username"`
+	Email                              string             `db:"email" json:"email"`
+	CreatedAt                          pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt                          pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	DefaultDesktopLayoutID             uuid.NullUUID      `db:"default_desktop_layout_id" json:"default_desktop_layout_id"`
+	DefaultMobileLayoutID              uuid.NullUUID      `db:"default_mobile_layout_id" json:"default_mobile_layout_id"`
+	RawLogRetentionHours               pgtype.Int4        `db:"raw_log_retention_hours" json:"raw_log_retention_hours"`
+	CharacterCosmetics                 string             `db:"character_cosmetics" json:"character_cosmetics"`
+	AutoDeleteRawLogsAtStorageCapacity bool               `db:"auto_delete_raw_logs_at_storage_capacity" json:"auto_delete_raw_logs_at_storage_capacity"`
 }
 
 type UserActionBarSlot struct {
@@ -3426,6 +3428,7 @@ type WoWLogGroup struct {
 	ParseGeneration int64              `db:"parse_generation" json:"parse_generation"`
 	Unlisted        bool               `db:"unlisted" json:"unlisted"`
 	UploadSource    UploadSource       `db:"upload_source" json:"upload_source"`
+	RawFilesPinned  bool               `db:"raw_files_pinned" json:"raw_files_pinned"`
 }
 
 type World struct {

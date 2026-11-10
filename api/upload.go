@@ -244,6 +244,32 @@ func (api *API) WoWLogParseProfileDownload(w http.ResponseWriter, r *http.Reques
 	_, _ = w.Write(profile)
 }
 
+func (api *API) UpdateWoWLogRawFilesPinned(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	logID := httpmw.LogID(ctx)
+	actor, _ := authz.ActorFromContext(ctx)
+
+	ok, err := api.Zed.CheckOne(ctx, nil, policy.New().Raid_log(logID).CanDelete_files_User(actor))
+	if err != nil || !ok {
+		httpapi.Forbidden(w, err)
+		return
+	}
+
+	var req chroniclesdk.UpdateRawFilesPinnedRequest
+	if !httpapi.Read(ctx, w, r, &req) {
+		return
+	}
+	if _, err := api.Zed.UpdateWoWLogGroupRawFilesPinned(ctx, database.UpdateWoWLogGroupRawFilesPinnedParams{
+		ID:             logID,
+		RawFilesPinned: req.Pinned,
+	}); err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, req)
+}
+
 func (api *API) DeleteWoWLogFiles(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	logID := httpmw.LogID(ctx)

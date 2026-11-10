@@ -1,4 +1,6 @@
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Pin } from "lucide-react";
+import { toast } from "sonner";
+import { useUpdateRawFilesPinned } from "@/api/rawLogPinning";
 import { Checkbox } from "@/components/ui/Checkbox/Checkbox";
 import {
   DropdownMenu,
@@ -31,6 +33,11 @@ export function LogRow({
   onRequestDeleteParsed,
   onRequestDeleteEntire,
 }: LogRowProps) {
+  const updatePin = useUpdateRawFilesPinned(row.id);
+  const pinned = updatePin.isPending && updatePin.variables !== undefined
+    ? updatePin.variables
+    : row.group.raw_files_pinned;
+
   return (
     <>
       <TableRow>
@@ -75,6 +82,22 @@ export function LogRow({
         </TableCell>
         <TableCell>
           <div className="flex items-center justify-end gap-1">
+            <button
+              type="button"
+              aria-label={pinned ? "Unpin raw log" : "Pin raw log"}
+              aria-pressed={pinned}
+              title={pinned ? "Pinned raw files are protected from automatic cleanup" : "Protect raw files from automatic cleanup"}
+              disabled={!row.canDeleteFiles || row.storedBytes <= 0 || updatePin.isPending}
+              className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+              onClick={() => {
+                updatePin.mutate(!pinned, {
+                  onSuccess: () => toast.success(pinned ? "Raw log unpinned" : "Raw log pinned"),
+                  onError: (error) => toast.error("Failed to update raw-log pin", { description: error.message }),
+                });
+              }}
+            >
+              <Pin className={`size-4 ${pinned ? "fill-current text-primary" : ""}`} />
+            </button>
             <a
               href={`/logs/${row.id}`}
               target="_blank"

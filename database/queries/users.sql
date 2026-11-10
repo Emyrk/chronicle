@@ -139,6 +139,12 @@ SET raw_log_retention_hours = @raw_log_retention_hours
 WHERE id = @id
 RETURNING *;
 
+-- name: UpdateUserAutoDeleteRawLogsAtStorageCapacity :one
+UPDATE users
+SET auto_delete_raw_logs_at_storage_capacity = @enabled
+WHERE id = @id
+RETURNING *;
+
 -- name: UpdateUserCharacterCosmeticsDisplayMode :one
 UPDATE users
 SET character_cosmetics = @character_cosmetics

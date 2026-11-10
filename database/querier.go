@@ -943,6 +943,8 @@ type sqlcQuerier interface {
 	// independent of snapshot membership (the instance may not be a member of the
 	// snapshot it scores against, e.g. historical canonical snapshots).
 	ListRankingsForInstance(ctx context.Context, instanceID uuid.UUID) ([]ListRankingsForInstanceRow, error)
+	// Oldest successfully parsed, unpinned groups are eligible for automatic raw-file cleanup.
+	ListRawLogGroupsForQuotaCleanup(ctx context.Context, owner uuid.UUID) ([]uuid.UUID, error)
 	ListReadyLogFileParts(ctx context.Context, logFileID uuid.UUID) ([]LogFilePart, error)
 	ListRecentBillingReconciliationRuns(ctx context.Context, limit int32) ([]BillingReconciliationRun, error)
 	ListRecentBillingSubscriptions(ctx context.Context, limit int32) ([]ListRecentBillingSubscriptionsRow, error)
@@ -1353,6 +1355,7 @@ type sqlcQuerier interface {
 	// Only non-null params are applied; NULL means "keep existing value".
 	UpdateTenant(ctx context.Context, arg UpdateTenantParams) (Tenant, error)
 	UpdateUserAuthSessionTokens(ctx context.Context, arg UpdateUserAuthSessionTokensParams) (UserAuthSession, error)
+	UpdateUserAutoDeleteRawLogsAtStorageCapacity(ctx context.Context, arg UpdateUserAutoDeleteRawLogsAtStorageCapacityParams) (User, error)
 	UpdateUserCharacterActiveCosmetics(ctx context.Context, arg UpdateUserCharacterActiveCosmeticsParams) (UserCharacterCosmetic, error)
 	UpdateUserCharacterCosmeticsDisplayMode(ctx context.Context, arg UpdateUserCharacterCosmeticsDisplayModeParams) (User, error)
 	UpdateUserPanelLayoutByID(ctx context.Context, arg UpdateUserPanelLayoutByIDParams) (UserPanelLayout, error)
@@ -1367,6 +1370,7 @@ type sqlcQuerier interface {
 	// via a NULL narg to leave that column unchanged.
 	UpdateWoWLogGroupFormatFlavor(ctx context.Context, arg UpdateWoWLogGroupFormatFlavorParams) error
 	UpdateWoWLogGroupLogType(ctx context.Context, arg UpdateWoWLogGroupLogTypeParams) error
+	UpdateWoWLogGroupRawFilesPinned(ctx context.Context, arg UpdateWoWLogGroupRawFilesPinnedParams) (WoWLogGroup, error)
 	UpdateWoWServer(ctx context.Context, arg UpdateWoWServerParams) (WowServer, error)
 	UpdateWoWServerRealm(ctx context.Context, arg UpdateWoWServerRealmParams) (WowServerRealm, error)
 	UpsertActiveSidekickIssue(ctx context.Context, arg UpsertActiveSidekickIssueParams) (SidekickIssue, error)

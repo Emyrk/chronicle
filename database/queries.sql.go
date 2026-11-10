@@ -6290,6 +6290,7 @@ JOIN log_file lf ON lf.wow_log_id = wlg.id
 JOIN users u ON u.id = lf.owner
 WHERE
   u.raw_log_retention_hours IS NOT NULL
+  AND NOT wlg.raw_files_pinned
   AND lf.storage_deleted_at IS NULL
   AND lf.created_at < NOW() - make_interval(hours => u.raw_log_retention_hours)
 LIMIT $1
@@ -6408,7 +6409,7 @@ func (q *sqlQuerier) GetWoWLogFilesByGroupID(ctx context.Context, wowLogID uuid.
 
 const getWoWLogGroupByID = `-- name: GetWoWLogGroupByID :one
 SELECT
-  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason, wow_log_groups.parse_generation, wow_log_groups.unlisted, wow_log_groups.upload_source,
+  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason, wow_log_groups.parse_generation, wow_log_groups.unlisted, wow_log_groups.upload_source, wow_log_groups.raw_files_pinned,
   u.username AS owner_name,
   COALESCE(
       jsonb_agg(
@@ -6464,6 +6465,7 @@ func (q *sqlQuerier) GetWoWLogGroupByID(ctx context.Context, id uuid.UUID) (GetW
 		&i.WoWLogGroup.ParseGeneration,
 		&i.WoWLogGroup.Unlisted,
 		&i.WoWLogGroup.UploadSource,
+		&i.WoWLogGroup.RawFilesPinned,
 		&i.OwnerName,
 		&i.Files,
 	)
@@ -6472,7 +6474,7 @@ func (q *sqlQuerier) GetWoWLogGroupByID(ctx context.Context, id uuid.UUID) (GetW
 
 const getWoWLogGroupsByOwner = `-- name: GetWoWLogGroupsByOwner :many
 SELECT
-  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason, wow_log_groups.parse_generation, wow_log_groups.unlisted, wow_log_groups.upload_source,
+  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason, wow_log_groups.parse_generation, wow_log_groups.unlisted, wow_log_groups.upload_source, wow_log_groups.raw_files_pinned,
   files_agg.files,
   instances_output.output AS processing_output,
   parsed_bytes_agg.parsed_bytes
@@ -6605,6 +6607,7 @@ func (q *sqlQuerier) GetWoWLogGroupsByOwner(ctx context.Context, arg GetWoWLogGr
 			&i.WoWLogGroup.ParseGeneration,
 			&i.WoWLogGroup.Unlisted,
 			&i.WoWLogGroup.UploadSource,
+			&i.WoWLogGroup.RawFilesPinned,
 			&i.Files,
 			&i.ProcessingOutput,
 			&i.ParsedBytes,
@@ -6720,7 +6723,7 @@ VALUES
     $7,
     $8
   )
-RETURNING id, owner, created_at, updated_at, log_type, format, flavor, invalidated_at, invalid_reason, parse_generation, unlisted, upload_source
+RETURNING id, owner, created_at, updated_at, log_type, format, flavor, invalidated_at, invalid_reason, parse_generation, unlisted, upload_source, raw_files_pinned
 `
 
 type InsertWoWLogGroupParams struct {
@@ -6761,6 +6764,7 @@ func (q *sqlQuerier) InsertWoWLogGroup(ctx context.Context, arg InsertWoWLogGrou
 		&i.ParseGeneration,
 		&i.Unlisted,
 		&i.UploadSource,
+		&i.RawFilesPinned,
 	)
 	return i, err
 }
@@ -6942,7 +6946,7 @@ func (q *sqlQuerier) InvalidateWoWLogGroup(ctx context.Context, arg InvalidateWo
 
 const listAllWoWLogGroupsWithOwner = `-- name: ListAllWoWLogGroupsWithOwner :many
 SELECT
-  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason, wow_log_groups.parse_generation, wow_log_groups.unlisted, wow_log_groups.upload_source,
+  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason, wow_log_groups.parse_generation, wow_log_groups.unlisted, wow_log_groups.upload_source, wow_log_groups.raw_files_pinned,
   u.username AS owner_name,
   files_agg.files,
   instances_output.output AS processing_output
@@ -7067,6 +7071,7 @@ func (q *sqlQuerier) ListAllWoWLogGroupsWithOwner(ctx context.Context) ([]ListAl
 			&i.WoWLogGroup.ParseGeneration,
 			&i.WoWLogGroup.Unlisted,
 			&i.WoWLogGroup.UploadSource,
+			&i.WoWLogGroup.RawFilesPinned,
 			&i.OwnerName,
 			&i.Files,
 			&i.ProcessingOutput,
@@ -7083,7 +7088,7 @@ func (q *sqlQuerier) ListAllWoWLogGroupsWithOwner(ctx context.Context) ([]ListAl
 
 const listAllWoWLogGroupsWithOwnerPaginated = `-- name: ListAllWoWLogGroupsWithOwnerPaginated :many
 SELECT
-  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason, wow_log_groups.parse_generation, wow_log_groups.unlisted, wow_log_groups.upload_source,
+  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason, wow_log_groups.parse_generation, wow_log_groups.unlisted, wow_log_groups.upload_source, wow_log_groups.raw_files_pinned,
   u.username AS owner_name,
   files_agg.files,
   files_agg.total_size_bytes,
@@ -7274,6 +7279,7 @@ func (q *sqlQuerier) ListAllWoWLogGroupsWithOwnerPaginated(ctx context.Context, 
 			&i.WoWLogGroup.ParseGeneration,
 			&i.WoWLogGroup.Unlisted,
 			&i.WoWLogGroup.UploadSource,
+			&i.WoWLogGroup.RawFilesPinned,
 			&i.OwnerName,
 			&i.Files,
 			&i.TotalSizeBytes,
@@ -7327,6 +7333,50 @@ func (q *sqlQuerier) ListDistinctInstanceNames(ctx context.Context) ([]string, e
 			return nil, err
 		}
 		items = append(items, name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRawLogGroupsForQuotaCleanup = `-- name: ListRawLogGroupsForQuotaCleanup :many
+SELECT wlg.id
+FROM wow_log_groups wlg
+JOIN parsed_log_group plg ON plg.id = wlg.id
+  AND plg.parse_generation = wlg.parse_generation
+  AND plg.finalized_at IS NOT NULL
+WHERE wlg.owner = $1
+  AND NOT wlg.raw_files_pinned
+  AND (
+    EXISTS (
+      SELECT 1 FROM log_file lf
+      WHERE lf.wow_log_id = wlg.id
+        AND lf.storage_deleted_at IS NULL
+    )
+    OR EXISTS (
+      SELECT 1 FROM log_group_artifacts artifact
+      WHERE artifact.log_group_id = wlg.id
+        AND artifact.storage_deleted_at IS NULL
+    )
+  )
+ORDER BY wlg.created_at ASC, wlg.id ASC
+`
+
+// Oldest successfully parsed, unpinned groups are eligible for automatic raw-file cleanup.
+func (q *sqlQuerier) ListRawLogGroupsForQuotaCleanup(ctx context.Context, owner uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listRawLogGroupsForQuotaCleanup, owner)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -7396,6 +7446,40 @@ type UpdateWoWLogGroupLogTypeParams struct {
 func (q *sqlQuerier) UpdateWoWLogGroupLogType(ctx context.Context, arg UpdateWoWLogGroupLogTypeParams) error {
 	_, err := q.db.Exec(ctx, updateWoWLogGroupLogType, arg.ID, arg.LogType, arg.Format)
 	return err
+}
+
+const updateWoWLogGroupRawFilesPinned = `-- name: UpdateWoWLogGroupRawFilesPinned :one
+UPDATE wow_log_groups
+SET raw_files_pinned = $1,
+    updated_at = NOW()
+WHERE id = $2
+RETURNING id, owner, created_at, updated_at, log_type, format, flavor, invalidated_at, invalid_reason, parse_generation, unlisted, upload_source, raw_files_pinned
+`
+
+type UpdateWoWLogGroupRawFilesPinnedParams struct {
+	RawFilesPinned bool      `db:"raw_files_pinned" json:"raw_files_pinned"`
+	ID             uuid.UUID `db:"id" json:"id"`
+}
+
+func (q *sqlQuerier) UpdateWoWLogGroupRawFilesPinned(ctx context.Context, arg UpdateWoWLogGroupRawFilesPinnedParams) (WoWLogGroup, error) {
+	row := q.db.QueryRow(ctx, updateWoWLogGroupRawFilesPinned, arg.RawFilesPinned, arg.ID)
+	var i WoWLogGroup
+	err := row.Scan(
+		&i.ID,
+		&i.Owner,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.LogType,
+		&i.Format,
+		&i.Flavor,
+		&i.InvalidatedAt,
+		&i.InvalidReason,
+		&i.ParseGeneration,
+		&i.Unlisted,
+		&i.UploadSource,
+		&i.RawFilesPinned,
+	)
+	return i, err
 }
 
 const countUserGearLists = `-- name: CountUserGearLists :one
@@ -27809,7 +27893,7 @@ func (q *sqlQuerier) UpsertPendingModificationRequest(ctx context.Context, arg U
 }
 
 const findMatchingServerUpload = `-- name: FindMatchingServerUpload :one
-SELECT wlg.id, wlg.owner, wlg.created_at, wlg.updated_at, wlg.log_type, wlg.format, wlg.flavor, wlg.invalidated_at, wlg.invalid_reason, wlg.parse_generation, wlg.unlisted, wlg.upload_source
+SELECT wlg.id, wlg.owner, wlg.created_at, wlg.updated_at, wlg.log_type, wlg.format, wlg.flavor, wlg.invalidated_at, wlg.invalid_reason, wlg.parse_generation, wlg.unlisted, wlg.upload_source, wlg.raw_files_pinned
 FROM wow_log_groups wlg
 JOIN server_upload_meta sm ON sm.log_group_id = wlg.id
 WHERE wlg.owner = $1
@@ -27856,6 +27940,7 @@ func (q *sqlQuerier) FindMatchingServerUpload(ctx context.Context, arg FindMatch
 		&i.ParseGeneration,
 		&i.Unlisted,
 		&i.UploadSource,
+		&i.RawFilesPinned,
 	)
 	return i, err
 }
@@ -32825,7 +32910,7 @@ UPDATE wow_log_groups
 SET unlisted = true,
     updated_at = NOW()
 WHERE id = $1
-RETURNING id, owner, created_at, updated_at, log_type, format, flavor, invalidated_at, invalid_reason, parse_generation, unlisted, upload_source
+RETURNING id, owner, created_at, updated_at, log_type, format, flavor, invalidated_at, invalid_reason, parse_generation, unlisted, upload_source, raw_files_pinned
 `
 
 func (q *sqlQuerier) MarkWoWLogGroupUnlisted(ctx context.Context, id uuid.UUID) (WoWLogGroup, error) {
@@ -32844,6 +32929,7 @@ func (q *sqlQuerier) MarkWoWLogGroupUnlisted(ctx context.Context, id uuid.UUID) 
 		&i.ParseGeneration,
 		&i.Unlisted,
 		&i.UploadSource,
+		&i.RawFilesPinned,
 	)
 	return i, err
 }
@@ -34737,7 +34823,7 @@ func (q *sqlQuerier) GetUserAuthSessionByID(ctx context.Context, id uuid.UUID) (
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, username, email, created_at, updated_at, default_desktop_layout_id, default_mobile_layout_id, raw_log_retention_hours, character_cosmetics FROM users WHERE LOWER(email) = LOWER($1)
+SELECT id, username, email, created_at, updated_at, default_desktop_layout_id, default_mobile_layout_id, raw_log_retention_hours, character_cosmetics, auto_delete_raw_logs_at_storage_capacity FROM users WHERE LOWER(email) = LOWER($1)
 `
 
 func (q *sqlQuerier) GetUserByEmail(ctx context.Context, email string) (User, error) {
@@ -34753,13 +34839,14 @@ func (q *sqlQuerier) GetUserByEmail(ctx context.Context, email string) (User, er
 		&i.DefaultMobileLayoutID,
 		&i.RawLogRetentionHours,
 		&i.CharacterCosmetics,
+		&i.AutoDeleteRawLogsAtStorageCapacity,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
 SELECT
-  id, username, email, created_at, updated_at, default_desktop_layout_id, default_mobile_layout_id, raw_log_retention_hours, character_cosmetics, max_storage_bytes, data_limit_updated_at, consumed_storage_bytes
+  id, username, email, created_at, updated_at, default_desktop_layout_id, default_mobile_layout_id, raw_log_retention_hours, character_cosmetics, auto_delete_raw_logs_at_storage_capacity, max_storage_bytes, data_limit_updated_at, consumed_storage_bytes
 FROM
   chronicle_users
 WHERE
@@ -34779,6 +34866,7 @@ func (q *sqlQuerier) GetUserByID(ctx context.Context, id uuid.UUID) (ChronicleUs
 		&i.DefaultMobileLayoutID,
 		&i.RawLogRetentionHours,
 		&i.CharacterCosmetics,
+		&i.AutoDeleteRawLogsAtStorageCapacity,
 		&i.MaxStorageBytes,
 		&i.DataLimitUpdatedAt,
 		&i.ConsumedStorageBytes,
@@ -34788,7 +34876,7 @@ func (q *sqlQuerier) GetUserByID(ctx context.Context, id uuid.UUID) (ChronicleUs
 
 const getUsersByIDs = `-- name: GetUsersByIDs :many
 SELECT
-  id, username, email, created_at, updated_at, default_desktop_layout_id, default_mobile_layout_id, raw_log_retention_hours, character_cosmetics, max_storage_bytes, data_limit_updated_at, consumed_storage_bytes
+  id, username, email, created_at, updated_at, default_desktop_layout_id, default_mobile_layout_id, raw_log_retention_hours, character_cosmetics, auto_delete_raw_logs_at_storage_capacity, max_storage_bytes, data_limit_updated_at, consumed_storage_bytes
 FROM
   chronicle_users
 WHERE
@@ -34814,6 +34902,7 @@ func (q *sqlQuerier) GetUsersByIDs(ctx context.Context, ids []uuid.UUID) ([]Chro
 			&i.DefaultMobileLayoutID,
 			&i.RawLogRetentionHours,
 			&i.CharacterCosmetics,
+			&i.AutoDeleteRawLogsAtStorageCapacity,
 			&i.MaxStorageBytes,
 			&i.DataLimitUpdatedAt,
 			&i.ConsumedStorageBytes,
@@ -34833,7 +34922,7 @@ INSERT INTO
   users(id, username, email, created_at, updated_at)
 VALUES
   ($1, $2, $3, $4, $5)
-RETURNING id, username, email, created_at, updated_at, default_desktop_layout_id, default_mobile_layout_id, raw_log_retention_hours, character_cosmetics
+RETURNING id, username, email, created_at, updated_at, default_desktop_layout_id, default_mobile_layout_id, raw_log_retention_hours, character_cosmetics, auto_delete_raw_logs_at_storage_capacity
 `
 
 type InsertUserParams struct {
@@ -34863,6 +34952,7 @@ func (q *sqlQuerier) InsertUser(ctx context.Context, arg InsertUserParams) (User
 		&i.DefaultMobileLayoutID,
 		&i.RawLogRetentionHours,
 		&i.CharacterCosmetics,
+		&i.AutoDeleteRawLogsAtStorageCapacity,
 	)
 	return i, err
 }
@@ -34957,7 +35047,7 @@ func (q *sqlQuerier) InsertUserAuthSession(ctx context.Context, arg InsertUserAu
 
 const listAllUsers = `-- name: ListAllUsers :many
 SELECT
-  chronicle_users.id, chronicle_users.username, chronicle_users.email, chronicle_users.created_at, chronicle_users.updated_at, chronicle_users.default_desktop_layout_id, chronicle_users.default_mobile_layout_id, chronicle_users.raw_log_retention_hours, chronicle_users.character_cosmetics, chronicle_users.max_storage_bytes, chronicle_users.data_limit_updated_at, chronicle_users.consumed_storage_bytes,
+  chronicle_users.id, chronicle_users.username, chronicle_users.email, chronicle_users.created_at, chronicle_users.updated_at, chronicle_users.default_desktop_layout_id, chronicle_users.default_mobile_layout_id, chronicle_users.raw_log_retention_hours, chronicle_users.character_cosmetics, chronicle_users.auto_delete_raw_logs_at_storage_capacity, chronicle_users.max_storage_bytes, chronicle_users.data_limit_updated_at, chronicle_users.consumed_storage_bytes,
   COALESCE(discord_auth.linked_id, '')::text AS discord_id
 FROM
   chronicle_users
@@ -34996,6 +35086,7 @@ func (q *sqlQuerier) ListAllUsers(ctx context.Context) ([]ListAllUsersRow, error
 			&i.ChronicleUser.DefaultMobileLayoutID,
 			&i.ChronicleUser.RawLogRetentionHours,
 			&i.ChronicleUser.CharacterCosmetics,
+			&i.ChronicleUser.AutoDeleteRawLogsAtStorageCapacity,
 			&i.ChronicleUser.MaxStorageBytes,
 			&i.ChronicleUser.DataLimitUpdatedAt,
 			&i.ChronicleUser.ConsumedStorageBytes,
@@ -35076,11 +35167,41 @@ func (q *sqlQuerier) UpdateUserAuthSessionTokens(ctx context.Context, arg Update
 	return i, err
 }
 
+const updateUserAutoDeleteRawLogsAtStorageCapacity = `-- name: UpdateUserAutoDeleteRawLogsAtStorageCapacity :one
+UPDATE users
+SET auto_delete_raw_logs_at_storage_capacity = $1
+WHERE id = $2
+RETURNING id, username, email, created_at, updated_at, default_desktop_layout_id, default_mobile_layout_id, raw_log_retention_hours, character_cosmetics, auto_delete_raw_logs_at_storage_capacity
+`
+
+type UpdateUserAutoDeleteRawLogsAtStorageCapacityParams struct {
+	Enabled bool      `db:"enabled" json:"enabled"`
+	ID      uuid.UUID `db:"id" json:"id"`
+}
+
+func (q *sqlQuerier) UpdateUserAutoDeleteRawLogsAtStorageCapacity(ctx context.Context, arg UpdateUserAutoDeleteRawLogsAtStorageCapacityParams) (User, error) {
+	row := q.db.QueryRow(ctx, updateUserAutoDeleteRawLogsAtStorageCapacity, arg.Enabled, arg.ID)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Email,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DefaultDesktopLayoutID,
+		&i.DefaultMobileLayoutID,
+		&i.RawLogRetentionHours,
+		&i.CharacterCosmetics,
+		&i.AutoDeleteRawLogsAtStorageCapacity,
+	)
+	return i, err
+}
+
 const updateUserCharacterCosmeticsDisplayMode = `-- name: UpdateUserCharacterCosmeticsDisplayMode :one
 UPDATE users
 SET character_cosmetics = $1
 WHERE id = $2
-RETURNING id, username, email, created_at, updated_at, default_desktop_layout_id, default_mobile_layout_id, raw_log_retention_hours, character_cosmetics
+RETURNING id, username, email, created_at, updated_at, default_desktop_layout_id, default_mobile_layout_id, raw_log_retention_hours, character_cosmetics, auto_delete_raw_logs_at_storage_capacity
 `
 
 type UpdateUserCharacterCosmeticsDisplayModeParams struct {
@@ -35101,6 +35222,7 @@ func (q *sqlQuerier) UpdateUserCharacterCosmeticsDisplayMode(ctx context.Context
 		&i.DefaultMobileLayoutID,
 		&i.RawLogRetentionHours,
 		&i.CharacterCosmetics,
+		&i.AutoDeleteRawLogsAtStorageCapacity,
 	)
 	return i, err
 }
@@ -35109,7 +35231,7 @@ const updateUserRawLogRetentionHours = `-- name: UpdateUserRawLogRetentionHours 
 UPDATE users
 SET raw_log_retention_hours = $1
 WHERE id = $2
-RETURNING id, username, email, created_at, updated_at, default_desktop_layout_id, default_mobile_layout_id, raw_log_retention_hours, character_cosmetics
+RETURNING id, username, email, created_at, updated_at, default_desktop_layout_id, default_mobile_layout_id, raw_log_retention_hours, character_cosmetics, auto_delete_raw_logs_at_storage_capacity
 `
 
 type UpdateUserRawLogRetentionHoursParams struct {
@@ -35130,6 +35252,7 @@ func (q *sqlQuerier) UpdateUserRawLogRetentionHours(ctx context.Context, arg Upd
 		&i.DefaultMobileLayoutID,
 		&i.RawLogRetentionHours,
 		&i.CharacterCosmetics,
+		&i.AutoDeleteRawLogsAtStorageCapacity,
 	)
 	return i, err
 }

@@ -89,6 +89,7 @@ func TestUpdateMyPreferencesCharacterCosmetics(t *testing.T) {
 
 	user, err := store.GetUserByID(ctx, userID)
 	require.NoError(t, err)
+	require.True(t, user.AutoDeleteRawLogsAtStorageCapacity)
 	require.Equal(t, string(chroniclesdk.CharacterCosmeticsEnabled), user.CharacterCosmetics)
 	require.Equal(t, chroniclesdk.CharacterCosmeticsEnabled, userPreferences(user).CharacterCosmetics)
 
@@ -96,9 +97,11 @@ func TestUpdateMyPreferencesCharacterCosmetics(t *testing.T) {
 
 	disabled := chroniclesdk.CharacterCosmeticsDisabled
 	retention := int32(24)
+	autoDelete := false
 	body, err := json.Marshal(chroniclesdk.UpdatePreferencesRequest{
-		CharacterCosmetics:   &disabled,
-		RawLogRetentionHours: &retention,
+		CharacterCosmetics:                 &disabled,
+		RawLogRetentionHours:               &retention,
+		AutoDeleteRawLogsAtStorageCapacity: &autoDelete,
 	})
 	require.NoError(t, err)
 	request := httptest.NewRequest(http.MethodPatch, "/me/preferences", bytes.NewReader(body))
@@ -110,6 +113,7 @@ func TestUpdateMyPreferencesCharacterCosmetics(t *testing.T) {
 	var preferences chroniclesdk.Preferences
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &preferences))
 	require.Equal(t, chroniclesdk.CharacterCosmeticsDisabled, preferences.CharacterCosmetics)
+	require.False(t, preferences.AutoDeleteRawLogsAtStorageCapacity)
 	require.NotNil(t, preferences.RawLogRetentionHours)
 	require.Equal(t, int32(24), *preferences.RawLogRetentionHours)
 
@@ -124,6 +128,7 @@ func TestUpdateMyPreferencesCharacterCosmetics(t *testing.T) {
 
 	user, err = store.GetUserByID(ctx, userID)
 	require.NoError(t, err)
+	require.False(t, user.AutoDeleteRawLogsAtStorageCapacity)
 	require.Equal(t, string(chroniclesdk.CharacterCosmeticsDisabled), user.CharacterCosmetics)
 	require.True(t, user.RawLogRetentionHours.Valid)
 	require.Equal(t, int32(24), user.RawLogRetentionHours.Int32)

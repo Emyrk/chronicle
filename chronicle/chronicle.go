@@ -247,6 +247,37 @@ type UploadMeta struct {
 	Unlisted bool
 }
 
+func (c *Chronicle) freeStorageForUpload(ctx context.Context, user database.ChronicleUser, incomingStorageBytes int64) (database.ChronicleUser, error) {
+	if incomingStorageBytes > user.MaxStorageBytes ||
+		user.ConsumedStorageBytes+incomingStorageBytes <= user.MaxStorageBytes ||
+		!user.AutoDeleteRawLogsAtStorageCapacity {
+		return user, nil
+	}
+
+	groups, err := c.Zed.ListRawLogGroupsForQuotaCleanup(ctx, user.ID)
+	if err != nil {
+		return user, fmt.Errorf("list quota cleanup candidates: %w", err)
+	}
+	for _, groupID := range groups {
+		if err := c.DeleteWoWLogGroupFiles(ctx, groupID); err != nil {
+			return user, fmt.Errorf("delete raw files for log group %s: %w", groupID, err)
+		}
+		c.logger.InfoContext(ctx, "automatically deleted raw log files to free upload storage",
+			slog.String("user_id", user.ID.String()),
+			slog.String("log_group_id", groupID.String()),
+		)
+
+		user, err = c.Zed.GetUserByID(ctx, user.ID)
+		if err != nil {
+			return user, fmt.Errorf("refresh user storage after cleanup: %w", err)
+		}
+		if user.ConsumedStorageBytes+incomingStorageBytes <= user.MaxStorageBytes {
+			break
+		}
+	}
+	return user, nil
+}
+
 func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, artifacts []ArtifactInput, logType database.LogType, realmID uuid.UUID, meta UploadMeta) (*database.WoWLogGroup, []database.LogFile, error) {
 	clean := cleanup.New()
 	defer clean.Do()
@@ -274,12 +305,6 @@ func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, artifa
 	user, err := c.Zed.GetUserByID(ctx, cl.Subject)
 	if err != nil {
 		return nil, nil, fmt.Errorf("fetch user: %w", err)
-	}
-	if user.ConsumedStorageBytes > user.MaxStorageBytes {
-		return nil, nil, httpapi.NewAPIError(
-			ErrUserStorageQuotaExceeded,
-			fmt.Sprintf("Reached storage limit of %s bytes, delete log files to free up space", humanize.Bytes(uint64(user.MaxStorageBytes))),
-			http.StatusBadRequest)
 	}
 
 	// Save the files locally to disk first, then upload them to object storage.
@@ -441,6 +466,10 @@ func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, artifa
 	}
 	for _, size := range artifactSizes {
 		incomingStorageBytes += size
+	}
+	user, err = c.freeStorageForUpload(ctx, user, incomingStorageBytes)
+	if err != nil {
+		return nil, nil, fmt.Errorf("free storage for upload: %w", err)
 	}
 	if user.ConsumedStorageBytes+incomingStorageBytes > user.MaxStorageBytes {
 		return nil, nil, httpapi.NewAPIError(

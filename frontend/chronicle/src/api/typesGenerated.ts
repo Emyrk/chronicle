@@ -4743,6 +4743,11 @@ export interface Preferences {
     readonly helpful_hints: boolean;
     readonly character_cosmetics: CharacterCosmeticsDisplayMode;
     /**
+     * AutoDeleteRawLogsAtStorageCapacity allows Chronicle to remove the oldest
+     * unpinned, successfully parsed raw logs when a new upload needs space.
+     */
+    readonly auto_delete_raw_logs_at_storage_capacity: boolean;
+    /**
      * RawLogRetentionHours is how long to keep raw log files in object storage
      * after upload. nil means keep forever.
      */
@@ -6828,11 +6833,20 @@ export interface UpdateLuaProjectRequest {
     readonly flavor?: readonly string[];
 }
 
+// From chroniclesdk/log.go
+export interface UpdateRawFilesPinnedRequest {
+    readonly pinned: boolean;
+}
+
 // From chroniclesdk/user.go
 /**
  * UpdatePreferencesRequest is the request body for updating user preferences.
  */
 export interface UpdatePreferencesRequest {
+    /**
+     * AutoDeleteRawLogsAtStorageCapacity controls quota cleanup. nil means no change.
+     */
+    readonly auto_delete_raw_logs_at_storage_capacity: boolean | null;
     /**
      * RawLogRetentionHours controls raw log file retention. nil = no change, 0 = keep forever.
      */
@@ -7018,6 +7032,7 @@ export interface User {
     readonly max_storage_bytes: number;
     readonly max_storage_bytes_updated: string;
     readonly consumed_storage_bytes: number;
+    readonly auto_delete_raw_logs_at_storage_capacity: boolean;
     /**
      * RawLogRetentionHours is how long to keep raw log files. nil means keep forever.
      */
@@ -7416,6 +7431,7 @@ export interface WoWLogGroup {
     readonly flavor?: readonly string[];
     readonly upload_source: string;
     readonly unlisted: boolean;
+    readonly raw_files_pinned: boolean;
     readonly invalidated_at?: string;
     readonly invalid_reason?: string;
     readonly files: readonly WoWLogFile[];
