@@ -296,10 +296,17 @@ function HubLanding({
         })}
       </div>
     )
-    // A configured Renown board is published leaderboard content even when the
-    // legacy instance summary has no DPS rows (for example, Renown-only raids).
-    const published = instances.filter((inst) => inst.total_kills > 0
-      || !!awardsForCohort(renownAwards?.get(inst.instance_name), inst.difficulty_name, inst.max_players))
+    // Renown-only raids belong in the main grid once someone has actually
+    // earned Renown. While highlights are unavailable, keep configured boards
+    // visible rather than treating missing data as a definitive zero.
+    const published = instances.filter((inst) => {
+      if (inst.total_kills > 0) return true
+      const configured = !!awardsForCohort(renownAwards?.get(inst.instance_name), inst.difficulty_name, inst.max_players)
+      if (landingBlocked || landingPreviews === undefined) return configured
+      const preview = landingPreviews.find((item) =>
+        item.instance_name === inst.instance_name && item.difficulty_name === inst.difficulty_name && item.max_players === inst.max_players)
+      return [...(preview?.player.renown ?? []), ...(preview?.guild.renown ?? [])].some((entry) => entry.score > 0)
+    })
     const publishedNames = new Set(published.map((inst) => inst.instance_name))
     const unavailable = [...new Set(instances
       .filter((inst) => !publishedNames.has(inst.instance_name))
@@ -351,12 +358,12 @@ function HubLanding({
                 onOpen(name)
               }}>
                 <Link to={instanceHref?.(name) ?? "#"}
-                  className="group flex items-center gap-3 rounded-lg border border-dashed bg-card/30 px-3 py-2.5 text-muted-foreground/70 opacity-75 transition-colors hover:border-muted-foreground/40 hover:bg-card/50 hover:text-muted-foreground hover:opacity-100">
+                  className="group flex items-center gap-3 rounded-lg border border-dashed bg-card/30 px-3 py-2.5 text-muted-foreground/70 opacity-60 transition-colors hover:border-muted-foreground/40 hover:bg-card/50 hover:text-muted-foreground hover:opacity-80">
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-medium">{name}</span>
-                    <span className="block text-[10px] tracking-wide uppercase">No rankings yet</span>
+                    <span className="block text-[10px] tracking-wide uppercase">No rankings or Renown yet</span>
                   </span>
-                  <ArrowRight className="size-3.5 shrink-0 opacity-50 transition-transform group-hover:translate-x-0.5 group-hover:opacity-80" />
+                  <ArrowRight className="size-3.5 shrink-0 opacity-40 transition-transform group-hover:translate-x-0.5 group-hover:opacity-70" />
                 </Link>
               </div>
             ))}
