@@ -67,7 +67,7 @@ func TestFreeStorageForUploadDeletesOldestUnpinnedParsedRawLog(t *testing.T) {
 	require.NoError(t, err)
 	require.Greater(t, user.ConsumedStorageBytes, user.MaxStorageBytes)
 
-	updated, err := chron.freeStorageForUpload(ctx, user, 10)
+	updated, err := chron.freeStorageForUpload(ctx, user, 10, uuid.Nil)
 	require.NoError(t, err)
 	require.LessOrEqual(t, updated.ConsumedStorageBytes+10, updated.MaxStorageBytes)
 

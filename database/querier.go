@@ -944,7 +944,7 @@ type sqlcQuerier interface {
 	// snapshot it scores against, e.g. historical canonical snapshots).
 	ListRankingsForInstance(ctx context.Context, instanceID uuid.UUID) ([]ListRankingsForInstanceRow, error)
 	// Oldest successfully parsed, unpinned groups are eligible for automatic raw-file cleanup.
-	ListRawLogGroupsForQuotaCleanup(ctx context.Context, owner uuid.UUID) ([]uuid.UUID, error)
+	ListRawLogGroupsForQuotaCleanup(ctx context.Context, arg ListRawLogGroupsForQuotaCleanupParams) ([]uuid.UUID, error)
 	ListReadyLogFileParts(ctx context.Context, logFileID uuid.UUID) ([]LogFilePart, error)
 	ListRecentBillingReconciliationRuns(ctx context.Context, limit int32) ([]BillingReconciliationRun, error)
 	ListRecentBillingSubscriptions(ctx context.Context, limit int32) ([]ListRecentBillingSubscriptionsRow, error)

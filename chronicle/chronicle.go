@@ -247,14 +247,17 @@ type UploadMeta struct {
 	Unlisted bool
 }
 
-func (c *Chronicle) freeStorageForUpload(ctx context.Context, user database.ChronicleUser, incomingStorageBytes int64) (database.ChronicleUser, error) {
+func (c *Chronicle) freeStorageForUpload(ctx context.Context, user database.ChronicleUser, incomingStorageBytes int64, excludeLogGroupID uuid.UUID) (database.ChronicleUser, error) {
 	if incomingStorageBytes > user.MaxStorageBytes ||
 		user.ConsumedStorageBytes+incomingStorageBytes <= user.MaxStorageBytes ||
 		!user.AutoDeleteRawLogsAtStorageCapacity {
 		return user, nil
 	}
 
-	groups, err := c.Zed.ListRawLogGroupsForQuotaCleanup(ctx, user.ID)
+	groups, err := c.Zed.ListRawLogGroupsForQuotaCleanup(ctx, database.ListRawLogGroupsForQuotaCleanupParams{
+		Owner:             user.ID,
+		ExcludeLogGroupID: excludeLogGroupID,
+	})
 	if err != nil {
 		return user, fmt.Errorf("list quota cleanup candidates: %w", err)
 	}
@@ -467,7 +470,7 @@ func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, artifa
 	for _, size := range artifactSizes {
 		incomingStorageBytes += size
 	}
-	user, err = c.freeStorageForUpload(ctx, user, incomingStorageBytes)
+	user, err = c.freeStorageForUpload(ctx, user, incomingStorageBytes, uuid.Nil)
 	if err != nil {
 		return nil, nil, fmt.Errorf("free storage for upload: %w", err)
 	}
@@ -851,6 +854,10 @@ func (c *Chronicle) appendLog(ctx context.Context, group database.WoWLogGroup, n
 		owner, err := c.Zed.GetUserByID(ctx, group.Owner)
 		if err != nil {
 			return fmt.Errorf("fetch log owner for storage quota: %w", err)
+		}
+		owner, err = c.freeStorageForUpload(ctx, owner, incomingStorageBytes, group.ID)
+		if err != nil {
+			return fmt.Errorf("free storage for log append: %w", err)
 		}
 		if err := userLogAppendQuotaError(owner, incomingStorageBytes); err != nil {
 			return err

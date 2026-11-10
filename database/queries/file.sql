@@ -736,6 +736,7 @@ JOIN parsed_log_group plg ON plg.id = wlg.id
   AND plg.parse_generation = wlg.parse_generation
   AND plg.finalized_at IS NOT NULL
 WHERE wlg.owner = @owner
+  AND (@exclude_log_group_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR wlg.id <> @exclude_log_group_id)
   AND NOT wlg.raw_files_pinned
   AND (
     EXISTS (

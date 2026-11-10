@@ -7347,6 +7347,7 @@ JOIN parsed_log_group plg ON plg.id = wlg.id
   AND plg.parse_generation = wlg.parse_generation
   AND plg.finalized_at IS NOT NULL
 WHERE wlg.owner = $1
+  AND ($2::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR wlg.id <> $2)
   AND NOT wlg.raw_files_pinned
   AND (
     EXISTS (
@@ -7363,9 +7364,14 @@ WHERE wlg.owner = $1
 ORDER BY wlg.created_at ASC, wlg.id ASC
 `
 
+type ListRawLogGroupsForQuotaCleanupParams struct {
+	Owner             uuid.UUID `db:"owner" json:"owner"`
+	ExcludeLogGroupID uuid.UUID `db:"exclude_log_group_id" json:"exclude_log_group_id"`
+}
+
 // Oldest successfully parsed, unpinned groups are eligible for automatic raw-file cleanup.
-func (q *sqlQuerier) ListRawLogGroupsForQuotaCleanup(ctx context.Context, owner uuid.UUID) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, listRawLogGroupsForQuotaCleanup, owner)
+func (q *sqlQuerier) ListRawLogGroupsForQuotaCleanup(ctx context.Context, arg ListRawLogGroupsForQuotaCleanupParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listRawLogGroupsForQuotaCleanup, arg.Owner, arg.ExcludeLogGroupID)
 	if err != nil {
 		return nil, err
 	}

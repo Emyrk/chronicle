@@ -51,15 +51,21 @@ func TestListRawLogGroupsForQuotaCleanup(t *testing.T) {
 	pinned := insertGroup(time.Now().Add(-2*time.Hour), true, true)
 	_ = insertGroup(time.Now().Add(-time.Hour), false, false)
 
-	groups, err := store.ListRawLogGroupsForQuotaCleanup(ctx, ownerID)
+	groups, err := store.ListRawLogGroupsForQuotaCleanup(ctx, database.ListRawLogGroupsForQuotaCleanupParams{Owner: ownerID})
 	require.NoError(t, err)
 	require.Equal(t, []uuid.UUID{oldest}, groups)
+
+	groups, err = store.ListRawLogGroupsForQuotaCleanup(ctx, database.ListRawLogGroupsForQuotaCleanupParams{
+		Owner: ownerID, ExcludeLogGroupID: oldest,
+	})
+	require.NoError(t, err)
+	require.Empty(t, groups)
 
 	_, err = store.UpdateWoWLogGroupRawFilesPinned(ctx, database.UpdateWoWLogGroupRawFilesPinnedParams{
 		ID: pinned, RawFilesPinned: false,
 	})
 	require.NoError(t, err)
-	groups, err = store.ListRawLogGroupsForQuotaCleanup(ctx, ownerID)
+	groups, err = store.ListRawLogGroupsForQuotaCleanup(ctx, database.ListRawLogGroupsForQuotaCleanupParams{Owner: ownerID})
 	require.NoError(t, err)
 	require.Equal(t, []uuid.UUID{oldest, pinned}, groups)
 }
