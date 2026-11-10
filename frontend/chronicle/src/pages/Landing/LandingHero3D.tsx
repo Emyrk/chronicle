@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { InstanceEventsProvider, useInstanceEventsContext, type CachedStream, type StreamType } from "@/hooks/instanceEvents";
+import { DatasetProvider } from "@/hooks/useDatasetId";
 import type { Instance } from "@/pages/Instance/InstancePage";
 import { deathsProcessor, type DeathEvent, type DeathsResult } from "@/pages/Instance/EventsPanels/Deaths/deaths.processor";
 import { processIncrementally } from "@/pages/Instance/EventsPanels/mainThreadProcessor";
@@ -496,9 +497,11 @@ export function HeroScene({ instance, startOffsetMs, pull = null, active, onPull
 export default function LandingHero3D({ instanceId, children, ...props }: LandingHero3DProps & { children?: ReactNode }) {
   const instance = useLandingInstance(instanceId);
   return (
-    <InstanceEventsProvider instanceId={instanceId}>
-      {instance && <HeroScene instance={instance} {...props} />}
-      {children}
-    </InstanceEventsProvider>
+    <DatasetProvider datasetId={instance?.datasetId} iconBaseUrl={instance?.iconBaseUrl}>
+      <InstanceEventsProvider instanceId={instanceId}>
+        {instance && <HeroScene instance={instance} {...props} />}
+        {children}
+      </InstanceEventsProvider>
+    </DatasetProvider>
   );
 }
