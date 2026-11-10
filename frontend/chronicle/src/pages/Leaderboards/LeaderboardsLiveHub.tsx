@@ -53,7 +53,7 @@ export function LeaderboardsLiveHub() {
   const available = summary.data?.realms ?? []
   const highlightsSelectionError = summary.data ? landingRealmError(realmIDs, available) : undefined
   const highlights = useLandingHighlights(siteConfig?.tenant?.id, realmIDs[0],
-    !instance && !!summary.data && !summary.isPlaceholderData && !highlightsSelectionError && !rootRatingsDisabled && tab !== "rulesets" && tab !== "parsing")
+    !instance && !!summary.data && !summary.isPlaceholderData && !highlightsSelectionError && !rootRatingsDisabled && tab !== "rulesets")
   const highlightsScopeError = highlightsSelectionError ?? (highlights.data?.status === "unsupported_scope" ? "Choose All realms or one realm to view highlights" : undefined)
   const activeRealm = realmIDs.length === 1 ? available.find((row) => row.id === realmIDs[0]) : undefined
   const selectedRealmIDs = activeRealm ? [activeRealm.id] : realmIDs.length > 1 ? realmIDs : []
