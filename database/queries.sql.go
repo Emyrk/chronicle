@@ -24200,6 +24200,39 @@ func (q *sqlQuerier) BaselineEncounterRankings(ctx context.Context, logGroupID u
 	return items, nil
 }
 
+const baselineInstancePlayerGuilds = `-- name: BaselineInstancePlayerGuilds :many
+SELECT guild.id, guild.realm_id, guild.name, guild.created_at FROM guilds guild
+WHERE guild.id IN (
+    SELECT player.guild_id FROM log_instance_players player
+    WHERE player.instance_id = $1
+)
+`
+
+func (q *sqlQuerier) BaselineInstancePlayerGuilds(ctx context.Context, instanceID uuid.UUID) ([]Guild, error) {
+	rows, err := q.db.Query(ctx, baselineInstancePlayerGuilds, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Guild
+	for rows.Next() {
+		var i Guild
+		if err := rows.Scan(
+			&i.ID,
+			&i.RealmID,
+			&i.Name,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const baselineParseMemberships = `-- name: BaselineParseMemberships :many
 SELECT membership.id, membership.tenant_id, membership.policy_version, membership.query_version, membership.run_id, membership.encounter_name, membership.player_guid, membership.instance_id, membership.log_group_id, membership.difficulty_name, membership.max_players, membership.player_class, membership.player_spec, membership.player_sub_spec, membership.killed_at, membership.dps, membership.hps FROM parse_score_memberships membership
 WHERE membership.log_group_id = $1 OR membership.run_id IN (
