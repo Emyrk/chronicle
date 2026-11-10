@@ -156,6 +156,9 @@ test("Miniature Foundry edits tabletop and original game models", async () => {
   assert.match(page, /mixer\.clipAction\(activeClip\)/);
   assert.match(page, /mixer\?\.update\(delta\*playbackSpeed\)/);
   assert.match(page, /activeAction\.time=Math\.min/);
+  assert.match(page, /item\.animation_path\?previewURL\(item\.animation_path\):null/);
+  assert.match(page, /previewLoader\.load\(animationUrl/);
+  assert.match(page, /installClips\(\[\.\.\.gltf\.animations,\.\.\.packClips\],preferred\)/);
   assert.match(page, /animationControls\.hidden=false/);
 });
 
