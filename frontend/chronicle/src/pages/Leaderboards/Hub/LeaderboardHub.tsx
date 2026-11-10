@@ -19,6 +19,7 @@ import { METRIC_THEMES, scopeTitle, type RatingView } from "@/pages/Leaderboards
 import { ScopeBar } from "@/pages/Leaderboards/Ratings/ScopeBar"
 import { formatPeakRaw, peakWithRaw } from "./peakDisplay"
 import { TABS, type HubTab } from "./hubTabs"
+import { HubTabHint } from "./HubTabHint"
 import { EncounterSidebar } from "./EncounterSidebar"
 import { GuildName, GuildRatingBoards, GuildRatingLeaders, MetricColumns } from "./GuildRatings"
 import { entityAttributes } from "@/components/EntityMenu/entity"
@@ -410,11 +411,11 @@ export function LeaderboardHub({
                     : "border-transparent text-muted-foreground hover:border-muted-foreground/30 hover:text-foreground",
                 )
                 const content = <><t.icon className={cn("size-4", t.id === tab && "text-primary")} />{t.label}</>
-                return tabHref ? (
-                  <Link key={t.id} to={tabHref(t.id)} aria-current={t.id === tab ? "page" : undefined} className={className}>{content}</Link>
+                return <HubTabHint key={t.id} description={t.description}>{tabHref ? (
+                  <Link to={tabHref(t.id)} aria-current={t.id === tab ? "page" : undefined} className={className}>{content}</Link>
                 ) : (
-                  <button key={t.id} type="button" aria-pressed={t.id === tab} onClick={() => setTab(t.id)} className={className}>{content}</button>
-                )
+                  <button type="button" aria-pressed={t.id === tab} onClick={() => setTab(t.id)} className={className}>{content}</button>
+                )}</HubTabHint>
               })}
             </nav>
             <ScopeBar

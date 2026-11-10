@@ -3,7 +3,7 @@ import { useState, type ReactNode } from "react"
 import { useActiveTabInView } from "@/hooks/useActiveTabInView"
 import { Link } from "react-router-dom"
 import type { HubLandingPreview, RankingsInstanceSummary, SupportedInstance } from "@/api/typesGenerated"
-import { AlertTriangle, ArrowRight, RotateCw, Skull, Swords, Timer } from "lucide-react"
+import { AlertTriangle, ArrowRight, CircleHelp, RotateCw, Skull, Swords, Timer } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { CLASS_CSS_VAR, CLASS_DISPLAY } from "@/pages/Rankings/classDisplay"
 import { InstanceCard } from "@/pages/Rankings/InstanceCard"
@@ -14,6 +14,7 @@ import { LeaderboardHub, RealmPicker, type LeaderboardHubProps } from "./Leaderb
 import { HUB_REALMS, useHubRealm } from "./hubRealm"
 import { setMockRealm } from "@/pages/Leaderboards/Ratings/mockRealm"
 import { TABS, type HubTab } from "./hubTabs"
+import { HubTabHint } from "./HubTabHint"
 import { peakWithRaw } from "./peakDisplay"
 import { cohortLabel } from "./cohortLabel"
 import { entityAttributes } from "@/components/EntityMenu/entity"
@@ -127,13 +128,22 @@ export function LeaderboardsHubApp({
                     : "border-transparent text-muted-foreground hover:border-muted-foreground/30 hover:text-foreground",
                 )
                 const content = <><t.icon className="h-4 w-4" />{t.label}</>
-                return tabHref ? (
-                  <Link key={t.id} to={tabHref(t.id)} aria-current={t.id === tab ? "page" : undefined} className={className}>{content}</Link>
+                return <HubTabHint key={t.id} description={t.description}>{tabHref ? (
+                  <Link to={tabHref(t.id)} aria-current={t.id === tab ? "page" : undefined} className={className}>{content}</Link>
                 ) : (
-                  <button key={t.id} type="button" aria-pressed={t.id === tab} onClick={() => setTab(t.id)} className={className}>{content}</button>
-                )
+                  <button type="button" aria-pressed={t.id === tab} onClick={() => setTab(t.id)} className={className}>{content}</button>
+                )}</HubTabHint>
               })}
             </nav>
+            {/* Desktop: like the instance banner's corner, the bar ends with the explainer for Peak, Mastery, and Renown. */}
+            <Link
+              to="/ratings"
+              title="How ratings work"
+              aria-label="How ratings work"
+              className="ml-2 hidden size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground sm:inline-flex"
+            >
+              <CircleHelp className="size-5" />
+            </Link>
           </div>
         </div>
       )}
