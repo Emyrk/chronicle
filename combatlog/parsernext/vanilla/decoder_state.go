@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"slices"
 	"time"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
@@ -69,21 +68,8 @@ func clonePointer[T any](v *T) *T {
 
 func cloneCombatantValue(v combatantValue) combatantValue {
 	v.Guild = clonePointer(v.Guild)
-	v.Gear = slices.Clone(v.Gear)
-	for i := range v.Gear {
-		g := &v.Gear[i]
-		g.EnchantID = clonePointer(g.EnchantID)
-		g.TempEnchantID = clonePointer(g.TempEnchantID)
-		g.TransmogID = clonePointer(g.TransmogID)
-		g.BonusIDs = slices.Clone(g.BonusIDs)
-		g.Gems = slices.Clone(g.Gems)
-	}
-	v.Talents = clonePointer(v.Talents)
-	if v.Talents != nil {
-		for i := range v.Talents.Trees {
-			v.Talents.Trees[i] = slices.Clone(v.Talents.Trees[i])
-		}
-	}
+	v.Gear = combatant.CloneGear(v.Gear)
+	v.Talents = combatant.CloneTalents(v.Talents)
 	return v
 }
 
