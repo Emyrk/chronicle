@@ -22,6 +22,7 @@ import (
 	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/database/gamedb/talents"
 	"github.com/Emyrk/chronicle/database/storage"
+	"github.com/Emyrk/chronicle/internal/version"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -225,7 +226,8 @@ func parse(ctx context.Context, store database.Store, pool *pgxpool.Pool, args c
 // record describes the attempted engine/build; publication success is established
 // separately by the exporter, never inferred from provenance existence.
 func writeProvenance(path string, engine chronicle.BaselineEngine) error {
-	revision, modified := "unknown", "unknown"
+	// Standard build metadata is also available when this environment omits Go VCS settings.
+	revision, modified := version.GitCommit, "unknown"
 	if info, ok := debug.ReadBuildInfo(); ok {
 		for _, setting := range info.Settings {
 			switch setting.Key {

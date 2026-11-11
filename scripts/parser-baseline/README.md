@@ -49,7 +49,8 @@ Build the same command at each candidate revision, using identical build tags
 where required by the selected server:
 
 ```sh
-go build -o /tmp/parser-baseline ./scripts/parser-baseline
+go build -ldflags "-X github.com/Emyrk/chronicle/internal/version.GitCommit=$(git rev-parse HEAD)" \
+  -o /tmp/parser-baseline ./scripts/parser-baseline
 ```
 
 Supply the existing `ArgsLogParse` JSON (unknown fields are rejected):
@@ -107,7 +108,9 @@ arguments, database settings or production configuration. Production workers kee
 the legacy default. `export` does not select an engine.
 
 Pass `--provenance /new/path/run.json` to record the attempted engine and Go VCS
-revision/dirty status separately from stdout's comparable artifact. The path is
+revision/dirty status separately from stdout's comparable artifact. If Go omits
+VCS settings, the standard `version.GitCommit` linker input supplies the revision
+(as in the build command above); dirty status remains explicitly unknown. The path is
 exclusive-create; existing evidence is never overwritten. Provenance existence
 does not prove success: both the run exit status and canonical export validation
 must pass. Build a clean committed checkout for a precise revision; overlay builds
