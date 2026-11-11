@@ -35,6 +35,47 @@ func TestUlduarSpeedrunRequirements(t *testing.T) {
 	}, rules.Speedrun.Requirements)
 }
 
+func TestIcecrownCitadelSpeedrunRequirements(t *testing.T) {
+	t.Parallel()
+
+	rules := IcecrownCitadelFactory.FlavoredRankings(database.WoWFlavor{database.FlavorWrath})
+	require.NotNil(t, rules)
+	require.NotNil(t, rules.Speedrun)
+	require.Equal(t, []rankings.SpeedrunRequirement{
+		{Name: "Lord Marrowgar", EntryIDs: []uint32{36612}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Lady Deathwhisper", EntryIDs: []uint32{36855}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Gunship Battle", EntryIDs: []uint32{37215, 37540}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Deathbringer Saurfang", EntryIDs: []uint32{37813}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Festergut", EntryIDs: []uint32{36626}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Rotface", EntryIDs: []uint32{36627}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Professor Putricide", EntryIDs: []uint32{36678}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Blood Council", EntryIDs: []uint32{37970, 37972, 37973}, Count: 3, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Blood-Queen Lana'thel", EntryIDs: []uint32{37955}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Valithria Dreamwalker", EntryIDs: []uint32{36789}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Sindragosa", EntryIDs: []uint32{36853}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "The Lich King", EntryIDs: []uint32{36597}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+	}, rules.Speedrun.Requirements)
+}
+
+func TestIcecrownCitadelProgressionBosses(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, []string{
+		"Lord Marrowgar",
+		"Lady Deathwhisper",
+		"Gunship Battle",
+		"Deathbringer Saurfang",
+		"Festergut",
+		"Rotface",
+		"Professor Putricide",
+		"Blood Council",
+		"Blood-Queen Lana'thel",
+		"Valithria Dreamwalker",
+		"Sindragosa",
+		"The Lich King",
+	}, IcecrownCitadelFactory.ProgressionBosses(database.WoWFlavor{database.FlavorWrath}))
+}
+
 func TestUlduarProgressionBosses(t *testing.T) {
 	t.Parallel()
 
