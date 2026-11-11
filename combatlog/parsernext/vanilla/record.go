@@ -15,11 +15,13 @@ import (
 // ErrUnsupportedRecord indicates that this bounded decoder does not own the record.
 var ErrUnsupportedRecord = errors.New("unsupported Vanilla combat record")
 
-// DecodeRecord decodes SWING, DEATH, HEAL, SPELL_DMG, MISS, ENV_DMG and DMG_SHIELD records, without pipeline synthetic
-// processing, header clock state, identity tracking or encounter publication.
-// SPELL_DMG retains its local power-burn ResourceChange synthesis.
-// content excludes the physical line terminator. Extra fields retain legacy
-// tolerance. A successful call emits the existing concrete message payloads.
+// DecodeRecord decodes the explicitly selected Vanilla combat record families:
+// damage/heal/death, spell start/go, aura add/remove/cast, energize and dispel.
+// It does not perform pipeline synthetic processing, header clock state,
+// identity tracking or encounter publication. SPELL_DMG retains its local
+// power-burn ResourceChange synthesis. Unsupported records return an error.
+// content excludes the physical line terminator; extra fields retain legacy
+// tolerance. Successful calls emit the existing concrete message payloads.
 func DecodeRecord(ctx context.Context, spells SpellLookup, content string) ([]messages.Message, error) {
 	ts, event, fields, err := ccv2.ParseLine(content)
 	if err != nil {
@@ -27,6 +29,25 @@ func DecodeRecord(ctx context.Context, spells SpellLookup, content string) ([]me
 	}
 	m := &recordFields{fields: fields}
 	switch event {
+	case "SPELL_START", "SPELL_GO", "AURA_CAST", "ENERGIZE", "DISPEL", "BUFF_ADD", "BUFF_REM", "DEBUFF_ADD", "DEBUFF_REM":
+		if spells == nil {
+			return nil, fmt.Errorf("%s requires spell lookup", event)
+		}
+		switch event {
+		case "SPELL_START":
+			return DecodeSpellStart(ctx, spells, ts, m)
+		case "SPELL_GO":
+			return DecodeSpellGo(ctx, spells, ts, m)
+		case "AURA_CAST":
+			return DecodeAuraCast(ctx, spells, ts, m)
+		case "ENERGIZE":
+			return DecodeEnergize(ctx, spells, ts, m)
+		case "DISPEL":
+			return DecodeDispel(ctx, spells, ts, m)
+		default:
+			return DecodeAura(ctx, spells, event, ts, event == "BUFF_ADD" || event == "BUFF_REM", m)
+		}
+
 	case "SWING":
 		if spells == nil {
 			return nil, errors.New("SWING requires spell lookup")
@@ -97,3 +118,11 @@ func (m *recordFields) String() string       { return m.pop() }
 func (m *recordFields) SetError(err error)   { m.fail(err) }
 func (m *recordFields) School() types.School { return School(m.Int32()) }
 func (m *recordFields) Int32s() []int32      { v, err := ParseInt32List(m.pop()); m.fail(err); return v }
+
+func (m *recordFields) Peek() string {
+	if m.index >= len(m.fields) {
+		return ""
+	}
+	return m.fields[m.index]
+}
+func (m *recordFields) Skip() { m.index++ }

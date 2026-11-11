@@ -18,3 +18,7 @@ values rather than embedding a dataset export.
 miss result or shield school. The source has no ENV_DMG records; those cases
 are explicitly synthetic in tests. Fixtures contain GUIDs necessary for decoder
 parity, not names, chat, account metadata or private logs.
+
+`capybara-records.log` contains exactly one original record per supported cast,
+aura, resource or dispel event (9 total). Optional/error branches are generated
+synthetically in tests, rather than checking in more GUID-bearing records.
