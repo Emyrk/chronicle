@@ -43,16 +43,17 @@ type ogResult struct {
 
 // HTMLBranding carries per-request branding overrides for the HTML template.
 type HTMLBranding struct {
-	Title        string // Page title. Empty = default "Chronicle".
-	SiteName     string // Tenant/site display name used to suffix route-specific titles.
-	Description  string // Tenant/site description. Empty = default Chronicle description.
-	CanonicalURL string // Absolute canonical URL for this request.
-	ImageURL     string // Absolute social preview image URL.
-	Robots       string // Page-level robots directive. Empty = indexable default.
-	JSONLD       string // JSON-LD generated from trusted, JSON-marshaled values.
-	Favicon      string // Favicon URL. Empty = default /c/chronicle/favicon.ico.
-	ThemeCSS     string // Pre-built CSS variable overrides for tenant theming.
-	GA4ID        string // GA4 measurement ID; empty disables analytics.
+	Home         *HomeConfig // Public homepage-only rendering inputs.
+	Title        string      // Page title. Empty = default "Chronicle".
+	SiteName     string      // Tenant/site display name used to suffix route-specific titles.
+	Description  string      // Tenant/site description. Empty = default Chronicle description.
+	CanonicalURL string      // Absolute canonical URL for this request.
+	ImageURL     string      // Absolute social preview image URL.
+	Robots       string      // Page-level robots directive. Empty = indexable default.
+	JSONLD       string      // JSON-LD generated from trusted, JSON-marshaled values.
+	Favicon      string      // Favicon URL. Empty = default /c/chronicle/favicon.ico.
+	ThemeCSS     string      // Pre-built CSS variable overrides for tenant theming.
+	GA4ID        string      // GA4 measurement ID; empty disables analytics.
 }
 
 // BrandingResolver is an optional callback that returns per-request branding
@@ -73,6 +74,7 @@ type blogManifestPost struct {
 }
 
 type handler struct {
+	home               *homeManifest
 	fs                 fs.FS
 	mux                *http.ServeMux
 	htmlTemplates      *template.Template
@@ -108,7 +110,13 @@ func Handler(siteFS fs.FS, ogRoutes []OGRoute, brandingResolver BrandingResolver
 		panic(fmt.Sprintf("Failed to parse blog manifest: %v", err))
 	}
 
+	home, err := loadHomeManifest(siteFS)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to parse home manifest: %v", err))
+	}
+
 	return &handler{
+		home:               home,
 		fs:                 siteFS,
 		mux:                mux,
 		htmlTemplates:      tmpls,
@@ -214,6 +222,9 @@ func (h *handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 			state.Favicon = b.Favicon
 			state.ThemeCSS = b.ThemeCSS
 			state.GA4ID = b.GA4ID
+			if req.URL.Path == "/" {
+				state.HomeHTML, state.HomeBootstrapJSON = h.home.render(b.Home)
+			}
 		}
 	}
 
@@ -322,9 +333,11 @@ func (h *handler) exists(filePath string) bool {
 }
 
 type htmlState struct {
-	GitCommit string
-	GitTag    string
-	BuildTime string
+	HomeHTML          string
+	HomeBootstrapJSON string
+	GitCommit         string
+	GitTag            string
+	BuildTime         string
 
 	// BlogFlavorJSON is injected into pre-rendered blog pages for tenant-aware hydration.
 	BlogFlavorJSON string
@@ -391,7 +404,15 @@ func (h *handler) renderHTMLWithState(filePath string, state htmlState) ([]byte,
 	if err != nil {
 		return nil, err
 	}
-	return buf.Bytes(), nil
+	data := buf.Bytes()
+	if filePath == "index.html" && state.HomeHTML != "" {
+		// Inject only trusted build output and JSON-marshaled bootstrap data. This
+		// happens after template execution so product text is never template code.
+		root := `<div id="root"></div>`
+		home := `<script id="home-bootstrap" type="application/json">` + state.HomeBootstrapJSON + `</script><div id="root">` + state.HomeHTML + `</div>`
+		data = bytes.Replace(data, []byte(root), []byte(home), 1)
+	}
+	return data, nil
 }
 
 // findAndParseHTMLFiles recursively walks the file system passed finding all *.html files.

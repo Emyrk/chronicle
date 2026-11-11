@@ -1,3 +1,4 @@
+import { useHomeConfig } from "../home/bootstrap";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -186,8 +187,9 @@ function BoardToggle({
 function HeroSection() {
   const { isAuthenticated } = useAuth();
   const { data: siteConfig } = useSiteConfig();
-  const showUpload = !siteConfig?.client_uploads_disabled;
-  const productName = seoProductName(siteConfig?.dataset_flavor);
+  const homeConfig = useHomeConfig();
+  const showUpload = !(homeConfig?.uploadsDisabled ?? siteConfig?.client_uploads_disabled);
+  const productName = homeConfig?.productName ?? seoProductName(siteConfig?.dataset_flavor);
 
   return (
     <section
@@ -221,6 +223,7 @@ function HeroSection() {
               {isAuthenticated ? "View Your Logs" : "View a Sample"}
             </Link>
           </Button>
+          <Link to="/download" className="text-center text-sm text-primary hover:underline">Get started with the download guide</Link>
           <p className="text-center text-sm text-muted-foreground">No account required.</p>
         </div>
       </div>
@@ -501,7 +504,8 @@ function RaidSpotlight() {
 
   // Resume where the visitor left off.
   const [raidIdx, setRaidIdx] = useState(() => {
-    const saved = Number(localStorage.getItem(SPOTLIGHT_IDX_KEY));
+    // No raid data exists until after hydration; persisted selection is not part of initial HTML.
+    const saved = Number(typeof localStorage === "undefined" ? 0 : localStorage.getItem(SPOTLIGHT_IDX_KEY));
     return Number.isFinite(saved) && saved >= 0 ? saved : 0;
   });
   const [paused, setPaused] = useState(false);

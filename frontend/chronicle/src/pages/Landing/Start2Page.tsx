@@ -1,3 +1,5 @@
+import { useHydrated } from "@/hooks/useHydrated";
+import { useHomeBootstrap, useHomeConfig } from "@/home/bootstrap";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useLandingFeatured } from "@/api/landingFeatured";
 import type { LandingFeaturedRun } from "@/api/typesGenerated";
@@ -176,12 +178,14 @@ function BelowFold({ onExplore }: { onExplore: (target: ExploreTarget) => void }
 
 /** /start2: a working copy of StartPage inside the site Layout (our NavBar and Footer), to be edited down. */
 export function Start2Page() {
+  const bootstrap = useHomeBootstrap();
+  const homeConfig = useHomeConfig();
   const getSidekickHref = "/download";
   const { data: landing, isError: landingFailed } = useLandingFeatured();
   const { data: siteConfig } = useSiteConfig();
   const siteName = (siteConfig?.tenant?.branding ?? siteConfig?.branding)?.display_name;
   // The SEO headline Home uses ("WoW Forever Combat Logs"), with the landing's line under it, muted.
-  const productName = seoProductName(siteConfig?.dataset_flavor) || "WoW Forever";
+  const productName = homeConfig?.productName || seoProductName(siteConfig?.dataset_flavor) || "WoW Forever";
   // The live 3D replay's position and controls, for the hero's scrubber; null while the poster shows.
   const [replay, setReplay] = useState<HeroReplay | null>(null);
   // The run the live 3D plays, kept while it changes pulls.
@@ -228,7 +232,10 @@ export function Start2Page() {
   // The pre-rendered clips play until the live 3D shows: index.html picked this visit's (and painted its poster),
   // and each pass moves on to the next. clips.json holds WoW Forever pulls only, as this page is Forever's alone (#1589).
   const { data: clips } = useHeroClips();
-  const [visit] = useState(visitClip);
+  const hydrated = useHydrated();
+  const [visitPick] = useState(() => typeof document === "undefined" ? null : visitClip());
+  // Keep the build-time poster through hydration, then honor the visit's rotating clip.
+  const visit = bootstrap && !hydrated ? null : visitPick;
   const [clipPasses, setClipPasses] = useState(0);
   const nextClip = useCallback(() => setClipPasses((passes) => passes + 1), []);
   const firstClip = clips ? Math.max(0, clips.findIndex((clip) => clip.slug === visit?.slug)) : 0;

@@ -1,4 +1,6 @@
-import { lazy, Suspense } from "react"
+import { HomepageSuspense } from "./home/HomepageSuspense"
+import { useHomeConfig } from "./home/bootstrap"
+import { lazy, Suspense, type ComponentType } from "react"
 import { Routes, Route, Navigate, useLocation } from "react-router-dom"
 import { Home } from "./pages/Home"
 import { NitroPayRuntime } from "./components/Ads/NitroPayRuntime"
@@ -173,11 +175,14 @@ function CatchAllRoute() {
  * "/": WoW Forever serves the replay landing (Start2Page) while the admin toggle (site config
  * forever_landing_enabled) is on; off, or any other flavor, gets the standard Home.
  */
-function HomeRoute() {
-  const { data: siteConfig, isPending } = useSiteConfig()
-  if (isPending) return null
-  const foreverLanding = (siteConfig?.dataset_flavor?.includes("wow-forever") ?? false) && (siteConfig?.forever_landing_enabled ?? false)
-  return foreverLanding ? <Start2Page /> : <Home />
+function HomeRoute({ landing: Landing }: { landing?: ComponentType }) {
+  const { isPending } = useSiteConfig()
+  const config = useHomeConfig()
+  if (isPending && !config) return null
+  if (!config?.foreverLanding) return <Home />
+  // Initially enabled homepages preload Landing before hydration. If live config
+  // enables it later, give that newly requested lazy chunk its own boundary.
+  return Landing ? <Landing /> : <Suspense fallback={<RouteLoadingFallback />}><Start2Page /></Suspense>
 }
 
 /** /start2: the landing inside the site Layout, WoW Forever only like /start. */
@@ -187,11 +192,11 @@ function Start2Route() {
   return siteConfig?.dataset_flavor?.includes("wow-forever") ? <Start2Page /> : <CatchAllRoute />
 }
 
-function App() {
+function App({ homeLanding }: { homeLanding?: ComponentType } = {}) {
   return (
     <>
       <NitroPayRuntime />
-      <Suspense fallback={<RouteLoadingFallback />}>
+      <HomepageSuspense fallback={<RouteLoadingFallback />}>
         <Routes>
       <Route path="/login" element={<Login />} />
       {/* The old ad landing: its links now land on the home page (the replay landing on WoW Forever). */}
@@ -202,7 +207,7 @@ function App() {
       {/* Pop-out window opened from a chat's Prompt inspector; no site chrome. */}
       <Route path="/debug/assistant" element={<AssistantDebugPage />} />
       <Route element={<Layout />}>
-        <Route path="/" element={<HomeRoute />} />
+        <Route path="/" element={<HomeRoute landing={homeLanding} />} />
         <Route path="/start2" element={<Start2Route />} />
         <Route path="/recent" element={<RecentRaids />} />
         <Route path="/search" element={<InstanceSearchPage />} />
@@ -374,7 +379,7 @@ function App() {
       </Route>
         <Route path="*" element={<CatchAllRoute />} />
         </Routes>
-      </Suspense>
+      </HomepageSuspense>
     </>
   )
 }

@@ -1,4 +1,4 @@
-import { Suspense } from "react";
+import { HomepageSuspense } from "@/home/HomepageSuspense";
 import { Outlet, useLocation } from "react-router-dom";
 import { NavBar } from "../NavBar/NavBar";
 import { Footer } from "../Footer/Footer";
@@ -42,9 +42,9 @@ export function Layout() {
             </>
           )}
           <main>
-            <Suspense fallback={<RouteLoadingFallback />}>
+            <HomepageSuspense fallback={<RouteLoadingFallback />}>
               <Outlet />
-            </Suspense>
+            </HomepageSuspense>
           </main>
           {!hideChrome && <Footer />}
           {!hideChrome && !hasPageChat && <GlobalSiteHelpChat />}

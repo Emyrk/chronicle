@@ -1,4 +1,4 @@
-const SEO_PRODUCT_NAMES = [
+export const SEO_PRODUCT_NAMES = [
   ["wow-forever", "WoW Forever"],
   ["kronos", "Kronos"],
   ["chromiecraft", "ChromieCraft"],

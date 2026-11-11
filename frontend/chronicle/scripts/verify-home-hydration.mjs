@@ -1,0 +1,110 @@
+import assert from "node:assert/strict";
+import { createRequire } from "node:module";
+
+// Reuse the browser provider's installed Playwright rather than add a second copy.
+const require = createRequire(import.meta.url);
+const browserRequire = createRequire(require.resolve("@vitest/browser-playwright"));
+const { chromium } = browserRequire("playwright");
+const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH, headless: true });
+try {
+  for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 }]) for (const [variant, expected] of [["unknown", "Every raid tells a story."], ["epoch", "Epoch Reborn Combat Logs"], ["warmane", "Warmane Combat Logs"], ["forever", "WoW Forever Combat Logs"], ["forever-disabled", "WoW Forever Combat Logs"]]) {
+    const page = await browser.newPage({ viewport });
+    const errors = [];
+    await page.addInitScript(() => {
+      localStorage.setItem("landing-hero-clip", "1");
+      localStorage.setItem("homeSpotlightIdx", "3");
+    });
+    page.on("pageerror", (error) => errors.push(error.message));
+    page.on("console", (message) => {
+      if (message.type() === "error" && /hydration|hydrating|did not match|Minified React error/i.test(message.text())) errors.push(message.text());
+    });
+    let releaseScripts;
+    const scriptsReady = new Promise((resolve) => { releaseScripts = resolve; });
+    await page.route("**/*.js", async (route) => { await scriptsReady; await route.continue(); });
+    const liveConfig = {
+      dataset_flavor: variant.startsWith("forever") ? ["wow-forever"] : ["epoch", "warmane"].includes(variant) ? [variant] : [],
+      forever_landing_enabled: variant === "forever",
+      branding: { display_name: "Hydrated Test Tenant" },
+    };
+    await page.route("**/api/**", (route) => {
+      if (new URL(route.request().url()).pathname === "/api/v1/site-config") {
+        return route.fulfill({ json: liveConfig });
+      }
+      return route.abort();
+    });
+    await page.goto(`${process.argv[2]}/?variant=${variant}`, { waitUntil: "commit" });
+    await page.waitForSelector("h1");
+    assert.ok((await page.locator("h1").textContent()).includes(expected));
+    assert.ok(await page.locator('a[href="/download"]').count());
+    await page.evaluate(() => {
+      window.originalHomeHeading = document.querySelector("h1");
+    });
+    releaseScripts();
+    await page.waitForFunction(() => Object.keys(document.querySelector("h1")).some((key) => key.startsWith("__reactFiber$")));
+    assert.equal(await page.evaluate(() => window.originalHomeHeading === document.querySelector("h1")), true, `${variant}: heading was replaced rather than hydrated: ${errors.join("\n")}`);
+    await page.getByText("Hydrated Test Tenant", { exact: true }).first().waitFor();
+    assert.equal(await page.evaluate(() => window.originalHomeHeading === document.querySelector("h1")), true, `${variant}: live configuration replaced the heading`);
+    if (variant === "forever") {
+      await page.waitForFunction(() => document.querySelector('img[alt="3D replay of a dungeon boss fight"]')?.getAttribute("src") === document.documentElement.dataset.heroPoster);
+    }
+    assert.deepEqual(errors, [], `${variant}: browser errors`);
+    console.log(`${variant} at ${viewport.width}px: meaningful HTML, guide link, preserved heading DOM, no hydration errors`);
+    if (variant.startsWith("forever") || variant === "warmane") {
+      // Leave and return through SPA history, then let the newly mounted query
+      // fetch changed public configuration. The document bootstrap stays unchanged.
+      liveConfig.branding.display_name = "Config before return";
+      const downloadConfig = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/v1/site-config");
+      await page.locator('a[href="/download"]').first().click();
+      await page.waitForURL("**/download");
+      await page.waitForFunction(() => document.querySelector("h1") && document.querySelector("h1") !== window.originalHomeHeading);
+      await (await downloadConfig).finished();
+      assert.equal(await page.evaluate(() => !!window.originalHomeHeading), true, `${variant}: guide link performed document navigation`);
+      await page.getByText("Config before return", { exact: true }).first().waitFor();
+      liveConfig.branding.display_name = "Config after return";
+      if (variant.startsWith("forever")) liveConfig.forever_landing_enabled = !liveConfig.forever_landing_enabled;
+      else {
+        liveConfig.dataset_flavor = ["epoch"];
+        liveConfig.client_uploads_disabled = true;
+      }
+      const refreshedConfig = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/v1/site-config");
+      await page.goBack();
+      await page.waitForURL(`**/?variant=${variant}`);
+      // Exercise the normal focus-refetch path too, rather than relying on
+      // observer remount timing while the previous request is settling.
+      await page.evaluate(() => {
+        Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+        window.dispatchEvent(new Event("visibilitychange"));
+        delete document.visibilityState;
+        window.dispatchEvent(new Event("visibilitychange"));
+      });
+      await (await refreshedConfig.catch(async (error) => {
+        throw new Error(`${variant}: ${error.message}; url=${page.url()}; errors=${errors.join(";")}; body=${(await page.locator("body").innerText()).slice(0,1500)}`);
+      })).finished();
+      await page.getByText("Config after return", { exact: true }).first().waitFor();
+      if (variant.startsWith("forever")) {
+        await page.waitForFunction((enabled) => !!document.querySelector('img[alt="3D replay of a dungeon boss fight"]') === enabled, liveConfig.forever_landing_enabled).catch(async (error) => {
+          throw new Error(`${variant}: ${error.message}; errors=${errors.join(";")}; body=${(await page.locator("body").innerText()).slice(0,1500)}`);
+        });
+        await page.getByRole("heading", { level: 1 }).waitFor();
+      } else {
+        await page.waitForFunction(() => document.querySelector("h1")?.textContent.includes("Epoch Reborn Combat Logs"));
+        await page.waitForFunction(() => ![...document.querySelectorAll('a[href="/upload"]')].some((link) => link.textContent === "Upload Your First Log"));
+      }
+      assert.deepEqual(errors, [], `${variant}: updated config after SPA return`);
+      console.log(`${variant}: live toggle/flavor/upload changes override bootstrap after SPA return`);
+    }
+    if (variant === "unknown") {
+      await page.locator('a[href="/download"]').first().click();
+      await page.waitForURL("**/download");
+      await page.waitForFunction(() => document.querySelector("h1") && document.querySelector("h1") !== window.originalHomeHeading);
+      await page.goto(`${process.argv[2]}/blog`, { waitUntil: "domcontentloaded" });
+      await page.getByRole("heading", { name: "What's New", exact: true }).waitFor();
+      await page.waitForFunction(() => Object.keys(document.querySelector("h1")).some((key) => key.startsWith("__reactFiber$")));
+      assert.deepEqual(errors, [], "download navigation and blog hydration errors");
+      console.log("download navigation and separate blog hydration remain working");
+    }
+    await page.close();
+  }
+} finally {
+  await browser.close();
+}

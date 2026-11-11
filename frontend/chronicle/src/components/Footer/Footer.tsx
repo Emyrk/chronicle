@@ -1,3 +1,4 @@
+import { useHydrated } from "@/hooks/useHydrated";
 import { Link } from "react-router-dom";
 import { Crown, HandHeart } from "lucide-react";
 import { DiscordIcon } from "@/components/icons/DiscordIcon";
@@ -12,17 +13,14 @@ export function Footer() {
   const { data: siteConfig } = useSiteConfig();
   const tenant = siteConfig?.tenant ?? null;
 
-  const gitTag = document
-    .querySelector("meta[property=GitTag]")
-    ?.getAttribute("content");
-
-  const gitCommit = document
-    .querySelector("meta[property=GitCommit]")
-    ?.getAttribute("content");
-
-  const buildTime = document
-    .querySelector("meta[property=BuildTime]")
-    ?.getAttribute("content");
+  // Read document metadata only after hydration, so build-time and initial client markup match.
+  const hydrated = useHydrated();
+  const metadata = (key: string) => hydrated
+    ? document.querySelector(`meta[property=${key}]`)?.getAttribute("content")
+    : null;
+  const gitTag = metadata("GitTag");
+  const gitCommit = metadata("GitCommit");
+  const buildTime = metadata("BuildTime");
 
   return (
     <footer className="border-t bg-muted/30">
@@ -131,7 +129,7 @@ export function Footer() {
           {/* Legal/Build */}
           <div className="text-sm text-muted-foreground">
             <FooterBranding siteConfig={siteConfig ?? undefined} isTenant={!!tenant} />
-            <p>© {new Date().getFullYear()} Chronicle</p>
+            <p>© {hydrated ? `${new Date().getFullYear()} ` : ""}Chronicle</p>
             <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
               <Link
                 to="/privacy"
