@@ -88,6 +88,17 @@
       }
     },
     {
+      "path": "/root/character-shared-state/wotlk/reliquary",
+      "kind": "directory",
+      "metadata": {
+        "classification": "shared_character_state",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.reliquaryState",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.reliquaryState",
+        "note": "stored under Characters.sharedState key tbc_reliquary; semantic phase int and phaseSource GUID, plus characters map[GUID]*reliquaryCharacter preserving aliases to owned character instances; phase definitions are static policy",
+        "source": "combatlog/parser/wotlk/creatures/reliquary.go"
+      }
+    },
+    {
       "path": "/root/character-shared-state/wotlk/thorim",
       "kind": "directory",
       "metadata": {
@@ -646,6 +657,17 @@
       }
     },
     {
+      "path": "/root/character-types/wotlk/gunship-battle",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.gunshipBattleCharacter",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.gunshipBattleCharacter",
+        "note": "Common owns activity, six-minute timeout and recently-slain suppression; all is a shared Characters reference used to end linked crew on positive-overkill victory; no additional mutable scalar state",
+        "source": "combatlog/parser/wotlk/creatures/icecrowncitadel.go"
+      }
+    },
+    {
       "path": "/root/character-types/wotlk/hodir",
       "kind": "directory",
       "metadata": {
@@ -676,6 +698,28 @@
         "label": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.kologarnCharacter",
         "note": "",
         "source": "combatlog/parser/wotlk/creatures/kologarn.go"
+      }
+    },
+    {
+      "path": "/root/character-types/wotlk/lady-deathwhisper",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.ladyDeathwhisperCharacter",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.ladyDeathwhisperCharacter",
+        "note": "phaseTwo bool is semantic per-fight state reset on activation; all is a shared Characters reference used to emit phase transitions; phase definitions are static policy",
+        "source": "combatlog/parser/wotlk/creatures/icecrowncitadel.go"
+      }
+    },
+    {
+      "path": "/root/character-types/wotlk/lich-king",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.lichKingCharacter",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.lichKingCharacter",
+        "note": "phase int is semantic per-fight state reset to 1 on activation and 0 when inactive; all is a shared Characters reference used to emit phase transitions; phase definitions are static policy",
+        "source": "combatlog/parser/wotlk/creatures/icecrowncitadel.go"
       }
     },
     {
@@ -712,6 +756,17 @@
       }
     },
     {
+      "path": "/root/character-types/wotlk/professor-putricide",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.professorPutricideCharacter",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.professorPutricideCharacter",
+        "note": "phase int is semantic per-fight state reset to 1 on activation and 0 when inactive; all is a shared Characters reference used to emit phase transitions; phase definitions are static policy",
+        "source": "combatlog/parser/wotlk/creatures/icecrowncitadel.go"
+      }
+    },
+    {
       "path": "/root/character-types/wotlk/razorscale-add",
       "kind": "directory",
       "metadata": {
@@ -720,6 +775,28 @@
         "label": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.razorscaleAdd",
         "note": "",
         "source": "combatlog/parser/wotlk/creatures/razorscale.go"
+      }
+    },
+    {
+      "path": "/root/character-types/wotlk/reliquary",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.reliquaryCharacter",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.reliquaryCharacter",
+        "note": "TBC encounter currently implemented in the legacy wotlk package; embeds RoomMechanic with a two-minute pending-death window; all is a shared Characters reference and state aliases the shared tbc_reliquary value",
+        "source": "combatlog/parser/wotlk/creatures/reliquary.go"
+      }
+    },
+    {
+      "path": "/root/character-types/wotlk/sindragosa",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.sindragosaCharacter",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.sindragosaCharacter",
+        "note": "finalPhase bool is semantic per-fight state reset on activation; all is a shared Characters reference used to emit phase transitions; phase definitions are static policy",
+        "source": "combatlog/parser/wotlk/creatures/icecrowncitadel.go"
       }
     },
     {
@@ -742,6 +819,17 @@
         "label": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.Unstartable",
         "note": "wrapper used by LogBased",
         "source": "combatlog/parser/wotlk/creatures/logbased.go"
+      }
+    },
+    {
+      "path": "/root/character-types/wotlk/valithria-dreamwalker",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.valithriaDreamwalkerCharacter",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.valithriaDreamwalkerCharacter",
+        "note": "Common owns activity and recently-slain suppression; all is a shared Characters reference used to end linked adds on Dreamwalker's Rage positive-overkill victory; no additional mutable scalar state",
+        "source": "combatlog/parser/wotlk/creatures/icecrowncitadel.go"
       }
     },
     {
@@ -1299,6 +1387,14 @@
       "to": "/root/character-types/common/common"
     },
     {
+      "from": "/root/character-types/wotlk/gunship-battle",
+      "to": "/root/character-types/common/common"
+    },
+    {
+      "from": "/root/character-types/wotlk/gunship-battle",
+      "to": "/root/instances/0000/characters"
+    },
+    {
       "from": "/root/character-types/wotlk/hodir",
       "to": "/root/character-types/common/common"
     },
@@ -1313,6 +1409,22 @@
     {
       "from": "/root/character-types/wotlk/kologarn",
       "to": "/root/character-types/common/common"
+    },
+    {
+      "from": "/root/character-types/wotlk/lady-deathwhisper",
+      "to": "/root/character-types/common/common"
+    },
+    {
+      "from": "/root/character-types/wotlk/lady-deathwhisper",
+      "to": "/root/instances/0000/characters"
+    },
+    {
+      "from": "/root/character-types/wotlk/lich-king",
+      "to": "/root/character-types/common/common"
+    },
+    {
+      "from": "/root/character-types/wotlk/lich-king",
+      "to": "/root/instances/0000/characters"
     },
     {
       "from": "/root/character-types/wotlk/log-based",
@@ -1331,8 +1443,32 @@
       "to": "/root/character-types/common/common"
     },
     {
+      "from": "/root/character-types/wotlk/professor-putricide",
+      "to": "/root/character-types/common/common"
+    },
+    {
+      "from": "/root/character-types/wotlk/professor-putricide",
+      "to": "/root/instances/0000/characters"
+    },
+    {
       "from": "/root/character-types/wotlk/razorscale-add",
       "to": "/root/character-types/common/common"
+    },
+    {
+      "from": "/root/character-types/wotlk/reliquary",
+      "to": "/root/character-shared-state/wotlk/reliquary"
+    },
+    {
+      "from": "/root/character-types/wotlk/reliquary",
+      "to": "/root/character-types/common/room-mechanic"
+    },
+    {
+      "from": "/root/character-types/wotlk/sindragosa",
+      "to": "/root/character-types/common/common"
+    },
+    {
+      "from": "/root/character-types/wotlk/sindragosa",
+      "to": "/root/instances/0000/characters"
     },
     {
       "from": "/root/character-types/wotlk/thorim",
@@ -1345,6 +1481,14 @@
     {
       "from": "/root/character-types/wotlk/unstartable",
       "to": "/root/character-types/contracts/character-base"
+    },
+    {
+      "from": "/root/character-types/wotlk/valithria-dreamwalker",
+      "to": "/root/character-types/common/common"
+    },
+    {
+      "from": "/root/character-types/wotlk/valithria-dreamwalker",
+      "to": "/root/instances/0000/characters"
     },
     {
       "from": "/root/character-types/wotlk/yogg-saron",
@@ -1421,6 +1565,10 @@
     {
       "from": "/root/instances/0000/characters/shared-state",
       "to": "/root/character-shared-state/wotlk/mimiron"
+    },
+    {
+      "from": "/root/instances/0000/characters/shared-state",
+      "to": "/root/character-shared-state/wotlk/reliquary"
     },
     {
       "from": "/root/instances/0000/characters/shared-state",
