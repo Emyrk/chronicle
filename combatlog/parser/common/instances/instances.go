@@ -377,6 +377,7 @@ var (
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"stormwind stockade", "the stockade", "监狱"},
 		Hostiles:  FromMap(StockadeHostiles()),
+		MapIDs:    []uint32{34},
 	}
 
 	SunkenTempleFactory = &CommonFactory{
@@ -459,7 +460,7 @@ var (
 
 	ExcavationSiteWetlandsFactory = &CommonFactory{
 		Name:      "Excavation Site: Wetlands",
-		ZoneNames: []string{"excavation site: wetlands"},
+		ZoneNames: []string{"excavation site: wetlands", "挖掘场：湿地"},
 		MapIDs:    []uint32{2998},
 		Hostiles:  FromMap(ExcavationSiteWetlandsHostiles()),
 	}
