@@ -20,6 +20,71 @@ only overview `player_deaths` changed from 39 to 40. Export and comparison retur
 **1**, and recursive JSON comparison confirmed exactly one changed field:
 `/publication/instance_overview_metrics/0/player_deaths`.
 
+## Follow-up: persistent four-flavor corpus
+
+A subsequent run migrated the isolated setup to
+`~/Desktop/parsing_snapshots/` and exercised four real public inputs. The new
+PostgreSQL 17 container `parsing-snapshots-postgres` binds
+`~/Desktop/parsing_snapshots/postgres/data` and listens only on
+`127.0.0.1:55440`. Migration used logical dumps/restores, not a live PGDATA copy.
+The original container and named volume described below are retained. Restored
+before/after/negative artifacts are byte-identical to the originals; seed dump
+contents match after removing pg_dump's random restrict markers and sorting dump
+lines for comparison.
+
+| Case | Public log group | Instances / encounters / events | Strict differing fields |
+| --- | --- | ---: | ---: |
+| ChromieCraft | `64cd0aa4-97fb-4c4c-aa4f-6fb64625c12c` | 1 / 3 / 238,857 | 158 |
+| Crusader Storm | `c529c367-f844-4342-8922-e80cf96d5db3` | 3 / 106 / 532,430 | 6,924 |
+| OctoWoW | `5aae53d5-07c2-4da6-9129-c569cb776509` | 1 / 12 / 181,936 | 25 |
+| Capybara | `10deeee3-d8d7-46fa-aa30-ffd7f02444d9` | 1 / 11 / 178,354 | 71 |
+
+Each case completed two independent synchronous parses and exports. Every
+negative control changed exactly one overview `player_deaths` field and the
+whole-artifact comparison detected it. All twelve completed parse/control
+databases have zero River jobs. **All four strict repeats fail**; these counts
+are observations from one pair per case, not stable expected counts.
+
+- OctoWoW and Capybara differ only in classification event fields.
+- ChromieCraft differs in classification and remaining-hostile array order.
+- Crusader also differs in slain events and two trash encounter names in
+  Zul'Farrak: `Sandfury Shadowhunter` versus `Sandfury Witch Doctor`, and
+  `Sandfury Blood Drinker` versus `Sandfury Shadowcaster`. Matching encounters
+  diagnostically by exact times/map/boss flag finds the same identity sets.
+  Name-based canonical encounter keys reorder many referencing event and combat
+  structure sections, amplifying the strict diff. This is not a relaxed parity
+  result; no artifact normalization or parser fix was applied.
+
+An initial OctoWoW input was unavailable (HTTP 410, deleted raw storage). Another
+parsed successfully but export rejected duplicate zero-duration `Shadowflame
+Spark` encounter identities at `2026-11-10T20:36:13.227Z`, map 469. The rejected
+case is retained under `cases/octowow-ambiguous/` and corresponding
+`parser_baseline_octowow_ambiguous_*` databases. A smaller downloadable
+single-instance input was selected instead; the ambiguity guard is unchanged.
+
+Reference exports use the existing `legacy.sh` selectors: `azerothcore`, `tbc`,
+`octowow`, and `turtle` for Capybara. They are local client approximations, **not
+certified production-identical datasets**. World item/creature templates remain
+absent; item quality, gear and creature enrichment are incomplete. Both repeats
+of a case clone exactly the same reference/input seed.
+
+The Desktop root contains a detailed README, logical backups, scripts, input
+objects, DBCs, source/binary/image provenance, SHA-256 manifests and per-case
+`validation-summary.json` files. Its reproducible runner uses
+`parser_baseline_<case>_{repeat_a,repeat_b,negative}` databases and refuses
+existing names instead of overwriting evidence. API credentials are environment
+only; production access was read-only HTTP, never database access or mutation.
+
+Focused tests passed for `./scripts/parser-baseline`, `./database/authz` and
+`./chronicle`. To keep test databases on the bind-mounted PostgreSQL server, a
+local Go build overlay changed only dbtestutil's default connection port to
+55440; per-test cloning remained enabled. An initial shared-DSN test invocation
+failed due to concurrent database timezone updates and was corrected, not hidden.
+Focused lint reported zero issues; external Python compilation and shell syntax
+checks passed. No production code changed during this corpus expansion.
+
+The remainder of this document records the earlier ChromieCraft-only run.
+
 ## Fixture and reference scope
 
 - Public log group: `64cd0aa4-97fb-4c4c-aa4f-6fb64625c12c`.
