@@ -19,6 +19,7 @@ const (
 
 type advancedCombatSnapshot struct {
 	unit             string
+	owner            string
 	currentHealth    int64
 	maximumHealth    int64
 	attackPower      int32
@@ -239,6 +240,10 @@ func (r *transformReader) parseAdvancedCombatSnapshot(fields []string, sourceGUI
 	if err != nil {
 		return nil, err
 	}
+	owner, err := r.guids.normalize(fields[1])
+	if err != nil {
+		return nil, fmt.Errorf("normalize advanced combat owner %q: %w", fields[1], err)
+	}
 	parseInt64 := func(index int, name string) (int64, error) {
 		value, parseErr := strconv.ParseInt(fields[index], 10, 64)
 		if parseErr != nil {
@@ -272,7 +277,7 @@ func (r *transformReader) parseAdvancedCombatSnapshot(fields []string, sourceGUI
 		return value, nil
 	}
 
-	snapshot := &advancedCombatSnapshot{unit: unit}
+	snapshot := &advancedCombatSnapshot{unit: unit, owner: owner}
 	if snapshot.currentHealth, err = parseInt64(2, "current health"); err != nil {
 		return nil, err
 	}
@@ -319,7 +324,7 @@ func (r *transformReader) parseAdvancedCombatSnapshot(fields []string, sourceGUI
 }
 
 func (s advancedCombatSnapshot) lines(prefix string) []string {
-	return []string{
+	lines := []string{
 		prefix + "BLIZZARD_UNIT_POSITION," + strings.Join([]string{
 			s.unit,
 			strconv.FormatFloat(s.x, 'f', -1, 64),
@@ -341,6 +346,10 @@ func (s advancedCombatSnapshot) lines(prefix string) []string {
 			strconv.FormatInt(int64(s.levelOrItemLevel), 10),
 		}, ","),
 	}
+	if s.owner != "0x0000000000000000" {
+		lines = append(lines, prefix+"BLIZZARD_UNIT_OWNER,"+s.unit+","+s.owner)
+	}
+	return lines
 }
 
 func (r *transformReader) configureCombatLogVersion(args []string) error {

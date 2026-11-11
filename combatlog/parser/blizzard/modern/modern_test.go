@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
@@ -331,6 +332,23 @@ func TestTransformV22EmitsUnitTelemetry(t *testing.T) {
 	assert.Contains(t, lines[2], `,18,42,5,0,20,40,3,4,20,1`)
 }
 
+func TestTransformV22EmitsUnitOwnerTelemetry(t *testing.T) {
+	t.Parallel()
+
+	r := newTransformReader(strings.NewReader(""))
+	_, err := r.transform(`11/10/2026 10:22:18.000-1  COMBAT_LOG_VERSION,22,ADVANCED_LOG_ENABLED,1,BUILD_VERSION,1.60.1,PROJECT_ID,18`)
+	require.NoError(t, err)
+
+	line := `11/10/2026 10:22:18.314-1  SPELL_CAST_SUCCESS,Pet-0-6843-0-35-165189-010005B69C,"Peter",0x1112,0x80000000,Creature-0-7095-189-17992-4287-000672FD03,"Scarlet Gallant",0x10a48,0x80000000,14918,"Growl",0x1,Pet-0-6843-0-35-165189-010005B69C,Player-6945-007CBF9A,1988,1988,153,0,2204,0,0,0,2,100,100,15,272.74,-228.20,0,4.8638,30`
+	converted, err := r.transform(line)
+	require.NoError(t, err)
+	lines := strings.Split(converted, "\n")
+	require.Len(t, lines, 4)
+	assert.Contains(t, lines[1], `BLIZZARD_UNIT_POSITION,`)
+	assert.Contains(t, lines[2], `BLIZZARD_UNIT_RESOURCES,`)
+	assert.Contains(t, lines[3], `BLIZZARD_UNIT_OWNER,0xF14002854567D297,0x00001B21007CBF9A`)
+}
+
 func TestTransformV22EmitsTelemetryForAnonymousEventUnits(t *testing.T) {
 	t.Parallel()
 
@@ -411,6 +429,54 @@ func TestUnitResourcesDistinguishesUnitLevelFromAverageItemLevel(t *testing.T) {
 			assert.Equal(t, tt.wantAverageLevel, resources.AverageItemLevel)
 		})
 	}
+}
+
+func TestParseV22AdvancedCombatOwnerIsAuthoritative(t *testing.T) {
+	t.Parallel()
+
+	const peterEvent = `SPELL_CAST_SUCCESS,Pet-0-6843-0-35-165189-010005B69C,"Peter",0x1112,0x80000000,Creature-0-7095-189-17992-4287-000672FD03,"Scarlet Gallant",0x10a48,0x80000000,14918,"Growl",0x1,Pet-0-6843-0-35-165189-010005B69C,Player-6945-007CBF9A,1988,1988,153,0,2204,0,0,0,2,100,100,15,272.74,-228.20,0,4.8638,30`
+	input := strings.Join([]string{
+		`11/10/2026 10:22:18.000-1  COMBAT_LOG_VERSION,22,ADVANCED_LOG_ENABLED,1,BUILD_VERSION,1.60.1,PROJECT_ID,18`,
+		`11/10/2026 10:22:18.314-1  ` + peterEvent,
+		`11/10/2026 10:22:19.314-1  ` + peterEvent,
+	}, "\n")
+	p, err := New(context.Background(), slog.Default(), strings.NewReader(input), hermesProxyTestDB{}, hermesProxyTestDB{}, nil, database.LogFormatV22Cleu)
+	require.NoError(t, err)
+
+	units := unitdb.New()
+	var owners []*messages.NewOwner
+	for {
+		batch, advanceErr := p.Advance(context.Background())
+		for _, msg := range batch {
+			require.NoError(t, units.ProcessMessage(msg))
+			if owner, ok := msg.(*messages.NewOwner); ok {
+				owners = append(owners, owner)
+			}
+		}
+		if advanceErr == io.EOF {
+			break
+		}
+		require.NoError(t, advanceErr)
+	}
+
+	require.Len(t, owners, 1, "repeated advanced snapshots must not duplicate ownership changes")
+	assert.Equal(t, guid.GUID(0xF14002854567D297), owners[0].Target)
+	assert.Equal(t, guid.GUID(0x00001B21007CBF9A), owners[0].NewOwner)
+	pet, ok := units.Get(owners[0].Target)
+	require.True(t, ok)
+	require.NotNil(t, pet.Owner)
+	assert.Equal(t, owners[0].NewOwner, *pet.Owner)
+}
+
+func TestV22AdvancedCombatOwnerDoesNotPersistCreatureControl(t *testing.T) {
+	t.Parallel()
+
+	parser := &Parser{}
+	ts, _, matched, err := wotlk.ParseLine(`11/10 10:22:18.314  BLIZZARD_UNIT_OWNER,0xF13002854567D297,0x00001B21007CBF9A`)
+	require.NoError(t, err)
+	parsed, err := parser.unitOwner(ts, matched, "")
+	require.NoError(t, err)
+	assert.Empty(t, parsed, "creature ownership may represent temporary control such as Mind Control")
 }
 
 func TestParseV22UnitTelemetry(t *testing.T) {

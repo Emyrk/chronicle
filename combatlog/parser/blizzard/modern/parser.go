@@ -70,6 +70,7 @@ type Parser struct {
 	talentTrees *talents.TalentTreeData
 	flavor      database.WoWFlavor
 	guids       *guidNormalizer
+	owners      map[guid.GUID]guid.GUID
 	version     int
 }
 
@@ -122,11 +123,18 @@ func newParser(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB game
 	})
 	_, talentTrees := parsectx.DatasetTalents(ctx)
 	flavor, _ := parsectx.Flavor(ctx)
-	p := &Parser{inner: inner, wowDB: wowDB, talentTrees: talentTrees, flavor: flavor}
+	p := &Parser{
+		inner:       inner,
+		wowDB:       wowDB,
+		talentTrees: talentTrees,
+		flavor:      flavor,
+		owners:      make(map[guid.GUID]guid.GUID),
+	}
 	inner.WithEventHook("BLIZZARD_COMBAT_LOG_VERSION", p.combatLogVersion)
 	inner.WithEventHook("BLIZZARD_ZONE_CHANGE", p.zoneChange)
 	inner.WithEventHook("BLIZZARD_COMBATANT_INFO", p.combatantInfo)
 	inner.WithEventHook("BLIZZARD_SPELL_ABSORBED", p.spellAbsorbed)
+	inner.WithEventHook("BLIZZARD_UNIT_OWNER", p.unitOwner)
 	inner.WithEventHook("BLIZZARD_UNIT_POSITION", p.unitPosition)
 	inner.WithEventHook("BLIZZARD_UNIT_RESOURCES", p.unitResources)
 	inner.WithEventHook("BLIZZARD_ENCOUNTER_START", p.encounterStart)
@@ -204,6 +212,33 @@ func (p *Parser) zoneChange(ts time.Time, m *wotlk.Matched, _ string) ([]message
 			InstanceType: instanceType,
 			IsInstance:   instanceType != "0",
 		},
+	}}, nil
+}
+
+func (p *Parser) unitOwner(ts time.Time, m *wotlk.Matched, _ string) ([]messages.Message, error) {
+	unit := m.Guid()
+	owner := m.Guid()
+	if err := m.Error(); err != nil {
+		return nil, err
+	}
+	// The v22 owner field is also populated for temporary control such as Mind
+	// Control. Only Pet GUIDs provide an unambiguous persistent ownership signal;
+	// creature and vehicle control remains handled by the temporal possession and
+	// vehicle-control systems.
+	if !unit.IsPet() || !owner.IsPlayer() {
+		return nil, nil
+	}
+	if p.owners == nil {
+		p.owners = make(map[guid.GUID]guid.GUID)
+	}
+	if previous, ok := p.owners[unit]; ok && previous == owner {
+		return nil, nil
+	}
+	p.owners[unit] = owner
+	return []messages.Message{&messages.NewOwner{
+		MessageBase: messages.Base(ts),
+		Target:      unit,
+		NewOwner:    owner,
 	}}, nil
 }
 
