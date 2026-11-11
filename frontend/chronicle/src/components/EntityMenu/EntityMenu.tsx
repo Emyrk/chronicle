@@ -14,7 +14,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { Link, useLocation } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import { Copy, ExternalLink, History, Shield, Timer, Trophy, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -486,9 +486,20 @@ function EntityMenuPopover({ menu, actions, onClose }: { menu: OpenMenu; actions
         return (
           <div key={action.id} className={divider ? "mt-1 border-t border-border/60 pt-1" : undefined}>
             {action.href ? (
-              <Link role="menuitem" to={action.href} target="_blank" className={itemClass} onClick={onClose}>
+              <a
+                role="menuitem"
+                href={action.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={itemClass}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.currentTarget.ownerDocument.defaultView?.open(action.href, "_blank", "noopener,noreferrer");
+                  onClose();
+                }}
+              >
                 {content}
-              </Link>
+              </a>
             ) : (
               <button
                 type="button"
