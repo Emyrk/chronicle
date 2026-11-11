@@ -1091,19 +1091,38 @@ func TestIcecrownValithriaScriptedVictory(t *testing.T) {
 		Amount:      1,
 		HitType:     types.HitTypeHit,
 	}))
+	require.NoError(t, instance.Process(&messages.Damage{
+		MessageBase: messages.Base(start.Add(7*time.Minute + 37*time.Second)),
+		Caster:      &attacker,
+		Target:      valithria,
+		Amount:      1,
+		HitType:     types.HitTypeHit,
+	}))
 	require.NoError(t, instance.Process(&messages.SpellStart{
 		MessageBase: messages.Base(start.Add(7*time.Minute + 38*time.Second)),
 		Caster:      valithria,
 		SpellID:     71189,
+	}))
+	require.NoError(t, instance.Process(&messages.Damage{
+		MessageBase: messages.Base(start.Add(7*time.Minute + 41*time.Second)),
+		Caster:      &valithria,
+		Target:      attacker,
+		SpellID:     71189,
+		Amount:      1_000_000,
+		Overkill:    999_999,
+		HitType:     types.HitTypeHit,
+	}))
+	require.NoError(t, instance.Process(&messages.SpellStart{
+		MessageBase: messages.Base(start.Add(7*time.Minute + 42*time.Second)),
+		Caster:      valithria,
+		SpellID:     71196,
 	}))
 
 	result, err := instance.Finalize(context.Background())
 	require.NoError(t, err)
 	require.Len(t, result.Encounters, 1)
 	require.Equal(t, "Valithria Dreamwalker", result.Encounters[0].Name)
-	// The synthetic fixture leaves the attacking add alive, so the scripted boss
-	// victory is partial rather than a wipe.
-	require.Equal(t, encounter.KillTypePartial, result.Encounters[0].KillType)
+	require.Equal(t, encounter.KillTypeClean, result.Encounters[0].KillType)
 }
 
 func creatureGUIDWithSeed(entry uint32, seed uint32) guid.GUID {

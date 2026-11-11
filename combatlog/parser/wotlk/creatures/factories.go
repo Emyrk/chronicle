@@ -75,8 +75,12 @@ func NewCharacterFactories(flavor database.WoWFlavor) []characters.CharacterFact
 			NewMalGanis,
 
 			// Icecrown Citadel
+			NewLadyDeathwhisper,
 			NewGunshipBattleCharacter,
+			NewProfessorPutricide,
 			NewValithriaDreamwalker,
+			NewSindragosa,
+			NewLichKing,
 
 			// Ulduar,
 			NewIgnisIronConstruct,
@@ -93,9 +97,19 @@ func NewCharacterFactories(flavor database.WoWFlavor) []characters.CharacterFact
 			NewYoggSaronGuardian,
 			NewYoggSaronEncounterCharacter,
 		)
-		// Mechanolift, Vortex, Kologarn, Mimiron's machines, and Yogg-Saron can use
-		// vehicle GUIDs, so they must not rely solely on the CreatureFactories wrappers.
-		wrath = append(wrath, NewFlameLeviathan, NewMechanolift, NewVortex, NewKologarnEncounterCharacter, NewMimironEncounterCharacter, NewYoggSaronEncounterCharacter)
+		// Gunship objects, Putricide, Mechanolift, Vortex, Kologarn, Mimiron's
+		// machines, and Yogg-Saron can use vehicle GUIDs, so they must not rely
+		// solely on the CreatureFactories wrappers.
+		wrath = append(wrath,
+			NewGunshipBattleCharacter,
+			NewProfessorPutricide,
+			NewFlameLeviathan,
+			NewMechanolift,
+			NewVortex,
+			NewKologarnEncounterCharacter,
+			NewMimironEncounterCharacter,
+			NewYoggSaronEncounterCharacter,
+		)
 		cres = append(wrath, cres...)
 	}
 

@@ -209,10 +209,12 @@ func (p *Parser) suffixDamage(ts time.Time, base baseParams, spell *spellInfo, e
 	}
 
 	var spellName *string
+	var spellID chrondbc.SpellID
 	var spellData *chrondbc.Spell
 	if spell != nil {
 		spellName = &spell.spellName
-		spellData = p.lookupSpell(chrondbc.SpellID(spell.spellID), spell.spellName)
+		spellID = chrondbc.SpellID(spell.spellID)
+		spellData = p.lookupSpell(spellID, spell.spellName)
 		school = spell.spellSchool
 	} else if prefix == "SWING" {
 		spellName = ptr.Ref("Auto Attack")
@@ -223,6 +225,7 @@ func (p *Parser) suffixDamage(ts time.Time, base baseParams, spell *spellInfo, e
 	return set(&messages.Damage{
 		MessageBase:     messages.Base(ts),
 		SpellName:       spellName,
+		SpellID:         spellID,
 		SpellData:       spellData,
 		Caster:          &caster,
 		Target:          base.destGUID,
@@ -258,11 +261,13 @@ func (p *Parser) suffixMissed(ts time.Time, base baseParams, spell *spellInfo, i
 	}
 
 	var spellName *string
+	var spellID chrondbc.SpellID
 	var spellData *chrondbc.Spell
 	var school types.School
 	if spell != nil {
 		spellName = &spell.spellName
-		spellData = p.lookupSpell(chrondbc.SpellID(spell.spellID), spell.spellName)
+		spellID = chrondbc.SpellID(spell.spellID)
+		spellData = p.lookupSpell(spellID, spell.spellName)
 		school = spell.spellSchool
 	} else {
 		spellName = ptr.Ref("Auto Attack")
@@ -492,10 +497,12 @@ func (p *Parser) suffixAura(ts time.Time, base baseParams, spell *spellInfo, sta
 	isBuff := auraType == "BUFF"
 
 	var spellName string
+	var spellID chrondbc.SpellID
 	var spellData *chrondbc.Spell
 	if spell != nil {
 		spellName = spell.spellName
-		spellData = p.lookupSpell(chrondbc.SpellID(spell.spellID), spell.spellName)
+		spellID = chrondbc.SpellID(spell.spellID)
+		spellData = p.lookupSpell(spellID, spell.spellName)
 	}
 
 	// TODO: This is not wholly correct.
@@ -515,6 +522,7 @@ func (p *Parser) suffixAura(ts time.Time, base baseParams, spell *spellInfo, sta
 		Source:      source,
 		Target:      base.destGUID,
 		SpellName:   spellName,
+		SpellID:     spellID,
 		SpellData:   spellData,
 		Amount:      amt,
 		State:       state,
@@ -552,10 +560,12 @@ func (p *Parser) suffixAuraDose(ts time.Time, base baseParams, spell *spellInfo,
 	isBuff := auraType == "BUFF"
 
 	var spellName string
+	var spellID chrondbc.SpellID
 	var spellData *chrondbc.Spell
 	if spell != nil {
 		spellName = spell.spellName
-		spellData = p.lookupSpell(chrondbc.SpellID(spell.spellID), spell.spellName)
+		spellID = chrondbc.SpellID(spell.spellID)
+		spellData = p.lookupSpell(spellID, spell.spellName)
 	}
 
 	var source *guid.GUID
@@ -569,6 +579,7 @@ func (p *Parser) suffixAuraDose(ts time.Time, base baseParams, spell *spellInfo,
 		Source:      source,
 		Target:      base.destGUID,
 		SpellName:   spellName,
+		SpellID:     spellID,
 		SpellData:   spellData,
 		Amount:      amount,
 		State:       types.AuraStateModified,
@@ -590,10 +601,12 @@ func (p *Parser) suffixAuraBrokenSpell(ts time.Time, base baseParams, spell *spe
 	isBuff := auraType == "BUFF"
 
 	var spellName string
+	var spellID chrondbc.SpellID
 	var spellData *chrondbc.Spell
 	if spell != nil {
 		spellName = spell.spellName
-		spellData = p.lookupSpell(chrondbc.SpellID(spell.spellID), spell.spellName)
+		spellID = chrondbc.SpellID(spell.spellID)
+		spellData = p.lookupSpell(spellID, spell.spellName)
 	}
 
 	var source *guid.GUID
@@ -607,6 +620,7 @@ func (p *Parser) suffixAuraBrokenSpell(ts time.Time, base baseParams, spell *spe
 		Source:      source,
 		Target:      base.destGUID,
 		SpellName:   spellName,
+		SpellID:     spellID,
 		SpellData:   spellData,
 		Amount:      0,
 		State:       types.AuraStateRemoved,

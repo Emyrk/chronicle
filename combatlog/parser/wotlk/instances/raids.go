@@ -400,17 +400,25 @@ func IcecrownCitadelHostiles() map[uint32]instances.Identity {
 		36659: "Abomination Wing Orange Gas Stalker",
 		36724: "Servant of the Throne",
 		36725: "Nerub'ar Broodkeeper",
+		36791: "Blazing Skeleton",
 		36805: "Deathspeaker Servant",
 		36807: "Deathspeaker Disciple",
 		36808: "Deathspeaker Zealot",
 		36811: "Deathspeaker Attendant",
 		36829: "Deathspeaker High Priest",
+		36838: "Alliance Gunship Cannon",
+		36839: "Horde Gunship Cannon",
 		36880: "Decaying Colossus",
 		36934: "Empowering Orb Controller Stalker",
 		36939: "High Overlord Saurfang",
+		36948: "Muradin Bronzebeard",
+		36950: "Skybreaker Marine",
 		36957: "Kor'kron Reaver",
 		36960: "Kor'kron Sergeant",
+		36961: "Skybreaker Sergeant",
 		36968: "Kor'kron Axethrower",
+		36969: "Skybreaker Rifleman",
+		36978: "Skybreaker Mortar Soldier",
 		36982: "Kor'kron Rocketeer",
 		36998: "Skybreaker Protector",
 		37003: "Skybreaker Vindicator",
@@ -435,6 +443,7 @@ func IcecrownCitadelHostiles() map[uint32]instances.Identity {
 		37035: "Kor'kron Vanquisher",
 		37038: "Vengeful Fleshreaper",
 		37098: "Val'kyr Herald",
+		37116: "Skybreaker Sorcerer",
 		37117: "Kor'kron Battle-Mage",
 		37122: "Captain Arnath",
 		37123: "Captain Brandon",
@@ -471,9 +480,15 @@ func IcecrownCitadelHostiles() map[uint32]instances.Identity {
 		37702: "Runeforge Bunny",
 		37744: "Frost Freeze Trap",
 		37824: "Abomination Wing Mad Scientist Stalker",
+		37863: "Suppresser",
 		37868: "Risen Archmage",
+		37886: "Gluttonous Abomination",
+		37907: "Rot Worm",
 		37920: "Kor'kron Reaver",
+		37934: "Blistering Zombie",
 		37985: "Dream Cloud",
+		38068: "Mana Void",
+		38421: "Nightmare Cloud",
 	})
 
 	instances.LoadBosses(hostile, map[uint32]string{
@@ -491,6 +506,12 @@ func IcecrownCitadelHostiles() map[uint32]instances.Identity {
 	hostile[37970] = instances.Identity{Affiliation: types.AffiliationHostile, EncounterName: "Blood Council", Boss: true}
 	hostile[37972] = instances.Identity{Affiliation: types.AffiliationHostile, EncounterName: "Blood Council", Boss: true}
 	hostile[37973] = instances.Identity{Affiliation: types.AffiliationHostile, EncounterName: "Blood Council", Boss: true}
+	hostile[37540] = instances.Identity{
+		Affiliation:   types.AffiliationHostile,
+		Name:          "The Skybreaker",
+		EncounterName: "Gunship Battle",
+		Boss:          true,
+	}
 	hostile[37215] = instances.Identity{
 		Affiliation:   types.AffiliationHostile,
 		Name:          "Orgrim's Hammer",
@@ -501,8 +522,11 @@ func IcecrownCitadelHostiles() map[uint32]instances.Identity {
 }
 
 var IcecrownCitadelFactory = &instances.CommonFactory{
-	Name:      "Icecrown Citadel",
-	Category:  instances.InstanceCategoryRaid,
+	Name:     "Icecrown Citadel",
+	Category: instances.InstanceCategoryRaid,
+	Preprocessors: func() []instancehook.Preprocessor {
+		return []instancehook.Preprocessor{&icecrownScriptedActivity{}}
+	},
 	ZoneNames: []string{"icecrown citadel"},
 	MapIDs:    []uint32{631},
 	Hostiles:  instances.FromMap(IcecrownCitadelHostiles()),

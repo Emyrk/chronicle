@@ -74,3 +74,56 @@ func TestCastMessagesPreserveRawSpellIDWhenLookupFails(t *testing.T) {
 		})
 	}
 }
+
+func TestCombatMessagesPreserveRawSpellIDWhenLookupFails(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		line  string
+		check func(t *testing.T, msgs []messages.Message)
+	}{
+		{
+			name: "damage",
+			line: "11/5 22:27:21.549  SPELL_DAMAGE,0xF130008FB5000323,\"Valithria Dreamwalker\",0x30a18,0xF1300093EE000324,\"Risen Archmage\",0x10a48,71189,\"Dreamwalker's Rage\",0x8,1000000,999999,8,0,0,0,nil,nil,nil",
+			check: func(t *testing.T, msgs []messages.Message) {
+				t.Helper()
+				for _, msg := range msgs {
+					if damage, ok := msg.(*messages.Damage); ok {
+						require.Equal(t, chrondbc.SpellID(71189), damage.SpellID)
+						require.Nil(t, damage.SpellData)
+						return
+					}
+				}
+				require.Fail(t, "Damage not emitted")
+			},
+		},
+		{
+			name: "aura",
+			line: "11/5 20:21:16.960  SPELL_AURA_REMOVED,0xF130008FF70000D9,\"Lady Deathwhisper\",0x10a48,0xF130008FF70000D9,\"Lady Deathwhisper\",0x10a48,70842,\"Mana Barrier\",0x20,BUFF",
+			check: func(t *testing.T, msgs []messages.Message) {
+				t.Helper()
+				for _, msg := range msgs {
+					if aura, ok := msg.(*messages.Aura); ok {
+						require.Equal(t, chrondbc.SpellID(70842), aura.SpellID)
+						require.Nil(t, aura.SpellData)
+						return
+					}
+				}
+				require.Fail(t, "Aura not emitted")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			db := missingSpellTestDB{}
+			parser, err := New(context.Background(), slog.Default(), strings.NewReader(tt.line), db, db, nil)
+			require.NoError(t, err)
+			msgs, err := parser.Advance(context.Background())
+			require.NoError(t, err)
+			tt.check(t, msgs)
+		})
+	}
+}
