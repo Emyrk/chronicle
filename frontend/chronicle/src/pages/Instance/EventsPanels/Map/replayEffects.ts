@@ -1,5 +1,5 @@
 import type { BossMechanicAnimationInterval } from "./bossMechanicAnimations";
-import { bossRadialEffectForSpell, MAX_BOSS_RADIAL_DURATION_MS } from "./bossRadialEffects";
+import { radialEffectForSpell, MAX_RADIAL_EFFECT_DURATION_MS, type RadialEffectShape } from "./radialEffects";
 import { deepBreathPathForSpell, deepBreathPointForSpell, isDeepBreathPrimarySpell } from "./deepBreathLanes";
 
 /**
@@ -60,13 +60,14 @@ export interface EncounterEffects {
   healsByUnit: Map<string, ReplayEffectEvent[]>;
 }
 
-export interface ActiveBossRadialEffect {
+export interface ActiveRadialEffect {
   key: string;
   source: string;
   spellId: number;
   progress: number;
   radiusYards: number;
   color: string;
+  shape: RadialEffectShape;
   startMs: number;
   endMs: number;
 }
@@ -298,17 +299,17 @@ export function eventWindow(events: readonly ReplayEffectEvent[], fromMs: number
   return [start, Math.max(start, end)];
 }
 
-export function deriveActiveBossRadialEffects(
+export function deriveActiveRadialEffects(
   fx: EncounterEffects,
   cursorMs: number,
-  out: ActiveBossRadialEffect[] = [],
-): ActiveBossRadialEffect[] {
+  out: ActiveRadialEffect[] = [],
+): ActiveRadialEffect[] {
   let count = 0;
-  const [start, end] = eventWindow(fx.events, cursorMs - MAX_BOSS_RADIAL_DURATION_MS, cursorMs);
+  const [start, end] = eventWindow(fx.events, cursorMs - MAX_RADIAL_EFFECT_DURATION_MS, cursorMs);
   for (let index = end - 1; index >= start; index--) {
     const event = fx.events[index];
     if (event.kind !== "cast_go" || event.spellId === null || !event.source) continue;
-    const definition = bossRadialEffectForSpell(event.spellId);
+    const definition = radialEffectForSpell(event.spellId);
     if (!definition) continue;
     const ageMs = cursorMs - event.timestampMs;
     if (ageMs < 0 || ageMs >= definition.durationMs) continue;
@@ -319,6 +320,7 @@ export function deriveActiveBossRadialEffects(
       progress: 0,
       radiusYards: 0,
       color: "",
+      shape: "ring",
       startMs: 0,
       endMs: 0,
     });
@@ -328,6 +330,7 @@ export function deriveActiveBossRadialEffects(
     radial.progress = ageMs / definition.durationMs;
     radial.radiusYards = definition.radiusYards;
     radial.color = definition.color;
+    radial.shape = definition.shape;
     radial.startMs = event.timestampMs;
     radial.endMs = event.timestampMs + definition.durationMs;
     count++;
