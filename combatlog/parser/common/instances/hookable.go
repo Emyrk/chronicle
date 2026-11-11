@@ -188,6 +188,7 @@ func NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z z
 	cie := &CombatantInfoEmitter{
 		armory:     g,
 		characters: chrs,
+		units:      db,
 		strategy:   combatantStrategy,
 	}
 	chrs.RegisterHook(cie)
