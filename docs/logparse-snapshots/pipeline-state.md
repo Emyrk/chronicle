@@ -29,7 +29,9 @@ continues to determine whether the stage executes.
 ## Compatibility and runtime dependencies
 
 The caller supplies immutable dataset **content** identity, format, canonical
-flavor key, parser version, and custom-spell/override implementation version.
+flavor key, parser implementation version, HEADER display/build version, and
+custom-spell/override implementation version. The display/build string is a
+separate invariant from parser implementation identity and may be empty.
 These strings are attestations, not checksums computed or verified by the codec.
 A dataset UUID alone does not identify its changing contents. The caller must
 include all effective input data/rules, including talent/gear content and resolver
@@ -39,6 +41,10 @@ or local resource paths in it.
 The first successful capture binds that identity to the pipeline; subsequent
 captures cannot change it. Restore checks exact equality before any derivation,
 and verifies format/flavor against the newly supplied construction context.
+Capture also matches the display/build string against the original constructor.
+Restore rejects a source payload whose build string differs from the trusted
+expected identity before any spell lookup, then injects that trusted string into
+the new pipeline/decoder rather than accepting payload-controlled metadata.
 The effective GameDB must already be dataset-scoped and flavor-overridden exactly
 as at construction. The API cannot prove that an arbitrary injected implementation
 honors the attested identity. Logger, gear resolver, and talent data are reinjected.
