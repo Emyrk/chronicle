@@ -1,4 +1,3 @@
-import { IsolationDiagnostic } from "./IsolationDiagnostic";
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { ArrowLeft, Loader2, Youtube, Timer, TriangleAlert } from "lucide-react";
@@ -288,13 +287,6 @@ export function InstancePageInner({
 // Connected component that fetches data
 /** Encounter sidebar for an API instance, used by tools outside the instance page (e.g. the Lua preview). */
 export function InstancePage() {
-  return <>
-    <IsolationDiagnostic />
-    <InstancePageContent />
-  </>;
-}
-
-function InstancePageContent() {
   const { instanceId } = useParams<{ instanceId: string }>();
   const navigate = useNavigate();
   // Track user selection; null means use default
