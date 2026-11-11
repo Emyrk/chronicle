@@ -140,7 +140,7 @@ export interface MapSceneMarker {
   name: string;
   /** Health at the cursor for every unit with health data, or null. */
   health: MapUnitHealth | null;
-  /** The declutter (selectHealthBars) gives this unit a health bar; the 3D view also bars the selected unit's target chain. */
+  /** The declutter (selectHealthBars) gives this unit a health bar (the 3D view moves it into the nameplate for units that have one). */
   bar: boolean;
   /** Creature entry used by the shared miniature registry (hostiles, pets, totems, etc.). */
   entry?: number;

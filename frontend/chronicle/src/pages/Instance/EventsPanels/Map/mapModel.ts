@@ -226,7 +226,7 @@ export function latestPositionAt(
   return index >= 0 ? positions[index] : null;
 }
 
-/** Most health bars drawn at once (the selected unit's target chain comes on top). */
+/** Most health bars drawn at once. */
 export const MAX_HEALTH_BARS = 48;
 /** Units whose health changed this recently get a bar. */
 export const RECENT_HEALTH_MS = 3_000;

@@ -123,8 +123,7 @@ const POWER_STRIP_THICKNESS = 0.16;
 const POWER_STRIP_GAP = 0.05;
 // Quads per bar: backing, health, healed, absorb, power.
 const BAR_QUADS = 5;
-// The declutter's bars plus the selected unit's target chain (three).
-const BAR_POOL_SIZE = (MAX_HEALTH_BARS + 3) * BAR_QUADS;
+const BAR_POOL_SIZE = MAX_HEALTH_BARS * BAR_QUADS;
 const Z_AXIS = new THREE.Vector3(0, 0, 1);
 const MAX_COMBAT_TEXT = 8;
 const COMBAT_TEXT_HEIGHT = 1.8;
@@ -487,7 +486,7 @@ export interface MapScene3DUnit {
   name: string;
   /** Health at the cursor (for its bar and nameplate), or null when unknown or bars are off. */
   health: MapUnitHealth | null;
-  /** Draw its health bar: picked by the declutter (selectHealthBars). The selected unit, its target and their target always get one. */
+  /** Draw its health bar: picked by the declutter (selectHealthBars). A unit with a nameplate shows its health there instead. */
   bar?: boolean;
   /** Published model URL from the shared miniature manifest. */
   miniatureUrl: string | undefined;
@@ -639,7 +638,7 @@ interface UnitObject {
   /** `floorY` came from the unit's floor track (no logged height), not a probe. */
   floorTracked: boolean;
   health: MapUnitHealth | null;
-  /** The declutter gives it a health bar (the target chain gets one regardless). */
+  /** The declutter gives it a health bar (hidden while it has a nameplate). */
   bar: boolean;
   /** Published miniature or original-model URL; the primitive shows until it loads. */
   miniatureUrl: string | undefined;
@@ -947,8 +946,9 @@ export class MapScene3D {
   private readonly unitFloorHeights = new FloorHeightCache((x, z, ceiling) => this.sampleFloor(x, z, ceiling));
   private readonly floorRay = new THREE.Ray();
   private constraining = false;
-  // The hovered unit's nameplate (drawUnitPlate), redrawn when what it shows changes.
-  private label: { sprite: THREE.Sprite; canvas: HTMLCanvasElement; key: string } | null = null;
+  // Nameplates (drawUnitPlate) over the hovered unit, the selected unit, its
+  // target, their target and pinned units; each redrawn when what it shows changes.
+  private readonly plates = new Map<string, { sprite: THREE.Sprite; canvas: HTMLCanvasElement; key: string }>();
   private hoveredGuid: string | null = null;
   // A click on a unit (inspect it); held briefly so a double-click (zoom) cancels it.
   private onUnitClick: ((guid: string) => void) | null = null;
@@ -1597,7 +1597,7 @@ export class MapScene3D {
     for (const guid of [...this.units.keys()]) {
       if (!seen.has(guid)) this.removeUnit(guid);
     }
-    this.updateLabel();
+    this.updatePlates();
     this.requestRender();
   }
 
@@ -2076,7 +2076,7 @@ export class MapScene3D {
       this.layoutDrop(object);
     }
     this.planLayer.setUnitScale(scale);
-    this.updateLabel();
+    this.updatePlates();
   }
 
   // Client-sized models use true world yards on calibrated maps. On artwork
@@ -2836,7 +2836,7 @@ export class MapScene3D {
     this.keyWindow.removeEventListener("blur", this.releaseKeys);
     for (const guid of [...this.units.keys()]) this.removeUnit(guid);
     this.clearDebugOverlays();
-    this.clearLabel();
+    for (const guid of [...this.plates.keys()]) this.removePlate(guid);
     this.clearGround();
     this.dungeonMeshRequest = null;
     // The renderer's disposal frees this scene's GPU copy of the (shared) mesh.
@@ -3193,7 +3193,7 @@ export class MapScene3D {
       for (const object of this.units.values()) {
         if (object.miniatureUrl === url && object.gameModel === gameModel && object.mapScale === mapScale && object.worldHeight === worldHeight) this.applyBossMini(object, mini);
       }
-      this.updateLabel();
+      this.updatePlates();
       this.requestRender();
     });
     return null;
@@ -3971,8 +3971,8 @@ export class MapScene3D {
       this.castArcs[index].visible = false;
       this.castLabels[index].visible = false;
     }
-    // The hover label sits above the hovered unit's icons.
-    if (this.hoveredGuid) this.updateLabel();
+    // Nameplates sit above their unit's icons.
+    this.updatePlates();
   }
 
   // The cast outline traced `step / CAST_ARC_STEPS` of the way round,
@@ -4145,8 +4145,8 @@ export class MapScene3D {
 
   // Health bars above the units, facing the camera at a constant screen size,
   // with a thin power strip under the health while the unit is alive and has
-  // power. The declutter's picks get one, and the selected unit, its target
-  // and their target always do (drawn first, so the cap never drops them).
+  // power, over the declutter's picks. Units with a nameplate (hovered,
+  // selected, its target chain, pinned) show their health there instead.
   private updateBars() {
     const width = BAR_WIDTH * this.unitScale;
     const thickness = BAR_THICKNESS * this.unitScale;
@@ -4167,17 +4167,11 @@ export class MapScene3D {
       this.bars.setColorAt(count, typeof color === "number" ? this.color.setHex(color) : color);
       count++;
     };
-    const { roles } = this;
-    const chain = [roles.selected, roles.target, roles.targetsTarget].flatMap((guid) => {
-      const object = guid ? this.units.get(guid) : undefined;
-      return object ? [object] : [];
-    });
-    const drawn = new Set<UnitObject>();
-    for (const object of [...chain, ...this.units.values()]) {
+    // A unit with a nameplate shows its health and power there instead.
+    const plated = this.plateGuids();
+    for (const [guid, object] of this.units) {
       const { health } = object;
-      if (drawn.has(object) || (!object.bar && !chain.includes(object))) continue;
-      drawn.add(object);
-      if (!object.group.visible || !health || count + BAR_QUADS > BAR_POOL_SIZE) continue;
+      if (!object.bar || plated.has(guid) || !object.group.visible || !health || count + BAR_QUADS > BAR_POOL_SIZE) continue;
       const dead = health.dead || object.dead;
       barLift = object.barHeight * this.scaleOf(object);
       const fraction = health.max > 0 ? Math.min(1, Math.max(0, health.current / health.max)) : 0;
@@ -4256,55 +4250,74 @@ export class MapScene3D {
     }
   }
 
-  // The hovered unit's nameplate: name, health, power and cast, live.
-  private updateLabel() {
-    const guid = this.hoveredGuid;
-    const object = guid ? this.units.get(guid) : undefined;
-    if (!guid || !object || !object.group.visible) {
-      this.clearLabel();
-      return;
+  // The units with a nameplate: the hovered unit, the selected unit, its
+  // target, their target and pinned units.
+  private plateGuids(): Set<string> {
+    const { roles } = this;
+    const guids = new Set<string>(roles.pinned);
+    for (const guid of [roles.selected, roles.target, roles.targetsTarget, this.hoveredGuid]) {
+      if (guid) guids.add(guid);
     }
-    if (!this.label) {
+    return guids;
+  }
+
+  // Nameplates: name, health, power and cast, live, at a fixed screen size.
+  private updatePlates() {
+    const wanted = this.plateGuids();
+    for (const guid of [...this.plates.keys()]) {
+      const object = this.units.get(guid);
+      if (!wanted.has(guid) || !object || !object.group.visible) this.removePlate(guid);
+    }
+    for (const guid of wanted) {
+      const object = this.units.get(guid);
+      if (object?.group.visible) this.updatePlate(guid, object);
+    }
+  }
+
+  private updatePlate(guid: string, object: UnitObject) {
+    let plate = this.plates.get(guid);
+    if (!plate) {
       const canvas = document.createElement("canvas");
       const texture = new THREE.CanvasTexture(canvas);
       texture.colorSpace = THREE.SRGBColorSpace;
       const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true }));
       sprite.center.set(0.5, 0);
-      sprite.renderOrder = 10;
       this.scene.add(sprite);
-      this.label = { sprite, canvas, key: "" };
+      plate = { sprite, canvas, key: "" };
+      this.plates.set(guid, plate);
     }
-    const label = this.label;
+    // The hovered unit's plate draws over the others.
+    plate.sprite.renderOrder = guid === this.hoveredGuid ? 11 : 10;
     const info = this.plateInfo(guid, object);
     const size = unitPlateSize(info);
     // Redraw only when something it shows changes (to the percent).
     const key = JSON.stringify(info, (_key, value: unknown) => (typeof value === "number" ? Math.round(value * 100) / 100 : value));
-    if (key !== label.key) {
-      label.key = key;
-      if (label.canvas.width !== size.width * UNIT_PLATE.scale || label.canvas.height !== size.height * UNIT_PLATE.scale) {
-        label.canvas.width = size.width * UNIT_PLATE.scale;
-        label.canvas.height = size.height * UNIT_PLATE.scale;
-        label.sprite.material.map?.dispose();
-        const texture = new THREE.CanvasTexture(label.canvas);
+    if (key !== plate.key) {
+      plate.key = key;
+      if (plate.canvas.width !== size.width * UNIT_PLATE.scale || plate.canvas.height !== size.height * UNIT_PLATE.scale) {
+        plate.canvas.width = size.width * UNIT_PLATE.scale;
+        plate.canvas.height = size.height * UNIT_PLATE.scale;
+        plate.sprite.material.map?.dispose();
+        const texture = new THREE.CanvasTexture(plate.canvas);
         texture.colorSpace = THREE.SRGBColorSpace;
-        label.sprite.material.map = texture;
-        label.sprite.material.needsUpdate = true;
+        plate.sprite.material.map = texture;
+        plate.sprite.material.needsUpdate = true;
       }
-      drawUnitPlate(label.canvas.getContext("2d")!, info);
-      label.sprite.material.map!.needsUpdate = true;
+      drawUnitPlate(plate.canvas.getContext("2d")!, info);
+      plate.sprite.material.map!.needsUpdate = true;
     }
     // Above the unit's cast icons while it has any.
     const iconTop = this.castIconTops.get(guid);
     const height = iconTop !== undefined ? iconTop + CAST_ICON_TOP_GAP : object.labelHeight;
     const { position } = object.group;
-    label.sprite.position.set(position.x, position.y + height * this.scaleOf(object), position.z);
+    plate.sprite.position.set(position.x, position.y + height * this.scaleOf(object), position.z);
     // A fixed size on screen, like a game's nameplate, however close the camera is.
     const viewportHeight = this.renderer.domElement.clientHeight || 1;
-    const worldPerPixel = (2 * this.camera.position.distanceTo(label.sprite.position) * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)) / viewportHeight;
-    label.sprite.scale.set(size.width * PLATE_SCREEN_SCALE * worldPerPixel, size.height * PLATE_SCREEN_SCALE * worldPerPixel, 1);
+    const worldPerPixel = (2 * this.camera.position.distanceTo(plate.sprite.position) * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)) / viewportHeight;
+    plate.sprite.scale.set(size.width * PLATE_SCREEN_SCALE * worldPerPixel, size.height * PLATE_SCREEN_SCALE * worldPerPixel, 1);
   }
 
-  // What the hovered unit's nameplate shows, from what the scene already has.
+  // What a unit's nameplate shows, from what the scene already has.
   private plateInfo(guid: string, object: UnitObject): UnitPlateInfo {
     const health = object.healthFraction ?? (object.health && object.health.max > 0 ? object.health.current / object.health.max : null);
     const cast = this.unitCasts.get(guid);
@@ -4323,12 +4336,13 @@ export class MapScene3D {
     };
   }
 
-  private clearLabel() {
-    if (!this.label) return;
-    this.scene.remove(this.label.sprite);
-    this.label.sprite.material.map?.dispose();
-    this.label.sprite.material.dispose();
-    this.label = null;
+  private removePlate(guid: string) {
+    const plate = this.plates.get(guid);
+    if (!plate) return;
+    this.scene.remove(plate.sprite);
+    plate.sprite.material.map?.dispose();
+    plate.sprite.material.dispose();
+    this.plates.delete(guid);
   }
 
   private readonly handlePointerMove = (event: PointerEvent) => {
@@ -4385,7 +4399,7 @@ export class MapScene3D {
     if (guid === this.hoveredGuid) return;
     this.hoveredGuid = guid;
     this.updateCursor();
-    this.updateLabel();
+    this.updatePlates();
     this.requestRender();
   };
 
@@ -4533,7 +4547,7 @@ export class MapScene3D {
     this.requestRender();
     if (!this.hoveredGuid) return;
     this.hoveredGuid = null;
-    this.updateLabel();
+    this.updatePlates();
     this.requestRender();
   };
 
@@ -5520,8 +5534,8 @@ export class MapScene3D {
     this.updateBars();
     this.updateEffectHover();
     this.emitCompassYaw();
-    // The nameplate keeps its screen size as the camera moves.
-    if (this.hoveredGuid) this.updateLabel();
+    // Nameplates keep their screen size as the camera moves.
+    this.updatePlates();
     this.renderer.render(this.scene, this.camera);
     this.emitPresence();
     return animating;

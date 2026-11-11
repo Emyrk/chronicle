@@ -238,7 +238,7 @@ export function MapLegend() {
           <Card title="Muted" demo={<Ground><At x={35} y={55}><Token {...MAGE} /></At><At x={68} y={55}><Token {...PALADIN} muted /></At></Ground>}>
             While players are selected in the page&apos;s filter, everyone else fades to {Math.round(TOKEN_LAYOUT.mutedOpacity * 100)}%.
           </Card>
-          <Card title="Hover" demo={
+          <Card title="Nameplate" demo={
             <Ground height={150}>
               <At x={50} y={80}><Token {...SHAMAN} /></At>
               <At x={50} y={58}>
@@ -254,7 +254,7 @@ export function MapLegend() {
               </At>
             </Ground>
           }>
-            Hovering a unit shows its nameplate: the name (in red for enemies, with the owner for a pet or totem), health with its percentage and amount, power, and a cast bar while it casts (or Dead).
+            The hovered unit, the selected unit, its target, their target and pinned units show a nameplate: the name (in red for enemies, with the owner for a pet or totem), health with its percentage and amount, power, and a cast bar while it casts (or Dead). It takes the place of the unit's health bar.
           </Card>
         </Grid>
       </Section>
@@ -411,7 +411,7 @@ export function MapLegend() {
         </Grid>
       </Section>
 
-      <Section id="bars" title="Health bars" note={`Always over the selected unit, its target and their target. Then, up to ${MAX_HEALTH_BARS} at once: bosses, selected players, players below ${LOW_HEALTH_BAR_FRACTION * 100}% health, mana users below ${LOW_MANA_BAR_FRACTION * 100}% mana, and units whose health or power changed in the last ${ms(RECENT_HEALTH_MS)}. Toggle them in Map settings → Units.`}>
+      <Section id="bars" title="Health bars" note={`Up to ${MAX_HEALTH_BARS} at once: bosses, selected players, players below ${LOW_HEALTH_BAR_FRACTION * 100}% health, mana users below ${LOW_MANA_BAR_FRACTION * 100}% mana, and units whose health or power changed in the last ${ms(RECENT_HEALTH_MS)}. Units with a nameplate show their health there instead. Toggle them in Map settings → Units.`}>
         <div className="grid gap-3 sm:grid-cols-2">
           {[
             { label: "Healthy", bar: <HealthBar fraction={0.95} /> },
