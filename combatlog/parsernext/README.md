@@ -253,8 +253,9 @@ unsupported, against the pre-extraction implementations with fallback spell data
 
 ### Stateful header and timestamp boundary
 
-Use a **fresh** `vanilla.NewDecoder(spellLookup, chronicleBuildVersion)` for each
-source. Its `DecodeRecord` method supports HEADER plus the record families above;
+`vanilla.NewDecoder(spellLookup, chronicleBuildVersion)` creates independent
+clock/header state, matching a fresh legacy parser. Its `DecodeRecord` method
+supports HEADER plus the record families above;
 the stateless `vanilla.DecodeRecord` function still rejects HEADER because it
 cannot supply per-source timestamp/version interpretation. Neither entry point
 reads a file or claims unsupported identity/metadata was parsed.
@@ -280,7 +281,10 @@ backward movement is tolerated; larger jumps remain fatal. Successful lexical
 records advance time before semantic decoding, including unsupported records or
 semantic failures. Lexical failures do not update time. These are preserved
 legacy quirks, not new timestamp policy. State is not a checkpoint/saved payload;
-callers discard it with provisional output after a full-file ingestion failure.
+callers decide whether to discard it with provisional output after an ingestion
+failure. Completing a file does not finalize/reset the decoder. A future session
+can explicitly retain this owner across consecutive files; separate decoder
+instances provide isolation. No automatic continuity/reset policy is imposed.
 
 Headers advertise version strings but do **not** establish observed raid-layout,
 resource or position capabilities. Those flags are set by successfully parsed
