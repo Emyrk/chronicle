@@ -1,30 +1,9 @@
 package critters
 
-import "github.com/Emyrk/chronicle/combatlog/parser/guid"
-
-var critters = map[uint32]string{
-	4075:  "Rat",
-	7395:  "Cockroach",
-	4076:  "Roach",
-	2914:  "Snake",
-	883:   "Deer",
-	1420:  "Toad",
-	16030: "Maggot",
-	3835:  "Biletoad",
-	14881: "Spider",
-	10441: "Plagued Rat",
-	13321: "Frog",
-	3680:  "Serpentbloom Snake",
-	15010: "Jungle Toad", // ZG
-
-	// V+
-	25254: "Cockroach",
-
-	// WoW Forever
-	263055: "Crab",
-	263061: "Toad",
-	263064: "Snake",
-}
+import (
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	knowncritters "github.com/Emyrk/chronicle/combatlog/parsernext/common/critters"
+)
 
 func IsCritter(id guid.GUID) bool {
 	if !id.IsCreature() {
@@ -36,6 +15,6 @@ func IsCritter(id guid.GUID) bool {
 		return false
 	}
 
-	_, exists := critters[entry]
+	_, exists := knowncritters.Name(entry)
 	return exists
 }
