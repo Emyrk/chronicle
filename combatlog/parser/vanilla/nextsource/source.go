@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Emyrk/chronicle/database"
 	"io"
 	"log/slog"
 	"maps"
@@ -27,7 +28,7 @@ type Pipeline struct {
 	activeSource      *Source
 	boundary          bool
 	buildVersion      string
-	format            string
+	format            database.LogFormat
 	flavor            string
 	decoder           *next.Decoder
 	synthetics        *synthetic.Synthetic
@@ -54,7 +55,7 @@ func New(ctx context.Context, logger *slog.Logger, db gamedb.GameDB, gear gamedb
 	_, trees := parsectx.DatasetTalents(ctx)
 	format, _ := parsectx.Format(ctx)
 	flavor, _ := parsectx.Flavor(ctx)
-	p := &Pipeline{boundary: true, buildVersion: buildVersion, format: string(format), flavor: flavor.CanonicalKey(), spells: db, missed: make(map[chrondbc.SpellID]MissedSpell), synthetics: synthetic.New(ctx, logger, db, synthetic.WithAuraCastCorrelation())}
+	p := &Pipeline{boundary: true, buildVersion: buildVersion, format: format, flavor: flavor.CanonicalKey(), spells: db, missed: make(map[chrondbc.SpellID]MissedSpell), synthetics: synthetic.New(ctx, logger, db, synthetic.WithAuraCastCorrelation())}
 	p.decoder = next.NewDecoder(db, buildVersion, next.DecoderOptions{CountedSpells: p, Combatants: next.CombatantOptions{TalentTrees: trees, Gear: gear, Logger: logger}})
 	return p, nil
 }

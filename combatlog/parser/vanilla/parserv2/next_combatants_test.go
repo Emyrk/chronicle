@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"encoding/json"
 	"errors"
+	"github.com/Emyrk/chronicle/database"
 	"io"
 	"log/slog"
 	"os"
@@ -17,7 +18,6 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/combatlog/parsernext"
 	"github.com/Emyrk/chronicle/combatlog/parsernext/common"
-	"github.com/Emyrk/chronicle/combatlog/parsernext/formats"
 	next "github.com/Emyrk/chronicle/combatlog/parsernext/vanilla"
 	"github.com/Emyrk/chronicle/database/gamedb/talents"
 	"github.com/Emyrk/chronicle/internal/version"
@@ -76,7 +76,7 @@ func TestNextCombatantFileContinuityAndCloning(t *testing.T) {
 	d := next.NewDecoder(nil, "")
 	read := func(input string) []messages.Message {
 		var output []messages.Message
-		_, err := parsernext.ReadFile(t.Context(), parsernext.Selection{Format: formats.VanillaCompanion, Expansion: next.Name}, strings.NewReader(input), 4096, func(line common.Line) error {
+		_, err := parsernext.ReadFile(t.Context(), parsernext.Selection{Format: database.LogFormat112aCcAddon, Expansion: next.Name}, strings.NewReader(input), 4096, func(line common.Line) error {
 			batch, err := d.DecodeRecord(t.Context(), strings.TrimSuffix(line.Raw, "\n"))
 			output = append(output, batch...)
 			return err

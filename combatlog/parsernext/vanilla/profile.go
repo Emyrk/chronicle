@@ -3,13 +3,13 @@ package vanilla
 
 import (
 	"github.com/Emyrk/chronicle/combatlog/parsernext/common"
-	"github.com/Emyrk/chronicle/combatlog/parsernext/formats"
+	"github.com/Emyrk/chronicle/database"
 )
 
 const Name common.Expansion = "vanilla"
 
 // Accepts reports the explicitly supported source-ingestion combinations,
 // not support for decoding combat events or constructing encounters.
-func Accepts(format formats.ID) bool {
-	return format == formats.VanillaCompanion
+func Accepts(format database.LogFormat) bool {
+	return format == database.LogFormat112aCcAddon
 }
