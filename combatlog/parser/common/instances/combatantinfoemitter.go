@@ -3,10 +3,13 @@ package instances
 import (
 	"context"
 
-	"github.com/Emyrk/chronicle/combatlog/parser/common/characters"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/armory"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/characters"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/instancehook"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/google/uuid"
 )
 
@@ -29,6 +32,7 @@ type CombatantInfoEmitter struct {
 
 	armory     *armory.Tracker
 	characters *characters.Characters
+	units      *unitdb.Units
 	emit       func(*messages.Combatant)
 	strategy   EmitStrategy
 }
@@ -39,7 +43,7 @@ func (ce *CombatantInfoEmitter) ActivityChange(m messages.Message, chars ...char
 		if !c.IsActive() || !c.ID().IsPlayer() {
 			continue
 		}
-		player, ok := ce.armory.Players[c.ID()]
+		player, ok := ce.player(c.ID())
 		if !ok {
 			continue
 		}
@@ -78,6 +82,24 @@ func (ce *CombatantInfoEmitter) FightStarted(_ uuid.UUID, m messages.Message) {
 	}
 }
 
+// player prefers instance-local state, then fills missing metadata from the
+// parse-wide unit catalog. Combatant snapshots are often logged once before a
+// sequence of dungeon wings, while each wing has its own armory tracker.
+func (ce *CombatantInfoEmitter) player(id guid.GUID) (combatant.Combatant, bool) {
+	player, ok := ce.armory.Players[id]
+	if ce.units == nil {
+		return player, ok
+	}
+	parseWide, parseWideOK := ce.units.Players[id]
+	if !ok {
+		return parseWide, parseWideOK
+	}
+	if parseWideOK {
+		player.MergeExisting(parseWide)
+	}
+	return player, true
+}
+
 // instancehook.Hook — no-op on fight end (gear snapshot at start is sufficient).
 func (ce *CombatantInfoEmitter) FightEnded(_ uuid.UUID, _ messages.Message) {}
 
@@ -86,7 +108,7 @@ func (ce *CombatantInfoEmitter) emitAllActive(m messages.Message) {
 		if !char.IsActive() || !char.ID().IsPlayer() {
 			return nil
 		}
-		player, ok := ce.armory.Players[char.ID()]
+		player, ok := ce.player(char.ID())
 		if !ok {
 			return nil
 		}
