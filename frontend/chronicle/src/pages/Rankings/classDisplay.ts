@@ -11,6 +11,7 @@ export const CLASS_DISPLAY: Record<string, string> = {
   PALADIN: "Paladin",
   SHAMAN: "Shaman",
   DEATHKNIGHT: "Death Knight",
+  DEATH_KNIGHT: "Death Knight",
   UNKNOWN: "Unknown",
 }
 
@@ -25,6 +26,7 @@ export const CLASS_CSS_VAR: Record<string, string> = {
   PALADIN: "var(--color-class-paladin)",
   SHAMAN: "var(--color-class-shaman)",
   DEATHKNIGHT: "var(--color-class-deathknight)",
+  DEATH_KNIGHT: "var(--color-class-deathknight)",
   UNKNOWN: "var(--color-class-unknown)",
 }
 
@@ -41,6 +43,7 @@ export const CLASS_NAME_TO_ID: Record<string, number> = {
   ROGUE: 4,
   PRIEST: 5,
   DEATHKNIGHT: 6,
+  DEATH_KNIGHT: 6,
   SHAMAN: 7,
   MAGE: 8,
   WARLOCK: 9,
@@ -63,6 +66,7 @@ export const SPEC_BY_CLASS: Record<string, readonly string[]> = {
   PALADIN: ["Holy", "Protection", "Retribution"],
   SHAMAN: ["Elemental", "Enhancement", "Restoration"],
   DEATHKNIGHT: ["Blood", "Frost", "Unholy"],
+  DEATH_KNIGHT: ["Blood", "Frost", "Unholy"],
 }
 
 export const REALM_NAMES = ["Ambershire", "Tel'Abim", "Nordanaar"] as const
