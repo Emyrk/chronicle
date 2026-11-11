@@ -37,6 +37,7 @@ import { useInstancesTimeParses } from "@/pages/Instance/Overview/overviewQuerie
 import { EncounterKillBoxPlots } from "./EncounterKillBoxPlots";
 import { RaidClearBoxPlots, type RaidGroupMember } from "./RaidClearBoxPlots";
 import { entityKey, type EntityKind, type EntityRef } from "./entity";
+import { guildChartPoints } from "./quickStatsModel";
 import type { EntityRaidContext } from "./entityMenuContext";
 
 type Character = Extract<EntityRef, { kind: "character" }>;
@@ -662,7 +663,7 @@ function GuildQuickStats({
             key: entityKey(line.guild),
             label: line.guild.name,
             color: line.color,
-            points: line.runs.map((run) => ({ time: Date.parse(run.completion_time), value: run.duration_ms, highlight: run === line.focus })),
+            points: guildChartPoints(line.runs, line.focus),
           }))}
           format={formatClearTime}
           caption="Clear time per night, lower is faster"
