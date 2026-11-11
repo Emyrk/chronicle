@@ -77,10 +77,11 @@ type State struct {
 	// evidence, and is shared by all per-instance Collectors.
 	ConsumeTracker *consumeevidence.Tracker
 
-	instanceResolver        InstanceResolver
-	verbose                 bool
-	timings                 *timingAccumulator
-	instanceProcessDuration map[*instances.Hookable]time.Duration
+	instanceResolver          InstanceResolver
+	currentInstanceSelectedAt time.Time
+	verbose                   bool
+	timings                   *timingAccumulator
+	instanceProcessDuration   map[*instances.Hookable]time.Duration
 }
 
 func NewWithInstanceResolver(ctx context.Context, logger *slog.Logger, res InstanceResolver) *State {
@@ -329,6 +330,7 @@ func (s *State) matchOrCreateInstance(z messages.Zone) {
 			continue
 		}
 		s.CurrentInstance = inst
+		s.currentInstanceSelectedAt = z.Seen
 		inst.UpdateMapID(z.MapID)
 		if z.HasDifficulty() {
 			// A synthetic zone can create the instance before the companion's real
@@ -355,11 +357,41 @@ func (s *State) matchOrCreateInstance(z messages.Zone) {
 	)
 }
 
+const syntheticZoneMetadataWindow = time.Second
+
+// shouldAdoptUnmatchedInstanceMetadata recognizes the authoritative localized
+// zone message that can immediately follow a synthetic, registry-known zone.
+// The localized name may not resolve independently, but its difficulty metadata
+// still belongs to the already-selected instance.
+func shouldAdoptUnmatchedInstanceMetadata(current *instances.Hookable, selectedAt time.Time, z zone.Zone) bool {
+	if current == nil || !current.CurrentZone.IsInstance || !z.IsInstance {
+		return false
+	}
+	if current.CurrentZone.InstanceID != 0 && z.InstanceID != 0 && current.CurrentZone.InstanceID != z.InstanceID {
+		return false
+	}
+	if selectedAt.IsZero() || z.Seen.IsZero() {
+		return false
+	}
+	if z.Seen.Sub(selectedAt).Abs() > syntheticZoneMetadataWindow {
+		return false
+	}
+	return current.CurrentZone.InstanceType == "" || z.InstanceType == "" || current.CurrentZone.InstanceType == z.InstanceType
+}
+
 func (s *State) createInstance(z zone.Zone) {
-	s.CurrentInstance = s.instanceResolver(s.verbose, z, s.Units)
-	if s.CurrentInstance == nil {
+	instance := s.instanceResolver(s.verbose, z, s.Units)
+	if instance == nil {
+		if shouldAdoptUnmatchedInstanceMetadata(s.CurrentInstance, s.currentInstanceSelectedAt, z) {
+			s.CurrentInstance.UpdateZoneDifficulty(z)
+			return
+		}
+		s.CurrentInstance = nil
+		s.currentInstanceSelectedAt = time.Time{}
 		return
 	}
+	s.CurrentInstance = instance
+	s.currentInstanceSelectedAt = z.Seen
 
 	s.CurrentInstance.SetRealm(s.CurrentRealm)
 	if s.CurrentVersions != nil {

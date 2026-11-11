@@ -107,6 +107,85 @@ func TestSyntheticZoneAdoptsLateCompanionDifficulty(t *testing.T) {
 	require.Equal(t, "The Scrapyard", instance.CurrentZone.SubZone)
 }
 
+func TestLocalizedZoneMetadataPreservesSyntheticInstance(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	state := NewWithInstanceResolver(ctx, logger, func(_ bool, firstZone zone.Zone, db *unitdb.Units) *instances.Hookable {
+		if firstZone.Name != "icecrown citadel" {
+			return nil
+		}
+		return instances.NewHookable(ctx, logger, db, firstZone, instances.InstanceParams{
+			Name:        "Icecrown Citadel",
+			MatchesZone: func(z zone.Zone) bool { return z.Name == "icecrown citadel" },
+			Idf:         identifier.NewIdentifier(map[uint32]instances.Identity{}),
+		})
+	})
+
+	seen := time.Date(2026, time.November, 5, 17, 28, 6, 184_000_000, time.UTC)
+	state.Zone(messages.Zone{
+		MessageBase: messages.Base(seen.Add(-33*time.Minute), messages.WithSynthetic()),
+		Zone: zone.Zone{
+			Seen:       seen.Add(-33 * time.Minute),
+			Name:       "icecrown citadel",
+			IsInstance: true,
+		},
+	})
+	require.Len(t, state.Instances, 1)
+	instance := state.CurrentInstance
+	require.NotNil(t, instance)
+
+	// Warmane first reports the localized zone, then the synthetic detector
+	// reselects the existing ICC hookable just before authoritative localized
+	// metadata arrives.
+	state.Zone(messages.Zone{Zone: zone.Zone{
+		Seen:            seen.Add(-310 * time.Millisecond),
+		Name:            "цитадель ледяной короны",
+		InstanceType:    "raid",
+		IsInstance:      true,
+		DifficultyIndex: 1,
+		DifficultyName:  "10 игроков",
+		MaxPlayers:      10,
+	}})
+	require.Nil(t, state.CurrentInstance)
+
+	state.Zone(messages.Zone{
+		MessageBase: messages.Base(seen, messages.WithSynthetic()),
+		Zone: zone.Zone{
+			Seen:       seen,
+			Name:       "icecrown citadel",
+			IsInstance: true,
+		},
+	})
+	require.Same(t, instance, state.CurrentInstance)
+
+	state.Zone(messages.Zone{Zone: zone.Zone{
+		Seen:            seen.Add(17 * time.Millisecond),
+		Name:            "цитадель ледяной короны",
+		InstanceType:    "raid",
+		IsInstance:      true,
+		DifficultyIndex: 1,
+		DifficultyName:  "10 игроков",
+		MaxPlayers:      10,
+		SubZone:         "Черепной вал",
+	}})
+
+	require.Same(t, instance, state.CurrentInstance)
+	require.Len(t, state.Instances, 1)
+	require.Equal(t, "10 игроков", instance.CurrentZone.DifficultyName)
+	require.Equal(t, 10, instance.CurrentZone.MaxPlayers)
+	require.Equal(t, "Черепной вал", instance.CurrentZone.SubZone)
+
+	state.Zone(messages.Zone{Zone: zone.Zone{
+		Seen:         seen.Add(2 * time.Second),
+		Name:         "неизвестный рейд",
+		InstanceType: "raid",
+		IsInstance:   true,
+	}})
+	require.Nil(t, state.CurrentInstance, "an unrelated unrecognized zone must still leave the instance")
+}
+
 func TestZoneReentryDoesNotReuseDifferentDifficulty(t *testing.T) {
 	t.Parallel()
 

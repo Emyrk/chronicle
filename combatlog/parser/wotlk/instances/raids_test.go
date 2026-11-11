@@ -1027,6 +1027,112 @@ func TestObsidianSanctumSartharionKillFinalizesDrakes(t *testing.T) {
 	}
 }
 
+func TestIcecrownCitadelMatchesRussianZoneName(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, IcecrownCitadelFactory.MatchZone(zone.Zone{
+		Name: "цитадель ледяной короны",
+	}))
+}
+
+func TestIcecrownGunshipScriptedVictory(t *testing.T) {
+	t.Parallel()
+
+	ctx := parsectx.With(context.Background(), parsectx.Context{
+		Flavor: database.WoWFlavor{database.FlavorWrath},
+	})
+	instance := IcecrownCitadelFactory.New(
+		ctx,
+		slog.Default(),
+		unitdb.New(),
+		zone.Zone{Name: "Icecrown Citadel", MapID: 631},
+		database.WoWFlavor{database.FlavorWrath},
+	)
+	player := guid.GUID(1)
+	ship := creatureGUID(37215)
+	start := time.Date(2026, time.November, 5, 20, 28, 6, 0, time.UTC)
+
+	require.NoError(t, instance.Process(&messages.Damage{
+		MessageBase: messages.Base(start),
+		Caster:      &player,
+		Target:      ship,
+		Amount:      1500,
+		HitType:     types.HitTypeHit,
+	}))
+	require.NoError(t, instance.Process(&messages.Damage{
+		MessageBase: messages.Base(start.Add(4*time.Minute + 44*time.Second)),
+		Caster:      &player,
+		Target:      ship,
+		Amount:      1500,
+		Overkill:    1290,
+		HitType:     types.HitTypeHit,
+	}))
+
+	result, err := instance.Finalize(context.Background())
+	require.NoError(t, err)
+	require.Len(t, result.Encounters, 1)
+	require.Equal(t, "Gunship Battle", result.Encounters[0].Name)
+	require.Equal(t, encounter.KillTypeClean, result.Encounters[0].KillType)
+}
+
+func TestIcecrownValithriaScriptedVictory(t *testing.T) {
+	t.Parallel()
+
+	ctx := parsectx.With(context.Background(), parsectx.Context{
+		Flavor: database.WoWFlavor{database.FlavorWrath},
+	})
+	instance := IcecrownCitadelFactory.New(
+		ctx,
+		slog.Default(),
+		unitdb.New(),
+		zone.Zone{Name: "Icecrown Citadel", MapID: 631},
+		database.WoWFlavor{database.FlavorWrath},
+	)
+	attacker := creatureGUID(37868)
+	valithria := creatureGUID(36789)
+	start := time.Date(2026, time.November, 5, 22, 19, 40, 0, time.UTC)
+
+	require.NoError(t, instance.Process(&messages.Damage{
+		MessageBase: messages.Base(start),
+		Caster:      &attacker,
+		Target:      valithria,
+		Amount:      1,
+		HitType:     types.HitTypeHit,
+	}))
+	require.NoError(t, instance.Process(&messages.Damage{
+		MessageBase: messages.Base(start.Add(7*time.Minute + 37*time.Second)),
+		Caster:      &attacker,
+		Target:      valithria,
+		Amount:      1,
+		HitType:     types.HitTypeHit,
+	}))
+	require.NoError(t, instance.Process(&messages.SpellStart{
+		MessageBase: messages.Base(start.Add(7*time.Minute + 38*time.Second)),
+		Caster:      valithria,
+		SpellID:     71189,
+	}))
+	require.NoError(t, instance.Process(&messages.Damage{
+		MessageBase: messages.Base(start.Add(7*time.Minute + 41*time.Second)),
+		Caster:      &valithria,
+		Target:      attacker,
+		SpellID:     71189,
+		Amount:      1_000_000,
+		Overkill:    999_999,
+		HitType:     types.HitTypeHit,
+	}))
+	require.NoError(t, instance.Process(&messages.SpellStart{
+		MessageBase: messages.Base(start.Add(7*time.Minute + 42*time.Second)),
+		Caster:      valithria,
+		SpellID:     71196,
+	}))
+
+	result, err := instance.Finalize(context.Background())
+	require.NoError(t, err)
+	require.Len(t, result.Encounters, 1)
+	require.Equal(t, "Valithria Dreamwalker", result.Encounters[0].Name)
+	require.Equal(t, encounter.KillTypeClean, result.Encounters[0].KillType)
+}
+
 func creatureGUIDWithSeed(entry uint32, seed uint32) guid.GUID {
 	return guid.GUID(0xF130000000000000 | uint64(entry)<<24 | uint64(seed))
 }

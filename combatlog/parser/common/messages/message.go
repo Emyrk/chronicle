@@ -360,8 +360,10 @@ func (*ResourceChange) isMessage() {}
 
 type Damage struct {
 	MessageBase
-	// SpellName is nil for things like environmental and melee damage
+	// SpellName is nil for things like environmental and melee damage.
 	SpellName *string
+	// SpellID preserves the raw combat-log ID even when SpellData lookup fails.
+	SpellID   chrondbc.SpellID
 	SpellData *chrondbc.Spell
 	Caster    *guid.GUID
 	Target    guid.GUID
@@ -520,6 +522,8 @@ type Aura struct {
 	Source    *guid.GUID
 	Target    guid.GUID
 	SpellName string
+	// SpellID preserves the raw combat-log ID even when SpellData lookup fails.
+	SpellID   chrondbc.SpellID
 	SpellData *chrondbc.Spell
 	// Amount is the current stacks
 	Amount int32
@@ -581,7 +585,9 @@ func (*SpellFail) isMessage() {}
 
 type SpellStart struct {
 	MessageBase
-	ItemID          *int32
+	ItemID *int32
+	// SpellID preserves the raw combat-log ID even when SpellData lookup fails.
+	SpellID         chrondbc.SpellID
 	SpellData       *chrondbc.Spell
 	Caster          guid.GUID
 	Target          *guid.GUID
@@ -605,7 +611,9 @@ func (*SpellStart) isMessage() {}
 type SpellGo struct {
 	MessageBase
 	// Item is set if triggered by an item, otherwise nil.
-	ItemID           *int32
+	ItemID *int32
+	// SpellID preserves the raw combat-log ID even when SpellData lookup fails.
+	SpellID          chrondbc.SpellID
 	SpellData        *chrondbc.Spell
 	Caster           guid.GUID
 	Target           *guid.GUID
