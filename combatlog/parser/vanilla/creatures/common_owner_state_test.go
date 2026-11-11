@@ -35,6 +35,7 @@ func TestConcreteStatelessOwnersRestoreOnlyReferences(t *testing.T) {
 		{&Onyxia{Common: common}, &Onyxia{}},
 		{&DiseasedGhoul{Common: common}, &DiseasedGhoul{}},
 		{&HooktoothFrenzy{Common: common}, &HooktoothFrenzy{}},
+		{&coreRager{Common: common}, InitCoreRager()},
 	} {
 		state, err := pair.original.CaptureState(capture)
 		require.NoError(t, err)
@@ -73,4 +74,40 @@ func TestConcreteOwnerStateRejectsMalformedPayload(t *testing.T) {
 	}
 	_, err := DecodeCommonOwnerState(CommonOwnerStateVersion+1, []byte(`{"owner":"CoreHound","reference":"/common"}`))
 	require.Error(t, err)
+}
+
+func TestCommonLookupOwnersRestoreOnlyReferences(t *testing.T) {
+	t.Parallel()
+	all := characters.NewCharacters(unitdb.New(), nil, identifier.NewIdentifier(nil))
+	common := characters.NewCommonCharacter(guid.GUID(1), all)
+	type owner interface {
+		CaptureState(func(*characters.Common) (string, error)) (CommonOwnerState, error)
+		RestoreState(CommonOwnerState, *characters.Characters, func(string) (*characters.Common, error)) error
+	}
+	for _, pair := range []struct {
+		original owner
+		restored owner
+	}{
+		{&sonOfTheFlameCharacter{Common: common, all: all}, InitSonOfTheFlame()},
+		{&RazorAdCharacter{Common: common, all: all}, new(RazorAdCharacter)},
+		{&FragmentOfRupturan{Common: common, all: all}, new(FragmentOfRupturan)},
+	} {
+		capture := func(c *characters.Common) (string, error) { require.Same(t, common, c); return "common", nil }
+		s, e := pair.original.CaptureState(capture)
+		require.NoError(t, e)
+		b, e := s.Encode()
+		require.NoError(t, e)
+		s, e = DecodeCommonOwnerState(CommonOwnerStateVersion, b)
+		require.NoError(t, e)
+		require.NoError(t, pair.restored.RestoreState(s, all, func(string) (*characters.Common, error) { return common, nil }))
+		require.Error(t, pair.restored.RestoreState(s, all, func(string) (*characters.Common, error) { return nil, nil }))
+		after, e := pair.restored.CaptureState(capture)
+		require.NoError(t, e)
+		encoded, e := after.Encode()
+		require.NoError(t, e)
+		require.Equal(t, b, encoded)
+		require.Empty(t, all.ByEntry)
+		require.Zero(t, all.All.Len())
+		require.Empty(t, all.DB().Info)
+	}
 }
