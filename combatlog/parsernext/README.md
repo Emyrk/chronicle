@@ -1,8 +1,7 @@
 # parsernext foundation
 
-This is an isolated, runnable **complete-file source ingestion** foundation, not
-an alternate combat parser yet. Production continues using `combatlog/parser`
-and `chronicle/logparse_parse.go` unchanged. There are no legacy parser adapters,
+This is an isolated, runnable **complete-file source ingestion** foundation, plus a bounded Vanilla SWING/DEATH decoder, not a complete combat parser. Production continues using `combatlog/parser`
+and `chronicle/logparse_parse.go` unchanged. There are no legacy parser execution wrappers,
 registration side effects, database/River calls, or raid constructors here.
 
 ## Implemented boundary
@@ -61,7 +60,7 @@ characterization tests retain that limitation. The new complete-file reader
 already rejects read failures, but this extraction does not change the legacy
 lifecycle or claim equivalent error handling across those entry points.
 
-This is **not combat parsing**. GUID/spell interpretation, message schemas,
+The lexical entry point itself does not perform combat parsing. Message schemas,
 header clock rules, synthetic events, identities, consumers and publication are
 unchanged. Their ownership/migration choices still require explicit approval.
 
@@ -94,9 +93,8 @@ and published payloads remain unchanged. The new model **is not yet wired into
 an event pipeline, unknown-report collector or ranking publication**; contract
 tests are not evidence of migrated runtime event visibility.
 
-Only Vanilla's narrow critter boundary may import the existing `parser/guid`
-value helpers, explicitly allowed by the architecture test. No legacy decoder,
-consumer or raid constructor is imported into parsernext. Shared classification
+Vanilla may import the existing `parser/guid`
+value helpers, explicitly allowed by the architecture test. The additional explicit message/value compatibility imports are listed below. No legacy decoder, consumer or raid constructor is imported into parsernext. Shared classification
 and critter lookup modules remain standard-library-only leaves.
 
 Player metadata/handling stays distinct from creature classification. Player,
@@ -134,7 +132,7 @@ is performed.
 | root `parsernext` | Explicit composition validation and complete-file entry point | Imports profiles + common; future pipeline composition stays here |
 | `common`, `common/units`, `common/critters` | Source lifecycle, classification contract and known critter labels | Standard library only; no expansion/raid construction, observation store or global types drawer |
 | `formats`, `formats/ccv2` | Stable wire-format names and shared CC-v2 lexical decoding | Standard library only; no identity or combat-message dependencies |
-| `vanilla` | Vanilla source selection and known-critter classification | Imports explicit common leaves/formats and the narrowly approved GUID value helpers; no pipeline wiring yet |
+| `vanilla` | Vanilla source selection, known-critter classification, SWING/DEATH decoding | Explicit common/format leaves and listed message/value compatibility; no encounter/publication wiring |
 | `tbc` | TBC source-compatibility policy | Imports common/formats; **never routes through WotLK** |
 | `wotlk` | Wrath source-compatibility policy | Imports common/formats; Wrath-specific state/rules stay here |
 | `forever` | Explicit Forever source-compatibility policy | Imports common/formats; Forever-specific state/rules stay here |
@@ -142,13 +140,13 @@ is performed.
 
 The architecture test enforces production import direction and rejects old
 parser execution, database/publication, River and other external imports except
-the exact existing GUID helper import approved for Vanilla's critter boundary.
+the exact Vanilla message/value compatibility imports enumerated in the test.
 `common` cannot acquire expansion dependencies transitively through local imports.
 It cannot construct a raid through a registered constructor or imported package.
 
 ## Deliberately not implemented
 
-Combat-message decoding; clocks/timezone reconstruction; expansion combat rules;
+Combat-message decoding beyond SWING/DEATH; clocks/timezone reconstruction; other expansion combat rules;
 character/raid state; event sorting or synthetic events; multiple-file merging;
 semantic export parity; checkpoints, restore, snapshot schemas/codecs; publication.
 There are no no-op implementations claiming these features work.
@@ -171,3 +169,32 @@ Tests cover the full accepted/rejected selection cross-product, rejection before
 reader access, exact byte/line framing and digest, bounded long lines, clean EOF,
 reader/visitor failures, cancellation including the final callback, and package
 isolation. Shared-layer tests require no raid registry, game data or database.
+
+## Runnable Vanilla combat slice
+
+`vanilla.DecodeRecord(ctx, spellLookup, content)` decodes **SWING and DEATH only**
+from a CC-v2 line without its newline. It returns the existing concrete
+`*messages.Damage` / `*messages.Slain` payloads. All other records (including
+HEADER, HEAL and SPELL_DMG) return `ErrUnsupportedRecord`, not successful empty
+output. This is deliberately a record decoder, not a whole-file combat parser.
+Call it from a `ReadFile` visitor for an explicitly selected Vanilla source;
+callers must decide how to handle unsupported records rather than silently
+claiming the complete log was decoded.
+
+Vanilla owns the extracted melee hit/trailer conversions and SWING/DEATH
+construction. Legacy handlers delegate to those same functions using their
+existing cursor. `CombatFields` is the narrow migration seam; `SpellLookup`
+requires only dataset-aware `Spell(context.Context, chrondbc.SpellID)`. Auto
+Attack lookup, missing-spell fallback, integer narrowing, GUID validation,
+trailer ordering, nil attribution and tolerated extra fields remain unchanged.
+Temporary dependencies are precisely GUID, messages, legacy combat values,
+chrondbc spell values, ptr and bitmask—not the old parser or GameDB implementation.
+No identity store or payload schema is introduced. Critter events are not
+filtered by this decoder. Fight/ranking eligibility and synthetics are still
+outside this boundary.
+
+Parity tests use 22 unmodified Capybara SWING/DEATH records selected for distinct
+hit-info/victim-state combinations, plus malformed fields, missing fields,
+integer narrowing and missing/erroring spell lookups. The same tests can be run
+against pre-extraction legacy files using a Go overlay to avoid a circular
+comparison of delegates. This does not establish full synthetic/export parity.
