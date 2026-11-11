@@ -75,6 +75,7 @@ func NewCharacterFactories(flavor database.WoWFlavor) []characters.CharacterFact
 			NewMalGanis,
 
 			// Icecrown Citadel
+			NewDeathspeakerHighPriest,
 			NewLadyDeathwhisper,
 			NewGunshipBattleCharacter,
 			NewProfessorPutricide,

@@ -378,3 +378,8 @@ func isSpellID(got chrondbc.SpellID, ids ...chrondbc.SpellID) bool {
 	}
 	return false
 }
+
+func NewDeathspeakerHighPriest(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
+  return characters.NewIgnoreCast(36829, 69482)(id, all)
+}
+
