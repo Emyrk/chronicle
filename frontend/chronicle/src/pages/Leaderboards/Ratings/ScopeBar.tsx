@@ -12,7 +12,8 @@ import {
 } from "@/components/ui/DropdownMenu/DropdownMenu"
 import { ClassIcon } from "@/pages/RaidPlanner/ClassIcon"
 import { CLASS_CSS_VAR, CLASS_DISPLAY } from "@/pages/Rankings/classDisplay"
-import { CLASS_ORDER, MOLTEN_CORE_BOSSES, scopeKind, type RatingScope } from "./ratingBoards.fixtures"
+import { MOLTEN_CORE_BOSSES, scopeKind, type RatingScope } from "./ratingBoards.fixtures"
+import { CLASS_FILTER_ORDER } from "./leaderboardClassOrder"
 import { BossPortrait, SpecIcon } from "./RatingParts"
 
 /** Boss, class, and spec pickers: where you are, and the way to go anywhere else. */
@@ -154,7 +155,7 @@ function ClassSpecPicker({
   return (
     <>
       <div role="group" aria-label="Class" className="flex flex-wrap items-center gap-1">
-        {CLASS_ORDER.map((c) => {
+        {CLASS_FILTER_ORDER.map((c) => {
           const on = scope.cls === c
           return (
             <button

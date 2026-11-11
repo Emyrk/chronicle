@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { classNameToId } from "./classDisplay"
+import { CLASS_CSS_VAR, CLASS_DISPLAY, SPEC_BY_CLASS, classNameToId } from "./classDisplay"
 
 describe("classNameToId", () => {
   it.each([
@@ -15,5 +15,13 @@ describe("classNameToId", () => {
 
   it("returns undefined for an unknown class", () => {
     expect(classNameToId("UNKNOWN")).toBeUndefined()
+  })
+})
+
+describe("Death Knight display metadata", () => {
+  it("supports the database class identifier used by Wrath leaderboards", () => {
+    expect(CLASS_DISPLAY.DEATH_KNIGHT).toBe("Death Knight")
+    expect(CLASS_CSS_VAR.DEATH_KNIGHT).toBe("var(--color-class-deathknight)")
+    expect(SPEC_BY_CLASS.DEATH_KNIGHT).toEqual(["Blood", "Frost", "Unholy"])
   })
 })

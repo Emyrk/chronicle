@@ -68,5 +68,6 @@ export function scopeTitle(scope: RatingScope, instanceName: string): string {
 }
 
 export function specIconUrl(cls: string, spec: string): string {
-  return `/c/icons/spec_${cls.toLowerCase()}_${spec.toLowerCase().replace(/\s+/g, "")}.png`
+  const iconPart = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "")
+  return `/c/icons/spec_${iconPart(cls)}_${iconPart(spec)}.png`
 }

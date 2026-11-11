@@ -12,11 +12,12 @@ import { CLASS_CSS_VAR, CLASS_DISPLAY } from "@/pages/Rankings/classDisplay"
 import { ClassIcon } from "@/pages/RaidPlanner/ClassIcon"
 import { getInstanceBackground, getInstanceConfig } from "@/pages/Logs/utils/instanceImages"
 import { Podium, PodiumList } from "@/pages/Leaderboard/Podium"
-import { CLASS_ORDER, RATING_METRICS, scopeKind, type RatingMetric, type RatingPeriod, type RatingScope } from "@/pages/Leaderboards/Ratings/ratingBoards.fixtures"
+import { RATING_METRICS, scopeKind, type RatingMetric, type RatingPeriod, type RatingScope } from "@/pages/Leaderboards/Ratings/ratingBoards.fixtures"
 import { MetricTabs, PeriodToggle, RatingBoards } from "@/pages/Leaderboards/Ratings/RatingLeaderboard"
 import { BossPortrait, SpecIcon } from "@/pages/Leaderboards/Ratings/RatingParts"
 import { METRIC_THEMES, scopeTitle, type RatingView } from "@/pages/Leaderboards/Ratings/ratingThemes"
 import { ScopeBar } from "@/pages/Leaderboards/Ratings/ScopeBar"
+import { CLASS_FILTER_ORDER } from "@/pages/Leaderboards/Ratings/leaderboardClassOrder"
 import { formatPeakRaw, peakWithRaw } from "./peakDisplay"
 import { TABS, type HubTab } from "./hubTabs"
 import { HubTabHint } from "./HubTabHint"
@@ -344,8 +345,8 @@ export function LeaderboardHub({
   ]
     .filter(Boolean)
     .join(" · ")
-  const compactClasses = scope.cls ? [scope.cls] : CLASS_ORDER.slice(0, 4)
-  const remainingCompactClasses = scope.cls ? 0 : CLASS_ORDER.length - compactClasses.length
+  const compactClasses = scope.cls ? [scope.cls] : CLASS_FILTER_ORDER.slice(0, 4)
+  const remainingCompactClasses = scope.cls ? 0 : CLASS_FILTER_ORDER.length - compactClasses.length
   return (
     <div
       className="min-h-screen w-full bg-background text-foreground transition-[background] duration-500"
@@ -393,7 +394,7 @@ export function LeaderboardHub({
                     subject === "characters" ? (
                       <span
                         className="flex shrink-0 items-center"
-                        aria-label={scope.cls ? `${CLASS_DISPLAY[scope.cls]} selected` : `All ${CLASS_ORDER.length} classes selected`}
+                        aria-label={scope.cls ? `${CLASS_DISPLAY[scope.cls]} selected` : `All ${CLASS_FILTER_ORDER.length} classes selected`}
                       >
                         <span className="flex -space-x-1">
                           {compactClasses.map((cls) => (
