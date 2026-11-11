@@ -1102,7 +1102,7 @@ func (h *Hookable) Events() *encounterevents.Events {
 // classification for a single completed fight.
 func (h *Hookable) fightEncounter(fight encounter.Fight) (encounter.Encounter, error) {
 	encName := &encounterName{
-		byCharacterName: "",
+		characterNames:  make(map[string]int),
 		byBossName:      "",
 		byEncounterName: "",
 		bossDeadState:   make(map[uint32]bool),
@@ -1503,7 +1503,7 @@ func (h *Hookable) resolveUnknownUnits() map[uint32]UnknownUnit {
 }
 
 type encounterName struct {
-	byCharacterName   string
+	characterNames    map[string]int
 	byBossName        string
 	byEncounterName   string
 	byEncounterFnName string
@@ -1545,7 +1545,15 @@ func (e *encounterName) Name() string {
 	if e.byBossName != "" {
 		return e.byBossName
 	}
-	return e.byCharacterName
+	// Each eligible hostile GUID contributes once, regardless of activity/events.
+	// Break equal mob counts alphabetically, independently of map iteration order.
+	name, count := "", 0
+	for candidate, n := range e.characterNames {
+		if n > count || (n == count && candidate < name) {
+			name, count = candidate, n
+		}
+	}
+	return name
 }
 
 func (e *encounterName) Type() types.EncounterType {
@@ -1582,8 +1590,8 @@ func (e *encounterName) applyState(ch encounter.CharacterFight, id identifier.Id
 }
 
 func (e *encounterName) applyName(id identifier.Identity, f encounter.Fight) {
-	if e.byCharacterName == "" {
-		e.byCharacterName = id.Name
+	if id.Name != "" {
+		e.characterNames[id.Name]++
 	}
 	if id.Boss && e.byBossName == "" {
 		e.byBossName = id.Name
