@@ -10,6 +10,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
+	"github.com/Emyrk/chronicle/internal/ptr"
 	"github.com/stretchr/testify/require"
 )
 
@@ -140,42 +141,92 @@ func TestOwnerSlain_PossessedPetDiesWithPermanentOwner(t *testing.T) {
 	require.Equal(t, ReasonOwnerSlain, p.End.Reason)
 }
 
-func TestUnitCombatStateControlsActivity(t *testing.T) {
+func TestUnitCombatStateResetGracePeriod(t *testing.T) {
 	t.Parallel()
 
-	chars := NewCharacters(
-		unitdb.New(),
-		nil,
-		identifier.NewIdentifier(map[uint32]identifier.Identity{}),
-	)
-	mob := guid.GUID(0xF130000844000002)
+	const mob = guid.GUID(0xF130000844000002)
 	base := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
 
-	changed, err := chars.Process(&messages.UnitCombatState{
-		MessageBase: messages.Base(base),
-		Unit:        mob,
-		InCombat:    true,
+	newActiveMob := func(t *testing.T) (*Characters, Character) {
+		t.Helper()
+		chars := NewCharacters(
+			unitdb.New(),
+			nil,
+			identifier.NewIdentifier(map[uint32]identifier.Identity{}),
+		)
+		changed, err := chars.Process(&messages.UnitCombatState{
+			MessageBase: messages.Base(base),
+			Unit:        mob,
+			InCombat:    true,
+		})
+		require.NoError(t, err)
+		require.True(t, changed)
+		mobChar, ok := chars.Get(mob)
+		require.True(t, ok)
+		require.True(t, mobChar.IsActive())
+		return chars, mobChar
+	}
+
+	leaveCombat := func(t *testing.T, chars *Characters, mobChar Character) {
+		t.Helper()
+		changed, err := chars.Process(&messages.UnitCombatState{
+			MessageBase: messages.Base(base.Add(time.Second)),
+			Unit:        mob,
+			InCombat:    false,
+		})
+		require.NoError(t, err)
+		require.False(t, changed)
+		require.True(t, mobChar.IsActive(), "combat exit should wait before classifying the reset")
+	}
+
+	t.Run("death during grace remains slain", func(t *testing.T) {
+		t.Parallel()
+		chars, mobChar := newActiveMob(t)
+		leaveCombat(t, chars, mobChar)
+
+		changed, err := chars.Process(&messages.Slain{
+			MessageBase: messages.Base(base.Add(3 * time.Second)),
+			Victim:      mob,
+		})
+		require.NoError(t, err)
+		require.True(t, changed)
+		require.False(t, mobChar.IsActive())
+		activity, ok := mobChar.CurrentPeriod()
+		require.True(t, ok)
+		require.Equal(t, period.EndStateSlain, activity.EndState)
 	})
-	require.NoError(t, err)
-	require.True(t, changed)
 
-	mobChar, ok := chars.Get(mob)
-	require.True(t, ok)
-	require.True(t, mobChar.IsActive())
+	t.Run("no activity becomes reset after grace", func(t *testing.T) {
+		t.Parallel()
+		chars, mobChar := newActiveMob(t)
+		leaveCombat(t, chars, mobChar)
 
-	changed, err = chars.Process(&messages.UnitCombatState{
-		MessageBase: messages.Base(base.Add(time.Second)),
-		Unit:        mob,
-		InCombat:    false,
+		changed, err := chars.Process(messages.TimedOut(base.Add(7 * time.Second)))
+		require.NoError(t, err)
+		require.True(t, changed)
+		require.False(t, mobChar.IsActive())
+		activity, ok := mobChar.CurrentPeriod()
+		require.True(t, ok)
+		require.Equal(t, period.EndStateReset, activity.EndState)
 	})
-	require.NoError(t, err)
-	require.True(t, changed)
-	require.False(t, mobChar.IsActive())
 
-	activity, ok := mobChar.CurrentPeriod()
-	require.True(t, ok)
-	require.Equal(t, period.EndStateReset, activity.EndState)
-	require.Equal(t, "combat flag cleared", activity.End.Reason)
+	t.Run("new activity cancels reset", func(t *testing.T) {
+		t.Parallel()
+		chars, mobChar := newActiveMob(t)
+		leaveCombat(t, chars, mobChar)
+		target := guid.GUID(0x0000000000000001)
+
+		_, err := chars.Process(&messages.Damage{
+			MessageBase: messages.Base(base.Add(3 * time.Second)),
+			Caster:      ptr.Ref(mob),
+			Target:      target,
+			Amount:      1,
+		})
+		require.NoError(t, err)
+		_, err = chars.Process(messages.TimedOut(base.Add(7 * time.Second)))
+		require.NoError(t, err)
+		require.True(t, mobChar.IsActive())
+	})
 }
 
 func TestTimeoutAsDeathIfEntryAlive(t *testing.T) {

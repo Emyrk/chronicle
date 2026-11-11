@@ -163,8 +163,8 @@ func ProcessCommonActivity(c CharacterBase, m messages.Message) error {
 		}
 		if data.InCombat {
 			c.Start("combat flag", m)
-		} else {
-			c.End("combat flag cleared", m, period.EndStateReset)
+		} else if cur, ok := c.CurrentPeriodIsPeriod(); ok {
+			cur.EnterResetGracePeriod("combat flag cleared", m)
 		}
 		return nil
 	case *messages.Slain:
