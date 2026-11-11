@@ -2,6 +2,8 @@ import { useLandingHighlights } from "./Hub/landingHighlights"
 import { renderToStaticMarkup } from "react-dom/server"
 import { MemoryRouter, Route, Routes } from "react-router-dom"
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { useCareerLeaderboard } from "@/api/career"
+import type { CareerLeaderboardEntry, CareerLeaderboardResponse } from "@/api/typesGenerated"
 import { useRankingsLeaderboard } from "@/api/rankingsQueries"
 import { useHubSummary, type HubSummary } from "./Hub/hubSummaryAdapter"
 import { useSiteConfig } from "@/api/queries"
@@ -18,6 +20,30 @@ const summary = { landing_previews: [], instances: [{ instance_name: "Molten Cor
   ratings: { raid: { player: { peak: [], ranked_mastery: [], renown: [] }, guild: { peak: [], ranked_mastery: [], renown: [] } }, bosses: [] },
   performances: [], speedruns: [],
 } as HubSummary
+function careerEntry(name: string, values: Partial<CareerLeaderboardEntry>): CareerLeaderboardEntry {
+  return {
+    subject_id: `${name}-id`, name, realm_id: "realm-id", realm_name: "Nordanaar",
+    player_class: "MAGE", player_spec: "Frost", player_sub_spec: "", guild_name: "", logo_url: "",
+    chosen_metric: "dps", mastery: null, peak: null, renown: 0, form: null, floor: null, raids: [],
+    ...values,
+  }
+}
+
+function careerResponse(entries: Partial<Record<"peak" | "mastery" | "renown", CareerLeaderboardEntry>>): CareerLeaderboardResponse {
+  const board = (entry?: CareerLeaderboardEntry) => ({ total: entry ? 1 : 0, entries: entry ? [entry] : [] })
+  return {
+    status: "ready",
+    peak: board(entries.peak),
+    mastery: board(entries.mastery),
+    renown: board(entries.renown),
+    raid_options: [
+      { key: "mc", instance_name: "Molten Core", difficulty_name: "Normal", max_players: 40, weight: 1, include_average: true, include_renown: true },
+      { key: "zg", instance_name: "Zul'Gurub", difficulty_name: "Normal", max_players: 20, weight: 0.5, include_average: true, include_renown: true },
+    ],
+  }
+}
+
+vi.mock("@/api/career", () => ({ useCareerLeaderboard: vi.fn() }))
 vi.mock("./Hub/landingHighlights", async (importOriginal) => ({
   ...await importOriginal<typeof import("./Hub/landingHighlights")>(),
   useLandingHighlights: vi.fn(),
@@ -69,6 +95,7 @@ describe("live Storybook Hub", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(useSiteConfig).mockReturnValue({ data: { root_tenant_ratings_disabled: false }, isPending: false, isError: false } as ReturnType<typeof useSiteConfig>)
+    vi.mocked(useCareerLeaderboard).mockReturnValue({ data: undefined, isPending: true, isError: false } as ReturnType<typeof useCareerLeaderboard>)
     vi.mocked(useLandingHighlights).mockReturnValue({ data: undefined, isFetching: true, isError: false, refetch: vi.fn() } as unknown as ReturnType<typeof useLandingHighlights>)
     setSummary(summary)
   })
@@ -310,6 +337,52 @@ describe("live Storybook Hub", () => {
     const html = hub("/leaderboards")
     expect(html).toContain("Molten Core")
     expect(html).not.toContain("Onyxia&#x27;s Lair")
+  })
+
+  it("puts the live career card first on Overview and scopes it to the selected realm", () => {
+    vi.mocked(useCareerLeaderboard)
+      .mockReturnValueOnce({ data: careerResponse({
+        peak: careerEntry("Peak Mage", { peak: 91.2 }),
+        mastery: careerEntry("Mastery Mage", { mastery: 84.5 }),
+        renown: careerEntry("Renown Mage", { renown: 612 }),
+      }) } as ReturnType<typeof useCareerLeaderboard>)
+      .mockReturnValueOnce({ data: careerResponse({ mastery: careerEntry("Career Guild", {
+        subject_id: "guild-id", player_class: "", player_spec: "", mastery: 88.8,
+      }) }) } as ReturnType<typeof useCareerLeaderboard>)
+
+    const html = hub("/leaderboards?realm_ids=realm-id")
+    const career = html.indexOf("Every raid")
+    const moltenCore = html.indexOf("Molten Core</h2>")
+
+    expect(career).toBeGreaterThan(-1)
+    expect(career).toBeLessThan(moltenCore)
+    expect(html).toContain("Peak Mage")
+    expect(html).toContain("Mastery Mage")
+    expect(html).toContain("Renown Mage")
+    expect(html).toContain("Career Guild")
+    expect(html).toContain('href="/leaderboards/career?realm=realm-id"')
+    expect(html).toContain('title="Every raid: Molten Core, Zul&#x27;Gurub"')
+
+    const [playerTenant, playerParams, playerEnabled] = vi.mocked(useCareerLeaderboard).mock.calls[0]
+    const [, guildParams, guildEnabled] = vi.mocked(useCareerLeaderboard).mock.calls[1]
+    expect(playerTenant).toBeUndefined()
+    expect(playerParams.toString()).toBe("limit=1&realm=realm-id")
+    expect(guildParams.toString()).toBe("limit=1&subject=guilds&realm=realm-id")
+    expect(playerEnabled).toBe(true)
+    expect(guildEnabled).toBe(true)
+  })
+
+  it("only enables the career-card requests needed by Overview and Ratings landings", () => {
+    hub("/leaderboards/ratings")
+    expect(vi.mocked(useCareerLeaderboard).mock.calls.map((call) => call[2])).toEqual([true, false])
+
+    vi.mocked(useCareerLeaderboard).mockClear()
+    hub("/leaderboards/Molten-Core")
+    expect(vi.mocked(useCareerLeaderboard).mock.calls.every((call) => call[2] === false)).toBe(true)
+
+    vi.mocked(useCareerLeaderboard).mockClear()
+    hub("/leaderboards/speedruns")
+    expect(vi.mocked(useCareerLeaderboard).mock.calls.every((call) => call[2] === false)).toBe(true)
   })
 
   it("uses the Storybook landing grid with published cohorts", () => {
