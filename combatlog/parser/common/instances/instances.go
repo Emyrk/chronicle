@@ -21,6 +21,7 @@ var (
 		Name:      "Deadmines",
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"the deadmines", "deadmines", "死亡矿井"},
+		MapIDs:    []uint32{36},
 		Hostiles:  DeadminesHostiles,
 		FlavoredRankings: func(fl database.WoWFlavor) *rankings.Rankings {
 			return DeadminesSpeedrunRequirements(fl)
@@ -47,6 +48,7 @@ var (
 		Name:      "Razorfen Kraul",
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"razorfen kraul", "剃刀沼泽"},
+		MapIDs:    []uint32{47},
 		Hostiles:  FromMap(RazorfenKraulHostiles()),
 	}
 
@@ -138,6 +140,7 @@ var (
 			"黑石塔下层", // Lower
 			"黑石塔上层", // "upper"
 		},
+		MapIDs:   []uint32{229},
 		Hostiles: FromMap(BlackrockSpireHostiles()),
 	}
 
@@ -214,6 +217,7 @@ var (
 		Name:      "Ragefire Chasm",
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"ragefire chasm", "怒焰裂谷"},
+		MapIDs:    []uint32{389},
 		Hostiles:  FromMap(RagefireChasmHostiles()),
 		FlavoredRankings: func(database.WoWFlavor) *rankings.Rankings {
 			return RagefireChasmSpeedrunRequirements()
@@ -269,6 +273,7 @@ var (
 		Name:      "Scholomance",
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"scholomance", "通灵学院"},
+		MapIDs:    []uint32{289},
 		Hostiles:  FromMap(ScholomanceHostiles()),
 	}
 
@@ -347,6 +352,7 @@ var (
 		Name:      "Stratholme",
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"stratholme", "斯坦索姆"},
+		MapIDs:    []uint32{329},
 		Hostiles:  FromMap(StratholmeHostiles()),
 	}
 
@@ -362,6 +368,7 @@ var (
 		Name:      "Dire Maul",
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"dire maul", "厄运之槌"},
+		MapIDs:    []uint32{429},
 		Hostiles:  FromMap(DireMaulHostiles()),
 	}
 
@@ -384,6 +391,7 @@ var (
 		Name:      "Sunken Temple",
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"sunken temple", "the temple of atal'hakkar", "阿塔哈卡神庙"},
+		MapIDs:    []uint32{109},
 		Hostiles:  FromMap(SunkenTempleHostiles()),
 	}
 

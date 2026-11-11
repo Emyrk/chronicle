@@ -27,6 +27,33 @@ func TestCommonFactoryMatchZoneFallsBackToMapID(t *testing.T) {
 	require.True(t, factory.MatchZone(zone.Zone{Name: "ahn'qiraj", MapID: 0}))
 }
 
+func TestClassicDungeonFactoriesMatchLocalizedZonesByMapID(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		factory *CommonFactory
+		mapID   uint32
+	}{
+		{name: "Stormwind Stockade", factory: StockadesFactory, mapID: 34},
+		{name: "Deadmines", factory: DeadminesFactory, mapID: 36},
+		{name: "Razorfen Kraul", factory: RazorfenKraulFactory, mapID: 47},
+		{name: "Sunken Temple", factory: SunkenTempleFactory, mapID: 109},
+		{name: "Blackrock Spire", factory: BlackrockSpireFactory, mapID: 229},
+		{name: "Scholomance", factory: ScholomanceFactory, mapID: 289},
+		{name: "Stratholme", factory: StratholmeFactory, mapID: 329},
+		{name: "Ragefire Chasm", factory: RagefireChasmFactory, mapID: 389},
+		{name: "Dire Maul", factory: DireMaulFactory, mapID: 429},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.True(t, tt.factory.MatchZone(zone.Zone{Name: "unexpected localized name", MapID: tt.mapID}))
+		})
+	}
+}
+
 func TestCommonFactoryInjectsSingleKnownMapID(t *testing.T) {
 	t.Parallel()
 

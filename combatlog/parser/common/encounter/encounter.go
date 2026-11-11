@@ -104,7 +104,7 @@ type Fight struct {
 	PhaseEncounterName string
 
 	// AuthoritativeName is supplied by explicit encounter boundary records.
-	// When set, it overrides name inference from the participating hostiles.
+	// It is used when participating hostiles do not identify a canonical boss.
 	AuthoritativeName    string
 	AuthoritativeSuccess *bool
 
