@@ -68,7 +68,7 @@ func TestNextCombatParity(t *testing.T) {
 }
 func TestNextUnsupportedCombat(t *testing.T) {
 	t.Parallel()
-	for _, line := range []string{"1|HEADER", "1|HEAL", "1|SPELL_DMG", "1|"} {
+	for _, line := range []string{"1|HEADER", "1|ENV_DMG", "1|DMG_SHIELD", "1|MISS", "1|"} {
 		got, err := next.DecodeRecord(t.Context(), nil, line)
 		require.ErrorIs(t, err, next.ErrUnsupportedRecord)
 		require.Nil(t, got)

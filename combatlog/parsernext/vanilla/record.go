@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"strconv"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
@@ -14,8 +15,9 @@ import (
 // ErrUnsupportedRecord indicates that this bounded decoder does not own the record.
 var ErrUnsupportedRecord = errors.New("unsupported Vanilla combat record")
 
-// DecodeRecord decodes only SWING and DEATH CC-v2 records, without synthetic
+// DecodeRecord decodes SWING, DEATH, HEAL and SPELL_DMG CC-v2 records, without pipeline synthetic
 // processing, header clock state, identity tracking or encounter publication.
+// SPELL_DMG retains its local power-burn ResourceChange synthesis.
 // content excludes the physical line terminator. Extra fields retain legacy
 // tolerance. A successful call emits the existing concrete message payloads.
 func DecodeRecord(ctx context.Context, spells SpellLookup, content string) ([]messages.Message, error) {
@@ -30,6 +32,14 @@ func DecodeRecord(ctx context.Context, spells SpellLookup, content string) ([]me
 			return nil, errors.New("SWING requires spell lookup")
 		}
 		return DecodeSwing(ctx, spells, ts, m)
+	case "HEAL", "SPELL_DMG":
+		if spells == nil {
+			return nil, fmt.Errorf("%s requires spell lookup", event)
+		}
+		if event == "HEAL" {
+			return DecodeHeal(ctx, spells, ts, m)
+		}
+		return DecodeSpellDamage(ctx, spells, ts, m)
 	case "DEATH":
 		return DecodeDeath(ts, m)
 	default:
@@ -70,3 +80,8 @@ func (m *recordFields) SwingHitInfo() SwingHitInfo {
 	m.fail(err)
 	return SwingHitInfo(v)
 }
+
+func (m *recordFields) String() string       { return m.pop() }
+func (m *recordFields) SetError(err error)   { m.fail(err) }
+func (m *recordFields) School() types.School { return School(m.Int32()) }
+func (m *recordFields) Int32s() []int32      { v, err := ParseInt32List(m.pop()); m.fail(err); return v }

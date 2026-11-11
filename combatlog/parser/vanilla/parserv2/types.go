@@ -44,26 +44,7 @@ func Trailer(blocked, absorbed, resisted int32) types.Trailer {
 func BlockTrailer(amount int32) types.TrailerEntry { return next.BlockTrailer(amount) }
 func Resisted(amount int32) types.TrailerEntry     { return next.Resisted(amount) }
 func Absorbed(amount int32) types.TrailerEntry     { return next.Absorbed(amount) }
-func School(s int32) types.School {
-	switch s {
-	case 0:
-		return types.PhysicalSchool
-	case 1:
-		return types.HolySchool
-	case 2:
-		return types.FireSchool
-	case 3:
-		return types.NatureSchool
-	case 4:
-		return types.FrostSchool
-	case 5:
-		return types.ShadowSchool
-	case 6:
-		return types.ArcaneSchool
-	default:
-		return types.NoneSchool
-	}
-}
+func School(s int32) types.School                  { return next.School(s) }
 
 type SpellMissInfo int32
 
@@ -89,12 +70,12 @@ const (
 	SPELL_AURA_NONE                               AuraEffect = 0
 	SPELL_AURA_BIND_SIGHT                         AuraEffect = 1
 	SPELL_AURA_MOD_POSSESS                        AuraEffect = 2
-	SPELL_AURA_PERIODIC_DAMAGE                    AuraEffect = 3
+	SPELL_AURA_PERIODIC_DAMAGE                    AuraEffect = AuraEffect(next.SPELL_AURA_PERIODIC_DAMAGE)
 	SPELL_AURA_DUMMY                              AuraEffect = 4
 	SPELL_AURA_MOD_CONFUSE                        AuraEffect = 5
 	SPELL_AURA_MOD_CHARM                          AuraEffect = 6
 	SPELL_AURA_MOD_FEAR                           AuraEffect = 7
-	SPELL_AURA_PERIODIC_HEAL                      AuraEffect = 8
+	SPELL_AURA_PERIODIC_HEAL                      AuraEffect = AuraEffect(next.SPELL_AURA_PERIODIC_HEAL)
 	SPELL_AURA_MOD_ATTACKSPEED                    AuraEffect = 9
 	SPELL_AURA_MOD_THREAT                         AuraEffect = 10
 	SPELL_AURA_MOD_TAUNT                          AuraEffect = 11
@@ -109,8 +90,8 @@ const (
 	SPELL_AURA_OBS_MOD_HEALTH                     AuraEffect = 20 //20,21 unofficial
 	SPELL_AURA_OBS_MOD_MANA                       AuraEffect = 21
 	SPELL_AURA_MOD_RESISTANCE                     AuraEffect = 22
-	SPELL_AURA_PERIODIC_TRIGGER_SPELL             AuraEffect = 23
-	SPELL_AURA_PERIODIC_ENERGIZE                  AuraEffect = 24
+	SPELL_AURA_PERIODIC_TRIGGER_SPELL             AuraEffect = AuraEffect(next.SPELL_AURA_PERIODIC_TRIGGER_SPELL)
+	SPELL_AURA_PERIODIC_ENERGIZE                  AuraEffect = AuraEffect(next.SPELL_AURA_PERIODIC_ENERGIZE)
 	SPELL_AURA_MOD_PACIFY                         AuraEffect = 25
 	SPELL_AURA_MOD_ROOT                           AuraEffect = 26
 	SPELL_AURA_MOD_SILENCE                        AuraEffect = 27
@@ -139,7 +120,7 @@ const (
 	SPELL_AURA_MOD_BLOCK_SKILL                    AuraEffect = 50
 	SPELL_AURA_MOD_BLOCK_PERCENT                  AuraEffect = 51
 	SPELL_AURA_MOD_CRIT_PERCENT                   AuraEffect = 52
-	SPELL_AURA_PERIODIC_LEECH                     AuraEffect = 53
+	SPELL_AURA_PERIODIC_LEECH                     AuraEffect = AuraEffect(next.SPELL_AURA_PERIODIC_LEECH)
 	SPELL_AURA_MOD_HIT_CHANCE                     AuraEffect = 54
 	SPELL_AURA_MOD_SPELL_HIT_CHANCE               AuraEffect = 55
 	SPELL_AURA_TRANSFORM                          AuraEffect = 56
@@ -148,9 +129,9 @@ const (
 	SPELL_AURA_MOD_DAMAGE_DONE_CREATURE           AuraEffect = 59
 	SPELL_AURA_MOD_PACIFY_SILENCE                 AuraEffect = 60
 	SPELL_AURA_MOD_SCALE                          AuraEffect = 61
-	SPELL_AURA_PERIODIC_HEALTH_FUNNEL             AuraEffect = 62
-	SPELL_AURA_PERIODIC_MANA_FUNNEL               AuraEffect = 63
-	SPELL_AURA_PERIODIC_MANA_LEECH                AuraEffect = 64
+	SPELL_AURA_PERIODIC_HEALTH_FUNNEL             AuraEffect = AuraEffect(next.SPELL_AURA_PERIODIC_HEALTH_FUNNEL)
+	SPELL_AURA_PERIODIC_MANA_FUNNEL               AuraEffect = AuraEffect(next.SPELL_AURA_PERIODIC_MANA_FUNNEL)
+	SPELL_AURA_PERIODIC_MANA_LEECH                AuraEffect = AuraEffect(next.SPELL_AURA_PERIODIC_MANA_LEECH)
 	SPELL_AURA_MOD_CASTING_SPEED                  AuraEffect = 65
 	SPELL_AURA_FEIGN_DEATH                        AuraEffect = 66
 	SPELL_AURA_MOD_DISARM                         AuraEffect = 67
@@ -175,7 +156,7 @@ const (
 	SPELL_AURA_CHANNEL_DEATH_ITEM                 AuraEffect = 86
 	SPELL_AURA_MOD_DAMAGE_PERCENT_TAKEN           AuraEffect = 87
 	SPELL_AURA_MOD_HEALTH_REGEN_PERCENT           AuraEffect = 88
-	SPELL_AURA_PERIODIC_DAMAGE_PERCENT            AuraEffect = 89
+	SPELL_AURA_PERIODIC_DAMAGE_PERCENT            AuraEffect = AuraEffect(next.SPELL_AURA_PERIODIC_DAMAGE_PERCENT)
 	SPELL_AURA_MOD_RESIST_CHANCE                  AuraEffect = 90
 	SPELL_AURA_MOD_DETECT_RANGE                   AuraEffect = 91
 	SPELL_AURA_PREVENTS_FLEEING                   AuraEffect = 92
@@ -248,7 +229,7 @@ const (
 	SPELL_AURA_NO_PVP_CREDIT                      AuraEffect = 159
 	SPELL_AURA_MOD_AOE_AVOIDANCE                  AuraEffect = 160
 	SPELL_AURA_MOD_HEALTH_REGEN_IN_COMBAT         AuraEffect = 161
-	SPELL_AURA_POWER_BURN_MANA                    AuraEffect = 162
+	SPELL_AURA_POWER_BURN_MANA                    AuraEffect = AuraEffect(next.SPELL_AURA_POWER_BURN_MANA)
 
 	//[TZERO] used in 1.12 ?
 	SPELL_AURA_MOD_CRIT_DAMAGE_BONUS_MELEE       AuraEffect = 163

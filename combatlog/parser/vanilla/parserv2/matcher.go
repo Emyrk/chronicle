@@ -911,42 +911,7 @@ func (p *Parser) swing(ctx context.Context, ts time.Time, m *Matched) ([]message
 
 // 1771542037|HEAL|0x000000000001C80A|0x000000000001C80A|27805|507|0|0
 func (p *Parser) heal(ctx context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
-	target := m.Guid()
-	caster := m.Guid()
-	spell := m.DBCSpellByID(p.ctx, p)
-	amount := int32(m.Int64())
-	crit := m.Int64() == 1
-	periodic := m.Int64() == 1
-
-	hit := types.HitTypeHit
-	if crit {
-		hit = types.HitTypeCrit
-	}
-	if periodic {
-		hit |= types.HitTypePeriodic
-	}
-
-	if err := m.Error(); err != nil {
-		return nil, err
-	}
-
-	var name string
-	var school types.School
-	if spell != nil {
-		name = spell.Name()
-		school = spell.School.ToType()
-	}
-
-	return set(&messages.Heal{
-		MessageBase: messages.Base(ts),
-		Caster:      caster,
-		Target:      target,
-		SpellName:   name,
-		SpellData:   spell,
-		Amount:      amount,
-		HitType:     hit,
-		School:      school,
-	})
+	return next.DecodeHeal(p.ctx, p, ts, m)
 }
 
 func (p *Parser) spellMiss(ctx context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
@@ -1128,103 +1093,7 @@ func (p *Parser) envDmg(ctx context.Context, ts time.Time, m *Matched) ([]messag
 // 1771966671851|SPELL_DMG|0xF13000C55326FDD0|0x000000000003054A|9835|170|0,0,0|0|6|6,2,0,3
 // 1771966674890|SPELL_DMG|0xF13000C55326FDD0|0x000000000003054A|9835|170|0,0,0|0|6|6,2,0,3
 func (p *Parser) spell_dmg(ctx context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
-	target := m.Guid()
-	caster := m.Guid()
-	spell := m.DBCSpellByID(p.ctx, p)
-	amount := int32(m.Int64())
-	mitigated := m.Int32s() // 3 values: absorbed, blocked, resisted
-	hitInfo := m.Int64()
-	school := m.School()
-	effects := m.Int32s() // effect1, effect2, effect3, auraType
-
-	hit := types.HitTypeHit
-	if hitInfo == 2 {
-		hit = types.HitTypeCrit
-	}
-
-	if err := m.Error(); err != nil {
-		return nil, err
-	}
-	if spell == nil {
-		return nil, fmt.Errorf("spell not found in DBC")
-	}
-
-	if len(mitigated) != 3 {
-		return nil, fmt.Errorf("expected 3 mitigated values, got %d", len(mitigated))
-	}
-
-	if len(effects) != 4 {
-		return nil, fmt.Errorf("expected 4 effect values, got %d", len(effects))
-	}
-
-	dt := spell.SpellDamageType()
-
-	if dt.Has(chrondbc.SpellDamageDirect) && dt.Has(chrondbc.SpellDamagePeriodic) {
-		auraEffect := AuraEffect(effects[3])
-		switch auraEffect {
-		case SPELL_AURA_PERIODIC_HEAL,
-			SPELL_AURA_PERIODIC_DAMAGE,
-			SPELL_AURA_PERIODIC_ENERGIZE,
-			SPELL_AURA_PERIODIC_TRIGGER_SPELL,
-			SPELL_AURA_PERIODIC_LEECH,
-			SPELL_AURA_PERIODIC_HEALTH_FUNNEL,
-			SPELL_AURA_PERIODIC_MANA_FUNNEL,
-			SPELL_AURA_PERIODIC_MANA_LEECH,
-			SPELL_AURA_PERIODIC_DAMAGE_PERCENT:
-			hit |= types.HitTypePeriodic
-		}
-	} else if dt.Has(chrondbc.SpellDamagePeriodic) {
-		hit |= types.HitTypePeriodic
-	}
-
-	var trailer types.Trailer
-	if mitigated[0] > 0 || mitigated[1] > 0 || mitigated[2] > 0 {
-		if mitigated[0] > 0 {
-			trailer = append(trailer, types.TrailerEntry{
-				Amount:  ptr.Ref(uint32(mitigated[0])),
-				HitType: types.HitTypePartialAbsorb,
-			})
-		}
-		if mitigated[1] > 0 {
-			trailer = append(trailer, types.TrailerEntry{
-				Amount:  ptr.Ref(uint32(mitigated[1])),
-				HitType: types.HitTypePartialBlock,
-			})
-		}
-		if mitigated[2] > 0 {
-			trailer = append(trailer, types.TrailerEntry{
-				Amount:  ptr.Ref(uint32(mitigated[2])),
-				HitType: types.HitTypePartialResist,
-			})
-		}
-	}
-
-	msgs, err := set(&messages.Damage{
-		MessageBase:     messages.Base(ts),
-		SpellName:       ptr.Ref(spell.Name()),
-		SpellData:       spell,
-		Caster:          ptr.Ref(caster),
-		Target:          target,
-		HitType:         hit,
-		Amount:          amount,
-		School:          school,
-		Trailer:         trailer,
-		EnvironmentType: nil,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	// Power burn spells (e.g. Mana Burn) drain the target's power and deal
-	// damage proportional to the amount drained. The server never emits an
-	// ENERGIZE line for the drained power — the SPELL_DMG line only carries
-	// the damage component. Synthesize a ResourceChange so the drain is
-	// visible in resource tracking.
-	if rc := powerBurnResourceChange(ts, spell, caster, target, amount, mitigated, effects, hit.Has(types.HitTypeCrit)); rc != nil {
-		msgs = append(msgs, rc)
-	}
-
-	return msgs, nil
+	return next.DecodeSpellDamage(p.ctx, p, ts, m)
 }
 
 // powerBurnResourceChange synthesizes a ResourceChange for SPELL_DMG lines
@@ -1252,58 +1121,7 @@ func powerBurnResourceChange(
 	effects []int32,
 	crit bool,
 ) messages.Message {
-	// The logged effect order does not always match the DBC effect order, so
-	// detect the power burn from the log, then look up the DBC effect index
-	// for the misc value (power type) and damage multiplier.
-	isBurn := AuraEffect(effects[3]) == SPELL_AURA_POWER_BURN_MANA
-	for _, eff := range effects[:3] {
-		if chrondbc.Effect(eff) == chrondbc.EffectPowerBurn {
-			isBurn = true
-		}
-	}
-	if !isBurn {
-		return nil
-	}
-
-	var burnEffect *chrondbc.SpellEffect
-	for _, effect := range spell.DefaultEffects() {
-		if effect.Effect == chrondbc.EffectPowerBurn || effect.EffectAura == chrondbc.AuraEffectPowerBurn {
-			burnEffect = &effect
-			break
-		}
-	}
-	if burnEffect == nil {
-		return nil
-	}
-	powerType, ok := burnEffect.PowerBurnPowerType()
-	if !ok {
-		return nil
-	}
-
-	multiplier := float64(burnEffect.EffectAmplitude)
-	if multiplier <= 0 {
-		multiplier = 1
-	}
-	if crit {
-		multiplier *= 1.5
-	}
-
-	preMitigation := amount + mitigated[0] + mitigated[1] + mitigated[2]
-	burned := int32(float64(preMitigation)/multiplier + 0.5)
-	if burned <= 0 {
-		return nil
-	}
-
-	return &messages.ResourceChange{
-		MessageBase: messages.Base(ts, messages.WithSynthetic()),
-		Target:      target,
-		Amount:      burned,
-		Resource:    PowerTypeResource(powerType),
-		Caster:      ptr.Ref(caster),
-		SpellName:   ptr.Ref(spell.Name()),
-		SpellData:   spell,
-		Direction:   types.ChangeDirectionLoss,
-	}
+	return next.PowerBurnResourceChange(ts, spell, caster, target, amount, mitigated, effects, crit)
 }
 
 //func (p *Parser) spellStart(_ context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
