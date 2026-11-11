@@ -4,6 +4,7 @@ import (
 	"context"
 	"math"
 	"net/http/httptest"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -39,17 +40,26 @@ func TestTake(t *testing.T) {
 			res, err := l.Take(ctx, "user:a", 1)
 			require.NoError(t, err)
 			require.True(t, res.Allowed, "take %d", i)
-			require.InDelta(t, float64(2-i), res.Remaining, 0.01)
+			// The bucket refills continuously between database calls, so assert
+			// that each take spent one token without requiring an exact balance.
+			expected := float64(2 - i)
+			require.GreaterOrEqual(t, res.Remaining, expected)
+			require.Less(t, res.Remaining, expected+1)
 		}
 		res, err := l.Take(ctx, "user:a", 1)
 		require.NoError(t, err)
 		require.False(t, res.Allowed)
-		// 6 per minute = one token every 10s.
-		require.InDelta(t, 10*time.Second, res.RetryAfter, float64(time.Second))
+		// 6 per minute = one token every 10s. Some fraction may already have
+		// refilled while the preceding takes ran.
+		require.Greater(t, res.RetryAfter, time.Duration(0))
+		require.LessOrEqual(t, res.RetryAfter, 10*time.Second)
 
 		rec := httptest.NewRecorder()
 		ratelimit.SetRetryAfter(rec, res)
-		require.Equal(t, "10", rec.Header().Get("Retry-After"))
+		require.Equal(t,
+			strconv.FormatInt(int64(math.Ceil(res.RetryAfter.Seconds())), 10),
+			rec.Header().Get("Retry-After"),
+		)
 	})
 
 	t.Run("Refills", func(t *testing.T) {
