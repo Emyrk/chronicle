@@ -173,6 +173,7 @@ current_members AS MATERIALIZED (
     JOIN wow_servers server ON server.id = realm.server_id
     WHERE encounter.boss = true
       AND encounter.kill_type = 'clean'
+      AND encounter.invalidated_at IS NULL
       AND encounter.end_time > encounter.start_time
       AND (EXTRACT(EPOCH FROM (encounter.end_time - encounter.start_time)) * 1000)::bigint > 0
     ORDER BY representative.run_id, encounter.name,

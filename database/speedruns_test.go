@@ -9,6 +9,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/testutil"
+	"github.com/Emyrk/chronicle/internal/timeparsepolicy"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
@@ -107,10 +108,10 @@ func TestEncounterKillTimesIncludePartialKills(t *testing.T) {
 	})
 }
 
-func TestCleanEncounterKillTimesExcludePartialKills(t *testing.T) {
+func TestCleanEncounterKillTimesExcludePartialAndInvalidatedKills(t *testing.T) {
 	t.Parallel()
 
-	_, store, realmID := setupParsesTest(t)
+	pool, store, realmID := setupParsesTest(t)
 	ctx := testutil.Context(t, testutil.WaitShort)
 	startedAt := time.Date(2026, time.August, 1, 20, 0, 0, 0, time.UTC)
 
@@ -137,30 +138,93 @@ func TestCleanEncounterKillTimesExcludePartialKills(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	insertEncounter := func(name string, killType database.KillType, offset time.Duration) {
+	insertEncounter := func(id uuid.UUID, name string, killType database.KillType, offset time.Duration) {
 		t.Helper()
 		end := startedAt.Add(offset)
 		_, err := store.InsertEncounter(ctx, database.InsertEncounterParams{
-			ID: uuid.New(), InstanceID: instanceID, Name: name,
+			ID: id, InstanceID: instanceID, Name: name,
 			KillType: killType, Remaining: guid.GUIDs{}, Boss: true,
 			StartTime: database.Timestamptz(end.Add(-time.Minute)), EndTime: database.Timestamptz(end),
 		})
 		require.NoError(t, err)
 	}
-	insertEncounter("Clean Boss", database.KillTypeClean, 10*time.Minute)
-	insertEncounter("Partial Boss", database.KillTypePartial, 20*time.Minute)
-	insertEncounter("Wiped Boss", database.KillTypeWipe, 30*time.Minute)
+	cleanEncounterID := uuid.New()
+	remainingEncounterID := uuid.New()
+	insertEncounter(cleanEncounterID, "Clean Boss", database.KillTypeClean, 10*time.Minute)
+	insertEncounter(remainingEncounterID, "Remaining Boss", database.KillTypeClean, 15*time.Minute)
+	insertEncounter(uuid.New(), "Partial Boss", database.KillTypePartial, 20*time.Minute)
+	insertEncounter(uuid.New(), "Wiped Boss", database.KillTypeWipe, 30*time.Minute)
 
-	// The clean-only query should return only the clean kill.
+	// The clean-only query should return only clean kills.
 	cleanKillTimes, err := store.GetInstanceCleanEncounterKillTimes(ctx, instanceID)
 	require.NoError(t, err)
-	require.Len(t, cleanKillTimes, 1)
-	require.Equal(t, "Clean Boss", cleanKillTimes[0].EncounterName)
+	require.Len(t, cleanKillTimes, 2)
+	require.Equal(t, []string{"Clean Boss", "Remaining Boss"}, []string{
+		cleanKillTimes[0].EncounterName,
+		cleanKillTimes[1].EncounterName,
+	})
 
 	// The original query still returns both clean and partial.
 	allKillTimes, err := store.GetInstanceEncounterKillTimes(ctx, instanceID)
 	require.NoError(t, err)
-	require.Len(t, allKillTimes, 2)
+	require.Len(t, allKillTimes, 3)
+
+	require.NoError(t, store.InsertInstanceSpeedrun(ctx, database.InsertInstanceSpeedrunParams{
+		InstanceID: instanceID, InstanceName: "Molten Core", RealmID: realmID,
+		StartTime: database.Timestamptz(startedAt), CompletionTime: database.Timestamptz(startedAt.Add(time.Hour)),
+		DurationMs: int64(time.Hour / time.Millisecond), Proof: []byte(`{"proof":[]}`),
+	}))
+	_, err = store.RefreshTimeParseBossKillMembershipsForLogGroup(ctx, database.RefreshTimeParseBossKillMembershipsForLogGroupParams{
+		LogGroupID: logGroupID, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
+	})
+	require.NoError(t, err)
+	memberships, err := store.ListTimeParseBossKillMemberships(ctx, database.ListTimeParseBossKillMembershipsParams{
+		TenantID: uuid.Nil, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
+	})
+	require.NoError(t, err)
+	require.Len(t, memberships, 2)
+
+	_, err = pool.Exec(ctx, "UPDATE log_instance_encounters SET invalidated_at = now() WHERE id = $1", cleanEncounterID)
+	require.NoError(t, err)
+	_, err = store.RefreshTimeParseBossKillMembershipsForLogGroup(ctx, database.RefreshTimeParseBossKillMembershipsForLogGroupParams{
+		LogGroupID: logGroupID, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
+	})
+	require.NoError(t, err)
+	memberships, err = store.ListTimeParseBossKillMemberships(ctx, database.ListTimeParseBossKillMembershipsParams{
+		TenantID: uuid.Nil, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
+	})
+	require.NoError(t, err)
+	require.Len(t, memberships, 1)
+	require.Equal(t, "Remaining Boss", memberships[0].EncounterName)
+
+	cleanKillTimes, err = store.GetInstanceCleanEncounterKillTimes(ctx, instanceID)
+	require.NoError(t, err)
+	require.Len(t, cleanKillTimes, 1)
+	require.Equal(t, "Remaining Boss", cleanKillTimes[0].EncounterName)
+
+	_, err = pool.Exec(ctx, "UPDATE log_instance_encounters SET invalidated_at = now() WHERE id = $1", remainingEncounterID)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, "DELETE FROM instance_speedruns WHERE instance_id = $1", instanceID)
+	require.NoError(t, err)
+	_, err = store.RefreshTimeParseBossKillMembershipsForLogGroup(ctx, database.RefreshTimeParseBossKillMembershipsForLogGroupParams{
+		LogGroupID: logGroupID, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
+	})
+	require.NoError(t, err)
+	memberships, err = store.ListTimeParseBossKillMemberships(ctx, database.ListTimeParseBossKillMembershipsParams{
+		TenantID: uuid.Nil, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
+	})
+	require.NoError(t, err)
+	require.Empty(t, memberships)
+
+	cleanKillTimes, err = store.GetInstanceCleanEncounterKillTimes(ctx, instanceID)
+	require.NoError(t, err)
+	require.Empty(t, cleanKillTimes)
+	missingScores, err := store.ListInstancesMissingTimeParseScores(ctx, database.ListInstancesMissingTimeParseScoresParams{
+		AllTenants: true, Force: true, LookbackDays: 30,
+		PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion, MaxRows: 100,
+	})
+	require.NoError(t, err)
+	require.Empty(t, missingScores)
 }
 
 func TestSpeedrunLeaderboardTimingModes(t *testing.T) {
