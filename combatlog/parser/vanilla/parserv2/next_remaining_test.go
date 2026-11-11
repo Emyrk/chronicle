@@ -24,6 +24,23 @@ func assertRecordParity(t *testing.T, db gamedb.GameDB, line string) bool {
 	require.NoError(t, err)
 	// Bind only implemented records; unsupported corpus records are counted separately.
 	handlers := map[string]func(time.Time, *Matched) ([]messages.Message, error){
+		"SPELL_START": func(ts time.Time, m *Matched) ([]messages.Message, error) { return p.spellStart(t.Context(), ts, m) },
+		"SPELL_GO":    func(ts time.Time, m *Matched) ([]messages.Message, error) { return p.spellGo(t.Context(), ts, m) },
+		"AURA_CAST":   func(ts time.Time, m *Matched) ([]messages.Message, error) { return p.auraCast(t.Context(), ts, m) },
+		"ENERGIZE":    func(ts time.Time, m *Matched) ([]messages.Message, error) { return p.energize(t.Context(), ts, m) },
+		"DISPEL":      func(ts time.Time, m *Matched) ([]messages.Message, error) { return p.dispel(t.Context(), ts, m) },
+		"BUFF_ADD": func(ts time.Time, m *Matched) ([]messages.Message, error) {
+			return p.aura(t.Context(), "BUFF_ADD", ts, true, m)
+		},
+		"BUFF_REM": func(ts time.Time, m *Matched) ([]messages.Message, error) {
+			return p.aura(t.Context(), "BUFF_REM", ts, true, m)
+		},
+		"DEBUFF_ADD": func(ts time.Time, m *Matched) ([]messages.Message, error) {
+			return p.aura(t.Context(), "DEBUFF_ADD", ts, false, m)
+		},
+		"DEBUFF_REM": func(ts time.Time, m *Matched) ([]messages.Message, error) {
+			return p.aura(t.Context(), "DEBUFF_REM", ts, false, m)
+		},
 		"SWING":      func(ts time.Time, m *Matched) ([]messages.Message, error) { return p.swing(t.Context(), ts, m) },
 		"DEATH":      func(ts time.Time, m *Matched) ([]messages.Message, error) { return p.slain(t.Context(), ts, m) },
 		"HEAL":       func(ts time.Time, m *Matched) ([]messages.Message, error) { return p.heal(t.Context(), ts, m) },
