@@ -581,7 +581,9 @@ func (*SpellFail) isMessage() {}
 
 type SpellStart struct {
 	MessageBase
-	ItemID          *int32
+	ItemID *int32
+	// SpellID preserves the raw combat-log ID even when SpellData lookup fails.
+	SpellID         chrondbc.SpellID
 	SpellData       *chrondbc.Spell
 	Caster          guid.GUID
 	Target          *guid.GUID
@@ -605,7 +607,9 @@ func (*SpellStart) isMessage() {}
 type SpellGo struct {
 	MessageBase
 	// Item is set if triggered by an item, otherwise nil.
-	ItemID           *int32
+	ItemID *int32
+	// SpellID preserves the raw combat-log ID even when SpellData lookup fails.
+	SpellID          chrondbc.SpellID
 	SpellData        *chrondbc.Spell
 	Caster           guid.GUID
 	Target           *guid.GUID

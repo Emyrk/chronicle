@@ -619,9 +619,11 @@ func (p *Parser) suffixCastStart(ts time.Time, base baseParams, spell *spellInfo
 		return nil, err
 	}
 
+	var spellID chrondbc.SpellID
 	var spellData *chrondbc.Spell
 	if spell != nil {
-		spellData = p.lookupSpell(chrondbc.SpellID(spell.spellID), spell.spellName)
+		spellID = chrondbc.SpellID(spell.spellID)
+		spellData = p.lookupSpell(spellID, spell.spellName)
 	}
 
 	target := base.destGUID
@@ -632,6 +634,7 @@ func (p *Parser) suffixCastStart(ts time.Time, base baseParams, spell *spellInfo
 
 	return set(&messages.SpellStart{
 		MessageBase: messages.Base(ts),
+		SpellID:     spellID,
 		SpellData:   spellData,
 		Caster:      base.sourceGUID,
 		Target:      targetPtr,
@@ -644,9 +647,11 @@ func (p *Parser) suffixCastSuccess(ts time.Time, base baseParams, spell *spellIn
 		return nil, err
 	}
 
+	var spellID chrondbc.SpellID
 	var spellData *chrondbc.Spell
 	if spell != nil {
-		spellData = p.lookupSpell(chrondbc.SpellID(spell.spellID), spell.spellName)
+		spellID = chrondbc.SpellID(spell.spellID)
+		spellData = p.lookupSpell(spellID, spell.spellName)
 	}
 
 	target := base.destGUID
@@ -657,6 +662,7 @@ func (p *Parser) suffixCastSuccess(ts time.Time, base baseParams, spell *spellIn
 
 	return set(&messages.SpellGo{
 		MessageBase: messages.Base(ts),
+		SpellID:     spellID,
 		SpellData:   spellData,
 		Caster:      base.sourceGUID,
 		Target:      targetPtr,

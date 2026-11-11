@@ -407,6 +407,11 @@ func IcecrownCitadelHostiles() map[uint32]instances.Identity {
 		36829: "Deathspeaker High Priest",
 		36880: "Decaying Colossus",
 		36934: "Empowering Orb Controller Stalker",
+		36939: "High Overlord Saurfang",
+		36957: "Kor'kron Reaver",
+		36960: "Kor'kron Sergeant",
+		36968: "Kor'kron Axethrower",
+		36982: "Kor'kron Rocketeer",
 		36998: "Skybreaker Protector",
 		37003: "Skybreaker Vindicator",
 		37004: "Skybreaker Dreadblade",
@@ -430,6 +435,7 @@ func IcecrownCitadelHostiles() map[uint32]instances.Identity {
 		37035: "Kor'kron Vanquisher",
 		37038: "Vengeful Fleshreaper",
 		37098: "Val'kyr Herald",
+		37117: "Kor'kron Battle-Mage",
 		37122: "Captain Arnath",
 		37123: "Captain Brandon",
 		37124: "Captain Grondel",
@@ -485,6 +491,12 @@ func IcecrownCitadelHostiles() map[uint32]instances.Identity {
 	hostile[37970] = instances.Identity{Affiliation: types.AffiliationHostile, EncounterName: "Blood Council", Boss: true}
 	hostile[37972] = instances.Identity{Affiliation: types.AffiliationHostile, EncounterName: "Blood Council", Boss: true}
 	hostile[37973] = instances.Identity{Affiliation: types.AffiliationHostile, EncounterName: "Blood Council", Boss: true}
+	hostile[37215] = instances.Identity{
+		Affiliation:   types.AffiliationHostile,
+		Name:          "Orgrim's Hammer",
+		EncounterName: "Gunship Battle",
+		Boss:          true,
+	}
 	return hostile
 }
 

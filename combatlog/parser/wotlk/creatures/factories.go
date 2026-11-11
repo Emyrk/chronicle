@@ -74,6 +74,10 @@ func NewCharacterFactories(flavor database.WoWFlavor) []characters.CharacterFact
 			// Culling of Strathlome
 			NewMalGanis,
 
+			// Icecrown Citadel
+			NewGunshipBattleCharacter,
+			NewValithriaDreamwalker,
+
 			// Ulduar,
 			NewIgnisIronConstruct,
 			NewAlgalon,
