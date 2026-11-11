@@ -87,6 +87,7 @@ import { deadUnitVisualState } from "./mapDeathVisibility";
 import type { MapMarkerKind, MapSceneGround, MapUnitHealth } from "./useMapScene";
 import { publishedModelGeometryScale, publishedModelGroupScale } from "./modelSizing";
 import { cachedModelAsset, modelAnimationState, modelAnimationTimeSeconds, selectModelAnimation, usesStaticDeathFallback, type ModelLocomotion } from "./modelAnimation";
+import { setMaterialEmissive, type MapBodyMaterial } from "./mapMaterials";
 
 /** Ground plane width in scene units; depth follows the artwork's aspect. */
 export const GROUND_WIDTH = 100;
@@ -601,9 +602,9 @@ interface UnitObject {
   body: THREE.Mesh;
   calloutMarker: THREE.Sprite | null;
   calloutKey: string;
-  // Lambert with the unit's tint, or a textured model's cloned materials.
-  bodyMaterial: THREE.MeshLambertMaterial | THREE.MeshStandardMaterial;
-  bodyMaterials: (THREE.MeshLambertMaterial | THREE.MeshStandardMaterial)[];
+  // Lambert with the unit's tint, or a textured model's cloned lit/unlit materials.
+  bodyMaterial: MapBodyMaterial;
+  bodyMaterials: MapBodyMaterial[];
   textured: boolean;
   /** The facing notch (diamonds too, for bosses), turning with the unit. */
   coneMaterial: THREE.MeshBasicMaterial;
@@ -3089,12 +3090,12 @@ export class MapScene3D {
       if (guardian) scale *= Math.max(1, MIN_GUARDIAN_MODEL_HEIGHT / (nativeHeight * scale));
       root.scale.setScalar(scale);
       root.rotation.y = BOSS_MINI_YAW;
-      const materials: (THREE.MeshLambertMaterial | THREE.MeshStandardMaterial)[] = [];
+      const materials: MapBodyMaterial[] = [];
       root.traverse((child) => {
         const mesh = child as THREE.Mesh;
         if (!mesh.isMesh) return;
         const clone = (source: THREE.Material) => {
-          const material = source.clone() as THREE.MeshStandardMaterial;
+          const material = source.clone() as MapBodyMaterial;
           material.transparent = true;
           materials.push(material);
           return material;
@@ -3320,12 +3321,12 @@ export class MapScene3D {
       root.scale.setScalar(scale);
       root.position.y = -box.min.y * scale;
       root.rotation.y = BOSS_MINI_YAW;
-      const materials: (THREE.MeshLambertMaterial | THREE.MeshStandardMaterial)[] = [];
+      const materials: MapBodyMaterial[] = [];
       root.traverse((child) => {
         const mesh = child as THREE.Mesh;
         if (!mesh.isMesh) return;
         const clone = (source: THREE.Material) => {
-          const material = source.clone() as THREE.MeshStandardMaterial;
+          const material = source.clone() as MapBodyMaterial;
           material.transparent = true;
           materials.push(material);
           return material;
@@ -3668,7 +3669,7 @@ export class MapScene3D {
   private updateEffects(now: number): boolean {
     for (const object of this.wobbling) {
       object.body.rotation.z = 0;
-      for (const material of object.bodyMaterials) material.emissive.setRGB(0, 0, 0);
+      for (const material of object.bodyMaterials) setMaterialEmissive(material, null);
     }
     this.wobbling.length = 0;
     for (const object of this.lunging) object.group.position.copy(object.base);
@@ -3771,7 +3772,7 @@ export class MapScene3D {
         // Damped shake about the unit's facing axis plus an emissive flash.
         target.body.rotation.z = Math.sin(effect.progress * Math.PI * 6) * 0.3 * fade * Math.min(2, effect.intensity);
         for (const material of target.bodyMaterials) {
-          material.emissive.copy(color).multiplyScalar(fade * 0.6 * Math.min(2, effect.intensity));
+          setMaterialEmissive(material, color, fade * 0.6 * Math.min(2, effect.intensity));
         }
         if (!this.wobbling.includes(target)) this.wobbling.push(target);
       } else if (ringCount < MAX_EFFECT_PRIMITIVES) {
