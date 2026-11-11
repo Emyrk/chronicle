@@ -3,7 +3,7 @@ import { MAJOR_COOLDOWN_MIN_MS } from "@/api/cooldownSpells";
 import { AIRBORNE_YARDS } from "@/pages/Instance/EventsPanels/Map/dungeonMeshes";
 import { MAP_CONTROL_KEYBINDS } from "@/pages/Instance/EventsPanels/Map/mapControls";
 import { DEAD_ENEMY_FRAME_FADE_MS } from "@/pages/Instance/EventsPanels/Map/mapDeathVisibility";
-import { healthBarColor, LOW_HEALTH_BAR_FRACTION, LOW_MANA_BAR_FRACTION, MAX_HEALTH_BARS, RECENT_HEALTH_MS } from "@/pages/Instance/EventsPanels/Map/mapModel";
+import { healthBarColor, LOW_HEALTH_BAR_FRACTION, LOW_MANA_BAR_FRACTION, MAX_HEALTH_BARS, QUIET_BAR_FRACTION, QUIET_BAR_SCALE, RECENT_HEALTH_MS } from "@/pages/Instance/EventsPanels/Map/mapModel";
 import { BAR_ABSORB, BAR_BACKGROUND, BAR_DEAD, BAR_HEAL, COOLDOWN_ICON_SCALE, hexCss, WALK_AVATAR_COLOR } from "@/pages/Instance/EventsPanels/Map/mapPalette";
 import { CAST_MODES, TRAIL_OPTIONS } from "@/pages/Instance/EventsPanels/Map/mapViewSettings";
 import { HEAL_COLOR, HEAL_CRIT_COLOR, OVERHEAL_COLOR, SCHOOL_TOKENS, schoolColor } from "@/pages/Instance/EventsPanels/Map/replayEffects";
@@ -411,7 +411,7 @@ export function MapLegend() {
         </Grid>
       </Section>
 
-      <Section id="bars" title="Health bars" note={`Up to ${MAX_HEALTH_BARS} at once: bosses, selected players, players below ${LOW_HEALTH_BAR_FRACTION * 100}% health, mana users below ${LOW_MANA_BAR_FRACTION * 100}% mana, and units whose health or power changed in the last ${ms(RECENT_HEALTH_MS)}. Units with a nameplate show their health there instead. Toggle them in Map settings → Units.`}>
+      <Section id="bars" title="Health bars" note={`Up to ${MAX_HEALTH_BARS} at once: bosses, selected players, players below ${LOW_HEALTH_BAR_FRACTION * 100}% health, mana users below ${LOW_MANA_BAR_FRACTION * 100}% mana, and units whose health changed in the last ${ms(RECENT_HEALTH_MS)}. Units with a nameplate show their health there instead. Toggle them in Map settings → Units.`}>
         <div className="grid gap-3 sm:grid-cols-2">
           {[
             { label: "Healthy", bar: <HealthBar fraction={0.95} /> },
@@ -419,6 +419,7 @@ export function MapLegend() {
             { label: "Just healed: the pale chunk at the end of the fill", bar: <HealthBar fraction={0.7} healed={0.15} /> },
             { label: "Absorb shield, after the fill", bar: <HealthBar fraction={0.6} absorb={0.2} /> },
             { label: "Power under the health: mana, rage or energy in its raid-frame colour", bar: <HealthBar fraction={0.8} power={{ fraction: 0.2, color: POWER_COLORS.mana }} /> },
+            { label: `Quiet: a player above ${QUIET_BAR_FRACTION * 100}% health and mana, untouched for ${ms(RECENT_HEALTH_MS)}, gets a smaller bar`, bar: <div className="w-28"><div style={{ transform: `scale(${QUIET_BAR_SCALE})`, transformOrigin: "left center" }}><HealthBar fraction={0.9} power={{ fraction: 0.8, color: POWER_COLORS.mana }} /></div></div> },
             { label: "Dead", bar: <HealthBar fraction={0} dead /> },
           ].map((row) => (
             <div key={row.label} className="flex items-center gap-3 text-sm">{row.bar}<span className="text-muted-foreground">{row.label}</span></div>

@@ -287,6 +287,38 @@ export function selectHealthBars(
   return new Map(candidates.slice(0, MAX_HEALTH_BARS).map(({ guid, sample }) => [guid, sample]));
 }
 
+/** Players above this much health and mana whose health held steady for RECENT_HEALTH_MS get a smaller bar. */
+export const QUIET_BAR_FRACTION = 0.5;
+/** A quiet player's bar is drawn at this scale. */
+export const QUIET_BAR_SCALE = 0.6;
+
+/**
+ * Whether a player's bar at the cursor is quiet (drawn smaller): above
+ * QUIET_BAR_FRACTION health and, for mana users, mana, with no health change
+ * (damage or healing) in the last RECENT_HEALTH_MS. Power changes don't count.
+ */
+export function isQuietHealthBar(samples: readonly MapHealthSample[], cursorMs: number): boolean {
+  const index = latestPositionIndex(samples, cursorMs);
+  if (index < 0) return false;
+  const sample = samples[index];
+  if (sample.max <= 0 || sample.current / sample.max <= QUIET_BAR_FRACTION) return false;
+  if (sample.powerType === "mana" && (sample.maxPower ?? 0) > 0 && (sample.power ?? 0) / sample.maxPower! <= QUIET_BAR_FRACTION) return false;
+  return lastHealthChangeMs(samples, index, cursorMs - RECENT_HEALTH_MS) === null;
+}
+
+// When health (current, max or absorb) last changed at or before
+// samples[index], looking back no further than `sinceMs`; null when it held
+// steady over that span. Samples also record power, so consecutive samples
+// can share the same health. The first sample counts as a change.
+function lastHealthChangeMs(samples: readonly MapHealthSample[], index: number, sinceMs: number): number | null {
+  for (let at = index; at >= 0 && samples[at].timestampMs >= sinceMs; at--) {
+    const sample = samples[at];
+    const previous = samples[at - 1];
+    if (!previous || previous.current !== sample.current || previous.max !== sample.max || previous.absorb !== sample.absorb) return sample.timestampMs;
+  }
+  return null;
+}
+
 function latestPositionIndex(positions: readonly { timestampMs: number }[], timestampMs: number): number {
   let low = 0;
   let high = positions.length - 1;

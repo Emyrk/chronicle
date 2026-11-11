@@ -33,6 +33,7 @@ import {
   encounterRouteSamples,
   replayPositionAt,
   healthBarColor,
+  isQuietHealthBar,
   latestHealthAt,
   latestPositionAt,
   MAX_HEALTH_BARS,
@@ -198,6 +199,25 @@ describe("map replay model", () => {
     // The most recently damaged units win the remaining slots.
     expect(bars.has("p59")).toBe(true);
     expect(bars.has("p0")).toBe(false);
+  });
+
+  it("marks calm players' bars quiet, ignoring power-only changes", () => {
+    const sample = (timestampMs: number, current: number, power: number, powerType = "mana"): MapHealthSample =>
+      ({ timestampMs, current, max: 1000, absorb: 0, power, maxPower: 1000, powerType });
+    const quiet = (samples: MapHealthSample[]) => isQuietHealthBar(samples, 10_000);
+    // Health steady since 0; mana ticking up just now.
+    expect(quiet([sample(0, 900, 600), sample(9_000, 900, 620), sample(9_900, 900, 640)])).toBe(true);
+    // Hit at 8 s, then mana ticks.
+    expect(quiet([sample(0, 1000, 600), sample(8_000, 900, 600), sample(9_900, 900, 620)])).toBe(false);
+    // Hit long ago, then mana ticks.
+    expect(quiet([sample(0, 1000, 600), sample(5_000, 900, 600), sample(9_900, 900, 620)])).toBe(true);
+    // Half health, or half mana: not quiet.
+    expect(quiet([sample(0, 500, 900)])).toBe(false);
+    expect(quiet([sample(0, 900, 500)])).toBe(false);
+    // Low rage is not low mana.
+    expect(quiet([sample(0, 900, 0, "rage")])).toBe(true);
+    // No sample yet.
+    expect(quiet([sample(20_000, 900, 900)])).toBe(false);
   });
 
   it("keeps bars for hurt players and low-mana players, ahead of recent changes", () => {

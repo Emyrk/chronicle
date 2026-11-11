@@ -384,6 +384,7 @@ export default function MapView3D({
         name: marker.name,
         health: showBars ? marker.health : null,
         bar: marker.bar,
+        quietBar: marker.quietBar,
         miniatureUrl: model?.url,
         animationUrl: model?.animationUrl,
         gameModel: model?.kind === "game",

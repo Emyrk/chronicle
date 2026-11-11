@@ -54,7 +54,7 @@ import {
 } from "./dungeonMeshes";
 import { MAP_CURSOR, MAP_HOSTILE_CURSOR, MAP_UNIT_CURSOR } from "./mapCursors";
 import { FLOOR_SLICE_MS, FLOOR_TRACK_TOLERANCE_YARDS, floorTrackAt, startFloorTrackBuild, type FloorTrackBuild, type FloorTracks } from "./walkableFloors";
-import { flatArtworkUnitScale, FOCUS_RADIUS_YARDS, FULL_MAP_VIEWPORT, healthBarColor, interpolateViewport, mapPointToScene, MAX_HEALTH_BARS, topDownMapDistance, type MapPoint, type MapViewport } from "./mapModel";
+import { flatArtworkUnitScale, FOCUS_RADIUS_YARDS, FULL_MAP_VIEWPORT, healthBarColor, interpolateViewport, mapPointToScene, MAX_HEALTH_BARS, QUIET_BAR_SCALE, topDownMapDistance, type MapPoint, type MapViewport } from "./mapModel";
 import { deepBreathPathForPrimarySpell, ONYXIA_DEEP_BREATH_RADIUS_YARDS } from "./deepBreathLanes";
 import { projectMapDebugPoints, type MapDebugOverlay } from "./mapDebugOverlays";
 import {
@@ -488,6 +488,8 @@ export interface MapScene3DUnit {
   health: MapUnitHealth | null;
   /** Draw its health bar: picked by the declutter (selectHealthBars). A unit with a nameplate shows its health there instead. */
   bar?: boolean;
+  /** A calm player (isQuietHealthBar): its bar draws smaller. */
+  quietBar?: boolean;
   /** Published model URL from the shared miniature manifest. */
   miniatureUrl: string | undefined;
   /** Optional lazy animation-pack URL for an original game model. */
@@ -640,6 +642,8 @@ interface UnitObject {
   health: MapUnitHealth | null;
   /** The declutter gives it a health bar (hidden while it has a nameplate). */
   bar: boolean;
+  /** A calm player: its bar draws at QUIET_BAR_SCALE. */
+  quietBar: boolean;
   /** Published miniature or original-model URL; the primitive shows until it loads. */
   miniatureUrl: string | undefined;
   animationUrl: string | undefined;
@@ -1558,6 +1562,7 @@ export class MapScene3D {
       object.name = unit.name;
       object.health = unit.health;
       object.bar = Boolean(unit.bar);
+      object.quietBar = Boolean(unit.quietBar);
       object.worldX = unit.worldX;
       object.worldY = unit.worldY;
       object.loggedZ = unit.z;
@@ -2958,6 +2963,7 @@ export class MapScene3D {
       floorTracked: false,
       health: unit.health,
       bar: Boolean(unit.bar),
+      quietBar: Boolean(unit.quietBar),
       miniatureUrl: unit.miniatureUrl,
       animationUrl: unit.animationUrl,
       gameModel: Boolean(unit.gameModel),
@@ -4145,14 +4151,15 @@ export class MapScene3D {
 
   // Health bars above the units, facing the camera at a constant screen size,
   // with a thin power strip under the health while the unit is alive and has
-  // power, over the declutter's picks. Units with a nameplate (hovered,
+  // power, over the declutter's picks; calm players' bars are smaller. Units with a nameplate (hovered,
   // selected, its target chain, pinned) show their health there instead.
   private updateBars() {
-    const width = BAR_WIDTH * this.unitScale;
-    const thickness = BAR_THICKNESS * this.unitScale;
-    const padding = BAR_PADDING * this.unitScale;
-    const strip = POWER_STRIP_THICKNESS * this.unitScale;
-    const stripGap = POWER_STRIP_GAP * this.unitScale;
+    // Sizes for the bar being drawn: a quiet player's are smaller.
+    let width = 0;
+    let thickness = 0;
+    let padding = 0;
+    let strip = 0;
+    let stripGap = 0;
     const right = this.vectorB.set(1, 0, 0).applyQuaternion(this.camera.quaternion);
     const up = this.vectorC.set(0, 1, 0).applyQuaternion(this.camera.quaternion);
     let count = 0;
@@ -4174,6 +4181,12 @@ export class MapScene3D {
       if (!object.bar || plated.has(guid) || !object.group.visible || !health || count + BAR_QUADS > BAR_POOL_SIZE) continue;
       const dead = health.dead || object.dead;
       barLift = object.barHeight * this.scaleOf(object);
+      const size = this.unitScale * (object.quietBar && !dead ? QUIET_BAR_SCALE : 1);
+      width = BAR_WIDTH * size;
+      thickness = BAR_THICKNESS * size;
+      padding = BAR_PADDING * size;
+      strip = POWER_STRIP_THICKNESS * size;
+      stripGap = POWER_STRIP_GAP * size;
       const fraction = health.max > 0 ? Math.min(1, Math.max(0, health.current / health.max)) : 0;
       const absorb = health.max > 0 ? Math.min(1 - fraction, Math.max(0, health.absorb / health.max)) : 0;
       // From the effect clock while effects run, so the chunk shrinks
