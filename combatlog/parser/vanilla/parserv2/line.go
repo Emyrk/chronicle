@@ -199,3 +199,5 @@ func (m *Matched) DBCSpellByID(ctx context.Context, db spellByIDer) *chrondbc.Sp
 // Peek and Skip expose the legacy cursor behavior at the migration boundary.
 func (m *Matched) Peek() string { return m.peek() }
 func (m *Matched) Skip()        { m.skip() }
+
+func (m *Matched) Rest() []string { return m.rest() }

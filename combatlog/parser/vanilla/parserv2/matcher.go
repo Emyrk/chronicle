@@ -542,60 +542,7 @@ func (p *Parser) dispel(ctx context.Context, ts time.Time, m *Matched) ([]messag
 }
 
 func (p *Parser) loot(ctx context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
-	playerName := m.String()
-	rest := m.rest()
-
-	if err := m.Error(); err != nil {
-		return nil, err
-	}
-
-	var itemID int32
-	var itemSuffix int32
-	for _, part := range rest {
-		part = strings.TrimSpace(part)
-		if strings.HasPrefix(part, "Hitem:") {
-			part = strings.TrimSpace(strings.TrimPrefix(part, "Hitem:"))
-			fields := strings.Split(part, ":")
-			if len(fields) != 4 {
-				return nil, fmt.Errorf("unexpected item string format: %s", part)
-			}
-
-			itemID64, err := strconv.Atoi(fields[0])
-			if err != nil {
-				return nil, fmt.Errorf("parsing item ID: %w", err)
-			}
-
-			itemSuffix64, err := strconv.Atoi(fields[3])
-			if err != nil {
-				return nil, fmt.Errorf("parsing item suffix: %w", err)
-			}
-			itemID = int32(itemID64)
-			itemSuffix = int32(itemSuffix64)
-			break
-		}
-	}
-
-	itemName := rest[3]
-	itemName = strings.Trim(strings.TrimPrefix(itemName, "h"), `[]`)
-
-	last := rest[len(rest)-1]
-	quantity := int32(1)
-	if strings.HasPrefix(last, "rx") {
-		quantity64, err := strconv.Atoi(strings.TrimPrefix(last, "rx"))
-		if err != nil {
-			return nil, fmt.Errorf("parsing loot quantity %q: %w", last, err)
-		}
-		quantity = int32(quantity64)
-	}
-
-	return set(&messages.Loot{
-		MessageBase:  messages.Base(ts),
-		PlayerName:   playerName,
-		ItemName:     itemName,
-		ItemID:       itemID,
-		ItemSuffixID: itemSuffix,
-		Quantity:     quantity,
-	})
+	return next.DecodeLoot(ts, m)
 }
 
 // 1775356811498|LOOT_TRADE|Jimmythehand trades item Bloodfang Spaulders to Eithinis.

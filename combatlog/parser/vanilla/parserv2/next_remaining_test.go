@@ -24,7 +24,8 @@ func assertRecordParity(t *testing.T, db gamedb.GameDB, line string) bool {
 	require.NoError(t, err)
 	// Bind only implemented records; unsupported corpus records are counted separately.
 	handlers := map[string]func(time.Time, *Matched) ([]messages.Message, error){
-		"RG": func(ts time.Time, m *Matched) ([]messages.Message, error) { return p.raidGroup(t.Context(), ts, m) },
+		"LOOT": func(ts time.Time, m *Matched) ([]messages.Message, error) { return p.loot(t.Context(), ts, m) },
+		"RG":   func(ts time.Time, m *Matched) ([]messages.Message, error) { return p.raidGroup(t.Context(), ts, m) },
 		"RAID_COMPOSITION": func(ts time.Time, m *Matched) ([]messages.Message, error) {
 			return p.raidComposition(t.Context(), ts, m)
 		},
