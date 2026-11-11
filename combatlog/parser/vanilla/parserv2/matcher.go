@@ -14,8 +14,6 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
-	"github.com/Emyrk/chronicle/combatlog/parser/types/gameversions"
-	"github.com/Emyrk/chronicle/combatlog/parser/types/realm"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
 	"github.com/Emyrk/chronicle/combatlog/parser/unitname"
@@ -27,116 +25,15 @@ import (
 	"github.com/Masterminds/semver"
 )
 
-const dateLayout = "02.01.06 15:04:05"
-
 func (p *Parser) header(ctx context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
-	player := m.OptionalGuid()
-	realmName := m.String()
-	zoneName := m.String()
-	addonVersion := m.String()
-	superWoWVersion := m.String()
-	namPowerVersion := m.String()
-	xp3Version := m.String()
-	wowVersion := m.String()
-	wowBuild := m.Int32()
-	wowBuildDate := m.String()
-	localTimeStr := m.String()
-	utcTimeStr := m.String()
-
-	var classicAPIVersion string
-	if m.Remain() > 0 {
-		m.skip() // combat log range
-	}
-	if m.Remain() > 0 {
-		classicAPIVersion = m.String()
-	}
-	if m.Remain() > 0 {
-		m.skip() // threat mode
-	}
-
-	// TODO: If ts is 0, set to utc time
-
-	var _ = zoneName
-
-	if err := m.Error(); err != nil {
+	result, err := next.DecodeHeader(ts, m, version.GitTag)
+	if err != nil {
 		return nil, err
 	}
-
-	localTime, err := time.Parse(dateLayout, localTimeStr)
-	if err != nil {
-		return nil, fmt.Errorf("parsing local time: %w", err)
+	if result.Version != nil {
+		p.gameVersions = result.Version
 	}
-	var _ = localTime
-
-	utcTime, err := time.Parse(dateLayout, utcTimeStr)
-	if err != nil {
-		return nil, fmt.Errorf("parsing local time: %w", err)
-	}
-
-	if ts.IsZero() {
-		ts = utcTime
-	}
-
-	chronicleCompanion, ccv := semver.NewVersion(addonVersion)
-
-	if ccv == nil {
-		p.gameVersions = &gameversions.GameVersion{
-			ChronicleCompanionAddon: chronicleCompanion,
-		}
-	}
-
-	versions := make(map[string]string)
-	if addonVersion != "" {
-		versions["chronicle_companion"] = addonVersion
-		versions["addon"] = addonVersion
-	}
-	if superWoWVersion != "" {
-		versions["superwow"] = superWoWVersion
-	}
-	if namPowerVersion != "" {
-		versions["nampower"] = namPowerVersion
-	}
-	if xp3Version != "" {
-		versions["xp3"] = xp3Version
-	}
-	if classicAPIVersion != "" {
-		versions["classicapi"] = classicAPIVersion
-	}
-	if wowVersion != "" {
-		versions["wow_client"] = wowVersion
-	}
-	if wowBuild != 0 {
-		versions["wow_build"] = fmt.Sprintf("%d", wowBuild)
-	}
-	versions["chronicle"] = version.GitTag
-
-	return set(
-		//&messages.Zone{
-		//	MessageBase: messages.Base(ts),
-		//	Zone: zone.Zone{
-		//		Name:         zoneName,
-		//		InstanceID:   0,
-		//		Ghost:        false,
-		//		InstanceType: "",
-		//		IsInstance:   false,
-		//	},
-		//},
-		&messages.Realm{
-			MessageBase: messages.Base(ts),
-			Info: realm.Info{
-				Seen:      ts,
-				Version:   wowVersion,
-				Build:     int(wowBuild),
-				BuildDate: wowBuildDate,
-				RealmName: realmName,
-			},
-		},
-		&messages.Versions{
-			MessageBase: messages.Base(ts),
-			Player:      player,
-			Versions:    versions,
-		},
-	)
+	return result.Messages, nil
 }
 
 func (p *Parser) auraCast(ctx context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
