@@ -69,3 +69,25 @@ func TestMajordomoPartyStateRejectsMalformed(t *testing.T) {
 	_, err := DecodeMajordomoPartyState(99, []byte(`{"common":"/common"}`))
 	require.Error(t, err)
 }
+
+func TestMajordomoPartyStateRequiresCompleteShape(t *testing.T) {
+	t.Parallel()
+	for _, payload := range []string{
+		`{"common":"/common"}`,
+		`{"common":"/common","announced":false,"party":{}}`,
+		`{"common":"/common","is_majordomo":false,"party":{}}`,
+		`{"common":"/common","is_majordomo":false,"announced":false}`,
+		`{"common":null,"is_majordomo":false,"announced":false,"party":{}}`,
+		`{"common":"/common","is_majordomo":null,"announced":false,"party":{}}`,
+		`{"common":"/common","is_majordomo":false,"announced":null,"party":{}}`,
+		`{"common":"/common","is_majordomo":false,"announced":false,"party":[]}`,
+		`{"common":"/common","is_majordomo":false,"announced":false,"party":{},"party":{}}`,
+	} {
+		_, err := DecodeMajordomoPartyState(MajordomoPartyStateVersion, []byte(payload))
+		require.Error(t, err, payload)
+	}
+	// Deliberately preserve the nil representation supported by CaptureState.
+	state, err := DecodeMajordomoPartyState(MajordomoPartyStateVersion, []byte(`{"common":"/common","is_majordomo":false,"announced":false,"party":null}`))
+	require.NoError(t, err)
+	require.Nil(t, state.value.Party)
+}

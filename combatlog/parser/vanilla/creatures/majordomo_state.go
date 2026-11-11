@@ -57,13 +57,49 @@ func DecodeMajordomoPartyState(version uint32, payload []byte) (MajordomoPartySt
 		return MajordomoPartyState{}, fmt.Errorf("unsupported MajordomoParty version")
 	}
 	d := json.NewDecoder(bytes.NewReader(payload))
-	d.DisallowUnknownFields()
-	var v majordomoPartyValue
-	if err := d.Decode(&v); err != nil {
+	token, err := d.Token()
+	if err != nil {
+		return MajordomoPartyState{}, err
+	}
+	if token != json.Delim('{') {
+		return MajordomoPartyState{}, fmt.Errorf("MajordomoParty state must be object")
+	}
+	fields := make(map[string]json.RawMessage)
+	for d.More() {
+		token, err := d.Token()
+		if err != nil {
+			return MajordomoPartyState{}, err
+		}
+		key := token.(string)
+		if key != "common" && key != "is_majordomo" && key != "announced" && key != "party" {
+			return MajordomoPartyState{}, fmt.Errorf("unknown MajordomoParty field")
+		}
+		if _, ok := fields[key]; ok {
+			return MajordomoPartyState{}, fmt.Errorf("duplicate MajordomoParty field")
+		}
+		var raw json.RawMessage
+		if err := d.Decode(&raw); err != nil {
+			return MajordomoPartyState{}, err
+		}
+		// Capture explicitly preserves a nil party map as null. Unlike missing
+		// party, this is a complete representation (ordinary constructors use {}).
+		if key != "party" && bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+			return MajordomoPartyState{}, fmt.Errorf("null MajordomoParty scalar")
+		}
+		fields[key] = raw
+	}
+	if _, err := d.Token(); err != nil {
 		return MajordomoPartyState{}, err
 	}
 	if err := d.Decode(new(any)); err != io.EOF {
 		return MajordomoPartyState{}, fmt.Errorf("trailing MajordomoParty state")
+	}
+	if len(fields) != 4 {
+		return MajordomoPartyState{}, fmt.Errorf("incomplete MajordomoParty state")
+	}
+	var v majordomoPartyValue
+	if err := json.Unmarshal(payload, &v); err != nil {
+		return MajordomoPartyState{}, err
 	}
 	if v.Common == "" {
 		return MajordomoPartyState{}, fmt.Errorf("empty common reference")
