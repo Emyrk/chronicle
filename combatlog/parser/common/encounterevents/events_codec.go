@@ -10,6 +10,8 @@ import (
 
 	"github.com/Emyrk/chronicle/api/chronicleproto"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"google.golang.org/protobuf/encoding/protowire"
+	"google.golang.org/protobuf/proto"
 )
 
 const EncounterEventsStateType = "encounterevents.EncounterEventsInProgress"
@@ -130,20 +132,65 @@ func (e *EncounterEventsInProgress) CaptureState(captureDamage func(int, *messag
 }
 
 func (s EncounterEventsState) validate() error {
+	if s.value.Counter < 0 {
+		return fmt.Errorf("negative encounter event counter")
+	}
+	seenIndexes := make(map[int32]string)
+	addIndex := func(index int32, owner string) error {
+		if index < 0 || index >= s.value.Counter {
+			return fmt.Errorf("%s event index %d is outside counter %d", owner, index, s.value.Counter)
+		}
+		if previous, exists := seenIndexes[index]; exists {
+			return fmt.Errorf("event index %d is shared by %s and %s", index, previous, owner)
+		}
+		seenIndexes[index] = owner
+		return nil
+	}
+
+	var eventCount int64
 	switch {
 	case s.damagePending != nil && s.damageEager == nil:
 		if s.damagePending.First != s.value.First {
 			return fmt.Errorf("pending damage first timestamp mismatch")
 		}
+		eventCount += s.damagePending.Count
+		for i, entry := range s.damagePending.Entries {
+			if err := addIndex(entry.Index, fmt.Sprintf("pending damage %d", i)); err != nil {
+				return err
+			}
+		}
 	case s.damageEager != nil && s.damagePending == nil:
 		if s.damageEager.value.First != s.value.First {
 			return fmt.Errorf("eager damage first timestamp mismatch")
+		}
+		eventCount += s.damageEager.value.Count
+		if err := validateEagerIndexes("damage", *s.damageEager, addIndex); err != nil {
+			return err
 		}
 	default:
 		return fmt.Errorf("encounter events requires exactly one damage state")
 	}
 	if s.position.value.First != s.value.First {
 		return fmt.Errorf("position first timestamp mismatch")
+	}
+	if s.position.value.Done {
+		eventCount += s.position.value.Count
+	} else {
+		// Active position entries retain tombstones for compacted events, so their
+		// slice length is the exact number of indexes consumed by this owner.
+		eventCount += int64(len(s.position.value.Entries))
+		for i, entry := range s.position.value.Entries {
+			if entry == nil {
+				continue
+			}
+			index, err := encodedEventIndex(entry)
+			if err != nil {
+				return fmt.Errorf("position entry %d index: %w", i, err)
+			}
+			if err := addIndex(index, fmt.Sprintf("position entry %d", i)); err != nil {
+				return err
+			}
+		}
 	}
 	if len(s.eager) != len(eagerStreamNames) {
 		return fmt.Errorf("unexpected eager state count")
@@ -156,8 +203,86 @@ func (s EncounterEventsState) validate() error {
 		if state.value.First != s.value.First {
 			return fmt.Errorf("eager stream %s first timestamp mismatch", name)
 		}
+		eventCount += state.value.Count
+		if err := validateEagerIndexes(name, state, addIndex); err != nil {
+			return err
+		}
+	}
+	if s.position.value.Done {
+		// Finalized position state intentionally discards compaction tombstones, so
+		// only a lower bound remains. Other finalized stream counts stay exact.
+		if int64(s.value.Counter) < eventCount {
+			return fmt.Errorf("encounter event counter %d is below retained event count %d", s.value.Counter, eventCount)
+		}
+	} else if int64(s.value.Counter) != eventCount {
+		return fmt.Errorf("encounter event counter %d does not match consumed event count %d", s.value.Counter, eventCount)
 	}
 	return nil
+}
+
+func validateEagerIndexes(name string, state EagerBuilderState, add func(int32, string) error) error {
+	if state.value.Done {
+		return nil
+	}
+	data := state.value.Data
+	for record := 0; len(data) > 0; record++ {
+		length, prefixLength := protowire.ConsumeVarint(data)
+		if prefixLength < 0 {
+			return fmt.Errorf("%s record %d has invalid length", name, record)
+		}
+		data = data[prefixLength:]
+		if length > uint64(len(data)) {
+			return fmt.Errorf("%s record %d is truncated", name, record)
+		}
+		entry := data[:int(length)]
+		data = data[int(length):]
+		index, err := encodedEventIndex(entry)
+		if err != nil {
+			return fmt.Errorf("%s record %d index: %w", name, record, err)
+		}
+		if err := add(index, fmt.Sprintf("%s record %d", name, record)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func encodedEventIndex(entry []byte) (int32, error) {
+	var metaBytes []byte
+	foundMeta := false
+	for len(entry) > 0 {
+		number, wireType, tagLength := protowire.ConsumeTag(entry)
+		if tagLength < 0 {
+			return 0, fmt.Errorf("invalid protobuf tag")
+		}
+		entry = entry[tagLength:]
+		if number == 1 {
+			if foundMeta || wireType != protowire.BytesType {
+				return 0, fmt.Errorf("invalid event metadata")
+			}
+			value, valueLength := protowire.ConsumeBytes(entry)
+			if valueLength < 0 {
+				return 0, fmt.Errorf("invalid event metadata bytes")
+			}
+			metaBytes = value
+			foundMeta = true
+			entry = entry[valueLength:]
+			continue
+		}
+		valueLength := protowire.ConsumeFieldValue(number, wireType, entry)
+		if valueLength < 0 {
+			return 0, fmt.Errorf("invalid protobuf field")
+		}
+		entry = entry[valueLength:]
+	}
+	if !foundMeta {
+		return 0, fmt.Errorf("missing event metadata")
+	}
+	var meta chronicleproto.EventMeta
+	if err := proto.Unmarshal(metaBytes, &meta); err != nil {
+		return 0, fmt.Errorf("decode event metadata: %w", err)
+	}
+	return meta.Index, nil
 }
 
 func (s EncounterEventsState) Encode() ([]byte, error) {

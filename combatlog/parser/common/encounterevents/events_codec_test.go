@@ -91,6 +91,10 @@ func TestEncounterEventsStateContinuationAndSharedDamage(t *testing.T) {
 	for _, message := range suffixRestored {
 		require.NoError(t, restored.Process(message))
 	}
+	require.Equal(t, int32(6), continuous.cnter)
+	require.Equal(t, continuous.cnter, restored.cnter)
+	require.Equal(t, int32(5), continuous.Damage.pending[1].index)
+	require.Equal(t, continuous.Damage.pending[1].index, restored.Damage.pending[1].index)
 	require.NoError(t, continuous.Damage.SerializeBuffered(nil))
 	require.NoError(t, restored.Damage.SerializeBuffered(nil))
 	continuousEvents := NewEvents()
@@ -112,6 +116,26 @@ func TestEncounterEventsStateContinuationAndSharedDamage(t *testing.T) {
 	restoredEvents.Slain[0] ^= 0xff
 	require.Equal(t, finalPayload, finalizedEventsStateBytes(t, finalState))
 	require.Equal(t, finalPayload, finalizedEventsStateBytes(t, finalDecoded))
+}
+
+func TestEncounterEventsStateCounterIncludesCompactedPositions(t *testing.T) {
+	t.Parallel()
+	start := time.UnixMilli(1000)
+	events := New(false)
+	for i := range 3 {
+		require.NoError(t, events.Process(eventPosition(start.Add(time.Duration(i)*time.Second), 10)))
+	}
+	require.Len(t, events.UnitPosition.entries, 3)
+	require.Nil(t, events.UnitPosition.entries[1])
+	require.Equal(t, int64(2), events.UnitPosition.Count)
+	require.Equal(t, int32(3), events.cnter)
+
+	state, err := events.CaptureState(nil)
+	require.NoError(t, err)
+	corrupt := state
+	corrupt.value.Counter = 4
+	_, err = corrupt.Encode()
+	require.ErrorContains(t, err, "consumed event count 3")
 }
 
 func TestEncounterEventsStateFinalizedLifecycle(t *testing.T) {
@@ -178,7 +202,28 @@ func TestEncounterEventsAndFinalizedEventsRejectCorruption(t *testing.T) {
 	}
 	var root map[string]any
 	require.NoError(t, json.Unmarshal(valid, &root))
+	root["counter"] = float64(1)
+	badCounter, err := json.Marshal(root)
+	require.NoError(t, err)
+	_, err = DecodeEncounterEventsState(EncounterEventsStateVersion, badCounter)
+	require.ErrorContains(t, err, "does not match consumed event count")
+
+	indexed := New(false)
+	require.NoError(t, indexed.Process(eventDamage(time.UnixMilli(1000), 10)))
+	indexedState, err := indexed.CaptureState(func(int, *messages.Damage) (string, error) { return "/damage", nil })
+	require.NoError(t, err)
+	indexedPayload := encounterStateBytes(t, indexedState)
+	require.NoError(t, json.Unmarshal(indexedPayload, &root))
 	damageState := root["damage"].(map[string]any)["state"].(map[string]any)
+	damagePayload := damageState["payload"].(map[string]any)
+	damagePayload["entries"].([]any)[0].(map[string]any)["index"] = float64(1)
+	badIndex, err := json.Marshal(root)
+	require.NoError(t, err)
+	_, err = DecodeEncounterEventsState(EncounterEventsStateVersion, badIndex)
+	require.ErrorContains(t, err, "outside counter 1")
+
+	require.NoError(t, json.Unmarshal(valid, &root))
+	damageState = root["damage"].(map[string]any)["state"].(map[string]any)
 	damageState["version"] = 999
 	badVersion, err := json.Marshal(root)
 	require.NoError(t, err)
