@@ -102,6 +102,30 @@ failed due to concurrent database timezone updates and was corrected, not hidden
 Focused lint reported zero issues; external Python compilation and shell syntax
 checks passed. No production code changed during this corpus expansion.
 
+The final reproducibility audit added optional `BASELINE_RUN_ID` to the external
+runner, validated against `[a-z0-9_]+`. It preflights all requested output paths
+and database names before writing, rejects collisions, and namespaces outputs
+under `results/<run-id>/<case>/`. Each parse uses a private copy of the input
+object tree; immutable input/reference seeds and historical artifacts are
+preserved. Helper Go commands resolve the caller's current Git checkout, not a
+fixed child-worktree path.
+
+An actual `portable_check_01` OctoWoW rerun using the current-checkout CLI completed
+two parses (each 1 instance, 12 encounters, 181,936 events) and a negative control.
+Strict repeat comparison found 25 fields; the negative control detected exactly
+one `player_deaths` change. All three databases contain zero River jobs. Six
+preflight rejection cases passed, including a later invalid case and an existing
+run collision; existing output and historical input/reference checksums remained
+unchanged. A fresh ID permits another direct run without editing scripts:
+
+```sh
+ROOT="$HOME/Desktop/parsing_snapshots"
+bash "$ROOT/scripts/build-current.sh"
+BASELINE_RUN_ID=portable_check_02 \
+BASELINE_BINARY="$ROOT/bin/parser-baseline-current" \
+  bash "$ROOT/scripts/run-corpus.sh" octowow
+```
+
 The remainder of this document records the earlier ChromieCraft-only run.
 
 ## Fixture and reference scope
