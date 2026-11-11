@@ -223,7 +223,7 @@ The spell parity fixture contains 17 representative unchanged saved Capybara rec
 lookup uses deterministic test spell values/fallbacks, not a claim of complete
 production-dataset parity. Additional explicit spell fixtures cover periodic,
 hybrid, crit/periodic healing and power burn, plus malformed and missing fields.
-MISS, ENV_DMG and DMG_SHIELD are now decoded too. HEADER and the other unmigrated records remain explicit errors.
+MISS, ENV_DMG and DMG_SHIELD are now decoded too. The stateless entry point still rejects HEADER and COMBATANT records.
 
 ### Remaining damage records
 
@@ -371,3 +371,27 @@ unchanged. SPELL_FAIL/aura-duration outcome decisions remain pending.
 
 Parsernext still rejects these events explicitly. No skip policy, channel state
 or combat-finalization meaning has been introduced by this extraction.
+
+### Opt-in complete message-source compatibility
+
+`parser/vanilla/nextsource` lives outside parsernext. Its Pipeline owns one Decoder
+and the existing ordered Synthetic instance, with aura-cast correlation enabled.
+`OpenFile` creates a file-local Source implementing the existing Advance contract;
+records pass through synthetics one batch at a time. Existing Consumers can use
+it directly. No old Parser is invoked, no synthetic algorithm is copied, and
+production selection/publication is unchanged. Retain Pipeline across sequential
+files; EOF neither finalizes nor resets semantic state.
+
+DecoderOptions accepts a separate CountedSpells lookup solely to preserve the
+legacy diagnostic distinction. HEAL, SPELL_DMG, MISS, SPELL_START, SPELL_GO,
+AURA_CAST and DISPEL use the counted adapter; SWING, aura add/remove, ENERGIZE,
+ENV_DMG, DMG_SHIELD and SPELL_FAIL retain direct lookups. Intentional client-side
+failure drops add no diagnostic signal. The compatibility adapter exposes its
+own missed-spell values; this does not repair the old daemon's incompatible
+named-return-type assertion or change production reports.
+
+Opt-in real-data parity tests use `CHRONICLE_PARSER_PARITY_DB` (loopback,
+`parser_baseline_` database only, forced read-only transactions),
+`CHRONICLE_PARSER_PARITY_CASE` (saved case directory), and
+`CHRONICLE_PARSER_PARITY_GZIP` (saved raw gzip object). They compare the complete
+ordered synthetic message source, not final encounter/publication output.
