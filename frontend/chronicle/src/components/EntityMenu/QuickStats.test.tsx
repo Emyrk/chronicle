@@ -1,7 +1,10 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { GuildSpeedrunRun } from "@/api/typesGenerated";
+import { GUILD_HISTORY_MAX_TIME_MS } from "@/pages/GuildHistory/guildHistoryModel";
 import QuickStats from "./QuickStats";
 import { classEntity, entityKey, specEntity } from "./entity";
+import { guildChartPoints } from "./quickStatsModel";
 
 const rankings = vi.hoisted(() => ({
   stats: vi.fn(),
@@ -42,6 +45,31 @@ const common = {
   onPick: vi.fn(),
   rangeDays: 180,
 };
+
+describe("guild chart points", () => {
+  const run = (slug: string, completionTime: string, durationMs: number): GuildSpeedrunRun => ({
+    slug,
+    qualified: true,
+    complete: true,
+    player_count: 40,
+    start_time: completionTime,
+    completion_time: completionTime,
+    duration_ms: durationMs,
+    boss_to_boss_duration_ms: durationMs,
+    trash_duration_ms: 0,
+    clear_parse: null,
+    bosses: [],
+  });
+
+  it("omits clear times over six hours from the floating chart", () => {
+    const boundary = run("boundary", "2026-11-01T00:00:00Z", GUILD_HISTORY_MAX_TIME_MS);
+    const overLimit = run("over-limit", "2026-11-08T00:00:00Z", GUILD_HISTORY_MAX_TIME_MS + 1);
+
+    expect(guildChartPoints([boundary, overLimit], overLimit)).toEqual([
+      { time: Date.parse(boundary.completion_time), value: boundary.duration_ms, highlight: false },
+    ]);
+  });
+});
 
 describe("class and spec quick stats", () => {
   beforeEach(() => rankings.stats.mockClear());
