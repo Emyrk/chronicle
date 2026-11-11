@@ -10,8 +10,8 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parsernext/formats/ccv2"
+	next "github.com/Emyrk/chronicle/combatlog/parsernext/vanilla"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
-	"github.com/Emyrk/chronicle/internal/ptr"
 )
 
 type Matched struct {
@@ -200,21 +200,7 @@ func (m *Matched) Bool() bool {
 	})
 }
 
-func (m *Matched) Int32s() []int32 {
-	return parseMatch(m, func(s string) ([]int32, error) {
-		parts := strings.Split(s, ",")
-		all := make([]int32, 0, len(parts))
-		for _, p := range parts {
-			v, err := strconv.ParseInt(p, 10, 32)
-			if err != nil {
-				return nil, err
-			}
-			all = append(all, int32(v))
-		}
-
-		return all, nil
-	})
-}
+func (m *Matched) Int32s() []int32 { return parseMatch(m, next.ParseInt32List) }
 
 func (m *Matched) String() string {
 	return m.pop()
@@ -253,24 +239,7 @@ func (m *Matched) PowerType() types.Resource {
 
 // PowerTypeResource maps a numeric power type (as found in log lines and
 // spell effect misc values) to a types.Resource.
-func PowerTypeResource(ty int32) types.Resource {
-	switch ty {
-	case 0:
-		return types.ResourceMana
-	case 1:
-		return types.ResourceRage
-	case 2:
-		return types.ResourceFocus
-	case 3:
-		return types.ResourceEnergy
-	case 4:
-		return types.ResourceHappiness
-	case -2:
-		return types.ResourceHealth
-	default:
-		return types.ResourceUnknown
-	}
-}
+func PowerTypeResource(ty int32) types.Resource { return next.PowerTypeResource(ty) }
 
 func (m *Matched) CSV() []string {
 	str := m.pop()
@@ -286,23 +255,5 @@ type spellByIDer interface {
 }
 
 func (m *Matched) DBCSpellByID(ctx context.Context, db spellByIDer) *chrondbc.Spell {
-	return parseMatch(m, func(s string) (*chrondbc.Spell, error) {
-		id, err := strconv.ParseInt(s, 10, 32)
-		if err != nil {
-			return nil, err
-		}
-
-		if id <= 0 {
-			return nil, nil
-		}
-
-		spell, err := db.Spell(ctx, chrondbc.SpellID(int32(id)))
-		if err != nil {
-			if chrondbc.IsSpellNotFound(err) {
-				return ptr.Ref(chrondbc.UnknownSpell(chrondbc.SpellID(id))), nil
-			}
-			return nil, err
-		}
-		return spell, nil
-	})
+	return next.ReadSpell(ctx, db, m)
 }

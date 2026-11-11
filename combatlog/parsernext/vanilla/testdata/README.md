@@ -6,3 +6,11 @@ Selected locally from the verified saved gzip without production requests:
 first DEATH plus first SWING for each distinct (hit-info, victim-state) pair,
 in source order (22 records). Lines are unchanged. No names or credentials.
 This is a bounded record fixture, not a complete log.
+
+## Spell records
+
+`capybara-spells.log` comes from the same saved source. It retains the first
+record per HEAL (spell ID, crit flag, periodic flag), or SPELL_DMG (spell ID,
+positive mitigation flags, hit info, school, effects) combination: 367 lines,
+unchanged and in source order. Spell lookup parity uses deterministic test
+values rather than embedding a dataset export.
