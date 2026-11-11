@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"time"
 
 	"github.com/Gophercraft/core/vsn"
 
@@ -121,4 +122,19 @@ func canonicalOrigin(s *Service, r *http.Request) string {
 		scheme = s.accessURL.Scheme
 	}
 	return scheme + "://" + ogHost(r)
+}
+
+// ogCacheWait bounds how long a page waits for a card's first cached fetch.
+const ogCacheWait = 1500 * time.Millisecond
+
+// loadOGCache reads a card's cached data. Unlike Get, a cold cache (the first
+// request after a deploy) waits briefly for the fetch: crawlers such as
+// Discord keep the first embed they see, so serving the brand card while the
+// cache warms would stick. A slow or failed fetch returns the zero value and
+// the brand card; the refresh keeps running for later requests.
+func loadOGCache[T any](r *http.Request, logger *slog.Logger, cache *tenantcache.Cache[T], fetch func(context.Context) (T, error)) T {
+	ctx, cancel := context.WithTimeout(r.Context(), ogCacheWait)
+	defer cancel()
+	value, _ := cache.Load(ctx, logger, fetch)
+	return value
 }
