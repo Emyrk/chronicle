@@ -470,13 +470,31 @@ func (p *Parser) parsePullAuras(ts time.Time, target guid.GUID, raw string) ([]*
 		p.guids = newGUIDNormalizer()
 	}
 
-	result := make([]*messages.Aura, 0, len(entries))
-	for _, entry := range entries {
-		parts := splitTopLevel(strings.Trim(entry, "()"))
-		if len(parts) < 2 {
-			return nil, fmt.Errorf("invalid V22 pull aura %q", entry)
+	// Forever also writes flat source/spell/stack triples instead of the
+	// parenthesized entries used by other V22 logs.
+	var auraFields [][]string
+	if !strings.HasPrefix(entries[0], "(") {
+		if len(entries)%3 != 0 {
+			return nil, fmt.Errorf("invalid V22 flat pull aura list: expected source/spell/stack triples")
 		}
+		for i := 0; i < len(entries); i += 3 {
+			if _, err := strconv.ParseUint(entries[i+2], 10, 32); err != nil {
+				return nil, fmt.Errorf("parse V22 pull aura stack count %q: %w", entries[i+2], err)
+			}
+			auraFields = append(auraFields, entries[i:i+3])
+		}
+	} else {
+		for _, entry := range entries {
+			parts := splitTopLevel(strings.Trim(entry, "()"))
+			if len(parts) < 2 {
+				return nil, fmt.Errorf("invalid V22 pull aura %q", entry)
+			}
+			auraFields = append(auraFields, parts)
+		}
+	}
 
+	result := make([]*messages.Aura, 0, len(auraFields))
+	for _, parts := range auraFields {
 		sourceRaw, err := p.guids.normalize(parts[0])
 		if err != nil {
 			return nil, fmt.Errorf("normalize V22 pull aura source %q: %w", parts[0], err)

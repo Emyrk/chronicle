@@ -625,6 +625,19 @@ func TestParseCombatantMetadata(t *testing.T) {
 
 func TestCombatantInfoV22ResolvesClassTalentsAndGear(t *testing.T) {
 	t.Parallel()
+	for _, auraList := range []string{
+		"[(Player-4618-00C7EC79,1126,[])]",
+		"[Player-4618-00C7EC79,1126,1]",
+	} {
+		t.Run(auraList, func(t *testing.T) {
+			t.Parallel()
+			testCombatantInfoV22ResolvesClassTalentsAndGear(t, auraList)
+		})
+	}
+}
+
+func testCombatantInfoV22ResolvesClassTalentsAndGear(t *testing.T, auraList string) {
+	t.Helper()
 
 	fields := make([]string, 34)
 	for index := 1; index <= 25; index++ {
@@ -634,7 +647,7 @@ func TestCombatantInfoV22ResolvesClassTalentsAndGear(t *testing.T) {
 	fields[26] = "[(105924,130654,5),(105923,130653,5)]"
 	fields[27] = "(0,0,0,0)"
 	fields[28] = "[(253955,25,(),(),()),(251534,24,(2623,0,0),(),())]"
-	fields[29] = "[(Player-4618-00C7EC79,1126,[])]"
+	fields[29] = auraList
 	encoded := base64.RawStdEncoding.EncodeToString([]byte(strings.Join(fields, ",")))
 	ts, _, matched, err := wotlk.ParseLine(`9/23 15:26:53.574  BLIZZARD_COMBATANT_INFO,0x0000120A0062CD4D,"Bootie-ClassicBetaPvE",` + encoded)
 	require.NoError(t, err)
@@ -1011,4 +1024,49 @@ func TestParseWorldMarkers(t *testing.T) {
 	require.Len(t, markers, 2)
 	assert.True(t, markers[0].Placed)
 	assert.False(t, markers[1].Placed)
+}
+
+func TestParseV22PullAuras(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name      string
+		raw       string
+		spells    []chrondbc.SpellID
+		wantError bool
+	}{
+		{name: "empty", raw: "[]"},
+		// Shapes from the supplied Forever log, including the Shaman's flat list.
+		{name: "flat single", raw: "[Player-6945-00073BEA,1328621,1]", spells: []chrondbc.SpellID{1328621}},
+		{name: "flat multiple", raw: "[Player-6939-002DF622,1223030,1,Player-6939-002DF622,1223031,1,Player-6939-002DF622,415140,1,Player-6939-002DF622,408498,1,Player-6939-002DF622,436519,1]", spells: []chrondbc.SpellID{1223030, 1223031, 415140, 408498, 436519}},
+		{name: "tuples", raw: "[(Player-6939-002DF622,1223030,[]),(Player-6939-002DF622,1223031,[])]", spells: []chrondbc.SpellID{1223030, 1223031}},
+		{name: "missing stack", raw: "[Player-6945-00073BEA,1328621]", wantError: true},
+		{name: "truncated second triple", raw: "[Player-6945-00073BEA,1328621,1,Player-6945-00073BEA]", wantError: true},
+		{name: "invalid stack", raw: "[Player-6945-00073BEA,1328621,no]", wantError: true},
+		{name: "invalid spell", raw: "[Player-6945-00073BEA,no,1]", wantError: true},
+		{name: "invalid source", raw: "[not-a-guid,1328621,1]", wantError: true},
+		{name: "invalid tuple", raw: "[(Player-6945-00073BEA)]", wantError: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			p := &Parser{}
+			ts := time.Date(2026, 11, 10, 13, 0, 0, 0, time.UTC)
+			target := guid.GUID(0x00001B25003AB261)
+			got, err := p.parsePullAuras(ts, target, tc.raw)
+			if tc.wantError {
+				require.Error(t, err)
+				require.Nil(t, got)
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, got, len(tc.spells))
+			for i, aura := range got {
+				assert.Equal(t, tc.spells[i], aura.SpellData.ID)
+				assert.Equal(t, target, aura.Target)
+				require.NotNil(t, aura.Source)
+				assert.True(t, aura.Source.IsPlayer())
+				assert.Equal(t, ts, aura.Date())
+				assert.Equal(t, types.AuraStateAdded, aura.State)
+			}
+		})
+	}
 }
