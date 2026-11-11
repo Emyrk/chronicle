@@ -10,8 +10,8 @@ import (
 
 var _ IsPeriod = (*InactivityPeriod)(nil)
 
-// ResetGracePeriod is the duration to wait after a possible reset signal before
-// marking a period as reset. Activity within this window cancels the reset.
+// ResetGracePeriod is the duration to wait after CC fades before marking
+// a period as reset. If activity occurs within this window, the reset is cancelled.
 const ResetGracePeriod = 5 * time.Second
 
 // InactivityTimer tracks an inactivity-based timeout for a working period.
