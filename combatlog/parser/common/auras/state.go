@@ -8,7 +8,6 @@ import (
 	"slices"
 	"time"
 
-	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 )
@@ -206,9 +205,11 @@ func (p *Projection) CaptureState(capture func(*chrondbc.Spell) (string, error))
 	return ProjectionState{v}, nil
 }
 
-// Restore resolves every value before registering the new projection's observer.
-// The caller supplies the same canonical restored tracker and trusted emit closure.
-func (s ProjectionState) Restore(tracker *Tracking, emit func(*messages.Aura), resolve func(string) (*chrondbc.Spell, error)) (*Projection, error) {
+// Restore reconstructs only projection-owned state and the canonical tracker
+// reference. It must not attach observers, install emit callbacks, invoke hooks,
+// or replay gameplay. The session composition step calls SetEmit and
+// AttachObserver only after every owner has restored successfully.
+func (s ProjectionState) Restore(tracker *Tracking, resolve func(string) (*chrondbc.Spell, error)) (*Projection, error) {
 	if tracker == nil {
 		return nil, fmt.Errorf("projection requires canonical tracker")
 	}
@@ -231,8 +232,7 @@ func (s ProjectionState) Restore(tracker *Tracking, emit func(*messages.Aura), r
 		}
 		projected[key] = &projectedAura{projectedAuraKey{a.StoredUnit, a.StoredSpellID}, cloneGUID(a.Source), spell, a.SpellName, a.Stacks, a.Buff, a.MaxExistsUntil}
 	}
-	p := NewProjection(tracker)
-	p.SetEmit(emit)
+	p := &Projection{tracker: tracker}
 	p.pendingProjection = s.value.Pending
 	p.snapshot = snapshot
 	p.projectedAuras = projected

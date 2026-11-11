@@ -68,8 +68,15 @@ type Projection struct {
 // the shared parse-wide tracker.
 func NewProjection(tracker *Tracking) *Projection {
 	p := &Projection{tracker: tracker}
-	tracker.AddObserver(p.handleTrackingNotification)
+	p.AttachObserver()
 	return p
+}
+
+// AttachObserver is an explicit runtime composition step. Snapshot restore must
+// never call it because restore only reconstructs owned state and references; it
+// must not mutate the shared tracker's ordered observer list.
+func (p *Projection) AttachObserver() {
+	p.tracker.AddObserver(p.handleTrackingNotification)
 }
 
 // SetEmit sets the callback used to inject synthetic aura messages into the
