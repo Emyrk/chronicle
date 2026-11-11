@@ -1154,9 +1154,14 @@ func (h *Hookable) fightEncounter(fight encounter.Fight) (encounter.Encounter, e
 		Boss:      encName.IsBossFight(),
 	}
 	if fight.AuthoritativeName != "" {
-		enc.Name = fight.AuthoritativeName
-		enc.Type = types.EncounterTypeBOSS
-		enc.Boss = true
+		// Modern combat logs localize encounter boundary names. Prefer the
+		// canonical registry name when known boss entries identified the fight,
+		// and keep the boundary name as a fallback for otherwise unknown bosses.
+		if !enc.Boss || enc.Name == "" {
+			enc.Name = fight.AuthoritativeName
+			enc.Type = types.EncounterTypeBOSS
+			enc.Boss = true
+		}
 		if fight.AuthoritativeSuccess != nil {
 			if *fight.AuthoritativeSuccess {
 				enc.KillType = encounter.KillTypeClean

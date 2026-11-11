@@ -984,7 +984,7 @@ func TestEncounterBoundaryKeepsFightActiveUntilEnd(t *testing.T) {
 		MessageBase: messages.Base(base),
 		Active:      true,
 		EncounterID: 1,
-		Name:        "Authoritative Boss",
+		Name:        "本地化首领",
 	}))
 	_, boss := startFinalizeTestFight(t, h, base.Add(time.Second))
 
@@ -1001,7 +1001,7 @@ func TestEncounterBoundaryKeepsFightActiveUntilEnd(t *testing.T) {
 		MessageBase: messages.Base(end),
 		Active:      false,
 		EncounterID: 1,
-		Name:        "Authoritative Boss",
+		Name:        "本地化首领",
 		Success:     &success,
 	}))
 	require.False(t, bossCharacter.IsActive())
@@ -1011,11 +1011,28 @@ func TestEncounterBoundaryKeepsFightActiveUntilEnd(t *testing.T) {
 
 	enc, err := h.fightEncounter(h.completedFights[0])
 	require.NoError(t, err)
-	require.Equal(t, "Authoritative Boss", enc.Name)
+	require.Equal(t, "Final Boss", enc.Name)
 	require.Equal(t, types.EncounterTypeBOSS, enc.Type)
 	require.True(t, enc.Boss)
 	require.NotNil(t, enc.Remaining, "successful encounters must persist an empty array, not JSON null")
 	require.Empty(t, enc.Remaining)
+	require.Equal(t, encounter.KillTypeClean, enc.KillType)
+}
+
+func TestEncounterBoundaryNameFallsBackWhenCanonicalNameIsUnavailable(t *testing.T) {
+	t.Parallel()
+
+	h := newFinalizeTestHookable(t)
+	success := true
+	enc, err := h.fightEncounter(encounter.Fight{
+		Hostiles:             map[guid.GUID]encounter.CharacterFight{},
+		AuthoritativeName:    "本地化首领",
+		AuthoritativeSuccess: &success,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "本地化首领", enc.Name)
+	require.Equal(t, types.EncounterTypeBOSS, enc.Type)
+	require.True(t, enc.Boss)
 	require.Equal(t, encounter.KillTypeClean, enc.KillType)
 }
 
@@ -1066,7 +1083,7 @@ func TestEncounterBoundaryFailureIsAuthoritativeWipe(t *testing.T) {
 	require.Len(t, h.completedFights, 1)
 	enc, err := h.fightEncounter(h.completedFights[0])
 	require.NoError(t, err)
-	require.Equal(t, "Authoritative Boss", enc.Name)
+	require.Equal(t, "Final Boss", enc.Name)
 	require.Equal(t, encounter.KillTypeWipe, enc.KillType)
 }
 
