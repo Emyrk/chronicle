@@ -1342,7 +1342,7 @@ func (q *sqlQuerier) GetWoWServerByName(ctx context.Context, name string) (WowSe
 }
 
 const getWoWServerRealm = `-- name: GetWoWServerRealm :one
-SELECT id, server_id, name, created_by, url, description, pricing_route_name, pricing_auction_house FROM wow_server_realms WHERE id = $1
+SELECT id, server_id, name, created_by, url, description, pricing_route_name, pricing_auction_house, aliases FROM wow_server_realms WHERE id = $1
 `
 
 func (q *sqlQuerier) GetWoWServerRealm(ctx context.Context, id uuid.UUID) (WowServerRealm, error) {
@@ -1357,12 +1357,21 @@ func (q *sqlQuerier) GetWoWServerRealm(ctx context.Context, id uuid.UUID) (WowSe
 		&i.Description,
 		&i.PricingRouteName,
 		&i.PricingAuctionHouse,
+		&i.Aliases,
 	)
 	return i, err
 }
 
 const getWoWServerRealmByName = `-- name: GetWoWServerRealmByName :one
-SELECT id, server_id, name, created_by, url, description, pricing_route_name, pricing_auction_house FROM wow_server_realms WHERE lower(name) = lower($1) LIMIT 1
+SELECT id, server_id, name, created_by, url, description, pricing_route_name, pricing_auction_house, aliases
+FROM wow_server_realms
+WHERE lower(name) = lower($1)
+   OR EXISTS (
+       SELECT 1
+       FROM unnest(aliases) AS alias(name)
+       WHERE lower(alias.name) = lower($1)
+   )
+LIMIT 1
 `
 
 func (q *sqlQuerier) GetWoWServerRealmByName(ctx context.Context, name string) (WowServerRealm, error) {
@@ -1377,6 +1386,7 @@ func (q *sqlQuerier) GetWoWServerRealmByName(ctx context.Context, name string) (
 		&i.Description,
 		&i.PricingRouteName,
 		&i.PricingAuctionHouse,
+		&i.Aliases,
 	)
 	return i, err
 }
@@ -1456,16 +1466,22 @@ func (q *sqlQuerier) InsertWoWServer(ctx context.Context, arg InsertWoWServerPar
 
 const insertWoWServerRealm = `-- name: InsertWoWServerRealm :one
 INSERT INTO wow_server_realms (
-    id, server_id, name, description, url, created_by,
+    id, server_id, name, aliases, description, url, created_by,
     pricing_route_name, pricing_auction_house
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, server_id, name, created_by, url, description, pricing_route_name, pricing_auction_house
+VALUES (
+    $1, $2, $3,
+    COALESCE($4::text[], '{}'::text[]),
+    $5, $6, $7,
+    $8, $9
+) RETURNING id, server_id, name, created_by, url, description, pricing_route_name, pricing_auction_house, aliases
 `
 
 type InsertWoWServerRealmParams struct {
 	ID                  uuid.UUID     `db:"id" json:"id"`
 	ServerID            uuid.UUID     `db:"server_id" json:"server_id"`
 	Name                string        `db:"name" json:"name"`
+	Aliases             []string      `db:"aliases" json:"aliases"`
 	Description         string        `db:"description" json:"description"`
 	Url                 pgtype.Text   `db:"url" json:"url"`
 	CreatedBy           uuid.NullUUID `db:"created_by" json:"created_by"`
@@ -1478,6 +1494,7 @@ func (q *sqlQuerier) InsertWoWServerRealm(ctx context.Context, arg InsertWoWServ
 		arg.ID,
 		arg.ServerID,
 		arg.Name,
+		arg.Aliases,
 		arg.Description,
 		arg.Url,
 		arg.CreatedBy,
@@ -1494,12 +1511,13 @@ func (q *sqlQuerier) InsertWoWServerRealm(ctx context.Context, arg InsertWoWServ
 		&i.Description,
 		&i.PricingRouteName,
 		&i.PricingAuctionHouse,
+		&i.Aliases,
 	)
 	return i, err
 }
 
 const listAllWoWServerRealms = `-- name: ListAllWoWServerRealms :many
-SELECT id, server_id, name, created_by, url, description, pricing_route_name, pricing_auction_house FROM wow_server_realms ORDER BY name
+SELECT id, server_id, name, created_by, url, description, pricing_route_name, pricing_auction_house, aliases FROM wow_server_realms ORDER BY name
 `
 
 func (q *sqlQuerier) ListAllWoWServerRealms(ctx context.Context) ([]WowServerRealm, error) {
@@ -1520,6 +1538,7 @@ func (q *sqlQuerier) ListAllWoWServerRealms(ctx context.Context) ([]WowServerRea
 			&i.Description,
 			&i.PricingRouteName,
 			&i.PricingAuctionHouse,
+			&i.Aliases,
 		); err != nil {
 			return nil, err
 		}
@@ -1574,7 +1593,7 @@ func (q *sqlQuerier) ListUploadKeysByRealm(ctx context.Context, realmID uuid.UUI
 
 const listWoWServerRealms = `-- name: ListWoWServerRealms :many
 
-SELECT id, server_id, name, created_by, url, description, pricing_route_name, pricing_auction_house FROM wow_server_realms WHERE server_id = $1 ORDER BY name
+SELECT id, server_id, name, created_by, url, description, pricing_route_name, pricing_auction_house, aliases FROM wow_server_realms WHERE server_id = $1 ORDER BY name
 `
 
 // Realms
@@ -1596,6 +1615,7 @@ func (q *sqlQuerier) ListWoWServerRealms(ctx context.Context, serverID uuid.UUID
 			&i.Description,
 			&i.PricingRouteName,
 			&i.PricingAuctionHouse,
+			&i.Aliases,
 		); err != nil {
 			return nil, err
 		}
@@ -1743,16 +1763,18 @@ func (q *sqlQuerier) UpdateWoWServer(ctx context.Context, arg UpdateWoWServerPar
 const updateWoWServerRealm = `-- name: UpdateWoWServerRealm :one
 UPDATE wow_server_realms SET
     name = $1,
-    description = $2,
-    url = $3,
-    pricing_route_name = $4,
-    pricing_auction_house = $5
-WHERE id = $6
-RETURNING id, server_id, name, created_by, url, description, pricing_route_name, pricing_auction_house
+    aliases = COALESCE($2::text[], '{}'),
+    description = $3,
+    url = $4,
+    pricing_route_name = $5,
+    pricing_auction_house = $6
+WHERE id = $7
+RETURNING id, server_id, name, created_by, url, description, pricing_route_name, pricing_auction_house, aliases
 `
 
 type UpdateWoWServerRealmParams struct {
 	Name                string      `db:"name" json:"name"`
+	Aliases             []string    `db:"aliases" json:"aliases"`
 	Description         string      `db:"description" json:"description"`
 	Url                 pgtype.Text `db:"url" json:"url"`
 	PricingRouteName    pgtype.Text `db:"pricing_route_name" json:"pricing_route_name"`
@@ -1763,6 +1785,7 @@ type UpdateWoWServerRealmParams struct {
 func (q *sqlQuerier) UpdateWoWServerRealm(ctx context.Context, arg UpdateWoWServerRealmParams) (WowServerRealm, error) {
 	row := q.db.QueryRow(ctx, updateWoWServerRealm,
 		arg.Name,
+		arg.Aliases,
 		arg.Description,
 		arg.Url,
 		arg.PricingRouteName,
@@ -1779,6 +1802,7 @@ func (q *sqlQuerier) UpdateWoWServerRealm(ctx context.Context, arg UpdateWoWServ
 		&i.Description,
 		&i.PricingRouteName,
 		&i.PricingAuctionHouse,
+		&i.Aliases,
 	)
 	return i, err
 }

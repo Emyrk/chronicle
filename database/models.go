@@ -3705,6 +3705,7 @@ type WowServerRealm struct {
 	Description         string        `db:"description" json:"description"`
 	PricingRouteName    pgtype.Text   `db:"pricing_route_name" json:"pricing_route_name"`
 	PricingAuctionHouse pgtype.Text   `db:"pricing_auction_house" json:"pricing_auction_house"`
+	Aliases             []string      `db:"aliases" json:"aliases"`
 }
 
 type WowServerUploadKey struct {

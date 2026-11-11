@@ -1509,6 +1509,7 @@ export interface CreateUserTalentBuildRequest {
 // From chroniclesdk/azerothcore.go
 export interface CreateWoWServerRealmRequest {
     readonly name: string;
+    readonly aliases: readonly string[];
     readonly description: string;
     readonly url?: string;
     readonly pricing_route_name?: string;
@@ -7512,6 +7513,7 @@ export interface WoWServerRealm {
     readonly id: string;
     readonly server_id: string;
     readonly name: string;
+    readonly aliases: readonly string[];
     readonly description: string;
     readonly url?: string;
     readonly created_by?: string;

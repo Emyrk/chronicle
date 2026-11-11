@@ -69,6 +69,7 @@ func resolveRealmByName(
 		realm, err := db.GetWoWServerRealmByName(ctx, realmName)
 		if err == nil {
 			realmID = realm.ID
+			realmName = realm.Name
 		}
 	}
 

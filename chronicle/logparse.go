@@ -344,6 +344,8 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		}
 		if r, lookupErr := db.GetWoWServerRealmByName(ctx, realmName); lookupErr == nil {
 			preRealmID = r.ID
+			realmName = r.Name
+			preRealmName = r.Name
 		} else {
 			// Realm not yet in DB — use the well-known "Unknown" realm so
 			// dataset/flavor resolution can still look up the default dataset.
