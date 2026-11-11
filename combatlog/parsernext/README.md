@@ -211,8 +211,24 @@ Periodic/hybrid spell classification, mitigation order and power-burn synthesis
 retain their original behavior, including default-difficulty effect selection.
 The full synthetic pipeline is still not invoked by DecodeRecord.
 
-The spell parity fixture contains 367 unchanged saved Capybara records. Its
+The spell parity fixture contains 17 representative unchanged saved Capybara records. Its
 lookup uses deterministic test spell values/fallbacks, not a claim of complete
 production-dataset parity. Additional explicit spell fixtures cover periodic,
 hybrid, crit/periodic healing and power burn, plus malformed and missing fields.
-ENV_DMG, DMG_SHIELD and MISS remain unsupported; they are not silently ignored.
+MISS, ENV_DMG and DMG_SHIELD are now decoded too. HEADER and the other unmigrated records remain explicit errors.
+
+### Remaining damage records
+
+MISS retains its zero-damage payload and periodic-only modifier. ENV_DMG and
+DMG_SHIELD use the stable synthetic IDs in the dependency-free
+`database/gamedb/chrondbc/spellids` module; GameDB retains typed compatibility
+aliases and owns actual spell construction. No GameDB implementation import
+was added to parsernext. Existing error messages and lookup fallback remain.
+
+The checked-in spell fixture is reduced to 17 representative cases; 11 further
+public records cover MISS/shields (the saved Capybara log has no ENV_DMG).
+Synthetic tests enumerate environmental damage kinds and unknown kinds.
+`CHRONICLE_PARSER_PARITY_GZIP` enables full local saved-corpus replay without
+checking hundreds of raw records into git. The pre-extraction overlay replay
+compared 53,628 supported records, with 132,180 unsupported records counted
+separately, using missing-spell fallback—not complete production export parity.

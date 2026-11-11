@@ -15,7 +15,7 @@ import (
 // ErrUnsupportedRecord indicates that this bounded decoder does not own the record.
 var ErrUnsupportedRecord = errors.New("unsupported Vanilla combat record")
 
-// DecodeRecord decodes SWING, DEATH, HEAL and SPELL_DMG CC-v2 records, without pipeline synthetic
+// DecodeRecord decodes SWING, DEATH, HEAL, SPELL_DMG, MISS, ENV_DMG and DMG_SHIELD records, without pipeline synthetic
 // processing, header clock state, identity tracking or encounter publication.
 // SPELL_DMG retains its local power-burn ResourceChange synthesis.
 // content excludes the physical line terminator. Extra fields retain legacy
@@ -32,6 +32,18 @@ func DecodeRecord(ctx context.Context, spells SpellLookup, content string) ([]me
 			return nil, errors.New("SWING requires spell lookup")
 		}
 		return DecodeSwing(ctx, spells, ts, m)
+	case "MISS", "ENV_DMG", "DMG_SHIELD":
+		if spells == nil {
+			return nil, fmt.Errorf("%s requires spell lookup", event)
+		}
+		switch event {
+		case "MISS":
+			return DecodeMiss(ctx, spells, ts, m)
+		case "ENV_DMG":
+			return DecodeEnvironmentDamage(ctx, spells, ts, m)
+		default:
+			return DecodeDamageShield(ctx, spells, ts, m)
+		}
 	case "HEAL", "SPELL_DMG":
 		if spells == nil {
 			return nil, fmt.Errorf("%s requires spell lookup", event)
