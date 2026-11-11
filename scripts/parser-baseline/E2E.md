@@ -55,6 +55,25 @@ are observations from one pair per case, not stable expected counts.
   structure sections, amplifying the strict diff. This is not a relaxed parity
   result; no artifact normalization or parser fix was applied.
 
+A subsequent diagnostic classified all observed differences without rewriting
+strict artifacts. For ChromieCraft, OctoWoW and Capybara, changed event segments
+have equal first timestamps/counts and equal full-record multisets at each exact
+event offset when only the event index is omitted. Remaining-hostile multisets
+also match. These observations support an ordering/index-assignment diagnosis,
+not strict parity. For Crusader, exact-time encounter alignment plus table-row
+multiset comparison isolates the two encounter-name changes above; those are
+**non-order semantic differences whose cause remains uninvestigated**. Its
+remaining slain difference is ordering within nested
+`attribution.meta.activity` (the same `start` and `bump` records reversed).
+Classification/index ordering and name-based key/row reordering account for the
+rest. No additional unexplained differences remain in this diagnostic, but
+Crusader cannot be described as ordering-only or semantically equivalent.
+
+A credential scan examined 248 persisted non-PGDATA files for the exact raw
+API token without printing it: zero matches. Live Docker-owned PGDATA was
+excluded; no API credential was passed to PostgreSQL. The scan report is saved
+as `credential-scan.json` in the Desktop root.
+
 An initial OctoWoW input was unavailable (HTTP 410, deleted raw storage). Another
 parsed successfully but export rejected duplicate zero-duration `Shadowflame
 Spark` encounter identities at `2026-11-10T20:36:13.227Z`, map 469. The rejected
