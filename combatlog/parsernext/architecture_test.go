@@ -38,7 +38,17 @@ func TestProductionDependencyDirection(t *testing.T) {
 				continue
 			} // standard library
 			if allowedVanillaCompatibility[imported] {
-				require.Equal(t, "vanilla", owner, "only Vanilla reuses explicitly listed message/value compatibility")
+				if owner == "vanilla/synthetic" {
+					// Aura correlation owns copied values, not old parser execution.
+					require.Contains(t, []string{
+						"github.com/Emyrk/chronicle/combatlog/parser/common/messages",
+						"github.com/Emyrk/chronicle/combatlog/parser/guid",
+						"github.com/Emyrk/chronicle/combatlog/parser/types",
+						"github.com/Emyrk/chronicle/database/gamedb/chrondbc",
+					}, imported)
+				} else {
+					require.Equal(t, "vanilla", owner, "only Vanilla reuses explicitly listed message/value compatibility")
+				}
 				continue
 			}
 			require.True(t, strings.HasPrefix(imported, prefix), "%s imports outside parsernext: %s", path, imported)
