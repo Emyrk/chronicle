@@ -2119,3 +2119,47 @@ func ExcavationSiteWetlandsHostiles() map[uint32]Identity {
 	})
 	return hostile
 }
+
+func TheDrownedCityHostiles() map[uint32]Identity {
+	hostile := make(map[uint32]Identity)
+	LoadAdds(hostile, map[uint32]string{
+		15214:  "Invisible Stalker",
+		250187: "Bladetooth Frenzy",
+		258792: "Risen Sentry",
+		258797: "Champion of the Deep",
+		258799: "Brinescale Explorer",
+		258804: "Brinescale Sorceress",
+		258818: "Chasm Crawler",
+		258849: "Saltscale Muckdweller",
+		258897: "Makrura Snapper",
+		259979: "Saltseer Murderer",
+		259981: "Saltseer Cultist",
+		259987: "Saltseer Manhunter",
+		260096: "Brinescale Priestess",
+		260150: "Abyssal Bubble",
+		260205: "Deathless Watcher",
+		260213: "Deathless Guardian",
+		260214: "Deathless Sorcerer",
+		260353: "Saltseer Coroner",
+		263196: "Profane Necromancer",
+		263229: "Drowned Spirit",
+		268300: "Mindless Gorger",
+		268321: "Bound Elemental",
+		268374: "Unstable Crystal",
+		268476: "Deathless Sorcerer",
+		268477: "Deathless Watcher",
+		268478: "Deathless Guardian",
+	})
+	// TODO: Move bosses from LoadAdds to LoadBosses
+	LoadBosses(hostile, map[uint32]string{
+		258905: "Zul'Alai",
+		258924: "Var'Taka",
+		263886: "Primeval Elemental",
+		260042: "Captain Dreadrise",
+		260202: "Deathless Marrow",
+		260243: "Min'loth the Serpent",
+		264172: "Umbra",
+		264177: "Gill",
+	})
+	return hostile
+}

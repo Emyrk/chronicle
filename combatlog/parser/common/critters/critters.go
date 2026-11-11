@@ -19,6 +19,11 @@ var critters = map[uint32]string{
 
 	// V+
 	25254: "Cockroach",
+
+	// WoW Forever
+	263055: "Crab",
+	263061: "Toad",
+	263064: "Snake",
 }
 
 func IsCritter(id guid.GUID) bool {

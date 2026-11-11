@@ -474,6 +474,16 @@ var (
 	}
 )
 
+var (
+	TheDrownedCityFactory = &CommonFactory{
+		Name:      "The Drowned City",
+		ZoneNames: []string{"the drowned city"},
+		Category:  InstanceCategoryDungeon,
+		Hostiles:  FromMap(TheDrownedCityHostiles()),
+		MapIDs:    []uint32{2970},
+	}
+)
+
 //["Ahn'Qiraj"] = "安其拉",
 //["Blackfathom Deeps"] = "黑暗深渊",
 //["The Crescent Grove"] = "新月林地", -- TurtleWOW
