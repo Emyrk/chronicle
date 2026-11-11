@@ -25,9 +25,12 @@ type Options struct {
 }
 
 type Authz struct {
-	spice  *client.Client
-	logger *slog.Logger
-	db     database.Store
+	// databaseOnly is set only by NewDatabaseOnly; normal authorization never
+	// silently degrades to no-op when its SpiceDB dependency is absent.
+	databaseOnly bool
+	spice        *client.Client
+	logger       *slog.Logger
+	db           database.Store
 
 	zedToken atomic.Pointer[string]
 	*interceptor
@@ -133,7 +136,7 @@ func (z *Authz) InTx(ctx context.Context, f func(tx *AuthzTX) error, opts *pgx.T
 		// wrapped is nil when the underlying transaction fails before invoking
 		// the callback (e.g. BeginTx error, context cancellation). In that case
 		// no SpiceDB writes were made, so there is nothing to revert.
-		if wrapped != nil {
+		if wrapped != nil && !z.databaseOnly {
 			reverts := inverseRelationshipUpdates(wrapped.relations)
 			_, revertErr := z.spice.Write(context.Background(), reverts)
 			if revertErr != nil {

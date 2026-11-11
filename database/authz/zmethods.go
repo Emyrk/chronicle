@@ -39,6 +39,9 @@ func (z *Authz) DefaultConsistencyStrategy() *consistency.Strategy {
 }
 
 func (z *Authz) Write(ctx context.Context, txn rel.Txn) (writtenAtRevision string, err error) {
+	if z.databaseOnly {
+		return "", nil
+	}
 	token, err := z.spice.Write(ctx, txn)
 	if err != nil {
 		return "", err
@@ -62,6 +65,9 @@ func (z *AuthzTX) Write(ctx context.Context, txn rel.Txn) (writtenAtRevision str
 }
 
 func (z *Authz) Delete(ctx context.Context, filter *rel.PreconditionedFilter) error {
+	if z.databaseOnly {
+		return nil
+	}
 	token, err := z.spice.DeleteAtomic(ctx, filter)
 	if err != nil {
 		return err
