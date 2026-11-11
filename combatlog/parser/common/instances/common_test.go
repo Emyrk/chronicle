@@ -71,6 +71,14 @@ func TestWailingCavernsFactoryMatchesMapID(t *testing.T) {
 	require.True(t, WailingCavernsFactory.MatchZone(zone.Zone{Name: "unexpected localized name", MapID: 43}))
 }
 
+func TestExcavationSiteWetlandsFactoryMatchesLocalizedZone(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, ExcavationSiteWetlandsFactory.MatchZone(zone.Zone{Name: "挖掘场：湿地", MapID: 2998}))
+	// Preserve name-only matching for logs that do not include a map ID.
+	require.True(t, ExcavationSiteWetlandsFactory.MatchZone(zone.Zone{Name: "挖掘场：湿地"}))
+}
+
 func TestRuinsOfLordaeronFactoryMatchesMapID(t *testing.T) {
 	t.Parallel()
 
