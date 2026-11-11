@@ -4,10 +4,13 @@
 
 /* eslint-disable react-refresh/only-export-components */
 import { useMemo } from "react";
-import { Activity } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Activity, Download } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { downloadMetricsJson } from "./metricsExport";
 import { formatBytes } from "@/lib/format";
 import { usePanelTimingContext } from "../PanelTimingContext";
-import type { PanelDefinition } from "../types";
+import type { PanelContext, PanelDefinition } from "../types";
 import { metricsProcessor, type MetricsResult } from "./metrics.processor";
 
 function formatMs(value: number): string {
@@ -20,7 +23,7 @@ function formatMs(value: number): string {
   return `${value.toFixed(2)}ms`;
 }
 
-function MetricsContent() {
+function MetricsContent({ context, headerSlot }: { context: PanelContext; headerSlot?: HTMLElement | null }) {
   const timingContext = usePanelTimingContext();
 
   const rows = useMemo(
@@ -46,6 +49,22 @@ function MetricsContent() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 text-xs">
+      {headerSlot && createPortal(
+        <Button variant="ghost" size="icon" className="h-6 w-6" title="Download metrics JSON" aria-label="Download metrics JSON" onClick={() => downloadMetricsJson({
+          instanceId: context.instance.id,
+          selectedEncounterIds: context.selectedEncounterIds,
+          selectedPlayerIds: Array.from(context.entitySelection.playerIds),
+          selectedEnemyIds: Array.from(context.entitySelection.enemyIds),
+          panelCount: timingContext.panelCount,
+          doneCount: timingContext.doneCount,
+          allDone: timingContext.allDone,
+          totalTimeMs: timingContext.totalTimeMs,
+          panels: rows,
+        })}>
+          <Download className="h-4 w-4" />
+        </Button>,
+        headerSlot,
+      )}
       <div className="grid shrink-0 grid-cols-1 gap-2 sm:grid-cols-3">
         <div className="rounded border bg-muted/30 px-2 py-1.5">
           <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Total Events</div>
@@ -133,6 +152,6 @@ export function createMetricsPanel(): PanelDefinition<MetricsResult, any> {
     icon: <Activity className="h-4 w-4" />,
     keybinds: [],
     selfManagesAggregation: true,
-    render: () => <MetricsContent />,
+    render: ({ context, headerSlot }) => <MetricsContent context={context} headerSlot={headerSlot} />,
   };
 }
