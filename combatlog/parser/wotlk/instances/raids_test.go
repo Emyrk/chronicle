@@ -170,6 +170,18 @@ func TestOnyxiaDerivedName(t *testing.T) {
 	require.Nil(t, onyxiaDerivedName(database.WoWFlavor{database.FlavorWrath, database.FlavorAzerothcore}))
 }
 
+func TestRubySanctumHalionBodiesShareEncounterIdentity(t *testing.T) {
+	t.Parallel()
+
+	hostiles := RubySanctumHostiles()
+	for _, entry := range []uint32{39863, 39864, 39944, 39945, 40142, 40143, 40144, 40145} {
+		identity, ok := hostiles[entry]
+		require.True(t, ok)
+		require.True(t, identity.Boss)
+		require.Equal(t, "Halion", identity.EncounterName)
+	}
+}
+
 func TestUlduarNonBossMechanicIdentities(t *testing.T) {
 	t.Parallel()
 

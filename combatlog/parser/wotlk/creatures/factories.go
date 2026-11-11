@@ -74,6 +74,9 @@ func NewCharacterFactories(flavor database.WoWFlavor) []characters.CharacterFact
 			// Culling of Strathlome
 			NewMalGanis,
 
+			// Ruby Sanctum
+			NewHalionCharacter,
+
 			// Icecrown Citadel
 			NewDeathspeakerHighPriest,
 			NewLadyDeathwhisper,

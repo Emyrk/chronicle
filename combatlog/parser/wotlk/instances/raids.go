@@ -324,19 +324,42 @@ func RubySanctumHostiles() map[uint32]instances.Identity {
 	})
 	instances.LoadBosses(hostile, map[uint32]string{
 		39746: "General Zarithrian",
+		39805: "General Zarithrian",
 		39747: "Saviana Ragefire",
+		39823: "Saviana Ragefire",
 		39751: "Baltharus the Warborn",
+		39920: "Baltharus the Warborn",
 		39863: "Halion",
+		39864: "Halion",
+		39944: "Halion",
+		39945: "Halion",
+		40142: "Halion",
+		40143: "Halion",
+		40144: "Halion",
+		40145: "Halion",
 	})
 	return hostile
 }
 
+func RubySanctumProgressionBosses(database.WoWFlavor) []string {
+	return []string{
+		"Baltharus the Warborn",
+		"Saviana Ragefire",
+		"General Zarithrian",
+		"Halion",
+	}
+}
+
 var RubySanctumFactory = &instances.CommonFactory{
-	Name:      "Ruby Sanctum",
-	Category:  instances.InstanceCategoryRaid,
-	ZoneNames: []string{"the ruby sanctum", "ruby sanctum"},
-	MapIDs:    []uint32{724},
-	Hostiles:  instances.FromMap(RubySanctumHostiles()),
+	Name:              "Ruby Sanctum",
+	Category:          instances.InstanceCategoryRaid,
+	ZoneNames:         []string{"the ruby sanctum", "ruby sanctum"},
+	MapIDs:            []uint32{724},
+	Hostiles:          instances.FromMap(RubySanctumHostiles()),
+	ProgressionBosses: RubySanctumProgressionBosses,
+	FlavoredRankings: func(database.WoWFlavor) *rankings.Rankings {
+		return RubySanctumSpeedrunRequirements()
+	},
 }
 
 // TrialOfTheCrusaderHostiles returns creature entry IDs for Trial of the Crusader (map 649).

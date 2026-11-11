@@ -71,8 +71,8 @@ func TestWrathRenown(t *testing.T) {
 			}
 			want, ok := awards[r.InstanceName][r.EncounterName]
 			if !ok {
-				if r.InstanceName == "Icecrown Citadel" {
-					// ICC rankings are enabled without inventing a Renown calibration.
+				if r.InstanceName == "Icecrown Citadel" || r.InstanceName == "Ruby Sanctum" {
+					// ICC and Ruby Sanctum rankings are enabled without inventing a Renown calibration.
 					require.False(t, r.HasPoints, r)
 					continue
 				}
@@ -181,7 +181,7 @@ func TestWrathMigrationRoundTrip(t *testing.T) {
 	}
 	rows, err := leaderboardconfig.Resolve(ctx, db, database.WoWFlavor{database.FlavorWrath}, nil)
 	require.NoError(t, err)
-	require.Len(t, selectKind(rows, "variant"), 7)
+	require.Len(t, selectKind(rows, "variant"), 10)
 	for _, r := range rows {
 		require.False(t, r.HasPoints)
 		require.NotEqual(t, "Eye of Eternity", r.InstanceName)
