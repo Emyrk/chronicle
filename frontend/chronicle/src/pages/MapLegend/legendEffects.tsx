@@ -1,5 +1,10 @@
 import type { ReactNode } from "react";
-import { FIRE_NOVA_COLOR, FIRE_NOVA_DURATION_MS } from "@/pages/Instance/EventsPanels/Map/bossRadialEffects";
+import {
+  ARCANE_EXPLOSION_COLOR,
+  ARCANE_EXPLOSION_DURATION_MS,
+  DETONATION_COLOR,
+  DETONATION_DURATION_MS,
+} from "@/pages/Instance/EventsPanels/Map/radialEffects";
 import {
   BEAM_MS,
   CAST_ICON_MS,
@@ -172,8 +177,8 @@ export function HealDemo({ seconds, crit = false }: { seconds: number; crit?: bo
 }
 
 /** A boss-centered ground pulse expanding to the mechanic's logged radius. */
-export function FireNovaDemo({ seconds }: { seconds: number }) {
-  const p = phase(seconds, FIRE_NOVA_DURATION_MS);
+export function BossAreaAttackDemo({ seconds }: { seconds: number }) {
+  const p = phase(seconds, DETONATION_DURATION_MS);
   const radius = p === null ? 0 : 4 + 28 * p;
   return (
     <Ground height={130}>
@@ -186,7 +191,39 @@ export function FireNovaDemo({ seconds }: { seconds: number }) {
             rx={radius}
             ry={radius * 0.42}
             fill="none"
-            stroke={FIRE_NOVA_COLOR}
+            stroke={DETONATION_COLOR}
+            strokeWidth={2.5}
+            vectorEffect="non-scaling-stroke"
+            opacity={1 - p}
+          />
+        )}
+      </svg>
+    </Ground>
+  );
+}
+
+/** A translucent sphere expanding around the caster. */
+export function ArcaneExplosionDemo({ seconds }: { seconds: number }) {
+  const p = phase(seconds, ARCANE_EXPLOSION_DURATION_MS);
+  const radius = p === null ? 0 : 4 + 30 * p;
+  return (
+    <Ground height={130}>
+      <At x={50} y={58}><Token kind="hostile" ring="#fb7185" facing={0} /></At>
+      <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" className="pointer-events-none absolute inset-0 h-full w-full overflow-visible">
+        <defs>
+          <radialGradient id="arcane-sphere-glow" cx="38%" cy="32%" r="68%">
+            <stop offset="0%" stopColor="#e0f2fe" stopOpacity={0.28} />
+            <stop offset="65%" stopColor={ARCANE_EXPLOSION_COLOR} stopOpacity={0.18} />
+            <stop offset="100%" stopColor={ARCANE_EXPLOSION_COLOR} stopOpacity={0.55} />
+          </radialGradient>
+        </defs>
+        {p !== null && (
+          <circle
+            cx={50}
+            cy={58}
+            r={radius}
+            fill="url(#arcane-sphere-glow)"
+            stroke={ARCANE_EXPLOSION_COLOR}
             strokeWidth={2.5}
             vectorEffect="non-scaling-stroke"
             opacity={1 - p}
@@ -290,7 +327,8 @@ export const EFFECT_TIMINGS = {
   hit: HIT_WOBBLE_MS,
   meleeFlash: MELEE_FLASH_MS,
   heal: HEAL_PULSE_MS,
-  fireNova: FIRE_NOVA_DURATION_MS,
+  arcaneExplosion: ARCANE_EXPLOSION_DURATION_MS,
+  bossAreaAttack: DETONATION_DURATION_MS,
   interrupt: INTERRUPT_MS,
   combatText: COMBAT_TEXT_MS,
   castIcon: CAST_ICON_MS,

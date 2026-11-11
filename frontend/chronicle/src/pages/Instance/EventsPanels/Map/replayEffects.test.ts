@@ -1,5 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { FIRE_NOVA_COLOR, FIRE_NOVA_DURATION_MS, FIRE_NOVA_RADIUS_YARDS, FIRE_NOVA_SPELL_ID } from "./bossRadialEffects";
+import {
+  ARCANE_EXPLOSION_COLOR,
+  ARCANE_EXPLOSION_DURATION_MS,
+  ARCANE_EXPLOSION_RADIUS_YARDS,
+  ARCANE_EXPLOSION_SPELL_ID,
+  DETONATION_COLOR,
+  DETONATION_DURATION_MS,
+  DETONATION_RADIUS_YARDS,
+  DETONATION_SPELL_ID,
+  FIRE_NOVA_COLOR,
+  FIRE_NOVA_DURATION_MS,
+  FIRE_NOVA_RADIUS_YARDS,
+  FIRE_NOVA_SPELL_ID,
+  PLAYER_ARCANE_EXPLOSION_SPELL_IDS,
+} from "./radialEffects";
 import {
   effectiveCastIconGuids,
   addEffectEvent,
@@ -13,7 +27,7 @@ import {
   createEncounterEffects,
   DEFAULT_EFFECT_OPTIONS,
   DEEP_BREATH_POINT_LINGER_MS,
-  deriveActiveBossRadialEffects,
+  deriveActiveRadialEffects,
   deriveActiveDeepBreaths,
   deriveActiveEffects,
   deriveCastIcons,
@@ -188,7 +202,7 @@ describe("deriveActiveEffects", () => {
   });
 });
 
-describe("deriveActiveBossRadialEffects", () => {
+describe("deriveActiveRadialEffects", () => {
   const nova = (timestampMs: number, source = "taragaman") => event(timestampMs, "cast_go", source, "", {
     spellId: FIRE_NOVA_SPELL_ID,
     spellName: "Fire Nova",
@@ -196,29 +210,65 @@ describe("deriveActiveBossRadialEffects", () => {
 
   it("expands Fire Nova from its caster for the configured lifetime", () => {
     const fx = effects(nova(1_000));
-    expect(deriveActiveBossRadialEffects(fx, 999)).toEqual([]);
-    expect(deriveActiveBossRadialEffects(fx, 1_000)).toEqual([{
+    expect(deriveActiveRadialEffects(fx, 999)).toEqual([]);
+    expect(deriveActiveRadialEffects(fx, 1_000)).toEqual([{
       key: "taragaman-fire-nova",
       source: "taragaman",
       spellId: FIRE_NOVA_SPELL_ID,
       progress: 0,
       radiusYards: FIRE_NOVA_RADIUS_YARDS,
       color: FIRE_NOVA_COLOR,
+      shape: "ring",
       startMs: 1_000,
       endMs: 1_000 + FIRE_NOVA_DURATION_MS,
     }]);
-    expect(deriveActiveBossRadialEffects(fx, 1_000 + FIRE_NOVA_DURATION_MS / 2)[0]).toMatchObject({ progress: 0.5 });
-    expect(deriveActiveBossRadialEffects(fx, 1_000 + FIRE_NOVA_DURATION_MS)).toEqual([]);
+    expect(deriveActiveRadialEffects(fx, 1_000 + FIRE_NOVA_DURATION_MS / 2)[0]).toMatchObject({ progress: 0.5 });
+    expect(deriveActiveRadialEffects(fx, 1_000 + FIRE_NOVA_DURATION_MS)).toEqual([]);
+  });
+
+  it("expands Arcanist Doan's larger Detonation from its caster", () => {
+    const fx = effects(event(2_000, "cast_go", "doan", "", {
+      spellId: DETONATION_SPELL_ID,
+      spellName: "Detonation",
+    }));
+    expect(deriveActiveRadialEffects(fx, 2_000 + DETONATION_DURATION_MS / 2)).toEqual([expect.objectContaining({
+      key: "arcanist-doan-detonation",
+      source: "doan",
+      spellId: DETONATION_SPELL_ID,
+      progress: 0.5,
+      radiusYards: DETONATION_RADIUS_YARDS,
+      color: DETONATION_COLOR,
+      shape: "ring",
+    })]);
+  });
+
+  it.each([
+    ["Arcanist Doan", "doan", ARCANE_EXPLOSION_SPELL_ID],
+    ["a mage player", "mage", PLAYER_ARCANE_EXPLOSION_SPELL_IDS[0]],
+  ])("expands Arcane Explosion from %s", (_name, source, spellId) => {
+    const fx = effects(event(2_000, "cast_go", source, "", {
+      spellId,
+      spellName: "Arcane Explosion",
+    }));
+    expect(deriveActiveRadialEffects(fx, 2_000 + ARCANE_EXPLOSION_DURATION_MS / 2)).toEqual([expect.objectContaining({
+      key: "arcane-explosion",
+      source,
+      spellId,
+      progress: 0.5,
+      radiusYards: ARCANE_EXPLOSION_RADIUS_YARDS,
+      color: ARCANE_EXPLOSION_COLOR,
+      shape: "sphere",
+    })]);
   });
 
   it("keeps separate casts and remains deterministic while scrubbing", () => {
     const fx = effects(nova(1_000), nova(1_400));
-    const out = deriveActiveBossRadialEffects(fx, 1_500);
+    const out = deriveActiveRadialEffects(fx, 1_500);
     const forward = out.map((radial) => ({ ...radial }));
     expect(forward.map(({ startMs }) => startMs)).toEqual([1_400, 1_000]);
-    deriveActiveBossRadialEffects(fx, 5_000, out);
+    deriveActiveRadialEffects(fx, 5_000, out);
     expect(out).toEqual([]);
-    expect(deriveActiveBossRadialEffects(fx, 1_500, out).map((radial) => ({ ...radial }))).toEqual(forward);
+    expect(deriveActiveRadialEffects(fx, 1_500, out).map((radial) => ({ ...radial }))).toEqual(forward);
   });
 
   it("ignores unrelated spell completions and damage hits", () => {
@@ -226,7 +276,7 @@ describe("deriveActiveBossRadialEffects", () => {
       event(1_000, "cast_go", "mage", "", { spellId: 133 }),
       event(1_010, "damage", "taragaman", "player", { spellId: FIRE_NOVA_SPELL_ID }),
     );
-    expect(deriveActiveBossRadialEffects(fx, 1_100)).toEqual([]);
+    expect(deriveActiveRadialEffects(fx, 1_100)).toEqual([]);
   });
 });
 
