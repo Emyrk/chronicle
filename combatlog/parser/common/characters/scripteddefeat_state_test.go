@@ -1,8 +1,10 @@
 package characters
 
 import (
+	"encoding/json"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/phases"
+	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/stretchr/testify/require"
 	"testing"
 	"time"
@@ -79,4 +81,44 @@ func TestReferenceWrappersRestoreWithoutBehavior(t *testing.T) {
 	require.Same(t, restored, candidate.Character)
 	candidate.PhaseDefinitions()
 	require.Equal(t, 1, provider.calls)
+}
+
+func TestScriptedDefeatStateRejectsNilAuraSet(t *testing.T) {
+	t.Parallel()
+	_, err := new(ScriptedDefeatDetector).CaptureState()
+	require.Error(t, err)
+	at := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	original := NewScriptedDefeatDetector(1, ScriptedDefeatConfig{AuraCleanup: AuraCleanupDefeatConfig{DistinctAuras: 1, BurstWindow: time.Second, DamageWindow: time.Second}})
+	original.active = true
+	original.lastIncomingDamage = at
+	state, err := original.CaptureState()
+	require.NoError(t, err)
+	data, err := state.Encode()
+	require.NoError(t, err)
+	var malformed map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(data, &malformed))
+	malformed["cleanup_auras"] = json.RawMessage(`null`)
+	invalid, err := json.Marshal(malformed)
+	require.NoError(t, err)
+	_, err = DecodeScriptedDefeatDetectorState(ScriptedDefeatDetectorStateVersion, invalid)
+	require.Error(t, err)
+	restored := NewScriptedDefeatDetector(2, ScriptedDefeatConfig{})
+	bad := state
+	bad.value.CleanupAuras = nil
+	require.Error(t, restored.RestoreState(bad, nil))
+	require.EqualValues(t, 2, restored.id)
+	require.NotNil(t, restored.cleanupAuras)
+	decoded, err := DecodeScriptedDefeatDetectorState(ScriptedDefeatDetectorStateVersion, data)
+	require.NoError(t, err)
+	require.NoError(t, restored.RestoreState(decoded, nil))
+	require.NotNil(t, restored.cleanupAuras)
+	require.Empty(t, restored.cleanupAuras)
+	aura := &messages.Aura{Target: 1, State: types.AuraStateRemoved, SpellName: "test"}
+	aura.MessageBase = messages.Base(at)
+	expected, ok := original.Observe(aura, true)
+	require.True(t, ok)
+	require.Equal(t, ScriptedDefeatAuraCleanup, expected)
+	actual, ok := restored.Observe(aura, true)
+	require.True(t, ok)
+	require.Equal(t, expected, actual)
 }

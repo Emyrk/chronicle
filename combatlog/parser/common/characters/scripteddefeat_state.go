@@ -29,7 +29,7 @@ type scriptedDefeatValue struct {
 }
 
 func (d *ScriptedDefeatDetector) CaptureState() (ScriptedDefeatDetectorState, error) {
-	if d == nil {
+	if d == nil || d.cleanupAuras == nil {
 		return ScriptedDefeatDetectorState{}, fmt.Errorf("nil scripted defeat detector")
 	}
 	c := d.config
@@ -47,13 +47,16 @@ func DecodeScriptedDefeatDetectorState(version uint32, payload []byte) (Scripted
 	if e := decodeCharacterValue(payload, &v); e != nil {
 		return ScriptedDefeatDetectorState{}, e
 	}
+	if v.CleanupAuras == nil {
+		return ScriptedDefeatDetectorState{}, fmt.Errorf("nil cleanup aura set")
+	}
 	return ScriptedDefeatDetectorState{v}, nil
 }
 
 // RestoreState injects but never invokes the trusted participant callback. Its
 // identity belongs to the parse fingerprint, not the persisted representation.
 func (d *ScriptedDefeatDetector) RestoreState(s ScriptedDefeatDetectorState, noParticipants func() bool) error {
-	if d == nil || s.value.HasParticipantCallback != (noParticipants != nil) {
+	if d == nil || s.value.CleanupAuras == nil || s.value.HasParticipantCallback != (noParticipants != nil) {
 		return fmt.Errorf("missing detector or callback presence mismatch")
 	}
 	v := s.value
