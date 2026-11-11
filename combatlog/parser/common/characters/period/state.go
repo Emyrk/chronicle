@@ -123,35 +123,19 @@ func (s MomentState) Restore(resolve func(string) (messages.Message, error)) (*M
 	return &Moment{Timestamp: m, Reason: s.value.Reason}, nil
 }
 
-// CaptureState supports EmptyPeriod and InactivityPeriod only. Unsupported custom
-// period kinds must have explicit owner codecs; they cannot be reduced to dates.
+// CaptureState dispatches only to an owner's explicit codec method. It does not
+// know how to reconstruct concrete periods or serialize arbitrary custom types.
 func CaptureState(p IsPeriod, moments func(*Moment) (string, error), message func(messages.Message) (string, error)) (State, error) {
-	var value periodValue
-	var base *Period
-	switch p := p.(type) {
-	case *EmptyPeriod:
-		if p == nil || p.WorkingPeriod == nil || p.Period == nil || p.Meta == nil {
-			return State{}, fmt.Errorf("incomplete empty period")
-		}
-		value.Kind = "empty"
-		value.Me = p.me
-		base = p.Period
-	case *InactivityPeriod:
-		if p == nil || p.WorkingPeriod == nil || p.Period == nil || p.Meta == nil {
-			return State{}, fmt.Errorf("incomplete inactivity period")
-		}
-		value.Kind = "inactivity"
-		value.Me = p.me
-		base = p.Period
-		value.HasTimeoutPredicate = p.timeoutAsDeathIf != nil
-		path, err := captureMessage(p.Meta.ResetMessage, message)
-		if err != nil {
-			return State{}, err
-		}
-		value.Timer = &timerValue{p.Meta.NextTimeout, p.Meta.BumpBy, p.Meta.PendingReset, p.Meta.ResetDeadline, p.Meta.ResetReason, path}
-	default:
+	owner, ok := p.(interface {
+		CaptureState(func(*Moment) (string, error), func(messages.Message) (string, error)) (State, error)
+	})
+	if !ok {
 		return State{}, fmt.Errorf("unsupported period %T", p)
 	}
+	return owner.CaptureState(moments, message)
+}
+
+func capturePeriod(value periodValue, base *Period, moments func(*Moment) (string, error)) (State, error) {
 	var err error
 	value.Start, err = captureMoment(base.Start, moments)
 	if err != nil {
@@ -192,16 +176,10 @@ func DecodeState(version uint32, payload []byte) (State, error) {
 	return State{v}, nil
 }
 
-// Restore allocates inert objects and attaches trusted dependencies. It does not
-// invoke Begin/End/Bump/Start, recompute timers, or replay activity notifications.
-func (s State) Restore(moments func(string) (*Moment, error), message func(string) (messages.Message, error), hook Hook, timeoutAsDeath func() bool) (IsPeriod, error) {
+// restoreMoments resolves references only; concrete owners load their own state.
+func (s State) restoreMoments(moments func(string) (*Moment, error)) (*Period, error) {
 	v := s.value
-	if err := v.validate(); err != nil {
-		return nil, err
-	}
-	if v.HasTimeoutPredicate != (timeoutAsDeath != nil) {
-		return nil, fmt.Errorf("timeout predicate presence mismatch")
-	}
+
 	resolve := func(path string) (*Moment, error) {
 		if path == "" {
 			return nil, nil
@@ -230,16 +208,7 @@ func (s State) Restore(moments func(string) (*Moment, error), message func(strin
 	if err != nil {
 		return nil, err
 	}
-	base := &Period{Start: start, End: end, LastActive: last, EndState: v.EndState}
-	if v.Kind == "empty" {
-		return &EmptyPeriod{WorkingPeriod: &WorkingPeriod[EmptyMeta]{Period: base, me: v.Me, Meta: &EmptyMeta{}, hook: hook}}, nil
-	}
-	reset, err := resolveMessage(v.Timer.ResetMessage, message)
-	if err != nil {
-		return nil, err
-	}
-	timer := &InactivityTimer{NextTimeout: v.Timer.NextTimeout, BumpBy: v.Timer.BumpBy, PendingReset: v.Timer.PendingReset, ResetDeadline: v.Timer.ResetDeadline, ResetReason: v.Timer.ResetReason, ResetMessage: reset}
-	return &InactivityPeriod{WorkingPeriod: &WorkingPeriod[InactivityTimer]{Period: base, me: v.Me, Meta: timer, hook: hook}, timeoutAsDeathIf: timeoutAsDeath}, nil
+	return &Period{Start: start, End: end, LastActive: last, EndState: v.EndState}, nil
 }
 
 // Complete typed JSON validation rejects missing fields, null scalars, unknown
