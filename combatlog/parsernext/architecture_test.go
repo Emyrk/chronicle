@@ -43,7 +43,7 @@ func TestProductionDependencyDirection(t *testing.T) {
 				require.Contains(t, []string{"common", "formats", "vanilla", "tbc", "wotlk", "forever", "snapshot"}, dependency)
 			case "vanilla", "tbc", "wotlk", "forever":
 				require.Contains(t, []string{"common", "formats"}, dependency, "%s -> %s", owner, dependency)
-			case "common", "formats":
+			case "common", "formats", "formats/ccv2":
 				t.Errorf("leaf package %s imports %s", owner, imported)
 			case "snapshot":
 				require.Contains(t, []string{"common", "vanilla", "tbc", "wotlk", "forever"}, dependency)

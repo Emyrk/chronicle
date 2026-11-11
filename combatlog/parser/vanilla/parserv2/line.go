@@ -3,13 +3,13 @@ package parserv2
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
+	"github.com/Emyrk/chronicle/combatlog/parsernext/formats/ccv2"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/Emyrk/chronicle/internal/ptr"
 )
@@ -20,36 +20,14 @@ type Matched struct {
 	err   error
 }
 
-// TODO: Reuse the same slice
+// ParseLine preserves the legacy field cursor while sharing lexical decoding
+// with parsernext. Typed GUID/spell/combat helpers remain owned by this package.
 func ParseLine(content string) (time.Time, string, *Matched, error) {
-	if content == "" {
-		return time.Time{}, "", nil, errors.New("empty line")
-	}
-	parts := strings.Split(content, "|")
-	if len(parts) < 2 {
-		return time.Time{}, "", nil, fmt.Errorf("invalid line format: expected at least 3 parts, got %d", len(parts))
-	}
-
-	unixMilli, err := strconv.ParseInt(parts[0], 10, 64)
+	timestamp, event, fields, err := ccv2.ParseLine(content)
 	if err != nil {
-		return time.Now(), "", nil, err
+		return timestamp, event, nil, err
 	}
-
-	for i := range parts {
-		parts[i] = strings.TrimSpace(parts[i])
-	}
-
-	if len(parts) < 3 {
-		return time.UnixMilli(unixMilli), parts[1], &Matched{
-			parts: []string{},
-			index: 0,
-		}, nil
-	}
-
-	return time.UnixMilli(unixMilli), parts[1], &Matched{
-		parts: parts[2:],
-		index: 0,
-	}, nil
+	return timestamp, event, &Matched{parts: fields}, nil
 }
 
 func (m *Matched) Error() error {
