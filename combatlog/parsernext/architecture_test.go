@@ -65,6 +65,11 @@ func TestProductionDependencyDirection(t *testing.T) {
 // Temporary value/message compatibility only; never allow parser execution,
 // GameDB implementations, consumers, raid builders or publication packages.
 var allowedVanillaCompatibility = map[string]bool{
+	"github.com/Emyrk/chronicle/combatlog/parser/common/parseerrors": true,
+	"github.com/Emyrk/chronicle/combatlog/parser/types/gameversions": true,
+	"github.com/Emyrk/chronicle/combatlog/parser/types/realm":        true,
+	"github.com/Masterminds/semver":                                  true,
+
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/spellids": true,
 	"github.com/Emyrk/chronicle/combatlog/parser/guid":             true,
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages":  true,

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"strconv"
+	"time"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
@@ -27,6 +28,10 @@ func DecodeRecord(ctx context.Context, spells SpellLookup, content string) ([]me
 	if err != nil {
 		return nil, err
 	}
+	return decodeFields(ctx, spells, ts, event, fields)
+}
+
+func decodeFields(ctx context.Context, spells SpellLookup, ts time.Time, event string, fields []string) ([]messages.Message, error) {
 	m := &recordFields{fields: fields}
 	switch event {
 	case "SPELL_START", "SPELL_GO", "AURA_CAST", "ENERGIZE", "DISPEL", "BUFF_ADD", "BUFF_REM", "DEBUFF_ADD", "DEBUFF_REM":
@@ -126,3 +131,5 @@ func (m *recordFields) Peek() string {
 	return m.fields[m.index]
 }
 func (m *recordFields) Skip() { m.index++ }
+
+func (m *recordFields) Remain() int { return len(m.fields) - m.index }
