@@ -15,7 +15,7 @@ import (
 // Enforce the import graph rather than relying on registration side effects.
 // In particular common has no dependency path to an expansion, raid builder,
 // database, River, or old parser execution; only Vanilla may reuse the exact
-// legacy GUID value helper package. TBC cannot quietly delegate to WotLK.
+// listed legacy message/value packages. TBC cannot quietly delegate to WotLK.
 func TestProductionDependencyDirection(t *testing.T) {
 	t.Parallel()
 	const prefix = "github.com/Emyrk/chronicle/combatlog/parsernext/"
@@ -37,8 +37,8 @@ func TestProductionDependencyDirection(t *testing.T) {
 			if !strings.Contains(strings.Split(imported, "/")[0], ".") {
 				continue
 			} // standard library
-			if imported == "github.com/Emyrk/chronicle/combatlog/parser/guid" {
-				require.Equal(t, "vanilla", owner, "only Vanilla's critter boundary reuses GUID helpers")
+			if allowedVanillaCompatibility[imported] {
+				require.Equal(t, "vanilla", owner, "only Vanilla reuses explicitly listed message/value compatibility")
 				continue
 			}
 			require.True(t, strings.HasPrefix(imported, prefix), "%s imports outside parsernext: %s", path, imported)
@@ -47,7 +47,7 @@ func TestProductionDependencyDirection(t *testing.T) {
 			case ".":
 				require.Contains(t, []string{"common", "formats", "vanilla", "tbc", "wotlk", "forever", "snapshot"}, dependency)
 			case "vanilla":
-				require.Contains(t, []string{"common", "formats", "common/units", "common/critters"}, dependency, "%s -> %s", owner, dependency)
+				require.Contains(t, []string{"common", "formats", "common/units", "common/critters", "formats/ccv2"}, dependency, "%s -> %s", owner, dependency)
 			case "tbc", "wotlk", "forever":
 				require.Contains(t, []string{"common", "formats"}, dependency, "%s -> %s", owner, dependency)
 			case "common", "common/units", "common/critters", "formats", "formats/ccv2":
@@ -60,4 +60,15 @@ func TestProductionDependencyDirection(t *testing.T) {
 		}
 		return nil
 	}))
+}
+
+// Temporary value/message compatibility only; never allow parser execution,
+// GameDB implementations, consumers, raid builders or publication packages.
+var allowedVanillaCompatibility = map[string]bool{
+	"github.com/Emyrk/chronicle/combatlog/parser/guid":            true,
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages": true,
+	"github.com/Emyrk/chronicle/combatlog/parser/types":           true,
+	"github.com/Emyrk/chronicle/database/gamedb/chrondbc":         true,
+	"github.com/Emyrk/chronicle/internal/ptr":                     true,
+	"github.com/Emyrk/chronicle/internal/bitmask":                 true,
 }
