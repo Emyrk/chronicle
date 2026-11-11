@@ -109,7 +109,7 @@ func (d *Decoder) DecodeRecord(ctx context.Context, content string) ([]messages.
 	case "COMBATANT_TALENTS":
 		return d.combatants.DecodeTalents(ts, &recordFields{fields: fields}, d.combatantOptions.TalentTrees)
 	}
-	return decodeFields(ctx, d.spells, ts, event, fields)
+	return decodeFields(ctx, d.spells, ts, event, fields, content)
 }
 
 func (d *Decoder) Capabilities() Capabilities { return d.capabilities }

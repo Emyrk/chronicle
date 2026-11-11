@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"hash"
 	"io"
 )
 
@@ -40,50 +41,95 @@ var ErrLineTooLong = errors.New("source line exceeds byte limit")
 // failure, the summary is zero and the caller must discard derived state.
 // maxLineBytes includes the line terminator and must be positive.
 func ReadFile(ctx context.Context, source io.Reader, maxLineBytes int, visit func(Line) error) (FileSummary, error) {
-	if source == nil || visit == nil || maxLineBytes <= 0 {
-		return FileSummary{}, errors.New("source, visitor and positive line byte limit are required")
+	if visit == nil {
+		return FileSummary{}, errors.New("visitor is required")
 	}
-	reader := bufio.NewReader(source)
-	digest := sha256.New()
-	var summary FileSummary
+	reader, err := NewFileReader(source, maxLineBytes)
+	if err != nil {
+		return FileSummary{}, err
+	}
 	for {
-		var raw []byte
-		var readErr error
-		for {
-			if err := ctx.Err(); err != nil {
-				return FileSummary{}, err
-			}
-			var fragment []byte
-			fragment, readErr = reader.ReadSlice('\n')
-			if len(fragment) > maxLineBytes-len(raw) {
-				return FileSummary{}, fmt.Errorf("line %d: %w", summary.Lines+1, ErrLineTooLong)
-			}
-			raw = append(raw, fragment...)
-			if readErr != bufio.ErrBufferFull {
-				break
-			}
+		line, err := reader.Next(ctx)
+		if err == io.EOF {
+			return reader.Summary(), nil
 		}
-		if readErr != nil && readErr != io.EOF {
-			return FileSummary{}, fmt.Errorf("read line %d: %w", summary.Lines+1, readErr)
-		}
-		if err := ctx.Err(); err != nil {
+		if err != nil {
 			return FileSummary{}, err
 		}
-		if len(raw) > 0 {
-			line := Line{Number: summary.Lines + 1, Offset: summary.Bytes, Raw: string(raw)}
-			if err := visit(line); err != nil {
-				return FileSummary{}, fmt.Errorf("visit line %d: %w", line.Number, err)
-			}
-			_, _ = digest.Write(raw)
-			summary.Bytes += int64(len(raw))
-			summary.Lines++
-		}
-		if err := ctx.Err(); err != nil {
-			return FileSummary{}, err
-		}
-		if readErr == io.EOF {
-			summary.SHA256 = hex.EncodeToString(digest.Sum(nil))
-			return summary, nil
+		if err := visit(line); err != nil {
+			return FileSummary{}, fmt.Errorf("visit line %d: %w", line.Number, err)
 		}
 	}
+}
+
+// FileReader pulls owned physical lines from one complete source. It never reads
+// another source. A new reader is required for each file; callers own its input.
+// Read errors are sticky. Summary is available only after Next returns clean EOF.
+type FileReader struct {
+	reader       *bufio.Reader
+	maxLineBytes int
+	digest       hash.Hash
+	summary      FileSummary
+	terminal     error
+}
+
+func NewFileReader(source io.Reader, maxLineBytes int) (*FileReader, error) {
+	if source == nil || maxLineBytes <= 0 {
+		return nil, errors.New("source and positive line byte limit are required")
+	}
+	return &FileReader{reader: bufio.NewReader(source), maxLineBytes: maxLineBytes, digest: sha256.New()}, nil
+}
+
+func (r *FileReader) Summary() FileSummary {
+	if r.terminal != io.EOF {
+		return FileSummary{}
+	}
+	return r.summary
+}
+
+func (r *FileReader) Next(ctx context.Context) (Line, error) {
+	if r.terminal != nil {
+		return Line{}, r.terminal
+	}
+	line, err := r.next(ctx)
+	if err != nil {
+		r.terminal = err
+		if err == io.EOF {
+			r.summary.SHA256 = hex.EncodeToString(r.digest.Sum(nil))
+		}
+	}
+	return line, err
+}
+
+func (r *FileReader) next(ctx context.Context) (Line, error) {
+	var raw []byte
+	var readErr error
+	for {
+		if err := ctx.Err(); err != nil {
+			return Line{}, err
+		}
+		var fragment []byte
+		fragment, readErr = r.reader.ReadSlice('\n')
+		if len(fragment) > r.maxLineBytes-len(raw) {
+			return Line{}, fmt.Errorf("line %d: %w", r.summary.Lines+1, ErrLineTooLong)
+		}
+		raw = append(raw, fragment...)
+		if readErr != bufio.ErrBufferFull {
+			break
+		}
+	}
+	if readErr != nil && readErr != io.EOF {
+		return Line{}, fmt.Errorf("read line %d: %w", r.summary.Lines+1, readErr)
+	}
+	if err := ctx.Err(); err != nil {
+		return Line{}, err
+	}
+	if len(raw) == 0 && readErr == io.EOF {
+		return Line{}, io.EOF
+	}
+	line := Line{Number: r.summary.Lines + 1, Offset: r.summary.Bytes, Raw: string(raw)}
+	_, _ = r.digest.Write(raw)
+	r.summary.Bytes += int64(len(raw))
+	r.summary.Lines++
+	return line, nil
 }
