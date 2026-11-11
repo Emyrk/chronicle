@@ -41,6 +41,9 @@ func (c *Base[M]) CaptureState(periods func(M) (string, error), message func(mes
 	}
 	v := baseValue{ID: c.id, RecentlySlain: c.recentlySlain, Activity: encoded}
 	if c.LastSlain != nil {
+		if nilReference(c.LastSlain) {
+			return BaseState{}, fmt.Errorf("nil last slain message")
+		}
 		if message == nil {
 			return BaseState{}, fmt.Errorf("missing last slain capture")
 		}
@@ -92,7 +95,7 @@ func (c *Base[M]) RestoreState(s BaseState, lookup *Characters, periods func(str
 		if err != nil {
 			return err
 		}
-		if last == nil {
+		if nilReference(last) {
 			return fmt.Errorf("nil last slain reference")
 		}
 	}
