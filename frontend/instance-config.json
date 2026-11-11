@@ -109,7 +109,7 @@
   },
   "Ruby Sanctum": {
     "background": "/c/images/loadingscreens/loadscreenrubysanctum.webp",
-    "bossCount": 1,
+    "bossCount": 4,
     "abbrev": "RS",
     "contentLevel": 80
   },

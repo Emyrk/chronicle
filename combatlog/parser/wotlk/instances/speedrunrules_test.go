@@ -35,6 +35,31 @@ func TestUlduarSpeedrunRequirements(t *testing.T) {
 	}, rules.Speedrun.Requirements)
 }
 
+func TestRubySanctumSpeedrunRequirements(t *testing.T) {
+	t.Parallel()
+
+	rules := RubySanctumFactory.FlavoredRankings(database.WoWFlavor{database.FlavorWrath})
+	require.NotNil(t, rules)
+	require.NotNil(t, rules.Speedrun)
+	require.Equal(t, []rankings.SpeedrunRequirement{
+		{Name: "Baltharus the Warborn", EntryIDs: []uint32{39751, 39920}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Saviana Ragefire", EntryIDs: []uint32{39747, 39823}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "General Zarithrian", EntryIDs: []uint32{39746, 39805}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Halion", EntryIDs: []uint32{39863, 39864, 39944, 39945, 40142, 40143, 40144, 40145}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+	}, rules.Speedrun.Requirements)
+}
+
+func TestRubySanctumProgressionBosses(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, []string{
+		"Baltharus the Warborn",
+		"Saviana Ragefire",
+		"General Zarithrian",
+		"Halion",
+	}, RubySanctumFactory.ProgressionBosses(database.WoWFlavor{database.FlavorWrath}))
+}
+
 func TestIcecrownCitadelSpeedrunRequirements(t *testing.T) {
 	t.Parallel()
 

@@ -27,6 +27,19 @@ func UlduarSpeedrunRequirements() *rankings.Rankings {
 	}
 }
 
+func RubySanctumSpeedrunRequirements() *rankings.Rankings {
+	return &rankings.Rankings{
+		Speedrun: &rankings.SpeedrunRules{
+			Requirements: []rankings.SpeedrunRequirement{
+				{Name: "Baltharus the Warborn", EntryIDs: []uint32{39751, 39920}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+				{Name: "Saviana Ragefire", EntryIDs: []uint32{39747, 39823}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+				{Name: "General Zarithrian", EntryIDs: []uint32{39746, 39805}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+				{Name: "Halion", EntryIDs: []uint32{39863, 39864, 39944, 39945, 40142, 40143, 40144, 40145}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+			},
+		},
+	}
+}
+
 func IcecrownCitadelSpeedrunRequirements() *rankings.Rankings {
 	return &rankings.Rankings{
 		Speedrun: &rankings.SpeedrunRules{
