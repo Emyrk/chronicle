@@ -71,14 +71,14 @@ boss awards likewise remain available for Renown independently of average inputs
 | Existing Wrath raid | 10 Player / 10 | 25 Player / 25 |
 |---|---:|---:|
 | Onyxia's Lair | 1 | 1.5 |
-| Eye of Eternity | 1 | 1.5 |
 | Naxxramas | 4 | 6 |
 | Ulduar | 6 | 9 |
 
-Obsidian Sanctum and Vault of Archavon both retain Renown eligibility and NULL
-weights, with average eligibility false. Vault's empty default is not an average
-blocker under this approved policy. Optional bosses remain excluded from average
-inputs and included in Renown. Wrath excludes Vanilla from every career total.
+Eye of Eternity, Obsidian Sanctum, and Vault of Archavon retain Renown eligibility
+and NULL weights, with average eligibility false. Vault's empty default is not an
+average blocker under this approved policy. Optional bosses remain excluded from
+average inputs and included in Renown. Wrath excludes Vanilla from every career
+total.
 
 Future supported Heroic variants use explicit entries at 1.5 times corresponding
 Normal weights. Migration 358 creates no new tuples. Its bounded updates touch at
@@ -86,6 +86,11 @@ most 23 existing weight rows and two Vault flags, never historical evidence. Up
 fills NULL weights only. Down restores matching seeded weights to NULL and Vault
 average eligibility to true; later edited weights are preserved. Shared boss
 configuration and Renown awards are untouched.
+
+Migration 363 removes both Eye of Eternity variants from career averages while
+preserving their Renown eligibility. It updates only two shared configuration rows
+and queues bounded asynchronous career refreshes rather than scanning historical
+evidence during startup.
 
 ## Approved foundation constraints
 
