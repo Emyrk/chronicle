@@ -11,6 +11,7 @@ import (
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
 	"github.com/stretchr/testify/require"
 )
@@ -72,4 +73,18 @@ func TestBaselineEngineSelection(t *testing.T) {
 	require.ErrorContains(t, err, "does not support")
 	// Ordinary worker construction cannot inherit a baseline selection.
 	require.Empty(t, c.NewWorkerLogParse().(*WorkerLogParse).baselineEngine)
+}
+
+func TestBaselineUnsupportedFormatPrecedesWorkerWrites(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitLong)
+	store, logID := parseGenerationFixture(t, ctx) // AzerothCore, not Vanilla CC-v2.
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	// No metrics or storage: entering work (especially replacement cleanup) would
+	// be an error. The format gate must reject on the read-only preflight instead.
+	c := &Chronicle{Zed: authz.NewDatabaseOnly(logger, store)}
+	err := c.RunLogParseBaselineWithEngine(ctx, ArgsLogParse{LogID: logID, ParseGeneration: 1, Replacement: true}, BaselineParserNextVanilla)
+	require.ErrorContains(t, err, "does not support format")
+	_, err = store.GetParsedLogGroupByID(ctx, logID)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
