@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
@@ -77,6 +78,7 @@ func (p *Parser) parseZone(ts time.Time, data string) ([]messages.Message, error
 		z.DifficultyIndex, _ = strconv.Atoi(parts[2])
 		z.DifficultyName = parts[3]
 		z.MaxPlayers, _ = strconv.Atoi(parts[4])
+		z.DifficultyName = normalizePlayerCountDifficulty(instanceType, z.DifficultyName, z.MaxPlayers)
 		z.DynamicDifficulty, _ = strconv.Atoi(parts[5])
 		z.SubZone = parts[9]
 	}
@@ -87,6 +89,31 @@ func (p *Parser) parseZone(ts time.Time, data string) ([]messages.Message, error
 			Zone:        z,
 		},
 	}, nil
+}
+
+// normalizePlayerCountDifficulty replaces locale-specific plain raid-size labels
+// such as "10 игроков" with the stable English value used by leaderboard cohorts.
+// Qualified labels are left intact so information such as "(Heroic)" is not lost.
+func normalizePlayerCountDifficulty(instanceType, difficultyName string, maxPlayers int) string {
+	if instanceType != "raid" || maxPlayers <= 0 {
+		return difficultyName
+	}
+
+	fields := strings.Fields(difficultyName)
+	if len(fields) < 2 {
+		return difficultyName
+	}
+	players, err := strconv.Atoi(fields[0])
+	if err != nil || players != maxPlayers {
+		return difficultyName
+	}
+	for _, r := range strings.Join(fields[1:], " ") {
+		if unicode.IsLetter(r) || unicode.IsMark(r) || unicode.IsSpace(r) || r == '.' || r == '\'' || r == '-' {
+			continue
+		}
+		return difficultyName
+	}
+	return fmt.Sprintf("%d Player", maxPlayers)
 }
 
 // ParseHeaderClock parses the optional clock fields from a companion header

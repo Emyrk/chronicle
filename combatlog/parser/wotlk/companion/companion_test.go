@@ -185,6 +185,45 @@ func TestParseZone_ICC(t *testing.T) {
 	assert.Equal(t, "The Frozen Throne", z.SubZone)
 }
 
+func TestParseZone_NormalizesLocalizedPlayerCountDifficulty(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "Russian plain player count",
+			input: `[1Z:Icecrown Citadel,raid,1,10 игроков,10,0,0,631,0,]`,
+			want:  "10 Player",
+		},
+		{
+			name:  "qualified difficulty",
+			input: `[1Z:Icecrown Citadel,raid,3,10 игроков (героич.),10,0,0,631,0,]`,
+			want:  "10 игроков (героич.)",
+		},
+		{
+			name:  "non-raid",
+			input: `[1Z:Localized Dungeon,party,1,5 игроков,5,0,0,1,0,]`,
+			want:  "5 игроков",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			msgs, err := newTestParser().Feed(testTS, tt.input)
+			require.NoError(t, err)
+			require.Len(t, msgs, 1)
+			z, ok := msgs[0].(*messages.Zone)
+			require.True(t, ok)
+			assert.Equal(t, tt.want, z.DifficultyName)
+		})
+	}
+}
+
 func TestParseZone_OnyxiaVariants(t *testing.T) {
 	t.Parallel()
 
