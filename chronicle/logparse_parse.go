@@ -21,14 +21,12 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/messagesource"
 	"github.com/Emyrk/chronicle/combatlog/parser/reorder"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/realm"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/nextsource"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/parserv2"
 	"github.com/Emyrk/chronicle/combatlog/parser/wotlk"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/Emyrk/chronicle/internal/gamedataoverrides"
-	"github.com/Emyrk/chronicle/internal/version"
 )
 
 type overrideGameDB struct {
@@ -109,54 +107,6 @@ func (w *WorkerLogParse) parseCombatLog(
 		logLogger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
 
-	logCapabilities := initialLogCapabilities(logFormat)
-
-	// Server-side logs still use the flavor registry for known instances so
-	// rankings and speedrun rules are attached. The AzerothCore resolver adds
-	// server-reported unit metadata and falls back to a generic instance for
-	// zones Chronicle does not know yet.
-	var encountersState *encounters.State
-	if logFormat == database.LogFormatAzerothcoreMod {
-		encountersState = azencounters.New(ctx, logLogger, reg)
-	} else {
-		encountersState = encounters.New(ctx, logLogger, reg)
-	}
-
-	durationModifiers, err := gameDB.DurationModifiers(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("load aura duration modifiers: %w", err)
-	}
-	encountersState.Auras.SetDurationModifiers(durationModifiers)
-	flavor, _ := parsectx.Flavor(ctx)
-	overriddenGameDB := overrideGameDB{GameDB: gameDB, spells: gameDB, flavor: flavor}
-	encountersState.SetSpellFetcher(overriddenGameDB)
-
-	type consumableCatalogFetcher interface {
-		Consumables(context.Context) (*chrondbc.ConsumableCatalog, error)
-	}
-	if fetcher, ok := gameDB.(consumableCatalogFetcher); ok {
-		consumableCatalog, err := fetcher.Consumables(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("load consumable catalog: %w", err)
-		}
-		encountersState.ConsumeTracker.SetCatalog(consumableCatalog)
-	}
-
-	// Seed the realm from the pre-scan so instances created before the
-	// parser hits a REALM_INFO message already have realm context.
-	if preRealmName != "" {
-		encountersState.CurrentRealm = &realm.Info{RealmName: preRealmName}
-	}
-
-	var creaturesState *creatures.Creatures
-	var c *consumers.Consumers
-	if identityMode {
-		creaturesState = creatures.New(logLogger)
-		c = consumers.New(logLogger, encountersState, creaturesState)
-	} else {
-		c = consumers.New(logLogger, encountersState)
-	}
-
 	// loadFirstFile returns a reader for files[0], using preloaded data if
 	// available to avoid re-downloading from object storage.
 	loadFirstFile := func() (io.Reader, error) {
@@ -165,6 +115,32 @@ func (w *WorkerLogParse) parseCombatLog(
 		}
 		return w.loadFile(ctx, files[0])
 	}
+
+	if w.baselineEngine == BaselineParserNextVanilla {
+		session, err := newVanillaFileSession(ctx, logLogger, gameDB, reg, identityMode, preRealmName)
+		if err != nil {
+			return nil, err
+		}
+		loadStart := time.Now()
+		reader, err := loadFirstFile()
+		if err != nil {
+			return nil, fmt.Errorf("load log file: %w", err)
+		}
+		session.result.report.loadFileDuration = time.Since(loadStart)
+		session.result.report.parseDuration += session.result.report.loadFileDuration
+		if err := session.ProcessFile(ctx, reader); err != nil {
+			return nil, err
+		}
+		return session.result, nil
+	}
+	flavor, _ := parsectx.Flavor(ctx)
+	overriddenGameDB := overrideGameDB{GameDB: gameDB, spells: gameDB, flavor: flavor}
+	state, err := newParseState(ctx, logFormat, logLogger, gameDB, overriddenGameDB, reg, identityMode, preRealmName)
+	if err != nil {
+		return nil, err
+	}
+	encountersState, creaturesState, c := state.encountersState, state.creaturesState, state.consumers
+	logCapabilities := state.logCapabilities
 
 	parseStart := time.Now()
 	var loadFileDuration time.Duration
@@ -180,47 +156,24 @@ func (w *WorkerLogParse) parseCombatLog(
 		}
 		loadFileDuration = time.Since(loadStart)
 
-		if w.baselineEngine == BaselineParserNextVanilla {
-			pipeline, err := nextsource.New(ctx, logLogger, overriddenGameDB, gameDB, version.GitTag)
-			if err != nil {
-				return nil, fmt.Errorf("create parsernext Vanilla pipeline: %w", err)
-			}
-			source, err := pipeline.OpenFile(rdr, 4<<20)
-			if err != nil {
-				return nil, fmt.Errorf("create parsernext Vanilla source: %w", err)
-			}
-			c.Advancer = source
-			consumeErr = c.ConsumeAll(ctx, source)
-			if consumeErr != nil {
-				return nil, fmt.Errorf("consume parsernext Vanilla log: %w", consumeErr)
-			}
-			totalLines = source.Summary().Lines
-			observed := pipeline.Capabilities()
-			if observed.RaidGroup {
-				logCapabilities = append(logCapabilities, "raidgroup")
-			}
-			logCapabilities = append(logCapabilities, observedUnitTelemetryCapabilities(observed.UnitResources, observed.UnitPosition)...)
-		} else {
-			p, err := parserv2.New(ctx, logLogger, rdr, overriddenGameDB, gameDB)
-			if err != nil {
-				return nil, fmt.Errorf("create v2 parser: %w", err)
-			}
-			c.Advancer = p
-			consumeErr = c.ConsumeAll(ctx, p)
-			if consumeErr != nil && !errors.Is(consumeErr, io.EOF) {
-				return nil, fmt.Errorf("consume v2 log: %w", consumeErr)
-			}
-
-			if p.SawRaidGroup() {
-				logCapabilities = append(logCapabilities, "raidgroup")
-			}
-
-			logCapabilities = append(logCapabilities, observedUnitTelemetryCapabilities(
-				p.SawUnitResources(),
-				p.SawUnitPosition(),
-			)...)
-
+		p, err := parserv2.New(ctx, logLogger, rdr, overriddenGameDB, gameDB)
+		if err != nil {
+			return nil, fmt.Errorf("create v2 parser: %w", err)
 		}
+		c.Advancer = p
+		consumeErr = c.ConsumeAll(ctx, p)
+		if consumeErr != nil && !errors.Is(consumeErr, io.EOF) {
+			return nil, fmt.Errorf("consume v2 log: %w", consumeErr)
+		}
+
+		if p.SawRaidGroup() {
+			logCapabilities = append(logCapabilities, "raidgroup")
+		}
+
+		logCapabilities = append(logCapabilities, observedUnitTelemetryCapabilities(
+			p.SawUnitResources(),
+			p.SawUnitPosition(),
+		)...)
 
 	case database.LogFormat243CcAddon, database.LogFormat335aCcAddon:
 		logCapabilities = append(logCapabilities, "interrupt")
@@ -442,4 +395,54 @@ func (w *WorkerLogParse) loadFile(ctx context.Context, file database.LogFile) (i
 		return nil, err
 	}
 	return loadRawLogFileWithParts(ctx, w.parent.Storage, file, parts)
+}
+
+// newParseState builds the existing consumer graph once. File boundaries do not
+// reconstruct these owners, and no finalization or publication occurs here.
+func newParseState(ctx context.Context, logFormat database.LogFormat, logLogger *slog.Logger, gameDB gamedb.GameDB, spells gamedb.SpellFetcher, reg *registry.Registry, identityMode bool, preRealmName string) (*parseResult, error) {
+	// Server-side logs still use the flavor registry for known instances so
+	// rankings and speedrun rules are attached. The AzerothCore resolver adds
+	// server-reported unit metadata and falls back to a generic instance for
+	// zones Chronicle does not know yet.
+	var encountersState *encounters.State
+	if logFormat == database.LogFormatAzerothcoreMod {
+		encountersState = azencounters.New(ctx, logLogger, reg)
+	} else {
+		encountersState = encounters.New(ctx, logLogger, reg)
+	}
+
+	durationModifiers, err := gameDB.DurationModifiers(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load aura duration modifiers: %w", err)
+	}
+	encountersState.Auras.SetDurationModifiers(durationModifiers)
+	encountersState.SetSpellFetcher(spells)
+
+	type consumableCatalogFetcher interface {
+		Consumables(context.Context) (*chrondbc.ConsumableCatalog, error)
+	}
+	if fetcher, ok := gameDB.(consumableCatalogFetcher); ok {
+		consumableCatalog, err := fetcher.Consumables(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("load consumable catalog: %w", err)
+		}
+		encountersState.ConsumeTracker.SetCatalog(consumableCatalog)
+	}
+
+	// Seed the realm from the pre-scan so instances created before the
+	// parser hits a REALM_INFO message already have realm context.
+	if preRealmName != "" {
+		encountersState.CurrentRealm = &realm.Info{RealmName: preRealmName}
+	}
+
+	var creaturesState *creatures.Creatures
+	var c *consumers.Consumers
+	if identityMode {
+		creaturesState = creatures.New(logLogger)
+		c = consumers.New(logLogger, encountersState, creaturesState)
+	} else {
+		c = consumers.New(logLogger, encountersState)
+	}
+
+	return &parseResult{encountersState: encountersState, creaturesState: creaturesState, consumers: c, logCapabilities: initialLogCapabilities(logFormat)}, nil
 }
