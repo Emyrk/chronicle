@@ -178,3 +178,32 @@ func TestNextSavedHeaderStateParity(t *testing.T) {
 	require.Positive(t, headers)
 	t.Logf("header records=%d total timestamp transitions=%d", headers, records)
 }
+
+func TestNextHeaderStateSurvivesFileBoundary(t *testing.T) {
+	t.Parallel()
+	decoder := next.NewDecoder(nil, "test-build")
+	read := func(input string) ([]messages.Message, error) {
+		var output []messages.Message
+		_, err := parsernext.ReadFile(t.Context(), parsernext.Selection{Format: formats.VanillaCompanion, Expansion: next.Name}, strings.NewReader(input), 1024, func(line common.Line) error {
+			batch, err := decoder.DecodeRecord(t.Context(), strings.TrimSuffix(line.Raw, "\n"))
+			output = append(output, batch...)
+			return err
+		})
+		return output, err
+	}
+	_, err := read(nextHeader + "\n10000|DEATH|0x0000000000000001")
+	require.NoError(t, err)
+	output, err := read(strings.Replace(nextHeader, "0.38.4", "invalid", 1))
+	require.NoError(t, err)
+	require.Equal(t, time.UnixMilli(10000), output[0].Date())
+	state := decoder.State()
+	gv, ok := state.Version()
+	require.True(t, ok)
+	require.Equal(t, "0.38.4", gv.ChronicleCompanionAddon.String())
+	_, err = read("12000|DEATH|bad")
+	require.Error(t, err)
+	state = decoder.State()
+	require.Equal(t, time.UnixMilli(12000), state.LastTimestamp())
+	_, err = read("10000|DEATH|0x0000000000000001")
+	require.True(t, parseerrors.IsFatalError(err))
+}

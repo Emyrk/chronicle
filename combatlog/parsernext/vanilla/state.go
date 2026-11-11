@@ -48,9 +48,11 @@ func (s *HeaderState) ApplyHeader(result HeaderResult) {
 	}
 }
 
-// Decoder owns one source's semantic clock/header state. Construct a fresh
-// instance for every file; source framing, reader errors and provisional output
-// remain the responsibility of ReadFile. This is not a full-log parser.
+// Decoder owns semantic clock/header state independently of source framing.
+// A fresh instance matches a fresh legacy parser. Reusing it explicitly retains
+// continuity across input boundaries; completing ReadFile does not reset or
+// finalize this state. Reader errors and provisional output remain the caller
+// responsibility. This is not a full-log parser or a session finalizer.
 type Decoder struct {
 	spells           SpellLookup
 	chronicleVersion string
