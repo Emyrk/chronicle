@@ -9,8 +9,12 @@ This is a bounded record fixture, not a complete log.
 
 ## Spell records
 
-`capybara-spells.log` comes from the same saved source. It retains the first
-record per HEAL (spell ID, crit flag, periodic flag), or SPELL_DMG (spell ID,
-positive mitigation flags, hit info, school, effects) combination: 367 lines,
+`capybara-spells.log` comes from the same saved source. It retains representative HEAL crit/periodic and SPELL_DMG mitigation/hit/aura
+combinations (ignoring spell identity to avoid repeated structural cases): 17 representative lines,
 unchanged and in source order. Spell lookup parity uses deterministic test
 values rather than embedding a dataset export.
+
+`capybara-remaining.log` has 11 original public MISS/shield records selected by
+miss result or shield school. The source has no ENV_DMG records; those cases
+are explicitly synthetic in tests. Fixtures contain GUIDs necessary for decoder
+parity, not names, chat, account metadata or private logs.

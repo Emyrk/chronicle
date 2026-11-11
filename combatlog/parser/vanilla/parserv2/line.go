@@ -124,36 +124,7 @@ func (m *Matched) CastFlags() types.CastFlags {
 	})
 }
 
-func (m *Matched) SpellMissInfo() types.HitType {
-	switch SpellMissInfo(m.Int32()) {
-	case SPELL_MISS_NONE:
-		return types.HitTypeNone
-	case SPELL_MISS_MISS:
-		return types.HitTypeMiss
-	case SPELL_MISS_RESIST:
-		return types.HitTypeFullResist
-	case SPELL_MISS_DODGE:
-		return types.HitTypeDodge
-	case SPELL_MISS_PARRY:
-		return types.HitTypeParry
-	case SPELL_MISS_BLOCK:
-		return types.HitTypeFullBlock
-	case SPELL_MISS_EVADE:
-		return types.HitTypeEvade
-	case SPELL_MISS_IMMUNE:
-		return types.HitTypeImmune
-	case SPELL_MISS_IMMUNE2:
-		return types.HitTypeImmune
-	case SPELL_MISS_DEFLECT:
-		return types.HitTypeDeflect
-	case SPELL_MISS_ABSORB:
-		return types.HitTypeFullAbsorb
-	case SPELL_MISS_REFLECT:
-		return types.HitTypeReflect
-	default:
-		return types.HitTypeNone
-	}
-}
+func (m *Matched) SpellMissInfo() types.HitType { return next.SpellMissHit(m.Int32()) }
 
 func (m *Matched) Uint64() uint64 {
 	return parseMatch(m, func(s string) (uint64, error) {
