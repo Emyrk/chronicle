@@ -16,7 +16,7 @@ npm run dev
 
 The local migration step initializes the existing deployment-telemetry dashboard. The web analytics page itself does not query D1, but its navigation links back to that dashboard.
 
-Open `http://localhost:8787/internal/analytics`. Cloudflare Access is not applied by local Wrangler, and the dashboard displays a **Preview data** badge while `ANALYTICS_MOCK=true`.
+Open `http://localhost:8787/internal/analytics`. Cloudflare Access is not applied by local Wrangler, and the dashboard displays a **DEMO** freshness marker while `ANALYTICS_MOCK=true`.
 
 The analytics JSON endpoint is:
 
@@ -24,7 +24,7 @@ The analytics JSON endpoint is:
 http://localhost:8787/internal/api/v1/analytics/dashboard?days=30
 ```
 
-Supported periods are 7, 30, and 90 completed days. Successful responses use `Cache-Control: private, max-age=300`, allowing five minutes of browser-local caching without a shared or database cache.
+Supported periods are 7, 30, and 90 completed days. Successful API responses use `Cache-Control: private, max-age=300` for browser-local caching. Live GA4 dashboard data also uses the shared one-hour server cache described below.
 
 The preview includes a sanitized aggregate snapshot of the validated September 9–October 8, 2026 GA4 data for product families, server mix, leaderboard modes, and raid categories. The preview never includes player, guild, account, character, report, or instance identifiers. Seven- and 90-day preview values are scaled design fixtures; live mode queries the selected period from GA4.
 
@@ -85,9 +85,34 @@ Cloudflare Access is not applied by local Wrangler. With `ANALYTICS_MOCK=true`, 
 http://localhost:8787/device/api/v1/analytics/dashboard?days=30
 ```
 
+## Fixed analytics views and domain comparison
+
+- `/internal/analytics`: overview KPIs, period changes, daily selected-domain traffic and domain comparison.
+- `/internal/analytics/pages`: hostname + path ranking and route families by hostname. Both include current/previous views, traffic shares, and absolute/percentage changes.
+- `/internal/analytics/growth`: all selected domains, daily absolute lines or normalized lines (100 = each domain's previous-period daily average). A zero baseline is explicitly marked, not reported as infinite growth.
+- `/internal/analytics/details`: the original detailed dashboard, including geography, acquisition, non-China traffic and leaderboard breakdowns.
+
+All fixed views support `days=7|30|90` and repeated exact `domain` parameters. Example:
+
+```text
+/internal/analytics/growth?days=90&domain=octo.chronicleclassic.com&domain=capy.chronicleclassic.com&mode=normalized
+```
+
+Omit `domain` for all domains; `domain=` is an explicitly empty selection. Domain changes reuse the loaded hostname-dimensional reports in the browser and do not query GA4. Domain links open a linkable single-domain Growth view. Shares use the selected domains as their denominator. Unique active users are never summed across domains: the all-domain card uses GA4's real aggregate, single-domain selection uses that domain's users, and a partial multi-domain selection shows users per domain only. Single-domain selection also shows users, sessions and engaged sessions with their previous-period values and changes. Partial multi-domain selections show these nonadditive metrics only per domain. The All domains selection stays implicit in the URL and includes newly appearing domains when the period changes.
+
+Pages use `pagePath` (no query strings); route family classification shares the existing Explore rules. Daily charts cover completed dates and fill absent report rows with zero. Previous-only domains and pages remain visible. All returned hostnames are included, not just the top N. Reports are bounded to 50,000 rows and fail rather than silently cache truncated data; very large properties will need pagination before exceeding that bound. GA4 processing latency and privacy thresholds still apply.
+
+### One-hour server cache
+
+HTML clients, Explore, and the device API call the same live loader. Cloudflare Cache API entries are keyed by property ID, report version, timezone, and exact current/previous dates. The property timezone is discovered from GA4 metadata (also cached for one hour); absence is an error, never an implicit UTC fallback. Relative dates are used only for that timezone-discovery probe. The actual data reports and cache key use the same property-local completed-date boundaries, even across midnight or daylight-saving changes.
+
+Cache API storage is **per Cloudflare colocation**, not a globally consistent cache. Concurrent same-key requests are coalesced **within one Worker isolate**. Different isolates/colocations may independently refill. No KV, D1, Durable Object, or other new infrastructure is required. Cache failures are nonfatal; failed upstream loads are not cached and the next request retries. OAuth and each GA4 request have 15-second abort deadlines; cache reads/writes have one-second wait bounds. The original `generatedAt` survives cache hits and appears in the dashboard freshness line. Mock mode bypasses live caching.
+
+Only internal data envelopes are cached at synthetic, non-routed `analytics-cache.invalid` keys. No private HTML/API response is stored at a public application URL. Cloudflare Access must continue protecting **both `/internal/*` and `/device/*`**; this Worker relies on those edge policies, not application-side JWT verification. Local Wrangler has no Access enforcement. Route tests verify private headers and wiring, not production edge policy configuration.
+
 ## Drill-down views
 
-Use the overview for monitoring and follow its linked route families or server names into:
+Use the fixed views for monitoring, then open Explore or follow the original Detailed reports links into:
 
 ```text
 /internal/analytics/explore?focus=reports

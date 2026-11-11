@@ -4,7 +4,7 @@ import type { Env } from "../types";
 
 const analyticsDashboard = new Hono<{ Bindings: Env }>();
 
-analyticsDashboard.get("/internal/analytics", (c) => {
+analyticsDashboard.get("/internal/analytics/details", (c) => {
   c.header("Cache-Control", "private, no-cache");
   return c.html(
     <html lang="en">

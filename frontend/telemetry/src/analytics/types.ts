@@ -21,6 +21,10 @@ export interface AnalyticsHostRow {
   trend30d: number[];
   activeUsers: number;
   sessions: number;
+  engagedSessions?: number;
+  previousActiveUsers?: number;
+  previousSessions?: number;
+  previousEngagedSessions?: number;
   nonChinaPageViews: number;
   previousNonChinaPageViews: number;
   nonChinaChangePercent: number | null;
@@ -94,6 +98,14 @@ export interface AnalyticsDashboard {
     sessions: AnalyticsMetric;
     engagedSessions: AnalyticsMetric;
   };
+  pages?: Array<{
+    hostname: string;
+    path: string;
+    family: string;
+    pageViews: number;
+    previousPageViews: number;
+  }>;
+  dailyHosts?: Array<{ date: string; hostname: string; pageViews: number }>;
   timeseries: AnalyticsTimeseriesPoint[];
   hosts: AnalyticsHostRow[];
   acquisition: AnalyticsAcquisitionRow[];
