@@ -181,6 +181,7 @@ from a CC-v2 line without its newline.
 | Casts | SPELL_START, SPELL_GO |
 | Auras | AURA_CAST, BUFF_ADD, BUFF_REM, DEBUFF_ADD, DEBUFF_REM |
 | Resources/dispel | ENERGIZE, DISPEL |
+| Metadata/capabilities | RG, RAID_COMPOSITION, UNIT_STATE, UNIT_INFO, ZONE_INFO, LOOT_TRADE |
 
  It returns the existing concrete
 `*messages.Damage`, `*messages.Heal`, `*messages.Slain` payloads, plus the existing
@@ -287,32 +288,30 @@ can explicitly retain this owner across consecutive files; separate decoder
 instances provide isolation. No automatic continuity/reset policy is imposed.
 
 Headers advertise version strings but do **not** establish observed raid-layout,
-resource or position capabilities. Those flags are set by successfully parsed
-RG/RAID_COMPOSITION/UNIT_STATE records in legacy code and are not claimed here.
+resource or position capabilities. RG/RAID_COMPOSITION and UNIT_STATE now update an explicit capability owner in
+the stateful decoder. UNIT_STATE preserves the partial-observation quirk below.
 
 ### Remaining stateful/outcome work
 
-Roster, combatant, identity and zone observations and the ordered synthetic
-pipeline remain unmigrated. SPELL_FAIL silently ignores client failures and can
+Combatant/transmog reconciliation and the ordered synthetic pipeline remain
+unmigrated. The decoded roster/zone/unit messages do not establish an identity
+registry or change unknown-unit semantics. SPELL_FAIL silently ignores client failures and can
 swallow field errors; BUFF_DURATION/DEBUFF_DURATION return placeholder Skip
 messages. They remain `ErrUnsupportedRecord` until outcome policy is approved.
 Loot and other metadata records also remain unsupported.
 
-The saved public Capybara fixture has 185,808 records: 178,319 are now covered
-by supported event names (including 31 HEADER records), and the remaining 7,489
+The saved public Capybara fixture has 185,808 records: 179,000 are now covered
+by supported event names (including 31 HEADER records), and the remaining 6,808
 are exactly:
 
 | Unsupported record | Count |
 | --- | ---: |
 | SPELL_FAIL | 6,103 |
-| UNIT_INFO | 663 |
 | COMBATANT_INFO | 374 |
 | COMBATANT_TRANSMOG | 138 |
 | LOOT | 109 |
 | COMBATANT_TALENTS | 73 |
-| ZONE_INFO | 15 |
 | COMBAT_END | 9 |
-| LOOT_TRADE | 3 |
 | CHANNEL_START | 1 |
 | CHANNEL_UPDATE | 1 |
 
@@ -321,3 +320,31 @@ header implementation overlay matched all 31 real headers and 185,808 clock
 transitions; nonheader timestamp probes deliberately avoid parsing unsupported
 metadata. Tests additionally cover malformed/repeated headers, semantic/lexical
 errors, fatal jumps and isolation between separately constructed file decoders.
+
+### Metadata and capability observations
+
+The roster layouts (RG/RAID_COMPOSITION), UNIT_STATE telemetry, UNIT_INFO,
+ZONE_INFO and LOOT_TRADE are extracted implementations, shared with legacy.
+UNIT_INFO retains existing player semantics, buff parsing, optional owner/charm
+and the existing narrow `unitname.ByGUID` fallback only for unknown nonplayers.
+This is wire-to-message decoding, not roster reconciliation or a new registry.
+
+`MetadataResult` separates messages from observed capability deltas. The stateful
+decoder exposes its accumulated `Capabilities()` separately from HeaderState.
+**Apply deltas even on error:** legacy UNIT_STATE sets resource capability after
+valid health/power fields, before parsing map/coordinates. Bad later coordinates
+return no messages but retain that observation. Both paths deliberately preserve
+this quirk. RG/RAID_COMPOSITION only observe a raid layout after full validation.
+Stateless DecodeRecord emits messages but does not retain capabilities.
+
+Generated metadata tests use synthetic names/GUIDs; no further raw public player
+metadata is checked in. Full saved-source overlay replay executes the original
+parser in order (including all headers and version-dependent combatant handling),
+compares every supported message plus clock/version/capability state, and counts
+unsupported records separately: 179,000 matched and 6,808 unsupported.
+
+Next concrete boundaries are combatant/transmog caches and dataset-dependent
+talent normalization, plus the ordered synthetic pipeline. LOOT remains outside
+this extraction because its legacy short-item payload can panic at `rest[3]`;
+it needs an explicit malformed-input decision before being exposed as safe
+record decoding. SPELL_FAIL/aura-duration outcome decisions remain pending.
