@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 import { CheckCircle } from "lucide-react";
 import { TooltipProvider } from "@/components/ui/Tooltip/tooltip";
-import { EncounterPhaseStrip, type EncounterPhaseStripVariant } from "./EncounterPhaseStrip";
+import { EncounterPhaseStrip } from "./EncounterPhaseStrip";
 import type { Encounter, EncounterPhase } from "./InstancePage";
 import { formatDurationMs } from "./phaseTimeRange";
 
@@ -40,15 +40,7 @@ function encounterWithPhases(name: string, spec: readonly [string, number][]): E
 }
 
 /** Mirrors the selected boss row in the instance sidebar (267px wide, minus its right padding). */
-function SelectedEncounterRow({
-  encounter,
-  width,
-  variant = "chips",
-}: {
-  encounter: Encounter;
-  width: number;
-  variant?: EncounterPhaseStripVariant;
-}) {
+function SelectedEncounterRow({ encounter, width }: { encounter: Encounter; width: number }) {
   const [activePhaseId, setActivePhaseId] = useState<string | null>(null);
   const phases = encounter.phases ?? [];
   const durationMs = Date.parse(encounter.end_time) - Date.parse(encounter.start_time);
@@ -64,7 +56,6 @@ function SelectedEncounterRow({
           encounter={encounter}
           phases={phases}
           activePhaseId={activePhaseId}
-          variant={variant}
           onSelectPhase={(range) => {
             const match = phases.find((p) => p.start_offset_ms === range.start_offset_ms);
             setActivePhaseId((current) => (current === match?.id ? null : match?.id ?? null));
@@ -91,7 +82,6 @@ const meta = {
   args: { width: 251 },
   argTypes: {
     width: { control: { type: "range", min: 200, max: 600, step: 1 } },
-    variant: { control: "inline-radio", options: ["chips", "list", "bar"] },
   },
 } satisfies Meta<typeof SelectedEncounterRow>;
 
@@ -151,32 +141,14 @@ export const LopsidedPhases: Story = {
   },
 };
 
-const VARIANTS: { variant: EncounterPhaseStripVariant; label: string }[] = [
-  { variant: "chips", label: "Current (chips)" },
-  { variant: "list", label: "Option 1: list" },
-  { variant: "bar", label: "Option 3: segmented bar" },
-];
-
-/** Every layout prototype against every fixture. Click phases to see the selected state. */
-export const Comparison: Story = {
+/** Every fixture stacked, as a sidebar would show them one at a time. Toggle the list icon on any row. */
+export const AllEncounters: Story = {
   args: { encounter: LichKing.args!.encounter! },
   render: ({ width }) => (
-    <div className="grid gap-x-10 gap-y-8" style={{ gridTemplateColumns: `repeat(3, ${width}px)` }}>
-      {VARIANTS.map(({ label }) => (
-        <h3 key={label} className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          {label}
-        </h3>
+    <div className="flex flex-col gap-6">
+      {[TwoPhases, LichKing, ManyPhases, LopsidedPhases].map((story) => (
+        <SelectedEncounterRow key={story.args!.encounter!.id} encounter={story.args!.encounter!} width={width} />
       ))}
-      {[TwoPhases, LichKing, ManyPhases, LopsidedPhases].flatMap((story) =>
-        VARIANTS.map(({ variant }) => (
-          <SelectedEncounterRow
-            key={`${story.args!.encounter!.id}-${variant}`}
-            encounter={story.args!.encounter!}
-            width={width}
-            variant={variant}
-          />
-        )),
-      )}
     </div>
   ),
 };
