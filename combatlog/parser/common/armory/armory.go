@@ -233,6 +233,7 @@ func (g *Tracker) Insert(ctx context.Context, udb *unitdb.Units, instanceID uuid
 			Class:   db2sdk.HeroClassToDB(player.HeroClass),
 			Gender:  db2sdk.HeroGenderToDB(player.Gender),
 			Race:    db2sdk.HeroRaceToDB(player.Race),
+			Faction: db2sdk.HeroFactionToDB(player.Faction),
 			Gear:    gearPtr,
 			Level:   level,
 			Talents: dbTalents,

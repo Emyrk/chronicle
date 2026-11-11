@@ -9,6 +9,16 @@ describe("census race presentation", () => {
     expect(raceFaction("BloodElf", NIGHTMARE_OF_URSOL)).toBe("Alliance");
   });
 
+  it("uses an explicit faction for a bifactional race", () => {
+    expect(raceFaction("Skyborne", [], "Alliance")).toBe("Alliance");
+    expect(raceFaction("Skyborne", [], "Horde")).toBe("Horde");
+  });
+
+  it("presents Skyborne without assigning a fixed faction", () => {
+    expect(raceName("Skyborne", [])).toBe("Skyborne");
+    expect(raceFaction("Skyborne", [])).toBe("Unknown");
+  });
+
   it("presents Blood Elves as Horde for other flavors", () => {
     const chromieFlavor = ["wrath", "azerothcore", "chromiecraft"];
 

@@ -1111,11 +1111,12 @@ export interface BulkUpdateTenantsRequest {
 
 // From chroniclesdk/census.go
 /**
- * CensusEntry represents a count of unique players for a given class/race pair.
+ * CensusEntry represents a count of unique players for a class, race, and observed faction.
  */
 export interface CensusEntry {
     readonly class: string;
     readonly race: string;
+    readonly faction?: WoWHeroFaction;
     readonly count: number;
 }
 
@@ -7315,14 +7316,19 @@ export type WoWHeroClasses = "DEATHKNIGHT" | "DRUID" | "HUNTER" | "MAGE" | "PALA
 export const WoWHeroClasseses: WoWHeroClasses[] = ["DEATHKNIGHT", "DRUID", "HUNTER", "MAGE", "PALADIN", "PRIEST", "ROGUE", "SHAMAN", "UNKNOWN", "WARLOCK", "WARRIOR"];
 
 // From types/constants.go
+export type WoWHeroFaction = "Alliance" | "Horde";
+
+export const WoWHeroFactions: WoWHeroFaction[] = ["Alliance", "Horde"];
+
+// From types/constants.go
 export type WoWHeroGender = 3 | 2 | 0 | 1;
 
 export const WoWHeroGenders: WoWHeroGender[] = [3, 2, 0, 1];
 
 // From types/constants.go
-export type WoWHeroRaces = "BloodElf" | "Draenei" | "Dwarf" | "Gnome" | "Goblin" | "Human" | "NightElf" | "Orc" | "Scourge" | "Tauren" | "Troll" | "Unknown";
+export type WoWHeroRaces = "BloodElf" | "Draenei" | "Dwarf" | "Gnome" | "Goblin" | "Human" | "NightElf" | "Orc" | "Scourge" | "Skyborne" | "Tauren" | "Troll" | "Unknown";
 
-export const WoWHeroRaceses: WoWHeroRaces[] = ["BloodElf", "Draenei", "Dwarf", "Gnome", "Goblin", "Human", "NightElf", "Orc", "Scourge", "Tauren", "Troll", "Unknown"];
+export const WoWHeroRaceses: WoWHeroRaces[] = ["BloodElf", "Draenei", "Dwarf", "Gnome", "Goblin", "Human", "NightElf", "Orc", "Scourge", "Skyborne", "Tauren", "Troll", "Unknown"];
 
 // From types/constants.go
 export type WoWHitType = 4 | 512 | 32768 | 2048 | 16384 | 1024 | 128 | 262144 | 16 | 256 | 2 | 8192 | 65536 | 4194304 | 32 | 0 | 1 | 4096 | 64 | 131072 | 8 | 2097152 | 1048576 | 524288;

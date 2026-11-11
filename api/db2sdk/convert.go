@@ -778,6 +778,17 @@ func HeroRaceToDB(race types.HeroRaces) database.WowPlayableRace {
 	return f
 }
 
+func HeroFactionToDB(faction *types.HeroFaction) database.NullWowPlayerFaction {
+	if faction == nil {
+		return database.NullWowPlayerFaction{}
+	}
+	value := database.WowPlayerFaction(*faction)
+	return database.NullWowPlayerFaction{
+		WowPlayerFaction: value,
+		Valid:            value.Valid(),
+	}
+}
+
 func HeroGender(gender database.WowPlayableGender) types.HeroGender {
 	switch gender {
 	case database.WowPlayableGenderMale:

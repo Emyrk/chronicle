@@ -22,8 +22,11 @@ type CastActions string
 // ENUM(DRUID,HUNTER,MAGE,PALADIN,PRIEST,ROGUE,SHAMAN,WARLOCK,WARRIOR,DEATHKNIGHT,UNKNOWN)
 type HeroClasses string
 
-// ENUM(Scourge,Orc,Troll,Tauren,Goblin,Human,Gnome,Dwarf,NightElf,BloodElf,Draenei,Unknown)
+// ENUM(Scourge,Orc,Troll,Tauren,Goblin,Human,Gnome,Dwarf,NightElf,BloodElf,Draenei,Skyborne,Unknown)
 type HeroRaces string
+
+// ENUM(Alliance,Horde)
+type HeroFaction string
 
 // ENUM(NotSet,Unknown,Male,Female)
 type HeroGender int

@@ -191,9 +191,9 @@ VALUES
 
 -- name: InsertInstancePlayers :batchexec
 INSERT INTO
-  log_instance_players (instance_id, unit_guid, name, level, class, race, guild_id)
+  log_instance_players (instance_id, unit_guid, name, level, class, race, faction, guild_id)
 VALUES
-  ($1, $2, $3, $4, $5, $6, $7)
+  ($1, $2, $3, $4, $5, $6, $7, $8)
 ;
 
 -- name: InsertEncounterCharacterFights :batchexec

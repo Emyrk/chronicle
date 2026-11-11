@@ -1199,6 +1199,7 @@ func (w *logParseInstanceBuilder) participate(ids ...guid.GUID) {
 				Level:      level,
 				Class:      db2sdk.HeroClassToDB(playerData.HeroClass),
 				Race:       validRaceOrUnknown(playerData.Race),
+				Faction:    db2sdk.HeroFactionToDB(playerData.Faction),
 			})
 			continue
 		}
@@ -1235,6 +1236,7 @@ func (w *logParseInstanceBuilder) seen(ids ...guid.GUID) {
 					Level:      -1,
 					Class:      db2sdk.HeroClassToDB(playerData.HeroClass),
 					Race:       validRaceOrUnknown(playerData.Race),
+					Faction:    db2sdk.HeroFactionToDB(playerData.Faction),
 				})
 				continue
 			}

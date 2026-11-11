@@ -8,6 +8,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestParseHeroRacesSkyborne(t *testing.T) {
+	t.Parallel()
+
+	for _, input := range []string{"Skyborne", "skyborne"} {
+		race, err := types.ParseHeroRaces(input)
+		require.NoError(t, err)
+		require.Equal(t, types.HeroRacesSkyborne, race)
+	}
+}
+
 func TestParseSpell(t *testing.T) {
 	t.Parallel()
 

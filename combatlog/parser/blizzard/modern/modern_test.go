@@ -708,6 +708,7 @@ func testCombatantInfoV22ResolvesClassTalentsAndGear(t *testing.T, auraList stri
 		Armor:                  24,
 		SpecID:                 25,
 	}, combatantInfo.V22)
+	require.Equal(t, ptr.Ref(types.HeroFactionAlliance), combatantInfo.Faction)
 	require.NotNil(t, combatantInfo.Talents)
 	assert.Equal(t, [3]uint8{10, 0, 0}, combatantInfo.Talents.Summary)
 	assert.Equal(t, []uint8{5, 5}, combatantInfo.Talents.Trees[0])
@@ -762,6 +763,7 @@ func TestCombatantInfoV22ParsesStatsFromModernLog(t *testing.T) {
 		Armor:                  1826,
 		SpecID:                 1486,
 	}, combatantInfo.V22)
+	require.Equal(t, ptr.Ref(types.HeroFactionHorde), combatantInfo.Faction)
 	require.Len(t, combatantInfo.GearSetups, 1)
 	assert.Equal(t, 250532, combatantInfo.GearSetups[0].ItemID)
 }
@@ -811,6 +813,7 @@ func TestCombatantInfoV22ParsesShorterLayout(t *testing.T) {
 		Armor:                  0,
 		SpecID:                 1486,
 	}, combatantInfo.V22)
+	require.Equal(t, ptr.Ref(types.HeroFactionHorde), combatantInfo.Faction)
 	require.Len(t, combatantInfo.GearSetups, 1)
 	assert.Equal(t, 250532, combatantInfo.GearSetups[0].ItemID)
 }

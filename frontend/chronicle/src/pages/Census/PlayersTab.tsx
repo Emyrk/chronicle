@@ -27,7 +27,7 @@ export function PlayersTab({ data, isLoading, flavor }: PlayersTabProps) {
 
     for (const entry of data) {
       total += entry.count;
-      const faction = raceFaction(entry.race, flavor);
+      const faction = raceFaction(entry.race, flavor, entry.faction);
       if (faction === "Horde") horde += entry.count;
       else if (faction === "Alliance") alliance += entry.count;
       else unknown += entry.count;
@@ -46,8 +46,9 @@ export function PlayersTab({ data, isLoading, flavor }: PlayersTabProps) {
     let comboMax = 0;
     for (const entry of data) {
       const key = `${entry.class}|${entry.race}`;
-      comboMap.set(key, entry.count);
-      if (entry.count > comboMax) comboMax = entry.count;
+      const count = (comboMap.get(key) ?? 0) + entry.count;
+      comboMap.set(key, count);
+      if (count > comboMax) comboMax = count;
     }
 
     const classNames = classSorted.map(([c]) => c);

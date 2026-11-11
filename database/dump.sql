@@ -126,7 +126,13 @@ CREATE TYPE wow_playable_race AS ENUM (
     'NightElf',
     'BloodElf',
     'Unknown',
-    'Draenei'
+    'Draenei',
+    'Skyborne'
+);
+
+CREATE TYPE wow_player_faction AS ENUM (
+    'Alliance',
+    'Horde'
 );
 
 CREATE FUNCTION cleanup_orphaned_layout() RETURNS trigger
@@ -1093,7 +1099,8 @@ CREATE TABLE game_players (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_from_instance uuid,
     level smallint DEFAULT 0 NOT NULL,
-    talents jsonb DEFAULT 'null'::jsonb NOT NULL
+    talents jsonb DEFAULT 'null'::jsonb NOT NULL,
+    faction wow_player_faction
 );
 
 CREATE TABLE gear_lists (
@@ -2333,7 +2340,8 @@ CREATE TABLE log_instance_players (
     level integer NOT NULL,
     class wow_playable_class NOT NULL,
     race wow_playable_race NOT NULL,
-    guild_id uuid
+    guild_id uuid,
+    faction wow_player_faction
 );
 
 CREATE TABLE log_instance_raid_group_snapshots (

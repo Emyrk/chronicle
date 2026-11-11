@@ -1275,9 +1275,9 @@ func (b *InsertInstanceLootBatchResults) Close() error {
 
 const insertInstancePlayers = `-- name: InsertInstancePlayers :batchexec
 INSERT INTO
-  log_instance_players (instance_id, unit_guid, name, level, class, race, guild_id)
+  log_instance_players (instance_id, unit_guid, name, level, class, race, faction, guild_id)
 VALUES
-  ($1, $2, $3, $4, $5, $6, $7)
+  ($1, $2, $3, $4, $5, $6, $7, $8)
 `
 
 type InsertInstancePlayersBatchResults struct {
@@ -1287,13 +1287,14 @@ type InsertInstancePlayersBatchResults struct {
 }
 
 type InsertInstancePlayersParams struct {
-	InstanceID uuid.UUID        `db:"instance_id" json:"instance_id"`
-	UnitGuid   guid.GUID        `db:"unit_guid" json:"unit_guid"`
-	Name       string           `db:"name" json:"name"`
-	Level      int32            `db:"level" json:"level"`
-	Class      WowPlayableClass `db:"class" json:"class"`
-	Race       WowPlayableRace  `db:"race" json:"race"`
-	GuildID    uuid.NullUUID    `db:"guild_id" json:"guild_id"`
+	InstanceID uuid.UUID            `db:"instance_id" json:"instance_id"`
+	UnitGuid   guid.GUID            `db:"unit_guid" json:"unit_guid"`
+	Name       string               `db:"name" json:"name"`
+	Level      int32                `db:"level" json:"level"`
+	Class      WowPlayableClass     `db:"class" json:"class"`
+	Race       WowPlayableRace      `db:"race" json:"race"`
+	Faction    NullWowPlayerFaction `db:"faction" json:"faction"`
+	GuildID    uuid.NullUUID        `db:"guild_id" json:"guild_id"`
 }
 
 func (q *sqlQuerier) InsertInstancePlayers(ctx context.Context, arg []InsertInstancePlayersParams) *InsertInstancePlayersBatchResults {
@@ -1306,6 +1307,7 @@ func (q *sqlQuerier) InsertInstancePlayers(ctx context.Context, arg []InsertInst
 			a.Level,
 			a.Class,
 			a.Race,
+			a.Faction,
 			a.GuildID,
 		}
 		batch.Queue(insertInstancePlayers, vals...)
@@ -3459,19 +3461,20 @@ const upsertPlayers = `-- name: UpsertPlayers :batchexec
 INSERT INTO
   game_players (
     id, realm_id, name, guild_id,
-    class, gender, race,
+    class, gender, race, faction,
     gear, level, talents,
     updated_from_instance,
     updated_at
   )
 VALUES
-  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 ON CONFLICT (id, realm_id) DO UPDATE
   SET name = EXCLUDED.name,
       guild_id = EXCLUDED.guild_id,
       class = EXCLUDED.class,
       race = EXCLUDED.race,
       gender = EXCLUDED.gender,
+      faction = COALESCE(EXCLUDED.faction, game_players.faction),
       gear = CASE
         WHEN EXCLUDED.gear IS NOT NULL AND EXCLUDED.gear != '[]'::jsonb
         THEN EXCLUDED.gear
@@ -3497,18 +3500,19 @@ type UpsertPlayersBatchResults struct {
 }
 
 type UpsertPlayersParams struct {
-	ID                  guid.GUID          `db:"id" json:"id"`
-	RealmID             uuid.UUID          `db:"realm_id" json:"realm_id"`
-	Name                string             `db:"name" json:"name"`
-	GuildID             uuid.NullUUID      `db:"guild_id" json:"guild_id"`
-	Class               WowPlayableClass   `db:"class" json:"class"`
-	Gender              WowPlayableGender  `db:"gender" json:"gender"`
-	Race                WowPlayableRace    `db:"race" json:"race"`
-	Gear                *PlayerOutfit      `db:"gear" json:"gear"`
-	Level               int16              `db:"level" json:"level"`
-	Talents             *PlayerTalents     `db:"talents" json:"talents"`
-	UpdatedFromInstance uuid.NullUUID      `db:"updated_from_instance" json:"updated_from_instance"`
-	UpdatedAt           pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	ID                  guid.GUID            `db:"id" json:"id"`
+	RealmID             uuid.UUID            `db:"realm_id" json:"realm_id"`
+	Name                string               `db:"name" json:"name"`
+	GuildID             uuid.NullUUID        `db:"guild_id" json:"guild_id"`
+	Class               WowPlayableClass     `db:"class" json:"class"`
+	Gender              WowPlayableGender    `db:"gender" json:"gender"`
+	Race                WowPlayableRace      `db:"race" json:"race"`
+	Faction             NullWowPlayerFaction `db:"faction" json:"faction"`
+	Gear                *PlayerOutfit        `db:"gear" json:"gear"`
+	Level               int16                `db:"level" json:"level"`
+	Talents             *PlayerTalents       `db:"talents" json:"talents"`
+	UpdatedFromInstance uuid.NullUUID        `db:"updated_from_instance" json:"updated_from_instance"`
+	UpdatedAt           pgtype.Timestamptz   `db:"updated_at" json:"updated_at"`
 }
 
 func (q *sqlQuerier) UpsertPlayers(ctx context.Context, arg []UpsertPlayersParams) *UpsertPlayersBatchResults {
@@ -3522,6 +3526,7 @@ func (q *sqlQuerier) UpsertPlayers(ctx context.Context, arg []UpsertPlayersParam
 			a.Class,
 			a.Gender,
 			a.Race,
+			a.Faction,
 			a.Gear,
 			a.Level,
 			a.Talents,

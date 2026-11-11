@@ -778,6 +778,7 @@ const (
 	WowPlayableRaceBloodElf WowPlayableRace = "BloodElf"
 	WowPlayableRaceUnknown  WowPlayableRace = "Unknown"
 	WowPlayableRaceDraenei  WowPlayableRace = "Draenei"
+	WowPlayableRaceSkyborne WowPlayableRace = "Skyborne"
 )
 
 func (e *WowPlayableRace) Scan(src interface{}) error {
@@ -828,7 +829,8 @@ func (e WowPlayableRace) Valid() bool {
 		WowPlayableRaceNightElf,
 		WowPlayableRaceBloodElf,
 		WowPlayableRaceUnknown,
-		WowPlayableRaceDraenei:
+		WowPlayableRaceDraenei,
+		WowPlayableRaceSkyborne:
 		return true
 	}
 	return false
@@ -848,6 +850,65 @@ func AllWowPlayableRaceValues() []WowPlayableRace {
 		WowPlayableRaceBloodElf,
 		WowPlayableRaceUnknown,
 		WowPlayableRaceDraenei,
+		WowPlayableRaceSkyborne,
+	}
+}
+
+type WowPlayerFaction string
+
+const (
+	WowPlayerFactionAlliance WowPlayerFaction = "Alliance"
+	WowPlayerFactionHorde    WowPlayerFaction = "Horde"
+)
+
+func (e *WowPlayerFaction) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = WowPlayerFaction(s)
+	case string:
+		*e = WowPlayerFaction(s)
+	default:
+		return fmt.Errorf("unsupported scan type for WowPlayerFaction: %T", src)
+	}
+	return nil
+}
+
+type NullWowPlayerFaction struct {
+	WowPlayerFaction WowPlayerFaction `json:"wow_player_faction"`
+	Valid            bool             `json:"valid"` // Valid is true if WowPlayerFaction is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullWowPlayerFaction) Scan(value interface{}) error {
+	if value == nil {
+		ns.WowPlayerFaction, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.WowPlayerFaction.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullWowPlayerFaction) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.WowPlayerFaction), nil
+}
+
+func (e WowPlayerFaction) Valid() bool {
+	switch e {
+	case WowPlayerFactionAlliance,
+		WowPlayerFactionHorde:
+		return true
+	}
+	return false
+}
+
+func AllWowPlayerFactionValues() []WowPlayerFaction {
+	return []WowPlayerFaction{
+		WowPlayerFactionAlliance,
+		WowPlayerFactionHorde,
 	}
 }
 
@@ -1529,19 +1590,20 @@ type ExternalCharacterLinkSync struct {
 }
 
 type GamePlayer struct {
-	ID                  guid.GUID          `db:"id" json:"id"`
-	RealmID             uuid.UUID          `db:"realm_id" json:"realm_id"`
-	CreatedAt           pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	GuildID             uuid.NullUUID      `db:"guild_id" json:"guild_id"`
-	Name                string             `db:"name" json:"name"`
-	Class               WowPlayableClass   `db:"class" json:"class"`
-	Gender              WowPlayableGender  `db:"gender" json:"gender"`
-	Race                WowPlayableRace    `db:"race" json:"race"`
-	Gear                *PlayerOutfit      `db:"gear" json:"gear"`
-	UpdatedAt           pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
-	UpdatedFromInstance uuid.NullUUID      `db:"updated_from_instance" json:"updated_from_instance"`
-	Level               int16              `db:"level" json:"level"`
-	Talents             *PlayerTalents     `db:"talents" json:"talents"`
+	ID                  guid.GUID            `db:"id" json:"id"`
+	RealmID             uuid.UUID            `db:"realm_id" json:"realm_id"`
+	CreatedAt           pgtype.Timestamptz   `db:"created_at" json:"created_at"`
+	GuildID             uuid.NullUUID        `db:"guild_id" json:"guild_id"`
+	Name                string               `db:"name" json:"name"`
+	Class               WowPlayableClass     `db:"class" json:"class"`
+	Gender              WowPlayableGender    `db:"gender" json:"gender"`
+	Race                WowPlayableRace      `db:"race" json:"race"`
+	Gear                *PlayerOutfit        `db:"gear" json:"gear"`
+	UpdatedAt           pgtype.Timestamptz   `db:"updated_at" json:"updated_at"`
+	UpdatedFromInstance uuid.NullUUID        `db:"updated_from_instance" json:"updated_from_instance"`
+	Level               int16                `db:"level" json:"level"`
+	Talents             *PlayerTalents       `db:"talents" json:"talents"`
+	Faction             NullWowPlayerFaction `db:"faction" json:"faction"`
 }
 
 // One gear snapshot per (player, log instance): the outfit worn as of the last COMBATANT_INFO in that instance. Powers armory item-level trends and gear-over-time views.
@@ -2592,13 +2654,14 @@ type LogInstanceEvent struct {
 }
 
 type LogInstancePlayer struct {
-	InstanceID uuid.UUID        `db:"instance_id" json:"instance_id"`
-	UnitGuid   guid.GUID        `db:"unit_guid" json:"unit_guid"`
-	Name       string           `db:"name" json:"name"`
-	Level      int32            `db:"level" json:"level"`
-	Class      WowPlayableClass `db:"class" json:"class"`
-	Race       WowPlayableRace  `db:"race" json:"race"`
-	GuildID    uuid.NullUUID    `db:"guild_id" json:"guild_id"`
+	InstanceID uuid.UUID            `db:"instance_id" json:"instance_id"`
+	UnitGuid   guid.GUID            `db:"unit_guid" json:"unit_guid"`
+	Name       string               `db:"name" json:"name"`
+	Level      int32                `db:"level" json:"level"`
+	Class      WowPlayableClass     `db:"class" json:"class"`
+	Race       WowPlayableRace      `db:"race" json:"race"`
+	GuildID    uuid.NullUUID        `db:"guild_id" json:"guild_id"`
+	Faction    NullWowPlayerFaction `db:"faction" json:"faction"`
 }
 
 type LogInstanceRaidGroupSnapshot struct {

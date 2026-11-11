@@ -13,6 +13,7 @@ const RACE_TO_FACTION: Record<string, Faction> = {
   Gnome: "Alliance",
   NightElf: "Alliance",
   Draenei: "Alliance",
+  Skyborne: "Unknown",
   Unknown: "Unknown",
 };
 
@@ -22,7 +23,14 @@ const RACE_DISPLAY: Record<string, string> = {
   Scourge: "Undead",
 };
 
-export function raceFaction(race: string, flavor: readonly string[]): Faction {
+export function raceFaction(
+  race: string,
+  flavor: readonly string[],
+  explicitFaction?: string,
+): Faction {
+  if (explicitFaction === "Alliance" || explicitFaction === "Horde") {
+    return explicitFaction;
+  }
   if (race === "BloodElf") {
     return flavor.includes(NIGHTMARE_OF_URSOL_FLAVOR) ? "Alliance" : "Horde";
   }

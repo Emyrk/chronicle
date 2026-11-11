@@ -70,7 +70,7 @@ func TestInstancePricingFaction(t *testing.T) {
 	instanceID := uuid.New()
 
 	t.Run("merged", func(t *testing.T) {
-		faction, reason, err := instancePricingFaction(context.Background(), instancePlayersStub{}, instanceID, string(chroniclesdk.PricingAuctionHouseMerged))
+		faction, reason, err := instancePricingFaction(context.Background(), instancePlayersStub{}, instanceID, string(chroniclesdk.PricingAuctionHouseMerged), nil)
 		require.NoError(t, err)
 		require.Empty(t, reason)
 		require.Equal(t, chroniclesdk.AuctionHouseFactionMerged, faction)
@@ -80,17 +80,32 @@ func TestInstancePricingFaction(t *testing.T) {
 		faction, reason, err := instancePricingFaction(context.Background(), instancePlayersStub{players: []database.LogInstancePlayer{
 			{Race: database.WowPlayableRaceHuman},
 			{Race: database.WowPlayableRaceDwarf},
-		}}, instanceID, string(chroniclesdk.PricingAuctionHouseSplit))
+		}}, instanceID, string(chroniclesdk.PricingAuctionHouseSplit), nil)
 		require.NoError(t, err)
 		require.Empty(t, reason)
 		require.Equal(t, chroniclesdk.AuctionHouseFactionAlliance, faction)
+	})
+
+	t.Run("explicit skyborne faction", func(t *testing.T) {
+		faction, reason, err := instancePricingFaction(context.Background(), instancePlayersStub{players: []database.LogInstancePlayer{
+			{
+				Race: database.WowPlayableRaceSkyborne,
+				Faction: database.NullWowPlayerFaction{
+					WowPlayerFaction: database.WowPlayerFactionHorde,
+					Valid:            true,
+				},
+			},
+		}}, instanceID, string(chroniclesdk.PricingAuctionHouseSplit), database.WoWFlavor{database.FlavorWoWForever})
+		require.NoError(t, err)
+		require.Empty(t, reason)
+		require.Equal(t, chroniclesdk.AuctionHouseFactionHorde, faction)
 	})
 
 	t.Run("mixed", func(t *testing.T) {
 		faction, reason, err := instancePricingFaction(context.Background(), instancePlayersStub{players: []database.LogInstancePlayer{
 			{Race: database.WowPlayableRaceHuman},
 			{Race: database.WowPlayableRaceOrc},
-		}}, instanceID, string(chroniclesdk.PricingAuctionHouseSplit))
+		}}, instanceID, string(chroniclesdk.PricingAuctionHouseSplit), nil)
 		require.NoError(t, err)
 		require.Empty(t, faction)
 		require.Equal(t, "raid contains players from multiple factions", reason)
