@@ -29,7 +29,7 @@ type DamageGraph struct {
 // CaptureDamageGraph visits pending owners first, then sorted reference paths.
 // Cache-only objects receive retained-damage Values. Pointer identity is used
 // only in this call; equal-valued distinct Damage objects remain distinct.
-func CaptureDamageGraph(owners []DamageOwner, refs map[stategraph.Path]*messages.Damage) (DamageGraph, error) {
+func CaptureDamageGraph(owners []DamageOwner, refs map[stategraph.Path]*messages.Damage, extraSpells ...*chrondbc.Spell) (DamageGraph, error) {
 	r, err := stategraph.New("/root")
 	if err != nil {
 		return DamageGraph{}, err
@@ -58,6 +58,31 @@ func CaptureDamageGraph(owners []DamageOwner, refs map[stategraph.Path]*messages
 		return DamageGraph{}, err
 	}
 	values := map[stategraph.Path]stategraph.ValuePayload{}
+	registerSpell := func(spell *chrondbc.Spell) (string, error) {
+		if spell == nil {
+			return "", nil
+		}
+		spellPath := "/root/spells/" + strconv.FormatInt(int64(spell.ID), 10)
+		if _, ok := values[stategraph.Path(spellPath)]; !ok {
+			if err := directory("/root/spells"); err != nil {
+				return "", err
+			}
+			if err := r.Value(spellPath, SpellReferenceType, nil); err != nil {
+				return "", err
+			}
+			payload, err := (SpellReference{ID: spell.ID}).Encode()
+			if err != nil {
+				return "", err
+			}
+			values[stategraph.Path(spellPath)] = stategraph.ValuePayload{Type: SpellReferenceType, Version: SpellReferenceVersion, Payload: payload}
+		}
+		return spellPath, nil
+	}
+	for _, spell := range extraSpells {
+		if _, err := registerSpell(spell); err != nil {
+			return DamageGraph{}, err
+		}
+	}
 	seen := map[*messages.Damage]stategraph.Path{}
 	add := func(p stategraph.Path, d *messages.Damage) error {
 		if d == nil {
@@ -72,26 +97,16 @@ func CaptureDamageGraph(owners []DamageOwner, refs map[stategraph.Path]*messages
 		if err := r.Value(string(p), messages.DamageStateType, nil); err != nil {
 			return err
 		}
-		var spellPath string
-		if d.SpellData != nil {
-			spellPath = "/root/spells/" + strconv.FormatInt(int64(d.SpellData.ID), 10)
-			if _, ok := values[stategraph.Path(spellPath)]; !ok {
-				if err := directory("/root/spells"); err != nil {
-					return err
-				}
-				if err := r.Value(spellPath, SpellReferenceType, nil); err != nil {
-					return err
-				}
-				payload, err := (SpellReference{ID: d.SpellData.ID}).Encode()
-				if err != nil {
-					return err
-				}
-				values[stategraph.Path(spellPath)] = stategraph.ValuePayload{Type: SpellReferenceType, Version: SpellReferenceVersion, Payload: payload}
-			}
+		spellPath, err := registerSpell(d.SpellData)
+		if err != nil {
+			return err
+		}
+		if spellPath != "" {
 			if err := r.Reference(string(p)+"/spell", spellPath, SpellReferenceType, nil); err != nil {
 				return err
 			}
 		}
+
 		state, err := d.CaptureState(spellPath)
 		if err != nil {
 			return err
@@ -143,7 +158,21 @@ func CaptureDamageGraph(owners []DamageOwner, refs map[stategraph.Path]*messages
 // Restore validates and builds an isolated candidate graph. Canonical Damage
 // objects are allocated once, decoded, then spell and Damage aliases resolved.
 // All failure paths discard the candidate; no live owner is modified.
+type RestoredDamageGraph struct {
+	Damage map[stategraph.Path]*messages.Damage
+	Spells map[stategraph.Path]*chrondbc.Spell
+}
+
 func (g DamageGraph) Restore(ctx context.Context, fetcher SpellLookup) (map[stategraph.Path]*messages.Damage, error) {
+	restored, err := g.RestoreValues(ctx, fetcher)
+	if err != nil {
+		return nil, err
+	}
+	return restored.Damage, nil
+}
+
+// RestoreValues exposes the same canonical spell table to other retained owners.
+func (g DamageGraph) RestoreValues(ctx context.Context, fetcher SpellLookup) (*RestoredDamageGraph, error) {
 	if err := g.Graph.Validate(); err != nil {
 		return nil, err
 	}
@@ -221,5 +250,5 @@ func (g DamageGraph) Restore(ctx context.Context, fetcher SpellLookup) (map[stat
 			damage[node.Path] = damage[node.Target]
 		}
 	}
-	return damage, nil
+	return &RestoredDamageGraph{Damage: damage, Spells: spells}, nil
 }

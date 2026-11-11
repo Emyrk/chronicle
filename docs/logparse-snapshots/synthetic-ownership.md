@@ -17,7 +17,7 @@ remain beside their unchanged legacy owners. None makes a pipeline resumable.
 | Known objects | None | Stateless; may alias `Unit.Owner = Unit.Charm`, then emits copied owner/target GUID values. No retained owner graph. |
 | Razuvious correction | `lastSlain time.Time`, `raz GUID` | Copied scalars only; moved with codec. Mutates incoming Damage amount/synthetic flag, without retaining Damage. Runs for all flavors. |
 | Known armor (VanillaPlus only) | No effective cache entries on constructor path | `previous` starts nil. Reads may branch on existing entries, and writes occur only inside that branch, so normal processing never populates it. Leave this ineffective cache unchanged. |
-| VanillaPlus shadow bosses (VanillaPlus only) | Fixed shadow-entry -> primary-entry mapping; primary-entry -> `*GUID` | **Shared Unit-field references**, not a scalar GUID set. `boss[entry] = &unit.Guid`; future corrections read that pointer and copy its value into Damage.Caster. Defer codec; copying IDs would flatten current alias semantics. |
+| VanillaPlus shadow bosses (VanillaPlus only) | Fixed shadow-entry -> primary-entry mapping; primary-entry -> `*GUID` | **Shared Unit-field references**, not a scalar GUID set. `boss[entry] = &unit.Guid`; future corrections read that pointer and copy its value into Damage.Caster. Boundary codec copies primary GUID values under the audited absence of later production Unit.Guid mutation; the live alias algorithm remains unchanged. |
 | Absorption | Target-keyed ordered slices of owned `*activeShield` | Shield values include applied/removed time, duration, caster, estimated capacity, school, exhaustion, name, and retained **`*chrondbc.Spell`**. Emits the retained spell as Absorbed.AbsorbSpell; DamageSpell comes from current Damage. Owner codec preserves all shield fields and ordered slices, with spell references resolved from the existing same-ID derivable spell graph. Logger is injected and unused by processing. |
 | Judgement of Light credit | None | Stateless; aliases Heal.Caster to Heal.Target without retaining either. |
 
@@ -32,8 +32,9 @@ Slain tracking runs before Razuvious and VanillaPlus corrections. Its cached
 Damage pointer therefore observes later in-place changes. A value-copy codec
 must not silently replace this graph with independent damage records. Likewise,
 VanillaPlus retains the address of a Unit's GUID, even though its output caster
-pointer is newly allocated. Whether downstream consumers mutate that Unit field
-is a separate investigation, not permission to discard the alias.
+pointer is newly allocated. The subsequent audit found no later production writes to that Unit field,
+which permits value capture at complete-file boundaries without changing the live
+alias algorithm.
 
 Shared Damage values now use the bounded canonical graph adapter; immutable
 spells use ID-only derivation under the fixed compatible resolver. Other shared
