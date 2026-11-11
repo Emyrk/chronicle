@@ -335,6 +335,85 @@ type UnitResources struct {
 func (u UnitResources) Affects() []guid.GUID { return []guid.GUID{u.Unit} }
 func (*UnitResources) isMessage()            {}
 
+// UnitTarget records the current target of a hostile creature.
+type UnitTarget struct {
+	MessageBase
+	Unit   guid.GUID
+	Target *guid.GUID
+}
+
+func (u UnitTarget) Affects() []guid.GUID {
+	if u.Target == nil {
+		return []guid.GUID{u.Unit}
+	}
+	return []guid.GUID{u.Unit, *u.Target}
+}
+func (*UnitTarget) isMessage() {}
+
+// UnitCombatState records whether a hostile creature is currently in combat.
+type UnitCombatState struct {
+	MessageBase
+	Unit     guid.GUID
+	InCombat bool
+}
+
+func (u UnitCombatState) Affects() []guid.GUID { return []guid.GUID{u.Unit} }
+func (*UnitCombatState) isMessage()            {}
+
+// RaidMark records a raid target icon assignment. Index 0 removes the mark.
+type RaidMark struct {
+	MessageBase
+	Unit  guid.GUID
+	Index uint8
+}
+
+func (r RaidMark) Affects() []guid.GUID { return []guid.GUID{r.Unit} }
+func (*RaidMark) isMessage()            {}
+
+// ThreatEntry is one player row from a mob threat table.
+type ThreatEntry struct {
+	Player     string
+	Tank       bool
+	Threat     int64
+	Percentage float64
+	Melee      bool
+}
+
+// Threat records a server-provided threat table for one hostile creature.
+type Threat struct {
+	MessageBase
+	Mob     *guid.GUID
+	MobName string
+	Source  string
+	Entries []ThreatEntry
+}
+
+func (t Threat) Affects() []guid.GUID {
+	if t.Mob == nil {
+		return nil
+	}
+	return []guid.GUID{*t.Mob}
+}
+func (*Threat) isMessage() {}
+
+// ThreatTankEntry is one creature row from a tank-mode threat table.
+type ThreatTankEntry struct {
+	Creature   string
+	ServerGUID string
+	NextPlayer string
+	Percentage float64
+}
+
+// ThreatTank records the server's list of creatures tanked by a player.
+type ThreatTank struct {
+	MessageBase
+	Source  string
+	Entries []ThreatTankEntry
+}
+
+func (ThreatTank) Affects() []guid.GUID { return nil }
+func (*ThreatTank) isMessage()          {}
+
 type ResourceChange struct {
 	MessageBase
 	Target       guid.GUID

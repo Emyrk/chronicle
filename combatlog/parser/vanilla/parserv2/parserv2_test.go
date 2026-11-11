@@ -322,6 +322,119 @@ func TestParserMessages(t *testing.T) {
 		require.ErrorContains(t, err, `unit state: parse x "north"`)
 	})
 
+	t.Run("UrsolEvents", func(t *testing.T) {
+		t.Parallel()
+
+		const timestamp = int64(1771563953000)
+		ts := time.UnixMilli(timestamp)
+		mob := guid.GUID(0xF130002D9900DE15)
+		player := guid.GUID(0x000000000001C80A)
+
+		t.Run("unit target", func(t *testing.T) {
+			t.Parallel()
+			testCase(t, wowDB,
+				"1771563953000|UNIT_TARGET|0xF130002D9900DE15|0x000000000001C80A",
+				&messages.UnitTarget{MessageBase: messages.Base(ts), Unit: mob, Target: ptr.Ref(player)},
+			)
+		})
+
+		t.Run("unit target cleared", func(t *testing.T) {
+			t.Parallel()
+			testCase(t, wowDB,
+				"1771563953000|UNIT_TARGET|0xF130002D9900DE15|",
+				&messages.UnitTarget{MessageBase: messages.Base(ts), Unit: mob},
+			)
+		})
+
+		t.Run("unit combat reset", func(t *testing.T) {
+			t.Parallel()
+			testCase(t, wowDB,
+				"1771563953000|UNIT_COMBAT|0xF130002D9900DE15|0",
+				&messages.UnitCombatState{MessageBase: messages.Base(ts), Unit: mob, InCombat: false},
+			)
+		})
+
+		t.Run("raid mark", func(t *testing.T) {
+			t.Parallel()
+			testCase(t, wowDB,
+				"1771563953000|RAID_MARK|0xF130002D9900DE15|8",
+				&messages.RaidMark{MessageBase: messages.Base(ts), Unit: mob, Index: 8},
+			)
+		})
+
+		t.Run("threat", func(t *testing.T) {
+			t.Parallel()
+			testCase(t, wowDB,
+				"1771563953000|THREAT|0xF130002D9900DE15|Onyxia|self|Koniz:1:157:100:0;Mage:0:80:50.5:1;",
+				&messages.Threat{
+					MessageBase: messages.Base(ts),
+					Mob:         ptr.Ref(mob),
+					MobName:     "Onyxia",
+					Source:      "self",
+					Entries: []messages.ThreatEntry{
+						{Player: "Koniz", Tank: true, Threat: 157, Percentage: 100},
+						{Player: "Mage", Threat: 80, Percentage: 50.5, Melee: true},
+					},
+				},
+			)
+		})
+
+		t.Run("relayed threat without guid", func(t *testing.T) {
+			t.Parallel()
+			testCase(t, wowDB,
+				"1771563953000|THREAT||Onyxia|relay:Tank|Koniz:1:157:100:0",
+				&messages.Threat{
+					MessageBase: messages.Base(ts),
+					MobName:     "Onyxia",
+					Source:      "relay:Tank",
+					Entries:     []messages.ThreatEntry{{Player: "Koniz", Tank: true, Threat: 157, Percentage: 100}},
+				},
+			)
+		})
+
+		t.Run("threat tank", func(t *testing.T) {
+			t.Parallel()
+			testCase(t, wowDB,
+				"1771563953000|THREAT_TANK|self|Onyxia:123456:Koniz:100;",
+				&messages.ThreatTank{
+					MessageBase: messages.Base(ts),
+					Source:      "self",
+					Entries: []messages.ThreatTankEntry{{
+						Creature:   "Onyxia",
+						ServerGUID: "123456",
+						NextPlayer: "Koniz",
+						Percentage: 100,
+					}},
+				},
+			)
+		})
+	})
+
+	t.Run("UrsolEventsRejectMalformedFields", func(t *testing.T) {
+		t.Parallel()
+
+		for _, tt := range []struct {
+			name string
+			line string
+			err  string
+		}{
+			{name: "combat state", line: "1771563953000|UNIT_COMBAT|0xF130002D9900DE15|2", err: "invalid combat state"},
+			{name: "raid mark", line: "1771563953000|RAID_MARK|0xF130002D9900DE15|9", err: "invalid index"},
+			{name: "threat arity", line: "1771563953000|THREAT|0xF130002D9900DE15|Onyxia|self|Koniz:1:157", err: "expected 5 fields"},
+			{name: "threat flag", line: "1771563953000|THREAT|0xF130002D9900DE15|Onyxia|self|Koniz:yes:157:100:0", err: "invalid tank flag"},
+			{name: "threat number", line: "1771563953000|THREAT|0xF130002D9900DE15|Onyxia|self|Koniz:1:many:100:0", err: "parse threat"},
+			{name: "threat tank arity", line: "1771563953000|THREAT_TANK|self|Onyxia:123456", err: "expected 4 fields"},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+				parser, err := New(context.Background(), slog.Default(), strings.NewReader(tt.line), wowDB, nil)
+				require.NoError(t, err)
+				_, err = parser.Advance(context.Background())
+				require.ErrorContains(t, err, tt.err)
+			})
+		}
+	})
+
 	t.Run("ZoneInfoEmptyInstanceID", func(t *testing.T) {
 		t.Parallel()
 
