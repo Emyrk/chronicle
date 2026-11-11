@@ -56,7 +56,7 @@ func TestNextCombatantOrderedParity(t *testing.T) {
 	var oldLog, newLog bytes.Buffer
 	p, err := New(t.Context(), slog.New(slog.NewTextHandler(&oldLog, nil)), strings.NewReader(strings.Join(lines, "\n")), &stubGameDB{}, nil)
 	require.NoError(t, err)
-	d := next.NewDecoder(&stubGameDB{}, version.GitTag, next.CombatantOptions{Logger: slog.New(slog.NewTextHandler(&newLog, nil))})
+	d := next.NewDecoder(&stubGameDB{}, version.GitTag, next.DecoderOptions{Combatants: next.CombatantOptions{Logger: slog.New(slog.NewTextHandler(&newLog, nil))}})
 	for i, line := range lines {
 		want, wantErr := p.advance(t.Context())
 		got, gotErr := d.DecodeRecord(t.Context(), line)
@@ -134,7 +134,7 @@ func TestNextSavedCombatantStateParity(t *testing.T) {
 	scanner.Buffer(make([]byte, 4096), 4<<20)
 	p, err := New(ctx, slog.New(slog.NewTextHandler(io.Discard, nil)), strings.NewReader(""), &stubGameDB{}, nil)
 	require.NoError(t, err)
-	d := next.NewDecoder(&stubGameDB{}, version.GitTag, next.CombatantOptions{TalentTrees: trees})
+	d := next.NewDecoder(&stubGameDB{}, version.GitTag, next.DecoderOptions{Combatants: next.CombatantOptions{TalentTrees: trees}})
 	counts, unsupported := map[string]int{}, map[string]int{}
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -168,7 +168,7 @@ func (nextCombatantGearResolver) ResolveGear(gear []combatant.GearItem) { gear[0
 func TestNextCombatantVersionAndResolver(t *testing.T) {
 	t.Parallel()
 	var logged bytes.Buffer
-	d := next.NewDecoder(nil, "", next.CombatantOptions{Gear: nextCombatantGearResolver{}, Logger: slog.New(slog.NewTextHandler(&logged, nil))})
+	d := next.NewDecoder(nil, "", next.DecoderOptions{Combatants: next.CombatantOptions{Gear: nextCombatantGearResolver{}, Logger: slog.New(slog.NewTextHandler(&logged, nil))}})
 	decode := func(line string) []messages.Message {
 		batch, err := d.DecodeRecord(t.Context(), line)
 		require.NoError(t, err)
