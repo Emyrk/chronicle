@@ -1,0 +1,61 @@
+package synthetic
+
+import (
+	"time"
+
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+)
+
+const razuviousOverkillWindow = 2 * time.Minute
+
+// RazuviousOverkill retains only the last Razuvious death GUID and timestamp.
+type RazuviousOverkill struct {
+	lastSlain time.Time
+	raz       guid.GUID
+}
+
+// NewRazuviousOverkill constructs an inactive correction window.
+func NewRazuviousOverkill() *RazuviousOverkill {
+	return &RazuviousOverkill{}
+}
+
+func (r *RazuviousOverkill) ProcessMessages(msg []messages.Message) {
+	for _, m := range msg {
+		switch ty := m.(type) {
+		case *messages.Slain:
+			entry, ok := ty.Victim.GetEntry()
+			if !ok || entry != 16061 {
+				continue
+			}
+
+			r.lastSlain = ty.Timestamp
+			r.raz = ty.Victim
+		case *messages.Damage:
+			if r.raz == 0 {
+				continue
+			}
+
+			if r.raz != 0 && m.Date().Sub(r.lastSlain) > razuviousOverkillWindow {
+				// Stop processing Razuvious overkills.
+				r.raz = 0
+				r.lastSlain = time.Time{}
+				continue
+			}
+
+			entry, ok := ty.Target.GetEntry()
+			if !ok {
+				continue
+			}
+
+			if entry != 16803 {
+				continue
+			}
+
+			if ty.Amount > 10000 {
+				ty.Synthetic = true
+				ty.Amount = 1
+			}
+		}
+	}
+}
