@@ -1,11 +1,12 @@
 package serviceratings
 
 import (
-	"testing"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/leaderboardconfig"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
@@ -151,10 +152,17 @@ func TestCareerPublicationReadAndRetraction(t *testing.T) {
 	require.Equal(t, "Player", board.Entries[0].SubjectID)
 	require.Equal(t, 30.0, *board.Entries[0].Mastery)
 	require.Equal(t, 3.0, board.Entries[0].Renown)
-	leaders, err := ReadCareerLeaders(ctx, s.db, s.tenant, false, 5)
+	leaders, err := ReadCareerLeaders(ctx, s.db, s.tenant, false, nil, 5)
 	require.NoError(t, err)
 	require.Len(t, leaders.Boards["mastery"], 1)
 	require.NotEmpty(t, leaders.Boards["mastery"][0].Name)
+	fixtureRaid := leaderboardconfig.CareerKey{Instance: "Fixture raid", Difficulty: "Normal", MaxPlayers: 40}
+	selected, err := ReadCareerLeaders(ctx, s.db, s.tenant, false, []leaderboardconfig.CareerKey{fixtureRaid}, 5)
+	require.NoError(t, err)
+	require.Equal(t, 30.0, *selected.Boards["mastery"][0].Mastery, "the only raid, re-weighted over itself")
+	other, err := ReadCareerLeaders(ctx, s.db, s.tenant, false, []leaderboardconfig.CareerKey{{Instance: "Elsewhere"}}, 5)
+	require.NoError(t, err)
+	require.Empty(t, other.Boards["mastery"], "an unrelated raid has no Mastery leaders")
 	scoped, err := ReadCareerBoard(ctx, s.db, s.tenant, CareerBoardFilter{Realm: uuid.New()})
 	require.NoError(t, err)
 	require.Empty(t, scoped.Entries, "a realm filter excludes other realms")

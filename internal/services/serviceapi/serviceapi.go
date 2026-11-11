@@ -19,6 +19,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/itempricing"
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/leaderboardconfig"
 	"github.com/Emyrk/chronicle/internal/services/serviceaccessurl"
 	"github.com/Emyrk/chronicle/internal/services/serviceapplication"
 	"github.com/Emyrk/chronicle/internal/services/serviceassets"
@@ -279,8 +280,8 @@ func (s *Service) Start(ctx context.Context) error {
 		PlayerCareer: func(ctx context.Context, tenant, realm uuid.UUID, guid string) (serviceratings.PlayerCareerResult, error) {
 			return serviceratings.ReadPlayerCareer(ctx, database.New(pool), tenant, realm, guid)
 		},
-		CareerLeaders: func(ctx context.Context, tenant uuid.UUID, guilds bool) (serviceratings.CareerLeaders, error) {
-			return serviceratings.ReadCareerLeaders(ctx, database.New(pool), tenant, guilds, 5)
+		CareerLeaders: func(ctx context.Context, tenant uuid.UUID, guilds bool, raids []leaderboardconfig.CareerKey) (serviceratings.CareerLeaders, error) {
+			return serviceratings.ReadCareerLeaders(ctx, database.New(pool), tenant, guilds, raids, 5)
 		},
 	})
 	// The chooser subdomain previews with the brand card.

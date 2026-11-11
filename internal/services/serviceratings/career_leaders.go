@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/leaderboardconfig"
 )
 
 // CareerBoardSorts are the career board's rankings.
@@ -131,9 +132,10 @@ type CareerLeaders struct {
 	Boards map[string][]CareerLeader
 }
 
-// ReadCareerLeaders is the top `limit` of each unfiltered career board, named.
-func ReadCareerLeaders(ctx context.Context, store database.Store, tenant uuid.UUID, guilds bool, limit int) (CareerLeaders, error) {
-	board, err := ReadCareerBoard(ctx, store, tenant, CareerBoardFilter{Guilds: guilds})
+// ReadCareerLeaders is the top `limit` of each career board over the given
+// raids (every raid when empty), named.
+func ReadCareerLeaders(ctx context.Context, store database.Store, tenant uuid.UUID, guilds bool, raids []leaderboardconfig.CareerKey, limit int) (CareerLeaders, error) {
+	board, err := ReadCareerBoard(ctx, store, tenant, CareerBoardFilter{Guilds: guilds, Raids: raids})
 	if err != nil {
 		return CareerLeaders{}, err
 	}

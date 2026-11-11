@@ -3,19 +3,60 @@ package serviceog
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/Emyrk/chronicle/frontend"
+	"github.com/Emyrk/chronicle/internal/leaderboardconfig"
 	"github.com/Emyrk/chronicle/internal/services/serviceratings"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 )
 
-// CareerLeadersReader reads the top of each unfiltered career board for a tenant.
-type CareerLeadersReader func(ctx context.Context, tenant uuid.UUID, guilds bool) (serviceratings.CareerLeaders, error)
+// CareerLeadersReader reads the top of each career board for a tenant over the
+// given raids (every raid when empty).
+type CareerLeadersReader func(ctx context.Context, tenant uuid.UUID, guilds bool, raids []leaderboardconfig.CareerKey) (serviceratings.CareerLeaders, error)
+
+// careerOGRaidTimeout bounds a raid selection's leaders, which can't share the
+// per-tenant cache; a slow read keeps the brand card.
+const careerOGRaidTimeout = 1500 * time.Millisecond
+
+// careerOGViewLength is the card subtitle's limit (the renderer's `view`).
+const careerOGViewLength = 40
+
+// careerOGRaids are the page's valid ?raid= selections, in URL order.
+func careerOGRaids(query url.Values) []leaderboardconfig.CareerKey {
+	var out []leaderboardconfig.CareerKey
+	for _, raw := range query["raid"] {
+		if k, ok := leaderboardconfig.ParseCareerKeyQuery(raw); ok {
+			out = append(out, k)
+		}
+	}
+	return out
+}
+
+// careerOGScope names a selection as the page does: every raid, one raid, a
+// short "A + B", or "N raids" when the names would not fit the card.
+func careerOGScope(raids []leaderboardconfig.CareerKey, room int) string {
+	switch len(raids) {
+	case 0:
+		return "every raid"
+	case 1:
+		return raids[0].Label()
+	}
+	labels := make([]string, len(raids))
+	for i, k := range raids {
+		labels[i] = k.Label()
+	}
+	if joined := strings.Join(labels, " + "); len([]rune(joined)) <= room {
+		return joined
+	}
+	return fmt.Sprintf("%d raids", len(raids))
+}
 
 // careerOGView is a shareable ?view= board on /leaderboards/career.
 type careerOGView struct {
@@ -70,6 +111,11 @@ func careerOGMetadata(product, canonicalURL string, query url.Values) *frontend.
 	if product != "" {
 		lead += " for " + product
 	}
+	if raids := careerOGRaids(query); len(raids) > 0 {
+		// Titles have room for every name; the card falls back to a count.
+		title += " · " + careerOGScope(raids, math.MaxInt)
+		description = "Mastery and Peak weighted over " + careerOGScope(raids, math.MaxInt) + " alone, and Renown from those raids."
+	}
 	return &frontend.OGData{Title: title, Description: lead + ". " + description, URL: canonicalURL}
 }
 
@@ -85,13 +131,24 @@ func (s *Service) careerCardURL(r *http.Request, query url.Values) string {
 		return ""
 	}
 	guilds := careerOGGuilds(query)
-	cache := &s.ogCareerPlayers
-	if guilds {
-		cache = &s.ogCareerGuilds
+	raids := careerOGRaids(query)
+	var leaders serviceratings.CareerLeaders
+	if len(raids) == 0 {
+		cache := &s.ogCareerPlayers
+		if guilds {
+			cache = &s.ogCareerGuilds
+		}
+		leaders = cache.Get(r.Context(), s.logger, func(ctx context.Context) (serviceratings.CareerLeaders, error) {
+			return s.careerLeaders(ctx, tenant.ID, guilds, nil)
+		})
+	} else {
+		ctx, cancel := context.WithTimeout(r.Context(), careerOGRaidTimeout)
+		defer cancel()
+		var err error
+		if leaders, err = s.careerLeaders(ctx, tenant.ID, guilds, raids); err != nil {
+			return ""
+		}
 	}
-	leaders := cache.Get(r.Context(), s.logger, func(ctx context.Context) (serviceratings.CareerLeaders, error) {
-		return s.careerLeaders(ctx, tenant.ID, guilds)
-	})
 	params := careerCardParams(leaders, guilds, query)
 	if params == nil {
 		return ""
@@ -135,15 +192,25 @@ func careerCardParams(leaders serviceratings.CareerLeaders, guilds bool, query u
 	}
 	params := url.Values{"raid": {"Career"}, "chip": {"Leaderboards"}}
 	boards := []leaderboardCardBoard{}
+	raids := careerOGRaids(query)
 	if v, ok := careerOGSelectedView(query); ok {
-		params.Set("view", prefix+v.label+" · every raid")
+		lead := prefix + v.label + " · "
+		params.Set("view", lead+careerOGScope(raids, careerOGViewLength-len([]rune(lead))))
 		boards = append(boards, leaderboardCardBoard{prefix + v.label, rows(v, careerCardListRows)})
 	} else {
-		view := "Every raid, weighted"
+		lead := ""
 		if guilds {
-			view = "Guilds · every raid, weighted"
+			lead = "Guilds · "
 		}
-		params.Set("view", view)
+		scope := "every raid, weighted"
+		if len(raids) > 0 {
+			scope = careerOGScope(raids, careerOGViewLength-len([]rune(lead)))
+		}
+		// Capitalize only when the scope starts the subtitle ("Guilds · every raid…").
+		if lead == "" {
+			scope = strings.ToUpper(scope[:1]) + scope[1:]
+		}
+		params.Set("view", lead+scope)
 		for _, v := range careerOGViews {
 			boards = append(boards, leaderboardCardBoard{prefix + v.label, rows(v, leaderboardCardRows)})
 		}
