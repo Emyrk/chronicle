@@ -37,6 +37,12 @@ describe("getInstanceBackground", () => {
       "/c/images/loadingscreens/LoadScreenRuinsOfLordaeron.webp",
     );
   });
+
+  it("returns The Drowned City loading screen", () => {
+    expect(getInstanceBackground("The Drowned City")).toBe(
+      "/c/images/loadingscreens/LoadScreenDrownedCity.webp",
+    );
+  });
 });
 
 describe("getInstanceAccentColor", () => {

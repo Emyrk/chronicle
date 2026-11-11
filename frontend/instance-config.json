@@ -220,6 +220,13 @@
     "background": "/c/images/loadingscreens/LoadScreenRuinsOfLordaeron.webp",
     "contentLevel": 60
   },
+  "The Drowned City": {
+    "background": "/c/images/loadingscreens/LoadScreenDrownedCity.webp",
+    "bossCount": 8,
+    "abbrev": "Drowned City",
+    "accentColor": "#22a7a7",
+    "contentLevel": 60
+  },
   "Black Morass": {
     "background": "/c/images/loadingscreens/LoadScreenCavernsTime.webp",
     "bossCount": 4,
