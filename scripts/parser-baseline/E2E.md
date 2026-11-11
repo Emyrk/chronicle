@@ -119,3 +119,46 @@ Next decision: address production event-emission repeatability, or explicitly
 accept a non-byte-identical baseline policy. Do not silently sort semantic event
 streams. Reference-data completeness and additional server fixtures remain
 separate follow-ups.
+
+## Narrow ordering diagnosis
+
+A read-only diagnostic compared the two unchanged artifacts at exact absolute
+millisecond timestamps, within each canonical encounter:
+
+| Encounter | Classification records | Timestamp groups | Full-record multiset mismatched times | Mismatched times excluding only `meta.index` |
+| --- | ---: | ---: | ---: | ---: |
+| 0 | 656 | 461 | 7 | 0 |
+| 1 | 164 | 99 | 3 | 0 |
+| 2 | 554 | 355 | 2 | 0 |
+
+The event-index **sequence** is equal in each encounter, but different targets
+receive those indices. Thus complete records, even treated as equal-time
+multisets, are **not identical**. Excluding only `meta.index` diagnostically,
+equal-time multisets are identical, including target, type, affiliation,
+owner/controller, spell and all other metadata. No value discrepancy beyond
+index assignment was found for this pair. This is not permission to discard
+indices or event ordering, and does not prove other fixtures behave the same.
+The private diagnostic saved no changed baseline artifacts.
+
+The exact unordered emission path is:
+
+1. `characters/lookup.go`: `activityChanged` is a Go `map[Character]struct{}`;
+   `notifyActivityChanged` ranges that map into a slice (lines 223-234).
+2. `instances/classificationemitter.go:31-34`: `ActivityChange` emits in that
+   supplied slice order; `emitClassification` materializes each unit's values.
+3. `instances/hookable.go:291-296`: the callback forwards events to the active
+   fight's builder.
+4. `encounterevents/encounterevents.go:293-294,366-368`: classification events
+   receive sequential indices and are appended in emission order.
+
+The fight-start/end `emitAllActive` path is **not itself an unordered Go map**:
+`characterset.Set.ForEach` walks an ordered map oldest-first. Do not incorrectly
+attribute this issue to that loop or to the character catalog lookup.
+
+Remaining-enemy GUIDs are set-valued in the inspected code: `Fight.EndStates`
+ranges the map of unique hostiles and appends timeout IDs
+(`encounter/encounter.go:124-141`); `fightEncounter` assigns this collection to
+`Remaining` (`instances/hookable.go:1147-1153`). The instance UI builds a `Set`
+and uses membership tests (`InstancePageView.tsx:446-470`). In this fixture the
+three collections have 15, 1 and 0 unique GUIDs; all three multisets match, and
+only the first collection's order differs. No sorting change was made.
