@@ -44,6 +44,10 @@ type SetHook interface {
 }
 
 type Characters struct {
+	snapshotRecipe     string
+	snapshotFactoryIDs []string
+	restoreRuntime     *charactersRuntimeShape
+
 	All *characterset.Set[Character]
 	// ByEntry only works on creatures
 	ByEntry   map[uint32][]Character
