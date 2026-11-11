@@ -43,6 +43,7 @@ FROM log_instance_encounters lie
 WHERE lie.instance_id = $1
   AND lie.boss = true
   AND lie.kill_type = 'clean'
+  AND lie.invalidated_at IS NULL
   AND lie.end_time > lie.start_time
 ORDER BY lie.start_time;
 

@@ -152,6 +152,7 @@ WHERE instance.invalidated_at IS NULL
           WHERE encounter.instance_id = instance.id
             AND encounter.boss = true
             AND encounter.kill_type = 'clean'
+            AND encounter.invalidated_at IS NULL
             AND encounter.end_time > encounter.start_time
       )
   )
