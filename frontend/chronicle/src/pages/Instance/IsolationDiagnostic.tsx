@@ -9,7 +9,7 @@ export function IsolationDiagnostic() {
 }
 
 function IsolationProbe() {
-  const [result, setResult] = useState("Pending dedicated module-worker probe...");
+  const [result, setResult] = useState("Pending dedicated blob module-worker probe...");
   const secure = window.isSecureContext;
   const isolated = window.crossOriginIsolated;
   const available = typeof SharedArrayBuffer !== "undefined";
@@ -40,7 +40,7 @@ function IsolationProbe() {
       worker.onmessage = ({ data }: MessageEvent<unknown>) => {
         try {
           const workerIsolated = verifyIsolationProbe(data, view);
-          finish(`Shared memory mutation verified (41 → 42). Worker crossOriginIsolated: ${workerIsolated}.`);
+          finish(`Blob worker shared memory mutation verified (41 → 42). Worker crossOriginIsolated: ${workerIsolated}.`);
         } catch (error) {
           finish(`Probe failed: ${String(error)}`);
         }
@@ -67,7 +67,7 @@ function IsolationProbe() {
       </dl>
       <p role="status">{available ? result : "Probe unavailable: SharedArrayBuffer is not exposed."}</p>
       {!isolated && <p className="font-medium">Isolation is not active. SPA navigation cannot apply document headers. Reload the full document with the flag; if it still fails, check HTTPS, response headers, and browser support.</p>}
-      <p>Ads, YouTube, assets, and popouts are unchanged in code, but COEP may block third-party resources and COOP may sever opener access. Exercise them and inspect the browser console/network for blocked requests. A passing probe does not prove those integrations work.</p>
+      <p>Ads, YouTube, assets, and popouts are unchanged in code, but COEP may block third-party resources and COOP may sever opener access. Exercise them and inspect the browser console/network for blocked requests. The blob probe does not test HTTP-loaded aggregation workers or prove those integrations work.</p>
       <div className="flex flex-wrap gap-4">
         <button type="button" className="underline" onClick={() => window.location.reload()}>Reload full document</button>
         <button type="button" className="underline" onClick={() => window.location.assign(isolationExitURL(window.location.href))}>Exit experiment (full reload)</button>
