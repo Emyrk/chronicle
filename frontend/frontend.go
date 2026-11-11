@@ -86,7 +86,7 @@ type handler struct {
 
 func Handler(siteFS fs.FS, ogRoutes []OGRoute, brandingResolver BrandingResolver, blogFlavorResolver BlogFlavorResolver) http.Handler {
 	mux := http.NewServeMux()
-	mux.Handle("/", aggregationWorkerPolicy(etagMiddleware(http.FileServer(http.FS(siteFS)))))
+	mux.Handle("/", etagMiddleware(http.FileServer(http.FS(siteFS))))
 
 	tmpls, err := findAndParseHTMLFiles(siteFS)
 	if err != nil {
@@ -203,7 +203,6 @@ func (h *handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	}
 
 	state := htmlState{
-		IsolationTest:  instanceIsolationTest(req),
 		GitCommit:      version.GitCommit,
 		GitTag:         version.GitTag,
 		BuildTime:      version.BuildTime,
@@ -334,7 +333,6 @@ func (h *handler) exists(filePath string) bool {
 }
 
 type htmlState struct {
-	IsolationTest     bool
 	HomeHTML          string
 	HomeBootstrapJSON string
 	GitCommit         string
@@ -376,16 +374,7 @@ func (s *htmlState) escapeHTMLAttributes() {
 }
 
 func (h *handler) serveHTML(resp http.ResponseWriter, request *http.Request, reqPath string, state htmlState) bool {
-	if state.IsolationTest {
-		state.Robots = "noindex, nofollow"
-	}
 	if data, err := h.renderHTMLWithState(reqPath, state); err == nil {
-		if state.IsolationTest {
-			resp.Header().Set("Cross-Origin-Opener-Policy", "same-origin")
-			resp.Header().Set("Cross-Origin-Embedder-Policy", "require-corp")
-			resp.Header().Set("Cache-Control", "no-store")
-		}
-
 		if state.Robots != "" {
 			resp.Header().Set("X-Robots-Tag", state.Robots)
 		}
