@@ -527,7 +527,7 @@ var IcecrownCitadelFactory = &instances.CommonFactory{
 	Preprocessors: func() []instancehook.Preprocessor {
 		return []instancehook.Preprocessor{&icecrownScriptedActivity{}}
 	},
-	ZoneNames: []string{"icecrown citadel"},
+	ZoneNames: []string{"icecrown citadel", "цитадель ледяной короны"},
 	MapIDs:    []uint32{631},
 	Hostiles:  instances.FromMap(IcecrownCitadelHostiles()),
 }

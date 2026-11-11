@@ -1027,6 +1027,14 @@ func TestObsidianSanctumSartharionKillFinalizesDrakes(t *testing.T) {
 	}
 }
 
+func TestIcecrownCitadelMatchesRussianZoneName(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, IcecrownCitadelFactory.MatchZone(zone.Zone{
+		Name: "цитадель ледяной короны",
+	}))
+}
+
 func TestIcecrownGunshipScriptedVictory(t *testing.T) {
 	t.Parallel()
 
