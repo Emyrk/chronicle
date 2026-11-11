@@ -12,7 +12,7 @@ import (
 // Wrapper codecs own only their local state and a canonical wrapped-character
 // reference. They never restore the referenced owner or invoke its methods.
 func captureWrapped(c CharacterBase, capture func(CharacterBase) (string, error)) (string, error) {
-	if nilWrapped(c) || capture == nil {
+	if nilReference(c) || capture == nil {
 		return "", fmt.Errorf("missing wrapped character/capture")
 	}
 	ref, err := capture(c)
@@ -32,14 +32,14 @@ func resolveWrapped(ref string, resolve func(string) (CharacterBase, error)) (Ch
 	if err != nil {
 		return nil, err
 	}
-	if nilWrapped(c) {
+	if nilReference(c) {
 		return nil, fmt.Errorf("nil wrapped character")
 	}
 	return c, nil
 }
 
 // Typed-nil guard only, never reflection-based serialization or type discovery.
-func nilWrapped(c CharacterBase) bool {
+func nilReference(c any) bool {
 	v := reflect.ValueOf(c)
 	if !v.IsValid() {
 		return true
