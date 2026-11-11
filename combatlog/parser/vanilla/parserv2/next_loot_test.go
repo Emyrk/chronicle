@@ -51,7 +51,7 @@ func TestNextLootTruncatedReturnsError(t *testing.T) {
 	}
 }
 
-func TestLegacyPendingRecordOutcomes(t *testing.T) {
+func TestNextRecordOutcomes(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		line      string
@@ -62,6 +62,13 @@ func TestLegacyPendingRecordOutcomes(t *testing.T) {
 		{"1|SPELL_FAIL|0x0000000000000001|11578|false|89", "empty", false},
 		{"1|SPELL_FAIL|0x0000000000000001|11578|true", "failure", false},
 		{"1|SPELL_FAIL|0x0000000000000001|bad|true", "failure", true},
+		{"1|SPELL_FAIL|0x0000000000000001|bad|false", "empty", true},
+		{"1|SPELL_FAIL|0xBAD|11578|false", "empty", true},
+		{"1|SPELL_FAIL|0x0000000000000001|11578|bad", "empty", true},
+		{"1|SPELL_FAIL|0x0000000000000001", "empty", true},
+		{"1|SPELL_FAIL", "empty", false},
+		{"1|SPELL_FAIL|0x0000000000000001|11578", "failure", false},
+		{"1|FUTURE_EVENT|  raw | payload ", "unparsed", false},
 		{"1|BUFF_DURATION|unvalidated|payload", "skip", false},
 		{"1|DEBUFF_DURATION", "skip", false},
 		{"1|CHANNEL_START|45924|0x0000000000000001|-1", "unparsed", false},
@@ -70,11 +77,20 @@ func TestLegacyPendingRecordOutcomes(t *testing.T) {
 	} {
 		p := &Parser{ctx: t.Context(), wowDB: &stubGameDB{}, scanner: bufio.NewScanner(strings.NewReader(tc.line))}
 		got, err := p.advance(t.Context())
+		batch, nextErr := next.NewDecoder(&stubGameDB{}, "").DecodeRecord(t.Context(), tc.line)
 		if tc.wantError {
 			require.Error(t, err)
-		} else {
-			require.NoError(t, err)
+			require.EqualError(t, nextErr, err.Error())
+			require.Nil(t, batch)
+			continue
 		}
+		require.NoError(t, err)
+		require.NoError(t, nextErr)
+		// The approved change clarifies the existing placeholder's reason.
+		if tc.kind != "skip" {
+			require.Equal(t, got, batch)
+		}
+
 		switch tc.kind {
 		case "empty":
 			require.Empty(t, got)
@@ -83,12 +99,10 @@ func TestLegacyPendingRecordOutcomes(t *testing.T) {
 			require.IsType(t, &messages.SpellFail{}, got[0])
 		case "skip":
 			require.Len(t, got, 1)
-			require.Equal(t, "not yet implements", got[0].(*messages.SkippedMessage).Reason)
+			require.Equal(t, "aura duration update not implemented", batch[0].(*messages.SkippedMessage).Reason)
 		case "unparsed":
 			require.Len(t, got, 1)
 			require.Equal(t, tc.line, got[0].(*messages.UnparsedLine).Content)
 		}
-		_, err = next.DecodeRecord(t.Context(), &stubGameDB{}, tc.line)
-		require.ErrorIs(t, err, next.ErrUnsupportedRecord)
 	}
 }

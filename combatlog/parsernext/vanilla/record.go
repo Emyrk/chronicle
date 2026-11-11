@@ -14,16 +14,17 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parsernext/formats/ccv2"
 )
 
-// ErrUnsupportedRecord indicates that this bounded decoder does not own the record.
+// ErrUnsupportedRecord indicates a stateful record used with the stateless entry point.
 var ErrUnsupportedRecord = errors.New("unsupported Vanilla combat record")
 
 // DecodeRecord decodes the explicitly selected Vanilla combat record families:
 // damage/heal/death, spell start/go, aura add/remove/cast, energize, dispel,
-// roster/telemetry/unit/zone metadata and loot trades.
+// roster/telemetry/unit/zone metadata, loot, failure and placeholder outcomes.
 // It does not perform pipeline synthetic processing, header clock state,
 // combatant state (use Decoder), identity tracking or encounter publication.
 // SPELL_DMG retains its local
-// power-burn ResourceChange synthesis. Unsupported records return an error.
+// power-burn ResourceChange synthesis. Stateful records require Decoder; unknown
+// names retain their content in UnparsedLine.
 // content excludes the physical line terminator; extra fields retain legacy
 // tolerance. Successful calls emit the existing concrete message payloads.
 func DecodeRecord(ctx context.Context, spells SpellLookup, content string) ([]messages.Message, error) {
@@ -31,12 +32,18 @@ func DecodeRecord(ctx context.Context, spells SpellLookup, content string) ([]me
 	if err != nil {
 		return nil, err
 	}
-	return decodeFields(ctx, spells, ts, event, fields)
+	return decodeFields(ctx, spells, ts, event, fields, content)
 }
 
-func decodeFields(ctx context.Context, spells SpellLookup, ts time.Time, event string, fields []string) ([]messages.Message, error) {
+func decodeFields(ctx context.Context, spells SpellLookup, ts time.Time, event string, fields []string, content string) ([]messages.Message, error) {
 	m := &recordFields{fields: fields}
 	switch event {
+	case "HEADER", "COMBATANT_INFO", "COMBATANT_TRANSMOG", "COMBATANT_TALENTS":
+		return nil, fmt.Errorf("%w: %s requires Decoder state", ErrUnsupportedRecord, event)
+	case "SPELL_FAIL":
+		return DecodeSpellFail(ctx, spells, ts, m)
+	case "BUFF_DURATION", "DEBUFF_DURATION":
+		return DecodeAuraDuration(ts)
 	case "LOOT":
 		return DecodeLoot(ts, m)
 	case "RG", "RAID_COMPOSITION", "UNIT_STATE":
@@ -96,7 +103,7 @@ func decodeFields(ctx context.Context, spells SpellLookup, ts time.Time, event s
 	case "DEATH":
 		return DecodeDeath(ts, m)
 	default:
-		return nil, fmt.Errorf("%w: %s", ErrUnsupportedRecord, event)
+		return messages.Unparsed(ts, content), nil
 	}
 }
 
