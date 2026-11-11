@@ -383,6 +383,7 @@ export default function MapView3D({
         muted: marker.muted,
         name: marker.name,
         health: showBars ? marker.health : null,
+        bar: marker.bar,
         miniatureUrl: model?.url,
         animationUrl: model?.animationUrl,
         gameModel: model?.kind === "game",
@@ -411,10 +412,6 @@ export default function MapView3D({
   useEffect(() => {
     sceneRef.current?.setChipScale(effectSettings.chipScalePercent / 100);
   }, [effectSettings.chipScalePercent]);
-
-  useEffect(() => {
-    sceneRef.current?.setAboveDisc(effectSettings.aboveDisc);
-  }, [effectSettings.aboveDisc]);
 
   // Selected players (the unmuted ones while a selection mutes the rest),
   // bosses and tanks; keyed by string so replay ticks don't rebuild the options.

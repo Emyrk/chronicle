@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { WowMapInstance, WowMapManifest } from "@/pages/Technical/mapGallery";
-import type { MapEncounterPositions, MapPositionSample } from "./map.processor";
+import type { MapEncounterPositions, MapHealthSample, MapPositionSample } from "./map.processor";
 import { createEncounterEffects } from "./replayEffects";
 import {
   AUTO_FIT_MIN_SPAN_YARDS,
@@ -198,6 +198,30 @@ describe("map replay model", () => {
     // The most recently damaged units win the remaining slots.
     expect(bars.has("p59")).toBe(true);
     expect(bars.has("p0")).toBe(false);
+  });
+
+  it("keeps bars for hurt players and low-mana players, ahead of recent changes", () => {
+    const health = (current: number, power?: { power: number; powerType: string }) =>
+      [{ timestampMs: 0, current, max: 1000, absorb: 0, ...(power ? { ...power, maxPower: 1000 } : {}) }];
+    const healthByUnit = new Map<string, MapHealthSample[]>([
+      ["hurt", health(490)],
+      ["fine", health(500)],
+      ["oom", health(1000, { power: 240, powerType: "mana" })],
+      ["mana-ok", health(1000, { power: 250, powerType: "mana" })],
+      ["no-rage", health(1000, { power: 0, powerType: "rage" })],
+      ["hurt-enemy", health(100)],
+      ...Array.from({ length: 60 }, (_, index): [string, MapHealthSample[]] => [`p${index}`, [{ timestampMs: 9_000 + index, current: 900, max: 1000, absorb: 0 }]]),
+    ]);
+    const players = ["hurt", "fine", "oom", "mana-ok", "no-rage", ...Array.from({ length: 60 }, (_, index) => `p${index}`)];
+    const bars = selectHealthBars([...players, "hurt-enemy"], healthByUnit, 10_000, new Set(), new Set(), new Set(players));
+    expect(bars.size).toBe(MAX_HEALTH_BARS);
+    expect(bars.has("hurt")).toBe(true);
+    expect(bars.has("oom")).toBe(true);
+    // At the thresholds, a non-mana power, and a hurt enemy: only if recent.
+    expect(bars.has("fine")).toBe(false);
+    expect(bars.has("mana-ok")).toBe(false);
+    expect(bars.has("no-rage")).toBe(false);
+    expect(bars.has("hurt-enemy")).toBe(false);
   });
 
   it("colours health bars green to amber to red", () => {

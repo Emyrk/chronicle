@@ -54,5 +54,5 @@ export const AllTabs: Story = {};
 
 /** A few settings off their defaults: their dots, the tabs' dots and the reset buttons. */
 export const Changed: Story = {
-  args: { initial: { ...DEFAULT_EFFECT_SETTINGS, trailSeconds: 2, aboveDisc: "health", periodic: true } },
+  args: { initial: { ...DEFAULT_EFFECT_SETTINGS, trailSeconds: 2, periodic: true } },
 };

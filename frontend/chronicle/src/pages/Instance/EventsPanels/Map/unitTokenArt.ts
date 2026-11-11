@@ -39,14 +39,6 @@ export const TOKEN_LAYOUT = {
   /** A disc's edge, like a coin's, per radius (about 12% of the diameter). */
   thickness: 0.24,
   plane: { shadow: 1.45, halo: 1.9, pin: 2.25, arc: 1.32, ticks: 1, sigil: 1.5 },
-  /** The column above the disc: its width and full height, per radius. */
-  columnWidth: 0.26,
-  columnHeight: 3.2,
-  columnTrackOpacity: 0.08,
-  /** The power column beside the health one: thinner and shorter, per radius, and the gap between them. */
-  powerColumnWidth: 0.16,
-  powerColumnHeight: 2.2,
-  columnGap: 0.08,
   /** The boss sigil's tick ring turns this fast (radians per second). */
   sigilSpin: 0.14,
   /** A muted unit (another player is selected) fades to this opacity. */

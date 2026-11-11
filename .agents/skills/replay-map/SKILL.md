@@ -33,7 +33,7 @@ frontend/chronicle/src/pages/Instance/EventsPanels/Map/
 ├── replayEffects.ts      # Which effects play when: kinds, timings, colours, schools
 ├── mapModel.ts           # healthBarColor, MAX_HEALTH_BARS, RECENT_HEALTH_MS, projection
 ├── mapControls.ts        # Keys and MAP_CONTROL_KEYBINDS (help text)
-├── mapViewSettings.ts    # Saved display settings: CAST_MODES, ABOVE_DISC_MODES, defaults
+├── mapViewSettings.ts    # Saved display settings: CAST_MODES, TRAIL_OPTIONS, defaults
 ├── MapSettingsOverlay.tsx# The settings dialog: tabs (Units, Combat, World, Controls, Character), resets
 ├── walkAvatars.ts        # Walk-mode characters: creature roster, CDN URL, clip names
 └── TargetFrames.tsx      # Selected / Target / Target's target frames
@@ -59,12 +59,12 @@ through on their own:
 | Legend shows | Comes from |
 |---|---|
 | Token discs, notch, halos, pins, cast arc, sigil, ticks, boss pin, dashes | `unitTokenArt.ts` draw functions (same pixels as the map) |
-| Token sizes, halo/arc/shadow plane sizes, column size, muted opacity, sigil spin, line widths and dash, owner line opacity and dimming | `TOKEN_LAYOUT`, `TARGET_LINE`, `OWNER_LINE`, `MARKS_SCALE` in `unitTokenArt.ts` |
+| Token sizes, halo/arc/shadow plane sizes, muted opacity, sigil spin, line widths and dash, owner line opacity and dimming | `TOKEN_LAYOUT`, `TARGET_LINE`, `OWNER_LINE`, `MARKS_SCALE` in `unitTokenArt.ts` |
 | Halo colours | `HALO_COLORS` |
 | Effect durations, heal/overheal/crit/ranged/interrupt colours, school colours, heal number format | `replayEffects.ts` |
-| Health bar colours and rules | `healthBarColor`, `MAX_HEALTH_BARS`, `RECENT_HEALTH_MS`, `mapPalette.ts` |
+| Health bar colours and rules | `healthBarColor`, `MAX_HEALTH_BARS`, `RECENT_HEALTH_MS`, `LOW_HEALTH_BAR_FRACTION`, `LOW_MANA_BAR_FRACTION`, `mapPalette.ts` |
 | Cast icon outline and interrupted colours | `mapPalette.ts` |
-| Settings options and their wording | `CAST_MODES`, `ABOVE_DISC_MODES` |
+| Settings options and their wording | `CAST_MODES`, `TRAIL_OPTIONS` |
 | Controls table | `MAP_CONTROL_KEYBINDS` |
 | Live-session colours | `participantColor` |
 

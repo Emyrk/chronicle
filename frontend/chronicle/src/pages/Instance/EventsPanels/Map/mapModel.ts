@@ -226,10 +226,14 @@ export function latestPositionAt(
   return index >= 0 ? positions[index] : null;
 }
 
-/** Most health bars drawn at once. */
+/** Most health bars drawn at once (the selected unit's target chain comes on top). */
 export const MAX_HEALTH_BARS = 48;
 /** Units whose health changed this recently get a bar. */
 export const RECENT_HEALTH_MS = 3_000;
+/** Players below this much health keep a bar. */
+export const LOW_HEALTH_BAR_FRACTION = 0.5;
+/** Mana users below this much mana keep a bar. */
+export const LOW_MANA_BAR_FRACTION = 0.25;
 
 const HEALTH_RED = [239, 68, 68];
 const HEALTH_AMBER = [245, 158, 11];
@@ -251,10 +255,11 @@ export function latestHealthAt<T extends { timestampMs: number }>(samples: reado
 }
 
 /**
- * Declutters health bars: bosses, then selected players, then units whose
- * health changed in the last RECENT_HEALTH_MS (most recent first), up to
- * MAX_HEALTH_BARS. Units without a sample at or before the cursor get none.
- * Returns each chosen unit's sample at the cursor.
+ * Declutters health bars, up to MAX_HEALTH_BARS in this order: bosses,
+ * selected players, players below LOW_HEALTH_BAR_FRACTION health, mana users
+ * below LOW_MANA_BAR_FRACTION mana, then units whose health changed in the
+ * last RECENT_HEALTH_MS (most recent first). Units without a sample at or
+ * before the cursor get none. Returns each chosen unit's sample at the cursor.
  */
 export function selectHealthBars(
   guids: readonly string[],
@@ -262,13 +267,20 @@ export function selectHealthBars(
   cursorMs: number,
   bossGuids: ReadonlySet<string>,
   selectedGuids: ReadonlySet<string>,
+  playerGuids: ReadonlySet<string> = new Set(),
 ): Map<string, MapHealthSample> {
   const candidates = guids.flatMap((guid) => {
     const sample = latestHealthAt(healthByUnit.get(guid) ?? [], cursorMs);
     if (!sample) return [];
+    const player = playerGuids.has(guid);
+    const lowHealth = player && sample.max > 0 && sample.current / sample.max < LOW_HEALTH_BAR_FRACTION;
+    const lowMana = player && sample.powerType === "mana" && (sample.maxPower ?? 0) > 0
+      && (sample.power ?? 0) / sample.maxPower! < LOW_MANA_BAR_FRACTION;
     const priority = bossGuids.has(guid) ? 0
       : selectedGuids.has(guid) ? 1
-      : cursorMs - sample.timestampMs <= RECENT_HEALTH_MS ? 2 : -1;
+      : lowHealth ? 2
+      : lowMana ? 3
+      : cursorMs - sample.timestampMs <= RECENT_HEALTH_MS ? 4 : -1;
     return priority < 0 ? [] : [{ guid, sample, priority }];
   });
   candidates.sort((left, right) => left.priority - right.priority || right.sample.timestampMs - left.sample.timestampMs);

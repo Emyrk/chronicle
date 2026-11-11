@@ -199,6 +199,7 @@ function SyntheticReplay({ players, playbackSpeed, mutedEvery, effects }: { play
       point: projectSample(sample),
       muted: mutedEvery > 0 && unit.kind === "player" && !selected.has(unit.guid),
       health: health ? { ...health, dead: isDeadAt(fx, unit.guid, cursorMs) } : null,
+      bar: Boolean(health),
     }];
   });
 
@@ -562,7 +563,7 @@ function BossFightReplay({ players, playbackSpeed }: { players: number; playback
     const sample = latestPositionAt(unit.positions, cursorMs);
     if (!sample) return [];
     const health = bars.get(unit.guid);
-    return [{ ...unit, sample, point: projectSample(sample), muted: false, health: health ? { ...health, dead: isDeadAt(fx, unit.guid, cursorMs) } : null }];
+    return [{ ...unit, sample, point: projectSample(sample), muted: false, health: health ? { ...health, dead: isDeadAt(fx, unit.guid, cursorMs) } : null, bar: Boolean(health) }];
   });
 
   return (
@@ -665,7 +666,7 @@ function HealReplay({ playbackSpeed }: { playbackSpeed: number }) {
     const sample = latestPositionAt(unit.positions, cursorMs);
     if (!sample) return [];
     const health = bars.get(unit.guid);
-    return [{ ...unit, sample, point: projectSample(sample), muted: false, health: health ? { ...health, dead: false } : null }];
+    return [{ ...unit, sample, point: projectSample(sample), muted: false, health: health ? { ...health, dead: false } : null, bar: Boolean(health) }];
   });
 
   return (
@@ -722,6 +723,7 @@ function bossMiniMarkers(cursorMs: number, fx: EncounterEffects): MapSceneMarker
     return [{
       guid: `Boss-${entry}`,
       health: { current: 100 - index * 9, max: 100, absorb: 0, dead: isDeadAt(fx, `Boss-${entry}`, cursorMs) },
+      bar: true,
       name: STORY_BOSSES[index]!.name,
       kind: "hostile",
       color: "#fb7185",
@@ -1318,8 +1320,8 @@ const HAKKAR_UNITS = {
   ranged: "0x000000003B9CD38E",
 } as const;
 
-// The health and power columns on: over the players, and none over anyone else.
-const HAKKAR_EFFECT_SETTINGS: EffectSettings = { ...DEFAULT_EFFECT_SETTINGS, aboveDisc: "health" };
+// The default settings.
+const HAKKAR_EFFECT_SETTINGS: EffectSettings = DEFAULT_EFFECT_SETTINGS;
 
 function HakkarOctoReplay({ follow = null }: { follow?: keyof typeof HAKKAR_UNITS | null }) {
   const [fixture] = useState(() => loadMapFixture(hakkarOcto));
@@ -1374,7 +1376,6 @@ function HakkarCaptureReplay() {
 const MANDOKIR_EFFECT_SETTINGS: EffectSettings = {
   ...DEFAULT_EFFECT_SETTINGS,
   castMode: "all",
-  aboveDisc: "health",
   trailSeconds: 1,
 };
 
@@ -1715,7 +1716,7 @@ function LoggedZReplay({ site }: { site: keyof typeof ZG_SITES }) {
     { guid: "Player-no-z", name: `No z (top ${top})`, color: "#ef4444", z: undefined },
   ].map(({ guid, name, color, z }): MapSceneMarker => {
     const positions = [0, LOGGED_Z_MS].map((timestampMs): MapPositionSample => ({ timestampMs, x, y, mapId: 309, facing: 0, ...(z === undefined ? {} : { z }) }));
-    return { guid, name, color, kind: "player", muted: false, sample: positions[0], positions, point: project(positions[0])!, health: null };
+    return { guid, name, color, kind: "player", muted: false, sample: positions[0], positions, point: project(positions[0])!, health: null, bar: false };
   });
   const centre = markers[0].point;
   const view = { viewport: clampViewport({ centerX: centre.leftPercent / 100, centerY: centre.topPercent / 100, zoom }), key: site };
@@ -1841,6 +1842,7 @@ function CastPhaseReplay({ playbackSpeed, events = castEvents, selected = CAST_S
       point: projectSample(sample),
       muted: unit.kind === "player" && selected.size > 0 && !selected.has(unit.guid),
       health: { current: 70, max: 100, absorb: 0, dead: false },
+      bar: true,
     }];
   });
 
