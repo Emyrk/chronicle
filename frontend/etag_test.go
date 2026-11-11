@@ -23,15 +23,14 @@ func TestETagMiddlewareCachesStaticAssets(t *testing.T) {
 		version.BuildTime = originalBuildTime
 	})
 
-	handler := aggregationWorkerPolicy(etagMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	handler := etagMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
-	})))
+	}))
 
 	for _, test := range []struct {
 		requestPath  string
 		cacheControl string
 	}{
-		{requestPath: "/assets/aggregationPanelWorker-hash.js", cacheControl: "public, max-age=86400"},
 		{requestPath: "/assets/app-hash.js", cacheControl: "public, max-age=86400"},
 		{requestPath: "/assets/app-hash.css", cacheControl: "public, max-age=86400"},
 		{requestPath: "/assets/inter-latin-400-normal-hash.woff2", cacheControl: "public, max-age=604800"},
@@ -42,15 +41,5 @@ func TestETagMiddlewareCachesStaticAssets(t *testing.T) {
 
 		require.Equal(t, test.cacheControl, recorder.Header().Get("Cache-Control"), test.requestPath)
 		require.NotEmpty(t, recorder.Header().Get("ETag"), test.requestPath)
-		if test.requestPath == "/assets/aggregationPanelWorker-hash.js" {
-			require.Equal(t, "require-corp", recorder.Header().Get("Cross-Origin-Embedder-Policy"))
-			request := httptest.NewRequest(http.MethodGet, test.requestPath, nil)
-			request.Header.Set("If-None-Match", recorder.Header().Get("ETag"))
-			cached := httptest.NewRecorder()
-			handler.ServeHTTP(cached, request)
-			require.Equal(t, http.StatusNotModified, cached.Code)
-			require.Equal(t, "require-corp", cached.Header().Get("Cross-Origin-Embedder-Policy"))
-		}
-
 	}
 }

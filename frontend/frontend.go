@@ -86,7 +86,7 @@ type handler struct {
 
 func Handler(siteFS fs.FS, ogRoutes []OGRoute, brandingResolver BrandingResolver, blogFlavorResolver BlogFlavorResolver) http.Handler {
 	mux := http.NewServeMux()
-	mux.Handle("/", aggregationWorkerPolicy(etagMiddleware(http.FileServer(http.FS(siteFS)))))
+	mux.Handle("/", etagMiddleware(http.FileServer(http.FS(siteFS))))
 
 	tmpls, err := findAndParseHTMLFiles(siteFS)
 	if err != nil {
