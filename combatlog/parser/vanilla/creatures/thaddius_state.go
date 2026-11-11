@@ -78,7 +78,9 @@ func (c *ThaddiusParty) RestoreState(s ThaddiusPartyState, all *characters.Chara
 		}
 		pending = &m
 	}
-	// At completed-message boundaries, a nonzero GUID means the one-shot work
+	// Capture is supported only at quiescent completed-message boundaries, never
+	// mid-callback, reentrantly, or after a fatal/panic-interrupted session.
+	// At these boundaries, a nonzero GUID means the one-shot work
 	// has not run; the callback always clears it. A fresh Once preserves that
 	// semantic state without executing or serializing synchronization machinery.
 	*c = ThaddiusParty{Common: base, all: all, pendingDeath: pending, entry: s.value.Entry, buggedPrevious: s.value.BuggedPrevious}

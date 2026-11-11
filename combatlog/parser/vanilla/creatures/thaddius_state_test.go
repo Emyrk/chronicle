@@ -54,3 +54,34 @@ func TestThaddiusStateOneShotContinuation(t *testing.T) {
 	require.NoError(t, again.RestoreState(s, all, resolve, func(string) (messages.Message, error) { return m, nil }))
 	require.Same(t, m, *again.pendingDeath)
 }
+
+func TestThaddiusStateConsumesMissingPrevious(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	all := characters.NewCharacters(unitdb.New(), nil, identifier.NewIdentifier(nil))
+	common := characters.NewCommonCharacter(guid.GUID(2), all)
+	original := &ThaddiusParty{Common: common, all: all, entry: stalaggEntry, buggedPrevious: 1}
+	capture := func(*characters.Common) (string, error) { return "common", nil }
+	state, err := original.CaptureState(capture, nil)
+	require.NoError(t, err)
+	restored := new(ThaddiusParty)
+	resolve := func(string) (*characters.Common, error) { return common, nil }
+	require.NoError(t, restored.RestoreState(state, all, resolve, nil))
+	require.Equal(t, guid.GUID(1), restored.buggedPrevious)
+	// Both uninterrupted and resumed suffixes consume a miss without retrying.
+	require.NoError(t, original.Process(messages.TimedOut(at)))
+	require.NoError(t, restored.Process(messages.TimedOut(at)))
+	require.Zero(t, original.buggedPrevious)
+	require.Zero(t, restored.buggedPrevious)
+	state, err = restored.CaptureState(capture, nil)
+	require.NoError(t, err)
+	again := new(ThaddiusParty)
+	require.NoError(t, again.RestoreState(state, all, resolve, nil))
+	late := characters.NewCommonCharacter(guid.GUID(1), all)
+	late.Start("late", messages.TimedOut(at))
+	all.All.Add(late, at)
+	require.NoError(t, again.Process(messages.TimedOut(at.Add(time.Second))))
+	require.True(t, late.IsActive())
+	require.NoError(t, original.Process(messages.TimedOut(at.Add(time.Second))))
+	require.True(t, late.IsActive())
+}
