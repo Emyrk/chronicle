@@ -8,7 +8,7 @@ registration side effects, database/River calls, or raid constructors here.
 
 ```go
 summary, err := parsernext.ReadFile(ctx, parsernext.Selection{
-    Format: formats.TBCCompanion,
+    Format: database.LogFormat335aCcAddon,
     Expansion: tbc.Name,
 }, uncompressedReader, 1024*1024, func(line common.Line) error {
     // Source inspection only: Raw retains exact bytes and line endings.
@@ -16,6 +16,13 @@ summary, err := parsernext.ReadFile(ctx, parsernext.Selection{
     return inspect(line.Number, line.Offset, line.Raw)
 })
 ```
+
+Formats use canonical `database.LogFormat` primitives; there is no parsernext
+format enum. TBC accepts both `2.4.3-cc-addon` and `3.3.5a-cc-addon` wire syntax.
+Expansion stays explicit: the latter does not select WotLK rules. This accepts
+source ingestion only, not a TBC semantic decoder. Architecture checks allow
+only named LogFormat primitives in the selection/profile files, not database
+queries, stores, constructors, or service access.
 
 `ReadFile` validates the explicit format/expansion pair **before reading**, emits
 owned physical lines in file order, bounds each line's memory, and returns byte
@@ -100,8 +107,9 @@ and critter lookup modules remain standard-library-only leaves.
 Player metadata/handling stays distinct from creature classification. Player,
 pet, object, vehicle and unrecognized creature GUIDs are unhandled by this
 critter-only function, leaving existing player/raid-friendly behavior untouched.
-Vehicle/control roles and future Team1/Team2 relationships are intentionally not
-modeled as new kinds or battleground policy. Temporal identity observations,
+`KindVehicle` represents GUID vehicle identity; `CategoryTotem` refines a kind
+without imposing eligibility. Owner/control, affiliation and future Team1/Team2
+relationships remain separate from kinds and battleground policy. Temporal identity observations,
 GUID/entry payload deduplication, broader classification and consumer/publication
 integration still require separate approval.
 

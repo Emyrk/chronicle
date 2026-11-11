@@ -39,7 +39,7 @@ func (d *stateDB) ExtraAttackSpell(context.Context, int32) (chrondbc.ExtraAttack
 	return chrondbc.ExtraAttackSpell{}, false
 }
 func testIdentity() Compatibility {
-	return Compatibility{DatasetContent: "test-fixture-v1", Format: string(database.LogFormat112aCcAddon), Flavor: database.WoWFlavor{database.FlavorVanilla, database.FlavorVanillaPlus}.CanonicalKey(), ParserVersion: "test-parser-v1", BuildVersion: "build", CustomOverrideVersion: "test-overrides-v1"}
+	return Compatibility{DatasetContent: "test-fixture-v1", Format: database.LogFormat112aCcAddon, Flavor: database.WoWFlavor{database.FlavorVanilla, database.FlavorVanillaPlus}.CanonicalKey(), ParserVersion: "test-parser-v1", BuildVersion: "build", CustomOverrideVersion: "test-overrides-v1"}
 }
 func testContext(t *testing.T) context.Context {
 	return parsectx.With(t.Context(), parsectx.Context{Format: database.LogFormat112aCcAddon, Flavor: database.WoWFlavor{database.FlavorVanilla, database.FlavorVanillaPlus}})
@@ -196,7 +196,7 @@ func TestPipelineStateCapybaraLocal(t *testing.T) {
 		split++
 	}
 	split++
-	identity := Compatibility{DatasetContent: fmt.Sprintf("local-dbc-sha256:%x", sha256.Sum256(spellBytes)), Format: string(database.LogFormat112aCcAddon), Flavor: effective.flavor.CanonicalKey(), ParserVersion: "local-test-build", BuildVersion: "build", CustomOverrideVersion: "checked-out-overrides"}
+	identity := Compatibility{DatasetContent: fmt.Sprintf("local-dbc-sha256:%x", sha256.Sum256(spellBytes)), Format: database.LogFormat112aCcAddon, Flavor: effective.flavor.CanonicalKey(), ParserVersion: "local-test-build", BuildVersion: "build", CustomOverrideVersion: "checked-out-overrides"}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	continuous, err := New(ctx, logger, effective, nil, "build")
 	require.NoError(t, err)
@@ -320,4 +320,19 @@ func TestPipelineStateTrustedBuildCompatibility(t *testing.T) {
 	restored, _, err := RestoreState(ctx, nil, db, nil, identity, state)
 	require.NoError(t, err)
 	require.Empty(t, restored.buildVersion)
+}
+
+func TestCompatibilityFormatPayloadUnchanged(t *testing.T) {
+	t.Parallel()
+	// Existing version-1 JSON used a string field, which has the same wire value
+	// as canonical database.LogFormat. No speculative archive migration is needed.
+	var compatibility Compatibility
+	require.NoError(t, json.Unmarshal([]byte(`{"format":"1.12a-cc-addon"}`), &compatibility))
+	require.Equal(t, database.LogFormat112aCcAddon, compatibility.Format)
+	encoded, err := json.Marshal(compatibility)
+	require.NoError(t, err)
+	var fields map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(encoded, &fields))
+	require.Equal(t, `"1.12a-cc-addon"`, string(fields["format"]))
+	require.Equal(t, uint32(1), StateVersion)
 }

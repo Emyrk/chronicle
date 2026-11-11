@@ -3,13 +3,13 @@ package parsernext_test
 import (
 	"crypto/sha256"
 	"fmt"
+	"github.com/Emyrk/chronicle/database"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/Emyrk/chronicle/combatlog/parsernext"
 	"github.com/Emyrk/chronicle/combatlog/parsernext/common"
-	"github.com/Emyrk/chronicle/combatlog/parsernext/formats"
 	"github.com/Emyrk/chronicle/combatlog/parsernext/formats/ccv2"
 	"github.com/Emyrk/chronicle/combatlog/parsernext/vanilla"
 	"github.com/stretchr/testify/require"
@@ -25,7 +25,7 @@ func TestCCV2RecordsThroughCompleteFileReader(t *testing.T) {
 	}
 	var records []record
 	var lines []common.Line
-	summary, err := parsernext.ReadFile(t.Context(), parsernext.Selection{Format: formats.VanillaCompanion, Expansion: vanilla.Name}, strings.NewReader(input), 1024, func(line common.Line) error {
+	summary, err := parsernext.ReadFile(t.Context(), parsernext.Selection{Format: database.LogFormat112aCcAddon, Expansion: vanilla.Name}, strings.NewReader(input), 1024, func(line common.Line) error {
 		// Match bufio.ScanLines' LF/CR removal without changing retained source bytes.
 		content := strings.TrimSuffix(strings.TrimSuffix(line.Raw, "\n"), "\r")
 		timestamp, event, fields, err := ccv2.ParseLine(content)
@@ -56,7 +56,7 @@ func TestCCV2MalformedRecordDoesNotCompleteFile(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			accepted := 0
-			summary, err := parsernext.ReadFile(t.Context(), parsernext.Selection{Format: formats.VanillaCompanion, Expansion: vanilla.Name}, strings.NewReader(tc.input), 1024, func(line common.Line) error {
+			summary, err := parsernext.ReadFile(t.Context(), parsernext.Selection{Format: database.LogFormat112aCcAddon, Expansion: vanilla.Name}, strings.NewReader(tc.input), 1024, func(line common.Line) error {
 				_, _, _, err := ccv2.ParseLine(strings.TrimSuffix(strings.TrimSuffix(line.Raw, "\n"), "\r"))
 				if err == nil {
 					accepted++

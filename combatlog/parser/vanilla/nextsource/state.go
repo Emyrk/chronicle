@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/Emyrk/chronicle/database"
 	"io"
 	"log/slog"
 	"strconv"
@@ -25,10 +26,10 @@ import (
 // Never supply connection strings, credentials, or host-local file paths.
 // Format/Flavor must match construction; all fields are checked once at restore.
 type Compatibility struct {
-	DatasetContent string `json:"dataset_content"`
-	Format         string `json:"format"`
-	Flavor         string `json:"flavor"`
-	ParserVersion  string `json:"parser_version"`
+	DatasetContent string             `json:"dataset_content"`
+	Format         database.LogFormat `json:"format"`
+	Flavor         string             `json:"flavor"`
+	ParserVersion  string             `json:"parser_version"`
 	// BuildVersion is HEADER display metadata, not ParserVersion. Empty is valid.
 	BuildVersion          string `json:"build_version"`
 	CustomOverrideVersion string `json:"custom_override_version"`
@@ -51,6 +52,8 @@ type State struct {
 	Values        map[stategraph.Path]stategraph.ValuePayload `json:"values"`
 }
 
+// StateVersion remains 1: LogFormat replaces a Go string only; the JSON format
+// field keeps the exact canonical string payload. This codec is not deployed.
 const StateVersion uint32 = 1
 const pipelineType = "vanilla/nextsource.Pipeline"
 

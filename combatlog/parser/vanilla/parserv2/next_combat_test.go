@@ -3,6 +3,7 @@ package parserv2
 import (
 	"context"
 	"errors"
+	"github.com/Emyrk/chronicle/database"
 	"os"
 	"strings"
 	"testing"
@@ -12,7 +13,6 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parsernext"
 	"github.com/Emyrk/chronicle/combatlog/parsernext/common"
-	"github.com/Emyrk/chronicle/combatlog/parsernext/formats"
 	next "github.com/Emyrk/chronicle/combatlog/parsernext/vanilla"
 	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
@@ -93,7 +93,7 @@ func TestNextCritterCombatFile(t *testing.T) {
 	require.False(t, classification.RankedDamageTarget)
 	input := "1234|SWING|0x0000000000000001|" + rat + "|45|128|1|1|2|3|4\r\n1235|DEATH|" + rat
 	var decoded []messages.Message
-	summary, err := parsernext.ReadFile(t.Context(), parsernext.Selection{Format: formats.VanillaCompanion, Expansion: next.Name}, strings.NewReader(input), 1024, func(line common.Line) error {
+	summary, err := parsernext.ReadFile(t.Context(), parsernext.Selection{Format: database.LogFormat112aCcAddon, Expansion: next.Name}, strings.NewReader(input), 1024, func(line common.Line) error {
 		batch, err := next.DecodeRecord(t.Context(), combatSpellLookup{}, strings.TrimSuffix(strings.TrimSuffix(line.Raw, "\n"), "\r"))
 		if err != nil {
 			return err

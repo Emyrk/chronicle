@@ -7,11 +7,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Emyrk/chronicle/database"
 	"io"
 
 	"github.com/Emyrk/chronicle/combatlog/parsernext/common"
 	"github.com/Emyrk/chronicle/combatlog/parsernext/forever"
-	"github.com/Emyrk/chronicle/combatlog/parsernext/formats"
 	"github.com/Emyrk/chronicle/combatlog/parsernext/tbc"
 	"github.com/Emyrk/chronicle/combatlog/parsernext/vanilla"
 	"github.com/Emyrk/chronicle/combatlog/parsernext/wotlk"
@@ -20,7 +20,7 @@ import (
 // Selection keeps wire syntax and expansion policy explicit and independent.
 // In particular, selecting TBC never constructs a WotLK pipeline.
 type Selection struct {
-	Format    formats.ID
+	Format    database.LogFormat
 	Expansion common.Expansion
 }
 

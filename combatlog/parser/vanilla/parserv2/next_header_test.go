@@ -3,6 +3,7 @@ package parserv2
 import (
 	"bufio"
 	"compress/gzip"
+	"github.com/Emyrk/chronicle/database"
 	"os"
 	"strconv"
 	"strings"
@@ -13,7 +14,6 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parseerrors"
 	"github.com/Emyrk/chronicle/combatlog/parsernext"
 	"github.com/Emyrk/chronicle/combatlog/parsernext/common"
-	"github.com/Emyrk/chronicle/combatlog/parsernext/formats"
 	next "github.com/Emyrk/chronicle/combatlog/parsernext/vanilla"
 	"github.com/Emyrk/chronicle/internal/version"
 	"github.com/stretchr/testify/require"
@@ -72,7 +72,7 @@ func TestNextHeaderSourceIsolation(t *testing.T) {
 	for _, timestamp := range []string{"20000", "1000"} {
 		d := next.NewDecoder(nil, "test-build")
 		var emitted []messages.Message
-		summary, err := parsernext.ReadFile(t.Context(), parsernext.Selection{Format: formats.VanillaCompanion, Expansion: next.Name}, strings.NewReader(nextHeader+"\r\n"+timestamp+"|DEATH|0x0000000000000001"), 1024, func(line common.Line) error {
+		summary, err := parsernext.ReadFile(t.Context(), parsernext.Selection{Format: database.LogFormat112aCcAddon, Expansion: next.Name}, strings.NewReader(nextHeader+"\r\n"+timestamp+"|DEATH|0x0000000000000001"), 1024, func(line common.Line) error {
 			batch, err := d.DecodeRecord(t.Context(), strings.TrimSuffix(strings.TrimSuffix(line.Raw, "\n"), "\r"))
 			emitted = append(emitted, batch...)
 			return err
@@ -184,7 +184,7 @@ func TestNextHeaderStateSurvivesFileBoundary(t *testing.T) {
 	decoder := next.NewDecoder(nil, "test-build")
 	read := func(input string) ([]messages.Message, error) {
 		var output []messages.Message
-		_, err := parsernext.ReadFile(t.Context(), parsernext.Selection{Format: formats.VanillaCompanion, Expansion: next.Name}, strings.NewReader(input), 1024, func(line common.Line) error {
+		_, err := parsernext.ReadFile(t.Context(), parsernext.Selection{Format: database.LogFormat112aCcAddon, Expansion: next.Name}, strings.NewReader(input), 1024, func(line common.Line) error {
 			batch, err := decoder.DecodeRecord(t.Context(), strings.TrimSuffix(line.Raw, "\n"))
 			output = append(output, batch...)
 			return err

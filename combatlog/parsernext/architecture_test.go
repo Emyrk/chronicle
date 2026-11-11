@@ -1,6 +1,7 @@
 package parsernext_test
 
 import (
+	"go/ast"
 	"go/parser"
 	"go/token"
 	"io/fs"
@@ -14,7 +15,7 @@ import (
 
 // Enforce the import graph rather than relying on registration side effects.
 // In particular common has no dependency path to an expansion, raid builder,
-// database, River, or old parser execution; only Vanilla may reuse the exact
+// database services, River, or old parser execution; only Vanilla may reuse the exact
 // listed legacy message/value packages. TBC cannot quietly delegate to WotLK.
 func TestProductionDependencyDirection(t *testing.T) {
 	t.Parallel()
@@ -26,7 +27,7 @@ func TestProductionDependencyDirection(t *testing.T) {
 		if entry.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
-		file, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
+		file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
 		if err != nil {
 			return err
 		}
@@ -37,6 +38,22 @@ func TestProductionDependencyDirection(t *testing.T) {
 			if !strings.Contains(strings.Split(imported, "/")[0], ".") {
 				continue
 			} // standard library
+			if imported == "github.com/Emyrk/chronicle/database" {
+				require.Contains(t, []string{"file.go", "vanilla/profile.go", "tbc/profile.go", "wotlk/profile.go", "forever/profile.go"}, filepath.ToSlash(path))
+				require.Nil(t, spec.Name, "canonical database import only, no aliases or dot imports")
+				ast.Inspect(file, func(node ast.Node) bool {
+					selector, ok := node.(*ast.SelectorExpr)
+					if !ok {
+						return true
+					}
+					name, ok := selector.X.(*ast.Ident)
+					if ok && name.Name == "database" {
+						require.Contains(t, []string{"LogFormat", "LogFormat112aCcAddon", "LogFormat243CcAddon", "LogFormat335aCcAddon", "LogFormatAzerothcoreMod", "LogFormatV22Cleu"}, selector.Sel.Name, "primitive format contract only, no database services")
+					}
+					return true
+				})
+				continue
+			}
 			if allowedVanillaCompatibility[imported] {
 				if owner == "vanilla/synthetic" {
 					// Aura correlation owns copied values, not old parser execution.
@@ -55,12 +72,12 @@ func TestProductionDependencyDirection(t *testing.T) {
 			dependency := strings.TrimPrefix(imported, prefix)
 			switch owner {
 			case ".":
-				require.Contains(t, []string{"common", "formats", "vanilla", "tbc", "wotlk", "forever", "snapshot"}, dependency)
+				require.Contains(t, []string{"common", "vanilla", "tbc", "wotlk", "forever", "snapshot"}, dependency)
 			case "vanilla":
-				require.Contains(t, []string{"common", "formats", "common/units", "common/critters", "formats/ccv2"}, dependency, "%s -> %s", owner, dependency)
+				require.Contains(t, []string{"common", "common/units", "common/critters", "formats/ccv2"}, dependency, "%s -> %s", owner, dependency)
 			case "tbc", "wotlk", "forever":
-				require.Contains(t, []string{"common", "formats"}, dependency, "%s -> %s", owner, dependency)
-			case "common", "common/units", "common/critters", "formats", "formats/ccv2":
+				require.Contains(t, []string{"common"}, dependency, "%s -> %s", owner, dependency)
+			case "common", "common/units", "common/critters", "formats/ccv2":
 				t.Errorf("leaf package %s imports %s", owner, imported)
 			case "snapshot":
 				require.Contains(t, []string{"common", "vanilla", "tbc", "wotlk", "forever"}, dependency)
