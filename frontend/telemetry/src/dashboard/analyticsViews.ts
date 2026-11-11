@@ -179,6 +179,33 @@ for (const [path, title] of [
       .negative {
         color: #f19d94;
       }
+      /* Growth emphasis: positive <25% regular, 25–99.9% semibold,
+         >=100% bold. Negative is red; zero/missing baseline stay neutral. */
+      .growth-positive { color: #8fd8ac; font-weight: 400; }
+      .growth-strong { color: #a6e9be; font-weight: 600; }
+      .growth-high { color: #c0f7d2; font-weight: 800; }
+      .growth-negative { color: #f19d94; }
+      .growth-neutral { color: var(--muted); }
+      th button { border: 0; padding: 0; background: transparent; font: inherit; color: inherit; }
+      th[aria-sort="ascending"], th[aria-sort="descending"] { color: var(--accent); }
+      .chart-container {
+        position: relative;
+      }
+      .chart-tooltip {
+        position: absolute;
+        z-index: 2;
+        top: 10px;
+        max-width: min(360px, 100%);
+        padding: 12px;
+        border: 1px solid var(--accent);
+        border-radius: 6px;
+        background: #101516f5;
+        box-shadow: 0 6px 24px #0008;
+        white-space: pre-line;
+        overflow-wrap: anywhere;
+        pointer-events: none;
+        font: 12px/1.6 "IBM Plex Mono", monospace;
+      }
       .chart {
         width: 100%;
         height: 300px;
@@ -282,9 +309,7 @@ for (const [path, title] of [
         const number = (value) =>
           Number(value).toLocaleString(undefined, { maximumFractionDigits: 1 });
         const percent = (value) =>
-          value === null
-            ? "No baseline"
-            : (value > 0 ? "+" : "") + number(value) + "%";
+          value === null ? "No baseline" : (value > 0 ? "+" : "") + number(value) + "%";
         const delta = (value) =>
           '<span class="' +
           (value < 0 ? "negative" : "positive") +
@@ -307,32 +332,47 @@ for (const [path, title] of [
               a.setAttribute("aria-current", "page");
           });
         }
-        function table(headers, rows) {
+        function table(headers, rows, sortable = false) {
           return (
             '<div class="styled-scrollbar"><table><thead><tr>' +
-            headers.map((h) => "<th>" + esc(h) + "</th>").join("") +
+            headers
+              .map((h, i) =>
+                sortable
+                  ? '<th aria-sort="' +
+                    (domainSort.column === i ? domainSort.direction : "none") +
+                    '"><button type="button" data-domain-sort="' +
+                    i +
+                    '">' +
+                    esc(h) +
+                    ' <span aria-hidden="true">' +
+                    (domainSort.column === i
+                      ? domainSort.direction === "ascending"
+                        ? "↑"
+                        : "↓"
+                      : "↕") +
+                    "</span></button></th>"
+                  : "<th>" + esc(h) + "</th>",
+              )
+              .join("") +
             "</tr></thead><tbody>" +
             rows
               .map(
-                (r) =>
-                  "<tr>" +
-                  r.map((c) => "<td>" + c + "</td>").join("") +
-                  "</tr>",
+                (r) => "<tr>" + r.map((c) => "<td>" + c + "</td>").join("") + "</tr>",
               )
               .join("") +
             "</tbody></table></div>"
           );
         }
-        function chart(series, dates) {
-          const values = series
-            .flatMap((s) => s.values)
-            .filter((v) => v !== null);
+        let chartState;
+        function chart(series, dates, normalizedScale = false) {
+          chartState = { series, dates, normalizedScale };
+          const values = series.flatMap((s) => s.values).filter((v) => v !== null);
           const max = values.reduce((m, v) => Math.max(m, v), 1);
           const colors = series.map(
             (_, i) => "hsl(" + ((i * 137.508) % 360) + " 55% 68%)",
           );
           let svg =
-            '<svg class="chart" viewBox="0 0 1000 300" role="img" aria-label="Daily page views by domain">';
+            '<div class="chart-container"><svg class="chart" viewBox="0 0 1000 300" tabindex="0" role="group" aria-label="Daily traffic. Use left and right arrows to inspect dates." aria-describedby="chart-tooltip">';
           for (let i = 0; i < 4; i++) {
             const y = 20 + i * 80;
             svg +=
@@ -384,7 +424,9 @@ for (const [path, title] of [
           });
           return (
             svg +
-            '</svg><div class="axis"><span>' +
+            '<g class="chart-highlight" style="display:none" pointer-events="none"></g>' +
+            '<rect x="65" y="20" width="920" height="240" fill="transparent"/>' +
+            '</svg><div id="chart-tooltip" class="chart-tooltip" role="status" aria-live="polite" hidden></div></div><div class="axis"><span>' +
             dates[0] +
             "</span><span>" +
             dates[dates.length - 1] +
@@ -403,6 +445,173 @@ for (const [path, title] of [
             "</div>"
           );
         }
+        function bindChart(svg, state) {
+          const { series, dates, normalizedScale } = state;
+          const tooltip = svg.parentElement.querySelector(".chart-tooltip");
+          const highlight = svg.querySelector(".chart-highlight");
+          const max = series
+            .flatMap((s) => s.values)
+            .reduce((m, v) => Math.max(m, v ?? 0), 1);
+          let index = 0;
+          function hide() {
+            tooltip.hidden = true;
+            highlight.style.display = "none";
+          }
+          function show(next) {
+            if (!dates.length) return;
+            index = Math.max(0, Math.min(dates.length - 1, next));
+            const x = 65 + (index * 920) / Math.max(1, dates.length - 1);
+            tooltip.textContent =
+              dates[index] +
+              "\\n" +
+              series
+                .map((s) => {
+                  const value = s.values[index];
+                  const label =
+                    value === null
+                      ? "No baseline"
+                      : number(value) +
+                        (normalizedScale
+                          ? "% of previous daily average"
+                          : " page views");
+                  return s.hostname + ": " + label;
+                })
+                .join("\\n");
+            tooltip.hidden = false;
+            highlight.innerHTML =
+              '<line x1="' +
+              x +
+              '" x2="' +
+              x +
+              '" y1="20" y2="260" stroke="#e8f1f0" stroke-dasharray="4 4"/>' +
+              series
+                .map((s, i) => {
+                  const value = s.values[index];
+                  if (value === null) return "";
+                  return (
+                    '<circle cx="' +
+                    x +
+                    '" cy="' +
+                    (260 - (value / max) * 240) +
+                    '" r="5" fill="hsl(' +
+                    ((i * 137.508) % 360) +
+                    ' 55% 68%)" stroke="#101516" stroke-width="2"/>'
+                  );
+                })
+                .join("");
+            highlight.style.display = "";
+            // CTM includes viewBox letterboxing, CSS scaling and page position.
+            const matrix = svg.getScreenCTM();
+            if (matrix) {
+              const point = svg.createSVGPoint();
+              point.x = x;
+              point.y = 20;
+              const screen = point.matrixTransform(matrix);
+              const bounds = svg.parentElement.getBoundingClientRect();
+              const left = screen.x - bounds.left + 12;
+              tooltip.style.left =
+                Math.max(0, Math.min(left, bounds.width - tooltip.offsetWidth)) + "px";
+            }
+          }
+          svg.addEventListener("pointermove", (event) => {
+            const matrix = svg.getScreenCTM();
+            if (!matrix) {
+              hide();
+              return;
+            }
+            const point = svg.createSVGPoint();
+            point.x = event.clientX;
+            point.y = event.clientY;
+            const local = point.matrixTransform(matrix.inverse());
+            if (local.x < 65 || local.x > 985 || local.y < 20 || local.y > 260) {
+              hide();
+              return;
+            }
+            show(Math.round(((local.x - 65) / 920) * Math.max(1, dates.length - 1)));
+          });
+          svg.addEventListener("pointerleave", hide);
+          svg.addEventListener("focus", () => show(index));
+          svg.addEventListener("blur", hide);
+          svg.addEventListener("keydown", (event) => {
+            const next = {
+              ArrowLeft: index - 1,
+              ArrowRight: index + 1,
+              Home: 0,
+              End: dates.length - 1,
+            }[event.key];
+            if (event.key === "Escape") {
+              hide();
+              return;
+            }
+            if (next !== undefined) {
+              event.preventDefault();
+              show(next);
+            }
+          });
+        }
+        const domainSort = { column: 1, direction: "descending" };
+        const domainColumns = [
+          "Domain",
+          "Views",
+          "Previous",
+          "Share",
+          "Change",
+          "Growth",
+          "Active users",
+          "Sessions",
+          "Engaged sessions",
+        ];
+        function toggleDomainSort(column) {
+          domainSort.direction =
+            domainSort.column === column && domainSort.direction === "ascending"
+              ? "descending"
+              : "ascending";
+          domainSort.column = column;
+        }
+        function sortDomains(hosts) {
+          const value = (h) =>
+            [
+              h.hostname,
+              h.pageViews,
+              h.previousPageViews,
+              h.share,
+              h.delta,
+              h.percent,
+              h.metrics.activeUsers?.value,
+              h.metrics.sessions?.value,
+              h.metrics.engagedSessions?.value,
+            ][domainSort.column];
+          return [...hosts].sort((a, b) => {
+            const left = value(a),
+              right = value(b);
+            // Missing baselines/metrics stay last in either direction.
+            if (left == null || right == null)
+              return left == null
+                ? right == null
+                  ? a.hostname.localeCompare(b.hostname)
+                  : 1
+                : -1;
+            const order =
+              typeof left === "string" ? left.localeCompare(right) : left - right;
+            return (
+              (domainSort.direction === "ascending" ? order : -order) ||
+              a.hostname.localeCompare(b.hostname)
+            );
+          });
+        }
+        function growthPercent(value) {
+          const style =
+            value === null || value === 0
+              ? "neutral"
+              : value < 0
+                ? "negative"
+                : value >= 100
+                  ? "high"
+                  : value >= 25
+                    ? "strong"
+                    : "positive";
+          return '<span class="growth-' + style + '">' + percent(value) + "</span>";
+        }
         function metricCell(metric) {
           return metric
             ? number(metric.value) +
@@ -411,17 +620,13 @@ for (const [path, title] of [
                   : ' <span class="muted">(was ' +
                     number(metric.previous) +
                     ", " +
-                    percent(metric.changePercent) +
+                    growthPercent(metric.changePercent) +
                     ")</span>")
             : "Unavailable";
         }
         function render() {
           persist();
-          const model = compare(
-            data,
-            selected,
-            page === "/growth" && normalized,
-          );
+          const model = compare(data, selected, page === "/growth" && normalized);
           let output = "";
           if (!selected.length) {
             document.getElementById("content").innerHTML =
@@ -469,10 +674,7 @@ for (const [path, title] of [
             );
             output +=
               "<section><h2>Daily page views</h2>" +
-              chart(
-                [{ hostname: "Selected domains", values: totals }],
-                model.dates,
-              ) +
+              chart([{ hostname: "Selected domains", values: totals }], model.dates) +
               "</section>";
           }
           if (page === "/growth") {
@@ -482,25 +684,15 @@ for (const [path, title] of [
               '>Absolute page views</option><option value="normalized" ' +
               (normalized ? "selected" : "") +
               ">Normalized to previous daily average</option></select></label><p>Normalized: 100 = the domain’s previous-period daily average. Domains without a baseline are not plotted.</p>" +
-              chart(model.series, model.dates) +
+              chart(model.series, model.dates, normalized) +
               "</section>";
           }
           if (page !== "/pages")
             output +=
               "<section><h2>Domain comparison</h2><p>Share is of selected domains. Users and sessions are reported per domain and must not be summed across domains. Parentheses show previous values and period changes.</p>" +
               table(
-                [
-                  "Domain",
-                  "Views",
-                  "Previous",
-                  "Share",
-                  "Change",
-                  "Growth",
-                  "Active users",
-                  "Sessions",
-                  "Engaged sessions",
-                ],
-                model.hosts.map((h) => [
+                domainColumns,
+                sortDomains(model.hosts).map((h) => [
                   '<a href="/internal/analytics/growth?days=' +
                     days.value +
                     "&domain=" +
@@ -512,11 +704,12 @@ for (const [path, title] of [
                   number(h.previousPageViews),
                   number(h.share * 100) + "%",
                   delta(h.delta),
-                  percent(h.percent),
+                  growthPercent(h.percent),
                   metricCell(h.metrics.activeUsers),
                   metricCell(h.metrics.sessions),
                   metricCell(h.metrics.engagedSessions),
                 ]),
+                true,
               ) +
               "</section>";
           if (page === "/pages") {
@@ -549,6 +742,17 @@ for (const [path, title] of [
               "</section>";
           }
           document.getElementById("content").innerHTML = output;
+          document
+            .querySelectorAll(".chart")
+            .forEach((svg) => bindChart(svg, chartState));
+          document.querySelectorAll("[data-domain-sort]").forEach((button) => {
+            button.addEventListener("click", () => {
+              const column = Number(button.dataset.domainSort);
+              toggleDomainSort(column);
+              render();
+              document.querySelector('[data-domain-sort="' + column + '"]')?.focus();
+            });
+          });
           document.getElementById("scale")?.addEventListener("change", (e) => {
             normalized = e.target.value === "normalized";
             render();
@@ -570,9 +774,9 @@ for (const [path, title] of [
           document.querySelectorAll("#domains input").forEach((el) =>
             el.addEventListener("change", () => {
               explicit = true;
-              selected = [
-                ...document.querySelectorAll("#domains input:checked"),
-              ].map((e) => e.value);
+              selected = [...document.querySelectorAll("#domains input:checked")].map(
+                (e) => e.value,
+              );
               render();
             }),
           );
@@ -585,8 +789,7 @@ for (const [path, title] of [
             const response = await fetch(
               "/internal/api/v1/analytics/dashboard?days=" + days.value,
             );
-            if (!response.ok)
-              throw Error("Analytics unavailable. Try again shortly.");
+            if (!response.ok) throw Error("Analytics unavailable. Try again shortly.");
             const loaded = await response.json();
             if (version !== loadVersion) return;
             data = loaded;
