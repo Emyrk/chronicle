@@ -1576,7 +1576,7 @@ func insertDPSRankings(
 				continue
 			}
 			var class, spec string
-			if player, ok := finalized.Guilds.Players[unitGUID]; ok {
+			if player, ok := finalized.Guilds.PlayerObservations[unitGUID]; ok {
 				class = string(db2sdk.HeroClassToDB(player.HeroClass))
 			}
 			if stats.Talents != nil && class != "" {
@@ -1596,7 +1596,7 @@ func insertDPSRankings(
 			if !stats.IsPlayer {
 				continue
 			}
-			player, ok := finalized.Guilds.Players[unitGUID]
+			player, ok := finalized.Guilds.PlayerObservations[unitGUID]
 			if !ok {
 				continue
 			}
@@ -1771,7 +1771,7 @@ func insertTrashRankings(
 			if !stats.IsPlayer {
 				continue
 			}
-			className := string(db2sdk.HeroClassToDB(finalized.Guilds.Players[unitGUID].HeroClass))
+			className := string(db2sdk.HeroClassToDB(finalized.Guilds.PlayerObservations[unitGUID].HeroClass))
 			spec, subSpec, talentLayout, talentSummary := extractTalentInfoFromSnapshot(className, stats.Talents, stats.ObservedForm, flavor, talentTreeData)
 
 			key := trashPlayerKey{GUID: unitGUID, Spec: spec, SubSpec: subSpec}
@@ -1811,7 +1811,7 @@ func insertTrashRankings(
 	playerMetrics := make(map[trashPlayerKey]wowspec.PlayerMetrics, len(accum))
 	for key, a := range accum {
 		var class string
-		if player, ok := finalized.Guilds.Players[key.GUID]; ok {
+		if player, ok := finalized.Guilds.PlayerObservations[key.GUID]; ok {
 			class = string(db2sdk.HeroClassToDB(player.HeroClass))
 		}
 		playerMetrics[key] = wowspec.PlayerMetrics{
@@ -1825,7 +1825,7 @@ func insertTrashRankings(
 	roles := wowspec.InferRoles(playerMetrics)
 
 	for key, a := range accum {
-		player, ok := finalized.Guilds.Players[key.GUID]
+		player, ok := finalized.Guilds.PlayerObservations[key.GUID]
 		if !ok {
 			continue
 		}

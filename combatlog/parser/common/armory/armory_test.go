@@ -46,7 +46,7 @@ func TestRenameGuilds(t *testing.T) {
 			"Levia":   {leviaPlayer: {}},
 			"Remnant": {remnantPlayer: {}},
 		},
-		Players: map[guid.GUID]combatant.Combatant{
+		PlayerObservations: map[guid.GUID]combatant.Combatant{
 			leviaPlayer: {
 				Guid:  leviaPlayer,
 				Guild: &combatant.Guild{Name: "Levia"},
@@ -68,8 +68,8 @@ func TestRenameGuilds(t *testing.T) {
 	require.Len(t, tracker.Guilds, 1)
 	assert.Contains(t, tracker.Guilds["Remnant"], leviaPlayer)
 	assert.Contains(t, tracker.Guilds["Remnant"], remnantPlayer)
-	assert.Equal(t, "Remnant", tracker.Players[leviaPlayer].Guild.Name)
-	assert.Equal(t, "Remnant", tracker.Players[remnantPlayer].Guild.Name)
+	assert.Equal(t, "Remnant", tracker.PlayerObservations[leviaPlayer].Guild.Name)
+	assert.Equal(t, "Remnant", tracker.PlayerObservations[remnantPlayer].Guild.Name)
 }
 
 func TestOptionalGemEnchantIDs(t *testing.T) {
@@ -117,7 +117,7 @@ func TestUnitRespecAuraInvalidatesOnlyFirstObservation(t *testing.T) {
 		},
 	}
 	units.UpdatePlayer(initial)
-	tracker.Players[player] = initial
+	tracker.PlayerObservations[player] = initial
 
 	unitSnapshot := &messages.Unit{Info: unitinfo.Info{
 		Guid:  player,
@@ -125,7 +125,7 @@ func TestUnitRespecAuraInvalidatesOnlyFirstObservation(t *testing.T) {
 		Buffs: []unitinfo.Buff{{ID: respecAuraSpellID, Applications: 1}},
 	}}
 	require.NoError(t, tracker.ProcessMessage(false, uuid.Nil, unitSnapshot))
-	assert.Nil(t, tracker.Players[player].Talents)
+	assert.Nil(t, tracker.PlayerObservations[player].Talents)
 	assert.Nil(t, units.Players[player].Talents)
 
 	// UNIT_INFO is followed by COMBATANT_INFO containing the addon's cached
@@ -133,7 +133,7 @@ func TestUnitRespecAuraInvalidatesOnlyFirstObservation(t *testing.T) {
 	staleCombatant := &messages.Combatant{Combatant: initial}
 	require.NoError(t, units.ProcessMessage(staleCombatant))
 	require.NoError(t, tracker.ProcessMessage(false, uuid.Nil, staleCombatant))
-	assert.Nil(t, tracker.Players[player].Talents)
+	assert.Nil(t, tracker.PlayerObservations[player].Talents)
 	assert.Nil(t, units.Players[player].Talents)
 
 	freshTalents := &messages.CombatantTalents{
@@ -146,13 +146,13 @@ func TestUnitRespecAuraInvalidatesOnlyFirstObservation(t *testing.T) {
 		},
 	}
 	require.NoError(t, tracker.ProcessMessage(false, uuid.Nil, freshTalents))
-	require.NotNil(t, tracker.Players[player].Talents)
+	require.NotNil(t, tracker.PlayerObservations[player].Talents)
 	require.NotNil(t, units.Players[player].Talents)
 
 	// The persistent aura remains in UNIT_INFO snapshots. Seeing it again must
 	// not invalidate the fresh talent data.
 	require.NoError(t, tracker.ProcessMessage(false, uuid.Nil, unitSnapshot))
-	require.NotNil(t, tracker.Players[player].Talents)
+	require.NotNil(t, tracker.PlayerObservations[player].Talents)
 	require.NotNil(t, units.Players[player].Talents)
 }
 
@@ -172,7 +172,7 @@ func TestUnitRespecAuraExpiryAllowsSameBuildRepair(t *testing.T) {
 		},
 	}
 	units.UpdatePlayer(initial)
-	tracker.Players[player] = initial
+	tracker.PlayerObservations[player] = initial
 
 	unitSnapshot := &messages.Unit{Info: unitinfo.Info{
 		Guid:  player,
@@ -185,7 +185,7 @@ func TestUnitRespecAuraExpiryAllowsSameBuildRepair(t *testing.T) {
 	cachedCombatant := &messages.Combatant{Combatant: initial}
 	require.NoError(t, units.ProcessMessage(cachedCombatant))
 	require.NoError(t, tracker.ProcessMessage(false, uuid.Nil, cachedCombatant))
-	assert.Nil(t, tracker.Players[player].Talents)
+	assert.Nil(t, tracker.PlayerObservations[player].Talents)
 	assert.Nil(t, units.Players[player].Talents)
 
 	// Empty buff snapshots are not authoritative and must not end invalidation.
@@ -193,7 +193,7 @@ func TestUnitRespecAuraExpiryAllowsSameBuildRepair(t *testing.T) {
 	require.NoError(t, tracker.ProcessMessage(false, uuid.Nil, emptyBuffSnapshot))
 	require.NoError(t, units.ProcessMessage(cachedCombatant))
 	require.NoError(t, tracker.ProcessMessage(false, uuid.Nil, cachedCombatant))
-	assert.Nil(t, tracker.Players[player].Talents)
+	assert.Nil(t, tracker.PlayerObservations[player].Talents)
 	assert.Nil(t, units.Players[player].Talents)
 
 	// Once UNIT_INFO reports that the aura is gone, the next talent snapshot is
@@ -207,9 +207,9 @@ func TestUnitRespecAuraExpiryAllowsSameBuildRepair(t *testing.T) {
 	require.NoError(t, units.ProcessMessage(cachedCombatant))
 	require.NoError(t, tracker.ProcessMessage(false, uuid.Nil, cachedCombatant))
 
-	require.NotNil(t, tracker.Players[player].Talents)
+	require.NotNil(t, tracker.PlayerObservations[player].Talents)
 	require.NotNil(t, units.Players[player].Talents)
-	assert.Equal(t, [3]uint8{34, 17, 0}, tracker.Players[player].Talents.Summary)
+	assert.Equal(t, [3]uint8{34, 17, 0}, tracker.PlayerObservations[player].Talents.Summary)
 	assert.Equal(t, [3]uint8{34, 17, 0}, units.Players[player].Talents.Summary)
 }
 
@@ -229,7 +229,7 @@ func TestRespecAuraExpiryAllowsSameBuildRepair(t *testing.T) {
 		},
 	}
 	units.UpdatePlayer(initial)
-	tracker.Players[player] = initial
+	tracker.PlayerObservations[player] = initial
 
 	unitSnapshot := &messages.Unit{Info: unitinfo.Info{
 		Guid:  player,
@@ -262,9 +262,9 @@ func TestRespecAuraExpiryAllowsSameBuildRepair(t *testing.T) {
 	require.NoError(t, units.ProcessMessage(cachedCombatant))
 	require.NoError(t, tracker.ProcessMessage(false, uuid.Nil, cachedCombatant))
 
-	require.NotNil(t, tracker.Players[player].Talents)
+	require.NotNil(t, tracker.PlayerObservations[player].Talents)
 	require.NotNil(t, units.Players[player].Talents)
-	assert.Equal(t, [3]uint8{34, 17, 0}, tracker.Players[player].Talents.Summary)
+	assert.Equal(t, [3]uint8{34, 17, 0}, tracker.PlayerObservations[player].Talents.Summary)
 }
 
 func TestRespecInvalidatesRankingTalentsUntilFreshUpdate(t *testing.T) {
@@ -283,7 +283,7 @@ func TestRespecInvalidatesRankingTalentsUntilFreshUpdate(t *testing.T) {
 		},
 	}
 	units.UpdatePlayer(initial)
-	tracker.Players[player] = initial
+	tracker.PlayerObservations[player] = initial
 
 	respec := &messages.Aura{
 		Target:    player,
@@ -292,7 +292,7 @@ func TestRespecInvalidatesRankingTalentsUntilFreshUpdate(t *testing.T) {
 	}
 	require.NoError(t, tracker.ProcessMessage(false, uuid.Nil, respec))
 
-	assert.Nil(t, tracker.Players[player].Talents)
+	assert.Nil(t, tracker.PlayerObservations[player].Talents)
 	assert.Nil(t, units.Players[player].Talents)
 
 	freshTalents := &messages.CombatantTalents{
@@ -306,15 +306,15 @@ func TestRespecInvalidatesRankingTalentsUntilFreshUpdate(t *testing.T) {
 	}
 	require.NoError(t, tracker.ProcessMessage(false, uuid.Nil, freshTalents))
 
-	require.NotNil(t, tracker.Players[player].Talents)
+	require.NotNil(t, tracker.PlayerObservations[player].Talents)
 	require.NotNil(t, units.Players[player].Talents)
-	assert.Equal(t, [3]uint8{6, 0, 0}, tracker.Players[player].Talents.Summary)
+	assert.Equal(t, [3]uint8{6, 0, 0}, tracker.PlayerObservations[player].Talents.Summary)
 	assert.Equal(t, [3]uint8{6, 0, 0}, units.Players[player].Talents.Summary)
 
 	respecRemoved := *respec
 	respecRemoved.State = types.AuraStateRemoved
 	require.NoError(t, tracker.ProcessMessage(false, uuid.Nil, &respecRemoved))
-	require.NotNil(t, tracker.Players[player].Talents)
+	require.NotNil(t, tracker.PlayerObservations[player].Talents)
 	require.NotNil(t, units.Players[player].Talents)
 
 	require.NoError(t, tracker.ProcessMessage(false, uuid.Nil, respec))
@@ -330,8 +330,8 @@ func TestRespecInvalidatesRankingTalentsUntilFreshUpdate(t *testing.T) {
 	require.NoError(t, units.ProcessMessage(freshCombatant))
 	require.NoError(t, tracker.ProcessMessage(false, uuid.Nil, freshCombatant))
 
-	require.NotNil(t, tracker.Players[player].Talents)
+	require.NotNil(t, tracker.PlayerObservations[player].Talents)
 	require.NotNil(t, units.Players[player].Talents)
-	assert.Equal(t, [3]uint8{0, 0, 51}, tracker.Players[player].Talents.Summary)
+	assert.Equal(t, [3]uint8{0, 0, 51}, tracker.PlayerObservations[player].Talents.Summary)
 	assert.Equal(t, [3]uint8{0, 0, 51}, units.Players[player].Talents.Summary)
 }

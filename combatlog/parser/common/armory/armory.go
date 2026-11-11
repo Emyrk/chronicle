@@ -36,12 +36,13 @@ const respecAuraSpellID = 57734
 type Tracker struct {
 	instancehook.BaseHook
 
-	units          *unitdb.Units
-	Guilds         map[string]map[guid.GUID]struct{}
-	Participant    map[guid.GUID]struct{}
-	Players        map[guid.GUID]combatant.Combatant
-	ByName         map[string]guid.GUID
-	PendingTalents map[guid.GUID]pendingTalent
+	units       *unitdb.Units
+	Guilds      map[string]map[guid.GUID]struct{}
+	Participant map[guid.GUID]struct{}
+	// PlayerObservations contains detached per-instance persistence history, not current metadata.
+	PlayerObservations map[guid.GUID]combatant.Combatant
+	ByName             map[string]guid.GUID
+	PendingTalents     map[guid.GUID]pendingTalent
 	// InvalidatedTalents tracks players who have respecced but haven't yet
 	// received a fresh talent update. Their Talents field is set to nil so
 	// downstream consumers (DPS rankings) see "Unknown" spec.
@@ -61,7 +62,7 @@ func New(units *unitdb.Units) *Tracker {
 		units:                  units,
 		Guilds:                 make(map[string]map[guid.GUID]struct{}),
 		Participant:            make(map[guid.GUID]struct{}),
-		Players:                make(map[guid.GUID]combatant.Combatant),
+		PlayerObservations:     make(map[guid.GUID]combatant.Combatant),
 		ByName:                 make(map[string]guid.GUID),
 		PendingTalents:         make(map[guid.GUID]pendingTalent),
 		InvalidatedTalents:     make(map[guid.GUID]struct{}),
@@ -112,7 +113,7 @@ func (g *Tracker) Insert(ctx context.Context, udb *unitdb.Units, instanceID uuid
 	if err != nil {
 		return nil, err
 	}
-	playerGUIDs := sortedPlayerGUIDs(g.Players)
+	playerGUIDs := sortedPlayerGUIDs(g.PlayerObservations)
 
 	// Collect unique item IDs and names for batch metadata fetch.
 	// Names are used as fallback for transmog IDs that don't exist in the item table.
@@ -120,7 +121,7 @@ func (g *Tracker) Insert(ctx context.Context, udb *unitdb.Units, instanceID uuid
 	itemIDList := make([]int32, 0)
 	itemNameList := make([]string, 0)
 	for _, playerGUID := range playerGUIDs {
-		player := g.Players[playerGUID]
+		player := g.PlayerObservations[playerGUID]
 		for _, item := range player.GearSetups {
 			if item.ItemID > 0 {
 				if _, exists := itemIDSet[int32(item.ItemID)]; !exists {
@@ -149,10 +150,10 @@ func (g *Tracker) Insert(ctx context.Context, udb *unitdb.Units, instanceID uuid
 		}
 	}
 
-	inserts := make([]database.UpsertPlayersParams, 0, len(g.Players))
-	gearHistory := make([]database.UpsertPlayerGearHistoryParams, 0, len(g.Players))
+	inserts := make([]database.UpsertPlayersParams, 0, len(g.PlayerObservations))
+	gearHistory := make([]database.UpsertPlayerGearHistoryParams, 0, len(g.PlayerObservations))
 	for _, playerGUID := range playerGUIDs {
-		player := g.Players[playerGUID]
+		player := g.PlayerObservations[playerGUID]
 		guildID := uuid.Nil
 		if player.Guild != nil {
 			guildID = guildIDs[player.Guild.Name]
@@ -289,7 +290,7 @@ func (g *Tracker) RenameGuilds(resolve func(string) string) {
 	}
 	g.Guilds = renamedGuilds
 
-	for playerGUID, player := range g.Players {
+	for playerGUID, player := range g.PlayerObservations {
 		if player.Guild == nil {
 			continue
 		}
@@ -300,7 +301,7 @@ func (g *Tracker) RenameGuilds(resolve func(string) string) {
 		guild := *player.Guild
 		guild.Name = resolvedName
 		player.Guild = &guild
-		g.Players[playerGUID] = player
+		g.PlayerObservations[playerGUID] = player
 	}
 }
 
@@ -411,7 +412,8 @@ func (g *Tracker) ProcessMessage(active bool, encounterID uuid.UUID, msg message
 	case *messages.Combatant:
 		g.Guild(ty)
 		g.Player(ty)
-		if talents := g.Players[ty.Guid].Talents; talents != nil {
+		if player, ok := g.units.GetPlayer(ty.Guid); ok && player.Talents != nil {
+			talents := player.Talents
 			if invalidated, ok := g.invalidatedTalentBuild[ty.Guid]; ok && talentsEqual(talents, invalidated) {
 				// UNIT_INFO emits COMBATANT_INFO even when its cached talent data is
 				// unchanged. Keep the old build invalidated until a different build or
@@ -456,21 +458,12 @@ func hasUnitAura(unit *messages.Unit, spellID int) bool {
 
 func (g *Tracker) invalidateTalents(player guid.GUID) {
 	if _, invalidated := g.InvalidatedTalents[player]; !invalidated {
-		if p, ok := g.Players[player]; ok {
-			g.invalidatedTalentBuild[player] = cloneTalents(p.Talents)
-		} else if p, ok := g.units.Players[player]; ok {
-			g.invalidatedTalentBuild[player] = cloneTalents(p.Talents)
-		} else {
-			g.invalidatedTalentBuild[player] = nil
-		}
+		p, _ := g.units.GetPlayer(player)
+		g.invalidatedTalentBuild[player] = combatant.CloneTalents(p.Talents)
 	}
-
 	g.InvalidatedTalents[player] = struct{}{}
-	if p, ok := g.Players[player]; ok {
-		p.Talents = nil
-		g.Players[player] = p
-	}
 	g.units.InvalidatePlayerTalents(player)
+	g.observePlayer(player)
 }
 
 // finishRespecAura allows the next COMBATANT_INFO snapshot to repair an
@@ -484,17 +477,6 @@ func (g *Tracker) finishRespecAura(player guid.GUID) {
 func (g *Tracker) repairTalents(player guid.GUID) {
 	delete(g.InvalidatedTalents, player)
 	delete(g.invalidatedTalentBuild, player)
-}
-
-func cloneTalents(talents *combatant.Talents) *combatant.Talents {
-	if talents == nil {
-		return nil
-	}
-	clone := *talents
-	for i := range clone.Trees {
-		clone.Trees[i] = slices.Clone(talents.Trees[i])
-	}
-	return &clone
 }
 
 func talentsEqual(a, b *combatant.Talents) bool {
@@ -535,11 +517,8 @@ func (g *Tracker) Unit(unit *messages.Unit) {
 	}
 
 	g.PlayerLevel[unit.Guid] = unit.Level
-	exists, ok := g.Players[unit.Guid]
-	if ok && (exists.Level == nil || *exists.Level <= 0) {
-		exists.Level = &unit.Level
-		g.Players[unit.Guid] = exists
-	}
+	g.units.FillPlayerLevel(unit.Guid, unit.Level)
+	g.observePlayer(unit.Guid)
 }
 
 func (g *Tracker) Player(msg *messages.Combatant) {
@@ -548,38 +527,31 @@ func (g *Tracker) Player(msg *messages.Combatant) {
 		return
 	}
 	c := msg.Combatant
-
-	// If COMBATANT_TALENTS arrived before COMBATANT_INFO, merge the
-	// detailed talent data (which includes tab names) into this player.
 	if pending, ok := g.PendingTalents[gid]; ok {
 		c.Talents = pending.talents
 		delete(g.PendingTalents, gid)
 	}
-
-	previous, ok := g.Players[gid]
-	if ok {
-		c.MergeExisting(previous)
-		gearExists := false
-		for _, item := range c.GearSetups {
-			if item.ItemID != 0 {
-				gearExists = true
-				break
-			}
-		}
-		if !gearExists {
-			c.GearSetups = previous.GearSetups
-		}
-	}
-
-	if c.Level == nil || *c.Level <= 0 {
-		lvl, uok := g.PlayerLevel[gid]
-		if uok {
-			c.Level = &lvl
-		}
-	}
-
-	g.Players[gid] = c
+	g.units.UpdatePlayer(c)
+	g.units.FillPlayerLevel(gid, g.PlayerLevel[gid])
+	player, _ := g.units.GetPlayer(gid)
+	g.PlayerObservations[gid] = player.Clone()
 	g.ByName[msg.Name] = gid
+}
+
+// CurrentPlayer resolves live metadata only for players observed in this instance.
+func (g *Tracker) CurrentPlayer(gid guid.GUID) (combatant.Combatant, bool) {
+	if _, observed := g.PlayerObservations[gid]; !observed {
+		return combatant.Combatant{}, false
+	}
+	return g.units.GetPlayer(gid)
+}
+
+// observePlayer advances this instance's persistence history at an explicit
+// metadata observation. Other instances' observations remain detached.
+func (g *Tracker) observePlayer(gid guid.GUID) {
+	if p, ok := g.CurrentPlayer(gid); ok {
+		g.PlayerObservations[gid] = p.Clone()
+	}
 }
 
 func (g *Tracker) CombatantTalents(msg *messages.CombatantTalents) {
@@ -606,10 +578,9 @@ func (g *Tracker) CombatantTalents(msg *messages.CombatantTalents) {
 	// If we already have this player, merge talents in.
 	// We only update the Talents field — COMBATANT_TALENTS does not carry
 	// class/race/gender/gear, so those must come from COMBATANT_INFO.
-	if pl, ok := g.Players[gid]; ok {
-		pl.Talents = tls
-		g.Players[gid] = pl
+	if _, ok := g.PlayerObservations[gid]; ok {
 		g.units.UpdatePlayerTalents(gid, tls)
+		g.observePlayer(gid)
 		return
 	}
 
@@ -629,13 +600,6 @@ func (g *Tracker) Transmog(msg *messages.Transmog) {
 		return
 	}
 
-	pl := g.Players[gid]
-	for _, item := range msg.Transmogs {
-		if item.Slot < 0 || int(item.Slot) >= len(pl.GearSetups) {
-			continue
-		}
-
-		pl.GearSetups[item.Slot].ItemID = int(item.ItemID)
-		pl.GearSetups[item.Slot].TransmogID = ptr.Ref(int(item.TransmogID))
-	}
+	g.units.UpdatePlayerTransmogs(gid, msg.Transmogs)
+	g.observePlayer(gid)
 }
