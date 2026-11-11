@@ -157,6 +157,16 @@ func ProcessCommonActivity(c CharacterBase, m messages.Message) error {
 				}
 			}
 		}
+	case *messages.UnitCombatState:
+		if c.ID() != data.Unit {
+			return nil
+		}
+		if data.InCombat {
+			c.Start("combat flag", m)
+		} else {
+			c.End("combat flag cleared", m, period.EndStateReset)
+		}
+		return nil
 	case *messages.Slain:
 		if c.ID() == data.Victim {
 			c.Died(ReasonSlain, m)

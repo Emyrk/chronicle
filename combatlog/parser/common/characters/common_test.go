@@ -140,6 +140,44 @@ func TestOwnerSlain_PossessedPetDiesWithPermanentOwner(t *testing.T) {
 	require.Equal(t, ReasonOwnerSlain, p.End.Reason)
 }
 
+func TestUnitCombatStateControlsActivity(t *testing.T) {
+	t.Parallel()
+
+	chars := NewCharacters(
+		unitdb.New(),
+		nil,
+		identifier.NewIdentifier(map[uint32]identifier.Identity{}),
+	)
+	mob := guid.GUID(0xF130000844000002)
+	base := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+
+	changed, err := chars.Process(&messages.UnitCombatState{
+		MessageBase: messages.Base(base),
+		Unit:        mob,
+		InCombat:    true,
+	})
+	require.NoError(t, err)
+	require.True(t, changed)
+
+	mobChar, ok := chars.Get(mob)
+	require.True(t, ok)
+	require.True(t, mobChar.IsActive())
+
+	changed, err = chars.Process(&messages.UnitCombatState{
+		MessageBase: messages.Base(base.Add(time.Second)),
+		Unit:        mob,
+		InCombat:    false,
+	})
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.False(t, mobChar.IsActive())
+
+	activity, ok := mobChar.CurrentPeriod()
+	require.True(t, ok)
+	require.Equal(t, period.EndStateReset, activity.EndState)
+	require.Equal(t, "combat flag cleared", activity.End.Reason)
+}
+
 func TestTimeoutAsDeathIfEntryAlive(t *testing.T) {
 	t.Parallel()
 

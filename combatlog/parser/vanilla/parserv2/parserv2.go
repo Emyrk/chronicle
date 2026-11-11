@@ -142,6 +142,16 @@ func (p *Parser) advance(ctx context.Context) (_ []messages.Message, final error
 		return p.unitInfo(ctx, ts, m)
 	case "UNIT_STATE":
 		return p.unitState(ctx, ts, m)
+	case "UNIT_TARGET":
+		return p.unitTarget(ctx, ts, m)
+	case "UNIT_COMBAT":
+		return p.unitCombat(ctx, ts, m)
+	case "RAID_MARK":
+		return p.raidMark(ctx, ts, m)
+	case "THREAT":
+		return p.threat(ctx, ts, m)
+	case "THREAT_TANK":
+		return p.threatTank(ctx, ts, m)
 	case "COMBATANT_TRANSMOG":
 		return p.combatantTransmog(ctx, ts, m)
 	case "COMBATANT_INFO":
