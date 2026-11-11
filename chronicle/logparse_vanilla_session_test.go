@@ -187,3 +187,23 @@ func TestVanillaSessionEOFDoesNotFinalizeFight(t *testing.T) {
 }
 
 func (h *sessionFinalizer) ProcessMessage(bool, uuid.UUID, messages.Message) error { return nil }
+
+func TestVanillaSessionCanonicalPlayerMetadata(t *testing.T) {
+	t.Parallel()
+	ctx, session, _ := newTestFileSession(t)
+	state := session.result.encountersState
+	inst := instances.NewHookable(ctx, slog.New(slog.NewTextHandler(io.Discard, nil)), state.Units, zone.Zone{Name: "test"}, instances.InstanceParams{Name: "Test", Idf: identifier.NewIdentifier(map[uint32]instances.Identity{})})
+	state.CurrentInstance = inst
+	state.Instances = append(state.Instances, inst)
+	// This traverses source -> encounter state -> Hookable -> armory, including
+	// the real duplicate Units processing, rather than simulating two calls.
+	require.NoError(t, session.ProcessFile(ctx, strings.NewReader("10000|COMBATANT_INFO|0x0000000000000001|Player|HUNTER|NightElf|3||||Helm;1001853:0:0:0:0|||\n10001|COMBATANT_TRANSMOG|Player|1:33440:61053")))
+	player, ok := state.Units.GetPlayer(guid.GUID(1))
+	require.True(t, ok)
+	require.Equal(t, 33440, player.GearSetups[0].ItemID)
+	before := player.Clone()
+	require.NoError(t, session.ProcessFile(ctx, strings.NewReader("10002|COMBATANT_INFO|0x0000000000000001|Player|HUNTER|NightElf|3||||Helm;1001853:0:0:0:0|||")))
+	player, ok = state.Units.GetPlayer(guid.GUID(1))
+	require.True(t, ok)
+	require.Equal(t, before.GearSetups, player.GearSetups)
+}

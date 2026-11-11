@@ -4,7 +4,9 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
+	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -79,4 +81,42 @@ func TestPendingTalentsUseCanonicalPlayerAfterMetadata(t *testing.T) {
 	require.Empty(t, tracker.PendingTalents)
 	require.Equal(t, "Arcane", units.Players[gid].Talents.TabNames[0])
 	require.Equal(t, uint8(6), tracker.PlayerObservations[gid].Talents.Summary[0])
+}
+
+func TestSameNameTransmogUsesLastObservedGUID(t *testing.T) {
+	t.Parallel()
+	units := unitdb.New()
+	tracker := New(units)
+	for _, id := range []guid.GUID{1, 2} {
+		tracker.Player(&messages.Combatant{Combatant: combatant.Combatant{Guid: id, Name: "Same", GearSetups: []combatant.GearItem{{ItemID: int(id)}}}})
+	}
+	tracker.Transmog(&messages.Transmog{PlayerName: "Same", Transmogs: []combatant.Transmog{{Slot: 0, ItemID: 99}}})
+	require.Equal(t, 1, units.Players[1].GearSetups[0].ItemID)
+	require.Equal(t, 99, units.Players[2].GearSetups[0].ItemID)
+	require.Equal(t, 1, tracker.PlayerObservations[1].GearSetups[0].ItemID)
+	require.Equal(t, 99, tracker.PlayerObservations[2].GearSetups[0].ItemID)
+}
+
+func TestDetailedTalentsAfterRespecSequence(t *testing.T) {
+	t.Parallel()
+	units := unitdb.New()
+	tracker := New(units)
+	id := guid.GUID(1)
+	initial := &messages.Combatant{Combatant: combatant.Combatant{Guid: id, Name: "Player", Talents: &combatant.Talents{Summary: [3]uint8{6}, Trees: [3][]uint8{{5, 1}}}}}
+	process := func(m messages.Message) {
+		t.Helper()
+		require.NoError(t, units.ProcessMessage(m))
+		require.NoError(t, tracker.ProcessMessage(false, uuid.Nil, m))
+	}
+	process(initial)
+	process(&messages.Aura{Target: id, State: types.AuraStateAdded, SpellData: &chrondbc.Spell{ID: respecAuraSpellID}})
+	process(initial)
+	require.Nil(t, units.Players[id].Talents)
+	process(&messages.Aura{Target: id, State: types.AuraStateRemoved, SpellData: &chrondbc.Spell{ID: respecAuraSpellID}})
+	require.Nil(t, units.Players[id].Talents)
+	process(&messages.CombatantTalents{Guid: id, PlayerName: "Player", Tabs: [3]messages.CombatantTalentTab{{TabName: "Arcane", RankDigits: "51"}}})
+	require.Equal(t, [3]uint8{6}, units.Players[id].Talents.Summary)
+	require.Equal(t, "Arcane", units.Players[id].Talents.TabNames[0])
+	require.NotContains(t, tracker.InvalidatedTalents, id)
+	require.Equal(t, units.Players[id].Talents, tracker.PlayerObservations[id].Talents)
 }
