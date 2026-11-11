@@ -9,6 +9,15 @@ export interface PhaseTimeRangeSelection {
   endOffsetMs: number;
 }
 
+export function formatDurationMs(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) return `${hours}hr ${minutes}m ${seconds.toString().padStart(2, "0")}s`;
+  return `${minutes}m ${seconds.toString().padStart(2, "0")}s`;
+}
+
 /** Width percentage for a phase card relative to its encounter. */
 export function phaseWidthPercent(
   phase: EncounterOffsetRange,

@@ -44,8 +44,10 @@ import { instanceEntityAttributes, instanceGuildEntity } from "@/components/ui/P
 import { SeamlessLayoutContext } from "./EventsPanels/SeamlessLayoutContext";
 import { useFocusMode } from "@/hooks/useFocusMode";
 import type { Instance, Encounter, EnemyUnit } from "./InstancePage";
+import { EncounterPhaseStrip } from "./EncounterPhaseStrip";
 import {
   activePhaseForTimeRange,
+  formatDurationMs,
   phaseTimeRangeSelection,
   phaseWidthPercent,
   rangeStartPercent,
@@ -331,15 +333,6 @@ function formatPeriodsTooltip(guid: string, periods: readonly ActivityPeriod[]):
   );
 }
 
-function formatDurationMs(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  if (hours > 0) return `${hours}hr ${minutes}m ${seconds.toString().padStart(2, "0")}s`;
-  return `${minutes}m ${seconds.toString().padStart(2, "0")}s`;
-}
-
 /** Encounter-length track highlighting the interval scored for boss rankings. */
 function RankingWindowStrip({
   encounter,
@@ -486,21 +479,6 @@ function mergeEnemiesByGuid(encounters: Encounter[]): MergedEnemy[] {
   const enemies = mergeEnemies(encounters);
   // Sort by GUID (id) for stable ordering - indices won't change if damage changes
   return enemies.sort((a, b) => a.id.localeCompare(b.id));
-}
-
-function phaseTone(order: number, active: boolean): string {
-  const tones = [
-    active
-      ? "border-violet-400/80 bg-violet-500/35 text-violet-50 shadow-[inset_0_0_0_1px_rgba(196,181,253,0.12)]"
-      : "border-violet-400/55 bg-violet-500/15 text-violet-200",
-    active
-      ? "border-amber-400/80 bg-amber-500/30 text-amber-50 shadow-[inset_0_0_0_1px_rgba(253,230,138,0.12)]"
-      : "border-amber-400/55 bg-amber-500/10 text-amber-200",
-    active
-      ? "border-cyan-400/80 bg-cyan-500/30 text-cyan-50"
-      : "border-cyan-400/55 bg-cyan-500/10 text-cyan-200",
-  ];
-  return tones[order % tones.length];
 }
 
 // ============================================================================
@@ -937,51 +915,12 @@ function EncounterSidebar({
               </KillParseTooltip>
 
               {showExpandedPhases && (
-                <div className="flex gap-1.5 px-2 pb-2" aria-label="Apply encounter phase time range">
-                  {phases.map((phase) => {
-                    const phaseSelected = activePhaseId === phase.id;
-                    const durationMs = phase.end_offset_ms - phase.start_offset_ms;
-                    const widthPercent = phaseWidthPercent(phase, encounter);
-                    return (
-                      <Tooltip key={phase.id}>
-                        <TooltipTrigger asChild>
-                          <button
-                            type="button"
-                            onClick={() => onSelectPhase(phase, encounter.id)}
-                            aria-label={`Filter to phase ${phase.order + 1}: ${phase.name}`}
-                            aria-pressed={phaseSelected}
-                            className={cn(
-                              "flex h-7 min-w-12 cursor-pointer items-center justify-center overflow-hidden rounded border px-2 text-[11px] font-semibold transition-all duration-150",
-                              "hover:-translate-y-px hover:brightness-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                              phaseTone(phase.order, phaseSelected),
-                            )}
-                            style={{ flexGrow: Math.max(widthPercent, 16), flexBasis: 0 }}
-                          >
-                            <span className="truncate">{phase.name}</span>
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent
-                          side="top"
-                          sideOffset={8}
-                          hideArrow
-                          className="w-[232px] rounded-lg border border-border/80 bg-popover p-3.5 text-foreground shadow-2xl"
-                        >
-                          <div className="flex items-center justify-between gap-4">
-                            <p className="truncate text-sm font-semibold">
-                              Phase {phase.order + 1} — {phase.name}
-                            </p>
-                            <span className="shrink-0 font-mono text-xs text-muted-foreground">
-                              {formatDurationMs(durationMs)}
-                            </span>
-                          </div>
-                          <p className="mt-2 border-t border-border/70 pt-2 text-[11px] font-medium text-amber-500">
-                            Click to filter this phase <span aria-hidden>→</span>
-                          </p>
-                        </TooltipContent>
-                      </Tooltip>
-                    );
-                  })}
-                </div>
+                <EncounterPhaseStrip
+                  encounter={encounter}
+                  phases={phases}
+                  activePhaseId={activePhaseId}
+                  onSelectPhase={onSelectPhase}
+                />
               )}
 
               {rankingWindow && (
