@@ -74,6 +74,33 @@ func TestCareerOGMetadata(t *testing.T) {
 	require.Equal(t, "Guild Career Peak", careerOGMetadata("", "", url.Values{"subject": {"guilds"}, "view": {"peak"}}).Title)
 }
 
+func TestCareerOGRaidSelection(t *testing.T) {
+	t.Parallel()
+	leaders := careerLeadersFixture()
+	bwl := url.Values{"raid": {"Blackwing Lair||0"}}
+	two := url.Values{"raid": {"Blackwing Lair||0", "Molten Core||0"}}
+	many := url.Values{"raid": {"Naxxramas||0", "Temple of Ahn'Qiraj||0", "Blackwing Lair||0", "Molten Core||0"}}
+
+	// The card subtitle names the selection, or counts it when the names don't fit.
+	require.Equal(t, "Blackwing Lair", careerCardParams(leaders, false, bwl).Get("view"))
+	require.Equal(t, "Blackwing Lair + Molten Core", careerCardParams(leaders, false, two).Get("view"))
+	require.Equal(t, "4 raids", careerCardParams(leaders, false, many).Get("view"))
+	require.Equal(t, "Guilds · Blackwing Lair + Molten Core", careerCardParams(leaders, true, url.Values{"raid": two["raid"], "subject": {"guilds"}}).Get("view"))
+	mastery := careerCardParams(leaders, false, url.Values{"raid": two["raid"], "view": {"mastery"}}).Get("view")
+	require.Equal(t, "Mastery · Blackwing Lair + Molten Core", mastery)
+	for _, q := range []url.Values{bwl, two, many} {
+		require.LessOrEqual(t, len([]rune(careerCardParams(leaders, false, q).Get("view"))), careerOGViewLength)
+	}
+
+	// Malformed raid values are ignored rather than breaking the card.
+	require.Equal(t, "Every raid, weighted", careerCardParams(leaders, false, url.Values{"raid": {"nonsense"}}).Get("view"))
+
+	// Titles have room for every name.
+	og := careerOGMetadata("", "", many)
+	require.Equal(t, "Career Leaderboards · Naxxramas + Temple of Ahn'Qiraj + Blackwing Lair + Molten Core", og.Title)
+	require.Contains(t, og.Description, "weighted over Naxxramas + Temple of Ahn'Qiraj + Blackwing Lair + Molten Core alone")
+}
+
 func TestCareerRouteBeforeSegment(t *testing.T) {
 	t.Parallel()
 	routes := New(Options{}).leaderboardRoutes()

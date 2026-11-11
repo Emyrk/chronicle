@@ -81,7 +81,7 @@ func (api *API) LeaderboardCareer(w http.ResponseWriter, r *http.Request) {
 	}
 	search := strings.TrimSpace(q.Get("search"))
 	for _, raw := range q["raid"] {
-		key, ok := parseCareerRaidKey(raw)
+		key, ok := leaderboardconfig.ParseCareerKeyQuery(raw)
 		if !ok {
 			bad("raid must be Instance|Difficulty|MaxPlayers")
 			return
@@ -150,30 +150,13 @@ func (api *API) LeaderboardCareer(w http.ResponseWriter, r *http.Request) {
 	options := make([]chroniclesdk.CareerLeaderboardRaidOption, 0, len(board.Raids))
 	for _, r := range board.Raids {
 		options = append(options, chroniclesdk.CareerLeaderboardRaidOption{
-			Key: careerRaidKey(r.CareerKey), InstanceName: r.Instance, DifficultyName: r.Difficulty, MaxPlayers: int(r.MaxPlayers),
+			Key: r.QueryValue(), InstanceName: r.Instance, DifficultyName: r.Difficulty, MaxPlayers: int(r.MaxPlayers),
 			Weight: r.Weight, IncludeAverage: r.IncludeAverage, IncludeRenown: r.IncludeRenown,
 		})
 	}
 	writeCacheableLeaderboardResponse(ctx, w, http.StatusOK, chroniclesdk.CareerLeaderboardResponse{
 		Status: board.Status, Mastery: page("mastery"), Peak: page("peak"), Renown: page("renown"), RaidOptions: options,
 	})
-}
-
-// careerRaidKey is a raid's `raid` query value: Instance|Difficulty|MaxPlayers.
-func careerRaidKey(k leaderboardconfig.CareerKey) string {
-	return k.Instance + "|" + k.Difficulty + "|" + strconv.Itoa(int(k.MaxPlayers))
-}
-
-func parseCareerRaidKey(raw string) (leaderboardconfig.CareerKey, bool) {
-	parts := strings.Split(raw, "|")
-	if len(parts) != 3 || strings.TrimSpace(parts[0]) == "" {
-		return leaderboardconfig.CareerKey{}, false
-	}
-	size, err := strconv.ParseInt(parts[2], 10, 16)
-	if err != nil || size < 0 {
-		return leaderboardconfig.CareerKey{}, false
-	}
-	return leaderboardconfig.CareerKey{Instance: parts[0], Difficulty: parts[1], MaxPlayers: int16(size)}, true
 }
 
 // careerBoardSearch keeps subjects whose name contains the search text.
