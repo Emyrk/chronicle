@@ -21,7 +21,8 @@ var ErrUnsupportedRecord = errors.New("unsupported Vanilla combat record")
 // damage/heal/death, spell start/go, aura add/remove/cast, energize, dispel,
 // roster/telemetry/unit/zone metadata and loot trades.
 // It does not perform pipeline synthetic processing, header clock state,
-// identity tracking or encounter publication. SPELL_DMG retains its local
+// combatant state (use Decoder), identity tracking or encounter publication.
+// SPELL_DMG retains its local
 // power-burn ResourceChange synthesis. Unsupported records return an error.
 // content excludes the physical line terminator; extra fields retain legacy
 // tolerance. Successful calls emit the existing concrete message payloads.
@@ -167,3 +168,15 @@ func (m *recordFields) Rest() []string {
 	m.index = len(m.fields)
 	return rest
 }
+
+func (m *recordFields) HeroClass() types.HeroClasses {
+	v, err := types.ParseHeroClasses(m.pop())
+	m.fail(err)
+	return v
+}
+func (m *recordFields) HeroRace() types.HeroRaces {
+	v, err := types.ParseHeroRaces(m.pop())
+	m.fail(err)
+	return v
+}
+func (m *recordFields) HeroGender() types.HeroGender { return types.HeroGender(m.Int64()) }

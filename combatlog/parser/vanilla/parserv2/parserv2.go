@@ -10,7 +10,6 @@ import (
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/logscanner"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
-	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/gameversions"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/synthetic"
 	nextvanilla "github.com/Emyrk/chronicle/combatlog/parsernext/vanilla"
@@ -39,8 +38,7 @@ type Parser struct {
 
 	missedSpells map[chrondbc.SpellID]missedSpellEntry
 
-	transmogsByName       map[string]map[int32]transmogGearMapping
-	latestCombatantByName map[string]combatant.Combatant
+	combatants nextvanilla.CombatantState
 }
 
 func New(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.GameDB, gear gamedb.GearResolver) (*Parser, error) {
@@ -48,15 +46,13 @@ func New(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.Gam
 		return nil, fmt.Errorf("wowDB cannot be nil")
 	}
 	return &Parser{
-		ctx:                   ctx,
-		logger:                logger,
-		wowDB:                 wowDB,
-		scanner:               logscanner.New(r),
-		synthetics:            synthetic.New(ctx, logger, wowDB, synthetic.WithAuraCastCorrelation()),
-		itemFetcher:           gear,
-		missedSpells:          make(map[chrondbc.SpellID]missedSpellEntry),
-		transmogsByName:       make(map[string]map[int32]transmogGearMapping),
-		latestCombatantByName: make(map[string]combatant.Combatant),
+		ctx:          ctx,
+		logger:       logger,
+		wowDB:        wowDB,
+		scanner:      logscanner.New(r),
+		synthetics:   synthetic.New(ctx, logger, wowDB, synthetic.WithAuraCastCorrelation()),
+		itemFetcher:  gear,
+		missedSpells: make(map[chrondbc.SpellID]missedSpellEntry),
 	}, nil
 }
 

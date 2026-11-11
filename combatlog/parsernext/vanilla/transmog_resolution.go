@@ -1,4 +1,4 @@
-package parserv2
+package vanilla
 
 import (
 	"time"
@@ -23,11 +23,14 @@ func cloneCombatantGear(player combatant.Combatant) combatant.Combatant {
 	return player
 }
 
-func (p *Parser) rememberCombatant(player combatant.Combatant) {
+func (p *CombatantState) rememberCombatant(player combatant.Combatant) {
+	if p.latestCombatantByName == nil {
+		p.latestCombatantByName = make(map[string]combatant.Combatant)
+	}
 	p.latestCombatantByName[player.Name] = cloneCombatantGear(player)
 }
 
-func (p *Parser) applyKnownTransmogs(player *combatant.Combatant) {
+func (p *CombatantState) applyKnownTransmogs(player *combatant.Combatant) {
 	mappings := p.transmogsByName[player.Name]
 	for slot, mapping := range mappings {
 		if slot < 0 || int(slot) >= len(player.GearSetups) {
@@ -50,7 +53,7 @@ func (p *Parser) applyKnownTransmogs(player *combatant.Combatant) {
 	}
 }
 
-func (p *Parser) recordTransmogs(name string, transmogs []combatant.Transmog) {
+func (p *CombatantState) recordTransmogs(name string, transmogs []combatant.Transmog) {
 	previous := p.transmogsByName[name]
 	mappings := make(map[int32]transmogGearMapping, len(transmogs))
 	latest, hasLatest := p.latestCombatantByName[name]
@@ -71,10 +74,13 @@ func (p *Parser) recordTransmogs(name string, transmogs []combatant.Transmog) {
 		}
 		mappings[item.Slot] = mapping
 	}
+	if p.transmogsByName == nil {
+		p.transmogsByName = make(map[string]map[int32]transmogGearMapping)
+	}
 	p.transmogsByName[name] = mappings
 }
 
-func (p *Parser) correctedCombatantForTransmog(name string, ts time.Time) *messages.Combatant {
+func (p *CombatantState) correctedCombatantForTransmog(name string, ts time.Time) *messages.Combatant {
 	latest, ok := p.latestCombatantByName[name]
 	if !ok {
 		return nil
