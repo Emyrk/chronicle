@@ -121,7 +121,7 @@ func careerOGMetadata(product, canonicalURL string, query url.Values) *frontend.
 
 // careerCardURL is the signed leaderboard card for the career board, or "" to
 // keep the brand card: no OG service, no tenant or reader, or no leaders yet.
-// Leaders come from a per-tenant cache that never blocks the request.
+// Leaders come from a per-tenant cache; only a cold cache waits, briefly.
 func (s *Service) careerCardURL(r *http.Request, query url.Values) string {
 	if !s.ogServiceConfigured() || s.careerLeaders == nil {
 		return ""
@@ -138,7 +138,7 @@ func (s *Service) careerCardURL(r *http.Request, query url.Values) string {
 		if guilds {
 			cache = &s.ogCareerGuilds
 		}
-		leaders = cache.Get(r.Context(), s.logger, func(ctx context.Context) (serviceratings.CareerLeaders, error) {
+		leaders = loadOGCache(r, s.logger, cache, func(ctx context.Context) (serviceratings.CareerLeaders, error) {
 			return s.careerLeaders(ctx, tenant.ID, guilds, nil)
 		})
 	} else {

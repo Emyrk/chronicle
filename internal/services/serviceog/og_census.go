@@ -18,7 +18,7 @@ const censusOGDays = 90
 
 var censusOGMetadata = staticOGMetadata{Title: "Realm Census", Description: "Explore character and population statistics."}
 
-// censusOG is /census: the static metadata plus, once counts are cached, the
+// censusOG is /census: the static metadata plus, with cached counts, the
 // Horde versus Alliance card. With no OG service, or no counted faction
 // (e.g. a realm that only logs Unknown races), withBrandOG gives the brand card.
 func (s *Service) censusOG(r *http.Request) *frontend.OGData {
@@ -27,7 +27,7 @@ func (s *Service) censusOG(r *http.Request) *frontend.OGData {
 	if !s.ogServiceConfigured() || s.store == nil {
 		return og
 	}
-	rows := s.ogCensus.Get(r.Context(), s.logger, func(ctx context.Context) ([]database.CensusPlayerCountsRow, error) {
+	rows := loadOGCache(r, s.logger, &s.ogCensus, func(ctx context.Context) ([]database.CensusPlayerCountsRow, error) {
 		return s.store.CensusPlayerCounts(ctx, database.CensusPlayerCountsParams{
 			UpdatedAfter: pgtype.Timestamptz{Time: time.Now().AddDate(0, 0, -censusOGDays), Valid: true},
 			RealmIds:     nil,

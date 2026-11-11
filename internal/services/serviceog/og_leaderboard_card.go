@@ -36,7 +36,7 @@ const (
 // leaders. Highlights keep only three statistics rows, too few for a card.
 //
 // Highlights are the hub's own precomputed landing previews, read through a
-// per-tenant cache that never blocks the request.
+// per-tenant cache; only a cold cache waits, briefly.
 func (s *Service) leaderboardCardURL(r *http.Request, flavor database.WoWFlavor, tabID, instance string) string {
 	if !s.ogServiceConfigured() || s.store == nil {
 		return ""
@@ -46,7 +46,7 @@ func (s *Service) leaderboardCardURL(r *http.Request, flavor database.WoWFlavor,
 		return ""
 	}
 	tenantID := tenant.ID
-	previews := s.ogHighlights.Get(r.Context(), s.logger, func(ctx context.Context) ([]chroniclesdk.HubLandingPreview, error) {
+	previews := loadOGCache(r, s.logger, &s.ogHighlights, func(ctx context.Context) ([]chroniclesdk.HubLandingPreview, error) {
 		rows, err := s.store.ListLeaderboardHighlights(ctx, database.ListLeaderboardHighlightsParams{TenantID: tenantID, RealmScope: uuid.Nil})
 		if err != nil {
 			return nil, err
