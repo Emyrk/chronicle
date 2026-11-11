@@ -3,8 +3,8 @@
 package units
 
 // Kind describes the entity, independently of encounter or ranking eligibility.
-// These distinctions exist in the current GUID API. Vehicle/control roles and
-// future teams are intentionally not modeled by this narrow contract.
+// These distinctions exist in the current GUID API, including vehicles. A vehicle
+// kind does not imply an owner, controller, affiliation, or ranking eligibility.
 type Kind uint8
 
 const (
@@ -13,6 +13,7 @@ const (
 	KindCreature
 	KindPet
 	KindObject
+	KindVehicle
 )
 
 // Category refines an entity kind without turning ignored activity into identity.
@@ -21,6 +22,9 @@ type Category uint8
 const (
 	CategoryUnclassified Category = iota
 	CategoryCritter
+	// CategoryTotem is an entity category, not a GUID kind or eligibility policy.
+	// Hostile boss totems and player-owned totems need not share fight/ranking rules.
+	CategoryTotem
 )
 
 // Classification does not own GUIDs or observed names. Those remain with the

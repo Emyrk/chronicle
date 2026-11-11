@@ -73,3 +73,23 @@ func TestCritterClassificationDoesNotOwnObservations(t *testing.T) {
 		require.Equal(t, "Rat", label)
 	}
 }
+
+// This tests the shared data contract, not a vehicle/totem classifier or pipeline wiring.
+func TestClassificationKindsAndCategories(t *testing.T) {
+	t.Parallel()
+	// Existing serialized values stay stable when new distinctions are appended.
+	require.Equal(t, []units.Kind{0, 1, 2, 3, 4, 5}, []units.Kind{
+		units.KindUnspecified, units.KindPlayer, units.KindCreature, units.KindPet, units.KindObject, units.KindVehicle,
+	})
+	require.Equal(t, []units.Category{0, 1, 2}, []units.Category{
+		units.CategoryUnclassified, units.CategoryCritter, units.CategoryTotem,
+	})
+	// Category alone must not imply exclusion. Policy can represent a hostile
+	// boss totem independently of an unranked, player-owned totem.
+	for _, eligible := range []bool{false, true} {
+		classification := units.Classification{Kind: units.KindCreature, Category: units.CategoryTotem, Known: true, TrackFight: eligible, RankedDamageTarget: eligible}
+		require.Equal(t, units.CategoryTotem, classification.Category)
+		require.Equal(t, eligible, classification.TrackFight)
+		require.Equal(t, eligible, classification.RankedDamageTarget)
+	}
+}
