@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
@@ -17,7 +18,8 @@ import (
 var ErrUnsupportedRecord = errors.New("unsupported Vanilla combat record")
 
 // DecodeRecord decodes the explicitly selected Vanilla combat record families:
-// damage/heal/death, spell start/go, aura add/remove/cast, energize and dispel.
+// damage/heal/death, spell start/go, aura add/remove/cast, energize, dispel,
+// roster/telemetry/unit/zone metadata and loot trades.
 // It does not perform pipeline synthetic processing, header clock state,
 // identity tracking or encounter publication. SPELL_DMG retains its local
 // power-burn ResourceChange synthesis. Unsupported records return an error.
@@ -34,6 +36,16 @@ func DecodeRecord(ctx context.Context, spells SpellLookup, content string) ([]me
 func decodeFields(ctx context.Context, spells SpellLookup, ts time.Time, event string, fields []string) ([]messages.Message, error) {
 	m := &recordFields{fields: fields}
 	switch event {
+	case "RG", "RAID_COMPOSITION", "UNIT_STATE":
+		r, err := decodeCapabilityRecord(ts, event, m)
+		return r.Messages, err
+	case "UNIT_INFO":
+		return DecodeUnitInfo(ts, m)
+	case "ZONE_INFO":
+		return DecodeZoneInfo(ts, m)
+	case "LOOT_TRADE":
+		return DecodeLootTrade(ts, m)
+
 	case "SPELL_START", "SPELL_GO", "AURA_CAST", "ENERGIZE", "DISPEL", "BUFF_ADD", "BUFF_REM", "DEBUFF_ADD", "DEBUFF_REM":
 		if spells == nil {
 			return nil, fmt.Errorf("%s requires spell lookup", event)
@@ -133,3 +145,14 @@ func (m *recordFields) Peek() string {
 func (m *recordFields) Skip() { m.index++ }
 
 func (m *recordFields) Remain() int { return len(m.fields) - m.index }
+
+func (m *recordFields) OptionalGuid() *guid.GUID { return ReadOptionalGUID(m) }
+func (m *recordFields) OptionalUint32() uint32   { return ReadOptionalUint32(m) }
+func (m *recordFields) Bool() bool               { v, err := strconv.ParseBool(m.pop()); m.fail(err); return v }
+func (m *recordFields) CSV() []string {
+	raw := m.pop()
+	if raw == "" {
+		return []string{}
+	}
+	return strings.Split(raw, ",")
+}

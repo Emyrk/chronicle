@@ -26,7 +26,7 @@ func AcceptTimestamp(last, timestamp time.Time, event string) (time.Time, error)
 }
 
 // HeaderState owns only the per-source clock and last valid companion version.
-// It makes no claims about observed metadata/telemetry capabilities.
+// Observed metadata/telemetry capabilities live separately on Decoder.
 type HeaderState struct {
 	lastTimestamp time.Time
 	version       *gameversions.GameVersion
@@ -54,6 +54,7 @@ func (s *HeaderState) ApplyHeader(result HeaderResult) {
 // finalize this state. Reader errors and provisional output remain the caller
 // responsibility. This is not a full-log parser or a session finalizer.
 type Decoder struct {
+	capabilities     Capabilities
 	spells           SpellLookup
 	chronicleVersion string
 	state            HeaderState
@@ -84,5 +85,26 @@ func (d *Decoder) DecodeRecord(ctx context.Context, content string) ([]messages.
 		d.state.ApplyHeader(result)
 		return result.Messages, nil
 	}
+	if event == "RG" || event == "RAID_COMPOSITION" || event == "UNIT_STATE" {
+		r, err := decodeCapabilityRecord(ts, event, &recordFields{fields: fields})
+		// Preserve partial resource observation even when later position fields fail.
+		// Do not turn this into success-only application without a behavior decision.
+		d.capabilities.RaidGroup = d.capabilities.RaidGroup || r.Observed.RaidGroup
+		d.capabilities.UnitResources = d.capabilities.UnitResources || r.Observed.UnitResources
+		d.capabilities.UnitPosition = d.capabilities.UnitPosition || r.Observed.UnitPosition
+		return r.Messages, err
+	}
 	return decodeFields(ctx, d.spells, ts, event, fields)
+}
+
+func (d *Decoder) Capabilities() Capabilities { return d.capabilities }
+func decodeCapabilityRecord(ts time.Time, event string, m MetadataFields) (MetadataResult, error) {
+	switch event {
+	case "RG":
+		return DecodeRaidGroup(ts, m)
+	case "RAID_COMPOSITION":
+		return DecodeRaidComposition(ts, m)
+	default:
+		return DecodeUnitState(ts, m)
+	}
 }

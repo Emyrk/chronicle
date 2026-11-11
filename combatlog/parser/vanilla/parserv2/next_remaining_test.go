@@ -24,6 +24,14 @@ func assertRecordParity(t *testing.T, db gamedb.GameDB, line string) bool {
 	require.NoError(t, err)
 	// Bind only implemented records; unsupported corpus records are counted separately.
 	handlers := map[string]func(time.Time, *Matched) ([]messages.Message, error){
+		"RG": func(ts time.Time, m *Matched) ([]messages.Message, error) { return p.raidGroup(t.Context(), ts, m) },
+		"RAID_COMPOSITION": func(ts time.Time, m *Matched) ([]messages.Message, error) {
+			return p.raidComposition(t.Context(), ts, m)
+		},
+		"UNIT_STATE":  func(ts time.Time, m *Matched) ([]messages.Message, error) { return p.unitState(t.Context(), ts, m) },
+		"UNIT_INFO":   func(ts time.Time, m *Matched) ([]messages.Message, error) { return p.unitInfo(t.Context(), ts, m) },
+		"ZONE_INFO":   func(ts time.Time, m *Matched) ([]messages.Message, error) { return p.zoneInfo(t.Context(), ts, m) },
+		"LOOT_TRADE":  func(ts time.Time, m *Matched) ([]messages.Message, error) { return p.lootTrade(t.Context(), ts, m) },
 		"SPELL_START": func(ts time.Time, m *Matched) ([]messages.Message, error) { return p.spellStart(t.Context(), ts, m) },
 		"SPELL_GO":    func(ts time.Time, m *Matched) ([]messages.Message, error) { return p.spellGo(t.Context(), ts, m) },
 		"AURA_CAST":   func(ts time.Time, m *Matched) ([]messages.Message, error) { return p.auraCast(t.Context(), ts, m) },
