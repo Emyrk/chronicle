@@ -69,6 +69,41 @@ func TestResolveRealmByNamePrefersExplicitRealmID(t *testing.T) {
 	assert.Equal(t, original.Name, resolved.Name)
 }
 
+func TestResolveRealmByAlias(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitMedium)
+
+	store, _ := dbtestutil.NewDB(t)
+	db := authz.NewDatabaseOnly(slog.Default(), store)
+
+	serverID := uuid.New()
+	_, err := db.InsertWoWServer(ctx, database.InsertWoWServerParams{
+		ID:   serverID,
+		Name: "Localized Realm Server",
+	})
+	require.NoError(t, err)
+
+	canonical, err := db.InsertWoWServerRealm(ctx, database.InsertWoWServerRealmParams{
+		ID:       uuid.New(),
+		ServerID: serverID,
+		Name:     "Normal-US",
+		Aliases:  []string{"普通-US"},
+	})
+	require.NoError(t, err)
+
+	resolved := resolveRealmByName(ctx, db, "普通-us", uuid.Nil)
+	assert.Equal(t, canonical.ID, resolved.ID)
+	assert.Equal(t, canonical.Name, resolved.Name)
+
+	_, err = db.InsertWoWServerRealm(ctx, database.InsertWoWServerRealmParams{
+		ID:       uuid.New(),
+		ServerID: serverID,
+		Name:     "普通-US",
+	})
+	require.Error(t, err)
+	assert.True(t, database.IsUniqueViolation(err))
+}
+
 func TestNormalizeRealmNameForFlavor(t *testing.T) {
 	t.Parallel()
 

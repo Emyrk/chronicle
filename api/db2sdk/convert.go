@@ -35,6 +35,7 @@ func WoWServerRealm(r database.WowServerRealm) chroniclesdk.WoWServerRealm {
 		ID:          r.ID,
 		ServerID:    r.ServerID,
 		Name:        r.Name,
+		Aliases:     r.Aliases,
 		Description: r.Description,
 		URL:         url,
 		CreatedBy:   nullUUIDPtr(r.CreatedBy),

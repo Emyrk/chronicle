@@ -77,6 +77,24 @@ func pricingProviderText(value *chroniclesdk.ItemPricingProvider) (pgtype.Text, 
 	return pgtype.Text{String: string(*value), Valid: true}, true
 }
 
+func normalizeRealmAliases(primaryName string, aliases []string) []string {
+	normalized := make([]string, 0, len(aliases))
+	seen := map[string]struct{}{strings.ToLower(strings.TrimSpace(primaryName)): {}}
+	for _, alias := range aliases {
+		alias = strings.TrimSpace(alias)
+		key := strings.ToLower(alias)
+		if alias == "" {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		normalized = append(normalized, alias)
+	}
+	return normalized
+}
+
 func realmPricingText(route *string, mode *chroniclesdk.PricingAuctionHouse) (pgtype.Text, pgtype.Text, bool) {
 	if (route == nil || strings.TrimSpace(*route) == "") && (mode == nil || *mode == "") {
 		return pgtype.Text{}, pgtype.Text{}, true
@@ -108,6 +126,7 @@ func realmToSDK(r database.WowServerRealm) chroniclesdk.WoWServerRealm {
 		ID:                  r.ID,
 		ServerID:            r.ServerID,
 		Name:                r.Name,
+		Aliases:             r.Aliases,
 		Description:         r.Description,
 		URL:                 pgtextPtr(r.Url),
 		CreatedBy:           nullUUIDPtr(r.CreatedBy),
@@ -418,6 +437,7 @@ func (h *Handler) CreateRealm(w http.ResponseWriter, r *http.Request) {
 		ID:                  uuid.New(),
 		ServerID:            serverID,
 		Name:                req.Name,
+		Aliases:             normalizeRealmAliases(req.Name, req.Aliases),
 		Description:         req.Description,
 		Url:                 urlText,
 		CreatedBy:           createdBy,
@@ -427,7 +447,7 @@ func (h *Handler) CreateRealm(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if database.IsUniqueViolation(err) {
 			httpapi.Write(ctx, w, http.StatusConflict, chroniclesdk.Response{
-				Message: "realm name already exists",
+				Message: "realm name or alias already exists",
 			})
 			return
 		}
@@ -466,12 +486,19 @@ func (h *Handler) UpdateRealm(w http.ResponseWriter, r *http.Request) {
 	realm, err := h.zed.UpdateWoWServerRealm(ctx, database.UpdateWoWServerRealmParams{
 		ID:                  realmID,
 		Name:                req.Name,
+		Aliases:             normalizeRealmAliases(req.Name, req.Aliases),
 		Description:         req.Description,
 		Url:                 optionalText(req.URL),
 		PricingRouteName:    pricingRoute,
 		PricingAuctionHouse: pricingAuctionHouse,
 	})
 	if err != nil {
+		if database.IsUniqueViolation(err) {
+			httpapi.Write(ctx, w, http.StatusConflict, chroniclesdk.Response{
+				Message: "realm name or alias already exists",
+			})
+			return
+		}
 		httpapi.InternalServerError(w, err)
 		return
 	}

@@ -41,6 +41,7 @@ type WoWServerRealm struct {
 	ID                  uuid.UUID            `json:"id"`
 	ServerID            uuid.UUID            `json:"server_id"`
 	Name                string               `json:"name"`
+	Aliases             []string             `json:"aliases"`
 	Description         string               `json:"description"`
 	URL                 *string              `json:"url,omitempty"`
 	CreatedBy           *uuid.UUID           `json:"created_by,omitempty"`
@@ -50,6 +51,7 @@ type WoWServerRealm struct {
 
 type CreateWoWServerRealmRequest struct {
 	Name                string               `json:"name"`
+	Aliases             []string             `json:"aliases"`
 	Description         string               `json:"description"`
 	URL                 *string              `json:"url,omitempty"`
 	PricingRouteName    *string              `json:"pricing_route_name,omitempty"`

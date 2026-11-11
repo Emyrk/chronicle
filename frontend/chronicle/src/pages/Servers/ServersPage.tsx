@@ -28,6 +28,7 @@ function RealmPricingEditor({ realm }: { realm: WoWServerRealm }) {
     updateRealm.mutate({
       realmId: realm.id,
       name: realm.name,
+      aliases: realm.aliases ?? [],
       description: realm.description,
       url: realm.url,
       pricing_route_name: enabled ? routeName.trim() : undefined,
@@ -54,6 +55,40 @@ function RealmPricingEditor({ realm }: { realm: WoWServerRealm }) {
       </select>
       <Button type="button" variant="outline" size="sm" onClick={save} disabled={updateRealm.isPending}>
         {updateRealm.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save pricing"}
+      </Button>
+      {updateRealm.isError && <span className="text-xs text-destructive">{updateRealm.error.message}</span>}
+    </div>
+  );
+}
+
+function RealmAliasesEditor({ realm }: { realm: WoWServerRealm }) {
+  const updateRealm = useUpdateAzerothcoreRealm();
+  const [aliases, setAliases] = useState((realm.aliases ?? []).join("\n"));
+
+  const save = () => {
+    updateRealm.mutate({
+      realmId: realm.id,
+      name: realm.name,
+      aliases: aliases.split("\n"),
+      description: realm.description,
+      url: realm.url,
+      pricing_route_name: realm.pricing_route_name,
+      pricing_auction_house: realm.pricing_auction_house,
+    });
+  };
+
+  return (
+    <div className="mt-2 flex items-end gap-2">
+      <label className="flex-1 text-xs text-muted-foreground">
+        Aliases, one per line
+        <textarea
+          className="mt-1 min-h-[60px] w-full resize-y rounded-md border bg-background px-2 py-1.5 text-sm text-foreground"
+          value={aliases}
+          onChange={(event) => setAliases(event.target.value)}
+        />
+      </label>
+      <Button type="button" variant="outline" size="sm" onClick={save} disabled={updateRealm.isPending}>
+        {updateRealm.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save aliases"}
       </Button>
       {updateRealm.isError && <span className="text-xs text-destructive">{updateRealm.error.message}</span>}
     </div>
@@ -87,16 +122,18 @@ function RealmsList({ server }: { server: WoWServer }) {
   const deleteRealm = useDeleteAzerothcoreRealm();
   const [showAdd, setShowAdd] = useState(false);
   const [name, setName] = useState("");
+  const [aliases, setAliases] = useState("");
   const [description, setDescription] = useState("");
   const [url, setUrl] = useState("");
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
     createRealm.mutate(
-      { serverId: server.id, name, description, url: url || undefined },
+      { serverId: server.id, name, aliases: aliases.split("\n"), description, url: url || undefined },
       {
         onSuccess: () => {
           setName("");
+          setAliases("");
           setDescription("");
           setUrl("");
           setShowAdd(false);
@@ -136,6 +173,7 @@ function RealmsList({ server }: { server: WoWServer }) {
               <Trash2 className="h-3.5 w-3.5" />
             </Button>
           </div>
+          <RealmAliasesEditor realm={realm} />
           {server.pricing_provider && <RealmPricingEditor realm={realm} />}
         </div>
       ))}
@@ -148,6 +186,13 @@ function RealmsList({ server }: { server: WoWServer }) {
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
+          />
+          <textarea
+            className="w-full min-h-[60px] resize-y rounded-md border bg-background px-3 py-1.5 text-sm"
+            placeholder="Aliases, one per line (optional)"
+            value={aliases}
+            onChange={(e) => setAliases(e.target.value)}
+            rows={2}
           />
           <textarea
             className="w-full rounded-md border bg-background px-3 py-1.5 text-sm resize-y min-h-[60px]"

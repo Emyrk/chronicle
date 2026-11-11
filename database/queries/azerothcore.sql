@@ -41,18 +41,32 @@ SELECT * FROM wow_server_realms ORDER BY name;
 SELECT * FROM wow_server_realms WHERE id = $1;
 
 -- name: GetWoWServerRealmByName :one
-SELECT * FROM wow_server_realms WHERE lower(name) = lower(@name) LIMIT 1;
+SELECT *
+FROM wow_server_realms
+WHERE lower(name) = lower(@name)
+   OR EXISTS (
+       SELECT 1
+       FROM unnest(aliases) AS alias(name)
+       WHERE lower(alias.name) = lower(@name)
+   )
+LIMIT 1;
 
 
 -- name: InsertWoWServerRealm :one
 INSERT INTO wow_server_realms (
-    id, server_id, name, description, url, created_by,
+    id, server_id, name, aliases, description, url, created_by,
     pricing_route_name, pricing_auction_house
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *;
+VALUES (
+    sqlc.arg(id), sqlc.arg(server_id), sqlc.arg(name),
+    COALESCE(sqlc.arg(aliases)::text[], '{}'::text[]),
+    sqlc.arg(description), sqlc.arg(url), sqlc.arg(created_by),
+    sqlc.arg(pricing_route_name), sqlc.arg(pricing_auction_house)
+) RETURNING *;
 -- name: UpdateWoWServerRealm :one
 UPDATE wow_server_realms SET
     name = @name,
+    aliases = COALESCE(@aliases::text[], '{}'),
     description = @description,
     url = @url,
     pricing_route_name = @pricing_route_name,
