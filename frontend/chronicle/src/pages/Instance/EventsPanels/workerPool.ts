@@ -36,7 +36,7 @@ let workerSlots: WorkerSlot[] = [];
 let requestQueue: QueuedRequest[] = [];
 
 function createWorker(): Worker {
-  return new Worker(new URL("./panelWorker.ts", import.meta.url), { type: "module" });
+  return new Worker(new URL("./aggregationPanelWorker.ts", import.meta.url), { type: "module" });
 }
 
 function initializePool(): void {

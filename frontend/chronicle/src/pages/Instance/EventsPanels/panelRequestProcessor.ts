@@ -1,5 +1,5 @@
 /**
- * Panel event-processing pipeline, shared by the web worker (panelWorker.ts)
+ * Panel event-processing pipeline, shared by the web worker (aggregationPanelWorker.ts)
  * and the main-thread fallback in workerPool.ts (used where module workers
  * cannot be constructed, e.g. the compiled design-system bundle).
  */
