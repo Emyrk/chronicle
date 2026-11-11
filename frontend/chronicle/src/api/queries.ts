@@ -1189,7 +1189,7 @@ export function useAuthProviders(options?: Omit<UseQueryOptions<string[]>, "quer
 const supportedInstancesCacheTime = 1000 * 60 * 60 * 24;
 
 function supportedInstancesQueryKey() {
-  return ["supportedInstances", window.location.host] as const;
+  return ["supportedInstances", typeof window === "undefined" ? "" : window.location.host] as const;
 }
 
 async function fetchSupportedInstances(): Promise<SupportedInstance[]> {

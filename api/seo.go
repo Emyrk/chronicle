@@ -65,6 +65,16 @@ func (api *API) brandingResolver(r *http.Request) *frontend.HTMLBranding {
 	if !discoverable || !pathHasPrefix(r.URL.Path, indexablePrefixes) || pathHasPrefix(r.URL.Path, noIndexPrefixes) || isPrivateGuildPath(r.URL.Path) || api.isUnlistedInstancePath(r) {
 		resolved.Robots = "noindex, nofollow"
 	}
+	if r.URL.Path == "/" {
+		config, err := api.Opts.Zed.GetSiteConfig(r.Context())
+		if err == nil {
+			resolved.Home = &frontend.HomeConfig{
+				Flavor:                api.resolvedSiteFlavor(r.Context()).Strings(),
+				ForeverLandingEnabled: config.ForeverLandingEnabled,
+				UploadsDisabled:       api.Opts.ClientUploadsDisabled || config.ClientUploadsDisabled || (t != nil && t.DisableClientUpload),
+			}
+		}
+	}
 	resolved.JSONLD = websiteJSONLD(resolved.SiteName, resolved.Description, resolved.CanonicalURL, resolved.ImageURL)
 	return resolved
 }

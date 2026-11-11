@@ -29,3 +29,5 @@ storybook-static
 # Leeroy replay downloads (video, frames, spawn dumps): never committed
 scripts/leeroy/.work
 scripts/leeroy/__pycache__
+
+.home-prerender/
