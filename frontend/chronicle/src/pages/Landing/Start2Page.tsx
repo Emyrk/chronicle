@@ -1,5 +1,5 @@
 import { useHydrated } from "@/hooks/useHydrated";
-import { useHomeBootstrap } from "@/home/bootstrap";
+import { useHomeBootstrap, useHomeConfig } from "@/home/bootstrap";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useLandingFeatured } from "@/api/landingFeatured";
 import type { LandingFeaturedRun } from "@/api/typesGenerated";
@@ -179,12 +179,13 @@ function BelowFold({ onExplore }: { onExplore: (target: ExploreTarget) => void }
 /** /start2: a working copy of StartPage inside the site Layout (our NavBar and Footer), to be edited down. */
 export function Start2Page() {
   const bootstrap = useHomeBootstrap();
+  const homeConfig = useHomeConfig();
   const getSidekickHref = "/download";
   const { data: landing, isError: landingFailed } = useLandingFeatured();
   const { data: siteConfig } = useSiteConfig();
   const siteName = (siteConfig?.tenant?.branding ?? siteConfig?.branding)?.display_name;
   // The SEO headline Home uses ("WoW Forever Combat Logs"), with the landing's line under it, muted.
-  const productName = bootstrap?.productName || seoProductName(siteConfig?.dataset_flavor) || "WoW Forever";
+  const productName = homeConfig?.productName || seoProductName(siteConfig?.dataset_flavor) || "WoW Forever";
   // The live 3D replay's position and controls, for the hero's scrubber; null while the poster shows.
   const [replay, setReplay] = useState<HeroReplay | null>(null);
   // The run the live 3D plays, kept while it changes pulls.

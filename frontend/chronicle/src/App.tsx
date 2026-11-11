@@ -1,6 +1,6 @@
 import { HomepageSuspense } from "./home/HomepageSuspense"
-import { useHomeBootstrap } from "./home/bootstrap"
-import { lazy, type ComponentType } from "react"
+import { useHomeConfig } from "./home/bootstrap"
+import { lazy, Suspense, type ComponentType } from "react"
 import { Routes, Route, Navigate, useLocation } from "react-router-dom"
 import { Home } from "./pages/Home"
 import { NitroPayRuntime } from "./components/Ads/NitroPayRuntime"
@@ -175,12 +175,14 @@ function CatchAllRoute() {
  * "/": WoW Forever serves the replay landing (Start2Page) while the admin toggle (site config
  * forever_landing_enabled) is on; off, or any other flavor, gets the standard Home.
  */
-function HomeRoute({ landing: Landing = Start2Page }: { landing?: ComponentType }) {
-  const { data: siteConfig, isPending } = useSiteConfig()
-  const bootstrap = useHomeBootstrap()
-  if (isPending && !bootstrap) return null
-  const foreverLanding = bootstrap?.foreverLanding ?? ((siteConfig?.dataset_flavor?.includes("wow-forever") ?? false) && (siteConfig?.forever_landing_enabled ?? false))
-  return foreverLanding ? <Landing /> : <Home />
+function HomeRoute({ landing: Landing }: { landing?: ComponentType }) {
+  const { isPending } = useSiteConfig()
+  const config = useHomeConfig()
+  if (isPending && !config) return null
+  if (!config?.foreverLanding) return <Home />
+  // Initially enabled homepages preload Landing before hydration. If live config
+  // enables it later, give that newly requested lazy chunk its own boundary.
+  return Landing ? <Landing /> : <Suspense fallback={<RouteLoadingFallback />}><Start2Page /></Suspense>
 }
 
 /** /start2: the landing inside the site Layout, WoW Forever only like /start. */

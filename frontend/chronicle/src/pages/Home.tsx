@@ -1,4 +1,4 @@
-import { useHomeBootstrap } from "../home/bootstrap";
+import { useHomeConfig } from "../home/bootstrap";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -187,9 +187,9 @@ function BoardToggle({
 function HeroSection() {
   const { isAuthenticated } = useAuth();
   const { data: siteConfig } = useSiteConfig();
-  const bootstrap = useHomeBootstrap();
-  const showUpload = !(siteConfig?.client_uploads_disabled ?? bootstrap?.uploadsDisabled);
-  const productName = bootstrap?.productName ?? seoProductName(siteConfig?.dataset_flavor);
+  const homeConfig = useHomeConfig();
+  const showUpload = !(homeConfig?.uploadsDisabled ?? siteConfig?.client_uploads_disabled);
+  const productName = homeConfig?.productName ?? seoProductName(siteConfig?.dataset_flavor);
 
   return (
     <section
