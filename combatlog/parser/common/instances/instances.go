@@ -460,6 +460,7 @@ var (
 	ExcavationSiteWetlandsFactory = &CommonFactory{
 		Name:      "Excavation Site: Wetlands",
 		ZoneNames: []string{"excavation site: wetlands"},
+		MapIDs:    []uint32{2998},
 		Hostiles:  FromMap(ExcavationSiteWetlandsHostiles()),
 	}
 
