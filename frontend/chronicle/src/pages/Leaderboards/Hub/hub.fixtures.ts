@@ -667,6 +667,8 @@ export interface GuildRating {
   /** Peak only: the run behind it (summed over a set of bosses) and its date (the latest, for a set). */
   ms?: number
   date?: string
+  /** The log containing the Peak run, while that log is listed. */
+  log?: string
 }
 
 /**

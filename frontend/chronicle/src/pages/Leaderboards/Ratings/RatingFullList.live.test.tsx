@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { useQuery } from "@tanstack/react-query"
+import { MemoryRouter } from "react-router-dom"
 import { GuildRatingBoards } from "../Hub/GuildRatings"
 import { RatingFullList } from "./RatingFullList"
 import type { RatingLiveData } from "./ratingLiveData"
@@ -53,6 +54,21 @@ describe("Storybook full-list live data", () => {
       expect(visible).not.toContain("22222222-2222");
     });
   }
+
+  it("links a guild Peak kill time to its source log", () => {
+    vi.mocked(useQuery).mockReturnValue({ isError: false, data: {
+      rows: [{ rank: 0, entry: { ...entry, name: "Fast Guild", durationMs: 65_000 }, peakRun: { ms: 65_000, date: "Nov 11, 2026", log: "razorgore-log" } }],
+      page: 0, hasPreviousPage: false, hasNextPage: false,
+    } } as ReturnType<typeof useQuery>)
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <GuildRatingBoards instanceName="Blackwing Lair" view="peak" onView={vi.fn()} bosses={["Razorgore the Untamed"]}
+          allBosses={["Razorgore the Untamed"]} where="Blackwing Lair" onBoss={vi.fn()}
+          data={{ live, ratings: { peak: [], mastery: [], renown: [] }, perBoss: () => undefined }} />
+      </MemoryRouter>,
+    )
+    expect(html).toMatch(/href="\/instances\/razorgore-log"[^>]*>1:05<\/a>/)
+  })
 
   it("renders the published ranks and scores in the existing table", () => {
     vi.mocked(useQuery).mockReturnValue({ isError: false, data: {

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 import type { RatingLiveData } from "../Ratings/ratingLiveData"
 import { useState, type CSSProperties, type ReactNode } from "react"
+import { Link } from "react-router-dom"
 import { ArrowDown, ArrowRight, ChevronLeft, ChevronRight } from "lucide-react"
 import { RATING_METRICS, type RatingMetric } from "@/pages/Leaderboards/Ratings/ratingBoards.fixtures"
 import { cn } from "@/lib/utils"
@@ -325,7 +326,7 @@ function GuildFullTable({
   const published = useQuery({queryKey:["hub-guild-v2-page",pageKey,page],queryFn:()=>live!.loadPage!({scope:oneBoss ? {boss:oneBoss} : {},metric,period:"all",query,page}),enabled:!!live?.loadPage,retry:false})
   const byGuild = (m: RatingMetric) => new Map(ratings[m].map((g) => [g.guild, g]))
   const scores = { peak: byGuild("peak"), mastery: byGuild("mastery"), renown: byGuild("renown") }
-  const ranked = live ? (published.data?.rows ?? []).map(row => ({rank:0,g:{guild:row.entry.name,guildId:row.entry.guid,logo:row.entry.logo,score:row.entry.score,detail:row.entry.detail,realmLabel:row.entry.realmLabel,ms:row.entry.durationMs} as GuildRating})) : ratings[metric].map((g, i) => ({ rank: i + 1, g }))
+  const ranked = live ? (published.data?.rows ?? []).map(row => ({rank:0,g:{guild:row.entry.name,guildId:row.entry.guid,logo:row.entry.logo,score:row.entry.score,detail:row.entry.detail,realmLabel:row.entry.realmLabel,ms:row.peakRun?.ms ?? row.entry.durationMs,date:row.peakRun?.date,log:row.peakRun?.log} as GuildRating})) : ratings[metric].map((g, i) => ({ rank: i + 1, g }))
   const needle = query.trim().toLowerCase()
   const rows = !live && needle ? ranked.filter((r) => r.g.guild.toLowerCase().includes(needle)) : ranked
   const top = ranked[0]?.g.score ?? 1
@@ -453,7 +454,13 @@ function GuildFullTable({
                         </span>
                         {/* Phones fold the run time under the score, as the character board does. */}
                         {view === "peak" && !bossBars && g.ms !== undefined && (
-                          <span className="font-mono text-[11px] text-muted-foreground tabular-nums sm:hidden">{formatClock(g.ms)}</span>
+                          <span className="font-mono text-[11px] text-muted-foreground tabular-nums sm:hidden">
+                            {g.log ? (
+                              <Link to={`/instances/${g.log}`} className="underline decoration-dotted underline-offset-4 transition-colors hover:text-foreground">
+                                {formatClock(g.ms)}
+                              </Link>
+                            ) : formatClock(g.ms)}
+                          </span>
                         )}
                       </div>
                     </td>
@@ -461,7 +468,13 @@ function GuildFullTable({
                     {view === "peak" && (
                       <>
                         <td className={cn("hidden px-3 py-2 font-mono text-muted-foreground tabular-nums sm:table-cell", !bossBars && "text-right")}>
-                          {bossBars ? peakBars(g) : g.ms !== undefined ? formatClock(g.ms) : "Unavailable"}
+                          {bossBars ? peakBars(g) : g.ms !== undefined ? (
+                            g.log ? (
+                              <Link to={`/instances/${g.log}`} className="underline decoration-dotted underline-offset-4 transition-colors hover:text-foreground">
+                                {formatClock(g.ms)}
+                              </Link>
+                            ) : formatClock(g.ms)
+                          ) : "Unavailable"}
                         </td>
                         <td className="hidden px-3 py-2 text-xs text-muted-foreground sm:table-cell">{g.date}</td>
                       </>
