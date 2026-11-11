@@ -328,7 +328,7 @@ func (us *Units) UpdatePlayerTalents(gid guid.GUID, talents *combatant.Talents) 
 	if !ok {
 		return
 	}
-	player.Talents = talents
+	player.Talents = combatant.CloneTalents(talents)
 	us.Players[gid] = player
 }
 
@@ -336,8 +336,53 @@ func (us *Units) UpdatePlayer(c combatant.Combatant) {
 	existing, ok := us.Players[c.Guid]
 	if ok {
 		c.MergeExisting(existing)
+		hasGear := false
+		for _, item := range c.GearSetups {
+			hasGear = hasGear || item.ItemID != 0
+		}
+		if !hasGear {
+			c.GearSetups = existing.GearSetups
+		}
+		if (c.Level == nil || *c.Level <= 0) && existing.Level != nil && *existing.Level > 0 {
+			c.Level = existing.Level
+		}
+	}
+	if c.Level == nil || *c.Level <= 0 {
+		if info, ok := us.Info[c.Guid]; ok && info.Level > 0 {
+			level := info.Level
+			c.Level = &level
+		}
 	}
 
-	us.Players[c.Guid] = c
+	us.Players[c.Guid] = c.Clone()
 	us.PlayerByName[c.Name] = c.Guid
+}
+
+// UpdatePlayerTransmogs replaces owned gear without changing prior observations.
+func (us *Units) UpdatePlayerTransmogs(gid guid.GUID, updates []combatant.Transmog) {
+	p, ok := us.Players[gid]
+	if !ok {
+		return
+	}
+	p.GearSetups = combatant.CloneGear(p.GearSetups)
+	for _, item := range updates {
+		if item.Slot < 0 || int(item.Slot) >= len(p.GearSetups) {
+			continue
+		}
+		g := &p.GearSetups[item.Slot]
+		g.ItemID = int(item.ItemID)
+		transmog := int(item.TransmogID)
+		g.TransmogID = &transmog
+	}
+	us.Players[gid] = p
+}
+
+// FillPlayerLevel records a known level only when current metadata lacks one.
+func (us *Units) FillPlayerLevel(gid guid.GUID, level int32) {
+	p, ok := us.Players[gid]
+	if !ok || level <= 0 || (p.Level != nil && *p.Level > 0) {
+		return
+	}
+	p.Level = &level
+	us.Players[gid] = p
 }

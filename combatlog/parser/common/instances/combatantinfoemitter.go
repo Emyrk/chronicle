@@ -49,7 +49,7 @@ func (ce *CombatantInfoEmitter) ActivityChange(m messages.Message, chars ...char
 		}
 		ce.emit(&messages.Combatant{
 			MessageBase: messages.Base(m.Date()),
-			Combatant:   player,
+			Combatant:   player.Clone(),
 		})
 	}
 }
@@ -71,10 +71,14 @@ func (ce *CombatantInfoEmitter) FightStarted(_ uuid.UUID, m messages.Message) {
 	case EmitAllActive:
 		ce.emitAllActive(m)
 	case EmitAllPlayers:
-		for _, player := range ce.armory.Players {
+		for gid := range ce.armory.PlayerObservations {
+			player, ok := ce.armory.CurrentPlayer(gid)
+			if !ok {
+				continue
+			}
 			ce.emit(&messages.Combatant{
 				MessageBase: messages.Base(m.Date()),
-				Combatant:   player,
+				Combatant:   player.Clone(),
 			})
 		}
 	default:
@@ -82,22 +86,16 @@ func (ce *CombatantInfoEmitter) FightStarted(_ uuid.UUID, m messages.Message) {
 	}
 }
 
-// player prefers instance-local state, then fills missing metadata from the
-// parse-wide unit catalog. Combatant snapshots are often logged once before a
-// sequence of dungeon wings, while each wing has its own armory tracker.
+// player uses canonical current metadata, including players whose snapshot was
+// logged before this instance's armory existed (for example, an earlier wing).
 func (ce *CombatantInfoEmitter) player(id guid.GUID) (combatant.Combatant, bool) {
-	player, ok := ce.armory.Players[id]
-	if ce.units == nil {
-		return player, ok
+	if player, ok := ce.armory.CurrentPlayer(id); ok {
+		return player, true
 	}
-	parseWide, parseWideOK := ce.units.Players[id]
-	if !ok {
-		return parseWide, parseWideOK
+	if ce.units != nil {
+		return ce.units.GetPlayer(id)
 	}
-	if parseWideOK {
-		player.MergeExisting(parseWide)
-	}
-	return player, true
+	return combatant.Combatant{}, false
 }
 
 // instancehook.Hook — no-op on fight end (gear snapshot at start is sufficient).
@@ -114,7 +112,7 @@ func (ce *CombatantInfoEmitter) emitAllActive(m messages.Message) {
 		}
 		ce.emit(&messages.Combatant{
 			MessageBase: messages.Base(m.Date()),
-			Combatant:   player,
+			Combatant:   player.Clone(),
 		})
 		return nil
 	})

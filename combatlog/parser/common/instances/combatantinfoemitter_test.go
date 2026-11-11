@@ -22,14 +22,14 @@ func TestCombatantInfoEmitter_FightStarted(t *testing.T) {
 	playerGUID := mustGUID(t, "0x0000000000000001")
 	units := unitdb.New()
 	tracker := armory.New(units)
-	tracker.Players[playerGUID] = combatant.Combatant{
+	tracker.Player(&messages.Combatant{Combatant: combatant.Combatant{
 		Name: "TestPlayer",
 		Guid: playerGUID,
 		GearSetups: []combatant.GearItem{
 			{ItemID: 12345, EnchantID: intPtr(100)},
 			{ItemID: 67890},
 		},
-	}
+	}})
 
 	chars := characters.NewCharacters(units, creatures.TurtleCharacterFactories(), identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 
@@ -61,6 +61,10 @@ func TestCombatantInfoEmitter_FightStarted(t *testing.T) {
 	assert.Equal(t, "TestPlayer", emitted[0].Name)
 	assert.Len(t, emitted[0].GearSetups, 2)
 	assert.Equal(t, 12345, emitted[0].GearSetups[0].ItemID)
+
+	tracker.Transmog(&messages.Transmog{PlayerName: "TestPlayer", Transmogs: []combatant.Transmog{{Slot: 0, ItemID: 54321}}})
+	assert.Equal(t, 54321, units.Players[playerGUID].GearSetups[0].ItemID)
+	assert.Equal(t, 12345, emitted[0].GearSetups[0].ItemID, "fight-start history must remain detached")
 }
 
 func TestCombatantInfoEmitter_FightStartedUsesParseWidePlayerData(t *testing.T) {
