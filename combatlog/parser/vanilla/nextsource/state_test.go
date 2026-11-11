@@ -39,7 +39,7 @@ func (d *stateDB) ExtraAttackSpell(context.Context, int32) (chrondbc.ExtraAttack
 	return chrondbc.ExtraAttackSpell{}, false
 }
 func testIdentity() Compatibility {
-	return Compatibility{DatasetContent: "test-fixture-v1", Format: string(database.LogFormat112aCcAddon), Flavor: database.WoWFlavor{database.FlavorVanilla, database.FlavorVanillaPlus}.CanonicalKey(), ParserVersion: "test-parser-v1", CustomOverrideVersion: "test-overrides-v1"}
+	return Compatibility{DatasetContent: "test-fixture-v1", Format: string(database.LogFormat112aCcAddon), Flavor: database.WoWFlavor{database.FlavorVanilla, database.FlavorVanillaPlus}.CanonicalKey(), ParserVersion: "test-parser-v1", BuildVersion: "build", CustomOverrideVersion: "test-overrides-v1"}
 }
 func testContext(t *testing.T) context.Context {
 	return parsectx.With(t.Context(), parsectx.Context{Format: database.LogFormat112aCcAddon, Flavor: database.WoWFlavor{database.FlavorVanilla, database.FlavorVanillaPlus}})
@@ -196,7 +196,7 @@ func TestPipelineStateCapybaraLocal(t *testing.T) {
 		split++
 	}
 	split++
-	identity := Compatibility{DatasetContent: fmt.Sprintf("local-dbc-sha256:%x", sha256.Sum256(spellBytes)), Format: string(database.LogFormat112aCcAddon), Flavor: effective.flavor.CanonicalKey(), ParserVersion: "local-test-build", CustomOverrideVersion: "checked-out-overrides"}
+	identity := Compatibility{DatasetContent: fmt.Sprintf("local-dbc-sha256:%x", sha256.Sum256(spellBytes)), Format: string(database.LogFormat112aCcAddon), Flavor: effective.flavor.CanonicalKey(), ParserVersion: "local-test-build", BuildVersion: "build", CustomOverrideVersion: "checked-out-overrides"}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	continuous, err := New(ctx, logger, effective, nil, "build")
 	require.NoError(t, err)
@@ -269,4 +269,55 @@ func TestPipelineStateDecodeRejectsMalformed(t *testing.T) {
 		_, err := DecodeState([]byte(bad))
 		require.Error(t, err)
 	}
+}
+
+func TestPipelineStateTrustedBuildCompatibility(t *testing.T) {
+	t.Parallel()
+	ctx := testContext(t)
+	db := &stateDB{}
+	p, err := New(ctx, nil, db, nil, "build")
+	require.NoError(t, err)
+	wrong := testIdentity()
+	wrong.BuildVersion = "other-build"
+	_, err = p.CaptureState(wrong, nil)
+	require.Error(t, err)
+	drain(t, ctx, p, []byte("10051|SPELL_DMG|0x0000000000000002|0x0000000000000001|17|100|50,0,0|0|0|2,0,0,0"))
+	state, err := p.CaptureState(testIdentity(), nil)
+	require.NoError(t, err)
+	wire := stateWire(t, state)
+	for _, mutate := range []func(*State){
+		func(s *State) {
+			v := s.Values["/root/source"]
+			var source pipelineValue
+			require.NoError(t, json.Unmarshal(v.Payload, &source))
+			source.BuildVersion = "forged"
+			var err error
+			v.Payload, err = json.Marshal(source)
+			require.NoError(t, err)
+			s.Values["/root/source"] = v
+		},
+		func(s *State) { s.Compatibility.BuildVersion = "forged" },
+		func(s *State) { s.Compatibility.ParserVersion = "forged" },
+	} {
+		var forged State
+		require.NoError(t, json.Unmarshal(wire, &forged))
+		mutate(&forged)
+		spy := &stateDB{}
+		candidate, objects, err := RestoreState(ctx, nil, spy, nil, testIdentity(), forged)
+		require.Error(t, err)
+		require.Nil(t, candidate)
+		require.Nil(t, objects)
+		require.Zero(t, spy.calls)
+	}
+	// The build string is not the implementation identity. A distinct trusted
+	// parser version remains valid, and the empty display string is supported.
+	p, err = New(ctx, nil, db, nil, "")
+	require.NoError(t, err)
+	identity := testIdentity()
+	identity.BuildVersion = ""
+	state, err = p.CaptureState(identity, nil)
+	require.NoError(t, err)
+	restored, _, err := RestoreState(ctx, nil, db, nil, identity, state)
+	require.NoError(t, err)
+	require.Empty(t, restored.buildVersion)
 }
