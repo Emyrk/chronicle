@@ -7,7 +7,7 @@ const browserRequire = createRequire(require.resolve("@vitest/browser-playwright
 const { chromium } = browserRequire("playwright");
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH, headless: true });
 try {
-  for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 }]) for (const [variant, expected] of [["unknown", "Every raid tells a story."], ["epoch", "Epoch Reborn Combat Logs"], ["forever", "WoW Forever Combat Logs"], ["forever-disabled", "WoW Forever Combat Logs"]]) {
+  for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 }]) for (const [variant, expected] of [["unknown", "Every raid tells a story."], ["epoch", "Epoch Reborn Combat Logs"], ["warmane", "Warmane Combat Logs"], ["forever", "WoW Forever Combat Logs"], ["forever-disabled", "WoW Forever Combat Logs"]]) {
     const page = await browser.newPage({ viewport });
     const errors = [];
     await page.addInitScript(() => {
@@ -24,7 +24,7 @@ try {
     await page.route("**/api/**", (route) => {
       if (new URL(route.request().url()).pathname === "/api/v1/site-config") {
         return route.fulfill({ json: {
-          dataset_flavor: variant.startsWith("forever") ? ["wow-forever"] : variant === "epoch" ? ["epoch"] : [],
+          dataset_flavor: variant.startsWith("forever") ? ["wow-forever"] : ["epoch", "warmane"].includes(variant) ? [variant] : [],
           forever_landing_enabled: variant === "forever",
           branding: { display_name: "Hydrated Test Tenant" },
         } });

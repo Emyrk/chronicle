@@ -21,8 +21,8 @@ func TestHomeBrowserHydration(t *testing.T) {
 	server := httptest.NewServer(Handler(os.DirFS("chronicle/dist"), nil, func(r *http.Request) *HTMLBranding {
 		config := &HomeConfig{}
 		switch r.URL.Query().Get("variant") {
-		case "epoch":
-			config.Flavor = []string{"epoch"}
+		case "epoch", "warmane":
+			config.Flavor = []string{r.URL.Query().Get("variant")}
 		case "forever":
 			config.Flavor = []string{"wow-forever"}
 			config.ForeverLandingEnabled = true
