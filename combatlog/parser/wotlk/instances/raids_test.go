@@ -1035,6 +1035,31 @@ func TestIcecrownCitadelMatchesRussianZoneName(t *testing.T) {
 	}))
 }
 
+func TestIcecrownCitadelFactoryEnablesRankings(t *testing.T) {
+	t.Parallel()
+
+	flavor := database.WoWFlavor{database.FlavorWrath}
+	ctx := parsectx.With(context.Background(), parsectx.Context{
+		Format: database.LogFormat335aCcAddon,
+		Flavor: flavor,
+	})
+	instance := IcecrownCitadelFactory.New(
+		ctx,
+		slog.Default(),
+		unitdb.New(),
+		zone.Zone{Name: "Icecrown Citadel", MapID: 631},
+		flavor,
+	)
+
+	finalized, err := instance.Finalize(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, finalized.RankingRules)
+	require.NotNil(t, finalized.RankingRules.Speedrun)
+	require.NotNil(t, finalized.Rankings)
+	require.NotNil(t, finalized.Rankings.Speedrun)
+	require.NotNil(t, finalized.Rankings.DPS)
+}
+
 func TestIcecrownGunshipScriptedVictory(t *testing.T) {
 	t.Parallel()
 

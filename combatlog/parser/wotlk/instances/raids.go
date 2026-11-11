@@ -521,9 +521,30 @@ func IcecrownCitadelHostiles() map[uint32]instances.Identity {
 	return hostile
 }
 
+func IcecrownCitadelProgressionBosses(database.WoWFlavor) []string {
+	return []string{
+		"Lord Marrowgar",
+		"Lady Deathwhisper",
+		"Gunship Battle",
+		"Deathbringer Saurfang",
+		"Festergut",
+		"Rotface",
+		"Professor Putricide",
+		"Blood Council",
+		"Blood-Queen Lana'thel",
+		"Valithria Dreamwalker",
+		"Sindragosa",
+		"The Lich King",
+	}
+}
+
 var IcecrownCitadelFactory = &instances.CommonFactory{
-	Name:     "Icecrown Citadel",
-	Category: instances.InstanceCategoryRaid,
+	Name:              "Icecrown Citadel",
+	Category:          instances.InstanceCategoryRaid,
+	ProgressionBosses: IcecrownCitadelProgressionBosses,
+	FlavoredRankings: func(database.WoWFlavor) *rankings.Rankings {
+		return IcecrownCitadelSpeedrunRequirements()
+	},
 	Preprocessors: func() []instancehook.Preprocessor {
 		return []instancehook.Preprocessor{&icecrownScriptedActivity{}}
 	},
