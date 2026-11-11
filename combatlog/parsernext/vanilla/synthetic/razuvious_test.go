@@ -18,7 +18,7 @@ func TestRazuviousOverkillWindow(t *testing.T) {
 	require.NoError(t, err)
 
 	deathTime := time.Date(2026, time.October, 19, 12, 45, 5, 452_000_000, time.UTC)
-	processor := newRazuviousOverkill()
+	processor := NewRazuviousOverkill()
 	processor.ProcessMessages([]messages.Message{
 		&messages.Slain{
 			MessageBase: messages.Base(deathTime),
