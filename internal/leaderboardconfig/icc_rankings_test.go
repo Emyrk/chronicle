@@ -95,7 +95,7 @@ func TestIcecrownCitadelRankingConfiguration(t *testing.T) {
 }
 
 func icecrownMigration(ctx context.Context, pool *pgxpool.Pool, direction string) error {
-	data, err := os.ReadFile("../../database/migrations/000364_leaderboard_icecrown_citadel_rankings." + direction + ".sql")
+	data, err := os.ReadFile("../../database/migrations/000365_leaderboard_icecrown_citadel_rankings." + direction + ".sql")
 	if err != nil {
 		return err
 	}
