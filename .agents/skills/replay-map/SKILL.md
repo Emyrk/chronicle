@@ -62,7 +62,7 @@ through on their own:
 | Token sizes, halo/arc/shadow plane sizes, muted opacity, sigil spin, line widths and dash, owner line opacity and dimming | `TOKEN_LAYOUT`, `TARGET_LINE`, `OWNER_LINE`, `MARKS_SCALE` in `unitTokenArt.ts` |
 | Halo colours | `HALO_COLORS` |
 | Effect durations, heal/overheal/crit/ranged/interrupt colours, school colours, heal number format | `replayEffects.ts` |
-| Health bar colours and rules | `healthBarColor`, `MAX_HEALTH_BARS`, `RECENT_HEALTH_MS`, `LOW_HEALTH_BAR_FRACTION`, `LOW_MANA_BAR_FRACTION`, `mapPalette.ts` |
+| Health bar colours and rules | `healthBarColor`, `MAX_HEALTH_BARS`, `RECENT_HEALTH_MS`, `PLAYER_BAR_SCALE`, `mapPalette.ts` |
 | Cast icon outline and interrupted colours | `mapPalette.ts` |
 | Settings options and their wording | `CAST_MODES`, `TRAIL_OPTIONS` |
 | Controls table | `MAP_CONTROL_KEYBINDS` |

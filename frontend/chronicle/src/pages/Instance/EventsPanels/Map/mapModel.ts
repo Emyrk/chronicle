@@ -226,14 +226,14 @@ export function latestPositionAt(
   return index >= 0 ? positions[index] : null;
 }
 
-/** Most health bars drawn at once. */
+/** Most enemy (and other non-player) health bars drawn at once. */
 export const MAX_HEALTH_BARS = 48;
-/** Units whose health changed this recently get a bar. */
+/** Most player health bars drawn at once: more than a raid. */
+export const MAX_PLAYER_HEALTH_BARS = 80;
+/** Non-player units whose health changed this recently get a bar. */
 export const RECENT_HEALTH_MS = 3_000;
-/** Players below this much health keep a bar. */
-export const LOW_HEALTH_BAR_FRACTION = 0.5;
-/** Mana users below this much mana keep a bar. */
-export const LOW_MANA_BAR_FRACTION = 0.25;
+/** Players' bars draw at this scale of a full-size bar. */
+export const PLAYER_BAR_SCALE = 0.6;
 
 const HEALTH_RED = [239, 68, 68];
 const HEALTH_AMBER = [245, 158, 11];
@@ -255,68 +255,37 @@ export function latestHealthAt<T extends { timestampMs: number }>(samples: reado
 }
 
 /**
- * Declutters health bars, up to MAX_HEALTH_BARS in this order: bosses,
- * selected players, players below LOW_HEALTH_BAR_FRACTION health, mana users
- * below LOW_MANA_BAR_FRACTION mana, then units whose health changed in the
- * last RECENT_HEALTH_MS (most recent first). Units without a sample at or
- * before the cursor get none. Returns each chosen unit's sample at the cursor.
+ * Picks the units with a health bar. Every player gets one unless at full
+ * health and, for mana users, full mana (hurt players first, up to
+ * MAX_PLAYER_HEALTH_BARS). Other units, up to MAX_HEALTH_BARS: bosses, then
+ * those whose health changed in the last RECENT_HEALTH_MS (most recent first).
+ * Units without a sample at or before the cursor get none. Returns each
+ * chosen unit's sample at the cursor.
  */
 export function selectHealthBars(
   guids: readonly string[],
   healthByUnit: Map<string, MapHealthSample[]>,
   cursorMs: number,
   bossGuids: ReadonlySet<string>,
-  selectedGuids: ReadonlySet<string>,
   playerGuids: ReadonlySet<string> = new Set(),
 ): Map<string, MapHealthSample> {
-  const candidates = guids.flatMap((guid) => {
+  const players: { guid: string; sample: MapHealthSample; fraction: number }[] = [];
+  const others: { guid: string; sample: MapHealthSample; priority: number }[] = [];
+  for (const guid of guids) {
     const sample = latestHealthAt(healthByUnit.get(guid) ?? [], cursorMs);
-    if (!sample) return [];
-    const player = playerGuids.has(guid);
-    const lowHealth = player && sample.max > 0 && sample.current / sample.max < LOW_HEALTH_BAR_FRACTION;
-    const lowMana = player && sample.powerType === "mana" && (sample.maxPower ?? 0) > 0
-      && (sample.power ?? 0) / sample.maxPower! < LOW_MANA_BAR_FRACTION;
-    const priority = bossGuids.has(guid) ? 0
-      : selectedGuids.has(guid) ? 1
-      : lowHealth ? 2
-      : lowMana ? 3
-      : cursorMs - sample.timestampMs <= RECENT_HEALTH_MS ? 4 : -1;
-    return priority < 0 ? [] : [{ guid, sample, priority }];
-  });
-  candidates.sort((left, right) => left.priority - right.priority || right.sample.timestampMs - left.sample.timestampMs);
-  return new Map(candidates.slice(0, MAX_HEALTH_BARS).map(({ guid, sample }) => [guid, sample]));
-}
-
-/** Players above this much health and mana whose health held steady for RECENT_HEALTH_MS get a smaller bar. */
-export const QUIET_BAR_FRACTION = 0.5;
-/** A quiet player's bar is drawn at this scale. */
-export const QUIET_BAR_SCALE = 0.6;
-
-/**
- * Whether a player's bar at the cursor is quiet (drawn smaller): above
- * QUIET_BAR_FRACTION health and, for mana users, mana, with no health change
- * (damage or healing) in the last RECENT_HEALTH_MS. Power changes don't count.
- */
-export function isQuietHealthBar(samples: readonly MapHealthSample[], cursorMs: number): boolean {
-  const index = latestPositionIndex(samples, cursorMs);
-  if (index < 0) return false;
-  const sample = samples[index];
-  if (sample.max <= 0 || sample.current / sample.max <= QUIET_BAR_FRACTION) return false;
-  if (sample.powerType === "mana" && (sample.maxPower ?? 0) > 0 && (sample.power ?? 0) / sample.maxPower! <= QUIET_BAR_FRACTION) return false;
-  return lastHealthChangeMs(samples, index, cursorMs - RECENT_HEALTH_MS) === null;
-}
-
-// When health (current, max or absorb) last changed at or before
-// samples[index], looking back no further than `sinceMs`; null when it held
-// steady over that span. Samples also record power, so consecutive samples
-// can share the same health. The first sample counts as a change.
-function lastHealthChangeMs(samples: readonly MapHealthSample[], index: number, sinceMs: number): number | null {
-  for (let at = index; at >= 0 && samples[at].timestampMs >= sinceMs; at--) {
-    const sample = samples[at];
-    const previous = samples[at - 1];
-    if (!previous || previous.current !== sample.current || previous.max !== sample.max || previous.absorb !== sample.absorb) return sample.timestampMs;
+    if (!sample) continue;
+    if (playerGuids.has(guid)) {
+      const fullHealth = sample.current >= sample.max;
+      const fullMana = sample.powerType !== "mana" || (sample.power ?? 0) >= (sample.maxPower ?? 0);
+      if (!fullHealth || !fullMana) players.push({ guid, sample, fraction: sample.max > 0 ? sample.current / sample.max : 0 });
+      continue;
+    }
+    const priority = bossGuids.has(guid) ? 0 : cursorMs - sample.timestampMs <= RECENT_HEALTH_MS ? 1 : -1;
+    if (priority >= 0) others.push({ guid, sample, priority });
   }
-  return null;
+  players.sort((left, right) => left.fraction - right.fraction);
+  others.sort((left, right) => left.priority - right.priority || right.sample.timestampMs - left.sample.timestampMs);
+  return new Map([...players.slice(0, MAX_PLAYER_HEALTH_BARS), ...others.slice(0, MAX_HEALTH_BARS)].map(({ guid, sample }) => [guid, sample]));
 }
 
 function latestPositionIndex(positions: readonly { timestampMs: number }[], timestampMs: number): number {

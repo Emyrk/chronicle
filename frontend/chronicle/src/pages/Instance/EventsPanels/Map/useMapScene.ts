@@ -28,7 +28,6 @@ import {
   dominantMapId,
   dungeonMapPoint,
   focusCentre,
-  isQuietHealthBar,
   latestHealthAt,
   replayPositionAt,
   projectionScale,
@@ -143,8 +142,6 @@ export interface MapSceneMarker {
   health: MapUnitHealth | null;
   /** The declutter (selectHealthBars) gives this unit a health bar (the 3D view moves it into the nameplate for units that have one). */
   bar: boolean;
-  /** A calm player's bar (isQuietHealthBar), drawn smaller. */
-  quietBar: boolean;
   /** Creature entry used by the shared miniature registry (hostiles, pets, totems, etc.). */
   entry?: number;
   /** The 3D token's icon: a player's class icon, or null. */
@@ -551,7 +548,6 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
       name: player?.name ?? metadata?.name ?? guid,
       health: null,
       bar: false,
-      quietBar: false,
       entry: metadata?.entry,
       ...(kind === "pet" && ownerGuid ? { owner: ownerGuid } : {}),
       icon: player ? `/c/icons/class_${player.class.toLowerCase().replace(/\s+/g, "")}.png` : null,
@@ -559,7 +555,7 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
     }];
   });
   const playerGuids = new Set(markers.filter((marker) => marker.kind === "player").map((marker) => marker.guid));
-  const bars = selectHealthBars(markers.map((marker) => marker.guid), encounter.healthByUnit, cursorMs, bossGuids, selectedPlayers, playerGuids);
+  const bars = selectHealthBars(markers.map((marker) => marker.guid), encounter.healthByUnit, cursorMs, bossGuids, playerGuids);
   for (const marker of markers) {
     const debuffs = encounter.debuffsByUnit.get(marker.guid);
     if (debuffs) marker.debuffs = activeDebuffsAt(debuffs, cursorMs);
@@ -569,9 +565,6 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
       marker.power = { fraction: Math.min(1, Math.max(0, latest.power / latest.maxPower)), color: POWER_COLORS[latest.powerType ?? ""] ?? "#767676" };
     }
     marker.bar = bars.has(marker.guid);
-    // Calm players (not picked in the page filter) get a smaller bar.
-    marker.quietBar = marker.bar && marker.kind === "player" && !selectedPlayers.has(marker.guid)
-      && isQuietHealthBar(encounter.healthByUnit.get(marker.guid) ?? [], cursorMs);
     if (latest) {
       marker.health = {
         current: latest.current,
