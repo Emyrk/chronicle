@@ -40,7 +40,7 @@ describe("getInstanceBackground", () => {
 
   it("returns The Drowned City loading screen", () => {
     expect(getInstanceBackground("The Drowned City")).toBe(
-      "/c/images/loadingscreens/LoadScreenDrownedCity.webp",
+      "https://icons.chronicleclassic.com/forever/loadingscreens/2970-bea509ce83d9e614-drowned-city.webp",
     );
   });
 });

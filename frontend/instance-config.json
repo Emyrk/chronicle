@@ -221,7 +221,7 @@
     "contentLevel": 60
   },
   "The Drowned City": {
-    "background": "/c/images/loadingscreens/LoadScreenDrownedCity.webp",
+    "background": "https://icons.chronicleclassic.com/forever/loadingscreens/2970-bea509ce83d9e614-drowned-city.webp",
     "bossCount": 8,
     "abbrev": "Drowned City",
     "accentColor": "#22a7a7",
