@@ -36,6 +36,8 @@ func DecodeRecord(ctx context.Context, spells SpellLookup, content string) ([]me
 func decodeFields(ctx context.Context, spells SpellLookup, ts time.Time, event string, fields []string) ([]messages.Message, error) {
 	m := &recordFields{fields: fields}
 	switch event {
+	case "LOOT":
+		return DecodeLoot(ts, m)
 	case "RG", "RAID_COMPOSITION", "UNIT_STATE":
 		r, err := decodeCapabilityRecord(ts, event, m)
 		return r.Messages, err
@@ -155,4 +157,13 @@ func (m *recordFields) CSV() []string {
 		return []string{}
 	}
 	return strings.Split(raw, ",")
+}
+
+func (m *recordFields) Rest() []string {
+	if m.index >= len(m.fields) {
+		return []string{}
+	}
+	rest := m.fields[m.index:]
+	m.index = len(m.fields)
+	return rest
 }
