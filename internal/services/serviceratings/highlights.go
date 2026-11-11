@@ -46,9 +46,17 @@ func HighlightConfiguration(ctx context.Context, store database.Store, tenant uu
 	if err != nil {
 		return nil, nil, err
 	}
+	defaultSets := map[string]bool{}
+	for _, row := range rows {
+		if row.Kind == "set" && row.SetKey == "default" {
+			defaultSets[row.InstanceName] = true
+		}
+	}
 	cohorts := []HighlightCohort{}
 	for _, row := range rows {
-		if row.Kind != "instance" {
+		// Highlights include ranked-average boards, which require the approved
+		// default encounter set. Renown-only instances intentionally have none.
+		if row.Kind != "instance" || !defaultSets[row.InstanceName] {
 			continue
 		}
 		variants := 0

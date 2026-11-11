@@ -153,7 +153,11 @@ func TestHighlightDispatcherIncludesAllAndIndividualRealms(t *testing.T) {
 	second := uuid.New()
 	s.exec(`INSERT INTO wow_server_realms(id,server_id,name) VALUES($1,$2,'Second realm')`, second, s.server)
 	queue := &recordingQueue{}
-	d := &HighlightDispatcher{Store: highlightStore{Store: s.db, config: highlightConfig()}, Queue: queue}
+	config := append(highlightConfig(),
+		database.ResolveLeaderboardConfigurationRow{Kind: "instance", InstanceName: "Renown-only raid"},
+		database.ResolveLeaderboardConfigurationRow{Kind: "boss", InstanceName: "Renown-only raid", EncounterName: "Boss"},
+	)
+	d := &HighlightDispatcher{Store: highlightStore{Store: s.db, config: config}, Queue: queue}
 	require.NoError(t, d.Work(s.ctx, &river.Job[ArgsHighlightDispatch]{Args: ArgsHighlightDispatch{TenantID: s.tenant}}))
 	require.Len(t, queue.jobs, 3)
 	realms := map[uuid.UUID]bool{}
@@ -161,6 +165,7 @@ func TestHighlightDispatcherIncludesAllAndIndividualRealms(t *testing.T) {
 		args, ok := job.(ArgsHighlightRefresh)
 		require.True(t, ok)
 		require.Equal(t, s.tenant, args.TenantID)
+		require.Equal(t, "Fixture raid", args.Instance)
 		require.Equal(t, "Normal", args.Difficulty)
 		require.EqualValues(t, 40, args.Size)
 		realms[args.RealmID] = true
@@ -168,6 +173,12 @@ func TestHighlightDispatcherIncludesAllAndIndividualRealms(t *testing.T) {
 	require.True(t, realms[uuid.Nil])
 	require.True(t, realms[s.realm])
 	require.True(t, realms[second])
+
+	// Jobs queued before the configuration changed should finish without retrying.
+	require.NoError(t, (&HighlightWorker{Store: d.Store}).Work(s.tenantctx(), &river.Job[ArgsHighlightRefresh]{Args: ArgsHighlightRefresh{
+		TenantID: s.tenant,
+		Instance: "Renown-only raid",
+	}}))
 }
 
 func TestHighlightPerformanceExactVanillaCohortAndRealmID(t *testing.T) {
