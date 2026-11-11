@@ -143,7 +143,7 @@ func TestPeriodAliasesAndResetGraceContinuation(t *testing.T) {
 	state := roundtrip(t, p, r)
 	moments, resolve := r.restore(t)
 	var calls []messages.Message
-	candidate, err := state.Restore(moments, resolve, period.HookFunction(func(m messages.Message) { calls = append(calls, m) }), nil)
+	candidate, err := restoreTestPeriod(state, moments, resolve, period.HookFunction(func(m messages.Message) { calls = append(calls, m) }), nil)
 	require.NoError(t, err)
 	require.Empty(t, calls)
 	restored := candidate.(*period.InactivityPeriod)
@@ -163,7 +163,7 @@ func TestPeriodAliasesAndResetGraceContinuation(t *testing.T) {
 	require.Equal(t, p.Period.End.Timestamp.Date(), restored.Period.End.Timestamp.Date())
 	// A second restore is fresh, not the already-ended candidate.
 	otherMoments, otherMessages := r.restore(t)
-	other, err := state.Restore(otherMoments, otherMessages, nil, nil)
+	other, err := restoreTestPeriod(state, otherMoments, otherMessages, nil, nil)
 	require.NoError(t, err)
 	require.True(t, other.IsActive())
 }
@@ -180,7 +180,7 @@ func TestRetainedSlainMutationDoesNotRewriteEagerBytes(t *testing.T) {
 	require.NoError(t, err)
 	state := roundtrip(t, p, r)
 	moments, resolve := r.restore(t)
-	restored, err := state.Restore(moments, resolve, nil, nil)
+	restored, err := restoreTestPeriod(state, moments, resolve, nil, nil)
 	require.NoError(t, err)
 	retained, err := resolve(slainRef)
 	require.NoError(t, err)
@@ -210,10 +210,10 @@ func TestPeriodInjectedPredicateAndCallbackOrder(t *testing.T) {
 	r := newRefs()
 	state := roundtrip(t, p, r)
 	moments, resolve := r.restore(t)
-	_, err := state.Restore(moments, resolve, nil, nil)
+	_, err := restoreTestPeriod(state, moments, resolve, nil, nil)
 	require.Error(t, err)
 	var order []string
-	restored, err := state.Restore(moments, resolve, period.HookFunction(func(messages.Message) { order = append(order, "hook") }), func() bool { order = append(order, "predicate"); return true })
+	restored, err := restoreTestPeriod(state, moments, resolve, period.HookFunction(func(messages.Message) { order = append(order, "hook") }), func() bool { order = append(order, "predicate"); return true })
 	require.NoError(t, err)
 	require.Empty(t, order)
 	active := restored.(*period.InactivityPeriod)
@@ -260,7 +260,7 @@ func TestPeriodAndMessageStateRejectUnsupportedAndMalformed(t *testing.T) {
 	}
 	p.Begin("start", messages.TimedOut(time.Time{}))
 	s := roundtrip(t, p, newRefs())
-	candidate, err := s.Restore(nil, nil, nil, nil)
+	candidate, err := restoreTestPeriod(s, nil, nil, nil, nil)
 	require.Error(t, err)
 	require.Nil(t, candidate)
 }
@@ -280,7 +280,7 @@ func TestPeriodCancellationKeepsStaleTimerFieldsAndDistinctMessages(t *testing.T
 	r := newRefs()
 	s := roundtrip(t, p, r)
 	moments, resolve := r.restore(t)
-	restored, err := s.Restore(moments, resolve, nil, nil)
+	restored, err := restoreTestPeriod(s, moments, resolve, nil, nil)
 	require.NoError(t, err)
 	got := restored.(*period.InactivityPeriod)
 	require.Equal(t, p.Meta, got.Meta)
@@ -290,4 +290,61 @@ func TestPeriodCancellationKeepsStaleTimerFieldsAndDistinctMessages(t *testing.T
 	p.Begin("unsupported", &messages.Heal{})
 	_, err = period.CaptureState(p, r.moment, r.message)
 	require.Error(t, err)
+}
+
+// Test-only composition. Production has no concrete reconstruction dispatcher.
+func restoreTestPeriod(s period.State, moments func(string) (*period.Moment, error), message func(string) (messages.Message, error), hook period.Hook, predicate func() bool) (period.IsPeriod, error) {
+	encoded, err := s.Encode()
+	if err != nil {
+		return nil, err
+	}
+	var header struct {
+		Kind string `json:"kind"`
+	}
+	if err := json.Unmarshal(encoded, &header); err != nil {
+		return nil, err
+	}
+	var p period.IsPeriod
+	if header.Kind == "empty" {
+		owner := &period.EmptyPeriod{}
+		if err := owner.RestoreState(s, moments); err != nil {
+			return nil, err
+		}
+		p = owner
+	} else {
+		owner := &period.InactivityPeriod{}
+		if err := owner.RestoreState(s, moments, message, predicate); err != nil {
+			return nil, err
+		}
+		p = owner
+	}
+	p.SetHook(hook)
+	return p, nil
+}
+
+func TestConcreteRestoreDoesNotInvokeCallbacksOrChangeExternalOwners(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	original := period.NewInactivityPeriod(1, time.Minute).WithTimeoutAsDeath(true)
+	message := messages.TimedOut(now)
+	original.Begin("start", message)
+	refs := newRefs()
+	state := roundtrip(t, original, refs)
+	moments, messagesResolve := refs.restore(t)
+	hookCalls, predicateCalls := 0, 0
+	destination := period.NewInactivityPeriod(99, time.Hour)
+	destination.SetHook(period.HookFunction(func(messages.Message) { hookCalls++ }))
+	err := destination.RestoreState(state, moments, messagesResolve, func() bool { predicateCalls++; return true })
+	require.NoError(t, err)
+	require.Zero(t, hookCalls)
+	require.Zero(t, predicateCalls)
+	require.True(t, original.IsActive())
+	require.Equal(t, now.Add(time.Minute), original.Meta.NextTimeout)
+	require.Equal(t, messages.ActivityStart, message.Activity()[1])
+	// Runtime hook wiring is a separate composition step, not a Restore side effect.
+	destination.SetHook(period.HookFunction(func(messages.Message) { hookCalls++ }))
+	require.True(t, destination.HandleTimeout(now.Add(time.Minute+time.Nanosecond)))
+	require.Equal(t, 1, hookCalls)
+	require.Equal(t, 1, predicateCalls)
+	require.True(t, original.IsActive())
 }
