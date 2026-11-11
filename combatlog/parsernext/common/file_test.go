@@ -118,3 +118,25 @@ func TestReadFileInvalidArguments(t *testing.T) {
 		require.Zero(t, got)
 	}
 }
+
+// A reader may return the final bytes with EOF. Do not read it again merely to
+// expose completion on the next pull (or observe data outside this file).
+type finalBytesReader struct{ reads int }
+
+func (r *finalBytesReader) Read(p []byte) (int, error) { r.reads++; return copy(p, "last"), io.EOF }
+func TestFileReaderDoesNotReadAfterFinalBytes(t *testing.T) {
+	t.Parallel()
+	input := &finalBytesReader{}
+	reader, err := common.NewFileReader(input, 100)
+	require.NoError(t, err)
+	line, err := reader.Next(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, "last", line.Raw)
+	require.Zero(t, reader.Summary())
+	_, err = reader.Next(t.Context())
+	require.ErrorIs(t, err, io.EOF)
+	_, err = reader.Next(t.Context())
+	require.ErrorIs(t, err, io.EOF)
+	require.Equal(t, 1, input.reads)
+	require.EqualValues(t, 1, reader.Summary().Lines)
+}

@@ -71,6 +71,7 @@ type FileReader struct {
 	digest       hash.Hash
 	summary      FileSummary
 	terminal     error
+	eofPending   bool
 }
 
 func NewFileReader(source io.Reader, maxLineBytes int) (*FileReader, error) {
@@ -102,6 +103,12 @@ func (r *FileReader) Next(ctx context.Context) (Line, error) {
 }
 
 func (r *FileReader) next(ctx context.Context) (Line, error) {
+	if err := ctx.Err(); err != nil {
+		return Line{}, err
+	}
+	if r.eofPending {
+		return Line{}, io.EOF
+	}
 	var raw []byte
 	var readErr error
 	for {
@@ -127,6 +134,7 @@ func (r *FileReader) next(ctx context.Context) (Line, error) {
 	if len(raw) == 0 && readErr == io.EOF {
 		return Line{}, io.EOF
 	}
+	r.eofPending = readErr == io.EOF
 	line := Line{Number: r.summary.Lines + 1, Offset: r.summary.Bytes, Raw: string(raw)}
 	_, _ = r.digest.Write(raw)
 	r.summary.Bytes += int64(len(raw))
