@@ -5,12 +5,13 @@ import { cn } from "@/lib/utils"
 import { useQuery } from "@tanstack/react-query"
 import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import type { SpeedrunLeaderboardEntry } from "@/api/typesGenerated"
+import { useCareerLeaderboard } from "@/api/career"
 import { useRankingsKillTimesByBoss, useRankingsLeaderboard, useRankingsStats, useRankingsClearTimes, useRankingsKillTimes, useRankingsSuccessRates, useParseScoreSpreads, useTimeParseSpreads } from "@/api/rankingsQueries"
 import { useHubSummary, type HubSummary } from "./Hub/hubSummaryAdapter"
 import { cohortLabel } from "./Hub/cohortLabel"
 import { AdRailStack } from "@/components/Ads/AdRailStack"
 import { MobileBottomAd } from "@/components/Ads/MobileBottomAd"
-import { HubLoadError, LeaderboardsHubApp } from "./Hub/HubLanding"
+import { CareerCard, HubLoadError, LeaderboardsHubApp, type CareerCardLeaders } from "./Hub/HubLanding"
 import { LeaderboardHub, Overview, SkeletonRows, type HubLiveTabContext } from "./Hub/LeaderboardHub"
 import { LiveHubOverview } from "./Hub/LiveHubOverview"
 import { LiveHubRatings } from "./Hub/LiveHubRatings"
@@ -58,6 +59,28 @@ export function LeaderboardsLiveHub() {
     !instance && !!summary.data && !summary.isPlaceholderData && !highlightsSelectionError && !rootRatingsDisabled && tab !== "rulesets")
   const highlightsScopeError = highlightsSelectionError ?? (highlights.data?.status === "unsupported_scope" ? "Choose All realms or one realm to view highlights" : undefined)
   const activeRealm = realmIDs.length === 1 ? available.find((row) => row.id === realmIDs[0]) : undefined
+  const showCareerCard = !instance && (tab === "overview" || tab === "ratings")
+  const careerQueryEnabled = showCareerCard && !!summary.data && !summary.isPlaceholderData
+    && !highlightsSelectionError && siteConfig !== undefined && !rootRatingsDisabled
+  const playerCareerParams = new URLSearchParams({ limit: "1" })
+  const guildCareerParams = new URLSearchParams({ limit: "1", subject: "guilds" })
+  if (activeRealm) {
+    playerCareerParams.set("realm", activeRealm.id)
+    guildCareerParams.set("realm", activeRealm.id)
+  }
+  const playerCareer = useCareerLeaderboard(siteConfig?.tenant?.id, playerCareerParams, careerQueryEnabled)
+  const guildCareer = useCareerLeaderboard(siteConfig?.tenant?.id, guildCareerParams, careerQueryEnabled && tab === "overview")
+  const careerLeadersCandidate: CareerCardLeaders = {
+    peak: playerCareer.data?.peak.entries[0],
+    mastery: playerCareer.data?.mastery.entries[0],
+    renown: playerCareer.data?.renown.entries[0],
+    guild: guildCareer.data?.mastery.entries[0],
+  }
+  const careerLeaders = Object.values(careerLeadersCandidate).some(Boolean) ? careerLeadersCandidate : undefined
+  const careerRaids = [...new Set((playerCareer.data?.raid_options ?? guildCareer.data?.raid_options ?? [])
+    .filter((raid) => raid.include_average)
+    .map((raid) => raid.instance_name))]
+  const careerHref = activeRealm ? `/leaderboards/career?${new URLSearchParams({ realm: activeRealm.id })}` : "/leaderboards/career"
   const selectedRealmIDs = activeRealm ? [activeRealm.id] : realmIDs.length > 1 ? realmIDs : []
   const realm = !instance && highlightsSelectionError ? "Select a realm" : activeRealm?.name ?? ALL_REALMS
   const names = [...new Set((summary.data?.instances ?? []).map((row) => row.instance_name))]
@@ -125,6 +148,7 @@ export function LeaderboardsLiveHub() {
           : highlights.isError ? <HubLoadError title="Highlights could not be refreshed" message={highlights.data ? "Showing the last loaded highlights. Their update times are shown on each card." : "Highlights could not be loaded. This does not mean there are no qualifying entries."} onRetry={() => void highlights.refetch()} retrying={highlights.isFetching} />
           : highlights.isFetching && !highlights.data ? <p role="status">Loading highlights…</p> : undefined}
         loading={loading || stale} error={loadError}
+        leadCard={showCareerCard ? (currentTab) => <CareerCard to={careerHref} tab={currentTab} leaders={careerLeaders} raids={careerRaids} /> : undefined}
         onOpenCohort={(name, cohort) => navigate(instanceHref(name, cohort))}
         renderInstance={(name) => !summary.data ? <LoadingInstanceHub error={loadError} instanceName={name} tab={tab} onTab={chooseTab} tabHref={tabHref}
           allInstancesHref={allInstancesHref} realm={realm} onInstance={() => chooseInstance()} ratingView={ratingView} onRatingView={chooseRatingView} onOpenRatings={openRatings}

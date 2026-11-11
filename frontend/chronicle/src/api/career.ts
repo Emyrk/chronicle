@@ -30,12 +30,13 @@ export function usePlayerRatingHistory(tenantID: string | undefined, realmID: st
     enabled: enabled && !!realmID && !!player, staleTime: 60_000, retry: false })
 }
 /** Characters or guilds ranked by career Mastery, Peak, and Renown, in one response. */
-export function useCareerLeaderboard(tenantID: string | undefined, params: URLSearchParams) {
+export function useCareerLeaderboard(tenantID: string | undefined, params: URLSearchParams, enabled = true) {
   const url = `/api/v1/leaderboards-v2/career?${params}`
   return useQuery({ queryKey: ["career", tenantID, "leaderboard", url],
     queryFn: () => fetchCareer<CareerLeaderboardResponse>(url),
     // Keep the last boards (and their raid list) while a new selection loads.
     placeholderData: keepPreviousData,
+    enabled,
     staleTime: 60_000, retry: false })
 }
 export function useGuildCareer(tenantID: string | undefined, guildID: string) {
