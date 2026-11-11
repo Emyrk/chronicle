@@ -97,6 +97,27 @@ fields and ambiguous canonical identities fail. The underlying runner's nil
 return on stale-generation abort is **not** treated as publication proof. Empty
 or encounter-free logs are intentionally unsupported in this first slice.
 
+## Baseline-only engine selection
+
+`run --engine legacy` is the default. `run --engine parsernext-vanilla` selects
+`parser/vanilla/nextsource` for `1.12a-cc-addon` only. It reuses the existing
+consumers, finalizers and fenced publication. Unsupported names and formats fail;
+there is no fallback. The selection is call-local and is never stored in River
+arguments, database settings or production configuration. Production workers keep
+the legacy default. `export` does not select an engine.
+
+Pass `--provenance /new/path/run.json` to record the attempted engine and Go VCS
+revision/dirty status separately from stdout's comparable artifact. The path is
+exclusive-create; existing evidence is never overwritten. Provenance existence
+does not prove success: both the run exit status and canonical export validation
+must pass. Build a clean committed checkout for a precise revision; overlay builds
+need a separate manifest naming the overlaid revision/files/hashes too.
+
+For old/new validation, use separate fresh clones of the same seed and private
+object copies. Compress stdout directly (with pipefail or explicit subprocess
+status checks), preserve complete exports, and retain strict differences even
+when a separate diagnostic attributes differences to known event ordering noise.
+
 ## Exact v4 allowlist
 
 The artifact repeats its schema, controlled-fixture scope and field allowlists.

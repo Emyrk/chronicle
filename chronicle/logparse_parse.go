@@ -21,12 +21,14 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/messagesource"
 	"github.com/Emyrk/chronicle/combatlog/parser/reorder"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/realm"
+	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/nextsource"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/parserv2"
 	"github.com/Emyrk/chronicle/combatlog/parser/wotlk"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/Emyrk/chronicle/internal/gamedataoverrides"
+	"github.com/Emyrk/chronicle/internal/version"
 )
 
 type overrideGameDB struct {
@@ -96,6 +98,12 @@ func (w *WorkerLogParse) parseCombatLog(
 	preloadedFirst []byte,
 	preRealmName string,
 ) (*parseResult, error) {
+	// Defend the selection seam too, before constructing consumers or reading files.
+	if w.baselineEngine != "" {
+		if err := w.baselineEngine.ValidateFormat(logFormat); err != nil {
+			return nil, err
+		}
+	}
 	logLogger := w.parent.logger
 	if !w.parent.EmitParsingLogs() {
 		logLogger = slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -172,24 +180,46 @@ func (w *WorkerLogParse) parseCombatLog(
 		}
 		loadFileDuration = time.Since(loadStart)
 
-		p, err := parserv2.New(ctx, logLogger, rdr, overriddenGameDB, gameDB)
-		if err != nil {
-			return nil, fmt.Errorf("create v2 parser: %w", err)
-		}
-		c.Advancer = p
-		consumeErr = c.ConsumeAll(ctx, p)
-		if consumeErr != nil && !errors.Is(consumeErr, io.EOF) {
-			return nil, fmt.Errorf("consume v2 log: %w", consumeErr)
-		}
+		if w.baselineEngine == BaselineParserNextVanilla {
+			pipeline, err := nextsource.New(ctx, logLogger, overriddenGameDB, gameDB, version.GitTag)
+			if err != nil {
+				return nil, fmt.Errorf("create parsernext Vanilla pipeline: %w", err)
+			}
+			source, err := pipeline.OpenFile(rdr, 4<<20)
+			if err != nil {
+				return nil, fmt.Errorf("create parsernext Vanilla source: %w", err)
+			}
+			c.Advancer = source
+			consumeErr = c.ConsumeAll(ctx, source)
+			if consumeErr != nil {
+				return nil, fmt.Errorf("consume parsernext Vanilla log: %w", consumeErr)
+			}
+			observed := pipeline.Capabilities()
+			if observed.RaidGroup {
+				logCapabilities = append(logCapabilities, "raidgroup")
+			}
+			logCapabilities = append(logCapabilities, observedUnitTelemetryCapabilities(observed.UnitResources, observed.UnitPosition)...)
+		} else {
+			p, err := parserv2.New(ctx, logLogger, rdr, overriddenGameDB, gameDB)
+			if err != nil {
+				return nil, fmt.Errorf("create v2 parser: %w", err)
+			}
+			c.Advancer = p
+			consumeErr = c.ConsumeAll(ctx, p)
+			if consumeErr != nil && !errors.Is(consumeErr, io.EOF) {
+				return nil, fmt.Errorf("consume v2 log: %w", consumeErr)
+			}
 
-		if p.SawRaidGroup() {
-			logCapabilities = append(logCapabilities, "raidgroup")
-		}
+			if p.SawRaidGroup() {
+				logCapabilities = append(logCapabilities, "raidgroup")
+			}
 
-		logCapabilities = append(logCapabilities, observedUnitTelemetryCapabilities(
-			p.SawUnitResources(),
-			p.SawUnitPosition(),
-		)...)
+			logCapabilities = append(logCapabilities, observedUnitTelemetryCapabilities(
+				p.SawUnitResources(),
+				p.SawUnitPosition(),
+			)...)
+
+		}
 
 	case database.LogFormat243CcAddon, database.LogFormat335aCcAddon:
 		logCapabilities = append(logCapabilities, "interrupt")

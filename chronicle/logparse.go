@@ -141,6 +141,8 @@ func replacementParseFailureRefreshIDs(ctx context.Context, job *river.Job[ArgsL
 
 type WorkerLogParse struct {
 	parent *Chronicle
+	// Set only by synchronous baseline tooling, never from River args.
+	baselineEngine BaselineEngine
 
 	river.WorkerDefaults[ArgsLogParse]
 }

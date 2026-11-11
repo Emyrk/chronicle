@@ -2,7 +2,11 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"github.com/Emyrk/chronicle/chronicle"
 	"io"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -42,4 +46,31 @@ func TestFreshArmoryAttestationRequired(t *testing.T) {
 		err := run(context.Background(), []string{command, "--isolated-db", "--args", "nonexistent.json", "--expect-instances", "1"}, io.Discard)
 		require.ErrorContains(t, err, "--fresh-armory-seed")
 	}
+}
+
+func TestEngineRejectedBeforeInputs(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ command, engine, want string }{
+		{"run", "typo", "unsupported baseline engine"},
+		{"export", "parsernext-vanilla", "not an export"},
+	} {
+		err := run(t.Context(), []string{tc.command, "--isolated-db", "--fresh-armory-seed", "--args", "nonexistent.json", "--expect-instances", "1", "--engine", tc.engine}, io.Discard)
+		require.ErrorContains(t, err, tc.want)
+	}
+}
+
+func TestProvenanceIsSeparateAndExclusive(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "provenance.json")
+	require.NoError(t, writeProvenance(path, chronicle.BaselineParserNextVanilla))
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	var got map[string]string
+	require.NoError(t, json.Unmarshal(raw, &got))
+	require.Equal(t, "parsernext-vanilla", got["engine"])
+	require.NotEmpty(t, got["revision"])
+	require.Error(t, writeProvenance(path, chronicle.BaselineLegacy))
+	after, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, raw, after)
 }
