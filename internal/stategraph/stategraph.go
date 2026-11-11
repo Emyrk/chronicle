@@ -332,3 +332,30 @@ func pathsToStrings(paths []Path) []string {
 	}
 	return result
 }
+
+// Validate checks a decoded graph with the same rules as registry construction.
+func (g Graph) Validate() error {
+	_, err := g.validated()
+	return err
+}
+
+func (g Graph) validated() (Graph, error) {
+	if g.Version != FormatVersion {
+		return Graph{}, fmt.Errorf("unsupported graph version %d", g.Version)
+	}
+	r, err := New(string(g.Root))
+	if err != nil {
+		return Graph{}, err
+	}
+	for _, node := range g.Nodes {
+		if err := r.add(node); err != nil {
+			return Graph{}, err
+		}
+	}
+	for _, dep := range g.Dependencies {
+		if err := r.DependsOn(string(dep.From), string(dep.To)); err != nil {
+			return Graph{}, err
+		}
+	}
+	return r.Graph()
+}
