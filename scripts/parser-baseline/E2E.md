@@ -126,6 +126,32 @@ BASELINE_BINARY="$ROOT/bin/parser-baseline-current" \
   bash "$ROOT/scripts/run-corpus.sh" octowow
 ```
 
+### Deterministic trash naming follow-up
+
+The ordinary encounter-name fallback now chooses the most numerous nonempty
+hostile display name, counting each eligible mob GUID once (not activity periods
+or events), with alphabetical ties. Existing named/function/boss/authoritative
+encounter precedence is unchanged. The previous fallback selected the first
+hostile after activity-start sorting; tied starts could retain map iteration
+order. No event ordering or remaining-hostile ordering was changed.
+
+The `trash_names_01` Crusader rerun completed two parses and a negative control
+using the updated current-checkout CLI. Each parse produced 3 instances, 106
+encounters and 532,430 events. **All encounter names now match between repeats.**
+The remaining strict differences are 19 Auchenai classification fields, 430
+Hyjal remaining-hostile positions and 2,551 Hyjal classification fields (3,000
+total). Exact-time event multiset and remaining-GUID multiset diagnostics account
+for all of them as ordering/index assignment; no unexplained semantic changes
+remain in this pair. Strict artifacts are still unequal and were not normalized.
+The negative control still detects exactly one `player_deaths` change.
+
+Results and diagnostic evidence are preserved under
+`~/Desktop/parsing_snapshots/results/trash_names_01/crusader/`; all original
+corpus resources remain intact. The naming regression tests exercise every
+three-mob insertion order, majority over activity count and entry-ID grouping,
+alphabetical ties, empty names and existing override priorities. The instances
+subtree tests, ten race-enabled focused repetitions and focused lint passed.
+
 The remainder of this document records the earlier ChromieCraft-only run.
 
 ## Fixture and reference scope
