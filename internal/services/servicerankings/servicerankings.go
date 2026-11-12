@@ -139,7 +139,7 @@ func (s *Service) setupRoutes() {
 	s.router.Get("/speedrun/guild-clears", s.handleSpeedrunGuildClears)
 }
 
-// handleInstances returns per-instance summaries with top 3 players.
+// handleInstances returns per-instance cohort summaries.
 //
 //	GET /instances
 func (s *Service) handleInstances(w http.ResponseWriter, r *http.Request) {

@@ -15,12 +15,10 @@ import (
 )
 
 // rankingsQueryVersion is bumped whenever the UpsertRankingsInstanceSummary
-// query logic changes (e.g. aggregation method). The staleness guard compares
-// this against the stored version to force a recompute even when row counts
-// have not changed. Version 3 stores each top player's GUID; version 4 counts
-// a run complete at the boss count most full clears reach, not every boss ever recorded.
-// Version 5 uses normalized encounter-difficulty cohorts.
-const rankingsQueryVersion int16 = 5
+// query logic changes. The staleness guard compares this against the stored
+// version to force a recompute even when row counts have not changed. Version 6
+// retires the cached top-player preview and stores only the cohort player count.
+const rankingsQueryVersion int16 = 6
 
 // RankingsSummaryQueryVersion returns the current summary aggregation version.
 func RankingsSummaryQueryVersion() int16 {
@@ -28,7 +26,7 @@ func RankingsSummaryQueryVersion() int16 {
 }
 
 // ---------------------------------------------------------------------------
-// ArgsRefreshRankingsSummaries — dispatch job (periodic, hourly).
+// ArgsRefreshRankingsSummaries — dispatch job, scheduled every 24 hours.
 // Fans out one ArgsRefreshRankingsSummaryTenant per tenant.
 // ---------------------------------------------------------------------------
 
@@ -64,9 +62,9 @@ type WorkerRefreshRankingsSummaries struct {
 	Logger *slog.Logger
 }
 
-// minRefreshInterval is the minimum time between full dispatch runs.
-// Prevents redundant work on rapid restarts/redeploys.
-const minRefreshInterval = 45 * time.Minute
+// minRefreshInterval prevents redundant full dispatches after a recent
+// summary rebuild, including across service restarts and redeploys.
+const minRefreshInterval = 24 * time.Hour
 
 func (w *WorkerRefreshRankingsSummaries) Work(ctx context.Context, _ *river.Job[ArgsRefreshRankingsSummaries]) error {
 	// AdminBypass so we can list all tenants regardless of context.

@@ -319,11 +319,11 @@ func (s *Service) Start(ctx context.Context) error {
 	riverqueue.AddWorker(q, rank.RankingRunRepairWorker)
 	q.AddQueue(riverqueue.QueueRankings, river.QueueConfig{MaxWorkers: int(s.rankingWorkers)})
 	q.AddPeriodicJob(river.NewPeriodicJob(
-		river.PeriodicInterval(time.Hour),
+		river.PeriodicInterval(24*time.Hour),
 		func() (river.JobArgs, *river.InsertOpts) {
 			return servicerankings.ArgsRefreshRankingsSummaries{}, nil
 		},
-		&river.PeriodicJobOpts{RunOnStart: true},
+		&river.PeriodicJobOpts{RunOnStart: false},
 	))
 	q.AddPeriodicJob(river.NewPeriodicJob(
 		river.PeriodicInterval(24*time.Hour),
