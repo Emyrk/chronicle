@@ -715,7 +715,7 @@ export function Upload() {
                 cleanup: data.cleanup,
                 message: "You don't have permission to upload logs.",
                 call_to_action:
-                  "Ask for the alpha role in Discord to get upload access.",
+                  "Try force reloading the page. If the error persists, contact Chronicle on discord.",
               });
             } else {
               setError({
@@ -734,7 +734,7 @@ export function Upload() {
               setError({
                 message: "You don't have permission to upload logs.",
                 call_to_action:
-                  "Ask for the alpha role in Discord to get upload access.",
+                   "Try force reloading the page. If the error persists, contact Chronicle on discord.",
               });
             } else {
               setError({
