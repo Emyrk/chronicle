@@ -656,7 +656,10 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
         li.start_time ASC,
         li.id ASC
 ),
-representative_instances AS (
+/* Keep the representative set independent from the resolved rankings join.
+Inlining this CTE makes PostgreSQL choose a nested-loop join that can run for
+minutes on large cohorts; materializing it keeps the join under a second. */
+representative_instances AS MATERIALIZED (
     SELECT rr.representative_instance_id AS id, rr.run_id
     FROM ranking_runs rr
     JOIN log_instances_resolved representative
