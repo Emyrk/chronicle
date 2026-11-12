@@ -35,6 +35,7 @@ import {
 } from "@/pages/Logs/utils/instanceImages";
 import { getInstanceCategory } from "@/pages/Logs/utils/instanceCategory";
 import { seoProductName } from "@/lib/seo";
+import { RootCommunityHeroButton } from "@/components/RootCommunityContext/RootCommunityContext";
 import { Podium } from "@/pages/Leaderboard/Podium";
 import { RaidCard } from "@/pages/Recent/RaidCard";
 import {
@@ -189,6 +190,8 @@ function HeroSection() {
   const { data: siteConfig } = useSiteConfig();
   const homeConfig = useHomeConfig();
   const showUpload = !(homeConfig?.uploadsDisabled ?? siteConfig?.client_uploads_disabled);
+  const rootUploadsDisabled =
+    homeConfig?.rootUploadsDisabled ?? !!(siteConfig?.root_uploads_disabled && !siteConfig.tenant);
   const productName = homeConfig?.productName ?? seoProductName(siteConfig?.dataset_flavor);
 
   return (
@@ -213,11 +216,13 @@ function HeroSection() {
           </p>
         </div>
         <div className="flex flex-col gap-3 min-w-56">
-          {showUpload && (
+          {rootUploadsDisabled ? (
+            <RootCommunityHeroButton />
+          ) : showUpload ? (
             <Button asChild size="lg" className="md:h-12 md:px-8 md:text-base">
               <Link to="/upload">{isAuthenticated ? "Upload a Log" : "Upload Your First Log"}</Link>
             </Button>
-          )}
+          ) : null}
           <Button variant="outline" size="lg" asChild className="md:h-12 md:px-8 md:text-base">
             <Link to={isAuthenticated ? "/logs" : "/recent"}>
               {isAuthenticated ? "View Your Logs" : "View a Sample"}

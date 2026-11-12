@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 
 type RootCommunityContextValue = {
   enabled: boolean;
+  bannerEnabled: boolean;
   dismissed: boolean;
   dialogOpen: boolean;
   setDialogOpen: (open: boolean) => void;
@@ -25,6 +26,7 @@ type RootCommunityContextValue = {
 
 const RootCommunityState = createContext<RootCommunityContextValue>({
   enabled: false,
+  bannerEnabled: false,
   dismissed: false,
   dialogOpen: false,
   setDialogOpen: () => {},
@@ -35,6 +37,15 @@ const RootCommunityState = createContext<RootCommunityContextValue>({
 
 function useRootCommunityState(): RootCommunityContextValue {
   return useContext(RootCommunityState);
+}
+
+export function RootCommunityHeroButton() {
+  const { setDialogOpen } = useRootCommunityState();
+  return (
+    <Button size="lg" className="md:h-12 md:px-8 md:text-base" onClick={() => setDialogOpen(true)}>
+      Choose Community
+    </Button>
+  );
 }
 
 export function RootCommunityProvider({
@@ -49,12 +60,15 @@ export function RootCommunityProvider({
   const { data: siteConfig } = useSiteConfig();
   const [dismissed, setDismissed] = useState(initialDismissed);
   const [dialogOpen, setDialogOpen] = useState(initialDialogOpen);
-  const enabled = !!(siteConfig?.root_domain_discovery && !siteConfig.tenant);
+  const isRoot = !!siteConfig && !siteConfig.tenant;
+  const bannerEnabled = !!(isRoot && siteConfig.root_domain_discovery);
+  const enabled = !!(isRoot && (siteConfig.root_domain_discovery || siteConfig.root_uploads_disabled));
   const { data: servers = [], isLoading: serversLoading } = useDiscoverableServers(enabled);
 
   const value = useMemo(
     () => ({
       enabled,
+      bannerEnabled,
       dismissed,
       dialogOpen,
       setDialogOpen,
@@ -62,7 +76,7 @@ export function RootCommunityProvider({
       servers,
       serversLoading,
     }),
-    [dialogOpen, dismissed, enabled, servers, serversLoading],
+    [bannerEnabled, dialogOpen, dismissed, enabled, servers, serversLoading],
   );
 
   return <RootCommunityState.Provider value={value}>{children}</RootCommunityState.Provider>;
@@ -130,9 +144,9 @@ function CommunityStack({ servers, onChoose }: { servers: readonly DiscoveryEntr
 }
 
 export function RootCommunityBanner() {
-  const { enabled, dismissed, setDialogOpen, dismiss, servers } = useRootCommunityState();
+  const { bannerEnabled, dismissed, setDialogOpen, dismiss, servers } = useRootCommunityState();
 
-  if (!enabled || dismissed) return null;
+  if (!bannerEnabled || dismissed) return null;
 
   return (
     <section
@@ -180,8 +194,8 @@ export function RootCommunityBanner() {
 }
 
 export function RootCommunityNavButton({ mobile = false }: { mobile?: boolean }) {
-  const { enabled, dismissed, setDialogOpen } = useRootCommunityState();
-  if (!enabled || !dismissed) return null;
+  const { bannerEnabled, dismissed, setDialogOpen } = useRootCommunityState();
+  if (!bannerEnabled || !dismissed) return null;
 
   if (mobile) {
     return (

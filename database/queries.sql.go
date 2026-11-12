@@ -29325,7 +29325,7 @@ func (q *sqlQuerier) UpsertSidekickWoWDirectory(ctx context.Context, arg UpsertS
 }
 
 const getSiteConfig = `-- name: GetSiteConfig :one
-SELECT id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, ads_enabled, root_domain_discovery, landing_featured_instance_id, forever_landing_enabled FROM site_config WHERE id = TRUE
+SELECT id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, ads_enabled, root_domain_discovery, landing_featured_instance_id, forever_landing_enabled, root_uploads_disabled FROM site_config WHERE id = TRUE
 `
 
 func (q *sqlQuerier) GetSiteConfig(ctx context.Context) (SiteConfig, error) {
@@ -29345,6 +29345,7 @@ func (q *sqlQuerier) GetSiteConfig(ctx context.Context) (SiteConfig, error) {
 		&i.RootDomainDiscovery,
 		&i.LandingFeaturedInstanceID,
 		&i.ForeverLandingEnabled,
+		&i.RootUploadsDisabled,
 	)
 	return i, err
 }
@@ -29355,14 +29356,15 @@ UPDATE site_config SET
     branding = COALESCE($2, branding),
     discoverable = COALESCE($3, discoverable),
     root_domain_discovery = COALESCE($4, root_domain_discovery),
-    default_format = COALESCE($5, default_format),
-    available_formats = COALESCE($6, available_formats),
-    client_uploads_disabled = COALESCE($7, client_uploads_disabled),
-    ads_enabled = COALESCE($8, ads_enabled),
-    forever_landing_enabled = COALESCE($9, forever_landing_enabled),
+    root_uploads_disabled = COALESCE($5, root_uploads_disabled),
+    default_format = COALESCE($6, default_format),
+    available_formats = COALESCE($7, available_formats),
+    client_uploads_disabled = COALESCE($8, client_uploads_disabled),
+    ads_enabled = COALESCE($9, ads_enabled),
+    forever_landing_enabled = COALESCE($10, forever_landing_enabled),
     updated_at = now()
 WHERE id = TRUE
-RETURNING id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, ads_enabled, root_domain_discovery, landing_featured_instance_id, forever_landing_enabled
+RETURNING id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, ads_enabled, root_domain_discovery, landing_featured_instance_id, forever_landing_enabled, root_uploads_disabled
 `
 
 type UpdateSiteConfigParams struct {
@@ -29370,6 +29372,7 @@ type UpdateSiteConfigParams struct {
 	Branding              []byte        `db:"branding" json:"branding"`
 	Discoverable          pgtype.Bool   `db:"discoverable" json:"discoverable"`
 	RootDomainDiscovery   pgtype.Bool   `db:"root_domain_discovery" json:"root_domain_discovery"`
+	RootUploadsDisabled   pgtype.Bool   `db:"root_uploads_disabled" json:"root_uploads_disabled"`
 	DefaultFormat         NullLogFormat `db:"default_format" json:"default_format"`
 	AvailableFormats      []string      `db:"available_formats" json:"available_formats"`
 	ClientUploadsDisabled pgtype.Bool   `db:"client_uploads_disabled" json:"client_uploads_disabled"`
@@ -29383,6 +29386,7 @@ func (q *sqlQuerier) UpdateSiteConfig(ctx context.Context, arg UpdateSiteConfigP
 		arg.Branding,
 		arg.Discoverable,
 		arg.RootDomainDiscovery,
+		arg.RootUploadsDisabled,
 		arg.DefaultFormat,
 		arg.AvailableFormats,
 		arg.ClientUploadsDisabled,
@@ -29404,6 +29408,7 @@ func (q *sqlQuerier) UpdateSiteConfig(ctx context.Context, arg UpdateSiteConfigP
 		&i.RootDomainDiscovery,
 		&i.LandingFeaturedInstanceID,
 		&i.ForeverLandingEnabled,
+		&i.RootUploadsDisabled,
 	)
 	return i, err
 }
@@ -29413,7 +29418,7 @@ UPDATE site_config SET
     landing_featured_instance_id = $1::uuid,
     updated_at = now()
 WHERE id = TRUE
-RETURNING id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, ads_enabled, root_domain_discovery, landing_featured_instance_id, forever_landing_enabled
+RETURNING id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, ads_enabled, root_domain_discovery, landing_featured_instance_id, forever_landing_enabled, root_uploads_disabled
 `
 
 // NULL clears the setting, so this cannot share UpdateSiteConfig's COALESCE pattern.
@@ -29434,6 +29439,7 @@ func (q *sqlQuerier) UpdateSiteConfigLandingFeaturedInstance(ctx context.Context
 		&i.RootDomainDiscovery,
 		&i.LandingFeaturedInstanceID,
 		&i.ForeverLandingEnabled,
+		&i.RootUploadsDisabled,
 	)
 	return i, err
 }

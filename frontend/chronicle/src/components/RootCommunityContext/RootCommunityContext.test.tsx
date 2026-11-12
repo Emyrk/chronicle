@@ -8,9 +8,11 @@ import {
 } from "./RootCommunityContext";
 
 const mocks = vi.hoisted(() => ({
+  discoveryEnabled: false,
   siteConfig: undefined as
     | {
         root_domain_discovery: boolean;
+        root_uploads_disabled?: boolean;
         choose_url?: string;
         tenant: object | null;
       }
@@ -19,19 +21,23 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/api/queries", () => ({
   useSiteConfig: () => ({ data: mocks.siteConfig }),
-  useDiscoverableServers: () => ({
-    data: [
-      {
-        url: "https://turtle.chronicleclassic.com",
-        branding: { display_name: "Turtle WoW", tagline: "Vanilla, expanded" },
-        unique_players_14d: 18_400,
-      },
-    ],
-    isLoading: false,
-  }),
+  useDiscoverableServers: (enabled: boolean) => {
+    mocks.discoveryEnabled = enabled;
+    return {
+      data: [
+        {
+          url: "https://turtle.chronicleclassic.com",
+          branding: { display_name: "Turtle WoW", tagline: "Vanilla, expanded" },
+          unique_players_14d: 18_400,
+        },
+      ],
+      isLoading: false,
+    };
+  },
 }));
 
 afterEach(() => {
+  mocks.discoveryEnabled = false;
   mocks.siteConfig = undefined;
 });
 
@@ -73,6 +79,20 @@ describe("RootCommunityContext", () => {
 
     expect(markup).not.toContain("You’re viewing Chronicle across every community");
     expect(markup).toContain("Choose community");
+  });
+
+  it("keeps the chooser available when root uploads are disabled without showing the discovery banner", () => {
+    mocks.siteConfig = {
+      root_domain_discovery: false,
+      root_uploads_disabled: true,
+      choose_url: "https://choose.chronicleclassic.com",
+      tenant: null,
+    };
+
+    const markup = render();
+
+    expect(markup).not.toContain("You’re viewing Chronicle across every community");
+    expect(mocks.discoveryEnabled).toBe(true);
   });
 
   it("does not render on a community tenant", () => {

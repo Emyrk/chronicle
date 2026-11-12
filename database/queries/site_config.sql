@@ -7,6 +7,7 @@ UPDATE site_config SET
     branding = COALESCE(sqlc.narg('branding'), branding),
     discoverable = COALESCE(sqlc.narg('discoverable'), discoverable),
     root_domain_discovery = COALESCE(sqlc.narg('root_domain_discovery'), root_domain_discovery),
+    root_uploads_disabled = COALESCE(sqlc.narg('root_uploads_disabled'), root_uploads_disabled),
     default_format = COALESCE(sqlc.narg('default_format'), default_format),
     available_formats = COALESCE(sqlc.narg('available_formats'), available_formats),
     client_uploads_disabled = COALESCE(sqlc.narg('client_uploads_disabled'), client_uploads_disabled),

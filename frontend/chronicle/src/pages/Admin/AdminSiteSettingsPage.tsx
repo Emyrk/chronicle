@@ -211,6 +211,38 @@ export function AdminSiteSettingsPage() {
         {!config?.tenant && (
           <div className="flex items-center justify-between">
             <div>
+              <p className="font-medium">Root Uploads</p>
+              <p className="text-sm text-muted-foreground">
+                When disabled, the root site sends users to choose a community before uploading. Community tenants are unchanged.
+              </p>
+            </div>
+            <Button
+              variant={config?.root_uploads_disabled ? "destructive" : "default"}
+              size="sm"
+              disabled={updateConfig.isPending}
+              onClick={() => {
+                updateConfig.mutate({ root_uploads_disabled: !config?.root_uploads_disabled });
+              }}
+            >
+              {updateConfig.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : config?.root_uploads_disabled ? (
+                <>
+                  <X className="h-4 w-4 mr-1" />
+                  Disabled
+                </>
+              ) : (
+                <>
+                  <Check className="h-4 w-4 mr-1" />
+                  Enabled
+                </>
+              )}
+            </Button>
+          </div>
+        )}
+        {!config?.tenant && (
+          <div className="flex items-center justify-between">
+            <div>
               <p className="font-medium">Disable Root Tenant Ratings</p>
               <p className="text-sm text-muted-foreground">
                 Stop producing and displaying ratings for the legacy root tenant. Specific server tenants are unchanged.

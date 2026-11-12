@@ -5935,6 +5935,11 @@ export interface SiteConfig {
      */
     readonly root_domain_discovery: boolean;
     /**
+     * RootUploadsDisabled prevents client uploads on the root site while leaving
+     * community tenants unchanged.
+     */
+    readonly root_uploads_disabled: boolean;
+    /**
      * DefaultFormat is the primary domain's preferred log parse format.
      * Nil means no preference — fall back to the compiled-in server default.
      */
@@ -6916,6 +6921,7 @@ export interface UpdateSiteConfigRequest {
     readonly branding?: Branding;
     readonly discoverable?: boolean;
     readonly root_domain_discovery?: boolean;
+    readonly root_uploads_disabled?: boolean;
     readonly default_format?: string;
     readonly available_formats?: readonly string[];
     /**
