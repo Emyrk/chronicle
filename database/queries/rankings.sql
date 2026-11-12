@@ -27,111 +27,20 @@ ORDER BY ris.instance_name, ris.difficulty_name, ris.max_players;
 -- (instance, difficulty, max_players, tenant) combo.
 -- The caller sets tenant context so RLS on encounter_dps_rankings
 -- scopes to the correct realms automatically.
-WITH fallback_representative_instances AS (
-    SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
-        li.id,
-        COALESCE(li.duplicate_group_id, li.id) AS run_id
-    FROM log_instances_resolved li
-JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
-    JOIN wow_server_realms tenant_realm ON tenant_realm.id = li.realm_id
-    WHERE li.invalidated_at IS NULL
-      AND NOT EXISTS (
-        SELECT 1
-        FROM ranking_runs rr
-        JOIN log_instances_resolved representative ON representative.id = rr.representative_instance_id
-         AND COALESCE(representative.duplicate_group_id, representative.id) = rr.run_id
-         AND representative.invalidated_at IS NULL
-
-        JOIN wow_log_groups representative_group ON representative_group.id = representative.log_group_id AND NOT representative_group.unlisted
-        WHERE rr.run_id = COALESCE(li.duplicate_group_id, li.id)
-    )
-    ORDER BY COALESCE(li.duplicate_group_id, li.id),
-        (SELECT COUNT(DISTINCT coverage.encounter_name)
-         FROM encounter_dps_rankings_resolved coverage
-         WHERE coverage.instance_id = li.id
-           AND coverage.encounter_id IS NOT NULL) DESC,
-        (li.id = li.duplicate_group_id) DESC NULLS LAST,
-        li.start_time ASC,
-        li.id ASC
-),
-representative_instances AS (
-    SELECT rr.representative_instance_id AS id, rr.run_id
-    FROM ranking_runs rr
-    JOIN log_instances_resolved representative ON representative.id = rr.representative_instance_id
-     AND COALESCE(representative.duplicate_group_id, representative.id) = rr.run_id
-     AND representative.invalidated_at IS NULL
-
-    JOIN wow_log_groups representative_group ON representative_group.id = representative.log_group_id AND NOT representative_group.unlisted
-    JOIN wow_server_realms tenant_realm ON tenant_realm.id = rr.realm_id
-    WHERE rr.instance_name = @instance_name
-      AND rr.difficulty_name = @difficulty_name
-      AND rr.max_players = @max_players
-    UNION ALL
-    SELECT id, run_id FROM fallback_representative_instances
-),
-ranking_rows AS (
-    SELECT
-        edr.player_guid, edr.player_name, edr.realm_name,
-        edr.player_class, edr.encounter_name,
-        edr.damage_done, edr.duration_secs, edr.dps,
-        ri.run_id
+WITH ranking_rows AS (
+    SELECT edr.player_guid
     FROM encounter_dps_rankings_resolved edr
-JOIN log_instances_resolved edr_instance ON edr_instance.id = edr.instance_id
-JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NOT edr_group.unlisted
-    JOIN representative_instances ri ON ri.id = edr.instance_id
-    JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
+    JOIN log_instances_resolved edr_instance ON edr_instance.id = edr.instance_id
+    JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NOT edr_group.unlisted
     WHERE edr.instance_name = @instance_name
       AND edr.difficulty_name = @difficulty_name
       AND edr.max_players = @max_players
       AND edr.dps > 0
-      -- Boss encounters only: trash is excluded from the top-3 preview by default.
       AND edr.encounter_id IS NOT NULL
-),
-run_encounter_counts AS (
-    SELECT d.run_id, COUNT(DISTINCT d.encounter_name) AS cnt FROM ranking_rows d GROUP BY d.run_id
-),
--- A complete run kills as many distinct bosses as the instance's full clears
--- do: the largest boss count at least three runs reach (else the largest seen).
--- Requiring every boss name ever recorded fails when a server changes a raid's
--- roster (Turtle's Molten Core dropped Gehennas) or ranks a hard mode as its
--- own encounter, leaving no run complete and no top players.
-instance_encounter_count AS (
-    SELECT COALESCE(
-        (SELECT max(c.cnt) FROM (SELECT cnt FROM run_encounter_counts GROUP BY cnt HAVING COUNT(*) >= 3) c),
-        (SELECT max(cnt) FROM run_encounter_counts)
-    ) AS cnt
-),
--- Step 1: aggregate per player per run (sum encounters within one instance run).
-per_run AS (
-    SELECT
-        d.player_guid,
-        d.run_id,
-        (array_agg(d.player_name ORDER BY d.damage_done DESC))[1] AS player_name,
-        (array_agg(d.realm_name ORDER BY d.damage_done DESC))[1] AS realm_name,
-        (array_agg(d.player_class ORDER BY d.damage_done DESC))[1] AS player_class,
-        (SUM(d.damage_done)::double precision / NULLIF(SUM(d.duration_secs), 0)) AS dps
-    FROM ranking_rows d
-    GROUP BY d.player_guid, d.run_id
-    HAVING COUNT(DISTINCT d.encounter_name) >= (SELECT cnt FROM instance_encounter_count)
-),
--- Step 2: pick each player's best run.
-per_player AS (
-    SELECT DISTINCT ON (pr.player_guid)
-        pr.player_guid,
-        pr.player_name,
-        pr.realm_name,
-        pr.player_class,
-        pr.dps
-    FROM per_run pr
-    ORDER BY pr.player_guid, pr.dps DESC
+      AND edr_instance.invalidated_at IS NULL
 ),
 stats AS (
     SELECT COUNT(DISTINCT player_guid)::bigint AS total_kills FROM ranking_rows
-),
-top3 AS (
-    SELECT player_guid, player_name, realm_name, player_class, dps
-    FROM per_player WHERE dps > 0
-    ORDER BY dps DESC LIMIT 3
 )
 INSERT INTO rankings_instance_summaries (instance_name, difficulty_name, max_players, tenant_id, total_kills, top_players, last_row_count, query_version, updated_at)
 VALUES (
@@ -140,13 +49,7 @@ VALUES (
     @max_players,
     @tenant_id,
     (SELECT total_kills FROM stats),
-    COALESCE((SELECT json_agg(json_build_object(
-        'player_guid', t.player_guid,
-        'player_name', t.player_name,
-        'realm_name', t.realm_name,
-        'player_class', t.player_class,
-        'dps', t.dps
-    )) FROM top3 t), '[]'::json),
+    '[]'::jsonb,
     @last_row_count,
     @query_version,
     now()

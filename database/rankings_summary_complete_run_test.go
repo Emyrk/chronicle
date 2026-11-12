@@ -7,15 +7,14 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/testutil"
 )
 
-// A raid whose roster changed (a boss removed) still has complete runs: the
-// boss count full clears reach, not every boss name ever recorded.
-func TestRankingsInstanceSummaryCompleteRunsSurviveRosterChange(t *testing.T) {
+// Summary cards store the distinct players with eligible boss rankings, not a
+// complete-run or top-player calculation.
+func TestRankingsInstanceSummaryCountsDistinctPlayers(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitMedium)
 	pool, store, realm := setupParsesTest(t)
@@ -53,10 +52,6 @@ func TestRankingsInstanceSummaryCompleteRunsSurviveRosterChange(t *testing.T) {
 	summaries, err := store.RankingsInstanceSummaries(ctx, uuid.Nil)
 	require.NoError(t, err)
 	require.Len(t, summaries, 1)
-	top := chroniclesdk.TopPlayersFromJSON(summaries[0].TopPlayers)
-	require.Len(t, top, 3)
-	require.Equal(t, "Player-Charlie", top[0].PlayerName)
-	for _, player := range top {
-		require.NotEqual(t, "Player-Old", player.PlayerName, "a partial old run is not a complete run")
-	}
+	require.Equal(t, int64(4), summaries[0].TotalKills)
+	require.JSONEq(t, `[]`, string(summaries[0].TopPlayers))
 }

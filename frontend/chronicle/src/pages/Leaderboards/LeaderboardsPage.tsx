@@ -134,7 +134,7 @@ export function LeaderboardsPage({ mode }: { mode: LeaderboardsMode }) {
           ) : mode === "speedruns" ? (
             <SpeedrunLeaderboard />
           ) : (
-            <RankingsLanding showTopPlayers={mode !== "parsing"} />
+            <RankingsLanding />
           )}
         </div>
         <AdRailStack

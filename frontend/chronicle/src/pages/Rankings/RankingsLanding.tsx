@@ -1,7 +1,5 @@
 import { useSearchParams } from "react-router-dom"
-import { entityAttributes } from "@/components/EntityMenu/entity"
 import { Skull, Loader2 } from "lucide-react"
-import { CLASS_CSS_VAR } from "./classDisplay"
 import { useRankingsInstances } from "@/api/rankingsQueries"
 import { getInstanceCategory } from "@/pages/Logs/utils/instanceCategory"
 import {
@@ -13,8 +11,8 @@ import type { RankingsInstanceSummary } from "@/api/typesGenerated"
 import { rankingsSummariesWithStats } from "./rankingsLandingState"
 import { InstanceCard } from "./InstanceCard"
 
-/** Instance picker. `showTopPlayers` lists each raid's top DPS on its card. */
-export function RankingsLanding({ showTopPlayers = true }: { showTopPlayers?: boolean }) {
+/** Instance picker for available rankings cohorts. */
+export function RankingsLanding() {
   const [params] = useSearchParams()
   const { data: summaries, isLoading } = useRankingsInstances()
   const { data: supportedInstances } = useSupportedInstances()
@@ -80,31 +78,6 @@ export function RankingsLanding({ showTopPlayers = true }: { showTopPlayers?: bo
             </>
           )}
         >
-          {/* Top 3 */}
-          {showTopPlayers && (
-            <div className="mb-2 space-y-0.5">
-              {s.top_players.map((p, i) => (
-                <div key={i} className="flex items-center gap-2 text-xs">
-                  <span
-                    className="inline-block h-2 w-2 shrink-0 rounded-full"
-                    style={{ backgroundColor: CLASS_CSS_VAR[p.player_class] }}
-                  />
-                  <span
-                    className="truncate text-foreground/90"
-                    {...(p.player_guid
-                      ? entityAttributes({ kind: "character", realm: p.realm_name, guid: p.player_guid, name: p.player_name, className: p.player_class })
-                      : {})}
-                  >
-                    {p.player_name}
-                  </span>
-                  <span className="ml-auto font-mono font-semibold text-foreground/80">
-                    {Math.round(p.dps).toLocaleString()} dps
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-
           {/* Total kills */}
           <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
             <Skull className="h-3 w-3" />
