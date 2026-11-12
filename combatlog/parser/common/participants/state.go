@@ -154,6 +154,25 @@ func validateParticipantsJSON(payload []byte) error {
 			return fmt.Errorf("participants tracker field %q is missing or null", name)
 		}
 	}
+	var active []json.RawMessage
+	if err := json.Unmarshal(fields["active"], &active); err != nil {
+		return fmt.Errorf("decode active participants: %w", err)
+	}
+	for i, raw := range active {
+		var entry map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &entry); err != nil || entry == nil {
+			return fmt.Errorf("active participant %d must be an object", i)
+		}
+		if len(entry) != 2 {
+			return fmt.Errorf("active participant %d requires guid and active", i)
+		}
+		for _, name := range []string{"guid", "active"} {
+			value, exists := entry[name]
+			if !exists || bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+				return fmt.Errorf("active participant %d field %q is missing or null", i, name)
+			}
+		}
+	}
 	return nil
 }
 
