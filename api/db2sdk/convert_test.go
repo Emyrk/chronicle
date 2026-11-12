@@ -108,14 +108,16 @@ func TestWoWEncounterIncludesMapID(t *testing.T) {
 func TestWoWEncounterIncludesDifficulty(t *testing.T) {
 	t.Parallel()
 
-	converted := WoWEncounter(database.LogInstanceEncounter{
-		DifficultyName:    "25 Player (Heroic)",
-		MaxPlayers:        25,
-		DynamicDifficulty: 1,
-	})
-	require.Equal(t, "25 Player (Heroic)", converted.DifficultyName)
-	require.Equal(t, 25, converted.MaxPlayers)
-	require.Equal(t, 1, converted.DynamicDifficulty)
+	for _, difficulty := range []string{"", "heroic", "mythic"} {
+		converted := WoWEncounter(database.LogInstanceEncounter{
+			Difficulty: pgtype.Text{String: difficulty, Valid: true},
+		}, "heroic")
+		require.Equal(t, difficulty, converted.Difficulty)
+	}
+	require.Equal(t, "heroic", WoWEncounter(database.LogInstanceEncounter{}, "heroic").Difficulty)
+	require.Equal(t, "heroic", LegacyDifficulty("25 Player (Heroic)", 0))
+	require.Equal(t, "heroic", LegacyDifficulty("25 Player", 1))
+	require.Equal(t, "", LegacyDifficulty("25 Player", 0))
 }
 
 func TestWoWEncounterRankingWindow(t *testing.T) {

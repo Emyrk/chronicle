@@ -7264,12 +7264,10 @@ export interface WoWEncounter {
     readonly remaining?: readonly GUID[];
     readonly start_time: string;
     readonly end_time: string;
-    readonly difficulty_name?: string;
-    readonly max_players?: number;
-    readonly dynamic_difficulty?: number;
     readonly invalidated_at?: string;
     readonly invalid_reason?: string;
     readonly ranking_window?: WoWRankingWindow;
+    readonly difficulty: string;
 }
 
 // From chroniclesdk/log.go
@@ -7340,11 +7338,7 @@ export type WoWHitType = 4 | 512 | 32768 | 2048 | 16384 | 1024 | 128 | 262144 | 
 export const WoWHitTypes: WoWHitType[] = [4, 512, 32768, 2048, 16384, 1024, 128, 262144, 16, 256, 2, 8192, 65536, 4194304, 32, 0, 1, 4096, 64, 131072, 8, 2097152, 1048576, 524288];
 
 // From chroniclesdk/log.go
-export interface InstanceDifficulty {
-    readonly difficulty_name: string;
-    readonly max_players: number;
-    readonly dynamic_difficulty: number;
-}
+
 
 // From chroniclesdk/log.go
 export interface WoWInstance {
@@ -7387,7 +7381,7 @@ export interface WoWInstance {
     readonly difficulty_name: string;
     readonly max_players: number;
     readonly dynamic_difficulty: number;
-    readonly difficulties?: readonly InstanceDifficulty[];
+    readonly difficulties?: readonly string[];
     readonly mixed_difficulty?: boolean;
     readonly invalidated_at?: string;
     readonly invalid_reason?: string;

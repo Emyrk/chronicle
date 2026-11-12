@@ -153,12 +153,6 @@ const (
 	PositionCoordinateSpaceUIMapNormalized PositionCoordinateSpace = "ui-map-normalized"
 )
 
-type InstanceDifficulty struct {
-	DifficultyName    string `json:"difficulty_name"`
-	MaxPlayers        int    `json:"max_players"`
-	DynamicDifficulty int    `json:"dynamic_difficulty"`
-}
-
 type WoWInstance struct {
 	ID      uuid.UUID `json:"id"`
 	RealmID uuid.UUID `json:"realm_id"`
@@ -195,7 +189,7 @@ type WoWInstance struct {
 	DifficultyName          string                  `json:"difficulty_name"`
 	MaxPlayers              int                     `json:"max_players"`
 	DynamicDifficulty       int                     `json:"dynamic_difficulty"`
-	Difficulties            []InstanceDifficulty    `json:"difficulties,omitempty"`
+	Difficulties            []string                `json:"difficulties,omitempty"`
 	MixedDifficulty         bool                    `json:"mixed_difficulty,omitempty"`
 	InvalidatedAt           *time.Time              `json:"invalidated_at,omitempty"`
 	InvalidReason           string                  `json:"invalid_reason,omitempty"`
@@ -216,21 +210,19 @@ const (
 )
 
 type WoWEncounter struct {
-	ID                uuid.UUID         `json:"id"`
-	InstanceID        uuid.UUID         `json:"instance_id"`
-	Boss              bool              `json:"boss"`
-	Name              string            `json:"name"`
-	MapID             int               `json:"map_id"`
-	KillType          KillType          `json:"kill_type"`
-	Remaining         []guid.GUID       `json:"remaining,omitempty"`
-	StartTime         time.Time         `json:"start_time"`
-	EndTime           time.Time         `json:"end_time"`
-	DifficultyName    string            `json:"difficulty_name,omitempty"`
-	MaxPlayers        int               `json:"max_players,omitempty"`
-	DynamicDifficulty int               `json:"dynamic_difficulty,omitempty"`
-	InvalidatedAt     *time.Time        `json:"invalidated_at,omitempty"`
-	InvalidReason     string            `json:"invalid_reason,omitempty"`
-	RankingWindow     *WoWRankingWindow `json:"ranking_window,omitempty"`
+	ID            uuid.UUID         `json:"id"`
+	InstanceID    uuid.UUID         `json:"instance_id"`
+	Boss          bool              `json:"boss"`
+	Name          string            `json:"name"`
+	MapID         int               `json:"map_id"`
+	KillType      KillType          `json:"kill_type"`
+	Remaining     []guid.GUID       `json:"remaining,omitempty"`
+	StartTime     time.Time         `json:"start_time"`
+	EndTime       time.Time         `json:"end_time"`
+	Difficulty    string            `json:"difficulty"`
+	InvalidatedAt *time.Time        `json:"invalidated_at,omitempty"`
+	InvalidReason string            `json:"invalid_reason,omitempty"`
+	RankingWindow *WoWRankingWindow `json:"ranking_window,omitempty"`
 }
 
 // WoWRankingWindow marks the interval scored for boss rankings, relative to the

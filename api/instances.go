@@ -184,20 +184,12 @@ func (api *API) Instance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	setDifficulties := func(out *chroniclesdk.WoWInstance) {
-		out.Difficulties = make([]chroniclesdk.InstanceDifficulty, 0, max(1, len(difficulties)))
+		out.Difficulties = make([]string, 0, max(1, len(difficulties)))
 		for _, difficulty := range difficulties {
-			out.Difficulties = append(out.Difficulties, chroniclesdk.InstanceDifficulty{
-				DifficultyName:    difficulty.DifficultyName,
-				MaxPlayers:        int(difficulty.MaxPlayers),
-				DynamicDifficulty: int(difficulty.DynamicDifficulty),
-			})
+			out.Difficulties = append(out.Difficulties, difficulty.Difficulty)
 		}
 		if len(out.Difficulties) == 0 {
-			out.Difficulties = append(out.Difficulties, chroniclesdk.InstanceDifficulty{
-				DifficultyName:    out.DifficultyName,
-				MaxPlayers:        out.MaxPlayers,
-				DynamicDifficulty: out.DynamicDifficulty,
-			})
+			out.Difficulties = append(out.Difficulties, db2sdk.LegacyDifficulty(out.DifficultyName, out.DynamicDifficulty))
 		}
 	}
 

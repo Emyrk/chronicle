@@ -14,10 +14,7 @@ describe("transformToInstance difficulty metadata", () => {
       max_players: 25,
       dynamic_difficulty: 0,
       mixed_difficulty: true,
-      difficulties: [
-        { difficulty_name: "25 Player", max_players: 25, dynamic_difficulty: 0 },
-        { difficulty_name: "25 Player (Heroic)", max_players: 25, dynamic_difficulty: 1 },
-      ],
+      difficulties: ["", "heroic", "mythic"],
       encounters: [
         {
           id: "encounter-id",
@@ -28,9 +25,7 @@ describe("transformToInstance difficulty metadata", () => {
           kill_type: "clean",
           start_time: "2026-10-10T13:00:00Z",
           end_time: "2026-10-10T13:10:00Z",
-          difficulty_name: "25 Player (Heroic)",
-          max_players: 25,
-          dynamic_difficulty: 1,
+          difficulty: "heroic",
           hostiles: [],
         },
       ],
@@ -39,14 +34,7 @@ describe("transformToInstance difficulty metadata", () => {
     });
 
     expect(instance.mixedDifficulty).toBe(true);
-    expect(instance.difficulties).toEqual([
-      { difficultyName: "25 Player", maxPlayers: 25, dynamicDifficulty: 0 },
-      { difficultyName: "25 Player (Heroic)", maxPlayers: 25, dynamicDifficulty: 1 },
-    ]);
-    expect(instance.encounters[0]).toMatchObject({
-      difficultyName: "25 Player (Heroic)",
-      maxPlayers: 25,
-      dynamicDifficulty: 1,
-    });
+    expect(instance.difficulties).toEqual(["", "heroic", "mythic"]);
+    expect(instance.encounters[0]).toMatchObject({ difficulty: "heroic" });
   });
 });

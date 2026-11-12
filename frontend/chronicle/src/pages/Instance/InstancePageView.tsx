@@ -107,7 +107,7 @@ import { useInstanceTimeParses } from "./Overview/overviewQueries";
 import { bossKillParsesByEncounter, killParseEdgeStyle, scopedClearParses, scopedKillParsesByEncounter } from "./Overview/encounterKillTimePopulation";
 import { HeroicBadge } from "@/components/HeroicBadge";
 import { AdSlot } from "@/components/Ads/AdSlot";
-import { isHeroic } from "@/lib/wowUtils";
+import { isHeroic, difficultySetLabel } from "@/lib/wowUtils";
 import { DuplicatesBadge } from "./DuplicatesBadge";
 import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages";
 import { formatClassLabel, formatRaceLabel } from "../ArmoryPage/characterDisplay";
@@ -631,7 +631,7 @@ function EncounterSidebar({
           name: encounter.name,
           logId: instanceId,
           instanceName: raidInstance.name,
-          difficultyName: raidInstance.difficultyName,
+          difficultyName: encounter.difficulty,
           maxPlayers: raidInstance.maxPlayers,
           killType: encounter.kill_type,
           durationMs: pullDurationMs(encounter),
@@ -4334,8 +4334,8 @@ function InstancePageViewContent({
               {instance.maxPlayers != null && instance.maxPlayers > 0 && (
                 <div className="flex items-center gap-1.5">
                   <span className="text-sm text-muted-foreground font-medium">{instance.maxPlayers} Player</span>
-                  {instance.mixedDifficulty && (
-                    <span className="rounded bg-purple-500/15 px-1.5 py-0.5 text-xs font-semibold text-purple-300">Normal + Heroic</span>
+                  {(instance.mixedDifficulty || (!heroic && instance.difficulties?.some(Boolean))) && (
+                    <span className="rounded bg-purple-500/15 px-1.5 py-0.5 text-xs font-semibold text-purple-300">{difficultySetLabel(instance.difficulties)}</span>
                   )}
                   {heroic && (
                     <HeroicBadge />
@@ -4458,8 +4458,8 @@ function InstancePageViewContent({
           {isMobile && instance.maxPlayers != null && instance.maxPlayers > 0 && (
             <div className="flex items-center gap-1.5 shrink-0">
               <span className="text-xs text-muted-foreground font-medium">{instance.maxPlayers} Player</span>
-              {instance.mixedDifficulty && (
-                <span className="rounded bg-purple-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-purple-300">N + H</span>
+              {(instance.mixedDifficulty || (!heroic && instance.difficulties?.some(Boolean))) && (
+                <span className="rounded bg-purple-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-purple-300">{difficultySetLabel(instance.difficulties)}</span>
               )}
               {heroic && (
                 <HeroicBadge />

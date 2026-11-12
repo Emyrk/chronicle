@@ -51,7 +51,7 @@ export function transformToInstance(
     difficulty_name?: string;
     max_players?: number;
     dynamic_difficulty?: number;
-    difficulties?: readonly { difficulty_name: string; max_players: number; dynamic_difficulty: number }[];
+    difficulties?: readonly string[];
     mixed_difficulty?: boolean;
     invalidated_at?: string;
     invalid_reason?: string;
@@ -97,9 +97,7 @@ export function transformToInstance(
       players,
       enemies,
       remaining: enc.remaining as string[] | undefined,
-      difficultyName: enc.difficulty_name,
-      maxPlayers: enc.max_players,
-      dynamicDifficulty: enc.dynamic_difficulty,
+      difficulty: enc.difficulty,
       invalidatedAt: enc.invalidated_at,
       invalidReason: enc.invalid_reason,
       phases: normalizeArray(enc.phases).map((phase) => ({
@@ -154,11 +152,7 @@ export function transformToInstance(
     difficultyName: apiInstance.difficulty_name,
     maxPlayers: apiInstance.max_players,
     dynamicDifficulty: apiInstance.dynamic_difficulty,
-    difficulties: apiInstance.difficulties?.map((difficulty) => ({
-      difficultyName: difficulty.difficulty_name,
-      maxPlayers: difficulty.max_players,
-      dynamicDifficulty: difficulty.dynamic_difficulty,
-    })),
+    difficulties: apiInstance.difficulties,
     mixedDifficulty: apiInstance.mixed_difficulty,
     invalidatedAt: apiInstance.invalidated_at,
     invalidReason: apiInstance.invalid_reason,
