@@ -668,6 +668,17 @@
       }
     },
     {
+      "path": "/root/character-types/wotlk/halion",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.halionCharacter",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.halionCharacter",
+        "note": "NewHalionCharacter creates the owner; Common owns activity and recently-slain suppression; all is a shared Characters reference used to end linked physical and twilight bodies on death; no additional mutable scalar state; catalog description does not imply a restore adapter",
+        "source": "combatlog/parser/wotlk/creatures/rubysanctum.go"
+      }
+    },
+    {
       "path": "/root/character-types/wotlk/hodir",
       "kind": "directory",
       "metadata": {
@@ -1392,6 +1403,14 @@
     },
     {
       "from": "/root/character-types/wotlk/gunship-battle",
+      "to": "/root/instances/0000/characters"
+    },
+    {
+      "from": "/root/character-types/wotlk/halion",
+      "to": "/root/character-types/common/common"
+    },
+    {
+      "from": "/root/character-types/wotlk/halion",
       "to": "/root/instances/0000/characters"
     },
     {
