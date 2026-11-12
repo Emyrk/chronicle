@@ -139,7 +139,7 @@ func highlightSnapshotResponseAt(config []database.ResolveLeaderboardConfigurati
 			if serviceratings.HighlightEmpty(preview) {
 				metadata.Status = "empty"
 			}
-			if row.RefreshedAt.Time.Before(now.Add(-2 * time.Hour)) {
+			if row.RefreshedAt.Time.Before(now.Add(-serviceratings.HighlightStaleAfter)) {
 				metadata.Status = "stale"
 			}
 			out.LandingPreviews = append(out.LandingPreviews, preview)

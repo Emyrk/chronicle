@@ -34,11 +34,11 @@ type highlightStore struct {
 func (s highlightStore) ResolveLeaderboardConfiguration(context.Context, []string) ([]database.ResolveLeaderboardConfigurationRow, error) {
 	return s.config, nil
 }
-func (s highlightStore) RankingsLeaderboardNoJIT(ctx context.Context, p database.RankingsLeaderboardParams) ([]database.RankingsLeaderboardRow, error) {
+func (s highlightStore) RankingsBoxPlotStatsNoJIT(ctx context.Context, p database.RankingsBoxPlotStatsParams) ([]database.RankingsBoxPlotStatsRow, error) {
 	if s.fail {
-		return nil, errors.New("injected rankings refresh failure")
+		return nil, errors.New("injected statistics refresh failure")
 	}
-	return s.Store.RankingsLeaderboardNoJIT(ctx, p)
+	return s.Store.RankingsBoxPlotStatsNoJIT(ctx, p)
 }
 func (s highlightStore) GetDataset(context.Context, uuid.UUID) (database.Dataset, error) {
 	return database.Dataset{}, nil
@@ -84,6 +84,12 @@ func TestHighlightsUseExistingReadsAndKeepFailedSnapshot(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, foreign)
 	require.ErrorContains(t, RefreshHighlights(s.tenantctx(), store, s.tenant, uuid.New(), cohort), "realm does not belong")
+}
+
+func TestHighlightRefreshJobLimits(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, 1, ArgsHighlightRefresh{}.InsertOpts().MaxAttempts)
+	require.Equal(t, time.Minute, (&HighlightWorker{}).Timeout(nil))
 }
 
 func TestHighlightPublicationUniqueAndOlderRefreshCannotReplace(t *testing.T) {
@@ -174,6 +180,28 @@ func TestHighlightDispatcherIncludesAllAndIndividualRealms(t *testing.T) {
 	require.True(t, realms[s.realm])
 	require.True(t, realms[second])
 
+	fingerprint := HighlightFingerprint(config, HighlightCohort{"Fixture raid", "Normal", 40})
+	for _, realm := range []uuid.UUID{uuid.Nil, s.realm, second} {
+		require.NoError(t, s.db.PublishLeaderboardHighlights(s.tenantctx(), database.PublishLeaderboardHighlightsParams{
+			TenantID: s.tenant, RealmScope: realm, InstanceName: "Fixture raid", DifficultyName: "Normal", MaxPlayers: 40,
+			ConfigurationFingerprint: fingerprint, Payload: []byte(`{}`), RefreshStartedAt: database.Timestamptz(time.Now()),
+		}))
+	}
+	queue.jobs = nil
+	require.NoError(t, d.Work(s.ctx, &river.Job[ArgsHighlightDispatch]{Args: ArgsHighlightDispatch{TenantID: s.tenant}}))
+	require.Empty(t, queue.jobs, "fresh matching snapshots should not be refreshed")
+
+	s.exec(`UPDATE leaderboard_highlights SET refreshed_at=clock_timestamp()-interval '3 hours' WHERE tenant_id=$1 AND realm_scope=$2`, s.tenant, uuid.Nil)
+	s.exec(`UPDATE leaderboard_highlights SET configuration_fingerprint='old' WHERE tenant_id=$1 AND realm_scope=$2`, s.tenant, second)
+	require.NoError(t, d.Work(s.ctx, &river.Job[ArgsHighlightDispatch]{Args: ArgsHighlightDispatch{TenantID: s.tenant}}))
+	require.Len(t, queue.jobs, 2)
+	queuedRealms := map[uuid.UUID]bool{}
+	for _, job := range queue.jobs {
+		queuedRealms[job.(ArgsHighlightRefresh).RealmID] = true
+	}
+	require.True(t, queuedRealms[uuid.Nil], "stale snapshot should refresh")
+	require.True(t, queuedRealms[second], "configuration mismatch should refresh")
+
 	// Jobs queued before the configuration changed should finish without retrying.
 	require.NoError(t, (&HighlightWorker{Store: d.Store}).Work(s.tenantctx(), &river.Job[ArgsHighlightRefresh]{Args: ArgsHighlightRefresh{
 		TenantID: s.tenant,
@@ -181,7 +209,7 @@ func TestHighlightDispatcherIncludesAllAndIndividualRealms(t *testing.T) {
 	}}))
 }
 
-func TestHighlightPerformanceExactVanillaCohortAndRealmID(t *testing.T) {
+func TestHighlightStatisticsUseExactVanillaCohortAndRealmID(t *testing.T) {
 	t.Parallel()
 	s := newSourceFixture(t)
 	s.exec(`UPDATE log_instances SET difficulty_name='',max_players=0 WHERE id=$1`, s.instance)
@@ -194,10 +222,7 @@ func TestHighlightPerformanceExactVanillaCohortAndRealmID(t *testing.T) {
 	config = append(config[:1], config[2:]...)
 	preview, err := BuildHighlights(s.tenantctx(), s.db, s.tenant, s.realm, HighlightCohort{Instance: "Fixture raid"}, config)
 	require.NoError(t, err)
-	require.Len(t, preview.Performances, 1)
-	require.Equal(t, "Player", preview.Performances[0].PlayerGUID)
-	require.EqualValues(t, 0, preview.Performances[0].MaxPlayers)
-	require.Equal(t, "", preview.Performances[0].DifficultyName)
+	require.Empty(t, preview.Performances)
 	require.Len(t, preview.Statistics, 1)
 	require.Equal(t, float64(100), preview.Statistics[0].MedianDPS)
 }

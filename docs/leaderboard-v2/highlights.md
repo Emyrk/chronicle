@@ -22,11 +22,13 @@ subjects, **not tenant-wide benchmarks**. Raw Peak presentation uses existing
 per-boss raw peaks divided by the selected-set denominator, matching the Hub's
 mean-of-best-per-boss presentation.
 
-Performance top 3 reuses `RankingsLeaderboardNoJIT` with exact cohort/default-boss
-selection. Statistics top 3 uses `RankingsBoxPlotStatsNoJIT` (existing median-DPS
-ordering by spec). Full-clear top 3 uses `SpeedrunLeaderboard` with full timing and
-exact cohort. These are the same SQL calculations used by the existing tabs, not
-new scoring formulas. Parsing/rulesets have no highlight body in the current Hub.
+Performance highlights are intentionally omitted because Peak already summarizes
+player output on the compact landing cards; users open the raid to view the full
+performance board. Statistics top 3 uses `RankingsBoxPlotStatsNoJIT` (existing
+median-DPS ordering by spec). Full-clear top 3 uses `SpeedrunLeaderboard` with full
+timing and exact cohort. These are the same SQL calculations used by the existing
+tabs, not new scoring formulas. Parsing/rulesets have no highlight body in the
+current Hub.
 Guild leaders remain in the existing preview contract used by Overview.
 
 ## Persistence and refresh
@@ -36,12 +38,15 @@ upserts it. Any query/encoding failure preserves the previous row and timestamp.
 An older-started refresh cannot overwrite a newer-started publication. Arrays are
 bounded to 3 and serialized JSON is capped at 256KiB both in code and the database.
 At most 256 configured cohorts are accepted; larger configurations fail explicitly
-rather than silently truncate. Calculation jobs have a 2-minute deadline.
+rather than silently truncate. Calculation jobs have a 1-minute deadline and one
+attempt; a later stale-snapshot sweep is the retry mechanism.
 
-Hourly River dispatch pages tenants and queues at most 100 scope refreshes per
-continuation. There is no run-on-start historical task. Completed backfill/repair
-jobs best-effort nudge a tenant refresh after commit; failures remain recoverable
-by hourly refresh. Admins can explicitly request a tenant refresh.
+Hourly River dispatch pages tenants and examines at most 100 cohort/scope pairs per
+continuation. It queues only missing snapshots, snapshots older than two hours, or
+snapshots whose configuration fingerprint changed. There is no run-on-start
+historical task. Completed backfill/repair jobs best-effort nudge a tenant refresh
+after commit; failures remain recoverable by hourly refresh. Admins can explicitly
+request a tenant refresh.
 
 A configuration fingerprint hashes the resolved instance policy (default-set
 membership, awards, variants) plus snapshot algorithm version. Public reads resolve

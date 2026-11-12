@@ -19,9 +19,10 @@ import (
 	"github.com/google/uuid"
 )
 
-const HighlightVersion = 1
+const HighlightVersion = 2
 const HighlightLimit = 3
 const HighlightMaxCohorts = 256
+const HighlightStaleAfter = 2 * time.Hour
 
 type HighlightCohort struct {
 	Instance   string
@@ -179,17 +180,6 @@ func BuildHighlights(ctx context.Context, store database.Store, tenant, realm uu
 	if realm != uuid.Nil {
 		realmIDs = append(realmIDs, realm)
 	}
-	performances, err := store.RankingsLeaderboardNoJIT(ctx, database.RankingsLeaderboardParams{InstanceNames: []string{c.Instance}, EncounterNames: selection.Bosses, DifficultyNames: []string{c.Difficulty}, RealmIds: realmIDs, ExactCohort: true, FilterMaxPlayers: c.Size, Metric: "dps", QueryLimit: HighlightLimit})
-	if err != nil {
-		return out, err
-	}
-	for _, r := range performances {
-		entry := chroniclesdk.RankingsEntry{InstanceName: r.InstanceName, EncounterName: r.EncounterName, PlayerGUID: r.PlayerGuid, PlayerName: r.PlayerName, PlayerClass: strings.ReplaceAll(r.PlayerClass, "_", ""), PlayerSpec: r.PlayerSpec, PlayerRole: r.PlayerRole, PlayerLevel: r.PlayerLevel, DifficultyName: r.DifficultyName, MaxPlayers: r.MaxPlayers, RealmID: r.RealmID, RealmName: r.RealmName, GuildName: r.GuildName, GuildID: r.GuildID, DamageDone: r.DamageDone, HealingDone: r.HealingDone, AbsorbedDone: r.AbsorbedDone, DurationSecs: r.DurationSecs, DPS: r.Dps, HPS: r.Hps, LogHashedSlug: r.LogHashedSlug, KilledAt: r.KilledAt.Time}
-		if r.PlayerSubSpec != "" {
-			entry.SubSpec = &r.PlayerSubSpec
-		}
-		out.Performances = append(out.Performances, entry)
-	}
 	stats, err := store.RankingsBoxPlotStatsNoJIT(ctx, database.RankingsBoxPlotStatsParams{InstanceNames: []string{c.Instance}, EncounterNames: selection.Bosses, DifficultyNames: []string{c.Difficulty}, RealmIds: realmIDs, ExactCohort: true, FilterMaxPlayers: c.Size, Metric: "dps"})
 	if err != nil {
 		return out, err
@@ -215,7 +205,7 @@ func RefreshHighlights(ctx context.Context, store database.Store, tenant, realm 
 	if servicetenant.IsBypass(ctx) {
 		return fmt.Errorf("highlight refresh requires tenant context")
 	}
-	ctx, cancel := context.WithTimeout(servicetenant.WithTenantID(ctx, tenant), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(servicetenant.WithTenantID(ctx, tenant), time.Minute)
 	defer cancel()
 	started := time.Now()
 	rows, cohorts, err := HighlightConfiguration(ctx, store, tenant)
