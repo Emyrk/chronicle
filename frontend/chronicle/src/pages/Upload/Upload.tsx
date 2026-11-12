@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/Switch/Switch";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
 import { formatBytes } from "@/lib/format";
-import { useAuthorizationCheck, useSiteConfig, useFlavors } from "@/api/queries";
+import { uploadsDisabledForSite, useAuthorizationCheck, useSiteConfig, useFlavors } from "@/api/queries";
 import {
   serverCapabilities,
   hasExplicitServerCapabilities,
@@ -560,7 +560,7 @@ export function Upload() {
 
   const { data: siteConfig, isFetched: configLoaded } = useSiteConfig();
   const { data: flavorTags = [] } = useFlavors();
-  const uploadsDisabled = siteConfig?.client_uploads_disabled && !hasAdminLogs;
+  const uploadsDisabled = uploadsDisabledForSite(siteConfig) && !hasAdminLogs;
   const showUnlistedUpsell = !!siteConfig?.billing_enabled && !!authz && !canMarkUnlisted;
 
   // ── Format resolution ──────────────────────────────────────────────

@@ -1,6 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import type { SiteConfig } from "./typesGenerated";
 
+export function uploadsDisabledForSite(config: SiteConfig | undefined): boolean {
+  return !!(config?.client_uploads_disabled || (config?.root_uploads_disabled && !config.tenant));
+}
+
 // Lives outside queries.ts so the app shell (NitroPayRuntime) can read site config
 // without pulling every query hook into the entry chunk. queries.ts re-exports it.
 export function useSiteConfig() {

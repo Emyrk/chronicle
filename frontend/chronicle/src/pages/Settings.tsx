@@ -27,6 +27,7 @@ import {
   useUpdateLayoutDefaults,
   useUpdateActionBarSlots,
   useLogGroups,
+  uploadsDisabledForSite,
   useSiteConfig,
   useAuthorizationCheck,
   type UserPanelLayout,
@@ -147,7 +148,7 @@ export function AccountLayout() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const { data: siteConfig } = useSiteConfig();
   const tabs = allTabs.filter((tab) => {
-    if (tab.path === "/account/storage" && siteConfig?.client_uploads_disabled) return false;
+    if (tab.path === "/account/storage" && uploadsDisabledForSite(siteConfig)) return false;
     if (tab.path === "/account/billing" && !siteConfig?.billing_enabled) return false;
     return true;
   });

@@ -59,6 +59,14 @@ func TestSiteAdsEnabled(t *testing.T) {
 func TestSiteClientUploadsDisabled(t *testing.T) {
 	t.Parallel()
 
+	require.False(t, siteClientUploadsDisabled(database.SiteConfig{RootUploadsDisabled: true}, nil))
+	require.True(t, siteClientUploadsDisabled(database.SiteConfig{ClientUploadsDisabled: true}, nil))
+	require.True(t, siteClientUploadsDisabled(database.SiteConfig{}, &database.Tenant{DisableClientUpload: true}))
+}
+
+func TestSiteUploadRequestsDisabled(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		config   database.SiteConfig
@@ -76,7 +84,7 @@ func TestSiteClientUploadsDisabled(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, test.expected, siteClientUploadsDisabled(test.config, test.tenant))
+			require.Equal(t, test.expected, siteUploadRequestsDisabled(test.config, test.tenant))
 		})
 	}
 }

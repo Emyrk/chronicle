@@ -93,7 +93,7 @@ func (api *API) brandingResolver(r *http.Request) *frontend.HTMLBranding {
 			resolved.Home = &frontend.HomeConfig{
 				Flavor:                api.resolvedSiteFlavor(r.Context()).Strings(),
 				ForeverLandingEnabled: config.ForeverLandingEnabled,
-				UploadsDisabled:       api.Opts.ClientUploadsDisabled || siteClientUploadsDisabled(config, t),
+				UploadsDisabled:       api.Opts.ClientUploadsDisabled || siteUploadRequestsDisabled(config, t),
 				RootUploadsDisabled:   rootUploadsDisabled,
 			}
 		}

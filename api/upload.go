@@ -305,11 +305,15 @@ func (api *API) clientUploadsDisabled(ctx context.Context) bool {
 		return true
 	}
 	config, err := api.Opts.Zed.GetSiteConfig(ctx)
-	return err == nil && siteClientUploadsDisabled(config, servicetenant.TenantFromContext(ctx))
+	return err == nil && siteUploadRequestsDisabled(config, servicetenant.TenantFromContext(ctx))
 }
 
 func siteClientUploadsDisabled(config database.SiteConfig, tenant *database.Tenant) bool {
-	return config.ClientUploadsDisabled || (tenant == nil && config.RootUploadsDisabled) || (tenant != nil && tenant.DisableClientUpload)
+	return config.ClientUploadsDisabled || (tenant != nil && tenant.DisableClientUpload)
+}
+
+func siteUploadRequestsDisabled(config database.SiteConfig, tenant *database.Tenant) bool {
+	return siteClientUploadsDisabled(config, tenant) || (tenant == nil && config.RootUploadsDisabled)
 }
 
 func uploadUnlisted(r *http.Request) (bool, error) {
