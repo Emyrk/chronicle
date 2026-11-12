@@ -24,12 +24,12 @@ func TestCareerApprovedWeightSeeds(t *testing.T) {
 		{Instance: "Emerald Sanctum"}: 1, {Instance: "Lower Tower of Karazhan"}: 1, {Instance: "Timbermaw Hold"}: 3,
 		{Instance: "Upper Tower of Karazhan"}: 6, {Instance: "Scarlet Monastery"}: 2,
 		{Instance: "Gruul's Lair"}: 1, {Instance: "Serpentshrine Cavern"}: 4, {Instance: "Tempest Keep"}: 3,
-		{Instance: "Onyxia's Lair", Difficulty: "10 Player", MaxPlayers: 10}: 1,
-		{Instance: "Onyxia's Lair", Difficulty: "25 Player", MaxPlayers: 25}: 1.5,
-		{Instance: "Naxxramas", Difficulty: "10 Player", MaxPlayers: 10}:     4,
-		{Instance: "Naxxramas", Difficulty: "25 Player", MaxPlayers: 25}:     6,
-		{Instance: "Ulduar", Difficulty: "10 Player", MaxPlayers: 10}:        6,
-		{Instance: "Ulduar", Difficulty: "25 Player", MaxPlayers: 25}:        9,
+		{Instance: "Onyxia's Lair", Difficulty: "", MaxPlayers: 10}: 1,
+		{Instance: "Onyxia's Lair", Difficulty: "", MaxPlayers: 25}: 1.5,
+		{Instance: "Naxxramas", Difficulty: "", MaxPlayers: 10}:     4,
+		{Instance: "Naxxramas", Difficulty: "", MaxPlayers: 25}:     6,
+		{Instance: "Ulduar", Difficulty: "", MaxPlayers: 10}:        6,
+		{Instance: "Ulduar", Difficulty: "", MaxPlayers: 25}:        9,
 	}
 	before, err := db.ListLeaderboardCareerVariants(ctx, flavors)
 	require.NoError(t, err)
@@ -56,8 +56,9 @@ func TestCareerApprovedWeightSeeds(t *testing.T) {
 	migrate := func(name, direction string) {
 		data, err := os.ReadFile("../../database/migrations/" + name + "." + direction + ".sql")
 		require.NoError(t, err)
-		// Whole-migration execution in isolated test DB, not application SQL.
-		_, err = pool.Exec(ctx, string(data))
+		// These historical UPDATE migrations target canonical keys in this
+		// current-schema fixture, in both directions.
+		_, err = pool.Exec(ctx, migrationDifficultySQL(data, "down"))
 		require.NoError(t, err)
 	}
 	migrate("000358_leaderboard_career_weights", "down")

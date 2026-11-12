@@ -34,7 +34,7 @@ func TestIcecrownCitadelRankingConfiguration(t *testing.T) {
 	rows = icecrownRows(rows)
 
 	require.Len(t, selectKind(rows, "instance"), 1)
-	require.Len(t, selectKind(rows, "variant"), 5)
+	require.Len(t, selectKind(rows, "variant"), 4)
 	require.Len(t, selectKind(rows, "boss"), 12)
 	require.Len(t, selectKind(rows, "set"), 1)
 	members := selectKind(rows, "member")
@@ -65,11 +65,10 @@ func TestIcecrownCitadelRankingConfiguration(t *testing.T) {
 		name string
 		size int16
 	}{
-		{name: "10 Player", size: 10},
-		{name: "25 Player", size: 25},
-		{name: "10 Player (Heroic)", size: 10},
-		{name: "25 Player (Heroic)", size: 25},
-		{name: "10 игроков", size: 10},
+		{name: "", size: 10},
+		{name: "", size: 25},
+		{name: "heroic", size: 10},
+		{name: "heroic", size: 25},
 	}, func() []struct {
 		name string
 		size int16
@@ -101,10 +100,10 @@ func icecrownMigration(ctx context.Context, pool *pgxpool.Pool, direction string
 		_, err := pool.Exec(ctx, `
 DELETE FROM leaderboard_variant_overrides
 WHERE layer_key = 'wrath' AND instance_name = 'Icecrown Citadel'
-  AND difficulty_name IN ('10 Player (Heroic)', '25 Player (Heroic)');
+  AND difficulty_name = 'heroic';
 DELETE FROM leaderboard_instance_variants
 WHERE instance_name = 'Icecrown Citadel'
-  AND difficulty_name IN ('10 Player (Heroic)', '25 Player (Heroic)');`)
+  AND difficulty_name = 'heroic';`)
 		if err != nil {
 			return err
 		}
@@ -113,7 +112,7 @@ WHERE instance_name = 'Icecrown Citadel'
 	if err != nil {
 		return err
 	}
-	if _, err = pool.Exec(ctx, string(data)); err != nil {
+	if _, err = pool.Exec(ctx, migrationDifficultySQL(data, direction)); err != nil {
 		return err
 	}
 	if direction == "up" {
@@ -144,6 +143,7 @@ func TestIcecrownCitadelRankingMigrationRoundTrip(t *testing.T) {
 	require.Empty(t, icecrownRows(withoutICC))
 
 	require.NoError(t, icecrownMigration(ctx, pool, "up"))
+	require.NoError(t, normalizeDifficultyMigration(ctx, pool))
 	after, err := leaderboardconfig.Resolve(ctx, db, database.WoWFlavor{database.FlavorWrath}, nil)
 	require.NoError(t, err)
 	require.Equal(t, before, after)

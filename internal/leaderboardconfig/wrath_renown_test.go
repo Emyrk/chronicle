@@ -85,10 +85,11 @@ func TestWrathRenown(t *testing.T) {
 				continue
 			}
 			index := 0
-			switch r.DifficultyName {
-			case "10 Player":
+			require.Empty(t, r.DifficultyName)
+			switch r.MaxPlayers {
+			case 10:
 				require.Equal(t, int16(10), r.MaxPlayers)
-			case "25 Player":
+			case 25:
 				index = 1
 				require.Equal(t, int16(25), r.MaxPlayers)
 			default:
@@ -147,7 +148,7 @@ func wrathMigration(ctx context.Context, pool *pgxpool.Pool, direction string) e
 		return err
 	}
 	defer conn.Release()
-	_, err = conn.Exec(ctx, string(data))
+	_, err = conn.Exec(ctx, migrationDifficultySQL(data, "down"))
 	if err != nil {
 		_, _ = conn.Exec(ctx, "ROLLBACK")
 	}
@@ -181,13 +182,14 @@ func TestWrathMigrationRoundTrip(t *testing.T) {
 	}
 	rows, err := leaderboardconfig.Resolve(ctx, db, database.WoWFlavor{database.FlavorWrath}, nil)
 	require.NoError(t, err)
-	require.Len(t, selectKind(rows, "variant"), 12)
+	require.Len(t, selectKind(rows, "variant"), 10)
 	for _, r := range rows {
 		require.False(t, r.HasPoints)
 		require.NotEqual(t, "Eye of Eternity", r.InstanceName)
 		require.NotEqual(t, "Vault of Archavon", r.InstanceName)
 	}
 	require.NoError(t, wrathMigration(ctx, pool, "up"))
+	require.NoError(t, normalizeDifficultyMigration(ctx, pool))
 	for i, flavor := range flavors {
 		rows, err := leaderboardconfig.Resolve(ctx, db, flavor, nil)
 		require.NoError(t, err)
