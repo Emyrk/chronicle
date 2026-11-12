@@ -13,6 +13,10 @@ export interface PrerenderedBlogPage {
 export interface BlogManifestPost {
   id: string;
   path: string;
+  /** Post title and summary used by the server for BlogPosting JSON-LD. */
+  title: string;
+  description: string;
+  published_at: string;
   flavor_sets: readonly (readonly string[])[];
 }
 
@@ -49,6 +53,9 @@ export function blogManifest(): { posts: BlogManifestPost[] } {
     posts: BLOG_POSTS.map((post) => ({
       id: post.id,
       path: blogPostPath(post.id),
+      title: post.title,
+      description: post.description,
+      published_at: post.publishedAt,
       flavor_sets: post.flavorSets ?? [],
     })),
   };

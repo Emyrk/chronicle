@@ -69,8 +69,11 @@ type blogManifest struct {
 }
 
 type blogManifestPost struct {
-	Path       string     `json:"path"`
-	FlavorSets [][]string `json:"flavor_sets"`
+	Path        string     `json:"path"`
+	Title       string     `json:"title"`
+	Description string     `json:"description"`
+	PublishedAt string     `json:"published_at"`
+	FlavorSets  [][]string `json:"flavor_sets"`
 }
 
 type handler struct {
