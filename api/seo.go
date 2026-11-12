@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
@@ -17,14 +18,22 @@ import (
 
 const defaultSEODescription = "Chronicle provides combat log analysis for World of Warcraft communities. Upload combat logs to explore encounters, rankings, and performance insights."
 
+// indexableExactPaths are public pages with no child routes. Anything below
+// them (for example /guilds/zzz) is not a real page and stays noindex.
+var indexableExactPaths = []string{
+	"/", "/recent", "/guilds", "/census", "/speedrunning", "/contact", "/privacy", "/terms",
+	"/disclaimer", "/refund-policy", "/supported", "/download", "/search/guide",
+}
+
+// indexablePrefixes are public pages whose child routes are public too.
 var indexablePrefixes = []string{
-	"/", "/recent", "/guilds", "/g", "/armory", "/instances", "/s", "/leaderboards",
-	"/talents", "/wowdb", "/technical", "/census", "/speedrunning", "/tools", "/blog", "/contact",
-	"/privacy", "/terms", "/disclaimer", "/supported-instances",
+	"/g", "/armory", "/instances", "/s", "/leaderboards", "/talents", "/wowdb", "/technical",
+	"/tools", "/blog", "/modules", "/gear",
 }
 
 var noIndexPrefixes = []string{
 	"/admin", "/account", "/settings", "/debug", "/upload", "/servers", "/login", "/apply",
+	"/modules/new",
 }
 
 func (api *API) brandingResolver(r *http.Request) *frontend.HTMLBranding {
@@ -62,7 +71,7 @@ func (api *API) brandingResolver(r *http.Request) *frontend.HTMLBranding {
 		resolved.Description = defaultSEODescription
 	}
 
-	if !discoverable || !pathHasPrefix(r.URL.Path, indexablePrefixes) || pathHasPrefix(r.URL.Path, noIndexPrefixes) || isPrivateGuildPath(r.URL.Path) || api.isUnlistedInstancePath(r) {
+	if !discoverable || !isIndexablePath(r.URL.Path) || pathHasPrefix(r.URL.Path, noIndexPrefixes) || isPrivateGuildPath(r.URL.Path) || api.isUnlistedInstancePath(r) {
 		resolved.Robots = "noindex, nofollow"
 	}
 	if r.URL.Path == "/" {
@@ -185,6 +194,10 @@ func websiteJSONLD(name, description, canonical, image string) string {
 
 func isPrivateGuildPath(path string) bool {
 	return strings.HasSuffix(path, "/edit") || strings.HasSuffix(path, "/analytics") || strings.HasSuffix(path, "/settings")
+}
+
+func isIndexablePath(path string) bool {
+	return slices.Contains(indexableExactPaths, path) || pathHasPrefix(path, indexablePrefixes)
 }
 
 func pathHasPrefix(path string, prefixes []string) bool {
