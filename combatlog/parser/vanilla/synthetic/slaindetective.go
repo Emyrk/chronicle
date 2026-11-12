@@ -1,10 +1,10 @@
 package synthetic
 
 import (
-	"github.com/Emyrk/chronicle/combatlog/parser/guid"
-	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/zoner"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
 )
 
 type SlainDetective struct {
@@ -36,8 +36,10 @@ func (s *SlainDetective) ProcessMessage(msg messages.Message) {
 		s.lastDamage[m.Target] = m
 	case *messages.Slain:
 		if m.Killer == nil {
-			m.Attribution = s.lastDamage[m.Victim]
 			if lastDamage := s.lastDamage[m.Victim]; lastDamage != nil {
+				// A missing map value is a nil *Damage. Assigning it to the
+				// Message interface would manufacture nonnil, unusable attribution.
+				m.Attribution = lastDamage
 				m.Killer = lastDamage.Caster
 			}
 		} else if lastDamage, ok := s.lastDamage[m.Victim]; ok {
