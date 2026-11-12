@@ -3,6 +3,7 @@ import type { InstanceRatingEvidenceResponse, InstanceRatingPlayerObservation } 
 import { createRatingEvidencePanel } from "./RatingEvidence";
 import {
   countRatingEvidence,
+  formatDifficultyCohort,
   formatDurationMs,
   formatMetricName,
   formatPlayerCohort,
@@ -59,4 +60,10 @@ describe("Rating Evidence panel", () => {
     expect(formatDurationMs(65_432)).toBe("1m 05.432s");
     expect(formatDurationMs(3_723_004)).toBe("1h 02m 03.004s");
   });
+});
+
+it("distinguishes same-name boss difficulty cohorts including explicit Normal", () => {
+  expect(formatDifficultyCohort({ difficulty_name: "", max_players: 25 })).toBe("Normal · 25-player");
+  expect(formatDifficultyCohort({ difficulty_name: "heroic", max_players: 25 })).toBe("Heroic · 25-player");
+  expect(formatDifficultyCohort({ difficulty_name: "mythic_plus", max_players: 10 })).toBe("Mythic Plus · 10-player");
 });

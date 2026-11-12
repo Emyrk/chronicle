@@ -21,8 +21,17 @@ export function mapTimeBossParses(
 ): ReadonlyMap<string, TimeBossParse | null> | null {
   if (!timeParses?.available) return null;
   const result = new Map<string, TimeBossParse | null>();
+  const variants = new Map<string, string>();
+  const ambiguous = new Set<string>();
   for (const boss of timeParses.boss_kill_times) {
-    if (boss.status === "sample_too_small") {
+    const variant = JSON.stringify([boss.difficulty_name, boss.max_players]);
+    if (variants.has(boss.encounter_name) && variants.get(boss.encounter_name) !== variant) {
+      ambiguous.add(boss.encounter_name);
+    }
+    variants.set(boss.encounter_name, variant);
+    // Population rows currently identify bosses only by name. Never attach a
+    // different difficulty's score to an ambiguous name-only chart row.
+    if (ambiguous.has(boss.encounter_name) || boss.status === "sample_too_small") {
       result.set(boss.encounter_name, null);
     } else {
       result.set(boss.encounter_name, {

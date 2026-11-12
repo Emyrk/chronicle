@@ -18,6 +18,8 @@ export interface InstanceRatingEvidenceResponse {
 
 // From chroniclesdk/rating_evidence.go
 export interface InstanceRatingGuildBossObservation {
+    readonly difficulty_name: string;
+    readonly max_players: number;
     readonly encounter_name: string;
     readonly guild_id: string;
     readonly guild_name?: string;
@@ -31,6 +33,8 @@ export interface InstanceRatingGuildBossObservation {
 
 // From chroniclesdk/rating_evidence.go
 export interface InstanceRatingGuildClearObservation {
+    readonly difficulty_name: string;
+    readonly max_players: number;
     readonly guild_id: string;
     readonly guild_name?: string;
     readonly duration_ms: number;
@@ -49,6 +53,8 @@ export interface InstanceRatingGuildEvidence {
 
 // From chroniclesdk/rating_evidence.go
 export interface InstanceRatingGuildRenownFact {
+    readonly difficulty_name: string;
+    readonly max_players: number;
     readonly encounter_name: string;
     readonly guild_id: string;
     readonly guild_name?: string;
@@ -66,6 +72,8 @@ export interface InstanceRatingPlayerEvidence {
 
 // From chroniclesdk/rating_evidence.go
 export interface InstanceRatingPlayerObservation {
+    readonly difficulty_name: string;
+    readonly max_players: number;
     readonly encounter_name: string;
     readonly player_guid: string;
     readonly player_name?: string;
@@ -83,6 +91,8 @@ export interface InstanceRatingPlayerObservation {
 
 // From chroniclesdk/rating_evidence.go
 export interface InstanceRatingPlayerRenownFact {
+    readonly difficulty_name: string;
+    readonly max_players: number;
     readonly encounter_name: string;
     readonly player_guid: string;
     readonly player_name?: string;
@@ -1073,6 +1083,8 @@ export interface BillingSummary {
  * BossKillTimeParse is a per-boss kill-time parse.
  */
 export interface BossKillTimeParse {
+    readonly difficulty_name: string;
+    readonly max_players: number;
     readonly encounter_id: string;
     readonly encounter_name: string;
     readonly duration_ms: number;
@@ -3094,6 +3106,8 @@ export interface InstanceParseAverage {
  * InstanceParseBoss is a player's parse result for a single boss encounter.
  */
 export interface InstanceParseBoss {
+    readonly difficulty_name: string;
+    readonly max_players: number;
     readonly encounter_name: string;
     readonly metric_value: number;
     readonly precise_score: number;
@@ -3215,6 +3229,7 @@ export interface InstanceRaidGroupResponse {
  * in a specific log instance. Zero-value metrics are retained for debugging.
  */
 export interface InstanceRankingRecord {
+    readonly difficulty: string;
     readonly id: string;
     readonly encounter_id?: string;
     readonly encounter_name: string;

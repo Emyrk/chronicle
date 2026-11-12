@@ -1,3 +1,4 @@
+import { difficultyLabel } from "@/lib/wowUtils";
 import type { InstanceRankingRecord } from "@/api/typesGenerated";
 
 export function filterRankingRecords(
@@ -15,6 +16,7 @@ export function filterRankingRecords(
       record.player_sub_spec,
       record.player_role,
       record.encounter_name,
+      difficultyLabel(record.difficulty),
       record.player_guid,
     ].some((value) => value?.toLowerCase().includes(normalized)),
   );
