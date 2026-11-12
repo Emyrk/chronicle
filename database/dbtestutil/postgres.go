@@ -66,6 +66,15 @@ func initDefaultConnection(t TBSubset) error {
 		Port:     "5432",
 		DBName:   "postgres",
 	}
+	// Allow an isolated local PostgreSQL version without replacing another
+	// workspace's server on the default port.
+	if port := os.Getenv("CHRONICLE_TEST_POSTGRES_PORT"); port != "" {
+		value, err := strconv.Atoi(port)
+		if err != nil || value < 1 || value > 65535 {
+			return fmt.Errorf("invalid CHRONICLE_TEST_POSTGRES_PORT %q", port)
+		}
+		params.Port = port
+	}
 	dsn := params.DSN()
 
 	// Helper closure to try opening and pinging the default Postgres instance.
@@ -98,7 +107,7 @@ func initDefaultConnection(t TBSubset) error {
 	}
 
 	// After the loop dbErr is the last connection error (if any).
-	if dbErr != nil && containsAnySubstring(dbErr.Error(), noPostgresRunningErrSubstrings) {
+	if dbErr != nil && os.Getenv("CHRONICLE_TEST_POSTGRES_PORT") == "" && containsAnySubstring(dbErr.Error(), noPostgresRunningErrSubstrings) {
 		// If there's no database running on the default port, we'll start a
 		// postgres container. We won't be cleaning it up so it can be reused
 		// by subsequent tests. It'll keep on running until the user terminates

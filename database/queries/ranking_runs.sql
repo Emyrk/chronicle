@@ -218,7 +218,7 @@ WITH members AS MATERIALIZED (
     JOIN wow_log_groups log_group ON log_group.id = li.log_group_id AND NOT log_group.unlisted
     LEFT JOIN encounter_dps_rankings_resolved coverage ON coverage.instance_id = li.id
     WHERE li.invalidated_at IS NULL
-    GROUP BY li.id
+    GROUP BY li.id, li.duplicate_group_id, li.realm_id, li.name, li.difficulty_name, li.max_players, li.start_time, li.end_time, li.updated_at
 ),
 ranked AS (
     SELECT

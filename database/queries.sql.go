@@ -4397,15 +4397,15 @@ func (q *sqlQuerier) GetLogGroupInstanceIDByOrdinal(ctx context.Context, arg Get
 }
 
 const getLogInstanceForDiscordAnnouncement = `-- name: GetLogInstanceForDiscordAnnouncement :one
-SELECT li.id, li.realm_id, li.log_group_id, li.name, li.hashed_slug, li.guild_id, li.start_time, li.end_time, li.capabilities, li.versions, li.recorder_name, li.recorder_guid, li.parser_version, li.duplicate_group_id, li.difficulty_name, li.max_players, li.dynamic_difficulty, li.vehicle_control_intervals, li.category, li.updated_at, li.invalidated_at, li.invalid_reason, li.mixed_difficulty
-FROM log_instances li
+SELECT li.id, li.realm_id, li.log_group_id, li.name, li.hashed_slug, li.guild_id, li.start_time, li.end_time, li.capabilities, li.versions, li.recorder_name, li.recorder_guid, li.parser_version, li.duplicate_group_id, li.difficulty_name, li.max_players, li.dynamic_difficulty, li.vehicle_control_intervals, li.category, li.updated_at, li.invalidated_at, li.invalid_reason, li.mixed_difficulty, li.difficulty_normalized
+FROM log_instances_resolved li
 JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
 WHERE li.id = $1
 `
 
-func (q *sqlQuerier) GetLogInstanceForDiscordAnnouncement(ctx context.Context, id uuid.UUID) (LogInstance, error) {
+func (q *sqlQuerier) GetLogInstanceForDiscordAnnouncement(ctx context.Context, id uuid.UUID) (LogInstancesResolved, error) {
 	row := q.db.QueryRow(ctx, getLogInstanceForDiscordAnnouncement, id)
-	var i LogInstance
+	var i LogInstancesResolved
 	err := row.Scan(
 		&i.ID,
 		&i.RealmID,
@@ -4430,6 +4430,7 @@ func (q *sqlQuerier) GetLogInstanceForDiscordAnnouncement(ctx context.Context, i
 		&i.InvalidatedAt,
 		&i.InvalidReason,
 		&i.MixedDifficulty,
+		&i.DifficultyNormalized,
 	)
 	return i, err
 }
@@ -4598,7 +4599,7 @@ SELECT
   )::bigint AS clear_duration_ms,
   COALESCE(guild_average.avg_duration_ms, 0)::bigint AS guild_avg_duration_ms,
   (SELECT COUNT(*) FROM log_instance_players lip WHERE lip.instance_id = li.id)::int AS player_count
-FROM log_instances li
+FROM log_instances_resolved li
 JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
 JOIN users u ON u.id = wlg.owner
 LEFT JOIN wow_server_realms wsr ON wsr.id = li.realm_id
@@ -4612,7 +4613,7 @@ LEFT JOIN LATERAL (
     SELECT DISTINCT ON (COALESCE(previous_li.duplicate_group_id, previous_li.id))
       (EXTRACT(EPOCH FROM (previous_li.end_time - previous_li.start_time)) * 1000)::bigint AS duration_ms
     FROM instance_speedruns previous_sr
-    JOIN log_instances previous_li ON previous_li.id = previous_sr.instance_id
+    JOIN log_instances_resolved previous_li ON previous_li.id = previous_sr.instance_id
     JOIN wow_log_groups previous_group ON previous_group.id = previous_li.log_group_id AND NOT previous_group.unlisted
     WHERE previous_sr.guild_id = li.guild_id
       AND previous_sr.instance_name = li.name
@@ -5450,6 +5451,91 @@ func (q *sqlQuerier) UpsertDiscordMembershipGrantCheckNonMember(ctx context.Cont
 	return i, err
 }
 
+const backfillEncounterDifficultyBatch = `-- name: BackfillEncounterDifficultyBatch :one
+WITH batch AS MATERIALIZED (
+    SELECT id, instance_id, difficulty
+    FROM log_instance_encounters
+    WHERE id > $1::uuid
+    ORDER BY id
+    LIMIT LEAST(GREATEST($2::int, 1), 10000)
+), updated AS (
+    UPDATE log_instance_encounters encounter
+    SET difficulty = instance.difficulty_name
+    FROM batch
+    JOIN log_instances_resolved instance ON instance.id = batch.instance_id
+    WHERE encounter.id = batch.id AND encounter.difficulty IS NULL
+    RETURNING encounter.id
+)
+SELECT (SELECT id FROM batch ORDER BY id DESC LIMIT 1) AS last_inspected_id,
+       (SELECT count(*) FROM batch)::bigint AS inspected_count,
+       (SELECT count(*) FROM updated)::bigint AS updated_count
+`
+
+type BackfillEncounterDifficultyBatchParams struct {
+	AfterID   uuid.UUID `db:"after_id" json:"after_id"`
+	BatchSize int32     `db:"batch_size" json:"batch_size"`
+}
+
+type BackfillEncounterDifficultyBatchRow struct {
+	LastInspectedID uuid.UUID `db:"last_inspected_id" json:"last_inspected_id"`
+	InspectedCount  int64     `db:"inspected_count" json:"inspected_count"`
+	UpdatedCount    int64     `db:"updated_count" json:"updated_count"`
+}
+
+// Offline repair only. Never call this from startup. Use the last inspected ID
+// as the next cursor, even when updated_count is zero. Each batch inspects at
+// most batch_size primary-key entries, rather than searching an unbounded
+// suffix for NULLs. Existing explicit Normal (empty string) is never overwritten.
+func (q *sqlQuerier) BackfillEncounterDifficultyBatch(ctx context.Context, arg BackfillEncounterDifficultyBatchParams) (BackfillEncounterDifficultyBatchRow, error) {
+	row := q.db.QueryRow(ctx, backfillEncounterDifficultyBatch, arg.AfterID, arg.BatchSize)
+	var i BackfillEncounterDifficultyBatchRow
+	err := row.Scan(&i.LastInspectedID, &i.InspectedCount, &i.UpdatedCount)
+	return i, err
+}
+
+const previewEncounterDifficultyBackfillBatch = `-- name: PreviewEncounterDifficultyBackfillBatch :one
+WITH batch AS MATERIALIZED (
+    SELECT id, instance_id, difficulty
+    FROM log_instance_encounters
+    WHERE id > $1::uuid
+    ORDER BY id
+    LIMIT LEAST(GREATEST($2::int, 1), 10000)
+)
+SELECT (SELECT id FROM batch ORDER BY id DESC LIMIT 1) AS last_inspected_id,
+       count(*)::bigint AS inspected_count,
+       count(*) FILTER (WHERE batch.difficulty IS NULL)::bigint AS pending_count,
+       count(*) FILTER (WHERE batch.difficulty IS NULL AND
+           instance.difficulty_name = 'heroic')::bigint AS heroic_count
+FROM batch
+JOIN log_instances_resolved instance ON instance.id = batch.instance_id
+`
+
+type PreviewEncounterDifficultyBackfillBatchParams struct {
+	AfterID   uuid.UUID `db:"after_id" json:"after_id"`
+	BatchSize int32     `db:"batch_size" json:"batch_size"`
+}
+
+type PreviewEncounterDifficultyBackfillBatchRow struct {
+	LastInspectedID uuid.UUID `db:"last_inspected_id" json:"last_inspected_id"`
+	InspectedCount  int64     `db:"inspected_count" json:"inspected_count"`
+	PendingCount    int64     `db:"pending_count" json:"pending_count"`
+	HeroicCount     int64     `db:"heroic_count" json:"heroic_count"`
+}
+
+// Read-only preview/count of precisely the next bounded batch. Repeat with the
+// cursor to estimate the full rollout without one unbounded table scan.
+func (q *sqlQuerier) PreviewEncounterDifficultyBackfillBatch(ctx context.Context, arg PreviewEncounterDifficultyBackfillBatchParams) (PreviewEncounterDifficultyBackfillBatchRow, error) {
+	row := q.db.QueryRow(ctx, previewEncounterDifficultyBackfillBatch, arg.AfterID, arg.BatchSize)
+	var i PreviewEncounterDifficultyBackfillBatchRow
+	err := row.Scan(
+		&i.LastInspectedID,
+		&i.InspectedCount,
+		&i.PendingCount,
+		&i.HeroicCount,
+	)
+	return i, err
+}
+
 const getParsedBytesByOwner = `-- name: GetParsedBytesByOwner :one
 SELECT
   COALESCE(SUM(octet_length(lie.events)), 0)::bigint AS parsed_bytes,
@@ -5595,7 +5681,7 @@ WITH participation AS (
             ORDER BY COALESCE(li.start_time, wlg.created_at) DESC, li.id DESC
         ) AS duplicate_rank
     FROM log_instance_players lip
-    JOIN log_instances li ON li.id = lip.instance_id
+    JOIN log_instances_resolved li ON li.id = lip.instance_id
     JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
     WHERE lip.unit_guid = $1::wow_guid
       AND li.realm_id = $5
@@ -5640,7 +5726,7 @@ LEFT JOIN LATERAL (
             psr.encounter_name,
             MAX(psr.display_score) FILTER (WHERE psr.metric = 'dps') AS dps_parse,
             MAX(psr.display_score) FILTER (WHERE psr.metric = 'hps') AS hps_parse
-        FROM parse_score_results psr
+        FROM parse_score_results_resolved psr
         WHERE psr.run_id = d.run_id
           AND psr.player_guid = ($1::wow_guid)::text
           AND psr.tenant_id = $2
@@ -5886,7 +5972,7 @@ SELECT
     li.difficulty_name,
     li.max_players,
     li.recorder_name
-FROM log_instances li
+FROM log_instances_resolved li
 JOIN parsed_log_group plg ON plg.id = li.log_group_id
 JOIN wow_log_groups wlg ON wlg.id = plg.id
   AND plg.parse_generation = wlg.parse_generation
@@ -8924,12 +9010,12 @@ WITH representative_instances AS (
     SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
         li.id,
         COALESCE(li.duplicate_group_id, li.id) AS run_id
-    FROM log_instances li
+    FROM log_instances_resolved li
 JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
     WHERE li.invalidated_at IS NULL
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
         (SELECT COUNT(DISTINCT coverage.encounter_name)
-         FROM encounter_dps_rankings coverage
+         FROM encounter_dps_rankings_resolved coverage
          WHERE coverage.instance_id = li.id
            AND coverage.encounter_id IS NOT NULL) DESC,
         (li.id = li.duplicate_group_id) DESC NULLS LAST,
@@ -8947,11 +9033,12 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
         sr.ranked_duration_ms::bigint AS duration_ms,
         sr.ranked_completion_time::timestamptz AS completion_time
     FROM representative_instances representative
-    JOIN log_instances li ON li.id = representative.id
+    JOIN log_instances_resolved li ON li.id = representative.id
 JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
     JOIN instance_speedruns sr ON sr.instance_id = representative.id
     JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
     WHERE sr.guild_id = $2::uuid
+      AND NOT li.mixed_difficulty
       AND sr.ranked_duration_ms > 0
       AND CASE
           WHEN $3::bigint > 0 THEN sr.ranked_completion_time >= now() - make_interval(days => $3::int)
@@ -9100,7 +9187,7 @@ LEFT JOIN LATERAL (
         ) AS spec_roles
     FROM (
         SELECT psr.player_spec, psr.player_role, MAX(psr.killed_at) AS last_seen
-        FROM parse_score_results psr
+        FROM parse_score_results_resolved psr
 JOIN log_instances psr_instance ON psr_instance.id = psr.instance_id
 JOIN wow_log_groups psr_group ON psr_group.id = psr_instance.log_group_id AND NOT psr_group.unlisted
         WHERE psr.tenant_id = $1
@@ -9110,7 +9197,7 @@ JOIN wow_log_groups psr_group ON psr_group.id = psr_instance.log_group_id AND NO
               SELECT recent.instance_id
               FROM (
                   SELECT psr2.instance_id, MAX(psr2.killed_at) AS latest_kill
-                  FROM parse_score_results psr2
+                  FROM parse_score_results_resolved psr2
 JOIN log_instances psr2_instance ON psr2_instance.id = psr2.instance_id
 JOIN wow_log_groups psr2_group ON psr2_group.id = psr2_instance.log_group_id AND NOT psr2_group.unlisted
                   WHERE psr2.tenant_id = $1
@@ -9130,22 +9217,28 @@ LEFT JOIN LATERAL (
         SELECT
             ranked.instance_name,
             ranked.encounter_name,
+            ranked.difficulty_name,
+            ranked.max_players,
             AVG(ranked.precise_score)::float8 AS avg_parse
         FROM (
             SELECT
                 deduped.instance_name,
                 deduped.encounter_name,
+                deduped.difficulty_name,
+                deduped.max_players,
                 deduped.precise_score,
                 ROW_NUMBER() OVER (
-                    PARTITION BY deduped.instance_name, deduped.encounter_name
+                    PARTITION BY deduped.instance_name, deduped.encounter_name, deduped.difficulty_name, deduped.max_players
                     ORDER BY deduped.precise_score DESC
                 ) AS score_rank
             FROM (
-                SELECT DISTINCT ON (psr.run_id, psr.encounter_name)
+                SELECT DISTINCT ON (psr.run_id, psr.encounter_name, psr.difficulty_name, psr.max_players)
                     psr.instance_name,
                     psr.encounter_name,
+                    psr.difficulty_name,
+                    psr.max_players,
                     psr.precise_score
-                FROM parse_score_results psr
+                FROM parse_score_results_resolved psr
 JOIN log_instances psr_instance ON psr_instance.id = psr.instance_id
 JOIN wow_log_groups psr_group ON psr_group.id = psr_instance.log_group_id AND NOT psr_group.unlisted
                 WHERE psr.tenant_id = $1
@@ -9153,11 +9246,11 @@ JOIN wow_log_groups psr_group ON psr_group.id = psr_instance.log_group_id AND NO
                   AND psr.metric = CASE WHEN latest.player_role = 'heal' THEN 'hps' ELSE 'dps' END
                   AND psr.status IN ('ok', 'low_confidence')
                   AND psr.killed_at >= now() - make_interval(days => $2::int)
-                ORDER BY psr.run_id, psr.encounter_name, psr.created_at DESC, psr.precise_score DESC
+                ORDER BY psr.run_id, psr.encounter_name, psr.difficulty_name, psr.max_players, psr.created_at DESC, psr.precise_score DESC
             ) deduped
         ) ranked
         WHERE ranked.score_rank <= 3
-        GROUP BY ranked.instance_name, ranked.encounter_name
+        GROUP BY ranked.instance_name, ranked.encounter_name, ranked.difficulty_name, ranked.max_players
     ) encounter_scores
 ) scores ON true
 WHERE gp.guild_id = $3::uuid
@@ -9247,21 +9340,21 @@ const guildEncounterKills = `-- name: GuildEncounterKills :many
 SELECT
     li.name AS instance_name,
     lie.name AS encounter_name,
-    COALESCE(NULLIF(lie.difficulty_name, ''), li.difficulty_name) AS difficulty_name,
-    COALESCE(NULLIF(lie.max_players, 0), li.max_players) AS max_players,
+    COALESCE(lie.difficulty, li.difficulty_name) AS difficulty_name,
+    li.max_players AS max_players,
     COUNT(DISTINCT COALESCE(li.duplicate_group_id, li.id))::int AS kills,
     MIN(lie.end_time)::timestamptz AS first_killed_at,
     MAX(lie.end_time)::timestamptz AS last_killed_at
 FROM log_instance_encounters lie
-JOIN log_instances li ON li.id = lie.instance_id
+JOIN log_instances_resolved li ON li.id = lie.instance_id
 JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
 JOIN wow_server_realms wsr ON wsr.id = li.realm_id
 WHERE li.guild_id = $1::uuid
   AND lie.boss = true
   AND lie.kill_type IN ('clean', 'partial')
 GROUP BY li.name, lie.name,
-    COALESCE(NULLIF(lie.difficulty_name, ''), li.difficulty_name),
-    COALESCE(NULLIF(lie.max_players, 0), li.max_players)
+    COALESCE(lie.difficulty, li.difficulty_name),
+    li.max_players
 ORDER BY li.name, lie.name
 `
 
@@ -9309,13 +9402,13 @@ func (q *sqlQuerier) GuildEncounterKills(ctx context.Context, guildID uuid.UUID)
 
 const guildRunParseAverages = `-- name: GuildRunParseAverages :many
 WITH deduped AS (
-    SELECT DISTINCT ON (psr.run_id, psr.encounter_name, psr.player_guid)
+    SELECT DISTINCT ON (psr.run_id, psr.encounter_name, psr.player_guid, psr.difficulty_name, psr.max_players)
         psr.run_id,
         psr.encounter_name,
         psr.instance_id,
         psr.precise_score,
         psr.killed_at
-    FROM parse_score_results psr
+    FROM parse_score_results_resolved psr
 JOIN log_instances psr_instance ON psr_instance.id = psr.instance_id
 JOIN wow_log_groups psr_group ON psr_group.id = psr_instance.log_group_id AND NOT psr_group.unlisted
     WHERE psr.tenant_id = $1
@@ -9326,7 +9419,7 @@ JOIN wow_log_groups psr_group ON psr_group.id = psr_instance.log_group_id AND NO
           (psr.player_role = 'heal' AND psr.metric = 'hps')
           OR (psr.player_role != 'heal' AND psr.metric = 'dps')
       )
-    ORDER BY psr.run_id, psr.encounter_name, psr.player_guid, psr.created_at DESC, psr.precise_score DESC
+    ORDER BY psr.run_id, psr.encounter_name, psr.player_guid, psr.difficulty_name, psr.max_players, psr.created_at DESC, psr.precise_score DESC
 ), grouped AS (
     SELECT
         run_id,
@@ -9412,7 +9505,7 @@ WITH guild_members AS (
     FROM game_players gp
     WHERE gp.guild_id = $3::uuid
 ), deduped AS (
-    SELECT DISTINCT ON (psr.run_id, psr.encounter_name, psr.player_guid)
+    SELECT DISTINCT ON (psr.run_id, psr.encounter_name, psr.player_guid, psr.difficulty_name, psr.max_players)
         psr.player_guid,
         psr.player_name,
         psr.player_class,
@@ -9422,15 +9515,15 @@ WITH guild_members AS (
         psr.instance_id,
         COALESCE(li.hashed_slug, '')::text AS instance_slug,
         psr.instance_name,
-        psr.difficulty_name,
+        psr.difficulty_name::text AS difficulty_name,
         psr.max_players,
         psr.metric_value,
         psr.precise_score,
         psr.display_score,
         psr.killed_at
-    FROM parse_score_results psr
+    FROM parse_score_results_resolved psr
     JOIN guild_members gm ON gm.player_guid = psr.player_guid
-    JOIN log_instances li ON li.id = psr.instance_id
+    JOIN log_instances_resolved li ON li.id = psr.instance_id
 JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
     WHERE psr.tenant_id = $4
       AND psr.metric = $5
@@ -9439,7 +9532,7 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
           WHEN $6::bigint > 0 THEN psr.killed_at >= now() - make_interval(days => $6::int)
           ELSE true
       END
-    ORDER BY psr.run_id, psr.encounter_name, psr.player_guid, psr.created_at DESC, psr.precise_score DESC
+    ORDER BY psr.run_id, psr.encounter_name, psr.player_guid, psr.difficulty_name, psr.max_players, psr.created_at DESC, psr.precise_score DESC
 ), ranked AS (
     SELECT player_guid, player_name, player_class, player_spec, player_role, encounter_name, instance_id, instance_slug, instance_name, difficulty_name, max_players, metric_value, precise_score, display_score, killed_at,
         ROW_NUMBER() OVER (
@@ -11223,7 +11316,7 @@ func (q *sqlQuerier) ListInferenceContextUsageByUser(ctx context.Context, arg Li
 }
 
 const listInferenceInstanceEncounters = `-- name: ListInferenceInstanceEncounters :many
-SELECT id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id, ranking_start_offset_ms, ranking_end_offset_ms, invalidated_at, invalid_reason, difficulty_name, max_players, dynamic_difficulty
+SELECT id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id, ranking_start_offset_ms, ranking_end_offset_ms, invalidated_at, invalid_reason, difficulty
 FROM log_instance_encounters
 WHERE instance_id = $1
 ORDER BY start_time, id
@@ -11253,9 +11346,7 @@ func (q *sqlQuerier) ListInferenceInstanceEncounters(ctx context.Context, instan
 			&i.RankingEndOffsetMs,
 			&i.InvalidatedAt,
 			&i.InvalidReason,
-			&i.DifficultyName,
-			&i.MaxPlayers,
-			&i.DynamicDifficulty,
+			&i.Difficulty,
 		); err != nil {
 			return nil, err
 		}
@@ -11941,7 +12032,7 @@ WITH board AS (
         li.log_group_id,
         li.invalidated_at
     FROM instance_speedruns sr
-    JOIN log_instances li ON li.id = sr.instance_id
+    JOIN log_instances_resolved li ON li.id = sr.instance_id
     JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
     JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
     WHERE sr.qualified = true
@@ -14630,6 +14721,7 @@ func (q *sqlQuerier) GetInstanceRatingEvidenceRun(ctx context.Context, arg GetIn
 
 const listInstanceRatingGuildBossObservations = `-- name: ListInstanceRatingGuildBossObservations :many
 SELECT
+    observation.difficulty_name, observation.max_players,
     observation.encounter_name,
     observation.guild_id,
     COALESCE(guild.name, '')::text AS guild_name,
@@ -14652,6 +14744,8 @@ type ListInstanceRatingGuildBossObservationsParams struct {
 }
 
 type ListInstanceRatingGuildBossObservationsRow struct {
+	DifficultyName         string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers             int16              `db:"max_players" json:"max_players"`
 	EncounterName          string             `db:"encounter_name" json:"encounter_name"`
 	GuildID                uuid.UUID          `db:"guild_id" json:"guild_id"`
 	GuildName              string             `db:"guild_name" json:"guild_name"`
@@ -14673,6 +14767,8 @@ func (q *sqlQuerier) ListInstanceRatingGuildBossObservations(ctx context.Context
 	for rows.Next() {
 		var i ListInstanceRatingGuildBossObservationsRow
 		if err := rows.Scan(
+			&i.DifficultyName,
+			&i.MaxPlayers,
 			&i.EncounterName,
 			&i.GuildID,
 			&i.GuildName,
@@ -14695,6 +14791,7 @@ func (q *sqlQuerier) ListInstanceRatingGuildBossObservations(ctx context.Context
 
 const listInstanceRatingGuildClearObservations = `-- name: ListInstanceRatingGuildClearObservations :many
 SELECT
+    observation.difficulty_name, observation.max_players,
     observation.guild_id,
     COALESCE(guild.name, '')::text AS guild_name,
     observation.duration_ms,
@@ -14715,6 +14812,8 @@ type ListInstanceRatingGuildClearObservationsParams struct {
 }
 
 type ListInstanceRatingGuildClearObservationsRow struct {
+	DifficultyName         string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers             int16              `db:"max_players" json:"max_players"`
 	GuildID                uuid.UUID          `db:"guild_id" json:"guild_id"`
 	GuildName              string             `db:"guild_name" json:"guild_name"`
 	DurationMs             int64              `db:"duration_ms" json:"duration_ms"`
@@ -14734,6 +14833,8 @@ func (q *sqlQuerier) ListInstanceRatingGuildClearObservations(ctx context.Contex
 	for rows.Next() {
 		var i ListInstanceRatingGuildClearObservationsRow
 		if err := rows.Scan(
+			&i.DifficultyName,
+			&i.MaxPlayers,
 			&i.GuildID,
 			&i.GuildName,
 			&i.DurationMs,
@@ -14754,6 +14855,7 @@ func (q *sqlQuerier) ListInstanceRatingGuildClearObservations(ctx context.Contex
 
 const listInstanceRatingGuildRenownFacts = `-- name: ListInstanceRatingGuildRenownFacts :many
 SELECT
+    fact.difficulty_name, fact.max_players,
     fact.encounter_name,
     fact.guild_id,
     COALESCE(guild.name, '')::text AS guild_name,
@@ -14774,6 +14876,8 @@ type ListInstanceRatingGuildRenownFactsParams struct {
 }
 
 type ListInstanceRatingGuildRenownFactsRow struct {
+	DifficultyName    string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16              `db:"max_players" json:"max_players"`
 	EncounterName     string             `db:"encounter_name" json:"encounter_name"`
 	GuildID           uuid.UUID          `db:"guild_id" json:"guild_id"`
 	GuildName         string             `db:"guild_name" json:"guild_name"`
@@ -14793,6 +14897,8 @@ func (q *sqlQuerier) ListInstanceRatingGuildRenownFacts(ctx context.Context, arg
 	for rows.Next() {
 		var i ListInstanceRatingGuildRenownFactsRow
 		if err := rows.Scan(
+			&i.DifficultyName,
+			&i.MaxPlayers,
 			&i.EncounterName,
 			&i.GuildID,
 			&i.GuildName,
@@ -14813,6 +14919,7 @@ func (q *sqlQuerier) ListInstanceRatingGuildRenownFacts(ctx context.Context, arg
 
 const listInstanceRatingPlayerObservations = `-- name: ListInstanceRatingPlayerObservations :many
 SELECT
+    observation.difficulty_name, observation.max_players,
     observation.encounter_name,
     observation.player_guid,
     COALESCE(ranking.player_name, '')::text AS player_name,
@@ -14843,6 +14950,8 @@ type ListInstanceRatingPlayerObservationsParams struct {
 }
 
 type ListInstanceRatingPlayerObservationsRow struct {
+	DifficultyName    string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16              `db:"max_players" json:"max_players"`
 	EncounterName     string             `db:"encounter_name" json:"encounter_name"`
 	PlayerGuid        string             `db:"player_guid" json:"player_guid"`
 	PlayerName        string             `db:"player_name" json:"player_name"`
@@ -14868,6 +14977,8 @@ func (q *sqlQuerier) ListInstanceRatingPlayerObservations(ctx context.Context, a
 	for rows.Next() {
 		var i ListInstanceRatingPlayerObservationsRow
 		if err := rows.Scan(
+			&i.DifficultyName,
+			&i.MaxPlayers,
 			&i.EncounterName,
 			&i.PlayerGuid,
 			&i.PlayerName,
@@ -14894,6 +15005,7 @@ func (q *sqlQuerier) ListInstanceRatingPlayerObservations(ctx context.Context, a
 
 const listInstanceRatingPlayerRenownFacts = `-- name: ListInstanceRatingPlayerRenownFacts :many
 SELECT
+    fact.difficulty_name, fact.max_players,
     fact.encounter_name,
     fact.player_guid,
     COALESCE(player.name, '')::text AS player_name,
@@ -14916,6 +15028,8 @@ type ListInstanceRatingPlayerRenownFactsParams struct {
 }
 
 type ListInstanceRatingPlayerRenownFactsRow struct {
+	DifficultyName    string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16              `db:"max_players" json:"max_players"`
 	EncounterName     string             `db:"encounter_name" json:"encounter_name"`
 	PlayerGuid        string             `db:"player_guid" json:"player_guid"`
 	PlayerName        string             `db:"player_name" json:"player_name"`
@@ -14935,6 +15049,8 @@ func (q *sqlQuerier) ListInstanceRatingPlayerRenownFacts(ctx context.Context, ar
 	for rows.Next() {
 		var i ListInstanceRatingPlayerRenownFactsRow
 		if err := rows.Scan(
+			&i.DifficultyName,
+			&i.MaxPlayers,
 			&i.EncounterName,
 			&i.PlayerGuid,
 			&i.PlayerName,
@@ -16110,10 +16226,10 @@ WITH source AS MATERIALIZED (
           ELSE 'spec'
         END::text AS cohort_mode
  FROM ranking_runs rr
- JOIN log_instances li ON li.id=rr.representative_instance_id
+ JOIN log_instances_resolved li ON li.id=rr.representative_instance_id
   AND COALESCE(li.duplicate_group_id,li.id)=rr.run_id
   AND li.realm_id=rr.realm_id AND li.name=rr.instance_name
-  AND li.difficulty_name=rr.difficulty_name AND li.max_players=rr.max_players
+  AND li.max_players=rr.max_players
  JOIN wow_log_groups lg ON lg.id=li.log_group_id AND NOT lg.unlisted
  JOIN wow_server_realms realm ON realm.id=li.realm_id
  JOIN wow_servers server ON server.id=realm.server_id AND server.tenant_id= $1::uuid
@@ -16126,14 +16242,14 @@ WITH source AS MATERIALIZED (
         CASE WHEN s.cohort_mode='class' THEN 'Class' ELSE d.player_spec END::text AS player_spec,
         CASE WHEN s.cohort_mode='class' THEN '' ELSE d.player_sub_spec END::text AS player_sub_spec,
         d.dps,d.hps,e.id AS encounter_id,e.name AS encounter_name,
-        COALESCE(NULLIF(e.difficulty_name,''),d.difficulty_name) AS encounter_difficulty_name,
-        COALESCE(NULLIF(e.max_players,0),d.max_players)::smallint AS encounter_max_players
- FROM source s JOIN encounter_dps_rankings d ON d.instance_id=s.source_instance_id
+        COALESCE(e.difficulty, s.difficulty_name) AS encounter_difficulty_name,
+        s.max_players::smallint AS encounter_max_players
+ FROM source s JOIN encounter_dps_rankings_resolved d ON d.instance_id=s.source_instance_id
   AND d.realm_id=s.realm_id AND d.instance_name=s.instance_name
  JOIN log_instance_encounters e ON e.id=d.encounter_id AND e.instance_id=s.source_instance_id
   AND e.name=d.encounter_name AND e.boss AND e.kill_type='clean'
-  AND d.difficulty_name=COALESCE(NULLIF(e.difficulty_name,''),s.difficulty_name)
-  AND d.max_players=COALESCE(NULLIF(e.max_players,0),s.max_players)
+  AND d.difficulty_name=COALESCE(e.difficulty, s.difficulty_name)
+  AND d.max_players=s.max_players
  WHERE btrim(d.player_guid)<>'' AND btrim(d.player_class)<>''
    AND (s.cohort_mode<>'spec' OR btrim(d.player_spec)<>'')
 ), player_candidates AS MATERIALIZED (
@@ -16166,36 +16282,36 @@ WITH source AS MATERIALIZED (
   AND t.run_id=s.run_id AND t.tenant_id=s.tenant_id AND t.realm_id=s.realm_id AND t.guild_id=s.guild_id
 ), guild_bosses AS MATERIALIZED (
  SELECT s.run_id, s.source_instance_id, s.realm_id, s.guild_id, s.instance_name, s.difficulty_name, s.max_players, s.mixed_difficulty, s.tenant_id, s.cohort_mode, s.time_score_id, s.clear_duration_ms, b.duration_ms,e.id AS encounter_id,e.name AS encounter_name,
-        COALESCE(NULLIF(e.difficulty_name,''),s.difficulty_name) AS encounter_difficulty_name,
-        COALESCE(NULLIF(e.max_players,0),s.max_players)::smallint AS encounter_max_players
+        COALESCE(e.difficulty, s.difficulty_name) AS encounter_difficulty_name,
+        s.max_players::smallint AS encounter_max_players
  FROM guild_times s JOIN time_parse_boss_scores b ON b.time_parse_score_id=s.time_score_id
  JOIN log_instance_encounters e ON e.id=b.encounter_id AND e.instance_id=s.source_instance_id
   AND e.name=b.encounter_name AND e.boss AND e.kill_type='clean'
  WHERE b.duration_ms>0
 ), projected AS (
-(SELECT DISTINCT ON (s.encounter_name,s.player_guid,s.player_class,s.player_spec,s.player_sub_spec,s.metric) 1::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.encounter_difficulty_name AS difficulty_name, s.encounter_max_players AS max_players, s.encounter_name AS encounter_name, s.player_guid AS player_guid, s.player_class AS player_class, s.player_spec AS player_spec, s.player_sub_spec AS player_sub_spec, s.metric AS metric, s.metric_value AS metric_value, '00000000-0000-0000-0000-000000000000'::uuid AS guild_id, s.encounter_id AS source_encounter_id, s.ranking_id AS source_ranking_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_time_parse_score_id, 0::bigint AS duration_ms
+(SELECT DISTINCT ON (s.encounter_difficulty_name,s.encounter_max_players,s.encounter_name,s.player_guid,s.player_class,s.player_spec,s.player_sub_spec,s.metric) 1::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.encounter_difficulty_name AS difficulty_name, s.encounter_max_players AS max_players, s.encounter_name AS encounter_name, s.player_guid AS player_guid, s.player_class AS player_class, s.player_spec AS player_spec, s.player_sub_spec AS player_sub_spec, s.metric AS metric, s.metric_value AS metric_value, '00000000-0000-0000-0000-000000000000'::uuid AS guild_id, s.encounter_id AS source_encounter_id, s.ranking_id AS source_ranking_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_time_parse_score_id, 0::bigint AS duration_ms
  FROM player_metrics s WHERE s.metric_value>=0 AND s.metric_value<'Infinity'::double precision
- ORDER BY s.encounter_name,s.player_guid,s.player_class,s.player_spec,s.player_sub_spec,metric,metric_value DESC,source_encounter_id,source_ranking_id)
+ ORDER BY s.encounter_difficulty_name,s.encounter_max_players,s.encounter_name,s.player_guid,s.player_class,s.player_spec,s.player_sub_spec,metric,metric_value DESC,source_encounter_id,source_ranking_id)
 UNION ALL
-(SELECT DISTINCT ON (s.encounter_name) 2::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.encounter_difficulty_name AS difficulty_name, s.encounter_max_players AS max_players, s.encounter_name AS encounter_name, ''::text AS player_guid, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, s.guild_id AS guild_id, s.encounter_id AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, s.time_score_id AS source_time_parse_score_id, s.duration_ms AS duration_ms
+(SELECT DISTINCT ON (s.encounter_difficulty_name,s.encounter_max_players,s.encounter_name) 2::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.encounter_difficulty_name AS difficulty_name, s.encounter_max_players AS max_players, s.encounter_name AS encounter_name, ''::text AS player_guid, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, s.guild_id AS guild_id, s.encounter_id AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, s.time_score_id AS source_time_parse_score_id, s.duration_ms AS duration_ms
  FROM guild_bosses s
- ORDER BY s.encounter_name,s.duration_ms,s.encounter_id)
+ ORDER BY s.encounter_difficulty_name,s.encounter_max_players,s.encounter_name,s.duration_ms,s.encounter_id)
 UNION ALL
 (SELECT DISTINCT ON (s.guild_id) 3::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.difficulty_name AS difficulty_name, s.max_players AS max_players, ''::text AS encounter_name, ''::text AS player_guid, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, s.guild_id AS guild_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, s.time_score_id AS source_time_parse_score_id, s.clear_duration_ms AS duration_ms
  FROM guild_times s WHERE s.clear_duration_ms>0 AND NOT s.mixed_difficulty
  ORDER BY s.guild_id,s.clear_duration_ms,s.time_score_id)
 UNION ALL
-(SELECT DISTINCT ON (s.encounter_name,s.player_guid) 4::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.encounter_difficulty_name AS difficulty_name, s.encounter_max_players AS max_players, s.encounter_name AS encounter_name, s.player_guid AS player_guid, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, '00000000-0000-0000-0000-000000000000'::uuid AS guild_id, s.encounter_id AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_time_parse_score_id, 0::bigint AS duration_ms
+(SELECT DISTINCT ON (s.encounter_difficulty_name,s.encounter_max_players,s.encounter_name,s.player_guid) 4::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.encounter_difficulty_name AS difficulty_name, s.encounter_max_players AS max_players, s.encounter_name AS encounter_name, s.player_guid AS player_guid, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, '00000000-0000-0000-0000-000000000000'::uuid AS guild_id, s.encounter_id AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_time_parse_score_id, 0::bigint AS duration_ms
  FROM renown_players s
- ORDER BY s.encounter_name,s.player_guid,s.encounter_id)
+ ORDER BY s.encounter_difficulty_name,s.encounter_max_players,s.encounter_name,s.player_guid,s.encounter_id)
 UNION ALL
-(SELECT DISTINCT ON (s.encounter_name,s.player_guid,s.player_class,s.player_spec,s.player_sub_spec) 6::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.encounter_difficulty_name AS difficulty_name, s.encounter_max_players AS max_players, s.encounter_name AS encounter_name, s.player_guid AS player_guid, s.player_class AS player_class, s.player_spec AS player_spec, s.player_sub_spec AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, '00000000-0000-0000-0000-000000000000'::uuid AS guild_id, s.encounter_id AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_time_parse_score_id, 0::bigint AS duration_ms
+(SELECT DISTINCT ON (s.encounter_difficulty_name,s.encounter_max_players,s.encounter_name,s.player_guid,s.player_class,s.player_spec,s.player_sub_spec) 6::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.encounter_difficulty_name AS difficulty_name, s.encounter_max_players AS max_players, s.encounter_name AS encounter_name, s.player_guid AS player_guid, s.player_class AS player_class, s.player_spec AS player_spec, s.player_sub_spec AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, '00000000-0000-0000-0000-000000000000'::uuid AS guild_id, s.encounter_id AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_time_parse_score_id, 0::bigint AS duration_ms
  FROM renown_players s WHERE s.cohort_mode='spec'
- ORDER BY s.encounter_name,s.player_guid,s.player_class,s.player_spec,s.player_sub_spec,s.encounter_id)
+ ORDER BY s.encounter_difficulty_name,s.encounter_max_players,s.encounter_name,s.player_guid,s.player_class,s.player_spec,s.player_sub_spec,s.encounter_id)
 UNION ALL
-(SELECT DISTINCT ON (e.name) 5::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, COALESCE(NULLIF(e.difficulty_name,''),s.difficulty_name) AS difficulty_name, COALESCE(NULLIF(e.max_players,0),s.max_players)::smallint AS max_players, e.name AS encounter_name, ''::text AS player_guid, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, s.guild_id AS guild_id, e.id AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_time_parse_score_id, 0::bigint AS duration_ms
+(SELECT DISTINCT ON (COALESCE(e.difficulty,s.difficulty_name),s.max_players,e.name) 5::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, COALESCE(e.difficulty, s.difficulty_name) AS difficulty_name, s.max_players::smallint AS max_players, e.name AS encounter_name, ''::text AS player_guid, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, s.guild_id AS guild_id, e.id AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_time_parse_score_id, 0::bigint AS duration_ms
  FROM guild_source s JOIN log_instance_encounters e ON e.instance_id=s.source_instance_id AND e.boss AND e.kill_type='clean'
- ORDER BY e.name,e.id)
+ ORDER BY COALESCE(e.difficulty,s.difficulty_name),s.max_players,e.name,e.id)
 ) SELECT kind, tenant_id, run_id, source_instance_id, realm_id, instance_name, difficulty_name, max_players, encounter_name, player_guid, player_class, player_spec, player_sub_spec, metric, metric_value, guild_id, source_encounter_id, source_ranking_id, source_time_parse_score_id, duration_ms FROM projected
 `
 
@@ -17145,8 +17261,8 @@ const listLeaderboardV2PlayerHistory = `-- name: ListLeaderboardV2PlayerHistory 
 WITH runs AS MATERIALIZED (
  SELECT DISTINCT d.instance_name, d.difficulty_name, d.max_players, d.encounter_name,
         COALESCE(li.duplicate_group_id, li.id) AS run_id
- FROM encounter_dps_rankings d
- JOIN log_instances li ON li.id = d.instance_id
+ FROM encounter_dps_rankings_resolved d
+ JOIN log_instances_resolved li ON li.id = d.instance_id
  WHERE d.player_guid = $3::text AND d.realm_id = $2::uuid AND d.encounter_id IS NOT NULL
 )
 SELECT o.instance_name, o.difficulty_name, o.max_players, o.encounter_name,
@@ -17164,7 +17280,7 @@ LEFT JOIN leaderboard_player_boss_benchmarks b ON b.tenant_id = o.tenant_id AND 
  AND b.difficulty_name = o.difficulty_name AND b.max_players = o.max_players AND b.encounter_name = o.encounter_name
  AND b.player_class = o.player_class AND b.player_spec = o.player_spec AND b.player_sub_spec = o.player_sub_spec AND b.metric = o.metric
 LEFT JOIN LATERAL (
- SELECT ps.display_score FROM parse_score_results ps
+ SELECT ps.display_score FROM parse_score_results_resolved ps
  WHERE ps.tenant_id = o.tenant_id AND ps.instance_id = o.source_instance_id AND ps.player_guid = o.player_guid
    AND ps.metric = o.metric AND ps.encounter_name = o.encounter_name AND ps.status IN ('ok', 'low_confidence')
  ORDER BY ps.created_at DESC, ps.precise_score DESC
@@ -19615,7 +19731,7 @@ func (q *sqlQuerier) DeleteLogInstanceByIDAndGroup(ctx context.Context, arg Dele
 
 const encountersByInstanceID = `-- name: EncountersByInstanceID :many
 SELECT
-  id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id, ranking_start_offset_ms, ranking_end_offset_ms, invalidated_at, invalid_reason, difficulty_name, max_players, dynamic_difficulty
+  id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id, ranking_start_offset_ms, ranking_end_offset_ms, invalidated_at, invalid_reason, difficulty
 FROM
   log_instance_encounters
 WHERE
@@ -19645,9 +19761,7 @@ func (q *sqlQuerier) EncountersByInstanceID(ctx context.Context, instanceID uuid
 			&i.RankingEndOffsetMs,
 			&i.InvalidatedAt,
 			&i.InvalidReason,
-			&i.DifficultyName,
-			&i.MaxPlayers,
-			&i.DynamicDifficulty,
+			&i.Difficulty,
 		); err != nil {
 			return nil, err
 		}
@@ -19681,28 +19795,26 @@ func (q *sqlQuerier) FinalizeParsedLogGroup(ctx context.Context, arg FinalizePar
 
 const findDuplicateInstanceCandidates = `-- name: FindDuplicateInstanceCandidates :many
 SELECT li.id, li.duplicate_group_id
-FROM log_instances li
+FROM log_instances_resolved li
 JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
 WHERE li.realm_id = $1
   AND li.name = $2
   AND li.invalidated_at IS NULL
   AND li.max_players = $3
-  AND li.dynamic_difficulty = $4
-  AND li.start_time >= $5
-  AND li.start_time <= $6
-  AND li.id != $7
+  AND li.start_time >= $4
+  AND li.start_time <= $5
+  AND li.id != $6
 ORDER BY li.start_time ASC
 LIMIT 40
 `
 
 type FindDuplicateInstanceCandidatesParams struct {
-	RealmID           uuid.UUID          `db:"realm_id" json:"realm_id"`
-	Name              string             `db:"name" json:"name"`
-	MaxPlayers        int32              `db:"max_players" json:"max_players"`
-	DynamicDifficulty int32              `db:"dynamic_difficulty" json:"dynamic_difficulty"`
-	WindowStart       pgtype.Timestamptz `db:"window_start" json:"window_start"`
-	WindowEnd         pgtype.Timestamptz `db:"window_end" json:"window_end"`
-	ExcludeID         uuid.UUID          `db:"exclude_id" json:"exclude_id"`
+	RealmID     uuid.UUID          `db:"realm_id" json:"realm_id"`
+	Name        string             `db:"name" json:"name"`
+	MaxPlayers  int32              `db:"max_players" json:"max_players"`
+	WindowStart pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	WindowEnd   pgtype.Timestamptz `db:"window_end" json:"window_end"`
+	ExcludeID   uuid.UUID          `db:"exclude_id" json:"exclude_id"`
 }
 
 type FindDuplicateInstanceCandidatesRow struct {
@@ -19715,7 +19827,6 @@ func (q *sqlQuerier) FindDuplicateInstanceCandidates(ctx context.Context, arg Fi
 		arg.RealmID,
 		arg.Name,
 		arg.MaxPlayers,
-		arg.DynamicDifficulty,
 		arg.WindowStart,
 		arg.WindowEnd,
 		arg.ExcludeID,
@@ -19991,10 +20102,10 @@ func (q *sqlQuerier) GetParsedLogGroupByID(ctx context.Context, id uuid.UUID) (P
 
 const insertEncounter = `-- name: InsertEncounter :one
 INSERT INTO
-  log_instance_encounters (id, instance_id, name, map_id, kill_type, remaining, boss, start_time, end_time, ranking_start_offset_ms, ranking_end_offset_ms, difficulty_name, max_players, dynamic_difficulty)
+  log_instance_encounters (id, instance_id, name, map_id, kill_type, remaining, boss, start_time, end_time, ranking_start_offset_ms, ranking_end_offset_ms, difficulty)
 VALUES
-  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-RETURNING id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id, ranking_start_offset_ms, ranking_end_offset_ms, invalidated_at, invalid_reason, difficulty_name, max_players, dynamic_difficulty
+  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+RETURNING id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id, ranking_start_offset_ms, ranking_end_offset_ms, invalidated_at, invalid_reason, difficulty
 `
 
 type InsertEncounterParams struct {
@@ -20009,9 +20120,7 @@ type InsertEncounterParams struct {
 	EndTime              pgtype.Timestamptz `db:"end_time" json:"end_time"`
 	RankingStartOffsetMs pgtype.Int8        `db:"ranking_start_offset_ms" json:"ranking_start_offset_ms"`
 	RankingEndOffsetMs   pgtype.Int8        `db:"ranking_end_offset_ms" json:"ranking_end_offset_ms"`
-	DifficultyName       string             `db:"difficulty_name" json:"difficulty_name"`
-	MaxPlayers           int32              `db:"max_players" json:"max_players"`
-	DynamicDifficulty    int32              `db:"dynamic_difficulty" json:"dynamic_difficulty"`
+	Difficulty           pgtype.Text        `db:"difficulty" json:"difficulty"`
 }
 
 func (q *sqlQuerier) InsertEncounter(ctx context.Context, arg InsertEncounterParams) (LogInstanceEncounter, error) {
@@ -20027,9 +20136,7 @@ func (q *sqlQuerier) InsertEncounter(ctx context.Context, arg InsertEncounterPar
 		arg.EndTime,
 		arg.RankingStartOffsetMs,
 		arg.RankingEndOffsetMs,
-		arg.DifficultyName,
-		arg.MaxPlayers,
-		arg.DynamicDifficulty,
+		arg.Difficulty,
 	)
 	var i LogInstanceEncounter
 	err := row.Scan(
@@ -20046,9 +20153,7 @@ func (q *sqlQuerier) InsertEncounter(ctx context.Context, arg InsertEncounterPar
 		&i.RankingEndOffsetMs,
 		&i.InvalidatedAt,
 		&i.InvalidReason,
-		&i.DifficultyName,
-		&i.MaxPlayers,
-		&i.DynamicDifficulty,
+		&i.Difficulty,
 	)
 	return i, err
 }
@@ -20087,11 +20192,11 @@ func (q *sqlQuerier) InsertEncounterPhase(ctx context.Context, arg InsertEncount
 
 const insertInstance = `-- name: InsertInstance :one
 INSERT INTO
-  log_instances (id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time, capabilities, versions, recorder_name, recorder_guid, parser_version, difficulty_name, max_players, dynamic_difficulty, mixed_difficulty, vehicle_control_intervals, category, invalidated_at, invalid_reason)
+  log_instances (id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time, capabilities, versions, recorder_name, recorder_guid, parser_version, difficulty_name, max_players, dynamic_difficulty, mixed_difficulty, vehicle_control_intervals, category, invalidated_at, invalid_reason, difficulty_normalized)
 VALUES
-  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, true)
 ON CONFLICT (hashed_slug) WHERE hashed_slug IS NOT NULL DO NOTHING
-RETURNING id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time, capabilities, versions, recorder_name, recorder_guid, parser_version, duplicate_group_id, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, category, updated_at, invalidated_at, invalid_reason, mixed_difficulty
+RETURNING id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time, capabilities, versions, recorder_name, recorder_guid, parser_version, duplicate_group_id, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, category, updated_at, invalidated_at, invalid_reason, mixed_difficulty, difficulty_normalized
 `
 
 type InsertInstanceParams struct {
@@ -20167,30 +20272,24 @@ func (q *sqlQuerier) InsertInstance(ctx context.Context, arg InsertInstanceParam
 		&i.InvalidatedAt,
 		&i.InvalidReason,
 		&i.MixedDifficulty,
+		&i.DifficultyNormalized,
 	)
 	return i, err
 }
 
 const insertInstanceDifficulty = `-- name: InsertInstanceDifficulty :exec
-INSERT INTO log_instance_difficulties (instance_id, difficulty_name, max_players, dynamic_difficulty)
-VALUES ($1, $2, $3, $4)
+INSERT INTO log_instance_difficulties (instance_id, difficulty)
+VALUES ($1, $2)
 ON CONFLICT DO NOTHING
 `
 
 type InsertInstanceDifficultyParams struct {
-	InstanceID        uuid.UUID `db:"instance_id" json:"instance_id"`
-	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
-	MaxPlayers        int32     `db:"max_players" json:"max_players"`
-	DynamicDifficulty int32     `db:"dynamic_difficulty" json:"dynamic_difficulty"`
+	InstanceID uuid.UUID `db:"instance_id" json:"instance_id"`
+	Difficulty string    `db:"difficulty" json:"difficulty"`
 }
 
 func (q *sqlQuerier) InsertInstanceDifficulty(ctx context.Context, arg InsertInstanceDifficultyParams) error {
-	_, err := q.db.Exec(ctx, insertInstanceDifficulty,
-		arg.InstanceID,
-		arg.DifficultyName,
-		arg.MaxPlayers,
-		arg.DynamicDifficulty,
-	)
+	_, err := q.db.Exec(ctx, insertInstanceDifficulty, arg.InstanceID, arg.Difficulty)
 	return err
 }
 
@@ -20396,27 +20495,31 @@ func (q *sqlQuerier) InstanceBySlugWithUnlisted(ctx context.Context, hashedSlug 
 }
 
 const instanceDifficultiesByInstanceID = `-- name: InstanceDifficultiesByInstanceID :many
-SELECT instance_id, difficulty_name, max_players, dynamic_difficulty
-FROM log_instance_difficulties
-WHERE instance_id = $1
-ORDER BY max_players, difficulty_name, dynamic_difficulty
+SELECT DISTINCT encounter.instance_id,
+       COALESCE(encounter.difficulty, instance.difficulty_name)::text AS difficulty
+FROM log_instance_encounters encounter
+JOIN log_instances_resolved instance ON instance.id = encounter.instance_id
+WHERE encounter.instance_id = $1
+ORDER BY difficulty
 `
 
-func (q *sqlQuerier) InstanceDifficultiesByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceDifficulty, error) {
+type InstanceDifficultiesByInstanceIDRow struct {
+	InstanceID uuid.UUID `db:"instance_id" json:"instance_id"`
+	Difficulty string    `db:"difficulty" json:"difficulty"`
+}
+
+// Return all observed modes for analysis. Clear eligibility is stored separately
+// from boss attempts only; trash must not determine mixed-clear status.
+func (q *sqlQuerier) InstanceDifficultiesByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]InstanceDifficultiesByInstanceIDRow, error) {
 	rows, err := q.db.Query(ctx, instanceDifficultiesByInstanceID, instanceID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []LogInstanceDifficulty
+	var items []InstanceDifficultiesByInstanceIDRow
 	for rows.Next() {
-		var i LogInstanceDifficulty
-		if err := rows.Scan(
-			&i.InstanceID,
-			&i.DifficultyName,
-			&i.MaxPlayers,
-			&i.DynamicDifficulty,
-		); err != nil {
+		var i InstanceDifficultiesByInstanceIDRow
+		if err := rows.Scan(&i.InstanceID, &i.Difficulty); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -20779,7 +20882,7 @@ SELECT
     li.difficulty_name,
     li.max_players,
     li.dynamic_difficulty
-FROM log_instances li
+FROM log_instances_resolved li
 JOIN parsed_log_group plg ON plg.id = li.log_group_id
 JOIN wow_log_groups wlg ON wlg.id = plg.id
   AND plg.parse_generation = wlg.parse_generation
@@ -20930,7 +21033,7 @@ func (q *sqlQuerier) ListInstancesByTimeRange(ctx context.Context, arg ListInsta
 const listRecentInstanceGroups = `-- name: ListRecentInstanceGroups :many
 WITH matching_runs AS (
     SELECT DISTINCT COALESCE(li.duplicate_group_id, li.id) AS run_id
-    FROM log_instances li
+    FROM log_instances_resolved li
     JOIN parsed_log_group plg ON plg.id = li.log_group_id
     JOIN wow_log_groups wlg ON wlg.id = plg.id
       AND plg.parse_generation = wlg.parse_generation
@@ -21017,7 +21120,7 @@ instance_rows AS (
         li.max_players,
         li.dynamic_difficulty,
         ('unit-position' = ANY(li.capabilities))::boolean AS has_positions
-    FROM log_instances li
+    FROM log_instances_resolved li
     JOIN matching_runs ON matching_runs.run_id = COALESCE(li.duplicate_group_id, li.id)
     JOIN parsed_log_group plg ON plg.id = li.log_group_id
     JOIN wow_log_groups wlg ON wlg.id = plg.id
@@ -21248,7 +21351,7 @@ SELECT
     li.difficulty_name,
     li.max_players,
     li.dynamic_difficulty
-FROM log_instances li
+FROM log_instances_resolved li
 JOIN parsed_log_group plg ON plg.id = li.log_group_id
 JOIN wow_log_groups wlg ON wlg.id = plg.id
   AND plg.parse_generation = wlg.parse_generation
@@ -21413,7 +21516,7 @@ SELECT DISTINCT ON (
     li.difficulty_name,
     li.max_players,
     li.dynamic_difficulty
-FROM log_instances li
+FROM log_instances_resolved li
 JOIN log_instance_players lip ON lip.instance_id = li.id
 JOIN parsed_log_group plg ON plg.id = li.log_group_id
 JOIN wow_log_groups wlg ON wlg.id = plg.id
@@ -21794,7 +21897,7 @@ SELECT
     membership.killed_at,
     instance.hashed_slug AS log_hashed_slug
 FROM parse_score_memberships membership
-JOIN log_instances instance ON instance.id = membership.instance_id
+JOIN log_instances_resolved instance ON instance.id = membership.instance_id
 JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
 LEFT JOIN LATERAL (
     SELECT candidate.player_name
@@ -21805,7 +21908,7 @@ LEFT JOIN LATERAL (
           AND instance_player.unit_guid::text = membership.player_guid
         UNION ALL
         SELECT ranking.player_name::text AS player_name, 1 AS source_order
-        FROM encounter_dps_rankings ranking
+        FROM encounter_dps_rankings_resolved ranking
         WHERE ranking.instance_id = membership.instance_id
           AND ranking.encounter_name = membership.encounter_name
           AND ranking.player_guid = membership.player_guid
@@ -22230,21 +22333,21 @@ func (q *sqlQuerier) ListParseScoreSpreadValues(ctx context.Context, arg ListPar
 const refreshParseScoreMembershipsForLogGroup = `-- name: RefreshParseScoreMembershipsForLogGroup :one
 WITH affected_runs AS MATERIALIZED (
     SELECT DISTINCT COALESCE(instance.duplicate_group_id, instance.id) AS run_id
-    FROM log_instances instance
+    FROM log_instances_resolved instance
     WHERE instance.log_group_id = $1
 ),
 representative_instances AS MATERIALIZED (
     SELECT DISTINCT ON (COALESCE(instance.duplicate_group_id, instance.id))
         instance.id,
         COALESCE(instance.duplicate_group_id, instance.id) AS run_id
-    FROM log_instances instance
+    FROM log_instances_resolved instance
     JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
     JOIN affected_runs affected
       ON affected.run_id = COALESCE(instance.duplicate_group_id, instance.id)
     WHERE instance.invalidated_at IS NULL
     ORDER BY COALESCE(instance.duplicate_group_id, instance.id),
         (SELECT COUNT(DISTINCT coverage.encounter_name)
-         FROM encounter_dps_rankings coverage
+         FROM encounter_dps_rankings_resolved coverage
          WHERE coverage.instance_id = instance.id
            AND coverage.encounter_id IS NOT NULL) DESC,
         (instance.id = instance.duplicate_group_id) DESC NULLS LAST,
@@ -22252,7 +22355,7 @@ representative_instances AS MATERIALIZED (
         instance.id ASC
 ),
 current_members AS MATERIALIZED (
-    SELECT DISTINCT ON (representative.run_id, ranking.encounter_name, ranking.player_guid)
+    SELECT DISTINCT ON (representative.run_id, ranking.encounter_name, ranking.player_guid, ranking.difficulty_name, ranking.max_players)
         COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid) AS tenant_id,
         representative.run_id,
         ranking.encounter_name,
@@ -22268,15 +22371,15 @@ current_members AS MATERIALIZED (
         ranking.dps,
         ranking.hps
     FROM representative_instances representative
-    JOIN log_instances instance ON instance.id = representative.id
-    JOIN encounter_dps_rankings ranking ON ranking.instance_id = representative.id
+    JOIN log_instances_resolved instance ON instance.id = representative.id
+    JOIN encounter_dps_rankings_resolved ranking ON ranking.instance_id = representative.id
     JOIN wow_server_realms realm ON realm.id = instance.realm_id
     JOIN wow_servers server ON server.id = realm.server_id
     WHERE ranking.encounter_id IS NOT NULL
       AND (ranking.dps > 0 OR ranking.hps > 0)
       AND ranking.duration_secs > 0
       AND lower(btrim(ranking.player_class)) NOT IN ('', 'unknown')
-    ORDER BY representative.run_id, ranking.encounter_name, ranking.player_guid,
+    ORDER BY representative.run_id, ranking.encounter_name, ranking.player_guid, ranking.difficulty_name, ranking.max_players,
              ranking.dps DESC, ranking.hps DESC
 ),
 upserted AS (
@@ -22292,7 +22395,7 @@ upserted AS (
         member.max_players, member.player_class, member.player_spec,
         member.player_sub_spec, member.killed_at, member.dps, member.hps
     FROM current_members member
-    ON CONFLICT (tenant_id, policy_version, query_version, run_id, encounter_name, player_guid)
+    ON CONFLICT (tenant_id, policy_version, query_version, run_id, encounter_name, player_guid, difficulty_name, max_players)
     DO UPDATE SET
         instance_id = EXCLUDED.instance_id,
         log_group_id = EXCLUDED.log_group_id,
@@ -22318,6 +22421,8 @@ deleted AS (
             AND member.run_id = membership.run_id
             AND member.encounter_name = membership.encounter_name
             AND member.player_guid = membership.player_guid
+            AND member.difficulty_name = membership.difficulty_name
+            AND member.max_players = membership.max_players
       )
     RETURNING 1
 )
@@ -22373,7 +22478,7 @@ func (q *sqlQuerier) DeleteParseScoreResultsForTenantInstance(ctx context.Contex
 const getAnyParseScoreReceiptForTenantInstance = `-- name: GetAnyParseScoreReceiptForTenantInstance :one
 SELECT receipt.id, receipt.tenant_id, receipt.instance_id, receipt.snapshot_id, receipt.policy_version, receipt.query_version, receipt.lookback_days, receipt.source_count, receipt.result_count, receipt.computed_at, receipt.created_at, receipt.cutoff, receipt.window_start, receipt.cohort_mode
 FROM parse_score_receipts receipt
-JOIN log_instances instance ON instance.id = receipt.instance_id
+JOIN log_instances_resolved instance ON instance.id = receipt.instance_id
 JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
 WHERE receipt.tenant_id = $1
   AND receipt.instance_id = $2
@@ -22409,7 +22514,7 @@ func (q *sqlQuerier) GetAnyParseScoreReceiptForTenantInstance(ctx context.Contex
 }
 
 const getCharacterParseHistory = `-- name: GetCharacterParseHistory :many
-SELECT DISTINCT ON (psr.run_id, psr.encounter_name)
+SELECT DISTINCT ON (psr.difficulty_name, psr.max_players, psr.run_id, psr.encounter_name)
     psr.id,
     psr.instance_id,
     psr.run_id,
@@ -22431,15 +22536,15 @@ SELECT DISTINCT ON (psr.run_id, psr.encounter_name)
     psr.player_spec,
     psr.player_sub_spec,
     psr.player_role
-FROM parse_score_results psr
-JOIN log_instances visibility_instance ON visibility_instance.id = psr.instance_id
+FROM parse_score_results_resolved psr
+JOIN log_instances_resolved visibility_instance ON visibility_instance.id = psr.instance_id
 JOIN wow_log_groups log_group ON log_group.id = visibility_instance.log_group_id AND NOT log_group.unlisted
 WHERE psr.tenant_id = $1
   AND psr.player_guid = $2
   AND psr.metric = $3
   AND psr.status IN ('ok', 'low_confidence')
   AND psr.killed_at >= $4
-ORDER BY psr.run_id, psr.encounter_name, psr.created_at DESC, psr.precise_score DESC
+ORDER BY psr.difficulty_name, psr.max_players, psr.run_id, psr.encounter_name, psr.created_at DESC, psr.precise_score DESC
 `
 
 type GetCharacterParseHistoryParams struct {
@@ -22537,7 +22642,7 @@ SELECT
     li.max_players,
     li.log_group_id,
     li.guild_id
-FROM log_instances li
+FROM log_instances_resolved li
 JOIN wow_log_groups log_group ON log_group.id = li.log_group_id AND NOT log_group.unlisted
 WHERE li.id = $1
   AND li.invalidated_at IS NULL
@@ -22573,7 +22678,7 @@ func (q *sqlQuerier) GetLogInstanceForScoring(ctx context.Context, id uuid.UUID)
 
 const getParseScoreReceiptForInstance = `-- name: GetParseScoreReceiptForInstance :many
 SELECT receipt.id, receipt.tenant_id, receipt.instance_id, receipt.snapshot_id, receipt.policy_version, receipt.query_version, receipt.lookback_days, receipt.source_count, receipt.result_count, receipt.computed_at, receipt.created_at, receipt.cutoff, receipt.window_start, receipt.cohort_mode FROM parse_score_receipts receipt
-JOIN log_instances instance ON instance.id = receipt.instance_id
+JOIN log_instances_resolved instance ON instance.id = receipt.instance_id
 JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
 WHERE receipt.instance_id = $1
 ORDER BY computed_at DESC
@@ -22616,27 +22721,27 @@ func (q *sqlQuerier) GetParseScoreReceiptForInstance(ctx context.Context, instan
 }
 
 const getParseScoreResultsForInstance = `-- name: GetParseScoreResultsForInstance :many
-SELECT DISTINCT ON (psr.run_id, psr.encounter_name, psr.player_guid, psr.snapshot_id, psr.metric)
+SELECT DISTINCT ON (psr.difficulty_name, psr.max_players, psr.run_id, psr.encounter_name, psr.player_guid, psr.snapshot_id, psr.metric)
     psr.id, psr.tenant_id, psr.instance_id, psr.run_id, psr.snapshot_id, psr.log_group_id, psr.guild_id, psr.encounter_name, psr.player_guid, psr.player_name, psr.player_class, psr.player_spec, psr.player_role, psr.metric, psr.metric_value, psr.precise_score, psr.display_score, psr.rank, psr.sample_size, psr.status, psr.instance_name, psr.difficulty_name, psr.max_players, psr.killed_at, psr.created_at, psr.player_sub_spec
-FROM parse_score_results psr
-JOIN log_instances visibility_instance ON visibility_instance.id = psr.instance_id
+FROM parse_score_results_resolved psr
+JOIN log_instances_resolved visibility_instance ON visibility_instance.id = psr.instance_id
 JOIN wow_log_groups log_group ON log_group.id = visibility_instance.log_group_id AND NOT log_group.unlisted
 WHERE psr.instance_id = $1
-ORDER BY psr.run_id, psr.encounter_name, psr.player_guid, psr.snapshot_id, psr.metric,
+ORDER BY psr.difficulty_name, psr.max_players, psr.run_id, psr.encounter_name, psr.player_guid, psr.snapshot_id, psr.metric,
          psr.created_at DESC
 `
 
 // Read deduplicated parse score results for an instance.
 // Uses DISTINCT ON (run_id, encounter, player, snapshot, metric) to collapse duplicate uploads.
-func (q *sqlQuerier) GetParseScoreResultsForInstance(ctx context.Context, instanceID uuid.UUID) ([]ParseScoreResult, error) {
+func (q *sqlQuerier) GetParseScoreResultsForInstance(ctx context.Context, instanceID uuid.UUID) ([]ParseScoreResultsResolved, error) {
 	rows, err := q.db.Query(ctx, getParseScoreResultsForInstance, instanceID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ParseScoreResult
+	var items []ParseScoreResultsResolved
 	for rows.Next() {
-		var i ParseScoreResult
+		var i ParseScoreResultsResolved
 		if err := rows.Scan(
 			&i.ID,
 			&i.TenantID,
@@ -22678,7 +22783,7 @@ func (q *sqlQuerier) GetParseScoreResultsForInstance(ctx context.Context, instan
 const hasParseScoreResultsForTenantInstance = `-- name: HasParseScoreResultsForTenantInstance :one
 SELECT EXISTS (
     SELECT 1
-    FROM parse_score_results result
+    FROM parse_score_results_resolved result
     JOIN log_instances visibility_instance ON visibility_instance.id = result.instance_id
     JOIN wow_log_groups log_group ON log_group.id = visibility_instance.log_group_id AND NOT log_group.unlisted
     WHERE result.tenant_id = $1 AND result.instance_id = $2
@@ -22711,7 +22816,7 @@ SELECT
     $21, $22, $23, $24
 WHERE EXISTS (
     SELECT 1
-    FROM log_instances instance
+    FROM log_instances_resolved instance
     JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id
     WHERE instance.id = $2 AND NOT log_group.unlisted
 )
@@ -22864,11 +22969,11 @@ SELECT
     li.guild_id
 FROM (
     SELECT DISTINCT edr.instance_id
-    FROM encounter_dps_rankings edr
+    FROM encounter_dps_rankings_resolved edr
     WHERE edr.encounter_id IS NOT NULL
       AND (edr.dps > 0 OR edr.hps > 0)
 ) candidates
-JOIN log_instances li ON li.id = candidates.instance_id
+JOIN log_instances_resolved li ON li.id = candidates.instance_id
 JOIN wow_log_groups log_group ON log_group.id = li.log_group_id AND NOT log_group.unlisted
 WHERE li.start_time >= $1
   AND li.invalidated_at IS NULL
@@ -22880,7 +22985,7 @@ WHERE li.start_time >= $1
   )
   AND NOT EXISTS (
     SELECT 1
-    FROM parse_score_results result
+    FROM parse_score_results_resolved result
     WHERE result.tenant_id = $2
       AND result.instance_id = candidates.instance_id
   )
@@ -22938,16 +23043,16 @@ func (q *sqlQuerier) ListInstancesMissingParseReceiptWindowed(ctx context.Contex
 }
 
 const listParseScoreResultsForContract = `-- name: ListParseScoreResultsForContract :many
-SELECT DISTINCT ON (psr.encounter_name, psr.player_guid)
+SELECT DISTINCT ON (psr.difficulty_name, psr.max_players, psr.encounter_name, psr.player_guid)
     psr.id, psr.tenant_id, psr.instance_id, psr.run_id, psr.snapshot_id, psr.log_group_id, psr.guild_id, psr.encounter_name, psr.player_guid, psr.player_name, psr.player_class, psr.player_spec, psr.player_role, psr.metric, psr.metric_value, psr.precise_score, psr.display_score, psr.rank, psr.sample_size, psr.status, psr.instance_name, psr.difficulty_name, psr.max_players, psr.killed_at, psr.created_at, psr.player_sub_spec
-FROM parse_score_results psr
-JOIN log_instances visibility_instance ON visibility_instance.id = psr.instance_id
+FROM parse_score_results_resolved psr
+JOIN log_instances_resolved visibility_instance ON visibility_instance.id = psr.instance_id
 JOIN wow_log_groups log_group ON log_group.id = visibility_instance.log_group_id AND NOT log_group.unlisted
 WHERE psr.tenant_id = $1
   AND psr.instance_id = $2
   AND psr.snapshot_id = $3::uuid
   AND psr.metric = $4
-ORDER BY psr.encounter_name, psr.player_guid, psr.precise_score DESC, psr.created_at DESC
+ORDER BY psr.difficulty_name, psr.max_players, psr.encounter_name, psr.player_guid, psr.precise_score DESC, psr.created_at DESC
 `
 
 type ListParseScoreResultsForContractParams struct {
@@ -22959,7 +23064,7 @@ type ListParseScoreResultsForContractParams struct {
 
 // Read one persisted legacy result per player and encounter for the snapshot ID
 // retained as opaque provenance on its successful receipt.
-func (q *sqlQuerier) ListParseScoreResultsForContract(ctx context.Context, arg ListParseScoreResultsForContractParams) ([]ParseScoreResult, error) {
+func (q *sqlQuerier) ListParseScoreResultsForContract(ctx context.Context, arg ListParseScoreResultsForContractParams) ([]ParseScoreResultsResolved, error) {
 	rows, err := q.db.Query(ctx, listParseScoreResultsForContract,
 		arg.TenantID,
 		arg.InstanceID,
@@ -22970,9 +23075,9 @@ func (q *sqlQuerier) ListParseScoreResultsForContract(ctx context.Context, arg L
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ParseScoreResult
+	var items []ParseScoreResultsResolved
 	for rows.Next() {
-		var i ParseScoreResult
+		var i ParseScoreResultsResolved
 		if err := rows.Scan(
 			&i.ID,
 			&i.TenantID,
@@ -23012,15 +23117,15 @@ func (q *sqlQuerier) ListParseScoreResultsForContract(ctx context.Context, arg L
 }
 
 const listPersistedParseScoreResultsForInstance = `-- name: ListPersistedParseScoreResultsForInstance :many
-SELECT DISTINCT ON (psr.encounter_name, psr.player_guid)
+SELECT DISTINCT ON (psr.difficulty_name, psr.max_players, psr.encounter_name, psr.player_guid)
     psr.id, psr.tenant_id, psr.instance_id, psr.run_id, psr.snapshot_id, psr.log_group_id, psr.guild_id, psr.encounter_name, psr.player_guid, psr.player_name, psr.player_class, psr.player_spec, psr.player_role, psr.metric, psr.metric_value, psr.precise_score, psr.display_score, psr.rank, psr.sample_size, psr.status, psr.instance_name, psr.difficulty_name, psr.max_players, psr.killed_at, psr.created_at, psr.player_sub_spec
-FROM parse_score_results psr
-JOIN log_instances visibility_instance ON visibility_instance.id = psr.instance_id
+FROM parse_score_results_resolved psr
+JOIN log_instances_resolved visibility_instance ON visibility_instance.id = psr.instance_id
 JOIN wow_log_groups log_group ON log_group.id = visibility_instance.log_group_id AND NOT log_group.unlisted
 WHERE psr.tenant_id = $1
   AND psr.instance_id = $2
   AND psr.metric = $3
-ORDER BY psr.encounter_name, psr.player_guid, psr.created_at DESC, psr.precise_score DESC
+ORDER BY psr.difficulty_name, psr.max_players, psr.encounter_name, psr.player_guid, psr.created_at DESC, psr.precise_score DESC
 `
 
 type ListPersistedParseScoreResultsForInstanceParams struct {
@@ -23031,15 +23136,15 @@ type ListPersistedParseScoreResultsForInstanceParams struct {
 
 // Receipt-less results are authoritative historical data. Read them without
 // joining snapshot tables or score memberships so they can never be recomputed.
-func (q *sqlQuerier) ListPersistedParseScoreResultsForInstance(ctx context.Context, arg ListPersistedParseScoreResultsForInstanceParams) ([]ParseScoreResult, error) {
+func (q *sqlQuerier) ListPersistedParseScoreResultsForInstance(ctx context.Context, arg ListPersistedParseScoreResultsForInstanceParams) ([]ParseScoreResultsResolved, error) {
 	rows, err := q.db.Query(ctx, listPersistedParseScoreResultsForInstance, arg.TenantID, arg.InstanceID, arg.Metric)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ParseScoreResult
+	var items []ParseScoreResultsResolved
 	for rows.Next() {
-		var i ParseScoreResult
+		var i ParseScoreResultsResolved
 		if err := rows.Scan(
 			&i.ID,
 			&i.TenantID,
@@ -23079,16 +23184,16 @@ func (q *sqlQuerier) ListPersistedParseScoreResultsForInstance(ctx context.Conte
 }
 
 const listWindowedParseScoreResultsForContract = `-- name: ListWindowedParseScoreResultsForContract :many
-SELECT DISTINCT ON (psr.encounter_name, psr.player_guid)
+SELECT DISTINCT ON (psr.difficulty_name, psr.max_players, psr.encounter_name, psr.player_guid)
     psr.id, psr.tenant_id, psr.instance_id, psr.run_id, psr.snapshot_id, psr.log_group_id, psr.guild_id, psr.encounter_name, psr.player_guid, psr.player_name, psr.player_class, psr.player_spec, psr.player_role, psr.metric, psr.metric_value, psr.precise_score, psr.display_score, psr.rank, psr.sample_size, psr.status, psr.instance_name, psr.difficulty_name, psr.max_players, psr.killed_at, psr.created_at, psr.player_sub_spec
-FROM parse_score_results psr
-JOIN log_instances visibility_instance ON visibility_instance.id = psr.instance_id
+FROM parse_score_results_resolved psr
+JOIN log_instances_resolved visibility_instance ON visibility_instance.id = psr.instance_id
 JOIN wow_log_groups log_group ON log_group.id = visibility_instance.log_group_id AND NOT log_group.unlisted
 WHERE psr.tenant_id = $1
   AND psr.instance_id = $2
   AND psr.snapshot_id IS NULL
   AND psr.metric = $3
-ORDER BY psr.encounter_name, psr.player_guid, psr.precise_score DESC, psr.created_at DESC
+ORDER BY psr.difficulty_name, psr.max_players, psr.encounter_name, psr.player_guid, psr.precise_score DESC, psr.created_at DESC
 `
 
 type ListWindowedParseScoreResultsForContractParams struct {
@@ -23097,15 +23202,15 @@ type ListWindowedParseScoreResultsForContractParams struct {
 	Metric     string    `db:"metric" json:"metric"`
 }
 
-func (q *sqlQuerier) ListWindowedParseScoreResultsForContract(ctx context.Context, arg ListWindowedParseScoreResultsForContractParams) ([]ParseScoreResult, error) {
+func (q *sqlQuerier) ListWindowedParseScoreResultsForContract(ctx context.Context, arg ListWindowedParseScoreResultsForContractParams) ([]ParseScoreResultsResolved, error) {
 	rows, err := q.db.Query(ctx, listWindowedParseScoreResultsForContract, arg.TenantID, arg.InstanceID, arg.Metric)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ParseScoreResult
+	var items []ParseScoreResultsResolved
 	for rows.Next() {
-		var i ParseScoreResult
+		var i ParseScoreResultsResolved
 		if err := rows.Scan(
 			&i.ID,
 			&i.TenantID,
@@ -23192,8 +23297,8 @@ SELECT
     edr.duration_secs,
     edr.dps,
     edr.hps
-FROM encounter_dps_rankings edr
-JOIN log_instances li ON li.id = edr.instance_id
+FROM encounter_dps_rankings_resolved edr
+JOIN log_instances_resolved li ON li.id = edr.instance_id
 JOIN wow_log_groups log_group ON log_group.id = li.log_group_id AND NOT log_group.unlisted
 WHERE edr.instance_id = $1
   AND edr.encounter_id IS NOT NULL  -- boss kills only
@@ -24235,11 +24340,11 @@ WITH members AS MATERIALIZED (
         COUNT(DISTINCT coverage.encounter_name) FILTER (
             WHERE coverage.encounter_id IS NOT NULL
         )::integer AS boss_coverage
-    FROM log_instances li
+    FROM log_instances_resolved li
     JOIN wow_log_groups log_group ON log_group.id = li.log_group_id AND NOT log_group.unlisted
-    LEFT JOIN encounter_dps_rankings coverage ON coverage.instance_id = li.id
+    LEFT JOIN encounter_dps_rankings_resolved coverage ON coverage.instance_id = li.id
     WHERE li.invalidated_at IS NULL
-    GROUP BY li.id
+    GROUP BY li.id, li.duplicate_group_id, li.realm_id, li.name, li.difficulty_name, li.max_players, li.start_time, li.end_time, li.updated_at
 ),
 ranked AS (
     SELECT
@@ -24369,7 +24474,7 @@ func (q *sqlQuerier) RankingRunRepairVerification(ctx context.Context, queryLimi
 const rankingRunSources = `-- name: RankingRunSources :many
 WITH affected_runs AS MATERIALIZED (
     SELECT DISTINCT COALESCE(li.duplicate_group_id, li.id) AS run_id
-    FROM log_instances li
+    FROM log_instances_resolved li
     WHERE li.id = ANY($1::uuid[])
        OR li.duplicate_group_id = ANY($1::uuid[])
 ),
@@ -24390,15 +24495,15 @@ members AS MATERIALIZED (
         )::integer AS boss_coverage
     FROM affected_runs
     CROSS JOIN LATERAL (
-        SELECT candidate.id, candidate.realm_id, candidate.log_group_id, candidate.name, candidate.hashed_slug, candidate.guild_id, candidate.start_time, candidate.end_time, candidate.capabilities, candidate.versions, candidate.recorder_name, candidate.recorder_guid, candidate.parser_version, candidate.duplicate_group_id, candidate.difficulty_name, candidate.max_players, candidate.dynamic_difficulty, candidate.vehicle_control_intervals, candidate.category, candidate.updated_at, candidate.invalidated_at, candidate.invalid_reason, candidate.mixed_difficulty
-        FROM log_instances candidate
+        SELECT candidate.id, candidate.realm_id, candidate.log_group_id, candidate.name, candidate.hashed_slug, candidate.guild_id, candidate.start_time, candidate.end_time, candidate.capabilities, candidate.versions, candidate.recorder_name, candidate.recorder_guid, candidate.parser_version, candidate.duplicate_group_id, candidate.difficulty_name, candidate.max_players, candidate.dynamic_difficulty, candidate.vehicle_control_intervals, candidate.category, candidate.updated_at, candidate.invalidated_at, candidate.invalid_reason, candidate.mixed_difficulty, candidate.difficulty_normalized
+        FROM log_instances_resolved candidate
         JOIN wow_log_groups candidate_group ON candidate_group.id = candidate.log_group_id AND NOT candidate_group.unlisted
         WHERE COALESCE(candidate.duplicate_group_id, candidate.id) = affected_runs.run_id
           AND candidate.invalidated_at IS NULL
-        -- Prevent flattening into a hash join that scans all log_instances.
+        -- Prevent flattening into a hash join that scans all log_instances_resolved.
         OFFSET 0
     ) li
-    LEFT JOIN encounter_dps_rankings coverage ON coverage.instance_id = li.id
+    LEFT JOIN encounter_dps_rankings_resolved coverage ON coverage.instance_id = li.id
     GROUP BY affected_runs.run_id,
         li.id,
         li.realm_id,
@@ -24653,10 +24758,10 @@ SELECT
   COUNT(DISTINCT COALESCE(li.duplicate_group_id, edr.instance_id))::INT AS kills,
   MIN(edr.killed_at)::timestamptz AS first_killed_at,
   MAX(edr.killed_at)::timestamptz AS last_killed_at
-FROM encounter_dps_rankings edr
-JOIN log_instances edr_instance ON edr_instance.id = edr.instance_id
+FROM encounter_dps_rankings_resolved edr
+JOIN log_instances_resolved edr_instance ON edr_instance.id = edr.instance_id
 JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NOT edr_group.unlisted
-JOIN log_instances li ON li.id = edr.instance_id
+JOIN log_instances_resolved li ON li.id = edr.instance_id
 JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
 WHERE edr.player_guid = $1
   AND ($2::uuid IS NULL OR edr.realm_id = $2)
@@ -24741,11 +24846,13 @@ WITH selected_encounters AS MATERIALIZED (
     SELECT DISTINCT unnest($2::text[]) AS encounter_name
 ),
 raw_rows AS MATERIALIZED (
-    SELECT DISTINCT ON (rr.run_id, edr.encounter_name)
+    SELECT DISTINCT ON (rr.run_id, edr.difficulty_name, edr.max_players, edr.encounter_name)
         rr.run_id,
         rr.representative_instance_id,
         rr.start_time,
         edr.encounter_name,
+        edr.difficulty_name,
+        edr.max_players,
         edr.player_name,
         edr.player_class,
         edr.player_spec,
@@ -24759,9 +24866,9 @@ raw_rows AS MATERIALIZED (
         edr.log_hashed_slug,
         edr.killed_at
     FROM ranking_runs rr
-    JOIN encounter_dps_rankings edr
+    JOIN encounter_dps_rankings_resolved edr
       ON edr.instance_id = rr.representative_instance_id
-    JOIN log_instances representative ON representative.id = rr.representative_instance_id
+    JOIN log_instances_resolved representative ON representative.id = rr.representative_instance_id
     JOIN wow_log_groups representative_group ON representative_group.id = representative.log_group_id AND NOT representative_group.unlisted
     JOIN selected_encounters selected ON selected.encounter_name = edr.encounter_name
     JOIN wow_server_realms tenant_realm ON tenant_realm.id = rr.realm_id
@@ -24769,30 +24876,34 @@ raw_rows AS MATERIALIZED (
       AND ($4::uuid IS NULL OR rr.realm_id = $4)
       AND edr.encounter_id IS NOT NULL
       AND rr.instance_name = $5
-      AND ($6::text = '' OR rr.difficulty_name = $6)
-      AND ($7::smallint = 0 OR rr.max_players = $7)
-    ORDER BY rr.run_id, edr.encounter_name,
+      AND (NOT $6::boolean OR edr.difficulty_name = $7::text)
+      AND ($8::smallint = 0 OR edr.max_players = $8)
+    ORDER BY rr.run_id, edr.difficulty_name, edr.max_players, edr.encounter_name,
         (CASE WHEN $1::text = 'hps' THEN edr.hps ELSE edr.dps END) DESC
 ),
 parse_rows AS MATERIALIZED (
-    SELECT DISTINCT ON (psr.run_id, psr.encounter_name)
+    SELECT DISTINCT ON (psr.run_id, psr.difficulty_name, psr.max_players, psr.encounter_name)
         psr.run_id,
         psr.encounter_name,
+        psr.difficulty_name,
+        psr.max_players,
         psr.precise_score
-    FROM parse_score_results psr
-    JOIN log_instances psr_instance ON psr_instance.id = psr.instance_id
+    FROM parse_score_results_resolved psr
+    JOIN log_instances_resolved psr_instance ON psr_instance.id = psr.instance_id
     JOIN wow_log_groups psr_group ON psr_group.id = psr_instance.log_group_id AND NOT psr_group.unlisted
     JOIN selected_encounters selected ON selected.encounter_name = psr.encounter_name
-    WHERE psr.tenant_id = $8
+    WHERE psr.tenant_id = $9
       AND psr.player_guid = $3
       AND psr.metric = $1
       AND psr.status IN ('ok', 'low_confidence')
-    ORDER BY psr.run_id, psr.encounter_name, psr.created_at DESC, psr.precise_score DESC
+    ORDER BY psr.run_id, psr.difficulty_name, psr.max_players, psr.encounter_name, psr.created_at DESC, psr.precise_score DESC
 ),
 per_run AS (
     SELECT
         raw.run_id,
         raw.representative_instance_id,
+        raw.difficulty_name,
+        raw.max_players,
         MIN(raw.start_time)::timestamptz AS started_at,
         MAX(raw.killed_at)::timestamptz AS killed_at,
         ((array_agg(raw.player_name ORDER BY raw.damage_done DESC))[1])::text AS player_name,
@@ -24828,9 +24939,11 @@ per_run AS (
     LEFT JOIN parse_rows parse
       ON parse.run_id = raw.run_id
      AND parse.encounter_name = raw.encounter_name
-    GROUP BY raw.run_id, raw.representative_instance_id
+     AND parse.difficulty_name = raw.difficulty_name
+     AND parse.max_players = raw.max_players
+    GROUP BY raw.run_id, raw.representative_instance_id, raw.difficulty_name, raw.max_players
 )
-SELECT run_id, representative_instance_id, started_at, killed_at, player_name, player_class, player_spec, player_sub_spec, encounter_count, damage_done, healing_done, absorbed_done, player_deaths, alive_percentage, duration_secs, dps, hps, log_hashed_slug, parse_count, average_parse
+SELECT run_id, representative_instance_id, difficulty_name, max_players, started_at, killed_at, player_name, player_class, player_spec, player_sub_spec, encounter_count, damage_done, healing_done, absorbed_done, player_deaths, alive_percentage, duration_secs, dps, hps, log_hashed_slug, parse_count, average_parse
 FROM per_run
 WHERE encounter_count = (SELECT COUNT(*) FROM selected_encounters)
   AND (CASE WHEN $1::text = 'hps' THEN hps ELSE dps END) > 0
@@ -24838,19 +24951,22 @@ ORDER BY started_at ASC, run_id ASC
 `
 
 type GetCharacterPerformanceRunsParams struct {
-	Metric         string        `db:"metric" json:"metric"`
-	EncounterNames []string      `db:"encounter_names" json:"encounter_names"`
-	PlayerGuid     string        `db:"player_guid" json:"player_guid"`
-	RealmID        uuid.NullUUID `db:"realm_id" json:"realm_id"`
-	InstanceName   string        `db:"instance_name" json:"instance_name"`
-	DifficultyName string        `db:"difficulty_name" json:"difficulty_name"`
-	MaxPlayers     int16         `db:"max_players" json:"max_players"`
-	TenantID       uuid.UUID     `db:"tenant_id" json:"tenant_id"`
+	Metric           string        `db:"metric" json:"metric"`
+	EncounterNames   []string      `db:"encounter_names" json:"encounter_names"`
+	PlayerGuid       string        `db:"player_guid" json:"player_guid"`
+	RealmID          uuid.NullUUID `db:"realm_id" json:"realm_id"`
+	InstanceName     string        `db:"instance_name" json:"instance_name"`
+	FilterDifficulty bool          `db:"filter_difficulty" json:"filter_difficulty"`
+	DifficultyName   string        `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers       int16         `db:"max_players" json:"max_players"`
+	TenantID         uuid.UUID     `db:"tenant_id" json:"tenant_id"`
 }
 
 type GetCharacterPerformanceRunsRow struct {
 	RunID                    uuid.UUID          `db:"run_id" json:"run_id"`
 	RepresentativeInstanceID uuid.UUID          `db:"representative_instance_id" json:"representative_instance_id"`
+	DifficultyName           string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers               int16              `db:"max_players" json:"max_players"`
 	StartedAt                pgtype.Timestamptz `db:"started_at" json:"started_at"`
 	KilledAt                 pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
 	PlayerName               string             `db:"player_name" json:"player_name"`
@@ -24882,6 +24998,7 @@ func (q *sqlQuerier) GetCharacterPerformanceRuns(ctx context.Context, arg GetCha
 		arg.PlayerGuid,
 		arg.RealmID,
 		arg.InstanceName,
+		arg.FilterDifficulty,
 		arg.DifficultyName,
 		arg.MaxPlayers,
 		arg.TenantID,
@@ -24896,6 +25013,8 @@ func (q *sqlQuerier) GetCharacterPerformanceRuns(ctx context.Context, arg GetCha
 		if err := rows.Scan(
 			&i.RunID,
 			&i.RepresentativeInstanceID,
+			&i.DifficultyName,
+			&i.MaxPlayers,
 			&i.StartedAt,
 			&i.KilledAt,
 			&i.PlayerName,
@@ -24960,7 +25079,7 @@ WITH boss_insert AS (
         $24, $25, $26, $27, $28,
         $29, $30
     WHERE $1::uuid IS NOT NULL
-    ON CONFLICT (instance_id, player_guid, encounter_name)
+    ON CONFLICT (instance_id, player_guid, encounter_name, difficulty_name, max_players)
         WHERE encounter_id IS NOT NULL
     DO UPDATE SET
         encounter_id = EXCLUDED.encounter_id,
@@ -25131,22 +25250,22 @@ func (q *sqlQuerier) InsertEncounterDpsRanking(ctx context.Context, arg InsertEn
 
 const instanceRankingRecords = `-- name: InstanceRankingRecords :many
 SELECT edr.id, edr.encounter_id, edr.instance_id, edr.encounter_name, edr.instance_name, edr.player_guid, edr.player_name, edr.player_class, edr.player_spec, edr.player_role, edr.player_level, edr.talent_build_id, edr.difficulty_name, edr.max_players, edr.realm_id, edr.realm_name, edr.guild_id, edr.guild_name, edr.damage_done, edr.duration_secs, edr.dps, edr.avg_ilvl, edr.log_hashed_slug, edr.killed_at, edr.created_at, edr.healing_done, edr.absorbed_done, edr.hps, edr.player_sub_spec, edr.player_deaths, edr.alive_percentage, edr.unranked_damage_done
-FROM encounter_dps_rankings edr
+FROM encounter_dps_rankings_resolved edr
 WHERE edr.instance_id = $1
 ORDER BY (encounter_id IS NULL), killed_at, encounter_name, player_name
 `
 
 // Raw per-player ranking rows recorded for a single log instance. This intentionally
 // includes zero-value DPS/HPS rows so instance-level ranking issues can be debugged.
-func (q *sqlQuerier) InstanceRankingRecords(ctx context.Context, instanceID uuid.UUID) ([]EncounterDpsRanking, error) {
+func (q *sqlQuerier) InstanceRankingRecords(ctx context.Context, instanceID uuid.UUID) ([]EncounterDpsRankingsResolved, error) {
 	rows, err := q.db.Query(ctx, instanceRankingRecords, instanceID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []EncounterDpsRanking
+	var items []EncounterDpsRankingsResolved
 	for rows.Next() {
-		var i EncounterDpsRanking
+		var i EncounterDpsRankingsResolved
 		if err := rows.Scan(
 			&i.ID,
 			&i.EncounterID,
@@ -25196,8 +25315,8 @@ DELETE FROM rankings_instance_summaries ris
 WHERE ris.tenant_id = $1
   AND NOT EXISTS (
     SELECT 1
-    FROM encounter_dps_rankings edr
-JOIN log_instances edr_instance ON edr_instance.id = edr.instance_id
+    FROM encounter_dps_rankings_resolved edr
+JOIN log_instances_resolved edr_instance ON edr_instance.id = edr.instance_id
 JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NOT edr_group.unlisted
     WHERE edr.instance_name = ris.instance_name
       AND edr.difficulty_name = ris.difficulty_name
@@ -25220,7 +25339,7 @@ WITH fallback_representative_instances AS (
     SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
         li.id,
         COALESCE(li.duplicate_group_id, li.id) AS run_id
-    FROM log_instances li
+    FROM log_instances_resolved li
 JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
     JOIN wow_server_realms tenant_realm ON tenant_realm.id = li.realm_id
     -- Scope representative selection by tenant and instance before calculating
@@ -25232,7 +25351,7 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
       AND NOT EXISTS (
           SELECT 1
           FROM ranking_runs rr
-          JOIN log_instances representative
+          JOIN log_instances_resolved representative
             ON representative.id = rr.representative_instance_id
            AND COALESCE(representative.duplicate_group_id, representative.id) = rr.run_id
            AND representative.invalidated_at IS NULL
@@ -25243,7 +25362,7 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
         -- Prefer the upload with the broadest boss-ranking coverage. The group
         -- anchor is the first upload, but it may be truncated before the final boss.
         (SELECT COUNT(DISTINCT coverage.encounter_name)
-         FROM encounter_dps_rankings coverage
+         FROM encounter_dps_rankings_resolved coverage
          WHERE coverage.instance_id = li.id
            AND coverage.encounter_id IS NOT NULL) DESC,
         (li.id = li.duplicate_group_id) DESC NULLS LAST,
@@ -25253,7 +25372,7 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
 representative_instances AS (
     SELECT rr.representative_instance_id AS id, rr.run_id
     FROM ranking_runs rr
-    JOIN log_instances representative
+    JOIN log_instances_resolved representative
       ON representative.id = rr.representative_instance_id
      AND COALESCE(representative.duplicate_group_id, representative.id) = rr.run_id
      AND representative.invalidated_at IS NULL
@@ -25282,8 +25401,8 @@ filtered_rankings AS (
         edr.duration_secs,
         edr.killed_at,
         ri.run_id
-    FROM encounter_dps_rankings edr
-JOIN log_instances edr_instance ON edr_instance.id = edr.instance_id
+    FROM encounter_dps_rankings_resolved edr
+JOIN log_instances_resolved edr_instance ON edr_instance.id = edr.instance_id
 JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NOT edr_group.unlisted
     JOIN representative_instances ri ON ri.id = edr.instance_id
     JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
@@ -25477,14 +25596,17 @@ WITH deduped AS (
     SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
         COALESCE(sr.ranked_duration_ms, sr.duration_ms) / 1000.0 AS duration_secs
     FROM instance_speedruns sr
-    JOIN log_instances li ON li.id = sr.instance_id
+    JOIN log_instances_resolved li ON li.id = sr.instance_id
 JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
     JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
     WHERE sr.instance_name = $1
       AND sr.qualified = true
+      AND NOT li.mixed_difficulty
+      AND (NOT $2::boolean OR li.difficulty_name = $3::text)
+      AND (NOT $4::boolean OR li.max_players = $5::int)
       AND CASE
-          WHEN $2 :: bigint > 0 THEN
-              COALESCE(sr.ranked_completion_time, sr.completion_time) >= now() - make_interval(days => $2::int)
+          WHEN $6 :: bigint > 0 THEN
+              COALESCE(sr.ranked_completion_time, sr.completion_time) >= now() - make_interval(days => $6::int)
           ELSE true
       END
     ORDER BY COALESCE(li.duplicate_group_id, li.id), COALESCE(sr.ranked_duration_ms, sr.duration_ms)
@@ -25502,8 +25624,12 @@ HAVING COUNT(*) > 0
 `
 
 type RankingsClearTimeStatsParams struct {
-	InstanceName string `db:"instance_name" json:"instance_name"`
-	SinceDays    int64  `db:"since_days" json:"since_days"`
+	InstanceName     string `db:"instance_name" json:"instance_name"`
+	FilterDifficulty bool   `db:"filter_difficulty" json:"filter_difficulty"`
+	DifficultyName   string `db:"difficulty_name" json:"difficulty_name"`
+	FilterMaxPlayers bool   `db:"filter_max_players" json:"filter_max_players"`
+	MaxPlayers       int32  `db:"max_players" json:"max_players"`
+	SinceDays        int64  `db:"since_days" json:"since_days"`
 }
 
 type RankingsClearTimeStatsRow struct {
@@ -25520,7 +25646,14 @@ type RankingsClearTimeStatsRow struct {
 // clear timing like the speedrun board and keeps the fastest run per
 // duplicate group. Returns no row when there are no clears.
 func (q *sqlQuerier) RankingsClearTimeStats(ctx context.Context, arg RankingsClearTimeStatsParams) ([]RankingsClearTimeStatsRow, error) {
-	rows, err := q.db.Query(ctx, rankingsClearTimeStats, arg.InstanceName, arg.SinceDays)
+	rows, err := q.db.Query(ctx, rankingsClearTimeStats,
+		arg.InstanceName,
+		arg.FilterDifficulty,
+		arg.DifficultyName,
+		arg.FilterMaxPlayers,
+		arg.MaxPlayers,
+		arg.SinceDays,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -25548,8 +25681,8 @@ func (q *sqlQuerier) RankingsClearTimeStats(ctx context.Context, arg RankingsCle
 
 const rankingsDistinctSummaryKeys = `-- name: RankingsDistinctSummaryKeys :many
 SELECT DISTINCT edr.instance_name, edr.difficulty_name, edr.max_players
-FROM encounter_dps_rankings edr
-JOIN log_instances edr_instance ON edr_instance.id = edr.instance_id
+FROM encounter_dps_rankings_resolved edr
+JOIN log_instances_resolved edr_instance ON edr_instance.id = edr.instance_id
 JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NOT edr_group.unlisted
 ORDER BY edr.instance_name, edr.difficulty_name, edr.max_players
 `
@@ -25722,7 +25855,7 @@ SELECT
     ris.max_players,
     COALESCE((
         SELECT li.category
-        FROM log_instances li
+        FROM log_instances_resolved li
 JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
         WHERE li.name = ris.instance_name
           AND li.difficulty_name = ris.difficulty_name
@@ -25790,19 +25923,22 @@ WITH deduped AS (
         EXTRACT(EPOCH FROM (lie.end_time - lie.start_time))::double precision AS duration_secs,
         lie.end_time AS killed_at
     FROM log_instance_encounters lie
-    JOIN log_instances li ON li.id = lie.instance_id
+    JOIN log_instances_resolved li ON li.id = lie.instance_id
 JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
     JOIN wow_server_realms wsr ON wsr.id = li.realm_id
     LEFT JOIN guilds g ON g.id = li.guild_id
     WHERE li.name = $3
       AND lie.boss = true
+      AND (NOT $4::boolean OR
+           COALESCE(lie.difficulty, li.difficulty_name) = $5::text)
+      AND (NOT $6::boolean OR li.max_players = $7::int)
       AND lie.kill_type = 'clean'
       AND CASE
-          WHEN $4 :: text != '' THEN lie.name = $4
+          WHEN $8 :: text != '' THEN lie.name = $8
           ELSE true
       END
       AND CASE
-          WHEN $5 :: bigint > 0 THEN lie.end_time >= now() - make_interval(days => $5::int)
+          WHEN $9 :: bigint > 0 THEN lie.end_time >= now() - make_interval(days => $9::int)
           ELSE true
       END
     ORDER BY lie.name, COALESCE(li.duplicate_group_id, li.id),
@@ -25827,11 +25963,15 @@ LIMIT $2::bigint OFFSET $1::bigint
 `
 
 type RankingsKillTimeLeaderboardParams struct {
-	QueryOffset   int64  `db:"query_offset" json:"query_offset"`
-	QueryLimit    int64  `db:"query_limit" json:"query_limit"`
-	InstanceName  string `db:"instance_name" json:"instance_name"`
-	EncounterName string `db:"encounter_name" json:"encounter_name"`
-	SinceDays     int64  `db:"since_days" json:"since_days"`
+	QueryOffset      int64  `db:"query_offset" json:"query_offset"`
+	QueryLimit       int64  `db:"query_limit" json:"query_limit"`
+	InstanceName     string `db:"instance_name" json:"instance_name"`
+	FilterDifficulty bool   `db:"filter_difficulty" json:"filter_difficulty"`
+	DifficultyName   string `db:"difficulty_name" json:"difficulty_name"`
+	FilterMaxPlayers bool   `db:"filter_max_players" json:"filter_max_players"`
+	MaxPlayers       int32  `db:"max_players" json:"max_players"`
+	EncounterName    string `db:"encounter_name" json:"encounter_name"`
+	SinceDays        int64  `db:"since_days" json:"since_days"`
 }
 
 type RankingsKillTimeLeaderboardRow struct {
@@ -25855,6 +25995,10 @@ func (q *sqlQuerier) RankingsKillTimeLeaderboard(ctx context.Context, arg Rankin
 		arg.QueryOffset,
 		arg.QueryLimit,
 		arg.InstanceName,
+		arg.FilterDifficulty,
+		arg.DifficultyName,
+		arg.FilterMaxPlayers,
+		arg.MaxPlayers,
 		arg.EncounterName,
 		arg.SinceDays,
 	)
@@ -25894,14 +26038,17 @@ WITH deduped AS (
         lie.name AS encounter_name,
         EXTRACT(EPOCH FROM (lie.end_time - lie.start_time))::double precision AS duration_secs
     FROM log_instance_encounters lie
-    JOIN log_instances li ON li.id = lie.instance_id
+    JOIN log_instances_resolved li ON li.id = lie.instance_id
 JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
     JOIN wow_server_realms wsr ON wsr.id = li.realm_id
     WHERE li.name = $1
       AND lie.boss = true
+      AND (NOT $2::boolean OR
+           COALESCE(lie.difficulty, li.difficulty_name) = $3::text)
+      AND (NOT $4::boolean OR li.max_players = $5::int)
       AND lie.kill_type = 'clean'
       AND CASE
-          WHEN $2 :: bigint > 0 THEN lie.end_time >= now() - make_interval(days => $2::int)
+          WHEN $6 :: bigint > 0 THEN lie.end_time >= now() - make_interval(days => $6::int)
           ELSE true
       END
     ORDER BY lie.name, COALESCE(li.duplicate_group_id, li.id), lie.end_time DESC
@@ -25931,8 +26078,12 @@ ORDER BY (s.encounter_name = 'Trash'), s.encounter_name
 `
 
 type RankingsKillTimeStatsParams struct {
-	InstanceName string `db:"instance_name" json:"instance_name"`
-	SinceDays    int64  `db:"since_days" json:"since_days"`
+	InstanceName     string `db:"instance_name" json:"instance_name"`
+	FilterDifficulty bool   `db:"filter_difficulty" json:"filter_difficulty"`
+	DifficultyName   string `db:"difficulty_name" json:"difficulty_name"`
+	FilterMaxPlayers bool   `db:"filter_max_players" json:"filter_max_players"`
+	MaxPlayers       int32  `db:"max_players" json:"max_players"`
+	SinceDays        int64  `db:"since_days" json:"since_days"`
 }
 
 type RankingsKillTimeStatsRow struct {
@@ -25948,7 +26099,14 @@ type RankingsKillTimeStatsRow struct {
 // Box plot stats on encounter duration (seconds) per encounter name.
 // Deduplicates encounters across duplicate log groups.
 func (q *sqlQuerier) RankingsKillTimeStats(ctx context.Context, arg RankingsKillTimeStatsParams) ([]RankingsKillTimeStatsRow, error) {
-	rows, err := q.db.Query(ctx, rankingsKillTimeStats, arg.InstanceName, arg.SinceDays)
+	rows, err := q.db.Query(ctx, rankingsKillTimeStats,
+		arg.InstanceName,
+		arg.FilterDifficulty,
+		arg.DifficultyName,
+		arg.FilterMaxPlayers,
+		arg.MaxPlayers,
+		arg.SinceDays,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -25989,15 +26147,18 @@ WITH deduped AS (
         EXTRACT(EPOCH FROM (lie.end_time - lie.start_time))::double precision AS duration_secs,
         lie.end_time AS killed_at
     FROM log_instance_encounters lie
-    JOIN log_instances li ON li.id = lie.instance_id
+    JOIN log_instances_resolved li ON li.id = lie.instance_id
     JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
     JOIN wow_server_realms wsr ON wsr.id = li.realm_id
     LEFT JOIN guilds g ON g.id = li.guild_id
     WHERE li.name = $2
       AND lie.boss = true
+      AND (NOT $3::boolean OR
+           COALESCE(lie.difficulty, li.difficulty_name) = $4::text)
+      AND (NOT $5::boolean OR li.max_players = $6::int)
       AND lie.kill_type = 'clean'
-      AND lie.name = ANY($3::text[])
-      AND cardinality($3::text[]) <= 64
+      AND lie.name = ANY($7::text[])
+      AND cardinality($7::text[]) <= 64
       AND li.guild_id IS NOT NULL
     ORDER BY lie.name, COALESCE(li.duplicate_group_id, li.id),
              EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) ASC
@@ -26018,9 +26179,13 @@ ORDER BY encounter_name, position
 `
 
 type RankingsKillTimeTopPerEncounterParams struct {
-	PerEncounter   int32    `db:"per_encounter" json:"per_encounter"`
-	InstanceName   string   `db:"instance_name" json:"instance_name"`
-	EncounterNames []string `db:"encounter_names" json:"encounter_names"`
+	PerEncounter     int32    `db:"per_encounter" json:"per_encounter"`
+	InstanceName     string   `db:"instance_name" json:"instance_name"`
+	FilterDifficulty bool     `db:"filter_difficulty" json:"filter_difficulty"`
+	DifficultyName   string   `db:"difficulty_name" json:"difficulty_name"`
+	FilterMaxPlayers bool     `db:"filter_max_players" json:"filter_max_players"`
+	MaxPlayers       int32    `db:"max_players" json:"max_players"`
+	EncounterNames   []string `db:"encounter_names" json:"encounter_names"`
 }
 
 type RankingsKillTimeTopPerEncounterRow struct {
@@ -26041,7 +26206,15 @@ type RankingsKillTimeTopPerEncounterRow struct {
 // per boss with its fastest kill, as on the full-clear speedrun board; kills without
 // a guild are excluded.
 func (q *sqlQuerier) RankingsKillTimeTopPerEncounter(ctx context.Context, arg RankingsKillTimeTopPerEncounterParams) ([]RankingsKillTimeTopPerEncounterRow, error) {
-	rows, err := q.db.Query(ctx, rankingsKillTimeTopPerEncounter, arg.PerEncounter, arg.InstanceName, arg.EncounterNames)
+	rows, err := q.db.Query(ctx, rankingsKillTimeTopPerEncounter,
+		arg.PerEncounter,
+		arg.InstanceName,
+		arg.FilterDifficulty,
+		arg.DifficultyName,
+		arg.FilterMaxPlayers,
+		arg.MaxPlayers,
+		arg.EncounterNames,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -26077,8 +26250,8 @@ WITH candidate_runs AS (
     -- fraction of raid logs. Find those duplicate groups first so representative
     -- selection does not calculate boss coverage for every matching instance ever uploaded.
     SELECT DISTINCT COALESCE(li.duplicate_group_id, li.id) AS run_id
-    FROM encounter_dps_rankings candidate
-    JOIN log_instances li ON li.id = candidate.instance_id
+    FROM encounter_dps_rankings_resolved candidate
+    JOIN log_instances_resolved li ON li.id = candidate.instance_id
     JOIN wow_log_groups candidate_group ON candidate_group.id = li.log_group_id AND NOT candidate_group.unlisted
     WHERE ($2 :: text != '' OR $3 :: text != '' OR $4 :: text != '' OR $5 :: text != '')
       AND (cardinality($6 :: text[]) = 0
@@ -26092,7 +26265,7 @@ fallback_representative_instances AS (
     SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
         li.id,
         COALESCE(li.duplicate_group_id, li.id) AS run_id
-    FROM log_instances li
+    FROM log_instances_resolved li
 JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
     JOIN wow_server_realms tenant_realm ON tenant_realm.id = li.realm_id
     -- Apply tenant RLS before calculating boss coverage, then avoid unrelated
@@ -26106,7 +26279,7 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
       AND NOT EXISTS (
           SELECT 1
           FROM ranking_runs rr
-          JOIN log_instances representative ON representative.id = rr.representative_instance_id
+          JOIN log_instances_resolved representative ON representative.id = rr.representative_instance_id
            AND COALESCE(representative.duplicate_group_id, representative.id) = rr.run_id
          AND representative.invalidated_at IS NULL
 
@@ -26117,7 +26290,7 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
         -- Prefer the upload with the broadest boss-ranking coverage. The group
         -- anchor is the first upload, but it may be truncated before the final boss.
         (SELECT COUNT(DISTINCT coverage.encounter_name)
-         FROM encounter_dps_rankings coverage
+         FROM encounter_dps_rankings_resolved coverage
          WHERE coverage.instance_id = li.id
            AND coverage.encounter_id IS NOT NULL) DESC,
         (li.id = li.duplicate_group_id) DESC NULLS LAST,
@@ -26127,7 +26300,7 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
 representative_instances AS (
     SELECT rr.representative_instance_id AS id, rr.run_id
     FROM ranking_runs rr
-    JOIN log_instances representative ON representative.id = rr.representative_instance_id
+    JOIN log_instances_resolved representative ON representative.id = rr.representative_instance_id
      AND COALESCE(representative.duplicate_group_id, representative.id) = rr.run_id
      AND representative.invalidated_at IS NULL
 
@@ -26158,8 +26331,8 @@ score_candidates AS (
         edr.duration_secs,
         edr.killed_at,
         ri.run_id
-    FROM encounter_dps_rankings edr
-JOIN log_instances edr_instance ON edr_instance.id = edr.instance_id
+    FROM encounter_dps_rankings_resolved edr
+JOIN log_instances_resolved edr_instance ON edr_instance.id = edr.instance_id
 JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NOT edr_group.unlisted
     JOIN representative_instances ri ON ri.id = edr.instance_id
     JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
@@ -26311,8 +26484,8 @@ hydration_rows AS (
     JOIN score_rows score
       ON score.instance_id = p.instance_id
      AND score.player_guid = p.player_guid
-    JOIN encounter_dps_rankings edr ON edr.id = score.id
-    JOIN log_instances edr_instance ON edr_instance.id = edr.instance_id
+    JOIN encounter_dps_rankings_resolved edr ON edr.id = score.id
+    JOIN log_instances_resolved edr_instance ON edr_instance.id = edr.instance_id
     JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NOT edr_group.unlisted
     JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
     LEFT JOIN talent_builds tb ON tb.id = edr.talent_build_id
@@ -26564,13 +26737,13 @@ WITH deduped AS (
         lie.kill_type,
         lie.boss
     FROM log_instance_encounters lie
-    JOIN log_instances li ON li.id = lie.instance_id
+    JOIN log_instances_resolved li ON li.id = lie.instance_id
 JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
     JOIN wow_server_realms wsr ON wsr.id = li.realm_id
     WHERE li.name = $1
       AND lie.boss = true
       AND CASE
-          WHEN cardinality($2 :: text[]) > 0 THEN li.difficulty_name = ANY($2 :: text[])
+          WHEN cardinality($2 :: text[]) > 0 THEN COALESCE(lie.difficulty, li.difficulty_name) = ANY($2 :: text[])
           ELSE true
       END
       AND CASE
@@ -26717,14 +26890,14 @@ WITH fallback_representative_instances AS (
     SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
         li.id,
         COALESCE(li.duplicate_group_id, li.id) AS run_id
-    FROM log_instances li
+    FROM log_instances_resolved li
 JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
     JOIN wow_server_realms tenant_realm ON tenant_realm.id = li.realm_id
     WHERE li.invalidated_at IS NULL
       AND NOT EXISTS (
         SELECT 1
         FROM ranking_runs rr
-        JOIN log_instances representative ON representative.id = rr.representative_instance_id
+        JOIN log_instances_resolved representative ON representative.id = rr.representative_instance_id
          AND COALESCE(representative.duplicate_group_id, representative.id) = rr.run_id
          AND representative.invalidated_at IS NULL
 
@@ -26733,7 +26906,7 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
     )
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
         (SELECT COUNT(DISTINCT coverage.encounter_name)
-         FROM encounter_dps_rankings coverage
+         FROM encounter_dps_rankings_resolved coverage
          WHERE coverage.instance_id = li.id
            AND coverage.encounter_id IS NOT NULL) DESC,
         (li.id = li.duplicate_group_id) DESC NULLS LAST,
@@ -26743,7 +26916,7 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
 representative_instances AS (
     SELECT rr.representative_instance_id AS id, rr.run_id
     FROM ranking_runs rr
-    JOIN log_instances representative ON representative.id = rr.representative_instance_id
+    JOIN log_instances_resolved representative ON representative.id = rr.representative_instance_id
      AND COALESCE(representative.duplicate_group_id, representative.id) = rr.run_id
      AND representative.invalidated_at IS NULL
 
@@ -26761,8 +26934,8 @@ ranking_rows AS (
         edr.player_class, edr.encounter_name,
         edr.damage_done, edr.duration_secs, edr.dps,
         ri.run_id
-    FROM encounter_dps_rankings edr
-JOIN log_instances edr_instance ON edr_instance.id = edr.instance_id
+    FROM encounter_dps_rankings_resolved edr
+JOIN log_instances_resolved edr_instance ON edr_instance.id = edr.instance_id
 JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NOT edr_group.unlisted
     JOIN representative_instances ri ON ri.id = edr.instance_id
     JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
@@ -29252,11 +29425,11 @@ const getInstanceCleanEncounterKillTimes = `-- name: GetInstanceCleanEncounterKi
 SELECT
     lie.id AS encounter_id,
     lie.name AS encounter_name,
-    COALESCE(NULLIF(lie.difficulty_name, ''), instance.difficulty_name) AS difficulty_name,
-    COALESCE(NULLIF(lie.max_players, 0), instance.max_players)::smallint AS max_players,
+    COALESCE(lie.difficulty, instance.difficulty_name) AS difficulty_name,
+    instance.max_players::smallint AS max_players,
     (EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000)::bigint AS duration_ms
 FROM log_instance_encounters lie
-JOIN log_instances instance ON instance.id = lie.instance_id
+JOIN log_instances_resolved instance ON instance.id = lie.instance_id
 WHERE lie.instance_id = $1
   AND lie.boss = true
   AND lie.kill_type = 'clean'
@@ -29342,7 +29515,7 @@ func (q *sqlQuerier) GetInstanceEncounterKillTimes(ctx context.Context, instance
 const getInstanceSpeedrun = `-- name: GetInstanceSpeedrun :one
 SELECT sr.instance_id, sr.instance_name, sr.realm_id, sr.guild_id, sr.qualified, sr.start_time, sr.completion_time, sr.duration_ms, sr.proof, sr.created_at, sr.addon_version, sr.ranked_start_time, sr.ranked_completion_time, sr.ranked_duration_ms, sr.boss_to_boss_start_time, sr.boss_to_boss_completion_time, sr.boss_to_boss_duration_ms, li.capabilities
 FROM instance_speedruns sr
-JOIN log_instances li ON li.id = sr.instance_id
+JOIN log_instances_resolved li ON li.id = sr.instance_id
 WHERE sr.instance_id = $1
 `
 
@@ -29403,10 +29576,11 @@ WITH deduped AS (
         sr.ranked_duration_ms::bigint AS duration_ms,
         sr.ranked_completion_time::timestamptz AS completion_time
     FROM instance_speedruns sr
-    JOIN log_instances li ON li.id = sr.instance_id
+    JOIN log_instances_resolved li ON li.id = sr.instance_id
 JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
     JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
     WHERE sr.guild_id = $1 :: uuid
+      AND NOT li.mixed_difficulty
       AND sr.ranked_duration_ms > 0
       AND CASE
           WHEN $2 :: bigint > 0 THEN sr.ranked_completion_time >= now() - make_interval(days => $2::int)
@@ -29575,10 +29749,11 @@ WITH deduped AS (
         sr.ranked_duration_ms::bigint AS duration_ms,
         COALESCE(sr.boss_to_boss_duration_ms, 0)::bigint AS boss_to_boss_duration_ms
     FROM instance_speedruns sr
-    JOIN log_instances li ON li.id = sr.instance_id
+    JOIN log_instances_resolved li ON li.id = sr.instance_id
     JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
     JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
     WHERE sr.guild_id = $5 :: uuid
+      AND NOT li.mixed_difficulty
       AND sr.instance_name = $6 :: text
       AND sr.ranked_duration_ms > 0
       AND CASE
@@ -29833,10 +30008,10 @@ WITH anchor AS (
         li.guild_id,
         li.realm_id,
         wsr.server_id
-    FROM log_instances li
+    FROM log_instances_resolved li
     JOIN wow_log_groups anchor_group ON anchor_group.id = li.log_group_id AND NOT anchor_group.unlisted
     JOIN wow_server_realms wsr ON wsr.id = li.realm_id
-    WHERE li.id = $1
+    WHERE li.id = $1 AND NOT li.mixed_difficulty
 ),
 deduped AS (
     SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
@@ -29870,14 +30045,15 @@ deduped AS (
         ), '[]'::jsonb)::text AS encounter_kill_times_json
     FROM anchor a
     JOIN instance_speedruns sr ON sr.instance_name = a.name
-    JOIN log_instances li ON li.id = sr.instance_id
+    JOIN log_instances_resolved li ON li.id = sr.instance_id
 JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
     JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
     LEFT JOIN guilds g ON g.id = sr.guild_id
     LEFT JOIN instance_overview_metrics iom
       ON iom.instance_id = sr.instance_id
      AND iom.metrics_version = $2
-    WHERE li.difficulty_name = a.difficulty_name
+    WHERE NOT li.mixed_difficulty
+      AND li.difficulty_name = a.difficulty_name
       AND li.max_players = a.max_players
       AND sr.start_time >= a.start_time - make_interval(days => $3::int)
       AND sr.start_time <= a.start_time
@@ -29977,11 +30153,12 @@ func (q *sqlQuerier) InstanceSpeedrunCohort(ctx context.Context, arg InstanceSpe
 const speedrunDifficulties = `-- name: SpeedrunDifficulties :many
 SELECT DISTINCT li.difficulty_name
 FROM instance_speedruns sr
-JOIN log_instances li ON li.id = sr.instance_id
+JOIN log_instances_resolved li ON li.id = sr.instance_id
 JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
 JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
 WHERE sr.instance_name = $1
   AND sr.qualified = true
+      AND NOT li.mixed_difficulty
   AND sr.boss_to_boss_duration_ms IS NOT NULL
 ORDER BY li.difficulty_name
 `
@@ -30016,13 +30193,14 @@ SELECT
     COALESCE(gp.theme->>'logo_url', '')::text AS guild_logo_url,
     COUNT(DISTINCT COALESCE(li.duplicate_group_id, li.id))::bigint AS clears
 FROM instance_speedruns sr
-JOIN log_instances li ON li.id = sr.instance_id
+JOIN log_instances_resolved li ON li.id = sr.instance_id
 JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
 JOIN guilds g ON g.id = sr.guild_id
 LEFT JOIN guild_pages gp ON gp.guild_id = sr.guild_id
 JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
 WHERE sr.instance_name = $1
   AND sr.qualified = true
+      AND NOT li.mixed_difficulty
   AND sr.guild_id IS NOT NULL
   AND CASE
       WHEN $2 :: boolean THEN li.difficulty_name = $3 :: text
@@ -30083,17 +30261,19 @@ func (q *sqlQuerier) SpeedrunGuildClears(ctx context.Context, arg SpeedrunGuildC
 
 const speedrunInstanceBoards = `-- name: SpeedrunInstanceBoards :many
 WITH boards AS (
-    SELECT DISTINCT sr.instance_name, li.difficulty_name
+    SELECT DISTINCT sr.instance_name, li.difficulty_name, li.max_players
     FROM instance_speedruns sr
-    JOIN log_instances li ON li.id = sr.instance_id
+    JOIN log_instances_resolved li ON li.id = sr.instance_id
     JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
     JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
     WHERE sr.qualified = true
+      AND NOT li.mixed_difficulty
       AND sr.boss_to_boss_duration_ms IS NOT NULL
 )
 SELECT
     boards.instance_name,
     boards.difficulty_name,
+    boards.max_players,
     COALESCE(record.duration_ms, 0)::bigint AS record_duration_ms,
     record.completion_time AS record_completion_time,
     COALESCE(record.guild_name, '')::text AS record_guild_name,
@@ -30108,22 +30288,25 @@ LEFT JOIN LATERAL (
         sr.instance_id,
         ('unit-position' = ANY(li.capabilities)) AS has_positions
     FROM instance_speedruns sr
-    JOIN log_instances li ON li.id = sr.instance_id
+    JOIN log_instances_resolved li ON li.id = sr.instance_id
     JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
     JOIN guilds g ON sr.guild_id = g.id
     JOIN wow_server_realms wsr ON sr.realm_id = wsr.id
     WHERE sr.instance_name = boards.instance_name
       AND li.difficulty_name = boards.difficulty_name
+      AND li.max_players = boards.max_players
       AND sr.qualified = true
+      AND NOT li.mixed_difficulty
     ORDER BY COALESCE(sr.ranked_duration_ms, sr.duration_ms) ASC
     LIMIT 1
 ) record ON true
-ORDER BY boards.instance_name, boards.difficulty_name
+ORDER BY boards.instance_name, boards.difficulty_name, boards.max_players
 `
 
 type SpeedrunInstanceBoardsRow struct {
 	InstanceName         string             `db:"instance_name" json:"instance_name"`
 	DifficultyName       string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers           int32              `db:"max_players" json:"max_players"`
 	RecordDurationMs     int64              `db:"record_duration_ms" json:"record_duration_ms"`
 	RecordCompletionTime pgtype.Timestamptz `db:"record_completion_time" json:"record_completion_time"`
 	RecordGuildName      string             `db:"record_guild_name" json:"record_guild_name"`
@@ -30149,6 +30332,7 @@ func (q *sqlQuerier) SpeedrunInstanceBoards(ctx context.Context) ([]SpeedrunInst
 		if err := rows.Scan(
 			&i.InstanceName,
 			&i.DifficultyName,
+			&i.MaxPlayers,
 			&i.RecordDurationMs,
 			&i.RecordCompletionTime,
 			&i.RecordGuildName,
@@ -30196,7 +30380,7 @@ WITH deduped AS (
         (youtube.video_url IS NOT NULL)::boolean AS has_youtube_video,
         COALESCE(youtube.video_url, '')::text AS youtube_url
     FROM instance_speedruns sr
-    JOIN log_instances li ON li.id = sr.instance_id
+    JOIN log_instances_resolved li ON li.id = sr.instance_id
 JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
     JOIN guilds g ON sr.guild_id = g.id
     LEFT JOIN guild_pages gp ON gp.guild_id = sr.guild_id
@@ -30209,6 +30393,7 @@ JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
     ) youtube ON true
     WHERE sr.instance_name = $6
       AND sr.qualified = true
+      AND NOT li.mixed_difficulty
       AND (NOT $5::boolean OR sr.boss_to_boss_duration_ms IS NOT NULL)
       AND sr.guild_id IS NOT NULL
       AND (COALESCE(cardinality($7::uuid[]),0)=0 OR li.realm_id=ANY($7::uuid[]))
@@ -30365,6 +30550,7 @@ JOIN log_instances li ON li.id = sr.instance_id
 JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
 JOIN wow_server_realms wsr ON sr.realm_id = wsr.id
 WHERE sr.qualified = true
+      AND NOT li.mixed_difficulty
   AND sr.boss_to_boss_duration_ms IS NOT NULL
 ORDER BY realm_name
 `
@@ -31709,7 +31895,7 @@ SELECT
     guild.id AS guild_id,
     guild.name AS guild_name
 FROM time_parse_boss_kill_memberships membership
-JOIN log_instances instance ON instance.id = membership.instance_id
+JOIN log_instances_resolved instance ON instance.id = membership.instance_id
 JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
 LEFT JOIN guilds guild ON guild.id = instance.guild_id
 WHERE membership.tenant_id = $1
@@ -31851,7 +32037,7 @@ SELECT
     guild.id AS guild_id,
     guild.name AS guild_name
 FROM time_parse_clear_time_memberships membership
-JOIN log_instances instance ON instance.id = membership.instance_id
+JOIN log_instances_resolved instance ON instance.id = membership.instance_id
 JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
 LEFT JOIN guilds guild ON guild.id = instance.guild_id
 WHERE membership.tenant_id = $1
@@ -32333,21 +32519,21 @@ func (q *sqlQuerier) ListTimeParseClearTimeSpreadValues(ctx context.Context, arg
 const refreshTimeParseBossKillMembershipsForLogGroup = `-- name: RefreshTimeParseBossKillMembershipsForLogGroup :one
 WITH affected_runs AS MATERIALIZED (
     SELECT DISTINCT COALESCE(instance.duplicate_group_id, instance.id) AS run_id
-    FROM log_instances instance
+    FROM log_instances_resolved instance
     WHERE instance.log_group_id = $1
 ),
 representative_instances AS MATERIALIZED (
     SELECT DISTINCT ON (COALESCE(instance.duplicate_group_id, instance.id))
         instance.id,
         COALESCE(instance.duplicate_group_id, instance.id) AS run_id
-    FROM log_instances instance
+    FROM log_instances_resolved instance
     JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
     JOIN affected_runs affected
       ON affected.run_id = COALESCE(instance.duplicate_group_id, instance.id)
     WHERE instance.invalidated_at IS NULL
     ORDER BY COALESCE(instance.duplicate_group_id, instance.id),
         (SELECT COUNT(DISTINCT coverage.encounter_name)
-         FROM encounter_dps_rankings coverage
+         FROM encounter_dps_rankings_resolved coverage
          WHERE coverage.instance_id = instance.id
            AND coverage.encounter_id IS NOT NULL) DESC,
         (instance.id = instance.duplicate_group_id) DESC NULLS LAST,
@@ -32355,19 +32541,19 @@ representative_instances AS MATERIALIZED (
         instance.id ASC
 ),
 current_members AS MATERIALIZED (
-    SELECT DISTINCT ON (representative.run_id, encounter.name)
+    SELECT DISTINCT ON (representative.run_id, encounter.name, COALESCE(encounter.difficulty, instance.difficulty_name), instance.max_players)
         COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid) AS tenant_id,
         representative.run_id,
         encounter.name AS encounter_name,
         instance.id AS instance_id,
         instance.log_group_id,
         speedrun.instance_name,
-        COALESCE(NULLIF(encounter.difficulty_name, ''), instance.difficulty_name) AS difficulty_name,
-        COALESCE(NULLIF(encounter.max_players, 0), instance.max_players) AS max_players,
+        COALESCE(encounter.difficulty, instance.difficulty_name) AS difficulty_name,
+        instance.max_players AS max_players,
         (EXTRACT(EPOCH FROM (encounter.end_time - encounter.start_time)) * 1000)::bigint AS duration_ms,
         encounter.end_time AS killed_at
     FROM representative_instances representative
-    JOIN log_instances instance ON instance.id = representative.id
+    JOIN log_instances_resolved instance ON instance.id = representative.id
     JOIN instance_speedruns speedrun ON speedrun.instance_id = representative.id
     JOIN log_instance_encounters encounter ON encounter.instance_id = representative.id
     JOIN wow_server_realms realm ON realm.id = instance.realm_id
@@ -32377,7 +32563,7 @@ current_members AS MATERIALIZED (
       AND encounter.invalidated_at IS NULL
       AND encounter.end_time > encounter.start_time
       AND (EXTRACT(EPOCH FROM (encounter.end_time - encounter.start_time)) * 1000)::bigint > 0
-    ORDER BY representative.run_id, encounter.name,
+    ORDER BY representative.run_id, encounter.name, COALESCE(encounter.difficulty, instance.difficulty_name), instance.max_players,
         (EXTRACT(EPOCH FROM (encounter.end_time - encounter.start_time)) * 1000)::bigint ASC,
         encounter.end_time ASC
 ),
@@ -32392,7 +32578,7 @@ upserted AS (
         member.instance_id, member.log_group_id, member.instance_name,
         member.difficulty_name, member.max_players, member.duration_ms, member.killed_at
     FROM current_members member
-    ON CONFLICT (tenant_id, policy_version, query_version, run_id, encounter_name) DO UPDATE SET
+    ON CONFLICT (tenant_id, policy_version, query_version, run_id, encounter_name, difficulty_name, max_players) DO UPDATE SET
         instance_id = EXCLUDED.instance_id,
         log_group_id = EXCLUDED.log_group_id,
         instance_name = EXCLUDED.instance_name,
@@ -32412,6 +32598,8 @@ deleted AS (
           WHERE member.tenant_id = membership.tenant_id
             AND member.run_id = membership.run_id
             AND member.encounter_name = membership.encounter_name
+            AND member.difficulty_name = membership.difficulty_name
+            AND member.max_players = membership.max_players
       )
     RETURNING 1
 )
@@ -32441,21 +32629,21 @@ func (q *sqlQuerier) RefreshTimeParseBossKillMembershipsForLogGroup(ctx context.
 const refreshTimeParseClearTimeMembershipsForLogGroup = `-- name: RefreshTimeParseClearTimeMembershipsForLogGroup :one
 WITH affected_runs AS MATERIALIZED (
     SELECT DISTINCT COALESCE(instance.duplicate_group_id, instance.id) AS run_id
-    FROM log_instances instance
+    FROM log_instances_resolved instance
     WHERE instance.log_group_id = $1
 ),
 representative_instances AS MATERIALIZED (
     SELECT DISTINCT ON (COALESCE(instance.duplicate_group_id, instance.id))
         instance.id,
         COALESCE(instance.duplicate_group_id, instance.id) AS run_id
-    FROM log_instances instance
+    FROM log_instances_resolved instance
     JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
     JOIN affected_runs affected
       ON affected.run_id = COALESCE(instance.duplicate_group_id, instance.id)
     WHERE instance.invalidated_at IS NULL
     ORDER BY COALESCE(instance.duplicate_group_id, instance.id),
         (SELECT COUNT(DISTINCT coverage.encounter_name)
-         FROM encounter_dps_rankings coverage
+         FROM encounter_dps_rankings_resolved coverage
          WHERE coverage.instance_id = instance.id
            AND coverage.encounter_id IS NOT NULL) DESC,
         (instance.id = instance.duplicate_group_id) DESC NULLS LAST,
@@ -32474,7 +32662,7 @@ current_members AS MATERIALIZED (
         speedrun.ranked_duration_ms::bigint AS duration_ms,
         speedrun.start_time::timestamptz AS start_time
     FROM representative_instances representative
-    JOIN log_instances instance ON instance.id = representative.id
+    JOIN log_instances_resolved instance ON instance.id = representative.id
     JOIN instance_speedruns speedrun ON speedrun.instance_id = representative.id
     JOIN wow_server_realms realm ON realm.id = instance.realm_id
     JOIN wow_servers server ON server.id = realm.server_id
@@ -32578,7 +32766,7 @@ func (q *sqlQuerier) DeleteTimeParseScoreForContract(ctx context.Context, arg De
 const getScopedTimeParseBossKillCohort = `-- name: GetScopedTimeParseBossKillCohort :many
 SELECT membership.duration_ms
 FROM time_parse_boss_kill_memberships membership
-JOIN log_instances instance ON instance.id = membership.instance_id
+JOIN log_instances_resolved instance ON instance.id = membership.instance_id
 JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
 WHERE membership.tenant_id = $1
   AND membership.policy_version = $2
@@ -32651,7 +32839,7 @@ func (q *sqlQuerier) GetScopedTimeParseBossKillCohort(ctx context.Context, arg G
 const getScopedTimeParseClearTimeCohort = `-- name: GetScopedTimeParseClearTimeCohort :many
 SELECT membership.duration_ms
 FROM time_parse_clear_time_memberships membership
-JOIN log_instances instance ON instance.id = membership.instance_id
+JOIN log_instances_resolved instance ON instance.id = membership.instance_id
 JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
 WHERE membership.tenant_id = $1
   AND membership.policy_version = $2
@@ -32789,8 +32977,9 @@ SELECT
     instance.start_time,
     instance.name AS instance_name,
     instance.difficulty_name,
-    instance.max_players
-FROM log_instances instance
+    instance.max_players,
+    instance.mixed_difficulty
+FROM log_instances_resolved instance
 JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
 JOIN wow_server_realms realm ON realm.id = instance.realm_id
 JOIN wow_servers server ON server.id = realm.server_id
@@ -32805,15 +32994,16 @@ type GetTimeParseScoringInstanceParams struct {
 }
 
 type GetTimeParseScoringInstanceRow struct {
-	ID             uuid.UUID          `db:"id" json:"id"`
-	RunID          uuid.UUID          `db:"run_id" json:"run_id"`
-	LogGroupID     uuid.UUID          `db:"log_group_id" json:"log_group_id"`
-	RealmID        uuid.UUID          `db:"realm_id" json:"realm_id"`
-	GuildID        uuid.NullUUID      `db:"guild_id" json:"guild_id"`
-	StartTime      pgtype.Timestamptz `db:"start_time" json:"start_time"`
-	InstanceName   string             `db:"instance_name" json:"instance_name"`
-	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
-	MaxPlayers     int32              `db:"max_players" json:"max_players"`
+	ID              uuid.UUID          `db:"id" json:"id"`
+	RunID           uuid.UUID          `db:"run_id" json:"run_id"`
+	LogGroupID      uuid.UUID          `db:"log_group_id" json:"log_group_id"`
+	RealmID         uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID         uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	StartTime       pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	InstanceName    string             `db:"instance_name" json:"instance_name"`
+	DifficultyName  string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers      int32              `db:"max_players" json:"max_players"`
+	MixedDifficulty bool               `db:"mixed_difficulty" json:"mixed_difficulty"`
 }
 
 func (q *sqlQuerier) GetTimeParseScoringInstance(ctx context.Context, arg GetTimeParseScoringInstanceParams) (GetTimeParseScoringInstanceRow, error) {
@@ -32829,6 +33019,7 @@ func (q *sqlQuerier) GetTimeParseScoringInstance(ctx context.Context, arg GetTim
 		&i.InstanceName,
 		&i.DifficultyName,
 		&i.MaxPlayers,
+		&i.MixedDifficulty,
 	)
 	return i, err
 }
@@ -33112,20 +33303,48 @@ func (q *sqlQuerier) ListInstancesMissingTimeParseScores(ctx context.Context, ar
 }
 
 const listTimeParseBossScoresForScore = `-- name: ListTimeParseBossScoresForScore :many
-SELECT time_parse_score_id, encounter_id, encounter_name, duration_ms, server_precise_score, server_display_score, server_rank, server_sample_size, server_status, realm_precise_score, realm_display_score, realm_rank, realm_sample_size, realm_status, guild_precise_score, guild_display_score, guild_rank, guild_sample_size, guild_status FROM time_parse_boss_scores
+SELECT score.time_parse_score_id, score.encounter_id, score.encounter_name, score.duration_ms, score.server_precise_score, score.server_display_score, score.server_rank, score.server_sample_size, score.server_status, score.realm_precise_score, score.realm_display_score, score.realm_rank, score.realm_sample_size, score.realm_status, score.guild_precise_score, score.guild_display_score, score.guild_rank, score.guild_sample_size, score.guild_status, COALESCE(encounter.difficulty, instance.difficulty_name)::text AS difficulty_name,
+       instance.max_players::smallint AS max_players
+FROM time_parse_boss_scores score
+JOIN log_instance_encounters encounter ON encounter.id = score.encounter_id
+JOIN log_instances_resolved instance ON instance.id = encounter.instance_id
 WHERE time_parse_score_id = $1
-ORDER BY encounter_name
+ORDER BY score.encounter_name, difficulty_name
 `
 
-func (q *sqlQuerier) ListTimeParseBossScoresForScore(ctx context.Context, timeParseScoreID uuid.UUID) ([]TimeParseBossScore, error) {
+type ListTimeParseBossScoresForScoreRow struct {
+	TimeParseScoreID   uuid.UUID     `db:"time_parse_score_id" json:"time_parse_score_id"`
+	EncounterID        uuid.UUID     `db:"encounter_id" json:"encounter_id"`
+	EncounterName      string        `db:"encounter_name" json:"encounter_name"`
+	DurationMs         int64         `db:"duration_ms" json:"duration_ms"`
+	ServerPreciseScore float64       `db:"server_precise_score" json:"server_precise_score"`
+	ServerDisplayScore int16         `db:"server_display_score" json:"server_display_score"`
+	ServerRank         int32         `db:"server_rank" json:"server_rank"`
+	ServerSampleSize   int32         `db:"server_sample_size" json:"server_sample_size"`
+	ServerStatus       string        `db:"server_status" json:"server_status"`
+	RealmPreciseScore  float64       `db:"realm_precise_score" json:"realm_precise_score"`
+	RealmDisplayScore  int16         `db:"realm_display_score" json:"realm_display_score"`
+	RealmRank          int32         `db:"realm_rank" json:"realm_rank"`
+	RealmSampleSize    int32         `db:"realm_sample_size" json:"realm_sample_size"`
+	RealmStatus        string        `db:"realm_status" json:"realm_status"`
+	GuildPreciseScore  pgtype.Float8 `db:"guild_precise_score" json:"guild_precise_score"`
+	GuildDisplayScore  pgtype.Int2   `db:"guild_display_score" json:"guild_display_score"`
+	GuildRank          pgtype.Int4   `db:"guild_rank" json:"guild_rank"`
+	GuildSampleSize    pgtype.Int4   `db:"guild_sample_size" json:"guild_sample_size"`
+	GuildStatus        pgtype.Text   `db:"guild_status" json:"guild_status"`
+	DifficultyName     string        `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers         int16         `db:"max_players" json:"max_players"`
+}
+
+func (q *sqlQuerier) ListTimeParseBossScoresForScore(ctx context.Context, timeParseScoreID uuid.UUID) ([]ListTimeParseBossScoresForScoreRow, error) {
 	rows, err := q.db.Query(ctx, listTimeParseBossScoresForScore, timeParseScoreID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []TimeParseBossScore
+	var items []ListTimeParseBossScoresForScoreRow
 	for rows.Next() {
-		var i TimeParseBossScore
+		var i ListTimeParseBossScoresForScoreRow
 		if err := rows.Scan(
 			&i.TimeParseScoreID,
 			&i.EncounterID,
@@ -33146,6 +33365,8 @@ func (q *sqlQuerier) ListTimeParseBossScoresForScore(ctx context.Context, timePa
 			&i.GuildRank,
 			&i.GuildSampleSize,
 			&i.GuildStatus,
+			&i.DifficultyName,
+			&i.MaxPlayers,
 		); err != nil {
 			return nil, err
 		}
@@ -33163,7 +33384,7 @@ SELECT
     instance.difficulty_name,
     instance.max_players,
     COALESCE(instance.duplicate_group_id, instance.id) AS run_id
-FROM log_instances instance
+FROM log_instances_resolved instance
 JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
 WHERE instance.id = $1
 `

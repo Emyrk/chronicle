@@ -14,7 +14,7 @@ func TestPersistedInstanceParsesPreserveDifficultyVariants(t *testing.T) {
 		{PlayerGuid: "player", EncounterName: "Boss", DifficultyName: "", MaxPlayers: 25, Dps: 100, PlayerSpec: "Fury"},
 		{PlayerGuid: "player", EncounterName: "Boss", DifficultyName: "heroic", MaxPlayers: 25, Dps: 200, PlayerSpec: "Fury"},
 	}
-	results := []database.ParseScoreResult{
+	results := []database.ParseScoreResultsResolved{
 		{PlayerGuid: "player", EncounterName: "Boss", DifficultyName: "", MaxPlayers: 25, MetricValue: 100, PreciseScore: 40, Status: string(parsepolicy.StatusOK)},
 		{PlayerGuid: "player", EncounterName: "Boss", DifficultyName: "heroic", MaxPlayers: 25, MetricValue: 200, PreciseScore: 80, Status: string(parsepolicy.StatusOK)},
 	}

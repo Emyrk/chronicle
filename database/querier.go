@@ -34,6 +34,11 @@ type sqlcQuerier interface {
 	AdvanceLeaderboardOperationScope(ctx context.Context, arg AdvanceLeaderboardOperationScopeParams) error
 	AdvanceWoWLogGroupParseGeneration(ctx context.Context, id uuid.UUID) (int64, error)
 	AssignWorldToServer(ctx context.Context, arg AssignWorldToServerParams) error
+	// Offline repair only. Never call this from startup. Use the last inspected ID
+	// as the next cursor, even when updated_count is zero. Each batch inspects at
+	// most batch_size primary-key entries, rather than searching an unbounded
+	// suffix for NULLs. Existing explicit Normal (empty string) is never overwritten.
+	BackfillEncounterDifficultyBatch(ctx context.Context, arg BackfillEncounterDifficultyBatchParams) (BackfillEncounterDifficultyBatchRow, error)
 	BulkUpsertGuildPagePanels(ctx context.Context, dollar_1 []byte) error
 	CarryForwardFinalizedParsedLogGroup(ctx context.Context, arg CarryForwardFinalizedParsedLogGroupParams) error
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
@@ -448,7 +453,7 @@ type sqlcQuerier interface {
 	GetLogGroupArtifact(ctx context.Context, arg GetLogGroupArtifactParams) (LogGroupArtifact, error)
 	GetLogGroupArtifacts(ctx context.Context, logGroupID uuid.UUID) ([]LogGroupArtifact, error)
 	GetLogGroupInstanceIDByOrdinal(ctx context.Context, arg GetLogGroupInstanceIDByOrdinalParams) (uuid.UUID, error)
-	GetLogInstanceForDiscordAnnouncement(ctx context.Context, id uuid.UUID) (LogInstance, error)
+	GetLogInstanceForDiscordAnnouncement(ctx context.Context, id uuid.UUID) (LogInstancesResolved, error)
 	// Fetch instance metadata needed for parse scoring.
 	GetLogInstanceForScoring(ctx context.Context, id uuid.UUID) (GetLogInstanceForScoringRow, error)
 	// Return the cohort dimensions and logical run identity for live time parsing.
@@ -476,7 +481,7 @@ type sqlcQuerier interface {
 	GetParseScoreReceiptForInstance(ctx context.Context, instanceID uuid.UUID) ([]ParseScoreReceipt, error)
 	// Read deduplicated parse score results for an instance.
 	// Uses DISTINCT ON (run_id, encounter, player, snapshot, metric) to collapse duplicate uploads.
-	GetParseScoreResultsForInstance(ctx context.Context, instanceID uuid.UUID) ([]ParseScoreResult, error)
+	GetParseScoreResultsForInstance(ctx context.Context, instanceID uuid.UUID) ([]ParseScoreResultsResolved, error)
 	GetParsedBytesByOwner(ctx context.Context, owner uuid.UUID) (GetParsedBytesByOwnerRow, error)
 	GetParsedLogGroupByID(ctx context.Context, id uuid.UUID) (ParsedLogGroup, error)
 	GetPendingInferenceClientToolRequestByThreadForUpdate(ctx context.Context, arg GetPendingInferenceClientToolRequestByThreadForUpdateParams) (InferenceClientToolRequest, error)
@@ -725,7 +730,9 @@ type sqlcQuerier interface {
 	InstanceAnalyticsGroupKey(ctx context.Context, instanceID uuid.UUID) (string, error)
 	InstanceBySlug(ctx context.Context, hashedSlug pgtype.Text) (LogInstancesGuild, error)
 	InstanceBySlugWithUnlisted(ctx context.Context, hashedSlug pgtype.Text) (InstanceBySlugWithUnlistedRow, error)
-	InstanceDifficultiesByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceDifficulty, error)
+	// Return all observed modes for analysis. Clear eligibility is stored separately
+	// from boss attempts only; trash must not determine mixed-clear status.
+	InstanceDifficultiesByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]InstanceDifficultiesByInstanceIDRow, error)
 	InstanceEvent(ctx context.Context, arg InstanceEventParams) (LogInstanceEvent, error)
 	InstancePlayerGUIDsByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]guid.GUID, error)
 	InstancePlayerSpecs(ctx context.Context, instanceID uuid.UUID) ([]InstancePlayerSpecsRow, error)
@@ -733,7 +740,7 @@ type sqlcQuerier interface {
 	InstanceRaidGroupSnapshots(ctx context.Context, instanceID uuid.UUID) ([]InstanceRaidGroupSnapshotsRow, error)
 	// Raw per-player ranking rows recorded for a single log instance. This intentionally
 	// includes zero-value DPS/HPS rows so instance-level ranking issues can be debugged.
-	InstanceRankingRecords(ctx context.Context, instanceID uuid.UUID) ([]EncounterDpsRanking, error)
+	InstanceRankingRecords(ctx context.Context, instanceID uuid.UUID) ([]EncounterDpsRankingsResolved, error)
 	// Returns rankings-backed runs comparable to an anchor instance. Cohorts match
 	// instance name, difficulty, and declared maximum raid size, use a historical
 	// window ending at the anchor start time, and stay within the anchor's server,
@@ -927,7 +934,7 @@ type sqlcQuerier interface {
 	ListParseScoreMemberships(ctx context.Context, arg ListParseScoreMembershipsParams) ([]ParseScoreMembership, error)
 	// Read one persisted legacy result per player and encounter for the snapshot ID
 	// retained as opaque provenance on its successful receipt.
-	ListParseScoreResultsForContract(ctx context.Context, arg ListParseScoreResultsForContractParams) ([]ParseScoreResult, error)
+	ListParseScoreResultsForContract(ctx context.Context, arg ListParseScoreResultsForContractParams) ([]ParseScoreResultsResolved, error)
 	// Metric values for every exact DPS/HPS cohort on the given encounters, used
 	// to summarize parse spreads without fetching per-player names. Empty
 	// player_class/player_spec match every class/spec.
@@ -938,7 +945,7 @@ type sqlcQuerier interface {
 	ListParseScoreSpreadValues(ctx context.Context, arg ListParseScoreSpreadValuesParams) ([]ListParseScoreSpreadValuesRow, error)
 	// Receipt-less results are authoritative historical data. Read them without
 	// joining snapshot tables or score memberships so they can never be recomputed.
-	ListPersistedParseScoreResultsForInstance(ctx context.Context, arg ListPersistedParseScoreResultsForInstanceParams) ([]ParseScoreResult, error)
+	ListPersistedParseScoreResultsForInstance(ctx context.Context, arg ListPersistedParseScoreResultsForInstanceParams) ([]ParseScoreResultsResolved, error)
 	ListProofEvidenceCleanup(ctx context.Context, tenantID uuid.UUID) ([]ProofRequest, error)
 	// Resolve current armory classes and guilds in one query per request; old
 	// requests and characters removed from the armory still render without them.
@@ -1001,7 +1008,7 @@ type sqlcQuerier interface {
 	// Kill durations for every boss-kill cohort in one instance, used to
 	// summarize kill-time parse spreads without per-kill guild lookups.
 	ListTimeParseBossKillSpreadValues(ctx context.Context, arg ListTimeParseBossKillSpreadValuesParams) ([]ListTimeParseBossKillSpreadValuesRow, error)
-	ListTimeParseBossScoresForScore(ctx context.Context, timeParseScoreID uuid.UUID) ([]TimeParseBossScore, error)
+	ListTimeParseBossScoresForScore(ctx context.Context, timeParseScoreID uuid.UUID) ([]ListTimeParseBossScoresForScoreRow, error)
 	ListTimeParseClearTimeCohortBuckets(ctx context.Context, arg ListTimeParseClearTimeCohortBucketsParams) ([]ListTimeParseClearTimeCohortBucketsRow, error)
 	ListTimeParseClearTimeMemberships(ctx context.Context, arg ListTimeParseClearTimeMembershipsParams) ([]TimeParseClearTimeMembership, error)
 	// Full-clear durations for every clear-time cohort in one instance.
@@ -1025,7 +1032,7 @@ type sqlcQuerier interface {
 	ListUsersReferencingCosmetic(ctx context.Context, cosmeticID string) ([]uuid.UUID, error)
 	ListUsersWithCharacterCosmetics(ctx context.Context) ([]uuid.UUID, error)
 	ListVulnerabilitySpellsByDataset(ctx context.Context, arg ListVulnerabilitySpellsByDatasetParams) ([]ListVulnerabilitySpellsByDatasetRow, error)
-	ListWindowedParseScoreResultsForContract(ctx context.Context, arg ListWindowedParseScoreResultsForContractParams) ([]ParseScoreResult, error)
+	ListWindowedParseScoreResultsForContract(ctx context.Context, arg ListWindowedParseScoreResultsForContractParams) ([]ParseScoreResultsResolved, error)
 	// Realms
 	ListWoWServerRealms(ctx context.Context, serverID uuid.UUID) ([]WowServerRealm, error)
 	// Servers
@@ -1067,6 +1074,9 @@ type sqlcQuerier interface {
 	// Returns a bucket's current (refilled) token level without changing it. A
 	// bucket that does not exist yet is full.
 	PeekRateLimitTokens(ctx context.Context, arg PeekRateLimitTokensParams) (float64, error)
+	// Read-only preview/count of precisely the next bounded batch. Repeat with the
+	// cursor to estimate the full rollout without one unbounded table scan.
+	PreviewEncounterDifficultyBackfillBatch(ctx context.Context, arg PreviewEncounterDifficultyBackfillBatchParams) (PreviewEncounterDifficultyBackfillBatchRow, error)
 	// One statement snapshot: no source, canonical, or dirty-row locks. Missing
 	// stages yield only available evidence. No normalized parse score is selected.
 	ProjectLeaderboardRun(ctx context.Context, arg ProjectLeaderboardRunParams) ([]ProjectLeaderboardRunRow, error)

@@ -31,9 +31,9 @@ type parsesQuerier interface {
 	ListRankingsForInstance(ctx context.Context, instanceID uuid.UUID) ([]database.ListRankingsForInstanceRow, error)
 	GetAnyParseScoreReceiptForTenantInstance(ctx context.Context, arg database.GetAnyParseScoreReceiptForTenantInstanceParams) (database.ParseScoreReceipt, error)
 	HasParseScoreResultsForTenantInstance(ctx context.Context, arg database.HasParseScoreResultsForTenantInstanceParams) (bool, error)
-	ListParseScoreResultsForContract(ctx context.Context, arg database.ListParseScoreResultsForContractParams) ([]database.ParseScoreResult, error)
-	ListWindowedParseScoreResultsForContract(ctx context.Context, arg database.ListWindowedParseScoreResultsForContractParams) ([]database.ParseScoreResult, error)
-	ListPersistedParseScoreResultsForInstance(ctx context.Context, arg database.ListPersistedParseScoreResultsForInstanceParams) ([]database.ParseScoreResult, error)
+	ListParseScoreResultsForContract(ctx context.Context, arg database.ListParseScoreResultsForContractParams) ([]database.ParseScoreResultsResolved, error)
+	ListWindowedParseScoreResultsForContract(ctx context.Context, arg database.ListWindowedParseScoreResultsForContractParams) ([]database.ParseScoreResultsResolved, error)
+	ListPersistedParseScoreResultsForInstance(ctx context.Context, arg database.ListPersistedParseScoreResultsForInstanceParams) ([]database.ParseScoreResultsResolved, error)
 	GetParseScoreMembershipCohort(ctx context.Context, arg database.GetParseScoreMembershipCohortParams) ([]float64, error)
 }
 
@@ -490,9 +490,9 @@ func loadInstanceParseTenantConfig(ctx context.Context, store interface {
 type persistedParsesQuerier interface {
 	GetAnyParseScoreReceiptForTenantInstance(ctx context.Context, arg database.GetAnyParseScoreReceiptForTenantInstanceParams) (database.ParseScoreReceipt, error)
 	HasParseScoreResultsForTenantInstance(ctx context.Context, arg database.HasParseScoreResultsForTenantInstanceParams) (bool, error)
-	ListParseScoreResultsForContract(ctx context.Context, arg database.ListParseScoreResultsForContractParams) ([]database.ParseScoreResult, error)
-	ListWindowedParseScoreResultsForContract(ctx context.Context, arg database.ListWindowedParseScoreResultsForContractParams) ([]database.ParseScoreResult, error)
-	ListPersistedParseScoreResultsForInstance(ctx context.Context, arg database.ListPersistedParseScoreResultsForInstanceParams) ([]database.ParseScoreResult, error)
+	ListParseScoreResultsForContract(ctx context.Context, arg database.ListParseScoreResultsForContractParams) ([]database.ParseScoreResultsResolved, error)
+	ListWindowedParseScoreResultsForContract(ctx context.Context, arg database.ListWindowedParseScoreResultsForContractParams) ([]database.ParseScoreResultsResolved, error)
+	ListPersistedParseScoreResultsForInstance(ctx context.Context, arg database.ListPersistedParseScoreResultsForInstanceParams) ([]database.ParseScoreResultsResolved, error)
 }
 
 type persistedInstanceParses struct {
@@ -525,7 +525,7 @@ func loadPersistedInstanceParses(
 		TenantID: tid, InstanceID: instanceID,
 	})
 	if err == nil {
-		var persisted []database.ParseScoreResult
+		var persisted []database.ParseScoreResultsResolved
 		if receipt.SnapshotID.Valid {
 			persisted, err = store.ListParseScoreResultsForContract(ctx, database.ListParseScoreResultsForContractParams{
 				TenantID: tid, InstanceID: instanceID, SnapshotID: receipt.SnapshotID.UUID, Metric: string(metric),
@@ -573,7 +573,7 @@ func loadPersistedInstanceParses(
 
 func buildPersistedInstanceParsePlayers(
 	rankings []database.ListRankingsForInstanceRow,
-	persisted []database.ParseScoreResult,
+	persisted []database.ParseScoreResultsResolved,
 	encounterNames []string,
 	metric parsepolicy.Metric,
 	cohortMode parsepolicy.CohortMode,
@@ -613,7 +613,7 @@ func buildPersistedInstanceParsePlayers(
 		playerGUID string
 		boss       instanceParseBossKey
 	}
-	results := make(map[resultKey]database.ParseScoreResult, len(persisted))
+	results := make(map[resultKey]database.ParseScoreResultsResolved, len(persisted))
 	for _, result := range persisted {
 		results[resultKey{playerGUID: result.PlayerGuid, boss: instanceParseBossKey{result.EncounterName, result.DifficultyName, result.MaxPlayers}}] = result
 	}

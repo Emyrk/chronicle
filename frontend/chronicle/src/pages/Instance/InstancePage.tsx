@@ -71,7 +71,7 @@ export interface Encounter {
   end_time: string;
   enemies?: EnemyUnit[];
   remaining?: string[]; // GUIDs of enemies that did not die
-  difficulty?: string;
+  difficulty: string;
   invalidatedAt?: string;
   invalidReason?: string;
   /** Optional phases within this encounter (sorted by order). */

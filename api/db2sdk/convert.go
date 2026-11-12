@@ -430,7 +430,7 @@ func WowDecoratedInstance(instance database.LogInstancesGuild,
 	ret := chroniclesdk.WoWParsedInstance{
 		WoWInstance:    WoWInstance(instance),
 		RealmName:      instance.RealmName,
-		Encounters:     WoWEncountersWithHostiles(encounters, fights, phases, LegacyDifficulty(instance.DifficultyName, int(instance.DynamicDifficulty))),
+		Encounters:     WoWEncountersWithHostiles(encounters, fights, phases, instance.DifficultyName),
 		Units:          instanceUnits,
 		NamesByEntry:   namesByEntry,
 		SummonsByOwner: summonsByOwner,
@@ -458,9 +458,10 @@ func InstancePlayers(players []database.LogInstancePlayer) map[guid.GUID]chronic
 	})
 }
 
-func InstanceRankingRecords(rows []database.EncounterDpsRanking) []chroniclesdk.InstanceRankingRecord {
+func InstanceRankingRecords[T database.EncounterDpsRanking | database.EncounterDpsRankingsResolved](rows []T) []chroniclesdk.InstanceRankingRecord {
 	result := make([]chroniclesdk.InstanceRankingRecord, 0, len(rows))
-	for _, row := range rows {
+	for _, source := range rows {
+		row := database.EncounterDpsRanking(source)
 		var encounterID *uuid.UUID
 		if row.EncounterID.Valid {
 			id := row.EncounterID.UUID
@@ -477,6 +478,7 @@ func InstanceRankingRecords(rows []database.EncounterDpsRanking) []chroniclesdk.
 			playerDeaths = &value
 		}
 		result = append(result, chroniclesdk.InstanceRankingRecord{
+			Difficulty:      row.DifficultyName,
 			ID:              row.ID,
 			EncounterID:     encounterID,
 			EncounterName:   row.EncounterName,

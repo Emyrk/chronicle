@@ -559,7 +559,7 @@ WITH scoped AS MATERIALIZED (
     FROM peak p
     JOIN log_instance_encounters e ON e.id = p.source_encounter_id
       AND e.instance_id = p.source_instance_id AND e.name = p.encounter_name
-    JOIN log_instances i ON i.id = e.instance_id AND i.realm_id = p.realm_id
+    JOIN log_instances_resolved i ON i.id = e.instance_id AND i.realm_id = p.realm_id
       AND i.name = p.instance_name AND i.difficulty_name = p.difficulty_name AND i.max_players = p.max_players
     JOIN wow_server_realms r ON r.id = i.realm_id
     JOIN wow_servers s ON s.id = r.server_id AND s.tenant_id = p.tenant_id

@@ -406,8 +406,8 @@ func TestGuildEncounterKills(t *testing.T) {
 	_, err = f.store.InsertEncounter(ctx, database.InsertEncounterParams{
 		ID: uuid.New(), InstanceID: nightB, Name: "Ragnaros",
 		KillType: database.KillTypeClean, Remaining: guid.GUIDs{}, Boss: true,
-		DifficultyName: "Normal (Heroic)", MaxPlayers: 40, DynamicDifficulty: 1,
-		StartTime: database.Timestamptz(night2.Add(35 * time.Minute)), EndTime: database.Timestamptz(night2.Add(40 * time.Minute)),
+		Difficulty: pgtype.Text{String: "heroic", Valid: true},
+		StartTime:  database.Timestamptz(night2.Add(35 * time.Minute)), EndTime: database.Timestamptz(night2.Add(40 * time.Minute)),
 	})
 	require.NoError(t, err)
 
@@ -424,7 +424,7 @@ func TestGuildEncounterKills(t *testing.T) {
 		byEncounter[row.EncounterName+"|"+row.DifficultyName] = row
 	}
 	require.EqualValues(t, 2, byEncounter["Ragnaros|Normal"].Kills)
-	require.EqualValues(t, 1, byEncounter["Ragnaros|Normal (Heroic)"].Kills)
+	require.EqualValues(t, 1, byEncounter["Ragnaros|heroic"].Kills)
 	require.EqualValues(t, 1, byEncounter["Golemagg|Normal"].Kills)
 	require.Equal(t, "Molten Core", byEncounter["Ragnaros|Normal"].InstanceName)
 	require.WithinDuration(t, night2.Add(30*time.Minute), byEncounter["Ragnaros|Normal"].LastKilledAt.Time, time.Second)

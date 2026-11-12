@@ -7,7 +7,7 @@ const START = "2026-10-01T20:00:00Z";
 
 function encounter(id: string, boss: boolean, killType: Encounter["kill_type"], startMin: number, endMin: number): Encounter {
   const at = (min: number) => new Date(Date.parse(START) + min * 60_000).toISOString();
-  return { id, name: id, boss, mapId: 1, kill_type: killType, start_time: at(startMin), end_time: at(endMin) };
+  return { id, name: id, boss, difficulty: "", mapId: 1, kill_type: killType, start_time: at(startMin), end_time: at(endMin) };
 }
 
 function instance(encounters: Encounter[]): Instance {

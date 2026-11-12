@@ -1036,7 +1036,7 @@ func (c *Chronicle) WoWLogGroup(ctx context.Context, groupID uuid.UUID) (*chroni
 				}
 				sdkEncounters := make([]chroniclesdk.WoWEncounter, 0, len(encounters))
 				for _, e := range encounters {
-					sdkEncounters = append(sdkEncounters, db2sdk.WoWEncounter(e))
+					sdkEncounters = append(sdkEncounters, db2sdk.WoWEncounter(e, inst.DifficultyName))
 				}
 				parsed.Instances = append(parsed.Instances, chroniclesdk.WoWSimpleParsedInstance{
 					WoWInstance: db2sdk.WoWInstance(inst),

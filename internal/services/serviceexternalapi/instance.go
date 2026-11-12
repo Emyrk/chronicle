@@ -72,6 +72,7 @@ type InstanceRankingParse struct {
 }
 
 type instanceRankingParseKey struct {
+	Difficulty    string
 	EncounterName string
 	PlayerGUID    string
 	Metric        string
@@ -201,11 +202,12 @@ func (s *Service) getInstanceRankingRecordsBySlug(w http.ResponseWriter, r *http
 	httpapi.Write(ctx, w, http.StatusOK, instanceRankingRecords(records, parseScores))
 }
 
-func instanceRankingRecords(records []database.EncounterDpsRanking, parseScores []database.ParseScoreResult) []InstanceRankingRecord {
+func instanceRankingRecords(records []database.EncounterDpsRankingsResolved, parseScores []database.ParseScoreResultsResolved) []InstanceRankingRecord {
 	parses := make(map[instanceRankingParseKey]instanceRankingParseValue, len(parseScores))
 	for _, score := range parseScores {
 		key := instanceRankingParseKey{
 			EncounterName: score.EncounterName,
+			Difficulty:    score.DifficultyName,
 			PlayerGUID:    score.PlayerGuid,
 			Metric:        score.Metric,
 		}
@@ -239,6 +241,7 @@ func instanceRankingRecords(records []database.EncounterDpsRanking, parseScores 
 		out := InstanceRankingRecord{InstanceRankingRecord: record}
 		if score, ok := parses[instanceRankingParseKey{
 			EncounterName: record.EncounterName,
+			Difficulty:    record.Difficulty,
 			PlayerGUID:    record.PlayerGUID,
 			Metric:        "dps",
 		}]; ok {
@@ -247,6 +250,7 @@ func instanceRankingRecords(records []database.EncounterDpsRanking, parseScores 
 		}
 		if score, ok := parses[instanceRankingParseKey{
 			EncounterName: record.EncounterName,
+			Difficulty:    record.Difficulty,
 			PlayerGUID:    record.PlayerGUID,
 			Metric:        "hps",
 		}]; ok {

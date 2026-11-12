@@ -84,7 +84,7 @@ func setupParsesTest(t *testing.T) parsesTestFixture {
 	instanceID := uuid.New()
 	_, err = store.InsertInstance(ctx, database.InsertInstanceParams{
 		ID: instanceID, RealmID: realmID, LogGroupID: logGroupID,
-		Name: "Molten Core", Capabilities: []string{},
+		Name: "Molten Core", DifficultyName: "Normal", MaxPlayers: 40, Capabilities: []string{},
 		StartTime: database.Timestamptz(now.Add(time.Hour)),
 	})
 	require.NoError(t, err)
@@ -176,7 +176,7 @@ func (f parsesTestFixture) publishSnapshot(t *testing.T) legacySnapshotRef {
 		FROM encounter_dps_rankings ranking
 		JOIN log_instances instance ON instance.id = ranking.instance_id
 		WHERE ranking.instance_id = $1
-		ON CONFLICT (tenant_id, policy_version, query_version, run_id, encounter_name, player_guid)
+		ON CONFLICT (tenant_id, policy_version, query_version, run_id, encounter_name, player_guid, difficulty_name, max_players)
 		DO NOTHING`, f.instanceID, parsepolicy.PolicyVersion, parsepolicy.QueryVersion)
 	conn.Release()
 	require.NoError(t, err)

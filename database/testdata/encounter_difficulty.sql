@@ -25,7 +25,7 @@ INSERT INTO encounter_dps_rankings (encounter_id, instance_id, encounter_name, i
 VALUES
  ('10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'Boss', 'Test raid', 'player-one', 'One', 'wrong old label', 10, gen_random_uuid(), 'Test', 100, 60, 1, '2026-01-01'),
  ('10000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000001', 'Boss', 'Test raid', 'player-two', 'Two', 'wrong old label', 10, gen_random_uuid(), 'Test', 100, 60, 1, '2026-01-01'),
- (NULL, '00000000-0000-0000-0000-000000000004', 'Trash', 'Test raid', 'player-three', 'Three', 'wrong old label', 10, gen_random_uuid(), 'Test', 100, 60, 1, '2026-01-01');
+ (NULL, '00000000-0000-0000-0000-000000000004', 'Trash', 'Test raid', 'player-three', 'Three', 'mythic', 25, gen_random_uuid(), 'Test', 100, 60, 1, '2026-01-01');
 -- The same logical boss/player must coexist in Normal and heroic memberships.
 INSERT INTO parse_score_memberships (tenant_id, policy_version, query_version, run_id, encounter_name, player_guid,
  instance_id, log_group_id, difficulty_name, max_players, player_class, player_spec, killed_at, dps)

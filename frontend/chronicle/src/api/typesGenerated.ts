@@ -7279,10 +7279,10 @@ export interface WoWEncounter {
     readonly remaining?: readonly GUID[];
     readonly start_time: string;
     readonly end_time: string;
+    readonly difficulty: string;
     readonly invalidated_at?: string;
     readonly invalid_reason?: string;
     readonly ranking_window?: WoWRankingWindow;
-    readonly difficulty: string;
 }
 
 // From chroniclesdk/log.go

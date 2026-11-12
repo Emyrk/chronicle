@@ -105,9 +105,9 @@ import { ClearParseBadge, KillParseTooltip } from "./EncounterKillParse";
 import { OwnerAdFreeBadge } from "@/components/Ads/OwnerAdFreeBadge";
 import { useInstanceTimeParses } from "./Overview/overviewQueries";
 import { bossKillParsesByEncounter, killParseEdgeStyle, scopedClearParses, scopedKillParsesByEncounter } from "./Overview/encounterKillTimePopulation";
-import { HeroicBadge } from "@/components/HeroicBadge";
+import { EncounterDifficultyMark, EncounterDifficultySummary } from "@/components/EncounterDifficulty/EncounterDifficultyMark";
 import { AdSlot } from "@/components/Ads/AdSlot";
-import { isHeroic, difficultySetLabel } from "@/lib/wowUtils";
+import { isHeroic } from "@/lib/wowUtils";
 import { DuplicatesBadge } from "./DuplicatesBadge";
 import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages";
 import { formatClassLabel, formatRaceLabel } from "../ArmoryPage/characterDisplay";
@@ -827,6 +827,7 @@ function EncounterSidebar({
                 <span className="truncate flex-1">
                   {encounter.boss ? encounter.name : <span className="italic">{encounter.name}</span>}
                 </span>
+                {encounter.boss && <EncounterDifficultyMark difficulty={encounter.difficulty} />}
                 <span className={cn("text-xs shrink-0 font-mono", isSelected ? "opacity-70" : "text-muted-foreground")}>
                   {formatEncounterTime(encounter)}
                 </span>
@@ -896,6 +897,7 @@ function EncounterSidebar({
                   <Skull className="h-4 w-4 shrink-0 text-red-500" />
                 )}
                 <span className={cn("truncate flex-1", isSelected && "font-semibold")}>{encounter.name}</span>
+                <EncounterDifficultyMark difficulty={encounter.difficulty} />
                 <span className={cn("text-xs shrink-0 font-mono", isSelected ? "opacity-70" : "text-muted-foreground")}>
                   {formatEncounterTime(encounter)}
                 </span>
@@ -4334,12 +4336,7 @@ function InstancePageViewContent({
               {instance.maxPlayers != null && instance.maxPlayers > 0 && (
                 <div className="flex items-center gap-1.5">
                   <span className="text-sm text-muted-foreground font-medium">{instance.maxPlayers} Player</span>
-                  {(instance.mixedDifficulty || (!heroic && instance.difficulties?.some(Boolean))) && (
-                    <span className="rounded bg-purple-500/15 px-1.5 py-0.5 text-xs font-semibold text-purple-300">{difficultySetLabel(instance.difficulties)}</span>
-                  )}
-                  {heroic && (
-                    <HeroicBadge />
-                  )}
+                  <EncounterDifficultySummary encounters={instance.encounters} mixedDifficulty={instance.mixedDifficulty ?? false} />
                 </div>
               )}
               {overviewEnabled && <InstanceViewModeSwitch value={viewMode} onChange={setViewMode} />}
@@ -4458,12 +4455,7 @@ function InstancePageViewContent({
           {isMobile && instance.maxPlayers != null && instance.maxPlayers > 0 && (
             <div className="flex items-center gap-1.5 shrink-0">
               <span className="text-xs text-muted-foreground font-medium">{instance.maxPlayers} Player</span>
-              {(instance.mixedDifficulty || (!heroic && instance.difficulties?.some(Boolean))) && (
-                <span className="rounded bg-purple-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-purple-300">{difficultySetLabel(instance.difficulties)}</span>
-              )}
-              {heroic && (
-                <HeroicBadge />
-              )}
+              <EncounterDifficultySummary encounters={instance.encounters} mixedDifficulty={instance.mixedDifficulty ?? false} />
             </div>
           )}
           {!isMobile && (

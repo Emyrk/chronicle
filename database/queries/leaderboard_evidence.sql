@@ -13,6 +13,7 @@ WHERE li.id = @instance_id::uuid;
 
 -- name: ListInstanceRatingPlayerObservations :many
 SELECT
+    observation.difficulty_name, observation.max_players,
     observation.encounter_name,
     observation.player_guid,
     COALESCE(ranking.player_name, '')::text AS player_name,
@@ -38,6 +39,7 @@ ORDER BY observation.encounter_name, observation.player_guid;
 
 -- name: ListInstanceRatingPlayerRenownFacts :many
 SELECT
+    fact.difficulty_name, fact.max_players,
     fact.encounter_name,
     fact.player_guid,
     COALESCE(player.name, '')::text AS player_name,
@@ -55,6 +57,7 @@ ORDER BY fact.encounter_name, fact.player_guid;
 
 -- name: ListInstanceRatingGuildBossObservations :many
 SELECT
+    observation.difficulty_name, observation.max_players,
     observation.encounter_name,
     observation.guild_id,
     COALESCE(guild.name, '')::text AS guild_name,
@@ -72,6 +75,7 @@ ORDER BY observation.encounter_name, observation.guild_id;
 
 -- name: ListInstanceRatingGuildClearObservations :many
 SELECT
+    observation.difficulty_name, observation.max_players,
     observation.guild_id,
     COALESCE(guild.name, '')::text AS guild_name,
     observation.duration_ms,
@@ -87,6 +91,7 @@ ORDER BY observation.guild_id;
 
 -- name: ListInstanceRatingGuildRenownFacts :many
 SELECT
+    fact.difficulty_name, fact.max_players,
     fact.encounter_name,
     fact.guild_id,
     COALESCE(guild.name, '')::text AS guild_name,

@@ -33,7 +33,7 @@ func newSourceFixture(t *testing.T) *sourceFixture {
 	// A duplicate-group identity distinct from the representative is valid only
 	// when the group ID references another existing instance (seed it first).
 	s.run = s.instance
-	f.exec(`INSERT INTO log_instances(id,realm_id,log_group_id,name,difficulty_name,max_players,guild_id) VALUES($1,$2,$3,'Fixture raid','Normal',40,$4)`, s.instance, f.realm, s.group, f.guild)
+	f.exec(`INSERT INTO log_instances(id,realm_id,log_group_id,name,difficulty_name,max_players,guild_id,difficulty_normalized) VALUES($1,$2,$3,'Fixture raid','Normal',40,$4,true)`, s.instance, f.realm, s.group, f.guild)
 	f.exec(`INSERT INTO log_instance_encounters(id,instance_id,name,remaining,boss,start_time,end_time,kill_type) VALUES($1,$2,'Boss','{}',true,'2026-01-01Z','2026-01-01Z'::timestamptz+interval '10 seconds','clean')`, s.encounter, s.instance)
 	f.exec(`INSERT INTO ranking_runs(run_id,representative_instance_id,realm_id,instance_name,difficulty_name,max_players,boss_coverage,member_count,source_updated_at) VALUES($1,$2,$3,'Fixture raid','Normal',40,1,1,now())`, s.run, s.instance, f.realm)
 	f.exec(`INSERT INTO encounter_dps_rankings(encounter_id,instance_id,encounter_name,instance_name,player_guid,player_name,player_class,player_spec,difficulty_name,max_players,realm_id,realm_name,damage_done,duration_secs,dps,hps,killed_at) VALUES($1,$2,'Boss','Fixture raid','Player','Player','MAGE','Frost','Normal',40,$3,'Projection realm',1000,10,100,25,now())`, s.encounter, s.instance, f.realm)
@@ -700,7 +700,7 @@ func TestProjectionPreservesSameBossDifficultyVariants(t *testing.T) {
 	s.times()
 	// Keep the legacy instance label to exercise the resolved normal fallback.
 	heroic := uuid.New()
-	s.exec(`UPDATE log_instances SET mixed_difficulty=true WHERE id=$1`, s.instance)
+	s.exec(`UPDATE log_instances SET mixed_difficulty=true, difficulty_normalized=false WHERE id=$1`, s.instance)
 	s.exec(`INSERT INTO log_instance_encounters(id,instance_id,name,remaining,boss,start_time,end_time,kill_type,difficulty)
   VALUES($1,$2,'Boss','{}',true,'2026-01-01Z','2026-01-01Z'::timestamptz+interval '20 seconds','clean','heroic')`, heroic, s.instance)
 	s.exec(`INSERT INTO encounter_dps_rankings(encounter_id,instance_id,encounter_name,instance_name,player_guid,player_name,player_class,player_spec,difficulty_name,max_players,realm_id,realm_name,damage_done,duration_secs,dps,hps,killed_at)

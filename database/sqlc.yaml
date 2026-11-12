@@ -45,6 +45,13 @@ sql:
               type: "Periods"
           - column: "log_instance_encounters.remaining"
             go_type: "github.com/Emyrk/chronicle/combatlog/parser/guid.GUIDs"
+          - column: "parse_score_results_resolved.difficulty_name"
+            go_type: "string"
+          - column: "log_instances_resolved.versions"
+            go_type:
+              type: "VersionsMap"
+          - column: "log_instances_resolved.vehicle_control_intervals"
+            go_type: "github.com/Emyrk/chronicle/combatlog/parser/common/vehicles.Metadata"
           - column: "log_instances.versions"
             go_type:
               type: "VersionsMap"

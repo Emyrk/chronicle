@@ -909,7 +909,7 @@ parse_rows AS MATERIALIZED (
         psr.difficulty_name,
         psr.max_players,
         psr.precise_score
-    FROM parse_score_results psr
+    FROM parse_score_results_resolved psr
     JOIN log_instances_resolved psr_instance ON psr_instance.id = psr.instance_id
     JOIN wow_log_groups psr_group ON psr_group.id = psr_instance.log_group_id AND NOT psr_group.unlisted
     JOIN selected_encounters selected ON selected.encounter_name = psr.encounter_name

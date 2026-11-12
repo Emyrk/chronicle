@@ -23,6 +23,8 @@ type InstanceRatingPlayerEvidence struct {
 }
 
 type InstanceRatingPlayerObservation struct {
+	DifficultyName    string    `json:"difficulty_name"`
+	MaxPlayers        int16     `json:"max_players"`
 	EncounterName     string    `json:"encounter_name"`
 	PlayerGUID        string    `json:"player_guid"`
 	PlayerName        string    `json:"player_name,omitempty"`
@@ -39,6 +41,8 @@ type InstanceRatingPlayerObservation struct {
 }
 
 type InstanceRatingPlayerRenownFact struct {
+	DifficultyName    string    `json:"difficulty_name"`
+	MaxPlayers        int16     `json:"max_players"`
 	EncounterName     string    `json:"encounter_name"`
 	PlayerGUID        string    `json:"player_guid"`
 	PlayerName        string    `json:"player_name,omitempty"`
@@ -55,6 +59,8 @@ type InstanceRatingGuildEvidence struct {
 }
 
 type InstanceRatingGuildBossObservation struct {
+	DifficultyName         string    `json:"difficulty_name"`
+	MaxPlayers             int16     `json:"max_players"`
 	EncounterName          string    `json:"encounter_name"`
 	GuildID                uuid.UUID `json:"guild_id"`
 	GuildName              string    `json:"guild_name,omitempty"`
@@ -67,6 +73,8 @@ type InstanceRatingGuildBossObservation struct {
 }
 
 type InstanceRatingGuildClearObservation struct {
+	DifficultyName         string    `json:"difficulty_name"`
+	MaxPlayers             int16     `json:"max_players"`
 	GuildID                uuid.UUID `json:"guild_id"`
 	GuildName              string    `json:"guild_name,omitempty"`
 	DurationMs             int64     `json:"duration_ms"`
@@ -77,6 +85,8 @@ type InstanceRatingGuildClearObservation struct {
 }
 
 type InstanceRatingGuildRenownFact struct {
+	DifficultyName    string    `json:"difficulty_name"`
+	MaxPlayers        int16     `json:"max_players"`
 	EncounterName     string    `json:"encounter_name"`
 	GuildID           uuid.UUID `json:"guild_id"`
 	GuildName         string    `json:"guild_name,omitempty"`

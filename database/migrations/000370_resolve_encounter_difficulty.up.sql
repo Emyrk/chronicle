@@ -1,5 +1,15 @@
 BEGIN;
 
+-- Draft 369 must not have served ingestion before this replacement contract.
+-- Refuse rather than silently discard any draft-format encounter evidence.
+DO $draft_guard$
+BEGIN
+    IF EXISTS (SELECT 1 FROM log_instance_difficulties LIMIT 1) THEN
+        RAISE EXCEPTION 'migration 370 found populated draft-369 difficulty data; preserve it with an operator-reviewed conversion before deployment';
+    END IF;
+END
+$draft_guard$;
+
 -- Do not build indexes on populated tables during service startup. Production
 -- must first run the separately approved concurrent preparation script. Empty
 -- test/new installations can create these indexes without scanning user data.
@@ -52,8 +62,8 @@ ALTER TABLE log_instance_encounters
     DROP COLUMN max_players,
     DROP COLUMN dynamic_difficulty;
 
--- This is a derived ingestion summary. Reads derive the set from boss attempts,
--- so discarding draft-format summary rows does not discard encounter evidence.
+-- The guard above ensures this draft-format summary is empty.
+-- Reads derive the observed set from all encounters.
 DROP TABLE log_instance_difficulties;
 CREATE TABLE log_instance_difficulties (
     instance_id uuid NOT NULL REFERENCES log_instances(id) ON DELETE CASCADE,
@@ -91,7 +101,8 @@ SELECT
     li.updated_at,
     li.invalidated_at,
     li.invalid_reason,
-    li.mixed_difficulty
+    li.mixed_difficulty,
+    li.difficulty_normalized
 FROM log_instances li;
 
 -- Preserve the caller's ranking RLS policies through the read adapter.
@@ -131,7 +142,46 @@ SELECT
     ranking.unranked_damage_done
 FROM encounter_dps_rankings ranking
 JOIN log_instances_resolved instance ON instance.id = ranking.instance_id
-LEFT JOIN log_instance_encounters encounter ON encounter.id = ranking.encounter_id;
+LEFT JOIN log_instance_encounters encounter ON encounter.id = ranking.encounter_id
+-- New canonical rows must agree with the encounter. Legacy rows have only the
+-- parent log assumption; do not reinterpret a corrupt new ranking as valid.
+WHERE NOT instance.difficulty_normalized OR (
+    ranking.difficulty_name = COALESCE(encounter.difficulty, instance.difficulty_name)
+    AND ranking.max_players = instance.max_players
+);
+
+-- Preserve historic scores while resolving their cohort from the recorded log.
+-- This is a read adapter, not a bulk rewrite or an automatic score recalculation.
+CREATE VIEW parse_score_results_resolved WITH (security_invoker = true) AS
+SELECT
+    score.id,
+    score.tenant_id,
+    score.instance_id,
+    score.run_id,
+    score.snapshot_id,
+    score.log_group_id,
+    score.guild_id,
+    score.encounter_name,
+    score.player_guid,
+    score.player_name,
+    score.player_class,
+    score.player_spec,
+    score.player_role,
+    score.metric,
+    score.metric_value,
+    score.precise_score,
+    score.display_score,
+    score.rank,
+    score.sample_size,
+    score.status,
+    score.instance_name,
+    CASE WHEN instance.difficulty_normalized THEN score.difficulty_name ELSE instance.difficulty_name END::text AS difficulty_name,
+    instance.max_players::smallint AS max_players,
+    score.killed_at,
+    score.created_at,
+    score.player_sub_spec
+FROM parse_score_results score
+JOIN log_instances_resolved instance ON instance.id = score.instance_id;
 
 CREATE OR REPLACE VIEW log_instances_guild AS
 SELECT

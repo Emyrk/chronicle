@@ -51,6 +51,7 @@ LEFT JOIN wow_server_realms wsr ON wsr.id = li.realm_id
 LEFT JOIN wow_servers ws ON wsr.server_id = ws.id
 LEFT JOIN tenants t ON ws.tenant_id = t.id
 LEFT JOIN guilds g ON li.guild_id = g.id;
+DROP VIEW parse_score_results_resolved;
 DROP VIEW encounter_dps_rankings_resolved;
 DROP VIEW log_instances_resolved;
 ALTER TABLE log_instances DROP COLUMN difficulty_normalized;

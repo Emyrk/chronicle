@@ -144,7 +144,7 @@ LEFT JOIN LATERAL (
             psr.encounter_name,
             MAX(psr.display_score) FILTER (WHERE psr.metric = 'dps') AS dps_parse,
             MAX(psr.display_score) FILTER (WHERE psr.metric = 'hps') AS hps_parse
-        FROM parse_score_results psr
+        FROM parse_score_results_resolved psr
         WHERE psr.run_id = d.run_id
           AND psr.player_guid = (@player_guid::wow_guid)::text
           AND psr.tenant_id = @tenant_id

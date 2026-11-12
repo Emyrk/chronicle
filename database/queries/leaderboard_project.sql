@@ -14,7 +14,7 @@ WITH source AS MATERIALIZED (
  JOIN log_instances_resolved li ON li.id=rr.representative_instance_id
   AND COALESCE(li.duplicate_group_id,li.id)=rr.run_id
   AND li.realm_id=rr.realm_id AND li.name=rr.instance_name
-  AND li.difficulty_name=rr.difficulty_name AND li.max_players=rr.max_players
+  AND li.max_players=rr.max_players
  JOIN wow_log_groups lg ON lg.id=li.log_group_id AND NOT lg.unlisted
  JOIN wow_server_realms realm ON realm.id=li.realm_id
  JOIN wow_servers server ON server.id=realm.server_id AND server.tenant_id= @tenant_id::uuid

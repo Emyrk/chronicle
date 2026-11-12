@@ -246,8 +246,8 @@ func PGDump(dbURL string) ([]byte, error) {
 }
 
 const (
-	minimumPostgreSQLVersion = 13
-	postgresImageSha         = "sha256:467e7f2fb97b2f29d616e0be1d02218a7bbdfb94eb3cda7461fd80165edfd1f7"
+	minimumPostgreSQLVersion = 17
+	postgresImageSha         = "sha256:cb51e9f73d5b6fd77340999cc0fdfcf56a1d580daa6f4c2f6c72264993e6de34"
 )
 
 // PGDumpSchemaOnly is for use by gen/dump only.

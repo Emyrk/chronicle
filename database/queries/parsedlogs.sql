@@ -122,13 +122,13 @@ VALUES (@instance_id, @difficulty)
 ON CONFLICT DO NOTHING;
 
 -- name: InstanceDifficultiesByInstanceID :many
--- Boss attempts (including wipes) are authoritative. The persisted set is an
--- ingestion summary, not a substitute for legacy encounter fallback.
+-- Return all observed modes for analysis. Clear eligibility is stored separately
+-- from boss attempts only; trash must not determine mixed-clear status.
 SELECT DISTINCT encounter.instance_id,
        COALESCE(encounter.difficulty, instance.difficulty_name)::text AS difficulty
 FROM log_instance_encounters encounter
 JOIN log_instances_resolved instance ON instance.id = encounter.instance_id
-WHERE encounter.instance_id = @instance_id AND encounter.boss
+WHERE encounter.instance_id = @instance_id
 ORDER BY difficulty;
 
 -- name: GetInstancesByLogGroupID :many

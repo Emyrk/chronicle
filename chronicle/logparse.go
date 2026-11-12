@@ -31,7 +31,6 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
-	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
 	"github.com/Emyrk/chronicle/combatlog/parser/unitname"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
@@ -578,18 +577,14 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 				instanceCategory = pgtype.Text{String: string(inst.Category), Valid: true}
 			}
 
-			difficulties := make(map[zone.Difficulty]struct{})
-			for _, enc := range finalized.Encounters {
-				if enc.Combat.Difficulty.Known() {
-					difficulties[enc.Combat.Difficulty] = struct{}{}
-				}
+			difficultySummary := summarizeEncounterDifficulties(finalized.Encounters)
+			mixedDifficulty := difficultySummary.Mixed
+			clearDifficulty := difficultySummary.Clear
+			// Compatibility display flag follows the boss cohort, not the final zone.
+			clearDynamicDifficulty := int32(0)
+			if clearDifficulty == "heroic" {
+				clearDynamicDifficulty = 1
 			}
-			if len(difficulties) == 0 {
-				if difficulty := inst.CurrentZone.DifficultySnapshot(); difficulty.Known() {
-					difficulties[difficulty] = struct{}{}
-				}
-			}
-			mixedDifficulty := len(difficulties) > 1
 
 			insertInstanceParams := database.InsertInstanceParams{
 				ID:         instanceID,
@@ -611,9 +606,9 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 				RecorderName:            recorderName,
 				RecorderGuid:            recorderGUID,
 				ParserVersion:           version.ExactParserVersion(),
-				DifficultyName:          inst.CurrentZone.DifficultyName,
+				DifficultyName:          clearDifficulty,
 				MaxPlayers:              int32(inst.CurrentZone.MaxPlayers),
-				DynamicDifficulty:       int32(inst.CurrentZone.DynamicDifficulty),
+				DynamicDifficulty:       clearDynamicDifficulty,
 				MixedDifficulty:         mixedDifficulty,
 				Category:                instanceCategory,
 				VehicleControlIntervals: finalized.VehicleMetadata,
@@ -648,10 +643,9 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 			if err != nil {
 				return fmt.Errorf("insert instance: %w", err)
 			}
-			for difficulty := range difficulties {
+			for _, difficulty := range difficultySummary.All {
 				if err := tx.InsertInstanceDifficulty(ctx, database.InsertInstanceDifficultyParams{
-					InstanceID: dbinstance.ID, DifficultyName: difficulty.Name,
-					MaxPlayers: int32(difficulty.MaxPlayers), DynamicDifficulty: int32(difficulty.DynamicDifficulty),
+					InstanceID: dbinstance.ID, Difficulty: difficulty,
 				}); err != nil {
 					return fmt.Errorf("insert instance difficulty: %w", err)
 				}
@@ -726,9 +720,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 					Boss:                 enc.Boss,
 					RankingStartOffsetMs: rankingStart,
 					RankingEndOffsetMs:   rankingEnd,
-					DifficultyName:       enc.Combat.Difficulty.Name,
-					MaxPlayers:           int32(enc.Combat.Difficulty.MaxPlayers),
-					DynamicDifficulty:    int32(enc.Combat.Difficulty.DynamicDifficulty),
+					Difficulty:           pgtype.Text{String: enc.Combat.Difficulty, Valid: true},
 					StartTime:            database.Timestamptz(enc.Combat.Start),
 					EndTime:              database.Timestamptz(enc.Combat.End),
 				})
@@ -838,7 +830,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 				rankedStartTime := pgtype.Timestamptz{}
 				rankedCompletionTime := pgtype.Timestamptz{}
 				rankedDurationMs := pgtype.Int8{}
-				if !sr.RankedStartTime.IsZero() && !sr.RankedCompletionTime.IsZero() {
+				if !mixedDifficulty && !sr.RankedStartTime.IsZero() && !sr.RankedCompletionTime.IsZero() {
 					rankedStartTime = database.Timestamptz(sr.RankedStartTime)
 					rankedCompletionTime = database.Timestamptz(sr.RankedCompletionTime)
 					rankedDurationMs = pgtype.Int8{Int64: sr.RankedDuration.Milliseconds(), Valid: true}
@@ -846,7 +838,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 				bossToBossStartTime := pgtype.Timestamptz{}
 				bossToBossCompletionTime := pgtype.Timestamptz{}
 				bossToBossDurationMs := pgtype.Int8{}
-				if !sr.BossToBossStartTime.IsZero() && !sr.BossToBossCompletionTime.IsZero() {
+				if !mixedDifficulty && !sr.BossToBossStartTime.IsZero() && !sr.BossToBossCompletionTime.IsZero() {
 					bossToBossStartTime = database.Timestamptz(sr.BossToBossStartTime)
 					bossToBossCompletionTime = database.Timestamptz(sr.BossToBossCompletionTime)
 					bossToBossDurationMs = pgtype.Int8{Int64: sr.BossToBossDuration.Milliseconds(), Valid: true}
@@ -879,6 +871,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 			}
 
 			inst := db2sdk.WoWInstanceWithGuild(dbinstance, guild)
+			inst.Difficulties = difficultySummary.All
 			inst.UploadSource = string(lg.UploadSource)
 			inst.RealmName = realmName
 			jobOut.Instances = append(jobOut.Instances, chroniclesdk.WoWSimpleParsedInstance{
@@ -927,7 +920,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 					return err
 				}
 				var err error
-				rankingRunAffectedIDs, err = detectAndLinkDuplicate(ctx, tx, dbinstance.ID, dbinstance.RealmID, dbinstance.Name, dbinstance.MaxPlayers, dbinstance.DynamicDifficulty, instanceStart, builder.participants)
+				rankingRunAffectedIDs, err = detectAndLinkDuplicate(ctx, tx, dbinstance.ID, dbinstance.RealmID, dbinstance.Name, dbinstance.MaxPlayers, instanceStart, builder.participants)
 				if err != nil {
 					return err
 				}
@@ -1415,7 +1408,6 @@ func detectAndLinkDuplicate(
 	realmID uuid.UUID,
 	name string,
 	maxPlayers int32,
-	dynamicDifficulty int32,
 	startTime pgtype.Timestamptz,
 	players []database.InsertInstancePlayersParams,
 ) ([]uuid.UUID, error) {
@@ -1423,13 +1415,12 @@ func detectAndLinkDuplicate(
 	windowEnd := database.Timestamptz(startTime.Time.Add(30 * time.Minute))
 
 	candidates, err := tx.FindDuplicateInstanceCandidates(ctx, database.FindDuplicateInstanceCandidatesParams{
-		RealmID:           realmID,
-		Name:              name,
-		MaxPlayers:        maxPlayers,
-		DynamicDifficulty: dynamicDifficulty,
-		WindowStart:       windowStart,
-		WindowEnd:         windowEnd,
-		ExcludeID:         instanceID,
+		RealmID:     realmID,
+		Name:        name,
+		MaxPlayers:  maxPlayers,
+		WindowStart: windowStart,
+		WindowEnd:   windowEnd,
+		ExcludeID:   instanceID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("find duplicate candidates: %w", err)
@@ -1668,8 +1659,8 @@ func insertDPSRankings(
 				PlayerRole:         roles[unitGUID],
 				PlayerLevel:        playerLevel,
 				TalentBuildID:      talentBuildID,
-				DifficultyName:     enc.Combat.Difficulty.Name,
-				MaxPlayers:         int16(enc.Combat.Difficulty.MaxPlayers),
+				DifficultyName:     enc.Combat.Difficulty,
+				MaxPlayers:         int16(dbinstance.MaxPlayers),
 				RealmID:            dbinstance.RealmID,
 				RealmName:          realmName,
 				GuildID:            uuid.NullUUID{}, // guild_name is sufficient; avoid FK constraint issues
@@ -1695,8 +1686,10 @@ func insertDPSRankings(
 		}
 	}
 
-	// Aggregate trash (non-boss) encounters into per-(player, spec) ranking rows.
-	if !dbinstance.MixedDifficulty {
+	// Aggregate trash only when the whole log has one difficulty. A Normal
+	// trash pull must not be credited to a Heroic boss cohort, even though it
+	// does not invalidate the Heroic clear itself.
+	if !dbinstance.MixedDifficulty && len(summarizeEncounterDifficulties(finalized.Encounters).All) <= 1 {
 		if err := insertTrashRankings(ctx, tx, finalized, dbinstance, instanceName, realmName, datasetID, flavor, talentTreeData); err != nil {
 			return err
 		}

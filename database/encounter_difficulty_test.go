@@ -33,10 +33,10 @@ func TestEncounterDifficultySQL(t *testing.T) {
 	ctx := testutil.Context(t, testutil.WaitLong)
 	conn, err := pgx.Connect(ctx, connectionURL)
 	require.NoError(t, err)
-	defer conn.Close(ctx)
+	defer func() { require.NoError(t, conn.Close(ctx)) }()
 	tx, err := conn.Begin(ctx)
 	require.NoError(t, err)
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }() // The transaction may already be closed by the test.
 	fixture, err := os.ReadFile("testdata/encounter_difficulty.sql")
 	require.NoError(t, err)
 	_, err = tx.Exec(ctx, string(fixture))
@@ -58,7 +58,7 @@ func TestEncounterDifficultySQL(t *testing.T) {
 		require.Equal(t, expected, got)
 	}
 	// A Normal wipe and heroic kill are mixed; mythic trash is excluded.
-	assertSet("00000000-0000-0000-0000-000000000001", []string{"", "heroic"})
+	assertSet("00000000-0000-0000-0000-000000000001", []string{"", "heroic", "mythic"})
 	assertSet("00000000-0000-0000-0000-000000000002", []string{"heroic"})
 	// Future variants survive without being normalized back to Normal.
 	assertSet("00000000-0000-0000-0000-000000000003", []string{"", "mythic"})
@@ -138,6 +138,6 @@ func TestEncounterDifficultySQL(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(6), inspected)
 	require.Zero(t, updated)
-	assertSet("00000000-0000-0000-0000-000000000001", []string{"", "heroic"})
+	assertSet("00000000-0000-0000-0000-000000000001", []string{"", "heroic", "mythic"})
 	assertSet("00000000-0000-0000-0000-000000000003", []string{"", "mythic"})
 }

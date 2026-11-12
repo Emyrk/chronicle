@@ -64,7 +64,7 @@ LIMIT 1;
 -- name: HasParseScoreResultsForTenantInstance :one
 SELECT EXISTS (
     SELECT 1
-    FROM parse_score_results result
+    FROM parse_score_results_resolved result
     JOIN log_instances visibility_instance ON visibility_instance.id = result.instance_id
     JOIN wow_log_groups log_group ON log_group.id = visibility_instance.log_group_id AND NOT log_group.unlisted
     WHERE result.tenant_id = @tenant_id AND result.instance_id = @instance_id
@@ -83,7 +83,7 @@ ORDER BY computed_at DESC;
 -- retained as opaque provenance on its successful receipt.
 SELECT DISTINCT ON (psr.difficulty_name, psr.max_players, psr.encounter_name, psr.player_guid)
     psr.*
-FROM parse_score_results psr
+FROM parse_score_results_resolved psr
 JOIN log_instances_resolved visibility_instance ON visibility_instance.id = psr.instance_id
 JOIN wow_log_groups log_group ON log_group.id = visibility_instance.log_group_id AND NOT log_group.unlisted
 WHERE psr.tenant_id = @tenant_id
@@ -95,7 +95,7 @@ ORDER BY psr.difficulty_name, psr.max_players, psr.encounter_name, psr.player_gu
 -- name: ListWindowedParseScoreResultsForContract :many
 SELECT DISTINCT ON (psr.difficulty_name, psr.max_players, psr.encounter_name, psr.player_guid)
     psr.*
-FROM parse_score_results psr
+FROM parse_score_results_resolved psr
 JOIN log_instances_resolved visibility_instance ON visibility_instance.id = psr.instance_id
 JOIN wow_log_groups log_group ON log_group.id = visibility_instance.log_group_id AND NOT log_group.unlisted
 WHERE psr.tenant_id = @tenant_id
@@ -109,7 +109,7 @@ ORDER BY psr.difficulty_name, psr.max_players, psr.encounter_name, psr.player_gu
 -- joining snapshot tables or score memberships so they can never be recomputed.
 SELECT DISTINCT ON (psr.difficulty_name, psr.max_players, psr.encounter_name, psr.player_guid)
     psr.*
-FROM parse_score_results psr
+FROM parse_score_results_resolved psr
 JOIN log_instances_resolved visibility_instance ON visibility_instance.id = psr.instance_id
 JOIN wow_log_groups log_group ON log_group.id = visibility_instance.log_group_id AND NOT log_group.unlisted
 WHERE psr.tenant_id = @tenant_id
@@ -122,7 +122,7 @@ ORDER BY psr.difficulty_name, psr.max_players, psr.encounter_name, psr.player_gu
 -- Uses DISTINCT ON (run_id, encounter, player, snapshot, metric) to collapse duplicate uploads.
 SELECT DISTINCT ON (psr.difficulty_name, psr.max_players, psr.run_id, psr.encounter_name, psr.player_guid, psr.snapshot_id, psr.metric)
     psr.*
-FROM parse_score_results psr
+FROM parse_score_results_resolved psr
 JOIN log_instances_resolved visibility_instance ON visibility_instance.id = psr.instance_id
 JOIN wow_log_groups log_group ON log_group.id = visibility_instance.log_group_id AND NOT log_group.unlisted
 WHERE psr.instance_id = @instance_id
@@ -165,7 +165,7 @@ SELECT DISTINCT ON (psr.difficulty_name, psr.max_players, psr.run_id, psr.encoun
     psr.player_spec,
     psr.player_sub_spec,
     psr.player_role
-FROM parse_score_results psr
+FROM parse_score_results_resolved psr
 JOIN log_instances_resolved visibility_instance ON visibility_instance.id = psr.instance_id
 JOIN wow_log_groups log_group ON log_group.id = visibility_instance.log_group_id AND NOT log_group.unlisted
 WHERE psr.tenant_id = @tenant_id
@@ -206,7 +206,7 @@ WHERE li.start_time >= @repair_since
   )
   AND NOT EXISTS (
     SELECT 1
-    FROM parse_score_results result
+    FROM parse_score_results_resolved result
     WHERE result.tenant_id = @tenant_id
       AND result.instance_id = candidates.instance_id
   )

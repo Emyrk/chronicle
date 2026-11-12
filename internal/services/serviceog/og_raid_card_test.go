@@ -86,7 +86,7 @@ func TestRaidKillTimeParseSummary(t *testing.T) {
 		{ID: first, StartTime: database.Timestamptz(start)},
 		{ID: second, StartTime: database.Timestamptz(start.Add(time.Minute))},
 	}
-	rows := []database.TimeParseBossScore{
+	rows := []database.ListTimeParseBossScoresForScoreRow{
 		{EncounterID: second, ServerPreciseScore: 90.4, ServerDisplayScore: 90, ServerStatus: string(timeparsepolicy.StatusOK)},
 		{EncounterID: unmatched, ServerPreciseScore: 70.4, ServerDisplayScore: 70, ServerStatus: string(timeparsepolicy.StatusLowConfidence)},
 		{EncounterID: small, ServerPreciseScore: 99, ServerDisplayScore: 99, ServerStatus: string(timeparsepolicy.StatusSampleTooSmall)},
@@ -118,10 +118,10 @@ func TestRaidTopDPS(t *testing.T) {
 
 	boss := uuid.NullUUID{UUID: uuid.New(), Valid: true}
 	boss2 := uuid.NullUUID{UUID: uuid.New(), Valid: true}
-	row := func(encounter uuid.NullUUID, guid, name, class string, damage int64, secs float64) database.EncounterDpsRanking {
-		return database.EncounterDpsRanking{EncounterID: encounter, PlayerGuid: guid, PlayerName: name, PlayerClass: class, DamageDone: damage, DurationSecs: secs}
+	row := func(encounter uuid.NullUUID, guid, name, class string, damage int64, secs float64) database.EncounterDpsRankingsResolved {
+		return database.EncounterDpsRankingsResolved{EncounterID: encounter, PlayerGuid: guid, PlayerName: name, PlayerClass: class, DamageDone: damage, DurationSecs: secs}
 	}
-	records := []database.EncounterDpsRanking{
+	records := []database.EncounterDpsRankingsResolved{
 		// Damage ÷ time across bosses: (100k + 20k) / (100 + 100) = 600.
 		row(boss, "a", "Averylongcharactername", "MAGE", 100_000, 100),
 		row(boss2, "a", "Averylongcharactername", "MAGE", 20_000, 100),
@@ -155,10 +155,10 @@ func TestRaidTopHPS(t *testing.T) {
 	t.Parallel()
 
 	boss := uuid.NullUUID{UUID: uuid.New(), Valid: true}
-	row := func(guid, name, class string, healing, absorbed int64) database.EncounterDpsRanking {
-		return database.EncounterDpsRanking{EncounterID: boss, PlayerGuid: guid, PlayerName: name, PlayerClass: class, HealingDone: healing, AbsorbedDone: absorbed, DurationSecs: 100}
+	row := func(guid, name, class string, healing, absorbed int64) database.EncounterDpsRankingsResolved {
+		return database.EncounterDpsRankingsResolved{EncounterID: boss, PlayerGuid: guid, PlayerName: name, PlayerClass: class, HealingDone: healing, AbsorbedDone: absorbed, DurationSecs: 100}
 	}
-	records := []database.EncounterDpsRanking{
+	records := []database.EncounterDpsRankingsResolved{
 		row("a", "Aeloria", "PRIEST", 60_000, 30_000), // absorbs count: 900
 		row("b", "Moonbrew", "DRUID", 85_000, 0),
 		row("c", "Grimtusk", "WARRIOR", 0, 0),

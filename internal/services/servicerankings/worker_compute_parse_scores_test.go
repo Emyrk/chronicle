@@ -972,6 +972,8 @@ func TestWorkerComputeParseScoresSameBossDifficultyVariants(t *testing.T) {
 	require.NoError(t, err)
 	killedAt := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 	insertRanking(t, ctx, store, f.instanceID, f.realmID, "player", "Player", 100, 25, killedAt)
+	_, err = pool.Exec(ctx, `UPDATE encounter_dps_rankings SET difficulty_name='', max_players=25 WHERE instance_id=$1`, f.instanceID)
+	require.NoError(t, err)
 	insertRanking(t, ctx, store, f.instanceID, f.realmID, "player", "Player", 200, 50, killedAt.Add(time.Hour))
 	_, err = pool.Exec(ctx, `UPDATE log_instance_encounters SET difficulty=CASE WHEN end_time=$2 THEN '' ELSE 'heroic' END WHERE instance_id=$1`, f.instanceID, killedAt)
 	require.NoError(t, err)

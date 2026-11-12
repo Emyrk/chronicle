@@ -132,7 +132,7 @@ func seedParseCard(t *testing.T) (database.Store, database.LogInstancesGuild, da
 	inst := database.LogInstancesGuild{ID: uuid.New(), Name: "Molten Core", RealmName: "Nordanaar"}
 	_, err = store.InsertInstance(ctx, database.InsertInstanceParams{
 		ID: inst.ID, RealmID: realmID, LogGroupID: logGroupID,
-		Name: inst.Name, Capabilities: []string{}, StartTime: database.Timestamptz(now.Add(-time.Hour)),
+		Name: inst.Name, DifficultyName: "Normal", MaxPlayers: 40, Capabilities: []string{}, StartTime: database.Timestamptz(now.Add(-time.Hour)),
 	})
 	require.NoError(t, err)
 	enc := database.LogInstanceEncounter{ID: uuid.New(), InstanceID: inst.ID, Name: "Ragnaros", Boss: true, KillType: database.KillTypeClean}
@@ -167,7 +167,7 @@ func seedParseCard(t *testing.T) (database.Store, database.LogInstancesGuild, da
 // slowRankingStore never answers the ranking records lookup before its deadline.
 type slowRankingStore struct{ database.Store }
 
-func (slowRankingStore) InstanceRankingRecords(ctx context.Context, _ uuid.UUID) ([]database.EncounterDpsRanking, error) {
+func (slowRankingStore) InstanceRankingRecords(ctx context.Context, _ uuid.UUID) ([]database.EncounterDpsRankingsResolved, error) {
 	<-ctx.Done()
 	return nil, ctx.Err()
 }

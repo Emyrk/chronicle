@@ -15,7 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const minimumPostgreSQLVersion = 13
+const minimumPostgreSQLVersion = 17
 
 func main() {
 	connection, closeFn, err := Open()

@@ -1582,6 +1582,41 @@ type EncounterDpsRanking struct {
 	UnrankedDamageDone int64              `db:"unranked_damage_done" json:"unranked_damage_done"`
 }
 
+type EncounterDpsRankingsResolved struct {
+	ID                 uuid.UUID          `db:"id" json:"id"`
+	EncounterID        uuid.NullUUID      `db:"encounter_id" json:"encounter_id"`
+	InstanceID         uuid.UUID          `db:"instance_id" json:"instance_id"`
+	EncounterName      string             `db:"encounter_name" json:"encounter_name"`
+	InstanceName       string             `db:"instance_name" json:"instance_name"`
+	PlayerGuid         string             `db:"player_guid" json:"player_guid"`
+	PlayerName         string             `db:"player_name" json:"player_name"`
+	PlayerClass        string             `db:"player_class" json:"player_class"`
+	PlayerSpec         string             `db:"player_spec" json:"player_spec"`
+	PlayerRole         string             `db:"player_role" json:"player_role"`
+	PlayerLevel        int16              `db:"player_level" json:"player_level"`
+	TalentBuildID      uuid.NullUUID      `db:"talent_build_id" json:"talent_build_id"`
+	DifficultyName     string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers         int16              `db:"max_players" json:"max_players"`
+	RealmID            uuid.UUID          `db:"realm_id" json:"realm_id"`
+	RealmName          string             `db:"realm_name" json:"realm_name"`
+	GuildID            uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	GuildName          string             `db:"guild_name" json:"guild_name"`
+	DamageDone         int64              `db:"damage_done" json:"damage_done"`
+	DurationSecs       float64            `db:"duration_secs" json:"duration_secs"`
+	Dps                float64            `db:"dps" json:"dps"`
+	AvgIlvl            pgtype.Int2        `db:"avg_ilvl" json:"avg_ilvl"`
+	LogHashedSlug      string             `db:"log_hashed_slug" json:"log_hashed_slug"`
+	KilledAt           pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	CreatedAt          pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	HealingDone        int64              `db:"healing_done" json:"healing_done"`
+	AbsorbedDone       int64              `db:"absorbed_done" json:"absorbed_done"`
+	Hps                float64            `db:"hps" json:"hps"`
+	PlayerSubSpec      string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PlayerDeaths       pgtype.Int4        `db:"player_deaths" json:"player_deaths"`
+	AlivePercentage    pgtype.Float8      `db:"alive_percentage" json:"alive_percentage"`
+	UnrankedDamageDone int64              `db:"unranked_damage_done" json:"unranked_damage_done"`
+}
+
 type ExternalCharacterLinkSync struct {
 	UserID       uuid.UUID          `db:"user_id" json:"user_id"`
 	Source       string             `db:"source" json:"source"`
@@ -2599,13 +2634,12 @@ type LogInstance struct {
 	InvalidatedAt           pgtype.Timestamptz `db:"invalidated_at" json:"invalidated_at"`
 	InvalidReason           string             `db:"invalid_reason" json:"invalid_reason"`
 	MixedDifficulty         bool               `db:"mixed_difficulty" json:"mixed_difficulty"`
+	DifficultyNormalized    bool               `db:"difficulty_normalized" json:"difficulty_normalized"`
 }
 
 type LogInstanceDifficulty struct {
-	InstanceID        uuid.UUID `db:"instance_id" json:"instance_id"`
-	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
-	MaxPlayers        int32     `db:"max_players" json:"max_players"`
-	DynamicDifficulty int32     `db:"dynamic_difficulty" json:"dynamic_difficulty"`
+	InstanceID uuid.UUID `db:"instance_id" json:"instance_id"`
+	Difficulty string    `db:"difficulty" json:"difficulty"`
 }
 
 type LogInstanceEncounter struct {
@@ -2622,9 +2656,7 @@ type LogInstanceEncounter struct {
 	RankingEndOffsetMs   pgtype.Int8        `db:"ranking_end_offset_ms" json:"ranking_end_offset_ms"`
 	InvalidatedAt        pgtype.Timestamptz `db:"invalidated_at" json:"invalidated_at"`
 	InvalidReason        string             `db:"invalid_reason" json:"invalid_reason"`
-	DifficultyName       string             `db:"difficulty_name" json:"difficulty_name"`
-	MaxPlayers           int32              `db:"max_players" json:"max_players"`
-	DynamicDifficulty    int32              `db:"dynamic_difficulty" json:"dynamic_difficulty"`
+	Difficulty           pgtype.Text        `db:"difficulty" json:"difficulty"`
 }
 
 type LogInstanceEncounterDamageUnitSummary struct {
@@ -2735,6 +2767,33 @@ type LogInstancesGuild struct {
 	Format                  NullLogFormat      `db:"format" json:"format"`
 	Flavor                  []string           `db:"flavor" json:"flavor"`
 	UploadSource            UploadSource       `db:"upload_source" json:"upload_source"`
+}
+
+type LogInstancesResolved struct {
+	ID                      uuid.UUID          `db:"id" json:"id"`
+	RealmID                 uuid.UUID          `db:"realm_id" json:"realm_id"`
+	LogGroupID              uuid.UUID          `db:"log_group_id" json:"log_group_id"`
+	Name                    string             `db:"name" json:"name"`
+	HashedSlug              pgtype.Text        `db:"hashed_slug" json:"hashed_slug"`
+	GuildID                 uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	StartTime               pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	EndTime                 pgtype.Timestamptz `db:"end_time" json:"end_time"`
+	Capabilities            []string           `db:"capabilities" json:"capabilities"`
+	Versions                VersionsMap        `db:"versions" json:"versions"`
+	RecorderName            string             `db:"recorder_name" json:"recorder_name"`
+	RecorderGuid            string             `db:"recorder_guid" json:"recorder_guid"`
+	ParserVersion           string             `db:"parser_version" json:"parser_version"`
+	DuplicateGroupID        uuid.NullUUID      `db:"duplicate_group_id" json:"duplicate_group_id"`
+	DifficultyName          string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers              int32              `db:"max_players" json:"max_players"`
+	DynamicDifficulty       int32              `db:"dynamic_difficulty" json:"dynamic_difficulty"`
+	VehicleControlIntervals vehicles.Metadata  `db:"vehicle_control_intervals" json:"vehicle_control_intervals"`
+	Category                pgtype.Text        `db:"category" json:"category"`
+	UpdatedAt               pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	InvalidatedAt           pgtype.Timestamptz `db:"invalidated_at" json:"invalidated_at"`
+	InvalidReason           string             `db:"invalid_reason" json:"invalid_reason"`
+	MixedDifficulty         bool               `db:"mixed_difficulty" json:"mixed_difficulty"`
+	DifficultyNormalized    bool               `db:"difficulty_normalized" json:"difficulty_normalized"`
 }
 
 type LuaProject struct {
@@ -2871,6 +2930,35 @@ type ParseScoreReceipt struct {
 }
 
 type ParseScoreResult struct {
+	ID             uuid.UUID          `db:"id" json:"id"`
+	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	InstanceID     uuid.UUID          `db:"instance_id" json:"instance_id"`
+	RunID          uuid.UUID          `db:"run_id" json:"run_id"`
+	SnapshotID     uuid.NullUUID      `db:"snapshot_id" json:"snapshot_id"`
+	LogGroupID     uuid.NullUUID      `db:"log_group_id" json:"log_group_id"`
+	GuildID        uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
+	PlayerGuid     string             `db:"player_guid" json:"player_guid"`
+	PlayerName     string             `db:"player_name" json:"player_name"`
+	PlayerClass    string             `db:"player_class" json:"player_class"`
+	PlayerSpec     string             `db:"player_spec" json:"player_spec"`
+	PlayerRole     string             `db:"player_role" json:"player_role"`
+	Metric         string             `db:"metric" json:"metric"`
+	MetricValue    float64            `db:"metric_value" json:"metric_value"`
+	PreciseScore   float64            `db:"precise_score" json:"precise_score"`
+	DisplayScore   int16              `db:"display_score" json:"display_score"`
+	Rank           int32              `db:"rank" json:"rank"`
+	SampleSize     int32              `db:"sample_size" json:"sample_size"`
+	Status         string             `db:"status" json:"status"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16              `db:"max_players" json:"max_players"`
+	KilledAt       pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	CreatedAt      pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	PlayerSubSpec  string             `db:"player_sub_spec" json:"player_sub_spec"`
+}
+
+type ParseScoreResultsResolved struct {
 	ID             uuid.UUID          `db:"id" json:"id"`
 	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
 	InstanceID     uuid.UUID          `db:"instance_id" json:"instance_id"`
