@@ -893,7 +893,9 @@ func (a *API) adsEnabledForRequest(r *http.Request) bool {
 		return false
 	}
 
-	if a.Opts.Tenant != nil {
+	// The access URL may itself be a subdomain of the primary domain. Match the
+	// tenant middleware and treat it as the root site, not as a tenant slug.
+	if a.Opts.Tenant != nil && !a.isAccessURLHost(r.Host) {
 		slug := a.Opts.Tenant.ExtractSlug(r.Host)
 		if slug != "" {
 			tenant, ok := a.Opts.Tenant.GetTenantBySlug(slug)

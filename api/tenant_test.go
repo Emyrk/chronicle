@@ -11,6 +11,29 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestIsAccessURLHost(t *testing.T) {
+	t.Parallel()
+
+	accessURL := &url.URL{Scheme: "https", Host: "legacy.chronicle.example.com"}
+	api := &API{Opts: &Options{AccessURL: accessURL}}
+
+	for _, test := range []struct {
+		name string
+		host string
+		want bool
+	}{
+		{name: "access URL", host: "legacy.chronicle.example.com", want: true},
+		{name: "access URL with port", host: "legacy.chronicle.example.com:4000", want: true},
+		{name: "case insensitive", host: "LEGACY.CHRONICLE.EXAMPLE.COM", want: true},
+		{name: "tenant subdomain", host: "epoch.chronicle.example.com", want: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, test.want, api.isAccessURLHost(test.host))
+		})
+	}
+}
+
 func TestMetricTenant(t *testing.T) {
 	t.Parallel()
 

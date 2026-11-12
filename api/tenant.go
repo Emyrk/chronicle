@@ -11,6 +11,16 @@ const (
 	metricTenantUnknown = "unknown"
 )
 
+func (api *API) isAccessURLHost(host string) bool {
+	if api.Opts.AccessURL == nil {
+		return false
+	}
+	if hostname, _, err := net.SplitHostPort(host); err == nil {
+		host = hostname
+	}
+	return strings.EqualFold(host, api.Opts.AccessURL.Hostname())
+}
+
 // metricTenant returns a bounded tenant label for HTTP metrics. Only slugs in
 // the tenant service's cache are exposed, so arbitrary Host headers cannot
 // create unbounded Prometheus series.
@@ -18,11 +28,7 @@ func (api *API) metricTenant(r *http.Request) string {
 	if api.Opts.Tenant == nil {
 		return metricTenantRoot
 	}
-	host := r.Host
-	if hostname, _, err := net.SplitHostPort(host); err == nil {
-		host = hostname
-	}
-	if api.Opts.AccessURL != nil && strings.EqualFold(host, api.Opts.AccessURL.Hostname()) {
+	if api.isAccessURLHost(r.Host) {
 		return metricTenantRoot
 	}
 	slug := api.Opts.Tenant.ExtractSlug(r.Host)
