@@ -11,7 +11,10 @@ import (
 )
 
 type ongoingFight struct {
-	Difficulty     zone.Difficulty
+	Difficulty zone.Difficulty
+	// ZoneDifficulty records authoritative metadata received during this fight.
+	// Keep Difficulty as the fight-start snapshot for encounter-specific resolvers.
+	ZoneDifficulty *zone.Difficulty
 	EncounterID    uuid.UUID
 	MapID          uint32
 	ActiveHostiles map[guid.GUID]struct{}
