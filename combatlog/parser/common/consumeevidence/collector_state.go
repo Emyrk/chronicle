@@ -166,6 +166,8 @@ func (s CollectorState) validate() error {
 	return nil
 }
 
+// Restore uses the same canonical spell graph lookup as TrackerState.Restore.
+// Repeated paths, including paths shared across owners, must return one object.
 func (s CollectorState) Restore(auraTracker *auras.Tracking, shared *Tracker, resolveSpell func(string) (*chrondbc.Spell, error)) (*Collector, error) {
 	if shared == nil {
 		return nil, fmt.Errorf("nil shared consume evidence tracker")

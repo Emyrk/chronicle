@@ -91,6 +91,9 @@ func captureSpellReference(spell *chrondbc.Spell, capture func(*chrondbc.Spell) 
 	return spellReferenceValue{ID: spell.ID, Path: path}, nil
 }
 
+// resolveSpellReference expects a lookup into the session's already-restored
+// canonical spell graph. The same path must return the same object across every
+// owner restore. This owner deliberately does not add a second cache or registry.
 func resolveSpellReference(ref spellReferenceValue, resolve func(string) (*chrondbc.Spell, error)) (*chrondbc.Spell, error) {
 	if ref.Path == "" {
 		return nil, nil
@@ -255,6 +258,9 @@ func validateSpellReference(ref spellReferenceValue) error {
 	return nil
 }
 
+// Restore requires resolveSpell to be the shared canonical graph lookup used by
+// every retained owner in this session. It loads state only and does not derive
+// spells, query the catalog, or own resolver caching.
 func (s TrackerState) Restore(catalog ConsumableCatalog, resolveSpell func(string) (*chrondbc.Spell, error)) (*Tracker, error) {
 	if err := s.validate(); err != nil {
 		return nil, err
