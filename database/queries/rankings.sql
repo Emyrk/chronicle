@@ -7,7 +7,7 @@ SELECT
     ris.max_players,
     COALESCE((
         SELECT li.category
-        FROM log_instances li
+        FROM log_instances_resolved li
 JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
         WHERE li.name = ris.instance_name
           AND li.difficulty_name = ris.difficulty_name
@@ -31,14 +31,14 @@ WITH fallback_representative_instances AS (
     SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
         li.id,
         COALESCE(li.duplicate_group_id, li.id) AS run_id
-    FROM log_instances li
+    FROM log_instances_resolved li
 JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
     JOIN wow_server_realms tenant_realm ON tenant_realm.id = li.realm_id
     WHERE li.invalidated_at IS NULL
       AND NOT EXISTS (
         SELECT 1
         FROM ranking_runs rr
-        JOIN log_instances representative ON representative.id = rr.representative_instance_id
+        JOIN log_instances_resolved representative ON representative.id = rr.representative_instance_id
          AND COALESCE(representative.duplicate_group_id, representative.id) = rr.run_id
          AND representative.invalidated_at IS NULL
 
@@ -47,7 +47,7 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
     )
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
         (SELECT COUNT(DISTINCT coverage.encounter_name)
-         FROM encounter_dps_rankings coverage
+         FROM encounter_dps_rankings_resolved coverage
          WHERE coverage.instance_id = li.id
            AND coverage.encounter_id IS NOT NULL) DESC,
         (li.id = li.duplicate_group_id) DESC NULLS LAST,
@@ -57,7 +57,7 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
 representative_instances AS (
     SELECT rr.representative_instance_id AS id, rr.run_id
     FROM ranking_runs rr
-    JOIN log_instances representative ON representative.id = rr.representative_instance_id
+    JOIN log_instances_resolved representative ON representative.id = rr.representative_instance_id
      AND COALESCE(representative.duplicate_group_id, representative.id) = rr.run_id
      AND representative.invalidated_at IS NULL
 
@@ -75,8 +75,8 @@ ranking_rows AS (
         edr.player_class, edr.encounter_name,
         edr.damage_done, edr.duration_secs, edr.dps,
         ri.run_id
-    FROM encounter_dps_rankings edr
-JOIN log_instances edr_instance ON edr_instance.id = edr.instance_id
+    FROM encounter_dps_rankings_resolved edr
+JOIN log_instances_resolved edr_instance ON edr_instance.id = edr.instance_id
 JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NOT edr_group.unlisted
     JOIN representative_instances ri ON ri.id = edr.instance_id
     JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
@@ -165,8 +165,8 @@ DELETE FROM rankings_instance_summaries ris
 WHERE ris.tenant_id = @tenant_id
   AND NOT EXISTS (
     SELECT 1
-    FROM encounter_dps_rankings edr
-JOIN log_instances edr_instance ON edr_instance.id = edr.instance_id
+    FROM encounter_dps_rankings_resolved edr
+JOIN log_instances_resolved edr_instance ON edr_instance.id = edr.instance_id
 JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NOT edr_group.unlisted
     WHERE edr.instance_name = ris.instance_name
       AND edr.difficulty_name = ris.difficulty_name
@@ -177,8 +177,8 @@ JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NO
 -- Returns distinct (instance, difficulty, max_players) combos visible to the
 -- current tenant context (RLS on encounter_dps_rankings does the filtering).
 SELECT DISTINCT edr.instance_name, edr.difficulty_name, edr.max_players
-FROM encounter_dps_rankings edr
-JOIN log_instances edr_instance ON edr_instance.id = edr.instance_id
+FROM encounter_dps_rankings_resolved edr
+JOIN log_instances_resolved edr_instance ON edr_instance.id = edr.instance_id
 JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NOT edr_group.unlisted
 ORDER BY edr.instance_name, edr.difficulty_name, edr.max_players;
 
@@ -297,8 +297,8 @@ WITH candidate_runs AS (
     -- fraction of raid logs. Find those duplicate groups first so representative
     -- selection does not calculate boss coverage for every matching instance ever uploaded.
     SELECT DISTINCT COALESCE(li.duplicate_group_id, li.id) AS run_id
-    FROM encounter_dps_rankings candidate
-    JOIN log_instances li ON li.id = candidate.instance_id
+    FROM encounter_dps_rankings_resolved candidate
+    JOIN log_instances_resolved li ON li.id = candidate.instance_id
     JOIN wow_log_groups candidate_group ON candidate_group.id = li.log_group_id AND NOT candidate_group.unlisted
     WHERE (@class :: text != '' OR @spec :: text != '' OR @sub_spec :: text != '' OR @role :: text != '')
       AND (cardinality(@instance_names :: text[]) = 0
@@ -312,7 +312,7 @@ fallback_representative_instances AS (
     SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
         li.id,
         COALESCE(li.duplicate_group_id, li.id) AS run_id
-    FROM log_instances li
+    FROM log_instances_resolved li
 JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
     JOIN wow_server_realms tenant_realm ON tenant_realm.id = li.realm_id
     -- Apply tenant RLS before calculating boss coverage, then avoid unrelated
@@ -326,7 +326,7 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
       AND NOT EXISTS (
           SELECT 1
           FROM ranking_runs rr
-          JOIN log_instances representative ON representative.id = rr.representative_instance_id
+          JOIN log_instances_resolved representative ON representative.id = rr.representative_instance_id
            AND COALESCE(representative.duplicate_group_id, representative.id) = rr.run_id
          AND representative.invalidated_at IS NULL
 
@@ -337,7 +337,7 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
         -- Prefer the upload with the broadest boss-ranking coverage. The group
         -- anchor is the first upload, but it may be truncated before the final boss.
         (SELECT COUNT(DISTINCT coverage.encounter_name)
-         FROM encounter_dps_rankings coverage
+         FROM encounter_dps_rankings_resolved coverage
          WHERE coverage.instance_id = li.id
            AND coverage.encounter_id IS NOT NULL) DESC,
         (li.id = li.duplicate_group_id) DESC NULLS LAST,
@@ -347,7 +347,7 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
 representative_instances AS (
     SELECT rr.representative_instance_id AS id, rr.run_id
     FROM ranking_runs rr
-    JOIN log_instances representative ON representative.id = rr.representative_instance_id
+    JOIN log_instances_resolved representative ON representative.id = rr.representative_instance_id
      AND COALESCE(representative.duplicate_group_id, representative.id) = rr.run_id
      AND representative.invalidated_at IS NULL
 
@@ -378,8 +378,8 @@ score_candidates AS (
         edr.duration_secs,
         edr.killed_at,
         ri.run_id
-    FROM encounter_dps_rankings edr
-JOIN log_instances edr_instance ON edr_instance.id = edr.instance_id
+    FROM encounter_dps_rankings_resolved edr
+JOIN log_instances_resolved edr_instance ON edr_instance.id = edr.instance_id
 JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NOT edr_group.unlisted
     JOIN representative_instances ri ON ri.id = edr.instance_id
     JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
@@ -541,8 +541,8 @@ hydration_rows AS (
     JOIN score_rows score
       ON score.instance_id = p.instance_id
      AND score.player_guid = p.player_guid
-    JOIN encounter_dps_rankings edr ON edr.id = score.id
-    JOIN log_instances edr_instance ON edr_instance.id = edr.instance_id
+    JOIN encounter_dps_rankings_resolved edr ON edr.id = score.id
+    JOIN log_instances_resolved edr_instance ON edr_instance.id = edr.instance_id
     JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NOT edr_group.unlisted
     JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
     LEFT JOIN talent_builds tb ON tb.id = edr.talent_build_id
@@ -626,7 +626,7 @@ WITH fallback_representative_instances AS (
     SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
         li.id,
         COALESCE(li.duplicate_group_id, li.id) AS run_id
-    FROM log_instances li
+    FROM log_instances_resolved li
 JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
     JOIN wow_server_realms tenant_realm ON tenant_realm.id = li.realm_id
     -- Scope representative selection by tenant and instance before calculating
@@ -638,7 +638,7 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
       AND NOT EXISTS (
           SELECT 1
           FROM ranking_runs rr
-          JOIN log_instances representative
+          JOIN log_instances_resolved representative
             ON representative.id = rr.representative_instance_id
            AND COALESCE(representative.duplicate_group_id, representative.id) = rr.run_id
            AND representative.invalidated_at IS NULL
@@ -649,7 +649,7 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
         -- Prefer the upload with the broadest boss-ranking coverage. The group
         -- anchor is the first upload, but it may be truncated before the final boss.
         (SELECT COUNT(DISTINCT coverage.encounter_name)
-         FROM encounter_dps_rankings coverage
+         FROM encounter_dps_rankings_resolved coverage
          WHERE coverage.instance_id = li.id
            AND coverage.encounter_id IS NOT NULL) DESC,
         (li.id = li.duplicate_group_id) DESC NULLS LAST,
@@ -659,7 +659,7 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
 representative_instances AS (
     SELECT rr.representative_instance_id AS id, rr.run_id
     FROM ranking_runs rr
-    JOIN log_instances representative
+    JOIN log_instances_resolved representative
       ON representative.id = rr.representative_instance_id
      AND COALESCE(representative.duplicate_group_id, representative.id) = rr.run_id
      AND representative.invalidated_at IS NULL
@@ -688,8 +688,8 @@ filtered_rankings AS (
         edr.duration_secs,
         edr.killed_at,
         ri.run_id
-    FROM encounter_dps_rankings edr
-JOIN log_instances edr_instance ON edr_instance.id = edr.instance_id
+    FROM encounter_dps_rankings_resolved edr
+JOIN log_instances_resolved edr_instance ON edr_instance.id = edr.instance_id
 JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NOT edr_group.unlisted
     JOIN representative_instances ri ON ri.id = edr.instance_id
     JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
@@ -836,10 +836,10 @@ SELECT
   COUNT(DISTINCT COALESCE(li.duplicate_group_id, edr.instance_id))::INT AS kills,
   MIN(edr.killed_at)::timestamptz AS first_killed_at,
   MAX(edr.killed_at)::timestamptz AS last_killed_at
-FROM encounter_dps_rankings edr
-JOIN log_instances edr_instance ON edr_instance.id = edr.instance_id
+FROM encounter_dps_rankings_resolved edr
+JOIN log_instances_resolved edr_instance ON edr_instance.id = edr.instance_id
 JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NOT edr_group.unlisted
-JOIN log_instances li ON li.id = edr.instance_id
+JOIN log_instances_resolved li ON li.id = edr.instance_id
 JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
 WHERE edr.player_guid = @player_guid
   AND (sqlc.narg(realm_id)::uuid IS NULL OR edr.realm_id = sqlc.narg(realm_id))
@@ -885,9 +885,9 @@ raw_rows AS MATERIALIZED (
         edr.log_hashed_slug,
         edr.killed_at
     FROM ranking_runs rr
-    JOIN encounter_dps_rankings edr
+    JOIN encounter_dps_rankings_resolved edr
       ON edr.instance_id = rr.representative_instance_id
-    JOIN log_instances representative ON representative.id = rr.representative_instance_id
+    JOIN log_instances_resolved representative ON representative.id = rr.representative_instance_id
     JOIN wow_log_groups representative_group ON representative_group.id = representative.log_group_id AND NOT representative_group.unlisted
     JOIN selected_encounters selected ON selected.encounter_name = edr.encounter_name
     JOIN wow_server_realms tenant_realm ON tenant_realm.id = rr.realm_id
@@ -906,7 +906,7 @@ parse_rows AS MATERIALIZED (
         psr.encounter_name,
         psr.precise_score
     FROM parse_score_results psr
-    JOIN log_instances psr_instance ON psr_instance.id = psr.instance_id
+    JOIN log_instances_resolved psr_instance ON psr_instance.id = psr.instance_id
     JOIN wow_log_groups psr_group ON psr_group.id = psr_instance.log_group_id AND NOT psr_group.unlisted
     JOIN selected_encounters selected ON selected.encounter_name = psr.encounter_name
     WHERE psr.tenant_id = @tenant_id
@@ -1089,13 +1089,13 @@ WITH deduped AS (
         lie.name AS encounter_name,
         EXTRACT(EPOCH FROM (lie.end_time - lie.start_time))::double precision AS duration_secs
     FROM log_instance_encounters lie
-    JOIN log_instances li ON li.id = lie.instance_id
+    JOIN log_instances_resolved li ON li.id = lie.instance_id
 JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
     JOIN wow_server_realms wsr ON wsr.id = li.realm_id
     WHERE li.name = @instance_name
       AND lie.boss = true
       AND (NOT @filter_difficulty::boolean OR
-           COALESCE(lie.difficulty, CASE WHEN li.dynamic_difficulty > 0 OR li.difficulty_name ILIKE '%heroic%' THEN 'heroic' ELSE '' END) = @difficulty_name::text)
+           COALESCE(lie.difficulty, li.difficulty_name) = @difficulty_name::text)
       AND (NOT @filter_max_players::boolean OR li.max_players = @max_players::int)
       AND lie.kill_type = 'clean'
       AND CASE
@@ -1136,7 +1136,7 @@ WITH deduped AS (
     SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
         COALESCE(sr.ranked_duration_ms, sr.duration_ms) / 1000.0 AS duration_secs
     FROM instance_speedruns sr
-    JOIN log_instances li ON li.id = sr.instance_id
+    JOIN log_instances_resolved li ON li.id = sr.instance_id
 JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
     JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
     WHERE sr.instance_name = @instance_name
@@ -1178,14 +1178,14 @@ WITH deduped AS (
         EXTRACT(EPOCH FROM (lie.end_time - lie.start_time))::double precision AS duration_secs,
         lie.end_time AS killed_at
     FROM log_instance_encounters lie
-    JOIN log_instances li ON li.id = lie.instance_id
+    JOIN log_instances_resolved li ON li.id = lie.instance_id
 JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
     JOIN wow_server_realms wsr ON wsr.id = li.realm_id
     LEFT JOIN guilds g ON g.id = li.guild_id
     WHERE li.name = @instance_name
       AND lie.boss = true
       AND (NOT @filter_difficulty::boolean OR
-           COALESCE(lie.difficulty, CASE WHEN li.dynamic_difficulty > 0 OR li.difficulty_name ILIKE '%heroic%' THEN 'heroic' ELSE '' END) = @difficulty_name::text)
+           COALESCE(lie.difficulty, li.difficulty_name) = @difficulty_name::text)
       AND (NOT @filter_max_players::boolean OR li.max_players = @max_players::int)
       AND lie.kill_type = 'clean'
       AND CASE
@@ -1234,14 +1234,14 @@ WITH deduped AS (
         EXTRACT(EPOCH FROM (lie.end_time - lie.start_time))::double precision AS duration_secs,
         lie.end_time AS killed_at
     FROM log_instance_encounters lie
-    JOIN log_instances li ON li.id = lie.instance_id
+    JOIN log_instances_resolved li ON li.id = lie.instance_id
     JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
     JOIN wow_server_realms wsr ON wsr.id = li.realm_id
     LEFT JOIN guilds g ON g.id = li.guild_id
     WHERE li.name = @instance_name
       AND lie.boss = true
       AND (NOT @filter_difficulty::boolean OR
-           COALESCE(lie.difficulty, CASE WHEN li.dynamic_difficulty > 0 OR li.difficulty_name ILIKE '%heroic%' THEN 'heroic' ELSE '' END) = @difficulty_name::text)
+           COALESCE(lie.difficulty, li.difficulty_name) = @difficulty_name::text)
       AND (NOT @filter_max_players::boolean OR li.max_players = @max_players::int)
       AND lie.kill_type = 'clean'
       AND lie.name = ANY(@encounter_names::text[])
@@ -1273,13 +1273,13 @@ WITH deduped AS (
         lie.kill_type,
         lie.boss
     FROM log_instance_encounters lie
-    JOIN log_instances li ON li.id = lie.instance_id
+    JOIN log_instances_resolved li ON li.id = lie.instance_id
 JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
     JOIN wow_server_realms wsr ON wsr.id = li.realm_id
     WHERE li.name = @instance_name
       AND lie.boss = true
       AND CASE
-          WHEN cardinality(@difficulty_names :: text[]) > 0 THEN COALESCE(lie.difficulty, CASE WHEN li.dynamic_difficulty > 0 OR li.difficulty_name ILIKE '%heroic%' THEN 'heroic' ELSE '' END) = ANY(@difficulty_names :: text[])
+          WHEN cardinality(@difficulty_names :: text[]) > 0 THEN COALESCE(lie.difficulty, li.difficulty_name) = ANY(@difficulty_names :: text[])
           ELSE true
       END
       AND CASE
@@ -1324,7 +1324,7 @@ ORDER BY edr.realm_name;
 -- Raw per-player ranking rows recorded for a single log instance. This intentionally
 -- includes zero-value DPS/HPS rows so instance-level ranking issues can be debugged.
 SELECT edr.*
-FROM encounter_dps_rankings edr
+FROM encounter_dps_rankings_resolved edr
 WHERE edr.instance_id = @instance_id
 ORDER BY (encounter_id IS NULL), killed_at, encounter_name, player_name;
 

@@ -14,7 +14,7 @@ SELECT
     @instance_name, @difficulty_name, @max_players, @killed_at
 WHERE EXISTS (
     SELECT 1
-    FROM log_instances instance
+    FROM log_instances_resolved instance
     JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id
     WHERE instance.id = @instance_id AND NOT log_group.unlisted
 );
@@ -54,7 +54,7 @@ SELECT pg_advisory_xact_lock(hashtextextended(@lock_key, 0));
 -- name: GetAnyParseScoreReceiptForTenantInstance :one
 SELECT receipt.*
 FROM parse_score_receipts receipt
-JOIN log_instances instance ON instance.id = receipt.instance_id
+JOIN log_instances_resolved instance ON instance.id = receipt.instance_id
 JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
 WHERE receipt.tenant_id = @tenant_id
   AND receipt.instance_id = @instance_id
@@ -73,7 +73,7 @@ SELECT EXISTS (
 -- name: GetParseScoreReceiptForInstance :many
 -- Get all receipts for an instance (any snapshot).
 SELECT receipt.* FROM parse_score_receipts receipt
-JOIN log_instances instance ON instance.id = receipt.instance_id
+JOIN log_instances_resolved instance ON instance.id = receipt.instance_id
 JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
 WHERE receipt.instance_id = @instance_id
 ORDER BY computed_at DESC;
@@ -84,7 +84,7 @@ ORDER BY computed_at DESC;
 SELECT DISTINCT ON (psr.difficulty_name, psr.max_players, psr.encounter_name, psr.player_guid)
     psr.*
 FROM parse_score_results psr
-JOIN log_instances visibility_instance ON visibility_instance.id = psr.instance_id
+JOIN log_instances_resolved visibility_instance ON visibility_instance.id = psr.instance_id
 JOIN wow_log_groups log_group ON log_group.id = visibility_instance.log_group_id AND NOT log_group.unlisted
 WHERE psr.tenant_id = @tenant_id
   AND psr.instance_id = @instance_id
@@ -96,7 +96,7 @@ ORDER BY psr.difficulty_name, psr.max_players, psr.encounter_name, psr.player_gu
 SELECT DISTINCT ON (psr.difficulty_name, psr.max_players, psr.encounter_name, psr.player_guid)
     psr.*
 FROM parse_score_results psr
-JOIN log_instances visibility_instance ON visibility_instance.id = psr.instance_id
+JOIN log_instances_resolved visibility_instance ON visibility_instance.id = psr.instance_id
 JOIN wow_log_groups log_group ON log_group.id = visibility_instance.log_group_id AND NOT log_group.unlisted
 WHERE psr.tenant_id = @tenant_id
   AND psr.instance_id = @instance_id
@@ -110,7 +110,7 @@ ORDER BY psr.difficulty_name, psr.max_players, psr.encounter_name, psr.player_gu
 SELECT DISTINCT ON (psr.difficulty_name, psr.max_players, psr.encounter_name, psr.player_guid)
     psr.*
 FROM parse_score_results psr
-JOIN log_instances visibility_instance ON visibility_instance.id = psr.instance_id
+JOIN log_instances_resolved visibility_instance ON visibility_instance.id = psr.instance_id
 JOIN wow_log_groups log_group ON log_group.id = visibility_instance.log_group_id AND NOT log_group.unlisted
 WHERE psr.tenant_id = @tenant_id
   AND psr.instance_id = @instance_id
@@ -123,7 +123,7 @@ ORDER BY psr.difficulty_name, psr.max_players, psr.encounter_name, psr.player_gu
 SELECT DISTINCT ON (psr.difficulty_name, psr.max_players, psr.run_id, psr.encounter_name, psr.player_guid, psr.snapshot_id, psr.metric)
     psr.*
 FROM parse_score_results psr
-JOIN log_instances visibility_instance ON visibility_instance.id = psr.instance_id
+JOIN log_instances_resolved visibility_instance ON visibility_instance.id = psr.instance_id
 JOIN wow_log_groups log_group ON log_group.id = visibility_instance.log_group_id AND NOT log_group.unlisted
 WHERE psr.instance_id = @instance_id
 ORDER BY psr.difficulty_name, psr.max_players, psr.run_id, psr.encounter_name, psr.player_guid, psr.snapshot_id, psr.metric,
@@ -166,7 +166,7 @@ SELECT DISTINCT ON (psr.difficulty_name, psr.max_players, psr.run_id, psr.encoun
     psr.player_sub_spec,
     psr.player_role
 FROM parse_score_results psr
-JOIN log_instances visibility_instance ON visibility_instance.id = psr.instance_id
+JOIN log_instances_resolved visibility_instance ON visibility_instance.id = psr.instance_id
 JOIN wow_log_groups log_group ON log_group.id = visibility_instance.log_group_id AND NOT log_group.unlisted
 WHERE psr.tenant_id = @tenant_id
   AND psr.player_guid = @player_guid
@@ -190,11 +190,11 @@ SELECT
     li.guild_id
 FROM (
     SELECT DISTINCT edr.instance_id
-    FROM encounter_dps_rankings edr
+    FROM encounter_dps_rankings_resolved edr
     WHERE edr.encounter_id IS NOT NULL
       AND (edr.dps > 0 OR edr.hps > 0)
 ) candidates
-JOIN log_instances li ON li.id = candidates.instance_id
+JOIN log_instances_resolved li ON li.id = candidates.instance_id
 JOIN wow_log_groups log_group ON log_group.id = li.log_group_id AND NOT log_group.unlisted
 WHERE li.start_time >= @repair_since
   AND li.invalidated_at IS NULL
@@ -224,7 +224,7 @@ SELECT
     li.max_players,
     li.log_group_id,
     li.guild_id
-FROM log_instances li
+FROM log_instances_resolved li
 JOIN wow_log_groups log_group ON log_group.id = li.log_group_id AND NOT log_group.unlisted
 WHERE li.id = @id
   AND li.invalidated_at IS NULL;

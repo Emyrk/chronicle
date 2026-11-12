@@ -121,7 +121,7 @@ LIMIT 1 OFFSET @instance_ordinal;
 
 -- name: GetLogInstanceForDiscordAnnouncement :one
 SELECT li.*
-FROM log_instances li
+FROM log_instances_resolved li
 JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
 WHERE li.id = @id;
 
@@ -151,7 +151,7 @@ SELECT
   )::bigint AS clear_duration_ms,
   COALESCE(guild_average.avg_duration_ms, 0)::bigint AS guild_avg_duration_ms,
   (SELECT COUNT(*) FROM log_instance_players lip WHERE lip.instance_id = li.id)::int AS player_count
-FROM log_instances li
+FROM log_instances_resolved li
 JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
 JOIN users u ON u.id = wlg.owner
 LEFT JOIN wow_server_realms wsr ON wsr.id = li.realm_id
@@ -165,7 +165,7 @@ LEFT JOIN LATERAL (
     SELECT DISTINCT ON (COALESCE(previous_li.duplicate_group_id, previous_li.id))
       (EXTRACT(EPOCH FROM (previous_li.end_time - previous_li.start_time)) * 1000)::bigint AS duration_ms
     FROM instance_speedruns previous_sr
-    JOIN log_instances previous_li ON previous_li.id = previous_sr.instance_id
+    JOIN log_instances_resolved previous_li ON previous_li.id = previous_sr.instance_id
     JOIN wow_log_groups previous_group ON previous_group.id = previous_li.log_group_id AND NOT previous_group.unlisted
     WHERE previous_sr.guild_id = li.guild_id
       AND previous_sr.instance_name = li.name

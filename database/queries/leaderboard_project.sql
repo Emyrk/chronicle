@@ -11,7 +11,7 @@ WITH source AS MATERIALIZED (
           ELSE 'spec'
         END::text AS cohort_mode
  FROM ranking_runs rr
- JOIN log_instances li ON li.id=rr.representative_instance_id
+ JOIN log_instances_resolved li ON li.id=rr.representative_instance_id
   AND COALESCE(li.duplicate_group_id,li.id)=rr.run_id
   AND li.realm_id=rr.realm_id AND li.name=rr.instance_name
   AND li.difficulty_name=rr.difficulty_name AND li.max_players=rr.max_players
@@ -29,7 +29,7 @@ WITH source AS MATERIALIZED (
         d.dps,d.hps,e.id AS encounter_id,e.name AS encounter_name,
         COALESCE(e.difficulty, s.difficulty_name) AS encounter_difficulty_name,
         s.max_players::smallint AS encounter_max_players
- FROM source s JOIN encounter_dps_rankings d ON d.instance_id=s.source_instance_id
+ FROM source s JOIN encounter_dps_rankings_resolved d ON d.instance_id=s.source_instance_id
   AND d.realm_id=s.realm_id AND d.instance_name=s.instance_name
  JOIN log_instance_encounters e ON e.id=d.encounter_id AND e.instance_id=s.source_instance_id
   AND e.name=d.encounter_name AND e.boss AND e.kill_type='clean'

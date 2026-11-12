@@ -9,21 +9,21 @@ DELETE FROM parse_score_memberships WHERE instance_id = @instance_id;
 -- name: RefreshParseScoreMembershipsForLogGroup :one
 WITH affected_runs AS MATERIALIZED (
     SELECT DISTINCT COALESCE(instance.duplicate_group_id, instance.id) AS run_id
-    FROM log_instances instance
+    FROM log_instances_resolved instance
     WHERE instance.log_group_id = @log_group_id
 ),
 representative_instances AS MATERIALIZED (
     SELECT DISTINCT ON (COALESCE(instance.duplicate_group_id, instance.id))
         instance.id,
         COALESCE(instance.duplicate_group_id, instance.id) AS run_id
-    FROM log_instances instance
+    FROM log_instances_resolved instance
     JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
     JOIN affected_runs affected
       ON affected.run_id = COALESCE(instance.duplicate_group_id, instance.id)
     WHERE instance.invalidated_at IS NULL
     ORDER BY COALESCE(instance.duplicate_group_id, instance.id),
         (SELECT COUNT(DISTINCT coverage.encounter_name)
-         FROM encounter_dps_rankings coverage
+         FROM encounter_dps_rankings_resolved coverage
          WHERE coverage.instance_id = instance.id
            AND coverage.encounter_id IS NOT NULL) DESC,
         (instance.id = instance.duplicate_group_id) DESC NULLS LAST,
@@ -47,8 +47,8 @@ current_members AS MATERIALIZED (
         ranking.dps,
         ranking.hps
     FROM representative_instances representative
-    JOIN log_instances instance ON instance.id = representative.id
-    JOIN encounter_dps_rankings ranking ON ranking.instance_id = representative.id
+    JOIN log_instances_resolved instance ON instance.id = representative.id
+    JOIN encounter_dps_rankings_resolved ranking ON ranking.instance_id = representative.id
     JOIN wow_server_realms realm ON realm.id = instance.realm_id
     JOIN wow_servers server ON server.id = realm.server_id
     WHERE ranking.encounter_id IS NOT NULL
@@ -174,7 +174,7 @@ SELECT
     membership.killed_at,
     instance.hashed_slug AS log_hashed_slug
 FROM parse_score_memberships membership
-JOIN log_instances instance ON instance.id = membership.instance_id
+JOIN log_instances_resolved instance ON instance.id = membership.instance_id
 JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
 LEFT JOIN LATERAL (
     SELECT candidate.player_name
@@ -185,7 +185,7 @@ LEFT JOIN LATERAL (
           AND instance_player.unit_guid::text = membership.player_guid
         UNION ALL
         SELECT ranking.player_name::text AS player_name, 1 AS source_order
-        FROM encounter_dps_rankings ranking
+        FROM encounter_dps_rankings_resolved ranking
         WHERE ranking.instance_id = membership.instance_id
           AND ranking.encounter_name = membership.encounter_name
           AND ranking.player_guid = membership.player_guid

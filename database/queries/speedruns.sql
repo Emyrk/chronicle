@@ -17,7 +17,7 @@ VALUES (
 -- name: GetInstanceSpeedrun :one
 SELECT sr.*, li.capabilities
 FROM instance_speedruns sr
-JOIN log_instances li ON li.id = sr.instance_id
+JOIN log_instances_resolved li ON li.id = sr.instance_id
 WHERE sr.instance_id = $1;
 
 -- name: GetInstanceEncounterKillTimes :many
@@ -38,11 +38,11 @@ ORDER BY lie.start_time;
 SELECT
     lie.id AS encounter_id,
     lie.name AS encounter_name,
-    COALESCE(lie.difficulty, CASE WHEN instance.dynamic_difficulty > 0 OR instance.difficulty_name ILIKE '%heroic%' THEN 'heroic' ELSE '' END) AS difficulty_name,
+    COALESCE(lie.difficulty, instance.difficulty_name) AS difficulty_name,
     instance.max_players::smallint AS max_players,
     (EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000)::bigint AS duration_ms
 FROM log_instance_encounters lie
-JOIN log_instances instance ON instance.id = lie.instance_id
+JOIN log_instances_resolved instance ON instance.id = lie.instance_id
 WHERE lie.instance_id = $1
   AND lie.boss = true
   AND lie.kill_type = 'clean'
@@ -65,10 +65,10 @@ WITH anchor AS (
         li.guild_id,
         li.realm_id,
         wsr.server_id
-    FROM log_instances li
+    FROM log_instances_resolved li
     JOIN wow_log_groups anchor_group ON anchor_group.id = li.log_group_id AND NOT anchor_group.unlisted
     JOIN wow_server_realms wsr ON wsr.id = li.realm_id
-    WHERE li.id = @instance_id
+    WHERE li.id = @instance_id AND NOT li.mixed_difficulty
 ),
 deduped AS (
     SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
@@ -102,14 +102,15 @@ deduped AS (
         ), '[]'::jsonb)::text AS encounter_kill_times_json
     FROM anchor a
     JOIN instance_speedruns sr ON sr.instance_name = a.name
-    JOIN log_instances li ON li.id = sr.instance_id
+    JOIN log_instances_resolved li ON li.id = sr.instance_id
 JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
     JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
     LEFT JOIN guilds g ON g.id = sr.guild_id
     LEFT JOIN instance_overview_metrics iom
       ON iom.instance_id = sr.instance_id
      AND iom.metrics_version = @metrics_version
-    WHERE li.difficulty_name = a.difficulty_name
+    WHERE NOT li.mixed_difficulty
+      AND li.difficulty_name = a.difficulty_name
       AND li.max_players = a.max_players
       AND sr.start_time >= a.start_time - make_interval(days => @lookback_days::int)
       AND sr.start_time <= a.start_time
@@ -167,7 +168,7 @@ WITH deduped AS (
         (youtube.video_url IS NOT NULL)::boolean AS has_youtube_video,
         COALESCE(youtube.video_url, '')::text AS youtube_url
     FROM instance_speedruns sr
-    JOIN log_instances li ON li.id = sr.instance_id
+    JOIN log_instances_resolved li ON li.id = sr.instance_id
 JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
     JOIN guilds g ON sr.guild_id = g.id
     LEFT JOIN guild_pages gp ON gp.guild_id = sr.guild_id
@@ -180,6 +181,7 @@ JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
     ) youtube ON true
     WHERE sr.instance_name = @instance_name
       AND sr.qualified = true
+      AND NOT li.mixed_difficulty
       AND (NOT @use_ranked_timing::boolean OR sr.boss_to_boss_duration_ms IS NOT NULL)
       AND sr.guild_id IS NOT NULL
       AND (COALESCE(cardinality(@realm_ids::uuid[]),0)=0 OR li.realm_id=ANY(@realm_ids::uuid[]))
@@ -237,17 +239,19 @@ OFFSET @result_offset::bigint;
 -- with its instance and whether its log recorded unit positions (a replay).
 -- JOINs wow_server_realms so RLS tenant filtering cascades.
 WITH boards AS (
-    SELECT DISTINCT sr.instance_name, li.difficulty_name
+    SELECT DISTINCT sr.instance_name, li.difficulty_name, li.max_players
     FROM instance_speedruns sr
-    JOIN log_instances li ON li.id = sr.instance_id
+    JOIN log_instances_resolved li ON li.id = sr.instance_id
     JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
     JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
     WHERE sr.qualified = true
+      AND NOT li.mixed_difficulty
       AND sr.boss_to_boss_duration_ms IS NOT NULL
 )
 SELECT
     boards.instance_name,
     boards.difficulty_name,
+    boards.max_players,
     COALESCE(record.duration_ms, 0)::bigint AS record_duration_ms,
     record.completion_time AS record_completion_time,
     COALESCE(record.guild_name, '')::text AS record_guild_name,
@@ -262,17 +266,19 @@ LEFT JOIN LATERAL (
         sr.instance_id,
         ('unit-position' = ANY(li.capabilities)) AS has_positions
     FROM instance_speedruns sr
-    JOIN log_instances li ON li.id = sr.instance_id
+    JOIN log_instances_resolved li ON li.id = sr.instance_id
     JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
     JOIN guilds g ON sr.guild_id = g.id
     JOIN wow_server_realms wsr ON sr.realm_id = wsr.id
     WHERE sr.instance_name = boards.instance_name
       AND li.difficulty_name = boards.difficulty_name
+      AND li.max_players = boards.max_players
       AND sr.qualified = true
+      AND NOT li.mixed_difficulty
     ORDER BY COALESCE(sr.ranked_duration_ms, sr.duration_ms) ASC
     LIMIT 1
 ) record ON true
-ORDER BY boards.instance_name, boards.difficulty_name;
+ORDER BY boards.instance_name, boards.difficulty_name, boards.max_players;
 
 -- name: SpeedrunDifficulties :many
 -- Returns distinct difficulty names that have at least one qualified speedrun
@@ -280,11 +286,12 @@ ORDER BY boards.instance_name, boards.difficulty_name;
 -- JOINs wow_server_realms so RLS tenant filtering cascades.
 SELECT DISTINCT li.difficulty_name
 FROM instance_speedruns sr
-JOIN log_instances li ON li.id = sr.instance_id
+JOIN log_instances_resolved li ON li.id = sr.instance_id
 JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
 JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
 WHERE sr.instance_name = @instance_name
   AND sr.qualified = true
+      AND NOT li.mixed_difficulty
   AND sr.boss_to_boss_duration_ms IS NOT NULL
 ORDER BY li.difficulty_name;
 
@@ -296,6 +303,7 @@ JOIN log_instances li ON li.id = sr.instance_id
 JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
 JOIN wow_server_realms wsr ON sr.realm_id = wsr.id
 WHERE sr.qualified = true
+      AND NOT li.mixed_difficulty
   AND sr.boss_to_boss_duration_ms IS NOT NULL
 ORDER BY realm_name;
 
@@ -317,7 +325,7 @@ WITH deduped AS (
         sr.ranked_duration_ms::bigint AS duration_ms,
         sr.ranked_completion_time::timestamptz AS completion_time
     FROM instance_speedruns sr
-    JOIN log_instances li ON li.id = sr.instance_id
+    JOIN log_instances_resolved li ON li.id = sr.instance_id
 JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
     JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
     WHERE sr.guild_id = @guild_id :: uuid
@@ -352,13 +360,14 @@ SELECT
     COALESCE(gp.theme->>'logo_url', '')::text AS guild_logo_url,
     COUNT(DISTINCT COALESCE(li.duplicate_group_id, li.id))::bigint AS clears
 FROM instance_speedruns sr
-JOIN log_instances li ON li.id = sr.instance_id
+JOIN log_instances_resolved li ON li.id = sr.instance_id
 JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
 JOIN guilds g ON g.id = sr.guild_id
 LEFT JOIN guild_pages gp ON gp.guild_id = sr.guild_id
 JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
 WHERE sr.instance_name = @instance_name
   AND sr.qualified = true
+      AND NOT li.mixed_difficulty
   AND sr.guild_id IS NOT NULL
   AND CASE
       WHEN @filter_difficulty :: boolean THEN li.difficulty_name = @difficulty_name :: text
@@ -398,7 +407,7 @@ WITH deduped AS (
         sr.ranked_duration_ms::bigint AS duration_ms,
         COALESCE(sr.boss_to_boss_duration_ms, 0)::bigint AS boss_to_boss_duration_ms
     FROM instance_speedruns sr
-    JOIN log_instances li ON li.id = sr.instance_id
+    JOIN log_instances_resolved li ON li.id = sr.instance_id
     JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
     JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
     WHERE sr.guild_id = @guild_id :: uuid

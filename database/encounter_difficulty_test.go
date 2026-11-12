@@ -78,6 +78,23 @@ func TestEncounterDifficultySQL(t *testing.T) {
 		require.NotEqual(t, cursor, last)
 		cursor = last
 	}
+	// Ranking reads ignore old denormalized labels and encounter-level sizes.
+	rankingRows, err := tx.Query(ctx, difficultyQuery(t, "rankings", "InstanceRankingRecords"), pgx.NamedArgs{"instance_id": uuid.MustParse("00000000-0000-0000-0000-000000000001")})
+	require.NoError(t, err)
+	rankings, err := pgx.CollectRows(rankingRows, pgx.RowToMap)
+	require.NoError(t, err)
+	require.Len(t, rankings, 2)
+	require.Equal(t, "heroic", rankings[0]["difficulty_name"])
+	require.Equal(t, "", rankings[1]["difficulty_name"])
+	require.EqualValues(t, 25, rankings[0]["max_players"])
+	require.EqualValues(t, 25, rankings[1]["max_players"])
+	futureRows, err := tx.Query(ctx, difficultyQuery(t, "rankings", "InstanceRankingRecords"), pgx.NamedArgs{"instance_id": uuid.MustParse("00000000-0000-0000-0000-000000000004")})
+	require.NoError(t, err)
+	future, err := pgx.CollectRows(futureRows, pgx.RowToMap)
+	require.NoError(t, err)
+	require.Len(t, future, 1)
+	require.Equal(t, "mythic", future[0]["difficulty_name"])
+
 	// Backfill is idempotent and preserves explicit Normal and future variants.
 	var last uuid.UUID
 	var inspected, updated int64

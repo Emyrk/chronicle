@@ -46,7 +46,7 @@ WITH board AS (
         li.log_group_id,
         li.invalidated_at
     FROM instance_speedruns sr
-    JOIN log_instances li ON li.id = sr.instance_id
+    JOIN log_instances_resolved li ON li.id = sr.instance_id
     JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
     JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
     WHERE sr.qualified = true

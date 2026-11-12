@@ -244,8 +244,8 @@ SELECT realm_id::uuid AS realm_id,subject_id::text AS subject_id,player_class,pl
 WITH runs AS MATERIALIZED (
  SELECT DISTINCT d.instance_name, d.difficulty_name, d.max_players, d.encounter_name,
         COALESCE(li.duplicate_group_id, li.id) AS run_id
- FROM encounter_dps_rankings d
- JOIN log_instances li ON li.id = d.instance_id
+ FROM encounter_dps_rankings_resolved d
+ JOIN log_instances_resolved li ON li.id = d.instance_id
  WHERE d.player_guid = @player_guid::text AND d.realm_id = @realm_id::uuid AND d.encounter_id IS NOT NULL
 )
 SELECT o.instance_name, o.difficulty_name, o.max_players, o.encounter_name,

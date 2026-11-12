@@ -18,21 +18,21 @@ DELETE FROM time_parse_clear_time_memberships WHERE instance_id = @instance_id;
 -- name: RefreshTimeParseClearTimeMembershipsForLogGroup :one
 WITH affected_runs AS MATERIALIZED (
     SELECT DISTINCT COALESCE(instance.duplicate_group_id, instance.id) AS run_id
-    FROM log_instances instance
+    FROM log_instances_resolved instance
     WHERE instance.log_group_id = @log_group_id
 ),
 representative_instances AS MATERIALIZED (
     SELECT DISTINCT ON (COALESCE(instance.duplicate_group_id, instance.id))
         instance.id,
         COALESCE(instance.duplicate_group_id, instance.id) AS run_id
-    FROM log_instances instance
+    FROM log_instances_resolved instance
     JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
     JOIN affected_runs affected
       ON affected.run_id = COALESCE(instance.duplicate_group_id, instance.id)
     WHERE instance.invalidated_at IS NULL
     ORDER BY COALESCE(instance.duplicate_group_id, instance.id),
         (SELECT COUNT(DISTINCT coverage.encounter_name)
-         FROM encounter_dps_rankings coverage
+         FROM encounter_dps_rankings_resolved coverage
          WHERE coverage.instance_id = instance.id
            AND coverage.encounter_id IS NOT NULL) DESC,
         (instance.id = instance.duplicate_group_id) DESC NULLS LAST,
@@ -51,7 +51,7 @@ current_members AS MATERIALIZED (
         speedrun.ranked_duration_ms::bigint AS duration_ms,
         speedrun.start_time::timestamptz AS start_time
     FROM representative_instances representative
-    JOIN log_instances instance ON instance.id = representative.id
+    JOIN log_instances_resolved instance ON instance.id = representative.id
     JOIN instance_speedruns speedrun ON speedrun.instance_id = representative.id
     JOIN wow_server_realms realm ON realm.id = instance.realm_id
     JOIN wow_servers server ON server.id = realm.server_id
@@ -133,21 +133,21 @@ DELETE FROM time_parse_boss_kill_memberships WHERE instance_id = @instance_id;
 -- name: RefreshTimeParseBossKillMembershipsForLogGroup :one
 WITH affected_runs AS MATERIALIZED (
     SELECT DISTINCT COALESCE(instance.duplicate_group_id, instance.id) AS run_id
-    FROM log_instances instance
+    FROM log_instances_resolved instance
     WHERE instance.log_group_id = @log_group_id
 ),
 representative_instances AS MATERIALIZED (
     SELECT DISTINCT ON (COALESCE(instance.duplicate_group_id, instance.id))
         instance.id,
         COALESCE(instance.duplicate_group_id, instance.id) AS run_id
-    FROM log_instances instance
+    FROM log_instances_resolved instance
     JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
     JOIN affected_runs affected
       ON affected.run_id = COALESCE(instance.duplicate_group_id, instance.id)
     WHERE instance.invalidated_at IS NULL
     ORDER BY COALESCE(instance.duplicate_group_id, instance.id),
         (SELECT COUNT(DISTINCT coverage.encounter_name)
-         FROM encounter_dps_rankings coverage
+         FROM encounter_dps_rankings_resolved coverage
          WHERE coverage.instance_id = instance.id
            AND coverage.encounter_id IS NOT NULL) DESC,
         (instance.id = instance.duplicate_group_id) DESC NULLS LAST,
@@ -162,12 +162,12 @@ current_members AS MATERIALIZED (
         instance.id AS instance_id,
         instance.log_group_id,
         speedrun.instance_name,
-        COALESCE(encounter.difficulty, CASE WHEN instance.dynamic_difficulty > 0 OR instance.difficulty_name ILIKE '%heroic%' THEN 'heroic' ELSE '' END) AS difficulty_name,
+        COALESCE(encounter.difficulty, instance.difficulty_name) AS difficulty_name,
         instance.max_players AS max_players,
         (EXTRACT(EPOCH FROM (encounter.end_time - encounter.start_time)) * 1000)::bigint AS duration_ms,
         encounter.end_time AS killed_at
     FROM representative_instances representative
-    JOIN log_instances instance ON instance.id = representative.id
+    JOIN log_instances_resolved instance ON instance.id = representative.id
     JOIN instance_speedruns speedrun ON speedrun.instance_id = representative.id
     JOIN log_instance_encounters encounter ON encounter.instance_id = representative.id
     JOIN wow_server_realms realm ON realm.id = instance.realm_id
@@ -286,7 +286,7 @@ SELECT
     guild.id AS guild_id,
     guild.name AS guild_name
 FROM time_parse_boss_kill_memberships membership
-JOIN log_instances instance ON instance.id = membership.instance_id
+JOIN log_instances_resolved instance ON instance.id = membership.instance_id
 JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
 LEFT JOIN guilds guild ON guild.id = instance.guild_id
 WHERE membership.tenant_id = @tenant_id
@@ -309,7 +309,7 @@ SELECT
     guild.id AS guild_id,
     guild.name AS guild_name
 FROM time_parse_clear_time_memberships membership
-JOIN log_instances instance ON instance.id = membership.instance_id
+JOIN log_instances_resolved instance ON instance.id = membership.instance_id
 JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
 LEFT JOIN guilds guild ON guild.id = instance.guild_id
 WHERE membership.tenant_id = @tenant_id

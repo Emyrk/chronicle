@@ -136,7 +136,7 @@ WITH guild_members AS (
         psr.killed_at
     FROM parse_score_results psr
     JOIN guild_members gm ON gm.player_guid = psr.player_guid
-    JOIN log_instances li ON li.id = psr.instance_id
+    JOIN log_instances_resolved li ON li.id = psr.instance_id
 JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
     WHERE psr.tenant_id = @tenant_id
       AND psr.metric = @metric
@@ -187,12 +187,12 @@ WITH representative_instances AS (
     SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
         li.id,
         COALESCE(li.duplicate_group_id, li.id) AS run_id
-    FROM log_instances li
+    FROM log_instances_resolved li
 JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
     WHERE li.invalidated_at IS NULL
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
         (SELECT COUNT(DISTINCT coverage.encounter_name)
-         FROM encounter_dps_rankings coverage
+         FROM encounter_dps_rankings_resolved coverage
          WHERE coverage.instance_id = li.id
            AND coverage.encounter_id IS NOT NULL) DESC,
         (li.id = li.duplicate_group_id) DESC NULLS LAST,
@@ -210,7 +210,7 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
         sr.ranked_duration_ms::bigint AS duration_ms,
         sr.ranked_completion_time::timestamptz AS completion_time
     FROM representative_instances representative
-    JOIN log_instances li ON li.id = representative.id
+    JOIN log_instances_resolved li ON li.id = representative.id
 JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
     JOIN instance_speedruns sr ON sr.instance_id = representative.id
     JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
@@ -272,20 +272,20 @@ ORDER BY instance_name,
 SELECT
     li.name AS instance_name,
     lie.name AS encounter_name,
-    COALESCE(lie.difficulty, CASE WHEN li.dynamic_difficulty > 0 OR li.difficulty_name ILIKE '%heroic%' THEN 'heroic' ELSE '' END) AS difficulty_name,
+    COALESCE(lie.difficulty, li.difficulty_name) AS difficulty_name,
     li.max_players AS max_players,
     COUNT(DISTINCT COALESCE(li.duplicate_group_id, li.id))::int AS kills,
     MIN(lie.end_time)::timestamptz AS first_killed_at,
     MAX(lie.end_time)::timestamptz AS last_killed_at
 FROM log_instance_encounters lie
-JOIN log_instances li ON li.id = lie.instance_id
+JOIN log_instances_resolved li ON li.id = lie.instance_id
 JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
 JOIN wow_server_realms wsr ON wsr.id = li.realm_id
 WHERE li.guild_id = @guild_id::uuid
   AND lie.boss = true
   AND lie.kill_type IN ('clean', 'partial')
 GROUP BY li.name, lie.name,
-    COALESCE(lie.difficulty, CASE WHEN li.dynamic_difficulty > 0 OR li.difficulty_name ILIKE '%heroic%' THEN 'heroic' ELSE '' END),
+    COALESCE(lie.difficulty, li.difficulty_name),
     li.max_players
 ORDER BY li.name, lie.name;
 

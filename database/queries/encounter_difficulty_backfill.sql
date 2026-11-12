@@ -11,11 +11,9 @@ WITH batch AS MATERIALIZED (
     LIMIT LEAST(GREATEST(@batch_size::int, 1), 10000)
 ), updated AS (
     UPDATE log_instance_encounters encounter
-    SET difficulty = CASE
-        WHEN instance.dynamic_difficulty > 0 OR instance.difficulty_name ILIKE '%heroic%'
-        THEN 'heroic' ELSE '' END
+    SET difficulty = instance.difficulty_name
     FROM batch
-    JOIN log_instances instance ON instance.id = batch.instance_id
+    JOIN log_instances_resolved instance ON instance.id = batch.instance_id
     WHERE encounter.id = batch.id AND encounter.difficulty IS NULL
     RETURNING encounter.id
 )
@@ -37,6 +35,6 @@ SELECT (SELECT id FROM batch ORDER BY id DESC LIMIT 1) AS last_inspected_id,
        count(*)::bigint AS inspected_count,
        count(*) FILTER (WHERE batch.difficulty IS NULL)::bigint AS pending_count,
        count(*) FILTER (WHERE batch.difficulty IS NULL AND
-           (instance.dynamic_difficulty > 0 OR instance.difficulty_name ILIKE '%heroic%'))::bigint AS heroic_count
+           instance.difficulty_name = 'heroic')::bigint AS heroic_count
 FROM batch
-JOIN log_instances instance ON instance.id = batch.instance_id;
+JOIN log_instances_resolved instance ON instance.id = batch.instance_id;
