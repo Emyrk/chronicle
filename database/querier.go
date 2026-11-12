@@ -448,6 +448,7 @@ type sqlcQuerier interface {
 	GetItemTemplatesByNames(ctx context.Context, arg GetItemTemplatesByNamesParams) ([]WorldItemTemplate, error)
 	GetItemTemplatesBySetID(ctx context.Context, arg GetItemTemplatesBySetIDParams) ([]GetItemTemplatesBySetIDRow, error)
 	GetLatestRegressionSnapshot(ctx context.Context, fixtureID uuid.UUID) (RegressionSnapshot, error)
+	GetLeaderboardHighlight(ctx context.Context, arg GetLeaderboardHighlightParams) (LeaderboardHighlight, error)
 	GetLeaderboardHighlightFreshness(ctx context.Context, arg GetLeaderboardHighlightFreshnessParams) (GetLeaderboardHighlightFreshnessRow, error)
 	GetLeaderboardHighlightGeneration(ctx context.Context, tenantID uuid.UUID) (int64, error)
 	GetLeaderboardOperation(ctx context.Context, arg GetLeaderboardOperationParams) (LeaderboardOperation, error)

@@ -78,11 +78,15 @@ func TestHighlightsUseExistingReadsAndKeepFailedSnapshot(t *testing.T) {
 	scoped, err := s.db.ListLeaderboardHighlights(s.tenantctx(), database.ListLeaderboardHighlightsParams{TenantID: s.tenant, RealmScope: s.realm})
 	require.NoError(t, err)
 	require.Len(t, scoped, 1)
+	s.exec(`UPDATE leaderboard_highlights SET statistics_refreshed_at=clock_timestamp()-interval '25 hours' WHERE tenant_id=$1 AND realm_scope=$2`, s.tenant, uuid.Nil)
+	stale, err := s.db.GetLeaderboardHighlight(s.tenantctx(), database.GetLeaderboardHighlightParams{TenantID: s.tenant, InstanceName: cohort.Instance, DifficultyName: cohort.Difficulty, MaxPlayers: cohort.Size})
+	require.NoError(t, err)
 	store.fail = true
 	require.ErrorContains(t, RefreshHighlights(s.tenantctx(), store, s.tenant, uuid.Nil, cohort), "injected")
 	after, err := s.db.ListLeaderboardHighlights(s.tenantctx(), database.ListLeaderboardHighlightsParams{TenantID: s.tenant})
 	require.NoError(t, err)
 	require.Equal(t, snapshots[0].Payload, after[0].Payload)
+	require.Equal(t, stale.StatisticsRefreshedAt, after[0].StatisticsRefreshedAt)
 	require.Equal(t, snapshots[0].RefreshedAt, after[0].RefreshedAt)
 	foreign, err := s.db.ListLeaderboardHighlights(servicetenant.WithTenantID(s.ctx, uuid.New()), database.ListLeaderboardHighlightsParams{TenantID: s.tenant})
 	require.NoError(t, err)
@@ -90,11 +94,75 @@ func TestHighlightsUseExistingReadsAndKeepFailedSnapshot(t *testing.T) {
 	require.ErrorContains(t, RefreshHighlights(s.tenantctx(), store, s.tenant, uuid.New(), cohort), "realm does not belong")
 }
 
+type highlightQueryProbe struct {
+	highlightStore
+	statisticsCalls int
+	ratingsCalls    int
+}
+
+func (s *highlightQueryProbe) RankingsBoxPlotStatsNoJIT(ctx context.Context, p database.RankingsBoxPlotStatsParams) ([]database.RankingsBoxPlotStatsRow, error) {
+	s.statisticsCalls++
+	return s.highlightStore.RankingsBoxPlotStatsNoJIT(ctx, p)
+}
+func (s *highlightQueryProbe) ListLeaderboardV2(ctx context.Context, p database.ListLeaderboardV2Params) ([]database.ListLeaderboardV2Row, error) {
+	s.ratingsCalls++
+	return s.Store.ListLeaderboardV2(ctx, p)
+}
+
+func TestHighlightRefreshReusesStatisticsUntilDue(t *testing.T) {
+	t.Parallel()
+	s := newSourceFixture(t)
+	require.NoError(t, s.direct(s.compute()))
+	store := &highlightQueryProbe{highlightStore: highlightStore{Store: s.db, config: highlightConfig()}}
+	cohort := HighlightCohort{"Fixture raid", "Normal", 40}
+	read := func() database.LeaderboardHighlight {
+		t.Helper()
+		row, err := s.db.GetLeaderboardHighlight(s.tenantctx(), database.GetLeaderboardHighlightParams{
+			TenantID: s.tenant, InstanceName: cohort.Instance, DifficultyName: cohort.Difficulty, MaxPlayers: cohort.Size,
+		})
+		require.NoError(t, err)
+		return row
+	}
+
+	require.NoError(t, RefreshHighlights(s.tenantctx(), store, s.tenant, uuid.Nil, cohort))
+	first := read()
+	require.True(t, first.StatisticsRefreshedAt.Valid)
+	require.Equal(t, 1, store.statisticsCalls)
+	require.Equal(t, 6, store.ratingsCalls)
+
+	require.NoError(t, s.db.BumpLeaderboardHighlightGeneration(s.tenantctx(), s.tenant))
+	require.NoError(t, RefreshHighlights(s.tenantctx(), store, s.tenant, uuid.Nil, cohort))
+	second := read()
+	require.Equal(t, first.StatisticsRefreshedAt, second.StatisticsRefreshedAt)
+	require.Equal(t, 1, store.statisticsCalls, "source changes must not recompute recent statistics")
+	require.Equal(t, 12, store.ratingsCalls)
+
+	// An older statistics timestamp triggers only the box plot, even when
+	// the rest of the snapshot has just been published.
+	s.exec(`UPDATE leaderboard_highlights SET statistics_refreshed_at=clock_timestamp()-interval '25 hours' WHERE tenant_id=$1`, s.tenant)
+	require.NoError(t, RefreshHighlights(s.tenantctx(), store, s.tenant, uuid.Nil, cohort))
+	third := read()
+	require.Equal(t, 2, store.statisticsCalls)
+	require.Equal(t, 12, store.ratingsCalls)
+	require.Equal(t, second.RefreshedAt, third.RefreshedAt, "statistics-only refresh does not reset the ratings age")
+	require.True(t, third.StatisticsRefreshedAt.Time.After(second.StatisticsRefreshedAt.Time))
+	require.Equal(t, second.Payload, third.Payload, "recomputing unchanged statistics preserves other sections")
+}
+
 func TestHighlightRefreshJobLimits(t *testing.T) {
 	t.Parallel()
 	require.Equal(t, 1, ArgsHighlightRefresh{}.InsertOpts().MaxAttempts)
 	require.Equal(t, time.Minute, (&HighlightWorker{}).Timeout(nil))
 	require.ErrorContains(t, (&HighlightWorker{}).Work(servicetenant.AdminBypass(context.Background()), &river.Job[ArgsHighlightRefresh]{}), "tenant context")
+}
+
+func TestHighlightStatisticsDue(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 11, 12, 12, 0, 0, 0, time.UTC)
+	require.True(t, HighlightStatisticsDue("policy", "policy", database.Timestamptz(now.Add(-24*time.Hour-time.Nanosecond)), now))
+	require.False(t, HighlightStatisticsDue("policy", "policy", database.Timestamptz(now.Add(-24*time.Hour)), now))
+	require.True(t, HighlightStatisticsDue("old", "policy", database.Timestamptz(now), now))
+	require.True(t, HighlightStatisticsDue("policy", "policy", database.LeaderboardHighlight{}.StatisticsRefreshedAt, now))
 }
 
 func TestHighlightPublicationUniqueAndOlderRefreshCannotReplace(t *testing.T) {
@@ -189,12 +257,19 @@ func TestHighlightDispatcherIncludesAllAndIndividualRealms(t *testing.T) {
 	for _, realm := range []uuid.UUID{uuid.Nil, s.realm, second} {
 		require.NoError(t, s.db.PublishLeaderboardHighlights(s.tenantctx(), database.PublishLeaderboardHighlightsParams{
 			TenantID: s.tenant, RealmScope: realm, InstanceName: "Fixture raid", DifficultyName: "Normal", MaxPlayers: 40,
-			ConfigurationFingerprint: fingerprint, Payload: []byte(`{}`), RefreshStartedAt: database.Timestamptz(time.Now()),
+			ConfigurationFingerprint: fingerprint, Payload: []byte(`{}`), RefreshStartedAt: database.Timestamptz(time.Now()), StatisticsRefreshedAt: database.Timestamptz(time.Now()),
 		}))
 	}
 	queue.jobs = nil
 	require.NoError(t, d.Work(s.ctx, &river.Job[ArgsHighlightDispatch]{Args: ArgsHighlightDispatch{TenantID: s.tenant}}))
 	require.Empty(t, queue.jobs, "fresh matching snapshots should not be refreshed")
+
+	s.exec(`UPDATE leaderboard_highlights SET statistics_refreshed_at=clock_timestamp()-interval '25 hours' WHERE tenant_id=$1 AND realm_scope=$2`, s.tenant, second)
+	require.NoError(t, d.Work(s.ctx, &river.Job[ArgsHighlightDispatch]{Args: ArgsHighlightDispatch{TenantID: s.tenant}}))
+	require.Len(t, queue.jobs, 1, "daily statistics should refresh even when ratings are current")
+	require.Equal(t, second, queue.jobs[0].(ArgsHighlightRefresh).RealmID)
+	queue.jobs = nil
+	s.exec(`UPDATE leaderboard_highlights SET statistics_refreshed_at=clock_timestamp() WHERE tenant_id=$1 AND realm_scope=$2`, s.tenant, second)
 
 	// An old queued job can exit before running any expensive leaderboard reads.
 	skipped := highlightStore{Store: s.db, config: config, fail: true}
@@ -202,6 +277,8 @@ func TestHighlightDispatcherIncludesAllAndIndividualRealms(t *testing.T) {
 		TenantID: s.tenant, Instance: "Fixture raid", Difficulty: "Normal", Size: 40,
 	}}))
 	require.NoError(t, s.db.BumpLeaderboardHighlightGeneration(s.tenantctx(), s.tenant))
+	// Source changes alone reuse statistics; make this one due to test failure.
+	s.exec(`UPDATE leaderboard_highlights SET statistics_refreshed_at=NULL WHERE tenant_id=$1 AND realm_scope=$2`, s.tenant, uuid.Nil)
 	require.ErrorContains(t, (&HighlightWorker{Store: skipped}).Work(s.tenantctx(), &river.Job[ArgsHighlightRefresh]{Args: ArgsHighlightRefresh{
 		TenantID: s.tenant, Instance: "Fixture raid", Difficulty: "Normal", Size: 40,
 	}}), "injected")
@@ -210,6 +287,7 @@ func TestHighlightDispatcherIncludesAllAndIndividualRealms(t *testing.T) {
 	require.Len(t, queue.jobs, 3, "changed sources refresh even young snapshots")
 	queue.jobs = nil
 
+	s.exec(`UPDATE leaderboard_highlights SET statistics_refreshed_at=clock_timestamp() WHERE tenant_id=$1 AND realm_scope=$2`, s.tenant, uuid.Nil)
 	s.exec(`UPDATE leaderboard_highlights SET source_generation=1 WHERE tenant_id=$1`, s.tenant)
 	s.exec(`UPDATE leaderboard_highlights SET refreshed_at=clock_timestamp()-interval '25 hours' WHERE tenant_id=$1 AND realm_scope=$2`, s.tenant, uuid.Nil)
 	s.exec(`UPDATE leaderboard_highlights SET configuration_fingerprint='old' WHERE tenant_id=$1 AND realm_scope=$2`, s.tenant, second)

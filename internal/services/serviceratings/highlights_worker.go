@@ -105,7 +105,7 @@ func (d *HighlightDispatcher) Work(ctx context.Context, j *river.Job[ArgsHighlig
 		}
 		row, exists := stored[highlightKey{c.Instance, c.Difficulty, c.Size}]
 		fingerprint := HighlightFingerprint(config, c)
-		if exists && HighlightFresh(row.ConfigurationFingerprint, row.SourceGeneration, row.RefreshedAt.Time, fingerprint, generation, now) {
+		if exists && HighlightFresh(row.ConfigurationFingerprint, row.SourceGeneration, row.RefreshedAt.Time, fingerprint, generation, now) && !HighlightStatisticsDue(row.ConfigurationFingerprint, fingerprint, row.StatisticsRefreshedAt, now) {
 			continue
 		}
 		if _, err = d.Queue.Insert(ctx, ArgsHighlightRefresh{TenantID: j.Args.TenantID, RealmID: realm, Instance: c.Instance, Difficulty: c.Difficulty, Size: c.Size}, nil); err != nil {
@@ -149,7 +149,9 @@ func (w *HighlightWorker) Work(ctx context.Context, j *river.Job[ArgsHighlightRe
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return err
 	}
-	if err == nil && HighlightFresh(row.ConfigurationFingerprint, row.SourceGeneration, row.RefreshedAt.Time, HighlightFingerprint(config, cohort), generation, time.Now()) {
+	fingerprint := HighlightFingerprint(config, cohort)
+	now := time.Now()
+	if err == nil && HighlightFresh(row.ConfigurationFingerprint, row.SourceGeneration, row.RefreshedAt.Time, fingerprint, generation, now) && !HighlightStatisticsDue(row.ConfigurationFingerprint, fingerprint, row.StatisticsRefreshedAt, now) {
 		return nil
 	}
 	return RefreshHighlights(ctx, w.Store, j.Args.TenantID, j.Args.RealmID, cohort)

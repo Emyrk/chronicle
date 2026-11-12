@@ -54,6 +54,7 @@ func TestHighlightSnapshotStatesDoNotServeStalePolicy(t *testing.T) {
 	require.Equal(t, "rebuilding", out.Snapshots[0].Status)
 	require.Empty(t, out.LandingPreviews)
 	row.ConfigurationFingerprint = serviceratings.HighlightFingerprint(config, c)
+	row.StatisticsRefreshedAt = row.RefreshedAt
 	out, refresh, err = highlightSnapshotResponse(config, []serviceratings.HighlightCohort{c}, []database.LeaderboardHighlight{row}, 0)
 	require.NoError(t, err)
 	require.False(t, refresh)
@@ -66,6 +67,20 @@ func TestHighlightSnapshotStatesDoNotServeStalePolicy(t *testing.T) {
 	require.Equal(t, "stale", out.Snapshots[0].Status)
 	require.Len(t, out.LandingPreviews, 1)
 
+}
+
+func TestHighlightStatisticsDueKeepsCardReady(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	c := serviceratings.HighlightCohort{Instance: "Raid"}
+	config := []database.ResolveLeaderboardConfigurationRow{{Kind: "instance", InstanceName: c.Instance}}
+	row := database.LeaderboardHighlight{InstanceName: c.Instance, ConfigurationFingerprint: serviceratings.HighlightFingerprint(config, c), Payload: []byte(`{}`), RefreshedAt: database.Timestamptz(now), StatisticsRefreshedAt: database.Timestamptz(now.Add(-25 * time.Hour))}
+	out, refresh, err := highlightSnapshotResponseAt(config, []serviceratings.HighlightCohort{c}, []database.LeaderboardHighlight{row}, 0, now)
+	require.NoError(t, err)
+	require.True(t, refresh)
+	require.Equal(t, "ready", out.Status)
+	require.Equal(t, "empty", out.Snapshots[0].Status)
+	require.Equal(t, row.StatisticsRefreshedAt.Time, *out.Snapshots[0].StatisticsRefreshedAt)
 }
 
 func TestHighlightSourceChangeMarksSnapshotStale(t *testing.T) {
@@ -104,7 +119,7 @@ func TestHighlightStaleness24HourBoundary(t *testing.T) {
 	}{{"recent", time.Hour, "empty"}, {"before_boundary", 24*time.Hour - time.Nanosecond, "empty"}, {"boundary", 24 * time.Hour, "empty"}, {"after_boundary", 24*time.Hour + time.Nanosecond, "stale"}, {"older", 25 * time.Hour, "stale"}} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			row := database.LeaderboardHighlight{InstanceName: c.Instance, DifficultyName: c.Difficulty, MaxPlayers: c.Size, ConfigurationFingerprint: serviceratings.HighlightFingerprint(config, c), Payload: []byte(`{}`), RefreshedAt: database.Timestamptz(now.Add(-tc.age))}
+			row := database.LeaderboardHighlight{InstanceName: c.Instance, DifficultyName: c.Difficulty, MaxPlayers: c.Size, ConfigurationFingerprint: serviceratings.HighlightFingerprint(config, c), Payload: []byte(`{}`), RefreshedAt: database.Timestamptz(now.Add(-tc.age)), StatisticsRefreshedAt: database.Timestamptz(now)}
 			out, refresh, err := highlightSnapshotResponseAt(config, []serviceratings.HighlightCohort{c}, []database.LeaderboardHighlight{row}, 0, now)
 			require.NoError(t, err)
 			require.Equal(t, tc.status, out.Snapshots[0].Status)
