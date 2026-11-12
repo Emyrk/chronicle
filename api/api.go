@@ -191,7 +191,9 @@ type API struct {
 	discoveryStats discoveryStatsCache
 	landing        landingFeaturedCache
 	// sitemapCache holds each tenant's guild, character and raid sitemap URLs.
-	sitemapCache tenantcache.Cache[[]sitemapURL]
+	sitemapCache tenantcache.Cache[*sitemapDynamic]
+	// sitemapRendered holds the rendered sitemap XML per tenant and canonical host.
+	sitemapRendered sitemapRenderCache
 	// sitemapBlogFS overrides the frontend build the sitemap reads blog posts from (tests).
 	sitemapBlogFS fs.FS
 	// landingMeshMaps overrides datasetMeshMaps (tests).

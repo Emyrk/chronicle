@@ -130,7 +130,9 @@ func TestSitemapDynamicURLs(t *testing.T) {
 
 	request := func(discoverable bool) *http.Request {
 		req := httptest.NewRequest(http.MethodGet, "https://everlook.chronicleclassic.com/sitemap.xml", nil)
-		return req.WithContext(servicetenant.WithTenant(ctx, database.Tenant{ID: ourTenant, Discoverable: discoverable}))
+		return req.WithContext(servicetenant.WithTenant(ctx, database.Tenant{
+			ID: ourTenant, Slug: pgtype.Text{String: "everlook", Valid: true}, Discoverable: discoverable,
+		}))
 	}
 
 	// One post for every flavor, one bound to this site's flavor, one bound to another.
