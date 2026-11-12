@@ -1,6 +1,8 @@
 -- Isolated regression fixture. The transaction-local setting bypasses unrelated
 -- realm/log-upload FKs; all difficulty relationships remain real table rows.
 SET LOCAL session_replication_role = replica;
+INSERT INTO wow_server_realms (id, server_id, name)
+VALUES ('00000000-0000-0000-0000-000000000001', gen_random_uuid(), 'Difficulty test');
 INSERT INTO log_instances (id, realm_id, log_group_id, name, difficulty_name, max_players, dynamic_difficulty)
 VALUES
  ('00000000-0000-0000-0000-000000000001', gen_random_uuid(), gen_random_uuid(), 'Test raid', '25 Player (Heroic)', 25, 0),
@@ -24,4 +26,21 @@ VALUES
  ('10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'Boss', 'Test raid', 'player-one', 'One', 'wrong old label', 10, gen_random_uuid(), 'Test', 100, 60, 1, '2026-01-01'),
  ('10000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000001', 'Boss', 'Test raid', 'player-two', 'Two', 'wrong old label', 10, gen_random_uuid(), 'Test', 100, 60, 1, '2026-01-01'),
  (NULL, '00000000-0000-0000-0000-000000000004', 'Trash', 'Test raid', 'player-three', 'Three', 'wrong old label', 10, gen_random_uuid(), 'Test', 100, 60, 1, '2026-01-01');
+-- The same logical boss/player must coexist in Normal and heroic memberships.
+INSERT INTO parse_score_memberships (tenant_id, policy_version, query_version, run_id, encounter_name, player_guid,
+ instance_id, log_group_id, difficulty_name, max_players, player_class, player_spec, killed_at, dps)
+SELECT '00000000-0000-0000-0000-000000000001', 1, 1, '00000000-0000-0000-0000-000000000001', 'Boss', 'player-one',
+ '00000000-0000-0000-0000-000000000001', gen_random_uuid(), difficulty, 25, 'Mage', 'Fire', '2026-01-01', 100
+FROM unnest(ARRAY['', 'heroic']) AS difficulty;
+INSERT INTO time_parse_boss_kill_memberships (tenant_id, policy_version, query_version, run_id, encounter_name,
+ instance_id, log_group_id, instance_name, difficulty_name, max_players, duration_ms, killed_at)
+SELECT '00000000-0000-0000-0000-000000000001', 1, 1, '00000000-0000-0000-0000-000000000001', 'Boss',
+ '00000000-0000-0000-0000-000000000001', gen_random_uuid(), 'Test raid', difficulty, 25, 60000, '2026-01-01'
+FROM unnest(ARRAY['', 'heroic']) AS difficulty;
+INSERT INTO leaderboard_career_renown_facts (tenant_id, run_id, source_instance_id, realm_id, player_guid,
+ player_class, player_spec, player_sub_spec, instance_name, difficulty_name, max_players, encounter_name, source_encounter_id)
+SELECT '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001',
+ '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'player-one',
+ 'Mage', 'Fire', '', 'Test raid', difficulty, 25, 'Boss', '10000000-0000-0000-0000-000000000001'
+FROM unnest(ARRAY['', 'heroic']) AS difficulty;
 SET LOCAL session_replication_role = origin;

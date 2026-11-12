@@ -155,7 +155,7 @@ representative_instances AS MATERIALIZED (
         instance.id ASC
 ),
 current_members AS MATERIALIZED (
-    SELECT DISTINCT ON (representative.run_id, encounter.name)
+    SELECT DISTINCT ON (representative.run_id, encounter.name, COALESCE(encounter.difficulty, instance.difficulty_name), instance.max_players)
         COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid) AS tenant_id,
         representative.run_id,
         encounter.name AS encounter_name,
@@ -177,7 +177,7 @@ current_members AS MATERIALIZED (
       AND encounter.invalidated_at IS NULL
       AND encounter.end_time > encounter.start_time
       AND (EXTRACT(EPOCH FROM (encounter.end_time - encounter.start_time)) * 1000)::bigint > 0
-    ORDER BY representative.run_id, encounter.name,
+    ORDER BY representative.run_id, encounter.name, COALESCE(encounter.difficulty, instance.difficulty_name), instance.max_players,
         (EXTRACT(EPOCH FROM (encounter.end_time - encounter.start_time)) * 1000)::bigint ASC,
         encounter.end_time ASC
 ),
@@ -192,7 +192,7 @@ upserted AS (
         member.instance_id, member.log_group_id, member.instance_name,
         member.difficulty_name, member.max_players, member.duration_ms, member.killed_at
     FROM current_members member
-    ON CONFLICT (tenant_id, policy_version, query_version, run_id, encounter_name) DO UPDATE SET
+    ON CONFLICT (tenant_id, policy_version, query_version, run_id, encounter_name, difficulty_name, max_players) DO UPDATE SET
         instance_id = EXCLUDED.instance_id,
         log_group_id = EXCLUDED.log_group_id,
         instance_name = EXCLUDED.instance_name,
@@ -212,6 +212,8 @@ deleted AS (
           WHERE member.tenant_id = membership.tenant_id
             AND member.run_id = membership.run_id
             AND member.encounter_name = membership.encounter_name
+            AND member.difficulty_name = membership.difficulty_name
+            AND member.max_players = membership.max_players
       )
     RETURNING 1
 )

@@ -118,7 +118,7 @@ WITH guild_members AS (
     FROM game_players gp
     WHERE gp.guild_id = @guild_id::uuid
 ), deduped AS (
-    SELECT DISTINCT ON (psr.run_id, psr.encounter_name, psr.player_guid)
+    SELECT DISTINCT ON (psr.run_id, psr.encounter_name, psr.player_guid, psr.difficulty_name, psr.max_players)
         psr.player_guid,
         psr.player_name,
         psr.player_class,
@@ -145,7 +145,7 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
           WHEN @since_days::bigint > 0 THEN psr.killed_at >= now() - make_interval(days => @since_days::int)
           ELSE true
       END
-    ORDER BY psr.run_id, psr.encounter_name, psr.player_guid, psr.created_at DESC, psr.precise_score DESC
+    ORDER BY psr.run_id, psr.encounter_name, psr.player_guid, psr.difficulty_name, psr.max_players, psr.created_at DESC, psr.precise_score DESC
 ), ranked AS (
     SELECT *,
         ROW_NUMBER() OVER (
@@ -215,6 +215,7 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
     JOIN instance_speedruns sr ON sr.instance_id = representative.id
     JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
     WHERE sr.guild_id = @guild_id::uuid
+      AND NOT li.mixed_difficulty
       AND sr.ranked_duration_ms > 0
       AND CASE
           WHEN @since_days::bigint > 0 THEN sr.ranked_completion_time >= now() - make_interval(days => @since_days::int)
@@ -296,7 +297,7 @@ ORDER BY li.name, lie.name;
 -- hps for healers and dps for everyone else. Duplicate uploads collapse to
 -- one row per encounter+player before averaging.
 WITH deduped AS (
-    SELECT DISTINCT ON (psr.run_id, psr.encounter_name, psr.player_guid)
+    SELECT DISTINCT ON (psr.run_id, psr.encounter_name, psr.player_guid, psr.difficulty_name, psr.max_players)
         psr.run_id,
         psr.encounter_name,
         psr.instance_id,
@@ -313,7 +314,7 @@ JOIN wow_log_groups psr_group ON psr_group.id = psr_instance.log_group_id AND NO
           (psr.player_role = 'heal' AND psr.metric = 'hps')
           OR (psr.player_role != 'heal' AND psr.metric = 'dps')
       )
-    ORDER BY psr.run_id, psr.encounter_name, psr.player_guid, psr.created_at DESC, psr.precise_score DESC
+    ORDER BY psr.run_id, psr.encounter_name, psr.player_guid, psr.difficulty_name, psr.max_players, psr.created_at DESC, psr.precise_score DESC
 ), grouped AS (
     SELECT
         run_id,

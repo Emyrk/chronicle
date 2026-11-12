@@ -31,7 +31,7 @@ representative_instances AS MATERIALIZED (
         instance.id ASC
 ),
 current_members AS MATERIALIZED (
-    SELECT DISTINCT ON (representative.run_id, ranking.encounter_name, ranking.player_guid)
+    SELECT DISTINCT ON (representative.run_id, ranking.encounter_name, ranking.player_guid, ranking.difficulty_name, ranking.max_players)
         COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid) AS tenant_id,
         representative.run_id,
         ranking.encounter_name,
@@ -55,7 +55,7 @@ current_members AS MATERIALIZED (
       AND (ranking.dps > 0 OR ranking.hps > 0)
       AND ranking.duration_secs > 0
       AND lower(btrim(ranking.player_class)) NOT IN ('', 'unknown')
-    ORDER BY representative.run_id, ranking.encounter_name, ranking.player_guid,
+    ORDER BY representative.run_id, ranking.encounter_name, ranking.player_guid, ranking.difficulty_name, ranking.max_players,
              ranking.dps DESC, ranking.hps DESC
 ),
 upserted AS (
@@ -71,7 +71,7 @@ upserted AS (
         member.max_players, member.player_class, member.player_spec,
         member.player_sub_spec, member.killed_at, member.dps, member.hps
     FROM current_members member
-    ON CONFLICT (tenant_id, policy_version, query_version, run_id, encounter_name, player_guid)
+    ON CONFLICT (tenant_id, policy_version, query_version, run_id, encounter_name, player_guid, difficulty_name, max_players)
     DO UPDATE SET
         instance_id = EXCLUDED.instance_id,
         log_group_id = EXCLUDED.log_group_id,
@@ -97,6 +97,8 @@ deleted AS (
             AND member.run_id = membership.run_id
             AND member.encounter_name = membership.encounter_name
             AND member.player_guid = membership.player_guid
+            AND member.difficulty_name = membership.difficulty_name
+            AND member.max_players = membership.max_players
       )
     RETURNING 1
 )

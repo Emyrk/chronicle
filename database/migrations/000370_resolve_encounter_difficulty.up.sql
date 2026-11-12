@@ -1,5 +1,49 @@
 BEGIN;
 
+-- Do not build indexes on populated tables during service startup. Production
+-- must first run the separately approved concurrent preparation script. Empty
+-- test/new installations can create these indexes without scanning user data.
+DO $migration$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_index WHERE indexrelid = to_regclass('idx_edr_boss_variant_unique') AND indisvalid AND indisunique) THEN
+        IF EXISTS (SELECT 1 FROM encounter_dps_rankings LIMIT 1) THEN
+            RAISE EXCEPTION 'migration 370 requires prebuilt valid index idx_edr_boss_variant_unique; run approved migrations/offline/000370_prepare_variant_indexes.sql before deployment';
+        END IF;
+        EXECUTE 'CREATE UNIQUE INDEX idx_edr_boss_variant_unique ON encounter_dps_rankings (instance_id, player_guid, encounter_name, difficulty_name, max_players) WHERE encounter_id IS NOT NULL';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_index WHERE indexrelid = to_regclass('parse_score_memberships_variant_key') AND indisvalid AND indisunique) THEN
+        IF EXISTS (SELECT 1 FROM parse_score_memberships LIMIT 1) THEN
+            RAISE EXCEPTION 'migration 370 requires prebuilt valid index parse_score_memberships_variant_key; run approved migrations/offline/000370_prepare_variant_indexes.sql before deployment';
+        END IF;
+        EXECUTE 'CREATE UNIQUE INDEX parse_score_memberships_variant_key ON parse_score_memberships (tenant_id, policy_version, query_version, run_id, encounter_name, player_guid, difficulty_name, max_players)';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_index WHERE indexrelid = to_regclass('time_parse_boss_kill_memberships_variant_key') AND indisvalid AND indisunique) THEN
+        IF EXISTS (SELECT 1 FROM time_parse_boss_kill_memberships LIMIT 1) THEN
+            RAISE EXCEPTION 'migration 370 requires prebuilt valid index time_parse_boss_kill_memberships_variant_key; run approved migrations/offline/000370_prepare_variant_indexes.sql before deployment';
+        END IF;
+        EXECUTE 'CREATE UNIQUE INDEX time_parse_boss_kill_memberships_variant_key ON time_parse_boss_kill_memberships (tenant_id, policy_version, query_version, run_id, encounter_name, difficulty_name, max_players)';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_index WHERE indexrelid = to_regclass('leaderboard_career_renown_facts_variant_key') AND indisvalid AND indisunique) THEN
+        IF EXISTS (SELECT 1 FROM leaderboard_career_renown_facts LIMIT 1) THEN
+            RAISE EXCEPTION 'migration 370 requires prebuilt valid index leaderboard_career_renown_facts_variant_key; run approved offline preparation';
+        END IF;
+        EXECUTE 'CREATE UNIQUE INDEX leaderboard_career_renown_facts_variant_key ON leaderboard_career_renown_facts (tenant_id, run_id, encounter_name, realm_id, player_guid, player_class, player_spec, player_sub_spec, difficulty_name, max_players)';
+    END IF;
+END
+$migration$;
+ALTER TABLE leaderboard_career_renown_facts
+    DROP CONSTRAINT leaderboard_career_renown_facts_pkey,
+    ADD CONSTRAINT leaderboard_career_renown_facts_pkey PRIMARY KEY USING INDEX leaderboard_career_renown_facts_variant_key;
+DROP INDEX idx_edr_boss_canonical_unique;
+ALTER TABLE parse_score_memberships
+    DROP CONSTRAINT parse_score_memberships_tenant_id_policy_version_query_vers_key,
+    ADD CONSTRAINT parse_score_memberships_variant_key UNIQUE USING INDEX parse_score_memberships_variant_key;
+ALTER TABLE time_parse_boss_kill_memberships
+    DROP CONSTRAINT time_parse_boss_kill_membersh_tenant_id_policy_version_quer_key,
+    ADD CONSTRAINT time_parse_boss_kill_memberships_variant_key UNIQUE USING INDEX time_parse_boss_kill_memberships_variant_key;
+
+
+
 -- NULL identifies a legacy encounter. Empty text is explicitly Normal and must
 -- never inherit a heroic parent. Adding a nullable column does not rewrite rows.
 ALTER TABLE log_instance_encounters

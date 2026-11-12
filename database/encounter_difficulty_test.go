@@ -4,6 +4,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Emyrk/chronicle/database/dbtestutil"
 	"github.com/Emyrk/chronicle/internal/testutil"
@@ -94,6 +95,41 @@ func TestEncounterDifficultySQL(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, future, 1)
 	require.Equal(t, "mythic", future[0]["difficulty_name"])
+
+	// The real ingestion query must not overwrite the other difficulty of the
+	// same boss/player in one instance. Repeating either key stays idempotent.
+	args := pgx.NamedArgs{
+		"instance_id":    uuid.MustParse("00000000-0000-0000-0000-000000000001"),
+		"encounter_name": "Boss", "instance_name": "Test raid", "player_guid": "variant-player",
+		"player_name": "Variant", "player_class": "Mage", "player_spec": "Fire", "player_sub_spec": "",
+		"player_role": "dps", "player_level": int16(80), "talent_build_id": nil,
+		"max_players": int16(25), "realm_id": uuid.MustParse("00000000-0000-0000-0000-000000000001"),
+		"realm_name": "Test", "guild_id": nil, "guild_name": "", "damage_done": int64(100),
+		"unranked_damage_done": int64(0), "duration_secs": float64(60), "dps": float64(1), "avg_ilvl": nil,
+		"healing_done": int64(0), "absorbed_done": int64(0), "hps": float64(0), "player_deaths": nil,
+		"alive_percentage": nil, "log_hashed_slug": "", "killed_at": time.Date(2026, 1, 1, 0, 1, 0, 0, time.UTC),
+	}
+	for _, tc := range []struct{ id, difficulty string }{
+		{"10000000-0000-0000-0000-000000000001", "heroic"},
+		{"10000000-0000-0000-0000-000000000002", ""},
+		{"10000000-0000-0000-0000-000000000001", "heroic"},
+	} {
+		args["encounter_id"] = uuid.MustParse(tc.id)
+		args["difficulty_name"] = tc.difficulty
+		_, err = tx.Exec(ctx, difficultyQuery(t, "rankings", "InsertEncounterDpsRanking"), args)
+		require.NoError(t, err)
+	}
+	rows, err := tx.Query(ctx, difficultyQuery(t, "rankings", "InstanceRankingRecords"), pgx.NamedArgs{"instance_id": args["instance_id"]})
+	require.NoError(t, err)
+	allRankings, err := pgx.CollectRows(rows, pgx.RowToMap)
+	require.NoError(t, err)
+	var variants []string
+	for _, row := range allRankings {
+		if row["player_guid"] == "variant-player" {
+			variants = append(variants, row["difficulty_name"].(string))
+		}
+	}
+	require.ElementsMatch(t, []string{"", "heroic"}, variants)
 
 	// Backfill is idempotent and preserves explicit Normal and future variants.
 	var last uuid.UUID

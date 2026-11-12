@@ -329,6 +329,7 @@ WITH deduped AS (
 JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
     JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
     WHERE sr.guild_id = @guild_id :: uuid
+      AND NOT li.mixed_difficulty
       AND sr.ranked_duration_ms > 0
       AND CASE
           WHEN @since_days :: bigint > 0 THEN sr.ranked_completion_time >= now() - make_interval(days => @since_days::int)
@@ -411,6 +412,7 @@ WITH deduped AS (
     JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
     JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
     WHERE sr.guild_id = @guild_id :: uuid
+      AND NOT li.mixed_difficulty
       AND sr.instance_name = @instance_name :: text
       AND sr.ranked_duration_ms > 0
       AND CASE

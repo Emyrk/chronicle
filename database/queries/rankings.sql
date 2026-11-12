@@ -867,11 +867,13 @@ WITH selected_encounters AS MATERIALIZED (
     SELECT DISTINCT unnest(@encounter_names::text[]) AS encounter_name
 ),
 raw_rows AS MATERIALIZED (
-    SELECT DISTINCT ON (rr.run_id, edr.encounter_name)
+    SELECT DISTINCT ON (rr.run_id, edr.difficulty_name, edr.max_players, edr.encounter_name)
         rr.run_id,
         rr.representative_instance_id,
         rr.start_time,
         edr.encounter_name,
+        edr.difficulty_name,
+        edr.max_players,
         edr.player_name,
         edr.player_class,
         edr.player_spec,
@@ -895,15 +897,17 @@ raw_rows AS MATERIALIZED (
       AND (sqlc.narg(realm_id)::uuid IS NULL OR rr.realm_id = sqlc.narg(realm_id))
       AND edr.encounter_id IS NOT NULL
       AND rr.instance_name = @instance_name
-      AND (@difficulty_name::text = '' OR rr.difficulty_name = @difficulty_name)
-      AND (@max_players::smallint = 0 OR rr.max_players = @max_players)
-    ORDER BY rr.run_id, edr.encounter_name,
+      AND (NOT @filter_difficulty::boolean OR edr.difficulty_name = @difficulty_name::text)
+      AND (@max_players::smallint = 0 OR edr.max_players = @max_players)
+    ORDER BY rr.run_id, edr.difficulty_name, edr.max_players, edr.encounter_name,
         (CASE WHEN @metric::text = 'hps' THEN edr.hps ELSE edr.dps END) DESC
 ),
 parse_rows AS MATERIALIZED (
-    SELECT DISTINCT ON (psr.run_id, psr.encounter_name)
+    SELECT DISTINCT ON (psr.run_id, psr.difficulty_name, psr.max_players, psr.encounter_name)
         psr.run_id,
         psr.encounter_name,
+        psr.difficulty_name,
+        psr.max_players,
         psr.precise_score
     FROM parse_score_results psr
     JOIN log_instances_resolved psr_instance ON psr_instance.id = psr.instance_id
@@ -913,12 +917,14 @@ parse_rows AS MATERIALIZED (
       AND psr.player_guid = @player_guid
       AND psr.metric = @metric
       AND psr.status IN ('ok', 'low_confidence')
-    ORDER BY psr.run_id, psr.encounter_name, psr.created_at DESC, psr.precise_score DESC
+    ORDER BY psr.run_id, psr.difficulty_name, psr.max_players, psr.encounter_name, psr.created_at DESC, psr.precise_score DESC
 ),
 per_run AS (
     SELECT
         raw.run_id,
         raw.representative_instance_id,
+        raw.difficulty_name,
+        raw.max_players,
         MIN(raw.start_time)::timestamptz AS started_at,
         MAX(raw.killed_at)::timestamptz AS killed_at,
         ((array_agg(raw.player_name ORDER BY raw.damage_done DESC))[1])::text AS player_name,
@@ -954,7 +960,9 @@ per_run AS (
     LEFT JOIN parse_rows parse
       ON parse.run_id = raw.run_id
      AND parse.encounter_name = raw.encounter_name
-    GROUP BY raw.run_id, raw.representative_instance_id
+     AND parse.difficulty_name = raw.difficulty_name
+     AND parse.max_players = raw.max_players
+    GROUP BY raw.run_id, raw.representative_instance_id, raw.difficulty_name, raw.max_players
 )
 SELECT *
 FROM per_run
@@ -986,7 +994,7 @@ WITH boss_insert AS (
         @healing_done, @absorbed_done, @hps, @player_deaths, @alive_percentage,
         @log_hashed_slug, @killed_at
     WHERE @encounter_id::uuid IS NOT NULL
-    ON CONFLICT (instance_id, player_guid, encounter_name)
+    ON CONFLICT (instance_id, player_guid, encounter_name, difficulty_name, max_players)
         WHERE encounter_id IS NOT NULL
     DO UPDATE SET
         encounter_id = EXCLUDED.encounter_id,
