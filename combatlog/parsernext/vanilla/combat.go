@@ -72,11 +72,10 @@ func DecodeDeath(ts time.Time, m CombatFields) ([]messages.Message, error) {
 		return nil, err
 	}
 
-	var dmg *messages.Damage // For unit tests, this is dumb
+	// DEATH carries no damage attribution. Leave the Message interface truly
+	// nil; synthetic processing may attach a known damage owner later.
 	return decoded(&messages.Slain{
 		MessageBase: messages.Base(ts),
 		Victim:      id,
-		Killer:      nil,
-		Attribution: dmg,
 	})
 }
