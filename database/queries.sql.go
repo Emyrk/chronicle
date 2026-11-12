@@ -25992,6 +25992,8 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
            COALESCE(lie.difficulty, li.difficulty_name) = $5::text)
       AND (NOT $6::boolean OR li.max_players = $7::int)
       AND lie.kill_type = 'clean'
+      AND li.invalidated_at IS NULL
+      AND lie.invalidated_at IS NULL
       AND CASE
           WHEN $8 :: text != '' THEN lie.name = $8
           ELSE true
@@ -26048,7 +26050,8 @@ type RankingsKillTimeLeaderboardRow struct {
 }
 
 // Paginated leaderboard of fastest encounter kills, ordered by duration.
-// Deduplicates encounters across duplicate log groups (keeps fastest per group).
+// Deduplicates encounters across duplicate log groups (keeps fastest per group)
+// and excludes invalidated instances and encounters.
 func (q *sqlQuerier) RankingsKillTimeLeaderboard(ctx context.Context, arg RankingsKillTimeLeaderboardParams) ([]RankingsKillTimeLeaderboardRow, error) {
 	rows, err := q.db.Query(ctx, rankingsKillTimeLeaderboard,
 		arg.QueryOffset,
@@ -26106,6 +26109,8 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
            COALESCE(lie.difficulty, li.difficulty_name) = $3::text)
       AND (NOT $4::boolean OR li.max_players = $5::int)
       AND lie.kill_type = 'clean'
+      AND li.invalidated_at IS NULL
+      AND lie.invalidated_at IS NULL
       AND CASE
           WHEN $6 :: bigint > 0 THEN lie.end_time >= now() - make_interval(days => $6::int)
           ELSE true
@@ -26156,7 +26161,7 @@ type RankingsKillTimeStatsRow struct {
 }
 
 // Box plot stats on encounter duration (seconds) per encounter name.
-// Deduplicates encounters across duplicate log groups.
+// Deduplicates encounters across duplicate log groups and excludes invalidated data.
 func (q *sqlQuerier) RankingsKillTimeStats(ctx context.Context, arg RankingsKillTimeStatsParams) ([]RankingsKillTimeStatsRow, error) {
 	rows, err := q.db.Query(ctx, rankingsKillTimeStats,
 		arg.InstanceName,
@@ -26216,6 +26221,8 @@ WITH deduped AS (
            COALESCE(lie.difficulty, li.difficulty_name) = $4::text)
       AND (NOT $5::boolean OR li.max_players = $6::int)
       AND lie.kill_type = 'clean'
+      AND li.invalidated_at IS NULL
+      AND lie.invalidated_at IS NULL
       AND lie.name = ANY($7::text[])
       AND cardinality($7::text[]) <= 64
       AND li.guild_id IS NOT NULL
@@ -26262,8 +26269,8 @@ type RankingsKillTimeTopPerEncounterRow struct {
 
 // The fastest clean guild kills of each chosen boss in one round trip, deduplicated
 // across duplicate log groups like RankingsKillTimeLeaderboard. Each guild ranks once
-// per boss with its fastest kill, as on the full-clear speedrun board; kills without
-// a guild are excluded.
+// per boss with its fastest kill, as on the full-clear speedrun board; invalidated data
+// and kills without a guild are excluded.
 func (q *sqlQuerier) RankingsKillTimeTopPerEncounter(ctx context.Context, arg RankingsKillTimeTopPerEncounterParams) ([]RankingsKillTimeTopPerEncounterRow, error) {
 	rows, err := q.db.Query(ctx, rankingsKillTimeTopPerEncounter,
 		arg.PerEncounter,

@@ -61,12 +61,13 @@ describe("Hub leaderboard live props", () => {
   })
 
   it("opens a hand-picked set on its bosses' kill times and loads only that board", () => {
-    const kill = { encounter_id: "k1", instance_id: "run-1", instance_name: "Molten Core", encounter_name: "Ragnaros", guild_name: "Fast Guild", guild_id: "g1", realm_name: "Realm", duration_secs: 95, killed_at: "2026-10-01T00:00:00Z" }
+    const kill = { encounter_id: "k1", instance_id: "run-1", log_hashed_slug: "fast-kill-log", instance_name: "Molten Core", encounter_name: "Ragnaros", guild_name: "Fast Guild", guild_id: "g1", realm_name: "Realm", duration_secs: 95, killed_at: "2026-10-01T00:00:00Z" }
     const markup = renderToStaticMarkup(<SpeedrunsTab instanceName="Molten Core" bosses={["Lucifron", "Ragnaros"]} selection={{ kind: "bosses", bosses: ["Ragnaros"] }}
       live={{ kills: { entries: [kill as never] } }} />)
     expect(markup).toMatch(/aria-pressed="true"[^>]*>Kill times · Ragnaros/)
     expect(markup).toContain("&lt;Fast Guild&gt;")
     expect(markup).toContain("1:35")
+    expect(markup).toContain('href="/instances/fast-kill-log"')
     expect(markup).toContain('data-entity-kind="guild"')
     expect(markup).toContain('data-entity-kind="encounter"')
     expect(markup).not.toContain("Fastest full clears")
