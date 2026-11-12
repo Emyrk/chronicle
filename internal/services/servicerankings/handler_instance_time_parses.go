@@ -96,6 +96,7 @@ func handleInstanceTimeParsesWithStore(store timeParsesQuerier, w http.ResponseW
 		scope.Reason = ""
 		scope.BossKillTimes = append(scope.BossKillTimes, chroniclesdk.BossKillTimeParse{
 			EncounterID: row.EncounterID, EncounterName: row.EncounterName, DurationMs: row.DurationMs,
+			DifficultyName: row.DifficultyName, MaxPlayers: row.MaxPlayers,
 			PreciseScore: preciseScore, DisplayScore: int(displayScore), Rank: int(rank), SampleSize: int(sampleSize), Status: status,
 		})
 		if status != string(timeparsepolicy.StatusSampleTooSmall) {

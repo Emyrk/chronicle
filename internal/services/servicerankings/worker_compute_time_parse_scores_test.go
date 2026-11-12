@@ -15,6 +15,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/timeparsepolicy"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 	"github.com/stretchr/testify/assert"
@@ -121,8 +122,8 @@ func TestMixedDifficultyExcludesClearButKeepsBossCohorts(t *testing.T) {
 		instanceName: "Icecrown Citadel", difficultyName: "25 Player", maxPlayers: 25,
 		mixedDifficulty: true, qualified: true, durationMs: (2 * time.Hour).Milliseconds(), startTime: start,
 		encounters: []timeParseEncounterOpts{
-			{name: "Lord Marrowgar", killType: database.KillTypeClean, boss: true, difficultyName: "25 Player", maxPlayers: 25, startTime: start.Add(time.Hour), endTime: start.Add(70 * time.Minute)},
-			{name: "Lady Deathwhisper", killType: database.KillTypeClean, boss: true, difficultyName: "25 Player (Heroic)", maxPlayers: 25, dynamicDifficulty: 1, startTime: start.Add(80 * time.Minute), endTime: start.Add(95 * time.Minute)},
+			{name: "Lord Marrowgar", killType: database.KillTypeClean, boss: true, difficulty: pgtype.Text{String: "", Valid: true}, startTime: start.Add(time.Hour), endTime: start.Add(70 * time.Minute)},
+			{name: "Lady Deathwhisper", killType: database.KillTypeClean, boss: true, difficulty: pgtype.Text{String: "heroic", Valid: true}, startTime: start.Add(80 * time.Minute), endTime: start.Add(95 * time.Minute)},
 		},
 	})
 
@@ -143,8 +144,8 @@ func TestMixedDifficultyExcludesClearButKeepsBossCohorts(t *testing.T) {
 		byName[boss.EncounterName] = boss
 	}
 	require.Equal(t, instanceID, byName["Lord Marrowgar"].InstanceID)
-	require.Equal(t, "25 Player", byName["Lord Marrowgar"].DifficultyName)
-	require.Equal(t, "25 Player (Heroic)", byName["Lady Deathwhisper"].DifficultyName)
+	require.Equal(t, "", byName["Lord Marrowgar"].DifficultyName)
+	require.Equal(t, "heroic", byName["Lady Deathwhisper"].DifficultyName)
 }
 
 func TestWorkerComputeTimeParseScoresPersistsSampleTooSmall(t *testing.T) {
@@ -336,5 +337,6 @@ func TestWorkerComputeTimeParseScoresSameBossDifficultyVariants(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, bosses, 2)
 	require.NotEqual(t, bosses[0].EncounterID, bosses[1].EncounterID)
+	require.ElementsMatch(t, []string{"", "heroic"}, []string{bosses[0].DifficultyName, bosses[1].DifficultyName})
 	require.ElementsMatch(t, []int64{60000, 120000}, []int64{bosses[0].DurationMs, bosses[1].DurationMs})
 }

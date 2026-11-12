@@ -124,7 +124,7 @@ func (w *WorkerComputeTimeParseScores) Work(ctx context.Context, job *river.Job[
 			guildFilter = instance.GuildID.UUID
 		}
 		var clearResults *scopedScoreResults
-		if speedrunErr == nil && speedrun.Qualified && speedrun.RankedDurationMs.Valid && speedrun.RankedDurationMs.Int64 > 0 {
+		if !instance.MixedDifficulty && speedrunErr == nil && speedrun.Qualified && speedrun.RankedDurationMs.Valid && speedrun.RankedDurationMs.Int64 > 0 {
 			clearResults = &scopedScoreResults{}
 		}
 		for _, scope := range scopes {

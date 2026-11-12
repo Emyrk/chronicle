@@ -359,9 +359,10 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 			}
 
 			boss := chroniclesdk.InstanceParseBoss{
-				EncounterName: encName,
-				MetricValue:   metricValue,
-				Status:        string(parsepolicy.StatusSampleTooSmall),
+				EncounterName:  encName,
+				DifficultyName: memberRow.DifficultyName, MaxPlayers: memberRow.MaxPlayers,
+				MetricValue: metricValue,
+				Status:      string(parsepolicy.StatusSampleTooSmall),
 			}
 
 			// A zero metric value cannot be scored (the scorer rejects
@@ -650,9 +651,10 @@ func buildPersistedInstanceParsePlayers(
 				metricValue = ranking.Hps
 			}
 			boss := chroniclesdk.InstanceParseBoss{
-				EncounterName: encounterName,
-				MetricValue:   metricValue,
-				Status:        string(parsepolicy.StatusSampleTooSmall),
+				EncounterName:  encounterName,
+				DifficultyName: ranking.DifficultyName, MaxPlayers: ranking.MaxPlayers,
+				MetricValue: metricValue,
+				Status:      string(parsepolicy.StatusSampleTooSmall),
 			}
 			if metricValue <= 0 {
 				boss.Status = "no_metric_value"
