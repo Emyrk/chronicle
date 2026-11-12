@@ -24,6 +24,7 @@ describe("canonical encounter difficulties", () => {
   it("preserves authoritative mixed status even with only Normal kills", () => {
     const html = renderToStaticMarkup(<EncounterDifficultySummary encounters={[boss(""), boss("heroic", "wipe")]} mixedDifficulty />);
     expect(html).toContain("Mixed");
+    expect(html).toContain("1N");
     expect(html).toContain("Normal kills 1/1");
   });
 
@@ -40,6 +41,7 @@ describe("canonical encounter difficulties", () => {
     expect(homogeneous).not.toContain("kills");
     const mixed = renderToStaticMarkup(<EncounterDifficultySummary encounters={encounters} mixedDifficulty />);
     expect(mixed).toContain("Mixed");
+    expect(mixed).toContain("2H");
     expect(mixed).toContain("Heroic kills 2/2");
   });
 

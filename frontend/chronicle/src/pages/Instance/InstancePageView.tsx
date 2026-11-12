@@ -93,6 +93,7 @@ import {
   validateSharedViewPayload,
 } from "./sharedViewImport";
 import { samePageState } from "./pageStateSync";
+import { InstanceHeader } from "./InstanceHeader";
 import { InstanceViewModeSwitch } from "./InstanceViewMode";
 import { isInstanceOverviewEnabled, parseInstanceViewMode, withInstanceViewMode, type InstanceViewMode } from "./instanceViewModeState";
 import { InstanceOverview } from "./Overview/InstanceOverview";
@@ -100,12 +101,11 @@ import { LiveSessionButton } from "./LiveSessionButton";
 import { LivePanelViewboxes, useAutoJoinLiveSession, useLiveSession } from "./LiveSessionContext";
 
 import { showDebugDesktopControls } from "./debugFeatureGate";
-import { InstanceTimingTooltip } from "./InstanceTimingTooltip";
 import { ClearParseBadge, KillParseTooltip } from "./EncounterKillParse";
 import { OwnerAdFreeBadge } from "@/components/Ads/OwnerAdFreeBadge";
 import { useInstanceTimeParses } from "./Overview/overviewQueries";
 import { bossKillParsesByEncounter, killParseEdgeStyle, scopedClearParses, scopedKillParsesByEncounter } from "./Overview/encounterKillTimePopulation";
-import { EncounterDifficultyMark, EncounterDifficultySummary } from "@/components/EncounterDifficulty/EncounterDifficultyMark";
+import { EncounterDifficultyMark } from "@/components/EncounterDifficulty/EncounterDifficultyMark";
 import { AdSlot } from "@/components/Ads/AdSlot";
 import { isHeroic } from "@/lib/wowUtils";
 import { DuplicatesBadge } from "./DuplicatesBadge";
@@ -4266,28 +4266,14 @@ function InstancePageViewContent({
         onClearTimeRange={() => timeRange?.reset()}
       />
       {!focused && (<>
-      {/* Header */}
-      <div className={cn("mb-6 rounded-lg border relative", heroic && "border-purple-500/30")}>
-        {/* Background image */}
-        {headerBg && (
-          <div className="absolute inset-0 z-0 rounded-lg overflow-hidden">
-            <img
-              src={headerBg}
-              alt=""
-              className="h-full w-full object-cover opacity-70"
-            />
-            <div className="absolute inset-0 bg-gradient-to-r from-background/90 via-background/70 to-background/50" />
-            {heroic && (
-              <div className="absolute inset-0 bg-gradient-to-r from-purple-900/10 via-purple-900/5 to-transparent" />
-            )}
-          </div>
-        )}
-        {/* Content */}
-        <div className={cn("relative z-10", isMobile ? "p-3" : "p-4")}>
-        {/* Row 1: Title (+ mobile menu / desktop difficulty) */}
-        <div className="flex items-start justify-between gap-4 mb-1">
-          <h1 className={cn("font-bold flex items-center gap-2", isMobile ? "text-xl" : "text-2xl", heroic && "drop-shadow-[0_0_8px_rgba(147,51,234,0.3)]")}>
-            <span {...raidEntityAttributes}>{instance.name}</span>
+      <InstanceHeader
+        isMobile={isMobile}
+        name={instance.name}
+        nameAttributes={raidEntityAttributes}
+        backgroundUrl={headerBg}
+        heroic={heroic}
+        titleBadges={(
+          <>
             {!instance.unlisted && !reconstruction && (
               <ClearParseBadge
                 parses={scopedClearParses(instanceTimeParsesQuery.data)}
@@ -4330,227 +4316,145 @@ function InstancePageViewContent({
               <DuplicatesBadge instanceId={instance.id} duplicateGroupId={duplicateGroupId} />
             )}
             {!reconstruction && <OwnerAdFreeBadge subject="log" />}
-          </h1>
-          {!isMobile && (
-            <div className="flex shrink-0 items-center gap-3">
-              {instance.maxPlayers != null && instance.maxPlayers > 0 && (
-                <div className="flex items-center gap-1.5">
-                  <span className="text-sm text-muted-foreground font-medium">{instance.maxPlayers} Player</span>
-                  <EncounterDifficultySummary encounters={instance.encounters} mixedDifficulty={instance.mixedDifficulty ?? false} />
-                </div>
-              )}
-              {overviewEnabled && <InstanceViewModeSwitch value={viewMode} onChange={setViewMode} />}
-            </div>
-          )}
-          {isMobile && (
-            <div className="flex flex-col items-end gap-2 shrink-0">
-              <div className="flex items-center gap-2">
-              <InstanceMenu
-                onImportLayout={isEncounterView && canEditSharedView ? handleImportLayout : undefined}
-                onExportLayout={isEncounterView && !activePageType ? handleExportLayout : undefined}
-                onPopOutLayout={isEncounterView && canEditSharedView ? popOutLayout : undefined}
-                onEditLayout={canEditLayout && !layoutEditActive ? enterLayoutEdit : undefined}
-                onSaveLayout={isEncounterView && !activePageType ? () => setSaveLayoutOpen(true) : undefined}
-                layoutPoppedOut={isEncounterView && layoutPopup !== null}
-                onResetView={isEncounterView && canEditSharedView ? resetView : undefined}
-                onOpenTimeRange={isEncounterView && canEditSharedView ? onOpenTimeRange : undefined}
-                instanceId={instance.id}
-                logGroupId={instance.logGroupId}
-                instanceName={instance.name}
-                invalidated={Boolean(instance.invalidatedAt)}
-                selectedEncounter={selectedEncounters.length === 1 ? selectedEncounters[0] : undefined}
-                logDetailUrl={logDetailUrl}
-                layoutLabUrl={isEncounterView && !activePageType && activeLayoutId ? `/account/layout-lab?layoutId=${activeLayoutId}` : undefined}
-                duplicateGroupId={duplicateGroupId}
-                canAdminLogs={canAdminLogs}
-                canInvalidateLogs={canInvalidateLogs}
-                isMobile={isMobile}
-                viewMode={overviewEnabled ? viewMode : undefined}
-                onViewModeChange={overviewEnabled ? setViewMode : undefined}
-                isLoggedIn={isLoggedIn}
-                onShareWithLayout={() => { void handleShareView(); }}
-                onShareWithoutLayout={() => { void handleShareWithoutLayout(); }}
-                youtubeButton={youtubeButton}
-                showHints={showHints}
-                onOpenHelp={() => setHelpOpen(true)}
-              />
-              {showHints && (
-                <InstanceHelpSheet open={helpOpen} onOpenChange={setHelpOpen} />
-              )}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Row 2: Metadata */}
-        {isMobile ? (
-          <div className="text-muted-foreground text-sm">
-            {instance.guild && (
-              <p>
-                <Link to={`/g/${instance.guild.id}`} className="text-amber-500 hover:underline" {...(guildEntity ? entityAttributes(guildEntity) : {})}>&lt;{instance.guild.name}&gt;</Link>
-              </p>
-            )}
-            <p>
-              {instance.realm && `${instance.realm}`}
-              {instance.realm && " • "}
-              {formatTime(instance.startTime)}
-            </p>
-          </div>
-        ) : (
-          <p className="text-muted-foreground text-sm">
-            {instance.guild && (
-              <Link to={`/g/${instance.guild.id}`} className="text-amber-500 hover:underline" {...(guildEntity ? entityAttributes(guildEntity) : {})}>&lt;{instance.guild.name}&gt;</Link>
-            )}
-            {instance.guild && instance.realm && " • "}
-            {instance.realm && `${instance.realm}`}
-            {(instance.guild || instance.realm) && " • "}
-            {formatTime(instance.startTime)}
-          </p>
+          </>
         )}
-
-        {/* Row 3: Duration stats + action buttons (desktop) */}
-        <div className="flex items-center justify-between mt-1">
-          <div className="flex items-center gap-4 text-muted-foreground text-sm">
-            {elapsedDurationMs !== null && (
+        difficulty={instance.maxPlayers != null && instance.maxPlayers > 0 ? {
+          maxPlayers: instance.maxPlayers,
+          encounters: instance.encounters,
+          mixedDifficulty: instance.mixedDifficulty ?? false,
+        } : undefined}
+        guild={instance.guild ? (
+          <Link
+            to={`/g/${instance.guild.id}`}
+            className="text-amber-500 hover:underline"
+            {...(guildEntity ? entityAttributes(guildEntity) : {})}
+          >
+            &lt;{instance.guild.name}&gt;
+          </Link>
+        ) : undefined}
+        realm={instance.realm}
+        startTimeLabel={formatTime(instance.startTime)}
+        elapsedDurationMs={elapsedDurationMs}
+        combatDurationMs={instanceCombatDurationMs}
+        rankedDurationMs={instanceSpeedrun?.ranked_duration_ms}
+        bossToBossDurationMs={instanceSpeedrun?.boss_to_boss_duration_ms}
+        desktopModeSwitch={overviewEnabled ? <InstanceViewModeSwitch value={viewMode} onChange={setViewMode} /> : undefined}
+        mobileMenu={(
+          <>
+            <InstanceMenu
+              onImportLayout={isEncounterView && canEditSharedView ? handleImportLayout : undefined}
+              onExportLayout={isEncounterView && !activePageType ? handleExportLayout : undefined}
+              onPopOutLayout={isEncounterView && canEditSharedView ? popOutLayout : undefined}
+              onEditLayout={canEditLayout && !layoutEditActive ? enterLayoutEdit : undefined}
+              onSaveLayout={isEncounterView && !activePageType ? () => setSaveLayoutOpen(true) : undefined}
+              layoutPoppedOut={isEncounterView && layoutPopup !== null}
+              onResetView={isEncounterView && canEditSharedView ? resetView : undefined}
+              onOpenTimeRange={isEncounterView && canEditSharedView ? onOpenTimeRange : undefined}
+              instanceId={instance.id}
+              logGroupId={instance.logGroupId}
+              instanceName={instance.name}
+              invalidated={Boolean(instance.invalidatedAt)}
+              selectedEncounter={selectedEncounters.length === 1 ? selectedEncounters[0] : undefined}
+              logDetailUrl={logDetailUrl}
+              layoutLabUrl={isEncounterView && !activePageType && activeLayoutId ? `/account/layout-lab?layoutId=${activeLayoutId}` : undefined}
+              duplicateGroupId={duplicateGroupId}
+              canAdminLogs={canAdminLogs}
+              canInvalidateLogs={canInvalidateLogs}
+              isMobile={isMobile}
+              viewMode={overviewEnabled ? viewMode : undefined}
+              onViewModeChange={overviewEnabled ? setViewMode : undefined}
+              isLoggedIn={isLoggedIn}
+              onShareWithLayout={() => { void handleShareView(); }}
+              onShareWithoutLayout={() => { void handleShareWithoutLayout(); }}
+              youtubeButton={youtubeButton}
+              showHints={showHints}
+              onOpenHelp={() => setHelpOpen(true)}
+            />
+            {showHints && <InstanceHelpSheet open={helpOpen} onOpenChange={setHelpOpen} />}
+          </>
+        )}
+        desktopActions={(
+          <>
+            {showLiveSessionControls && !reconstruction && (
+              <LiveSessionButton instanceId={instance.id} canCreate={isLoggedIn} />
+            )}
+            <DropdownMenu modal={false}>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div className="flex cursor-help items-center gap-1.5">
-                    <Clock className="h-3.5 w-3.5" />
-                    <span>{formatDurationMs(elapsedDurationMs)}</span>
-                    <span className="text-xs opacity-60">elapsed</span>
-                  </div>
+                  <DropdownMenuTrigger asChild>
+                    <span onContextMenu={handleShareButtonContextMenu}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5"
+                        disabled={!isLoggedIn && !instance.unlisted}
+                      >
+                        <Share2 className="h-4 w-4" />
+                        Share
+                      </Button>
+                    </span>
+                  </DropdownMenuTrigger>
                 </TooltipTrigger>
-                <TooltipContent
-                  className="pointer-events-none border border-white/10 bg-zinc-950 p-3 text-zinc-100 shadow-xl"
-                  sideOffset={6}
-                  hideArrow
-                >
-                  <InstanceTimingTooltip
-                    elapsedDurationMs={elapsedDurationMs}
-                    rankedDurationMs={instanceSpeedrun?.ranked_duration_ms}
-                    bossToBossDurationMs={instanceSpeedrun?.boss_to_boss_duration_ms}
-                  />
-                </TooltipContent>
+                {!isLoggedIn && !instance.unlisted && <TooltipContent>You must be logged in to share</TooltipContent>}
               </Tooltip>
-            )}
-            {instanceCombatDurationMs > 0 && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="flex items-center gap-1.5">
-                    <Clock className="h-3.5 w-3.5" />
-                    <span>{formatDurationMs(instanceCombatDurationMs)}</span>
-                    <span className="text-xs opacity-60">combat</span>
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  className="pointer-events-none border border-white/10 bg-zinc-950 text-zinc-100 shadow-xl"
-                  sideOffset={6}
-                  hideArrow
-                >
-                  Sum of all encounter durations (active combat time)
-                </TooltipContent>
-              </Tooltip>
-            )}
-          </div>
-          {isMobile && instance.maxPlayers != null && instance.maxPlayers > 0 && (
-            <div className="flex items-center gap-1.5 shrink-0">
-              <span className="text-xs text-muted-foreground font-medium">{instance.maxPlayers} Player</span>
-              <EncounterDifficultySummary encounters={instance.encounters} mixedDifficulty={instance.mixedDifficulty ?? false} />
-            </div>
-          )}
-          {!isMobile && (
-            <div className="flex items-center gap-2 shrink-0">
-              {showLiveSessionControls && !reconstruction && (
-                <LiveSessionButton instanceId={instance.id} canCreate={isLoggedIn} />
-              )}
-              <DropdownMenu modal={false}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <DropdownMenuTrigger asChild>
-                      <span onContextMenu={handleShareButtonContextMenu}>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="gap-1.5"
-                          disabled={!isLoggedIn && !instance.unlisted}
-                        >
-                          <Share2 className="h-4 w-4" />
-                          Share
-                        </Button>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => { void handleShareView(); }}>
+                  Share with layout
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => { void handleShareWithoutLayout(); }}>
+                  Share without layout
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {isEncounterView && youtubeButton}
+            {showHints && (
+              <>
+                <div className="relative">
+                  <Button
+                    variant={hasSeenHelp ? "ghost" : "default"}
+                    size="sm"
+                    className={cn(
+                      "gap-1.5",
+                      !hasSeenHelp && "animate-bounce shadow-lg shadow-primary/25"
+                    )}
+                    onClick={() => setHelpOpen(true)}
+                  >
+                    <HelpCircle className="h-4 w-4" />
+                    <span className="hidden sm:inline">Help</span>
+                    {!hasSeenHelp && (
+                      <span className="absolute -right-1 -top-1 flex h-3 w-3">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
+                        <span className="relative inline-flex h-3 w-3 rounded-full bg-primary" />
                       </span>
-                    </DropdownMenuTrigger>
-                  </TooltipTrigger>
-                  {!isLoggedIn && !instance.unlisted && <TooltipContent>You must be logged in to share</TooltipContent>}
-                </Tooltip>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem
-                    onClick={() => {
-                      void handleShareView();
-                    }}
-                  >
-                    Share with layout
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      void handleShareWithoutLayout();
-                    }}
-                  >
-                    Share without layout
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              {isEncounterView && youtubeButton}
-              {showHints && (
-                <>
-                  <div className="relative">
-                    <Button
-                      variant={hasSeenHelp ? "ghost" : "default"}
-                      size="sm"
-                      className={cn(
-                        "gap-1.5",
-                        !hasSeenHelp && "animate-bounce shadow-lg shadow-primary/25"
-                      )}
-                      onClick={() => setHelpOpen(true)}
-                    >
-                      <HelpCircle className="h-4 w-4" />
-                      <span className="hidden sm:inline">Help</span>
-                      {!hasSeenHelp && (
-                        <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
-                          <span className="relative inline-flex rounded-full h-3 w-3 bg-primary" />
-                        </span>
-                      )}
-                    </Button>
-                  </div>
-                  <InstanceHelpSheet open={helpOpen} onOpenChange={setHelpOpen} />
-                </>
-              )}
-              <InstanceMenu
-                onImportLayout={isEncounterView && canEditSharedView ? handleImportLayout : undefined}
-                onExportLayout={isEncounterView && !activePageType ? handleExportLayout : undefined}
-                onPopOutLayout={isEncounterView && canEditSharedView ? popOutLayout : undefined}
-                onEditLayout={canEditLayout && !layoutEditActive ? enterLayoutEdit : undefined}
-                onSaveLayout={isEncounterView && !activePageType ? () => setSaveLayoutOpen(true) : undefined}
-                layoutPoppedOut={isEncounterView && layoutPopup !== null}
-                onResetView={isEncounterView && canEditSharedView ? resetView : undefined}
-                onOpenTimeRange={isEncounterView && canEditSharedView ? onOpenTimeRange : undefined}
-                instanceId={instance.id}
-                logGroupId={instance.logGroupId}
-                instanceName={instance.name}
-                invalidated={Boolean(instance.invalidatedAt)}
-                selectedEncounter={selectedEncounters.length === 1 ? selectedEncounters[0] : undefined}
-                logDetailUrl={logDetailUrl}
-                layoutLabUrl={isEncounterView && !activePageType && activeLayoutId ? `/account/layout-lab?layoutId=${activeLayoutId}` : undefined}
-                duplicateGroupId={duplicateGroupId}
-                canAdminLogs={canAdminLogs}
-                canInvalidateLogs={canInvalidateLogs}
-              />
-            </div>
-          )}
-        </div>
-
-        </div>
-      </div>
+                    )}
+                  </Button>
+                </div>
+                <InstanceHelpSheet open={helpOpen} onOpenChange={setHelpOpen} />
+              </>
+            )}
+            <InstanceMenu
+              onImportLayout={isEncounterView && canEditSharedView ? handleImportLayout : undefined}
+              onExportLayout={isEncounterView && !activePageType ? handleExportLayout : undefined}
+              onPopOutLayout={isEncounterView && canEditSharedView ? popOutLayout : undefined}
+              onEditLayout={canEditLayout && !layoutEditActive ? enterLayoutEdit : undefined}
+              onSaveLayout={isEncounterView && !activePageType ? () => setSaveLayoutOpen(true) : undefined}
+              layoutPoppedOut={isEncounterView && layoutPopup !== null}
+              onResetView={isEncounterView && canEditSharedView ? resetView : undefined}
+              onOpenTimeRange={isEncounterView && canEditSharedView ? onOpenTimeRange : undefined}
+              instanceId={instance.id}
+              logGroupId={instance.logGroupId}
+              instanceName={instance.name}
+              invalidated={Boolean(instance.invalidatedAt)}
+              selectedEncounter={selectedEncounters.length === 1 ? selectedEncounters[0] : undefined}
+              logDetailUrl={logDetailUrl}
+              layoutLabUrl={isEncounterView && !activePageType && activeLayoutId ? `/account/layout-lab?layoutId=${activeLayoutId}` : undefined}
+              duplicateGroupId={duplicateGroupId}
+              canAdminLogs={canAdminLogs}
+              canInvalidateLogs={canInvalidateLogs}
+            />
+          </>
+        )}
+      />
       </>)}
 
 

@@ -39,14 +39,49 @@ export function EncounterDifficultySummary({ encounters, mixedDifficulty }: {
 }) {
   const { kills, counts } = summarizeDifficulty(encounters);
   const allHeroic = !mixedDifficulty && kills.length > 0 && counts.get("heroic") === kills.length;
-  return (
-    <>
-      {mixedDifficulty && <span className={cn(CHIP, HEROIC_CHIP, "px-2 text-xs")}>Mixed</span>}
-      {allHeroic ? <HeroicBadge /> : [...counts].filter(([difficulty]) => mixedDifficulty || difficulty !== "").map(([difficulty, count]) => (
-        <span key={difficulty} className={cn(CHIP, difficulty === "heroic" ? HEROIC_CHIP : VARIANT_CHIP, "px-2 text-xs")}>
-          {difficultyLabel(difficulty)} kills {count}/{kills.length}
-        </span>
-      ))}
-    </>
-  );
+  const visibleCounts = [...counts].filter(([difficulty]) => mixedDifficulty || difficulty !== "");
+
+  if (allHeroic) return <HeroicBadge />;
+
+  if (mixedDifficulty) {
+    const breakdown = visibleCounts
+      .map(([difficulty, count]) => `${difficultyLabel(difficulty)} kills ${count}/${kills.length}`)
+      .join(", ");
+
+    return (
+      <HintTooltip>
+        <TooltipTrigger asChild>
+          <span
+            className={cn(CHIP, HEROIC_CHIP, "cursor-help gap-1 px-2 text-xs")}
+            aria-label={breakdown ? `Mixed difficulty, ${breakdown}` : "Mixed difficulty"}
+          >
+            <span>Mixed</span>
+            {visibleCounts.length > 0 && (
+              <span className="font-medium text-purple-100/80">
+                {visibleCounts.map(([difficulty, count]) => (
+                  <span key={difficulty} className="before:mx-1 before:content-['·']">
+                    {count}{difficulty === "" ? "N" : difficulty === "heroic" ? "H" : ` ${difficultyLabel(difficulty)}`}
+                  </span>
+                ))}
+              </span>
+            )}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="space-y-1">
+          <p className="text-xs font-semibold">Mixed difficulty</p>
+          {visibleCounts.map(([difficulty, count]) => (
+            <p key={difficulty} className="text-xs text-muted-foreground">
+              {difficultyLabel(difficulty)} kills {count}/{kills.length}
+            </p>
+          ))}
+        </TooltipContent>
+      </HintTooltip>
+    );
+  }
+
+  return visibleCounts.map(([difficulty, count]) => (
+    <span key={difficulty} className={cn(CHIP, difficulty === "heroic" ? HEROIC_CHIP : VARIANT_CHIP, "px-2 text-xs")}>
+      {difficultyLabel(difficulty)} kills {count}/{kills.length}
+    </span>
+  ));
 }
