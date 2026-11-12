@@ -41,6 +41,12 @@ describe("map gallery URLs", () => {
       .toBe("https://icons.example.test/forever/maps/manifest.json");
     expect(mapAssetUrl("https://icons.example.test/forever/", "/original/30.webp"))
       .toBe("https://icons.example.test/forever/maps/original/30.webp");
+    expect(mapAssetUrl("https://icons.example.test/turtle/", "https://icons.chronicleclassic.com/forever/maps/3d/389.glb"))
+      .toBe("https://icons.chronicleclassic.com/forever/maps/3d/389.glb");
+    expect(mapAssetUrl("https://icons.example.test/turtle/", "https://icons.chronicleclassic.com/forever/maps/original/389.webp"))
+      .toBe("https://icons.chronicleclassic.com/forever/maps/original/389.webp");
+    expect(mapAssetUrl("https://icons.example.test/turtle/", "https://example.com/forever/maps/3d/389.glb"))
+      .toBe("https://icons.example.test/turtle/maps/https://example.com/forever/maps/3d/389.glb");
   });
 });
 

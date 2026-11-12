@@ -70,7 +70,7 @@ export function dungeonMeshLiquid(mesh: WowMapMeshInstance): WowMapMeshLiquid | 
   return liquid;
 }
 
-/** The URL of a mesh entry: its manifest path under the icon CDN. */
+/** The URL of a mesh entry: local to this manifest CDN or an allowlisted absolute reuse URL. */
 export function dungeonMeshUrl(mesh: WowMapMeshInstance, iconBaseUrl: string): string {
   return mapAssetUrl(iconBaseUrl, mesh.path);
 }

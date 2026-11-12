@@ -80,6 +80,39 @@ func TestMergeWowdataMaps(t *testing.T) {
 	}
 }
 
+func TestMergeWowdataMapsReusedInstance(t *testing.T) {
+	t.Parallel()
+	target := wowMapTarget{Product: "turtle", Build: "1.12.1", Locale: "enUS"}
+	original := wowMapManifest{Format: wowMapManifestFormat, Target: target, Instances: []wowMapInstance{{
+		MapID: 389, Name: "Ragefire Chasm", Directory: "OrgrimmarInstance", Floors: []wowMapInstanceFloor{},
+	}}}
+	reuse := wowMapInstance{
+		ReusedFrom: &wowMapReuseSource{Namespace: "forever", MapID: 389},
+		MapID:      389, Name: "Ragefire Chasm", InstanceType: 1, Directory: "OrgrimmarInstance",
+		Floors: []wowMapInstanceFloor{{
+			Floor: 0, Width: 1024, Height: 768, TileWidth: 256, TileHeight: 256,
+			Tiles:   []wowMapTile{{Path: "https://icons.chronicleclassic.com/forever/maps/original/389.webp"}},
+			Renders: &wowMapManualRender{Path: "https://icons.chronicleclassic.com/forever/maps/renders/389.png", Width: 1600, Height: 1000},
+		}},
+		Mesh: &wowMapMeshInstance{
+			Path:   "https://icons.chronicleclassic.com/forever/maps/3d/389.glb",
+			Bounds: wowMapFloorBounds{MinX: -416, MaxX: 103, MinY: -108, MaxY: 275}, ZMin: -66, ZMax: 59, Frame: wowMapMeshFrame,
+		},
+	}
+	dir := t.TempDir()
+	origPath, reusesPath, outPath := filepath.Join(dir, "original.json"), filepath.Join(dir, "reuses.json"), filepath.Join(dir, "out.json")
+	require.NoError(t, writeWowMapManifest(origPath, original))
+	data, err := json.Marshal(wowMapReuseLayer{Format: wowMapManifestFormat, Target: wowMapTarget{Product: target.Product}, Instances: []wowMapInstance{reuse}})
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(reusesPath, data, 0o600))
+	require.NoError(t, mergeWowdataMaps(origPath, "", "", "", outPath, reusesPath))
+	mergedData, err := os.ReadFile(outPath)
+	require.NoError(t, err)
+	var merged wowMapManifest
+	require.NoError(t, json.Unmarshal(mergedData, &merged))
+	require.Equal(t, reuse, merged.Instances[0])
+}
+
 func TestMergeWowdataMapsFloorLayers(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -285,6 +318,9 @@ func TestMergeWowdataMapsMeshValidation(t *testing.T) {
 	t.Parallel()
 	target := wowMapTarget{Product: "wow_classic_beta", Build: "1.2.3", Region: "us", Locale: "enUS"}
 	good := wowMapMeshInstance{Path: "3d/wailing-caverns-open-top.glb", Bounds: wowMapFloorBounds{MinX: -389.07, MaxX: 191.667, MinY: -370.833, MaxY: 538.351}, ZMin: -119.16, ZMax: 56.469, Frame: wowMapMeshFrame}
+	reused := good
+	reused.Path = "https://icons.chronicleclassic.com/forever/maps/3d/wailing-caverns-open-top.glb"
+	require.NoError(t, validateWowMapLayerMesh(43, 0, &reused))
 	layerOf := func(mesh wowMapMeshInstance) wowMapLayer {
 		return wowMapLayer{Format: wowMapManifestFormat, Target: wowMapTarget{Product: target.Product}, Instances: []wowMapLayerInstance{{MapID: 43, Mesh: &mesh}}}
 	}
@@ -303,6 +339,10 @@ func TestMergeWowdataMapsMeshValidation(t *testing.T) {
 		{name: "no mesh", layer: wowMapLayer{Format: wowMapManifestFormat, Target: wowMapTarget{Product: target.Product}, Instances: []wowMapLayerInstance{{MapID: 43}}}, want: "must contain mesh only"},
 		{name: "with renders", layer: wowMapLayer{Format: wowMapManifestFormat, Target: wowMapTarget{Product: target.Product}, Instances: []wowMapLayerInstance{{MapID: 43, Mesh: &good, Renders: &wowMapManualRender{Path: "renders/43.png", Width: 2, Height: 2}}}}, want: "must contain mesh only"},
 		{name: "wrong prefix", layer: with(func(mesh *wowMapMeshInstance) { mesh.Path = "render/43.glb" }), want: "invalid meshes"},
+		{name: "untrusted absolute host", layer: with(func(mesh *wowMapMeshInstance) { mesh.Path = "https://example.com/forever/maps/3d/43.glb" }), want: "invalid meshes"},
+		{name: "absolute URL query", layer: with(func(mesh *wowMapMeshInstance) {
+			mesh.Path = "https://icons.chronicleclassic.com/forever/maps/3d/43.glb?mutable=1"
+		}), want: "invalid meshes"},
 		{name: "traversal path", layer: with(func(mesh *wowMapMeshInstance) { mesh.Path = "3d/../43.glb" }), want: "invalid meshes"},
 		{name: "not a glb", layer: with(func(mesh *wowMapMeshInstance) { mesh.Path = "3d/43.gltf" }), want: "invalid meshes"},
 		{name: "flat x bounds", layer: with(func(mesh *wowMapMeshInstance) { mesh.Bounds.MaxX = mesh.Bounds.MinX }), want: "invalid meshes"},

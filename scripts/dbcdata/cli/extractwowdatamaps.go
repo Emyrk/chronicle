@@ -77,7 +77,13 @@ type wowMapArtOverlay struct {
 	Tiles         []wowMapTile `json:"tiles"`
 }
 
+type wowMapReuseSource struct {
+	Namespace string `json:"namespace"`
+	MapID     int32  `json:"mapID"`
+}
+
 type wowMapInstance struct {
+	ReusedFrom   *wowMapReuseSource      `json:"reusedFrom,omitempty"`
 	MapID        int32                   `json:"mapID"`
 	Name         string                  `json:"name"`
 	InstanceType int32                   `json:"instanceType"`
