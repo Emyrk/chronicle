@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ReactNode } from "react";
 import { CheckCircle, Flame, Skull } from "lucide-react";
 import { HeroicBadge } from "@/components/HeroicBadge";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
+import { HintTooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { cn } from "@/lib/utils";
 
 /**
@@ -209,12 +209,12 @@ function ModeTooltipBody({ kill }: { kill: BossKill }) {
 function ModeTooltip({ kill, children }: { kill: BossKill; children: ReactNode }) {
   if (kill.mode === "normal") return <>{children}</>;
   return (
-    <Tooltip>
+    <HintTooltip>
       <TooltipTrigger asChild>{children}</TooltipTrigger>
       <TooltipContent side="right" className="p-3">
         <ModeTooltipBody kill={kill} />
       </TooltipContent>
-    </Tooltip>
+    </HintTooltip>
   );
 }
 
@@ -275,7 +275,7 @@ function HeaderSummary({ kills, maxPlayers }: { kills: BossKill[]; maxPlayers: n
         </span>
       )}
       {hard > 0 && (
-        <Tooltip>
+        <HintTooltip>
           <TooltipTrigger asChild>
             <span className="inline-flex cursor-help items-center gap-1 rounded border border-amber-400/40 bg-amber-600/30 px-2 py-0.5 text-xs font-bold text-amber-100">
               <Flame className="h-3 w-3" /> {hard} hard mode{hard === 1 ? "" : "s"}
@@ -284,7 +284,7 @@ function HeaderSummary({ kills, maxPlayers }: { kills: BossKill[]; maxPlayers: n
           <TooltipContent side="bottom" className="p-3">
             <HardModeList kills={final} />
           </TooltipContent>
-        </Tooltip>
+        </HintTooltip>
       )}
     </div>
   );
@@ -370,6 +370,76 @@ function Comparison({ kills, raid, maxPlayers }: { kills: BossKill[]; raid: stri
   );
 }
 
+/* ---------- Marker styles (B's placement, different chip looks) ---------- */
+
+type MarkStyle = "current" | "soft" | "outline" | "solid" | "letter";
+
+const MARK_STYLES: { style: MarkStyle; title: string; note: string }[] = [
+  { style: "current", title: "Current", note: "Today's HeroicBadge: solid, glow, shimmer." },
+  { style: "soft", title: "Soft tint", note: "Translucent fill, coloured text. Matches the header chips." },
+  { style: "outline", title: "Outline", note: "Border and text only; lightest box." },
+  { style: "solid", title: "Flat solid", note: "Solid fill like today, without glow or shimmer." },
+  { style: "letter", title: "Letter only", note: "Bold coloured letters, no box at all." },
+];
+
+const MARK_BOX = "inline-flex shrink-0 items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-bold leading-none";
+
+function StyledMark({ kill, style }: { kill: BossKill; style: MarkStyle }) {
+  if (kill.mode === "normal") return null;
+  const heroic = kill.mode === "heroic";
+  const label = heroic ? "H" : tierLabel(kill) ?? "HM";
+  const flame = !heroic && <Flame className="h-2.5 w-2.5" />;
+  if (style === "current") {
+    return heroic ? <HeroicBadge size="sm" /> : <HardModeChip tier={tierLabel(kill)} />;
+  }
+  const look: Record<Exclude<MarkStyle, "current">, string> = {
+    soft: heroic
+      ? "bg-purple-500/20 text-purple-200 ring-1 ring-inset ring-purple-400/40"
+      : "bg-amber-500/15 text-amber-200 ring-1 ring-inset ring-amber-400/40",
+    outline: heroic
+      ? "border border-purple-400/70 text-purple-300"
+      : "border border-amber-400/70 text-amber-300",
+    solid: heroic ? "bg-purple-600 text-white" : "bg-amber-600 text-white",
+    letter: cn("px-0 text-xs", heroic ? "text-purple-400" : "text-amber-400"),
+  };
+  return <span className={cn(MARK_BOX, look[style])}>{flame}{label}</span>;
+}
+
+const STYLE_SAMPLE: BossKill[] = [
+  ICC_25_MIXED[3],
+  ICC_25_MIXED[4],
+  ICC_25_MIXED[5],
+  ...ULDUAR_25.filter((k) => ["XT-002 Deconstructor", "Freya", "Yogg-Saron", "Mimiron"].includes(k.name)),
+];
+
+function MarkerStyles() {
+  return (
+    <div className="flex flex-wrap gap-8">
+      {MARK_STYLES.map(({ style, title, note }) => (
+        <div key={style} className="w-[251px] shrink-0">
+          <div className="mb-1 text-sm font-semibold">{title}</div>
+          <p className="mb-3 min-h-8 text-xs text-muted-foreground">{note}</p>
+          <div className="space-y-1">
+            {STYLE_SAMPLE.map((kill, i) => {
+              const mark = <StyledMark kill={kill} style={style} />;
+              return (
+                <Row
+                  key={kill.name}
+                  kill={kill}
+                  selected={i === 0}
+                  after={kill.mode !== "normal" && (
+                    <ModeTooltip kill={kill}><span className="inline-flex shrink-0 cursor-help">{mark}</span></ModeTooltip>
+                  )}
+                />
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 const meta = {
   title: "Instance/EncounterDifficulty",
   component: Comparison,
@@ -412,6 +482,12 @@ export const Ulduar25HardModes: Story = {
 export const UlduarTooltips: Story = {
   args: { kills: ULDUAR_25, raid: "Ulduar", maxPlayers: 25 },
   render: ({ kills }) => <TooltipGallery kills={kills} />,
+};
+
+/** Option B's placement with five chip looks, for picking a calmer Heroic "H". */
+export const MarkerStyleOptions: Story = {
+  args: { kills: [], raid: "", maxPlayers: 25 },
+  render: () => <MarkerStyles />,
 };
 
 /** Normal-only run: no markers anywhere, header unchanged. */
