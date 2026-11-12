@@ -132,6 +132,9 @@ func highlightSnapshotResponseAt(config []database.ResolveLeaderboardConfigurati
 				continue
 			}
 			metadata.RefreshedAt = &row.RefreshedAt.Time
+			if row.StatisticsRefreshedAt.Valid {
+				metadata.StatisticsRefreshedAt = &row.StatisticsRefreshedAt.Time
+			}
 			if row.ConfigurationFingerprint != fingerprint {
 				metadata.Status = "rebuilding"
 				break
@@ -146,6 +149,9 @@ func highlightSnapshotResponseAt(config []database.ResolveLeaderboardConfigurati
 			}
 			if !serviceratings.HighlightFresh(row.ConfigurationFingerprint, row.SourceGeneration, row.RefreshedAt.Time, fingerprint, generation, now) {
 				metadata.Status = "stale"
+			}
+			if serviceratings.HighlightStatisticsDue(row.ConfigurationFingerprint, fingerprint, row.StatisticsRefreshedAt, now) {
+				needRefresh = true
 			}
 			out.LandingPreviews = append(out.LandingPreviews, preview)
 			break

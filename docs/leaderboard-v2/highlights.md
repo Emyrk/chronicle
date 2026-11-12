@@ -48,6 +48,15 @@ materialized ratings. Snapshots record the
 generation captured before calculation. Dispatch and refresh workers skip expensive
 reads when the snapshot has the current generation and configuration fingerprint;
 a generation change during calculation leaves the snapshot stale for the next pass.
+Statistics (median-DPS box plots) have a separate `statistics_refreshed_at` marker.
+The same cohort/scope job recalculates ratings and speedruns when source generation
+changes, but reuses the previous statistics for up to 24 hours. When only statistics
+are due, it keeps the prior ratings and speedruns. A missing marker (including on
+pre-migration snapshots) or a configuration change forces new statistics. Each job
+publishes one complete payload atomically; a failed calculation preserves the old
+payload and both timestamps. `refreshed_at` tracks ratings/speedruns, so a
+statistics-only publication does not reset their age. The Statistics card shows
+its own update age.
 
 Hourly River dispatch pages tenants and examines at most 100 cohort/scope pairs per
 continuation. It queues only missing snapshots, snapshots older than 24 hours, or

@@ -49,6 +49,7 @@ type LeaderboardHighlightSnapshot struct {
 	MaxPlayers               int16      `json:"max_players"`
 	Status                   string     `json:"status"`
 	RefreshedAt              *time.Time `json:"refreshed_at,omitempty"`
+	StatisticsRefreshedAt    *time.Time `json:"statistics_refreshed_at,omitempty"`
 	ConfigurationFingerprint string     `json:"configuration_fingerprint"`
 }
 type LeaderboardHighlightsResponse struct {

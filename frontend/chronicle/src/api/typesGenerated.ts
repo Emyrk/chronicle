@@ -7664,6 +7664,7 @@ export interface LeaderboardHighlightSnapshot {
     readonly max_players: number;
     readonly status: string;
     readonly refreshed_at?: string;
+    readonly statistics_refreshed_at?: string;
     readonly configuration_fingerprint: string;
 }
 

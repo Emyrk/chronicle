@@ -232,6 +232,13 @@ describe("persisted highlight status", () => {
     expect(render({ landingSnapshots: [{ ...snapshot, status: "empty" }] })).toContain("Updated &gt;1d ago")
   })
 
+  it("shows the older statistics age only on the statistics tab", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-11-09T12:42:00Z"))
+    const withStats = { ...snapshot, statistics_refreshed_at: "2026-11-08T12:00:00Z", status: "ready" }
+    expect(render({ tab: "statistics", landingSnapshots: [withStats] })).toContain("Updated &gt;1d ago")
+    expect(render({ tab: "ratings", landingSnapshots: [withStats] })).toContain("Updated 42 minutes ago")
+  })
   it("labels stale published snapshots", () => {
     expect(render({ landingSnapshots: [{ ...snapshot, status: "stale" }] })).toContain("Stale highlights")
   })
@@ -245,7 +252,7 @@ describe("persisted highlight status", () => {
 })
 
 describe("all persisted card tabs", () => {
-  const snapshot = { instance_name: "Molten Core", difficulty_name: "Normal", max_players: 40, configuration_fingerprint: "policy", refreshed_at: "2026-11-09T12:00:00Z" }
+  const snapshot = { instance_name: "Molten Core", difficulty_name: "Normal", max_players: 40, configuration_fingerprint: "policy", refreshed_at: "2026-11-09T12:00:00Z", statistics_refreshed_at: "2026-11-09T12:00:00Z" }
   const emptyPreview = { ...snapshot, player: { peak: [], ranked_mastery: [], renown: [] }, guild: { peak: [], ranked_mastery: [], renown: [] }, speedruns: [], performances: [], statistics: [] }
   for (const tab of ["overview", "ratings", "speedruns", "performances", "statistics"] as const) {
     it(`${tab} distinguishes preparing, empty, and stale policy`, () => {

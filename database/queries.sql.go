@@ -15079,8 +15079,47 @@ func (q *sqlQuerier) BumpLeaderboardHighlightGeneration(ctx context.Context, ten
 	return err
 }
 
+const getLeaderboardHighlight = `-- name: GetLeaderboardHighlight :one
+SELECT tenant_id, instance_name, difficulty_name, max_players, realm_scope, configuration_fingerprint, payload, refresh_started_at, refreshed_at, source_generation, statistics_refreshed_at FROM leaderboard_highlights
+WHERE tenant_id= $1::uuid AND realm_scope= $2::uuid
+ AND instance_name= $3::text AND difficulty_name= $4::text AND max_players= $5::smallint
+`
+
+type GetLeaderboardHighlightParams struct {
+	TenantID       uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RealmScope     uuid.UUID `db:"realm_scope" json:"realm_scope"`
+	InstanceName   string    `db:"instance_name" json:"instance_name"`
+	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16     `db:"max_players" json:"max_players"`
+}
+
+func (q *sqlQuerier) GetLeaderboardHighlight(ctx context.Context, arg GetLeaderboardHighlightParams) (LeaderboardHighlight, error) {
+	row := q.db.QueryRow(ctx, getLeaderboardHighlight,
+		arg.TenantID,
+		arg.RealmScope,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+	)
+	var i LeaderboardHighlight
+	err := row.Scan(
+		&i.TenantID,
+		&i.InstanceName,
+		&i.DifficultyName,
+		&i.MaxPlayers,
+		&i.RealmScope,
+		&i.ConfigurationFingerprint,
+		&i.Payload,
+		&i.RefreshStartedAt,
+		&i.RefreshedAt,
+		&i.SourceGeneration,
+		&i.StatisticsRefreshedAt,
+	)
+	return i, err
+}
+
 const getLeaderboardHighlightFreshness = `-- name: GetLeaderboardHighlightFreshness :one
-SELECT configuration_fingerprint,source_generation,refreshed_at FROM leaderboard_highlights
+SELECT configuration_fingerprint,source_generation,refreshed_at,statistics_refreshed_at FROM leaderboard_highlights
 WHERE tenant_id= $1::uuid AND realm_scope= $2::uuid
  AND instance_name= $3::text AND difficulty_name= $4::text AND max_players= $5::smallint
 `
@@ -15097,6 +15136,7 @@ type GetLeaderboardHighlightFreshnessRow struct {
 	ConfigurationFingerprint string             `db:"configuration_fingerprint" json:"configuration_fingerprint"`
 	SourceGeneration         int64              `db:"source_generation" json:"source_generation"`
 	RefreshedAt              pgtype.Timestamptz `db:"refreshed_at" json:"refreshed_at"`
+	StatisticsRefreshedAt    pgtype.Timestamptz `db:"statistics_refreshed_at" json:"statistics_refreshed_at"`
 }
 
 func (q *sqlQuerier) GetLeaderboardHighlightFreshness(ctx context.Context, arg GetLeaderboardHighlightFreshnessParams) (GetLeaderboardHighlightFreshnessRow, error) {
@@ -15108,7 +15148,12 @@ func (q *sqlQuerier) GetLeaderboardHighlightFreshness(ctx context.Context, arg G
 		arg.MaxPlayers,
 	)
 	var i GetLeaderboardHighlightFreshnessRow
-	err := row.Scan(&i.ConfigurationFingerprint, &i.SourceGeneration, &i.RefreshedAt)
+	err := row.Scan(
+		&i.ConfigurationFingerprint,
+		&i.SourceGeneration,
+		&i.RefreshedAt,
+		&i.StatisticsRefreshedAt,
+	)
 	return i, err
 }
 
@@ -15148,7 +15193,7 @@ func (q *sqlQuerier) LeaderboardHighlightRealms(ctx context.Context, tenantID uu
 }
 
 const listLeaderboardHighlights = `-- name: ListLeaderboardHighlights :many
-SELECT tenant_id, instance_name, difficulty_name, max_players, realm_scope, configuration_fingerprint, payload, refresh_started_at, refreshed_at, source_generation FROM leaderboard_highlights WHERE tenant_id= $1::uuid AND realm_scope= $2::uuid ORDER BY instance_name,difficulty_name,max_players LIMIT 256
+SELECT tenant_id, instance_name, difficulty_name, max_players, realm_scope, configuration_fingerprint, payload, refresh_started_at, refreshed_at, source_generation, statistics_refreshed_at FROM leaderboard_highlights WHERE tenant_id= $1::uuid AND realm_scope= $2::uuid ORDER BY instance_name,difficulty_name,max_players LIMIT 256
 `
 
 type ListLeaderboardHighlightsParams struct {
@@ -15176,6 +15221,7 @@ func (q *sqlQuerier) ListLeaderboardHighlights(ctx context.Context, arg ListLead
 			&i.RefreshStartedAt,
 			&i.RefreshedAt,
 			&i.SourceGeneration,
+			&i.StatisticsRefreshedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -15188,9 +15234,9 @@ func (q *sqlQuerier) ListLeaderboardHighlights(ctx context.Context, arg ListLead
 }
 
 const publishLeaderboardHighlights = `-- name: PublishLeaderboardHighlights :exec
-INSERT INTO leaderboard_highlights(tenant_id,instance_name,difficulty_name,max_players,realm_scope,configuration_fingerprint,source_generation,payload,refresh_started_at)
-VALUES ($1::uuid,$2::text,$3::text,$4::smallint,$5::uuid,$6::text,$7::bigint,$8::jsonb,$9::timestamptz)
-ON CONFLICT(tenant_id,instance_name,difficulty_name,max_players,realm_scope) DO UPDATE SET configuration_fingerprint=EXCLUDED.configuration_fingerprint,source_generation=EXCLUDED.source_generation,payload=EXCLUDED.payload,refresh_started_at=EXCLUDED.refresh_started_at,refreshed_at=clock_timestamp()
+INSERT INTO leaderboard_highlights(tenant_id,instance_name,difficulty_name,max_players,realm_scope,configuration_fingerprint,source_generation,payload,refresh_started_at,statistics_refreshed_at)
+VALUES ($1::uuid,$2::text,$3::text,$4::smallint,$5::uuid,$6::text,$7::bigint,$8::jsonb,$9::timestamptz,$10::timestamptz)
+ON CONFLICT(tenant_id,instance_name,difficulty_name,max_players,realm_scope) DO UPDATE SET configuration_fingerprint=EXCLUDED.configuration_fingerprint,source_generation=EXCLUDED.source_generation,payload=EXCLUDED.payload,refresh_started_at=EXCLUDED.refresh_started_at,statistics_refreshed_at=EXCLUDED.statistics_refreshed_at,refreshed_at=CASE WHEN $11::boolean THEN clock_timestamp() ELSE leaderboard_highlights.refreshed_at END
 WHERE leaderboard_highlights.refresh_started_at<=EXCLUDED.refresh_started_at
 `
 
@@ -15204,6 +15250,8 @@ type PublishLeaderboardHighlightsParams struct {
 	SourceGeneration         int64              `db:"source_generation" json:"source_generation"`
 	Payload                  []byte             `db:"payload" json:"payload"`
 	RefreshStartedAt         pgtype.Timestamptz `db:"refresh_started_at" json:"refresh_started_at"`
+	StatisticsRefreshedAt    pgtype.Timestamptz `db:"statistics_refreshed_at" json:"statistics_refreshed_at"`
+	RatingsRefreshed         bool               `db:"ratings_refreshed" json:"ratings_refreshed"`
 }
 
 func (q *sqlQuerier) PublishLeaderboardHighlights(ctx context.Context, arg PublishLeaderboardHighlightsParams) error {
@@ -15217,6 +15265,8 @@ func (q *sqlQuerier) PublishLeaderboardHighlights(ctx context.Context, arg Publi
 		arg.SourceGeneration,
 		arg.Payload,
 		arg.RefreshStartedAt,
+		arg.StatisticsRefreshedAt,
+		arg.RatingsRefreshed,
 	)
 	return err
 }

@@ -2145,6 +2145,7 @@ CREATE TABLE leaderboard_highlights (
     refresh_started_at timestamp with time zone NOT NULL,
     refreshed_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
     source_generation bigint DEFAULT 0 NOT NULL,
+    statistics_refreshed_at timestamp with time zone,
     CONSTRAINT leaderboard_highlights_payload_check CHECK (((jsonb_typeof(payload) = 'object'::text) AND (octet_length((payload)::text) <= 262144)))
 );
 
