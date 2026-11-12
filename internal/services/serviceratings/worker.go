@@ -392,7 +392,11 @@ func drainFamily[C, R any](ctx context.Context, store database.Store,
 			// Benchmark-only changes invalidate normalized career candidates too.
 			// The invalidation commits with D2 output, never on a fenced result.
 			if outcome.published > 0 {
-				return tx.EnqueueLeaderboardCareer(pubctx, servicetenant.TenantIDFromContext(pubctx))
+				tenant := servicetenant.TenantIDFromContext(pubctx)
+				if err := tx.EnqueueLeaderboardCareer(pubctx, tenant); err != nil {
+					return err
+				}
+				return tx.BumpLeaderboardHighlightGeneration(pubctx, tenant)
 			}
 			return nil
 		}, nil)

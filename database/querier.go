@@ -40,6 +40,7 @@ type sqlcQuerier interface {
 	// suffix for NULLs. Existing explicit Normal (empty string) is never overwritten.
 	BackfillEncounterDifficultyBatch(ctx context.Context, arg BackfillEncounterDifficultyBatchParams) (BackfillEncounterDifficultyBatchRow, error)
 	BulkUpsertGuildPagePanels(ctx context.Context, dollar_1 []byte) error
+	BumpLeaderboardHighlightGeneration(ctx context.Context, tenantID uuid.UUID) error
 	CarryForwardFinalizedParsedLogGroup(ctx context.Context, arg CarryForwardFinalizedParsedLogGroupParams) error
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
 	CensusPlayerCounts(ctx context.Context, arg CensusPlayerCountsParams) ([]CensusPlayerCountsRow, error)
@@ -447,6 +448,8 @@ type sqlcQuerier interface {
 	GetItemTemplatesByNames(ctx context.Context, arg GetItemTemplatesByNamesParams) ([]WorldItemTemplate, error)
 	GetItemTemplatesBySetID(ctx context.Context, arg GetItemTemplatesBySetIDParams) ([]GetItemTemplatesBySetIDRow, error)
 	GetLatestRegressionSnapshot(ctx context.Context, fixtureID uuid.UUID) (RegressionSnapshot, error)
+	GetLeaderboardHighlightFreshness(ctx context.Context, arg GetLeaderboardHighlightFreshnessParams) (GetLeaderboardHighlightFreshnessRow, error)
+	GetLeaderboardHighlightGeneration(ctx context.Context, tenantID uuid.UUID) (int64, error)
 	GetLeaderboardOperation(ctx context.Context, arg GetLeaderboardOperationParams) (LeaderboardOperation, error)
 	GetLogFile(ctx context.Context, id uuid.UUID) (LogFile, error)
 	GetLogFilePart(ctx context.Context, id uuid.UUID) (LogFilePart, error)
@@ -1142,15 +1145,16 @@ type sqlcQuerier interface {
 	// The table has no RLS; filtering is done explicitly by tenant_id.
 	RankingsInstanceSummaries(ctx context.Context, tenantID uuid.UUID) ([]RankingsInstanceSummariesRow, error)
 	// Paginated leaderboard of fastest encounter kills, ordered by duration.
-	// Deduplicates encounters across duplicate log groups (keeps fastest per group).
+	// Deduplicates encounters across duplicate log groups (keeps fastest per group)
+	// and excludes invalidated instances and encounters.
 	RankingsKillTimeLeaderboard(ctx context.Context, arg RankingsKillTimeLeaderboardParams) ([]RankingsKillTimeLeaderboardRow, error)
 	// Box plot stats on encounter duration (seconds) per encounter name.
-	// Deduplicates encounters across duplicate log groups.
+	// Deduplicates encounters across duplicate log groups and excludes invalidated data.
 	RankingsKillTimeStats(ctx context.Context, arg RankingsKillTimeStatsParams) ([]RankingsKillTimeStatsRow, error)
 	// The fastest clean guild kills of each chosen boss in one round trip, deduplicated
 	// across duplicate log groups like RankingsKillTimeLeaderboard. Each guild ranks once
-	// per boss with its fastest kill, as on the full-clear speedrun board; kills without
-	// a guild are excluded.
+	// per boss with its fastest kill, as on the full-clear speedrun board; invalidated data
+	// and kills without a guild are excluded.
 	RankingsKillTimeTopPerEncounter(ctx context.Context, arg RankingsKillTimeTopPerEncounterParams) ([]RankingsKillTimeTopPerEncounterRow, error)
 	// Returns paginated DPS rankings showing each player's best single run.
 	// A "run" is one instance_id (deduplicated by duplicate_group_id).

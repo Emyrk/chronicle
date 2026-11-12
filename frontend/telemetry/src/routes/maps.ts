@@ -7,14 +7,18 @@ import {
   MAP_MANIFEST_NAMESPACES,
   emptyMapManifest,
   isPreviewableMapAssetPath,
+  mapAssetStorageKey,
   mergeMapManifests,
   parseMapLayer,
   parseMapManifest,
+  parseMapReuseLayer,
   recoverMapManifestBase,
   recoverMapManifestLayers,
   type MapLayerInstance,
   type MapLayerManifest,
+  type MapManifest,
   type MapManifestLayers,
+  type MapReuseManifest,
   type MapManifestNamespace,
 } from "../maps/manifest";
 import { renderImageMetadata } from "../maps/renderImage";
@@ -48,12 +52,14 @@ const DRAFT_HEADERS = {
 } as const;
 
 interface ManualDraft {
+  reuses: MapReuseManifest;
   renders: MapLayerManifest;
   meshes: MapLayerManifest;
 }
 
 interface DraftInput {
   version?: string | null;
+  reuses?: unknown;
   renders?: unknown;
   meshes?: unknown;
 }
@@ -96,31 +102,41 @@ function manualLayer(product: string, instances: MapLayerInstance[] = []): MapLa
   };
 }
 
+function reuseLayer(product: string, instances: MapManifest["instances"] = []): MapReuseManifest {
+  return {
+    format: MAP_MANIFEST_FORMAT,
+    target: { product, build: "", region: "", locale: "" },
+    instances,
+  };
+}
+
 function parseDraft(value: unknown, product: string): ManualDraft {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new TypeError("map draft must be an object");
   }
   const input = value as Record<string, unknown>;
   for (const key of Object.keys(input)) {
-    if (key !== "renders" && key !== "meshes") throw new TypeError(`map draft has unknown field ${JSON.stringify(key)}`);
+    if (key !== "reuses" && key !== "renders" && key !== "meshes") throw new TypeError(`map draft has unknown field ${JSON.stringify(key)}`);
   }
+  const reuses = parseMapReuseLayer(input.reuses ?? reuseLayer(product));
   const renders = parseMapLayer(input.renders ?? manualLayer(product));
   const meshes = parseMapLayer(input.meshes ?? manualLayer(product));
-  for (const [kind, layer] of [["renders", renders], ["meshes", meshes]] as const) {
+  for (const [kind, layer] of [["reuses", reuses], ["renders", renders], ["meshes", meshes]] as const) {
     if (layer.target.product !== product || layer.target.build !== "" || layer.target.region !== "" || layer.target.locale !== "") {
       throw new TypeError(`${kind} map layer target does not match original`);
     }
   }
-  return { renders, meshes };
+  return { reuses, renders, meshes };
 }
 
 async function loadOptionalLayers(bucket: R2Bucket, namespace: MapManifestNamespace): Promise<MapManifestLayers> {
-  const [styled, renders, meshes] = await Promise.all([
+  const [reuses, styled, renders, meshes] = await Promise.all([
+    readJSON(bucket, manifestKey(namespace, "reuses")),
     readJSON(bucket, manifestKey(namespace, "styled")),
     readJSON(bucket, manifestKey(namespace, "renders")),
     readJSON(bucket, manifestKey(namespace, "meshes")),
   ]);
-  return { styled, renders, meshes };
+  return { reuses, styled, renders, meshes };
 }
 
 async function loadMapBase(bucket: R2Bucket, namespace: MapManifestNamespace) {
@@ -141,11 +157,13 @@ async function loadState(bucket: R2Bucket, namespace: MapManifestNamespace) {
   const { original, originalRaw, recoveredLayers, baseSource } = await loadMapBase(bucket, namespace);
   const storedLayers = await loadOptionalLayers(bucket, namespace);
   const liveLayers: MapManifestLayers = {
+    reuses: storedLayers.reuses ?? recoveredLayers.reuses,
     styled: storedLayers.styled ?? recoveredLayers.styled,
     renders: storedLayers.renders ?? recoveredLayers.renders,
     meshes: storedLayers.meshes ?? recoveredLayers.meshes,
   };
   const published: ManualDraft = {
+    reuses: (liveLayers.reuses as MapReuseManifest | undefined) ?? reuseLayer(original.target.product),
     renders: (liveLayers.renders as MapLayerManifest | undefined) ?? manualLayer(original.target.product),
     meshes: (liveLayers.meshes as MapLayerManifest | undefined) ?? manualLayer(original.target.product),
   };
@@ -160,12 +178,14 @@ async function loadState(bucket: R2Bucket, namespace: MapManifestNamespace) {
     }
     draft = parseDraft(raw, original.target.product);
   }
+  const publishedManifest = mergeMapManifests(originalRaw, liveLayers);
   const preview = mergeMapManifests(originalRaw, {
     ...liveLayers,
+    reuses: draft.reuses,
     renders: draft.renders,
     meshes: draft.meshes,
   });
-  return { original, originalRaw, baseSource, liveLayers, published, draft, draftObject, preview };
+  return { original, originalRaw, baseSource, liveLayers, published, publishedManifest, draft, draftObject, preview };
 }
 
 function jsonText(value: unknown): string {
@@ -181,8 +201,27 @@ function manualEntries(value: unknown, field: "renders" | "meshes"): MapLayerIns
   return value as MapLayerInstance[];
 }
 
+function reusedInstanceAssetPaths(instance: MapManifest["instances"][number]): string[] {
+  return [
+    instance.styled?.path,
+    instance.renders?.path,
+    instance.mesh?.path,
+    ...instance.floors.flatMap((floor) => [
+      ...floor.tiles.map((tile) => tile.path),
+      floor.renders?.path,
+      floor.mesh?.path,
+    ]),
+  ].filter((path): path is string => Boolean(path));
+}
+
+function reuseEntries(value: unknown): MapManifest["instances"] {
+  if (!Array.isArray(value)) throw new TypeError("reuses must be an array");
+  return value as MapManifest["instances"];
+}
+
 async function verifyDraftAssets(bucket: R2Bucket, namespace: MapManifestNamespace, draft: ManualDraft): Promise<void> {
   const paths = [
+    ...draft.reuses.instances.flatMap(reusedInstanceAssetPaths),
     ...draft.renders.instances.flatMap((entry) => [entry.renders?.path, ...(entry.floors ?? []).map((floor) => floor.renders?.path)]),
     ...draft.meshes.instances.flatMap((entry) => [entry.mesh?.path, ...(entry.floors ?? []).map((floor) => floor.mesh?.path)]),
   ].filter((path): path is string => Boolean(path));
@@ -199,7 +238,8 @@ async function verifyDraftAssets(bucket: R2Bucket, namespace: MapManifestNamespa
   }
   const missing: string[] = [];
   await Promise.all(paths.map(async (path) => {
-    if (!(await bucket.head(`${root(namespace)}/${path}`))) missing.push(path);
+    const key = mapAssetStorageKey(namespace, path);
+    if (!key || !(await bucket.head(key))) missing.push(path);
   }));
   if (missing.length > 0) throw new TypeError(`missing uploaded assets: ${missing.sort().join(", ")}`);
 }
@@ -320,6 +360,7 @@ maps.get("/internal/api/v1/maps/:namespace/instances/:mapID/preview", async (c) 
       renders: instance.renders,
       mesh: instance.mesh,
         floorSupport: instance.floorSupport,
+      published_instance: state.publishedManifest.instances.find((candidate) => candidate.mapID === mapID),
       published_renders: publishedRenders?.renders,
       published_render_floors: publishedRenders?.floors ?? [],
       published_mesh: publishedMeshes?.mesh,
@@ -362,11 +403,13 @@ maps.put("/internal/api/v1/maps/:namespace/draft", async (c) => {
       return c.json({ error: "Draft changed in another tab. Reload before saving.", draft_version: currentVersion }, 409);
     }
     const draft: ManualDraft = {
+      reuses: reuseLayer(state.original.target.product, reuseEntries(input.reuses ?? [])),
       renders: manualLayer(state.original.target.product, manualEntries(input.renders ?? [], "renders")),
       meshes: manualLayer(state.original.target.product, manualEntries(input.meshes ?? [], "meshes")),
     };
     mergeMapManifests(state.originalRaw, {
       ...state.liveLayers,
+      reuses: draft.reuses,
       renders: draft.renders,
       meshes: draft.meshes,
     });
@@ -483,12 +526,14 @@ maps.post("/internal/api/v1/maps/:namespace/publish", async (c) => {
     await verifyDraftAssets(c.env.MAPS, namespace, state.draft);
     const merged = mergeMapManifests(state.originalRaw, {
       ...state.liveLayers,
+      reuses: state.draft.reuses,
       renders: state.draft.renders,
       meshes: state.draft.meshes,
     });
     if (state.baseSource !== "original" && state.liveLayers.styled) {
       await c.env.MAPS.put(manifestKey(namespace, "styled"), jsonText(state.liveLayers.styled), JSON_HEADERS);
     }
+    await c.env.MAPS.put(manifestKey(namespace, "reuses"), jsonText(state.draft.reuses), JSON_HEADERS);
     await c.env.MAPS.put(manifestKey(namespace, "renders"), jsonText(state.draft.renders), JSON_HEADERS);
     await c.env.MAPS.put(manifestKey(namespace, "meshes"), jsonText(state.draft.meshes), JSON_HEADERS);
     if (state.baseSource !== "original") {

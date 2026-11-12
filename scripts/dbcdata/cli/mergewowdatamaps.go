@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path"
 	"regexp"
@@ -14,6 +15,12 @@ import (
 
 	"github.com/coder/serpent"
 )
+
+type wowMapReuseLayer struct {
+	Format    string           `json:"format"`
+	Target    wowMapTarget     `json:"target"`
+	Instances []wowMapInstance `json:"instances"`
+}
 
 // wowMapLayer contains only the metadata needed to attach optional artwork.
 // Keep this separate from wowMapManifest so a layer cannot replace original metadata.
@@ -44,12 +51,13 @@ type wowMapLayerFloor struct {
 // MergeWowdataMapsCmd joins independently generated instance artwork with
 // the original, authoritative map manifest.
 func MergeWowdataMapsCmd() *serpent.Command {
-	var original, styled, meshes, renders, out string
+	var original, reuses, styled, meshes, renders, out string
 	return &serpent.Command{
 		Use:   "merge-wowdata-maps",
 		Short: "Merge original, styled, renders and mesh map manifests.",
 		Options: serpent.OptionSet{
 			{Name: "original", Description: "Original map manifest (required).", Flag: "original", Value: serpent.StringOf(&original)},
+			{Name: "reuses", Description: "Optional copied full-instance map layer.", Flag: "reuses", Value: serpent.StringOf(&reuses)},
 			{Name: "styled", Description: "Optional styled map layer.", Flag: "styled", Value: serpent.StringOf(&styled)},
 			{Name: "meshes", Description: "Optional dungeon mesh layer.", Flag: "meshes", Value: serpent.StringOf(&meshes)},
 			{Name: "renders", Description: "Optional manually uploaded 2D render layer.", Flag: "renders", Value: serpent.StringOf(&renders)},
@@ -59,12 +67,12 @@ func MergeWowdataMapsCmd() *serpent.Command {
 			if original == "" || out == "" {
 				return fmt.Errorf("--original and --out are required")
 			}
-			return mergeWowdataMaps(original, styled, meshes, renders, out)
+			return mergeWowdataMaps(original, styled, meshes, renders, out, reuses)
 		},
 	}
 }
 
-func mergeWowdataMaps(originalPath, styledPath, meshesPath, rendersPath, outPath string) error {
+func mergeWowdataMaps(originalPath, styledPath, meshesPath, rendersPath, outPath string, reusePaths ...string) error {
 	data, err := os.ReadFile(originalPath)
 	if err != nil {
 		return fmt.Errorf("read original map manifest: %w", err)
@@ -96,12 +104,20 @@ func mergeWowdataMaps(originalPath, styledPath, meshesPath, rendersPath, outPath
 		}
 		// The original manifest owns metadata, not optional artwork. This also
 		// makes rerunning a merge independent of any stale original overlays.
+		instance.ReusedFrom = nil
 		instance.Styled, instance.Mesh, instance.Renders = nil, nil, nil
 		for floorIndex := range instance.Floors {
 			floor := &instance.Floors[floorIndex]
 			floor.Preferred2D, floor.Mesh, floor.Renders = "", nil, nil
 		}
 		instances[instance.MapID] = i
+	}
+	reusesPath := ""
+	if len(reusePaths) > 0 {
+		reusesPath = reusePaths[0]
+	}
+	if err := mergeWowMapReuseLayer(reusesPath, &manifest, instances, created); err != nil {
+		return err
 	}
 	for _, layer := range []struct{ kind, file string }{{"styled", styledPath}, {"meshes", meshesPath}, {"renders", rendersPath}} {
 		if err := mergeWowMapLayer(layer.file, layer.kind, &manifest, instances, created); err != nil {
@@ -113,6 +129,80 @@ func mergeWowdataMaps(originalPath, styledPath, meshesPath, rendersPath, outPath
 		return manifest.Instances[originalCount+i].MapID < manifest.Instances[originalCount+j].MapID
 	})
 	return writeWowMapManifest(outPath, manifest)
+}
+
+func mergeWowMapReuseLayer(file string, manifest *wowMapManifest, instances map[int32]int, created map[int32]struct{}) error {
+	if file == "" {
+		return nil
+	}
+	data, err := os.ReadFile(file)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read reuses map layer: %w", err)
+	}
+	var layer wowMapReuseLayer
+	if err := decodeWowMapJSON(data, &layer); err != nil {
+		return fmt.Errorf("decode reuses map layer: %w", err)
+	}
+	if layer.Format != wowMapManifestFormat {
+		return fmt.Errorf("unsupported reuses map layer format %q", layer.Format)
+	}
+	target := manifest.Target
+	if layer.Target.Product != target.Product || layer.Target.Build != "" || layer.Target.Region != "" || layer.Target.Locale != "" {
+		return fmt.Errorf("reuses map layer target does not match original")
+	}
+	seen := make(map[int32]struct{}, len(layer.Instances))
+	for _, instance := range layer.Instances {
+		if _, exists := seen[instance.MapID]; exists {
+			return fmt.Errorf("duplicate reuses map layer mapID %d", instance.MapID)
+		}
+		seen[instance.MapID] = struct{}{}
+		if err := validateWowMapReusedInstance(&instance); err != nil {
+			return err
+		}
+		if index, exists := instances[instance.MapID]; exists {
+			manifest.Instances[index] = instance
+		} else {
+			instances[instance.MapID] = len(manifest.Instances)
+			manifest.Instances = append(manifest.Instances, instance)
+			created[instance.MapID] = struct{}{}
+		}
+	}
+	return nil
+}
+
+func validateWowMapReusedInstance(instance *wowMapInstance) error {
+	if instance.MapID <= 0 || strings.TrimSpace(instance.Name) == "" || instance.ReusedFrom == nil ||
+		strings.TrimSpace(instance.ReusedFrom.Namespace) == "" || instance.ReusedFrom.MapID <= 0 {
+		return fmt.Errorf("invalid reuses map layer instance mapID %d", instance.MapID)
+	}
+	if instance.Styled != nil && !validWowMapAbsoluteAssetPath(instance.Styled.Path, "render-styled/", ".png", ".webp", ".jpeg") {
+		return fmt.Errorf("invalid reuses map layer styled artwork for mapID %d", instance.MapID)
+	}
+	if instance.Renders != nil && !validWowMapAbsoluteAssetPath(instance.Renders.Path, "renders/", ".png", ".webp") {
+		return fmt.Errorf("invalid reuses map layer render for mapID %d", instance.MapID)
+	}
+	if instance.Mesh != nil {
+		if !validWowMapAbsoluteAssetPath(instance.Mesh.Path, "3d/", ".glb") || validateWowMapLayerMesh(instance.MapID, 0, instance.Mesh) != nil {
+			return fmt.Errorf("invalid reuses map layer mesh for mapID %d", instance.MapID)
+		}
+	}
+	for _, floor := range instance.Floors {
+		for _, tile := range floor.Tiles {
+			if !validWowMapAbsoluteAssetPath(tile.Path, "original/", ".webp") && !validWowMapAbsoluteAssetPath(tile.Path, "tiles/", ".webp") {
+				return fmt.Errorf("invalid reuses map layer tile for mapID %d floor %d", instance.MapID, floor.Floor)
+			}
+		}
+		if floor.Renders != nil && !validWowMapAbsoluteAssetPath(floor.Renders.Path, "renders/", ".png", ".webp") {
+			return fmt.Errorf("invalid reuses map layer render for mapID %d floor %d", instance.MapID, floor.Floor)
+		}
+		if floor.Mesh != nil && (!validWowMapAbsoluteAssetPath(floor.Mesh.Path, "3d/", ".glb") || validateWowMapLayerMesh(instance.MapID, floor.Floor, floor.Mesh) != nil) {
+			return fmt.Errorf("invalid reuses map layer mesh for mapID %d floor %d", instance.MapID, floor.Floor)
+		}
+	}
+	return nil
 }
 
 func decodeWowMapJSON(data []byte, value any) error {
@@ -280,7 +370,7 @@ func validateWowMapLayerMesh(mapID, floor int32, mesh *wowMapMeshInstance) error
 	if floor != 0 {
 		location += fmt.Sprintf(" floor %d", floor)
 	}
-	if !validWowMapLayerPath(mesh.Path, "3d/") || !strings.HasSuffix(mesh.Path, ".glb") ||
+	if !validWowMapMeshPath(mesh.Path) ||
 		!(mesh.Bounds.MinX < mesh.Bounds.MaxX) || !(mesh.Bounds.MinY < mesh.Bounds.MaxY) || !(mesh.ZMin < mesh.ZMax) ||
 		mesh.Frame != wowMapMeshFrame {
 		return fmt.Errorf("invalid meshes map layer mesh for %s", location)
@@ -289,6 +379,31 @@ func validateWowMapLayerMesh(mapID, floor int32, mesh *wowMapMeshInstance) error
 		return fmt.Errorf("invalid meshes map layer liquid for %s", location)
 	}
 	return nil
+}
+
+func validWowMapAbsoluteAssetPath(assetPath, prefix string, extensions ...string) bool {
+	assetURL, err := url.Parse(assetPath)
+	if err != nil || assetURL.Scheme != "https" || assetURL.Host != "icons.chronicleclassic.com" ||
+		assetURL.User != nil || assetURL.RawQuery != "" || assetURL.Fragment != "" {
+		return false
+	}
+	parts := strings.SplitN(strings.TrimPrefix(assetURL.Path, "/"), "/maps/", 2)
+	if len(parts) != 2 || parts[0] == "" || !validWowMapLayerPath(parts[1], prefix) {
+		return false
+	}
+	for _, extension := range extensions {
+		if strings.HasSuffix(parts[1], extension) {
+			return true
+		}
+	}
+	return false
+}
+
+func validWowMapMeshPath(assetPath string) bool {
+	if validWowMapLayerPath(assetPath, "3d/") && strings.HasSuffix(assetPath, ".glb") {
+		return true
+	}
+	return validWowMapAbsoluteAssetPath(assetPath, "3d/", ".glb")
 }
 
 func validateWowMapLayerRender(mapID, floor int32, artwork *wowMapManualRender) error {

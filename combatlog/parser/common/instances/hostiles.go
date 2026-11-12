@@ -2150,7 +2150,7 @@ func TheDrownedCityHostiles() map[uint32]Identity {
 		268477: "Deathless Watcher",
 		268478: "Deathless Guardian",
 	})
-	// TODO: Move bosses from LoadAdds to LoadBosses
+
 	LoadBosses(hostile, map[uint32]string{
 		258905: "Zul'Alai",
 		258924: "Var'Taka",
@@ -2160,6 +2160,33 @@ func TheDrownedCityHostiles() map[uint32]Identity {
 		260243: "Min'loth the Serpent",
 		264172: "Umbra",
 		264177: "Gill",
+	})
+	return hostile
+}
+
+func KrolDokStrongholdHostiles() map[uint32]Identity {
+	hostile := make(map[uint32]Identity)
+	LoadAdds(hostile, map[uint32]string{
+		257885: "Krol'dok Centurion",
+		257888: "Krol'dok Shaman",
+		257900: "Redridge Prisoner",
+		258038: "Shadowhide Bully",
+		258040: "Shadowhide Curseweaver",
+		258042: "Twilight Grunt",
+		258100: "Twilight Warlock",
+		258102: "Twilight Outrider",
+		258104: "Twilight Lieutenant",
+		258687: "Krol'dok Brute",
+		262067: "Twilight Peon",
+	})
+
+	LoadBosses(hostile, map[uint32]string{
+		258966: "Slavecrusher Grox",
+		258972: "Twilight Commander Zarmok",
+		259281: "War Handler Ashka",
+		258964: "Nar'gurk",
+		264773: "Bossman Toof",
+		258968: "Overlord Mugg",
 	})
 	return hostile
 }

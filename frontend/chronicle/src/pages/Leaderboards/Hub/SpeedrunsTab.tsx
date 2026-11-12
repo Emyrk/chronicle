@@ -121,7 +121,18 @@ function KillTimes({
                       &lt;{r.guild || "Unknown guild"}&gt;
                     </span>
                     <span className="hidden truncate text-xs text-muted-foreground sm:inline">{r.realm}</span>
-                    <span className="font-mono tabular-nums" {...(r.entry ? killAttributes(r.entry) : {})}>{formatClock(r.ms)}</span>
+                    {r.entry ? (
+                      <a
+                        href={`/instances/${r.entry.log_hashed_slug || r.entry.instance_id}`}
+                        className="font-mono tabular-nums hover:underline"
+                        aria-label={`Open ${boss} kill log for ${r.guild || "Unknown guild"}`}
+                        {...killAttributes(r.entry)}
+                      >
+                        {formatClock(r.ms)}
+                      </a>
+                    ) : (
+                      <span className="font-mono tabular-nums">{formatClock(r.ms)}</span>
+                    )}
                   </li>
                 ))}
               </ol>

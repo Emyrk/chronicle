@@ -80,9 +80,16 @@ jq -e '([.instances[].renders.path] | sort) == (["renders/RFC-shaded.png", "rend
 jq -e '([.instances[].mapID] | sort) == [43,389,2999] and (.instances[] | select(.mapID == 389) | .name == "Ragefire Chasm" and .floors == [])' "$MOCK_MAP_REMOTE/manifest.json" >/dev/null
 [[ -f "$MOCK_MAP_REMOTE/manifest.renders.json" && ! -e "$MOCK_MAP_REMOTE/manifest.rendered.json" && ! -e "$MOCK_MAP_REMOTE/manifest.3d.json" ]]
 
+# Telemetry-owned copied instances survive later publisher jobs.
+cat > "$MOCK_MAP_REMOTE/manifest.reuses.json" <<'JSON'
+{"format":"chronicle-wow-map-art-v2","target":{"product":"wow_classic_beta"},"instances":[{"reusedFrom":{"namespace":"turtle","mapID":5000},"mapID":5000,"name":"Copied Test Map","instanceType":1,"directory":"copied","floors":[]}]}
+JSON
+MAPS_UPLOAD_MODE=original ./upload-maps-r2.sh >/dev/null
+jq -e '(.instances[] | select(.mapID == 5000) | .reusedFrom.namespace == "turtle" and .name == "Copied Test Map")' "$MOCK_MAP_REMOTE/manifest.json" >/dev/null
+
 # Native refresh retains floorless manual instances and independent mesh metadata.
 MAPS_UPLOAD_MODE=original ./upload-maps-r2.sh >/dev/null
-jq -e '([.instances[].mapID] | sort) == [43,389,2999] and (.instances[] | select(.mapID == 2999) | .floors == [] and .renders.path == "renders/RoL-shaded-aligned.png")' "$MOCK_MAP_REMOTE/manifest.json" >/dev/null
+jq -e '([.instances[].mapID] | sort) == [43,389,2999,5000] and (.instances[] | select(.mapID == 2999) | .floors == [] and .renders.path == "renders/RoL-shaded-aligned.png") and (.instances[] | select(.mapID == 5000) | .reusedFrom.namespace == "turtle")' "$MOCK_MAP_REMOTE/manifest.json" >/dev/null
 
 before="$(sha256sum "$MOCK_MAP_REMOTE/manifest.json")"
 # An incompatible unchanged source layer aborts before remote writes.

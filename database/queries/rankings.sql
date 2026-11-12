@@ -1091,7 +1091,7 @@ WHERE
 
 -- name: RankingsKillTimeStats :many
 -- Box plot stats on encounter duration (seconds) per encounter name.
--- Deduplicates encounters across duplicate log groups.
+-- Deduplicates encounters across duplicate log groups and excludes invalidated data.
 WITH deduped AS (
     SELECT DISTINCT ON (lie.name, COALESCE(li.duplicate_group_id, li.id))
         lie.name AS encounter_name,
@@ -1106,6 +1106,8 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
            COALESCE(lie.difficulty, li.difficulty_name) = @difficulty_name::text)
       AND (NOT @filter_max_players::boolean OR li.max_players = @max_players::int)
       AND lie.kill_type = 'clean'
+      AND li.invalidated_at IS NULL
+      AND lie.invalidated_at IS NULL
       AND CASE
           WHEN @since_days :: bigint > 0 THEN lie.end_time >= now() - make_interval(days => @since_days::int)
           ELSE true
@@ -1172,7 +1174,8 @@ HAVING COUNT(*) > 0;
 
 -- name: RankingsKillTimeLeaderboard :many
 -- Paginated leaderboard of fastest encounter kills, ordered by duration.
--- Deduplicates encounters across duplicate log groups (keeps fastest per group).
+-- Deduplicates encounters across duplicate log groups (keeps fastest per group)
+-- and excludes invalidated instances and encounters.
 WITH deduped AS (
     SELECT DISTINCT ON (lie.name, COALESCE(li.duplicate_group_id, li.id))
         lie.id AS encounter_id,
@@ -1196,6 +1199,8 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
            COALESCE(lie.difficulty, li.difficulty_name) = @difficulty_name::text)
       AND (NOT @filter_max_players::boolean OR li.max_players = @max_players::int)
       AND lie.kill_type = 'clean'
+      AND li.invalidated_at IS NULL
+      AND lie.invalidated_at IS NULL
       AND CASE
           WHEN @encounter_name :: text != '' THEN lie.name = @encounter_name
           ELSE true
@@ -1227,8 +1232,8 @@ LIMIT @query_limit::bigint OFFSET @query_offset::bigint;
 -- name: RankingsKillTimeTopPerEncounter :many
 -- The fastest clean guild kills of each chosen boss in one round trip, deduplicated
 -- across duplicate log groups like RankingsKillTimeLeaderboard. Each guild ranks once
--- per boss with its fastest kill, as on the full-clear speedrun board; kills without
--- a guild are excluded.
+-- per boss with its fastest kill, as on the full-clear speedrun board; invalidated data
+-- and kills without a guild are excluded.
 WITH deduped AS (
     SELECT DISTINCT ON (lie.name, COALESCE(li.duplicate_group_id, li.id))
         lie.id AS encounter_id,
@@ -1252,6 +1257,8 @@ WITH deduped AS (
            COALESCE(lie.difficulty, li.difficulty_name) = @difficulty_name::text)
       AND (NOT @filter_max_players::boolean OR li.max_players = @max_players::int)
       AND lie.kill_type = 'clean'
+      AND li.invalidated_at IS NULL
+      AND lie.invalidated_at IS NULL
       AND lie.name = ANY(@encounter_names::text[])
       AND cardinality(@encounter_names::text[]) <= 64
       AND li.guild_id IS NOT NULL

@@ -68,7 +68,7 @@ if ! listing="$(rclone lsf "${remote}/" --files-only 2>"${tmp}/listing-error")";
     exit 1
   fi
 fi
-for layer in original styled meshes renders; do
+for layer in original reuses styled meshes renders; do
   local_source="${MAPS_DIR}/manifest.${layer}.json"
   if [[ "${MAPS_UPLOAD_MODE}" == "styled" && "${layer}" == "styled" ]]; then
     cp "${styled_source}" "${tmp}/manifest.${layer}.json"
@@ -88,6 +88,7 @@ done
 mkdir -p "${MAPS_DIR}"
 go run ../../scripts/dbcdata merge-wowdata-maps \
   --original="${tmp}/manifest.original.json" \
+  --reuses="${tmp}/manifest.reuses.json" \
   --styled="${tmp}/manifest.styled.json" \
   --meshes="${tmp}/manifest.meshes.json" \
   --renders="${tmp}/manifest.renders.json" \

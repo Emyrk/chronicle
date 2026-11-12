@@ -69,8 +69,14 @@ export interface WowMapFloorSupport {
   validated: boolean;
 }
 
+export interface WowMapReuseSource {
+  namespace: string;
+  mapID: number;
+}
+
 export interface WowMapInstance {
   floorSupport?: WowMapFloorSupport;
+  reusedFrom?: WowMapReuseSource;
   mapID: number;
   name: string;
   instanceType: number;
@@ -221,6 +227,17 @@ export function mapManifestUrl(iconBaseUrl: string): string {
 }
 
 export function mapAssetUrl(iconBaseUrl: string, path: string): string {
+  if (/^https:\/\//i.test(path)) {
+    try {
+      const url = new URL(path);
+      if (url.origin === "https://icons.chronicleclassic.com"
+        && /^\/[^/]+\/maps\/(?:original|tiles|render-styled|renders|3d)\/.+/.test(url.pathname)
+        && url.search === ""
+        && url.hash === "") return path;
+    } catch {
+      // Fall through to a same-CDN path, which will safely fail instead of fetching an arbitrary origin.
+    }
+  }
   return `${stripTrailingSlash(iconBaseUrl)}/maps/${path.replace(/^\/+/, "")}`;
 }
 

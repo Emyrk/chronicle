@@ -225,6 +225,92 @@ test("Map Foundry uploads, drafts, previews, and publishes floor assets without 
   assert.equal(reader.instances[0]?.floors[1]?.mesh?.path, uploadedMesh.path);
 });
 
+test("Map Foundry publishes a copied map body with source art, render, mesh, and provenance", async () => {
+  const bucket = new FakeBucket();
+  const source = "https://icons.chronicleclassic.com/forever/maps";
+  const tilePath = `${source}/original/389.webp`;
+  const renderPath = `${source}/renders/389.png`;
+  const meshPath = `${source}/3d/389-ragefire-chasm.glb`;
+  const reused = {
+    reusedFrom: { namespace: "forever", mapID: 389 },
+    mapID: 389,
+    name: "Ragefire Chasm",
+    instanceType: 1,
+    directory: "OrgrimmarInstance",
+    floors: [{
+      floor: 0,
+      width: 1024,
+      height: 768,
+      tileWidth: 256,
+      tileHeight: 256,
+      tiles: [{ row: 0, column: 0, fileDataID: 389, path: tilePath }],
+      renders: { path: renderPath, width: 1600, height: 1000 },
+    }],
+    mesh: {
+      path: meshPath,
+      bounds: { minX: -416, maxX: 103, minY: -108, maxY: 275 },
+      zMin: -66,
+      zMax: 59,
+      frame: "wow-yup-mirrored-x",
+    },
+  };
+  await bucket.put("forever/maps/original/389.webp", new Uint8Array([1]));
+  await bucket.put("forever/maps/renders/389.png", png(1600, 1000));
+  await bucket.put("forever/maps/3d/389-ragefire-chasm.glb", glb());
+  await bucket.put("turtle/maps/manifest.original.json", JSON.stringify({
+    ...original,
+    target: { product: "turtle", build: "1.12.1", region: "", locale: "enUS" },
+    instances: [{ ...original.instances[0], mapID: 389, name: "Ragefire Chasm", directory: "OrgrimmarInstance" }],
+  }));
+
+  const saved = await request(bucket, "/internal/api/v1/maps/turtle/draft", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ version: null, reuses: [reused], renders: [], meshes: [] }),
+  });
+  assert.equal(saved.status, 200);
+  const savedBody = await saved.json() as { draft_version: string };
+
+  const published = await request(bucket, "/internal/api/v1/maps/turtle/publish", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ version: savedBody.draft_version }),
+  });
+  assert.equal(published.status, 200);
+  assert.equal(await bucket.head("turtle/maps/original/389.webp"), null);
+  assert.equal(await bucket.head("turtle/maps/renders/389.png"), null);
+  assert.equal(await bucket.head("turtle/maps/3d/389-ragefire-chasm.glb"), null);
+  const reuseSource = await bucket.json("turtle/maps/manifest.reuses.json") as { instances: typeof reused[] };
+  assert.deepEqual(reuseSource.instances[0]?.reusedFrom, { namespace: "forever", mapID: 389 });
+  const reader = await bucket.json("turtle/maps/manifest.json") as { instances: typeof reused[] };
+  const copied = reader.instances.find((instance) => instance.mapID === 389);
+  assert.equal(copied?.floors[0]?.tiles[0]?.path, tilePath);
+  assert.equal(copied?.floors[0]?.renders?.path, renderPath);
+  assert.equal(copied?.mesh?.path, meshPath);
+});
+
+test("Map Foundry rejects mesh URLs outside the Chronicle icon CDN", async () => {
+  const bucket = new FakeBucket();
+  await seed(bucket);
+  const response = await request(bucket, "/internal/api/v1/maps/forever/draft", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      version: null,
+      renders: [],
+      meshes: [{ mapID: 43, name: "Wailing Caverns", mesh: {
+        path: "https://example.com/maps/3d/43.glb",
+        bounds: { minX: -10, maxX: 20, minY: 30, maxY: 40 },
+        zMin: -5,
+        zMax: 15,
+        frame: "wow-yup-mirrored-x",
+      } }],
+    }),
+  });
+  assert.equal(response.status, 400);
+  assert.match((await response.json() as { error: string }).error, /invalid meshes map layer artwork/);
+});
+
 test("Map Foundry keeps missing multipart floor as a legacy map-level upload", async () => {
   const bucket = new FakeBucket();
   await seed(bucket);

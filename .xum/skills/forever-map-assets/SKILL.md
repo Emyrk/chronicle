@@ -12,13 +12,14 @@ Use the server-aware native extractor and independently published artwork source
 
 ## Sources and contracts
 
-The frontend reads `<icon-base>/maps/manifest.json`, merged from root-level `manifest.original.json` (native maps, floors and target), optional `manifest.renders.json` (PNG), `manifest.meshes.json` (placeable GLB) and `manifest.styled.json` (hand-styled image). All use `chronicle-wow-map-art-v2`. Original targets identify product/build/region/locale; independent sources use the same product only. Source layers attach by world `mapID`, never replace native metadata, and must have a `name` to create a floorless instance absent from original.
+The frontend reads `<icon-base>/maps/manifest.json`, merged from root-level `manifest.original.json` (native maps, floors and target), optional `manifest.reuses.json` (copied full instances), `manifest.renders.json` (PNG), `manifest.meshes.json` (placeable GLB) and `manifest.styled.json` (hand-styled image). All use `chronicle-wow-map-art-v2`. Original targets identify product/build/region/locale; independent sources use the same product only. Artwork layers attach by world `mapID` without replacing native metadata; the reuse layer deliberately replaces one complete instance snapshot and records its source. Render and mesh layers must have a `name` to create a floorless instance absent from original.
 
 | Source in Git or generated locally | Entry | Asset path | Use |
 | --- | --- | --- | --- |
 | `frontend/imagecache/<server>/maps/manifest.original.json` | maps, floors | `original/<FileDataID>.webp` | Extracted native tiles; generated files ignored by Git. |
+| R2 `<server>/maps/manifest.reuses.json` | full instance plus `reusedFrom` | absolute Chronicle CDN URLs | Map Foundry snapshot of another namespace's art, renders and meshes; no assets copied. |
 | `frontend/imagecache/map-layers/<server>/manifest.renders.json` | `renders: {path,width,height,bounds?}` | `renders/*.png` | Hand-uploaded 2D images; bounds are optional until calibrated. |
-| `frontend/imagecache/meshes/<server>/manifest.meshes.json` | `mesh: {path,bounds,zMin,zMax,frame,liquid?}` | `3d/*.glb` | Placeable replay model; derive and verify coordinates against actual GLB. |
+| `frontend/imagecache/meshes/<server>/manifest.meshes.json` | `mesh: {path,bounds,zMin,zMax,frame,liquid?}` | `3d/*.glb` or allowlisted Chronicle CDN URL | Placeable replay model; derive and verify coordinates against actual GLB. |
 | `frontend/imagecache/styled-maps/<server>/manifest.styled.json` | `styled: {path,width,height,source,bounds}` | `render-styled/*` | Hand-styled image with calibrated overlay bounds. |
 
 There is **no** public `rendered` or path-only `3d` layer. The standalone `render-wowdata-maps` CLI may generate local `manifest.generated-renders.json` and `renders/` PNGs, but `make maps` does not publish them or replace the tracked manual source. Do not infer 2D PNG bounds from mesh bounds or image dimensions. Uncalibrated images must not place route or player markers. `frame` for meshes is `wow-yup-mirrored-x`; check the renderer's `height.json` and GLB POSITION extents before publishing. See `docs/wow-map-assets.md` for calibration and exporter details.
@@ -32,7 +33,7 @@ There is **no** public `rendered` or path-only `3d` layer. The standalone `rende
    jq '{target, maps: (.maps|length), instances: (.instances|length)}' "$out/manifest.original.json"
    # Legacy: go run ./scripts/dbcdata extract-legacy-maps --server=turtle --metadata-only --out="$out"
    ```
-2. Add manual PNG metadata to `map-layers/<server>/manifest.renders.json` or mesh metadata to `meshes/<server>/manifest.meshes.json`; keep other entries. Verify uploaded asset paths exist before manifest-only publication. Do not commit GLBs or generated tiles.
+2. Add manual PNG metadata to `map-layers/<server>/manifest.renders.json` or mesh metadata to `meshes/<server>/manifest.meshes.json`; keep other entries. To reuse an identical instance, Map Foundry's **Copy map** action snapshots the source manifest body into `manifest.reuses.json`, rewrites art/render/mesh paths to allowlisted absolute Chronicle CDN URLs, and records `reusedFrom`; it does not copy assets or auto-refresh. Verify referenced source objects remain immutable and live. Do not commit GLBs or generated tiles.
 3. Validate before publishing:
    ```bash
    go test ./scripts/dbcdata/cli ./scripts/dbcdata

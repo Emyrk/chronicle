@@ -494,6 +494,14 @@ var (
 	}
 )
 
+var KrolDokStrongholdFactory = &CommonFactory{
+	Name:      "Krol'dok Stronghold",
+	ZoneNames: []string{"krol'dok stronghold"},
+	Hostiles:  FromMap(KrolDokStrongholdHostiles()),
+	Category:  InstanceCategoryDungeon,
+	MapIDs:    []uint32{3039},
+}
+
 //["Ahn'Qiraj"] = "安其拉",
 //["Blackfathom Deeps"] = "黑暗深渊",
 //["The Crescent Grove"] = "新月林地", -- TurtleWOW

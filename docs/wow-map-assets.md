@@ -197,6 +197,14 @@ GLBs upload with `Content-Type: model/gltf-binary` and a one-year immutable cach
 
 Dev, Storybook and production all read the GLBs from the icon CDN (`forever/maps/3d/`); nothing is copied into `public/`.
 
+### Copying a map across flavors
+
+Identical instances such as Ragefire Chasm do not need duplicate assets in every namespace. In Map Foundry, select the target flavor and map, choose the source namespace beside **Copy map**, and save the draft. The operation copies the source instance's published manifest body—native floor art, manual renders, styled art, meshes, bounds, and display preferences—while rewriting every asset path to its absolute source URL. No image or GLB object is copied.
+
+Copied instances live in `manifest.reuses.json` and retain a `reusedFrom: {namespace,mapID}` annotation in the merged reader manifest. A later manual copy replaces that snapshot; there is intentionally no automatic reload relationship. Local render or mesh edits made after copying remain ordinary target-layer overrides.
+
+Reusable asset URLs are limited to immutable objects under `https://icons.chronicleclassic.com/<namespace>/maps/`. Publishing verifies that every referenced R2 object still exists. Relative paths remain scoped to the manifest's own icon CDN as before. Do not delete or overwrite source assets while another namespace references them; publish a new filename and copy the map again when refreshing it.
+
 ### CORS
 
 The icon CDN applies its CORS policy to every map asset response, not per object or content type: requests for keys under the map namespace answer with `Access-Control-Allow-Origin: *` and `Vary: Origin`. Nothing extra needs to be set on the R2 bucket for meshes. The frontend uses the canonical asset URL for both ordinary images and CORS-enabled texture or mesh requests, so they share one browser cache entry.

@@ -15069,6 +15069,60 @@ func (q *sqlQuerier) ListInstanceRatingPlayerRenownFacts(ctx context.Context, ar
 	return items, nil
 }
 
+const bumpLeaderboardHighlightGeneration = `-- name: BumpLeaderboardHighlightGeneration :exec
+INSERT INTO leaderboard_highlight_sources(tenant_id,generation) VALUES ($1::uuid,1)
+ON CONFLICT(tenant_id) DO UPDATE SET generation=leaderboard_highlight_sources.generation+1
+`
+
+func (q *sqlQuerier) BumpLeaderboardHighlightGeneration(ctx context.Context, tenantID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, bumpLeaderboardHighlightGeneration, tenantID)
+	return err
+}
+
+const getLeaderboardHighlightFreshness = `-- name: GetLeaderboardHighlightFreshness :one
+SELECT configuration_fingerprint,source_generation,refreshed_at FROM leaderboard_highlights
+WHERE tenant_id= $1::uuid AND realm_scope= $2::uuid
+ AND instance_name= $3::text AND difficulty_name= $4::text AND max_players= $5::smallint
+`
+
+type GetLeaderboardHighlightFreshnessParams struct {
+	TenantID       uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RealmScope     uuid.UUID `db:"realm_scope" json:"realm_scope"`
+	InstanceName   string    `db:"instance_name" json:"instance_name"`
+	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16     `db:"max_players" json:"max_players"`
+}
+
+type GetLeaderboardHighlightFreshnessRow struct {
+	ConfigurationFingerprint string             `db:"configuration_fingerprint" json:"configuration_fingerprint"`
+	SourceGeneration         int64              `db:"source_generation" json:"source_generation"`
+	RefreshedAt              pgtype.Timestamptz `db:"refreshed_at" json:"refreshed_at"`
+}
+
+func (q *sqlQuerier) GetLeaderboardHighlightFreshness(ctx context.Context, arg GetLeaderboardHighlightFreshnessParams) (GetLeaderboardHighlightFreshnessRow, error) {
+	row := q.db.QueryRow(ctx, getLeaderboardHighlightFreshness,
+		arg.TenantID,
+		arg.RealmScope,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+	)
+	var i GetLeaderboardHighlightFreshnessRow
+	err := row.Scan(&i.ConfigurationFingerprint, &i.SourceGeneration, &i.RefreshedAt)
+	return i, err
+}
+
+const getLeaderboardHighlightGeneration = `-- name: GetLeaderboardHighlightGeneration :one
+SELECT COALESCE(MAX(generation),0)::bigint FROM leaderboard_highlight_sources WHERE tenant_id= $1::uuid
+`
+
+func (q *sqlQuerier) GetLeaderboardHighlightGeneration(ctx context.Context, tenantID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, getLeaderboardHighlightGeneration, tenantID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const leaderboardHighlightRealms = `-- name: LeaderboardHighlightRealms :many
 SELECT r.id FROM wow_server_realms r JOIN wow_servers s ON s.id=r.server_id WHERE s.tenant_id= $1::uuid ORDER BY r.id
 `
@@ -15094,7 +15148,7 @@ func (q *sqlQuerier) LeaderboardHighlightRealms(ctx context.Context, tenantID uu
 }
 
 const listLeaderboardHighlights = `-- name: ListLeaderboardHighlights :many
-SELECT tenant_id, instance_name, difficulty_name, max_players, realm_scope, configuration_fingerprint, payload, refresh_started_at, refreshed_at FROM leaderboard_highlights WHERE tenant_id= $1::uuid AND realm_scope= $2::uuid ORDER BY instance_name,difficulty_name,max_players LIMIT 256
+SELECT tenant_id, instance_name, difficulty_name, max_players, realm_scope, configuration_fingerprint, payload, refresh_started_at, refreshed_at, source_generation FROM leaderboard_highlights WHERE tenant_id= $1::uuid AND realm_scope= $2::uuid ORDER BY instance_name,difficulty_name,max_players LIMIT 256
 `
 
 type ListLeaderboardHighlightsParams struct {
@@ -15121,6 +15175,7 @@ func (q *sqlQuerier) ListLeaderboardHighlights(ctx context.Context, arg ListLead
 			&i.Payload,
 			&i.RefreshStartedAt,
 			&i.RefreshedAt,
+			&i.SourceGeneration,
 		); err != nil {
 			return nil, err
 		}
@@ -15133,9 +15188,9 @@ func (q *sqlQuerier) ListLeaderboardHighlights(ctx context.Context, arg ListLead
 }
 
 const publishLeaderboardHighlights = `-- name: PublishLeaderboardHighlights :exec
-INSERT INTO leaderboard_highlights(tenant_id,instance_name,difficulty_name,max_players,realm_scope,configuration_fingerprint,payload,refresh_started_at)
-VALUES ($1::uuid,$2::text,$3::text,$4::smallint,$5::uuid,$6::text,$7::jsonb,$8::timestamptz)
-ON CONFLICT(tenant_id,instance_name,difficulty_name,max_players,realm_scope) DO UPDATE SET configuration_fingerprint=EXCLUDED.configuration_fingerprint,payload=EXCLUDED.payload,refresh_started_at=EXCLUDED.refresh_started_at,refreshed_at=clock_timestamp()
+INSERT INTO leaderboard_highlights(tenant_id,instance_name,difficulty_name,max_players,realm_scope,configuration_fingerprint,source_generation,payload,refresh_started_at)
+VALUES ($1::uuid,$2::text,$3::text,$4::smallint,$5::uuid,$6::text,$7::bigint,$8::jsonb,$9::timestamptz)
+ON CONFLICT(tenant_id,instance_name,difficulty_name,max_players,realm_scope) DO UPDATE SET configuration_fingerprint=EXCLUDED.configuration_fingerprint,source_generation=EXCLUDED.source_generation,payload=EXCLUDED.payload,refresh_started_at=EXCLUDED.refresh_started_at,refreshed_at=clock_timestamp()
 WHERE leaderboard_highlights.refresh_started_at<=EXCLUDED.refresh_started_at
 `
 
@@ -15146,6 +15201,7 @@ type PublishLeaderboardHighlightsParams struct {
 	MaxPlayers               int16              `db:"max_players" json:"max_players"`
 	RealmScope               uuid.UUID          `db:"realm_scope" json:"realm_scope"`
 	ConfigurationFingerprint string             `db:"configuration_fingerprint" json:"configuration_fingerprint"`
+	SourceGeneration         int64              `db:"source_generation" json:"source_generation"`
 	Payload                  []byte             `db:"payload" json:"payload"`
 	RefreshStartedAt         pgtype.Timestamptz `db:"refresh_started_at" json:"refresh_started_at"`
 }
@@ -15158,6 +15214,7 @@ func (q *sqlQuerier) PublishLeaderboardHighlights(ctx context.Context, arg Publi
 		arg.MaxPlayers,
 		arg.RealmScope,
 		arg.ConfigurationFingerprint,
+		arg.SourceGeneration,
 		arg.Payload,
 		arg.RefreshStartedAt,
 	)
@@ -16236,7 +16293,9 @@ WITH source AS MATERIALIZED (
  LEFT JOIN tenants tenant ON tenant.id=server.tenant_id
  WHERE rr.run_id= $2::uuid AND li.invalidated_at IS NULL
 ), players AS MATERIALIZED (
- SELECT s.run_id, s.source_instance_id, s.realm_id, s.guild_id, s.instance_name, s.difficulty_name, s.max_players, s.mixed_difficulty, s.tenant_id, s.cohort_mode, d.id AS ranking_id, d.player_guid, d.player_class,
+ SELECT s.run_id, s.source_instance_id, s.realm_id, s.guild_id, s.instance_name, s.difficulty_name, s.max_players, s.mixed_difficulty, s.tenant_id, s.cohort_mode, d.id AS ranking_id, d.player_guid,
+        CASE WHEN upper(replace(btrim(d.player_class), '_', ''))='DEATHKNIGHT'
+             THEN 'DEATH_KNIGHT' ELSE d.player_class END::text AS player_class,
         -- Rating evidence requires a non-empty spec key. Class mode collapses every
         -- source spec, including missing or unknown specs, into one stable class-only cohort.
         CASE WHEN s.cohort_mode='class' THEN 'Class' ELSE d.player_spec END::text AS player_spec,
@@ -25933,6 +25992,8 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
            COALESCE(lie.difficulty, li.difficulty_name) = $5::text)
       AND (NOT $6::boolean OR li.max_players = $7::int)
       AND lie.kill_type = 'clean'
+      AND li.invalidated_at IS NULL
+      AND lie.invalidated_at IS NULL
       AND CASE
           WHEN $8 :: text != '' THEN lie.name = $8
           ELSE true
@@ -25989,7 +26050,8 @@ type RankingsKillTimeLeaderboardRow struct {
 }
 
 // Paginated leaderboard of fastest encounter kills, ordered by duration.
-// Deduplicates encounters across duplicate log groups (keeps fastest per group).
+// Deduplicates encounters across duplicate log groups (keeps fastest per group)
+// and excludes invalidated instances and encounters.
 func (q *sqlQuerier) RankingsKillTimeLeaderboard(ctx context.Context, arg RankingsKillTimeLeaderboardParams) ([]RankingsKillTimeLeaderboardRow, error) {
 	rows, err := q.db.Query(ctx, rankingsKillTimeLeaderboard,
 		arg.QueryOffset,
@@ -26047,6 +26109,8 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
            COALESCE(lie.difficulty, li.difficulty_name) = $3::text)
       AND (NOT $4::boolean OR li.max_players = $5::int)
       AND lie.kill_type = 'clean'
+      AND li.invalidated_at IS NULL
+      AND lie.invalidated_at IS NULL
       AND CASE
           WHEN $6 :: bigint > 0 THEN lie.end_time >= now() - make_interval(days => $6::int)
           ELSE true
@@ -26097,7 +26161,7 @@ type RankingsKillTimeStatsRow struct {
 }
 
 // Box plot stats on encounter duration (seconds) per encounter name.
-// Deduplicates encounters across duplicate log groups.
+// Deduplicates encounters across duplicate log groups and excludes invalidated data.
 func (q *sqlQuerier) RankingsKillTimeStats(ctx context.Context, arg RankingsKillTimeStatsParams) ([]RankingsKillTimeStatsRow, error) {
 	rows, err := q.db.Query(ctx, rankingsKillTimeStats,
 		arg.InstanceName,
@@ -26157,6 +26221,8 @@ WITH deduped AS (
            COALESCE(lie.difficulty, li.difficulty_name) = $4::text)
       AND (NOT $5::boolean OR li.max_players = $6::int)
       AND lie.kill_type = 'clean'
+      AND li.invalidated_at IS NULL
+      AND lie.invalidated_at IS NULL
       AND lie.name = ANY($7::text[])
       AND cardinality($7::text[]) <= 64
       AND li.guild_id IS NOT NULL
@@ -26203,8 +26269,8 @@ type RankingsKillTimeTopPerEncounterRow struct {
 
 // The fastest clean guild kills of each chosen boss in one round trip, deduplicated
 // across duplicate log groups like RankingsKillTimeLeaderboard. Each guild ranks once
-// per boss with its fastest kill, as on the full-clear speedrun board; kills without
-// a guild are excluded.
+// per boss with its fastest kill, as on the full-clear speedrun board; invalidated data
+// and kills without a guild are excluded.
 func (q *sqlQuerier) RankingsKillTimeTopPerEncounter(ctx context.Context, arg RankingsKillTimeTopPerEncounterParams) ([]RankingsKillTimeTopPerEncounterRow, error) {
 	rows, err := q.db.Query(ctx, rankingsKillTimeTopPerEncounter,
 		arg.PerEncounter,

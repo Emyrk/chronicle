@@ -97,6 +97,23 @@ func (s *sourceFixture) direct(rows []database.ProjectLeaderboardRunRow) error {
 		return nil
 	}, nil)
 }
+func TestProjectionNormalizesDeathKnightClass(t *testing.T) {
+	t.Parallel()
+	s := newSourceFixture(t)
+	s.exec(`UPDATE encounter_dps_rankings SET player_class='DEATHKNIGHT', player_spec='Frost' WHERE instance_id=$1`, s.instance)
+
+	rows := s.compute()
+	var ratingRows int
+	for _, row := range rows {
+		if row.Kind != 1 && row.Kind != 6 {
+			continue
+		}
+		ratingRows++
+		require.Equal(t, "DEATH_KNIGHT", row.PlayerClass)
+	}
+	require.Equal(t, 2, ratingRows)
+}
+
 func TestProjectionFamiliesAndReplay(t *testing.T) {
 	t.Parallel()
 	s := newSourceFixture(t)

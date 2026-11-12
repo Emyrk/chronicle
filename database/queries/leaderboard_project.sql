@@ -21,7 +21,9 @@ WITH source AS MATERIALIZED (
  LEFT JOIN tenants tenant ON tenant.id=server.tenant_id
  WHERE rr.run_id= @run_id::uuid AND li.invalidated_at IS NULL
 ), players AS MATERIALIZED (
- SELECT s.*, d.id AS ranking_id, d.player_guid, d.player_class,
+ SELECT s.*, d.id AS ranking_id, d.player_guid,
+        CASE WHEN upper(replace(btrim(d.player_class), '_', ''))='DEATHKNIGHT'
+             THEN 'DEATH_KNIGHT' ELSE d.player_class END::text AS player_class,
         -- Rating evidence requires a non-empty spec key. Class mode collapses every
         -- source spec, including missing or unknown specs, into one stable class-only cohort.
         CASE WHEN s.cohort_mode='class' THEN 'Class' ELSE d.player_spec END::text AS player_spec,

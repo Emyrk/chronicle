@@ -153,8 +153,14 @@ export interface MapFloorSupport {
   validated: boolean;
 }
 
+export interface MapReuseSource {
+  namespace: MapManifestNamespace;
+  mapID: number;
+}
+
 export interface MapInstance {
   floorSupport?: MapFloorSupport;
+  reusedFrom?: MapReuseSource;
   mapID: number;
   name: string;
   instanceType: number;
@@ -207,7 +213,7 @@ export function recoverMapManifestBase(value: unknown, namespace: MapManifestNam
   }
   return {
     ...manifest,
-    instances: manifest.instances.map(({ floorSupport: _floorSupport, styled: _styled, renders: _renders, mesh: _mesh, ...instance }) => ({
+    instances: manifest.instances.filter((instance) => !instance.reusedFrom).map(({ floorSupport: _floorSupport, reusedFrom: _reusedFrom, styled: _styled, renders: _renders, mesh: _mesh, ...instance }) => ({
       ...instance,
       floors: instance.floors.map(({ preferred2D: _preferred2D, renders: _floorRenders, mesh: _floorMesh, ...floor }) => floor),
     })),
@@ -218,10 +224,11 @@ export function recoverMapManifestLayers(value: unknown): MapManifestLayers {
   if (value === undefined) return {};
   const manifest = parseRecoverableMapManifest(value);
   const target = { product: manifest.target.product, build: "", region: "", locale: "" };
-  const styled = manifest.instances.flatMap((instance) => instance.styled
+  const reuses = manifest.instances.filter((instance) => instance.reusedFrom);
+  const styled = manifest.instances.filter((instance) => !instance.reusedFrom).flatMap((instance) => instance.styled
     ? [{ mapID: instance.mapID, name: instance.name, styled: instance.styled }]
     : []);
-  const renders = manifest.instances.flatMap((instance) => {
+  const renders = manifest.instances.filter((instance) => !instance.reusedFrom).flatMap((instance) => {
     const floors = instance.floors.flatMap((floor) => floor.renders || floor.preferred2D !== undefined
       ? [{ floor: floor.floor, ...(floor.preferred2D === undefined ? {} : { preferred2D: floor.preferred2D }), ...(floor.renders ? { renders: floor.renders } : {}) }]
       : []);
@@ -229,13 +236,14 @@ export function recoverMapManifestLayers(value: unknown): MapManifestLayers {
       ? [{ mapID: instance.mapID, name: instance.name, ...(instance.renders ? { renders: instance.renders } : {}), ...(floors.length > 0 ? { floors } : {}) }]
       : [];
   });
-  const meshes = manifest.instances.flatMap((instance) => {
+  const meshes = manifest.instances.filter((instance) => !instance.reusedFrom).flatMap((instance) => {
     const floors = instance.floors.flatMap((floor) => floor.mesh ? [{ floor: floor.floor, mesh: floor.mesh }] : []);
     return instance.floorSupport || instance.mesh || floors.length > 0
       ? [{ mapID: instance.mapID, name: instance.name, ...(instance.floorSupport ? { floorSupport: instance.floorSupport } : {}), ...(instance.mesh ? { mesh: instance.mesh } : {}), ...(floors.length > 0 ? { floors } : {}) }]
       : [];
   });
   return {
+    reuses: reuses.length > 0 ? { format: MAP_MANIFEST_FORMAT, target, instances: reuses } : undefined,
     styled: styled.length > 0 ? { format: MAP_MANIFEST_FORMAT, target, instances: styled } : undefined,
     renders: renders.length > 0 ? { format: MAP_MANIFEST_FORMAT, target, instances: renders } : undefined,
     meshes: meshes.length > 0 ? { format: MAP_MANIFEST_FORMAT, target, instances: meshes } : undefined,
@@ -265,14 +273,21 @@ export interface MapLayerManifest {
   instances: MapLayerInstance[];
 }
 
+export interface MapReuseManifest {
+  format: typeof MAP_MANIFEST_FORMAT;
+  target: MapTarget;
+  instances: MapInstance[];
+}
+
 export interface MapManifestLayers {
+  reuses?: unknown;
   styled?: unknown;
   renders?: unknown;
   meshes?: unknown;
 }
 
 type JSONObject = Record<string, unknown>;
-type LayerKind = keyof MapManifestLayers;
+type LayerKind = Exclude<keyof MapManifestLayers, "reuses">;
 
 const hasOwn = (value: JSONObject, key: string): boolean =>
   Object.prototype.hasOwnProperty.call(value, key);
@@ -521,9 +536,16 @@ function parseMesh(value: unknown, context: string): MapPlaceableMesh {
   return mesh;
 }
 
+function parseReuseSource(value: unknown, context: string): MapReuseSource {
+  const input = object(value, context, ["namespace", "mapID"]);
+  const namespace = string(input.namespace, `${context}.namespace`);
+  if (!isNamespaceValue(namespace)) throw new TypeError(`${context}.namespace is not supported`);
+  return { namespace, mapID: integer(input.mapID, `${context}.mapID`, 0) };
+}
+
 function parseInstance(value: unknown, context: string): MapInstance {
   const input = object(value, context, [
-    "mapID", "name", "instanceType", "directory", "floors", "styled", "renders", "mesh", "floorSupport",
+    "mapID", "name", "instanceType", "directory", "floors", "styled", "renders", "mesh", "floorSupport", "reusedFrom",
   ]);
   const result: MapInstance = {
     mapID: integer(input.mapID, `${context}.mapID`, 0),
@@ -538,6 +560,7 @@ function parseInstance(value: unknown, context: string): MapInstance {
   if (styled) result.styled = styled;
   if (renders) result.renders = renders;
   if (meshes) result.mesh = meshes;
+  if (input.reusedFrom !== undefined) result.reusedFrom = parseReuseSource(input.reusedFrom, `${context}.reusedFrom`);
   if (input.floorSupport !== undefined) result.floorSupport = parseFloorSupport(input.floorSupport);
   return result;
 }
@@ -594,6 +617,19 @@ export function parseMapLayer(value: unknown): MapLayerManifest {
   };
 }
 
+export function parseMapReuseLayer(value: unknown): MapReuseManifest {
+  const input = object(value, "map reuse layer", ["format", "target", "instances"]);
+  return {
+    format: format(input.format, "map reuse layer"),
+    target: parseTarget(input.target, "map reuse layer.target"),
+    instances: array(input.instances ?? [], "map reuse layer.instances").map((entry, index) => {
+      const instance = parseInstance(entry, `map reuse layer.instances[${index}]`);
+      if (!instance.reusedFrom) throw new TypeError(`map reuse layer.instances[${index}].reusedFrom is required`);
+      return instance;
+    }),
+  };
+}
+
 export function isPreviewableMapAssetPath(assetPath: string): boolean {
   return ["original/", "tiles/", "render-styled/", "renders/", "3d/"].some((prefix) => validAssetPath(assetPath, prefix));
 }
@@ -602,6 +638,32 @@ function validAssetPath(assetPath: string, prefix: string): boolean {
   if (!assetPath.startsWith(prefix) || assetPath.length === prefix.length || assetPath.includes("\\")) return false;
   const parts = assetPath.split("/");
   return parts.every((part) => part !== "" && part !== "." && part !== "..");
+}
+
+const MAP_ASSET_ORIGIN = "https://icons.chronicleclassic.com";
+
+/** Resolves a local or cross-flavor map asset reference to its R2 object key. */
+export function mapAssetStorageKey(namespace: MapManifestNamespace, assetPath: string): string | undefined {
+  if (!/^https:\/\//i.test(assetPath)) return `${namespace}/maps/${assetPath}`;
+  let url: URL;
+  try {
+    url = new URL(assetPath);
+  } catch {
+    return undefined;
+  }
+  if (url.origin !== MAP_ASSET_ORIGIN || url.search !== "" || url.hash !== "") return undefined;
+  const match = url.pathname.match(/^\/([^/]+)\/maps\/(.+)$/);
+  if (!match || !isNamespaceValue(match[1]) || !isPreviewableMapAssetPath(match[2]) && !isFloorSupportAssetPath(match[2])) return undefined;
+  return `${match[1]}/maps/${match[2]}`;
+}
+
+function isNamespaceValue(value: string): value is MapManifestNamespace {
+  return MAP_MANIFEST_NAMESPACES.includes(value as MapManifestNamespace);
+}
+
+function isReusableMeshPath(assetPath: string): boolean {
+  return (validAssetPath(assetPath, "3d/") && assetPath.endsWith(".glb"))
+    || (/^https:\/\//i.test(assetPath) && mapAssetStorageKey("forever", assetPath) !== undefined);
 }
 
 function isRenderImagePath(assetPath: string): boolean {
@@ -627,9 +689,56 @@ function validateLayerArtwork(
     }
   } else {
     const mesh = artwork as MapPlaceableMesh | undefined;
-    if (!mesh || !validAssetPath(mesh.path, "3d/") || !mesh.path.endsWith(".glb")) {
+    if (!mesh || !isReusableMeshPath(mesh.path)) {
       throw new TypeError(`invalid meshes map layer artwork for ${location}`);
     }
+  }
+}
+
+function reusedAssetPath(path: string, prefix: string, extensions: readonly string[]): boolean {
+  const key = mapAssetStorageKey("forever", path);
+  if (!key) return false;
+  const marker = "/maps/";
+  const assetPath = key.slice(key.indexOf(marker) + marker.length);
+  return validAssetPath(assetPath, prefix) && extensions.some((extension) => assetPath.endsWith(extension));
+}
+
+function validateReusedInstance(instance: MapInstance): void {
+  if (!instance.reusedFrom) throw new TypeError(`reused mapID ${instance.mapID} requires reusedFrom`);
+  if (instance.floorSupport) throw new TypeError(`reused mapID ${instance.mapID} cannot copy floorSupport`);
+  const validateMesh = (mesh: MapPlaceableMesh | undefined, context: string) => {
+    if (mesh && !reusedAssetPath(mesh.path, "3d/", [".glb"])) throw new TypeError(`${context} must use a Chronicle CDN 3d/*.glb URL`);
+  };
+  const validateRender = (render: MapManualRender | undefined, context: string) => {
+    if (render && !reusedAssetPath(render.path, "renders/", [".png", ".webp"])) throw new TypeError(`${context} must use a Chronicle CDN render URL`);
+  };
+  if (instance.styled && !reusedAssetPath(instance.styled.path, "render-styled/", [".png", ".webp", ".jpeg"])) {
+    throw new TypeError(`reused mapID ${instance.mapID} styled art must use a Chronicle CDN URL`);
+  }
+  validateRender(instance.renders, `reused mapID ${instance.mapID} render`);
+  validateMesh(instance.mesh, `reused mapID ${instance.mapID} mesh`);
+  for (const floor of instance.floors) {
+    for (const tile of floor.tiles) {
+      if (!reusedAssetPath(tile.path, "original/", [".webp"]) && !reusedAssetPath(tile.path, "tiles/", [".webp"])) {
+        throw new TypeError(`reused mapID ${instance.mapID} floor ${floor.floor} tile must use a Chronicle CDN URL`);
+      }
+    }
+    validateRender(floor.renders, `reused mapID ${instance.mapID} floor ${floor.floor} render`);
+    validateMesh(floor.mesh, `reused mapID ${instance.mapID} floor ${floor.floor} mesh`);
+  }
+}
+
+function mergeReuseLayer(rawLayer: unknown, target: MapTarget, instances: Map<number, MapInstance>): void {
+  const layer = parseMapReuseLayer(rawLayer);
+  if (layer.target.product !== target.product || layer.target.build !== "" || layer.target.region !== "" || layer.target.locale !== "") {
+    throw new TypeError("reuses map layer target does not match original");
+  }
+  const seen = new Set<number>();
+  for (const instance of layer.instances) {
+    if (seen.has(instance.mapID)) throw new TypeError(`duplicate reuses map layer mapID ${instance.mapID}`);
+    seen.add(instance.mapID);
+    validateReusedInstance(instance);
+    instances.set(instance.mapID, instance);
   }
 }
 
@@ -718,8 +827,9 @@ export function mergeMapManifests(original: unknown, layers: MapManifestLayers =
     mapIDs.add(record.id);
   }
 
+  const originalOrder = manifest.instances.map((instance) => instance.mapID);
   const instances = new Map<number, MapInstance>();
-  for (const source of manifest.instances) {
+  for (const source of manifest.instances.filter((instance) => !instance.reusedFrom)) {
     if (instances.has(source.mapID)) throw new TypeError(`duplicate original instance mapID ${source.mapID}`);
     const { floorSupport: _floorSupport, styled: _styled, renders: _renders, mesh: _mesh, ...metadata } = source;
     const floorNumbers = new Set<number>();
@@ -731,15 +841,15 @@ export function mergeMapManifests(original: unknown, layers: MapManifestLayers =
     const instance: MapInstance = { ...metadata, floors };
     instances.set(instance.mapID, instance);
   }
-  manifest.instances = [...instances.values()];
+  if (layers.reuses !== undefined) mergeReuseLayer(layers.reuses, manifest.target, instances);
 
   const created = new Map<number, MapInstance>();
   for (const kind of ["styled", "renders", "meshes"] as const) {
     if (layers[kind] !== undefined) mergeLayer(kind, layers[kind], manifest.target, instances, created);
   }
-  for (const mapID of [...created.keys()].sort((left, right) => left - right)) {
-    manifest.instances.push(created.get(mapID)!);
-  }
+  const ordered = originalOrder.filter((mapID, index) => originalOrder.indexOf(mapID) === index && instances.has(mapID));
+  const appended = [...instances.keys()].filter((mapID) => !ordered.includes(mapID)).sort((left, right) => left - right);
+  manifest.instances = [...ordered, ...appended].map((mapID) => instances.get(mapID)!);
   for (const instance of manifest.instances) validateFloorSupportSources(instance);
   return manifest;
 }

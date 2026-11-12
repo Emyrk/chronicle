@@ -2127,6 +2127,13 @@ CREATE TABLE leaderboard_guild_renown_facts (
 
 ALTER TABLE ONLY leaderboard_guild_renown_facts FORCE ROW LEVEL SECURITY;
 
+CREATE TABLE leaderboard_highlight_sources (
+    tenant_id uuid NOT NULL,
+    generation bigint DEFAULT 0 NOT NULL
+);
+
+ALTER TABLE ONLY leaderboard_highlight_sources FORCE ROW LEVEL SECURITY;
+
 CREATE TABLE leaderboard_highlights (
     tenant_id uuid NOT NULL,
     instance_name text NOT NULL,
@@ -2137,6 +2144,7 @@ CREATE TABLE leaderboard_highlights (
     payload jsonb NOT NULL,
     refresh_started_at timestamp with time zone NOT NULL,
     refreshed_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    source_generation bigint DEFAULT 0 NOT NULL,
     CONSTRAINT leaderboard_highlights_payload_check CHECK (((jsonb_typeof(payload) = 'object'::text) AND (octet_length((payload)::text) <= 262144)))
 );
 
@@ -4034,6 +4042,9 @@ ALTER TABLE ONLY leaderboard_guild_renown_counts
 ALTER TABLE ONLY leaderboard_guild_renown_facts
     ADD CONSTRAINT leaderboard_guild_renown_facts_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name, run_id, realm_id, guild_id);
 
+ALTER TABLE ONLY leaderboard_highlight_sources
+    ADD CONSTRAINT leaderboard_highlight_sources_pkey PRIMARY KEY (tenant_id);
+
 ALTER TABLE ONLY leaderboard_highlights
     ADD CONSTRAINT leaderboard_highlights_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, realm_scope);
 
@@ -5638,6 +5649,8 @@ ALTER TABLE leaderboard_guild_renown_counts ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE leaderboard_guild_renown_facts ENABLE ROW LEVEL SECURITY;
 
+ALTER TABLE leaderboard_highlight_sources ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE leaderboard_highlights ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE leaderboard_operations ENABLE ROW LEVEL SECURITY;
@@ -5701,6 +5714,8 @@ CREATE POLICY tenant_admin_bypass ON leaderboard_guild_clear_subjects USING ((cu
 CREATE POLICY tenant_admin_bypass ON leaderboard_guild_renown_counts USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON leaderboard_guild_renown_facts USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON leaderboard_highlight_sources USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON leaderboard_highlights USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
@@ -5774,6 +5789,8 @@ CREATE POLICY tenant_isolation ON leaderboard_guild_clear_subjects USING ((tenan
 CREATE POLICY tenant_isolation ON leaderboard_guild_renown_counts USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
 
 CREATE POLICY tenant_isolation ON leaderboard_guild_renown_facts USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
+
+CREATE POLICY tenant_isolation ON leaderboard_highlight_sources USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
 
 CREATE POLICY tenant_isolation ON leaderboard_highlights USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
 
