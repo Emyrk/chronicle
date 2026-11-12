@@ -78,8 +78,11 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
         .upload { position:relative; display:block; margin-top:11px; padding:12px; color:var(--muted); border:1px dashed #526057; border-radius:6px; text-align:center; cursor:pointer; font-size:11px; }
         .upload:hover { color:var(--text); border-color:var(--moss); background:#20271f; }
         .upload input { position:absolute; inset:0; opacity:0; cursor:pointer; }
-        .reuse-controls { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; margin-top:11px; }
+        .reuse-controls { display:grid; grid-template-columns:minmax(0,1fr) auto auto; gap:8px; margin-top:11px; }
         .reuse-controls select { min-width:0; }
+        .copy-options { display:flex; flex-wrap:wrap; gap:12px; margin-top:10px; }
+        .copy-options label { display:flex; align-items:center; gap:6px; margin:0; color:var(--muted); font-size:10px; letter-spacing:0; text-transform:none; }
+        .copy-options input { accent-color:var(--moss); }
         .dimensions { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px; }
         .bounds-toggle { display:flex; align-items:center; gap:7px; margin-top:12px; color:var(--muted); font-size:11px; }
         .bounds-toggle input { accent-color:var(--moss); }
@@ -430,8 +433,9 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
               '<article class="layer-card"><h3>Placeable mesh <span class="layer-tag">GLB 2.0</span></h3><p>Binary glTF scene. Enter measured world bounds and vertical extent before saving. No coordinates are inferred from the file.</p>' +
                 '<div class="path ' + (!model ? 'empty-path' : '') + '">' + escapeHTML(model?.path || 'No mesh registered') + '</div>' +
                 '<label class="upload">Upload or replace GLB<input id="model-file" type="file" accept="model/gltf-binary,.glb" /></label>' +
-                '<div class="reuse-controls"><select id="reuse-namespace" aria-label="Copy map from namespace">' + mapNamespaces.filter(namespace => namespace !== state.namespace).map(namespace => '<option value="' + namespace + '" ' + (namespace === 'forever' ? 'selected' : '') + '>' + namespace + '</option>').join('') + '</select><button id="reuse-model">Copy map</button></div>' +
-                '<p class="count">Copy the source manifest body—native art, renders, and 3D assets—while keeping every file on the source CDN.</p>' +
+                '<div class="reuse-controls"><select id="reuse-namespace" aria-label="Other map namespace">' + mapNamespaces.filter(namespace => namespace !== state.namespace).map(namespace => '<option value="' + namespace + '" ' + (namespace === 'forever' ? 'selected' : '') + '>' + namespace + '</option>').join('') + '</select><button id="copy-from">Copy from</button><button id="copy-to">Copy to</button></div>' +
+                '<div class="copy-options" aria-label="Map assets to copy"><label><input id="copy-native" type="checkbox" checked /> Native art</label><label><input id="copy-renders" type="checkbox" checked /> Rendered maps</label><label><input id="copy-meshes" type="checkbox" checked /> 3D meshes</label></div>' +
+                '<p class="count">Copy the selected published assets into either server draft while keeping every file on the source CDN.</p>' +
                 '<div class="bounds"><label>Min X<input id="mesh-min-x" type="number" step="any" value="' + (model?.bounds?.minX ?? '') + '" /></label><label>Max X<input id="mesh-max-x" type="number" step="any" value="' + (model?.bounds?.maxX ?? '') + '" /></label><label>Min Y<input id="mesh-min-y" type="number" step="any" value="' + (model?.bounds?.minY ?? '') + '" /></label><label>Max Y<input id="mesh-max-y" type="number" step="any" value="' + (model?.bounds?.maxY ?? '') + '" /></label></div>' +
                 '<div class="dimensions"><label>Z min<input id="mesh-z-min" type="number" step="any" value="' + (model?.zMin ?? '') + '" /></label><label>Z max<input id="mesh-z-max" type="number" step="any" value="' + (model?.zMax ?? '') + '" /></label></div>' +
                 '<label>Coordinate frame<input id="mesh-frame" type="text" value="' + escapeHTML(model?.frame || 'wow-yup-mirrored-x') + '" /></label>' +
@@ -454,7 +458,8 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
           document.querySelectorAll('#editor input').forEach(input => { if (input.type !== 'file' && input.id !== 'has-bounds' && input.id !== 'mesh-liquid') input.addEventListener('input', () => { syncEditor(); markDirty(); renderList(); }); });
           document.getElementById('render-file').addEventListener('change', event => uploadAsset('renders', event.target.files[0]));
           document.getElementById('model-file').addEventListener('change', event => uploadAsset('meshes', event.target.files[0]));
-          document.getElementById('reuse-model').addEventListener('click', copyMap);
+          document.getElementById('copy-from').addEventListener('click', copyMapFrom);
+          document.getElementById('copy-to').addEventListener('click', copyMapTo);
           document.getElementById('remove-render').addEventListener('click', () => removeLayer('renders'));
           document.getElementById('remove-model').addEventListener('click', () => removeLayer('meshes'));
           document.querySelectorAll('.preview-tab').forEach(button => button.addEventListener('click', () => { previewMode = button.dataset.mode; previewChoice = 0; renderPreview(); }));
@@ -485,44 +490,117 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
           while (path.startsWith('/')) path = path.slice(1);
           return 'https://icons.chronicleclassic.com/' + sourceNamespace + '/maps/' + path;
         }
-        function copiedMapInstance(sourceNamespace, instance) {
+        function copySelection() {
+          const selection = {
+            native: document.getElementById('copy-native').checked,
+            renders: document.getElementById('copy-renders').checked,
+            meshes: document.getElementById('copy-meshes').checked,
+          };
+          selection.labels = [selection.native && 'native art', selection.renders && 'rendered maps', selection.meshes && '3D meshes'].filter(Boolean);
+          if (!selection.labels.length) { setStatus('Select at least one map asset to copy.', true); return null; }
+          return selection;
+        }
+        function copiedNativeInstance(sourceNamespace, instance) {
           const copy = structuredClone(instance);
           copy.reusedFrom = { namespace:sourceNamespace, mapID:instance.mapID };
           delete copy.floorSupport;
+          delete copy.renders;
+          delete copy.mesh;
           if (copy.styled) copy.styled.path = sourceAssetURL(sourceNamespace, copy.styled.path);
-          if (copy.renders) copy.renders.path = sourceAssetURL(sourceNamespace, copy.renders.path);
-          if (copy.mesh) copy.mesh.path = sourceAssetURL(sourceNamespace, copy.mesh.path);
           for (const floor of copy.floors) {
             for (const tile of floor.tiles) tile.path = sourceAssetURL(sourceNamespace, tile.path);
-            if (floor.renders) floor.renders.path = sourceAssetURL(sourceNamespace, floor.renders.path);
-            if (floor.mesh) floor.mesh.path = sourceAssetURL(sourceNamespace, floor.mesh.path);
+            delete floor.preferred2D;
+            delete floor.renders;
+            delete floor.mesh;
           }
           return copy;
         }
-        async function copyMap() {
+        function copiedAssetLayer(sourceNamespace, instance, kind) {
+          const field = kind === 'renders' ? 'renders' : 'mesh';
+          const rootAsset = instance[field] ? structuredClone(instance[field]) : null;
+          if (rootAsset) rootAsset.path = sourceAssetURL(sourceNamespace, rootAsset.path);
+          const floors = instance.floors.flatMap(floor => {
+            if (!floor[field]) return [];
+            const asset = structuredClone(floor[field]);
+            asset.path = sourceAssetURL(sourceNamespace, asset.path);
+            return [{ floor:floor.floor, ...(kind === 'renders' && floor.preferred2D ? {preferred2D:floor.preferred2D} : {}), [field]:asset }];
+          });
+          if (!rootAsset && !floors.length) return null;
+          return { mapID:instance.mapID, name:instance.name, ...(rootAsset ? {[field]:rootAsset} : {}), ...(floors.length ? {floors} : {}) };
+        }
+        function replaceLayerEntry(layer, mapID, entry) {
+          layer.instances = layer.instances.filter(item => item.mapID !== mapID);
+          if (entry) layer.instances.push(entry);
+          layer.instances.sort((left, right) => left.mapID - right.mapID);
+        }
+        function applyMapCopy(draft, sourceNamespace, source, selection) {
+          const mapID = source.mapID;
+          const native = selection.native ? copiedNativeInstance(sourceNamespace, source) : null;
+          const renders = selection.renders ? copiedAssetLayer(sourceNamespace, source, 'renders') : null;
+          const meshes = selection.meshes ? copiedAssetLayer(sourceNamespace, source, 'meshes') : null;
+          if (selection.renders && !renders) throw new Error(sourceNamespace + ' has no published rendered maps for mapID ' + mapID);
+          if (selection.meshes && !meshes) throw new Error(sourceNamespace + ' has no published 3D meshes for mapID ' + mapID);
+          if (selection.native) replaceLayerEntry(draft.reuses, mapID, native);
+          if (selection.renders) replaceLayerEntry(draft.renders, mapID, renders);
+          if (selection.meshes) replaceLayerEntry(draft.meshes, mapID, meshes);
+        }
+        async function publishedMap(namespace, mapID) {
+          const response = await fetch('/internal/api/v1/maps/' + encodeURIComponent(namespace) + '/instances/' + mapID + '/preview');
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error || 'Source map lookup failed');
+          if (!result.published_instance) throw new Error(namespace + ' has no published map for mapID ' + mapID);
+          return result.published_instance;
+        }
+        async function copyMapFrom() {
           if (!state || !selectedID) return;
           syncEditor();
+          const selection = copySelection();
+          if (!selection) return;
           const sourceNamespace = document.getElementById('reuse-namespace').value;
           const targetNamespace = state.namespace;
           const mapID = selectedID;
+          if (!confirm('Copy ' + selection.labels.join(', ') + ' for published mapID ' + mapID + ' from ' + sourceNamespace + ' into the ' + targetNamespace + ' draft? Selected asset types replace their existing draft entries.')) return;
           setBusy(true); setStatus('Loading published map from ' + sourceNamespace + '…');
           try {
-            const response = await fetch('/internal/api/v1/maps/' + encodeURIComponent(sourceNamespace) + '/instances/' + mapID + '/preview');
-            const result = await response.json();
-            if (!response.ok) throw new Error(result.error || 'Source map lookup failed');
-            if (!result.published_instance) throw new Error(sourceNamespace + ' has no published map for mapID ' + mapID);
+            const source = await publishedMap(sourceNamespace, mapID);
             if (!state || state.namespace !== targetNamespace || selectedID !== mapID) return;
-            const copy = copiedMapInstance(sourceNamespace, result.published_instance);
-            state.draft.reuses.instances = state.draft.reuses.instances.filter(item => item.mapID !== mapID);
-            state.draft.reuses.instances.push(copy);
-            state.draft.reuses.instances.sort((left, right) => left.mapID - right.mapID);
-            for (const kind of ['renders','meshes']) state.draft[kind].instances = state.draft[kind].instances.filter(item => item.mapID !== mapID);
+            applyMapCopy(state.draft, sourceNamespace, source, selection);
             dirty = true;
-            selectedFloor = copy.floors[0]?.floor ?? null;
-            setStatus('Copied ' + sourceNamespace + ' map manifest body. Save the draft, preview it, then publish when ready.');
+            selectedFloor = source.floors[0]?.floor ?? null;
+            setStatus('Copied ' + selection.labels.join(', ') + ' from ' + sourceNamespace + '. Save the ' + targetNamespace + ' draft, preview it, then publish when ready.');
             renderList(); renderEditor();
           } catch (error) {
             if (state?.namespace === targetNamespace && selectedID === mapID) setStatus(error.message, true);
+          } finally { setBusy(false); }
+        }
+        async function copyMapTo() {
+          if (!state || !selectedID) return;
+          syncEditor();
+          const selection = copySelection();
+          if (!selection) return;
+          const sourceNamespace = state.namespace;
+          const targetNamespace = document.getElementById('reuse-namespace').value;
+          const mapID = selectedID;
+          if (!confirm('Copy ' + selection.labels.join(', ') + ' for published mapID ' + mapID + ' from ' + sourceNamespace + ' into the ' + targetNamespace + ' draft? This immediately saves the target draft and replaces the selected asset types.')) return;
+          setBusy(true); setStatus('Copying published map assets from ' + sourceNamespace + ' to the ' + targetNamespace + ' draft…');
+          try {
+            const [source, targetResponse] = await Promise.all([
+              publishedMap(sourceNamespace, mapID),
+              fetch('/internal/api/v1/maps/' + encodeURIComponent(targetNamespace)),
+            ]);
+            const target = await targetResponse.json();
+            if (!targetResponse.ok) throw new Error(target.error || 'Target map draft lookup failed');
+            if (!state || state.namespace !== sourceNamespace || selectedID !== mapID) return;
+            applyMapCopy(target.draft, sourceNamespace, source, selection);
+            const response = await fetch('/internal/api/v1/maps/' + encodeURIComponent(targetNamespace) + '/draft', {
+              method:'PUT', headers:{'Content-Type':'application/json'},
+              body:JSON.stringify({version:target.draft_version,reuses:target.draft.reuses.instances,renders:target.draft.renders.instances,meshes:target.draft.meshes.instances}),
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error || 'Target draft save failed');
+            if (state?.namespace === sourceNamespace && selectedID === mapID) setStatus('Copied ' + selection.labels.join(', ') + ' for mapID ' + mapID + ' from ' + sourceNamespace + ' and saved the ' + targetNamespace + ' draft. Switch namespaces to preview or publish it.');
+          } catch (error) {
+            if (state?.namespace === sourceNamespace && selectedID === mapID) setStatus(error.message, true);
           } finally { setBusy(false); }
         }
 

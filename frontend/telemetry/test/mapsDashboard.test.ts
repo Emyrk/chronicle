@@ -32,7 +32,13 @@ test("Map Foundry renders a syntactically valid browser script", async () => {
     const scripts = [...page.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)];
     const browserScript = scripts.at(-1)?.[1];
 
+    assert.match(page, /id="copy-from">Copy from<\/button>/);
+    assert.match(page, /id="copy-to">Copy to<\/button>/);
+    assert.match(page, /id="copy-native"[^>]*checked/);
+    assert.match(page, /id="copy-renders"[^>]*checked/);
+    assert.match(page, /id="copy-meshes"[^>]*checked/);
     assert.ok(browserScript);
+    assert.equal(browserScript.match(/if \(!confirm\('Copy /g)?.length, 2);
     assert.doesNotThrow(() => new Function(browserScript));
   } finally {
     await rm(directory, { recursive: true, force: true });
