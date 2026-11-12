@@ -68,7 +68,7 @@ func TestDifficultyTransitionsThroughWrathWire(t *testing.T) {
 				deaths++
 				if deaths <= 3 {
 					require.Len(t, first.Fights(), deaths)
-					require.Equal(t, []string{"", "heroic", ""}[deaths-1], first.Fights()[deaths-1].Difficulty)
+					require.Equal(t, []string{"heroic", "", ""}[deaths-1], first.Fights()[deaths-1].Difficulty)
 				}
 			}
 		}

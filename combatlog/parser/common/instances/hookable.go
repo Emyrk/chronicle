@@ -465,6 +465,12 @@ func (h *Hookable) UpdateZoneDifficulty(z zone.Zone) {
 	h.CurrentZone.MaxPlayers = z.MaxPlayers
 	h.CurrentZone.DynamicDifficulty = z.DynamicDifficulty
 	h.CurrentZone.SubZone = z.SubZone
+	if h.currentFight != nil && h.currentFight.active() {
+		// Companion zone metadata can arrive after the pull has begun. Apply it
+		// to this fight too, without losing the initial snapshot for resolvers.
+		difficulty := z.DifficultySnapshot()
+		h.currentFight.ZoneDifficulty = &difficulty
+	}
 }
 
 // ShouldStartNewRun reports whether a later entry into the same zone should
@@ -983,7 +989,11 @@ func (h *Hookable) finalizeFight() error {
 		AuthoritativeSuccess: h.currentFight.AuthoritativeSuccess,
 	}
 
-	// Resolve from the start snapshot, never the latest zone metadata.
+	if h.currentFight.ZoneDifficulty != nil {
+		fight.Difficulty = *h.currentFight.ZoneDifficulty
+	}
+	// Encounter-specific resolvers still receive the fight-start snapshot and
+	// take precedence over an in-fight zone update when they override it.
 	for _, hook := range h.hooks {
 		if resolver, ok := hook.(instancehook.DifficultyResolver); ok {
 			if difficulty, override := resolver.ResolveDifficulty(fight.EncounterID, h.currentFight.Difficulty); override {

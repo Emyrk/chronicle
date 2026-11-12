@@ -49,7 +49,7 @@ func TestDifficultySnapshotAndFinalization(t *testing.T) {
 		name, mode string
 		override   bool
 	}{
-		{name: "initial snapshot"},
+		{name: "in-fight zone update"},
 		{name: "future hard mode", mode: "three_lights", override: true},
 		{name: "explicit normal override", override: true},
 	} {
@@ -65,12 +65,14 @@ func TestDifficultySnapshotAndFinalization(t *testing.T) {
 				require.NoError(t, h.Process(&messages.Damage{MessageBase: messages.Base(at), Caster: &player, Target: boss, Amount: fixture.Amount}))
 				require.NotNil(t, h.currentFight)
 				require.Equal(t, initial.DifficultySnapshot(), h.currentFight.Difficulty)
-				// A mid-fight update must not mutate the initial snapshot.
+				// A mid-fight update changes the finalized mode but not the
+				// initial snapshot supplied to encounter-specific resolvers.
 				h.UpdateZoneDifficulty(fixture.Zones[1-i])
+				require.Equal(t, initial.DifficultySnapshot(), h.currentFight.Difficulty)
 				require.NoError(t, h.Process(&messages.Slain{MessageBase: messages.Base(at.Add(time.Second)), Victim: boss}))
 				require.Len(t, h.Fights(), i+1)
-				want := initial.DifficultySnapshot()
-				require.Equal(t, want, hook.initial)
+				want := fixture.Zones[1-i].DifficultySnapshot()
+				require.Equal(t, initial.DifficultySnapshot(), hook.initial)
 				if tc.override {
 					want = tc.mode
 				}
@@ -78,4 +80,25 @@ func TestDifficultySnapshotAndFinalization(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Companion metadata may first appear after combat begins. It applies to that
+// fight, while a zone update after the kill must not rewrite its result.
+func TestFirstZoneMetadataArrivesDuringFight(t *testing.T) {
+	t.Parallel()
+	boss := creatureGUID(finalizeTestBossEntry, 1)
+	hostiles := map[uint32]Identity{}
+	LoadBosses(hostiles, map[uint32]string{finalizeTestBossEntry: "Lord Marrowgar"})
+	h := newFinalizeTestHookableWithHostiles(t, hostiles)
+	at := time.Date(2026, time.October, 30, 21, 14, 13, 0, time.UTC)
+	_, activeBoss := startFinalizeTestFight(t, h, at)
+	require.Equal(t, boss, activeBoss)
+	require.Empty(t, h.currentFight.Difficulty)
+	h.UpdateZoneDifficulty(zone.Zone{DifficultyName: "heroic", MaxPlayers: 25})
+	require.Empty(t, h.currentFight.Difficulty)
+	require.NoError(t, h.Process(&messages.Slain{MessageBase: messages.Base(at.Add(20 * time.Second)), Victim: boss}))
+	require.Len(t, h.Fights(), 1)
+	require.Equal(t, "heroic", h.Fights()[0].Difficulty)
+	h.UpdateZoneDifficulty(zone.Zone{MaxPlayers: 25})
+	require.Equal(t, "heroic", h.Fights()[0].Difficulty)
 }

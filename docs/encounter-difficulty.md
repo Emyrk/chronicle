@@ -14,7 +14,7 @@ Difficulty does not include the raid size or a translated display label. The API
 
 ## Parser lifecycle
 
-Zone metadata establishes the initial mode for subsequent encounters. A fight snapshots this mode at its start; later zone updates do not mutate that snapshot. An optional encounter difficulty resolver may override the snapshot at finalization, including explicitly resolving back to Normal. No Ulduar hard-mode detector is included.
+Zone metadata establishes the mode for subsequent encounters. A fight keeps its start-mode snapshot for encounter-specific resolvers; zone updates received while it is active also update its finalized difficulty (including an explicit return to Normal). Updates after the fight do not change it. An optional encounter difficulty resolver may override the finalized zone mode, including explicitly resolving back to Normal. No Ulduar hard-mode detector is included.
 
 The ICC wire fixture under the parser tests contains synthetic companion zone transitions and scrubbed combat events derived from the supplied log. It does not claim those transitions occurred in the original raid. The original source file is not modified or required to run tests.
 
