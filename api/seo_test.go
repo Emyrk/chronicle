@@ -3,6 +3,7 @@ package api
 import (
 	"compress/gzip"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -239,6 +240,73 @@ func TestSitemapRenderedCache(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(rendered.raw), "https://everlook.chronicleclassic.com/g/refreshed")
 	require.Equal(t, 2, api.sitemapRendered.renders)
+}
+
+// A slow render (including its database lookup) must not hold up cache hits
+// or other tenants. A late render must also not replace a newer publication.
+func TestSitemapRenderDoesNotBlockCache(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitShort)
+	var cache sitemapRenderCache
+	key := sitemapRenderKey{tenant: uuid.New(), host: "one.example"}
+	otherKey := sitemapRenderKey{tenant: uuid.New(), host: "two.example"}
+	initial := &sitemapDynamic{}
+	warm, err := cache.get(key, initial, func() ([]byte, error) { return []byte("initial"), nil })
+	require.NoError(t, err)
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	type result struct {
+		rendered *sitemapRendered
+		err      error
+	}
+	slowDone := make(chan result, 1)
+	slowSource := &sitemapDynamic{}
+	go func() {
+		rendered, err := cache.get(key, slowSource, func() ([]byte, error) {
+			close(started)
+			<-release
+			return []byte("slow"), nil
+		})
+		slowDone <- result{rendered, err}
+	}()
+	// Always release the worker, including on a failed assertion.
+	defer func() {
+		close(release)
+		got := <-slowDone
+		require.NoError(t, got.err)
+		require.Equal(t, "slow", string(got.rendered.raw))
+		cache.mu.Lock()
+		defer cache.mu.Unlock()
+		require.Equal(t, "newer", string(cache.entries[key].raw), "late render must not overwrite newer publication")
+	}()
+	select {
+	case <-started:
+	case <-ctx.Done():
+		t.Fatal("slow render did not start")
+	}
+
+	newer := &sitemapDynamic{}
+	fastDone := make(chan error, 1)
+	go func() {
+		_, err := cache.get(key, initial, func() ([]byte, error) {
+			return nil, fmt.Errorf("cache hit unexpectedly rendered")
+		})
+		if err == nil {
+			_, err = cache.get(otherKey, initial, func() ([]byte, error) { return []byte("other"), nil })
+		}
+		if err == nil {
+			_, err = cache.get(key, newer, func() ([]byte, error) { return []byte("newer"), nil })
+		}
+		fastDone <- err
+	}()
+	select {
+	case err := <-fastDone:
+		require.NoError(t, err)
+	case <-ctx.Done():
+		t.Fatal("cache hit or independent render blocked behind slow render")
+	}
+	require.Equal(t, "initial", string(warm.raw), "published renders stay immutable")
 }
 
 func TestSitemapCanonicalHosts(t *testing.T) {

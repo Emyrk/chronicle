@@ -264,9 +264,9 @@ func (api *API) robotsTXT(w http.ResponseWriter, r *http.Request) {
 // paths and the blog they stay well under the 50,000 URLs (and 50 MB) one
 // sitemap file may hold, so /sitemap.xml needs no sitemap index.
 const (
-	sitemapGuildLimit     = 5000
-	sitemapCharacterLimit = 10000
-	sitemapInstanceLimit  = 10000
+	sitemapGuildLimit     = 1000
+	sitemapCharacterLimit = 5000
+	sitemapInstanceLimit  = 1000
 )
 
 type sitemapURLSet struct {
@@ -311,13 +311,16 @@ type sitemapRenderCache struct {
 }
 
 // get returns the cached render for key if it was built from source, or
-// calls render and caches the result. The lock is held while rendering so
-// concurrent requests for a stale entry render once.
+// calls render and caches the result. Rendering may query the database for
+// blog flavor, so neither rendering nor compression may hold the cache lock.
+// Concurrent misses may render independently; publication below keeps a slow
+// render from overwriting an entry another request has already replaced.
 func (c *sitemapRenderCache) get(key sitemapRenderKey, source *sitemapDynamic, render func() ([]byte, error)) (*sitemapRendered, error) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	if e, ok := c.entries[key]; ok && e.source == source {
-		return e, nil
+	previous := c.entries[key]
+	c.mu.Unlock()
+	if previous != nil && previous.source == source {
+		return previous, nil
 	}
 	raw, err := render()
 	if err != nil {
@@ -335,6 +338,16 @@ func (c *sitemapRenderCache) get(key sitemapRenderKey, source *sitemapDynamic, r
 		return nil, err
 	}
 	e := &sitemapRendered{source: source, raw: raw, gz: buf.Bytes()}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if current := c.entries[key]; current != previous {
+		if current != nil && current.source == source {
+			return current, nil
+		}
+		// Another source was published while we rendered. Serve this request
+		// without replacing it; the next request checks the source as usual.
+		return e, nil
+	}
 	if c.entries == nil {
 		c.entries = make(map[sitemapRenderKey]*sitemapRendered)
 	}
