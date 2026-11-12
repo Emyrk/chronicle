@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
@@ -8,8 +9,10 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/frontend"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/google/uuid"
@@ -245,6 +248,15 @@ func (api *API) robotsTXT(w http.ResponseWriter, r *http.Request) {
 	_, _ = fmt.Fprintf(w, "User-agent: *\nDisallow: /api/\nDisallow: /admin/\nDisallow: /account/\nDisallow: /settings/\nDisallow: /debug/\nDisallow: /upload\nDisallow: /servers/\nSitemap: %s/sitemap.xml\n", strings.TrimSuffix(canonicalRequestURL(api, r), "/robots.txt"))
 }
 
+// Caps on the sitemap's database-backed URLs, newest first. With the static
+// paths and the blog they stay well under the 50,000 URLs (and 50 MB) one
+// sitemap file may hold, so /sitemap.xml needs no sitemap index.
+const (
+	sitemapGuildLimit     = 5000
+	sitemapCharacterLimit = 10000
+	sitemapInstanceLimit  = 10000
+)
+
 type sitemapURLSet struct {
 	XMLName xml.Name     `xml:"urlset"`
 	XMLNS   string       `xml:"xmlns,attr"`
@@ -253,6 +265,7 @@ type sitemapURLSet struct {
 
 type sitemapURL struct {
 	Location string `xml:"loc"`
+	LastMod  string `xml:"lastmod,omitempty"`
 }
 
 func (api *API) sitemapXML(w http.ResponseWriter, r *http.Request) {
@@ -260,10 +273,25 @@ func (api *API) sitemapXML(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	ctx := r.Context()
 	base := strings.TrimSuffix(canonicalRequestURL(api, r), "/sitemap.xml")
 	set := sitemapURLSet{XMLNS: "http://www.sitemaps.org/schemas/sitemap/0.9"}
 	for _, path := range sitemapPaths {
 		set.URLs = append(set.URLs, sitemapURL{Location: base + path})
+	}
+	for _, u := range api.sitemapBlogURLs(r) {
+		set.URLs = append(set.URLs, sitemapURL{Location: base + u.Location, LastMod: u.LastMod})
+	}
+	if api.Opts.Zed != nil {
+		// Cached per tenant, so crawlers re-reading the sitemap never reach the
+		// database more than once an hour per tenant.
+		dynamic, err := api.sitemapCache.Load(ctx, api.Opts.Logger, api.loadSitemapURLs)
+		if err != nil && api.Opts.Logger != nil {
+			api.Opts.Logger.WarnContext(ctx, "load sitemap urls", "error", err)
+		}
+		for _, u := range dynamic {
+			set.URLs = append(set.URLs, sitemapURL{Location: base + u.Location, LastMod: u.LastMod})
+		}
 	}
 	data, err := xml.Marshal(set)
 	if err != nil {
@@ -273,6 +301,79 @@ func (api *API) sitemapXML(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
 	w.Header().Set("Cache-Control", "public, max-age=3600")
 	_, _ = w.Write(append([]byte(xml.Header), data...))
+}
+
+// sitemapBlogURLs lists the blog posts the request's site serves, by the same
+// flavor rule as the blog route. Locations are paths.
+func (api *API) sitemapBlogURLs(r *http.Request) []sitemapURL {
+	siteFS := api.sitemapBlogFS
+	if siteFS == nil {
+		siteFS = frontend.FS()
+	}
+	posts, err := frontend.BlogPosts(siteFS)
+	if err != nil {
+		if api.Opts.Logger != nil {
+			api.Opts.Logger.WarnContext(r.Context(), "read blog manifest for sitemap", "error", err)
+		}
+		return nil
+	}
+	flavor := api.blogFlavorResolver(r)
+	urls := make([]sitemapURL, 0, len(posts))
+	for _, post := range posts {
+		if post.AllowedFor(flavor) {
+			urls = append(urls, sitemapURL{Location: post.Path, LastMod: post.PublishedAt})
+		}
+	}
+	return urls
+}
+
+// loadSitemapURLs reads the tenant's guild, character and raid pages. ctx
+// carries the tenant, which RLS uses to scope every query. Locations are paths.
+func (api *API) loadSitemapURLs(ctx context.Context) ([]sitemapURL, error) {
+	tenantID := uuid.NullUUID{}
+	if id := servicetenant.TenantIDFromContext(ctx); id != uuid.Nil {
+		tenantID = uuid.NullUUID{UUID: id, Valid: true}
+	}
+	db := api.Opts.Zed
+
+	guilds, err := db.ListSitemapGuilds(ctx, database.ListSitemapGuildsParams{TenantID: tenantID, ResultLimit: sitemapGuildLimit})
+	if err != nil {
+		return nil, fmt.Errorf("list sitemap guilds: %w", err)
+	}
+	characters, err := db.ListSitemapCharacters(ctx, database.ListSitemapCharactersParams{TenantID: tenantID, ResultLimit: sitemapCharacterLimit})
+	if err != nil {
+		return nil, fmt.Errorf("list sitemap characters: %w", err)
+	}
+	instances, err := db.ListSitemapInstances(ctx, database.ListSitemapInstancesParams{TenantID: tenantID, ResultLimit: sitemapInstanceLimit})
+	if err != nil {
+		return nil, fmt.Errorf("list sitemap instances: %w", err)
+	}
+
+	urls := make([]sitemapURL, 0, len(guilds)+len(characters)+len(instances))
+	for _, g := range guilds {
+		urls = append(urls, sitemapURL{Location: "/g/" + g.ID.String(), LastMod: sitemapLastMod(g.PageUpdatedAt)})
+	}
+	for _, c := range characters {
+		urls = append(urls, sitemapURL{
+			Location: "/armory/" + url.PathEscape(c.RealmName) + "/" + c.ID.String(),
+			LastMod:  sitemapLastMod(c.UpdatedAt),
+		})
+	}
+	for _, inst := range instances {
+		identifier := inst.ID.String()
+		if inst.HashedSlug.Valid && inst.HashedSlug.String != "" {
+			identifier = inst.HashedSlug.String
+		}
+		urls = append(urls, sitemapURL{Location: "/instances/" + url.PathEscape(identifier), LastMod: sitemapLastMod(inst.UpdatedAt)})
+	}
+	return urls, nil
+}
+
+func sitemapLastMod(t pgtype.Timestamptz) string {
+	if !t.Valid {
+		return ""
+	}
+	return t.Time.UTC().Format(time.RFC3339)
 }
 
 func (api *API) requestSiteDiscoverable(r *http.Request) bool {

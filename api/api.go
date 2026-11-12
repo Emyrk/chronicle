@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"net/http/httputil"
@@ -189,6 +190,10 @@ type API struct {
 	censusCache    tenantcache.Cache[[]database.CensusPlayerCountsRow]
 	discoveryStats discoveryStatsCache
 	landing        landingFeaturedCache
+	// sitemapCache holds each tenant's guild, character and raid sitemap URLs.
+	sitemapCache tenantcache.Cache[[]sitemapURL]
+	// sitemapBlogFS overrides the frontend build the sitemap reads blog posts from (tests).
+	sitemapBlogFS fs.FS
 	// landingMeshMaps overrides datasetMeshMaps (tests).
 	landingMeshMaps func(ctx context.Context, realmID uuid.UUID) (map[int32]bool, error)
 }
