@@ -7,16 +7,10 @@ import {
   EncounterDifficultyMark,
   EncounterDifficultySummary,
   EncounterDifficultyTooltipBody,
-  HardModeList,
 } from "./EncounterDifficultyMark";
 import type { DifficultyEncounter } from "./encounterDifficulty";
 
-/**
- * Per-boss difficulty: ICC toggles Heroic per boss, so one run can mix Normal
- * and Heroic kills; Ulduar bosses each have a hard mode, some tiered (Freya's
- * elders, Yogg-Saron's keepers, Leviathan's towers). Rows mirror the instance
- * sidebar (267px, same classes).
- */
+/** Canonical per-boss difficulties in the instance sidebar and header. */
 
 interface Kill extends DifficultyEncounter {
   duration: string;
@@ -25,12 +19,11 @@ interface Kill extends DifficultyEncounter {
 const kill = (
   name: string,
   duration: string,
-  difficulty?: DifficultyEncounter["difficulty"],
+  difficulty: DifficultyEncounter["difficulty"] = "",
   kill_type: KillType = "clean",
 ): Kill => ({ name, duration, boss: true, kill_type, difficulty });
 
-const HEROIC = { mode: "heroic" } as const;
-const HM = { mode: "hard_mode" } as const;
+const HEROIC = "heroic";
 
 const ICC_25_MIXED: Kill[] = [
   kill("Lord Marrowgar", "2:41", HEROIC),
@@ -46,22 +39,6 @@ const ICC_25_MIXED: Kill[] = [
   kill("Valithria Dreamwalker", "5:30"),
   kill("Sindragosa", "6:20"),
   kill("The Lich King", "11:02"),
-];
-
-const ULDUAR_25: Kill[] = [
-  kill("Flame Leviathan", "3:55", { mode: "hard_mode", tier: 4 }),
-  kill("Ignis the Furnace Master", "2:48"),
-  kill("Razorscale", "3:12"),
-  kill("XT-002 Deconstructor", "4:30", HM),
-  kill("Assembly of Iron", "3:40", HM),
-  kill("Kologarn", "1:58"),
-  kill("Auriaya", "2:20"),
-  kill("Hodir", "2:41", HM),
-  kill("Thorim", "3:05", HM),
-  kill("Freya", "4:50", { mode: "hard_mode", tier: 2 }),
-  kill("Mimiron", "8:12"),
-  kill("General Vezax", "4:15"),
-  kill("Yogg-Saron", "9:40", { mode: "hard_mode", tier: 1 }),
 ];
 
 function SidebarRow({ kill, selected }: { kill: Kill; selected: boolean }) {
@@ -80,7 +57,7 @@ function SidebarRow({ kill, selected }: { kill: Kill; selected: boolean }) {
         ? <Skull className="h-4 w-4 shrink-0 text-red-500" />
         : <CheckCircle className="h-4 w-4 shrink-0 text-green-500" />}
       <span className={cn("truncate flex-1", selected && "font-semibold")}>{kill.name}</span>
-      <EncounterDifficultyMark encounterName={kill.name} difficulty={kill.difficulty} />
+      <EncounterDifficultyMark difficulty={kill.difficulty} />
       <span className={cn("text-xs shrink-0 font-mono", selected ? "opacity-70" : "text-muted-foreground")}>
         {kill.duration}
       </span>
@@ -88,14 +65,14 @@ function SidebarRow({ kill, selected }: { kill: Kill; selected: boolean }) {
   );
 }
 
-function RaidPreview({ kills, raid, instanceHeroic = false }: { kills: Kill[]; raid: string; instanceHeroic?: boolean }) {
+function RaidPreview({ kills, raid, mixedDifficulty = false }: { kills: Kill[]; raid: string; mixedDifficulty?: boolean }) {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
         <h1 className="text-xl font-bold">{raid}</h1>
         <div className="flex items-center gap-1.5">
           <span className="text-sm font-medium text-muted-foreground">25 Player</span>
-          <EncounterDifficultySummary encounters={kills} instanceHeroic={instanceHeroic} />
+          <EncounterDifficultySummary encounters={kills} mixedDifficulty={mixedDifficulty} />
         </div>
       </div>
       <div className="w-[251px] space-y-1">
@@ -126,7 +103,7 @@ type Story = StoryObj<typeof meta>;
 
 /** ICC 25 with Heroic toggled off from Rotface on, then back on for the Blood Wing. */
 export const ICC25Mixed: Story = {
-  args: { kills: ICC_25_MIXED, raid: "Icecrown Citadel" },
+  args: { kills: ICC_25_MIXED, raid: "Icecrown Citadel", mixedDifficulty: true },
 };
 
 /** Every kill Heroic: the header keeps the full Heroic badge. */
@@ -134,30 +111,22 @@ export const ICC25AllHeroic: Story = {
   args: { kills: ICC_25_MIXED.map((k) => ({ ...k, difficulty: HEROIC })), raid: "Icecrown Citadel" },
 };
 
-/** Ulduar 25 hard modes: plain ("HM") and tiered ("4 towers", "2 elders", "1 keeper"). */
-export const Ulduar25HardModes: Story = {
-  args: { kills: ULDUAR_25, raid: "Ulduar" },
+/** Illustrative future identifiers, not a detector or supported game-mode catalog. */
+export const FutureVariants: Story = {
+  args: { kills: [kill("Boss A", "2:41", "challenge"), kill("Boss B", "3:10", ""), kill("Boss C", "1:20", "mythic_plus")], raid: "Example raid", mixedDifficulty: true },
 };
 
-/** No per-boss data yet: the header falls back to the instance-level Heroic flag. */
-export const LegacyInstanceHeroic: Story = {
-  args: { kills: ICC_25_MIXED.map((k) => ({ ...k, difficulty: undefined })), raid: "Icecrown Citadel", instanceHeroic: true },
+export const NormalKillsHeroicWipe: Story = {
+  args: { kills: [kill("Boss A", "2:41", ""), kill("Boss B", "1:10", "heroic", "wipe")], raid: "Mixed attempts", mixedDifficulty: true },
 };
 
-/** Every hard mode tooltip, and the header's list, open at once for copy review. */
-export const UlduarTooltips: Story = {
-  args: { kills: ULDUAR_25, raid: "Ulduar" },
-  render: ({ kills }) => {
-    const done = kills.filter((k) => k.kill_type !== "wipe");
-    return (
-      <div className="flex flex-wrap items-start gap-4">
-        <div className="rounded-md border border-white/10 bg-zinc-950 p-3 text-zinc-100"><HardModeList kills={done} /></div>
-        {done.flatMap((k) => k.difficulty ? [
-          <div key={k.name} className="rounded-md border border-white/10 bg-zinc-950 p-3 text-zinc-100">
-            <EncounterDifficultyTooltipBody encounterName={k.name} difficulty={k.difficulty} />
-          </div>,
-        ] : [])}
-      </div>
-    );
-  },
+export const AllNormal: Story = {
+  args: { kills: ICC_25_MIXED.map((k) => ({ ...k, difficulty: "" })), raid: "Normal raid" },
+};
+
+export const TooltipGallery: Story = {
+  args: { kills: [], raid: "Difficulty tooltips" },
+  render: () => <div className="flex flex-wrap gap-4">{["", "heroic", "challenge", "mythic_plus"].map((difficulty) => (
+    <div key={difficulty} className="rounded-md border border-white/10 bg-zinc-950 p-3 text-zinc-100"><EncounterDifficultyTooltipBody difficulty={difficulty} /></div>
+  ))}</div>,
 };

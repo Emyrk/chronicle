@@ -17,6 +17,7 @@ import { shouldLoadPublicRankingData } from "../panelAvailability";
 import { ratingEvidenceProcessor, type RatingEvidenceResult } from "./ratingEvidence.processor";
 import {
   countRatingEvidence,
+  formatDifficultyCohort,
   formatDurationMs,
   formatMetricName,
   formatMetricValue,
@@ -186,7 +187,7 @@ function PlayerObservationTable({ context, rows }: { context: PanelContext; rows
     <EvidenceTable minWidth="min-w-[720px]" headers={["Encounter", "Player", "Cohort", "Metric", "Value"]}>
       {rows.map((row, index) => (
         <tr key={`${row.source_ranking_id}-${index}`} className="border-b border-border/60 last:border-0 hover:bg-muted/40">
-          <td className="whitespace-nowrap px-2 py-1.5 font-medium">{row.encounter_name}</td>
+          <td className="whitespace-nowrap px-2 py-1.5 font-medium">{row.encounter_name}<span className="ml-2 text-muted-foreground">{formatDifficultyCohort(row)}</span></td>
           <td className="px-2 py-1.5">
             <PlayerName context={context} guid={row.player_guid} fallback={row.player_name} />
           </td>
@@ -204,7 +205,7 @@ function PlayerRenownTable({ context, rows }: { context: PanelContext; rows: rea
     <EvidenceTable minWidth="min-w-[480px]" headers={["Encounter", "Player", "Credit"]}>
       {rows.map((row, index) => (
         <tr key={`${row.source_encounter_id}-${row.player_guid}-${index}`} className="border-b border-border/60 last:border-0 hover:bg-muted/40">
-          <td className="whitespace-nowrap px-2 py-1.5 font-medium">{row.encounter_name}</td>
+          <td className="whitespace-nowrap px-2 py-1.5 font-medium">{row.encounter_name}<span className="ml-2 text-muted-foreground">{formatDifficultyCohort(row)}</span></td>
           <td className="px-2 py-1.5"><PlayerName context={context} guid={row.player_guid} fallback={row.player_name} /></td>
           <td className="px-2 py-1.5 text-right text-muted-foreground">1 kill</td>
         </tr>
@@ -245,10 +246,11 @@ function GuildEvidence({
 
 function GuildClearTable({ context, rows }: { context: PanelContext; rows: readonly InstanceRatingGuildClearObservation[] }) {
   return (
-    <EvidenceTable minWidth="min-w-[420px]" headers={["Guild", "Clear time"]}>
+    <EvidenceTable minWidth="min-w-[420px]" headers={["Guild", "Difficulty", "Clear time"]}>
       {rows.map((row, index) => (
         <tr key={`${row.source_time_parse_score_id}-${index}`} className="border-b border-border/60 last:border-0 hover:bg-muted/40">
           <td className="px-2 py-1.5 font-medium">{guildName(context, row.guild_name)}</td>
+          <td className="px-2 py-1.5 text-muted-foreground">{formatDifficultyCohort(row)}</td>
           <td className="px-2 py-1.5 text-right font-mono tabular-nums">{formatDurationMs(row.duration_ms)}</td>
         </tr>
       ))}
@@ -261,7 +263,7 @@ function GuildBossTable({ context, rows }: { context: PanelContext; rows: readon
     <EvidenceTable minWidth="min-w-[560px]" headers={["Encounter", "Guild", "Boss time"]}>
       {rows.map((row, index) => (
         <tr key={`${row.source_time_parse_score_id}-${index}`} className="border-b border-border/60 last:border-0 hover:bg-muted/40">
-          <td className="whitespace-nowrap px-2 py-1.5 font-medium">{row.encounter_name}</td>
+          <td className="whitespace-nowrap px-2 py-1.5 font-medium">{row.encounter_name}<span className="ml-2 text-muted-foreground">{formatDifficultyCohort(row)}</span></td>
           <td className="px-2 py-1.5">{guildName(context, row.guild_name)}</td>
           <td className="px-2 py-1.5 text-right font-mono tabular-nums">{formatDurationMs(row.duration_ms)}</td>
         </tr>
@@ -275,7 +277,7 @@ function GuildRenownTable({ context, rows }: { context: PanelContext; rows: read
     <EvidenceTable minWidth="min-w-[480px]" headers={["Encounter", "Guild", "Credit"]}>
       {rows.map((row, index) => (
         <tr key={`${row.source_encounter_id}-${row.guild_id}-${index}`} className="border-b border-border/60 last:border-0 hover:bg-muted/40">
-          <td className="whitespace-nowrap px-2 py-1.5 font-medium">{row.encounter_name}</td>
+          <td className="whitespace-nowrap px-2 py-1.5 font-medium">{row.encounter_name}<span className="ml-2 text-muted-foreground">{formatDifficultyCohort(row)}</span></td>
           <td className="px-2 py-1.5">{guildName(context, row.guild_name)}</td>
           <td className="px-2 py-1.5 text-right text-muted-foreground">1 kill</td>
         </tr>

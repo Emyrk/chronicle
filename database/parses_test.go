@@ -345,7 +345,7 @@ func TestRankingsLeaderboardUsesSingleDuplicateInstance(t *testing.T) {
 	for _, instanceID := range []uuid.UUID{canonicalID, duplicateID, incompleteID, tiedID} {
 		_, err = store.InsertInstance(ctx, database.InsertInstanceParams{
 			ID: instanceID, RealmID: realmID, LogGroupID: logGroupID,
-			Name: "Molten Core", Capabilities: []string{},
+			Name: "Molten Core", MaxPlayers: 40, Capabilities: []string{},
 		})
 		require.NoError(t, err)
 	}
@@ -521,6 +521,8 @@ func TestRankingsLeaderboardUsesSingleDuplicateInstance(t *testing.T) {
 	// Turtle/vanilla stores zero as the cohort's actual raid size.
 	_, err = pool.Exec(ctx, "UPDATE encounter_dps_rankings SET max_players = 0 WHERE instance_name = 'Molten Core'")
 	require.NoError(t, err)
+	_, err = pool.Exec(ctx, "UPDATE log_instances SET max_players = 0 WHERE name = 'Molten Core'")
+	require.NoError(t, err)
 	exact.FilterMaxPlayers = 0
 	zeroRows, err = store.RankingsLeaderboardNoJIT(ctx, exact)
 	require.NoError(t, err)
@@ -563,7 +565,7 @@ func TestRankingsBoxPlotUsesSingleDuplicateInstance(t *testing.T) {
 	} {
 		_, err = store.InsertInstance(ctx, database.InsertInstanceParams{
 			ID: instance.id, RealmID: realmID, LogGroupID: logGroupID,
-			Name: instance.name, Capabilities: []string{},
+			Name: instance.name, MaxPlayers: 40, Capabilities: []string{},
 		})
 		require.NoError(t, err)
 	}

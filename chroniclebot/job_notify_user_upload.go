@@ -196,7 +196,7 @@ func (w *WorkerNotifyUploadProcessed) Work(ctx context.Context, job *river.Job[A
 		if !instance.Category.Valid {
 			continue
 		}
-		runID := effectiveRunID(instance)
+		runID := effectiveRunID(database.LogInstance(instance))
 		if _, ok := seenRuns[runID]; ok {
 			continue
 		}

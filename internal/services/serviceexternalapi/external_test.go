@@ -46,10 +46,10 @@ type fakeExternalAPIStore struct {
 	phasesCalled          bool
 	datasetResolution     database.ResolveDatasetByRealmRow
 	datasetResolutionErr  error
-	rankingRecords        []database.EncounterDpsRanking
+	rankingRecords        []database.EncounterDpsRankingsResolved
 	rankingRecordsErr     error
 	rankingInstanceID     uuid.UUID
-	parseScores           []database.ParseScoreResult
+	parseScores           []database.ParseScoreResultsResolved
 	parseScoresErr        error
 	parseScoresInstanceID uuid.UUID
 	event                 database.LogInstanceEvent
@@ -121,11 +121,11 @@ func (f *fakeExternalAPIStore) GetEncounterPhasesByInstanceID(context.Context, u
 func (f *fakeExternalAPIStore) ResolveDatasetByRealm(context.Context, uuid.UUID) (database.ResolveDatasetByRealmRow, error) {
 	return f.datasetResolution, f.datasetResolutionErr
 }
-func (f *fakeExternalAPIStore) InstanceRankingRecords(_ context.Context, instanceID uuid.UUID) ([]database.EncounterDpsRanking, error) {
+func (f *fakeExternalAPIStore) InstanceRankingRecords(_ context.Context, instanceID uuid.UUID) ([]database.EncounterDpsRankingsResolved, error) {
 	f.rankingInstanceID = instanceID
 	return f.rankingRecords, f.rankingRecordsErr
 }
-func (f *fakeExternalAPIStore) GetParseScoreResultsForInstance(_ context.Context, instanceID uuid.UUID) ([]database.ParseScoreResult, error) {
+func (f *fakeExternalAPIStore) GetParseScoreResultsForInstance(_ context.Context, instanceID uuid.UUID) ([]database.ParseScoreResultsResolved, error) {
 	f.parseScoresInstanceID = instanceID
 	return f.parseScores, f.parseScoresErr
 }

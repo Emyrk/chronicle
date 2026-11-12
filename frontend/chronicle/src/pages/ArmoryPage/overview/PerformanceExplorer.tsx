@@ -150,7 +150,7 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
     && item.difficultyName === state.difficultyName
     && item.maxPlayers === state.maxPlayers
   ))
-    ?? variants.find((item) => item.instanceName === state.instanceName && (!state.difficultyName || item.difficultyName === state.difficultyName))
+    ?? variants.find((item) => item.instanceName === state.instanceName && item.difficultyName === state.difficultyName)
     ?? variants.find((item) => item.instanceName === state.instanceName)
     ?? variants[0];
   const encounterSections = progressionBossesQuery.isLoading

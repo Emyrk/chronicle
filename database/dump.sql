@@ -427,12 +427,12 @@ CREATE TABLE log_group_artifacts (
 );
 
 CREATE VIEW user_storage_limits AS
- SELECT data_grants.user_id,
-    sum(data_grants.storage_bytes) AS max_storage_bytes,
-    max(data_grants.created_at) AS updated_at
+ SELECT user_id,
+    sum(storage_bytes) AS max_storage_bytes,
+    max(created_at) AS updated_at
    FROM data_grants
-  WHERE ((data_grants.expires_at IS NULL) OR (data_grants.expires_at > now()))
-  GROUP BY data_grants.user_id;
+  WHERE ((expires_at IS NULL) OR (expires_at > now()))
+  GROUP BY user_id;
 
 CREATE TABLE users (
     id uuid NOT NULL,
@@ -1067,6 +1067,122 @@ CREATE TABLE encounter_dps_rankings (
 
 ALTER TABLE ONLY encounter_dps_rankings FORCE ROW LEVEL SECURITY;
 
+CREATE TABLE log_instance_encounters (
+    id uuid NOT NULL,
+    instance_id uuid NOT NULL,
+    name text NOT NULL,
+    remaining wow_guid[] NOT NULL,
+    boss boolean NOT NULL,
+    start_time timestamp with time zone NOT NULL,
+    end_time timestamp with time zone NOT NULL,
+    kill_type kill_type NOT NULL,
+    map_id integer DEFAULT 0 NOT NULL,
+    ranking_start_offset_ms bigint,
+    ranking_end_offset_ms bigint,
+    invalidated_at timestamp with time zone,
+    invalid_reason text DEFAULT ''::text NOT NULL,
+    difficulty text
+);
+
+CREATE TABLE log_instances (
+    id uuid NOT NULL,
+    realm_id uuid NOT NULL,
+    log_group_id uuid NOT NULL,
+    name text NOT NULL,
+    hashed_slug text,
+    guild_id uuid,
+    start_time timestamp with time zone,
+    end_time timestamp with time zone,
+    capabilities text[] DEFAULT '{}'::text[] NOT NULL,
+    versions jsonb DEFAULT '{}'::jsonb NOT NULL,
+    recorder_name text DEFAULT ''::text NOT NULL,
+    recorder_guid text DEFAULT ''::text NOT NULL,
+    parser_version text DEFAULT '0.0'::text NOT NULL,
+    duplicate_group_id uuid,
+    difficulty_name text DEFAULT ''::text NOT NULL,
+    max_players integer DEFAULT 0 NOT NULL,
+    dynamic_difficulty integer DEFAULT 0 NOT NULL,
+    vehicle_control_intervals jsonb DEFAULT '{}'::jsonb NOT NULL,
+    category text,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    invalidated_at timestamp with time zone,
+    invalid_reason text DEFAULT ''::text NOT NULL,
+    mixed_difficulty boolean DEFAULT false NOT NULL,
+    difficulty_normalized boolean DEFAULT false NOT NULL,
+    CONSTRAINT log_instances_category_check CHECK ((category = ANY (ARRAY['raid'::text, 'dungeon'::text])))
+);
+
+COMMENT ON COLUMN log_instances.guild_id IS 'If set, that means it was a guild run.';
+
+CREATE VIEW log_instances_resolved AS
+ SELECT id,
+    realm_id,
+    log_group_id,
+    name,
+    hashed_slug,
+    guild_id,
+    start_time,
+    end_time,
+    capabilities,
+    versions,
+    recorder_name,
+    recorder_guid,
+    parser_version,
+    duplicate_group_id,
+        CASE
+            WHEN difficulty_normalized THEN difficulty_name
+            WHEN ((dynamic_difficulty > 0) OR (difficulty_name ~~* '%heroic%'::text)) THEN 'heroic'::text
+            ELSE ''::text
+        END AS difficulty_name,
+    max_players,
+    dynamic_difficulty,
+    vehicle_control_intervals,
+    category,
+    updated_at,
+    invalidated_at,
+    invalid_reason,
+    mixed_difficulty,
+    difficulty_normalized
+   FROM log_instances li;
+
+CREATE VIEW encounter_dps_rankings_resolved WITH (security_invoker='true') AS
+ SELECT ranking.id,
+    ranking.encounter_id,
+    ranking.instance_id,
+    ranking.encounter_name,
+    ranking.instance_name,
+    ranking.player_guid,
+    ranking.player_name,
+    ranking.player_class,
+    ranking.player_spec,
+    ranking.player_role,
+    ranking.player_level,
+    ranking.talent_build_id,
+    COALESCE(encounter.difficulty, instance.difficulty_name) AS difficulty_name,
+    (instance.max_players)::smallint AS max_players,
+    ranking.realm_id,
+    ranking.realm_name,
+    ranking.guild_id,
+    ranking.guild_name,
+    ranking.damage_done,
+    ranking.duration_secs,
+    ranking.dps,
+    ranking.avg_ilvl,
+    ranking.log_hashed_slug,
+    ranking.killed_at,
+    ranking.created_at,
+    ranking.healing_done,
+    ranking.absorbed_done,
+    ranking.hps,
+    ranking.player_sub_spec,
+    ranking.player_deaths,
+    ranking.alive_percentage,
+    ranking.unranked_damage_done
+   FROM ((public.encounter_dps_rankings ranking
+     JOIN log_instances_resolved instance ON ((instance.id = ranking.instance_id)))
+     LEFT JOIN log_instance_encounters encounter ON ((encounter.id = ranking.encounter_id)))
+  WHERE ((NOT instance.difficulty_normalized) OR ((ranking.difficulty_name = COALESCE(encounter.difficulty, instance.difficulty_name)) AND (ranking.max_players = instance.max_players)));
+
 CREATE TABLE external_character_link_syncs (
     user_id uuid NOT NULL,
     source text NOT NULL,
@@ -1298,14 +1414,14 @@ CREATE TABLE instance_speedruns (
 );
 
 CREATE VIEW guild_speedrun_ranks AS
- SELECT instance_speedruns.instance_id,
-    instance_speedruns.instance_name,
-    instance_speedruns.realm_id,
-    instance_speedruns.guild_id,
-    instance_speedruns.duration_ms,
-    rank() OVER (PARTITION BY instance_speedruns.guild_id, instance_speedruns.instance_name, instance_speedruns.realm_id ORDER BY instance_speedruns.duration_ms) AS guild_rank
+ SELECT instance_id,
+    instance_name,
+    realm_id,
+    guild_id,
+    duration_ms,
+    rank() OVER (PARTITION BY guild_id, instance_name, realm_id ORDER BY duration_ms) AS guild_rank
    FROM instance_speedruns
-  WHERE ((instance_speedruns.qualified = true) AND (instance_speedruns.guild_id IS NOT NULL));
+  WHERE ((qualified = true) AND (guild_id IS NOT NULL));
 
 CREATE TABLE guilds (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
@@ -2276,6 +2392,11 @@ CREATE TABLE leaderboard_variant_renown (
     CONSTRAINT leaderboard_variant_renown_points_check CHECK (((points >= (0)::double precision) AND (points < 'Infinity'::double precision)))
 );
 
+CREATE TABLE log_instance_difficulties (
+    instance_id uuid NOT NULL,
+    difficulty text NOT NULL
+);
+
 CREATE TABLE log_instance_encounter_damage_unit_summary (
     encounter_id uuid NOT NULL,
     unit_guid wow_guid NOT NULL,
@@ -2307,22 +2428,6 @@ CREATE TABLE log_instance_encounter_phases (
     CONSTRAINT log_instance_encounter_phases_check CHECK ((end_offset_ms > start_offset_ms)),
     CONSTRAINT log_instance_encounter_phases_phase_order_check CHECK ((phase_order >= 0)),
     CONSTRAINT log_instance_encounter_phases_start_offset_ms_check CHECK ((start_offset_ms >= 0))
-);
-
-CREATE TABLE log_instance_encounters (
-    id uuid NOT NULL,
-    instance_id uuid NOT NULL,
-    name text NOT NULL,
-    remaining wow_guid[] NOT NULL,
-    boss boolean NOT NULL,
-    start_time timestamp with time zone NOT NULL,
-    end_time timestamp with time zone NOT NULL,
-    kill_type kill_type NOT NULL,
-    map_id integer DEFAULT 0 NOT NULL,
-    ranking_start_offset_ms bigint,
-    ranking_end_offset_ms bigint,
-    invalidated_at timestamp with time zone,
-    invalid_reason text DEFAULT ''::text NOT NULL
 );
 
 CREATE TABLE log_instance_events (
@@ -2373,34 +2478,6 @@ CREATE TABLE log_instance_youtube_timestamped (
     instance_slug text,
     id uuid DEFAULT gen_random_uuid() NOT NULL
 );
-
-CREATE TABLE log_instances (
-    id uuid NOT NULL,
-    realm_id uuid NOT NULL,
-    log_group_id uuid NOT NULL,
-    name text NOT NULL,
-    hashed_slug text,
-    guild_id uuid,
-    start_time timestamp with time zone,
-    end_time timestamp with time zone,
-    capabilities text[] DEFAULT '{}'::text[] NOT NULL,
-    versions jsonb DEFAULT '{}'::jsonb NOT NULL,
-    recorder_name text DEFAULT ''::text NOT NULL,
-    recorder_guid text DEFAULT ''::text NOT NULL,
-    parser_version text DEFAULT '0.0'::text NOT NULL,
-    duplicate_group_id uuid,
-    difficulty_name text DEFAULT ''::text NOT NULL,
-    max_players integer DEFAULT 0 NOT NULL,
-    dynamic_difficulty integer DEFAULT 0 NOT NULL,
-    vehicle_control_intervals jsonb DEFAULT '{}'::jsonb NOT NULL,
-    category text,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    invalidated_at timestamp with time zone,
-    invalid_reason text DEFAULT ''::text NOT NULL,
-    CONSTRAINT log_instances_category_check CHECK ((category = ANY (ARRAY['raid'::text, 'dungeon'::text])))
-);
-
-COMMENT ON COLUMN log_instances.guild_id IS 'If set, that means it was a guild run.';
 
 CREATE TABLE parsed_log_group (
     id uuid NOT NULL,
@@ -2479,6 +2556,7 @@ CREATE VIEW log_instances_guild AS
     li.difficulty_name,
     li.max_players,
     li.dynamic_difficulty,
+    li.mixed_difficulty,
     li.vehicle_control_intervals,
     li.invalidated_at,
     li.invalid_reason,
@@ -2493,7 +2571,7 @@ CREATE VIEW log_instances_guild AS
     wlg.format,
     wlg.flavor,
     wlg.upload_source
-   FROM ((((((public.log_instances li
+   FROM ((((((public.log_instances_resolved li
      JOIN wow_log_groups wlg ON ((wlg.id = li.log_group_id)))
      JOIN parsed_log_group plg ON (((plg.id = li.log_group_id) AND (plg.parse_generation = wlg.parse_generation) AND (plg.finalized_at IS NOT NULL))))
      LEFT JOIN wow_server_realms wsr ON ((wsr.id = li.realm_id)))
@@ -2677,6 +2755,39 @@ CREATE TABLE parse_score_results (
     player_sub_spec text DEFAULT ''::text NOT NULL,
     CONSTRAINT parse_score_results_metric_check CHECK ((metric = ANY (ARRAY['dps'::text, 'hps'::text])))
 );
+
+CREATE VIEW parse_score_results_resolved WITH (security_invoker='true') AS
+ SELECT score.id,
+    score.tenant_id,
+    score.instance_id,
+    score.run_id,
+    score.snapshot_id,
+    score.log_group_id,
+    score.guild_id,
+    score.encounter_name,
+    score.player_guid,
+    score.player_name,
+    score.player_class,
+    score.player_spec,
+    score.player_role,
+    score.metric,
+    score.metric_value,
+    score.precise_score,
+    score.display_score,
+    score.rank,
+    score.sample_size,
+    score.status,
+    score.instance_name,
+        CASE
+            WHEN instance.difficulty_normalized THEN score.difficulty_name
+            ELSE instance.difficulty_name
+        END AS difficulty_name,
+    (instance.max_players)::smallint AS max_players,
+    score.killed_at,
+    score.created_at,
+    score.player_sub_spec
+   FROM (public.parse_score_results score
+     JOIN log_instances_resolved instance ON ((instance.id = score.instance_id)));
 
 CREATE TABLE proof_request_subjects (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
@@ -3861,7 +3972,7 @@ ALTER TABLE ONLY leaderboard_career_identities
     ADD CONSTRAINT leaderboard_career_identities_pkey PRIMARY KEY (tenant_id, subject_kind, realm_id, subject_id, player_class, player_spec, player_sub_spec);
 
 ALTER TABLE ONLY leaderboard_career_renown_facts
-    ADD CONSTRAINT leaderboard_career_renown_facts_pkey PRIMARY KEY (tenant_id, run_id, encounter_name, realm_id, player_guid, player_class, player_spec, player_sub_spec);
+    ADD CONSTRAINT leaderboard_career_renown_facts_pkey PRIMARY KEY (tenant_id, run_id, encounter_name, realm_id, player_guid, player_class, player_spec, player_sub_spec, difficulty_name, max_players);
 
 ALTER TABLE ONLY leaderboard_career_subjects
     ADD CONSTRAINT leaderboard_career_subjects_pkey PRIMARY KEY (tenant_id, subject_kind, realm_id, subject_id, player_class, player_spec, player_sub_spec);
@@ -4001,6 +4112,9 @@ ALTER TABLE ONLY log_group_artifacts
 ALTER TABLE ONLY log_group_artifacts
     ADD CONSTRAINT log_group_artifacts_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY log_instance_difficulties
+    ADD CONSTRAINT log_instance_difficulties_pkey PRIMARY KEY (instance_id, difficulty);
+
 ALTER TABLE ONLY log_instance_encounter_damage_unit_summary
     ADD CONSTRAINT log_instance_encounter_damage_unit_summary_pkey PRIMARY KEY (encounter_id, unit_guid);
 
@@ -4071,7 +4185,7 @@ ALTER TABLE ONLY parse_score_memberships
     ADD CONSTRAINT parse_score_memberships_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY parse_score_memberships
-    ADD CONSTRAINT parse_score_memberships_tenant_id_policy_version_query_vers_key UNIQUE (tenant_id, policy_version, query_version, run_id, encounter_name, player_guid);
+    ADD CONSTRAINT parse_score_memberships_variant_key UNIQUE (tenant_id, policy_version, query_version, run_id, encounter_name, player_guid, difficulty_name, max_players);
 
 ALTER TABLE ONLY parse_score_receipts
     ADD CONSTRAINT parse_score_receipts_pkey PRIMARY KEY (id);
@@ -4200,10 +4314,10 @@ ALTER TABLE ONLY tenants
     ADD CONSTRAINT tenants_slug_key UNIQUE (slug);
 
 ALTER TABLE ONLY time_parse_boss_kill_memberships
-    ADD CONSTRAINT time_parse_boss_kill_membersh_tenant_id_policy_version_quer_key UNIQUE (tenant_id, policy_version, query_version, run_id, encounter_name);
+    ADD CONSTRAINT time_parse_boss_kill_memberships_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY time_parse_boss_kill_memberships
-    ADD CONSTRAINT time_parse_boss_kill_memberships_pkey PRIMARY KEY (id);
+    ADD CONSTRAINT time_parse_boss_kill_memberships_variant_key UNIQUE (tenant_id, policy_version, query_version, run_id, encounter_name, difficulty_name, max_players);
 
 ALTER TABLE ONLY time_parse_boss_scores
     ADD CONSTRAINT time_parse_boss_scores_pkey PRIMARY KEY (time_parse_score_id, encounter_id);
@@ -4381,9 +4495,9 @@ CREATE INDEX idx_dbc_cooldown_spells_class ON dbc_cooldown_spells USING btree (d
 
 CREATE INDEX idx_dbc_spells_name ON dbc_spells USING btree (dataset_id, name);
 
-CREATE UNIQUE INDEX idx_edr_boss_canonical_unique ON encounter_dps_rankings USING btree (instance_id, player_guid, encounter_name) WHERE (encounter_id IS NOT NULL);
-
 CREATE INDEX idx_edr_boss_coverage_by_instance ON encounter_dps_rankings USING btree (instance_id, encounter_name) WHERE (encounter_id IS NOT NULL);
+
+CREATE UNIQUE INDEX idx_edr_boss_variant_unique ON encounter_dps_rankings USING btree (instance_id, player_guid, encounter_name, difficulty_name, max_players) WHERE (encounter_id IS NOT NULL);
 
 CREATE INDEX idx_edr_class_spec ON encounter_dps_rankings USING btree (player_class, player_spec);
 
@@ -5123,6 +5237,9 @@ ALTER TABLE ONLY log_group_artifacts
 
 ALTER TABLE ONLY log_group_artifacts
     ADD CONSTRAINT log_group_artifacts_log_group_id_fkey FOREIGN KEY (log_group_id) REFERENCES wow_log_groups(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY log_instance_difficulties
+    ADD CONSTRAINT log_instance_difficulties_instance_id_fkey FOREIGN KEY (instance_id) REFERENCES log_instances(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY log_instance_encounter_damage_unit_summary
     ADD CONSTRAINT log_instance_encounter_damage_unit_summary_encounter_id_fkey FOREIGN KEY (encounter_id) REFERENCES log_instance_encounters(id) ON DELETE CASCADE;

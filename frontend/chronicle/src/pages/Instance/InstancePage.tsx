@@ -7,7 +7,7 @@ import { InstanceEventsProvider } from "@/hooks/instanceEvents";
 import { DatasetProvider } from "@/hooks/useDatasetId";
 import { PlayerSpecializationProvider } from "@/components/ui/PlayerMetricChart/PlayerSpecializationContext";
 import { PlayerCosmeticsProvider } from "@/components/ui/PlayerMetricChart/PlayerCosmeticsContext";
-import type { ActivityPeriod, InstancePlayer, KillType, VehicleControlMetadata, WoWEncounterDifficulty } from "@/api/typesGenerated";
+import type { ActivityPeriod, InstancePlayer, KillType, VehicleControlMetadata } from "@/api/typesGenerated";
 import type { ResolvedInstanceUnit } from "./instanceUnits";
 import { transformToInstance } from "./transformInstance";
 import { Card } from "@/components/ui/Card/Card";
@@ -71,14 +71,13 @@ export interface Encounter {
   end_time: string;
   enemies?: EnemyUnit[];
   remaining?: string[]; // GUIDs of enemies that did not die
+  difficulty: string;
   invalidatedAt?: string;
   invalidReason?: string;
   /** Optional phases within this encounter (sorted by order). */
   phases?: EncounterPhase[];
   /** Interval scored for boss rankings, when shorter than the full encounter. */
   ranking_window?: EncounterRankingWindow;
-  /** Heroic or hard mode for this boss pull; absent for normal. */
-  difficulty?: WoWEncounterDifficulty;
 }
 
 /** Ranked interval as offsets from the encounter start. */
@@ -126,6 +125,8 @@ export interface Instance {
   difficultyName?: string;
   maxPlayers?: number;
   dynamicDifficulty?: number;
+  difficulties?: readonly string[];
+  mixedDifficulty?: boolean;
   invalidatedAt?: string;
   invalidReason?: string;
   // Timestamped vehicle-to-controller intervals and transport diagnostics
@@ -347,16 +348,18 @@ export function InstancePage() {
   // Quick stats from the entity menu compare players on the same boss kills selected here.
   const entityRaid = useMemo((): EntityRaidContext | null => {
     if (!instance) return null;
-    const bossNames = instance.encounters
-      .filter((e) => e.boss && (e.kill_type === "clean" || e.kill_type === "partial") && selectedEncounterIds.includes(e.id))
-      .map((e) => e.name);
+    const bosses = instance.encounters
+      .filter((e) => e.boss && (e.kill_type === "clean" || e.kill_type === "partial") && selectedEncounterIds.includes(e.id));
+    const bossNames = bosses.map((e) => e.name);
+    const difficulties = new Set(bosses.map((e) => e.difficulty ?? ""));
     return {
       instanceId: instance.id,
       instanceSlug: instance.slug,
       instanceName: instance.name,
-      difficultyName: instance.difficultyName,
+      // A mixed selection cannot be represented by one difficulty filter.
+      difficultyName: difficulties.size === 1 ? [...difficulties][0] : undefined,
       maxPlayers: instance.maxPlayers,
-      dynamicDifficulty: instance.dynamicDifficulty,
+      dynamicDifficulty: difficulties.size === 1 && difficulties.has("heroic") ? 1 : 0,
       label: [
         instance.name,
         instance.guild ? `<${instance.guild.name}>` : "",

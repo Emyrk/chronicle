@@ -1,3 +1,4 @@
+import { difficultyLabel } from "@/lib/wowUtils";
 import type {
   InstanceRatingEvidenceResponse,
   InstanceRatingPlayerObservation,
@@ -68,4 +69,9 @@ export function formatDurationMs(durationMs: number): string {
     return `${minutes}m ${secondsLabel.padStart(milliseconds === 0 ? 2 : 6, "0")}s`;
   }
   return `${secondsLabel}s`;
+}
+
+/** Difficulty and raid size are separate dimensions of every persisted cohort. */
+export function formatDifficultyCohort(row: { difficulty_name: string; max_players: number }): string {
+  return [difficultyLabel(row.difficulty_name), row.max_players > 0 ? `${row.max_players}-player` : ""].filter(Boolean).join(" · ");
 }

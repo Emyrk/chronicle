@@ -148,6 +148,7 @@ export function loadMapFixture(fixture: MapFixture, options: { selectPlayers?: b
       id: encounterId,
       name: fixture.encounter.name,
       boss: fixture.encounter.boss,
+      difficulty: "",
       mapId: fixture.encounter.mapId,
       kill_type: fixture.encounter.killType as KillType,
       start_time: fixture.encounter.startTime,

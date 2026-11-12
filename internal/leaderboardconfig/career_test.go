@@ -57,12 +57,12 @@ func TestCareerPool(t *testing.T) {
 		require.False(t, v.Active)
 		require.Positive(t, v.MaxPlayers)
 	}
-	os := careerVariant(t, pool, "Obsidian Sanctum", "10 Player", 10)
+	os := careerVariant(t, pool, "Obsidian Sanctum", "", 10)
 	require.False(t, os.IncludeAverage)
 	require.True(t, os.IncludeRenown)
 	require.Empty(t, os.AverageBosses)
 	require.Len(t, os.RenownBosses, 4)
-	ulduar := careerVariant(t, pool, "Ulduar", "10 Player", 10)
+	ulduar := careerVariant(t, pool, "Ulduar", "", 10)
 	require.NotContains(t, ulduar.AverageBosses, "Flame Leviathan")
 	require.Contains(t, ulduar.RenownBosses, leaderboardconfig.CareerBoss{Name: "Flame Leviathan", Points: 2, HasPoints: true})
 	vanilla, err := leaderboardconfig.ResolveCareer(ctx, db, tenant, database.WoWFlavor{database.FlavorVanilla}, nil)
@@ -71,45 +71,45 @@ func TestCareerPool(t *testing.T) {
 	require.Equal(t, int16(0), careerVariant(t, vanilla, "Naxxramas", "", 0).MaxPlayers)
 
 	// Explicitly clear a test weight to retain coverage of unconfigured averages.
-	require.NoError(t, db.UpsertLeaderboardCareerVariant(ctx, database.UpsertLeaderboardCareerVariantParams{InstanceName: "Ulduar", DifficultyName: "10 Player", MaxPlayers: 10, RequiredFlavors: []string{"wrath"}, IncludeAverage: true, IncludeRenown: true}))
-	fact := database.ReplaceLeaderboardPlayerRenownFactParams{TenantID: tenant, InstanceName: "Ulduar", DifficultyName: "10 Player", MaxPlayers: 10, EncounterName: "Flame Leviathan", RunID: uuid.New(), SourceInstanceID: uuid.New(), RealmID: uuid.New(), PlayerGuid: "player", SourceEncounterID: uuid.New()}
+	require.NoError(t, db.UpsertLeaderboardCareerVariant(ctx, database.UpsertLeaderboardCareerVariantParams{InstanceName: "Ulduar", DifficultyName: "", MaxPlayers: 10, RequiredFlavors: []string{"wrath"}, IncludeAverage: true, IncludeRenown: true}))
+	fact := database.ReplaceLeaderboardPlayerRenownFactParams{TenantID: tenant, InstanceName: "Ulduar", DifficultyName: "", MaxPlayers: 10, EncounterName: "Flame Leviathan", RunID: uuid.New(), SourceInstanceID: uuid.New(), RealmID: uuid.New(), PlayerGuid: "player", SourceEncounterID: uuid.New()}
 	insert := func(f database.ReplaceLeaderboardPlayerRenownFactParams) {
 		db.ReplaceLeaderboardPlayerRenownFact(ctx, []database.ReplaceLeaderboardPlayerRenownFactParams{f}).Exec(func(_ int, err error) { require.NoError(t, err) })
 	}
 	insert(fact)
 	pool = resolve()
-	require.True(t, careerVariant(t, pool, "Ulduar", "10 Player", 10).Active)
-	require.False(t, careerVariant(t, pool, "Ulduar", "25 Player", 25).Active)
+	require.True(t, careerVariant(t, pool, "Ulduar", "", 10).Active)
+	require.False(t, careerVariant(t, pool, "Ulduar", "", 25).Active)
 	require.False(t, pool.AveragesReady())
 	require.Equal(t, []leaderboardconfig.CareerIssue{{CareerKey: ulduar.CareerKey, Code: leaderboardconfig.CareerMissingWeight}}, pool.Issues)
 	require.NotEqual(t, vanilla.Fingerprint, pool.Fingerprint)
 	other, err := leaderboardconfig.ResolveCareer(ctx, db, uuid.New(), flavors, nil)
 	require.NoError(t, err)
-	require.False(t, careerVariant(t, other, "Ulduar", "10 Player", 10).Active)
+	require.False(t, careerVariant(t, other, "Ulduar", "", 10).Active)
 
-	config := database.UpsertLeaderboardCareerVariantParams{InstanceName: "Ulduar", DifficultyName: "10 Player", MaxPlayers: 10, RequiredFlavors: []string{"wrath"}, IncludeAverage: true, IncludeRenown: true, Weight: pgtype.Float8{Float64: 2, Valid: true}}
+	config := database.UpsertLeaderboardCareerVariantParams{InstanceName: "Ulduar", DifficultyName: "", MaxPlayers: 10, RequiredFlavors: []string{"wrath"}, IncludeAverage: true, IncludeRenown: true, Weight: pgtype.Float8{Float64: 2, Valid: true}}
 	require.NoError(t, db.UpsertLeaderboardCareerVariant(ctx, config)) // test-only weight, not a seed
 	weighted := resolve()
 	require.True(t, weighted.AveragesReady())
 	require.NotEqual(t, pool.Fingerprint, weighted.Fingerprint)
-	require.Equal(t, 2.0, *careerVariant(t, weighted, "Ulduar", "10 Player", 10).Weight)
+	require.Equal(t, 2.0, *careerVariant(t, weighted, "Ulduar", "", 10).Weight)
 	// A current enabled-boss selection without the killed optional boss deactivates
 	// the scope even while the raw fact remains (configuration exclusion).
-	active, err := db.LeaderboardCareerVariantActive(ctx, database.LeaderboardCareerVariantActiveParams{TenantID: tenant, InstanceName: "Ulduar", DifficultyName: "10 Player", MaxPlayers: 10, Bosses: ulduar.AverageBosses})
+	active, err := db.LeaderboardCareerVariantActive(ctx, database.LeaderboardCareerVariantActiveParams{TenantID: tenant, InstanceName: "Ulduar", DifficultyName: "", MaxPlayers: 10, Bosses: ulduar.AverageBosses})
 	require.NoError(t, err)
 	require.False(t, active)
 	require.NoError(t, db.DeleteLeaderboardRunEvidence(ctx, database.DeleteLeaderboardRunEvidenceParams{TenantID: tenant, RunID: fact.RunID}))
-	require.False(t, careerVariant(t, resolve(), "Ulduar", "10 Player", 10).Active)
+	require.False(t, careerVariant(t, resolve(), "Ulduar", "", 10).Active)
 	insert(fact)
-	require.True(t, careerVariant(t, resolve(), "Ulduar", "10 Player", 10).Active)
+	require.True(t, careerVariant(t, resolve(), "Ulduar", "", 10).Active)
 	// A guild-only kill also activates a scope, independent of player subjects.
 	guildRun := uuid.New()
-	db.ReplaceLeaderboardGuildRenownFact(ctx, []database.ReplaceLeaderboardGuildRenownFactParams{{TenantID: tenant, InstanceName: "Obsidian Sanctum", DifficultyName: "25 Player", MaxPlayers: 25, EncounterName: "Sartharion (3 Drakes)", RunID: guildRun, SourceInstanceID: uuid.New(), RealmID: uuid.New(), GuildID: uuid.New(), SourceEncounterID: uuid.New()}}).Exec(func(_ int, err error) { require.NoError(t, err) })
+	db.ReplaceLeaderboardGuildRenownFact(ctx, []database.ReplaceLeaderboardGuildRenownFactParams{{TenantID: tenant, InstanceName: "Obsidian Sanctum", DifficultyName: "", MaxPlayers: 25, EncounterName: "Sartharion (3 Drakes)", RunID: guildRun, SourceInstanceID: uuid.New(), RealmID: uuid.New(), GuildID: uuid.New(), SourceEncounterID: uuid.New()}}).Exec(func(_ int, err error) { require.NoError(t, err) })
 	pool = resolve()
-	require.True(t, careerVariant(t, pool, "Obsidian Sanctum", "25 Player", 25).Active)
+	require.True(t, careerVariant(t, pool, "Obsidian Sanctum", "", 25).Active)
 	require.True(t, pool.AveragesReady()) // no OS weight needed; Renown still included
 	require.NoError(t, db.DeleteLeaderboardRunEvidence(ctx, database.DeleteLeaderboardRunEvidenceParams{TenantID: tenant, RunID: guildRun}))
-	require.False(t, careerVariant(t, resolve(), "Obsidian Sanctum", "25 Player", 25).Active)
+	require.False(t, careerVariant(t, resolve(), "Obsidian Sanctum", "", 25).Active)
 	// Approved Vault policy is Renown-only, so an active empty default does not block.
 	vault := fact
 	vault.RunID = uuid.New()
@@ -118,7 +118,7 @@ func TestCareerPool(t *testing.T) {
 	insert(vault)
 	pool = resolve()
 	require.True(t, pool.AveragesReady())
-	v := careerVariant(t, pool, "Vault of Archavon", "10 Player", 10)
+	v := careerVariant(t, pool, "Vault of Archavon", "", 10)
 	require.True(t, v.Active)
 	require.False(t, v.IncludeAverage)
 	require.True(t, v.IncludeRenown)
@@ -132,7 +132,7 @@ func TestCareerWeightConstraints(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitLong)
 	db, _ := dbtestutil.NewDB(t)
-	arg := database.UpsertLeaderboardCareerVariantParams{InstanceName: "Naxxramas", DifficultyName: "10 Player", MaxPlayers: 10, RequiredFlavors: []string{"wrath"}, IncludeAverage: true, IncludeRenown: true}
+	arg := database.UpsertLeaderboardCareerVariantParams{InstanceName: "Naxxramas", DifficultyName: "", MaxPlayers: 10, RequiredFlavors: []string{"wrath"}, IncludeAverage: true, IncludeRenown: true}
 	for _, w := range []float64{0, -1, math.Inf(1), math.Inf(-1), math.NaN()} {
 		arg.Weight = pgtype.Float8{Float64: w, Valid: true}
 		require.Error(t, db.UpsertLeaderboardCareerVariant(ctx, arg))
@@ -157,8 +157,8 @@ func TestCareerWeightConstraints(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, p.Variants, 13)
 	require.Equal(t, 0.5, *careerVariant(t, p, "Naxxramas", "Heroic", 10).Weight)
-	require.Equal(t, 0.5, *careerVariant(t, p, "Naxxramas", "10 Player", 10).Weight)
-	require.Equal(t, 6.0, *careerVariant(t, p, "Naxxramas", "25 Player", 25).Weight)
+	require.Equal(t, 0.5, *careerVariant(t, p, "Naxxramas", "", 10).Weight)
+	require.Equal(t, 6.0, *careerVariant(t, p, "Naxxramas", "", 25).Weight)
 }
 
 type careerCaptureStore struct {

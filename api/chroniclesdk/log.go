@@ -189,6 +189,8 @@ type WoWInstance struct {
 	DifficultyName          string                  `json:"difficulty_name"`
 	MaxPlayers              int                     `json:"max_players"`
 	DynamicDifficulty       int                     `json:"dynamic_difficulty"`
+	Difficulties            []string                `json:"difficulties,omitempty"`
+	MixedDifficulty         bool                    `json:"mixed_difficulty,omitempty"`
 	InvalidatedAt           *time.Time              `json:"invalidated_at,omitempty"`
 	InvalidReason           string                  `json:"invalid_reason,omitempty"`
 	VehicleControlIntervals *VehicleControlMetadata `json:"vehicle_control_intervals,omitempty"`
@@ -217,31 +219,10 @@ type WoWEncounter struct {
 	Remaining     []guid.GUID       `json:"remaining,omitempty"`
 	StartTime     time.Time         `json:"start_time"`
 	EndTime       time.Time         `json:"end_time"`
+	Difficulty    string            `json:"difficulty"`
 	InvalidatedAt *time.Time        `json:"invalidated_at,omitempty"`
 	InvalidReason string            `json:"invalid_reason,omitempty"`
 	RankingWindow *WoWRankingWindow `json:"ranking_window,omitempty"`
-	// Difficulty marks a boss pulled above normal difficulty. Absent means normal.
-	Difficulty *WoWEncounterDifficulty `json:"difficulty,omitempty"`
-}
-
-// EncounterDifficultyMode is how a single boss was pulled. Raids like ICC
-// toggle Heroic per boss, and Ulduar bosses each have their own hard mode, so
-// one log can mix modes.
-type EncounterDifficultyMode string
-
-const (
-	// EncounterDifficultyHeroic is a boss pulled with the Heroic toggle on.
-	EncounterDifficultyHeroic EncounterDifficultyMode = "heroic"
-	// EncounterDifficultyHardMode is a boss whose in-fight hard mode was triggered (Ulduar).
-	EncounterDifficultyHardMode EncounterDifficultyMode = "hard_mode"
-)
-
-type WoWEncounterDifficulty struct {
-	Mode EncounterDifficultyMode `json:"mode"`
-	// Tier is the count for tiered hard modes: Flame Leviathan towers (1-4),
-	// Freya elders (1-3), Yogg-Saron keepers (0-3, fewer is harder). Absent
-	// for untiered modes.
-	Tier *int `json:"tier,omitempty"`
 }
 
 // WoWRankingWindow marks the interval scored for boss rankings, relative to the
@@ -478,6 +459,7 @@ type SpeedrunResult struct {
 	BossToBossDurationMs     *int64                    `json:"boss_to_boss_duration_ms,omitempty"`
 	Proof                    []SpeedrunProof           `json:"proof"`
 	LevelRange               *SpeedrunLevelRangeResult `json:"level_range,omitempty"`
+	MixedDifficulty          bool                      `json:"mixed_difficulty,omitempty"`
 	DataSourceStatus         *SpeedrunDataSourceStatus `json:"data_source,omitempty"`
 	DpsRankingsStatus        *DpsRankingsStatus        `json:"dps_rankings,omitempty"`
 	EncounterKillTimes       []EncounterKillTime       `json:"encounter_kill_times"`

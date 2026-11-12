@@ -73,24 +73,26 @@ func insertTimeParseTenantRealm(t *testing.T, pool *pgxpool.Pool, name string) (
 // insertTimeParseInstance creates a log_instance, an instance_speedrun, and
 // optional encounters. Returns the instance ID.
 type timeParseInstanceOpts struct {
-	instanceName   string
-	difficultyName string
-	maxPlayers     int32
-	qualified      bool
-	durationMs     int64
-	startTime      time.Time
-	encounters     []timeParseEncounterOpts
-	guildID        uuid.NullUUID
+	instanceName    string
+	difficultyName  string
+	maxPlayers      int32
+	qualified       bool
+	durationMs      int64
+	startTime       time.Time
+	mixedDifficulty bool
+	encounters      []timeParseEncounterOpts
+	guildID         uuid.NullUUID
 	// duplicateGroupID if set, links this instance to a duplicate group.
 	duplicateGroupID uuid.NullUUID
 }
 
 type timeParseEncounterOpts struct {
-	name      string
-	killType  database.KillType
-	boss      bool
-	startTime time.Time
-	endTime   time.Time
+	name       string
+	killType   database.KillType
+	boss       bool
+	difficulty pgtype.Text
+	startTime  time.Time
+	endTime    time.Time
 }
 
 func insertTimeParseInstance(t *testing.T, pool *pgxpool.Pool, store database.Store, realmID uuid.UUID, opts timeParseInstanceOpts) uuid.UUID {
@@ -116,16 +118,17 @@ func insertTimeParseInstance(t *testing.T, pool *pgxpool.Pool, store database.St
 	instanceID := uuid.New()
 	completionTime := opts.startTime.Add(time.Duration(opts.durationMs) * time.Millisecond)
 	_, err = store.InsertInstance(ctx, database.InsertInstanceParams{
-		ID:             instanceID,
-		RealmID:        realmID,
-		LogGroupID:     logGroupID,
-		Name:           opts.instanceName,
-		GuildID:        opts.guildID,
-		Capabilities:   []string{},
-		StartTime:      database.Timestamptz(opts.startTime),
-		EndTime:        database.Timestamptz(completionTime),
-		DifficultyName: opts.difficultyName,
-		MaxPlayers:     opts.maxPlayers,
+		ID:              instanceID,
+		RealmID:         realmID,
+		LogGroupID:      logGroupID,
+		Name:            opts.instanceName,
+		GuildID:         opts.guildID,
+		Capabilities:    []string{},
+		StartTime:       database.Timestamptz(opts.startTime),
+		EndTime:         database.Timestamptz(completionTime),
+		DifficultyName:  opts.difficultyName,
+		MaxPlayers:      opts.maxPlayers,
+		MixedDifficulty: opts.mixedDifficulty,
 	})
 	require.NoError(t, err)
 
@@ -172,6 +175,7 @@ func insertTimeParseInstance(t *testing.T, pool *pgxpool.Pool, store database.St
 			KillType:   enc.killType,
 			Remaining:  guid.GUIDs{},
 			Boss:       enc.boss,
+			Difficulty: enc.difficulty,
 			StartTime:  database.Timestamptz(enc.startTime),
 			EndTime:    database.Timestamptz(enc.endTime),
 		})

@@ -204,7 +204,7 @@ func (w *WorkerComputeParseScores) Work(ctx context.Context, job *river.Job[pars
 					PlayerRole: ranking.PlayerRole, Metric: metric.name, MetricValue: metric.value,
 					PreciseScore: preciseScore, DisplayScore: displayScore, Rank: rank,
 					SampleSize: int32(scoreResult.SampleSize), Status: string(scoreResult.Status),
-					InstanceName: inst.InstanceName, DifficultyName: inst.DifficultyName,
+					InstanceName: inst.InstanceName, DifficultyName: ranking.DifficultyName,
 					MaxPlayers: int16(inst.MaxPlayers), KilledAt: ranking.KilledAt,
 				}); err != nil {
 					return fmt.Errorf("insert %s score result: %w", metric.name, err)

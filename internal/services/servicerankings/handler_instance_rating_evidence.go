@@ -102,7 +102,7 @@ func handleInstanceRatingEvidenceWithStore(store ratingEvidenceQuerier, w http.R
 
 	for _, row := range playerRows {
 		response.Player.Observations = append(response.Player.Observations, chroniclesdk.InstanceRatingPlayerObservation{
-			EncounterName: row.EncounterName, PlayerGUID: row.PlayerGuid, PlayerName: row.PlayerName,
+			DifficultyName: row.DifficultyName, MaxPlayers: row.MaxPlayers, EncounterName: row.EncounterName, PlayerGUID: row.PlayerGuid, PlayerName: row.PlayerName,
 			PlayerClass: row.PlayerClass, PlayerSpec: row.PlayerSpec, PlayerSubSpec: row.PlayerSubSpec,
 			Metric: row.Metric, MetricValue: row.MetricValue,
 			SourceInstanceID: row.SourceInstanceID, SourceEncounterID: row.SourceEncounterID,
@@ -112,14 +112,14 @@ func handleInstanceRatingEvidenceWithStore(store ratingEvidenceQuerier, w http.R
 	}
 	for _, row := range playerRenownRows {
 		response.Player.Renown = append(response.Player.Renown, chroniclesdk.InstanceRatingPlayerRenownFact{
-			EncounterName: row.EncounterName, PlayerGUID: row.PlayerGuid, PlayerName: row.PlayerName,
+			DifficultyName: row.DifficultyName, MaxPlayers: row.MaxPlayers, EncounterName: row.EncounterName, PlayerGUID: row.PlayerGuid, PlayerName: row.PlayerName,
 			SourceInstanceID: row.SourceInstanceID, SourceEncounterID: row.SourceEncounterID,
 			ProjectionVersion: row.ProjectionVersion, ObservedAt: row.ObservedAt.Time,
 		})
 	}
 	for _, row := range guildBossRows {
 		response.Guild.BossTimes = append(response.Guild.BossTimes, chroniclesdk.InstanceRatingGuildBossObservation{
-			EncounterName: row.EncounterName, GuildID: row.GuildID, GuildName: row.GuildName,
+			DifficultyName: row.DifficultyName, MaxPlayers: row.MaxPlayers, EncounterName: row.EncounterName, GuildID: row.GuildID, GuildName: row.GuildName,
 			DurationMs: row.DurationMs, SourceInstanceID: row.SourceInstanceID,
 			SourceEncounterID: row.SourceEncounterID, SourceTimeParseScoreID: row.SourceTimeParseScoreID,
 			ProjectionVersion: row.ProjectionVersion, ObservedAt: row.ObservedAt.Time,
@@ -127,14 +127,14 @@ func handleInstanceRatingEvidenceWithStore(store ratingEvidenceQuerier, w http.R
 	}
 	for _, row := range guildClearRows {
 		response.Guild.ClearTimes = append(response.Guild.ClearTimes, chroniclesdk.InstanceRatingGuildClearObservation{
-			GuildID: row.GuildID, GuildName: row.GuildName, DurationMs: row.DurationMs,
+			DifficultyName: row.DifficultyName, MaxPlayers: row.MaxPlayers, GuildID: row.GuildID, GuildName: row.GuildName, DurationMs: row.DurationMs,
 			SourceInstanceID: row.SourceInstanceID, SourceTimeParseScoreID: row.SourceTimeParseScoreID,
 			ProjectionVersion: row.ProjectionVersion, ObservedAt: row.ObservedAt.Time,
 		})
 	}
 	for _, row := range guildRenownRows {
 		response.Guild.Renown = append(response.Guild.Renown, chroniclesdk.InstanceRatingGuildRenownFact{
-			EncounterName: row.EncounterName, GuildID: row.GuildID, GuildName: row.GuildName,
+			DifficultyName: row.DifficultyName, MaxPlayers: row.MaxPlayers, EncounterName: row.EncounterName, GuildID: row.GuildID, GuildName: row.GuildName,
 			SourceInstanceID: row.SourceInstanceID, SourceEncounterID: row.SourceEncounterID,
 			ProjectionVersion: row.ProjectionVersion, ObservedAt: row.ObservedAt.Time,
 		})

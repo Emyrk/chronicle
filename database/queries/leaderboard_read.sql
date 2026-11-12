@@ -244,8 +244,8 @@ SELECT realm_id::uuid AS realm_id,subject_id::text AS subject_id,player_class,pl
 WITH runs AS MATERIALIZED (
  SELECT DISTINCT d.instance_name, d.difficulty_name, d.max_players, d.encounter_name,
         COALESCE(li.duplicate_group_id, li.id) AS run_id
- FROM encounter_dps_rankings d
- JOIN log_instances li ON li.id = d.instance_id
+ FROM encounter_dps_rankings_resolved d
+ JOIN log_instances_resolved li ON li.id = d.instance_id
  WHERE d.player_guid = @player_guid::text AND d.realm_id = @realm_id::uuid AND d.encounter_id IS NOT NULL
 )
 SELECT o.instance_name, o.difficulty_name, o.max_players, o.encounter_name,
@@ -263,7 +263,7 @@ LEFT JOIN leaderboard_player_boss_benchmarks b ON b.tenant_id = o.tenant_id AND 
  AND b.difficulty_name = o.difficulty_name AND b.max_players = o.max_players AND b.encounter_name = o.encounter_name
  AND b.player_class = o.player_class AND b.player_spec = o.player_spec AND b.player_sub_spec = o.player_sub_spec AND b.metric = o.metric
 LEFT JOIN LATERAL (
- SELECT ps.display_score FROM parse_score_results ps
+ SELECT ps.display_score FROM parse_score_results_resolved ps
  WHERE ps.tenant_id = o.tenant_id AND ps.instance_id = o.source_instance_id AND ps.player_guid = o.player_guid
    AND ps.metric = o.metric AND ps.encounter_name = o.encounter_name AND ps.status IN ('ok', 'low_confidence')
  ORDER BY ps.created_at DESC, ps.precise_score DESC

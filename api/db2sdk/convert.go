@@ -275,6 +275,7 @@ func WoWInstanceWithGuild(instance database.LogInstance, dbG *database.Guild) ch
 		DifficultyName:          instance.DifficultyName,
 		MaxPlayers:              int(instance.MaxPlayers),
 		DynamicDifficulty:       int(instance.DynamicDifficulty),
+		MixedDifficulty:         instance.MixedDifficulty,
 		InvalidatedAt:           invalidatedAt,
 		InvalidReason:           invalidReason,
 		VehicleControlIntervals: VehicleControlMetadata(instance.VehicleControlIntervals),
@@ -329,6 +330,7 @@ func WoWInstance(instance database.LogInstancesGuild) chroniclesdk.WoWInstance {
 		DifficultyName:          instance.DifficultyName,
 		MaxPlayers:              int(instance.MaxPlayers),
 		DynamicDifficulty:       int(instance.DynamicDifficulty),
+		MixedDifficulty:         instance.MixedDifficulty,
 		InvalidatedAt:           invalidatedAt,
 		InvalidReason:           invalidReason,
 		VehicleControlIntervals: VehicleControlMetadata(instance.VehicleControlIntervals),
@@ -428,7 +430,7 @@ func WowDecoratedInstance(instance database.LogInstancesGuild,
 	ret := chroniclesdk.WoWParsedInstance{
 		WoWInstance:    WoWInstance(instance),
 		RealmName:      instance.RealmName,
-		Encounters:     WoWEncountersWithHostiles(encounters, fights, phases),
+		Encounters:     WoWEncountersWithHostiles(encounters, fights, phases, instance.DifficultyName),
 		Units:          instanceUnits,
 		NamesByEntry:   namesByEntry,
 		SummonsByOwner: summonsByOwner,
@@ -456,9 +458,10 @@ func InstancePlayers(players []database.LogInstancePlayer) map[guid.GUID]chronic
 	})
 }
 
-func InstanceRankingRecords(rows []database.EncounterDpsRanking) []chroniclesdk.InstanceRankingRecord {
+func InstanceRankingRecords[T database.EncounterDpsRanking | database.EncounterDpsRankingsResolved](rows []T) []chroniclesdk.InstanceRankingRecord {
 	result := make([]chroniclesdk.InstanceRankingRecord, 0, len(rows))
-	for _, row := range rows {
+	for _, source := range rows {
+		row := database.EncounterDpsRanking(source)
 		var encounterID *uuid.UUID
 		if row.EncounterID.Valid {
 			id := row.EncounterID.UUID
@@ -475,6 +478,7 @@ func InstanceRankingRecords(rows []database.EncounterDpsRanking) []chroniclesdk.
 			playerDeaths = &value
 		}
 		result = append(result, chroniclesdk.InstanceRankingRecord{
+			Difficulty:      row.DifficultyName,
 			ID:              row.ID,
 			EncounterID:     encounterID,
 			EncounterName:   row.EncounterName,
@@ -845,7 +849,11 @@ func WoWHostile(hostile database.LogInstanceEncounterHostile) chroniclesdk.WoWEn
 	}
 }
 
-func WoWEncounter(encounter database.LogInstanceEncounter) chroniclesdk.WoWEncounter {
+func WoWEncounter(encounter database.LogInstanceEncounter, legacyDifficulty ...string) chroniclesdk.WoWEncounter {
+	difficulty := encounter.Difficulty.String
+	if !encounter.Difficulty.Valid && len(legacyDifficulty) > 0 {
+		difficulty = legacyDifficulty[0]
+	}
 	invalidatedAt, invalidReason := invalidation(encounter.InvalidatedAt, encounter.InvalidReason)
 	var window *chroniclesdk.WoWRankingWindow
 	if encounter.RankingStartOffsetMs.Valid && encounter.RankingEndOffsetMs.Valid {
@@ -868,6 +876,7 @@ func WoWEncounter(encounter database.LogInstanceEncounter) chroniclesdk.WoWEncou
 		Remaining:     encounter.Remaining,
 		StartTime:     encounter.StartTime.Time,
 		EndTime:       encounter.EndTime.Time,
+		Difficulty:    difficulty,
 		InvalidatedAt: invalidatedAt,
 		InvalidReason: invalidReason,
 	}
@@ -885,11 +894,11 @@ func WoWEncounterPhase(phase database.LogInstanceEncounterPhase) chroniclesdk.Wo
 	}
 }
 
-func WoWEncountersWithHostiles(encounter []database.LogInstanceEncounter, hostiles []database.LogInstanceEncounterHostile, phases []database.LogInstanceEncounterPhase) []chroniclesdk.WoWEncounterWithHostiles {
+func WoWEncountersWithHostiles(encounter []database.LogInstanceEncounter, hostiles []database.LogInstanceEncounterHostile, phases []database.LogInstanceEncounterPhase, legacyDifficulty ...string) []chroniclesdk.WoWEncounterWithHostiles {
 	output := make([]chroniclesdk.WoWEncounterWithHostiles, 0, len(encounter))
 	for _, e := range encounter {
 		enc := chroniclesdk.WoWEncounterWithHostiles{
-			WoWEncounter: WoWEncounter(e),
+			WoWEncounter: WoWEncounter(e, legacyDifficulty...),
 			Hostiles: slice.List(slice.Filter(hostiles, func(h database.LogInstanceEncounterHostile) bool {
 				return h.EncounterID == e.ID
 			}), WoWHostile),
@@ -1174,4 +1183,12 @@ func RaidCompositions(rows []database.RaidComposition) ([]chroniclesdk.RaidCompo
 		out = append(out, comp)
 	}
 	return out, nil
+}
+
+// LegacyDifficulty normalizes pre-encounter difficulty metadata.
+func LegacyDifficulty(name string, dynamic int) string {
+	if dynamic > 0 || strings.Contains(strings.ToLower(name), "heroic") {
+		return "heroic"
+	}
+	return ""
 }

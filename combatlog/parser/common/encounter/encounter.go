@@ -12,6 +12,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
 	"github.com/Emyrk/chronicle/combatlog/parser/unitname"
 )
 
@@ -85,6 +86,9 @@ type RankingWindow struct {
 // hostile becomes inactive. Hostiles with overlapping activity periods are
 // grouped into the same fight.
 type Fight struct {
+	// Difficulty is the resolved encounter mode. It defaults to the zone mode
+	// captured at fight start and may be overridden by a finalization resolver.
+	Difficulty  zone.Difficulty
 	EncounterID uuid.UUID
 	MapID       uint32
 	// Hostiles contains all hostile characters that participated in this fight.

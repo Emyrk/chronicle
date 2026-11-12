@@ -51,6 +51,8 @@ export function transformToInstance(
     difficulty_name?: string;
     max_players?: number;
     dynamic_difficulty?: number;
+    difficulties?: readonly string[];
+    mixed_difficulty?: boolean;
     invalidated_at?: string;
     invalid_reason?: string;
     vehicle_control_intervals?: VehicleControlMetadata;
@@ -95,6 +97,7 @@ export function transformToInstance(
       players,
       enemies,
       remaining: enc.remaining as string[] | undefined,
+      difficulty: enc.difficulty,
       invalidatedAt: enc.invalidated_at,
       invalidReason: enc.invalid_reason,
       phases: normalizeArray(enc.phases).map((phase) => ({
@@ -113,7 +116,6 @@ export function transformToInstance(
         start_offset_ms: enc.ranking_window.start_offset_ms,
         end_offset_ms: enc.ranking_window.end_offset_ms,
       },
-      difficulty: enc.difficulty,
     };
   });
 
@@ -150,6 +152,8 @@ export function transformToInstance(
     difficultyName: apiInstance.difficulty_name,
     maxPlayers: apiInstance.max_players,
     dynamicDifficulty: apiInstance.dynamic_difficulty,
+    difficulties: apiInstance.difficulties,
+    mixedDifficulty: apiInstance.mixed_difficulty,
     invalidatedAt: apiInstance.invalidated_at,
     invalidReason: apiInstance.invalid_reason,
     vehicleControlIntervals: apiInstance.vehicle_control_intervals,

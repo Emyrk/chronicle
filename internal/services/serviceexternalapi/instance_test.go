@@ -127,7 +127,7 @@ func TestGetInstanceRankingRecordsBySlug(t *testing.T) {
 		instance: database.LogInstancesGuild{
 			ID: instanceID, HashedSlug: pgtype.Text{String: "example-instance", Valid: true},
 		},
-		rankingRecords: []database.EncounterDpsRanking{{
+		rankingRecords: []database.EncounterDpsRankingsResolved{{
 			ID:              recordID,
 			EncounterID:     uuid.NullUUID{UUID: encounterID, Valid: true},
 			InstanceID:      instanceID,
@@ -150,7 +150,7 @@ func TestGetInstanceRankingRecordsBySlug(t *testing.T) {
 			KilledAt:        pgtype.Timestamptz{Time: killedAt, Valid: true},
 		}},
 	}
-	store.parseScores = []database.ParseScoreResult{
+	store.parseScores = []database.ParseScoreResultsResolved{
 		{
 			InstanceID: instanceID, SnapshotID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
 			EncounterName: "Ragnaros", PlayerGuid: "Player-00000001", Metric: "dps",
@@ -200,6 +200,28 @@ func TestGetInstanceRankingRecordsBySlug(t *testing.T) {
 	require.Equal(t, 24.11, response[0].HPSParse.PreciseScore)
 	require.Equal(t, 24, response[0].HPSParse.DisplayScore)
 	require.Equal(t, "low_confidence", response[0].HPSParse.Status)
+}
+
+func TestInstanceRankingRecordsDifficultyIsolation(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, time.November, 10, 12, 0, 0, 0, time.UTC)
+	records := []database.EncounterDpsRankingsResolved{
+		{EncounterName: "Lord Marrowgar", PlayerGuid: "player", DifficultyName: ""},
+		{EncounterName: "Lord Marrowgar", PlayerGuid: "player", DifficultyName: "heroic"},
+		{EncounterName: "Lord Marrowgar", PlayerGuid: "player", DifficultyName: "test-hard-mode"},
+	}
+	scores := []database.ParseScoreResultsResolved{
+		{EncounterName: "Lord Marrowgar", PlayerGuid: "player", DifficultyName: "", Metric: "dps", DisplayScore: 25, CreatedAt: database.Timestamptz(at)},
+		{EncounterName: "Lord Marrowgar", PlayerGuid: "player", DifficultyName: "heroic", Metric: "dps", DisplayScore: 75, CreatedAt: database.Timestamptz(at.Add(time.Minute))},
+	}
+	out := instanceRankingRecords(records, scores)
+	require.Len(t, out, 3)
+	require.NotNil(t, out[0].DPSParse)
+	require.Equal(t, 25, out[0].DPSParse.DisplayScore)
+	require.NotNil(t, out[1].DPSParse)
+	require.Equal(t, 75, out[1].DPSParse.DisplayScore)
+	require.Equal(t, "heroic", out[1].Difficulty)
+	require.Nil(t, out[2].DPSParse)
 }
 
 func TestGetInstanceBySlugNotFound(t *testing.T) {

@@ -18,7 +18,7 @@ import (
 // handleCharacterParseHistory returns ALL deduplicated parses over the last
 // 60 days, with a derived Score computed as:
 //
-//  1. Group parses by (instance_name, encounter_name)
+//  1. Group parses by (instance_name, encounter_name, difficulty_name, max_players)
 //  2. Within each group, take the best 3 parse scores
 //  3. Average each group's best 3
 //  4. Average all group averages → final Score
@@ -110,7 +110,7 @@ func (s *Service) handleCharacterParseHistory(w http.ResponseWriter, r *http.Req
 		return parses[i].PreciseScore > parses[j].PreciseScore
 	})
 
-	// Derive Score: group by (instance_name, encounter_name), best 3 per group,
+	// Derive Score: group by (instance_name, encounter_name, difficulty_name, max_players), best 3 per group,
 	// average each group, average groups.
 	score := ComputeCharacterScore(parses)
 
@@ -131,7 +131,7 @@ func (s *Service) handleCharacterParseHistory(w http.ResponseWriter, r *http.Req
 
 // ComputeCharacterScore derives the 60-day Score from a list of parses.
 // Algorithm:
-//  1. Group by (instance_name, encounter_name)
+//  1. Group by (instance_name, encounter_name, difficulty_name, max_players)
 //  2. Within each group, take the best 3 parse scores
 //  3. Average each group's best 3
 //  4. Average all group averages → final Score
@@ -142,14 +142,16 @@ func ComputeCharacterScore(parses []chroniclesdk.CharacterParse) *chroniclesdk.C
 		return nil
 	}
 
-	// Group by (instance_name, encounter_name).
+	// Group by (instance_name, encounter_name, difficulty_name, max_players).
 	type groupKey struct {
-		instanceName  string
-		encounterName string
+		instanceName   string
+		encounterName  string
+		difficultyName string
+		maxPlayers     int16
 	}
 	groups := make(map[groupKey][]float64)
 	for _, p := range parses {
-		key := groupKey{instanceName: p.InstanceName, encounterName: p.EncounterName}
+		key := groupKey{instanceName: p.InstanceName, encounterName: p.EncounterName, difficultyName: p.DifficultyName, maxPlayers: p.MaxPlayers}
 		groups[key] = append(groups[key], p.PreciseScore)
 	}
 

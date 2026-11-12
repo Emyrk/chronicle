@@ -74,7 +74,7 @@ func insertRankingRow(t *testing.T, _ *pgxpool.Pool, store database.Store, realm
 	instanceID := uuid.New()
 	_, err = store.InsertInstance(ctx, database.InsertInstanceParams{
 		ID: instanceID, RealmID: realmID, LogGroupID: logGroupID,
-		Name: opts.instanceName, Capabilities: []string{},
+		Name: opts.instanceName, DifficultyName: opts.difficultyName, MaxPlayers: int32(opts.maxPlayers), Capabilities: []string{},
 	})
 	require.NoError(t, err)
 

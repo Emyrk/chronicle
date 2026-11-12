@@ -59,6 +59,11 @@ func InstanceBossParse(ctx context.Context, store InstanceParsesStore, instanceI
 			return BossParse{}, false, err
 		}
 	}
+	// This legacy name-only API cannot identify one of several difficulty variants.
+	// Do not publish a score for an arbitrary cohort on a share card.
+	if len(player.Bosses) > 1 {
+		return BossParse{}, false, nil
+	}
 	for _, boss := range player.Bosses {
 		if boss.EncounterName != encounterName {
 			continue

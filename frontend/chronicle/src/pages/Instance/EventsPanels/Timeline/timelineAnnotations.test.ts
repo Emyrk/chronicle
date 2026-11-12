@@ -16,6 +16,7 @@ function encounter(
     id,
     name: id,
     boss: true,
+    difficulty: "",
     mapId: 0,
     kill_type: "clean",
     start_time: startTime,

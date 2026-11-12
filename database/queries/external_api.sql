@@ -99,7 +99,7 @@ WITH participation AS (
             ORDER BY COALESCE(li.start_time, wlg.created_at) DESC, li.id DESC
         ) AS duplicate_rank
     FROM log_instance_players lip
-    JOIN log_instances li ON li.id = lip.instance_id
+    JOIN log_instances_resolved li ON li.id = lip.instance_id
     JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
     WHERE lip.unit_guid = @player_guid::wow_guid
       AND li.realm_id = @realm_id
@@ -144,7 +144,7 @@ LEFT JOIN LATERAL (
             psr.encounter_name,
             MAX(psr.display_score) FILTER (WHERE psr.metric = 'dps') AS dps_parse,
             MAX(psr.display_score) FILTER (WHERE psr.metric = 'hps') AS hps_parse
-        FROM parse_score_results psr
+        FROM parse_score_results_resolved psr
         WHERE psr.run_id = d.run_id
           AND psr.player_guid = (@player_guid::wow_guid)::text
           AND psr.tenant_id = @tenant_id
@@ -186,7 +186,7 @@ SELECT
     li.difficulty_name,
     li.max_players,
     li.recorder_name
-FROM log_instances li
+FROM log_instances_resolved li
 JOIN parsed_log_group plg ON plg.id = li.log_group_id
 JOIN wow_log_groups wlg ON wlg.id = plg.id
   AND plg.parse_generation = wlg.parse_generation

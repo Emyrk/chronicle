@@ -34,8 +34,8 @@ SELECT
     edr.duration_secs,
     edr.dps,
     edr.hps
-FROM encounter_dps_rankings edr
-JOIN log_instances li ON li.id = edr.instance_id
+FROM encounter_dps_rankings_resolved edr
+JOIN log_instances_resolved li ON li.id = edr.instance_id
 JOIN wow_log_groups log_group ON log_group.id = li.log_group_id AND NOT log_group.unlisted
 WHERE edr.instance_id = @instance_id
   AND edr.encounter_id IS NOT NULL  -- boss kills only

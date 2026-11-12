@@ -57,9 +57,13 @@ INSERT INTO time_parse_boss_scores (
 );
 
 -- name: ListTimeParseBossScoresForScore :many
-SELECT * FROM time_parse_boss_scores
+SELECT score.*, COALESCE(encounter.difficulty, instance.difficulty_name)::text AS difficulty_name,
+       instance.max_players::smallint AS max_players
+FROM time_parse_boss_scores score
+JOIN log_instance_encounters encounter ON encounter.id = score.encounter_id
+JOIN log_instances_resolved instance ON instance.id = encounter.instance_id
 WHERE time_parse_score_id = @time_parse_score_id
-ORDER BY encounter_name;
+ORDER BY score.encounter_name, difficulty_name;
 
 -- name: AcquireTimeParseScoreLock :exec
 SELECT pg_advisory_xact_lock(hashtextextended(@instance_id::text, 0));
@@ -74,8 +78,9 @@ SELECT
     instance.start_time,
     instance.name AS instance_name,
     instance.difficulty_name,
-    instance.max_players
-FROM log_instances instance
+    instance.max_players,
+    instance.mixed_difficulty
+FROM log_instances_resolved instance
 JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
 JOIN wow_server_realms realm ON realm.id = instance.realm_id
 JOIN wow_servers server ON server.id = realm.server_id
@@ -86,7 +91,7 @@ WHERE instance.id = @id
 -- name: GetScopedTimeParseClearTimeCohort :many
 SELECT membership.duration_ms
 FROM time_parse_clear_time_memberships membership
-JOIN log_instances instance ON instance.id = membership.instance_id
+JOIN log_instances_resolved instance ON instance.id = membership.instance_id
 JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
 WHERE membership.tenant_id = @tenant_id
   AND membership.policy_version = @policy_version
@@ -107,7 +112,7 @@ WHERE membership.tenant_id = @tenant_id
 -- name: GetScopedTimeParseBossKillCohort :many
 SELECT membership.duration_ms
 FROM time_parse_boss_kill_memberships membership
-JOIN log_instances instance ON instance.id = membership.instance_id
+JOIN log_instances_resolved instance ON instance.id = membership.instance_id
 JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
 WHERE membership.tenant_id = @tenant_id
   AND membership.policy_version = @policy_version

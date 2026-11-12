@@ -73,6 +73,7 @@ type RankingsEntry struct {
 // InstanceRankingRecord is a raw per-player ranking row recorded for one encounter
 // in a specific log instance. Zero-value metrics are retained for debugging.
 type InstanceRankingRecord struct {
+	Difficulty      string     `json:"difficulty"`
 	ID              uuid.UUID  `json:"id"`
 	EncounterID     *uuid.UUID `json:"encounter_id,omitempty"`
 	EncounterName   string     `json:"encounter_name"`
@@ -238,12 +239,14 @@ type InstanceParsePlayer struct {
 
 // InstanceParseBoss is a player's parse result for a single boss encounter.
 type InstanceParseBoss struct {
-	EncounterName string  `json:"encounter_name"`
-	MetricValue   float64 `json:"metric_value"`
-	PreciseScore  float64 `json:"precise_score"`
-	DisplayScore  int     `json:"display_score"`
-	Rank          int     `json:"rank"`
-	SampleSize    int     `json:"sample_size"`
+	DifficultyName string  `json:"difficulty_name"`
+	MaxPlayers     int16   `json:"max_players"`
+	EncounterName  string  `json:"encounter_name"`
+	MetricValue    float64 `json:"metric_value"`
+	PreciseScore   float64 `json:"precise_score"`
+	DisplayScore   int     `json:"display_score"`
+	Rank           int     `json:"rank"`
+	SampleSize     int     `json:"sample_size"`
 	// Status: "ok", "low_confidence", "sample_too_small", "unknown_spec", or "no_metric_value".
 	Status string `json:"status"`
 }

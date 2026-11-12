@@ -379,7 +379,7 @@ function usePlayerFights(characters: Character[], pageRaid: EntityRaidContext | 
   }
   const variant = raid
     ? (picked && !pageRaid ? variants.find((item) => choiceKey(item) === choiceKey(picked)) : undefined)
-      ?? variants.find((item) => item.instanceName === raid.instanceName && (!raid.difficultyName || item.difficultyName === raid.difficultyName))
+      ?? variants.find((item) => item.instanceName === raid.instanceName && (raid.difficultyName === undefined || item.difficultyName === raid.difficultyName))
       ?? variants.find((item) => item.instanceName === raid.instanceName)
     : variants[0];
   if (!variant) return { instanceName: "", bossNames: [] as string[], fromPage: false, loading: encounters.isLoading, choices: variants };

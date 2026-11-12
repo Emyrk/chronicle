@@ -1474,6 +1474,7 @@ function transformToInstance(
     id: enc.id,
     name: enc.name,
     boss: enc.boss,
+    difficulty: enc.difficulty,
     mapId: enc.map_id,
     kill_type: enc.kill_type,
     start_time: enc.start_time,

@@ -105,6 +105,21 @@ func TestWoWEncounterIncludesMapID(t *testing.T) {
 	require.Equal(t, 43, WoWEncounter(database.LogInstanceEncounter{MapID: 43}).MapID)
 }
 
+func TestWoWEncounterIncludesDifficulty(t *testing.T) {
+	t.Parallel()
+
+	for _, difficulty := range []string{"", "heroic", "mythic"} {
+		converted := WoWEncounter(database.LogInstanceEncounter{
+			Difficulty: pgtype.Text{String: difficulty, Valid: true},
+		}, "heroic")
+		require.Equal(t, difficulty, converted.Difficulty)
+	}
+	require.Equal(t, "heroic", WoWEncounter(database.LogInstanceEncounter{}, "heroic").Difficulty)
+	require.Equal(t, "heroic", LegacyDifficulty("25 Player (Heroic)", 0))
+	require.Equal(t, "heroic", LegacyDifficulty("25 Player", 1))
+	require.Equal(t, "", LegacyDifficulty("25 Player", 0))
+}
+
 func TestWoWEncounterRankingWindow(t *testing.T) {
 	t.Parallel()
 	require.Nil(t, WoWEncounter(database.LogInstanceEncounter{}).RankingWindow)

@@ -142,7 +142,7 @@ func (s *Service) loadRaidCard(r *http.Request, inst database.LogInstancesGuild,
 		progression []string
 		bossCount   *int
 		wipes       *int
-		records     []database.EncounterDpsRanking
+		records     []database.EncounterDpsRankingsResolved
 		recordsErr  error
 	)
 	wg.Go(func() {
@@ -206,8 +206,8 @@ func (s *Service) loadRaidKillTimeParses(r *http.Request, inst database.LogInsta
 	return raidKillTimeParseSummary(rows, encounters)
 }
 
-func raidKillTimeParseSummary(rows []database.TimeParseBossScore, encounters []database.LogInstanceEncounter) ([]int, *int) {
-	byEncounter := make(map[uuid.UUID]database.TimeParseBossScore, len(rows))
+func raidKillTimeParseSummary(rows []database.ListTimeParseBossScoresForScoreRow, encounters []database.LogInstanceEncounter) ([]int, *int) {
+	byEncounter := make(map[uuid.UUID]database.ListTimeParseBossScoresForScoreRow, len(rows))
 	for _, row := range rows {
 		if row.ServerStatus == string(timeparsepolicy.StatusSampleTooSmall) {
 			continue
@@ -291,16 +291,16 @@ func raidBossProgress(encounters []database.LogInstanceEncounter, progression []
 
 // raidTopDPS ranks players by damage ÷ time across the instance's ranked boss
 // kills (trash rows have no encounter_id) and returns the top n.
-func raidTopDPS(records []database.EncounterDpsRanking, n int) []raidCardDPS {
-	return raidTopPerSecond(records, n, func(rec database.EncounterDpsRanking) int64 { return rec.DamageDone })
+func raidTopDPS(records []database.EncounterDpsRankingsResolved, n int) []raidCardDPS {
+	return raidTopPerSecond(records, n, func(rec database.EncounterDpsRankingsResolved) int64 { return rec.DamageDone })
 }
 
 // raidTopHPS is raidTopDPS for healing, counting absorbs like the rankings' HPS.
-func raidTopHPS(records []database.EncounterDpsRanking, n int) []raidCardDPS {
-	return raidTopPerSecond(records, n, func(rec database.EncounterDpsRanking) int64 { return rec.HealingDone + rec.AbsorbedDone })
+func raidTopHPS(records []database.EncounterDpsRankingsResolved, n int) []raidCardDPS {
+	return raidTopPerSecond(records, n, func(rec database.EncounterDpsRankingsResolved) int64 { return rec.HealingDone + rec.AbsorbedDone })
 }
 
-func raidTopPerSecond(records []database.EncounterDpsRanking, n int, amount func(database.EncounterDpsRanking) int64) []raidCardDPS {
+func raidTopPerSecond(records []database.EncounterDpsRankingsResolved, n int, amount func(database.EncounterDpsRankingsResolved) int64) []raidCardDPS {
 	type total struct {
 		name, class string
 		damage      int64

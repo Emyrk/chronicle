@@ -14,7 +14,7 @@ SELECT
     @instance_name, @difficulty_name, @max_players, @killed_at
 WHERE EXISTS (
     SELECT 1
-    FROM log_instances instance
+    FROM log_instances_resolved instance
     JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id
     WHERE instance.id = @instance_id AND NOT log_group.unlisted
 );
@@ -54,7 +54,7 @@ SELECT pg_advisory_xact_lock(hashtextextended(@lock_key, 0));
 -- name: GetAnyParseScoreReceiptForTenantInstance :one
 SELECT receipt.*
 FROM parse_score_receipts receipt
-JOIN log_instances instance ON instance.id = receipt.instance_id
+JOIN log_instances_resolved instance ON instance.id = receipt.instance_id
 JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
 WHERE receipt.tenant_id = @tenant_id
   AND receipt.instance_id = @instance_id
@@ -64,7 +64,7 @@ LIMIT 1;
 -- name: HasParseScoreResultsForTenantInstance :one
 SELECT EXISTS (
     SELECT 1
-    FROM parse_score_results result
+    FROM parse_score_results_resolved result
     JOIN log_instances visibility_instance ON visibility_instance.id = result.instance_id
     JOIN wow_log_groups log_group ON log_group.id = visibility_instance.log_group_id AND NOT log_group.unlisted
     WHERE result.tenant_id = @tenant_id AND result.instance_id = @instance_id
@@ -73,7 +73,7 @@ SELECT EXISTS (
 -- name: GetParseScoreReceiptForInstance :many
 -- Get all receipts for an instance (any snapshot).
 SELECT receipt.* FROM parse_score_receipts receipt
-JOIN log_instances instance ON instance.id = receipt.instance_id
+JOIN log_instances_resolved instance ON instance.id = receipt.instance_id
 JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
 WHERE receipt.instance_id = @instance_id
 ORDER BY computed_at DESC;
@@ -81,52 +81,52 @@ ORDER BY computed_at DESC;
 -- name: ListParseScoreResultsForContract :many
 -- Read one persisted legacy result per player and encounter for the snapshot ID
 -- retained as opaque provenance on its successful receipt.
-SELECT DISTINCT ON (psr.encounter_name, psr.player_guid)
+SELECT DISTINCT ON (psr.difficulty_name, psr.max_players, psr.encounter_name, psr.player_guid)
     psr.*
-FROM parse_score_results psr
-JOIN log_instances visibility_instance ON visibility_instance.id = psr.instance_id
+FROM parse_score_results_resolved psr
+JOIN log_instances_resolved visibility_instance ON visibility_instance.id = psr.instance_id
 JOIN wow_log_groups log_group ON log_group.id = visibility_instance.log_group_id AND NOT log_group.unlisted
 WHERE psr.tenant_id = @tenant_id
   AND psr.instance_id = @instance_id
   AND psr.snapshot_id = @snapshot_id::uuid
   AND psr.metric = @metric
-ORDER BY psr.encounter_name, psr.player_guid, psr.precise_score DESC, psr.created_at DESC;
+ORDER BY psr.difficulty_name, psr.max_players, psr.encounter_name, psr.player_guid, psr.precise_score DESC, psr.created_at DESC;
 
 -- name: ListWindowedParseScoreResultsForContract :many
-SELECT DISTINCT ON (psr.encounter_name, psr.player_guid)
+SELECT DISTINCT ON (psr.difficulty_name, psr.max_players, psr.encounter_name, psr.player_guid)
     psr.*
-FROM parse_score_results psr
-JOIN log_instances visibility_instance ON visibility_instance.id = psr.instance_id
+FROM parse_score_results_resolved psr
+JOIN log_instances_resolved visibility_instance ON visibility_instance.id = psr.instance_id
 JOIN wow_log_groups log_group ON log_group.id = visibility_instance.log_group_id AND NOT log_group.unlisted
 WHERE psr.tenant_id = @tenant_id
   AND psr.instance_id = @instance_id
   AND psr.snapshot_id IS NULL
   AND psr.metric = @metric
-ORDER BY psr.encounter_name, psr.player_guid, psr.precise_score DESC, psr.created_at DESC;
+ORDER BY psr.difficulty_name, psr.max_players, psr.encounter_name, psr.player_guid, psr.precise_score DESC, psr.created_at DESC;
 
 -- name: ListPersistedParseScoreResultsForInstance :many
 -- Receipt-less results are authoritative historical data. Read them without
 -- joining snapshot tables or score memberships so they can never be recomputed.
-SELECT DISTINCT ON (psr.encounter_name, psr.player_guid)
+SELECT DISTINCT ON (psr.difficulty_name, psr.max_players, psr.encounter_name, psr.player_guid)
     psr.*
-FROM parse_score_results psr
-JOIN log_instances visibility_instance ON visibility_instance.id = psr.instance_id
+FROM parse_score_results_resolved psr
+JOIN log_instances_resolved visibility_instance ON visibility_instance.id = psr.instance_id
 JOIN wow_log_groups log_group ON log_group.id = visibility_instance.log_group_id AND NOT log_group.unlisted
 WHERE psr.tenant_id = @tenant_id
   AND psr.instance_id = @instance_id
   AND psr.metric = @metric
-ORDER BY psr.encounter_name, psr.player_guid, psr.created_at DESC, psr.precise_score DESC;
+ORDER BY psr.difficulty_name, psr.max_players, psr.encounter_name, psr.player_guid, psr.created_at DESC, psr.precise_score DESC;
 
 -- name: GetParseScoreResultsForInstance :many
 -- Read deduplicated parse score results for an instance.
 -- Uses DISTINCT ON (run_id, encounter, player, snapshot, metric) to collapse duplicate uploads.
-SELECT DISTINCT ON (psr.run_id, psr.encounter_name, psr.player_guid, psr.snapshot_id, psr.metric)
+SELECT DISTINCT ON (psr.difficulty_name, psr.max_players, psr.run_id, psr.encounter_name, psr.player_guid, psr.snapshot_id, psr.metric)
     psr.*
-FROM parse_score_results psr
-JOIN log_instances visibility_instance ON visibility_instance.id = psr.instance_id
+FROM parse_score_results_resolved psr
+JOIN log_instances_resolved visibility_instance ON visibility_instance.id = psr.instance_id
 JOIN wow_log_groups log_group ON log_group.id = visibility_instance.log_group_id AND NOT log_group.unlisted
 WHERE psr.instance_id = @instance_id
-ORDER BY psr.run_id, psr.encounter_name, psr.player_guid, psr.snapshot_id, psr.metric,
+ORDER BY psr.difficulty_name, psr.max_players, psr.run_id, psr.encounter_name, psr.player_guid, psr.snapshot_id, psr.metric,
          psr.created_at DESC;
 
 -- name: DeleteParseScoreResultsForTenantInstance :exec
@@ -143,7 +143,7 @@ WHERE tenant_id = @tenant_id AND instance_id = @instance_id;
 -- computed scoring wins so a night's rows stay internally consistent.
 -- The caller groups by (instance_name, encounter_name), takes best 3 per group,
 -- averages each group, then averages groups for the Score.
-SELECT DISTINCT ON (psr.run_id, psr.encounter_name)
+SELECT DISTINCT ON (psr.difficulty_name, psr.max_players, psr.run_id, psr.encounter_name)
     psr.id,
     psr.instance_id,
     psr.run_id,
@@ -165,15 +165,15 @@ SELECT DISTINCT ON (psr.run_id, psr.encounter_name)
     psr.player_spec,
     psr.player_sub_spec,
     psr.player_role
-FROM parse_score_results psr
-JOIN log_instances visibility_instance ON visibility_instance.id = psr.instance_id
+FROM parse_score_results_resolved psr
+JOIN log_instances_resolved visibility_instance ON visibility_instance.id = psr.instance_id
 JOIN wow_log_groups log_group ON log_group.id = visibility_instance.log_group_id AND NOT log_group.unlisted
 WHERE psr.tenant_id = @tenant_id
   AND psr.player_guid = @player_guid
   AND psr.metric = @metric
   AND psr.status IN ('ok', 'low_confidence')
   AND psr.killed_at >= @since
-ORDER BY psr.run_id, psr.encounter_name, psr.created_at DESC, psr.precise_score DESC;
+ORDER BY psr.difficulty_name, psr.max_players, psr.run_id, psr.encounter_name, psr.created_at DESC, psr.precise_score DESC;
 
 -- name: ListInstancesMissingParseReceiptWindowed :many
 -- Bound automatic repair to recent instances with no successful parse receipt at
@@ -190,11 +190,11 @@ SELECT
     li.guild_id
 FROM (
     SELECT DISTINCT edr.instance_id
-    FROM encounter_dps_rankings edr
+    FROM encounter_dps_rankings_resolved edr
     WHERE edr.encounter_id IS NOT NULL
       AND (edr.dps > 0 OR edr.hps > 0)
 ) candidates
-JOIN log_instances li ON li.id = candidates.instance_id
+JOIN log_instances_resolved li ON li.id = candidates.instance_id
 JOIN wow_log_groups log_group ON log_group.id = li.log_group_id AND NOT log_group.unlisted
 WHERE li.start_time >= @repair_since
   AND li.invalidated_at IS NULL
@@ -206,7 +206,7 @@ WHERE li.start_time >= @repair_since
   )
   AND NOT EXISTS (
     SELECT 1
-    FROM parse_score_results result
+    FROM parse_score_results_resolved result
     WHERE result.tenant_id = @tenant_id
       AND result.instance_id = candidates.instance_id
   )
@@ -224,7 +224,7 @@ SELECT
     li.max_players,
     li.log_group_id,
     li.guild_id
-FROM log_instances li
+FROM log_instances_resolved li
 JOIN wow_log_groups log_group ON log_group.id = li.log_group_id AND NOT log_group.unlisted
 WHERE li.id = @id
   AND li.invalidated_at IS NULL;

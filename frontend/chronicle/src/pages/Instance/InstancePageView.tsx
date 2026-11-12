@@ -631,7 +631,7 @@ function EncounterSidebar({
           name: encounter.name,
           logId: instanceId,
           instanceName: raidInstance.name,
-          difficultyName: raidInstance.difficultyName,
+          difficultyName: encounter.difficulty,
           maxPlayers: raidInstance.maxPlayers,
           killType: encounter.kill_type,
           durationMs: pullDurationMs(encounter),
@@ -827,7 +827,7 @@ function EncounterSidebar({
                 <span className="truncate flex-1">
                   {encounter.boss ? encounter.name : <span className="italic">{encounter.name}</span>}
                 </span>
-                {encounter.boss && <EncounterDifficultyMark encounterName={encounter.name} difficulty={encounter.difficulty} />}
+                {encounter.boss && <EncounterDifficultyMark difficulty={encounter.difficulty} />}
                 <span className={cn("text-xs shrink-0 font-mono", isSelected ? "opacity-70" : "text-muted-foreground")}>
                   {formatEncounterTime(encounter)}
                 </span>
@@ -897,7 +897,7 @@ function EncounterSidebar({
                   <Skull className="h-4 w-4 shrink-0 text-red-500" />
                 )}
                 <span className={cn("truncate flex-1", isSelected && "font-semibold")}>{encounter.name}</span>
-                <EncounterDifficultyMark encounterName={encounter.name} difficulty={encounter.difficulty} />
+                <EncounterDifficultyMark difficulty={encounter.difficulty} />
                 <span className={cn("text-xs shrink-0 font-mono", isSelected ? "opacity-70" : "text-muted-foreground")}>
                   {formatEncounterTime(encounter)}
                 </span>
@@ -4074,7 +4074,7 @@ function InstancePageViewContent({
   const trashGroups = groupTrashEncounters(instance.encounters);
 
   const headerBg = getInstanceBackground(instance.name);
-  const heroic = isHeroic(instance);
+  const heroic = !instance.mixedDifficulty && isHeroic(instance);
 
   const elapsedDurationMs = instance.endTime
     ? new Date(instance.endTime).getTime() - new Date(instance.startTime).getTime()
@@ -4336,7 +4336,7 @@ function InstancePageViewContent({
               {instance.maxPlayers != null && instance.maxPlayers > 0 && (
                 <div className="flex items-center gap-1.5">
                   <span className="text-sm text-muted-foreground font-medium">{instance.maxPlayers} Player</span>
-                  <EncounterDifficultySummary encounters={instance.encounters} instanceHeroic={heroic} />
+                  <EncounterDifficultySummary encounters={instance.encounters} mixedDifficulty={instance.mixedDifficulty ?? false} />
                 </div>
               )}
               {overviewEnabled && <InstanceViewModeSwitch value={viewMode} onChange={setViewMode} />}
@@ -4455,7 +4455,7 @@ function InstancePageViewContent({
           {isMobile && instance.maxPlayers != null && instance.maxPlayers > 0 && (
             <div className="flex items-center gap-1.5 shrink-0">
               <span className="text-xs text-muted-foreground font-medium">{instance.maxPlayers} Player</span>
-              <EncounterDifficultySummary encounters={instance.encounters} instanceHeroic={heroic} />
+              <EncounterDifficultySummary encounters={instance.encounters} mixedDifficulty={instance.mixedDifficulty ?? false} />
             </div>
           )}
           {!isMobile && (

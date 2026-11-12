@@ -5,7 +5,7 @@ SELECT
     instance.difficulty_name,
     instance.max_players,
     COALESCE(instance.duplicate_group_id, instance.id) AS run_id
-FROM log_instances instance
+FROM log_instances_resolved instance
 JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
 WHERE instance.id = @id;
 

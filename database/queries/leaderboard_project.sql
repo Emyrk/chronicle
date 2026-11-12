@@ -4,17 +4,17 @@
 WITH source AS MATERIALIZED (
  SELECT rr.run_id, li.id AS source_instance_id, li.realm_id, li.guild_id,
         li.name AS instance_name, li.difficulty_name, li.max_players::smallint AS max_players,
-        server.tenant_id,
+        li.mixed_difficulty, server.tenant_id,
         CASE lower(btrim(tenant.parse_config->>'cohort_mode'))
           WHEN 'class' THEN 'class'
           WHEN 'disabled' THEN 'disabled'
           ELSE 'spec'
         END::text AS cohort_mode
  FROM ranking_runs rr
- JOIN log_instances li ON li.id=rr.representative_instance_id
+ JOIN log_instances_resolved li ON li.id=rr.representative_instance_id
   AND COALESCE(li.duplicate_group_id,li.id)=rr.run_id
   AND li.realm_id=rr.realm_id AND li.name=rr.instance_name
-  AND li.difficulty_name=rr.difficulty_name AND li.max_players=rr.max_players
+  AND li.max_players=rr.max_players
  JOIN wow_log_groups lg ON lg.id=li.log_group_id AND NOT lg.unlisted
  JOIN wow_server_realms realm ON realm.id=li.realm_id
  JOIN wow_servers server ON server.id=realm.server_id AND server.tenant_id= @tenant_id::uuid
@@ -26,12 +26,15 @@ WITH source AS MATERIALIZED (
         -- source spec, including missing or unknown specs, into one stable class-only cohort.
         CASE WHEN s.cohort_mode='class' THEN 'Class' ELSE d.player_spec END::text AS player_spec,
         CASE WHEN s.cohort_mode='class' THEN '' ELSE d.player_sub_spec END::text AS player_sub_spec,
-        d.dps,d.hps,e.id AS encounter_id,e.name AS encounter_name
- FROM source s JOIN encounter_dps_rankings d ON d.instance_id=s.source_instance_id
+        d.dps,d.hps,e.id AS encounter_id,e.name AS encounter_name,
+        COALESCE(e.difficulty, s.difficulty_name) AS encounter_difficulty_name,
+        s.max_players::smallint AS encounter_max_players
+ FROM source s JOIN encounter_dps_rankings_resolved d ON d.instance_id=s.source_instance_id
   AND d.realm_id=s.realm_id AND d.instance_name=s.instance_name
-  AND d.difficulty_name=s.difficulty_name AND d.max_players=s.max_players
  JOIN log_instance_encounters e ON e.id=d.encounter_id AND e.instance_id=s.source_instance_id
   AND e.name=d.encounter_name AND e.boss AND e.kill_type='clean'
+  AND d.difficulty_name=COALESCE(e.difficulty, s.difficulty_name)
+  AND d.max_players=s.max_players
  WHERE btrim(d.player_guid)<>'' AND btrim(d.player_class)<>''
    AND (s.cohort_mode<>'spec' OR btrim(d.player_spec)<>'')
 ), player_candidates AS MATERIALIZED (
@@ -63,35 +66,37 @@ WITH source AS MATERIALIZED (
  FROM guild_source s JOIN time_parse_scores t ON t.instance_id=s.source_instance_id
   AND t.run_id=s.run_id AND t.tenant_id=s.tenant_id AND t.realm_id=s.realm_id AND t.guild_id=s.guild_id
 ), guild_bosses AS MATERIALIZED (
- SELECT s.*, b.duration_ms,e.id AS encounter_id,e.name AS encounter_name
+ SELECT s.*, b.duration_ms,e.id AS encounter_id,e.name AS encounter_name,
+        COALESCE(e.difficulty, s.difficulty_name) AS encounter_difficulty_name,
+        s.max_players::smallint AS encounter_max_players
  FROM guild_times s JOIN time_parse_boss_scores b ON b.time_parse_score_id=s.time_score_id
  JOIN log_instance_encounters e ON e.id=b.encounter_id AND e.instance_id=s.source_instance_id
   AND e.name=b.encounter_name AND e.boss AND e.kill_type='clean'
  WHERE b.duration_ms>0
 ), projected AS (
-(SELECT DISTINCT ON (s.encounter_name,s.player_guid,s.player_class,s.player_spec,s.player_sub_spec,s.metric) 1::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.difficulty_name AS difficulty_name, s.max_players AS max_players, s.encounter_name AS encounter_name, s.player_guid AS player_guid, s.player_class AS player_class, s.player_spec AS player_spec, s.player_sub_spec AS player_sub_spec, s.metric AS metric, s.metric_value AS metric_value, '00000000-0000-0000-0000-000000000000'::uuid AS guild_id, s.encounter_id AS source_encounter_id, s.ranking_id AS source_ranking_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_time_parse_score_id, 0::bigint AS duration_ms
+(SELECT DISTINCT ON (s.encounter_difficulty_name,s.encounter_max_players,s.encounter_name,s.player_guid,s.player_class,s.player_spec,s.player_sub_spec,s.metric) 1::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.encounter_difficulty_name AS difficulty_name, s.encounter_max_players AS max_players, s.encounter_name AS encounter_name, s.player_guid AS player_guid, s.player_class AS player_class, s.player_spec AS player_spec, s.player_sub_spec AS player_sub_spec, s.metric AS metric, s.metric_value AS metric_value, '00000000-0000-0000-0000-000000000000'::uuid AS guild_id, s.encounter_id AS source_encounter_id, s.ranking_id AS source_ranking_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_time_parse_score_id, 0::bigint AS duration_ms
  FROM player_metrics s WHERE s.metric_value>=0 AND s.metric_value<'Infinity'::double precision
- ORDER BY s.encounter_name,s.player_guid,s.player_class,s.player_spec,s.player_sub_spec,metric,metric_value DESC,source_encounter_id,source_ranking_id)
+ ORDER BY s.encounter_difficulty_name,s.encounter_max_players,s.encounter_name,s.player_guid,s.player_class,s.player_spec,s.player_sub_spec,metric,metric_value DESC,source_encounter_id,source_ranking_id)
 UNION ALL
-(SELECT DISTINCT ON (s.encounter_name) 2::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.difficulty_name AS difficulty_name, s.max_players AS max_players, s.encounter_name AS encounter_name, ''::text AS player_guid, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, s.guild_id AS guild_id, s.encounter_id AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, s.time_score_id AS source_time_parse_score_id, s.duration_ms AS duration_ms
+(SELECT DISTINCT ON (s.encounter_difficulty_name,s.encounter_max_players,s.encounter_name) 2::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.encounter_difficulty_name AS difficulty_name, s.encounter_max_players AS max_players, s.encounter_name AS encounter_name, ''::text AS player_guid, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, s.guild_id AS guild_id, s.encounter_id AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, s.time_score_id AS source_time_parse_score_id, s.duration_ms AS duration_ms
  FROM guild_bosses s
- ORDER BY s.encounter_name,s.duration_ms,s.encounter_id)
+ ORDER BY s.encounter_difficulty_name,s.encounter_max_players,s.encounter_name,s.duration_ms,s.encounter_id)
 UNION ALL
 (SELECT DISTINCT ON (s.guild_id) 3::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.difficulty_name AS difficulty_name, s.max_players AS max_players, ''::text AS encounter_name, ''::text AS player_guid, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, s.guild_id AS guild_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, s.time_score_id AS source_time_parse_score_id, s.clear_duration_ms AS duration_ms
- FROM guild_times s WHERE s.clear_duration_ms>0
+ FROM guild_times s WHERE s.clear_duration_ms>0 AND NOT s.mixed_difficulty
  ORDER BY s.guild_id,s.clear_duration_ms,s.time_score_id)
 UNION ALL
-(SELECT DISTINCT ON (s.encounter_name,s.player_guid) 4::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.difficulty_name AS difficulty_name, s.max_players AS max_players, s.encounter_name AS encounter_name, s.player_guid AS player_guid, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, '00000000-0000-0000-0000-000000000000'::uuid AS guild_id, s.encounter_id AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_time_parse_score_id, 0::bigint AS duration_ms
+(SELECT DISTINCT ON (s.encounter_difficulty_name,s.encounter_max_players,s.encounter_name,s.player_guid) 4::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.encounter_difficulty_name AS difficulty_name, s.encounter_max_players AS max_players, s.encounter_name AS encounter_name, s.player_guid AS player_guid, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, '00000000-0000-0000-0000-000000000000'::uuid AS guild_id, s.encounter_id AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_time_parse_score_id, 0::bigint AS duration_ms
  FROM renown_players s
- ORDER BY s.encounter_name,s.player_guid,s.encounter_id)
+ ORDER BY s.encounter_difficulty_name,s.encounter_max_players,s.encounter_name,s.player_guid,s.encounter_id)
 UNION ALL
-(SELECT DISTINCT ON (s.encounter_name,s.player_guid,s.player_class,s.player_spec,s.player_sub_spec) 6::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.difficulty_name AS difficulty_name, s.max_players AS max_players, s.encounter_name AS encounter_name, s.player_guid AS player_guid, s.player_class AS player_class, s.player_spec AS player_spec, s.player_sub_spec AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, '00000000-0000-0000-0000-000000000000'::uuid AS guild_id, s.encounter_id AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_time_parse_score_id, 0::bigint AS duration_ms
+(SELECT DISTINCT ON (s.encounter_difficulty_name,s.encounter_max_players,s.encounter_name,s.player_guid,s.player_class,s.player_spec,s.player_sub_spec) 6::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.encounter_difficulty_name AS difficulty_name, s.encounter_max_players AS max_players, s.encounter_name AS encounter_name, s.player_guid AS player_guid, s.player_class AS player_class, s.player_spec AS player_spec, s.player_sub_spec AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, '00000000-0000-0000-0000-000000000000'::uuid AS guild_id, s.encounter_id AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_time_parse_score_id, 0::bigint AS duration_ms
  FROM renown_players s WHERE s.cohort_mode='spec'
- ORDER BY s.encounter_name,s.player_guid,s.player_class,s.player_spec,s.player_sub_spec,s.encounter_id)
+ ORDER BY s.encounter_difficulty_name,s.encounter_max_players,s.encounter_name,s.player_guid,s.player_class,s.player_spec,s.player_sub_spec,s.encounter_id)
 UNION ALL
-(SELECT DISTINCT ON (e.name) 5::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.difficulty_name AS difficulty_name, s.max_players AS max_players, e.name AS encounter_name, ''::text AS player_guid, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, s.guild_id AS guild_id, e.id AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_time_parse_score_id, 0::bigint AS duration_ms
+(SELECT DISTINCT ON (COALESCE(e.difficulty,s.difficulty_name),s.max_players,e.name) 5::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, COALESCE(e.difficulty, s.difficulty_name) AS difficulty_name, s.max_players::smallint AS max_players, e.name AS encounter_name, ''::text AS player_guid, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, s.guild_id AS guild_id, e.id AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_time_parse_score_id, 0::bigint AS duration_ms
  FROM guild_source s JOIN log_instance_encounters e ON e.instance_id=s.source_instance_id AND e.boss AND e.kill_type='clean'
- ORDER BY e.name,e.id)
+ ORDER BY COALESCE(e.difficulty,s.difficulty_name),s.max_players,e.name,e.id)
 ) SELECT * FROM projected;
 
 -- name: ReplaceLeaderboardPlayerObservation :batchexec

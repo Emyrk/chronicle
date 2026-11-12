@@ -34,7 +34,7 @@ func TestRubySanctumRankingConfiguration(t *testing.T) {
 	rows = rubySanctumRows(rows)
 
 	require.Len(t, selectKind(rows, "instance"), 1)
-	require.Len(t, selectKind(rows, "variant"), 3)
+	require.Len(t, selectKind(rows, "variant"), 2)
 	require.Len(t, selectKind(rows, "boss"), 4)
 	require.Len(t, selectKind(rows, "set"), 1)
 	members := selectKind(rows, "member")
@@ -66,7 +66,7 @@ func rubySanctumMigration(ctx context.Context, pool *pgxpool.Pool, direction str
 	if err != nil {
 		return err
 	}
-	_, err = pool.Exec(ctx, string(data))
+	_, err = pool.Exec(ctx, migrationDifficultySQL(data, direction))
 	return err
 }
 
@@ -86,6 +86,7 @@ func TestRubySanctumRankingMigrationRoundTrip(t *testing.T) {
 	require.Empty(t, rubySanctumRows(withoutRubySanctum))
 
 	require.NoError(t, rubySanctumMigration(ctx, pool, "up"))
+	require.NoError(t, normalizeDifficultyMigration(ctx, pool))
 	after, err := leaderboardconfig.Resolve(ctx, db, database.WoWFlavor{database.FlavorWrath}, nil)
 	require.NoError(t, err)
 	require.Equal(t, before, after)

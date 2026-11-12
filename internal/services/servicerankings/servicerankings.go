@@ -574,8 +574,20 @@ func splitCSV(s string) []string {
 //
 //	GET /kill-times?instance_name=Molten+Core&period=90d
 func (s *Service) handleKillTimes(w http.ResponseWriter, r *http.Request) {
+	handleKillTimesWithStore(s.store, w, r)
+}
+
+type killTimeStatsQuerier interface {
+	RankingsKillTimeStats(context.Context, database.RankingsKillTimeStatsParams) ([]database.RankingsKillTimeStatsRow, error)
+}
+
+func handleKillTimesWithStore(store killTimeStatsQuerier, w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	q := r.URL.Query()
+	maxPlayers, valid := timeRankingMaxPlayers(w, r)
+	if !valid {
+		return
+	}
 
 	instanceName := q.Get("instance_name")
 	if instanceName == "" {
@@ -590,7 +602,9 @@ func (s *Service) handleKillTimes(w http.ResponseWriter, r *http.Request) {
 		sinceDays = periodToDays(v)
 	}
 
-	rows, err := s.store.RankingsKillTimeStats(ctx, database.RankingsKillTimeStatsParams{
+	rows, err := store.RankingsKillTimeStats(ctx, database.RankingsKillTimeStatsParams{
+		FilterDifficulty: q.Has("difficulty_name"), DifficultyName: q.Get("difficulty_name"),
+		FilterMaxPlayers: q.Has("max_players"), MaxPlayers: maxPlayers,
 		InstanceName: instanceName,
 		SinceDays:    sinceDays,
 	})
@@ -636,6 +650,10 @@ type clearTimeStatsQuerier interface {
 func handleClearTimesWithStore(store clearTimeStatsQuerier, w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	q := r.URL.Query()
+	maxPlayers, valid := timeRankingMaxPlayers(w, r)
+	if !valid {
+		return
+	}
 
 	instanceName := q.Get("instance_name")
 	if instanceName == "" {
@@ -651,6 +669,8 @@ func handleClearTimesWithStore(store clearTimeStatsQuerier, w http.ResponseWrite
 	}
 
 	rows, err := store.RankingsClearTimeStats(ctx, database.RankingsClearTimeStatsParams{
+		FilterDifficulty: q.Has("difficulty_name"), DifficultyName: q.Get("difficulty_name"),
+		FilterMaxPlayers: q.Has("max_players"), MaxPlayers: maxPlayers,
 		InstanceName: instanceName,
 		SinceDays:    sinceDays,
 	})
@@ -684,8 +704,21 @@ func handleClearTimesWithStore(store clearTimeStatsQuerier, w http.ResponseWrite
 //
 //	GET /kill-time-leaderboard?instance_name=Molten+Core&encounter_name=Ragnaros&period=90d
 func (s *Service) handleKillTimeLeaderboard(w http.ResponseWriter, r *http.Request) {
+	handleKillTimeLeaderboardWithStore(s.store, w, r)
+}
+
+type killTimeLeaderboardQuerier interface {
+	RankingsKillTimeLeaderboard(context.Context, database.RankingsKillTimeLeaderboardParams) ([]database.RankingsKillTimeLeaderboardRow, error)
+	RankingsKillTimeTopPerEncounter(context.Context, database.RankingsKillTimeTopPerEncounterParams) ([]database.RankingsKillTimeTopPerEncounterRow, error)
+}
+
+func handleKillTimeLeaderboardWithStore(store killTimeLeaderboardQuerier, w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	q := r.URL.Query()
+	maxPlayers, valid := timeRankingMaxPlayers(w, r)
+	if !valid {
+		return
+	}
 
 	instanceName := q.Get("instance_name")
 	if instanceName == "" {
@@ -723,7 +756,9 @@ func (s *Service) handleKillTimeLeaderboard(w http.ResponseWriter, r *http.Reque
 			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "encounter_names must list 1 to 64 bosses"})
 			return
 		}
-		top, err := s.store.RankingsKillTimeTopPerEncounter(ctx, database.RankingsKillTimeTopPerEncounterParams{
+		top, err := store.RankingsKillTimeTopPerEncounter(ctx, database.RankingsKillTimeTopPerEncounterParams{
+			FilterDifficulty: q.Has("difficulty_name"), DifficultyName: q.Get("difficulty_name"),
+			FilterMaxPlayers: q.Has("max_players"), MaxPlayers: maxPlayers,
 			InstanceName: instanceName, EncounterNames: names, PerEncounter: int32(min(limit, 10)),
 		})
 		if err != nil {
@@ -742,7 +777,9 @@ func (s *Service) handleKillTimeLeaderboard(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	rows, err := s.store.RankingsKillTimeLeaderboard(ctx, database.RankingsKillTimeLeaderboardParams{
+	rows, err := store.RankingsKillTimeLeaderboard(ctx, database.RankingsKillTimeLeaderboardParams{
+		FilterDifficulty: q.Has("difficulty_name"), DifficultyName: q.Get("difficulty_name"),
+		FilterMaxPlayers: q.Has("max_players"), MaxPlayers: maxPlayers,
 		InstanceName:  instanceName,
 		EncounterName: q.Get("encounter_name"),
 		SinceDays:     sinceDays,
@@ -845,4 +882,18 @@ func periodToDays(period string) int64 {
 	default:
 		return 0
 	}
+}
+
+// timeRankingMaxPlayers keeps an absent filter distinct from an explicit value.
+func timeRankingMaxPlayers(w http.ResponseWriter, r *http.Request) (int32, bool) {
+	q := r.URL.Query()
+	if !q.Has("max_players") {
+		return 0, true
+	}
+	value, err := strconv.ParseInt(q.Get("max_players"), 10, 16)
+	if err != nil || value <= 0 {
+		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "max_players must be a positive integer no greater than 32767"})
+		return 0, false
+	}
+	return int32(value), true
 }

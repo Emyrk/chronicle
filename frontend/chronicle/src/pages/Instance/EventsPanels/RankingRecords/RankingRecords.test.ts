@@ -5,6 +5,7 @@ import { filterRankingRecords } from "./rankingRecordsFilter";
 
 const record = {
   id: "row-1",
+  difficulty: "",
   encounter_name: "Baron Geddon",
   player_guid: "0x00000000000197DC",
   player_name: "Roggia",
@@ -24,7 +25,7 @@ describe("Ranking Records panel", () => {
   });
 
   it("searches player, encounter, role, and GUID fields", () => {
-    for (const query of ["roggia", "geddon", "feral", "bear", "tank", "197dc"]) {
+    for (const query of ["roggia", "geddon", "feral", "bear", "tank", "197dc", "normal"]) {
       expect(filterRankingRecords([record], query)).toEqual([record]);
     }
     expect(filterRankingRecords([record], "priest")).toEqual([]);

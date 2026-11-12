@@ -63,8 +63,9 @@ func TestReconcileReparseAndDuplicateMerge(t *testing.T) {
 	require.NoError(t, store.SetDuplicateGroupIDs(ctx, database.SetDuplicateGroupIDsParams{
 		DuplicateGroupID: uuid.NullUUID{UUID: instanceA.ID, Valid: true}, Ids: []uuid.UUID{instanceA.ID, instanceB.ID},
 	}))
-	instanceB, err = store.GetLogInstanceForDiscordAnnouncement(ctx, instanceB.ID)
+	resolvedInstanceB, err := store.GetLogInstanceForDiscordAnnouncement(ctx, instanceB.ID)
 	require.NoError(t, err)
+	instanceB = database.LogInstance(resolvedInstanceB)
 	merged, err := worker.reconcile(ctx, instanceB, 0, "channel")
 	require.NoError(t, err)
 	require.Equal(t, annA.announcement.ID, merged.announcement.ID)

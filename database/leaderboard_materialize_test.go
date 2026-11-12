@@ -298,7 +298,7 @@ func TestMaterializePeakProvenance(t *testing.T) {
 	f.exec(`INSERT INTO wow_server_realms(id,server_id,name) VALUES($1,$2,'Provenance realm')`, f.realm, server)
 	f.exec(`INSERT INTO wow_log_groups(id,owner,created_at,updated_at) VALUES($1,$2,now(),now())`, group, user)
 	f.exec(`INSERT INTO parsed_log_group(id) VALUES($1)`, group)
-	f.exec(`INSERT INTO log_instances(id,realm_id,log_group_id,name,difficulty_name,max_players) SELECT source_instance_id,realm_id,$2,instance_name,difficulty_name,max_players FROM leaderboard_player_observations WHERE tenant_id=$1`, f.tenant, group)
+	f.exec(`INSERT INTO log_instances(id,realm_id,log_group_id,name,difficulty_name,max_players,difficulty_normalized) SELECT source_instance_id,realm_id,$2,instance_name,difficulty_name,max_players,true FROM leaderboard_player_observations WHERE tenant_id=$1`, f.tenant, group)
 	f.exec(`INSERT INTO log_instance_encounters(id,instance_id,name,remaining,boss,start_time,end_time,kill_type) SELECT source_encounter_id,source_instance_id,encounter_name,'{}',true,'2026-01-01Z'::timestamptz,'2026-01-01Z'::timestamptz+CASE WHEN source_encounter_id=$2 THEN interval '8 seconds' ELSE interval '1 second' END,'clean' FROM leaderboard_player_observations WHERE tenant_id=$1`, f.tenant, low)
 	check := func(valid bool) {
 		t.Helper()

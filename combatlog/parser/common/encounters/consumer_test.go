@@ -552,3 +552,33 @@ func TestRaidGroupTrackerAttachedToNewInstance(t *testing.T) {
 	require.Len(t, event.GroupMemberGuids, messages.RaidGroupCount*messages.RaidGroupSize)
 	require.Equal(t, player.String(), event.GroupMemberGuids[0])
 }
+
+func TestSameSizeModeChangesDoNotSplitInstance(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	state := NewWithInstanceResolver(ctx, logger, func(_ bool, z zone.Zone, db *unitdb.Units) *instances.Hookable {
+		return instances.NewHookable(ctx, logger, db, z, instances.InstanceParams{Name: "Icecrown Citadel", MatchesZone: func(other zone.Zone) bool { return other.Name == z.Name }, Idf: identifier.NewIdentifier(map[uint32]instances.Identity{})})
+	})
+	z := zone.Zone{Name: "icecrown citadel", InstanceType: "raid", IsInstance: true, MaxPlayers: 25, DifficultyIndex: 2, DifficultyName: "25 Player"}
+	state.Zone(messages.Zone{Zone: z})
+	first := state.CurrentInstance
+	for _, index := range []int{4, 2} {
+		z.DifficultyIndex = index
+		state.Zone(messages.Zone{Zone: z})
+		require.Same(t, first, state.CurrentInstance)
+		require.Equal(t, index, first.CurrentZone.DifficultyIndex)
+	}
+	for _, dynamic := range []int{1, 0} {
+		z.DynamicDifficulty = dynamic
+		state.Zone(messages.Zone{Zone: z})
+		require.Same(t, first, state.CurrentInstance)
+		require.Equal(t, dynamic, first.CurrentZone.DynamicDifficulty)
+	}
+	require.Len(t, state.Instances, 1)
+	z.MaxPlayers = 10
+	z.DifficultyIndex = 1
+	state.Zone(messages.Zone{Zone: z})
+	require.Len(t, state.Instances, 2)
+	require.NotSame(t, first, state.CurrentInstance)
+}

@@ -888,6 +888,7 @@ func (h *Hookable) FightDetectionHandler(m messages.Message) (func() error, erro
 	}
 
 	if !wasActive && h.currentFight.active() {
+		h.currentFight.Difficulty = h.CurrentZone.DifficultySnapshot()
 		// Install the callback as soon as the fight starts. If the phased
 		// character has not joined yet, keep transitions on the fight until its
 		// provider is discovered later in the same or a subsequent message.
@@ -969,6 +970,7 @@ func (h *Hookable) finalizeFight() error {
 	}
 
 	fight := encounter.Fight{
+		Difficulty:           h.currentFight.Difficulty,
 		Hostiles:             map[guid.GUID]encounter.CharacterFight{},
 		MapID:                h.currentFight.MapID,
 		Start:                start,
@@ -979,6 +981,15 @@ func (h *Hookable) finalizeFight() error {
 		PhaseEncounterName:   h.currentFight.Phases.encounterName(),
 		AuthoritativeName:    h.currentFight.AuthoritativeName,
 		AuthoritativeSuccess: h.currentFight.AuthoritativeSuccess,
+	}
+
+	// Resolve from the start snapshot, never the latest zone metadata.
+	for _, hook := range h.hooks {
+		if resolver, ok := hook.(instancehook.DifficultyResolver); ok {
+			if difficulty, override := resolver.ResolveDifficulty(fight.EncounterID, h.currentFight.Difficulty); override {
+				fight.Difficulty = difficulty
+			}
+		}
 	}
 
 	for id := range h.currentFight.ActiveHostiles {

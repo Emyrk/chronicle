@@ -94,9 +94,9 @@ func (s *Service) loadBossShareCard(r *http.Request, inst database.LogInstancesG
 
 // bossKillCard fills card with the kill time and the top DPS and top HPS on
 // enc. ok is false when the kill has no ranked DPS or HPS.
-func bossKillCard(card bossShareCard, records []database.EncounterDpsRanking, enc database.LogInstanceEncounter) (bossShareCard, bool) {
+func bossKillCard(card bossShareCard, records []database.EncounterDpsRankingsResolved, enc database.LogInstanceEncounter) (bossShareCard, bool) {
 	card.Boss = enc.Name
-	kill := make([]database.EncounterDpsRanking, 0, len(records))
+	kill := make([]database.EncounterDpsRankingsResolved, 0, len(records))
 	for _, rec := range records {
 		if rec.EncounterID.Valid && rec.EncounterID.UUID == enc.ID {
 			kill = append(kill, rec)

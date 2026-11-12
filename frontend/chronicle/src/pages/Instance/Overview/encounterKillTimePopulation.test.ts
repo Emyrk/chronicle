@@ -125,8 +125,8 @@ describe("bossKillParsesByEncounter", () => {
   it("indexes repeat kills of the same boss by encounter ID", () => {
     const resp = makeTimeParsesResponse({
       boss_kill_times: [
-        { encounter_id: "00000000-0000-0000-0000-000000000001", encounter_name: "Lucifron", duration_ms: 90_000, precise_score: 85.5, display_score: 86, rank: 5, sample_size: 50, status: "ok" },
-        { encounter_id: "00000000-0000-0000-0000-000000000002", encounter_name: "Lucifron", duration_ms: 120_000, precise_score: 40.1, display_score: 40, rank: 30, sample_size: 50, status: "ok" },
+        { difficulty_name: "", max_players: 40, encounter_id: "00000000-0000-0000-0000-000000000001", encounter_name: "Lucifron", duration_ms: 90_000, precise_score: 85.5, display_score: 86, rank: 5, sample_size: 50, status: "ok" },
+        { difficulty_name: "", max_players: 40, encounter_id: "00000000-0000-0000-0000-000000000002", encounter_name: "Lucifron", duration_ms: 120_000, precise_score: 40.1, display_score: 40, rank: 30, sample_size: 50, status: "ok" },
       ],
     });
 
@@ -145,8 +145,8 @@ describe("mapTimeBossParses", () => {
   it("maps scored bosses by encounter name", () => {
     const resp = makeTimeParsesResponse({
       boss_kill_times: [
-        { encounter_id: "00000000-0000-0000-0000-000000000001", encounter_name: "Lucifron", duration_ms: 90_000, precise_score: 85.5, display_score: 86, rank: 5, sample_size: 50, status: "scored" },
-        { encounter_id: "00000000-0000-0000-0000-000000000002", encounter_name: "Magmadar", duration_ms: 120_000, precise_score: 72.3, display_score: 72, rank: 10, sample_size: 50, status: "scored" },
+        { difficulty_name: "", max_players: 40, encounter_id: "00000000-0000-0000-0000-000000000001", encounter_name: "Lucifron", duration_ms: 90_000, precise_score: 85.5, display_score: 86, rank: 5, sample_size: 50, status: "scored" },
+        { difficulty_name: "", max_players: 40, encounter_id: "00000000-0000-0000-0000-000000000002", encounter_name: "Magmadar", duration_ms: 120_000, precise_score: 72.3, display_score: 72, rank: 10, sample_size: 50, status: "scored" },
       ],
     });
 
@@ -159,7 +159,7 @@ describe("mapTimeBossParses", () => {
   it("maps sample_too_small bosses to null entry", () => {
     const resp = makeTimeParsesResponse({
       boss_kill_times: [
-        { encounter_id: "00000000-0000-0000-0000-000000000001", encounter_name: "Lucifron", duration_ms: 90_000, precise_score: 0, display_score: 0, rank: 0, sample_size: 3, status: "sample_too_small" },
+        { difficulty_name: "", max_players: 40, encounter_id: "00000000-0000-0000-0000-000000000001", encounter_name: "Lucifron", duration_ms: 90_000, precise_score: 0, display_score: 0, rank: 0, sample_size: 3, status: "sample_too_small" },
       ],
     });
 
@@ -209,4 +209,11 @@ describe("resolveEncounterParseScore", () => {
     // The API score wins — resolveEncounterParseScore returns it
     expect(resolveEncounterParseScore(timeParses, "Lucifron")).toBe(92);
   });
+});
+
+it("does not choose a parse from an ambiguous same-name difficulty cohort", () => {
+  const boss = { encounter_id: "normal", encounter_name: "Lucifron", difficulty_name: "", max_players: 25, duration_ms: 90_000, precise_score: 85.5, display_score: 86, rank: 5, sample_size: 50, status: "ok" };
+  const response = makeTimeParsesResponse({ boss_kill_times: [boss, { ...boss, encounter_id: "heroic", difficulty_name: "heroic" }, boss] });
+  expect(mapTimeBossParses(response)?.get("Lucifron")).toBeNull();
+  expect(bossKillParsesByEncounter(response)?.get("heroic")?.difficulty_name).toBe("heroic");
 });

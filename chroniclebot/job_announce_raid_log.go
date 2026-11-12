@@ -209,7 +209,7 @@ func (w *WorkerAnnounceRaidLog) Work(ctx context.Context, job *river.Job[ArgsAnn
 		return nil
 	}
 
-	reconciled, err := w.reconcile(ctx, instance, job.Args.InstanceOrdinal, installation.AnnounceRaidLogsChannelID.String)
+	reconciled, err := w.reconcile(ctx, database.LogInstance(instance), job.Args.InstanceOrdinal, installation.AnnounceRaidLogsChannelID.String)
 	if err != nil {
 		return fmt.Errorf("reconcile announcement: %w", err)
 	}

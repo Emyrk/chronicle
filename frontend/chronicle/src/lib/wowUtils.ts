@@ -15,11 +15,21 @@ export function isHeroic(
   if ("dynamic_difficulty" in instance) {
     return (
       instance.dynamic_difficulty > 0 ||
-      instance.difficulty_name.includes("Heroic")
+      instance.difficulty_name.toLowerCase().includes("heroic")
     );
   }
   return (
     ((instance.dynamicDifficulty ?? 0) > 0) ||
-    ((instance.difficultyName ?? "").includes("Heroic"))
+    ((instance.difficultyName ?? "").toLowerCase().includes("heroic"))
   );
+}
+
+/** Display normalized identifiers without assuming only two game difficulties exist. */
+export function difficultyLabel(difficulty: string): string {
+  if (!difficulty) return "Normal";
+  return difficulty.replace(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+export function difficultySetLabel(difficulties: readonly string[] | undefined): string {
+  return difficulties?.length ? difficulties.map(difficultyLabel).join(" + ") : "Mixed";
 }

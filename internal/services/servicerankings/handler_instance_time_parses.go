@@ -17,10 +17,11 @@ import (
 )
 
 type timeParsesQuerier interface {
+	GetTimeParseScoringInstance(context.Context, database.GetTimeParseScoringInstanceParams) (database.GetTimeParseScoringInstanceRow, error)
 	InstanceBySlug(context.Context, pgtype.Text) (database.LogInstancesGuild, error)
 	GetTenantByID(context.Context, uuid.UUID) (database.Tenant, error)
 	GetTimeParseScoreForContract(context.Context, database.GetTimeParseScoreForContractParams) (database.TimeParseScore, error)
-	ListTimeParseBossScoresForScore(context.Context, uuid.UUID) ([]database.TimeParseBossScore, error)
+	ListTimeParseBossScoresForScore(context.Context, uuid.UUID) ([]database.ListTimeParseBossScoresForScoreRow, error)
 }
 
 func (s *Service) handleInstanceTimeParses(w http.ResponseWriter, r *http.Request) {
@@ -59,6 +60,13 @@ func handleInstanceTimeParsesWithStore(store timeParsesQuerier, w http.ResponseW
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{Response: chroniclesdk.Response{Message: "Failed to load time parse score", Detail: err.Error()}})
 		return
 	}
+	instance, err := store.GetTimeParseScoringInstance(ctx, database.GetTimeParseScoringInstanceParams{
+		ID: instanceID, TenantID: uuid.NullUUID{UUID: tenantID, Valid: true},
+	})
+	if err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{Response: chroniclesdk.Response{Message: "Failed to load time parse instance", Detail: err.Error()}})
+		return
+	}
 	bossRows, err := store.ListTimeParseBossScoresForScore(ctx, score.ID)
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{Response: chroniclesdk.Response{Message: "Failed to load time parse boss scores", Detail: err.Error()}})
@@ -73,7 +81,7 @@ func handleInstanceTimeParsesWithStore(store timeParsesQuerier, w http.ResponseW
 		scopes[TimeParseScopeGuild] = chroniclesdk.TimeParseScopeResult{Reason: "no_time_data", BossKillTimes: []chroniclesdk.BossKillTimeParse{}}
 	}
 	setClear := func(scopeName string, precise pgtype.Float8, display pgtype.Int2, rank pgtype.Int4, sampleSize pgtype.Int4, status pgtype.Text) {
-		if !score.ClearDurationMs.Valid || !status.Valid {
+		if instance.MixedDifficulty || !score.ClearDurationMs.Valid || !status.Valid {
 			return
 		}
 		scope := scopes[scopeName]
@@ -90,12 +98,13 @@ func handleInstanceTimeParsesWithStore(store timeParsesQuerier, w http.ResponseW
 	setClear(TimeParseScopeGuild, score.ClearGuildPreciseScore, score.ClearGuildDisplayScore, score.ClearGuildRank, score.ClearGuildSampleSize, score.ClearGuildStatus)
 
 	precise := make(map[string][]float64)
-	appendBoss := func(scopeName string, row database.TimeParseBossScore, preciseScore float64, displayScore int16, rank int32, sampleSize int32, status string) {
+	appendBoss := func(scopeName string, row database.ListTimeParseBossScoresForScoreRow, preciseScore float64, displayScore int16, rank int32, sampleSize int32, status string) {
 		scope := scopes[scopeName]
 		scope.Available = true
 		scope.Reason = ""
 		scope.BossKillTimes = append(scope.BossKillTimes, chroniclesdk.BossKillTimeParse{
 			EncounterID: row.EncounterID, EncounterName: row.EncounterName, DurationMs: row.DurationMs,
+			DifficultyName: row.DifficultyName, MaxPlayers: row.MaxPlayers,
 			PreciseScore: preciseScore, DisplayScore: int(displayScore), Rank: int(rank), SampleSize: int(sampleSize), Status: status,
 		})
 		if status != string(timeparsepolicy.StatusSampleTooSmall) {

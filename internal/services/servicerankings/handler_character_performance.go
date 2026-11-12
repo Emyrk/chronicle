@@ -43,13 +43,14 @@ func (s *Service) handleCharacterPerformance(w http.ResponseWriter, r *http.Requ
 
 	metric := normalizeMetric(q.Get("metric"))
 	rows, err := s.store.GetCharacterPerformanceRuns(ctx, database.GetCharacterPerformanceRunsParams{
-		Metric:         metric,
-		EncounterNames: encounterNames,
-		PlayerGuid:     playerGUID,
-		RealmID:        realmID,
-		InstanceName:   instanceName,
-		DifficultyName: q.Get("difficulty_name"),
-		MaxPlayers:     parseMaxPlayers(q.Get("max_players")),
+		Metric:           metric,
+		EncounterNames:   encounterNames,
+		PlayerGuid:       playerGUID,
+		RealmID:          realmID,
+		InstanceName:     instanceName,
+		DifficultyName:   q.Get("difficulty_name"),
+		FilterDifficulty: q.Has("difficulty_name"),
+		MaxPlayers:       parseMaxPlayers(q.Get("max_players")),
 	})
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{

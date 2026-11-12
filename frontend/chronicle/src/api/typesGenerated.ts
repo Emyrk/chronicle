@@ -18,6 +18,8 @@ export interface InstanceRatingEvidenceResponse {
 
 // From chroniclesdk/rating_evidence.go
 export interface InstanceRatingGuildBossObservation {
+    readonly difficulty_name: string;
+    readonly max_players: number;
     readonly encounter_name: string;
     readonly guild_id: string;
     readonly guild_name?: string;
@@ -31,6 +33,8 @@ export interface InstanceRatingGuildBossObservation {
 
 // From chroniclesdk/rating_evidence.go
 export interface InstanceRatingGuildClearObservation {
+    readonly difficulty_name: string;
+    readonly max_players: number;
     readonly guild_id: string;
     readonly guild_name?: string;
     readonly duration_ms: number;
@@ -49,6 +53,8 @@ export interface InstanceRatingGuildEvidence {
 
 // From chroniclesdk/rating_evidence.go
 export interface InstanceRatingGuildRenownFact {
+    readonly difficulty_name: string;
+    readonly max_players: number;
     readonly encounter_name: string;
     readonly guild_id: string;
     readonly guild_name?: string;
@@ -66,6 +72,8 @@ export interface InstanceRatingPlayerEvidence {
 
 // From chroniclesdk/rating_evidence.go
 export interface InstanceRatingPlayerObservation {
+    readonly difficulty_name: string;
+    readonly max_players: number;
     readonly encounter_name: string;
     readonly player_guid: string;
     readonly player_name?: string;
@@ -83,6 +91,8 @@ export interface InstanceRatingPlayerObservation {
 
 // From chroniclesdk/rating_evidence.go
 export interface InstanceRatingPlayerRenownFact {
+    readonly difficulty_name: string;
+    readonly max_players: number;
     readonly encounter_name: string;
     readonly player_guid: string;
     readonly player_name?: string;
@@ -1073,6 +1083,8 @@ export interface BillingSummary {
  * BossKillTimeParse is a per-boss kill-time parse.
  */
 export interface BossKillTimeParse {
+    readonly difficulty_name: string;
+    readonly max_players: number;
     readonly encounter_id: string;
     readonly encounter_name: string;
     readonly duration_ms: number;
@@ -1819,16 +1831,6 @@ export interface EnchantmentSearchResult {
     readonly id: number;
     readonly name: string;
 }
-
-// From chroniclesdk/log.go
-/**
- * EncounterDifficultyMode is how a single boss was pulled. Raids like ICC
- * toggle Heroic per boss, and Ulduar bosses each have their own hard mode, so
- * one log can mix modes.
- */
-export type EncounterDifficultyMode = "hard_mode" | "heroic";
-
-export const EncounterDifficultyModes: EncounterDifficultyMode[] = ["hard_mode", "heroic"];
 
 // From chroniclesdk/log.go
 export interface EncounterKillTime {
@@ -3104,6 +3106,8 @@ export interface InstanceParseAverage {
  * InstanceParseBoss is a player's parse result for a single boss encounter.
  */
 export interface InstanceParseBoss {
+    readonly difficulty_name: string;
+    readonly max_players: number;
     readonly encounter_name: string;
     readonly metric_value: number;
     readonly precise_score: number;
@@ -3225,6 +3229,7 @@ export interface InstanceRaidGroupResponse {
  * in a specific log instance. Zero-value metrics are retained for debugging.
  */
 export interface InstanceRankingRecord {
+    readonly difficulty: string;
     readonly id: string;
     readonly encounter_id?: string;
     readonly encounter_name: string;
@@ -6228,6 +6233,7 @@ export interface SpeedrunResult {
     readonly boss_to_boss_duration_ms?: number;
     readonly proof: readonly SpeedrunProof[];
     readonly level_range?: SpeedrunLevelRangeResult;
+    readonly mixed_difficulty?: boolean;
     readonly data_source?: SpeedrunDataSourceStatus;
     readonly dps_rankings?: DpsRankingsStatus;
     readonly encounter_kill_times: readonly EncounterKillTime[];
@@ -7273,24 +7279,10 @@ export interface WoWEncounter {
     readonly remaining?: readonly GUID[];
     readonly start_time: string;
     readonly end_time: string;
+    readonly difficulty: string;
     readonly invalidated_at?: string;
     readonly invalid_reason?: string;
     readonly ranking_window?: WoWRankingWindow;
-    /**
-     * Difficulty marks a boss pulled above normal difficulty. Absent means normal.
-     */
-    readonly difficulty?: WoWEncounterDifficulty;
-}
-
-// From chroniclesdk/log.go
-export interface WoWEncounterDifficulty {
-    readonly mode: EncounterDifficultyMode;
-    /**
-     * Tier is the count for tiered hard modes: Flame Leviathan towers (1-4),
-     * Freya elders (1-3), Yogg-Saron keepers (0-3, fewer is harder). Absent
-     * for untiered modes.
-     */
-    readonly tier?: number;
 }
 
 // From chroniclesdk/log.go
@@ -7361,6 +7353,9 @@ export type WoWHitType = 4 | 512 | 32768 | 2048 | 16384 | 1024 | 128 | 262144 | 
 export const WoWHitTypes: WoWHitType[] = [4, 512, 32768, 2048, 16384, 1024, 128, 262144, 16, 256, 2, 8192, 65536, 4194304, 32, 0, 1, 4096, 64, 131072, 8, 2097152, 1048576, 524288];
 
 // From chroniclesdk/log.go
+
+
+// From chroniclesdk/log.go
 export interface WoWInstance {
     readonly id: string;
     readonly realm_id: string;
@@ -7401,6 +7396,8 @@ export interface WoWInstance {
     readonly difficulty_name: string;
     readonly max_players: number;
     readonly dynamic_difficulty: number;
+    readonly difficulties?: readonly string[];
+    readonly mixed_difficulty?: boolean;
     readonly invalidated_at?: string;
     readonly invalid_reason?: string;
     readonly vehicle_control_intervals?: VehicleControlMetadata;

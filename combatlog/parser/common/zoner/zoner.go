@@ -53,11 +53,13 @@ func (l *Location) Process(z messages.Zone) zone.ZoneChangeResult {
 			l.Zone = z.Zone
 			return zone.DifficultyChanged
 		}
-		if !l.HasDifficulty() {
-			// Adopt late-arriving difficulty info in place.
+		if !l.DifficultyEquals(z.Zone) {
+			// Adopt late metadata or mode changes for subsequent encounters.
 			l.DifficultyIndex = z.DifficultyIndex
 			l.DifficultyName = z.DifficultyName
-			l.MaxPlayers = z.MaxPlayers
+			if z.MaxPlayers > 0 {
+				l.MaxPlayers = z.MaxPlayers
+			}
 			l.DynamicDifficulty = z.DynamicDifficulty
 			l.SubZone = z.SubZone
 			return zone.InfoUpdated

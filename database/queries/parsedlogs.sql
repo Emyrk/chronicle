@@ -101,20 +101,35 @@ WHERE id = $1
 
 -- name: InsertInstance :one
 INSERT INTO
-  log_instances (id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time, capabilities, versions, recorder_name, recorder_guid, parser_version, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, category, invalidated_at, invalid_reason)
+  log_instances (id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time, capabilities, versions, recorder_name, recorder_guid, parser_version, difficulty_name, max_players, dynamic_difficulty, mixed_difficulty, vehicle_control_intervals, category, invalidated_at, invalid_reason, difficulty_normalized)
 VALUES
-  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, true)
 ON CONFLICT (hashed_slug) WHERE hashed_slug IS NOT NULL DO NOTHING
 RETURNING *
 ;
 
 -- name: InsertEncounter :one
 INSERT INTO
-  log_instance_encounters (id, instance_id, name, map_id, kill_type, remaining, boss, start_time, end_time, ranking_start_offset_ms, ranking_end_offset_ms)
+  log_instance_encounters (id, instance_id, name, map_id, kill_type, remaining, boss, start_time, end_time, ranking_start_offset_ms, ranking_end_offset_ms, difficulty)
 VALUES
-  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 RETURNING *
 ;
+
+-- name: InsertInstanceDifficulty :exec
+INSERT INTO log_instance_difficulties (instance_id, difficulty)
+VALUES (@instance_id, @difficulty)
+ON CONFLICT DO NOTHING;
+
+-- name: InstanceDifficultiesByInstanceID :many
+-- Return all observed modes for analysis. Clear eligibility is stored separately
+-- from boss attempts only; trash must not determine mixed-clear status.
+SELECT DISTINCT encounter.instance_id,
+       COALESCE(encounter.difficulty, instance.difficulty_name)::text AS difficulty
+FROM log_instance_encounters encounter
+JOIN log_instances_resolved instance ON instance.id = encounter.instance_id
+WHERE encounter.instance_id = @instance_id
+ORDER BY difficulty;
 
 -- name: GetInstancesByLogGroupID :many
 SELECT
@@ -276,7 +291,7 @@ SELECT
     li.difficulty_name,
     li.max_players,
     li.dynamic_difficulty
-FROM log_instances li
+FROM log_instances_resolved li
 JOIN parsed_log_group plg ON plg.id = li.log_group_id
 JOIN wow_log_groups wlg ON wlg.id = plg.id
   AND plg.parse_generation = wlg.parse_generation
@@ -352,7 +367,7 @@ SELECT
     li.difficulty_name,
     li.max_players,
     li.dynamic_difficulty
-FROM log_instances li
+FROM log_instances_resolved li
 JOIN parsed_log_group plg ON plg.id = li.log_group_id
 JOIN wow_log_groups wlg ON wlg.id = plg.id
   AND plg.parse_generation = wlg.parse_generation
@@ -415,7 +430,7 @@ OFFSET @offset_count;
 -- most total encounters, then the duplicate-group anchor and stable tie-breakers.
 WITH matching_runs AS (
     SELECT DISTINCT COALESCE(li.duplicate_group_id, li.id) AS run_id
-    FROM log_instances li
+    FROM log_instances_resolved li
     JOIN parsed_log_group plg ON plg.id = li.log_group_id
     JOIN wow_log_groups wlg ON wlg.id = plg.id
       AND plg.parse_generation = wlg.parse_generation
@@ -502,7 +517,7 @@ instance_rows AS (
         li.max_players,
         li.dynamic_difficulty,
         ('unit-position' = ANY(li.capabilities))::boolean AS has_positions
-    FROM log_instances li
+    FROM log_instances_resolved li
     JOIN matching_runs ON matching_runs.run_id = COALESCE(li.duplicate_group_id, li.id)
     JOIN parsed_log_group plg ON plg.id = li.log_group_id
     JOIN wow_log_groups wlg ON wlg.id = plg.id
@@ -635,7 +650,7 @@ SELECT DISTINCT ON (
     li.difficulty_name,
     li.max_players,
     li.dynamic_difficulty
-FROM log_instances li
+FROM log_instances_resolved li
 JOIN log_instance_players lip ON lip.instance_id = li.id
 JOIN parsed_log_group plg ON plg.id = li.log_group_id
 JOIN wow_log_groups wlg ON wlg.id = plg.id
@@ -706,13 +721,12 @@ ORDER BY lie.instance_id, lie.start_time ASC;
 
 -- name: FindDuplicateInstanceCandidates :many
 SELECT li.id, li.duplicate_group_id
-FROM log_instances li
+FROM log_instances_resolved li
 JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
 WHERE li.realm_id = @realm_id
   AND li.name = @name
   AND li.invalidated_at IS NULL
   AND li.max_players = @max_players
-  AND li.dynamic_difficulty = @dynamic_difficulty
   AND li.start_time >= @window_start
   AND li.start_time <= @window_end
   AND li.id != @exclude_id

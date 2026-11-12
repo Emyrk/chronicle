@@ -37,7 +37,7 @@ LEFT JOIN LATERAL (
         ) AS spec_roles
     FROM (
         SELECT psr.player_spec, psr.player_role, MAX(psr.killed_at) AS last_seen
-        FROM parse_score_results psr
+        FROM parse_score_results_resolved psr
 JOIN log_instances psr_instance ON psr_instance.id = psr.instance_id
 JOIN wow_log_groups psr_group ON psr_group.id = psr_instance.log_group_id AND NOT psr_group.unlisted
         WHERE psr.tenant_id = @tenant_id
@@ -47,7 +47,7 @@ JOIN wow_log_groups psr_group ON psr_group.id = psr_instance.log_group_id AND NO
               SELECT recent.instance_id
               FROM (
                   SELECT psr2.instance_id, MAX(psr2.killed_at) AS latest_kill
-                  FROM parse_score_results psr2
+                  FROM parse_score_results_resolved psr2
 JOIN log_instances psr2_instance ON psr2_instance.id = psr2.instance_id
 JOIN wow_log_groups psr2_group ON psr2_group.id = psr2_instance.log_group_id AND NOT psr2_group.unlisted
                   WHERE psr2.tenant_id = @tenant_id
@@ -67,22 +67,28 @@ LEFT JOIN LATERAL (
         SELECT
             ranked.instance_name,
             ranked.encounter_name,
+            ranked.difficulty_name,
+            ranked.max_players,
             AVG(ranked.precise_score)::float8 AS avg_parse
         FROM (
             SELECT
                 deduped.instance_name,
                 deduped.encounter_name,
+                deduped.difficulty_name,
+                deduped.max_players,
                 deduped.precise_score,
                 ROW_NUMBER() OVER (
-                    PARTITION BY deduped.instance_name, deduped.encounter_name
+                    PARTITION BY deduped.instance_name, deduped.encounter_name, deduped.difficulty_name, deduped.max_players
                     ORDER BY deduped.precise_score DESC
                 ) AS score_rank
             FROM (
-                SELECT DISTINCT ON (psr.run_id, psr.encounter_name)
+                SELECT DISTINCT ON (psr.run_id, psr.encounter_name, psr.difficulty_name, psr.max_players)
                     psr.instance_name,
                     psr.encounter_name,
+                    psr.difficulty_name,
+                    psr.max_players,
                     psr.precise_score
-                FROM parse_score_results psr
+                FROM parse_score_results_resolved psr
 JOIN log_instances psr_instance ON psr_instance.id = psr.instance_id
 JOIN wow_log_groups psr_group ON psr_group.id = psr_instance.log_group_id AND NOT psr_group.unlisted
                 WHERE psr.tenant_id = @tenant_id
@@ -90,11 +96,11 @@ JOIN wow_log_groups psr_group ON psr_group.id = psr_instance.log_group_id AND NO
                   AND psr.metric = CASE WHEN latest.player_role = 'heal' THEN 'hps' ELSE 'dps' END
                   AND psr.status IN ('ok', 'low_confidence')
                   AND psr.killed_at >= now() - make_interval(days => @parse_window_days::int)
-                ORDER BY psr.run_id, psr.encounter_name, psr.created_at DESC, psr.precise_score DESC
+                ORDER BY psr.run_id, psr.encounter_name, psr.difficulty_name, psr.max_players, psr.created_at DESC, psr.precise_score DESC
             ) deduped
         ) ranked
         WHERE ranked.score_rank <= 3
-        GROUP BY ranked.instance_name, ranked.encounter_name
+        GROUP BY ranked.instance_name, ranked.encounter_name, ranked.difficulty_name, ranked.max_players
     ) encounter_scores
 ) scores ON true
 WHERE gp.guild_id = @guild_id::uuid
@@ -118,7 +124,7 @@ WITH guild_members AS (
     FROM game_players gp
     WHERE gp.guild_id = @guild_id::uuid
 ), deduped AS (
-    SELECT DISTINCT ON (psr.run_id, psr.encounter_name, psr.player_guid)
+    SELECT DISTINCT ON (psr.run_id, psr.encounter_name, psr.player_guid, psr.difficulty_name, psr.max_players)
         psr.player_guid,
         psr.player_name,
         psr.player_class,
@@ -128,15 +134,15 @@ WITH guild_members AS (
         psr.instance_id,
         COALESCE(li.hashed_slug, '')::text AS instance_slug,
         psr.instance_name,
-        psr.difficulty_name,
+        psr.difficulty_name::text AS difficulty_name,
         psr.max_players,
         psr.metric_value,
         psr.precise_score,
         psr.display_score,
         psr.killed_at
-    FROM parse_score_results psr
+    FROM parse_score_results_resolved psr
     JOIN guild_members gm ON gm.player_guid = psr.player_guid
-    JOIN log_instances li ON li.id = psr.instance_id
+    JOIN log_instances_resolved li ON li.id = psr.instance_id
 JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
     WHERE psr.tenant_id = @tenant_id
       AND psr.metric = @metric
@@ -145,7 +151,7 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
           WHEN @since_days::bigint > 0 THEN psr.killed_at >= now() - make_interval(days => @since_days::int)
           ELSE true
       END
-    ORDER BY psr.run_id, psr.encounter_name, psr.player_guid, psr.created_at DESC, psr.precise_score DESC
+    ORDER BY psr.run_id, psr.encounter_name, psr.player_guid, psr.difficulty_name, psr.max_players, psr.created_at DESC, psr.precise_score DESC
 ), ranked AS (
     SELECT *,
         ROW_NUMBER() OVER (
@@ -187,12 +193,12 @@ WITH representative_instances AS (
     SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
         li.id,
         COALESCE(li.duplicate_group_id, li.id) AS run_id
-    FROM log_instances li
+    FROM log_instances_resolved li
 JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
     WHERE li.invalidated_at IS NULL
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
         (SELECT COUNT(DISTINCT coverage.encounter_name)
-         FROM encounter_dps_rankings coverage
+         FROM encounter_dps_rankings_resolved coverage
          WHERE coverage.instance_id = li.id
            AND coverage.encounter_id IS NOT NULL) DESC,
         (li.id = li.duplicate_group_id) DESC NULLS LAST,
@@ -210,11 +216,12 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
         sr.ranked_duration_ms::bigint AS duration_ms,
         sr.ranked_completion_time::timestamptz AS completion_time
     FROM representative_instances representative
-    JOIN log_instances li ON li.id = representative.id
+    JOIN log_instances_resolved li ON li.id = representative.id
 JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
     JOIN instance_speedruns sr ON sr.instance_id = representative.id
     JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
     WHERE sr.guild_id = @guild_id::uuid
+      AND NOT li.mixed_difficulty
       AND sr.ranked_duration_ms > 0
       AND CASE
           WHEN @since_days::bigint > 0 THEN sr.ranked_completion_time >= now() - make_interval(days => @since_days::int)
@@ -272,19 +279,21 @@ ORDER BY instance_name,
 SELECT
     li.name AS instance_name,
     lie.name AS encounter_name,
-    li.difficulty_name,
-    li.max_players,
+    COALESCE(lie.difficulty, li.difficulty_name) AS difficulty_name,
+    li.max_players AS max_players,
     COUNT(DISTINCT COALESCE(li.duplicate_group_id, li.id))::int AS kills,
     MIN(lie.end_time)::timestamptz AS first_killed_at,
     MAX(lie.end_time)::timestamptz AS last_killed_at
 FROM log_instance_encounters lie
-JOIN log_instances li ON li.id = lie.instance_id
+JOIN log_instances_resolved li ON li.id = lie.instance_id
 JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
 JOIN wow_server_realms wsr ON wsr.id = li.realm_id
 WHERE li.guild_id = @guild_id::uuid
   AND lie.boss = true
   AND lie.kill_type IN ('clean', 'partial')
-GROUP BY li.name, lie.name, li.difficulty_name, li.max_players
+GROUP BY li.name, lie.name,
+    COALESCE(lie.difficulty, li.difficulty_name),
+    li.max_players
 ORDER BY li.name, lie.name;
 
 -- name: GuildRunParseAverages :many
@@ -294,13 +303,13 @@ ORDER BY li.name, lie.name;
 -- hps for healers and dps for everyone else. Duplicate uploads collapse to
 -- one row per encounter+player before averaging.
 WITH deduped AS (
-    SELECT DISTINCT ON (psr.run_id, psr.encounter_name, psr.player_guid)
+    SELECT DISTINCT ON (psr.run_id, psr.encounter_name, psr.player_guid, psr.difficulty_name, psr.max_players)
         psr.run_id,
         psr.encounter_name,
         psr.instance_id,
         psr.precise_score,
         psr.killed_at
-    FROM parse_score_results psr
+    FROM parse_score_results_resolved psr
 JOIN log_instances psr_instance ON psr_instance.id = psr.instance_id
 JOIN wow_log_groups psr_group ON psr_group.id = psr_instance.log_group_id AND NOT psr_group.unlisted
     WHERE psr.tenant_id = @tenant_id
@@ -311,7 +320,7 @@ JOIN wow_log_groups psr_group ON psr_group.id = psr_instance.log_group_id AND NO
           (psr.player_role = 'heal' AND psr.metric = 'hps')
           OR (psr.player_role != 'heal' AND psr.metric = 'dps')
       )
-    ORDER BY psr.run_id, psr.encounter_name, psr.player_guid, psr.created_at DESC, psr.precise_score DESC
+    ORDER BY psr.run_id, psr.encounter_name, psr.player_guid, psr.difficulty_name, psr.max_players, psr.created_at DESC, psr.precise_score DESC
 ), grouped AS (
     SELECT
         run_id,

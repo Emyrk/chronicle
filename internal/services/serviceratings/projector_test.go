@@ -33,7 +33,7 @@ func newSourceFixture(t *testing.T) *sourceFixture {
 	// A duplicate-group identity distinct from the representative is valid only
 	// when the group ID references another existing instance (seed it first).
 	s.run = s.instance
-	f.exec(`INSERT INTO log_instances(id,realm_id,log_group_id,name,difficulty_name,max_players,guild_id) VALUES($1,$2,$3,'Fixture raid','Normal',40,$4)`, s.instance, f.realm, s.group, f.guild)
+	f.exec(`INSERT INTO log_instances(id,realm_id,log_group_id,name,difficulty_name,max_players,guild_id,difficulty_normalized) VALUES($1,$2,$3,'Fixture raid','Normal',40,$4,true)`, s.instance, f.realm, s.group, f.guild)
 	f.exec(`INSERT INTO log_instance_encounters(id,instance_id,name,remaining,boss,start_time,end_time,kill_type) VALUES($1,$2,'Boss','{}',true,'2026-01-01Z','2026-01-01Z'::timestamptz+interval '10 seconds','clean')`, s.encounter, s.instance)
 	f.exec(`INSERT INTO ranking_runs(run_id,representative_instance_id,realm_id,instance_name,difficulty_name,max_players,boss_coverage,member_count,source_updated_at) VALUES($1,$2,$3,'Fixture raid','Normal',40,1,1,now())`, s.run, s.instance, f.realm)
 	f.exec(`INSERT INTO encounter_dps_rankings(encounter_id,instance_id,encounter_name,instance_name,player_guid,player_name,player_class,player_spec,difficulty_name,max_players,realm_id,realm_name,damage_done,duration_secs,dps,hps,killed_at) VALUES($1,$2,'Boss','Fixture raid','Player','Player','MAGE','Frost','Normal',40,$3,'Projection realm',1000,10,100,25,now())`, s.encounter, s.instance, f.realm)
@@ -692,4 +692,41 @@ func TestCareerRenownProjectionAttributionAndRetraction(t *testing.T) {
 	require.NoError(t, s.direct(s.compute()))
 	require.NoError(t, s.row(`SELECT count(*) FROM leaderboard_career_renown_facts WHERE tenant_id=$1`, s.tenant).Scan(&n))
 	require.Zero(t, n)
+}
+
+func TestProjectionPreservesSameBossDifficultyVariants(t *testing.T) {
+	t.Parallel()
+	s := newSourceFixture(t)
+	s.times()
+	// Keep the legacy instance label to exercise the resolved normal fallback.
+	heroic := uuid.New()
+	s.exec(`UPDATE log_instances SET mixed_difficulty=true, difficulty_normalized=false WHERE id=$1`, s.instance)
+	s.exec(`INSERT INTO log_instance_encounters(id,instance_id,name,remaining,boss,start_time,end_time,kill_type,difficulty)
+  VALUES($1,$2,'Boss','{}',true,'2026-01-01Z','2026-01-01Z'::timestamptz+interval '20 seconds','clean','heroic')`, heroic, s.instance)
+	s.exec(`INSERT INTO encounter_dps_rankings(encounter_id,instance_id,encounter_name,instance_name,player_guid,player_name,player_class,player_spec,difficulty_name,max_players,realm_id,realm_name,damage_done,duration_secs,dps,hps,killed_at)
+  VALUES($1,$2,'Boss','Fixture raid','Player','Player','MAGE','Frost','heroic',40,$3,'Projection realm',4000,20,200,50,now())`, heroic, s.instance, s.realm)
+	s.exec(`INSERT INTO time_parse_boss_scores(time_parse_score_id,encounter_id,encounter_name,duration_ms,server_precise_score,server_display_score,server_rank,server_sample_size,server_status,realm_precise_score,realm_display_score,realm_rank,realm_sample_size,realm_status)
+  SELECT time_parse_score_id,$1,encounter_name,20000,server_precise_score,server_display_score,server_rank,server_sample_size,server_status,realm_precise_score,realm_display_score,realm_rank,realm_sample_size,realm_status FROM time_parse_boss_scores WHERE encounter_id=$2`, heroic, s.encounter)
+	rows := s.compute()
+	kinds := map[int32]map[string]bool{}
+	for _, row := range rows {
+		require.NotEqual(t, int32(3), row.Kind, "mixed runs cannot project a clear")
+		if kinds[row.Kind] == nil {
+			kinds[row.Kind] = map[string]bool{}
+		}
+		kinds[row.Kind][row.DifficultyName] = true
+	}
+	for _, kind := range []int32{1, 2, 4, 5, 6} {
+		require.Equal(t, map[string]bool{"": true, "heroic": true}, kinds[kind])
+	}
+	require.NoError(t, s.direct(rows))
+	require.NoError(t, s.direct(rows))
+	for _, table := range []string{"player_observations", "guild_boss_observations", "player_renown_facts", "guild_renown_facts", "career_renown_facts"} {
+		var count int
+		require.NoError(t, s.row("SELECT count(DISTINCT difficulty_name) FROM leaderboard_"+table+" WHERE tenant_id=$1", s.tenant).Scan(&count))
+		require.Equal(t, 2, count, table)
+	}
+	var clears int
+	require.NoError(t, s.row(`SELECT count(*) FROM leaderboard_guild_clear_observations WHERE tenant_id=$1`, s.tenant).Scan(&clears))
+	require.Zero(t, clears)
 }
