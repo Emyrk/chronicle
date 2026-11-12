@@ -34,6 +34,7 @@ func RegisterWoWForever(r *Registry) {
 	r.RegisterEntry(FromCommonFactory(instances.RuinsOfLordaeronFactory))
 	r.RegisterEntry(FromCommonFactory(instances.ExcavationSiteWetlandsFactory))
 	r.RegisterEntry(FromCommonFactory(instances.TheDrownedCityFactory))
+	r.RegisterEntry(FromCommonFactory(instances.KrolDokStrongholdFactory))
 }
 
 func RegisterClassicEncounters(r *Registry) {
