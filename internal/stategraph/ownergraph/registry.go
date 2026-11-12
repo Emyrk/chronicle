@@ -279,12 +279,17 @@ func (r *Registry) Restore(s Snapshot) (any, error) {
 	}
 	sort.Strings(paths)
 	// Allocate every owner before any loader can resolve a cyclic reference.
+	initialized := map[any]bool{}
 	for _, p := range paths {
 		a := r.byType[run.nodes[p].Type]
 		v := a.init()
 		if !validPointer(v) {
 			return nil, fmt.Errorf("nil owner init %s", a.typ)
 		}
+		if initialized[v] {
+			return nil, fmt.Errorf("owner init reused canonical object")
+		}
+		initialized[v] = true
 		run.objects[p] = v
 	}
 	for _, p := range paths {

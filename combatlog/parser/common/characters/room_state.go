@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"maps"
+	"slices"
 	"time"
 )
 
@@ -40,7 +42,8 @@ func (r *Room) CaptureState(capture func(*RoomMechanic) (string, error)) (RoomSt
 		}
 		return s, nil
 	}
-	for id, c := range r.Units {
+	for _, id := range slices.Sorted(maps.Keys(r.Units)) {
+		c := r.Units[id]
 		s, e := ref(c)
 		if e != nil {
 			return RoomState{}, e
