@@ -174,14 +174,7 @@ function TierScale({ scale, tier }: { scale: HardModeScale; tier: number }) {
 /** Tooltip body: what this kill was, and how the mode is triggered. */
 function ModeTooltipBody({ kill }: { kill: BossKill }) {
   if (kill.mode === "heroic") {
-    return (
-      <div className="max-w-60 text-xs">
-        <div className="flex items-center gap-1.5 font-semibold text-purple-300">Heroic</div>
-        <p className="mt-1 text-muted-foreground">
-          Killed with Heroic difficulty on. ICC lets the raid toggle Heroic per boss, so one run can mix both.
-        </p>
-      </div>
-    );
+    return <span className="text-xs font-semibold text-purple-300">Heroic</span>;
   }
   const info = ULDUAR_HARD_MODES[kill.name];
   const tier = tierLabel(kill);
@@ -211,7 +204,7 @@ function ModeTooltip({ kill, children }: { kill: BossKill; children: ReactNode }
   return (
     <HintTooltip>
       <TooltipTrigger asChild>{children}</TooltipTrigger>
-      <TooltipContent side="right" className="p-3">
+      <TooltipContent side="right" className={kill.mode === "hard" ? "p-3" : undefined}>
         <ModeTooltipBody kill={kill} />
       </TooltipContent>
     </HintTooltip>
@@ -220,12 +213,12 @@ function ModeTooltip({ kill, children }: { kill: BossKill; children: ReactNode }
 
 /* ---------- Candidate treatments ---------- */
 
-/** A: trailing chip. Reuses HeroicBadge ("H") for heroic; amber "HM" for hard mode, tier in the tooltip. */
+/** A: trailing soft-tint chip. Purple "H" for heroic; amber "HM" for hard mode, tier in the tooltip. */
 function ChipRow({ kill, selected }: { kill: BossKill; selected?: boolean }) {
   const marker = kill.mode === "heroic"
-    ? <span className="inline-flex shrink-0 cursor-help"><HeroicBadge size="sm" /></span>
+    ? <span className="inline-flex shrink-0 cursor-help"><StyledMark kill={kill} style="soft" /></span>
     : kill.mode === "hard"
-      ? <span className="inline-flex shrink-0 cursor-help"><HardModeChip compact /></span>
+      ? <span className="inline-flex shrink-0 cursor-help"><StyledMark kill={kill} style="soft" compact /></span>
       : null;
   return <Row kill={kill} selected={selected} after={marker && <ModeTooltip kill={kill}>{marker}</ModeTooltip>} />;
 }
@@ -233,9 +226,9 @@ function ChipRow({ kill, selected }: { kill: BossKill; selected?: boolean }) {
 /** B: chip carries the tier for tiered hard modes ("2 elders"), plain "HM" otherwise. */
 function TierChipRow({ kill, selected }: { kill: BossKill; selected?: boolean }) {
   const marker = kill.mode === "heroic"
-    ? <span className="inline-flex shrink-0 cursor-help"><HeroicBadge size="sm" /></span>
+    ? <span className="inline-flex shrink-0 cursor-help"><StyledMark kill={kill} style="soft" /></span>
     : kill.mode === "hard"
-      ? <span className="inline-flex shrink-0 cursor-help"><HardModeChip tier={tierLabel(kill)} /></span>
+      ? <span className="inline-flex shrink-0 cursor-help"><StyledMark kill={kill} style="soft" /></span>
       : null;
   return <Row kill={kill} selected={selected} after={marker && <ModeTooltip kill={kill}>{marker}</ModeTooltip>} />;
 }
@@ -350,7 +343,7 @@ function SidebarColumn({ title, note, kills, RowFor }: {
 }
 
 const CANDIDATES: { title: string; note: string; RowFor: RowComponent }[] = [
-  { title: "A · Trailing chip", note: "Existing purple H badge; amber HM. Tier lives in the tooltip.", RowFor: ChipRow },
+  { title: "A · Trailing chip", note: "Soft-tint purple H; amber HM. Tier lives in the tooltip.", RowFor: ChipRow },
   { title: "B · Chip with tier", note: "Same as A, but tiered hard modes print the tier (\"2 elders\").", RowFor: TierChipRow },
   { title: "C · Leading glyph", note: "No text, lowest noise. Needs the legend/tooltip to learn.", RowFor: GlyphRow },
   { title: "D · Tinted name", note: "Quietest, but purple collides with parse colours.", RowFor: TintRow },
@@ -384,10 +377,11 @@ const MARK_STYLES: { style: MarkStyle; title: string; note: string }[] = [
 
 const MARK_BOX = "inline-flex shrink-0 items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-bold leading-none";
 
-function StyledMark({ kill, style }: { kill: BossKill; style: MarkStyle }) {
+/** `compact` prints "HM" even for tiered hard modes (option A). */
+function StyledMark({ kill, style, compact }: { kill: BossKill; style: MarkStyle; compact?: boolean }) {
   if (kill.mode === "normal") return null;
   const heroic = kill.mode === "heroic";
-  const label = heroic ? "H" : tierLabel(kill) ?? "HM";
+  const label = heroic ? "H" : (!compact && tierLabel(kill)) || "HM";
   const flame = !heroic && <Flame className="h-2.5 w-2.5" />;
   if (style === "current") {
     return heroic ? <HeroicBadge size="sm" /> : <HardModeChip tier={tierLabel(kill)} />;
