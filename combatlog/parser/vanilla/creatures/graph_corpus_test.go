@@ -34,6 +34,11 @@ func (graphCorpusSpells) Spell(_ context.Context, id chrondbc.SpellID) (*chrondb
 	v := chrondbc.UnknownSpell(id)
 	return &v, nil
 }
+
+// TestCharacterGraphCapybara uses a REDUCED recipe (NewNefarian + Common fallback,
+// UnknownSpell), not production character semantics or a production dataset.
+// The line-20000 checkpoint is a quiescent MESSAGE-BATCH boundary, not proof of
+// the complete-file snapshot API. Full-session comparison remains out of scope.
 func TestCharacterGraphCapybara(t *testing.T) {
 	path := os.Getenv("CHRONICLE_CHARACTER_GRAPH_FIXTURE")
 	if path == "" {
