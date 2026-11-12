@@ -228,7 +228,7 @@ export function LeaderboardDetails({
         <div className="mt-3 border-t border-zinc-800 pt-3">
           <div className="flex items-center gap-1.5 text-xs text-red-400">
             <XCircle className="h-3 w-3 shrink-0" />
-            Mixed Normal and Heroic encounters are not eligible for a single clear-time or speedrun ranking.
+            Mixed boss difficulties are not eligible for a single clear-time or speedrun ranking.
           </div>
         </div>
       )}

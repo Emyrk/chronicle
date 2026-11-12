@@ -1,3 +1,5 @@
+import { difficultyLabel } from "@/lib/wowUtils";
+
 export interface ProgressionEncounter {
   readonly instance_name: string;
   readonly encounter_name: string;
@@ -59,7 +61,7 @@ export function groupProgression(
       instanceName: encounter.instance_name,
       difficultyName: encounter.difficulty_name,
       maxPlayers: encounter.max_players,
-      heroic: encounter.difficulty_name.includes("Heroic"),
+      heroic: encounter.difficulty_name.toLowerCase().includes("heroic"),
       encountersDown: 1,
       killedBosses: [encounter.encounter_name],
       kills: encounter.kills,
@@ -110,14 +112,14 @@ export function progressionVariantLabel(
   format: "short" | "long" = "short",
 ): string {
   if (format === "long") {
-    return [variant.maxPlayers > 0 ? `${variant.maxPlayers}-player` : "", variant.difficultyName]
+    return [variant.maxPlayers > 0 ? `${variant.maxPlayers}-player` : "", difficultyLabel(variant.difficultyName)]
       .filter(Boolean)
       .join(" ");
   }
 
   const parts: string[] = [];
   if (variant.maxPlayers > 0) parts.push(String(variant.maxPlayers));
-  if (variant.heroic) parts.push("HC");
+  parts.push(variant.heroic ? "HC" : difficultyLabel(variant.difficultyName));
   return parts.join(" ");
 }
 

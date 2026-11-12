@@ -22,7 +22,7 @@ export function RankingsLanding({ showTopPlayers = true }: { showTopPlayers?: bo
   const instanceHref = (name: string, difficultyName?: string) => {
     const next = new URLSearchParams(params)
     next.set("instance", name)
-    if (difficultyName) {
+    if (difficultyName !== undefined) {
       next.set("diff", difficultyName)
     } else {
       next.delete("diff")

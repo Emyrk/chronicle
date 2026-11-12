@@ -96,7 +96,7 @@ function characterPerformanceQuery(params: CharacterPerformanceParams) {
   if (params.realmID) searchParams.set("realm_id", params.realmID);
   if (params.instanceName) searchParams.set("instance_name", params.instanceName);
   if (params.encounterNames.length > 0) searchParams.set("encounter_names", params.encounterNames.join(","));
-  if (params.difficultyName) searchParams.set("difficulty_name", params.difficultyName);
+  if (params.difficultyName !== undefined) searchParams.set("difficulty_name", params.difficultyName);
   if (params.maxPlayers) searchParams.set("max_players", String(params.maxPlayers));
   searchParams.set("metric", params.metric);
 

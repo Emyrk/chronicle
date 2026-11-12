@@ -115,3 +115,17 @@ describe("progression presentation helpers", () => {
     });
   });
 });
+
+ describe("normalized difficulty variants", () => {
+  it("recognizes normalized heroic and preserves arbitrary mode labels", () => {
+    const [group] = groupProgression([
+      encounter("Boss", { difficulty_name: "heroic" }),
+      encounter("Boss", { difficulty_name: "mythic_plus" }),
+      encounter("Boss", { difficulty_name: "" }),
+    ]);
+    expect(group.variants.find((v) => v.difficultyName === "heroic")?.heroic).toBe(true);
+    const labels = group.variants.map((v) => progressionVariantLabel(v));
+    expect(labels).toEqual(expect.arrayContaining(["10 HC", "10 Mythic Plus", "10 Normal"]));
+    expect(progressionVariantLabel({ difficultyName: "", maxPlayers: 10, heroic: false }, "long")).toBe("10-player Normal");
+  });
+});
