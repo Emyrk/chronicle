@@ -7,6 +7,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/phases"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
+	"maps"
 	"slices"
 	"sort"
 )
@@ -94,7 +95,8 @@ func (c *Characters) CaptureState(character func(Character) (string, error), sha
 		return CharactersState{}, e
 	}
 	v := charactersValue{Recipe: c.snapshotRecipe, Factories: slices.Clone(c.snapshotFactoryIDs), All: data, ByEntry: make(map[uint32][]string, len(c.ByEntry)), Shared: make(map[string]string, len(c.sharedState)), Staged: slices.Clone(c.stagedTransitions), Explicit: c.explicitEncounter, Runtime: charactersRuntimeShape{len(c.hooks), c.noKnownParticipantsAlive != nil, c.phaseTransitionCb != nil}}
-	for entry, chars := range c.ByEntry {
+	for _, entry := range slices.Sorted(maps.Keys(c.ByEntry)) {
+		chars := c.ByEntry[entry]
 		var refs []string
 		if chars != nil {
 			refs = make([]string, 0, len(chars))
@@ -108,7 +110,8 @@ func (c *Characters) CaptureState(character func(Character) (string, error), sha
 		}
 		v.ByEntry[entry] = refs
 	}
-	for key, value := range c.sharedState {
+	for _, key := range slices.Sorted(maps.Keys(c.sharedState)) {
+		value := c.sharedState[key]
 		if nilReference(value) || shared == nil {
 			return CharactersState{}, fmt.Errorf("missing shared owner/capture")
 		}
@@ -124,7 +127,17 @@ func (c *Characters) CaptureState(character func(Character) (string, error), sha
 	if c.activityChanged != nil {
 		v.ActivityChanged = make([]string, 0, len(c.activityChanged))
 	}
-	for ch := range c.activityChanged {
+	changed := slices.Collect(maps.Keys(c.activityChanged))
+	slices.SortFunc(changed, func(a, b Character) int {
+		if a.ID() < b.ID() {
+			return -1
+		}
+		if a.ID() > b.ID() {
+			return 1
+		}
+		return 0
+	})
+	for _, ch := range changed {
 		s, e := ref(ch)
 		if e != nil {
 			return CharactersState{}, e

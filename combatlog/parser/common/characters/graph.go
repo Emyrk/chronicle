@@ -3,6 +3,8 @@ package characters
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"time"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
@@ -103,34 +105,7 @@ func RegisterGraphOwners(r *ownergraph.Registry, options GraphOptions) error {
 			}})
 		},
 		func() error {
-			return ownergraph.Register(r, ownergraph.Codec[Common]{Type: CommonStateType, Version: CommonStateVersion, Init: func() *Common { return new(Common) }, Capture: func(c *Common, ctx *ownergraph.Capture) ([]byte, error) {
-				if c.timeoutAsDeathIf != nil {
-					return nil, fmt.Errorf("Common timeout callback requires trusted graph adapter")
-				}
-				s, e := c.CaptureState(ownergraph.Reference[*period.InactivityPeriod](ctx), ownergraph.Reference[messages.Message](ctx))
-				if e != nil {
-					return nil, e
-				}
-				base, e := ctx.Ref(c.Base)
-				if e != nil {
-					return nil, e
-				}
-				return graphPayload(s, map[string]string{"base": base})
-			}, Restore: func(c *Common, v uint32, b []byte, ctx *ownergraph.Restore) error {
-				g, e := graphDecode(b)
-				if e != nil {
-					return e
-				}
-				s, e := DecodeCommonState(v, g.State)
-				if e != nil {
-					return e
-				}
-				base, e := ownergraph.LoadAs[*Base[*period.InactivityPeriod]](ctx, g.Refs["base"])
-				if e != nil {
-					return e
-				}
-				return c.RestoreState(s, base, nil)
-			}})
+			return ownergraph.Register(r, ownergraph.Codec[Common]{Type: CommonStateType, Version: CommonStateVersion, Init: func() *Common { return new(Common) }, Capture: (*Common).captureGraphState, Restore: (*Common).restoreGraphState})
 		},
 		func() error {
 			return ownergraph.Register(r, ownergraph.Codec[NeverActive]{Type: NeverActiveStateType, Version: NeverActiveStateVersion, Init: func() *NeverActive { return new(NeverActive) }, Capture: func(c *NeverActive, _ *ownergraph.Capture) ([]byte, error) { return c.CaptureState().Encode() }, Restore: func(c *NeverActive, v uint32, b []byte, _ *ownergraph.Restore) error {
@@ -256,4 +231,45 @@ func RegisterAdsGraphOwner(r *ownergraph.Registry) error {
 }
 func (c *AdsGoWithBoss) WireGraphPeriodHook(h period.Hook) {
 	c.CharacterBase.(interface{ WireGraphPeriodHook(period.Hook) }).WireGraphPeriodHook(h)
+}
+
+// Common's graph form owns only Common-local state. Its older standalone codec
+// embeds a Base payload; using that here would capture the Base twice. The graph
+// has one canonical Base Value, declared by this reference instead.
+type commonGraphValue struct {
+	Base    string        `json:"base"`
+	ID      guid.GUID     `json:"id"`
+	Timeout time.Duration `json:"timeout"`
+}
+
+func (c *Common) captureGraphState(ctx *ownergraph.Capture) ([]byte, error) {
+	if c == nil || c.Base == nil {
+		return nil, fmt.Errorf("nil Common/base")
+	}
+	if c.timeoutAsDeathIf != nil {
+		return nil, fmt.Errorf("Common timeout callback requires trusted graph adapter")
+	}
+	base, e := ctx.Ref(c.Base)
+	if e != nil {
+		return nil, e
+	}
+	return json.Marshal(commonGraphValue{base, c.ID(), c.timeout})
+}
+func (c *Common) restoreGraphState(version uint32, data []byte, ctx *ownergraph.Restore) error {
+	if version != CommonStateVersion {
+		return fmt.Errorf("unsupported Common graph version")
+	}
+	var v commonGraphValue
+	if e := decodeCharacterValue(data, &v); e != nil {
+		return e
+	}
+	base, e := ownergraph.LoadAs[*Base[*period.InactivityPeriod]](ctx, v.Base)
+	if e != nil {
+		return e
+	}
+	if base.ID() != v.ID {
+		return fmt.Errorf("Common base identity mismatch")
+	}
+	*c = Common{Base: base, timeout: v.Timeout}
+	return nil
 }
