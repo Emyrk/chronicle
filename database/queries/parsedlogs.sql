@@ -727,7 +727,6 @@ WHERE li.realm_id = @realm_id
   AND li.name = @name
   AND li.invalidated_at IS NULL
   AND li.max_players = @max_players
-  AND li.dynamic_difficulty = @dynamic_difficulty
   AND li.start_time >= @window_start
   AND li.start_time <= @window_end
   AND li.id != @exclude_id
