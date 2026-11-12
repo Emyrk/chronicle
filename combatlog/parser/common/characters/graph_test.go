@@ -1,11 +1,13 @@
 package characters
 
 import (
+	"encoding/json"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/internal/stategraph"
 	"github.com/Emyrk/chronicle/internal/stategraph/ownergraph"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -42,6 +44,32 @@ func TestRegisteredRoomGraphCycle(t *testing.T) {
 	require.NoError(t, messages.RegisterDamageGraphOwner(r))
 	snapshot, e := r.Capture(all)
 	require.NoError(t, e)
+	commonValues, baseValues := 0, 0
+	for _, node := range snapshot.Graph.Nodes {
+		if node.Kind != stategraph.KindValue {
+			continue
+		}
+		if node.Type == BaseStateType+".Inactivity" {
+			baseValues++
+		}
+		if node.Type == CommonStateType {
+			commonValues++
+			var envelope struct {
+				Version uint32
+				Data    json.RawMessage
+			}
+			require.NoError(t, json.Unmarshal(node.Metadata, &envelope))
+			var local commonGraphValue
+			require.NoError(t, decodeCharacterValue(envelope.Data, &local))
+			// Strict DTO decoding proves Common contains only a Base path, ID and
+			// timeout, not a second nested saved Base/collector payload.
+			baseNode, ok := snapshot.Graph.Find(stategraph.Path(local.Base))
+			require.True(t, ok)
+			require.Equal(t, BaseStateType+".Inactivity", baseNode.Type)
+		}
+	}
+	require.Equal(t, 2, commonValues)
+	require.Equal(t, 2, baseValues)
 	restored, e := r.Restore(snapshot)
 	require.NoError(t, e)
 	fresh := restored.(*Characters)
