@@ -20,6 +20,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/dbtestutil"
+	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/testutil"
 )
@@ -128,16 +129,27 @@ func TestSitemapDynamicURLs(t *testing.T) {
 	api.Opts.Logger = testutil.Logger(t)
 	api.Opts.Zed = authz.NewDatabaseOnly(testutil.Logger(t), database.New(pool))
 
+	// Pin the site's flavor with a tenant dataset. Without one it falls back to
+	// the build's server identity, which differs by build tag (CI builds with
+	// -tags azerothcore, a wrath build).
+	dataset, err := seed.InsertDataset(ctx, database.InsertDatasetParams{
+		Name: "Sitemap Turtle", Slug: "sitemap-turtle-" + uuid.NewString()[:8], WowVersion: "1.12.1",
+		BuildVersion: 5875, DefaultFlavor: []string{"vanilla", "turtle"},
+	})
+	require.NoError(t, err)
+	api.Opts.Dataset = servicedataset.NewTest(seed)
+
 	request := func(discoverable bool) *http.Request {
 		req := httptest.NewRequest(http.MethodGet, "https://everlook.chronicleclassic.com/sitemap.xml", nil)
 		return req.WithContext(servicetenant.WithTenant(ctx, database.Tenant{
 			ID: ourTenant, Slug: pgtype.Text{String: "everlook", Valid: true}, Discoverable: discoverable,
+			DefaultDatasetID: uuid.NullUUID{UUID: dataset.ID, Valid: true},
 		}))
 	}
 
 	// One post for every flavor, one bound to this site's flavor, one bound to another.
 	siteFlavor := api.blogFlavorResolver(request(true))
-	require.NotContains(t, siteFlavor, "wrath")
+	require.Equal(t, []string{"vanilla", "turtle"}, siteFlavor)
 	manifest, err := json.Marshal(map[string]any{"posts": []map[string]any{
 		{"path": "/blog/global", "flavor_sets": [][]string{}, "published_at": "2026-11-09"},
 		{"path": "/blog/this-flavor", "flavor_sets": [][]string{siteFlavor}, "published_at": "2026-11-01"},
