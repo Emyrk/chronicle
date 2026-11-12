@@ -983,6 +983,15 @@ func (h *Hookable) finalizeFight() error {
 		AuthoritativeSuccess: h.currentFight.AuthoritativeSuccess,
 	}
 
+	// Resolve from the start snapshot, never the latest zone metadata.
+	for _, hook := range h.hooks {
+		if resolver, ok := hook.(instancehook.DifficultyResolver); ok {
+			if difficulty, override := resolver.ResolveDifficulty(fight.EncounterID, h.currentFight.Difficulty); override {
+				fight.Difficulty = difficulty
+			}
+		}
+	}
+
 	for id := range h.currentFight.ActiveHostiles {
 		char, ok := h.Characters.Get(id)
 		if !ok {

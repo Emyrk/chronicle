@@ -41,3 +41,11 @@ type BaseHook struct{}
 
 func (BaseHook) FightStarted(uuid.UUID, messages.Message) {}
 func (BaseHook) FightEnded(uuid.UUID, messages.Message)   {}
+
+// DifficultyResolver optionally resolves an encounter-specific mode at fight
+// finalization, after FightFinalized. Returning false preserves the initial zone
+// snapshot. An empty override means Normal. If multiple hooks resolve a mode,
+// the last override in registration order wins. No detector is enabled by default.
+type DifficultyResolver interface {
+	ResolveDifficulty(encounterID uuid.UUID, initial string) (difficulty string, override bool)
+}

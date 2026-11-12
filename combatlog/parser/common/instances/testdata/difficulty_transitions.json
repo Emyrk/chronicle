@@ -1,0 +1,24 @@
+{
+  "description": "Synthetic ICC transition fixture. Combat GUIDs, timestamp and damage derived from the first player SWING_DAMAGE against Lord Marrowgar in combatlog-cfbe27f4-5559-4f06-9aa2-5e41dbb2a4f7 (1).txt. Zone transitions are invented: the source has no ZONE_INFO records. Names omitted.",
+  "at": "2026-11-10T20:50:35.463Z",
+  "player": "0x06000000007974E7",
+  "boss": "0xF130008F0400003D",
+  "amount": 1797,
+  "zones": [
+    {
+      "Name": "icecrown citadel",
+      "InstanceType": "raid",
+      "MaxPlayers": 25,
+      "DifficultyIndex": 2,
+      "DifficultyName": "25 Player"
+    },
+    {
+      "Name": "icecrown citadel",
+      "InstanceType": "raid",
+      "MaxPlayers": 25,
+      "DifficultyIndex": 2,
+      "DifficultyName": "25 Player",
+      "DynamicDifficulty": 1
+    }
+  ]
+}

@@ -35,34 +35,19 @@ type Zone struct {
 	SubZone           string // current subzone name
 }
 
-// Difficulty is the difficulty snapshot active when an encounter starts.
-type Difficulty struct {
-	Name              string
-	MaxPlayers        int
-	DynamicDifficulty int
-}
+// Difficulty is an encounter mode: empty means Normal, "heroic" means Heroic.
+// Other identifiers are reserved for encounter-specific hard modes. Size belongs
+// to the instance's MaxPlayers, never to the encounter difficulty.
+type Difficulty = string
 
-func (d Difficulty) Known() bool {
-	return d.Name != "" || d.MaxPlayers > 0 || d.DynamicDifficulty > 0
-}
-
-// DifficultySnapshot returns the comparable difficulty active in this zone.
-// ICC-style dynamic Heroic mode is promoted into the cohort name while the raw
-// toggle remains available for display and diagnostics.
+// DifficultySnapshot returns the initial encounter mode active in this zone.
 func (z Zone) DifficultySnapshot() Difficulty {
-	name := z.DifficultyName
-	if z.DynamicDifficulty > 0 && !strings.Contains(strings.ToLower(name), "heroic") {
-		if name == "" {
-			name = "Heroic"
-		} else {
-			name += " (Heroic)"
-		}
+	if z.DynamicDifficulty > 0 || strings.Contains(strings.ToLower(z.DifficultyName), "heroic") ||
+		(z.InstanceType == "raid" && (z.DifficultyIndex == 3 || z.DifficultyIndex == 4)) ||
+		(z.InstanceType == "party" && z.DifficultyIndex == 2) {
+		return "heroic"
 	}
-	return Difficulty{
-		Name:              name,
-		MaxPlayers:        z.MaxPlayers,
-		DynamicDifficulty: z.DynamicDifficulty,
-	}
+	return ""
 }
 
 func (z Zone) ID() string {
@@ -111,29 +96,27 @@ const (
 	NoChange ZoneChangeResult = iota
 	// ZoneChanged means the player moved to a different zone (name or instanceID differs).
 	ZoneChanged
-	// DifficultyChanged means the zone is the same but difficulty/size changed
+	// DifficultyChanged means the zone is the same but instance size changed
 	// (e.g. switching from 10-man to 25-man). This should trigger a new hookable instance.
 	DifficultyChanged
-	// InfoUpdated means the zone is the same and difficulty info was previously
-	// absent but is now provided (late-arriving info). The current instance should
+	// InfoUpdated means the zone is the same and mode or other metadata changed. The current instance should
 	// adopt the new info without creating a new hookable.
 	InfoUpdated
 )
 
 // HasDifficulty returns true if difficulty/size information has been set.
 func (z Zone) HasDifficulty() bool {
-	return z.MaxPlayers > 0 || z.DifficultyName != ""
+	return z.MaxPlayers > 0 || z.DifficultyName != "" || z.DifficultyIndex > 0 || z.DynamicDifficulty > 0
 }
 
-// DifficultyDiffers returns true when both zones have difficulty metadata and
-// their difficulty settings differ.
+// DifficultyDiffers reports a known instance-size change. Mode changes do not
+// split instances, and missing size metadata does not imply a size change.
 func (z Zone) DifficultyDiffers(b Zone) bool {
-	return z.HasDifficulty() && b.HasDifficulty() && !z.DifficultyEquals(b)
+	return z.MaxPlayers > 0 && b.MaxPlayers > 0 && z.MaxPlayers != b.MaxPlayers
 }
 
-// DifficultyEquals returns true if z and b have identical difficulty settings.
+// DifficultyEquals compares mode and size metadata, including the dynamic toggle.
 func (z Zone) DifficultyEquals(b Zone) bool {
-	return z.DifficultyIndex == b.DifficultyIndex &&
-		z.MaxPlayers == b.MaxPlayers
-	// TODO: What to do with dynamic difficulty?
+	return z.DifficultyIndex == b.DifficultyIndex && z.MaxPlayers == b.MaxPlayers &&
+		z.DifficultyName == b.DifficultyName && z.DynamicDifficulty == b.DynamicDifficulty
 }

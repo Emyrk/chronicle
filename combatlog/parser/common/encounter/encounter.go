@@ -86,6 +86,8 @@ type RankingWindow struct {
 // hostile becomes inactive. Hostiles with overlapping activity periods are
 // grouped into the same fight.
 type Fight struct {
+	// Difficulty is the resolved encounter mode. It defaults to the zone mode
+	// captured at fight start and may be overridden by a finalization resolver.
 	Difficulty  zone.Difficulty
 	EncounterID uuid.UUID
 	MapID       uint32
