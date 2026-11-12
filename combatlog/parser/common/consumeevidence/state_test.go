@@ -1,6 +1,7 @@
 package consumeevidence
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"testing"
@@ -8,7 +9,10 @@ import (
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/auras"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	next "github.com/Emyrk/chronicle/combatlog/parsernext/vanilla"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
+	"github.com/Emyrk/chronicle/internal/stategraph"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -193,6 +197,70 @@ func TestCollectorStateContinuesCastEpisodeWithoutReemittingPrefix(t *testing.T)
 	require.Len(t, restoredEmitted, 1, "restored collector must not regenerate already emitted cast evidence")
 	require.Equal(t, prefixID, emitted[1].ConsumeID)
 	require.Equal(t, emitted[1], restoredEmitted[0])
+}
+
+type canonicalConsumeSpellFetcher struct {
+	calls int
+	spell *chrondbc.Spell
+}
+
+func (f *canonicalConsumeSpellFetcher) Spell(context.Context, chrondbc.SpellID) (*chrondbc.Spell, error) {
+	f.calls++
+	return f.spell, nil
+}
+
+func TestConsumeEvidenceStatesUseSharedCanonicalSpellGraph(t *testing.T) {
+	t.Parallel()
+	player := testPlayerGUID()
+	at := time.UnixMilli(1000)
+	spell := testSpell(17534)
+	tracker := NewTracker(newTestCatalog())
+	tracker.directEpisodes = []directEpisode{{consumeID: "direct", player: player, itemID: 13446, spellData: spell, ts: at}}
+	tracker.preCombatCastEpisodes = []castEpisode{{consumeID: "cast", player: player, spellData: spell, candidateItems: []int32{13446}, ts: at}}
+	tracker.preCombatEvidence = []*messages.Consume{{
+		MessageBase: messages.Base(at), ConsumeID: "cast", EvidenceID: "cast-evidence",
+		Player: player, SpellData: spell, Kind: messages.EvidenceKindCast,
+	}}
+	collector := NewCollector(auras.New(nil), tracker)
+	collector.snapshot = map[guid.GUID]map[chrondbc.SpellID]*auras.AuraState{
+		player: {spell.ID: {Buff: true, SpellID: spell.ID, SpellName: "Healing Potion", Spell: spell}},
+	}
+	collector.castEpisodes = []castEpisode{{consumeID: "collector-cast", player: player, spellData: spell, candidateItems: []int32{13446}, ts: at}}
+
+	refs := make(map[string]*chrondbc.Spell)
+	capture := func(value *chrondbc.Spell) (string, error) {
+		refs["consume"] = value
+		return "/root/references/consume", nil
+	}
+	trackerState, err := tracker.CaptureState(capture)
+	require.NoError(t, err)
+	collectorState, err := collector.CaptureState(capture)
+	require.NoError(t, err)
+	trackerState, err = DecodeTrackerState(TrackerStateVersion, trackerPayload(t, trackerState))
+	require.NoError(t, err)
+	collectorState, err = DecodeCollectorState(CollectorStateVersion, collectorPayload(t, collectorState))
+	require.NoError(t, err)
+
+	graph, payloads, err := next.CaptureSpellReferences(refs)
+	require.NoError(t, err)
+	canonical := testSpell(17534)
+	fetcher := &canonicalConsumeSpellFetcher{spell: canonical}
+	deriver, err := next.NewSpellDerivation(fetcher)
+	require.NoError(t, err)
+	derived, err := deriver.Restore(t.Context(), graph, payloads)
+	require.NoError(t, err)
+	resolve := func(path string) (*chrondbc.Spell, error) { return derived[stategraph.Path(path)], nil }
+
+	restoredTracker, err := trackerState.Restore(tracker.Catalog(), resolve)
+	require.NoError(t, err)
+	restoredCollector, err := collectorState.Restore(collector.auraTracker, restoredTracker, resolve)
+	require.NoError(t, err)
+	require.Equal(t, 1, fetcher.calls, "the graph derives one canonical spell value")
+	require.Same(t, canonical, restoredTracker.directEpisodes[0].spellData)
+	require.Same(t, canonical, restoredTracker.preCombatCastEpisodes[0].spellData)
+	require.Same(t, canonical, restoredTracker.preCombatEvidence[0].SpellData)
+	require.Same(t, canonical, restoredCollector.snapshot[player][spell.ID].Spell)
+	require.Same(t, canonical, restoredCollector.castEpisodes[0].spellData)
 }
 
 func TestConsumeEvidenceStatesRejectCorruptionAndRestoreAtomically(t *testing.T) {
