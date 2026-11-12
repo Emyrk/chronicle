@@ -176,6 +176,31 @@ func (api *API) Instance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	difficulties, err := db.InstanceDifficultiesByInstanceID(ctx, inst.ID)
+	if err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{Message: "Failed to fetch instance difficulties", Detail: err.Error()},
+		})
+		return
+	}
+	setDifficulties := func(out *chroniclesdk.WoWInstance) {
+		out.Difficulties = make([]chroniclesdk.InstanceDifficulty, 0, max(1, len(difficulties)))
+		for _, difficulty := range difficulties {
+			out.Difficulties = append(out.Difficulties, chroniclesdk.InstanceDifficulty{
+				DifficultyName:    difficulty.DifficultyName,
+				MaxPlayers:        int(difficulty.MaxPlayers),
+				DynamicDifficulty: int(difficulty.DynamicDifficulty),
+			})
+		}
+		if len(out.Difficulties) == 0 {
+			out.Difficulties = append(out.Difficulties, chroniclesdk.InstanceDifficulty{
+				DifficultyName:    out.DifficultyName,
+				MaxPlayers:        out.MaxPlayers,
+				DynamicDifficulty: out.DynamicDifficulty,
+			})
+		}
+	}
+
 	setDataset := func(out *chroniclesdk.WoWInstance) {
 		out.OwnerAdsFree = ownerAdsFree
 		out.Unlisted = httpmw.InstanceUnlisted(ctx)
@@ -192,6 +217,7 @@ func (api *API) Instance(w http.ResponseWriter, r *http.Request) {
 
 	if attendanceOnly(r) {
 		out := db2sdk.WowAttendanceInstance(inst, players)
+		setDifficulties(&out.WoWInstance)
 		setDataset(&out.WoWInstance)
 		httpapi.Write(ctx, w, http.StatusOK, out)
 		return
@@ -242,6 +268,7 @@ func (api *API) Instance(w http.ResponseWriter, r *http.Request) {
 	}
 
 	out := db2sdk.WowDecoratedInstance(inst, units, players, encounters, fights, phases)
+	setDifficulties(&out.WoWInstance)
 	setDataset(&out.WoWInstance)
 	httpapi.Write(ctx, w, http.StatusOK, out)
 }
@@ -320,6 +347,7 @@ func (api *API) InstanceSpeedrun(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result := db2sdk.SpeedrunResult(sr)
+	result.MixedDifficulty = inst.MixedDifficulty
 	killTimes, err := api.Opts.Zed.GetInstanceEncounterKillTimes(ctx, inst.ID)
 	if err != nil {
 		httpapi.InternalServerError(w, err)

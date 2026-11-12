@@ -34,7 +34,7 @@ func TestIcecrownCitadelRankingConfiguration(t *testing.T) {
 	rows = icecrownRows(rows)
 
 	require.Len(t, selectKind(rows, "instance"), 1)
-	require.Len(t, selectKind(rows, "variant"), 3)
+	require.Len(t, selectKind(rows, "variant"), 5)
 	require.Len(t, selectKind(rows, "boss"), 12)
 	require.Len(t, selectKind(rows, "set"), 1)
 	members := selectKind(rows, "member")
@@ -67,6 +67,8 @@ func TestIcecrownCitadelRankingConfiguration(t *testing.T) {
 	}{
 		{name: "10 Player", size: 10},
 		{name: "25 Player", size: 25},
+		{name: "10 Player (Heroic)", size: 10},
+		{name: "25 Player (Heroic)", size: 25},
 		{name: "10 игроков", size: 10},
 	}, func() []struct {
 		name string
@@ -95,11 +97,34 @@ func TestIcecrownCitadelRankingConfiguration(t *testing.T) {
 }
 
 func icecrownMigration(ctx context.Context, pool *pgxpool.Pool, direction string) error {
+	if direction == "down" {
+		_, err := pool.Exec(ctx, `
+DELETE FROM leaderboard_variant_overrides
+WHERE layer_key = 'wrath' AND instance_name = 'Icecrown Citadel'
+  AND difficulty_name IN ('10 Player (Heroic)', '25 Player (Heroic)');
+DELETE FROM leaderboard_instance_variants
+WHERE instance_name = 'Icecrown Citadel'
+  AND difficulty_name IN ('10 Player (Heroic)', '25 Player (Heroic)');`)
+		if err != nil {
+			return err
+		}
+	}
 	data, err := os.ReadFile("../../database/migrations/000365_leaderboard_icecrown_citadel_rankings." + direction + ".sql")
 	if err != nil {
 		return err
 	}
-	_, err = pool.Exec(ctx, string(data))
+	if _, err = pool.Exec(ctx, string(data)); err != nil {
+		return err
+	}
+	if direction == "up" {
+		_, err = pool.Exec(ctx, `
+INSERT INTO leaderboard_instance_variants (instance_name, difficulty_name, max_players) VALUES
+  ('Icecrown Citadel', '10 Player (Heroic)', 10),
+  ('Icecrown Citadel', '25 Player (Heroic)', 25);
+INSERT INTO leaderboard_variant_overrides (layer_key, instance_name, difficulty_name, max_players, enabled) VALUES
+  ('wrath', 'Icecrown Citadel', '10 Player (Heroic)', 10, true),
+  ('wrath', 'Icecrown Citadel', '25 Player (Heroic)', 25, true);`)
+	}
 	return err
 }
 

@@ -71,6 +71,9 @@ export interface Encounter {
   end_time: string;
   enemies?: EnemyUnit[];
   remaining?: string[]; // GUIDs of enemies that did not die
+  difficultyName?: string;
+  maxPlayers?: number;
+  dynamicDifficulty?: number;
   invalidatedAt?: string;
   invalidReason?: string;
   /** Optional phases within this encounter (sorted by order). */
@@ -124,6 +127,8 @@ export interface Instance {
   difficultyName?: string;
   maxPlayers?: number;
   dynamicDifficulty?: number;
+  difficulties?: readonly { difficultyName: string; maxPlayers: number; dynamicDifficulty: number }[];
+  mixedDifficulty?: boolean;
   invalidatedAt?: string;
   invalidReason?: string;
   // Timestamped vehicle-to-controller intervals and transport diagnostics

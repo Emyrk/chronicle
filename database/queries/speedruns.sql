@@ -38,8 +38,11 @@ ORDER BY lie.start_time;
 SELECT
     lie.id AS encounter_id,
     lie.name AS encounter_name,
+    COALESCE(NULLIF(lie.difficulty_name, ''), instance.difficulty_name) AS difficulty_name,
+    COALESCE(NULLIF(lie.max_players, 0), instance.max_players)::smallint AS max_players,
     (EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000)::bigint AS duration_ms
 FROM log_instance_encounters lie
+JOIN log_instances instance ON instance.id = lie.instance_id
 WHERE lie.instance_id = $1
   AND lie.boss = true
   AND lie.kill_type = 'clean'

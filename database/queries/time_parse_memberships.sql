@@ -56,6 +56,7 @@ current_members AS MATERIALIZED (
     JOIN wow_server_realms realm ON realm.id = instance.realm_id
     JOIN wow_servers server ON server.id = realm.server_id
     WHERE speedrun.qualified = true
+      AND NOT instance.mixed_difficulty
       AND speedrun.ranked_duration_ms > 0
 ),
 upserted AS (
@@ -161,8 +162,8 @@ current_members AS MATERIALIZED (
         instance.id AS instance_id,
         instance.log_group_id,
         speedrun.instance_name,
-        instance.difficulty_name,
-        instance.max_players,
+        COALESCE(NULLIF(encounter.difficulty_name, ''), instance.difficulty_name) AS difficulty_name,
+        COALESCE(NULLIF(encounter.max_players, 0), instance.max_players) AS max_players,
         (EXTRACT(EPOCH FROM (encounter.end_time - encounter.start_time)) * 1000)::bigint AS duration_ms,
         encounter.end_time AS killed_at
     FROM representative_instances representative

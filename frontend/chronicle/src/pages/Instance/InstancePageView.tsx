@@ -4072,7 +4072,7 @@ function InstancePageViewContent({
   const trashGroups = groupTrashEncounters(instance.encounters);
 
   const headerBg = getInstanceBackground(instance.name);
-  const heroic = isHeroic(instance);
+  const heroic = !instance.mixedDifficulty && isHeroic(instance);
 
   const elapsedDurationMs = instance.endTime
     ? new Date(instance.endTime).getTime() - new Date(instance.startTime).getTime()
@@ -4334,6 +4334,9 @@ function InstancePageViewContent({
               {instance.maxPlayers != null && instance.maxPlayers > 0 && (
                 <div className="flex items-center gap-1.5">
                   <span className="text-sm text-muted-foreground font-medium">{instance.maxPlayers} Player</span>
+                  {instance.mixedDifficulty && (
+                    <span className="rounded bg-purple-500/15 px-1.5 py-0.5 text-xs font-semibold text-purple-300">Normal + Heroic</span>
+                  )}
                   {heroic && (
                     <HeroicBadge />
                   )}
@@ -4455,6 +4458,9 @@ function InstancePageViewContent({
           {isMobile && instance.maxPlayers != null && instance.maxPlayers > 0 && (
             <div className="flex items-center gap-1.5 shrink-0">
               <span className="text-xs text-muted-foreground font-medium">{instance.maxPlayers} Player</span>
+              {instance.mixedDifficulty && (
+                <span className="rounded bg-purple-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-purple-300">N + H</span>
+              )}
               {heroic && (
                 <HeroicBadge />
               )}

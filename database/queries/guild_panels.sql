@@ -272,8 +272,8 @@ ORDER BY instance_name,
 SELECT
     li.name AS instance_name,
     lie.name AS encounter_name,
-    li.difficulty_name,
-    li.max_players,
+    COALESCE(NULLIF(lie.difficulty_name, ''), li.difficulty_name) AS difficulty_name,
+    COALESCE(NULLIF(lie.max_players, 0), li.max_players) AS max_players,
     COUNT(DISTINCT COALESCE(li.duplicate_group_id, li.id))::int AS kills,
     MIN(lie.end_time)::timestamptz AS first_killed_at,
     MAX(lie.end_time)::timestamptz AS last_killed_at
@@ -284,7 +284,9 @@ JOIN wow_server_realms wsr ON wsr.id = li.realm_id
 WHERE li.guild_id = @guild_id::uuid
   AND lie.boss = true
   AND lie.kill_type IN ('clean', 'partial')
-GROUP BY li.name, lie.name, li.difficulty_name, li.max_players
+GROUP BY li.name, lie.name,
+    COALESCE(NULLIF(lie.difficulty_name, ''), li.difficulty_name),
+    COALESCE(NULLIF(lie.max_players, 0), li.max_players)
 ORDER BY li.name, lie.name;
 
 -- name: GuildRunParseAverages :many

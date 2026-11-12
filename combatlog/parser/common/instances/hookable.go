@@ -888,6 +888,7 @@ func (h *Hookable) FightDetectionHandler(m messages.Message) (func() error, erro
 	}
 
 	if !wasActive && h.currentFight.active() {
+		h.currentFight.Difficulty = h.CurrentZone.DifficultySnapshot()
 		// Install the callback as soon as the fight starts. If the phased
 		// character has not joined yet, keep transitions on the fight until its
 		// provider is discovered later in the same or a subsequent message.
@@ -969,6 +970,7 @@ func (h *Hookable) finalizeFight() error {
 	}
 
 	fight := encounter.Fight{
+		Difficulty:           h.currentFight.Difficulty,
 		Hostiles:             map[guid.GUID]encounter.CharacterFight{},
 		MapID:                h.currentFight.MapID,
 		Start:                start,

@@ -105,6 +105,19 @@ func TestWoWEncounterIncludesMapID(t *testing.T) {
 	require.Equal(t, 43, WoWEncounter(database.LogInstanceEncounter{MapID: 43}).MapID)
 }
 
+func TestWoWEncounterIncludesDifficulty(t *testing.T) {
+	t.Parallel()
+
+	converted := WoWEncounter(database.LogInstanceEncounter{
+		DifficultyName:    "25 Player (Heroic)",
+		MaxPlayers:        25,
+		DynamicDifficulty: 1,
+	})
+	require.Equal(t, "25 Player (Heroic)", converted.DifficultyName)
+	require.Equal(t, 25, converted.MaxPlayers)
+	require.Equal(t, 1, converted.DynamicDifficulty)
+}
+
 func TestWoWEncounterRankingWindow(t *testing.T) {
 	t.Parallel()
 	require.Nil(t, WoWEncounter(database.LogInstanceEncounter{}).RankingWindow)

@@ -6,10 +6,12 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/phases"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
 	"github.com/google/uuid"
 )
 
 type ongoingFight struct {
+	Difficulty     zone.Difficulty
 	EncounterID    uuid.UUID
 	MapID          uint32
 	ActiveHostiles map[guid.GUID]struct{}

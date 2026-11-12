@@ -110,6 +110,43 @@ func TestWorkerComputeTimeParseScoresScopesAndLocking(t *testing.T) {
 	assert.NotEqual(t, score.ID, replaced.ID)
 }
 
+func TestMixedDifficultyExcludesClearButKeepsBossCohorts(t *testing.T) {
+	t.Parallel()
+	pool, store, _ := setupTimeParseTest(t)
+	ctx := testutil.Context(t, testutil.WaitMedium)
+	tenantID, realmID := insertTimeParseTenantRealm(t, pool, "mixed-difficulty-time")
+	start := time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC)
+
+	instanceID := insertTimeParseInstance(t, pool, store, realmID, timeParseInstanceOpts{
+		instanceName: "Icecrown Citadel", difficultyName: "25 Player", maxPlayers: 25,
+		mixedDifficulty: true, qualified: true, durationMs: (2 * time.Hour).Milliseconds(), startTime: start,
+		encounters: []timeParseEncounterOpts{
+			{name: "Lord Marrowgar", killType: database.KillTypeClean, boss: true, difficultyName: "25 Player", maxPlayers: 25, startTime: start.Add(time.Hour), endTime: start.Add(70 * time.Minute)},
+			{name: "Lady Deathwhisper", killType: database.KillTypeClean, boss: true, difficultyName: "25 Player (Heroic)", maxPlayers: 25, dynamicDifficulty: 1, startTime: start.Add(80 * time.Minute), endTime: start.Add(95 * time.Minute)},
+		},
+	})
+
+	refreshTimeParseMemberships(t, ctx, store)
+	clears, err := store.ListTimeParseClearTimeMemberships(ctx, database.ListTimeParseClearTimeMembershipsParams{
+		TenantID: tenantID, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
+	})
+	require.NoError(t, err)
+	require.Empty(t, clears)
+
+	bosses, err := store.ListTimeParseBossKillMemberships(ctx, database.ListTimeParseBossKillMembershipsParams{
+		TenantID: tenantID, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
+	})
+	require.NoError(t, err)
+	require.Len(t, bosses, 2)
+	byName := map[string]database.TimeParseBossKillMembership{}
+	for _, boss := range bosses {
+		byName[boss.EncounterName] = boss
+	}
+	require.Equal(t, instanceID, byName["Lord Marrowgar"].InstanceID)
+	require.Equal(t, "25 Player", byName["Lord Marrowgar"].DifficultyName)
+	require.Equal(t, "25 Player (Heroic)", byName["Lady Deathwhisper"].DifficultyName)
+}
+
 func TestWorkerComputeTimeParseScoresPersistsSampleTooSmall(t *testing.T) {
 	t.Parallel()
 	pool, store, _ := setupTimeParseTest(t)

@@ -4397,7 +4397,7 @@ func (q *sqlQuerier) GetLogGroupInstanceIDByOrdinal(ctx context.Context, arg Get
 }
 
 const getLogInstanceForDiscordAnnouncement = `-- name: GetLogInstanceForDiscordAnnouncement :one
-SELECT li.id, li.realm_id, li.log_group_id, li.name, li.hashed_slug, li.guild_id, li.start_time, li.end_time, li.capabilities, li.versions, li.recorder_name, li.recorder_guid, li.parser_version, li.duplicate_group_id, li.difficulty_name, li.max_players, li.dynamic_difficulty, li.vehicle_control_intervals, li.category, li.updated_at, li.invalidated_at, li.invalid_reason
+SELECT li.id, li.realm_id, li.log_group_id, li.name, li.hashed_slug, li.guild_id, li.start_time, li.end_time, li.capabilities, li.versions, li.recorder_name, li.recorder_guid, li.parser_version, li.duplicate_group_id, li.difficulty_name, li.max_players, li.dynamic_difficulty, li.vehicle_control_intervals, li.category, li.updated_at, li.invalidated_at, li.invalid_reason, li.mixed_difficulty
 FROM log_instances li
 JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
 WHERE li.id = $1
@@ -4429,6 +4429,7 @@ func (q *sqlQuerier) GetLogInstanceForDiscordAnnouncement(ctx context.Context, i
 		&i.UpdatedAt,
 		&i.InvalidatedAt,
 		&i.InvalidReason,
+		&i.MixedDifficulty,
 	)
 	return i, err
 }
@@ -9246,8 +9247,8 @@ const guildEncounterKills = `-- name: GuildEncounterKills :many
 SELECT
     li.name AS instance_name,
     lie.name AS encounter_name,
-    li.difficulty_name,
-    li.max_players,
+    COALESCE(NULLIF(lie.difficulty_name, ''), li.difficulty_name) AS difficulty_name,
+    COALESCE(NULLIF(lie.max_players, 0), li.max_players) AS max_players,
     COUNT(DISTINCT COALESCE(li.duplicate_group_id, li.id))::int AS kills,
     MIN(lie.end_time)::timestamptz AS first_killed_at,
     MAX(lie.end_time)::timestamptz AS last_killed_at
@@ -9258,7 +9259,9 @@ JOIN wow_server_realms wsr ON wsr.id = li.realm_id
 WHERE li.guild_id = $1::uuid
   AND lie.boss = true
   AND lie.kill_type IN ('clean', 'partial')
-GROUP BY li.name, lie.name, li.difficulty_name, li.max_players
+GROUP BY li.name, lie.name,
+    COALESCE(NULLIF(lie.difficulty_name, ''), li.difficulty_name),
+    COALESCE(NULLIF(lie.max_players, 0), li.max_players)
 ORDER BY li.name, lie.name
 `
 
@@ -11220,7 +11223,7 @@ func (q *sqlQuerier) ListInferenceContextUsageByUser(ctx context.Context, arg Li
 }
 
 const listInferenceInstanceEncounters = `-- name: ListInferenceInstanceEncounters :many
-SELECT id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id, ranking_start_offset_ms, ranking_end_offset_ms, invalidated_at, invalid_reason
+SELECT id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id, ranking_start_offset_ms, ranking_end_offset_ms, invalidated_at, invalid_reason, difficulty_name, max_players, dynamic_difficulty
 FROM log_instance_encounters
 WHERE instance_id = $1
 ORDER BY start_time, id
@@ -11250,6 +11253,9 @@ func (q *sqlQuerier) ListInferenceInstanceEncounters(ctx context.Context, instan
 			&i.RankingEndOffsetMs,
 			&i.InvalidatedAt,
 			&i.InvalidReason,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.DynamicDifficulty,
 		); err != nil {
 			return nil, err
 		}
@@ -16097,7 +16103,7 @@ const projectLeaderboardRun = `-- name: ProjectLeaderboardRun :many
 WITH source AS MATERIALIZED (
  SELECT rr.run_id, li.id AS source_instance_id, li.realm_id, li.guild_id,
         li.name AS instance_name, li.difficulty_name, li.max_players::smallint AS max_players,
-        server.tenant_id,
+        li.mixed_difficulty, server.tenant_id,
         CASE lower(btrim(tenant.parse_config->>'cohort_mode'))
           WHEN 'class' THEN 'class'
           WHEN 'disabled' THEN 'disabled'
@@ -16114,31 +16120,34 @@ WITH source AS MATERIALIZED (
  LEFT JOIN tenants tenant ON tenant.id=server.tenant_id
  WHERE rr.run_id= $2::uuid AND li.invalidated_at IS NULL
 ), players AS MATERIALIZED (
- SELECT s.run_id, s.source_instance_id, s.realm_id, s.guild_id, s.instance_name, s.difficulty_name, s.max_players, s.tenant_id, s.cohort_mode, d.id AS ranking_id, d.player_guid, d.player_class,
+ SELECT s.run_id, s.source_instance_id, s.realm_id, s.guild_id, s.instance_name, s.difficulty_name, s.max_players, s.mixed_difficulty, s.tenant_id, s.cohort_mode, d.id AS ranking_id, d.player_guid, d.player_class,
         -- Rating evidence requires a non-empty spec key. Class mode collapses every
         -- source spec, including missing or unknown specs, into one stable class-only cohort.
         CASE WHEN s.cohort_mode='class' THEN 'Class' ELSE d.player_spec END::text AS player_spec,
         CASE WHEN s.cohort_mode='class' THEN '' ELSE d.player_sub_spec END::text AS player_sub_spec,
-        d.dps,d.hps,e.id AS encounter_id,e.name AS encounter_name
+        d.dps,d.hps,e.id AS encounter_id,e.name AS encounter_name,
+        COALESCE(NULLIF(e.difficulty_name,''),d.difficulty_name) AS encounter_difficulty_name,
+        COALESCE(NULLIF(e.max_players,0),d.max_players)::smallint AS encounter_max_players
  FROM source s JOIN encounter_dps_rankings d ON d.instance_id=s.source_instance_id
   AND d.realm_id=s.realm_id AND d.instance_name=s.instance_name
-  AND d.difficulty_name=s.difficulty_name AND d.max_players=s.max_players
  JOIN log_instance_encounters e ON e.id=d.encounter_id AND e.instance_id=s.source_instance_id
   AND e.name=d.encounter_name AND e.boss AND e.kill_type='clean'
+  AND d.difficulty_name=COALESCE(NULLIF(e.difficulty_name,''),s.difficulty_name)
+  AND d.max_players=COALESCE(NULLIF(e.max_players,0),s.max_players)
  WHERE btrim(d.player_guid)<>'' AND btrim(d.player_class)<>''
    AND (s.cohort_mode<>'spec' OR btrim(d.player_spec)<>'')
 ), player_candidates AS MATERIALIZED (
- SELECT players.run_id, players.source_instance_id, players.realm_id, players.guild_id, players.instance_name, players.difficulty_name, players.max_players, players.tenant_id, players.cohort_mode, players.ranking_id, players.player_guid, players.player_class, players.player_spec, players.player_sub_spec, players.dps, players.hps, players.encounter_id, players.encounter_name, 'dps'::text AS metric,dps AS metric_value FROM players
- UNION ALL SELECT players.run_id, players.source_instance_id, players.realm_id, players.guild_id, players.instance_name, players.difficulty_name, players.max_players, players.tenant_id, players.cohort_mode, players.ranking_id, players.player_guid, players.player_class, players.player_spec, players.player_sub_spec, players.dps, players.hps, players.encounter_id, players.encounter_name, 'hps'::text AS metric,hps AS metric_value FROM players
+ SELECT players.run_id, players.source_instance_id, players.realm_id, players.guild_id, players.instance_name, players.difficulty_name, players.max_players, players.mixed_difficulty, players.tenant_id, players.cohort_mode, players.ranking_id, players.player_guid, players.player_class, players.player_spec, players.player_sub_spec, players.dps, players.hps, players.encounter_id, players.encounter_name, players.encounter_difficulty_name, players.encounter_max_players, 'dps'::text AS metric,dps AS metric_value FROM players
+ UNION ALL SELECT players.run_id, players.source_instance_id, players.realm_id, players.guild_id, players.instance_name, players.difficulty_name, players.max_players, players.mixed_difficulty, players.tenant_id, players.cohort_mode, players.ranking_id, players.player_guid, players.player_class, players.player_spec, players.player_sub_spec, players.dps, players.hps, players.encounter_id, players.encounter_name, players.encounter_difficulty_name, players.encounter_max_players, 'hps'::text AS metric,hps AS metric_value FROM players
 ), eligible_player_metrics AS MATERIALIZED (
  -- PostgreSQL orders NaN above Infinity: this excludes both before comparison.
- SELECT run_id, source_instance_id, realm_id, guild_id, instance_name, difficulty_name, max_players, tenant_id, cohort_mode, ranking_id, player_guid, player_class, player_spec, player_sub_spec, dps, hps, encounter_id, encounter_name, metric, metric_value FROM player_candidates WHERE metric_value>0 AND metric_value<'Infinity'::double precision
+ SELECT run_id, source_instance_id, realm_id, guild_id, instance_name, difficulty_name, max_players, mixed_difficulty, tenant_id, cohort_mode, ranking_id, player_guid, player_class, player_spec, player_sub_spec, dps, hps, encounter_id, encounter_name, encounter_difficulty_name, encounter_max_players, metric, metric_value FROM player_candidates WHERE metric_value>0 AND metric_value<'Infinity'::double precision
 ), renown_players AS MATERIALIZED (
  -- Renown records the witnessed kill even when spec mode excludes it from ratings.
- SELECT DISTINCT ON (ranking_id) run_id, source_instance_id, realm_id, guild_id, instance_name, difficulty_name, max_players, tenant_id, cohort_mode, ranking_id, player_guid, player_class, player_spec, player_sub_spec, dps, hps, encounter_id, encounter_name, metric, metric_value FROM eligible_player_metrics
+ SELECT DISTINCT ON (ranking_id) run_id, source_instance_id, realm_id, guild_id, instance_name, difficulty_name, max_players, mixed_difficulty, tenant_id, cohort_mode, ranking_id, player_guid, player_class, player_spec, player_sub_spec, dps, hps, encounter_id, encounter_name, encounter_difficulty_name, encounter_max_players, metric, metric_value FROM eligible_player_metrics
  ORDER BY ranking_id,metric_value DESC,metric ASC
 ), rating_player_metrics AS MATERIALIZED (
- SELECT run_id, source_instance_id, realm_id, guild_id, instance_name, difficulty_name, max_players, tenant_id, cohort_mode, ranking_id, player_guid, player_class, player_spec, player_sub_spec, dps, hps, encounter_id, encounter_name, metric, metric_value FROM eligible_player_metrics
+ SELECT run_id, source_instance_id, realm_id, guild_id, instance_name, difficulty_name, max_players, mixed_difficulty, tenant_id, cohort_mode, ranking_id, player_guid, player_class, player_spec, player_sub_spec, dps, hps, encounter_id, encounter_name, encounter_difficulty_name, encounter_max_players, metric, metric_value FROM eligible_player_metrics
  WHERE (cohort_mode<>'spec' OR lower(btrim(player_spec)) NOT IN ('', 'unknown'))
    AND (metric='dps' OR cohort_mode<>'spec' OR
         (upper(btrim(player_class))='PRIEST' AND lower(btrim(player_spec)) IN ('holy', 'discipline')) OR
@@ -16147,42 +16156,44 @@ WITH source AS MATERIALIZED (
         (upper(btrim(player_class))='PALADIN' AND lower(btrim(player_spec))='holy'))
 ), player_metrics AS MATERIALIZED (
  -- One raw metric per player/fight; positive ties favor DPS.
- SELECT DISTINCT ON (ranking_id) run_id, source_instance_id, realm_id, guild_id, instance_name, difficulty_name, max_players, tenant_id, cohort_mode, ranking_id, player_guid, player_class, player_spec, player_sub_spec, dps, hps, encounter_id, encounter_name, metric, metric_value FROM rating_player_metrics
+ SELECT DISTINCT ON (ranking_id) run_id, source_instance_id, realm_id, guild_id, instance_name, difficulty_name, max_players, mixed_difficulty, tenant_id, cohort_mode, ranking_id, player_guid, player_class, player_spec, player_sub_spec, dps, hps, encounter_id, encounter_name, encounter_difficulty_name, encounter_max_players, metric, metric_value FROM rating_player_metrics
  ORDER BY ranking_id,metric_value DESC,metric ASC
 ), guild_source AS MATERIALIZED (
- SELECT s.run_id, s.source_instance_id, s.realm_id, s.guild_id, s.instance_name, s.difficulty_name, s.max_players, s.tenant_id, s.cohort_mode FROM source s JOIN guilds g ON g.id=s.guild_id AND g.realm_id=s.realm_id
+ SELECT s.run_id, s.source_instance_id, s.realm_id, s.guild_id, s.instance_name, s.difficulty_name, s.max_players, s.mixed_difficulty, s.tenant_id, s.cohort_mode FROM source s JOIN guilds g ON g.id=s.guild_id AND g.realm_id=s.realm_id
 ), guild_times AS MATERIALIZED (
- SELECT s.run_id, s.source_instance_id, s.realm_id, s.guild_id, s.instance_name, s.difficulty_name, s.max_players, s.tenant_id, s.cohort_mode, t.id AS time_score_id,t.clear_duration_ms
+ SELECT s.run_id, s.source_instance_id, s.realm_id, s.guild_id, s.instance_name, s.difficulty_name, s.max_players, s.mixed_difficulty, s.tenant_id, s.cohort_mode, t.id AS time_score_id,t.clear_duration_ms
  FROM guild_source s JOIN time_parse_scores t ON t.instance_id=s.source_instance_id
   AND t.run_id=s.run_id AND t.tenant_id=s.tenant_id AND t.realm_id=s.realm_id AND t.guild_id=s.guild_id
 ), guild_bosses AS MATERIALIZED (
- SELECT s.run_id, s.source_instance_id, s.realm_id, s.guild_id, s.instance_name, s.difficulty_name, s.max_players, s.tenant_id, s.cohort_mode, s.time_score_id, s.clear_duration_ms, b.duration_ms,e.id AS encounter_id,e.name AS encounter_name
+ SELECT s.run_id, s.source_instance_id, s.realm_id, s.guild_id, s.instance_name, s.difficulty_name, s.max_players, s.mixed_difficulty, s.tenant_id, s.cohort_mode, s.time_score_id, s.clear_duration_ms, b.duration_ms,e.id AS encounter_id,e.name AS encounter_name,
+        COALESCE(NULLIF(e.difficulty_name,''),s.difficulty_name) AS encounter_difficulty_name,
+        COALESCE(NULLIF(e.max_players,0),s.max_players)::smallint AS encounter_max_players
  FROM guild_times s JOIN time_parse_boss_scores b ON b.time_parse_score_id=s.time_score_id
  JOIN log_instance_encounters e ON e.id=b.encounter_id AND e.instance_id=s.source_instance_id
   AND e.name=b.encounter_name AND e.boss AND e.kill_type='clean'
  WHERE b.duration_ms>0
 ), projected AS (
-(SELECT DISTINCT ON (s.encounter_name,s.player_guid,s.player_class,s.player_spec,s.player_sub_spec,s.metric) 1::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.difficulty_name AS difficulty_name, s.max_players AS max_players, s.encounter_name AS encounter_name, s.player_guid AS player_guid, s.player_class AS player_class, s.player_spec AS player_spec, s.player_sub_spec AS player_sub_spec, s.metric AS metric, s.metric_value AS metric_value, '00000000-0000-0000-0000-000000000000'::uuid AS guild_id, s.encounter_id AS source_encounter_id, s.ranking_id AS source_ranking_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_time_parse_score_id, 0::bigint AS duration_ms
+(SELECT DISTINCT ON (s.encounter_name,s.player_guid,s.player_class,s.player_spec,s.player_sub_spec,s.metric) 1::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.encounter_difficulty_name AS difficulty_name, s.encounter_max_players AS max_players, s.encounter_name AS encounter_name, s.player_guid AS player_guid, s.player_class AS player_class, s.player_spec AS player_spec, s.player_sub_spec AS player_sub_spec, s.metric AS metric, s.metric_value AS metric_value, '00000000-0000-0000-0000-000000000000'::uuid AS guild_id, s.encounter_id AS source_encounter_id, s.ranking_id AS source_ranking_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_time_parse_score_id, 0::bigint AS duration_ms
  FROM player_metrics s WHERE s.metric_value>=0 AND s.metric_value<'Infinity'::double precision
  ORDER BY s.encounter_name,s.player_guid,s.player_class,s.player_spec,s.player_sub_spec,metric,metric_value DESC,source_encounter_id,source_ranking_id)
 UNION ALL
-(SELECT DISTINCT ON (s.encounter_name) 2::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.difficulty_name AS difficulty_name, s.max_players AS max_players, s.encounter_name AS encounter_name, ''::text AS player_guid, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, s.guild_id AS guild_id, s.encounter_id AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, s.time_score_id AS source_time_parse_score_id, s.duration_ms AS duration_ms
+(SELECT DISTINCT ON (s.encounter_name) 2::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.encounter_difficulty_name AS difficulty_name, s.encounter_max_players AS max_players, s.encounter_name AS encounter_name, ''::text AS player_guid, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, s.guild_id AS guild_id, s.encounter_id AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, s.time_score_id AS source_time_parse_score_id, s.duration_ms AS duration_ms
  FROM guild_bosses s
  ORDER BY s.encounter_name,s.duration_ms,s.encounter_id)
 UNION ALL
 (SELECT DISTINCT ON (s.guild_id) 3::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.difficulty_name AS difficulty_name, s.max_players AS max_players, ''::text AS encounter_name, ''::text AS player_guid, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, s.guild_id AS guild_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, s.time_score_id AS source_time_parse_score_id, s.clear_duration_ms AS duration_ms
- FROM guild_times s WHERE s.clear_duration_ms>0
+ FROM guild_times s WHERE s.clear_duration_ms>0 AND NOT s.mixed_difficulty
  ORDER BY s.guild_id,s.clear_duration_ms,s.time_score_id)
 UNION ALL
-(SELECT DISTINCT ON (s.encounter_name,s.player_guid) 4::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.difficulty_name AS difficulty_name, s.max_players AS max_players, s.encounter_name AS encounter_name, s.player_guid AS player_guid, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, '00000000-0000-0000-0000-000000000000'::uuid AS guild_id, s.encounter_id AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_time_parse_score_id, 0::bigint AS duration_ms
+(SELECT DISTINCT ON (s.encounter_name,s.player_guid) 4::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.encounter_difficulty_name AS difficulty_name, s.encounter_max_players AS max_players, s.encounter_name AS encounter_name, s.player_guid AS player_guid, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, '00000000-0000-0000-0000-000000000000'::uuid AS guild_id, s.encounter_id AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_time_parse_score_id, 0::bigint AS duration_ms
  FROM renown_players s
  ORDER BY s.encounter_name,s.player_guid,s.encounter_id)
 UNION ALL
-(SELECT DISTINCT ON (s.encounter_name,s.player_guid,s.player_class,s.player_spec,s.player_sub_spec) 6::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.difficulty_name AS difficulty_name, s.max_players AS max_players, s.encounter_name AS encounter_name, s.player_guid AS player_guid, s.player_class AS player_class, s.player_spec AS player_spec, s.player_sub_spec AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, '00000000-0000-0000-0000-000000000000'::uuid AS guild_id, s.encounter_id AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_time_parse_score_id, 0::bigint AS duration_ms
+(SELECT DISTINCT ON (s.encounter_name,s.player_guid,s.player_class,s.player_spec,s.player_sub_spec) 6::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.encounter_difficulty_name AS difficulty_name, s.encounter_max_players AS max_players, s.encounter_name AS encounter_name, s.player_guid AS player_guid, s.player_class AS player_class, s.player_spec AS player_spec, s.player_sub_spec AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, '00000000-0000-0000-0000-000000000000'::uuid AS guild_id, s.encounter_id AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_time_parse_score_id, 0::bigint AS duration_ms
  FROM renown_players s WHERE s.cohort_mode='spec'
  ORDER BY s.encounter_name,s.player_guid,s.player_class,s.player_spec,s.player_sub_spec,s.encounter_id)
 UNION ALL
-(SELECT DISTINCT ON (e.name) 5::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.difficulty_name AS difficulty_name, s.max_players AS max_players, e.name AS encounter_name, ''::text AS player_guid, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, s.guild_id AS guild_id, e.id AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_time_parse_score_id, 0::bigint AS duration_ms
+(SELECT DISTINCT ON (e.name) 5::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, COALESCE(NULLIF(e.difficulty_name,''),s.difficulty_name) AS difficulty_name, COALESCE(NULLIF(e.max_players,0),s.max_players)::smallint AS max_players, e.name AS encounter_name, ''::text AS player_guid, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, s.guild_id AS guild_id, e.id AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_time_parse_score_id, 0::bigint AS duration_ms
  FROM guild_source s JOIN log_instance_encounters e ON e.instance_id=s.source_instance_id AND e.boss AND e.kill_type='clean'
  ORDER BY e.name,e.id)
 ) SELECT kind, tenant_id, run_id, source_instance_id, realm_id, instance_name, difficulty_name, max_players, encounter_name, player_guid, player_class, player_spec, player_sub_spec, metric, metric_value, guild_id, source_encounter_id, source_ranking_id, source_time_parse_score_id, duration_ms FROM projected
@@ -19604,7 +19615,7 @@ func (q *sqlQuerier) DeleteLogInstanceByIDAndGroup(ctx context.Context, arg Dele
 
 const encountersByInstanceID = `-- name: EncountersByInstanceID :many
 SELECT
-  id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id, ranking_start_offset_ms, ranking_end_offset_ms, invalidated_at, invalid_reason
+  id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id, ranking_start_offset_ms, ranking_end_offset_ms, invalidated_at, invalid_reason, difficulty_name, max_players, dynamic_difficulty
 FROM
   log_instance_encounters
 WHERE
@@ -19634,6 +19645,9 @@ func (q *sqlQuerier) EncountersByInstanceID(ctx context.Context, instanceID uuid
 			&i.RankingEndOffsetMs,
 			&i.InvalidatedAt,
 			&i.InvalidReason,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.DynamicDifficulty,
 		); err != nil {
 			return nil, err
 		}
@@ -19903,7 +19917,7 @@ func (q *sqlQuerier) GetInstanceLogOwner(ctx context.Context, id uuid.UUID) (uui
 
 const getInstancesByLogGroupID = `-- name: GetInstancesByLogGroupID :many
 SELECT
-  id, realm_id, log_group_id, name, hashed_slug, guild_id, capabilities, versions, recorder_name, recorder_guid, duplicate_group_id, start_time, end_time, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, invalidated_at, invalid_reason, realm_name, guild_name, guild_realm_id, guild_created_at, server_name, tenant_name, tenant_slug, tenant_include_in_all, format, flavor, upload_source
+  id, realm_id, log_group_id, name, hashed_slug, guild_id, capabilities, versions, recorder_name, recorder_guid, duplicate_group_id, start_time, end_time, difficulty_name, max_players, dynamic_difficulty, mixed_difficulty, vehicle_control_intervals, invalidated_at, invalid_reason, realm_name, guild_name, guild_realm_id, guild_created_at, server_name, tenant_name, tenant_slug, tenant_include_in_all, format, flavor, upload_source
 FROM
   log_instances_guild
 WHERE
@@ -19936,6 +19950,7 @@ func (q *sqlQuerier) GetInstancesByLogGroupID(ctx context.Context, logGroupID uu
 			&i.DifficultyName,
 			&i.MaxPlayers,
 			&i.DynamicDifficulty,
+			&i.MixedDifficulty,
 			&i.VehicleControlIntervals,
 			&i.InvalidatedAt,
 			&i.InvalidReason,
@@ -19976,10 +19991,10 @@ func (q *sqlQuerier) GetParsedLogGroupByID(ctx context.Context, id uuid.UUID) (P
 
 const insertEncounter = `-- name: InsertEncounter :one
 INSERT INTO
-  log_instance_encounters (id, instance_id, name, map_id, kill_type, remaining, boss, start_time, end_time, ranking_start_offset_ms, ranking_end_offset_ms)
+  log_instance_encounters (id, instance_id, name, map_id, kill_type, remaining, boss, start_time, end_time, ranking_start_offset_ms, ranking_end_offset_ms, difficulty_name, max_players, dynamic_difficulty)
 VALUES
-  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-RETURNING id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id, ranking_start_offset_ms, ranking_end_offset_ms, invalidated_at, invalid_reason
+  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+RETURNING id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id, ranking_start_offset_ms, ranking_end_offset_ms, invalidated_at, invalid_reason, difficulty_name, max_players, dynamic_difficulty
 `
 
 type InsertEncounterParams struct {
@@ -19994,6 +20009,9 @@ type InsertEncounterParams struct {
 	EndTime              pgtype.Timestamptz `db:"end_time" json:"end_time"`
 	RankingStartOffsetMs pgtype.Int8        `db:"ranking_start_offset_ms" json:"ranking_start_offset_ms"`
 	RankingEndOffsetMs   pgtype.Int8        `db:"ranking_end_offset_ms" json:"ranking_end_offset_ms"`
+	DifficultyName       string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers           int32              `db:"max_players" json:"max_players"`
+	DynamicDifficulty    int32              `db:"dynamic_difficulty" json:"dynamic_difficulty"`
 }
 
 func (q *sqlQuerier) InsertEncounter(ctx context.Context, arg InsertEncounterParams) (LogInstanceEncounter, error) {
@@ -20009,6 +20027,9 @@ func (q *sqlQuerier) InsertEncounter(ctx context.Context, arg InsertEncounterPar
 		arg.EndTime,
 		arg.RankingStartOffsetMs,
 		arg.RankingEndOffsetMs,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.DynamicDifficulty,
 	)
 	var i LogInstanceEncounter
 	err := row.Scan(
@@ -20025,6 +20046,9 @@ func (q *sqlQuerier) InsertEncounter(ctx context.Context, arg InsertEncounterPar
 		&i.RankingEndOffsetMs,
 		&i.InvalidatedAt,
 		&i.InvalidReason,
+		&i.DifficultyName,
+		&i.MaxPlayers,
+		&i.DynamicDifficulty,
 	)
 	return i, err
 }
@@ -20063,11 +20087,11 @@ func (q *sqlQuerier) InsertEncounterPhase(ctx context.Context, arg InsertEncount
 
 const insertInstance = `-- name: InsertInstance :one
 INSERT INTO
-  log_instances (id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time, capabilities, versions, recorder_name, recorder_guid, parser_version, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, category, invalidated_at, invalid_reason)
+  log_instances (id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time, capabilities, versions, recorder_name, recorder_guid, parser_version, difficulty_name, max_players, dynamic_difficulty, mixed_difficulty, vehicle_control_intervals, category, invalidated_at, invalid_reason)
 VALUES
-  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
 ON CONFLICT (hashed_slug) WHERE hashed_slug IS NOT NULL DO NOTHING
-RETURNING id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time, capabilities, versions, recorder_name, recorder_guid, parser_version, duplicate_group_id, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, category, updated_at, invalidated_at, invalid_reason
+RETURNING id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time, capabilities, versions, recorder_name, recorder_guid, parser_version, duplicate_group_id, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, category, updated_at, invalidated_at, invalid_reason, mixed_difficulty
 `
 
 type InsertInstanceParams struct {
@@ -20087,6 +20111,7 @@ type InsertInstanceParams struct {
 	DifficultyName          string             `db:"difficulty_name" json:"difficulty_name"`
 	MaxPlayers              int32              `db:"max_players" json:"max_players"`
 	DynamicDifficulty       int32              `db:"dynamic_difficulty" json:"dynamic_difficulty"`
+	MixedDifficulty         bool               `db:"mixed_difficulty" json:"mixed_difficulty"`
 	VehicleControlIntervals vehicles.Metadata  `db:"vehicle_control_intervals" json:"vehicle_control_intervals"`
 	Category                pgtype.Text        `db:"category" json:"category"`
 	InvalidatedAt           pgtype.Timestamptz `db:"invalidated_at" json:"invalidated_at"`
@@ -20111,6 +20136,7 @@ func (q *sqlQuerier) InsertInstance(ctx context.Context, arg InsertInstanceParam
 		arg.DifficultyName,
 		arg.MaxPlayers,
 		arg.DynamicDifficulty,
+		arg.MixedDifficulty,
 		arg.VehicleControlIntervals,
 		arg.Category,
 		arg.InvalidatedAt,
@@ -20140,8 +20166,32 @@ func (q *sqlQuerier) InsertInstance(ctx context.Context, arg InsertInstanceParam
 		&i.UpdatedAt,
 		&i.InvalidatedAt,
 		&i.InvalidReason,
+		&i.MixedDifficulty,
 	)
 	return i, err
+}
+
+const insertInstanceDifficulty = `-- name: InsertInstanceDifficulty :exec
+INSERT INTO log_instance_difficulties (instance_id, difficulty_name, max_players, dynamic_difficulty)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT DO NOTHING
+`
+
+type InsertInstanceDifficultyParams struct {
+	InstanceID        uuid.UUID `db:"instance_id" json:"instance_id"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int32     `db:"max_players" json:"max_players"`
+	DynamicDifficulty int32     `db:"dynamic_difficulty" json:"dynamic_difficulty"`
+}
+
+func (q *sqlQuerier) InsertInstanceDifficulty(ctx context.Context, arg InsertInstanceDifficultyParams) error {
+	_, err := q.db.Exec(ctx, insertInstanceDifficulty,
+		arg.InstanceID,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.DynamicDifficulty,
+	)
+	return err
 }
 
 const insertInstanceRaidGroupSnapshot = `-- name: InsertInstanceRaidGroupSnapshot :exec
@@ -20198,7 +20248,7 @@ func (q *sqlQuerier) InsertStagedParsedLogGroup(ctx context.Context, arg InsertS
 
 const instance = `-- name: Instance :one
 SELECT
-  id, realm_id, log_group_id, name, hashed_slug, guild_id, capabilities, versions, recorder_name, recorder_guid, duplicate_group_id, start_time, end_time, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, invalidated_at, invalid_reason, realm_name, guild_name, guild_realm_id, guild_created_at, server_name, tenant_name, tenant_slug, tenant_include_in_all, format, flavor, upload_source
+  id, realm_id, log_group_id, name, hashed_slug, guild_id, capabilities, versions, recorder_name, recorder_guid, duplicate_group_id, start_time, end_time, difficulty_name, max_players, dynamic_difficulty, mixed_difficulty, vehicle_control_intervals, invalidated_at, invalid_reason, realm_name, guild_name, guild_realm_id, guild_created_at, server_name, tenant_name, tenant_slug, tenant_include_in_all, format, flavor, upload_source
 FROM
   log_instances_guild
 WHERE
@@ -20225,6 +20275,7 @@ func (q *sqlQuerier) Instance(ctx context.Context, id uuid.UUID) (LogInstancesGu
 		&i.DifficultyName,
 		&i.MaxPlayers,
 		&i.DynamicDifficulty,
+		&i.MixedDifficulty,
 		&i.VehicleControlIntervals,
 		&i.InvalidatedAt,
 		&i.InvalidReason,
@@ -20245,7 +20296,7 @@ func (q *sqlQuerier) Instance(ctx context.Context, id uuid.UUID) (LogInstancesGu
 
 const instanceBySlug = `-- name: InstanceBySlug :one
 SELECT
-  id, realm_id, log_group_id, name, hashed_slug, guild_id, capabilities, versions, recorder_name, recorder_guid, duplicate_group_id, start_time, end_time, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, invalidated_at, invalid_reason, realm_name, guild_name, guild_realm_id, guild_created_at, server_name, tenant_name, tenant_slug, tenant_include_in_all, format, flavor, upload_source
+  id, realm_id, log_group_id, name, hashed_slug, guild_id, capabilities, versions, recorder_name, recorder_guid, duplicate_group_id, start_time, end_time, difficulty_name, max_players, dynamic_difficulty, mixed_difficulty, vehicle_control_intervals, invalidated_at, invalid_reason, realm_name, guild_name, guild_realm_id, guild_created_at, server_name, tenant_name, tenant_slug, tenant_include_in_all, format, flavor, upload_source
 FROM
   log_instances_guild
 WHERE
@@ -20272,6 +20323,7 @@ func (q *sqlQuerier) InstanceBySlug(ctx context.Context, hashedSlug pgtype.Text)
 		&i.DifficultyName,
 		&i.MaxPlayers,
 		&i.DynamicDifficulty,
+		&i.MixedDifficulty,
 		&i.VehicleControlIntervals,
 		&i.InvalidatedAt,
 		&i.InvalidReason,
@@ -20291,7 +20343,7 @@ func (q *sqlQuerier) InstanceBySlug(ctx context.Context, hashedSlug pgtype.Text)
 }
 
 const instanceBySlugWithUnlisted = `-- name: InstanceBySlugWithUnlisted :one
-SELECT log_instances_guild.id, log_instances_guild.realm_id, log_instances_guild.log_group_id, log_instances_guild.name, log_instances_guild.hashed_slug, log_instances_guild.guild_id, log_instances_guild.capabilities, log_instances_guild.versions, log_instances_guild.recorder_name, log_instances_guild.recorder_guid, log_instances_guild.duplicate_group_id, log_instances_guild.start_time, log_instances_guild.end_time, log_instances_guild.difficulty_name, log_instances_guild.max_players, log_instances_guild.dynamic_difficulty, log_instances_guild.vehicle_control_intervals, log_instances_guild.invalidated_at, log_instances_guild.invalid_reason, log_instances_guild.realm_name, log_instances_guild.guild_name, log_instances_guild.guild_realm_id, log_instances_guild.guild_created_at, log_instances_guild.server_name, log_instances_guild.tenant_name, log_instances_guild.tenant_slug, log_instances_guild.tenant_include_in_all, log_instances_guild.format, log_instances_guild.flavor, log_instances_guild.upload_source, wow_log_groups.unlisted
+SELECT log_instances_guild.id, log_instances_guild.realm_id, log_instances_guild.log_group_id, log_instances_guild.name, log_instances_guild.hashed_slug, log_instances_guild.guild_id, log_instances_guild.capabilities, log_instances_guild.versions, log_instances_guild.recorder_name, log_instances_guild.recorder_guid, log_instances_guild.duplicate_group_id, log_instances_guild.start_time, log_instances_guild.end_time, log_instances_guild.difficulty_name, log_instances_guild.max_players, log_instances_guild.dynamic_difficulty, log_instances_guild.mixed_difficulty, log_instances_guild.vehicle_control_intervals, log_instances_guild.invalidated_at, log_instances_guild.invalid_reason, log_instances_guild.realm_name, log_instances_guild.guild_name, log_instances_guild.guild_realm_id, log_instances_guild.guild_created_at, log_instances_guild.server_name, log_instances_guild.tenant_name, log_instances_guild.tenant_slug, log_instances_guild.tenant_include_in_all, log_instances_guild.format, log_instances_guild.flavor, log_instances_guild.upload_source, wow_log_groups.unlisted
 FROM log_instances_guild
 JOIN wow_log_groups ON wow_log_groups.id = log_instances_guild.log_group_id
 WHERE log_instances_guild.hashed_slug = $1
@@ -20323,6 +20375,7 @@ func (q *sqlQuerier) InstanceBySlugWithUnlisted(ctx context.Context, hashedSlug 
 		&i.LogInstancesGuild.DifficultyName,
 		&i.LogInstancesGuild.MaxPlayers,
 		&i.LogInstancesGuild.DynamicDifficulty,
+		&i.LogInstancesGuild.MixedDifficulty,
 		&i.LogInstancesGuild.VehicleControlIntervals,
 		&i.LogInstancesGuild.InvalidatedAt,
 		&i.LogInstancesGuild.InvalidReason,
@@ -20340,6 +20393,38 @@ func (q *sqlQuerier) InstanceBySlugWithUnlisted(ctx context.Context, hashedSlug 
 		&i.Unlisted,
 	)
 	return i, err
+}
+
+const instanceDifficultiesByInstanceID = `-- name: InstanceDifficultiesByInstanceID :many
+SELECT instance_id, difficulty_name, max_players, dynamic_difficulty
+FROM log_instance_difficulties
+WHERE instance_id = $1
+ORDER BY max_players, difficulty_name, dynamic_difficulty
+`
+
+func (q *sqlQuerier) InstanceDifficultiesByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceDifficulty, error) {
+	rows, err := q.db.Query(ctx, instanceDifficultiesByInstanceID, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LogInstanceDifficulty
+	for rows.Next() {
+		var i LogInstanceDifficulty
+		if err := rows.Scan(
+			&i.InstanceID,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.DynamicDifficulty,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const instancePlayerGUIDsByInstanceID = `-- name: InstancePlayerGUIDsByInstanceID :many
@@ -20535,7 +20620,7 @@ func (q *sqlQuerier) InstanceUnitsByInstanceID(ctx context.Context, instanceID u
 }
 
 const instanceWithUnlisted = `-- name: InstanceWithUnlisted :one
-SELECT log_instances_guild.id, log_instances_guild.realm_id, log_instances_guild.log_group_id, log_instances_guild.name, log_instances_guild.hashed_slug, log_instances_guild.guild_id, log_instances_guild.capabilities, log_instances_guild.versions, log_instances_guild.recorder_name, log_instances_guild.recorder_guid, log_instances_guild.duplicate_group_id, log_instances_guild.start_time, log_instances_guild.end_time, log_instances_guild.difficulty_name, log_instances_guild.max_players, log_instances_guild.dynamic_difficulty, log_instances_guild.vehicle_control_intervals, log_instances_guild.invalidated_at, log_instances_guild.invalid_reason, log_instances_guild.realm_name, log_instances_guild.guild_name, log_instances_guild.guild_realm_id, log_instances_guild.guild_created_at, log_instances_guild.server_name, log_instances_guild.tenant_name, log_instances_guild.tenant_slug, log_instances_guild.tenant_include_in_all, log_instances_guild.format, log_instances_guild.flavor, log_instances_guild.upload_source, wow_log_groups.unlisted
+SELECT log_instances_guild.id, log_instances_guild.realm_id, log_instances_guild.log_group_id, log_instances_guild.name, log_instances_guild.hashed_slug, log_instances_guild.guild_id, log_instances_guild.capabilities, log_instances_guild.versions, log_instances_guild.recorder_name, log_instances_guild.recorder_guid, log_instances_guild.duplicate_group_id, log_instances_guild.start_time, log_instances_guild.end_time, log_instances_guild.difficulty_name, log_instances_guild.max_players, log_instances_guild.dynamic_difficulty, log_instances_guild.mixed_difficulty, log_instances_guild.vehicle_control_intervals, log_instances_guild.invalidated_at, log_instances_guild.invalid_reason, log_instances_guild.realm_name, log_instances_guild.guild_name, log_instances_guild.guild_realm_id, log_instances_guild.guild_created_at, log_instances_guild.server_name, log_instances_guild.tenant_name, log_instances_guild.tenant_slug, log_instances_guild.tenant_include_in_all, log_instances_guild.format, log_instances_guild.flavor, log_instances_guild.upload_source, wow_log_groups.unlisted
 FROM log_instances_guild
 JOIN wow_log_groups ON wow_log_groups.id = log_instances_guild.log_group_id
 WHERE log_instances_guild.id = $1
@@ -20566,6 +20651,7 @@ func (q *sqlQuerier) InstanceWithUnlisted(ctx context.Context, id uuid.UUID) (In
 		&i.LogInstancesGuild.DifficultyName,
 		&i.LogInstancesGuild.MaxPlayers,
 		&i.LogInstancesGuild.DynamicDifficulty,
+		&i.LogInstancesGuild.MixedDifficulty,
 		&i.LogInstancesGuild.VehicleControlIntervals,
 		&i.LogInstancesGuild.InvalidatedAt,
 		&i.LogInstancesGuild.InvalidReason,
@@ -21512,7 +21598,7 @@ func (q *sqlQuerier) PruneParsedInstanceFromLogOutput(ctx context.Context, arg P
 }
 
 const publicInstance = `-- name: PublicInstance :one
-SELECT log_instances_guild.id, log_instances_guild.realm_id, log_instances_guild.log_group_id, log_instances_guild.name, log_instances_guild.hashed_slug, log_instances_guild.guild_id, log_instances_guild.capabilities, log_instances_guild.versions, log_instances_guild.recorder_name, log_instances_guild.recorder_guid, log_instances_guild.duplicate_group_id, log_instances_guild.start_time, log_instances_guild.end_time, log_instances_guild.difficulty_name, log_instances_guild.max_players, log_instances_guild.dynamic_difficulty, log_instances_guild.vehicle_control_intervals, log_instances_guild.invalidated_at, log_instances_guild.invalid_reason, log_instances_guild.realm_name, log_instances_guild.guild_name, log_instances_guild.guild_realm_id, log_instances_guild.guild_created_at, log_instances_guild.server_name, log_instances_guild.tenant_name, log_instances_guild.tenant_slug, log_instances_guild.tenant_include_in_all, log_instances_guild.format, log_instances_guild.flavor, log_instances_guild.upload_source
+SELECT log_instances_guild.id, log_instances_guild.realm_id, log_instances_guild.log_group_id, log_instances_guild.name, log_instances_guild.hashed_slug, log_instances_guild.guild_id, log_instances_guild.capabilities, log_instances_guild.versions, log_instances_guild.recorder_name, log_instances_guild.recorder_guid, log_instances_guild.duplicate_group_id, log_instances_guild.start_time, log_instances_guild.end_time, log_instances_guild.difficulty_name, log_instances_guild.max_players, log_instances_guild.dynamic_difficulty, log_instances_guild.mixed_difficulty, log_instances_guild.vehicle_control_intervals, log_instances_guild.invalidated_at, log_instances_guild.invalid_reason, log_instances_guild.realm_name, log_instances_guild.guild_name, log_instances_guild.guild_realm_id, log_instances_guild.guild_created_at, log_instances_guild.server_name, log_instances_guild.tenant_name, log_instances_guild.tenant_slug, log_instances_guild.tenant_include_in_all, log_instances_guild.format, log_instances_guild.flavor, log_instances_guild.upload_source
 FROM log_instances_guild
 JOIN wow_log_groups ON wow_log_groups.id = log_instances_guild.log_group_id AND NOT wow_log_groups.unlisted
 WHERE log_instances_guild.id = $1
@@ -21538,6 +21624,7 @@ func (q *sqlQuerier) PublicInstance(ctx context.Context, id uuid.UUID) (LogInsta
 		&i.DifficultyName,
 		&i.MaxPlayers,
 		&i.DynamicDifficulty,
+		&i.MixedDifficulty,
 		&i.VehicleControlIntervals,
 		&i.InvalidatedAt,
 		&i.InvalidReason,
@@ -21557,7 +21644,7 @@ func (q *sqlQuerier) PublicInstance(ctx context.Context, id uuid.UUID) (LogInsta
 }
 
 const publicInstanceBySlug = `-- name: PublicInstanceBySlug :one
-SELECT log_instances_guild.id, log_instances_guild.realm_id, log_instances_guild.log_group_id, log_instances_guild.name, log_instances_guild.hashed_slug, log_instances_guild.guild_id, log_instances_guild.capabilities, log_instances_guild.versions, log_instances_guild.recorder_name, log_instances_guild.recorder_guid, log_instances_guild.duplicate_group_id, log_instances_guild.start_time, log_instances_guild.end_time, log_instances_guild.difficulty_name, log_instances_guild.max_players, log_instances_guild.dynamic_difficulty, log_instances_guild.vehicle_control_intervals, log_instances_guild.invalidated_at, log_instances_guild.invalid_reason, log_instances_guild.realm_name, log_instances_guild.guild_name, log_instances_guild.guild_realm_id, log_instances_guild.guild_created_at, log_instances_guild.server_name, log_instances_guild.tenant_name, log_instances_guild.tenant_slug, log_instances_guild.tenant_include_in_all, log_instances_guild.format, log_instances_guild.flavor, log_instances_guild.upload_source
+SELECT log_instances_guild.id, log_instances_guild.realm_id, log_instances_guild.log_group_id, log_instances_guild.name, log_instances_guild.hashed_slug, log_instances_guild.guild_id, log_instances_guild.capabilities, log_instances_guild.versions, log_instances_guild.recorder_name, log_instances_guild.recorder_guid, log_instances_guild.duplicate_group_id, log_instances_guild.start_time, log_instances_guild.end_time, log_instances_guild.difficulty_name, log_instances_guild.max_players, log_instances_guild.dynamic_difficulty, log_instances_guild.mixed_difficulty, log_instances_guild.vehicle_control_intervals, log_instances_guild.invalidated_at, log_instances_guild.invalid_reason, log_instances_guild.realm_name, log_instances_guild.guild_name, log_instances_guild.guild_realm_id, log_instances_guild.guild_created_at, log_instances_guild.server_name, log_instances_guild.tenant_name, log_instances_guild.tenant_slug, log_instances_guild.tenant_include_in_all, log_instances_guild.format, log_instances_guild.flavor, log_instances_guild.upload_source
 FROM log_instances_guild
 JOIN wow_log_groups ON wow_log_groups.id = log_instances_guild.log_group_id AND NOT wow_log_groups.unlisted
 WHERE log_instances_guild.hashed_slug = $1
@@ -21583,6 +21670,7 @@ func (q *sqlQuerier) PublicInstanceBySlug(ctx context.Context, hashedSlug pgtype
 		&i.DifficultyName,
 		&i.MaxPlayers,
 		&i.DynamicDifficulty,
+		&i.MixedDifficulty,
 		&i.VehicleControlIntervals,
 		&i.InvalidatedAt,
 		&i.InvalidReason,
@@ -24302,7 +24390,7 @@ members AS MATERIALIZED (
         )::integer AS boss_coverage
     FROM affected_runs
     CROSS JOIN LATERAL (
-        SELECT candidate.id, candidate.realm_id, candidate.log_group_id, candidate.name, candidate.hashed_slug, candidate.guild_id, candidate.start_time, candidate.end_time, candidate.capabilities, candidate.versions, candidate.recorder_name, candidate.recorder_guid, candidate.parser_version, candidate.duplicate_group_id, candidate.difficulty_name, candidate.max_players, candidate.dynamic_difficulty, candidate.vehicle_control_intervals, candidate.category, candidate.updated_at, candidate.invalidated_at, candidate.invalid_reason
+        SELECT candidate.id, candidate.realm_id, candidate.log_group_id, candidate.name, candidate.hashed_slug, candidate.guild_id, candidate.start_time, candidate.end_time, candidate.capabilities, candidate.versions, candidate.recorder_name, candidate.recorder_guid, candidate.parser_version, candidate.duplicate_group_id, candidate.difficulty_name, candidate.max_players, candidate.dynamic_difficulty, candidate.vehicle_control_intervals, candidate.category, candidate.updated_at, candidate.invalidated_at, candidate.invalid_reason, candidate.mixed_difficulty
         FROM log_instances candidate
         JOIN wow_log_groups candidate_group ON candidate_group.id = candidate.log_group_id AND NOT candidate_group.unlisted
         WHERE COALESCE(candidate.duplicate_group_id, candidate.id) = affected_runs.run_id
@@ -29164,8 +29252,11 @@ const getInstanceCleanEncounterKillTimes = `-- name: GetInstanceCleanEncounterKi
 SELECT
     lie.id AS encounter_id,
     lie.name AS encounter_name,
+    COALESCE(NULLIF(lie.difficulty_name, ''), instance.difficulty_name) AS difficulty_name,
+    COALESCE(NULLIF(lie.max_players, 0), instance.max_players)::smallint AS max_players,
     (EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000)::bigint AS duration_ms
 FROM log_instance_encounters lie
+JOIN log_instances instance ON instance.id = lie.instance_id
 WHERE lie.instance_id = $1
   AND lie.boss = true
   AND lie.kill_type = 'clean'
@@ -29175,9 +29266,11 @@ ORDER BY lie.start_time
 `
 
 type GetInstanceCleanEncounterKillTimesRow struct {
-	EncounterID   uuid.UUID `db:"encounter_id" json:"encounter_id"`
-	EncounterName string    `db:"encounter_name" json:"encounter_name"`
-	DurationMs    int64     `db:"duration_ms" json:"duration_ms"`
+	EncounterID    uuid.UUID `db:"encounter_id" json:"encounter_id"`
+	EncounterName  string    `db:"encounter_name" json:"encounter_name"`
+	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16     `db:"max_players" json:"max_players"`
+	DurationMs     int64     `db:"duration_ms" json:"duration_ms"`
 }
 
 // Returns only clean boss kills for an instance, excluding partial kills.
@@ -29192,7 +29285,13 @@ func (q *sqlQuerier) GetInstanceCleanEncounterKillTimes(ctx context.Context, ins
 	var items []GetInstanceCleanEncounterKillTimesRow
 	for rows.Next() {
 		var i GetInstanceCleanEncounterKillTimesRow
-		if err := rows.Scan(&i.EncounterID, &i.EncounterName, &i.DurationMs); err != nil {
+		if err := rows.Scan(
+			&i.EncounterID,
+			&i.EncounterName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.DurationMs,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -32263,8 +32362,8 @@ current_members AS MATERIALIZED (
         instance.id AS instance_id,
         instance.log_group_id,
         speedrun.instance_name,
-        instance.difficulty_name,
-        instance.max_players,
+        COALESCE(NULLIF(encounter.difficulty_name, ''), instance.difficulty_name) AS difficulty_name,
+        COALESCE(NULLIF(encounter.max_players, 0), instance.max_players) AS max_players,
         (EXTRACT(EPOCH FROM (encounter.end_time - encounter.start_time)) * 1000)::bigint AS duration_ms,
         encounter.end_time AS killed_at
     FROM representative_instances representative
@@ -32380,6 +32479,7 @@ current_members AS MATERIALIZED (
     JOIN wow_server_realms realm ON realm.id = instance.realm_id
     JOIN wow_servers server ON server.id = realm.server_id
     WHERE speedrun.qualified = true
+      AND NOT instance.mixed_difficulty
       AND speedrun.ranked_duration_ms > 0
 ),
 upserted AS (

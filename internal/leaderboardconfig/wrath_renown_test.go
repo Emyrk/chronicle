@@ -181,7 +181,7 @@ func TestWrathMigrationRoundTrip(t *testing.T) {
 	}
 	rows, err := leaderboardconfig.Resolve(ctx, db, database.WoWFlavor{database.FlavorWrath}, nil)
 	require.NoError(t, err)
-	require.Len(t, selectKind(rows, "variant"), 10)
+	require.Len(t, selectKind(rows, "variant"), 12)
 	for _, r := range rows {
 		require.False(t, r.HasPoints)
 		require.NotEqual(t, "Eye of Eternity", r.InstanceName)

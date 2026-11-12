@@ -2276,6 +2276,15 @@ CREATE TABLE leaderboard_variant_renown (
     CONSTRAINT leaderboard_variant_renown_points_check CHECK (((points >= (0)::double precision) AND (points < 'Infinity'::double precision)))
 );
 
+CREATE TABLE log_instance_difficulties (
+    instance_id uuid NOT NULL,
+    difficulty_name text NOT NULL,
+    max_players integer NOT NULL,
+    dynamic_difficulty integer DEFAULT 0 NOT NULL,
+    CONSTRAINT log_instance_difficulties_dynamic_difficulty_check CHECK ((dynamic_difficulty >= 0)),
+    CONSTRAINT log_instance_difficulties_max_players_check CHECK ((max_players >= 0))
+);
+
 CREATE TABLE log_instance_encounter_damage_unit_summary (
     encounter_id uuid NOT NULL,
     unit_guid wow_guid NOT NULL,
@@ -2322,7 +2331,12 @@ CREATE TABLE log_instance_encounters (
     ranking_start_offset_ms bigint,
     ranking_end_offset_ms bigint,
     invalidated_at timestamp with time zone,
-    invalid_reason text DEFAULT ''::text NOT NULL
+    invalid_reason text DEFAULT ''::text NOT NULL,
+    difficulty_name text DEFAULT ''::text NOT NULL,
+    max_players integer DEFAULT 0 NOT NULL,
+    dynamic_difficulty integer DEFAULT 0 NOT NULL,
+    CONSTRAINT log_instance_encounters_dynamic_difficulty_check CHECK ((dynamic_difficulty >= 0)),
+    CONSTRAINT log_instance_encounters_max_players_check CHECK ((max_players >= 0))
 );
 
 CREATE TABLE log_instance_events (
@@ -2397,6 +2411,7 @@ CREATE TABLE log_instances (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     invalidated_at timestamp with time zone,
     invalid_reason text DEFAULT ''::text NOT NULL,
+    mixed_difficulty boolean DEFAULT false NOT NULL,
     CONSTRAINT log_instances_category_check CHECK ((category = ANY (ARRAY['raid'::text, 'dungeon'::text])))
 );
 
@@ -2479,6 +2494,7 @@ CREATE VIEW log_instances_guild AS
     li.difficulty_name,
     li.max_players,
     li.dynamic_difficulty,
+    li.mixed_difficulty,
     li.vehicle_control_intervals,
     li.invalidated_at,
     li.invalid_reason,
@@ -4001,6 +4017,9 @@ ALTER TABLE ONLY log_group_artifacts
 ALTER TABLE ONLY log_group_artifacts
     ADD CONSTRAINT log_group_artifacts_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY log_instance_difficulties
+    ADD CONSTRAINT log_instance_difficulties_pkey PRIMARY KEY (instance_id, difficulty_name, max_players, dynamic_difficulty);
+
 ALTER TABLE ONLY log_instance_encounter_damage_unit_summary
     ADD CONSTRAINT log_instance_encounter_damage_unit_summary_pkey PRIMARY KEY (encounter_id, unit_guid);
 
@@ -5123,6 +5142,9 @@ ALTER TABLE ONLY log_group_artifacts
 
 ALTER TABLE ONLY log_group_artifacts
     ADD CONSTRAINT log_group_artifacts_log_group_id_fkey FOREIGN KEY (log_group_id) REFERENCES wow_log_groups(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY log_instance_difficulties
+    ADD CONSTRAINT log_instance_difficulties_instance_id_fkey FOREIGN KEY (instance_id) REFERENCES log_instances(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY log_instance_encounter_damage_unit_summary
     ADD CONSTRAINT log_instance_encounter_damage_unit_summary_encounter_id_fkey FOREIGN KEY (encounter_id) REFERENCES log_instance_encounters(id) ON DELETE CASCADE;

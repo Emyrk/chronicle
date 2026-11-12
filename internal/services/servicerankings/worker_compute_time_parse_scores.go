@@ -91,6 +91,8 @@ func (w *WorkerComputeTimeParseScores) Work(ctx context.Context, job *river.Job[
 		type bossScoreRow struct {
 			encounterID   uuid.UUID
 			encounterName string
+			difficulty    string
+			maxPlayers    int16
 			duration      int64
 			results       scopedScoreResults
 		}
@@ -112,7 +114,7 @@ func (w *WorkerComputeTimeParseScores) Work(ctx context.Context, job *river.Job[
 		bossRows := make([]bossScoreRow, 0, len(bossKills))
 		for _, kill := range bossKills {
 			if kill.DurationMs > 0 {
-				bossRows = append(bossRows, bossScoreRow{encounterID: kill.EncounterID, encounterName: kill.EncounterName, duration: kill.DurationMs})
+				bossRows = append(bossRows, bossScoreRow{encounterID: kill.EncounterID, encounterName: kill.EncounterName, difficulty: kill.DifficultyName, maxPlayers: kill.MaxPlayers, duration: kill.DurationMs})
 			}
 		}
 		cutoffDB := pgtype.Timestamptz{Time: cutoff, Valid: true}
@@ -145,7 +147,7 @@ func (w *WorkerComputeTimeParseScores) Work(ctx context.Context, job *river.Job[
 					TenantID: args.TenantID, PolicyVersion: policyVersion, QueryVersion: queryVersion,
 					Cutoff: cutoffDB, WindowStart: windowDB, ExcludeRunID: instance.RunID,
 					InstanceName: instance.InstanceName, EncounterName: row.encounterName,
-					DifficultyName: instance.DifficultyName, MaxPlayers: int16(instance.MaxPlayers),
+					DifficultyName: row.difficulty, MaxPlayers: row.maxPlayers,
 					Scope: scope, RealmID: instance.RealmID, GuildID: guildFilter,
 				})
 				if cohortErr != nil {

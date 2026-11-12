@@ -35,6 +35,36 @@ type Zone struct {
 	SubZone           string // current subzone name
 }
 
+// Difficulty is the difficulty snapshot active when an encounter starts.
+type Difficulty struct {
+	Name              string
+	MaxPlayers        int
+	DynamicDifficulty int
+}
+
+func (d Difficulty) Known() bool {
+	return d.Name != "" || d.MaxPlayers > 0 || d.DynamicDifficulty > 0
+}
+
+// DifficultySnapshot returns the comparable difficulty active in this zone.
+// ICC-style dynamic Heroic mode is promoted into the cohort name while the raw
+// toggle remains available for display and diagnostics.
+func (z Zone) DifficultySnapshot() Difficulty {
+	name := z.DifficultyName
+	if z.DynamicDifficulty > 0 && !strings.Contains(strings.ToLower(name), "heroic") {
+		if name == "" {
+			name = "Heroic"
+		} else {
+			name += " (Heroic)"
+		}
+	}
+	return Difficulty{
+		Name:              name,
+		MaxPlayers:        z.MaxPlayers,
+		DynamicDifficulty: z.DynamicDifficulty,
+	}
+}
+
 func (z Zone) ID() string {
 	return fmt.Sprintf("%s:%d", z.Name, z.InstanceID)
 }

@@ -663,6 +663,7 @@ type sqlcQuerier interface {
 	InsertInferenceThread(ctx context.Context, arg InsertInferenceThreadParams) (InferenceThread, error)
 	InsertInferenceUsage(ctx context.Context, arg InsertInferenceUsageParams) error
 	InsertInstance(ctx context.Context, arg InsertInstanceParams) (LogInstance, error)
+	InsertInstanceDifficulty(ctx context.Context, arg InsertInstanceDifficultyParams) error
 	InsertInstanceLoot(ctx context.Context, arg []InsertInstanceLootParams) *InsertInstanceLootBatchResults
 	InsertInstancePlayers(ctx context.Context, arg []InsertInstancePlayersParams) *InsertInstancePlayersBatchResults
 	InsertInstanceRaidGroupSnapshot(ctx context.Context, arg InsertInstanceRaidGroupSnapshotParams) error
@@ -724,6 +725,7 @@ type sqlcQuerier interface {
 	InstanceAnalyticsGroupKey(ctx context.Context, instanceID uuid.UUID) (string, error)
 	InstanceBySlug(ctx context.Context, hashedSlug pgtype.Text) (LogInstancesGuild, error)
 	InstanceBySlugWithUnlisted(ctx context.Context, hashedSlug pgtype.Text) (InstanceBySlugWithUnlistedRow, error)
+	InstanceDifficultiesByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceDifficulty, error)
 	InstanceEvent(ctx context.Context, arg InstanceEventParams) (LogInstanceEvent, error)
 	InstancePlayerGUIDsByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]guid.GUID, error)
 	InstancePlayerSpecs(ctx context.Context, instanceID uuid.UUID) ([]InstancePlayerSpecsRow, error)

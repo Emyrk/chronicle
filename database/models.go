@@ -2598,6 +2598,14 @@ type LogInstance struct {
 	UpdatedAt               pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 	InvalidatedAt           pgtype.Timestamptz `db:"invalidated_at" json:"invalidated_at"`
 	InvalidReason           string             `db:"invalid_reason" json:"invalid_reason"`
+	MixedDifficulty         bool               `db:"mixed_difficulty" json:"mixed_difficulty"`
+}
+
+type LogInstanceDifficulty struct {
+	InstanceID        uuid.UUID `db:"instance_id" json:"instance_id"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int32     `db:"max_players" json:"max_players"`
+	DynamicDifficulty int32     `db:"dynamic_difficulty" json:"dynamic_difficulty"`
 }
 
 type LogInstanceEncounter struct {
@@ -2614,6 +2622,9 @@ type LogInstanceEncounter struct {
 	RankingEndOffsetMs   pgtype.Int8        `db:"ranking_end_offset_ms" json:"ranking_end_offset_ms"`
 	InvalidatedAt        pgtype.Timestamptz `db:"invalidated_at" json:"invalidated_at"`
 	InvalidReason        string             `db:"invalid_reason" json:"invalid_reason"`
+	DifficultyName       string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers           int32              `db:"max_players" json:"max_players"`
+	DynamicDifficulty    int32              `db:"dynamic_difficulty" json:"dynamic_difficulty"`
 }
 
 type LogInstanceEncounterDamageUnitSummary struct {
@@ -2709,6 +2720,7 @@ type LogInstancesGuild struct {
 	DifficultyName          string             `db:"difficulty_name" json:"difficulty_name"`
 	MaxPlayers              int32              `db:"max_players" json:"max_players"`
 	DynamicDifficulty       int32              `db:"dynamic_difficulty" json:"dynamic_difficulty"`
+	MixedDifficulty         bool               `db:"mixed_difficulty" json:"mixed_difficulty"`
 	VehicleControlIntervals vehicles.Metadata  `db:"vehicle_control_intervals" json:"vehicle_control_intervals"`
 	InvalidatedAt           pgtype.Timestamptz `db:"invalidated_at" json:"invalidated_at"`
 	InvalidReason           string             `db:"invalid_reason" json:"invalid_reason"`

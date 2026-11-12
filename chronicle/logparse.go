@@ -31,6 +31,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
 	"github.com/Emyrk/chronicle/combatlog/parser/unitname"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
@@ -577,6 +578,19 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 				instanceCategory = pgtype.Text{String: string(inst.Category), Valid: true}
 			}
 
+			difficulties := make(map[zone.Difficulty]struct{})
+			for _, enc := range finalized.Encounters {
+				if enc.Combat.Difficulty.Known() {
+					difficulties[enc.Combat.Difficulty] = struct{}{}
+				}
+			}
+			if len(difficulties) == 0 {
+				if difficulty := inst.CurrentZone.DifficultySnapshot(); difficulty.Known() {
+					difficulties[difficulty] = struct{}{}
+				}
+			}
+			mixedDifficulty := len(difficulties) > 1
+
 			insertInstanceParams := database.InsertInstanceParams{
 				ID:         instanceID,
 				RealmID:    realmID,
@@ -600,6 +614,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 				DifficultyName:          inst.CurrentZone.DifficultyName,
 				MaxPlayers:              int32(inst.CurrentZone.MaxPlayers),
 				DynamicDifficulty:       int32(inst.CurrentZone.DynamicDifficulty),
+				MixedDifficulty:         mixedDifficulty,
 				Category:                instanceCategory,
 				VehicleControlIntervals: finalized.VehicleMetadata,
 				InvalidatedAt:           lg.InvalidatedAt,
@@ -632,6 +647,14 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 			)
 			if err != nil {
 				return fmt.Errorf("insert instance: %w", err)
+			}
+			for difficulty := range difficulties {
+				if err := tx.InsertInstanceDifficulty(ctx, database.InsertInstanceDifficultyParams{
+					InstanceID: dbinstance.ID, DifficultyName: difficulty.Name,
+					MaxPlayers: int32(difficulty.MaxPlayers), DynamicDifficulty: int32(difficulty.DynamicDifficulty),
+				}); err != nil {
+					return fmt.Errorf("insert instance difficulty: %w", err)
+				}
 			}
 
 			topIncomingDamageAbilities := make([]database.OverviewIncomingDamageAbility, 0, len(finalized.Overview.TopIncomingDamageAbilities))
@@ -703,6 +726,9 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 					Boss:                 enc.Boss,
 					RankingStartOffsetMs: rankingStart,
 					RankingEndOffsetMs:   rankingEnd,
+					DifficultyName:       enc.Combat.Difficulty.Name,
+					MaxPlayers:           int32(enc.Combat.Difficulty.MaxPlayers),
+					DynamicDifficulty:    int32(enc.Combat.Difficulty.DynamicDifficulty),
 					StartTime:            database.Timestamptz(enc.Combat.Start),
 					EndTime:              database.Timestamptz(enc.Combat.End),
 				})
@@ -804,7 +830,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 
 				// Data source rule: require server-side capability or addon version
 				// for a speedrun to be eligible.
-				qualified := sr.Qualified
+				qualified := sr.Qualified && !mixedDifficulty
 				if !slices.Contains(logCapabilities, "server-side") && addonVersion == "" {
 					qualified = false
 				}
@@ -1642,8 +1668,8 @@ func insertDPSRankings(
 				PlayerRole:         roles[unitGUID],
 				PlayerLevel:        playerLevel,
 				TalentBuildID:      talentBuildID,
-				DifficultyName:     dbinstance.DifficultyName,
-				MaxPlayers:         int16(dbinstance.MaxPlayers),
+				DifficultyName:     enc.Combat.Difficulty.Name,
+				MaxPlayers:         int16(enc.Combat.Difficulty.MaxPlayers),
 				RealmID:            dbinstance.RealmID,
 				RealmName:          realmName,
 				GuildID:            uuid.NullUUID{}, // guild_name is sufficient; avoid FK constraint issues
@@ -1670,8 +1696,10 @@ func insertDPSRankings(
 	}
 
 	// Aggregate trash (non-boss) encounters into per-(player, spec) ranking rows.
-	if err := insertTrashRankings(ctx, tx, finalized, dbinstance, instanceName, realmName, datasetID, flavor, talentTreeData); err != nil {
-		return err
+	if !dbinstance.MixedDifficulty {
+		if err := insertTrashRankings(ctx, tx, finalized, dbinstance, instanceName, realmName, datasetID, flavor, talentTreeData); err != nil {
+			return err
+		}
 	}
 	return nil
 }

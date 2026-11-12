@@ -402,22 +402,32 @@ func TestGuildEncounterKills(t *testing.T) {
 	nightB := insertGuildInstance(f.guildID, night2)
 	insertEncounter(nightB, "Ragnaros", database.KillTypeClean, true, night2.Add(30*time.Minute))
 
+	// The same log can contain an encounter from a different dynamic difficulty.
+	_, err = f.store.InsertEncounter(ctx, database.InsertEncounterParams{
+		ID: uuid.New(), InstanceID: nightB, Name: "Ragnaros",
+		KillType: database.KillTypeClean, Remaining: guid.GUIDs{}, Boss: true,
+		DifficultyName: "Normal (Heroic)", MaxPlayers: 40, DynamicDifficulty: 1,
+		StartTime: database.Timestamptz(night2.Add(35 * time.Minute)), EndTime: database.Timestamptz(night2.Add(40 * time.Minute)),
+	})
+	require.NoError(t, err)
+
 	// Another guild's kills never leak in.
 	foreign := insertGuildInstance(otherGuildID, night2)
 	insertEncounter(foreign, "Onyxia", database.KillTypeClean, true, night2.Add(30*time.Minute))
 
 	rows, err := f.store.GuildEncounterKills(ctx, f.guildID)
 	require.NoError(t, err)
-	require.Len(t, rows, 2, "only clean/partial boss kills for this guild count")
+	require.Len(t, rows, 3, "only clean/partial boss kills for this guild count")
 
 	byEncounter := map[string]database.GuildEncounterKillsRow{}
 	for _, row := range rows {
-		byEncounter[row.EncounterName] = row
+		byEncounter[row.EncounterName+"|"+row.DifficultyName] = row
 	}
-	require.EqualValues(t, 2, byEncounter["Ragnaros"].Kills)
-	require.EqualValues(t, 1, byEncounter["Golemagg"].Kills)
-	require.Equal(t, "Molten Core", byEncounter["Ragnaros"].InstanceName)
-	require.WithinDuration(t, night2.Add(30*time.Minute), byEncounter["Ragnaros"].LastKilledAt.Time, time.Second)
+	require.EqualValues(t, 2, byEncounter["Ragnaros|Normal"].Kills)
+	require.EqualValues(t, 1, byEncounter["Ragnaros|Normal (Heroic)"].Kills)
+	require.EqualValues(t, 1, byEncounter["Golemagg|Normal"].Kills)
+	require.Equal(t, "Molten Core", byEncounter["Ragnaros|Normal"].InstanceName)
+	require.WithinDuration(t, night2.Add(30*time.Minute), byEncounter["Ragnaros|Normal"].LastKilledAt.Time, time.Second)
 }
 
 func TestGuildBestRuns(t *testing.T) {
