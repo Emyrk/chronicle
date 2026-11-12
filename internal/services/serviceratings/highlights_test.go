@@ -56,12 +56,16 @@ func TestHighlightsUseExistingReadsAndKeepFailedSnapshot(t *testing.T) {
 		_, err := (&Worker{Store: s.db}).Drain(s.ctx, s.tenant, f)
 		require.NoError(t, err)
 	}
+	generation, err := s.db.GetLeaderboardHighlightGeneration(s.tenantctx(), s.tenant)
+	require.NoError(t, err)
+	require.Positive(t, generation, "successful D2 publication must mark highlights changed")
 	store := highlightStore{Store: s.db, config: highlightConfig()}
 	cohort := HighlightCohort{"Fixture raid", "Normal", 40}
 	require.NoError(t, RefreshHighlights(s.tenantctx(), store, s.tenant, uuid.Nil, cohort))
 	snapshots, err := s.db.ListLeaderboardHighlights(s.tenantctx(), database.ListLeaderboardHighlightsParams{TenantID: s.tenant})
 	require.NoError(t, err)
 	require.Len(t, snapshots, 1)
+	require.Equal(t, generation, snapshots[0].SourceGeneration)
 	var preview chroniclesdk.HubLandingPreview
 	require.NoError(t, json.Unmarshal(snapshots[0].Payload, &preview))
 	require.Len(t, preview.Player.Peak, 1)
@@ -90,6 +94,7 @@ func TestHighlightRefreshJobLimits(t *testing.T) {
 	t.Parallel()
 	require.Equal(t, 1, ArgsHighlightRefresh{}.InsertOpts().MaxAttempts)
 	require.Equal(t, time.Minute, (&HighlightWorker{}).Timeout(nil))
+	require.ErrorContains(t, (&HighlightWorker{}).Work(servicetenant.AdminBypass(context.Background()), &river.Job[ArgsHighlightRefresh]{}), "tenant context")
 }
 
 func TestHighlightPublicationUniqueAndOlderRefreshCannotReplace(t *testing.T) {
@@ -191,7 +196,22 @@ func TestHighlightDispatcherIncludesAllAndIndividualRealms(t *testing.T) {
 	require.NoError(t, d.Work(s.ctx, &river.Job[ArgsHighlightDispatch]{Args: ArgsHighlightDispatch{TenantID: s.tenant}}))
 	require.Empty(t, queue.jobs, "fresh matching snapshots should not be refreshed")
 
-	s.exec(`UPDATE leaderboard_highlights SET refreshed_at=clock_timestamp()-interval '3 hours' WHERE tenant_id=$1 AND realm_scope=$2`, s.tenant, uuid.Nil)
+	// An old queued job can exit before running any expensive leaderboard reads.
+	skipped := highlightStore{Store: s.db, config: config, fail: true}
+	require.NoError(t, (&HighlightWorker{Store: skipped}).Work(s.tenantctx(), &river.Job[ArgsHighlightRefresh]{Args: ArgsHighlightRefresh{
+		TenantID: s.tenant, Instance: "Fixture raid", Difficulty: "Normal", Size: 40,
+	}}))
+	require.NoError(t, s.db.BumpLeaderboardHighlightGeneration(s.tenantctx(), s.tenant))
+	require.ErrorContains(t, (&HighlightWorker{Store: skipped}).Work(s.tenantctx(), &river.Job[ArgsHighlightRefresh]{Args: ArgsHighlightRefresh{
+		TenantID: s.tenant, Instance: "Fixture raid", Difficulty: "Normal", Size: 40,
+	}}), "injected")
+	queue.jobs = nil
+	require.NoError(t, d.Work(s.ctx, &river.Job[ArgsHighlightDispatch]{Args: ArgsHighlightDispatch{TenantID: s.tenant}}))
+	require.Len(t, queue.jobs, 3, "changed sources refresh even young snapshots")
+	queue.jobs = nil
+
+	s.exec(`UPDATE leaderboard_highlights SET source_generation=1 WHERE tenant_id=$1`, s.tenant)
+	s.exec(`UPDATE leaderboard_highlights SET refreshed_at=clock_timestamp()-interval '25 hours' WHERE tenant_id=$1 AND realm_scope=$2`, s.tenant, uuid.Nil)
 	s.exec(`UPDATE leaderboard_highlights SET configuration_fingerprint='old' WHERE tenant_id=$1 AND realm_scope=$2`, s.tenant, second)
 	require.NoError(t, d.Work(s.ctx, &river.Job[ArgsHighlightDispatch]{Args: ArgsHighlightDispatch{TenantID: s.tenant}}))
 	require.Len(t, queue.jobs, 2)

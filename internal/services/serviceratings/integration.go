@@ -66,6 +66,18 @@ func PublishDirectRunsTx(ctx context.Context, tx database.StoreQueries, runs []D
 			}
 		}
 	}
+	// Direct repair can change canonical evidence without passing through either
+	// source enqueue hook. Invalidate those snapshots in this same transaction.
+	seen := make(map[uuid.UUID]bool, len(runs))
+	for _, run := range runs {
+		if seen[run.TenantID] {
+			continue
+		}
+		if err := tx.BumpLeaderboardHighlightGeneration(ctx, run.TenantID); err != nil {
+			return err
+		}
+		seen[run.TenantID] = true
+	}
 	return nil
 }
 
@@ -87,6 +99,22 @@ func EnqueueSourceRepairTx(ctx context.Context, tx database.StoreQueries, ids []
 		if err := tx.EnqueueLeaderboardRun(ctx, database.EnqueueLeaderboardRunParams{TenantID: key.TenantID, RunID: key.RunID, ProcessAfter: database.Timestamptz(time.Now())}); err != nil {
 			return err
 		}
+	}
+	return bumpHighlightGenerations(ctx, tx, keys)
+}
+
+// Bump once per affected tenant, in the caller's source transaction. Old and new
+// run identities can both be present when duplicates are relinked or logs removed.
+func bumpHighlightGenerations(ctx context.Context, tx database.StoreQueries, keys []database.LeaderboardRunKeysForIDsRow) error {
+	last := uuid.Nil
+	for _, key := range keys { // LeaderboardRunKeysForIDs orders by tenant, then run.
+		if key.TenantID == last {
+			continue
+		}
+		if err := tx.BumpLeaderboardHighlightGeneration(ctx, key.TenantID); err != nil {
+			return err
+		}
+		last = key.TenantID
 	}
 	return nil
 }
@@ -154,6 +182,12 @@ func EnqueueCanonicalRefreshTx(ctx context.Context, tx database.Store, q *riverq
 	if raw == nil {
 		return fmt.Errorf("canonical refresh requires source transaction")
 	}
-	_, err := q.InsertTx(ctx, raw, args, nil)
-	return err
+	if _, err := q.InsertTx(ctx, raw, args, nil); err != nil {
+		return err
+	}
+	keys, err := tx.LeaderboardRunKeysForIDs(ctx, args.AffectedIDs)
+	if err != nil {
+		return err
+	}
+	return bumpHighlightGenerations(ctx, tx, keys)
 }

@@ -2,6 +2,7 @@ package serviceratings
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -27,6 +28,9 @@ func TestDirectIntegrationOverlappingRepairAndDeletion(t *testing.T) {
 		}, nil))
 	}
 	publish()
+	generation, err := s.db.GetLeaderboardHighlightGeneration(ctx, s.tenant)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, generation, "direct publication must invalidate highlights")
 	var count int
 	require.NoError(t, s.row(`SELECT count(*) FROM leaderboard_dirty_runs WHERE tenant_id=$1`, s.tenant).Scan(&count))
 	require.Zero(t, count)
@@ -50,7 +54,7 @@ func TestDirectIntegrationOverlappingRepairAndDeletion(t *testing.T) {
 	var revision int64
 	require.NoError(t, s.row(`SELECT revision FROM leaderboard_dirty_runs WHERE tenant_id=$1`, s.tenant).Scan(&revision))
 	require.Equal(t, int64(2), revision)
-	_, err := w.Drain(s.ctx, s.tenant)
+	_, err = w.Drain(s.ctx, s.tenant)
 	require.NoError(t, err)
 	var spec string
 	require.NoError(t, s.row(`SELECT player_spec FROM leaderboard_player_observations WHERE tenant_id=$1 AND metric='dps'`, s.tenant).Scan(&spec))
@@ -70,6 +74,30 @@ func TestDirectIntegrationOverlappingRepairAndDeletion(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, s.row(`SELECT count(*) FROM leaderboard_player_observations WHERE tenant_id=$1`, s.tenant).Scan(&count))
 	require.Zero(t, count)
+}
+
+func TestSourceRepairBumpsHighlightGenerationAtomically(t *testing.T) {
+	t.Parallel()
+	s := newSourceFixture(t)
+	ctx := s.tenantctx()
+	generation, err := s.db.GetLeaderboardHighlightGeneration(ctx, s.tenant)
+	require.NoError(t, err)
+	require.Zero(t, generation)
+	require.ErrorContains(t, s.db.InTx(ctx, func(tx database.Store) error {
+		if err := EnqueueSourceRepairTx(ctx, tx, []uuid.UUID{s.instance}); err != nil {
+			return err
+		}
+		return errors.New("rollback source change")
+	}, nil), "rollback source change")
+	generation, err = s.db.GetLeaderboardHighlightGeneration(ctx, s.tenant)
+	require.NoError(t, err)
+	require.Zero(t, generation)
+	require.NoError(t, s.db.InTx(ctx, func(tx database.Store) error {
+		return EnqueueSourceRepairTx(ctx, tx, []uuid.UUID{s.instance, s.instance})
+	}, nil))
+	generation, err = s.db.GetLeaderboardHighlightGeneration(ctx, s.tenant)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, generation)
 }
 
 func TestDirectIntegrationTenantScope(t *testing.T) {

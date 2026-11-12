@@ -40,6 +40,7 @@ type sqlcQuerier interface {
 	// suffix for NULLs. Existing explicit Normal (empty string) is never overwritten.
 	BackfillEncounterDifficultyBatch(ctx context.Context, arg BackfillEncounterDifficultyBatchParams) (BackfillEncounterDifficultyBatchRow, error)
 	BulkUpsertGuildPagePanels(ctx context.Context, dollar_1 []byte) error
+	BumpLeaderboardHighlightGeneration(ctx context.Context, tenantID uuid.UUID) error
 	CarryForwardFinalizedParsedLogGroup(ctx context.Context, arg CarryForwardFinalizedParsedLogGroupParams) error
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
 	CensusPlayerCounts(ctx context.Context, arg CensusPlayerCountsParams) ([]CensusPlayerCountsRow, error)
@@ -447,6 +448,8 @@ type sqlcQuerier interface {
 	GetItemTemplatesByNames(ctx context.Context, arg GetItemTemplatesByNamesParams) ([]WorldItemTemplate, error)
 	GetItemTemplatesBySetID(ctx context.Context, arg GetItemTemplatesBySetIDParams) ([]GetItemTemplatesBySetIDRow, error)
 	GetLatestRegressionSnapshot(ctx context.Context, fixtureID uuid.UUID) (RegressionSnapshot, error)
+	GetLeaderboardHighlightFreshness(ctx context.Context, arg GetLeaderboardHighlightFreshnessParams) (GetLeaderboardHighlightFreshnessRow, error)
+	GetLeaderboardHighlightGeneration(ctx context.Context, tenantID uuid.UUID) (int64, error)
 	GetLeaderboardOperation(ctx context.Context, arg GetLeaderboardOperationParams) (LeaderboardOperation, error)
 	GetLogFile(ctx context.Context, id uuid.UUID) (LogFile, error)
 	GetLogFilePart(ctx context.Context, id uuid.UUID) (LogFilePart, error)

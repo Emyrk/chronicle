@@ -22,7 +22,7 @@ import (
 const HighlightVersion = 2
 const HighlightLimit = 3
 const HighlightMaxCohorts = 256
-const HighlightStaleAfter = 2 * time.Hour
+const HighlightStaleAfter = 24 * time.Hour
 
 type HighlightCohort struct {
 	Instance   string
@@ -85,6 +85,13 @@ func HighlightConfiguration(ctx context.Context, store database.Store, tenant uu
 	})
 	return rows, cohorts, nil
 }
+
+// HighlightFresh checks both the rules and the source publication marker.
+// The age limit repairs any missed source signal without scanning source tables.
+func HighlightFresh(fingerprint string, sourceGeneration int64, refreshedAt time.Time, currentFingerprint string, currentGeneration int64, now time.Time) bool {
+	return fingerprint == currentFingerprint && sourceGeneration == currentGeneration && !refreshedAt.Before(now.Add(-HighlightStaleAfter))
+}
+
 func HighlightFingerprint(rows []database.ResolveLeaderboardConfigurationRow, cohort HighlightCohort) string {
 	selected := []database.ResolveLeaderboardConfigurationRow{}
 	for _, r := range rows {
@@ -208,6 +215,10 @@ func RefreshHighlights(ctx context.Context, store database.Store, tenant, realm 
 	ctx, cancel := context.WithTimeout(servicetenant.WithTenantID(ctx, tenant), time.Minute)
 	defer cancel()
 	started := time.Now()
+	generation, err := store.GetLeaderboardHighlightGeneration(ctx, tenant)
+	if err != nil {
+		return err
+	}
 	rows, cohorts, err := HighlightConfiguration(ctx, store, tenant)
 	if err != nil {
 		return err
@@ -243,5 +254,5 @@ func RefreshHighlights(ctx context.Context, store database.Store, tenant, realm 
 	if !slices.Contains(currentCohorts, c) || HighlightFingerprint(current, c) != HighlightFingerprint(rows, c) {
 		return fmt.Errorf("highlight configuration changed during refresh")
 	}
-	return store.PublishLeaderboardHighlights(ctx, database.PublishLeaderboardHighlightsParams{TenantID: tenant, RealmScope: realm, InstanceName: c.Instance, DifficultyName: c.Difficulty, MaxPlayers: c.Size, ConfigurationFingerprint: HighlightFingerprint(rows, c), Payload: payload, RefreshStartedAt: database.Timestamptz(started)})
+	return store.PublishLeaderboardHighlights(ctx, database.PublishLeaderboardHighlightsParams{TenantID: tenant, RealmScope: realm, InstanceName: c.Instance, DifficultyName: c.Difficulty, MaxPlayers: c.Size, ConfigurationFingerprint: HighlightFingerprint(rows, c), SourceGeneration: generation, Payload: payload, RefreshStartedAt: database.Timestamptz(started)})
 }

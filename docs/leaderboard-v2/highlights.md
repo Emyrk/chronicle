@@ -41,12 +41,21 @@ At most 256 configured cohorts are accepted; larger configurations fail explicit
 rather than silently truncate. Calculation jobs have a 1-minute deadline and one
 attempt; a later stale-snapshot sweep is the retry mechanism.
 
+A tenant-level source generation increments atomically with source repair,
+canonical/direct projection publication, canonical refresh enqueue, and successful
+D2 ratings publication. This covers speedruns and rankings as well as
+materialized ratings. Snapshots record the
+generation captured before calculation. Dispatch and refresh workers skip expensive
+reads when the snapshot has the current generation and configuration fingerprint;
+a generation change during calculation leaves the snapshot stale for the next pass.
+
 Hourly River dispatch pages tenants and examines at most 100 cohort/scope pairs per
-continuation. It queues only missing snapshots, snapshots older than two hours, or
-snapshots whose configuration fingerprint changed. There is no run-on-start
-historical task. Completed backfill/repair jobs best-effort nudge a tenant refresh
-after commit; failures remain recoverable by hourly refresh. Admins can explicitly
-request a tenant refresh.
+continuation. It queues only missing snapshots, snapshots older than 24 hours, or
+snapshots whose generation or configuration fingerprint changed. The 24-hour limit
+is a safety refresh for changes not yet signaled by source publication. There is
+no run-on-start historical task. Completed backfill/repair jobs best-effort nudge
+a tenant refresh after commit; failures remain recoverable by hourly refresh.
+Admins can explicitly request a tenant refresh.
 
 A configuration fingerprint hashes the resolved instance policy (default-set
 membership, awards, variants) plus snapshot algorithm version. Public reads resolve
@@ -70,9 +79,9 @@ status is `ready`, `partial`, or `unsupported_scope`. Snapshot metadata contains
 instance/difficulty/size, configuration fingerprint, optional refreshed_at and
 `not_prepared`, `rebuilding`, `stale`, `ready`, or `empty` status. `empty` means a successful
 calculation with no highlights; absence is not an empty calculation. Configuration-mismatched (`rebuilding`) payload is never served. Same-fingerprint
-snapshots older than two hours are marked `stale` but may still be displayed. Failed refresh with unchanged configuration continues
-serving the old successful payload and its old timestamp, marked `stale` after
-two hours. Refresh nudges use stable River args and active-job uniqueness; GET
+snapshots older than 24 hours or behind the current source generation are marked
+`stale` but may still be displayed. Failed refresh continues serving the old
+successful payload and its old timestamp, marked `stale` after 24 hours or a source change. Refresh nudges use stable River args and active-job uniqueness; GET
 requests do not calculate highlights. Repeated singular/plural realm parameters
 are unsupported, not silently reduced to the first value.
 

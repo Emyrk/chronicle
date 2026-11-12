@@ -71,7 +71,12 @@ func (api *API) LeaderboardHighlights(w http.ResponseWriter, r *http.Request) {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	out, needRefresh, err := highlightSnapshotResponse(config, cohorts, stored)
+	generation, err := db.GetLeaderboardHighlightGeneration(ctx, tenant.ID)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	out, needRefresh, err := highlightSnapshotResponse(config, cohorts, stored, generation)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
@@ -112,11 +117,11 @@ func (api *API) AdminRefreshLeaderboardHighlights(w http.ResponseWriter, r *http
 	httpapi.Write(r.Context(), w, 202, chroniclesdk.Response{Message: "Leaderboard highlight refresh queued."})
 }
 
-func highlightSnapshotResponse(config []database.ResolveLeaderboardConfigurationRow, cohorts []serviceratings.HighlightCohort, stored []database.LeaderboardHighlight) (chroniclesdk.LeaderboardHighlightsResponse, bool, error) {
-	return highlightSnapshotResponseAt(config, cohorts, stored, time.Now())
+func highlightSnapshotResponse(config []database.ResolveLeaderboardConfigurationRow, cohorts []serviceratings.HighlightCohort, stored []database.LeaderboardHighlight, generation int64) (chroniclesdk.LeaderboardHighlightsResponse, bool, error) {
+	return highlightSnapshotResponseAt(config, cohorts, stored, generation, time.Now())
 }
 
-func highlightSnapshotResponseAt(config []database.ResolveLeaderboardConfigurationRow, cohorts []serviceratings.HighlightCohort, stored []database.LeaderboardHighlight, now time.Time) (chroniclesdk.LeaderboardHighlightsResponse, bool, error) {
+func highlightSnapshotResponseAt(config []database.ResolveLeaderboardConfigurationRow, cohorts []serviceratings.HighlightCohort, stored []database.LeaderboardHighlight, generation int64, now time.Time) (chroniclesdk.LeaderboardHighlightsResponse, bool, error) {
 	out := chroniclesdk.LeaderboardHighlightsResponse{Status: "ready", LandingPreviews: []chroniclesdk.HubLandingPreview{}, Snapshots: []chroniclesdk.LeaderboardHighlightSnapshot{}}
 	needRefresh := false
 	for _, c := range cohorts {
@@ -139,7 +144,7 @@ func highlightSnapshotResponseAt(config []database.ResolveLeaderboardConfigurati
 			if serviceratings.HighlightEmpty(preview) {
 				metadata.Status = "empty"
 			}
-			if row.RefreshedAt.Time.Before(now.Add(-serviceratings.HighlightStaleAfter)) {
+			if !serviceratings.HighlightFresh(row.ConfigurationFingerprint, row.SourceGeneration, row.RefreshedAt.Time, fingerprint, generation, now) {
 				metadata.Status = "stale"
 			}
 			out.LandingPreviews = append(out.LandingPreviews, preview)
