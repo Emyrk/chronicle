@@ -19,7 +19,8 @@ var ErrUnsupportedRecord = errors.New("unsupported Vanilla combat record")
 
 // DecodeRecord decodes the explicitly selected Vanilla combat record families:
 // damage/heal/death, spell start/go, aura add/remove/cast, energize, dispel,
-// roster/telemetry/unit/zone metadata, loot, failure and placeholder outcomes.
+// roster/unit/zone metadata, target/combat/raid-mark/threat telemetry, loot,
+// failure and placeholder outcomes.
 // It does not perform pipeline synthetic processing, header clock state,
 // combatant state (use Decoder), identity tracking or encounter publication.
 // SPELL_DMG retains its local
@@ -53,6 +54,16 @@ func decodeFields(ctx context.Context, spells SpellLookup, ts time.Time, event s
 		return DecodeUnitInfo(ts, m)
 	case "ZONE_INFO":
 		return DecodeZoneInfo(ts, m)
+	case "UNIT_TARGET":
+		return DecodeUnitTarget(ts, m)
+	case "UNIT_COMBAT":
+		return DecodeUnitCombat(ts, m)
+	case "RAID_MARK":
+		return DecodeRaidMark(ts, m)
+	case "THREAT":
+		return DecodeThreat(ts, m)
+	case "THREAT_TANK":
+		return DecodeThreatTank(ts, m)
 	case "LOOT_TRADE":
 		return DecodeLootTrade(ts, m)
 

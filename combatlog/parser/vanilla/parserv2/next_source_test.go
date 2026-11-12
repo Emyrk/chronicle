@@ -66,6 +66,38 @@ func TestNextSourceSyntheticBoundaryParity(t *testing.T) {
 	require.NotNil(t, all[4].(*messages.Slain).Attribution)
 }
 
+func TestNextSourceTelemetryBatchParity(t *testing.T) {
+	t.Parallel()
+	lines := []string{
+		"10000|UNIT_TARGET|0xF130002D9900DE15|0x000000000001C80A",
+		"9500|UNIT_COMBAT|0xF130002D9900DE15|1",
+		"9500|RAID_MARK|0xF130002D9900DE15|8",
+		"9500|THREAT|0xF130002D9900DE15|Onyxia|self|Koniz:1:157:100:0;Mage:0:80:50.5:1;",
+		"9500|THREAT_TANK|self|Onyxia:123456:Koniz:100;",
+		"9500|UNIT_TARGET|0xF130002D9900DE15|",
+	}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	db := &stubGameDB{}
+	input := strings.Join(lines, "\n")
+	old, err := New(t.Context(), logger, strings.NewReader(input), db, nil)
+	require.NoError(t, err)
+	pipeline, err := nextsource.New(t.Context(), logger, db, nil, "")
+	require.NoError(t, err)
+	source, err := pipeline.OpenFile(strings.NewReader(input), 4096)
+	require.NoError(t, err)
+	for i := range lines {
+		want, wantErr := old.Advance(t.Context())
+		got, gotErr := source.Advance(t.Context())
+		require.NoError(t, wantErr, "line %d", i+1)
+		require.NoError(t, gotErr, "line %d", i+1)
+		require.Equal(t, want, got, "line %d", i+1)
+	}
+	_, err = old.Advance(t.Context())
+	require.ErrorIs(t, err, io.EOF)
+	_, err = source.Advance(t.Context())
+	require.ErrorIs(t, err, io.EOF)
+}
+
 func TestNextSourceMissedSpellLookupDistinction(t *testing.T) {
 	t.Parallel()
 	lines := []string{
