@@ -73,6 +73,32 @@ func TestBrandingResolverNoIndex(t *testing.T) {
 	require.Equal(t, "noindex, nofollow", api.brandingResolver(tenantSEORequest(t, "/recent", false)).Robots)
 }
 
+func TestBrandingResolverIndexablePaths(t *testing.T) {
+	t.Parallel()
+	api := testSEOAPI(t)
+
+	indexable := []string{
+		"/download", "/supported", "/search/guide", "/guilds", "/contact", "/privacy", "/terms",
+		"/disclaimer", "/refund-policy",
+		"/modules", "/modules/api", "/modules/someone", "/modules/someone/cool-panel", "/modules/id/project-id",
+		"/gear", "/gear/weights", "/gear/lists/list-id", "/gear/progression/progression-id",
+	}
+	for _, path := range indexable {
+		require.Empty(t, api.brandingResolver(tenantSEORequest(t, path, true)).Robots, path)
+		// Non-discoverable tenants stay fully noindex.
+		require.Equal(t, "noindex, nofollow", api.brandingResolver(tenantSEORequest(t, path, false)).Robots, path)
+	}
+
+	noIndex := []string{
+		"/supported-instances",
+		"/guilds/zzz-not-a-guild", "/download/extra", "/supported/extra", "/contact/extra", "/search",
+		"/modules/new", "/modules/someone/cool-panel/edit", "/modules/id/project-id/edit",
+	}
+	for _, path := range noIndex {
+		require.Equal(t, "noindex, nofollow", api.brandingResolver(tenantSEORequest(t, path, true)).Robots, path)
+	}
+}
+
 func TestBrandingResolverNoIndexesUnlistedInstances(t *testing.T) {
 	t.Parallel()
 

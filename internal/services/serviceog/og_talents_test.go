@@ -56,6 +56,17 @@ func TestFlavorStaticOG(t *testing.T) {
 	require.Contains(t, og.Description, "rankings")
 }
 
+func TestStaticOGRoutesHaveOwnMetadata(t *testing.T) {
+	t.Parallel()
+	for _, path := range []string{"/contact", "/privacy", "/terms", "/disclaimer", "/supported", "/refund-policy", "/modules", "/gear"} {
+		metadata, ok := staticOGRoutes[path]
+		require.True(t, ok, path)
+		require.NotEmpty(t, metadata.Title, path)
+		require.NotEmpty(t, metadata.Description, path)
+		require.NotEqual(t, defaultSEODescription, metadata.Description, path)
+	}
+}
+
 func TestDownloadOGImage(t *testing.T) {
 	t.Parallel()
 	api := New(Options{})
