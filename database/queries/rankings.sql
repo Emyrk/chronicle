@@ -1094,6 +1094,9 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
     JOIN wow_server_realms wsr ON wsr.id = li.realm_id
     WHERE li.name = @instance_name
       AND lie.boss = true
+      AND (NOT @filter_difficulty::boolean OR
+           COALESCE(lie.difficulty, CASE WHEN li.dynamic_difficulty > 0 OR li.difficulty_name ILIKE '%heroic%' THEN 'heroic' ELSE '' END) = @difficulty_name::text)
+      AND (NOT @filter_max_players::boolean OR li.max_players = @max_players::int)
       AND lie.kill_type = 'clean'
       AND CASE
           WHEN @since_days :: bigint > 0 THEN lie.end_time >= now() - make_interval(days => @since_days::int)
@@ -1138,6 +1141,9 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
     JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
     WHERE sr.instance_name = @instance_name
       AND sr.qualified = true
+      AND NOT li.mixed_difficulty
+      AND (NOT @filter_difficulty::boolean OR li.difficulty_name = @difficulty_name::text)
+      AND (NOT @filter_max_players::boolean OR li.max_players = @max_players::int)
       AND CASE
           WHEN @since_days :: bigint > 0 THEN
               COALESCE(sr.ranked_completion_time, sr.completion_time) >= now() - make_interval(days => @since_days::int)
@@ -1178,6 +1184,9 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
     LEFT JOIN guilds g ON g.id = li.guild_id
     WHERE li.name = @instance_name
       AND lie.boss = true
+      AND (NOT @filter_difficulty::boolean OR
+           COALESCE(lie.difficulty, CASE WHEN li.dynamic_difficulty > 0 OR li.difficulty_name ILIKE '%heroic%' THEN 'heroic' ELSE '' END) = @difficulty_name::text)
+      AND (NOT @filter_max_players::boolean OR li.max_players = @max_players::int)
       AND lie.kill_type = 'clean'
       AND CASE
           WHEN @encounter_name :: text != '' THEN lie.name = @encounter_name
@@ -1231,6 +1240,9 @@ WITH deduped AS (
     LEFT JOIN guilds g ON g.id = li.guild_id
     WHERE li.name = @instance_name
       AND lie.boss = true
+      AND (NOT @filter_difficulty::boolean OR
+           COALESCE(lie.difficulty, CASE WHEN li.dynamic_difficulty > 0 OR li.difficulty_name ILIKE '%heroic%' THEN 'heroic' ELSE '' END) = @difficulty_name::text)
+      AND (NOT @filter_max_players::boolean OR li.max_players = @max_players::int)
       AND lie.kill_type = 'clean'
       AND lie.name = ANY(@encounter_names::text[])
       AND cardinality(@encounter_names::text[]) <= 64
@@ -1267,7 +1279,7 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
     WHERE li.name = @instance_name
       AND lie.boss = true
       AND CASE
-          WHEN cardinality(@difficulty_names :: text[]) > 0 THEN li.difficulty_name = ANY(@difficulty_names :: text[])
+          WHEN cardinality(@difficulty_names :: text[]) > 0 THEN COALESCE(lie.difficulty, CASE WHEN li.dynamic_difficulty > 0 OR li.difficulty_name ILIKE '%heroic%' THEN 'heroic' ELSE '' END) = ANY(@difficulty_names :: text[])
           ELSE true
       END
       AND CASE

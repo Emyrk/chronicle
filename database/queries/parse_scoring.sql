@@ -81,7 +81,7 @@ ORDER BY computed_at DESC;
 -- name: ListParseScoreResultsForContract :many
 -- Read one persisted legacy result per player and encounter for the snapshot ID
 -- retained as opaque provenance on its successful receipt.
-SELECT DISTINCT ON (psr.encounter_name, psr.player_guid)
+SELECT DISTINCT ON (psr.difficulty_name, psr.max_players, psr.encounter_name, psr.player_guid)
     psr.*
 FROM parse_score_results psr
 JOIN log_instances visibility_instance ON visibility_instance.id = psr.instance_id
@@ -90,10 +90,10 @@ WHERE psr.tenant_id = @tenant_id
   AND psr.instance_id = @instance_id
   AND psr.snapshot_id = @snapshot_id::uuid
   AND psr.metric = @metric
-ORDER BY psr.encounter_name, psr.player_guid, psr.precise_score DESC, psr.created_at DESC;
+ORDER BY psr.difficulty_name, psr.max_players, psr.encounter_name, psr.player_guid, psr.precise_score DESC, psr.created_at DESC;
 
 -- name: ListWindowedParseScoreResultsForContract :many
-SELECT DISTINCT ON (psr.encounter_name, psr.player_guid)
+SELECT DISTINCT ON (psr.difficulty_name, psr.max_players, psr.encounter_name, psr.player_guid)
     psr.*
 FROM parse_score_results psr
 JOIN log_instances visibility_instance ON visibility_instance.id = psr.instance_id
@@ -102,12 +102,12 @@ WHERE psr.tenant_id = @tenant_id
   AND psr.instance_id = @instance_id
   AND psr.snapshot_id IS NULL
   AND psr.metric = @metric
-ORDER BY psr.encounter_name, psr.player_guid, psr.precise_score DESC, psr.created_at DESC;
+ORDER BY psr.difficulty_name, psr.max_players, psr.encounter_name, psr.player_guid, psr.precise_score DESC, psr.created_at DESC;
 
 -- name: ListPersistedParseScoreResultsForInstance :many
 -- Receipt-less results are authoritative historical data. Read them without
 -- joining snapshot tables or score memberships so they can never be recomputed.
-SELECT DISTINCT ON (psr.encounter_name, psr.player_guid)
+SELECT DISTINCT ON (psr.difficulty_name, psr.max_players, psr.encounter_name, psr.player_guid)
     psr.*
 FROM parse_score_results psr
 JOIN log_instances visibility_instance ON visibility_instance.id = psr.instance_id
@@ -115,18 +115,18 @@ JOIN wow_log_groups log_group ON log_group.id = visibility_instance.log_group_id
 WHERE psr.tenant_id = @tenant_id
   AND psr.instance_id = @instance_id
   AND psr.metric = @metric
-ORDER BY psr.encounter_name, psr.player_guid, psr.created_at DESC, psr.precise_score DESC;
+ORDER BY psr.difficulty_name, psr.max_players, psr.encounter_name, psr.player_guid, psr.created_at DESC, psr.precise_score DESC;
 
 -- name: GetParseScoreResultsForInstance :many
 -- Read deduplicated parse score results for an instance.
 -- Uses DISTINCT ON (run_id, encounter, player, snapshot, metric) to collapse duplicate uploads.
-SELECT DISTINCT ON (psr.run_id, psr.encounter_name, psr.player_guid, psr.snapshot_id, psr.metric)
+SELECT DISTINCT ON (psr.difficulty_name, psr.max_players, psr.run_id, psr.encounter_name, psr.player_guid, psr.snapshot_id, psr.metric)
     psr.*
 FROM parse_score_results psr
 JOIN log_instances visibility_instance ON visibility_instance.id = psr.instance_id
 JOIN wow_log_groups log_group ON log_group.id = visibility_instance.log_group_id AND NOT log_group.unlisted
 WHERE psr.instance_id = @instance_id
-ORDER BY psr.run_id, psr.encounter_name, psr.player_guid, psr.snapshot_id, psr.metric,
+ORDER BY psr.difficulty_name, psr.max_players, psr.run_id, psr.encounter_name, psr.player_guid, psr.snapshot_id, psr.metric,
          psr.created_at DESC;
 
 -- name: DeleteParseScoreResultsForTenantInstance :exec
@@ -143,7 +143,7 @@ WHERE tenant_id = @tenant_id AND instance_id = @instance_id;
 -- computed scoring wins so a night's rows stay internally consistent.
 -- The caller groups by (instance_name, encounter_name), takes best 3 per group,
 -- averages each group, then averages groups for the Score.
-SELECT DISTINCT ON (psr.run_id, psr.encounter_name)
+SELECT DISTINCT ON (psr.difficulty_name, psr.max_players, psr.run_id, psr.encounter_name)
     psr.id,
     psr.instance_id,
     psr.run_id,
@@ -173,7 +173,7 @@ WHERE psr.tenant_id = @tenant_id
   AND psr.metric = @metric
   AND psr.status IN ('ok', 'low_confidence')
   AND psr.killed_at >= @since
-ORDER BY psr.run_id, psr.encounter_name, psr.created_at DESC, psr.precise_score DESC;
+ORDER BY psr.difficulty_name, psr.max_players, psr.run_id, psr.encounter_name, psr.created_at DESC, psr.precise_score DESC;
 
 -- name: ListInstancesMissingParseReceiptWindowed :many
 -- Bound automatic repair to recent instances with no successful parse receipt at

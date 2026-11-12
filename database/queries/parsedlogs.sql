@@ -110,22 +110,28 @@ RETURNING *
 
 -- name: InsertEncounter :one
 INSERT INTO
-  log_instance_encounters (id, instance_id, name, map_id, kill_type, remaining, boss, start_time, end_time, ranking_start_offset_ms, ranking_end_offset_ms, difficulty_name, max_players, dynamic_difficulty)
+  log_instance_encounters (id, instance_id, name, map_id, kill_type, remaining, boss, start_time, end_time, ranking_start_offset_ms, ranking_end_offset_ms, difficulty)
 VALUES
-  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 RETURNING *
 ;
 
 -- name: InsertInstanceDifficulty :exec
-INSERT INTO log_instance_difficulties (instance_id, difficulty_name, max_players, dynamic_difficulty)
-VALUES (@instance_id, @difficulty_name, @max_players, @dynamic_difficulty)
+INSERT INTO log_instance_difficulties (instance_id, difficulty)
+VALUES (@instance_id, @difficulty)
 ON CONFLICT DO NOTHING;
 
 -- name: InstanceDifficultiesByInstanceID :many
-SELECT *
-FROM log_instance_difficulties
-WHERE instance_id = @instance_id
-ORDER BY max_players, difficulty_name, dynamic_difficulty;
+-- Boss attempts (including wipes) are authoritative. The persisted set is an
+-- ingestion summary, not a substitute for legacy encounter fallback.
+SELECT DISTINCT encounter.instance_id,
+       COALESCE(encounter.difficulty, CASE
+           WHEN instance.dynamic_difficulty > 0 OR instance.difficulty_name ILIKE '%heroic%'
+           THEN 'heroic' ELSE '' END)::text AS difficulty
+FROM log_instance_encounters encounter
+JOIN log_instances instance ON instance.id = encounter.instance_id
+WHERE encounter.instance_id = @instance_id AND encounter.boss
+ORDER BY difficulty;
 
 -- name: GetInstancesByLogGroupID :many
 SELECT

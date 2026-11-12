@@ -162,8 +162,8 @@ current_members AS MATERIALIZED (
         instance.id AS instance_id,
         instance.log_group_id,
         speedrun.instance_name,
-        COALESCE(NULLIF(encounter.difficulty_name, ''), instance.difficulty_name) AS difficulty_name,
-        COALESCE(NULLIF(encounter.max_players, 0), instance.max_players) AS max_players,
+        COALESCE(encounter.difficulty, CASE WHEN instance.dynamic_difficulty > 0 OR instance.difficulty_name ILIKE '%heroic%' THEN 'heroic' ELSE '' END) AS difficulty_name,
+        instance.max_players AS max_players,
         (EXTRACT(EPOCH FROM (encounter.end_time - encounter.start_time)) * 1000)::bigint AS duration_ms,
         encounter.end_time AS killed_at
     FROM representative_instances representative
