@@ -959,3 +959,33 @@ func insertRanking(t *testing.T, ctx context.Context, store database.Store,
 	})
 	require.NoError(t, err)
 }
+
+func TestWorkerComputeParseScoresSameBossDifficultyVariants(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitMedium)
+	pool := newSingleConnectionPool(t)
+	store := database.New(pool)
+	f := setupScoringFixture(t, pool, store)
+	_, err := pool.Exec(ctx, `SET app.tenant_bypass='true'`)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `UPDATE log_instances SET difficulty_name='Normal', max_players=25, mixed_difficulty=true WHERE id=$1`, f.instanceID)
+	require.NoError(t, err)
+	killedAt := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	insertRanking(t, ctx, store, f.instanceID, f.realmID, "player", "Player", 100, 25, killedAt)
+	insertRanking(t, ctx, store, f.instanceID, f.realmID, "player", "Player", 200, 50, killedAt.Add(time.Hour))
+	_, err = pool.Exec(ctx, `UPDATE log_instance_encounters SET difficulty=CASE WHEN end_time=$2 THEN '' ELSE 'heroic' END WHERE instance_id=$1`, f.instanceID, killedAt)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `UPDATE encounter_dps_rankings SET difficulty_name=CASE WHEN dps=100 THEN '' ELSE 'heroic' END, max_players=25 WHERE instance_id=$1`, f.instanceID)
+	require.NoError(t, err)
+	refreshScoringMemberships(t, ctx, store, f.logGroupID)
+	worker := &servicerankings.WorkerComputeParseScores{Store: store, Logger: slog.Default()}
+	require.NoError(t, worker.Work(ctx, &river.Job[parseargs.ArgsComputeParseScores]{Args: parseargs.ArgsComputeParseScores{InstanceID: f.instanceID, TenantID: uuid.Nil}}))
+	results, err := store.ListWindowedParseScoreResultsForContract(ctx, database.ListWindowedParseScoreResultsForContractParams{TenantID: uuid.Nil, InstanceID: f.instanceID, Metric: "dps"})
+	require.NoError(t, err)
+	require.Len(t, results, 2)
+	byDifficulty := map[string]float64{}
+	for _, result := range results {
+		byDifficulty[result.DifficultyName] = result.MetricValue
+	}
+	require.Equal(t, map[string]float64{"": 100, "heroic": 200}, byDifficulty)
+}

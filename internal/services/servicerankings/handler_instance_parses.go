@@ -43,8 +43,8 @@ type instanceParsePlayerInfo struct {
 	spec    string
 	subSpec string
 	role    string
-	// encounter -> ranking row (the instance's own metric values)
-	bosses map[string]database.ListRankingsForInstanceRow
+	// encounter cohort -> ranking row (the instance's own metric values)
+	bosses map[instanceParseBossKey]database.ListRankingsForInstanceRow
 }
 
 func isUnknownPlayerSpec(spec string) bool {
@@ -301,7 +301,7 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 				spec:    m.PlayerSpec,
 				subSpec: m.PlayerSubSpec,
 				role:    m.PlayerRole,
-				bosses:  make(map[string]database.ListRankingsForInstanceRow),
+				bosses:  make(map[instanceParseBossKey]database.ListRankingsForInstanceRow),
 			}
 			players[m.PlayerGuid] = p
 			playerOrder = append(playerOrder, m.PlayerGuid)
@@ -309,10 +309,12 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 			preferKnownPlayerSpec(p, m)
 		}
 		// Keep the first (highest DPS, since ordered by dps DESC).
-		if _, has := p.bosses[m.EncounterName]; !has {
-			p.bosses[m.EncounterName] = m
+		if _, has := p.bosses[instanceParseBossKey{m.EncounterName, m.DifficultyName, m.MaxPlayers}]; !has {
+			p.bosses[instanceParseBossKey{m.EncounterName, m.DifficultyName, m.MaxPlayers}] = m
 		}
 	}
+
+	selectedBosses := selectedInstanceBosses(rankings, encounterNames)
 
 	// Score each player's per-boss performance.
 	result := make([]chroniclesdk.InstanceParsePlayer, 0, len(players))
@@ -342,8 +344,9 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 		}
 
 		var preciseScores []float64
-		for _, encName := range encounterNames {
-			memberRow, killed := p.bosses[encName]
+		for _, key := range selectedBosses {
+			encName := key.encounterName
+			memberRow, killed := p.bosses[key]
 			if !killed {
 				continue
 			}
@@ -423,7 +426,7 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 
 		// Compute average parse.
 		if len(preciseScores) > 0 {
-			avg, ok := parsepolicy.AverageParse(preciseScores, len(encounterNames))
+			avg, ok := parsepolicy.AverageParse(preciseScores, len(selectedBosses))
 			if ok {
 				sdkPlayer.AverageParse = &chroniclesdk.InstanceParseAverage{
 					PreciseScore: avg.PreciseScore,
@@ -593,27 +596,28 @@ func buildPersistedInstanceParsePlayers(
 				spec:    ranking.PlayerSpec,
 				subSpec: ranking.PlayerSubSpec,
 				role:    ranking.PlayerRole,
-				bosses:  make(map[string]database.ListRankingsForInstanceRow),
+				bosses:  make(map[instanceParseBossKey]database.ListRankingsForInstanceRow),
 			}
 			players[ranking.PlayerGuid] = player
 			playerOrder = append(playerOrder, ranking.PlayerGuid)
 		} else {
 			preferKnownPlayerSpec(player, ranking)
 		}
-		if _, exists := player.bosses[ranking.EncounterName]; !exists {
-			player.bosses[ranking.EncounterName] = ranking
+		if _, exists := player.bosses[instanceParseBossKey{ranking.EncounterName, ranking.DifficultyName, ranking.MaxPlayers}]; !exists {
+			player.bosses[instanceParseBossKey{ranking.EncounterName, ranking.DifficultyName, ranking.MaxPlayers}] = ranking
 		}
 	}
 
 	type resultKey struct {
-		playerGUID    string
-		encounterName string
+		playerGUID string
+		boss       instanceParseBossKey
 	}
 	results := make(map[resultKey]database.ParseScoreResult, len(persisted))
 	for _, result := range persisted {
-		results[resultKey{playerGUID: result.PlayerGuid, encounterName: result.EncounterName}] = result
+		results[resultKey{playerGUID: result.PlayerGuid, boss: instanceParseBossKey{result.EncounterName, result.DifficultyName, result.MaxPlayers}}] = result
 	}
 
+	selectedBosses := selectedInstanceBosses(rankings, encounterNames)
 	response := make([]chroniclesdk.InstanceParsePlayer, 0, len(playerOrder))
 	for _, playerGUID := range playerOrder {
 		player := players[playerGUID]
@@ -634,8 +638,9 @@ func buildPersistedInstanceParsePlayers(
 		}
 
 		preciseScores := make([]float64, 0, len(encounterNames))
-		for _, encounterName := range encounterNames {
-			ranking, killed := player.bosses[encounterName]
+		for _, key := range selectedBosses {
+			encounterName := key.encounterName
+			ranking, killed := player.bosses[key]
 			if !killed {
 				continue
 			}
@@ -661,7 +666,7 @@ func buildPersistedInstanceParsePlayers(
 				continue
 			}
 
-			persistedResult, exists := results[resultKey{playerGUID: playerGUID, encounterName: encounterName}]
+			persistedResult, exists := results[resultKey{playerGUID: playerGUID, boss: key}]
 			if !exists {
 				// A successful receipt promises a complete projection. Fall back to
 				// on-demand scoring if the persisted rows violate that invariant.
@@ -680,7 +685,7 @@ func buildPersistedInstanceParsePlayers(
 			sdkPlayer.Bosses = append(sdkPlayer.Bosses, boss)
 		}
 
-		if avg, ok := parsepolicy.AverageParse(preciseScores, len(encounterNames)); ok {
+		if avg, ok := parsepolicy.AverageParse(preciseScores, len(selectedBosses)); ok {
 			sdkPlayer.AverageParse = &chroniclesdk.InstanceParseAverage{
 				PreciseScore: avg.PreciseScore,
 				DisplayScore: avg.DisplayScore,
@@ -692,4 +697,34 @@ func buildPersistedInstanceParsePlayers(
 	}
 
 	return response, true
+}
+
+// instanceParseBossKey preserves independent variants of the same named boss.
+type instanceParseBossKey struct {
+	encounterName  string
+	difficultyName string
+	maxPlayers     int16
+}
+
+func selectedInstanceBosses(rankings []database.ListRankingsForInstanceRow, names []string) []instanceParseBossKey {
+	keys := make([]instanceParseBossKey, 0)
+	seen := make(map[instanceParseBossKey]bool)
+	for _, name := range names {
+		found := false
+		for _, row := range rankings {
+			key := instanceParseBossKey{row.EncounterName, row.DifficultyName, row.MaxPlayers}
+			if row.EncounterName == name {
+				found = true
+			}
+			if row.EncounterName == name && !seen[key] {
+				seen[key] = true
+				keys = append(keys, key)
+			}
+		}
+		// Keep selected bosses without kills in the average denominator.
+		if !found {
+			keys = append(keys, instanceParseBossKey{encounterName: name})
+		}
+	}
+	return keys
 }

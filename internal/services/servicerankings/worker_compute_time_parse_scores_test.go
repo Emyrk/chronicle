@@ -309,3 +309,32 @@ func TestWorkerBackfillTimeParseScoresMissingOnlyBatchAndTenant(t *testing.T) {
 	require.NoError(t, pool.QueryRow(ctx, `SELECT args->>'instance_id' FROM river_job WHERE kind = $1 AND args->>'tenant_id' = $2 LIMIT 1`, parseargs.KindComputeTimeParseScores, tenantID.String()).Scan(&queuedID))
 	assert.Equal(t, second.String(), queuedID)
 }
+
+func TestWorkerComputeTimeParseScoresSameBossDifficultyVariants(t *testing.T) {
+	t.Parallel()
+	pool, store, _ := setupTimeParseTest(t)
+	ctx := testutil.Context(t, testutil.WaitMedium)
+	tenantID, realmID := insertTimeParseTenantRealm(t, pool, "same-boss-difficulty")
+	start := time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC)
+	target := insertTimeParseInstance(t, pool, store, realmID, timeParseInstanceOpts{
+		instanceName: "Icecrown Citadel", difficultyName: "25 Player", maxPlayers: 25,
+		mixedDifficulty: true, qualified: true, durationMs: (2 * time.Hour).Milliseconds(), startTime: start,
+		encounters: []timeParseEncounterOpts{
+			{name: "Boss", killType: database.KillTypeClean, boss: true, startTime: start, endTime: start.Add(time.Minute)},
+			{name: "Boss", killType: database.KillTypeClean, boss: true, startTime: start.Add(time.Hour), endTime: start.Add(time.Hour + 2*time.Minute)},
+		},
+	})
+	_, err := pool.Exec(ctx, `UPDATE log_instance_encounters SET difficulty=CASE WHEN start_time=$2 THEN '' ELSE 'heroic' END WHERE instance_id=$1`, target, start)
+	require.NoError(t, err)
+	refreshTimeParseMemberships(t, ctx, store)
+	worker := &servicerankings.WorkerComputeTimeParseScores{Store: store, Logger: slog.Default()}
+	require.NoError(t, worker.Work(ctx, &river.Job[parseargs.ArgsComputeTimeParseScores]{Args: parseargs.ArgsComputeTimeParseScores{InstanceID: target, TenantID: tenantID, Force: true}}))
+	score, err := store.GetTimeParseScoreForContract(ctx, database.GetTimeParseScoreForContractParams{TenantID: tenantID, InstanceID: target, LookbackDays: servicerankings.TimeParseScoreLookbackDays, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion})
+	require.NoError(t, err)
+	require.False(t, score.ClearDurationMs.Valid)
+	bosses, err := store.ListTimeParseBossScoresForScore(ctx, score.ID)
+	require.NoError(t, err)
+	require.Len(t, bosses, 2)
+	require.NotEqual(t, bosses[0].EncounterID, bosses[1].EncounterID)
+	require.ElementsMatch(t, []int64{60000, 120000}, []int64{bosses[0].DurationMs, bosses[1].DurationMs})
+}
