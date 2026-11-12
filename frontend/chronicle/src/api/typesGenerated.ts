@@ -1821,6 +1821,16 @@ export interface EnchantmentSearchResult {
 }
 
 // From chroniclesdk/log.go
+/**
+ * EncounterDifficultyMode is how a single boss was pulled. Raids like ICC
+ * toggle Heroic per boss, and Ulduar bosses each have their own hard mode, so
+ * one log can mix modes.
+ */
+export type EncounterDifficultyMode = "hard_mode" | "heroic";
+
+export const EncounterDifficultyModes: EncounterDifficultyMode[] = ["hard_mode", "heroic"];
+
+// From chroniclesdk/log.go
 export interface EncounterKillTime {
     readonly encounter_name: string;
     readonly duration_ms: number;
@@ -7266,6 +7276,21 @@ export interface WoWEncounter {
     readonly invalidated_at?: string;
     readonly invalid_reason?: string;
     readonly ranking_window?: WoWRankingWindow;
+    /**
+     * Difficulty marks a boss pulled above normal difficulty. Absent means normal.
+     */
+    readonly difficulty?: WoWEncounterDifficulty;
+}
+
+// From chroniclesdk/log.go
+export interface WoWEncounterDifficulty {
+    readonly mode: EncounterDifficultyMode;
+    /**
+     * Tier is the count for tiered hard modes: Flame Leviathan towers (1-4),
+     * Freya elders (1-3), Yogg-Saron keepers (0-3, fewer is harder). Absent
+     * for untiered modes.
+     */
+    readonly tier?: number;
 }
 
 // From chroniclesdk/log.go
