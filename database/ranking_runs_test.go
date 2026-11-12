@@ -627,6 +627,76 @@ func TestRankingRunRepresentativePrefersBroaderDuplicate(t *testing.T) {
 	assert.Equal(t, duplicateID, run.RepresentativeInstanceID)
 }
 
+func TestRankingRunPrefersFullyValidDuplicateAndKeepsPartialFallback(t *testing.T) {
+	t.Parallel()
+	pool, store, realmID := setupParsesTest(t)
+	ctx := testutil.Context(t, testutil.WaitMedium)
+	anchorID, duplicateID := uuid.New(), uuid.New()
+	start := time.Date(2026, 9, 2, 20, 0, 0, 0, time.UTC)
+	insertRankingRunSource(t, pool, store, realmID, anchorID, start, "Lucifron")
+	insertRankingRunSource(t, pool, store, realmID, duplicateID, start.Add(time.Second), "Lucifron", "Magmadar", "Ragnaros")
+	require.NoError(t, store.SetDuplicateGroupIDs(ctx, database.SetDuplicateGroupIDsParams{
+		DuplicateGroupID: uuid.NullUUID{UUID: anchorID, Valid: true}, Ids: []uuid.UUID{anchorID, duplicateID},
+	}))
+	_, err := servicerankings.RefreshRankingRuns(ctx, store, []uuid.UUID{anchorID})
+	require.NoError(t, err)
+	run, err := store.RankingRunByID(ctx, anchorID)
+	require.NoError(t, err)
+	require.Equal(t, duplicateID, run.RepresentativeInstanceID)
+
+	invalidate := func(instanceID uuid.UUID) uuid.UUID {
+		t.Helper()
+		instance, err := store.Instance(ctx, instanceID)
+		require.NoError(t, err)
+		encounters, err := store.GetEncounterSummariesByInstanceID(ctx, instanceID)
+		require.NoError(t, err)
+		require.NotEmpty(t, encounters)
+		count, err := store.InvalidateLogEncounter(ctx, database.InvalidateLogEncounterParams{
+			LogGroupID: instance.LogGroupID, InstanceID: instanceID,
+			EncounterID: encounters[0].ID, Reason: "bad encounter",
+		})
+		require.NoError(t, err)
+		require.Equal(t, int64(1), count)
+		return encounters[0].ID
+	}
+	duplicateEncounterID := invalidate(duplicateID)
+	sources, err := store.RankingRunSources(ctx, []uuid.UUID{anchorID})
+	require.NoError(t, err)
+	require.Len(t, sources, 1)
+	require.Equal(t, anchorID, sources[0].RepresentativeInstanceID)
+	repairs, err := store.RankingRunRepairVerification(ctx, 10)
+	require.NoError(t, err)
+	require.Len(t, repairs, 1)
+	require.Equal(t, anchorID, repairs[0].RunID)
+	require.True(t, repairs[0].InvalidRepresentative)
+	_, err = servicerankings.RefreshRankingRuns(ctx, store, []uuid.UUID{anchorID})
+	require.NoError(t, err)
+	run, err = store.RankingRunByID(ctx, anchorID)
+	require.NoError(t, err)
+	require.Equal(t, anchorID, run.RepresentativeInstanceID)
+	require.Equal(t, int32(2), run.MemberCount)
+
+	invalidate(anchorID)
+	sources, err = store.RankingRunSources(ctx, []uuid.UUID{anchorID})
+	require.NoError(t, err)
+	require.Len(t, sources, 1)
+	require.Equal(t, anchorID, sources[0].RepresentativeInstanceID, "keep the incumbent when all duplicates are partial")
+	_, err = servicerankings.RefreshRankingRuns(ctx, store, []uuid.UUID{anchorID})
+	require.NoError(t, err)
+
+	duplicate, err := store.Instance(ctx, duplicateID)
+	require.NoError(t, err)
+	cleared, err := store.ClearLogEncounterInvalidation(ctx, database.ClearLogEncounterInvalidationParams{
+		LogGroupID: duplicate.LogGroupID, InstanceID: duplicateID, EncounterID: duplicateEncounterID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), cleared)
+	sources, err = store.RankingRunSources(ctx, []uuid.UUID{anchorID})
+	require.NoError(t, err)
+	require.Len(t, sources, 1)
+	require.Equal(t, duplicateID, sources[0].RepresentativeInstanceID)
+}
+
 func TestInvalidatedDuplicateIsNeverRankingRunRepresentative(t *testing.T) {
 	t.Parallel()
 	pool, store, realmID := setupParsesTest(t)

@@ -24446,6 +24446,11 @@ WITH members AS MATERIALIZED (
         li.end_time,
         li.duplicate_group_id,
         li.updated_at AS instance_updated_at,
+        -- A partial upload stays eligible, but clean duplicates take priority.
+        EXISTS (
+            SELECT 1 FROM log_instance_encounters encounter
+            WHERE encounter.instance_id = li.id AND encounter.invalidated_at IS NOT NULL
+        ) AS partially_invalid,
         COUNT(DISTINCT coverage.encounter_name) FILTER (
             WHERE coverage.encounter_id IS NOT NULL
         )::integer AS boss_coverage
@@ -24457,20 +24462,24 @@ WITH members AS MATERIALIZED (
 ),
 ranked AS (
     SELECT
-        members.run_id, members.id, members.realm_id, members.instance_name, members.difficulty_name, members.max_players, members.start_time, members.end_time, members.duplicate_group_id, members.instance_updated_at, members.boss_coverage,
-        COUNT(*) OVER (PARTITION BY run_id)::integer AS member_count,
-        (MAX(instance_updated_at) OVER (PARTITION BY run_id))::timestamptz AS source_updated_at,
+        members.run_id, members.id, members.realm_id, members.instance_name, members.difficulty_name, members.max_players, members.start_time, members.end_time, members.duplicate_group_id, members.instance_updated_at, members.partially_invalid, members.boss_coverage,
+        COUNT(*) OVER (PARTITION BY members.run_id)::integer AS member_count,
+        (MAX(instance_updated_at) OVER (PARTITION BY members.run_id))::timestamptz AS source_updated_at,
         ROW_NUMBER() OVER (
-            PARTITION BY run_id
-            ORDER BY boss_coverage DESC,
-                (id = duplicate_group_id) DESC NULLS LAST,
-                start_time ASC,
-                id ASC
+            PARTITION BY members.run_id
+            ORDER BY members.partially_invalid ASC,
+                -- When every eligible upload is partial, retain the current representative.
+                CASE WHEN members.partially_invalid THEN members.id = incumbent.representative_instance_id END DESC NULLS LAST,
+                members.boss_coverage DESC,
+                (members.id = members.duplicate_group_id) DESC NULLS LAST,
+                members.start_time ASC,
+                members.id ASC
         ) AS representative_rank
     FROM members
+    LEFT JOIN ranking_runs incumbent ON incumbent.run_id = members.run_id
 ),
 expected AS MATERIALIZED (
-    SELECT run_id, id, realm_id, instance_name, difficulty_name, max_players, start_time, end_time, duplicate_group_id, instance_updated_at, boss_coverage, member_count, source_updated_at, representative_rank FROM ranked
+    SELECT run_id, id, realm_id, instance_name, difficulty_name, max_players, start_time, end_time, duplicate_group_id, instance_updated_at, partially_invalid, boss_coverage, member_count, source_updated_at, representative_rank FROM ranked
     WHERE representative_rank = 1
 ),
 discrepancies AS (
@@ -24599,6 +24608,11 @@ members AS MATERIALIZED (
         li.end_time,
         li.duplicate_group_id,
         li.updated_at AS instance_updated_at,
+        -- A partial upload stays eligible, but clean duplicates take priority.
+        EXISTS (
+            SELECT 1 FROM log_instance_encounters encounter
+            WHERE encounter.instance_id = li.id AND encounter.invalidated_at IS NOT NULL
+        ) AS partially_invalid,
         COUNT(DISTINCT coverage.encounter_name) FILTER (
             WHERE coverage.encounter_id IS NOT NULL
         )::integer AS boss_coverage
@@ -24626,17 +24640,21 @@ members AS MATERIALIZED (
 ),
 ranked AS (
     SELECT
-        members.run_id, members.id, members.realm_id, members.instance_name, members.difficulty_name, members.max_players, members.start_time, members.end_time, members.duplicate_group_id, members.instance_updated_at, members.boss_coverage,
-        COUNT(*) OVER (PARTITION BY run_id)::integer AS member_count,
-        (MAX(instance_updated_at) OVER (PARTITION BY run_id))::timestamptz AS source_updated_at,
+        members.run_id, members.id, members.realm_id, members.instance_name, members.difficulty_name, members.max_players, members.start_time, members.end_time, members.duplicate_group_id, members.instance_updated_at, members.partially_invalid, members.boss_coverage,
+        COUNT(*) OVER (PARTITION BY members.run_id)::integer AS member_count,
+        (MAX(instance_updated_at) OVER (PARTITION BY members.run_id))::timestamptz AS source_updated_at,
         ROW_NUMBER() OVER (
-            PARTITION BY run_id
-            ORDER BY boss_coverage DESC,
-                (id = duplicate_group_id) DESC NULLS LAST,
-                start_time ASC,
-                id ASC
+            PARTITION BY members.run_id
+            ORDER BY members.partially_invalid ASC,
+                -- When every eligible upload is partial, retain the current representative.
+                CASE WHEN members.partially_invalid THEN members.id = incumbent.representative_instance_id END DESC NULLS LAST,
+                members.boss_coverage DESC,
+                (members.id = members.duplicate_group_id) DESC NULLS LAST,
+                members.start_time ASC,
+                members.id ASC
         ) AS representative_rank
     FROM members
+    LEFT JOIN ranking_runs incumbent ON incumbent.run_id = members.run_id
 )
 SELECT
     run_id,
@@ -25468,6 +25486,10 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
           WHERE rr.run_id = COALESCE(li.duplicate_group_id, li.id)
       )
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
+        EXISTS (
+            SELECT 1 FROM log_instance_encounters invalid
+            WHERE invalid.instance_id = li.id AND invalid.invalidated_at IS NOT NULL
+        ) ASC,
         -- Prefer the upload with the broadest boss-ranking coverage. The group
         -- anchor is the first upload, but it may be truncated before the final boss.
         (SELECT COUNT(DISTINCT coverage.encounter_name)
@@ -25848,6 +25870,10 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
         WHERE rr.run_id = COALESCE(li.duplicate_group_id, li.id)
     )
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
+        EXISTS (
+            SELECT 1 FROM log_instance_encounters invalid
+            WHERE invalid.instance_id = li.id AND invalid.invalidated_at IS NOT NULL
+        ) ASC,
         (SELECT COUNT(DISTINCT coverage.encounter_name)
          FROM encounter_dps_rankings coverage
          WHERE coverage.instance_id = li.id
@@ -26406,6 +26432,10 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
           WHERE rr.run_id = COALESCE(li.duplicate_group_id, li.id)
       )
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
+        EXISTS (
+            SELECT 1 FROM log_instance_encounters invalid
+            WHERE invalid.instance_id = li.id AND invalid.invalidated_at IS NOT NULL
+        ) ASC,
         -- Prefer the upload with the broadest boss-ranking coverage. The group
         -- anchor is the first upload, but it may be truncated before the final boss.
         (SELECT COUNT(DISTINCT coverage.encounter_name)
