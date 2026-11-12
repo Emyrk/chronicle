@@ -113,6 +113,7 @@ export function transformToInstance(
         start_offset_ms: enc.ranking_window.start_offset_ms,
         end_offset_ms: enc.ranking_window.end_offset_ms,
       },
+      difficulty: enc.difficulty,
     };
   });
 
