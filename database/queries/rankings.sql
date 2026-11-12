@@ -240,6 +240,10 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
         WHERE rr.run_id = COALESCE(li.duplicate_group_id, li.id)
     )
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
+        EXISTS (
+            SELECT 1 FROM log_instance_encounters invalid
+            WHERE invalid.instance_id = li.id AND invalid.invalidated_at IS NOT NULL
+        ) ASC,
         (SELECT COUNT(DISTINCT coverage.encounter_name)
          FROM encounter_dps_rankings coverage
          WHERE coverage.instance_id = li.id
@@ -334,6 +338,10 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
           WHERE rr.run_id = COALESCE(li.duplicate_group_id, li.id)
       )
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
+        EXISTS (
+            SELECT 1 FROM log_instance_encounters invalid
+            WHERE invalid.instance_id = li.id AND invalid.invalidated_at IS NOT NULL
+        ) ASC,
         -- Prefer the upload with the broadest boss-ranking coverage. The group
         -- anchor is the first upload, but it may be truncated before the final boss.
         (SELECT COUNT(DISTINCT coverage.encounter_name)
@@ -646,6 +654,10 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
           WHERE rr.run_id = COALESCE(li.duplicate_group_id, li.id)
       )
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
+        EXISTS (
+            SELECT 1 FROM log_instance_encounters invalid
+            WHERE invalid.instance_id = li.id AND invalid.invalidated_at IS NOT NULL
+        ) ASC,
         -- Prefer the upload with the broadest boss-ranking coverage. The group
         -- anchor is the first upload, but it may be truncated before the final boss.
         (SELECT COUNT(DISTINCT coverage.encounter_name)
