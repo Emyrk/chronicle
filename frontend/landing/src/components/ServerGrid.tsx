@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { ArrowUpRight, Search, Upload, X } from "lucide-react";
 import { trackedTenantUrl } from "../trackedLinks";
+import { FEATURED_SERVER } from "../data/servers";
 import type { ServerEntry } from "../types";
 import { ServerCard } from "./ServerCard";
 
@@ -262,7 +263,7 @@ export function ServerGrid({ servers, loading }: { servers: ServerEntry[]; loadi
           </>
         )}
         {searchResults
-          .filter(({ server }) => server.id !== "forever")
+          .filter(({ server }) => server.id !== FEATURED_SERVER.id)
           .map(({ server, matches }) => {
             const dimmed = query.trim() !== "" && !matches;
             return (

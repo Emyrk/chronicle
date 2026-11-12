@@ -13,6 +13,10 @@ import type {
 const CACHE_KEY_PREFIX = "chronicle_discovery_v2_";
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const CHRONICLE_HOSTED_DISCOVERY_URL = "https://legacy.chronicleclassic.com";
+const LANDING_ORIGIN_HEADERS = {
+  Origin: "https://chronicleclassic.com",
+  Referer: "https://chronicleclassic.com/",
+};
 
 interface SourcedDiscoveryEntry extends DiscoveryEntry {
   discoverySource: string;
@@ -156,7 +160,13 @@ function isHTTPURL(value: string): boolean {
 
 async function fetchDiscovery(url: string): Promise<SourcedDiscoveryEntry[]> {
   try {
-    const resp = await fetch(discoveryEndpoint(url));
+    // Discovery only answers requests from the landing origin. Browsers send
+    // that Origin themselves; the build-time prerender runs in Node and must
+    // send it explicitly, or it gets a 403 and prerenders the baseline only.
+    const resp = await fetch(
+      discoveryEndpoint(url),
+      import.meta.env.SSR ? { headers: LANDING_ORIGIN_HEADERS } : undefined,
+    );
     if (!resp.ok) return [];
     const data = (await resp.json()) as DiscoveryEntry[];
     if (!Array.isArray(data)) return [];

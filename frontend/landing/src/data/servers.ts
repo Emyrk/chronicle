@@ -54,3 +54,10 @@ export const DISCOVERY_URLS: string[] = [
   "https://legacy.chronicleclassic.com",
 ];
 
+
+/** The featured server shown in the hero card above the grid. */
+export const FEATURED_SERVER = {
+  id: "forever",
+  name: "WoW Forever",
+  chronicleUrl: "https://forever.chronicleclassic.com",
+};

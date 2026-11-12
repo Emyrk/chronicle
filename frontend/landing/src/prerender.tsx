@@ -1,6 +1,6 @@
 import { renderToString } from "react-dom/server";
 import { App } from "./App";
-import { DISCOVERY_URLS, SERVERS } from "./data/servers";
+import { DISCOVERY_URLS, FEATURED_SERVER, SERVERS } from "./data/servers";
 import { discoverServers } from "./hooks/useDiscovery";
 import type { ServerEntry } from "./types";
 
@@ -13,9 +13,30 @@ export interface PrerenderResult {
   structuredData: Record<string, unknown>;
 }
 
+function normalizeURL(url: string): string {
+  return url.replace(/\/+$/, "");
+}
+
+/**
+ * Every server rendered on the home page: the featured hero card, then the
+ * grid (which skips the featured server), de-duplicated by Chronicle URL.
+ */
+export function listedServers(servers: ServerEntry[]): { name: string; url: string }[] {
+  const seen = new Set<string>();
+  const listed: { name: string; url: string }[] = [];
+  for (const server of [FEATURED_SERVER, ...servers]) {
+    const url = normalizeURL(server.chronicleUrl);
+    if (seen.has(url)) continue;
+    seen.add(url);
+    listed.push({ name: server.name, url });
+  }
+  return listed;
+}
+
 export async function prerenderHome(): Promise<PrerenderResult> {
   const initialServers = await discoverServers(SERVERS, DISCOVERY_URLS);
   const copyrightYear = new Date().getUTCFullYear();
+  const listed = listedServers(initialServers);
 
   return {
     html: renderToString(
@@ -34,17 +55,17 @@ export async function prerenderHome(): Promise<PrerenderResult> {
           name: "Chronicle",
           url: "https://chronicleclassic.com/",
           description:
-            "Combat log analysis for Classic World of Warcraft private servers.",
+            "Find Chronicle combat logs for supported Classic WoW private servers. Upload raids and analyze damage, healing, deaths, rankings, and performance.",
         },
         {
           "@type": "ItemList",
           name: "Classic WoW servers supported by Chronicle",
-          numberOfItems: initialServers.length,
-          itemListElement: initialServers.map((server, index) => ({
+          numberOfItems: listed.length,
+          itemListElement: listed.map((server, index) => ({
             "@type": "ListItem",
             position: index + 1,
             name: server.name,
-            url: server.chronicleUrl,
+            url: server.url,
           })),
         },
       ],
