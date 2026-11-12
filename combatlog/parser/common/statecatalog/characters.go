@@ -207,6 +207,7 @@ func characterTypeSpecs() []typeSpec {
 		{wotlk + "coilfang-guardian", wotlkPkg + "coilfangGuardian", "combatlog/parser/wotlk/creatures/serpentshrinecavern.go", common + "common", "", ""},
 		{wotlk + "freya", wotlkPkg + "freyaCharacter", "combatlog/parser/wotlk/creatures/freya.go", common + "common", "", ""},
 		{wotlk + "gunship-battle", wotlkPkg + "gunshipBattleCharacter", "combatlog/parser/wotlk/creatures/icecrowncitadel.go", common + "common", "/root/instances/0000/characters", "Common owns activity, six-minute timeout and recently-slain suppression; all is a shared Characters reference used to end linked crew on positive-overkill victory; no additional mutable scalar state"},
+		{wotlk + "halion", wotlkPkg + "halionCharacter", "combatlog/parser/wotlk/creatures/rubysanctum.go", common + "common", "/root/instances/0000/characters", "NewHalionCharacter creates the owner; Common owns activity and recently-slain suppression; all is a shared Characters reference used to end linked physical and twilight bodies on death; no additional mutable scalar state; catalog description does not imply a restore adapter"},
 		{wotlk + "hodir", wotlkPkg + "hodirCharacter", "combatlog/parser/wotlk/creatures/hodir.go", common + "common", "", ""},
 		{wotlk + "kael-thas", wotlkPkg + "kaelThasCharacter", "combatlog/parser/wotlk/creatures/kaelthas.go", common + "room-mechanic", "/root/character-shared-state/wotlk/kael-thas", ""},
 		{wotlk + "kologarn", wotlkPkg + "kologarnCharacter", "combatlog/parser/wotlk/creatures/kologarn.go", common + "common", "", ""},
