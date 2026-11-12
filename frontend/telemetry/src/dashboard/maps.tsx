@@ -270,7 +270,7 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
           }
         }
         function assetURL(path) {
-          if (/^https:\/\//i.test(path)) return path;
+          if (path.toLowerCase().startsWith('https://')) return path;
           return '/internal/api/v1/maps/' + encodeURIComponent(state.namespace) + '/preview-assets/' + path.split('/').map(encodeURIComponent).join('/');
         }
         function formatAssetSize(bytes) {
@@ -481,8 +481,9 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
           markDirty(); renderList(); renderEditor();
         }
         function sourceAssetURL(sourceNamespace, path) {
-          if (!path || /^https:\/\//i.test(path)) return path;
-          return 'https://icons.chronicleclassic.com/' + sourceNamespace + '/maps/' + path.replace(/^\/+/, '');
+          if (!path || path.toLowerCase().startsWith('https://')) return path;
+          while (path.startsWith('/')) path = path.slice(1);
+          return 'https://icons.chronicleclassic.com/' + sourceNamespace + '/maps/' + path;
         }
         function copiedMapInstance(sourceNamespace, instance) {
           const copy = structuredClone(instance);
