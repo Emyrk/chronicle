@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { FEATURED_SERVER } from "../src/data/servers.ts";
+import { listedServers } from "../src/listedServers.ts";
 
 async function read(relativePath) {
   return readFile(new URL(`../${relativePath}`, import.meta.url), "utf8");
@@ -106,9 +108,20 @@ test("every sitemap sub-page has unique titles, a canonical, and social tags", a
   assert.equal(descriptions.size, subPages.length);
 });
 
-test("structured data lists the featured server alongside the grid", async () => {
-  const [prerender, servers] = await Promise.all([read("src/prerender.tsx"), read("src/data/servers.ts")]);
-  assert.match(servers, /FEATURED_SERVER = \{[^}]*name: "WoW Forever"/s);
-  assert.match(prerender, /\[FEATURED_SERVER, \.\.\.servers\]/);
-  assert.match(prerender, /itemListElement: listed\.map/);
+test("structured data lists the featured server first, then the grid without duplicates", () => {
+  const listed = listedServers([
+    { name: "Old Man Warcraft", chronicleUrl: "https://logs.oldmanwarcraft.com/" },
+    // The grid can include the featured server; it is listed once, first.
+    { name: "WoW Forever (grid)", chronicleUrl: "https://forever.chronicleclassic.com/" },
+    { name: "Old Man Warcraft again", chronicleUrl: "https://logs.oldmanwarcraft.com" },
+    { name: "Everlook", chronicleUrl: "https://everlook.chronicleclassic.com" },
+  ]);
+
+  assert.deepEqual(listed, [
+    { name: FEATURED_SERVER.name, url: FEATURED_SERVER.chronicleUrl },
+    { name: "Old Man Warcraft", url: "https://logs.oldmanwarcraft.com" },
+    { name: "Everlook", url: "https://everlook.chronicleclassic.com" },
+  ]);
+  assert.equal(listed.length, 3);
+  assert.deepEqual(listedServers([]), [{ name: FEATURED_SERVER.name, url: FEATURED_SERVER.chronicleUrl }]);
 });

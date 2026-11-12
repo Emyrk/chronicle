@@ -1,7 +1,8 @@
 import { renderToString } from "react-dom/server";
 import { App } from "./App";
-import { DISCOVERY_URLS, FEATURED_SERVER, SERVERS } from "./data/servers";
+import { DISCOVERY_URLS, SERVERS } from "./data/servers";
 import { discoverServers } from "./hooks/useDiscovery";
+import { listedServers } from "./listedServers";
 import type { ServerEntry } from "./types";
 
 export interface PrerenderResult {
@@ -11,26 +12,6 @@ export interface PrerenderResult {
     copyrightYear: number;
   };
   structuredData: Record<string, unknown>;
-}
-
-function normalizeURL(url: string): string {
-  return url.replace(/\/+$/, "");
-}
-
-/**
- * Every server rendered on the home page: the featured hero card, then the
- * grid (which skips the featured server), de-duplicated by Chronicle URL.
- */
-export function listedServers(servers: ServerEntry[]): { name: string; url: string }[] {
-  const seen = new Set<string>();
-  const listed: { name: string; url: string }[] = [];
-  for (const server of [FEATURED_SERVER, ...servers]) {
-    const url = normalizeURL(server.chronicleUrl);
-    if (seen.has(url)) continue;
-    seen.add(url);
-    listed.push({ name: server.name, url });
-  }
-  return listed;
 }
 
 export async function prerenderHome(): Promise<PrerenderResult> {
