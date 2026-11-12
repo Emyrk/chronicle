@@ -140,11 +140,18 @@ async function loadOptionalLayers(bucket: R2Bucket, namespace: MapManifestNamesp
 }
 
 async function loadMapBase(bucket: R2Bucket, namespace: MapManifestNamespace) {
-  const originalRaw = await readJSON(bucket, manifestKey(namespace, "original"));
+  const [originalRaw, readerRaw] = await Promise.all([
+    readJSON(bucket, manifestKey(namespace, "original")),
+    readJSON(bucket, `${root(namespace)}/manifest.json`),
+  ]);
   if (originalRaw !== undefined) {
-    return { original: parseMapManifest(originalRaw), originalRaw, recoveredLayers: {} as MapManifestLayers, baseSource: "original" as const };
+    return {
+      original: parseMapManifest(originalRaw),
+      originalRaw,
+      recoveredLayers: recoverMapManifestLayers(readerRaw),
+      baseSource: "original" as const,
+    };
   }
-  const readerRaw = await readJSON(bucket, `${root(namespace)}/manifest.json`);
   if (readerRaw !== undefined) {
     const original = recoverMapManifestBase(readerRaw, namespace);
     return { original, originalRaw: original, recoveredLayers: recoverMapManifestLayers(readerRaw), baseSource: "reader" as const };
@@ -153,14 +160,61 @@ async function loadMapBase(bucket: R2Bucket, namespace: MapManifestNamespace) {
   return { original, originalRaw: original, recoveredLayers: {} as MapManifestLayers, baseSource: "empty" as const };
 }
 
+function verifyPortableLayerTarget(layer: MapLayerManifest | MapReuseManifest, product: string, kind: string): void {
+  if (layer.target.product !== product || layer.target.build !== "" || layer.target.region !== "" || layer.target.locale !== "") {
+    throw new TypeError(`${kind} map layer target does not match original`);
+  }
+}
+
+function mergeRecoveredLayer(
+  recoveredRaw: unknown,
+  storedRaw: unknown,
+  product: string,
+): MapLayerManifest | undefined {
+  if (recoveredRaw === undefined && storedRaw === undefined) return undefined;
+  const recovered = recoveredRaw === undefined ? manualLayer(product) : parseMapLayer(recoveredRaw);
+  const stored = storedRaw === undefined ? manualLayer(product) : parseMapLayer(storedRaw);
+  verifyPortableLayerTarget(recovered, product, "recovered");
+  verifyPortableLayerTarget(stored, product, "stored");
+  const instances = new Map<number, MapLayerInstance>();
+  for (const entry of [...recovered.instances, ...stored.instances]) {
+    const previous = instances.get(entry.mapID);
+    const floors = new Map<number, NonNullable<MapLayerInstance["floors"]>[number]>();
+    for (const floor of previous?.floors ?? []) floors.set(floor.floor, floor);
+    for (const floor of entry.floors ?? []) floors.set(floor.floor, { ...floors.get(floor.floor), ...floor });
+    instances.set(entry.mapID, {
+      ...previous,
+      ...entry,
+      ...(floors.size > 0 ? { floors: [...floors.values()].sort((a, b) => a.floor - b.floor) } : {}),
+    });
+  }
+  return manualLayer(product, [...instances.values()]);
+}
+
+function mergeRecoveredReuses(
+  recoveredRaw: unknown,
+  storedRaw: unknown,
+  product: string,
+): MapReuseManifest | undefined {
+  if (recoveredRaw === undefined && storedRaw === undefined) return undefined;
+  const recovered = recoveredRaw === undefined ? reuseLayer(product) : parseMapReuseLayer(recoveredRaw);
+  const stored = storedRaw === undefined ? reuseLayer(product) : parseMapReuseLayer(storedRaw);
+  verifyPortableLayerTarget(recovered, product, "recovered reuses");
+  verifyPortableLayerTarget(stored, product, "stored reuses");
+  const instances = new Map(recovered.instances.map((instance) => [instance.mapID, instance]));
+  for (const instance of stored.instances) instances.set(instance.mapID, instance);
+  return reuseLayer(product, [...instances.values()]);
+}
+
 async function loadState(bucket: R2Bucket, namespace: MapManifestNamespace) {
   const { original, originalRaw, recoveredLayers, baseSource } = await loadMapBase(bucket, namespace);
   const storedLayers = await loadOptionalLayers(bucket, namespace);
+  const product = original.target.product;
   const liveLayers: MapManifestLayers = {
-    reuses: storedLayers.reuses ?? recoveredLayers.reuses,
-    styled: storedLayers.styled ?? recoveredLayers.styled,
-    renders: storedLayers.renders ?? recoveredLayers.renders,
-    meshes: storedLayers.meshes ?? recoveredLayers.meshes,
+    reuses: mergeRecoveredReuses(recoveredLayers.reuses, storedLayers.reuses, product),
+    styled: mergeRecoveredLayer(recoveredLayers.styled, storedLayers.styled, product),
+    renders: mergeRecoveredLayer(recoveredLayers.renders, storedLayers.renders, product),
+    meshes: mergeRecoveredLayer(recoveredLayers.meshes, storedLayers.meshes, product),
   };
   const published: ManualDraft = {
     reuses: (liveLayers.reuses as MapReuseManifest | undefined) ?? reuseLayer(original.target.product),

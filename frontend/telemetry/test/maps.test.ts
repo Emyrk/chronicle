@@ -225,6 +225,67 @@ test("Map Foundry uploads, drafts, previews, and publishes floor assets without 
   assert.equal(reader.instances[0]?.floors[1]?.mesh?.path, uploadedMesh.path);
 });
 
+test("Map Foundry preserves reader-only artwork while migrating partial source manifests", async () => {
+  const bucket = new FakeBucket();
+  await seed(bucket);
+  const legacyPath = "3d/43-floor-0-legacy.glb";
+  const storedPath = "3d/43-floor-1-stored.glb";
+  const mesh = (path: string) => ({
+    path,
+    bounds: { minX: -10, maxX: 20, minY: 30, maxY: 40 },
+    zMin: -5,
+    zMax: 15,
+    frame: "wow-yup-mirrored-x",
+  });
+  await bucket.put(`forever/maps/${legacyPath}`, glb());
+  await bucket.put(`forever/maps/${storedPath}`, glb());
+  await bucket.put("forever/maps/manifest.json", JSON.stringify({
+    ...original,
+    instances: [{
+      ...original.instances[0],
+      floors: original.instances[0].floors.map((floor) => floor.floor === 0 ? { ...floor, mesh: mesh(legacyPath) } : floor),
+    }],
+  }));
+  await bucket.put("forever/maps/manifest.meshes.json", JSON.stringify({
+    format: "chronicle-wow-map-art-v2",
+    target: { product: target.product },
+    instances: [{ mapID: 43, floors: [{ floor: 1, mesh: mesh(storedPath) }] }],
+  }));
+
+  const state = await request(bucket, "/internal/api/v1/maps/forever");
+  assert.equal(state.status, 200);
+  const body = await state.json() as {
+    published: { reuses: { instances: unknown[] }; renders: { instances: unknown[] }; meshes: { instances: { floors?: { floor: number; mesh?: { path: string } }[] }[] } };
+  };
+  assert.deepEqual(body.published.meshes.instances[0]?.floors?.map((floor) => [floor.floor, floor.mesh?.path]), [
+    [0, legacyPath],
+    [1, storedPath],
+  ]);
+
+  const saved = await request(bucket, "/internal/api/v1/maps/forever/draft", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      reuses: body.published.reuses.instances,
+      renders: body.published.renders.instances,
+      meshes: body.published.meshes.instances,
+    }),
+  });
+  assert.equal(saved.status, 200, await saved.clone().text());
+  const draft = await saved.json() as { draft_version: string };
+  const published = await request(bucket, "/internal/api/v1/maps/forever/publish", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ version: draft.draft_version }),
+  });
+  assert.equal(published.status, 200, await published.clone().text());
+  const reader = await bucket.json("forever/maps/manifest.json") as { instances: { floors: { floor: number; mesh?: { path: string } }[] }[] };
+  assert.deepEqual(reader.instances[0]?.floors.map((floor) => [floor.floor, floor.mesh?.path]), [
+    [0, legacyPath],
+    [1, storedPath],
+  ]);
+});
+
 test("Map Foundry publishes a copied map body with source art, render, mesh, and provenance", async () => {
   const bucket = new FakeBucket();
   const source = "https://icons.chronicleclassic.com/forever/maps";

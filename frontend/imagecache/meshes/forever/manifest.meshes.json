@@ -5,6 +5,54 @@
   },
   "instances": [
     {
+      "mapID": 33,
+      "name": "Shadowfang Keep",
+      "mesh": {
+        "path": "3d/33-9ac0a79949c7f117-shadowfang-keep-open-top.glb",
+        "bounds": {
+          "minX": -309.4287,
+          "maxX": -65.5721,
+          "minY": 2057.552,
+          "maxY": 2334.1519
+        },
+        "zMin": 45.9549,
+        "zMax": 173.0915,
+        "frame": "wow-yup-mirrored-x"
+      }
+    },
+    {
+      "mapID": 34,
+      "name": "The Stockade",
+      "mesh": {
+        "path": "3d/34-9e01861771933721-the-stockade-open-top.glb",
+        "bounds": {
+          "minX": -8.1085,
+          "maxX": 197.271,
+          "minY": -150.3021,
+          "maxY": 151.7934
+        },
+        "zMin": -35.5215,
+        "zMax": 13.2368,
+        "frame": "wow-yup-mirrored-x"
+      }
+    },
+    {
+      "mapID": 36,
+      "name": "Deadmines",
+      "mesh": {
+        "path": "3d/36-6f8b8f10e24436fd-deadmines-open-top.glb",
+        "bounds": {
+          "minX": -317.0507,
+          "maxX": 33.334,
+          "minY": -1050.0605,
+          "maxY": -341.7047
+        },
+        "zMin": -31.9291,
+        "zMax": 185.6344,
+        "frame": "wow-yup-mirrored-x"
+      }
+    },
+    {
       "mapID": 43,
       "mesh": {
         "path": "3d/wailing-caverns-open-top.glb",
@@ -18,6 +66,175 @@
         "zMax": 56.4689,
         "frame": "wow-yup-mirrored-x"
       }
+    },
+    {
+      "mapID": 47,
+      "name": "Razorfen Kraul",
+      "floors": [
+        {
+          "floor": 1,
+          "mesh": {
+            "path": "3d/47-floor-1-302a89ef838a6731-razorfen-kraul-floor-1-open-top.glb",
+            "bounds": {
+              "minX": 1866.6667,
+              "maxX": 2266.667,
+              "minY": 1366.6667,
+              "maxY": 2066.667
+            },
+            "zMin": -58.7464,
+            "zMax": 226.8368,
+            "frame": "wow-yup-mirrored-x"
+          }
+        }
+      ]
+    },
+    {
+      "mapID": 48,
+      "name": "Blackfathom Deeps",
+      "mesh": {
+        "path": "3d/48-cc8860998e6e38ee-blackfathom-deeps-open-top.glb",
+        "bounds": {
+          "minX": -887.9683,
+          "maxX": -76.8456,
+          "minY": -500.4364,
+          "maxY": 423.9965
+        },
+        "zMin": -80.4975,
+        "zMax": 30.576,
+        "frame": "wow-yup-mirrored-x"
+      }
+    },
+    {
+      "mapID": 90,
+      "name": "Gnomeregan",
+      "floors": [
+        {
+          "floor": 1,
+          "mesh": {
+            "path": "3d/90-floor-1-e27a6431b0e3a625-gnomeregan-floor-1-open-top.glb",
+            "bounds": {
+              "minX": -666.4304,
+              "maxX": -200.9161,
+              "minY": -142.0104,
+              "maxY": 243.6545
+            },
+            "zMin": -194.8643,
+            "zMax": -94.2864,
+            "frame": "wow-yup-mirrored-x"
+          }
+        },
+        {
+          "floor": 2,
+          "mesh": {
+            "path": "3d/90-floor-2-13a2aa5f4e83fdf7-gnomeregan-floor-2-open-top.glb",
+            "bounds": {
+              "minX": -664.5627,
+              "maxX": -353.6407,
+              "minY": 25.0198,
+              "maxY": 615.8148
+            },
+            "zMin": -233.04,
+            "zMax": -158.2755,
+            "frame": "wow-yup-mirrored-x"
+          }
+        },
+        {
+          "floor": 3,
+          "mesh": {
+            "path": "3d/90-floor-3-df49a1ec14810d06-gnomeregan-floor-3-open-top.glb",
+            "bounds": {
+              "minX": -913.972,
+              "maxX": -470.3798,
+              "minY": -20.6701,
+              "maxY": 584.0104
+            },
+            "zMin": -285.7828,
+            "zMax": -220.7096,
+            "frame": "wow-yup-mirrored-x"
+          }
+        },
+        {
+          "floor": 4,
+          "mesh": {
+            "path": "3d/90-floor-4-33d1daf31e7ccf84-gnomeregan-floor-4-open-top.glb",
+            "bounds": {
+              "minX": -890.8753,
+              "maxX": -442.4849,
+              "minY": 298.5539,
+              "maxY": 756.1331
+            },
+            "zMin": -331.8029,
+            "zMax": -250.6775,
+            "frame": "wow-yup-mirrored-x"
+          }
+        }
+      ]
+    },
+    {
+      "mapID": 189,
+      "name": "Scarlet Monastery",
+      "floors": [
+        {
+          "floor": 1,
+          "mesh": {
+            "path": "3d/189-floor-1-b077e364686eb610-scarlet-monastery-graveyard-floor-1-open-top.glb",
+            "bounds": {
+              "minX": 1616.9543,
+              "maxX": 2030.1477,
+              "minY": 977.414,
+              "maxY": 1538.5427
+            },
+            "zMin": -9.4829,
+            "zMax": 233.7005,
+            "frame": "wow-yup-mirrored-x"
+          }
+        },
+        {
+          "floor": 2,
+          "mesh": {
+            "path": "3d/189-floor-2-0baba8a75a75d1db-scarlet-monastery-library-floor-2-open-top.glb",
+            "bounds": {
+              "minX": 111.4235,
+              "maxX": 289.8492,
+              "minY": -451.831,
+              "maxY": -132.3016
+            },
+            "zMin": 18.006,
+            "zMax": 42.3522,
+            "frame": "wow-yup-mirrored-x"
+          }
+        },
+        {
+          "floor": 3,
+          "mesh": {
+            "path": "3d/189-floor-3-ea686fcbddf20452-scarlet-monastery-floor-3-open-top.glb",
+            "bounds": {
+              "minX": 1517.5814,
+              "maxX": 1992.226,
+              "minY": -458.801,
+              "maxY": -253.8915
+            },
+            "zMin": 6.1773,
+            "zMax": 51.8403,
+            "frame": "wow-yup-mirrored-x"
+          }
+        },
+        {
+          "floor": 4,
+          "mesh": {
+            "path": "3d/189-floor-4-a9831b6d17b90dab-scarlet-monastery-cathedral-floor-4-open-top.glb",
+            "bounds": {
+              "minX": 762.5209,
+              "maxX": 1223.8159,
+              "minY": 1253.1621,
+              "maxY": 1518.0436
+            },
+            "zMin": 17.9726,
+            "zMax": 205.0908,
+            "frame": "wow-yup-mirrored-x"
+          }
+        }
+      ]
     },
     {
       "mapID": 389,
@@ -37,6 +254,38 @@
       }
     },
     {
+      "mapID": 2970,
+      "name": "The Drowned City",
+      "mesh": {
+        "path": "3d/2970-0b144670c59f9bf4-the-drowned-city-open-top.glb",
+        "bounds": {
+          "minX": -13866.665,
+          "maxX": -12866.666,
+          "minY": 1766.6667,
+          "maxY": 3466.667
+        },
+        "zMin": -527.0889,
+        "zMax": 123.2212,
+        "frame": "wow-yup-mirrored-x"
+      }
+    },
+    {
+      "mapID": 2998,
+      "name": "Excavation Site: Wetlands",
+      "mesh": {
+        "path": "3d/2998-d4bbfe58fe247b15-excavation-site-wetlands-open-top.glb",
+        "bounds": {
+          "minX": -4133.3335,
+          "maxX": -3633.334,
+          "minY": -2433.3333,
+          "maxY": -1533.334
+        },
+        "zMin": 86.3236,
+        "zMax": 435.1344,
+        "frame": "wow-yup-mirrored-x"
+      }
+    },
+    {
       "mapID": 2999,
       "name": "Ruins of Lordaeron",
       "mesh": {
@@ -49,6 +298,22 @@
         },
         "zMin": -13.6235,
         "zMax": 195.9512,
+        "frame": "wow-yup-mirrored-x"
+      }
+    },
+    {
+      "mapID": 3039,
+      "name": "Krol'dok Stronghold",
+      "mesh": {
+        "path": "3d/kroldok-stronghold-open-top.glb",
+        "bounds": {
+          "minX": -7733.3335,
+          "maxX": -6633.334,
+          "minY": -4733.3335,
+          "maxY": -3600.0
+        },
+        "zMin": 4.3158,
+        "zMax": 517.0672,
         "frame": "wow-yup-mirrored-x"
       }
     }
