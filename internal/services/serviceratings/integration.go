@@ -125,7 +125,11 @@ func SourceContext(ctx context.Context, db database.StoreQueries, ids []uuid.UUI
 	if servicetenant.IsBypass(ctx) || servicetenant.TenantIDFromContext(ctx) != uuid.Nil {
 		return ctx, nil
 	}
-	keys, err := db.LeaderboardRunKeysForIDs(ctx, ids)
+	// Root-domain administrators can act on tenants that are intentionally hidden
+	// from the aggregate root view (include_in_all=false). Resolve the source under
+	// administrative visibility, then return a tenant-scoped context for the
+	// mutation itself so RLS remains enforced rather than bypassed.
+	keys, err := db.LeaderboardRunKeysForIDs(servicetenant.AdminBypass(ctx), ids)
 	if err != nil {
 		return nil, err
 	}
