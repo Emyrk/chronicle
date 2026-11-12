@@ -1,8 +1,11 @@
 package rankings
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,6 +14,9 @@ import (
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/nextsource"
+	"github.com/Emyrk/chronicle/database/gamedb"
+	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 )
 
 func survivabilityStateBytes(t *testing.T, state SurvivabilityTrackerState) []byte {
@@ -78,6 +84,88 @@ func TestSurvivabilityTrackerStateContinuation(t *testing.T) {
 			require.Equal(t, payload, survivabilityStateBytes(t, decoded))
 		})
 	}
+}
+
+type survivabilitySourceDB struct {
+	gamedb.GameDB
+	spell *chrondbc.Spell
+}
+
+func (d *survivabilitySourceDB) Spell(context.Context, chrondbc.SpellID) (*chrondbc.Spell, error) {
+	return d.spell, nil
+}
+
+func (d *survivabilitySourceDB) ExtraAttackSpell(context.Context, int32) (chrondbc.ExtraAttackSpell, bool) {
+	return chrondbc.ExtraAttackSpell{}, false
+}
+
+func drainSurvivabilitySource(t *testing.T, pipeline *nextsource.Pipeline, lines ...string) []messages.Message {
+	t.Helper()
+	source, err := pipeline.OpenFile(strings.NewReader(strings.Join(lines, "\n")), 4096)
+	require.NoError(t, err)
+	var result []messages.Message
+	for {
+		batch, err := source.Advance(t.Context())
+		if err == io.EOF {
+			return result
+		}
+		require.NoError(t, err)
+		result = append(result, batch...)
+	}
+}
+
+func TestSurvivabilityTrackerStatePreservesAcceptedTimestampRegression(t *testing.T) {
+	t.Parallel()
+	player := guid.GUID(1)
+	caster := guid.GUID(2)
+	fightID := uuid.MustParse("99999999-9999-9999-9999-999999999999")
+	db := &survivabilitySourceDB{spell: &chrondbc.Spell{
+		Effects: []chrondbc.SpellEffect{{EffectIndex: 0, Effect: chrondbc.EffectResurrect}},
+	}}
+	pipeline, err := nextsource.New(t.Context(), nil, db, nil, "")
+	require.NoError(t, err)
+	prefix := drainSurvivabilitySource(t, pipeline,
+		"10000|DEATH|0x0000000000000001",
+		"9500|SPELL_GO|0|123|0x0000000000000002|0x0000000000000001|0|1|0",
+	)
+
+	continuous := NewSurvivabilityTracker()
+	continuous.FightStarted(fightID, nil)
+	for _, message := range prefix {
+		require.NoError(t, continuous.ProcessMessage(true, fightID, message))
+	}
+	require.Len(t, continuous.players[player].transitions, 2)
+	require.True(t, continuous.players[player].transitions[1].at.Before(continuous.players[player].transitions[0].at))
+
+	captured, err := continuous.CaptureState()
+	require.NoError(t, err)
+	payload := survivabilityStateBytes(t, captured)
+	decoded, err := DecodeSurvivabilityTrackerState(SurvivabilityTrackerStateVersion, payload)
+	require.NoError(t, err)
+	restored, err := decoded.Restore()
+	require.NoError(t, err)
+
+	suffix := drainSurvivabilitySource(t, pipeline, "11000|DEATH|0x0000000000000001")
+	for _, message := range suffix {
+		require.NoError(t, continuous.ProcessMessage(true, fightID, message))
+		require.NoError(t, restored.ProcessMessage(true, fightID, message))
+	}
+	start, end := time.UnixMilli(9000), time.UnixMilli(12000)
+	continuous.FightFinalized(fightID, start, end)
+	restored.FightFinalized(fightID, start, end)
+	require.Equal(t, continuous.Result(), restored.Result())
+	result := continuous.Result()[fightID].Players[player]
+	require.Equal(t, int32(2), result.Deaths)
+	require.Equal(t, float64(2), result.AliveDurationSecs)
+	require.InDelta(t, 200.0/3, result.AlivePercentage, 0.000001)
+	continuousState, err := continuous.CaptureState()
+	require.NoError(t, err)
+	restoredState, err := restored.CaptureState()
+	require.NoError(t, err)
+	require.Equal(t, survivabilityStateBytes(t, continuousState), survivabilityStateBytes(t, restoredState))
+	require.Equal(t, payload, survivabilityStateBytes(t, captured))
+	require.Equal(t, payload, survivabilityStateBytes(t, decoded))
+	require.Equal(t, caster, prefix[1].(*messages.SpellGo).Caster)
 }
 
 func TestSurvivabilityTrackerStateDetachedRestore(t *testing.T) {
