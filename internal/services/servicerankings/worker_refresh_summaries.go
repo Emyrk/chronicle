@@ -19,7 +19,8 @@ import (
 // this against the stored version to force a recompute even when row counts
 // have not changed. Version 3 stores each top player's GUID; version 4 counts
 // a run complete at the boss count most full clears reach, not every boss ever recorded.
-const rankingsQueryVersion int16 = 4
+// Version 5 uses normalized encounter-difficulty cohorts.
+const rankingsQueryVersion int16 = 5
 
 // RankingsSummaryQueryVersion returns the current summary aggregation version.
 func RankingsSummaryQueryVersion() int16 {
