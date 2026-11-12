@@ -216,7 +216,7 @@ export function UploadView({
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle className="text-yellow-200">Upload Access Required</AlertTitle>
           <AlertDescription className="text-yellow-200/80">
-            You don't have permission to upload logs yet. Ask for the alpha role in the Chronicle Discord server to get upload access.
+            You don't have permission to upload logs yet. Try force reloading the page. If the error persists, contact Chronicle on Discord.
           </AlertDescription>
         </Alert>
       )}
