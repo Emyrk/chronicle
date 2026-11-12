@@ -215,9 +215,24 @@ func TestSpeedrunTrackerStateRejectsCorruptionAndDependencyMismatch(t *testing.T
 	_, err = DecodeSpeedrunTrackerState(SpeedrunTrackerStateVersion, corrupt)
 	require.Error(t, err)
 
-	invalid := state
-	invalid.value.Remaining = 99
+	require.NoError(t, json.Unmarshal(valid, &root))
+	kill := root["requirements"].([]any)[0].(map[string]any)["kills"].([]any)[0].(map[string]any)
+	kill["entry_id"] = float64(101)
+	corrupt, err = json.Marshal(root)
+	require.NoError(t, err)
+	_, err = DecodeSpeedrunTrackerState(SpeedrunTrackerStateVersion, corrupt)
+	require.Error(t, err, "GUID-derived entry mismatch must fail before restore")
+
+	invalid, err := DecodeSpeedrunTrackerState(SpeedrunTrackerStateVersion, valid)
+	require.NoError(t, err)
+	invalid.value.Requirements[0].Kills[0].EntryID = 101
 	candidate, err := invalid.Restore(rules, units, engagement)
+	require.Error(t, err)
+	require.Nil(t, candidate)
+	invalid, err = DecodeSpeedrunTrackerState(SpeedrunTrackerStateVersion, valid)
+	require.NoError(t, err)
+	invalid.value.Remaining = 99
+	candidate, err = invalid.Restore(rules, units, engagement)
 	require.Error(t, err)
 	require.Nil(t, candidate)
 	candidate, err = state.Restore(rules, nil, engagement)
