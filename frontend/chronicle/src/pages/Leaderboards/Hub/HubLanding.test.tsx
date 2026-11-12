@@ -141,7 +141,7 @@ describe("live Hub landing", () => {
     expect(lastMoltenCore).toBeGreaterThan(firstMoltenCore)
   })
 
-  it("shows the published board summaries for each tab instead of mock rows", () => {
+  it("shows the published card summaries without calculating performance highlights", () => {
     const player = { realm_id: "realm", realm_name: "Nordanaar", player_guid: "mage-1", player_name: "Live Mage",
       player_class: "MAGE", player_spec: "Frost", player_sub_spec: "", score: 98 }
     const guild = { realm_id: "realm", realm_name: "Nordanaar", guild_id: "guild-1", guild_name: "Live Guild", score: 1200 }
@@ -164,8 +164,8 @@ describe("live Hub landing", () => {
     expect(speedruns).toContain("Live Clear")
     expect(speedruns).not.toContain("Live Mage")
     const performances = render({ tab: "performances", landingPreviews })
-    expect(performances).toContain("Live Mage")
-    expect(performances).toContain("1,725 dps")
+    expect(performances).toContain("Open the raid to view performances")
+    expect(performances).not.toContain("1,725 dps")
     const statistics = render({ tab: "statistics", landingPreviews })
     expect(statistics).toContain("Frost")
     expect(statistics).toContain("840 dps")

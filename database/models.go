@@ -2372,6 +2372,12 @@ type LeaderboardHighlight struct {
 	Payload                  []byte             `db:"payload" json:"payload"`
 	RefreshStartedAt         pgtype.Timestamptz `db:"refresh_started_at" json:"refresh_started_at"`
 	RefreshedAt              pgtype.Timestamptz `db:"refreshed_at" json:"refreshed_at"`
+	SourceGeneration         int64              `db:"source_generation" json:"source_generation"`
+}
+
+type LeaderboardHighlightSource struct {
+	TenantID   uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	Generation int64     `db:"generation" json:"generation"`
 }
 
 type LeaderboardInstance struct {

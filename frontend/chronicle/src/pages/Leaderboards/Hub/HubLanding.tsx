@@ -484,14 +484,11 @@ function LiveCardBody({ tab, preview }: { tab: HubTab; preview?: HubLandingPrevi
   let rows: ReactNode = null
   if (tab === "overview") {
     const guild = preview?.guild.renown[0]
-    const performance = preview?.performances[0]
     rows = <>{speedLine(0)}
       {guild && <Line icon={<renown.icon className="size-3" style={{ color: renown.accent }} />}
         value={renown.format(guild.score)} title="Guild Renown #1"><GuildTag name={guild.guild_name} id={guild.guild_id} /></Line>}
       {playerLine("peak", "Peak")}
-      {performance && <Line icon={<Swords className="size-3 text-muted-foreground" />}
-        value={`${Math.round(performance.dps).toLocaleString()} dps`} title="Best performance"><LivePlayer entry={performance} /></Line>}
-      {!preview?.speedruns.length && !guild && !preview?.player.peak.length && !performance && <UnavailableHighlight />}
+      {!preview?.speedruns.length && !guild && !preview?.player.peak.length && <UnavailableHighlight />}
     </>
   } else if (tab === "ratings") {
     rows = <>{playerLine("peak", "Peak")}{playerLine("ranked_mastery", "Ranked Mastery")}{playerLine("renown", "Renown")}
@@ -499,10 +496,7 @@ function LiveCardBody({ tab, preview }: { tab: HubTab; preview?: HubLandingPrevi
   } else if (tab === "speedruns") {
     rows = <>{[0, 1, 2].map(speedLine)}{!preview?.speedruns.length && <UnavailableHighlight label="No qualifying full clears" />}</>
   } else if (tab === "performances") {
-    rows = preview?.performances.length ? preview.performances.map((entry, index) =>
-      <Line key={`${entry.realm_id}-${entry.player_guid || index}`} value={`${Math.round(entry.dps).toLocaleString()} dps`} title="Best performance">
-        <LivePlayer entry={entry} />
-      </Line>) : <UnavailableHighlight label="No recorded performances" />
+    rows = <UnavailableHighlight label="Open the raid to view performances" />
   } else if (tab === "statistics") {
     rows = preview?.statistics.length ? preview.statistics.map((entry, index) =>
       <Line key={`${entry.player_class}-${entry.player_spec}-${entry.player_sub_spec ?? ""}`}

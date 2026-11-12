@@ -22,11 +22,13 @@ subjects, **not tenant-wide benchmarks**. Raw Peak presentation uses existing
 per-boss raw peaks divided by the selected-set denominator, matching the Hub's
 mean-of-best-per-boss presentation.
 
-Performance top 3 reuses `RankingsLeaderboardNoJIT` with exact cohort/default-boss
-selection. Statistics top 3 uses `RankingsBoxPlotStatsNoJIT` (existing median-DPS
-ordering by spec). Full-clear top 3 uses `SpeedrunLeaderboard` with full timing and
-exact cohort. These are the same SQL calculations used by the existing tabs, not
-new scoring formulas. Parsing/rulesets have no highlight body in the current Hub.
+Performance highlights are intentionally omitted because Peak already summarizes
+player output on the compact landing cards; users open the raid to view the full
+performance board. Statistics top 3 uses `RankingsBoxPlotStatsNoJIT` (existing
+median-DPS ordering by spec). Full-clear top 3 uses `SpeedrunLeaderboard` with full
+timing and exact cohort. These are the same SQL calculations used by the existing
+tabs, not new scoring formulas. Parsing/rulesets have no highlight body in the
+current Hub.
 Guild leaders remain in the existing preview contract used by Overview.
 
 ## Persistence and refresh
@@ -36,12 +38,24 @@ upserts it. Any query/encoding failure preserves the previous row and timestamp.
 An older-started refresh cannot overwrite a newer-started publication. Arrays are
 bounded to 3 and serialized JSON is capped at 256KiB both in code and the database.
 At most 256 configured cohorts are accepted; larger configurations fail explicitly
-rather than silently truncate. Calculation jobs have a 2-minute deadline.
+rather than silently truncate. Calculation jobs have a 1-minute deadline and one
+attempt; a later stale-snapshot sweep is the retry mechanism.
 
-Hourly River dispatch pages tenants and queues at most 100 scope refreshes per
-continuation. There is no run-on-start historical task. Completed backfill/repair
-jobs best-effort nudge a tenant refresh after commit; failures remain recoverable
-by hourly refresh. Admins can explicitly request a tenant refresh.
+A tenant-level source generation increments atomically with source repair,
+canonical/direct projection publication, canonical refresh enqueue, and successful
+D2 ratings publication. This covers speedruns and rankings as well as
+materialized ratings. Snapshots record the
+generation captured before calculation. Dispatch and refresh workers skip expensive
+reads when the snapshot has the current generation and configuration fingerprint;
+a generation change during calculation leaves the snapshot stale for the next pass.
+
+Hourly River dispatch pages tenants and examines at most 100 cohort/scope pairs per
+continuation. It queues only missing snapshots, snapshots older than 24 hours, or
+snapshots whose generation or configuration fingerprint changed. The 24-hour limit
+is a safety refresh for changes not yet signaled by source publication. There is
+no run-on-start historical task. Completed backfill/repair jobs best-effort nudge
+a tenant refresh after commit; failures remain recoverable by hourly refresh.
+Admins can explicitly request a tenant refresh.
 
 A configuration fingerprint hashes the resolved instance policy (default-set
 membership, awards, variants) plus snapshot algorithm version. Public reads resolve
@@ -65,9 +79,9 @@ status is `ready`, `partial`, or `unsupported_scope`. Snapshot metadata contains
 instance/difficulty/size, configuration fingerprint, optional refreshed_at and
 `not_prepared`, `rebuilding`, `stale`, `ready`, or `empty` status. `empty` means a successful
 calculation with no highlights; absence is not an empty calculation. Configuration-mismatched (`rebuilding`) payload is never served. Same-fingerprint
-snapshots older than two hours are marked `stale` but may still be displayed. Failed refresh with unchanged configuration continues
-serving the old successful payload and its old timestamp, marked `stale` after
-two hours. Refresh nudges use stable River args and active-job uniqueness; GET
+snapshots older than 24 hours or behind the current source generation are marked
+`stale` but may still be displayed. Failed refresh continues serving the old
+successful payload and its old timestamp, marked `stale` after 24 hours or a source change. Refresh nudges use stable River args and active-job uniqueness; GET
 requests do not calculate highlights. Repeated singular/plural realm parameters
 are unsupported, not silently reduced to the first value.
 
