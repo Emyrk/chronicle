@@ -54,7 +54,7 @@ import {
 } from "./dungeonMeshes";
 import { MAP_CURSOR, MAP_HOSTILE_CURSOR, MAP_UNIT_CURSOR } from "./mapCursors";
 import { FLOOR_SLICE_MS, FLOOR_TRACK_TOLERANCE_YARDS, floorTrackAt, startFloorTrackBuild, type FloorTrackBuild, type FloorTracks } from "./walkableFloors";
-import { flatArtworkUnitScale, FOCUS_RADIUS_YARDS, FULL_MAP_VIEWPORT, healthBarColor, interpolateViewport, mapPointToScene, MAX_HEALTH_BARS, topDownMapDistance, type MapPoint, type MapViewport } from "./mapModel";
+import { flatArtworkUnitScale, FOCUS_RADIUS_YARDS, FULL_MAP_VIEWPORT, healthBarColor, interpolateViewport, mapPointToScene, MAX_HEALTH_BARS, MAX_PLAYER_HEALTH_BARS, PLAYER_BAR_SCALE, topDownMapDistance, type MapPoint, type MapViewport } from "./mapModel";
 import { deepBreathPathForPrimarySpell, ONYXIA_DEEP_BREATH_RADIUS_YARDS } from "./deepBreathLanes";
 import { projectMapDebugPoints, type MapDebugOverlay } from "./mapDebugOverlays";
 import {
@@ -118,6 +118,12 @@ const BAR_HEIGHT = 3.9;
 const BAR_WIDTH = 2.6;
 const BAR_THICKNESS = 0.36;
 const BAR_PADDING = 0.14;
+// The power strip under the health bar, and the gap between them.
+const POWER_STRIP_THICKNESS = 0.16;
+const POWER_STRIP_GAP = 0.05;
+// Quads per bar: backing, health, healed, absorb, power.
+const BAR_QUADS = 5;
+const BAR_POOL_SIZE = (MAX_HEALTH_BARS + MAX_PLAYER_HEALTH_BARS) * BAR_QUADS;
 const Z_AXIS = new THREE.Vector3(0, 0, 1);
 const MAX_COMBAT_TEXT = 8;
 const COMBAT_TEXT_HEIGHT = 1.8;
@@ -269,9 +275,6 @@ const TOKEN_THICKNESS = TOKEN_LAYOUT.thickness;
 /** A boss sigil lies flat, at the height a player's disc face would be. */
 const SIGIL_FACE = 0.45;
 const TOKEN_PLANE = TOKEN_LAYOUT.plane;
-const COLUMN_WIDTH = TOKEN_LAYOUT.columnWidth;
-const COLUMN_HEIGHT = TOKEN_LAYOUT.columnHeight;
-const COLUMN_TRACK_OPACITY = TOKEN_LAYOUT.columnTrackOpacity;
 const SIGIL_SPIN = TOKEN_LAYOUT.sigilSpin;
 // Target lines: ribbon width (geometry units), lift above the floor, and dash period and speed.
 const TARGET_LINE_WIDTH = TARGET_LINE.width;
@@ -481,8 +484,10 @@ export interface MapScene3DUnit {
   kind: MapMarkerKind;
   muted: boolean;
   name: string;
-  /** Health bar to draw, or null for none. */
+  /** Health at the cursor (for its bar and nameplate), or null when unknown or bars are off. */
   health: MapUnitHealth | null;
+  /** Draw its health bar: picked by the declutter (selectHealthBars). A unit with a nameplate shows its health there instead. */
+  bar?: boolean;
   /** Published model URL from the shared miniature manifest. */
   miniatureUrl: string | undefined;
   /** Optional lazy animation-pack URL for an original game model. */
@@ -505,13 +510,13 @@ export interface MapScene3DUnit {
   icon?: string | null;
   /** A boss: a sigil instead of a disc. */
   boss?: boolean;
-  /** Health at the cursor (0-1), for the health column above the disc; null when unknown. */
+  /** Health at the cursor (0-1), for the nameplate; null when unknown. */
   healthFraction?: number | null;
   /** A guardian's owning player: an owner line runs between them. */
   owner?: string;
   /** A debuffed player's dispel type (magic, curse, disease, poison), tinting its token. */
   dispel?: DispelKind | null;
-  /** Power (0-1) and its colour, drawn as a thinner column beside health. */
+  /** Power (0-1) and its colour, drawn as a thin strip under the health bar. */
   power?: { fraction: number; color: string } | null;
   /** Where the unit was lately, newest (now) first, for its movement trail. */
   trail?: MapScene3DTrailPoint[];
@@ -523,8 +528,6 @@ export interface MapScene3DTrailPoint {
   z?: number;
 }
 
-/** The one live value drawn as a column above each token. */
-export type AboveDiscMode = "none" | "health";
 
 /** Who the map's target frames show, for the token halos and target lines. */
 export interface MapUnitRoles {
@@ -548,12 +551,6 @@ interface UnitToken {
   arc: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   /** A debuffed player's tint and glow, in the dispel type's colour. */
   debuff: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
-  /** Health and power columns, side by side and turned to face the camera. */
-  columns: THREE.Group;
-  column: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
-  columnTrack: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
-  power: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
-  powerTrack: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   /** Bosses: the turning tick ring, the sigil under a model, and the crystal while there is none. */
   ticks: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | null;
   sigil: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | null;
@@ -641,6 +638,8 @@ interface UnitObject {
   /** `floorY` came from the unit's floor track (no logged height), not a probe. */
   floorTracked: boolean;
   health: MapUnitHealth | null;
+  /** The declutter gives it a health bar (hidden while it has a nameplate). */
+  bar: boolean;
   /** Published miniature or original-model URL; the primitive shows until it loads. */
   miniatureUrl: string | undefined;
   animationUrl: string | undefined;
@@ -705,31 +704,6 @@ export interface MapScene3DEffectHover {
   /** Container-relative pixels of the effect's target. */
   x: number;
   y: number;
-}
-
-// Sizes the health column (and its track) and the thinner, shorter power
-// column beside it, centred as a pair on the token.
-function layoutColumns(columns: THREE.Group, radius: number) {
-  const [healthTrack, health, powerTrack, power] = columns.children as THREE.Mesh[];
-  const healthWidth = radius * COLUMN_WIDTH;
-  const powerWidth = radius * TOKEN_LAYOUT.powerColumnWidth;
-  const gap = radius * TOKEN_LAYOUT.columnGap;
-  const offset = (powerWidth + gap) / 2;
-  for (const part of [healthTrack, health]) {
-    part.scale.set(healthWidth, radius * COLUMN_HEIGHT, healthWidth);
-    part.position.x = -offset;
-  }
-  for (const part of [powerTrack, power]) {
-    part.scale.set(powerWidth, radius * TOKEN_LAYOUT.powerColumnHeight, powerWidth);
-    part.position.x = (healthWidth + gap) / 2;
-  }
-}
-
-// Fills a column to `value` (0-1) of its track; hidden (track too) without a value.
-function fillColumn(column: THREE.Mesh, track: THREE.Mesh, value: number | null) {
-  column.visible = value !== null && value > 0;
-  track.visible = value !== null;
-  if (value !== null) column.scale.y = Math.max(0.02, track.scale.y * value);
 }
 
 interface RemotePresence {
@@ -972,8 +946,9 @@ export class MapScene3D {
   private readonly unitFloorHeights = new FloorHeightCache((x, z, ceiling) => this.sampleFloor(x, z, ceiling));
   private readonly floorRay = new THREE.Ray();
   private constraining = false;
-  // The hovered unit's nameplate (drawUnitPlate), redrawn when what it shows changes.
-  private label: { sprite: THREE.Sprite; canvas: HTMLCanvasElement; key: string } | null = null;
+  // Nameplates (drawUnitPlate) over the hovered unit, the selected unit, its
+  // target, their target and pinned units; each redrawn when what it shows changes.
+  private readonly plates = new Map<string, { sprite: THREE.Sprite; canvas: HTMLCanvasElement; key: string }>();
   private hoveredGuid: string | null = null;
   // A click on a unit (inspect it); held briefly so a double-click (zoom) cancels it.
   private onUnitClick: ((guid: string) => void) | null = null;
@@ -1144,6 +1119,7 @@ export class MapScene3D {
   private readonly color = new THREE.Color();
   private readonly vector = new THREE.Vector3();
   private readonly vectorB = new THREE.Vector3();
+  private readonly vectorC = new THREE.Vector3();
   private readonly scaleVector = new THREE.Vector3();
   private readonly quaternion = new THREE.Quaternion();
   // Index into activeEffects of each pooled primitive, for hover picking.
@@ -1176,7 +1152,6 @@ export class MapScene3D {
   private readonly tokenEdge = new THREE.CylinderGeometry(1, 1, 1, 40, 1, true).translate(0, -0.5, 0);
   // A boss's crystal while it has no model (radius 1), its tip at y = 0.
   private readonly bossSpire = new THREE.LatheGeometry(BOSS_SPIRE.profile.map(([x, y]) => new THREE.Vector2(x, y)), BOSS_SPIRE.sides);
-  private aboveDisc: AboveDiscMode = "none";
   private roles: MapUnitRoles = { selected: null, target: null, targetsTarget: null, pinned: new Set() };
   private readonly unitCasts = new Map<string, UnitCast>();
   private readonly lastHitTargets = new Map<string, string>();
@@ -1397,7 +1372,7 @@ export class MapScene3D {
     this.bars = this.createPool(
       new THREE.PlaneGeometry(1, 1),
       new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.92, depthTest: false, depthWrite: false }),
-      MAX_HEALTH_BARS * 4,
+      BAR_POOL_SIZE,
     );
     this.bars.renderOrder = 9;
     this.scene.add(
@@ -1582,6 +1557,7 @@ export class MapScene3D {
       if (!object) object = this.addUnit(unit);
       object.name = unit.name;
       object.health = unit.health;
+      object.bar = Boolean(unit.bar);
       object.worldX = unit.worldX;
       object.worldY = unit.worldY;
       object.loggedZ = unit.z;
@@ -1621,7 +1597,7 @@ export class MapScene3D {
     for (const guid of [...this.units.keys()]) {
       if (!seen.has(guid)) this.removeUnit(guid);
     }
-    this.updateLabel();
+    this.updatePlates();
     this.requestRender();
   }
 
@@ -2100,7 +2076,7 @@ export class MapScene3D {
       this.layoutDrop(object);
     }
     this.planLayer.setUnitScale(scale);
-    this.updateLabel();
+    this.updatePlates();
   }
 
   // Client-sized models use true world yards on calibrated maps. On artwork
@@ -2860,7 +2836,7 @@ export class MapScene3D {
     this.keyWindow.removeEventListener("blur", this.releaseKeys);
     for (const guid of [...this.units.keys()]) this.removeUnit(guid);
     this.clearDebugOverlays();
-    this.clearLabel();
+    for (const guid of [...this.plates.keys()]) this.removePlate(guid);
     this.clearGround();
     this.dungeonMeshRequest = null;
     // The renderer's disposal frees this scene's GPU copy of the (shared) mesh.
@@ -2933,16 +2909,6 @@ export class MapScene3D {
     const arc = overlay(null, radius * TOKEN_PLANE.arc, face + TOKEN_LIFT.arc);
     const debuff = overlay(this.tokenTextures.debuffTint(), radius * DEBUFF_PLANE, face + TOKEN_LIFT.debuff);
     debuff.visible = false;
-    const track = () => new THREE.Mesh(this.columnBox, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: COLUMN_TRACK_OPACITY, depthWrite: false }));
-    const fill = () => new THREE.Mesh(this.columnBox, new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.92 }));
-    const columnTrack = track();
-    const column = fill();
-    const powerTrack = track();
-    const power = fill();
-    const columns = new THREE.Group();
-    columns.add(columnTrack, column, powerTrack, power);
-    columns.position.y = face;
-    layoutColumns(columns, radius);
     const ticks = boss ? overlay(this.tokenTextures.sigilTicks(), radius * TOKEN_PLANE.ticks * TOKEN_PLANE.sigil, face + TOKEN_LIFT.marks) : null;
     let bossSpire: UnitToken["bossSpire"] = null;
     if (boss) {
@@ -2953,7 +2919,7 @@ export class MapScene3D {
     const group = new THREE.Group();
     group.userData.guid = unit.guid;
     body.userData.guid = unit.guid;
-    group.add(shadow, edge, body, cone, debuff, arc, halo, pin, columns);
+    group.add(shadow, edge, body, cone, debuff, arc, halo, pin);
     if (ticks) group.add(ticks);
     if (bossSpire) group.add(bossSpire);
     this.unitsGroup.add(group);
@@ -2968,7 +2934,7 @@ export class MapScene3D {
       bodyMaterials: [bodyMaterial],
       coneMaterial,
       cone,
-      token: { radius, face, edge, shadow, halo, pin, arc, debuff, columns, column, columnTrack, power, powerTrack, ticks, sigil: null, chip: null, bossSpire },
+      token: { radius, face, edge, shadow, halo, pin, arc, debuff, ticks, sigil: null, chip: null, bossSpire },
       icon: unit.icon ?? null,
       boss,
       mini: false,
@@ -2991,6 +2957,7 @@ export class MapScene3D {
       sampleMs: unit.atMs,
       floorTracked: false,
       health: unit.health,
+      bar: Boolean(unit.bar),
       miniatureUrl: unit.miniatureUrl,
       animationUrl: unit.animationUrl,
       gameModel: Boolean(unit.gameModel),
@@ -3162,8 +3129,6 @@ export class MapScene3D {
       for (const [part, size] of [[token.halo, TOKEN_PLANE.halo], [token.pin, TOKEN_PLANE.pin], [token.arc, TOKEN_PLANE.arc], [token.shadow, TOKEN_PLANE.shadow]] as const) {
         part.scale.setScalar(MINI_TOKEN_RADIUS * size);
       }
-      token.columns.position.y = token.face;
-      layoutColumns(token.columns, MINI_TOKEN_RADIUS);
       if (token.bossSpire) token.bossSpire.visible = false;
       if (object.boss && !token.sigil) {
         token.sigil = new THREE.Mesh(this.tokenPlane, new THREE.MeshBasicMaterial({
@@ -3228,7 +3193,7 @@ export class MapScene3D {
       for (const object of this.units.values()) {
         if (object.miniatureUrl === url && object.gameModel === gameModel && object.mapScale === mapScale && object.worldHeight === worldHeight) this.applyBossMini(object, mini);
       }
-      this.updateLabel();
+      this.updatePlates();
       this.requestRender();
     });
     return null;
@@ -3400,8 +3365,6 @@ export class MapScene3D {
     for (const [part, size] of [[token.halo, TOKEN_PLANE.halo], [token.pin, TOKEN_PLANE.pin], [token.arc, TOKEN_PLANE.arc], [token.shadow, TOKEN_PLANE.shadow]] as const) {
       part.scale.setScalar(MINI_TOKEN_RADIUS * size);
     }
-    token.columns.position.y = token.face;
-    layoutColumns(token.columns, MINI_TOKEN_RADIUS);
     if (token.bossSpire) token.bossSpire.visible = false;
     if (object.boss && !token.sigil) {
       // The model stands on the sigil.
@@ -3474,7 +3437,7 @@ export class MapScene3D {
     for (const material of object.bodyMaterials) material.dispose();
     object.coneMaterial.dispose();
     const { token } = object;
-    for (const part of [token.shadow, token.edge, token.halo, token.pin, token.arc, token.debuff, token.column, token.columnTrack, token.power, token.powerTrack, token.ticks, token.sigil, token.chip]) part?.material.dispose();
+    for (const part of [token.shadow, token.edge, token.halo, token.pin, token.arc, token.debuff, token.ticks, token.sigil, token.chip]) part?.material.dispose();
     token.bossSpire?.material.dispose();
     object.drop?.material.dispose();
     this.units.delete(guid);
@@ -4008,8 +3971,8 @@ export class MapScene3D {
       this.castArcs[index].visible = false;
       this.castLabels[index].visible = false;
     }
-    // The hover label sits above the hovered unit's icons.
-    if (this.hoveredGuid) this.updateLabel();
+    // Nameplates sit above their unit's icons.
+    this.updatePlates();
   }
 
   // The cast outline traced `step / CAST_ARC_STEPS` of the way round,
@@ -4180,39 +4143,61 @@ export class MapScene3D {
     pool.instanceColor!.needsUpdate = true;
   }
 
-  // Health bars above the units, facing the camera at a constant screen size.
+  // Health bars above the units, facing the camera at a constant screen size,
+  // with a thin power strip under the health while the unit is alive and has
+  // power, over the declutter's picks; players' are smaller. Units with a nameplate (hovered,
+  // selected, its target chain, pinned) show their health there instead.
   private updateBars() {
-    const width = BAR_WIDTH * this.unitScale;
-    const thickness = BAR_THICKNESS * this.unitScale;
-    const padding = BAR_PADDING * this.unitScale;
+    // Sizes for the bar being drawn: players' are smaller.
+    let width = 0;
+    let thickness = 0;
+    let padding = 0;
+    let strip = 0;
+    let stripGap = 0;
     const right = this.vectorB.set(1, 0, 0).applyQuaternion(this.camera.quaternion);
+    const up = this.vectorC.set(0, 1, 0).applyQuaternion(this.camera.quaternion);
     let count = 0;
     // The bar's lift above the unit's base, in scene units.
     let barLift = BAR_HEIGHT;
     const fx = this.effects?.fx ?? null;
-    const quad = (base: THREE.Vector3, from: number, to: number, quadWidth: number, quadHeight: number, color: THREE.Color | number) => {
-      const center = this.vector.copy(base).setY(base.y + barLift).addScaledVector(right, ((from + to) / 2 - 0.5) * width);
+    // `down`: how far below the health bar's centre, across the screen.
+    const quad = (base: THREE.Vector3, from: number, to: number, quadWidth: number, quadHeight: number, color: THREE.Color | number, down = 0) => {
+      const center = this.vector.copy(base).setY(base.y + barLift).addScaledVector(right, ((from + to) / 2 - 0.5) * width).addScaledVector(up, -down);
       this.matrix.compose(center, this.camera.quaternion, this.scaleVector.set(quadWidth, quadHeight, 1));
       this.bars.setMatrixAt(count, this.matrix);
       this.bars.setColorAt(count, typeof color === "number" ? this.color.setHex(color) : color);
       count++;
     };
-    for (const object of this.units.values()) {
+    // A unit with a nameplate shows its health and power there instead.
+    const plated = this.plateGuids();
+    for (const [guid, object] of this.units) {
       const { health } = object;
-      if (!object.group.visible || !health || count + 4 > MAX_HEALTH_BARS * 4) continue;
+      if (!object.bar || plated.has(guid) || !object.group.visible || !health || count + BAR_QUADS > BAR_POOL_SIZE) continue;
       const dead = health.dead || object.dead;
       barLift = object.barHeight * this.scaleOf(object);
+      const size = this.unitScale * (object.kind === "player" ? PLAYER_BAR_SCALE : 1);
+      width = BAR_WIDTH * size;
+      thickness = BAR_THICKNESS * size;
+      padding = BAR_PADDING * size;
+      strip = POWER_STRIP_THICKNESS * size;
+      stripGap = POWER_STRIP_GAP * size;
       const fraction = health.max > 0 ? Math.min(1, Math.max(0, health.current / health.max)) : 0;
       const absorb = health.max > 0 ? Math.min(1 - fraction, Math.max(0, health.absorb / health.max)) : 0;
       // From the effect clock while effects run, so the chunk shrinks
       // smoothly between replay ticks; the tick's value otherwise.
       const gain = fx ? deriveRecentHealGain(fx, object.group.userData.guid as string, this.effectCursorMs) : health.healGain ?? 0;
       const healed = health.max > 0 ? Math.min(fraction, Math.max(0, gain / health.max)) : 0;
-      quad(object.base, 0, 1, width + padding, thickness + padding, dead ? BAR_DEAD : BAR_BACKGROUND);
+      const power = dead ? null : object.powerLevel;
+      // The backing grows down to hold the power strip.
+      const below = power ? stripGap + strip : 0;
+      quad(object.base, 0, 1, width + padding, thickness + padding + below, dead ? BAR_DEAD : BAR_BACKGROUND, below / 2);
       if (dead) continue;
       if (fraction > 0) quad(object.base, 0, fraction, width * fraction, thickness, this.color.setStyle(healthBarColor(fraction)));
       if (healed > 0) quad(object.base, fraction - healed, fraction, width * healed, thickness, BAR_HEAL);
       if (absorb > 0) quad(object.base, fraction, fraction + absorb, width * absorb, thickness, BAR_ABSORB);
+      if (power && power.fraction > 0) {
+        quad(object.base, 0, power.fraction, width * power.fraction, strip, this.color.setStyle(power.color), (thickness + strip) / 2 + stripGap);
+      }
     }
     this.commitPool(this.bars, count);
   }
@@ -4272,55 +4257,74 @@ export class MapScene3D {
     }
   }
 
-  // The hovered unit's nameplate: name, health, power and cast, live.
-  private updateLabel() {
-    const guid = this.hoveredGuid;
-    const object = guid ? this.units.get(guid) : undefined;
-    if (!guid || !object || !object.group.visible) {
-      this.clearLabel();
-      return;
+  // The units with a nameplate: the hovered unit, the selected unit, its
+  // target, their target and pinned units.
+  private plateGuids(): Set<string> {
+    const { roles } = this;
+    const guids = new Set<string>(roles.pinned);
+    for (const guid of [roles.selected, roles.target, roles.targetsTarget, this.hoveredGuid]) {
+      if (guid) guids.add(guid);
     }
-    if (!this.label) {
+    return guids;
+  }
+
+  // Nameplates: name, health, power and cast, live, at a fixed screen size.
+  private updatePlates() {
+    const wanted = this.plateGuids();
+    for (const guid of [...this.plates.keys()]) {
+      const object = this.units.get(guid);
+      if (!wanted.has(guid) || !object || !object.group.visible) this.removePlate(guid);
+    }
+    for (const guid of wanted) {
+      const object = this.units.get(guid);
+      if (object?.group.visible) this.updatePlate(guid, object);
+    }
+  }
+
+  private updatePlate(guid: string, object: UnitObject) {
+    let plate = this.plates.get(guid);
+    if (!plate) {
       const canvas = document.createElement("canvas");
       const texture = new THREE.CanvasTexture(canvas);
       texture.colorSpace = THREE.SRGBColorSpace;
       const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true }));
       sprite.center.set(0.5, 0);
-      sprite.renderOrder = 10;
       this.scene.add(sprite);
-      this.label = { sprite, canvas, key: "" };
+      plate = { sprite, canvas, key: "" };
+      this.plates.set(guid, plate);
     }
-    const label = this.label;
+    // The hovered unit's plate draws over the others.
+    plate.sprite.renderOrder = guid === this.hoveredGuid ? 11 : 10;
     const info = this.plateInfo(guid, object);
     const size = unitPlateSize(info);
     // Redraw only when something it shows changes (to the percent).
     const key = JSON.stringify(info, (_key, value: unknown) => (typeof value === "number" ? Math.round(value * 100) / 100 : value));
-    if (key !== label.key) {
-      label.key = key;
-      if (label.canvas.width !== size.width * UNIT_PLATE.scale || label.canvas.height !== size.height * UNIT_PLATE.scale) {
-        label.canvas.width = size.width * UNIT_PLATE.scale;
-        label.canvas.height = size.height * UNIT_PLATE.scale;
-        label.sprite.material.map?.dispose();
-        const texture = new THREE.CanvasTexture(label.canvas);
+    if (key !== plate.key) {
+      plate.key = key;
+      if (plate.canvas.width !== size.width * UNIT_PLATE.scale || plate.canvas.height !== size.height * UNIT_PLATE.scale) {
+        plate.canvas.width = size.width * UNIT_PLATE.scale;
+        plate.canvas.height = size.height * UNIT_PLATE.scale;
+        plate.sprite.material.map?.dispose();
+        const texture = new THREE.CanvasTexture(plate.canvas);
         texture.colorSpace = THREE.SRGBColorSpace;
-        label.sprite.material.map = texture;
-        label.sprite.material.needsUpdate = true;
+        plate.sprite.material.map = texture;
+        plate.sprite.material.needsUpdate = true;
       }
-      drawUnitPlate(label.canvas.getContext("2d")!, info);
-      label.sprite.material.map!.needsUpdate = true;
+      drawUnitPlate(plate.canvas.getContext("2d")!, info);
+      plate.sprite.material.map!.needsUpdate = true;
     }
     // Above the unit's cast icons while it has any.
     const iconTop = this.castIconTops.get(guid);
     const height = iconTop !== undefined ? iconTop + CAST_ICON_TOP_GAP : object.labelHeight;
     const { position } = object.group;
-    label.sprite.position.set(position.x, position.y + height * this.scaleOf(object), position.z);
+    plate.sprite.position.set(position.x, position.y + height * this.scaleOf(object), position.z);
     // A fixed size on screen, like a game's nameplate, however close the camera is.
     const viewportHeight = this.renderer.domElement.clientHeight || 1;
-    const worldPerPixel = (2 * this.camera.position.distanceTo(label.sprite.position) * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)) / viewportHeight;
-    label.sprite.scale.set(size.width * PLATE_SCREEN_SCALE * worldPerPixel, size.height * PLATE_SCREEN_SCALE * worldPerPixel, 1);
+    const worldPerPixel = (2 * this.camera.position.distanceTo(plate.sprite.position) * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)) / viewportHeight;
+    plate.sprite.scale.set(size.width * PLATE_SCREEN_SCALE * worldPerPixel, size.height * PLATE_SCREEN_SCALE * worldPerPixel, 1);
   }
 
-  // What the hovered unit's nameplate shows, from what the scene already has.
+  // What a unit's nameplate shows, from what the scene already has.
   private plateInfo(guid: string, object: UnitObject): UnitPlateInfo {
     const health = object.healthFraction ?? (object.health && object.health.max > 0 ? object.health.current / object.health.max : null);
     const cast = this.unitCasts.get(guid);
@@ -4339,12 +4343,13 @@ export class MapScene3D {
     };
   }
 
-  private clearLabel() {
-    if (!this.label) return;
-    this.scene.remove(this.label.sprite);
-    this.label.sprite.material.map?.dispose();
-    this.label.sprite.material.dispose();
-    this.label = null;
+  private removePlate(guid: string) {
+    const plate = this.plates.get(guid);
+    if (!plate) return;
+    this.scene.remove(plate.sprite);
+    plate.sprite.material.map?.dispose();
+    plate.sprite.material.dispose();
+    this.plates.delete(guid);
   }
 
   private readonly handlePointerMove = (event: PointerEvent) => {
@@ -4401,7 +4406,7 @@ export class MapScene3D {
     if (guid === this.hoveredGuid) return;
     this.hoveredGuid = guid;
     this.updateCursor();
-    this.updateLabel();
+    this.updatePlates();
     this.requestRender();
   };
 
@@ -4549,7 +4554,7 @@ export class MapScene3D {
     this.requestRender();
     if (!this.hoveredGuid) return;
     this.hoveredGuid = null;
-    this.updateLabel();
+    this.updatePlates();
     this.requestRender();
   };
 
@@ -4710,12 +4715,6 @@ export class MapScene3D {
     this.requestRender();
   }
 
-  /** The live value drawn as a column above each token. */
-  setAboveDisc(mode: AboveDiscMode) {
-    this.aboveDisc = mode;
-    this.requestRender();
-  }
-
   /** The target frames' units: halos for the selected chain and pins, and the chain's target lines. */
   setUnitRoles(roles: MapUnitRoles) {
     this.roles = roles;
@@ -4836,14 +4835,13 @@ export class MapScene3D {
     return moving;
   }
 
-  // The token parts that follow the replay: cast arcs, the column above the
-  // disc, halos for the selected chain and pins, the boss sigils' turn, and
+  // The token parts that follow the replay: cast arcs, halos for the
+  // selected chain and pins, the boss sigils' turn, and
   // the chain's target lines.
   private updateTokens(now: number) {
     const dt = this.tokenAt ? Math.min(KEY_MAX_STEP_S, (now - this.tokenAt) / 1000) : 0;
     this.tokenAt = now;
     const { roles } = this;
-    const cameraYaw = this.cameraYaw();
     for (const [guid, object] of this.units) {
       const { token } = object;
       const cast = object.dead ? undefined : this.unitCasts.get(guid);
@@ -4856,21 +4854,6 @@ export class MapScene3D {
           token.arc.material.needsUpdate = true;
         }
         token.arc.material.color.copy(castColor);
-      }
-      // The columns, over players only: health (green to red) and, beside
-      // it, thinner and shorter, power in its raid-frame colour. Casts show
-      // as the arc.
-      const columns = !object.dead && this.aboveDisc === "health" && object.kind === "player";
-      const health = columns ? object.healthFraction : null;
-      const power = columns ? object.powerLevel : null;
-      token.columns.visible = health !== null || power !== null;
-      if (token.columns.visible) {
-        // Side by side across the view: the pair turns with the camera.
-        token.columns.rotation.y = cameraYaw - object.group.rotation.y;
-        fillColumn(token.column, token.columnTrack, health);
-        if (health !== null) token.column.material.color.setStyle(healthBarColor(health));
-        fillColumn(token.power, token.powerTrack, power?.fraction ?? null);
-        if (power) token.power.material.color.set(power.color);
       }
       const kind: HaloKind | null = guid === roles.selected ? "selected"
         : guid === roles.target ? "target"
@@ -5558,8 +5541,8 @@ export class MapScene3D {
     this.updateBars();
     this.updateEffectHover();
     this.emitCompassYaw();
-    // The nameplate keeps its screen size as the camera moves.
-    if (this.hoveredGuid) this.updateLabel();
+    // Nameplates keep their screen size as the camera moves.
+    this.updatePlates();
     this.renderer.render(this.scene, this.camera);
     this.emitPresence();
     return animating;

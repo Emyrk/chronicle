@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { WowMapInstance, WowMapManifest } from "@/pages/Technical/mapGallery";
-import type { MapEncounterPositions, MapPositionSample } from "./map.processor";
+import type { MapEncounterPositions, MapHealthSample, MapPositionSample } from "./map.processor";
 import { createEncounterEffects } from "./replayEffects";
 import {
   AUTO_FIT_MIN_SPAN_YARDS,
@@ -178,26 +178,48 @@ describe("map replay model", () => {
     expect(latestHealthAt(health, 150)).toBe(health[0]);
   });
 
-  it("keeps bars for bosses and selected players and caps recently damaged units", () => {
+  it("keeps bars for bosses and caps recently damaged enemies", () => {
     const sample = (timestampMs: number) => [{ timestampMs, current: 500, max: 1000, absorb: 0 }];
     const healthByUnit = new Map([
       ["boss", sample(0)],
-      ["selected", sample(0)],
       ["idle", sample(0)],
       ["future", sample(20_000)],
-      ...Array.from({ length: 60 }, (_, index) => [`p${index}`, sample(9_000 + index)] as const),
+      ...Array.from({ length: 60 }, (_, index) => [`e${index}`, sample(9_000 + index)] as const),
     ]);
-    const guids = ["idle", "future", ...Array.from({ length: 60 }, (_, index) => `p${index}`), "selected", "boss"];
-    const bars = selectHealthBars(guids, healthByUnit, 10_000, new Set(["boss"]), new Set(["selected"]));
+    const guids = ["idle", "future", ...Array.from({ length: 60 }, (_, index) => `e${index}`), "boss"];
+    const bars = selectHealthBars(guids, healthByUnit, 10_000, new Set(["boss"]));
     expect(bars.size).toBe(MAX_HEALTH_BARS);
     expect(bars.has("boss")).toBe(true);
-    expect(bars.has("selected")).toBe(true);
     // Unchanged for longer than RECENT_HEALTH_MS, or no sample yet.
     expect(bars.has("idle")).toBe(false);
     expect(bars.has("future")).toBe(false);
-    // The most recently damaged units win the remaining slots.
-    expect(bars.has("p59")).toBe(true);
-    expect(bars.has("p0")).toBe(false);
+    // The most recently damaged enemies win the remaining slots.
+    expect(bars.has("e59")).toBe(true);
+    expect(bars.has("e0")).toBe(false);
+  });
+
+  it("bars every player except those at full health and mana, outside the enemy cap", () => {
+    const health = (current: number, power?: { power: number; powerType: string }): MapHealthSample[] =>
+      [{ timestampMs: 0, current, max: 1000, absorb: 0, ...(power ? { ...power, maxPower: 1000 } : {}) }];
+    const healthByUnit = new Map<string, MapHealthSample[]>([
+      ["full", health(1000)],
+      ["full-mana", health(1000, { power: 1000, powerType: "mana" })],
+      ["mana-down", health(1000, { power: 990, powerType: "mana" })],
+      ["no-rage", health(1000, { power: 0, powerType: "rage" })],
+      ["scratched", health(999)],
+      ...Array.from({ length: 60 }, (_, index): [string, MapHealthSample[]] => [`e${index}`, [{ timestampMs: 9_000, current: 500, max: 1000, absorb: 0 }]]),
+    ]);
+    const players = ["full", "full-mana", "mana-down", "no-rage", "scratched"];
+    const enemies = Array.from({ length: 60 }, (_, index) => `e${index}`);
+    const bars = selectHealthBars([...players, ...enemies], healthByUnit, 10_000, new Set(), new Set(players));
+    // Long untouched, but not full.
+    expect(bars.has("mana-down")).toBe(true);
+    expect(bars.has("scratched")).toBe(true);
+    // Full health and mana; rage and energy don't count.
+    expect(bars.has("full")).toBe(false);
+    expect(bars.has("full-mana")).toBe(false);
+    expect(bars.has("no-rage")).toBe(false);
+    expect(bars.size).toBe(2 + MAX_HEALTH_BARS);
   });
 
   it("colours health bars green to amber to red", () => {

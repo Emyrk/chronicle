@@ -178,7 +178,7 @@ function MapMarker({ marker, viewport }: { marker: MapSceneMarker; viewport: Map
         {marker.kind === "pet" && <PawPrint className="absolute -bottom-1.5 -right-1.5 h-2.5 w-2.5 rounded-full bg-black/80 p-0.5 text-cyan-200" />}
         {marker.kind === "hostile" && <Skull className="absolute -bottom-1.5 -right-1.5 h-2.5 w-2.5 rounded-full bg-black/80 p-0.5 text-rose-200" />}
       </div>
-      {marker.health && <HealthBar health={marker.health} />}
+      {marker.bar && marker.health && <HealthBar health={marker.health} />}
       <span className="pointer-events-none absolute left-1/2 top-full mt-2 hidden -translate-x-1/2 whitespace-nowrap rounded bg-black/85 px-1.5 py-0.5 text-[9px] font-medium text-white shadow-lg group-hover:block">
         {marker.name}
       </span>

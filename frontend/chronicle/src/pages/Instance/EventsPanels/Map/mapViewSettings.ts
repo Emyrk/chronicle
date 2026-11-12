@@ -1,5 +1,4 @@
 import { useCallback, useState } from "react";
-import type { AboveDiscMode } from "./MapScene3D";
 import { DEFAULT_EFFECT_OPTIONS, MAX_EFFECT_PRIMITIVES, type CastIconMode } from "./replayEffects";
 
 /** The 3D map's display settings, set from the map's settings overlay and kept in local storage. */
@@ -14,8 +13,6 @@ export interface EffectSettings {
   /** Legacy boolean from before castMode; false migrates to "off". */
   casts?: boolean;
   castMode: CastIconMode;
-  /** The live value drawn as a column above each player's token. */
-  aboveDisc: AboveDiscMode;
   /** Seconds of movement trail behind each unit; 0 for none. */
   trailSeconds: number;
   /** Size of units on the 3D map, as a percentage of their normal size. */
@@ -29,8 +26,6 @@ export interface EffectSettings {
 }
 
 export const EFFECTS_STORAGE_KEY = "chronicle.map.effects3d";
-/** One-time rollout marker: existing users see the new health-column default once, then their choice is respected. */
-export const ABOVE_DISC_HEALTH_DEFAULT_STORAGE_KEY = "chronicle.map.effects3d.aboveDiscHealthDefault";
 export const MIN_CHIP_SCALE_PERCENT = 15;
 export const MAX_CHIP_SCALE_PERCENT = 200;
 export const CHIP_SCALE_STEP_PERCENT = 5;
@@ -44,18 +39,12 @@ export const DEFAULT_EFFECT_SETTINGS: EffectSettings = {
   maxEffects: MAX_EFFECT_PRIMITIVES,
   bars: true,
   castMode: "selected",
-  aboveDisc: "health",
   trailSeconds: 0,
   chipScalePercent: 100,
   gameModelsOnly: false,
   alignmentOverlay: false,
   showHiddenUnits: false,
 };
-
-export const ABOVE_DISC_MODES: { value: AboveDiscMode; label: string; title: string }[] = [
-  { value: "none", label: "None", title: "Nothing above the tokens" },
-  { value: "health", label: "Health", title: "A column as tall as each player's health, green to red, with its power (mana, rage, energy) in a thinner one beside it" },
-];
 
 export const CAST_MODES: { value: CastIconMode; label: string; title: string }[] = [
   { value: "off", label: "Off", title: "No cast icons" },
@@ -72,7 +61,6 @@ export const DENSITY_OPTIONS = [16, 32, MAX_EFFECT_PRIMITIVES];
 
 export function readStoredEffectSettings(): EffectSettings {
   try {
-    const applyHealthDefault = localStorage.getItem(ABOVE_DISC_HEALTH_DEFAULT_STORAGE_KEY) !== "1";
     let stored: Partial<EffectSettings> = {};
     try {
       stored = JSON.parse(localStorage.getItem(EFFECTS_STORAGE_KEY) ?? "{}") as Partial<EffectSettings>;
@@ -84,17 +72,11 @@ export function readStoredEffectSettings(): EffectSettings {
     if (!stored.castMode && stored.casts === false) settings.castMode = "off";
     if (!CAST_MODES.some((mode) => mode.value === settings.castMode)) settings.castMode = "selected";
     if (!DENSITY_OPTIONS.includes(settings.maxEffects)) settings.maxEffects = MAX_EFFECT_PRIMITIVES;
-    if (!ABOVE_DISC_MODES.some((mode) => mode.value === settings.aboveDisc)) settings.aboveDisc = DEFAULT_EFFECT_SETTINGS.aboveDisc;
-    if (applyHealthDefault) settings.aboveDisc = "health";
     if (!TRAIL_OPTIONS.some((option) => option.value === settings.trailSeconds)) settings.trailSeconds = DEFAULT_EFFECT_SETTINGS.trailSeconds;
     if (typeof stored.gameModelsOnly !== "boolean") settings.gameModelsOnly = DEFAULT_EFFECT_SETTINGS.gameModelsOnly;
     settings.chipScalePercent = typeof settings.chipScalePercent === "number" && Number.isFinite(settings.chipScalePercent)
       ? Math.min(MAX_CHIP_SCALE_PERCENT, Math.max(MIN_CHIP_SCALE_PERCENT, settings.chipScalePercent))
       : DEFAULT_EFFECT_SETTINGS.chipScalePercent;
-    if (applyHealthDefault) {
-      localStorage.setItem(EFFECTS_STORAGE_KEY, JSON.stringify(settings));
-      localStorage.setItem(ABOVE_DISC_HEALTH_DEFAULT_STORAGE_KEY, "1");
-    }
     return settings;
   } catch {
     return DEFAULT_EFFECT_SETTINGS;

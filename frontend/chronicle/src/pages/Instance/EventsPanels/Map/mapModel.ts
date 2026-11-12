@@ -226,10 +226,14 @@ export function latestPositionAt(
   return index >= 0 ? positions[index] : null;
 }
 
-/** Most health bars drawn at once. */
+/** Most enemy (and other non-player) health bars drawn at once. */
 export const MAX_HEALTH_BARS = 48;
-/** Units whose health changed this recently get a bar. */
+/** Most player health bars drawn at once: more than a raid. */
+export const MAX_PLAYER_HEALTH_BARS = 80;
+/** Non-player units whose health changed this recently get a bar. */
 export const RECENT_HEALTH_MS = 3_000;
+/** Players' bars draw at this scale of a full-size bar. */
+export const PLAYER_BAR_SCALE = 0.6;
 
 const HEALTH_RED = [239, 68, 68];
 const HEALTH_AMBER = [245, 158, 11];
@@ -251,28 +255,37 @@ export function latestHealthAt<T extends { timestampMs: number }>(samples: reado
 }
 
 /**
- * Declutters health bars: bosses, then selected players, then units whose
- * health changed in the last RECENT_HEALTH_MS (most recent first), up to
- * MAX_HEALTH_BARS. Units without a sample at or before the cursor get none.
- * Returns each chosen unit's sample at the cursor.
+ * Picks the units with a health bar. Every player gets one unless at full
+ * health and, for mana users, full mana (hurt players first, up to
+ * MAX_PLAYER_HEALTH_BARS). Other units, up to MAX_HEALTH_BARS: bosses, then
+ * those whose health changed in the last RECENT_HEALTH_MS (most recent first).
+ * Units without a sample at or before the cursor get none. Returns each
+ * chosen unit's sample at the cursor.
  */
 export function selectHealthBars(
   guids: readonly string[],
   healthByUnit: Map<string, MapHealthSample[]>,
   cursorMs: number,
   bossGuids: ReadonlySet<string>,
-  selectedGuids: ReadonlySet<string>,
+  playerGuids: ReadonlySet<string> = new Set(),
 ): Map<string, MapHealthSample> {
-  const candidates = guids.flatMap((guid) => {
+  const players: { guid: string; sample: MapHealthSample; fraction: number }[] = [];
+  const others: { guid: string; sample: MapHealthSample; priority: number }[] = [];
+  for (const guid of guids) {
     const sample = latestHealthAt(healthByUnit.get(guid) ?? [], cursorMs);
-    if (!sample) return [];
-    const priority = bossGuids.has(guid) ? 0
-      : selectedGuids.has(guid) ? 1
-      : cursorMs - sample.timestampMs <= RECENT_HEALTH_MS ? 2 : -1;
-    return priority < 0 ? [] : [{ guid, sample, priority }];
-  });
-  candidates.sort((left, right) => left.priority - right.priority || right.sample.timestampMs - left.sample.timestampMs);
-  return new Map(candidates.slice(0, MAX_HEALTH_BARS).map(({ guid, sample }) => [guid, sample]));
+    if (!sample) continue;
+    if (playerGuids.has(guid)) {
+      const fullHealth = sample.current >= sample.max;
+      const fullMana = sample.powerType !== "mana" || (sample.power ?? 0) >= (sample.maxPower ?? 0);
+      if (!fullHealth || !fullMana) players.push({ guid, sample, fraction: sample.max > 0 ? sample.current / sample.max : 0 });
+      continue;
+    }
+    const priority = bossGuids.has(guid) ? 0 : cursorMs - sample.timestampMs <= RECENT_HEALTH_MS ? 1 : -1;
+    if (priority >= 0) others.push({ guid, sample, priority });
+  }
+  players.sort((left, right) => left.fraction - right.fraction);
+  others.sort((left, right) => left.priority - right.priority || right.sample.timestampMs - left.sample.timestampMs);
+  return new Map([...players.slice(0, MAX_PLAYER_HEALTH_BARS), ...others.slice(0, MAX_HEALTH_BARS)].map(({ guid, sample }) => [guid, sample]));
 }
 
 function latestPositionIndex(positions: readonly { timestampMs: number }[], timestampMs: number): number {

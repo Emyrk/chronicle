@@ -3,9 +3,9 @@ import { MAJOR_COOLDOWN_MIN_MS } from "@/api/cooldownSpells";
 import { AIRBORNE_YARDS } from "@/pages/Instance/EventsPanels/Map/dungeonMeshes";
 import { MAP_CONTROL_KEYBINDS } from "@/pages/Instance/EventsPanels/Map/mapControls";
 import { DEAD_ENEMY_FRAME_FADE_MS } from "@/pages/Instance/EventsPanels/Map/mapDeathVisibility";
-import { healthBarColor, MAX_HEALTH_BARS, RECENT_HEALTH_MS } from "@/pages/Instance/EventsPanels/Map/mapModel";
+import { healthBarColor, MAX_HEALTH_BARS, PLAYER_BAR_SCALE, RECENT_HEALTH_MS } from "@/pages/Instance/EventsPanels/Map/mapModel";
 import { BAR_ABSORB, BAR_BACKGROUND, BAR_DEAD, BAR_HEAL, COOLDOWN_ICON_SCALE, hexCss, WALK_AVATAR_COLOR } from "@/pages/Instance/EventsPanels/Map/mapPalette";
-import { ABOVE_DISC_MODES, CAST_MODES, TRAIL_OPTIONS } from "@/pages/Instance/EventsPanels/Map/mapViewSettings";
+import { CAST_MODES, TRAIL_OPTIONS } from "@/pages/Instance/EventsPanels/Map/mapViewSettings";
 import { HEAL_COLOR, HEAL_CRIT_COLOR, OVERHEAL_COLOR, SCHOOL_TOKENS, schoolColor } from "@/pages/Instance/EventsPanels/Map/replayEffects";
 import { DASH_ART_SIZE, DISPEL_COLORS, DISPEL_ORDER, HALO_COLORS, OWNER_LINE, TARGET_LINE, TOKEN_LAYOUT, TRAIL_LINE, type HaloKind } from "@/pages/Instance/EventsPanels/Map/unitTokenArt";
 import { participantColor } from "@/pages/Instance/liveSessionProtocol";
@@ -145,15 +145,22 @@ function Lines({ children }: { children: ReactNode }) {
   return <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="pointer-events-none absolute inset-0 h-full w-full overflow-visible">{children}</svg>;
 }
 
-function HealthBar({ fraction, healed = 0, absorb = 0, dead = false }: { fraction: number; healed?: number; absorb?: number; dead?: boolean }) {
+function HealthBar({ fraction, healed = 0, absorb = 0, dead = false, power }: { fraction: number; healed?: number; absorb?: number; dead?: boolean; power?: { fraction: number; color: string } }) {
   return (
-    <div className="relative h-2.5 w-28 overflow-hidden rounded-[2px] border border-black" style={{ background: hexCss(dead ? BAR_DEAD : BAR_BACKGROUND) }}>
-      {!dead && (
-        <>
-          <div className="absolute inset-y-0 left-0" style={{ width: `${fraction * 100}%`, background: healthBarColor(fraction) }} />
-          {healed > 0 && <div className="absolute inset-y-0" style={{ left: `${(fraction - healed) * 100}%`, width: `${healed * 100}%`, background: hexCss(BAR_HEAL) }} />}
-          {absorb > 0 && <div className="absolute inset-y-0" style={{ left: `${fraction * 100}%`, width: `${absorb * 100}%`, background: hexCss(BAR_ABSORB) }} />}
-        </>
+    <div className="w-28 overflow-hidden rounded-[2px] border border-black" style={{ background: hexCss(dead ? BAR_DEAD : BAR_BACKGROUND) }}>
+      <div className="relative h-2.5">
+        {!dead && (
+          <>
+            <div className="absolute inset-y-0 left-0" style={{ width: `${fraction * 100}%`, background: healthBarColor(fraction) }} />
+            {healed > 0 && <div className="absolute inset-y-0" style={{ left: `${(fraction - healed) * 100}%`, width: `${healed * 100}%`, background: hexCss(BAR_HEAL) }} />}
+            {absorb > 0 && <div className="absolute inset-y-0" style={{ left: `${fraction * 100}%`, width: `${absorb * 100}%`, background: hexCss(BAR_ABSORB) }} />}
+          </>
+        )}
+      </div>
+      {!dead && power && (
+        <div className="relative mt-px h-1">
+          <div className="absolute inset-y-0 left-0" style={{ width: `${power.fraction * 100}%`, background: power.color }} />
+        </div>
       )}
     </div>
   );
@@ -162,7 +169,6 @@ function HealthBar({ fraction, healed = 0, absorb = 0, dead = false }: { fractio
 const MAGE = { ring: "var(--color-class-mage)", icon: "/c/icons/spec_mage_frost.png" };
 const PALADIN = { ring: "var(--color-class-paladin)", icon: "/c/icons/spec_paladin_holy.png" };
 const SHAMAN = { ring: "var(--color-class-shaman)", icon: "/c/icons/spec_shaman_restoration.png" };
-const WARRIOR = { ring: "var(--color-class-warrior)", icon: "/c/icons/class_warrior.png" };
 const HUNTER = { ring: "var(--color-class-hunter)", icon: "/c/icons/spec_hunter_beastmastery.png" };
 
 export function MapLegend() {
@@ -232,7 +238,7 @@ export function MapLegend() {
           <Card title="Muted" demo={<Ground><At x={35} y={55}><Token {...MAGE} /></At><At x={68} y={55}><Token {...PALADIN} muted /></At></Ground>}>
             While players are selected in the page&apos;s filter, everyone else fades to {Math.round(TOKEN_LAYOUT.mutedOpacity * 100)}%.
           </Card>
-          <Card title="Hover" demo={
+          <Card title="Nameplate" demo={
             <Ground height={150}>
               <At x={50} y={80}><Token {...SHAMAN} /></At>
               <At x={50} y={58}>
@@ -248,7 +254,7 @@ export function MapLegend() {
               </At>
             </Ground>
           }>
-            Hovering a unit shows its nameplate: the name (in red for enemies, with the owner for a pet or totem), health with its percentage and amount, power, and a cast bar while it casts (or Dead).
+            The hovered unit, the selected unit, its target, their target and pinned units show a nameplate: the name (in red for enemies, with the owner for a pet or totem), health with its percentage and amount, power, and a cast bar while it casts (or Dead). It takes the place of the unit's health bar.
           </Card>
         </Grid>
       </Section>
@@ -342,27 +348,6 @@ export function MapLegend() {
         </Grid>
       </Section>
 
-      <Section id="above" title="Above the token" note={<>Optionally, health rises as a column from every player's token, with power (mana, rage, energy) in a thinner, shorter one beside it (off by default). Turn it on in Map settings → Units → <em>Above the token</em>.</>}>
-        <Grid min={240}>
-          {ABOVE_DISC_MODES.map((mode) => (
-            <Card key={mode.value} title={mode.label} demo={
-              <Ground height={150}>
-                {[0.92, 0.54, 0.18].map((value, index) => (
-                  <At key={value} x={22 + index * 28} y={82}>
-                    <Token
-                      {...[PALADIN, MAGE, WARRIOR][index]}
-                      column={mode.value === "health" ? { value, color: healthBarColor(value), power: { value: [0.35, 0.8, 0.6][index], color: POWER_COLORS[["mana", "mana", "rage"][index]] } } : null}
-                    />
-                  </At>
-                ))}
-              </Ground>
-            }>
-              {mode.title}.
-            </Card>
-          ))}
-        </Grid>
-      </Section>
-
       <Section id="effects" title="Combat effects" note={`Short animations replay what happened at each moment of the fight (shown here at 1/${DEMO_SLOWDOWN} speed; the times are the map's). Turn them off, or limit them to selected players, in Map settings → Combat.`}>
         <Grid>
           <Card title="Spell" timing={ms(EFFECT_TIMINGS.bolt)} demo={<BoltDemo seconds={seconds} color={frost} />}>
@@ -426,13 +411,15 @@ export function MapLegend() {
         </Grid>
       </Section>
 
-      <Section id="bars" title="Health bars" note={`Over bosses, selected players and units whose health changed in the last ${ms(RECENT_HEALTH_MS)}, up to ${MAX_HEALTH_BARS} at once. Toggle them in Map settings → Units.`}>
+      <Section id="bars" title="Health bars" note={`Every player has a smaller bar unless at full health and (for mana users) full mana. Enemies, up to ${MAX_HEALTH_BARS} at once: bosses and those whose health changed in the last ${ms(RECENT_HEALTH_MS)}. Units with a nameplate show their health there instead. Toggle them in Map settings → Units.`}>
         <div className="grid gap-3 sm:grid-cols-2">
           {[
             { label: "Healthy", bar: <HealthBar fraction={0.95} /> },
             { label: "Hurt: the fill runs green to amber to red", bar: <HealthBar fraction={0.42} /> },
             { label: "Just healed: the pale chunk at the end of the fill", bar: <HealthBar fraction={0.7} healed={0.15} /> },
             { label: "Absorb shield, after the fill", bar: <HealthBar fraction={0.6} absorb={0.2} /> },
+            { label: "Power under the health: mana, rage or energy in its raid-frame colour", bar: <HealthBar fraction={0.8} power={{ fraction: 0.2, color: POWER_COLORS.mana }} /> },
+            { label: `A player's bar, at ${PLAYER_BAR_SCALE * 100}% size`, bar: <div className="w-28"><div style={{ transform: `scale(${PLAYER_BAR_SCALE})`, transformOrigin: "left center" }}><HealthBar fraction={0.9} power={{ fraction: 0.8, color: POWER_COLORS.mana }} /></div></div> },
             { label: "Dead", bar: <HealthBar fraction={0} dead /> },
           ].map((row) => (
             <div key={row.label} className="flex items-center gap-3 text-sm">{row.bar}<span className="text-muted-foreground">{row.label}</span></div>

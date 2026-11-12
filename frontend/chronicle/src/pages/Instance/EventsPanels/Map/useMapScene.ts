@@ -138,8 +138,10 @@ export interface MapSceneMarker {
   kind: MapMarkerKind;
   muted: boolean;
   name: string;
-  /** Health bar at the cursor, or null when the unit has none or it was decluttered. */
+  /** Health at the cursor for every unit with health data, or null. */
   health: MapUnitHealth | null;
+  /** The declutter (selectHealthBars) gives this unit a health bar (the 3D view moves it into the nameplate for units that have one). */
+  bar: boolean;
   /** Creature entry used by the shared miniature registry (hostiles, pets, totems, etc.). */
   entry?: number;
   /** The 3D token's icon: a player's class icon, or null. */
@@ -150,7 +152,7 @@ export interface MapSceneMarker {
   owner?: string;
   /** Spell ids of the debuffs on this player at the cursor (the map tints it by their dispel type). */
   debuffs?: number[];
-  /** Power at the cursor (0-1) and its raid-frame colour, for the column beside health; absent without power. */
+  /** Power at the cursor (0-1) and its raid-frame colour, for the strip under the health bar; absent without power. */
   power?: { fraction: number; color: string };
 }
 
@@ -545,13 +547,15 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
       muted: Boolean(player) && selectedPlayers.size > 0 && !selectedPlayers.has(guid),
       name: player?.name ?? metadata?.name ?? guid,
       health: null,
+      bar: false,
       entry: metadata?.entry,
       ...(kind === "pet" && ownerGuid ? { owner: ownerGuid } : {}),
       icon: player ? `/c/icons/class_${player.class.toLowerCase().replace(/\s+/g, "")}.png` : null,
       healthFraction: null,
     }];
   });
-  const bars = selectHealthBars(markers.map((marker) => marker.guid), encounter.healthByUnit, cursorMs, bossGuids, selectedPlayers);
+  const playerGuids = new Set(markers.filter((marker) => marker.kind === "player").map((marker) => marker.guid));
+  const bars = selectHealthBars(markers.map((marker) => marker.guid), encounter.healthByUnit, cursorMs, bossGuids, playerGuids);
   for (const marker of markers) {
     const debuffs = encounter.debuffsByUnit.get(marker.guid);
     if (debuffs) marker.debuffs = activeDebuffsAt(debuffs, cursorMs);
@@ -560,12 +564,12 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
     if (latest?.maxPower && latest.power !== undefined) {
       marker.power = { fraction: Math.min(1, Math.max(0, latest.power / latest.maxPower)), color: POWER_COLORS[latest.powerType ?? ""] ?? "#767676" };
     }
-    const sample = bars.get(marker.guid);
-    if (sample) {
+    marker.bar = bars.has(marker.guid);
+    if (latest) {
       marker.health = {
-        current: sample.current,
-        max: sample.max,
-        absorb: sample.absorb,
+        current: latest.current,
+        max: latest.max,
+        absorb: latest.absorb,
         dead: isDeadAt(encounter.effects, marker.guid, cursorMs),
         healGain: deriveRecentHealGain(encounter.effects, marker.guid, cursorMs),
       };

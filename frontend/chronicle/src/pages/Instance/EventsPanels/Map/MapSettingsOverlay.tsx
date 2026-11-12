@@ -5,7 +5,6 @@ import { Switch } from "@/components/ui/Switch/Switch";
 import { cn } from "@/lib/utils";
 import { DEFAULT_AD_STRAFE, MAP_CONTROL_KEYBINDS } from "./mapControls";
 import {
-  ABOVE_DISC_MODES,
   CAST_MODES,
   CHIP_SCALE_STEP_PERCENT,
   DEFAULT_EFFECT_SETTINGS,
@@ -60,7 +59,7 @@ interface SettingsTab {
 const TAB_STORAGE_KEY = "chronicle.map.settingsTab";
 
 // The effect settings each tab owns, for its reset and its changed marks.
-const UNIT_KEYS = ["chipScalePercent", "gameModelsOnly", "bars", "aboveDisc", "trailSeconds"] as const satisfies readonly (keyof EffectSettings)[];
+const UNIT_KEYS = ["chipScalePercent", "gameModelsOnly", "bars", "trailSeconds"] as const satisfies readonly (keyof EffectSettings)[];
 const COMBAT_KEYS = ["enabled", "heals", "overheal", "periodic", "castMode", "onlySelected", "maxEffects"] as const satisfies readonly (keyof EffectSettings)[];
 const WORLD_KEYS = ["alignmentOverlay"] as const satisfies readonly (keyof EffectSettings)[];
 const DEVELOPER_KEYS = ["showHiddenUnits"] as const satisfies readonly (keyof EffectSettings)[];
@@ -136,18 +135,10 @@ export function MapSettingsOverlay({
           />
           <Toggle
             label="Health bars"
-            detail="Over bosses, selected players and recently damaged units"
+            detail="Over bosses, your target, hurt or low-mana players and recently damaged units"
             checked={effectSettings.bars}
             changed={changed("bars")}
             onChange={(bars) => onEffectSettings({ bars })}
-          />
-          <Choice
-            label="Above the token"
-            detail="A live value as a column over each player"
-            value={effectSettings.aboveDisc}
-            options={ABOVE_DISC_MODES}
-            changed={changed("aboveDisc")}
-            onChange={(aboveDisc) => onEffectSettings({ aboveDisc })}
           />
           <Choice
             label="Movement trail"
