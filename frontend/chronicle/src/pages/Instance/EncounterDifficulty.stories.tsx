@@ -22,11 +22,48 @@ interface BossKill {
   name: string;
   duration: string;
   mode: Mode;
-  /** Ulduar tiered hard modes: short label shown in the row, e.g. "3 elders". */
-  tier?: string;
-  /** What triggered the hard mode, shown in the tooltip. */
+  /** Tiered hard modes: the count reached this kill (towers, elders, keepers). */
+  tier?: number;
+  /** What happened on this kill, shown in the tooltip. */
   detail?: string;
   wipe?: boolean;
+}
+
+/** Tiered hard modes are a count. `hardest` says which end of the scale is hardest. */
+interface HardModeScale {
+  unit: string;
+  units: string;
+  min: number;
+  max: number;
+  hardest: "max" | "min";
+}
+
+/** How each Ulduar hard mode is triggered, so the tooltip can teach it. */
+const ULDUAR_HARD_MODES: Record<string, { trigger: string; scale?: HardModeScale }> = {
+  "Flame Leviathan": {
+    trigger: "Leave the towers standing. Each tower buffs Leviathan.",
+    scale: { unit: "tower", units: "towers", min: 1, max: 4, hardest: "max" },
+  },
+  "XT-002 Deconstructor": { trigger: "Destroy the Heart during a heart phase. XT-002 heals and enrages." },
+  "Assembly of Iron": { trigger: "Kill Steelbreaker last, after Molgeim and Brundir." },
+  "Hodir": { trigger: "Kill Hodir before the Rare Cache shatters." },
+  "Thorim": { trigger: "Reach Thorim before Sif leaves, so she joins the fight." },
+  "Freya": {
+    trigger: "Leave the elders alive. Each one gives Freya an ability.",
+    scale: { unit: "elder", units: "elders", min: 1, max: 3, hardest: "max" },
+  },
+  "Mimiron": { trigger: "Press the big red button. The room fills with fire." },
+  "General Vezax": { trigger: "Let the Saronite Vapors form the Saronite Animus and kill it." },
+  "Yogg-Saron": {
+    trigger: "Accept less help from the keepers. Fewer keepers is harder.",
+    scale: { unit: "keeper", units: "keepers", min: 0, max: 3, hardest: "min" },
+  },
+};
+
+function tierLabel(kill: BossKill): string | undefined {
+  const scale = ULDUAR_HARD_MODES[kill.name]?.scale;
+  if (!scale || kill.tier === undefined) return undefined;
+  return `${kill.tier} ${kill.tier === 1 ? scale.unit : scale.units}`;
 }
 
 const ICC_25_MIXED: BossKill[] = [
@@ -46,7 +83,7 @@ const ICC_25_MIXED: BossKill[] = [
 ];
 
 const ULDUAR_25: BossKill[] = [
-  { name: "Flame Leviathan", duration: "3:55", mode: "hard", tier: "4 towers", detail: "All four towers left standing" },
+  { name: "Flame Leviathan", duration: "3:55", mode: "hard", tier: 4, detail: "All four towers left standing" },
   { name: "Ignis the Furnace Master", duration: "2:48", mode: "normal" },
   { name: "Razorscale", duration: "3:12", mode: "normal" },
   { name: "XT-002 Deconstructor", duration: "4:30", mode: "hard", detail: "Heart destroyed" },
@@ -55,13 +92,12 @@ const ULDUAR_25: BossKill[] = [
   { name: "Auriaya", duration: "2:20", mode: "normal" },
   { name: "Hodir", duration: "2:41", mode: "hard", detail: "Killed before the cache shattered" },
   { name: "Thorim", duration: "3:05", mode: "hard", detail: "Sif stayed for the fight" },
-  { name: "Freya", duration: "4:50", mode: "hard", tier: "2 elders", detail: "2 of 3 elders alive at pull" },
+  { name: "Freya", duration: "4:50", mode: "hard", tier: 2, detail: "2 of 3 elders alive at pull" },
   { name: "Mimiron", duration: "8:12", mode: "normal" },
   { name: "General Vezax", duration: "4:15", mode: "normal" },
-  { name: "Yogg-Saron", duration: "9:40", mode: "hard", tier: "1 keeper", detail: "1 keeper assisting" },
+  { name: "Yogg-Saron", duration: "9:40", mode: "hard", tier: 1, detail: "1 keeper assisting" },
 ];
 
-const MODE_LABEL: Record<Mode, string> = { normal: "Normal", heroic: "Heroic", hard: "Hard mode" };
 
 function KillIcon({ wipe }: { wipe?: boolean }) {
   return wipe
@@ -109,16 +145,74 @@ function HardModeChip({ tier, compact }: { tier?: string; compact?: boolean }) {
   );
 }
 
+/** Pips from easiest to hardest, filled up to this kill's tier. */
+function TierScale({ scale, tier }: { scale: HardModeScale; tier: number }) {
+  const steps = Array.from({ length: scale.max - scale.min + 1 }, (_, i) => scale.min + i);
+  // Order the pips easiest → hardest so "more filled" always means "harder".
+  const ordered = scale.hardest === "max" ? steps : [...steps].reverse();
+  const reached = ordered.indexOf(tier);
+  return (
+    <div className="mt-2">
+      <div className="flex gap-1">
+        {ordered.map((step, i) => (
+          <div key={step} className="flex flex-col items-center gap-0.5">
+            <span className={cn("h-1.5 w-6 rounded-full", i <= reached ? "bg-amber-500" : "bg-white/15")} />
+            <span className={cn("text-[10px] font-mono", step === tier ? "text-amber-300 font-bold" : "text-muted-foreground")}>
+              {step}
+            </span>
+          </div>
+        ))}
+      </div>
+      <div className="mt-0.5 flex justify-between text-[10px] text-muted-foreground">
+        <span>easier</span>
+        <span>hardest</span>
+      </div>
+    </div>
+  );
+}
+
+/** Tooltip body: what this kill was, and how the mode is triggered. */
+function ModeTooltipBody({ kill }: { kill: BossKill }) {
+  if (kill.mode === "heroic") {
+    return (
+      <div className="max-w-60 text-xs">
+        <div className="flex items-center gap-1.5 font-semibold text-purple-300">Heroic</div>
+        <p className="mt-1 text-muted-foreground">
+          Killed with Heroic difficulty on. ICC lets the raid toggle Heroic per boss, so one run can mix both.
+        </p>
+      </div>
+    );
+  }
+  const info = ULDUAR_HARD_MODES[kill.name];
+  const tier = tierLabel(kill);
+  return (
+    <div className="max-w-64 text-xs">
+      <div className="flex items-center gap-1.5 font-semibold text-amber-300">
+        <Flame className="h-3.5 w-3.5" /> Hard mode{tier && <span className="text-foreground">· {tier}</span>}
+      </div>
+      {kill.detail && <div className="mt-1 text-foreground">{kill.detail}</div>}
+      {info && (
+        <div className="mt-2 border-t border-white/10 pt-2">
+          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">How it's triggered</div>
+          <p className="text-muted-foreground">{info.trigger}</p>
+        </div>
+      )}
+      {info?.scale && kill.tier !== undefined && <TierScale scale={info.scale} tier={kill.tier} />}
+    </div>
+  );
+}
+
+/**
+ * Tooltip on the marker only: the real row already shows the kill-parse
+ * tooltip on hover, so the difficulty tooltip can't own the whole row.
+ */
 function ModeTooltip({ kill, children }: { kill: BossKill; children: ReactNode }) {
   if (kill.mode === "normal") return <>{children}</>;
   return (
     <Tooltip>
       <TooltipTrigger asChild>{children}</TooltipTrigger>
-      <TooltipContent side="right">
-        <div className="text-xs">
-          <div className="font-semibold">{MODE_LABEL[kill.mode]}</div>
-          {kill.detail && <div className="text-muted-foreground">{kill.detail}</div>}
-        </div>
+      <TooltipContent side="right" className="p-3">
+        <ModeTooltipBody kill={kill} />
       </TooltipContent>
     </Tooltip>
   );
@@ -129,34 +223,34 @@ function ModeTooltip({ kill, children }: { kill: BossKill; children: ReactNode }
 /** A: trailing chip. Reuses HeroicBadge ("H") for heroic; amber "HM" for hard mode, tier in the tooltip. */
 function ChipRow({ kill, selected }: { kill: BossKill; selected?: boolean }) {
   const marker = kill.mode === "heroic"
-    ? <HeroicBadge size="sm" />
+    ? <span className="inline-flex shrink-0 cursor-help"><HeroicBadge size="sm" /></span>
     : kill.mode === "hard"
-      ? <HardModeChip compact />
+      ? <span className="inline-flex shrink-0 cursor-help"><HardModeChip compact /></span>
       : null;
-  return <ModeTooltip kill={kill}><div><Row kill={kill} selected={selected} after={marker} /></div></ModeTooltip>;
+  return <Row kill={kill} selected={selected} after={marker && <ModeTooltip kill={kill}>{marker}</ModeTooltip>} />;
 }
 
 /** B: chip carries the tier for tiered hard modes ("2 elders"), plain "HM" otherwise. */
 function TierChipRow({ kill, selected }: { kill: BossKill; selected?: boolean }) {
   const marker = kill.mode === "heroic"
-    ? <HeroicBadge size="sm" />
+    ? <span className="inline-flex shrink-0 cursor-help"><HeroicBadge size="sm" /></span>
     : kill.mode === "hard"
-      ? <HardModeChip tier={kill.tier} />
+      ? <span className="inline-flex shrink-0 cursor-help"><HardModeChip tier={tierLabel(kill)} /></span>
       : null;
-  return <ModeTooltip kill={kill}><div><Row kill={kill} selected={selected} after={marker} /></div></ModeTooltip>;
+  return <Row kill={kill} selected={selected} after={marker && <ModeTooltip kill={kill}>{marker}</ModeTooltip>} />;
 }
 
 /** C: leading glyph only (no text), quietest option. Purple diamond = heroic, amber flame = hard mode. */
 function GlyphRow({ kill, selected }: { kill: BossKill; selected?: boolean }) {
   const glyph = kill.mode === "heroic"
-    ? <span className="h-2 w-2 shrink-0 rotate-45 bg-purple-500 shadow-[0_0_6px_rgba(168,85,247,0.8)]" />
+    ? <span className="h-2 w-2 shrink-0 cursor-help rotate-45 bg-purple-500 shadow-[0_0_6px_rgba(168,85,247,0.8)]" />
     : kill.mode === "hard"
-      ? <Flame className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+      ? <Flame className="h-3.5 w-3.5 shrink-0 cursor-help text-amber-500" />
       : <span className="w-2 shrink-0" />;
-  return <ModeTooltip kill={kill}><div><Row kill={kill} selected={selected} before={glyph} /></div></ModeTooltip>;
+  return <Row kill={kill} selected={selected} before={<ModeTooltip kill={kill}>{glyph}</ModeTooltip>} />;
 }
 
-/** D: tinted name only. Risk: purple also means a 75–94 parse in WoW parse colours. */
+/** D: tinted name only. Risk: purple also means a 75–94 parse in WoW parse colours. No marker to hover, so the name carries the tooltip. */
 function TintRow({ kill, selected }: { kill: BossKill; selected?: boolean }) {
   const nameClass = selected
     ? undefined
@@ -181,10 +275,55 @@ function HeaderSummary({ kills, maxPlayers }: { kills: BossKill[]; maxPlayers: n
         </span>
       )}
       {hard > 0 && (
-        <span className="inline-flex items-center gap-1 rounded border border-amber-400/40 bg-amber-600/30 px-2 py-0.5 text-xs font-bold text-amber-100">
-          <Flame className="h-3 w-3" /> {hard} hard mode{hard === 1 ? "" : "s"}
-        </span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="inline-flex cursor-help items-center gap-1 rounded border border-amber-400/40 bg-amber-600/30 px-2 py-0.5 text-xs font-bold text-amber-100">
+              <Flame className="h-3 w-3" /> {hard} hard mode{hard === 1 ? "" : "s"}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="p-3">
+            <HardModeList kills={final} />
+          </TooltipContent>
+        </Tooltip>
       )}
+    </div>
+  );
+}
+
+/** Header tooltip: every boss that has a hard mode, and whether this run did it. */
+function HardModeList({ kills }: { kills: BossKill[] }) {
+  const withHardMode = kills.filter((k) => ULDUAR_HARD_MODES[k.name]);
+  return (
+    <div className="w-60 text-xs">
+      <div className="mb-1.5 font-semibold">Hard modes this run</div>
+      <ul className="space-y-1">
+        {withHardMode.map((k) => (
+          <li key={k.name} className={cn("flex items-center gap-2", k.mode !== "hard" && "text-muted-foreground")}>
+            {k.mode === "hard"
+              ? <Flame className="h-3 w-3 shrink-0 text-amber-400" />
+              : <span className="h-3 w-3 shrink-0 text-center leading-3">–</span>}
+            <span className="flex-1 truncate">{k.name}</span>
+            <span className={cn("shrink-0", k.mode === "hard" && "text-amber-300")}>
+              {k.mode === "hard" ? tierLabel(k) ?? "Hard" : "Normal"}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** Every tooltip body laid out flat, for review without hovering. */
+function TooltipGallery({ kills }: { kills: BossKill[] }) {
+  const marked = kills.filter((k) => k.mode !== "normal" && !k.wipe);
+  return (
+    <div className="flex flex-wrap items-start gap-4">
+      <div className="rounded-md border bg-popover p-3 shadow-md"><HardModeList kills={kills.filter((k) => !k.wipe)} /></div>
+      {marked.map((k) => (
+        <div key={k.name} className="rounded-md border bg-popover p-3 shadow-md">
+          <ModeTooltipBody kill={k} />
+        </div>
+      ))}
     </div>
   );
 }
@@ -267,6 +406,12 @@ export const ICC25AllHeroic: Story = {
 /** Ulduar 25: per-boss hard modes, three of them tiered. */
 export const Ulduar25HardModes: Story = {
   args: { kills: ULDUAR_25, raid: "Ulduar", maxPlayers: 25 },
+};
+
+/** Every Ulduar hard mode tooltip (and the header's list) open at once, for copy and layout review. */
+export const UlduarTooltips: Story = {
+  args: { kills: ULDUAR_25, raid: "Ulduar", maxPlayers: 25 },
+  render: ({ kills }) => <TooltipGallery kills={kills} />,
 };
 
 /** Normal-only run: no markers anywhere, header unchanged. */
