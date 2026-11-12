@@ -984,6 +984,18 @@ type sqlcQuerier interface {
 	ListSidekickIssues(ctx context.Context, arg ListSidekickIssuesParams) ([]SidekickIssue, error)
 	ListSidekickOAuthGrantRequestIDs(ctx context.Context, sidekickID uuid.UUID) ([]string, error)
 	ListSidekickWoWDirectories(ctx context.Context, sidekickID uuid.UUID) ([]SidekickWowDirectory, error)
+	// Most recently seen characters whose latest sighting is a listed log.
+	// Walks idx_game_players_updated_at newest-first and stops at the limit.
+	ListSitemapCharacters(ctx context.Context, arg ListSitemapCharactersParams) ([]ListSitemapCharactersRow, error)
+	// Queries behind /sitemap.xml. Each is capped and scoped to one tenant's own
+	// servers: RLS on wow_server_realms limits rows to what the tenant can see, and
+	// the tenant_id match drops include_in_all servers whose pages are canonical
+	// on another host. A NULL tenant_id is the root site's untenanted servers.
+	// Guilds as the /guilds directory lists them, guilds with an edited page first.
+	ListSitemapGuilds(ctx context.Context, arg ListSitemapGuildsParams) ([]ListSitemapGuildsRow, error)
+	// Most recent listed, valid, finalized instance logs.
+	// Walks idx_log_instances_start_time newest-first and stops at the limit.
+	ListSitemapInstances(ctx context.Context, arg ListSitemapInstancesParams) ([]ListSitemapInstancesRow, error)
 	// Canonical database-backed spell lookups. Each base spell row carries its
 	// independently ordered normalized components without multiplying child rows.
 	ListSpellCastTimesByDataset(ctx context.Context, datasetID uuid.UUID) ([]DbcSpellCastTime, error)

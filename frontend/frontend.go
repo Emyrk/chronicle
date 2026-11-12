@@ -10,6 +10,7 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"path"
 	"path/filepath"
 	"strings"
@@ -69,8 +70,11 @@ type blogManifest struct {
 }
 
 type blogManifestPost struct {
-	Path       string     `json:"path"`
-	FlavorSets [][]string `json:"flavor_sets"`
+	Path        string     `json:"path"`
+	Title       string     `json:"title"`
+	Description string     `json:"description"`
+	PublishedAt string     `json:"published_at"`
+	FlavorSets  [][]string `json:"flavor_sets"`
 }
 
 type handler struct {
@@ -247,6 +251,10 @@ func (h *handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 		}
 	}
 
+	if post, ok := h.blogPosts[path.Clean(req.URL.Path)]; ok {
+		state.JSONLD = withBlogPostingJSONLD(state.JSONLD, post, state.CanonicalURL)
+	}
+
 	state.escapeHTMLAttributes()
 
 	if h.serveHTML(resp, req, reqFile, state) {
@@ -322,6 +330,44 @@ func (h *handler) blogPathAllowed(requestPath string, flavor []string) bool {
 		}
 	}
 	return false
+}
+
+// withBlogPostingJSONLD adds BlogPosting structured data for a blog post to the
+// page's existing JSON-LD. The page URL must be the absolute canonical URL.
+func withBlogPostingJSONLD(existing string, post blogManifestPost, canonical string) string {
+	pageURL, err := url.Parse(canonical)
+	if err != nil || !pageURL.IsAbs() || post.Title == "" {
+		return existing
+	}
+
+	posting := map[string]any{
+		"@context":         "https://schema.org",
+		"@type":            "BlogPosting",
+		"headline":         post.Title,
+		"description":      post.Description,
+		"url":              canonical,
+		"mainEntityOfPage": canonical,
+		"publisher": map[string]any{
+			"@type": "Organization",
+			"name":  "Chronicle",
+			"url":   "https://chronicleclassic.com/",
+		},
+	}
+	if post.PublishedAt != "" {
+		posting["datePublished"] = post.PublishedAt
+	}
+
+	// json.Marshal escapes <, > and &, so the result cannot close the script tag.
+	// Keep the site-wide WebSite node alongside the post as a top-level array.
+	var value any = posting
+	if existing != "" {
+		value = []any{json.RawMessage(existing), posting}
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return existing
+	}
+	return string(data)
 }
 
 func (h *handler) exists(filePath string) bool {

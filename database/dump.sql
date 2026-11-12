@@ -4534,6 +4534,8 @@ CREATE INDEX idx_game_players_guild ON game_players USING btree (guild_id) WHERE
 
 CREATE INDEX idx_game_players_realm_lower_name ON game_players USING btree (realm_id, lower(name));
 
+CREATE INDEX idx_game_players_updated_at ON game_players USING btree (updated_at DESC);
+
 CREATE INDEX idx_game_players_updated_from_instance ON game_players USING btree (updated_from_instance) WHERE (updated_from_instance IS NOT NULL);
 
 CREATE INDEX idx_guild_join_requests_guild ON guild_join_requests USING btree (guild_id);
@@ -4577,6 +4579,8 @@ CREATE INDEX idx_log_instances_log_group_id ON log_instances USING btree (log_gr
 CREATE INDEX idx_log_instances_logical_run ON log_instances USING btree (COALESCE(duplicate_group_id, id));
 
 CREATE INDEX idx_log_instances_realm_id ON log_instances USING btree (realm_id);
+
+CREATE INDEX idx_log_instances_start_time ON log_instances USING btree (start_time DESC) WHERE (start_time IS NOT NULL);
 
 CREATE UNIQUE INDEX idx_mod_requests_pending ON application_modification_requests USING btree (application_id, type, COALESCE(parent_id, '00000000-0000-0000-0000-000000000000'::uuid)) WHERE ((status = 'pending'::text) AND (type <> ALL (ARRAY['server'::text, 'realm'::text])));
 

@@ -29448,6 +29448,149 @@ func (q *sqlQuerier) UpdateSiteConfigLandingFeaturedInstance(ctx context.Context
 	return i, err
 }
 
+const listSitemapCharacters = `-- name: ListSitemapCharacters :many
+SELECT gp.id, r.name AS realm_name, gp.updated_at
+FROM game_players gp
+JOIN wow_server_realms r ON r.id = gp.realm_id
+JOIN wow_servers ws ON ws.id = r.server_id
+JOIN log_instances li ON li.id = gp.updated_from_instance
+JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
+WHERE ws.tenant_id IS NOT DISTINCT FROM $1::uuid
+ORDER BY gp.updated_at DESC
+LIMIT $2
+`
+
+type ListSitemapCharactersParams struct {
+	TenantID    uuid.NullUUID `db:"tenant_id" json:"tenant_id"`
+	ResultLimit int32         `db:"result_limit" json:"result_limit"`
+}
+
+type ListSitemapCharactersRow struct {
+	ID        guid.GUID          `db:"id" json:"id"`
+	RealmName string             `db:"realm_name" json:"realm_name"`
+	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
+// Most recently seen characters whose latest sighting is a listed log.
+// Walks idx_game_players_updated_at newest-first and stops at the limit.
+func (q *sqlQuerier) ListSitemapCharacters(ctx context.Context, arg ListSitemapCharactersParams) ([]ListSitemapCharactersRow, error) {
+	rows, err := q.db.Query(ctx, listSitemapCharacters, arg.TenantID, arg.ResultLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSitemapCharactersRow
+	for rows.Next() {
+		var i ListSitemapCharactersRow
+		if err := rows.Scan(&i.ID, &i.RealmName, &i.UpdatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSitemapGuilds = `-- name: ListSitemapGuilds :many
+
+SELECT g.id, gp.updated_at AS page_updated_at
+FROM guilds g
+JOIN wow_server_realms r ON r.id = g.realm_id
+JOIN wow_servers ws ON ws.id = r.server_id
+LEFT JOIN guild_pages gp ON gp.guild_id = g.id
+WHERE ws.tenant_id IS NOT DISTINCT FROM $1::uuid
+ORDER BY gp.updated_at DESC NULLS LAST, g.created_at DESC, g.id
+LIMIT $2
+`
+
+type ListSitemapGuildsParams struct {
+	TenantID    uuid.NullUUID `db:"tenant_id" json:"tenant_id"`
+	ResultLimit int32         `db:"result_limit" json:"result_limit"`
+}
+
+type ListSitemapGuildsRow struct {
+	ID            uuid.UUID          `db:"id" json:"id"`
+	PageUpdatedAt pgtype.Timestamptz `db:"page_updated_at" json:"page_updated_at"`
+}
+
+// Queries behind /sitemap.xml. Each is capped and scoped to one tenant's own
+// servers: RLS on wow_server_realms limits rows to what the tenant can see, and
+// the tenant_id match drops include_in_all servers whose pages are canonical
+// on another host. A NULL tenant_id is the root site's untenanted servers.
+// Guilds as the /guilds directory lists them, guilds with an edited page first.
+func (q *sqlQuerier) ListSitemapGuilds(ctx context.Context, arg ListSitemapGuildsParams) ([]ListSitemapGuildsRow, error) {
+	rows, err := q.db.Query(ctx, listSitemapGuilds, arg.TenantID, arg.ResultLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSitemapGuildsRow
+	for rows.Next() {
+		var i ListSitemapGuildsRow
+		if err := rows.Scan(&i.ID, &i.PageUpdatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSitemapInstances = `-- name: ListSitemapInstances :many
+SELECT li.id, li.hashed_slug, li.updated_at
+FROM log_instances li
+JOIN wow_log_groups wlg ON wlg.id = li.log_group_id
+  AND NOT wlg.unlisted
+  AND wlg.invalidated_at IS NULL
+JOIN parsed_log_group plg ON plg.id = li.log_group_id
+  AND plg.parse_generation = wlg.parse_generation
+  AND plg.finalized_at IS NOT NULL
+JOIN wow_server_realms r ON r.id = li.realm_id
+JOIN wow_servers ws ON ws.id = r.server_id
+WHERE li.start_time IS NOT NULL
+  AND li.invalidated_at IS NULL
+  AND ws.tenant_id IS NOT DISTINCT FROM $1::uuid
+ORDER BY li.start_time DESC
+LIMIT $2
+`
+
+type ListSitemapInstancesParams struct {
+	TenantID    uuid.NullUUID `db:"tenant_id" json:"tenant_id"`
+	ResultLimit int32         `db:"result_limit" json:"result_limit"`
+}
+
+type ListSitemapInstancesRow struct {
+	ID         uuid.UUID          `db:"id" json:"id"`
+	HashedSlug pgtype.Text        `db:"hashed_slug" json:"hashed_slug"`
+	UpdatedAt  pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
+// Most recent listed, valid, finalized instance logs.
+// Walks idx_log_instances_start_time newest-first and stops at the limit.
+func (q *sqlQuerier) ListSitemapInstances(ctx context.Context, arg ListSitemapInstancesParams) ([]ListSitemapInstancesRow, error) {
+	rows, err := q.db.Query(ctx, listSitemapInstances, arg.TenantID, arg.ResultLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSitemapInstancesRow
+	for rows.Next() {
+		var i ListSitemapInstancesRow
+		if err := rows.Scan(&i.ID, &i.HashedSlug, &i.UpdatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const siteStats = `-- name: SiteStats :one
 SELECT
     (SELECT COUNT(*)

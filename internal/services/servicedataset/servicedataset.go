@@ -63,6 +63,12 @@ func New(broker *services.Services) *Service {
 	}
 }
 
+// NewTest creates a Service backed by db without a broker, for unit tests
+// that only read datasets.
+func NewTest(db DatasetStore) *Service {
+	return &Service{db: db}
+}
+
 func (s *Service) Name() string         { return services.ServiceDataset }
 func (s *Service) Configures() []string { return nil }
 func (s *Service) DependsOn() []string {
