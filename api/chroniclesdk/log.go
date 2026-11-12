@@ -663,6 +663,9 @@ type RecentInstance struct {
 	DifficultyName    string            `json:"difficulty_name"`
 	MaxPlayers        int               `json:"max_players"`
 	DynamicDifficulty int               `json:"dynamic_difficulty"`
+	// MixedDifficulty is true when bosses in the run were fought on more
+	// than one difficulty (e.g. some heroic, some normal).
+	MixedDifficulty bool `json:"mixed_difficulty,omitempty"`
 	// HasPositions is true when the log recorded unit positions, so the run
 	// has a replay. Set by /raidlogs/recent only.
 	HasPositions bool `json:"has_positions,omitempty"`

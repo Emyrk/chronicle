@@ -5295,6 +5295,11 @@ export interface RecentInstance {
     readonly max_players: number;
     readonly dynamic_difficulty: number;
     /**
+     * MixedDifficulty is true when bosses in the run were fought on more
+     * than one difficulty (e.g. some heroic, some normal).
+     */
+    readonly mixed_difficulty?: boolean;
+    /**
      * HasPositions is true when the log recorded unit positions, so the run
      * has a replay. Set by /raidlogs/recent only.
      */

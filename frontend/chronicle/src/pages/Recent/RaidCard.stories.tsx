@@ -80,6 +80,47 @@ export const Has3DPositions: Story = {
 };
 
 /**
+ * Every boss fought on heroic.
+ */
+export const Heroic: Story = {
+  args: {
+    instance: { ...baseInstance, dynamic_difficulty: 1 },
+  },
+};
+
+/**
+ * Run mixes heroic and normal bosses; the badge reads "Mixed".
+ */
+export const MixedDifficulty: Story = {
+  args: {
+    instance: { ...baseInstance, dynamic_difficulty: 1, mixed_difficulty: true },
+  },
+};
+
+/**
+ * Mixed run whose instance-level difficulty resolved to normal still shows "Mixed".
+ */
+export const MixedDifficultyNormalInstance: Story = {
+  args: {
+    instance: { ...baseInstance, dynamic_difficulty: 0, mixed_difficulty: true },
+  },
+};
+
+/**
+ * Normal, Heroic and Mixed side by side.
+ */
+export const DifficultyComparison: StoryObj = {
+  render: () => (
+    <div className="grid w-[900px] grid-cols-3 gap-4 p-4">
+      <RaidCard instance={{ ...baseInstance, id: "normal" }} />
+      <RaidCard instance={{ ...baseInstance, id: "heroic", dynamic_difficulty: 1 }} />
+      <RaidCard instance={{ ...baseInstance, id: "mixed", dynamic_difficulty: 1, mixed_difficulty: true }} />
+    </div>
+  ),
+  parameters: { layout: "fullscreen" },
+};
+
+/**
  * Partial clear with some wipes.
  */
 export const PartialClear: Story = {

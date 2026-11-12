@@ -20990,7 +20990,8 @@ SELECT
     li.recorder_name,
     li.difficulty_name,
     li.max_players,
-    li.dynamic_difficulty
+    li.dynamic_difficulty,
+    li.mixed_difficulty
 FROM log_instances_resolved li
 JOIN parsed_log_group plg ON plg.id = li.log_group_id
 JOIN wow_log_groups wlg ON wlg.id = plg.id
@@ -21084,6 +21085,7 @@ type ListInstancesByTimeRangeRow struct {
 	DifficultyName     string             `db:"difficulty_name" json:"difficulty_name"`
 	MaxPlayers         int32              `db:"max_players" json:"max_players"`
 	DynamicDifficulty  int32              `db:"dynamic_difficulty" json:"dynamic_difficulty"`
+	MixedDifficulty    bool               `db:"mixed_difficulty" json:"mixed_difficulty"`
 }
 
 func (q *sqlQuerier) ListInstancesByTimeRange(ctx context.Context, arg ListInstancesByTimeRangeParams) ([]ListInstancesByTimeRangeRow, error) {
@@ -21128,6 +21130,7 @@ func (q *sqlQuerier) ListInstancesByTimeRange(ctx context.Context, arg ListInsta
 			&i.DifficultyName,
 			&i.MaxPlayers,
 			&i.DynamicDifficulty,
+			&i.MixedDifficulty,
 		); err != nil {
 			return nil, err
 		}
@@ -21228,6 +21231,7 @@ instance_rows AS (
         li.difficulty_name,
         li.max_players,
         li.dynamic_difficulty,
+        li.mixed_difficulty,
         ('unit-position' = ANY(li.capabilities))::boolean AS has_positions
     FROM log_instances_resolved li
     JOIN matching_runs ON matching_runs.run_id = COALESCE(li.duplicate_group_id, li.id)
@@ -21269,7 +21273,7 @@ instance_rows AS (
 ),
 ranked_instances AS (
     SELECT
-        instance_rows.id, instance_rows.slug, instance_rows.name, instance_rows.realm_id, instance_rows.realm_name, instance_rows.uploader_id, instance_rows.uploader_name, instance_rows.uploaded_at, instance_rows.first_encounter_time, instance_rows.player_count, instance_rows.boss_count, instance_rows.encounter_count, instance_rows.boss_kills, instance_rows.duration_ms, instance_rows.combat_duration_ms, instance_rows.guild_id, instance_rows.guild_name, instance_rows.has_youtube_video, instance_rows.duplicate_group_id, instance_rows.run_id, instance_rows.recorder_name, instance_rows.difficulty_name, instance_rows.max_players, instance_rows.dynamic_difficulty, instance_rows.has_positions,
+        instance_rows.id, instance_rows.slug, instance_rows.name, instance_rows.realm_id, instance_rows.realm_name, instance_rows.uploader_id, instance_rows.uploader_name, instance_rows.uploaded_at, instance_rows.first_encounter_time, instance_rows.player_count, instance_rows.boss_count, instance_rows.encounter_count, instance_rows.boss_kills, instance_rows.duration_ms, instance_rows.combat_duration_ms, instance_rows.guild_id, instance_rows.guild_name, instance_rows.has_youtube_video, instance_rows.duplicate_group_id, instance_rows.run_id, instance_rows.recorder_name, instance_rows.difficulty_name, instance_rows.max_players, instance_rows.dynamic_difficulty, instance_rows.mixed_difficulty, instance_rows.has_positions,
         ROW_NUMBER() OVER (
             PARTITION BY instance_rows.run_id
             ORDER BY
@@ -21323,6 +21327,7 @@ SELECT
     ranked_instances.difficulty_name,
     ranked_instances.max_players,
     ranked_instances.dynamic_difficulty,
+    ranked_instances.mixed_difficulty,
     ranked_instances.has_positions
 FROM ranked_instances
 JOIN selected_runs USING (run_id)
@@ -21370,6 +21375,7 @@ type ListRecentInstanceGroupsRow struct {
 	DifficultyName     string             `db:"difficulty_name" json:"difficulty_name"`
 	MaxPlayers         int32              `db:"max_players" json:"max_players"`
 	DynamicDifficulty  int32              `db:"dynamic_difficulty" json:"dynamic_difficulty"`
+	MixedDifficulty    bool               `db:"mixed_difficulty" json:"mixed_difficulty"`
 	HasPositions       bool               `db:"has_positions" json:"has_positions"`
 }
 
@@ -21420,6 +21426,7 @@ func (q *sqlQuerier) ListRecentInstanceGroups(ctx context.Context, arg ListRecen
 			&i.DifficultyName,
 			&i.MaxPlayers,
 			&i.DynamicDifficulty,
+			&i.MixedDifficulty,
 			&i.HasPositions,
 		); err != nil {
 			return nil, err

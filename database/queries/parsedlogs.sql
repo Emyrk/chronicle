@@ -366,7 +366,8 @@ SELECT
     li.recorder_name,
     li.difficulty_name,
     li.max_players,
-    li.dynamic_difficulty
+    li.dynamic_difficulty,
+    li.mixed_difficulty
 FROM log_instances_resolved li
 JOIN parsed_log_group plg ON plg.id = li.log_group_id
 JOIN wow_log_groups wlg ON wlg.id = plg.id
@@ -516,6 +517,7 @@ instance_rows AS (
         li.difficulty_name,
         li.max_players,
         li.dynamic_difficulty,
+        li.mixed_difficulty,
         ('unit-position' = ANY(li.capabilities))::boolean AS has_positions
     FROM log_instances_resolved li
     JOIN matching_runs ON matching_runs.run_id = COALESCE(li.duplicate_group_id, li.id)
@@ -611,6 +613,7 @@ SELECT
     ranked_instances.difficulty_name,
     ranked_instances.max_players,
     ranked_instances.dynamic_difficulty,
+    ranked_instances.mixed_difficulty,
     ranked_instances.has_positions
 FROM ranked_instances
 JOIN selected_runs USING (run_id)
