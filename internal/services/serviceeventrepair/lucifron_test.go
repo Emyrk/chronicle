@@ -12,6 +12,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 )
 
 const lucifronTestPlayer = "0x0000000000000001"
@@ -179,7 +180,14 @@ func TestLucifronPetOwnershipAndControl(t *testing.T) {
 			case "control":
 				snapshot.Controller = &owner
 			}
-			e.Events = append(e.Events, database.LogInstanceEvent{InstanceID: e.Instance.ID, Type: database.LogInstanceEventTypeUnitClassification, Events: numericFrame(t, e, snapshot)})
+			snapshots := []proto.Message{snapshot}
+			if kind == "terminal owner" || kind == "terminal totem" {
+				// Terminal proof supplements, never replaces, prior damage ownership.
+				prior := proto.Clone(snapshot).(*chronicleproto.UnitClassification)
+				prior.Meta = &chronicleproto.EventMeta{Index: 0, OffsetMilli: 0}
+				snapshots = append([]proto.Message{prior}, snapshots...)
+			}
+			e.Events = append(e.Events, database.LogInstanceEvent{InstanceID: e.Instance.ID, Type: database.LogInstanceEventTypeUnitClassification, Events: numericFrame(t, e, snapshots...)})
 			p, err := evaluateLucifronEvidence(e)
 			require.NoError(t, err)
 			if kind == "terminal owner" || kind == "terminal totem" {

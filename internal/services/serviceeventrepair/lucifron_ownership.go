@@ -74,8 +74,10 @@ func lucifronRecordedOwners(events []razorgoreReplayEvent, end time.Time, encoun
 		if owner.IsZero() {
 			continue
 		}
-		if !terminal[source] && firstSnapshot[source] >= firstDamage[source] {
-			return nil, errors.New("recorded owner must precede first nonplayer damage for ownership inference")
+		// Even terminal ownership cannot retroactively establish who owned a
+		// source when its earlier damage occurred.
+		if firstSnapshot[source] >= firstDamage[source] {
+			return nil, errors.New("recorded owner must precede first nonplayer damage")
 		}
 		owners[source] = owner
 		if !terminal[source] {

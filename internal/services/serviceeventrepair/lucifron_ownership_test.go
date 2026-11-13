@@ -82,7 +82,7 @@ func TestLucifronStableRecordedOwnerInference(t *testing.T) {
 
 func TestLucifronOwnershipInferenceRejectsGapsAndTransitions(t *testing.T) {
 	t.Parallel()
-	for _, kind := range []string{"owner after damage", "owner changed before damage", "owner changed after damage", "owner cleared", "initial nil", "chain", "duplicate index", "unclassified source", "unknown owner", "reconciliation", "owned player", "nonplayer control"} {
+	for _, kind := range []string{"owner after damage", "late owner then terminal", "terminal-only owner", "owner changed before damage", "owner changed after damage", "owner cleared", "initial nil", "chain", "duplicate index", "unclassified source", "unknown owner", "reconciliation", "owned player", "nonplayer control"} {
 		t.Run(kind, func(t *testing.T) {
 			t.Parallel()
 			e, snapshots := lucifronOwnershipFixture(t, lucifronTestPet)
@@ -92,6 +92,13 @@ func TestLucifronOwnershipInferenceRejectsGapsAndTransitions(t *testing.T) {
 			case "owner after damage":
 				first.Meta.Index = 4
 				first.Meta.OffsetMilli = 4000
+			case "late owner then terminal":
+				first.Meta.Index = 4
+				first.Meta.OffsetMilli = 4000
+				snapshots = append(snapshots, lucifronOwnerSnapshot(t, lucifronTestPet, first.Owner, 5, 60000))
+			case "terminal-only owner":
+				first.Meta.Index = 4
+				first.Meta.OffsetMilli = 60000
 			case "owner changed before damage":
 				first.Meta.Index = 0
 				first.Meta.OffsetMilli = 0
@@ -127,6 +134,9 @@ func TestLucifronOwnershipInferenceRejectsGapsAndTransitions(t *testing.T) {
 			p, err := evaluateLucifronEvidence(e)
 			require.NoError(t, err)
 			require.True(t, p.RequiresReparse, p.Reason)
+			if kind == "late owner then terminal" || kind == "terminal-only owner" {
+				require.Contains(t, p.Reason, "recorded owner must precede first nonplayer damage")
+			}
 			require.Nil(t, p.lucifron)
 		})
 	}
