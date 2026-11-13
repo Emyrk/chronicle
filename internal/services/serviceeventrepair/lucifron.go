@@ -166,14 +166,16 @@ func evaluateLucifronEncounter(e razorgoreEvidence, c database.LogInstanceEncoun
 	if err != nil {
 		return err
 	}
-	// Possession expiry and cross-boundary control cannot be inferred from sparse
-	// snapshots. Reject control rather than treating a final owner as a controller.
+	// Validate recorded control before replay. Player identity is unchanged by
+	// possession: the parser credits direct player casters to themselves and
+	// excludes player targets even while hostile. No controller receives their
+	// damage. Unsupported creature control still cannot use this upper bound.
+	if err := validateLucifronControl(e, c, replay); err != nil {
+		return err
+	}
 	terminalUnowned := map[guid.GUID]bool{}
 	for _, event := range replay {
 		if m, ok := event.message.(*messages.UnitClassificationEvent); ok {
-			if m.Controller != nil {
-				return errors.New("lucifron control history requires original-log reparse")
-			}
 			if event.at.Equal(c.EndTime.Time) && m.Owner == nil {
 				terminalUnowned[m.Target] = true
 			}

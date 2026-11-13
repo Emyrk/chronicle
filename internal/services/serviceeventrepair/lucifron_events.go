@@ -12,6 +12,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -100,6 +101,9 @@ func lucifronEvents(e razorgoreEvidence, c database.LogInstanceEncounter) ([]raz
 						return nil, err
 					}
 					classification.Controller = &controller
+					if m.SpellId != 0 {
+						classification.Spell = &chrondbc.Spell{ID: chrondbc.SpellID(m.SpellId)}
+					}
 				}
 				message = classification
 			}
