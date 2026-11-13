@@ -190,6 +190,20 @@ schema's `0.0` placeholder may use the persisted Chronicle tag; other malformed
 or conflicting stamps still skip. An existing
 receipt for this script also skips, without another receipt or ratings enqueue.
 
+Before downloading event streams, the job may skip when **every relevant ranked
+Lucifron encounter** explicitly lists exactly one Lucifron GUID and two distinct
+Flamewaker Protector GUIDs, no additional hostile entries, and usable nonempty
+activity periods. Existing source identity, version, receipt, and structural
+checks still apply. Missing/empty/ambiguous activity, additional hostiles, or any
+nonmatching ranked encounter falls back to normal event replay.
+
+The reason is **"Skipped: encounter activity lists only Lucifron and his
+protectors"**. This metadata-only shortcut intentionally accepts possible false
+negatives: hostile activity is not proof that stored damage is correct, and
+incidental damage absent from activity metadata may remain unrepaired. It creates
+no receipt, queues no ratings, and changes no source data. Its locked revalidation
+checks the metadata fingerprint without fetching event blobs.
+
 The only mutable source fields are Lucifron ranking rows' `damage_done`,
 `unranked_damage_done`, and `dps`. The evaluator replays effective stored damage
 against the repository target rule and preserves the recorded duration. It does
