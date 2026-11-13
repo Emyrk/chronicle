@@ -237,6 +237,10 @@ func TestTransientFailureRetainsCheckpointForRetry(t *testing.T) {
 func TestRetryDoesNotAuthorizeApply(t *testing.T) {
 	t.Parallel()
 	f := newRepairFixture(t, 1)
+	_, err := f.service.Retry(f.ctx, f.id, uuid.New())
+	require.ErrorIs(t, err, ErrConflict, "healthy active work must not be retried")
+	_, err = f.db.UpdateEventRepairOperationState(f.ctx, database.UpdateEventRepairOperationStateParams{ID: f.id, TenantID: f.tenant, State: "dry_running", LastError: "transient worker failure"})
+	require.NoError(t, err)
 	op, err := f.service.Retry(f.ctx, f.id, uuid.New())
 	require.NoError(t, err)
 	require.Equal(t, "dry_running", op.State)

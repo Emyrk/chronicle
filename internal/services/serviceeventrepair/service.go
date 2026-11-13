@@ -181,6 +181,9 @@ func (s *Service) Apply(ctx context.Context, id, actor uuid.UUID) (Operation, er
 		if o.State != "ready" && o.State != "applying" {
 			return fmt.Errorf("%w: apply requires a ready report", ErrConflict)
 		}
+		if o.State == "applying" && o.LastError == "" {
+			return fmt.Errorf("%w: apply is already running without a recorded failure", ErrConflict)
+		}
 		if o.State == "ready" {
 			if _, err := tx.RequestEventRepairApply(ctx, database.RequestEventRepairApplyParams{ID: id, TenantID: o.TenantID, AppliedBy: actor}); err != nil {
 				return err
@@ -382,6 +385,9 @@ func (s *Service) Retry(ctx context.Context, id, actor uuid.UUID) (Operation, er
 		}
 		if current.State != "dry_running" && current.State != "applying" {
 			return fmt.Errorf("%w: only unfinished active work can be retried", ErrConflict)
+		}
+		if current.LastError == "" {
+			return fmt.Errorf("%w: retry requires a recorded worker failure", ErrConflict)
 		}
 		if current.Version != Version || current.Operation != OperationRazorgore {
 			return fmt.Errorf("%w: operation version no longer supported", ErrConflict)

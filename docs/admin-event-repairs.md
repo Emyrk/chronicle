@@ -13,7 +13,7 @@ Base: `/api/v1/admin/event-repairs`
 | POST | 202, new dry-run operation |
 | GET `/{id}` | operation with up to 1000 instance reports |
 | POST `/{id}/apply` | 202, explicitly authorize apply after preview; also retry applying |
-| POST `/{id}/retry` | 202, resume dry_running/applying checkpoints only |
+| POST `/{id}/retry` | 202, resume failed dry_running/applying checkpoints only |
 | POST `/{id}/cancel` | stop future instances; prior committed repairs remain |
 
 Create body:
@@ -50,7 +50,8 @@ next successful checkpoint. Errors use 400 for invalid input, 404 for unknown ID
   transaction as the corresponding state change.
 - A job handles at most 25 instances before durably snoozing for another page.
   River retries transient failures up to ten times; the retry endpoint resumes
-  exhausted work without resetting checkpoints or authorizing a new apply.
+  exhausted work with a recorded `last_error`, without resetting checkpoints or
+  authorizing a new apply. Healthy active work cannot be retried.
 - Fetching, gzip/protobuf decoding, and reconstruction happen outside the write
   transaction. The prepared plan is sealed against modification. The transaction
   takes the existing canonical-refresh lock then parse-generation row, rechecks
