@@ -100,7 +100,7 @@ export function AdminEventRepairs() {
   const realms = useRealms();
   const [params, setParams] = useSearchParams();
   const selected = params.get("operation") || "";
-  const [form, setForm] = useState<RepairSelection>({ mode: "single", instance: "", tenant: "", limit: "100", realm: "", after: "", before: "" });
+  const [form, setForm] = useState<RepairSelection>({ operation: "razorgore-phase-two", mode: "single", instance: "", tenant: "", limit: "100", realm: "", after: "", before: "" });
   const [validationError, setValidationError] = useState("");
   const list = useQuery({
     queryKey: eventRepairKey,
@@ -126,7 +126,7 @@ export function AdminEventRepairs() {
     },
     onError: () => { void client.invalidateQueries({ queryKey: [...eventRepairKey, selected] }); },
   });
-  function field(key: Exclude<keyof RepairSelection, "mode">, label: string, type = "text", required = false, className = "") {
+  function field(key: Exclude<keyof RepairSelection, "mode" | "operation">, label: string, type = "text", required = false, className = "") {
     return <label className={`${labelClass} ${className}`} key={key}><span>{label}</span><input className={inputClass} type={type} value={form[key]} required={required} aria-describedby={validationError ? "repair-form-error" : undefined} onChange={(event) => setForm({ ...form, [key]: event.target.value })} {...(key === "limit" ? { min: 1, max: 1000, step: 1 } : {})} /></label>;
   }
   return <div className="space-y-3">
@@ -139,11 +139,12 @@ export function AdminEventRepairs() {
     }}>
       <h2 className="text-sm font-semibold">New dry-run</h2>
       <div className="flex flex-wrap items-end gap-2">
-        <label className={`${labelClass} w-56`}><span>Named repair</span><select className={inputClass} value="razorgore-phase-two" onChange={() => {}}><option value="razorgore-phase-two">Razorgore phase two · v1</option></select></label>
+        <label className={`${labelClass} w-56`}><span>Named repair</span><select className={inputClass} value={form.operation} onChange={(event) => { setForm({ ...form, operation: event.target.value }); setValidationError(""); }}><option value="razorgore-phase-two">Razorgore phase two · v1</option><option value="lucifron-ranked-damage">Lucifron ranked damage · v1</option></select></label>
         <fieldset className="text-xs text-muted-foreground"><legend className="mb-0.5">Selection</legend><div className="flex h-8 overflow-hidden rounded-md border border-input">{(["single", "sweep"] as const).map((mode) => <label key={mode} className={`flex cursor-pointer items-center gap-1.5 px-2 text-sm ${form.mode === mode ? "bg-primary/20 font-medium text-foreground" : "hover:bg-muted"}`}><input type="radio" className="sr-only" name="selection" value={mode} checked={form.mode === mode} onChange={() => { setForm({ ...form, mode }); setValidationError(""); }} />{mode === "single" ? "Single instance" : "Bounded tenant sweep"}</label>)}</div></fieldset>
         {form.mode === "single" && field("instance", "Instance URL, ID, or slug", "text", true, "min-w-64 flex-1")}
         <Button type="submit" size="sm" className="h-8" disabled={mutation.isPending}>{mutation.isPending ? "Submitting…" : "Start dry-run"}</Button>
       </div>
+      {form.operation === "lucifron-ranked-damage" && <p className="text-xs text-muted-foreground">Recalculate ranked damage for Lucifron (12118) and Flamewaker Protector (12119). Core Hounds are excluded. Only instances parsed before v1.0.173 are eligible; v1.0.173 or later and unknown parser versions are skipped. Original events remain untouched.</p>}
       {form.mode === "sweep" && <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_2fr_1fr_1fr]">
         <label className={labelClass}><span>Tenant (required)</span><select className={inputClass} value={form.tenant} required disabled={tenants.isPending || tenants.isError} onChange={(event) => setForm({ ...form, tenant: event.target.value, realm: "" })}>
           <option value="">{tenants.isPending ? "Loading tenants…" : tenants.isError ? "Tenants unavailable" : "Select a tenant"}</option>

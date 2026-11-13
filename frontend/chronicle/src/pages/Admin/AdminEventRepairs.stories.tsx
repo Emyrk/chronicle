@@ -103,3 +103,25 @@ export const AllSkipped: Story = {
     await expect(canvas.getByText(/No instances are eligible to apply/)).toBeVisible();
   },
 };
+
+export const SubmitLucifronScope: Story = {
+  parameters: { msw: { handlers: [
+    http.get("/api/v1/admin/event-repairs/lucifron-scope", () => HttpResponse.json({ ...operation, operation: "lucifron-ranked-damage", id: "lucifron-scope", state: "completed" })),
+    ...handlers(operation),
+    http.post("/api/v1/admin/event-repairs", async ({ request }) => {
+      expect(await request.json()).toEqual({ operation: "lucifron-ranked-damage", tenant_id: operation.tenant_id, realm_id: "33e57ec2-92da-4a47-95a9-ceab69a8cd87", limit: 100 });
+      return HttpResponse.json({ ...operation, operation: "lucifron-ranked-damage", id: "lucifron-scope", state: "completed" }, { status: 202 });
+    }),
+  ] } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.selectOptions(canvas.getByRole("combobox", { name: "Named repair" }), "lucifron-ranked-damage");
+    await expect(canvas.getByText(/Only instances parsed before v1.0.173/)).toBeVisible();
+    await userEvent.click(canvas.getByRole("radio", { name: "Bounded tenant sweep" }));
+    await canvas.findByRole("option", { name: "Octo (octo)" });
+    await userEvent.selectOptions(canvas.getByRole("combobox", { name: "Tenant (required)" }), operation.tenant_id);
+    await userEvent.selectOptions(canvas.getByRole("combobox", { name: "Realm (optional)" }), "33e57ec2-92da-4a47-95a9-ceab69a8cd87");
+    await userEvent.click(canvas.getByRole("button", { name: "Start dry-run" }));
+    await expect(await canvas.findByText("lucifron-scope", { selector: "p" })).toBeVisible();
+  },
+};

@@ -38,6 +38,72 @@ function isRazorgoreDetails(value: unknown): value is RazorgoreDetails {
   return isRecord(value) && Array.isArray(value.phases) && value.phases.every(isPhase)
     && Array.isArray(value.omissions) && value.omissions.every(isOmission);
 }
+interface LucifronPlayer {
+  encounter_id: string;
+  player_guid: string;
+  player_name: string;
+  before_ranked_damage: number;
+  after_ranked_damage: number;
+  before_unranked_damage: number;
+  after_unranked_damage: number;
+  before_dps: number;
+  after_dps: number;
+}
+interface LucifronDetails {
+  parser_version: string;
+  rule_version: "v1.0.173";
+  ranked_target_entries: number[];
+  players: LucifronPlayer[];
+  omissions: Omission[];
+}
+function isLucifronPlayer(value: unknown): value is LucifronPlayer {
+  return isRecord(value) && typeof value.encounter_id === "string" && typeof value.player_guid === "string"
+    && typeof value.player_name === "string" && [value.before_ranked_damage, value.after_ranked_damage,
+      value.before_unranked_damage, value.after_unranked_damage, value.before_dps, value.after_dps].every(isFiniteNumber);
+}
+function isLucifronDetails(value: unknown): value is LucifronDetails {
+  return isRecord(value) && typeof value.parser_version === "string" && value.rule_version === "v1.0.173"
+    && Array.isArray(value.ranked_target_entries) && value.ranked_target_entries.every((entry) => isFiniteNumber(entry) && Number.isInteger(entry) && entry > 0)
+    && Array.isArray(value.players) && value.players.every(isLucifronPlayer)
+    && Array.isArray(value.omissions) && value.omissions.every(isOmission);
+}
+function LucifronReport({ details }: { details: LucifronDetails }) {
+  const number = (value: number) => value.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  return <div className="space-y-3">
+    <h4 className="font-medium">Lucifron ranked damage</h4>
+    <p className="text-muted-foreground">Parser: {details.parser_version || "Unknown"} · Ranking rule: {details.rule_version}</p>
+    <p>Ranked targets: {details.ranked_target_entries.map((entry) => entry === 12118 ? "Lucifron (12118)" : entry === 12119 ? "Flamewaker Protector (12119)" : String(entry)).join(", ") || "None reported"}. Core Hounds excluded.</p>
+    <div className="styled-scrollbar overflow-x-auto rounded border">
+      <table className="w-full text-left text-xs">
+        <caption className="p-2 text-left font-medium">Player damage and DPS, before and after repair</caption>
+        <thead className="bg-muted"><tr>{["Player / encounter", "Metric", "Before", "After"].map((label) => <th key={label} scope="col" className="p-2">{label}</th>)}</tr></thead>
+        {details.players.map((player, index) => <tbody key={index} className="border-t">
+          <tr><th rowSpan={3} scope="rowgroup" className="min-w-40 max-w-64 break-all p-2 align-top font-normal">
+            <span className="block font-medium">{player.player_name || "Unnamed player"}</span>
+            <span className="block font-mono text-muted-foreground">{player.player_guid}</span>
+            <span className="mt-1 block font-mono text-muted-foreground">Encounter {player.encounter_id}</span>
+          </th><th scope="row" className="p-2 font-normal">Ranked damage</th><td className="p-2 font-mono">{number(player.before_ranked_damage)}</td><td className="p-2 font-mono">{number(player.after_ranked_damage)}</td></tr>
+          <tr><th scope="row" className="p-2 font-normal">Unranked damage</th><td className="p-2 font-mono">{number(player.before_unranked_damage)}</td><td className="p-2 font-mono">{number(player.after_unranked_damage)}</td></tr>
+          <tr><th scope="row" className="p-2 font-normal">DPS</th><td className="p-2 font-mono">{number(player.before_dps)}</td><td className="p-2 font-mono">{number(player.after_dps)}</td></tr>
+        </tbody>)}
+      </table>
+      {!details.players.length && <p className="p-2 text-muted-foreground">No player changes reported.</p>}
+    </div>
+  </div>;
+}
+
+function Omissions({ omissions }: { omissions: Omission[] }) {
+  return <>
+      <h4 className="font-medium">Omitted values</h4>
+      {!omissions.length ? <p className="text-muted-foreground">No omitted values reported.</p> : <ul className="space-y-2">{omissions.map((omission, index) => <li key={index} className="space-y-1 rounded border border-amber-500/30 p-2">
+        <p className="font-medium">{omission.stream}: {omission.amount.toLocaleString("en-US")} omitted across {omission.count.toLocaleString("en-US")} events</p>
+        <p className="break-words">{omission.reason}</p>
+        <p className="break-all font-mono text-muted-foreground">Encounter {omission.encounter_id}</p>
+        <p className="break-all font-mono text-muted-foreground">Unit {omission.unit_guid}</p>
+      </li>)}</ul>}
+  </>;
+}
+
 function warningMessages(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
@@ -65,6 +131,7 @@ export function RepairDetails({ operation, version, warnings, details }: {
 }) {
   const messages = warningMessages(warnings);
   const known = operation === "razorgore-phase-two" && version === 1 && isRazorgoreDetails(details);
+  const lucifron = operation === "lucifron-ranked-damage" && version === 1 && isLucifronDetails(details);
   return <div className="space-y-3 text-xs">
     {hasWarnings(warnings, details) && <div className="rounded border border-amber-500/40 bg-amber-500/10 p-2 text-amber-300">
       <p className="font-medium">Repair warnings</p>
@@ -80,14 +147,8 @@ export function RepairDetails({ operation, version, warnings, details }: {
         <p className="mt-1 font-mono">{offset(phase.start_offset_ms)} to {offset(phase.end_offset_ms)}</p>
         <p className="mt-1">{phase.reconstructed ? "Reconstructed phase window" : "Recorded phase window"}</p>
       </li>)}</ul>
-      <h4 className="font-medium">Omitted values</h4>
-      {!details.omissions.length ? <p className="text-muted-foreground">No omitted values reported.</p> : <ul className="space-y-2">{details.omissions.map((omission, index) => <li key={index} className="space-y-1 rounded border border-amber-500/30 p-2">
-        <p className="font-medium">{omission.stream}: {omission.amount.toLocaleString("en-US")} omitted across {omission.count.toLocaleString("en-US")} events</p>
-        <p className="break-words">{omission.reason}</p>
-        <p className="break-all font-mono text-muted-foreground">Encounter {omission.encounter_id}</p>
-        <p className="break-all font-mono text-muted-foreground">Unit {omission.unit_guid}</p>
-      </li>)}</ul>}
-    </> : <p className="text-muted-foreground">{details == null ? "Detailed repair data is not available." : "No compatible detail view for this payload. Inspect the saved JSON below."}</p>}
+      <Omissions omissions={details.omissions} />
+    </> : lucifron ? <><LucifronReport details={details} /><Omissions omissions={details.omissions} /></> : <p className="text-muted-foreground">{details == null ? "Detailed repair data is not available." : "No compatible detail view for this payload. Inspect the saved JSON below."}</p>}
     {details != null && <details><summary className="cursor-pointer text-muted-foreground">Saved repair JSON</summary>
       <pre className="styled-scrollbar mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-all rounded bg-muted p-2">{jsonText(details)}</pre>
     </details>}

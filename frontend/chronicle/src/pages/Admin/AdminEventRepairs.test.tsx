@@ -13,7 +13,7 @@ const operation: AdminEventRepairOperation = {
   items: [{ instance_id: "instance-1", state: "ready", reason: "Phase two found", evidence_hash: "hash", changes: ["Trim phase one"], ratings_queued: false },
     { instance_id: "instance-2", state: "skipped", reason: "No phase two evidence", evidence_hash: "", changes: [], ratings_queued: false }],
 };
-const form: RepairSelection = { mode: "sweep", instance: "", tenant: operation.tenant_id, limit: "10", realm: "", after: "", before: "" };
+const form: RepairSelection = { operation: "razorgore-phase-two", mode: "sweep", instance: "", tenant: operation.tenant_id, limit: "10", realm: "", after: "", before: "" };
 afterEach(() => vi.unstubAllGlobals());
 
 it("requires explicit bounded sweep scope and validates optional filters", () => {
@@ -85,4 +85,15 @@ it("all-skipped reports need no acceptance or rejection", () => {
   expect(markup).toContain("No instances are eligible to apply");
   expect(markup).not.toContain("Apply repair");
   expect(markup).not.toContain("Confirm write operation");
+});
+
+it("submits only supported named repairs for both selection modes", () => {
+  for (const operation of ["razorgore-phase-two", "lucifron-ranked-damage"]) {
+    expect(buildRepairRequest({ ...form, operation }).operation).toBe(operation);
+    expect(buildRepairRequest({ ...form, operation, mode: "single", instance: "raid-slug" })).toEqual({ operation, instance: "raid-slug" });
+  }
+  for (const operation of ["", "arbitrary-job", "lucifron-ranked-damage-v2"]) {
+    expect(() => buildRepairRequest({ ...form, operation })).toThrow("supported named repair");
+    expect(() => buildRepairRequest({ ...form, operation, mode: "single", instance: "raid" })).toThrow("supported named repair");
+  }
 });
