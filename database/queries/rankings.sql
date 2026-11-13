@@ -255,7 +255,10 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
         li.start_time ASC,
         li.id ASC
 ),
-representative_instances AS (
+-- Keep the representative set independent from the resolved rankings join.
+-- Inlining this CTE lets PostgreSQL repeatedly evaluate the fallback branch
+-- when exact cohort filters have low row-count estimates.
+representative_instances AS MATERIALIZED (
     SELECT rr.representative_instance_id AS id, rr.run_id
     FROM ranking_runs rr
     JOIN log_instances_resolved representative ON representative.id = rr.representative_instance_id
@@ -423,7 +426,9 @@ paged AS (
 -- Step 4: hydrate display-only fields for only the selected page. score_rows
 -- already contains the exact filtered and Trash-deduplicated ranking IDs, so the
 -- wide joins below do not repeat filtering or touch non-page talent builds.
-hydration_rows AS (
+-- Materialize this page-sized result so the final aggregation cannot inline it
+-- and rescan score_rows once for every output row.
+hydration_rows AS MATERIALIZED (
     SELECT
         edr.instance_id,
         edr.player_guid,
