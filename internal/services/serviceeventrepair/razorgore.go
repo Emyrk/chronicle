@@ -15,27 +15,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// RazorgoreRepairPlan is diagnostic evidence, not an executable mutation payload.
-// Only Evaluate creates an executable in-memory plan. JSON is diagnostic only.
-type RazorgoreRepairPlan struct {
-	Warnings            []string          `json:"warnings,omitempty"`
-	Details             map[string]any    `json:"details,omitempty"`
-	TenantID            uuid.UUID         `json:"tenant_id"`
-	InstanceID          uuid.UUID         `json:"instance_id"`
-	RequiresReparse     bool              `json:"requires_reparse"`
-	Reason              string            `json:"reason"`
-	Changes             []string          `json:"changes"`
-	EvidenceHash        string            `json:"evidence_hash"`
-	EncounterID         uuid.UUID         `json:"encounter_id,omitempty"`
-	Outcome             database.KillType `json:"outcome,omitempty"`
-	hostile             *database.LogInstanceEncounterHostile
-	phase               *database.LogInstanceEncounterPhase
-	numeric             *razorgoreNumericPlan
-	multi               *razorgoreMultiPlan
-	reconstructedPhases []database.InsertEncounterPhaseParams
-	seal                [sha256.Size]byte
-}
-
 type razorgoreEvidence struct {
 	Receipts        []database.EventRepairReceipt
 	Group           database.WoWLogGroup
@@ -53,7 +32,7 @@ type razorgoreEvidence struct {
 
 // ErrStaleEvidence means the source snapshot changed after preview. Reconstruct
 // a new preview outside the transaction rather than applying the old plan.
-var ErrStaleEvidence = errors.New("razorgore evidence changed; reevaluate repair")
+var ErrStaleEvidence = errors.New("event repair evidence changed; reevaluate repair")
 
 // EvaluateRazorgore loads and reconstructs a prepared plan outside the mutation
 // transaction. Gzip/protobuf decoding and numerical replay happen only here.
@@ -243,7 +222,8 @@ func razorgorePlanSeal(p *RazorgoreRepairPlan) ([sha256.Size]byte, error) {
 		Numeric             *razorgoreNumericPlan
 		Multi               *razorgoreMultiPlan
 		ReconstructedPhases []database.InsertEncounterPhaseParams
-	}{p, p.hostile, p.phase, p.numeric, p.multi, p.reconstructedPhases}
+		Lucifron            *lucifronPlan
+	}{p, p.hostile, p.phase, p.numeric, p.multi, p.reconstructedPhases, p.lucifron}
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		return [sha256.Size]byte{}, err

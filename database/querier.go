@@ -1118,6 +1118,9 @@ type sqlcQuerier interface {
 	LookupEventRepairOperation(ctx context.Context, id uuid.UUID) (EventRepairOperation, error)
 	// Authorized admin lookup only; RLS still applies.
 	LookupLeaderboardOperation(ctx context.Context, id uuid.UUID) (LeaderboardOperation, error)
+	// Only the ranked/unranked split and DPS change. All timing, identity, healing,
+	// survival, and other encounter source fields remain untouched.
+	LucifronRepairRanking(ctx context.Context, arg LucifronRepairRankingParams) (int64, error)
 	MarkBillingWebhookEventProcessed(ctx context.Context, stripeEventID string) error
 	MarkEmailVerified(ctx context.Context, userAuthID uuid.UUID) error
 	MarkLogFilePartFailed(ctx context.Context, arg MarkLogFilePartFailedParams) error

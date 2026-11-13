@@ -5536,6 +5536,41 @@ func (q *sqlQuerier) PreviewEncounterDifficultyBackfillBatch(ctx context.Context
 	return i, err
 }
 
+const lucifronRepairRanking = `-- name: LucifronRepairRanking :execrows
+UPDATE encounter_dps_rankings
+SET damage_done = $1, unranked_damage_done = $2,
+    dps = $3
+WHERE id = $4 AND instance_id = $5
+  AND encounter_id = $6::uuid
+  AND encounter_name = 'Lucifron' AND instance_name = 'Molten Core'
+`
+
+type LucifronRepairRankingParams struct {
+	DamageDone         int64     `db:"damage_done" json:"damage_done"`
+	UnrankedDamageDone int64     `db:"unranked_damage_done" json:"unranked_damage_done"`
+	Dps                float64   `db:"dps" json:"dps"`
+	ID                 uuid.UUID `db:"id" json:"id"`
+	InstanceID         uuid.UUID `db:"instance_id" json:"instance_id"`
+	EncounterID        uuid.UUID `db:"encounter_id" json:"encounter_id"`
+}
+
+// Only the ranked/unranked split and DPS change. All timing, identity, healing,
+// survival, and other encounter source fields remain untouched.
+func (q *sqlQuerier) LucifronRepairRanking(ctx context.Context, arg LucifronRepairRankingParams) (int64, error) {
+	result, err := q.db.Exec(ctx, lucifronRepairRanking,
+		arg.DamageDone,
+		arg.UnrankedDamageDone,
+		arg.Dps,
+		arg.ID,
+		arg.InstanceID,
+		arg.EncounterID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const razorgoreRepairDeleteRankings = `-- name: RazorgoreRepairDeleteRankings :exec
 DELETE FROM encounter_dps_rankings WHERE instance_id = $1 AND encounter_id = $2
 `
