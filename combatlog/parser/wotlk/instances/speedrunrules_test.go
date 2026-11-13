@@ -9,6 +9,14 @@ import (
 	"github.com/Emyrk/chronicle/database"
 )
 
+func TestMagtheridonsLairRankingsHaveNoSpeedrun(t *testing.T) {
+	t.Parallel()
+
+	rules := MagtheridonsLairFactory.FlavoredRankings(database.WoWFlavor{database.FlavorTBC})
+	require.NotNil(t, rules)
+	require.Nil(t, rules.Speedrun)
+}
+
 func TestUlduarSpeedrunRequirements(t *testing.T) {
 	t.Parallel()
 

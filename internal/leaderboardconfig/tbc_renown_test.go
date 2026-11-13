@@ -107,7 +107,7 @@ func TestTBCRenown(t *testing.T) {
 	}
 }
 
-func TestTBCUnrankedRaidsAreRenownOnly(t *testing.T) {
+func TestTBCRemainingUnrankedRaidsAreRenownOnly(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitLong)
 	db, _ := dbtestutil.NewDB(t)
@@ -115,8 +115,7 @@ func TestTBCUnrankedRaidsAreRenownOnly(t *testing.T) {
 	require.NoError(t, err)
 
 	unranked := map[string]bool{
-		"Black Temple": true, "Magtheridon's Lair": true,
-		"Sunwell Plateau": true,
+		"Black Temple": true, "Sunwell Plateau": true,
 	}
 	instances := map[string]bool{}
 	for _, row := range rows {
@@ -164,7 +163,8 @@ func TestTBCRankedSets(t *testing.T) {
 			"Attumen the Huntsman", "Moroes", "Maiden of Virtue", "Nightbane", "The Curator",
 			"Terestian Illhoof", "Shade of Aran", "Netherspite", "Prince Malchezaar",
 		},
-		"Zul'Aman": {"Akil'zon", "Nalorakk", "Jan'alai", "Halazzi", "Hex Lord Malacrass", "Zul'jin"},
+		"Magtheridon's Lair": {"Magtheridon"},
+		"Zul'Aman":           {"Akil'zon", "Nalorakk", "Jan'alai", "Halazzi", "Hex Lord Malacrass", "Zul'jin"},
 	}
 	for instance, want := range expected {
 		var set bool
@@ -191,6 +191,11 @@ func TestTBCRankedSets(t *testing.T) {
 		require.ElementsMatch(t, want, selection.Bosses)
 		require.EqualValues(t, len(want), selection.Denominator)
 	}
+
+	require.NotContains(t,
+		registry.RegistryForFlavor(slog.Default(), database.WoWFlavor{database.FlavorTBC}).SpeedrunRules(),
+		"Magtheridon's Lair",
+	)
 
 	variants, err := db.ListLeaderboardCareerVariants(ctx, []string{string(database.FlavorTBC)})
 	require.NoError(t, err)
@@ -258,6 +263,23 @@ func tbcKarazhanRankedSetMigration(ctx context.Context, pool *pgxpool.Pool, dire
 	return err
 }
 
+func magtheridonRankingsMigration(ctx context.Context, pool *pgxpool.Pool, direction string) error {
+	data, err := os.ReadFile("../../database/migrations/000377_leaderboard_magtheridons_lair_rankings." + direction + ".sql")
+	if err != nil {
+		return err
+	}
+	conn, err := pool.Acquire(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+	_, err = conn.Exec(ctx, string(data))
+	if err != nil {
+		_, _ = conn.Exec(ctx, "ROLLBACK")
+	}
+	return err
+}
+
 func TestTBCRankedSetsMigrationRoundTrip(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitLong)
@@ -284,6 +306,30 @@ func TestTBCRankedSetsMigrationRoundTrip(t *testing.T) {
 	require.Equal(t, before, after)
 }
 
+func TestMagtheridonRankingsMigrationRoundTrip(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitLong)
+	pool, _ := dbtestutil.NewPGXPool(t)
+	db := database.New(pool)
+	flavor := database.WoWFlavor{database.FlavorTBC}
+	before, err := leaderboardconfig.Resolve(ctx, db, flavor, nil)
+	require.NoError(t, err)
+
+	require.NoError(t, magtheridonRankingsMigration(ctx, pool, "down"))
+	withoutSet, err := leaderboardconfig.Resolve(ctx, db, flavor, nil)
+	require.NoError(t, err)
+	for _, row := range withoutSet {
+		if row.InstanceName == "Magtheridon's Lair" {
+			require.NotContains(t, []string{"set", "member"}, row.Kind, row)
+		}
+	}
+
+	require.NoError(t, magtheridonRankingsMigration(ctx, pool, "up"))
+	after, err := leaderboardconfig.Resolve(ctx, db, flavor, nil)
+	require.NoError(t, err)
+	require.Equal(t, before, after)
+}
+
 func TestTBCMigrationRoundTrip(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitLong)
@@ -304,6 +350,7 @@ func TestTBCMigrationRoundTrip(t *testing.T) {
 	careerBefore, err := db.ListLeaderboardCareerVariants(ctx, []string{string(database.FlavorTBC)})
 	require.NoError(t, err)
 
+	require.NoError(t, magtheridonRankingsMigration(ctx, pool, "down"))
 	require.NoError(t, tbcKarazhanRankedSetMigration(ctx, pool, "down"))
 	require.NoError(t, tbcRankedSetsMigration(ctx, pool, "down"))
 	require.NoError(t, tbcMigration(ctx, pool, "down"))
@@ -334,6 +381,7 @@ func TestTBCMigrationRoundTrip(t *testing.T) {
 	require.NoError(t, tbcMigration(ctx, pool, "up"))
 	require.NoError(t, tbcRankedSetsMigration(ctx, pool, "up"))
 	require.NoError(t, tbcKarazhanRankedSetMigration(ctx, pool, "up"))
+	require.NoError(t, magtheridonRankingsMigration(ctx, pool, "up"))
 	for i, flavor := range flavors {
 		rows, err := leaderboardconfig.Resolve(ctx, db, flavor, nil)
 		require.NoError(t, err)
@@ -351,6 +399,7 @@ func TestTBCRollbackPreservesEditedAward(t *testing.T) {
 
 	_, err := pool.Exec(ctx, `UPDATE leaderboard_boss_renown SET points=99 WHERE layer_key='tbc' AND instance_name='Gruul''s Lair' AND encounter_name='Gruul the Dragonkiller'`)
 	require.NoError(t, err)
+	require.NoError(t, magtheridonRankingsMigration(ctx, pool, "down"))
 	require.NoError(t, tbcKarazhanRankedSetMigration(ctx, pool, "down"))
 	require.NoError(t, tbcRankedSetsMigration(ctx, pool, "down"))
 	require.NoError(t, tbcMigration(ctx, pool, "down"))
@@ -368,6 +417,7 @@ func TestTBCRollbackProtectsEditedNewCatalogAward(t *testing.T) {
 
 	_, err := pool.Exec(ctx, `UPDATE leaderboard_boss_renown SET points=99 WHERE layer_key='tbc' AND instance_name='Black Temple' AND encounter_name='Illidan Stormrage'`)
 	require.NoError(t, err)
+	require.NoError(t, magtheridonRankingsMigration(ctx, pool, "down"))
 	require.NoError(t, tbcKarazhanRankedSetMigration(ctx, pool, "down"))
 	require.NoError(t, tbcRankedSetsMigration(ctx, pool, "down"))
 	require.Error(t, tbcMigration(ctx, pool, "down"))

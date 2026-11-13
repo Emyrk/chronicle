@@ -28,6 +28,9 @@ var MagtheridonsLairFactory = &instances.CommonFactory{
 	ZoneNames: []string{"magtheridon's lair"},
 	MapIDs:    []uint32{544},
 	Hostiles:  instances.FromMap(MagtheridonsLairHostiles()),
+	FlavoredRankings: func(database.WoWFlavor) *rankings.Rankings {
+		return &rankings.Rankings{}
+	},
 }
 
 func BloodFurnaceHostiles() map[uint32]instances.Identity {
