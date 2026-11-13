@@ -6,7 +6,7 @@ import { encounterVariantLabel, type EncounterVariant } from "./encounterVariant
 export function EncounterVariantMark({ variant }: { variant?: string }) {
   if (variant !== "normal" && variant !== "hard") return null;
   return <span className={difficultyChipClassName(variant === "normal" ? "" : "hard")} title={`Encounter variant: ${encounterVariantLabel(variant)}`}>
-    {variant === "hard" ? "HM" : encounterVariantLabel(variant)}
+    {variant === "hard" ? "HM" : "N"}
   </span>;
 }
 

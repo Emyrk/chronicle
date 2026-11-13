@@ -13,7 +13,7 @@ describe("encounter variant presentation", () => {
     expect(renderToStaticMarkup(<EncounterVariantMark />)).toBe("");
     expect(renderToStaticMarkup(<EncounterVariantMark variant="unknown" />)).toBe("");
     expect(renderToStaticMarkup(<EncounterVariantMark variant="hard" />)).toContain(">HM<");
-    expect(renderToStaticMarkup(<EncounterVariantMark variant="normal" />)).toContain("Normal");
+    expect(renderToStaticMarkup(<EncounterVariantMark variant="normal" />)).toContain(">N<");
   });
   it("defaults to Combined and selects only one cohort", () => {
     for (const active of [undefined, "normal", "hard"] as const) {

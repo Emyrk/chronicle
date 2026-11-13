@@ -1,6 +1,6 @@
 import { EncounterVariantChips } from "@/components/EncounterDifficulty/EncounterVariant"
 import { EncounterVariantMark } from "@/components/EncounterDifficulty/EncounterVariant"
-import { supportsEncounterVariant, highestEncounterVariant, withHighestEncounterVariants, encounterVariantLabel, type EncounterVariant, type EncounterVariants } from "@/components/EncounterDifficulty/encounterVariant"
+import { supportsEncounterVariant, highestEncounterVariant, withHighestEncounterVariants, type EncounterVariant, type EncounterVariants } from "@/components/EncounterDifficulty/encounterVariant"
 import { difficultyChipClassName } from "@/components/EncounterDifficulty/encounterDifficulty"
 import { landingRealmError, useLandingHighlights } from "./Hub/landingHighlights"
 import { useCallback, useState, type ReactNode } from "react"
@@ -351,7 +351,7 @@ function LiveHubContent({ context, summary, stale = false, realmName, realmIDs, 
     selected={picked.filter((name) => name !== "Trash")} scope={scope} onScope={context.onScope} view={context.ratingView} onView={context.onView}
     period={context.period} subject={subject === "guilds" ? "guild" : "player"} realmIDs={realmIDs} role={role}
     cohort={chosen ? { difficulty: chosen.difficulty_name, maxPlayers: chosen.max_players } : undefined}
-    where={`${boss ?? (picked.length > 1 ? `${picked.length} bosses` : instanceName)}${shownVariants.map(([name, variant]) => ` · ${name} ${encounterVariantLabel(variant)}`).join("")}`}
+    where={boss ?? (picked.length > 1 ? `${picked.length} bosses` : instanceName)}
     titleBadge={shownVariants.length ? shownVariants.map(([name, variant]) => <span key={name} className="inline-flex shrink-0 items-center gap-1 text-sm text-muted-foreground">{name !== boss && name}<EncounterVariantMark variant={variant} /></span>) : undefined}
     toolbar={<div className="flex min-w-0 max-w-full flex-wrap items-center gap-2"><MetricTabs view={context.ratingView} onView={context.onView} /><span className="absolute top-3 right-4 text-xs text-muted-foreground sm:static sm:px-2">All-time</span></div>} />
   if (context.tab === "rulesets") return <RulesetInstanceView instanceName={instanceName} embedded />
