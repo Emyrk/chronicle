@@ -36,9 +36,11 @@ func fixtureLucifron(t *testing.T) razorgoreEvidence {
 	e.Rankings[0].PlayerGuid = lucifronTestPlayer
 	e.Rankings[0].PlayerName = "Warrior"
 	e.Rankings[0].DurationSecs = 60
-	e.Rankings[0].DamageDone = 100
-	e.Rankings[0].UnrankedDamageDone = 100
-	e.Rankings[0].Dps = 100.0 / 60
+	// Before v1.0.173, ranked source damage was the full credited total.
+	// Migration 000279 supplies the historical unranked column default of zero.
+	e.Rankings[0].DamageDone = 200
+	e.Rankings[0].UnrankedDamageDone = 0
+	e.Rankings[0].Dps = 200.0 / 60
 	absorb := uint32(20)
 	boss := lucifronDamage(1, lucifronTestPlayer, lucifronTestBoss, 100)
 	boss.Overkill = 20
@@ -89,7 +91,7 @@ func TestLucifronEffectiveTargetsAndImmutability(t *testing.T) {
 	details, err := json.Marshal(p.Details)
 	require.NoError(t, err)
 	require.Contains(t, string(details), `"omissions":[]`)
-	require.Contains(t, string(details), `"before_ranked_damage":100`)
+	require.Contains(t, string(details), `"before_ranked_damage":200`)
 }
 
 func TestLucifronStructuralSkips(t *testing.T) {
@@ -182,7 +184,7 @@ func TestLucifronPetOwnershipAndControl(t *testing.T) {
 			require.NoError(t, err)
 			if kind == "terminal owner" || kind == "terminal totem" {
 				require.False(t, p.RequiresReparse, p.Reason)
-				require.EqualValues(t, 200, p.lucifron.Metrics[0].DamageDone)
+				require.EqualValues(t, 200, p.Details["players"].([]lucifronPlayerChange)[0].AfterRankedDamage)
 			} else {
 				require.True(t, p.RequiresReparse, p.Reason)
 			}
@@ -281,7 +283,7 @@ func TestLucifronOrdinaryNPCIsNotMissingOwner(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, p.RequiresReparse, p.Reason)
 	require.Empty(t, p.Details["omissions"])
-	require.EqualValues(t, 200, p.lucifron.Metrics[0].DamageDone)
+	require.EqualValues(t, 200, p.Details["players"].([]lucifronPlayerChange)[0].AfterRankedDamage)
 }
 
 func TestLucifronProvenOwnerlessOmissionPreservesPlayerTotal(t *testing.T) {
@@ -299,9 +301,9 @@ func TestLucifronProvenOwnerlessOmissionPreservesPlayerTotal(t *testing.T) {
 	require.Len(t, omissions, 1)
 	require.EqualValues(t, 50, omissions[0].Amount)
 	require.Contains(t, omissions[0].Reason, "excluded from player rollup")
-	update := p.lucifron.Metrics[0]
-	require.EqualValues(t, 200, update.DamageDone+update.UnrankedDamageDone)
-	require.EqualValues(t, 200, update.DamageDone)
+	update := p.Details["players"].([]lucifronPlayerChange)[0]
+	require.EqualValues(t, 200, update.AfterRankedDamage+update.AfterUnrankedDamage)
+	require.EqualValues(t, 200, update.AfterRankedDamage)
 }
 
 func TestLucifronRejectsWrongScriptPreparedPlan(t *testing.T) {
