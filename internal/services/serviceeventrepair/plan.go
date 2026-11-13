@@ -2,6 +2,7 @@ package serviceeventrepair
 
 import (
 	"crypto/sha256"
+
 	"github.com/Emyrk/chronicle/database"
 	"github.com/google/uuid"
 )
@@ -24,6 +25,7 @@ type RepairPlan struct {
 	numeric             *razorgoreNumericPlan
 	multi               *razorgoreMultiPlan
 	reconstructedPhases []database.InsertEncounterPhaseParams
+	operation           string
 	lucifron            *lucifronPlan
 	seal                [sha256.Size]byte
 }
