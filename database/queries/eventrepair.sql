@@ -77,3 +77,56 @@ WHERE s.tenant_id = @tenant_id
   AND (i.id::text = @reference::text OR i.hashed_slug = @reference::text)
 ORDER BY (i.id::text = @reference::text) DESC, i.id
 LIMIT 1;
+
+-- name: RequestEventRepairApply :one
+UPDATE event_repair_operations
+SET state = 'applying', applied_by = @applied_by::uuid,
+  apply_requested_at = now(), updated_at = now()
+WHERE id = @id AND tenant_id = @tenant_id AND state = 'ready'
+RETURNING *;
+
+-- name: CancelEventRepairOperation :one
+UPDATE event_repair_operations
+SET state = 'cancelled', cancelled_by = @cancelled_by::uuid,
+  cancelled_at = now(), updated_at = now()
+WHERE id = @id AND tenant_id = @tenant_id
+  AND state IN ('dry_running', 'ready', 'applying')
+RETURNING *;
+
+-- name: ListEventRepairPendingItems :many
+SELECT i.* FROM event_repair_items i
+JOIN event_repair_operations o ON o.id = i.operation_id
+WHERE i.operation_id = @operation_id AND o.tenant_id = @tenant_id
+  AND i.state = @state
+ORDER BY i.instance_id LIMIT 25;
+
+-- name: RefreshEventRepairProgress :one
+-- Caller holds the operation lock while processing its page and refreshing totals.
+UPDATE event_repair_operations o
+SET total = counts.total, processed = counts.processed,
+  applied = counts.applied, skipped = counts.skipped,
+  state = CASE
+    WHEN o.state = 'dry_running' AND counts.pending = 0 THEN 'ready'
+    WHEN o.state = 'applying' AND counts.ready = 0 THEN 'completed'
+    ELSE o.state
+  END,
+  updated_at = now()
+FROM (
+  SELECT count(*)::integer AS total,
+    count(*) FILTER (WHERE i.state <> 'pending')::integer AS processed,
+    count(*) FILTER (WHERE i.state = 'applied')::integer AS applied,
+    count(*) FILTER (WHERE i.state IN ('skipped', 'stale'))::integer AS skipped,
+    count(*) FILTER (WHERE i.state = 'pending')::integer AS pending,
+    count(*) FILTER (WHERE i.state = 'ready')::integer AS ready
+  FROM event_repair_items i
+  JOIN event_repair_operations parent ON parent.id = i.operation_id
+  WHERE i.operation_id = @id AND parent.tenant_id = @tenant_id
+) counts
+WHERE o.id = @id AND o.tenant_id = @tenant_id
+RETURNING o.*;
+
+-- name: UpdateEventRepairOperationState :one
+UPDATE event_repair_operations
+SET state = @state, last_error = @last_error, updated_at = now()
+WHERE id = @id AND tenant_id = @tenant_id
+RETURNING *;

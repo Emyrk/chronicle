@@ -1214,6 +1214,10 @@ CREATE TABLE event_repair_operations (
     applied integer DEFAULT 0 NOT NULL,
     skipped integer DEFAULT 0 NOT NULL,
     last_error text DEFAULT ''::text NOT NULL,
+    applied_by uuid,
+    cancelled_by uuid,
+    apply_requested_at timestamp with time zone,
+    cancelled_at timestamp with time zone,
     CONSTRAINT event_repair_operations_state_check CHECK ((state = ANY (ARRAY['dry_running'::text, 'ready'::text, 'applying'::text, 'completed'::text, 'cancelled'::text])))
 );
 

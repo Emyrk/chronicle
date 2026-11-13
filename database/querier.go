@@ -41,6 +41,7 @@ type sqlcQuerier interface {
 	BackfillEncounterDifficultyBatch(ctx context.Context, arg BackfillEncounterDifficultyBatchParams) (BackfillEncounterDifficultyBatchRow, error)
 	BulkUpsertGuildPagePanels(ctx context.Context, dollar_1 []byte) error
 	BumpLeaderboardHighlightGeneration(ctx context.Context, tenantID uuid.UUID) error
+	CancelEventRepairOperation(ctx context.Context, arg CancelEventRepairOperationParams) (EventRepairOperation, error)
 	CarryForwardFinalizedParsedLogGroup(ctx context.Context, arg CarryForwardFinalizedParsedLogGroupParams) error
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
 	CensusPlayerCounts(ctx context.Context, arg CensusPlayerCountsParams) ([]CensusPlayerCountsRow, error)
@@ -858,6 +859,7 @@ type sqlcQuerier interface {
 	ListDueLeaderboardRuns(ctx context.Context, arg ListDueLeaderboardRunsParams) ([]uuid.UUID, error)
 	ListEventRepairItems(ctx context.Context, arg ListEventRepairItemsParams) ([]EventRepairItem, error)
 	ListEventRepairOperations(ctx context.Context, arg ListEventRepairOperationsParams) ([]EventRepairOperation, error)
+	ListEventRepairPendingItems(ctx context.Context, arg ListEventRepairPendingItemsParams) ([]EventRepairItem, error)
 	ListExternalAPICharacterLogs(ctx context.Context, arg ListExternalAPICharacterLogsParams) ([]ListExternalAPICharacterLogsRow, error)
 	// Returns the logs excluded by duplicate-group deduplication for each selected
 	// leaderboard instance. The selected instance is the canonical leaderboard log
@@ -1238,6 +1240,8 @@ type sqlcQuerier interface {
 	RecordGuildInstanceView(ctx context.Context, arg RecordGuildInstanceViewParams) error
 	RecordGuildResourceView(ctx context.Context, arg RecordGuildResourceViewParams) error
 	RedeemOAuthRelayCode(ctx context.Context, codeHash []byte) (RedeemOAuthRelayCodeRow, error)
+	// Caller holds the operation lock while processing its page and refreshing totals.
+	RefreshEventRepairProgress(ctx context.Context, arg RefreshEventRepairProgressParams) (EventRepairOperation, error)
 	RefreshParseScoreMembershipsForLogGroup(ctx context.Context, arg RefreshParseScoreMembershipsForLogGroupParams) (RefreshParseScoreMembershipsForLogGroupRow, error)
 	RefreshTimeParseBossKillMembershipsForLogGroup(ctx context.Context, arg RefreshTimeParseBossKillMembershipsForLogGroupParams) (RefreshTimeParseBossKillMembershipsForLogGroupRow, error)
 	RefreshTimeParseClearTimeMembershipsForLogGroup(ctx context.Context, arg RefreshTimeParseClearTimeMembershipsForLogGroupParams) (RefreshTimeParseClearTimeMembershipsForLogGroupRow, error)
@@ -1267,6 +1271,7 @@ type sqlcQuerier interface {
 	ReplaceLeaderboardPlayerRenownFact(ctx context.Context, arg []ReplaceLeaderboardPlayerRenownFactParams) *ReplaceLeaderboardPlayerRenownFactBatchResults
 	ReplaceLeaderboardVariantGuildBossObservation(ctx context.Context, arg []ReplaceLeaderboardVariantGuildBossObservationParams) *ReplaceLeaderboardVariantGuildBossObservationBatchResults
 	ReplaceLeaderboardVariantPlayerObservation(ctx context.Context, arg []ReplaceLeaderboardVariantPlayerObservationParams) *ReplaceLeaderboardVariantPlayerObservationBatchResults
+	RequestEventRepairApply(ctx context.Context, arg RequestEventRepairApplyParams) (EventRepairOperation, error)
 	RequireCareerGuild(ctx context.Context, arg RequireCareerGuildParams) (uuid.UUID, error)
 	RequireCareerRealm(ctx context.Context, arg RequireCareerRealmParams) (uuid.UUID, error)
 	ReserveLogFilePart(ctx context.Context, arg ReserveLogFilePartParams) (LogFilePart, error)
@@ -1416,6 +1421,7 @@ type sqlcQuerier interface {
 	UpdateDiscordAnnouncementRun(ctx context.Context, arg UpdateDiscordAnnouncementRunParams) (GuildDiscordLogAnnouncement, error)
 	UpdateEventRepairItem(ctx context.Context, arg UpdateEventRepairItemParams) (EventRepairItem, error)
 	UpdateEventRepairOperation(ctx context.Context, arg UpdateEventRepairOperationParams) (EventRepairOperation, error)
+	UpdateEventRepairOperationState(ctx context.Context, arg UpdateEventRepairOperationStateParams) (EventRepairOperation, error)
 	UpdateExternalCharacterLinkSyncResponse(ctx context.Context, arg UpdateExternalCharacterLinkSyncResponseParams) error
 	UpdateGearList(ctx context.Context, arg UpdateGearListParams) (GearList, error)
 	UpdateGearProgression(ctx context.Context, arg UpdateGearProgressionParams) (GearProgression, error)

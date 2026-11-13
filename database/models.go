@@ -1630,20 +1630,24 @@ type EventRepairItem struct {
 }
 
 type EventRepairOperation struct {
-	ID        uuid.UUID          `db:"id" json:"id"`
-	Operation string             `db:"operation" json:"operation"`
-	Version   int32              `db:"version" json:"version"`
-	State     string             `db:"state" json:"state"`
-	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
-	CreatedBy uuid.UUID          `db:"created_by" json:"created_by"`
-	TenantID  uuid.UUID          `db:"tenant_id" json:"tenant_id"`
-	Selection []byte             `db:"selection" json:"selection"`
-	Total     int32              `db:"total" json:"total"`
-	Processed int32              `db:"processed" json:"processed"`
-	Applied   int32              `db:"applied" json:"applied"`
-	Skipped   int32              `db:"skipped" json:"skipped"`
-	LastError string             `db:"last_error" json:"last_error"`
+	ID               uuid.UUID          `db:"id" json:"id"`
+	Operation        string             `db:"operation" json:"operation"`
+	Version          int32              `db:"version" json:"version"`
+	State            string             `db:"state" json:"state"`
+	CreatedAt        pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	CreatedBy        uuid.UUID          `db:"created_by" json:"created_by"`
+	TenantID         uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	Selection        []byte             `db:"selection" json:"selection"`
+	Total            int32              `db:"total" json:"total"`
+	Processed        int32              `db:"processed" json:"processed"`
+	Applied          int32              `db:"applied" json:"applied"`
+	Skipped          int32              `db:"skipped" json:"skipped"`
+	LastError        string             `db:"last_error" json:"last_error"`
+	AppliedBy        uuid.NullUUID      `db:"applied_by" json:"applied_by"`
+	CancelledBy      uuid.NullUUID      `db:"cancelled_by" json:"cancelled_by"`
+	ApplyRequestedAt pgtype.Timestamptz `db:"apply_requested_at" json:"apply_requested_at"`
+	CancelledAt      pgtype.Timestamptz `db:"cancelled_at" json:"cancelled_at"`
 }
 
 type ExternalCharacterLinkSync struct {
