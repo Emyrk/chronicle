@@ -45,12 +45,16 @@ UPDATE leaderboard_operations o SET state='completed',completed_at=clock_timesta
 WHERE o.id= @id AND o.tenant_id= @tenant_id AND state='draining' AND discovery_complete
 AND NOT EXISTS(SELECT 1 FROM leaderboard_dirty_runs d WHERE d.tenant_id=o.tenant_id)
 AND NOT EXISTS(SELECT 1 FROM leaderboard_dirty_guild_boss_benchmarks d WHERE d.tenant_id=o.tenant_id)
+AND NOT EXISTS(SELECT 1 FROM leaderboard_variant_dirty_guild_boss_benchmarks d WHERE d.tenant_id=o.tenant_id)
 AND NOT EXISTS(SELECT 1 FROM leaderboard_dirty_guild_boss_subjects d WHERE d.tenant_id=o.tenant_id)
+AND NOT EXISTS(SELECT 1 FROM leaderboard_variant_dirty_guild_boss_subjects d WHERE d.tenant_id=o.tenant_id)
 AND NOT EXISTS(SELECT 1 FROM leaderboard_dirty_guild_clear_benchmarks d WHERE d.tenant_id=o.tenant_id)
 AND NOT EXISTS(SELECT 1 FROM leaderboard_dirty_guild_clear_subjects d WHERE d.tenant_id=o.tenant_id)
 AND NOT EXISTS(SELECT 1 FROM leaderboard_dirty_guild_renown d WHERE d.tenant_id=o.tenant_id)
 AND NOT EXISTS(SELECT 1 FROM leaderboard_dirty_player_boss_benchmarks d WHERE d.tenant_id=o.tenant_id)
+AND NOT EXISTS(SELECT 1 FROM leaderboard_variant_dirty_player_boss_benchmarks d WHERE d.tenant_id=o.tenant_id)
 AND NOT EXISTS(SELECT 1 FROM leaderboard_dirty_player_boss_subjects d WHERE d.tenant_id=o.tenant_id)
+AND NOT EXISTS(SELECT 1 FROM leaderboard_variant_dirty_player_boss_subjects d WHERE d.tenant_id=o.tenant_id)
 AND NOT EXISTS(SELECT 1 FROM leaderboard_dirty_player_renown d WHERE d.tenant_id=o.tenant_id)
 AND NOT EXISTS(SELECT 1 FROM leaderboard_dirty_careers d WHERE d.tenant_id=o.tenant_id AND d.required);
 
@@ -86,7 +90,11 @@ SELECT 'd1'::text AS level,count(*)::bigint AS pending,min(dirtied_at) AS oldest
 UNION ALL
 SELECT 'd2'::text AS level,count(*)::bigint AS pending,min(dirtied_at) AS oldest,coalesce(sum(attempts),0)::bigint AS retries FROM leaderboard_dirty_guild_boss_benchmarks WHERE tenant_id= @tenant_id::uuid
 UNION ALL
+SELECT 'd2'::text AS level,count(*)::bigint AS pending,min(dirtied_at) AS oldest,coalesce(sum(attempts),0)::bigint AS retries FROM leaderboard_variant_dirty_guild_boss_benchmarks WHERE tenant_id= @tenant_id::uuid
+UNION ALL
 SELECT 'd2'::text AS level,count(*)::bigint AS pending,min(dirtied_at) AS oldest,coalesce(sum(attempts),0)::bigint AS retries FROM leaderboard_dirty_guild_boss_subjects WHERE tenant_id= @tenant_id::uuid
+UNION ALL
+SELECT 'd2'::text AS level,count(*)::bigint AS pending,min(dirtied_at) AS oldest,coalesce(sum(attempts),0)::bigint AS retries FROM leaderboard_variant_dirty_guild_boss_subjects WHERE tenant_id= @tenant_id::uuid
 UNION ALL
 SELECT 'd2'::text AS level,count(*)::bigint AS pending,min(dirtied_at) AS oldest,coalesce(sum(attempts),0)::bigint AS retries FROM leaderboard_dirty_guild_clear_benchmarks WHERE tenant_id= @tenant_id::uuid
 UNION ALL
@@ -96,7 +104,11 @@ SELECT 'd2'::text AS level,count(*)::bigint AS pending,min(dirtied_at) AS oldest
 UNION ALL
 SELECT 'd2'::text AS level,count(*)::bigint AS pending,min(dirtied_at) AS oldest,coalesce(sum(attempts),0)::bigint AS retries FROM leaderboard_dirty_player_boss_benchmarks WHERE tenant_id= @tenant_id::uuid
 UNION ALL
+SELECT 'd2'::text AS level,count(*)::bigint AS pending,min(dirtied_at) AS oldest,coalesce(sum(attempts),0)::bigint AS retries FROM leaderboard_variant_dirty_player_boss_benchmarks WHERE tenant_id= @tenant_id::uuid
+UNION ALL
 SELECT 'd2'::text AS level,count(*)::bigint AS pending,min(dirtied_at) AS oldest,coalesce(sum(attempts),0)::bigint AS retries FROM leaderboard_dirty_player_boss_subjects WHERE tenant_id= @tenant_id::uuid
+UNION ALL
+SELECT 'd2'::text AS level,count(*)::bigint AS pending,min(dirtied_at) AS oldest,coalesce(sum(attempts),0)::bigint AS retries FROM leaderboard_variant_dirty_player_boss_subjects WHERE tenant_id= @tenant_id::uuid
 UNION ALL
 SELECT 'd2'::text AS level,count(*)::bigint AS pending,min(dirtied_at) AS oldest,coalesce(sum(attempts),0)::bigint AS retries FROM leaderboard_dirty_player_renown WHERE tenant_id= @tenant_id::uuid
 ) SELECT coalesce(sum(pending) FILTER(WHERE level='d1'),0)::bigint AS d1_pending,coalesce(sum(pending) FILTER(WHERE level='d2'),0)::bigint AS d2_pending,min(oldest)::timestamptz AS oldest_pending_at,sum(retries)::bigint AS pending_retries FROM queues;
@@ -113,7 +125,11 @@ WHERE id= @id AND tenant_id= @tenant_id;
 SELECT DISTINCT run_id FROM (
 (SELECT DISTINCT run_id FROM leaderboard_player_observations WHERE tenant_id= @tenant_id::uuid AND observed_at<= @cutoff::timestamptz AND run_id> @after_id::uuid ORDER BY run_id LIMIT 100)
 UNION ALL
+(SELECT DISTINCT run_id FROM leaderboard_variant_player_observations WHERE tenant_id= @tenant_id::uuid AND observed_at<= @cutoff::timestamptz AND run_id> @after_id::uuid ORDER BY run_id LIMIT 100)
+UNION ALL
 (SELECT DISTINCT run_id FROM leaderboard_guild_boss_observations WHERE tenant_id= @tenant_id::uuid AND observed_at<= @cutoff::timestamptz AND run_id> @after_id::uuid ORDER BY run_id LIMIT 100)
+UNION ALL
+(SELECT DISTINCT run_id FROM leaderboard_variant_guild_boss_observations WHERE tenant_id= @tenant_id::uuid AND observed_at<= @cutoff::timestamptz AND run_id> @after_id::uuid ORDER BY run_id LIMIT 100)
 UNION ALL
 (SELECT DISTINCT run_id FROM leaderboard_guild_clear_observations WHERE tenant_id= @tenant_id::uuid AND observed_at<= @cutoff::timestamptz AND run_id> @after_id::uuid ORDER BY run_id LIMIT 100)
 UNION ALL

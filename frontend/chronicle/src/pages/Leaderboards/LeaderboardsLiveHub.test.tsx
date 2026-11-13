@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { useCareerLeaderboard } from "@/api/career"
 import type { CareerLeaderboardEntry, CareerLeaderboardResponse } from "@/api/typesGenerated"
-import { useRankingsLeaderboard } from "@/api/rankingsQueries"
+import { useRankingsLeaderboard, useRankingsKillTimesByBoss } from "@/api/rankingsQueries"
 import { useHubSummary, type HubSummary } from "./Hub/hubSummaryAdapter"
 import { useSiteConfig } from "@/api/queries"
 import { LeaderboardsLiveHub } from "./LeaderboardsLiveHub"
@@ -55,7 +55,7 @@ vi.mock("@/api/rankingsQueries", () => ({
   useRankingsStats: () => ({ data: [], isPending: false, isError: false }),
   useRankingsClearTimes: () => ({ data: [], isPending: false, isError: false }),
   useRankingsKillTimes: () => ({ data: [], isPending: false, isError: false }),
-  useRankingsKillTimesByBoss: () => ({ data: { entries: [], total_count: 0 }, isPending: false, isError: false }),
+  useRankingsKillTimesByBoss: vi.fn(() => ({ data: { entries: [], total_count: 0 }, isPending: false, isError: false })),
   useRankingsSuccessRates: () => ({ data: [], isPending: false, isError: false }),
   useParseScoreSpreads: () => ({ data: { available: false, spreads: [] }, isPending: false, isError: false }),
   useTimeParseSpreads: () => ({ data: { spreads: [] }, isPending: false, isError: false }),
@@ -99,6 +99,27 @@ describe("live Storybook Hub", () => {
     vi.mocked(useLandingHighlights).mockReturnValue({ data: undefined, isFetching: true, isError: false, refetch: vi.fn() } as unknown as ReturnType<typeof useLandingHighlights>)
     setSummary(summary)
   })
+  it("keeps kill-time requests unchanged by variant URL parameters", () => {
+    hub("/leaderboards/Molten-Core/speedruns?encounters=Ragnaros");
+    const combined = vi.mocked(useRankingsKillTimesByBoss).mock.calls.at(-1);
+    hub("/leaderboards/Molten-Core/speedruns?encounters=Ragnaros&encounter_variant=hard");
+    expect(vi.mocked(useRankingsKillTimesByBoss).mock.calls.at(-1)).toEqual(combined);
+  });
+
+  it("never forwards encounter variants to career or summary requests", () => {
+    hub("/leaderboards?encounter_variant=hard&encounter_variants=%7B%22Hodir%22%3A%22hard%22%7D");
+    for (const call of vi.mocked(useCareerLeaderboard).mock.calls) {
+      expect(call[1].has("encounter_variant")).toBe(false);
+      expect(call[1].has("encounter_variants")).toBe(false);
+    }
+    for (const call of vi.mocked(useHubSummary).mock.calls) {
+      expect(call[0]).not.toHaveProperty("encounter_variant");
+      expect(call[0]).not.toHaveProperty("encounterVariant");
+      expect(call[0]).not.toHaveProperty("encounter_variants");
+      expect(call[0]).not.toHaveProperty("encounterVariants");
+    }
+  });
+
   it("mounts the mobile bottom ad on active leaderboard routes", () => {
     expect(hub("/leaderboards/Ruins-of-Ahn%27Qiraj?difficulty=&size=0")).toContain(
       'data-ad-placement="rankings-mobile-bottom"',

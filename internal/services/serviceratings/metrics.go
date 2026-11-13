@@ -165,7 +165,7 @@ func (m *Metrics) elapsed(tenant uuid.UUID, family, phase string, start time.Tim
 	}
 }
 
-var metricFamilies = []string{"player_boss_benchmarks", "player_boss_subjects", "guild_boss_benchmarks", "guild_boss_subjects", "guild_clear_benchmarks", "guild_clear_subjects", "player_renown", "guild_renown"}
+var metricFamilies = []string{"player_boss_benchmarks", "player_boss_subjects", "guild_boss_benchmarks", "guild_boss_subjects", "guild_clear_benchmarks", "guild_clear_subjects", "player_renown", "guild_renown", "variant_player_boss_benchmarks", "variant_player_boss_subjects", "variant_guild_boss_benchmarks", "variant_guild_boss_subjects"}
 
 type metricScopeKey struct{}
 type metricScope struct {

@@ -11316,7 +11316,7 @@ func (q *sqlQuerier) ListInferenceContextUsageByUser(ctx context.Context, arg Li
 }
 
 const listInferenceInstanceEncounters = `-- name: ListInferenceInstanceEncounters :many
-SELECT id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id, ranking_start_offset_ms, ranking_end_offset_ms, invalidated_at, invalid_reason, difficulty
+SELECT id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id, ranking_start_offset_ms, ranking_end_offset_ms, invalidated_at, invalid_reason, difficulty, encounter_variant
 FROM log_instance_encounters
 WHERE instance_id = $1
 ORDER BY start_time, id
@@ -11347,6 +11347,7 @@ func (q *sqlQuerier) ListInferenceInstanceEncounters(ctx context.Context, instan
 			&i.InvalidatedAt,
 			&i.InvalidReason,
 			&i.Difficulty,
+			&i.EncounterVariant,
 		); err != nil {
 			return nil, err
 		}
@@ -13529,7 +13530,11 @@ SELECT (($1::integer=0 AND EXISTS(SELECT 1 FROM leaderboard_dirty_player_boss_be
 ($1::integer=4 AND EXISTS(SELECT 1 FROM leaderboard_dirty_guild_clear_benchmarks WHERE tenant_id= $2::uuid AND process_after<=clock_timestamp() AND retry_after<=clock_timestamp() AND (locked_until IS NULL OR locked_until<=clock_timestamp()))) OR
 ($1::integer=5 AND EXISTS(SELECT 1 FROM leaderboard_dirty_guild_clear_subjects WHERE tenant_id= $2::uuid AND process_after<=clock_timestamp() AND retry_after<=clock_timestamp() AND (locked_until IS NULL OR locked_until<=clock_timestamp()))) OR
 ($1::integer=6 AND EXISTS(SELECT 1 FROM leaderboard_dirty_player_renown WHERE tenant_id= $2::uuid AND process_after<=clock_timestamp() AND retry_after<=clock_timestamp() AND (locked_until IS NULL OR locked_until<=clock_timestamp()))) OR
-($1::integer=7 AND EXISTS(SELECT 1 FROM leaderboard_dirty_guild_renown WHERE tenant_id= $2::uuid AND process_after<=clock_timestamp() AND retry_after<=clock_timestamp() AND (locked_until IS NULL OR locked_until<=clock_timestamp()))))::boolean
+($1::integer=7 AND EXISTS(SELECT 1 FROM leaderboard_dirty_guild_renown WHERE tenant_id= $2::uuid AND process_after<=clock_timestamp() AND retry_after<=clock_timestamp() AND (locked_until IS NULL OR locked_until<=clock_timestamp()))) OR
+($1::integer=8 AND EXISTS(SELECT 1 FROM leaderboard_variant_dirty_player_boss_benchmarks WHERE tenant_id= $2::uuid AND process_after<=clock_timestamp() AND retry_after<=clock_timestamp() AND (locked_until IS NULL OR locked_until<=clock_timestamp()))) OR
+($1::integer=9 AND EXISTS(SELECT 1 FROM leaderboard_variant_dirty_player_boss_subjects WHERE tenant_id= $2::uuid AND process_after<=clock_timestamp() AND retry_after<=clock_timestamp() AND (locked_until IS NULL OR locked_until<=clock_timestamp()))) OR
+($1::integer=10 AND EXISTS(SELECT 1 FROM leaderboard_variant_dirty_guild_boss_benchmarks WHERE tenant_id= $2::uuid AND process_after<=clock_timestamp() AND retry_after<=clock_timestamp() AND (locked_until IS NULL OR locked_until<=clock_timestamp()))) OR
+($1::integer=11 AND EXISTS(SELECT 1 FROM leaderboard_variant_dirty_guild_boss_subjects WHERE tenant_id= $2::uuid AND process_after<=clock_timestamp() AND retry_after<=clock_timestamp() AND (locked_until IS NULL OR locked_until<=clock_timestamp()))))::boolean
 `
 
 type HasDueLeaderboardD2Params struct {
@@ -14513,6 +14518,14 @@ UNION ALL
 SELECT tenant_id, 6::integer AS family FROM leaderboard_dirty_player_renown WHERE process_after <= clock_timestamp() AND retry_after <= clock_timestamp() AND (locked_until IS NULL OR locked_until <= clock_timestamp()) GROUP BY tenant_id
 UNION ALL
 SELECT tenant_id, 7::integer AS family FROM leaderboard_dirty_guild_renown WHERE process_after <= clock_timestamp() AND retry_after <= clock_timestamp() AND (locked_until IS NULL OR locked_until <= clock_timestamp()) GROUP BY tenant_id
+UNION ALL
+SELECT tenant_id, 8::integer AS family FROM leaderboard_variant_dirty_player_boss_benchmarks WHERE process_after <= clock_timestamp() AND retry_after <= clock_timestamp() AND (locked_until IS NULL OR locked_until <= clock_timestamp()) GROUP BY tenant_id
+UNION ALL
+SELECT tenant_id, 9::integer AS family FROM leaderboard_variant_dirty_player_boss_subjects WHERE process_after <= clock_timestamp() AND retry_after <= clock_timestamp() AND (locked_until IS NULL OR locked_until <= clock_timestamp()) GROUP BY tenant_id
+UNION ALL
+SELECT tenant_id, 10::integer AS family FROM leaderboard_variant_dirty_guild_boss_benchmarks WHERE process_after <= clock_timestamp() AND retry_after <= clock_timestamp() AND (locked_until IS NULL OR locked_until <= clock_timestamp()) GROUP BY tenant_id
+UNION ALL
+SELECT tenant_id, 11::integer AS family FROM leaderboard_variant_dirty_guild_boss_subjects WHERE process_after <= clock_timestamp() AND retry_after <= clock_timestamp() AND (locked_until IS NULL OR locked_until <= clock_timestamp()) GROUP BY tenant_id
 )
 SELECT tenant_id, family FROM due
 WHERE (tenant_id, family) > ($1::uuid, $2::integer)
@@ -14560,6 +14573,387 @@ func (q *sqlQuerier) SetLeaderboardWorkerTimeouts(ctx context.Context, statement
 	return err
 }
 
+const claimLeaderboardVariantGuildBossBenchmark = `-- name: ClaimLeaderboardVariantGuildBossBenchmark :many
+WITH candidates AS (
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, revision, dirtied_at, process_after, claim_token, claimed_revision, locked_until, retry_after, attempts, encounter_variant FROM leaderboard_variant_dirty_guild_boss_benchmarks
+ WHERE tenant_id = $1::uuid AND process_after <= clock_timestamp()
+   AND retry_after <= clock_timestamp()
+   AND (locked_until IS NULL OR locked_until <= clock_timestamp())
+ ORDER BY process_after, instance_name, difficulty_name, max_players, encounter_name, encounter_variant
+ LIMIT $2::integer FOR UPDATE SKIP LOCKED
+)
+UPDATE leaderboard_variant_dirty_guild_boss_benchmarks d SET claim_token = gen_random_uuid(), claimed_revision = d.revision,
+    locked_until = clock_timestamp() + interval '15 minutes'
+FROM candidates c WHERE d.tenant_id = c.tenant_id AND d.instance_name = c.instance_name AND d.difficulty_name = c.difficulty_name AND d.max_players = c.max_players AND d.encounter_name = c.encounter_name AND d.encounter_variant = c.encounter_variant
+RETURNING d.tenant_id, d.instance_name, d.difficulty_name, d.max_players, d.encounter_name, d.revision, d.dirtied_at, d.process_after, d.claim_token, d.claimed_revision, d.locked_until, d.retry_after, d.attempts, d.encounter_variant
+`
+
+type ClaimLeaderboardVariantGuildBossBenchmarkParams struct {
+	TenantID   uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	LimitCount int32     `db:"limit_count" json:"limit_count"`
+}
+
+func (q *sqlQuerier) ClaimLeaderboardVariantGuildBossBenchmark(ctx context.Context, arg ClaimLeaderboardVariantGuildBossBenchmarkParams) ([]LeaderboardVariantDirtyGuildBossBenchmark, error) {
+	rows, err := q.db.Query(ctx, claimLeaderboardVariantGuildBossBenchmark, arg.TenantID, arg.LimitCount)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LeaderboardVariantDirtyGuildBossBenchmark
+	for rows.Next() {
+		var i LeaderboardVariantDirtyGuildBossBenchmark
+		if err := rows.Scan(
+			&i.TenantID,
+			&i.InstanceName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.EncounterName,
+			&i.Revision,
+			&i.DirtiedAt,
+			&i.ProcessAfter,
+			&i.ClaimToken,
+			&i.ClaimedRevision,
+			&i.LockedUntil,
+			&i.RetryAfter,
+			&i.Attempts,
+			&i.EncounterVariant,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const claimLeaderboardVariantGuildBossSubject = `-- name: ClaimLeaderboardVariantGuildBossSubject :many
+WITH candidates AS (
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id, revision, dirtied_at, process_after, claim_token, claimed_revision, locked_until, retry_after, attempts, encounter_variant FROM leaderboard_variant_dirty_guild_boss_subjects
+ WHERE tenant_id = $1::uuid AND process_after <= clock_timestamp()
+   AND retry_after <= clock_timestamp()
+   AND (locked_until IS NULL OR locked_until <= clock_timestamp())
+ ORDER BY process_after, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, realm_id, guild_id
+ LIMIT $2::integer FOR UPDATE SKIP LOCKED
+)
+UPDATE leaderboard_variant_dirty_guild_boss_subjects d SET claim_token = gen_random_uuid(), claimed_revision = d.revision,
+    locked_until = clock_timestamp() + interval '15 minutes'
+FROM candidates c WHERE d.tenant_id = c.tenant_id AND d.instance_name = c.instance_name AND d.difficulty_name = c.difficulty_name AND d.max_players = c.max_players AND d.encounter_name = c.encounter_name AND d.encounter_variant = c.encounter_variant AND d.realm_id = c.realm_id AND d.guild_id = c.guild_id
+RETURNING d.tenant_id, d.instance_name, d.difficulty_name, d.max_players, d.encounter_name, d.realm_id, d.guild_id, d.revision, d.dirtied_at, d.process_after, d.claim_token, d.claimed_revision, d.locked_until, d.retry_after, d.attempts, d.encounter_variant
+`
+
+type ClaimLeaderboardVariantGuildBossSubjectParams struct {
+	TenantID   uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	LimitCount int32     `db:"limit_count" json:"limit_count"`
+}
+
+func (q *sqlQuerier) ClaimLeaderboardVariantGuildBossSubject(ctx context.Context, arg ClaimLeaderboardVariantGuildBossSubjectParams) ([]LeaderboardVariantDirtyGuildBossSubject, error) {
+	rows, err := q.db.Query(ctx, claimLeaderboardVariantGuildBossSubject, arg.TenantID, arg.LimitCount)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LeaderboardVariantDirtyGuildBossSubject
+	for rows.Next() {
+		var i LeaderboardVariantDirtyGuildBossSubject
+		if err := rows.Scan(
+			&i.TenantID,
+			&i.InstanceName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.EncounterName,
+			&i.RealmID,
+			&i.GuildID,
+			&i.Revision,
+			&i.DirtiedAt,
+			&i.ProcessAfter,
+			&i.ClaimToken,
+			&i.ClaimedRevision,
+			&i.LockedUntil,
+			&i.RetryAfter,
+			&i.Attempts,
+			&i.EncounterVariant,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const claimLeaderboardVariantPlayerBossBenchmark = `-- name: ClaimLeaderboardVariantPlayerBossBenchmark :many
+WITH candidates AS (
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, revision, dirtied_at, process_after, claim_token, claimed_revision, locked_until, retry_after, attempts, encounter_variant FROM leaderboard_variant_dirty_player_boss_benchmarks
+ WHERE tenant_id = $1::uuid AND process_after <= clock_timestamp()
+   AND retry_after <= clock_timestamp()
+   AND (locked_until IS NULL OR locked_until <= clock_timestamp())
+ ORDER BY process_after, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, player_class, player_spec, player_sub_spec, metric
+ LIMIT $2::integer FOR UPDATE SKIP LOCKED
+)
+UPDATE leaderboard_variant_dirty_player_boss_benchmarks d SET claim_token = gen_random_uuid(), claimed_revision = d.revision,
+    locked_until = clock_timestamp() + interval '15 minutes'
+FROM candidates c WHERE d.tenant_id = c.tenant_id AND d.instance_name = c.instance_name AND d.difficulty_name = c.difficulty_name AND d.max_players = c.max_players AND d.encounter_name = c.encounter_name AND d.encounter_variant = c.encounter_variant AND d.player_class = c.player_class AND d.player_spec = c.player_spec AND d.player_sub_spec = c.player_sub_spec AND d.metric = c.metric
+RETURNING d.tenant_id, d.instance_name, d.difficulty_name, d.max_players, d.encounter_name, d.player_class, d.player_spec, d.player_sub_spec, d.metric, d.revision, d.dirtied_at, d.process_after, d.claim_token, d.claimed_revision, d.locked_until, d.retry_after, d.attempts, d.encounter_variant
+`
+
+type ClaimLeaderboardVariantPlayerBossBenchmarkParams struct {
+	TenantID   uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	LimitCount int32     `db:"limit_count" json:"limit_count"`
+}
+
+func (q *sqlQuerier) ClaimLeaderboardVariantPlayerBossBenchmark(ctx context.Context, arg ClaimLeaderboardVariantPlayerBossBenchmarkParams) ([]LeaderboardVariantDirtyPlayerBossBenchmark, error) {
+	rows, err := q.db.Query(ctx, claimLeaderboardVariantPlayerBossBenchmark, arg.TenantID, arg.LimitCount)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LeaderboardVariantDirtyPlayerBossBenchmark
+	for rows.Next() {
+		var i LeaderboardVariantDirtyPlayerBossBenchmark
+		if err := rows.Scan(
+			&i.TenantID,
+			&i.InstanceName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.EncounterName,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+			&i.Metric,
+			&i.Revision,
+			&i.DirtiedAt,
+			&i.ProcessAfter,
+			&i.ClaimToken,
+			&i.ClaimedRevision,
+			&i.LockedUntil,
+			&i.RetryAfter,
+			&i.Attempts,
+			&i.EncounterVariant,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const claimLeaderboardVariantPlayerBossSubject = `-- name: ClaimLeaderboardVariantPlayerBossSubject :many
+WITH candidates AS (
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid, revision, dirtied_at, process_after, claim_token, claimed_revision, locked_until, retry_after, attempts, encounter_variant FROM leaderboard_variant_dirty_player_boss_subjects
+ WHERE tenant_id = $1::uuid AND process_after <= clock_timestamp()
+   AND retry_after <= clock_timestamp()
+   AND (locked_until IS NULL OR locked_until <= clock_timestamp())
+ ORDER BY process_after, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid
+ LIMIT $2::integer FOR UPDATE SKIP LOCKED
+)
+UPDATE leaderboard_variant_dirty_player_boss_subjects d SET claim_token = gen_random_uuid(), claimed_revision = d.revision,
+    locked_until = clock_timestamp() + interval '15 minutes'
+FROM candidates c WHERE d.tenant_id = c.tenant_id AND d.instance_name = c.instance_name AND d.difficulty_name = c.difficulty_name AND d.max_players = c.max_players AND d.encounter_name = c.encounter_name AND d.encounter_variant = c.encounter_variant AND d.player_class = c.player_class AND d.player_spec = c.player_spec AND d.player_sub_spec = c.player_sub_spec AND d.metric = c.metric AND d.realm_id = c.realm_id AND d.player_guid = c.player_guid
+RETURNING d.tenant_id, d.instance_name, d.difficulty_name, d.max_players, d.encounter_name, d.player_class, d.player_spec, d.player_sub_spec, d.metric, d.realm_id, d.player_guid, d.revision, d.dirtied_at, d.process_after, d.claim_token, d.claimed_revision, d.locked_until, d.retry_after, d.attempts, d.encounter_variant
+`
+
+type ClaimLeaderboardVariantPlayerBossSubjectParams struct {
+	TenantID   uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	LimitCount int32     `db:"limit_count" json:"limit_count"`
+}
+
+func (q *sqlQuerier) ClaimLeaderboardVariantPlayerBossSubject(ctx context.Context, arg ClaimLeaderboardVariantPlayerBossSubjectParams) ([]LeaderboardVariantDirtyPlayerBossSubject, error) {
+	rows, err := q.db.Query(ctx, claimLeaderboardVariantPlayerBossSubject, arg.TenantID, arg.LimitCount)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LeaderboardVariantDirtyPlayerBossSubject
+	for rows.Next() {
+		var i LeaderboardVariantDirtyPlayerBossSubject
+		if err := rows.Scan(
+			&i.TenantID,
+			&i.InstanceName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.EncounterName,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+			&i.Metric,
+			&i.RealmID,
+			&i.PlayerGuid,
+			&i.Revision,
+			&i.DirtiedAt,
+			&i.ProcessAfter,
+			&i.ClaimToken,
+			&i.ClaimedRevision,
+			&i.LockedUntil,
+			&i.RetryAfter,
+			&i.Attempts,
+			&i.EncounterVariant,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const enqueueLeaderboardVariantGuildBossBenchmark = `-- name: EnqueueLeaderboardVariantGuildBossBenchmark :exec
+INSERT INTO leaderboard_variant_dirty_guild_boss_benchmarks (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, process_after)
+VALUES ($1::uuid, $2::text, $3::text, $4::smallint, $5::text, $6::text, $7::timestamptz)
+ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant) DO UPDATE
+SET revision = leaderboard_variant_dirty_guild_boss_benchmarks.revision + 1, dirtied_at = clock_timestamp(),
+    process_after = LEAST(leaderboard_variant_dirty_guild_boss_benchmarks.process_after, EXCLUDED.process_after)
+`
+
+type EnqueueLeaderboardVariantGuildBossBenchmarkParams struct {
+	TenantID         uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	InstanceName     string             `db:"instance_name" json:"instance_name"`
+	DifficultyName   string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers       int16              `db:"max_players" json:"max_players"`
+	EncounterName    string             `db:"encounter_name" json:"encounter_name"`
+	EncounterVariant string             `db:"encounter_variant" json:"encounter_variant"`
+	ProcessAfter     pgtype.Timestamptz `db:"process_after" json:"process_after"`
+}
+
+func (q *sqlQuerier) EnqueueLeaderboardVariantGuildBossBenchmark(ctx context.Context, arg EnqueueLeaderboardVariantGuildBossBenchmarkParams) error {
+	_, err := q.db.Exec(ctx, enqueueLeaderboardVariantGuildBossBenchmark,
+		arg.TenantID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.EncounterName,
+		arg.EncounterVariant,
+		arg.ProcessAfter,
+	)
+	return err
+}
+
+const enqueueLeaderboardVariantGuildBossSubject = `-- name: EnqueueLeaderboardVariantGuildBossSubject :exec
+INSERT INTO leaderboard_variant_dirty_guild_boss_subjects (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, realm_id, guild_id, process_after)
+VALUES ($1::uuid, $2::text, $3::text, $4::smallint, $5::text, $6::text, $7::uuid, $8::uuid, $9::timestamptz)
+ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, realm_id, guild_id) DO UPDATE
+SET revision = leaderboard_variant_dirty_guild_boss_subjects.revision + 1, dirtied_at = clock_timestamp(),
+    process_after = LEAST(leaderboard_variant_dirty_guild_boss_subjects.process_after, EXCLUDED.process_after)
+`
+
+type EnqueueLeaderboardVariantGuildBossSubjectParams struct {
+	TenantID         uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	InstanceName     string             `db:"instance_name" json:"instance_name"`
+	DifficultyName   string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers       int16              `db:"max_players" json:"max_players"`
+	EncounterName    string             `db:"encounter_name" json:"encounter_name"`
+	EncounterVariant string             `db:"encounter_variant" json:"encounter_variant"`
+	RealmID          uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID          uuid.UUID          `db:"guild_id" json:"guild_id"`
+	ProcessAfter     pgtype.Timestamptz `db:"process_after" json:"process_after"`
+}
+
+func (q *sqlQuerier) EnqueueLeaderboardVariantGuildBossSubject(ctx context.Context, arg EnqueueLeaderboardVariantGuildBossSubjectParams) error {
+	_, err := q.db.Exec(ctx, enqueueLeaderboardVariantGuildBossSubject,
+		arg.TenantID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.EncounterName,
+		arg.EncounterVariant,
+		arg.RealmID,
+		arg.GuildID,
+		arg.ProcessAfter,
+	)
+	return err
+}
+
+const enqueueLeaderboardVariantPlayerBossBenchmark = `-- name: EnqueueLeaderboardVariantPlayerBossBenchmark :exec
+INSERT INTO leaderboard_variant_dirty_player_boss_benchmarks (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, player_class, player_spec, player_sub_spec, metric, process_after)
+VALUES ($1::uuid, $2::text, $3::text, $4::smallint, $5::text, $6::text, $7::text, $8::text, $9::text, $10::text, $11::timestamptz)
+ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, player_class, player_spec, player_sub_spec, metric) DO UPDATE
+SET revision = leaderboard_variant_dirty_player_boss_benchmarks.revision + 1, dirtied_at = clock_timestamp(),
+    process_after = LEAST(leaderboard_variant_dirty_player_boss_benchmarks.process_after, EXCLUDED.process_after)
+`
+
+type EnqueueLeaderboardVariantPlayerBossBenchmarkParams struct {
+	TenantID         uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	InstanceName     string             `db:"instance_name" json:"instance_name"`
+	DifficultyName   string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers       int16              `db:"max_players" json:"max_players"`
+	EncounterName    string             `db:"encounter_name" json:"encounter_name"`
+	EncounterVariant string             `db:"encounter_variant" json:"encounter_variant"`
+	PlayerClass      string             `db:"player_class" json:"player_class"`
+	PlayerSpec       string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec    string             `db:"player_sub_spec" json:"player_sub_spec"`
+	Metric           string             `db:"metric" json:"metric"`
+	ProcessAfter     pgtype.Timestamptz `db:"process_after" json:"process_after"`
+}
+
+// Exact variants use the same calculation and claim fencing as Combined.
+func (q *sqlQuerier) EnqueueLeaderboardVariantPlayerBossBenchmark(ctx context.Context, arg EnqueueLeaderboardVariantPlayerBossBenchmarkParams) error {
+	_, err := q.db.Exec(ctx, enqueueLeaderboardVariantPlayerBossBenchmark,
+		arg.TenantID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.EncounterName,
+		arg.EncounterVariant,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.Metric,
+		arg.ProcessAfter,
+	)
+	return err
+}
+
+const enqueueLeaderboardVariantPlayerBossSubject = `-- name: EnqueueLeaderboardVariantPlayerBossSubject :exec
+INSERT INTO leaderboard_variant_dirty_player_boss_subjects (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid, process_after)
+VALUES ($1::uuid, $2::text, $3::text, $4::smallint, $5::text, $6::text, $7::text, $8::text, $9::text, $10::text, $11::uuid, $12::text, $13::timestamptz)
+ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid) DO UPDATE
+SET revision = leaderboard_variant_dirty_player_boss_subjects.revision + 1, dirtied_at = clock_timestamp(),
+    process_after = LEAST(leaderboard_variant_dirty_player_boss_subjects.process_after, EXCLUDED.process_after)
+`
+
+type EnqueueLeaderboardVariantPlayerBossSubjectParams struct {
+	TenantID         uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	InstanceName     string             `db:"instance_name" json:"instance_name"`
+	DifficultyName   string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers       int16              `db:"max_players" json:"max_players"`
+	EncounterName    string             `db:"encounter_name" json:"encounter_name"`
+	EncounterVariant string             `db:"encounter_variant" json:"encounter_variant"`
+	PlayerClass      string             `db:"player_class" json:"player_class"`
+	PlayerSpec       string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec    string             `db:"player_sub_spec" json:"player_sub_spec"`
+	Metric           string             `db:"metric" json:"metric"`
+	RealmID          uuid.UUID          `db:"realm_id" json:"realm_id"`
+	PlayerGuid       string             `db:"player_guid" json:"player_guid"`
+	ProcessAfter     pgtype.Timestamptz `db:"process_after" json:"process_after"`
+}
+
+func (q *sqlQuerier) EnqueueLeaderboardVariantPlayerBossSubject(ctx context.Context, arg EnqueueLeaderboardVariantPlayerBossSubjectParams) error {
+	_, err := q.db.Exec(ctx, enqueueLeaderboardVariantPlayerBossSubject,
+		arg.TenantID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.EncounterName,
+		arg.EncounterVariant,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+		arg.Metric,
+		arg.RealmID,
+		arg.PlayerGuid,
+		arg.ProcessAfter,
+	)
+	return err
+}
+
 const leaderboardMetricOperationProgress = `-- name: LeaderboardMetricOperationProgress :many
 SELECT phase,state,discovered,last_progress_at FROM leaderboard_operations
 WHERE tenant_id= $1::uuid ORDER BY started_at DESC,id LIMIT 1
@@ -14602,11 +14996,19 @@ SELECT 'runs'::text AS family,count(*)::bigint AS pending,count(*) FILTER(WHERE 
 UNION ALL
 SELECT 'player_boss_benchmarks'::text AS family,count(*)::bigint AS pending,count(*) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::bigint AS due,count(*) FILTER(WHERE locked_until>statement_timestamp())::bigint AS claimed,count(*) FILTER(WHERE retry_after>statement_timestamp())::bigint AS retrying,min(dirtied_at)::timestamptz AS oldest_pending_at,min(process_after) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::timestamptz AS oldest_due_at FROM leaderboard_dirty_player_boss_benchmarks WHERE tenant_id= $1::uuid
 UNION ALL
+SELECT 'variant_player_boss_benchmarks'::text AS family,count(*)::bigint AS pending,count(*) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::bigint AS due,count(*) FILTER(WHERE locked_until>statement_timestamp())::bigint AS claimed,count(*) FILTER(WHERE retry_after>statement_timestamp())::bigint AS retrying,min(dirtied_at)::timestamptz AS oldest_pending_at,min(process_after) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::timestamptz AS oldest_due_at FROM leaderboard_variant_dirty_player_boss_benchmarks WHERE tenant_id= $1::uuid
+UNION ALL
 SELECT 'player_boss_subjects'::text AS family,count(*)::bigint AS pending,count(*) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::bigint AS due,count(*) FILTER(WHERE locked_until>statement_timestamp())::bigint AS claimed,count(*) FILTER(WHERE retry_after>statement_timestamp())::bigint AS retrying,min(dirtied_at)::timestamptz AS oldest_pending_at,min(process_after) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::timestamptz AS oldest_due_at FROM leaderboard_dirty_player_boss_subjects WHERE tenant_id= $1::uuid
+UNION ALL
+SELECT 'variant_player_boss_subjects'::text AS family,count(*)::bigint AS pending,count(*) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::bigint AS due,count(*) FILTER(WHERE locked_until>statement_timestamp())::bigint AS claimed,count(*) FILTER(WHERE retry_after>statement_timestamp())::bigint AS retrying,min(dirtied_at)::timestamptz AS oldest_pending_at,min(process_after) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::timestamptz AS oldest_due_at FROM leaderboard_variant_dirty_player_boss_subjects WHERE tenant_id= $1::uuid
 UNION ALL
 SELECT 'guild_boss_benchmarks'::text AS family,count(*)::bigint AS pending,count(*) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::bigint AS due,count(*) FILTER(WHERE locked_until>statement_timestamp())::bigint AS claimed,count(*) FILTER(WHERE retry_after>statement_timestamp())::bigint AS retrying,min(dirtied_at)::timestamptz AS oldest_pending_at,min(process_after) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::timestamptz AS oldest_due_at FROM leaderboard_dirty_guild_boss_benchmarks WHERE tenant_id= $1::uuid
 UNION ALL
+SELECT 'variant_guild_boss_benchmarks'::text AS family,count(*)::bigint AS pending,count(*) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::bigint AS due,count(*) FILTER(WHERE locked_until>statement_timestamp())::bigint AS claimed,count(*) FILTER(WHERE retry_after>statement_timestamp())::bigint AS retrying,min(dirtied_at)::timestamptz AS oldest_pending_at,min(process_after) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::timestamptz AS oldest_due_at FROM leaderboard_variant_dirty_guild_boss_benchmarks WHERE tenant_id= $1::uuid
+UNION ALL
 SELECT 'guild_boss_subjects'::text AS family,count(*)::bigint AS pending,count(*) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::bigint AS due,count(*) FILTER(WHERE locked_until>statement_timestamp())::bigint AS claimed,count(*) FILTER(WHERE retry_after>statement_timestamp())::bigint AS retrying,min(dirtied_at)::timestamptz AS oldest_pending_at,min(process_after) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::timestamptz AS oldest_due_at FROM leaderboard_dirty_guild_boss_subjects WHERE tenant_id= $1::uuid
+UNION ALL
+SELECT 'variant_guild_boss_subjects'::text AS family,count(*)::bigint AS pending,count(*) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::bigint AS due,count(*) FILTER(WHERE locked_until>statement_timestamp())::bigint AS claimed,count(*) FILTER(WHERE retry_after>statement_timestamp())::bigint AS retrying,min(dirtied_at)::timestamptz AS oldest_pending_at,min(process_after) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::timestamptz AS oldest_due_at FROM leaderboard_variant_dirty_guild_boss_subjects WHERE tenant_id= $1::uuid
 UNION ALL
 SELECT 'guild_clear_benchmarks'::text AS family,count(*)::bigint AS pending,count(*) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::bigint AS due,count(*) FILTER(WHERE locked_until>statement_timestamp())::bigint AS claimed,count(*) FILTER(WHERE retry_after>statement_timestamp())::bigint AS retrying,min(dirtied_at)::timestamptz AS oldest_pending_at,min(process_after) FILTER(WHERE process_after<=statement_timestamp() AND retry_after<=statement_timestamp() AND (locked_until IS NULL OR locked_until<=statement_timestamp()))::timestamptz AS oldest_due_at FROM leaderboard_dirty_guild_clear_benchmarks WHERE tenant_id= $1::uuid
 UNION ALL
@@ -15232,7 +15634,9 @@ WITH keys AS (
  JOIN wow_server_realms r ON r.id=rr.realm_id JOIN wow_servers s ON s.id=r.server_id
  WHERE (rr.run_id=ANY($1::uuid[]) OR rr.representative_instance_id=ANY($1::uuid[])) AND s.tenant_id IS NOT NULL
  UNION SELECT tenant_id,run_id FROM leaderboard_player_observations WHERE run_id=ANY($1::uuid[]) OR source_instance_id=ANY($1::uuid[])
+ UNION SELECT tenant_id,run_id FROM leaderboard_variant_player_observations WHERE run_id=ANY($1::uuid[]) OR source_instance_id=ANY($1::uuid[])
  UNION SELECT tenant_id,run_id FROM leaderboard_guild_boss_observations WHERE run_id=ANY($1::uuid[]) OR source_instance_id=ANY($1::uuid[])
+ UNION SELECT tenant_id,run_id FROM leaderboard_variant_guild_boss_observations WHERE run_id=ANY($1::uuid[]) OR source_instance_id=ANY($1::uuid[])
  UNION SELECT tenant_id,run_id FROM leaderboard_guild_clear_observations WHERE run_id=ANY($1::uuid[]) OR source_instance_id=ANY($1::uuid[])
  UNION SELECT tenant_id,run_id FROM leaderboard_player_renown_facts WHERE run_id=ANY($1::uuid[]) OR source_instance_id=ANY($1::uuid[])
  UNION SELECT tenant_id,run_id FROM leaderboard_guild_renown_facts WHERE run_id=ANY($1::uuid[]) OR source_instance_id=ANY($1::uuid[])
@@ -15510,6 +15914,122 @@ func (q *sqlQuerier) RepairOperationPlayerRenownCounts(ctx context.Context, arg 
 	return i, err
 }
 
+const repairOperationVariantGuildBossBenchmarks = `-- name: RepairOperationVariantGuildBossBenchmarks :one
+WITH page AS MATERIALIZED (
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant FROM leaderboard_variant_guild_boss_benchmarks WHERE tenant_id= $1::uuid AND computed_at<= $2::timestamptz
+ AND (instance_name, difficulty_name, max_players, encounter_name, encounter_variant)>(COALESCE(($3::jsonb->>'instance_name')::text,''::text), COALESCE(($3::jsonb->>'difficulty_name')::text,''::text), COALESCE(($3::jsonb->>'max_players')::smallint,-1::smallint), COALESCE(($3::jsonb->>'encounter_name')::text,''::text), COALESCE(($3::jsonb->>'encounter_variant')::text,''::text)) ORDER BY instance_name, difficulty_name, max_players, encounter_name, encounter_variant LIMIT 100
+), enqueued AS (
+ INSERT INTO leaderboard_variant_dirty_guild_boss_benchmarks (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant,process_after)
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant,clock_timestamp() FROM page
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant) DO UPDATE SET revision=leaderboard_variant_dirty_guild_boss_benchmarks.revision+1,dirtied_at=clock_timestamp(),process_after=LEAST(leaderboard_variant_dirty_guild_boss_benchmarks.process_after,EXCLUDED.process_after) RETURNING 1
+) SELECT (SELECT count(*) FROM enqueued)::bigint AS page_count,COALESCE((SELECT to_jsonb(page) FROM page ORDER BY instance_name DESC, difficulty_name DESC, max_players DESC, encounter_name DESC, encounter_variant DESC LIMIT 1),'{}'::jsonb)::jsonb AS last_cursor
+`
+
+type RepairOperationVariantGuildBossBenchmarksParams struct {
+	TenantID    uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	Cutoff      pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	CursorScope []byte             `db:"cursor_scope" json:"cursor_scope"`
+}
+
+type RepairOperationVariantGuildBossBenchmarksRow struct {
+	PageCount  int64  `db:"page_count" json:"page_count"`
+	LastCursor []byte `db:"last_cursor" json:"last_cursor"`
+}
+
+func (q *sqlQuerier) RepairOperationVariantGuildBossBenchmarks(ctx context.Context, arg RepairOperationVariantGuildBossBenchmarksParams) (RepairOperationVariantGuildBossBenchmarksRow, error) {
+	row := q.db.QueryRow(ctx, repairOperationVariantGuildBossBenchmarks, arg.TenantID, arg.Cutoff, arg.CursorScope)
+	var i RepairOperationVariantGuildBossBenchmarksRow
+	err := row.Scan(&i.PageCount, &i.LastCursor)
+	return i, err
+}
+
+const repairOperationVariantGuildBossSubjects = `-- name: RepairOperationVariantGuildBossSubjects :one
+WITH page AS MATERIALIZED (
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, realm_id, guild_id FROM leaderboard_variant_guild_boss_subjects WHERE tenant_id= $1::uuid AND computed_at<= $2::timestamptz
+ AND (instance_name, difficulty_name, max_players, encounter_name, encounter_variant, realm_id, guild_id)>(COALESCE(($3::jsonb->>'instance_name')::text,''::text), COALESCE(($3::jsonb->>'difficulty_name')::text,''::text), COALESCE(($3::jsonb->>'max_players')::smallint,-1::smallint), COALESCE(($3::jsonb->>'encounter_name')::text,''::text), COALESCE(($3::jsonb->>'encounter_variant')::text,''::text), COALESCE(($3::jsonb->>'realm_id')::uuid,'00000000-0000-0000-0000-000000000000'::uuid), COALESCE(($3::jsonb->>'guild_id')::uuid,'00000000-0000-0000-0000-000000000000'::uuid)) ORDER BY instance_name, difficulty_name, max_players, encounter_name, encounter_variant, realm_id, guild_id LIMIT 100
+), enqueued AS (
+ INSERT INTO leaderboard_variant_dirty_guild_boss_subjects (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, realm_id, guild_id,process_after)
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, realm_id, guild_id,clock_timestamp() FROM page
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, realm_id, guild_id) DO UPDATE SET revision=leaderboard_variant_dirty_guild_boss_subjects.revision+1,dirtied_at=clock_timestamp(),process_after=LEAST(leaderboard_variant_dirty_guild_boss_subjects.process_after,EXCLUDED.process_after) RETURNING 1
+) SELECT (SELECT count(*) FROM enqueued)::bigint AS page_count,COALESCE((SELECT to_jsonb(page) FROM page ORDER BY instance_name DESC, difficulty_name DESC, max_players DESC, encounter_name DESC, encounter_variant DESC, realm_id DESC, guild_id DESC LIMIT 1),'{}'::jsonb)::jsonb AS last_cursor
+`
+
+type RepairOperationVariantGuildBossSubjectsParams struct {
+	TenantID    uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	Cutoff      pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	CursorScope []byte             `db:"cursor_scope" json:"cursor_scope"`
+}
+
+type RepairOperationVariantGuildBossSubjectsRow struct {
+	PageCount  int64  `db:"page_count" json:"page_count"`
+	LastCursor []byte `db:"last_cursor" json:"last_cursor"`
+}
+
+func (q *sqlQuerier) RepairOperationVariantGuildBossSubjects(ctx context.Context, arg RepairOperationVariantGuildBossSubjectsParams) (RepairOperationVariantGuildBossSubjectsRow, error) {
+	row := q.db.QueryRow(ctx, repairOperationVariantGuildBossSubjects, arg.TenantID, arg.Cutoff, arg.CursorScope)
+	var i RepairOperationVariantGuildBossSubjectsRow
+	err := row.Scan(&i.PageCount, &i.LastCursor)
+	return i, err
+}
+
+const repairOperationVariantPlayerBossBenchmarks = `-- name: RepairOperationVariantPlayerBossBenchmarks :one
+WITH page AS MATERIALIZED (
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, player_class, player_spec, player_sub_spec, metric FROM leaderboard_variant_player_boss_benchmarks WHERE tenant_id= $1::uuid AND computed_at<= $2::timestamptz
+ AND (instance_name, difficulty_name, max_players, encounter_name, encounter_variant, player_class, player_spec, player_sub_spec, metric)>(COALESCE(($3::jsonb->>'instance_name')::text,''::text), COALESCE(($3::jsonb->>'difficulty_name')::text,''::text), COALESCE(($3::jsonb->>'max_players')::smallint,-1::smallint), COALESCE(($3::jsonb->>'encounter_name')::text,''::text), COALESCE(($3::jsonb->>'encounter_variant')::text,''::text), COALESCE(($3::jsonb->>'player_class')::text,''::text), COALESCE(($3::jsonb->>'player_spec')::text,''::text), COALESCE(($3::jsonb->>'player_sub_spec')::text,''::text), COALESCE(($3::jsonb->>'metric')::text,''::text)) ORDER BY instance_name, difficulty_name, max_players, encounter_name, encounter_variant, player_class, player_spec, player_sub_spec, metric LIMIT 100
+), enqueued AS (
+ INSERT INTO leaderboard_variant_dirty_player_boss_benchmarks (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, player_class, player_spec, player_sub_spec, metric,process_after)
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, player_class, player_spec, player_sub_spec, metric,clock_timestamp() FROM page
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, player_class, player_spec, player_sub_spec, metric) DO UPDATE SET revision=leaderboard_variant_dirty_player_boss_benchmarks.revision+1,dirtied_at=clock_timestamp(),process_after=LEAST(leaderboard_variant_dirty_player_boss_benchmarks.process_after,EXCLUDED.process_after) RETURNING 1
+) SELECT (SELECT count(*) FROM enqueued)::bigint AS page_count,COALESCE((SELECT to_jsonb(page) FROM page ORDER BY instance_name DESC, difficulty_name DESC, max_players DESC, encounter_name DESC, encounter_variant DESC, player_class DESC, player_spec DESC, player_sub_spec DESC, metric DESC LIMIT 1),'{}'::jsonb)::jsonb AS last_cursor
+`
+
+type RepairOperationVariantPlayerBossBenchmarksParams struct {
+	TenantID    uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	Cutoff      pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	CursorScope []byte             `db:"cursor_scope" json:"cursor_scope"`
+}
+
+type RepairOperationVariantPlayerBossBenchmarksRow struct {
+	PageCount  int64  `db:"page_count" json:"page_count"`
+	LastCursor []byte `db:"last_cursor" json:"last_cursor"`
+}
+
+func (q *sqlQuerier) RepairOperationVariantPlayerBossBenchmarks(ctx context.Context, arg RepairOperationVariantPlayerBossBenchmarksParams) (RepairOperationVariantPlayerBossBenchmarksRow, error) {
+	row := q.db.QueryRow(ctx, repairOperationVariantPlayerBossBenchmarks, arg.TenantID, arg.Cutoff, arg.CursorScope)
+	var i RepairOperationVariantPlayerBossBenchmarksRow
+	err := row.Scan(&i.PageCount, &i.LastCursor)
+	return i, err
+}
+
+const repairOperationVariantPlayerBossSubjects = `-- name: RepairOperationVariantPlayerBossSubjects :one
+WITH page AS MATERIALIZED (
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid FROM leaderboard_variant_player_boss_subjects WHERE tenant_id= $1::uuid AND computed_at<= $2::timestamptz
+ AND (instance_name, difficulty_name, max_players, encounter_name, encounter_variant, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid)>(COALESCE(($3::jsonb->>'instance_name')::text,''::text), COALESCE(($3::jsonb->>'difficulty_name')::text,''::text), COALESCE(($3::jsonb->>'max_players')::smallint,-1::smallint), COALESCE(($3::jsonb->>'encounter_name')::text,''::text), COALESCE(($3::jsonb->>'encounter_variant')::text,''::text), COALESCE(($3::jsonb->>'player_class')::text,''::text), COALESCE(($3::jsonb->>'player_spec')::text,''::text), COALESCE(($3::jsonb->>'player_sub_spec')::text,''::text), COALESCE(($3::jsonb->>'metric')::text,''::text), COALESCE(($3::jsonb->>'realm_id')::uuid,'00000000-0000-0000-0000-000000000000'::uuid), COALESCE(($3::jsonb->>'player_guid')::text,''::text)) ORDER BY instance_name, difficulty_name, max_players, encounter_name, encounter_variant, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid LIMIT 100
+), enqueued AS (
+ INSERT INTO leaderboard_variant_dirty_player_boss_subjects (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid,process_after)
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid,clock_timestamp() FROM page
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid) DO UPDATE SET revision=leaderboard_variant_dirty_player_boss_subjects.revision+1,dirtied_at=clock_timestamp(),process_after=LEAST(leaderboard_variant_dirty_player_boss_subjects.process_after,EXCLUDED.process_after) RETURNING 1
+) SELECT (SELECT count(*) FROM enqueued)::bigint AS page_count,COALESCE((SELECT to_jsonb(page) FROM page ORDER BY instance_name DESC, difficulty_name DESC, max_players DESC, encounter_name DESC, encounter_variant DESC, player_class DESC, player_spec DESC, player_sub_spec DESC, metric DESC, realm_id DESC, player_guid DESC LIMIT 1),'{}'::jsonb)::jsonb AS last_cursor
+`
+
+type RepairOperationVariantPlayerBossSubjectsParams struct {
+	TenantID    uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	Cutoff      pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	CursorScope []byte             `db:"cursor_scope" json:"cursor_scope"`
+}
+
+type RepairOperationVariantPlayerBossSubjectsRow struct {
+	PageCount  int64  `db:"page_count" json:"page_count"`
+	LastCursor []byte `db:"last_cursor" json:"last_cursor"`
+}
+
+func (q *sqlQuerier) RepairOperationVariantPlayerBossSubjects(ctx context.Context, arg RepairOperationVariantPlayerBossSubjectsParams) (RepairOperationVariantPlayerBossSubjectsRow, error) {
+	row := q.db.QueryRow(ctx, repairOperationVariantPlayerBossSubjects, arg.TenantID, arg.Cutoff, arg.CursorScope)
+	var i RepairOperationVariantPlayerBossSubjectsRow
+	err := row.Scan(&i.PageCount, &i.LastCursor)
+	return i, err
+}
+
 const activeLeaderboardOperation = `-- name: ActiveLeaderboardOperation :many
 SELECT id, tenant_id, requested_by, purpose, scope, run_id, before_date, cutoff, state, phase, cursor_scope, cursor_realm, cursor_date, cursor_id, discovered, missing_dates, discovery_complete, started_at, completed_at, last_progress_at, retry_count, retry_after, last_error, after_date FROM leaderboard_operations WHERE tenant_id= $1 AND state<>'completed'
 `
@@ -15631,12 +16151,16 @@ UPDATE leaderboard_operations o SET state='completed',completed_at=clock_timesta
 WHERE o.id= $1 AND o.tenant_id= $2 AND state='draining' AND discovery_complete
 AND NOT EXISTS(SELECT 1 FROM leaderboard_dirty_runs d WHERE d.tenant_id=o.tenant_id)
 AND NOT EXISTS(SELECT 1 FROM leaderboard_dirty_guild_boss_benchmarks d WHERE d.tenant_id=o.tenant_id)
+AND NOT EXISTS(SELECT 1 FROM leaderboard_variant_dirty_guild_boss_benchmarks d WHERE d.tenant_id=o.tenant_id)
 AND NOT EXISTS(SELECT 1 FROM leaderboard_dirty_guild_boss_subjects d WHERE d.tenant_id=o.tenant_id)
+AND NOT EXISTS(SELECT 1 FROM leaderboard_variant_dirty_guild_boss_subjects d WHERE d.tenant_id=o.tenant_id)
 AND NOT EXISTS(SELECT 1 FROM leaderboard_dirty_guild_clear_benchmarks d WHERE d.tenant_id=o.tenant_id)
 AND NOT EXISTS(SELECT 1 FROM leaderboard_dirty_guild_clear_subjects d WHERE d.tenant_id=o.tenant_id)
 AND NOT EXISTS(SELECT 1 FROM leaderboard_dirty_guild_renown d WHERE d.tenant_id=o.tenant_id)
 AND NOT EXISTS(SELECT 1 FROM leaderboard_dirty_player_boss_benchmarks d WHERE d.tenant_id=o.tenant_id)
+AND NOT EXISTS(SELECT 1 FROM leaderboard_variant_dirty_player_boss_benchmarks d WHERE d.tenant_id=o.tenant_id)
 AND NOT EXISTS(SELECT 1 FROM leaderboard_dirty_player_boss_subjects d WHERE d.tenant_id=o.tenant_id)
+AND NOT EXISTS(SELECT 1 FROM leaderboard_variant_dirty_player_boss_subjects d WHERE d.tenant_id=o.tenant_id)
 AND NOT EXISTS(SELECT 1 FROM leaderboard_dirty_player_renown d WHERE d.tenant_id=o.tenant_id)
 AND NOT EXISTS(SELECT 1 FROM leaderboard_dirty_careers d WHERE d.tenant_id=o.tenant_id AND d.required)
 `
@@ -15722,7 +16246,11 @@ const discoverLeaderboardOperationEvidence = `-- name: DiscoverLeaderboardOperat
 SELECT DISTINCT run_id FROM (
 (SELECT DISTINCT run_id FROM leaderboard_player_observations WHERE tenant_id= $1::uuid AND observed_at<= $2::timestamptz AND run_id> $3::uuid ORDER BY run_id LIMIT 100)
 UNION ALL
+(SELECT DISTINCT run_id FROM leaderboard_variant_player_observations WHERE tenant_id= $1::uuid AND observed_at<= $2::timestamptz AND run_id> $3::uuid ORDER BY run_id LIMIT 100)
+UNION ALL
 (SELECT DISTINCT run_id FROM leaderboard_guild_boss_observations WHERE tenant_id= $1::uuid AND observed_at<= $2::timestamptz AND run_id> $3::uuid ORDER BY run_id LIMIT 100)
+UNION ALL
+(SELECT DISTINCT run_id FROM leaderboard_variant_guild_boss_observations WHERE tenant_id= $1::uuid AND observed_at<= $2::timestamptz AND run_id> $3::uuid ORDER BY run_id LIMIT 100)
 UNION ALL
 (SELECT DISTINCT run_id FROM leaderboard_guild_clear_observations WHERE tenant_id= $1::uuid AND observed_at<= $2::timestamptz AND run_id> $3::uuid ORDER BY run_id LIMIT 100)
 UNION ALL
@@ -15873,7 +16401,11 @@ SELECT 'd1'::text AS level,count(*)::bigint AS pending,min(dirtied_at) AS oldest
 UNION ALL
 SELECT 'd2'::text AS level,count(*)::bigint AS pending,min(dirtied_at) AS oldest,coalesce(sum(attempts),0)::bigint AS retries FROM leaderboard_dirty_guild_boss_benchmarks WHERE tenant_id= $1::uuid
 UNION ALL
+SELECT 'd2'::text AS level,count(*)::bigint AS pending,min(dirtied_at) AS oldest,coalesce(sum(attempts),0)::bigint AS retries FROM leaderboard_variant_dirty_guild_boss_benchmarks WHERE tenant_id= $1::uuid
+UNION ALL
 SELECT 'd2'::text AS level,count(*)::bigint AS pending,min(dirtied_at) AS oldest,coalesce(sum(attempts),0)::bigint AS retries FROM leaderboard_dirty_guild_boss_subjects WHERE tenant_id= $1::uuid
+UNION ALL
+SELECT 'd2'::text AS level,count(*)::bigint AS pending,min(dirtied_at) AS oldest,coalesce(sum(attempts),0)::bigint AS retries FROM leaderboard_variant_dirty_guild_boss_subjects WHERE tenant_id= $1::uuid
 UNION ALL
 SELECT 'd2'::text AS level,count(*)::bigint AS pending,min(dirtied_at) AS oldest,coalesce(sum(attempts),0)::bigint AS retries FROM leaderboard_dirty_guild_clear_benchmarks WHERE tenant_id= $1::uuid
 UNION ALL
@@ -15883,7 +16415,11 @@ SELECT 'd2'::text AS level,count(*)::bigint AS pending,min(dirtied_at) AS oldest
 UNION ALL
 SELECT 'd2'::text AS level,count(*)::bigint AS pending,min(dirtied_at) AS oldest,coalesce(sum(attempts),0)::bigint AS retries FROM leaderboard_dirty_player_boss_benchmarks WHERE tenant_id= $1::uuid
 UNION ALL
+SELECT 'd2'::text AS level,count(*)::bigint AS pending,min(dirtied_at) AS oldest,coalesce(sum(attempts),0)::bigint AS retries FROM leaderboard_variant_dirty_player_boss_benchmarks WHERE tenant_id= $1::uuid
+UNION ALL
 SELECT 'd2'::text AS level,count(*)::bigint AS pending,min(dirtied_at) AS oldest,coalesce(sum(attempts),0)::bigint AS retries FROM leaderboard_dirty_player_boss_subjects WHERE tenant_id= $1::uuid
+UNION ALL
+SELECT 'd2'::text AS level,count(*)::bigint AS pending,min(dirtied_at) AS oldest,coalesce(sum(attempts),0)::bigint AS retries FROM leaderboard_variant_dirty_player_boss_subjects WHERE tenant_id= $1::uuid
 UNION ALL
 SELECT 'd2'::text AS level,count(*)::bigint AS pending,min(dirtied_at) AS oldest,coalesce(sum(attempts),0)::bigint AS retries FROM leaderboard_dirty_player_renown WHERE tenant_id= $1::uuid
 ) SELECT coalesce(sum(pending) FILTER(WHERE level='d1'),0)::bigint AS d1_pending,coalesce(sum(pending) FILTER(WHERE level='d2'),0)::bigint AS d2_pending,min(oldest)::timestamptz AS oldest_pending_at,sum(retries)::bigint AS pending_retries FROM queues
@@ -16199,7 +16735,9 @@ func (q *sqlQuerier) SetLeaderboardOperationMissingDates(ctx context.Context, ar
 }
 
 const deleteLeaderboardRunEvidence = `-- name: DeleteLeaderboardRunEvidence :exec
-WITH deleted0 AS (DELETE FROM leaderboard_player_observations WHERE tenant_id= $1::uuid AND run_id= $2::uuid RETURNING 1),
+WITH deleted_variant_player AS (DELETE FROM leaderboard_variant_player_observations WHERE tenant_id= $1::uuid AND run_id= $2::uuid RETURNING 1),
+deleted_variant_guild AS (DELETE FROM leaderboard_variant_guild_boss_observations WHERE tenant_id= $1::uuid AND run_id= $2::uuid RETURNING 1),
+deleted0 AS (DELETE FROM leaderboard_player_observations WHERE tenant_id= $1::uuid AND run_id= $2::uuid RETURNING 1),
 deleted1 AS (DELETE FROM leaderboard_guild_boss_observations WHERE tenant_id= $1::uuid AND run_id= $2::uuid RETURNING 1),
 deleted2 AS (DELETE FROM leaderboard_guild_clear_observations WHERE tenant_id= $1::uuid AND run_id= $2::uuid RETURNING 1),
 deleted3 AS (DELETE FROM leaderboard_player_renown_facts WHERE tenant_id= $1::uuid AND run_id= $2::uuid RETURNING 1),
@@ -16238,6 +16776,26 @@ GuildBossSubject AS (
  INSERT INTO leaderboard_dirty_guild_boss_subjects (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id, process_after)
  SELECT scopes.tenant_id, scopes.instance_name, scopes.difficulty_name, scopes.max_players, scopes.encounter_name, scopes.realm_id, scopes.guild_id, clock_timestamp() FROM (SELECT DISTINCT tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id FROM leaderboard_guild_boss_observations WHERE tenant_id= $1::uuid AND run_id= $2::uuid) scopes
  ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id) DO UPDATE SET revision=leaderboard_dirty_guild_boss_subjects.revision+1, dirtied_at=clock_timestamp(), process_after=LEAST(leaderboard_dirty_guild_boss_subjects.process_after,EXCLUDED.process_after) RETURNING 1
+),
+VariantPlayerBossBenchmark AS (
+ INSERT INTO leaderboard_variant_dirty_player_boss_benchmarks (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, player_class, player_spec, player_sub_spec, metric, process_after)
+ SELECT scopes.tenant_id, scopes.instance_name, scopes.difficulty_name, scopes.max_players, scopes.encounter_name, scopes.encounter_variant, scopes.player_class, scopes.player_spec, scopes.player_sub_spec, scopes.metric, clock_timestamp() FROM (SELECT DISTINCT tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, player_class, player_spec, player_sub_spec, metric FROM leaderboard_variant_player_observations WHERE tenant_id= $1::uuid AND run_id= $2::uuid) scopes
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, player_class, player_spec, player_sub_spec, metric) DO UPDATE SET revision=leaderboard_variant_dirty_player_boss_benchmarks.revision+1, dirtied_at=clock_timestamp(), process_after=LEAST(leaderboard_variant_dirty_player_boss_benchmarks.process_after,EXCLUDED.process_after) RETURNING 1
+),
+VariantPlayerBossSubject AS (
+ INSERT INTO leaderboard_variant_dirty_player_boss_subjects (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid, process_after)
+ SELECT scopes.tenant_id, scopes.instance_name, scopes.difficulty_name, scopes.max_players, scopes.encounter_name, scopes.encounter_variant, scopes.player_class, scopes.player_spec, scopes.player_sub_spec, scopes.metric, scopes.realm_id, scopes.player_guid, clock_timestamp() FROM (SELECT DISTINCT tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid FROM leaderboard_variant_player_observations WHERE tenant_id= $1::uuid AND run_id= $2::uuid) scopes
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid) DO UPDATE SET revision=leaderboard_variant_dirty_player_boss_subjects.revision+1, dirtied_at=clock_timestamp(), process_after=LEAST(leaderboard_variant_dirty_player_boss_subjects.process_after,EXCLUDED.process_after) RETURNING 1
+),
+VariantGuildBossBenchmark AS (
+ INSERT INTO leaderboard_variant_dirty_guild_boss_benchmarks (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, process_after)
+ SELECT scopes.tenant_id, scopes.instance_name, scopes.difficulty_name, scopes.max_players, scopes.encounter_name, scopes.encounter_variant, clock_timestamp() FROM (SELECT DISTINCT tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant FROM leaderboard_variant_guild_boss_observations WHERE tenant_id= $1::uuid AND run_id= $2::uuid) scopes
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant) DO UPDATE SET revision=leaderboard_variant_dirty_guild_boss_benchmarks.revision+1, dirtied_at=clock_timestamp(), process_after=LEAST(leaderboard_variant_dirty_guild_boss_benchmarks.process_after,EXCLUDED.process_after) RETURNING 1
+),
+VariantGuildBossSubject AS (
+ INSERT INTO leaderboard_variant_dirty_guild_boss_subjects (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, realm_id, guild_id, process_after)
+ SELECT scopes.tenant_id, scopes.instance_name, scopes.difficulty_name, scopes.max_players, scopes.encounter_name, scopes.encounter_variant, scopes.realm_id, scopes.guild_id, clock_timestamp() FROM (SELECT DISTINCT tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, realm_id, guild_id FROM leaderboard_variant_guild_boss_observations WHERE tenant_id= $1::uuid AND run_id= $2::uuid) scopes
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, realm_id, guild_id) DO UPDATE SET revision=leaderboard_variant_dirty_guild_boss_subjects.revision+1, dirtied_at=clock_timestamp(), process_after=LEAST(leaderboard_variant_dirty_guild_boss_subjects.process_after,EXCLUDED.process_after) RETURNING 1
 ),
 GuildClearBenchmark AS (
  INSERT INTO leaderboard_dirty_guild_clear_benchmarks (tenant_id, instance_name, difficulty_name, max_players, process_after)
@@ -16300,7 +16858,8 @@ WITH source AS MATERIALIZED (
         -- source spec, including missing or unknown specs, into one stable class-only cohort.
         CASE WHEN s.cohort_mode='class' THEN 'Class' ELSE d.player_spec END::text AS player_spec,
         CASE WHEN s.cohort_mode='class' THEN '' ELSE d.player_sub_spec END::text AS player_sub_spec,
-        d.dps,d.hps,e.id AS encounter_id,e.name AS encounter_name,
+        d.dps,d.hps,e.id AS encounter_id,e.name AS encounter_name, COALESCE(e.encounter_variant, '')::text AS encounter_variant,
+        (d.encounter_variant IS NOT DISTINCT FROM e.encounter_variant) AS variant_consistent,
         COALESCE(e.difficulty, s.difficulty_name) AS encounter_difficulty_name,
         s.max_players::smallint AS encounter_max_players
  FROM source s JOIN encounter_dps_rankings_resolved d ON d.instance_id=s.source_instance_id
@@ -16312,17 +16871,17 @@ WITH source AS MATERIALIZED (
  WHERE btrim(d.player_guid)<>'' AND btrim(d.player_class)<>''
    AND (s.cohort_mode<>'spec' OR btrim(d.player_spec)<>'')
 ), player_candidates AS MATERIALIZED (
- SELECT players.run_id, players.source_instance_id, players.realm_id, players.guild_id, players.instance_name, players.difficulty_name, players.max_players, players.mixed_difficulty, players.tenant_id, players.cohort_mode, players.ranking_id, players.player_guid, players.player_class, players.player_spec, players.player_sub_spec, players.dps, players.hps, players.encounter_id, players.encounter_name, players.encounter_difficulty_name, players.encounter_max_players, 'dps'::text AS metric,dps AS metric_value FROM players
- UNION ALL SELECT players.run_id, players.source_instance_id, players.realm_id, players.guild_id, players.instance_name, players.difficulty_name, players.max_players, players.mixed_difficulty, players.tenant_id, players.cohort_mode, players.ranking_id, players.player_guid, players.player_class, players.player_spec, players.player_sub_spec, players.dps, players.hps, players.encounter_id, players.encounter_name, players.encounter_difficulty_name, players.encounter_max_players, 'hps'::text AS metric,hps AS metric_value FROM players
+ SELECT players.run_id, players.source_instance_id, players.realm_id, players.guild_id, players.instance_name, players.difficulty_name, players.max_players, players.mixed_difficulty, players.tenant_id, players.cohort_mode, players.ranking_id, players.player_guid, players.player_class, players.player_spec, players.player_sub_spec, players.dps, players.hps, players.encounter_id, players.encounter_name, players.encounter_variant, players.variant_consistent, players.encounter_difficulty_name, players.encounter_max_players, 'dps'::text AS metric,dps AS metric_value FROM players
+ UNION ALL SELECT players.run_id, players.source_instance_id, players.realm_id, players.guild_id, players.instance_name, players.difficulty_name, players.max_players, players.mixed_difficulty, players.tenant_id, players.cohort_mode, players.ranking_id, players.player_guid, players.player_class, players.player_spec, players.player_sub_spec, players.dps, players.hps, players.encounter_id, players.encounter_name, players.encounter_variant, players.variant_consistent, players.encounter_difficulty_name, players.encounter_max_players, 'hps'::text AS metric,hps AS metric_value FROM players
 ), eligible_player_metrics AS MATERIALIZED (
  -- PostgreSQL orders NaN above Infinity: this excludes both before comparison.
- SELECT run_id, source_instance_id, realm_id, guild_id, instance_name, difficulty_name, max_players, mixed_difficulty, tenant_id, cohort_mode, ranking_id, player_guid, player_class, player_spec, player_sub_spec, dps, hps, encounter_id, encounter_name, encounter_difficulty_name, encounter_max_players, metric, metric_value FROM player_candidates WHERE metric_value>0 AND metric_value<'Infinity'::double precision
+ SELECT run_id, source_instance_id, realm_id, guild_id, instance_name, difficulty_name, max_players, mixed_difficulty, tenant_id, cohort_mode, ranking_id, player_guid, player_class, player_spec, player_sub_spec, dps, hps, encounter_id, encounter_name, encounter_variant, variant_consistent, encounter_difficulty_name, encounter_max_players, metric, metric_value FROM player_candidates WHERE metric_value>0 AND metric_value<'Infinity'::double precision
 ), renown_players AS MATERIALIZED (
  -- Renown records the witnessed kill even when spec mode excludes it from ratings.
- SELECT DISTINCT ON (ranking_id) run_id, source_instance_id, realm_id, guild_id, instance_name, difficulty_name, max_players, mixed_difficulty, tenant_id, cohort_mode, ranking_id, player_guid, player_class, player_spec, player_sub_spec, dps, hps, encounter_id, encounter_name, encounter_difficulty_name, encounter_max_players, metric, metric_value FROM eligible_player_metrics
+ SELECT DISTINCT ON (ranking_id) run_id, source_instance_id, realm_id, guild_id, instance_name, difficulty_name, max_players, mixed_difficulty, tenant_id, cohort_mode, ranking_id, player_guid, player_class, player_spec, player_sub_spec, dps, hps, encounter_id, encounter_name, encounter_variant, variant_consistent, encounter_difficulty_name, encounter_max_players, metric, metric_value FROM eligible_player_metrics
  ORDER BY ranking_id,metric_value DESC,metric ASC
 ), rating_player_metrics AS MATERIALIZED (
- SELECT run_id, source_instance_id, realm_id, guild_id, instance_name, difficulty_name, max_players, mixed_difficulty, tenant_id, cohort_mode, ranking_id, player_guid, player_class, player_spec, player_sub_spec, dps, hps, encounter_id, encounter_name, encounter_difficulty_name, encounter_max_players, metric, metric_value FROM eligible_player_metrics
+ SELECT run_id, source_instance_id, realm_id, guild_id, instance_name, difficulty_name, max_players, mixed_difficulty, tenant_id, cohort_mode, ranking_id, player_guid, player_class, player_spec, player_sub_spec, dps, hps, encounter_id, encounter_name, encounter_variant, variant_consistent, encounter_difficulty_name, encounter_max_players, metric, metric_value FROM eligible_player_metrics
  WHERE (cohort_mode<>'spec' OR lower(btrim(player_spec)) NOT IN ('', 'unknown'))
    AND (metric='dps' OR cohort_mode<>'spec' OR
         (upper(btrim(player_class))='PRIEST' AND lower(btrim(player_spec)) IN ('holy', 'discipline')) OR
@@ -16331,7 +16890,7 @@ WITH source AS MATERIALIZED (
         (upper(btrim(player_class))='PALADIN' AND lower(btrim(player_spec))='holy'))
 ), player_metrics AS MATERIALIZED (
  -- One raw metric per player/fight; positive ties favor DPS.
- SELECT DISTINCT ON (ranking_id) run_id, source_instance_id, realm_id, guild_id, instance_name, difficulty_name, max_players, mixed_difficulty, tenant_id, cohort_mode, ranking_id, player_guid, player_class, player_spec, player_sub_spec, dps, hps, encounter_id, encounter_name, encounter_difficulty_name, encounter_max_players, metric, metric_value FROM rating_player_metrics
+ SELECT DISTINCT ON (ranking_id) run_id, source_instance_id, realm_id, guild_id, instance_name, difficulty_name, max_players, mixed_difficulty, tenant_id, cohort_mode, ranking_id, player_guid, player_class, player_spec, player_sub_spec, dps, hps, encounter_id, encounter_name, encounter_variant, variant_consistent, encounter_difficulty_name, encounter_max_players, metric, metric_value FROM rating_player_metrics
  ORDER BY ranking_id,metric_value DESC,metric ASC
 ), guild_source AS MATERIALIZED (
  SELECT s.run_id, s.source_instance_id, s.realm_id, s.guild_id, s.instance_name, s.difficulty_name, s.max_players, s.mixed_difficulty, s.tenant_id, s.cohort_mode FROM source s JOIN guilds g ON g.id=s.guild_id AND g.realm_id=s.realm_id
@@ -16340,7 +16899,7 @@ WITH source AS MATERIALIZED (
  FROM guild_source s JOIN time_parse_scores t ON t.instance_id=s.source_instance_id
   AND t.run_id=s.run_id AND t.tenant_id=s.tenant_id AND t.realm_id=s.realm_id AND t.guild_id=s.guild_id
 ), guild_bosses AS MATERIALIZED (
- SELECT s.run_id, s.source_instance_id, s.realm_id, s.guild_id, s.instance_name, s.difficulty_name, s.max_players, s.mixed_difficulty, s.tenant_id, s.cohort_mode, s.time_score_id, s.clear_duration_ms, b.duration_ms,e.id AS encounter_id,e.name AS encounter_name,
+ SELECT s.run_id, s.source_instance_id, s.realm_id, s.guild_id, s.instance_name, s.difficulty_name, s.max_players, s.mixed_difficulty, s.tenant_id, s.cohort_mode, s.time_score_id, s.clear_duration_ms, b.duration_ms,e.id AS encounter_id,e.name AS encounter_name, COALESCE(e.encounter_variant, '')::text AS encounter_variant,
         COALESCE(e.difficulty, s.difficulty_name) AS encounter_difficulty_name,
         s.max_players::smallint AS encounter_max_players
  FROM guild_times s JOIN time_parse_boss_scores b ON b.time_parse_score_id=s.time_score_id
@@ -16348,30 +16907,39 @@ WITH source AS MATERIALIZED (
   AND e.name=b.encounter_name AND e.boss AND e.kill_type='clean'
  WHERE b.duration_ms>0
 ), projected AS (
-(SELECT DISTINCT ON (s.encounter_difficulty_name,s.encounter_max_players,s.encounter_name,s.player_guid,s.player_class,s.player_spec,s.player_sub_spec,s.metric) 1::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.encounter_difficulty_name AS difficulty_name, s.encounter_max_players AS max_players, s.encounter_name AS encounter_name, s.player_guid AS player_guid, s.player_class AS player_class, s.player_spec AS player_spec, s.player_sub_spec AS player_sub_spec, s.metric AS metric, s.metric_value AS metric_value, '00000000-0000-0000-0000-000000000000'::uuid AS guild_id, s.encounter_id AS source_encounter_id, s.ranking_id AS source_ranking_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_time_parse_score_id, 0::bigint AS duration_ms
+(SELECT DISTINCT ON (s.encounter_difficulty_name,s.encounter_max_players,s.encounter_name,s.player_guid,s.player_class,s.player_spec,s.player_sub_spec,s.metric) 1::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.encounter_difficulty_name AS difficulty_name, s.encounter_max_players AS max_players, s.encounter_name AS encounter_name, ''::text AS encounter_variant, s.player_guid AS player_guid, s.player_class AS player_class, s.player_spec AS player_spec, s.player_sub_spec AS player_sub_spec, s.metric AS metric, s.metric_value AS metric_value, '00000000-0000-0000-0000-000000000000'::uuid AS guild_id, s.encounter_id AS source_encounter_id, s.ranking_id AS source_ranking_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_time_parse_score_id, 0::bigint AS duration_ms
  FROM player_metrics s WHERE s.metric_value>=0 AND s.metric_value<'Infinity'::double precision
  ORDER BY s.encounter_difficulty_name,s.encounter_max_players,s.encounter_name,s.player_guid,s.player_class,s.player_spec,s.player_sub_spec,metric,metric_value DESC,source_encounter_id,source_ranking_id)
 UNION ALL
-(SELECT DISTINCT ON (s.encounter_difficulty_name,s.encounter_max_players,s.encounter_name) 2::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.encounter_difficulty_name AS difficulty_name, s.encounter_max_players AS max_players, s.encounter_name AS encounter_name, ''::text AS player_guid, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, s.guild_id AS guild_id, s.encounter_id AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, s.time_score_id AS source_time_parse_score_id, s.duration_ms AS duration_ms
+(SELECT DISTINCT ON (s.encounter_difficulty_name,s.encounter_max_players,s.encounter_name) 2::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.encounter_difficulty_name AS difficulty_name, s.encounter_max_players AS max_players, s.encounter_name AS encounter_name, ''::text AS encounter_variant, ''::text AS player_guid, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, s.guild_id AS guild_id, s.encounter_id AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, s.time_score_id AS source_time_parse_score_id, s.duration_ms AS duration_ms
  FROM guild_bosses s
  ORDER BY s.encounter_difficulty_name,s.encounter_max_players,s.encounter_name,s.duration_ms,s.encounter_id)
 UNION ALL
-(SELECT DISTINCT ON (s.guild_id) 3::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.difficulty_name AS difficulty_name, s.max_players AS max_players, ''::text AS encounter_name, ''::text AS player_guid, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, s.guild_id AS guild_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, s.time_score_id AS source_time_parse_score_id, s.clear_duration_ms AS duration_ms
+(SELECT DISTINCT ON (s.guild_id) 3::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.difficulty_name AS difficulty_name, s.max_players AS max_players, ''::text AS encounter_name, ''::text AS encounter_variant, ''::text AS player_guid, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, s.guild_id AS guild_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, s.time_score_id AS source_time_parse_score_id, s.clear_duration_ms AS duration_ms
  FROM guild_times s WHERE s.clear_duration_ms>0 AND NOT s.mixed_difficulty
  ORDER BY s.guild_id,s.clear_duration_ms,s.time_score_id)
 UNION ALL
-(SELECT DISTINCT ON (s.encounter_difficulty_name,s.encounter_max_players,s.encounter_name,s.player_guid) 4::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.encounter_difficulty_name AS difficulty_name, s.encounter_max_players AS max_players, s.encounter_name AS encounter_name, s.player_guid AS player_guid, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, '00000000-0000-0000-0000-000000000000'::uuid AS guild_id, s.encounter_id AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_time_parse_score_id, 0::bigint AS duration_ms
+(SELECT DISTINCT ON (s.encounter_difficulty_name,s.encounter_max_players,s.encounter_name,s.player_guid) 4::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.encounter_difficulty_name AS difficulty_name, s.encounter_max_players AS max_players, s.encounter_name AS encounter_name, ''::text AS encounter_variant, s.player_guid AS player_guid, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, '00000000-0000-0000-0000-000000000000'::uuid AS guild_id, s.encounter_id AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_time_parse_score_id, 0::bigint AS duration_ms
  FROM renown_players s
  ORDER BY s.encounter_difficulty_name,s.encounter_max_players,s.encounter_name,s.player_guid,s.encounter_id)
 UNION ALL
-(SELECT DISTINCT ON (s.encounter_difficulty_name,s.encounter_max_players,s.encounter_name,s.player_guid,s.player_class,s.player_spec,s.player_sub_spec) 6::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.encounter_difficulty_name AS difficulty_name, s.encounter_max_players AS max_players, s.encounter_name AS encounter_name, s.player_guid AS player_guid, s.player_class AS player_class, s.player_spec AS player_spec, s.player_sub_spec AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, '00000000-0000-0000-0000-000000000000'::uuid AS guild_id, s.encounter_id AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_time_parse_score_id, 0::bigint AS duration_ms
+(SELECT DISTINCT ON (s.encounter_difficulty_name,s.encounter_max_players,s.encounter_name,s.player_guid,s.player_class,s.player_spec,s.player_sub_spec) 6::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.encounter_difficulty_name AS difficulty_name, s.encounter_max_players AS max_players, s.encounter_name AS encounter_name, ''::text AS encounter_variant, s.player_guid AS player_guid, s.player_class AS player_class, s.player_spec AS player_spec, s.player_sub_spec AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, '00000000-0000-0000-0000-000000000000'::uuid AS guild_id, s.encounter_id AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_time_parse_score_id, 0::bigint AS duration_ms
  FROM renown_players s WHERE s.cohort_mode='spec'
  ORDER BY s.encounter_difficulty_name,s.encounter_max_players,s.encounter_name,s.player_guid,s.player_class,s.player_spec,s.player_sub_spec,s.encounter_id)
 UNION ALL
-(SELECT DISTINCT ON (COALESCE(e.difficulty,s.difficulty_name),s.max_players,e.name) 5::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, COALESCE(e.difficulty, s.difficulty_name) AS difficulty_name, s.max_players::smallint AS max_players, e.name AS encounter_name, ''::text AS player_guid, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, s.guild_id AS guild_id, e.id AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_time_parse_score_id, 0::bigint AS duration_ms
+(SELECT DISTINCT ON (COALESCE(e.difficulty,s.difficulty_name),s.max_players,e.name) 5::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, COALESCE(e.difficulty, s.difficulty_name) AS difficulty_name, s.max_players::smallint AS max_players, e.name AS encounter_name, ''::text AS encounter_variant, ''::text AS player_guid, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, s.guild_id AS guild_id, e.id AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_time_parse_score_id, 0::bigint AS duration_ms
  FROM guild_source s JOIN log_instance_encounters e ON e.instance_id=s.source_instance_id AND e.boss AND e.kill_type='clean'
  ORDER BY COALESCE(e.difficulty,s.difficulty_name),s.max_players,e.name,e.id)
-) SELECT kind, tenant_id, run_id, source_instance_id, realm_id, instance_name, difficulty_name, max_players, encounter_name, player_guid, player_class, player_spec, player_sub_spec, metric, metric_value, guild_id, source_encounter_id, source_ranking_id, source_time_parse_score_id, duration_ms FROM projected
+
+UNION ALL
+(SELECT DISTINCT ON (s.encounter_difficulty_name,s.encounter_max_players,s.encounter_name,s.encounter_variant,s.player_guid,s.player_class,s.player_spec,s.player_sub_spec,s.metric) 7::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.encounter_difficulty_name AS difficulty_name, s.encounter_max_players AS max_players, s.encounter_name AS encounter_name, s.encounter_variant AS encounter_variant, s.player_guid AS player_guid, s.player_class AS player_class, s.player_spec AS player_spec, s.player_sub_spec AS player_sub_spec, s.metric AS metric, s.metric_value AS metric_value, '00000000-0000-0000-0000-000000000000'::uuid AS guild_id, s.encounter_id AS source_encounter_id, s.ranking_id AS source_ranking_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_time_parse_score_id, 0::bigint AS duration_ms
+ FROM player_metrics s WHERE s.variant_consistent AND s.encounter_variant IN ('normal', 'hard') AND s.metric_value>=0 AND s.metric_value<'Infinity'::double precision
+ ORDER BY s.encounter_difficulty_name,s.encounter_max_players,s.encounter_name,s.encounter_variant,s.player_guid,s.player_class,s.player_spec,s.player_sub_spec,metric,metric_value DESC,source_encounter_id,source_ranking_id)
+UNION ALL
+(SELECT DISTINCT ON (s.encounter_difficulty_name,s.encounter_max_players,s.encounter_name,s.encounter_variant) 8::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.encounter_difficulty_name AS difficulty_name, s.encounter_max_players AS max_players, s.encounter_name AS encounter_name, s.encounter_variant AS encounter_variant, ''::text AS player_guid, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, s.guild_id AS guild_id, s.encounter_id AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, s.time_score_id AS source_time_parse_score_id, s.duration_ms AS duration_ms
+ FROM guild_bosses s WHERE s.encounter_variant IN ('normal', 'hard')
+ ORDER BY s.encounter_difficulty_name,s.encounter_max_players,s.encounter_name,s.encounter_variant,s.duration_ms,s.encounter_id)
+) SELECT kind, tenant_id, run_id, source_instance_id, realm_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, player_guid, player_class, player_spec, player_sub_spec, metric, metric_value, guild_id, source_encounter_id, source_ranking_id, source_time_parse_score_id, duration_ms FROM projected
 `
 
 type ProjectLeaderboardRunParams struct {
@@ -16389,6 +16957,7 @@ type ProjectLeaderboardRunRow struct {
 	DifficultyName         string        `db:"difficulty_name" json:"difficulty_name"`
 	MaxPlayers             int16         `db:"max_players" json:"max_players"`
 	EncounterName          string        `db:"encounter_name" json:"encounter_name"`
+	EncounterVariant       string        `db:"encounter_variant" json:"encounter_variant"`
 	PlayerGuid             string        `db:"player_guid" json:"player_guid"`
 	PlayerClass            string        `db:"player_class" json:"player_class"`
 	PlayerSpec             string        `db:"player_spec" json:"player_spec"`
@@ -16423,6 +16992,7 @@ func (q *sqlQuerier) ProjectLeaderboardRun(ctx context.Context, arg ProjectLeade
 			&i.DifficultyName,
 			&i.MaxPlayers,
 			&i.EncounterName,
+			&i.EncounterVariant,
 			&i.PlayerGuid,
 			&i.PlayerClass,
 			&i.PlayerSpec,
@@ -16569,27 +17139,47 @@ func (q *sqlQuerier) ListLeaderboardPlayerObservations(ctx context.Context, tena
 }
 
 const listLeaderboardV2 = `-- name: ListLeaderboardV2 :many
-WITH contributions AS (
+WITH selected_leaderboard_player_boss_subjects AS NOT MATERIALIZED (
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid, observation_count, raw_peak, raw_form, raw_floor, projection_version, algorithm_version, computed_at, peak_encounter_id, peak_duration_ms FROM leaderboard_player_boss_subjects WHERE COALESCE($2::jsonb ->> encounter_name, $3::text) = ''
+ UNION ALL
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid, observation_count, raw_peak, raw_form, raw_floor, projection_version, algorithm_version, computed_at, peak_encounter_id, peak_duration_ms FROM leaderboard_variant_player_boss_subjects WHERE encounter_variant = COALESCE($2::jsonb ->> encounter_name, $3::text)
+),
+selected_leaderboard_player_boss_benchmarks AS NOT MATERIALIZED (
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, best_metric, projection_version, algorithm_version, computed_at FROM leaderboard_player_boss_benchmarks WHERE COALESCE($2::jsonb ->> encounter_name, $3::text) = ''
+ UNION ALL
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, best_metric, projection_version, algorithm_version, computed_at FROM leaderboard_variant_player_boss_benchmarks WHERE encounter_variant = COALESCE($2::jsonb ->> encounter_name, $3::text)
+),
+selected_leaderboard_guild_boss_subjects AS NOT MATERIALIZED (
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id, observation_count, fastest_duration_ms, form_mean_inverse_ms, floor_mean_inverse_ms, projection_version, algorithm_version, computed_at FROM leaderboard_guild_boss_subjects WHERE COALESCE($2::jsonb ->> encounter_name, $3::text) = ''
+ UNION ALL
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id, observation_count, fastest_duration_ms, form_mean_inverse_ms, floor_mean_inverse_ms, projection_version, algorithm_version, computed_at FROM leaderboard_variant_guild_boss_subjects WHERE encounter_variant = COALESCE($2::jsonb ->> encounter_name, $3::text)
+),
+selected_leaderboard_guild_boss_benchmarks AS NOT MATERIALIZED (
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, best_duration_ms, projection_version, algorithm_version, computed_at FROM leaderboard_guild_boss_benchmarks WHERE COALESCE($2::jsonb ->> encounter_name, $3::text) = ''
+ UNION ALL
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, best_duration_ms, projection_version, algorithm_version, computed_at FROM leaderboard_variant_guild_boss_benchmarks WHERE encounter_variant = COALESCE($2::jsonb ->> encounter_name, $3::text)
+),
+contributions AS (
 SELECT s.realm_id, s.player_guid COLLATE "C" AS subject_id,
  s.player_class COLLATE "C" AS player_class, s.player_spec COLLATE "C" AS player_spec, s.player_sub_spec COLLATE "C" AS player_sub_spec,
  CASE WHEN b.best_metric > 0 THEN LEAST(100::double precision, 100 * s.raw_peak / b.best_metric) ELSE 0::double precision END AS peak, CASE WHEN b.best_metric > 0 THEN LEAST(100::double precision, 100 * s.raw_form / b.best_metric) ELSE 0::double precision END AS form, CASE WHEN b.best_metric > 0 THEN LEAST(100::double precision, 100 * s.raw_floor / b.best_metric) ELSE 0::double precision END AS floor,
  0::double precision AS renown, s.observation_count AS sample_count, s.computed_at
- FROM leaderboard_player_boss_subjects s
+ FROM selected_leaderboard_player_boss_subjects s
  LEFT JOIN game_players m ON m.realm_id = s.realm_id AND m.id = s.player_guid
- JOIN leaderboard_player_boss_benchmarks b ON b.tenant_id = s.tenant_id AND b.instance_name = s.instance_name AND b.difficulty_name = s.difficulty_name AND b.max_players = s.max_players AND b.encounter_name = s.encounter_name AND b.player_class = s.player_class AND b.player_spec = s.player_spec AND b.player_sub_spec = s.player_sub_spec AND b.metric = s.metric
- WHERE $1::text = 'player' AND $2::text = 'boss'
- AND s.tenant_id = $3::uuid AND s.instance_name = $4::text AND s.difficulty_name = $5::text AND s.max_players = $6::smallint
- AND ($7::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR s.realm_id = $7::uuid)
- AND ($8::text = '' OR position(lower($8::text) IN lower(COALESCE(m.name, s.player_guid))) > 0)
- AND s.encounter_name = ANY($9::text[])
- AND ($10::text = '' OR s.player_class = $10::text)
- AND ($11::text = '' OR s.player_spec = $11::text)
- AND (NOT $12::boolean OR s.player_sub_spec = $13::text) AND s.metric = $14::text
- AND ($15::boolean OR s.player_spec <> 'Unknown' OR NOT EXISTS (
-  SELECT 1 FROM leaderboard_player_boss_benchmarks known
+ JOIN selected_leaderboard_player_boss_benchmarks b ON b.tenant_id = s.tenant_id AND b.instance_name = s.instance_name AND b.difficulty_name = s.difficulty_name AND b.max_players = s.max_players AND b.encounter_name = s.encounter_name AND b.player_class = s.player_class AND b.player_spec = s.player_spec AND b.player_sub_spec = s.player_sub_spec AND b.metric = s.metric
+ WHERE $1::text = 'player' AND $4::text = 'boss'
+ AND s.tenant_id = $5::uuid AND s.instance_name = $6::text AND s.difficulty_name = $7::text AND s.max_players = $8::smallint
+ AND ($9::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR s.realm_id = $9::uuid)
+ AND ($10::text = '' OR position(lower($10::text) IN lower(COALESCE(m.name, s.player_guid))) > 0)
+ AND s.encounter_name = ANY($11::text[])
+ AND ($12::text = '' OR s.player_class = $12::text)
+ AND ($13::text = '' OR s.player_spec = $13::text)
+ AND (NOT $14::boolean OR s.player_sub_spec = $15::text) AND s.metric = $16::text
+ AND ($17::boolean OR s.player_spec <> 'Unknown' OR NOT EXISTS (
+  SELECT 1 FROM selected_leaderboard_player_boss_benchmarks known
   WHERE known.tenant_id = s.tenant_id AND known.instance_name = s.instance_name
    AND known.difficulty_name = s.difficulty_name AND known.max_players = s.max_players
-   AND known.encounter_name = ANY($9::text[]) AND known.metric = s.metric
+   AND known.encounter_name = ANY($11::text[]) AND known.metric = s.metric
    AND known.player_spec <> 'Unknown'
  ))
  UNION ALL
@@ -16597,14 +17187,14 @@ SELECT s.realm_id, s.guild_id::text COLLATE "C" AS subject_id,
  ''::text COLLATE "C" AS player_class, ''::text COLLATE "C" AS player_spec, ''::text COLLATE "C" AS player_sub_spec,
  LEAST(100::double precision, 100.0 * b.best_duration_ms / s.fastest_duration_ms)::double precision AS peak, LEAST(100::double precision, 100::double precision * b.best_duration_ms * s.form_mean_inverse_ms) AS form, LEAST(100::double precision, 100::double precision * b.best_duration_ms * s.floor_mean_inverse_ms) AS floor,
  0::double precision AS renown, s.observation_count AS sample_count, s.computed_at
- FROM leaderboard_guild_boss_subjects s
+ FROM selected_leaderboard_guild_boss_subjects s
  LEFT JOIN guilds m ON m.realm_id = s.realm_id AND m.id = s.guild_id
- JOIN leaderboard_guild_boss_benchmarks b ON b.tenant_id = s.tenant_id AND b.instance_name = s.instance_name AND b.difficulty_name = s.difficulty_name AND b.max_players = s.max_players AND b.encounter_name = s.encounter_name
- WHERE $1::text = 'guild' AND $2::text = 'boss'
- AND s.tenant_id = $3::uuid AND s.instance_name = $4::text AND s.difficulty_name = $5::text AND s.max_players = $6::smallint
- AND ($7::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR s.realm_id = $7::uuid)
- AND ($8::text = '' OR position(lower($8::text) IN lower(COALESCE(m.name, s.guild_id::text))) > 0)
- AND s.encounter_name = ANY($9::text[])
+ JOIN selected_leaderboard_guild_boss_benchmarks b ON b.tenant_id = s.tenant_id AND b.instance_name = s.instance_name AND b.difficulty_name = s.difficulty_name AND b.max_players = s.max_players AND b.encounter_name = s.encounter_name
+ WHERE $1::text = 'guild' AND $4::text = 'boss'
+ AND s.tenant_id = $5::uuid AND s.instance_name = $6::text AND s.difficulty_name = $7::text AND s.max_players = $8::smallint
+ AND ($9::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR s.realm_id = $9::uuid)
+ AND ($10::text = '' OR position(lower($10::text) IN lower(COALESCE(m.name, s.guild_id::text))) > 0)
+ AND s.encounter_name = ANY($11::text[])
  UNION ALL
 SELECT s.realm_id, s.guild_id::text COLLATE "C" AS subject_id,
  ''::text COLLATE "C" AS player_class, ''::text COLLATE "C" AS player_spec, ''::text COLLATE "C" AS player_sub_spec,
@@ -16613,10 +17203,10 @@ SELECT s.realm_id, s.guild_id::text COLLATE "C" AS subject_id,
  FROM leaderboard_guild_clear_subjects s
  LEFT JOIN guilds m ON m.realm_id = s.realm_id AND m.id = s.guild_id
  JOIN leaderboard_guild_clear_benchmarks b ON b.tenant_id = s.tenant_id AND b.instance_name = s.instance_name AND b.difficulty_name = s.difficulty_name AND b.max_players = s.max_players
- WHERE $1::text = 'guild' AND $2::text = 'clear'
- AND s.tenant_id = $3::uuid AND s.instance_name = $4::text AND s.difficulty_name = $5::text AND s.max_players = $6::smallint
- AND ($7::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR s.realm_id = $7::uuid)
- AND ($8::text = '' OR position(lower($8::text) IN lower(COALESCE(m.name, s.guild_id::text))) > 0)
+ WHERE $1::text = 'guild' AND $4::text = 'clear'
+ AND s.tenant_id = $5::uuid AND s.instance_name = $6::text AND s.difficulty_name = $7::text AND s.max_players = $8::smallint
+ AND ($9::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR s.realm_id = $9::uuid)
+ AND ($10::text = '' OR position(lower($10::text) IN lower(COALESCE(m.name, s.guild_id::text))) > 0)
  UNION ALL
 SELECT s.realm_id, s.player_guid COLLATE "C" AS subject_id,
  ''::text COLLATE "C" AS player_class, ''::text COLLATE "C" AS player_spec, ''::text COLLATE "C" AS player_sub_spec,
@@ -16624,11 +17214,11 @@ SELECT s.realm_id, s.player_guid COLLATE "C" AS subject_id,
  s.kill_count * a.points AS renown, s.kill_count AS sample_count, s.computed_at
  FROM leaderboard_player_renown_counts s
  LEFT JOIN game_players m ON m.realm_id = s.realm_id AND m.id = s.player_guid
- JOIN (SELECT unnest($9::text[]) AS encounter_name, unnest($16::double precision[]) AS points) a ON a.encounter_name = s.encounter_name
- WHERE $1::text = 'player' AND $2::text = 'renown'
- AND s.tenant_id = $3::uuid AND s.instance_name = $4::text AND s.difficulty_name = $5::text AND s.max_players = $6::smallint
- AND ($7::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR s.realm_id = $7::uuid)
- AND ($8::text = '' OR position(lower($8::text) IN lower(COALESCE(m.name, s.player_guid))) > 0)
+ JOIN (SELECT unnest($11::text[]) AS encounter_name, unnest($18::double precision[]) AS points) a ON a.encounter_name = s.encounter_name
+ WHERE $1::text = 'player' AND $4::text = 'renown'
+ AND s.tenant_id = $5::uuid AND s.instance_name = $6::text AND s.difficulty_name = $7::text AND s.max_players = $8::smallint
+ AND ($9::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR s.realm_id = $9::uuid)
+ AND ($10::text = '' OR position(lower($10::text) IN lower(COALESCE(m.name, s.player_guid))) > 0)
  UNION ALL
 SELECT s.realm_id, s.guild_id::text COLLATE "C" AS subject_id,
  ''::text COLLATE "C" AS player_class, ''::text COLLATE "C" AS player_spec, ''::text COLLATE "C" AS player_sub_spec,
@@ -16636,22 +17226,22 @@ SELECT s.realm_id, s.guild_id::text COLLATE "C" AS subject_id,
  s.kill_count * a.points AS renown, s.kill_count AS sample_count, s.computed_at
  FROM leaderboard_guild_renown_counts s
  LEFT JOIN guilds m ON m.realm_id = s.realm_id AND m.id = s.guild_id
- JOIN (SELECT unnest($9::text[]) AS encounter_name, unnest($16::double precision[]) AS points) a ON a.encounter_name = s.encounter_name
- WHERE $1::text = 'guild' AND $2::text = 'renown'
- AND s.tenant_id = $3::uuid AND s.instance_name = $4::text AND s.difficulty_name = $5::text AND s.max_players = $6::smallint
- AND ($7::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR s.realm_id = $7::uuid)
- AND ($8::text = '' OR position(lower($8::text) IN lower(COALESCE(m.name, s.guild_id::text))) > 0)
+ JOIN (SELECT unnest($11::text[]) AS encounter_name, unnest($18::double precision[]) AS points) a ON a.encounter_name = s.encounter_name
+ WHERE $1::text = 'guild' AND $4::text = 'renown'
+ AND s.tenant_id = $5::uuid AND s.instance_name = $6::text AND s.difficulty_name = $7::text AND s.max_players = $8::smallint
+ AND ($9::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR s.realm_id = $9::uuid)
+ AND ($10::text = '' OR position(lower($10::text) IN lower(COALESCE(m.name, s.guild_id::text))) > 0)
 ), grouped AS (
  SELECT realm_id, subject_id, player_class, player_spec, player_sub_spec,
- (sum(peak) / NULLIF($17::integer, 0))::double precision AS peak,
- (sum(form) / NULLIF($17::integer, 0))::double precision AS form,
- (sum(floor) / NULLIF($17::integer, 0))::double precision AS floor,
- (sum(0.30 * peak + 0.50 * form + 0.20 * floor) / NULLIF($17::integer, 0))::double precision AS mastery,
+ (sum(peak) / NULLIF($19::integer, 0))::double precision AS peak,
+ (sum(form) / NULLIF($19::integer, 0))::double precision AS form,
+ (sum(floor) / NULLIF($19::integer, 0))::double precision AS floor,
+ (sum(0.30 * peak + 0.50 * form + 0.20 * floor) / NULLIF($19::integer, 0))::double precision AS mastery,
  sum(renown)::double precision AS renown, sum(sample_count)::bigint AS sample_count,
  min(computed_at) AS computed_at
  FROM contributions GROUP BY realm_id, subject_id, player_class, player_spec, player_sub_spec
 ), scored AS (
- SELECT realm_id, subject_id, player_class, player_spec, player_sub_spec, peak, form, floor, mastery, renown, sample_count, computed_at, CASE $18::text WHEN 'peak' THEN peak WHEN 'mastery' THEN mastery ELSE renown END::double precision AS score
+ SELECT realm_id, subject_id, player_class, player_spec, player_sub_spec, peak, form, floor, mastery, renown, sample_count, computed_at, CASE $20::text WHEN 'peak' THEN peak WHEN 'mastery' THEN mastery ELSE renown END::double precision AS score
  FROM grouped
 ), page AS (
 SELECT realm_id, subject_id::text AS subject_id, player_class::text AS player_class, player_spec::text AS player_spec, player_sub_spec::text AS player_sub_spec, COALESCE(peak, 0)::double precision AS peak,
@@ -16659,10 +17249,10 @@ SELECT realm_id, subject_id::text AS subject_id, player_class::text AS player_cl
  COALESCE(mastery, 0)::double precision AS mastery, renown, sample_count,
  computed_at::timestamptz AS computed_at, score
 FROM scored
-WHERE NOT $19::boolean OR score < $20::double precision
- OR (score = $20::double precision AND (realm_id, subject_id, player_class, player_spec, player_sub_spec) > ($21::uuid, $22::text, $23::text, $24::text, $25::text))
+WHERE NOT $21::boolean OR score < $22::double precision
+ OR (score = $22::double precision AND (realm_id, subject_id, player_class, player_spec, player_sub_spec) > ($23::uuid, $24::text, $25::text, $26::text, $27::text))
 ORDER BY score DESC, realm_id, subject_id, player_class, player_spec, player_sub_spec
-LIMIT $26::integer
+LIMIT $28::integer
 )
 SELECT page.realm_id, page.subject_id, page.player_class, page.player_spec, page.player_sub_spec, page.peak, page.form, page.floor, page.mastery, page.renown, page.sample_count, page.computed_at, page.score, COALESCE((SELECT NULLIF(r.name,'') FROM wow_server_realms r WHERE r.id=page.realm_id),'Unknown realm')::text AS realm_name,
  COALESCE(CASE WHEN $1::text = 'player' THEN
@@ -16686,32 +17276,34 @@ FROM page ORDER BY score DESC, realm_id, subject_id, player_class, player_spec, 
 `
 
 type ListLeaderboardV2Params struct {
-	SubjectKind    string    `db:"subject_kind" json:"subject_kind"`
-	BoardKind      string    `db:"board_kind" json:"board_kind"`
-	TenantID       uuid.UUID `db:"tenant_id" json:"tenant_id"`
-	InstanceName   string    `db:"instance_name" json:"instance_name"`
-	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
-	MaxPlayers     int16     `db:"max_players" json:"max_players"`
-	RealmFilter    uuid.UUID `db:"realm_filter" json:"realm_filter"`
-	Search         string    `db:"search" json:"search"`
-	Bosses         []string  `db:"bosses" json:"bosses"`
-	PlayerClass    string    `db:"player_class" json:"player_class"`
-	PlayerSpec     string    `db:"player_spec" json:"player_spec"`
-	FilterSubSpec  bool      `db:"filter_sub_spec" json:"filter_sub_spec"`
-	PlayerSubSpec  string    `db:"player_sub_spec" json:"player_sub_spec"`
-	Metric         string    `db:"metric" json:"metric"`
-	ShowUnknowns   bool      `db:"show_unknowns" json:"show_unknowns"`
-	Awards         []float64 `db:"awards" json:"awards"`
-	Denominator    int32     `db:"denominator" json:"denominator"`
-	ScoreMetric    string    `db:"score_metric" json:"score_metric"`
-	HasCursor      bool      `db:"has_cursor" json:"has_cursor"`
-	AfterScore     float64   `db:"after_score" json:"after_score"`
-	AfterRealm     uuid.UUID `db:"after_realm" json:"after_realm"`
-	AfterSubject   string    `db:"after_subject" json:"after_subject"`
-	AfterClass     string    `db:"after_class" json:"after_class"`
-	AfterSpec      string    `db:"after_spec" json:"after_spec"`
-	AfterSubSpec   string    `db:"after_sub_spec" json:"after_sub_spec"`
-	PageSize       int32     `db:"page_size" json:"page_size"`
+	SubjectKind       string    `db:"subject_kind" json:"subject_kind"`
+	EncounterVariants []byte    `db:"encounter_variants" json:"encounter_variants"`
+	EncounterVariant  string    `db:"encounter_variant" json:"encounter_variant"`
+	BoardKind         string    `db:"board_kind" json:"board_kind"`
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	RealmFilter       uuid.UUID `db:"realm_filter" json:"realm_filter"`
+	Search            string    `db:"search" json:"search"`
+	Bosses            []string  `db:"bosses" json:"bosses"`
+	PlayerClass       string    `db:"player_class" json:"player_class"`
+	PlayerSpec        string    `db:"player_spec" json:"player_spec"`
+	FilterSubSpec     bool      `db:"filter_sub_spec" json:"filter_sub_spec"`
+	PlayerSubSpec     string    `db:"player_sub_spec" json:"player_sub_spec"`
+	Metric            string    `db:"metric" json:"metric"`
+	ShowUnknowns      bool      `db:"show_unknowns" json:"show_unknowns"`
+	Awards            []float64 `db:"awards" json:"awards"`
+	Denominator       int32     `db:"denominator" json:"denominator"`
+	ScoreMetric       string    `db:"score_metric" json:"score_metric"`
+	HasCursor         bool      `db:"has_cursor" json:"has_cursor"`
+	AfterScore        float64   `db:"after_score" json:"after_score"`
+	AfterRealm        uuid.UUID `db:"after_realm" json:"after_realm"`
+	AfterSubject      string    `db:"after_subject" json:"after_subject"`
+	AfterClass        string    `db:"after_class" json:"after_class"`
+	AfterSpec         string    `db:"after_spec" json:"after_spec"`
+	AfterSubSpec      string    `db:"after_sub_spec" json:"after_sub_spec"`
+	PageSize          int32     `db:"page_size" json:"page_size"`
 }
 
 type ListLeaderboardV2Row struct {
@@ -16743,6 +17335,8 @@ type ListLeaderboardV2Row struct {
 func (q *sqlQuerier) ListLeaderboardV2(ctx context.Context, arg ListLeaderboardV2Params) ([]ListLeaderboardV2Row, error) {
 	rows, err := q.db.Query(ctx, listLeaderboardV2,
 		arg.SubjectKind,
+		arg.EncounterVariants,
+		arg.EncounterVariant,
 		arg.BoardKind,
 		arg.TenantID,
 		arg.InstanceName,
@@ -16949,13 +17543,18 @@ func (q *sqlQuerier) ListLeaderboardV2BossLeaders(ctx context.Context, arg ListL
 }
 
 const listLeaderboardV2Cohorts = `-- name: ListLeaderboardV2Cohorts :many
+WITH selected_leaderboard_player_boss_benchmarks AS NOT MATERIALIZED (
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, best_metric, projection_version, algorithm_version, computed_at FROM leaderboard_player_boss_benchmarks WHERE COALESCE($7::jsonb ->> encounter_name, $8::text) = ''
+ UNION ALL
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, best_metric, projection_version, algorithm_version, computed_at FROM leaderboard_variant_player_boss_benchmarks WHERE encounter_variant = COALESCE($7::jsonb ->> encounter_name, $8::text)
+)
 SELECT DISTINCT b.player_class, b.player_spec, b.player_sub_spec, b.metric
-FROM leaderboard_player_boss_benchmarks b
+FROM selected_leaderboard_player_boss_benchmarks b
 WHERE b.tenant_id = $1::uuid AND b.instance_name = $2::text
  AND b.difficulty_name = $3::text AND b.max_players = $4::smallint
  AND b.encounter_name = ANY($5::text[])
  AND ($6::boolean OR b.player_spec <> 'Unknown' OR NOT EXISTS (
-  SELECT 1 FROM leaderboard_player_boss_benchmarks known
+  SELECT 1 FROM selected_leaderboard_player_boss_benchmarks known
   WHERE known.tenant_id = $1::uuid AND known.instance_name = $2::text
    AND known.difficulty_name = $3::text AND known.max_players = $4::smallint
    AND known.encounter_name = ANY($5::text[]) AND known.metric = b.metric
@@ -16965,12 +17564,14 @@ ORDER BY b.player_class, b.player_spec, b.player_sub_spec, b.metric
 `
 
 type ListLeaderboardV2CohortsParams struct {
-	TenantID       uuid.UUID `db:"tenant_id" json:"tenant_id"`
-	InstanceName   string    `db:"instance_name" json:"instance_name"`
-	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
-	MaxPlayers     int16     `db:"max_players" json:"max_players"`
-	Bosses         []string  `db:"bosses" json:"bosses"`
-	ShowUnknowns   bool      `db:"show_unknowns" json:"show_unknowns"`
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	Bosses            []string  `db:"bosses" json:"bosses"`
+	ShowUnknowns      bool      `db:"show_unknowns" json:"show_unknowns"`
+	EncounterVariants []byte    `db:"encounter_variants" json:"encounter_variants"`
+	EncounterVariant  string    `db:"encounter_variant" json:"encounter_variant"`
 }
 
 type ListLeaderboardV2CohortsRow struct {
@@ -16988,6 +17589,8 @@ func (q *sqlQuerier) ListLeaderboardV2Cohorts(ctx context.Context, arg ListLeade
 		arg.MaxPlayers,
 		arg.Bosses,
 		arg.ShowUnknowns,
+		arg.EncounterVariants,
+		arg.EncounterVariant,
 	)
 	if err != nil {
 		return nil, err
@@ -17013,12 +17616,32 @@ func (q *sqlQuerier) ListLeaderboardV2Cohorts(ctx context.Context, arg ListLeade
 }
 
 const listLeaderboardV2PageBosses = `-- name: ListLeaderboardV2PageBosses :many
-WITH subjects AS (
- SELECT unnest($1::uuid[]) AS realm_id, unnest($2::text[]) AS subject_id,
- unnest($3::text[]) AS player_class, unnest($4::text[]) AS player_spec,
- unnest($5::text[]) AS player_sub_spec
+WITH selected_leaderboard_player_boss_subjects AS NOT MATERIALIZED (
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid, observation_count, raw_peak, raw_form, raw_floor, projection_version, algorithm_version, computed_at, peak_encounter_id, peak_duration_ms FROM leaderboard_player_boss_subjects WHERE COALESCE($1::jsonb ->> encounter_name, $2::text) = ''
+ UNION ALL
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid, observation_count, raw_peak, raw_form, raw_floor, projection_version, algorithm_version, computed_at, peak_encounter_id, peak_duration_ms FROM leaderboard_variant_player_boss_subjects WHERE encounter_variant = COALESCE($1::jsonb ->> encounter_name, $2::text)
+),
+selected_leaderboard_player_boss_benchmarks AS NOT MATERIALIZED (
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, best_metric, projection_version, algorithm_version, computed_at FROM leaderboard_player_boss_benchmarks WHERE COALESCE($1::jsonb ->> encounter_name, $2::text) = ''
+ UNION ALL
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, best_metric, projection_version, algorithm_version, computed_at FROM leaderboard_variant_player_boss_benchmarks WHERE encounter_variant = COALESCE($1::jsonb ->> encounter_name, $2::text)
+),
+selected_leaderboard_guild_boss_subjects AS NOT MATERIALIZED (
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id, observation_count, fastest_duration_ms, form_mean_inverse_ms, floor_mean_inverse_ms, projection_version, algorithm_version, computed_at FROM leaderboard_guild_boss_subjects WHERE COALESCE($1::jsonb ->> encounter_name, $2::text) = ''
+ UNION ALL
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id, observation_count, fastest_duration_ms, form_mean_inverse_ms, floor_mean_inverse_ms, projection_version, algorithm_version, computed_at FROM leaderboard_variant_guild_boss_subjects WHERE encounter_variant = COALESCE($1::jsonb ->> encounter_name, $2::text)
+),
+selected_leaderboard_guild_boss_benchmarks AS NOT MATERIALIZED (
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, best_duration_ms, projection_version, algorithm_version, computed_at FROM leaderboard_guild_boss_benchmarks WHERE COALESCE($1::jsonb ->> encounter_name, $2::text) = ''
+ UNION ALL
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, best_duration_ms, projection_version, algorithm_version, computed_at FROM leaderboard_variant_guild_boss_benchmarks WHERE encounter_variant = COALESCE($1::jsonb ->> encounter_name, $2::text)
+),
+subjects AS (
+ SELECT unnest($3::uuid[]) AS realm_id, unnest($4::text[]) AS subject_id,
+ unnest($5::text[]) AS player_class, unnest($6::text[]) AS player_spec,
+ unnest($7::text[]) AS player_sub_spec
 ), selected AS (
- SELECT subjects.realm_id, subjects.subject_id, subjects.player_class, subjects.player_spec, subjects.player_sub_spec, unnest($6::text[]) AS encounter_name FROM subjects
+ SELECT subjects.realm_id, subjects.subject_id, subjects.player_class, subjects.player_spec, subjects.player_sub_spec, unnest($8::text[]) AS encounter_name FROM subjects
 )
 SELECT p.realm_id::uuid AS realm_id, p.subject_id::text AS subject_id, p.player_class::text AS player_class, p.player_spec::text AS player_spec, p.player_sub_spec::text AS player_sub_spec, p.encounter_name::text AS encounter_name,
  CASE WHEN b.best_metric > 0 THEN COALESCE(LEAST(100::double precision,100*s.raw_peak/b.best_metric),0) ELSE 0 END::double precision AS peak,
@@ -17031,17 +17654,17 @@ SELECT p.realm_id::uuid AS realm_id, p.subject_id::text AS subject_id, p.player_
  -- The peak kill's log, only while it is still listed and valid; empty otherwise.
  COALESCE(NULLIF(pli.hashed_slug, ''), pli.id::text, '')::text AS peak_log
 FROM selected p
-LEFT JOIN leaderboard_player_boss_subjects s ON s.tenant_id= $7::uuid
- AND s.instance_name= $8::text AND s.difficulty_name= $9::text AND s.max_players= $10::smallint
+LEFT JOIN selected_leaderboard_player_boss_subjects s ON s.tenant_id= $9::uuid
+ AND s.instance_name= $10::text AND s.difficulty_name= $11::text AND s.max_players= $12::smallint
  AND s.encounter_name=p.encounter_name AND s.realm_id=p.realm_id AND s.player_guid=p.subject_id
- AND s.player_class=p.player_class AND s.player_spec=p.player_spec AND s.player_sub_spec=p.player_sub_spec AND s.metric= $11::text
-LEFT JOIN leaderboard_player_boss_benchmarks b ON b.tenant_id=s.tenant_id AND b.instance_name=s.instance_name
+ AND s.player_class=p.player_class AND s.player_spec=p.player_spec AND s.player_sub_spec=p.player_sub_spec AND s.metric= $13::text
+LEFT JOIN selected_leaderboard_player_boss_benchmarks b ON b.tenant_id=s.tenant_id AND b.instance_name=s.instance_name
  AND b.difficulty_name=s.difficulty_name AND b.max_players=s.max_players AND b.encounter_name=s.encounter_name
  AND b.player_class=s.player_class AND b.player_spec=s.player_spec AND b.player_sub_spec=s.player_sub_spec AND b.metric=s.metric
 LEFT JOIN log_instance_encounters pe ON pe.id = s.peak_encounter_id
 LEFT JOIN (log_instances pli JOIN wow_log_groups plg ON plg.id = pli.log_group_id AND NOT plg.unlisted)
  ON pli.id = pe.instance_id AND pli.invalidated_at IS NULL
-WHERE $12::text='player'
+WHERE $14::text='player'
 UNION ALL
 SELECT p.realm_id::uuid AS realm_id, p.subject_id::text AS subject_id, p.player_class::text AS player_class, p.player_spec::text AS player_spec, p.player_sub_spec::text AS player_sub_spec, p.encounter_name::text AS encounter_name,
  CASE WHEN s.fastest_duration_ms > 0 AND b.best_duration_ms IS NOT NULL THEN LEAST(100::double precision,100.0*b.best_duration_ms/s.fastest_duration_ms) ELSE 0 END::double precision AS peak,
@@ -17052,28 +17675,30 @@ SELECT p.realm_id::uuid AS realm_id, p.subject_id::text AS subject_id, p.player_
  NULL::timestamptz AS peak_at,
  ''::text AS peak_log
 FROM selected p
-LEFT JOIN leaderboard_guild_boss_subjects s ON s.tenant_id= $7::uuid
- AND s.instance_name= $8::text AND s.difficulty_name= $9::text AND s.max_players= $10::smallint
+LEFT JOIN selected_leaderboard_guild_boss_subjects s ON s.tenant_id= $9::uuid
+ AND s.instance_name= $10::text AND s.difficulty_name= $11::text AND s.max_players= $12::smallint
  AND s.encounter_name=p.encounter_name AND s.realm_id=p.realm_id AND s.guild_id=p.subject_id::uuid
-LEFT JOIN leaderboard_guild_boss_benchmarks b ON b.tenant_id=s.tenant_id AND b.instance_name=s.instance_name
+LEFT JOIN selected_leaderboard_guild_boss_benchmarks b ON b.tenant_id=s.tenant_id AND b.instance_name=s.instance_name
  AND b.difficulty_name=s.difficulty_name AND b.max_players=s.max_players AND b.encounter_name=s.encounter_name
-WHERE $12::text='guild'
+WHERE $14::text='guild'
 ORDER BY realm_id,subject_id,player_class,player_spec,player_sub_spec,encounter_name
 `
 
 type ListLeaderboardV2PageBossesParams struct {
-	Realms         []uuid.UUID `db:"realms" json:"realms"`
-	Subjects       []string    `db:"subjects" json:"subjects"`
-	Classes        []string    `db:"classes" json:"classes"`
-	Specs          []string    `db:"specs" json:"specs"`
-	SubSpecs       []string    `db:"sub_specs" json:"sub_specs"`
-	Bosses         []string    `db:"bosses" json:"bosses"`
-	TenantID       uuid.UUID   `db:"tenant_id" json:"tenant_id"`
-	InstanceName   string      `db:"instance_name" json:"instance_name"`
-	DifficultyName string      `db:"difficulty_name" json:"difficulty_name"`
-	MaxPlayers     int16       `db:"max_players" json:"max_players"`
-	Metric         string      `db:"metric" json:"metric"`
-	SubjectKind    string      `db:"subject_kind" json:"subject_kind"`
+	EncounterVariants []byte      `db:"encounter_variants" json:"encounter_variants"`
+	EncounterVariant  string      `db:"encounter_variant" json:"encounter_variant"`
+	Realms            []uuid.UUID `db:"realms" json:"realms"`
+	Subjects          []string    `db:"subjects" json:"subjects"`
+	Classes           []string    `db:"classes" json:"classes"`
+	Specs             []string    `db:"specs" json:"specs"`
+	SubSpecs          []string    `db:"sub_specs" json:"sub_specs"`
+	Bosses            []string    `db:"bosses" json:"bosses"`
+	TenantID          uuid.UUID   `db:"tenant_id" json:"tenant_id"`
+	InstanceName      string      `db:"instance_name" json:"instance_name"`
+	DifficultyName    string      `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16       `db:"max_players" json:"max_players"`
+	Metric            string      `db:"metric" json:"metric"`
+	SubjectKind       string      `db:"subject_kind" json:"subject_kind"`
 }
 
 type ListLeaderboardV2PageBossesRow struct {
@@ -17097,6 +17722,8 @@ type ListLeaderboardV2PageBossesRow struct {
 // Cross the bounded page with selection to retain missing bosses as zero peaks.
 func (q *sqlQuerier) ListLeaderboardV2PageBosses(ctx context.Context, arg ListLeaderboardV2PageBossesParams) ([]ListLeaderboardV2PageBossesRow, error) {
 	rows, err := q.db.Query(ctx, listLeaderboardV2PageBosses,
+		arg.EncounterVariants,
+		arg.EncounterVariant,
 		arg.Realms,
 		arg.Subjects,
 		arg.Classes,
@@ -19790,7 +20417,7 @@ func (q *sqlQuerier) DeleteLogInstanceByIDAndGroup(ctx context.Context, arg Dele
 
 const encountersByInstanceID = `-- name: EncountersByInstanceID :many
 SELECT
-  id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id, ranking_start_offset_ms, ranking_end_offset_ms, invalidated_at, invalid_reason, difficulty
+  id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id, ranking_start_offset_ms, ranking_end_offset_ms, invalidated_at, invalid_reason, difficulty, encounter_variant
 FROM
   log_instance_encounters
 WHERE
@@ -19821,6 +20448,7 @@ func (q *sqlQuerier) EncountersByInstanceID(ctx context.Context, instanceID uuid
 			&i.InvalidatedAt,
 			&i.InvalidReason,
 			&i.Difficulty,
+			&i.EncounterVariant,
 		); err != nil {
 			return nil, err
 		}
@@ -20161,10 +20789,10 @@ func (q *sqlQuerier) GetParsedLogGroupByID(ctx context.Context, id uuid.UUID) (P
 
 const insertEncounter = `-- name: InsertEncounter :one
 INSERT INTO
-  log_instance_encounters (id, instance_id, name, map_id, kill_type, remaining, boss, start_time, end_time, ranking_start_offset_ms, ranking_end_offset_ms, difficulty)
+  log_instance_encounters (id, instance_id, name, map_id, kill_type, remaining, boss, start_time, end_time, ranking_start_offset_ms, ranking_end_offset_ms, difficulty, encounter_variant)
 VALUES
-  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-RETURNING id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id, ranking_start_offset_ms, ranking_end_offset_ms, invalidated_at, invalid_reason, difficulty
+  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+RETURNING id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id, ranking_start_offset_ms, ranking_end_offset_ms, invalidated_at, invalid_reason, difficulty, encounter_variant
 `
 
 type InsertEncounterParams struct {
@@ -20180,6 +20808,7 @@ type InsertEncounterParams struct {
 	RankingStartOffsetMs pgtype.Int8        `db:"ranking_start_offset_ms" json:"ranking_start_offset_ms"`
 	RankingEndOffsetMs   pgtype.Int8        `db:"ranking_end_offset_ms" json:"ranking_end_offset_ms"`
 	Difficulty           pgtype.Text        `db:"difficulty" json:"difficulty"`
+	EncounterVariant     pgtype.Text        `db:"encounter_variant" json:"encounter_variant"`
 }
 
 func (q *sqlQuerier) InsertEncounter(ctx context.Context, arg InsertEncounterParams) (LogInstanceEncounter, error) {
@@ -20196,6 +20825,7 @@ func (q *sqlQuerier) InsertEncounter(ctx context.Context, arg InsertEncounterPar
 		arg.RankingStartOffsetMs,
 		arg.RankingEndOffsetMs,
 		arg.Difficulty,
+		arg.EncounterVariant,
 	)
 	var i LogInstanceEncounter
 	err := row.Scan(
@@ -20213,6 +20843,7 @@ func (q *sqlQuerier) InsertEncounter(ctx context.Context, arg InsertEncounterPar
 		&i.InvalidatedAt,
 		&i.InvalidReason,
 		&i.Difficulty,
+		&i.EncounterVariant,
 	)
 	return i, err
 }
@@ -21927,7 +22558,8 @@ func (q *sqlQuerier) UnlinkDuplicateGroup(ctx context.Context, id uuid.UUID) (Un
 }
 
 const deleteParseScoreMembershipsByInstance = `-- name: DeleteParseScoreMembershipsByInstance :exec
-DELETE FROM parse_score_memberships WHERE instance_id = $1
+WITH variants AS (DELETE FROM parse_variant_memberships variant WHERE variant.instance_id = $1)
+DELETE FROM parse_score_memberships membership WHERE membership.instance_id = $1
 `
 
 func (q *sqlQuerier) DeleteParseScoreMembershipsByInstance(ctx context.Context, instanceID uuid.UUID) error {
@@ -21937,7 +22569,8 @@ func (q *sqlQuerier) DeleteParseScoreMembershipsByInstance(ctx context.Context, 
 
 const deleteParseScoreMembershipsByLogGroup = `-- name: DeleteParseScoreMembershipsByLogGroup :exec
 
-DELETE FROM parse_score_memberships WHERE log_group_id = $1
+WITH variants AS (DELETE FROM parse_variant_memberships variant WHERE variant.log_group_id = $1)
+DELETE FROM parse_score_memberships membership WHERE membership.log_group_id = $1
 `
 
 // Compact current-known membership for DPS/HPS parse cohorts.
@@ -22482,6 +23115,80 @@ deleted AS (
             AND member.player_guid = membership.player_guid
             AND member.difficulty_name = membership.difficulty_name
             AND member.max_players = membership.max_players
+      )
+    RETURNING 1
+),
+variant_members AS MATERIALIZED (
+    SELECT DISTINCT ON (representative.run_id, ranking.encounter_name, ranking.player_guid, ranking.difficulty_name, ranking.max_players, ranking.encounter_variant)
+        COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid) AS tenant_id,
+        representative.run_id,
+        ranking.encounter_name,
+        ranking.player_guid,
+        ranking.instance_id,
+        instance.log_group_id,
+        ranking.difficulty_name,
+        ranking.max_players, ranking.encounter_variant,
+        ranking.player_class,
+        ranking.player_spec,
+        ranking.player_sub_spec,
+        ranking.killed_at,
+        ranking.dps,
+        ranking.hps
+    FROM representative_instances representative
+    JOIN log_instances_resolved instance ON instance.id = representative.id
+    JOIN encounter_dps_rankings_resolved ranking ON ranking.instance_id = representative.id
+    JOIN wow_server_realms realm ON realm.id = instance.realm_id
+    JOIN wow_servers server ON server.id = realm.server_id
+    WHERE ranking.encounter_id IS NOT NULL
+      AND ranking.encounter_variant IS NOT NULL
+      AND (ranking.dps > 0 OR ranking.hps > 0)
+      AND ranking.duration_secs > 0
+      AND lower(btrim(ranking.player_class)) NOT IN ('', 'unknown')
+    ORDER BY representative.run_id, ranking.encounter_name, ranking.player_guid, ranking.difficulty_name, ranking.max_players, ranking.encounter_variant,
+             ranking.dps DESC, ranking.hps DESC
+),
+variant_upserted AS (
+    INSERT INTO parse_variant_memberships (
+        tenant_id, policy_version, query_version, run_id, encounter_name, player_guid,
+        instance_id, log_group_id, difficulty_name, max_players, encounter_variant,
+        player_class, player_spec, player_sub_spec, killed_at, dps, hps
+    )
+    SELECT
+        member.tenant_id, $2, $3, member.run_id,
+        member.encounter_name, member.player_guid, member.instance_id,
+        member.log_group_id, member.difficulty_name,
+        member.max_players, member.encounter_variant, member.player_class, member.player_spec,
+        member.player_sub_spec, member.killed_at, member.dps, member.hps
+    FROM variant_members member
+    ON CONFLICT (tenant_id, policy_version, query_version, run_id, encounter_name, player_guid, difficulty_name, max_players, encounter_variant)
+    DO UPDATE SET
+        instance_id = EXCLUDED.instance_id,
+        log_group_id = EXCLUDED.log_group_id,
+        difficulty_name = EXCLUDED.difficulty_name,
+        max_players = EXCLUDED.max_players,
+        player_class = EXCLUDED.player_class,
+        player_spec = EXCLUDED.player_spec,
+        player_sub_spec = EXCLUDED.player_sub_spec,
+        killed_at = EXCLUDED.killed_at,
+        dps = EXCLUDED.dps,
+        hps = EXCLUDED.hps
+    RETURNING 1
+),
+variant_deleted AS (
+    DELETE FROM parse_variant_memberships membership
+    WHERE membership.policy_version = $2
+      AND membership.query_version = $3
+      AND membership.run_id IN (SELECT run_id FROM affected_runs)
+      AND NOT EXISTS (
+          SELECT 1
+          FROM variant_members member
+          WHERE member.tenant_id = membership.tenant_id
+            AND member.run_id = membership.run_id
+            AND member.encounter_name = membership.encounter_name
+            AND member.player_guid = membership.player_guid
+            AND member.difficulty_name = membership.difficulty_name
+            AND member.max_players = membership.max_players
+            AND member.encounter_variant = membership.encounter_variant
       )
     RETURNING 1
 )
@@ -23348,6 +24055,7 @@ SELECT
     edr.player_role,
     edr.difficulty_name,
     edr.max_players,
+    edr.encounter_variant,
     edr.killed_at,
     edr.created_at,
     edr.damage_done,
@@ -23361,36 +24069,38 @@ JOIN log_instances_resolved li ON li.id = edr.instance_id
 JOIN wow_log_groups log_group ON log_group.id = li.log_group_id AND NOT log_group.unlisted
 WHERE edr.instance_id = $1
   AND edr.encounter_id IS NOT NULL  -- boss kills only
-ORDER BY edr.encounter_name, edr.dps DESC
+ORDER BY edr.encounter_name, edr.dps DESC, edr.id ASC
 `
 
 type ListRankingsForInstanceRow struct {
-	ID             uuid.UUID          `db:"id" json:"id"`
-	RunID          uuid.UUID          `db:"run_id" json:"run_id"`
-	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
-	InstanceName   string             `db:"instance_name" json:"instance_name"`
-	PlayerGuid     string             `db:"player_guid" json:"player_guid"`
-	PlayerName     string             `db:"player_name" json:"player_name"`
-	PlayerClass    string             `db:"player_class" json:"player_class"`
-	PlayerSpec     string             `db:"player_spec" json:"player_spec"`
-	PlayerSubSpec  string             `db:"player_sub_spec" json:"player_sub_spec"`
-	PlayerRole     string             `db:"player_role" json:"player_role"`
-	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
-	MaxPlayers     int16              `db:"max_players" json:"max_players"`
-	KilledAt       pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
-	CreatedAt      pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	DamageDone     int64              `db:"damage_done" json:"damage_done"`
-	HealingDone    int64              `db:"healing_done" json:"healing_done"`
-	AbsorbedDone   int64              `db:"absorbed_done" json:"absorbed_done"`
-	DurationSecs   float64            `db:"duration_secs" json:"duration_secs"`
-	Dps            float64            `db:"dps" json:"dps"`
-	Hps            float64            `db:"hps" json:"hps"`
+	ID               uuid.UUID          `db:"id" json:"id"`
+	RunID            uuid.UUID          `db:"run_id" json:"run_id"`
+	EncounterName    string             `db:"encounter_name" json:"encounter_name"`
+	InstanceName     string             `db:"instance_name" json:"instance_name"`
+	PlayerGuid       string             `db:"player_guid" json:"player_guid"`
+	PlayerName       string             `db:"player_name" json:"player_name"`
+	PlayerClass      string             `db:"player_class" json:"player_class"`
+	PlayerSpec       string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec    string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PlayerRole       string             `db:"player_role" json:"player_role"`
+	DifficultyName   string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers       int16              `db:"max_players" json:"max_players"`
+	EncounterVariant pgtype.Text        `db:"encounter_variant" json:"encounter_variant"`
+	KilledAt         pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	CreatedAt        pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	DamageDone       int64              `db:"damage_done" json:"damage_done"`
+	HealingDone      int64              `db:"healing_done" json:"healing_done"`
+	AbsorbedDone     int64              `db:"absorbed_done" json:"absorbed_done"`
+	DurationSecs     float64            `db:"duration_secs" json:"duration_secs"`
+	Dps              float64            `db:"dps" json:"dps"`
+	Hps              float64            `db:"hps" json:"hps"`
 }
 
 // Load ranking rows for a specific instance directly from encounter_dps_rankings.
 // Used by the parses handler to get the viewed instance's own metric values
 // independent of snapshot membership (the instance may not be a member of the
 // snapshot it scores against, e.g. historical canonical snapshots).
+// Keep the same winning source for persisted and on-demand variant parses when DPS ties.
 func (q *sqlQuerier) ListRankingsForInstance(ctx context.Context, instanceID uuid.UUID) ([]ListRankingsForInstanceRow, error) {
 	rows, err := q.db.Query(ctx, listRankingsForInstance, instanceID)
 	if err != nil {
@@ -23413,6 +24123,7 @@ func (q *sqlQuerier) ListRankingsForInstance(ctx context.Context, instanceID uui
 			&i.PlayerRole,
 			&i.DifficultyName,
 			&i.MaxPlayers,
+			&i.EncounterVariant,
 			&i.KilledAt,
 			&i.CreatedAt,
 			&i.DamageDone,
@@ -23421,6 +24132,184 @@ func (q *sqlQuerier) ListRankingsForInstance(ctx context.Context, instanceID uui
 			&i.DurationSecs,
 			&i.Dps,
 			&i.Hps,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getParseVariantMembershipCohort = `-- name: GetParseVariantMembershipCohort :many
+SELECT CASE WHEN $1::text = 'hps' THEN membership.hps ELSE membership.dps END::double precision AS metric_value
+FROM parse_variant_memberships membership
+JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
+WHERE (
+      ($2::uuid <> '00000000-0000-0000-0000-000000000000'::uuid AND membership.tenant_id = $2)
+      OR
+      ($2::uuid = '00000000-0000-0000-0000-000000000000'::uuid AND (
+          membership.tenant_id = '00000000-0000-0000-0000-000000000000'::uuid
+          OR EXISTS (SELECT 1 FROM tenants tenant WHERE tenant.id = membership.tenant_id AND tenant.include_in_all)
+      ))
+  )
+  AND membership.policy_version = $3
+  AND membership.query_version = $4
+  AND membership.killed_at < $5
+  AND ($6::timestamptz IS NULL OR membership.killed_at >= $6)
+  AND membership.run_id <> $7
+  AND membership.encounter_name = $8
+  AND membership.difficulty_name = $9
+  AND membership.max_players = $10
+  AND membership.encounter_variant = $11
+  AND membership.player_class = $12
+  AND ($13::text <> 'spec' OR (
+      membership.player_spec = $14
+      AND membership.player_sub_spec = $15
+      AND lower(btrim(membership.player_spec)) NOT IN ('', 'unknown')
+  ))
+  AND CASE WHEN $1::text = 'hps' THEN membership.hps ELSE membership.dps END > 0
+`
+
+type GetParseVariantMembershipCohortParams struct {
+	Metric           string             `db:"metric" json:"metric"`
+	TenantID         uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	PolicyVersion    int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion     int16              `db:"query_version" json:"query_version"`
+	Cutoff           pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	WindowStart      pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	ExcludeRunID     uuid.UUID          `db:"exclude_run_id" json:"exclude_run_id"`
+	EncounterName    string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName   string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers       int16              `db:"max_players" json:"max_players"`
+	EncounterVariant string             `db:"encounter_variant" json:"encounter_variant"`
+	PlayerClass      string             `db:"player_class" json:"player_class"`
+	CohortMode       string             `db:"cohort_mode" json:"cohort_mode"`
+	PlayerSpec       string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec    string             `db:"player_sub_spec" json:"player_sub_spec"`
+}
+
+func (q *sqlQuerier) GetParseVariantMembershipCohort(ctx context.Context, arg GetParseVariantMembershipCohortParams) ([]float64, error) {
+	rows, err := q.db.Query(ctx, getParseVariantMembershipCohort,
+		arg.Metric,
+		arg.TenantID,
+		arg.PolicyVersion,
+		arg.QueryVersion,
+		arg.Cutoff,
+		arg.WindowStart,
+		arg.ExcludeRunID,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.EncounterVariant,
+		arg.PlayerClass,
+		arg.CohortMode,
+		arg.PlayerSpec,
+		arg.PlayerSubSpec,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []float64
+	for rows.Next() {
+		var metric_value float64
+		if err := rows.Scan(&metric_value); err != nil {
+			return nil, err
+		}
+		items = append(items, metric_value)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const insertParseVariantResult = `-- name: InsertParseVariantResult :exec
+INSERT INTO parse_variant_results (
+    tenant_id, instance_id, encounter_name, difficulty_name, max_players,
+    encounter_variant, player_guid, metric, precise_score, display_score, rank, sample_size, status
+) VALUES (
+    $1, $2, $3, $4, $5,
+    $6, $7, $8, $9, $10, $11, $12, $13
+)
+ON CONFLICT (tenant_id, instance_id, encounter_name, difficulty_name, max_players, encounter_variant, player_guid, metric)
+DO NOTHING
+`
+
+type InsertParseVariantResultParams struct {
+	TenantID         uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceID       uuid.UUID `db:"instance_id" json:"instance_id"`
+	EncounterName    string    `db:"encounter_name" json:"encounter_name"`
+	DifficultyName   string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers       int16     `db:"max_players" json:"max_players"`
+	EncounterVariant string    `db:"encounter_variant" json:"encounter_variant"`
+	PlayerGuid       string    `db:"player_guid" json:"player_guid"`
+	Metric           string    `db:"metric" json:"metric"`
+	PreciseScore     float64   `db:"precise_score" json:"precise_score"`
+	DisplayScore     int16     `db:"display_score" json:"display_score"`
+	Rank             int32     `db:"rank" json:"rank"`
+	SampleSize       int32     `db:"sample_size" json:"sample_size"`
+	Status           string    `db:"status" json:"status"`
+}
+
+func (q *sqlQuerier) InsertParseVariantResult(ctx context.Context, arg InsertParseVariantResultParams) error {
+	_, err := q.db.Exec(ctx, insertParseVariantResult,
+		arg.TenantID,
+		arg.InstanceID,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.EncounterVariant,
+		arg.PlayerGuid,
+		arg.Metric,
+		arg.PreciseScore,
+		arg.DisplayScore,
+		arg.Rank,
+		arg.SampleSize,
+		arg.Status,
+	)
+	return err
+}
+
+const listParseVariantResultsForInstance = `-- name: ListParseVariantResultsForInstance :many
+SELECT result.tenant_id, result.instance_id, result.encounter_name, result.difficulty_name, result.max_players, result.encounter_variant, result.player_guid, result.metric, result.precise_score, result.display_score, result.rank, result.sample_size, result.status FROM parse_variant_results result
+JOIN log_instances_resolved instance ON instance.id = result.instance_id
+JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
+WHERE result.tenant_id = $1 AND result.instance_id = $2 AND result.metric = $3
+`
+
+type ListParseVariantResultsForInstanceParams struct {
+	TenantID   uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceID uuid.UUID `db:"instance_id" json:"instance_id"`
+	Metric     string    `db:"metric" json:"metric"`
+}
+
+func (q *sqlQuerier) ListParseVariantResultsForInstance(ctx context.Context, arg ListParseVariantResultsForInstanceParams) ([]ParseVariantResult, error) {
+	rows, err := q.db.Query(ctx, listParseVariantResultsForInstance, arg.TenantID, arg.InstanceID, arg.Metric)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ParseVariantResult
+	for rows.Next() {
+		var i ParseVariantResult
+		if err := rows.Scan(
+			&i.TenantID,
+			&i.InstanceID,
+			&i.EncounterName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.EncounterVariant,
+			&i.PlayerGuid,
+			&i.Metric,
+			&i.PreciseScore,
+			&i.DisplayScore,
+			&i.Rank,
+			&i.SampleSize,
+			&i.Status,
 		); err != nil {
 			return nil, err
 		}
@@ -25123,7 +26012,7 @@ WITH boss_insert AS (
     INSERT INTO encounter_dps_rankings (
         encounter_id, instance_id, encounter_name, instance_name,
         player_guid, player_name, player_class, player_spec, player_sub_spec, player_role, player_level,
-        talent_build_id, difficulty_name, max_players,
+        talent_build_id, difficulty_name, max_players, encounter_variant,
         realm_id, realm_name, guild_id, guild_name,
         damage_done, unranked_damage_done, duration_secs, dps, avg_ilvl,
         healing_done, absorbed_done, hps, player_deaths, alive_percentage,
@@ -25132,7 +26021,7 @@ WITH boss_insert AS (
     SELECT
         $1, $2, $3, $4,
         $5, $6, $7, $8, $9, $10, $11,
-        $12, $13, $14,
+        $12, $13, $14, $31::text,
         $15, $16, $17, $18,
         $19, $20, $21, $22, $23,
         $24, $25, $26, $27, $28,
@@ -25151,6 +26040,7 @@ WITH boss_insert AS (
         player_level = EXCLUDED.player_level,
         talent_build_id = EXCLUDED.talent_build_id,
         difficulty_name = EXCLUDED.difficulty_name,
+        encounter_variant = EXCLUDED.encounter_variant,
         max_players = EXCLUDED.max_players,
         realm_id = EXCLUDED.realm_id,
         realm_name = EXCLUDED.realm_name,
@@ -25265,6 +26155,7 @@ type InsertEncounterDpsRankingParams struct {
 	AlivePercentage    pgtype.Float8      `db:"alive_percentage" json:"alive_percentage"`
 	LogHashedSlug      string             `db:"log_hashed_slug" json:"log_hashed_slug"`
 	KilledAt           pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	EncounterVariant   pgtype.Text        `db:"encounter_variant" json:"encounter_variant"`
 }
 
 // Boss encounters keep the latest timestamped occurrence per player and
@@ -25303,12 +26194,13 @@ func (q *sqlQuerier) InsertEncounterDpsRanking(ctx context.Context, arg InsertEn
 		arg.AlivePercentage,
 		arg.LogHashedSlug,
 		arg.KilledAt,
+		arg.EncounterVariant,
 	)
 	return err
 }
 
 const instanceRankingRecords = `-- name: InstanceRankingRecords :many
-SELECT edr.id, edr.encounter_id, edr.instance_id, edr.encounter_name, edr.instance_name, edr.player_guid, edr.player_name, edr.player_class, edr.player_spec, edr.player_role, edr.player_level, edr.talent_build_id, edr.difficulty_name, edr.max_players, edr.realm_id, edr.realm_name, edr.guild_id, edr.guild_name, edr.damage_done, edr.duration_secs, edr.dps, edr.avg_ilvl, edr.log_hashed_slug, edr.killed_at, edr.created_at, edr.healing_done, edr.absorbed_done, edr.hps, edr.player_sub_spec, edr.player_deaths, edr.alive_percentage, edr.unranked_damage_done
+SELECT edr.id, edr.encounter_id, edr.instance_id, edr.encounter_name, edr.instance_name, edr.player_guid, edr.player_name, edr.player_class, edr.player_spec, edr.player_role, edr.player_level, edr.talent_build_id, edr.difficulty_name, edr.max_players, edr.realm_id, edr.realm_name, edr.guild_id, edr.guild_name, edr.damage_done, edr.duration_secs, edr.dps, edr.avg_ilvl, edr.log_hashed_slug, edr.killed_at, edr.created_at, edr.healing_done, edr.absorbed_done, edr.hps, edr.player_sub_spec, edr.player_deaths, edr.alive_percentage, edr.unranked_damage_done, edr.encounter_variant
 FROM encounter_dps_rankings_resolved edr
 WHERE edr.instance_id = $1
 ORDER BY (encounter_id IS NULL), killed_at, encounter_name, player_name
@@ -25358,6 +26250,7 @@ func (q *sqlQuerier) InstanceRankingRecords(ctx context.Context, instanceID uuid
 			&i.PlayerDeaths,
 			&i.AlivePercentage,
 			&i.UnrankedDamageDone,
+			&i.EncounterVariant,
 		); err != nil {
 			return nil, err
 		}

@@ -216,7 +216,7 @@ export function BoardSkeleton() {
  * Overview / Peak / Ranked Mastery / Renown, as a compact segmented switch that lives in the board's
  * header: a setting of the board, not another row of page tabs. The chosen one takes its metric color.
  */
-export function MetricTabs({ view, onView, className }: { view: RatingView; onView: (view: RatingView) => void; className?: string }) {
+export function MetricTabs({ view, onView, className, disabledViews }: { view: RatingView; onView: (view: RatingView) => void; className?: string; disabledViews?: Partial<Record<RatingView, string>> }) {
   return (
     <nav className={cn("relative flex max-w-full overflow-x-auto rounded-md border bg-background/60 p-0.5", className)} aria-label="Rating metric">
       {VIEW_ORDER.map((m) => {
@@ -227,7 +227,8 @@ export function MetricTabs({ view, onView, className }: { view: RatingView; onVi
             key={m}
             type="button"
             aria-pressed={active}
-            title={t.question}
+            title={disabledViews?.[m] ?? t.question}
+            disabled={!!disabledViews?.[m]}
             onClick={() => onView(m)}
             style={
               active
@@ -239,7 +240,7 @@ export function MetricTabs({ view, onView, className }: { view: RatingView; onVi
                 : undefined
             }
             className={cn(
-              "flex shrink-0 cursor-pointer items-center gap-1.5 rounded px-2 py-1.5 text-xs font-medium transition-colors sm:px-2.5",
+              "flex shrink-0 cursor-pointer items-center gap-1.5 rounded px-2 py-1.5 text-xs font-medium transition-colors sm:px-2.5 disabled:cursor-not-allowed disabled:opacity-40",
               !active && "text-muted-foreground hover:text-foreground",
             )}
           >

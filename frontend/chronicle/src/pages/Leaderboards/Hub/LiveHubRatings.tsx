@@ -1,3 +1,4 @@
+import type { EncounterVariants } from "@/components/EncounterDifficulty/encounterVariant";
 import { useMemo, useState, type ReactNode } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -23,6 +24,7 @@ import {
 } from "./v2RatingAdapter";
 
 export interface LiveHubRatingsProps {
+  encounterVariants?: EncounterVariants;
   instanceName: string;
   bosses: readonly string[];
   selected: readonly string[];
@@ -73,6 +75,7 @@ export function LiveHubRatings(props: LiveHubRatingsProps) {
     subject,
     props.realmIDs,
     showUnknowns,
+    view === "overview" ? undefined : props.encounterVariants,
     summary?.configuration,
     summary?.cohorts,
   ]);
@@ -90,6 +93,7 @@ export function LiveHubRatings(props: LiveHubRatingsProps) {
             selected,
             realmIDs: props.realmIDs,
             showUnknowns,
+            encounterVariants: view === "overview" ? undefined : props.encounterVariants,
           }
         : undefined,
     // The key includes the complete immutable request identity.
@@ -136,7 +140,7 @@ export function LiveHubRatings(props: LiveHubRatingsProps) {
           ),
         };
       },
-      enabled: !!context,
+      enabled: !!context && !request.error,
       retry: false,
       staleTime: 30_000,
     })),
@@ -158,10 +162,9 @@ export function LiveHubRatings(props: LiveHubRatingsProps) {
       const targetIndex = targets.findIndex(
         (item) => item.boss === target.boss,
       );
-      const q =
-        allQueries[
-          Math.max(0, targetIndex) * 3 + RATING_METRICS.indexOf(metric)
-        ];
+      const requestIndex = Math.max(0, targetIndex) * 3 + RATING_METRICS.indexOf(metric);
+      if (requests[requestIndex].error) return { status: "error", error: requests[requestIndex].error.message };
+      const q = allQueries[requestIndex];
       if (q.isError) return { status: "error", error: q.error.message };
       if (!q.data) return { status: "loading" };
       return {
@@ -192,6 +195,9 @@ export function LiveHubRatings(props: LiveHubRatingsProps) {
   const ratingsToolbar = (
     <div className="flex flex-wrap items-center gap-2">
       {toolbar}
+      {!!Object.keys(context?.encounterVariants ?? {}).length && <span className="text-xs text-muted-foreground" role="note">
+        Peak and Mastery use selected encounter variants. Renown uses base boss scores. Overview and career metrics always use Combined.
+      </span>}
       {subject === "player" && hasSpecs && (
         <button
           type="button"
@@ -266,7 +272,7 @@ export function LiveHubRatings(props: LiveHubRatingsProps) {
           return [metric, query.isError ? { error: query.error.message } : !query.data ? { pending: true } : {}];
         }));
       },
-      pending: !!context && queries.some((q) => q.isPending),
+      pending: !!context && queries.some((q, index) => !requests[index].error && q.isPending),
       error: !context
         ? "No enabled instance variant."
         : current?.isError
@@ -286,7 +292,7 @@ export function LiveHubRatings(props: LiveHubRatingsProps) {
           allBosses={bosses}
           where={where}
           onBoss={(boss) => onScope({ boss })}
-          toolbar={toolbar}
+          toolbar={ratingsToolbar}
           data={data}
         />
       </div>

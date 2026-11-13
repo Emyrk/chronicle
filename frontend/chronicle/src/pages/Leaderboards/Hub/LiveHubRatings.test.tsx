@@ -1,16 +1,19 @@
 import { renderToStaticMarkup } from "react-dom/server"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { setBoardPage, setBoardURL } from "@/pages/Leaderboards/Ratings/setBoard"
+import { MetricTabs } from "@/pages/Leaderboards/Ratings/RatingLeaderboard"
 import { LiveHubRatings, type LiveHubRatingsProps } from "./LiveHubRatings"
 import { resolvedHubMetadata } from "./resolvedHubAdapter"
 import { configuration } from "./v2RatingAdapter.testdata"
 
-const states = vi.hoisted(() => ({ bosses: {} as Record<string, "pending" | "error" | "empty">, centerPending: false }))
-beforeEach(() => { states.bosses = {}; states.centerPending = false })
+const states = vi.hoisted(() => ({ bosses: {} as Record<string, "pending" | "error" | "empty">, centerPending: false, enabled: [] as boolean[], params: [] as URLSearchParams[] }))
+beforeEach(() => { states.bosses = {}; states.centerPending = false; states.enabled = []; states.params = [] })
 vi.mock("@tanstack/react-query", () => ({
  useQuery: () => ({data:undefined,isPending:true}),
- useQueries: ({queries}:{queries:{queryKey: string[]}[]}) => queries.map((query)=>{
+ useQueries: ({queries}:{queries:{queryKey: string[]; enabled: boolean}[]}) => queries.map((query)=>{
+  states.enabled.push(query.enabled)
   const params = new URLSearchParams(query.queryKey[1])
+  states.params.push(params)
   const boss = params.get("boss") ?? ""
   const state = states.bosses[boss]
   if (state === "pending" || (!boss && states.centerPending)) return {isPending:true,isError:false}
@@ -80,4 +83,27 @@ describe("set board client", () => {
       total: 1, page: 0, has_next_page: false }, "mastery")
     expect(withParts.rows[0].entry.publishedMastery).toEqual({ peak: 91, form: 82, floor: 60, eligibleKills: 7 })
   })
+})
+
+
+describe("encounter variant views", () => {
+ for (const subject of ["player", "guild"] as const) {
+  for (const view of ["overview", "renown", "peak"] as const) {
+   it(`keeps ${subject} ${view} available with mixed selections`, () => {
+    const html = renderToStaticMarkup(<LiveHubRatings {...props} instanceName="Ulduar" bosses={["Hodir", "Freya"]} selected={["Hodir", "Freya"]} subject={subject} view={view} encounterVariants={{ Hodir: "hard" }} />)
+    expect(html).not.toContain("Encounter variant availability")
+    expect(states.enabled.length).toBeGreaterThan(0)
+    expect(states.enabled.every(Boolean)).toBe(true)
+    expect(states.params[0].getAll("bosses")).toEqual(["Freya", "Hodir"])
+    for (const params of states.params) {
+     expect(params.get("encounter_variants")).toBe(view === "overview" ? null : '{"Hodir":"hard"}')
+    }
+    if (view === "renown") expect(html).toContain("Renown uses base boss scores")
+   })
+  }
+ }
+ it("keeps Overview and Renown metric tabs enabled", () => {
+  const html = renderToStaticMarkup(<MetricTabs view="peak" onView={() => {}} />)
+  expect(html).not.toContain('disabled=""')
+ })
 })

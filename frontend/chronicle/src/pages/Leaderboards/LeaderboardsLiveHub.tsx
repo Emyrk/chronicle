@@ -1,3 +1,6 @@
+import { EncounterVariantChips } from "@/components/EncounterDifficulty/EncounterVariant"
+import { supportsEncounterVariant, highestEncounterVariant, withHighestEncounterVariants, encounterVariantLabel, type EncounterVariant, type EncounterVariants } from "@/components/EncounterDifficulty/encounterVariant"
+import { difficultyChipClassName } from "@/components/EncounterDifficulty/encounterDifficulty"
 import { landingRealmError, useLandingHighlights } from "./Hub/landingHighlights"
 import { useCallback, useState, type ReactNode } from "react"
 import { LeaderboardMaintenanceNotice } from "./LeaderboardMaintenanceNotice"
@@ -203,6 +206,7 @@ function LiveInstanceHub({ instanceName, names, summary, stale, realm, realmIDs,
   subject: HubSubject; onSubject: (subject: HubSubject) => void; onOpenGuildRatings: (view: RatingView) => void
   onRealm: (name: string) => void; onCohort: (difficulty: string, size: string) => void; onEncounters: (bosses: readonly string[]) => void
 }) {
+  const [variantSelection, setVariantSelection] = useState<{ instance: string; variants: EncounterVariants }>()
   const raids = summary.instances.filter((row) => row.instance_name === instanceName && row.category === "raid")
   // The summary resolves the URL's cohort, or the busiest one when none (or a stale one) is given.
   const resolved = summary.selected_cohort
@@ -218,7 +222,30 @@ function LiveInstanceHub({ instanceName, names, summary, stale, realm, realmIDs,
   // Stale names (another instance, a removed boss) drop out; nothing left is the preset.
   const chosen = bosses.filter((name) => encounters.includes(name))
   const selection: EncounterSelection = chosen.length ? { kind: "bosses", bosses: chosen } : FULL_CLEAR
+  const encounterVariants = tab === "ratings" && variantSelection?.instance === instanceName
+    ? variantSelection.variants : undefined
+  const selectVariant = (boss: string, variant?: EncounterVariant) => {
+    setVariantSelection(previous => {
+      const variants = { ...(previous?.instance === instanceName ? previous.variants : {}) }
+      if (variant) variants[boss] = variant
+      else delete variants[boss]
+      return { instance: instanceName, variants }
+    })
+  }
+  const hardBosses = (chosen.length ? chosen : presetBosses).filter(boss => supportsEncounterVariant(instanceName, boss))
+  const hardMode = hardBosses.length > 0 && hardBosses.every(boss => encounterVariants?.[boss] === highestEncounterVariant(instanceName, boss))
   const live = {
+    encounterSidebarExtras: tab === "ratings" && bosses.some(boss => supportsEncounterVariant(instanceName, boss)) ? {
+      actions: <button type="button" aria-label="Hard mode" aria-pressed={ratingView !== "overview" && hardMode}
+        title="Use the highest supported tier for selected bosses. Unclassified bosses stay Combined."
+        className={cn(difficultyChipClassName("hard"), "h-5 cursor-pointer px-2 text-xs", ratingView !== "overview" && hardMode ? "ring-2" : "opacity-70 hover:opacity-100")}
+        onClick={() => {
+          setVariantSelection({ instance: instanceName, variants: withHighestEncounterVariants(instanceName, hardBosses, encounterVariants, hardMode && ratingView !== "overview") })
+          if (ratingView === "overview") onRatingView("peak")
+        }}>Hard mode</button>,
+      afterBoss: (boss: string) => supportsEncounterVariant(instanceName, boss)
+        ? <EncounterVariantChips boss={boss} active={ratingView === "overview" ? undefined : encounterVariants?.[boss]} onSelect={variant => { selectVariant(boss, variant); if (ratingView === "overview") onRatingView("peak") }} /> : null,
+    } : undefined,
     selection,
     onSelection: (next: EncounterSelection) => onEncounters(next.kind === "bosses" ? next.bosses : []),
     bosses,
@@ -240,7 +267,7 @@ function LiveInstanceHub({ instanceName, names, summary, stale, realm, realmIDs,
       })}
     </div> : undefined,
     renderOverview: (context: HubLiveTabContext) => <LiveHubContent context={context} summary={summary} stale={stale} realmName={realmName} realmIDs={realmIDs} cohort={cohort} bosses={bosses} overview />,
-    renderTab: (context: HubLiveTabContext) => <LiveHubContent context={context} summary={summary} stale={stale} realmName={realmName} realmIDs={realmIDs} cohort={cohort} bosses={bosses} />,
+    renderTab: (context: HubLiveTabContext) => <LiveHubContent context={context} summary={summary} stale={stale} realmName={realmName} realmIDs={realmIDs} cohort={cohort} bosses={bosses} encounterVariants={encounterVariants} />,
   }
   return <LeaderboardHub live={live} instanceName={instanceName} instances={names} onAllInstances={() => onInstance()} allInstancesHref={allInstancesHref}
     onSwitchInstance={(next) => onInstance(next)} tab={tab} onTab={onTab} tabHref={tabHref} realm={realm} onRealm={onRealm}
@@ -249,7 +276,8 @@ function LiveInstanceHub({ instanceName, names, summary, stale, realm, realmIDs,
     initialBosses={chosen.length ? chosen : undefined} />
 }
 
-function LiveHubContent({ context, summary, stale = false, realmName, realmIDs, cohort, bosses, overview = false }: {
+function LiveHubContent({ context, summary, stale = false, realmName, realmIDs, cohort, bosses, overview = false, encounterVariants }: {
+  encounterVariants?: EncounterVariants
   context: HubLiveTabContext; summary: HubSummary; stale?: boolean; realmName?: string; realmIDs: readonly string[]
   cohort?: { difficulty_name: string; max_players: number }; bosses: readonly string[]; overview?: boolean
 }) {
@@ -317,11 +345,11 @@ function LiveHubContent({ context, summary, stale = false, realmName, realmIDs, 
   if (stale) return <LoadingContent context={context} overview={overview} />
   if (!overview && realmIDs.length > 1) return <p role="status" className="rounded-xl border bg-card p-8 text-sm text-muted-foreground">Choose one realm or All realms in the Hub selector. This view cannot apply multiple realms.</p>
   if (overview) return <LiveHubOverview context={context} summary={summary} realmName={realmName} realmIDs={realmIDs} bosses={bosses} />
-  if (context.tab === "ratings") return <LiveHubRatings summary={summary} instanceName={instanceName} bosses={bosses.filter((name) => name !== "Trash")}
+  if (context.tab === "ratings") return <LiveHubRatings encounterVariants={encounterVariants} summary={summary} instanceName={instanceName} bosses={bosses.filter((name) => name !== "Trash")}
     selected={picked.filter((name) => name !== "Trash")} scope={scope} onScope={context.onScope} view={context.ratingView} onView={context.onView}
     period={context.period} subject={subject === "guilds" ? "guild" : "player"} realmIDs={realmIDs} role={role}
     cohort={chosen ? { difficulty: chosen.difficulty_name, maxPlayers: chosen.max_players } : undefined}
-    where={boss ?? (picked.length > 1 ? `${picked.length} bosses` : instanceName)}
+    where={`${boss ?? (picked.length > 1 ? `${picked.length} bosses` : instanceName)}${context.ratingView !== "overview" && encounterVariants ? Object.entries(encounterVariants).filter(([name]) => picked.length === 0 || picked.includes(name)).map(([name, variant]) => ` · ${name} ${encounterVariantLabel(variant)}`).join("") : ""}`}
     toolbar={<div className="flex min-w-0 max-w-full flex-wrap items-center gap-2"><MetricTabs view={context.ratingView} onView={context.onView} /><span className="absolute top-3 right-4 text-xs text-muted-foreground sm:static sm:px-2">All-time</span></div>} />
   if (context.tab === "rulesets") return <RulesetInstanceView instanceName={instanceName} embedded />
   if (context.tab === "performances") return !exact ? <CohortPrompt raids={raids} /> :

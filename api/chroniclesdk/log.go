@@ -210,19 +210,21 @@ const (
 )
 
 type WoWEncounter struct {
-	ID            uuid.UUID         `json:"id"`
-	InstanceID    uuid.UUID         `json:"instance_id"`
-	Boss          bool              `json:"boss"`
-	Name          string            `json:"name"`
-	MapID         int               `json:"map_id"`
-	KillType      KillType          `json:"kill_type"`
-	Remaining     []guid.GUID       `json:"remaining,omitempty"`
-	StartTime     time.Time         `json:"start_time"`
-	EndTime       time.Time         `json:"end_time"`
-	Difficulty    string            `json:"difficulty"`
-	InvalidatedAt *time.Time        `json:"invalidated_at,omitempty"`
-	InvalidReason string            `json:"invalid_reason,omitempty"`
-	RankingWindow *WoWRankingWindow `json:"ranking_window,omitempty"`
+	// EncounterVariant is absent for unclassified/legacy kills, which belong only to Combined.
+	EncounterVariant string            `json:"encounter_variant,omitempty"`
+	ID               uuid.UUID         `json:"id"`
+	InstanceID       uuid.UUID         `json:"instance_id"`
+	Boss             bool              `json:"boss"`
+	Name             string            `json:"name"`
+	MapID            int               `json:"map_id"`
+	KillType         KillType          `json:"kill_type"`
+	Remaining        []guid.GUID       `json:"remaining,omitempty"`
+	StartTime        time.Time         `json:"start_time"`
+	EndTime          time.Time         `json:"end_time"`
+	Difficulty       string            `json:"difficulty"`
+	InvalidatedAt    *time.Time        `json:"invalidated_at,omitempty"`
+	InvalidReason    string            `json:"invalid_reason,omitempty"`
+	RankingWindow    *WoWRankingWindow `json:"ranking_window,omitempty"`
 }
 
 // WoWRankingWindow marks the interval scored for boss rankings, relative to the

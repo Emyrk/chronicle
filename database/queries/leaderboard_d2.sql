@@ -239,6 +239,14 @@ UNION ALL
 SELECT tenant_id, 6::integer AS family FROM leaderboard_dirty_player_renown WHERE process_after <= clock_timestamp() AND retry_after <= clock_timestamp() AND (locked_until IS NULL OR locked_until <= clock_timestamp()) GROUP BY tenant_id
 UNION ALL
 SELECT tenant_id, 7::integer AS family FROM leaderboard_dirty_guild_renown WHERE process_after <= clock_timestamp() AND retry_after <= clock_timestamp() AND (locked_until IS NULL OR locked_until <= clock_timestamp()) GROUP BY tenant_id
+UNION ALL
+SELECT tenant_id, 8::integer AS family FROM leaderboard_variant_dirty_player_boss_benchmarks WHERE process_after <= clock_timestamp() AND retry_after <= clock_timestamp() AND (locked_until IS NULL OR locked_until <= clock_timestamp()) GROUP BY tenant_id
+UNION ALL
+SELECT tenant_id, 9::integer AS family FROM leaderboard_variant_dirty_player_boss_subjects WHERE process_after <= clock_timestamp() AND retry_after <= clock_timestamp() AND (locked_until IS NULL OR locked_until <= clock_timestamp()) GROUP BY tenant_id
+UNION ALL
+SELECT tenant_id, 10::integer AS family FROM leaderboard_variant_dirty_guild_boss_benchmarks WHERE process_after <= clock_timestamp() AND retry_after <= clock_timestamp() AND (locked_until IS NULL OR locked_until <= clock_timestamp()) GROUP BY tenant_id
+UNION ALL
+SELECT tenant_id, 11::integer AS family FROM leaderboard_variant_dirty_guild_boss_subjects WHERE process_after <= clock_timestamp() AND retry_after <= clock_timestamp() AND (locked_until IS NULL OR locked_until <= clock_timestamp()) GROUP BY tenant_id
 )
 SELECT tenant_id, family FROM due
 WHERE (tenant_id, family) > (@after_tenant::uuid, @after_family::integer)

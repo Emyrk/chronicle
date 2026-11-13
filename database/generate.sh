@@ -22,6 +22,11 @@ SCRIPT_DIR=$(dirname "${BASH_SOURCE[0]}")
 
 	first=true
 	for fi in genqueries/*.sql.go; do
+		# Batch-only SQL files emit an empty package stub; their implementations
+		# live in batch.go. Do not concatenate that second package declaration.
+		if ! grep -q '^import (' "$fi"; then
+			continue
+		fi
 		# Find the last line from the imports section and add 1. We have to
 		# disable pipefail temporarily to avoid ERRPIPE errors when piping into
 		# `head -n1`.

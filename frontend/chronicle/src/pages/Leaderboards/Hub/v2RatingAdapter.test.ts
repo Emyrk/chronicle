@@ -300,3 +300,37 @@ it("preserves returned cohort identity for two specs of the same player", () => 
   expect(frost.id).not.toBe(arcane.id);
   expect(frost.guid).toBe(arcane.guid);
 });
+
+
+describe("encounter variant request boundaries", () => {
+  const hodir: V2RatingContext = { ...context, instance: "Ulduar", selected: ["Hodir"], difficulty: "heroic", size: 25 };
+  it.each(["peak", "mastery"] as const)("scopes %s to exactly one variant without changing difficulty or size", metric => {
+    for (const encounterVariant of ["normal", "hard"] as const) {
+      const params = v2RatingParams({ ...hodir, encounterVariant }, {}, metric);
+      expect(params.get("encounter_variant")).toBe(encounterVariant);
+      expect(params.get("boss")).toBe("Hodir");
+      expect(params.get("difficulty")).toBe("heroic");
+      expect(params.get("max_players")).toBe("25");
+    }
+  });
+  it("omits Combined, including the default board", () => {
+    expect(v2RatingParams(hodir, {}, "peak").has("encounter_variant")).toBe(false);
+    expect(v2RatingParams(context, {}, "peak").has("encounter_variant")).toBe(false);
+  });
+  it("retains legacy single-boss validation and accepts Renown", () => {
+    const hard = { ...hodir, encounterVariant: "hard" as const };
+    expect(v2RatingParams(hard, {}, "renown").get("encounter_variant")).toBe("hard");
+    expect(() => v2RatingParams(hard, { boss: "Freya" }, "peak")).toThrow("single supported boss");
+    expect(() => v2RatingParams({ ...hard, selected: ["Hodir", "Freya"] }, {}, "mastery")).toThrow("single supported boss");
+  });
+});
+
+it.each(["peak", "mastery", "renown"] as const)("supports mixed boss variants for %s", metric => {
+  const mixed: V2RatingContext = { ...context, instance: "Ulduar", selected: ["Hodir", "Freya"], encounterVariants: { Hodir: "hard" } };
+  const params = v2RatingParams(mixed, {}, metric);
+  expect(params.getAll("bosses")).toEqual(["Freya", "Hodir"]);
+  expect(params.get("encounter_variants")).toBe('{"Hodir":"hard"}');
+  expect(params.has("encounter_variant")).toBe(false);
+  expect(v2RatingParams(mixed, { boss: "Freya" }, metric).has("encounter_variants")).toBe(false);
+  expect(v2RatingParams({ ...mixed, encounterVariants: {} }, {}, metric).has("encounter_variants")).toBe(false);
+});

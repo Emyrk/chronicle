@@ -54,10 +54,10 @@ func (f *fixture) row(q string, args ...any) interface{ Scan(...any) error } {
 func (f *fixture) tenantctx() context.Context { return servicetenant.WithTenantID(f.ctx, f.tenant) }
 func (f *fixture) evidence(boss string) {
 	f.t.Helper()
-	row := map[string]any{"tenant_id": f.tenant, "realm_id": f.realm, "guild_id": f.guild, "instance_name": "Fixture raid", "difficulty_name": "Normal", "max_players": 40, "encounter_name": boss, "player_guid": "Player", "player_class": "MAGE", "player_spec": "Frost", "player_sub_spec": "", "metric": "dps", "metric_value": 100, "duration_ms": 1000, "run_id": uuid.New(), "source_instance_id": uuid.New(), "source_encounter_id": uuid.New(), "source_ranking_id": uuid.New(), "source_time_parse_score_id": uuid.New(), "projection_version": 1, "observed_at": "2026-01-01T00:00:00Z"}
+	row := map[string]any{"encounter_variant": "normal", "tenant_id": f.tenant, "realm_id": f.realm, "guild_id": f.guild, "instance_name": "Fixture raid", "difficulty_name": "Normal", "max_players": 40, "encounter_name": boss, "player_guid": "Player", "player_class": "MAGE", "player_spec": "Frost", "player_sub_spec": "", "metric": "dps", "metric_value": 100, "duration_ms": 1000, "run_id": uuid.New(), "source_instance_id": uuid.New(), "source_encounter_id": uuid.New(), "source_ranking_id": uuid.New(), "source_time_parse_score_id": uuid.New(), "projection_version": 1, "observed_at": "2026-01-01T00:00:00Z"}
 	data, err := json.Marshal(row)
 	require.NoError(f.t, err)
-	for _, table := range []string{"player_observations", "guild_boss_observations", "guild_clear_observations", "player_renown_facts", "guild_renown_facts"} {
+	for _, table := range []string{"player_observations", "guild_boss_observations", "guild_clear_observations", "player_renown_facts", "guild_renown_facts", "variant_player_observations", "variant_guild_boss_observations"} {
 		f.exec("INSERT INTO leaderboard_"+table+" SELECT (jsonb_populate_record(NULL::leaderboard_"+table+",$1::jsonb)).*", string(data))
 	}
 }
@@ -73,6 +73,14 @@ func (f *fixture) enqueue(family Family, boss string, due time.Time) {
 		require.NoError(f.t, f.db.EnqueueLeaderboardGuildBossBenchmark(ctx, database.EnqueueLeaderboardGuildBossBenchmarkParams{TenantID: f.tenant, InstanceName: "Fixture raid", DifficultyName: "Normal", MaxPlayers: 40, EncounterName: boss, ProcessAfter: pgtype.Timestamptz{Time: due, Valid: true}}))
 	case FamilyGuildBossSubject:
 		require.NoError(f.t, f.db.EnqueueLeaderboardGuildBossSubject(ctx, database.EnqueueLeaderboardGuildBossSubjectParams{TenantID: f.tenant, InstanceName: "Fixture raid", DifficultyName: "Normal", MaxPlayers: 40, EncounterName: boss, RealmID: f.realm, GuildID: f.guild, ProcessAfter: pgtype.Timestamptz{Time: due, Valid: true}}))
+	case FamilyVariantPlayerBossBenchmark:
+		require.NoError(f.t, f.db.EnqueueLeaderboardVariantPlayerBossBenchmark(ctx, database.EnqueueLeaderboardVariantPlayerBossBenchmarkParams{TenantID: f.tenant, InstanceName: "Fixture raid", DifficultyName: "Normal", MaxPlayers: 40, EncounterName: boss, EncounterVariant: "normal", PlayerClass: "MAGE", PlayerSpec: "Frost", PlayerSubSpec: "", Metric: "dps", ProcessAfter: pgtype.Timestamptz{Time: due, Valid: true}}))
+	case FamilyVariantPlayerBossSubject:
+		require.NoError(f.t, f.db.EnqueueLeaderboardVariantPlayerBossSubject(ctx, database.EnqueueLeaderboardVariantPlayerBossSubjectParams{TenantID: f.tenant, InstanceName: "Fixture raid", DifficultyName: "Normal", MaxPlayers: 40, EncounterName: boss, EncounterVariant: "normal", PlayerClass: "MAGE", PlayerSpec: "Frost", PlayerSubSpec: "", Metric: "dps", RealmID: f.realm, PlayerGuid: "Player", ProcessAfter: pgtype.Timestamptz{Time: due, Valid: true}}))
+	case FamilyVariantGuildBossBenchmark:
+		require.NoError(f.t, f.db.EnqueueLeaderboardVariantGuildBossBenchmark(ctx, database.EnqueueLeaderboardVariantGuildBossBenchmarkParams{TenantID: f.tenant, InstanceName: "Fixture raid", DifficultyName: "Normal", MaxPlayers: 40, EncounterName: boss, EncounterVariant: "normal", ProcessAfter: pgtype.Timestamptz{Time: due, Valid: true}}))
+	case FamilyVariantGuildBossSubject:
+		require.NoError(f.t, f.db.EnqueueLeaderboardVariantGuildBossSubject(ctx, database.EnqueueLeaderboardVariantGuildBossSubjectParams{TenantID: f.tenant, InstanceName: "Fixture raid", DifficultyName: "Normal", MaxPlayers: 40, EncounterName: boss, EncounterVariant: "normal", RealmID: f.realm, GuildID: f.guild, ProcessAfter: pgtype.Timestamptz{Time: due, Valid: true}}))
 	case FamilyGuildClearBenchmark:
 		require.NoError(f.t, f.db.EnqueueLeaderboardGuildClearBenchmark(ctx, database.EnqueueLeaderboardGuildClearBenchmarkParams{TenantID: f.tenant, InstanceName: "Fixture raid", DifficultyName: "Normal", MaxPlayers: 40, ProcessAfter: pgtype.Timestamptz{Time: due, Valid: true}}))
 	case FamilyGuildClearSubject:
@@ -95,6 +103,10 @@ var dirtyTables = []string{
 	"leaderboard_dirty_guild_clear_subjects",
 	"leaderboard_dirty_player_renown",
 	"leaderboard_dirty_guild_renown",
+	"leaderboard_variant_dirty_player_boss_benchmarks",
+	"leaderboard_variant_dirty_player_boss_subjects",
+	"leaderboard_variant_dirty_guild_boss_benchmarks",
+	"leaderboard_variant_dirty_guild_boss_subjects",
 }
 var resultTables = []string{
 	"leaderboard_player_boss_benchmarks",
@@ -105,6 +117,10 @@ var resultTables = []string{
 	"leaderboard_guild_clear_subjects",
 	"leaderboard_player_renown_counts",
 	"leaderboard_guild_renown_counts",
+	"leaderboard_variant_player_boss_benchmarks",
+	"leaderboard_variant_player_boss_subjects",
+	"leaderboard_variant_guild_boss_benchmarks",
+	"leaderboard_variant_guild_boss_subjects",
 }
 
 func TestAllFamiliesDrainAndNonSlidingEnqueue(t *testing.T) {
@@ -126,11 +142,11 @@ func TestAllFamiliesDrainAndNonSlidingEnqueue(t *testing.T) {
 		require.Equal(t, 1, result.Processed)
 		var count int
 		require.NoError(t, f.row("SELECT count(*) FROM "+resultTables[family]+" WHERE tenant_id=$1", f.tenant).Scan(&count))
-		require.Equal(t, 1, count)
+		require.Equal(t, 1, count, "family %d", family)
 		require.NoError(t, f.row("SELECT count(*) FROM "+dirtyTables[family]+" WHERE tenant_id=$1", f.tenant).Scan(&count))
 		require.Zero(t, count)
 	}
-	for _, table := range []string{"player_observations", "guild_boss_observations", "guild_clear_observations", "player_renown_facts", "guild_renown_facts"} {
+	for _, table := range []string{"player_observations", "guild_boss_observations", "guild_clear_observations", "player_renown_facts", "guild_renown_facts", "variant_player_observations", "variant_guild_boss_observations"} {
 		f.exec("DELETE FROM leaderboard_"+table+" WHERE tenant_id=$1", f.tenant)
 	}
 	for family := Family(0); family < familyCount; family++ {

@@ -50,12 +50,12 @@ func TestQueueDiagnosticsTruthAndCachedMetrics(t *testing.T) {
 	require.Equal(t, 1, store.calls)
 	rows, err := s.db.LeaderboardQueueDiagnostics(ctx, s.tenant)
 	require.NoError(t, err)
-	require.Len(t, rows, 10)
+	require.Len(t, rows, 14)
 	require.EqualValues(t, 1, diagnosticFamily(rows, "runs").Pending)
 	require.EqualValues(t, 1, diagnosticFamily(rows, "runs").Due)
 	isolated, err := s.db.LeaderboardQueueDiagnostics(servicetenant.WithTenantID(s.ctx, uuid.New()), s.tenant)
 	require.NoError(t, err)
-	require.Len(t, isolated, 10)
+	require.Len(t, isolated, 14)
 	for _, row := range isolated {
 		require.Zero(t, row.Pending)
 	}

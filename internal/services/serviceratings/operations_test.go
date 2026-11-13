@@ -85,7 +85,7 @@ func TestOperationDatePagesResumeAndMissingDates(t *testing.T) {
 	require.EqualValues(t, 102, op.Discovered)
 	require.False(t, op.DiscoveryComplete)
 	require.Equal(t, "evidence", op.Phase)
-	for range 10 {
+	for range len(operationResultPhases) + 2 {
 		require.NoError(t, worker.Step(ctx, s.tenant, op.ID))
 	}
 	op, err = s.db.GetLeaderboardOperation(ctx, get)
@@ -258,7 +258,7 @@ func TestOperationBootstrapEndToEnd(t *testing.T) {
 	op, err := s.db.CreateLeaderboardOperation(ctx, database.CreateLeaderboardOperationParams{TenantID: s.tenant, RequestedBy: uuid.New(), Purpose: "bootstrap", Scope: "tenant", BeforeDate: pgtype.Date{Time: time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC), Valid: true}})
 	require.NoError(t, err)
 	worker := &OperationWorker{Store: s.db}
-	for range 12 {
+	for range len(operationResultPhases) + 4 {
 		require.NoError(t, worker.Step(ctx, s.tenant, op.ID))
 	}
 	repaired, err := (&RepairWorker{Store: s.db}).Drain(s.ctx, s.tenant)

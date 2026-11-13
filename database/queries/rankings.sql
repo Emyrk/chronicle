@@ -885,7 +885,7 @@ WITH boss_insert AS (
     INSERT INTO encounter_dps_rankings (
         encounter_id, instance_id, encounter_name, instance_name,
         player_guid, player_name, player_class, player_spec, player_sub_spec, player_role, player_level,
-        talent_build_id, difficulty_name, max_players,
+        talent_build_id, difficulty_name, max_players, encounter_variant,
         realm_id, realm_name, guild_id, guild_name,
         damage_done, unranked_damage_done, duration_secs, dps, avg_ilvl,
         healing_done, absorbed_done, hps, player_deaths, alive_percentage,
@@ -894,7 +894,7 @@ WITH boss_insert AS (
     SELECT
         @encounter_id, @instance_id, @encounter_name, @instance_name,
         @player_guid, @player_name, @player_class, @player_spec, @player_sub_spec, @player_role, @player_level,
-        @talent_build_id, @difficulty_name, @max_players,
+        @talent_build_id, @difficulty_name, @max_players, sqlc.narg(encounter_variant)::text,
         @realm_id, @realm_name, @guild_id, @guild_name,
         @damage_done, @unranked_damage_done, @duration_secs, @dps, @avg_ilvl,
         @healing_done, @absorbed_done, @hps, @player_deaths, @alive_percentage,
@@ -913,6 +913,7 @@ WITH boss_insert AS (
         player_level = EXCLUDED.player_level,
         talent_build_id = EXCLUDED.talent_build_id,
         difficulty_name = EXCLUDED.difficulty_name,
+        encounter_variant = EXCLUDED.encounter_variant,
         max_players = EXCLUDED.max_players,
         realm_id = EXCLUDED.realm_id,
         realm_name = EXCLUDED.realm_name,

@@ -25,6 +25,7 @@ import (
 // This interface allows tests to provide a plain database.Store without the
 // full authz.Authz wrapper (which requires SpiceDB).
 type parsesQuerier interface {
+	variantParsesQuerier
 	GetTenantByID(ctx context.Context, id uuid.UUID) (database.Tenant, error)
 	IsLogInstanceInvalid(ctx context.Context, id uuid.UUID) (bool, error)
 	GetLogInstanceStartTime(ctx context.Context, id uuid.UUID) (pgtype.Timestamptz, error)
@@ -254,6 +255,10 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 				receiptSnapshotID = receipt.SnapshotID.UUID
 			}
 			if persisted.complete {
+				if err := applyVariantParses(ctx, store, tid, instanceID, rankings, persisted.players, encounterNames, metric, persisted.cohortMode, cutoffDB, windowStartDB, true); err != nil {
+					httpapi.InternalServerError(w, err)
+					return
+				}
 				httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.InstanceParsesResponse{
 					Available: true, SnapshotID: receiptSnapshotID, Cutoff: receiptCutoff,
 					LookbackDays: int32(receipt.LookbackDays), CohortMode: string(persisted.cohortMode),
@@ -270,6 +275,10 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 		}
 		if persisted.found {
 			if persisted.complete {
+				if err := applyVariantParses(ctx, store, tid, instanceID, rankings, persisted.players, encounterNames, metric, persisted.cohortMode, cutoffDB, windowStartDB, true); err != nil {
+					httpapi.InternalServerError(w, err)
+					return
+				}
 				httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.InstanceParsesResponse{
 					Available: true, Cutoff: cutoff, LookbackDays: int32(lookbackDays), CohortMode: string(cohortMode),
 					SelectedEncounters: encounterNames, Metric: string(metric), Players: persisted.players,
@@ -441,6 +450,10 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 		result = append(result, sdkPlayer)
 	}
 
+	if err := applyVariantParses(ctx, store, tid, instanceID, rankings, result, encounterNames, metric, cohortMode, cutoffDB, windowStartDB, false); err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
 	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.InstanceParsesResponse{
 		Available:          true,
 		Cutoff:             cutoff,

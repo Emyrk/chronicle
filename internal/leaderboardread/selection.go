@@ -16,10 +16,14 @@ import (
 	"github.com/google/uuid"
 )
 
-// Request identifies one exact cohort. Renown intentionally has no performance
-// cohort or set selection. Tenant comes from request middleware, never input.
+// Request identifies the selected boss cohorts. EncounterVariants maps each
+// selected boss to one exact variant; omitted bosses use Combined. Renown keeps
+// the original base-boss counts and awards, independent of encounter variants.
+// Tenant comes from request middleware, never input.
 type Request struct {
 	Instance, Difficulty                                             string
+	EncounterVariant                                                 string
+	EncounterVariants                                                map[string]string
 	MaxPlayers                                                       int16
 	Subject, Kind, Score                                             string
 	Boss, Set                                                        string
@@ -40,6 +44,12 @@ type Selection struct {
 
 func Select(rows []database.ResolveLeaderboardConfigurationRow, r Request) (Selection, error) {
 	out := Selection{Bosses: []string{}, Awards: []float64{}, Denominator: 1}
+	if r.EncounterVariant != "" && r.EncounterVariant != "normal" && r.EncounterVariant != "hard" {
+		return out, errors.New("encounter_variant must be empty, normal, or hard")
+	}
+	if (r.EncounterVariant != "" || len(r.EncounterVariants) > 0) && r.Kind != "boss" && r.Kind != "renown" {
+		return out, errors.New("encounter variants only apply to boss or Renown boards")
+	}
 	if r.Subject != "player" && r.Subject != "guild" {
 		return out, errors.New("subject must be player or guild")
 	}
@@ -161,6 +171,23 @@ func Select(rows []database.ResolveLeaderboardConfigurationRow, r Request) (Sele
 		out.Bosses = append(out.Bosses, name)
 	}
 	slices.Sort(out.Bosses)
+	if r.EncounterVariant != "" && len(out.Bosses) != 1 {
+		return out, errors.New("encounter_variant requires a single boss selection")
+	}
+	if r.EncounterVariant != "" && len(r.EncounterVariants) > 0 {
+		return out, errors.New("select encounter_variant or encounter_variants, not both")
+	}
+	for name, value := range r.EncounterVariants {
+		if !selected[name] {
+			return out, errors.New("encounter variant refers to an unselected boss")
+		}
+		if !supportedEncounterVariant(r.Instance, name, value) {
+			return out, errors.New("encounter variant is not supported for this boss")
+		}
+	}
+	if r.EncounterVariant != "" && !supportedEncounterVariant(r.Instance, out.Bosses[0], r.EncounterVariant) {
+		return out, errors.New("encounter variant is not supported for this boss")
+	}
 	for _, name := range out.Bosses {
 		award := bosses[name]
 		if variants > 0 {
@@ -181,6 +208,12 @@ func Select(rows []database.ResolveLeaderboardConfigurationRow, r Request) (Sele
 		out.Denominator = int32(len(out.Bosses))
 	}
 	return out, nil
+}
+
+// Only classified encounters expose exact boards. Combined is represented by
+// omitting the boss from EncounterVariants, not by inventing a variant value.
+func supportedEncounterVariant(instance, boss, variant string) bool {
+	return instance == "Ulduar" && boss == "Hodir" && (variant == "normal" || variant == "hard")
 }
 
 type Cursor struct {

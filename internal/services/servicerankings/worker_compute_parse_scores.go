@@ -213,6 +213,12 @@ func (w *WorkerComputeParseScores) Work(ctx context.Context, job *river.Job[pars
 			}
 		}
 
+		// Variant projections are independent of Combined career scores and share
+		// the same transaction and historical cutoff.
+		if err := persistVariantParses(ctx, tx, tenantID, instanceID, rankings, cutoffDB, windowStartDB, cohortMode); err != nil {
+			return err
+		}
+
 		if _, err := tx.InsertWindowedParseScoreReceipt(ctx, database.InsertWindowedParseScoreReceiptParams{
 			TenantID: tenantID, InstanceID: instanceID,
 			PolicyVersion: int16(parsepolicy.PolicyVersion), QueryVersion: int16(QueryVersion),

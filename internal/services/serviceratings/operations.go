@@ -217,7 +217,7 @@ func (w *OperationWorker) Step(ctx context.Context, tenant, id uuid.UUID) error 
 	return err
 }
 
-var operationResultPhases = []string{"player_boss_benchmarks", "player_boss_subjects", "guild_boss_benchmarks", "guild_boss_subjects", "guild_clear_benchmarks", "guild_clear_subjects", "player_renown_counts", "guild_renown_counts"}
+var operationResultPhases = []string{"player_boss_benchmarks", "player_boss_subjects", "guild_boss_benchmarks", "guild_boss_subjects", "guild_clear_benchmarks", "guild_clear_subjects", "player_renown_counts", "guild_renown_counts", "variant_player_boss_benchmarks", "variant_player_boss_subjects", "variant_guild_boss_benchmarks", "variant_guild_boss_subjects"}
 
 func operationRepairPhase(ctx context.Context, tx database.Store, op database.LeaderboardOperation) error {
 	tenant, id := op.TenantID, op.ID
@@ -251,6 +251,18 @@ func operationRepairPhase(ctx context.Context, tx database.Store, op database.Le
 		count, cursor, err = r.PageCount, r.LastCursor, e
 	case "guild_boss_subjects":
 		r, e := tx.RepairOperationGuildBossSubjects(ctx, database.RepairOperationGuildBossSubjectsParams{TenantID: tenant, Cutoff: op.Cutoff, CursorScope: op.CursorScope})
+		count, cursor, err = r.PageCount, r.LastCursor, e
+	case "variant_player_boss_benchmarks":
+		r, e := tx.RepairOperationVariantPlayerBossBenchmarks(ctx, database.RepairOperationVariantPlayerBossBenchmarksParams{TenantID: tenant, Cutoff: op.Cutoff, CursorScope: op.CursorScope})
+		count, cursor, err = r.PageCount, r.LastCursor, e
+	case "variant_player_boss_subjects":
+		r, e := tx.RepairOperationVariantPlayerBossSubjects(ctx, database.RepairOperationVariantPlayerBossSubjectsParams{TenantID: tenant, Cutoff: op.Cutoff, CursorScope: op.CursorScope})
+		count, cursor, err = r.PageCount, r.LastCursor, e
+	case "variant_guild_boss_benchmarks":
+		r, e := tx.RepairOperationVariantGuildBossBenchmarks(ctx, database.RepairOperationVariantGuildBossBenchmarksParams{TenantID: tenant, Cutoff: op.Cutoff, CursorScope: op.CursorScope})
+		count, cursor, err = r.PageCount, r.LastCursor, e
+	case "variant_guild_boss_subjects":
+		r, e := tx.RepairOperationVariantGuildBossSubjects(ctx, database.RepairOperationVariantGuildBossSubjectsParams{TenantID: tenant, Cutoff: op.Cutoff, CursorScope: op.CursorScope})
 		count, cursor, err = r.PageCount, r.LastCursor, e
 	case "guild_clear_benchmarks":
 		r, e := tx.RepairOperationGuildClearBenchmarks(ctx, database.RepairOperationGuildClearBenchmarksParams{TenantID: tenant, Cutoff: op.Cutoff, CursorScope: op.CursorScope})
