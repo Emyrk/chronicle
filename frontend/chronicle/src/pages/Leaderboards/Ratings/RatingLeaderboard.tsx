@@ -150,7 +150,6 @@ export function RatingBoards({
           onShowAll={showTable}
           search={searchBox}
           toolbar={toolbar}
-          ranksKnown={live?.ranksKnown !== false}
         />
       )}
 
@@ -347,7 +346,6 @@ function OverviewCenter({
   onShowAll,
   search,
   toolbar,
-  ranksKnown = true,
 }: {
   boards: { metric: RatingMetric; board: RatingLiveBoard }[]
   theme: MetricTheme
@@ -357,7 +355,6 @@ function OverviewCenter({
   onShowAll: () => void
   search: ReactNode
   toolbar?: ReactNode
-  ranksKnown?: boolean
 }) {
   return (
     <CenterFrame board={boards[0].board} theme={theme} title={title} titleBadge={titleBadge} onShowAll={onShowAll} search={search} toolbar={toolbar}>
@@ -378,7 +375,7 @@ function OverviewCenter({
               </button>
               <ol>
                 {board.entries.slice(0, 5).map((entry, i) => (
-                  <EntryRow key={entry.id} entry={entry} rank={ranksKnown ? i + 1 : undefined} theme={t} size="sm" />
+                  <EntryRow key={entry.id} entry={entry} rank={i + 1} theme={t} size="sm" />
                 ))}
               </ol>
             </div>

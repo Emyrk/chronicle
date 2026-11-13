@@ -72,7 +72,6 @@ async function careerPage(base: URLSearchParams, guilds: boolean, { metric, quer
  */
 export function careerLiveData(state: CareerBoardsState, guilds: boolean, base: URLSearchParams): RatingLiveData {
   return {
-    ranksKnown: false,
     catchupStatus: false,
     peakLabels: CAREER_PEAK_LABELS,
     pageKey: base.toString(),

@@ -54,6 +54,12 @@ describe("existing Hub ratings on current-policy data",()=>{
    expect(empty).not.toContain('Loading B')
   })
  }
+ it("numbers live player and guild rows on the overview", () => {
+  const players = renderToStaticMarkup(<LiveHubRatings {...props} subject="player" />)
+  expect(players).toContain('aria-label="Rank 1"')
+  const guilds = renderToStaticMarkup(<LiveHubRatings {...props} subject="guild" />)
+  expect(guilds).toContain('w-3 font-mono text-xs text-muted-foreground">1</span>')
+ })
  it("offers unknown specs only for player ratings on tenants with specs", () => {
   expect(renderToStaticMarkup(<LiveHubRatings {...props} />)).toContain("Show unknown specs")
   expect(renderToStaticMarkup(<LiveHubRatings {...props} subject="guild" />)).not.toContain("Show unknown specs")

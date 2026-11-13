@@ -45,7 +45,7 @@ export const METRIC_COLUMN_ROWS = 5
  * guild rating cards so both read the same. Without columns, each column shows
  * its fixed number of skeleton rows while loading.
  */
-export function MetricColumns({ columns, onOpen, ranksKnown = true }: { columns?: Record<RatingMetric, MetricRow[]>; onOpen: (metric: RatingMetric) => void; ranksKnown?: boolean }) {
+export function MetricColumns({ columns, onOpen }: { columns?: Record<RatingMetric, MetricRow[]>; onOpen: (metric: RatingMetric) => void }) {
   return (
     <div role={columns ? undefined : "status"} aria-label={columns ? undefined : "Loading"} className="grid flex-1 max-sm:divide-y sm:grid-cols-3 sm:divide-x">
       {RATING_METRICS.map((m) => {
@@ -73,7 +73,7 @@ export function MetricColumns({ columns, onOpen, ranksKnown = true }: { columns?
               ))}
               {columns?.[m].map((r, i) => (
                 <li key={r.id} className="flex items-center gap-2 border-b border-white/5 px-3 py-2.5 last:border-b-0">
-                  {ranksKnown && <span className="w-3 font-mono text-xs text-muted-foreground">{i + 1}</span>}
+                  <span className="w-3 font-mono text-xs text-muted-foreground">{i + 1}</span>
                   <span className="flex min-w-0 flex-1 items-center gap-2 text-sm font-medium">{r.name}</span>
                   {r.raw && <span className="shrink-0 font-mono text-[11px] text-muted-foreground tabular-nums">{r.raw}</span>}
                   <span className="font-mono text-sm tabular-nums" style={i === 0 ? { color: t.accent } : undefined}>
@@ -213,7 +213,7 @@ export function GuildRatingBoards({
           <BoardHeader oneBoss={oneBoss} title={title} theme={theme} subtitle={data?.live ? undefined : `${all.peak.length} guilds ranked`} toolbar={toolbar}>
             <BoardSearch query={query} onQuery={setQuery} />
           </BoardHeader>
-          <MetricColumns ranksKnown={!data?.live}
+          <MetricColumns
             columns={{ peak: toRows(all.peak.slice(0, 5)), mastery: toRows(all.mastery.slice(0, 5)), renown: toRows(all.renown.slice(0, 5)) }}
             onOpen={onView}
           />
