@@ -90,7 +90,7 @@ export function RepairDetails({ operation, version, warnings, details }: {
   </div>;
 }
 
-// Temporary receipt contract until generated SDK types are available.
+// Minimal runtime shape accepted at the rendering boundary, including older payloads.
 interface RepairReceipt {
   operation_id: string;
   operation: string;

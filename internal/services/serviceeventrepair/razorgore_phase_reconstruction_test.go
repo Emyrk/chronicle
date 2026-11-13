@@ -1,10 +1,12 @@
 package serviceeventrepair
 
 import (
+	"context"
 	"testing"
 
 	"github.com/Emyrk/chronicle/api/chronicleproto"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 )
@@ -128,4 +130,43 @@ func TestRazorgoreReconstructedWipeRetainsCompletedPhaseOne(t *testing.T) {
 	require.Equal(t, database.KillTypeClean, got.Phases[0].KillType)
 	require.Equal(t, database.KillTypeWipe, got.Phases[1].KillType)
 	require.Equal(t, database.KillTypeClean, p.reconstructedPhases[0].KillType)
+}
+
+func (s *razorgoreStore) InsertEncounterPhase(_ context.Context, p database.InsertEncounterPhaseParams) error {
+	s.writes = append(s.writes, "insert_phase")
+	s.e.Phases = append(s.e.Phases, database.LogInstanceEncounterPhase(p))
+	return nil
+}
+
+func TestRazorgoreReconstructedPhaseApplyAndSeal(t *testing.T) {
+	t.Parallel()
+	for _, tamper := range []bool{false, true} {
+		t.Run(map[bool]string{false: "apply", true: "tampered"}[tamper], func(t *testing.T) {
+			t.Parallel()
+			s := &razorgoreStore{e: fixtureRazorgoreEggs(t, database.FlavorVanillaPlus, 30)}
+			ctx := context.Background()
+			s.e.Instance.LogGroupID = uuid.New()
+			originalEvents := append([]database.LogInstanceEvent(nil), s.e.Events...)
+			plan, err := EvaluateRazorgore(ctx, s, s.e.Instance.ID)
+			require.NoError(t, err)
+			require.False(t, plan.RequiresReparse, plan.Reason)
+			require.NoError(t, RevalidateRazorgore(ctx, s, plan))
+			if tamper {
+				plan.reconstructedPhases[1].StartOffsetMs++
+				require.ErrorContains(t, ApplyRazorgore(ctx, s, plan), "modified")
+				require.Empty(t, s.writes)
+				return
+			}
+			require.NoError(t, ApplyRazorgore(ctx, s, plan))
+			require.Equal(t, []string{"insert_phase", "insert_phase", "window", "metrics", "metrics"}, s.writes)
+			require.Len(t, s.e.Phases, 2)
+			require.EqualValues(t, 30000, s.e.Phases[1].StartOffsetMs)
+			require.Equal(t, originalEvents, s.e.Events)
+			require.ErrorIs(t, RevalidateRazorgore(ctx, s, plan), ErrStaleEvidence)
+		})
+	}
+}
+
+func (s *razorgoreStore) RazorgoreRepairLogGroup(context.Context, uuid.UUID) (database.WoWLogGroup, error) {
+	return s.e.Group, nil
 }

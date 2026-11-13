@@ -1,3 +1,4 @@
+import type { EventRepairReceipt } from "@/api/typesGenerated";
 import type { ReactNode } from "react";
 import { RepairReceipts } from "@/components/EventRepair/RepairDetails";
 import { Clock } from "lucide-react";
@@ -24,7 +25,7 @@ export interface InstanceHeaderProps {
   backgroundUrl?: string;
   heroic?: boolean;
   titleBadges?: ReactNode;
-  repairs?: unknown;
+  repairs?: readonly EventRepairReceipt[];
   difficulty?: InstanceHeaderDifficulty;
   guild?: ReactNode;
   realm?: string;

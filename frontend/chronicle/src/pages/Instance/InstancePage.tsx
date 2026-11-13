@@ -7,7 +7,7 @@ import { InstanceEventsProvider } from "@/hooks/instanceEvents";
 import { DatasetProvider } from "@/hooks/useDatasetId";
 import { PlayerSpecializationProvider } from "@/components/ui/PlayerMetricChart/PlayerSpecializationContext";
 import { PlayerCosmeticsProvider } from "@/components/ui/PlayerMetricChart/PlayerCosmeticsContext";
-import type { ActivityPeriod, InstancePlayer, KillType, VehicleControlMetadata } from "@/api/typesGenerated";
+import type { ActivityPeriod, EventRepairReceipt, InstancePlayer, KillType, VehicleControlMetadata } from "@/api/typesGenerated";
 import type { ResolvedInstanceUnit } from "./instanceUnits";
 import { transformToInstance } from "./transformInstance";
 import { Card } from "@/components/ui/Card/Card";
@@ -89,8 +89,7 @@ export interface EncounterRankingWindow {
 }
 
 export interface Instance {
-  // Validated by the receipt renderer; replace with SDK receipt type after generation.
-  repairs?: unknown;
+  repairs?: readonly EventRepairReceipt[];
   id: string;
   slug?: string;
   logGroupId?: string;

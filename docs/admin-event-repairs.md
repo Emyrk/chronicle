@@ -90,11 +90,12 @@ conservative repair paths:
 1. **Phase-two numerical repair.** A single clean encounter can use the
    direct-player proof path. Multi-pull addon instances use indexed classification,
    aura-duration possession expiry, pet aggregation, and shared DPS/survivability
-   trackers. Persisted contiguous P1/P2 phases and complete metric streams are
-   required. Repairs include ranked/unranked damage, healing, absorbs, DPS/HPS,
+   trackers. Contiguous P1/P2 phases and complete metric streams are required;
+   missing phase rows can be reconstructed under the evidence rules below. Repairs include ranked/unranked damage, healing, absorbs, DPS/HPS,
    duration, inferred role, deaths, and alive percentage. Spec/subspec/talent
-   identities stay unchanged. Missing attribution/stream evidence or inconsistent full damage credits reject
-   ambiguous instances. Historical derived HPS totals are not treated as an input
+   identities stay unchanged. Missing streams or inconsistent full damage credits
+   reject ambiguous instances. Contributions with unknown player attribution are
+   omitted individually, with quantities and reasons in the preview and receipt. Historical derived HPS totals are not treated as an input
    completeness checksum: complete classified P2 healing is reconstructed directly.
 2. **Pre-threshold false-kill correction.** Requires complete persisted P1 and
    explicit terminal Razorgore death with unambiguous hostile activity. It corrects
@@ -105,17 +106,28 @@ conservative repair paths:
    endpoints. Wipes have no source rankings; non-Razorgore metrics/proof entries
    remain unchanged and proof evidence is checked before any mutation.
 
-Original encounter and instance boundaries stay unchanged. A fully matching
-repaired state is a no-op but still enqueues ratings on apply.
+Original encounter and instance boundaries stay unchanged. An eligible no-op
+without an existing receipt still enqueues ratings on apply. Previously repaired
+instances are skipped, not reapplied.
 
 Other cases are skipped with diagnostic reasons requiring original-log reparse.
 The unit_classification stream can carry ownership/controller transitions, but
 snapshots omit possession expiry and some UNIT_INFO changes are not emitted.
 The addon classification path requires authoritative possession durations and
-rejects missing attribution evidence. The direct-player fallback proves narrower
-attribution bounds instead of guessing history. Missing persisted
-phases are not inferred from potentially truncated egg casts. The implementation
-does not fabricate approximate ranking totals or perform duration-only repairs.
+rejects structural or ambiguous control evidence. Missing source/target ownership
+for individual phase-two damage, healing, or absorb contributions is reported as
+an omission instead of assigning a guessed player. The direct-player fallback
+proves narrower attribution bounds instead of guessing history.
+
+When all phase rows for a pull are missing, the addon path can reconstruct them
+from stored, non-synthetic Destroy Egg (19873) casts. It uses the saved log-group
+flavor's threshold (20 or 30), requires exactly that many ordered casts by the
+proven Razorgore GUID, and requires unambiguous full-pull activity and boundaries.
+Unsupported flavors, overlapping pulls, incomplete/excess casts, missing streams,
+and conflicting existing phase evidence still skip. Existing phase rows are not
+overwritten. Reconstructed phase rows, metric changes, and the receipt commit
+atomically; raw events remain unchanged. The implementation does not fabricate
+approximate ranking totals or perform duration-only repairs.
 
 ## Permanent per-script receipts
 
