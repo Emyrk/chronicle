@@ -250,3 +250,80 @@ func TestFiveAttemptRepairRetainsWipesAndOtherBosses(t *testing.T) {
 	require.True(t, corrected[falsePull.ID])
 	require.False(t, corrected[vael.ID])
 }
+
+type multiRecordingStore struct {
+	database.Store
+	encounters, hostiles, phases, deletes, windows, metrics, proofs int
+}
+
+func (s *multiRecordingStore) RazorgoreRepairEncounter(context.Context, database.RazorgoreRepairEncounterParams) error {
+	s.encounters++
+	return nil
+}
+func (s *multiRecordingStore) RazorgoreRepairHostile(context.Context, database.RazorgoreRepairHostileParams) error {
+	s.hostiles++
+	return nil
+}
+func (s *multiRecordingStore) RazorgoreRepairPhase(context.Context, database.RazorgoreRepairPhaseParams) error {
+	s.phases++
+	return nil
+}
+func (s *multiRecordingStore) RazorgoreRepairDeleteRankings(context.Context, database.RazorgoreRepairDeleteRankingsParams) error {
+	s.deletes++
+	return nil
+}
+func (s *multiRecordingStore) RazorgoreRepairRankingWindow(context.Context, database.RazorgoreRepairRankingWindowParams) error {
+	s.windows++
+	return nil
+}
+func (s *multiRecordingStore) RazorgoreRepairMetrics(context.Context, database.RazorgoreRepairMetricsParams) error {
+	s.metrics++
+	return nil
+}
+func (s *multiRecordingStore) RazorgoreRepairSpeedrunProof(context.Context, database.RazorgoreRepairSpeedrunProofParams) error {
+	s.proofs++
+	return nil
+}
+func TestMultiPullOperationDryRunApplyQueuesRatings(t *testing.T) {
+	t.Parallel()
+	f := newRepairFixture(t, 1)
+	e := fixtureRazorgoreMultiple(t)
+	e.Server.TenantID = uuid.NullUUID{UUID: f.tenant, Valid: true}
+	recorded := &multiRecordingStore{}
+	f.service.evaluate = func(context.Context, database.Store, uuid.UUID) (*RazorgoreRepairPlan, error) {
+		p, err := evaluateRazorgoreEvidence(e)
+		if err != nil {
+			return nil, err
+		}
+		p.seal, err = razorgorePlanSeal(p)
+		return p, err
+	}
+	f.service.apply = func(ctx context.Context, tx database.Store, p *RazorgoreRepairPlan) error {
+		_, ok := database.PGXTx(tx)
+		require.True(t, ok)
+		return ApplyRazorgore(ctx, recorded, p)
+	}
+	_, err := f.service.ProcessPage(f.ctx, f.id, "dry_running")
+	require.NoError(t, err)
+	require.Zero(t, recorded.metrics)
+	require.Zero(t, f.canonicalJobs(t))
+	report, err := f.service.Get(f.ctx, f.id)
+	require.NoError(t, err)
+	require.Equal(t, "ready", report.Items[0].State)
+	_, err = f.service.Apply(f.ctx, f.id, uuid.New())
+	require.NoError(t, err)
+	_, err = f.service.ProcessPage(f.ctx, f.id, "applying")
+	require.NoError(t, err)
+	require.Equal(t, 1, recorded.encounters)
+	require.Equal(t, 1, recorded.hostiles)
+	require.Equal(t, 1, recorded.phases)
+	require.Equal(t, 1, recorded.deletes)
+	require.Equal(t, 1, recorded.windows)
+	require.Equal(t, 2, recorded.metrics)
+	require.Equal(t, 1, recorded.proofs)
+	require.Equal(t, 1, f.canonicalJobs(t))
+	report, err = f.service.Get(f.ctx, f.id)
+	require.NoError(t, err)
+	require.Equal(t, "applied", report.Items[0].State)
+	require.True(t, report.Items[0].RatingsQueued)
+}
