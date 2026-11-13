@@ -9,6 +9,7 @@ import {
   useSupportedInstanceRankingEncounterSets,
 } from "@/api/queries";
 import { useCharacterEncounters, useCharacterPerformances } from "@/api/rankingsQueries";
+import { entityAttributes, raidEntity } from "@/components/EntityMenu/entity";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/Card/Card";
 import {
@@ -41,6 +42,7 @@ import {
   type PerformanceDisplayMode,
   type PerformancePlayerSelection,
 } from "./performanceComparisonState";
+import { performanceRunEntity } from "./performanceEntities";
 import {
   assignChartCollisionOffsets,
   assignPerformanceSeriesColors,
@@ -300,7 +302,10 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
                 <ChartNoAxesCombined className="h-4 w-4 text-sky-400" />
                 Player Analysis
               </h1>
-              <label className="relative min-w-0 basis-full sm:max-w-md sm:flex-1 sm:basis-auto">
+              <label
+                {...(variant ? entityAttributes(raidEntity(variant.instanceName, variant.difficultyName)) : {})}
+                className="relative min-w-0 basis-full sm:max-w-md sm:flex-1 sm:basis-auto"
+              >
                 <span className="sr-only">Instance</span>
                 <Map className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-sky-400" />
                 <select
@@ -530,6 +535,9 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
                         metric={metric}
                         display={display}
                         showPlayerRealms={showPlayerRealms}
+                        instanceName={variant?.instanceName ?? state.instanceName}
+                        difficultyName={variant?.difficultyName}
+                        maxPlayers={variant?.maxPlayers}
                       />
                     ) : (
                       <NumbersExplainer
@@ -1327,11 +1335,17 @@ function PerformanceTable({
   metric,
   display,
   showPlayerRealms,
+  instanceName,
+  difficultyName,
+  maxPlayers,
 }: {
   series: readonly PerformanceSeries[];
   metric: ParseMetric;
   display: DisplayMode;
   showPlayerRealms: boolean;
+  instanceName: string;
+  difficultyName?: string;
+  maxPlayers?: number;
 }) {
   const [selectedRow, setSelectedRow] = useState<{ player: SelectedPerformancePlayer; run: CharacterPerformanceRun } | null>(null);
   const rows = series
@@ -1358,6 +1372,7 @@ function PerformanceTable({
             return (
               <button
                 key={`${performancePlayerKey(rowPlayer)}-${run.run_id}`}
+                {...entityAttributes(performanceRunEntity(run, instanceName, difficultyName, maxPlayers))}
                 type="button"
                 onClick={() => setSelectedRow({ player: rowPlayer, run })}
                 className="grid w-full grid-cols-[3.5rem_minmax(0,1fr)_auto] items-center gap-2 border-b border-border/40 px-2 py-2 text-left text-xs odd:bg-black/5 even:bg-black/20 hover:bg-accent/20 last:border-0"
@@ -1419,6 +1434,7 @@ function PerformanceTable({
             {rows.map(({ player: rowPlayer, run, shape, specShapes }) => (
               <tr
                 key={`${performancePlayerKey(rowPlayer)}-${run.run_id}`}
+                {...entityAttributes(performanceRunEntity(run, instanceName, difficultyName, maxPlayers))}
                 className="border-b border-border/40 odd:bg-black/5 even:bg-black/20 hover:bg-accent/20 last:border-0"
               >
                 <td className="py-2 pr-4 whitespace-nowrap">{new Date(run.started_at).toLocaleDateString()}</td>

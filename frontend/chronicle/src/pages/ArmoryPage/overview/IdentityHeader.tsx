@@ -2,6 +2,8 @@ import { Link } from "react-router-dom";
 import type { ArmoryPlayer } from "@/api/typesGenerated";
 import { useIconBaseUrl } from "@/hooks/useDatasetId";
 import { OwnerAdFreeBadge } from "@/components/Ads/OwnerAdFreeBadge";
+import { entityAttributes, specEntity } from "@/components/EntityMenu/entity";
+import { guildAttributes } from "@/components/EntityMenu/leaderboardEntities";
 import { formatClassLabel, formatRaceLabel, getClassIconUrl, getRaceIconUrl } from "../characterDisplay";
 import { getClassColorVar } from "../types";
 import { treeName } from "./util";
@@ -28,10 +30,11 @@ export function IdentityHeader({ player, titleAction, actions, children }: Ident
   const deepestIdx = trees
     ? trees.reduce((best, t, i) => (t.points_spent > trees[best].points_spent ? i : best), 0)
     : -1;
-  const specLabel =
+  const specName =
     deepestIdx >= 0 && trees![deepestIdx].points_spent > 0
-      ? `${treeName(player, deepestIdx)} `
-      : `${formatRaceLabel(player.race)} `;
+      ? treeName(player, deepestIdx)
+      : null;
+  const classLabel = formatClassLabel(player.class);
 
   return (
     <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center lg:gap-8">
@@ -56,6 +59,13 @@ export function IdentityHeader({ player, titleAction, actions, children }: Ident
         <div className="w-full min-w-0 text-center lg:col-start-2 lg:row-start-1 lg:text-left">
           <div className="flex min-w-0 items-center justify-center gap-2 lg:justify-start">
             <div
+              {...entityAttributes({
+                kind: "character",
+                realm: player.realm_name,
+                guid: player.id,
+                name: player.name,
+                className: player.class,
+              })}
               className="font-wow truncate text-4xl leading-none"
               style={{ color: classColor }}
             >
@@ -70,6 +80,7 @@ export function IdentityHeader({ player, titleAction, actions, children }: Ident
                 &lt;
                 {player.guild_id ? (
                   <Link
+                    {...guildAttributes(player.guild_id, player.guild_name)}
                     to={`/g/${player.guild_id}`}
                     style={{ color: "var(--color-amber-500)" }}
                     className="hover:underline"
@@ -83,8 +94,16 @@ export function IdentityHeader({ player, titleAction, actions, children }: Ident
               </>
             )}
             {player.level > 0 && <>Level {player.level} </>}
-            {specLabel}
-            {formatClassLabel(player.class)} · {player.realm_name}
+            {specName ? (
+              <>
+                <span {...entityAttributes(specEntity(player.class, classLabel, specName))}>
+                  {specName}
+                </span>{" "}
+              </>
+            ) : (
+              <>{formatRaceLabel(player.race)} </>
+            )}
+            {classLabel} · {player.realm_name}
           </div>
         </div>
         {actions && (
