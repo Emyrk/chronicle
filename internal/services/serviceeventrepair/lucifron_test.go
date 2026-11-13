@@ -297,3 +297,23 @@ func TestLucifronProvenOwnerlessOmissionPreservesPlayerTotal(t *testing.T) {
 	require.EqualValues(t, 200, update.DamageDone+update.UnrankedDamageDone)
 	require.EqualValues(t, 200, update.DamageDone)
 }
+
+func TestLucifronRejectsWrongScriptPreparedPlan(t *testing.T) {
+	t.Parallel()
+	s := &lucifronStore{razorgoreStore: &razorgoreStore{e: fixtureLucifron(t)}, affected: 1}
+	ctx := context.Background()
+	p, err := EvaluateLucifron(ctx, s, s.e.Instance.ID)
+	require.NoError(t, err)
+	require.Equal(t, OperationLucifron, p.operation)
+	// Even a correctly sealed payload is unusable by the wrong script.
+	p.operation = OperationRazorgore
+	p.seal, err = razorgorePlanSeal(p)
+	require.NoError(t, err)
+	require.Error(t, RevalidateLucifron(ctx, s, p))
+	require.Error(t, ApplyLucifron(ctx, s, p))
+	require.Empty(t, s.updates)
+	// Changing the private operation after sealing also invalidates the seal.
+	p.operation = OperationLucifron
+	require.Error(t, ApplyLucifron(ctx, s, p))
+	require.Empty(t, s.updates)
+}
