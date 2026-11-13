@@ -16,7 +16,7 @@ import (
 
 var publicationFields = map[string][]string{
 	"guilds":                    strings.Fields("id realm_id name"),
-	"game_players":              strings.Fields("id realm_id guild_id name class gender race gear updated_at updated_from_instance level talents"),
+	"game_players":              strings.Fields("id realm_id guild_id name class gender race faction gear updated_at updated_from_instance level talents"),
 	"game_player_gear_history":  strings.Fields("player_id realm_id instance_id gear avg_ilvl equipped_at"),
 	"instance_loot":             strings.Fields("id instance_id realm_id source_guid source_ts received_guid received_ts item_id item_name loot_suffix quantity"),
 	"instance_overview_metrics": strings.Fields("instance_id requirements_complete player_deaths wipe_count top_incoming_damage_abilities encounter_span_duration_ms total_combat_duration_ms total_boss_duration_ms metrics_version"),

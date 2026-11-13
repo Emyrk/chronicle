@@ -15,8 +15,8 @@ import (
 )
 
 // Field-level allowlists are deliberately explicit. This is NOT a full DB dump.
-var instanceFields = []string{"id", "realm_id", "name", "capabilities", "recorder_name", "recorder_guid", "start_time", "end_time", "difficulty_name", "max_players", "dynamic_difficulty", "vehicle_control_intervals"}
-var encounterFields = []string{"id", "instance_id", "name", "remaining", "boss", "start_time", "end_time", "kill_type", "map_id", "ranking_start_offset_ms", "ranking_end_offset_ms"}
+var instanceFields = []string{"id", "realm_id", "name", "capabilities", "recorder_name", "recorder_guid", "start_time", "end_time", "difficulty_name", "max_players", "dynamic_difficulty", "mixed_difficulty", "vehicle_control_intervals"}
+var encounterFields = []string{"id", "instance_id", "name", "remaining", "boss", "start_time", "end_time", "kill_type", "map_id", "ranking_start_offset_ms", "ranking_end_offset_ms", "difficulty"}
 
 var unsupportedTables = []string{}
 
@@ -31,10 +31,11 @@ type artifact struct {
 	Instances         []instanceOutput    `json:"instances"`
 }
 type instanceOutput struct {
-	Structure  structureOutput                                  `json:"combat_structure"`
-	Instance   map[string]any                                   `json:"instance"`
-	Encounters []map[string]any                                 `json:"encounters"`
-	Events     map[database.LogInstanceEventType][]eventSegment `json:"events"`
+	Difficulties []string                                         `json:"log_instance_difficulties"`
+	Structure    structureOutput                                  `json:"combat_structure"`
+	Instance     map[string]any                                   `json:"instance"`
+	Encounters   []map[string]any                                 `json:"encounters"`
+	Events       map[database.LogInstanceEventType][]eventSegment `json:"events"`
 }
 
 func export(ctx context.Context, db database.Store, logID uuid.UUID, generation int64, expectedInstances int) (*artifact, error) {
@@ -66,8 +67,8 @@ func export(ctx context.Context, db database.Store, logID uuid.UUID, generation 
 			return err
 		}
 		result = &artifact{
-			Schema: "chronicle-parser-baseline-v4", Coverage: "synchronous publication tables; explicit field allowlists; public fresh-armory single-log fixtures only",
-			Allowlist:         map[string][]string{"log_instances": instanceFields, "log_instance_encounters": encounterFields, "log_instance_events": {"instance_id", "type", "decoded_encounter_segments"}},
+			Schema: "chronicle-parser-baseline-v5", Coverage: "synchronous publication tables; explicit field allowlists; public fresh-armory single-log fixtures only",
+			Allowlist:         map[string][]string{"log_instances": instanceFields, "log_instance_encounters": encounterFields, "log_instance_difficulties": {"difficulty"}, "log_instance_events": {"instance_id", "type", "decoded_encounter_segments"}},
 			UnsupportedTables: unsupportedTables, Instances: make([]instanceOutput, 0, len(rows)),
 		}
 		for table, fields := range map[string][]string{"encounter_dps_rankings": rankingFields, "talent_builds": talentFields, "parse_score_memberships": parseMembershipFields, "time_parse_clear_time_memberships": clearMembershipFields, "time_parse_boss_kill_memberships": bossMembershipFields} {
@@ -113,6 +114,11 @@ func export(ctx context.Context, db database.Store, logID uuid.UUID, generation 
 				return strings.Compare(encounterIDs[a.ID], encounterIDs[b.ID])
 			})
 			out := instanceOutput{Instance: instanceValues(row, keys[row.ID]), Encounters: make([]map[string]any, 0, len(encounters)), Events: make(map[database.LogInstanceEventType][]eventSegment)}
+			difficulties, err := tx.BaselineInstanceDifficulties(ctx, row.ID)
+			if err != nil {
+				return err
+			}
+			out.Difficulties = difficultyValues(difficulties)
 			for _, encounter := range encounters {
 				out.Encounters = append(out.Encounters, encounterValues(encounter, encounterIDs[encounter.ID], keys[row.ID]))
 			}
@@ -168,10 +174,10 @@ func exactTime(t pgtype.Timestamptz) pgtype.Timestamptz {
 	return t
 }
 func instanceValues(r database.LogInstancesGuild, key string) map[string]any {
-	return map[string]any{"id": key, "realm_id": r.RealmID, "name": r.Name, "capabilities": r.Capabilities, "recorder_name": r.RecorderName, "recorder_guid": r.RecorderGuid, "start_time": exactTime(r.StartTime), "end_time": exactTime(r.EndTime), "difficulty_name": r.DifficultyName, "max_players": r.MaxPlayers, "dynamic_difficulty": r.DynamicDifficulty, "vehicle_control_intervals": r.VehicleControlIntervals}
+	return map[string]any{"id": key, "realm_id": r.RealmID, "name": r.Name, "capabilities": r.Capabilities, "recorder_name": r.RecorderName, "recorder_guid": r.RecorderGuid, "start_time": exactTime(r.StartTime), "end_time": exactTime(r.EndTime), "difficulty_name": r.DifficultyName, "max_players": r.MaxPlayers, "dynamic_difficulty": r.DynamicDifficulty, "mixed_difficulty": r.MixedDifficulty, "vehicle_control_intervals": r.VehicleControlIntervals}
 }
 func encounterValues(r database.LogInstanceEncounter, key, parent string) map[string]any {
-	return map[string]any{"id": key, "instance_id": parent, "name": r.Name, "remaining": r.Remaining, "boss": r.Boss, "start_time": exactTime(r.StartTime), "end_time": exactTime(r.EndTime), "kill_type": r.KillType, "map_id": r.MapID, "ranking_start_offset_ms": r.RankingStartOffsetMs, "ranking_end_offset_ms": r.RankingEndOffsetMs}
+	return map[string]any{"id": key, "instance_id": parent, "name": r.Name, "remaining": r.Remaining, "boss": r.Boss, "start_time": exactTime(r.StartTime), "end_time": exactTime(r.EndTime), "kill_type": r.KillType, "map_id": r.MapID, "ranking_start_offset_ms": r.RankingStartOffsetMs, "ranking_end_offset_ms": r.RankingEndOffsetMs, "difficulty": r.Difficulty}
 }
 
 func instanceKeys(rows []database.LogInstancesGuild) (map[uuid.UUID]string, error) {
@@ -225,4 +231,15 @@ func canonicalKeys(identities map[uuid.UUID]string, prefix string) (map[uuid.UUI
 		result[id] = prefix + "/" + strconv.Itoa(index)
 	}
 	return result, nil
+}
+
+// Instance identity is supplied by the containing instance output. Preserve each
+// persisted mode verbatim, including the empty string used for normal mode.
+func difficultyValues(rows []database.LogInstanceDifficulty) []string {
+	values := make([]string, 0, len(rows))
+	for _, row := range rows {
+		values = append(values, row.Difficulty)
+	}
+	slices.Sort(values)
+	return values
 }

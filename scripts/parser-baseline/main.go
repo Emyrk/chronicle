@@ -46,7 +46,7 @@ func run(ctx context.Context, arguments []string, output io.Writer) error {
 	storagePath := flags.String("storage", "", "local object-storage root (run only)")
 	isolated := flags.Bool("isolated-db", false, "confirm disposable, exclusively owned local DB and local storage")
 	freshArmory := flags.Bool("fresh-armory-seed", false, "attest shared armory tables were empty before this public parse")
-	engineName := flags.String("engine", string(chronicle.BaselineLegacy), "run-only engine: legacy or parsernext-vanilla")
+	engineName := flags.String("engine", string(chronicle.BaselineLegacy), "run-only engine: legacy, parsernext (all supported formats), or parsernext-vanilla")
 	provenancePath := flags.String("provenance", "", "exclusive-create run provenance JSON outside the comparable export")
 	expected := flags.Int("expect-instances", 0, "required exact number of published instances")
 	if err := flags.Parse(arguments[1:]); err != nil {
