@@ -22,14 +22,22 @@ interface FrontendDamageRule {
   mode: string
   entry_ids: number[]
   note: string
+  rankedTime?: RankedTime
 }
 
 /**
- * Encounter rules implemented as custom backend trackers rather than
- * damage_by_encounter metadata. Keep in sync with the rankings package
- * (see dpstracker_assembly_of_iron.go).
+ * Encounter-specific explanations not fully represented by damage_by_encounter.
+ * Keep in sync with backend phase tracking and ranking rules.
  */
 const FRONTEND_DAMAGE_RULES: Record<string, Record<string, FrontendDamageRule>> = {
+  "Blackwing Lair": {
+    "Razorgore the Untamed": {
+      mode: "entries",
+      entry_ids: [12435],
+      rankedTime: "phase-two",
+      note: "Only damage to Razorgore counts; add damage is excluded. On servers with egg tracking, kills only count after all eggs are destroyed. Ranked damage and boss kill time use phase two, from the final egg being destroyed until Razorgore dies. Phase one remains available in the full log. Servers without egg tracking retain full-encounter timing and legacy kill detection.",
+    },
+  },
   Ulduar: {
     "Assembly of Iron": {
       mode: "phase-kill",
@@ -41,12 +49,13 @@ const FRONTEND_DAMAGE_RULES: Record<string, Record<string, FrontendDamageRule>> 
 }
 
 const FALLBACK_UNIT_NAMES: Record<number, string> = {
+  12435: "Razorgore the Untamed",
   32857: "Stormcaller Brundir",
   32867: "Steelbreaker",
   32927: "Runemaster Molgeim",
 }
 
-function encounterRules(instance: SupportedInstance): Record<string, SupportedInstanceDamageRule & { note?: string }> {
+function encounterRules(instance: SupportedInstance): Record<string, SupportedInstanceDamageRule & { note?: string; rankedTime?: RankedTime }> {
   return { ...(instance.damage_by_encounter ?? {}), ...(FRONTEND_DAMAGE_RULES[instance.name] ?? {}) }
 }
 
@@ -88,9 +97,10 @@ export function rulesetEntries(instances: readonly SupportedInstance[], renown?:
  * "window": DPS is divided by the time from the first listed target engaging to
  * the last one dying. "full": the whole encounter is used. Mirrors
  * rankings.DurationTargets/RankingWindow, which reuse the damage target rule;
- * Assembly of Iron keeps the full fight.
+ * Assembly of Iron keeps the full fight. "phase-two" starts at the final egg
+ * destruction for Razorgore on servers with egg tracking.
  */
-export type RankedTime = "window" | "full"
+export type RankedTime = "window" | "full" | "phase-two"
 
 function rankedTimeFor(mode: string): RankedTime {
   return mode === "entries" || mode === "boss-only" ? "window" : "full"
@@ -112,7 +122,7 @@ export function damageRuleRows(instance: SupportedInstance) {
     name,
     mode: rules[name].mode,
     note: rules[name].note,
-    rankedTime: rankedTimeFor(rules[name].mode),
+    rankedTime: rules[name].rankedTime ?? rankedTimeFor(rules[name].mode),
     targets: (rules[name].entry_ids ?? []).map((id) => ({
       id,
       name: units.get(id) ?? FALLBACK_UNIT_NAMES[id] ?? `Creature ${id}`,

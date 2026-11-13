@@ -42,6 +42,37 @@ describe("Leaderboard ruleset", () => {
     expect(rulesetEntries([{ name: "Ulduar", category: "raid" }])[0].damageRuleCount).toBe(1)
   })
 
+  it("explains Razorgore phase-two rules without duplicating the backend target rule", () => {
+    const instance: SupportedInstance = {
+      name: "Blackwing Lair",
+      category: "raid",
+      damage_by_encounter: {
+        "Razorgore the Untamed": { mode: "entries", entry_ids: [12435] },
+        "Broodlord Lashlayer": { mode: "boss-only" },
+      },
+    }
+    const rows = damageRuleRows(instance)
+    const razor = rows.find((row) => row.name === "Razorgore the Untamed")!
+    expect(rows).toHaveLength(2)
+    expect(razor).toMatchObject({
+      mode: "entries",
+      rankedTime: "phase-two",
+      targets: [{ id: 12435, name: "Razorgore the Untamed", boss: true }],
+    })
+    expect(razor.note).toContain("add damage is excluded")
+    expect(razor.note).toContain("kills only count after all eggs are destroyed")
+    expect(razor.note).toContain("from the final egg being destroyed until Razorgore dies")
+    expect(razor.note).toContain("Servers without egg tracking retain full-encounter timing")
+    expect(rows.find((row) => row.name === "Broodlord Lashlayer")?.rankedTime).toBe("window")
+    expect(rulesetEntries([instance])[0].damageRuleCount).toBe(2)
+  })
+
+  it("provides the Razorgore explanation when backend target metadata is absent", () => {
+    expect(damageRuleRows({ name: "Blackwing Lair", category: "raid" })).toMatchObject([
+      { name: "Razorgore the Untamed", rankedTime: "phase-two" },
+    ])
+  })
+
   it("shows no encounter restrictions when no rules are configured", () => {
     expect(damageRuleRows({ name: "Other", category: "raid" })).toEqual([])
   })
