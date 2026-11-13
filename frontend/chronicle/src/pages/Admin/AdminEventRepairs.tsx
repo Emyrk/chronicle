@@ -32,7 +32,7 @@ export function RepairReport({ operation, busy, onApply, onCancel, onRetry }: {
     </div>
     <details className="text-xs"><summary className="cursor-pointer">Saved selection</summary><pre className="styled-scrollbar mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-all">{JSON.stringify(operation.selection, null, 2)}</pre></details>
     {operation.last_error && <p role="alert" className="break-words text-sm text-destructive">{operation.last_error}</p>}
-    {operation.state === "ready" && <div className="space-y-3 rounded-md border border-amber-600/60 bg-amber-500/10 p-3 text-sm">
+    {operation.state === "ready" && operation.items.some((item) => item.state === "ready") && <div className="space-y-3 rounded-md border border-amber-600/60 bg-amber-500/10 p-3 text-sm">
       <h3 className="font-semibold text-amber-400">Confirm write operation</h3>
       <p>Review the dry-run evidence below. Apply updates derived encounter and ranking evidence. Original events remain untouched.</p>
       <p>Every successfully applied or no-op instance enqueues ratings work. Ratings queued does not mean ratings completed.</p>
@@ -40,12 +40,16 @@ export function RepairReport({ operation, busy, onApply, onCancel, onRetry }: {
       <Button disabled={!confirmed || busy} onClick={onApply} className="bg-amber-500 text-black hover:bg-amber-400">Apply repair</Button>
     </div>}
     {isRepairActive(operation.state) && operation.last_error && onRetry && <Button variant="outline" disabled={busy} onClick={onRetry}>Retry operation</Button>}
+    {operation.state === "ready" && <div className="space-y-2">
+      {!operation.items.some((item) => item.state === "ready") && <p className="text-sm text-muted-foreground">No instances are eligible to apply. Review the skip reasons below or reject this repair.</p>}
+      <Button variant="outline" disabled={busy} onClick={onCancel}>Reject repair</Button>
+    </div>}
     {isRepairActive(operation.state) && <Button variant="outline" disabled={busy} onClick={onCancel}>Cancel operation</Button>}
     <div className="styled-scrollbar max-h-[32rem] overflow-auto rounded border">
       <table className="w-full text-left text-xs"><caption className="p-3 text-left text-sm font-medium">Instance evidence and outcomes</caption>
         <thead className="bg-muted"><tr>{["Instance", "State", "Changes / reason", "Ratings"].map((title) => <th key={title} scope="col" className="p-3">{title}</th>)}</tr></thead>
         <tbody>{(operation.items ?? []).map((item) => <tr key={item.instance_id} className="border-t align-top">
-          <td className="max-w-56 break-all p-3 font-mono">{item.instance_id}</td><td className="p-3">{item.state}</td>
+          <td className="max-w-56 break-all p-3 font-mono"><a href={`/instances/${encodeURIComponent(item.instance_id)}`} target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-2 hover:no-underline" title="Open instance in a new tab">{item.instance_id}</a></td><td className="p-3">{item.state}</td>
           <td className="min-w-60 p-3"><p className="break-words">{item.reason}</p><ul className="list-inside list-disc">{(item.changes ?? []).map((change, index) => <li key={index}>{change}</li>)}</ul>{item.evidence_hash && <details className="mt-2 text-muted-foreground"><summary className="cursor-pointer">Evidence hash</summary><code className="break-all">{item.evidence_hash}</code></details>}</td>
           <td className="p-3">{item.ratings_queued ? "Queued, not completed" : "Not queued"}</td>
         </tr>)}</tbody>

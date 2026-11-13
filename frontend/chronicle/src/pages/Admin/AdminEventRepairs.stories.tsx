@@ -75,3 +75,30 @@ export const SubmitSelectedScope: Story = {
     await expect(await canvas.findByText("selected-scope", { selector: "p" })).toBeVisible();
   },
 };
+
+export const RejectPreview: Story = {
+  parameters: { msw: { handlers: [
+    http.get("/api/v1/admin/event-repairs/rejected-preview", () => HttpResponse.json({ ...operation, id: "rejected-preview", state: "cancelled" })),
+    ...handlers(operation),
+    http.post("/api/v1/admin/event-repairs/:id/cancel", () => HttpResponse.json({ ...operation, id: "rejected-preview", state: "cancelled" })),
+  ] } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const reject = await canvas.findByRole("button", { name: "Reject repair" });
+    const link = canvas.getByRole("link", { name: operation.items[0].instance_id });
+    await expect(link).toHaveAttribute("href", `/instances/${operation.items[0].instance_id}`);
+    await expect(link).toHaveAttribute("target", "_blank");
+    await expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    await userEvent.click(reject);
+    await expect(await canvas.findByText("rejected-preview", { selector: "p" })).toBeVisible();
+  },
+};
+export const AllSkipped: Story = {
+  parameters: { msw: { handlers: handlers({ ...operation, items: [operation.items[1]], total: 1, processed: 1, skipped: 1 }) } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole("button", { name: "Reject repair" })).toBeEnabled();
+    await expect(canvas.queryByRole("button", { name: "Apply repair" })).not.toBeInTheDocument();
+    await expect(canvas.getByText(/No instances are eligible to apply/)).toBeVisible();
+  },
+};

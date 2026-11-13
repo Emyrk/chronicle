@@ -39,6 +39,8 @@ it("ready reports require confirmation and expose skips and evidence", () => {
   expect(markup).toContain("Trim phase one");
   expect(markup).toContain("Original events remain untouched");
   expect(markup).not.toContain("Cancel operation");
+  expect(markup).toContain("Reject repair");
+  expect(markup).toContain('href="/instances/instance-1" target="_blank" rel="noopener noreferrer"');
 });
 it("running reports allow cancellation but terminal reports never offer apply", () => {
   for (const state of ["dry_running", "applying", "completed", "cancelled", "failed"] as const) {
@@ -74,4 +76,12 @@ it("sends the locked create/apply/cancel contracts and surfaces auth errors", as
   fetcher.mockResolvedValue({ ok: false, status: 403, json: async () => ({ message: "Admin access required" }) });
   await expect(repairRequest()).rejects.toThrow("Admin access required");
   expect(fetcher).toHaveBeenCalledTimes(5);
+});
+
+it("all-skipped reports can be rejected but cannot be applied", () => {
+  const markup = renderToStaticMarkup(<RepairReport operation={{ ...operation, items: [operation.items[1]] }} busy={false} onApply={() => {}} onCancel={() => {}} />);
+  expect(markup).toContain("Reject repair");
+  expect(markup).toContain("No instances are eligible to apply");
+  expect(markup).not.toContain("Apply repair");
+  expect(markup).not.toContain("Confirm write operation");
 });
