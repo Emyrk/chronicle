@@ -21,7 +21,7 @@ import { CLASS_FILTER_ORDER } from "@/pages/Leaderboards/Ratings/leaderboardClas
 import { formatPeakRaw, peakWithRaw } from "./peakDisplay"
 import { TABS, type HubTab } from "./hubTabs"
 import { HubTabHint } from "./HubTabHint"
-import { EncounterSidebar } from "./EncounterSidebar"
+import { EncounterSidebar, type EncounterSidebarExtras } from "./EncounterSidebar"
 import { GuildName, GuildRatingBoards, GuildRatingLeaders, MetricColumns } from "./GuildRatings"
 import { useEntityRaidContext } from "@/components/EntityMenu/entityMenuContext"
 import { entityAttributes, raidEntity } from "@/components/EntityMenu/entity"
@@ -137,6 +137,8 @@ export interface HubLiveTabContext {
 }
 
 export interface HubLiveData {
+  /** Optional sidebar presentation, shared by desktop and mobile. */
+  encounterSidebarExtras?: EncounterSidebarExtras
   bosses: readonly string[]
   /** Bosses represented by the default clear selection; other bosses remain individually selectable. */
   presetBosses?: readonly string[]
@@ -443,6 +445,7 @@ export function LeaderboardHub({
                     instanceName={instanceName}
                     bosses={bosses}
                     preset={live?.presetBosses}
+                    extras={live?.encounterSidebarExtras}
                     optional={live ? live.optionalBosses ?? new Set<string>() : OPTIONAL_BOSSES}
                     trash={live && tab === "performances" ? new Set(["Trash"]) : undefined}
                     selection={selection}
@@ -576,6 +579,7 @@ export function LeaderboardHub({
                   instanceName={instanceName}
                   bosses={bosses}
                   preset={live?.presetBosses}
+                  extras={live?.encounterSidebarExtras}
                   optional={live ? live.optionalBosses ?? new Set<string>() : OPTIONAL_BOSSES}
                   trash={live && tab === "performances" ? new Set(["Trash"]) : undefined}
                   selection={selection}
