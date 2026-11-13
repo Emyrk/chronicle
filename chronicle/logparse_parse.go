@@ -21,8 +21,8 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/messagesource"
 	"github.com/Emyrk/chronicle/combatlog/parser/reorder"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/realm"
+	"github.com/Emyrk/chronicle/combatlog/parser/vanilla"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/parserv2"
-	"github.com/Emyrk/chronicle/combatlog/parser/wotlk"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
@@ -116,7 +116,7 @@ func (w *WorkerLogParse) parseCombatLog(
 		return w.loadFile(ctx, files[0])
 	}
 
-	if w.baselineEngine == BaselineParserNextVanilla {
+	if w.baselineEngine == BaselineParserNextVanilla || (w.baselineEngine == BaselineParserNext && logFormat == database.LogFormat112aCcAddon) {
 		session, err := newVanillaFileSession(ctx, logLogger, gameDB, reg, identityMode, preRealmName)
 		if err != nil {
 			return nil, err
@@ -191,13 +191,7 @@ func (w *WorkerLogParse) parseCombatLog(
 		}
 		loadFileDuration = time.Since(loadStart)
 
-		var p *wotlk.Parser
-		var err error
-		if logFormat == database.LogFormat243CcAddon {
-			p, err = wotlk.NewTBC(ctx, logLogger, bytes.NewReader(data), overriddenGameDB, gameDB, reg)
-		} else {
-			p, err = wotlk.New(ctx, logLogger, bytes.NewReader(data), overriddenGameDB, gameDB, reg)
-		}
+		p, err := newCLEUSource(ctx, w.baselineEngine, logFormat, logLogger, bytes.NewReader(data), overriddenGameDB, gameDB, reg)
 		if err != nil {
 			return nil, fmt.Errorf("create CLEU parser: %w", err)
 		}
@@ -251,22 +245,16 @@ func (w *WorkerLogParse) parseCombatLog(
 		}
 		loadFileDuration = time.Since(loadStart)
 
-		var p *blizzardmodern.Parser
-		var err error
-		if logFormat == database.LogFormatHermesproxy1142Cc {
-			p, err = blizzardmodern.NewHermesProxy(ctx, logLogger, bytes.NewReader(data), overriddenGameDB, gameDB, reg)
-			if err == nil {
-				p.SetRealmClockInfo(scanCompanionHeaderClock(data))
-			}
-		} else {
-			p, err = blizzardmodern.New(ctx, logLogger, bytes.NewReader(data), overriddenGameDB, gameDB, reg, logFormat)
+		p, err := newCLEUSource(ctx, w.baselineEngine, logFormat, logLogger, bytes.NewReader(data), overriddenGameDB, gameDB, reg)
+		if err == nil && logFormat == database.LogFormatHermesproxy1142Cc {
+			p.SetRealmClockInfo(scanCompanionHeaderClock(data))
 		}
 		if err != nil {
 			return nil, fmt.Errorf("create modern Blizzard CLEU parser: %w", err)
 		}
 		c.Advancer = p
 		var parseAdvancer consumers.Advancer = p
-		if logFormat == database.LogFormatV22Cleu {
+		if logFormat == database.LogFormatV22Cleu && w.baselineEngine != BaselineParserNext {
 			parseAdvancer = reorder.New(p, blizzardmodern.ReorderWindow)
 		}
 		consumeErr = c.ConsumeAll(ctx, parseAdvancer)
@@ -287,7 +275,15 @@ func (w *WorkerLogParse) parseCombatLog(
 		}
 		loadFileDuration = time.Since(loadStart)
 
-		p, err := azerothcore.New(ctx, logLogger, rdr, overriddenGameDB, gameDB)
+		var p interface {
+			consumers.Advancer
+			Metrics() vanilla.Metrics
+		}
+		if w.baselineEngine == BaselineParserNext {
+			p, err = azerothcore.NewNext(ctx, logLogger, rdr, overriddenGameDB, gameDB)
+		} else {
+			p, err = azerothcore.New(ctx, logLogger, rdr, overriddenGameDB, gameDB)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("create azerothcore parser: %w", err)
 		}
