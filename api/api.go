@@ -509,6 +509,14 @@ func (api *API) Routes() chi.Router {
 				r.Use(api.Auth.Authenticated(false))
 				r.With(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User)).Get("/leaderboard-queues", api.AdminLeaderboardQueues)
 				r.With(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User)).Post("/leaderboard-highlights/refresh", api.AdminRefreshLeaderboardHighlights)
+				r.Route("/event-repairs", func(r chi.Router) {
+					r.Use(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User))
+					r.Get("/", api.AdminListEventRepairs)
+					r.Post("/", api.AdminCreateEventRepair)
+					r.Get("/{operationID}", api.AdminGetEventRepair)
+					r.Post("/{operationID}/apply", api.AdminApplyEventRepair)
+					r.Post("/{operationID}/cancel", api.AdminCancelEventRepair)
+				})
 				r.Route("/leaderboard-operations", func(r chi.Router) {
 					r.Use(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User))
 					r.Get("/", api.AdminListLeaderboardOperations)

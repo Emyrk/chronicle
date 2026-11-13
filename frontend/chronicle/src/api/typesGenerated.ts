@@ -7841,3 +7841,47 @@ export type WoWUnitType = 2 | 3 | 1 | 0 | 4;
 export const WoWUnitTypes: WoWUnitType[] = [2, 3, 1, 0, 4];
 
 
+
+// From chroniclesdk/event_repairs.go
+export interface CreateEventRepairRequest {
+    readonly operation: string;
+    readonly instance: string;
+    readonly tenant_id: string;
+    readonly limit: number;
+    readonly realm_id: string;
+    readonly after: string | null;
+    readonly before: string | null;
+}
+
+// From chroniclesdk/event_repairs.go
+export interface EventRepairItem {
+    readonly instance_id: string;
+    readonly state: string;
+    readonly reason: string;
+    readonly evidence_hash: string;
+    readonly changes: readonly string[];
+}
+
+// From chroniclesdk/event_repairs.go
+export interface EventRepairOperation {
+    readonly id: string;
+    readonly operation: string;
+    readonly version: number;
+    readonly state: string;
+    readonly created_at: string;
+    readonly updated_at: string;
+    readonly created_by: string;
+    readonly tenant_id: string;
+    readonly selection: CreateEventRepairRequest;
+    readonly total: number;
+    readonly processed: number;
+    readonly applied: number;
+    readonly skipped: number;
+    readonly last_error: string;
+    readonly items: readonly EventRepairItem[];
+}
+
+// From chroniclesdk/event_repairs.go
+export interface EventRepairOperationsResponse {
+    readonly operations: readonly EventRepairOperation[];
+}
