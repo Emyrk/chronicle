@@ -44,6 +44,7 @@ describe("Hub leaderboard live props", () => {
     expect(markup).toContain('data-testid="podium">Live guild')
     expect(markup).toContain("Live realm")
     expect(markup).toContain("5:21")
+    expect(markup).toContain('href="/instances/live-speedrun"')
     // Mobile winner card, desktop podium (CSS shows one), and the table row.
     expect(markup.match(/>Live guild</g)).toHaveLength(3)
     expect(markup).toContain('data-entity-kind="guild"')

@@ -199,7 +199,14 @@ function ClearBoard({ instanceName, bosses, live, story, switcher }: { instanceN
                   </span>
                 </td>
                 <td className="px-2 py-2 text-right font-mono tabular-nums">
-                  <span {...speedrunClearAttributes(r, instanceName)}>{formatClock(r.duration_ms)}</span>
+                  <a
+                    href={`/instances/${r.slug || r.instance_id}`}
+                    className="hover:underline"
+                    aria-label={`Open ${instanceName} speedrun log for ${r.guild_name || "Unknown guild"}`}
+                    {...speedrunClearAttributes(r, instanceName)}
+                  >
+                    {formatClock(r.duration_ms)}
+                  </a>
                 </td>
                 <td className="hidden px-2 py-2 text-right text-muted-foreground sm:table-cell">
                   <span className="inline-flex items-center gap-1">
