@@ -69,7 +69,7 @@ export function RepairDetails({ operation, version, warnings, details }: {
     </div>}
     {known ? <>
       <h4 className="font-medium">Phase-two windows</h4>
-      <p className="text-muted-foreground">Phase offsets (minutes:seconds).</p>
+      <p className="text-muted-foreground">Offsets from each encounter start (minutes:seconds).</p>
       {!details.phases.length && <p>No phase windows reported.</p>}
       <ul className="space-y-2">{details.phases.map((phase, index) => <li key={index} className="rounded border p-2">
         <p className="break-all font-mono">Encounter {phase.encounter_id}</p>
