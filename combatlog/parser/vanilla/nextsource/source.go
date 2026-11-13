@@ -16,6 +16,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/synthetic"
+	"github.com/Emyrk/chronicle/combatlog/parsernext/snapshot"
 	next "github.com/Emyrk/chronicle/combatlog/parsernext/vanilla"
 	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
@@ -24,6 +25,7 @@ import (
 // Pipeline retains semantic state across consecutive complete files. Use one
 // serial file source at a time. It owns no consumer, finalizer or write service.
 type Pipeline struct {
+	construction      *snapshot.Compatibility
 	identity          *Compatibility
 	activeSource      *Source
 	boundary          bool
@@ -46,6 +48,10 @@ type MissedSpell struct {
 // New keeps the legacy read dependencies and constructor context for synthetics.
 // GameDB is the existing read-only game-data interface, not a publication store.
 func New(ctx context.Context, logger *slog.Logger, db gamedb.GameDB, gear gamedb.GearResolver, buildVersion string) (*Pipeline, error) {
+	bound, err := constructionIdentity(ctx)
+	if err != nil {
+		return nil, err
+	}
 	if db == nil {
 		return nil, fmt.Errorf("wowDB cannot be nil")
 	}
@@ -55,7 +61,7 @@ func New(ctx context.Context, logger *slog.Logger, db gamedb.GameDB, gear gamedb
 	_, trees := parsectx.DatasetTalents(ctx)
 	format, _ := parsectx.Format(ctx)
 	flavor, _ := parsectx.Flavor(ctx)
-	p := &Pipeline{boundary: true, buildVersion: buildVersion, format: format, flavor: flavor.CanonicalKey(), spells: db, missed: make(map[chrondbc.SpellID]MissedSpell), synthetics: synthetic.New(ctx, logger, db, synthetic.WithAuraCastCorrelation())}
+	p := &Pipeline{construction: bound, boundary: true, buildVersion: buildVersion, format: format, flavor: flavor.CanonicalKey(), spells: db, missed: make(map[chrondbc.SpellID]MissedSpell), synthetics: synthetic.New(ctx, logger, db, synthetic.WithAuraCastCorrelation())}
 	p.decoder = next.NewDecoder(db, buildVersion, next.DecoderOptions{CountedSpells: p, Combatants: next.CombatantOptions{TalentTrees: trees, Gear: gear, Logger: logger}})
 	return p, nil
 }
