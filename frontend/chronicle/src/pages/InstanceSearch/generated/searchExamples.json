@@ -306,6 +306,21 @@
     "cost": 9
   },
   {
+    "id": "30_ranked_razorgore_kill",
+    "title": "Razorgore ranked kill under a minute",
+    "category": "Speed",
+    "description": "Razorgore's ranked kill time is at most 60 seconds. Uses the recorded phase-two window, or full duration for legacy logs.",
+    "where": {
+      "field": "instance.ranked_kill_time_ms",
+      "op": "\u003c=",
+      "value": 60000,
+      "bosses": [
+        "Razorgore the Untamed"
+      ]
+    },
+    "cost": 7
+  },
+  {
     "id": "09_three_or_more_priests",
     "title": "3+ Priests",
     "category": "Roster",

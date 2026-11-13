@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -613,4 +614,65 @@ func TestSearch(t *testing.T) {
 		require.Nil(t, second.Next)
 		require.NotEqual(t, first.Results[0].ID, second.Results[0].ID)
 	})
+}
+
+// Each case owns its database so window and outcome variants cannot affect
+// other searches or the shared semantic fixture.
+func TestRankedKillDuration(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, boss, outcome string
+		start, end          any
+		want                int64
+	}{
+		{"PhaseTwo", "Razorgore the Untamed", "clean", 240000, 300000, 60000},
+		{"Partial", "Razorgore the Untamed", "partial", 240000, 300000, 60000},
+		{"Legacy", "Razorgore the Untamed", "clean", nil, nil, 300000},
+		{"NegativeStart", "Razorgore the Untamed", "clean", -1, 60000, 300000},
+		{"EmptyWindow", "Razorgore the Untamed", "clean", 60000, 60000, 300000},
+		{"ReversedWindow", "Razorgore the Untamed", "clean", 60000, 0, 300000},
+		{"OtherBoss", "Ragnaros", "clean", 240000, 300000, 300000},
+		{"Wipe", "Razorgore the Untamed", "wipe", 240000, 300000, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			f := newFixture(t)
+			ctx := testutil.Context(t, testutil.WaitLong)
+			cfg, err := pgxpool.ParseConfig(f.url)
+			require.NoError(t, err)
+			cfg.ConnConfig.RuntimeParams["app.tenant_bypass"] = "true"
+			pool, err := pgxpool.NewWithConfig(ctx, cfg)
+			require.NoError(t, err)
+			defer pool.Close()
+			// Use the otherwise empty invalid run; validity is an ordinary filter.
+			_, err = pool.Exec(ctx, `INSERT INTO log_instance_encounters
+				(id, instance_id, name, remaining, boss, start_time, end_time, kill_type, ranking_start_offset_ms, ranking_end_offset_ms)
+				VALUES ($1, $2, $3, '{}', true, '2026-10-15T19:00:00Z', '2026-10-15T19:05:00Z', $4, $5, $6)`,
+				uuid.New(), f.invalid, tc.boss, tc.outcome, tc.start, tc.end)
+			require.NoError(t, err)
+			for _, match := range []instancesearch.Match{instancesearch.MatchAny, instancesearch.MatchEach} {
+				q := instancesearch.Query{Where: &instancesearch.Node{
+					Field: "instance.ranked_kill_time_ms", Op: instancesearch.OpEq, Value: tc.want,
+					Bosses: []string{strings.ToUpper(tc.boss)}, Match: match,
+				}}
+				page := f.search(t, f.tenantA, q)
+				if tc.want == 0 {
+					require.Empty(t, page.Results)
+				} else {
+					require.Len(t, page.Results, 1)
+					require.Equal(t, f.invalid, page.Results[0].ID)
+				}
+				// The existing field must retain full encounter duration.
+				q.Where.Field = "instance.kill_time_ms"
+				q.Where.Value = 300000
+				page = f.search(t, f.tenantA, q)
+				if tc.outcome == "wipe" {
+					require.Empty(t, page.Results)
+				} else {
+					require.Len(t, page.Results, 1)
+					require.Equal(t, f.invalid, page.Results[0].ID)
+				}
+			}
+		})
+	}
 }

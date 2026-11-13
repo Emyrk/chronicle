@@ -609,11 +609,21 @@ var fields = []*field{
 			return valueSQL{Expr: fmt.Sprintf("%s.%s_display_score", tbs, p.parseScope), From: from, Name: tbs + ".encounter_name"}
 		}},
 	{Name: "instance.kill_time_ms", Cost: 6, Scope: scopeInstance, Type: typeInt, Unit: "ms", Bosses: true,
-		Doc: "Boss kill duration (clean or partial kills) on any / each of the bosses.",
+		Doc: "Full boss kill duration (clean or partial kills) on any / each of the bosses.",
 		value: func(c *compiler, s scope, p pred) valueSQL {
 			e := c.alias("k")
 			from := fmt.Sprintf("log_instance_encounters %[1]s WHERE %[1]s.instance_id = li.id AND %[1]s.boss AND %[1]s.kill_type %[2]s", e, killedSQL)
 			return valueSQL{Expr: durationMS(e), From: from, Name: e + ".name"}
+		}},
+
+	{Name: "instance.ranked_kill_time_ms", Cost: 6, Scope: scopeInstance, Type: typeInt, Unit: "ms", Bosses: true,
+		Doc: "Ranked boss kill duration (clean or partial kills) on any / each boss. Uses Razorgore's valid phase-two window; otherwise full duration.",
+		value: func(c *compiler, s scope, p pred) valueSQL {
+			e := c.alias("k")
+			from := fmt.Sprintf("log_instance_encounters %[1]s WHERE %[1]s.instance_id = li.id AND %[1]s.boss AND %[1]s.kill_type %[2]s AND %[1]s.end_time > %[1]s.start_time", e, killedSQL)
+			// Keep the timing rule aligned with GetInstanceEncounterKillTimes.
+			expr := fmt.Sprintf("(CASE WHEN %[1]s.name = 'Razorgore the Untamed' AND %[1]s.ranking_start_offset_ms >= 0 AND %[1]s.ranking_end_offset_ms > %[1]s.ranking_start_offset_ms THEN %[1]s.ranking_end_offset_ms - %[1]s.ranking_start_offset_ms ELSE %[2]s END)::bigint", e, durationMS(e))
+			return valueSQL{Expr: expr, From: from, Name: e + ".name"}
 		}},
 
 	// ---- Encounter scope (inside any_encounter / count_encounters) ------

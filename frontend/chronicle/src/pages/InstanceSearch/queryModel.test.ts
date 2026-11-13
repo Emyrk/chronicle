@@ -45,14 +45,14 @@ function fullForm(): SearchForm {
     killParseMin: 80,
     killParseBosses: ["Ragnaros", "Majordomo Executus"],
     killParseMatch: "each",
-    clearTimeMaxMinutes: 60,
-    idleTimeMaxMinutes: 5,
-    bossTimeMaxMinutes: 20,
-    trashTimeMaxMinutes: 35,
+    clearTimeMaxSeconds: 60,
+    idleTimeMaxSeconds: 5,
+    bossTimeMaxSeconds: 20,
+    trashTimeMaxSeconds: 35,
     bossesKilledMin: 8,
     wipesMax: 0,
     deathsMax: 10,
-    bossKillTimes: [{ boss: "Ragnaros", maxMinutes: 2 }],
+    bossKillTimes: [{ boss: "Ragnaros", maxSeconds: 2 }],
     classCounts: [
       { class: "PRIEST", spec: "", subSpec: "", min: 3 },
       { class: "PALADIN", spec: "Holy", subSpec: "", min: 2 },
@@ -78,6 +78,27 @@ describe("formToTree / treeToForm", () => {
     const tree = formToTree(form);
     expect(tree).toBeDefined();
     expect(treeToForm(tree)).toEqual(form);
+  });
+
+  it("converts seconds to URL milliseconds and restores existing millisecond queries", () => {
+    const form = { ...emptyForm(), clearTimeMaxSeconds: 60, idleTimeMaxSeconds: 0,
+      bossTimeMaxSeconds: 1.5, trashTimeMaxSeconds: 90,
+      bossKillTimes: [{ boss: "Ragnaros", maxSeconds: 60 }] };
+    const tree = formToTree(form);
+    expect(tree?.and).toEqual(expect.arrayContaining([
+      { field: "instance.clear_time_ms", op: "<=", value: 60000 },
+      { field: "instance.idle_time_ms", op: "<=", value: 0 },
+      { field: "instance.boss_time_ms", op: "<=", value: 1500 },
+      { field: "instance.trash_time_ms", op: "<=", value: 90000 },
+      { any_encounter: { and: [
+        { field: "encounter.name", op: "=", value: "Ragnaros" },
+        { field: "encounter.killed", op: "=", value: true },
+        { field: "encounter.duration_ms", op: "<=", value: 60000 },
+      ] } },
+    ]));
+    const restored = decodeQuery(encodeQuery(tree));
+    expect(restored).toEqual(tree);
+    expect(treeToForm(restored)).toEqual(form);
   });
 
   it("round-trips the empty form", () => {
