@@ -51,8 +51,23 @@ func newRepairFixture(t *testing.T, n int) *repairFixture {
 	require.NoError(t, err)
 	_, err = db.CreateEventRepairOperation(ctx, database.CreateEventRepairOperationParams{ID: f.id, Operation: OperationRazorgore, Version: Version, CreatedBy: uuid.New(), TenantID: f.tenant, Selection: selection, Total: int32(n)})
 	require.NoError(t, err)
+
+	owner, server, realm, group := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	_, err = pool.Exec(ctx, `INSERT INTO users(id,username,email) VALUES($1,'repair-test',$2)`, owner, owner.String()+"@example.test")
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO wow_servers(id,name,tenant_id) VALUES($1,$2,$3)`, server, server.String(), f.tenant)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO wow_server_realms(id,server_id,name) VALUES($1,$2,$3)`, realm, server, realm.String())
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO wow_log_groups(id,owner) VALUES($1,$2)`, group, owner)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO parsed_log_group(id) VALUES($1)`, group)
+	require.NoError(t, err)
 	for range n {
-		_, err = db.InsertEventRepairItem(ctx, database.InsertEventRepairItemParams{OperationID: f.id, TenantID: f.tenant, InstanceID: uuid.New()})
+		instance := uuid.New()
+		_, err = pool.Exec(ctx, `INSERT INTO log_instances(id,realm_id,log_group_id,name) VALUES($1,$2,$3,'Blackwing Lair')`, instance, realm, group)
+		require.NoError(t, err)
+		_, err = db.InsertEventRepairItem(ctx, database.InsertEventRepairItemParams{OperationID: f.id, TenantID: f.tenant, InstanceID: instance})
 		require.NoError(t, err)
 	}
 	f.service.evaluate = func(context.Context, database.Store, uuid.UUID) (*RazorgoreRepairPlan, error) {
@@ -119,6 +134,9 @@ func TestCanonicalQueueFailureRollsBackSourceAndCheckpoint(t *testing.T) {
 	require.Equal(t, "ready", op.Items[0].State)
 	require.NotEmpty(t, op.LastError)
 	require.Zero(t, f.canonicalJobs(t))
+	receipts, err := f.db.ListInstanceEventRepairReceipts(f.ctx, op.Items[0].InstanceID)
+	require.NoError(t, err)
+	require.Empty(t, receipts, "queue failure must roll back the permanent receipt")
 }
 func TestStaleEvidenceAndSkippedItemsNeverEnqueue(t *testing.T) {
 	t.Parallel()
@@ -148,6 +166,9 @@ func TestStaleEvidenceAndSkippedItemsNeverEnqueue(t *testing.T) {
 			require.Zero(t, op.Applied)
 			require.False(t, op.Items[0].RatingsQueued)
 			require.Zero(t, f.canonicalJobs(t))
+			receipts, err := f.db.ListInstanceEventRepairReceipts(f.ctx, op.Items[0].InstanceID)
+			require.NoError(t, err)
+			require.Empty(t, receipts)
 		})
 	}
 }

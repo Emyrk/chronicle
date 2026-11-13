@@ -45,10 +45,12 @@ type Operation struct {
 	Items     []Item        `json:"items"`
 }
 type Item struct {
-	InstanceID    uuid.UUID `json:"instance_id"`
-	State         string    `json:"state"`
-	Reason        string    `json:"reason"`
-	EvidenceHash  string    `json:"evidence_hash"`
-	Changes       []string  `json:"changes"`
-	RatingsQueued bool      `json:"ratings_queued"`
+	Warnings      []string       `json:"warnings,omitempty"`
+	Details       map[string]any `json:"details,omitempty"`
+	InstanceID    uuid.UUID      `json:"instance_id"`
+	State         string         `json:"state"`
+	Reason        string         `json:"reason"`
+	EvidenceHash  string         `json:"evidence_hash"`
+	Changes       []string       `json:"changes"`
+	RatingsQueued bool           `json:"ratings_queued"`
 }

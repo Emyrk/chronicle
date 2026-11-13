@@ -154,8 +154,9 @@ const (
 )
 
 type WoWInstance struct {
-	ID      uuid.UUID `json:"id"`
-	RealmID uuid.UUID `json:"realm_id"`
+	Repairs []EventRepairReceipt `json:"repairs,omitempty"`
+	ID      uuid.UUID            `json:"id"`
+	RealmID uuid.UUID            `json:"realm_id"`
 	// DatasetID is the resolved game-data dataset for this instance's realm.
 	// Frontends use it to fetch matching talent/spell data regardless of the
 	// tenant domain serving the request. Only populated on the detail endpoint.

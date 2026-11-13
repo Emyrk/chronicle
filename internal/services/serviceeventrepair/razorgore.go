@@ -18,6 +18,8 @@ import (
 // RazorgoreRepairPlan is diagnostic evidence, not an executable mutation payload.
 // Only Evaluate creates an executable in-memory plan. JSON is diagnostic only.
 type RazorgoreRepairPlan struct {
+	Warnings        []string          `json:"warnings,omitempty"`
+	Details         map[string]any    `json:"details,omitempty"`
 	TenantID        uuid.UUID         `json:"tenant_id"`
 	InstanceID      uuid.UUID         `json:"instance_id"`
 	RequiresReparse bool              `json:"requires_reparse"`
@@ -34,6 +36,7 @@ type RazorgoreRepairPlan struct {
 }
 
 type razorgoreEvidence struct {
+	Receipts        []database.EventRepairReceipt
 	Group           database.WoWLogGroup
 	MissingInstance bool
 	Realm           database.WowServerRealm
@@ -106,6 +109,9 @@ func loadRazorgoreEvidence(ctx context.Context, db database.Store, instanceID uu
 		return e, fmt.Errorf("load instance: %w", err)
 	}
 
+	if e.Receipts, err = db.ListInstanceEventRepairReceipts(ctx, instanceID); err != nil {
+		return e, err
+	}
 	if e.Instance.LogGroupID != uuid.Nil {
 		if e.Group, err = db.RazorgoreRepairLogGroup(ctx, e.Instance.LogGroupID); err != nil {
 			return e, err
@@ -184,6 +190,10 @@ func ApplyRazorgore(ctx context.Context, tx database.Store, plan *RazorgoreRepai
 
 func razorgoreEvidenceHash(e razorgoreEvidence) (string, error) {
 	// Sort copies so hashing never mutates a prepared preview or caller-owned rows.
+	e.Receipts = slices.Clone(e.Receipts)
+	slices.SortFunc(e.Receipts, func(a, b database.EventRepairReceipt) int {
+		return bytes.Compare([]byte(a.Operation), []byte(b.Operation))
+	})
 	e.Encounters = slices.Clone(e.Encounters)
 	e.Phases = slices.Clone(e.Phases)
 	e.Hostiles = slices.Clone(e.Hostiles)
@@ -268,6 +278,11 @@ func evaluateRazorgoreEvidence(e razorgoreEvidence) (*RazorgoreRepairPlan, error
 		return skip("source realm/server tenant identity is missing or inconsistent")
 	}
 	p.TenantID = e.Server.TenantID.UUID
+	for _, receipt := range e.Receipts {
+		if receipt.Operation == OperationRazorgore {
+			return skip("this named repair script already has a permanent receipt for the instance")
+		}
+	}
 	if e.Instance.Name != "Blackwing Lair" || e.Instance.InvalidatedAt.Valid || slices.Contains(e.Instance.Capabilities, "server-side") {
 		return skip("instance is not an active legacy Blackwing Lair source (authoritative encounter results require reparse)")
 	}

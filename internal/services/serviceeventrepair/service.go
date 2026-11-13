@@ -108,6 +108,14 @@ func (s *Service) Get(ctx context.Context, id uuid.UUID) (Operation, error) {
 		if err := json.Unmarshal(i.Changes, &item.Changes); err != nil {
 			return o, err
 		}
+		var diagnostic struct {
+			Warnings []string       `json:"warnings"`
+			Details  map[string]any `json:"details"`
+		}
+		if err := json.Unmarshal(i.Plan, &diagnostic); err != nil {
+			return o, err
+		}
+		item.Warnings, item.Details = diagnostic.Warnings, diagnostic.Details
 		o.Items = append(o.Items, item)
 	}
 	return o, nil
@@ -308,9 +316,14 @@ func (s *Service) processItem(ctx context.Context, op database.EventRepairOperat
 		if err := s.lockSource(ctx, tx, item.InstanceID); err != nil {
 			return err
 		}
+		_, receiptErr := tx.GetEventRepairReceipt(ctx, database.GetEventRepairReceiptParams{InstanceID: item.InstanceID, Operation: op.Operation, TenantID: op.TenantID})
+		alreadyApplied := receiptErr == nil
+		if receiptErr != nil && !errors.Is(receiptErr, pgx.ErrNoRows) {
+			return receiptErr
+		}
 		changed := false
 		if err := s.revalidate(ctx, tx, plan); err != nil {
-			if !errors.Is(err, ErrStaleEvidence) || phase != "applying" {
+			if !errors.Is(err, ErrStaleEvidence) || (phase != "applying" && !alreadyApplied) {
 				return err
 			}
 			changed = true
@@ -323,15 +336,44 @@ func (s *Service) processItem(ctx context.Context, op database.EventRepairOperat
 		if plan.RequiresReparse {
 			state = "skipped"
 		}
-		if phase == "applying" {
+		if alreadyApplied {
+			state = "skipped"
+			reason = "this named repair script already has a permanent receipt for the instance"
+		}
+		if phase == "applying" && !alreadyApplied {
 			if changed || plan.RequiresReparse || plan.EvidenceHash != stored.EvidenceHash {
 				state = "stale"
 				reason = "Evidence changed since dry run; create a new dry run. " + plan.Reason
 			} else {
-				if err := s.successfulApply(ctx, tx, item.InstanceID, plan); err != nil {
+				warnings := plan.Warnings
+				if warnings == nil {
+					warnings = []string{}
+				}
+				details := plan.Details
+				if details == nil {
+					details = map[string]any{}
+				}
+				warningsJSON, err := json.Marshal(warnings)
+				if err != nil {
 					return err
 				}
-				state = "applied"
+				detailsJSON, err := json.Marshal(details)
+				if err != nil {
+					return err
+				}
+				_, err = tx.InsertEventRepairReceipt(ctx, database.InsertEventRepairReceiptParams{InstanceID: item.InstanceID, Operation: op.Operation, Version: op.Version, OperationID: op.ID, TenantID: op.TenantID, Warnings: warningsJSON, Details: detailsJSON})
+				if errors.Is(err, pgx.ErrNoRows) {
+					state = "skipped"
+					reason = "this named repair script already has a permanent receipt for the instance"
+				} else {
+					if err != nil {
+						return err
+					}
+					if err := s.successfulApply(ctx, tx, item.InstanceID, plan); err != nil {
+						return err
+					}
+					state = "applied"
+				}
 			}
 		}
 		changes := plan.Changes

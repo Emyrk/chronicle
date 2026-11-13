@@ -1743,6 +1743,9 @@ export const EndStates: EndState[] = ["reset", "slain", "timeout"];
 
 // From chroniclesdk/event_repairs.go
 export interface EventRepairItem {
+    readonly warnings?: readonly string[];
+    // empty interface{} type, falling back to unknown
+    readonly details?: Record<string, unknown>;
     readonly instance_id: string;
     readonly state: string;
     readonly reason: string;
@@ -7674,6 +7677,7 @@ export const WoWHitTypes: WoWHitType[] = [4, 512, 32768, 2048, 16384, 1024, 128,
 
 // From chroniclesdk/log.go
 export interface WoWInstance {
+    readonly repairs?: readonly EventRepairReceipt[];
     readonly id: string;
     readonly realm_id: string;
     /**
@@ -7884,3 +7888,14 @@ export interface WoWTrailerEntry {
 export type WoWUnitType = 2 | 3 | 1 | 0 | 4;
 
 export const WoWUnitTypes: WoWUnitType[] = [2, 3, 1, 0, 4];
+
+// From chroniclesdk/event_repairs.go
+export interface EventRepairReceipt {
+    readonly operation_id: string;
+    readonly operation: string;
+    readonly version: number;
+    readonly applied_at: string;
+    readonly warnings: readonly string[];
+    // empty interface{} type, falling back to unknown
+    readonly details: Record<string, unknown>;
+}

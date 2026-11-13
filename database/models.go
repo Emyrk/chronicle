@@ -1650,6 +1650,17 @@ type EventRepairOperation struct {
 	CancelledAt      pgtype.Timestamptz `db:"cancelled_at" json:"cancelled_at"`
 }
 
+type EventRepairReceipt struct {
+	InstanceID  uuid.UUID          `db:"instance_id" json:"instance_id"`
+	Operation   string             `db:"operation" json:"operation"`
+	Version     int32              `db:"version" json:"version"`
+	OperationID uuid.UUID          `db:"operation_id" json:"operation_id"`
+	TenantID    uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	AppliedAt   pgtype.Timestamptz `db:"applied_at" json:"applied_at"`
+	Warnings    []byte             `db:"warnings" json:"warnings"`
+	Details     []byte             `db:"details" json:"details"`
+}
+
 type ExternalCharacterLinkSync struct {
 	UserID       uuid.UUID          `db:"user_id" json:"user_id"`
 	Source       string             `db:"source" json:"source"`

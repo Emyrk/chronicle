@@ -5896,6 +5896,106 @@ func (q *sqlQuerier) RazorgoreRepairSpeedruns(ctx context.Context, instanceID uu
 	return items, nil
 }
 
+const getEventRepairReceipt = `-- name: GetEventRepairReceipt :one
+SELECT instance_id, operation, version, operation_id, tenant_id, applied_at, warnings, details FROM event_repair_receipts WHERE instance_id = $1 AND operation = $2 AND tenant_id = $3
+`
+
+type GetEventRepairReceiptParams struct {
+	InstanceID uuid.UUID `db:"instance_id" json:"instance_id"`
+	Operation  string    `db:"operation" json:"operation"`
+	TenantID   uuid.UUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) GetEventRepairReceipt(ctx context.Context, arg GetEventRepairReceiptParams) (EventRepairReceipt, error) {
+	row := q.db.QueryRow(ctx, getEventRepairReceipt, arg.InstanceID, arg.Operation, arg.TenantID)
+	var i EventRepairReceipt
+	err := row.Scan(
+		&i.InstanceID,
+		&i.Operation,
+		&i.Version,
+		&i.OperationID,
+		&i.TenantID,
+		&i.AppliedAt,
+		&i.Warnings,
+		&i.Details,
+	)
+	return i, err
+}
+
+const insertEventRepairReceipt = `-- name: InsertEventRepairReceipt :one
+INSERT INTO event_repair_receipts(instance_id, operation, version, operation_id, tenant_id, warnings, details)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+ON CONFLICT (instance_id, operation) DO NOTHING
+RETURNING instance_id, operation, version, operation_id, tenant_id, applied_at, warnings, details
+`
+
+type InsertEventRepairReceiptParams struct {
+	InstanceID  uuid.UUID `db:"instance_id" json:"instance_id"`
+	Operation   string    `db:"operation" json:"operation"`
+	Version     int32     `db:"version" json:"version"`
+	OperationID uuid.UUID `db:"operation_id" json:"operation_id"`
+	TenantID    uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	Warnings    []byte    `db:"warnings" json:"warnings"`
+	Details     []byte    `db:"details" json:"details"`
+}
+
+func (q *sqlQuerier) InsertEventRepairReceipt(ctx context.Context, arg InsertEventRepairReceiptParams) (EventRepairReceipt, error) {
+	row := q.db.QueryRow(ctx, insertEventRepairReceipt,
+		arg.InstanceID,
+		arg.Operation,
+		arg.Version,
+		arg.OperationID,
+		arg.TenantID,
+		arg.Warnings,
+		arg.Details,
+	)
+	var i EventRepairReceipt
+	err := row.Scan(
+		&i.InstanceID,
+		&i.Operation,
+		&i.Version,
+		&i.OperationID,
+		&i.TenantID,
+		&i.AppliedAt,
+		&i.Warnings,
+		&i.Details,
+	)
+	return i, err
+}
+
+const listInstanceEventRepairReceipts = `-- name: ListInstanceEventRepairReceipts :many
+SELECT instance_id, operation, version, operation_id, tenant_id, applied_at, warnings, details FROM event_repair_receipts WHERE instance_id = $1 ORDER BY operation
+`
+
+func (q *sqlQuerier) ListInstanceEventRepairReceipts(ctx context.Context, instanceID uuid.UUID) ([]EventRepairReceipt, error) {
+	rows, err := q.db.Query(ctx, listInstanceEventRepairReceipts, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []EventRepairReceipt
+	for rows.Next() {
+		var i EventRepairReceipt
+		if err := rows.Scan(
+			&i.InstanceID,
+			&i.Operation,
+			&i.Version,
+			&i.OperationID,
+			&i.TenantID,
+			&i.AppliedAt,
+			&i.Warnings,
+			&i.Details,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const cancelEventRepairOperation = `-- name: CancelEventRepairOperation :one
 UPDATE event_repair_operations
 SET state = 'cancelled', cancelled_by = $1::uuid,

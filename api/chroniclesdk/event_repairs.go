@@ -35,14 +35,27 @@ type EventRepairOperation struct {
 }
 
 type EventRepairItem struct {
-	InstanceID    uuid.UUID `json:"instance_id"`
-	State         string    `json:"state"`
-	Reason        string    `json:"reason"`
-	EvidenceHash  string    `json:"evidence_hash"`
-	Changes       []string  `json:"changes"`
-	RatingsQueued bool      `json:"ratings_queued"`
+	Warnings      []string       `json:"warnings,omitempty"`
+	Details       map[string]any `json:"details,omitempty"`
+	InstanceID    uuid.UUID      `json:"instance_id"`
+	State         string         `json:"state"`
+	Reason        string         `json:"reason"`
+	EvidenceHash  string         `json:"evidence_hash"`
+	Changes       []string       `json:"changes"`
+	RatingsQueued bool           `json:"ratings_queued"`
 }
 
 type EventRepairOperationsResponse struct {
 	Operations []EventRepairOperation `json:"operations"`
+}
+
+// EventRepairReceipt is public repair provenance, not privileged job contents.
+// AppliedAt records the source/receipt/ratings enqueue commit, not ratings completion.
+type EventRepairReceipt struct {
+	OperationID uuid.UUID      `json:"operation_id"`
+	Operation   string         `json:"operation"`
+	Version     int            `json:"version"`
+	AppliedAt   time.Time      `json:"applied_at"`
+	Warnings    []string       `json:"warnings"`
+	Details     map[string]any `json:"details"`
 }

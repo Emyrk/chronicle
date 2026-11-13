@@ -130,7 +130,7 @@ func eventRepairOperation(operation serviceeventrepair.Operation) chroniclesdk.E
 		Items: make([]chroniclesdk.EventRepairItem, 0, len(operation.Items)),
 	}
 	for _, item := range operation.Items {
-		result.Items = append(result.Items, chroniclesdk.EventRepairItem{InstanceID: item.InstanceID, State: item.State, Reason: item.Reason, EvidenceHash: item.EvidenceHash, Changes: append([]string{}, item.Changes...), RatingsQueued: item.RatingsQueued})
+		result.Items = append(result.Items, chroniclesdk.EventRepairItem{InstanceID: item.InstanceID, State: item.State, Reason: item.Reason, EvidenceHash: item.EvidenceHash, Changes: append([]string{}, item.Changes...), RatingsQueued: item.RatingsQueued, Warnings: item.Warnings, Details: item.Details})
 	}
 	return result
 }

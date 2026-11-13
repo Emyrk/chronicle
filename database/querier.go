@@ -403,6 +403,7 @@ type sqlcQuerier interface {
 	GetEncounterSummariesByInstanceIDs(ctx context.Context, instanceIds []uuid.UUID) ([]GetEncounterSummariesByInstanceIDsRow, error)
 	GetEventRepairItem(ctx context.Context, arg GetEventRepairItemParams) (EventRepairItem, error)
 	GetEventRepairOperation(ctx context.Context, arg GetEventRepairOperationParams) (EventRepairOperation, error)
+	GetEventRepairReceipt(ctx context.Context, arg GetEventRepairReceiptParams) (EventRepairReceipt, error)
 	// Returns log groups whose raw files are past their owner's retention window.
 	// Only considers users who have set a retention policy (non-NULL).
 	GetExpiredRawLogGroups(ctx context.Context, limit int32) ([]uuid.UUID, error)
@@ -689,6 +690,7 @@ type sqlcQuerier interface {
 	InsertEncounterDpsRanking(ctx context.Context, arg InsertEncounterDpsRankingParams) error
 	InsertEncounterPhase(ctx context.Context, arg InsertEncounterPhaseParams) error
 	InsertEventRepairItem(ctx context.Context, arg InsertEventRepairItemParams) (EventRepairItem, error)
+	InsertEventRepairReceipt(ctx context.Context, arg InsertEventRepairReceiptParams) (EventRepairReceipt, error)
 	InsertGuildPagePanel(ctx context.Context, arg InsertGuildPagePanelParams) (GuildPagePanel, error)
 	InsertGuildPageTab(ctx context.Context, arg InsertGuildPageTabParams) (GuildPageTab, error)
 	InsertInferenceClientToolRequest(ctx context.Context, arg InsertInferenceClientToolRequestParams) (InferenceClientToolRequest, error)
@@ -895,6 +897,7 @@ type sqlcQuerier interface {
 	ListInferenceInstancePlayers(ctx context.Context, instanceID uuid.UUID) ([]LogInstancePlayer, error)
 	ListInferenceThreadsByOwner(ctx context.Context, userID uuid.UUID) ([]InferenceThread, error)
 	ListInferenceUsageByMessageKeys(ctx context.Context, arg ListInferenceUsageByMessageKeysParams) ([]ListInferenceUsageByMessageKeysRow, error)
+	ListInstanceEventRepairReceipts(ctx context.Context, instanceID uuid.UUID) ([]EventRepairReceipt, error)
 	ListInstanceRatingGuildBossObservations(ctx context.Context, arg ListInstanceRatingGuildBossObservationsParams) ([]ListInstanceRatingGuildBossObservationsRow, error)
 	ListInstanceRatingGuildClearObservations(ctx context.Context, arg ListInstanceRatingGuildClearObservationsParams) ([]ListInstanceRatingGuildClearObservationsRow, error)
 	ListInstanceRatingGuildRenownFacts(ctx context.Context, arg ListInstanceRatingGuildRenownFactsParams) ([]ListInstanceRatingGuildRenownFactsRow, error)

@@ -1223,6 +1223,22 @@ CREATE TABLE event_repair_operations (
 
 ALTER TABLE ONLY event_repair_operations FORCE ROW LEVEL SECURITY;
 
+CREATE TABLE event_repair_receipts (
+    instance_id uuid NOT NULL,
+    operation text NOT NULL,
+    version integer NOT NULL,
+    operation_id uuid NOT NULL,
+    tenant_id uuid NOT NULL,
+    applied_at timestamp with time zone DEFAULT now() NOT NULL,
+    warnings jsonb DEFAULT '[]'::jsonb NOT NULL,
+    details jsonb DEFAULT '{}'::jsonb NOT NULL,
+    CONSTRAINT event_repair_receipts_details_check CHECK ((jsonb_typeof(details) = 'object'::text)),
+    CONSTRAINT event_repair_receipts_version_check CHECK ((version > 0)),
+    CONSTRAINT event_repair_receipts_warnings_check CHECK ((jsonb_typeof(warnings) = 'array'::text))
+);
+
+ALTER TABLE ONLY event_repair_receipts FORCE ROW LEVEL SECURITY;
+
 CREATE TABLE external_character_link_syncs (
     user_id uuid NOT NULL,
     source text NOT NULL,
@@ -4240,6 +4256,9 @@ ALTER TABLE ONLY event_repair_items
 ALTER TABLE ONLY event_repair_operations
     ADD CONSTRAINT event_repair_operations_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY event_repair_receipts
+    ADD CONSTRAINT event_repair_receipts_pkey PRIMARY KEY (instance_id, operation);
+
 ALTER TABLE ONLY external_character_link_syncs
     ADD CONSTRAINT external_character_link_syncs_pkey PRIMARY KEY (user_id, source);
 
@@ -4904,6 +4923,8 @@ CREATE INDEX event_repair_items_work ON event_repair_items USING btree (operatio
 
 CREATE INDEX event_repair_operations_history ON event_repair_operations USING btree (tenant_id, created_at DESC, id);
 
+CREATE INDEX event_repair_receipts_tenant ON event_repair_receipts USING btree (tenant_id, instance_id);
+
 CREATE UNIQUE INDEX files_unique_owner_hash ON log_file USING btree (owner, hash);
 
 CREATE INDEX game_player_gear_history_player_time ON game_player_gear_history USING btree (realm_id, player_id, equipped_at DESC);
@@ -5508,6 +5529,12 @@ ALTER TABLE ONLY event_repair_items
 ALTER TABLE ONLY event_repair_operations
     ADD CONSTRAINT event_repair_operations_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES tenants(id);
 
+ALTER TABLE ONLY event_repair_receipts
+    ADD CONSTRAINT event_repair_receipts_instance_id_fkey FOREIGN KEY (instance_id) REFERENCES log_instances(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY event_repair_receipts
+    ADD CONSTRAINT event_repair_receipts_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES tenants(id);
+
 ALTER TABLE ONLY external_character_link_syncs
     ADD CONSTRAINT external_character_link_syncs_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 
@@ -6096,6 +6123,8 @@ ALTER TABLE event_repair_items ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE event_repair_operations ENABLE ROW LEVEL SECURITY;
 
+ALTER TABLE event_repair_receipts ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE guild_renown_kill_facts ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE item_daily_prices ENABLE ROW LEVEL SECURITY;
@@ -6177,6 +6206,20 @@ ALTER TABLE leaderboard_variant_player_boss_benchmarks ENABLE ROW LEVEL SECURITY
 ALTER TABLE leaderboard_variant_player_boss_subjects ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE leaderboard_variant_player_observations ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY receipt_admin_bypass ON event_repair_receipts USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY receipt_read ON event_repair_receipts FOR SELECT USING ((EXISTS ( SELECT 1
+   FROM ((public.log_instances i
+     JOIN wow_server_realms r ON ((r.id = i.realm_id)))
+     JOIN wow_servers s ON ((s.id = r.server_id)))
+  WHERE ((i.id = event_repair_receipts.instance_id) AND (s.tenant_id = event_repair_receipts.tenant_id)))));
+
+CREATE POLICY receipt_tenant_write ON event_repair_receipts FOR INSERT WITH CHECK (((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)) AND (EXISTS ( SELECT 1
+   FROM ((public.log_instances i
+     JOIN wow_server_realms r ON ((r.id = i.realm_id)))
+     JOIN wow_servers s ON ((s.id = r.server_id)))
+  WHERE ((i.id = event_repair_receipts.instance_id) AND (s.tenant_id = event_repair_receipts.tenant_id))))));
 
 ALTER TABLE renown_kill_facts ENABLE ROW LEVEL SECURITY;
 

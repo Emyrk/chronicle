@@ -491,3 +491,7 @@ func TestFalseKillBossMayActivateAfterAdds(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, p.RequiresReparse)
 }
+
+func (s *razorgoreStore) ListInstanceEventRepairReceipts(context.Context, uuid.UUID) ([]database.EventRepairReceipt, error) {
+	return s.e.Receipts, nil
+}

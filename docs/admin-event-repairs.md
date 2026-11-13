@@ -116,3 +116,31 @@ rejects missing attribution evidence. The direct-player fallback proves narrower
 attribution bounds instead of guessing history. Missing persisted
 phases are not inferred from potentially truncated egg casts. The implementation
 does not fabricate approximate ranking totals or perform duration-only repairs.
+
+## Permanent per-script receipts
+
+Every committed successful instance apply, including no-op, stores one permanent
+receipt in the same transaction as the source writes, ratings obligation, and
+checkpoint. The uniqueness key is `(instance_id, operation)`; version is deliberately
+not part of it. A future version of the same named script cannot run again on that
+instance. A subsequent operation reports a skip, with no source write or ratings
+enqueue. Dry-run, stale, rejected, skipped, and failed attempts create no receipt.
+The script version remains **1**.
+
+Receipt metadata outlives admin operation history. Its `operation_id` is a durable
+UUID reference, not a cascading foreign key. Deleting the source instance may
+cascade its receipt. Prior receipts participate in sealed evidence hashing and are
+checked again inside the source transaction before inserting the uniqueness guard.
+
+Instance metadata exposes an optional `repairs` array using the same instance
+permission and tenant visibility as the rest of the response. Each public receipt
+contains only `operation_id`, `operation`, `version`, `applied_at`, `warnings`, and
+`details`. It does not expose operator identities, selections, private executable
+plans, or privileged job errors. `applied_at` records application, not downstream
+ratings completion.
+
+Admin items expose optional `warnings` and `details` for previews and applied
+reports. These fields are covered by the prepared-plan seal and copied into the
+permanent receipt on success. Details are unstructured JSON; current version-1
+producers use `phases` (encounter ID, offsets, reconstructed flag) and `omissions`
+(encounter ID, stream, unit GUID, amount, count, reason).
