@@ -38,6 +38,9 @@ func fixtureRazorgore(t *testing.T) razorgoreEvidence {
 		Rankings:   []database.EncounterDpsRanking{{ID: uuid.MustParse("00000000-0000-0000-0000-000000000004"), InstanceID: id, EncounterID: uuid.NullUUID{UUID: enc, Valid: true}, DamageDone: 1000}},
 		Speedruns:  []database.InstanceSpeedrun{{InstanceID: id, Proof: []byte(`{"proof":[{"requirement":{"name":"Razorgore the Untamed"},"satisfied":true}]}`)}},
 	}
+	e.Instance.RealmID = uuid.MustParse("00000000-0000-0000-0000-000000000020")
+	e.Realm = database.WowServerRealm{ID: e.Instance.RealmID, ServerID: uuid.MustParse("00000000-0000-0000-0000-000000000021")}
+	e.Server = database.WowServer{ID: e.Realm.ServerID, TenantID: uuid.NullUUID{UUID: uuid.MustParse("00000000-0000-0000-0000-000000000022"), Valid: true}}
 	e.Events = []database.LogInstanceEvent{{InstanceID: id, Type: database.LogInstanceEventTypeSlain, Events: encodeDeaths(t, enc, start, &chronicleproto.Slain{Meta: &chronicleproto.EventMeta{Index: 12, OffsetMilli: 60000}, Target: boss.String()})}}
 	return e
 }
@@ -333,4 +336,33 @@ func TestRazorgoreDisappearedInstanceIsTerminalSkip(t *testing.T) {
 	require.Empty(t, p.Changes)
 	require.Contains(t, p.Reason, "no longer exists")
 	require.ErrorContains(t, ApplyRazorgore(context.Background(), s, p), "requires reparse")
+}
+
+func (s *razorgoreStore) GetWoWServerRealm(context.Context, uuid.UUID) (database.WowServerRealm, error) {
+	return s.e.Realm, nil
+}
+func (s *razorgoreStore) GetWoWServer(context.Context, uuid.UUID) (database.WowServer, error) {
+	return s.e.Server, nil
+}
+
+func TestRazorgoreTenantIdentity(t *testing.T) {
+	t.Parallel()
+	s := &razorgoreStore{e: fixtureRazorgore(t)}
+	ctx := context.Background()
+	p, err := EvaluateRazorgore(ctx, s, s.e.Instance.ID)
+	require.NoError(t, err)
+	require.False(t, p.RequiresReparse, p.Reason)
+	require.Equal(t, s.e.Server.TenantID.UUID, p.TenantID)
+	s.e.Server.TenantID.UUID = uuid.MustParse("00000000-0000-0000-0000-000000000023")
+	moved, err := EvaluateRazorgore(ctx, s, s.e.Instance.ID)
+	require.NoError(t, err)
+	require.NotEqual(t, p.TenantID, moved.TenantID)
+	require.NotEqual(t, p.EvidenceHash, moved.EvidenceHash)
+	require.ErrorContains(t, ApplyRazorgore(ctx, s, p), "evidence changed")
+	require.Empty(t, s.writes)
+	s.e.Server.TenantID = uuid.NullUUID{}
+	missing, err := EvaluateRazorgore(ctx, s, s.e.Instance.ID)
+	require.NoError(t, err)
+	require.True(t, missing.RequiresReparse)
+	require.Equal(t, uuid.Nil, missing.TenantID)
 }

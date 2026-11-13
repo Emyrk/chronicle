@@ -18,6 +18,7 @@ import (
 // RazorgoreRepairPlan is diagnostic evidence, not an executable mutation payload.
 // Apply always reloads and reevaluates the source rows before using any changes.
 type RazorgoreRepairPlan struct {
+	TenantID        uuid.UUID         `json:"tenant_id"`
 	InstanceID      uuid.UUID         `json:"instance_id"`
 	RequiresReparse bool              `json:"requires_reparse"`
 	Reason          string            `json:"reason"`
@@ -30,6 +31,8 @@ type RazorgoreRepairPlan struct {
 }
 
 type razorgoreEvidence struct {
+	Realm      database.WowServerRealm
+	Server     database.WowServer
 	Instance   database.LogInstance
 	Encounters []database.LogInstanceEncounter
 	Hostiles   []database.LogInstanceEncounterHostile
@@ -55,6 +58,22 @@ func EvaluateRazorgore(ctx context.Context, db database.Store, instanceID uuid.U
 				Changes: []string{}, EvidenceHash: hex.EncodeToString(sum[:])}, nil
 		}
 		return nil, fmt.Errorf("load instance: %w", err)
+	}
+
+	if e.Realm, err = db.GetWoWServerRealm(ctx, e.Instance.RealmID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return evaluateRazorgoreEvidence(e)
+		}
+		return nil, fmt.Errorf("load source realm: %w", err)
+	}
+	if e.Server, err = db.GetWoWServer(ctx, e.Realm.ServerID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return evaluateRazorgoreEvidence(e)
+		}
+		return nil, fmt.Errorf("load source server: %w", err)
+	}
+	if !e.Server.TenantID.Valid || e.Server.TenantID.UUID == uuid.Nil {
+		return evaluateRazorgoreEvidence(e)
 	}
 	if e.Encounters, err = db.EncountersByInstanceID(ctx, instanceID); err != nil {
 		return nil, err
@@ -139,6 +158,11 @@ func evaluateRazorgoreEvidence(e razorgoreEvidence) (*RazorgoreRepairPlan, error
 		p.Changes = []string{}
 		return p, nil
 	}
+
+	if !e.Server.TenantID.Valid || e.Server.TenantID.UUID == uuid.Nil || e.Realm.ID != e.Instance.RealmID || e.Server.ID != e.Realm.ServerID {
+		return skip("source realm/server tenant identity is missing or inconsistent")
+	}
+	p.TenantID = e.Server.TenantID.UUID
 	if e.Instance.Name != "Blackwing Lair" || e.Instance.InvalidatedAt.Valid || slices.Contains(e.Instance.Capabilities, "server-side") {
 		return skip("instance is not an active legacy Blackwing Lair source (authoritative encounter results require reparse)")
 	}
