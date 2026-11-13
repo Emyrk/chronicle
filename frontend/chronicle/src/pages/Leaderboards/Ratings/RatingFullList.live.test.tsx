@@ -90,6 +90,8 @@ describe("Storybook full-list live data", () => {
     } } as ReturnType<typeof useQuery>)
     const html = renderToStaticMarkup(<RatingFullList scope={{ boss: "Ragnaros" }} title="Ragnaros" period="180d"
       view="overview" query="Actual" onQuery={vi.fn()} live={live} />)
+    expect(html).not.toContain(">#</th>")
+    expect(html).not.toContain(">17</span>")
     expect(html).toContain("Actual Mage")
     expect(html).toContain('data-entity-kind="character"')
     expect(html).toContain('&quot;guid&quot;:&quot;mage-guid&quot;')

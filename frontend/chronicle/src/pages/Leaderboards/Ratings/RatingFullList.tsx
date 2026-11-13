@@ -107,6 +107,7 @@ export function RatingFullList({
   const rows: FullRow[] = livePage ? livePage.rows.map((row) => ({ ...row, scores: row.scores ?? {} })) : fixtureRows
   const top = rows[0]?.entry.score ?? 1
   const needle = query.trim().toLowerCase()
+  const showRanks = needle === ""
   const filtered = live ? rows : rows.filter(
     (r) => !needle || [r.entry.name, r.entry.guild, r.entry.spec, r.entry.subSpec].some((value) => value?.toLowerCase().includes(needle)),
   )
@@ -173,8 +174,8 @@ export function RatingFullList({
         <table className="w-full table-auto text-sm sm:min-w-[42rem]">
           <thead className="border-b bg-black/10 text-[11px] tracking-wider text-muted-foreground uppercase">
             <tr>
-              <th className="w-14 px-4 py-2.5 text-left font-medium sm:px-5">#</th>
-              <th className="w-[22%] px-2 py-2.5 pr-2 text-left font-medium whitespace-nowrap sm:pr-6">Character</th>
+              {showRanks && <th className="w-14 px-4 py-2.5 text-left font-medium sm:px-5">#</th>}
+              <th className={cn("w-[22%] px-2 py-2.5 pr-2 text-left font-medium whitespace-nowrap sm:pr-6", !showRanks && "pl-4 sm:pl-5")}>Character</th>
               {/* The ranking's own number sits next to the name; supporting columns follow to the right. */}
               {view === "overview" ? (
                 <>
@@ -254,10 +255,12 @@ export function RatingFullList({
               const shownRank = displayRank(row, index)
               return (
                 <tr key={entry.id} className="border-b border-white/5 transition-colors last:border-b-0 hover:bg-white/[.025]">
-                <td className="px-4 py-2 sm:px-5">
-                  <RankMark rank={shownRank} size="sm" />
-                </td>
-                <td className="px-2 py-2 pr-2 whitespace-nowrap sm:pr-8">
+                {showRanks && (
+                  <td className="px-4 py-2 sm:px-5">
+                    <RankMark rank={shownRank} size="sm" />
+                  </td>
+                )}
+                <td className={cn("px-2 py-2 pr-2 whitespace-nowrap sm:pr-8", !showRanks && "pl-4 sm:pl-5")}>
                   <div className="flex min-w-0 items-center gap-2.5">
                     <SpecIcon cls={entry.cls} spec={entry.spec} className="size-6 shrink-0 rounded-sm" />
                     <div className="min-w-0">
@@ -307,7 +310,7 @@ export function RatingFullList({
                       <td
                         key={m}
                         className={cn("hidden px-3 py-2 font-mono tabular-nums sm:table-cell", sortBy !== m && "text-muted-foreground")}
-                        style={sortBy === m && shownRank === 1 ? { color: METRIC_THEMES[m].accent } : undefined}
+                        style={showRanks && sortBy === m && shownRank === 1 ? { color: METRIC_THEMES[m].accent } : undefined}
                       >
                         {score ? METRIC_THEMES[m].format(score.score) : <span title="No performance summary in the selected role and cohort filters">—</span>}
                         {score?.cohortLabel && <span className="mt-0.5 block text-[10px] text-muted-foreground" title={`Best whole-selection ${METRIC_THEMES[m].label}: ${score.cohortLabel}`}>{score.cohortLabel}</span>}
@@ -321,7 +324,7 @@ export function RatingFullList({
                     {showPeakComponents && <td className="px-2 py-2 sm:hidden"><PeakComponents entry={entry} scores={peakComponents} labels={peakLabels} /></td>}
                     <td className={cn("px-3 py-2", phoneFolds && "pr-4 sm:pr-3")}>
                       <div className={cn("flex flex-col items-start gap-1", phoneFolds && "items-end sm:items-start")}>
-                        <span className="font-mono text-base tabular-nums" style={shownRank === 1 ? { color: theme.accent } : undefined}>
+                        <span className="font-mono text-base tabular-nums" style={showRanks && shownRank === 1 ? { color: theme.accent } : undefined}>
                           {theme.format(entry.score)}
                           {/* A phone moves the raw number under the score, beside the kill time. */}
                           {view === "peak" && entry.raw ? <RawTag raw={entry.raw} className="ml-2 hidden sm:inline" /> : null}
