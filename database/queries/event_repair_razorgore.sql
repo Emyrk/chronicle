@@ -28,3 +28,17 @@ DELETE FROM encounter_dps_rankings WHERE instance_id = @instance_id AND encounte
 
 -- name: RazorgoreRepairDeleteSpeedrun :exec
 DELETE FROM instance_speedruns WHERE instance_id = @instance_id;
+
+-- name: RazorgoreRepairRankingWindow :exec
+UPDATE log_instance_encounters
+SET ranking_start_offset_ms = @start_ms, ranking_end_offset_ms = @end_ms
+WHERE id = @encounter_id AND instance_id = @instance_id;
+
+-- name: RazorgoreRepairMetrics :exec
+UPDATE encounter_dps_rankings
+SET damage_done = @damage_done, unranked_damage_done = @unranked_damage_done,
+ healing_done = @healing_done, absorbed_done = @absorbed_done,
+ duration_secs = @duration_secs, dps = @dps, hps = @hps,
+ player_role = @player_role, player_deaths = @player_deaths,
+ alive_percentage = @alive_percentage
+WHERE id = @id AND instance_id = @instance_id AND encounter_id = @encounter_id;

@@ -1239,7 +1239,9 @@ type sqlcQuerier interface {
 	RazorgoreRepairEvents(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceEvent, error)
 	RazorgoreRepairHostile(ctx context.Context, arg RazorgoreRepairHostileParams) error
 	RazorgoreRepairInstance(ctx context.Context, instanceID uuid.UUID) (LogInstance, error)
+	RazorgoreRepairMetrics(ctx context.Context, arg RazorgoreRepairMetricsParams) error
 	RazorgoreRepairPhase(ctx context.Context, arg RazorgoreRepairPhaseParams) error
+	RazorgoreRepairRankingWindow(ctx context.Context, arg RazorgoreRepairRankingWindowParams) error
 	RazorgoreRepairRankings(ctx context.Context, instanceID uuid.UUID) ([]EncounterDpsRanking, error)
 	RazorgoreRepairSpeedruns(ctx context.Context, instanceID uuid.UUID) ([]InstanceSpeedrun, error)
 	ReactivateDiscordMembershipGrantCheck(ctx context.Context, arg ReactivateDiscordMembershipGrantCheckParams) (ReactivateDiscordMembershipGrantCheckRow, error)

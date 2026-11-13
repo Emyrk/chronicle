@@ -5652,6 +5652,51 @@ func (q *sqlQuerier) RazorgoreRepairInstance(ctx context.Context, instanceID uui
 	return i, err
 }
 
+const razorgoreRepairMetrics = `-- name: RazorgoreRepairMetrics :exec
+UPDATE encounter_dps_rankings
+SET damage_done = $1, unranked_damage_done = $2,
+ healing_done = $3, absorbed_done = $4,
+ duration_secs = $5, dps = $6, hps = $7,
+ player_role = $8, player_deaths = $9,
+ alive_percentage = $10
+WHERE id = $11 AND instance_id = $12 AND encounter_id = $13
+`
+
+type RazorgoreRepairMetricsParams struct {
+	DamageDone         int64         `db:"damage_done" json:"damage_done"`
+	UnrankedDamageDone int64         `db:"unranked_damage_done" json:"unranked_damage_done"`
+	HealingDone        int64         `db:"healing_done" json:"healing_done"`
+	AbsorbedDone       int64         `db:"absorbed_done" json:"absorbed_done"`
+	DurationSecs       float64       `db:"duration_secs" json:"duration_secs"`
+	Dps                float64       `db:"dps" json:"dps"`
+	Hps                float64       `db:"hps" json:"hps"`
+	PlayerRole         string        `db:"player_role" json:"player_role"`
+	PlayerDeaths       pgtype.Int4   `db:"player_deaths" json:"player_deaths"`
+	AlivePercentage    pgtype.Float8 `db:"alive_percentage" json:"alive_percentage"`
+	ID                 uuid.UUID     `db:"id" json:"id"`
+	InstanceID         uuid.UUID     `db:"instance_id" json:"instance_id"`
+	EncounterID        uuid.NullUUID `db:"encounter_id" json:"encounter_id"`
+}
+
+func (q *sqlQuerier) RazorgoreRepairMetrics(ctx context.Context, arg RazorgoreRepairMetricsParams) error {
+	_, err := q.db.Exec(ctx, razorgoreRepairMetrics,
+		arg.DamageDone,
+		arg.UnrankedDamageDone,
+		arg.HealingDone,
+		arg.AbsorbedDone,
+		arg.DurationSecs,
+		arg.Dps,
+		arg.Hps,
+		arg.PlayerRole,
+		arg.PlayerDeaths,
+		arg.AlivePercentage,
+		arg.ID,
+		arg.InstanceID,
+		arg.EncounterID,
+	)
+	return err
+}
+
 const razorgoreRepairPhase = `-- name: RazorgoreRepairPhase :exec
 UPDATE log_instance_encounter_phases SET kill_type = $1
 WHERE encounter_id = $2 AND id = $3
@@ -5665,6 +5710,29 @@ type RazorgoreRepairPhaseParams struct {
 
 func (q *sqlQuerier) RazorgoreRepairPhase(ctx context.Context, arg RazorgoreRepairPhaseParams) error {
 	_, err := q.db.Exec(ctx, razorgoreRepairPhase, arg.KillType, arg.EncounterID, arg.ID)
+	return err
+}
+
+const razorgoreRepairRankingWindow = `-- name: RazorgoreRepairRankingWindow :exec
+UPDATE log_instance_encounters
+SET ranking_start_offset_ms = $1, ranking_end_offset_ms = $2
+WHERE id = $3 AND instance_id = $4
+`
+
+type RazorgoreRepairRankingWindowParams struct {
+	StartMs     pgtype.Int8 `db:"start_ms" json:"start_ms"`
+	EndMs       pgtype.Int8 `db:"end_ms" json:"end_ms"`
+	EncounterID uuid.UUID   `db:"encounter_id" json:"encounter_id"`
+	InstanceID  uuid.UUID   `db:"instance_id" json:"instance_id"`
+}
+
+func (q *sqlQuerier) RazorgoreRepairRankingWindow(ctx context.Context, arg RazorgoreRepairRankingWindowParams) error {
+	_, err := q.db.Exec(ctx, razorgoreRepairRankingWindow,
+		arg.StartMs,
+		arg.EndMs,
+		arg.EncounterID,
+		arg.InstanceID,
+	)
 	return err
 }
 

@@ -28,6 +28,7 @@ type RazorgoreRepairPlan struct {
 	Outcome         database.KillType `json:"outcome,omitempty"`
 	hostile         *database.LogInstanceEncounterHostile
 	phase           *database.LogInstanceEncounterPhase
+	numeric         *razorgoreNumericPlan
 }
 
 type razorgoreEvidence struct {
@@ -52,7 +53,7 @@ func EvaluateRazorgore(ctx context.Context, db database.Store, instanceID uuid.U
 		if errors.Is(err, pgx.ErrNoRows) {
 			// Retention/deletion can race a queued repair. This is terminal
 			// missing evidence, not a transient database error to retry forever.
-			sum := sha256.Sum256([]byte("razorgore-false-kill-v1:missing:" + instanceID.String()))
+			sum := sha256.Sum256([]byte("razorgore-repair-v2:missing:" + instanceID.String()))
 			return &RazorgoreRepairPlan{InstanceID: instanceID, RequiresReparse: true,
 				Reason:  "instance no longer exists or is not visible to the repair tenant",
 				Changes: []string{}, EvidenceHash: hex.EncodeToString(sum[:])}, nil
@@ -115,6 +116,9 @@ func ApplyRazorgore(ctx context.Context, tx database.Store, plan *RazorgoreRepai
 	if len(fresh.Changes) == 0 {
 		return nil
 	}
+	if fresh.numeric != nil {
+		return applyRazorgoreNumeric(ctx, tx, fresh.numeric)
+	}
 	if err := tx.RazorgoreRepairEncounter(ctx, database.RazorgoreRepairEncounterParams{InstanceID: fresh.InstanceID, EncounterID: fresh.EncounterID, KillType: fresh.Outcome}); err != nil {
 		return err
 	}
@@ -150,7 +154,7 @@ func evaluateRazorgoreEvidence(e razorgoreEvidence) (*RazorgoreRepairPlan, error
 	if err != nil {
 		return nil, err
 	}
-	sum := sha256.Sum256(append([]byte("razorgore-false-kill-v1\x00"), raw...))
+	sum := sha256.Sum256(append([]byte("razorgore-repair-v2\x00"), raw...))
 	p := &RazorgoreRepairPlan{InstanceID: e.Instance.ID, EvidenceHash: hex.EncodeToString(sum[:]), Changes: []string{}}
 	skip := func(reason string) (*RazorgoreRepairPlan, error) {
 		p.RequiresReparse = true
@@ -165,6 +169,14 @@ func evaluateRazorgoreEvidence(e razorgoreEvidence) (*RazorgoreRepairPlan, error
 	p.TenantID = e.Server.TenantID.UUID
 	if e.Instance.Name != "Blackwing Lair" || e.Instance.InvalidatedAt.Valid || slices.Contains(e.Instance.Capabilities, "server-side") {
 		return skip("instance is not an active legacy Blackwing Lair source (authoritative encounter results require reparse)")
+	}
+	for _, phase := range e.Phases {
+		if phase.Key == "razorgore_p2" {
+			if err := evaluateRazorgoreNumeric(e, p); err != nil {
+				return skip(err.Error())
+			}
+			return p, nil
+		}
 	}
 	var enc *database.LogInstanceEncounter
 	for i := range e.Encounters {
