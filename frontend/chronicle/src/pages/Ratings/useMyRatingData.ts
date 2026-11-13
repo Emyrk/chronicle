@@ -56,11 +56,6 @@ function specLabel(g: LeaderboardV2PlayerHistoryGroup): string {
   return [g.player_sub_spec, g.player_spec, formatClassLabel(g.player_class)].filter(Boolean).join(" ")
 }
 
-/** Within one raid, the boss name, spec, and metric identify the option. */
-export function groupLabel(g: LeaderboardV2PlayerHistoryGroup): string {
-  return `${g.encounter_name} · ${specLabel(g)} ${g.metric.toUpperCase()} · ${killWord(g.kills.length)}`
-}
-
 const RAID_SCOPE = "raid:"
 
 /** Every boss of a raid for one spec and metric, the unit the Armory rates. */
@@ -77,7 +72,7 @@ export function raidScopeKey(cohort: string, metric: string): string {
 }
 
 export function raidScopeLabel(scope: RaidScope): string {
-  return `All bosses · ${scope.label} ${scope.metric.toUpperCase()} · ${killWord(scope.kills)}`
+  return `${scope.label} · ${scope.metric.toUpperCase()} · ${killWord(scope.kills)}`
 }
 
 export interface RaidBoss extends BossRating {
@@ -180,7 +175,9 @@ export function useMyRatingData(enabled: boolean, link?: RatingsLink) {
   const [chosen, setCharacter] = useState<ArmorySearchResult>()
   const character = chosen ?? linked.data
   const [raidChoice, setRaidChoice] = useState(link?.raid ?? "")
-  const [groupChoice, setGroupChoice] = useState(link?.raid && link.spec !== undefined && link.metric ? raidScopeKey(link.spec, link.metric) : "")
+  const [scopeChoice, setScopeChoice] = useState(link?.spec !== undefined && link.metric ? raidScopeKey(link.spec, link.metric) : "")
+  /** Encounter name; empty for the whole raid. */
+  const [bossChoice, setBossChoice] = useState("")
 
   const history = useQuery({
     queryKey: ["leaderboards-v2-player-history", character?.realm_id, character?.id],
@@ -211,8 +208,11 @@ export function useMyRatingData(enabled: boolean, link?: RatingsLink) {
     scopeMap.set(key, scope)
   }
   const scopes = [...scopeMap.values()].sort((a, b) => b.kills - a.kills)
-  const scope = scopes.find((s) => s.key === groupChoice)
-  const group = scope ? undefined : (groups.find((g) => groupKey(g) === groupChoice) ?? groups[0])
+  const scope = scopes.find((s) => s.key === scopeChoice) ?? scopes[0]
+  // Each kill group belongs to one spec and metric, so the scope and boss name identify it.
+  const group = scope && bossChoice
+    ? groups.find((g) => raidScopeKey(cohortKey(g), g.metric) === scope.key && g.encounter_name === bossChoice)
+    : undefined
   const raidView =
     raid && scope ? buildRaidView(raid, groups, scope, [...(progressionBosses?.get(groups[0].instance_name) ?? [])]) : undefined
 
@@ -233,19 +233,24 @@ export function useMyRatingData(enabled: boolean, link?: RatingsLink) {
       setCharacter(next)
       setSearchQuery("")
       setRaidChoice("")
-      setGroupChoice("")
+      setScopeChoice("")
+      setBossChoice("")
     },
     raids,
     raid,
     selectRaid: (key: string) => {
       setRaidChoice(key)
-      setGroupChoice("")
+      setScopeChoice("")
+      setBossChoice("")
     },
-    groups,
     group,
     scopes,
+    scope,
+    selectScope: setScopeChoice,
+    /** The whole raid when no boss is chosen. */
     raidView,
-    selectGroup: setGroupChoice,
+    /** Pass an empty name for all bosses. */
+    selectBoss: setBossChoice,
     truncated: history.data?.truncated ?? false,
     dataset: state.status === "ready" && character && group ? datasetFromGroup(character, group) : undefined,
   }

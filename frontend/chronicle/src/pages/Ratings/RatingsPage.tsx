@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react"
 import { Link, useSearchParams } from "react-router-dom"
-import { ArrowRight, BarChart3, Loader2, Percent, Search, TrendingDown } from "lucide-react"
+import { ArrowLeft, ArrowRight, BarChart3, LayoutGrid, Loader2, Percent, Search, TrendingDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { parseColor } from "@/pages/Instance/parseColors"
 import { formatClassLabel } from "@/pages/ArmoryPage/characterDisplay"
@@ -8,8 +8,6 @@ import { ToolsBackLink } from "@/pages/Tools/ToolsBackLink"
 import { METRIC_THEMES } from "@/pages/Leaderboards/Ratings/ratingThemes"
 import { MASTERY_WEIGHTS, averageAcrossBosses, normalize, ratePlayerBoss, type Band } from "./ratingMath"
 import {
-  groupKey,
-  groupLabel,
   raidLabel,
   raidScopeLabel,
   useMyRatingData,
@@ -133,7 +131,7 @@ export function RatingsPage() {
               {source === "example"
                 ? "One example player's Nefarian kills as a Fury Warrior, viewed through each lens."
                 : my.character
-                  ? my.raidView
+                  ? my.raidView && !my.group
                     ? `${my.character.name}'s ${my.raidView.raidLabel} bosses, viewed through each lens.`
                     : `${my.character.name}'s kills on one boss, viewed through each lens.`
                   : "Search the Armory to inspect any character's kills."}
@@ -186,10 +184,20 @@ export function RatingsPage() {
           ))}
         </div>
 
-        {my.raidView && source === "character" ? (
-          <RaidPanel lens={lens} view={my.raidView} onSelectBoss={my.selectGroup} />
+        {my.raidView && !my.group && source === "character" ? (
+          <RaidPanel lens={lens} view={my.raidView} onSelectBoss={my.selectBoss} />
         ) : dataset ? (
           <div className="rounded-xl border bg-card p-4 sm:p-6">
+            {!dataset.example && my.raidView && (
+              <button
+                type="button"
+                onClick={() => my.selectBoss("")}
+                className="mb-4 inline-flex items-center gap-1.5 rounded-md text-sm font-medium text-sky-300 hover:text-sky-200 hover:underline"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                All {my.raidView.raidLabel} bosses
+              </button>
+            )}
             <div className="grid gap-6 lg:grid-cols-[minmax(0,17rem)_minmax(0,1fr)]">
               <LensExplanation lens={lens} rating={rating} dataset={dataset} benchmark={benchmark} killCount={killCount} />
               <div className="min-w-0">
@@ -300,46 +308,61 @@ function MyDataPicker({ my }: { my: MyData }) {
         )}
       </div>
       {my.character && (
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="rounded-full border bg-card px-3 py-1.5 font-medium text-foreground">
-            {my.character.name} · {my.character.realm_name}
-          </span>
-          {my.raids.length > 0 && (
-            <label className="flex min-w-0 items-center gap-2 text-muted-foreground">
-              Raid
-              <select
-                className={selectClass}
-                value={my.raid?.key ?? ""}
-                onChange={(e) => my.selectRaid(e.target.value)}
-              >
-                {my.raids.map((r) => (
-                  <option key={r.key} value={r.key}>
-                    {raidLabel(r)}
-                  </option>
+        <div className="space-y-3 rounded-lg border bg-background/40 p-3">
+          <div className="flex flex-wrap items-end gap-3">
+            <PickerField label="Character">
+              <span className="flex h-9 items-center rounded-md border bg-card px-3 font-medium text-foreground">
+                {my.character.name} · {my.character.realm_name}
+              </span>
+            </PickerField>
+            {my.raids.length > 0 && (
+              <PickerField label="Raid">
+                <select className={selectClass} value={my.raid?.key ?? ""} onChange={(e) => my.selectRaid(e.target.value)}>
+                  {my.raids.map((r) => (
+                    <option key={r.key} value={r.key}>
+                      {raidLabel(r)}
+                    </option>
+                  ))}
+                </select>
+              </PickerField>
+            )}
+            {my.scope && (
+              <PickerField label="Spec">
+                {my.scopes.length > 1 ? (
+                  <select className={selectClass} value={my.scope.key} onChange={(e) => my.selectScope(e.target.value)}>
+                    {my.scopes.map((s) => (
+                      <option key={s.key} value={s.key}>
+                        {raidScopeLabel(s)}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="flex h-9 items-center text-foreground">{raidScopeLabel(my.scope)}</span>
+                )}
+              </PickerField>
+            )}
+          </div>
+          {my.raidView && (
+            <PickerField label="Boss">
+              <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Boss">
+                <BossChip active={!my.group} onClick={() => my.selectBoss("")}>
+                  <LayoutGrid className="h-3.5 w-3.5" />
+                  All bosses
+                </BossChip>
+                {my.raidView.bosses.map((b) => (
+                  <BossChip
+                    key={b.encounterName}
+                    active={my.group?.encounter_name === b.encounterName}
+                    disabled={!b.groupKey}
+                    title={b.groupKey ? undefined : `No ${my.raidView!.unit} kills as ${my.raidView!.scope.label}`}
+                    onClick={() => my.selectBoss(b.encounterName)}
+                  >
+                    {b.encounterName}
+                    <span className="tabular-nums opacity-60">{b.kills}</span>
+                  </BossChip>
                 ))}
-              </select>
-            </label>
-          )}
-          {my.groups.length > 0 && (
-            <label className="flex min-w-0 flex-1 items-center gap-2 text-muted-foreground">
-              Boss
-              <select
-                className={cn(selectClass, "flex-1")}
-                value={my.raidView?.scope.key ?? (my.group ? groupKey(my.group) : "")}
-                onChange={(e) => my.selectGroup(e.target.value)}
-              >
-                {my.scopes.map((s) => (
-                  <option key={s.key} value={s.key}>
-                    {raidScopeLabel(s)}
-                  </option>
-                ))}
-                {my.groups.map((g) => (
-                  <option key={groupKey(g)} value={groupKey(g)}>
-                    {groupLabel(g)}
-                  </option>
-                ))}
-              </select>
-            </label>
+              </div>
+            </PickerField>
           )}
         </div>
       )}
@@ -347,6 +370,48 @@ function MyDataPicker({ my }: { my: MyData }) {
         <p className="text-xs text-amber-300">Showing the most recent history only; this character has a lot of kills.</p>
       )}
     </div>
+  )
+}
+
+function PickerField({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <div className="mb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{label}</div>
+      {children}
+    </div>
+  )
+}
+
+function BossChip({
+  active,
+  disabled,
+  title,
+  onClick,
+  children,
+}: {
+  active: boolean
+  disabled?: boolean
+  title?: string
+  onClick: () => void
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={active}
+      disabled={disabled}
+      title={title}
+      onClick={onClick}
+      className={cn(
+        "inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+        active
+          ? "border-sky-400 bg-sky-500/15 font-medium text-foreground"
+          : "border-border bg-card text-muted-foreground hover:border-sky-400/50 hover:text-foreground",
+      )}
+    >
+      {children}
+    </button>
   )
 }
 
@@ -720,7 +785,7 @@ function RaidPanel({ lens, view, onSelectBoss }: { lens: Lens; view: RaidView; o
                       {b.groupKey ? (
                         <button
                           type="button"
-                          onClick={() => onSelectBoss(b.groupKey!)}
+                          onClick={() => onSelectBoss(b.encounterName)}
                           className="text-left text-sky-300 hover:text-sky-200 hover:underline"
                           title="See this boss's kills"
                         >
@@ -731,7 +796,7 @@ function RaidPanel({ lens, view, onSelectBoss }: { lens: Lens; view: RaidView; o
                       )}
                     </td>
                     <td className="px-1.5 py-2">
-                      <BossKillBars boss={b} lens={lens} onSelect={b.groupKey ? () => onSelectBoss(b.groupKey!) : undefined} />
+                      <BossKillBars boss={b} lens={lens} onSelect={b.groupKey ? () => onSelectBoss(b.encounterName) : undefined} />
                     </td>
                     <td className="px-1.5 py-2 text-right text-muted-foreground">{has ? fmtInt(b.benchmark) : dash}</td>
                     <td className={cn("px-1.5 py-2 text-right", hi("best"))}>{has ? fmtInt(b.rawPeak) : dash}</td>
