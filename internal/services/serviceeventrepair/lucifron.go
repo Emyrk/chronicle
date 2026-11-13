@@ -56,12 +56,13 @@ func EvaluateLucifron(ctx context.Context, db database.Store, instanceID uuid.UU
 	if err != nil {
 		return nil, err
 	}
+	p.operation = OperationLucifron
 	p.seal, err = razorgorePlanSeal(p)
 	return p, err
 }
 
 func RevalidateLucifron(ctx context.Context, db database.Store, p *RepairPlan) error {
-	if p == nil || p.lucifron == nil {
+	if p == nil || p.operation != OperationLucifron || p.lucifron == nil {
 		return errors.New("missing Lucifron prepared payload")
 	}
 	return RevalidateRazorgore(ctx, db, p)
@@ -72,7 +73,7 @@ func ApplyLucifron(ctx context.Context, db database.Store, p *RepairPlan) error 
 	if err := validateRazorgorePlan(p); err != nil {
 		return err
 	}
-	if p.RequiresReparse || p.lucifron == nil {
+	if p.RequiresReparse || p.operation != OperationLucifron || p.lucifron == nil {
 		return errors.New("lucifron plan is not executable")
 	}
 	for _, row := range p.lucifron.Metrics {
