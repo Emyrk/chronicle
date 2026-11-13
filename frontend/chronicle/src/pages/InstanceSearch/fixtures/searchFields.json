@@ -511,7 +511,29 @@
         "between"
       ],
       "unit": "ms",
-      "doc": "Boss kill duration (clean or partial kills) on any / each of the bosses.",
+      "doc": "Full boss kill duration (clean or partial kills) on any / each of the bosses.",
+      "bosses": true,
+      "parse_scope": false,
+      "metric": false,
+      "on": false,
+      "anonymous": false,
+      "cost": 6
+    },
+    {
+      "name": "instance.ranked_kill_time_ms",
+      "scope": "instance",
+      "type": "int",
+      "ops": [
+        "=",
+        "!=",
+        "\u003c",
+        "\u003c=",
+        "\u003e",
+        "\u003e=",
+        "between"
+      ],
+      "unit": "ms",
+      "doc": "Ranked boss kill duration (clean or partial kills) on any / each boss. Uses Razorgore's valid phase-two window; otherwise full duration.",
       "bosses": true,
       "parse_scope": false,
       "metric": false,

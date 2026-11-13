@@ -1,0 +1,13 @@
+{
+  "title": "Razorgore ranked kill under a minute",
+  "category": "Speed",
+  "description": "Razorgore's ranked kill time is at most 60 seconds. Uses the recorded phase-two window, or full duration for legacy logs.",
+  "query": {
+    "where": {
+      "field": "instance.ranked_kill_time_ms",
+      "op": "<=",
+      "value": 60000,
+      "bosses": ["Razorgore the Untamed"]
+    }
+  }
+}

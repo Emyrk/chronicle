@@ -84,7 +84,12 @@ export function SearchGuidePage() {
           </li>
           <li>
             <strong>Ranges</strong> (<em>between</em>) include both ends. Date ranges cover whole days. Durations are
-            entered in minutes.
+            entered in seconds (60 for one minute).
+          </li>
+          <li>
+            <strong>Ranked boss kill time</strong> uses Razorgore&apos;s recorded phase-two window when available.
+            Other bosses and logs without a valid window use the full kill duration. Choose <em>Full kill duration</em>
+            {' '}to always measure the entire fight. Both options include clean and partial kills, not wipes.
           </li>
           <li>
             <strong>Missing values never match</strong>, even under <em>not</em>: &quot;not a clear time over an

@@ -23,7 +23,7 @@ describe("parseCEL", () => {
       killParseMin: 80,
       killParseBosses: ["Ragnaros", "Majordomo Executus"],
       killParseMatch: "each",
-      idleTimeMaxMinutes: 5,
+      idleTimeMaxSeconds: 5,
       classCounts: [{ class: "DRUID", spec: "Feral", subSpec: "Bear", min: 2 }],
       players: ["Ëlune"],
       guildCounts: [{ guild: "Beta", min: 10 }],

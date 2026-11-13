@@ -418,7 +418,7 @@ function asGroup(n: Node | undefined): Node {
 /* Predicates                                                          */
 /* ------------------------------------------------------------------ */
 
-const MS_PER_MINUTE = 60_000;
+const MS_PER_SECOND = 1_000;
 
 function PredicateEditor({
   node,
@@ -585,7 +585,7 @@ function ValueEditor({
   if (op === "between" && (field.type === "int" || field.type === "float" || field.type === "time")) {
     // A range: from / to. Dates cover whole days (to = end of that day).
     const [lo, hi] = Array.isArray(value) ? value : [null, null];
-    const unit = field.unit === "ms" ? "min" : null;
+    const unit = field.unit === "ms" ? "seconds" : null;
     return (
       <span className="inline-flex items-center gap-1 flex-wrap">
         <ScalarInput field={field} value={lo} disabled={disabled} onChange={(v) => onChange([v, hi ?? null])} />
@@ -599,7 +599,7 @@ function ValueEditor({
     return (
       <span className="inline-flex items-center gap-1">
         <ScalarInput field={field} value={value} disabled={disabled} onChange={onChange} />
-        {field.unit === "ms" && <span className="text-2xs text-muted-foreground">min</span>}
+        {field.unit === "ms" && <span className="text-2xs text-muted-foreground">seconds</span>}
       </span>
     );
   }
@@ -628,7 +628,7 @@ function ValueEditor({
 }
 
 /**
- * One number or date. Durations (ms) are edited in minutes. Dates are whole
+ * One number or date. Durations (ms) are edited in seconds. Dates are whole
  * days: the start of the day, or with endOfDay the last second of it (the
  * "to" end of an inclusive range).
  */
@@ -661,11 +661,11 @@ function ScalarInput({
   const n = typeof value === "number" ? value : null;
   return (
     <NumberInput
-      value={n == null ? null : isMs ? n / MS_PER_MINUTE : n}
-      step={isMs ? 0.5 : field.type === "int" ? 1 : 0.1}
+      value={n == null ? null : isMs ? n / MS_PER_SECOND : n}
+      step={isMs || field.type === "int" ? 1 : 0.1}
       disabled={disabled}
       placeholder={field.unit === "0-100" ? "0-100" : undefined}
-      onChange={(v) => onChange(v == null ? null : isMs ? Math.round(v * MS_PER_MINUTE) : field.type === "int" ? Math.round(v) : v)}
+      onChange={(v) => onChange(v == null ? null : isMs ? Math.round(v * MS_PER_SECOND) : field.type === "int" ? Math.round(v) : v)}
     />
   );
 }

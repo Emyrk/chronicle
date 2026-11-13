@@ -115,13 +115,13 @@ export function hasValue(f: Form, k: Kind): boolean {
     case "playerParse":
       return f.playerParses.length > 0;
     case "clearTime":
-      return f.clearTimeMaxMinutes != null;
+      return f.clearTimeMaxSeconds != null;
     case "bossTime":
-      return f.bossTimeMaxMinutes != null;
+      return f.bossTimeMaxSeconds != null;
     case "trashTime":
-      return f.trashTimeMaxMinutes != null;
+      return f.trashTimeMaxSeconds != null;
     case "idleTime":
-      return f.idleTimeMaxMinutes != null;
+      return f.idleTimeMaxSeconds != null;
     case "classCount":
       return f.classCounts.length > 0;
     case "players":
@@ -159,13 +159,13 @@ export function cleared(k: Kind): Partial<Form> {
     case "clearParse":
       return { clearParseMin: null };
     case "clearTime":
-      return { clearTimeMaxMinutes: null };
+      return { clearTimeMaxSeconds: null };
     case "bossTime":
-      return { bossTimeMaxMinutes: null };
+      return { bossTimeMaxSeconds: null };
     case "trashTime":
-      return { trashTimeMaxMinutes: null };
+      return { trashTimeMaxSeconds: null };
     case "idleTime":
-      return { idleTimeMaxMinutes: null };
+      return { idleTimeMaxSeconds: null };
     case "players":
       return { players: [] };
     case "capabilities":

@@ -34,14 +34,14 @@ describe("fieldTiers", () => {
     const samples: Partial<Record<string, Partial<SearchForm>>> = {
       playerParse: { playerParses: [{ name: "", class: "", spec: "", subSpec: "", min: 90, metric: "dps", bosses: [] }] },
       playerStat: { playerStats: [{ name: "", stat: "dps", min: 1, bosses: [] }] },
-      bossTime: { bossTimeMaxMinutes: 10 },
-      trashTime: { trashTimeMaxMinutes: 10 },
-      idleTime: { idleTimeMaxMinutes: 10 },
-      clearTime: { clearTimeMaxMinutes: 10 },
+      bossTime: { bossTimeMaxSeconds: 10 },
+      trashTime: { trashTimeMaxSeconds: 10 },
+      idleTime: { idleTimeMaxSeconds: 10 },
+      clearTime: { clearTimeMaxSeconds: 10 },
       clearParse: { clearParseMin: 90 },
       killParse: { killParseMin: 90 },
       classCount: { classCounts: [{ class: "MAGE", spec: "", subSpec: "", min: 1 }] },
-      bossKillTime: { bossKillTimes: [{ boss: "Ragnaros", maxMinutes: 2 }] },
+      bossKillTime: { bossKillTimes: [{ boss: "Ragnaros", maxSeconds: 2 }] },
     };
     for (const [kind, sample] of Object.entries(samples)) {
       const def = KINDS.find((k) => k.kind === kind)!;

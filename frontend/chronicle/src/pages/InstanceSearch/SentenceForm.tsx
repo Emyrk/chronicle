@@ -68,7 +68,7 @@ export function SentenceForm({ form, onChange, zones, bosses, realms, classes, c
       case "guildCount":
         return set("guildCounts", [...form.guildCounts, { guild: "", min: 5 }]);
       case "bossKillTime":
-        return set("bossKillTimes", [...form.bossKillTimes, { boss: "", maxMinutes: null }]);
+        return set("bossKillTimes", [...form.bossKillTimes, { boss: "", maxSeconds: null }]);
       case "playerParse":
         return set("playerParses", [...form.playerParses, { name: "", class: "", spec: "", subSpec: "", min: null, metric: "dps", bosses: [] }]);
       case "playerStat":
@@ -173,7 +173,7 @@ export function SentenceForm({ form, onChange, zones, bosses, realms, classes, c
         body = (
           <>
             <Word>the full clear took under</Word>
-            <MinutesToken value={form.clearTimeMaxMinutes} onChange={(v) => set("clearTimeMaxMinutes", v)} presets={[45, 60, 90, 120, 180]} autoOpen={auto} disabled={dis} />
+            <SecondsToken value={form.clearTimeMaxSeconds} onChange={(v) => set("clearTimeMaxSeconds", v)} presets={[2700, 3600, 5400, 7200, 10800]} autoOpen={auto} disabled={dis} />
           </>
         );
         break;
@@ -181,7 +181,7 @@ export function SentenceForm({ form, onChange, zones, bosses, realms, classes, c
         body = (
           <>
             <Word>fighting bosses took under</Word>
-            <MinutesToken value={form.bossTimeMaxMinutes} onChange={(v) => set("bossTimeMaxMinutes", v)} presets={[10, 15, 20, 30, 45]} autoOpen={auto} disabled={dis} />
+            <SecondsToken value={form.bossTimeMaxSeconds} onChange={(v) => set("bossTimeMaxSeconds", v)} presets={[600, 900, 1200, 1800, 2700]} autoOpen={auto} disabled={dis} />
             <Word>in total</Word>
           </>
         );
@@ -190,7 +190,7 @@ export function SentenceForm({ form, onChange, zones, bosses, realms, classes, c
         body = (
           <>
             <Word>clearing trash took under</Word>
-            <MinutesToken value={form.trashTimeMaxMinutes} onChange={(v) => set("trashTimeMaxMinutes", v)} presets={[20, 30, 45, 60, 90]} autoOpen={auto} disabled={dis} />
+            <SecondsToken value={form.trashTimeMaxSeconds} onChange={(v) => set("trashTimeMaxSeconds", v)} presets={[1200, 1800, 2700, 3600, 5400]} autoOpen={auto} disabled={dis} />
             <Word>in total</Word>
           </>
         );
@@ -199,7 +199,7 @@ export function SentenceForm({ form, onChange, zones, bosses, realms, classes, c
         body = (
           <>
             <Word>under</Word>
-            <MinutesToken value={form.idleTimeMaxMinutes} onChange={(v) => set("idleTimeMaxMinutes", v)} presets={[2, 5, 10, 15, 30]} autoOpen={auto} disabled={dis} />
+            <SecondsToken value={form.idleTimeMaxSeconds} onChange={(v) => set("idleTimeMaxSeconds", v)} presets={[120, 300, 600, 900, 1800]} autoOpen={auto} disabled={dis} />
             <Word>was spent out of combat</Word>
           </>
         );
@@ -264,7 +264,7 @@ export function SentenceForm({ form, onChange, zones, bosses, realms, classes, c
         <>
           <BossToken single values={b.boss ? [b.boss] : []} onChange={(v) => updateAt("bossKillTimes", i, { boss: v.at(-1) ?? "" })} bosses={bosses} empty="a boss" autoOpen={freshAt("bossKillTime", i, form.bossKillTimes.length)} disabled={dis} />
           <Word>died in under</Word>
-          <MinutesToken value={b.maxMinutes} onChange={(v) => updateAt("bossKillTimes", i, { maxMinutes: v })} presets={[1, 2, 3, 5, 10]} disabled={dis} />
+          <SecondsToken value={b.maxSeconds} onChange={(v) => updateAt("bossKillTimes", i, { maxSeconds: v })} presets={[60, 120, 180, 300, 600]} disabled={dis} />
         </>
       ),
       onRemove: () => removeAt("bossKillTimes", i),
@@ -683,17 +683,14 @@ function ParseToken({ value, onChange, autoOpen, disabled }: { value: number | n
   );
 }
 
-function formatMinutes(m: number): string {
-  if (m < 60) return `${m} min`;
-  const h = Math.floor(m / 60);
-  const rest = Math.round(m % 60);
-  return rest ? `${h}h ${rest}m` : `${h}h`;
+function formatSeconds(seconds: number): string {
+  return `${seconds} seconds`;
 }
 
-function MinutesToken({ value, onChange, presets, autoOpen, disabled }: { value: number | null; onChange: (v: number | null) => void; presets: number[]; autoOpen?: boolean; disabled?: boolean }) {
+function SecondsToken({ value, onChange, presets, autoOpen, disabled }: { value: number | null; onChange: (v: number | null) => void; presets: number[]; autoOpen?: boolean; disabled?: boolean }) {
   return (
-    <Token label={value != null ? formatMinutes(value) : ""} filled={value != null} empty="… min" autoOpen={autoOpen} disabled={disabled} width="w-auto">
-      <div className="flex gap-1">
+    <Token label={value != null ? formatSeconds(value) : ""} filled={value != null} empty="… seconds" autoOpen={autoOpen} disabled={disabled} width="w-auto">
+      <div className="flex flex-wrap gap-1">
         {presets.map((p) => (
           <button
             key={p}
@@ -701,12 +698,12 @@ function MinutesToken({ value, onChange, presets, autoOpen, disabled }: { value:
             onClick={() => onChange(p)}
             className={cn("rounded-md px-2 py-1 text-xs tabular-nums ring-1 transition", value === p ? "ring-primary bg-primary/15 text-foreground" : "ring-border text-muted-foreground hover:text-foreground")}
           >
-            {formatMinutes(p)}
+            {formatSeconds(p)}
           </button>
         ))}
       </div>
       <div className="mt-2 flex items-center gap-1.5 text-2xs text-muted-foreground">
-        or <NumberInput className="w-16" value={value} onChange={onChange} min={0} step={1} placeholder="min" /> minutes
+        or <NumberInput className="w-24" value={value} onChange={onChange} min={0} step={1} placeholder="seconds" /> seconds
       </div>
     </Token>
   );

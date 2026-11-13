@@ -15,7 +15,8 @@ const FIELD_LABELS: Record<string, string> = {
   "instance.idle_time_ms": "Idle time",
   "instance.clear_parse": "Clear-time parse",
   "instance.kill_time_parse": "Kill-time parse",
-  "instance.kill_time_ms": "Kill time",
+  "instance.kill_time_ms": "Full kill duration",
+  "instance.ranked_kill_time_ms": "Ranked boss kill time",
   "instance.capability": "Log capability",
   "encounter.kill_time_parse": "Kill-time parse",
   "encounter.duration_ms": "Duration",
@@ -38,7 +39,7 @@ export function fieldLabel(name: string): string {
 /** Field picker groups, in display order. Unlisted fields go under "Other". */
 const FIELD_GROUPS: [string, string[]][] = [
   ["Run", ["instance.validity", "instance.name", "instance.realm", "instance.realm_id", "instance.guild", "instance.guild_id", "instance.started_at", "instance.difficulty", "instance.max_players", "instance.category", "instance.recorder", "instance.has_video", "instance.player_count"]],
-  ["Bosses & speed", ["instance.bosses_killed", "instance.wipes", "instance.deaths", "instance.clear_time_ms", "instance.clear_qualified", "instance.boss_time_ms", "instance.trash_time_ms", "instance.idle_time_ms", "instance.kill_time_ms"]],
+  ["Bosses & speed", ["instance.bosses_killed", "instance.wipes", "instance.deaths", "instance.clear_time_ms", "instance.clear_qualified", "instance.boss_time_ms", "instance.trash_time_ms", "instance.idle_time_ms", "instance.kill_time_ms", "instance.ranked_kill_time_ms"]],
   ["Parses", ["instance.clear_parse", "instance.kill_time_parse"]],
   ["Log", ["instance.capability"]],
   ["Character", ["player.name", "player.guid", "player.class", "player.race", "player.level", "player.guild", "player.guild_id"]],

@@ -138,7 +138,7 @@ export interface GuildCount {
 /** A boss killed within a time limit. */
 export interface BossKillTime {
   boss: string;
-  maxMinutes: number | null;
+  maxSeconds: number | null;
 }
 
 export type ParseMetric = "dps" | "hps";
@@ -186,10 +186,10 @@ export interface SearchForm {
   killParseMin: number | null;
   killParseBosses: string[];
   killParseMatch: InstanceSearchMatch;
-  clearTimeMaxMinutes: number | null;
-  idleTimeMaxMinutes: number | null;
-  bossTimeMaxMinutes: number | null;
-  trashTimeMaxMinutes: number | null;
+  clearTimeMaxSeconds: number | null;
+  idleTimeMaxSeconds: number | null;
+  bossTimeMaxSeconds: number | null;
+  trashTimeMaxSeconds: number | null;
   bossesKilledMin: number | null;
   wipesMax: number | null;
   deathsMax: number | null;
@@ -223,10 +223,10 @@ export function emptyForm(): SearchForm {
     killParseMin: null,
     killParseBosses: [],
     killParseMatch: "any",
-    clearTimeMaxMinutes: null,
-    idleTimeMaxMinutes: null,
-    bossTimeMaxMinutes: null,
-    trashTimeMaxMinutes: null,
+    clearTimeMaxSeconds: null,
+    idleTimeMaxSeconds: null,
+    bossTimeMaxSeconds: null,
+    trashTimeMaxSeconds: null,
     bossesKilledMin: null,
     wipesMax: null,
     deathsMax: null,
@@ -249,7 +249,7 @@ export function formIsBasic(f: SearchForm): boolean {
   return (Object.keys(e) as (keyof SearchForm)[]).every((k) => BASIC_KEYS.includes(k) || JSON.stringify(f[k]) === JSON.stringify(e[k]));
 }
 
-const MINUTE_MS = 60_000;
+const SECOND_MS = 1_000;
 
 function pred(field: string, op: InstanceSearchOp, value: unknown, extra: Partial<Node> = {}): Node {
   return { field, op, value, ...extra };
@@ -275,7 +275,7 @@ function killedNode(boss: string): Node {
 
 function bossKillTimeNode(k: BossKillTime): Node {
   const conds = [pred("encounter.name", "=", k.boss.trim()), pred("encounter.killed", "=", true)];
-  if (k.maxMinutes != null) conds.push(pred("encounter.duration_ms", "<=", Math.round(k.maxMinutes * MINUTE_MS)));
+  if (k.maxSeconds != null) conds.push(pred("encounter.duration_ms", "<=", Math.round(k.maxSeconds * SECOND_MS)));
   return { any_encounter: { and: conds } };
 }
 
@@ -343,10 +343,10 @@ export function formToTree(f: SearchForm): Node | undefined {
       }),
     );
   }
-  if (f.clearTimeMaxMinutes != null) parts.push(pred("instance.clear_time_ms", "<=", Math.round(f.clearTimeMaxMinutes * MINUTE_MS)));
-  if (f.idleTimeMaxMinutes != null) parts.push(pred("instance.idle_time_ms", "<=", Math.round(f.idleTimeMaxMinutes * MINUTE_MS)));
-  if (f.bossTimeMaxMinutes != null) parts.push(pred("instance.boss_time_ms", "<=", Math.round(f.bossTimeMaxMinutes * MINUTE_MS)));
-  if (f.trashTimeMaxMinutes != null) parts.push(pred("instance.trash_time_ms", "<=", Math.round(f.trashTimeMaxMinutes * MINUTE_MS)));
+  if (f.clearTimeMaxSeconds != null) parts.push(pred("instance.clear_time_ms", "<=", Math.round(f.clearTimeMaxSeconds * SECOND_MS)));
+  if (f.idleTimeMaxSeconds != null) parts.push(pred("instance.idle_time_ms", "<=", Math.round(f.idleTimeMaxSeconds * SECOND_MS)));
+  if (f.bossTimeMaxSeconds != null) parts.push(pred("instance.boss_time_ms", "<=", Math.round(f.bossTimeMaxSeconds * SECOND_MS)));
+  if (f.trashTimeMaxSeconds != null) parts.push(pred("instance.trash_time_ms", "<=", Math.round(f.trashTimeMaxSeconds * SECOND_MS)));
 
   for (const c of f.classCounts) {
     // All parts refer to the same player: e.g. a Paladin who was Holy.
@@ -430,7 +430,7 @@ function bossKillTimeOf(inner: Node | undefined): BossKillTime | null {
   if (!isPred(a, "encounter.name", "=") || asString(a.value) == null) return null;
   if (!isPred(b, "encounter.killed", "=") || b.value !== true) return null;
   if (!isPred(c, "encounter.duration_ms", "<=") || asNumber(c.value) == null) return null;
-  return { boss: a.value as string, maxMinutes: (c.value as number) / MINUTE_MS };
+  return { boss: a.value as string, maxSeconds: (c.value as number) / SECOND_MS };
 }
 
 /** Splits a player block into its conditions, taking a leading name. */
@@ -514,20 +514,20 @@ export function treeToForm(tree: Node | undefined): SearchForm | null {
         f.wipesMax = num;
       } else if (isPred(n, "instance.deaths", "<=") && num != null && f.deathsMax == null) {
         f.deathsMax = num;
-      } else if (isPred(n, "instance.boss_time_ms", "<=") && num != null && f.bossTimeMaxMinutes == null) {
-        f.bossTimeMaxMinutes = num / MINUTE_MS;
-      } else if (isPred(n, "instance.trash_time_ms", "<=") && num != null && f.trashTimeMaxMinutes == null) {
-        f.trashTimeMaxMinutes = num / MINUTE_MS;
+      } else if (isPred(n, "instance.boss_time_ms", "<=") && num != null && f.bossTimeMaxSeconds == null) {
+        f.bossTimeMaxSeconds = num / SECOND_MS;
+      } else if (isPred(n, "instance.trash_time_ms", "<=") && num != null && f.trashTimeMaxSeconds == null) {
+        f.trashTimeMaxSeconds = num / SECOND_MS;
       } else if (isPred(n, "instance.clear_parse", ">=") && num != null && f.clearParseMin == null && takeScope(n)) {
         f.clearParseMin = num;
       } else if (isPred(n, "instance.kill_time_parse", ">=") && num != null && f.killParseMin == null && takeScope(n)) {
         f.killParseMin = num;
         f.killParseBosses = [...(n.bosses ?? [])];
         f.killParseMatch = n.match === "each" ? "each" : "any";
-      } else if (isPred(n, "instance.clear_time_ms", "<=") && num != null && f.clearTimeMaxMinutes == null) {
-        f.clearTimeMaxMinutes = num / MINUTE_MS;
-      } else if (isPred(n, "instance.idle_time_ms", "<=") && num != null && f.idleTimeMaxMinutes == null) {
-        f.idleTimeMaxMinutes = num / MINUTE_MS;
+      } else if (isPred(n, "instance.clear_time_ms", "<=") && num != null && f.clearTimeMaxSeconds == null) {
+        f.clearTimeMaxSeconds = num / SECOND_MS;
+      } else if (isPred(n, "instance.idle_time_ms", "<=") && num != null && f.idleTimeMaxSeconds == null) {
+        f.idleTimeMaxSeconds = num / SECOND_MS;
       } else if (isPred(n, "instance.capability", "=") && s != null) {
         f.capabilities.push(s);
       } else {

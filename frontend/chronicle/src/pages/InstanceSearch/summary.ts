@@ -34,7 +34,7 @@ export function formatSortValue(field: InstanceSearchSortField, value: string | 
 
 export function formatValue(field: string, value: unknown): string {
   if (Array.isArray(value)) return value.map((v) => formatValue(field, v)).join(", ");
-  if (typeof value === "number") return MS_FIELDS.test(field) ? formatMinutes(value) : String(value);
+  if (typeof value === "number") return MS_FIELDS.test(field) ? `${value / 1000} seconds` : String(value);
   if (typeof value === "string") {
     if (field.endsWith("started_at")) return value.slice(0, 10);
     if (/^[A-Z_]+$/.test(value) || field.endsWith("capability") || field.endsWith("outcome") || field.endsWith("category")) return enumLabel(value);

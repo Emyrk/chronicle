@@ -31,7 +31,8 @@ Use at the top level (outside any quantifier).
 | `instance.idle_time_ms` | int (ms) | =, !=, <, <=, >, >=, between |  | Time inside the clear spent out of combat. Full clears only. |
 | `instance.clear_parse` | int (0-100) | =, !=, <, <=, >, >=, between | parse_scope | Clear-time parse (higher is faster). |
 | `instance.kill_time_parse` | int (0-100) | =, !=, <, <=, >, >=, between | bosses, match, parse_scope | Boss kill-time parse (higher is faster) on any / each of the bosses. |
-| `instance.kill_time_ms` | int (ms) | =, !=, <, <=, >, >=, between | bosses, match | Boss kill duration (clean or partial kills) on any / each of the bosses. |
+| `instance.kill_time_ms` | int (ms) | =, !=, <, <=, >, >=, between | bosses, match | Full boss kill duration (clean or partial kills) on any / each of the bosses. |
+| `instance.ranked_kill_time_ms` | int (ms) | =, !=, <, <=, >, >=, between | bosses, match | Ranked boss kill duration (clean or partial kills) on any / each boss. Uses Razorgore's valid phase-two window; otherwise full duration. |
 
 ## Encounter fields
 

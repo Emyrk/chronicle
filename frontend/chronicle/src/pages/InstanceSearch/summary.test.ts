@@ -21,7 +21,7 @@ describe("summarize", () => {
       `A pull: Name is "Ragnaros" & Killed`,
       `≥ 3 players with Class is Priest`,
       `Kill-time parse ≥ 90 on each of Ragnaros, Majordomo Executus vs realm`,
-      `Idle time ≤ 5 min`,
+      `Idle time ≤ 300 seconds`,
       `Has Unit position`,
       `Not: A player: Sub-spec is "Bear" on trash`,
     ]);
@@ -34,6 +34,11 @@ describe("summarize", () => {
     }
   });
 
+  it("keeps second precision in duration conditions", () => {
+    expect(summarize({ field: "instance.ranked_kill_time_ms", op: "<=", value: 1250 }))
+      .toEqual(["Ranked boss kill time ≤ 1.25 seconds"]);
+  });
+
   it("formats durations", () => {
     expect(formatMinutes(300000)).toBe("5 min");
     expect(formatMinutes(4500000)).toBe("1h 15m");
@@ -43,7 +48,7 @@ describe("summarize", () => {
 
 describe("ranges and evidence values", () => {
   it("describes a between range", () => {
-    expect(summarize({ field: "instance.clear_time_ms", op: "between", value: [3_600_000, 4_500_000] })).toEqual(["Clear time 1h – 1h 15m"]);
+    expect(summarize({ field: "instance.clear_time_ms", op: "between", value: [3_600_000, 4_500_000] })).toEqual(["Clear time 3600 seconds – 4500 seconds"]);
     expect(summarize({ field: "instance.started_at", op: "between", value: ["2026-10-01T00:00:00Z", "2026-10-31T23:59:59Z"] })).toEqual(["Date 2026-10-01 – 2026-10-31"]);
   });
   it("formats durations as m:ss, or hours when long", () => {
