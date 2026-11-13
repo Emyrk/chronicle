@@ -40,6 +40,22 @@ function formatDuration(ms: number): string {
   return `${secs}s`;
 }
 
+function formatTimestamp(absoluteMilli: number): string {
+  return new Date(absoluteMilli).toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+}
+
+function formatRelativeTime(offsetMilli: number): string {
+  const totalSeconds = offsetMilli / 1000;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = (totalSeconds % 60).toFixed(1);
+  return `+${minutes}:${seconds.padStart(4, "0")}`;
+}
+
 interface TimelineRow {
   targetGuid: string;
   targetName: string;
@@ -49,7 +65,7 @@ interface TimelineRow {
 // ── Component ────────────────────────────────────────────────────────────────
 
 function PossessionTimeline(props: PanelRenderProps<PossessionResult>) {
-  const { result, context } = props;
+  const { result, context, checkboxChecked } = props;
 
   // Resolve names and group intervals by target GUID
   const rows = useMemo(() => {
@@ -153,6 +169,14 @@ function PossessionTimeline(props: PanelRenderProps<PossessionResult>) {
                 ? iv.endOffsetMilli - iv.startOffsetMilli
                 : null;
               const affil = AFFILIATION_COLORS[iv.affiliation] ?? AFFILIATION_COLORS[0];
+              const startLabel = checkboxChecked
+                ? formatRelativeTime(iv.startOffsetMilli)
+                : formatTimestamp(absStart);
+              const endLabel = iv.endOffsetMilli == null
+                ? "ongoing"
+                : checkboxChecked
+                  ? formatRelativeTime(iv.endOffsetMilli)
+                  : formatTimestamp(absEnd);
 
               return (
                 <TemporalTimelineInterval
@@ -178,7 +202,12 @@ function PossessionTimeline(props: PanelRenderProps<PossessionResult>) {
                       {iv.spellId > 0 && (
                         <div className="text-muted-foreground">Spell ID: {iv.spellId}</div>
                       )}
-                      <div className="pt-1 font-medium">
+                      <div className="pt-1 font-mono text-[10px] text-muted-foreground">
+                        Start: <span className="text-foreground">{startLabel}</span>
+                        <br />
+                        End: <span className="text-foreground">{endLabel}</span>
+                      </div>
+                      <div className="font-medium">
                         Duration: {duration != null ? formatDuration(duration) : "ongoing"}
                       </div>
                     </div>
@@ -219,6 +248,7 @@ export function createPossessionPanel(): PanelDefinition<PossessionResult, any> 
     label: "Possession",
     icon: <Brain className="h-4 w-4" />,
     keybinds: [],
+    checkboxLabel: "Encounter offset",
     render: (props: PanelRenderProps<PossessionResult>) => <PossessionTimeline {...props} />,
   };
 }
