@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
+	"github.com/Emyrk/chronicle/combatlog/parsernext/snapshot"
 	next "github.com/Emyrk/chronicle/combatlog/parsernext/vanilla"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb"
@@ -23,6 +23,7 @@ import (
 	"github.com/Emyrk/chronicle/database/gamedb/talents"
 	"github.com/Emyrk/chronicle/internal/gamedataoverrides"
 	"github.com/Emyrk/chronicle/internal/stategraph"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -36,13 +37,14 @@ func (d *stateDB) Spell(_ context.Context, id chrondbc.SpellID) (*chrondbc.Spell
 	return nil, chrondbc.SpellNotFound(id)
 }
 func (d *stateDB) ExtraAttackSpell(context.Context, int32) (chrondbc.ExtraAttackSpell, bool) {
+	d.calls++
 	return chrondbc.ExtraAttackSpell{}, false
 }
 func testIdentity() Compatibility {
-	return Compatibility{DatasetContent: "test-fixture-v1", Format: database.LogFormat112aCcAddon, Flavor: database.WoWFlavor{database.FlavorVanilla, database.FlavorVanillaPlus}.CanonicalKey(), ParserVersion: "test-parser-v1", BuildVersion: "build", CustomOverrideVersion: "test-overrides-v1"}
+	return Compatibility{DatasetID: "9c716540-587a-4bf3-bd90-739c01a6ce31", DatasetRevision: 1, BuildIdentity: "sha256:" + strings.Repeat("a", 64), Format: database.LogFormat112aCcAddon, Flavor: database.WoWFlavor{database.FlavorVanilla, database.FlavorVanillaPlus}.CanonicalKey(), BuildVersion: "build", CustomOverrideVersion: "test-overrides-v1"}
 }
 func testContext(t *testing.T) context.Context {
-	return parsectx.With(t.Context(), parsectx.Context{Format: database.LogFormat112aCcAddon, Flavor: database.WoWFlavor{database.FlavorVanilla, database.FlavorVanillaPlus}})
+	return snapshot.WithCompatibility(parsectx.With(t.Context(), parsectx.Context{DatasetID: uuid.MustParse(testIdentity().DatasetID), Format: database.LogFormat112aCcAddon, Flavor: database.WoWFlavor{database.FlavorVanilla, database.FlavorVanillaPlus}}), testIdentity().RuntimeIdentity())
 }
 func drain(t *testing.T, ctx context.Context, p *Pipeline, data []byte) []messages.Message {
 	t.Helper()
@@ -141,7 +143,7 @@ func TestPipelineStateRejectsBoundaryAndMismatch(t *testing.T) {
 	s, err := p.CaptureState(testIdentity(), nil)
 	require.NoError(t, err)
 	wrong := testIdentity()
-	wrong.DatasetContent = "changed"
+	wrong.DatasetRevision++
 	_, err = p.CaptureState(wrong, nil)
 	require.Error(t, err)
 	candidate, objects, err := RestoreState(ctx, nil, db, nil, wrong, s)
@@ -176,8 +178,6 @@ func TestPipelineStateCapybaraLocal(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, db.Close()) })
 	effective := localEffectiveDB{GameDB: db, flavor: database.WoWFlavor{database.FlavorVanilla, database.FlavorNightmareOfUrsol}}
-	spellBytes, err := os.ReadFile(filepath.Join(root, "dbc/Spell.dbc"))
-	require.NoError(t, err)
 	treesBytes, err := os.ReadFile(filepath.Join(root, "dbc/talent-trees.json"))
 	require.NoError(t, err)
 	var trees talents.TalentTreeData
@@ -196,7 +196,9 @@ func TestPipelineStateCapybaraLocal(t *testing.T) {
 		split++
 	}
 	split++
-	identity := Compatibility{DatasetContent: fmt.Sprintf("local-dbc-sha256:%x", sha256.Sum256(spellBytes)), Format: database.LogFormat112aCcAddon, Flavor: effective.flavor.CanonicalKey(), ParserVersion: "local-test-build", BuildVersion: "build", CustomOverrideVersion: "checked-out-overrides"}
+	identity := testIdentity()
+	identity.Flavor = effective.flavor.CanonicalKey()
+	ctx = snapshot.WithCompatibility(ctx, identity.RuntimeIdentity())
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	continuous, err := New(ctx, logger, effective, nil, "build")
 	require.NoError(t, err)
@@ -265,7 +267,7 @@ func TestPipelineStateDecodeRejectsMalformed(t *testing.T) {
 	b := stateWire(t, s)
 	_, err = DecodeState(b)
 	require.NoError(t, err)
-	for _, bad := range []string{"null", "{}", string(b) + " {}", strings.Replace(string(b), `"version":1`, `"unexpected":true,"version":1`, 1)} {
+	for _, bad := range []string{"null", "{}", string(b) + " {}", strings.Replace(string(b), `"version":2`, `"unexpected":true,"version":2`, 1)} {
 		_, err := DecodeState([]byte(bad))
 		require.Error(t, err)
 	}
@@ -297,7 +299,7 @@ func TestPipelineStateTrustedBuildCompatibility(t *testing.T) {
 			s.Values["/root/source"] = v
 		},
 		func(s *State) { s.Compatibility.BuildVersion = "forged" },
-		func(s *State) { s.Compatibility.ParserVersion = "forged" },
+		func(s *State) { s.Compatibility.BuildIdentity = "sha256:" + strings.Repeat("b", 64) },
 	} {
 		var forged State
 		require.NoError(t, json.Unmarshal(wire, &forged))
@@ -310,7 +312,7 @@ func TestPipelineStateTrustedBuildCompatibility(t *testing.T) {
 		require.Zero(t, spy.calls)
 	}
 	// The build string is not the implementation identity. A distinct trusted
-	// parser version remains valid, and the empty display string is supported.
+	// executable identity remains required, and the empty display string is supported.
 	p, err = New(ctx, nil, db, nil, "")
 	require.NoError(t, err)
 	identity := testIdentity()
@@ -324,8 +326,7 @@ func TestPipelineStateTrustedBuildCompatibility(t *testing.T) {
 
 func TestCompatibilityFormatPayloadUnchanged(t *testing.T) {
 	t.Parallel()
-	// Existing version-1 JSON used a string field, which has the same wire value
-	// as canonical database.LogFormat. No speculative archive migration is needed.
+	// Format remains a canonical string even though strict identity invalidates v1.
 	var compatibility Compatibility
 	require.NoError(t, json.Unmarshal([]byte(`{"format":"1.12a-cc-addon"}`), &compatibility))
 	require.Equal(t, database.LogFormat112aCcAddon, compatibility.Format)
@@ -334,5 +335,58 @@ func TestCompatibilityFormatPayloadUnchanged(t *testing.T) {
 	var fields map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(encoded, &fields))
 	require.Equal(t, `"1.12a-cc-addon"`, string(fields["format"]))
-	require.Equal(t, uint32(1), StateVersion)
+	require.Equal(t, uint32(2), StateVersion)
+}
+
+func TestStrictCompatibilityRejectsBeforeDependencies(t *testing.T) {
+	t.Parallel()
+	ctx := testContext(t)
+	p, err := New(ctx, nil, &stateDB{}, nil, "build")
+	require.NoError(t, err)
+	state, err := p.CaptureState(testIdentity(), nil)
+	require.NoError(t, err)
+	for _, change := range []func(*Compatibility){
+		func(c *Compatibility) { c.DatasetID = "9c716540-587a-4bf3-bd90-739c01a6ce32" },
+		func(c *Compatibility) { c.DatasetRevision++ },
+		func(c *Compatibility) { c.DatasetRevision = 0 },
+		func(c *Compatibility) { c.BuildIdentity = "sha256:" + strings.Repeat("b", 64) },
+		func(c *Compatibility) { c.BuildIdentity = "unknown" },
+		func(c *Compatibility) { c.Format = database.LogFormat335aCcAddon },
+		func(c *Compatibility) { c.Flavor = "wrath" },
+	} {
+		wrong := testIdentity()
+		change(&wrong)
+		// Even a forged matching expected/payload pair cannot override construction.
+		forged := state
+		forged.Compatibility = wrong
+		spy := &stateDB{}
+		candidate, objects, err := RestoreState(ctx, nil, spy, nil, wrong, forged)
+		require.Error(t, err)
+		require.Nil(t, candidate)
+		require.Nil(t, objects)
+		require.Zero(t, spy.calls)
+		_, err = p.CaptureState(wrong, nil)
+		require.Error(t, err)
+	}
+	// Missing construction binding may parse normally, but cannot snapshot.
+	unbound := parsectx.With(t.Context(), parsectx.Context{Format: testIdentity().Format, Flavor: database.WoWFlavor{database.FlavorVanilla, database.FlavorVanillaPlus}})
+	p, err = New(unbound, nil, &stateDB{}, nil, "build")
+	require.NoError(t, err)
+	_, err = p.CaptureState(testIdentity(), nil)
+	require.Error(t, err)
+	spy := &stateDB{}
+	_, _, err = RestoreState(unbound, nil, spy, nil, testIdentity(), state)
+	require.Error(t, err)
+	require.Zero(t, spy.calls)
+	// Context dataset disagreement fails before constructor dependencies initialize.
+	mismatch := parsectx.With(t.Context(), parsectx.Context{DatasetID: uuid.MustParse("9c716540-587a-4bf3-bd90-739c01a6ce32"), Format: testIdentity().Format, Flavor: database.WoWFlavor{database.FlavorVanilla, database.FlavorVanillaPlus}})
+	mismatch = snapshot.WithCompatibility(mismatch, testIdentity().RuntimeIdentity())
+	_, err = New(mismatch, nil, nil, nil, "build")
+	require.ErrorContains(t, err, "construction dataset")
+	_, _, err = RestoreState(mismatch, nil, nil, nil, testIdentity(), state)
+	require.ErrorContains(t, err, "construction dataset")
+	// Version 1 has no strict revision/executable contract and is invalidated.
+	state.Version = 1
+	_, _, err = RestoreState(ctx, nil, nil, nil, testIdentity(), state)
+	require.Error(t, err)
 }
