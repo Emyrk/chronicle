@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { mapAssetUrl, type WowMapInstance } from "@/pages/Technical/mapGallery";
 import type { PanelRenderProps } from "../types";
 import type { MapResult } from "./map.processor";
-import { EncounterFloorMemory, encounterFloorScope, estimateEncounterFloor, firstFloorEncounter } from "./encounterFloor";
+import { EncounterFloorMemory, encounterFloorScope, estimateEncounterFloor, firstFloorEncounter, instanceNameFloor } from "./encounterFloor";
 import { fetchFloorSupport, usableFloorSupport } from "./floorSupport";
 
 export function useEncounterFloor(props: PanelRenderProps<MapResult>, map: WowMapInstance | undefined) {
@@ -14,8 +14,10 @@ export function useEncounterFloor(props: PanelRenderProps<MapResult>, map: WowMa
   const [, update] = useState(0);
   const instance = props.context.instance;
   const anchor = firstFloorEncounter(instance.encounters, props.context.selectedEncounterIds);
+  const floors = map?.floors.map(floor => floor.floor) ?? [];
+  const namedFloor = instanceNameFloor(instance.name, map?.mapID ?? 0, floors);
   const descriptor = map?.floorSupport;
-  const enabled = instance.positionCoordinateSpace !== "ui-map-normalized" && Boolean(instance.iconBaseUrl) && Boolean(map)
+  const enabled = namedFloor === null && instance.positionCoordinateSpace !== "ui-map-normalized" && Boolean(instance.iconBaseUrl) && Boolean(map)
     && usableFloorSupport(descriptor, instance.datasetId, map?.mapID ?? 0, map?.floors ?? []);
   const query = useQuery({
     queryKey: ["map-floor-support", instance.iconBaseUrl, descriptor],
@@ -35,15 +37,15 @@ export function useEncounterFloor(props: PanelRenderProps<MapResult>, map: WowMa
   // Map uses syncDataMode:"full": aggregation publishes the complete worker
   // result before clearing processing, so first-frame partial data is not frozen.
   const estimate = memory.choose(anchorID, Date.parse(anchor?.start_time ?? ""), previous => estimateEncounterFloor(
-    positions, map?.mapID ?? 0, map?.floors.map(floor => floor.floor) ?? [],
+    positions, map?.mapID ?? 0, floors,
     new Set(Object.keys(instance.players ?? {})), enabled ? query.data : undefined, previous,
   ), Boolean(map && positions) && !props.loading && !props.processing && !props.error && !pending);
   return {
     anchor,
-    selectedFloorNumber: manualFloorNumber ?? estimate.floor,
+    selectedFloorNumber: manualFloorNumber ?? namedFloor ?? estimate.floor,
     manualFloorNumber,
-    floorUncertain: manualFloorNumber === null && estimate.uncertain,
-    pending: (pending || (props.processing && !memory.has(anchorID))) && manualFloorNumber === null,
+    floorUncertain: manualFloorNumber === null && namedFloor === null && estimate.uncertain,
+    pending: namedFloor === null && (pending || (props.processing && !memory.has(anchorID))) && manualFloorNumber === null,
     setFloorNumber: (floor: number | null) => {
       if (!anchorID || (floor !== null && !map?.floors.some(item => item.floor === floor))) return;
       memory.correct(anchorID, floor); update(value => value + 1);

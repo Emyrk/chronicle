@@ -18,6 +18,25 @@ export function firstFloorEncounter<T extends FloorEncounter>(encounters: readon
     .slice().sort((a, b) => Date.parse(a.start_time) - Date.parse(b.start_time) || a.id.localeCompare(b.id))[0] ?? null;
 }
 
+const SCARLET_MONASTERY_MAP_ID = 189;
+const SCARLET_MONASTERY_WING_FLOORS = [
+  ["graveyard", 1],
+  ["library", 2],
+  ["armory", 3],
+  ["cathedral", 4],
+] as const;
+
+/** Scarlet Monastery's wings share one map ID but each published floor is a
+ * different wing, so the parsed instance name is more authoritative than
+ * position-based floor inference. */
+export function instanceNameFloor(instanceName: string, mapID: number, floors: readonly number[]): number | null {
+  if (mapID !== SCARLET_MONASTERY_MAP_ID) return null;
+  const normalized = instanceName.trim().toLowerCase();
+  if (!normalized.startsWith("scarlet monastery")) return null;
+  const match = SCARLET_MONASTERY_WING_FLOORS.find(([wing]) => normalized.includes(wing));
+  return match && floors.includes(match[1]) ? match[1] : null;
+}
+
 export function encounterFloorScope(datasetID: string | undefined, instanceID: string, mapID: number, revision: string): string {
   return JSON.stringify([datasetID ?? "", instanceID, mapID, revision]);
 }

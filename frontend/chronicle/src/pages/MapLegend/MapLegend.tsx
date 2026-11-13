@@ -202,7 +202,8 @@ export function MapLegend() {
           Auto chooses one display floor for the selected encounter and keeps it fixed while you play or scrub.
           When several encounters are selected, the earliest chronological encounter anchors the entire view.
           Whole-run views use that same anchor until the selection changes.
-          Recorded floor telemetry, geometry and player positions can help estimate the floor, but overlapping levels may remain ambiguous.
+          When separate dungeon wings share one map, such as Scarlet Monastery, the instance name selects the matching wing.
+          Otherwise, recorded floor telemetry, geometry and player positions can help estimate the floor, but overlapping levels may remain ambiguous.
         </p>
         <p className="text-sm text-muted-foreground">
           If the map says &quot;Floor uncertain · choose a floor&quot;, use the floating floor picker at the bottom-left of the map, beside the camera controls, to choose the artwork that fits.

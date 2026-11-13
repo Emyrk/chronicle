@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EncounterFloorMemory, encounterFloorScope, estimateEncounterFloor, firstFloorEncounter } from "./encounterFloor";
+import { EncounterFloorMemory, encounterFloorScope, estimateEncounterFloor, firstFloorEncounter, instanceNameFloor } from "./encounterFloor";
 import type { MapEncounterPositions, MapPositionSample } from "./map.processor";
 const encounter = (samples: Partial<MapPositionSample>[]): MapEncounterPositions => ({ positionsByUnit: new Map([["player", samples.map((sample, i) => ({ timestampMs: i, x: 1, y: 1, mapId: 90, ...sample }))]]) } as MapEncounterPositions);
 const players = new Set(["player"]);
@@ -12,6 +12,16 @@ describe("encounter floor selection", () => {
     expect(firstFloorEncounter(rows, ["5", "4", "3", "2", "1"])?.id).toBe("1");
     expect(firstFloorEncounter(rows, ["4", "2"])?.id).toBe("2");
     expect(firstFloorEncounter(rows, [])?.id).toBe("1");
+  });
+  it("selects Scarlet Monastery wings from the parsed instance name", () => {
+    const floors = [1, 2, 3, 4];
+    expect(instanceNameFloor("Scarlet Monastery Graveyard", 189, floors)).toBe(1);
+    expect(instanceNameFloor("Scarlet Monastery Library", 189, floors)).toBe(2);
+    expect(instanceNameFloor("Scarlet Monastery Armory", 189, floors)).toBe(3);
+    expect(instanceNameFloor("Scarlet Monastery Cathedral", 189, floors)).toBe(4);
+    expect(instanceNameFloor("Scarlet Monastery", 189, floors)).toBeNull();
+    expect(instanceNameFloor("Scarlet Monastery Armory", 189, [1, 2, 4])).toBeNull();
+    expect(instanceNameFloor("Scarlet Monastery Armory", 90, floors)).toBeNull();
   });
   it("scores fresh supported samples and preserves logged precedence", () => {
     expect(estimate([{ x: 1, synthetic: true }, { x: 2 }, { x: 2 }, { x: 1, mapId: 91 }]).floor).toBe(2);
