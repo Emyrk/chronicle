@@ -88,6 +88,7 @@ func TestInitialSeeds(t *testing.T) {
 	}
 	// Only raids whose projected data uses an explicit player cap add TBC variants.
 	require.ElementsMatch(t, []database.ResolveLeaderboardConfigurationRow{
+		{Kind: "variant", InstanceName: "Gruul's Lair", MaxPlayers: 25},
 		{Kind: "variant", InstanceName: "Karazhan", MaxPlayers: 10},
 		{Kind: "variant", InstanceName: "Magtheridon's Lair", MaxPlayers: 25},
 	}, selectKind(effective["tbc"], "variant"))
