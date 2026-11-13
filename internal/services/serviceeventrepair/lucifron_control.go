@@ -74,7 +74,7 @@ func validateLucifronControl(e razorgoreEvidence, c database.LogInstanceEncounte
 			continue
 		}
 		entry, _ := m.Controller.GetEntry()
-		if !m.Target.IsPlayer() || m.Owner != nil || m.Controller.IsPlayer() || entry != 12119 || m.Spell == nil || m.Spell.ID != 20604 {
+		if !m.Target.IsPlayer() || m.Owner != nil || !m.Controller.IsCreature() || entry != 12119 || m.Spell == nil || m.Spell.ID != 20604 {
 			return errors.New("unsupported Lucifron control target, controller, or spell")
 		}
 		var chosen *razorgoreControlCast
@@ -159,7 +159,7 @@ func lucifronControlCasts(e razorgoreEvidence, c database.LogInstanceEncounter) 
 				continue
 			} // The possession synthesizer ignores self-casts.
 			entry, _ := controller.GetEntry()
-			if !target.IsPlayer() || entry != 12119 || controller.IsPlayer() || a.Spell == nil || a.Spell.Id != 20604 || a.DurationMS <= 0 {
+			if !target.IsPlayer() || entry != 12119 || !controller.IsCreature() || a.Spell == nil || a.Spell.Id != 20604 || a.DurationMS <= 0 {
 				return nil, nil, errors.New("unsupported player control aura or missing authoritative duration")
 			}
 			casts = append(casts, razorgoreControlCast{index: a.Meta.Index, spellID: a.Spell.Id, at: at, target: target, controller: controller, duration: time.Duration(a.DurationMS) * time.Millisecond})

@@ -244,3 +244,32 @@ Omissions use `encounter_id`, `stream`, `unit_guid`, `amount`, `count`, and `rea
 and are accompanied by visible warnings. The example is synthetic, not an
 actual-instance validation or authorization to apply. No real-log parity is
 claimed without a separately captured historical source and independent replay.
+
+
+### Evidenced Lucifron player control (version 2)
+
+Flamewaker Protector (12119) control of players via spell 20604 is accepted only
+with matching stored addon aura-cast duration and contemporaneous classification
+history. Repeated snapshots do not renew expiry; the parser's lazy-expiry
+boundary is preserved. Targetless and self-targeted aura casts create no control
+state, matching the possession synthesizer. Missing/malformed casts, unsupported
+controllers or spells, creature control, owner chains, unmatched gains, and
+unproven control crossing into the encounter still skip.
+
+The production damage tracker retains direct-player credit while a player is
+controlled and excludes damage against players even when temporarily hostile.
+The repair follows those semantics rather than counting controlled players as
+ranked targets or transferring their damage to a protector. Full historical
+player-total reconciliation and existing pet/omission safeguards remain required.
+Passing control validation does not imply that the rest of a log is repairable.
+
+A read-only event-stream probe of the supplied public sample established two
+15-second targeted control effects and one targetless no-op. An independent
+production-tracker replay reconciled all 33 exported player totals: 1,045,793
+full damage, with a reference target split of 855,355 ranked / 190,438 unranked
+over 39.580 seconds. The new evaluator passes the control evidence but still
+skips on separate uncertain nonplayer-credit evidence (missing encounter-terminal
+ownership snapshots); those reference figures are **not an applied repair or a
+ready preview**. The export lacks the current unranked database column and exact
+parser stamp, so the probe used the persisted release tag and disclosed historical
+zero-column default, not fabricated current database values. No real apply was run.

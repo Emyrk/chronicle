@@ -108,7 +108,7 @@ func TestLucifronPlayerControlMatchesParserDamageSemantics(t *testing.T) {
 
 func TestLucifronControlEvidenceFailures(t *testing.T) {
 	t.Parallel()
-	for _, kind := range []string{"missing aura", "missing classification", "missing duration", "wrong spell", "wrong controller", "nonplayer target", "late initial snapshot", "expired repeat", "boundary crossing", "duplicate index", "bad chronology", "malformed aura", "unsupported format", "owner chain", "missing spell"} {
+	for _, kind := range []string{"missing aura", "missing classification", "missing duration", "wrong spell", "wrong controller", "noncreature controller", "nonplayer target", "late initial snapshot", "expired repeat", "boundary crossing", "duplicate index", "bad chronology", "malformed aura", "unsupported format", "owner chain", "missing spell"} {
 		t.Run(kind, func(t *testing.T) {
 			t.Parallel()
 			e, casts, snapshots := lucifronControlFixture(t)
@@ -126,6 +126,11 @@ func TestLucifronControlEvidenceFailures(t *testing.T) {
 				cast.Spell.Id = 12345
 			case "wrong controller":
 				cast.Caster = lucifronTestHound
+			case "noncreature controller":
+				controller := "0xF110002F57000001"
+				cast.Caster = controller
+				first.Controller = &controller
+				repeat.Controller = &controller
 			case "nonplayer target":
 				first.Target = lucifronTestBoss
 			case "late initial snapshot":
