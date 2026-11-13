@@ -128,6 +128,7 @@ func TestRazorgoreNumericalRepairEndToEnd(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, p.RequiresReparse, p.Reason)
 	require.Len(t, p.numeric.Metrics, 2)
+	require.NoError(t, RevalidateRazorgore(ctx, s, p))
 	require.NoError(t, ApplyRazorgore(ctx, s, p))
 	require.Equal(t, []string{"window", "metrics", "metrics"}, s.writes)
 	d := s.e.Rankings[0]
@@ -152,6 +153,7 @@ func TestRazorgoreNumericalRepairEndToEnd(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, fresh.RequiresReparse, fresh.Reason)
 	require.Empty(t, fresh.Changes)
+	require.NoError(t, RevalidateRazorgore(ctx, s, fresh))
 	require.NoError(t, ApplyRazorgore(ctx, s, fresh))
 	require.Len(t, s.writes, 3)
 }
@@ -241,6 +243,7 @@ func TestRazorgoreNumericalNoopChecksEveryMetric(t *testing.T) {
 	ctx := context.Background()
 	p, err := EvaluateRazorgore(ctx, s, s.e.Instance.ID)
 	require.NoError(t, err)
+	require.NoError(t, RevalidateRazorgore(ctx, s, p))
 	require.NoError(t, ApplyRazorgore(ctx, s, p))
 	s.e.Rankings[0].Dps = 0
 	again, err := EvaluateRazorgore(ctx, s, s.e.Instance.ID)

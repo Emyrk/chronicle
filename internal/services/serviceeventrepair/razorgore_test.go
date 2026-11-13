@@ -5,6 +5,8 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"fmt"
+	"slices"
 	"testing"
 	"time"
 
@@ -232,7 +234,7 @@ func (s *razorgoreStore) RazorgoreRepairDeleteSpeedrun(context.Context, uuid.UUI
 	return nil
 }
 
-func TestRazorgoreApplyReevaluatesDiagnosticPlan(t *testing.T) {
+func TestRazorgoreApplyRejectsDiagnosticPlan(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	s := &razorgoreStore{e: fixtureRazorgore(t)}
@@ -244,7 +246,10 @@ func TestRazorgoreApplyReevaluatesDiagnosticPlan(t *testing.T) {
 	require.NoError(t, json.Unmarshal(data, &diagnostic))
 	diagnostic.Outcome = database.KillTypeClean
 	diagnostic.Changes = nil // never trusted
-	require.NoError(t, ApplyRazorgore(ctx, s, &diagnostic))
+	require.ErrorContains(t, ApplyRazorgore(ctx, s, &diagnostic), "missing prepared")
+	require.Empty(t, s.writes)
+	require.NoError(t, RevalidateRazorgore(ctx, s, p))
+	require.NoError(t, ApplyRazorgore(ctx, s, p))
 	require.Len(t, s.writes, 5)
 	require.Equal(t, database.KillTypeReset, s.e.Encounters[0].KillType)
 	fresh, err := EvaluateRazorgore(ctx, s, s.e.Instance.ID)
@@ -252,7 +257,7 @@ func TestRazorgoreApplyReevaluatesDiagnosticPlan(t *testing.T) {
 	require.Empty(t, fresh.Changes)
 	require.NoError(t, ApplyRazorgore(ctx, s, fresh))
 	require.Len(t, s.writes, 5)
-	require.ErrorContains(t, ApplyRazorgore(ctx, s, &diagnostic), "evidence changed")
+	require.ErrorIs(t, RevalidateRazorgore(ctx, s, p), ErrStaleEvidence)
 	require.Len(t, s.writes, 5)
 }
 
@@ -263,7 +268,7 @@ func TestRazorgoreApplyRejectsChangedEvidence(t *testing.T) {
 	p, err := EvaluateRazorgore(ctx, s, s.e.Instance.ID)
 	require.NoError(t, err)
 	s.e.Rankings[0].DamageDone++
-	require.ErrorContains(t, ApplyRazorgore(ctx, s, p), "evidence changed")
+	require.ErrorIs(t, RevalidateRazorgore(ctx, s, p), ErrStaleEvidence)
 	require.Empty(t, s.writes)
 	require.Error(t, ApplyRazorgore(ctx, s, nil))
 }
@@ -314,8 +319,8 @@ func TestRazorgoreApplyRejectsUnsupportedFreshPlan(t *testing.T) {
 	s.e.Phases = nil
 	p, err := EvaluateRazorgore(context.Background(), s, s.e.Instance.ID)
 	require.NoError(t, err)
-	p.RequiresReparse = false // serialized flags cannot override fresh evaluation
-	require.ErrorContains(t, ApplyRazorgore(context.Background(), s, p), "requires reparse")
+	p.RequiresReparse = false // even public diagnostics are covered by the seal
+	require.ErrorContains(t, ApplyRazorgore(context.Background(), s, p), "was modified")
 	require.Empty(t, s.writes)
 }
 
@@ -358,11 +363,118 @@ func TestRazorgoreTenantIdentity(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEqual(t, p.TenantID, moved.TenantID)
 	require.NotEqual(t, p.EvidenceHash, moved.EvidenceHash)
-	require.ErrorContains(t, ApplyRazorgore(ctx, s, p), "evidence changed")
+	require.ErrorIs(t, RevalidateRazorgore(ctx, s, p), ErrStaleEvidence)
 	require.Empty(t, s.writes)
 	s.e.Server.TenantID = uuid.NullUUID{}
 	missing, err := EvaluateRazorgore(ctx, s, s.e.Instance.ID)
 	require.NoError(t, err)
 	require.True(t, missing.RequiresReparse)
 	require.Equal(t, uuid.Nil, missing.TenantID)
+}
+
+// This Store exposes mutations only. Any evidence read by Apply panics through
+// the nil embedded Store, proving reconstruction cannot leak into the write phase.
+type razorgoreWriteOnlyStore struct {
+	database.Store
+	target *razorgoreStore
+}
+
+func (s *razorgoreWriteOnlyStore) RazorgoreRepairEncounter(ctx context.Context, p database.RazorgoreRepairEncounterParams) error {
+	return s.target.RazorgoreRepairEncounter(ctx, p)
+}
+func (s *razorgoreWriteOnlyStore) RazorgoreRepairHostile(ctx context.Context, p database.RazorgoreRepairHostileParams) error {
+	return s.target.RazorgoreRepairHostile(ctx, p)
+}
+func (s *razorgoreWriteOnlyStore) RazorgoreRepairPhase(ctx context.Context, p database.RazorgoreRepairPhaseParams) error {
+	return s.target.RazorgoreRepairPhase(ctx, p)
+}
+func (s *razorgoreWriteOnlyStore) RazorgoreRepairDeleteRankings(ctx context.Context, p database.RazorgoreRepairDeleteRankingsParams) error {
+	return s.target.RazorgoreRepairDeleteRankings(ctx, p)
+}
+func (s *razorgoreWriteOnlyStore) RazorgoreRepairDeleteSpeedrun(ctx context.Context, id uuid.UUID) error {
+	return s.target.RazorgoreRepairDeleteSpeedrun(ctx, id)
+}
+func (s *razorgoreWriteOnlyStore) RazorgoreRepairRankingWindow(ctx context.Context, p database.RazorgoreRepairRankingWindowParams) error {
+	return s.target.RazorgoreRepairRankingWindow(ctx, p)
+}
+func (s *razorgoreWriteOnlyStore) RazorgoreRepairMetrics(ctx context.Context, p database.RazorgoreRepairMetricsParams) error {
+	return s.target.RazorgoreRepairMetrics(ctx, p)
+}
+
+func TestRazorgoreApplyOnlyWritesPreparedPayload(t *testing.T) {
+	t.Parallel()
+	for _, numeric := range []bool{false, true} {
+		t.Run(fmt.Sprint(numeric), func(t *testing.T) {
+			t.Parallel()
+			e := fixtureRazorgore(t)
+			if numeric {
+				e = fixtureRazorgoreNumeric(t)
+			}
+			s := &razorgoreStore{e: e}
+			ctx := context.Background()
+			p, err := EvaluateRazorgore(ctx, s, e.Instance.ID)
+			require.NoError(t, err)
+			require.False(t, p.RequiresReparse, p.Reason)
+			require.NoError(t, RevalidateRazorgore(ctx, s, p))
+			require.NoError(t, ApplyRazorgore(ctx, &razorgoreWriteOnlyStore{target: s}, p))
+			require.NotEmpty(t, s.writes)
+		})
+	}
+}
+
+func TestRazorgorePreparedPayloadSeal(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"diagnostics", "hostile", "numeric"} {
+		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
+			e := fixtureRazorgore(t)
+			if kind == "numeric" {
+				e = fixtureRazorgoreNumeric(t)
+			}
+			s := &razorgoreStore{e: e}
+			ctx := context.Background()
+			p, err := EvaluateRazorgore(ctx, s, e.Instance.ID)
+			require.NoError(t, err)
+			switch kind {
+			case "diagnostics":
+				p.Changes = nil
+			case "hostile":
+				p.hostile.Periods[0].EndState = database.EndStateSlain
+			case "numeric":
+				p.numeric.Metrics[0].DamageDone++
+			}
+			require.ErrorContains(t, RevalidateRazorgore(ctx, s, p), "was modified")
+			require.ErrorContains(t, ApplyRazorgore(ctx, s, p), "was modified")
+			require.Empty(t, s.writes)
+		})
+	}
+}
+
+func TestRazorgoreRevalidateHashesOpaqueCompressedBytes(t *testing.T) {
+	t.Parallel()
+	s := &razorgoreStore{e: fixtureRazorgore(t)}
+	s.e.Events[0].Events = []byte("not a gzip stream")
+	// An integrity-only comparison must not require these bytes to be decodable.
+	// Constructing this private seal is possible only inside this package's test.
+	hash, err := razorgoreEvidenceHash(s.e)
+	require.NoError(t, err)
+	p := &RazorgoreRepairPlan{InstanceID: s.e.Instance.ID, EvidenceHash: hash}
+	p.seal, err = razorgorePlanSeal(p)
+	require.NoError(t, err)
+	require.NoError(t, RevalidateRazorgore(context.Background(), s, p))
+	s.e.Events[0].Events = append(s.e.Events[0].Events, '!')
+	require.ErrorIs(t, RevalidateRazorgore(context.Background(), s, p), ErrStaleEvidence)
+}
+
+func TestRazorgoreEvidenceHashIgnoresDatabaseRowOrder(t *testing.T) {
+	t.Parallel()
+	e := fixtureRazorgoreNumeric(t)
+	first, err := razorgoreEvidenceHash(e)
+	require.NoError(t, err)
+	slices.Reverse(e.Events)
+	slices.Reverse(e.Phases)
+	slices.Reverse(e.Rankings)
+	second, err := razorgoreEvidenceHash(e)
+	require.NoError(t, err)
+	require.Equal(t, first, second)
 }

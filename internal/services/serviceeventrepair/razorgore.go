@@ -16,7 +16,7 @@ import (
 )
 
 // RazorgoreRepairPlan is diagnostic evidence, not an executable mutation payload.
-// Apply always reloads and reevaluates the source rows before using any changes.
+// Only Evaluate creates an executable in-memory plan. JSON is diagnostic only.
 type RazorgoreRepairPlan struct {
 	TenantID        uuid.UUID         `json:"tenant_id"`
 	InstanceID      uuid.UUID         `json:"instance_id"`
@@ -29,87 +29,125 @@ type RazorgoreRepairPlan struct {
 	hostile         *database.LogInstanceEncounterHostile
 	phase           *database.LogInstanceEncounterPhase
 	numeric         *razorgoreNumericPlan
+	seal            [sha256.Size]byte
 }
 
 type razorgoreEvidence struct {
-	Realm      database.WowServerRealm
-	Server     database.WowServer
-	Instance   database.LogInstance
-	Encounters []database.LogInstanceEncounter
-	Hostiles   []database.LogInstanceEncounterHostile
-	Phases     []database.LogInstanceEncounterPhase
-	Events     []database.LogInstanceEvent
-	Rankings   []database.EncounterDpsRanking
-	Speedruns  []database.InstanceSpeedrun
+	MissingInstance bool
+	Realm           database.WowServerRealm
+	Server          database.WowServer
+	Instance        database.LogInstance
+	Encounters      []database.LogInstanceEncounter
+	Hostiles        []database.LogInstanceEncounterHostile
+	Phases          []database.LogInstanceEncounterPhase
+	Events          []database.LogInstanceEvent
+	Rankings        []database.EncounterDpsRanking
+	Speedruns       []database.InstanceSpeedrun
 }
 
-// EvaluateRazorgore supports proven direct-player phase-two numerical repairs
-// and pre-egg-threshold false kills when no other boss kill survives. General
-// pet/possession replay is rejected rather than guessing classification history.
+// ErrStaleEvidence means the source snapshot changed after preview. Reconstruct
+// a new preview outside the transaction rather than applying the old plan.
+var ErrStaleEvidence = errors.New("razorgore evidence changed; reevaluate repair")
+
+// EvaluateRazorgore loads and reconstructs a prepared plan outside the mutation
+// transaction. Gzip/protobuf decoding and numerical replay happen only here.
+// Supports proven direct-player phase-two metrics and pre-threshold false kills;
+// general pet/possession replay is rejected rather than guessing classification.
 func EvaluateRazorgore(ctx context.Context, db database.Store, instanceID uuid.UUID) (*RazorgoreRepairPlan, error) {
+	e, err := loadRazorgoreEvidence(ctx, db, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	p, err := evaluateRazorgoreEvidence(e)
+	if err != nil {
+		return nil, err
+	}
+	p.seal, err = razorgorePlanSeal(p)
+	if err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
+// RevalidateRazorgore rereads only stored source rows and hashes their compressed
+// event bytes. It performs no gzip decoding or numerical reconstruction. Call
+// under the instance operation lock in the same SERIALIZABLE transaction as Apply.
+func RevalidateRazorgore(ctx context.Context, tx database.Store, plan *RazorgoreRepairPlan) error {
+	if err := validateRazorgorePlan(plan); err != nil {
+		return err
+	}
+	e, err := loadRazorgoreEvidence(ctx, tx, plan.InstanceID)
+	if err != nil {
+		return err
+	}
+	hash, err := razorgoreEvidenceHash(e)
+	if err != nil {
+		return err
+	}
+	if hash != plan.EvidenceHash {
+		return ErrStaleEvidence
+	}
+	return nil
+}
+
+// loadRazorgoreEvidence intentionally deals only in database rows. Retention or
+// tenant identity loss is terminal missing evidence, not an endless retry error.
+func loadRazorgoreEvidence(ctx context.Context, db database.Store, instanceID uuid.UUID) (razorgoreEvidence, error) {
 	var e razorgoreEvidence
 	var err error
 	if e.Instance, err = db.RazorgoreRepairInstance(ctx, instanceID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			// Retention/deletion can race a queued repair. This is terminal
-			// missing evidence, not a transient database error to retry forever.
-			sum := sha256.Sum256([]byte("razorgore-repair-v2:missing:" + instanceID.String()))
-			return &RazorgoreRepairPlan{InstanceID: instanceID, RequiresReparse: true,
-				Reason:  "instance no longer exists or is not visible to the repair tenant",
-				Changes: []string{}, EvidenceHash: hex.EncodeToString(sum[:])}, nil
+			e.MissingInstance = true
+			e.Instance.ID = instanceID
+			return e, nil
 		}
-		return nil, fmt.Errorf("load instance: %w", err)
+		return e, fmt.Errorf("load instance: %w", err)
 	}
 
 	if e.Realm, err = db.GetWoWServerRealm(ctx, e.Instance.RealmID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return evaluateRazorgoreEvidence(e)
+			return e, nil
 		}
-		return nil, fmt.Errorf("load source realm: %w", err)
+		return e, fmt.Errorf("load source realm: %w", err)
 	}
 	if e.Server, err = db.GetWoWServer(ctx, e.Realm.ServerID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return evaluateRazorgoreEvidence(e)
+			return e, nil
 		}
-		return nil, fmt.Errorf("load source server: %w", err)
+		return e, fmt.Errorf("load source server: %w", err)
 	}
 	if !e.Server.TenantID.Valid || e.Server.TenantID.UUID == uuid.Nil {
-		return evaluateRazorgoreEvidence(e)
+		return e, nil
 	}
 	if e.Encounters, err = db.EncountersByInstanceID(ctx, instanceID); err != nil {
-		return nil, err
+		return e, err
 	}
 	if e.Hostiles, err = db.GetInstanceEncounterCharacterFights(ctx, instanceID); err != nil {
-		return nil, err
+		return e, err
 	}
 	if e.Phases, err = db.GetEncounterPhasesByInstanceID(ctx, instanceID); err != nil {
-		return nil, err
+		return e, err
 	}
 	if e.Events, err = db.RazorgoreRepairEvents(ctx, instanceID); err != nil {
-		return nil, err
+		return e, err
 	}
 	if e.Rankings, err = db.RazorgoreRepairRankings(ctx, instanceID); err != nil {
-		return nil, err
+		return e, err
 	}
 	if e.Speedruns, err = db.RazorgoreRepairSpeedruns(ctx, instanceID); err != nil {
-		return nil, err
+		return e, err
 	}
-	return evaluateRazorgoreEvidence(e)
+	return e, nil
 }
 
-// ApplyRazorgore must run in the caller's SERIALIZABLE transaction, under its
-// instance operation lock. Never execute a deserialized plan's proposed changes.
+// ApplyRazorgore writes only a sealed in-memory plan; it does not read or decode
+// evidence. The caller MUST first Revalidate in its locked SERIALIZABLE transaction.
+// Deserialized diagnostics and modified prepared payloads are never executable.
 func ApplyRazorgore(ctx context.Context, tx database.Store, plan *RazorgoreRepairPlan) error {
-	if plan == nil || plan.InstanceID == uuid.Nil || plan.EvidenceHash == "" {
-		return errors.New("missing Razorgore repair evidence")
-	}
-	fresh, err := EvaluateRazorgore(ctx, tx, plan.InstanceID)
-	if err != nil {
+	if err := validateRazorgorePlan(plan); err != nil {
 		return err
 	}
-	if fresh.EvidenceHash != plan.EvidenceHash {
-		return errors.New("razorgore evidence changed; reevaluate repair")
-	}
+	fresh := plan
 	if fresh.RequiresReparse {
 		return fmt.Errorf("razorgore requires reparse: %s", fresh.Reason)
 	}
@@ -134,7 +172,15 @@ func ApplyRazorgore(ctx context.Context, tx database.Store, plan *RazorgoreRepai
 	return tx.RazorgoreRepairDeleteSpeedrun(ctx, fresh.InstanceID)
 }
 
-func evaluateRazorgoreEvidence(e razorgoreEvidence) (*RazorgoreRepairPlan, error) {
+func razorgoreEvidenceHash(e razorgoreEvidence) (string, error) {
+	// Sort copies so hashing never mutates a prepared preview or caller-owned rows.
+	e.Encounters = slices.Clone(e.Encounters)
+	e.Phases = slices.Clone(e.Phases)
+	e.Hostiles = slices.Clone(e.Hostiles)
+	e.Events = slices.Clone(e.Events)
+	e.Rankings = slices.Clone(e.Rankings)
+	e.Speedruns = slices.Clone(e.Speedruns)
+
 	// Database queries without ORDER BY must not make hashes depend on row order.
 	slices.SortFunc(e.Encounters, func(a, b database.LogInstanceEncounter) int { return bytes.Compare(a.ID[:], b.ID[:]) })
 	slices.SortFunc(e.Phases, func(a, b database.LogInstanceEncounterPhase) int { return bytes.Compare(a.ID[:], b.ID[:]) })
@@ -150,12 +196,53 @@ func evaluateRazorgoreEvidence(e razorgoreEvidence) (*RazorgoreRepairPlan, error
 		}
 		return 0
 	})
+	slices.SortFunc(e.Events, func(a, b database.LogInstanceEvent) int { return bytes.Compare([]byte(a.Type), []byte(b.Type)) })
+	slices.SortFunc(e.Rankings, func(a, b database.EncounterDpsRanking) int { return bytes.Compare(a.ID[:], b.ID[:]) })
+	slices.SortFunc(e.Speedruns, func(a, b database.InstanceSpeedrun) int { return bytes.Compare(a.InstanceID[:], b.InstanceID[:]) })
 	raw, err := json.Marshal(e)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(append([]byte("razorgore-repair-v3\x00"), raw...))
+	return hex.EncodeToString(sum[:]), nil
+}
+
+// The seal covers both public diagnostics and the private executable payload.
+// It is never serialized, so a stored diagnostic cannot become an executable plan.
+func razorgorePlanSeal(p *RazorgoreRepairPlan) ([sha256.Size]byte, error) {
+	payload := struct {
+		Plan    *RazorgoreRepairPlan
+		Hostile *database.LogInstanceEncounterHostile
+		Phase   *database.LogInstanceEncounterPhase
+		Numeric *razorgoreNumericPlan
+	}{p, p.hostile, p.phase, p.numeric}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return [sha256.Size]byte{}, err
+	}
+	return sha256.Sum256(raw), nil
+}
+
+func validateRazorgorePlan(p *RazorgoreRepairPlan) error {
+	if p == nil || p.InstanceID == uuid.Nil || p.EvidenceHash == "" || p.seal == ([sha256.Size]byte{}) {
+		return errors.New("missing prepared Razorgore repair plan; evaluate outside the transaction")
+	}
+	sum, err := razorgorePlanSeal(p)
+	if err != nil {
+		return err
+	}
+	if sum != p.seal {
+		return errors.New("prepared Razorgore repair plan was modified")
+	}
+	return nil
+}
+
+func evaluateRazorgoreEvidence(e razorgoreEvidence) (*RazorgoreRepairPlan, error) {
+	hash, err := razorgoreEvidenceHash(e)
 	if err != nil {
 		return nil, err
 	}
-	sum := sha256.Sum256(append([]byte("razorgore-repair-v2\x00"), raw...))
-	p := &RazorgoreRepairPlan{InstanceID: e.Instance.ID, EvidenceHash: hex.EncodeToString(sum[:]), Changes: []string{}}
+	p := &RazorgoreRepairPlan{InstanceID: e.Instance.ID, EvidenceHash: hash, Changes: []string{}}
 	skip := func(reason string) (*RazorgoreRepairPlan, error) {
 		p.RequiresReparse = true
 		p.Reason = reason
@@ -163,6 +250,9 @@ func evaluateRazorgoreEvidence(e razorgoreEvidence) (*RazorgoreRepairPlan, error
 		return p, nil
 	}
 
+	if e.MissingInstance {
+		return skip("instance no longer exists or is not visible to the repair tenant")
+	}
 	if !e.Server.TenantID.Valid || e.Server.TenantID.UUID == uuid.Nil || e.Realm.ID != e.Instance.RealmID || e.Server.ID != e.Realm.ServerID {
 		return skip("source realm/server tenant identity is missing or inconsistent")
 	}
