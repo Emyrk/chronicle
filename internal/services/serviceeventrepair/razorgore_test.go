@@ -33,7 +33,7 @@ func fixtureRazorgore(t *testing.T) razorgoreEvidence {
 	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	end := start.Add(time.Minute)
 	e := razorgoreEvidence{
-		Instance:   database.LogInstance{ID: id, Name: "Blackwing Lair", ParserVersion: "v1.0.279", StartTime: database.Timestamptz(start), EndTime: database.Timestamptz(end)},
+		Instance:   database.LogInstance{ID: id, Name: "Blackwing Lair", StartTime: database.Timestamptz(start), EndTime: database.Timestamptz(end)},
 		Encounters: []database.LogInstanceEncounter{{ID: enc, InstanceID: id, Name: "Razorgore the Untamed", Boss: true, StartTime: database.Timestamptz(start), EndTime: database.Timestamptz(end), KillType: database.KillTypeClean}},
 		Phases:     []database.LogInstanceEncounterPhase{{ID: uuid.MustParse("00000000-0000-0000-0000-000000000003"), EncounterID: enc, Key: "razorgore_p1", StartOffsetMs: 0, EndOffsetMs: 60000, KillType: database.KillTypeClean}},
 		Hostiles:   []database.LogInstanceEncounterHostile{{EncounterID: enc, ID: boss, Boss: true, Periods: database.Periods{{Start: &database.PeriodMoment{Timestamp: start}, End: &database.PeriodMoment{Timestamp: end, Reason: "slain"}, EndState: database.EndStateSlain}}}},
@@ -505,9 +505,10 @@ func TestRazorgoreParserVersionGate(t *testing.T) {
 		{"v1.0.279", "", true}, {"v1.0.280", "", false}, {"v1.0.281", "", false},
 		{"v1.0.99", "", true}, {"v1.0.279+abcdef", "v1.0.279", true},
 		{"v1.0.280+abcdef", "v1.0.280", false}, {"v1.0.281+abcdef", "", false},
-		{"unknown", "", false}, {"", "", false}, {"1.0", "", false},
-		{"v1.0.280-rc.1", "", false}, {"v1.0.279-4-gabcdef", "", false},
+		{"unknown", "", true}, {"", "", true}, {"1.0", "", true},
+		{"v1.0.280-rc.1", "", true}, {"v1.0.279-4-gabcdef", "", true},
 		{"v1.0.279+abcdef", "v1.0.280", false}, {"0.0", "v1.0.279", true},
+		{"unknown", "v1.0.280", false}, {"v1.0.280+abcdef", "unknown", false},
 	} {
 		t.Run(tc.version+"/"+tc.tag, func(t *testing.T) {
 			t.Parallel()

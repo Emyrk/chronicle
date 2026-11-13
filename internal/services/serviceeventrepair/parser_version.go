@@ -37,3 +37,16 @@ func parserVersionBefore(instance database.LogInstance, cutoff string) (string, 
 	}
 	return exact, semver.Compare(release, cutoff) < 0
 }
+
+// parserVersionAtLeast only establishes a known cutoff. Unlike the opt-in
+// Lucifron repair, Razorgore preserves its prior eligibility for unknown stamps.
+// Either persisted release can prove the cutoff even when the stamps conflict.
+func parserVersionAtLeast(instance database.LogInstance, cutoff string) bool {
+	for _, stamp := range []string{instance.ParserVersion, instance.Versions["chronicle"]} {
+		release := parserRelease(stamp)
+		if release != "" && semver.Compare(release, cutoff) >= 0 {
+			return true
+		}
+	}
+	return false
+}

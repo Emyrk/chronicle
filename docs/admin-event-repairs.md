@@ -71,13 +71,14 @@ next successful checkpoint. Errors use 400 for invalid input, 404 for unknown ID
 
 ## Previously processed instances
 
-Before event replay, Razorgore requires a known parser release strictly before
-`v1.0.280`; parsing at that release or later skips the instance. Exact
-`GitTag+GitCommit` stamps are compared by release version, with any persisted
-`versions["chronicle"]` tag required to agree. Unknown/malformed, conflicting,
-prerelease, and git-describe versions conservatively skip, matching Lucifron. A
-missing exact stamp or schema `0.0` placeholder may use the persisted Chronicle
-tag. Skips create no receipt and enqueue no ratings.
+Before event replay, Razorgore skips instances with a known parser release at or
+after `v1.0.280`. Exact `GitTag+GitCommit` stamps are compared by release version;
+either the exact stamp or persisted `versions["chronicle"]` tag can establish
+that cutoff, including when metadata conflicts. Unknown/malformed, prerelease,
+and git-describe stamps do not introduce a new eligibility restriction: when
+neither stamp establishes the cutoff, the existing evidence checks still apply.
+This intentionally differs from Lucifron's opt-in historical-version policy.
+Skipped instances create no receipt and enqueue no ratings.
 
 The existing independent duration gate is preserved: the repair skips the entire instance if any
 Razorgore encounter has a valid persisted ranking window whose duration differs

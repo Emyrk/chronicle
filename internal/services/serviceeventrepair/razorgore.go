@@ -284,8 +284,8 @@ func evaluateRazorgoreEvidence(e razorgoreEvidence) (*RazorgoreRepairPlan, error
 	if e.Instance.Name != "Blackwing Lair" || e.Instance.InvalidatedAt.Valid || slices.Contains(e.Instance.Capabilities, "server-side") {
 		return skip("instance is not an active legacy Blackwing Lair source (authoritative encounter results require reparse)")
 	}
-	if _, eligible := parserVersionBefore(e.Instance, "v1.0.280"); !eligible {
-		return skip("parser version is unknown, ambiguous, or not strictly before v1.0.280")
+	if parserVersionAtLeast(e.Instance, "v1.0.280") {
+		return skip("instance was parsed at or after v1.0.280")
 	}
 	// A distinct persisted ranking duration is the opt-out proxy for previously
 	// processed instances, including manual reparses. Check every Razorgore pull
