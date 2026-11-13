@@ -2,6 +2,7 @@ package gamedataapi
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	"github.com/Emyrk/chronicle/api/chronauth"
@@ -37,6 +38,9 @@ func (h *Handler) mutateDataset(ctx context.Context, datasetID uuid.UUID, namesp
 		if err := mutate(tx); err != nil {
 			return err
 		}
+		if _, err := tx.BumpDatasetRevision(ctx, datasetID); err != nil {
+			return fmt.Errorf("bump dataset revision: %w", err)
+		}
 		if h.cacheSvc == nil {
 			return nil
 		}
@@ -63,6 +67,9 @@ func (h *Handler) mutateDatasetAuthz(ctx context.Context, datasetID uuid.UUID, n
 	if err := h.zed.InTx(ctx, func(tx *authz.AuthzTX) error {
 		if err := mutate(tx); err != nil {
 			return err
+		}
+		if _, err := tx.BumpDatasetRevision(ctx, datasetID); err != nil {
+			return fmt.Errorf("bump dataset revision: %w", err)
 		}
 		if h.cacheSvc == nil {
 			return nil

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/Emyrk/chronicle/database"
 
 	"github.com/coder/serpent"
 )
@@ -19,7 +19,7 @@ const kronosDataDir = "importdata/world/kronos"
 // importWorldKronos imports world data for the Kronos server (Classic 1.12).
 // Items are sourced from JSON files converted from the thatsmybis/classic-wow-item-db MySQL dumps.
 // See scripts/convert_cmangos_sql_to_json.py for the conversion tool.
-func importWorldKronos(ctx context.Context, pool *pgxpool.Pool, inv *serpent.Invocation, opts ImportWorldOptions) error {
+func importWorldKronos(ctx context.Context, pool database.DBTX, inv *serpent.Invocation, opts ImportWorldOptions) error {
 	dataDir := kronosDataDir
 
 	detected, err := detectFiles(dataDir)

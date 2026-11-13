@@ -25,27 +25,47 @@ func TestSetClassBuffIgnoresUpdatesSelectedDatasets(t *testing.T) {
 		BuildVersion: 5875, DefaultFlavor: []string{},
 	})
 	require.NoError(t, err)
+	otherDataset, err := store.InsertDataset(ctx, database.InsertDatasetParams{
+		Name: "Other Buff Ignore Dataset", Slug: "api-other-buff-ignore-dataset", WowVersion: "1.12.1",
+		BuildVersion: 5875, DefaultFlavor: []string{},
+	})
+	require.NoError(t, err)
+	otherRevision, err := store.GetDatasetRevision(ctx, otherDataset.ID)
+	require.NoError(t, err)
+	datasetRevision, err := store.GetDatasetRevision(ctx, dataset.ID)
+	require.NoError(t, err)
+	var revisionSequence int64
+	require.NoError(t, pool.QueryRow(ctx, `SELECT last_value FROM datasets_revision_seq`).Scan(&revisionSequence))
 
 	handler := &Handler{pool: pool}
 	req := httptest.NewRequest(http.MethodPut, "/class-buff-ignores", strings.NewReader(`{
 			"spell_name":"Power Word: Fortitude",
-			"dataset_ids":["`+servicedataset.DefaultDatasetID.String()+`","`+dataset.ID.String()+`","`+dataset.ID.String()+`"],
+			"dataset_ids":["`+otherDataset.ID.String()+`","`+dataset.ID.String()+`","`+dataset.ID.String()+`"],
 			"ignored":true
 		}`)).WithContext(ctx)
 	recorder := httptest.NewRecorder()
 	handler.SetClassBuffIgnores(recorder, req)
 	require.Equal(t, http.StatusNoContent, recorder.Code)
 
-	defaultPolicies, err := store.ListClassBuffPoliciesForDataset(ctx, servicedataset.DefaultDatasetID)
+	otherPolicies, err := store.ListClassBuffPoliciesForDataset(ctx, otherDataset.ID)
 	require.NoError(t, err)
 	require.Equal(t, []database.ListClassBuffPoliciesForDatasetRow{{
 		NormalizedName: "power word: fortitude", Ignored: true,
-	}}, defaultPolicies)
+	}}, otherPolicies)
 	datasetPolicies, err := store.ListClassBuffPoliciesForDataset(ctx, dataset.ID)
 	require.NoError(t, err)
 	require.Equal(t, []database.ListClassBuffPoliciesForDatasetRow{{
 		NormalizedName: "power word: fortitude", Ignored: true,
 	}}, datasetPolicies)
+	updatedOtherRevision, err := store.GetDatasetRevision(ctx, otherDataset.ID)
+	require.NoError(t, err)
+	require.Greater(t, updatedOtherRevision, otherRevision)
+	updatedDatasetRevision, err := store.GetDatasetRevision(ctx, dataset.ID)
+	require.NoError(t, err)
+	require.Greater(t, updatedDatasetRevision, datasetRevision)
+	var updatedRevisionSequence int64
+	require.NoError(t, pool.QueryRow(ctx, `SELECT last_value FROM datasets_revision_seq`).Scan(&updatedRevisionSequence))
+	require.Equal(t, revisionSequence+2, updatedRevisionSequence)
 
 	req = httptest.NewRequest(http.MethodPut, "/class-buff-ignores", strings.NewReader(`{
 			"spell_name":"Unending Breath",
@@ -62,6 +82,15 @@ func TestSetClassBuffIgnoresUpdatesSelectedDatasets(t *testing.T) {
 		{NormalizedName: "power word: fortitude", Ignored: true},
 		{NormalizedName: "unending breath", Ignored: false},
 	}, datasetPolicies)
+	finalOtherRevision, err := store.GetDatasetRevision(ctx, otherDataset.ID)
+	require.NoError(t, err)
+	require.Equal(t, updatedOtherRevision, finalOtherRevision)
+	finalDatasetRevision, err := store.GetDatasetRevision(ctx, dataset.ID)
+	require.NoError(t, err)
+	require.Greater(t, finalDatasetRevision, updatedDatasetRevision)
+	var finalRevisionSequence int64
+	require.NoError(t, pool.QueryRow(ctx, `SELECT last_value FROM datasets_revision_seq`).Scan(&finalRevisionSequence))
+	require.Equal(t, updatedRevisionSequence+1, finalRevisionSequence)
 }
 
 func TestSetClassBuffIgnoresRejectsUnknownDataset(t *testing.T) {

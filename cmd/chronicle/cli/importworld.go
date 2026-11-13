@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb/dbcdb"
 	"github.com/Emyrk/chronicle/database/migrations"
 	"github.com/coder/serpent"
@@ -25,7 +26,7 @@ type ImportWorldOptions struct {
 // ServerWorldImporter defines the import function for a specific server.
 // Each server can have its own data format and import logic.
 // pool is nil when DryRun is true.
-type ServerWorldImporter func(ctx context.Context, pool *pgxpool.Pool, inv *serpent.Invocation, opts ImportWorldOptions) error
+type ServerWorldImporter func(ctx context.Context, db database.DBTX, inv *serpent.Invocation, opts ImportWorldOptions) error
 
 // serverWorldImporters maps server names to their import functions.
 var serverWorldImporters = map[string]ServerWorldImporter{
@@ -78,7 +79,6 @@ func ImportWorldCmd() *serpent.Command {
 		Value:       serpent.BoolOf(&truncate),
 	})
 
-
 	cmd.Handler = func(inv *serpent.Invocation) error {
 		ctx := inv.Context()
 
@@ -130,14 +130,42 @@ func ImportWorldCmd() *serpent.Command {
 
 		_, _ = fmt.Fprintf(inv.Stderr, "importing world data for server %q into dataset %s (dry-run=%v)\n", server, opts.DatasetID, dryRun)
 
-		if truncate && !dryRun {
-			if err := truncateWorldTables(ctx, pool, inv); err != nil {
-				return fmt.Errorf("truncating world tables: %w", err)
+		if dryRun {
+			if err := importer(ctx, nil, inv, opts); err != nil {
+				return fmt.Errorf("importing world data for %s: %w", server, err)
 			}
-		}
+		} else {
+			tx, err := pool.Begin(ctx)
+			if err != nil {
+				return fmt.Errorf("beginning world import transaction: %w", err)
+			}
+			defer func() { _ = tx.Rollback(ctx) }()
 
-		if err := importer(ctx, pool, inv, opts); err != nil {
-			return fmt.Errorf("importing world data for %s: %w", server, err)
+			if truncate {
+				if err := truncateWorldTables(ctx, tx, inv); err != nil {
+					return fmt.Errorf("truncating world tables: %w", err)
+				}
+			}
+			if err := importer(ctx, tx, inv, opts); err != nil {
+				return fmt.Errorf("importing world data for %s: %w", server, err)
+			}
+			queries := database.NewQueries(tx)
+			if truncate {
+				datasets, err := queries.ListDatasets(ctx)
+				if err != nil {
+					return fmt.Errorf("listing datasets after global truncate: %w", err)
+				}
+				for _, dataset := range datasets {
+					if _, err := queries.BumpDatasetRevision(ctx, dataset.ID); err != nil {
+						return fmt.Errorf("bumping truncated dataset %s revision: %w", dataset.ID, err)
+					}
+				}
+			} else if _, err := queries.BumpDatasetRevision(ctx, opts.DatasetID); err != nil {
+				return fmt.Errorf("bumping dataset revision: %w", err)
+			}
+			if err := tx.Commit(ctx); err != nil {
+				return fmt.Errorf("committing world import: %w", err)
+			}
 		}
 
 		_, _ = fmt.Fprintf(inv.Stderr, "import complete\n")
@@ -240,7 +268,7 @@ var dbcTables = []string{
 }
 
 // truncateWorldTables clears all world and DBC data tables before a fresh import.
-func truncateWorldTables(ctx context.Context, pool *pgxpool.Pool, inv *serpent.Invocation) error {
+func truncateWorldTables(ctx context.Context, pool database.DBTX, inv *serpent.Invocation) error {
 	for table := range tableSchemas {
 		_, err := pool.Exec(ctx, fmt.Sprintf("TRUNCATE TABLE %s", table))
 		if err != nil {
@@ -304,7 +332,7 @@ func pickDataset(ctx context.Context, pool *pgxpool.Pool) (uuid.UUID, error) {
 }
 
 // importTable reads a JSON file and upserts all rows into the given table.
-func importTable(ctx context.Context, pool *pgxpool.Pool, table string, filePath string, datasetID uuid.UUID) (int, error) {
+func importTable(ctx context.Context, pool database.DBTX, table string, filePath string, datasetID uuid.UUID) (int, error) {
 	schema, ok := tableSchemas[table]
 	if !ok {
 		return 0, fmt.Errorf("unknown table schema: %s", table)
@@ -390,7 +418,7 @@ func importTable(ctx context.Context, pool *pgxpool.Pool, table string, filePath
 
 // importDBCData extracts ItemRandomProperties and SpellItemEnchantment from the WoW client
 // and upserts them into PostgreSQL.
-func importDBCData(ctx context.Context, pool *pgxpool.Pool, wowDir string, inv *serpent.Invocation, datasetID uuid.UUID) error {
+func importDBCData(ctx context.Context, pool database.DBTX, wowDir string, inv *serpent.Invocation, datasetID uuid.UUID) error {
 	wc, err := dbcdb.New(wowDir)
 	if err != nil {
 		return fmt.Errorf("opening WoW client at %s: %w", wowDir, err)
@@ -399,7 +427,7 @@ func importDBCData(ctx context.Context, pool *pgxpool.Pool, wowDir string, inv *
 	return importDBCTables(ctx, pool, wc, inv, datasetID)
 }
 
-func importDBCTables(ctx context.Context, pool *pgxpool.Pool, wc *dbcdb.WoWClient, inv *serpent.Invocation, datasetID uuid.UUID) error {
+func importDBCTables(ctx context.Context, pool database.DBTX, wc *dbcdb.WoWClient, inv *serpent.Invocation, datasetID uuid.UUID) error {
 	// --- ItemRandomProperties ---
 	irpTable, err := wc.ItemRandomProperties()
 	if err != nil {
@@ -650,7 +678,7 @@ func importDBCTables(ctx context.Context, pool *pgxpool.Pool, wc *dbcdb.WoWClien
 // This creates synthetic dbc_item_set rows (negative IDs) for each tier and sets
 // tooltip_set_id on world_item_template to point to the tier-specific row.
 // The original set_id is left untouched for cross-tier eligibility.
-func fixupMultiTierSets(ctx context.Context, pool *pgxpool.Pool, inv *serpent.Invocation, datasetID uuid.UUID) error {
+func fixupMultiTierSets(ctx context.Context, pool database.DBTX, inv *serpent.Invocation, datasetID uuid.UUID) error {
 	// Find sets where items have multiple distinct first-word prefixes.
 	rows, err := pool.Query(ctx, `
 		SELECT s.id, s.name_lang
@@ -769,7 +797,7 @@ func fixupMultiTierSets(ctx context.Context, pool *pgxpool.Pool, inv *serpent.In
 	return nil
 }
 
-func flushBatch(ctx context.Context, pool *pgxpool.Pool, batch *pgx.Batch) error {
+func flushBatch(ctx context.Context, pool database.DBTX, batch *pgx.Batch) error {
 	br := pool.SendBatch(ctx, batch)
 	for i := 0; i < batch.Len(); i++ {
 		if _, err := br.Exec(); err != nil {

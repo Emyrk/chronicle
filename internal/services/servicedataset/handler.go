@@ -130,7 +130,15 @@ func (s *Service) Upsert(w http.ResponseWriter, r *http.Request) {
 		}
 		d, err = s.db.InsertDataset(ctx, req.ToInsertParams())
 	} else {
-		d, err = s.db.UpdateDataset(ctx, req.ToUpdateParams())
+		err = s.db.InTx(ctx, func(tx database.Store) error {
+			var updateErr error
+			d, updateErr = tx.UpdateDataset(ctx, req.ToUpdateParams())
+			if updateErr != nil {
+				return updateErr
+			}
+			d.Revision, updateErr = tx.BumpDatasetRevision(ctx, d.ID)
+			return updateErr
+		}, nil)
 	}
 	if err != nil {
 		if database.IsUniqueViolation(err) {

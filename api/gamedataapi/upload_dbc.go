@@ -237,50 +237,56 @@ func (h *Handler) handleItemDisplayInfoUpload(ctx context.Context, w http.Respon
 		VALUES ($1, $2, $3)
 		ON CONFLICT (dataset_id, id) DO UPDATE SET icon=EXCLUDED.icon`
 
-	batch := &pgx.Batch{}
-	for _, row := range rows {
-		batch.Queue(idiSQL,
-			row.ID,
-			jsonSlice(row.ModelName), jsonSlice(row.ModelTexture),
-			jsonSlice(row.GeosetGroup), row.Flags, row.SpellVisualID,
-			jsonSlice(row.HelmetGeosetVis), jsonSlice(row.Texture),
-			row.ItemVisual, row.ParticleColorID,
-			jsonSlice(row.AttachmentGeosetGroup), row.ItemRangedDisplayInfoID,
-			jsonSlice(row.ModelMaterialResourcesID), jsonSlice(row.ModelResourcesID),
-			row.ModelType1, row.OverrideSwooshSoundKitID,
-			row.SheatheTransformMatrixID, row.SheathedSpellVisualKitID,
-			row.StateSpellVisualKitID, row.UnsheathedSpellVisualKitID,
-			jsonSlice(row.InventoryIcon), row.GroupSoundIndex,
-			row.GroundModel, row.ItemSize, jsonSlice(row.HelmetGeosetVisID),
-			datasetID,
-		)
+	mutationErrMessage := "Failed to update dataset"
+	err = h.mutateDataset(ctx, datasetID, nil, func(tx database.Store) error {
+		batch := &pgx.Batch{}
+		for _, row := range rows {
+			batch.Queue(idiSQL,
+				row.ID,
+				jsonSlice(row.ModelName), jsonSlice(row.ModelTexture),
+				jsonSlice(row.GeosetGroup), row.Flags, row.SpellVisualID,
+				jsonSlice(row.HelmetGeosetVis), jsonSlice(row.Texture),
+				row.ItemVisual, row.ParticleColorID,
+				jsonSlice(row.AttachmentGeosetGroup), row.ItemRangedDisplayInfoID,
+				jsonSlice(row.ModelMaterialResourcesID), jsonSlice(row.ModelResourcesID),
+				row.ModelType1, row.OverrideSwooshSoundKitID,
+				row.SheatheTransformMatrixID, row.SheathedSpellVisualKitID,
+				row.StateSpellVisualKitID, row.UnsheathedSpellVisualKitID,
+				jsonSlice(row.InventoryIcon), row.GroupSoundIndex,
+				row.GroundModel, row.ItemSize, jsonSlice(row.HelmetGeosetVisID),
+				datasetID,
+			)
 
-		// Also populate world_display_info with the first inventory icon.
-		icon := ""
-		if len(row.InventoryIcon) > 0 {
-			icon = row.InventoryIcon[0]
-		}
-		batch.Queue(wdiSQL, row.ID, icon, datasetID)
-
-		if batch.Len() >= batchSize {
-			if err := flushBatch(ctx, h.pool, batch); err != nil {
-				httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-					Message: "Failed to write batch",
-					Detail:  err.Error(),
-				})
-				return
+			// Also populate world_display_info with the first inventory icon.
+			icon := ""
+			if len(row.InventoryIcon) > 0 {
+				icon = row.InventoryIcon[0]
 			}
-			batch = &pgx.Batch{}
+			batch.Queue(wdiSQL, row.ID, icon, datasetID)
+
+			if batch.Len() >= batchSize {
+				if err := flushBatch(ctx, tx, batch); err != nil {
+					mutationErrMessage = "Failed to write batch"
+					return err
+				}
+				batch = &pgx.Batch{}
+			}
 		}
-	}
-	if batch.Len() > 0 {
-		if err := flushBatch(ctx, h.pool, batch); err != nil {
-			httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-				Message: "Failed to write final batch",
-				Detail:  err.Error(),
-			})
-			return
+		if batch.Len() > 0 {
+			if err := flushBatch(ctx, tx, batch); err != nil {
+				mutationErrMessage = "Failed to write final batch"
+				return err
+			}
 		}
+
+		return nil
+	})
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
+			Message: mutationErrMessage,
+			Detail:  err.Error(),
+		})
+		return
 	}
 
 	resp.Inserted = len(rows) // Simplified — upsert doesn't distinguish insert vs update here.
@@ -353,38 +359,44 @@ func (h *Handler) handleSpellItemEnchantmentUpload(ctx context.Context, w http.R
 			required_skill_id=EXCLUDED.required_skill_id, required_skill_rank=EXCLUDED.required_skill_rank,
 			min_level=EXCLUDED.min_level, max_level=EXCLUDED.max_level`
 
-	batch := &pgx.Batch{}
-	for _, row := range rows {
-		batch.Queue(sieSQL,
-			row.ID, row.Charges,
-			int32At(row.Effect, 0), int32At(row.Effect, 1), int32At(row.Effect, 2),
-			int32At(row.EffectPointsMin, 0), int32At(row.EffectPointsMin, 1), int32At(row.EffectPointsMin, 2),
-			int32At(row.EffectArg, 0), int32At(row.EffectArg, 1), int32At(row.EffectArg, 2),
-			row.Name_lang.String(), row.ItemVisual, row.Flags, row.Src_itemID,
-			row.Condition_ID, row.RequiredSkillID, row.RequiredSkillRank,
-			row.MinLevel, row.MaxLevel,
-			datasetID,
-		)
+	mutationErrMessage := "Failed to update dataset"
+	err = h.mutateDataset(ctx, datasetID, nil, func(tx database.Store) error {
+		batch := &pgx.Batch{}
+		for _, row := range rows {
+			batch.Queue(sieSQL,
+				row.ID, row.Charges,
+				int32At(row.Effect, 0), int32At(row.Effect, 1), int32At(row.Effect, 2),
+				int32At(row.EffectPointsMin, 0), int32At(row.EffectPointsMin, 1), int32At(row.EffectPointsMin, 2),
+				int32At(row.EffectArg, 0), int32At(row.EffectArg, 1), int32At(row.EffectArg, 2),
+				row.Name_lang.String(), row.ItemVisual, row.Flags, row.Src_itemID,
+				row.Condition_ID, row.RequiredSkillID, row.RequiredSkillRank,
+				row.MinLevel, row.MaxLevel,
+				datasetID,
+			)
 
-		if batch.Len() >= batchSize {
-			if err := flushBatch(ctx, h.pool, batch); err != nil {
-				httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-					Message: "Failed to write batch",
-					Detail:  err.Error(),
-				})
-				return
+			if batch.Len() >= batchSize {
+				if err := flushBatch(ctx, tx, batch); err != nil {
+					mutationErrMessage = "Failed to write batch"
+					return err
+				}
+				batch = &pgx.Batch{}
 			}
-			batch = &pgx.Batch{}
 		}
-	}
-	if batch.Len() > 0 {
-		if err := flushBatch(ctx, h.pool, batch); err != nil {
-			httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-				Message: "Failed to write final batch",
-				Detail:  err.Error(),
-			})
-			return
+		if batch.Len() > 0 {
+			if err := flushBatch(ctx, tx, batch); err != nil {
+				mutationErrMessage = "Failed to write final batch"
+				return err
+			}
 		}
+
+		return nil
+	})
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
+			Message: mutationErrMessage,
+			Detail:  err.Error(),
+		})
+		return
 	}
 
 	resp.Inserted = len(rows)
@@ -427,34 +439,40 @@ func (h *Handler) handleItemRandomPropertiesUpload(ctx context.Context, w http.R
 			enchantment_3=EXCLUDED.enchantment_3, enchantment_4=EXCLUDED.enchantment_4,
 			enchantment_5=EXCLUDED.enchantment_5`
 
-	batch := &pgx.Batch{}
-	for _, row := range rows {
-		batch.Queue(irpSQL,
-			row.ID, row.Name, row.Name_lang.String(),
-			int32At(row.Enchantment, 0), int32At(row.Enchantment, 1),
-			int32At(row.Enchantment, 2), int32At(row.Enchantment, 3),
-			int32At(row.Enchantment, 4),
-			datasetID,
-		)
-		if batch.Len() >= batchSize {
-			if err := flushBatch(ctx, h.pool, batch); err != nil {
-				httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-					Message: "Failed to write batch",
-					Detail:  err.Error(),
-				})
-				return
+	mutationErrMessage := "Failed to update dataset"
+	err = h.mutateDataset(ctx, datasetID, nil, func(tx database.Store) error {
+		batch := &pgx.Batch{}
+		for _, row := range rows {
+			batch.Queue(irpSQL,
+				row.ID, row.Name, row.Name_lang.String(),
+				int32At(row.Enchantment, 0), int32At(row.Enchantment, 1),
+				int32At(row.Enchantment, 2), int32At(row.Enchantment, 3),
+				int32At(row.Enchantment, 4),
+				datasetID,
+			)
+			if batch.Len() >= batchSize {
+				if err := flushBatch(ctx, tx, batch); err != nil {
+					mutationErrMessage = "Failed to write batch"
+					return err
+				}
+				batch = &pgx.Batch{}
 			}
-			batch = &pgx.Batch{}
 		}
-	}
-	if batch.Len() > 0 {
-		if err := flushBatch(ctx, h.pool, batch); err != nil {
-			httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-				Message: "Failed to write final batch",
-				Detail:  err.Error(),
-			})
-			return
+		if batch.Len() > 0 {
+			if err := flushBatch(ctx, tx, batch); err != nil {
+				mutationErrMessage = "Failed to write final batch"
+				return err
+			}
 		}
+
+		return nil
+	})
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
+			Message: mutationErrMessage,
+			Detail:  err.Error(),
+		})
+		return
 	}
 
 	resp.Inserted = len(rows)
@@ -497,101 +515,95 @@ func (h *Handler) handleItemSetUpload(ctx context.Context, w http.ResponseWriter
 			required_skill=EXCLUDED.required_skill,
 			required_skill_rank=EXCLUDED.required_skill_rank`
 
-	batch := &pgx.Batch{}
-	for _, row := range rows {
-		batch.Queue(setSQL, row.ID, row.Name_lang.String(), row.RequiredSkill, row.RequiredSkillRank, datasetID)
-		if batch.Len() >= batchSize {
-			if err := flushBatch(ctx, h.pool, batch); err != nil {
-				httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-					Message: "Failed to write item set batch",
-					Detail:  err.Error(),
-				})
-				return
-			}
-			batch = &pgx.Batch{}
-		}
-	}
-	if batch.Len() > 0 {
-		if err := flushBatch(ctx, h.pool, batch); err != nil {
-			httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-				Message: "Failed to write item set final batch",
-				Detail:  err.Error(),
-			})
-			return
-		}
-	}
-
-	// 2. Upsert dbc_item_set_bonus (set bonus spells)
-	const bonusSQL = `INSERT INTO dbc_item_set_bonus (set_id, threshold, spell_id, dataset_id)
-		VALUES ($1,$2,$3,$4)
-		ON CONFLICT (dataset_id, set_id, threshold, spell_id) DO NOTHING`
-
-	batch = &pgx.Batch{}
-	for _, row := range rows {
-		for i := range row.SetSpellID {
-			if i >= len(row.SetThreshold) {
-				break
-			}
-			spellID := row.SetSpellID[i]
-			threshold := row.SetThreshold[i]
-			if spellID == 0 || threshold == 0 {
-				continue
-			}
-			batch.Queue(bonusSQL, row.ID, threshold, spellID, datasetID)
+	mutationErrMessage := "Failed to update dataset"
+	err = h.mutateDataset(ctx, datasetID, nil, func(tx database.Store) error {
+		batch := &pgx.Batch{}
+		for _, row := range rows {
+			batch.Queue(setSQL, row.ID, row.Name_lang.String(), row.RequiredSkill, row.RequiredSkillRank, datasetID)
 			if batch.Len() >= batchSize {
-				if err := flushBatch(ctx, h.pool, batch); err != nil {
-					httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-						Message: "Failed to write set bonus batch",
-						Detail:  err.Error(),
-					})
-					return
+				if err := flushBatch(ctx, tx, batch); err != nil {
+					mutationErrMessage = "Failed to write item set batch"
+					return err
 				}
 				batch = &pgx.Batch{}
 			}
 		}
-	}
-	if batch.Len() > 0 {
-		if err := flushBatch(ctx, h.pool, batch); err != nil {
-			httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-				Message: "Failed to write set bonus final batch",
-				Detail:  err.Error(),
-			})
-			return
-		}
-	}
-
-	// 3. Upsert dbc_item_set_item (set membership)
-	const itemSQL = `INSERT INTO dbc_item_set_item (set_id, item_entry, dataset_id)
-		VALUES ($1,$2,$3)
-		ON CONFLICT (dataset_id, set_id, item_entry) DO NOTHING`
-
-	batch = &pgx.Batch{}
-	for _, row := range rows {
-		for _, itemID := range row.ItemID {
-			if itemID == 0 {
-				continue
+		if batch.Len() > 0 {
+			if err := flushBatch(ctx, tx, batch); err != nil {
+				mutationErrMessage = "Failed to write item set final batch"
+				return err
 			}
-			batch.Queue(itemSQL, row.ID, itemID, datasetID)
-			if batch.Len() >= batchSize {
-				if err := flushBatch(ctx, h.pool, batch); err != nil {
-					httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-						Message: "Failed to write set item batch",
-						Detail:  err.Error(),
-					})
-					return
+		}
+
+		// 2. Upsert dbc_item_set_bonus (set bonus spells)
+		const bonusSQL = `INSERT INTO dbc_item_set_bonus (set_id, threshold, spell_id, dataset_id)
+			VALUES ($1,$2,$3,$4)
+			ON CONFLICT (dataset_id, set_id, threshold, spell_id) DO NOTHING`
+
+		batch = &pgx.Batch{}
+		for _, row := range rows {
+			for i := range row.SetSpellID {
+				if i >= len(row.SetThreshold) {
+					break
 				}
-				batch = &pgx.Batch{}
+				spellID := row.SetSpellID[i]
+				threshold := row.SetThreshold[i]
+				if spellID == 0 || threshold == 0 {
+					continue
+				}
+				batch.Queue(bonusSQL, row.ID, threshold, spellID, datasetID)
+				if batch.Len() >= batchSize {
+					if err := flushBatch(ctx, tx, batch); err != nil {
+						mutationErrMessage = "Failed to write set bonus batch"
+						return err
+					}
+					batch = &pgx.Batch{}
+				}
 			}
 		}
-	}
-	if batch.Len() > 0 {
-		if err := flushBatch(ctx, h.pool, batch); err != nil {
-			httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-				Message: "Failed to write set item final batch",
-				Detail:  err.Error(),
-			})
-			return
+		if batch.Len() > 0 {
+			if err := flushBatch(ctx, tx, batch); err != nil {
+				mutationErrMessage = "Failed to write set bonus final batch"
+				return err
+			}
 		}
+
+		// 3. Upsert dbc_item_set_item (set membership)
+		const itemSQL = `INSERT INTO dbc_item_set_item (set_id, item_entry, dataset_id)
+			VALUES ($1,$2,$3)
+			ON CONFLICT (dataset_id, set_id, item_entry) DO NOTHING`
+
+		batch = &pgx.Batch{}
+		for _, row := range rows {
+			for _, itemID := range row.ItemID {
+				if itemID == 0 {
+					continue
+				}
+				batch.Queue(itemSQL, row.ID, itemID, datasetID)
+				if batch.Len() >= batchSize {
+					if err := flushBatch(ctx, tx, batch); err != nil {
+						mutationErrMessage = "Failed to write set item batch"
+						return err
+					}
+					batch = &pgx.Batch{}
+				}
+			}
+		}
+		if batch.Len() > 0 {
+			if err := flushBatch(ctx, tx, batch); err != nil {
+				mutationErrMessage = "Failed to write set item final batch"
+				return err
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
+			Message: mutationErrMessage,
+			Detail:  err.Error(),
+		})
+		return
 	}
 
 	resp.Inserted = len(rows)

@@ -170,12 +170,13 @@ func (h *Handler) deriveClassBuffs(ctx context.Context, datasetID uuid.UUID, spe
 	if err != nil {
 		return fmt.Errorf("marshal class buffs: %w", err)
 	}
-	store := database.New(h.pool)
-	if err := store.UpsertDatasetClassBuffs(ctx, database.UpsertDatasetClassBuffsParams{
-		DatasetID: datasetID,
-		Data:      data,
-	}); err != nil {
-		return fmt.Errorf("upsert class buffs: %w", err)
-	}
-	return nil
+	return h.mutateDataset(ctx, datasetID, nil, func(tx database.Store) error {
+		if err := tx.UpsertDatasetClassBuffs(ctx, database.UpsertDatasetClassBuffsParams{
+			DatasetID: datasetID,
+			Data:      data,
+		}); err != nil {
+			return fmt.Errorf("upsert class buffs: %w", err)
+		}
+		return nil
+	})
 }
