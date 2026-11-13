@@ -27,7 +27,7 @@ import { StatisticsTab, type LiveStatisticsData } from "./Hub/StatisticsTab"
 import { ParsingTab, type LiveParsingData } from "./Hub/ParsingTab"
 import { FULL_CLEAR, defaultSpeedrunsView, type EncounterSelection, type SpeedrunsView } from "./Hub/encounterSelection"
 import { liveHubBosses, liveHubPreset } from "./Hub/liveBosses"
-import { hubInstanceParams, hubParams, hubPath, hubRatingParams, hubRatingView, hubSubject, hubSubjectParams, hubTab, v2Selection } from "./v2Selection"
+import { hubEncounterVariants, hubEncounterVariantParams, hubInstanceParams, hubParams, hubPath, hubRatingParams, hubRatingView, hubSubject, hubSubjectParams, hubTab, v2Selection } from "./v2Selection"
 import type { RatingView } from "./Ratings/ratingThemes"
 import type { HubSubject } from "./Hub/hub.fixtures"
 import { legacyLeaderboardsTarget } from "./leaderboardsState"
@@ -128,6 +128,12 @@ export function LeaderboardsLiveHub() {
     return <Navigate to={hubPath(hubTab(params.get("tab")) ?? tab, params, params.get("instance") ?? instance)} replace />
   }
   if (pathTab !== undefined && (hubTab(pathTab) === undefined || pathTab === "overview")) return <Navigate to={hubPath("overview", params, instance)} replace />
+  // Normalize against static supported cohorts, not summary data that may still be loading.
+  // Redirect before rendering content so a rejected URL cannot silently claim an exact cohort.
+  const canonicalVariants = hubEncounterVariantParams(params, hubEncounterVariants(params, instance))
+  if (params.getAll("encounter_variants").length > 1 || params.get("encounter_variants") !== canonicalVariants.get("encounter_variants")) {
+    return <Navigate to={hubPath(tab, canonicalVariants, instance)} replace />
+  }
   if (rootRatingsDisabled) return <p className="p-8 text-center text-muted-foreground">Visit a specific server to see ratings</p>
   // Only the first load (nothing on screen yet) fails the page: the hub keeps its frame, empty,
   // with the error where the boards would be.
@@ -207,7 +213,6 @@ function LiveInstanceHub({ instanceName, names, summary, stale, realm, realmIDs,
   subject: HubSubject; onSubject: (subject: HubSubject) => void; onOpenGuildRatings: (view: RatingView) => void
   onRealm: (name: string) => void; onCohort: (difficulty: string, size: string) => void; onEncounters: (bosses: readonly string[]) => void
 }) {
-  const [variantSelection, setVariantSelection] = useState<{ instance: string; variants: EncounterVariants }>()
   const raids = summary.instances.filter((row) => row.instance_name === instanceName && row.category === "raid")
   // The summary resolves the URL's cohort, or the busiest one when none (or a stale one) is given.
   const resolved = summary.selected_cohort
@@ -223,20 +228,17 @@ function LiveInstanceHub({ instanceName, names, summary, stale, realm, realmIDs,
   // Stale names (another instance, a removed boss) drop out; nothing left is the preset.
   const chosen = bosses.filter((name) => encounters.includes(name))
   const selection: EncounterSelection = chosen.length ? { kind: "bosses", bosses: chosen } : FULL_CLEAR
-  const [, setVariantParams] = useSearchParams()
+  const [variantParams, setVariantParams] = useSearchParams()
   const variantsEnabled = encounterVariantsEnabled(tab, ratingView)
   const disabledReason = variantsEnabled ? undefined : "This view uses Combined. Variant choices are retained for Ratings, Performances, and Statistics."
-  const encounterVariants = variantSelection?.instance === instanceName
-    ? variantSelection.variants : undefined
-  const resetPage = () => setVariantParams(previous => { const next = new URLSearchParams(previous); next.delete("page"); return next })
+  const encounterVariants = hubEncounterVariants(variantParams, instanceName)
   const selectVariant = (boss: string, variant?: EncounterVariant) => {
     if (!variantsEnabled) return
-    resetPage()
-    setVariantSelection(previous => {
-      const variants = { ...(previous?.instance === instanceName ? previous.variants : {}) }
+    setVariantParams(previous => {
+      const variants = hubEncounterVariants(previous, instanceName)
       if (variant) variants[boss] = variant
       else delete variants[boss]
-      return { instance: instanceName, variants }
+      return hubEncounterVariantParams(previous, variants)
     })
   }
   const hardBosses = (chosen.length ? chosen : presetBosses).filter(boss => supportsEncounterVariant(instanceName, boss))
@@ -248,8 +250,8 @@ function LiveInstanceHub({ instanceName, names, summary, stale, realm, realmIDs,
         className={cn(difficultyChipClassName("hard"), "h-5 cursor-pointer px-2 text-xs disabled:cursor-not-allowed disabled:opacity-25 disabled:grayscale", hardMode ? "ring-2" : "opacity-70 hover:opacity-100")}
         onClick={() => {
           if (!variantsEnabled) return
-          resetPage()
-          setVariantSelection({ instance: instanceName, variants: withHighestEncounterVariants(instanceName, hardBosses, encounterVariants, hardMode) })
+          setVariantParams(previous => hubEncounterVariantParams(previous,
+            withHighestEncounterVariants(instanceName, hardBosses, hubEncounterVariants(previous, instanceName), hardMode)))
         }}>Hard mode</button>,
       afterBoss: (boss: string) => supportsEncounterVariant(instanceName, boss)
         ? <EncounterVariantChips boss={boss} active={encounterVariants?.[boss]} disabledReason={disabledReason} onSelect={variant => selectVariant(boss, variant)} /> : null,

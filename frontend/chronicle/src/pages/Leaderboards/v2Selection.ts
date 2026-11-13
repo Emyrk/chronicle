@@ -1,3 +1,4 @@
+import { supportsEncounterVariant, type EncounterVariants } from "@/components/EncounterDifficulty/encounterVariant"
 import type { HubSubject } from "./Hub/hub.fixtures"
 import { TABS, type HubTab } from "./Hub/hubTabs"
 import { VIEW_ORDER, type RatingView } from "./Ratings/ratingThemes"
@@ -78,6 +79,7 @@ export function hubInstanceParams(params: URLSearchParams): URLSearchParams {
   next.delete("instance")
   next.delete("encounter")
   next.delete("encounters")
+  next.delete("encounter_variants")
   next.delete("difficulty")
   next.delete("size")
   return next
@@ -105,4 +107,27 @@ export function v2Selection(params: URLSearchParams, route: HubRouteParams = {})
     encounters: [...new Set(listed.split(",").map((name) => name.trim()).filter(Boolean))],
     realmIDs: [...new Set((params.get("realm_ids") ?? "").split(",").filter(Boolean))],
   }
+}
+
+/** Parse only supported exact cohorts, independently of pending/stale summary metadata. */
+export function hubEncounterVariants(params: URLSearchParams, instance: string | null): EncounterVariants {
+  try {
+    const value: unknown = JSON.parse(params.get("encounter_variants") ?? "{}")
+    if (!value || typeof value !== "object" || Array.isArray(value)) return {}
+    return Object.fromEntries(Object.entries(value)
+      .filter(([boss, variant]) => instance !== null && supportsEncounterVariant(instance, boss) && (variant === "normal" || variant === "hard"))
+      .sort(([a], [b]) => a.localeCompare(b))) as EncounterVariants
+  } catch {
+    return {}
+  }
+}
+
+/** Combined omits a boss; an entirely Combined selection omits the parameter. */
+export function hubEncounterVariantParams(params: URLSearchParams, variants: EncounterVariants): URLSearchParams {
+  const next = new URLSearchParams(params)
+  const entries = Object.entries(variants).sort(([a], [b]) => a.localeCompare(b))
+  if (entries.length) next.set("encounter_variants", JSON.stringify(Object.fromEntries(entries)))
+  else next.delete("encounter_variants")
+  next.delete("page")
+  return next
 }

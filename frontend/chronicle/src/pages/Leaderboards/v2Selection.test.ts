@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { hubInstanceParams, hubParams, hubPath, hubRatingParams, hubRatingView, hubSubject, hubSubjectParams, v2Selection } from "./v2Selection"
+import { hubEncounterVariants, hubEncounterVariantParams, hubInstanceParams, hubParams, hubPath, hubRatingParams, hubRatingView, hubSubject, hubSubjectParams, v2Selection } from "./v2Selection"
 
 describe("leaderboard hub selection", () => {
   it("opens the live overview without selecting a mock instance", () => {
@@ -63,7 +63,9 @@ describe("leaderboard hub selection", () => {
 
   it("drops instance-specific state when changing instances", () => {
     const params = new URLSearchParams("instance=Molten+Core&encounter=Ragnaros&difficulty=Normal&size=40&subject=guild&realm_ids=realm-1")
+    params.set("encounter_variants", JSON.stringify({ Hodir: "hard" }))
     const next = hubInstanceParams(params)
+    expect(next.has("encounter_variants")).toBe(false)
     expect(next.has("instance")).toBe(false)
     expect(next.has("encounter")).toBe(false)
     expect(next.has("difficulty")).toBe(false)
@@ -84,5 +86,26 @@ describe("leaderboard hub selection", () => {
     expect(hubPath("overview", params, "Molten Core")).toBe("/leaderboards/Molten-Core?encounters=Garr")
     expect(hubPath("ratings", params)).toBe("/leaderboards/ratings?encounters=Garr")
     expect(hubPath("overview", new URLSearchParams())).toBe("/leaderboards")
+  })
+})
+
+describe("encounter variant URLs", () => {
+  it.each(["broken", "null", "[]", "42", '"hard"', '{"Hodir":"combined"}', '{"Freya":"hard"}', '{"__proto__":"hard"}'])("ignores invalid selections: %s", value => {
+    expect(hubEncounterVariants(new URLSearchParams({ encounter_variants: value }), "Ulduar")).toEqual({})
+  })
+  it("validates each entry and instance without relying on loaded boss metadata", () => {
+    const params = new URLSearchParams({ encounter_variants: '{"Freya":"hard","Hodir":"normal","Thorim":null}' })
+    expect(hubEncounterVariants(params, "Ulduar")).toEqual({ Hodir: "normal" })
+    expect(hubEncounterVariants(params, "Naxxramas")).toEqual({})
+    expect(hubEncounterVariants(params, null)).toEqual({})
+  })
+  it("writes canonical maps atomically with pagination reset and preserves other scope", () => {
+    const params = new URLSearchParams("page=3&realm_ids=realm-1&difficulty=Normal&size=10&spec=Frost&subject=guild&encounters=Hodir")
+    const next = hubEncounterVariantParams(params, { Hodir: "hard" })
+    expect(next.get("encounter_variants")).toBe('{"Hodir":"hard"}')
+    expect(next.has("page")).toBe(false)
+    for (const key of ["realm_ids", "difficulty", "size", "spec", "subject", "encounters"]) expect(next.get(key)).toBe(params.get(key))
+    expect(hubEncounterVariantParams(next, {}).has("encounter_variants")).toBe(false)
+    expect(params.get("page")).toBe("3")
   })
 })
