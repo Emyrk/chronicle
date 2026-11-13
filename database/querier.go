@@ -1233,6 +1233,15 @@ type sqlcQuerier interface {
 	// Capture affected tenants before deleting instances, including invalidated
 	// sources that RankingRunSources deliberately excludes.
 	RatingRealmsByInstanceIDs(ctx context.Context, instanceIds []uuid.UUID) ([]uuid.UUID, error)
+	RazorgoreRepairDeleteRankings(ctx context.Context, arg RazorgoreRepairDeleteRankingsParams) error
+	RazorgoreRepairDeleteSpeedrun(ctx context.Context, instanceID uuid.UUID) error
+	RazorgoreRepairEncounter(ctx context.Context, arg RazorgoreRepairEncounterParams) error
+	RazorgoreRepairEvents(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceEvent, error)
+	RazorgoreRepairHostile(ctx context.Context, arg RazorgoreRepairHostileParams) error
+	RazorgoreRepairInstance(ctx context.Context, instanceID uuid.UUID) (LogInstance, error)
+	RazorgoreRepairPhase(ctx context.Context, arg RazorgoreRepairPhaseParams) error
+	RazorgoreRepairRankings(ctx context.Context, instanceID uuid.UUID) ([]EncounterDpsRanking, error)
+	RazorgoreRepairSpeedruns(ctx context.Context, instanceID uuid.UUID) ([]InstanceSpeedrun, error)
 	ReactivateDiscordMembershipGrantCheck(ctx context.Context, arg ReactivateDiscordMembershipGrantCheckParams) (ReactivateDiscordMembershipGrantCheckRow, error)
 	ReadLeaderboardGuildCareer(ctx context.Context, arg ReadLeaderboardGuildCareerParams) (LeaderboardCareerSubject, error)
 	ReadLeaderboardPlayerCareers(ctx context.Context, arg ReadLeaderboardPlayerCareersParams) ([]LeaderboardCareerSubject, error)
