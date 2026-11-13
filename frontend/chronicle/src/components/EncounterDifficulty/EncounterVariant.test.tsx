@@ -5,8 +5,9 @@ import { EncounterVariantChips, EncounterVariantMark } from "./EncounterVariant"
 import { activeEncounterVariants, encounterVariantsEnabled, supportsEncounterVariant, withHighestEncounterVariants } from "./encounterVariant";
 
 describe("encounter variant presentation", () => {
-  it("only exposes proven Hodir support", () => {
+  it("only exposes proven Ulduar support", () => {
     expect(supportsEncounterVariant("Ulduar", "Hodir")).toBe(true);
+    expect(supportsEncounterVariant("Ulduar", "XT-002 Deconstructor")).toBe(true);
     expect(supportsEncounterVariant("Ulduar", "Freya")).toBe(false);
     expect(supportsEncounterVariant("Other", "Hodir")).toBe(false);
   });
@@ -60,4 +61,12 @@ it("hides exact success rates and attempt counts even if cached data exists", ()
   expect(html).toContain("require variant classification for unsuccessful attempts");
   expect(html).not.toContain("100%");
   expect(html).not.toContain("Attempts");
+});
+
+it("keeps XT and Hodir independent through the hard-mode shortcut", () => {
+ const selected = ["Hodir", "XT-002 Deconstructor", "Freya"];
+ const variants = { Hodir: "normal" as const, "XT-002 Deconstructor": "hard" as const };
+ expect(activeEncounterVariants("Ulduar", selected, variants)).toEqual(variants);
+ expect(withHighestEncounterVariants("Ulduar", selected, variants)).toEqual({ Hodir: "hard", "XT-002 Deconstructor": "hard" });
+ expect(withHighestEncounterVariants("Ulduar", ["XT-002 Deconstructor"], variants, true)).toEqual({ Hodir: "normal" });
 });

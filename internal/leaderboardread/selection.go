@@ -213,7 +213,7 @@ func Select(rows []database.ResolveLeaderboardConfigurationRow, r Request) (Sele
 // Only classified encounters expose exact boards. Combined is represented by
 // omitting the boss from EncounterVariants, not by inventing a variant value.
 func supportedEncounterVariant(instance, boss, variant string) bool {
-	return instance == "Ulduar" && boss == "Hodir" && (variant == "normal" || variant == "hard")
+	return instance == "Ulduar" && (boss == "Hodir" || boss == "XT-002 Deconstructor") && (variant == "normal" || variant == "hard")
 }
 
 type Cursor struct {
