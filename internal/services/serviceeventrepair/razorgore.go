@@ -140,6 +140,9 @@ func ApplyRazorgore(ctx context.Context, tx database.Store, plan *RazorgoreRepai
 	if err := validateRazorgorePlan(plan); err != nil {
 		return err
 	}
+	if plan.lucifron != nil || plan.operation != OperationRazorgore {
+		return errors.New("prepared plan belongs to a different repair script")
+	}
 	fresh := plan
 	if fresh.RequiresReparse {
 		return fmt.Errorf("razorgore requires reparse: %s", fresh.Reason)
@@ -222,8 +225,9 @@ func razorgorePlanSeal(p *RazorgoreRepairPlan) ([sha256.Size]byte, error) {
 		Numeric             *razorgoreNumericPlan
 		Multi               *razorgoreMultiPlan
 		ReconstructedPhases []database.InsertEncounterPhaseParams
+		Operation           string
 		Lucifron            *lucifronPlan
-	}{p, p.hostile, p.phase, p.numeric, p.multi, p.reconstructedPhases, p.lucifron}
+	}{p, p.hostile, p.phase, p.numeric, p.multi, p.reconstructedPhases, p.operation, p.lucifron}
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		return [sha256.Size]byte{}, err
@@ -251,6 +255,7 @@ func evaluateRazorgoreEvidence(e razorgoreEvidence) (*RazorgoreRepairPlan, error
 		return nil, err
 	}
 	p := &RazorgoreRepairPlan{
+		operation:  OperationRazorgore,
 		InstanceID: e.Instance.ID, EvidenceHash: hash, Changes: []string{},
 		Warnings: []string{},
 		// Keep the version-1 diagnostic shape stable even without reconstructed

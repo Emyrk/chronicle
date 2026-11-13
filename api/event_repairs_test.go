@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -69,4 +70,22 @@ func TestEventRepairConversion(t *testing.T) {
 	result.Items[0].Changes[0] = "mutated"
 	require.Equal(t, "change", operation.Items[0].Changes[0])
 	require.NotNil(t, eventRepairOperation(serviceeventrepair.Operation{}).Items)
+}
+
+func TestLucifronRepairPublicDetailsRoundTrip(t *testing.T) {
+	t.Parallel()
+	details := map[string]any{"parser_version": "v1.0.172", "rule_version": "v1.0.173", "ranked_target_entries": []int{12118, 12119}, "players": []any{}, "omissions": []any{map[string]any{"encounter_id": uuid.New().String(), "stream": "damage", "unit_guid": "0xF140000001000001", "amount": 12, "count": 1, "reason": "unknown historical owner"}}}
+	operation := serviceeventrepair.Operation{ID: uuid.New(), Operation: serviceeventrepair.OperationLucifron, Version: 1, Items: []serviceeventrepair.Item{{InstanceID: uuid.New(), Warnings: []string{"omitted uncertain contribution"}, Details: details}}}
+	encoded, err := json.Marshal(eventRepairOperation(operation))
+	require.NoError(t, err)
+	var response chroniclesdk.EventRepairOperation
+	require.NoError(t, json.Unmarshal(encoded, &response))
+	require.Equal(t, serviceeventrepair.OperationLucifron, response.Operation)
+	require.Equal(t, 1, response.Version)
+	require.Equal(t, operation.Items[0].Warnings, response.Items[0].Warnings)
+	expected, err := json.Marshal(details)
+	require.NoError(t, err)
+	actual, err := json.Marshal(response.Items[0].Details)
+	require.NoError(t, err)
+	require.JSONEq(t, string(expected), string(actual))
 }
