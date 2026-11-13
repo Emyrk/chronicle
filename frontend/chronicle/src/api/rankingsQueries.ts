@@ -352,6 +352,8 @@ export function useRankingsSuccessRates(
 export function useRankingsKillTimeLeaderboard(params: {
   instance_name: string;
   encounter_name?: string;
+  difficulty_name?: string;
+  max_players?: number;
   period?: string;
   limit?: number;
   offset?: number;
@@ -359,6 +361,8 @@ export function useRankingsKillTimeLeaderboard(params: {
   const searchParams = new URLSearchParams();
   searchParams.set("instance_name", params.instance_name);
   if (params.encounter_name) searchParams.set("encounter_name", params.encounter_name);
+  if (params.difficulty_name !== undefined) searchParams.set("difficulty_name", params.difficulty_name);
+  if (params.max_players !== undefined) searchParams.set("max_players", String(params.max_players));
   if (params.period) searchParams.set("period", params.period);
   if (params.limit != null) searchParams.set("limit", String(params.limit));
   if (params.offset != null) searchParams.set("offset", String(params.offset));

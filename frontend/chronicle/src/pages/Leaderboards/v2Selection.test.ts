@@ -31,12 +31,13 @@ describe("leaderboard hub selection", () => {
     expect(hubParams(selected, "realm_ids").has("realm_ids")).toBe(false)
   })
 
-  it("keeps chosen encounters in the query", () => {
+  it("keeps chosen encounters in the query and resets pagination", () => {
     // The legacy single-boss link still opens that boss.
-    const params = new URLSearchParams("encounter=Ragnaros&realm_ids=realm-1")
+    const params = new URLSearchParams("encounter=Ragnaros&realm_ids=realm-1&page=3")
     expect(v2Selection(params, { instance: "Molten-Core", tab: "performances" }).encounters).toEqual(["Ragnaros"])
     const set = hubParams(params, "encounters", "Lucifron,Ragnaros")
     expect(v2Selection(set).encounters).toEqual(["Lucifron", "Ragnaros"])
+    expect(set.has("page")).toBe(false)
     expect(set.has("encounter")).toBe(false)
   })
 

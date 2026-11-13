@@ -74,6 +74,23 @@ describe("Hub leaderboard live props", () => {
     expect(markup).not.toContain("Fastest full clears")
   })
 
+  it("shows 50 kill times per page with absolute ranks and pagination", () => {
+    const kill = (index: number) => ({
+      encounter_id: `k${index}`, instance_id: `run-${index}`, log_hashed_slug: `kill-log-${index}`,
+      instance_name: "Molten Core", encounter_name: "Ragnaros", guild_name: `Guild ${index}`, guild_id: `g${index}`,
+      realm_name: "Realm", duration_secs: 90 + index, killed_at: "2026-10-01T00:00:00Z",
+    })
+    const markup = renderToStaticMarkup(<SpeedrunsTab instanceName="Molten Core" bosses={["Lucifron", "Ragnaros"]}
+      selection={{ kind: "bosses", bosses: ["Ragnaros"] }} killPage={2} killPageSize={50} onKillPage={() => {}}
+      live={{ kills: { entries: [kill(1) as never, kill(2) as never], totalCount: 101 } }} />)
+    expect(markup).toContain(">51<")
+    expect(markup).toContain(">52<")
+    expect(markup).toContain("101 kills")
+    expect(markup).toContain("Page 2 of 3")
+    expect(markup).toContain('aria-label="Previous page"')
+    expect(markup).toContain('aria-label="Next page"')
+  })
+
   it("keeps Storybook performances and renders live ranked rows with the selected metric", () => {
     const fixture = performances()
     expect(fixture).toContain('data-metric="hps"')

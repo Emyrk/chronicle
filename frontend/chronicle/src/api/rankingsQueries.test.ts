@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { useQuery } from "@tanstack/react-query"
-import { useCharacterPerformance, useRankingsLeaderboard, useRankingsStats, useRankingsKillTimes, useRankingsSuccessRates } from "./rankingsQueries"
+import { useCharacterPerformance, useRankingsKillTimeLeaderboard, useRankingsLeaderboard, useRankingsStats, useRankingsKillTimes, useRankingsSuccessRates } from "./rankingsQueries"
 
 vi.mock("@tanstack/react-query", () => ({ useQuery: vi.fn((options) => options) }))
 
@@ -18,6 +18,26 @@ describe("rankings query cohort serialization", () => {
     expect(params.has("difficulty_names")).toBe(true)
     expect(params.get("difficulty_names")).toBe("")
     expect(params.get("max_players")).toBe("0")
+  })
+})
+
+describe("kill time leaderboard serialization", () => {
+  it("preserves an explicitly empty difficulty, zero size, and pagination", async () => {
+    const fetcher = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ entries: [], total_count: 0 }) })
+    vi.stubGlobal("fetch", fetcher)
+    useRankingsKillTimeLeaderboard({ instance_name: "Blackwing Lair", encounter_name: "Razorgore the Untamed", difficulty_name: "", max_players: 0, limit: 50, offset: 50 })
+    const options = vi.mocked(useQuery).mock.calls[0][0]
+    if (typeof options.queryFn !== "function") throw new Error("Expected rankings query function")
+    await options.queryFn({} as never)
+    const params = new URL(String(fetcher.mock.calls[0][0]), "http://localhost").searchParams
+    expect(Object.fromEntries(params)).toMatchObject({
+      instance_name: "Blackwing Lair",
+      encounter_name: "Razorgore the Untamed",
+      difficulty_name: "",
+      max_players: "0",
+      limit: "50",
+      offset: "50",
+    })
   })
 })
 

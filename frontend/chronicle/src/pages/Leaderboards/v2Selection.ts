@@ -38,7 +38,9 @@ export function hubPath(tab: HubTab, params: URLSearchParams, instance?: string 
 /** Keep filter query state while changing one of the remaining query-backed selections. */
 export function hubParams(params: URLSearchParams, key: "realm_ids" | "encounters", value?: string): URLSearchParams {
   const next = new URLSearchParams(params)
-  // The single-boss parameter predates multi-boss selection; any write replaces it.
+  // Filter changes start at the first page. The single-boss parameter predates
+  // multi-boss selection; any encounter write replaces it.
+  next.delete("page")
   if (key === "encounters") next.delete("encounter")
   if (value) next.set(key, value)
   else next.delete(key)

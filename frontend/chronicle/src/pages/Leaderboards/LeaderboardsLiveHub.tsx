@@ -10,7 +10,7 @@ import { useQuery } from "@tanstack/react-query"
 import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import type { SpeedrunLeaderboardEntry } from "@/api/typesGenerated"
 import { useCareerLeaderboard } from "@/api/career"
-import { useRankingsKillTimesByBoss, useRankingsLeaderboard, useRankingsStats, useRankingsClearTimes, useRankingsKillTimes, useRankingsSuccessRates, useParseScoreSpreads, useTimeParseSpreads } from "@/api/rankingsQueries"
+import { useRankingsKillTimeLeaderboard, useRankingsKillTimesByBoss, useRankingsLeaderboard, useRankingsStats, useRankingsClearTimes, useRankingsKillTimes, useRankingsSuccessRates, useParseScoreSpreads, useTimeParseSpreads } from "@/api/rankingsQueries"
 import { useHubSummary, type HubSummary } from "./Hub/hubSummaryAdapter"
 import { cohortLabel } from "./Hub/cohortLabel"
 import { AdRailStack } from "@/components/Ads/AdRailStack"
@@ -35,7 +35,7 @@ import { useSiteConfig, useSupportedInstances } from "@/api/queries"
 import { useRenownAwards } from "./renownConfig"
 
 const ALL_REALMS = "All realms"
-const PERFORMANCE_PAGE_SIZE = 50
+const LEADERBOARD_PAGE_SIZE = 50
 
 /** The Storybook Hub is the page. Only its data source differs in production. */
 export function LeaderboardsLiveHub() {
@@ -168,7 +168,7 @@ export function LeaderboardsLiveHub() {
           subject={subject} onSubject={chooseSubject} onOpenGuildRatings={openGuildRatings}
           onRealm={(name) => choose("realm_ids", available.find((row) => row.name === name)?.id)}
           difficulty={params.get("difficulty")} size={params.get("size")}
-          onCohort={(difficulty, size) => { const next = new URLSearchParams(params); if (size) { next.set("difficulty", difficulty); next.set("size", size) } else { next.delete("difficulty"); next.delete("size") } setParams(next) }}
+          onCohort={(difficulty, size) => { const next = new URLSearchParams(params); next.delete("page"); if (size) { next.set("difficulty", difficulty); next.set("size", size) } else { next.delete("difficulty"); next.delete("size") } setParams(next) }}
           onEncounters={(names) => choose("encounters", names.join(",") || undefined)} />} />
     </div>
     <AdRailStack primaryPlacement="leaderboards-right-rail" secondaryPlacement="leaderboards-right-rail-lower" />
@@ -294,8 +294,8 @@ function LiveHubContent({ context, summary, stale = false, realmName, realmIDs, 
   const { instanceName, scope, role, subject, selection, onTab } = context
   const [params, setParams] = useSearchParams()
   const rawPage = Number(params.get("page"))
-  const performancePage = Number.isInteger(rawPage) && rawPage >= 1 ? rawPage : 1
-  const setPerformancePage = useCallback((page: number) => {
+  const page = Number.isInteger(rawPage) && rawPage >= 1 ? rawPage : 1
+  const setPage = useCallback((page: number) => {
     setParams((previous) => {
       const next = new URLSearchParams(previous)
       if (page <= 1) next.delete("page")
@@ -317,16 +317,26 @@ function LiveHubContent({ context, summary, stale = false, realmName, realmIDs, 
   // Preserve zero-size cohorts explicitly; exact_cohort distinguishes them from an unfiltered board.
   const performance = useRankingsLeaderboard({ encounter_variants: activeVariants, instance_names: instanceName, encounter_names: pickedNames,
     difficulty_names: chosen?.difficulty_name, max_players: chosen?.max_players, exact_cohort: !!chosen, class: scope.cls, spec: scope.spec, sub_spec: scope.subSpec,
-    metric: role === "healing" ? "hps" : "dps", realm_names: realmName, limit: PERFORMANCE_PAGE_SIZE,
-    offset: (performancePage - 1) * PERFORMANCE_PAGE_SIZE,
+    metric: role === "healing" ? "hps" : "dps", realm_names: realmName, limit: LEADERBOARD_PAGE_SIZE,
+    offset: (page - 1) * LEADERBOARD_PAGE_SIZE,
   }, !overview && context.tab === "performances" && exact && realmIDs.length <= 1 && subject === "characters")
   // Speedruns shows one board at a time; only that board is fetched. Reset with the selection.
   const [speedViewState, setSpeedView] = useState<{ key: string; view: SpeedrunsView }>()
   const selectionKey = picked.join(",")
   const speedView = speedViewState?.key === selectionKey ? speedViewState.view : defaultSpeedrunsView(selection)
   const killBosses = picked.length ? picked : bosses
-  const kills = useRankingsKillTimesByBoss(instanceName, killBosses, killBosses.length === 1 ? 10 : 3,
-    !overview && context.tab === "speedruns" && speedView === "kills")
+  const singleKillBoss = killBosses.length === 1 ? killBosses[0] : undefined
+  const singleKills = useRankingsKillTimeLeaderboard({
+    instance_name: instanceName,
+    encounter_name: singleKillBoss,
+    difficulty_name: chosen?.difficulty_name,
+    max_players: chosen?.max_players,
+    limit: LEADERBOARD_PAGE_SIZE,
+    offset: (page - 1) * LEADERBOARD_PAGE_SIZE,
+  }, !overview && context.tab === "speedruns" && speedView === "kills" && !!singleKillBoss)
+  const multiKills = useRankingsKillTimesByBoss(instanceName, killBosses, 3,
+    !overview && context.tab === "speedruns" && speedView === "kills" && killBosses.length > 1)
+  const kills = singleKillBoss ? singleKills : multiKills
   const speed = useQuery<SpeedrunLeaderboardEntry[]>({
     queryKey: ["hub-live-speedruns", instanceName, realmName, chosen?.difficulty_name, chosen?.max_players],
     queryFn: async () => {
@@ -369,14 +379,15 @@ function LiveHubContent({ context, summary, stale = false, realmName, realmIDs, 
   if (context.tab === "performances") return !exact ? <CohortPrompt raids={raids} /> :
     <PerformancesTab instanceName={instanceName} scope={scope} role={role} subject={subject} bosses={picked}
       where={boss ?? (picked.length > 1 ? `${picked.length} bosses` : instanceName)} onSpeedruns={() => onTab("speedruns")}
-      page={performancePage} pageSize={PERFORMANCE_PAGE_SIZE} onPage={setPerformancePage}
+      page={page} pageSize={LEADERBOARD_PAGE_SIZE} onPage={setPage}
       live={{ response: performance.data, loading: performance.isPending, error: performance.isError ? performance.error : null }} />
   if (context.tab === "speedruns") return !exact ? <CohortPrompt raids={raids} /> :
     <SpeedrunsTab instanceName={instanceName} bosses={bosses} selection={selection}
       view={speedView} onView={(view) => setSpeedView({ key: selectionKey, view })}
+      killPage={page} killPageSize={LEADERBOARD_PAGE_SIZE} onKillPage={setPage}
       live={{
         clears: { entries: speed.data, loading: speed.isPending, error: speed.isError ? speed.error : null },
-        kills: { entries: kills.data?.entries, loading: kills.isPending, error: kills.isError ? kills.error : null },
+        kills: { entries: kills.data?.entries, totalCount: kills.data?.total_count, loading: kills.isPending, error: kills.isError ? kills.error : null },
       }} />
   if (context.tab === "statistics") {
     const live: LiveStatisticsData = {

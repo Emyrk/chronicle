@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { useCareerLeaderboard } from "@/api/career"
 import type { CareerLeaderboardEntry, CareerLeaderboardResponse } from "@/api/typesGenerated"
-import { useRankingsLeaderboard, useRankingsKillTimesByBoss } from "@/api/rankingsQueries"
+import { useRankingsKillTimeLeaderboard, useRankingsLeaderboard, useRankingsKillTimesByBoss } from "@/api/rankingsQueries"
 import { useHubSummary, type HubSummary } from "./Hub/hubSummaryAdapter"
 import { useSiteConfig } from "@/api/queries"
 import { LeaderboardsLiveHub } from "./LeaderboardsLiveHub"
@@ -55,6 +55,7 @@ vi.mock("@/api/rankingsQueries", () => ({
   useRankingsStats: () => ({ data: [], isPending: false, isError: false }),
   useRankingsClearTimes: () => ({ data: [], isPending: false, isError: false }),
   useRankingsKillTimes: () => ({ data: [], isPending: false, isError: false }),
+  useRankingsKillTimeLeaderboard: vi.fn(() => ({ data: { entries: [], total_count: 0 }, isPending: false, isError: false })),
   useRankingsKillTimesByBoss: vi.fn(() => ({ data: { entries: [], total_count: 0 }, isPending: false, isError: false })),
   useRankingsSuccessRates: () => ({ data: [], isPending: false, isError: false }),
   useParseScoreSpreads: () => ({ data: { available: false, spreads: [] }, isPending: false, isError: false }),
@@ -117,9 +118,22 @@ describe("live Storybook Hub", () => {
 
   it("keeps kill-time requests unchanged by variant URL parameters", () => {
     hub("/leaderboards/Molten-Core/speedruns?encounters=Ragnaros");
-    const combined = vi.mocked(useRankingsKillTimesByBoss).mock.calls.at(-1);
+    const combined = vi.mocked(useRankingsKillTimeLeaderboard).mock.calls.at(-1);
     hub("/leaderboards/Molten-Core/speedruns?encounters=Ragnaros&encounter_variant=hard");
-    expect(vi.mocked(useRankingsKillTimesByBoss).mock.calls.at(-1)).toEqual(combined);
+    expect(vi.mocked(useRankingsKillTimeLeaderboard).mock.calls.at(-1)).toEqual(combined);
+  });
+
+  it("paginates a single boss's kill times 50 at a time", () => {
+    hub("/leaderboards/Molten-Core/speedruns?encounters=Ragnaros&page=2");
+    expect(vi.mocked(useRankingsKillTimeLeaderboard)).toHaveBeenLastCalledWith({
+      instance_name: "Molten Core",
+      encounter_name: "Ragnaros",
+      difficulty_name: "Normal",
+      max_players: 40,
+      limit: 50,
+      offset: 50,
+    }, true);
+    expect(vi.mocked(useRankingsKillTimesByBoss).mock.calls.at(-1)?.[3]).toBe(false);
   });
 
   it("never forwards encounter variants to career or summary requests", () => {

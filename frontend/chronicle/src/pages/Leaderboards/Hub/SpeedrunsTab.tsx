@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react"
-import { Timer, Users } from "lucide-react"
+import { ChevronLeft, ChevronRight, Timer, Users } from "lucide-react"
 import type { KillTimeLeaderboardEntry, SpeedrunLeaderboardEntry } from "@/api/typesGenerated"
+import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { MOBILE_EDGE_TO_EDGE } from "@/pages/Leaderboards/Hub/edgeToEdge"
 import { guildAttributes, killAttributes, speedrunClearAttributes } from "@/components/EntityMenu/leaderboardEntities"
@@ -21,6 +22,9 @@ export function SpeedrunsTab({
   selection,
   view: controlledView,
   onView,
+  killPage = 1,
+  killPageSize = 50,
+  onKillPage,
   live,
 }: {
   instanceName: string
@@ -29,8 +33,11 @@ export function SpeedrunsTab({
   /** Controlled view, so a host only loads the board that is shown. */
   view?: SpeedrunsView
   onView?: (view: SpeedrunsView) => void
+  killPage?: number
+  killPageSize?: number
+  onKillPage?: (page: number) => void
   /** When provided, use only parent-loaded API results, never story fixtures. */
-  live?: { clears?: LiveList<SpeedrunLeaderboardEntry>; kills?: LiveList<KillTimeLeaderboardEntry> }
+  live?: { clears?: LiveList<SpeedrunLeaderboardEntry>; kills?: LiveList<KillTimeLeaderboardEntry> & { totalCount?: number } }
 }) {
   const [ownView, setOwnView] = useState<SpeedrunsView>(defaultSpeedrunsView(selection))
   const view = controlledView ?? ownView
@@ -65,7 +72,8 @@ export function SpeedrunsTab({
   ) : (
     <div className="space-y-3 sm:space-y-5">
       {switcher}
-      <KillTimes instanceName={instanceName} bosses={chosen} allBosses={bosses} live={live?.kills} story={!live} />
+      <KillTimes instanceName={instanceName} bosses={chosen} allBosses={bosses} page={killPage} pageSize={killPageSize}
+        onPage={onKillPage} live={live?.kills} story={!live} />
     </div>
   )
 }
@@ -78,23 +86,32 @@ function Status({ children, alert }: { children: React.ReactNode; alert?: boolea
   )
 }
 
-/** Each selected boss's fastest kills, a card per boss (one boss gets a longer list). */
+/** Each selected boss's fastest kills, a card per boss. A single boss shows 50 per page. */
 function KillTimes({
   instanceName,
   bosses,
   allBosses,
+  page,
+  pageSize,
+  onPage,
   live,
   story,
 }: {
   instanceName: string
   bosses: readonly string[]
   allBosses: readonly string[]
-  live?: LiveList<KillTimeLeaderboardEntry>
+  page: number
+  pageSize: number
+  onPage?: (page: number) => void
+  live?: LiveList<KillTimeLeaderboardEntry> & { totalCount?: number }
   story: boolean
 }) {
   if (live?.error) return <Status alert>Could not load kill times: {live.error.message}</Status>
   if (!story && (live?.loading || !live?.entries)) return <Status>Loading kill times…</Status>
-  const limit = bosses.length === 1 ? 10 : 3
+  const limit = bosses.length === 1 ? (story ? 10 : pageSize) : 3
+  const rankOffset = !story && bosses.length === 1 ? (page - 1) * pageSize : 0
+  const totalCount = live?.totalCount ?? live?.entries?.length ?? 0
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
   const rows = (boss: string): { key: string; guild: string; guildId?: string; ms: number; date: string; realm: string; entry?: KillTimeLeaderboardEntry }[] =>
     story
       ? speedruns([boss], allBosses, instanceName, limit).map((r) => ({ key: r.instance_id, guild: r.guild_name, ms: r.duration_ms, date: r.completion_time, realm: r.realm_name }))
@@ -103,46 +120,64 @@ function KillTimes({
           .slice(0, limit)
           .map((e) => ({ key: e.encounter_id, guild: e.guild_name, guildId: e.guild_id, ms: Math.round(e.duration_secs * 1000), date: e.killed_at, realm: e.realm_name, entry: e }))
   return (
-    <section aria-label="Kill times" className={cn("grid gap-4", bosses.length > 1 && "sm:grid-cols-2 xl:grid-cols-3")}>
-      {bosses.map((boss) => {
-        const list = rows(boss)
-        return (
-          <div key={boss} className="overflow-hidden rounded-xl border bg-card">
-            <h3 className="flex items-center gap-2 border-b bg-black/10 px-4 py-2.5 text-sm font-semibold">
-              <Timer className="size-4 text-muted-foreground" />
-              {boss}
-            </h3>
-            {list.length ? (
-              <ol>
-                {list.map((r, i) => (
-                  <li key={r.key} className="flex items-center gap-3 border-b border-white/5 px-4 py-2 text-sm last:border-b-0">
-                    <span className="w-4 font-mono text-xs text-muted-foreground">{i + 1}</span>
-                    <span className="min-w-0 flex-1 truncate text-amber-500" {...guildAttributes(r.guildId, r.guild)}>
-                      &lt;{r.guild || "Unknown guild"}&gt;
-                    </span>
-                    <span className="hidden truncate text-xs text-muted-foreground sm:inline">{r.realm}</span>
-                    {r.entry ? (
-                      <a
-                        href={`/instances/${r.entry.log_hashed_slug || r.entry.instance_id}`}
-                        className="font-mono tabular-nums hover:underline"
-                        aria-label={`Open ${boss} kill log for ${r.guild || "Unknown guild"}`}
-                        {...killAttributes(r.entry)}
-                      >
-                        {formatClock(r.ms)}
-                      </a>
-                    ) : (
-                      <span className="font-mono tabular-nums">{formatClock(r.ms)}</span>
-                    )}
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <p className="px-4 py-6 text-center text-xs text-muted-foreground">No clean kills yet</p>
-            )}
+    <div className="space-y-3">
+      <section aria-label="Kill times" className={cn("grid gap-4", bosses.length > 1 && "sm:grid-cols-2 xl:grid-cols-3")}>
+        {bosses.map((boss) => {
+          const list = rows(boss)
+          return (
+            <div key={boss} className="overflow-hidden rounded-xl border bg-card">
+              <h3 className="flex items-center gap-2 border-b bg-black/10 px-4 py-2.5 text-sm font-semibold">
+                <Timer className="size-4 text-muted-foreground" />
+                {boss}
+              </h3>
+              {list.length ? (
+                <ol>
+                  {list.map((r, i) => (
+                    <li key={r.key} className="flex items-center gap-3 border-b border-white/5 px-4 py-2 text-sm last:border-b-0">
+                      <span className="w-8 font-mono text-xs text-muted-foreground">{rankOffset + i + 1}</span>
+                      <span className="min-w-0 flex-1 truncate text-amber-500" {...guildAttributes(r.guildId, r.guild)}>
+                        &lt;{r.guild || "Unknown guild"}&gt;
+                      </span>
+                      <span className="hidden truncate text-xs text-muted-foreground sm:inline">{r.realm}</span>
+                      {r.entry ? (
+                        <a
+                          href={`/instances/${r.entry.log_hashed_slug || r.entry.instance_id}`}
+                          className="font-mono tabular-nums hover:underline"
+                          aria-label={`Open ${boss} kill log for ${r.guild || "Unknown guild"}`}
+                          {...killAttributes(r.entry)}
+                        >
+                          {formatClock(r.ms)}
+                        </a>
+                      ) : (
+                        <span className="font-mono tabular-nums">{formatClock(r.ms)}</span>
+                      )}
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="px-4 py-6 text-center text-xs text-muted-foreground">No clean kills yet</p>
+              )}
+            </div>
+          )
+        })}
+      </section>
+      {!story && bosses.length === 1 && onPage && totalPages > 1 && (
+        <div className="flex items-center justify-between px-1 pt-2">
+          <span className="text-xs text-muted-foreground">{totalCount.toLocaleString()} kills</span>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" className="h-7 w-7 p-0" disabled={page <= 1}
+              aria-label="Previous page" onClick={() => onPage(page - 1)}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="text-xs text-muted-foreground">Page {page} of {totalPages}</span>
+            <Button variant="outline" size="sm" className="h-7 w-7 p-0" disabled={page >= totalPages}
+              aria-label="Next page" onClick={() => onPage(page + 1)}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
           </div>
-        )
-      })}
-    </section>
+        </div>
+      )}
+    </div>
   )
 }
 
