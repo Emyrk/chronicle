@@ -26,28 +26,31 @@ current parser-supported capstone.
 
 ## Ranked and Renown-only raid scope
 
-Gruul's Lair, Serpentshrine Cavern, Tempest Keep, Hyjal Summit, and Zul'Aman have
-reviewed default sets for boss parse leaderboards. Hyjal and Zul'Aman were added
-in migration `000360` after complete Crusader Storm uploads confirmed the exact
-boss names and kill coverage. Their career entries remain `include_average=false`
-and `include_renown=true`; ranked boss parses do not imply a new career weight.
+Gruul's Lair, Serpentshrine Cavern, Tempest Keep, Hyjal Summit, Karazhan, and
+Zul'Aman have reviewed default sets for boss parse leaderboards. Hyjal and
+Zul'Aman were added in migration `000360`; Karazhan was added in migration
+`000376` after complete Crusader Storm uploads confirmed the exact boss names
+and kill coverage. Their career entries remain `include_average=false` and
+`include_renown=true`; ranked boss parses do not imply a new career weight.
 
-The reviewed sets were checked against complete live uploads returned by the
-Crusader Storm `/api/v1/raidlogs/recent` feed on November 10, 2026:
+The reviewed sets were checked against complete live Crusader Storm uploads:
 
-- Hyjal Summit: `94O5-RcMlTHVVyO4` and `83VTaZ5M1RFH8Riq`, each with all five
-  clean boss kills in the configured order.
-- Zul'Aman: `b7gvszAphwC4n8x-`, with all six clean boss kills in the configured
-  order (`Akil'zon`, `Nalorakk`, `Jan'alai`, `Halazzi`, `Hex Lord Malacrass`,
-  `Zul'jin`).
+- Hyjal Summit: `94O5-RcMlTHVVyO4` and `83VTaZ5M1RFH8Riq`, checked on November
+  10, 2026, each with all five clean boss kills in the configured order.
+- Karazhan: `Um_q1dByeFC4e6F1`, checked on November 12, 2026, with all nine
+  configured clean boss kills. The run had no canonical Opera or chess boss
+  kill, so neither event is required for rankings or speedruns.
+- Zul'Aman: `b7gvszAphwC4n8x-`, checked on November 10, 2026, with all six clean
+  boss kills in the configured order (`Akil'zon`, `Nalorakk`, `Jan'alai`,
+  `Halazzi`, `Hex Lord Malacrass`, `Zul'jin`).
 
-The Hyjal and Zul'Aman factories also define parser-side speedrun requirements
-for the same boss rosters. This enables qualified fastest-clear results for new
-parses. Existing uploads need to be reparsed before they can populate the new
-speedrun boards.
+The Hyjal, Karazhan, and Zul'Aman factories also define parser-side speedrun
+requirements for the same boss rosters. This enables qualified fastest-clear
+results for new parses. Existing uploads need to be reparsed before they can
+populate the new speedrun boards.
 
-Karazhan, Magtheridon's Lair, Black Temple, and Sunwell Plateau remain cataloged
-for **Renown only**. No set or member rows are configured for them, so direct boss
+Magtheridon's Lair, Black Temple, and Sunwell Plateau remain cataloged for
+**Renown only**. No set or member rows are configured for them, so direct boss
 and career Renown work while default whole-raid selection remains deferred.
 
 Canonical identities come from `combatlog/parser/wotlk/instances/tbc.go`.
