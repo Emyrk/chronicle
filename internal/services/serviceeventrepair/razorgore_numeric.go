@@ -92,6 +92,10 @@ func evaluateRazorgoreNumeric(e razorgoreEvidence, p *RazorgoreRepairPlan) error
 	if err != nil {
 		return err
 	}
+	petOwners, err := razorgoreProvenPetOwners(replay, end)
+	if err != nil {
+		return err
+	}
 	units := unitdb.New()
 	tracker := rankings.NewDPSTracker(units, nil, rankings.DamageRuleNone)
 	life := rankings.NewSurvivabilityTracker()
@@ -111,8 +115,15 @@ func evaluateRazorgoreNumeric(e razorgoreEvidence, p *RazorgoreRepairPlan) error
 			}
 			units.Info[m.Target] = unitinfo.Info{Guid: m.Target, IsPlayer: m.Target.IsPlayer(), CanCooperate: m.Target.IsPlayer()}
 			if !m.Target.IsPlayer() {
-				if m.Caster == nil || !m.Caster.IsPlayer() {
-					return errors.New("non-player damage source requires historical ownership/possession replay")
+				if m.Caster == nil {
+					return errors.New("environmental damage to nonplayers cannot establish credit")
+				}
+				if !m.Caster.IsPlayer() {
+					owner, ok := petOwners[*m.Caster]
+					if !ok {
+						return errors.New("non-player damage source lacks proven terminal ownership or has possession ambiguity")
+					}
+					units.Info[*m.Caster] = unitinfo.Info{Guid: *m.Caster, Owner: &owner, CanCooperate: true}
 				}
 			}
 			if m.Caster != nil && m.Caster.IsPlayer() {
@@ -134,6 +145,15 @@ func evaluateRazorgoreNumeric(e razorgoreEvidence, p *RazorgoreRepairPlan) error
 			}
 			units.Info[m.Caster] = unitinfo.Info{Guid: m.Caster, IsPlayer: true, CanCooperate: true}
 			units.Info[m.Target] = unitinfo.Info{Guid: m.Target, IsPlayer: true, CanCooperate: true}
+		case *messages.UnitClassificationEvent:
+			// Snapshots share the global event index with combat streams. They
+			// establish source ownership, not assumed perpetual affiliation.
+			// Candidate targets are deliberately an upper bound below.
+			info := units.Info[m.Target]
+			info.Guid = m.Target
+			info.Owner = m.Owner
+			info.Affiliation = m.Affiliation
+			units.Info[m.Target] = info
 		case *messages.Slain:
 			if m.Victim == boss {
 				if !event.at.Equal(end) {
@@ -152,8 +172,14 @@ func evaluateRazorgoreNumeric(e razorgoreEvidence, p *RazorgoreRepairPlan) error
 	if bossDeaths != 1 {
 		return errors.New("requires one explicit phase-two terminal boss death")
 	}
+	for pet, owner := range petOwners {
+		info := units.Info[pet]
+		copyOwner := owner
+		info.Owner = &copyOwner
+		units.Info[pet] = info
+	}
 	tracker.FightEnded(c.ID, nil)
-	result := tracker.Result()[c.ID]
+	result := razorgoreMergePetDamage(tracker.Result()[c.ID])
 	rows := make(map[guid.GUID]database.EncounterDpsRanking)
 	fullHealing := make(map[guid.GUID][2]int64)
 	for _, row := range e.Rankings {
@@ -189,6 +215,7 @@ func evaluateRazorgoreNumeric(e razorgoreEvidence, p *RazorgoreRepairPlan) error
 	}
 	tracker.ClassifyHealing(c.ID, window)
 	tracker.FinishDamageClassification(c.ID)
+	result = razorgoreMergePetDamage(tracker.Result()[c.ID])
 	life.FightFinalized(c.ID, window.Start, window.End)
 	roleMetrics := make(map[guid.GUID]wowspec.PlayerMetrics)
 	for id, row := range rows {
@@ -303,6 +330,7 @@ func razorgoreNumericEvents(e razorgoreEvidence, c database.LogInstanceEncounter
 		database.LogInstanceEventTypeSlain:        func() proto.Message { return &chronicleproto.Slain{} },
 		database.LogInstanceEventTypeRessurection: func() proto.Message { return &chronicleproto.Resurrection{} },
 	}
+	streams[database.LogInstanceEventTypeUnitClassification] = func() proto.Message { return &chronicleproto.UnitClassification{} }
 	var result []razorgoreReplayEvent
 	seen := map[database.LogInstanceEventType]bool{}
 	for _, row := range e.Events {
@@ -380,6 +408,27 @@ func razorgoreNumericEvents(e razorgoreEvidence, c database.LogInstanceEncounter
 					return nil, err
 				}
 				message = &messages.Absorbed{MessageBase: base, Caster: caster, Target: target, Amount: m.Amount}
+			case *chronicleproto.UnitClassification:
+				target, err := parse(m.Target)
+				if err != nil {
+					return nil, err
+				}
+				classification := &messages.UnitClassificationEvent{MessageBase: base, Target: target, UnitType: unitdb.UnitType(m.UnitType), Affiliation: unitdb.Affiliation(m.Affiliation)}
+				if m.Owner != nil {
+					owner, err := parse(*m.Owner)
+					if err != nil {
+						return nil, err
+					}
+					classification.Owner = &owner
+				}
+				if m.Controller != nil {
+					controller, err := parse(*m.Controller)
+					if err != nil {
+						return nil, err
+					}
+					classification.Controller = &controller
+				}
+				message = classification
 			case *chronicleproto.Slain:
 				target, err := parse(m.Target)
 				if err != nil {
@@ -397,6 +446,9 @@ func razorgoreNumericEvents(e razorgoreEvidence, c database.LogInstanceEncounter
 		}
 	}
 	for kind := range streams {
+		if kind == database.LogInstanceEventTypeUnitClassification {
+			continue
+		}
 		if !seen[kind] {
 			return nil, fmt.Errorf("missing %s stream (empty must be explicit)", kind)
 		}
