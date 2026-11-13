@@ -111,13 +111,15 @@ export function OverviewTab({
               metric={ratings.metric}
               isLoading={ratings.isLoading}
               emptyMessage={ratings.emptyMessage}
-              ratingsHref={(raid) =>
+              character={player}
+              ratingsHref={(raid, boss) =>
                 ratingsExplainerHref({
                   realm: player.realm_name,
                   player: player.id,
                   raid,
                   spec: ratings.cohort ? cohortKey(ratings.cohort) : undefined,
                   metric: ratings.metric,
+                  boss,
                 })
               }
             />

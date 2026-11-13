@@ -8,6 +8,8 @@ export interface RatingsLink {
   /** Cohort key: class|spec|sub spec. */
   spec?: string
   metric?: string
+  /** Encounter name; the whole raid when absent. */
+  boss?: string
 }
 
 export function ratingsExplainerHref(link: RatingsLink): string {
@@ -15,6 +17,7 @@ export function ratingsExplainerHref(link: RatingsLink): string {
   if (link.raid) params.set("raid", link.raid)
   if (link.spec !== undefined) params.set("spec", link.spec)
   if (link.metric) params.set("metric", link.metric)
+  if (link.boss) params.set("boss", link.boss)
   return `/ratings?${params}`
 }
 
@@ -28,5 +31,6 @@ export function parseRatingsLink(params: URLSearchParams): RatingsLink | undefin
     raid: params.get("raid") ?? undefined,
     spec: params.get("spec") ?? undefined,
     metric: params.get("metric") ?? undefined,
+    boss: params.get("boss") ?? undefined,
   }
 }

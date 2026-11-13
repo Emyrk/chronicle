@@ -51,6 +51,8 @@ export interface BossRating {
   rawPeak: number;
   /** Award × this spec's kills of the boss, for either metric. */
   renown: number;
+  /** The chosen metric's kills, for the ratings calculator. */
+  group?: LeaderboardV2PlayerHistoryGroup;
 }
 
 export interface RaidRating {
@@ -93,6 +95,7 @@ export function rateBoss(
     mastery: rating?.mastery ?? 0,
     rawPeak: rating?.rawPeak ?? 0,
     renown: (any?.renown_award ?? 0) * renownKills,
+    group: metricGroup,
   };
 }
 

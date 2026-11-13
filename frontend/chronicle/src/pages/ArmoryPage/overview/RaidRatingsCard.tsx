@@ -1,7 +1,11 @@
 import { entityAttributes, raidEntity, bossEntity } from "@/components/EntityMenu/entity";
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, Calculator } from "lucide-react";
+import type { ArmorySearchResult } from "@/api/typesGenerated";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { StandaloneBossCalculator } from "@/pages/Ratings/BossCalculator";
+import { datasetFromGroup } from "@/pages/Ratings/useMyRatingData";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card/Card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/Collapsible/Collapsible";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/Table/Table";
@@ -15,9 +19,13 @@ interface RaidRatingsCardProps {
   isLoading: boolean;
   /** Shown instead of the raid list when there is nothing to rate. */
   emptyMessage?: string;
-  /** The ratings explainer for one raid, with this character selected. */
-  ratingsHref?: (raidKey: string) => string;
+  /** The character, for the per-boss ratings calculator. */
+  character?: Character;
+  /** The ratings explainer for one raid (or one of its bosses), with this character selected. */
+  ratingsHref?: (raidKey: string, boss?: string) => string;
 }
+
+type Character = Pick<ArmorySearchResult, "realm_id" | "id">;
 
 const MASTERY = METRIC_THEMES.mastery.accent;
 const PEAK = METRIC_THEMES.peak.accent;
@@ -25,7 +33,14 @@ const RENOWN = METRIC_THEMES.renown.accent;
 const fmt = (v: number | null) => (v === null ? "—" : v.toFixed(1));
 
 /** Per-raid career contributions; expand a raid for its bosses against the benchmark. */
-export function RaidRatingsCard({ raids, metric, isLoading, emptyMessage, ratingsHref }: RaidRatingsCardProps) {
+export function RaidRatingsCard({
+  raids,
+  metric,
+  isLoading,
+  emptyMessage,
+  character,
+  ratingsHref,
+}: RaidRatingsCardProps) {
   const active = raids.filter((r) => r.kills > 0);
   const untouched = raids.filter((r) => r.kills === 0 && r.rated);
   const [open, setOpen] = useState<string | null>(null);
@@ -55,7 +70,8 @@ export function RaidRatingsCard({ raids, metric, isLoading, emptyMessage, rating
             metric={metric}
             open={openKey === raid.key}
             onOpenChange={(o) => setOpen(o ? raid.key : "")}
-            ratingsHref={ratingsHref?.(raid.key)}
+            character={character}
+            ratingsHref={ratingsHref && ((boss?: string) => ratingsHref(raid.key, boss))}
           />
         ))}
         {untouched.length > 0 && (
@@ -85,13 +101,15 @@ function RaidRow({
   metric,
   open,
   onOpenChange,
+  character,
   ratingsHref,
 }: {
   raid: RaidRating;
   metric: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  ratingsHref?: string;
+  character?: Character;
+  ratingsHref?: (boss?: string) => string;
 }) {
   const accent = getInstanceAccentColor(raid.instanceName);
   const bossTotal = raid.bosses.length + raid.missingBosses.length;
@@ -132,7 +150,7 @@ function RaidRow({
               </div>
               {ratingsHref && (
                 <Link
-                  to={ratingsHref}
+                  to={ratingsHref()}
                   className="pointer-events-auto inline-flex shrink-0 items-center gap-0.5 text-xs text-muted-foreground transition-colors hover:text-foreground hover:underline"
                 >
                   How ratings work
@@ -158,7 +176,7 @@ function RaidRow({
       </div>
       <CollapsibleContent>
         <div className="styled-scrollbar overflow-x-auto bg-popover px-6 py-4">
-          <BossTable raid={raid} metric={metric} />
+          <BossTable raid={raid} metric={metric} character={character} ratingsHref={ratingsHref} />
         </div>
       </CollapsibleContent>
     </Collapsible>
@@ -200,10 +218,23 @@ function BossBars({ raid }: { raid: RaidRating }) {
   );
 }
 
-function BossTable({ raid, metric }: { raid: RaidRating; metric: string }) {
+function BossTable({
+  raid,
+  metric,
+  character,
+  ratingsHref,
+}: {
+  raid: RaidRating;
+  metric: string;
+  character?: Character;
+  ratingsHref?: (boss?: string) => string;
+}) {
   const unit = metric.toUpperCase();
+  const [explaining, setExplaining] = useState<BossRating>();
+  const canExplain = raid.rated && !!character;
   return (
-    <Table>
+    <>
+      <Table>
       <TableHeader>
         <TableRow>
           <TableHead>Boss</TableHead>
@@ -221,25 +252,98 @@ function BossTable({ raid, metric }: { raid: RaidRating; metric: string }) {
             </>
           )}
           <TableHead className="text-right">Renown</TableHead>
+          {canExplain && <TableHead className="w-8" />}
         </TableRow>
       </TableHeader>
       <TableBody>
         {raid.bosses.map((b) => (
-          <BossRow key={b.encounterName} boss={b} instanceName={raid.instanceName} rated={raid.rated} />
+          <BossRow
+            key={b.encounterName}
+            boss={b}
+            instanceName={raid.instanceName}
+            rated={raid.rated}
+            onExplain={canExplain ? () => setExplaining(b) : undefined}
+          />
         ))}
         {raid.missingBosses.length > 0 && (
           <TableRow className="text-muted-foreground hover:bg-transparent">
-            <TableCell colSpan={raid.rated ? 9 : 5} className="text-xs whitespace-normal">
+            <TableCell colSpan={(raid.rated ? 9 : 5) + (canExplain ? 1 : 0)} className="text-xs whitespace-normal">
               <span className="text-foreground">Not killed as this spec:</span> {raid.missingBosses.map((name, i) => <span key={name}>{i > 0 && " · "}<span {...entityAttributes(bossEntity(raid.instanceName, name))}>{name}</span></span>)}
             </TableCell>
           </TableRow>
         )}
       </TableBody>
-    </Table>
+      </Table>
+      {character && (
+        <BossCalculatorDialog
+          boss={explaining}
+          raidName={raidName(raid)}
+          character={character}
+          href={explaining && ratingsHref?.(explaining.encounterName)}
+          onClose={() => setExplaining(undefined)}
+        />
+      )}
+    </>
   );
 }
 
-function BossRow({ boss, rated, instanceName }: { boss: BossRating; rated: boolean; instanceName: string }) {
+function BossCalculatorDialog({
+  boss,
+  raidName,
+  character,
+  href,
+  onClose,
+}: {
+  boss?: BossRating;
+  raidName: string;
+  character: Character;
+  href?: string;
+  onClose: () => void;
+}) {
+  const dataset = boss?.group ? datasetFromGroup(character, boss.group) : undefined;
+  return (
+    <Dialog open={!!dataset} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="styled-scrollbar max-h-[90vh] bg-card max-w-[calc(100%-2rem)] overflow-y-auto sm:max-w-5xl">
+        {dataset && (
+          <>
+            <DialogHeader>
+              <DialogTitle className="font-wow text-xl">{dataset.bossName}</DialogTitle>
+              <DialogDescription>
+                {raidName} · {dataset.cohortLabel} {dataset.unit} · how these kills become Peak, Mastery, and Renown
+                {href && (
+                  <>
+                    {" · "}
+                    <Link
+                      to={href}
+                      className="inline-flex items-center gap-0.5 text-sky-300 hover:text-sky-200 hover:underline"
+                    >
+                      Open in How Ratings Work
+                      <ArrowUpRight className="size-3" />
+                    </Link>
+                  </>
+                )}
+              </DialogDescription>
+            </DialogHeader>
+            {/* Keyed so a different boss starts with every kill logged. */}
+            <StandaloneBossCalculator key={dataset.key} dataset={dataset} />
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function BossRow({
+  boss,
+  rated,
+  instanceName,
+  onExplain,
+}: {
+  boss: BossRating;
+  rated: boolean;
+  instanceName: string;
+  onExplain?: () => void;
+}) {
   const perSecond = (v: number) => (
     <>
       {Math.round(v).toLocaleString()}
@@ -287,6 +391,21 @@ function BossRow({ boss, rated, instanceName }: { boss: BossRating; rated: boole
       <TableCell className="text-right font-mono" style={{ color: RENOWN }}>
         {boss.renown}
       </TableCell>
+      {onExplain && (
+        <TableCell className="py-1 text-right">
+          {boss.group && (
+            <button
+              type="button"
+              onClick={onExplain}
+              title={`How ${boss.encounterName}'s ratings are calculated`}
+              aria-label={`How ${boss.encounterName}'s ratings are calculated`}
+              className="inline-flex cursor-pointer items-center rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-sky-500/15 hover:text-sky-300"
+            >
+              <Calculator className="size-4" />
+            </button>
+          )}
+        </TableCell>
+      )}
     </TableRow>
   );
 }

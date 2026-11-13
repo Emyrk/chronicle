@@ -130,7 +130,7 @@ export function buildRaidView(
   }
 }
 
-export function datasetFromGroup(character: ArmorySearchResult, g: LeaderboardV2PlayerHistoryGroup): RatingDataset {
+export function datasetFromGroup(character: Pick<ArmorySearchResult, "realm_id" | "id">, g: LeaderboardV2PlayerHistoryGroup): RatingDataset {
   const kills = g.kills.map((k) => ({ value: k.value, parse: k.parse, killedAt: k.killed_at }))
   // A benchmark refresh can lag a new kill; never let our own kill exceed it.
   const benchmark = Math.max(g.benchmark, ...kills.map((k) => k.value))
@@ -177,7 +177,7 @@ export function useMyRatingData(enabled: boolean, link?: RatingsLink) {
   const [raidChoice, setRaidChoice] = useState(link?.raid ?? "")
   const [scopeChoice, setScopeChoice] = useState(link?.spec !== undefined && link.metric ? raidScopeKey(link.spec, link.metric) : "")
   /** Encounter name; empty for the whole raid. */
-  const [bossChoice, setBossChoice] = useState("")
+  const [bossChoice, setBossChoice] = useState(link?.boss ?? "")
 
   const history = useQuery({
     queryKey: ["leaderboards-v2-player-history", character?.realm_id, character?.id],
