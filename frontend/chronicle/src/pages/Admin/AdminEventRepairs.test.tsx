@@ -9,9 +9,9 @@ import { AdminEventRepairs, RepairReport } from "./AdminEventRepairs";
 const operation: AdminEventRepairOperation = {
   id: "repair-1", operation: "razorgore-phase-two", version: 1, state: "ready",
   created_at: "2026-11-01T00:00:00Z", updated_at: "2026-11-01T00:00:00Z", created_by: "admin",
-  tenant_id: "00000000-0000-0000-0000-000000000000", selection: { instance: "raid-slug" }, total: 2, processed: 2, applied: 0, skipped: 1,
-  items: [{ instance_id: "instance-1", state: "ready", reason: "Phase two found", evidence_hash: "hash", changes: ["Trim phase one"] },
-    { instance_id: "instance-2", state: "skipped", reason: "No phase two evidence", evidence_hash: "", changes: [] }],
+  tenant_id: "00000000-0000-0000-0000-000000000000", selection: { operation: "razorgore-phase-two", instance: "raid-slug" }, total: 2, processed: 2, applied: 0, skipped: 1, last_error: "",
+  items: [{ instance_id: "instance-1", state: "ready", reason: "Phase two found", evidence_hash: "hash", changes: ["Trim phase one"], ratings_queued: false },
+    { instance_id: "instance-2", state: "skipped", reason: "No phase two evidence", evidence_hash: "", changes: [], ratings_queued: false }],
 };
 const form: RepairSelection = { mode: "sweep", instance: "", tenant: operation.tenant_id, limit: "10", realm: "", after: "", before: "" };
 afterEach(() => vi.unstubAllGlobals());
@@ -42,7 +42,8 @@ it("ready reports require confirmation and expose skips and evidence", () => {
 });
 it("running reports allow cancellation but terminal reports never offer apply", () => {
   for (const state of ["dry_running", "applying", "completed", "cancelled", "failed"] as const) {
-    const markup = renderToStaticMarkup(<RepairReport operation={{ ...operation, state, last_error: "A repair error", items: [{ ...operation.items[0], ratings_queued: true }] }} busy={false} onApply={() => {}} onCancel={() => {}} />);
+    const markup = renderToStaticMarkup(<RepairReport operation={{ ...operation, state, last_error: "A repair error", items: [{ ...operation.items[0], ratings_queued: true }] }} busy={false} onApply={() => {}} onCancel={() => {}} onRetry={() => {}} />);
+    expect(markup.includes("Retry operation")).toBe(isRepairActive(state));
     expect(markup.includes("Cancel operation")).toBe(isRepairActive(state));
     expect(markup).not.toContain("Apply repair");
     expect(markup).toContain("A repair error");
@@ -68,7 +69,9 @@ it("sends the locked create/apply/cancel contracts and surfaces auth errors", as
   expect(fetcher).toHaveBeenLastCalledWith("/api/v1/admin/event-repairs/repair-1/apply", { method: "POST" });
   await repairRequest("/repair-1/cancel", "cancel");
   expect(fetcher).toHaveBeenLastCalledWith("/api/v1/admin/event-repairs/repair-1/cancel", { method: "POST" });
+  await repairRequest("/repair-1/retry", "retry");
+  expect(fetcher).toHaveBeenLastCalledWith("/api/v1/admin/event-repairs/repair-1/retry", { method: "POST" });
   fetcher.mockResolvedValue({ ok: false, status: 403, json: async () => ({ message: "Admin access required" }) });
   await expect(repairRequest()).rejects.toThrow("Admin access required");
-  expect(fetcher).toHaveBeenCalledTimes(4);
+  expect(fetcher).toHaveBeenCalledTimes(5);
 });

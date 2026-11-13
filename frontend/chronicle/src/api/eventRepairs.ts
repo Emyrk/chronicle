@@ -1,47 +1,16 @@
-// Temporary wire contracts until the backend SDK is generated. Keep these aligned
-// with chroniclesdk, then replace with generated imports at integration time.
-export interface AdminEventRepairCreateRequest {
-  operation: "razorgore-phase-two";
-  instance?: string;
-  tenant_id?: string;
-  limit?: number;
-  realm_id?: string;
-  after?: string;
-  before?: string;
-}
-export interface AdminEventRepairItem {
-  instance_id: string;
-  state: "pending" | "ready" | "skipped" | "applied" | "stale";
-  reason: string;
-  evidence_hash: string;
-  changes: string[];
-  ratings_queued?: boolean;
-}
-export interface AdminEventRepairOperation {
-  id: string;
-  operation: string;
-  version: number;
-  state: "dry_running" | "ready" | "applying" | "completed" | "cancelled" | "failed";
-  created_at: string;
-  updated_at: string;
-  created_by: string;
-  tenant_id: string;
-  selection: unknown;
-  total: number;
-  processed: number;
-  applied: number;
-  skipped: number;
-  last_error?: string;
-  items: AdminEventRepairItem[];
-}
-export interface AdminEventRepairList { operations: AdminEventRepairOperation[] }
+import type { CreateEventRepairRequest, EventRepairItem, EventRepairOperation, EventRepairOperationsResponse } from "./typesGenerated";
+
+export type AdminEventRepairCreateRequest = CreateEventRepairRequest;
+export type AdminEventRepairItem = EventRepairItem;
+export type AdminEventRepairOperation = EventRepairOperation;
+export type AdminEventRepairList = EventRepairOperationsResponse;
 
 export const eventRepairKey = ["admin", "event-repairs"] as const;
 export const eventRepairURL = "/api/v1/admin/event-repairs";
 export function isRepairActive(state?: string) {
   return state === "dry_running" || state === "applying";
 }
-export async function repairRequest<T>(path = "", body?: AdminEventRepairCreateRequest | "apply" | "cancel"): Promise<T> {
+export async function repairRequest<T>(path = "", body?: AdminEventRepairCreateRequest | "apply" | "cancel" | "retry"): Promise<T> {
   const response = await fetch(`${eventRepairURL}${path}`, body === undefined ? undefined : {
     method: "POST",
     ...(typeof body === "object" ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {}),

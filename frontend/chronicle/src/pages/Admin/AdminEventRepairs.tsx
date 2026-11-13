@@ -8,11 +8,12 @@ import type { AdminEventRepairCreateRequest, AdminEventRepairList, AdminEventRep
 
 const inputClass = "w-full rounded-md border border-input bg-background px-3 py-2 text-sm";
 
-export function RepairReport({ operation, busy, onApply, onCancel }: {
+export function RepairReport({ operation, busy, onApply, onCancel, onRetry }: {
   operation: AdminEventRepairOperation;
   busy: boolean;
   onApply: () => void;
   onCancel: () => void;
+  onRetry?: () => void;
 }) {
   const [confirmed, setConfirmed] = useState(false);
   return <Card className="space-y-4 p-4">
@@ -32,11 +33,12 @@ export function RepairReport({ operation, busy, onApply, onCancel }: {
     {operation.last_error && <p role="alert" className="break-words text-sm text-destructive">{operation.last_error}</p>}
     {operation.state === "ready" && <div className="space-y-3 rounded-md border border-amber-600/60 bg-amber-500/10 p-3 text-sm">
       <h3 className="font-semibold text-amber-400">Confirm write operation</h3>
-      <p>Review the dry-run evidence below. Apply writes repaired event data. Original events remain untouched.</p>
+      <p>Review the dry-run evidence below. Apply updates derived encounter and ranking evidence. Original events remain untouched.</p>
       <p>Every successfully applied or no-op instance enqueues ratings work. Ratings queued does not mean ratings completed.</p>
       <label className="flex items-start gap-2"><input type="checkbox" className="mt-1" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />I reviewed this report and confirm applying this repair.</label>
       <Button disabled={!confirmed || busy} onClick={onApply} className="bg-amber-500 text-black hover:bg-amber-400">Apply repair</Button>
     </div>}
+    {isRepairActive(operation.state) && operation.last_error && onRetry && <Button variant="outline" disabled={busy} onClick={onRetry}>Retry operation</Button>}
     {isRepairActive(operation.state) && <Button variant="outline" disabled={busy} onClick={onCancel}>Cancel operation</Button>}
     <div className="styled-scrollbar max-h-[32rem] overflow-auto rounded border">
       <table className="w-full text-left text-xs"><caption className="p-3 text-left text-sm font-medium">Instance evidence and outcomes</caption>
@@ -72,7 +74,7 @@ export function AdminEventRepairs() {
     refetchInterval: (query) => query.state.status !== "error" && isRepairActive(query.state.data?.state) ? 3000 : false,
   });
   const mutation = useMutation({
-    mutationFn: ({ action, request, id }: { action: "create" | "apply" | "cancel"; request?: AdminEventRepairCreateRequest; id?: string }) =>
+    mutationFn: ({ action, request, id }: { action: "create" | "apply" | "cancel" | "retry"; request?: AdminEventRepairCreateRequest; id?: string }) =>
       repairRequest<AdminEventRepairOperation>(action === "create" ? "" : `/${encodeURIComponent(id!)}/${action}`, action === "create" ? request : action),
     retry: false,
     onSuccess: (operation) => {
@@ -115,7 +117,7 @@ export function AdminEventRepairs() {
         {!selected && <p className="p-4 text-sm text-muted-foreground">Start a dry-run or select a saved operation to inspect its report.</p>}
         {selected && detail.isLoading && <p role="status">Loading report…</p>}
         {detail.error && <div role="alert" className="text-sm text-destructive">{detail.error.message}<Button variant="outline" size="sm" className="ml-2" onClick={() => { void detail.refetch(); }}>Reload report</Button></div>}
-        {detail.data && <RepairReport key={`${detail.data.id}:${detail.data.state}:${detail.data.updated_at}`} operation={detail.data} busy={mutation.isPending || detail.isFetching || detail.isError} onApply={() => mutation.mutate({ action: "apply", id: selected })} onCancel={() => mutation.mutate({ action: "cancel", id: selected })} />}
+        {detail.data && <RepairReport key={`${detail.data.id}:${detail.data.state}:${detail.data.updated_at}`} operation={detail.data} busy={mutation.isPending || detail.isFetching || detail.isError} onApply={() => mutation.mutate({ action: "apply", id: selected })} onCancel={() => mutation.mutate({ action: "cancel", id: selected })} onRetry={() => mutation.mutate({ action: "retry", id: selected })} />}
       </section>
     </div>
     <p className="text-xs text-muted-foreground">Every successfully applied or no-op instance enqueues ratings work. Ratings queued is not ratings completed.</p>
