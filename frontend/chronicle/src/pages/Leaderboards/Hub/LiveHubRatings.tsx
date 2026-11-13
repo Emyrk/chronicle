@@ -1,6 +1,7 @@
 import type { EncounterVariants } from "@/components/EncounterDifficulty/encounterVariant";
 import { useMemo, useState, type ReactNode } from "react";
-import { Eye, EyeOff } from "lucide-react";
+import { CircleHelp, Eye, EyeOff } from "lucide-react";
+import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { cn } from "@/lib/utils";
 import { useQueries } from "@tanstack/react-query";
 import type { LeaderboardV2Response } from "@/api/typesGenerated";
@@ -43,6 +44,8 @@ export interface LiveHubRatingsProps {
   toolbar?: ReactNode;
   summary?: HubSummary;
 }
+
+const ENCOUNTER_VARIANT_NOTE = "Peak and Mastery use selected encounter variants. Renown uses base boss scores. Overview and career metrics always use Combined.";
 
 /** Existing Hub presentation; only its source and cursor adapter change. */
 export function LiveHubRatings(props: LiveHubRatingsProps) {
@@ -198,9 +201,17 @@ export function LiveHubRatings(props: LiveHubRatingsProps) {
   const ratingsToolbar = (
     <div className="flex flex-wrap items-center gap-2">
       {toolbar}
-      {!!Object.keys(context?.encounterVariants ?? {}).length && <span className="text-xs text-muted-foreground" role="note">
-        Peak and Mastery use selected encounter variants. Renown uses base boss scores. Overview and career metrics always use Combined.
-      </span>}
+      {!!Object.keys(context?.encounterVariants ?? {}).length && (
+        <HintTooltip>
+          <TooltipTrigger asChild>
+            <button type="button" aria-label={`Encounter variants: ${ENCOUNTER_VARIANT_NOTE}`}
+              className="inline-flex size-5 cursor-help items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <CircleHelp className="size-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-xs">{ENCOUNTER_VARIANT_NOTE}</TooltipContent>
+        </HintTooltip>
+      )}
       {subject === "player" && hasSpecs && (
         <button
           type="button"
