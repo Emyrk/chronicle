@@ -277,3 +277,23 @@ func TestLucifronOrdinaryNPCIsNotMissingOwner(t *testing.T) {
 	require.Empty(t, p.Details["omissions"])
 	require.EqualValues(t, 200, p.lucifron.Metrics[0].DamageDone)
 }
+
+func TestLucifronProvenOwnerlessOmissionPreservesPlayerTotal(t *testing.T) {
+	t.Parallel()
+	e := fixtureLucifron(t)
+	e.Events[0].Events = numericFrame(t, e, lucifronDamage(1, lucifronTestPlayer, lucifronTestBoss, 200), lucifronDamage(2, lucifronTestPet, lucifronTestBoss, 50))
+	pet, err := guid.FromString(lucifronTestPet)
+	require.NoError(t, err)
+	snapshot := &chronicleproto.UnitClassification{Meta: &chronicleproto.EventMeta{Index: 3, OffsetMilli: 60000}, Target: lucifronTestPet, UnitType: int32(unitdb.UnitTypeFromGUID(pet))}
+	e.Events = append(e.Events, database.LogInstanceEvent{InstanceID: e.Instance.ID, Type: database.LogInstanceEventTypeUnitClassification, Events: numericFrame(t, e, snapshot)})
+	p, err := evaluateLucifronEvidence(e)
+	require.NoError(t, err)
+	require.False(t, p.RequiresReparse, p.Reason)
+	omissions := p.Details["omissions"].([]razorgoreOmission)
+	require.Len(t, omissions, 1)
+	require.EqualValues(t, 50, omissions[0].Amount)
+	require.Contains(t, omissions[0].Reason, "excluded from player rollup")
+	update := p.lucifron.Metrics[0]
+	require.EqualValues(t, 200, update.DamageDone+update.UnrankedDamageDone)
+	require.EqualValues(t, 200, update.DamageDone)
+}

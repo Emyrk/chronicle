@@ -73,7 +73,7 @@ func ApplyLucifron(ctx context.Context, db database.Store, p *RepairPlan) error 
 		return err
 	}
 	if p.RequiresReparse || p.lucifron == nil {
-		return errors.New("Lucifron plan is not executable")
+		return errors.New("lucifron plan is not executable")
 	}
 	for _, row := range p.lucifron.Metrics {
 		n, err := db.LucifronRepairRanking(ctx, row)
@@ -141,14 +141,14 @@ func evaluateLucifronEvidence(e razorgoreEvidence) (*RepairPlan, error) {
 
 func evaluateLucifronEncounter(e razorgoreEvidence, c database.LogInstanceEncounter, targets []uint32, p *RepairPlan) error {
 	if c.InstanceID != e.Instance.ID || !c.Boss || c.InvalidatedAt.Valid || c.KillType != database.KillTypeClean || !c.StartTime.Valid || !c.EndTime.Valid || !c.EndTime.Time.After(c.StartTime.Time) {
-		return errors.New("Lucifron requires complete clean encounter boundaries")
+		return errors.New("lucifron requires complete clean encounter boundaries")
 	}
 	duration := c.EndTime.Time.Sub(c.StartTime.Time)
 	if duration != time.Duration(duration.Milliseconds())*time.Millisecond || c.StartTime.Time.Nanosecond()%int(time.Millisecond) != 0 {
 		return errors.New("sub-millisecond encounter precision cannot be reconstructed")
 	}
 	if c.RankingStartOffsetMs.Valid && c.RankingStartOffsetMs.Int64 != 0 || c.RankingEndOffsetMs.Valid && c.RankingEndOffsetMs.Int64 != duration.Milliseconds() {
-		return errors.New("Lucifron has an unsupported ranking window")
+		return errors.New("lucifron has an unsupported ranking window")
 	}
 	replay, err := lucifronEvents(e, c)
 	if err != nil {
@@ -164,7 +164,7 @@ func evaluateLucifronEncounter(e razorgoreEvidence, c database.LogInstanceEncoun
 	for _, event := range replay {
 		if m, ok := event.message.(*messages.UnitClassificationEvent); ok {
 			if m.Controller != nil {
-				return errors.New("Lucifron control history requires original-log reparse")
+				return errors.New("lucifron control history requires original-log reparse")
 			}
 			if event.at.Equal(c.EndTime.Time) && m.Owner == nil {
 				terminalUnowned[m.Target] = true
@@ -173,6 +173,7 @@ func evaluateLucifronEncounter(e razorgoreEvidence, c database.LogInstanceEncoun
 	}
 	totals := map[guid.GUID]int64{}
 	ranked := map[guid.GUID]int64{}
+	uncertainCredit := false
 	classified := map[guid.GUID]*messages.UnitClassificationEvent{}
 	for _, event := range replay {
 		if snapshot, ok := event.message.(*messages.UnitClassificationEvent); ok {
@@ -210,6 +211,14 @@ func evaluateLucifronEncounter(e razorgoreEvidence, c database.LogInstanceEncoun
 				if player.IsPet() || totem {
 					reason = "pet or totem has no proven encounter-terminal owner"
 				}
+				// Fight-end rollup cannot assign a pet whose explicit terminal
+				// owner is nil. Its omitted contribution cannot offset an excluded
+				// direct-player term. Missing terminal evidence has no such proof.
+				if !terminalUnowned[player] {
+					uncertainCredit = true
+				} else {
+					reason = "explicit encounter-terminal snapshot has no owner; excluded from player rollup"
+				}
 				recordRazorgoreOmission(p, c.ID, "damage", player, amount, reason)
 				continue
 			}
@@ -226,10 +235,8 @@ func evaluateLucifronEncounter(e razorgoreEvidence, c database.LogInstanceEncoun
 	}
 	// An unattributed source could offset an excluded direct-player term. Equal
 	// sums alone cannot prove which terms were credited in that mixed case.
-	for _, omission := range p.Details["omissions"].([]razorgoreOmission) {
-		if omission.EncounterID == c.ID && len(totals) > 0 {
-			return errors.New("uncertain nonplayer credits prevent direct-player upper-bound proof")
-		}
+	if uncertainCredit && len(totals) > 0 {
+		return errors.New("uncertain nonplayer credits prevent direct-player upper-bound proof")
 	}
 	rows := map[guid.GUID]bool{}
 	for _, row := range e.Rankings {
@@ -245,7 +252,7 @@ func evaluateLucifronEncounter(e razorgoreEvidence, c database.LogInstanceEncoun
 			return errors.New("full damage upper bound does not reconcile to persisted player credit")
 		}
 		if row.DurationSecs <= 0 || math.IsNaN(row.DurationSecs) || math.IsInf(row.DurationSecs, 0) || row.DurationSecs != duration.Seconds() {
-			return errors.New("Lucifron source duration does not match encounter")
+			return errors.New("lucifron source duration does not match encounter")
 		}
 		after := ranked[player]
 		unranked := totals[player] - after
