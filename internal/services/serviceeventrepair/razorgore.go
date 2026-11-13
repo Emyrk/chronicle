@@ -12,6 +12,7 @@ import (
 
 	"github.com/Emyrk/chronicle/database"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 // RazorgoreRepairPlan is diagnostic evidence, not an executable mutation payload.
@@ -45,6 +46,14 @@ func EvaluateRazorgore(ctx context.Context, db database.Store, instanceID uuid.U
 	var e razorgoreEvidence
 	var err error
 	if e.Instance, err = db.RazorgoreRepairInstance(ctx, instanceID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// Retention/deletion can race a queued repair. This is terminal
+			// missing evidence, not a transient database error to retry forever.
+			sum := sha256.Sum256([]byte("razorgore-false-kill-v1:missing:" + instanceID.String()))
+			return &RazorgoreRepairPlan{InstanceID: instanceID, RequiresReparse: true,
+				Reason:  "instance no longer exists or is not visible to the repair tenant",
+				Changes: []string{}, EvidenceHash: hex.EncodeToString(sum[:])}, nil
+		}
 		return nil, fmt.Errorf("load instance: %w", err)
 	}
 	if e.Encounters, err = db.EncountersByInstanceID(ctx, instanceID); err != nil {

@@ -12,6 +12,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/encoding/protowire"
@@ -313,4 +314,23 @@ func TestRazorgoreApplyRejectsUnsupportedFreshPlan(t *testing.T) {
 	p.RequiresReparse = false // serialized flags cannot override fresh evaluation
 	require.ErrorContains(t, ApplyRazorgore(context.Background(), s, p), "requires reparse")
 	require.Empty(t, s.writes)
+}
+
+type missingRazorgoreStore struct{ database.Store }
+
+func (*missingRazorgoreStore) RazorgoreRepairInstance(context.Context, uuid.UUID) (database.LogInstance, error) {
+	return database.LogInstance{}, pgx.ErrNoRows
+}
+func TestRazorgoreDisappearedInstanceIsTerminalSkip(t *testing.T) {
+	t.Parallel()
+	id := uuid.MustParse("00000000-0000-0000-0000-000000000010")
+	s := &missingRazorgoreStore{}
+	p, err := EvaluateRazorgore(context.Background(), s, id)
+	require.NoError(t, err)
+	require.True(t, p.RequiresReparse)
+	require.Equal(t, id, p.InstanceID)
+	require.NotEmpty(t, p.EvidenceHash)
+	require.Empty(t, p.Changes)
+	require.Contains(t, p.Reason, "no longer exists")
+	require.ErrorContains(t, ApplyRazorgore(context.Background(), s, p), "requires reparse")
 }
