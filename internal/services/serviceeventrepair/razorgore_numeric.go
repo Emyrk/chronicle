@@ -22,6 +22,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/Emyrk/chronicle/internal/wowspec"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -427,6 +428,9 @@ func razorgoreNumericEvents(e razorgoreEvidence, c database.LogInstanceEncounter
 						return nil, err
 					}
 					classification.Controller = &controller
+					if m.SpellId != 0 {
+						classification.Spell = &chrondbc.Spell{ID: chrondbc.SpellID(m.SpellId)}
+					}
 				}
 				message = classification
 			case *chronicleproto.Slain:

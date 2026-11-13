@@ -21,6 +21,7 @@ import (
 
 type razorgoreControlCast struct {
 	index              int32
+	spellID            int32
 	at                 time.Time
 	target, controller guid.GUID
 	duration           time.Duration
@@ -63,7 +64,7 @@ func razorgoreControlCasts(e razorgoreEvidence, c database.LogInstanceEncounter)
 					continue
 				}
 			}
-			if a.Meta == nil || a.Spell == nil || a.Spell.Id != 19832 || a.Meta.IsSynthetic || a.Meta.OffsetMilli < 0 || a.Meta.OffsetMilli > c.EndTime.Time.Sub(c.StartTime.Time).Milliseconds() || a.DurationMS <= 0 {
+			if a.Meta == nil || a.Spell == nil || a.Spell.Id <= 0 || a.Meta.IsSynthetic || a.Meta.OffsetMilli < 0 || a.Meta.OffsetMilli > c.EndTime.Time.Sub(c.StartTime.Time).Milliseconds() || a.DurationMS <= 0 {
 				return nil, errors.New("unsupported control aura or missing authoritative duration")
 			}
 			target, err := guid.FromString(a.GetTarget())
@@ -74,11 +75,10 @@ func razorgoreControlCasts(e razorgoreEvidence, c database.LogInstanceEncounter)
 			if err != nil {
 				return nil, err
 			}
-			entry, _ := target.GetEntry()
-			if entry != 12435 || !controller.IsPlayer() || controller.IsZero() {
+			if target.IsZero() || controller.IsZero() || target == controller {
 				return nil, errors.New("unsupported possession target/controller")
 			}
-			result = append(result, razorgoreControlCast{index: a.Meta.Index, at: c.StartTime.Time.Add(time.Duration(a.Meta.OffsetMilli) * time.Millisecond), target: target, controller: controller, duration: time.Duration(a.DurationMS) * time.Millisecond})
+			result = append(result, razorgoreControlCast{index: a.Meta.Index, spellID: a.Spell.Id, at: c.StartTime.Time.Add(time.Duration(a.Meta.OffsetMilli) * time.Millisecond), target: target, controller: controller, duration: time.Duration(a.DurationMS) * time.Millisecond})
 		}
 	}
 	if !found {
@@ -146,23 +146,43 @@ func replayRazorgoreClassified(e razorgoreEvidence, c database.LogInstanceEncoun
 				var chosen *razorgoreControlCast
 				for i := range casts {
 					a := &casts[i]
-					if a.index < event.index && a.target == m.Target && a.controller == *m.Controller && (chosen == nil || chosen.index < a.index) {
+					if a.index < event.index && !a.at.After(event.at) && a.target == m.Target && a.controller == *m.Controller && (chosen == nil || chosen.index < a.index) {
 						chosen = a
 					}
 				}
-				if chosen == nil || event.at.After(chosen.at.Add(chosen.duration)) {
+				if chosen == nil || m.Spell == nil || chosen.spellID != int32(m.Spell.ID) || event.at.After(chosen.at.Add(chosen.duration)) {
 					return nil, nil, errors.New("controlled snapshot lacks a live authoritative aura_cast")
 				}
-				// Preserve a known underlying affiliation, never the temporary friendly
-				// classification. Registry hostiles supply the initial baseline only.
-				if !classified[m.Target] {
+				// Preserve a known underlying affiliation, never the temporary control
+				// classification. Players and registry hostiles supply initial baselines.
+				if !classified[m.Target] && m.Target.IsPlayer() {
+					info.Affiliation = unitdb.AffiliationFriendly
+				} else if !classified[m.Target] {
 					entry, _ := m.Target.GetEntry()
 					if _, ok := knownHostiles[entry]; !ok {
 						return nil, nil, errors.New("unknown pre-possession affiliation")
 					}
 					info.Affiliation = unitdb.AffiliationHostile
 				}
-				units.SetPossessed(m.Target, *m.Controller, nil, chosen.at, chosen.duration)
+				// Expired P1 control cannot affect the persisted egg-marker window.
+				// Do not require irrelevant controller history or persist its temporary
+				// affiliation as the player's underlying affiliation.
+				if chosen.at.Add(chosen.duration).Before(window.Start) {
+					units.ClearPossessed(m.Target)
+				} else {
+					if !m.Controller.IsPlayer() && !classified[*m.Controller] {
+						entry, _ := m.Controller.GetEntry()
+						if _, known := knownHostiles[entry]; !known {
+							return nil, nil, errors.New("unknown possession controller affiliation")
+						}
+						units.Info[*m.Controller] = unitinfo.Info{Guid: *m.Controller, Affiliation: unitdb.AffiliationHostile}
+					}
+					// Reject chains rather than risking recursive classification cycles.
+					if _, controlled := units.GetPossession(*m.Controller); controlled {
+						return nil, nil, errors.New("unsupported possession controller chain")
+					}
+					units.SetPossessed(m.Target, *m.Controller, m.Spell, chosen.at, chosen.duration)
+				}
 			}
 			units.Info[m.Target] = info
 			classified[m.Target] = true

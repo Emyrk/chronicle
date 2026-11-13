@@ -131,3 +131,67 @@ func TestClassifiedRepairDoesNotTrustHistoricalDerivedHealing(t *testing.T) {
 	_, _, err = replayRazorgoreClassified(e, c, window, database.LogFormat112aCcAddon)
 	require.ErrorContains(t, err, "missing heal stream")
 }
+
+// Synthetic identities only. The offsets, duration and spell reproduce the
+// stored Grethok -> player control that previously blocked the local repair.
+func TestRazorgorePlayerControlEvidence(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name        string
+		duration    int32
+		spell       int32
+		controller  string
+		wantError   string
+		invalidAura bool
+	}{
+		{name: "expired phase one", duration: 15000, spell: 14515, controller: "0xF13000310D000001"},
+		{name: "expired unknown controller is irrelevant", duration: 15000, spell: 14515, controller: "0xF13000FFFF000001"},
+		{name: "cross boundary", duration: 20000, spell: 14515, controller: "0xF13000310D000001"},
+		{name: "cross boundary unknown controller", duration: 20000, spell: 14515, controller: "0xF13000FFFF000001", wantError: "unknown possession controller affiliation"},
+		{name: "expiry equals boundary still needs evidence", duration: 16074, spell: 14515, controller: "0xF13000FFFF000001", wantError: "unknown possession controller affiliation"},
+		{name: "not a control aura", duration: 15000, spell: 14515, controller: "0xF13000310D000001", invalidAura: true, wantError: "lacks a live authoritative aura_cast"},
+		{name: "unknown duration", spell: 14515, controller: "0xF13000310D000001", wantError: "missing authoritative duration"},
+		{name: "repeated snapshot cannot revive expired control", duration: 1000, spell: 14515, controller: "0xF13000310D000001", wantError: "lacks a live authoritative aura_cast"},
+		{name: "wrong spell", duration: 15000, spell: 19832, controller: "0xF13000310D000001", wantError: "lacks a live authoritative aura_cast"},
+		{name: "missing spell", duration: 15000, controller: "0xF13000310D000001", wantError: "lacks a live authoritative aura_cast"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			e := fixtureRazorgorePossession(t)
+			player := e.Rankings[0].PlayerGuid
+			for i, row := range e.Events {
+				if row.Type == database.LogInstanceEventTypeSlain {
+					e.Events[i].Events = numericFrame(t, e)
+				}
+				if row.Type == database.LogInstanceEventTypeHeal {
+					e.Events[i].Events = numericFrame(t, e, &chronicleproto.Heal{Meta: &chronicleproto.EventMeta{Index: 75, OffsetMilli: 31000}, Caster: e.Rankings[1].PlayerGuid, Target: player, Amount: 70})
+				}
+			}
+			// Replace the boss possession with two snapshots of the player's control.
+			// The second snapshot must not renew the original 13.926s cast duration.
+			e.Events[len(e.Events)-2].Events = numericFrame(t, e,
+				&chronicleproto.UnitClassification{Meta: &chronicleproto.EventMeta{Index: 1}, Target: "0xF130003090000001", UnitType: int32(unitdb.UnitTypeCreature), Affiliation: int32(unitdb.AffiliationHostile)},
+				&chronicleproto.UnitClassification{Meta: &chronicleproto.EventMeta{Index: 32, OffsetMilli: 13926}, Target: player, UnitType: int32(unitdb.UnitTypePlayer), Affiliation: int32(unitdb.AffiliationHostile), Controller: &tc.controller, SpellId: tc.spell},
+				&chronicleproto.UnitClassification{Meta: &chronicleproto.EventMeta{Index: 35, OffsetMilli: 15000}, Target: player, UnitType: int32(unitdb.UnitTypePlayer), Affiliation: int32(unitdb.AffiliationHostile), Controller: &tc.controller, SpellId: tc.spell})
+			effect := int32(6)
+			if tc.invalidAura {
+				effect = 4
+			}
+			e.Events[len(e.Events)-1].Events = numericFrame(t, e,
+				&chronicleproto.AuraCast{Meta: &chronicleproto.EventMeta{Index: 31, OffsetMilli: 13926}, Spell: &chronicleproto.SpellData{Id: 14515}, Caster: tc.controller, Target: &player, EffectAuraName: effect, DurationMS: tc.duration})
+			c := e.Encounters[0]
+			result, _, err := replayRazorgoreClassified(e, c, &encounter.RankingWindow{Start: c.StartTime.Time.Add(30 * time.Second), End: c.EndTime.Time}, database.LogFormat112aCcAddon)
+			if tc.wantError != "" {
+				require.ErrorContains(t, err, tc.wantError)
+				return
+			}
+			require.NoError(t, err)
+			id, err := guid.FromString(player)
+			require.NoError(t, err)
+			require.EqualValues(t, 250, result.Units[id].RankedDamageDone)
+			healer, err := guid.FromString(e.Rankings[1].PlayerGuid)
+			require.NoError(t, err)
+			require.EqualValues(t, 70, result.Units[healer].HealingDone, "player-target healing remains eligible, matching the live tracker")
+		})
+	}
+}
