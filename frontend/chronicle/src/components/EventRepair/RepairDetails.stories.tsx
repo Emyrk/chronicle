@@ -53,3 +53,19 @@ export const NoReceipt: Story = {
   args: { repairs: undefined },
   play: async ({ canvasElement }) => { await expect(within(canvasElement).queryByRole("button", { name: /Adjusted by repair/ })).not.toBeInTheDocument(); },
 };
+
+export const LucifronComparison: Story = {
+  args: { repairs: [{ ...receipt, operation: "lucifron-ranked-damage", details: {
+    parser_version: "v1.0.172", rule_version: "v1.0.173", ranked_target_entries: [12118, 12119],
+    players: [{ encounter_id: "lucifron-encounter", player_guid: "player-guid", player_name: "Mage",
+      before_ranked_damage: 12000, after_ranked_damage: 10000, before_unranked_damage: 1000,
+      after_unranked_damage: 3000, before_dps: 200, after_dps: 166.67 }], omissions: [],
+  } }] },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: "Adjusted by repair" }));
+    const dialog = within(document.body).getByRole("dialog");
+    await expect(within(dialog).getByText("Player damage and DPS, before and after repair")).toBeVisible();
+    await expect(within(dialog).getByText("166.67")).toBeVisible();
+  },
+};
