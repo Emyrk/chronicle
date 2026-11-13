@@ -62,7 +62,7 @@ WHERE r.id = $1;
 -- Resolves the dataset for a realm and returns its default flavor plus the
 -- tenant's additive flavor tags. Dataset selection uses the same precedence as
 -- ResolveDatasetByRealm; tenant tags augment rather than replace dataset tags.
-SELECT d.id AS dataset_id, d.default_flavor, COALESCE(t.additional_flavor, '{}')::text[] AS additional_flavor
+SELECT d.id AS dataset_id, d.revision, d.default_flavor, COALESCE(t.additional_flavor, '{}')::text[] AS additional_flavor
 FROM wow_server_realms r
 JOIN wow_servers s ON s.id = r.server_id
 LEFT JOIN tenants t ON t.id = s.tenant_id
@@ -71,6 +71,50 @@ JOIN datasets d ON d.id = COALESCE(
     NULLIF(t.default_dataset_id, '00000000-0000-0000-0000-000000000000'::uuid)
 )
 WHERE r.id = $1;
+
+-- name: LockRealmDatasetResolution :one
+-- Locks the realm row so its server assignment cannot change before publication.
+-- An unknown realm returns no rows; publication callers must fail closed rather
+-- than treating it as an unlocked default-dataset resolution.
+SELECT server_id
+FROM wow_server_realms
+WHERE id = $1
+FOR SHARE;
+
+-- name: LockServerDatasetResolution :one
+-- Locks the server row so its tenant and default dataset cannot change before publication.
+SELECT tenant_id, default_dataset_id AS server_dataset_id
+FROM wow_servers
+WHERE id = $1
+FOR SHARE;
+
+-- name: LockTenantDatasetResolution :one
+-- Locks the tenant row so its default dataset and additive flavor cannot change before publication.
+SELECT default_dataset_id AS tenant_dataset_id, additional_flavor
+FROM tenants
+WHERE id = $1
+FOR SHARE;
+
+-- name: LockDatasetForResolution :one
+-- Locks the effective dataset so its revision and default flavor remain stable through publication.
+SELECT revision, default_flavor
+FROM datasets
+WHERE id = $1
+FOR SHARE;
+
+-- name: GetDatasetRevision :one
+SELECT revision FROM datasets WHERE id = $1;
+
+-- name: LockDatasetRevision :one
+-- Holds a row-level share lock until the surrounding transaction completes.
+-- Dataset mutations bump revision with UPDATE, which conflicts with this lock.
+SELECT revision FROM datasets WHERE id = $1 FOR SHARE;
+
+-- name: BumpDatasetRevision :one
+UPDATE datasets
+SET revision = nextval('datasets_revision_seq')
+WHERE id = $1
+RETURNING revision;
 
 -- name: GetDatasetImportSummary :one
 -- Returns row counts for each per-dataset data table, plus whether talent
