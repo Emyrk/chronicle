@@ -116,10 +116,9 @@ export function InstanceHeader({
             {realm}
             {(isMobile ? Boolean(realm) : Boolean(guild || realm)) && " • "}
             {startTimeLabel}
+            {repairs?.length ? <span className="ml-2"><RepairReceipts repairs={repairs} /></span> : null}
           </p>
         </div>
-
-        <RepairReceipts repairs={repairs} />
 
         {isMobile && difficulty && (
           <div className="mt-2 flex flex-wrap items-center">

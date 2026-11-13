@@ -16,13 +16,15 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+// The modal portals to document.body, so its contents are queried there.
+const modal = () => within(document.body);
 export const Repaired: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByText("Adjusted by repair"));
-    await expect(canvas.getByText("Recorded phase window")).toBeVisible();
-    await expect(canvas.getByText(receipt.operation_id)).toBeVisible();
-    await expect(canvas.getByText("No omitted values reported.")).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "Adjusted by repair" }));
+    await expect(await modal().findByText("Recorded phase window")).toBeVisible();
+    await expect(modal().getByText(receipt.operation_id)).toBeVisible();
+    await expect(modal().getByText("No omitted values reported.")).toBeVisible();
   },
 };
 export const WithOmissions: Story = {
@@ -32,10 +34,9 @@ export const WithOmissions: Story = {
   } }] },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(canvas.getByText("Warnings", { exact: true })).toBeVisible();
-    await userEvent.click(canvas.getByText("Adjusted by repair"));
-    await expect(canvas.getByText("Reconstructed phase window")).toBeVisible();
-    await expect(canvas.getByText("heal: 12,500 omitted across 3 events")).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "Adjusted by repair, with warnings" }));
+    await expect(await modal().findByText("Reconstructed phase window")).toBeVisible();
+    await expect(modal().getByText("heal: 12,500 omitted across 3 events")).toBeVisible();
   },
 };
 export const MissingDetails: Story = { args: { repairs: [{ ...receipt, warnings: ["Detail evidence unavailable"], details: undefined }] } };
@@ -43,12 +44,12 @@ export const UnknownPayload: Story = {
   args: { repairs: [{ ...receipt, operation: "future-repair", details: { future: "<script>This is displayed as text, never HTML</script>" } }] },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByText("Adjusted by repair"));
-    await userEvent.click(canvas.getByText("Saved repair JSON"));
-    await expect(canvas.getByText(/This is displayed as text/)).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "Adjusted by repair" }));
+    await userEvent.click(await modal().findByText("Saved repair JSON"));
+    await expect(modal().getByText(/This is displayed as text/)).toBeVisible();
   },
 };
 export const NoReceipt: Story = {
   args: { repairs: undefined },
-  play: async ({ canvasElement }) => { await expect(within(canvasElement).queryByText("Adjusted by repair")).not.toBeInTheDocument(); },
+  play: async ({ canvasElement }) => { await expect(within(canvasElement).queryByRole("button", { name: /Adjusted by repair/ })).not.toBeInTheDocument(); },
 };

@@ -1,3 +1,7 @@
+import { TriangleAlert, Wrench } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
+
 interface Phase {
   encounter_id: string;
   start_offset_ms: number;
@@ -104,24 +108,59 @@ function isReceipt(value: unknown): value is RepairReceipt {
     && isFiniteNumber(value.version) && typeof value.applied_at === "string";
 }
 
-/** Uses only instance metadata. Public readers never fetch privileged admin jobs. */
-export function RepairReceipts({ repairs }: { repairs?: unknown }) {
-  if (!Array.isArray(repairs)) return null;
-  const receipts = repairs.filter(isReceipt);
+function validReceipts(repairs: unknown): RepairReceipt[] {
+  return Array.isArray(repairs) ? repairs.filter(isReceipt) : [];
+}
+
+/** Full receipt data, shown inside the instance repair modal. */
+export function RepairReceiptList({ repairs }: { repairs?: unknown }) {
+  const receipts = validReceipts(repairs);
   if (!receipts.length) return null;
-  return <div className="mt-3 space-y-2" aria-label="Instance repairs">
-    {receipts.map((receipt, index) => <details key={`${receipt.operation_id}:${index}`} className="rounded border bg-background/70 p-2 text-xs">
-      <summary className="cursor-pointer">
-        <span className="inline-flex rounded-full border border-sky-500/40 bg-sky-500/10 px-2 py-0.5 font-medium text-sky-300">Adjusted by repair</span>
-        {hasWarnings(receipt.warnings, receipt.details) && <span className="ml-2 inline-flex rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 font-medium text-amber-300">Warnings</span>}
-        <span className="ml-2">{receipt.operation} · v{receipt.version}</span>
-        <time className="ml-2 text-muted-foreground" dateTime={receipt.applied_at}>{receipt.applied_at || "Application time unavailable"}</time>
-      </summary>
-      <div className="mt-3 space-y-3">
-        <p className="break-all">Repair job <code>{receipt.operation_id}</code></p>
-        <p className="text-muted-foreground">Original events remain untouched.</p>
-        <RepairDetails operation={receipt.operation} version={receipt.version} warnings={receipt.warnings} details={receipt.details} />
+  return <div className="space-y-4" aria-label="Instance repairs">
+    {receipts.map((receipt, index) => <section key={`${receipt.operation_id}:${index}`} className="space-y-3 rounded border p-3 text-xs">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-medium">{receipt.operation} · v{receipt.version}</span>
+        {hasWarnings(receipt.warnings, receipt.details) && <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-px text-[10px] font-medium text-amber-300">Warnings</span>}
+        <time className="text-muted-foreground" dateTime={receipt.applied_at}>{receipt.applied_at || "Application time unavailable"}</time>
       </div>
-    </details>)}
+      <p className="break-all">Repair job <code>{receipt.operation_id}</code></p>
+      <RepairDetails operation={receipt.operation} version={receipt.version} warnings={receipt.warnings} details={receipt.details} />
+    </section>)}
   </div>;
+}
+
+/** Uses only instance metadata. Public readers never fetch privileged admin jobs.
+ * Renders a compact badge; the full receipt data opens in a modal. */
+export function RepairReceipts({ repairs }: { repairs?: unknown }) {
+  const receipts = validReceipts(repairs);
+  if (!receipts.length) return null;
+  const warned = receipts.some((receipt) => hasWarnings(receipt.warnings, receipt.details));
+  const summary = receipts.length === 1 ? "1 repair" : `${receipts.length} repairs`;
+  return <Dialog>
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DialogTrigger asChild>
+            <button type="button" aria-label={`Adjusted by repair${warned ? ", with warnings" : ""}`} className={warned
+              ? "inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-px align-middle text-[10px] font-medium text-amber-300 hover:bg-amber-500/20"
+              : "inline-flex items-center gap-1 rounded-full border border-sky-500/40 bg-sky-500/10 px-1.5 py-px align-middle text-[10px] font-medium text-sky-300 hover:bg-sky-500/20"}>
+              {warned ? <TriangleAlert className="h-3 w-3" /> : <Wrench className="h-3 w-3" />}
+              Repaired
+            </button>
+          </DialogTrigger>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-64 text-xs">
+          Some values were adjusted by {summary}. Original events remain untouched.
+          {warned && " Some values could not be repaired."} Click for details.
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+    <DialogContent className="styled-scrollbar max-h-[85vh] w-[calc(100%-2rem)] max-w-2xl overflow-y-auto">
+      <DialogHeader>
+        <DialogTitle>Adjusted by repair</DialogTitle>
+        <DialogDescription>Values on this page were adjusted by {summary}. Original events remain untouched.</DialogDescription>
+      </DialogHeader>
+      <RepairReceiptList repairs={receipts} />
+    </DialogContent>
+  </Dialog>;
 }
