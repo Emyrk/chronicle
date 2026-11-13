@@ -224,9 +224,8 @@ Complete clean Lucifron kills are supported. Wipes without rankings are ignored
 and remain untouched; non-clean attempts with ranking rows are conservatively
 unsupported. Direct-player replay does not require the modern classification
 stream: a complete effective-damage upper bound must reconcile independently to
-each player's persisted ranked + unranked total. Pet/totem rollup requires proven
-encounter-terminal ownership, matching the parser's fight-end aggregation rather
-than an instance's current owner. Explicitly ownerless terminal pets can produce
+each player's persisted ranked + unranked total. Pet/totem rollup uses encounter-terminal ownership or the explicitly approved
+stable recorded-owner inference described below, never an instance's current owner. Explicitly ownerless terminal pets can produce
 omissions without invalidating reconciled player totals. Uncertain nonplayer
 credit mixed with player damage cannot be proved by equal totals alone and skips;
 unsupported control histories still skip rather than guessing possession expiry. These are
@@ -277,13 +276,70 @@ ranked targets or transferring their damage to a protector. Full historical
 player-total reconciliation and existing pet/omission safeguards remain required.
 Passing control validation does not imply that the rest of a log is repairable.
 
-A read-only event-stream probe of the supplied public sample established two
-15-second targeted control effects and one targetless no-op. An independent
-production-tracker replay reconciled all 33 exported player totals: 1,045,793
-full damage, with a reference target split of 855,355 ranked / 190,438 unranked
-over 39.580 seconds. The new evaluator passes the control evidence but still
-skips on separate uncertain nonplayer-credit evidence (missing encounter-terminal
-ownership snapshots); those reference figures are **not an applied repair or a
-ready preview**. The export lacks the current unranked database column and exact
-parser stamp, so the probe used the persisted release tag and disclosed historical
-zero-column default, not fabricated current database values. No real apply was run.
+### Approved stable recorded-owner inference (version 2)
+
+The classification emitter records ownership/activity changes, but emits terminal
+snapshots only for units still active at fight end. Traps and totems may therefore
+have valid encounter-local owner observations without a terminal snapshot. The
+approved fallback requires a valid player owner recorded before the source's first
+credited damage, with every encounter-local ownership snapshot agreeing. Owner
+changes, explicit clearing, chains, contradictory classifications, unsupported
+control, and ambiguous chronology skip. No observation is borrowed from another
+encounter or from final instance metadata. Known ordinary hostile NPC sources are
+not mislabeled as missing-owner player contributions.
+
+Every player's reconstructed full damage must still exactly reconcile against
+persisted ranked + unranked damage. Other unresolved contributions that could
+offset those credits remain a skip. Inferred sources carry an explicit warning in
+the dry-run and permanent receipt distinguishing stable recorded ownership from
+terminal proof; original streams are unchanged.
+
+This is a user-approved inference, **not proof of complete ownership history**:
+some UNIT_INFO updates are not emitted. Unrecorded equal-total ownership swaps
+could preserve all player totals while changing the ranked split. Stable recorded
+owners and per-player reconciliation reduce that uncertainty but do not eliminate
+it. Review the warning before authorizing Apply.
+
+### Captured-source acceptance reproduction
+
+`TestLucifronCapturedSourceReplay` is opt-in and stores no private logs or player
+fixtures in the repository. Capture these public API responses in a private
+scratch directory using the instance's normal authorized access:
+
+- `metadata`: instance metadata JSON
+- `_ranking-records`: ranking-records JSON
+- `_events_damage`, `_events_unit_classification`, `_events_aura_cast`: original
+  gzip-framed protobuf streams
+- `parser_version.txt`: exact parser stamp independently supplied from source
+  metadata/admin report
+
+The probe requires one clean Lucifron encounter. It independently computes
+expected values with production `unitdb`/`DPSTracker` semantics, without seeding
+expected splits from the repair. It requires a ready plan, zero unexpected
+omissions, exact per-player historical full totals and ranked/unranked splits,
+matching DPS, and immutable source evidence. It writes `independent-reference.csv`
+only into the supplied private directory.
+
+```sh
+CHRONICLE_LUCIFRON_EVIDENCE_DIR=/path/to/private/capture \
+CHRONICLE_REPAIR_ASSUME_HISTORICAL_UNRANKED_ZERO=1 \
+go test ./internal/services/serviceeventrepair \
+  -run '^TestLucifronCapturedSourceReplay$' -v -count=1
+```
+
+The second variable explicitly acknowledges that public exports may omit the
+current `unranked_damage_done` column. Only use it with separately verified
+historical context establishing the zero migration default. It is not exact
+parity with an unobserved current database column, and neither this probe nor its
+output authorizes a real apply.
+
+
+The supplied sample was replayed read-only with the user-provided exact stamp
+`v1.0.50+v1.0.0-157-ge961a7c3b`. With approved stable-owner inference it produces
+a ready local evaluator preview for 33 players, zero omissions, and ten explicit
+inference warnings. Every proposed player split and DPS matches independent
+production-tracker replay: 1,045,793 full damage, 855,355 ranked damage, and 190,438
+unranked damage over 39.580 seconds. The current unranked source column is not
+publicly exported; its historical-zero assumption remains explicit. This is local
+preview verification, not proof of hidden current database columns or a live
+apply. Original captured evidence stayed unchanged; no live apply/sweep was run.

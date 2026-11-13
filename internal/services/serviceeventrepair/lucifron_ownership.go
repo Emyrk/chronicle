@@ -9,13 +9,14 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/google/uuid"
 )
 
 // A terminal snapshot establishes fight-end rollup. Otherwise the approved
 // policy permits stable recorded-owner INFERENCE, not proof of a complete
 // ownership history: UNIT_INFO updates need not emit classification snapshots.
 // Exact per-player source reconciliation remains mandatory in the caller.
-func lucifronRecordedOwners(events []razorgoreReplayEvent, end time.Time, p *RepairPlan) (map[guid.GUID]guid.GUID, error) {
+func lucifronRecordedOwners(events []razorgoreReplayEvent, end time.Time, encounterID uuid.UUID, p *RepairPlan) (map[guid.GUID]guid.GUID, error) {
 	firstDamage := map[guid.GUID]int32{}
 	for _, event := range events {
 		if m, ok := event.message.(*messages.Damage); ok && m.Caster != nil && !m.Caster.IsPlayer() && !m.Target.IsPlayer() && combatmetrics.EffectiveDamage(m) > 0 {
@@ -78,7 +79,7 @@ func lucifronRecordedOwners(events []razorgoreReplayEvent, end time.Time, p *Rep
 		}
 		owners[source] = owner
 		if !terminal[source] {
-			p.Warnings = append(p.Warnings, fmt.Sprintf("Stable recorded-owner inference for source %s -> owner %s: encounter-local snapshots agree before damage, but terminal ownership is not proven; all player full totals must reconcile", source, owner))
+			p.Warnings = append(p.Warnings, fmt.Sprintf("Stable recorded-owner inference in encounter %s for source %s -> owner %s: encounter-local snapshots agree before damage, but terminal ownership is not proven; all player full totals must reconcile", encounterID, source, owner))
 		}
 	}
 	return owners, nil

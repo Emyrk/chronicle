@@ -196,7 +196,7 @@ func evaluateLucifronEncounter(e razorgoreEvidence, c database.LogInstanceEncoun
 	if err != nil {
 		return err
 	}
-	owners, err := lucifronRecordedOwners(replay, c.EndTime.Time, p)
+	owners, err := lucifronRecordedOwners(replay, c.EndTime.Time, c.ID, p)
 	if err != nil {
 		return err
 	}
