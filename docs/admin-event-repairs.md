@@ -77,8 +77,9 @@ conservative repair paths:
    trackers. Persisted contiguous P1/P2 phases and complete metric streams are
    required. Repairs include ranked/unranked damage, healing, absorbs, DPS/HPS,
    duration, inferred role, deaths, and alive percentage. Spec/subspec/talent
-   identities stay unchanged. Historical source reconciliation can reject an
-   ambiguous instance even when a fresh-parser comparison is available.
+   identities stay unchanged. Missing attribution/stream evidence or inconsistent full damage credits reject
+   ambiguous instances. Historical derived HPS totals are not treated as an input
+   completeness checksum: complete classified P2 healing is reconstructed directly.
 2. **Pre-threshold false-kill correction.** Requires complete persisted P1 and
    explicit terminal Razorgore death with unambiguous hostile activity. It corrects
    encounter/window, hostile and phase outcomes, then removes false ranking rows.

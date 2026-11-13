@@ -212,7 +212,6 @@ func replayRazorgoreClassified(e razorgoreEvidence, c database.LogInstanceEncoun
 		}
 	}
 	tracker.FightEnded(c.ID, nil)
-	full := razorgoreMergeOwnerMetrics(tracker.Result()[c.ID])
 	// P1 can precede a pet's first classification snapshot. Do not invent that
 	// history: retain the existing full credited damage and reconstruct only P2.
 	// Raw source totals are invariant under the phase-window repair.
@@ -254,13 +253,9 @@ func replayRazorgoreClassified(e razorgoreEvidence, c database.LogInstanceEncoun
 			stats = &rankings.UnitCombatStats{IsPlayer: true}
 			result.Units[id] = stats
 		}
-		before := full.Units[id]
-		if before == nil {
-			before = &rankings.UnitCombatStats{}
-		}
-		if (row.HealingDone != before.HealingDone || row.AbsorbedDone != before.HealingAbsorbed) && (row.HealingDone != stats.HealingDone || row.AbsorbedDone != stats.HealingAbsorbed) {
-			return nil, nil, errors.New("classified healing/absorb totals do not reconcile to source rows")
-		}
+		// Historical derived HPS may use older targeting/overheal semantics.
+		// It is an output to repair, not a completeness checksum for P2 inputs.
+		// Complete framed streams and classified P2 units are required above.
 		raw := row.DamageDone + row.UnrankedDamageDone
 		if stats.RankedDamageDone > raw {
 			return nil, nil, errors.New("phase-two credit exceeds persisted raw total")

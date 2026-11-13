@@ -346,8 +346,8 @@ func evaluateRazorgoreEvidence(e razorgoreEvidence) (*RazorgoreRepairPlan, error
 		return skip("missing Razorgore hostile period")
 	}
 	period := p.hostile.Periods[0]
-	if period.Start == nil || period.End == nil || !period.Start.Timestamp.Equal(enc.StartTime.Time) || !period.End.Timestamp.Equal(enc.EndTime.Time) {
-		return skip("boss period does not cover the complete encounter")
+	if period.Start == nil || period.End == nil || period.Start.Timestamp.Before(enc.StartTime.Time) || period.Start.Timestamp.After(enc.EndTime.Time) || !period.End.Timestamp.Equal(enc.EndTime.Time) {
+		return skip("boss period lies outside the encounter or lacks a terminal death")
 	}
 	if period.EndState == database.EndStateReset && period.End.Reason != "razorgore_died_before_eggs_destroyed" {
 		return skip("reset lacks explicit pre-threshold death provenance")

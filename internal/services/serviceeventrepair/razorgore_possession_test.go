@@ -107,3 +107,27 @@ func TestRazorgoreStoredSyntheticMetricsAreReplayable(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, p.RequiresReparse, p.Reason)
 }
+
+func TestClassifiedRepairDoesNotTrustHistoricalDerivedHealing(t *testing.T) {
+	t.Parallel()
+	e := fixtureRazorgorePossession(t)
+	e.Rankings[1].HealingDone += 337
+	e.Rankings[1].AbsorbedDone += 39
+	c := e.Encounters[0]
+	window := &encounter.RankingWindow{Start: c.StartTime.Time.Add(30 * time.Second), End: c.EndTime.Time}
+	result, _, err := replayRazorgoreClassified(e, c, window, database.LogFormat112aCcAddon)
+	require.NoError(t, err)
+	healer, err := guid.FromString(e.Rankings[1].PlayerGuid)
+	require.NoError(t, err)
+	require.EqualValues(t, 70, result.Units[healer].HealingDone)
+	require.EqualValues(t, 20, result.Units[healer].HealingAbsorbed)
+	// Still reject genuinely missing inputs, regardless of historical totals.
+	for i, row := range e.Events {
+		if row.Type == database.LogInstanceEventTypeHeal {
+			e.Events = append(e.Events[:i], e.Events[i+1:]...)
+			break
+		}
+	}
+	_, _, err = replayRazorgoreClassified(e, c, window, database.LogFormat112aCcAddon)
+	require.ErrorContains(t, err, "missing heal stream")
+}

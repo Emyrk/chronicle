@@ -478,3 +478,16 @@ func TestRazorgoreEvidenceHashIgnoresDatabaseRowOrder(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, first, second)
 }
+
+func TestFalseKillBossMayActivateAfterAdds(t *testing.T) {
+	t.Parallel()
+	e := fixtureRazorgore(t)
+	e.Hostiles[0].Periods[0].Start.Timestamp = e.Encounters[0].StartTime.Time.Add(8 * time.Second)
+	p, err := evaluateRazorgoreEvidence(e)
+	require.NoError(t, err)
+	require.False(t, p.RequiresReparse, p.Reason)
+	e.Hostiles[0].Periods[0].Start.Timestamp = e.Encounters[0].StartTime.Time.Add(-time.Second)
+	p, err = evaluateRazorgoreEvidence(e)
+	require.NoError(t, err)
+	require.True(t, p.RequiresReparse)
+}

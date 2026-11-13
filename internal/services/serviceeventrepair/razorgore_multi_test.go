@@ -176,3 +176,77 @@ func TestRazorgoreMultiPullProvesNoopAfterAllSourceChanges(t *testing.T) {
 	require.False(t, again.RequiresReparse, again.Reason)
 	require.Empty(t, again.Changes)
 }
+
+func TestFiveAttemptRepairRetainsWipesAndOtherBosses(t *testing.T) {
+	t.Parallel()
+	e := fixtureRazorgoreMultiple(t)
+	// Add a second pre-threshold false kill and two existing failed attempts.
+	falsePull := e.Encounters[0]
+	oldID := falsePull.ID
+	falsePull.ID = uuid.New()
+	falsePull.StartTime = database.Timestamptz(falsePull.StartTime.Time.Add(-2 * time.Minute))
+	falsePull.EndTime = database.Timestamptz(falsePull.EndTime.Time.Add(-2 * time.Minute))
+	oldHostile := e.Hostiles[0]
+	oldHostile.EncounterID = falsePull.ID
+	oldHostile.Periods = append(database.Periods(nil), oldHostile.Periods...)
+	start, end := *oldHostile.Periods[0].Start, *oldHostile.Periods[0].End
+	start.Timestamp = falsePull.StartTime.Time
+	end.Timestamp = falsePull.EndTime.Time
+	oldHostile.Periods[0].Start = &start
+	oldHostile.Periods[0].End = &end
+	phase := e.Phases[0]
+	phase.ID = uuid.New()
+	phase.EncounterID = falsePull.ID
+	row := e.Rankings[0]
+	row.ID = uuid.New()
+	row.EncounterID = uuid.NullUUID{UUID: falsePull.ID, Valid: true}
+	f := e
+	f.Encounters = []database.LogInstanceEncounter{falsePull}
+	frame := numericFrame(t, f, &chronicleproto.Slain{Meta: &chronicleproto.EventMeta{Index: 0, OffsetMilli: 60000}, Target: oldHostile.ID.String()})
+	for i := range e.Events {
+		if e.Events[i].Type == database.LogInstanceEventTypeSlain {
+			e.Events[i].Events = append(frame, e.Events[i].Events...)
+		}
+	}
+	e.Encounters = append(e.Encounters, falsePull)
+	e.Hostiles = append(e.Hostiles, oldHostile)
+	e.Phases = append(e.Phases, phase)
+	e.Rankings = append(e.Rankings, row)
+	for j := 0; j < 2; j++ {
+		wipe := e.Encounters[1]
+		wipe.ID = uuid.New()
+		wipe.KillType = database.KillTypeWipe
+		e.Encounters = append(e.Encounters, wipe)
+		for _, ph := range append([]database.LogInstanceEncounterPhase(nil), e.Phases...) {
+			if ph.EncounterID == e.Encounters[1].ID {
+				ph.ID = uuid.New()
+				ph.EncounterID = wipe.ID
+				if ph.Key == "razorgore_p2" {
+					ph.KillType = database.KillTypeWipe
+				}
+				e.Phases = append(e.Phases, ph)
+			}
+		}
+	}
+	vael := e.Encounters[1]
+	vael.ID = uuid.New()
+	vael.Name = "Vaelastrasz the Corrupt"
+	vael.KillType = database.KillTypeWipe
+	e.Encounters = append(e.Encounters, vael)
+	e.Speedruns[0].StartTime = falsePull.StartTime
+	e.Speedruns[0].RankedStartTime = falsePull.StartTime
+	e.Speedruns[0].BossToBossStartTime = falsePull.StartTime
+	p, err := evaluateRazorgoreEvidence(e)
+	require.NoError(t, err)
+	require.False(t, p.RequiresReparse, p.Reason)
+	require.Len(t, p.multi.FalseKills, 2)
+	require.Len(t, p.multi.Numerical, 3)
+	require.EqualValues(t, 300000, p.multi.Speedrun.DurationMs)
+	corrected := map[uuid.UUID]bool{}
+	for _, f := range p.multi.FalseKills {
+		corrected[f.EncounterID] = true
+	}
+	require.True(t, corrected[oldID])
+	require.True(t, corrected[falsePull.ID])
+	require.False(t, corrected[vael.ID])
+}
