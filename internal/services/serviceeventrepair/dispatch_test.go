@@ -18,7 +18,7 @@ func lucifronLifecycleFixture(t *testing.T, n int) *repairFixture {
 	job := f.service.jobs[OperationLucifron]
 	mock := f.service.jobs[OperationRazorgore]
 	job.evaluate, job.apply, job.revalidate = mock.evaluate, mock.apply, mock.revalidate
-	_, err := f.pool.Exec(f.ctx, `UPDATE event_repair_operations SET operation=$2 WHERE id=$1`, f.id, OperationLucifron)
+	_, err := f.pool.Exec(f.ctx, `UPDATE event_repair_operations SET operation=$2, version=$3 WHERE id=$1`, f.id, OperationLucifron, LucifronVersion)
 	require.NoError(t, err)
 	return f
 }
@@ -34,7 +34,7 @@ func TestRepairDispatchSelectionAndSweep(t *testing.T) {
 		report, err := f.service.Create(f.ctx, uuid.New(), CreateRequest{Operation: operation, TenantID: f.tenant, Limit: 10})
 		require.NoError(t, err)
 		require.Equal(t, operation, report.Operation)
-		require.Equal(t, 1, report.Version)
+		require.EqualValues(t, f.service.jobs[operation].version, report.Version)
 		require.Len(t, report.Items, 1)
 		require.Equal(t, want, report.Items[0].InstanceID)
 	}
@@ -79,11 +79,11 @@ func TestLucifronLifecycleReceiptsAndRetry(t *testing.T) {
 	receipt, err := f.db.GetEventRepairReceipt(f.ctx, database.GetEventRepairReceiptParams{InstanceID: instance, Operation: OperationLucifron, TenantID: f.tenant})
 	require.NoError(t, err)
 	require.Equal(t, f.id, receipt.OperationID)
-	require.EqualValues(t, 1, receipt.Version)
+	require.EqualValues(t, LucifronVersion, receipt.Version)
 	require.JSONEq(t, `[]`, string(receipt.Warnings))
 	require.Equal(t, 1, f.canonicalJobs(t))
 	next := anotherReceiptJob(t, f, instance)
-	_, err = f.pool.Exec(f.ctx, `UPDATE event_repair_operations SET operation=$2 WHERE id=$1`, next, OperationLucifron)
+	_, err = f.pool.Exec(f.ctx, `UPDATE event_repair_operations SET operation=$2, version=$3 WHERE id=$1`, next, OperationLucifron, LucifronVersion)
 	require.NoError(t, err)
 	_, err = f.service.ProcessPage(f.ctx, next, "dry_running")
 	require.NoError(t, err)
@@ -139,7 +139,7 @@ func TestLucifronLifecycleEmptySkippedAndStale(t *testing.T) {
 func TestRepairDispatchRejectsUnknownVersion(t *testing.T) {
 	t.Parallel()
 	f := lucifronLifecycleFixture(t, 0)
-	_, err := f.pool.Exec(f.ctx, `UPDATE event_repair_operations SET version=2,last_error='failed' WHERE id=$1`, f.id)
+	_, err := f.pool.Exec(f.ctx, `UPDATE event_repair_operations SET version=99,last_error='failed' WHERE id=$1`, f.id)
 	require.NoError(t, err)
 	_, err = f.service.ProcessPage(f.ctx, f.id, "dry_running")
 	require.ErrorIs(t, err, ErrConflict)
@@ -271,4 +271,42 @@ func TestLucifronRealEvaluatorSkipsCompleteWithoutReceipt(t *testing.T) {
 			require.Empty(t, receipts)
 		})
 	}
+}
+
+func TestLucifronVersionOneCannotApplyOrRetryWithNewEvaluator(t *testing.T) {
+	t.Parallel()
+	f := lucifronLifecycleFixture(t, 1)
+	_, err := f.service.ProcessPage(f.ctx, f.id, "dry_running")
+	require.NoError(t, err)
+	_, err = f.pool.Exec(f.ctx, `UPDATE event_repair_operations SET version=1 WHERE id=$1`, f.id)
+	require.NoError(t, err)
+	_, err = f.service.Apply(f.ctx, f.id, uuid.New())
+	require.ErrorIs(t, err, ErrConflict)
+	_, err = f.pool.Exec(f.ctx, `UPDATE event_repair_operations SET state='applying',last_error='old worker failed' WHERE id=$1`, f.id)
+	require.NoError(t, err)
+	_, err = f.service.Retry(f.ctx, f.id, uuid.New())
+	require.ErrorIs(t, err, ErrConflict)
+	_, err = f.service.ProcessPage(f.ctx, f.id, "applying")
+	require.ErrorIs(t, err, ErrConflict)
+	require.Zero(t, f.canonicalJobs(t))
+	receipts, err := f.db.ListInstanceEventRepairReceipts(f.ctx, receiptInstance(t, f))
+	require.NoError(t, err)
+	require.Empty(t, receipts)
+}
+
+func TestLucifronVersionOneReceiptRemainsPermanent(t *testing.T) {
+	t.Parallel()
+	f := lucifronLifecycleFixture(t, 1)
+	instance := receiptInstance(t, f)
+	_, err := f.db.InsertEventRepairReceipt(f.ctx, database.InsertEventRepairReceiptParams{InstanceID: instance, Operation: OperationLucifron, Version: 1, OperationID: uuid.New(), TenantID: f.tenant, Warnings: []byte(`[]`), Details: []byte(`{}`)})
+	require.NoError(t, err)
+	_, err = f.service.ProcessPage(f.ctx, f.id, "dry_running")
+	require.NoError(t, err)
+	report, err := f.service.Get(f.ctx, f.id)
+	require.NoError(t, err)
+	require.Equal(t, LucifronVersion, report.Version)
+	require.Equal(t, "completed", report.State)
+	require.Equal(t, "skipped", report.Items[0].State)
+	require.Contains(t, report.Items[0].Reason, "permanent receipt")
+	require.Zero(t, f.canonicalJobs(t))
 }

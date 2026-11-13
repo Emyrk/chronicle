@@ -170,7 +170,13 @@ Razorgore producers use `phases` (encounter ID, offsets, reconstructed flag) and
 (encounter ID, stream, unit GUID, amount, count, reason).
 
 
-## Lucifron ranked damage, version 1
+## Lucifron ranked damage, version 2
+
+Lucifron implementation version 2 adds evidenced player mind-control support.
+Version-1 previews and failed operations cannot apply/retry under the new
+evaluator; create a fresh dry run. Permanent receipts remain unique by script,
+not version, so an existing version-1 receipt still prevents reapplication.
+The public details shape is unchanged and old receipts remain readable.
 
 The script `lucifron-ranked-damage` uses the same selection, preview, explicit
 apply, retry/cancel, permanent receipts, and transactional ratings lifecycle.
@@ -209,7 +215,7 @@ encounter-terminal ownership, matching the parser's fight-end aggregation rather
 than an instance's current owner. Explicitly ownerless terminal pets can produce
 omissions without invalidating reconciled player totals. Uncertain nonplayer
 credit mixed with player damage cannot be proved by equal totals alone and skips;
-control history also skips rather than guessing possession expiry. These are
+unsupported control histories still skip rather than guessing possession expiry. These are
 evidence limits, not a claim to support every historical log.
 
 Version-1 `details` has this stable shape (arrays are always arrays, not null):

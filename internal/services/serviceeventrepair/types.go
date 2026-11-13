@@ -11,7 +11,7 @@ import (
 const OperationRazorgore = "razorgore-phase-two"
 const Version = 1
 const OperationLucifron = "lucifron-ranked-damage"
-const LucifronVersion = 1
+const LucifronVersion = 2
 const PageSize = 25
 
 var (
