@@ -317,3 +317,21 @@ func TestLucifronRejectsWrongScriptPreparedPlan(t *testing.T) {
 	require.Error(t, ApplyLucifron(ctx, s, p))
 	require.Empty(t, s.updates)
 }
+
+func TestRepairApplyRejectsOtherScriptsSealedPlan(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	lucifron := &lucifronStore{razorgoreStore: &razorgoreStore{e: fixtureLucifron(t)}, affected: 1}
+	lucifronPlan, err := EvaluateLucifron(ctx, lucifron, lucifron.e.Instance.ID)
+	require.NoError(t, err)
+	require.NoError(t, validateRazorgorePlan(lucifronPlan))
+	require.Error(t, ApplyRazorgore(ctx, lucifron, lucifronPlan))
+	require.Empty(t, lucifron.updates)
+	razorgore := &razorgoreStore{e: fixtureRazorgoreNumeric(t)}
+	razorgorePlan, err := EvaluateRazorgore(ctx, razorgore, razorgore.e.Instance.ID)
+	require.NoError(t, err)
+	require.False(t, razorgorePlan.RequiresReparse, razorgorePlan.Reason)
+	require.NoError(t, validateRazorgorePlan(razorgorePlan))
+	require.Error(t, ApplyLucifron(ctx, lucifron, razorgorePlan))
+	require.Empty(t, lucifron.updates)
+}
