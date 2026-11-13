@@ -301,6 +301,53 @@ func tbcKarazhanMagtheridonVariantsMigration(ctx context.Context, pool *pgxpool.
 	return err
 }
 
+func tbcGruulsLairVariantMigration(ctx context.Context, pool *pgxpool.Pool, direction string) error {
+	data, err := os.ReadFile("../../database/migrations/000379_leaderboard_tbc_gruuls_lair_variant." + direction + ".sql")
+	if err != nil {
+		return err
+	}
+	conn, err := pool.Acquire(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+	_, err = conn.Exec(ctx, string(data))
+	if err != nil {
+		_, _ = conn.Exec(ctx, "ROLLBACK")
+	}
+	return err
+}
+
+func TestTBCGruulsLairVariantMigrationRoundTrip(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitLong)
+	pool, _ := dbtestutil.NewPGXPool(t)
+	db := database.New(pool)
+	flavor := database.WoWFlavor{database.FlavorTBC}
+	before, err := leaderboardconfig.Resolve(ctx, db, flavor, nil)
+	require.NoError(t, err)
+	require.Contains(t, before, database.ResolveLeaderboardConfigurationRow{
+		Kind:           "variant",
+		InstanceName:   "Gruul's Lair",
+		DifficultyName: "",
+		MaxPlayers:     25,
+	})
+
+	require.NoError(t, tbcGruulsLairVariantMigration(ctx, pool, "down"))
+	withoutVariant, err := leaderboardconfig.Resolve(ctx, db, flavor, nil)
+	require.NoError(t, err)
+	for _, row := range withoutVariant {
+		if row.InstanceName == "Gruul's Lair" {
+			require.NotEqual(t, "variant", row.Kind, row)
+		}
+	}
+
+	require.NoError(t, tbcGruulsLairVariantMigration(ctx, pool, "up"))
+	after, err := leaderboardconfig.Resolve(ctx, db, flavor, nil)
+	require.NoError(t, err)
+	require.Equal(t, before, after)
+}
+
 func TestTBCKarazhanMagtheridonVariantsMigrationRoundTrip(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitLong)
@@ -408,6 +455,7 @@ func TestTBCMigrationRoundTrip(t *testing.T) {
 	careerBefore, err := db.ListLeaderboardCareerVariants(ctx, []string{string(database.FlavorTBC)})
 	require.NoError(t, err)
 
+	require.NoError(t, tbcGruulsLairVariantMigration(ctx, pool, "down"))
 	require.NoError(t, tbcKarazhanMagtheridonVariantsMigration(ctx, pool, "down"))
 	require.NoError(t, magtheridonRankingsMigration(ctx, pool, "down"))
 	require.NoError(t, tbcKarazhanRankedSetMigration(ctx, pool, "down"))
@@ -442,6 +490,7 @@ func TestTBCMigrationRoundTrip(t *testing.T) {
 	require.NoError(t, tbcKarazhanRankedSetMigration(ctx, pool, "up"))
 	require.NoError(t, magtheridonRankingsMigration(ctx, pool, "up"))
 	require.NoError(t, tbcKarazhanMagtheridonVariantsMigration(ctx, pool, "up"))
+	require.NoError(t, tbcGruulsLairVariantMigration(ctx, pool, "up"))
 	for i, flavor := range flavors {
 		rows, err := leaderboardconfig.Resolve(ctx, db, flavor, nil)
 		require.NoError(t, err)
@@ -459,6 +508,7 @@ func TestTBCRollbackPreservesEditedAward(t *testing.T) {
 
 	_, err := pool.Exec(ctx, `UPDATE leaderboard_boss_renown SET points=99 WHERE layer_key='tbc' AND instance_name='Gruul''s Lair' AND encounter_name='Gruul the Dragonkiller'`)
 	require.NoError(t, err)
+	require.NoError(t, tbcGruulsLairVariantMigration(ctx, pool, "down"))
 	require.NoError(t, tbcKarazhanMagtheridonVariantsMigration(ctx, pool, "down"))
 	require.NoError(t, magtheridonRankingsMigration(ctx, pool, "down"))
 	require.NoError(t, tbcKarazhanRankedSetMigration(ctx, pool, "down"))
@@ -478,6 +528,7 @@ func TestTBCRollbackProtectsEditedNewCatalogAward(t *testing.T) {
 
 	_, err := pool.Exec(ctx, `UPDATE leaderboard_boss_renown SET points=99 WHERE layer_key='tbc' AND instance_name='Black Temple' AND encounter_name='Illidan Stormrage'`)
 	require.NoError(t, err)
+	require.NoError(t, tbcGruulsLairVariantMigration(ctx, pool, "down"))
 	require.NoError(t, tbcKarazhanMagtheridonVariantsMigration(ctx, pool, "down"))
 	require.NoError(t, magtheridonRankingsMigration(ctx, pool, "down"))
 	require.NoError(t, tbcKarazhanRankedSetMigration(ctx, pool, "down"))
