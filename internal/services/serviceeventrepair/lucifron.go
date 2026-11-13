@@ -196,7 +196,7 @@ func evaluateLucifronEncounter(e razorgoreEvidence, c database.LogInstanceEncoun
 	if err != nil {
 		return err
 	}
-	owners, err := razorgoreProvenPetOwners(replay, c.EndTime.Time)
+	owners, err := lucifronRecordedOwners(replay, c.EndTime.Time, p)
 	if err != nil {
 		return err
 	}
@@ -219,6 +219,13 @@ func evaluateLucifronEncounter(e razorgoreEvidence, c database.LogInstanceEncoun
 	ranked := map[guid.GUID]int64{}
 	uncertainCredit := false
 	classified := map[guid.GUID]*messages.UnitClassificationEvent{}
+	knownHostiles := instances.MoltenCoreHostiles()
+	observedOwned := map[guid.GUID]bool{}
+	for _, event := range replay {
+		if m, ok := event.message.(*messages.UnitClassificationEvent); ok && m.Owner != nil {
+			observedOwned[m.Target] = true
+		}
+	}
 	for _, event := range replay {
 		if snapshot, ok := event.message.(*messages.UnitClassificationEvent); ok {
 			classified[snapshot.Target] = snapshot
@@ -235,6 +242,11 @@ func evaluateLucifronEncounter(e razorgoreEvidence, c database.LogInstanceEncoun
 		if amount <= 0 || m.Target.IsPlayer() {
 			continue
 		}
+		// The parser never credits damage to a player-owned target. Use only
+		// classification already observed at this damage index, not final state.
+		if target, known := classified[m.Target]; known && target.Owner != nil && target.Owner.IsPlayer() {
+			continue
+		}
 		if m.Caster == nil {
 			return errors.New("environmental damage to nonplayers cannot establish credit")
 		}
@@ -242,6 +254,12 @@ func evaluateLucifronEncounter(e razorgoreEvidence, c database.LogInstanceEncoun
 		if !player.IsPlayer() {
 			owner, ok := owners[player]
 			if !ok {
+				entry, _ := player.GetEntry()
+				if _, hostile := knownHostiles[entry]; hostile && !observedOwned[player] {
+					// Registry hostiles such as Lucifron are not missing-owner
+					// pets merely because activity ended before the final frame.
+					continue
+				}
 				_, totem := totems.IsTotem(player)
 				_, known := classified[player]
 				if terminalUnowned[player] && !player.IsPet() && !totem {
