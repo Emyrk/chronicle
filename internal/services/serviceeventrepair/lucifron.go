@@ -45,13 +45,27 @@ func lucifronParserVersion(instance database.LogInstance) (string, bool) {
 }
 
 func EvaluateLucifron(ctx context.Context, db database.Store, instanceID uuid.UUID) (*RepairPlan, error) {
-	e, err := loadRazorgoreEvidence(ctx, db, instanceID)
+	e, err := loadRepairEvidence(ctx, db, instanceID, false)
 	if err != nil {
 		return nil, err
 	}
+	// Evaluate metadata first. Only the specifically approved activity skip may
+	// omit stream loading; every fallback retains the normal evidence path.
 	p, err := evaluateLucifronEvidence(e)
 	if err != nil {
 		return nil, err
+	}
+	if p.Reason != lucifronActivitySkipReason {
+		if !e.MissingInstance && e.Server.TenantID.Valid && e.Server.TenantID.UUID != uuid.Nil {
+			e.Events, err = db.RazorgoreRepairEvents(ctx, instanceID)
+			if err != nil {
+				return nil, err
+			}
+		}
+		p, err = evaluateLucifronEvidence(e)
+		if err != nil {
+			return nil, err
+		}
 	}
 	p.operation = OperationLucifron
 	p.seal, err = razorgorePlanSeal(p)
@@ -61,6 +75,23 @@ func EvaluateLucifron(ctx context.Context, db database.Store, instanceID uuid.UU
 func RevalidateLucifron(ctx context.Context, db database.Store, p *RepairPlan) error {
 	if p == nil || p.operation != OperationLucifron {
 		return errors.New("missing Lucifron prepared payload")
+	}
+	if p.RequiresReparse && p.Reason == lucifronActivitySkipReason {
+		if err := validateRazorgorePlan(p); err != nil {
+			return err
+		}
+		e, err := loadRepairEvidence(ctx, db, p.InstanceID, false)
+		if err != nil {
+			return err
+		}
+		hash, err := razorgoreEvidenceHash(e)
+		if err != nil {
+			return err
+		}
+		if hash != p.EvidenceHash {
+			return ErrStaleEvidence
+		}
+		return nil
 	}
 	return RevalidateRazorgore(ctx, db, p)
 }
@@ -114,6 +145,9 @@ func evaluateLucifronEvidence(e razorgoreEvidence) (*RepairPlan, error) {
 		if r.Operation == OperationLucifron {
 			return skip("Lucifron repair already recorded")
 		}
+	}
+	if lucifronActivityOnlyTargets(e) {
+		return skip(lucifronActivitySkipReason)
 	}
 	p.lucifron = &lucifronPlan{}
 	found := false
