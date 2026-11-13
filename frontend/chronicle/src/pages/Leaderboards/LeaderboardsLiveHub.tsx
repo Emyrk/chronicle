@@ -1,6 +1,6 @@
 import { EncounterVariantChips } from "@/components/EncounterDifficulty/EncounterVariant"
 import { EncounterVariantMark } from "@/components/EncounterDifficulty/EncounterVariant"
-import { supportsEncounterVariant, highestEncounterVariant, withHighestEncounterVariants, type EncounterVariant, type EncounterVariants } from "@/components/EncounterDifficulty/encounterVariant"
+import { activeEncounterVariants, encounterVariantsEnabled, supportsEncounterVariant, highestEncounterVariant, withHighestEncounterVariants, type EncounterVariant, type EncounterVariants } from "@/components/EncounterDifficulty/encounterVariant"
 import { difficultyChipClassName } from "@/components/EncounterDifficulty/encounterDifficulty"
 import { landingRealmError, useLandingHighlights } from "./Hub/landingHighlights"
 import { useCallback, useState, type ReactNode } from "react"
@@ -223,9 +223,15 @@ function LiveInstanceHub({ instanceName, names, summary, stale, realm, realmIDs,
   // Stale names (another instance, a removed boss) drop out; nothing left is the preset.
   const chosen = bosses.filter((name) => encounters.includes(name))
   const selection: EncounterSelection = chosen.length ? { kind: "bosses", bosses: chosen } : FULL_CLEAR
-  const encounterVariants = tab === "ratings" && variantSelection?.instance === instanceName
+  const [, setVariantParams] = useSearchParams()
+  const variantsEnabled = encounterVariantsEnabled(tab, ratingView)
+  const disabledReason = variantsEnabled ? undefined : "This view uses Combined. Variant choices are retained for Ratings, Performances, and Statistics."
+  const encounterVariants = variantSelection?.instance === instanceName
     ? variantSelection.variants : undefined
+  const resetPage = () => setVariantParams(previous => { const next = new URLSearchParams(previous); next.delete("page"); return next })
   const selectVariant = (boss: string, variant?: EncounterVariant) => {
+    if (!variantsEnabled) return
+    resetPage()
     setVariantSelection(previous => {
       const variants = { ...(previous?.instance === instanceName ? previous.variants : {}) }
       if (variant) variants[boss] = variant
@@ -236,16 +242,17 @@ function LiveInstanceHub({ instanceName, names, summary, stale, realm, realmIDs,
   const hardBosses = (chosen.length ? chosen : presetBosses).filter(boss => supportsEncounterVariant(instanceName, boss))
   const hardMode = hardBosses.length > 0 && hardBosses.every(boss => encounterVariants?.[boss] === highestEncounterVariant(instanceName, boss))
   const live = {
-    encounterSidebarExtras: tab === "ratings" && bosses.some(boss => supportsEncounterVariant(instanceName, boss)) ? {
-      actions: <button type="button" aria-label="Hard mode" aria-pressed={ratingView !== "overview" && hardMode}
-        title="Use the highest supported tier for selected bosses. Unclassified bosses stay Combined."
-        className={cn(difficultyChipClassName("hard"), "h-5 cursor-pointer px-2 text-xs", ratingView !== "overview" && hardMode ? "ring-2" : "opacity-70 hover:opacity-100")}
+    encounterSidebarExtras: bosses.some(boss => supportsEncounterVariant(instanceName, boss)) ? {
+      actions: <button type="button" aria-label="Hard mode" aria-pressed={hardMode} disabled={!variantsEnabled}
+        title={disabledReason ?? "Use the highest supported tier for selected bosses. Unclassified bosses stay Combined."}
+        className={cn(difficultyChipClassName("hard"), "h-5 cursor-pointer px-2 text-xs disabled:cursor-not-allowed disabled:opacity-25 disabled:grayscale", hardMode ? "ring-2" : "opacity-70 hover:opacity-100")}
         onClick={() => {
-          setVariantSelection({ instance: instanceName, variants: withHighestEncounterVariants(instanceName, hardBosses, encounterVariants, hardMode && ratingView !== "overview") })
-          if (ratingView === "overview") onRatingView("peak")
+          if (!variantsEnabled) return
+          resetPage()
+          setVariantSelection({ instance: instanceName, variants: withHighestEncounterVariants(instanceName, hardBosses, encounterVariants, hardMode) })
         }}>Hard mode</button>,
       afterBoss: (boss: string) => supportsEncounterVariant(instanceName, boss)
-        ? <EncounterVariantChips boss={boss} active={ratingView === "overview" ? undefined : encounterVariants?.[boss]} onSelect={variant => { selectVariant(boss, variant); if (ratingView === "overview") onRatingView("peak") }} /> : null,
+        ? <EncounterVariantChips boss={boss} active={encounterVariants?.[boss]} disabledReason={disabledReason} onSelect={variant => selectVariant(boss, variant)} /> : null,
     } : undefined,
     selection,
     onSelection: (next: EncounterSelection) => onEncounters(next.kind === "bosses" ? next.bosses : []),
@@ -268,7 +275,7 @@ function LiveInstanceHub({ instanceName, names, summary, stale, realm, realmIDs,
       })}
     </div> : undefined,
     renderOverview: (context: HubLiveTabContext) => <LiveHubContent context={context} summary={summary} stale={stale} realmName={realmName} realmIDs={realmIDs} cohort={cohort} bosses={bosses} overview />,
-    renderTab: (context: HubLiveTabContext) => <LiveHubContent context={context} summary={summary} stale={stale} realmName={realmName} realmIDs={realmIDs} cohort={cohort} bosses={bosses} encounterVariants={encounterVariants} />,
+    renderTab: (context: HubLiveTabContext) => <LiveHubContent context={context} summary={summary} stale={stale} realmName={realmName} realmIDs={realmIDs} cohort={cohort} bosses={bosses} encounterVariants={variantsEnabled ? activeEncounterVariants(instanceName, chosen.length ? chosen : presetBosses, encounterVariants) : undefined} />,
   }
   return <LeaderboardHub live={live} instanceName={instanceName} instances={names} onAllInstances={() => onInstance()} allInstancesHref={allInstancesHref}
     onSwitchInstance={(next) => onInstance(next)} tab={tab} onTab={onTab} tabHref={tabHref} realm={realm} onRealm={onRealm}
@@ -302,9 +309,11 @@ function LiveHubContent({ context, summary, stale = false, realmName, realmIDs, 
   // The preset sends its bosses explicitly, as /leaderboards does: no list would rank every
   // encounter, Trash included.
   const pickedNames = (picked.length ? picked : bosses.filter((name) => name !== "Trash")).join(",") || undefined
+  const activeVariants = !overview && encounterVariantsEnabled(context.tab, context.ratingView) ? activeEncounterVariants(instanceName, pickedNames?.split(",") ?? [], encounterVariants) : undefined
+  const variantScope = { encounter_names: pickedNames, difficulty_names: chosen?.difficulty_name, max_players: chosen?.max_players, exact_cohort: !!chosen, realm_names: realmName, encounter_variants: activeVariants }
   const exact = !!chosen
   // Preserve zero-size cohorts explicitly; exact_cohort distinguishes them from an unfiltered board.
-  const performance = useRankingsLeaderboard({ instance_names: instanceName, encounter_names: pickedNames,
+  const performance = useRankingsLeaderboard({ encounter_variants: activeVariants, instance_names: instanceName, encounter_names: pickedNames,
     difficulty_names: chosen?.difficulty_name, max_players: chosen?.max_players, exact_cohort: !!chosen, class: scope.cls, spec: scope.spec, sub_spec: scope.subSpec,
     metric: role === "healing" ? "hps" : "dps", realm_names: realmName, limit: PERFORMANCE_PAGE_SIZE,
     offset: (performancePage - 1) * PERFORMANCE_PAGE_SIZE,
@@ -329,14 +338,14 @@ function LiveHubContent({ context, summary, stale = false, realmName, realmIDs, 
     enabled: !overview && context.tab === "speedruns" && speedView === "clear" && exact && realmIDs.length <= 1,
     staleTime: 5 * 60 * 1000,
   })
-  const stats = useRankingsStats({ instance_names: instanceName, encounter_names: pickedNames, difficulty_names: chosen?.difficulty_name,
+  const stats = useRankingsStats({ encounter_variants: activeVariants, instance_names: instanceName, encounter_names: pickedNames, difficulty_names: chosen?.difficulty_name,
     max_players: chosen?.max_players, exact_cohort: !!chosen, realm_names: realmName, metric: role === "healing" ? "hps" : "dps" },
     !overview && context.tab === "statistics" && exact)
-  const clearTimes = useRankingsClearTimes(instanceName, undefined, !overview && context.tab === "statistics" && !realmName && exact)
-  const killTimes = useRankingsKillTimes(instanceName, undefined, !overview && context.tab === "statistics" && !realmName && exact)
+  const clearTimes = useRankingsClearTimes(instanceName, undefined, !overview && context.tab === "statistics" && !realmName && exact && !activeVariants)
+  const killTimes = useRankingsKillTimes(instanceName, undefined, !overview && context.tab === "statistics" && realmIDs.length <= 1 && exact, variantScope)
   const successRates = useRankingsSuccessRates(instanceName, undefined,
     chosen ? { difficulty_names: chosen.difficulty_name, max_players: chosen.max_players, exact_cohort: true } : undefined,
-    !overview && context.tab === "statistics" && !realmName && exact)
+    !overview && context.tab === "statistics" && !realmName && exact && !activeVariants)
   const parseSpreads = useParseScoreSpreads({ metric: role === "healing" ? "hps" : "dps",
     encounterNames: picked.length ? picked : bosses, playerClass: scope.cls, playerSpec: scope.spec },
     !overview && context.tab === "parsing" && !!chosen && !realmName)
@@ -370,12 +379,13 @@ function LiveHubContent({ context, summary, stale = false, realmName, realmIDs, 
   if (context.tab === "statistics") {
     const live: LiveStatisticsData = {
       specs: chosen ? queryState(stats) : undefined,
-      clearTimes: chosen && !realmName && raids.length === 1 ? queryState(clearTimes) : undefined,
-      killTimes: chosen && !realmName && raids.length === 1 ? queryState(killTimes) : undefined,
-      successRates: chosen && !realmName ? queryState(successRates) : undefined,
+      clearTimes: !activeVariants && chosen && !realmName && raids.length === 1 ? queryState(clearTimes) : undefined,
+      killTimes: chosen ? queryState(killTimes) : undefined,
+      successRates: !activeVariants && chosen && !realmName ? queryState(successRates) : undefined,
+      successUnavailable: activeVariants ? "Success-rate statistics require variant classification for unsuccessful attempts. Select Combined to view success rates and attempt counts." : undefined,
     }
-    return <StatisticsTab instanceName={instanceName} bosses={bosses} optional={new Set()}
-      selection={selection} view={context.statisticsView} onView={context.onStatisticsView} scope={scope} role={role} onScope={context.onScope} live={live} />
+    return <>{activeVariants && <p role="note" className="mb-3 text-sm text-muted-foreground">Full-clear time statistics are unavailable with encounter variants. Select Combined to view full clears.</p>}<StatisticsTab instanceName={instanceName} bosses={bosses} optional={new Set()}
+      selection={selection} view={context.statisticsView} onView={context.onStatisticsView} scope={scope} role={role} onScope={context.onScope} live={live} /></>
   }
   if (context.tab === "parsing") {
     const live: LiveParsingData = {

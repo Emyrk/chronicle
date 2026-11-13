@@ -25,6 +25,7 @@ export interface LiveStatisticsData {
   specs?: LiveResult<RankingsBoxPlotStats[]>
   clearTimes?: LiveResult<RankingsKillTimeStats[]>
   killTimes?: LiveResult<RankingsKillTimeStats[]>
+  successUnavailable?: string
   successRates?: LiveResult<RankingsSuccessRate[]>
 }
 
@@ -143,7 +144,7 @@ export function StatisticsTab({
             <KillTimeContent stats={live ? (live.killTimes?.status === "ready" ? live.killTimes.data.filter((row) => chosen.includes(row.encounter_name)) : []) : killTimeStats(chosen, bosses)} loading={false} instanceName={instanceName} />}
         </div>
       )}
-      {view === "success" && (live && live.successRates?.status !== "ready" ? liveState(live.successRates, "Success rates") :
+      {view === "success" && (live?.successUnavailable ? <p role="note" className="rounded-xl border bg-card p-5 text-sm text-muted-foreground">{live.successUnavailable}</p> : live && live.successRates?.status !== "ready" ? liveState(live.successRates, "Success rates") :
         <SuccessRateContent rates={live ? (live.successRates?.status === "ready" ? live.successRates.data.filter((row) => chosen.includes(row.encounter_name)) : []) : successRates(chosen, bosses)} loading={false} instanceName={instanceName} />)}
     </div>
   )

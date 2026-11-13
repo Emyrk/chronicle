@@ -302,6 +302,8 @@ JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NO
         WHEN cardinality(@encounter_names :: text[]) > 0 THEN edr.encounter_name = ANY(@encounter_names :: text[])
         ELSE true
     END
+    AND (NOT (COALESCE(@encounter_variants::jsonb, '{}'::jsonb) ? edr.encounter_name)
+         OR edr.encounter_variant = (COALESCE(@encounter_variants::jsonb, '{}'::jsonb) ->> edr.encounter_name))
     AND (COALESCE(cardinality(@realm_ids::uuid[]),0)=0 OR edr.realm_id=ANY(@realm_ids::uuid[]))
     AND CASE
         WHEN cardinality(@realm_names :: text[]) > 0 THEN edr.realm_name = ANY(@realm_names :: text[])
@@ -619,6 +621,8 @@ JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NO
         WHEN cardinality(@encounter_names :: text[]) > 0 THEN edr.encounter_name = ANY(@encounter_names :: text[])
         ELSE true
     END
+    AND (NOT (COALESCE(@encounter_variants::jsonb, '{}'::jsonb) ? edr.encounter_name)
+         OR edr.encounter_variant = (COALESCE(@encounter_variants::jsonb, '{}'::jsonb) ->> edr.encounter_name))
     AND (COALESCE(cardinality(@realm_ids::uuid[]),0)=0 OR edr.realm_id=ANY(@realm_ids::uuid[]))
     AND CASE
         WHEN cardinality(@realm_names :: text[]) > 0 THEN edr.realm_name = ANY(@realm_names :: text[])
@@ -1026,9 +1030,15 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
     JOIN wow_server_realms wsr ON wsr.id = li.realm_id
     WHERE li.name = @instance_name
       AND lie.boss = true
+      AND (NOT (COALESCE(@encounter_variants::jsonb, '{}'::jsonb) ? lie.name)
+           OR lie.encounter_variant = (COALESCE(@encounter_variants::jsonb, '{}'::jsonb) ->> lie.name))
+      AND (COALESCE(cardinality(@encounter_names::text[]), 0) = 0 OR lie.name = ANY(@encounter_names::text[]))
+      AND (COALESCE(cardinality(@realm_names::text[]), 0) = 0 OR wsr.name = ANY(@realm_names::text[]))
+      AND (COALESCE(cardinality(@difficulty_names::text[]), 0) = 0
+           OR COALESCE(lie.difficulty, li.difficulty_name) = ANY(@difficulty_names::text[]))
       AND (NOT @filter_difficulty::boolean OR
            COALESCE(lie.difficulty, li.difficulty_name) = @difficulty_name::text)
-      AND (NOT @filter_max_players::boolean OR li.max_players = @max_players::int)
+      AND (NOT (@exact_cohort::boolean OR @filter_max_players::boolean) OR li.max_players = @max_players::int)
       AND lie.kill_type = 'clean'
       AND li.invalidated_at IS NULL
       AND lie.invalidated_at IS NULL

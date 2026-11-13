@@ -438,7 +438,7 @@ export function LeaderboardHub({
           {/* Keyed by realm: every board below is that realm's, so a switch rebuilds them. */}
           <div key={realm} className="flex flex-col gap-5 lg:flex-row lg:gap-0">
             {/* Rulesets describe the whole instance; encounter selection does not apply. */}
-            {tab !== "rulesets" &&
+            {(tab !== "rulesets" || !!live?.encounterSidebarExtras) &&
               (encountersOpen ? (
                 <div className="hidden shrink-0 lg:sticky lg:top-4 lg:block lg:max-h-[calc(100vh-2rem)] lg:w-[267px] lg:self-start lg:overflow-y-auto lg:border-r lg:pt-1 lg:pr-4 styled-scrollbar">
                   <EncounterSidebar
@@ -468,7 +468,7 @@ export function LeaderboardHub({
                   </Button>
                 </div>
               ))}
-            <div className={cn("min-w-0 flex-1 space-y-5", tab !== "rulesets" && (encountersOpen ? "lg:pl-6" : "lg:pl-4"))}>
+            <div className={cn("min-w-0 flex-1 space-y-5", (tab !== "rulesets" || !!live?.encounterSidebarExtras) && (encountersOpen ? "lg:pl-6" : "lg:pl-4"))}>
               {live ? (
                 tab === "overview" && live.renderOverview ? live.renderOverview(liveContext) : live.renderTab(liveContext)
               ) : tab === "overview" ? (
@@ -560,7 +560,7 @@ export function LeaderboardHub({
           {!live && <p className="px-1 text-xs text-muted-foreground/70">Mock data for design review. Names, guilds, and numbers are generated.</p>}
         </div>
       </div>
-      {tab !== "rulesets" && isMobile && createPortal(
+      {(tab !== "rulesets" || !!live?.encounterSidebarExtras) && isMobile && createPortal(
         <>
           {mobileEncountersOpen && (
             <>

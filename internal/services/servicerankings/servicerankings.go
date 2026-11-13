@@ -305,23 +305,28 @@ func (s *Service) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	encounterVariants, ok := rankingEncounterVariants(w, r, splitCSV(q.Get("instance_names")), encounterNames)
+	if !ok {
+		return
+	}
 
 	rows, err := s.store.RankingsLeaderboardNoJIT(ctx, database.RankingsLeaderboardParams{
-		InstanceNames:    splitCSV(q.Get("instance_names")),
-		EncounterNames:   encounterNames,
-		DifficultyNames:  rankingDifficultyNames(q),
-		RealmNames:       splitCSV(q.Get("realm_names")),
-		Class:            classParam,
-		Spec:             q.Get("spec"),
-		SubSpec:          q.Get("sub_spec"),
-		Role:             q.Get("role"),
-		SinceDays:        sinceDays,
-		HideUnknowns:     q.Get("hide_unknowns") == "true",
-		Metric:           normalizeMetric(q.Get("metric")),
-		FilterMaxPlayers: parseMaxPlayers(q.Get("max_players")),
-		ExactCohort:      q.Get("exact_cohort") == "true",
-		QueryLimit:       limit,
-		QueryOffset:      offset,
+		InstanceNames:     splitCSV(q.Get("instance_names")),
+		EncounterNames:    encounterNames,
+		EncounterVariants: encounterVariants,
+		DifficultyNames:   rankingDifficultyNames(q),
+		RealmNames:        splitCSV(q.Get("realm_names")),
+		Class:             classParam,
+		Spec:              q.Get("spec"),
+		SubSpec:           q.Get("sub_spec"),
+		Role:              q.Get("role"),
+		SinceDays:         sinceDays,
+		HideUnknowns:      q.Get("hide_unknowns") == "true",
+		Metric:            normalizeMetric(q.Get("metric")),
+		FilterMaxPlayers:  parseMaxPlayers(q.Get("max_players")),
+		ExactCohort:       q.Get("exact_cohort") == "true",
+		QueryLimit:        limit,
+		QueryOffset:       offset,
 	})
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
@@ -443,18 +448,23 @@ func (s *Service) handleStats(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	encounterVariants, ok := rankingEncounterVariants(w, r, splitCSV(q.Get("instance_names")), encounterNames)
+	if !ok {
+		return
+	}
 
 	rows, err := s.store.RankingsBoxPlotStatsNoJIT(ctx, database.RankingsBoxPlotStatsParams{
-		InstanceNames:    splitCSV(q.Get("instance_names")),
-		EncounterNames:   encounterNames,
-		DifficultyNames:  rankingDifficultyNames(q),
-		RealmNames:       splitCSV(q.Get("realm_names")),
-		Role:             q.Get("role"),
-		SinceDays:        sinceDays,
-		Metric:           normalizeMetric(q.Get("metric")),
-		GroupByClass:     q.Get("group_by_class") == "true",
-		FilterMaxPlayers: parseMaxPlayers(q.Get("max_players")),
-		ExactCohort:      q.Get("exact_cohort") == "true",
+		InstanceNames:     splitCSV(q.Get("instance_names")),
+		EncounterNames:    encounterNames,
+		EncounterVariants: encounterVariants,
+		DifficultyNames:   rankingDifficultyNames(q),
+		RealmNames:        splitCSV(q.Get("realm_names")),
+		Role:              q.Get("role"),
+		SinceDays:         sinceDays,
+		Metric:            normalizeMetric(q.Get("metric")),
+		GroupByClass:      q.Get("group_by_class") == "true",
+		FilterMaxPlayers:  parseMaxPlayers(q.Get("max_players")),
+		ExactCohort:       q.Get("exact_cohort") == "true",
 	})
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
@@ -584,7 +594,13 @@ type killTimeStatsQuerier interface {
 func handleKillTimesWithStore(store killTimeStatsQuerier, w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	q := r.URL.Query()
-	maxPlayers, valid := timeRankingMaxPlayers(w, r)
+	var maxPlayers int32
+	valid := true
+	// Exact cohorts may legitimately have size zero. Legacy time endpoints
+	// continue to require positive explicitly supplied sizes.
+	if q.Get("exact_cohort") != "true" || q.Get("max_players") != "0" {
+		maxPlayers, valid = timeRankingMaxPlayers(w, r)
+	}
 	if !valid {
 		return
 	}
@@ -597,6 +613,16 @@ func handleKillTimesWithStore(store killTimeStatsQuerier, w http.ResponseWriter,
 		return
 	}
 
+	encounterNames := splitCSV(q.Get("encounter_names"))
+	encounterVariants, ok := rankingEncounterVariants(w, r, []string{instanceName}, encounterNames)
+	if !ok {
+		return
+	}
+	if q.Has("difficulty_name") && q.Has("difficulty_names") {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "select difficulty_name or difficulty_names, not both"})
+		return
+	}
+
 	var sinceDays int64
 	if v := q.Get("period"); v != "" {
 		sinceDays = periodToDays(v)
@@ -605,8 +631,13 @@ func handleKillTimesWithStore(store killTimeStatsQuerier, w http.ResponseWriter,
 	rows, err := store.RankingsKillTimeStats(ctx, database.RankingsKillTimeStatsParams{
 		FilterDifficulty: q.Has("difficulty_name"), DifficultyName: q.Get("difficulty_name"),
 		FilterMaxPlayers: q.Has("max_players"), MaxPlayers: maxPlayers,
-		InstanceName: instanceName,
-		SinceDays:    sinceDays,
+		InstanceName:      instanceName,
+		SinceDays:         sinceDays,
+		EncounterNames:    encounterNames,
+		EncounterVariants: encounterVariants,
+		DifficultyNames:   rankingDifficultyNames(q),
+		RealmNames:        splitCSV(q.Get("realm_names")),
+		ExactCohort:       q.Get("exact_cohort") == "true",
 	})
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
@@ -826,6 +857,18 @@ func handleKillTimeLeaderboardWithStore(store killTimeLeaderboardQuerier, w http
 func (s *Service) handleSuccessRates(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	q := r.URL.Query()
+
+	variants, err := decodeRankingEncounterVariants(q)
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: err.Error()})
+		return
+	}
+	if len(variants) > 0 {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "Exact encounter variant success rates are unavailable: unsuccessful attempts are not classified by variant. Use Combined success rates.",
+		})
+		return
+	}
 
 	instanceName := q.Get("instance_name")
 	if instanceName == "" {

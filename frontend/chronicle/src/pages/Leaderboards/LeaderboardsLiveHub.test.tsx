@@ -99,6 +99,22 @@ describe("live Storybook Hub", () => {
     vi.mocked(useLandingHighlights).mockReturnValue({ data: undefined, isFetching: true, isError: false, refetch: vi.fn() } as unknown as ReturnType<typeof useLandingHighlights>)
     setSummary(summary)
   })
+  it.each(["overview", "speedruns", "parsing", "rulesets", "performances", "statistics", "ratings"])("retains visible variant controls on %s", tab => {
+    setSummary({ ...summary,
+      instances: [{ ...summary.instances[0], instance_name: "Ulduar" }],
+      encounters: [{ encounter_name: "Hodir", total_kills: 12, top_dps: 1450 }, { encounter_name: "Freya", total_kills: 10, top_dps: 1300 }],
+      progression_bosses: ["Hodir", "Freya"],
+      ranking_encounter_sets: [{ id: "", label: "Default", encounters: ["Hodir", "Freya"] }],
+    });
+    const html = hub(tab === "overview" ? "/leaderboards/Ulduar" : `/leaderboards/Ulduar/${tab}`);
+    expect(html).toContain('aria-label="Hodir variants"');
+    expect(html).toContain('aria-label="Hard mode"');
+    if (!["performances", "statistics"].includes(tab)) {
+      expect(html).toContain('disabled="" title="This view uses Combined.');
+      expect(html).toContain('disabled:grayscale');
+    }
+  });
+
   it("keeps kill-time requests unchanged by variant URL parameters", () => {
     hub("/leaderboards/Molten-Core/speedruns?encounters=Ragnaros");
     const combined = vi.mocked(useRankingsKillTimesByBoss).mock.calls.at(-1);

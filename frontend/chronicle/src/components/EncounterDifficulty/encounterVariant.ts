@@ -26,3 +26,12 @@ export function withHighestEncounterVariants(instance: string, bosses: readonly 
   }
   return next;
 }
+
+export function activeEncounterVariants(instance: string, bosses: readonly string[], variants?: EncounterVariants): EncounterVariants | undefined {
+  const entries = Object.entries(variants ?? {}).filter(([boss]) => bosses.includes(boss) && supportsEncounterVariant(instance, boss)).sort(([a], [b]) => a.localeCompare(b));
+  return entries.length ? Object.fromEntries(entries) : undefined;
+}
+
+export function encounterVariantsEnabled(tab: string, ratingView: string): boolean {
+  return tab === "performances" || tab === "statistics" || (tab === "ratings" && ratingView !== "overview");
+}
