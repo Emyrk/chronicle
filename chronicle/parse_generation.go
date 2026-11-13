@@ -148,12 +148,15 @@ func fenceParseGenerationPreservingFinalized(ctx context.Context, db database.St
 	return generation, nil
 }
 
-func (c *Chronicle) stageParseGeneration(ctx context.Context, logID uuid.UUID, generation int64) error {
+func (c *Chronicle) stageParseGeneration(ctx context.Context, logID uuid.UUID, generation int64, identity *parseIdentityFence) error {
 	return c.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
 		if err := tx.AcquireRankingRunRefreshLock(ctx); err != nil {
 			return err
 		}
 		if err := lockExpectedParseGeneration(ctx, tx, logID, generation); err != nil {
+			return err
+		}
+		if err := identity.check(ctx, tx, true); err != nil {
 			return err
 		}
 		identities, err := tx.RankingRunIdentitiesByLogGroupID(ctx, logID)
@@ -176,9 +179,12 @@ func (c *Chronicle) stageParseGeneration(ctx context.Context, logID uuid.UUID, g
 	}, nil)
 }
 
-func (c *Chronicle) finalizeParseGeneration(ctx context.Context, logID uuid.UUID, generation int64) error {
+func (c *Chronicle) finalizeParseGeneration(ctx context.Context, logID uuid.UUID, generation int64, identity *parseIdentityFence) error {
 	return c.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
 		if err := lockExpectedParseGeneration(ctx, tx, logID, generation); err != nil {
+			return err
+		}
+		if err := identity.check(ctx, tx, true); err != nil {
 			return err
 		}
 		_, err := tx.FinalizeParsedLogGroup(ctx, database.FinalizeParsedLogGroupParams{
