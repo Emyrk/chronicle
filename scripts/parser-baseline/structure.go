@@ -12,7 +12,7 @@ import (
 
 var structureFields = map[string][]string{
 	"log_instance_units":                strings.Fields("instance_id unit_guid name entry owner_guid"),
-	"log_instance_players":              strings.Fields("instance_id unit_guid name level class race guild_id"),
+	"log_instance_players":              strings.Fields("instance_id unit_guid name level class race faction guild_id"),
 	"log_instance_encounter_hostiles":   strings.Fields("encounter_id id periods boss"),
 	"log_instance_encounter_phases":     strings.Fields("id encounter_id key name phase_order start_offset_ms end_offset_ms kill_type"),
 	"log_instance_raid_group_snapshots": strings.Fields("id instance_id encounter_id snapshot_type observed_at composition"),

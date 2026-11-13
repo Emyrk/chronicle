@@ -195,7 +195,7 @@ legitimate), and any row-count/content difference is visible in the artifact.
 Publication checks alone cannot certify that an expected nonempty ranking cohort
 was produced: the baseline fixture must establish that expectation.
 
-The current schema is `chronicle-parser-baseline-v4`. Compare the **whole artifact**,
+The current schema is `chronicle-parser-baseline-v5`. Compare the **whole artifact**,
 including version, coverage, allowlists and unsupported-table inventory. `diff`
 returns nonzero for different coverage; never compare an intersection or strip
 coverage metadata. Artifacts with different versions are not comparable as equal coverage.
@@ -327,3 +327,26 @@ phase offsets/order, raid slots/observation times and persisted log flavor. Fina
 publication tests cover shared-state isolation, randomized guild/loot IDs, exact
 observation/loot times, speedrun proof, overview evidence and duplicate loot
 multiplicity. No real production fixture is included or downloaded.
+
+### Multi-format parsernext comparison
+
+`--engine parsernext` selects the independent parsernext source composition for
+Vanilla companion, TBC companion, Wrath companion, AzerothCore, V9, HermesProxy,
+and V22 input. `--engine parsernext-vanilla` remains available as the narrower
+Vanilla-only selection. Both are workerless tooling options; neither changes
+normal server/River worker selection.
+
+The stored format and resolved flavor tags are attached to the parsing context.
+Wire format selects decoding and its synthetic composition, not custom-content
+flavor. All sources feed the existing consumers and publication path. V22's new
+source includes reordering internally, so callers must not reorder it a second
+time.
+
+Compare against a genuine pinned legacy source build, not merely the `legacy`
+entrypoint of the refactored tree, since legacy adapters share extracted record
+algorithms. Keep source/overlay hashes, reference-seed hashes, engine selection,
+format, and flavor provenance. Strict differences remain differences; semantic
+ranking diagnostics may separately explain canonical encounter-ID propagation.
+These runs do not validate full-session snapshot/resume.
+
+Version 5 also compares mixed-clear status, nullable per-encounter difficulty, faction in instance and career player rows, and the exact persisted `log_instance_difficulties` values. The last is not reconstructed from encounters. `difficulty_normalized` is excluded because it records internal normalization provenance rather than the resulting difficulty semantics.
