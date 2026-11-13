@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
@@ -16,7 +15,6 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/google/uuid"
-	"golang.org/x/mod/semver"
 )
 
 const lucifronRuleVersion = "v1.0.173"
@@ -37,41 +35,13 @@ type lucifronPlayerChange struct {
 	AfterDPS             float64   `json:"after_dps"`
 }
 
-// ExactParserVersion persists GitTag+GitCommit. Build metadata does not change
-// release ordering; prereleases/git descriptions cannot prove the rule boundary.
-func lucifronRelease(version string) string {
-	v := version
-	if !strings.HasPrefix(v, "v") {
-		v = "v" + v
-	}
-	if !semver.IsValid(v) || semver.Prerelease(v) != "" {
-		return ""
-	}
-	release := strings.TrimSuffix(v, semver.Build(v))
-	if semver.Canonical(v) != release || strings.Count(release, ".") != 2 {
-		return ""
-	}
-	return release
-}
-
 func lucifronVersionEligible(version string) bool {
-	release := lucifronRelease(version)
-	return release != "" && semver.Compare(release, lucifronRuleVersion) < 0
+	_, eligible := parserVersionBefore(database.LogInstance{ParserVersion: version}, lucifronRuleVersion)
+	return eligible
 }
 
 func lucifronParserVersion(instance database.LogInstance) (string, bool) {
-	exact := instance.ParserVersion
-	tag, hasTag := instance.Versions["chronicle"]
-	// The schema's historical placeholder is not contradictory release evidence.
-	// Use the parser's persisted GitTag when no exact stamp was recorded.
-	if (exact == "" || exact == "0.0") && hasTag {
-		exact = tag
-	}
-	release := lucifronRelease(exact)
-	if release == "" || (hasTag && lucifronRelease(tag) != release) {
-		return exact, false
-	}
-	return exact, lucifronVersionEligible(exact)
+	return parserVersionBefore(instance, lucifronRuleVersion)
 }
 
 func EvaluateLucifron(ctx context.Context, db database.Store, instanceID uuid.UUID) (*RepairPlan, error) {

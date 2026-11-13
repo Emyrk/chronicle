@@ -33,7 +33,7 @@ func fixtureRazorgore(t *testing.T) razorgoreEvidence {
 	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	end := start.Add(time.Minute)
 	e := razorgoreEvidence{
-		Instance:   database.LogInstance{ID: id, Name: "Blackwing Lair", StartTime: database.Timestamptz(start), EndTime: database.Timestamptz(end)},
+		Instance:   database.LogInstance{ID: id, Name: "Blackwing Lair", ParserVersion: "v1.0.279", StartTime: database.Timestamptz(start), EndTime: database.Timestamptz(end)},
 		Encounters: []database.LogInstanceEncounter{{ID: enc, InstanceID: id, Name: "Razorgore the Untamed", Boss: true, StartTime: database.Timestamptz(start), EndTime: database.Timestamptz(end), KillType: database.KillTypeClean}},
 		Phases:     []database.LogInstanceEncounterPhase{{ID: uuid.MustParse("00000000-0000-0000-0000-000000000003"), EncounterID: enc, Key: "razorgore_p1", StartOffsetMs: 0, EndOffsetMs: 60000, KillType: database.KillTypeClean}},
 		Hostiles:   []database.LogInstanceEncounterHostile{{EncounterID: enc, ID: boss, Boss: true, Periods: database.Periods{{Start: &database.PeriodMoment{Timestamp: start}, End: &database.PeriodMoment{Timestamp: end, Reason: "slain"}, EndState: database.EndStateSlain}}}},
@@ -494,4 +494,39 @@ func TestFalseKillBossMayActivateAfterAdds(t *testing.T) {
 
 func (s *razorgoreStore) ListInstanceEventRepairReceipts(context.Context, uuid.UUID) ([]database.EventRepairReceipt, error) {
 	return s.e.Receipts, nil
+}
+
+func TestRazorgoreParserVersionGate(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		version, tag string
+		eligible     bool
+	}{
+		{"v1.0.279", "", true}, {"v1.0.280", "", false}, {"v1.0.281", "", false},
+		{"v1.0.99", "", true}, {"v1.0.279+abcdef", "v1.0.279", true},
+		{"v1.0.280+abcdef", "v1.0.280", false}, {"v1.0.281+abcdef", "", false},
+		{"unknown", "", false}, {"", "", false}, {"1.0", "", false},
+		{"v1.0.280-rc.1", "", false}, {"v1.0.279-4-gabcdef", "", false},
+		{"v1.0.279+abcdef", "v1.0.280", false}, {"0.0", "v1.0.279", true},
+	} {
+		t.Run(tc.version+"/"+tc.tag, func(t *testing.T) {
+			t.Parallel()
+			e := fixtureRazorgore(t)
+			e.Instance.ParserVersion = tc.version
+			if tc.tag != "" {
+				e.Instance.Versions = database.VersionsMap{"chronicle": tc.tag}
+			}
+			store := &razorgoreStore{e: e}
+			plan, err := EvaluateRazorgore(context.Background(), store, e.Instance.ID)
+			require.NoError(t, err)
+			require.Equal(t, !tc.eligible, plan.RequiresReparse, plan.Reason)
+			require.NoError(t, RevalidateRazorgore(context.Background(), store, plan))
+			if !tc.eligible {
+				require.Contains(t, plan.Reason, "v1.0.280")
+				require.Empty(t, plan.Changes)
+				require.Error(t, ApplyRazorgore(context.Background(), store, plan))
+				require.Empty(t, store.writes)
+			}
+		})
+	}
 }
