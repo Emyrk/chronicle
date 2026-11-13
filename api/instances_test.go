@@ -300,6 +300,18 @@ func TestUngroupInstanceMaintainsDuplicateGroupURLsAndLists(t *testing.T) {
 			if tt.unlinkIndex == 0 {
 				expectedGroupID = instanceIDs[1]
 			}
+			// Rank the last remaining member so it is not always the group anchor.
+			rankedID := instanceIDs[tt.memberCount-1]
+			if tt.unlinkIndex == tt.memberCount-1 {
+				rankedID = instanceIDs[tt.memberCount-2]
+			}
+			_, err = store.UpsertRankingRun(ctx, database.UpsertRankingRunParams{
+				RunID: expectedGroupID, RepresentativeInstanceID: rankedID, RealmID: realmID,
+				InstanceName: "Molten Core", DifficultyName: "Normal", MaxPlayers: 40,
+				StartTime: database.Timestamptz(start), EndTime: database.Timestamptz(start.Add(time.Hour)),
+				MemberCount: int32(tt.memberCount - 1), SourceUpdatedAt: database.Timestamptz(start),
+			})
+			require.NoError(t, err)
 			for i, instanceID := range instanceIDs {
 				request = httptest.NewRequest(http.MethodGet, "/instances/"+instanceID.String()+"/duplicates", nil)
 				response = httptest.NewRecorder()
@@ -314,6 +326,9 @@ func TestUngroupInstanceMaintainsDuplicateGroupURLsAndLists(t *testing.T) {
 				}
 				require.Len(t, duplicates, tt.memberCount-1)
 				require.Contains(t, duplicateInstanceIDs(duplicates), expectedGroupID)
+				for _, duplicate := range duplicates {
+					require.Equal(t, duplicate.ID == rankedID, duplicate.IsRanked, duplicate.ID)
+				}
 			}
 		})
 	}

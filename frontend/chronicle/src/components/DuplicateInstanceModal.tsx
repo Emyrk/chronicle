@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
-import { X, Users, Clock, Check } from "lucide-react";
+import { X, Users, Clock, Check, Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   getInstanceBackground,
@@ -15,6 +15,8 @@ export interface DuplicateModalInstance {
   uploader_name?: string;
   player_count: number;
   duration_ms?: number | null;
+  /** The duplicate chosen to represent this run in rankings and ratings. */
+  is_ranked?: boolean;
 }
 
 interface DuplicateInstanceModalProps {
@@ -146,6 +148,15 @@ function DuplicateInstanceRow({ instance, isCurrent }: { instance: DuplicateModa
           </p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+          {instance.is_ranked && (
+            <span
+              className="flex items-center gap-0.5 text-[10px] text-emerald-300 bg-emerald-500/20 px-1.5 py-0.5 rounded font-medium"
+              title="This upload is the one used for rankings and ratings"
+            >
+              <Trophy className="h-3 w-3" />
+              Ranked
+            </span>
+          )}
           {isCurrent && (
             <span className="flex items-center gap-0.5 text-[10px] text-amber-300 bg-amber-500/20 px-1.5 py-0.5 rounded font-medium">
               <Check className="h-3 w-3" />

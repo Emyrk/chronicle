@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Copy } from "lucide-react";
+import { Copy, Trophy } from "lucide-react";
 import type { DuplicateInstance } from "@/api/typesGenerated";
 import { DuplicateInstanceModal } from "@/components/DuplicateInstanceModal";
 
@@ -24,15 +24,30 @@ export function DuplicatesBadge({ instanceId, duplicateGroupId }: DuplicatesBadg
 
   if (!duplicates || duplicates.length <= 1) return null;
 
+  const ranked = duplicates.find((d) => d.is_ranked);
+  const isRanked = ranked?.id === instanceId;
+  let title = `${duplicates.length} logs from the same raid`;
+  if (ranked) {
+    title += isRanked
+      ? " — this upload is used for rankings and ratings"
+      : " — another upload is used for rankings and ratings";
+  }
+
   return (
     <>
       <button
         onClick={() => setShowModal(true)}
         className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground bg-muted/60 hover:bg-muted px-2 py-0.5 rounded-full transition-colors"
-        title={`${duplicates.length} logs from the same raid`}
+        title={title}
       >
         <Copy className="h-3 w-3" />
         {duplicates.length}
+        {ranked && (
+          <span className={`inline-flex items-center gap-0.5 ${isRanked ? "text-emerald-400" : ""}`}>
+            · {isRanked && <Trophy className="h-3 w-3" />}
+            {isRanked ? "Ranked" : "Not ranked"}
+          </span>
+        )}
       </button>
       {showModal && (
         <DuplicateInstanceModal

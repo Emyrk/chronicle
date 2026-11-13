@@ -1814,6 +1814,10 @@ export interface DuplicateInstance {
     readonly uploader_name: string;
     readonly player_count: number;
     readonly duration_ms?: number;
+    /**
+     * IsRanked marks the duplicate that represents this run in rankings and ratings.
+     */
+    readonly is_ranked: boolean;
 }
 
 // From chroniclesdk/log.go

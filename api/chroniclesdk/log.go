@@ -687,4 +687,6 @@ type DuplicateInstance struct {
 	UploaderName string    `json:"uploader_name"`
 	PlayerCount  int64     `json:"player_count"`
 	DurationMs   *float64  `json:"duration_ms,omitempty"`
+	// IsRanked marks the duplicate that represents this run in rankings and ratings.
+	IsRanked bool `json:"is_ranked"`
 }
