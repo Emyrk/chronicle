@@ -114,8 +114,9 @@ export function RatingFullList({
   const current = livePage?.page ?? Math.min(page, pages - 1)
   const visible = live ? filtered : filtered.slice(current * PAGE_SIZE, (current + 1) * PAGE_SIZE)
   const total = livePage?.total ?? (live ? visible.length : filtered.length)
-  // Live boards without a global rank leave "#" empty; drop the column instead.
-  const ranksShown = live?.ranksKnown !== false
+  const displayRank = (row: FullRow, index: number) => row.rank > 0 ? row.rank : current * PAGE_SIZE + index + 1
+  const firstVisibleRank = visible.length ? displayRank(visible[0], 0) : 0
+  const lastVisibleRank = visible.length ? displayRank(visible[visible.length - 1], visible.length - 1) : 0
 
   return (
     <section aria-label={`${title} ${theme.label} full list`} className={cn("overflow-hidden rounded-xl border bg-card", MOBILE_EDGE_TO_EDGE)}>
@@ -172,8 +173,8 @@ export function RatingFullList({
         <table className="w-full table-auto text-sm sm:min-w-[42rem]">
           <thead className="border-b bg-black/10 text-[11px] tracking-wider text-muted-foreground uppercase">
             <tr>
-              {ranksShown && <th className="w-14 px-4 py-2.5 text-left font-medium sm:px-5">#</th>}
-              <th className={cn("w-[22%] px-2 py-2.5 pr-2 text-left font-medium whitespace-nowrap sm:pr-6", !ranksShown && "pl-4 sm:pl-5")}>Character</th>
+              <th className="w-14 px-4 py-2.5 text-left font-medium sm:px-5">#</th>
+              <th className="w-[22%] px-2 py-2.5 pr-2 text-left font-medium whitespace-nowrap sm:pr-6">Character</th>
               {/* The ranking's own number sits next to the name; supporting columns follow to the right. */}
               {view === "overview" ? (
                 <>
@@ -248,14 +249,15 @@ export function RatingFullList({
                 {state.status === "error" ? state.error : "Loading published ratings…"}
               </td></tr>
             )}
-            {visible.map(({ rank, entry, scores, peakComponents, peakRun: liveRun }) => (
-              <tr key={entry.id} className="border-b border-white/5 transition-colors last:border-b-0 hover:bg-white/[.025]">
-                {ranksShown && (
-                  <td className="px-4 py-2 sm:px-5">
-                    <RankMark rank={rank} size="sm" />
-                  </td>
-                )}
-                <td className={cn("px-2 py-2 pr-2 whitespace-nowrap sm:pr-8", !ranksShown && "pl-4 sm:pl-5")}>
+            {visible.map((row, index) => {
+              const { entry, scores, peakComponents, peakRun: liveRun } = row
+              const shownRank = displayRank(row, index)
+              return (
+                <tr key={entry.id} className="border-b border-white/5 transition-colors last:border-b-0 hover:bg-white/[.025]">
+                <td className="px-4 py-2 sm:px-5">
+                  <RankMark rank={shownRank} size="sm" />
+                </td>
+                <td className="px-2 py-2 pr-2 whitespace-nowrap sm:pr-8">
                   <div className="flex min-w-0 items-center gap-2.5">
                     <SpecIcon cls={entry.cls} spec={entry.spec} className="size-6 shrink-0 rounded-sm" />
                     <div className="min-w-0">
@@ -305,7 +307,7 @@ export function RatingFullList({
                       <td
                         key={m}
                         className={cn("hidden px-3 py-2 font-mono tabular-nums sm:table-cell", sortBy !== m && "text-muted-foreground")}
-                        style={sortBy === m && rank === 1 ? { color: METRIC_THEMES[m].accent } : undefined}
+                        style={sortBy === m && shownRank === 1 ? { color: METRIC_THEMES[m].accent } : undefined}
                       >
                         {score ? METRIC_THEMES[m].format(score.score) : <span title="No performance summary in the selected role and cohort filters">—</span>}
                         {score?.cohortLabel && <span className="mt-0.5 block text-[10px] text-muted-foreground" title={`Best whole-selection ${METRIC_THEMES[m].label}: ${score.cohortLabel}`}>{score.cohortLabel}</span>}
@@ -319,7 +321,7 @@ export function RatingFullList({
                     {showPeakComponents && <td className="px-2 py-2 sm:hidden"><PeakComponents entry={entry} scores={peakComponents} labels={peakLabels} /></td>}
                     <td className={cn("px-3 py-2", phoneFolds && "pr-4 sm:pr-3")}>
                       <div className={cn("flex flex-col items-start gap-1", phoneFolds && "items-end sm:items-start")}>
-                        <span className="font-mono text-base tabular-nums" style={rank === 1 ? { color: theme.accent } : undefined}>
+                        <span className="font-mono text-base tabular-nums" style={shownRank === 1 ? { color: theme.accent } : undefined}>
                           {theme.format(entry.score)}
                           {/* A phone moves the raw number under the score, beside the kill time. */}
                           {view === "peak" && entry.raw ? <RawTag raw={entry.raw} className="ml-2 hidden sm:inline" /> : null}
@@ -364,8 +366,9 @@ export function RatingFullList({
                     <td className="hidden px-2 py-2 pr-4 text-muted-foreground sm:pr-5 md:table-cell">{entry.subSpec}</td>
                   </>
                 )}
-              </tr>
-            ))}
+                </tr>
+              )
+            })}
             {(!state || state.status === "ready") && visible.length === 0 && (
               <tr>
                 <td colSpan={9} className="px-5 py-10 text-center text-muted-foreground">
@@ -379,9 +382,9 @@ export function RatingFullList({
 
       <div className="flex items-center justify-between gap-3 border-t px-4 py-2.5 text-xs text-muted-foreground sm:px-5">
         <span>
-          {live?.ranksKnown === false ? `${visible.length} results · no global ranks` : live && query.trim()
-            ? `${visible.length ? `${current * PAGE_SIZE + 1}–${current * PAGE_SIZE + visible.length}` : "0"} of ${total} matches${visible.length ? ` · global ranks ${visible[0].rank}–${visible[visible.length - 1].rank}` : ""}`
-            : `${visible.length === 0 ? "0" : live ? `${visible[0].rank}–${visible[visible.length - 1].rank}` : `${current * PAGE_SIZE + 1}–${Math.min((current + 1) * PAGE_SIZE, filtered.length)}`} of ${live && livePage?.total === undefined ? "published ratings" : total}`}
+          {live && query.trim()
+            ? `${visible.length ? `${firstVisibleRank}–${lastVisibleRank}` : "0"} of ${total} matches`
+            : `${visible.length === 0 ? "0" : `${firstVisibleRank}–${lastVisibleRank}`} of ${live && livePage?.total === undefined ? "published ratings" : total}`}
         </span>
         <div className="flex items-center gap-1">
           <PageButton disabled={live ? !livePage?.hasPreviousPage : current === 0} onClick={() => setPage(current - 1)} label="Previous page">

@@ -67,7 +67,20 @@ describe("Storybook full-list live data", () => {
           data={{ live, ratings: { peak: [], mastery: [], renown: [] }, perBoss: () => undefined }} />
       </MemoryRouter>,
     )
+    expect(html).toContain(">#</th>")
+    expect(html).toContain('aria-label="Rank 1"')
     expect(html).toMatch(/href="\/instances\/razorgore-log"[^>]*>1:05<\/a>/)
+  })
+
+  it("derives display ranks from the current page when the API omits them", () => {
+    vi.mocked(useQuery).mockReturnValue({ isError: false, data: {
+      rows: [{ rank: 0, entry }], total: 150, page: 2, hasPreviousPage: true, hasNextPage: false,
+    } } as ReturnType<typeof useQuery>)
+    const html = renderToStaticMarkup(<RatingFullList scope={{}} title="Raid" period="all"
+      view="peak" query="" onQuery={vi.fn()} live={live} />)
+    expect(html).toContain(">#</th>")
+    expect(html).toContain(">101</span>")
+    expect(html).toContain("101–101 of 150")
   })
 
   it("renders the published ranks and scores in the existing table", () => {
