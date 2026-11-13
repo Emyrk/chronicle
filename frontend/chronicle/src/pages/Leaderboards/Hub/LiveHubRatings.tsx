@@ -1,5 +1,7 @@
+import type { EncounterVariants } from "@/components/EncounterDifficulty/encounterVariant";
 import { useMemo, useState, type ReactNode } from "react";
-import { Eye, EyeOff } from "lucide-react";
+import { CircleHelp, Eye, EyeOff } from "lucide-react";
+import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { cn } from "@/lib/utils";
 import { useQueries } from "@tanstack/react-query";
 import type { LeaderboardV2Response } from "@/api/typesGenerated";
@@ -23,6 +25,7 @@ import {
 } from "./v2RatingAdapter";
 
 export interface LiveHubRatingsProps {
+  encounterVariants?: EncounterVariants;
   instanceName: string;
   bosses: readonly string[];
   selected: readonly string[];
@@ -36,9 +39,13 @@ export interface LiveHubRatingsProps {
   cohort?: { difficulty: string; maxPlayers: number };
   role: "dps" | "healing";
   where: string;
+  /** Shown after the board title, e.g. the encounter variant mark. */
+  titleBadge?: ReactNode;
   toolbar?: ReactNode;
   summary?: HubSummary;
 }
+
+const ENCOUNTER_VARIANT_NOTE = "Peak and Mastery use selected encounter variants. Renown uses base boss scores. Overview and career metrics always use Combined.";
 
 /** Existing Hub presentation; only its source and cursor adapter change. */
 export function LiveHubRatings(props: LiveHubRatingsProps) {
@@ -54,6 +61,7 @@ export function LiveHubRatings(props: LiveHubRatingsProps) {
     cohort,
     role,
     where,
+    titleBadge,
     toolbar,
     summary,
   } = props;
@@ -73,6 +81,7 @@ export function LiveHubRatings(props: LiveHubRatingsProps) {
     subject,
     props.realmIDs,
     showUnknowns,
+    view === "overview" ? undefined : props.encounterVariants,
     summary?.configuration,
     summary?.cohorts,
   ]);
@@ -90,6 +99,7 @@ export function LiveHubRatings(props: LiveHubRatingsProps) {
             selected,
             realmIDs: props.realmIDs,
             showUnknowns,
+            encounterVariants: view === "overview" ? undefined : props.encounterVariants,
           }
         : undefined,
     // The key includes the complete immutable request identity.
@@ -136,7 +146,7 @@ export function LiveHubRatings(props: LiveHubRatingsProps) {
           ),
         };
       },
-      enabled: !!context,
+      enabled: !!context && !request.error,
       retry: false,
       staleTime: 30_000,
     })),
@@ -158,10 +168,9 @@ export function LiveHubRatings(props: LiveHubRatingsProps) {
       const targetIndex = targets.findIndex(
         (item) => item.boss === target.boss,
       );
-      const q =
-        allQueries[
-          Math.max(0, targetIndex) * 3 + RATING_METRICS.indexOf(metric)
-        ];
+      const requestIndex = Math.max(0, targetIndex) * 3 + RATING_METRICS.indexOf(metric);
+      if (requests[requestIndex].error) return { status: "error", error: requests[requestIndex].error.message };
+      const q = allQueries[requestIndex];
       if (q.isError) return { status: "error", error: q.error.message };
       if (!q.data) return { status: "loading" };
       return {
@@ -192,6 +201,17 @@ export function LiveHubRatings(props: LiveHubRatingsProps) {
   const ratingsToolbar = (
     <div className="flex flex-wrap items-center gap-2">
       {toolbar}
+      {!!Object.keys(context?.encounterVariants ?? {}).length && (
+        <HintTooltip>
+          <TooltipTrigger asChild>
+            <button type="button" aria-label={`Encounter variants: ${ENCOUNTER_VARIANT_NOTE}`}
+              className="inline-flex size-5 cursor-help items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <CircleHelp className="size-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-xs">{ENCOUNTER_VARIANT_NOTE}</TooltipContent>
+        </HintTooltip>
+      )}
       {subject === "player" && hasSpecs && (
         <button
           type="button"
@@ -266,7 +286,7 @@ export function LiveHubRatings(props: LiveHubRatingsProps) {
           return [metric, query.isError ? { error: query.error.message } : !query.data ? { pending: true } : {}];
         }));
       },
-      pending: !!context && queries.some((q) => q.isPending),
+      pending: !!context && queries.some((q, index) => !requests[index].error && q.isPending),
       error: !context
         ? "No enabled instance variant."
         : current?.isError
@@ -285,8 +305,9 @@ export function LiveHubRatings(props: LiveHubRatingsProps) {
           }
           allBosses={bosses}
           where={where}
+          titleBadge={titleBadge}
           onBoss={(boss) => onScope({ boss })}
-          toolbar={toolbar}
+          toolbar={ratingsToolbar}
           data={data}
         />
       </div>
@@ -310,6 +331,7 @@ export function LiveHubRatings(props: LiveHubRatingsProps) {
         toolbar={ratingsToolbar}
         live={live}
         title={where}
+        titleBadge={titleBadge}
       />
     </div>
   );

@@ -1,0 +1,12 @@
+BEGIN;
+DROP TABLE leaderboard_variant_dirty_guild_boss_subjects;
+DROP TABLE leaderboard_variant_dirty_guild_boss_benchmarks;
+DROP TABLE leaderboard_variant_dirty_player_boss_subjects;
+DROP TABLE leaderboard_variant_dirty_player_boss_benchmarks;
+DROP TABLE leaderboard_variant_guild_boss_subjects;
+DROP TABLE leaderboard_variant_guild_boss_benchmarks;
+DROP TABLE leaderboard_variant_player_boss_subjects;
+DROP TABLE leaderboard_variant_player_boss_benchmarks;
+DROP TABLE leaderboard_variant_guild_boss_observations;
+DROP TABLE leaderboard_variant_player_observations;
+COMMIT;

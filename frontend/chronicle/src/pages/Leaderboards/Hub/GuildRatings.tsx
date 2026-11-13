@@ -138,6 +138,7 @@ export function GuildRatingBoards({
   bosses,
   allBosses,
   where,
+  titleBadge,
   onBoss,
   toolbar,
   data,
@@ -153,6 +154,8 @@ export function GuildRatingBoards({
   bosses?: readonly string[]
   allBosses: readonly string[]
   where: string
+  /** Shown after the title, e.g. the encounter variant mark. */
+  titleBadge?: ReactNode
   onBoss: (boss: string) => void
 }) {
   const oneBoss = bosses?.length === 1 ? bosses[0] : undefined
@@ -186,6 +189,7 @@ export function GuildRatingBoards({
           toolbar={toolbar}
           label={label}
           title={title}
+          titleBadge={titleBadge}
           oneBoss={oneBoss}
           kindLabel={kindLabel}
           view={view}
@@ -248,6 +252,7 @@ export function GuildRatingBoards({
 function BoardHeader({
   oneBoss,
   title,
+  titleBadge,
   theme,
   subtitle,
   lead,
@@ -256,6 +261,7 @@ function BoardHeader({
 }: {
   oneBoss?: string
   title: string
+  titleBadge?: ReactNode
   theme: MetricTheme
   subtitle?: string
   lead?: ReactNode
@@ -276,7 +282,7 @@ function BoardHeader({
             {oneBoss ? <BossPortrait boss={oneBoss} size="sm" /> : <theme.icon className="size-5 text-[color:var(--metric)]" />}
           </Emblem>
           <div className="min-w-0">
-            <h2 className="truncate font-wow text-xl leading-tight">{title}</h2>
+            <div className="flex min-w-0 items-center gap-2"><h2 className="truncate font-wow text-xl leading-tight">{title}</h2>{titleBadge}</div>
             {subtitle && <span className="block text-xs text-muted-foreground">{subtitle}</span>}
           </div>
         </div>
@@ -295,6 +301,7 @@ function BoardHeader({
 function GuildFullTable({
   label,
   title,
+  titleBadge,
   oneBoss,
   kindLabel,
   view,
@@ -309,6 +316,7 @@ function GuildFullTable({
   toolbar?: ReactNode
   label: string
   title: string
+  titleBadge?: ReactNode
   oneBoss?: string
   kindLabel: string
   view: RatingView
@@ -344,6 +352,7 @@ function GuildFullTable({
       <BoardHeader
         oneBoss={oneBoss}
         title={title}
+        titleBadge={titleBadge}
         theme={theme}
         subtitle={live ? undefined : `${ranked.length} guilds ranked`}
         toolbar={toolbar}

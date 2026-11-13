@@ -37,7 +37,7 @@ func PublishProjectionTx(ctx context.Context, tx database.StoreQueries, tenant, 
 // transactions. Every statement remains explicitly qualified by tenant/run.
 func publishProjectionTx(ctx context.Context, tx database.StoreQueries, tenant, run uuid.UUID, rows []database.ProjectLeaderboardRunRow) error {
 	for _, r := range rows {
-		if !r.TenantID.Valid || r.TenantID.UUID != tenant || r.RunID != run || r.Kind < 1 || r.Kind > 6 {
+		if !r.TenantID.Valid || r.TenantID.UUID != tenant || r.RunID != run || r.Kind < 1 || r.Kind > 8 {
 			return fmt.Errorf("invalid projection identity")
 		}
 	}
@@ -117,6 +117,56 @@ func publishProjectionTx(ctx context.Context, tx database.StoreQueries, tenant, 
 				continue
 			}
 			params = append(params, database.ReplaceLeaderboardGuildBossObservationParams{TenantID: tenant, InstanceName: r.InstanceName, DifficultyName: r.DifficultyName, MaxPlayers: r.MaxPlayers, EncounterName: r.EncounterName, RunID: r.RunID, SourceInstanceID: r.SourceInstanceID, RealmID: r.RealmID, GuildID: r.GuildID, SourceTimeParseScoreID: r.SourceTimeParseScoreID, SourceEncounterID: r.SourceEncounterID, DurationMs: r.DurationMs})
+			if len(params) == BatchSize {
+				if err := flush(); err != nil {
+					return err
+				}
+			}
+		}
+		if err := flush(); err != nil {
+			return err
+		}
+	}
+	{
+		params := make([]database.ReplaceLeaderboardVariantPlayerObservationParams, 0, BatchSize)
+		flush := func() error {
+			if len(params) == 0 {
+				return nil
+			}
+			err := consume(tx.ReplaceLeaderboardVariantPlayerObservation(ctx, params))
+			params = params[:0]
+			return err
+		}
+		for _, r := range rows {
+			if r.Kind != 7 {
+				continue
+			}
+			params = append(params, database.ReplaceLeaderboardVariantPlayerObservationParams{TenantID: tenant, InstanceName: r.InstanceName, DifficultyName: r.DifficultyName, MaxPlayers: r.MaxPlayers, EncounterName: r.EncounterName, EncounterVariant: r.EncounterVariant, RunID: r.RunID, SourceInstanceID: r.SourceInstanceID, RealmID: r.RealmID, PlayerGuid: r.PlayerGuid, SourceEncounterID: r.SourceEncounterID, SourceRankingID: r.SourceRankingID, PlayerClass: r.PlayerClass, PlayerSpec: r.PlayerSpec, PlayerSubSpec: r.PlayerSubSpec, Metric: r.Metric, MetricValue: r.MetricValue})
+			if len(params) == BatchSize {
+				if err := flush(); err != nil {
+					return err
+				}
+			}
+		}
+		if err := flush(); err != nil {
+			return err
+		}
+	}
+	{
+		params := make([]database.ReplaceLeaderboardVariantGuildBossObservationParams, 0, BatchSize)
+		flush := func() error {
+			if len(params) == 0 {
+				return nil
+			}
+			err := consume(tx.ReplaceLeaderboardVariantGuildBossObservation(ctx, params))
+			params = params[:0]
+			return err
+		}
+		for _, r := range rows {
+			if r.Kind != 8 {
+				continue
+			}
+			params = append(params, database.ReplaceLeaderboardVariantGuildBossObservationParams{TenantID: tenant, InstanceName: r.InstanceName, DifficultyName: r.DifficultyName, MaxPlayers: r.MaxPlayers, EncounterName: r.EncounterName, EncounterVariant: r.EncounterVariant, RunID: r.RunID, SourceInstanceID: r.SourceInstanceID, RealmID: r.RealmID, GuildID: r.GuildID, SourceTimeParseScoreID: r.SourceTimeParseScoreID, SourceEncounterID: r.SourceEncounterID, DurationMs: r.DurationMs})
 			if len(params) == BatchSize {
 				if err := flush(); err != nil {
 					return err

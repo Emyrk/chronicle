@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
@@ -37,6 +38,21 @@ func (api *API) LeaderboardV2(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req := leaderboardread.Request{Instance: q.Get("instance"), Difficulty: q.Get("difficulty"), MaxPlayers: int16(size), Subject: q.Get("subject"), Kind: q.Get("kind"), Score: q.Get("score"), Boss: q.Get("boss"), Bosses: q["bosses"], Set: q.Get("set"), Class: q.Get("class"), Spec: q.Get("spec"), SubSpec: q.Get("sub_spec"), FilterSubSpec: q.Has("sub_spec"), ShowUnknowns: q.Get("show_unknown") == "true", Metric: q.Get("metric"), Search: strings.TrimSpace(q.Get("search"))}
+	req.EncounterVariant = q.Get("encounter_variant")
+	if raw := q.Get("encounter_variants"); raw != "" {
+		if len(raw) > 16384 || json.Unmarshal([]byte(raw), &req.EncounterVariants) != nil || req.EncounterVariants == nil {
+			bad("encounter_variants must be a JSON object mapping boss names to variants")
+			return
+		}
+	}
+	if req.EncounterVariant != "" && req.EncounterVariant != "normal" && req.EncounterVariant != "hard" {
+		bad("encounter_variant must be empty, normal, or hard")
+		return
+	}
+	if (req.EncounterVariant != "" || len(req.EncounterVariants) > 0) && q.Get("view") == "boss-leaders" {
+		bad("boss-leader summaries are Combined; encounter_variant is not supported")
+		return
+	}
 	req.CompanionMetric = q.Get("companion_metric")
 	req.CompanionClass = q.Get("companion_class")
 	req.CompanionSpec = q.Get("companion_spec")
@@ -95,7 +111,7 @@ func (api *API) LeaderboardV2(w http.ResponseWriter, r *http.Request) {
 		selectionReq.Bosses = nil
 		selectionReq.Set = ""
 		for _, row := range rows {
-			if row.Kind == "boss" && row.InstanceName == req.Instance {
+			if row.Kind == "boss" && row.InstanceName == req.Instance && (req.EncounterVariant == "" || row.EncounterName == req.Boss) {
 				selectionReq.Bosses = append(selectionReq.Bosses, row.EncounterName)
 			}
 		}
@@ -103,6 +119,11 @@ func (api *API) LeaderboardV2(w http.ResponseWriter, r *http.Request) {
 	selection, err := leaderboardread.Select(rows, selectionReq)
 	if err != nil {
 		bad(err.Error())
+		return
+	}
+	variantJSON, err := json.Marshal(req.EncounterVariants)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
 		return
 	}
 	if q.Get("view") == "boss-leaders" {
@@ -127,7 +148,7 @@ func (api *API) LeaderboardV2(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if q.Get("view") == "cohorts" {
-		cohorts, err := db.ListLeaderboardV2Cohorts(ctx, database.ListLeaderboardV2CohortsParams{TenantID: tenant.ID, InstanceName: req.Instance, DifficultyName: req.Difficulty, MaxPlayers: req.MaxPlayers, Bosses: selection.Bosses, ShowUnknowns: req.ShowUnknowns})
+		cohorts, err := db.ListLeaderboardV2Cohorts(ctx, database.ListLeaderboardV2CohortsParams{EncounterVariant: req.EncounterVariant, EncounterVariants: variantJSON, TenantID: tenant.ID, InstanceName: req.Instance, DifficultyName: req.Difficulty, MaxPlayers: req.MaxPlayers, Bosses: selection.Bosses, ShowUnknowns: req.ShowUnknowns})
 		if err != nil {
 			httpapi.InternalServerError(w, err)
 			return
@@ -174,6 +195,7 @@ func (api *API) LeaderboardV2(w http.ResponseWriter, r *http.Request) {
 		limit = int32(n)
 	}
 	result, err := db.ListLeaderboardV2(ctx, database.ListLeaderboardV2Params{
+		EncounterVariant: req.EncounterVariant, EncounterVariants: variantJSON,
 		TenantID: tenant.ID, InstanceName: req.Instance, DifficultyName: req.Difficulty, MaxPlayers: req.MaxPlayers,
 		SubjectKind: req.Subject, BoardKind: req.Kind, ScoreMetric: req.Score, PlayerClass: req.Class, PlayerSpec: req.Spec, PlayerSubSpec: req.SubSpec, FilterSubSpec: req.FilterSubSpec, ShowUnknowns: req.ShowUnknowns, Metric: req.Metric,
 		Bosses: selection.Bosses, Awards: selection.Awards, Denominator: selection.Denominator, RealmFilter: req.Realm, Search: req.Search,
@@ -192,7 +214,13 @@ func (api *API) LeaderboardV2(w http.ResponseWriter, r *http.Request) {
 	}
 	// Enrich only the actual returned page, not the look-ahead row or all candidates.
 	if (req.Kind == "boss" || (req.Kind == "renown" && req.Subject == "guild")) && len(out.Entries) > 0 {
-		details := database.ListLeaderboardV2PageBossesParams{TenantID: tenant.ID, InstanceName: req.Instance, DifficultyName: req.Difficulty, MaxPlayers: req.MaxPlayers, Metric: req.Metric, SubjectKind: req.Subject, Bosses: selection.Bosses}
+		// Renown reuses base-boss counts and awards; its detail rows must also
+		// remain Combined rather than imply a separately scored variant scale.
+		detailVariant, detailVariants := req.EncounterVariant, variantJSON
+		if req.Kind == "renown" {
+			detailVariant, detailVariants = "", []byte("{}")
+		}
+		details := database.ListLeaderboardV2PageBossesParams{EncounterVariant: detailVariant, EncounterVariants: detailVariants, TenantID: tenant.ID, InstanceName: req.Instance, DifficultyName: req.Difficulty, MaxPlayers: req.MaxPlayers, Metric: req.Metric, SubjectKind: req.Subject, Bosses: selection.Bosses}
 		type identity struct {
 			Realm                         uuid.UUID
 			Subject, Class, Spec, SubSpec string

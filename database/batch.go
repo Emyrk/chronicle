@@ -746,6 +746,409 @@ func (b *ComputeLeaderboardPlayerRenownCountBatchResults) Close() error {
 	return b.br.Close()
 }
 
+const computeLeaderboardVariantGuildBossBenchmark = `-- name: ComputeLeaderboardVariantGuildBossBenchmark :batchone
+WITH calculated AS (
+    SELECT duration_ms AS best_duration_ms
+    FROM leaderboard_variant_guild_boss_observations
+    WHERE tenant_id = $1::uuid
+      AND instance_name = $2::text
+      AND difficulty_name = $3::text
+      AND max_players = $4::smallint
+      AND encounter_name = $5::text AND encounter_variant = $6::text
+    ORDER BY duration_ms ASC
+    LIMIT 1
+)
+SELECT COALESCE(c.best_duration_ms, 0)::bigint AS best_duration_ms,
+       (c.best_duration_ms IS NOT NULL)::boolean AS has_evidence
+FROM (SELECT 1) singleton LEFT JOIN calculated c ON true
+`
+
+type ComputeLeaderboardVariantGuildBossBenchmarkBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type ComputeLeaderboardVariantGuildBossBenchmarkParams struct {
+	TenantID         uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName     string    `db:"instance_name" json:"instance_name"`
+	DifficultyName   string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers       int16     `db:"max_players" json:"max_players"`
+	EncounterName    string    `db:"encounter_name" json:"encounter_name"`
+	EncounterVariant string    `db:"encounter_variant" json:"encounter_variant"`
+}
+
+type ComputeLeaderboardVariantGuildBossBenchmarkRow struct {
+	BestDurationMs int64 `db:"best_duration_ms" json:"best_duration_ms"`
+	HasEvidence    bool  `db:"has_evidence" json:"has_evidence"`
+}
+
+func (q *sqlQuerier) ComputeLeaderboardVariantGuildBossBenchmark(ctx context.Context, arg []ComputeLeaderboardVariantGuildBossBenchmarkParams) *ComputeLeaderboardVariantGuildBossBenchmarkBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.EncounterName,
+			a.EncounterVariant,
+		}
+		batch.Queue(computeLeaderboardVariantGuildBossBenchmark, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &ComputeLeaderboardVariantGuildBossBenchmarkBatchResults{br, len(arg), false}
+}
+
+func (b *ComputeLeaderboardVariantGuildBossBenchmarkBatchResults) QueryRow(f func(int, ComputeLeaderboardVariantGuildBossBenchmarkRow, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		var i ComputeLeaderboardVariantGuildBossBenchmarkRow
+		if b.closed {
+			if f != nil {
+				f(t, i, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		row := b.br.QueryRow()
+		err := row.Scan(&i.BestDurationMs, &i.HasEvidence)
+		if f != nil {
+			f(t, i, err)
+		}
+	}
+}
+
+func (b *ComputeLeaderboardVariantGuildBossBenchmarkBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const computeLeaderboardVariantGuildBossSubject = `-- name: ComputeLeaderboardVariantGuildBossSubject :batchone
+WITH scoped AS MATERIALIZED (
+    SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, run_id, source_instance_id, realm_id, guild_id, source_time_parse_score_id, source_encounter_id, duration_ms, projection_version, observed_at, encounter_variant FROM leaderboard_variant_guild_boss_observations WHERE tenant_id = $1::uuid
+      AND instance_name = $2::text
+      AND difficulty_name = $3::text
+      AND max_players = $4::smallint
+      AND encounter_name = $5::text AND encounter_variant = $6::text
+      AND realm_id = $7::uuid
+      AND guild_id = $8::uuid
+), ranked AS (
+    SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, run_id, source_instance_id, realm_id, guild_id, source_time_parse_score_id, source_encounter_id, duration_ms, projection_version, observed_at, encounter_variant, row_number() OVER (ORDER BY duration_ms DESC, run_id) AS position,
+           count(*) OVER () AS observations
+    FROM scoped
+), statistics AS (
+    SELECT count(*)::bigint AS observation_count,
+           min(duration_ms) AS fastest_duration_ms,
+           COALESCE(avg(1.0::double precision / duration_ms) FILTER (WHERE position > observations * 2 / 5 AND position < observations), 0)::double precision AS form_mean_inverse_ms,
+           COALESCE(avg(1.0::double precision / duration_ms) FILTER (WHERE position > observations / 5 AND position <= observations * 2 / 5), 0)::double precision AS floor_mean_inverse_ms
+    FROM ranked HAVING count(*) > 0
+), calculated AS (SELECT observation_count, fastest_duration_ms, form_mean_inverse_ms, floor_mean_inverse_ms FROM statistics)
+SELECT COALESCE(c.observation_count, 0)::bigint AS observation_count, COALESCE(c.fastest_duration_ms, 0)::bigint AS fastest_duration_ms, COALESCE(c.form_mean_inverse_ms, 0)::double precision AS form_mean_inverse_ms, COALESCE(c.floor_mean_inverse_ms, 0)::double precision AS floor_mean_inverse_ms,
+       (c.observation_count IS NOT NULL)::boolean AS has_evidence
+FROM (SELECT 1) singleton LEFT JOIN calculated c ON true
+`
+
+type ComputeLeaderboardVariantGuildBossSubjectBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type ComputeLeaderboardVariantGuildBossSubjectParams struct {
+	TenantID         uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName     string    `db:"instance_name" json:"instance_name"`
+	DifficultyName   string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers       int16     `db:"max_players" json:"max_players"`
+	EncounterName    string    `db:"encounter_name" json:"encounter_name"`
+	EncounterVariant string    `db:"encounter_variant" json:"encounter_variant"`
+	RealmID          uuid.UUID `db:"realm_id" json:"realm_id"`
+	GuildID          uuid.UUID `db:"guild_id" json:"guild_id"`
+}
+
+type ComputeLeaderboardVariantGuildBossSubjectRow struct {
+	ObservationCount   int64   `db:"observation_count" json:"observation_count"`
+	FastestDurationMs  int64   `db:"fastest_duration_ms" json:"fastest_duration_ms"`
+	FormMeanInverseMs  float64 `db:"form_mean_inverse_ms" json:"form_mean_inverse_ms"`
+	FloorMeanInverseMs float64 `db:"floor_mean_inverse_ms" json:"floor_mean_inverse_ms"`
+	HasEvidence        bool    `db:"has_evidence" json:"has_evidence"`
+}
+
+func (q *sqlQuerier) ComputeLeaderboardVariantGuildBossSubject(ctx context.Context, arg []ComputeLeaderboardVariantGuildBossSubjectParams) *ComputeLeaderboardVariantGuildBossSubjectBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.EncounterName,
+			a.EncounterVariant,
+			a.RealmID,
+			a.GuildID,
+		}
+		batch.Queue(computeLeaderboardVariantGuildBossSubject, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &ComputeLeaderboardVariantGuildBossSubjectBatchResults{br, len(arg), false}
+}
+
+func (b *ComputeLeaderboardVariantGuildBossSubjectBatchResults) QueryRow(f func(int, ComputeLeaderboardVariantGuildBossSubjectRow, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		var i ComputeLeaderboardVariantGuildBossSubjectRow
+		if b.closed {
+			if f != nil {
+				f(t, i, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		row := b.br.QueryRow()
+		err := row.Scan(
+			&i.ObservationCount,
+			&i.FastestDurationMs,
+			&i.FormMeanInverseMs,
+			&i.FloorMeanInverseMs,
+			&i.HasEvidence,
+		)
+		if f != nil {
+			f(t, i, err)
+		}
+	}
+}
+
+func (b *ComputeLeaderboardVariantGuildBossSubjectBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const computeLeaderboardVariantPlayerBossBenchmark = `-- name: ComputeLeaderboardVariantPlayerBossBenchmark :batchone
+
+WITH calculated AS (
+    SELECT metric_value AS best_metric
+    FROM leaderboard_variant_player_observations
+    WHERE tenant_id = $1::uuid
+      AND instance_name = $2::text
+      AND difficulty_name = $3::text
+      AND max_players = $4::smallint
+      AND encounter_name = $5::text AND encounter_variant = $6::text
+      AND player_class = $7::text
+      AND player_spec = $8::text
+      AND player_sub_spec = $9::text
+      AND metric = $10::text
+    ORDER BY metric_value DESC
+    LIMIT 1
+)
+SELECT COALESCE(c.best_metric, 0)::double precision AS best_metric,
+       (c.best_metric IS NOT NULL)::boolean AS has_evidence
+FROM (SELECT 1) singleton LEFT JOIN calculated c ON true
+`
+
+type ComputeLeaderboardVariantPlayerBossBenchmarkBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type ComputeLeaderboardVariantPlayerBossBenchmarkParams struct {
+	TenantID         uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName     string    `db:"instance_name" json:"instance_name"`
+	DifficultyName   string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers       int16     `db:"max_players" json:"max_players"`
+	EncounterName    string    `db:"encounter_name" json:"encounter_name"`
+	EncounterVariant string    `db:"encounter_variant" json:"encounter_variant"`
+	PlayerClass      string    `db:"player_class" json:"player_class"`
+	PlayerSpec       string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec    string    `db:"player_sub_spec" json:"player_sub_spec"`
+	Metric           string    `db:"metric" json:"metric"`
+}
+
+type ComputeLeaderboardVariantPlayerBossBenchmarkRow struct {
+	BestMetric  float64 `db:"best_metric" json:"best_metric"`
+	HasEvidence bool    `db:"has_evidence" json:"has_evidence"`
+}
+
+// Exact variants use the same calculation and claim fencing as Combined.
+// Mirrors Combined calculation semantics. Compute returns one typed record even
+// for empty evidence. Workers buffer at most 100 records, then publish in a
+// separate SHORT transaction. Never hold dirty-row locks while sorting history.
+// Compatibility singleton wrappers explicitly opt into unfenced manual writes;
+// worker publication must use ownership fencing and never sets manual=true.
+func (q *sqlQuerier) ComputeLeaderboardVariantPlayerBossBenchmark(ctx context.Context, arg []ComputeLeaderboardVariantPlayerBossBenchmarkParams) *ComputeLeaderboardVariantPlayerBossBenchmarkBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.EncounterName,
+			a.EncounterVariant,
+			a.PlayerClass,
+			a.PlayerSpec,
+			a.PlayerSubSpec,
+			a.Metric,
+		}
+		batch.Queue(computeLeaderboardVariantPlayerBossBenchmark, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &ComputeLeaderboardVariantPlayerBossBenchmarkBatchResults{br, len(arg), false}
+}
+
+func (b *ComputeLeaderboardVariantPlayerBossBenchmarkBatchResults) QueryRow(f func(int, ComputeLeaderboardVariantPlayerBossBenchmarkRow, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		var i ComputeLeaderboardVariantPlayerBossBenchmarkRow
+		if b.closed {
+			if f != nil {
+				f(t, i, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		row := b.br.QueryRow()
+		err := row.Scan(&i.BestMetric, &i.HasEvidence)
+		if f != nil {
+			f(t, i, err)
+		}
+	}
+}
+
+func (b *ComputeLeaderboardVariantPlayerBossBenchmarkBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const computeLeaderboardVariantPlayerBossSubject = `-- name: ComputeLeaderboardVariantPlayerBossSubject :batchone
+WITH scoped AS MATERIALIZED (
+    SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, run_id, source_instance_id, realm_id, player_guid, source_encounter_id, source_ranking_id, player_class, player_spec, player_sub_spec, metric, metric_value, projection_version, observed_at, encounter_variant FROM leaderboard_variant_player_observations WHERE tenant_id = $1::uuid
+      AND instance_name = $2::text
+      AND difficulty_name = $3::text
+      AND max_players = $4::smallint
+      AND encounter_name = $5::text AND encounter_variant = $6::text
+      AND player_class = $7::text
+      AND player_spec = $8::text
+      AND player_sub_spec = $9::text
+      AND metric = $10::text
+      AND realm_id = $11::uuid
+      AND player_guid = $12::text
+), ranked AS (
+    SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, run_id, source_instance_id, realm_id, player_guid, source_encounter_id, source_ranking_id, player_class, player_spec, player_sub_spec, metric, metric_value, projection_version, observed_at, encounter_variant, row_number() OVER (ORDER BY metric_value ASC, run_id) AS position,
+           count(*) OVER () AS observations
+    FROM scoped
+), statistics AS (
+    SELECT count(*)::bigint AS observation_count,
+           max(metric_value) AS raw_peak,
+           COALESCE(avg(metric_value) FILTER (WHERE position > observations * 2 / 5 AND position < observations), 0)::double precision AS raw_form,
+           COALESCE(avg(metric_value) FILTER (WHERE position > observations / 5 AND position <= observations * 2 / 5), 0)::double precision AS raw_floor
+    FROM ranked HAVING count(*) > 0
+), peak AS (
+    SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, run_id, source_instance_id, realm_id, player_guid, source_encounter_id, source_ranking_id, player_class, player_spec, player_sub_spec, metric, metric_value, projection_version, observed_at, encounter_variant FROM scoped ORDER BY metric_value DESC, source_encounter_id ASC, run_id ASC LIMIT 1
+), provenance AS (
+    -- Do not substitute another observation when the actual peak source is gone.
+    -- Source joins are identity-qualified, not just a coincidental encounter UUID.
+    SELECT e.id, floor(extract(epoch FROM (e.end_time - e.start_time)) * 1000)::bigint AS duration_ms
+    FROM peak p
+    JOIN log_instance_encounters e ON e.id = p.source_encounter_id
+      AND e.instance_id = p.source_instance_id AND e.name = p.encounter_name AND e.encounter_variant = p.encounter_variant
+    JOIN log_instances_resolved i ON i.id = e.instance_id AND i.realm_id = p.realm_id
+      AND i.name = p.instance_name AND i.difficulty_name = p.difficulty_name AND i.max_players = p.max_players
+    JOIN wow_server_realms r ON r.id = i.realm_id
+    JOIN wow_servers s ON s.id = r.server_id AND s.tenant_id = p.tenant_id
+    WHERE e.end_time > e.start_time
+      AND floor(extract(epoch FROM (e.end_time - e.start_time)) * 1000) > 0
+), calculated AS (
+    SELECT statistics.observation_count, statistics.raw_peak, statistics.raw_form, statistics.raw_floor, provenance.id AS peak_encounter_id, provenance.duration_ms AS peak_duration_ms
+    FROM statistics LEFT JOIN provenance ON true
+)
+SELECT COALESCE(c.observation_count, 0)::bigint AS observation_count, COALESCE(c.raw_peak, 0)::double precision AS raw_peak, COALESCE(c.raw_form, 0)::double precision AS raw_form, COALESCE(c.raw_floor, 0)::double precision AS raw_floor, c.peak_encounter_id, c.peak_duration_ms,
+       (c.observation_count IS NOT NULL)::boolean AS has_evidence
+FROM (SELECT 1) singleton LEFT JOIN calculated c ON true
+`
+
+type ComputeLeaderboardVariantPlayerBossSubjectBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type ComputeLeaderboardVariantPlayerBossSubjectParams struct {
+	TenantID         uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName     string    `db:"instance_name" json:"instance_name"`
+	DifficultyName   string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers       int16     `db:"max_players" json:"max_players"`
+	EncounterName    string    `db:"encounter_name" json:"encounter_name"`
+	EncounterVariant string    `db:"encounter_variant" json:"encounter_variant"`
+	PlayerClass      string    `db:"player_class" json:"player_class"`
+	PlayerSpec       string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec    string    `db:"player_sub_spec" json:"player_sub_spec"`
+	Metric           string    `db:"metric" json:"metric"`
+	RealmID          uuid.UUID `db:"realm_id" json:"realm_id"`
+	PlayerGuid       string    `db:"player_guid" json:"player_guid"`
+}
+
+type ComputeLeaderboardVariantPlayerBossSubjectRow struct {
+	ObservationCount int64         `db:"observation_count" json:"observation_count"`
+	RawPeak          float64       `db:"raw_peak" json:"raw_peak"`
+	RawForm          float64       `db:"raw_form" json:"raw_form"`
+	RawFloor         float64       `db:"raw_floor" json:"raw_floor"`
+	PeakEncounterID  uuid.NullUUID `db:"peak_encounter_id" json:"peak_encounter_id"`
+	PeakDurationMs   pgtype.Int8   `db:"peak_duration_ms" json:"peak_duration_ms"`
+	HasEvidence      bool          `db:"has_evidence" json:"has_evidence"`
+}
+
+func (q *sqlQuerier) ComputeLeaderboardVariantPlayerBossSubject(ctx context.Context, arg []ComputeLeaderboardVariantPlayerBossSubjectParams) *ComputeLeaderboardVariantPlayerBossSubjectBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.EncounterName,
+			a.EncounterVariant,
+			a.PlayerClass,
+			a.PlayerSpec,
+			a.PlayerSubSpec,
+			a.Metric,
+			a.RealmID,
+			a.PlayerGuid,
+		}
+		batch.Queue(computeLeaderboardVariantPlayerBossSubject, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &ComputeLeaderboardVariantPlayerBossSubjectBatchResults{br, len(arg), false}
+}
+
+func (b *ComputeLeaderboardVariantPlayerBossSubjectBatchResults) QueryRow(f func(int, ComputeLeaderboardVariantPlayerBossSubjectRow, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		var i ComputeLeaderboardVariantPlayerBossSubjectRow
+		if b.closed {
+			if f != nil {
+				f(t, i, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		row := b.br.QueryRow()
+		err := row.Scan(
+			&i.ObservationCount,
+			&i.RawPeak,
+			&i.RawForm,
+			&i.RawFloor,
+			&i.PeakEncounterID,
+			&i.PeakDurationMs,
+			&i.HasEvidence,
+		)
+		if f != nil {
+			f(t, i, err)
+		}
+	}
+}
+
+func (b *ComputeLeaderboardVariantPlayerBossSubjectBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
 const copyLegacySpellEffects = `-- name: CopyLegacySpellEffects :batchexec
 INSERT INTO dbc_spell_effects (
   dataset_id, spell_id, difficulty_id, effect_index, source_id,
@@ -2380,6 +2783,490 @@ func (b *PublishLeaderboardPlayerRenownCountBatchResults) Close() error {
 	return b.br.Close()
 }
 
+const publishLeaderboardVariantGuildBossBenchmark = `-- name: PublishLeaderboardVariantGuildBossBenchmark :batchone
+WITH locked AS MATERIALIZED (
+ SELECT d.tenant_id, d.instance_name, d.difficulty_name, d.max_players, d.encounter_name, d.revision, d.dirtied_at, d.process_after, d.claim_token, d.claimed_revision, d.locked_until, d.retry_after, d.attempts, d.encounter_variant FROM leaderboard_variant_dirty_guild_boss_benchmarks d
+ WHERE d.tenant_id = $1::uuid AND d.instance_name = $2::text AND d.difficulty_name = $3::text AND d.max_players = $4::smallint AND d.encounter_name = $5::text AND d.encounter_variant = $6::text
+   AND d.claim_token = $7::uuid AND d.claimed_revision = $8::bigint
+   AND d.locked_until > clock_timestamp()
+ FOR UPDATE
+), allowed AS MATERIALIZED (
+ SELECT 1 FROM locked WHERE locked_until > clock_timestamp()
+ UNION ALL SELECT 1 WHERE $9::boolean
+), written AS (
+ INSERT INTO leaderboard_variant_guild_boss_benchmarks (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, best_duration_ms, projection_version, algorithm_version, computed_at)
+ SELECT $1::uuid, $2::text, $3::text, $4::smallint, $5::text, $6::text, $10::bigint, $11::integer, $12::integer, statement_timestamp()
+ WHERE $13::boolean AND EXISTS (SELECT 1 FROM allowed)
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant) DO UPDATE SET
+ best_duration_ms = EXCLUDED.best_duration_ms,
+ projection_version = EXCLUDED.projection_version,
+ algorithm_version = EXCLUDED.algorithm_version,
+ computed_at = EXCLUDED.computed_at
+ RETURNING 1
+), erased AS (
+ DELETE FROM leaderboard_variant_guild_boss_benchmarks WHERE tenant_id = $1::uuid AND instance_name = $2::text AND difficulty_name = $3::text AND max_players = $4::smallint AND encounter_name = $5::text AND encounter_variant = $6::text
+ AND NOT $13::boolean AND EXISTS (SELECT 1 FROM allowed)
+ RETURNING 1
+), acknowledged AS (
+ DELETE FROM leaderboard_variant_dirty_guild_boss_benchmarks d USING locked l
+ WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.encounter_variant = l.encounter_variant AND l.revision = l.claimed_revision
+   AND EXISTS (SELECT 1 FROM allowed)
+ RETURNING 1
+), released AS (
+UPDATE leaderboard_variant_dirty_guild_boss_benchmarks d
+SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
+    attempts = 0, retry_after = '-infinity'
+FROM locked l
+WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.encounter_variant = l.encounter_variant AND l.revision <> l.claimed_revision
+  AND EXISTS (SELECT 1 FROM allowed) RETURNING 1
+)
+SELECT EXISTS(SELECT 1 FROM allowed)::boolean AS published
+`
+
+type PublishLeaderboardVariantGuildBossBenchmarkBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type PublishLeaderboardVariantGuildBossBenchmarkParams struct {
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	EncounterName     string    `db:"encounter_name" json:"encounter_name"`
+	EncounterVariant  string    `db:"encounter_variant" json:"encounter_variant"`
+	ClaimToken        uuid.UUID `db:"claim_token" json:"claim_token"`
+	ClaimedRevision   int64     `db:"claimed_revision" json:"claimed_revision"`
+	UnfencedManual    bool      `db:"unfenced_manual" json:"unfenced_manual"`
+	BestDurationMs    int64     `db:"best_duration_ms" json:"best_duration_ms"`
+	ProjectionVersion int32     `db:"projection_version" json:"projection_version"`
+	AlgorithmVersion  int32     `db:"algorithm_version" json:"algorithm_version"`
+	HasEvidence       bool      `db:"has_evidence" json:"has_evidence"`
+}
+
+func (q *sqlQuerier) PublishLeaderboardVariantGuildBossBenchmark(ctx context.Context, arg []PublishLeaderboardVariantGuildBossBenchmarkParams) *PublishLeaderboardVariantGuildBossBenchmarkBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.EncounterName,
+			a.EncounterVariant,
+			a.ClaimToken,
+			a.ClaimedRevision,
+			a.UnfencedManual,
+			a.BestDurationMs,
+			a.ProjectionVersion,
+			a.AlgorithmVersion,
+			a.HasEvidence,
+		}
+		batch.Queue(publishLeaderboardVariantGuildBossBenchmark, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &PublishLeaderboardVariantGuildBossBenchmarkBatchResults{br, len(arg), false}
+}
+
+func (b *PublishLeaderboardVariantGuildBossBenchmarkBatchResults) QueryRow(f func(int, bool, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		var published bool
+		if b.closed {
+			if f != nil {
+				f(t, published, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		row := b.br.QueryRow()
+		err := row.Scan(&published)
+		if f != nil {
+			f(t, published, err)
+		}
+	}
+}
+
+func (b *PublishLeaderboardVariantGuildBossBenchmarkBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const publishLeaderboardVariantGuildBossSubject = `-- name: PublishLeaderboardVariantGuildBossSubject :batchone
+WITH locked AS MATERIALIZED (
+ SELECT d.tenant_id, d.instance_name, d.difficulty_name, d.max_players, d.encounter_name, d.realm_id, d.guild_id, d.revision, d.dirtied_at, d.process_after, d.claim_token, d.claimed_revision, d.locked_until, d.retry_after, d.attempts, d.encounter_variant FROM leaderboard_variant_dirty_guild_boss_subjects d
+ WHERE d.tenant_id = $1::uuid AND d.instance_name = $2::text AND d.difficulty_name = $3::text AND d.max_players = $4::smallint AND d.encounter_name = $5::text AND d.encounter_variant = $6::text AND d.realm_id = $7::uuid AND d.guild_id = $8::uuid
+   AND d.claim_token = $9::uuid AND d.claimed_revision = $10::bigint
+   AND d.locked_until > clock_timestamp()
+ FOR UPDATE
+), allowed AS MATERIALIZED (
+ SELECT 1 FROM locked WHERE locked_until > clock_timestamp()
+ UNION ALL SELECT 1 WHERE $11::boolean
+), written AS (
+ INSERT INTO leaderboard_variant_guild_boss_subjects (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, realm_id, guild_id, observation_count, fastest_duration_ms, form_mean_inverse_ms, floor_mean_inverse_ms, projection_version, algorithm_version, computed_at)
+ SELECT $1::uuid, $2::text, $3::text, $4::smallint, $5::text, $6::text, $7::uuid, $8::uuid, $12::bigint, $13::bigint, $14::double precision, $15::double precision, $16::integer, $17::integer, statement_timestamp()
+ WHERE $18::boolean AND EXISTS (SELECT 1 FROM allowed)
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, realm_id, guild_id) DO UPDATE SET
+ observation_count = EXCLUDED.observation_count,
+ fastest_duration_ms = EXCLUDED.fastest_duration_ms,
+ form_mean_inverse_ms = EXCLUDED.form_mean_inverse_ms,
+ floor_mean_inverse_ms = EXCLUDED.floor_mean_inverse_ms,
+ projection_version = EXCLUDED.projection_version,
+ algorithm_version = EXCLUDED.algorithm_version,
+ computed_at = EXCLUDED.computed_at
+ RETURNING 1
+), erased AS (
+ DELETE FROM leaderboard_variant_guild_boss_subjects WHERE tenant_id = $1::uuid AND instance_name = $2::text AND difficulty_name = $3::text AND max_players = $4::smallint AND encounter_name = $5::text AND encounter_variant = $6::text AND realm_id = $7::uuid AND guild_id = $8::uuid
+ AND NOT $18::boolean AND EXISTS (SELECT 1 FROM allowed)
+ RETURNING 1
+), acknowledged AS (
+ DELETE FROM leaderboard_variant_dirty_guild_boss_subjects d USING locked l
+ WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.encounter_variant = l.encounter_variant AND d.realm_id = l.realm_id AND d.guild_id = l.guild_id AND l.revision = l.claimed_revision
+   AND EXISTS (SELECT 1 FROM allowed)
+ RETURNING 1
+), released AS (
+UPDATE leaderboard_variant_dirty_guild_boss_subjects d
+SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
+    attempts = 0, retry_after = '-infinity'
+FROM locked l
+WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.encounter_variant = l.encounter_variant AND d.realm_id = l.realm_id AND d.guild_id = l.guild_id AND l.revision <> l.claimed_revision
+  AND EXISTS (SELECT 1 FROM allowed) RETURNING 1
+)
+SELECT EXISTS(SELECT 1 FROM allowed)::boolean AS published
+`
+
+type PublishLeaderboardVariantGuildBossSubjectBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type PublishLeaderboardVariantGuildBossSubjectParams struct {
+	TenantID           uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName       string    `db:"instance_name" json:"instance_name"`
+	DifficultyName     string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers         int16     `db:"max_players" json:"max_players"`
+	EncounterName      string    `db:"encounter_name" json:"encounter_name"`
+	EncounterVariant   string    `db:"encounter_variant" json:"encounter_variant"`
+	RealmID            uuid.UUID `db:"realm_id" json:"realm_id"`
+	GuildID            uuid.UUID `db:"guild_id" json:"guild_id"`
+	ClaimToken         uuid.UUID `db:"claim_token" json:"claim_token"`
+	ClaimedRevision    int64     `db:"claimed_revision" json:"claimed_revision"`
+	UnfencedManual     bool      `db:"unfenced_manual" json:"unfenced_manual"`
+	ObservationCount   int64     `db:"observation_count" json:"observation_count"`
+	FastestDurationMs  int64     `db:"fastest_duration_ms" json:"fastest_duration_ms"`
+	FormMeanInverseMs  float64   `db:"form_mean_inverse_ms" json:"form_mean_inverse_ms"`
+	FloorMeanInverseMs float64   `db:"floor_mean_inverse_ms" json:"floor_mean_inverse_ms"`
+	ProjectionVersion  int32     `db:"projection_version" json:"projection_version"`
+	AlgorithmVersion   int32     `db:"algorithm_version" json:"algorithm_version"`
+	HasEvidence        bool      `db:"has_evidence" json:"has_evidence"`
+}
+
+func (q *sqlQuerier) PublishLeaderboardVariantGuildBossSubject(ctx context.Context, arg []PublishLeaderboardVariantGuildBossSubjectParams) *PublishLeaderboardVariantGuildBossSubjectBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.EncounterName,
+			a.EncounterVariant,
+			a.RealmID,
+			a.GuildID,
+			a.ClaimToken,
+			a.ClaimedRevision,
+			a.UnfencedManual,
+			a.ObservationCount,
+			a.FastestDurationMs,
+			a.FormMeanInverseMs,
+			a.FloorMeanInverseMs,
+			a.ProjectionVersion,
+			a.AlgorithmVersion,
+			a.HasEvidence,
+		}
+		batch.Queue(publishLeaderboardVariantGuildBossSubject, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &PublishLeaderboardVariantGuildBossSubjectBatchResults{br, len(arg), false}
+}
+
+func (b *PublishLeaderboardVariantGuildBossSubjectBatchResults) QueryRow(f func(int, bool, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		var published bool
+		if b.closed {
+			if f != nil {
+				f(t, published, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		row := b.br.QueryRow()
+		err := row.Scan(&published)
+		if f != nil {
+			f(t, published, err)
+		}
+	}
+}
+
+func (b *PublishLeaderboardVariantGuildBossSubjectBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const publishLeaderboardVariantPlayerBossBenchmark = `-- name: PublishLeaderboardVariantPlayerBossBenchmark :batchone
+WITH locked AS MATERIALIZED (
+ SELECT d.tenant_id, d.instance_name, d.difficulty_name, d.max_players, d.encounter_name, d.player_class, d.player_spec, d.player_sub_spec, d.metric, d.revision, d.dirtied_at, d.process_after, d.claim_token, d.claimed_revision, d.locked_until, d.retry_after, d.attempts, d.encounter_variant FROM leaderboard_variant_dirty_player_boss_benchmarks d
+ WHERE d.tenant_id = $1::uuid AND d.instance_name = $2::text AND d.difficulty_name = $3::text AND d.max_players = $4::smallint AND d.encounter_name = $5::text AND d.encounter_variant = $6::text AND d.player_class = $7::text AND d.player_spec = $8::text AND d.player_sub_spec = $9::text AND d.metric = $10::text
+   AND d.claim_token = $11::uuid AND d.claimed_revision = $12::bigint
+   AND d.locked_until > clock_timestamp()
+ FOR UPDATE
+), allowed AS MATERIALIZED (
+ SELECT 1 FROM locked WHERE locked_until > clock_timestamp()
+ UNION ALL SELECT 1 WHERE $13::boolean
+), written AS (
+ INSERT INTO leaderboard_variant_player_boss_benchmarks (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, player_class, player_spec, player_sub_spec, metric, best_metric, projection_version, algorithm_version, computed_at)
+ SELECT $1::uuid, $2::text, $3::text, $4::smallint, $5::text, $6::text, $7::text, $8::text, $9::text, $10::text, $14::double precision, $15::integer, $16::integer, statement_timestamp()
+ WHERE $17::boolean AND EXISTS (SELECT 1 FROM allowed)
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, player_class, player_spec, player_sub_spec, metric) DO UPDATE SET
+ best_metric = EXCLUDED.best_metric,
+ projection_version = EXCLUDED.projection_version,
+ algorithm_version = EXCLUDED.algorithm_version,
+ computed_at = EXCLUDED.computed_at
+ RETURNING 1
+), erased AS (
+ DELETE FROM leaderboard_variant_player_boss_benchmarks WHERE tenant_id = $1::uuid AND instance_name = $2::text AND difficulty_name = $3::text AND max_players = $4::smallint AND encounter_name = $5::text AND encounter_variant = $6::text AND player_class = $7::text AND player_spec = $8::text AND player_sub_spec = $9::text AND metric = $10::text
+ AND NOT $17::boolean AND EXISTS (SELECT 1 FROM allowed)
+ RETURNING 1
+), acknowledged AS (
+ DELETE FROM leaderboard_variant_dirty_player_boss_benchmarks d USING locked l
+ WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.encounter_variant = l.encounter_variant AND d.player_class = l.player_class AND d.player_spec = l.player_spec AND d.player_sub_spec = l.player_sub_spec AND d.metric = l.metric AND l.revision = l.claimed_revision
+   AND EXISTS (SELECT 1 FROM allowed)
+ RETURNING 1
+), released AS (
+UPDATE leaderboard_variant_dirty_player_boss_benchmarks d
+SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
+    attempts = 0, retry_after = '-infinity'
+FROM locked l
+WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.encounter_variant = l.encounter_variant AND d.player_class = l.player_class AND d.player_spec = l.player_spec AND d.player_sub_spec = l.player_sub_spec AND d.metric = l.metric AND l.revision <> l.claimed_revision
+  AND EXISTS (SELECT 1 FROM allowed) RETURNING 1
+)
+SELECT EXISTS(SELECT 1 FROM allowed)::boolean AS published
+`
+
+type PublishLeaderboardVariantPlayerBossBenchmarkBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type PublishLeaderboardVariantPlayerBossBenchmarkParams struct {
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	EncounterName     string    `db:"encounter_name" json:"encounter_name"`
+	EncounterVariant  string    `db:"encounter_variant" json:"encounter_variant"`
+	PlayerClass       string    `db:"player_class" json:"player_class"`
+	PlayerSpec        string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string    `db:"player_sub_spec" json:"player_sub_spec"`
+	Metric            string    `db:"metric" json:"metric"`
+	ClaimToken        uuid.UUID `db:"claim_token" json:"claim_token"`
+	ClaimedRevision   int64     `db:"claimed_revision" json:"claimed_revision"`
+	UnfencedManual    bool      `db:"unfenced_manual" json:"unfenced_manual"`
+	BestMetric        float64   `db:"best_metric" json:"best_metric"`
+	ProjectionVersion int32     `db:"projection_version" json:"projection_version"`
+	AlgorithmVersion  int32     `db:"algorithm_version" json:"algorithm_version"`
+	HasEvidence       bool      `db:"has_evidence" json:"has_evidence"`
+}
+
+func (q *sqlQuerier) PublishLeaderboardVariantPlayerBossBenchmark(ctx context.Context, arg []PublishLeaderboardVariantPlayerBossBenchmarkParams) *PublishLeaderboardVariantPlayerBossBenchmarkBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.EncounterName,
+			a.EncounterVariant,
+			a.PlayerClass,
+			a.PlayerSpec,
+			a.PlayerSubSpec,
+			a.Metric,
+			a.ClaimToken,
+			a.ClaimedRevision,
+			a.UnfencedManual,
+			a.BestMetric,
+			a.ProjectionVersion,
+			a.AlgorithmVersion,
+			a.HasEvidence,
+		}
+		batch.Queue(publishLeaderboardVariantPlayerBossBenchmark, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &PublishLeaderboardVariantPlayerBossBenchmarkBatchResults{br, len(arg), false}
+}
+
+func (b *PublishLeaderboardVariantPlayerBossBenchmarkBatchResults) QueryRow(f func(int, bool, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		var published bool
+		if b.closed {
+			if f != nil {
+				f(t, published, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		row := b.br.QueryRow()
+		err := row.Scan(&published)
+		if f != nil {
+			f(t, published, err)
+		}
+	}
+}
+
+func (b *PublishLeaderboardVariantPlayerBossBenchmarkBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const publishLeaderboardVariantPlayerBossSubject = `-- name: PublishLeaderboardVariantPlayerBossSubject :batchone
+WITH locked AS MATERIALIZED (
+ SELECT d.tenant_id, d.instance_name, d.difficulty_name, d.max_players, d.encounter_name, d.player_class, d.player_spec, d.player_sub_spec, d.metric, d.realm_id, d.player_guid, d.revision, d.dirtied_at, d.process_after, d.claim_token, d.claimed_revision, d.locked_until, d.retry_after, d.attempts, d.encounter_variant FROM leaderboard_variant_dirty_player_boss_subjects d
+ WHERE d.tenant_id = $1::uuid AND d.instance_name = $2::text AND d.difficulty_name = $3::text AND d.max_players = $4::smallint AND d.encounter_name = $5::text AND d.encounter_variant = $6::text AND d.player_class = $7::text AND d.player_spec = $8::text AND d.player_sub_spec = $9::text AND d.metric = $10::text AND d.realm_id = $11::uuid AND d.player_guid = $12::text
+   AND d.claim_token = $13::uuid AND d.claimed_revision = $14::bigint
+   AND d.locked_until > clock_timestamp()
+ FOR UPDATE
+), allowed AS MATERIALIZED (
+ SELECT 1 FROM locked WHERE locked_until > clock_timestamp()
+ UNION ALL SELECT 1 WHERE $15::boolean
+), written AS (
+ INSERT INTO leaderboard_variant_player_boss_subjects (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid, observation_count, raw_peak, raw_form, raw_floor, peak_encounter_id, peak_duration_ms, projection_version, algorithm_version, computed_at)
+ SELECT $1::uuid, $2::text, $3::text, $4::smallint, $5::text, $6::text, $7::text, $8::text, $9::text, $10::text, $11::uuid, $12::text, $16::bigint, $17::double precision, $18::double precision, $19::double precision, $20::uuid, $21::bigint, $22::integer, $23::integer, statement_timestamp()
+ WHERE $24::boolean AND EXISTS (SELECT 1 FROM allowed)
+ ON CONFLICT (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid) DO UPDATE SET
+ observation_count = EXCLUDED.observation_count,
+ raw_peak = EXCLUDED.raw_peak,
+ raw_form = EXCLUDED.raw_form,
+ raw_floor = EXCLUDED.raw_floor,
+ peak_encounter_id = EXCLUDED.peak_encounter_id,
+ peak_duration_ms = EXCLUDED.peak_duration_ms,
+ projection_version = EXCLUDED.projection_version,
+ algorithm_version = EXCLUDED.algorithm_version,
+ computed_at = EXCLUDED.computed_at
+ RETURNING 1
+), erased AS (
+ DELETE FROM leaderboard_variant_player_boss_subjects WHERE tenant_id = $1::uuid AND instance_name = $2::text AND difficulty_name = $3::text AND max_players = $4::smallint AND encounter_name = $5::text AND encounter_variant = $6::text AND player_class = $7::text AND player_spec = $8::text AND player_sub_spec = $9::text AND metric = $10::text AND realm_id = $11::uuid AND player_guid = $12::text
+ AND NOT $24::boolean AND EXISTS (SELECT 1 FROM allowed)
+ RETURNING 1
+), acknowledged AS (
+ DELETE FROM leaderboard_variant_dirty_player_boss_subjects d USING locked l
+ WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.encounter_variant = l.encounter_variant AND d.player_class = l.player_class AND d.player_spec = l.player_spec AND d.player_sub_spec = l.player_sub_spec AND d.metric = l.metric AND d.realm_id = l.realm_id AND d.player_guid = l.player_guid AND l.revision = l.claimed_revision
+   AND EXISTS (SELECT 1 FROM allowed)
+ RETURNING 1
+), released AS (
+UPDATE leaderboard_variant_dirty_player_boss_subjects d
+SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
+    attempts = 0, retry_after = '-infinity'
+FROM locked l
+WHERE d.tenant_id = l.tenant_id AND d.instance_name = l.instance_name AND d.difficulty_name = l.difficulty_name AND d.max_players = l.max_players AND d.encounter_name = l.encounter_name AND d.encounter_variant = l.encounter_variant AND d.player_class = l.player_class AND d.player_spec = l.player_spec AND d.player_sub_spec = l.player_sub_spec AND d.metric = l.metric AND d.realm_id = l.realm_id AND d.player_guid = l.player_guid AND l.revision <> l.claimed_revision
+  AND EXISTS (SELECT 1 FROM allowed) RETURNING 1
+)
+SELECT EXISTS(SELECT 1 FROM allowed)::boolean AS published
+`
+
+type PublishLeaderboardVariantPlayerBossSubjectBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type PublishLeaderboardVariantPlayerBossSubjectParams struct {
+	TenantID          uuid.UUID     `db:"tenant_id" json:"tenant_id"`
+	InstanceName      string        `db:"instance_name" json:"instance_name"`
+	DifficultyName    string        `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16         `db:"max_players" json:"max_players"`
+	EncounterName     string        `db:"encounter_name" json:"encounter_name"`
+	EncounterVariant  string        `db:"encounter_variant" json:"encounter_variant"`
+	PlayerClass       string        `db:"player_class" json:"player_class"`
+	PlayerSpec        string        `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string        `db:"player_sub_spec" json:"player_sub_spec"`
+	Metric            string        `db:"metric" json:"metric"`
+	RealmID           uuid.UUID     `db:"realm_id" json:"realm_id"`
+	PlayerGuid        string        `db:"player_guid" json:"player_guid"`
+	ClaimToken        uuid.UUID     `db:"claim_token" json:"claim_token"`
+	ClaimedRevision   int64         `db:"claimed_revision" json:"claimed_revision"`
+	UnfencedManual    bool          `db:"unfenced_manual" json:"unfenced_manual"`
+	ObservationCount  int64         `db:"observation_count" json:"observation_count"`
+	RawPeak           float64       `db:"raw_peak" json:"raw_peak"`
+	RawForm           float64       `db:"raw_form" json:"raw_form"`
+	RawFloor          float64       `db:"raw_floor" json:"raw_floor"`
+	PeakEncounterID   uuid.NullUUID `db:"peak_encounter_id" json:"peak_encounter_id"`
+	PeakDurationMs    pgtype.Int8   `db:"peak_duration_ms" json:"peak_duration_ms"`
+	ProjectionVersion int32         `db:"projection_version" json:"projection_version"`
+	AlgorithmVersion  int32         `db:"algorithm_version" json:"algorithm_version"`
+	HasEvidence       bool          `db:"has_evidence" json:"has_evidence"`
+}
+
+func (q *sqlQuerier) PublishLeaderboardVariantPlayerBossSubject(ctx context.Context, arg []PublishLeaderboardVariantPlayerBossSubjectParams) *PublishLeaderboardVariantPlayerBossSubjectBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.EncounterName,
+			a.EncounterVariant,
+			a.PlayerClass,
+			a.PlayerSpec,
+			a.PlayerSubSpec,
+			a.Metric,
+			a.RealmID,
+			a.PlayerGuid,
+			a.ClaimToken,
+			a.ClaimedRevision,
+			a.UnfencedManual,
+			a.ObservationCount,
+			a.RawPeak,
+			a.RawForm,
+			a.RawFloor,
+			a.PeakEncounterID,
+			a.PeakDurationMs,
+			a.ProjectionVersion,
+			a.AlgorithmVersion,
+			a.HasEvidence,
+		}
+		batch.Queue(publishLeaderboardVariantPlayerBossSubject, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &PublishLeaderboardVariantPlayerBossSubjectBatchResults{br, len(arg), false}
+}
+
+func (b *PublishLeaderboardVariantPlayerBossSubjectBatchResults) QueryRow(f func(int, bool, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		var published bool
+		if b.closed {
+			if f != nil {
+				f(t, published, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		row := b.br.QueryRow()
+		err := row.Scan(&published)
+		if f != nil {
+			f(t, published, err)
+		}
+	}
+}
+
+func (b *PublishLeaderboardVariantPlayerBossSubjectBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
 const replaceLeaderboardCareerRenownFact = `-- name: ReplaceLeaderboardCareerRenownFact :batchexec
 INSERT INTO leaderboard_career_renown_facts (tenant_id,run_id,source_instance_id,realm_id,player_guid,player_class,player_spec,player_sub_spec,instance_name,difficulty_name,max_players,encounter_name,source_encounter_id)
 VALUES ($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::text,$6::text,$7::text,$8::text,$9::text,$10::text,$11::smallint,$12::text,$13::uuid)
@@ -2794,6 +3681,158 @@ func (b *ReplaceLeaderboardPlayerRenownFactBatchResults) Exec(f func(int, error)
 }
 
 func (b *ReplaceLeaderboardPlayerRenownFactBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const replaceLeaderboardVariantGuildBossObservation = `-- name: ReplaceLeaderboardVariantGuildBossObservation :batchexec
+INSERT INTO leaderboard_variant_guild_boss_observations (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, run_id, source_instance_id, realm_id, guild_id, source_time_parse_score_id, source_encounter_id, duration_ms, projection_version, observed_at)
+VALUES ($1::uuid, $2::text, $3::text, $4::smallint, $5::text, $6::text, $7::uuid, $8::uuid, $9::uuid, $10::uuid, $11::uuid, $12::uuid, $13::bigint, 1, clock_timestamp())
+`
+
+type ReplaceLeaderboardVariantGuildBossObservationBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type ReplaceLeaderboardVariantGuildBossObservationParams struct {
+	TenantID               uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName           string    `db:"instance_name" json:"instance_name"`
+	DifficultyName         string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers             int16     `db:"max_players" json:"max_players"`
+	EncounterName          string    `db:"encounter_name" json:"encounter_name"`
+	EncounterVariant       string    `db:"encounter_variant" json:"encounter_variant"`
+	RunID                  uuid.UUID `db:"run_id" json:"run_id"`
+	SourceInstanceID       uuid.UUID `db:"source_instance_id" json:"source_instance_id"`
+	RealmID                uuid.UUID `db:"realm_id" json:"realm_id"`
+	GuildID                uuid.UUID `db:"guild_id" json:"guild_id"`
+	SourceTimeParseScoreID uuid.UUID `db:"source_time_parse_score_id" json:"source_time_parse_score_id"`
+	SourceEncounterID      uuid.UUID `db:"source_encounter_id" json:"source_encounter_id"`
+	DurationMs             int64     `db:"duration_ms" json:"duration_ms"`
+}
+
+func (q *sqlQuerier) ReplaceLeaderboardVariantGuildBossObservation(ctx context.Context, arg []ReplaceLeaderboardVariantGuildBossObservationParams) *ReplaceLeaderboardVariantGuildBossObservationBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.EncounterName,
+			a.EncounterVariant,
+			a.RunID,
+			a.SourceInstanceID,
+			a.RealmID,
+			a.GuildID,
+			a.SourceTimeParseScoreID,
+			a.SourceEncounterID,
+			a.DurationMs,
+		}
+		batch.Queue(replaceLeaderboardVariantGuildBossObservation, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &ReplaceLeaderboardVariantGuildBossObservationBatchResults{br, len(arg), false}
+}
+
+func (b *ReplaceLeaderboardVariantGuildBossObservationBatchResults) Exec(f func(int, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		if b.closed {
+			if f != nil {
+				f(t, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		_, err := b.br.Exec()
+		if f != nil {
+			f(t, err)
+		}
+	}
+}
+
+func (b *ReplaceLeaderboardVariantGuildBossObservationBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const replaceLeaderboardVariantPlayerObservation = `-- name: ReplaceLeaderboardVariantPlayerObservation :batchexec
+INSERT INTO leaderboard_variant_player_observations (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, run_id, source_instance_id, realm_id, player_guid, source_encounter_id, source_ranking_id, player_class, player_spec, player_sub_spec, metric, metric_value, projection_version, observed_at)
+VALUES ($1::uuid, $2::text, $3::text, $4::smallint, $5::text, $6::text, $7::uuid, $8::uuid, $9::uuid, $10::text, $11::uuid, $12::uuid, $13::text, $14::text, $15::text, $16::text, $17::double precision, 1, clock_timestamp())
+`
+
+type ReplaceLeaderboardVariantPlayerObservationBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type ReplaceLeaderboardVariantPlayerObservationParams struct {
+	TenantID          uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName      string    `db:"instance_name" json:"instance_name"`
+	DifficultyName    string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers        int16     `db:"max_players" json:"max_players"`
+	EncounterName     string    `db:"encounter_name" json:"encounter_name"`
+	EncounterVariant  string    `db:"encounter_variant" json:"encounter_variant"`
+	RunID             uuid.UUID `db:"run_id" json:"run_id"`
+	SourceInstanceID  uuid.UUID `db:"source_instance_id" json:"source_instance_id"`
+	RealmID           uuid.UUID `db:"realm_id" json:"realm_id"`
+	PlayerGuid        string    `db:"player_guid" json:"player_guid"`
+	SourceEncounterID uuid.UUID `db:"source_encounter_id" json:"source_encounter_id"`
+	SourceRankingID   uuid.UUID `db:"source_ranking_id" json:"source_ranking_id"`
+	PlayerClass       string    `db:"player_class" json:"player_class"`
+	PlayerSpec        string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec     string    `db:"player_sub_spec" json:"player_sub_spec"`
+	Metric            string    `db:"metric" json:"metric"`
+	MetricValue       float64   `db:"metric_value" json:"metric_value"`
+}
+
+func (q *sqlQuerier) ReplaceLeaderboardVariantPlayerObservation(ctx context.Context, arg []ReplaceLeaderboardVariantPlayerObservationParams) *ReplaceLeaderboardVariantPlayerObservationBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.EncounterName,
+			a.EncounterVariant,
+			a.RunID,
+			a.SourceInstanceID,
+			a.RealmID,
+			a.PlayerGuid,
+			a.SourceEncounterID,
+			a.SourceRankingID,
+			a.PlayerClass,
+			a.PlayerSpec,
+			a.PlayerSubSpec,
+			a.Metric,
+			a.MetricValue,
+		}
+		batch.Queue(replaceLeaderboardVariantPlayerObservation, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &ReplaceLeaderboardVariantPlayerObservationBatchResults{br, len(arg), false}
+}
+
+func (b *ReplaceLeaderboardVariantPlayerObservationBatchResults) Exec(f func(int, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		if b.closed {
+			if f != nil {
+				f(t, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		_, err := b.br.Exec()
+		if f != nil {
+			f(t, err)
+		}
+	}
+}
+
+func (b *ReplaceLeaderboardVariantPlayerObservationBatchResults) Close() error {
 	b.closed = true
 	return b.br.Close()
 }
@@ -3330,6 +4369,290 @@ func (b *RetryLeaderboardPlayerRenownCountBatchResults) Exec(f func(int, error))
 }
 
 func (b *RetryLeaderboardPlayerRenownCountBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const retryLeaderboardVariantGuildBossBenchmark = `-- name: RetryLeaderboardVariantGuildBossBenchmark :batchexec
+UPDATE leaderboard_variant_dirty_guild_boss_benchmarks
+SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
+    attempts = LEAST(attempts + 1, 30),
+    retry_after = clock_timestamp() + make_interval(secs => LEAST(300, 5 * power(2, LEAST(attempts, 6)))::double precision)
+WHERE tenant_id = $1::uuid AND instance_name = $2::text AND difficulty_name = $3::text AND max_players = $4::smallint AND encounter_name = $5::text AND encounter_variant = $6::text AND claim_token = $7::uuid AND claimed_revision = $8::bigint
+`
+
+type RetryLeaderboardVariantGuildBossBenchmarkBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type RetryLeaderboardVariantGuildBossBenchmarkParams struct {
+	TenantID         uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName     string    `db:"instance_name" json:"instance_name"`
+	DifficultyName   string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers       int16     `db:"max_players" json:"max_players"`
+	EncounterName    string    `db:"encounter_name" json:"encounter_name"`
+	EncounterVariant string    `db:"encounter_variant" json:"encounter_variant"`
+	ClaimToken       uuid.UUID `db:"claim_token" json:"claim_token"`
+	ClaimedRevision  int64     `db:"claimed_revision" json:"claimed_revision"`
+}
+
+func (q *sqlQuerier) RetryLeaderboardVariantGuildBossBenchmark(ctx context.Context, arg []RetryLeaderboardVariantGuildBossBenchmarkParams) *RetryLeaderboardVariantGuildBossBenchmarkBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.EncounterName,
+			a.EncounterVariant,
+			a.ClaimToken,
+			a.ClaimedRevision,
+		}
+		batch.Queue(retryLeaderboardVariantGuildBossBenchmark, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &RetryLeaderboardVariantGuildBossBenchmarkBatchResults{br, len(arg), false}
+}
+
+func (b *RetryLeaderboardVariantGuildBossBenchmarkBatchResults) Exec(f func(int, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		if b.closed {
+			if f != nil {
+				f(t, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		_, err := b.br.Exec()
+		if f != nil {
+			f(t, err)
+		}
+	}
+}
+
+func (b *RetryLeaderboardVariantGuildBossBenchmarkBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const retryLeaderboardVariantGuildBossSubject = `-- name: RetryLeaderboardVariantGuildBossSubject :batchexec
+UPDATE leaderboard_variant_dirty_guild_boss_subjects
+SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
+    attempts = LEAST(attempts + 1, 30),
+    retry_after = clock_timestamp() + make_interval(secs => LEAST(300, 5 * power(2, LEAST(attempts, 6)))::double precision)
+WHERE tenant_id = $1::uuid AND instance_name = $2::text AND difficulty_name = $3::text AND max_players = $4::smallint AND encounter_name = $5::text AND encounter_variant = $6::text AND realm_id = $7::uuid AND guild_id = $8::uuid AND claim_token = $9::uuid AND claimed_revision = $10::bigint
+`
+
+type RetryLeaderboardVariantGuildBossSubjectBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type RetryLeaderboardVariantGuildBossSubjectParams struct {
+	TenantID         uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName     string    `db:"instance_name" json:"instance_name"`
+	DifficultyName   string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers       int16     `db:"max_players" json:"max_players"`
+	EncounterName    string    `db:"encounter_name" json:"encounter_name"`
+	EncounterVariant string    `db:"encounter_variant" json:"encounter_variant"`
+	RealmID          uuid.UUID `db:"realm_id" json:"realm_id"`
+	GuildID          uuid.UUID `db:"guild_id" json:"guild_id"`
+	ClaimToken       uuid.UUID `db:"claim_token" json:"claim_token"`
+	ClaimedRevision  int64     `db:"claimed_revision" json:"claimed_revision"`
+}
+
+func (q *sqlQuerier) RetryLeaderboardVariantGuildBossSubject(ctx context.Context, arg []RetryLeaderboardVariantGuildBossSubjectParams) *RetryLeaderboardVariantGuildBossSubjectBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.EncounterName,
+			a.EncounterVariant,
+			a.RealmID,
+			a.GuildID,
+			a.ClaimToken,
+			a.ClaimedRevision,
+		}
+		batch.Queue(retryLeaderboardVariantGuildBossSubject, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &RetryLeaderboardVariantGuildBossSubjectBatchResults{br, len(arg), false}
+}
+
+func (b *RetryLeaderboardVariantGuildBossSubjectBatchResults) Exec(f func(int, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		if b.closed {
+			if f != nil {
+				f(t, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		_, err := b.br.Exec()
+		if f != nil {
+			f(t, err)
+		}
+	}
+}
+
+func (b *RetryLeaderboardVariantGuildBossSubjectBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const retryLeaderboardVariantPlayerBossBenchmark = `-- name: RetryLeaderboardVariantPlayerBossBenchmark :batchexec
+UPDATE leaderboard_variant_dirty_player_boss_benchmarks
+SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
+    attempts = LEAST(attempts + 1, 30),
+    retry_after = clock_timestamp() + make_interval(secs => LEAST(300, 5 * power(2, LEAST(attempts, 6)))::double precision)
+WHERE tenant_id = $1::uuid AND instance_name = $2::text AND difficulty_name = $3::text AND max_players = $4::smallint AND encounter_name = $5::text AND encounter_variant = $6::text AND player_class = $7::text AND player_spec = $8::text AND player_sub_spec = $9::text AND metric = $10::text AND claim_token = $11::uuid AND claimed_revision = $12::bigint
+`
+
+type RetryLeaderboardVariantPlayerBossBenchmarkBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type RetryLeaderboardVariantPlayerBossBenchmarkParams struct {
+	TenantID         uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName     string    `db:"instance_name" json:"instance_name"`
+	DifficultyName   string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers       int16     `db:"max_players" json:"max_players"`
+	EncounterName    string    `db:"encounter_name" json:"encounter_name"`
+	EncounterVariant string    `db:"encounter_variant" json:"encounter_variant"`
+	PlayerClass      string    `db:"player_class" json:"player_class"`
+	PlayerSpec       string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec    string    `db:"player_sub_spec" json:"player_sub_spec"`
+	Metric           string    `db:"metric" json:"metric"`
+	ClaimToken       uuid.UUID `db:"claim_token" json:"claim_token"`
+	ClaimedRevision  int64     `db:"claimed_revision" json:"claimed_revision"`
+}
+
+func (q *sqlQuerier) RetryLeaderboardVariantPlayerBossBenchmark(ctx context.Context, arg []RetryLeaderboardVariantPlayerBossBenchmarkParams) *RetryLeaderboardVariantPlayerBossBenchmarkBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.EncounterName,
+			a.EncounterVariant,
+			a.PlayerClass,
+			a.PlayerSpec,
+			a.PlayerSubSpec,
+			a.Metric,
+			a.ClaimToken,
+			a.ClaimedRevision,
+		}
+		batch.Queue(retryLeaderboardVariantPlayerBossBenchmark, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &RetryLeaderboardVariantPlayerBossBenchmarkBatchResults{br, len(arg), false}
+}
+
+func (b *RetryLeaderboardVariantPlayerBossBenchmarkBatchResults) Exec(f func(int, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		if b.closed {
+			if f != nil {
+				f(t, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		_, err := b.br.Exec()
+		if f != nil {
+			f(t, err)
+		}
+	}
+}
+
+func (b *RetryLeaderboardVariantPlayerBossBenchmarkBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const retryLeaderboardVariantPlayerBossSubject = `-- name: RetryLeaderboardVariantPlayerBossSubject :batchexec
+UPDATE leaderboard_variant_dirty_player_boss_subjects
+SET claim_token = NULL, claimed_revision = NULL, locked_until = NULL,
+    attempts = LEAST(attempts + 1, 30),
+    retry_after = clock_timestamp() + make_interval(secs => LEAST(300, 5 * power(2, LEAST(attempts, 6)))::double precision)
+WHERE tenant_id = $1::uuid AND instance_name = $2::text AND difficulty_name = $3::text AND max_players = $4::smallint AND encounter_name = $5::text AND encounter_variant = $6::text AND player_class = $7::text AND player_spec = $8::text AND player_sub_spec = $9::text AND metric = $10::text AND realm_id = $11::uuid AND player_guid = $12::text AND claim_token = $13::uuid AND claimed_revision = $14::bigint
+`
+
+type RetryLeaderboardVariantPlayerBossSubjectBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type RetryLeaderboardVariantPlayerBossSubjectParams struct {
+	TenantID         uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceName     string    `db:"instance_name" json:"instance_name"`
+	DifficultyName   string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers       int16     `db:"max_players" json:"max_players"`
+	EncounterName    string    `db:"encounter_name" json:"encounter_name"`
+	EncounterVariant string    `db:"encounter_variant" json:"encounter_variant"`
+	PlayerClass      string    `db:"player_class" json:"player_class"`
+	PlayerSpec       string    `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec    string    `db:"player_sub_spec" json:"player_sub_spec"`
+	Metric           string    `db:"metric" json:"metric"`
+	RealmID          uuid.UUID `db:"realm_id" json:"realm_id"`
+	PlayerGuid       string    `db:"player_guid" json:"player_guid"`
+	ClaimToken       uuid.UUID `db:"claim_token" json:"claim_token"`
+	ClaimedRevision  int64     `db:"claimed_revision" json:"claimed_revision"`
+}
+
+func (q *sqlQuerier) RetryLeaderboardVariantPlayerBossSubject(ctx context.Context, arg []RetryLeaderboardVariantPlayerBossSubjectParams) *RetryLeaderboardVariantPlayerBossSubjectBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.TenantID,
+			a.InstanceName,
+			a.DifficultyName,
+			a.MaxPlayers,
+			a.EncounterName,
+			a.EncounterVariant,
+			a.PlayerClass,
+			a.PlayerSpec,
+			a.PlayerSubSpec,
+			a.Metric,
+			a.RealmID,
+			a.PlayerGuid,
+			a.ClaimToken,
+			a.ClaimedRevision,
+		}
+		batch.Queue(retryLeaderboardVariantPlayerBossSubject, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &RetryLeaderboardVariantPlayerBossSubjectBatchResults{br, len(arg), false}
+}
+
+func (b *RetryLeaderboardVariantPlayerBossSubjectBatchResults) Exec(f func(int, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		if b.closed {
+			if f != nil {
+				f(t, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		_, err := b.br.Exec()
+		if f != nil {
+			f(t, err)
+		}
+	}
+}
+
+func (b *RetryLeaderboardVariantPlayerBossSubjectBatchResults) Close() error {
 	b.closed = true
 	return b.br.Close()
 }

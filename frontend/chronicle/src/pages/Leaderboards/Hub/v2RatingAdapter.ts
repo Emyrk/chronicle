@@ -1,3 +1,4 @@
+import { supportsEncounterVariant, type EncounterVariant, type EncounterVariants } from "@/components/EncounterDifficulty/encounterVariant";
 import type {
   LeaderboardConfiguration,
   LeaderboardV2Cohort,
@@ -23,6 +24,8 @@ export interface V2RatingContext {
   selected: readonly string[];
   realmIDs?: readonly string[];
   showUnknowns?: boolean;
+  encounterVariant?: EncounterVariant;
+  encounterVariants?: EncounterVariants;
 }
 export function v2RatingParams(
   context: V2RatingContext,
@@ -53,6 +56,18 @@ export function v2RatingParams(
     (row) => row.instance_name === context.instance,
   );
   const selected = scope.boss ? [scope.boss] : context.selected;
+  if (context.encounterVariant) {
+    if (selected.length !== 1 || !supportsEncounterVariant(context.instance, selected[0]))
+      throw new Error("Encounter variants require a single supported boss. Select Hodir or Combined.");
+    p.set("encounter_variant", context.encounterVariant);
+  }
+  const variants = Object.fromEntries(Object.entries(context.encounterVariants ?? {})
+    .filter(([boss]) => selected.length === 0 || selected.includes(boss))
+    .sort(([a], [b]) => a.localeCompare(b)));
+  for (const boss of Object.keys(variants)) {
+    if (!supportsEncounterVariant(context.instance, boss)) throw new Error(`Unsupported encounter variant for ${boss}.`);
+  }
+  if (Object.keys(variants).length) p.set("encounter_variants", JSON.stringify(variants));
   if (selected.length === 1) p.set("boss", selected[0]);
   else if (selected.length > 1) {
     for (const name of [...new Set(selected)].sort()) p.append("bosses", name);

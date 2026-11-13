@@ -2,11 +2,8 @@ import { HeroicBadge } from "@/components/HeroicBadge";
 import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { cn } from "@/lib/utils";
 import { difficultyLabel } from "@/lib/wowUtils";
-import { type DifficultyEncounter, summarizeDifficulty } from "./encounterDifficulty";
+import { CHIP, HEROIC_CHIP, VARIANT_CHIP, type DifficultyEncounter, summarizeDifficulty } from "./encounterDifficulty";
 
-const CHIP = "inline-flex shrink-0 items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-bold leading-none ring-1 ring-inset";
-const HEROIC_CHIP = "bg-purple-500/20 text-purple-200 ring-purple-400/40";
-const VARIANT_CHIP = "bg-amber-500/15 text-amber-200 ring-amber-400/40";
 
 export function EncounterDifficultyMark({ difficulty, tooltipSide = "top", className }: {
   difficulty: string;

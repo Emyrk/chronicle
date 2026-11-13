@@ -39,6 +39,7 @@ interface FullRow {
 export function RatingFullList({
   scope,
   title,
+  titleBadge,
   period,
   view,
   query,
@@ -50,6 +51,8 @@ export function RatingFullList({
 }: {
   scope: RatingScope
   title: string
+  /** Shown after the title, e.g. the encounter variant mark. */
+  titleBadge?: ReactNode
   encounterCount?: number
   period: RatingPeriod
   view: RatingView
@@ -137,7 +140,7 @@ export function RatingFullList({
             {scope.boss || scope.cls ? <ScopeMark scope={scope} size="sm" /> : <theme.icon className="size-4 text-[color:var(--metric)]" />}
           </Emblem>
           <div className="min-w-0">
-            <h2 className="truncate font-wow text-xl leading-tight">{title}</h2>
+            <div className="flex min-w-0 items-center gap-2"><h2 className="truncate font-wow text-xl leading-tight">{title}</h2>{titleBadge}</div>
             {/* Only a known count earns a subtitle; "Published rankings" said nothing. */}
             {!(state && state.status !== "ready") && !(live && livePage?.total === undefined) && (
               <p className="text-xs text-muted-foreground">{total} ranked</p>

@@ -2,14 +2,34 @@
 -- Read current benchmarks and current resolved awards, never replay observations.
 -- Boss arrays are enabled exact identities resolved by the API. The fixed
 -- denominator includes missing bosses; filtering never shrinks it per subject.
-WITH contributions AS (
+WITH selected_leaderboard_player_boss_subjects AS NOT MATERIALIZED (
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid, observation_count, raw_peak, raw_form, raw_floor, projection_version, algorithm_version, computed_at, peak_encounter_id, peak_duration_ms FROM leaderboard_player_boss_subjects WHERE COALESCE(@encounter_variants::jsonb ->> encounter_name, @encounter_variant::text) = ''
+ UNION ALL
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid, observation_count, raw_peak, raw_form, raw_floor, projection_version, algorithm_version, computed_at, peak_encounter_id, peak_duration_ms FROM leaderboard_variant_player_boss_subjects WHERE encounter_variant = COALESCE(@encounter_variants::jsonb ->> encounter_name, @encounter_variant::text)
+),
+selected_leaderboard_player_boss_benchmarks AS NOT MATERIALIZED (
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, best_metric, projection_version, algorithm_version, computed_at FROM leaderboard_player_boss_benchmarks WHERE COALESCE(@encounter_variants::jsonb ->> encounter_name, @encounter_variant::text) = ''
+ UNION ALL
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, best_metric, projection_version, algorithm_version, computed_at FROM leaderboard_variant_player_boss_benchmarks WHERE encounter_variant = COALESCE(@encounter_variants::jsonb ->> encounter_name, @encounter_variant::text)
+),
+selected_leaderboard_guild_boss_subjects AS NOT MATERIALIZED (
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id, observation_count, fastest_duration_ms, form_mean_inverse_ms, floor_mean_inverse_ms, projection_version, algorithm_version, computed_at FROM leaderboard_guild_boss_subjects WHERE COALESCE(@encounter_variants::jsonb ->> encounter_name, @encounter_variant::text) = ''
+ UNION ALL
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id, observation_count, fastest_duration_ms, form_mean_inverse_ms, floor_mean_inverse_ms, projection_version, algorithm_version, computed_at FROM leaderboard_variant_guild_boss_subjects WHERE encounter_variant = COALESCE(@encounter_variants::jsonb ->> encounter_name, @encounter_variant::text)
+),
+selected_leaderboard_guild_boss_benchmarks AS NOT MATERIALIZED (
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, best_duration_ms, projection_version, algorithm_version, computed_at FROM leaderboard_guild_boss_benchmarks WHERE COALESCE(@encounter_variants::jsonb ->> encounter_name, @encounter_variant::text) = ''
+ UNION ALL
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, best_duration_ms, projection_version, algorithm_version, computed_at FROM leaderboard_variant_guild_boss_benchmarks WHERE encounter_variant = COALESCE(@encounter_variants::jsonb ->> encounter_name, @encounter_variant::text)
+),
+contributions AS (
 SELECT s.realm_id, s.player_guid COLLATE "C" AS subject_id,
  s.player_class COLLATE "C" AS player_class, s.player_spec COLLATE "C" AS player_spec, s.player_sub_spec COLLATE "C" AS player_sub_spec,
  CASE WHEN b.best_metric > 0 THEN LEAST(100::double precision, 100 * s.raw_peak / b.best_metric) ELSE 0::double precision END AS peak, CASE WHEN b.best_metric > 0 THEN LEAST(100::double precision, 100 * s.raw_form / b.best_metric) ELSE 0::double precision END AS form, CASE WHEN b.best_metric > 0 THEN LEAST(100::double precision, 100 * s.raw_floor / b.best_metric) ELSE 0::double precision END AS floor,
  0::double precision AS renown, s.observation_count AS sample_count, s.computed_at
- FROM leaderboard_player_boss_subjects s
+ FROM selected_leaderboard_player_boss_subjects s
  LEFT JOIN game_players m ON m.realm_id = s.realm_id AND m.id = s.player_guid
- JOIN leaderboard_player_boss_benchmarks b ON b.tenant_id = s.tenant_id AND b.instance_name = s.instance_name AND b.difficulty_name = s.difficulty_name AND b.max_players = s.max_players AND b.encounter_name = s.encounter_name AND b.player_class = s.player_class AND b.player_spec = s.player_spec AND b.player_sub_spec = s.player_sub_spec AND b.metric = s.metric
+ JOIN selected_leaderboard_player_boss_benchmarks b ON b.tenant_id = s.tenant_id AND b.instance_name = s.instance_name AND b.difficulty_name = s.difficulty_name AND b.max_players = s.max_players AND b.encounter_name = s.encounter_name AND b.player_class = s.player_class AND b.player_spec = s.player_spec AND b.player_sub_spec = s.player_sub_spec AND b.metric = s.metric
  WHERE @subject_kind::text = 'player' AND @board_kind::text = 'boss'
  AND s.tenant_id = @tenant_id::uuid AND s.instance_name = @instance_name::text AND s.difficulty_name = @difficulty_name::text AND s.max_players = @max_players::smallint
  AND (@realm_filter::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR s.realm_id = @realm_filter::uuid)
@@ -19,7 +39,7 @@ SELECT s.realm_id, s.player_guid COLLATE "C" AS subject_id,
  AND (@player_spec::text = '' OR s.player_spec = @player_spec::text)
  AND (NOT @filter_sub_spec::boolean OR s.player_sub_spec = @player_sub_spec::text) AND s.metric = @metric::text
  AND (@show_unknowns::boolean OR s.player_spec <> 'Unknown' OR NOT EXISTS (
-  SELECT 1 FROM leaderboard_player_boss_benchmarks known
+  SELECT 1 FROM selected_leaderboard_player_boss_benchmarks known
   WHERE known.tenant_id = s.tenant_id AND known.instance_name = s.instance_name
    AND known.difficulty_name = s.difficulty_name AND known.max_players = s.max_players
    AND known.encounter_name = ANY(@bosses::text[]) AND known.metric = s.metric
@@ -30,9 +50,9 @@ SELECT s.realm_id, s.guild_id::text COLLATE "C" AS subject_id,
  ''::text COLLATE "C" AS player_class, ''::text COLLATE "C" AS player_spec, ''::text COLLATE "C" AS player_sub_spec,
  LEAST(100::double precision, 100.0 * b.best_duration_ms / s.fastest_duration_ms)::double precision AS peak, LEAST(100::double precision, 100::double precision * b.best_duration_ms * s.form_mean_inverse_ms) AS form, LEAST(100::double precision, 100::double precision * b.best_duration_ms * s.floor_mean_inverse_ms) AS floor,
  0::double precision AS renown, s.observation_count AS sample_count, s.computed_at
- FROM leaderboard_guild_boss_subjects s
+ FROM selected_leaderboard_guild_boss_subjects s
  LEFT JOIN guilds m ON m.realm_id = s.realm_id AND m.id = s.guild_id
- JOIN leaderboard_guild_boss_benchmarks b ON b.tenant_id = s.tenant_id AND b.instance_name = s.instance_name AND b.difficulty_name = s.difficulty_name AND b.max_players = s.max_players AND b.encounter_name = s.encounter_name
+ JOIN selected_leaderboard_guild_boss_benchmarks b ON b.tenant_id = s.tenant_id AND b.instance_name = s.instance_name AND b.difficulty_name = s.difficulty_name AND b.max_players = s.max_players AND b.encounter_name = s.encounter_name
  WHERE @subject_kind::text = 'guild' AND @board_kind::text = 'boss'
  AND s.tenant_id = @tenant_id::uuid AND s.instance_name = @instance_name::text AND s.difficulty_name = @difficulty_name::text AND s.max_players = @max_players::smallint
  AND (@realm_filter::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR s.realm_id = @realm_filter::uuid)
@@ -120,13 +140,18 @@ SELECT page.*, COALESCE((SELECT NULLIF(r.name,'') FROM wow_server_realms r WHERE
 FROM page ORDER BY score DESC, realm_id, subject_id, player_class, player_spec, player_sub_spec;
 
 -- name: ListLeaderboardV2Cohorts :many
+WITH selected_leaderboard_player_boss_benchmarks AS NOT MATERIALIZED (
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, best_metric, projection_version, algorithm_version, computed_at FROM leaderboard_player_boss_benchmarks WHERE COALESCE(@encounter_variants::jsonb ->> encounter_name, @encounter_variant::text) = ''
+ UNION ALL
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, best_metric, projection_version, algorithm_version, computed_at FROM leaderboard_variant_player_boss_benchmarks WHERE encounter_variant = COALESCE(@encounter_variants::jsonb ->> encounter_name, @encounter_variant::text)
+)
 SELECT DISTINCT b.player_class, b.player_spec, b.player_sub_spec, b.metric
-FROM leaderboard_player_boss_benchmarks b
+FROM selected_leaderboard_player_boss_benchmarks b
 WHERE b.tenant_id = @tenant_id::uuid AND b.instance_name = @instance_name::text
  AND b.difficulty_name = @difficulty_name::text AND b.max_players = @max_players::smallint
  AND b.encounter_name = ANY(@bosses::text[])
  AND (@show_unknowns::boolean OR b.player_spec <> 'Unknown' OR NOT EXISTS (
-  SELECT 1 FROM leaderboard_player_boss_benchmarks known
+  SELECT 1 FROM selected_leaderboard_player_boss_benchmarks known
   WHERE known.tenant_id = @tenant_id::uuid AND known.instance_name = @instance_name::text
    AND known.difficulty_name = @difficulty_name::text AND known.max_players = @max_players::smallint
    AND known.encounter_name = ANY(@bosses::text[]) AND known.metric = b.metric
@@ -137,7 +162,27 @@ ORDER BY b.player_class, b.player_spec, b.player_sub_spec, b.metric;
 -- name: ListLeaderboardV2PageBosses :many
 -- Only the returned score page is passed here, with aligned exact cohort arrays.
 -- Cross the bounded page with selection to retain missing bosses as zero peaks.
-WITH subjects AS (
+WITH selected_leaderboard_player_boss_subjects AS NOT MATERIALIZED (
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid, observation_count, raw_peak, raw_form, raw_floor, projection_version, algorithm_version, computed_at, peak_encounter_id, peak_duration_ms FROM leaderboard_player_boss_subjects WHERE COALESCE(@encounter_variants::jsonb ->> encounter_name, @encounter_variant::text) = ''
+ UNION ALL
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid, observation_count, raw_peak, raw_form, raw_floor, projection_version, algorithm_version, computed_at, peak_encounter_id, peak_duration_ms FROM leaderboard_variant_player_boss_subjects WHERE encounter_variant = COALESCE(@encounter_variants::jsonb ->> encounter_name, @encounter_variant::text)
+),
+selected_leaderboard_player_boss_benchmarks AS NOT MATERIALIZED (
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, best_metric, projection_version, algorithm_version, computed_at FROM leaderboard_player_boss_benchmarks WHERE COALESCE(@encounter_variants::jsonb ->> encounter_name, @encounter_variant::text) = ''
+ UNION ALL
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, player_class, player_spec, player_sub_spec, metric, best_metric, projection_version, algorithm_version, computed_at FROM leaderboard_variant_player_boss_benchmarks WHERE encounter_variant = COALESCE(@encounter_variants::jsonb ->> encounter_name, @encounter_variant::text)
+),
+selected_leaderboard_guild_boss_subjects AS NOT MATERIALIZED (
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id, observation_count, fastest_duration_ms, form_mean_inverse_ms, floor_mean_inverse_ms, projection_version, algorithm_version, computed_at FROM leaderboard_guild_boss_subjects WHERE COALESCE(@encounter_variants::jsonb ->> encounter_name, @encounter_variant::text) = ''
+ UNION ALL
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, realm_id, guild_id, observation_count, fastest_duration_ms, form_mean_inverse_ms, floor_mean_inverse_ms, projection_version, algorithm_version, computed_at FROM leaderboard_variant_guild_boss_subjects WHERE encounter_variant = COALESCE(@encounter_variants::jsonb ->> encounter_name, @encounter_variant::text)
+),
+selected_leaderboard_guild_boss_benchmarks AS NOT MATERIALIZED (
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, best_duration_ms, projection_version, algorithm_version, computed_at FROM leaderboard_guild_boss_benchmarks WHERE COALESCE(@encounter_variants::jsonb ->> encounter_name, @encounter_variant::text) = ''
+ UNION ALL
+ SELECT tenant_id, instance_name, difficulty_name, max_players, encounter_name, best_duration_ms, projection_version, algorithm_version, computed_at FROM leaderboard_variant_guild_boss_benchmarks WHERE encounter_variant = COALESCE(@encounter_variants::jsonb ->> encounter_name, @encounter_variant::text)
+),
+subjects AS (
  SELECT unnest(@realms::uuid[]) AS realm_id, unnest(@subjects::text[]) AS subject_id,
  unnest(@classes::text[]) AS player_class, unnest(@specs::text[]) AS player_spec,
  unnest(@sub_specs::text[]) AS player_sub_spec
@@ -155,11 +200,11 @@ SELECT p.realm_id::uuid AS realm_id, p.subject_id::text AS subject_id, p.player_
  -- The peak kill's log, only while it is still listed and valid; empty otherwise.
  COALESCE(NULLIF(pli.hashed_slug, ''), pli.id::text, '')::text AS peak_log
 FROM selected p
-LEFT JOIN leaderboard_player_boss_subjects s ON s.tenant_id= @tenant_id::uuid
+LEFT JOIN selected_leaderboard_player_boss_subjects s ON s.tenant_id= @tenant_id::uuid
  AND s.instance_name= @instance_name::text AND s.difficulty_name= @difficulty_name::text AND s.max_players= @max_players::smallint
  AND s.encounter_name=p.encounter_name AND s.realm_id=p.realm_id AND s.player_guid=p.subject_id
  AND s.player_class=p.player_class AND s.player_spec=p.player_spec AND s.player_sub_spec=p.player_sub_spec AND s.metric= @metric::text
-LEFT JOIN leaderboard_player_boss_benchmarks b ON b.tenant_id=s.tenant_id AND b.instance_name=s.instance_name
+LEFT JOIN selected_leaderboard_player_boss_benchmarks b ON b.tenant_id=s.tenant_id AND b.instance_name=s.instance_name
  AND b.difficulty_name=s.difficulty_name AND b.max_players=s.max_players AND b.encounter_name=s.encounter_name
  AND b.player_class=s.player_class AND b.player_spec=s.player_spec AND b.player_sub_spec=s.player_sub_spec AND b.metric=s.metric
 LEFT JOIN log_instance_encounters pe ON pe.id = s.peak_encounter_id
@@ -176,10 +221,10 @@ SELECT p.realm_id::uuid AS realm_id, p.subject_id::text AS subject_id, p.player_
  NULL::timestamptz AS peak_at,
  ''::text AS peak_log
 FROM selected p
-LEFT JOIN leaderboard_guild_boss_subjects s ON s.tenant_id= @tenant_id::uuid
+LEFT JOIN selected_leaderboard_guild_boss_subjects s ON s.tenant_id= @tenant_id::uuid
  AND s.instance_name= @instance_name::text AND s.difficulty_name= @difficulty_name::text AND s.max_players= @max_players::smallint
  AND s.encounter_name=p.encounter_name AND s.realm_id=p.realm_id AND s.guild_id=p.subject_id::uuid
-LEFT JOIN leaderboard_guild_boss_benchmarks b ON b.tenant_id=s.tenant_id AND b.instance_name=s.instance_name
+LEFT JOIN selected_leaderboard_guild_boss_benchmarks b ON b.tenant_id=s.tenant_id AND b.instance_name=s.instance_name
  AND b.difficulty_name=s.difficulty_name AND b.max_players=s.max_players AND b.encounter_name=s.encounter_name
 WHERE @subject_kind::text='guild'
 ORDER BY realm_id,subject_id,player_class,player_spec,player_sub_spec,encounter_name;

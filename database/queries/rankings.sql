@@ -302,6 +302,8 @@ JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NO
         WHEN cardinality(@encounter_names :: text[]) > 0 THEN edr.encounter_name = ANY(@encounter_names :: text[])
         ELSE true
     END
+    AND (NOT (COALESCE(@encounter_variants::jsonb, '{}'::jsonb) ? edr.encounter_name)
+         OR edr.encounter_variant = (COALESCE(@encounter_variants::jsonb, '{}'::jsonb) ->> edr.encounter_name))
     AND (COALESCE(cardinality(@realm_ids::uuid[]),0)=0 OR edr.realm_id=ANY(@realm_ids::uuid[]))
     AND CASE
         WHEN cardinality(@realm_names :: text[]) > 0 THEN edr.realm_name = ANY(@realm_names :: text[])
@@ -619,6 +621,8 @@ JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NO
         WHEN cardinality(@encounter_names :: text[]) > 0 THEN edr.encounter_name = ANY(@encounter_names :: text[])
         ELSE true
     END
+    AND (NOT (COALESCE(@encounter_variants::jsonb, '{}'::jsonb) ? edr.encounter_name)
+         OR edr.encounter_variant = (COALESCE(@encounter_variants::jsonb, '{}'::jsonb) ->> edr.encounter_name))
     AND (COALESCE(cardinality(@realm_ids::uuid[]),0)=0 OR edr.realm_id=ANY(@realm_ids::uuid[]))
     AND CASE
         WHEN cardinality(@realm_names :: text[]) > 0 THEN edr.realm_name = ANY(@realm_names :: text[])
@@ -897,7 +901,7 @@ WITH boss_insert AS (
     INSERT INTO encounter_dps_rankings (
         encounter_id, instance_id, encounter_name, instance_name,
         player_guid, player_name, player_class, player_spec, player_sub_spec, player_role, player_level,
-        talent_build_id, difficulty_name, max_players,
+        talent_build_id, difficulty_name, max_players, encounter_variant,
         realm_id, realm_name, guild_id, guild_name,
         damage_done, unranked_damage_done, duration_secs, dps, avg_ilvl,
         healing_done, absorbed_done, hps, player_deaths, alive_percentage,
@@ -906,7 +910,7 @@ WITH boss_insert AS (
     SELECT
         @encounter_id, @instance_id, @encounter_name, @instance_name,
         @player_guid, @player_name, @player_class, @player_spec, @player_sub_spec, @player_role, @player_level,
-        @talent_build_id, @difficulty_name, @max_players,
+        @talent_build_id, @difficulty_name, @max_players, sqlc.narg(encounter_variant)::text,
         @realm_id, @realm_name, @guild_id, @guild_name,
         @damage_done, @unranked_damage_done, @duration_secs, @dps, @avg_ilvl,
         @healing_done, @absorbed_done, @hps, @player_deaths, @alive_percentage,
@@ -925,6 +929,7 @@ WITH boss_insert AS (
         player_level = EXCLUDED.player_level,
         talent_build_id = EXCLUDED.talent_build_id,
         difficulty_name = EXCLUDED.difficulty_name,
+        encounter_variant = EXCLUDED.encounter_variant,
         max_players = EXCLUDED.max_players,
         realm_id = EXCLUDED.realm_id,
         realm_name = EXCLUDED.realm_name,
@@ -1025,9 +1030,15 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
     JOIN wow_server_realms wsr ON wsr.id = li.realm_id
     WHERE li.name = @instance_name
       AND lie.boss = true
+      AND (NOT (COALESCE(@encounter_variants::jsonb, '{}'::jsonb) ? lie.name)
+           OR lie.encounter_variant = (COALESCE(@encounter_variants::jsonb, '{}'::jsonb) ->> lie.name))
+      AND (COALESCE(cardinality(@encounter_names::text[]), 0) = 0 OR lie.name = ANY(@encounter_names::text[]))
+      AND (COALESCE(cardinality(@realm_names::text[]), 0) = 0 OR wsr.name = ANY(@realm_names::text[]))
+      AND (COALESCE(cardinality(@difficulty_names::text[]), 0) = 0
+           OR COALESCE(lie.difficulty, li.difficulty_name) = ANY(@difficulty_names::text[]))
       AND (NOT @filter_difficulty::boolean OR
            COALESCE(lie.difficulty, li.difficulty_name) = @difficulty_name::text)
-      AND (NOT @filter_max_players::boolean OR li.max_players = @max_players::int)
+      AND (NOT (@exact_cohort::boolean OR @filter_max_players::boolean) OR li.max_players = @max_players::int)
       AND lie.kill_type = 'clean'
       AND li.invalidated_at IS NULL
       AND lie.invalidated_at IS NULL

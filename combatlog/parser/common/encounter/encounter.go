@@ -34,7 +34,9 @@ const (
 type Encounter struct {
 	// Name is the identifier for this encounter.
 	Name string
-	Type types.EncounterType
+	// Variant is independent of difficulty and raid size. Empty means unclassified.
+	Variant string
+	Type    types.EncounterType
 
 	// Period identifies the start/end of combat
 	Combat Fight

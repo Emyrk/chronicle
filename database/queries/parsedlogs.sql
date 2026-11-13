@@ -110,9 +110,9 @@ RETURNING *
 
 -- name: InsertEncounter :one
 INSERT INTO
-  log_instance_encounters (id, instance_id, name, map_id, kill_type, remaining, boss, start_time, end_time, ranking_start_offset_ms, ranking_end_offset_ms, difficulty)
+  log_instance_encounters (id, instance_id, name, map_id, kill_type, remaining, boss, start_time, end_time, ranking_start_offset_ms, ranking_end_offset_ms, difficulty, encounter_variant)
 VALUES
-  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 RETURNING *
 ;
 

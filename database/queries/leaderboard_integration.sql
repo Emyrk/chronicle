@@ -11,7 +11,9 @@ WITH keys AS (
  JOIN wow_server_realms r ON r.id=rr.realm_id JOIN wow_servers s ON s.id=r.server_id
  WHERE (rr.run_id=ANY(@ids::uuid[]) OR rr.representative_instance_id=ANY(@ids::uuid[])) AND s.tenant_id IS NOT NULL
  UNION SELECT tenant_id,run_id FROM leaderboard_player_observations WHERE run_id=ANY(@ids::uuid[]) OR source_instance_id=ANY(@ids::uuid[])
+ UNION SELECT tenant_id,run_id FROM leaderboard_variant_player_observations WHERE run_id=ANY(@ids::uuid[]) OR source_instance_id=ANY(@ids::uuid[])
  UNION SELECT tenant_id,run_id FROM leaderboard_guild_boss_observations WHERE run_id=ANY(@ids::uuid[]) OR source_instance_id=ANY(@ids::uuid[])
+ UNION SELECT tenant_id,run_id FROM leaderboard_variant_guild_boss_observations WHERE run_id=ANY(@ids::uuid[]) OR source_instance_id=ANY(@ids::uuid[])
  UNION SELECT tenant_id,run_id FROM leaderboard_guild_clear_observations WHERE run_id=ANY(@ids::uuid[]) OR source_instance_id=ANY(@ids::uuid[])
  UNION SELECT tenant_id,run_id FROM leaderboard_player_renown_facts WHERE run_id=ANY(@ids::uuid[]) OR source_instance_id=ANY(@ids::uuid[])
  UNION SELECT tenant_id,run_id FROM leaderboard_guild_renown_facts WHERE run_id=ANY(@ids::uuid[]) OR source_instance_id=ANY(@ids::uuid[])

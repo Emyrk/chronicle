@@ -49,6 +49,7 @@ export function RatingBoards({
   period,
   bosses,
   title: titleOverride,
+  titleBadge,
   toolbar,
   live,
 }: {
@@ -61,6 +62,8 @@ export function RatingBoards({
   /** A combined boss set: only these bosses get side boards. */
   bosses?: readonly string[]
   title?: string
+  /** Shown after the title, e.g. the encounter variant mark. */
+  titleBadge?: ReactNode
   /** Metric switch and period, shown in the board's (or table's) header. */
   toolbar?: ReactNode
   live?: RatingLiveData
@@ -123,6 +126,7 @@ export function RatingBoards({
           key={`${boardKey}|${view}|${period}`}
           scope={scope}
           title={title}
+          titleBadge={titleBadge}
           encounterCount={scope.boss ? 1 : bosses?.length}
           period={period}
           view={view}
@@ -141,6 +145,7 @@ export function RatingBoards({
           boards={readyBoards.map((b) => ({ metric: b.metric, board: b.center.data }))}
           theme={theme}
           title={title}
+          titleBadge={titleBadge}
           onSelect={onView}
           onShowAll={showTable}
           search={searchBox}
@@ -216,7 +221,7 @@ export function BoardSkeleton() {
  * Overview / Peak / Ranked Mastery / Renown, as a compact segmented switch that lives in the board's
  * header: a setting of the board, not another row of page tabs. The chosen one takes its metric color.
  */
-export function MetricTabs({ view, onView, className }: { view: RatingView; onView: (view: RatingView) => void; className?: string }) {
+export function MetricTabs({ view, onView, className, disabledViews }: { view: RatingView; onView: (view: RatingView) => void; className?: string; disabledViews?: Partial<Record<RatingView, string>> }) {
   return (
     <nav className={cn("relative flex max-w-full overflow-x-auto rounded-md border bg-background/60 p-0.5", className)} aria-label="Rating metric">
       {VIEW_ORDER.map((m) => {
@@ -227,7 +232,8 @@ export function MetricTabs({ view, onView, className }: { view: RatingView; onVi
             key={m}
             type="button"
             aria-pressed={active}
-            title={t.question}
+            title={disabledViews?.[m] ?? t.question}
+            disabled={!!disabledViews?.[m]}
             onClick={() => onView(m)}
             style={
               active
@@ -239,7 +245,7 @@ export function MetricTabs({ view, onView, className }: { view: RatingView; onVi
                 : undefined
             }
             className={cn(
-              "flex shrink-0 cursor-pointer items-center gap-1.5 rounded px-2 py-1.5 text-xs font-medium transition-colors sm:px-2.5",
+              "flex shrink-0 cursor-pointer items-center gap-1.5 rounded px-2 py-1.5 text-xs font-medium transition-colors sm:px-2.5 disabled:cursor-not-allowed disabled:opacity-40",
               !active && "text-muted-foreground hover:text-foreground",
             )}
           >
@@ -283,6 +289,7 @@ function CenterFrame({
   board,
   theme,
   title,
+  titleBadge,
   onShowAll,
   search,
   toolbar,
@@ -291,6 +298,7 @@ function CenterFrame({
   board: RatingLiveBoard
   theme: MetricTheme
   title: string
+  titleBadge?: ReactNode
   onShowAll: () => void
   search: ReactNode
   toolbar?: ReactNode
@@ -309,7 +317,7 @@ function CenterFrame({
             {board.kind === "raid" ? <theme.icon className="size-5 text-[color:var(--metric)]" /> : <ScopeMark scope={board.scope} size="sm" />}
           </Emblem>
           <div className="min-w-0">
-            <h2 className="truncate font-wow text-xl leading-tight">{title}</h2>
+            <div className="flex min-w-0 items-center gap-2"><h2 className="truncate font-wow text-xl leading-tight">{title}</h2>{titleBadge}</div>
             <span className="block truncate text-xs text-muted-foreground">{board.subtitle}</span>
           </div>
         </div>
@@ -334,6 +342,7 @@ function OverviewCenter({
   boards,
   theme,
   title,
+  titleBadge,
   onSelect,
   onShowAll,
   search,
@@ -343,6 +352,7 @@ function OverviewCenter({
   boards: { metric: RatingMetric; board: RatingLiveBoard }[]
   theme: MetricTheme
   title: string
+  titleBadge?: ReactNode
   onSelect: (metric: RatingMetric) => void
   onShowAll: () => void
   search: ReactNode
@@ -350,7 +360,7 @@ function OverviewCenter({
   ranksKnown?: boolean
 }) {
   return (
-    <CenterFrame board={boards[0].board} theme={theme} title={title} onShowAll={onShowAll} search={search} toolbar={toolbar}>
+    <CenterFrame board={boards[0].board} theme={theme} title={title} titleBadge={titleBadge} onShowAll={onShowAll} search={search} toolbar={toolbar}>
       <div className="relative grid border-t max-lg:divide-y lg:grid-cols-3 lg:divide-x">
         {boards.map(({ metric, board }) => {
           const t = METRIC_THEMES[metric]

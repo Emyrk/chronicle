@@ -98,6 +98,7 @@ export function transformToInstance(
       enemies,
       remaining: enc.remaining as string[] | undefined,
       difficulty: enc.difficulty,
+      encounter_variant: enc.encounter_variant,
       invalidatedAt: enc.invalidated_at,
       invalidReason: enc.invalid_reason,
       phases: normalizeArray(enc.phases).map((phase) => ({

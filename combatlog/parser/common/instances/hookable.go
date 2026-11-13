@@ -68,6 +68,7 @@ type Hookable struct {
 	realm                *realm.Info       // mostly static
 	versions             map[string]string // addon/dependency versions from HEADER
 	recorderGUID         *guid.GUID        // recording player GUID from HEADER
+	encounterVariant     func(encounter.Encounter) string
 	preprocessors        []instancehook.Preprocessor
 	hooks                []instancehook.Hook // TODO: unroll?
 	engagementTracker    *rankings.EngagementTracker
@@ -108,13 +109,14 @@ type Hookable struct {
 }
 
 type InstanceParams struct {
-	Name          string
-	Category      InstanceCategory
-	MatchesZone   func(z zone.Zone) bool
-	Idf           *identifier.Identifier
-	Rankings      *rankings.Rankings
-	Preprocessors []instancehook.Preprocessor
-	ExtraHooks    []instancehook.Hook
+	Name             string
+	Category         InstanceCategory
+	MatchesZone      func(z zone.Zone) bool
+	Idf              *identifier.Identifier
+	Rankings         *rankings.Rankings
+	Preprocessors    []instancehook.Preprocessor
+	ExtraHooks       []instancehook.Hook
+	EncounterVariant func(encounter.Encounter) string
 }
 
 func (f *CommonFactory) NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z zone.Zone, flavor database.WoWFlavor) *Hookable {
@@ -134,13 +136,18 @@ func (f *CommonFactory) NewHookable(ctx context.Context, logger *slog.Logger, db
 	if f.Preprocessors != nil {
 		preprocessors = f.Preprocessors()
 	}
+	var variant func(encounter.Encounter) string
+	if f.EncounterVariant != nil {
+		variant = func(enc encounter.Encounter) string { return f.EncounterVariant(enc, flavor) }
+	}
 	return NewHookable(ctx, logger, db, z, InstanceParams{
-		Name:          name,
-		Category:      f.Category,
-		MatchesZone:   f.MatchZone,
-		Idf:           f.Hostiles(flavor),
-		Rankings:      r,
-		Preprocessors: preprocessors,
+		Name:             name,
+		EncounterVariant: variant,
+		Category:         f.Category,
+		MatchesZone:      f.MatchZone,
+		Idf:              f.Hostiles(flavor),
+		Rankings:         r,
+		Preprocessors:    preprocessors,
 	})
 }
 
@@ -257,6 +264,7 @@ func NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z z
 		logger:                     logger,
 		units:                      db,
 		preprocessors:              ip.Preprocessors,
+		encounterVariant:           ip.EncounterVariant,
 		CurrentZone:                z,
 		activeMapID:                z.MapID,
 		MatchesZoneF:               ip.MatchesZone,
@@ -1300,6 +1308,9 @@ func (h *Hookable) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 			return nil, err
 		}
 		enc.RankingWindow = fight.RankingWindow
+		if h.encounterVariant != nil {
+			enc.Variant = h.encounterVariant(enc)
+		}
 		encounters = append(encounters, enc)
 	}
 

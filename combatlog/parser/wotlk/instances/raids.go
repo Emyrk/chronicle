@@ -1002,6 +1002,7 @@ func UlduarRankingEncounterSets(flavor database.WoWFlavor) []instances.RankingEn
 }
 
 var UlduarFactory = &instances.CommonFactory{
+	EncounterVariant:     ulduarEncounterVariant,
 	Name:                 "Ulduar",
 	Category:             instances.InstanceCategoryRaid,
 	ZoneNames:            []string{"ulduar"},

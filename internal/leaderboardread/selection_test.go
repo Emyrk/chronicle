@@ -117,3 +117,58 @@ func TestRenownOptionalBossWithEmptyDefault(t *testing.T) {
 	_, err = Select(rows, r)
 	require.Error(t, err)
 }
+
+func TestEncounterVariantSelectionAndCursor(t *testing.T) {
+	t.Parallel()
+	rows := []database.ResolveLeaderboardConfigurationRow{{Kind: "instance", InstanceName: "Ulduar"}, {Kind: "boss", InstanceName: "Ulduar", EncounterName: "Hodir"}, {Kind: "boss", InstanceName: "Ulduar", EncounterName: "Other"}}
+	r := Request{Instance: "Ulduar", Subject: "player", Kind: "boss", Score: "peak", Metric: "dps", Boss: "Hodir"}
+	selection, err := Select(rows, r)
+	require.NoError(t, err)
+	tenant := uuid.New()
+	combined := Fingerprint(tenant, r, selection)
+	r.EncounterVariant = "normal"
+	exact, err := Select(rows, r)
+	require.NoError(t, err)
+	require.Equal(t, selection, exact)
+	normal := Fingerprint(tenant, r, exact)
+	require.NotEqual(t, combined, normal)
+	r.EncounterVariant = "hard"
+	require.NotEqual(t, normal, Fingerprint(tenant, r, exact))
+	_, err = DecodeCursor(EncodeCursor(Cursor{Fingerprint: normal}), Fingerprint(tenant, r, exact))
+	require.Error(t, err)
+	r.EncounterVariant = "heroic"
+	_, err = Select(rows, r)
+	require.ErrorContains(t, err, "encounter_variant")
+	r.EncounterVariant = "hard"
+	r.Boss = ""
+	r.Bosses = []string{"Hodir", "Other"}
+	_, err = Select(rows, r)
+	require.ErrorContains(t, err, "single boss")
+	r.EncounterVariant = ""
+	r.EncounterVariants = map[string]string{"Hodir": "hard"}
+	mixed, err := Select(rows, r)
+	require.NoError(t, err)
+	require.Equal(t, []string{"Hodir", "Other"}, mixed.Bosses)
+	require.EqualValues(t, 2, mixed.Denominator)
+	hard := Fingerprint(tenant, r, mixed)
+	r.EncounterVariants = map[string]string{"Hodir": "normal"}
+	require.NotEqual(t, hard, Fingerprint(tenant, r, mixed))
+	r.Kind, r.Score, r.Metric = "renown", "renown", ""
+	renown, err := Select(rows, r)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, renown.Denominator)
+	require.Equal(t, mixed.Awards, renown.Awards, "variant selection does not create a Renown award scale")
+	r.EncounterVariants = map[string]string{"Other": "hard"}
+	_, err = Select(rows, r)
+	require.ErrorContains(t, err, "not supported")
+	r.EncounterVariants = map[string]string{"Unselected": "hard"}
+	_, err = Select(rows, r)
+	require.ErrorContains(t, err, "unselected")
+	r.EncounterVariants = map[string]string{"Hodir": "combined"}
+	_, err = Select(rows, r)
+	require.ErrorContains(t, err, "not supported")
+	r.EncounterVariants = map[string]string{"Hodir": "hard"}
+	r.Kind, r.Score, r.Subject = "clear", "peak", "guild"
+	_, err = Select(rows, r)
+	require.ErrorContains(t, err, "boss or Renown")
+}

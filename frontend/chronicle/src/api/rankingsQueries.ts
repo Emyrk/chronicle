@@ -1,3 +1,4 @@
+import type { EncounterVariants } from "@/components/EncounterDifficulty/encounterVariant";
 import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
 import type {
   RankingsInstanceSummary,
@@ -172,6 +173,26 @@ export function useRankingsFilters(instanceName?: string) {
   });
 }
 
+export interface RankingsEncounterScope {
+  encounter_names?: string;
+  encounter_variants?: EncounterVariants;
+  difficulty_names?: string;
+  realm_names?: string;
+  max_players?: number;
+  exact_cohort?: boolean;
+}
+
+function appendEncounterScope(search: URLSearchParams, scope?: RankingsEncounterScope) {
+  if (!scope) return;
+  if (scope.encounter_names) search.set("encounter_names", scope.encounter_names);
+  if (scope.realm_names) search.set("realm_names", scope.realm_names);
+  if (scope.difficulty_names !== undefined) search.set("difficulty_names", scope.difficulty_names);
+  if (scope.max_players !== undefined) search.set("max_players", String(scope.max_players));
+  if (scope.exact_cohort) search.set("exact_cohort", "true");
+  const variants = Object.entries(scope.encounter_variants ?? {}).sort(([a], [b]) => a.localeCompare(b));
+  if (variants.length) search.set("encounter_variants", JSON.stringify(Object.fromEntries(variants)));
+}
+
 interface RankingsQueryBehavior {
   retry?: boolean | number;
 }
@@ -179,6 +200,7 @@ interface RankingsQueryBehavior {
 export function useRankingsLeaderboard(params: {
   instance_names?: string;
   encounter_names?: string;
+  encounter_variants?: EncounterVariants;
   encounter_set?: string;
   difficulty_names?: string;
   realm_names?: string;
@@ -211,10 +233,11 @@ export function useRankingsLeaderboard(params: {
   if (params.exact_cohort) searchParams.set("exact_cohort", "true");
   if (params.limit != null) searchParams.set("limit", String(params.limit));
   if (params.offset != null) searchParams.set("offset", String(params.offset));
+  appendEncounterScope(searchParams, params);
   const qs = searchParams.toString();
 
   return useQuery({
-    queryKey: ["rankings", "leaderboard", params],
+    queryKey: ["rankings", "leaderboard", qs],
     queryFn: () =>
       fetchJSON<RankingsLeaderboardResponse>(`/api/v1/rankings/leaderboard${qs ? `?${qs}` : ""}`, 15_000),
     retry: behavior?.retry,
@@ -226,6 +249,7 @@ export function useRankingsLeaderboard(params: {
 export function useRankingsStats(params: {
   instance_names?: string;
   encounter_names?: string;
+  encounter_variants?: EncounterVariants;
   encounter_set?: string;
   difficulty_names?: string;
   realm_names?: string;
@@ -248,10 +272,11 @@ export function useRankingsStats(params: {
   if (params.group_by_class) searchParams.set("group_by_class", "true");
   if (params.max_players !== undefined) searchParams.set("max_players", String(params.max_players));
   if (params.exact_cohort) searchParams.set("exact_cohort", "true");
+  appendEncounterScope(searchParams, params);
   const qs = searchParams.toString();
 
   return useQuery({
-    queryKey: ["rankings", "stats", params],
+    queryKey: ["rankings", "stats", qs],
     queryFn: () =>
       fetchJSON<RankingsBoxPlotStats[]>(`/api/v1/rankings/stats${qs ? `?${qs}` : ""}`, 15_000),
     retry: behavior?.retry,
@@ -268,13 +293,14 @@ export function useRankingsRealms() {
   });
 }
 
-export function useRankingsKillTimes(instanceName: string, period?: string, enabled = true) {
+export function useRankingsKillTimes(instanceName: string, period?: string, enabled = true, opts?: RankingsEncounterScope) {
   const searchParams = new URLSearchParams();
   searchParams.set("instance_name", instanceName);
   if (period) searchParams.set("period", period);
 
+  appendEncounterScope(searchParams, opts);
   return useQuery({
-    queryKey: ["rankings", "kill-times", instanceName, period],
+    queryKey: ["rankings", "kill-times", searchParams.toString()],
     queryFn: () =>
       fetchJSON<RankingsKillTimeStats[]>(`/api/v1/rankings/kill-times?${searchParams.toString()}`, 15_000),
     staleTime: RANKINGS_STALE_TIME,
@@ -300,7 +326,7 @@ export function useRankingsClearTimes(instanceName: string, period?: string, ena
 export function useRankingsSuccessRates(
   instanceName: string,
   period?: string,
-  opts?: { difficulty_names?: string; max_players?: number; exact_cohort?: boolean },
+  opts?: RankingsEncounterScope,
   enabled = true,
 ) {
   const searchParams = new URLSearchParams();
@@ -310,15 +336,17 @@ export function useRankingsSuccessRates(
   if (opts?.max_players !== undefined) searchParams.set("max_players", String(opts.max_players));
   if (opts?.exact_cohort) searchParams.set("exact_cohort", "true");
 
+  appendEncounterScope(searchParams, opts);
   return useQuery({
-    queryKey: ["rankings", "success-rates", instanceName, period, opts],
+    queryKey: ["rankings", "success-rates", searchParams.toString()],
     queryFn: () =>
       fetchJSON<RankingsSuccessRate[]>(
         `/api/v1/rankings/success-rates?${searchParams.toString()}`,
         15_000,
       ),
     staleTime: RANKINGS_STALE_TIME,
-    enabled: enabled && !!instanceName,
+    // Exact classifications are only available for successful kills, not attempts.
+    enabled: enabled && !!instanceName && !Object.keys(opts?.encounter_variants ?? {}).length,
   });
 }
 export function useRankingsKillTimeLeaderboard(params: {

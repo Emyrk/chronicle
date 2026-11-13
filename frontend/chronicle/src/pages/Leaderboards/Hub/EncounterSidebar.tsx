@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import { Fragment, type ReactNode } from "react"
 import { CheckCircle, PanelLeftClose } from "lucide-react"
 import { bossEntity, entityAttributes } from "@/components/EntityMenu/entity"
 import { Button } from "@/components/ui/button"
@@ -32,6 +32,12 @@ const BOSS_LABELS: EncounterSidebarLabels = {
   noun: "encounters",
 }
 
+/** Optional presentation slots; selection semantics remain owned by the caller. */
+export interface EncounterSidebarExtras {
+  actions?: ReactNode
+  afterBoss?: (name: string, selected: boolean) => ReactNode
+}
+
 export function EncounterSidebar({
   instanceName,
   bosses,
@@ -44,7 +50,9 @@ export function EncounterSidebar({
   labels: customLabels,
   details,
   entity,
+  extras,
 }: {
+  extras?: EncounterSidebarExtras
   instanceName: string
   bosses: readonly string[]
   preset?: readonly string[]
@@ -81,7 +89,7 @@ export function EncounterSidebar({
         )}
       </div>
 
-      <div className="mt-1.5 flex items-center gap-2">
+      <div className={cn("mt-1.5 flex items-center gap-2", extras?.actions && "flex-wrap")}>
         <Button
           variant="outline"
           size="sm"
@@ -92,6 +100,7 @@ export function EncounterSidebar({
         >
           {labels.all}
         </Button>
+        {extras?.actions}
         <span className="text-[11px] text-muted-foreground">
           {chosen.size} of {preset.length} selected
         </span>
@@ -100,13 +109,19 @@ export function EncounterSidebar({
       <div className="mt-3 space-y-4">
         <Section label={labels.required}>
           {required.map((name) => (
-            <Row key={name} attributes={rowEntity(name)} name={name} detail={details?.get(name)} selected={chosen.has(name)} onClick={(combine) => pick(name, combine)} />
+            <Fragment key={name}>
+              <Row attributes={rowEntity(name)} name={name} detail={details?.get(name)} selected={chosen.has(name)} onClick={(combine) => pick(name, combine)} />
+              {extras?.afterBoss?.(name, chosen.has(name))}
+            </Fragment>
           ))}
         </Section>
         {extra.length > 0 && (
           <Section label={labels.optional}>
             {extra.map((name) => (
-              <Row key={name} attributes={rowEntity(name)} name={name} detail={details?.get(name)} selected={chosen.has(name)} subdued onClick={(combine) => pick(name, combine)} />
+              <Fragment key={name}>
+                <Row attributes={rowEntity(name)} name={name} detail={details?.get(name)} selected={chosen.has(name)} subdued onClick={(combine) => pick(name, combine)} />
+                {extras?.afterBoss?.(name, chosen.has(name))}
+              </Fragment>
             ))}
           </Section>
         )}

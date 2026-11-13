@@ -1,10 +1,12 @@
 -- Compact current-known membership for DPS/HPS parse cohorts.
 
 -- name: DeleteParseScoreMembershipsByLogGroup :exec
-DELETE FROM parse_score_memberships WHERE log_group_id = @log_group_id;
+WITH variants AS (DELETE FROM parse_variant_memberships variant WHERE variant.log_group_id = @log_group_id)
+DELETE FROM parse_score_memberships membership WHERE membership.log_group_id = @log_group_id;
 
 -- name: DeleteParseScoreMembershipsByInstance :exec
-DELETE FROM parse_score_memberships WHERE instance_id = @instance_id;
+WITH variants AS (DELETE FROM parse_variant_memberships variant WHERE variant.instance_id = @instance_id)
+DELETE FROM parse_score_memberships membership WHERE membership.instance_id = @instance_id;
 
 -- name: RefreshParseScoreMembershipsForLogGroup :one
 WITH affected_runs AS MATERIALIZED (
@@ -99,6 +101,80 @@ deleted AS (
             AND member.player_guid = membership.player_guid
             AND member.difficulty_name = membership.difficulty_name
             AND member.max_players = membership.max_players
+      )
+    RETURNING 1
+),
+variant_members AS MATERIALIZED (
+    SELECT DISTINCT ON (representative.run_id, ranking.encounter_name, ranking.player_guid, ranking.difficulty_name, ranking.max_players, ranking.encounter_variant)
+        COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid) AS tenant_id,
+        representative.run_id,
+        ranking.encounter_name,
+        ranking.player_guid,
+        ranking.instance_id,
+        instance.log_group_id,
+        ranking.difficulty_name,
+        ranking.max_players, ranking.encounter_variant,
+        ranking.player_class,
+        ranking.player_spec,
+        ranking.player_sub_spec,
+        ranking.killed_at,
+        ranking.dps,
+        ranking.hps
+    FROM representative_instances representative
+    JOIN log_instances_resolved instance ON instance.id = representative.id
+    JOIN encounter_dps_rankings_resolved ranking ON ranking.instance_id = representative.id
+    JOIN wow_server_realms realm ON realm.id = instance.realm_id
+    JOIN wow_servers server ON server.id = realm.server_id
+    WHERE ranking.encounter_id IS NOT NULL
+      AND ranking.encounter_variant IS NOT NULL
+      AND (ranking.dps > 0 OR ranking.hps > 0)
+      AND ranking.duration_secs > 0
+      AND lower(btrim(ranking.player_class)) NOT IN ('', 'unknown')
+    ORDER BY representative.run_id, ranking.encounter_name, ranking.player_guid, ranking.difficulty_name, ranking.max_players, ranking.encounter_variant,
+             ranking.dps DESC, ranking.hps DESC
+),
+variant_upserted AS (
+    INSERT INTO parse_variant_memberships (
+        tenant_id, policy_version, query_version, run_id, encounter_name, player_guid,
+        instance_id, log_group_id, difficulty_name, max_players, encounter_variant,
+        player_class, player_spec, player_sub_spec, killed_at, dps, hps
+    )
+    SELECT
+        member.tenant_id, @policy_version, @query_version, member.run_id,
+        member.encounter_name, member.player_guid, member.instance_id,
+        member.log_group_id, member.difficulty_name,
+        member.max_players, member.encounter_variant, member.player_class, member.player_spec,
+        member.player_sub_spec, member.killed_at, member.dps, member.hps
+    FROM variant_members member
+    ON CONFLICT (tenant_id, policy_version, query_version, run_id, encounter_name, player_guid, difficulty_name, max_players, encounter_variant)
+    DO UPDATE SET
+        instance_id = EXCLUDED.instance_id,
+        log_group_id = EXCLUDED.log_group_id,
+        difficulty_name = EXCLUDED.difficulty_name,
+        max_players = EXCLUDED.max_players,
+        player_class = EXCLUDED.player_class,
+        player_spec = EXCLUDED.player_spec,
+        player_sub_spec = EXCLUDED.player_sub_spec,
+        killed_at = EXCLUDED.killed_at,
+        dps = EXCLUDED.dps,
+        hps = EXCLUDED.hps
+    RETURNING 1
+),
+variant_deleted AS (
+    DELETE FROM parse_variant_memberships membership
+    WHERE membership.policy_version = @policy_version
+      AND membership.query_version = @query_version
+      AND membership.run_id IN (SELECT run_id FROM affected_runs)
+      AND NOT EXISTS (
+          SELECT 1
+          FROM variant_members member
+          WHERE member.tenant_id = membership.tenant_id
+            AND member.run_id = membership.run_id
+            AND member.encounter_name = membership.encounter_name
+            AND member.player_guid = membership.player_guid
+            AND member.difficulty_name = membership.difficulty_name
+            AND member.max_players = membership.max_players
+            AND member.encounter_variant = membership.encounter_variant
       )
     RETURNING 1
 )

@@ -72,6 +72,8 @@ export interface Encounter {
   enemies?: EnemyUnit[];
   remaining?: string[]; // GUIDs of enemies that did not die
   difficulty: string;
+  /** Proven encounter classification, independent of raid difficulty and size. */
+  encounter_variant?: string;
   invalidatedAt?: string;
   invalidReason?: string;
   /** Optional phases within this encounter (sorted by order). */

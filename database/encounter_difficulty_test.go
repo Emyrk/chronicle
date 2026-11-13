@@ -24,7 +24,7 @@ func difficultyQuery(t *testing.T, file, name string) string {
 	_, query, ok = strings.Cut(query, "\n")
 	require.True(t, ok)
 	query, _, _ = strings.Cut(query, "-- name:")
-	return query
+	return strings.ReplaceAll(query, "sqlc.narg(encounter_variant)", "@encounter_variant")
 }
 
 func TestEncounterDifficultySQL(t *testing.T) {
@@ -85,6 +85,8 @@ func TestEncounterDifficultySQL(t *testing.T) {
 	rankings, err := pgx.CollectRows(rankingRows, pgx.RowToMap)
 	require.NoError(t, err)
 	require.Len(t, rankings, 2)
+	require.Nil(t, rankings[0]["encounter_variant"], "legacy variants must not be backfilled")
+	require.Nil(t, rankings[1]["encounter_variant"])
 	require.Equal(t, "heroic", rankings[0]["difficulty_name"])
 	require.Equal(t, "", rankings[1]["difficulty_name"])
 	require.EqualValues(t, 25, rankings[0]["max_players"])
@@ -106,7 +108,7 @@ func TestEncounterDifficultySQL(t *testing.T) {
 		"max_players": int16(25), "realm_id": uuid.MustParse("00000000-0000-0000-0000-000000000001"),
 		"realm_name": "Test", "guild_id": nil, "guild_name": "", "damage_done": int64(100),
 		"unranked_damage_done": int64(0), "duration_secs": float64(60), "dps": float64(1), "avg_ilvl": nil,
-		"healing_done": int64(0), "absorbed_done": int64(0), "hps": float64(0), "player_deaths": nil,
+		"healing_done": int64(120), "absorbed_done": int64(0), "hps": float64(2), "encounter_variant": "hard", "player_deaths": nil,
 		"alive_percentage": nil, "log_hashed_slug": "", "killed_at": time.Date(2026, 1, 1, 0, 1, 0, 0, time.UTC),
 	}
 	for _, tc := range []struct{ id, difficulty string }{
@@ -127,6 +129,9 @@ func TestEncounterDifficultySQL(t *testing.T) {
 	for _, row := range allRankings {
 		if row["player_guid"] == "variant-player" {
 			variants = append(variants, row["difficulty_name"].(string))
+			require.Equal(t, "hard", row["encounter_variant"])
+			require.EqualValues(t, 1, row["dps"])
+			require.EqualValues(t, 2, row["hps"])
 		}
 	}
 	require.ElementsMatch(t, []string{"", "heroic"}, variants)
@@ -140,4 +145,29 @@ func TestEncounterDifficultySQL(t *testing.T) {
 	require.Zero(t, updated)
 	assertSet("00000000-0000-0000-0000-000000000001", []string{"", "heroic", "mythic"})
 	assertSet("00000000-0000-0000-0000-000000000003", []string{"", "mythic"})
+}
+
+func TestEncounterVariantPersistenceSQL(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitLong)
+	conn, err := pgx.Connect(ctx, dbtestutil.NewConnectionURL(t))
+	require.NoError(t, err)
+	defer func() { require.NoError(t, conn.Close(ctx)) }()
+	tx, err := conn.Begin(ctx)
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(ctx) }()
+	fixture, err := os.ReadFile("testdata/encounter_difficulty.sql")
+	require.NoError(t, err)
+	_, err = tx.Exec(ctx, string(fixture))
+	require.NoError(t, err)
+	for _, variant := range []any{nil, "normal", "hard"} {
+		rows, err := tx.Query(ctx, difficultyQuery(t, "parsedlogs", "InsertEncounter"),
+			uuid.New(), uuid.MustParse("00000000-0000-0000-0000-000000000001"), "Hodir", 603, "clean", []uint64{}, true,
+			time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 1, 1, 0, 3, 0, 0, time.UTC), nil, nil, "", variant)
+		require.NoError(t, err)
+		stored, err := pgx.CollectOneRow(rows, pgx.RowToMap)
+		require.NoError(t, err)
+		require.Equal(t, variant, stored["encounter_variant"])
+		require.Equal(t, "", stored["difficulty"])
+	}
 }

@@ -1,3 +1,4 @@
+import { EncounterVariantMark } from "@/components/EncounterDifficulty/EncounterVariant";
 import { useQuery } from "@tanstack/react-query";
 import { useState, useMemo, useEffect, useCallback, useRef, useDeferredValue, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
@@ -827,7 +828,7 @@ function EncounterSidebar({
                 <span className="truncate flex-1">
                   {encounter.boss ? encounter.name : <span className="italic">{encounter.name}</span>}
                 </span>
-                {encounter.boss && <EncounterDifficultyMark difficulty={encounter.difficulty} />}
+                {encounter.boss && <><EncounterDifficultyMark difficulty={encounter.difficulty} /><EncounterVariantMark variant={encounter.encounter_variant} /></>}
                 <span className={cn("text-xs shrink-0 font-mono", isSelected ? "opacity-70" : "text-muted-foreground")}>
                   {formatEncounterTime(encounter)}
                 </span>
@@ -898,6 +899,7 @@ function EncounterSidebar({
                 )}
                 <span className={cn("truncate flex-1", isSelected && "font-semibold")}>{encounter.name}</span>
                 <EncounterDifficultyMark difficulty={encounter.difficulty} />
+                <EncounterVariantMark variant={encounter.encounter_variant} />
                 <span className={cn("text-xs shrink-0 font-mono", isSelected ? "opacity-70" : "text-muted-foreground")}>
                   {formatEncounterTime(encounter)}
                 </span>

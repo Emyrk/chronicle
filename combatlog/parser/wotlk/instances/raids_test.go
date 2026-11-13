@@ -332,6 +332,7 @@ func TestUlduarHodirScriptedDefeat(t *testing.T) {
 	require.True(t, got.Boss)
 	require.Equal(t, encounter.KillTypeClean, got.KillType)
 	require.Equal(t, 10*time.Second+57*time.Millisecond, got.Combat.End.Sub(got.Combat.Start))
+	require.Equal(t, "hard", got.Variant)
 }
 
 func TestUlduarHodirIdentities(t *testing.T) {

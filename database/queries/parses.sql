@@ -26,6 +26,7 @@ SELECT
     edr.player_role,
     edr.difficulty_name,
     edr.max_players,
+    edr.encounter_variant,
     edr.killed_at,
     edr.created_at,
     edr.damage_done,
@@ -39,4 +40,5 @@ JOIN log_instances_resolved li ON li.id = edr.instance_id
 JOIN wow_log_groups log_group ON log_group.id = li.log_group_id AND NOT log_group.unlisted
 WHERE edr.instance_id = @instance_id
   AND edr.encounter_id IS NOT NULL  -- boss kills only
-ORDER BY edr.encounter_name, edr.dps DESC;
+-- Keep the same winning source for persisted and on-demand variant parses when DPS ties.
+ORDER BY edr.encounter_name, edr.dps DESC, edr.id ASC;

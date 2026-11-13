@@ -70,6 +70,9 @@ type RankingEncounterSet struct {
 }
 
 type CommonFactory struct {
+	// EncounterVariant classifies finalized outcomes; empty preserves unknown history.
+	EncounterVariant func(encounter.Encounter, database.WoWFlavor) string
+
 	Name      string
 	Category  InstanceCategory
 	MultiZone bool

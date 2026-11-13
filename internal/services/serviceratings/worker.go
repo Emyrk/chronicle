@@ -20,20 +20,24 @@ const (
 	PublicationTimeout = 30 * time.Second
 	DispatchInterval   = 30 * time.Second
 	DispatchEnabled    = true // Source integration is enabled; no runtime flag or implicit backfill.
-	familyCount        = 8
+	familyCount        = 12
 )
 
 type Family int32
 
 const (
-	FamilyPlayerBossBenchmark Family = 0
-	FamilyPlayerBossSubject   Family = 1
-	FamilyGuildBossBenchmark  Family = 2
-	FamilyGuildBossSubject    Family = 3
-	FamilyGuildClearBenchmark Family = 4
-	FamilyGuildClearSubject   Family = 5
-	FamilyPlayerRenownCount   Family = 6
-	FamilyGuildRenownCount    Family = 7
+	FamilyPlayerBossBenchmark        Family = 0
+	FamilyPlayerBossSubject          Family = 1
+	FamilyGuildBossBenchmark         Family = 2
+	FamilyGuildBossSubject           Family = 3
+	FamilyGuildClearBenchmark        Family = 4
+	FamilyGuildClearSubject          Family = 5
+	FamilyPlayerRenownCount          Family = 6
+	FamilyGuildRenownCount           Family = 7
+	FamilyVariantPlayerBossBenchmark Family = 8
+	FamilyVariantPlayerBossSubject   Family = 9
+	FamilyVariantGuildBossBenchmark  Family = 10
+	FamilyVariantGuildBossSubject    Family = 11
 )
 
 type DrainResult struct{ Claimed, Processed, Failed int }
@@ -175,6 +179,126 @@ func (w *Worker) Drain(ctx context.Context, tenant uuid.UUID, family Family) (Dr
 					params[i] = database.RetryLeaderboardGuildBossSubjectParams{TenantID: c.TenantID, InstanceName: c.InstanceName, DifficultyName: c.DifficultyName, MaxPlayers: c.MaxPlayers, EncounterName: c.EncounterName, RealmID: c.RealmID, GuildID: c.GuildID, ClaimToken: c.ClaimToken.UUID, ClaimedRevision: c.ClaimedRevision.Int64}
 				}
 				return consume(tx.RetryLeaderboardGuildBossSubject(ctx, params))
+			})
+	case FamilyVariantPlayerBossBenchmark:
+		return drainFamily(ctx, w.Store,
+			func(ctx context.Context, tx database.Store) ([]database.LeaderboardVariantDirtyPlayerBossBenchmark, error) {
+				return tx.ClaimLeaderboardVariantPlayerBossBenchmark(ctx, database.ClaimLeaderboardVariantPlayerBossBenchmarkParams{TenantID: tenant, LimitCount: BatchSize})
+			},
+			func(ctx context.Context, tx database.Store, claims []database.LeaderboardVariantDirtyPlayerBossBenchmark) ([]database.ComputeLeaderboardVariantPlayerBossBenchmarkRow, error) {
+				params := make([]database.ComputeLeaderboardVariantPlayerBossBenchmarkParams, len(claims))
+				for i, c := range claims {
+					params[i] = database.ComputeLeaderboardVariantPlayerBossBenchmarkParams{TenantID: c.TenantID, InstanceName: c.InstanceName, DifficultyName: c.DifficultyName, MaxPlayers: c.MaxPlayers, EncounterName: c.EncounterName, EncounterVariant: c.EncounterVariant, PlayerClass: c.PlayerClass, PlayerSpec: c.PlayerSpec, PlayerSubSpec: c.PlayerSubSpec, Metric: c.Metric}
+				}
+				return collect(tx.ComputeLeaderboardVariantPlayerBossBenchmark(ctx, params), len(params))
+			},
+			func(ctx context.Context, tx database.Store, claims []database.LeaderboardVariantDirtyPlayerBossBenchmark, rows []database.ComputeLeaderboardVariantPlayerBossBenchmarkRow) error {
+				params := make([]database.PublishLeaderboardVariantPlayerBossBenchmarkParams, len(claims))
+				for i, c := range claims {
+					r := rows[i]
+					params[i] = database.PublishLeaderboardVariantPlayerBossBenchmarkParams{TenantID: c.TenantID, InstanceName: c.InstanceName, DifficultyName: c.DifficultyName, MaxPlayers: c.MaxPlayers, EncounterName: c.EncounterName, EncounterVariant: c.EncounterVariant, PlayerClass: c.PlayerClass, PlayerSpec: c.PlayerSpec, PlayerSubSpec: c.PlayerSubSpec, Metric: c.Metric,
+						BestMetric: r.BestMetric, HasEvidence: r.HasEvidence,
+						ProjectionVersion: 1, AlgorithmVersion: 1, ClaimToken: c.ClaimToken.UUID, ClaimedRevision: c.ClaimedRevision.Int64,
+					}
+				}
+				return consumePublished(ctx, tx.PublishLeaderboardVariantPlayerBossBenchmark(ctx, params))
+			},
+			func(ctx context.Context, tx database.Store, claims []database.LeaderboardVariantDirtyPlayerBossBenchmark) error {
+				params := make([]database.RetryLeaderboardVariantPlayerBossBenchmarkParams, len(claims))
+				for i, c := range claims {
+					params[i] = database.RetryLeaderboardVariantPlayerBossBenchmarkParams{TenantID: c.TenantID, InstanceName: c.InstanceName, DifficultyName: c.DifficultyName, MaxPlayers: c.MaxPlayers, EncounterName: c.EncounterName, EncounterVariant: c.EncounterVariant, PlayerClass: c.PlayerClass, PlayerSpec: c.PlayerSpec, PlayerSubSpec: c.PlayerSubSpec, Metric: c.Metric, ClaimToken: c.ClaimToken.UUID, ClaimedRevision: c.ClaimedRevision.Int64}
+				}
+				return consume(tx.RetryLeaderboardVariantPlayerBossBenchmark(ctx, params))
+			})
+	case FamilyVariantPlayerBossSubject:
+		return drainFamily(ctx, w.Store,
+			func(ctx context.Context, tx database.Store) ([]database.LeaderboardVariantDirtyPlayerBossSubject, error) {
+				return tx.ClaimLeaderboardVariantPlayerBossSubject(ctx, database.ClaimLeaderboardVariantPlayerBossSubjectParams{TenantID: tenant, LimitCount: BatchSize})
+			},
+			func(ctx context.Context, tx database.Store, claims []database.LeaderboardVariantDirtyPlayerBossSubject) ([]database.ComputeLeaderboardVariantPlayerBossSubjectRow, error) {
+				params := make([]database.ComputeLeaderboardVariantPlayerBossSubjectParams, len(claims))
+				for i, c := range claims {
+					params[i] = database.ComputeLeaderboardVariantPlayerBossSubjectParams{TenantID: c.TenantID, InstanceName: c.InstanceName, DifficultyName: c.DifficultyName, MaxPlayers: c.MaxPlayers, EncounterName: c.EncounterName, EncounterVariant: c.EncounterVariant, PlayerClass: c.PlayerClass, PlayerSpec: c.PlayerSpec, PlayerSubSpec: c.PlayerSubSpec, Metric: c.Metric, RealmID: c.RealmID, PlayerGuid: c.PlayerGuid}
+				}
+				return collect(tx.ComputeLeaderboardVariantPlayerBossSubject(ctx, params), len(params))
+			},
+			func(ctx context.Context, tx database.Store, claims []database.LeaderboardVariantDirtyPlayerBossSubject, rows []database.ComputeLeaderboardVariantPlayerBossSubjectRow) error {
+				params := make([]database.PublishLeaderboardVariantPlayerBossSubjectParams, len(claims))
+				for i, c := range claims {
+					r := rows[i]
+					params[i] = database.PublishLeaderboardVariantPlayerBossSubjectParams{TenantID: c.TenantID, InstanceName: c.InstanceName, DifficultyName: c.DifficultyName, MaxPlayers: c.MaxPlayers, EncounterName: c.EncounterName, EncounterVariant: c.EncounterVariant, PlayerClass: c.PlayerClass, PlayerSpec: c.PlayerSpec, PlayerSubSpec: c.PlayerSubSpec, Metric: c.Metric, RealmID: c.RealmID, PlayerGuid: c.PlayerGuid,
+						ObservationCount: r.ObservationCount, RawPeak: r.RawPeak, RawForm: r.RawForm, RawFloor: r.RawFloor, PeakEncounterID: r.PeakEncounterID, PeakDurationMs: r.PeakDurationMs, HasEvidence: r.HasEvidence,
+						ProjectionVersion: 1, AlgorithmVersion: 1, ClaimToken: c.ClaimToken.UUID, ClaimedRevision: c.ClaimedRevision.Int64,
+					}
+				}
+				return consumePublished(ctx, tx.PublishLeaderboardVariantPlayerBossSubject(ctx, params))
+			},
+			func(ctx context.Context, tx database.Store, claims []database.LeaderboardVariantDirtyPlayerBossSubject) error {
+				params := make([]database.RetryLeaderboardVariantPlayerBossSubjectParams, len(claims))
+				for i, c := range claims {
+					params[i] = database.RetryLeaderboardVariantPlayerBossSubjectParams{TenantID: c.TenantID, InstanceName: c.InstanceName, DifficultyName: c.DifficultyName, MaxPlayers: c.MaxPlayers, EncounterName: c.EncounterName, EncounterVariant: c.EncounterVariant, PlayerClass: c.PlayerClass, PlayerSpec: c.PlayerSpec, PlayerSubSpec: c.PlayerSubSpec, Metric: c.Metric, RealmID: c.RealmID, PlayerGuid: c.PlayerGuid, ClaimToken: c.ClaimToken.UUID, ClaimedRevision: c.ClaimedRevision.Int64}
+				}
+				return consume(tx.RetryLeaderboardVariantPlayerBossSubject(ctx, params))
+			})
+	case FamilyVariantGuildBossBenchmark:
+		return drainFamily(ctx, w.Store,
+			func(ctx context.Context, tx database.Store) ([]database.LeaderboardVariantDirtyGuildBossBenchmark, error) {
+				return tx.ClaimLeaderboardVariantGuildBossBenchmark(ctx, database.ClaimLeaderboardVariantGuildBossBenchmarkParams{TenantID: tenant, LimitCount: BatchSize})
+			},
+			func(ctx context.Context, tx database.Store, claims []database.LeaderboardVariantDirtyGuildBossBenchmark) ([]database.ComputeLeaderboardVariantGuildBossBenchmarkRow, error) {
+				params := make([]database.ComputeLeaderboardVariantGuildBossBenchmarkParams, len(claims))
+				for i, c := range claims {
+					params[i] = database.ComputeLeaderboardVariantGuildBossBenchmarkParams{TenantID: c.TenantID, InstanceName: c.InstanceName, DifficultyName: c.DifficultyName, MaxPlayers: c.MaxPlayers, EncounterName: c.EncounterName, EncounterVariant: c.EncounterVariant}
+				}
+				return collect(tx.ComputeLeaderboardVariantGuildBossBenchmark(ctx, params), len(params))
+			},
+			func(ctx context.Context, tx database.Store, claims []database.LeaderboardVariantDirtyGuildBossBenchmark, rows []database.ComputeLeaderboardVariantGuildBossBenchmarkRow) error {
+				params := make([]database.PublishLeaderboardVariantGuildBossBenchmarkParams, len(claims))
+				for i, c := range claims {
+					r := rows[i]
+					params[i] = database.PublishLeaderboardVariantGuildBossBenchmarkParams{TenantID: c.TenantID, InstanceName: c.InstanceName, DifficultyName: c.DifficultyName, MaxPlayers: c.MaxPlayers, EncounterName: c.EncounterName, EncounterVariant: c.EncounterVariant,
+						BestDurationMs: r.BestDurationMs, HasEvidence: r.HasEvidence,
+						ProjectionVersion: 1, AlgorithmVersion: 1, ClaimToken: c.ClaimToken.UUID, ClaimedRevision: c.ClaimedRevision.Int64,
+					}
+				}
+				return consumePublished(ctx, tx.PublishLeaderboardVariantGuildBossBenchmark(ctx, params))
+			},
+			func(ctx context.Context, tx database.Store, claims []database.LeaderboardVariantDirtyGuildBossBenchmark) error {
+				params := make([]database.RetryLeaderboardVariantGuildBossBenchmarkParams, len(claims))
+				for i, c := range claims {
+					params[i] = database.RetryLeaderboardVariantGuildBossBenchmarkParams{TenantID: c.TenantID, InstanceName: c.InstanceName, DifficultyName: c.DifficultyName, MaxPlayers: c.MaxPlayers, EncounterName: c.EncounterName, EncounterVariant: c.EncounterVariant, ClaimToken: c.ClaimToken.UUID, ClaimedRevision: c.ClaimedRevision.Int64}
+				}
+				return consume(tx.RetryLeaderboardVariantGuildBossBenchmark(ctx, params))
+			})
+	case FamilyVariantGuildBossSubject:
+		return drainFamily(ctx, w.Store,
+			func(ctx context.Context, tx database.Store) ([]database.LeaderboardVariantDirtyGuildBossSubject, error) {
+				return tx.ClaimLeaderboardVariantGuildBossSubject(ctx, database.ClaimLeaderboardVariantGuildBossSubjectParams{TenantID: tenant, LimitCount: BatchSize})
+			},
+			func(ctx context.Context, tx database.Store, claims []database.LeaderboardVariantDirtyGuildBossSubject) ([]database.ComputeLeaderboardVariantGuildBossSubjectRow, error) {
+				params := make([]database.ComputeLeaderboardVariantGuildBossSubjectParams, len(claims))
+				for i, c := range claims {
+					params[i] = database.ComputeLeaderboardVariantGuildBossSubjectParams{TenantID: c.TenantID, InstanceName: c.InstanceName, DifficultyName: c.DifficultyName, MaxPlayers: c.MaxPlayers, EncounterName: c.EncounterName, EncounterVariant: c.EncounterVariant, RealmID: c.RealmID, GuildID: c.GuildID}
+				}
+				return collect(tx.ComputeLeaderboardVariantGuildBossSubject(ctx, params), len(params))
+			},
+			func(ctx context.Context, tx database.Store, claims []database.LeaderboardVariantDirtyGuildBossSubject, rows []database.ComputeLeaderboardVariantGuildBossSubjectRow) error {
+				params := make([]database.PublishLeaderboardVariantGuildBossSubjectParams, len(claims))
+				for i, c := range claims {
+					r := rows[i]
+					params[i] = database.PublishLeaderboardVariantGuildBossSubjectParams{TenantID: c.TenantID, InstanceName: c.InstanceName, DifficultyName: c.DifficultyName, MaxPlayers: c.MaxPlayers, EncounterName: c.EncounterName, EncounterVariant: c.EncounterVariant, RealmID: c.RealmID, GuildID: c.GuildID,
+						ObservationCount: r.ObservationCount, FastestDurationMs: r.FastestDurationMs, FormMeanInverseMs: r.FormMeanInverseMs, FloorMeanInverseMs: r.FloorMeanInverseMs, HasEvidence: r.HasEvidence,
+						ProjectionVersion: 1, AlgorithmVersion: 1, ClaimToken: c.ClaimToken.UUID, ClaimedRevision: c.ClaimedRevision.Int64,
+					}
+				}
+				return consumePublished(ctx, tx.PublishLeaderboardVariantGuildBossSubject(ctx, params))
+			},
+			func(ctx context.Context, tx database.Store, claims []database.LeaderboardVariantDirtyGuildBossSubject) error {
+				params := make([]database.RetryLeaderboardVariantGuildBossSubjectParams, len(claims))
+				for i, c := range claims {
+					params[i] = database.RetryLeaderboardVariantGuildBossSubjectParams{TenantID: c.TenantID, InstanceName: c.InstanceName, DifficultyName: c.DifficultyName, MaxPlayers: c.MaxPlayers, EncounterName: c.EncounterName, EncounterVariant: c.EncounterVariant, RealmID: c.RealmID, GuildID: c.GuildID, ClaimToken: c.ClaimToken.UUID, ClaimedRevision: c.ClaimedRevision.Int64}
+				}
+				return consume(tx.RetryLeaderboardVariantGuildBossSubject(ctx, params))
 			})
 	case FamilyGuildClearBenchmark:
 		return drainFamily(ctx, w.Store,
