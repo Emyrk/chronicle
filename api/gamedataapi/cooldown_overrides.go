@@ -38,18 +38,18 @@ func (h *Handler) SetCooldownOverrides(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	q := database.New(h.pool)
-	if err := q.UpsertCooldownOverrides(ctx, database.UpsertCooldownOverridesParams{
-		DatasetID:    datasetID,
-		SpellIds:     req.SpellIDs,
-		Ignored:      optionalBool(req.Ignored),
-		HideDuration: optionalBool(req.HideDuration),
+	if err := h.mutateDataset(ctx, datasetID, nil, func(tx database.Store) error {
+		if err := tx.UpsertCooldownOverrides(ctx, database.UpsertCooldownOverridesParams{
+			DatasetID:    datasetID,
+			SpellIds:     req.SpellIDs,
+			Ignored:      optionalBool(req.Ignored),
+			HideDuration: optionalBool(req.HideDuration),
+		}); err != nil {
+			return err
+		}
+		// Rows with no overrides left carry no meaning; drop them.
+		return tx.DeleteEmptyCooldownOverrides(ctx, datasetID)
 	}); err != nil {
-		httpapi.InternalServerError(w, err)
-		return
-	}
-	// Rows with no overrides left carry no meaning; drop them.
-	if err := q.DeleteEmptyCooldownOverrides(ctx, datasetID); err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}

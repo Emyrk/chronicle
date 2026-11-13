@@ -76,11 +76,16 @@ func (h *Handler) SetConsumableDisambiguation(w http.ResponseWriter, r *http.Req
 		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "invalid item ID"})
 		return
 	}
-	row, err := database.New(h.pool).UpsertConsumableDisambiguationIfCandidate(ctx, database.UpsertConsumableDisambiguationIfCandidateParams{
-		DatasetID:  datasetID,
-		EffectKind: string(kind),
-		SpellID:    spellID,
-		ItemID:     pgtype.Int4{Int32: req.ItemID, Valid: true},
+	var row database.UpsertConsumableDisambiguationIfCandidateRow
+	err := h.mutateDataset(ctx, datasetID, nil, func(tx database.Store) error {
+		var err error
+		row, err = tx.UpsertConsumableDisambiguationIfCandidate(ctx, database.UpsertConsumableDisambiguationIfCandidateParams{
+			DatasetID:  datasetID,
+			EffectKind: string(kind),
+			SpellID:    spellID,
+			ItemID:     pgtype.Int4{Int32: req.ItemID, Valid: true},
+		})
+		return err
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "selected item is not a current candidate for this effect"})
@@ -103,10 +108,15 @@ func (h *Handler) IgnoreConsumableEffect(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
-	row, err := database.New(h.pool).IgnoreConsumableEffectIfCandidate(ctx, database.IgnoreConsumableEffectIfCandidateParams{
-		DatasetID:  datasetID,
-		EffectKind: string(kind),
-		SpellID:    spellID,
+	var row database.IgnoreConsumableEffectIfCandidateRow
+	err := h.mutateDataset(ctx, datasetID, nil, func(tx database.Store) error {
+		var err error
+		row, err = tx.IgnoreConsumableEffectIfCandidate(ctx, database.IgnoreConsumableEffectIfCandidateParams{
+			DatasetID:  datasetID,
+			EffectKind: string(kind),
+			SpellID:    spellID,
+		})
+		return err
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "effect is not a current consumable candidate"})
@@ -129,7 +139,11 @@ func (h *Handler) DeleteConsumableDisambiguation(w http.ResponseWriter, r *http.
 	if !ok {
 		return
 	}
-	if err := database.New(h.pool).DeleteConsumableDisambiguation(ctx, database.DeleteConsumableDisambiguationParams{DatasetID: datasetID, EffectKind: string(kind), SpellID: spellID}); err != nil {
+	if err := h.mutateDataset(ctx, datasetID, nil, func(tx database.Store) error {
+		return tx.DeleteConsumableDisambiguation(ctx, database.DeleteConsumableDisambiguationParams{
+			DatasetID: datasetID, EffectKind: string(kind), SpellID: spellID,
+		})
+	}); err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
