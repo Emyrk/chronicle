@@ -555,6 +555,7 @@ func (api *API) Routes() chi.Router {
 						httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_logs_User),
 					)
 					r.Get("/", api.AdminListLogs)
+					r.Get("/tenants", api.AdminListLogTenants)
 					r.Post("/delete", api.AdminBulkDeleteLogs)
 					r.Post("/reparse", api.AdminBulkReparseLogs)
 					r.With(

@@ -26,6 +26,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"golang.org/x/sync/errgroup"
 )
 
 func adminMinParserVersion(requested string) (string, int64) {
@@ -368,6 +369,10 @@ const (
 // @Param user_id query string false "Filter by user ID (UUID)"
 // @Param instance_name query string false "Filter by instance name"
 // @Param without_instance query bool false "Filter to logs without an instance"
+// @Param tenant_id query string false "Filter by tenant ID"
+// @Param validity query string false "Filter by validity: all, valid, invalid"
+// @Param created_from query string false "Filter to uploads on or after this UTC date (YYYY-MM-DD)"
+// @Param created_to query string false "Filter to uploads through this UTC date (YYYY-MM-DD)"
 // @Success 200 {object} chroniclesdk.AdminLogsResponse
 // @Router /api/v1/admin/logs [get]
 func (a *API) AdminListLogs(w http.ResponseWriter, r *http.Request) {
@@ -420,28 +425,77 @@ func (a *API) AdminListLogs(w http.ResponseWriter, r *http.Request) {
 	filterInstanceName := r.URL.Query().Get("instance_name")
 	filterWithoutInstance := r.URL.Query().Get("without_instance") == "true"
 
-	// Fetch total count for pagination (with filters applied)
-	totalCount, err := a.Opts.Zed.CountAllWoWLogGroups(ctx, database.CountAllWoWLogGroupsParams{
-		FilterUserID:          filterUserID,
-		FilterInstanceName:    filterInstanceName,
-		FilterWithoutInstance: filterWithoutInstance,
-	})
-	if err != nil {
-		httpapi.InternalServerError(w, err)
+	filterTenantID := uuid.Nil
+	if tenantIDStr := r.URL.Query().Get("tenant_id"); tenantIDStr != "" {
+		parsed, err := uuid.Parse(tenantIDStr)
+		if err != nil {
+			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid tenant ID"})
+			return
+		}
+		filterTenantID = parsed
+	}
+
+	filterValidity := r.URL.Query().Get("validity")
+	if filterValidity == "" {
+		filterValidity = "all"
+	}
+	if filterValidity != "all" && filterValidity != "valid" && filterValidity != "invalid" {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid validity filter"})
 		return
 	}
 
-	// Fetch logs with +1 to detect hasMore
-	logs, err := a.Opts.Zed.ListAllWoWLogGroupsWithOwnerPaginated(ctx, database.ListAllWoWLogGroupsWithOwnerPaginatedParams{
+	createdFrom, ok := parseAdminLogDate(r.URL.Query().Get("created_from"), false)
+	if !ok {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid created_from date"})
+		return
+	}
+	createdBefore, ok := parseAdminLogDate(r.URL.Query().Get("created_to"), true)
+	if !ok {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid created_to date"})
+		return
+	}
+	if createdFrom.Valid && createdBefore.Valid && !createdFrom.Time.Before(createdBefore.Time) {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "created_from must be on or before created_to"})
+		return
+	}
+
+	countParams := database.CountAllWoWLogGroupsParams{
 		FilterUserID:          filterUserID,
 		FilterInstanceName:    filterInstanceName,
 		FilterWithoutInstance: filterWithoutInstance,
+		FilterTenantID:        filterTenantID,
+		FilterValidity:        filterValidity,
+		CreatedFrom:           createdFrom,
+		CreatedBefore:         createdBefore,
+	}
+	listParams := database.ListAllWoWLogGroupsWithOwnerPaginatedParams{
+		FilterUserID:          filterUserID,
+		FilterInstanceName:    filterInstanceName,
+		FilterWithoutInstance: filterWithoutInstance,
+		FilterTenantID:        filterTenantID,
+		FilterValidity:        filterValidity,
+		CreatedFrom:           createdFrom,
+		CreatedBefore:         createdBefore,
 		SortBy:                sortBy,
 		SortOrder:             sortOrder,
 		LimitCount:            int32(limit + 1),
 		OffsetCount:           int32(offset),
+	}
+
+	var totalCount int32
+	var logs []database.ListAllWoWLogGroupsWithOwnerPaginatedRow
+	group, queryCtx := errgroup.WithContext(ctx)
+	group.Go(func() error {
+		var err error
+		totalCount, err = a.Opts.Zed.CountAllWoWLogGroups(queryCtx, countParams)
+		return err
 	})
-	if err != nil {
+	group.Go(func() error {
+		var err error
+		logs, err = a.Opts.Zed.ListAllWoWLogGroupsWithOwnerPaginated(queryCtx, listParams)
+		return err
+	})
+	if err := group.Wait(); err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
@@ -460,7 +514,7 @@ func (a *API) AdminListLogs(w http.ResponseWriter, r *http.Request) {
 
 	for i, l := range logs {
 		state := "unknown"
-		if l.ProcessingOutput != nil {
+		if l.Processed {
 			state = "processed"
 		}
 
@@ -473,16 +527,7 @@ func (a *API) AdminListLogs(w http.ResponseWriter, r *http.Request) {
 			ownerName = l.OwnerName.String
 		}
 
-		// Extract total size from interface{}
-		var sizeBytes int64
-		if l.TotalSizeBytes != nil {
-			switch v := l.TotalSizeBytes.(type) {
-			case int64:
-				sizeBytes = v
-			case float64:
-				sizeBytes = int64(v)
-			}
-		}
+		sizeBytes := l.TotalSizeBytes
 
 		instanceNames := adminLogStrings(l.InstanceNames)
 		tenantNames := adminLogStrings(l.TenantNames)
@@ -535,6 +580,35 @@ func adminLogStrings(v interface{}) []string {
 		}
 	}
 	return out
+}
+
+func parseAdminLogDate(raw string, endOfDay bool) (pgtype.Timestamptz, bool) {
+	if raw == "" {
+		return pgtype.Timestamptz{}, true
+	}
+	parsed, err := time.ParseInLocation(time.DateOnly, raw, time.UTC)
+	if err != nil {
+		return pgtype.Timestamptz{}, false
+	}
+	if endOfDay {
+		parsed = parsed.AddDate(0, 0, 1)
+	}
+	return pgtype.Timestamptz{Time: parsed, Valid: true}, true
+}
+
+// AdminListLogTenants returns tenant options visible to logs administrators.
+func (a *API) AdminListLogTenants(w http.ResponseWriter, r *http.Request) {
+	tenants, err := a.Opts.Zed.ListTenants(r.Context())
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	resp := make([]chroniclesdk.AdminLogTenant, len(tenants))
+	for i, tenant := range tenants {
+		resp[i] = chroniclesdk.AdminLogTenant{ID: tenant.ID, Name: tenant.Name}
+	}
+	httpapi.Write(r.Context(), w, http.StatusOK, resp)
 }
 
 // AdminListInstanceNames returns all distinct instance names for filtering.

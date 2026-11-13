@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  adminLogsURL,
   billingCheckoutOperationID,
   fetchInstanceSpeedrun,
   getLogGroupRefetchInterval,
@@ -8,6 +9,38 @@ import {
   type RiverJobState,
   type WoWLogGroupState,
 } from "./queries";
+
+describe("adminLogsURL", () => {
+  it("includes tenant, validity, and upload date filters", () => {
+    const url = new URL(adminLogsURL({
+      limit: 25,
+      offset: 50,
+      tenantId: "tenant-id",
+      validity: "invalid",
+      createdFrom: "2026-01-01",
+      createdTo: "2026-02-01",
+    }), "https://example.test");
+
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      limit: "25",
+      offset: "50",
+      sort_by: "date",
+      sort_order: "desc",
+      tenant_id: "tenant-id",
+      validity: "invalid",
+      created_from: "2026-01-01",
+      created_to: "2026-02-01",
+    });
+  });
+
+  it("omits inactive optional filters", () => {
+    const url = new URL(adminLogsURL({ validity: "all" }), "https://example.test");
+    expect(url.searchParams.has("tenant_id")).toBe(false);
+    expect(url.searchParams.has("validity")).toBe(false);
+    expect(url.searchParams.has("created_from")).toBe(false);
+    expect(url.searchParams.has("created_to")).toBe(false);
+  });
+});
 
 describe("selectSupportedInstanceProgressionBosses", () => {
   it("includes derived instance bosses from their speedrun rules", () => {

@@ -125,6 +125,11 @@ type AdminLog struct {
 	Flavors     []string `json:"flavors"`
 }
 
+type AdminLogTenant struct {
+	ID   uuid.UUID `json:"id"`
+	Name string    `json:"name"`
+}
+
 type AdminBulkLogRequest struct {
 	LogIDs []uuid.UUID `json:"log_ids"`
 }
