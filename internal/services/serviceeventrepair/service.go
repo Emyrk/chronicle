@@ -15,17 +15,34 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+type repairJob struct {
+	version      int32
+	instanceName string
+	evaluate     func(context.Context, database.Store, uuid.UUID) (*RepairPlan, error)
+	apply        func(context.Context, database.Store, *RepairPlan) error
+	revalidate   func(context.Context, database.Store, *RepairPlan) error
+}
+
 type Service struct {
 	db         database.Store
 	queue      *riverqueue.Queues
-	evaluate   func(context.Context, database.Store, uuid.UUID) (*RazorgoreRepairPlan, error)
-	apply      func(context.Context, database.Store, *RazorgoreRepairPlan) error
-	revalidate func(context.Context, database.Store, *RazorgoreRepairPlan) error
+	jobs       map[string]*repairJob
 	lockSource func(context.Context, database.Store, uuid.UUID) error
 }
 
 func New(db database.Store, q *riverqueue.Queues) *Service {
-	return &Service{db: db, queue: q, evaluate: EvaluateRazorgore, apply: ApplyRazorgore, revalidate: RevalidateRazorgore, lockSource: lockRepairSource}
+	return &Service{db: db, queue: q, lockSource: lockRepairSource, jobs: map[string]*repairJob{
+		OperationRazorgore: {Version, "Blackwing Lair", EvaluateRazorgore, ApplyRazorgore, RevalidateRazorgore},
+		OperationLucifron:  {LucifronVersion, "Molten Core", EvaluateLucifron, ApplyLucifron, RevalidateLucifron},
+	}}
+}
+
+func (s *Service) job(operation string, version int32) (*repairJob, error) {
+	job := s.jobs[operation]
+	if job == nil || job.version != version {
+		return nil, fmt.Errorf("%w: operation version no longer supported; create a new dry run", ErrConflict)
+	}
+	return job, nil
 }
 func (s *Service) enqueue(ctx context.Context, tx database.Store, id uuid.UUID, phase string, actor uuid.UUID) error {
 	if s.queue == nil || s.queue.Client == nil {
@@ -48,7 +65,7 @@ func lookupError(err error) error {
 // successfulApply always publishes a durable canonical refresh, even if the
 // evaluator's plan contains no changes. Source writes, old-identity repair,
 // canonical enqueue and the audit checkpoint share one transaction.
-func (s *Service) successfulApply(ctx context.Context, tx database.Store, id uuid.UUID, p *RazorgoreRepairPlan) error {
+func (s *Service) successfulApply(ctx context.Context, tx database.Store, id uuid.UUID, p *RepairPlan, job *repairJob) error {
 	if s.queue == nil || s.queue.Client == nil {
 		return errors.New("event repair queue unavailable")
 	}
@@ -63,7 +80,7 @@ func (s *Service) successfulApply(ctx context.Context, tx database.Store, id uui
 	if err := serviceratings.EnqueueSourceRepairTx(ctx, tx, seeds); err != nil {
 		return err
 	}
-	if err := s.apply(ctx, tx, p); err != nil {
+	if err := job.apply(ctx, tx, p); err != nil {
 		return err
 	}
 	return serviceratings.EnqueueCanonicalRefreshTx(ctx, tx, s.queue, seeds)
@@ -140,6 +157,7 @@ func (s *Service) Create(ctx context.Context, actor uuid.UUID, request CreateReq
 	if err != nil {
 		return Operation{}, err
 	}
+	job := s.jobs[r.Operation]
 	ctx = servicetenant.AdminBypass(ctx)
 	ids := []uuid.UUID{}
 	if r.Instance != "" {
@@ -150,7 +168,7 @@ func (s *Service) Create(ctx context.Context, actor uuid.UUID, request CreateReq
 		r.TenantID = target.TenantID.UUID
 		ids = append(ids, target.InstanceID)
 	} else {
-		params := database.SelectEventRepairInstancesParams{TenantID: uuid.NullUUID{UUID: r.TenantID, Valid: true}, InstanceName: "Blackwing Lair", RealmID: uuid.NullUUID{UUID: r.RealmID, Valid: r.RealmID != uuid.Nil}, LimitCount: int32(r.Limit)}
+		params := database.SelectEventRepairInstancesParams{TenantID: uuid.NullUUID{UUID: r.TenantID, Valid: true}, InstanceName: job.instanceName, RealmID: uuid.NullUUID{UUID: r.RealmID, Valid: r.RealmID != uuid.Nil}, LimitCount: int32(r.Limit)}
 		if r.After != nil {
 			params.AfterDate = database.Timestamptz(*r.After)
 		}
@@ -171,7 +189,7 @@ func (s *Service) Create(ctx context.Context, actor uuid.UUID, request CreateReq
 		return Operation{}, err
 	}
 	err = s.db.InTx(ctx, func(tx database.Store) error {
-		_, err := tx.CreateEventRepairOperation(ctx, database.CreateEventRepairOperationParams{ID: id, Operation: r.Operation, Version: Version, CreatedBy: actor, TenantID: r.TenantID, Selection: selection, Total: int32(len(ids))})
+		_, err := tx.CreateEventRepairOperation(ctx, database.CreateEventRepairOperationParams{ID: id, Operation: r.Operation, Version: job.version, CreatedBy: actor, TenantID: r.TenantID, Selection: selection, Total: int32(len(ids))})
 		if err != nil {
 			return err
 		}
@@ -204,8 +222,8 @@ func (s *Service) Apply(ctx context.Context, id, actor uuid.UUID) (Operation, er
 				return err
 			}
 		}
-		if o.Version != Version || o.Operation != OperationRazorgore {
-			return fmt.Errorf("%w: operation version no longer supported; create a new dry run", ErrConflict)
+		if _, err := s.job(o.Operation, o.Version); err != nil {
+			return err
 		}
 		if o.State != "ready" && o.State != "applying" {
 			return fmt.Errorf("%w: apply requires a ready report", ErrConflict)
@@ -268,6 +286,9 @@ func (s *Service) ProcessPage(ctx context.Context, id uuid.UUID, phase string) (
 	if op.State != phase || (phase != "dry_running" && phase != "applying") {
 		return false, nil
 	}
+	if _, err := s.job(op.Operation, op.Version); err != nil {
+		return false, err
+	}
 	state := "pending"
 	if phase == "applying" {
 		state = "ready"
@@ -312,7 +333,11 @@ func (s *Service) processItem(ctx context.Context, op database.EventRepairOperat
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 	// Fetch, decompress and reconstruct before opening the short write transaction.
-	plan, err := s.evaluate(ctx, s.db, item.InstanceID)
+	job, err := s.job(op.Operation, op.Version)
+	if err != nil {
+		return err
+	}
+	plan, err := job.evaluate(ctx, s.db, item.InstanceID)
 	if err != nil {
 		return err
 	}
@@ -324,8 +349,8 @@ func (s *Service) processItem(ctx context.Context, op database.EventRepairOperat
 		if current.State != phase {
 			return nil
 		}
-		if current.Version != Version || current.Operation != OperationRazorgore {
-			return fmt.Errorf("unsupported repair version")
+		if current.Operation != op.Operation || current.Version != op.Version {
+			return fmt.Errorf("%w: operation changed during evaluation", ErrConflict)
 		}
 		stored, err := tx.LockEventRepairItem(ctx, database.LockEventRepairItemParams{OperationID: op.ID, TenantID: op.TenantID, InstanceID: item.InstanceID})
 		if err != nil {
@@ -349,7 +374,7 @@ func (s *Service) processItem(ctx context.Context, op database.EventRepairOperat
 			return receiptErr
 		}
 		changed := false
-		if err := s.revalidate(ctx, tx, plan); err != nil {
+		if err := job.revalidate(ctx, tx, plan); err != nil {
 			if !errors.Is(err, ErrStaleEvidence) || (phase != "applying" && !alreadyApplied) {
 				return err
 			}
@@ -396,7 +421,7 @@ func (s *Service) processItem(ctx context.Context, op database.EventRepairOperat
 					if err != nil {
 						return err
 					}
-					if err := s.successfulApply(ctx, tx, item.InstanceID, plan); err != nil {
+					if err := s.successfulApply(ctx, tx, item.InstanceID, plan, job); err != nil {
 						return err
 					}
 					state = "applied"
@@ -458,8 +483,8 @@ func (s *Service) Retry(ctx context.Context, id, actor uuid.UUID) (Operation, er
 		if current.LastError == "" {
 			return fmt.Errorf("%w: retry requires a recorded worker failure", ErrConflict)
 		}
-		if current.Version != Version || current.Operation != OperationRazorgore {
-			return fmt.Errorf("%w: operation version no longer supported", ErrConflict)
+		if _, err := s.job(current.Operation, current.Version); err != nil {
+			return err
 		}
 		return s.enqueue(ctx, tx, id, current.State, actor)
 	}, nil)

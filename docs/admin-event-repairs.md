@@ -31,7 +31,8 @@ Or a finite sweep:
 Sweep limit must be 1..1000. The tenant is mandatory for sweeps; for a single
 instance it is optional and, when supplied, constrains resolution. Sweep dates
 filter encounter-instance start time, inclusive `after`, exclusive `before`.
-The Razorgore operation selects Blackwing Lair instances only. Single-instance
+The Razorgore operation selects Blackwing Lair instances only; the Lucifron
+operation selects Molten Core instances only. Single-instance
 requests cannot also specify sweep filters.
 
 SDK contracts live in `api/chroniclesdk/event_repairs.go`. Operation states are
@@ -70,7 +71,16 @@ next successful checkpoint. Errors use 400 for invalid input, 404 for unknown ID
 
 ## Previously processed instances
 
-Before event replay, the Razorgore repair skips the entire instance if any
+Before event replay, Razorgore skips instances with a known parser release at or
+after `v1.0.280`. Exact `GitTag+GitCommit` stamps are compared by release version;
+either the exact stamp or persisted `versions["chronicle"]` tag can establish
+that cutoff, including when metadata conflicts. Unknown/malformed, prerelease,
+and git-describe stamps do not introduce a new eligibility restriction: when
+neither stamp establishes the cutoff, the existing evidence checks still apply.
+This intentionally differs from Lucifron's opt-in historical-version policy.
+Skipped instances create no receipt and enqueue no ratings.
+
+The existing independent duration gate is preserved: the repair skips the entire instance if any
 Razorgore encounter has a valid persisted ranking window whose duration differs
 from its full encounter duration. The window must have both offsets, a
 nonnegative start, a positive duration, and an end within valid encounter bounds.
@@ -84,7 +94,7 @@ previously processed. Other bosses' ranking windows do not trigger this gate.
 The legacy API field `requires_reparse` still marks these skips, but the reason
 explicitly says `already has distinct ranked duration; skipping previously processed instance`.
 
-## Version 1 support and limits
+## Razorgore version 1 support and limits
 
 The named operation is `razorgore-phase-two`, version 1. It supports two
 conservative repair paths:
@@ -156,5 +166,75 @@ ratings completion.
 Admin items expose optional `warnings` and `details` for previews and applied
 reports. These fields are covered by the prepared-plan seal and copied into the
 permanent receipt on success. Details are unstructured JSON; current version-1
-producers use `phases` (encounter ID, offsets, reconstructed flag) and `omissions`
+Razorgore producers use `phases` (encounter ID, offsets, reconstructed flag) and `omissions`
 (encounter ID, stream, unit GUID, amount, count, reason).
+
+
+## Lucifron ranked damage, version 1
+
+The script `lucifron-ranked-damage` uses the same selection, preview, explicit
+apply, retry/cancel, permanent receipts, and transactional ratings lifecycle.
+A single-instance request accepts UUID, slug, or URL; bounded sweeps select
+**Molten Core** in the explicitly selected tenant. Raw-log deletion is not a gate.
+
+Eligibility requires a known historical parser release **before `v1.0.173`**.
+That release introduced `instances.MoltenCoreDamageTargets(flavor)["Lucifron"]`:
+Lucifron (12118) and Flamewaker Protectors (12119) are ranked targets; incidental
+Core Hounds are not. The evaluator reads persisted parser metadata, compares
+semantic versions numerically, and skips current/modern, unknown, malformed, or
+ambiguous development versions rather than guessing commit dates. The actual
+`parser_version` stamp is `GitTag+GitCommit`; SemVer build metadata is retained in
+the preview but does not change release ordering. When present,
+`versions["chronicle"]` must agree with that release. A missing exact stamp or the
+schema's `0.0` placeholder may use the persisted Chronicle tag; other malformed
+or conflicting stamps still skip. An existing
+receipt for this script also skips, without another receipt or ratings enqueue.
+
+The only mutable source fields are Lucifron ranking rows' `damage_done`,
+`unranked_damage_done`, and `dps`. The evaluator replays effective stored damage
+against the repository target rule and preserves the recorded duration. It does
+not modify healing, absorbs, HPS, role/spec/subspec/talents, survival, encounter
+boundaries, speedrun proof, event blobs, or any other boss. Original per-event
+unranked flags remain unchanged. Missing/corrupt structural evidence is a skip.
+The public report and receipt carry before/after values and explicit attribution
+omissions; they never assign uncertain pet damage to a guessed current owner.
+An eligible verified no-op still records a receipt and queues ratings on Apply.
+
+Complete clean Lucifron kills are supported. Wipes without rankings are ignored
+and remain untouched; non-clean attempts with ranking rows are conservatively
+unsupported. Direct-player replay does not require the modern classification
+stream: a complete effective-damage upper bound must reconcile independently to
+each player's persisted ranked + unranked total. Pet/totem rollup requires proven
+encounter-terminal ownership, matching the parser's fight-end aggregation rather
+than an instance's current owner. Explicitly ownerless terminal pets can produce
+omissions without invalidating reconciled player totals. Uncertain nonplayer
+credit mixed with player damage cannot be proved by equal totals alone and skips;
+control history also skips rather than guessing possession expiry. These are
+evidence limits, not a claim to support every historical log.
+
+Version-1 `details` has this stable shape (arrays are always arrays, not null):
+
+```json
+{
+  "parser_version": "v1.0.172",
+  "rule_version": "v1.0.173",
+  "ranked_target_entries": [12118, 12119],
+  "players": [{
+    "encounter_id": "UUID",
+    "player_guid": "0x0000000000000001",
+    "player_name": "Player",
+    "before_ranked_damage": 600,
+    "after_ranked_damage": 400,
+    "before_unranked_damage": 60,
+    "after_unranked_damage": 260,
+    "before_dps": 10,
+    "after_dps": 6.666666666666667
+  }],
+  "omissions": []
+}
+```
+
+Omissions use `encounter_id`, `stream`, `unit_guid`, `amount`, `count`, and `reason`,
+and are accompanied by visible warnings. The example is synthetic, not an
+actual-instance validation or authorization to apply. No real-log parity is
+claimed without a separately captured historical source and independent replay.

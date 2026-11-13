@@ -23,6 +23,7 @@ export async function repairRequest<T>(path = "", body?: AdminEventRepairCreateR
 }
 
 export interface RepairSelection {
+  operation: string;
   mode: "single" | "sweep";
   instance: string;
   tenant: string;
@@ -33,7 +34,8 @@ export interface RepairSelection {
 }
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export function buildRepairRequest(form: RepairSelection): AdminEventRepairCreateRequest {
-  const operation = "razorgore-phase-two" as const;
+  const operation = form.operation;
+  if (operation !== "razorgore-phase-two" && operation !== "lucifron-ranked-damage") throw new Error("Choose a supported named repair.");
   if (form.mode === "single") {
     if (!form.instance.trim()) throw new Error("Enter an instance URL, ID, or slug.");
     return { operation, instance: form.instance.trim() };

@@ -15,27 +15,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// RazorgoreRepairPlan is diagnostic evidence, not an executable mutation payload.
-// Only Evaluate creates an executable in-memory plan. JSON is diagnostic only.
-type RazorgoreRepairPlan struct {
-	Warnings            []string          `json:"warnings,omitempty"`
-	Details             map[string]any    `json:"details,omitempty"`
-	TenantID            uuid.UUID         `json:"tenant_id"`
-	InstanceID          uuid.UUID         `json:"instance_id"`
-	RequiresReparse     bool              `json:"requires_reparse"`
-	Reason              string            `json:"reason"`
-	Changes             []string          `json:"changes"`
-	EvidenceHash        string            `json:"evidence_hash"`
-	EncounterID         uuid.UUID         `json:"encounter_id,omitempty"`
-	Outcome             database.KillType `json:"outcome,omitempty"`
-	hostile             *database.LogInstanceEncounterHostile
-	phase               *database.LogInstanceEncounterPhase
-	numeric             *razorgoreNumericPlan
-	multi               *razorgoreMultiPlan
-	reconstructedPhases []database.InsertEncounterPhaseParams
-	seal                [sha256.Size]byte
-}
-
 type razorgoreEvidence struct {
 	Receipts        []database.EventRepairReceipt
 	Group           database.WoWLogGroup
@@ -53,7 +32,7 @@ type razorgoreEvidence struct {
 
 // ErrStaleEvidence means the source snapshot changed after preview. Reconstruct
 // a new preview outside the transaction rather than applying the old plan.
-var ErrStaleEvidence = errors.New("razorgore evidence changed; reevaluate repair")
+var ErrStaleEvidence = errors.New("event repair evidence changed; reevaluate repair")
 
 // EvaluateRazorgore loads and reconstructs a prepared plan outside the mutation
 // transaction. Gzip/protobuf decoding and numerical replay happen only here.
@@ -161,6 +140,9 @@ func ApplyRazorgore(ctx context.Context, tx database.Store, plan *RazorgoreRepai
 	if err := validateRazorgorePlan(plan); err != nil {
 		return err
 	}
+	if plan.lucifron != nil || plan.operation != OperationRazorgore {
+		return errors.New("prepared plan belongs to a different repair script")
+	}
 	fresh := plan
 	if fresh.RequiresReparse {
 		return fmt.Errorf("razorgore requires reparse: %s", fresh.Reason)
@@ -243,7 +225,9 @@ func razorgorePlanSeal(p *RazorgoreRepairPlan) ([sha256.Size]byte, error) {
 		Numeric             *razorgoreNumericPlan
 		Multi               *razorgoreMultiPlan
 		ReconstructedPhases []database.InsertEncounterPhaseParams
-	}{p, p.hostile, p.phase, p.numeric, p.multi, p.reconstructedPhases}
+		Operation           string
+		Lucifron            *lucifronPlan
+	}{p, p.hostile, p.phase, p.numeric, p.multi, p.reconstructedPhases, p.operation, p.lucifron}
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		return [sha256.Size]byte{}, err
@@ -271,6 +255,7 @@ func evaluateRazorgoreEvidence(e razorgoreEvidence) (*RazorgoreRepairPlan, error
 		return nil, err
 	}
 	p := &RazorgoreRepairPlan{
+		operation:  OperationRazorgore,
 		InstanceID: e.Instance.ID, EvidenceHash: hash, Changes: []string{},
 		Warnings: []string{},
 		// Keep the version-1 diagnostic shape stable even without reconstructed
@@ -298,6 +283,9 @@ func evaluateRazorgoreEvidence(e razorgoreEvidence) (*RazorgoreRepairPlan, error
 	}
 	if e.Instance.Name != "Blackwing Lair" || e.Instance.InvalidatedAt.Valid || slices.Contains(e.Instance.Capabilities, "server-side") {
 		return skip("instance is not an active legacy Blackwing Lair source (authoritative encounter results require reparse)")
+	}
+	if parserVersionAtLeast(e.Instance, "v1.0.280") {
+		return skip("instance was parsed at or after v1.0.280")
 	}
 	// A distinct persisted ranking duration is the opt-out proxy for previously
 	// processed instances, including manual reparses. Check every Razorgore pull

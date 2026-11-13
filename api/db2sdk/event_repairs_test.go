@@ -38,3 +38,16 @@ func TestInstanceRepairsAreOptional(t *testing.T) {
 	_, err = EventRepairReceipts([]database.EventRepairReceipt{{Warnings: []byte(`invalid`), Details: []byte(`{}`)}})
 	require.Error(t, err)
 }
+
+func TestLucifronReceiptPublicDetails(t *testing.T) {
+	t.Parallel()
+	details := `{"parser_version":"v1.0.172","rule_version":"v1.0.173","ranked_target_entries":[12118,12119],"players":[],"omissions":[]}`
+	receipts, err := EventRepairReceipts([]database.EventRepairReceipt{{OperationID: uuid.New(), Operation: "lucifron-ranked-damage", Version: 1, Warnings: []byte(`[]`), Details: []byte(details)}})
+	require.NoError(t, err)
+	require.Len(t, receipts, 1)
+	require.NotNil(t, receipts[0].Warnings)
+	encoded, err := json.Marshal(receipts[0].Details)
+	require.NoError(t, err)
+	require.JSONEq(t, details, string(encoded))
+	require.Equal(t, "lucifron-ranked-damage", receipts[0].Operation)
+}

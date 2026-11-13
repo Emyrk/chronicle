@@ -495,3 +495,39 @@ func TestFalseKillBossMayActivateAfterAdds(t *testing.T) {
 func (s *razorgoreStore) ListInstanceEventRepairReceipts(context.Context, uuid.UUID) ([]database.EventRepairReceipt, error) {
 	return s.e.Receipts, nil
 }
+
+func TestRazorgoreParserVersionGate(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		version, tag string
+		eligible     bool
+	}{
+		{"v1.0.279", "", true}, {"v1.0.280", "", false}, {"v1.0.281", "", false},
+		{"v1.0.99", "", true}, {"v1.0.279+abcdef", "v1.0.279", true},
+		{"v1.0.280+abcdef", "v1.0.280", false}, {"v1.0.281+abcdef", "", false},
+		{"unknown", "", true}, {"", "", true}, {"1.0", "", true},
+		{"v1.0.280-rc.1", "", true}, {"v1.0.279-4-gabcdef", "", true},
+		{"v1.0.279+abcdef", "v1.0.280", false}, {"0.0", "v1.0.279", true},
+		{"unknown", "v1.0.280", false}, {"v1.0.280+abcdef", "unknown", false},
+	} {
+		t.Run(tc.version+"/"+tc.tag, func(t *testing.T) {
+			t.Parallel()
+			e := fixtureRazorgore(t)
+			e.Instance.ParserVersion = tc.version
+			if tc.tag != "" {
+				e.Instance.Versions = database.VersionsMap{"chronicle": tc.tag}
+			}
+			store := &razorgoreStore{e: e}
+			plan, err := EvaluateRazorgore(context.Background(), store, e.Instance.ID)
+			require.NoError(t, err)
+			require.Equal(t, !tc.eligible, plan.RequiresReparse, plan.Reason)
+			require.NoError(t, RevalidateRazorgore(context.Background(), store, plan))
+			if !tc.eligible {
+				require.Contains(t, plan.Reason, "v1.0.280")
+				require.Empty(t, plan.Changes)
+				require.Error(t, ApplyRazorgore(context.Background(), store, plan))
+				require.Empty(t, store.writes)
+			}
+		})
+	}
+}
