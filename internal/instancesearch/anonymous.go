@@ -18,6 +18,7 @@ const (
 // AnonymousFields are the fields anonymous users may filter on. They are
 // cheap columns on the instance row.
 var AnonymousFields = []string{
+	"instance.validity",
 	"instance.name",
 	"instance.realm",
 	"instance.guild",

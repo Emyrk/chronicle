@@ -88,7 +88,7 @@ JOIN wow_log_groups wlg ON wlg.id = plg.id
   AND plg.parse_generation = wlg.parse_generation
   AND plg.finalized_at IS NOT NULL
   AND NOT wlg.unlisted
-WHERE li.invalidated_at IS NULL
+WHERE TRUE                                                -- validity is a user condition
   AND <one row per COALESCE(li.duplicate_group_id, li.id)>  -- dupes collapse to 1
   AND ( <compiled user tree> )
 ORDER BY <sort>, li.id
@@ -98,6 +98,9 @@ LIMIT $n                                                 -- keyset pagination
 Rules:
 - Run through the normal `database.Store` connection so `app.tenant_id` is
   set; never with `app.tenant_bypass`.
+- Validity is an ordinary enum field condition: `instance.validity = "valid"`
+  selects valid runs and `instance.validity = "invalid"` selects invalidated runs.
+  Omitting the condition includes both. The field is available anonymously.
 - The frame is emitted by code, not by the tree.
 - Tables that carry their own `tenant_id` without RLS (`parse_score_results`,
   `time_parse_scores`) get `tenant_id = <current tenant>` bound inside the

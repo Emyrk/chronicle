@@ -7,6 +7,7 @@ Use at the top level (outside any quantifier).
 
 | Field | Type | Ops | Options | Description |
 |---|---|---|---|---|
+| `instance.validity` | enum: valid, invalid | =, !=, in, not_in |  | Whether the run is valid or invalidated. |
 | `instance.name` | string | =, !=, in, not_in, contains, starts_with |  | Zone name, e.g. "Molten Core". |
 | `instance.realm` | string | =, !=, in, not_in, contains, starts_with |  | Realm name. |
 | `instance.realm_id` | uuid | =, !=, in, not_in |  | Realm ID. |

@@ -1,6 +1,6 @@
 import { Fragment, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowDown, ArrowUp, CheckCircle2, ChevronRight, Loader2, SearchX } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, CheckCircle2, ChevronRight, Loader2, SearchX } from "lucide-react";
 import type { InstanceSearchResult, InstanceSearchSort, InstanceSearchSortField } from "@/api/typesGenerated";
 import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages";
 import { cn } from "@/lib/utils";
@@ -146,9 +146,19 @@ export function ResultsTable({
                       aria-hidden="true"
                     />
                     <div className="min-w-0">
-                      <Link to={instanceHref(r)} target="_blank" rel="noopener noreferrer" className="block font-medium text-foreground truncate group-hover:underline">
-                        {r.name}
-                      </Link>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <Link to={instanceHref(r)} target="_blank" rel="noopener noreferrer" className="block min-w-0 font-medium text-foreground truncate group-hover:underline">
+                          {r.name}
+                        </Link>
+                        {r.invalidated_at && (
+                          <span
+                            title={r.invalid_reason ? `Invalid: ${r.invalid_reason}` : "Invalid run"}
+                            className="inline-flex shrink-0 items-center gap-1 rounded bg-red-500/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-red-300 ring-1 ring-red-500/25"
+                          >
+                            <AlertTriangle className="h-3 w-3" /> Invalid
+                          </span>
+                        )}
+                      </div>
                       <div className="text-2xs text-muted-foreground truncate">
                         {r.realm_name}
                         {r.max_players ? ` · ${r.max_players}-player` : ""}

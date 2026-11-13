@@ -195,6 +195,8 @@ type InstanceSearchResult struct {
 	DifficultyName string        `json:"difficulty_name"`
 	MaxPlayers     int32         `json:"max_players"`
 	StartedAt      time.Time     `json:"started_at" format:"date-time"`
+	InvalidatedAt  *time.Time    `json:"invalidated_at,omitempty" format:"date-time"`
+	InvalidReason  string        `json:"invalid_reason,omitempty"`
 	// PlayerCount is the number of distinct players in the run.
 	PlayerCount int64 `json:"player_count"`
 	// BossesKilled is the number of distinct bosses killed (clean or partial).

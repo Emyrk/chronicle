@@ -205,6 +205,15 @@ func TestDescribeFixture(t *testing.T) {
 	require.Equal(t, string(want), string(got), "run go test ./internal/instancesearch -run TestDescribeFixture -update")
 }
 
+func TestCompileValidityField(t *testing.T) {
+	t.Parallel()
+
+	compiled, err := instancesearch.Compile(where(t, `{"field": "instance.validity", "op": "=", "value": "invalid"}`), instancesearch.Options{})
+	require.NoError(t, err)
+	require.Contains(t, compiled.SQL, "li.invalidated_at IS NULL")
+	require.Contains(t, compiled.Args, "invalid")
+}
+
 func TestCompileSort(t *testing.T) {
 	t.Parallel()
 
@@ -398,6 +407,7 @@ func TestCheckAnonymous(t *testing.T) {
 	for _, raw := range allowed {
 		require.NoError(t, instancesearch.CheckAnonymous(where(t, raw)), raw)
 	}
+	require.NoError(t, instancesearch.CheckAnonymous(where(t, `{"field": "instance.validity", "op": "=", "value": "invalid"}`)))
 	require.NoError(t, instancesearch.CheckAnonymous(instancesearch.Query{}))
 
 	denied := []string{

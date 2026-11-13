@@ -3641,6 +3641,8 @@ export interface InstanceSearchResult {
     readonly difficulty_name: string;
     readonly max_players: number;
     readonly started_at: string;
+    readonly invalidated_at?: string;
+    readonly invalid_reason?: string;
     /**
      * PlayerCount is the number of distinct players in the run.
      */
