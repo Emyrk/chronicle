@@ -1,3 +1,4 @@
+import { RepairDetails } from "@/components/EventRepair/RepairDetails";
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -50,7 +51,7 @@ export function RepairReport({ operation, busy, onApply, onCancel, onRetry }: {
         <thead className="bg-muted"><tr>{["Instance", "State", "Changes / reason", "Ratings"].map((title) => <th key={title} scope="col" className="p-3">{title}</th>)}</tr></thead>
         <tbody>{(operation.items ?? []).map((item) => <tr key={item.instance_id} className="border-t align-top">
           <td className="max-w-56 break-all p-3 font-mono"><a href={`/instances/${encodeURIComponent(item.instance_id)}`} target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-2 hover:no-underline" title="Open instance in a new tab">{item.instance_id}</a></td><td className="p-3">{item.state}</td>
-          <td className="min-w-60 p-3"><p className="break-words">{item.reason}</p><ul className="list-inside list-disc">{(item.changes ?? []).map((change, index) => <li key={index}>{change}</li>)}</ul>{item.evidence_hash && <details className="mt-2 text-muted-foreground"><summary className="cursor-pointer">Evidence hash</summary><code className="break-all">{item.evidence_hash}</code></details>}</td>
+          <td className="min-w-60 p-3"><p className="break-words">{item.reason}</p><ul className="list-inside list-disc">{(item.changes ?? []).map((change, index) => <li key={index}>{change}</li>)}</ul>{item.evidence_hash && <details className="mt-2 text-muted-foreground"><summary className="cursor-pointer">Evidence hash</summary><code className="break-all">{item.evidence_hash}</code></details>}<div className="mt-3"><RepairDetails operation={operation.operation} version={operation.version} warnings={item.warnings} details={item.details} /></div></td>
           <td className="p-3">{item.ratings_queued ? "Queued, not completed" : "Not queued"}</td>
         </tr>)}</tbody>
       </table>

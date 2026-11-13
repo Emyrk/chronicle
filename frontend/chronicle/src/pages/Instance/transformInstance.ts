@@ -155,6 +155,7 @@ export function transformToInstance(
     dynamicDifficulty: apiInstance.dynamic_difficulty,
     difficulties: apiInstance.difficulties,
     mixedDifficulty: apiInstance.mixed_difficulty,
+    repairs: "repairs" in apiInstance ? apiInstance.repairs : undefined,
     invalidatedAt: apiInstance.invalidated_at,
     invalidReason: apiInstance.invalid_reason,
     vehicleControlIntervals: apiInstance.vehicle_control_intervals,

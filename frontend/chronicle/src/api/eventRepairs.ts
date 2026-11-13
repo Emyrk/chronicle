@@ -1,9 +1,10 @@
 import type { CreateEventRepairRequest, EventRepairItem, EventRepairOperation, EventRepairOperationsResponse } from "./typesGenerated";
 
 export type AdminEventRepairCreateRequest = CreateEventRepairRequest;
-export type AdminEventRepairItem = EventRepairItem;
-export type AdminEventRepairOperation = EventRepairOperation;
-export type AdminEventRepairList = EventRepairOperationsResponse;
+// Temporary extensions until the receipt SDK is generated.
+export type AdminEventRepairItem = EventRepairItem & { warnings?: string[]; details?: Record<string, unknown> };
+export type AdminEventRepairOperation = Omit<EventRepairOperation, "items"> & { items: AdminEventRepairItem[] };
+export type AdminEventRepairList = Omit<EventRepairOperationsResponse, "operations"> & { operations: AdminEventRepairOperation[] };
 
 export const eventRepairKey = ["admin", "event-repairs"] as const;
 export const eventRepairURL = "/api/v1/admin/event-repairs";

@@ -89,6 +89,8 @@ export interface EncounterRankingWindow {
 }
 
 export interface Instance {
+  // Validated by the receipt renderer; replace with SDK receipt type after generation.
+  repairs?: unknown;
   id: string;
   slug?: string;
   logGroupId?: string;

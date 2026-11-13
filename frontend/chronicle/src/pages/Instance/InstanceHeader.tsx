@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { RepairReceipts } from "@/components/EventRepair/RepairDetails";
 import { Clock } from "lucide-react";
 import { EncounterDifficultySummary } from "@/components/EncounterDifficulty/EncounterDifficultyMark";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
@@ -23,6 +24,7 @@ export interface InstanceHeaderProps {
   backgroundUrl?: string;
   heroic?: boolean;
   titleBadges?: ReactNode;
+  repairs?: unknown;
   difficulty?: InstanceHeaderDifficulty;
   guild?: ReactNode;
   realm?: string;
@@ -57,6 +59,7 @@ export function InstanceHeader({
   backgroundUrl,
   heroic = false,
   titleBadges,
+  repairs,
   difficulty,
   guild,
   realm,
@@ -114,6 +117,8 @@ export function InstanceHeader({
             {startTimeLabel}
           </p>
         </div>
+
+        <RepairReceipts repairs={repairs} />
 
         {isMobile && difficulty && (
           <div className="mt-2 flex flex-wrap items-center">

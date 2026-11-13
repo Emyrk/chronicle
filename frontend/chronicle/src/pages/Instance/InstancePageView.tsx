@@ -4271,6 +4271,7 @@ function InstancePageViewContent({
       <InstanceHeader
         isMobile={isMobile}
         name={instance.name}
+        repairs={instance.repairs}
         nameAttributes={raidEntityAttributes}
         backgroundUrl={headerBg}
         heroic={heroic}
