@@ -38,8 +38,11 @@ func TestProductionDependencyDirection(t *testing.T) {
 			if !strings.Contains(strings.Split(imported, "/")[0], ".") {
 				continue
 			} // standard library
+			if owner == "formats/modern" && allowedModernCompatibility[imported] {
+				continue
+			}
 			if imported == "github.com/Emyrk/chronicle/database" {
-				require.Contains(t, []string{"file.go", "vanilla/profile.go", "tbc/profile.go", "wotlk/profile.go", "forever/profile.go"}, filepath.ToSlash(path))
+				require.Contains(t, []string{"file.go", "vanilla/profile.go", "tbc/profile.go", "wotlk/profile.go", "forever/profile.go", "formats/modern/normalizer.go", "formats/cleu/decoder.go", "tbc/decoder.go", "wotlk/decoder.go", "azerothcore/decoder.go", "formats/modern/handlers.go", "formats/modern/decoder.go", "wotlk/source.go", "cleusource/source.go"}, filepath.ToSlash(path))
 				require.Nil(t, spec.Name, "canonical database import only, no aliases or dot imports")
 				ast.Inspect(file, func(node ast.Node) bool {
 					selector, ok := node.(*ast.SelectorExpr)
@@ -48,10 +51,22 @@ func TestProductionDependencyDirection(t *testing.T) {
 					}
 					name, ok := selector.X.(*ast.Ident)
 					if ok && name.Name == "database" {
-						require.Contains(t, []string{"LogFormat", "LogFormat112aCcAddon", "LogFormat243CcAddon", "LogFormat335aCcAddon", "LogFormatAzerothcoreMod", "LogFormatV22Cleu"}, selector.Sel.Name, "primitive format contract only, no database services")
+						require.Contains(t, []string{"LogFormat", "LogFormat112aCcAddon", "LogFormat243CcAddon", "LogFormat335aCcAddon", "LogFormatAzerothcoreMod", "LogFormatV22Cleu", "LogFormatV9Cleu", "LogFormatHermesproxy1142Cc", "WoWFlavor", "FlavorTBC", "FlavorWrath", "FlavorWoWForever"}, selector.Sel.Name, "primitive format contract only, no database services")
 					}
 					return true
 				})
+				continue
+			}
+			if owner == "azerothcore" && (allowedCLEUCompatibility[imported] || allowedACoreCompatibility[imported]) {
+				continue
+			}
+			if owner == "formats/cleu" && allowedCLEUCompatibility[imported] {
+				continue
+			}
+			if owner == "cleusource" && allowedCLEUSourceCompatibility[imported] {
+				continue
+			}
+			if owner == "formats/cleu/companion" && allowedCLEUCompanionCompatibility[imported] {
 				continue
 			}
 			if allowedVanillaCompatibility[imported] {
@@ -75,9 +90,15 @@ func TestProductionDependencyDirection(t *testing.T) {
 				require.Contains(t, []string{"common", "vanilla", "tbc", "wotlk", "forever", "snapshot"}, dependency)
 			case "vanilla":
 				require.Contains(t, []string{"common", "common/units", "common/critters", "formats/ccv2"}, dependency, "%s -> %s", owner, dependency)
-			case "tbc", "wotlk", "forever":
+			case "tbc", "wotlk", "azerothcore":
+				require.Contains(t, []string{"common", "formats/cleu", "cleusource"}, dependency, "%s -> %s", owner, dependency)
+			case "cleusource":
+				require.Contains(t, []string{"formats/cleu", "formats/cleu/companion"}, dependency)
+			case "forever":
 				require.Contains(t, []string{"common"}, dependency, "%s -> %s", owner, dependency)
-			case "common", "common/units", "common/critters", "formats/ccv2":
+			case "formats/modern":
+				require.Equal(t, "formats/cleu", dependency)
+			case "common", "common/units", "common/critters", "formats/ccv2", "formats/cleu", "formats/cleu/companion":
 				t.Errorf("leaf package %s imports %s", owner, imported)
 			case "snapshot":
 				require.Contains(t, []string{"common", "vanilla", "tbc", "wotlk", "forever"}, dependency)
@@ -87,6 +108,25 @@ func TestProductionDependencyDirection(t *testing.T) {
 		}
 		return nil
 	}))
+}
+
+// ACore reuses only context and message value contracts, never old execution.
+var allowedACoreCompatibility = map[string]bool{
+	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx": true,
+	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant": true,
+	"github.com/Emyrk/chronicle/combatlog/parser/types/realm":     true,
+	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo":  true,
+	"github.com/Emyrk/chronicle/combatlog/parser/types/zone":      true,
+}
+
+// CLEU semantics temporarily reuse only the established message/value model.
+// Execution, parser state, companions, synthetics, and consumers stay outside.
+var allowedCLEUCompatibility = map[string]bool{
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages": true,
+	"github.com/Emyrk/chronicle/combatlog/parser/guid":            true,
+	"github.com/Emyrk/chronicle/combatlog/parser/types":           true,
+	"github.com/Emyrk/chronicle/database/gamedb/chrondbc":         true,
+	"github.com/Emyrk/chronicle/internal/ptr":                     true,
 }
 
 // Temporary value/message compatibility only; never allow parser execution,
@@ -111,4 +151,42 @@ var allowedVanillaCompatibility = map[string]bool{
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc":          true,
 	"github.com/Emyrk/chronicle/internal/ptr":                      true,
 	"github.com/Emyrk/chronicle/internal/bitmask":                  true,
+}
+
+// Companion frame decoding owns copied message/value behavior, not legacy parser
+// execution or consumers.
+var allowedCLEUCompanionCompatibility = map[string]bool{
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages":  true,
+	"github.com/Emyrk/chronicle/combatlog/parser/guid":             true,
+	"github.com/Emyrk/chronicle/combatlog/parser/types":            true,
+	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant":  true,
+	"github.com/Emyrk/chronicle/combatlog/parser/types/realm":      true,
+	"github.com/Emyrk/chronicle/combatlog/parser/types/realmclock": true,
+	"github.com/Emyrk/chronicle/combatlog/parser/types/zone":       true,
+	"github.com/Emyrk/chronicle/internal/ptr":                      true,
+	"github.com/Emyrk/chronicle/internal/semverenc":                true,
+}
+
+// Native CLEU source composition may reuse only parse metadata, fatal parse
+// errors, shared message/value contracts, and read-only game-data interfaces.
+var allowedCLEUSourceCompatibility = map[string]bool{
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages":    true,
+	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx":    true,
+	"github.com/Emyrk/chronicle/combatlog/parser/common/parseerrors": true,
+	"github.com/Emyrk/chronicle/combatlog/parser/guid":               true,
+	"github.com/Emyrk/chronicle/combatlog/parser/types/realmclock":   true,
+	"github.com/Emyrk/chronicle/database/gamedb":                     true,
+	"github.com/Emyrk/chronicle/database/gamedb/chrondbc":            true,
+}
+
+var allowedModernCompatibility = map[string]bool{
+	"github.com/Emyrk/chronicle/combatlog/parser/guid":            true,
+	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx": true,
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages": true,
+	"github.com/Emyrk/chronicle/combatlog/parser/types":           true,
+	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant": true,
+	"github.com/Emyrk/chronicle/combatlog/parser/types/zone":      true,
+	"github.com/Emyrk/chronicle/database/gamedb/chrondbc":         true,
+	"github.com/Emyrk/chronicle/database/gamedb/talents":          true,
+	"github.com/Gophercraft/core/i18n":                            true,
 }
