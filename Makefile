@@ -20,9 +20,13 @@ test:
 update-spell-goldens:
 	go test ./database/gamedb/chrondbc -run '^TestLegacySpellGoldenParity$$' -update
 
+# golangci-lint caches absolute source paths. Keep its cache scoped to this Git
+# worktree so removed or parallel worktrees cannot leak stale diagnostics.
+GOLANGCI_LINT_CACHE ?= $(abspath $(shell git rev-parse --git-path golangci-lint-cache))
+
 .PHONY: lint
 lint:
-	golangci-lint run --build-tags $(SERVER)
+	GOLANGCI_LINT_CACHE="$(GOLANGCI_LINT_CACHE)" golangci-lint run --build-tags $(SERVER)
 
 frontend/chronicle/dist: $(wildcard frontend/**)
 	(cd frontend/chronicle; pnpm install; SERVER=$(SERVER) pnpm build)
