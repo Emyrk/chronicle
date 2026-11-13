@@ -48,6 +48,42 @@ export function RootCommunityHeroButton() {
   );
 }
 
+export function RootCommunityUploadPrompt() {
+  const { enabled, setDialogOpen, servers } = useRootCommunityState();
+  if (!enabled) return null;
+
+  return (
+    <section
+      aria-label="Choose a community to upload"
+      className="relative overflow-hidden rounded-xl border border-primary/20 bg-[linear-gradient(100deg,color-mix(in_srgb,var(--primary)_16%,var(--background))_0%,color-mix(in_srgb,var(--primary)_5%,var(--background))_45%,var(--background)_80%)] shadow-xl shadow-black/10"
+    >
+      <div className="absolute inset-y-0 left-0 w-1 bg-linear-to-b from-(--tertiary) via-primary/60 to-transparent" />
+      <div className="absolute -top-16 left-[8%] size-48 rounded-full bg-primary/15 blur-3xl" />
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,color-mix(in_oklch,var(--foreground)_4%,transparent)_1px,transparent_1px)] mask-[linear-gradient(to_right,black,transparent_55%)] bg-size-[22px_100%]" />
+      <div className="absolute inset-x-0 bottom-0 h-px bg-linear-to-r from-transparent via-primary/60 to-transparent" />
+
+      <div className="relative flex flex-col gap-5 px-6 py-7 sm:flex-row sm:items-center">
+        <CommunityStack servers={servers} onChoose={() => setDialogOpen(true)} />
+        <div className="min-w-0 flex-1">
+          <p className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.2em] text-(--tertiary)">
+            <Globe2 className="size-3" aria-hidden="true" />
+            Community upload
+          </p>
+          <h2 className="mt-1 font-wow text-xl text-foreground sm:text-2xl">Upload your logs on a community server</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Choose where you play to upload with that server’s log format and game data.
+          </p>
+        </div>
+        <Button size="lg" onClick={() => setDialogOpen(true)} className="group gap-2 shadow-lg shadow-primary/20">
+          <Compass className="size-4 transition-transform group-hover:rotate-45" aria-hidden="true" />
+          Choose community
+          <ChevronRight className="size-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+        </Button>
+      </div>
+    </section>
+  );
+}
+
 export function RootCommunityProvider({
   children,
   initialDismissed = false,

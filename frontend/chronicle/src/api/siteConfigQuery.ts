@@ -1,6 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import type { SiteConfig } from "./typesGenerated";
 
+export function rootUploadsDisabledForSite(config: SiteConfig | undefined): boolean {
+  return !!(config?.root_uploads_disabled && !config.tenant && !config.client_uploads_disabled);
+}
+
 export function uploadsDisabledForSite(config: SiteConfig | undefined): boolean {
   return !!(config?.client_uploads_disabled || (config?.root_uploads_disabled && !config.tenant));
 }

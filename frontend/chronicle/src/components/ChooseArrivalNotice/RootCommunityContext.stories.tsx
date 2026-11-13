@@ -7,6 +7,7 @@ import {
   RootCommunityDialog,
   RootCommunityNavButton,
   RootCommunityProvider,
+  RootCommunityUploadPrompt,
 } from "@/components/RootCommunityContext/RootCommunityContext";
 
 const siteConfig = {
@@ -17,6 +18,7 @@ const siteConfig = {
   disabled_ads: [],
   discoverable: true,
   root_domain_discovery: true,
+  root_uploads_disabled: true,
   default_format: null,
   available_formats: [],
   dataset_flavor: [],
@@ -66,9 +68,10 @@ const communities = [
 type RootContextPreviewProps = {
   initialDismissed?: boolean;
   initialDialogOpen?: boolean;
+  showUploadPrompt?: boolean;
 };
 
-function RootContextPreview({ initialDismissed, initialDialogOpen }: RootContextPreviewProps) {
+function RootContextPreview({ initialDismissed, initialDialogOpen, showUploadPrompt }: RootContextPreviewProps) {
   return (
     <MemoryRouter initialEntries={["/instances/42?view=damage#players"]}>
       <RootCommunityProvider initialDismissed={initialDismissed} initialDialogOpen={initialDialogOpen}>
@@ -81,6 +84,11 @@ function RootContextPreview({ initialDismissed, initialDialogOpen }: RootContext
           </nav>
           <RootCommunityBanner />
           <main>
+            {showUploadPrompt ? (
+              <div className="container mx-auto max-w-5xl px-4 py-12">
+                <RootCommunityUploadPrompt />
+              </div>
+            ) : (
             <section className="relative overflow-hidden border-b px-5 py-16 md:py-24">
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_20%,color-mix(in_oklch,var(--primary)_16%,transparent),transparent_38%)]" />
               <div className="relative mx-auto max-w-6xl">
@@ -91,6 +99,7 @@ function RootContextPreview({ initialDismissed, initialDialogOpen }: RootContext
                 </p>
               </div>
             </section>
+            )}
           </main>
           <RootCommunityDialog />
         </div>
@@ -127,6 +136,11 @@ export const SelectorOpen: Story = {
 /** After dismissal, the compact navigation action remains for the session. */
 export const Dismissed: Story = {
   args: { initialDismissed: true },
+};
+
+/** Root upload page directs visitors to the community where they play. */
+export const UploadPrompt: Story = {
+  args: { showUploadPrompt: true },
 };
 
 /** Narrow-screen treatment for the root context and community selector. */

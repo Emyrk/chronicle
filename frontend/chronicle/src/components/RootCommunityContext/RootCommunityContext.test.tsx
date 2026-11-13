@@ -5,6 +5,7 @@ import {
   RootCommunityBanner,
   RootCommunityNavButton,
   RootCommunityProvider,
+  RootCommunityUploadPrompt,
 } from "./RootCommunityContext";
 
 const mocks = vi.hoisted(() => ({
@@ -47,6 +48,7 @@ function render(initialDismissed = false) {
       <RootCommunityProvider initialDismissed={initialDismissed}>
         <RootCommunityBanner />
         <RootCommunityNavButton />
+        <RootCommunityUploadPrompt />
       </RootCommunityProvider>
     </MemoryRouter>,
   );
@@ -92,6 +94,8 @@ describe("RootCommunityContext", () => {
     const markup = render();
 
     expect(markup).not.toContain("You’re viewing Chronicle across every community");
+    expect(markup).toContain("Upload your logs on a community server");
+    expect(markup).toContain("Choose where you play to upload with that server’s log format and game data.");
     expect(mocks.discoveryEnabled).toBe(true);
   });
 

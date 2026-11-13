@@ -1925,7 +1925,7 @@ export function useAdminOutdatedInstances(instanceName?: string, parserVersion?:
     },
   });
 }
-export { uploadsDisabledForSite, useSiteConfig } from "./siteConfigQuery";
+export { rootUploadsDisabledForSite, uploadsDisabledForSite, useSiteConfig } from "./siteConfigQuery";
 
 // useDiscoverableServers lists every discoverable Chronicle server, even from a tenant subdomain.
 export function useDiscoverableServers(enabled = true) {
