@@ -45,13 +45,27 @@ func lucifronParserVersion(instance database.LogInstance) (string, bool) {
 }
 
 func EvaluateLucifron(ctx context.Context, db database.Store, instanceID uuid.UUID) (*RepairPlan, error) {
-	e, err := loadRazorgoreEvidence(ctx, db, instanceID)
+	e, err := loadRepairEvidence(ctx, db, instanceID, false)
 	if err != nil {
 		return nil, err
 	}
+	// Evaluate metadata first. Only the specifically approved activity skip may
+	// omit stream loading; every fallback retains the normal evidence path.
 	p, err := evaluateLucifronEvidence(e)
 	if err != nil {
 		return nil, err
+	}
+	if p.Reason != lucifronActivitySkipReason {
+		if !e.MissingInstance && e.Server.TenantID.Valid && e.Server.TenantID.UUID != uuid.Nil {
+			e.Events, err = db.RazorgoreRepairEvents(ctx, instanceID)
+			if err != nil {
+				return nil, err
+			}
+		}
+		p, err = evaluateLucifronEvidence(e)
+		if err != nil {
+			return nil, err
+		}
 	}
 	p.operation = OperationLucifron
 	p.seal, err = razorgorePlanSeal(p)
@@ -61,6 +75,23 @@ func EvaluateLucifron(ctx context.Context, db database.Store, instanceID uuid.UU
 func RevalidateLucifron(ctx context.Context, db database.Store, p *RepairPlan) error {
 	if p == nil || p.operation != OperationLucifron {
 		return errors.New("missing Lucifron prepared payload")
+	}
+	if p.RequiresReparse && p.Reason == lucifronActivitySkipReason {
+		if err := validateRazorgorePlan(p); err != nil {
+			return err
+		}
+		e, err := loadRepairEvidence(ctx, db, p.InstanceID, false)
+		if err != nil {
+			return err
+		}
+		hash, err := razorgoreEvidenceHash(e)
+		if err != nil {
+			return err
+		}
+		if hash != p.EvidenceHash {
+			return ErrStaleEvidence
+		}
+		return nil
 	}
 	return RevalidateRazorgore(ctx, db, p)
 }
@@ -115,6 +146,9 @@ func evaluateLucifronEvidence(e razorgoreEvidence) (*RepairPlan, error) {
 			return skip("Lucifron repair already recorded")
 		}
 	}
+	if lucifronActivityOnlyTargets(e) {
+		return skip(lucifronActivitySkipReason)
+	}
 	p.lucifron = &lucifronPlan{}
 	found := false
 	seen := map[uuid.UUID]bool{}
@@ -162,18 +196,20 @@ func evaluateLucifronEncounter(e razorgoreEvidence, c database.LogInstanceEncoun
 	if err != nil {
 		return err
 	}
-	owners, err := razorgoreProvenPetOwners(replay, c.EndTime.Time)
+	owners, err := lucifronRecordedOwners(replay, c.EndTime.Time, c.ID, p)
 	if err != nil {
 		return err
 	}
-	// Possession expiry and cross-boundary control cannot be inferred from sparse
-	// snapshots. Reject control rather than treating a final owner as a controller.
+	// Validate recorded control before replay. Player identity is unchanged by
+	// possession: the parser credits direct player casters to themselves and
+	// excludes player targets even while hostile. No controller receives their
+	// damage. Unsupported creature control still cannot use this upper bound.
+	if err := validateLucifronControl(e, c, replay); err != nil {
+		return err
+	}
 	terminalUnowned := map[guid.GUID]bool{}
 	for _, event := range replay {
 		if m, ok := event.message.(*messages.UnitClassificationEvent); ok {
-			if m.Controller != nil {
-				return errors.New("lucifron control history requires original-log reparse")
-			}
 			if event.at.Equal(c.EndTime.Time) && m.Owner == nil {
 				terminalUnowned[m.Target] = true
 			}
@@ -183,6 +219,13 @@ func evaluateLucifronEncounter(e razorgoreEvidence, c database.LogInstanceEncoun
 	ranked := map[guid.GUID]int64{}
 	uncertainCredit := false
 	classified := map[guid.GUID]*messages.UnitClassificationEvent{}
+	knownHostiles := instances.MoltenCoreHostiles()
+	observedOwned := map[guid.GUID]bool{}
+	for _, event := range replay {
+		if m, ok := event.message.(*messages.UnitClassificationEvent); ok && m.Owner != nil {
+			observedOwned[m.Target] = true
+		}
+	}
 	for _, event := range replay {
 		if snapshot, ok := event.message.(*messages.UnitClassificationEvent); ok {
 			classified[snapshot.Target] = snapshot
@@ -199,6 +242,11 @@ func evaluateLucifronEncounter(e razorgoreEvidence, c database.LogInstanceEncoun
 		if amount <= 0 || m.Target.IsPlayer() {
 			continue
 		}
+		// The parser never credits damage to a player-owned target. Use only
+		// classification already observed at this damage index, not final state.
+		if target, known := classified[m.Target]; known && target.Owner != nil && target.Owner.IsPlayer() {
+			continue
+		}
 		if m.Caster == nil {
 			return errors.New("environmental damage to nonplayers cannot establish credit")
 		}
@@ -206,6 +254,12 @@ func evaluateLucifronEncounter(e razorgoreEvidence, c database.LogInstanceEncoun
 		if !player.IsPlayer() {
 			owner, ok := owners[player]
 			if !ok {
+				entry, _ := player.GetEntry()
+				if _, hostile := knownHostiles[entry]; hostile && !observedOwned[player] {
+					// Registry hostiles such as Lucifron are not missing-owner
+					// pets merely because activity ended before the final frame.
+					continue
+				}
 				_, totem := totems.IsTotem(player)
 				_, known := classified[player]
 				if terminalUnowned[player] && !player.IsPet() && !totem {

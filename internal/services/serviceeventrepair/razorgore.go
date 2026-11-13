@@ -78,6 +78,11 @@ func RevalidateRazorgore(ctx context.Context, tx database.Store, plan *Razorgore
 // loadRazorgoreEvidence intentionally deals only in database rows. Retention or
 // tenant identity loss is terminal missing evidence, not an endless retry error.
 func loadRazorgoreEvidence(ctx context.Context, db database.Store, instanceID uuid.UUID) (razorgoreEvidence, error) {
+	return loadRepairEvidence(ctx, db, instanceID, true)
+}
+
+// Metadata-only skips need the same source rows without transferring event blobs.
+func loadRepairEvidence(ctx context.Context, db database.Store, instanceID uuid.UUID, includeEvents bool) (razorgoreEvidence, error) {
 	var e razorgoreEvidence
 	var err error
 	if e.Instance, err = db.RazorgoreRepairInstance(ctx, instanceID); err != nil {
@@ -121,8 +126,10 @@ func loadRazorgoreEvidence(ctx context.Context, db database.Store, instanceID uu
 	if e.Phases, err = db.GetEncounterPhasesByInstanceID(ctx, instanceID); err != nil {
 		return e, err
 	}
-	if e.Events, err = db.RazorgoreRepairEvents(ctx, instanceID); err != nil {
-		return e, err
+	if includeEvents {
+		if e.Events, err = db.RazorgoreRepairEvents(ctx, instanceID); err != nil {
+			return e, err
+		}
 	}
 	if e.Rankings, err = db.RazorgoreRepairRankings(ctx, instanceID); err != nil {
 		return e, err
