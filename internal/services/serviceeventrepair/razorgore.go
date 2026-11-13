@@ -18,21 +18,22 @@ import (
 // RazorgoreRepairPlan is diagnostic evidence, not an executable mutation payload.
 // Only Evaluate creates an executable in-memory plan. JSON is diagnostic only.
 type RazorgoreRepairPlan struct {
-	Warnings        []string          `json:"warnings,omitempty"`
-	Details         map[string]any    `json:"details,omitempty"`
-	TenantID        uuid.UUID         `json:"tenant_id"`
-	InstanceID      uuid.UUID         `json:"instance_id"`
-	RequiresReparse bool              `json:"requires_reparse"`
-	Reason          string            `json:"reason"`
-	Changes         []string          `json:"changes"`
-	EvidenceHash    string            `json:"evidence_hash"`
-	EncounterID     uuid.UUID         `json:"encounter_id,omitempty"`
-	Outcome         database.KillType `json:"outcome,omitempty"`
-	hostile         *database.LogInstanceEncounterHostile
-	phase           *database.LogInstanceEncounterPhase
-	numeric         *razorgoreNumericPlan
-	multi           *razorgoreMultiPlan
-	seal            [sha256.Size]byte
+	Warnings            []string          `json:"warnings,omitempty"`
+	Details             map[string]any    `json:"details,omitempty"`
+	TenantID            uuid.UUID         `json:"tenant_id"`
+	InstanceID          uuid.UUID         `json:"instance_id"`
+	RequiresReparse     bool              `json:"requires_reparse"`
+	Reason              string            `json:"reason"`
+	Changes             []string          `json:"changes"`
+	EvidenceHash        string            `json:"evidence_hash"`
+	EncounterID         uuid.UUID         `json:"encounter_id,omitempty"`
+	Outcome             database.KillType `json:"outcome,omitempty"`
+	hostile             *database.LogInstanceEncounterHostile
+	phase               *database.LogInstanceEncounterPhase
+	numeric             *razorgoreNumericPlan
+	multi               *razorgoreMultiPlan
+	reconstructedPhases []database.InsertEncounterPhaseParams
+	seal                [sha256.Size]byte
 }
 
 type razorgoreEvidence struct {
@@ -167,6 +168,11 @@ func ApplyRazorgore(ctx context.Context, tx database.Store, plan *RazorgoreRepai
 	if len(fresh.Changes) == 0 {
 		return nil
 	}
+	for _, phase := range fresh.reconstructedPhases {
+		if err := tx.InsertEncounterPhase(ctx, phase); err != nil {
+			return err
+		}
+	}
 	if fresh.multi != nil {
 		return applyRazorgoreMulti(ctx, tx, fresh.multi)
 	}
@@ -231,12 +237,13 @@ func razorgoreEvidenceHash(e razorgoreEvidence) (string, error) {
 // It is never serialized, so a stored diagnostic cannot become an executable plan.
 func razorgorePlanSeal(p *RazorgoreRepairPlan) ([sha256.Size]byte, error) {
 	payload := struct {
-		Plan    *RazorgoreRepairPlan
-		Hostile *database.LogInstanceEncounterHostile
-		Phase   *database.LogInstanceEncounterPhase
-		Numeric *razorgoreNumericPlan
-		Multi   *razorgoreMultiPlan
-	}{p, p.hostile, p.phase, p.numeric, p.multi}
+		Plan                *RazorgoreRepairPlan
+		Hostile             *database.LogInstanceEncounterHostile
+		Phase               *database.LogInstanceEncounterPhase
+		Numeric             *razorgoreNumericPlan
+		Multi               *razorgoreMultiPlan
+		ReconstructedPhases []database.InsertEncounterPhaseParams
+	}{p, p.hostile, p.phase, p.numeric, p.multi, p.reconstructedPhases}
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		return [sha256.Size]byte{}, err
@@ -298,6 +305,12 @@ func evaluateRazorgoreEvidence(e razorgoreEvidence) (*RazorgoreRepairPlan, error
 		if start >= 0 && end > start && end <= duration && end-start != duration {
 			return skip("Razorgore already has distinct ranked duration; skipping previously processed instance")
 		}
+	}
+	// Reconstruct only after the opt-out checks; EvidenceHash remains the hash of
+	// the original stored evidence used by transactional revalidation.
+	e, err = reconstructRazorgorePhases(e, p)
+	if err != nil {
+		return skip(err.Error())
 	}
 	if len(e.Encounters) > 1 && e.Group.Format.Valid {
 		if err := evaluateRazorgoreMulti(e, p); err != nil {
