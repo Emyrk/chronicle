@@ -118,11 +118,6 @@ func Compile(q Query, opts Options) (Compiled, error) {
 		return Compiled{}, &Error{Path: "limit", Message: fmt.Sprintf("must be between 1 and %d", opts.MaxLimit)}
 	}
 
-	validity, err := compileValidity(q.Validity)
-	if err != nil {
-		return Compiled{}, err
-	}
-
 	where := "TRUE"
 	if q.Where != nil {
 		var err error
@@ -145,7 +140,6 @@ func Compile(q Query, opts Options) (Compiled, error) {
 
 	sql := strings.NewReplacer(
 		"{{WHERE}}", where,
-		"{{VALIDITY}}", validity,
 		"{{SORT_EXPR}}", sort.expr,
 		"{{CURSOR}}", cursor,
 		"{{INNER_ORDER}}", sort.order("m"),
@@ -154,19 +148,6 @@ func Compile(q Query, opts Options) (Compiled, error) {
 		"{{LIMIT}}", limitArg,
 	).Replace(frameSQL)
 	return Compiled{SQL: sql, Args: c.args, Limit: limit, Sort: sort.wire, Cost: baseCost + c.cost, Fields: c.fields}, nil
-}
-
-func compileValidity(validity Validity) (string, error) {
-	switch validity {
-	case "", ValidityAny:
-		return "TRUE", nil
-	case ValidityValid:
-		return "li.invalidated_at IS NULL", nil
-	case ValidityInvalid:
-		return "li.invalidated_at IS NOT NULL", nil
-	default:
-		return "", &Error{Path: "validity", Message: fmt.Sprintf("must be %q, %q or %q", ValidityAny, ValidityValid, ValidityInvalid)}
-	}
 }
 
 type compiledSort struct {
@@ -309,8 +290,8 @@ func parseCursorValue(value string, sort compiledSort) (any, error) {
 // narrow the visible set.
 //
 //   - JOIN wow_server_realms: RLS on realms/servers applies the tenant scope.
-//   - Finalized parse generation and not unlisted. The query's top-level
-//     validity selector chooses valid, invalidated or all instances.
+//   - Finalized parse generation and not unlisted. Validity is an ordinary
+//     instance.validity condition, so omitting it includes valid and invalid runs.
 //   - DISTINCT ON the logical run collapses duplicate uploads to one row.
 const frameSQL = `WITH matched AS (
   SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
@@ -351,8 +332,8 @@ FROM (
 ORDER BY {{OUTER_ORDER}}`
 
 // frameFrom is the visibility frame shared by search and explain: tenant RLS
-// through wow_server_realms, finalized and listed logs, plus the selected
-// invalidation status. Fields may reference li, wsr, wlg, sm and g.
+// through wow_server_realms plus finalized and listed logs. Fields may reference
+// li, wsr, wlg, sm and g.
 const frameFrom = `  FROM log_instances li
   JOIN wow_server_realms wsr ON wsr.id = li.realm_id
   JOIN parsed_log_group plg ON plg.id = li.log_group_id
@@ -362,7 +343,7 @@ const frameFrom = `  FROM log_instances li
     AND NOT wlg.unlisted
   LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
   LEFT JOIN guilds g ON g.id = li.guild_id
-  WHERE {{VALIDITY}}`
+  WHERE TRUE`
 
 type scopeKind int
 

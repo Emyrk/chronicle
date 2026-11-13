@@ -1,7 +1,7 @@
 import { Fragment, useState } from "react";
 import { Link } from "react-router-dom";
 import { AlertTriangle, ArrowDown, ArrowUp, CheckCircle2, ChevronRight, Loader2, SearchX } from "lucide-react";
-import type { InstanceSearchResult, InstanceSearchSort, InstanceSearchSortField, InstanceSearchValidity } from "@/api/typesGenerated";
+import type { InstanceSearchResult, InstanceSearchSort, InstanceSearchSortField } from "@/api/typesGenerated";
 import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages";
 import { cn } from "@/lib/utils";
 import { EvidencePanel } from "./EvidencePanel";
@@ -45,7 +45,6 @@ export function ResultsTable({
   loading,
   bossCounts,
   tree,
-  validity,
   sort,
   sortLabel,
   onBudget,
@@ -56,8 +55,6 @@ export function ResultsTable({
   bossCounts: Map<string, number>;
   /** The submitted search, explained per row on expand. */
   tree: Node | undefined;
-  /** The submitted invalidation-status filter. */
-  validity: InstanceSearchValidity;
   /** The submitted order: its column gets an arrow, or its own column when the table doesn't show it. */
   sort: InstanceSearchSort;
   /** Header for the extra sort column, e.g. "Boss kill time · Ragnaros". */
@@ -217,7 +214,7 @@ export function ResultsTable({
                   <td />
                   <td colSpan={extraColumn ? 7 : 6} className="px-3 pt-1 pb-3">
                     <p className="text-2xs uppercase tracking-wider text-muted-foreground mb-1.5">Why it matched</p>
-                    <EvidencePanel tree={tree} validity={validity} instanceId={r.id} realmName={r.realm_name} onBudget={onBudget} />
+                    <EvidencePanel tree={tree} instanceId={r.id} realmName={r.realm_name} onBudget={onBudget} />
                   </td>
                 </tr>
               )}

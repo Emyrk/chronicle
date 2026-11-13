@@ -369,10 +369,12 @@ func TestSearch(t *testing.T) {
 		require.NoError(t, err)
 		require.False(t, ex.Matched)
 
-		compiled, err = instancesearch.CompileExplainForContext(ctx, instancesearch.Query{Where: q.Where, Validity: instancesearch.ValidityValid}, f.invalid, instancesearch.Options{})
+		validQ := where(t, `{"field": "instance.validity", "op": "=", "value": "valid"}`)
+		compiled, err = instancesearch.CompileExplainForContext(ctx, validQ, f.invalid, instancesearch.Options{})
 		require.NoError(t, err)
-		_, err = instancesearch.Explain(ctx, store, compiled, instancesearch.SearchOptions{})
-		require.ErrorIs(t, err, instancesearch.ErrNotFound)
+		ex, err = instancesearch.Explain(ctx, store, compiled, instancesearch.SearchOptions{})
+		require.NoError(t, err)
+		require.False(t, ex.Matched)
 
 		compiled, err = instancesearch.CompileExplainForContext(ctx, q, f.mc1, instancesearch.Options{})
 		require.NoError(t, err)
@@ -417,23 +419,22 @@ func TestSearch(t *testing.T) {
 		require.Len(t, f.search(t, f.tenantA, instancesearch.Query{}).Results, 3)
 	})
 
-	t.Run("Validity", func(t *testing.T) {
+	t.Run("ValidityCondition", func(t *testing.T) {
 		t.Parallel()
 
-		valid := f.search(t, f.tenantA, instancesearch.Query{Validity: instancesearch.ValidityValid}).Results
+		valid := f.search(t, f.tenantA, where(t, `{"field": "instance.validity", "op": "=", "value": "valid"}`)).Results
 		require.Len(t, valid, 2)
 		for _, result := range valid {
 			require.Nil(t, result.InvalidatedAt)
 		}
 
-		invalid := f.search(t, f.tenantA, instancesearch.Query{Validity: instancesearch.ValidityInvalid}).Results
+		invalid := f.search(t, f.tenantA, where(t, `{"field": "instance.validity", "op": "=", "value": "invalid"}`)).Results
 		require.Len(t, invalid, 1)
 		require.Equal(t, f.invalid, invalid[0].ID)
 		require.NotNil(t, invalid[0].InvalidatedAt)
 		require.Equal(t, "test invalidation", invalid[0].InvalidReason)
 
-		all := f.search(t, f.tenantA, instancesearch.Query{Validity: instancesearch.ValidityAny}).Results
-		require.Len(t, all, 3)
+		require.Len(t, f.search(t, f.tenantA, instancesearch.Query{}).Results, 3)
 	})
 
 	t.Run("Semantics", func(t *testing.T) {
@@ -514,7 +515,10 @@ func TestSearch(t *testing.T) {
 					require.Equal(t, want, f.explain(t, f.tenantA, tc.query, id).Matched, "explain %s", id)
 				}
 				q := where(t, tc.query)
-				q.Validity = instancesearch.ValidityValid
+				q.Where = &instancesearch.Node{And: []instancesearch.Node{
+					{Field: "instance.validity", Op: instancesearch.OpEq, Value: json.RawMessage(`"valid"`)},
+					*q.Where,
+				}}
 				got := ids(f.search(t, f.tenantA, q))
 				// mc1 and mc1dup are one logical run; normalize to mc1.
 				for i, id := range got {
@@ -566,11 +570,14 @@ func TestSearch(t *testing.T) {
 			if option.Boss {
 				sort.Boss = "Ragnaros"
 			}
-			page := f.search(t, f.tenantA, instancesearch.Query{Sort: sort, Validity: instancesearch.ValidityValid})
+			q := where(t, `{"field": "instance.validity", "op": "=", "value": "valid"}`)
+			q.Sort = sort
+			page := f.search(t, f.tenantA, q)
 			require.Len(t, page.Results, 2, option.Field)
 		}
 
-		q := instancesearch.Query{Sort: &instancesearch.Sort{Field: instancesearch.SortClearTime, Direction: instancesearch.SortAsc}, Validity: instancesearch.ValidityValid}
+		q := where(t, `{"field": "instance.validity", "op": "=", "value": "valid"}`)
+		q.Sort = &instancesearch.Sort{Field: instancesearch.SortClearTime, Direction: instancesearch.SortAsc}
 		page := f.search(t, f.tenantA, q)
 		require.Equal(t, []string{"Alpha", "Beta"}, []string{page.Results[0].GuildName, page.Results[1].GuildName})
 		// Results carry the sorted value so the UI can show it; mc2 has no clear.

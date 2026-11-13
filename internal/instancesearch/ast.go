@@ -9,8 +9,8 @@
 //
 // Every compiled query is wrapped in a fixed frame (see compile.go) that
 // joins wow_server_realms so tenant row-level security applies, hides
-// unfinalized and unlisted logs, applies the top-level validity selector, and
-// collapses duplicate uploads to one result. The tree cannot alter the frame.
+// unfinalized and unlisted logs, and collapses duplicate uploads to one result.
+// Validity is an ordinary instance.validity field condition.
 //
 // The wire types live in chroniclesdk (so TypeScript types are generated);
 // this package aliases them.
@@ -21,16 +21,9 @@ package instancesearch
 
 import "github.com/Emyrk/chronicle/api/chroniclesdk"
 
-const (
-	ValidityAny     = chroniclesdk.InstanceSearchValidityAny
-	ValidityValid   = chroniclesdk.InstanceSearchValidityValid
-	ValidityInvalid = chroniclesdk.InstanceSearchValidityInvalid
-)
-
 type (
 	Query         = chroniclesdk.InstanceSearchQuery
 	Sort          = chroniclesdk.InstanceSearchSort
-	Validity      = chroniclesdk.InstanceSearchValidity
 	SortField     = chroniclesdk.InstanceSearchSortField
 	SortDirection = chroniclesdk.InstanceSearchSortDirection
 	Cursor        = chroniclesdk.InstanceSearchCursor

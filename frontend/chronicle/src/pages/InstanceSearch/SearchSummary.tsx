@@ -1,6 +1,5 @@
 import { Pencil, RotateCcw, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { InstanceSearchValidity } from "@/api/typesGenerated";
 import type { Node } from "./queryModel";
 import { summarize } from "./summary";
 
@@ -10,20 +9,16 @@ import { summarize } from "./summary";
  */
 export function SearchSummary({
   tree,
-  validity,
   resultLabel,
   onEdit,
   onNew,
 }: {
   tree: Node | undefined;
-  validity: InstanceSearchValidity;
   resultLabel: string;
   onEdit: () => void;
   onNew: () => void;
 }) {
   const chips = summarize(tree);
-  if (validity === "valid") chips.unshift("Valid runs only");
-  if (validity === "invalid") chips.unshift("Invalid runs only");
   return (
     <div className="rounded-lg border border-border/60 bg-background/40 px-3 py-2 flex items-start gap-3">
       <Search className="h-4 w-4 text-primary shrink-0 mt-1" />

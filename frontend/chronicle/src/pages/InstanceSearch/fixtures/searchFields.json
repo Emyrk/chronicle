@@ -1,6 +1,28 @@
 {
   "fields": [
     {
+      "name": "instance.validity",
+      "scope": "instance",
+      "type": "enum",
+      "enum": [
+        "valid",
+        "invalid"
+      ],
+      "ops": [
+        "=",
+        "!=",
+        "in",
+        "not_in"
+      ],
+      "doc": "Whether the run is valid or invalidated.",
+      "bosses": false,
+      "parse_scope": false,
+      "metric": false,
+      "on": false,
+      "anonymous": true,
+      "cost": 2
+    },
+    {
       "name": "instance.name",
       "scope": "instance",
       "type": "string",

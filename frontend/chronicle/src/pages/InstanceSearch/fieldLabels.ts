@@ -1,6 +1,7 @@
 import type { InstanceSearchOp } from "@/api/typesGenerated";
 
 const FIELD_LABELS: Record<string, string> = {
+  "instance.validity": "Validity",
   "instance.name": "Zone",
   "instance.started_at": "Date",
   "instance.max_players": "Raid size",
@@ -36,7 +37,7 @@ export function fieldLabel(name: string): string {
 
 /** Field picker groups, in display order. Unlisted fields go under "Other". */
 const FIELD_GROUPS: [string, string[]][] = [
-  ["Run", ["instance.name", "instance.realm", "instance.realm_id", "instance.guild", "instance.guild_id", "instance.started_at", "instance.difficulty", "instance.max_players", "instance.category", "instance.recorder", "instance.has_video", "instance.player_count"]],
+  ["Run", ["instance.validity", "instance.name", "instance.realm", "instance.realm_id", "instance.guild", "instance.guild_id", "instance.started_at", "instance.difficulty", "instance.max_players", "instance.category", "instance.recorder", "instance.has_video", "instance.player_count"]],
   ["Bosses & speed", ["instance.bosses_killed", "instance.wipes", "instance.deaths", "instance.clear_time_ms", "instance.clear_qualified", "instance.boss_time_ms", "instance.trash_time_ms", "instance.idle_time_ms", "instance.kill_time_ms"]],
   ["Parses", ["instance.clear_parse", "instance.kill_time_parse"]],
   ["Log", ["instance.capability"]],

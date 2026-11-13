@@ -527,6 +527,8 @@ var (
 
 var fields = []*field{
 	// ---- Instance scope -------------------------------------------------
+	{Name: "instance.validity", Scope: scopeInstance, Type: typeEnum, Enum: []string{"valid", "invalid"},
+		Doc: "Whether the run is valid or invalidated.", value: column("CASE WHEN li.invalidated_at IS NULL THEN 'valid' ELSE 'invalid' END")},
 	{Name: "instance.name", Scope: scopeInstance, Type: typeString,
 		Doc:   "Zone name, e.g. \"Molten Core\".",
 		value: column("COALESCE(NULLIF(btrim(li.name), ''), NULLIF(btrim(sm.instance_name), ''), li.name)")},

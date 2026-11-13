@@ -11,9 +11,6 @@ import (
 type InstanceSearchQuery struct {
 	// Where is the search tree. Omit it to match every visible run.
 	Where *InstanceSearchNode `json:"where,omitempty"`
-	// Validity selects valid runs, invalidated runs, or both. Omit it to include
-	// both valid and invalidated runs.
-	Validity InstanceSearchValidity `json:"validity,omitempty"`
 	// Sort changes the result order. Omit it for newest first. Each allowlisted
 	// property declares its minimum supporter tier in GET /search/fields.
 	Sort *InstanceSearchSort `json:"sort,omitempty"`
@@ -22,15 +19,6 @@ type InstanceSearchQuery struct {
 	// Cursor continues from a previous page's Next.
 	Cursor *InstanceSearchCursor `json:"cursor,omitempty"`
 }
-
-// InstanceSearchValidity selects runs by invalidation status.
-type InstanceSearchValidity string
-
-const (
-	InstanceSearchValidityAny     InstanceSearchValidity = "any"
-	InstanceSearchValidityValid   InstanceSearchValidity = "valid"
-	InstanceSearchValidityInvalid InstanceSearchValidity = "invalid"
-)
 
 // InstanceSearchSort selects an allowlisted result property and direction.
 // ParseScope only applies to instance.clear_parse.

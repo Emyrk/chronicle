@@ -53,9 +53,8 @@ players.filter(p, p.class == "PRIEST").size() >= 3
 **Bucket status without searching:** `GET /api/v1/raidlogs/search/limit` returns `{logged_in, limit, remaining, refill_per_minute, reset_seconds}` and the same headers. It spends nothing.
 
 **Anonymous users** (`instancesearch.CheckAnonymous`) can only send:
-- any `validity` selector (`any`, `valid` or `invalid`)
 - up to 6 predicates ANDed together
-- fields from `instance.name`, `realm`, `guild`, `started_at`, `difficulty`, `category`
+- fields from `instance.validity`, `name`, `realm`, `guild`, `started_at`, `difficulty`, `category`
 - no quantifiers, `or` or `not`
 - a page size of at most 25
 
@@ -80,14 +79,13 @@ UIs can show the cost before running: `GET /api/v1/raidlogs/search/fields` retur
 ```json
 {
   "where": <node>,
-  "validity": "any" | "valid" | "invalid",
   "sort": {"field": "instance.clear_time_ms", "direction": "asc"},
   "limit": 25,
   "cursor": <the previous response's next>
 }
 ```
 
-`where` is optional (omit = every visible run). `validity` defaults to `any`, so search includes valid and invalidated instances; use `valid` or `invalid` to select one status. This selector is available to anonymous callers. Unlisted and unfinalized logs remain hidden. `limit` defaults to 25, max 100. Without `sort`, results are newest first. Sorting uses a fixed allowlist returned by `GET /search/fields` as `sorts`:
+`where` is optional (omit = every visible run, including valid and invalidated instances). Use `instance.validity = "valid"` for valid runs or `instance.validity = "invalid"` for invalidated runs. This field is available to anonymous callers. Unlisted and unfinalized logs remain hidden. `limit` defaults to 25, max 100. Without `sort`, results are newest first. Sorting uses a fixed allowlist returned by `GET /search/fields` as `sorts`:
 
 | Property | Default | Minimum tier | Added cost |
 |---|---:|---:|---:|
@@ -190,7 +188,7 @@ This means one druid played both Bear and Cat. Two separate `any_player` nodes A
 
 ## Safety model (don't break it)
 
-- **Tenant scoping comes from RLS.** The fixed frame in `compile.go` (`frameSQL`) joins `wow_server_realms`, and its RLS policy applies `app.tenant_id`. The frame also filters to finalized, listed logs and applies the top-level `validity` selector. The tree only ever becomes one parenthesized `AND (...)` inside it.
+- **Tenant scoping comes from RLS.** The fixed frame in `compile.go` (`frameSQL`) joins `wow_server_realms`, and its RLS policy applies `app.tenant_id`. The frame also filters to finalized, listed logs. Validity is the ordinary `instance.validity` condition, and the tree only ever becomes one parenthesized `AND (...)` inside the frame.
 - **`Search` reads the tenant from ctx** (`servicetenant.TenantIDFromContext`) and binds it into parse tables that have `tenant_id` but no RLS. Never run a search with `servicetenant.AdminBypass`.
 - **User input never becomes SQL.** Field names select templates, and values are always `$n` bind params. Limits apply: 64 nodes, depth 8, 50 list values, limit 100, 5s statement timeout, all configurable via `Options`/`SearchOptions`.
 

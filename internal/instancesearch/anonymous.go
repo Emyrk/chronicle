@@ -18,6 +18,7 @@ const (
 // AnonymousFields are the fields anonymous users may filter on. They are
 // cheap columns on the instance row.
 var AnonymousFields = []string{
+	"instance.validity",
 	"instance.name",
 	"instance.realm",
 	"instance.guild",
@@ -27,9 +28,8 @@ var AnonymousFields = []string{
 }
 
 // CheckAnonymous reports whether q is in the small subset of search
-// available without logging in: any validity selector, no quantifiers, no or /
-// not, and at most a few instance-level predicates from AnonymousFields ANDed
-// together. It returns
+// available without logging in: no quantifiers, no or / not, at most a few
+// instance-level predicates from AnonymousFields ANDed together. It returns
 // ErrLoginRequired (wrapped) when q is outside that subset. q must still be
 // compiled, which validates it fully.
 func CheckAnonymous(q Query) error {
