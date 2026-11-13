@@ -28,6 +28,27 @@ func lucifronOwnershipFixture(t *testing.T, source string) (razorgoreEvidence, [
 	return e, snapshots
 }
 
+// fixtureLucifronStableOwner supplies real stored frames for lifecycle tests,
+// with one stable pre-damage owner observation and no terminal ownership proof.
+func fixtureLucifronStableOwner(t *testing.T) razorgoreEvidence {
+	t.Helper()
+	e, _ := lucifronOwnershipFixture(t, lucifronTestPet)
+	return e
+}
+
+func TestLucifronStableOwnerLifecycleFixture(t *testing.T) {
+	t.Parallel()
+	e := fixtureLucifronStableOwner(t)
+	store := &lucifronStore{razorgoreStore: &razorgoreStore{e: e}, affected: 1}
+	p, err := EvaluateLucifron(t.Context(), store, e.Instance.ID)
+	require.NoError(t, err)
+	require.False(t, p.RequiresReparse, p.Reason)
+	require.Len(t, p.Warnings, 1)
+	require.Contains(t, p.Warnings[0], "Stable recorded-owner inference")
+	require.NoError(t, RevalidateLucifron(t.Context(), store, p))
+	require.Len(t, p.lucifron.Metrics, 1)
+}
+
 func TestLucifronStableRecordedOwnerInference(t *testing.T) {
 	t.Parallel()
 	for _, source := range []string{lucifronTestPet, "0xF1300009DB000001", "0xF110000001000001", "0xF110000A01000001"} {
