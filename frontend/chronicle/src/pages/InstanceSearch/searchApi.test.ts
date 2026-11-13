@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { InstanceSearchLimitResponse } from "@/api/typesGenerated";
-import { runSearch, SEARCH_LIMIT_REFETCH_MS, SearchError, searchLimitRefetchInterval } from "./searchApi";
+import { explainRun, runSearch, SEARCH_LIMIT_REFETCH_MS, SearchError, searchLimitRefetchInterval } from "./searchApi";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -37,6 +37,23 @@ describe("search charges", () => {
     expect(result.cost).toBe(13);
     expect(result.runtimeCost).toBe(7);
     expect(result.budget).toEqual({ limit: 100, remaining: 80, resetSeconds: 20 });
+  });
+});
+
+describe("search explain", () => {
+  it("preserves the validity filter", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ matched: true }), { status: 200, headers: { "Content-Type": "application/json" } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await explainRun({ validity: "invalid" }, "00000000-0000-0000-0000-000000000001");
+
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(String(init.body))).toEqual({
+      query: { validity: "invalid" },
+      instance_id: "00000000-0000-0000-0000-000000000001",
+    });
   });
 });
 

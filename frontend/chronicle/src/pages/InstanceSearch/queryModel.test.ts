@@ -165,6 +165,12 @@ describe("prune", () => {
     });
   });
 
+  it("includes non-default validity in the wire query", () => {
+    expect(buildQuery(undefined, undefined, undefined, "valid")).toEqual({ validity: "valid" });
+    expect(buildQuery(undefined, undefined, undefined, "invalid")).toEqual({ validity: "invalid" });
+    expect(buildQuery(undefined, undefined, undefined, "any")).toEqual({});
+  });
+
   it("includes the selected boss for kill-time sorting", () => {
     expect(buildQuery(undefined, undefined, { field: "instance.kill_time_ms", direction: "asc", boss: "Ragnaros" })).toEqual({
       sort: { field: "instance.kill_time_ms", direction: "asc", boss: "Ragnaros" },

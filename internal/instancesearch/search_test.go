@@ -30,12 +30,13 @@ import (
 //   - mc2: Molten Core by Beta, 2 priests, a Ragnaros wipe then a 200s kill,
 //     a druid that only played Bear.
 //   - hidden: 3 priests but the log is unlisted.
+//   - invalid: an invalidated run with no encounter data.
 //   - other: 3 priests in tenant B.
 type fixture struct {
-	url              string
-	tenantA, tenantB uuid.UUID
-	mc1, mc1dup, mc2 uuid.UUID
-	hidden, other    uuid.UUID
+	url                    string
+	tenantA, tenantB       uuid.UUID
+	mc1, mc1dup, mc2       uuid.UUID
+	hidden, invalid, other uuid.UUID
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -61,7 +62,7 @@ func newFixture(t *testing.T) *fixture {
 		url:     url,
 		tenantA: uuid.New(), tenantB: uuid.New(),
 		mc1: uuid.New(), mc1dup: uuid.New(), mc2: uuid.New(),
-		hidden: uuid.New(), other: uuid.New(),
+		hidden: uuid.New(), invalid: uuid.New(), other: uuid.New(),
 	}
 	user := uuid.New()
 	exec("INSERT INTO users (id, username, email) VALUES ($1, $2, $3)", user, "u-"+user.String()[:8], user.String()+"@example.com")
@@ -97,6 +98,8 @@ func newFixture(t *testing.T) *fixture {
 	instance(f.mc1dup, realmA, alpha, false, dup)
 	instance(f.mc2, realmA, beta, false, nil)
 	instance(f.hidden, realmA, alpha, true, nil)
+	instance(f.invalid, realmA, nil, false, nil)
+	exec("UPDATE log_instances SET name = 'Invalid Run', category = 'dungeon', start_time = '2026-09-01T00:00:00Z', invalidated_at = now(), invalid_reason = 'test invalidation' WHERE id = $1", f.invalid)
 	instance(f.other, realmB, gammaB, false, nil)
 	exec("UPDATE log_instances SET capabilities = '{overheal,unit-resources,unit-position}' WHERE id = ANY($1)", []uuid.UUID{f.mc1, f.mc1dup})
 	exec("UPDATE log_instances SET capabilities = '{overheal,unit-resources}' WHERE id = $1", f.mc2)
@@ -360,7 +363,18 @@ func TestSearch(t *testing.T) {
 		}
 
 		ctx, store := f.store(t, f.tenantA)
-		compiled, err := instancesearch.CompileExplainForContext(ctx, q, f.mc1, instancesearch.Options{})
+		compiled, err := instancesearch.CompileExplainForContext(ctx, instancesearch.Query{Where: q.Where}, f.invalid, instancesearch.Options{})
+		require.NoError(t, err)
+		ex, err := instancesearch.Explain(ctx, store, compiled, instancesearch.SearchOptions{})
+		require.NoError(t, err)
+		require.False(t, ex.Matched)
+
+		compiled, err = instancesearch.CompileExplainForContext(ctx, instancesearch.Query{Where: q.Where, Validity: instancesearch.ValidityValid}, f.invalid, instancesearch.Options{})
+		require.NoError(t, err)
+		_, err = instancesearch.Explain(ctx, store, compiled, instancesearch.SearchOptions{})
+		require.ErrorIs(t, err, instancesearch.ErrNotFound)
+
+		compiled, err = instancesearch.CompileExplainForContext(ctx, q, f.mc1, instancesearch.Options{})
 		require.NoError(t, err)
 		_, err = instancesearch.Explain(servicetenant.AdminBypass(ctx), store, compiled, instancesearch.SearchOptions{})
 		require.ErrorContains(t, err, "RLS bypassed")
@@ -397,9 +411,29 @@ func TestSearch(t *testing.T) {
 
 		require.Equal(t, []uuid.UUID{f.other}, ids(f.search(t, f.tenantB, q)))
 
-		// An empty query still only sees the tenant's own visible runs.
+		// An empty query includes valid and invalid runs by default, while still
+		// respecting tenant scope, unlisted logs and duplicate collapsing.
 		require.Len(t, f.search(t, f.tenantB, instancesearch.Query{}).Results, 1)
-		require.Len(t, f.search(t, f.tenantA, instancesearch.Query{}).Results, 2)
+		require.Len(t, f.search(t, f.tenantA, instancesearch.Query{}).Results, 3)
+	})
+
+	t.Run("Validity", func(t *testing.T) {
+		t.Parallel()
+
+		valid := f.search(t, f.tenantA, instancesearch.Query{Validity: instancesearch.ValidityValid}).Results
+		require.Len(t, valid, 2)
+		for _, result := range valid {
+			require.Nil(t, result.InvalidatedAt)
+		}
+
+		invalid := f.search(t, f.tenantA, instancesearch.Query{Validity: instancesearch.ValidityInvalid}).Results
+		require.Len(t, invalid, 1)
+		require.Equal(t, f.invalid, invalid[0].ID)
+		require.NotNil(t, invalid[0].InvalidatedAt)
+		require.Equal(t, "test invalidation", invalid[0].InvalidReason)
+
+		all := f.search(t, f.tenantA, instancesearch.Query{Validity: instancesearch.ValidityAny}).Results
+		require.Len(t, all, 3)
 	})
 
 	t.Run("Semantics", func(t *testing.T) {
@@ -479,7 +513,9 @@ func TestSearch(t *testing.T) {
 					want := slices.Contains(tc.want, id)
 					require.Equal(t, want, f.explain(t, f.tenantA, tc.query, id).Matched, "explain %s", id)
 				}
-				got := ids(f.search(t, f.tenantA, where(t, tc.query)))
+				q := where(t, tc.query)
+				q.Validity = instancesearch.ValidityValid
+				got := ids(f.search(t, f.tenantA, q))
 				// mc1 and mc1dup are one logical run; normalize to mc1.
 				for i, id := range got {
 					if id == f.mc1dup {
@@ -530,11 +566,11 @@ func TestSearch(t *testing.T) {
 			if option.Boss {
 				sort.Boss = "Ragnaros"
 			}
-			page := f.search(t, f.tenantA, instancesearch.Query{Sort: sort})
+			page := f.search(t, f.tenantA, instancesearch.Query{Sort: sort, Validity: instancesearch.ValidityValid})
 			require.Len(t, page.Results, 2, option.Field)
 		}
 
-		q := instancesearch.Query{Sort: &instancesearch.Sort{Field: instancesearch.SortClearTime, Direction: instancesearch.SortAsc}}
+		q := instancesearch.Query{Sort: &instancesearch.Sort{Field: instancesearch.SortClearTime, Direction: instancesearch.SortAsc}, Validity: instancesearch.ValidityValid}
 		page := f.search(t, f.tenantA, q)
 		require.Equal(t, []string{"Alpha", "Beta"}, []string{page.Results[0].GuildName, page.Results[1].GuildName})
 		// Results carry the sorted value so the UI can show it; mc2 has no clear.

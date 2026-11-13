@@ -13,6 +13,7 @@ import type {
   InstanceSearchSortField,
   InstanceSearchSortOption,
   InstanceSearchSortTier,
+  InstanceSearchValidity,
 } from "@/api/typesGenerated";
 import { useRealms, useSiteConfig, useSupportedInstances } from "@/api/queries";
 import { useAuth } from "@/hooks/useAuth";
@@ -25,7 +26,7 @@ import { cn } from "@/lib/utils";
 import { BlockEditor } from "./BlockEditor";
 import { SelectCombo } from "./ComboInput";
 import type { ComboOption } from "./comboOptions";
-import { NATIVE_SELECT } from "./controls";
+import { NATIVE_SELECT, Segmented } from "./controls";
 import { ResultsTable } from "./ResultsTable";
 import { SearchSummary } from "./SearchSummary";
 import { CelCode } from "./CelCode";
@@ -95,6 +96,17 @@ function readSort(field: string | null, direction: string | null, parseScope: st
   return { field: typedField, direction: typedDirection };
 }
 
+const DEFAULT_VALIDITY: InstanceSearchValidity = "any";
+
+function readValidity(value: string | null): InstanceSearchValidity {
+  return value === "valid" || value === "invalid" ? value : DEFAULT_VALIDITY;
+}
+
+function writeValidityParam(params: URLSearchParams, validity: InstanceSearchValidity) {
+  if (validity === DEFAULT_VALIDITY) params.delete("validity");
+  else params.set("validity", validity);
+}
+
 const DEFAULT_SORT: InstanceSearchSort = { field: "instance.started_at", direction: "desc" };
 
 function writeSortParams(params: URLSearchParams, sort: InstanceSearchSort) {
@@ -132,6 +144,9 @@ export function InstanceSearchPage() {
   // The submitted search lives in the URL so it can be shared.
   const submittedParam = params.get("q");
   const submittedTree = useMemo(() => decodeQuery(submittedParam), [submittedParam]);
+  const submittedValidity = readValidity(params.get("validity"));
+  const [draftValidity, writeDraftValidity] = useState<InstanceSearchValidity>(() => submittedValidity);
+  const setDraftValidity = (validity: InstanceSearchValidity) => { bumpDraftRevision(); writeDraftValidity(validity); };
   const sortFieldParam = params.get("sort");
   const sortDirectionParam = params.get("order");
   const sortScopeParam = params.get("sort_scope");
@@ -285,9 +300,11 @@ export function InstanceSearchPage() {
     setCode("");
     setExample(null);
     setDraftSort(DEFAULT_SORT);
+    setDraftValidity(DEFAULT_VALIDITY);
     const next = new URLSearchParams(params);
     next.delete("q");
     next.delete("mode");
+    next.delete("validity");
     next.delete("sort");
     next.delete("order");
     next.delete("sort_scope");
@@ -314,6 +331,7 @@ export function InstanceSearchPage() {
     next.set("q", q);
     if (m === "form") next.delete("mode");
     else next.set("mode", m);
+    writeValidityParam(next, draftValidity);
     writeSortParams(next, draftSort);
     setParams(next);
     rememberSearch(q, m);
@@ -338,8 +356,8 @@ export function InstanceSearchPage() {
   };
 
   const results = useInfiniteQuery({
-    queryKey: ["instance-search", "results", submittedParam, submittedSort, isAuthenticated],
-    queryFn: ({ pageParam }) => runSearch(buildQuery(submittedTree, isAuthenticated ? undefined : 25, submittedSort), pageParam),
+    queryKey: ["instance-search", "results", submittedParam, submittedSort, submittedValidity, isAuthenticated],
+    queryFn: ({ pageParam }) => runSearch(buildQuery(submittedTree, isAuthenticated ? undefined : 25, submittedSort, submittedValidity), pageParam),
     initialPageParam: undefined as InstanceSearchCursor | undefined,
     getNextPageParam: (last) => last.page.next ?? undefined,
     // Wait for the session: searching before it loads would run (and spend)
@@ -446,7 +464,7 @@ export function InstanceSearchPage() {
       </div>
 
       {collapsed ? (
-        <SearchSummary tree={submittedTree} resultLabel={resultLabel} onEdit={() => setCollapsed(false)} onNew={newSearch} />
+        <SearchSummary tree={submittedTree} validity={submittedValidity} resultLabel={resultLabel} onEdit={() => setCollapsed(false)} onNew={newSearch} />
       ) : (
       <>
       {!isAuthenticated && (
@@ -493,6 +511,18 @@ export function InstanceSearchPage() {
           >
             <Code2 className="h-3.5 w-3.5" /> Code
           </ModeButton>
+        </div>
+        <div className="inline-flex items-center gap-1.5 text-2xs text-muted-foreground">
+          <span>Runs</span>
+          <Segmented
+            value={draftValidity}
+            onChange={setDraftValidity}
+            options={[
+              { value: "any", label: "All" },
+              { value: "valid", label: "Valid" },
+              { value: "invalid", label: "Invalid" },
+            ]}
+          />
         </div>
         <SortControls
           sort={draftSort}
@@ -614,6 +644,7 @@ export function InstanceSearchPage() {
           loading={results.isLoading}
           bossCounts={bossCounts}
           tree={submittedTree}
+          validity={submittedValidity}
           sort={selectedSort}
           sortLabel={sortColumnLabel(selectedSort, fields.data?.sorts ?? [])}
           onBudget={recordBudget}

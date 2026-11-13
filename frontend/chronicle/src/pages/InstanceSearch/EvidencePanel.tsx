@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Check, ChevronDown, ChevronRight, CircleHelp, Loader2, X } from "lucide-react";
-import type { InstanceSearchEvidence, InstanceSearchWitness } from "@/api/typesGenerated";
+import type { InstanceSearchEvidence, InstanceSearchValidity, InstanceSearchWitness } from "@/api/typesGenerated";
 import { ClassIcon } from "@/pages/RaidPlanner/ClassIcon";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { cn } from "@/lib/utils";
@@ -19,20 +19,22 @@ import { describe, formatDuration, formatEvidence } from "./summary";
  */
 export function EvidencePanel({
   tree,
+  validity,
   instanceId,
   realmName,
   onBudget,
 }: {
   tree: Node | undefined;
+  validity: InstanceSearchValidity;
   instanceId: string;
   /** For armory links on player witnesses. */
   realmName: string;
   onBudget?: (budget: SearchBudget) => void;
 }) {
   const explain = useQuery({
-    queryKey: ["instance-search", "explain", encodeQuery(tree), instanceId],
+    queryKey: ["instance-search", "explain", encodeQuery(tree), validity, instanceId],
     queryFn: async () => {
-      const res = await explainRun({ where: tree }, instanceId);
+      const res = await explainRun({ where: tree, ...(validity !== "any" ? { validity } : {}) }, instanceId);
       if (res.budget) onBudget?.(res.budget);
       return res;
     },
@@ -41,7 +43,10 @@ export function EvidencePanel({
     refetchOnWindowFocus: false,
   });
 
-  if (!tree) return <p className="text-xs text-muted-foreground">This search has no conditions, so every run matches.</p>;
+  if (!tree) {
+    const message = validity === "valid" ? "This search matches every valid run." : validity === "invalid" ? "This search matches every invalid run." : "This search has no conditions, so every run matches.";
+    return <p className="text-xs text-muted-foreground">{message}</p>;
+  }
   if (explain.isLoading) {
     return (
       <p className="text-xs text-muted-foreground inline-flex items-center gap-1.5">

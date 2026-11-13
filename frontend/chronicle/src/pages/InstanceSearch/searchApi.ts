@@ -133,7 +133,7 @@ export async function explainRun(query: InstanceSearchQuery, instanceId: string)
   const response = await fetch(`${BASE}/explain`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query: { where: query.where }, instance_id: instanceId }),
+    body: JSON.stringify({ query: { where: query.where, validity: query.validity }, instance_id: instanceId }),
   });
   const cost = num(response.headers.get("Chronicle-Search-Cost"));
   const runtimeCost = num(response.headers.get("Chronicle-Search-Runtime-Cost"));

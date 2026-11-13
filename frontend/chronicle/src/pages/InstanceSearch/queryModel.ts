@@ -6,6 +6,7 @@ import type {
   InstanceSearchParseScope,
   InstanceSearchQuery,
   InstanceSearchSort,
+  InstanceSearchValidity,
 } from "@/api/typesGenerated";
 
 export type Node = InstanceSearchNode;
@@ -109,9 +110,14 @@ function isEmptyValue(v: unknown): boolean {
   return false;
 }
 
-export function buildQuery(where: Node | undefined, limit?: number, sort?: InstanceSearchSort): InstanceSearchQuery {
+export function buildQuery(where: Node | undefined, limit?: number, sort?: InstanceSearchSort, validity?: InstanceSearchValidity): InstanceSearchQuery {
   const pruned = prune(where);
-  return { ...(pruned ? { where: pruned } : {}), ...(sort ? { sort } : {}), ...(limit ? { limit } : {}) };
+  return {
+    ...(pruned ? { where: pruned } : {}),
+    ...(sort ? { sort } : {}),
+    ...(validity && validity !== "any" ? { validity } : {}),
+    ...(limit ? { limit } : {}),
+  };
 }
 
 /* ------------------------------------------------------------------ */

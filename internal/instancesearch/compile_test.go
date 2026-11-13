@@ -205,6 +205,28 @@ func TestDescribeFixture(t *testing.T) {
 	require.Equal(t, string(want), string(got), "run go test ./internal/instancesearch -run TestDescribeFixture -update")
 }
 
+func TestCompileValidity(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name     string
+		validity instancesearch.Validity
+		want     string
+	}{
+		{name: "Default", want: "WHERE TRUE"},
+		{name: "Any", validity: instancesearch.ValidityAny, want: "WHERE TRUE"},
+		{name: "Valid", validity: instancesearch.ValidityValid, want: "WHERE li.invalidated_at IS NULL"},
+		{name: "Invalid", validity: instancesearch.ValidityInvalid, want: "WHERE li.invalidated_at IS NOT NULL"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			compiled, err := instancesearch.Compile(instancesearch.Query{Validity: tc.validity}, instancesearch.Options{})
+			require.NoError(t, err)
+			require.Contains(t, compiled.SQL, tc.want)
+		})
+	}
+}
+
 func TestCompileSort(t *testing.T) {
 	t.Parallel()
 
@@ -313,6 +335,7 @@ func TestCompileErrors(t *testing.T) {
 		query instancesearch.Query
 		want  string
 	}{
+		{"BadValidity", instancesearch.Query{Validity: "sometimes"}, "validity: must be"},
 		{"UnknownField", instancesearch.Query{Where: pred("instance.secret", instancesearch.OpEq, 1)}, `unknown field "instance.secret"`},
 		{"PlayerFieldAtTop", instancesearch.Query{Where: pred("player.class", instancesearch.OpEq, "MAGE")}, "must be used inside any_player or count_players"},
 		{"InstanceFieldInPlayer", instancesearch.Query{Where: &instancesearch.Node{AnyPlayer: pred("instance.name", instancesearch.OpEq, "x")}}, "must be used inside the top level"},
@@ -398,6 +421,7 @@ func TestCheckAnonymous(t *testing.T) {
 	for _, raw := range allowed {
 		require.NoError(t, instancesearch.CheckAnonymous(where(t, raw)), raw)
 	}
+	require.NoError(t, instancesearch.CheckAnonymous(instancesearch.Query{Validity: instancesearch.ValidityInvalid}))
 	require.NoError(t, instancesearch.CheckAnonymous(instancesearch.Query{}))
 
 	denied := []string{

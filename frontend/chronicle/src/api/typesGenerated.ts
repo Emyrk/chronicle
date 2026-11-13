@@ -3600,6 +3600,11 @@ export interface InstanceSearchQuery {
      */
     readonly where?: InstanceSearchNode;
     /**
+     * Validity selects valid runs, invalidated runs, or both. Omit it to include
+     * both valid and invalidated runs.
+     */
+    readonly validity?: InstanceSearchValidity;
+    /**
      * Sort changes the result order. Omit it for newest first. Each allowlisted
      * property declares its minimum supporter tier in GET /search/fields.
      */
@@ -3641,6 +3646,8 @@ export interface InstanceSearchResult {
     readonly difficulty_name: string;
     readonly max_players: number;
     readonly started_at: string;
+    readonly invalidated_at?: string;
+    readonly invalid_reason?: string;
     /**
      * PlayerCount is the number of distinct players in the run.
      */
@@ -3660,6 +3667,14 @@ export interface InstanceSearchResult {
      */
     readonly sort_value?: string;
 }
+
+// From chroniclesdk/instance_search.go
+/**
+ * InstanceSearchValidity selects runs by invalidation status.
+ */
+export type InstanceSearchValidity = "any" | "invalid" | "valid";
+
+export const InstanceSearchValiditys: InstanceSearchValidity[] = ["any", "invalid", "valid"];
 
 // From chroniclesdk/instance_search.go
 /**

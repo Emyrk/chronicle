@@ -58,7 +58,7 @@ func ExplainCost(searchCost int) int {
 // Go (see resolve). The query runs in the same visibility frame as Search, so
 // RLS and visibility rules are identical.
 func CompileExplain(q Query, instanceID uuid.UUID, opts Options) (CompiledExplain, error) {
-	compiled, err := Compile(Query{Where: q.Where}, opts)
+	compiled, err := Compile(Query{Where: q.Where, Validity: q.Validity}, opts)
 	if err != nil {
 		return CompiledExplain{}, err
 	}
@@ -74,7 +74,11 @@ func CompileExplain(q Query, instanceID uuid.UUID, opts Options) (CompiledExplai
 			return CompiledExplain{}, err
 		}
 	}
-	sql := "SELECT " + evidence + "\n" + frameFrom + "\n    AND li.id = " + c.arg(instanceID.String()) + "::uuid"
+	validity, err := compileValidity(q.Validity)
+	if err != nil {
+		return CompiledExplain{}, err
+	}
+	sql := "SELECT " + evidence + "\n" + strings.ReplaceAll(frameFrom, "{{VALIDITY}}", validity) + "\n    AND li.id = " + c.arg(instanceID.String()) + "::uuid"
 	return CompiledExplain{SQL: sql, Args: c.args, Cost: ExplainCost(compiled.Cost), where: q.Where}, nil
 }
 

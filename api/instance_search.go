@@ -156,7 +156,7 @@ func (api *API) InstanceSearchExplain(w http.ResponseWriter, r *http.Request) {
 		api.invalidSearchBody(w, r, c, err, true, start)
 		return
 	}
-	ex, result := api.instanceSearch.Explain(r.Context(), c, chroniclesdk.InstanceSearchQuery{Where: req.Query.Where}, req.InstanceID)
+	ex, result := api.instanceSearch.Explain(r.Context(), c, chroniclesdk.InstanceSearchQuery{Where: req.Query.Where, Validity: req.Query.Validity}, req.InstanceID)
 	writeSearchResult(w, r, result, true)
 	if result.Err == nil {
 		httpapi.Write(r.Context(), w, http.StatusOK, ex)
