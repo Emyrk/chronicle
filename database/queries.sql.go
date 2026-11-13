@@ -26088,7 +26088,12 @@ WITH deduped AS (
         COALESCE(g.name, '')::text AS guild_name,
         COALESCE(li.guild_id::text, '')::text AS guild_id,
         wsr.name AS realm_name,
-        EXTRACT(EPOCH FROM (lie.end_time - lie.start_time))::double precision AS duration_secs,
+        (CASE WHEN lie.name = 'Razorgore the Untamed'
+              AND lie.ranking_start_offset_ms >= 0
+              AND lie.ranking_end_offset_ms > lie.ranking_start_offset_ms
+            THEN (lie.ranking_end_offset_ms - lie.ranking_start_offset_ms) / 1000.0
+            ELSE EXTRACT(EPOCH FROM (lie.end_time - lie.start_time))
+        END)::double precision AS duration_secs,
         lie.end_time AS killed_at
     FROM log_instance_encounters lie
     JOIN log_instances_resolved li ON li.id = lie.instance_id
@@ -26112,7 +26117,7 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
           ELSE true
       END
     ORDER BY lie.name, COALESCE(li.duplicate_group_id, li.id),
-             EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) ASC
+             duration_secs ASC
 )
 SELECT
     d.encounter_id,
@@ -26207,7 +26212,12 @@ const rankingsKillTimeStats = `-- name: RankingsKillTimeStats :many
 WITH deduped AS (
     SELECT DISTINCT ON (lie.name, COALESCE(li.duplicate_group_id, li.id))
         lie.name AS encounter_name,
-        EXTRACT(EPOCH FROM (lie.end_time - lie.start_time))::double precision AS duration_secs
+        (CASE WHEN lie.name = 'Razorgore the Untamed'
+              AND lie.ranking_start_offset_ms >= 0
+              AND lie.ranking_end_offset_ms > lie.ranking_start_offset_ms
+            THEN (lie.ranking_end_offset_ms - lie.ranking_start_offset_ms) / 1000.0
+            ELSE EXTRACT(EPOCH FROM (lie.end_time - lie.start_time))
+        END)::double precision AS duration_secs
     FROM log_instance_encounters lie
     JOIN log_instances_resolved li ON li.id = lie.instance_id
 JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
@@ -26317,7 +26327,12 @@ WITH deduped AS (
         COALESCE(g.name, '')::text AS guild_name,
         COALESCE(li.guild_id::text, '')::text AS guild_id,
         wsr.name AS realm_name,
-        EXTRACT(EPOCH FROM (lie.end_time - lie.start_time))::double precision AS duration_secs,
+        (CASE WHEN lie.name = 'Razorgore the Untamed'
+              AND lie.ranking_start_offset_ms >= 0
+              AND lie.ranking_end_offset_ms > lie.ranking_start_offset_ms
+            THEN (lie.ranking_end_offset_ms - lie.ranking_start_offset_ms) / 1000.0
+            ELSE EXTRACT(EPOCH FROM (lie.end_time - lie.start_time))
+        END)::double precision AS duration_secs,
         lie.end_time AS killed_at
     FROM log_instance_encounters lie
     JOIN log_instances_resolved li ON li.id = lie.instance_id
@@ -26336,7 +26351,7 @@ WITH deduped AS (
       AND cardinality($7::text[]) <= 64
       AND li.guild_id IS NOT NULL
     ORDER BY lie.name, COALESCE(li.duplicate_group_id, li.id),
-             EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) ASC
+             duration_secs ASC
 ), best_per_guild AS (
     SELECT DISTINCT ON (d.encounter_name, d.guild_id) d.encounter_id, d.encounter_name, d.instance_id, d.log_hashed_slug, d.instance_name, d.guild_name, d.guild_id, d.realm_name, d.duration_secs, d.killed_at
     FROM deduped d
@@ -29658,7 +29673,12 @@ SELECT
     lie.name AS encounter_name,
     COALESCE(lie.difficulty, instance.difficulty_name) AS difficulty_name,
     instance.max_players::smallint AS max_players,
-    (EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000)::bigint AS duration_ms
+    (CASE WHEN lie.name = 'Razorgore the Untamed'
+          AND lie.ranking_start_offset_ms >= 0
+          AND lie.ranking_end_offset_ms > lie.ranking_start_offset_ms
+        THEN lie.ranking_end_offset_ms - lie.ranking_start_offset_ms
+        ELSE EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000
+    END)::bigint AS duration_ms
 FROM log_instance_encounters lie
 JOIN log_instances_resolved instance ON instance.id = lie.instance_id
 WHERE lie.instance_id = $1
@@ -29709,7 +29729,12 @@ func (q *sqlQuerier) GetInstanceCleanEncounterKillTimes(ctx context.Context, ins
 const getInstanceEncounterKillTimes = `-- name: GetInstanceEncounterKillTimes :many
 SELECT
     lie.name AS encounter_name,
-    (EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000)::bigint AS duration_ms
+    (CASE WHEN lie.name = 'Razorgore the Untamed'
+          AND lie.ranking_start_offset_ms >= 0
+          AND lie.ranking_end_offset_ms > lie.ranking_start_offset_ms
+        THEN lie.ranking_end_offset_ms - lie.ranking_start_offset_ms
+        ELSE EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000
+    END)::bigint AS duration_ms
 FROM log_instance_encounters lie
 WHERE lie.instance_id = $1
   AND lie.boss = true
@@ -29723,6 +29748,8 @@ type GetInstanceEncounterKillTimesRow struct {
 	DurationMs    int64  `db:"duration_ms" json:"duration_ms"`
 }
 
+// Only Razorgore uses its persisted phase-two window; legacy or invalid windows
+// and every other boss retain full encounter duration.
 func (q *sqlQuerier) GetInstanceEncounterKillTimes(ctx context.Context, instanceID uuid.UUID) ([]GetInstanceEncounterKillTimesRow, error) {
 	rows, err := q.db.Query(ctx, getInstanceEncounterKillTimes, instanceID)
 	if err != nil {
@@ -30266,7 +30293,12 @@ deduped AS (
         COALESCE((
             SELECT jsonb_agg(jsonb_build_object(
                 'encounter_name', lie.name,
-                'duration_ms', (EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000)::bigint
+                'duration_ms', (CASE WHEN lie.name = 'Razorgore the Untamed'
+                      AND lie.ranking_start_offset_ms >= 0
+                      AND lie.ranking_end_offset_ms > lie.ranking_start_offset_ms
+                    THEN lie.ranking_end_offset_ms - lie.ranking_start_offset_ms
+                    ELSE EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000
+                END)::bigint
             ) ORDER BY lie.start_time)
             FROM log_instance_encounters lie
             WHERE lie.instance_id = sr.instance_id

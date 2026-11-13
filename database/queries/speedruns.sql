@@ -21,9 +21,16 @@ JOIN log_instances_resolved li ON li.id = sr.instance_id
 WHERE sr.instance_id = $1;
 
 -- name: GetInstanceEncounterKillTimes :many
+-- Only Razorgore uses its persisted phase-two window; legacy or invalid windows
+-- and every other boss retain full encounter duration.
 SELECT
     lie.name AS encounter_name,
-    (EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000)::bigint AS duration_ms
+    (CASE WHEN lie.name = 'Razorgore the Untamed'
+          AND lie.ranking_start_offset_ms >= 0
+          AND lie.ranking_end_offset_ms > lie.ranking_start_offset_ms
+        THEN lie.ranking_end_offset_ms - lie.ranking_start_offset_ms
+        ELSE EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000
+    END)::bigint AS duration_ms
 FROM log_instance_encounters lie
 WHERE lie.instance_id = $1
   AND lie.boss = true
@@ -40,7 +47,12 @@ SELECT
     lie.name AS encounter_name,
     COALESCE(lie.difficulty, instance.difficulty_name) AS difficulty_name,
     instance.max_players::smallint AS max_players,
-    (EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000)::bigint AS duration_ms
+    (CASE WHEN lie.name = 'Razorgore the Untamed'
+          AND lie.ranking_start_offset_ms >= 0
+          AND lie.ranking_end_offset_ms > lie.ranking_start_offset_ms
+        THEN lie.ranking_end_offset_ms - lie.ranking_start_offset_ms
+        ELSE EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000
+    END)::bigint AS duration_ms
 FROM log_instance_encounters lie
 JOIN log_instances_resolved instance ON instance.id = lie.instance_id
 WHERE lie.instance_id = $1
@@ -92,7 +104,12 @@ deduped AS (
         COALESCE((
             SELECT jsonb_agg(jsonb_build_object(
                 'encounter_name', lie.name,
-                'duration_ms', (EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000)::bigint
+                'duration_ms', (CASE WHEN lie.name = 'Razorgore the Untamed'
+                      AND lie.ranking_start_offset_ms >= 0
+                      AND lie.ranking_end_offset_ms > lie.ranking_start_offset_ms
+                    THEN lie.ranking_end_offset_ms - lie.ranking_start_offset_ms
+                    ELSE EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000
+                END)::bigint
             ) ORDER BY lie.start_time)
             FROM log_instance_encounters lie
             WHERE lie.instance_id = sr.instance_id
