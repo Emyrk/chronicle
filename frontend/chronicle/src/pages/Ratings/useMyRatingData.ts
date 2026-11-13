@@ -83,6 +83,8 @@ export function raidScopeLabel(scope: RaidScope): string {
 export interface RaidBoss extends BossRating {
   /** The boss's group for the scope's metric, to drill into; undefined without kills. */
   groupKey?: string
+  /** The scope metric's kill values, chronological. */
+  values: number[]
 }
 
 export interface RaidView {
@@ -115,7 +117,11 @@ export function buildRaidView(
   const bosses = names.map((name): RaidBoss => {
     const all = byBoss.get(name) ?? []
     const metricGroup = all.find((g) => g.metric === scope.metric)
-    return { ...rateBoss(name, metricGroup, all), groupKey: metricGroup && groupKey(metricGroup) }
+    return {
+      ...rateBoss(name, metricGroup, all),
+      groupKey: metricGroup && groupKey(metricGroup),
+      values: metricGroup?.kills.map((k) => k.value) ?? [],
+    }
   })
   const avg = (pick: (b: RaidBoss) => number) => (bosses.length === 0 ? 0 : bosses.reduce((s, b) => s + pick(b), 0) / bosses.length)
   return {
