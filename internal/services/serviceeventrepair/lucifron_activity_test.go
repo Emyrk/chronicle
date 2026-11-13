@@ -174,3 +174,35 @@ func TestLucifronActivitySkipCompletesLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, receipts)
 }
+
+func TestLucifronActivityShortcutAndControlReplayTogether(t *testing.T) {
+	t.Parallel()
+	for _, extraHostile := range []bool{false, true} {
+		t.Run(map[bool]string{false: "activity-only skip", true: "control replay fallback"}[extraHostile], func(t *testing.T) {
+			t.Parallel()
+			e, _, _ := lucifronControlFixture(t)
+			e.Instance.LogGroupID = uuid.New()
+			e.Hostiles = fixtureLucifronActivity(t).Hostiles
+			if extraHostile {
+				h := e.Hostiles[0]
+				h.ID = guid.GUID(0xF130002D99000001)
+				e.Hostiles = append(e.Hostiles, h)
+			}
+			store := &lucifronActivityStore{razorgoreStore: &razorgoreStore{e: e}}
+			p, err := EvaluateLucifron(context.Background(), store, e.Instance.ID)
+			require.NoError(t, err)
+			require.NoError(t, RevalidateLucifron(context.Background(), store, p))
+			if !extraHostile {
+				require.True(t, p.RequiresReparse)
+				require.Equal(t, lucifronActivitySkipReason, p.Reason)
+				require.Zero(t, store.eventFetches)
+			} else {
+				require.False(t, p.RequiresReparse, p.Reason)
+				require.Equal(t, 2, store.eventFetches, "evaluation and revalidation fetch normal evidence")
+				require.Len(t, p.lucifron.Metrics, 1)
+				require.EqualValues(t, 100, p.lucifron.Metrics[0].DamageDone)
+				require.EqualValues(t, 100, p.lucifron.Metrics[0].UnrankedDamageDone)
+			}
+		})
+	}
+}
