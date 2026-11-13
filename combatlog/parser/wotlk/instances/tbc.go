@@ -836,6 +836,11 @@ var KarazhanFactory = &instances.CommonFactory{
 	ZoneNames: []string{"karazhan"},
 	MapIDs:    []uint32{532},
 	Hostiles:  instances.FromMap(KarazhanHostiles()),
+	FlavoredRankings: func(fl database.WoWFlavor) *rankings.Rankings {
+		rules := KarazhanSpeedrunRequirements()
+		rules.Speedrun.LevelRange = instances.Level70Cap(fl)
+		return rules
+	},
 }
 
 // HyjalSummitHostiles returns creature entry IDs for Hyjal Summit (map 534).

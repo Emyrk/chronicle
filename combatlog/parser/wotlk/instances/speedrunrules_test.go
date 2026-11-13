@@ -137,6 +137,29 @@ func TestUlduarOptionalEldersRemainBossesButAreNotRequired(t *testing.T) {
 	}
 }
 
+func TestKarazhanSpeedrunRequirements(t *testing.T) {
+	t.Parallel()
+
+	tbcRules := KarazhanFactory.FlavoredRankings(database.WoWFlavor{database.FlavorTBC})
+	require.NotNil(t, tbcRules)
+	require.NotNil(t, tbcRules.Speedrun)
+	require.Nil(t, tbcRules.Speedrun.LevelRange)
+	require.Equal(t, []rankings.SpeedrunRequirement{
+		{Name: "Attumen the Huntsman", EntryIDs: []uint32{15550, 16151, 16152}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Moroes", EntryIDs: []uint32{15687}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Maiden of Virtue", EntryIDs: []uint32{16457}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Nightbane", EntryIDs: []uint32{17225}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "The Curator", EntryIDs: []uint32{15691}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Terestian Illhoof", EntryIDs: []uint32{15688}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Shade of Aran", EntryIDs: []uint32{16524}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Netherspite", EntryIDs: []uint32{15689}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Prince Malchezaar", EntryIDs: []uint32{15690}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+	}, tbcRules.Speedrun.Requirements)
+
+	wrathRules := KarazhanFactory.FlavoredRankings(database.WoWFlavor{database.FlavorWrath})
+	require.Equal(t, &rankings.LevelRangeRequirement{MinLevel: 0, MaxLevel: 70}, wrathRules.Speedrun.LevelRange)
+}
+
 func TestSerpentshrineCavernSpeedrunRequirements(t *testing.T) {
 	t.Parallel()
 
