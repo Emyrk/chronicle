@@ -28,12 +28,13 @@ type BaselineEngine string
 
 const (
 	BaselineLegacy            BaselineEngine = "legacy"
+	BaselineParserNext        BaselineEngine = "parsernext"
 	BaselineParserNextVanilla BaselineEngine = "parsernext-vanilla"
 )
 
 func (e BaselineEngine) Validate() error {
 	switch e {
-	case BaselineLegacy, BaselineParserNextVanilla:
+	case BaselineLegacy, BaselineParserNextVanilla, BaselineParserNext:
 		return nil
 	}
 	return fmt.Errorf("unsupported baseline engine %q", e)
@@ -45,6 +46,15 @@ func (e BaselineEngine) ValidateFormat(format database.LogFormat) error {
 	}
 	if e == BaselineParserNextVanilla && format != database.LogFormat112aCcAddon {
 		return fmt.Errorf("baseline engine %q does not support format %q", e, format)
+	}
+	if e == BaselineParserNext {
+		switch format {
+		case database.LogFormat112aCcAddon, database.LogFormat243CcAddon, database.LogFormat335aCcAddon,
+			database.LogFormatAzerothcoreMod, database.LogFormatV9Cleu, database.LogFormatV22Cleu, database.LogFormatHermesproxy1142Cc:
+			return nil
+		default:
+			return fmt.Errorf("baseline engine %q does not support format %q", e, format)
+		}
 	}
 	return nil
 }
@@ -62,7 +72,7 @@ func (c *Chronicle) RunLogParseBaselineWithEngine(ctx context.Context, args Args
 	if c.queue != nil {
 		return errors.New("baseline parsing requires a Chronicle without a queue")
 	}
-	if engine == BaselineParserNextVanilla {
+	if engine == BaselineParserNextVanilla || engine == BaselineParserNext {
 		group, err := c.Zed.GetWoWLogGroupByID(ctx, args.LogID)
 		if err != nil {
 			return fmt.Errorf("baseline format preflight: %w", err)
