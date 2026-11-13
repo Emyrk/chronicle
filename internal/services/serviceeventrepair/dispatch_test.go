@@ -148,3 +148,86 @@ func TestRepairDispatchRejectsUnknownVersion(t *testing.T) {
 	_, err = f.service.Apply(f.ctx, f.id, uuid.New())
 	require.ErrorIs(t, err, ErrConflict)
 }
+
+func TestLucifronRankingMutationPreservesOtherFieldsAndRollsBack(t *testing.T) {
+	t.Parallel()
+	f := lucifronLifecycleFixture(t, 1)
+	instance := receiptInstance(t, f)
+	var target database.EncounterDpsRanking
+	for _, boss := range []string{"Lucifron", "Magmadar"} {
+		encounter := uuid.New()
+		_, err := f.pool.Exec(f.ctx, `INSERT INTO log_instance_encounters(id,instance_id,name,remaining,boss,start_time,end_time,kill_type) VALUES($1,$2,$3,'{}',true,'2026-01-01T00:00:00Z','2026-01-01T00:01:00Z','clean')`, encounter, instance, boss)
+		require.NoError(t, err)
+		_, err = f.pool.Exec(f.ctx, `INSERT INTO encounter_dps_rankings(encounter_id,instance_id,encounter_name,instance_name,player_guid,player_name,realm_id,realm_name,damage_done,unranked_damage_done,duration_secs,dps,killed_at,healing_done,absorbed_done,hps,player_spec,player_sub_spec,player_role,player_deaths,alive_percentage) SELECT $1,id,$2,'Molten Core','0x0000000000000001','Player',realm_id,'Realm',600,60,60,10,'2026-01-01T00:01:00Z',120,30,2.5,'Fire','fire','dps',1,99 FROM log_instances WHERE id=$3`, encounter, boss, instance)
+		require.NoError(t, err)
+	}
+	before, err := f.db.RazorgoreRepairRankings(f.ctx, instance)
+	require.NoError(t, err)
+	require.Len(t, before, 2)
+	for _, r := range before {
+		if r.EncounterName == "Lucifron" {
+			target = r
+		}
+	}
+	require.NotEqual(t, uuid.Nil, target.ID)
+	params := database.LucifronRepairRankingParams{ID: target.ID, InstanceID: instance, EncounterID: target.EncounterID.UUID, DamageDone: 400, UnrankedDamageDone: 260, Dps: 400.0 / 60}
+	f.service.jobs[OperationLucifron].apply = func(ctx context.Context, tx database.Store, _ *RepairPlan) error {
+		n, err := tx.LucifronRepairRanking(ctx, params)
+		if err != nil {
+			return err
+		}
+		if n != 1 {
+			return errors.New("missing Lucifron ranking")
+		}
+		return nil
+	}
+	_, err = f.service.ProcessPage(f.ctx, f.id, "dry_running")
+	require.NoError(t, err)
+	_, err = f.service.Apply(f.ctx, f.id, uuid.New())
+	require.NoError(t, err)
+	conn, err := f.pool.Acquire(f.ctx)
+	require.NoError(t, err)
+	_, err = conn.Exec(f.ctx, `RESET ROLE; ALTER TABLE river_job ADD CONSTRAINT reject_lucifron_queue CHECK (kind <> 'refresh-ranking-runs'); SET ROLE chronicle`)
+	conn.Release()
+	require.NoError(t, err)
+	_, err = f.service.ProcessPage(f.ctx, f.id, "applying")
+	require.Error(t, err)
+	after, err := f.db.RazorgoreRepairRankings(f.ctx, instance)
+	require.NoError(t, err)
+	require.Equal(t, before, after, "failed queue must roll back actual source damage changes")
+	receipts, err := f.db.ListInstanceEventRepairReceipts(f.ctx, instance)
+	require.NoError(t, err)
+	require.Empty(t, receipts)
+	conn, err = f.pool.Acquire(f.ctx)
+	require.NoError(t, err)
+	_, err = conn.Exec(f.ctx, `RESET ROLE; ALTER TABLE river_job DROP CONSTRAINT reject_lucifron_queue; SET ROLE chronicle`)
+	conn.Release()
+	require.NoError(t, err)
+	_, err = f.service.ProcessPage(f.ctx, f.id, "applying")
+	require.NoError(t, err)
+	after, err = f.db.RazorgoreRepairRankings(f.ctx, instance)
+	require.NoError(t, err)
+	for i := range before {
+		if before[i].ID == target.ID {
+			before[i].DamageDone = params.DamageDone
+			before[i].UnrankedDamageDone = params.UnrankedDamageDone
+			before[i].Dps = params.Dps
+		}
+	}
+	require.Equal(t, before, after, "only Lucifron ranked/unranked damage and DPS may change")
+	require.Equal(t, 1, f.canonicalJobs(t))
+	wrong := params
+	wrong.InstanceID = uuid.New()
+	n, err := f.db.LucifronRepairRanking(f.ctx, wrong)
+	require.NoError(t, err)
+	require.Zero(t, n)
+	for _, r := range after {
+		if r.EncounterName == "Magmadar" {
+			wrong = params
+			wrong.ID, wrong.EncounterID = r.ID, r.EncounterID.UUID
+			n, err = f.db.LucifronRepairRanking(f.ctx, wrong)
+			require.NoError(t, err)
+			require.Zero(t, n, "SQL also rejects other encounters")
+		}
+	}
+}
