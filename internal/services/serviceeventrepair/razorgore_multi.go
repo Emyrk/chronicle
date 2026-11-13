@@ -99,12 +99,13 @@ func evaluateRazorgoreMulti(e razorgoreEvidence, p *RazorgoreRepairPlan) error {
 		}
 		window := &encounter.RankingWindow{Start: c.StartTime.Time.Add(time.Duration(sub.Phases[1].StartOffsetMs) * time.Millisecond), End: c.EndTime.Time}
 		n := &razorgoreNumericPlan{Window: database.RazorgoreRepairRankingWindowParams{EncounterID: c.ID, InstanceID: c.InstanceID, StartMs: pgtype.Int8{Int64: sub.Phases[1].StartOffsetMs, Valid: true}, EndMs: pgtype.Int8{Int64: duration, Valid: true}}}
-		if c.KillType == database.KillTypeWipe || c.KillType == database.KillTypeReset {
+		switch c.KillType {
+		case database.KillTypeWipe, database.KillTypeReset:
 			if len(sub.Rankings) > 0 {
 				m.DeleteRankings = append(m.DeleteRankings, c.ID)
 				p.Changes = append(p.Changes, "remove non-kill source metrics "+c.ID.String())
 			}
-		} else if c.KillType == database.KillTypeClean {
+		case database.KillTypeClean:
 			boss, err := provenRazorgoreDeath(sub, c)
 			if err != nil {
 				return err
@@ -140,7 +141,7 @@ func evaluateRazorgoreMulti(e razorgoreEvidence, p *RazorgoreRepairPlan) error {
 					n.Metrics = append(n.Metrics, update)
 				}
 			}
-		} else {
+		default:
 			return errors.New("ambiguous phase-two outcome")
 		}
 		if c.RankingStartOffsetMs != n.Window.StartMs || c.RankingEndOffsetMs != n.Window.EndMs || len(n.Metrics) > 0 {
@@ -265,7 +266,7 @@ func repairRazorgoreMultiProof(e razorgoreEvidence, m *razorgoreMultiPlan, kills
 					}
 				}
 				if !known {
-					return errors.New("Razorgore proof kill not supported by encounter evidence")
+					return errors.New("razorgore proof kill not supported by encounter evidence")
 				}
 			}
 			pr.Kills = []rankings.KillRecord{kills[0]}
