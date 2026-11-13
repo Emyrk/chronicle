@@ -6295,49 +6295,81 @@ func (q *sqlQuerier) ClearWoWLogGroupInvalidation(ctx context.Context, logGroupI
 }
 
 const countAllWoWLogGroups = `-- name: CountAllWoWLogGroups :one
-SELECT COUNT(*)::int FROM wow_log_groups
-LEFT JOIN LATERAL (
-  SELECT COALESCE(array_agg(inst_names.name ORDER BY inst_names.name), ARRAY[]::text[]) AS instance_names
-  FROM (
-    SELECT DISTINCT li.name
-    FROM log_instances li
-    WHERE li.log_group_id = wow_log_groups.id
-      AND btrim(li.name) <> ''
-
-    UNION
-
-    SELECT sm.instance_name AS name
-    FROM server_upload_meta sm
-    WHERE sm.log_group_id = wow_log_groups.id
-      AND btrim(sm.instance_name) <> ''
-      AND NOT EXISTS (
-        SELECT 1
-        FROM log_instances li
-        WHERE li.log_group_id = wow_log_groups.id
-          AND btrim(li.name) <> ''
-      )
-  ) inst_names
-) instances_agg ON true
+SELECT COUNT(*)::int
+FROM wow_log_groups
 WHERE
-  CASE WHEN $1::uuid != '00000000-0000-0000-0000-000000000000'::uuid
-       THEN wow_log_groups.owner = $1
-       ELSE true END
-  AND
-  CASE WHEN $2::boolean
-       THEN cardinality(instances_agg.instance_names) = 0
-       WHEN $3::text != ''
-       THEN $3 = ANY(instances_agg.instance_names)
-       ELSE true END
+  ($1::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR wow_log_groups.owner = $1)
+  AND (
+    NOT $2::boolean
+    OR NOT EXISTS (
+      SELECT 1 FROM log_instances li
+      WHERE li.log_group_id = wow_log_groups.id AND btrim(li.name) <> ''
+    ) AND NOT EXISTS (
+      SELECT 1 FROM server_upload_meta sm
+      WHERE sm.log_group_id = wow_log_groups.id AND btrim(sm.instance_name) <> ''
+    )
+  )
+  AND (
+    $3::text = ''
+    OR EXISTS (
+      SELECT 1 FROM log_instances li
+      WHERE li.log_group_id = wow_log_groups.id AND li.name = $3
+    )
+    OR (
+      NOT EXISTS (
+        SELECT 1 FROM log_instances li
+        WHERE li.log_group_id = wow_log_groups.id AND btrim(li.name) <> ''
+      )
+      AND EXISTS (
+        SELECT 1 FROM server_upload_meta sm
+        WHERE sm.log_group_id = wow_log_groups.id AND sm.instance_name = $3
+      )
+    )
+  )
+  AND (
+    $4::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+    OR EXISTS (
+      SELECT 1
+      FROM (
+        SELECT li.realm_id FROM log_instances li WHERE li.log_group_id = wow_log_groups.id
+        UNION
+        SELECT sm.realm_id FROM server_upload_meta sm WHERE sm.log_group_id = wow_log_groups.id AND sm.realm_id IS NOT NULL
+      ) realms
+      JOIN wow_server_realms wsr ON wsr.id = realms.realm_id
+      JOIN wow_servers ws ON ws.id = wsr.server_id
+      WHERE ws.tenant_id = $4
+    )
+  )
+  AND (
+    $5::text = ''
+    OR $5::text = 'all'
+    OR ($5::text = 'valid' AND wow_log_groups.invalidated_at IS NULL)
+    OR ($5::text = 'invalid' AND wow_log_groups.invalidated_at IS NOT NULL)
+  )
+  AND ($6::timestamptz IS NULL OR wow_log_groups.created_at >= $6)
+  AND ($7::timestamptz IS NULL OR wow_log_groups.created_at < $7)
 `
 
 type CountAllWoWLogGroupsParams struct {
-	FilterUserID          uuid.UUID `db:"filter_user_id" json:"filter_user_id"`
-	FilterWithoutInstance bool      `db:"filter_without_instance" json:"filter_without_instance"`
-	FilterInstanceName    string    `db:"filter_instance_name" json:"filter_instance_name"`
+	FilterUserID          uuid.UUID          `db:"filter_user_id" json:"filter_user_id"`
+	FilterWithoutInstance bool               `db:"filter_without_instance" json:"filter_without_instance"`
+	FilterInstanceName    string             `db:"filter_instance_name" json:"filter_instance_name"`
+	FilterTenantID        uuid.UUID          `db:"filter_tenant_id" json:"filter_tenant_id"`
+	FilterValidity        string             `db:"filter_validity" json:"filter_validity"`
+	CreatedFrom           pgtype.Timestamptz `db:"created_from" json:"created_from"`
+	CreatedBefore         pgtype.Timestamptz `db:"created_before" json:"created_before"`
 }
 
 func (q *sqlQuerier) CountAllWoWLogGroups(ctx context.Context, arg CountAllWoWLogGroupsParams) (int32, error) {
-	row := q.db.QueryRow(ctx, countAllWoWLogGroups, arg.FilterUserID, arg.FilterWithoutInstance, arg.FilterInstanceName)
+	row := q.db.QueryRow(ctx, countAllWoWLogGroups,
+		arg.FilterUserID,
+		arg.FilterWithoutInstance,
+		arg.FilterInstanceName,
+		arg.FilterTenantID,
+		arg.FilterValidity,
+		arg.CreatedFrom,
+		arg.CreatedBefore,
+	)
 	var column_1 int32
 	err := row.Scan(&column_1)
 	return column_1, err
@@ -7210,109 +7242,92 @@ const listAllWoWLogGroupsWithOwnerPaginated = `-- name: ListAllWoWLogGroupsWithO
 SELECT
   wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason, wow_log_groups.parse_generation, wow_log_groups.unlisted, wow_log_groups.upload_source, wow_log_groups.raw_files_pinned,
   u.username AS owner_name,
-  files_agg.files,
   files_agg.total_size_bytes,
-  instances_output.output AS processing_output,
+  EXISTS (
+    SELECT 1
+    FROM parsed_log_group plg
+    WHERE plg.id = wow_log_groups.id
+      AND plg.parse_generation = wow_log_groups.parse_generation
+      AND plg.finalized_at IS NOT NULL
+  ) AS processed,
   instances_agg.instance_names,
   instances_agg.first_instance_name,
   tenants_agg.tenant_names
-FROM
-  wow_log_groups
-    LEFT JOIN users u ON u.id = wow_log_groups.owner
-    -- Files aggregate with total size
-    LEFT JOIN LATERAL (
-      SELECT
-        COALESCE(
-          jsonb_agg(
-            jsonb_build_object(
-              'id', lf.id,
-              'owner', lf.owner,
-              'wow_log_id', lf.wow_log_id,
-              'hash', lf.hash,
-              'size_bytes', lf.size_bytes,
-              'mime_type', lf.mime_type,
-              'compressed_size_bytes', lf.compressed_size_bytes,
-              'content_encoding', lf.content_encoding,
-              'created_at', lf.created_at,
-              'updated_at', lf.updated_at
-            )
-            ORDER BY lf.created_at
-          ) FILTER (WHERE lf.id IS NOT NULL),
-          '[]'::jsonb
-        )::wow_log_group_files AS files,
-        COALESCE(SUM(lf.size_bytes), 0) AS total_size_bytes
-      FROM log_file lf
-      WHERE lf.wow_log_id = wow_log_groups.id
-    ) files_agg ON true
+FROM wow_log_groups
+LEFT JOIN users u ON u.id = wow_log_groups.owner
+LEFT JOIN LATERAL (
+  SELECT COALESCE(SUM(lf.size_bytes), 0)::bigint AS total_size_bytes
+  FROM log_file lf
+  WHERE lf.wow_log_id = wow_log_groups.id
+) files_agg ON true
+LEFT JOIN LATERAL (
+  SELECT
+    COALESCE(array_agg(inst_names.name ORDER BY inst_names.name), ARRAY[]::text[]) AS instance_names,
+    MIN(inst_names.name) AS first_instance_name
+  FROM (
+    SELECT DISTINCT li.name
+    FROM log_instances li
+    WHERE li.log_group_id = wow_log_groups.id
+      AND btrim(li.name) <> ''
 
-    LEFT JOIN parsed_log_group plg ON plg.id = wow_log_groups.id
-      AND plg.parse_generation = wow_log_groups.parse_generation
-      AND plg.finalized_at IS NOT NULL
+    UNION
 
-    -- Instances from DB tables
-    LEFT JOIN LATERAL (
-      SELECT jsonb_build_object(
-          'complete', CASE WHEN plg.id IS NOT NULL THEN to_jsonb(wow_log_groups.updated_at) ELSE NULL END,
-          'instances', COALESCE((
-              SELECT jsonb_agg(inst_data)
-              FROM (
-                  SELECT jsonb_build_object(
-                      'id', li.id,
-                      'name', li.name,
-                      'slug', li.hashed_slug,
-                      'realm_id', li.realm_id,
-                      'log_group_id', li.log_group_id,
-                      'encounters', COALESCE((
-                          SELECT jsonb_agg(jsonb_build_object(
-                              'id', e.id,
-                              'instance_id', e.instance_id,
-                            'boss', e.boss,
-                            'name', e.name,
-                            'kill_type', e.kill_type,
-                            'remaining', e.remaining,
-                              'start_time', e.start_time,
-                              'end_time', e.end_time
-                          ) ORDER BY e.start_time)
-                          FROM log_instance_encounters e
-                          WHERE e.instance_id = li.id
-                      ), '[]'::jsonb)
-                  ) AS inst_data
-                  FROM log_instances li
-                  WHERE li.log_group_id = wow_log_groups.id
-                  ORDER BY li.name
-              ) sub
-          ), '[]'::jsonb)
-      ) AS output
-    ) instances_output ON true
-    -- Instance names aggregate
-    LEFT JOIN LATERAL (
-      SELECT
-        COALESCE(array_agg(inst_names.name ORDER BY inst_names.name), ARRAY[]::text[]) AS instance_names,
-        MIN(inst_names.name) AS first_instance_name
-      FROM (
-        SELECT DISTINCT li.name
+    SELECT sm.instance_name AS name
+    FROM server_upload_meta sm
+    WHERE sm.log_group_id = wow_log_groups.id
+      AND btrim(sm.instance_name) <> ''
+      AND NOT EXISTS (
+        SELECT 1
         FROM log_instances li
         WHERE li.log_group_id = wow_log_groups.id
           AND btrim(li.name) <> ''
-
-        UNION
-
-        SELECT sm.instance_name AS name
-        FROM server_upload_meta sm
-        WHERE sm.log_group_id = wow_log_groups.id
-          AND btrim(sm.instance_name) <> ''
-          AND NOT EXISTS (
-            SELECT 1
-            FROM log_instances li
-            WHERE li.log_group_id = wow_log_groups.id
-              AND btrim(li.name) <> ''
-          )
-      ) inst_names
-    ) instances_agg ON true
-    -- Tenants resolved from parsed instance realms, or server upload realms
-    LEFT JOIN LATERAL (
-      SELECT
-        COALESCE(array_agg(DISTINCT t.name ORDER BY t.name), ARRAY[]::text[]) AS tenant_names
+      )
+  ) inst_names
+) instances_agg ON true
+LEFT JOIN LATERAL (
+  SELECT COALESCE(array_agg(DISTINCT t.name ORDER BY t.name), ARRAY[]::text[]) AS tenant_names
+  FROM (
+    SELECT li.realm_id FROM log_instances li WHERE li.log_group_id = wow_log_groups.id
+    UNION
+    SELECT sm.realm_id FROM server_upload_meta sm WHERE sm.log_group_id = wow_log_groups.id AND sm.realm_id IS NOT NULL
+  ) realms
+  JOIN wow_server_realms wsr ON wsr.id = realms.realm_id
+  JOIN wow_servers ws ON ws.id = wsr.server_id
+  JOIN tenants t ON t.id = ws.tenant_id
+) tenants_agg ON true
+WHERE
+  ($1::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR wow_log_groups.owner = $1)
+  AND (
+    NOT $2::boolean
+    OR NOT EXISTS (
+      SELECT 1 FROM log_instances li
+      WHERE li.log_group_id = wow_log_groups.id AND btrim(li.name) <> ''
+    ) AND NOT EXISTS (
+      SELECT 1 FROM server_upload_meta sm
+      WHERE sm.log_group_id = wow_log_groups.id AND btrim(sm.instance_name) <> ''
+    )
+  )
+  AND (
+    $3::text = ''
+    OR EXISTS (
+      SELECT 1 FROM log_instances li
+      WHERE li.log_group_id = wow_log_groups.id AND li.name = $3
+    )
+    OR (
+      NOT EXISTS (
+        SELECT 1 FROM log_instances li
+        WHERE li.log_group_id = wow_log_groups.id AND btrim(li.name) <> ''
+      )
+      AND EXISTS (
+        SELECT 1 FROM server_upload_meta sm
+        WHERE sm.log_group_id = wow_log_groups.id AND sm.instance_name = $3
+      )
+    )
+  )
+  AND (
+    $4::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+    OR EXISTS (
+      SELECT 1
       FROM (
         SELECT li.realm_id FROM log_instances li WHERE li.log_group_id = wow_log_groups.id
         UNION
@@ -7320,50 +7335,50 @@ FROM
       ) realms
       JOIN wow_server_realms wsr ON wsr.id = realms.realm_id
       JOIN wow_servers ws ON ws.id = wsr.server_id
-      JOIN tenants t ON t.id = ws.tenant_id
-    ) tenants_agg ON true
-WHERE
-  -- Filter by user ID (skip if nil UUID)
-  CASE WHEN $1::uuid != '00000000-0000-0000-0000-000000000000'::uuid
-       THEN wow_log_groups.owner = $1
-       ELSE true END
-  AND
-  -- Filter to logs without an instance, or by instance name when provided
-  CASE WHEN $2::boolean
-       THEN cardinality(instances_agg.instance_names) = 0
-       WHEN $3::text != ''
-       THEN $3 = ANY(instances_agg.instance_names)
-       ELSE true END
+      WHERE ws.tenant_id = $4
+    )
+  )
+  AND (
+    $5::text = ''
+    OR $5::text = 'all'
+    OR ($5::text = 'valid' AND wow_log_groups.invalidated_at IS NULL)
+    OR ($5::text = 'invalid' AND wow_log_groups.invalidated_at IS NOT NULL)
+  )
+  AND ($6::timestamptz IS NULL OR wow_log_groups.created_at >= $6)
+  AND ($7::timestamptz IS NULL OR wow_log_groups.created_at < $7)
 ORDER BY
-  CASE WHEN $4::text = 'date' AND $5::text = 'desc' THEN wow_log_groups.created_at END DESC,
-  CASE WHEN $4::text = 'date' AND $5::text = 'asc' THEN wow_log_groups.created_at END ASC,
-  CASE WHEN $4::text = 'user' AND $5::text = 'desc' THEN u.username END DESC NULLS LAST,
-  CASE WHEN $4::text = 'user' AND $5::text = 'asc' THEN u.username END ASC NULLS LAST,
-  CASE WHEN $4::text = 'size' AND $5::text = 'desc' THEN files_agg.total_size_bytes END DESC,
-  CASE WHEN $4::text = 'size' AND $5::text = 'asc' THEN files_agg.total_size_bytes END ASC,
-  CASE WHEN $4::text = 'instance' AND $5::text = 'desc' THEN instances_agg.first_instance_name END DESC NULLS LAST,
-  CASE WHEN $4::text = 'instance' AND $5::text = 'asc' THEN instances_agg.first_instance_name END ASC NULLS LAST,
+  CASE WHEN $8::text = 'date' AND $9::text = 'desc' THEN wow_log_groups.created_at END DESC,
+  CASE WHEN $8::text = 'date' AND $9::text = 'asc' THEN wow_log_groups.created_at END ASC,
+  CASE WHEN $8::text = 'user' AND $9::text = 'desc' THEN u.username END DESC NULLS LAST,
+  CASE WHEN $8::text = 'user' AND $9::text = 'asc' THEN u.username END ASC NULLS LAST,
+  CASE WHEN $8::text = 'size' AND $9::text = 'desc' THEN files_agg.total_size_bytes END DESC,
+  CASE WHEN $8::text = 'size' AND $9::text = 'asc' THEN files_agg.total_size_bytes END ASC,
+  CASE WHEN $8::text = 'instance' AND $9::text = 'desc' THEN instances_agg.first_instance_name END DESC NULLS LAST,
+  CASE WHEN $8::text = 'instance' AND $9::text = 'asc' THEN instances_agg.first_instance_name END ASC NULLS LAST,
   wow_log_groups.id
-LIMIT $7
-OFFSET $6
+LIMIT $11
+OFFSET $10
 `
 
 type ListAllWoWLogGroupsWithOwnerPaginatedParams struct {
-	FilterUserID          uuid.UUID `db:"filter_user_id" json:"filter_user_id"`
-	FilterWithoutInstance bool      `db:"filter_without_instance" json:"filter_without_instance"`
-	FilterInstanceName    string    `db:"filter_instance_name" json:"filter_instance_name"`
-	SortBy                string    `db:"sort_by" json:"sort_by"`
-	SortOrder             string    `db:"sort_order" json:"sort_order"`
-	OffsetCount           int32     `db:"offset_count" json:"offset_count"`
-	LimitCount            int32     `db:"limit_count" json:"limit_count"`
+	FilterUserID          uuid.UUID          `db:"filter_user_id" json:"filter_user_id"`
+	FilterWithoutInstance bool               `db:"filter_without_instance" json:"filter_without_instance"`
+	FilterInstanceName    string             `db:"filter_instance_name" json:"filter_instance_name"`
+	FilterTenantID        uuid.UUID          `db:"filter_tenant_id" json:"filter_tenant_id"`
+	FilterValidity        string             `db:"filter_validity" json:"filter_validity"`
+	CreatedFrom           pgtype.Timestamptz `db:"created_from" json:"created_from"`
+	CreatedBefore         pgtype.Timestamptz `db:"created_before" json:"created_before"`
+	SortBy                string             `db:"sort_by" json:"sort_by"`
+	SortOrder             string             `db:"sort_order" json:"sort_order"`
+	OffsetCount           int32              `db:"offset_count" json:"offset_count"`
+	LimitCount            int32              `db:"limit_count" json:"limit_count"`
 }
 
 type ListAllWoWLogGroupsWithOwnerPaginatedRow struct {
 	WoWLogGroup       WoWLogGroup `db:"wo_wlog_group" json:"wo_wlog_group"`
 	OwnerName         pgtype.Text `db:"owner_name" json:"owner_name"`
-	Files             []LogFile   `db:"files" json:"files"`
-	TotalSizeBytes    interface{} `db:"total_size_bytes" json:"total_size_bytes"`
-	ProcessingOutput  []byte      `db:"processing_output" json:"processing_output"`
+	TotalSizeBytes    int64       `db:"total_size_bytes" json:"total_size_bytes"`
+	Processed         bool        `db:"processed" json:"processed"`
 	InstanceNames     interface{} `db:"instance_names" json:"instance_names"`
 	FirstInstanceName interface{} `db:"first_instance_name" json:"first_instance_name"`
 	TenantNames       interface{} `db:"tenant_names" json:"tenant_names"`
@@ -7374,6 +7389,10 @@ func (q *sqlQuerier) ListAllWoWLogGroupsWithOwnerPaginated(ctx context.Context, 
 		arg.FilterUserID,
 		arg.FilterWithoutInstance,
 		arg.FilterInstanceName,
+		arg.FilterTenantID,
+		arg.FilterValidity,
+		arg.CreatedFrom,
+		arg.CreatedBefore,
 		arg.SortBy,
 		arg.SortOrder,
 		arg.OffsetCount,
@@ -7401,9 +7420,8 @@ func (q *sqlQuerier) ListAllWoWLogGroupsWithOwnerPaginated(ctx context.Context, 
 			&i.WoWLogGroup.UploadSource,
 			&i.WoWLogGroup.RawFilesPinned,
 			&i.OwnerName,
-			&i.Files,
 			&i.TotalSizeBytes,
-			&i.ProcessingOutput,
+			&i.Processed,
 			&i.InstanceNames,
 			&i.FirstInstanceName,
 			&i.TenantNames,

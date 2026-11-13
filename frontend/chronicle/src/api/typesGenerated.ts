@@ -594,6 +594,12 @@ export interface AdminLog {
 }
 
 // From chroniclesdk/user.go
+export interface AdminLogTenant {
+    readonly id: string;
+    readonly name: string;
+}
+
+// From chroniclesdk/user.go
 export interface AdminLogsResponse {
     readonly logs: readonly AdminLog[];
     readonly has_more: boolean;
