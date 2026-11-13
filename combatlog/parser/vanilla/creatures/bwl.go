@@ -264,6 +264,15 @@ func (c *razorgore) PhaseDefinitions() *phases.EncounterPhases {
 }
 
 func (c *razorgore) Process(m messages.Message) error {
+	// Resolve the previous pull before counting the first egg of a new pull.
+	// Timeouts can be handled by the character set between Process calls.
+	if current, ok := c.Activity.Current(); ok && !c.Lookup().ExplicitEncounterActive() {
+		current.HandleTimeout(m.Date())
+	}
+	if !c.IsActive() {
+		c.eggCount = 0
+		c.adsGone = false
+	}
 	wasActive := c.IsActive()
 
 	if ty, ok := m.(*messages.SpellGo); ok && ty.Caster == c.ID() && ty.SpellData != nil {
@@ -288,7 +297,7 @@ func (c *razorgore) Process(m messages.Message) error {
 		}
 	}
 
-	err := c.Common.Process(m)
+	err := characters.ProcessCommonActivity(c, m)
 
 	// Reset the egg count when the boss resets / the fight ends.
 	if wasActive && !c.IsActive() {
@@ -296,6 +305,17 @@ func (c *razorgore) Process(m messages.Message) error {
 		c.adsGone = false
 	}
 	return err
+}
+
+// Died distinguishes losing the mind-controlled boss during the egg phase from
+// defeating him. Preserve legacy behavior on flavors without egg tracking.
+func (c *razorgore) Died(reason string, m messages.Message) {
+	if c.eggThreshold > 0 && !c.adsGone {
+		c.End("razorgore_died_before_eggs_destroyed", m, period.EndStateReset)
+		c.LastSlain = m // Suppress lingering damage from reopening the failed pull.
+		return
+	}
+	c.Common.Died(reason, m)
 }
 
 // killEggAds marks the phase-1 adds as killed. In the real fight they run away

@@ -56,6 +56,17 @@ function RankedTimeCell({ rankedTime, mode }: { rankedTime: RankedTime; mode: st
   if (rankedTime === "full") {
     return <span className="whitespace-nowrap text-xs text-muted-foreground">Full encounter</span>
   }
+  if (rankedTime === "phase-two") {
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground"
+        title="From the final egg being destroyed until Razorgore dies. Full encounter on servers without egg tracking."
+      >
+        <Clock className="h-3 w-3 text-emerald-300" />
+        Phase 2 (with egg tracking)
+      </span>
+    )
+  }
   const targets = mode === "boss-only" ? "boss" : "target"
   return (
     <span

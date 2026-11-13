@@ -417,6 +417,8 @@ type sqlcQuerier interface {
 	// the clean-only snapshot cohort consistently.
 	GetInstanceCleanEncounterKillTimes(ctx context.Context, instanceID uuid.UUID) ([]GetInstanceCleanEncounterKillTimesRow, error)
 	GetInstanceEncounterCharacterFights(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceEncounterHostile, error)
+	// Only Razorgore uses its persisted phase-two window; legacy or invalid windows
+	// and every other boss retain full encounter duration.
 	GetInstanceEncounterKillTimes(ctx context.Context, instanceID uuid.UUID) ([]GetInstanceEncounterKillTimesRow, error)
 	GetInstanceLogOwner(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	GetInstanceLoot(ctx context.Context, arg GetInstanceLootParams) ([]GetInstanceLootRow, error)

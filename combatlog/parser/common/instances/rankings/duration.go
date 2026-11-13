@@ -8,10 +8,25 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 )
 
-// RankingWindow returns a shortened DPS interval only when every participating
-// selected unit has one complete activity period ending in death. A reset,
-// surviving add, or ambiguous boundary keeps the entire encounter ranked.
+// RankingWindow selects an explicit phase interval when configured. Otherwise it
+// shortens the DPS interval only when every selected unit has one complete activity
+// period ending in death. Missing or ambiguous boundaries keep the full encounter.
 func RankingWindow(fight encounter.Fight, rule DamageTargets, isBoss func(guid.GUID) bool) *encounter.RankingWindow {
+	if rule.PhaseKey != "" {
+		for _, phase := range fight.Phases {
+			if phase.Key != rule.PhaseKey {
+				continue
+			}
+			start := fight.Start.Add(time.Duration(phase.StartOffsetMs) * time.Millisecond)
+			end := fight.Start.Add(time.Duration(phase.EndOffsetMs) * time.Millisecond)
+			if start.Before(fight.Start) || end.After(fight.End) || !end.After(start) {
+				return nil
+			}
+			return &encounter.RankingWindow{Start: start, End: end}
+		}
+		// No phase means no reliable shortened interval (e.g. a phase-one wipe).
+		return nil
+	}
 	if rule.Mode != DamageTargetsBossOnly && rule.Mode != DamageTargetsEntries {
 		return nil
 	}

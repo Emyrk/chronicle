@@ -134,6 +134,30 @@ func TestWoWEncounterRankingWindow(t *testing.T) {
 	require.Equal(t, int64(60000), converted.RankingWindow.DurationMs)
 }
 
+func TestWoWEncounterRankingWindowPhaseBasis(t *testing.T) {
+	t.Parallel()
+	id := uuid.New()
+	enc := database.LogInstanceEncounter{ID: id,
+		RankingStartOffsetMs: pgtype.Int8{Int64: 10000, Valid: true},
+		RankingEndOffsetMs:   pgtype.Int8{Int64: 70000, Valid: true},
+	}
+	for _, tc := range []struct {
+		name  string
+		phase database.LogInstanceEncounterPhase
+		want  string
+	}{
+		{"matching", database.LogInstanceEncounterPhase{EncounterID: id, StartOffsetMs: 10000, EndOffsetMs: 70000}, "phase"},
+		{"different_bounds", database.LogInstanceEncounterPhase{EncounterID: id, StartOffsetMs: 0, EndOffsetMs: 70000}, "selected-unit-activity"},
+		{"other_encounter", database.LogInstanceEncounterPhase{EncounterID: uuid.New(), StartOffsetMs: 10000, EndOffsetMs: 70000}, "selected-unit-activity"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			converted := WoWEncountersWithHostiles([]database.LogInstanceEncounter{enc}, nil, []database.LogInstanceEncounterPhase{tc.phase})
+			require.Equal(t, tc.want, converted[0].RankingWindow.Basis)
+		})
+	}
+}
+
 func TestInstanceUnitsCompactsNamesAndOwners(t *testing.T) {
 	t.Parallel()
 

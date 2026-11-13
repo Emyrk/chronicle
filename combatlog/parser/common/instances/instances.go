@@ -2,6 +2,7 @@ package instances
 
 import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/rankings"
+	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures"
 	"github.com/Emyrk/chronicle/database"
 )
 
@@ -317,8 +318,14 @@ var (
 		Hostiles:          BlackwingLairHostiles,
 		ProgressionBosses: BlackwingLairProgressionBosses,
 		FlavoredRankings: func(fl database.WoWFlavor) *rankings.Rankings {
+			// Unsupported flavors have no egg transition; keep their full duration.
+			durationRules := map[string]rankings.DamageTargets{"Razorgore the Untamed": {}}
+			if creatures.RazorgoreEggThreshold(fl) > 0 {
+				durationRules["Razorgore the Untamed"] = rankings.DamageTargets{PhaseKey: creatures.RazorgorePhaseKeyP2}
+			}
 			return &rankings.Rankings{
-				DamageByEncounter: BlackwingLairDamageTargets(),
+				DurationByEncounter: durationRules,
+				DamageByEncounter:   BlackwingLairDamageTargets(),
 				Speedrun: &rankings.SpeedrunRules{
 					Requirements: BlackwingLairSpeedrunRequirements(fl),
 					LevelRange:   Level60Cap(fl),

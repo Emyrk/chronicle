@@ -555,7 +555,12 @@ WITH scoped AS MATERIALIZED (
 ), provenance AS (
     -- Do not substitute another observation when the actual peak source is gone.
     -- Source joins are identity-qualified, not just a coincidental encounter UUID.
-    SELECT e.id, floor(extract(epoch FROM (e.end_time - e.start_time)) * 1000)::bigint AS duration_ms
+    SELECT e.id, (CASE WHEN e.name = 'Razorgore the Untamed'
+          AND e.ranking_start_offset_ms >= 0
+          AND e.ranking_end_offset_ms > e.ranking_start_offset_ms
+        THEN e.ranking_end_offset_ms - e.ranking_start_offset_ms
+        ELSE floor(extract(epoch FROM (e.end_time - e.start_time)) * 1000)
+    END)::bigint AS duration_ms
     FROM peak p
     JOIN log_instance_encounters e ON e.id = p.source_encounter_id
       AND e.instance_id = p.source_instance_id AND e.name = p.encounter_name
@@ -564,7 +569,12 @@ WITH scoped AS MATERIALIZED (
     JOIN wow_server_realms r ON r.id = i.realm_id
     JOIN wow_servers s ON s.id = r.server_id AND s.tenant_id = p.tenant_id
     WHERE e.end_time > e.start_time
-      AND floor(extract(epoch FROM (e.end_time - e.start_time)) * 1000) > 0
+      AND (CASE WHEN e.name = 'Razorgore the Untamed'
+          AND e.ranking_start_offset_ms >= 0
+          AND e.ranking_end_offset_ms > e.ranking_start_offset_ms
+        THEN e.ranking_end_offset_ms - e.ranking_start_offset_ms
+        ELSE floor(extract(epoch FROM (e.end_time - e.start_time)) * 1000)
+    END)::bigint > 0
 ), calculated AS (
     SELECT statistics.observation_count, statistics.raw_peak, statistics.raw_form, statistics.raw_floor, provenance.id AS peak_encounter_id, provenance.duration_ms AS peak_duration_ms
     FROM statistics LEFT JOIN provenance ON true

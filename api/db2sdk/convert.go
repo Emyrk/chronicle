@@ -906,6 +906,14 @@ func WoWEncountersWithHostiles(encounter []database.LogInstanceEncounter, hostil
 				return p.EncounterID == e.ID
 			}), WoWEncounterPhase),
 		}
+		if window := enc.RankingWindow; window != nil {
+			for _, phase := range enc.Phases {
+				if phase.StartOffsetMs == window.StartOffsetMs && phase.EndOffsetMs == window.EndOffsetMs {
+					window.Basis = "phase"
+					break
+				}
+			}
+		}
 		output = append(output, enc)
 	}
 	return output

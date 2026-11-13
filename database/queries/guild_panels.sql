@@ -341,7 +341,12 @@ SELECT
     COALESCE(kill.duration_ms, 0)::bigint AS kill_duration_ms
 FROM grouped g
 LEFT JOIN LATERAL (
-    SELECT (EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000)::bigint AS duration_ms
+    SELECT (CASE WHEN lie.name = 'Razorgore the Untamed'
+          AND lie.ranking_start_offset_ms >= 0
+          AND lie.ranking_end_offset_ms > lie.ranking_start_offset_ms
+        THEN lie.ranking_end_offset_ms - lie.ranking_start_offset_ms
+        ELSE EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000
+    END)::bigint AS duration_ms
     FROM log_instance_encounters lie
     WHERE lie.instance_id = g.instance_id
       AND lie.name = g.encounter_name
