@@ -38,6 +38,8 @@ export interface LiveHubRatingsProps {
   cohort?: { difficulty: string; maxPlayers: number };
   role: "dps" | "healing";
   where: string;
+  /** Shown after the board title, e.g. the encounter variant mark. */
+  titleBadge?: ReactNode;
   toolbar?: ReactNode;
   summary?: HubSummary;
 }
@@ -56,6 +58,7 @@ export function LiveHubRatings(props: LiveHubRatingsProps) {
     cohort,
     role,
     where,
+    titleBadge,
     toolbar,
     summary,
   } = props;
@@ -291,6 +294,7 @@ export function LiveHubRatings(props: LiveHubRatingsProps) {
           }
           allBosses={bosses}
           where={where}
+          titleBadge={titleBadge}
           onBoss={(boss) => onScope({ boss })}
           toolbar={ratingsToolbar}
           data={data}
@@ -316,6 +320,7 @@ export function LiveHubRatings(props: LiveHubRatingsProps) {
         toolbar={ratingsToolbar}
         live={live}
         title={where}
+        titleBadge={titleBadge}
       />
     </div>
   );

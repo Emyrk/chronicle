@@ -12,7 +12,7 @@ describe("encounter variant presentation", () => {
   it("leaves historical or unknown reports unclassified", () => {
     expect(renderToStaticMarkup(<EncounterVariantMark />)).toBe("");
     expect(renderToStaticMarkup(<EncounterVariantMark variant="unknown" />)).toBe("");
-    expect(renderToStaticMarkup(<EncounterVariantMark variant="hard" />)).toContain("Hard mode");
+    expect(renderToStaticMarkup(<EncounterVariantMark variant="hard" />)).toContain(">HM<");
     expect(renderToStaticMarkup(<EncounterVariantMark variant="normal" />)).toContain("Normal");
   });
   it("defaults to Combined and selects only one cohort", () => {
