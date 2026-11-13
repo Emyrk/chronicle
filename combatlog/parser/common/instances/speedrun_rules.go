@@ -169,10 +169,11 @@ func MoltenCoreSpeedrunRequirements(fl database.WoWFlavor) []rankings.SpeedrunRe
 	return mc
 }
 
-// BlackwingLairDamageTargets limits Broodlord rankings to boss damage.
+// BlackwingLairDamageTargets excludes adds from Razorgore and Broodlord rankings.
 func BlackwingLairDamageTargets() map[string]rankings.DamageTargets {
 	return map[string]rankings.DamageTargets{
-		"Broodlord Lashlayer": {Mode: rankings.DamageTargetsBossOnly},
+		"Razorgore the Untamed": {Mode: rankings.DamageTargetsEntries, EntryIDs: []uint32{12435}},
+		"Broodlord Lashlayer":   {Mode: rankings.DamageTargetsBossOnly},
 	}
 }
 

@@ -68,8 +68,25 @@ func TestBlackwingLairDamageTargets(t *testing.T) {
 
 	rules := BlackwingLairFactory.FlavoredRankings(database.WoWFlavor{database.FlavorVanilla})
 	require.Equal(t, map[string]rankings.DamageTargets{
-		"Broodlord Lashlayer": {Mode: rankings.DamageTargetsBossOnly},
+		"Broodlord Lashlayer":   {Mode: rankings.DamageTargetsBossOnly},
+		"Razorgore the Untamed": {Mode: rankings.DamageTargetsEntries, EntryIDs: []uint32{12435}},
 	}, rules.DamageByEncounter)
+}
+
+func TestBlackwingLairRazorgoreDurationRule(t *testing.T) {
+	t.Parallel()
+	for _, flavor := range []database.FlavorTag{database.FlavorVanilla, database.FlavorNightmareOfUrsol, database.FlavorVanillaPlus} {
+		t.Run(string(flavor), func(t *testing.T) {
+			t.Parallel()
+			rules := BlackwingLairFactory.FlavoredRankings(database.WoWFlavor{database.FlavorVanilla, flavor})
+			want := rankings.DamageTargets{PhaseKey: "razorgore_p2"}
+			if flavor == database.FlavorVanilla {
+				want = rankings.DamageTargets{}
+			}
+			require.Equal(t, want, rules.DurationTargets("Razorgore the Untamed"))
+			require.Equal(t, rankings.DamageTargets{Mode: rankings.DamageTargetsBossOnly}, rules.DurationTargets("Broodlord Lashlayer"))
+		})
+	}
 }
 
 func TestLevel60Cap(t *testing.T) {

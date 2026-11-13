@@ -7529,7 +7529,7 @@ export interface WoWParsedLogJobOutput {
  * original encounter start. Absent when the full encounter is scored.
  */
 export interface WoWRankingWindow {
-    readonly basis: string; // "selected-unit-activity"
+    readonly basis: string; // "selected-unit-activity" or "phase"
     readonly start_offset_ms: number;
     readonly end_offset_ms: number;
     readonly duration_ms: number;

@@ -228,7 +228,7 @@ type WoWEncounter struct {
 // WoWRankingWindow marks the interval scored for boss rankings, relative to the
 // original encounter start. Absent when the full encounter is scored.
 type WoWRankingWindow struct {
-	Basis         string `json:"basis"` // "selected-unit-activity"
+	Basis         string `json:"basis"` // "selected-unit-activity" or "phase"
 	StartOffsetMs int64  `json:"start_offset_ms"`
 	EndOffsetMs   int64  `json:"end_offset_ms"`
 	DurationMs    int64  `json:"duration_ms"`

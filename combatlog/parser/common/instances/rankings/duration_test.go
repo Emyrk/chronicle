@@ -23,6 +23,33 @@ func TestDurationTargetsDefaultsToDamageTargets(t *testing.T) {
 	require.Equal(t, DamageTargets{Mode: DamageTargetsBossOnly}, rules.DurationTargets("Garr"))
 }
 
+func TestRankingWindowPhase(t *testing.T) {
+	t.Parallel()
+	base := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name  string
+		phase encounter.Phase
+		valid bool
+	}{
+		{"phase_two", encounter.Phase{Key: "boss", StartOffsetMs: 30000, EndOffsetMs: 90000}, true},
+		{"missing", encounter.Phase{Key: "adds", EndOffsetMs: 90000}, false},
+		{"empty", encounter.Phase{Key: "boss", StartOffsetMs: 30000, EndOffsetMs: 30000}, false},
+		{"before_fight", encounter.Phase{Key: "boss", StartOffsetMs: -1, EndOffsetMs: 90000}, false},
+		{"after_fight", encounter.Phase{Key: "boss", StartOffsetMs: 30000, EndOffsetMs: 90001}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			fight := encounter.Fight{Start: base, End: base.Add(90 * time.Second), Phases: []encounter.Phase{tc.phase}}
+			window := RankingWindow(fight, DamageTargets{PhaseKey: "boss"}, nil)
+			if !tc.valid {
+				require.Nil(t, window)
+				return
+			}
+			require.Equal(t, &encounter.RankingWindow{Start: base.Add(30 * time.Second), End: fight.End}, window)
+		})
+	}
+}
+
 func TestRankingWindow(t *testing.T) {
 	t.Parallel()
 	base := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
