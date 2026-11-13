@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import type { ArmorySearchResult, LeaderboardV2PlayerHistoryGroup } from "@/api/typesGenerated"
-import { datasetFromGroup, playerHistoryURL } from "./useMyRatingData"
+import { buildRaidView, datasetFromGroup, playerHistoryURL, raidScopeKey } from "./useMyRatingData"
+import { parseRatingsLink, ratingsExplainerHref } from "./ratingsLink"
 
 const character = {
   id: "Player-1234-ABCDEF",
@@ -48,5 +49,26 @@ describe("Armory rating history", () => {
       { value: 900, parse: 88, killedAt: "2026-11-01T00:00:00Z" },
       { value: 1100, parse: undefined, killedAt: "2026-11-08T00:00:00Z" },
     ])
+  })
+
+  it("rates a raid like the Armory: missing bosses count as zero, Renown sums every metric", () => {
+    const healKill = { ...group, encounter_name: "Chromaggus", metric: "hps", renown_award: 2, kills: [{ value: 500, killed_at: "2026-11-01T00:00:00Z" }] }
+    const scope = { key: raidScopeKey("WARRIOR|Fury|", "dps"), label: "Fury Warrior", cohort: "WARRIOR|Fury|", metric: "dps", kills: 2 }
+    const view = buildRaidView({ key: "bwl", label: "Blackwing Lair", kills: 3 }, [group, healKill], scope, ["Chromaggus", "Nefarian"])
+
+    expect(view.bosses.map((b) => b.encounterName)).toEqual(["Chromaggus", "Nefarian"])
+    expect(view.bosses[0]).toMatchObject({ kills: 0, mastery: 0, renown: 2, groupKey: undefined })
+    expect(view.bosses[1].peak).toBe(100)
+    expect(view.peak).toBe(50)
+    expect(view.mastery).toBeCloseTo(view.bosses[1].mastery / 2)
+    expect(view.renown).toBe(2 + 18)
+  })
+})
+
+describe("ratings deep link", () => {
+  it("round-trips a character, raid, spec, and metric", () => {
+    const link = { realm: "Nordanaar", player: "Player-1", raid: "Blackwing Lair|Normal|40", spec: "WARRIOR|Fury|", metric: "dps" }
+    const href = ratingsExplainerHref(link)
+    expect(parseRatingsLink(new URLSearchParams(href.split("?")[1]))).toEqual(link)
   })
 })

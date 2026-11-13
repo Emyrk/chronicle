@@ -11,6 +11,8 @@ import { useCharacterEncounters, useCharacterParses } from "@/api/rankingsQuerie
 import { averageScoreByInstance, bestScoreByInstance, summarizeProgress } from "../parseAggregation";
 import type { CareerRatings } from "./useCareerRatings";
 import { defaultMetric } from "./util";
+import { cohortKey } from "./careerRatingsModel";
+import { ratingsExplainerHref } from "@/pages/Ratings/ratingsLink";
 import { useRecentActivity } from "./useRecentActivity";
 import { TalentsCard } from "./TalentsCard";
 import { GearStripCard } from "./GearStripCard";
@@ -109,6 +111,15 @@ export function OverviewTab({
               metric={ratings.metric}
               isLoading={ratings.isLoading}
               emptyMessage={ratings.emptyMessage}
+              ratingsHref={(raid) =>
+                ratingsExplainerHref({
+                  realm: player.realm_name,
+                  player: player.id,
+                  raid,
+                  spec: ratings.cohort ? cohortKey(ratings.cohort) : undefined,
+                  metric: ratings.metric,
+                })
+              }
             />
           </div>
           <div className="lg:col-span-12">

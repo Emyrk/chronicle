@@ -73,7 +73,7 @@ export interface RaidRating {
 const variantKey = (v: { instance_name: string; difficulty_name: string; max_players: number }) =>
   [v.instance_name, v.difficulty_name, v.max_players].join("|");
 
-function rateBoss(
+export function rateBoss(
   name: string,
   metricGroup: LeaderboardV2PlayerHistoryGroup | undefined,
   allGroups: LeaderboardV2PlayerHistoryGroup[],

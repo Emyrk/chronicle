@@ -1,9 +1,11 @@
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { useArmorySearch } from "@/api/queries"
+import { useArmoryPlayer, useArmorySearch, useSupportedInstanceProgressionBosses } from "@/api/queries"
 import type { ArmorySearchResult, LeaderboardV2PlayerHistory, LeaderboardV2PlayerHistoryGroup } from "@/api/typesGenerated"
 import { useDebouncedValue } from "@/hooks/useDebouncedValue"
 import { formatClassLabel } from "@/pages/ArmoryPage/characterDisplay"
+import { cohortKey, rateBoss, type BossRating } from "@/pages/ArmoryPage/overview/careerRatingsModel"
+import type { RatingsLink } from "./ratingsLink"
 
 /** Everything the interactive example needs, for the example player or real data. */
 export interface RatingDataset {
@@ -50,10 +52,81 @@ export function raidLabel(raid: MyRaid): string {
   return `${raid.label} · ${killWord(raid.kills)}`
 }
 
+function specLabel(g: LeaderboardV2PlayerHistoryGroup): string {
+  return [g.player_sub_spec, g.player_spec, formatClassLabel(g.player_class)].filter(Boolean).join(" ")
+}
+
 /** Within one raid, the boss name, spec, and metric identify the option. */
 export function groupLabel(g: LeaderboardV2PlayerHistoryGroup): string {
-  const spec = [g.player_sub_spec, g.player_spec, formatClassLabel(g.player_class)].filter(Boolean).join(" ")
-  return `${g.encounter_name} · ${spec} ${g.metric.toUpperCase()} · ${killWord(g.kills.length)}`
+  return `${g.encounter_name} · ${specLabel(g)} ${g.metric.toUpperCase()} · ${killWord(g.kills.length)}`
+}
+
+const RAID_SCOPE = "raid:"
+
+/** Every boss of a raid for one spec and metric, the unit the Armory rates. */
+export interface RaidScope {
+  key: string
+  label: string
+  cohort: string
+  metric: string
+  kills: number
+}
+
+export function raidScopeKey(cohort: string, metric: string): string {
+  return `${RAID_SCOPE}${cohort}|${metric}`
+}
+
+export function raidScopeLabel(scope: RaidScope): string {
+  return `All bosses · ${scope.label} ${scope.metric.toUpperCase()} · ${killWord(scope.kills)}`
+}
+
+export interface RaidBoss extends BossRating {
+  /** The boss's group for the scope's metric, to drill into; undefined without kills. */
+  groupKey?: string
+}
+
+export interface RaidView {
+  scope: RaidScope
+  raidLabel: string
+  unit: "DPS" | "HPS"
+  bosses: RaidBoss[]
+  peak: number
+  mastery: number
+  renown: number
+}
+
+/**
+ * Rates every boss of the raid for one spec and metric, the way the Armory
+ * does: bosses without kills count as zero and Renown counts the spec's kills
+ * for either metric.
+ */
+export function buildRaidView(
+  raid: MyRaid,
+  groups: LeaderboardV2PlayerHistoryGroup[],
+  scope: RaidScope,
+  progressionBosses: string[] = [],
+): RaidView {
+  const byBoss = new Map<string, LeaderboardV2PlayerHistoryGroup[]>()
+  for (const g of groups) {
+    if (cohortKey(g) !== scope.cohort) continue
+    byBoss.set(g.encounter_name, [...(byBoss.get(g.encounter_name) ?? []), g])
+  }
+  const names = [...progressionBosses, ...[...byBoss.keys()].filter((n) => !progressionBosses.includes(n)).sort()]
+  const bosses = names.map((name): RaidBoss => {
+    const all = byBoss.get(name) ?? []
+    const metricGroup = all.find((g) => g.metric === scope.metric)
+    return { ...rateBoss(name, metricGroup, all), groupKey: metricGroup && groupKey(metricGroup) }
+  })
+  const avg = (pick: (b: RaidBoss) => number) => (bosses.length === 0 ? 0 : bosses.reduce((s, b) => s + pick(b), 0) / bosses.length)
+  return {
+    scope,
+    raidLabel: raid.label,
+    unit: scope.metric === "hps" ? "HPS" : "DPS",
+    bosses,
+    peak: avg((b) => b.peak),
+    mastery: avg((b) => b.mastery),
+    renown: bosses.reduce((s, b) => s + b.renown, 0),
+  }
 }
 
 export function datasetFromGroup(character: ArmorySearchResult, g: LeaderboardV2PlayerHistoryGroup): RatingDataset {
@@ -87,14 +160,21 @@ async function fetchHistory(c: ArmorySearchResult): Promise<LeaderboardV2PlayerH
   return response.json() as Promise<LeaderboardV2PlayerHistory>
 }
 
-/** Armory character search, the chosen character's boss/cohort groups, and the chosen group as a dataset. */
-export function useMyRatingData(enabled: boolean) {
+/**
+ * Armory character search, the chosen character's boss/cohort groups, and the
+ * chosen group as a dataset or the chosen raid scope as a raid view. A deep
+ * link preselects its character, raid, and spec.
+ */
+export function useMyRatingData(enabled: boolean, link?: RatingsLink) {
   const [searchQuery, setSearchQuery] = useState("")
   const debouncedSearch = useDebouncedValue(searchQuery.trim(), 250)
   const search = useArmorySearch({ q: debouncedSearch }, { enabled: enabled && debouncedSearch.length >= 2 })
-  const [character, setCharacter] = useState<ArmorySearchResult>()
-  const [raidChoice, setRaidChoice] = useState("")
-  const [groupChoice, setGroupChoice] = useState("")
+  const linked = useArmoryPlayer(enabled ? link?.realm : undefined, link?.player)
+  const { data: progressionBosses } = useSupportedInstanceProgressionBosses()
+  const [chosen, setCharacter] = useState<ArmorySearchResult>()
+  const character = chosen ?? linked.data
+  const [raidChoice, setRaidChoice] = useState(link?.raid ?? "")
+  const [groupChoice, setGroupChoice] = useState(link?.raid && link.spec !== undefined && link.metric ? raidScopeKey(link.spec, link.metric) : "")
 
   const history = useQuery({
     queryKey: ["leaderboards-v2-player-history", character?.realm_id, character?.id],
@@ -116,10 +196,22 @@ export function useMyRatingData(enabled: boolean) {
   const raids = [...raidMap.values()].sort((a, b) => b.kills - a.kills)
   const raid = raids.find((r) => r.key === raidChoice) ?? raids[0]
   const groups = allGroups.filter((g) => raidKey(g) === raid?.key).sort((a, b) => b.kills.length - a.kills.length)
-  const group = groups.find((g) => groupKey(g) === groupChoice) ?? groups[0]
+
+  const scopeMap = new Map<string, RaidScope>()
+  for (const g of groups) {
+    const key = raidScopeKey(cohortKey(g), g.metric)
+    const scope = scopeMap.get(key) ?? { key, label: specLabel(g), cohort: cohortKey(g), metric: g.metric, kills: 0 }
+    scope.kills += g.kills.length
+    scopeMap.set(key, scope)
+  }
+  const scopes = [...scopeMap.values()].sort((a, b) => b.kills - a.kills)
+  const scope = scopes.find((s) => s.key === groupChoice)
+  const group = scope ? undefined : (groups.find((g) => groupKey(g) === groupChoice) ?? groups[0])
+  const raidView =
+    raid && scope ? buildRaidView(raid, groups, scope, [...(progressionBosses?.get(groups[0].instance_name) ?? [])]) : undefined
 
   let state: MyDataState = { status: "ready" }
-  if (!character) state = { status: "choose-character" }
+  if (!character) state = linked.isLoading ? { status: "loading" } : linked.isError ? { status: "error", message: "Could not find that Armory character." } : { status: "choose-character" }
   else if (history.isLoading) state = { status: "loading" }
   else if (history.isError) state = { status: "error", message: history.error.message }
   else if (groups.length === 0) state = { status: "no-kills" }
@@ -145,6 +237,8 @@ export function useMyRatingData(enabled: boolean) {
     },
     groups,
     group,
+    scopes,
+    raidView,
     selectGroup: setGroupChoice,
     truncated: history.data?.truncated ?? false,
     dataset: state.status === "ready" && character && group ? datasetFromGroup(character, group) : undefined,

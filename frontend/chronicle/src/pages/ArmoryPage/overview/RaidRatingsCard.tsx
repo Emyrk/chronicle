@@ -1,5 +1,7 @@
 import { entityAttributes, raidEntity, bossEntity } from "@/components/EntityMenu/entity";
 import { useState } from "react";
+import { Link } from "react-router-dom";
+import { ArrowUpRight } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card/Card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/Collapsible/Collapsible";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/Table/Table";
@@ -13,6 +15,8 @@ interface RaidRatingsCardProps {
   isLoading: boolean;
   /** Shown instead of the raid list when there is nothing to rate. */
   emptyMessage?: string;
+  /** The ratings explainer for one raid, with this character selected. */
+  ratingsHref?: (raidKey: string) => string;
 }
 
 const MASTERY = METRIC_THEMES.mastery.accent;
@@ -21,7 +25,7 @@ const RENOWN = METRIC_THEMES.renown.accent;
 const fmt = (v: number | null) => (v === null ? "—" : v.toFixed(1));
 
 /** Per-raid career contributions; expand a raid for its bosses against the benchmark. */
-export function RaidRatingsCard({ raids, metric, isLoading, emptyMessage }: RaidRatingsCardProps) {
+export function RaidRatingsCard({ raids, metric, isLoading, emptyMessage, ratingsHref }: RaidRatingsCardProps) {
   const active = raids.filter((r) => r.kills > 0);
   const untouched = raids.filter((r) => r.kills === 0 && r.rated);
   const [open, setOpen] = useState<string | null>(null);
@@ -51,6 +55,7 @@ export function RaidRatingsCard({ raids, metric, isLoading, emptyMessage }: Raid
             metric={metric}
             open={openKey === raid.key}
             onOpenChange={(o) => setOpen(o ? raid.key : "")}
+            ratingsHref={ratingsHref?.(raid.key)}
           />
         ))}
         {untouched.length > 0 && (
@@ -80,11 +85,13 @@ function RaidRow({
   metric,
   open,
   onOpenChange,
+  ratingsHref,
 }: {
   raid: RaidRating;
   metric: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  ratingsHref?: string;
 }) {
   const accent = getInstanceAccentColor(raid.instanceName);
   const bossTotal = raid.bosses.length + raid.missingBosses.length;
@@ -100,16 +107,39 @@ function RaidRow({
       onOpenChange={onOpenChange}
       className="overflow-hidden rounded-xl border border-border bg-card shadow-sm"
     >
-      <CollapsibleTrigger
-        className={`w-full cursor-pointer px-6 py-5 text-left transition-colors hover:bg-muted/30 ${open ? "border-b border-border" : ""}`}
+      {/* The trigger stretches under the row so the ratings link isn't nested in a button. */}
+      <div
+        className={`group relative px-6 py-5 ${open ? "border-b border-border" : ""}`}
         style={{
           backgroundImage: `linear-gradient(90deg, ${accent}14 0%, transparent 42%)`,
           boxShadow: `inset 4px 0 0 ${accent}`,
         }}
       >
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6 gap-y-2 sm:grid-cols-[minmax(0,1fr)_auto_200px_14px]">
+        <CollapsibleTrigger
+          aria-label={`${open ? "Collapse" : "Expand"} ${raidName(raid)} bosses`}
+          className="absolute inset-0 cursor-pointer transition-colors hover:bg-muted/30"
+        />
+        <div className="pointer-events-none relative grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6 gap-y-2 sm:grid-cols-[minmax(0,1fr)_auto_200px_14px]">
           <div className="min-w-0">
-            <div {...entityAttributes(raidEntity(raid.instanceName, raid.difficultyName))} className="font-wow truncate text-lg text-foreground">{raidName(raid)}</div>
+            <div className="flex min-w-0 items-baseline gap-3">
+              {/* Clickable itself so Alt+click reaches the entity menu; a plain click toggles the row. */}
+              <div
+                {...entityAttributes(raidEntity(raid.instanceName, raid.difficultyName))}
+                onClick={() => onOpenChange(!open)}
+                className="pointer-events-auto cursor-pointer truncate font-wow text-lg text-foreground"
+              >
+                {raidName(raid)}
+              </div>
+              {ratingsHref && (
+                <Link
+                  to={ratingsHref}
+                  className="pointer-events-auto inline-flex shrink-0 items-center gap-0.5 text-xs text-muted-foreground transition-colors hover:text-foreground hover:underline"
+                >
+                  How ratings work
+                  <ArrowUpRight className="size-3" />
+                </Link>
+              )}
+            </div>
             <div className="mt-1 text-xs text-muted-foreground">{subtitle.join(" · ")}</div>
           </div>
           <div className="flex items-end gap-5 text-right">
@@ -125,7 +155,7 @@ function RaidRow({
             ▾
           </div>
         </div>
-      </CollapsibleTrigger>
+      </div>
       <CollapsibleContent>
         <div className="styled-scrollbar overflow-x-auto bg-popover px-6 py-4">
           <BossTable raid={raid} metric={metric} />

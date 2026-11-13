@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react"
-import { Link } from "react-router-dom"
+import { Link, useSearchParams } from "react-router-dom"
 import { ArrowRight, BarChart3, Loader2, Percent, Search, TrendingDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { parseColor } from "@/pages/Instance/parseColors"
@@ -7,7 +7,16 @@ import { formatClassLabel } from "@/pages/ArmoryPage/characterDisplay"
 import { ToolsBackLink } from "@/pages/Tools/ToolsBackLink"
 import { METRIC_THEMES } from "@/pages/Leaderboards/Ratings/ratingThemes"
 import { MASTERY_WEIGHTS, averageAcrossBosses, normalize, ratePlayerBoss, type Band } from "./ratingMath"
-import { groupKey, groupLabel, raidLabel, useMyRatingData, type RatingDataset } from "./useMyRatingData"
+import {
+  groupKey,
+  groupLabel,
+  raidLabel,
+  raidScopeLabel,
+  useMyRatingData,
+  type RaidView,
+  type RatingDataset,
+} from "./useMyRatingData"
+import { parseRatingsLink } from "./ratingsLink"
 
 // Example player: a Fury Warrior's Nefarian kills, in chronological order.
 // Parses are illustrative 60-day-window scores; ratings never read them.
@@ -78,11 +87,13 @@ const fmtInt = (n: number) => Math.round(n).toLocaleString()
 const fmtDate = (iso?: string) => (iso ? new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "")
 
 export function RatingsPage() {
+  const [searchParams] = useSearchParams()
+  const [link] = useState(() => parseRatingsLink(searchParams))
   const [lens, setLens] = useState<Lens>("mastery")
-  const [source, setSource] = useState<Source>("example")
+  const [source, setSource] = useState<Source>(link ? "character" : "example")
   // Slider positions belong to one dataset; switching datasets resets them.
   const [sliders, setSliders] = useState<{ key: string; killCount?: number; benchmark?: number }>({ key: "" })
-  const my = useMyRatingData(source === "character")
+  const my = useMyRatingData(source === "character", link)
 
   const dataset = source === "character" ? my.dataset : EXAMPLE
   // The benchmark section keeps teaching with the example while no character data is available.
@@ -121,7 +132,9 @@ export function RatingsPage() {
               {source === "example"
                 ? "One example player's Nefarian kills as a Fury Warrior, viewed through each lens."
                 : my.character
-                  ? `${my.character.name}'s kills on one boss, viewed through each lens.`
+                  ? my.raidView
+                    ? `${my.character.name}'s ${my.raidView.raidLabel} bosses, viewed through each lens.`
+                    : `${my.character.name}'s kills on one boss, viewed through each lens.`
                   : "Search the Armory to inspect any character's kills."}
             </p>
           </div>
@@ -172,7 +185,9 @@ export function RatingsPage() {
           ))}
         </div>
 
-        {dataset ? (
+        {my.raidView && source === "character" ? (
+          <RaidPanel lens={lens} view={my.raidView} onSelectBoss={my.selectGroup} />
+        ) : dataset ? (
           <div className="rounded-xl border bg-card p-4 sm:p-6">
             <div className="grid gap-6 lg:grid-cols-[minmax(0,17rem)_minmax(0,1fr)]">
               <LensExplanation lens={lens} rating={rating} dataset={dataset} benchmark={benchmark} killCount={killCount} />
@@ -309,9 +324,14 @@ function MyDataPicker({ my }: { my: MyData }) {
               Boss
               <select
                 className={cn(selectClass, "flex-1")}
-                value={my.group ? groupKey(my.group) : ""}
+                value={my.raidView?.scope.key ?? (my.group ? groupKey(my.group) : "")}
                 onChange={(e) => my.selectGroup(e.target.value)}
               >
+                {my.scopes.map((s) => (
+                  <option key={s.key} value={s.key}>
+                    {raidScopeLabel(s)}
+                  </option>
+                ))}
                 {my.groups.map((g) => (
                   <option key={groupKey(g)} value={groupKey(g)}>
                     {groupLabel(g)}
@@ -569,6 +589,139 @@ function LensExplanation({
       )
     }
   }
+}
+
+/** Raid lens copy: per-kill numbers belong to one boss; ratings average or add up across bosses. */
+function RaidExplanation({ lens, view }: { lens: Lens; view: RaidView }) {
+  const n = view.bosses.length
+  const killed = view.bosses.filter((b) => b.kills > 0).length
+  const title = LENSES.find((l) => l.id === lens)?.label
+  const average = (field: "peak" | "mastery", value: number) => (
+    <>
+      <p className="mt-2 text-sm text-muted-foreground">
+        A raid's {title} is the <strong>average of every boss's {title}</strong>, all weighted equally. A boss without a{" "}
+        {view.unit} kill as {view.scope.label} counts as 0
+        {killed < n ? ` (${n - killed} here)` : ""}.
+      </p>
+      <p className="mt-2 font-mono text-xs text-muted-foreground">
+        {view.bosses.map((b) => fmt(b[field])).join(" + ")} ÷ {n}
+      </p>
+      <Score label={`${view.raidLabel} ${title}`} value={fmt(value)} />
+    </>
+  )
+  return (
+    <div>
+      <h3 className="text-xl font-semibold">{title}</h3>
+      <LensQuestion lens={lens} />
+      {lens === "performance" || lens === "parse" ? (
+        <p className="mt-2 text-sm text-muted-foreground">
+          {title} describes one kill, so it has no raid total. Pick a boss to see each kill's{" "}
+          {lens === "parse" ? "parse" : view.unit}. The table shows each boss's best {view.unit} against its benchmark.
+        </p>
+      ) : lens === "peak" ? (
+        average("peak", view.peak)
+      ) : lens === "mastery" ? (
+        average("mastery", view.mastery)
+      ) : (
+        <>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Renown adds up: every kill of every boss earns that boss's award, whichever metric it was rated on.
+          </p>
+          <Score label={`${view.raidLabel} Renown`} value={fmtInt(view.renown)} />
+        </>
+      )}
+    </div>
+  )
+}
+
+function RaidPanel({ lens, view, onSelectBoss }: { lens: Lens; view: RaidView; onSelectBoss: (key: string) => void }) {
+  const n = view.bosses.length
+  // The lens's column is highlighted; per-kill lenses highlight raw performance.
+  const hi = (col: "best" | "peak" | "mastery" | "renown") =>
+    (col === "best" && (lens === "performance" || lens === "parse")) || col === lens ? "bg-sky-500/10" : ""
+  return (
+    <div className="rounded-xl border bg-card p-4 sm:p-6">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,17rem)_minmax(0,1fr)]">
+        <RaidExplanation lens={lens} view={view} />
+        <div className="styled-scrollbar min-w-0 overflow-x-auto">
+          <table className="w-full min-w-[40rem] text-sm tabular-nums">
+            <thead>
+              <tr className="border-b text-muted-foreground">
+                <th className="py-2 pr-3 text-left font-medium">Boss</th>
+                <th className="px-2 py-2 text-right font-medium">Kills</th>
+                <th className="px-2 py-2 text-right font-medium">Benchmark</th>
+                <th className={cn("px-2 py-2 text-right font-medium", hi("best"))}>Best {view.unit}</th>
+                <th className={cn("px-2 py-2 text-right font-medium", hi("peak"))}>Peak</th>
+                <th className="px-2 py-2 text-right font-medium">Form</th>
+                <th className="px-2 py-2 text-right font-medium">Floor</th>
+                <th className={cn("px-2 py-2 text-right font-medium", hi("mastery"))}>Mastery</th>
+                <th className={cn("px-2 py-2 text-right font-medium", hi("renown"))}>Renown</th>
+              </tr>
+            </thead>
+            <tbody>
+              {view.bosses.map((b) => {
+                const has = b.kills > 0
+                const dash = <span className="text-muted-foreground">—</span>
+                return (
+                  <tr key={b.encounterName} className="border-b">
+                    <td className="py-2 pr-3">
+                      {b.groupKey ? (
+                        <button
+                          type="button"
+                          onClick={() => onSelectBoss(b.groupKey!)}
+                          className="text-left text-sky-300 hover:text-sky-200 hover:underline"
+                          title="See this boss's kills"
+                        >
+                          {b.encounterName}
+                        </button>
+                      ) : (
+                        <span className="text-muted-foreground">{b.encounterName}</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-2 text-right text-muted-foreground">{b.kills}</td>
+                    <td className="px-2 py-2 text-right text-muted-foreground">{has ? fmtInt(b.benchmark) : dash}</td>
+                    <td className={cn("px-2 py-2 text-right", hi("best"))}>{has ? fmtInt(b.rawPeak) : dash}</td>
+                    <td className={cn("px-2 py-2 text-right", hi("peak"))} style={{ color: RATING_ACCENT.peak }}>
+                      {fmt(b.peak)}
+                    </td>
+                    <td className="px-2 py-2 text-right text-muted-foreground">{has ? fmt(b.form) : dash}</td>
+                    <td className="px-2 py-2 text-right text-muted-foreground">{has ? fmt(b.floor) : dash}</td>
+                    <td className={cn("px-2 py-2 text-right font-semibold", hi("mastery"))} style={{ color: RATING_ACCENT.mastery }}>
+                      {fmt(b.mastery)}
+                    </td>
+                    <td className={cn("px-2 py-2 text-right", hi("renown"))} style={{ color: RATING_ACCENT.renown }}>
+                      {fmtInt(b.renown)}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+            <tfoot>
+              <tr className="font-semibold">
+                <td className="py-2 pr-3" colSpan={4}>
+                  Raid <span className="font-normal text-muted-foreground">(Peak and Mastery ÷ {n}, Renown summed)</span>
+                </td>
+                <td className={cn("px-2 py-2 text-right", hi("peak"))} style={{ color: RATING_ACCENT.peak }}>
+                  {fmt(view.peak)}
+                </td>
+                <td colSpan={2} />
+                <td className={cn("px-2 py-2 text-right", hi("mastery"))} style={{ color: RATING_ACCENT.mastery }}>
+                  {fmt(view.mastery)}
+                </td>
+                <td className={cn("px-2 py-2 text-right", hi("renown"))} style={{ color: RATING_ACCENT.renown }}>
+                  {fmtInt(view.renown)}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Pick a boss to see how its kills fill the Peak, Form, and Floor bands. Bosses with no {view.unit} kills
+            count as 0. Boss values are recomputed here for illustration and can differ slightly from the Armory.
+          </p>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function Score({ label, value }: { label: string; value: string }) {
