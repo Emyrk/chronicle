@@ -1619,6 +1619,48 @@ type EncounterDpsRankingsResolved struct {
 	EncounterVariant   pgtype.Text        `db:"encounter_variant" json:"encounter_variant"`
 }
 
+type EventRepairItem struct {
+	OperationID  uuid.UUID `db:"operation_id" json:"operation_id"`
+	InstanceID   uuid.UUID `db:"instance_id" json:"instance_id"`
+	State        string    `db:"state" json:"state"`
+	Reason       string    `db:"reason" json:"reason"`
+	EvidenceHash string    `db:"evidence_hash" json:"evidence_hash"`
+	Changes      []byte    `db:"changes" json:"changes"`
+	Plan         []byte    `db:"plan" json:"plan"`
+}
+
+type EventRepairOperation struct {
+	ID               uuid.UUID          `db:"id" json:"id"`
+	Operation        string             `db:"operation" json:"operation"`
+	Version          int32              `db:"version" json:"version"`
+	State            string             `db:"state" json:"state"`
+	CreatedAt        pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	CreatedBy        uuid.UUID          `db:"created_by" json:"created_by"`
+	TenantID         uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	Selection        []byte             `db:"selection" json:"selection"`
+	Total            int32              `db:"total" json:"total"`
+	Processed        int32              `db:"processed" json:"processed"`
+	Applied          int32              `db:"applied" json:"applied"`
+	Skipped          int32              `db:"skipped" json:"skipped"`
+	LastError        string             `db:"last_error" json:"last_error"`
+	AppliedBy        uuid.NullUUID      `db:"applied_by" json:"applied_by"`
+	CancelledBy      uuid.NullUUID      `db:"cancelled_by" json:"cancelled_by"`
+	ApplyRequestedAt pgtype.Timestamptz `db:"apply_requested_at" json:"apply_requested_at"`
+	CancelledAt      pgtype.Timestamptz `db:"cancelled_at" json:"cancelled_at"`
+}
+
+type EventRepairReceipt struct {
+	InstanceID  uuid.UUID          `db:"instance_id" json:"instance_id"`
+	Operation   string             `db:"operation" json:"operation"`
+	Version     int32              `db:"version" json:"version"`
+	OperationID uuid.UUID          `db:"operation_id" json:"operation_id"`
+	TenantID    uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	AppliedAt   pgtype.Timestamptz `db:"applied_at" json:"applied_at"`
+	Warnings    []byte             `db:"warnings" json:"warnings"`
+	Details     []byte             `db:"details" json:"details"`
+}
+
 type ExternalCharacterLinkSync struct {
 	UserID       uuid.UUID          `db:"user_id" json:"user_id"`
 	Source       string             `db:"source" json:"source"`

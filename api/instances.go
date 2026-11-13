@@ -193,7 +193,20 @@ func (api *API) Instance(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Instance middleware has already authorized this exact source. Use the same
+	// request tenant visibility; public receipts never bypass RLS or load admin jobs.
+	receiptRows, err := db.ListInstanceEventRepairReceipts(ctx, inst.ID)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	receipts, err := db2sdk.EventRepairReceipts(receiptRows)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
 	setDataset := func(out *chroniclesdk.WoWInstance) {
+		out.Repairs = receipts
 		out.OwnerAdsFree = ownerAdsFree
 		out.Unlisted = httpmw.InstanceUnlisted(ctx)
 		datasetID, ok := api.Opts.Dataset.LookupDatasetForRealm(ctx, inst.RealmID)

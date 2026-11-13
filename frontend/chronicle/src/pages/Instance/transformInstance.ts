@@ -1,4 +1,4 @@
-import type { InstancePlayer, InstanceUnit, WoWEncounterWithHostiles, VehicleControlMetadata } from "@/api/typesGenerated";
+import type { EventRepairReceipt, InstancePlayer, InstanceUnit, WoWEncounterWithHostiles, VehicleControlMetadata } from "@/api/typesGenerated";
 import type { EnemyUnit, Encounter, Instance } from "./InstancePage";
 import { resolveInstanceUnits, type ResolvedInstanceUnit } from "./instanceUnits";
 import { defaultPositionCoordinateSpace, type PositionCoordinateSpace } from "./positionCoordinateSpace";
@@ -24,6 +24,7 @@ function normalizeArray<T>(value: readonly T[] | null | undefined): readonly T[]
 /** The instance page's view of the API instance (also built by the landing hero, without the page). */
 export function transformToInstance(
   apiInstance: {
+    repairs?: readonly EventRepairReceipt[];
     id: string;
     slug?: string;
     owner_ads_free: boolean;
@@ -155,6 +156,7 @@ export function transformToInstance(
     dynamicDifficulty: apiInstance.dynamic_difficulty,
     difficulties: apiInstance.difficulties,
     mixedDifficulty: apiInstance.mixed_difficulty,
+    repairs: apiInstance.repairs,
     invalidatedAt: apiInstance.invalidated_at,
     invalidReason: apiInstance.invalid_reason,
     vehicleControlIntervals: apiInstance.vehicle_control_intervals,

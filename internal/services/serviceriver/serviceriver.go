@@ -22,6 +22,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicebot"
 	"github.com/Emyrk/chronicle/internal/services/servicechronicle"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
+	"github.com/Emyrk/chronicle/internal/services/serviceeventrepair"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 	"github.com/Emyrk/chronicle/internal/services/servicepgxpool"
 	"github.com/Emyrk/chronicle/internal/services/serviceprometheus"
@@ -110,6 +111,7 @@ func (s *Service) Start(ctx context.Context) error {
 		MaxWorkers: 1,
 	})
 
+	riverqueue.AddWorker(q, &serviceeventrepair.Worker{Service: serviceeventrepair.New(servicedbstore.DatabaseStore(s.broker), q)})
 	riverqueue.AddWorker(q, chron.NewWorkerLogParse())
 	riverqueue.AddWorker(q, chron.NewWorkerReLogParse())
 	riverqueue.AddWorker(q, chron.NewWorkerRegressionSnapshot())

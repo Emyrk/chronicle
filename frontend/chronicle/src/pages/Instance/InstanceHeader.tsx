@@ -1,4 +1,6 @@
+import type { EventRepairReceipt } from "@/api/typesGenerated";
 import type { ReactNode } from "react";
+import { RepairReceipts } from "@/components/EventRepair/RepairDetails";
 import { Clock } from "lucide-react";
 import { EncounterDifficultySummary } from "@/components/EncounterDifficulty/EncounterDifficultyMark";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
@@ -23,6 +25,7 @@ export interface InstanceHeaderProps {
   backgroundUrl?: string;
   heroic?: boolean;
   titleBadges?: ReactNode;
+  repairs?: readonly EventRepairReceipt[];
   difficulty?: InstanceHeaderDifficulty;
   guild?: ReactNode;
   realm?: string;
@@ -57,6 +60,7 @@ export function InstanceHeader({
   backgroundUrl,
   heroic = false,
   titleBadges,
+  repairs,
   difficulty,
   guild,
   realm,
@@ -112,6 +116,7 @@ export function InstanceHeader({
             {realm}
             {(isMobile ? Boolean(realm) : Boolean(guild || realm)) && " • "}
             {startTimeLabel}
+            {repairs?.length ? <span className="ml-2"><RepairReceipts repairs={repairs} /></span> : null}
           </p>
         </div>
 
