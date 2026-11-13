@@ -401,8 +401,8 @@ export function MapLegend() {
       <Section id="text" title="Combat text" note={`Text floats up over the target for ${ms(EFFECT_TIMINGS.combatText)}.`}>
         <Grid min={300}>
           <Card title="Spell names and heals" demo={<CombatTextDemo seconds={seconds} />}>
-            Damage shows the spell&apos;s name in its school colour (larger on crits; never for auto-attacks, and not for casters showing cast icons).
-            Heals show the amount healed in green, or the overheal in grey.
+            Damage dealt by selected players shows the spell&apos;s name in its school colour (larger on crits; never for auto-attacks, and not for casters showing cast icons).
+            Heals cast by or landing on selected players and tanks show the amount healed in green, or the overheal in grey.
           </Card>
           <div className="flex flex-col justify-center gap-2 text-sm">
             <Swatch color={HEAL_COLOR} label="Healing" />
