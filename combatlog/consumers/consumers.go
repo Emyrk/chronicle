@@ -69,7 +69,7 @@ func (c Consumers) ConsumeAll(ctx context.Context, p Advancer) error {
 		}
 		_, err := c.Advance(ctx, p)
 		if err != nil {
-			if errors.Is(err, io.EOF) {
+			if errors.Is(err, io.EOF) && !parseerrors.IsFatalError(err) {
 				return nil
 			}
 			return err

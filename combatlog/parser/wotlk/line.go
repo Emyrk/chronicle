@@ -1,7 +1,6 @@
 package wotlk
 
 import (
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -9,148 +8,65 @@ import (
 
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
+	"github.com/Emyrk/chronicle/combatlog/parsernext/formats/cleu"
 )
 
-// ExtractUnixMilli extracts the unix-millisecond timestamp and the raw payload
-// from a line of the form "<unix_millis>  EVENT,field,...". It does NOT parse
-// the CSV fields — use ParseLineUnixMillis for full parsing.
-func ExtractUnixMilli(line string) (ts time.Time, payload string, err error) {
-	if line == "" {
-		return time.Time{}, "", errors.New("empty line")
-	}
-
-	idx := strings.Index(line, "  ")
-	if idx < 0 {
-		return time.Time{}, "", fmt.Errorf("no double-space separator found in line: %q", truncate(line, 80))
-	}
-
-	ms, err := strconv.ParseInt(line[:idx], 10, 64)
+// ExtractUnixMilli preserves the legacy API while sharing text mechanics with
+// parsernext. The leaf neither imports nor executes legacy parser code.
+func ExtractUnixMilli(line string) (time.Time, string, error) {
+	token, payload, err := cleu.SplitHeader(line)
 	if err != nil {
-		return time.Time{}, "", fmt.Errorf("parsing unix millis %q: %w", line[:idx], err)
+		return time.Time{}, "", err
 	}
-
-	return time.UnixMilli(ms), line[idx+2:], nil
+	ms, err := strconv.ParseInt(token, 10, 64)
+	if err != nil {
+		return time.Time{}, "", fmt.Errorf("parsing unix millis %q: %w", token, err)
+	}
+	return time.UnixMilli(ms), payload, nil
 }
 
-// ParseLineUnixMillis parses an AzerothCore combat log line of the form:
-//
-//	<unix_millis>  EVENT,field,field,...
-//
-// Same structure as ParseLine (double-space separator, comma-separated fields)
-// but the timestamp is Unix epoch milliseconds instead of M/DD HH:MM:SS.mmm.
-func ParseLineUnixMillis(content string) (time.Time, string, *Matched, error) {
-	ts, payload, err := ExtractUnixMilli(content)
-	if err != nil {
-		return time.Time{}, "", nil, err
-	}
-
-	parts := splitCSVFields(payload)
-	if len(parts) < 1 || parts[0] == "" {
-		return time.Time{}, "", nil, fmt.Errorf("empty event type in line: %q", truncate(content, 80))
-	}
-
-	event := strings.TrimSpace(parts[0])
-
-	fields := make([]string, 0, len(parts)-1)
-	for _, p := range parts[1:] {
-		fields = append(fields, unquote(strings.TrimSpace(p)))
-	}
-
-	return ts, event, &Matched{parts: fields, index: 0}, nil
-}
-
-// Matched is a stateful cursor over comma-separated fields from a WotLK
-// COMBAT_LOG_EVENT_UNFILTERED line. Fields are consumed sequentially via typed
-// getter methods. The first parse error is recorded and never overwritten.
+// Matched is the legacy message-specific cursor. Typed fields, GUID conversion,
+// and first-error behavior remain here, outside the shared lexical layer.
 type Matched struct {
 	parts []string
 	index int
 	err   error
 }
 
-// ParseLine parses a WotLK combat log line of the form:
-//
-//	M/DD HH:MM:SS.mmm  EVENT,field,field,...
-//
-// It returns the timestamp (year 0 — caller must add year), event type string,
-// and a Matched cursor over the remaining comma-separated fields.
-func ParseLine(content string) (time.Time, string, *Matched, error) {
-	if content == "" {
-		return time.Time{}, "", nil, errors.New("empty line")
-	}
-
-	// Find the double-space separator between timestamp and payload.
-	idx := strings.Index(content, "  ")
-	if idx < 0 {
-		return time.Time{}, "", nil, fmt.Errorf("no double-space separator found in line: %q", truncate(content, 80))
-	}
-
-	tsStr := content[:idx]
-	payload := content[idx+2:]
-
-	ts, err := time.Parse("1/2 15:04:05.000", tsStr)
+func ParseLineUnixMillis(content string) (time.Time, string, *Matched, error) {
+	ts, payload, err := ExtractUnixMilli(content)
 	if err != nil {
-		return time.Time{}, "", nil, fmt.Errorf("parsing timestamp %q: %w", tsStr, err)
+		return time.Time{}, "", nil, err
 	}
-
-	// Split payload on commas, respecting double-quoted fields that may
-	// contain commas (e.g. AzerothCore spell descriptions).
-	parts := splitCSVFields(payload)
-	if len(parts) < 1 || parts[0] == "" {
-		return time.Time{}, "", nil, fmt.Errorf("empty event type in line: %q", truncate(content, 80))
-	}
-
-	event := strings.TrimSpace(parts[0])
-
-	// Strip double quotes from all remaining fields.
-	fields := make([]string, 0, len(parts)-1)
-	for _, p := range parts[1:] {
-		fields = append(fields, unquote(strings.TrimSpace(p)))
-	}
-
-	return ts, event, &Matched{parts: fields, index: 0}, nil
+	return parsePayload(ts, payload, content)
 }
 
-// unquote strips surrounding double quotes if present.
-func unquote(s string) string {
-	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
-		return s[1 : len(s)-1]
+func ParseLine(content string) (time.Time, string, *Matched, error) {
+	token, payload, err := cleu.SplitHeader(content)
+	if err != nil {
+		return time.Time{}, "", nil, err
 	}
-	return s
+	ts, err := time.Parse("1/2 15:04:05.000", token)
+	if err != nil {
+		return time.Time{}, "", nil, fmt.Errorf("parsing timestamp %q: %w", token, err)
+	}
+	return parsePayload(ts, payload, content)
 }
 
-// splitCSVFields splits a comma-separated string, treating commas inside
-// double-quoted segments as literal characters rather than delimiters.
-// This handles AzerothCore spell descriptions like:
-//
-//	"Defensive State - Follows a successful block, dodge or parry."
-//
-// Quotes are NOT stripped here; that happens in unquote() during field processing.
-func splitCSVFields(s string) []string {
-	fields := make([]string, 0, 16)
-	start := 0
-	inQuotes := false
-	for i := 0; i < len(s); i++ {
-		switch s[i] {
-		case '"':
-			inQuotes = !inQuotes
-		case ',':
-			if !inQuotes {
-				fields = append(fields, s[start:i])
-				start = i + 1
-			}
+func parsePayload(ts time.Time, payload, content string) (time.Time, string, *Matched, error) {
+	event, fields, err := cleu.ParsePayload(payload)
+	if err != nil {
+		text := content
+		if len(text) > 80 {
+			text = text[:80] + "..."
 		}
+		return time.Time{}, "", nil, fmt.Errorf("empty event type in line: %q", text)
 	}
-	fields = append(fields, s[start:])
-	return fields
+	return ts, event, &Matched{parts: fields}, nil
 }
 
-func truncate(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n] + "..."
-}
+// Retained for the legacy splitter characterization tests.
+func splitCSVFields(s string) []string { return cleu.SplitCSVFields(s) }
 
 // Error returns the first parse error encountered, or nil.
 func (m *Matched) Error() error {
