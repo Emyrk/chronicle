@@ -1,4 +1,4 @@
-// Package wotlk owns wotlk composition policy. Combat decoding is not implemented.
+// Package wotlk owns wotlk composition policy. It composes the shared CLEU semantic decoder.
 package wotlk
 
 import (

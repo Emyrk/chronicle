@@ -25,6 +25,11 @@ const (
 	// CategoryTotem is an entity category, not a GUID kind or eligibility policy.
 	// Hostile boss totems and player-owned totems need not share fight/ranking rules.
 	CategoryTotem
+	// CategoryScripted identifies explicitly known encounter helpers, such as
+	// invisible mechanic controllers. Record their events, but set TrackFight
+	// false. Keep RankedDamageTarget true: encounter ranking rules independently
+	// decide whether their damage counts. Invisibility alone is not classification.
+	CategoryScripted
 )
 
 // Classification does not own GUIDs or observed names. Those remain with the

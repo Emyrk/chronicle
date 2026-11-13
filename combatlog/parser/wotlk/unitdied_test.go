@@ -5,6 +5,7 @@ import (
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -13,7 +14,11 @@ func TestUnitDissipates(t *testing.T) {
 	t.Parallel()
 
 	line := `9/20 15:02:08.135  UNIT_DISSIPATES,0x0000000000000000,nil,0x80000000,0xF1300005E8DC4807,"Duskbat",0xa28,0,-1`
-	p := &Parser{guidNames: NewGUIDNames()}
+	p := &Parser{
+		format:    database.LogFormat335aCcAddon,
+		flavor:    database.WoWFlavor{database.FlavorWrath},
+		guidNames: NewGUIDNames(),
+	}
 
 	ts, event, matched, err := ParseLine(line)
 	require.NoError(t, err)

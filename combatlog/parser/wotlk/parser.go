@@ -17,17 +17,25 @@ import (
 	parservanilla "github.com/Emyrk/chronicle/combatlog/parser/vanilla"
 	"github.com/Emyrk/chronicle/combatlog/parser/wotlk/companion"
 	"github.com/Emyrk/chronicle/combatlog/parser/wotlk/synthetic"
+	"github.com/Emyrk/chronicle/combatlog/parsernext/common"
+	"github.com/Emyrk/chronicle/combatlog/parsernext/formats/cleu"
+	nexttbc "github.com/Emyrk/chronicle/combatlog/parsernext/tbc"
+	nextwotlk "github.com/Emyrk/chronicle/combatlog/parsernext/wotlk"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 )
 
 type Parser struct {
-	logger  *slog.Logger
-	wowDB   gamedb.SpellFetcher
-	gameDB  gamedb.GameDB
-	scanner *bufio.Scanner
-	format  database.LogFormat
+	logger              *slog.Logger
+	wowDB               gamedb.SpellFetcher
+	gameDB              gamedb.GameDB
+	scanner             *bufio.Scanner
+	format              database.LogFormat
+	flavor              database.WoWFlavor
+	parsernextExpansion common.Expansion
+	parsernextSemantics bool
+	semantic            *cleu.Decoder
 
 	lastDate                        time.Time
 	maxTimestampRegression          time.Duration
@@ -56,29 +64,54 @@ type Parser struct {
 }
 
 func New(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.GameDB, gear gamedb.GearResolver, reg *registry.Registry) (*Parser, error) {
-	return newParser(ctx, logger, r, wowDB, gear, reg)
+	return newParser(ctx, logger, r, wowDB, gear, reg, cleu.Context{
+		Format: database.LogFormat335aCcAddon,
+		Flavor: database.WoWFlavor{database.FlavorWrath},
+	}, nextwotlk.Name)
 }
 
 // NewTBC creates a parser for native 2.4.3 COMBAT_LOG_EVENT_UNFILTERED
 // records. TBC and WotLK share the event-prefix and base-field layout, but
 // their damage and healing suffixes differ.
 func NewTBC(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.GameDB, gear gamedb.GearResolver, reg *registry.Registry) (*Parser, error) {
-	return newParser(ctx, logger, r, wowDB, gear, reg)
+	return newParser(ctx, logger, r, wowDB, gear, reg, cleu.Context{
+		Format: database.LogFormat243CcAddon,
+		Flavor: database.WoWFlavor{database.FlavorTBC},
+	}, nexttbc.Name)
 }
 
-func newParser(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.GameDB, gear gamedb.GearResolver, reg *registry.Registry) (*Parser, error) {
+// NewLegacy preserves the pre-migration semantic execution path for wrappers
+// whose modern or AzerothCore formats are outside parsernext scope.
+func NewLegacy(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.GameDB, gear gamedb.GearResolver, reg *registry.Registry) (*Parser, error) {
+	return newParser(ctx, logger, r, wowDB, gear, reg, cleu.Context{
+		Format: database.LogFormat335aCcAddon,
+		Flavor: database.WoWFlavor{database.FlavorWrath},
+	}, "")
+}
+
+func newParser(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.GameDB, gear gamedb.GearResolver, reg *registry.Registry, semanticContext cleu.Context, parsernextExpansion common.Expansion) (*Parser, error) {
 	if wowDB == nil {
 		return nil, fmt.Errorf("wowDB cannot be nil")
 	}
 	gn := NewGUIDNames()
-	format, _ := parsectx.Format(ctx)
-	return &Parser{
+	if resolved, ok := parsectx.FromContext(ctx); ok {
+		if resolved.Format != "" {
+			semanticContext.Format = resolved.Format
+		}
+		if len(resolved.Flavor) > 0 {
+			semanticContext.Flavor = resolved.Flavor
+		}
+	}
+	p := &Parser{
 		eventHook:              map[string]func(ts time.Time, m *Matched, raw string) ([]messages.Message, error){},
 		logger:                 logger,
 		wowDB:                  wowDB,
 		gameDB:                 wowDB,
 		scanner:                logscanner.New(r),
-		format:                 format,
+		format:                 semanticContext.Format,
+		flavor:                 semanticContext.Flavor,
+		parsernextExpansion:    parsernextExpansion,
+		parsernextSemantics:    parsernextExpansion != "",
 		guidNames:              gn,
 		synthetics:             synthetic.New(ctx, logger, wowDB, reg, gn),
 		itemFetcher:            gear,
@@ -89,7 +122,15 @@ func newParser(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB game
 			UnmatchingTime: make(map[string]time.Duration),
 		},
 		missedSpells: make(map[chrondbc.SpellID]missedSpellEntry),
-	}, nil
+	}
+	if parsernextExpansion != "" {
+		decoder, err := p.newSemanticDecoder()
+		if err != nil {
+			return nil, err
+		}
+		p.semantic = decoder
+	}
+	return p, nil
 }
 
 func (p *Parser) WithEventHook(event string, hook func(ts time.Time, m *Matched, raw string) ([]messages.Message, error)) {

@@ -1,4 +1,4 @@
-// Package tbc owns tbc composition policy. Combat decoding is not implemented.
+// Package tbc owns tbc composition policy. It composes the shared CLEU semantic decoder.
 package tbc
 
 import (

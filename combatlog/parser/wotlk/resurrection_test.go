@@ -7,6 +7,7 @@ import (
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -20,6 +21,8 @@ func TestSpellResurrect(t *testing.T) {
 	p := &Parser{
 		logger:       slog.Default(),
 		wowDB:        resurrectionSpellFetcher{spell: spell},
+		format:       database.LogFormat335aCcAddon,
+		flavor:       database.WoWFlavor{database.FlavorWrath},
 		guidNames:    NewGUIDNames(),
 		missedSpells: make(map[chrondbc.SpellID]missedSpellEntry),
 	}
