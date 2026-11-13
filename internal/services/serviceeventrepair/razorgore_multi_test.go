@@ -291,7 +291,7 @@ func TestMultiPullOperationDryRunApplyQueuesRatings(t *testing.T) {
 	e := fixtureRazorgoreMultiple(t)
 	e.Server.TenantID = uuid.NullUUID{UUID: f.tenant, Valid: true}
 	recorded := &multiRecordingStore{}
-	f.service.evaluate = func(context.Context, database.Store, uuid.UUID) (*RazorgoreRepairPlan, error) {
+	f.service.jobs[OperationRazorgore].evaluate = func(context.Context, database.Store, uuid.UUID) (*RazorgoreRepairPlan, error) {
 		p, err := evaluateRazorgoreEvidence(e)
 		if err != nil {
 			return nil, err
@@ -299,7 +299,7 @@ func TestMultiPullOperationDryRunApplyQueuesRatings(t *testing.T) {
 		p.seal, err = razorgorePlanSeal(p)
 		return p, err
 	}
-	f.service.apply = func(ctx context.Context, tx database.Store, p *RazorgoreRepairPlan) error {
+	f.service.jobs[OperationRazorgore].apply = func(ctx context.Context, tx database.Store, p *RazorgoreRepairPlan) error {
 		_, ok := database.PGXTx(tx)
 		require.True(t, ok)
 		return ApplyRazorgore(ctx, recorded, p)

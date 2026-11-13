@@ -36,7 +36,7 @@ func TestReceiptPermanentAcrossJobsAndVersions(t *testing.T) {
 	t.Parallel()
 	f := newRepairFixture(t, 1)
 	instance := receiptInstance(t, f)
-	f.service.evaluate = func(context.Context, database.Store, uuid.UUID) (*RazorgoreRepairPlan, error) {
+	f.service.jobs[OperationRazorgore].evaluate = func(context.Context, database.Store, uuid.UUID) (*RazorgoreRepairPlan, error) {
 		return &RazorgoreRepairPlan{TenantID: f.tenant, EvidenceHash: "stable", Warnings: []string{"omitted irrelevant event"}, Details: map[string]any{"omissions": []any{map[string]any{"reason": "irrelevant"}}}}, nil
 	}
 	_, err := f.service.ProcessPage(f.ctx, f.id, "dry_running")
@@ -88,7 +88,7 @@ func TestReceiptRollsBackWithApplyFailure(t *testing.T) {
 	require.NoError(t, err)
 	_, err = f.service.Apply(f.ctx, f.id, uuid.New())
 	require.NoError(t, err)
-	f.service.apply = func(context.Context, database.Store, *RazorgoreRepairPlan) error {
+	f.service.jobs[OperationRazorgore].apply = func(context.Context, database.Store, *RazorgoreRepairPlan) error {
 		return errors.New("source write failed")
 	}
 	_, err = f.service.ProcessPage(f.ctx, f.id, "applying")
@@ -97,7 +97,7 @@ func TestReceiptRollsBackWithApplyFailure(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, rows)
 	require.Zero(t, f.canonicalJobs(t))
-	f.service.apply = func(context.Context, database.Store, *RazorgoreRepairPlan) error { return nil }
+	f.service.jobs[OperationRazorgore].apply = func(context.Context, database.Store, *RazorgoreRepairPlan) error { return nil }
 	_, err = f.service.ProcessPage(f.ctx, f.id, "applying")
 	require.NoError(t, err)
 	rows, err = f.db.ListInstanceEventRepairReceipts(f.ctx, instance)
@@ -120,7 +120,7 @@ func TestReceiptConcurrentJobsApplyOnlyOnce(t *testing.T) {
 	var arrived atomic.Int32
 	gate := make(chan struct{})
 	var applies atomic.Int32
-	f.service.revalidate = func(ctx context.Context, _ database.Store, _ *RazorgoreRepairPlan) error {
+	f.service.jobs[OperationRazorgore].revalidate = func(ctx context.Context, _ database.Store, _ *RazorgoreRepairPlan) error {
 		if arrived.Add(1) == 2 {
 			close(gate)
 		}
@@ -131,7 +131,7 @@ func TestReceiptConcurrentJobsApplyOnlyOnce(t *testing.T) {
 			return ctx.Err()
 		}
 	}
-	f.service.apply = func(context.Context, database.Store, *RazorgoreRepairPlan) error { applies.Add(1); return nil }
+	f.service.jobs[OperationRazorgore].apply = func(context.Context, database.Store, *RazorgoreRepairPlan) error { applies.Add(1); return nil }
 	ids := []uuid.UUID{f.id, other}
 	errs := make([]error, 2)
 	var wg sync.WaitGroup
@@ -140,7 +140,7 @@ func TestReceiptConcurrentJobsApplyOnlyOnce(t *testing.T) {
 		go func() { defer wg.Done(); _, errs[i] = f.service.ProcessPage(f.ctx, id, "applying") }()
 	}
 	wg.Wait()
-	f.service.revalidate = func(context.Context, database.Store, *RazorgoreRepairPlan) error { return nil }
+	f.service.jobs[OperationRazorgore].revalidate = func(context.Context, database.Store, *RazorgoreRepairPlan) error { return nil }
 	for i, err := range errs {
 		if err != nil {
 			var pgerr *pgconn.PgError

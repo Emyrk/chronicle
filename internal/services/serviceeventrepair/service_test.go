@@ -71,11 +71,11 @@ func newRepairFixture(t *testing.T, n int) *repairFixture {
 		_, err = db.InsertEventRepairItem(ctx, database.InsertEventRepairItemParams{OperationID: f.id, TenantID: f.tenant, InstanceID: instance})
 		require.NoError(t, err)
 	}
-	f.service.evaluate = func(context.Context, database.Store, uuid.UUID) (*RazorgoreRepairPlan, error) {
+	f.service.jobs[OperationRazorgore].evaluate = func(context.Context, database.Store, uuid.UUID) (*RazorgoreRepairPlan, error) {
 		return &RazorgoreRepairPlan{TenantID: f.tenant, EvidenceHash: "stable", Changes: []string{}}, nil
 	}
-	f.service.apply = func(context.Context, database.Store, *RazorgoreRepairPlan) error { return nil }
-	f.service.revalidate = func(context.Context, database.Store, *RazorgoreRepairPlan) error { return nil }
+	f.service.jobs[OperationRazorgore].apply = func(context.Context, database.Store, *RazorgoreRepairPlan) error { return nil }
+	f.service.jobs[OperationRazorgore].revalidate = func(context.Context, database.Store, *RazorgoreRepairPlan) error { return nil }
 	f.service.lockSource = func(context.Context, database.Store, uuid.UUID) error { return nil }
 	return f
 }
@@ -121,7 +121,7 @@ func TestCanonicalQueueFailureRollsBackSourceAndCheckpoint(t *testing.T) {
 	_, err = conn.Exec(f.ctx, "RESET ROLE; ALTER TABLE river_job ADD CONSTRAINT reject_event_repair_test CHECK (kind <> 'refresh-ranking-runs'); SET ROLE chronicle")
 	conn.Release()
 	require.NoError(t, err)
-	f.service.apply = func(ctx context.Context, tx database.Store, _ *RazorgoreRepairPlan) error {
+	f.service.jobs[OperationRazorgore].apply = func(ctx context.Context, tx database.Store, _ *RazorgoreRepairPlan) error {
 		// A fixture source write in the same transaction must roll back with enqueue.
 		_, err := tx.UpdateEventRepairOperation(ctx, database.UpdateEventRepairOperationParams{ID: f.id, TenantID: f.tenant, State: "applying", Total: 99, Processed: 99, Applied: 99, LastError: "source mutation"})
 		return err
@@ -146,7 +146,7 @@ func TestStaleEvidenceAndSkippedItemsNeverEnqueue(t *testing.T) {
 			t.Parallel()
 			f := newRepairFixture(t, 1)
 			if skip {
-				f.service.evaluate = func(context.Context, database.Store, uuid.UUID) (*RazorgoreRepairPlan, error) {
+				f.service.jobs[OperationRazorgore].evaluate = func(context.Context, database.Store, uuid.UUID) (*RazorgoreRepairPlan, error) {
 					return &RazorgoreRepairPlan{TenantID: f.tenant, RequiresReparse: true, Reason: "original-log reparse required"}, nil
 				}
 			}
@@ -159,7 +159,7 @@ func TestStaleEvidenceAndSkippedItemsNeverEnqueue(t *testing.T) {
 				require.NoError(t, err)
 			}
 			if !skip {
-				f.service.evaluate = func(context.Context, database.Store, uuid.UUID) (*RazorgoreRepairPlan, error) {
+				f.service.jobs[OperationRazorgore].evaluate = func(context.Context, database.Store, uuid.UUID) (*RazorgoreRepairPlan, error) {
 					return &RazorgoreRepairPlan{TenantID: f.tenant, EvidenceHash: "changed"}, nil
 				}
 			}
@@ -237,7 +237,7 @@ func TestTransientFailureRetainsCheckpointForRetry(t *testing.T) {
 	t.Parallel()
 	f := newRepairFixture(t, 2)
 	evaluated := 0
-	f.service.evaluate = func(context.Context, database.Store, uuid.UUID) (*RazorgoreRepairPlan, error) {
+	f.service.jobs[OperationRazorgore].evaluate = func(context.Context, database.Store, uuid.UUID) (*RazorgoreRepairPlan, error) {
 		evaluated++
 		if evaluated == 2 {
 			return nil, errors.New("temporary read failure")
@@ -284,7 +284,7 @@ func TestRetryDoesNotAuthorizeApply(t *testing.T) {
 func TestSelectedTenantCannotChangeDuringRepair(t *testing.T) {
 	t.Parallel()
 	f := newRepairFixture(t, 1)
-	f.service.evaluate = func(context.Context, database.Store, uuid.UUID) (*RazorgoreRepairPlan, error) {
+	f.service.jobs[OperationRazorgore].evaluate = func(context.Context, database.Store, uuid.UUID) (*RazorgoreRepairPlan, error) {
 		return &RazorgoreRepairPlan{TenantID: uuid.New(), EvidenceHash: "stable"}, nil
 	}
 	_, err := f.service.ProcessPage(f.ctx, f.id, "dry_running")
@@ -315,12 +315,12 @@ func TestWorkerDurablySnoozesAfterBoundedPage(t *testing.T) {
 func TestReconstructionOutsideTransactionAndStaleRecheck(t *testing.T) {
 	t.Parallel()
 	f := newRepairFixture(t, 1)
-	f.service.evaluate = func(_ context.Context, db database.Store, _ uuid.UUID) (*RazorgoreRepairPlan, error) {
+	f.service.jobs[OperationRazorgore].evaluate = func(_ context.Context, db database.Store, _ uuid.UUID) (*RazorgoreRepairPlan, error) {
 		_, inTx := database.PGXTx(db)
 		require.False(t, inTx, "gzip/reconstruction must not hold a transaction")
 		return &RazorgoreRepairPlan{TenantID: f.tenant, EvidenceHash: "stable"}, nil
 	}
-	f.service.revalidate = func(_ context.Context, db database.Store, _ *RazorgoreRepairPlan) error {
+	f.service.jobs[OperationRazorgore].revalidate = func(_ context.Context, db database.Store, _ *RazorgoreRepairPlan) error {
 		_, inTx := database.PGXTx(db)
 		require.True(t, inTx, "fingerprint recheck must share source write transaction")
 		return nil
@@ -329,8 +329,8 @@ func TestReconstructionOutsideTransactionAndStaleRecheck(t *testing.T) {
 	require.NoError(t, err)
 	_, err = f.service.Apply(f.ctx, f.id, uuid.New())
 	require.NoError(t, err)
-	f.service.revalidate = func(context.Context, database.Store, *RazorgoreRepairPlan) error { return ErrStaleEvidence }
-	f.service.apply = func(context.Context, database.Store, *RazorgoreRepairPlan) error {
+	f.service.jobs[OperationRazorgore].revalidate = func(context.Context, database.Store, *RazorgoreRepairPlan) error { return ErrStaleEvidence }
+	f.service.jobs[OperationRazorgore].apply = func(context.Context, database.Store, *RazorgoreRepairPlan) error {
 		t.Fatal("stale evidence must not mutate source")
 		return nil
 	}
@@ -352,10 +352,10 @@ func TestPreviouslyProcessedRazorgoreNeverEnqueues(t *testing.T) {
 	for i := range e.Events {
 		e.Events[i].Events = []byte("corrupt")
 	}
-	f.service.evaluate = func(context.Context, database.Store, uuid.UUID) (*RazorgoreRepairPlan, error) {
+	f.service.jobs[OperationRazorgore].evaluate = func(context.Context, database.Store, uuid.UUID) (*RazorgoreRepairPlan, error) {
 		return evaluateRazorgoreEvidence(e)
 	}
-	f.service.apply = func(context.Context, database.Store, *RazorgoreRepairPlan) error {
+	f.service.jobs[OperationRazorgore].apply = func(context.Context, database.Store, *RazorgoreRepairPlan) error {
 		t.Error("skipped instance must not apply")
 		return nil
 	}
@@ -379,7 +379,7 @@ func TestEmptyAndSkippedPreviewsCompleteAutomatically(t *testing.T) {
 		t.Run(fmt.Sprint(count), func(t *testing.T) {
 			t.Parallel()
 			f := newRepairFixture(t, count)
-			f.service.evaluate = func(context.Context, database.Store, uuid.UUID) (*RazorgoreRepairPlan, error) {
+			f.service.jobs[OperationRazorgore].evaluate = func(context.Context, database.Store, uuid.UUID) (*RazorgoreRepairPlan, error) {
 				return &RazorgoreRepairPlan{TenantID: f.tenant, RequiresReparse: true, Reason: "already repaired"}, nil
 			}
 			for {

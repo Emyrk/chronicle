@@ -8,7 +8,7 @@ import (
 )
 
 func validateSelection(r CreateRequest) (CreateRequest, error) {
-	if r.Operation != OperationRazorgore {
+	if r.Operation != OperationRazorgore && r.Operation != OperationLucifron {
 		return r, fmt.Errorf("%w: unknown operation", ErrInvalid)
 	}
 	r.Instance = strings.TrimSpace(r.Instance)
