@@ -158,7 +158,7 @@ func TestLucifronRankingMutationPreservesOtherFieldsAndRollsBack(t *testing.T) {
 		encounter := uuid.New()
 		_, err := f.pool.Exec(f.ctx, `INSERT INTO log_instance_encounters(id,instance_id,name,remaining,boss,start_time,end_time,kill_type) VALUES($1,$2,$3,'{}',true,'2026-01-01T00:00:00Z','2026-01-01T00:01:00Z','clean')`, encounter, instance, boss)
 		require.NoError(t, err)
-		_, err = f.pool.Exec(f.ctx, `INSERT INTO encounter_dps_rankings(encounter_id,instance_id,encounter_name,instance_name,player_guid,player_name,realm_id,realm_name,damage_done,unranked_damage_done,duration_secs,dps,killed_at,healing_done,absorbed_done,hps,player_spec,player_sub_spec,player_role,player_deaths,alive_percentage) SELECT $1,id,$2,'Molten Core','0x0000000000000001','Player',realm_id,'Realm',600,60,60,10,'2026-01-01T00:01:00Z',120,30,2.5,'Fire','fire','dps',1,99 FROM log_instances WHERE id=$3`, encounter, boss, instance)
+		_, err = f.pool.Exec(f.ctx, `INSERT INTO encounter_dps_rankings(encounter_id,instance_id,encounter_name,instance_name,player_guid,player_name,realm_id,realm_name,damage_done,duration_secs,dps,killed_at,healing_done,absorbed_done,hps,player_spec,player_sub_spec,player_role,player_deaths,alive_percentage) SELECT $1,id,$2,'Molten Core','0x0000000000000001','Player',realm_id,'Realm',660,60,11,'2026-01-01T00:01:00Z',120,30,2.5,'Fire','fire','dps',1,99 FROM log_instances WHERE id=$3`, encounter, boss, instance)
 		require.NoError(t, err)
 	}
 	before, err := f.db.RazorgoreRepairRankings(f.ctx, instance)
@@ -170,6 +170,7 @@ func TestLucifronRankingMutationPreservesOtherFieldsAndRollsBack(t *testing.T) {
 		}
 	}
 	require.NotEqual(t, uuid.Nil, target.ID)
+	require.Zero(t, target.UnrankedDamageDone, "historical rows inherit the migration default, not an inferred fixture split")
 	params := database.LucifronRepairRankingParams{ID: target.ID, InstanceID: instance, EncounterID: target.EncounterID.UUID, DamageDone: 400, UnrankedDamageDone: 260, Dps: 400.0 / 60}
 	_, err = f.pool.Exec(f.ctx, `UPDATE log_instances SET name='Molten Core',parser_version='v1.0.172' WHERE id=$1`, instance)
 	require.NoError(t, err)
