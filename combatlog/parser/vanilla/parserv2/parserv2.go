@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/logscanner"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parseerrors"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
@@ -50,7 +51,7 @@ func New(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.Gam
 		ctx:                   ctx,
 		logger:                logger,
 		wowDB:                 wowDB,
-		scanner:               bufio.NewScanner(r),
+		scanner:               logscanner.New(r),
 		synthetics:            synthetic.New(ctx, logger, wowDB, synthetic.WithAuraCastCorrelation()),
 		itemFetcher:           gear,
 		missedSpells:          make(map[chrondbc.SpellID]missedSpellEntry),

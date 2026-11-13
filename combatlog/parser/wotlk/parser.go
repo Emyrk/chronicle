@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/logscanner"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parseerrors"
@@ -76,7 +77,7 @@ func newParser(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB game
 		logger:                 logger,
 		wowDB:                  wowDB,
 		gameDB:                 wowDB,
-		scanner:                bufio.NewScanner(r),
+		scanner:                logscanner.New(r),
 		format:                 format,
 		guidNames:              gn,
 		synthetics:             synthetic.New(ctx, logger, wowDB, reg, gn),
