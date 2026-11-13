@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CharacterPerformanceRun } from "@/api/typesGenerated";
-import { performanceRunEntity } from "./performanceEntities";
+import { performanceRunEntity, performanceSpecAttributes } from "./performanceEntities";
 
 const run: CharacterPerformanceRun = {
   run_id: "run-id",
@@ -29,8 +29,23 @@ describe("performance run Alt mode entities", () => {
       difficultyName: "Normal",
       maxPlayers: 40,
       logId: "instance-id",
-      clearMs: 3_600_125,
       startTime: "2026-11-13T01:00:00Z",
     });
+  });
+
+  it("does not mistake selected encounter combat duration for ranked clear time", () => {
+    expect(performanceRunEntity(run, "Blackwing Lair")).not.toHaveProperty("clearMs");
+  });
+});
+
+describe("performance specialization identities", () => {
+  it.each([undefined, null, "", "Mixed", "Unknown"])("omits non-specialization %s", (spec) => {
+    expect(performanceSpecAttributes("SHAMAN", spec)).toEqual({});
+  });
+  it("uses display-formatted class names and ignores synthetic subspecs", () => {
+    expect(JSON.parse(performanceSpecAttributes("SHAMAN", "Enhancement", "Mixed")["data-entity"]!)).toMatchObject({
+      name: "Enhancement Shaman", specName: "Enhancement", className: "SHAMAN",
+    });
+    expect(JSON.parse(performanceSpecAttributes("SHAMAN", "Enhancement", "Unknown")["data-entity"]!)).not.toHaveProperty("subSpecName");
   });
 });

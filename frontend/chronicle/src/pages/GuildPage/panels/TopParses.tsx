@@ -1,3 +1,5 @@
+/* eslint-disable react-refresh/only-export-components -- Panel registry files export a definition alongside their render components. */
+import { entityAttributes } from "@/components/EntityMenu/entity";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Star, AlertCircle } from "lucide-react";
@@ -24,7 +26,7 @@ function formatMetricValue(parse: GuildTopParse): string {
   return `${rounded} ${parse.metric.toUpperCase()}`;
 }
 
-function ParseRow({ parse, rank }: { parse: GuildTopParse; rank: number }) {
+function ParseRow({ parse, rank, realmName }: { parse: GuildTopParse; rank: number; realmName: string }) {
   const color = CLASS_CSS_VAR[parse.player_class] ?? CLASS_CSS_VAR.UNKNOWN;
   const killedAt = new Date(parse.killed_at);
   const tooltip = `${formatMetricValue(parse)} · ${killedAt.toLocaleDateString(undefined, {
@@ -44,7 +46,7 @@ function ParseRow({ parse, rank }: { parse: GuildTopParse; rank: number }) {
     >
       <span className="text-sm text-muted-foreground/70 tabular-nums">#{rank}</span>
       <div className="min-w-0">
-        <p className="truncate text-sm font-medium leading-tight" style={{ color }}>
+        <p {...entityAttributes({ kind: "character", realm: realmName, guid: parse.player_guid, name: parse.player_name, className: parse.player_class })} className="truncate text-sm font-medium leading-tight" style={{ color }}>
           {parse.player_name}
           {parse.player_spec && (
             <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">
@@ -147,6 +149,7 @@ function TopParsesContent({ config, position, guild }: GuildPanelRenderProps<Top
             key={`${parse.player_guid}-${parse.encounter_name}-${parse.killed_at}`}
             parse={parse}
             rank={i + 1}
+            realmName={guild.realm_name}
           />
         ))}
       </div>

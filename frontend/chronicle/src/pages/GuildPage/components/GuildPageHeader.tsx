@@ -1,7 +1,9 @@
+import { guildAttributes } from "@/components/EntityMenu/leaderboardEntities";
 import type { GuildInfo, GuildPageTheme, SocialPlatform } from "@/api/typesGenerated";
 import { Youtube, Twitch, Twitter, Globe } from "lucide-react";
 import { DiscordIcon } from "@/components/icons/DiscordIcon";
 
+// eslint-disable-next-line react-refresh/only-export-components -- Shared social platform metadata is consumed by the guild editor.
 export const SOCIAL_PLATFORM_META: Record<
   SocialPlatform,
   { label: string; icon: React.ReactNode; placeholder: string }
@@ -197,7 +199,7 @@ export function GuildPageHeader({ guild, theme, leading }: GuildPageHeaderProps)
             </div>
           )}
           <div className="text-left">
-            <h1 className="text-3xl font-bold" style={{ color: "var(--color-amber-500)" }}>
+            <h1 {...guildAttributes(guild.id, guild.name)} className="text-3xl font-bold" style={{ color: "var(--color-amber-500)" }}>
               {guild.name}
             </h1>
             <p className="text-sm text-muted-foreground">{guild.realm_name}</p>

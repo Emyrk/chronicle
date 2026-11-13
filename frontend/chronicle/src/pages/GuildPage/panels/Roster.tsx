@@ -1,3 +1,4 @@
+import { entityAttributes } from "@/components/EntityMenu/entity";
 /* eslint-disable react-refresh/only-export-components -- Panel registry files export a definition alongside their render components. */
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
@@ -97,6 +98,7 @@ function MemberRow({ member, showParse }: { member: GuildRosterCharacter; showPa
 
   return (
     <Link
+      {...entityAttributes({ kind: "character", realm: member.realm_name, guid: member.id, name: member.name, className: member.class })}
       to={`/armory/${encodeURIComponent(member.realm_name)}/${encodeURIComponent(member.name)}`}
       className={`grid ${showParse ? "grid-cols-[24px_1fr_48px_auto]" : "grid-cols-[24px_1fr_auto]"} items-center gap-2.5 border-b border-border/40 py-1.5 last:border-b-0 hover:bg-muted/30 rounded-sm px-1 -mx-1`}
     >

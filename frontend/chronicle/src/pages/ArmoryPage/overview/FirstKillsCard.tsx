@@ -1,3 +1,4 @@
+import { entityAttributes, raidEntity } from "@/components/EntityMenu/entity";
 import { useMemo } from "react";
 import { format } from "date-fns";
 import type { CharacterEncounterStats } from "@/api/typesGenerated";
@@ -77,7 +78,7 @@ export function FirstKillsCard({ encounters, isLoading }: FirstKillsCardProps) {
                   )}
                 </div>
                 <div className="truncate text-xs text-muted-foreground">
-                  {night.instanceName}
+                  <span {...entityAttributes(raidEntity(night.instanceName))}>{night.instanceName}</span>
                   {night.bosses.length > 1
                     ? ` · ${night.bosses.length} first kills`
                     : ""}

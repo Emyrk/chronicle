@@ -1,3 +1,4 @@
+import { entityAttributes } from "@/components/EntityMenu/entity";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { format } from "date-fns";
@@ -72,6 +73,7 @@ export function RecentNightsCard({ instances, nightScores, lootByInstance, onOpe
 
           return (
             <Link
+              {...entityAttributes({ kind: "raid", id: inst.id, logId: inst.id, name: inst.name, startTime: inst.first_encounter_time })}
               key={inst.id}
               to={url}
               className="flex items-center gap-4 border-b border-border py-2.5 transition-colors last:border-b-0 hover:bg-muted/40"

@@ -42,7 +42,7 @@ import {
   type PerformanceDisplayMode,
   type PerformancePlayerSelection,
 } from "./performanceComparisonState";
-import { performanceRunEntity } from "./performanceEntities";
+import { performanceRunEntity, performanceSpecAttributes } from "./performanceEntities";
 import {
   assignChartCollisionOffsets,
   assignPerformanceSeriesColors,
@@ -432,10 +432,10 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
                             style={{ borderColor: selectedPlayer.color }}
                           />
                           <span className="min-w-0 flex-1 leading-tight">
-                            <span className="block truncate font-semibold" style={{ color: selectedPlayer.color }}>
+                            <span {...entityAttributes({ kind: "character", realm: selectedPlayer.realmName, guid: selectedPlayer.id, name: selectedPlayer.name, className: selectedPlayer.className })} className="block truncate font-semibold" style={{ color: selectedPlayer.color }}>
                               {selectedPlayer.name}
                             </span>
-                            <span className="block truncate text-[10px] text-muted-foreground">
+                            <span {...performanceSpecAttributes(selectedPlayer.className, selectedPlayer.spec, selectedPlayer.subSpec)} className="block truncate text-[10px] text-muted-foreground">
                               {selectedPlayer.spec ? `${selectedPlayer.spec}${selectedPlayer.subSpec ? ` / ${selectedPlayer.subSpec}` : ""}` : "All specs"}
                               {showPlayerRealms && ` · ${selectedPlayer.realmName}`}
                             </span>
@@ -465,6 +465,9 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
                   <PerformanceSummaryPanel
                     players={visibleSeries.map(({ player: summaryPlayer, runs }) => ({
                       id: performancePlayerKey(summaryPlayer),
+                      guid: summaryPlayer.id,
+                      realmName: summaryPlayer.realmName,
+                      characterName: summaryPlayer.name,
                       name: playerLabel(summaryPlayer),
                       className: summaryPlayer.className,
                       color: summaryPlayer.color,
@@ -1239,7 +1242,7 @@ function PerformanceTrend({
                               fillColor={valueColor}
                               className="size-2"
                             />
-                            <span className="truncate" style={{ color: getClassColorVar(pointPlayer.className) }}>
+                            <span className="truncate" {...entityAttributes({ kind: "character", realm: pointPlayer.realmName, guid: pointPlayer.id, name: pointPlayer.name, className: pointPlayer.className })} style={{ color: getClassColorVar(pointPlayer.className) }}>
                               {pointPlayer.name}{showPlayerRealms && ` · ${pointPlayer.realmName}`}
                             </span>
                           </span>
@@ -1380,7 +1383,7 @@ function PerformanceTable({
                 <span className="font-mono tabular-nums text-muted-foreground">
                   {new Date(run.started_at).toLocaleDateString(undefined, { month: "numeric", day: "numeric" })}
                 </span>
-                <span className="flex min-w-0 items-center gap-1.5">
+                <span {...entityAttributes({ kind: "character", realm: rowPlayer.realmName, guid: rowPlayer.id, name: rowPlayer.name, className: rowPlayer.className })} className="flex min-w-0 items-center gap-1.5">
                   <PerformancePointShape
                     shape={shape}
                     borderColor={rowPlayer.color}
@@ -1438,7 +1441,7 @@ function PerformanceTable({
                 className="border-b border-border/40 odd:bg-black/5 even:bg-black/20 hover:bg-accent/20 last:border-0"
               >
                 <td className="py-2 pr-4 whitespace-nowrap">{new Date(run.started_at).toLocaleDateString()}</td>
-                <td className="py-2 pr-4 whitespace-nowrap">
+                <td {...entityAttributes({ kind: "character", realm: rowPlayer.realmName, guid: rowPlayer.id, name: rowPlayer.name, className: rowPlayer.className })} className="py-2 pr-4 whitespace-nowrap">
                   <PerformancePointShape
                     shape={shape}
                     borderColor={rowPlayer.color}
@@ -1464,7 +1467,7 @@ function PerformanceTable({
                       />
                     )}
                     <div className="min-w-0">
-                      <div className="font-medium">{run.player_spec || "Unknown"}</div>
+                      <div {...performanceSpecAttributes(rowPlayer.className, run.player_spec, run.player_sub_spec)} className="font-medium">{run.player_spec || "Unknown"}</div>
                       {run.player_sub_spec && run.player_sub_spec !== run.player_spec && <div className="truncate text-xs text-muted-foreground">{run.player_sub_spec}</div>}
                     </div>
                   </div>
@@ -1501,7 +1504,7 @@ function PerformanceTable({
           </DialogHeader>
           {selectedRow && (
             <div className="rounded-md border border-border/70 bg-black/10 px-3 py-2 text-sm">
-              <div className="font-medium" style={{ color: getClassColorVar(selectedRow.player.className) }}>
+              <div className="font-medium" {...entityAttributes({ kind: "character", realm: selectedRow.player.realmName, guid: selectedRow.player.id, name: selectedRow.player.name, className: selectedRow.player.className })} style={{ color: getClassColorVar(selectedRow.player.className) }}>
                 {selectedRow.player.name}{showPlayerRealms && ` · ${selectedRow.player.realmName}`}
               </div>
               <div className="mt-0.5 text-xs text-muted-foreground">
@@ -1542,7 +1545,7 @@ function PlayerPickRow({ player, onSelect }: { player: ArmorySearchResult | Favo
       className="flex w-full items-center justify-between border-b border-border/60 px-3 py-2.5 text-left last:border-0 hover:bg-accent/50"
     >
       <span>
-        <span className="font-medium" style={{ color: getClassColorVar(player.class) }}>{player.name}</span>
+        <span {...entityAttributes({ kind: "character", realm: player.realm_name, guid: player.id, name: player.name, className: player.class })} className="font-medium" style={{ color: getClassColorVar(player.class) }}>{player.name}</span>
         <span className="ml-2 text-xs text-muted-foreground">{player.class}</span>
       </span>
       <span className="text-xs text-muted-foreground">

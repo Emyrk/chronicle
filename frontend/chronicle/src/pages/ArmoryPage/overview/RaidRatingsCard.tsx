@@ -1,3 +1,4 @@
+import { entityAttributes, raidEntity, bossEntity } from "@/components/EntityMenu/entity";
 import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card/Card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/Collapsible/Collapsible";
@@ -56,7 +57,7 @@ export function RaidRatingsCard({ raids, metric, isLoading, emptyMessage }: Raid
           <div className="rounded-xl border border-dashed border-border px-6 py-4 text-xs text-muted-foreground">
             <span className="text-foreground">No kills yet:</span>{" "}
             {untouched.map((r, i) => (
-              <span key={r.key}>
+              <span key={r.key} {...entityAttributes(raidEntity(r.instanceName, r.difficultyName))}>
                 {i > 0 && " · "}
                 {raidName(r)}
                 {r.weight !== null && <span className="opacity-60"> ×{r.weight}</span>}
@@ -108,7 +109,7 @@ function RaidRow({
       >
         <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6 gap-y-2 sm:grid-cols-[minmax(0,1fr)_auto_200px_14px]">
           <div className="min-w-0">
-            <div className="font-wow truncate text-lg text-foreground">{raidName(raid)}</div>
+            <div {...entityAttributes(raidEntity(raid.instanceName, raid.difficultyName))} className="font-wow truncate text-lg text-foreground">{raidName(raid)}</div>
             <div className="mt-1 text-xs text-muted-foreground">{subtitle.join(" · ")}</div>
           </div>
           <div className="flex items-end gap-5 text-right">
@@ -194,12 +195,12 @@ function BossTable({ raid, metric }: { raid: RaidRating; metric: string }) {
       </TableHeader>
       <TableBody>
         {raid.bosses.map((b) => (
-          <BossRow key={b.encounterName} boss={b} rated={raid.rated} />
+          <BossRow key={b.encounterName} boss={b} instanceName={raid.instanceName} rated={raid.rated} />
         ))}
         {raid.missingBosses.length > 0 && (
           <TableRow className="text-muted-foreground hover:bg-transparent">
             <TableCell colSpan={raid.rated ? 9 : 5} className="text-xs whitespace-normal">
-              <span className="text-foreground">Not killed as this spec:</span> {raid.missingBosses.join(" · ")}
+              <span className="text-foreground">Not killed as this spec:</span> {raid.missingBosses.map((name, i) => <span key={name}>{i > 0 && " · "}<span {...entityAttributes(bossEntity(raid.instanceName, name))}>{name}</span></span>)}
             </TableCell>
           </TableRow>
         )}
@@ -208,7 +209,7 @@ function BossTable({ raid, metric }: { raid: RaidRating; metric: string }) {
   );
 }
 
-function BossRow({ boss, rated }: { boss: BossRating; rated: boolean }) {
+function BossRow({ boss, rated, instanceName }: { boss: BossRating; rated: boolean; instanceName: string }) {
   const perSecond = (v: number) => (
     <>
       {Math.round(v).toLocaleString()}
@@ -218,7 +219,7 @@ function BossRow({ boss, rated }: { boss: BossRating; rated: boolean }) {
   const hasKills = boss.kills > 0;
   return (
     <TableRow>
-      <TableCell className="font-wow">{boss.encounterName}</TableCell>
+      <TableCell {...entityAttributes(bossEntity(instanceName, boss.encounterName))} className="font-wow">{boss.encounterName}</TableCell>
       <TableCell className="text-right font-mono text-muted-foreground">{boss.kills}</TableCell>
       <TableCell className="text-right font-mono text-muted-foreground">
         {hasKills ? perSecond(boss.benchmark) : "—"}

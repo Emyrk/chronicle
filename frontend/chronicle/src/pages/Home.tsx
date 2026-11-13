@@ -410,7 +410,7 @@ function MobileSpotlight({
                     {i + 1}
                   </span>
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium truncate">{r.guild_name}</div>
+                    <div {...guildAttributes(r.guild_id, r.guild_name)} className="font-medium truncate">{r.guild_name}</div>
                     <div className="text-xs text-muted-foreground truncate">
                       {r.realm_name} · {r.player_count} players
                     </div>
@@ -429,6 +429,7 @@ function MobileSpotlight({
                   <div className="flex-1 min-w-0">
                     <div
                       className="font-medium truncate"
+                      {...rankingPlayerAttributes(r)}
                       style={{ color: CLASS_CSS_VAR[r.player_class] }}
                     >
                       {r.player_name}
@@ -447,7 +448,7 @@ function MobileSpotlight({
             : guildClears.slice(0, 5).map((g, i) => (
                 <div key={g.guild_id} className={rowClass}>
                   <span className="w-5 font-mono text-xs text-muted-foreground">{i + 1}</span>
-                  <span className="flex-1 font-medium truncate">{g.guild_name}</span>
+                  <span {...guildAttributes(g.guild_id, g.guild_name)} className="flex-1 font-medium truncate">{g.guild_name}</span>
                   <span className="font-mono font-bold text-(--tertiary)">{g.clears}</span>
                 </div>
               )))}

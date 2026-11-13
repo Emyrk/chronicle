@@ -1,3 +1,4 @@
+import { entityAttributes } from "@/components/EntityMenu/entity";
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { addDays, differenceInCalendarWeeks, format, getDay, isAfter } from "date-fns";
@@ -176,7 +177,8 @@ function RaidedCell({
       <TooltipTrigger asChild>
         {single ? (
           <Link
-            to={single.slug ? `/instances/${single.slug}` : `/instances/${single.id}`}
+            {...entityAttributes({ kind: "raid", id: single.id, logId: single.id, name: single.name, startTime: single.first_encounter_time })}
+              to={single.slug ? `/instances/${single.slug}` : `/instances/${single.id}`}
             className={cellClass}
             style={cellStyle}
             aria-label={`${single.name} on ${format(cell.date, "MMM d")}`}

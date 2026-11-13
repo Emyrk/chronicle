@@ -1,3 +1,4 @@
+import { entityAttributes } from "@/components/EntityMenu/entity";
 import { useState, type MouseEvent, type ReactNode } from "react";
 import { format } from "date-fns";
 import { useArmoryGearHistory } from "@/api/queries";
@@ -59,6 +60,7 @@ export function GearPanel({
           {players.map((player) => (
             <button
               key={player.key}
+              {...entityAttributes({ kind: "character", realm: player.realmName, guid: player.id, name: player.name, className: player.className })}
               type="button"
               onClick={() => setSelectedKey(player.key)}
               className="rounded-md border border-border/70 px-3 py-1.5 text-sm font-medium hover:bg-white/5"
@@ -174,7 +176,7 @@ function PlayerGearTimeline({
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <div className="text-sm">
-          <span className="font-medium" style={{ color: getClassColorVar(player.className) }}>{player.name}</span>
+          <span {...entityAttributes({ kind: "character", realm: player.realmName, guid: player.id, name: player.name, className: player.className })} className="font-medium" style={{ color: getClassColorVar(player.className) }}>{player.name}</span>
           <span className="text-muted-foreground">
             {raidOnly ? ` in ${instanceName}` : " in all raids"} · {timeline.snapshotCount} recorded {timeline.snapshotCount === 1 ? "log" : "logs"} · {timeline.changedSlots} {timeline.changedSlots === 1 ? "slot" : "slots"} changed
           </span>

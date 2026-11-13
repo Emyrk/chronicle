@@ -1,3 +1,5 @@
+/* eslint-disable react-refresh/only-export-components -- Panel registry files export a definition alongside their render components. */
+import { entityAttributes, raidEntity } from "@/components/EntityMenu/entity";
 import { useEffect, useState } from "react";
 import { Trophy, AlertCircle, CheckCircle, Clock } from "lucide-react";
 import type { GuildRaidClear, GuildRaidClearsResponse } from "@/api/typesGenerated";
@@ -111,7 +113,7 @@ function RaidClearCard({
       {/* Bottom text */}
       <div className="absolute inset-x-0 bottom-0 z-10 p-2.5">
         <p className="text-sm font-semibold text-white truncate drop-shadow">
-          {clear.instance_name}
+          <span {...entityAttributes(raidEntity(clear.instance_name))}>{clear.instance_name}</span>
         </p>
         <div className="flex items-center justify-between gap-3 text-[11px] text-white/80">
           <span className="flex items-center gap-3">
@@ -222,7 +224,7 @@ function RaidClearsContent({ config: rawConfig, position, guild }: GuildPanelRen
         <div key={clear.instance_name} className="flex items-center gap-3 py-2">
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium truncate flex items-center gap-2">
-              {clear.instance_name}
+              <span {...entityAttributes(raidEntity(clear.instance_name))}>{clear.instance_name}</span>
               {windowLabel && <TimeWindowBadge label={windowLabel} />}
             </p>
             {config.showLastCleared && (

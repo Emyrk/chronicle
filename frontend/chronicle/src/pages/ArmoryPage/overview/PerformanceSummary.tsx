@@ -1,3 +1,4 @@
+import { entityAttributes } from "@/components/EntityMenu/entity";
 import type { ReactNode } from "react";
 import { CircleHelp } from "lucide-react";
 import type { CharacterPerformanceRun } from "@/api/typesGenerated";
@@ -17,6 +18,9 @@ import {
 
 export interface PerformanceSummaryPlayer {
   id: string;
+  guid?: string;
+  realmName?: string;
+  characterName?: string;
   name: string;
   className: string;
   color: string;
@@ -243,7 +247,7 @@ function PlayerName({ player }: { player: PerformanceSummaryPlayer }) {
   return (
     <span className="inline-flex min-w-0 items-center gap-2">
       <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: player.color }} />
-      <span className="truncate font-medium" style={{ color: getClassColorVar(player.className) }}>{player.name}</span>
+      <span {...(player.realmName && player.guid ? entityAttributes({ kind: "character", realm: player.realmName, guid: player.guid, name: player.characterName ?? player.name, className: player.className }) : {})} className="truncate font-medium" style={{ color: getClassColorVar(player.className) }}>{player.name}</span>
     </span>
   );
 }
@@ -437,7 +441,7 @@ function BoxPlotRow({
         </div>
       </TooltipTrigger>
       <TooltipContent side="top" className="text-left">
-        <div className="mb-1 font-semibold">{player.name} · {summary.runCount} runs</div>
+        <div {...(player.realmName && player.guid ? entityAttributes({ kind: "character", realm: player.realmName, guid: player.guid, name: player.characterName ?? player.name, className: player.className }) : {})} className="mb-1 font-semibold">{player.name} · {summary.runCount} runs</div>
         <dl className="grid grid-cols-[auto_auto] gap-x-4 gap-y-0.5 font-mono tabular-nums">
           <dt className="font-sans text-zinc-400">Best</dt><dd className="text-right">{formatStat(summary.best, display)}</dd>
           <dt className="font-sans text-zinc-400">Top of box (75th pct)</dt><dd className="text-right">{formatStat(summary.upperQuartile, display)}</dd>

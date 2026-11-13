@@ -1,3 +1,5 @@
+import { entityAttributes, specEntity } from "@/components/EntityMenu/entity";
+import { CLASS_DISPLAY } from "@/pages/Rankings/classDisplay";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ArrowUpRight } from "lucide-react";
@@ -213,6 +215,7 @@ function CohortSelector({
         return (
           <button
             key={key}
+            {...(c.player_spec ? entityAttributes(specEntity(c.player_class, CLASS_DISPLAY[c.player_class] ?? c.player_class, c.player_spec, c.player_sub_spec || undefined)) : {})}
             type="button"
             aria-pressed={active}
             aria-label={`Show ${label} ratings`}

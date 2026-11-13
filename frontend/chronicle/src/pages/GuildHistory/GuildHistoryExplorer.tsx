@@ -1,3 +1,4 @@
+import { guildAttributes } from "@/components/EntityMenu/leaderboardEntities";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ExternalLink, Eye, EyeOff, List, LockKeyhole, Map, Plus, Search, Settings2, Shield, Star, Timer, Trash2 } from "lucide-react";
@@ -220,6 +221,7 @@ export function GuildHistoryExplorer({
           {guilds.map((guild) => (
             <button
               key={guild.id}
+              {...guildAttributes(guild.id, guild.name)}
               type="button"
               onClick={(event) => {
                 if (event.shiftKey) toggleHidden(guild.id);
@@ -575,7 +577,7 @@ function GuildSettingsDialog({
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <span className="size-2.5 rounded-full" style={{ backgroundColor: guild.color }} />
-                <span style={{ color: guild.color }}>{guild.name}</span>
+                <span {...guildAttributes(guild.id, guild.name)} style={{ color: guild.color }}>{guild.name}</span>
               </DialogTitle>
               {guild.realmName && <DialogDescription>{guild.realmName}</DialogDescription>}
             </DialogHeader>
@@ -663,6 +665,7 @@ export function GuildPickRow({ guild, onSelect }: { guild: GuildInfo | FavoriteG
   return (
     <button
       type="button"
+      {...guildAttributes(guild.id, guild.name)}
       onClick={onSelect}
       className="flex w-full items-center justify-between gap-3 border-b border-border/60 px-3 py-2.5 text-left last:border-0 hover:bg-accent/50"
     >

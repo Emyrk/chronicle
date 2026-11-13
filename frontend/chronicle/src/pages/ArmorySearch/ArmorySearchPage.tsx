@@ -1,3 +1,5 @@
+import { entityAttributes } from "@/components/EntityMenu/entity";
+import { guildAttributes } from "@/components/EntityMenu/leaderboardEntities";
 import { useState, useMemo, useEffect } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { Search, Shield, Users, Loader2, Swords } from "lucide-react";
@@ -280,6 +282,7 @@ function PlayerRow({ player }: { player: ArmorySearchResult }) {
     <tr className="hover:bg-primary-darker/40 transition-colors">
       <td className="px-4 py-2.5">
         <Link
+          {...entityAttributes({ kind: "character", realm: player.realm_name, guid: player.id, name: player.name, className: player.class })}
           to={`/armory/${encodeURIComponent(player.realm_name)}/${encodeURIComponent(player.id)}`}
           className="font-medium hover:underline"
           style={{ color: classColor }}
@@ -298,7 +301,7 @@ function PlayerRow({ player }: { player: ArmorySearchResult }) {
         {player.level}
       </td>
       <td className="px-4 py-2.5 hidden sm:table-cell text-muted-foreground">
-        {player.guild_name || "—"}
+        <span {...guildAttributes(player.guild_id, player.guild_name ?? "")}>{player.guild_name || "—"}</span>
       </td>
       <td className="px-4 py-2.5 hidden lg:table-cell text-muted-foreground">
         {player.realm_name}

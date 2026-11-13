@@ -1,3 +1,4 @@
+import { entityAttributes, raidEntity } from "@/components/EntityMenu/entity";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card/Card";
 import {
   ProgressionBossIndicator,
@@ -46,7 +47,7 @@ export function ProgressionCard({
             <div key={`${raid.instanceName}|${raid.difficultyName}|${raid.maxPlayers}`}>
               <div className="mb-2 flex items-baseline justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-1.5">
-                  <div className="font-wow min-w-0 truncate text-sm text-foreground">
+                  <div {...entityAttributes(raidEntity(raid.instanceName, raid.difficultyName))} className="font-wow min-w-0 truncate text-sm text-foreground">
                     {raid.instanceName}
                   </div>
                   <ProgressionBossIndicator
