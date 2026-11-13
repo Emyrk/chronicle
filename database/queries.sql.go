@@ -5536,6 +5536,237 @@ func (q *sqlQuerier) PreviewEncounterDifficultyBackfillBatch(ctx context.Context
 	return i, err
 }
 
+const razorgoreRepairDeleteRankings = `-- name: RazorgoreRepairDeleteRankings :exec
+DELETE FROM encounter_dps_rankings WHERE instance_id = $1 AND encounter_id = $2
+`
+
+type RazorgoreRepairDeleteRankingsParams struct {
+	InstanceID  uuid.UUID     `db:"instance_id" json:"instance_id"`
+	EncounterID uuid.NullUUID `db:"encounter_id" json:"encounter_id"`
+}
+
+func (q *sqlQuerier) RazorgoreRepairDeleteRankings(ctx context.Context, arg RazorgoreRepairDeleteRankingsParams) error {
+	_, err := q.db.Exec(ctx, razorgoreRepairDeleteRankings, arg.InstanceID, arg.EncounterID)
+	return err
+}
+
+const razorgoreRepairDeleteSpeedrun = `-- name: RazorgoreRepairDeleteSpeedrun :exec
+DELETE FROM instance_speedruns WHERE instance_id = $1
+`
+
+func (q *sqlQuerier) RazorgoreRepairDeleteSpeedrun(ctx context.Context, instanceID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, razorgoreRepairDeleteSpeedrun, instanceID)
+	return err
+}
+
+const razorgoreRepairEncounter = `-- name: RazorgoreRepairEncounter :exec
+UPDATE log_instance_encounters SET kill_type = $1,
+ ranking_start_offset_ms = NULL, ranking_end_offset_ms = NULL
+WHERE instance_id = $2 AND id = $3
+`
+
+type RazorgoreRepairEncounterParams struct {
+	KillType    KillType  `db:"kill_type" json:"kill_type"`
+	InstanceID  uuid.UUID `db:"instance_id" json:"instance_id"`
+	EncounterID uuid.UUID `db:"encounter_id" json:"encounter_id"`
+}
+
+func (q *sqlQuerier) RazorgoreRepairEncounter(ctx context.Context, arg RazorgoreRepairEncounterParams) error {
+	_, err := q.db.Exec(ctx, razorgoreRepairEncounter, arg.KillType, arg.InstanceID, arg.EncounterID)
+	return err
+}
+
+const razorgoreRepairEvents = `-- name: RazorgoreRepairEvents :many
+SELECT instance_id, type, events FROM log_instance_events WHERE instance_id = $1 ORDER BY type
+`
+
+func (q *sqlQuerier) RazorgoreRepairEvents(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceEvent, error) {
+	rows, err := q.db.Query(ctx, razorgoreRepairEvents, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LogInstanceEvent
+	for rows.Next() {
+		var i LogInstanceEvent
+		if err := rows.Scan(&i.InstanceID, &i.Type, &i.Events); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const razorgoreRepairHostile = `-- name: RazorgoreRepairHostile :exec
+UPDATE log_instance_encounter_hostiles SET periods = $1
+WHERE encounter_id = $2 AND id = $3
+`
+
+type RazorgoreRepairHostileParams struct {
+	Periods     Periods   `db:"periods" json:"periods"`
+	EncounterID uuid.UUID `db:"encounter_id" json:"encounter_id"`
+	ID          guid.GUID `db:"id" json:"id"`
+}
+
+func (q *sqlQuerier) RazorgoreRepairHostile(ctx context.Context, arg RazorgoreRepairHostileParams) error {
+	_, err := q.db.Exec(ctx, razorgoreRepairHostile, arg.Periods, arg.EncounterID, arg.ID)
+	return err
+}
+
+const razorgoreRepairInstance = `-- name: RazorgoreRepairInstance :one
+SELECT id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time, capabilities, versions, recorder_name, recorder_guid, parser_version, duplicate_group_id, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, category, updated_at, invalidated_at, invalid_reason, mixed_difficulty, difficulty_normalized FROM log_instances WHERE id = $1
+`
+
+func (q *sqlQuerier) RazorgoreRepairInstance(ctx context.Context, instanceID uuid.UUID) (LogInstance, error) {
+	row := q.db.QueryRow(ctx, razorgoreRepairInstance, instanceID)
+	var i LogInstance
+	err := row.Scan(
+		&i.ID,
+		&i.RealmID,
+		&i.LogGroupID,
+		&i.Name,
+		&i.HashedSlug,
+		&i.GuildID,
+		&i.StartTime,
+		&i.EndTime,
+		&i.Capabilities,
+		&i.Versions,
+		&i.RecorderName,
+		&i.RecorderGuid,
+		&i.ParserVersion,
+		&i.DuplicateGroupID,
+		&i.DifficultyName,
+		&i.MaxPlayers,
+		&i.DynamicDifficulty,
+		&i.VehicleControlIntervals,
+		&i.Category,
+		&i.UpdatedAt,
+		&i.InvalidatedAt,
+		&i.InvalidReason,
+		&i.MixedDifficulty,
+		&i.DifficultyNormalized,
+	)
+	return i, err
+}
+
+const razorgoreRepairPhase = `-- name: RazorgoreRepairPhase :exec
+UPDATE log_instance_encounter_phases SET kill_type = $1
+WHERE encounter_id = $2 AND id = $3
+`
+
+type RazorgoreRepairPhaseParams struct {
+	KillType    KillType  `db:"kill_type" json:"kill_type"`
+	EncounterID uuid.UUID `db:"encounter_id" json:"encounter_id"`
+	ID          uuid.UUID `db:"id" json:"id"`
+}
+
+func (q *sqlQuerier) RazorgoreRepairPhase(ctx context.Context, arg RazorgoreRepairPhaseParams) error {
+	_, err := q.db.Exec(ctx, razorgoreRepairPhase, arg.KillType, arg.EncounterID, arg.ID)
+	return err
+}
+
+const razorgoreRepairRankings = `-- name: RazorgoreRepairRankings :many
+SELECT id, encounter_id, instance_id, encounter_name, instance_name, player_guid, player_name, player_class, player_spec, player_role, player_level, talent_build_id, difficulty_name, max_players, realm_id, realm_name, guild_id, guild_name, damage_done, duration_secs, dps, avg_ilvl, log_hashed_slug, killed_at, created_at, healing_done, absorbed_done, hps, player_sub_spec, player_deaths, alive_percentage, unranked_damage_done FROM encounter_dps_rankings WHERE instance_id = $1 ORDER BY id
+`
+
+func (q *sqlQuerier) RazorgoreRepairRankings(ctx context.Context, instanceID uuid.UUID) ([]EncounterDpsRanking, error) {
+	rows, err := q.db.Query(ctx, razorgoreRepairRankings, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []EncounterDpsRanking
+	for rows.Next() {
+		var i EncounterDpsRanking
+		if err := rows.Scan(
+			&i.ID,
+			&i.EncounterID,
+			&i.InstanceID,
+			&i.EncounterName,
+			&i.InstanceName,
+			&i.PlayerGuid,
+			&i.PlayerName,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerRole,
+			&i.PlayerLevel,
+			&i.TalentBuildID,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.RealmID,
+			&i.RealmName,
+			&i.GuildID,
+			&i.GuildName,
+			&i.DamageDone,
+			&i.DurationSecs,
+			&i.Dps,
+			&i.AvgIlvl,
+			&i.LogHashedSlug,
+			&i.KilledAt,
+			&i.CreatedAt,
+			&i.HealingDone,
+			&i.AbsorbedDone,
+			&i.Hps,
+			&i.PlayerSubSpec,
+			&i.PlayerDeaths,
+			&i.AlivePercentage,
+			&i.UnrankedDamageDone,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const razorgoreRepairSpeedruns = `-- name: RazorgoreRepairSpeedruns :many
+SELECT instance_id, instance_name, realm_id, guild_id, qualified, start_time, completion_time, duration_ms, proof, created_at, addon_version, ranked_start_time, ranked_completion_time, ranked_duration_ms, boss_to_boss_start_time, boss_to_boss_completion_time, boss_to_boss_duration_ms FROM instance_speedruns WHERE instance_id = $1
+`
+
+func (q *sqlQuerier) RazorgoreRepairSpeedruns(ctx context.Context, instanceID uuid.UUID) ([]InstanceSpeedrun, error) {
+	rows, err := q.db.Query(ctx, razorgoreRepairSpeedruns, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []InstanceSpeedrun
+	for rows.Next() {
+		var i InstanceSpeedrun
+		if err := rows.Scan(
+			&i.InstanceID,
+			&i.InstanceName,
+			&i.RealmID,
+			&i.GuildID,
+			&i.Qualified,
+			&i.StartTime,
+			&i.CompletionTime,
+			&i.DurationMs,
+			&i.Proof,
+			&i.CreatedAt,
+			&i.AddonVersion,
+			&i.RankedStartTime,
+			&i.RankedCompletionTime,
+			&i.RankedDurationMs,
+			&i.BossToBossStartTime,
+			&i.BossToBossCompletionTime,
+			&i.BossToBossDurationMs,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const cancelEventRepairOperation = `-- name: CancelEventRepairOperation :one
 UPDATE event_repair_operations
 SET state = 'cancelled', cancelled_by = $1::uuid,
@@ -6453,237 +6684,6 @@ func (q *sqlQuerier) UpdateEventRepairOperationState(ctx context.Context, arg Up
 		&i.CancelledAt,
 	)
 	return i, err
-}
-
-const razorgoreRepairDeleteRankings = `-- name: RazorgoreRepairDeleteRankings :exec
-DELETE FROM encounter_dps_rankings WHERE instance_id = $1 AND encounter_id = $2
-`
-
-type RazorgoreRepairDeleteRankingsParams struct {
-	InstanceID  uuid.UUID     `db:"instance_id" json:"instance_id"`
-	EncounterID uuid.NullUUID `db:"encounter_id" json:"encounter_id"`
-}
-
-func (q *sqlQuerier) RazorgoreRepairDeleteRankings(ctx context.Context, arg RazorgoreRepairDeleteRankingsParams) error {
-	_, err := q.db.Exec(ctx, razorgoreRepairDeleteRankings, arg.InstanceID, arg.EncounterID)
-	return err
-}
-
-const razorgoreRepairDeleteSpeedrun = `-- name: RazorgoreRepairDeleteSpeedrun :exec
-DELETE FROM instance_speedruns WHERE instance_id = $1
-`
-
-func (q *sqlQuerier) RazorgoreRepairDeleteSpeedrun(ctx context.Context, instanceID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, razorgoreRepairDeleteSpeedrun, instanceID)
-	return err
-}
-
-const razorgoreRepairEncounter = `-- name: RazorgoreRepairEncounter :exec
-UPDATE log_instance_encounters SET kill_type = $1,
- ranking_start_offset_ms = NULL, ranking_end_offset_ms = NULL
-WHERE instance_id = $2 AND id = $3
-`
-
-type RazorgoreRepairEncounterParams struct {
-	KillType    KillType  `db:"kill_type" json:"kill_type"`
-	InstanceID  uuid.UUID `db:"instance_id" json:"instance_id"`
-	EncounterID uuid.UUID `db:"encounter_id" json:"encounter_id"`
-}
-
-func (q *sqlQuerier) RazorgoreRepairEncounter(ctx context.Context, arg RazorgoreRepairEncounterParams) error {
-	_, err := q.db.Exec(ctx, razorgoreRepairEncounter, arg.KillType, arg.InstanceID, arg.EncounterID)
-	return err
-}
-
-const razorgoreRepairEvents = `-- name: RazorgoreRepairEvents :many
-SELECT instance_id, type, events FROM log_instance_events WHERE instance_id = $1 ORDER BY type
-`
-
-func (q *sqlQuerier) RazorgoreRepairEvents(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceEvent, error) {
-	rows, err := q.db.Query(ctx, razorgoreRepairEvents, instanceID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []LogInstanceEvent
-	for rows.Next() {
-		var i LogInstanceEvent
-		if err := rows.Scan(&i.InstanceID, &i.Type, &i.Events); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const razorgoreRepairHostile = `-- name: RazorgoreRepairHostile :exec
-UPDATE log_instance_encounter_hostiles SET periods = $1
-WHERE encounter_id = $2 AND id = $3
-`
-
-type RazorgoreRepairHostileParams struct {
-	Periods     Periods   `db:"periods" json:"periods"`
-	EncounterID uuid.UUID `db:"encounter_id" json:"encounter_id"`
-	ID          guid.GUID `db:"id" json:"id"`
-}
-
-func (q *sqlQuerier) RazorgoreRepairHostile(ctx context.Context, arg RazorgoreRepairHostileParams) error {
-	_, err := q.db.Exec(ctx, razorgoreRepairHostile, arg.Periods, arg.EncounterID, arg.ID)
-	return err
-}
-
-const razorgoreRepairInstance = `-- name: RazorgoreRepairInstance :one
-SELECT id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time, capabilities, versions, recorder_name, recorder_guid, parser_version, duplicate_group_id, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, category, updated_at, invalidated_at, invalid_reason, mixed_difficulty, difficulty_normalized FROM log_instances WHERE id = $1
-`
-
-func (q *sqlQuerier) RazorgoreRepairInstance(ctx context.Context, instanceID uuid.UUID) (LogInstance, error) {
-	row := q.db.QueryRow(ctx, razorgoreRepairInstance, instanceID)
-	var i LogInstance
-	err := row.Scan(
-		&i.ID,
-		&i.RealmID,
-		&i.LogGroupID,
-		&i.Name,
-		&i.HashedSlug,
-		&i.GuildID,
-		&i.StartTime,
-		&i.EndTime,
-		&i.Capabilities,
-		&i.Versions,
-		&i.RecorderName,
-		&i.RecorderGuid,
-		&i.ParserVersion,
-		&i.DuplicateGroupID,
-		&i.DifficultyName,
-		&i.MaxPlayers,
-		&i.DynamicDifficulty,
-		&i.VehicleControlIntervals,
-		&i.Category,
-		&i.UpdatedAt,
-		&i.InvalidatedAt,
-		&i.InvalidReason,
-		&i.MixedDifficulty,
-		&i.DifficultyNormalized,
-	)
-	return i, err
-}
-
-const razorgoreRepairPhase = `-- name: RazorgoreRepairPhase :exec
-UPDATE log_instance_encounter_phases SET kill_type = $1
-WHERE encounter_id = $2 AND id = $3
-`
-
-type RazorgoreRepairPhaseParams struct {
-	KillType    KillType  `db:"kill_type" json:"kill_type"`
-	EncounterID uuid.UUID `db:"encounter_id" json:"encounter_id"`
-	ID          uuid.UUID `db:"id" json:"id"`
-}
-
-func (q *sqlQuerier) RazorgoreRepairPhase(ctx context.Context, arg RazorgoreRepairPhaseParams) error {
-	_, err := q.db.Exec(ctx, razorgoreRepairPhase, arg.KillType, arg.EncounterID, arg.ID)
-	return err
-}
-
-const razorgoreRepairRankings = `-- name: RazorgoreRepairRankings :many
-SELECT id, encounter_id, instance_id, encounter_name, instance_name, player_guid, player_name, player_class, player_spec, player_role, player_level, talent_build_id, difficulty_name, max_players, realm_id, realm_name, guild_id, guild_name, damage_done, duration_secs, dps, avg_ilvl, log_hashed_slug, killed_at, created_at, healing_done, absorbed_done, hps, player_sub_spec, player_deaths, alive_percentage, unranked_damage_done FROM encounter_dps_rankings WHERE instance_id = $1 ORDER BY id
-`
-
-func (q *sqlQuerier) RazorgoreRepairRankings(ctx context.Context, instanceID uuid.UUID) ([]EncounterDpsRanking, error) {
-	rows, err := q.db.Query(ctx, razorgoreRepairRankings, instanceID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []EncounterDpsRanking
-	for rows.Next() {
-		var i EncounterDpsRanking
-		if err := rows.Scan(
-			&i.ID,
-			&i.EncounterID,
-			&i.InstanceID,
-			&i.EncounterName,
-			&i.InstanceName,
-			&i.PlayerGuid,
-			&i.PlayerName,
-			&i.PlayerClass,
-			&i.PlayerSpec,
-			&i.PlayerRole,
-			&i.PlayerLevel,
-			&i.TalentBuildID,
-			&i.DifficultyName,
-			&i.MaxPlayers,
-			&i.RealmID,
-			&i.RealmName,
-			&i.GuildID,
-			&i.GuildName,
-			&i.DamageDone,
-			&i.DurationSecs,
-			&i.Dps,
-			&i.AvgIlvl,
-			&i.LogHashedSlug,
-			&i.KilledAt,
-			&i.CreatedAt,
-			&i.HealingDone,
-			&i.AbsorbedDone,
-			&i.Hps,
-			&i.PlayerSubSpec,
-			&i.PlayerDeaths,
-			&i.AlivePercentage,
-			&i.UnrankedDamageDone,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const razorgoreRepairSpeedruns = `-- name: RazorgoreRepairSpeedruns :many
-SELECT instance_id, instance_name, realm_id, guild_id, qualified, start_time, completion_time, duration_ms, proof, created_at, addon_version, ranked_start_time, ranked_completion_time, ranked_duration_ms, boss_to_boss_start_time, boss_to_boss_completion_time, boss_to_boss_duration_ms FROM instance_speedruns WHERE instance_id = $1
-`
-
-func (q *sqlQuerier) RazorgoreRepairSpeedruns(ctx context.Context, instanceID uuid.UUID) ([]InstanceSpeedrun, error) {
-	rows, err := q.db.Query(ctx, razorgoreRepairSpeedruns, instanceID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []InstanceSpeedrun
-	for rows.Next() {
-		var i InstanceSpeedrun
-		if err := rows.Scan(
-			&i.InstanceID,
-			&i.InstanceName,
-			&i.RealmID,
-			&i.GuildID,
-			&i.Qualified,
-			&i.StartTime,
-			&i.CompletionTime,
-			&i.DurationMs,
-			&i.Proof,
-			&i.CreatedAt,
-			&i.AddonVersion,
-			&i.RankedStartTime,
-			&i.RankedCompletionTime,
-			&i.RankedDurationMs,
-			&i.BossToBossStartTime,
-			&i.BossToBossCompletionTime,
-			&i.BossToBossDurationMs,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const getParsedBytesByOwner = `-- name: GetParsedBytesByOwner :one

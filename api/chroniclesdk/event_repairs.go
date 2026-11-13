@@ -1,18 +1,19 @@
 package chroniclesdk
 
 import (
-	"github.com/google/uuid"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type CreateEventRepairRequest struct {
 	Operation string     `json:"operation"`
-	Instance  string     `json:"instance"`
-	TenantID  uuid.UUID  `json:"tenant_id"`
-	Limit     int        `json:"limit"`
-	RealmID   uuid.UUID  `json:"realm_id"`
-	After     *time.Time `json:"after"`
-	Before    *time.Time `json:"before"`
+	Instance  string     `json:"instance,omitempty"`
+	TenantID  uuid.UUID  `json:"tenant_id,omitempty"`
+	Limit     int        `json:"limit,omitempty"`
+	RealmID   uuid.UUID  `json:"realm_id,omitempty"`
+	After     *time.Time `json:"after,omitempty"`
+	Before    *time.Time `json:"before,omitempty"`
 }
 
 type EventRepairOperation struct {

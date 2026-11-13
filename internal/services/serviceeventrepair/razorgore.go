@@ -192,7 +192,7 @@ func evaluateRazorgoreEvidence(e razorgoreEvidence) (*RazorgoreRepairPlan, error
 	for i := range e.Phases {
 		if e.Phases[i].EncounterID == enc.ID {
 			if p.phase != nil {
-				return skip("phase two or multiple phases require numerical replay")
+				return skip("original-log reparse required: phase-two ranking metrics need event-time possession/owner attribution not preserved in stored events")
 			}
 			phase := e.Phases[i]
 			p.phase = &phase

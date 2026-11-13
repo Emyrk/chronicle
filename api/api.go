@@ -515,6 +515,7 @@ func (api *API) Routes() chi.Router {
 					r.Post("/", api.AdminCreateEventRepair)
 					r.Get("/{operationID}", api.AdminGetEventRepair)
 					r.Post("/{operationID}/apply", api.AdminApplyEventRepair)
+					r.Post("/{operationID}/retry", api.AdminRetryEventRepair)
 					r.Post("/{operationID}/cancel", api.AdminCancelEventRepair)
 				})
 				r.Route("/leaderboard-operations", func(r chi.Router) {

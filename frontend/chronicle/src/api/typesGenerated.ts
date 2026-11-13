@@ -7845,12 +7845,12 @@ export const WoWUnitTypes: WoWUnitType[] = [2, 3, 1, 0, 4];
 // From chroniclesdk/event_repairs.go
 export interface CreateEventRepairRequest {
     readonly operation: string;
-    readonly instance: string;
-    readonly tenant_id: string;
-    readonly limit: number;
-    readonly realm_id: string;
-    readonly after: string | null;
-    readonly before: string | null;
+    readonly instance?: string;
+    readonly tenant_id?: string;
+    readonly limit?: number;
+    readonly realm_id?: string;
+    readonly after?: string;
+    readonly before?: string;
 }
 
 // From chroniclesdk/event_repairs.go

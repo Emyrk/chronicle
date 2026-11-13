@@ -7,13 +7,14 @@ import (
 	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/services/serviceeventrepair"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
 func (api *API) AdminListEventRepairs(w http.ResponseWriter, r *http.Request) {
-	operations, err := serviceeventrepair.New(api.Opts.DB, api.Queues).List(r.Context())
+	operations, err := serviceeventrepair.New(database.New(api.Opts.Pool), api.Queues).List(r.Context())
 	if err != nil {
 		writeEventRepairError(w, r, err)
 		return
@@ -30,7 +31,7 @@ func (api *API) AdminCreateEventRepair(w http.ResponseWriter, r *http.Request) {
 	if !httpapi.Read(r.Context(), w, r, &request) {
 		return
 	}
-	operation, err := serviceeventrepair.New(api.Opts.DB, api.Queues).Create(r.Context(), chronauth.MustAuthenticatedClaims(r.Context()).Subject, eventRepairRequest(request))
+	operation, err := serviceeventrepair.New(database.New(api.Opts.Pool), api.Queues).Create(r.Context(), chronauth.MustAuthenticatedClaims(r.Context()).Subject, eventRepairRequest(request))
 	if err != nil {
 		writeEventRepairError(w, r, err)
 		return
@@ -43,7 +44,7 @@ func (api *API) AdminGetEventRepair(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	operation, err := serviceeventrepair.New(api.Opts.DB, api.Queues).Get(r.Context(), id)
+	operation, err := serviceeventrepair.New(database.New(api.Opts.Pool), api.Queues).Get(r.Context(), id)
 	if err != nil {
 		writeEventRepairError(w, r, err)
 		return
@@ -56,7 +57,20 @@ func (api *API) AdminApplyEventRepair(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	operation, err := serviceeventrepair.New(api.Opts.DB, api.Queues).Apply(r.Context(), id, chronauth.MustAuthenticatedClaims(r.Context()).Subject)
+	operation, err := serviceeventrepair.New(database.New(api.Opts.Pool), api.Queues).Apply(r.Context(), id, chronauth.MustAuthenticatedClaims(r.Context()).Subject)
+	if err != nil {
+		writeEventRepairError(w, r, err)
+		return
+	}
+	httpapi.Write(r.Context(), w, http.StatusAccepted, eventRepairOperation(operation))
+}
+
+func (api *API) AdminRetryEventRepair(w http.ResponseWriter, r *http.Request) {
+	id, ok := eventRepairID(w, r)
+	if !ok {
+		return
+	}
+	operation, err := serviceeventrepair.New(database.New(api.Opts.Pool), api.Queues).Retry(r.Context(), id, chronauth.MustAuthenticatedClaims(r.Context()).Subject)
 	if err != nil {
 		writeEventRepairError(w, r, err)
 		return
@@ -69,7 +83,7 @@ func (api *API) AdminCancelEventRepair(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	operation, err := serviceeventrepair.New(api.Opts.DB, api.Queues).Cancel(r.Context(), id, chronauth.MustAuthenticatedClaims(r.Context()).Subject)
+	operation, err := serviceeventrepair.New(database.New(api.Opts.Pool), api.Queues).Cancel(r.Context(), id, chronauth.MustAuthenticatedClaims(r.Context()).Subject)
 	if err != nil {
 		writeEventRepairError(w, r, err)
 		return
