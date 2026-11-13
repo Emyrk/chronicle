@@ -354,7 +354,7 @@ func razorgoreNumericEvents(e razorgoreEvidence, c database.LogInstanceEncounter
 			meta := event.(interface {
 				GetMeta() *chronicleproto.EventMeta
 			}).GetMeta()
-			if meta == nil || meta.IsSynthetic || meta.Index < 0 || meta.OffsetMilli < 0 || meta.OffsetMilli > c.EndTime.Time.Sub(c.StartTime.Time).Milliseconds() {
+			if meta == nil || (meta.IsSynthetic && row.Type != database.LogInstanceEventTypeAbsorbed && row.Type != database.LogInstanceEventTypeRessurection) || meta.Index < 0 || meta.OffsetMilli < 0 || meta.OffsetMilli > c.EndTime.Time.Sub(c.StartTime.Time).Milliseconds() {
 				return nil, errors.New("invalid or synthetic numerical event metadata")
 			}
 			at := c.StartTime.Time.Add(time.Duration(meta.OffsetMilli) * time.Millisecond)
