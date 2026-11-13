@@ -7860,6 +7860,7 @@ export interface EventRepairItem {
     readonly reason: string;
     readonly evidence_hash: string;
     readonly changes: readonly string[];
+    readonly ratings_queued: boolean;
 }
 
 // From chroniclesdk/event_repairs.go

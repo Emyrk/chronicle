@@ -84,6 +84,7 @@ func TestSuccessfulNoopDurablyEnqueuesCanonicalRefresh(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "completed", op.State)
 	require.Equal(t, 1, op.Applied)
+	require.True(t, op.Items[0].RatingsQueued)
 	_, err = f.service.ProcessPage(f.ctx, f.id, "applying")
 	require.NoError(t, err)
 	require.Equal(t, 1, f.canonicalJobs(t), "retry must not reapply completed item")
@@ -142,6 +143,7 @@ func TestStaleEvidenceAndSkippedItemsNeverEnqueue(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, 1, op.Skipped)
 			require.Zero(t, op.Applied)
+			require.False(t, op.Items[0].RatingsQueued)
 			require.Zero(t, f.canonicalJobs(t))
 		})
 	}

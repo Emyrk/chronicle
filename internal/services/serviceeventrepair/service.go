@@ -94,7 +94,7 @@ func (s *Service) Get(ctx context.Context, id uuid.UUID) (Operation, error) {
 		return o, err
 	}
 	for _, i := range items {
-		item := Item{InstanceID: i.InstanceID, State: i.State, Reason: i.Reason, EvidenceHash: i.EvidenceHash, Changes: []string{}}
+		item := Item{InstanceID: i.InstanceID, State: i.State, Reason: i.Reason, EvidenceHash: i.EvidenceHash, Changes: []string{}, RatingsQueued: i.State == "applied"}
 		if err := json.Unmarshal(i.Changes, &item.Changes); err != nil {
 			return o, err
 		}

@@ -38,7 +38,10 @@ SDK contracts live in `api/chroniclesdk/event_repairs.go`. Operation states are
 `dry_running`, `ready`, `applying`, `completed`, `cancelled`. Item states are
 `pending`, `ready`, `skipped`, `applied`, `stale`. `processed` counts dry-run
 reports, `applied` counts committed applies, and `skipped` includes stale items.
-Errors use 400 for invalid input, 404 for unknown IDs, and 409 for state conflicts.
+Item `ratings_queued` is true only after apply and the durable canonical refresh
+commit together. It does not report downstream ratings completion. `last_error`
+persists worker errors while checkpoints remain retryable; it clears after the
+next successful checkpoint. Errors use 400 for invalid input, 404 for unknown IDs, and 409 for state conflicts.
 
 ## Execution guarantees
 
@@ -71,8 +74,9 @@ instance boundaries stay unchanged. A fully matching repaired state is a no-op
 but still enqueues ratings on apply.
 
 Other cases are skipped with diagnostic reasons. In particular, phase-two player
-DPS/HPS reconstruction requires event-time possession/owner attribution that is
-not generally recoverable from stored protobuf streams and final owner snapshots.
-Those cases require original-log reparse. Missing persisted phases are not inferred
+DPS/HPS reconstruction needs a verified complete event-time classification replay.
+The unit_classification stream can carry ownership/controller transitions, but
+that numerical replay is not implemented in this version. Those cases currently
+require original-log reparse. Missing persisted phases are not inferred
 from potentially truncated egg casts. The implementation does not fabricate
 approximate ranking totals or claim successful duration-only repair.

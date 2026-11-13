@@ -43,8 +43,8 @@ type razorgoreEvidence struct {
 }
 
 // EvaluateRazorgore supports pre-egg-threshold false kills when no other boss
-// kill survives. Phase-two numerical repair requires event-time attribution that
-// legacy streams cannot in general reconstruct (notably silent possession expiry).
+// kill survives. Phase-two numerical repair requires a verified complete replay
+// of event-time classification, which this operation does not yet implement.
 func EvaluateRazorgore(ctx context.Context, db database.Store, instanceID uuid.UUID) (*RazorgoreRepairPlan, error) {
 	var e razorgoreEvidence
 	var err error
@@ -192,7 +192,7 @@ func evaluateRazorgoreEvidence(e razorgoreEvidence) (*RazorgoreRepairPlan, error
 	for i := range e.Phases {
 		if e.Phases[i].EncounterID == enc.ID {
 			if p.phase != nil {
-				return skip("original-log reparse required: phase-two ranking metrics need event-time possession/owner attribution not preserved in stored events")
+				return skip("original-log reparse required: phase-two numerical replay with verified complete event-time classification is not yet supported")
 			}
 			phase := e.Phases[i]
 			p.phase = &phase

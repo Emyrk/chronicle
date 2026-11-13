@@ -35,11 +35,12 @@ type EventRepairOperation struct {
 }
 
 type EventRepairItem struct {
-	InstanceID   uuid.UUID `json:"instance_id"`
-	State        string    `json:"state"`
-	Reason       string    `json:"reason"`
-	EvidenceHash string    `json:"evidence_hash"`
-	Changes      []string  `json:"changes"`
+	InstanceID    uuid.UUID `json:"instance_id"`
+	State         string    `json:"state"`
+	Reason        string    `json:"reason"`
+	EvidenceHash  string    `json:"evidence_hash"`
+	Changes       []string  `json:"changes"`
+	RatingsQueued bool      `json:"ratings_queued"`
 }
 
 type EventRepairOperationsResponse struct {
