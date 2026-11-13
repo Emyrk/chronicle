@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/Switch/Switch";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
 import { formatBytes } from "@/lib/format";
-import { useAuthorizationCheck, useSiteConfig, useFlavors } from "@/api/queries";
+import { rootUploadsDisabledForSite, uploadsDisabledForSite, useAuthorizationCheck, useSiteConfig, useFlavors } from "@/api/queries";
 import {
   serverCapabilities,
   hasExplicitServerCapabilities,
@@ -21,6 +21,7 @@ import { InstructionsChronicleCompanion } from "./InstructionsChronicleCompanion
 import { InstructionsForever } from "./InstructionsForever";
 import type { RawLogCleanup } from "@/api/typesGenerated";
 import { RawLogCleanupSummary } from "./RawLogCleanupSummary";
+import { RootCommunityUploadPrompt } from "@/components/RootCommunityContext/RootCommunityContext";
 import { MultiUpload } from "./MultiUpload";
 import { VisibilityPicker } from "./VisibilityPicker";
 
@@ -560,7 +561,8 @@ export function Upload() {
 
   const { data: siteConfig, isFetched: configLoaded } = useSiteConfig();
   const { data: flavorTags = [] } = useFlavors();
-  const uploadsDisabled = siteConfig?.client_uploads_disabled && !hasAdminLogs;
+  const uploadsDisabled = uploadsDisabledForSite(siteConfig) && !hasAdminLogs;
+  const rootUploadsDisabled = rootUploadsDisabledForSite(siteConfig) && !hasAdminLogs;
   const showUnlistedUpsell = !!siteConfig?.billing_enabled && !!authz && !canMarkUnlisted;
 
   // ── Format resolution ──────────────────────────────────────────────
@@ -782,6 +784,14 @@ export function Upload() {
   }
 
   if (uploadsDisabled) {
+    if (rootUploadsDisabled) {
+      return (
+        <div className="container max-w-5xl mx-auto py-12 px-4">
+          <RootCommunityUploadPrompt />
+        </div>
+      );
+    }
+
     return (
       <div className="container max-w-2xl mx-auto py-12 px-4 text-center">
         <Card className="p-8">

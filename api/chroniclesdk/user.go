@@ -288,6 +288,9 @@ type SiteConfig struct {
 	// RootDomainDiscovery shows a community-discovery notice on the root site.
 	// The root remains a fully usable Chronicle site.
 	RootDomainDiscovery bool `json:"root_domain_discovery"`
+	// RootUploadsDisabled prevents client uploads on the root site while leaving
+	// community tenants unchanged.
+	RootUploadsDisabled bool `json:"root_uploads_disabled"`
 	// DefaultFormat is the primary domain's preferred log parse format.
 	// Nil means no preference — fall back to the compiled-in server default.
 	DefaultFormat *string `json:"default_format"`
@@ -319,6 +322,7 @@ type UpdateSiteConfigRequest struct {
 	Branding            *Branding `json:"branding,omitempty"`
 	Discoverable        *bool     `json:"discoverable,omitempty"`
 	RootDomainDiscovery *bool     `json:"root_domain_discovery,omitempty"`
+	RootUploadsDisabled *bool     `json:"root_uploads_disabled,omitempty"`
 	DefaultFormat       *string   `json:"default_format,omitempty"`
 	AvailableFormats    []string  `json:"available_formats,omitempty"`
 	// LandingFeaturedInstanceID sets the landing hero's featured instance.

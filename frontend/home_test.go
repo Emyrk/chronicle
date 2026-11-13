@@ -15,9 +15,13 @@ func TestHomeTenantSelectionAndPathGating(t *testing.T) {
 	manifest := homeManifest{
 		Products: [][2]string{{"wow-forever", "WoW Forever"}, {"epoch", "Epoch Reborn"}},
 		Pages: map[string]string{
-			"generic-open": "<h1>Generic open</h1>", "generic-closed": "<h1>Generic closed</h1>",
-			"named-open": "<h1>CHRONICLE_HOME_PRODUCT_TOKEN open</h1>", "named-closed": "<h1>CHRONICLE_HOME_PRODUCT_TOKEN closed</h1>",
-			"forever": "<h1>Forever replay</h1>",
+			"generic-open":        "<h1>Generic open</h1>",
+			"generic-closed":      "<h1>Generic closed</h1>",
+			"generic-root-closed": "<h1>Generic choose community</h1>",
+			"named-open":          "<h1>CHRONICLE_HOME_PRODUCT_TOKEN open</h1>",
+			"named-closed":        "<h1>CHRONICLE_HOME_PRODUCT_TOKEN closed</h1>",
+			"named-root-closed":   "<h1>CHRONICLE_HOME_PRODUCT_TOKEN choose community</h1>",
+			"forever":             "<h1>Forever replay</h1>",
 		},
 	}
 	data, err := json.Marshal(manifest)
@@ -31,6 +35,7 @@ func TestHomeTenantSelectionAndPathGating(t *testing.T) {
 		"epoch.test":    {Flavor: []string{"epoch"}},
 		"forever.test":  {Flavor: []string{"wow-forever"}, ForeverLandingEnabled: true},
 		"disabled.test": {Flavor: []string{"wow-forever"}, UploadsDisabled: true},
+		"root.test":     {Flavor: []string{"epoch"}, UploadsDisabled: true, RootUploadsDisabled: true},
 		"unknown.test":  {Flavor: []string{"unrecognized"}},
 	}
 	handler := Handler(siteFS, nil, func(r *http.Request) *HTMLBranding {
@@ -40,6 +45,7 @@ func TestHomeTenantSelectionAndPathGating(t *testing.T) {
 		{"epoch.test", "/", "Epoch Reborn open"},
 		{"forever.test", "/?campaign=1", "Forever replay"},
 		{"disabled.test", "/", "WoW Forever closed"},
+		{"root.test", "/", "Epoch Reborn choose community"},
 		{"unknown.test", "/", "Generic open"},
 		{"epoch.test", "/download", `<div id="root"></div>`},
 		{"forever.test", "/recent", `<div id="root"></div>`},

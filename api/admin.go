@@ -920,7 +920,8 @@ func (a *API) AdminGetSiteConfig(w http.ResponseWriter, r *http.Request) {
 	resp := chroniclesdk.SiteConfig{
 		SignupsEnabled:        config.SignupsEnabled,
 		ShortLinkDomain:       a.Opts.ShortLinkDomain,
-		ClientUploadsDisabled: a.Opts.ClientUploadsDisabled || config.ClientUploadsDisabled || (t != nil && t.DisableClientUpload),
+		ClientUploadsDisabled: a.Opts.ClientUploadsDisabled || siteClientUploadsDisabled(config, t),
+		RootUploadsDisabled:   config.RootUploadsDisabled,
 		BillingEnabled:        a.Opts.BillingEnabled,
 		AdsEnabled:            adsEnabled,
 		DisabledAds:           []string{},
@@ -1003,6 +1004,9 @@ func (a *API) AdminUpdateSiteConfig(w http.ResponseWriter, r *http.Request) {
 	if req.RootDomainDiscovery != nil {
 		params.RootDomainDiscovery = pgtype.Bool{Bool: *req.RootDomainDiscovery, Valid: true}
 	}
+	if req.RootUploadsDisabled != nil {
+		params.RootUploadsDisabled = pgtype.Bool{Bool: *req.RootUploadsDisabled, Valid: true}
+	}
 	if req.DefaultFormat != nil {
 		params.DefaultFormat = database.NullLogFormat{LogFormat: database.LogFormat(*req.DefaultFormat), Valid: true}
 	}
@@ -1056,7 +1060,8 @@ func (a *API) AdminUpdateSiteConfig(w http.ResponseWriter, r *http.Request) {
 	resp := chroniclesdk.SiteConfig{
 		SignupsEnabled:        config.SignupsEnabled,
 		ShortLinkDomain:       a.Opts.ShortLinkDomain,
-		ClientUploadsDisabled: a.Opts.ClientUploadsDisabled || config.ClientUploadsDisabled || (t != nil && t.DisableClientUpload),
+		ClientUploadsDisabled: a.Opts.ClientUploadsDisabled || siteClientUploadsDisabled(config, t),
+		RootUploadsDisabled:   config.RootUploadsDisabled,
 		BillingEnabled:        a.Opts.BillingEnabled,
 		AdsEnabled:            adsEnabled,
 		DisabledAds:           []string{},

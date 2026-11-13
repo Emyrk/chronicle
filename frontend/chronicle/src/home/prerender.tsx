@@ -34,12 +34,20 @@ async function render(bootstrap: HomeBootstrap) {
 export async function prerenderHome() {
   const pages: Record<string, string> = {};
   for (const named of [false, true]) {
-    for (const uploadsDisabled of [false, true]) {
-      pages[`${named ? "named" : "generic"}-${uploadsDisabled ? "closed" : "open"}`] = await render({
-        productName: named ? PRODUCT_TOKEN : "", foreverLanding: false, uploadsDisabled,
+    for (const state of ["open", "closed", "root-closed"] as const) {
+      pages[`${named ? "named" : "generic"}-${state}`] = await render({
+        productName: named ? PRODUCT_TOKEN : "",
+        foreverLanding: false,
+        uploadsDisabled: state !== "open",
+        rootUploadsDisabled: state === "root-closed",
       });
     }
   }
-  pages.forever = await render({ productName: "WoW Forever", foreverLanding: true, uploadsDisabled: true });
+  pages.forever = await render({
+    productName: "WoW Forever",
+    foreverLanding: true,
+    uploadsDisabled: true,
+    rootUploadsDisabled: false,
+  });
   return { products: SEO_PRODUCT_NAMES, pages };
 }

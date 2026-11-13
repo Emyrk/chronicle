@@ -3130,6 +3130,7 @@ CREATE TABLE site_config (
     root_domain_discovery boolean DEFAULT false NOT NULL,
     landing_featured_instance_id uuid,
     forever_landing_enabled boolean DEFAULT true NOT NULL,
+    root_uploads_disabled boolean DEFAULT false NOT NULL,
     CONSTRAINT site_config_id_check CHECK (id)
 );
 
