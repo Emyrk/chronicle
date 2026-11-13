@@ -133,12 +133,18 @@ type sqlcQuerier interface {
 	CountUserPanelLayoutsTotal(ctx context.Context, userID uuid.NullUUID) (int32, error)
 	CountUserTalentBuilds(ctx context.Context, arg CountUserTalentBuildsParams) (int64, error)
 	CreateEventRepairOperation(ctx context.Context, arg CreateEventRepairOperationParams) (EventRepairOperation, error)
-	// =====================================================	// Gear Lists
-	// =====================================================	CreateGearList(ctx context.Context, arg CreateGearListParams) (GearList, error)
-	// =====================================================	// Gear Progressions
-	// =====================================================	CreateGearProgression(ctx context.Context, arg CreateGearProgressionParams) (GearProgression, error)
-	// =====================================================	// Stat Weights
-	// =====================================================	CreateGearStatWeight(ctx context.Context, arg CreateGearStatWeightParams) (GearStatWeight, error)
+	// ============================================================
+	// Gear Lists
+	// ============================================================
+	CreateGearList(ctx context.Context, arg CreateGearListParams) (GearList, error)
+	// ============================================================
+	// Gear Progressions
+	// ============================================================
+	CreateGearProgression(ctx context.Context, arg CreateGearProgressionParams) (GearProgression, error)
+	// ============================================================
+	// Stat Weights
+	// ============================================================
+	CreateGearStatWeight(ctx context.Context, arg CreateGearStatWeightParams) (GearStatWeight, error)
 	// Discord Integration
 	CreateGuildDiscordInstallState(ctx context.Context, arg CreateGuildDiscordInstallStateParams) (GuildDiscordInstallState, error)
 	// Guild Join Requests

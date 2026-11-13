@@ -5762,7 +5762,7 @@ func (q *sqlQuerier) RazorgoreRepairRankingWindow(ctx context.Context, arg Razor
 }
 
 const razorgoreRepairRankings = `-- name: RazorgoreRepairRankings :many
-SELECT id, encounter_id, instance_id, encounter_name, instance_name, player_guid, player_name, player_class, player_spec, player_role, player_level, talent_build_id, difficulty_name, max_players, realm_id, realm_name, guild_id, guild_name, damage_done, duration_secs, dps, avg_ilvl, log_hashed_slug, killed_at, created_at, healing_done, absorbed_done, hps, player_sub_spec, player_deaths, alive_percentage, unranked_damage_done FROM encounter_dps_rankings WHERE instance_id = $1 ORDER BY id
+SELECT id, encounter_id, instance_id, encounter_name, instance_name, player_guid, player_name, player_class, player_spec, player_role, player_level, talent_build_id, difficulty_name, max_players, realm_id, realm_name, guild_id, guild_name, damage_done, duration_secs, dps, avg_ilvl, log_hashed_slug, killed_at, created_at, healing_done, absorbed_done, hps, player_sub_spec, player_deaths, alive_percentage, unranked_damage_done, encounter_variant FROM encounter_dps_rankings WHERE instance_id = $1 ORDER BY id
 `
 
 func (q *sqlQuerier) RazorgoreRepairRankings(ctx context.Context, instanceID uuid.UUID) ([]EncounterDpsRanking, error) {
@@ -5807,6 +5807,7 @@ func (q *sqlQuerier) RazorgoreRepairRankings(ctx context.Context, instanceID uui
 			&i.PlayerDeaths,
 			&i.AlivePercentage,
 			&i.UnrankedDamageDone,
+			&i.EncounterVariant,
 		); err != nil {
 			return nil, err
 		}
