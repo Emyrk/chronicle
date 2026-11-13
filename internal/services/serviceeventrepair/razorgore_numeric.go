@@ -425,11 +425,15 @@ func razorgoreNumericEvents(e razorgoreEvidence, c database.LogInstanceEncounter
 				}
 				classification := &messages.UnitClassificationEvent{MessageBase: base, Target: target, UnitType: unitdb.UnitType(m.UnitType), Affiliation: unitdb.Affiliation(m.Affiliation)}
 				if m.Owner != nil {
-					owner, err := parse(*m.Owner)
+					owner, err := guid.FromString(*m.Owner)
 					if err != nil {
 						return nil, err
 					}
-					classification.Owner = &owner
+					// A zero owner is an explicit unknown-owner sentinel, not evidence
+					// of ownership by a player. Other malformed GUIDs remain errors.
+					if !owner.IsZero() {
+						classification.Owner = &owner
+					}
 				}
 				if m.Controller != nil {
 					controller, err := parse(*m.Controller)

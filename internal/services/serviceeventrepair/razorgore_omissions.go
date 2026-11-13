@@ -3,6 +3,8 @@ package serviceeventrepair
 import (
 	"fmt"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/totems"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/google/uuid"
 )
@@ -38,4 +40,16 @@ func recordRazorgoreOmission(p *RazorgoreRepairPlan, encounterID uuid.UUID, stre
 	rows = append(rows, razorgoreOmission{EncounterID: encounterID, Stream: stream, UnitGUID: unit.String(), Amount: amount, Count: 1, Reason: reason})
 	p.Details["omissions"] = rows
 	p.Warnings = append(p.Warnings, fmt.Sprintf("Omitted %s contributions for %s in encounter %s: %s; quantities are recorded in details.omissions", stream, unit, encounterID, reason))
+}
+
+// Pet GUIDs and the shared totem registry establish that player ownership is
+// needed. A classification snapshot alone does not establish that owner. Do not
+// infer ownership for ordinary unowned NPCs, or borrow final instance metadata.
+func razorgoreMissingOwner(units *unitdb.Units, id guid.GUID) bool {
+	_, totem := totems.IsTotem(id)
+	if !id.IsPet() && !totem {
+		return false
+	}
+	owner := units.Classify(id).Relation.Owner
+	return owner == nil || owner.IsZero()
 }

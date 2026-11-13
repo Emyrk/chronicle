@@ -200,14 +200,18 @@ func replayRazorgoreClassified(e razorgoreEvidence, c database.LogInstanceEncoun
 					units.Info[m.Target] = unitinfo.Info{Guid: m.Target, Affiliation: unitdb.AffiliationHostile}
 				}
 			}
-			if !event.at.Before(window.Start) && !m.Target.IsPlayer() && m.Caster != nil && !m.Caster.IsPlayer() && !classified[*m.Caster] {
-				recordRazorgoreOmission(report, c.ID, "damage", *m.Caster, combatmetrics.EffectiveDamage(m), "source ownership is not known at event time")
-				continue
+			if !event.at.Before(window.Start) && !m.Target.IsPlayer() && m.Caster != nil && !m.Caster.IsPlayer() {
+				classification := units.Classify(*m.Caster)
+				controlledByPlayer := classification.Possession != nil && classification.Possession.Controller.IsPlayer()
+				if !classified[*m.Caster] || (razorgoreMissingOwner(units, *m.Caster) && !controlledByPlayer) {
+					recordRazorgoreOmission(report, c.ID, "damage", *m.Caster, combatmetrics.EffectiveDamage(m), "source ownership is not known at event time")
+					continue
+				}
 			}
 			// Unknown nonplayer targets may be pets. Without a classification there is
 			// no reliable player-owned exclusion, so do not silently assume hostile.
 			if !m.Target.IsPlayer() {
-				if _, ok := units.Info[m.Target]; !ok {
+				if _, ok := units.Info[m.Target]; !ok || razorgoreMissingOwner(units, m.Target) {
 					attributable := m.Caster != nil && m.Caster.IsPlayer()
 					if m.Caster != nil {
 						cls := units.Classify(*m.Caster)
@@ -226,11 +230,11 @@ func replayRazorgoreClassified(e razorgoreEvidence, c database.LogInstanceEncoun
 			}
 			if !event.at.Before(window.Start) {
 				amount := max(int64(m.Amount)-int64(m.Overheal), 0)
-				if !m.Caster.IsPlayer() && !classified[m.Caster] {
+				if !m.Caster.IsPlayer() && (!classified[m.Caster] || razorgoreMissingOwner(units, m.Caster)) {
 					recordRazorgoreOmission(report, c.ID, "heal", m.Caster, amount, "source ownership is not known at event time")
 					continue
 				}
-				if !m.Target.IsPlayer() && !classified[m.Target] {
+				if !m.Target.IsPlayer() && (!classified[m.Target] || razorgoreMissingOwner(units, m.Target)) {
 					recordRazorgoreOmission(report, c.ID, "heal", m.Target, amount, "target ownership is not known at event time")
 					continue
 				}
@@ -240,11 +244,11 @@ func replayRazorgoreClassified(e razorgoreEvidence, c database.LogInstanceEncoun
 				return nil, nil, errors.New("invalid absorb amount")
 			}
 			if !event.at.Before(window.Start) {
-				if !m.Caster.IsPlayer() && !classified[m.Caster] {
+				if !m.Caster.IsPlayer() && (!classified[m.Caster] || razorgoreMissingOwner(units, m.Caster)) {
 					recordRazorgoreOmission(report, c.ID, "absorbed", m.Caster, int64(m.Amount), "source ownership is not known at event time")
 					continue
 				}
-				if !m.Target.IsPlayer() && !classified[m.Target] {
+				if !m.Target.IsPlayer() && (!classified[m.Target] || razorgoreMissingOwner(units, m.Target)) {
 					recordRazorgoreOmission(report, c.ID, "absorbed", m.Target, int64(m.Amount), "target ownership is not known at event time")
 					continue
 				}
