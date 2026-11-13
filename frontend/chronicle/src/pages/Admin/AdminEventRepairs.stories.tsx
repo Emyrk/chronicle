@@ -94,10 +94,11 @@ export const RejectPreview: Story = {
   },
 };
 export const AllSkipped: Story = {
-  parameters: { msw: { handlers: handlers({ ...operation, items: [operation.items[1]], total: 1, processed: 1, skipped: 1 }) } },
+  parameters: { msw: { handlers: handlers({ ...operation, state: "completed", items: [operation.items[1]], total: 1, processed: 1, skipped: 1 }) } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(await canvas.findByRole("button", { name: "Reject repair" })).toBeEnabled();
+    await expect(await canvas.findByText(/No instances are eligible to apply/)).toBeVisible();
+    await expect(canvas.queryByRole("button", { name: "Reject repair" })).not.toBeInTheDocument();
     await expect(canvas.queryByRole("button", { name: "Apply repair" })).not.toBeInTheDocument();
     await expect(canvas.getByText(/No instances are eligible to apply/)).toBeVisible();
   },

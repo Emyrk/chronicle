@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"testing"
 
@@ -152,7 +153,11 @@ func TestStaleEvidenceAndSkippedItemsNeverEnqueue(t *testing.T) {
 			_, err := f.service.ProcessPage(f.ctx, f.id, "dry_running")
 			require.NoError(t, err)
 			_, err = f.service.Apply(f.ctx, f.id, uuid.New())
-			require.NoError(t, err)
+			if skip {
+				require.ErrorIs(t, err, ErrConflict)
+			} else {
+				require.NoError(t, err)
+			}
 			if !skip {
 				f.service.evaluate = func(context.Context, database.Store, uuid.UUID) (*RazorgoreRepairPlan, error) {
 					return &RazorgoreRepairPlan{TenantID: f.tenant, EvidenceHash: "changed"}, nil
@@ -206,7 +211,7 @@ func TestBoundedPagesResumeAndCancellation(t *testing.T) {
 
 func TestCreateAndApplyEnqueueAtomically(t *testing.T) {
 	t.Parallel()
-	f := newRepairFixture(t, 0)
+	f := newRepairFixture(t, 1)
 	unqueued := New(f.db, nil)
 	_, err := unqueued.Create(f.ctx, uuid.New(), CreateRequest{Operation: OperationRazorgore, TenantID: f.tenant, Limit: 25})
 	require.ErrorContains(t, err, "queue unavailable")
@@ -357,7 +362,7 @@ func TestPreviouslyProcessedRazorgoreNeverEnqueues(t *testing.T) {
 	_, err := f.service.ProcessPage(f.ctx, f.id, "dry_running")
 	require.NoError(t, err)
 	_, err = f.service.Apply(f.ctx, f.id, uuid.New())
-	require.NoError(t, err)
+	require.ErrorIs(t, err, ErrConflict)
 	_, err = f.service.ProcessPage(f.ctx, f.id, "applying")
 	require.NoError(t, err)
 	op, err := f.service.Get(f.ctx, f.id)
@@ -366,4 +371,46 @@ func TestPreviouslyProcessedRazorgoreNeverEnqueues(t *testing.T) {
 	require.Zero(t, op.Applied)
 	require.False(t, op.Items[0].RatingsQueued)
 	require.Zero(t, f.canonicalJobs(t))
+}
+
+func TestEmptyAndSkippedPreviewsCompleteAutomatically(t *testing.T) {
+	t.Parallel()
+	for _, count := range []int{0, 1, 26} {
+		t.Run(fmt.Sprint(count), func(t *testing.T) {
+			t.Parallel()
+			f := newRepairFixture(t, count)
+			f.service.evaluate = func(context.Context, database.Store, uuid.UUID) (*RazorgoreRepairPlan, error) {
+				return &RazorgoreRepairPlan{TenantID: f.tenant, RequiresReparse: true, Reason: "already repaired"}, nil
+			}
+			for {
+				more, err := f.service.ProcessPage(f.ctx, f.id, "dry_running")
+				require.NoError(t, err)
+				if !more {
+					break
+				}
+				row, err := f.db.LookupEventRepairOperation(f.ctx, f.id)
+				require.NoError(t, err)
+				require.Equal(t, "dry_running", row.State)
+			}
+			row, err := f.db.LookupEventRepairOperation(f.ctx, f.id)
+			require.NoError(t, err)
+			require.Equal(t, "completed", row.State, "completion must persist without opening report")
+			require.EqualValues(t, count, row.Skipped)
+			_, err = f.service.Apply(f.ctx, f.id, uuid.New())
+			require.ErrorIs(t, err, ErrConflict)
+			_, err = f.service.Cancel(f.ctx, f.id, uuid.New())
+			require.ErrorIs(t, err, ErrConflict)
+			require.Zero(t, f.canonicalJobs(t))
+			_, err = f.db.UpdateEventRepairOperationState(f.ctx, database.UpdateEventRepairOperationStateParams{ID: f.id, TenantID: f.tenant, State: "ready"})
+			require.NoError(t, err)
+			_, err = f.service.Apply(f.ctx, f.id, uuid.New())
+			require.ErrorIs(t, err, ErrConflict)
+			_, err = f.service.Cancel(f.ctx, f.id, uuid.New())
+			require.ErrorIs(t, err, ErrConflict)
+			report, err := f.service.Get(f.ctx, f.id)
+			require.NoError(t, err)
+			require.Equal(t, "completed", report.State)
+			require.Zero(t, f.canonicalJobs(t))
+		})
+	}
 }

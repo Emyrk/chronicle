@@ -41,10 +41,8 @@ export function RepairReport({ operation, busy, onApply, onCancel, onRetry }: {
       <Button disabled={!confirmed || busy} onClick={onApply} className="bg-amber-500 text-black hover:bg-amber-400">Apply repair</Button>
     </div>}
     {isRepairActive(operation.state) && operation.last_error && onRetry && <Button variant="outline" disabled={busy} onClick={onRetry}>Retry operation</Button>}
-    {operation.state === "ready" && <div className="space-y-2">
-      {!operation.items.some((item) => item.state === "ready") && <p className="text-sm text-muted-foreground">No instances are eligible to apply. Review the skip reasons below or reject this repair.</p>}
-      <Button variant="outline" disabled={busy} onClick={onCancel}>Reject repair</Button>
-    </div>}
+    {(operation.state === "ready" || operation.state === "completed") && !operation.items.some((item) => item.state === "ready") && operation.applied === 0 && <p className="text-sm text-muted-foreground">No instances are eligible to apply. No action is required. Review the skip reasons below.</p>}
+    {operation.state === "ready" && operation.items.some((item) => item.state === "ready") && <Button variant="outline" disabled={busy} onClick={onCancel}>Reject repair</Button>}
     {isRepairActive(operation.state) && <Button variant="outline" disabled={busy} onClick={onCancel}>Cancel operation</Button>}
     <div className="styled-scrollbar max-h-[32rem] overflow-auto rounded border">
       <table className="w-full text-left text-xs"><caption className="p-3 text-left text-sm font-medium">Instance evidence and outcomes</caption>

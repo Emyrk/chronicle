@@ -95,6 +95,21 @@ func (s *Service) Get(ctx context.Context, id uuid.UUID) (Operation, error) {
 	if err != nil {
 		return Operation{}, lookupError(err)
 	}
+	// Older previews could remain ready with nothing eligible. Finalize them
+	// under the same lock as apply/cancel rather than asking for a decision.
+	if row.State == "ready" && row.Total == row.Skipped {
+		err = s.db.InTx(ctx, func(tx database.Store) error {
+			if _, err := tx.LockEventRepairOperation(ctx, database.LockEventRepairOperationParams{ID: id, TenantID: row.TenantID}); err != nil {
+				return err
+			}
+			var err error
+			row, err = tx.RefreshEventRepairProgress(ctx, database.RefreshEventRepairProgressParams{ID: id, TenantID: row.TenantID})
+			return err
+		}, nil)
+		if err != nil {
+			return Operation{}, err
+		}
+	}
 	o, err := operationDTO(row)
 	if err != nil {
 		return o, err
@@ -183,6 +198,12 @@ func (s *Service) Apply(ctx context.Context, id, actor uuid.UUID) (Operation, er
 		if err != nil {
 			return err
 		}
+		if o.State == "ready" {
+			o, err = tx.RefreshEventRepairProgress(ctx, database.RefreshEventRepairProgressParams{ID: id, TenantID: o.TenantID})
+			if err != nil {
+				return err
+			}
+		}
 		if o.Version != Version || o.Operation != OperationRazorgore {
 			return fmt.Errorf("%w: operation version no longer supported; create a new dry run", ErrConflict)
 		}
@@ -214,6 +235,12 @@ func (s *Service) Cancel(ctx context.Context, id, actor uuid.UUID) (Operation, e
 		o, err := tx.LockEventRepairOperation(ctx, database.LockEventRepairOperationParams{ID: id, TenantID: row.TenantID})
 		if err != nil {
 			return err
+		}
+		if o.State == "ready" {
+			o, err = tx.RefreshEventRepairProgress(ctx, database.RefreshEventRepairProgressParams{ID: id, TenantID: o.TenantID})
+			if err != nil {
+				return err
+			}
 		}
 		if o.State == "cancelled" {
 			return nil

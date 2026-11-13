@@ -6532,6 +6532,7 @@ UPDATE event_repair_operations o
 SET total = counts.total, processed = counts.processed,
   applied = counts.applied, skipped = counts.skipped,
   state = CASE
+    WHEN o.state IN ('dry_running', 'ready') AND counts.pending = 0 AND counts.ready = 0 THEN 'completed'
     WHEN o.state = 'dry_running' AND counts.pending = 0 THEN 'ready'
     WHEN o.state = 'applying' AND counts.ready = 0 THEN 'completed'
     ELSE o.state

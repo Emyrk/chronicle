@@ -36,7 +36,9 @@ requests cannot also specify sweep filters.
 
 SDK contracts live in `api/chroniclesdk/event_repairs.go`. Operation states are
 `dry_running`, `ready`, `applying`, `completed`, `cancelled`. Item states are
-`pending`, `ready`, `skipped`, `applied`, `stale`. `processed` counts dry-run
+`pending`, `ready`, `skipped`, `applied`, `stale`. A dry-run with no eligible items
+(empty selection or all skipped) completes automatically without Apply or Reject.
+Existing all-skipped ready reports are finalized when opened. `processed` counts dry-run
 reports, `applied` counts committed applies, and `skipped` includes stale items.
 Item `ratings_queued` is true only after apply and the durable canonical refresh
 commit together. It does not report downstream ratings completion. `last_error`

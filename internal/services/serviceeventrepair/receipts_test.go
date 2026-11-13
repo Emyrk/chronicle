@@ -75,7 +75,7 @@ func TestReceiptPermanentAcrossJobsAndVersions(t *testing.T) {
 	require.Equal(t, "skipped", report.Items[0].State)
 	require.Contains(t, report.Items[0].Reason, "permanent receipt")
 	_, err = f.service.Apply(f.ctx, next, uuid.New())
-	require.NoError(t, err)
+	require.ErrorIs(t, err, ErrConflict)
 	_, err = f.service.ProcessPage(f.ctx, next, "applying")
 	require.NoError(t, err)
 	require.Equal(t, 1, f.canonicalJobs(t))

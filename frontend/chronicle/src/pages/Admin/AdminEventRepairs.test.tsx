@@ -78,9 +78,10 @@ it("sends the locked create/apply/cancel contracts and surfaces auth errors", as
   expect(fetcher).toHaveBeenCalledTimes(5);
 });
 
-it("all-skipped reports can be rejected but cannot be applied", () => {
+it("all-skipped reports need no acceptance or rejection", () => {
   const markup = renderToStaticMarkup(<RepairReport operation={{ ...operation, items: [operation.items[1]] }} busy={false} onApply={() => {}} onCancel={() => {}} />);
-  expect(markup).toContain("Reject repair");
+  expect(markup).not.toContain("Reject repair");
+  expect(markup).toContain("No action is required");
   expect(markup).toContain("No instances are eligible to apply");
   expect(markup).not.toContain("Apply repair");
   expect(markup).not.toContain("Confirm write operation");
