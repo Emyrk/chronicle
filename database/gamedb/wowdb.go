@@ -186,6 +186,27 @@ func (w *WoWDB) ForDataset(datasetID uuid.UUID) GameDB {
 	return &ScopedGameDB{w: w, datasetID: datasetID}
 }
 
+// FreshForDataset creates a parse-local database-backed view with independent,
+// initially empty spell, item, creature, talent and derived-data caches. Unlike
+// ForDataset, it never inherits warmed entries from the process-wide WoWDB.
+// The caller must fence the dataset revision before acquisition and publication;
+// fresh caches alone do not provide a consistent snapshot across concurrent writes.
+// These short-lived caches are deliberately not registered with servicecache:
+// they require no invalidator callbacks and cannot retain a completed parse.
+// Close releases only resources owned by the view, never the shared pool.
+func (w *WoWDB) FreshForDataset(ctx context.Context, datasetID uuid.UUID) (*WoWDB, error) {
+	if w.pool == nil {
+		return nil, fmt.Errorf("fresh parse game data requires a PostgreSQL-backed WoWDB")
+	}
+	store := database.New(w.pool)
+	return New(ctx, Options{
+		Pool:      w.pool,
+		DB:        store,
+		DatasetID: datasetID,
+		Talents:   talents.NewFetcher(store, nil, 1),
+	})
+}
+
 // --- GameDB interface (default dataset) ---
 
 func (w *WoWDB) Spell(ctx context.Context, id chrondbc.SpellID) (*chrondbc.Spell, error) {
