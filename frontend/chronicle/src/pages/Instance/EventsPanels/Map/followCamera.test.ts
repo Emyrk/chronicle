@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { directorFrame, FRAME_FILL, MIN_FRAME_RADIUS_YARDS, type DirectorUnit } from "./cameraDirector";
+import { directorFrame, DISTANCE_SMOOTH_SECONDS, FRAME_FILL, MIN_FRAME_RADIUS_YARDS, smoothDamp, type DampedValue, type DirectorUnit } from "./cameraDirector";
 import {
   buildFollowTrack,
   startFollowTrackBuild,
   createShotHold,
+  FOLLOW_CENTRE_CLAMP_YARDS,
+  FOLLOW_CENTRE_WINDOW_MS,
   FOLLOW_JUMP_MS,
+  FOLLOW_MAX_WINDOW_STRETCH,
+  FOLLOW_SMOOTH_SECONDS,
+  followSprings,
+  handOverFollowSpring,
   followKeyAt,
   GLIDE_MAX_MS,
   GLIDE_MIN_MS,
@@ -16,7 +22,34 @@ import {
   isReplayJump,
   SHOT_RELEASE_MS,
   type FollowKey,
+  type FollowSprings,
+  type FollowTrack,
   type GlidePose,
+  heldYawChoices,
+  nearestOpenYaw,
+  FOLLOW_YAW_CANDIDATES_DEG,
+  FOLLOW_YAW_MAX_RATE,
+  FOLLOW_YAW_SMOOTH_SECONDS,
+  followYawStep,
+  handOverFollowYaw,
+  wrapAngle,
+  glideTurnMs,
+  unwrapNear,
+  type FollowYawProbe,
+  climbElevations,
+  directorPullIn,
+  fallbackShot,
+  choiceMasks,
+  shotCheckDue,
+  steepPullIn,
+  releaseSteepShot,
+  FOLLOW_SHOT_CHECK_MS,
+  type FollowYawSight,
+  type ShotAnswer,
+  FOLLOW_SIGHT_STRIDE,
+  FOLLOW_STEEP_ELEVATION_DEG,
+  seesFraming,
+  sightPicks,
 } from "./followCamera";
 
 const FRAME_MS = 1000 / 60;
@@ -42,10 +75,49 @@ function walkingGroup(ms: number): DirectorUnit[] {
   return units;
 }
 
+/**
+ * The Summary mini preview's replay clock at `speed`: an interval tick every
+ * 250 ms (+-15 ms) reads the cursor, React commits it 0-20 ms later and
+ * stamps the clock then, and the scene runs the clock ahead of its stamp by
+ * at most 250 ms of real time (MapScene3D.replayNow). Frames at 60 fps, one
+ * in fifty dropped to 100 ms unless `drops` is false. Calls `frame` with the real time and the
+ * replay time the scene reads. The cursor loops over `spanMs`.
+ */
+function previewPlayback(speed: number, spanMs: number, durationMs: number, frame: (now: number, replayMs: number) => void, drops = true) {
+  let seed = 7;
+  const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  let clockMs = 0;
+  let clockAt = 0;
+  let nextTick = 250;
+  let pending: { ms: number; at: number } | null = null;
+  for (let now = 0; now < durationMs; now += drops && random() < 0.02 ? 100 : FRAME_MS) {
+    while (nextTick <= now) {
+      pending = { ms: (nextTick * speed) % spanMs, at: nextTick + random() * 20 };
+      nextTick += 250 + (random() - 0.5) * 30;
+    }
+    if (pending && pending.at <= now) {
+      clockMs = pending.ms;
+      clockAt = pending.at;
+      pending = null;
+    }
+    frame(now, clockMs + Math.min(now - clockAt, 250) * speed);
+  }
+}
+
+/** Five players running a zigzag at `pace` yd/s (7 on foot, 14 mounted): 40 yd legs, alternately +x and +z. */
+function zigzagGroup(ms: number, pace = 7): DirectorUnit[] {
+  const run = (ms / 1000) * pace;
+  const leg = Math.floor(run / 40);
+  const along = run - leg * 40;
+  const x = Math.ceil(leg / 2) * 40 + (leg % 2 === 0 ? along : 0);
+  const z = Math.floor(leg / 2) * 40 + (leg % 2 === 1 ? along : 0);
+  return [[0, 0], [2, 1], [-2, 1], [1, -2], [-1, -2]].map(([dx, dz], i) => unit(`p${i}`, x + dx!, z + dz!));
+}
+
 // The worst rate of change of the centre (yd/s) and of that rate (yd/s²),
 // and of the radius (yd/s), sampling `at` at 60 fps over `durationMs`.
-function motion(durationMs: number, at: (ms: number) => FollowKey) {
-  let previous: FollowKey | null = null;
+function motion(durationMs: number, at: (ms: number) => Pick<FollowKey, "x" | "z" | "radius">) {
+  let previous: Pick<FollowKey, "x" | "z" | "radius"> | null = null;
   let previousVelocity: [number, number] | null = null;
   let speed = 0;
   let acceleration = 0;
@@ -84,7 +156,7 @@ describe("buildFollowTrack", () => {
   it("is continuous through walking, a straggler leaving and a boss engaging", () => {
     const track = buildFollowTrack({ startMs: 0, endMs: durationMs, unitsAt: walkingGroup, scale: 1 })!;
     expect(track).not.toBeNull();
-    const out: FollowKey = { x: 0, z: 0, radius: 0 };
+    const out: FollowKey = { x: 0, z: 0, radius: 0, yaw: 0 };
     const smooth = motion(durationMs, (ms) => followKeyAt(track, ms, out));
     // Bounded velocity (the group walks at 6 yd/s) and acceleration, and the
     // frame size eases instead of jumping.
@@ -96,7 +168,7 @@ describe("buildFollowTrack", () => {
   it("looks ahead: the centre starts moving before the group does", () => {
     const standThenWalk = (ms: number) => [0, 1, 2].map((i) => unit(`p${i}`, (ms < 10_000 ? 0 : (ms - 10_000) / 1000 * 6) + i, 0));
     const track = buildFollowTrack({ startMs: 0, endMs: 20_000, unitsAt: standThenWalk, scale: 1 })!;
-    const out: FollowKey = { x: 0, z: 0, radius: 0 };
+    const out: FollowKey = { x: 0, z: 0, radius: 0, yaw: 0 };
     const before = followKeyAt(track, 8_000, out).x;
     const stillBefore = followKeyAt(track, 6_000, out).x;
     expect(before).toBeGreaterThan(stillBefore);
@@ -104,7 +176,7 @@ describe("buildFollowTrack", () => {
 
   it("keeps everyone framed inside the shot's headroom, whatever the smoothing", () => {
     const track = buildFollowTrack({ startMs: 0, endMs: durationMs, unitsAt: walkingGroup, scale: 1 })!;
-    const out: FollowKey = { x: 0, z: 0, radius: 0 };
+    const out: FollowKey = { x: 0, z: 0, radius: 0, yaw: 0 };
     // Who the per-frame rule frames at each sample.
     const framedAt: Set<string>[] = [];
     let inFrame = new Set<string>();
@@ -131,7 +203,7 @@ describe("buildFollowTrack", () => {
       ? [unit("a", 0, 0), unit("b", 4, 0)]
       : ms < 30_000 ? [] : [unit("a", 300, 0), unit("b", 304, 0)];
     const track = buildFollowTrack({ startMs: 0, endMs: 40_000, unitsAt: away, scale: 1 })!;
-    const out: FollowKey = { x: 0, z: 0, radius: 0 };
+    const out: FollowKey = { x: 0, z: 0, radius: 0, yaw: 0 };
     const glide = motion(40_000, (ms) => followKeyAt(track, ms, out));
     // 300 yd over the 6 s triangular centre window peaks near 100 yd/s,
     // eased in and out; a one-frame jump would be 18,000 yd/s.
@@ -140,18 +212,225 @@ describe("buildFollowTrack", () => {
     expect(followKeyAt(track, 40_000, out).x).toBeCloseTo(302, 0);
   });
 
-  it("stretches its windows with the playback speed, keeping the same calm in real time", () => {
-    const fast = buildFollowTrack({ startMs: 0, endMs: durationMs * 4, unitsAt: (ms) => walkingGroup(ms / 4), scale: 1, speed: 4 })!;
-    const out: FollowKey = { x: 0, z: 0, radius: 0 };
-    // At 4x, real time t shows replay 4t: the same motion as the 1x fixture.
-    const smooth = motion(durationMs, (ms) => followKeyAt(fast, ms * 4, out));
+  it("stays continuous at a fast speed, with a centre window capped in replay time", () => {
+    const fast = buildFollowTrack({ startMs: 0, endMs: durationMs, unitsAt: walkingGroup, scale: 1, speed: 32 })!;
+    const out: FollowKey = { x: 0, z: 0, radius: 0, yaw: 0 };
+    // In replay time the fast track is as smooth as the 1x one.
+    const smooth = motion(durationMs, (ms) => followKeyAt(fast, ms, out));
     expect(smooth.speed).toBeLessThan(15);
     expect(smooth.acceleration).toBeLessThan(40);
+    // But it looks ahead no further than the capped window: at 32x the old
+    // stretch (32 x 3 s) started moving a minute and a half early.
+    const standThenWalk = (ms: number) => [0, 1, 2].map((i) => unit(`p${i}`, (ms < 60_000 ? 0 : (ms - 60_000) / 1000 * 6) + i, 0));
+    const track = buildFollowTrack({ startMs: 0, endMs: 120_000, unitsAt: standThenWalk, scale: 1, speed: 32 })!;
+    const window = FOLLOW_CENTRE_WINDOW_MS * FOLLOW_MAX_WINDOW_STRETCH;
+    expect(followKeyAt(track, 60_000 - window - 1_000, out).x).toBeCloseTo(1, 6);
+    expect(followKeyAt(track, 60_000 - 1_000, out).x).toBeGreaterThan(1);
+  });
+
+  it.each([7, 14])("keeps the centre near the framed units on a zigzag path at 32x, never cutting its corners (%i yd/s)", (pace) => {
+    // A group runs a cave-like zigzag (40 yd legs, alternating +x and +z) for ten minutes, on foot or mounted.
+    const unitsAt = (ms: number) => zigzagGroup(ms, pace);
+    const track = buildFollowTrack({ startMs: 0, endMs: 600_000, unitsAt, scale: 1, speed: 32 })!;
+    const out: FollowKey = { x: 0, z: 0, radius: 0, yaw: 0 };
+    // The clamp holds at every sample; between them the Catmull-Rom can swing
+    // a little past it (about 1.6 yd at a mounted pace).
+    let inFrame = new Set<string>();
+    for (let ms = 0; ms <= 600_000; ms += 100) {
+      const frame = directorFrame(unitsAt(ms), inFrame)!;
+      inFrame = new Set(frame.guids);
+      const key = followKeyAt(track, ms, out);
+      const bound = ms % track.sampleMs === 0 ? FOLLOW_CENTRE_CLAMP_YARDS + 1e-6 : FOLLOW_CENTRE_CLAMP_YARDS + 2;
+      expect(Math.hypot(key.x - frame.x, key.z - frame.z)).toBeLessThanOrEqual(bound);
+      // The cover radius stays the group's size, not swollen by an off-centre point.
+      expect(key.radius).toBeLessThan(FOLLOW_CENTRE_CLAMP_YARDS + 6);
+    }
+  });
+
+  it("keeps the aim on a moving group at 1x, 8x and 32x (harness)", () => {
+    // The scene's position spring on the track, led by its trail (60 fps), against the framed
+    // units' circle; the ends are left out (the windows clamp there).
+    const lag = (speed: number) => {
+      const end = 600_000;
+      const track = buildFollowTrack({ startMs: 0, endMs: end, unitsAt: zigzagGroup, scale: 1, speed })!;
+      const out: FollowKey = { x: 0, z: 0, radius: 0, yaw: 0 };
+      followKeyAt(track, 0, out);
+      const x = { value: out.x, velocity: 0 };
+      const z = { value: out.z, velocity: 0 };
+      const { position: smooth, leadMs } = followSprings(speed, true);
+      let max = 0;
+      let sum = 0;
+      let count = 0;
+      for (let real = 0; real * speed <= end; real += FRAME_MS) {
+        const ms = real * speed;
+        const key = followKeyAt(track, ms + leadMs, out);
+        smoothDamp(x, key.x, smooth, FRAME_MS / 1000);
+        smoothDamp(z, key.z, smooth, FRAME_MS / 1000);
+        if (ms < 20_000 || ms > end - 120_000) continue;
+        const frame = directorFrame(zigzagGroup(ms))!;
+        const off = Math.hypot(x.value - frame.x, z.value - frame.z);
+        max = Math.max(max, off);
+        sum += off;
+        count++;
+      }
+      console.info(`follow aim vs group at ${speed}x: max ${max.toFixed(1)} yd, mean ${(sum / count).toFixed(1)} yd`);
+      return { max, mean: sum / count };
+    };
+    for (const speed of [1, 8, 32]) {
+      const { max, mean } = lag(speed);
+      // The track's centre holds the clamp; the 0.3 s spring on it rounds a
+      // 32x corner (about 10 s of replay) a little further.
+      expect(max).toBeLessThan(FOLLOW_CENTRE_CLAMP_YARDS + 3);
+      expect(mean).toBeLessThan(8);
+    }
   });
 
   it("is null with nobody ever framed", () => {
     expect(buildFollowTrack({ startMs: 0, endMs: 5_000, unitsAt: () => [], scale: 1 })).toBeNull();
   });
+});
+
+describe("followSprings", () => {
+  // The camera on a group walking +x at 7 yd/s in the 32x preview, its goal sampled from the track at `goalMs`.
+  const preview = (smooth: number, goalMs: (replayMs: number) => number, drops = false) => {
+    const speed = 32;
+    const track = buildFollowTrack({ startMs: 0, endMs: 3_000_000, unitsAt: (ms) => [0, 1, 2].map((i) => unit(`p${i}`, (ms / 1000) * 7 + i, 0)), scale: 1, speed })!;
+    const out: FollowKey = { x: 0, z: 0, radius: 0, yaw: 0 };
+    const x = { value: 1, velocity: 0 };
+    let last: { now: number; x: number; velocity: number } | null = null;
+    let jerk = 0;
+    let lag = 0;
+    previewPlayback(speed, 3_000_000, 60_000, (now, replayMs) => {
+      const dt = last ? (now - last.now) / 1000 : FRAME_MS / 1000;
+      smoothDamp(x, followKeyAt(track, goalMs(replayMs), out).x, smooth, dt);
+      const velocity = last ? (x.value - last.x) / dt : 0;
+      if (now > 2_000 && last) {
+        jerk = Math.max(jerk, Math.abs(velocity - last.velocity));
+        // Against where the group really is (the cursor, not the stepped clock).
+        lag = Math.max(lag, Math.abs(x.value - ((now * speed) / 1000 * 7 + 1)));
+      }
+      last = { now, x: x.value, velocity };
+    }, drops);
+    return { jerk, lag };
+  };
+
+  it("keeps the 32x preview's clock ticks out of the camera, without the spring's trail", () => {
+    const springs = followSprings(32, true);
+    const led = preview(springs.position, (replayMs) => replayMs + springs.leadMs);
+    // The old spring on the track: smooth, but tens of yards behind.
+    const trailing = preview(FOLLOW_SMOOTH_SECONDS, (replayMs) => replayMs);
+    // A spring short enough to keep up copies each tick's step into the camera.
+    const copying = preview(FOLLOW_SMOOTH_SECONDS / 32, (replayMs) => replayMs);
+    const report = (name: string, run: { jerk: number; lag: number }) => `${name} jerk ${run.jerk.toFixed(0)} yd/s, off ${run.lag.toFixed(1)} yd`;
+    console.info(`32x preview: ${report("led", led)}; ${report("trailing", trailing)}; ${report("copying", copying)}`);
+    expect(trailing.lag).toBeGreaterThan(50);
+    expect(copying.jerk).toBeGreaterThan(200);
+    // Led, the camera changes speed as little as with the old spring.
+    expect(led.jerk).toBeLessThan(trailing.jerk + 1);
+    expect(led.jerk).toBeLessThan(5);
+    // The clock itself runs up to ~20 ms x 32 behind the cursor, or 250 ms x 32 ahead on a late tick.
+    expect(led.lag).toBeLessThan(10);
+  });
+
+  it("stays on the group with dropped frames too", () => {
+    const springs = followSprings(32, true);
+    const led = preview(springs.position, (replayMs) => replayMs + springs.leadMs, true);
+    const trailing = preview(FOLLOW_SMOOTH_SECONDS, (replayMs) => replayMs, true);
+    console.info(`32x preview, dropped frames: led jerk ${led.jerk.toFixed(0)} yd/s, off ${led.lag.toFixed(1)} yd; trailing jerk ${trailing.jerk.toFixed(0)} yd/s`);
+    // Across a 100 ms frame the frame-to-frame velocity reads a step whatever
+    // the spring: the led one reads no more than the old one did.
+    expect(led.jerk).toBeLessThan(trailing.jerk + 1);
+    expect(led.lag).toBeLessThan(10);
+  });
+
+  // A group walking +x at `pace` yd/s; the camera arrives on it at real time 0
+  // by `arrive` (from a cut or a glide), then the position spring chases the
+  // led goal as MapScene3D.updateDirector does. Returns the worst distance
+  // between the camera and the group over the 2 s after.
+  const afterHandover = (speed: number, pace: number, arrive: (track: FollowTrack, springs: FollowSprings, x: DampedValue) => number) => {
+    const unitsAt = (ms: number) => [0, 1, 2].map((i) => unit(`p${i}`, (ms / 1000) * pace + i - 1, 0));
+    const track = buildFollowTrack({ startMs: 0, endMs: 600_000, unitsAt, scale: 1, speed })!;
+    const springs = followSprings(speed, true);
+    const out: FollowKey = { x: 0, z: 0, radius: 0, yaw: 0 };
+    const x: DampedValue = { value: 0, velocity: 0 };
+    const startMs = arrive(track, springs, x);
+    let worst = 0;
+    for (let real = FRAME_MS; real <= 2_000; real += FRAME_MS) {
+      const ms = startMs + real * speed;
+      smoothDamp(x, followKeyAt(track, ms + springs.leadMs, out).x, springs.position, FRAME_MS / 1000);
+      worst = Math.max(worst, Math.abs(x.value - (ms / 1000) * pace));
+    }
+    return worst;
+  };
+  // At 60 fps the spring's steady trail is about half a frame of travel past the lead's cancelling.
+  const halfFrame = (speed: number, pace: number) => 0.5 * (FRAME_MS / 1000) * speed * pace + 0.1;
+
+  it.each([[8, 7], [32, 7], [32, 14]])("hands over to the led spring after a cut without running ahead (%ix, %i yd/s)", (speed, pace) => {
+    const startMs = 200_000;
+    const cut = afterHandover(speed, pace, (track, springs, x) => {
+      const out: FollowKey = { x: 0, z: 0, radius: 0, yaw: 0 };
+      const at = followKeyAt(track, startMs, out).x;
+      handOverFollowSpring(x, at, followKeyAt(track, startMs + springs.leadMs, out).x, springs);
+      return startMs;
+    });
+    // Snapped onto the led goal at rest instead, it starts the whole lead ahead.
+    const naive = afterHandover(speed, pace, (track, springs, x) => {
+      x.value = followKeyAt(track, startMs + springs.leadMs, { x: 0, z: 0, radius: 0, yaw: 0 }).x;
+      return startMs;
+    });
+    console.info(`cut at ${speed}x, ${pace} yd/s: off the group at most ${cut.toFixed(2)} yd (snapped onto the led goal: ${naive.toFixed(0)} yd)`);
+    expect(naive).toBeGreaterThan(0.25 * speed * pace);
+    expect(cut).toBeLessThan(halfFrame(speed, pace));
+  });
+
+  it.each([[8, 7], [32, 7], [32, 14]])("hands over to the led spring after a glide without running ahead (%ix, %i yd/s)", (speed, pace) => {
+    const glide = afterHandover(speed, pace, (track, _springs, x) => {
+      // A replay jump to 200 s: the glide (as updateDirector runs it) from
+      // 300 yd away onto where the group is, riding along as it moves.
+      const out: FollowKey = { x: 0, z: 0, radius: 0, yaw: 0 };
+      const jumpMs = 200_000;
+      const from: GlidePose = { x: followKeyAt(track, jumpMs, out).x - 300, z: 0, distance: 30, elevationDeg: 28 };
+      const to: GlidePose = { x: 0, z: 0, distance: 30, elevationDeg: 28 };
+      const pose: GlidePose = { x: 0, z: 0, distance: 0, elevationDeg: 0 };
+      const duration = glideDurationMs(300, 1);
+      x.value = from.x;
+      let real = 0;
+      for (;;) {
+        real += FRAME_MS;
+        to.x = followKeyAt(track, jumpMs + real * speed, out).x;
+        const t = Math.min(1, real / duration);
+        const last = x.value;
+        glidePoseAt(from, to, t, pose, duration);
+        x.value = pose.x;
+        x.velocity = (pose.x - last) / (FRAME_MS / 1000);
+        if (t >= 1) return jumpMs + real * speed;
+      }
+    });
+    console.info(`glide at ${speed}x, ${pace} yd/s: off the group at most ${glide.toFixed(2)} yd after it lands`);
+    expect(glide).toBeLessThan(halfFrame(speed, pace));
+  });
+
+  it("matches each spring's lead to its trail; paused, no lead", () => {
+    expect(followSprings(1, true)).toEqual({
+      position: FOLLOW_SMOOTH_SECONDS,
+      leadMs: FOLLOW_SMOOTH_SECONDS * 1_000,
+      distance: DISTANCE_SMOOTH_SECONDS,
+      distanceLeadMs: DISTANCE_SMOOTH_SECONDS * 1_000,
+      yaw: FOLLOW_YAW_SMOOTH_SECONDS,
+      yawLeadMs: FOLLOW_YAW_SMOOTH_SECONDS * 1_000,
+    });
+    expect(followSprings(32, true).yawLeadMs).toBeCloseTo(32 * FOLLOW_YAW_SMOOTH_SECONDS * 1_000, 6);
+    expect(followSprings(32, true).leadMs).toBeCloseTo(32 * FOLLOW_SMOOTH_SECONDS * 1_000, 6);
+    expect(followSprings(32, true).distanceLeadMs).toBeCloseTo(32 * DISTANCE_SMOOTH_SECONDS * 1_000, 6);
+    // Paused, a short seek eases in on the real-time springs rather than cutting.
+    expect(followSprings(32, false)).toEqual({ ...followSprings(1, true), leadMs: 0, distanceLeadMs: 0, yawLeadMs: 0 });
+  });
+
+  it("a cut while paused hands over at rest", () => {
+    const x = handOverFollowSpring({ value: 0, velocity: 5 }, 10, 10, followSprings(32, false));
+    expect(x).toEqual({ value: 10, velocity: 0 });
+  });
+
 });
 
 describe("holdShot", () => {
@@ -206,6 +485,27 @@ describe("isReplayJump", () => {
     expect(isReplayJump(0, FOLLOW_JUMP_MS * 2, 16 * 8, 8)).toBe(false);
     // But a 10 s gap skipped at 8x is still a jump.
     expect(isReplayJump(0, 10_000, 16 * 8, 8)).toBe(true);
+  });
+
+  it("sees no jump in steady 32x preview playback, only its loop", () => {
+    const speed = 32;
+    const spanMs = 45 * 60_000;
+    let previous: { ms: number; at: number } | null = null;
+    let jumps = 0;
+    previewPlayback(speed, spanMs, 2.5 * (spanMs / speed), (now, replayMs) => {
+      if (previous && isReplayJump(previous.ms, replayMs, (now - previous.at) * speed, speed)) jumps++;
+      previous = { ms: replayMs, at: now };
+    });
+    // Two loops back to the start, and nothing else.
+    expect(jumps).toBe(2);
+  });
+
+  it("only allows fast playback's slop while playing: a paused seek of a few seconds is a jump", () => {
+    // Playing at 32x, a 5 s step could be a tick re-anchoring the clock.
+    expect(isReplayJump(0, 5_000, 0, 32, true)).toBe(false);
+    // Paused, nothing re-anchors: it is a seek, and glides.
+    expect(isReplayJump(0, 5_000, 0, 32, false)).toBe(true);
+    expect(isReplayJump(0, FOLLOW_JUMP_MS - 1, 0, 32, false)).toBe(false);
   });
 });
 
@@ -307,9 +607,896 @@ describe("startFollowTrackBuild", () => {
     expect(buildFollowTrack({ startMs: 0, endMs: 10_000, unitsAt: walkingGroup, scale: 1, subjectGuid: "mob-1" })).toBeNull();
     // A followed player who is in it gets a track centred on them.
     const track = buildFollowTrack({ startMs: 0, endMs: 10_000, unitsAt: walkingGroup, scale: 1, subjectGuid: "p4" })!;
-    const out: FollowKey = { x: 0, z: 0, radius: 0 };
+    const out: FollowKey = { x: 0, z: 0, radius: 0, yaw: 0 };
     const key = followKeyAt(track, 5_000, out);
     const p4 = walkingGroup(5_000).find((candidate) => candidate.guid === "p4")!;
     expect(Math.hypot(key.x - p4.x, key.z - p4.z)).toBeLessThan(2);
+  });
+});
+
+describe("follow track yaw", () => {
+  const DEG = Math.PI / 180;
+  // Behind travel along +x, and along +z (the camera sits at (sin yaw, cos yaw) from the aim).
+  const BEHIND_X = -Math.PI / 2;
+  const BEHIND_Z = Math.PI;
+  const angleOff = (a: number, b: number) => Math.abs(wrapAngle(a - b));
+  const keyAt = (track: FollowTrack, ms: number) => followKeyAt(track, ms, { x: 0, z: 0, radius: 0, yaw: 0 });
+
+  /** Three players walk +x at 7 yd/s for 60 s, then turn and walk +z for 60 s. */
+  const corner = (ms: number) => {
+    const t = Math.min(ms, 120_000) / 1000;
+    const x = Math.min(t, 60) * 7;
+    const z = Math.max(0, t - 60) * 7;
+    return [0, 1, 2].map((i) => unit(`p${i}`, x + i, z));
+  };
+
+  it("turns with the path: behind the group on each leg, turning before the corner", () => {
+    const track = buildFollowTrack({ startMs: 0, endMs: 120_000, unitsAt: corner, scale: 1 })!;
+    expect(angleOff(keyAt(track, 30_000).yaw, BEHIND_X)).toBeLessThan(DEG);
+    expect(angleOff(keyAt(track, 100_000).yaw, BEHIND_Z)).toBeLessThan(DEG);
+    // Look-ahead: already turning before the group reaches the corner.
+    expect(angleOff(keyAt(track, 59_000).yaw, BEHIND_X)).toBeGreaterThan(5 * DEG);
+    // And it turns the short way (90 degrees), not round through the other side.
+    const swept = Math.abs(keyAt(track, 100_000).yaw - keyAt(track, 30_000).yaw);
+    expect(swept).toBeCloseTo(Math.PI / 2, 2);
+  });
+
+  it("holds steady while the group stands (a fight) instead of spinning", () => {
+    // Walk +x for 20 s, then stand for 60 s shuffling 2 yd about in every direction.
+    const fight = (ms: number) => {
+      const t = ms / 1000;
+      const x = Math.min(t, 20) * 7;
+      return [0, 1, 2, 3].map((i) => {
+        const shuffle = t > 20 ? 2 * Math.sin(t * (1.3 + i) + i) : 0;
+        return unit(`p${i}`, x + shuffle, Math.cos(t * (0.7 + i)) * (t > 20 ? 2 : 0) + i);
+      });
+    };
+    const track = buildFollowTrack({ startMs: 0, endMs: 80_000, unitsAt: fight, scale: 1 })!;
+    let worst = 0;
+    for (let ms = 30_000; ms <= 80_000; ms += 250) worst = Math.max(worst, angleOff(keyAt(track, ms).yaw, BEHIND_X));
+    console.info(`fight: worst yaw drift ${(worst / DEG).toFixed(1)} deg over 50 s of shuffling`);
+    expect(worst / DEG).toBeLessThan(5);
+  });
+
+  it("starts on the first move's yaw, and keeps the initial yaw when nobody ever moves", () => {
+    const later = (ms: number) => [0, 1].map((i) => unit(`p${i}`, Math.max(0, ms / 1000 - 30) * 7 + i, 0));
+    const track = buildFollowTrack({ startMs: 0, endMs: 60_000, unitsAt: later, scale: 1, initialYaw: 1 })!;
+    expect(angleOff(keyAt(track, 0).yaw, BEHIND_X)).toBeLessThan(DEG);
+    const still = buildFollowTrack({ startMs: 0, endMs: 60_000, unitsAt: () => [unit("p0", 5, 5)], scale: 1, initialYaw: 1 })!;
+    expect(keyAt(still, 30_000).yaw).toBeCloseTo(1, 9);
+  });
+
+  /** Five players walking a staircase of `leg` yd legs at 7 yd/s, alternately +x and +z: a 90 degree turn every leg. */
+  const stairs = (leg: number) => (ms: number) => {
+    const run = (ms / 1000) * 7;
+    const i = Math.floor(run / leg);
+    const along = run - i * leg;
+    const x = Math.ceil(i / 2) * leg + (i % 2 === 0 ? along : 0);
+    const z = Math.floor(i / 2) * leg + (i % 2 === 1 ? along : 0);
+    return [[0, 0], [2, 1], [-2, 1], [1, -2], [-1, -2]].map(([dx, dz], k) => unit(`p${k}`, x + dx!, z + dz!));
+  };
+
+  it("unwraps across +-pi: a group walking circles turns on and on, never spinning back", () => {
+    // A 40 yd circle walked anticlockwise at 7 yd/s: about 36 s a lap, five laps.
+    const circle = (ms: number) => {
+      const a = ((ms / 1000) * 7) / 40;
+      return [unit("p0", 40 * Math.cos(a), 40 * Math.sin(a))];
+    };
+    const track = buildFollowTrack({ startMs: 0, endMs: 180_000, unitsAt: circle, scale: 1 })!;
+    let previous = keyAt(track, 0).yaw;
+    for (let ms = FRAME_MS; ms <= 180_000; ms += FRAME_MS) {
+      const yaw = keyAt(track, ms).yaw;
+      expect(Math.abs(yaw - previous)).toBeLessThan(0.05);
+      previous = yaw;
+    }
+    // Several whole turns, one way.
+    expect(Math.abs(keyAt(track, 170_000).yaw - keyAt(track, 10_000).yaw)).toBeGreaterThan(4 * Math.PI);
+    // The spring turns the short way across the seam too.
+    const spring = { value: Math.PI - 0.05, velocity: 0 };
+    followYawStep(spring, -Math.PI + 0.05, FOLLOW_YAW_SMOOTH_SECONDS, 1);
+    expect(spring.value).toBeGreaterThan(Math.PI - 0.05);
+    expect(spring.value).toBeLessThanOrEqual(Math.PI + 0.05 + 1e-9);
+  });
+
+  it("caps the track's turn rate in real time, at 1x and 32x", () => {
+    const worstTurn = (speed: number, leg: number, yawWindowMs?: number) => {
+      const track = buildFollowTrack({ startMs: 0, endMs: 1_200_000, unitsAt: stairs(leg), scale: 1, speed, yawWindowMs })!;
+      let worst = 0;
+      const step = FRAME_MS * speed;
+      let previous = keyAt(track, 0).yaw;
+      for (let ms = step; ms <= 1_200_000; ms += step) {
+        const yaw = keyAt(track, ms).yaw;
+        worst = Math.max(worst, Math.abs(yaw - previous) / (FRAME_MS / 1000));
+        previous = yaw;
+      }
+      return worst;
+    };
+    for (const [speed, leg] of [[1, 60], [32, 1_200]] as const) {
+      // The default window: at 1x it alone keeps a sharp corner under the cap;
+      // at 32x (stretched only FOLLOW_MAX_YAW_STRETCH) the cap is what holds it.
+      const smoothed = worstTurn(speed, leg);
+      // With almost no yaw window, the cap is what holds it.
+      const capped = worstTurn(speed, leg, 250);
+      console.info(`stairs ${speed}x: worst track turn ${(smoothed / DEG).toFixed(1)} deg/s, ${(capped / DEG).toFixed(1)} with a 250 ms window (cap ${(FOLLOW_YAW_MAX_RATE / DEG).toFixed(0)})`);
+      if (speed === 1) expect(smoothed).toBeLessThan(FOLLOW_YAW_MAX_RATE);
+      else expect(smoothed).toBeGreaterThan(FOLLOW_YAW_MAX_RATE * 0.9);
+      expect(smoothed).toBeLessThan(FOLLOW_YAW_MAX_RATE * 1.3);
+      // (At 1x the centre's own window spreads a corner over seconds; at 32x it is a fifth of a second of real time.)
+      if (speed === 32) expect(capped).toBeGreaterThan(FOLLOW_YAW_MAX_RATE * 0.9);
+      // Catmull-Rom between capped samples can overshoot a sample's chord a little.
+      expect(capped).toBeLessThan(FOLLOW_YAW_MAX_RATE * 1.3);
+    }
+  });
+
+  it("never turns more than the rate cap in a frame, without stutter, on the 32x preview clock", () => {
+    const speed = 32;
+    const span = 3_000_000;
+    const track = buildFollowTrack({ startMs: 0, endMs: span, unitsAt: stairs(1_200), scale: 1, speed })!;
+    const run = (smooth: number, lead: number) => {
+      const spring: DampedValue = { value: keyAt(track, 0).yaw, velocity: 0 };
+      let last: { now: number; yaw: number; rate: number } | null = null;
+      let worstStep = 0;
+      let jerk = 0;
+      previewPlayback(speed, span, 60_000, (now, replayMs) => {
+        const dt = last ? (now - last.now) / 1000 : FRAME_MS / 1000;
+        const yaw = followYawStep(spring, keyAt(track, replayMs + lead).yaw, smooth, dt);
+        const rate = last ? (yaw - last.yaw) / dt : 0;
+        worstStep = Math.max(worstStep, Math.abs(rate));
+        if (last && now > 2_000) jerk = Math.max(jerk, Math.abs(rate - last.rate));
+        last = { now, yaw, rate };
+      }, false);
+      return { worstStep, jerk };
+    };
+    const springs = followSprings(speed, true);
+    const led = run(springs.yaw, springs.yawLeadMs);
+    const copying = run(FOLLOW_YAW_SMOOTH_SECONDS / speed, 0);
+    console.info(`32x preview yaw: led worst ${(led.worstStep / DEG).toFixed(1)} deg/s, jerk ${(led.jerk / DEG).toFixed(2)} deg/s per frame; short spring jerk ${(copying.jerk / DEG).toFixed(2)}`);
+    expect(led.worstStep).toBeLessThanOrEqual(FOLLOW_YAW_MAX_RATE + 1e-9);
+    // The turns are real (the camera does turn), but its rate changes smoothly frame to frame.
+    expect(led.worstStep).toBeGreaterThan(FOLLOW_YAW_MAX_RATE / 2);
+    expect(led.jerk).toBeLessThan(copying.jerk);
+    expect(led.jerk).toBeLessThan(2 * DEG);
+  });
+
+  /** A stub probe: `clear(sample, offsetDeg)` says whether candidate `offsetDeg` around the base is clear at the n-th sample probed. */
+  const stubProbe = (base: number, clear: (sample: number, offsetDeg: number) => boolean) => {
+    let sample = -1;
+    const calls: number[] = [];
+    const probe: FollowYawProbe = {
+      sample: () => {
+        sample++;
+        calls[sample] = 0;
+      },
+      clearYaw: (yaw) => {
+        calls[sample]!++;
+        return clear(sample, Math.round(wrapAngle(yaw - base) / DEG));
+      },
+    };
+    return { probe, calls };
+  };
+
+  it("turns a blocked base yaw to the nearest clear one, probing only until each side's nearest is known", () => {
+    const straight = (ms: number) => [0, 1, 2].map((i) => unit(`p${i}`, (ms / 1000) * 7 + i, 0));
+    // The cave blocks from 40 degrees one side of behind to 70 the other: only -60 and beyond are clear on that side.
+    const { probe, calls } = stubProbe(BEHIND_X, (_, off) => off < -40 || off > 70);
+    const track = buildFollowTrack({ startMs: 0, endMs: 60_000, unitsAt: straight, scale: 1, probe })!;
+    expect(angleOff(keyAt(track, 30_000).yaw, BEHIND_X - 60 * DEG)).toBeLessThan(DEG);
+    // The alternatives stay on the track: base, which candidates were probed, which were clear, and the choice.
+    const i = Math.round(30_000 / track.sampleMs);
+    expect(angleOff(track.baseYaw[i]!, BEHIND_X)).toBeLessThan(DEG);
+    const listed = (mask: number) => FOLLOW_YAW_CANDIDATES_DEG.filter((_, k) => mask & (1 << k));
+    // 0, 30, -30, 60 blocked; -60 is the nearest clear on the right, 90 on the left: stop there.
+    expect(listed(track.yawProbed[i]!)).toEqual([0, 30, -30, 60, -60, 90]);
+    expect(listed(track.yawOpen[i]!)).toEqual([-60, 90]);
+    expect(FOLLOW_YAW_CANDIDATES_DEG[track.yawChoice[i]!]).toBe(-60);
+    expect(calls[i]).toBe(6);
+    // A clear base takes one ray.
+    const open = stubProbe(BEHIND_X, () => true);
+    buildFollowTrack({ startMs: 0, endMs: 60_000, unitsAt: straight, scale: 1, probe: open.probe });
+    expect(open.calls.every((n) => n === 1)).toBe(true);
+    // Without a probe every candidate counts as clear and the base wins.
+    const free = buildFollowTrack({ startMs: 0, endMs: 60_000, unitsAt: straight, scale: 1 })!;
+    expect(free.yawOpen[i]).toBe((1 << FOLLOW_YAW_CANDIDATES_DEG.length) - 1);
+    expect(angleOff(keyAt(free, 30_000).yaw, BEHIND_X)).toBeLessThan(DEG);
+  });
+
+  it("gives each sample's probe the framed units' own height", () => {
+    // Walking down a ramp: the height at each sample, not the one at build time.
+    const ramp = (ms: number) => [0, 1, 2].map((i) => ({ ...unit(`p${i}`, (ms / 1000) * 7 + i, 0), height: -ms / 1000 + i }));
+    const heights: (number | undefined)[] = [];
+    buildFollowTrack({ startMs: 0, endMs: 20_000, unitsAt: ramp, scale: 1, probe: { sample: (_x, _z, _r, height) => void heights.push(height), clearYaw: () => true } });
+    // The median of the three (i = 1).
+    expect(heights[0]).toBeCloseTo(1, 9);
+    expect(heights[40]).toBeCloseTo(-10 + 1, 9);
+    // Unknown heights stay unknown.
+    const none: (number | undefined)[] = [];
+    buildFollowTrack({ startMs: 0, endMs: 5_000, unitsAt: corner, scale: 1, probe: { sample: (_x, _z, _r, height) => void none.push(height), clearYaw: () => true } });
+    expect(none.every((height) => height === undefined)).toBe(true);
+  });
+
+  // A group walks in along +x for 10 s, then stands (a fight) for the rest.
+  const standing = (ms: number) => {
+    const t = Math.min(ms / 1000, 10);
+    return [0, 1, 2, 3].map((i) => unit(`p${i}`, t * 6 + (i % 2), i));
+  };
+  // The total turn, and the worst distance from any probed choice (base + a candidate), over the fight.
+  const fightYaw = (track: FollowTrack, fromMs: number) => {
+    let worstOffChoice = 0;
+    for (let ms = fromMs; ms <= track.endMs; ms += 250) {
+      const yaw = keyAt(track, ms).yaw;
+      worstOffChoice = Math.max(worstOffChoice, Math.min(...FOLLOW_YAW_CANDIDATES_DEG.map((deg) => angleOff(yaw, BEHIND_X + deg * DEG))));
+    }
+    // A blocked base (+90/-90 pairs) gives way once, to one side, and stays.
+    const switches = Array.from(track.yawChoice).filter((k, j, all) => j > 0 && k !== all[j - 1]).length;
+    expect(switches).toBeLessThanOrEqual(1);
+    return { turn: Math.abs(keyAt(track, track.endMs).yaw - keyAt(track, fromMs).yaw), worstOffChoice };
+  };
+
+  it("does not spin through a fight when the clear yaw flips half a turn or side to side every sample (review 1728)", () => {
+    for (const [name, pair] of [["0/180", [0, 180]], ["+90/-90", [90, -90]]] as const) {
+      // From 15 s, only one of the pair is clear, alternating every sample.
+      const { probe } = stubProbe(BEHIND_X, (sample, off) => (sample > 60 ? off === pair[sample % 2] : true));
+      const track = buildFollowTrack({ startMs: 0, endMs: 300_000, unitsAt: standing, scale: 1, probe })!;
+      const { turn, worstOffChoice } = fightYaw(track, 30_000);
+      console.info(`flip ${name} every sample: turned ${(turn / DEG).toFixed(1)} deg, at most ${(worstOffChoice / DEG).toFixed(1)} deg off a probed choice`);
+      expect(turn).toBeLessThan(DEG);
+      expect(worstOffChoice).toBeLessThan(DEG);
+    }
+  });
+
+  it("does not spin, nor settle sideways, when the clear yaw flips every 0.25-2.5 s", () => {
+    for (const pair of [[0, 180], [90, -90]] as const) {
+      let seed = 3;
+      const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+      let state = 0;
+      let left = 0;
+      const { probe } = stubProbe(BEHIND_X, (sample, off) => {
+        if (sample <= 60) return true;
+        if (off === 0) {
+          // Once per sample (the base is always probed first): count the run down.
+          if (left-- <= 0) {
+            state ^= 1;
+            left = 1 + Math.floor(random() * 10);
+          }
+        }
+        return off === pair[state];
+      });
+      const track = buildFollowTrack({ startMs: 0, endMs: 300_000, unitsAt: standing, scale: 1, probe })!;
+      const { turn, worstOffChoice } = fightYaw(track, 30_000);
+      console.info(`flip ${pair.join("/")} in 0.25-2.5 s runs: turned ${(turn / DEG).toFixed(1)} deg, at most ${(worstOffChoice / DEG).toFixed(1)} deg off a probed choice`);
+      expect(turn).toBeLessThan(DEG);
+      expect(worstOffChoice).toBeLessThan(DEG);
+    }
+  });
+
+  it("takes a new clear yaw that holds past the dwell, and still never accumulates a turn", () => {
+    // The clear yaw flips 0 <-> 180 in runs of 1-10 s: some runs outlast the dwell and are taken.
+    let seed = 11;
+    const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    const runs: number[] = [];
+    for (let at = 60; at < 1_300; at += 4 + Math.floor(random() * 36)) runs.push(at);
+    const stateAt = (sample: number) => runs.filter((at) => at <= sample).length % 2;
+    const { probe } = stubProbe(BEHIND_X, (sample, off) => (sample <= 60 ? true : off === (stateAt(sample) ? 180 : 0)));
+    const track = buildFollowTrack({ startMs: 0, endMs: 300_000, unitsAt: standing, scale: 1, probe })!;
+    const choices = new Set(Array.from(track.yawChoice).map((k) => FOLLOW_YAW_CANDIDATES_DEG[k]));
+    expect(choices).toEqual(new Set([0, 180]));
+    // Every yaw on the track lies between the two choices on one side (no laps): within half a turn of the base.
+    for (const yaw of track.yaw) expect(Math.abs(yaw - BEHIND_X)).toBeLessThanOrEqual(Math.PI + 1e-9);
+  });
+
+  // Walking +x with the base blocked from 10 s on; `open(sample)` says which offsets are clear.
+  const walkingBlocked = (open: (sample: number) => number[]) => {
+    const walking = (ms: number) => [0, 1, 2, 3].map((i) => unit(`p${i}`, (ms / 1000) * 6 + (i % 2), i));
+    const { probe } = stubProbe(BEHIND_X, (sample, off) => (sample < 40 ? true : open(sample).includes(off)));
+    return buildFollowTrack({ startMs: 0, endMs: 120_000, unitsAt: walking, scale: 1, probe })!;
+  };
+
+  it("turns off a blocked base while walking even when the clear side moves between +30 and +60 each sample (review 1728b)", () => {
+    const track = walkingBlocked((sample) => (sample % 2 ? [30] : [60]));
+    const i = Math.round(60_000 / track.sampleMs);
+    expect([30, 60]).toContain(FOLLOW_YAW_CANDIDATES_DEG[track.yawChoice[i]!]);
+    // It switched once and stays (the held +30 or +60 is asked for again every other sample).
+    const switches = Array.from(track.yawChoice).filter((k, j, all) => j > 0 && k !== all[j - 1]).length;
+    expect(switches).toBe(1);
+    expect(angleOff(keyAt(track, 60_000).yaw, BEHIND_X)).toBeGreaterThan(25 * DEG);
+  });
+
+  it("turns off a blocked base while walking even when one sample in eight has nothing clear (review 1728b)", () => {
+    const track = walkingBlocked((sample) => (sample % 8 === 0 ? [] : [60]));
+    expect(FOLLOW_YAW_CANDIDATES_DEG[track.yawChoice[Math.round(60_000 / track.sampleMs)]!]).toBe(60);
+    expect(angleOff(keyAt(track, 60_000).yaw, BEHIND_X + 60 * DEG)).toBeLessThan(DEG);
+  });
+
+  it("skips a sample the probe cannot tell (no floor): it keeps the held choice", () => {
+    let sample = -1;
+    const probe: FollowYawProbe = {
+      // From 10 s on, every other sample has no floor below; the rest have only +60 clear.
+      sample: () => ++sample < 40 || sample % 2 === 0,
+      clearYaw: (yaw) => sample < 40 || Math.round(wrapAngle(yaw - BEHIND_X) / DEG) === 60,
+    };
+    const walking = (ms: number) => [0, 1, 2, 3].map((i) => unit(`p${i}`, (ms / 1000) * 6 + (i % 2), i));
+    const track = buildFollowTrack({ startMs: 0, endMs: 120_000, unitsAt: walking, scale: 1, probe })!;
+    const i = Math.round(60_000 / track.sampleMs);
+    expect(track.yawProbed[i % 2 ? i : i + 1]).toBe(0);
+    expect(FOLLOW_YAW_CANDIDATES_DEG[track.yawChoice[i]!]).toBe(60);
+  });
+
+  it("heldYawChoices: a new choice takes over only after the dwell; nothing clear pauses the count", () => {
+    const bit = (deg: number) => 1 << FOLLOW_YAW_CANDIDATES_DEG.indexOf(deg);
+    const at = (deg: number) => FOLLOW_YAW_CANDIDATES_DEG.indexOf(deg);
+    const open = Uint16Array.from([bit(0), bit(30), bit(30), bit(0), bit(30), 0, bit(30), bit(30), bit(0)]);
+    // Asking for the held 0 again starts the count over; the empty sample only pauses it.
+    expect(Array.from(heldYawChoices(open, 3))).toEqual([at(0), at(0), at(0), at(0), at(0), at(0), at(0), at(30), at(30)]);
+    // The clear side moving between candidates still counts as away, and the latest one asked for takes over.
+    expect(Array.from(heldYawChoices(Uint16Array.from([bit(0), bit(30), bit(60), bit(30), bit(60)]), 3))).toEqual([at(0), at(0), at(0), at(30), at(30)]);
+    // The first sample takes its own choice; dwell 1 switches at once.
+    expect(Array.from(heldYawChoices(Uint16Array.from([bit(60), bit(0)]), 1))).toEqual([at(60), at(0)]);
+  });
+
+  it("nearestOpenYaw: nearest clear candidate, a tie going to the side held, -1 when nothing is clear", () => {
+    const bit = (deg: number) => 1 << FOLLOW_YAW_CANDIDATES_DEG.indexOf(deg);
+    const at = (deg: number) => FOLLOW_YAW_CANDIDATES_DEG.indexOf(deg);
+    expect(nearestOpenYaw(bit(30) | bit(-30), -1)).toBe(at(-30));
+    expect(nearestOpenYaw(bit(30) | bit(-30), 1)).toBe(at(30));
+    expect(nearestOpenYaw(bit(30) | bit(-30))).toBe(at(30));
+    expect(nearestOpenYaw(bit(90) | bit(-60))).toBe(at(-60));
+    expect(nearestOpenYaw(0)).toBe(-1);
+  });
+
+  it("hands the yaw spring over after a cut turning with the track, at rest when paused", () => {
+    const playing = handOverFollowYaw({ value: 0, velocity: 0 }, 1, 1.1, followSprings(8, true));
+    expect(playing.value).toBe(1);
+    expect(playing.velocity).toBeCloseTo(0.1 / FOLLOW_YAW_SMOOTH_SECONDS, 9);
+    expect(handOverFollowYaw({ value: 0, velocity: 3 }, 1, 1, followSprings(8, false))).toEqual({ value: 1, velocity: 0 });
+  });
+
+  it("a glide turns along the yaw it is given, slowly enough for a big turn, the move keeping its own length", () => {
+    const from: GlidePose = { x: 0, z: 0, distance: 10, elevationDeg: 30, yaw: 3 };
+    const to: GlidePose = { x: 0, z: 0, distance: 10, elevationDeg: 30, yaw: unwrapNear(-3, 3) };
+    const out: GlidePose = { x: 0, z: 0, distance: 0, elevationDeg: 0 };
+    // From 3 rad to -3 rad is 0.28 rad the short way, across pi (the caller unwraps the target).
+    expect(glidePoseAt(from, to, 0.5, out).yaw).toBeCloseTo(3 + (2 * Math.PI - 6) / 2, 9);
+    expect(glidePoseAt(from, to, 1, out).yaw).toBeCloseTo(-3 + 2 * Math.PI, 9);
+    // Any turn's clock is long enough that its eased peak stays at the cap, even past GLIDE_MAX_MS...
+    for (const turn of [Math.PI / 4, Math.PI / 2, Math.PI]) {
+      const ms = glideTurnMs(turn, GLIDE_MIN_MS);
+      expect(ms).toBeCloseTo(Math.max(GLIDE_MIN_MS, (1000 * turn * Math.PI) / (2 * FOLLOW_YAW_MAX_RATE)), 6);
+      let peak = 0;
+      for (let t = 0; t <= 1; t += 0.001) {
+        const a = glidePoseAt({ ...from, yaw: 0 }, { ...to, yaw: turn }, 1, out, GLIDE_MIN_MS, t, ms).yaw!;
+        const b = glidePoseAt({ ...from, yaw: 0 }, { ...to, yaw: turn }, 1, out, GLIDE_MIN_MS, t + 0.001, ms).yaw!;
+        peak = Math.max(peak, Math.abs(b - a) / ((0.001 * ms) / 1000));
+      }
+      expect(peak).toBeLessThanOrEqual(FOLLOW_YAW_MAX_RATE * 1.001);
+    }
+    expect(glideTurnMs(Math.PI, GLIDE_MAX_MS)).toBeGreaterThan(GLIDE_MAX_MS);
+    // ...while the move keeps car 1's length, GLIDE_MAX_MS at most.
+    expect(glideDurationMs(10_000, 1)).toBe(GLIDE_MAX_MS);
+    expect(glideTurnMs(0.1, 2_000)).toBe(2_000);
+  });
+
+  it("a glide whose target drifts across the opposite direction keeps turning the same way (review 1728b)", () => {
+    // As MapScene3D.updateDirector glides: a 177 degree turn, the track's yaw drifting 6 degrees past half a turn meanwhile.
+    const from: GlidePose = { x: 0, z: 0, distance: 10, elevationDeg: 30, yaw: 0, vyaw: 0 };
+    const trackYaw = (t: number) => Math.PI - 3 * DEG + 6 * DEG * t;
+    const to: GlidePose = { x: 0, z: 0, distance: 10, elevationDeg: 30, yaw: unwrapNear(trackYaw(0), from.yaw!) };
+    const moveMs = GLIDE_MIN_MS;
+    const turnMs = glideTurnMs(to.yaw! - from.yaw!, moveMs);
+    const out: GlidePose = { x: 0, z: 0, distance: 0, elevationDeg: 0 };
+    let previous = 0;
+    let worst = 0;
+    for (let now = FRAME_MS; now <= turnMs + FRAME_MS; now += FRAME_MS) {
+      const turnT = Math.min(1, now / turnMs);
+      to.yaw = unwrapNear(trackYaw(turnT), to.yaw!);
+      const yaw = glidePoseAt(from, to, Math.min(1, now / moveMs), out, moveMs, turnT, turnMs).yaw!;
+      worst = Math.max(worst, Math.abs(yaw - previous) / (FRAME_MS / 1000));
+      previous = yaw;
+    }
+    console.info(`drifting half-turn glide: worst ${(worst / DEG).toFixed(1)} deg/s, ends at ${(previous / DEG).toFixed(1)} deg`);
+    // Without the fixed direction this snapped about 180 degrees in one frame.
+    expect(worst).toBeLessThan(FOLLOW_YAW_MAX_RATE * 1.1);
+    expect(previous).toBeCloseTo(Math.PI + 3 * DEG, 6);
+  });
+
+  it("probes in slices too: no slice runs past its budget by more than one sample's probes", () => {
+    let clock = 0;
+    // Only half a turn round is clear, so every candidate is probed: 0.5 ms a floor, 0.1 ms a ray.
+    const probe: FollowYawProbe = {
+      sample: () => {
+        clock += 0.5;
+      },
+      clearYaw: () => {
+        clock += 0.1;
+        return false;
+      },
+    };
+    const build = startFollowTrackBuild({ startMs: 0, endMs: 120_000, unitsAt: corner, scale: 1, probe }, () => clock);
+    let longest = 0;
+    let slices = 0;
+    for (;;) {
+      const before = clock;
+      const finished = build.step(6);
+      longest = Math.max(longest, clock - before);
+      slices++;
+      if (finished) break;
+    }
+    // 481 samples of 1.5 ms each: about 120 slices.
+    expect(slices).toBeGreaterThan(110);
+    expect(longest).toBeLessThanOrEqual(6 + 1.5 + 1e-9);
+    const whole = buildFollowTrack({ startMs: 0, endMs: 120_000, unitsAt: corner, scale: 1, probe: { sample: () => {}, clearYaw: () => false } })!;
+    expect(Array.from(build.result!.yaw)).toEqual(Array.from(whole.yaw));
+  });
+});
+
+describe("line of sight to the framed units (chronicle-1725)", () => {
+  const CLIMB = climbElevations(28, 5, 50);
+  const DEG = Math.PI / 180;
+  // Walking +x, the camera sits behind at -x: yaw -90 degrees.
+  const BEHIND_X = -Math.PI / 2;
+  const keyAt = (track: FollowTrack, ms: number) => followKeyAt(track, ms, { x: 0, z: 0, radius: 0, yaw: 0 });
+  // A seeded random, so flicker tests are repeatable.
+  const seeded = (seed: number) => () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+
+  it("climbs in steps up to the cap", () => {
+    expect(CLIMB).toEqual([28, 33, 38, 43, 48, 50]);
+  });
+
+  it("checks the boss and at most five players, spread through the framing", () => {
+    const picks: number[] = [];
+    // A 5-man: everyone.
+    expect(sightPicks(5, () => false, picks)).toEqual([0, 1, 2, 3, 4]);
+    // The boss first, wherever it sits in the list.
+    expect(sightPicks(6, (i) => i === 3, picks)).toEqual([3, 0, 1, 2, 4, 5]);
+    // A raid of 40 with a boss: the boss and every eighth player.
+    const raid = sightPicks(41, (i) => i === 40, picks);
+    expect(raid).toEqual([40, 0, 8, 16, 24, 32]);
+    // Never more than six, even with several bosses.
+    expect(sightPicks(10, (i) => i < 3, picks)).toHaveLength(6);
+    expect(sightPicks(0, () => false, picks)).toEqual([]);
+  });
+
+  it("needs the boss and most (60%) of the players checked", () => {
+    const boss = (i: number) => i === 0;
+    const sees = (clear: boolean[]) => seesFraming(clear.length, boss, (i) => clear[i]!);
+    // Boss and 3 of 5 players: seen.
+    expect(sees([true, true, true, true, false, false])).toBe(true);
+    // Boss and 2 of 5: not.
+    expect(sees([true, true, true, false, false, false])).toBe(false);
+    // Every player but no boss: not.
+    expect(sees([false, true, true, true, true, true])).toBe(false);
+    // No boss framed: 3 of 5 players.
+    expect(seesFraming(5, () => false, (i) => i < 3)).toBe(true);
+    expect(seesFraming(5, () => false, (i) => i < 2)).toBe(false);
+    // One player: that one. Nobody framed: nothing to hide.
+    expect(seesFraming(1, () => false, () => false)).toBe(false);
+    expect(seesFraming(0, () => false, () => false)).toBe(true);
+    // A boss alone.
+    expect(seesFraming(1, () => true, () => true)).toBe(true);
+  });
+
+  it("casts no more rays than the answer needs", () => {
+    const boss = (i: number) => i === 0;
+    let rays = 0;
+    const count = (clear: boolean) => () => (rays++, clear);
+    // A blocked boss: one ray.
+    seesFraming(6, boss, count(false));
+    expect(rays).toBe(1);
+    // Everything clear: the boss and three players.
+    rays = 0;
+    seesFraming(6, boss, count(true));
+    expect(rays).toBe(4);
+    // Players blocked: the boss and three players (the third miss settles it).
+    rays = 0;
+    seesFraming(6, boss, (i) => (rays++, i === 0));
+    expect(rays).toBe(4);
+  });
+
+  it("climbs before it shortens, and asks in that order", () => {
+    const asked: string[] = [];
+    const answer = (ok: (deg: number, shortened: boolean) => FollowYawSight) => fallbackShot(CLIMB, (deg, shortened) => {
+      asked.push(`${deg}${shortened ? "s" : ""}`);
+      return ok(deg, shortened);
+    });
+    // Clear at the base: no climb.
+    expect(answer(() => true)).toEqual({ elevationDeg: 28, shortened: false });
+    expect(asked).toEqual(["28"]);
+    // A modest climb is enough.
+    asked.length = 0;
+    expect(answer((deg, shortened) => !shortened && deg >= 43)).toEqual({ elevationDeg: 43, shortened: false });
+    expect(asked).toEqual(["28", "33", "38", "43"]);
+    // A shortened shot sees from lower than the full one does: still every full climb first.
+    asked.length = 0;
+    expect(answer((deg, shortened) => shortened || deg >= 50)).toEqual({ elevationDeg: 50, shortened: false });
+    // Nothing at the full distance: the lowest shortened shot that sees.
+    asked.length = 0;
+    expect(answer((deg, shortened) => shortened && deg >= 38)).toEqual({ elevationDeg: 38, shortened: true });
+    expect(asked).toEqual(["28", "33", "38", "43", "48", "50", "28s", "38s"]);
+    // Nothing sees the framing: the highest shot with a clear aim line,
+    // shortened first, from the answers already asked (no more rays).
+    asked.length = 0;
+    expect(answer((deg, shortened) => !shortened && deg <= 38 && "aim")).toEqual({ elevationDeg: 38, shortened: false });
+    expect(asked).toHaveLength(CLIMB.length + 3);
+    asked.length = 0;
+    expect(answer((deg, shortened) => (shortened ? deg <= 38 && "aim" : deg <= 38 && "aim"))).toEqual({ elevationDeg: 38, shortened: true });
+    expect(asked).toHaveLength(CLIMB.length + 3);
+    // Elevation first: a clear full 48 beats a clear shortened 28 (review 1732b).
+    asked.length = 0;
+    expect(answer((deg, shortened) => (shortened ? deg === 28 && "aim" : deg >= 43 && deg <= 48 && "aim"))).toEqual({ elevationDeg: 48, shortened: false });
+    // Blocked even on the aim line everywhere: the base elevation, shortened.
+    // The wall pulls the camera in, but not looking steeply down at the floor.
+    asked.length = 0;
+    expect(answer(() => false)).toEqual({ elevationDeg: 28, shortened: true });
+    expect(asked).toHaveLength(CLIMB.length + 3);
+  });
+
+  it("lets a wall pull the camera in at any elevation, and flags a steep close-up", () => {
+    // The wall wins: never kept on its far side (in the rock), steep or not.
+    expect(directorPullIn(30, 3, 0.75, 1)).toBeCloseTo(2.25, 9);
+    expect(directorPullIn(30, 20, 0.75, 1)).toBeCloseTo(19.25, 9);
+    expect(directorPullIn(30, 0.5, 0.75, 1)).toBe(1);
+    expect(directorPullIn(30, null, 0.75, 1)).toBeNull();
+    // Pulled in under 10 out: a floor close-up only past 40 degrees.
+    const allowed = directorPullIn(30, 4, 0.75, 1);
+    expect(steepPullIn(FOLLOW_STEEP_ELEVATION_DEG - 0.1, allowed, 10)).toBe(false);
+    expect(steepPullIn(FOLLOW_STEEP_ELEVATION_DEG, allowed, 10)).toBe(false);
+    expect(steepPullIn(FOLLOW_STEEP_ELEVATION_DEG + 0.01, allowed, 10)).toBe(true);
+    expect(steepPullIn(50, directorPullIn(30, 12, 0.75, 1), 10)).toBe(false);
+    expect(steepPullIn(50, null, 10)).toBe(false);
+  });
+
+  // The Director's per-frame line-of-sight loop (MapScene3D.updateDirector),
+  // modelled with the pure parts: a check every FOLLOW_SHOT_CHECK_MS or at
+  // once on a cut or jump, the hold, the steep pull-in releasing a held steep
+  // shot (releaseSteepShot), and the elevation spring. `answer(now, poseClear)`
+  // is the raw answer; `poseClear(deg)` says whether a steep shot clears the
+  // wall from the camera's own pose (clearShot's pose check). `wall(elevation)`
+  // is the wall's distance on the camera's own line (null: none).
+  const directorLoop = (durationMs: number, answer: (now: number, poseClear: (deg: number) => boolean) => ShotAnswer, wall: (elevationDeg: number) => number | null, jumps: number[] = []) => {
+    const hold = createShotHold();
+    const elevation: DampedValue = { value: hold.elevationDeg, velocity: 0 };
+    let raw: ShotAnswer | null = null;
+    let checkAt = 0;
+    let release = false;
+    let shallow: ShotAnswer | null = null;
+    let allowed: number | null = null;
+    let checks = 0;
+    const frames: { now: number; elevation: number; allowed: number | null; held: number }[] = [];
+    const poseClear = (deg: number) => {
+      const hit = wall(deg);
+      return hit === null || hit - 0.75 >= 10;
+    };
+    for (let now = 0; now <= durationMs; now += FRAME_MS) {
+      if (hold.elevationDeg <= FOLLOW_STEEP_ELEVATION_DEG) release = false;
+      else if (steepPullIn(elevation.value, allowed, 10)) release = true;
+      const jumped = jumps.some((at) => at > now - FRAME_MS && at <= now);
+      if (shotCheckDue(now, checkAt, raw !== null, jumped)) {
+        raw = answer(now, poseClear);
+        checkAt = now + FOLLOW_SHOT_CHECK_MS;
+        checks++;
+        if (raw.elevationDeg <= FOLLOW_STEEP_ELEVATION_DEG) shallow = raw;
+        if (release && releaseSteepShot(hold, raw, now, shallow)) release = false;
+      }
+      holdShot(hold, raw!.elevationDeg, raw!.shortened, now);
+      smoothDamp(elevation, hold.elevationDeg, 0.6, FRAME_MS / 1000);
+      const hit = wall(elevation.value);
+      allowed = directorPullIn(30, hit, 0.75, 1);
+      frames.push({ now, elevation: elevation.value, allowed, held: hold.elevationDeg });
+    }
+    return { frames, checks };
+  };
+
+  it("asks every 100 ms, and at once on a jump or a cut", () => {
+    const asked: number[] = [];
+    const { checks } = directorLoop(1_000, (now) => (asked.push(now), { elevationDeg: 28, shortened: false }), () => null, [455]);
+    // On the 60 fps clock: the first frame at or past each 100 ms, plus the jump's frame.
+    expect(checks).toBe(asked.length);
+    expect(asked.some((now) => now >= 455 && now < 455 + FRAME_MS)).toBe(true);
+    for (let i = 1; i < asked.length; i++) {
+      const gap = asked[i]! - asked[i - 1]!;
+      const jump = asked[i]! >= 455 && asked[i]! < 455 + FRAME_MS;
+      if (!jump) expect(gap).toBeLessThanOrEqual(FOLLOW_SHOT_CHECK_MS + FRAME_MS + 1e-9);
+      // Never more often than every 100 ms, but for the jump (which restarts the count).
+      if (!jump && !(asked[i - 1]! >= 455 && asked[i - 1]! < 455 + FRAME_MS)) expect(gap).toBeGreaterThanOrEqual(FOLLOW_SHOT_CHECK_MS - 1e-6);
+    }
+    expect(checks).toBeLessThanOrEqual(1_000 / FOLLOW_SHOT_CHECK_MS + 2);
+    expect(shotCheckDue(50, 100, true, false)).toBe(false);
+    expect(shotCheckDue(100, 100, true, false)).toBe(true);
+    expect(shotCheckDue(50, 100, false, false)).toBe(true);
+    expect(shotCheckDue(50, 100, true, true)).toBe(true);
+  });
+
+  it("comes down at once when a wall pulls the steep camera in close", () => {
+    // The answer climbs to 50 for a second (the group behind a pillar), then
+    // asks for 33; meanwhile, a wall 4 yd out stands on the camera's line
+    // above 40 degrees (the spring's lagging position, say).
+    const answer = (now: number): ShotAnswer => (now < 1_000 ? { elevationDeg: 50, shortened: false } : { elevationDeg: 33, shortened: false });
+    const wall = (deg: number) => (deg > 40 ? 4 : null);
+    const { frames } = directorLoop(4_000, answer, wall);
+    // The hold lets go within one check of the 33 answer, not SHOT_RELEASE_MS later.
+    const down = frames.find((frame) => frame.now >= 1_000 && frame.held === 33)!;
+    expect(down.now).toBeLessThan(1_000 + 2 * FOLLOW_SHOT_CHECK_MS);
+    // Steep and pulled in close only while the spring comes down through 40.
+    const close = frames.filter((frame) => frame.now >= 1_000 && steepPullIn(frame.elevation, frame.allowed, 10));
+    expect(close.length * FRAME_MS).toBeLessThan(1_000);
+    // Without the wall the same answers wait out the hold.
+    const free = directorLoop(4_000, answer, () => null).frames.find((frame) => frame.now >= 1_000 && frame.held === 33)!;
+    expect(free.now).toBeGreaterThanOrEqual(1_000 + SHOT_RELEASE_MS);
+  });
+
+  // Reversals of the elevation spring's direction, and how long it is steep
+  // and pulled in close, after the first `settleMs`.
+  const bobbing = (frames: { now: number; elevation: number; allowed: number | null }[], settleMs = 0) => {
+    let reversals = 0;
+    let lastDirection = 0;
+    let steepClose = 0;
+    for (let i = 1; i < frames.length; i++) {
+      const step = frames[i]!.elevation - frames[i - 1]!.elevation;
+      const direction = Math.abs(step) > 1e-3 ? Math.sign(step) : 0;
+      if (frames[i]!.now < settleMs) continue;
+      if (direction && lastDirection && direction !== lastDirection) reversals++;
+      if (direction) lastDirection = direction;
+      if (steepPullIn(frames[i]!.elevation, frames[i]!.allowed, 10)) steepClose += FRAME_MS;
+    }
+    return { reversals, steepCloseMs: steepClose };
+  };
+
+  it("does not bob when the steep answer flickers while the camera's own line is walled (review 1732b)", () => {
+    // The answer at the goal flickers between {50, full} and {28, shortened};
+    // the camera's own line has a wall 4 yd out above 40 degrees. Before
+    // the fix: 153 reversals between 31 and 48 degrees in 60 s, 40 s steep and close.
+    const wall = (deg: number) => (deg > 40 ? 4 : null);
+    for (const odds of [0.5, 0.2, 0.05]) {
+      const random = seeded(7);
+      const flicker = () => random() < odds;
+      // With clearShot's pose check, the steep answer is turned down where the camera stands.
+      const checked = directorLoop(60_000, (_now, poseClear) => (flicker() || !poseClear(50) ? { elevationDeg: 28, shortened: true } : { elevationDeg: 50, shortened: false }), wall).frames;
+      const pose = bobbing(checked);
+      expect(pose.reversals).toBeLessThanOrEqual(1);
+      expect(pose.steepCloseMs).toBe(0);
+      // Without it (the pose check cannot see the wall), the release alone:
+      // a steep answer comes back only after holding SHOT_RELEASE_MS, so the
+      // camera rises at most once per release.
+      const random2 = seeded(7);
+      const blind = directorLoop(60_000, () => (random2() < odds ? { elevationDeg: 28, shortened: true } : { elevationDeg: 50, shortened: false }), wall).frames;
+      const alone = bobbing(blind, 5_000);
+      // Each release doubles the wait (1.5, 3, 6, 12, 24 s): a handful of
+      // rises in a minute, each steep and close only until the next check.
+      expect(alone.reversals).toBeLessThanOrEqual(12);
+      expect(alone.steepCloseMs).toBeLessThan(3_000);
+      console.info(`flicker ${odds}: pose-checked ${pose.reversals} reversals, ${(pose.steepCloseMs / 1000).toFixed(1)} s steep and close; release alone ${alone.reversals} reversals, ${(alone.steepCloseMs / 1000).toFixed(1)} s`);
+    }
+  });
+
+  it("keeps a released steep answer from winning straight back, then lets it in once it holds", () => {
+    const hold = createShotHold();
+    holdShot(hold, 50, false, 0);
+    // A second release doubles the wait.
+    const twice = createShotHold();
+    releaseSteepShot(twice, { elevationDeg: 28, shortened: false }, 0);
+    holdShot(twice, 50, false, 100);
+    holdShot(twice, 50, false, 100 + SHOT_RELEASE_MS);
+    expect(twice.elevationDeg).toBe(50);
+    releaseSteepShot(twice, { elevationDeg: 28, shortened: false }, 2_000);
+    holdShot(twice, 50, false, 2_100);
+    holdShot(twice, 50, false, 2_100 + SHOT_RELEASE_MS);
+    expect(twice.elevationDeg).toBe(28);
+    holdShot(twice, 50, false, 2_100 + 2 * SHOT_RELEASE_MS);
+    expect(twice.elevationDeg).toBe(50);
+    // Once steep answers go quiet, the back-off resets: the next release waits SHOT_RELEASE_MS again.
+    holdShot(twice, 28, false, 10_000);
+    holdShot(twice, 28, false, 10_000 + SHOT_RELEASE_MS);
+    expect(twice.steepReleases).toBe(0);
+    holdShot(twice, 50, false, 12_000);
+    releaseSteepShot(twice, { elevationDeg: 28, shortened: false }, 12_100);
+    holdShot(twice, 50, false, 12_200);
+    holdShot(twice, 50, false, 12_200 + SHOT_RELEASE_MS);
+    expect(twice.elevationDeg).toBe(50);
+    // A steep answer does not release on its own (it waits for one that is
+    // not), but falls back to the last shallow answer when there is one.
+    expect(releaseSteepShot(hold, { elevationDeg: 48, shortened: false }, 100)).toBe(false);
+    expect(hold.elevationDeg).toBe(50);
+    const fallback = createShotHold();
+    holdShot(fallback, 50, false, 0);
+    expect(releaseSteepShot(fallback, { elevationDeg: 48, shortened: false }, 100, { elevationDeg: 33, shortened: false })).toBe(true);
+    expect(fallback).toMatchObject({ elevationDeg: 33, shortened: false });
+    expect(releaseSteepShot(hold, { elevationDeg: 28, shortened: true }, 200)).toBe(true);
+    expect(hold).toMatchObject({ elevationDeg: 28, shortened: true });
+    // 50 asked again at once: blocked, it counts as lower.
+    holdShot(hold, 50, false, 300);
+    expect(hold.elevationDeg).toBe(28);
+    // A flicker back to the held answer starts the count over.
+    holdShot(hold, 28, true, 400);
+    holdShot(hold, 50, false, 500);
+    holdShot(hold, 50, false, 500 + SHOT_RELEASE_MS - 1);
+    expect(hold.elevationDeg).toBe(28);
+    // Held steadily for the release time, it comes in, and the block lifts.
+    holdShot(hold, 50, false, 500 + SHOT_RELEASE_MS);
+    expect(hold.elevationDeg).toBe(50);
+    expect(hold.steepBlockedMs).toBeNull();
+    // With no steep answer asked for the release time, the block lifts by itself.
+    const quiet = createShotHold();
+    releaseSteepShot(quiet, { elevationDeg: 28, shortened: false }, 0);
+    holdShot(quiet, 28, false, SHOT_RELEASE_MS);
+    holdShot(quiet, 50, false, SHOT_RELEASE_MS + 100);
+    expect(quiet.elevationDeg).toBe(50);
+    // A shallow climb is not blocked.
+    const shallow = createShotHold();
+    releaseSteepShot(shallow, { elevationDeg: 28, shortened: false }, 0);
+    holdShot(shallow, 38, false, 100);
+    expect(shallow.elevationDeg).toBe(38);
+  });
+
+  it("does not drop a held full 50-degree shot for one shortened 28-degree answer", () => {
+    // The review's case: held at 50, full; one check asks for 28 shortened,
+    // then back to 50 full. Shortened only outranks full at the same height or higher.
+    const hold = createShotHold();
+    holdShot(hold, 50, false, 0);
+    holdShot(hold, 28, true, 100);
+    expect(hold).toMatchObject({ elevationDeg: 50, shortened: false });
+    holdShot(hold, 50, false, 200);
+    expect(hold).toMatchObject({ elevationDeg: 50, shortened: false, lowerSinceMs: null });
+    // Shortened at the same elevation (or higher) is still taken at once.
+    holdShot(hold, 50, true, 300);
+    expect(hold).toMatchObject({ elevationDeg: 50, shortened: true });
+    // Flicker between the two every check for a minute: the camera never drops.
+    const flicker = createShotHold();
+    holdShot(flicker, 50, false, 0);
+    let changes = 0;
+    for (let now = 100; now < 60_000; now += 100) {
+      const before = `${flicker.elevationDeg}|${flicker.shortened}`;
+      if (Math.floor(now / 100) % 2 === 0) holdShot(flicker, 50, false, now);
+      else holdShot(flicker, 28, true, now);
+      if (`${flicker.elevationDeg}|${flicker.shortened}` !== before) changes++;
+    }
+    expect(changes).toBe(0);
+    // Asking for the lower shortened shot steadily, it comes down after the release time.
+    holdShot(flicker, 28, true, 70_000);
+    holdShot(flicker, 28, true, 70_000 + SHOT_RELEASE_MS);
+    expect(flicker).toMatchObject({ elevationDeg: 28, shortened: true });
+  });
+
+  it("holds the answer while each unit's line flickers from check to check", () => {
+    // Every 100 ms check, each of the boss and five players is seen from the
+    // base elevation with even odds (a pillar edge), and always from 43 degrees up.
+    const random = seeded(11);
+    const hold = createShotHold();
+    let rawChanges = 0;
+    let heldChanges = 0;
+    let lastRaw = -1;
+    let lastHeld = hold.elevationDeg;
+    for (let now = 0; now < 60_000; now += 100) {
+      const clear = Array.from({ length: 6 }, () => random() < 0.5);
+      const raw = fallbackShot(CLIMB, (deg) => deg >= 43 || seesFraming(6, (i) => i === 0, (i) => clear[i]!));
+      if (raw.elevationDeg !== lastRaw) rawChanges++;
+      lastRaw = raw.elevationDeg;
+      holdShot(hold, raw.elevationDeg, raw.shortened, now);
+      if (hold.elevationDeg !== lastHeld) heldChanges++;
+      lastHeld = hold.elevationDeg;
+    }
+    // The raw answer flips hundreds of times; the shot climbs once and stays.
+    expect(rawChanges).toBeGreaterThan(100);
+    expect(heldChanges).toBe(1);
+    expect(hold.elevationDeg).toBe(43);
+  });
+
+  it("gives the probe each sample's boss and players, as the framing changes", () => {
+    // Five players walk +x; one strays out of the frame and back every few
+    // samples, and the boss is framed only in the second half.
+    const random = seeded(5);
+    const strays: boolean[] = [];
+    const units = (ms: number) => {
+      const i = Math.round(ms / 250);
+      strays[i] ??= random() < 0.4;
+      const walked = (ms / 1000) * 3;
+      const group = [0, 1, 2, 3].map((k) => unit(`p${k}`, walked + k, 0, { height: 5 + k }));
+      group.push(unit("p4", walked + (strays[i] ? 60 : 4), 0));
+      if (ms >= 10_000) group.push(unit("boss", walked + 10, 0, { player: false, boss: true, height: 7 }));
+      return group;
+    };
+    const seen: { count: number; boss: boolean; heights: number[]; hasStray: boolean }[] = [];
+    const probe: FollowYawProbe = {
+      sample: (_x, _z, _r, _h, targets) => {
+        const count = targets.length / FOLLOW_SIGHT_STRIDE;
+        const heights: number[] = [];
+        let boss = false;
+        let hasStray = false;
+        for (let k = 0; k < count; k++) {
+          heights.push(targets[k * FOLLOW_SIGHT_STRIDE + 2]!);
+          if (targets[k * FOLLOW_SIGHT_STRIDE + 3] === 1) boss = true;
+          if (targets[k * FOLLOW_SIGHT_STRIDE]! > (seen.length * 250 / 1000) * 3 + 30) hasStray = true;
+        }
+        seen.push({ count, boss, heights, hasStray });
+      },
+      clearYaw: () => true,
+    };
+    buildFollowTrack({ startMs: 0, endMs: 20_000, unitsAt: units, scale: 1, probe });
+    expect(seen).toHaveLength(81);
+    for (let i = 0; i < seen.length; i++) {
+      const sample = seen[i]!;
+      // The straggler is never a sight target while it is out of the frame.
+      expect(sample.hasStray).toBe(false);
+      expect(sample.boss).toBe(i * 250 >= 10_000);
+      // Each target's own height; NaN for the one without.
+      expect(sample.heights.slice(sample.boss ? 1 : 0, (sample.boss ? 1 : 0) + 4)).toEqual([5, 6, 7, 8]);
+    }
+    // Both framings occur: the straggler in (5 players) and out (4).
+    const counts = new Set(seen.filter((sample) => !sample.boss).map((sample) => sample.count));
+    expect(counts).toEqual(new Set([4, 5]));
+  });
+
+  it("turns to a yaw that sees the group before it climbs", () => {
+    // Walking +x. Behind the group (and 30 degrees either side), a pillar
+    // hides three of the five players from the base elevation, though the
+    // aim line is clear; from 60 degrees round all five are seen. From
+    // 43 degrees up, every yaw sees them.
+    const straight = (ms: number) => [0, 1, 2, 3, 4].map((i) => unit(`p${i}`, (ms / 1000) * 7 + i, i % 2));
+    const hiddenFrom = (offsetDeg: number, elevationDeg: number) => elevationDeg < 43 && Math.abs(offsetDeg) <= 30;
+    let offset = 0;
+    let count = 0;
+    const probe: FollowYawProbe = {
+      sample: (_x, _z, _r, _h, targets) => void (count = targets.length / FOLLOW_SIGHT_STRIDE),
+      clearYaw: (yaw) => {
+        offset = Math.round(wrapAngle(yaw - BEHIND_X) / DEG);
+        return seesFraming(count, () => false, (k) => !(hiddenFrom(offset, 28) && k < 3));
+      },
+    };
+    const track = buildFollowTrack({ startMs: 0, endMs: 60_000, unitsAt: straight, scale: 1, probe })!;
+    const i = Math.round(30_000 / track.sampleMs);
+    // The track turned (nearest clear: 60 degrees round)...
+    expect(Math.abs(FOLLOW_YAW_CANDIDATES_DEG[track.yawChoice[i]!]!)).toBe(60);
+    // ...so the shot at its yaw needs no climb.
+    const turned = Math.round(wrapAngle(keyAt(track, 30_000).yaw - BEHIND_X) / DEG);
+    const shot = fallbackShot(CLIMB, (deg) => seesFraming(5, () => false, (k) => !(hiddenFrom(turned, deg) && k < 3)));
+    expect(shot).toEqual({ elevationDeg: 28, shortened: false });
+    // Held at the base yaw instead, it would have had to climb.
+    const behind = fallbackShot(CLIMB, (deg) => seesFraming(5, () => false, (k) => !(hiddenFrom(0, deg) && k < 3)));
+    expect(behind).toEqual({ elevationDeg: 43, shortened: false });
+  });
+
+  it("copies the sight targets across a gap with nobody framed", () => {
+    // The group is framed 0-5 s, gone 5-10 s, back from 10 s.
+    const unitsAt = (ms: number) => (ms >= 5_000 && ms < 10_000 ? [] : [0, 1, 2].map((i) => unit(`p${i}`, (ms / 1000) * 3 + i, i, { height: 4 + i })));
+    const seen: number[][] = [];
+    const probe: FollowYawProbe = {
+      sample: (_x, _z, _r, _h, targets) => {
+        const xs: number[] = [];
+        for (let k = 0; k < targets.length; k += FOLLOW_SIGHT_STRIDE) xs.push(targets[k]!);
+        seen.push(xs);
+      },
+      clearYaw: () => true,
+    };
+    buildFollowTrack({ startMs: 0, endMs: 15_000, unitsAt, scale: 1, probe });
+    // Each gap sample holds the last framing before it (the units at 4.75 s), heights included.
+    const last = [14.25, 15.25, 16.25];
+    for (let i = 20; i < 40; i++) for (let k = 0; k < 3; k++) expect(seen[i]![k]).toBeCloseTo(last[k]!, 4);
+    expect(seen[40]![0]).toBeCloseTo(30, 4);
+  });
+
+  it("keeps the camera off the wall where no yaw sees the framing", () => {
+    // A boss tanked against a wall: no candidate sees the framing, but the
+    // aim line is clear only from 90 degrees round and beyond on one side.
+    const straight = (ms: number) => [0, 1, 2].map((i) => unit(`p${i}`, (ms / 1000) * 7 + i, 0));
+    const probe: FollowYawProbe = {
+      sample: () => {},
+      clearYaw: (yaw) => (Math.round(wrapAngle(yaw - BEHIND_X) / DEG) >= 90 ? "aim" : false),
+    };
+    const track = buildFollowTrack({ startMs: 0, endMs: 60_000, unitsAt: straight, scale: 1, probe })!;
+    const i = Math.round(30_000 / track.sampleMs);
+    expect(track.yawOpen[i]).toBe(0);
+    const listed = (mask: number) => FOLLOW_YAW_CANDIDATES_DEG.filter((_, k) => mask & (1 << k));
+    // Nothing sees, so every candidate was probed and the aim mask is whole.
+    expect(listed(track.yawAimOpen[i]!)).toEqual([90, 135, 180]);
+    expect(FOLLOW_YAW_CANDIDATES_DEG[track.yawChoice[i]!]).toBe(90);
+    expect(Math.abs(wrapAngle(keyAt(track, 30_000).yaw - (BEHIND_X + 90 * DEG)))).toBeLessThan(DEG);
+    // Where some yaw does see the framing, that tier wins over a nearer clear aim line.
+    const tiered = buildFollowTrack({ startMs: 0, endMs: 60_000, unitsAt: straight, scale: 1, probe: {
+      sample: () => {},
+      clearYaw: (yaw) => {
+        const off = Math.round(wrapAngle(yaw - BEHIND_X) / DEG);
+        return off === -90 ? true : off >= 30 ? "aim" : false;
+      },
+    } })!;
+    expect(FOLLOW_YAW_CANDIDATES_DEG[tiered.yawChoice[i]!]).toBe(-90);
+    expect(Array.from(choiceMasks(Uint16Array.of(0, 4), Uint16Array.of(6, 7)))).toEqual([6, 4]);
   });
 });

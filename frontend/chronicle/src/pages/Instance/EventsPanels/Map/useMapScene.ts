@@ -644,7 +644,7 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
           if (sample.floor !== undefined && selectedFloorNumber !== null && sample.floor !== selectedFloorNumber) return [];
           const point = projectSample(sample);
           if (!point) return [];
-          return [{ guid, point, player, boss: bossGuids.has(guid), dead: isDeadAt(encounter.effects, guid, ms) }];
+          return [{ guid, point, z: sample.z, player, boss: bossGuids.has(guid), dead: isDeadAt(encounter.effects, guid, ms) }];
         }),
         // Every unit the log gives no height, for the scene's walkable floors
         // (chronicle-1597); each unit's samples are projected when read.

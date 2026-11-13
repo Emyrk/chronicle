@@ -8,6 +8,10 @@
  * replay time, so the shot is a pure function of replay time and starts
  * moving before the group does.
  *
+ * The track also carries the yaw the camera looks from (chronicle-1724):
+ * behind the group's direction of travel, turned to the nearest clear line
+ * where the cave blocks it, smoothed and rate-capped ahead of time.
+ *
  * Also here: the hold that keeps the line-of-sight answer from flipping each
  * frame, and the glide across a replay jump (a seek, a skipped gap, a loop).
  *
@@ -17,6 +21,9 @@ import {
   BOSS_ENGAGE_YARDS,
   CINEMATIC_ELEVATION_DEG,
   directorFrame,
+  DISTANCE_SMOOTH_SECONDS,
+  type DampedValue,
+  smoothDamp,
   MIN_FRAME_RADIUS_YARDS,
   STRAGGLER_CUTOFF_YARDS,
   STRAGGLER_RELEASE_YARDS,
@@ -40,6 +47,22 @@ export const FOLLOW_SUBJECT_WINDOW_MS = 1_000;
 /** The springs only smooth what the track leaves over, so they can be quick. */
 export const FOLLOW_SMOOTH_SECONDS = 0.3;
 /**
+ * Fast playback stretches the sample spacing and the centre window, but only
+ * up to these factors of the 1x values (so at most 1 s between samples and a
+ * 6 s centre window, in replay time): averaging minutes of a winding cave path
+ * cuts its bends into the rock (chronicle-1723). The radius windows keep
+ * stretching with the speed, which keeps a fast shot calm.
+ */
+export const FOLLOW_MAX_SAMPLE_STRETCH = 4;
+export const FOLLOW_MAX_WINDOW_STRETCH = 2;
+/**
+ * The smoothed centre never sits further than this from the per-sample
+ * framing (the framed units' circle), except where the framing itself jumps
+ * (more than twice this between samples: a gap, a teleport), whose slide is
+ * left alone.
+ */
+export const FOLLOW_CENTRE_CLAMP_YARDS = 12;
+/**
  * The replay clock moving more than playback explains by this much is a jump,
  * or by FOLLOW_JUMP_REAL_MS of play at a fast speed (a tick re-anchoring the
  * clock can be off by a couple of hundred milliseconds of real time).
@@ -47,8 +70,64 @@ export const FOLLOW_SMOOTH_SECONDS = 0.3;
 export const FOLLOW_JUMP_MS = 1_500;
 export const FOLLOW_JUMP_REAL_MS = 400;
 
+/** Below this pace (yd/s of replay) the group counts as standing (a fight): the yaw holds instead of spinning. */
+export const FOLLOW_YAW_MOVING_YPS = 2;
+/**
+ * The yaws tried around the base yaw (degrees, + turns the camera
+ * anticlockwise seen from above), nearest first. A track's `yawOpen[i]` has bit
+ * k set when candidate k had a clear line at sample i.
+ */
+export const FOLLOW_YAW_CANDIDATES_DEG: readonly number[] = [0, 30, -30, 60, -60, 90, -90, 135, -135, 180];
+/**
+ * The held yaw choice (a candidate around the base) gives way once samples
+ * with something else clear have asked for another one this long (replay ms
+ * at 1x, stretched with the speed up to FOLLOW_MAX_YAW_STRETCH): a line of
+ * sight that flickers between options keeps the one it has instead of
+ * averaging them into a yaw nobody probed.
+ */
+export const FOLLOW_YAW_DWELL_MS = 3_000;
+/** Half-width of the yaw's smoothing window (replay ms at 1x), stretched with the speed up to FOLLOW_MAX_YAW_STRETCH. */
+export const FOLLOW_YAW_WINDOW_MS = 3_000;
+/**
+ * The most the yaw's window and dwell stretch with the speed: at 32x a full
+ * stretch (96 s of replay) followed the run's overall heading, not its walls.
+ * Capped, they stay short in replay time and the rate cap keeps the turns
+ * calm in real time instead.
+ */
+export const FOLLOW_MAX_YAW_STRETCH = 8;
+/** The fastest the yaw turns, in real time (radians a second): on the track, and frame to frame. */
+export const FOLLOW_YAW_MAX_RATE = (45 * Math.PI) / 180;
+/** The yaw spring's smoothing (real seconds); its goal is led by its trail, as the position spring's is. */
+export const FOLLOW_YAW_SMOOTH_SECONDS = 0.6;
+
 /** A higher line-of-sight answer only drops back once lower ones have held this long (real time). */
 export const SHOT_RELEASE_MS = 1_500;
+
+/**
+ * A shot sees the framing when the camera has a clear line to the boss (when
+ * one is framed) and to at least this share of the framed players, at player
+ * height (chronicle-1725).
+ */
+export const FOLLOW_SIGHT_FRACTION = 0.6;
+/** At most this many framed players are checked per shot (spread through the framing), besides the boss. */
+export const FOLLOW_SIGHT_MAX_PLAYERS = 5;
+/** Sight targets kept per track sample: the boss and the players checked. */
+export const FOLLOW_SIGHT_SLOTS = 1 + FOLLOW_SIGHT_MAX_PLAYERS;
+/** Numbers per sight target in a track's targets: x, z, height (yards; NaN when unknown), boss (1 or 0). */
+export const FOLLOW_SIGHT_STRIDE = 4;
+/**
+ * Steeper than this (degrees above the horizon) and pulled in by a wall
+ * closer than FOLLOW_STEEP_MIN_DISTANCE_YARDS, the camera shows only the
+ * floor: the Director lets the held answer go for a lower one (steepPullIn).
+ */
+export const FOLLOW_STEEP_ELEVATION_DEG = 40;
+export const FOLLOW_STEEP_MIN_DISTANCE_YARDS = 10;
+/**
+ * The Director re-asks the line-of-sight answer at most this often (real ms),
+ * and on a cut or a jump: each answer casts a ray per framed unit checked, at
+ * each elevation it tries, and the hold below keeps it for longer anyway.
+ */
+export const FOLLOW_SHOT_CHECK_MS = 100;
 
 /** The glide across a replay jump: its speed (yards a second), and its shortest and longest length. */
 export const GLIDE_SPEED_YARDS_PER_S = 60;
@@ -67,13 +146,47 @@ export interface FollowTrackOptions {
   scale: number;
   /** Follow this unit instead of the group. */
   subjectGuid?: string | null;
-  /** Replay ms per real ms: sampling and windows stretch with it, so a fast replay moves the camera as calmly as a real-time one. */
+  /** Replay ms per real ms: sampling and windows stretch with it (the centre's only up to FOLLOW_MAX_WINDOW_STRETCH), so a fast replay stays calm. */
   speed?: number;
   sampleMs?: number;
   /** Half-widths of the centre and radius windows (replay ms at 1x); the defaults when left out. */
   centreWindowMs?: number;
   radiusWindowMs?: number;
+  /** Half-width of the yaw's window (replay ms at 1x); FOLLOW_YAW_WINDOW_MS when left out. */
+  yawWindowMs?: number;
+  /** Tells which yaws have a clear line; without one, every yaw counts as clear. */
+  probe?: FollowYawProbe | null;
+  /** The yaw while the group has not moved yet (and throughout, if it never does). */
+  initialYaw?: number;
 }
+
+/**
+ * The cave mesh, seen by the yaw pass (injected, so this file stays free of
+ * three.js, as the drone's `probe.clearShot`).
+ */
+export interface FollowYawProbe {
+  /**
+   * Readies one sample's probes: the framing at (x, z) covering `radius`,
+   * its units standing at `height` (yards; undefined when unknown), so the
+   * floor is found once per sample, not once per yaw. `targets` are the
+   * framed units to keep in sight (FOLLOW_SIGHT_STRIDE numbers each: x, z,
+   * height in yards or NaN, boss 1 or 0). False when it cannot tell (no floor
+   * below: a chasm, off the mesh): the sample is not probed and keeps the
+   * held choice.
+   */
+  sample(x: number, z: number, radius: number, height: number | undefined, targets: Float32Array): boolean | void;
+  /**
+   * How a camera at `yaw` (the base shot: base elevation, fitted distance)
+   * does against the sample last readied: true when it is clear of the cave
+   * toward the aim point and sees the framing (seesFraming); "aim" when only
+   * its line to the aim point is clear (no wall between them, but the framed
+   * units are hidden); false when the cave blocks even that.
+   */
+  clearYaw(yaw: number): FollowYawSight;
+}
+
+/** clearYaw's answer: sees the framing (true), only a clear aim line ("aim"), or blocked (false). */
+export type FollowYawSight = boolean | "aim";
 
 /** The smoothed framing over a replay span; sample it with followKeyAt. */
 export interface FollowTrack {
@@ -85,6 +198,27 @@ export interface FollowTrack {
   x: Float64Array;
   z: Float64Array;
   radius: Float64Array;
+  /** The yaw the camera looks from (radians, unwrapped: continuous across +-pi), smoothed and rate-capped. */
+  yaw: Float64Array;
+  /** Per sample: the yaw behind the direction of travel (held while the group stands), unwrapped. */
+  baseYaw: Float64Array;
+  /**
+   * Per sample: bit k set when base + FOLLOW_YAW_CANDIDATES_DEG[k] was probed.
+   * Probing stops once the nearest clear yaw on each side is known (or the
+   * base itself is clear); all set without a probe.
+   */
+  yawProbed: Uint16Array;
+  /** Per sample: bit k set when candidate k was probed and saw the framing (all set without a probe). */
+  yawOpen: Uint16Array;
+  /**
+   * Per sample: bit k set when candidate k was probed and its line to the aim
+   * point was clear (a superset of `yawOpen`; all set without a probe). Where
+   * no candidate sees the framing, the choice falls back to these, so the
+   * camera still keeps off the walls.
+   */
+  yawAimOpen: Uint16Array;
+  /** Per sample: the candidate index the yaw was built from (after the dwell); -1 when none was clear and the base stands. */
+  yawChoice: Int8Array;
 }
 
 /** The framing at one moment: the circle's centre and the radius that covers everyone framed. */
@@ -92,6 +226,8 @@ export interface FollowKey {
   x: number;
   z: number;
   radius: number;
+  /** The yaw the camera looks from (radians, unwrapped). */
+  yaw: number;
 }
 
 /** How long one slice of a track build may block the main thread (ms). */
@@ -109,6 +245,88 @@ export interface FollowTrackBuild {
    * followed unit never appears in the source (frame it frame by frame).
    */
   readonly result: FollowTrack | null;
+}
+
+/** How much the centre window (replay time) stretches at `speed`. */
+export function followWindowStretch(speed: number): number {
+  return Math.min(Math.max(1, speed), FOLLOW_MAX_WINDOW_STRETCH);
+}
+
+/** How the Director's springs follow a track. */
+export interface FollowSprings {
+  /** The position spring's smoothing (real seconds). */
+  position: number;
+  /** How far ahead (replay ms) the position spring's goal is sampled. */
+  leadMs: number;
+  /** The distance spring's smoothing (real seconds). */
+  distance: number;
+  /** How far ahead (replay ms) the radius the distance is fitted to is sampled. */
+  distanceLeadMs: number;
+  /** The yaw spring's smoothing (real seconds). */
+  yaw: number;
+  /** How far ahead (replay ms) the yaw spring's goal is sampled. */
+  yawLeadMs: number;
+}
+
+/**
+ * The springs while following a track at `speed`. The track moves on replay
+ * time and the springs on real time: a critically damped spring trails a
+ * steady move by its smoothing time, which is `speed` times as much replay at
+ * a fast speed (tens of yards at 32x). So the springs keep their real-time
+ * smoothing (it filters the replay clock's coarse ticks and eases a short
+ * seek or a shortened shot), and each goal is sampled that far ahead, which
+ * cancels the trail (chronicle-1723). Paused, there is no lead.
+ */
+export function followSprings(speed: number, playing: boolean): FollowSprings {
+  const replayPerSecond = playing ? Math.max(1, speed) * 1_000 : 0;
+  return {
+    position: FOLLOW_SMOOTH_SECONDS,
+    leadMs: replayPerSecond * FOLLOW_SMOOTH_SECONDS,
+    distance: DISTANCE_SMOOTH_SECONDS,
+    distanceLeadMs: replayPerSecond * DISTANCE_SMOOTH_SECONDS,
+    yaw: FOLLOW_YAW_SMOOTH_SECONDS,
+    yawLeadMs: replayPerSecond * FOLLOW_YAW_SMOOTH_SECONDS,
+  };
+}
+
+/**
+ * One frame of the yaw spring toward the track's (led) yaw `goal`: the goal
+ * is unwrapped to within half a turn of the spring, so it never spins the
+ * long way round, and no frame turns more than FOLLOW_YAW_MAX_RATE allows.
+ * Mutates `state` and returns its new (unwrapped) value.
+ */
+export function followYawStep(state: DampedValue, goal: number, smoothSeconds: number, dt: number, maxRate = FOLLOW_YAW_MAX_RATE): number {
+  const before = state.value;
+  smoothDamp(state, before + wrapAngle(goal - before), smoothSeconds, dt);
+  const cap = maxRate * dt;
+  const turned = state.value - before;
+  if (Math.abs(turned) > cap) state.value = before + Math.sign(turned) * cap;
+  state.velocity = Math.min(maxRate, Math.max(-maxRate, state.velocity));
+  return state.value;
+}
+
+/**
+ * The yaw spring's handover after a cut, as handOverFollowSpring: on the
+ * track's yaw `at`, turning at the rate that keeps it on the led yaw `led`
+ * (capped). Mutates and returns `spring`.
+ */
+export function handOverFollowYaw(spring: DampedValue, at: number, led: number, springs: FollowSprings, maxRate = FOLLOW_YAW_MAX_RATE): DampedValue {
+  spring.value = at;
+  spring.velocity = springs.yawLeadMs > 0 ? Math.min(maxRate, Math.max(-maxRate, (led - at) / springs.yaw)) : 0;
+  return spring;
+}
+
+/**
+ * Hands a position spring over to a led goal without a jump: the spring sits
+ * on `at` (where the group is) moving at the track's speed, which is where a
+ * spring that has been chasing `led` (its goal, `springs.leadMs` ahead) settles.
+ * Use it after a cut; a glide that lands on `at` hands over with that velocity
+ * already. Mutates and returns `spring`.
+ */
+export function handOverFollowSpring(spring: DampedValue, at: number, led: number, springs: FollowSprings): DampedValue {
+  spring.value = at;
+  spring.velocity = springs.leadMs > 0 ? (led - at) / springs.position : 0;
+  return spring;
 }
 
 // A moving average over `half` samples either side, in O(n) with a running sum.
@@ -134,10 +352,11 @@ function movingMean(values: ArrayLike<number>, half: number): Float64Array {
  * timed with.
  */
 export function startFollowTrackBuild(options: FollowTrackOptions, now: () => number = () => performance.now()): FollowTrackBuild {
-  const { startMs, endMs, unitsAt, scale, subjectGuid = null } = options;
+  const { startMs, endMs, unitsAt, scale, subjectGuid = null, probe = null } = options;
   const speed = Math.max(1, options.speed ?? 1);
+  const yawStretch = Math.min(speed, FOLLOW_MAX_YAW_STRETCH);
   const baseSampleMs = options.sampleMs ?? FOLLOW_SAMPLE_MS;
-  const sampleMs = baseSampleMs * speed;
+  const sampleMs = baseSampleMs * Math.min(speed, FOLLOW_MAX_SAMPLE_STRETCH);
   const span = Math.max(0, endMs - startMs);
   const count = Math.max(1, Math.ceil(span / sampleMs) + 1);
   const frameOptions = {
@@ -153,8 +372,16 @@ export function startFollowTrackBuild(options: FollowTrackOptions, now: () => nu
   // the cover radius can be measured from the smoothed centre.
   const rawX = new Float64Array(count).fill(Number.NaN);
   const rawZ = new Float64Array(count).fill(Number.NaN);
+  // The framed units' median height per sample (NaN when unknown), for the yaw probe's floor.
+  const rawHeight = new Float64Array(count).fill(Number.NaN);
   const NONE = new Float64Array(0);
   const framed = new Array<Float64Array>(count).fill(NONE);
+  // The framed units the probe keeps in sight (sightPicks), FOLLOW_SIGHT_SLOTS per sample.
+  const sightStride = FOLLOW_SIGHT_SLOTS * FOLLOW_SIGHT_STRIDE;
+  const sight = probe ? new Float32Array(count * sightStride) : null;
+  const sightCount = probe ? new Uint8Array(count) : null;
+  const framedUnits: DirectorUnit[] = [];
+  const picks: number[] = [];
   let inFrame = new Set<string>();
   let subjectSeen = subjectGuid === null;
   let sampled = 0;
@@ -162,9 +389,18 @@ export function startFollowTrackBuild(options: FollowTrackOptions, now: () => nu
   let zs: Float64Array | null = null;
   let cover: Float64Array | null = null;
   let covered = 0;
+  let radii: Float64Array | null = null;
+  let baseYaw: Float64Array | null = null;
+  let yawOpen: Uint16Array | null = null;
+  let yawAimOpen: Uint16Array | null = null;
+  let yawProbed: Uint16Array | null = null;
+  let choice: Int8Array | null = null;
+  let chosen: Float64Array | null = null;
+  let probed = 0;
   let done = false;
   let result: FollowTrack | null = null;
   const minRadius = MIN_FRAME_RADIUS_YARDS * scale;
+  const clamp = FOLLOW_CENTRE_CLAMP_YARDS * scale;
 
   // Gaps (nobody to frame) hold the nearest framing on either side, so the
   // centred window glides into the next one before the group appears there.
@@ -180,11 +416,35 @@ export function startFollowTrackBuild(options: FollowTrackOptions, now: () => nu
       const from = i < firstValid ? firstValid : i - 1;
       rawX[i] = rawX[from]!;
       rawZ[i] = rawZ[from]!;
+      rawHeight[i] = rawHeight[from]!;
       framed[i] = framed[from]!;
+      if (sight) {
+        sight.copyWithin(i * sightStride, from * sightStride, (from + 1) * sightStride);
+        sightCount![i] = sightCount![from]!;
+      }
     }
-    const half = Math.max(1, Math.round((subjectGuid ? FOLLOW_SUBJECT_WINDOW_MS : options.centreWindowMs ?? FOLLOW_CENTRE_WINDOW_MS) / baseSampleMs / 2));
+    const windowMs = (subjectGuid ? FOLLOW_SUBJECT_WINDOW_MS : options.centreWindowMs ?? FOLLOW_CENTRE_WINDOW_MS) * followWindowStretch(speed);
+    const half = Math.max(1, Math.round(windowMs / sampleMs / 2));
     xs = movingMean(movingMean(rawX, half), half);
     zs = movingMean(movingMean(rawZ, half), half);
+    // Keep the centre near the framing it smooths, so a bend is not cut into
+    // the rock; within the window of a jump in the framing, its slide stays.
+    const jumps = new Int32Array(count + 1);
+    for (let i = 1; i < count; i++) {
+      const jumped = Math.hypot(rawX[i]! - rawX[i - 1]!, rawZ[i]! - rawZ[i - 1]!) > 2 * clamp;
+      jumps[i + 1] = jumps[i]! + (jumped ? 1 : 0);
+    }
+    const reach = 2 * half;
+    for (let i = 0; i < count; i++) {
+      // Any jump into a sample within the window (2 * half either side) leaves it be.
+      if (jumps[Math.min(count, i + reach + 1)]! - jumps[Math.max(0, i - reach) + 1]! > 0) continue;
+      const dx = xs[i]! - rawX[i]!;
+      const dz = zs[i]! - rawZ[i]!;
+      const off = Math.hypot(dx, dz);
+      if (off <= clamp) continue;
+      xs[i] = rawX[i]! + (dx * clamp) / off;
+      zs[i] = rawZ[i]! + (dz * clamp) / off;
+    }
     cover = new Float64Array(count);
     return true;
   };
@@ -194,12 +454,40 @@ export function startFollowTrackBuild(options: FollowTrackOptions, now: () => nu
   // the frame instead of jumping it, a long slide to the next fight pulls the
   // camera out on the way, and a straggler hovering at the cutoff does not
   // hold the frame at its widest (chronicle-1579 review: that backed the
-  // camera into the cave walls).
+  // camera into the cave walls). Then the base yaw, ready for the probe pass.
+  const smoothRadius = () => {
+    const peakHalf = Math.max(1, Math.round((FOLLOW_RADIUS_PEAK_MS * speed) / sampleMs));
+    const meanHalf = Math.max(1, Math.round(((options.radiusWindowMs ?? FOLLOW_RADIUS_WINDOW_MS) * speed) / sampleMs / 2));
+    radii = Float64Array.from(movingMean(movingMean(windowed(Array.from(cover!), peakHalf, "max"), meanHalf), meanHalf));
+  };
+  const startYaw = () => {
+    baseYaw = baseYaws(xs!, zs!, FOLLOW_YAW_MOVING_YPS * scale * (sampleMs / 1_000), options.initialYaw ?? 0);
+    yawOpen = new Uint16Array(count);
+    yawAimOpen = new Uint16Array(count);
+    yawProbed = new Uint16Array(count);
+    if (!probe) {
+      yawOpen.fill(ALL_YAWS_OPEN);
+      yawAimOpen.fill(ALL_YAWS_OPEN);
+      yawProbed.fill(ALL_YAWS_OPEN);
+    }
+  };
+
+  // The yaw: per sample the clear candidate nearest the base, held through a
+  // dwell before a new one takes over, as base + offset (the base is already
+  // unwrapped, so flipping between options half a turn apart adds no turn);
+  // then smoothed over replay time (stretched fully with the speed) and
+  // capped at FOLLOW_YAW_MAX_RATE of real time.
+  const choose = () => {
+    const dwell = Math.max(1, Math.round((FOLLOW_YAW_DWELL_MS * yawStretch) / sampleMs));
+    choice = heldYawChoices(choiceMasks(yawOpen!, yawAimOpen!), dwell);
+    chosen = new Float64Array(count);
+    for (let i = 0; i < count; i++) chosen[i] = baseYaw![i]! + (choice[i]! < 0 ? 0 : YAW_CANDIDATES[choice[i]!]!);
+  };
   const finish = () => {
-    const peakHalf = Math.max(1, Math.round(FOLLOW_RADIUS_PEAK_MS / baseSampleMs));
-    const meanHalf = Math.max(1, Math.round((options.radiusWindowMs ?? FOLLOW_RADIUS_WINDOW_MS) / baseSampleMs / 2));
-    const radii = movingMean(movingMean(windowed(Array.from(cover!), peakHalf, "max"), meanHalf), meanHalf);
-    result = { startMs, endMs: startMs + span, sampleMs, subjectGuid, speed, x: xs!, z: zs!, radius: Float64Array.from(radii) };
+    const half = Math.max(1, Math.round(((options.yawWindowMs ?? FOLLOW_YAW_WINDOW_MS) * yawStretch) / sampleMs / 2));
+    const maxStep = (FOLLOW_YAW_MAX_RATE * sampleMs) / (speed * 1_000);
+    const yaw = rateLimited(movingMean(movingMean(chosen!, half), half), maxStep);
+    result = { startMs, endMs: startMs + span, sampleMs, subjectGuid, speed, x: xs!, z: zs!, radius: radii!, yaw, baseYaw: baseYaw!, yawProbed: yawProbed!, yawOpen: yawOpen!, yawAimOpen: yawAimOpen!, yawChoice: choice! };
   };
 
   return {
@@ -218,13 +506,28 @@ export function startFollowTrackBuild(options: FollowTrackOptions, now: () => nu
           rawZ[sampled] = frame.z;
           const points = new Float64Array(frame.guids.length * 2);
           let p = 0;
+          framedUnits.length = 0;
           for (const unit of units) {
             if (!inFrame.has(unit.guid)) continue;
             points[p++] = unit.x;
             points[p++] = unit.z;
+            framedUnits.push(unit);
             if (unit.guid === subjectGuid) subjectSeen = true;
           }
           framed[sampled] = p === points.length ? points : points.subarray(0, p);
+          rawHeight[sampled] = medianFramedHeight(units, inFrame);
+          if (sight) {
+            sightPicks(framedUnits.length, (k) => framedUnits[k]!.boss, picks);
+            let at = sampled * sightStride;
+            for (const k of picks) {
+              const unit = framedUnits[k]!;
+              sight[at++] = unit.x;
+              sight[at++] = unit.z;
+              sight[at++] = unit.height ?? Number.NaN;
+              sight[at++] = unit.boss ? 1 : 0;
+            }
+            sightCount![sampled] = picks.length;
+          }
         }
         sampled++;
         if (now() >= until) return false;
@@ -248,11 +551,326 @@ export function startFollowTrackBuild(options: FollowTrackOptions, now: () => nu
         if ((covered & 255) === 0 && now() >= until) return false;
         if (covered === count) return false;
       }
+      if (!radii) {
+        smoothRadius();
+        return false;
+      }
+      if (!baseYaw) {
+        startYaw();
+        return false;
+      }
+      // The probe pass: each sample's candidate yaws against the cave.
+      while (probe && probed < count) {
+        const height = rawHeight[probed]!;
+        const targets = sight!.subarray(probed * sightStride, probed * sightStride + sightCount![probed]! * FOLLOW_SIGHT_STRIDE);
+        if (probe.sample(xs![probed]!, zs![probed]!, radii[probed]!, Number.isNaN(height) ? undefined : height, targets) !== false) {
+          const probedYaws = probeYaws(probe, baseYaw![probed]!);
+          yawOpen![probed] = probedYaws.open;
+          yawAimOpen![probed] = probedYaws.aim;
+          yawProbed![probed] = probedYaws.probed;
+        }
+        probed++;
+        if (now() >= until) return false;
+      }
+      if (!chosen) {
+        choose();
+        return false;
+      }
       finish();
       done = true;
       return true;
     },
   };
+}
+
+const ALL_YAWS_OPEN = (1 << FOLLOW_YAW_CANDIDATES_DEG.length) - 1;
+const YAW_CANDIDATES = FOLLOW_YAW_CANDIDATES_DEG.map((deg) => (deg * Math.PI) / 180);
+
+/** `angle` wrapped into (-pi, pi]. */
+export function wrapAngle(angle: number): number {
+  const wrapped = angle - 2 * Math.PI * Math.floor((angle + Math.PI) / (2 * Math.PI));
+  return wrapped === -Math.PI ? Math.PI : wrapped;
+}
+
+// The yaw behind the smoothed centre's direction of travel at each sample
+// (unwrapped), held while it moves less than `moving` (scene units a sample):
+// a fight does not spin the camera. Before the first move, the first moving
+// yaw (or `initialYaw` if the group never moves).
+function baseYaws(xs: Float64Array, zs: Float64Array, moving: number, initialYaw: number): Float64Array {
+  const n = xs.length;
+  const out = new Float64Array(n);
+  let last = Number.NaN;
+  let first = -1;
+  for (let i = 0; i < n; i++) {
+    const a = Math.max(0, i - 1);
+    const b = Math.min(n - 1, i + 1);
+    const dx = xs[b]! - xs[a]!;
+    const dz = zs[b]! - zs[a]!;
+    if (b > a && Math.hypot(dx, dz) > moving * (b - a)) {
+      // The camera sits at (sin yaw, cos yaw) from the aim: behind is against the travel.
+      const yaw = Math.atan2(-dx, -dz);
+      last = Number.isNaN(last) ? yaw : last + wrapAngle(yaw - last);
+      if (first < 0) first = i;
+    }
+    out[i] = last;
+  }
+  out.fill(first < 0 ? initialYaw : out[first]!, 0, first < 0 ? n : first);
+  return out;
+}
+
+// The median height of the framed units that have one, or NaN.
+function medianFramedHeight(units: readonly DirectorUnit[], inFrame: ReadonlySet<string>): number {
+  const heights: number[] = [];
+  for (const unit of units) if (unit.height !== undefined && inFrame.has(unit.guid)) heights.push(unit.height);
+  if (heights.length === 0) return Number.NaN;
+  heights.sort((a, b) => a - b);
+  const middle = heights.length >> 1;
+  return heights.length % 2 === 1 ? heights[middle]! : (heights[middle - 1]! + heights[middle]!) / 2;
+}
+
+// Probes the candidate yaws around `base` nearest first, stopping once the
+// base sees the framing or the nearest yaw that does on each side is known
+// (half a turn counts as both sides). Returns which were probed, which saw
+// the framing and which had a clear aim line (where none sees the framing,
+// every candidate was probed, so that mask is whole).
+function probeYaws(probe: FollowYawProbe, base: number): { probed: number; open: number; aim: number } {
+  let probed = 0;
+  let open = 0;
+  let aim = 0;
+  let left = false;
+  let right = false;
+  for (let k = 0; k < YAW_CANDIDATES.length; k++) {
+    probed |= 1 << k;
+    const sight = probe.clearYaw(base + YAW_CANDIDATES[k]!);
+    if (sight === false) continue;
+    aim |= 1 << k;
+    if (sight !== true) continue;
+    open |= 1 << k;
+    const off = FOLLOW_YAW_CANDIDATES_DEG[k]!;
+    if (off === 0) break;
+    if (off > 0 || off === 180) left = true;
+    if (off < 0 || off === 180) right = true;
+    if (left && right) break;
+  }
+  return { probed, open, aim };
+}
+
+/**
+ * The masks the yaw choice reads, per sample: the yaws that see the framing
+ * where any does, else those with a clear aim line (keeping the camera off
+ * the wall where nothing sees the group, as before chronicle-1725).
+ */
+export function choiceMasks(open: Uint16Array, aimOpen: Uint16Array): Uint16Array {
+  const out = new Uint16Array(open.length);
+  for (let i = 0; i < open.length; i++) out[i] = open[i]! !== 0 ? open[i]! : aimOpen[i]!;
+  return out;
+}
+
+/**
+ * The candidate (index into FOLLOW_YAW_CANDIDATES_DEG) nearest the base among
+ * those `open` (a `yawOpen` mask), a tie going to the side of `side` (the
+ * sign of the offset held so far; 0 for none). -1 when none is open.
+ */
+export function nearestOpenYaw(open: number, side = 0): number {
+  let best = -1;
+  for (let k = 0; k < YAW_CANDIDATES.length; k++) {
+    if (!(open & (1 << k))) continue;
+    if (best < 0) {
+      best = k;
+      continue;
+    }
+    // Candidates come nearest first: only the tie partner can still win.
+    if (Math.abs(FOLLOW_YAW_CANDIDATES_DEG[k]!) !== Math.abs(FOLLOW_YAW_CANDIDATES_DEG[best]!)) break;
+    if (Math.sign(FOLLOW_YAW_CANDIDATES_DEG[k]!) === side) best = k;
+  }
+  return best;
+}
+
+/**
+ * Each sample's yaw choice (a candidate index, -1 for the base with nothing
+ * clear). The held choice gives way to the latest one asked for once `dwell`
+ * samples have asked for something else (it is blocked, or a nearer one is
+ * clear); a sample asking for it again starts the count over, and a sample
+ * with nothing clear (or not probed) pauses it. So a clear side that moves
+ * between candidates as the group walks still takes over, while one that
+ * flickers back to the held choice does not. The first sample takes its own
+ * choice.
+ */
+export function heldYawChoices(open: Uint16Array, dwell: number): Int8Array {
+  const n = open.length;
+  const out = new Int8Array(n);
+  let held = -2;
+  let away = 0;
+  for (let i = 0; i < n; i++) {
+    const side = held < 0 ? 0 : Math.sign(FOLLOW_YAW_CANDIDATES_DEG[held]!);
+    const want = nearestOpenYaw(open[i]!, side);
+    if (held === -2) held = want;
+    else if (want === held) away = 0;
+    else if (want >= 0 && ++away >= dwell) {
+      held = want;
+      away = 0;
+    }
+    out[i] = held;
+  }
+  return out;
+}
+
+/**
+ * Which framed units a shot checks (indices into `count` units, written into
+ * `out`): the boss, then up to FOLLOW_SIGHT_MAX_PLAYERS players spread evenly
+ * through the rest, so a raid costs a handful of rays, not forty. At most
+ * FOLLOW_SIGHT_SLOTS in all.
+ */
+export function sightPicks(count: number, isBoss: (index: number) => boolean, out: number[], maxPlayers = FOLLOW_SIGHT_MAX_PLAYERS): number[] {
+  out.length = 0;
+  let players = 0;
+  for (let i = 0; i < count; i++) {
+    if (!isBoss(i)) players++;
+    else if (out.length < 1 + maxPlayers) out.push(i);
+  }
+  // Extra bosses (never more than one framed today) take players' slots.
+  const take = Math.min(players, maxPlayers, 1 + maxPlayers - out.length);
+  let player = 0;
+  let next = 0;
+  for (let i = 0; i < count && next < take; i++) {
+    if (isBoss(i)) continue;
+    // The player at rank floor(next * players / take) is the next one taken.
+    if (player++ === Math.floor((next * players) / take)) {
+      out.push(i);
+      next++;
+    }
+  }
+  return out;
+}
+
+/**
+ * Whether a shot sees the framing: every boss among the `count` targets has
+ * a clear line, and at least FOLLOW_SIGHT_FRACTION of the players do (all of
+ * them when that rounds to every one; none needed when there are none).
+ * Bosses are checked first and `clear` is only asked until the answer is
+ * known, so a blocked boss costs one ray.
+ */
+export function seesFraming(count: number, isBoss: (index: number) => boolean, clear: (index: number) => boolean, fraction = FOLLOW_SIGHT_FRACTION): boolean {
+  let players = 0;
+  for (let i = 0; i < count; i++) {
+    if (!isBoss(i)) players++;
+    else if (!clear(i)) return false;
+  }
+  const need = Math.ceil(players * fraction - 1e-9);
+  let seen = 0;
+  let missed = 0;
+  for (let i = 0; i < count && seen < need; i++) {
+    if (isBoss(i)) continue;
+    if (clear(i)) seen++;
+    else if (++missed > players - need) return false;
+  }
+  return seen >= need;
+}
+
+/** The line-of-sight answer: how high the shot climbs, and whether it comes in closer. */
+export interface ShotAnswer {
+  elevationDeg: number;
+  shortened: boolean;
+}
+
+/** The elevations the climb tries, base first: base, then steps, then the cap. */
+export function climbElevations(baseDeg: number, stepDeg: number, maxDeg: number): number[] {
+  const out: number[] = [];
+  for (let deg = baseDeg; ; deg += stepDeg) {
+    out.push(Math.min(deg, maxDeg));
+    if (deg >= maxDeg) return out;
+  }
+}
+
+/**
+ * The fallback once the yaw is set (the track turns first, chronicle-1724).
+ * `sees(elevationDeg, shortened)` answers for one shot as clearYaw does (true:
+ * clear and sees the framing; "aim": only the aim line is clear; false:
+ * blocked). In order:
+ * 1. the lowest of `elevations` that sees the framing at the full distance (a
+ *    modest climb);
+ * 2. the lowest of the base, middle and top that does at the shortened
+ *    distance (shortening last);
+ * 3. where nothing sees the framing, the highest shot with a clear aim line
+ *    (the camera at least sits clear of the cave, not pulled in, and from
+ *    higher up more of the group shows over what hides it), shortened first;
+ * 4. with even the aim line blocked everywhere, the base elevation shortened:
+ *    the wall will pull the camera in, and that close it must not look
+ *    steeply down at the floor.
+ * Each shot is asked at most once, and only until the answer is known.
+ */
+export function fallbackShot(elevations: readonly number[], sees: (elevationDeg: number, shortened: boolean) => FollowYawSight): ShotAnswer {
+  const full: FollowYawSight[] = [];
+  for (const elevationDeg of elevations) {
+    const sight = sees(elevationDeg, false);
+    if (sight === true) return { elevationDeg, shortened: false };
+    full.push(sight);
+  }
+  const shorter = [...new Set([elevations[0]!, elevations[(elevations.length - 1) >> 1]!, elevations[elevations.length - 1]!])];
+  const short: FollowYawSight[] = [];
+  for (const elevationDeg of shorter) {
+    const sight = sees(elevationDeg, true);
+    if (sight === true) return { elevationDeg, shortened: true };
+    short.push(sight);
+  }
+  // Nothing sees the framing: the highest shot whose aim line is clear (more
+  // of the group shows over what hides it), the closer one first at the same
+  // elevation, as holdShot ranks them.
+  let best: ShotAnswer | null = null;
+  const consider = (elevationDeg: number, shortened: boolean) => {
+    if (!best || elevationDeg > best.elevationDeg || (elevationDeg === best.elevationDeg && shortened && !best.shortened)) best = { elevationDeg, shortened };
+  };
+  full.forEach((sight, k) => sight === "aim" && consider(elevations[k]!, false));
+  short.forEach((sight, k) => sight === "aim" && consider(shorter[k]!, true));
+  return best ?? { elevationDeg: elevations[0]!, shortened: true };
+}
+
+/**
+ * How far out the Director's camera may sit with a wall `hit` scene units
+ * out along its line (null: no wall), wanting `want`: `padding` short of the
+ * wall, but never under `minDistance`. Null when nothing holds it in. The
+ * wall always wins: a camera kept out past it would sit in the rock or above
+ * the ceiling. A steep camera pulled in close is undone by the answer
+ * instead (steepPullIn).
+ */
+export function directorPullIn(want: number, hit: number | null, padding: number, minDistance: number): number | null {
+  if (hit === null) return null;
+  return Math.max(Math.min(want, minDistance), hit - padding);
+}
+
+/**
+ * Whether a wall has pulled the camera (allowed `allowed` scene units out;
+ * null: not held in) closer than `steepMinDistance` while it looks down
+ * steeper than FOLLOW_STEEP_ELEVATION_DEG: a close-up of the floor. While
+ * the held shot is steep, the Director then releases it for its next answer
+ * that is not (releaseSteepShot), instead of waiting out SHOT_RELEASE_MS.
+ */
+export function steepPullIn(elevationDeg: number, allowed: number | null, steepMinDistance: number): boolean {
+  return allowed !== null && elevationDeg > FOLLOW_STEEP_ELEVATION_DEG && allowed < steepMinDistance;
+}
+
+/** Whether the Director asks for a new line-of-sight answer this frame: every FOLLOW_SHOT_CHECK_MS, at once on a cut or a jump, and when it has none. */
+export function shotCheckDue(nowMs: number, checkAtMs: number, hasAnswer: boolean, cutOrJump: boolean): boolean {
+  return !hasAnswer || cutOrJump || nowMs >= checkAtMs;
+}
+
+// Caps each step at `maxStep`, forwards and backwards, and averages the two,
+// so the cap does not make the yaw lag (or lead) a turn; the average of two
+// capped runs is capped too.
+function rateLimited(values: Float64Array, maxStep: number): Float64Array {
+  const n = values.length;
+  const forward = new Float64Array(n);
+  const out = new Float64Array(n);
+  const step = (from: number, to: number) => from + Math.min(maxStep, Math.max(-maxStep, to - from));
+  forward[0] = values[0]!;
+  for (let i = 1; i < n; i++) forward[i] = step(forward[i - 1]!, values[i]!);
+  let backward = values[n - 1]!;
+  out[n - 1] = (forward[n - 1]! + backward) / 2;
+  for (let i = n - 2; i >= 0; i--) {
+    backward = step(backward, values[i]!);
+    out[i] = (forward[i]! + backward) / 2;
+  }
+  return out;
 }
 
 /** Builds the whole follow track at once (tests, small spans); see startFollowTrackBuild. */
@@ -280,16 +898,19 @@ export function followKeyAt(track: FollowTrack, ms: number, out: FollowKey): Fol
   out.x = catmullRom(x[i0]!, x[i1]!, x[i2]!, x[i3]!, t);
   out.z = catmullRom(z[i0]!, z[i1]!, z[i2]!, z[i3]!, t);
   out.radius = catmullRom(radius[i0]!, radius[i1]!, radius[i2]!, radius[i3]!, t);
+  const { yaw } = track;
+  out.yaw = catmullRom(yaw[i0]!, yaw[i1]!, yaw[i2]!, yaw[i3]!, t);
   return out;
 }
 
 /**
  * Whether the replay clock moved from `previousMs` to `ms` by more than
  * playback explains (`expectedMs` of play at `speed`): a seek, a skipped
- * gap between encounters, or a loop back to the start.
+ * gap between encounters, or a loop back to the start. Only playback
+ * re-anchors by more at a fast speed: paused, any seek past FOLLOW_JUMP_MS is one.
  */
-export function isReplayJump(previousMs: number, ms: number, expectedMs: number, speed: number): boolean {
-  return Math.abs(ms - previousMs - expectedMs) > Math.max(FOLLOW_JUMP_MS, FOLLOW_JUMP_REAL_MS * speed);
+export function isReplayJump(previousMs: number, ms: number, expectedMs: number, speed: number, playing = true): boolean {
+  return Math.abs(ms - previousMs - expectedMs) > Math.max(FOLLOW_JUMP_MS, playing ? FOLLOW_JUMP_REAL_MS * speed : 0);
 }
 
 /** What the line-of-sight check currently holds the shot at. */
@@ -299,26 +920,78 @@ export interface ShotHold {
   shortened: boolean;
   /** When the raw answer first asked for less than the held one, or null. */
   lowerSinceMs: number | null;
+  /**
+   * Set when a wall pulled the steep shot in (releaseSteepShot): a steep
+   * answer (above FOLLOW_STEEP_ELEVATION_DEG) then counts as lower than any
+   * other, so it only comes back once asked for SHOT_RELEASE_MS without a
+   * break, and a flickering one cannot bob the camera. The release time; null
+   * when none is blocked. It lifts once a steep answer is taken, or none has
+   * been asked for SHOT_RELEASE_MS (a later climb is a new need).
+   */
+  steepBlockedMs: number | null;
+  /** When a steep answer was last asked (or a release), or null. */
+  steepAskedMs: number | null;
+  /**
+   * Releases since steep answers last went quiet: each one doubles how long
+   * a blocked steep answer must hold to come back (up to 16 times
+   * SHOT_RELEASE_MS), so a wall that keeps pulling the steep shot in stops
+   * it bobbing up and down.
+   */
+  steepReleases: number;
 }
 
 export function createShotHold(): ShotHold {
-  return { elevationDeg: CINEMATIC_ELEVATION_DEG, shortened: false, lowerSinceMs: null };
+  return { elevationDeg: CINEMATIC_ELEVATION_DEG, shortened: false, lowerSinceMs: null, steepBlockedMs: null, steepAskedMs: null, steepReleases: 0 };
 }
 
+/**
+ * A wall pulled the held steep shot in close (steepPullIn): takes `answer`
+ * at once when it is not steep (else `shallow`, the last answer that was
+ * not), and blocks steep answers from winning back at once
+ * (ShotHold.steepBlockedMs): they come in like any lower answer, once asked
+ * SHOT_RELEASE_MS without a break. Without either, it waits. True when the
+ * hold was released. Mutates `hold`.
+ */
+export function releaseSteepShot(hold: ShotHold, answer: ShotAnswer, nowMs: number, shallow: ShotAnswer | null = null): boolean {
+  const to = answer.elevationDeg <= FOLLOW_STEEP_ELEVATION_DEG ? answer : shallow;
+  if (!to || to.elevationDeg > FOLLOW_STEEP_ELEVATION_DEG) return false;
+  hold.elevationDeg = to.elevationDeg;
+  hold.shortened = to.shortened;
+  hold.lowerSinceMs = null;
+  hold.steepBlockedMs = nowMs;
+  hold.steepAskedMs = nowMs;
+  hold.steepReleases++;
+  return true;
+}
+
+// Higher means further from the base shot. Elevation first: a shortened
+// shot only outranks a full one at the same elevation or higher, so a
+// shortened answer at a lower elevation waits out the release like any lower
+// answer (chronicle-1725 review: it used to drop a full 50-degree shot to 28
+// degrees on one flicker).
 function shotRank(elevationDeg: number, shortened: boolean): number {
-  return elevationDeg + (shortened ? 1_000 : 0);
+  return 2 * elevationDeg + (shortened ? 1 : 0);
 }
 
 /**
  * Hysteresis for the line-of-sight answer: a higher elevation (or the
- * shortened shot) is taken at once, so the fight is not hidden, but the shot
+ * shortened shot at the same elevation) is taken at once, so the fight is not hidden, but the shot
  * only comes back down once every answer for SHOT_RELEASE_MS asked for less.
  * A ray that flips between blocked and clear frame to frame therefore moves
  * the camera once, not back and forth. Mutates and returns `hold`.
  */
 export function holdShot(hold: ShotHold, elevationDeg: number, shortened: boolean, nowMs: number, releaseMs = SHOT_RELEASE_MS): ShotHold {
   const held = shotRank(hold.elevationDeg, hold.shortened);
-  const next = shotRank(elevationDeg, shortened);
+  const steep = elevationDeg > FOLLOW_STEEP_ELEVATION_DEG;
+  if (steep) hold.steepAskedMs = nowMs;
+  else if (hold.steepAskedMs !== null && nowMs - hold.steepAskedMs >= releaseMs) {
+    // Steep answers went quiet: the block and the back-off lift.
+    hold.steepAskedMs = null;
+    hold.steepBlockedMs = null;
+    hold.steepReleases = 0;
+  }
+  const blocked = steep && hold.steepBlockedMs !== null;
+  const next = blocked ? Number.NEGATIVE_INFINITY : shotRank(elevationDeg, shortened);
   if (next > held) {
     hold.elevationDeg = elevationDeg;
     hold.shortened = shortened;
@@ -327,10 +1000,11 @@ export function holdShot(hold: ShotHold, elevationDeg: number, shortened: boolea
     hold.lowerSinceMs = null;
   } else if (hold.lowerSinceMs === null) {
     hold.lowerSinceMs = nowMs;
-  } else if (nowMs - hold.lowerSinceMs >= releaseMs) {
+  } else if (nowMs - hold.lowerSinceMs >= (blocked ? releaseMs * 2 ** Math.min(Math.max(0, hold.steepReleases - 1), 4) : releaseMs)) {
     hold.elevationDeg = elevationDeg;
     hold.shortened = shortened;
     hold.lowerSinceMs = null;
+    if (blocked) hold.steepBlockedMs = null;
   }
   return hold;
 }
@@ -344,12 +1018,30 @@ export interface GlidePose {
   /** The aim point's velocity (scene units a second) when the glide starts; none when left out. */
   vx?: number;
   vz?: number;
+  /** The yaw (radians); the glide turns it along the shortest arc when both ends have one. */
+  yaw?: number;
+  /** The yaw's rate (radians a second) when the glide starts. */
+  vyaw?: number;
 }
 
 /** How long the glide across a replay jump of `travel` (scene units) takes. */
 export function glideDurationMs(travel: number, scale: number): number {
   const ms = (1_000 * travel) / (GLIDE_SPEED_YARDS_PER_S * Math.max(1e-6, scale));
   return Math.min(GLIDE_MAX_MS, Math.max(GLIDE_MIN_MS, ms));
+}
+
+/**
+ * How long the glide's yaw takes to turn `turn` (radians): the position's
+ * `glideMs`, or longer, so the sine ease (which peaks at pi/2 times its
+ * average rate) peaks at FOLLOW_YAW_MAX_RATE; half a turn takes about 6.3 s.
+ */
+export function glideTurnMs(turn: number, glideMs: number): number {
+  return Math.max(glideMs, (1_000 * Math.abs(turn) * Math.PI) / (2 * FOLLOW_YAW_MAX_RATE));
+}
+
+/** `angle` unwrapped to within half a turn of `near`. */
+export function unwrapNear(angle: number, near: number): number {
+  return near + wrapAngle(angle - near);
 }
 
 // Sine ease in-out: no velocity at either end, and a gentle peak (pi/2 times the average speed).
@@ -368,9 +1060,13 @@ function lerp(from: number, to: number, amount: number): number {
  * long move reads as a crane up and over rather than a whip-pan. A glide
  * that starts while the camera is moving (another jump mid-glide) carries
  * `from`'s velocity in and lets it fade out, so it has no corner either.
+ * The yaw turns from `from.yaw` to `to.yaw` as given (the caller unwraps the
+ * target: the turn's direction is fixed when the glide starts, so a target
+ * drifting across the opposite direction does not flip it), on its own clock
+ * `yawT` (0..1 over `yawDurationMs`) when a big turn needs longer than the move.
  * Written into `out`.
  */
-export function glidePoseAt(from: GlidePose, to: GlidePose, t: number, out: GlidePose, durationMs = 0): GlidePose {
+export function glidePoseAt(from: GlidePose, to: GlidePose, t: number, out: GlidePose, durationMs = 0, yawT = t, yawDurationMs = durationMs): GlidePose {
   const clamped = Math.min(1, Math.max(0, t));
   const eased = easeInOutSine(clamped);
   // Hermite's start-velocity term: slope 1 at t = 0, gone (value and slope) at t = 1.
@@ -380,6 +1076,11 @@ export function glidePoseAt(from: GlidePose, to: GlidePose, t: number, out: Glid
   out.x = lerp(from.x, to.x, eased) + (from.vx ?? 0) * carry;
   out.z = lerp(from.z, to.z, eased) + (from.vz ?? 0) * carry;
   out.elevationDeg = lerp(from.elevationDeg, to.elevationDeg, eased);
+  if (from.yaw !== undefined && to.yaw !== undefined) {
+    const turned = Math.min(1, Math.max(0, yawT));
+    const yawCarry = (yawDurationMs / 1000) * turned * (1 - turned) ** 2;
+    out.yaw = lerp(from.yaw, to.yaw, easeInOutSine(turned)) + (from.vyaw ?? 0) * yawCarry;
+  }
   const distance = Math.exp(lerp(Math.log(Math.max(1e-6, from.distance)), Math.log(Math.max(1e-6, to.distance)), eased));
   out.distance = distance * (1 + pull * Math.sin(Math.PI * eased));
   return out;
