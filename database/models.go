@@ -1061,6 +1061,7 @@ type Dataset struct {
 	SpellsImportedAt pgtype.Timestamptz `db:"spells_imported_at" json:"spells_imported_at"`
 	SpellsCount      int32              `db:"spells_count" json:"spells_count"`
 	IconBaseUrl      string             `db:"icon_base_url" json:"icon_base_url"`
+	Revision         int64              `db:"revision" json:"revision"`
 }
 
 type DatasetClassBuff struct {
