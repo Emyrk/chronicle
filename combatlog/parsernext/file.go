@@ -1,6 +1,6 @@
-// Package parsernext is an isolated replacement-parser foundation. Its current
-// executable boundary ingests complete source files; it does not decode combat
-// events or replace any existing production parser.
+// Package parsernext provides source selection and complete-file inspection.
+// Format-specific subpackages decode shared combat messages; adapters compose
+// their synthetics without changing the default production parser selection.
 package parsernext
 
 import (
