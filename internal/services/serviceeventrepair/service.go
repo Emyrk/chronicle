@@ -52,13 +52,21 @@ func (s *Service) successfulApply(ctx context.Context, tx database.Store, id uui
 	if s.queue == nil || s.queue.Client == nil {
 		return errors.New("event repair queue unavailable")
 	}
-	if err := serviceratings.EnqueueSourceRepairTx(ctx, tx, []uuid.UUID{id}); err != nil {
+	identities, err := tx.RankingRunIdentitiesByInstanceIDs(ctx, []uuid.UUID{id})
+	if err != nil {
+		return err
+	}
+	seeds := []uuid.UUID{id}
+	for _, identity := range identities {
+		seeds = append(seeds, identity.InstanceID, identity.RunID)
+	}
+	if err := serviceratings.EnqueueSourceRepairTx(ctx, tx, seeds); err != nil {
 		return err
 	}
 	if err := s.apply(ctx, tx, p); err != nil {
 		return err
 	}
-	return serviceratings.EnqueueCanonicalRefreshTx(ctx, tx, s.queue, []uuid.UUID{id})
+	return serviceratings.EnqueueCanonicalRefreshTx(ctx, tx, s.queue, seeds)
 }
 
 func operationDTO(row database.EventRepairOperation) (Operation, error) {
