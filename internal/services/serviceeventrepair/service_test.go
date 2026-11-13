@@ -14,6 +14,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
@@ -312,5 +313,36 @@ func TestReconstructionOutsideTransactionAndStaleRecheck(t *testing.T) {
 	op, err := f.service.Get(f.ctx, f.id)
 	require.NoError(t, err)
 	require.Equal(t, "stale", op.Items[0].State)
+	require.Zero(t, f.canonicalJobs(t))
+}
+
+func TestPreviouslyProcessedRazorgoreNeverEnqueues(t *testing.T) {
+	t.Parallel()
+	f := newRepairFixture(t, 1)
+	e := fixtureRazorgoreNumeric(t)
+	e.Server.TenantID = uuid.NullUUID{UUID: f.tenant, Valid: true}
+	e.Encounters[0].RankingStartOffsetMs = pgtype.Int8{Int64: 30000, Valid: true}
+	e.Encounters[0].RankingEndOffsetMs = pgtype.Int8{Int64: 60000, Valid: true}
+	for i := range e.Events {
+		e.Events[i].Events = []byte("corrupt")
+	}
+	f.service.evaluate = func(context.Context, database.Store, uuid.UUID) (*RazorgoreRepairPlan, error) {
+		return evaluateRazorgoreEvidence(e)
+	}
+	f.service.apply = func(context.Context, database.Store, *RazorgoreRepairPlan) error {
+		t.Error("skipped instance must not apply")
+		return nil
+	}
+	_, err := f.service.ProcessPage(f.ctx, f.id, "dry_running")
+	require.NoError(t, err)
+	_, err = f.service.Apply(f.ctx, f.id, uuid.New())
+	require.NoError(t, err)
+	_, err = f.service.ProcessPage(f.ctx, f.id, "applying")
+	require.NoError(t, err)
+	op, err := f.service.Get(f.ctx, f.id)
+	require.NoError(t, err)
+	require.Equal(t, 1, op.Skipped)
+	require.Zero(t, op.Applied)
+	require.False(t, op.Items[0].RatingsQueued)
 	require.Zero(t, f.canonicalJobs(t))
 }

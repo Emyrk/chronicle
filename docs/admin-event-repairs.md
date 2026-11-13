@@ -66,6 +66,22 @@ next successful checkpoint. Errors use 400 for invalid input, 404 for unknown ID
   rolls back source changes and the checkpoint. Dry runs and skips enqueue no ratings.
 - Original event blobs and public immutable `damage.Unranked` flags never change.
 
+## Previously processed instances
+
+Before event replay, the Razorgore repair skips the entire instance if any
+Razorgore encounter has a valid persisted ranking window whose duration differs
+from its full encounter duration. The window must have both offsets, a
+nonnegative start, a positive duration, and an end within valid encounter bounds.
+This duration proxy excludes manually reparsed and already repaired instances
+from the successful no-op path; skipped instances enqueue no ratings refresh.
+It does not inspect raw-log deletion or storage availability.
+
+Absent or full-duration windows remain eligible for normal validation. Invalid
+windows follow existing ambiguity/replay checks, rather than being labeled
+previously processed. Other bosses' ranking windows do not trigger this gate.
+The legacy API field `requires_reparse` still marks these skips, but the reason
+explicitly says `already has distinct ranked duration; skipping previously processed instance`.
+
 ## Version 1 support and limits
 
 The named operation is `razorgore-phase-two`, version 1. It supports two

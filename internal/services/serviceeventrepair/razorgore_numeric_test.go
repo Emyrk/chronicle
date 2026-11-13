@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/Emyrk/chronicle/api/chronicleproto"
@@ -151,10 +152,11 @@ func TestRazorgoreNumericalRepairEndToEnd(t *testing.T) {
 	require.Equal(t, beforeEvents, s.e.Events)
 	fresh, err := EvaluateRazorgore(ctx, s, e.Instance.ID)
 	require.NoError(t, err)
-	require.False(t, fresh.RequiresReparse, fresh.Reason)
+	require.True(t, fresh.RequiresReparse)
+	require.Contains(t, fresh.Reason, "skipping previously processed instance")
 	require.Empty(t, fresh.Changes)
 	require.NoError(t, RevalidateRazorgore(ctx, s, fresh))
-	require.NoError(t, ApplyRazorgore(ctx, s, fresh))
+	require.Error(t, ApplyRazorgore(ctx, s, fresh))
 	require.Len(t, s.writes, 3)
 }
 
@@ -237,7 +239,7 @@ func TestRazorgoreNumericalEmptyStreamsAreExplicit(t *testing.T) {
 	require.False(t, p.RequiresReparse, p.Reason)
 }
 
-func TestRazorgoreNumericalNoopChecksEveryMetric(t *testing.T) {
+func TestRazorgoreNumericalPreviouslyProcessedSkipsEvenWithStaleMetrics(t *testing.T) {
 	t.Parallel()
 	s := &razorgoreStore{e: fixtureRazorgoreNumeric(t)}
 	ctx := context.Background()
@@ -248,6 +250,114 @@ func TestRazorgoreNumericalNoopChecksEveryMetric(t *testing.T) {
 	s.e.Rankings[0].Dps = 0
 	again, err := EvaluateRazorgore(ctx, s, s.e.Instance.ID)
 	require.NoError(t, err)
-	require.False(t, again.RequiresReparse, again.Reason)
-	require.NotEmpty(t, again.Changes)
+	require.True(t, again.RequiresReparse)
+	require.Contains(t, again.Reason, "skipping previously processed instance")
+	require.Empty(t, again.Changes)
+}
+
+func TestRazorgoreDistinctRankingDurationGate(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name       string
+		start, end pgtype.Int8
+		skip       bool
+	}{
+		{name: "no window"},
+		{name: "full duration", start: pgtype.Int8{Int64: 0, Valid: true}, end: pgtype.Int8{Int64: 60000, Valid: true}},
+		{name: "shortened", start: pgtype.Int8{Int64: 30000, Valid: true}, end: pgtype.Int8{Int64: 60000, Valid: true}, skip: true},
+		{name: "shortened end", start: pgtype.Int8{Int64: 0, Valid: true}, end: pgtype.Int8{Int64: 50000, Valid: true}, skip: true},
+		{name: "missing start", end: pgtype.Int8{Int64: 50000, Valid: true}},
+		{name: "missing end", start: pgtype.Int8{Int64: 10000, Valid: true}},
+		{name: "negative start", start: pgtype.Int8{Int64: -1, Valid: true}, end: pgtype.Int8{Int64: 50000, Valid: true}},
+		{name: "zero duration", start: pgtype.Int8{Int64: 50000, Valid: true}, end: pgtype.Int8{Int64: 50000, Valid: true}},
+		{name: "reversed", start: pgtype.Int8{Int64: 50000, Valid: true}, end: pgtype.Int8{Int64: 40000, Valid: true}},
+		{name: "outside encounter", start: pgtype.Int8{Int64: 30000, Valid: true}, end: pgtype.Int8{Int64: 60001, Valid: true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			e := fixtureRazorgoreNumeric(t)
+			e.Encounters[0].RankingStartOffsetMs = tc.start
+			e.Encounters[0].RankingEndOffsetMs = tc.end
+			p, err := evaluateRazorgoreEvidence(e)
+			require.NoError(t, err)
+			if tc.skip {
+				require.True(t, p.RequiresReparse)
+				require.Contains(t, p.Reason, "already has distinct ranked duration")
+				require.Empty(t, p.Changes)
+			} else {
+				require.NotContains(t, p.Reason, "previously processed instance")
+			}
+			if tc.name == "no window" || tc.name == "full duration" {
+				require.False(t, p.RequiresReparse, p.Reason)
+				require.NotEmpty(t, p.Changes)
+			}
+			// Corrupt streams must not take priority over the already-processed gate.
+			for i := range e.Events {
+				e.Events[i].Events = []byte("corrupt")
+			}
+			p, err = evaluateRazorgoreEvidence(e)
+			require.NoError(t, err)
+			require.True(t, p.RequiresReparse)
+			require.Equal(t, tc.skip, strings.Contains(p.Reason, "already has distinct ranked duration"), p.Reason)
+		})
+	}
+}
+
+func TestRazorgoreDistinctDurationSkipsWholeInstance(t *testing.T) {
+	t.Parallel()
+	e := fixtureRazorgoreMultiple(t)
+	// The later Razorgore pull blocks the entire instance before replay of the first.
+	e.Encounters[1].RankingStartOffsetMs = pgtype.Int8{Int64: 30000, Valid: true}
+	e.Encounters[1].RankingEndOffsetMs = pgtype.Int8{Int64: 60000, Valid: true}
+	for i := range e.Events {
+		e.Events[i].Events = []byte("corrupt")
+	}
+	p, err := evaluateRazorgoreEvidence(e)
+	require.NoError(t, err)
+	require.True(t, p.RequiresReparse)
+	require.Contains(t, p.Reason, "already has distinct ranked duration")
+	require.Empty(t, p.Changes)
+	require.Nil(t, p.multi)
+}
+
+func TestRazorgoreDistinctDurationIgnoresOtherBoss(t *testing.T) {
+	t.Parallel()
+	e := fixtureRazorgoreMultiple(t)
+	other := e.Encounters[1]
+	other.ID = uuid.New()
+	other.Name = "Other Boss"
+	other.Boss = true
+	other.KillType = database.KillTypeWipe
+	other.RankingStartOffsetMs = pgtype.Int8{Int64: 30000, Valid: true}
+	other.RankingEndOffsetMs = pgtype.Int8{Int64: 60000, Valid: true}
+	e.Encounters = append(e.Encounters, other)
+	p, err := evaluateRazorgoreEvidence(e)
+	require.NoError(t, err)
+	require.False(t, p.RequiresReparse, p.Reason)
+	require.NotEmpty(t, p.Changes)
+}
+
+func TestRazorgoreDistinctDurationNeedsValidEncounterBounds(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"missing start", "missing end", "reversed"} {
+		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
+			e := fixtureRazorgoreNumeric(t)
+			c := &e.Encounters[0]
+			c.RankingStartOffsetMs = pgtype.Int8{Int64: 30000, Valid: true}
+			c.RankingEndOffsetMs = pgtype.Int8{Int64: 60000, Valid: true}
+			switch kind {
+			case "missing start":
+				c.StartTime.Valid = false
+			case "missing end":
+				c.EndTime.Valid = false
+			case "reversed":
+				c.StartTime, c.EndTime = c.EndTime, c.StartTime
+			}
+			p, err := evaluateRazorgoreEvidence(e)
+			require.NoError(t, err)
+			require.True(t, p.RequiresReparse)
+			require.NotContains(t, p.Reason, "previously processed instance")
+		})
+	}
 }

@@ -48,7 +48,8 @@ func TestRazorgoreClassificationProvenPetDamage(t *testing.T) {
 	require.EqualValues(t, 220, s.e.Rankings[0].UnrankedDamageDone)
 	fresh, err := EvaluateRazorgore(ctx, s, s.e.Instance.ID)
 	require.NoError(t, err)
-	require.False(t, fresh.RequiresReparse, fresh.Reason)
+	require.True(t, fresh.RequiresReparse)
+	require.Contains(t, fresh.Reason, "skipping previously processed instance")
 	require.Empty(t, fresh.Changes)
 }
 

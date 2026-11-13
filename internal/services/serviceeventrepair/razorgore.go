@@ -271,6 +271,19 @@ func evaluateRazorgoreEvidence(e razorgoreEvidence) (*RazorgoreRepairPlan, error
 	if e.Instance.Name != "Blackwing Lair" || e.Instance.InvalidatedAt.Valid || slices.Contains(e.Instance.Capabilities, "server-side") {
 		return skip("instance is not an active legacy Blackwing Lair source (authoritative encounter results require reparse)")
 	}
+	// A distinct persisted ranking duration is the opt-out proxy for previously
+	// processed instances, including manual reparses. Check every Razorgore pull
+	// before replaying any stream, and leave malformed windows to existing checks.
+	for _, c := range e.Encounters {
+		if c.Name != "Razorgore the Untamed" || !c.StartTime.Valid || !c.EndTime.Valid || !c.EndTime.Time.After(c.StartTime.Time) || !c.RankingStartOffsetMs.Valid || !c.RankingEndOffsetMs.Valid {
+			continue
+		}
+		start, end := c.RankingStartOffsetMs.Int64, c.RankingEndOffsetMs.Int64
+		duration := c.EndTime.Time.Sub(c.StartTime.Time).Milliseconds()
+		if start >= 0 && end > start && end <= duration && end-start != duration {
+			return skip("Razorgore already has distinct ranked duration; skipping previously processed instance")
+		}
+	}
 	if len(e.Encounters) > 1 && e.Group.Format.Valid {
 		if err := evaluateRazorgoreMulti(e, p); err != nil {
 			return skip(err.Error())

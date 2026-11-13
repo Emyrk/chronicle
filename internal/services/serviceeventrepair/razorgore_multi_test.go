@@ -119,7 +119,7 @@ func TestRazorgoreMultiPullPreservesNonBossSourceMetrics(t *testing.T) {
 	}
 }
 
-func TestRazorgoreMultiPullProvesNoopAfterAllSourceChanges(t *testing.T) {
+func TestRazorgoreMultiPullSkipsAfterPersistedWindowChange(t *testing.T) {
 	t.Parallel()
 	e := fixtureRazorgoreMultiple(t)
 	p, err := evaluateRazorgoreEvidence(e)
@@ -173,7 +173,8 @@ func TestRazorgoreMultiPullProvesNoopAfterAllSourceChanges(t *testing.T) {
 	require.NoError(t, json.Unmarshal(b, &e.Speedruns[0]))
 	again, err := evaluateRazorgoreEvidence(e)
 	require.NoError(t, err)
-	require.False(t, again.RequiresReparse, again.Reason)
+	require.True(t, again.RequiresReparse)
+	require.Contains(t, again.Reason, "skipping previously processed instance")
 	require.Empty(t, again.Changes)
 }
 
