@@ -58,6 +58,8 @@ func newRepairFixture(t *testing.T, n int) *repairFixture {
 		return &RazorgoreRepairPlan{TenantID: f.tenant, EvidenceHash: "stable", Changes: []string{}}, nil
 	}
 	f.service.apply = func(context.Context, database.Store, *RazorgoreRepairPlan) error { return nil }
+	f.service.revalidate = func(context.Context, database.Store, *RazorgoreRepairPlan) error { return nil }
+	f.service.lockSource = func(context.Context, database.Store, uuid.UUID) error { return nil }
 	return f
 }
 func (f *repairFixture) canonicalJobs(t *testing.T) int {
@@ -277,4 +279,34 @@ func TestWorkerDurablySnoozesAfterBoundedPage(t *testing.T) {
 	op, err = f.service.Get(f.ctx, f.id)
 	require.NoError(t, err)
 	require.Equal(t, "ready", op.State)
+}
+
+func TestReconstructionOutsideTransactionAndStaleRecheck(t *testing.T) {
+	t.Parallel()
+	f := newRepairFixture(t, 1)
+	f.service.evaluate = func(_ context.Context, db database.Store, _ uuid.UUID) (*RazorgoreRepairPlan, error) {
+		_, inTx := database.PGXTx(db)
+		require.False(t, inTx, "gzip/reconstruction must not hold a transaction")
+		return &RazorgoreRepairPlan{TenantID: f.tenant, EvidenceHash: "stable"}, nil
+	}
+	f.service.revalidate = func(_ context.Context, db database.Store, _ *RazorgoreRepairPlan) error {
+		_, inTx := database.PGXTx(db)
+		require.True(t, inTx, "fingerprint recheck must share source write transaction")
+		return nil
+	}
+	_, err := f.service.ProcessPage(f.ctx, f.id, "dry_running")
+	require.NoError(t, err)
+	_, err = f.service.Apply(f.ctx, f.id, uuid.New())
+	require.NoError(t, err)
+	f.service.revalidate = func(context.Context, database.Store, *RazorgoreRepairPlan) error { return ErrStaleEvidence }
+	f.service.apply = func(context.Context, database.Store, *RazorgoreRepairPlan) error {
+		t.Fatal("stale evidence must not mutate source")
+		return nil
+	}
+	_, err = f.service.ProcessPage(f.ctx, f.id, "applying")
+	require.NoError(t, err)
+	op, err := f.service.Get(f.ctx, f.id)
+	require.NoError(t, err)
+	require.Equal(t, "stale", op.Items[0].State)
+	require.Zero(t, f.canonicalJobs(t))
 }

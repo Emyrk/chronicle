@@ -51,6 +51,10 @@ next successful checkpoint. Errors use 400 for invalid input, 404 for unknown ID
 - A job handles at most 25 instances before durably snoozing for another page.
   River retries transient failures up to ten times; the retry endpoint resumes
   exhausted work without resetting checkpoints or authorizing a new apply.
+- Fetching, gzip/protobuf decoding, and reconstruction happen outside the write
+  transaction. The prepared plan is sealed against modification. The transaction
+  takes the existing canonical-refresh lock then parse-generation row, rechecks
+  compressed-source fingerprints and the sealed plan, and writes without decoding.
 - Each instance is a separate SERIALIZABLE transaction. Cancellation and instance
   processing serialize on the operation lock; cancel does not undo earlier work.
 - Apply reevaluates current evidence and compares its hash with the approved dry

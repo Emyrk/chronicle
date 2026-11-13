@@ -16,14 +16,16 @@ import (
 )
 
 type Service struct {
-	db       database.Store
-	queue    *riverqueue.Queues
-	evaluate func(context.Context, database.Store, uuid.UUID) (*RazorgoreRepairPlan, error)
-	apply    func(context.Context, database.Store, *RazorgoreRepairPlan) error
+	db         database.Store
+	queue      *riverqueue.Queues
+	evaluate   func(context.Context, database.Store, uuid.UUID) (*RazorgoreRepairPlan, error)
+	apply      func(context.Context, database.Store, *RazorgoreRepairPlan) error
+	revalidate func(context.Context, database.Store, *RazorgoreRepairPlan) error
+	lockSource func(context.Context, database.Store, uuid.UUID) error
 }
 
 func New(db database.Store, q *riverqueue.Queues) *Service {
-	return &Service{db: db, queue: q, evaluate: EvaluateRazorgore, apply: ApplyRazorgore}
+	return &Service{db: db, queue: q, evaluate: EvaluateRazorgore, apply: ApplyRazorgore, revalidate: RevalidateRazorgore, lockSource: lockRepairSource}
 }
 func (s *Service) enqueue(ctx context.Context, tx database.Store, id uuid.UUID, phase string, actor uuid.UUID) error {
 	if s.queue == nil || s.queue.Client == nil {
@@ -263,6 +265,11 @@ func (s *Service) ProcessPage(ctx context.Context, id uuid.UUID, phase string) (
 func (s *Service) processItem(ctx context.Context, op database.EventRepairOperation, item database.EventRepairItem, phase string) error {
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
+	// Fetch, decompress and reconstruct before opening the short write transaction.
+	plan, err := s.evaluate(ctx, s.db, item.InstanceID)
+	if err != nil {
+		return err
+	}
 	return s.db.InTx(ctx, func(tx database.Store) error {
 		current, err := tx.LockEventRepairOperation(ctx, database.LockEventRepairOperationParams{ID: op.ID, TenantID: op.TenantID})
 		if err != nil {
@@ -285,9 +292,17 @@ func (s *Service) processItem(ctx context.Context, op database.EventRepairOperat
 		if stored.State != expected {
 			return nil
 		}
-		plan, err := s.evaluate(ctx, tx, item.InstanceID)
-		if err != nil {
+		// Match production source publication order: global canonical lock,
+		// parse-generation row, then source/D1 publication. No decoding here.
+		if err := s.lockSource(ctx, tx, item.InstanceID); err != nil {
 			return err
+		}
+		changed := false
+		if err := s.revalidate(ctx, tx, plan); err != nil {
+			if !errors.Is(err, ErrStaleEvidence) || phase != "applying" {
+				return err
+			}
+			changed = true
 		}
 		if plan.TenantID != op.TenantID {
 			plan.RequiresReparse = true
@@ -298,7 +313,7 @@ func (s *Service) processItem(ctx context.Context, op database.EventRepairOperat
 			state = "skipped"
 		}
 		if phase == "applying" {
-			if plan.RequiresReparse || plan.EvidenceHash != stored.EvidenceHash {
+			if changed || plan.RequiresReparse || plan.EvidenceHash != stored.EvidenceHash {
 				state = "stale"
 				reason = "Evidence changed since dry run; create a new dry run. " + plan.Reason
 			} else {
@@ -369,4 +384,22 @@ func (s *Service) Retry(ctx context.Context, id, actor uuid.UUID) (Operation, er
 		return Operation{}, err
 	}
 	return s.Get(ctx, id)
+}
+
+func lockRepairSource(ctx context.Context, tx database.Store, id uuid.UUID) error {
+	if err := tx.AcquireRankingRunRefreshLock(ctx); err != nil {
+		return err
+	}
+	source, err := tx.RazorgoreRepairInstance(ctx, id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	} // missing evidence is a terminal skip
+	if err != nil {
+		return err
+	}
+	_, err = tx.LockWoWLogGroupParseGeneration(ctx, source.LogGroupID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrStaleEvidence
+	}
+	return err
 }
