@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useAdminTenants, useRealms } from "@/api/queries";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/Card/Card";
 import { buildRepairRequest, eventRepairKey, isRepairActive, repairRequest } from "@/api/eventRepairs";
@@ -56,6 +57,8 @@ export function RepairReport({ operation, busy, onApply, onCancel, onRetry }: {
 
 export function AdminEventRepairs() {
   const client = useQueryClient();
+  const tenants = useAdminTenants();
+  const realms = useRealms();
   const [params, setParams] = useSearchParams();
   const selected = params.get("operation") || "";
   const [form, setForm] = useState<RepairSelection>({ mode: "single", instance: "", tenant: "", limit: "100", realm: "", after: "", before: "" });
@@ -99,8 +102,15 @@ export function AdminEventRepairs() {
       <label className="block space-y-1 text-sm"><span>Named repair</span><select className={inputClass} value="razorgore-phase-two" onChange={() => {}}><option value="razorgore-phase-two">Razorgore phase two · v1</option></select></label>
       <fieldset className="flex flex-wrap gap-4 text-sm"><legend className="mb-2">Selection</legend>{(["single", "sweep"] as const).map((mode) => <label key={mode} className="flex items-center gap-2"><input type="radio" name="selection" value={mode} checked={form.mode === mode} onChange={() => { setForm({ ...form, mode }); setValidationError(""); }} />{mode === "single" ? "Single instance" : "Bounded tenant sweep"}</label>)}</fieldset>
       {form.mode === "single" ? field("instance", "Instance URL, ID, or slug", "text", true) : <div className="grid gap-3 sm:grid-cols-2">
-        {field("tenant", "Tenant UUID (required)", "text", true)}{field("limit", "Maximum instances (1–1000)", "number", true)}
-        {field("realm", "Realm UUID (optional)")}{field("after", "After (UTC, optional)", "date")}{field("before", "Before (UTC, optional)", "date")}
+        <label className="space-y-1 text-sm"><span>Tenant (required)</span><select className={inputClass} value={form.tenant} required disabled={tenants.isPending || tenants.isError} onChange={(event) => setForm({ ...form, tenant: event.target.value, realm: "" })}>
+          <option value="">{tenants.isPending ? "Loading tenants…" : tenants.isError ? "Tenants unavailable" : "Select a tenant"}</option>
+          {[...(tenants.data ?? [])].sort((a, b) => a.name.localeCompare(b.name)).map((tenant) => <option key={tenant.id} value={tenant.id}>{tenant.name} ({tenant.slug || tenant.id})</option>)}
+        </select>{tenants.isError && <span role="alert" className="block text-destructive">Could not load tenants. <button type="button" className="underline" onClick={() => { void tenants.refetch(); }}>Retry tenants</button></span>}{tenants.isSuccess && !tenants.data.length && <span className="block text-muted-foreground">No tenants available.</span>}</label>
+        {field("limit", "Maximum instances (1–1000)", "number", true)}
+        <label className="space-y-1 text-sm"><span>Realm (optional)</span><select className={inputClass} value={form.realm} disabled={realms.isPending || realms.isError} onChange={(event) => setForm({ ...form, realm: event.target.value })}>
+          <option value="">{realms.isPending ? "Loading realms…" : "All realms"}</option>
+          {[...(realms.data ?? [])].sort((a, b) => a.name.localeCompare(b.name)).map((realm) => <option key={realm.id} value={realm.id}>{realm.name} ({realm.id})</option>)}
+        </select>{realms.isError && <span role="alert" className="block text-destructive">Could not load realms. <button type="button" className="underline" onClick={() => { void realms.refetch(); }}>Retry realms</button></span>}{realms.isSuccess && !realms.data.length && <span className="block text-muted-foreground">No realm filters available.</span>}</label>{field("after", "After (UTC, optional)", "date")}{field("before", "Before (UTC, optional)", "date")}
       </div>}
       {validationError && <p id="repair-form-error" role="alert" className="text-sm text-destructive">{validationError}</p>}
       <Button type="submit" disabled={mutation.isPending}>{mutation.isPending ? "Submitting…" : "Start dry-run"}</Button>
