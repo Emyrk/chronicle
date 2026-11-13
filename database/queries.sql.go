@@ -5536,6 +5536,577 @@ func (q *sqlQuerier) PreviewEncounterDifficultyBackfillBatch(ctx context.Context
 	return i, err
 }
 
+const createEventRepairOperation = `-- name: CreateEventRepairOperation :one
+INSERT INTO event_repair_operations (id, operation, version, created_by, tenant_id, selection, total)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, operation, version, state, created_at, updated_at, created_by, tenant_id, selection, total, processed, applied, skipped, last_error
+`
+
+type CreateEventRepairOperationParams struct {
+	ID        uuid.UUID `db:"id" json:"id"`
+	Operation string    `db:"operation" json:"operation"`
+	Version   int32     `db:"version" json:"version"`
+	CreatedBy uuid.UUID `db:"created_by" json:"created_by"`
+	TenantID  uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	Selection []byte    `db:"selection" json:"selection"`
+	Total     int32     `db:"total" json:"total"`
+}
+
+func (q *sqlQuerier) CreateEventRepairOperation(ctx context.Context, arg CreateEventRepairOperationParams) (EventRepairOperation, error) {
+	row := q.db.QueryRow(ctx, createEventRepairOperation,
+		arg.ID,
+		arg.Operation,
+		arg.Version,
+		arg.CreatedBy,
+		arg.TenantID,
+		arg.Selection,
+		arg.Total,
+	)
+	var i EventRepairOperation
+	err := row.Scan(
+		&i.ID,
+		&i.Operation,
+		&i.Version,
+		&i.State,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CreatedBy,
+		&i.TenantID,
+		&i.Selection,
+		&i.Total,
+		&i.Processed,
+		&i.Applied,
+		&i.Skipped,
+		&i.LastError,
+	)
+	return i, err
+}
+
+const getEventRepairItem = `-- name: GetEventRepairItem :one
+SELECT i.operation_id, i.instance_id, i.state, i.reason, i.evidence_hash, i.changes, i.plan FROM event_repair_items i JOIN event_repair_operations o ON o.id = i.operation_id
+WHERE i.operation_id = $1 AND o.tenant_id = $2 AND i.instance_id = $3
+`
+
+type GetEventRepairItemParams struct {
+	OperationID uuid.UUID `db:"operation_id" json:"operation_id"`
+	TenantID    uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceID  uuid.UUID `db:"instance_id" json:"instance_id"`
+}
+
+func (q *sqlQuerier) GetEventRepairItem(ctx context.Context, arg GetEventRepairItemParams) (EventRepairItem, error) {
+	row := q.db.QueryRow(ctx, getEventRepairItem, arg.OperationID, arg.TenantID, arg.InstanceID)
+	var i EventRepairItem
+	err := row.Scan(
+		&i.OperationID,
+		&i.InstanceID,
+		&i.State,
+		&i.Reason,
+		&i.EvidenceHash,
+		&i.Changes,
+		&i.Plan,
+	)
+	return i, err
+}
+
+const getEventRepairOperation = `-- name: GetEventRepairOperation :one
+SELECT id, operation, version, state, created_at, updated_at, created_by, tenant_id, selection, total, processed, applied, skipped, last_error FROM event_repair_operations WHERE id = $1 AND tenant_id = $2
+`
+
+type GetEventRepairOperationParams struct {
+	ID       uuid.UUID `db:"id" json:"id"`
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) GetEventRepairOperation(ctx context.Context, arg GetEventRepairOperationParams) (EventRepairOperation, error) {
+	row := q.db.QueryRow(ctx, getEventRepairOperation, arg.ID, arg.TenantID)
+	var i EventRepairOperation
+	err := row.Scan(
+		&i.ID,
+		&i.Operation,
+		&i.Version,
+		&i.State,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CreatedBy,
+		&i.TenantID,
+		&i.Selection,
+		&i.Total,
+		&i.Processed,
+		&i.Applied,
+		&i.Skipped,
+		&i.LastError,
+	)
+	return i, err
+}
+
+const insertEventRepairItem = `-- name: InsertEventRepairItem :one
+INSERT INTO event_repair_items (operation_id, instance_id)
+SELECT o.id, $1 FROM event_repair_operations o
+WHERE o.id = $2 AND o.tenant_id = $3
+RETURNING operation_id, instance_id, state, reason, evidence_hash, changes, plan
+`
+
+type InsertEventRepairItemParams struct {
+	InstanceID  uuid.UUID `db:"instance_id" json:"instance_id"`
+	OperationID uuid.UUID `db:"operation_id" json:"operation_id"`
+	TenantID    uuid.UUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) InsertEventRepairItem(ctx context.Context, arg InsertEventRepairItemParams) (EventRepairItem, error) {
+	row := q.db.QueryRow(ctx, insertEventRepairItem, arg.InstanceID, arg.OperationID, arg.TenantID)
+	var i EventRepairItem
+	err := row.Scan(
+		&i.OperationID,
+		&i.InstanceID,
+		&i.State,
+		&i.Reason,
+		&i.EvidenceHash,
+		&i.Changes,
+		&i.Plan,
+	)
+	return i, err
+}
+
+const listEventRepairItems = `-- name: ListEventRepairItems :many
+SELECT i.operation_id, i.instance_id, i.state, i.reason, i.evidence_hash, i.changes, i.plan FROM event_repair_items i JOIN event_repair_operations o ON o.id = i.operation_id
+WHERE i.operation_id = $1 AND o.tenant_id = $2
+ORDER BY i.instance_id LIMIT $4::integer OFFSET $3::integer
+`
+
+type ListEventRepairItemsParams struct {
+	OperationID uuid.UUID `db:"operation_id" json:"operation_id"`
+	TenantID    uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	OffsetCount int32     `db:"offset_count" json:"offset_count"`
+	LimitCount  int32     `db:"limit_count" json:"limit_count"`
+}
+
+func (q *sqlQuerier) ListEventRepairItems(ctx context.Context, arg ListEventRepairItemsParams) ([]EventRepairItem, error) {
+	rows, err := q.db.Query(ctx, listEventRepairItems,
+		arg.OperationID,
+		arg.TenantID,
+		arg.OffsetCount,
+		arg.LimitCount,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []EventRepairItem
+	for rows.Next() {
+		var i EventRepairItem
+		if err := rows.Scan(
+			&i.OperationID,
+			&i.InstanceID,
+			&i.State,
+			&i.Reason,
+			&i.EvidenceHash,
+			&i.Changes,
+			&i.Plan,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEventRepairOperations = `-- name: ListEventRepairOperations :many
+SELECT id, operation, version, state, created_at, updated_at, created_by, tenant_id, selection, total, processed, applied, skipped, last_error FROM event_repair_operations WHERE tenant_id = $1
+ORDER BY created_at DESC, id
+LIMIT $3::integer OFFSET $2::integer
+`
+
+type ListEventRepairOperationsParams struct {
+	TenantID    uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	OffsetCount int32     `db:"offset_count" json:"offset_count"`
+	LimitCount  int32     `db:"limit_count" json:"limit_count"`
+}
+
+func (q *sqlQuerier) ListEventRepairOperations(ctx context.Context, arg ListEventRepairOperationsParams) ([]EventRepairOperation, error) {
+	rows, err := q.db.Query(ctx, listEventRepairOperations, arg.TenantID, arg.OffsetCount, arg.LimitCount)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []EventRepairOperation
+	for rows.Next() {
+		var i EventRepairOperation
+		if err := rows.Scan(
+			&i.ID,
+			&i.Operation,
+			&i.Version,
+			&i.State,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.CreatedBy,
+			&i.TenantID,
+			&i.Selection,
+			&i.Total,
+			&i.Processed,
+			&i.Applied,
+			&i.Skipped,
+			&i.LastError,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPendingEventRepairItems = `-- name: ListPendingEventRepairItems :many
+SELECT i.operation_id, i.instance_id, i.state, i.reason, i.evidence_hash, i.changes, i.plan FROM event_repair_items i JOIN event_repair_operations o ON o.id = i.operation_id
+WHERE i.operation_id = $1 AND o.tenant_id = $2 AND i.state = 'pending'
+ORDER BY i.instance_id LIMIT 25
+`
+
+type ListPendingEventRepairItemsParams struct {
+	OperationID uuid.UUID `db:"operation_id" json:"operation_id"`
+	TenantID    uuid.UUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) ListPendingEventRepairItems(ctx context.Context, arg ListPendingEventRepairItemsParams) ([]EventRepairItem, error) {
+	rows, err := q.db.Query(ctx, listPendingEventRepairItems, arg.OperationID, arg.TenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []EventRepairItem
+	for rows.Next() {
+		var i EventRepairItem
+		if err := rows.Scan(
+			&i.OperationID,
+			&i.InstanceID,
+			&i.State,
+			&i.Reason,
+			&i.EvidenceHash,
+			&i.Changes,
+			&i.Plan,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listReadyEventRepairItems = `-- name: ListReadyEventRepairItems :many
+SELECT i.operation_id, i.instance_id, i.state, i.reason, i.evidence_hash, i.changes, i.plan FROM event_repair_items i JOIN event_repair_operations o ON o.id = i.operation_id
+WHERE i.operation_id = $1 AND o.tenant_id = $2 AND i.state = 'ready'
+ORDER BY i.instance_id LIMIT 25
+`
+
+type ListReadyEventRepairItemsParams struct {
+	OperationID uuid.UUID `db:"operation_id" json:"operation_id"`
+	TenantID    uuid.UUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) ListReadyEventRepairItems(ctx context.Context, arg ListReadyEventRepairItemsParams) ([]EventRepairItem, error) {
+	rows, err := q.db.Query(ctx, listReadyEventRepairItems, arg.OperationID, arg.TenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []EventRepairItem
+	for rows.Next() {
+		var i EventRepairItem
+		if err := rows.Scan(
+			&i.OperationID,
+			&i.InstanceID,
+			&i.State,
+			&i.Reason,
+			&i.EvidenceHash,
+			&i.Changes,
+			&i.Plan,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockEventRepairItem = `-- name: LockEventRepairItem :one
+SELECT i.operation_id, i.instance_id, i.state, i.reason, i.evidence_hash, i.changes, i.plan FROM event_repair_items i JOIN event_repair_operations o ON o.id = i.operation_id
+WHERE i.operation_id = $1 AND o.tenant_id = $2 AND i.instance_id = $3 FOR UPDATE OF i
+`
+
+type LockEventRepairItemParams struct {
+	OperationID uuid.UUID `db:"operation_id" json:"operation_id"`
+	TenantID    uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceID  uuid.UUID `db:"instance_id" json:"instance_id"`
+}
+
+func (q *sqlQuerier) LockEventRepairItem(ctx context.Context, arg LockEventRepairItemParams) (EventRepairItem, error) {
+	row := q.db.QueryRow(ctx, lockEventRepairItem, arg.OperationID, arg.TenantID, arg.InstanceID)
+	var i EventRepairItem
+	err := row.Scan(
+		&i.OperationID,
+		&i.InstanceID,
+		&i.State,
+		&i.Reason,
+		&i.EvidenceHash,
+		&i.Changes,
+		&i.Plan,
+	)
+	return i, err
+}
+
+const lockEventRepairOperation = `-- name: LockEventRepairOperation :one
+SELECT id, operation, version, state, created_at, updated_at, created_by, tenant_id, selection, total, processed, applied, skipped, last_error FROM event_repair_operations WHERE id = $1 AND tenant_id = $2 FOR UPDATE
+`
+
+type LockEventRepairOperationParams struct {
+	ID       uuid.UUID `db:"id" json:"id"`
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) LockEventRepairOperation(ctx context.Context, arg LockEventRepairOperationParams) (EventRepairOperation, error) {
+	row := q.db.QueryRow(ctx, lockEventRepairOperation, arg.ID, arg.TenantID)
+	var i EventRepairOperation
+	err := row.Scan(
+		&i.ID,
+		&i.Operation,
+		&i.Version,
+		&i.State,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CreatedBy,
+		&i.TenantID,
+		&i.Selection,
+		&i.Total,
+		&i.Processed,
+		&i.Applied,
+		&i.Skipped,
+		&i.LastError,
+	)
+	return i, err
+}
+
+const resolveEventRepairInstance = `-- name: ResolveEventRepairInstance :one
+SELECT i.id, i.realm_id, i.log_group_id, i.name, i.hashed_slug, i.guild_id, i.start_time, i.end_time, i.capabilities, i.versions, i.recorder_name, i.recorder_guid, i.parser_version, i.duplicate_group_id, i.difficulty_name, i.max_players, i.dynamic_difficulty, i.vehicle_control_intervals, i.category, i.updated_at, i.invalidated_at, i.invalid_reason, i.mixed_difficulty, i.difficulty_normalized FROM log_instances i
+JOIN wow_server_realms r ON r.id = i.realm_id
+JOIN wow_servers s ON s.id = r.server_id
+WHERE s.tenant_id = $1
+  AND (i.id::text = $2::text OR i.hashed_slug = $2::text)
+ORDER BY (i.id::text = $2::text) DESC, i.id
+LIMIT 1
+`
+
+type ResolveEventRepairInstanceParams struct {
+	TenantID  uuid.NullUUID `db:"tenant_id" json:"tenant_id"`
+	Reference string        `db:"reference" json:"reference"`
+}
+
+// The service normalizes URLs to their last path segment before this lookup.
+func (q *sqlQuerier) ResolveEventRepairInstance(ctx context.Context, arg ResolveEventRepairInstanceParams) (LogInstance, error) {
+	row := q.db.QueryRow(ctx, resolveEventRepairInstance, arg.TenantID, arg.Reference)
+	var i LogInstance
+	err := row.Scan(
+		&i.ID,
+		&i.RealmID,
+		&i.LogGroupID,
+		&i.Name,
+		&i.HashedSlug,
+		&i.GuildID,
+		&i.StartTime,
+		&i.EndTime,
+		&i.Capabilities,
+		&i.Versions,
+		&i.RecorderName,
+		&i.RecorderGuid,
+		&i.ParserVersion,
+		&i.DuplicateGroupID,
+		&i.DifficultyName,
+		&i.MaxPlayers,
+		&i.DynamicDifficulty,
+		&i.VehicleControlIntervals,
+		&i.Category,
+		&i.UpdatedAt,
+		&i.InvalidatedAt,
+		&i.InvalidReason,
+		&i.MixedDifficulty,
+		&i.DifficultyNormalized,
+	)
+	return i, err
+}
+
+const selectEventRepairInstances = `-- name: SelectEventRepairInstances :many
+SELECT i.id, i.realm_id, i.log_group_id, i.name, i.hashed_slug, i.guild_id, i.start_time, i.end_time, i.capabilities, i.versions, i.recorder_name, i.recorder_guid, i.parser_version, i.duplicate_group_id, i.difficulty_name, i.max_players, i.dynamic_difficulty, i.vehicle_control_intervals, i.category, i.updated_at, i.invalidated_at, i.invalid_reason, i.mixed_difficulty, i.difficulty_normalized FROM log_instances i
+JOIN wow_server_realms r ON r.id = i.realm_id
+JOIN wow_servers s ON s.id = r.server_id
+WHERE s.tenant_id = $1
+  AND ($2::uuid IS NULL OR i.realm_id = $2)
+  AND ($3::timestamptz IS NULL OR i.start_time >= $3)
+  AND ($4::timestamptz IS NULL OR i.start_time < $4)
+ORDER BY i.start_time DESC NULLS LAST, i.id
+LIMIT LEAST(GREATEST($5::integer, 0), 1000)
+`
+
+type SelectEventRepairInstancesParams struct {
+	TenantID   uuid.NullUUID      `db:"tenant_id" json:"tenant_id"`
+	RealmID    uuid.NullUUID      `db:"realm_id" json:"realm_id"`
+	AfterDate  pgtype.Timestamptz `db:"after_date" json:"after_date"`
+	BeforeDate pgtype.Timestamptz `db:"before_date" json:"before_date"`
+	LimitCount int32              `db:"limit_count" json:"limit_count"`
+}
+
+func (q *sqlQuerier) SelectEventRepairInstances(ctx context.Context, arg SelectEventRepairInstancesParams) ([]LogInstance, error) {
+	rows, err := q.db.Query(ctx, selectEventRepairInstances,
+		arg.TenantID,
+		arg.RealmID,
+		arg.AfterDate,
+		arg.BeforeDate,
+		arg.LimitCount,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LogInstance
+	for rows.Next() {
+		var i LogInstance
+		if err := rows.Scan(
+			&i.ID,
+			&i.RealmID,
+			&i.LogGroupID,
+			&i.Name,
+			&i.HashedSlug,
+			&i.GuildID,
+			&i.StartTime,
+			&i.EndTime,
+			&i.Capabilities,
+			&i.Versions,
+			&i.RecorderName,
+			&i.RecorderGuid,
+			&i.ParserVersion,
+			&i.DuplicateGroupID,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.DynamicDifficulty,
+			&i.VehicleControlIntervals,
+			&i.Category,
+			&i.UpdatedAt,
+			&i.InvalidatedAt,
+			&i.InvalidReason,
+			&i.MixedDifficulty,
+			&i.DifficultyNormalized,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateEventRepairItem = `-- name: UpdateEventRepairItem :one
+UPDATE event_repair_items i SET state = $1, reason = $2,
+  evidence_hash = $3, changes = $4, plan = $5
+FROM event_repair_operations o
+WHERE i.operation_id = $6 AND i.instance_id = $7
+  AND o.id = i.operation_id AND o.tenant_id = $8
+RETURNING i.operation_id, i.instance_id, i.state, i.reason, i.evidence_hash, i.changes, i.plan
+`
+
+type UpdateEventRepairItemParams struct {
+	State        string    `db:"state" json:"state"`
+	Reason       string    `db:"reason" json:"reason"`
+	EvidenceHash string    `db:"evidence_hash" json:"evidence_hash"`
+	Changes      []byte    `db:"changes" json:"changes"`
+	Plan         []byte    `db:"plan" json:"plan"`
+	OperationID  uuid.UUID `db:"operation_id" json:"operation_id"`
+	InstanceID   uuid.UUID `db:"instance_id" json:"instance_id"`
+	TenantID     uuid.UUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) UpdateEventRepairItem(ctx context.Context, arg UpdateEventRepairItemParams) (EventRepairItem, error) {
+	row := q.db.QueryRow(ctx, updateEventRepairItem,
+		arg.State,
+		arg.Reason,
+		arg.EvidenceHash,
+		arg.Changes,
+		arg.Plan,
+		arg.OperationID,
+		arg.InstanceID,
+		arg.TenantID,
+	)
+	var i EventRepairItem
+	err := row.Scan(
+		&i.OperationID,
+		&i.InstanceID,
+		&i.State,
+		&i.Reason,
+		&i.EvidenceHash,
+		&i.Changes,
+		&i.Plan,
+	)
+	return i, err
+}
+
+const updateEventRepairOperation = `-- name: UpdateEventRepairOperation :one
+UPDATE event_repair_operations SET state = $1, total = $2,
+  processed = $3, applied = $4, skipped = $5,
+  last_error = $6, updated_at = now()
+WHERE id = $7 AND tenant_id = $8 RETURNING id, operation, version, state, created_at, updated_at, created_by, tenant_id, selection, total, processed, applied, skipped, last_error
+`
+
+type UpdateEventRepairOperationParams struct {
+	State     string    `db:"state" json:"state"`
+	Total     int32     `db:"total" json:"total"`
+	Processed int32     `db:"processed" json:"processed"`
+	Applied   int32     `db:"applied" json:"applied"`
+	Skipped   int32     `db:"skipped" json:"skipped"`
+	LastError string    `db:"last_error" json:"last_error"`
+	ID        uuid.UUID `db:"id" json:"id"`
+	TenantID  uuid.UUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) UpdateEventRepairOperation(ctx context.Context, arg UpdateEventRepairOperationParams) (EventRepairOperation, error) {
+	row := q.db.QueryRow(ctx, updateEventRepairOperation,
+		arg.State,
+		arg.Total,
+		arg.Processed,
+		arg.Applied,
+		arg.Skipped,
+		arg.LastError,
+		arg.ID,
+		arg.TenantID,
+	)
+	var i EventRepairOperation
+	err := row.Scan(
+		&i.ID,
+		&i.Operation,
+		&i.Version,
+		&i.State,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CreatedBy,
+		&i.TenantID,
+		&i.Selection,
+		&i.Total,
+		&i.Processed,
+		&i.Applied,
+		&i.Skipped,
+		&i.LastError,
+	)
+	return i, err
+}
+
 const getParsedBytesByOwner = `-- name: GetParsedBytesByOwner :one
 SELECT
   COALESCE(SUM(octet_length(lie.events)), 0)::bigint AS parsed_bytes,

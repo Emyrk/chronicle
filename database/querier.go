@@ -131,18 +131,13 @@ type sqlcQuerier interface {
 	CountUserLogFileParts(ctx context.Context, logFileID uuid.UUID) (int64, error)
 	CountUserPanelLayoutsTotal(ctx context.Context, userID uuid.NullUUID) (int32, error)
 	CountUserTalentBuilds(ctx context.Context, arg CountUserTalentBuildsParams) (int64, error)
-	// ============================================================
-	// Gear Lists
-	// ============================================================
-	CreateGearList(ctx context.Context, arg CreateGearListParams) (GearList, error)
-	// ============================================================
-	// Gear Progressions
-	// ============================================================
-	CreateGearProgression(ctx context.Context, arg CreateGearProgressionParams) (GearProgression, error)
-	// ============================================================
-	// Stat Weights
-	// ============================================================
-	CreateGearStatWeight(ctx context.Context, arg CreateGearStatWeightParams) (GearStatWeight, error)
+	CreateEventRepairOperation(ctx context.Context, arg CreateEventRepairOperationParams) (EventRepairOperation, error)
+	// =====================================================	// Gear Lists
+	// =====================================================	CreateGearList(ctx context.Context, arg CreateGearListParams) (GearList, error)
+	// =====================================================	// Gear Progressions
+	// =====================================================	CreateGearProgression(ctx context.Context, arg CreateGearProgressionParams) (GearProgression, error)
+	// =====================================================	// Stat Weights
+	// =====================================================	CreateGearStatWeight(ctx context.Context, arg CreateGearStatWeightParams) (GearStatWeight, error)
 	// Discord Integration
 	CreateGuildDiscordInstallState(ctx context.Context, arg CreateGuildDiscordInstallStateParams) (GuildDiscordInstallState, error)
 	// Guild Join Requests
@@ -399,6 +394,8 @@ type sqlcQuerier interface {
 	GetEncounterPhasesByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceEncounterPhase, error)
 	GetEncounterSummariesByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]GetEncounterSummariesByInstanceIDRow, error)
 	GetEncounterSummariesByInstanceIDs(ctx context.Context, instanceIds []uuid.UUID) ([]GetEncounterSummariesByInstanceIDsRow, error)
+	GetEventRepairItem(ctx context.Context, arg GetEventRepairItemParams) (EventRepairItem, error)
+	GetEventRepairOperation(ctx context.Context, arg GetEventRepairOperationParams) (EventRepairOperation, error)
 	// Returns log groups whose raw files are past their owner's retention window.
 	// Only considers users who have set a retention policy (non-NULL).
 	GetExpiredRawLogGroups(ctx context.Context, limit int32) ([]uuid.UUID, error)
@@ -684,6 +681,7 @@ type sqlcQuerier interface {
 	// Trash keeps one aggregate per player/spec/sub-spec.
 	InsertEncounterDpsRanking(ctx context.Context, arg InsertEncounterDpsRankingParams) error
 	InsertEncounterPhase(ctx context.Context, arg InsertEncounterPhaseParams) error
+	InsertEventRepairItem(ctx context.Context, arg InsertEventRepairItemParams) (EventRepairItem, error)
 	InsertGuildPagePanel(ctx context.Context, arg InsertGuildPagePanelParams) (GuildPagePanel, error)
 	InsertGuildPageTab(ctx context.Context, arg InsertGuildPageTabParams) (GuildPageTab, error)
 	InsertInferenceClientToolRequest(ctx context.Context, arg InsertInferenceClientToolRequestParams) (InferenceClientToolRequest, error)
@@ -858,6 +856,8 @@ type sqlcQuerier interface {
 	ListDueLeaderboardD2(ctx context.Context, arg ListDueLeaderboardD2Params) ([]ListDueLeaderboardD2Row, error)
 	ListDueLeaderboardOperations(ctx context.Context, afterTenant uuid.UUID) ([]ListDueLeaderboardOperationsRow, error)
 	ListDueLeaderboardRuns(ctx context.Context, arg ListDueLeaderboardRunsParams) ([]uuid.UUID, error)
+	ListEventRepairItems(ctx context.Context, arg ListEventRepairItemsParams) ([]EventRepairItem, error)
+	ListEventRepairOperations(ctx context.Context, arg ListEventRepairOperationsParams) ([]EventRepairOperation, error)
 	ListExternalAPICharacterLogs(ctx context.Context, arg ListExternalAPICharacterLogsParams) ([]ListExternalAPICharacterLogsRow, error)
 	// Returns the logs excluded by duplicate-group deduplication for each selected
 	// leaderboard instance. The selected instance is the canonical leaderboard log
@@ -971,6 +971,7 @@ type sqlcQuerier interface {
 	// membership row instead of seeking by encounter.
 	ListParseScoreSpreadValues(ctx context.Context, arg ListParseScoreSpreadValuesParams) ([]ListParseScoreSpreadValuesRow, error)
 	ListParseVariantResultsForInstance(ctx context.Context, arg ListParseVariantResultsForInstanceParams) ([]ParseVariantResult, error)
+	ListPendingEventRepairItems(ctx context.Context, arg ListPendingEventRepairItemsParams) ([]EventRepairItem, error)
 	// Receipt-less results are authoritative historical data. Read them without
 	// joining snapshot tables or score memberships so they can never be recomputed.
 	ListPersistedParseScoreResultsForInstance(ctx context.Context, arg ListPersistedParseScoreResultsForInstanceParams) ([]ParseScoreResultsResolved, error)
@@ -990,6 +991,7 @@ type sqlcQuerier interface {
 	ListRankingsForInstance(ctx context.Context, instanceID uuid.UUID) ([]ListRankingsForInstanceRow, error)
 	// Oldest successfully parsed, unpinned groups are eligible for automatic raw-file cleanup.
 	ListRawLogGroupsForQuotaCleanup(ctx context.Context, arg ListRawLogGroupsForQuotaCleanupParams) ([]uuid.UUID, error)
+	ListReadyEventRepairItems(ctx context.Context, arg ListReadyEventRepairItemsParams) ([]EventRepairItem, error)
 	ListReadyLogFileParts(ctx context.Context, logFileID uuid.UUID) ([]LogFilePart, error)
 	ListRecentBillingReconciliationRuns(ctx context.Context, limit int32) ([]BillingReconciliationRun, error)
 	ListRecentBillingSubscriptions(ctx context.Context, limit int32) ([]ListRecentBillingSubscriptionsRow, error)
@@ -1080,6 +1082,8 @@ type sqlcQuerier interface {
 	ListWoWServers(ctx context.Context) ([]WowServer, error)
 	ListWoWServersByTenantID(ctx context.Context, tenantID uuid.NullUUID) ([]WowServer, error)
 	ListWorlds(ctx context.Context) ([]World, error)
+	LockEventRepairItem(ctx context.Context, arg LockEventRepairItemParams) (EventRepairItem, error)
+	LockEventRepairOperation(ctx context.Context, arg LockEventRepairOperationParams) (EventRepairOperation, error)
 	LockLeaderboardCareerPublication(ctx context.Context, arg LockLeaderboardCareerPublicationParams) (uuid.UUID, error)
 	// Future direct writers call BEFORE source mutation in the same transaction.
 	// An overlap increments revision without invalidating the active owner's token.
@@ -1276,6 +1280,8 @@ type sqlcQuerier interface {
 	// tenant's additive flavor tags. Dataset selection uses the same precedence as
 	// ResolveDatasetByRealm; tenant tags augment rather than replace dataset tags.
 	ResolveDatasetWithFlavorByRealm(ctx context.Context, id uuid.UUID) (ResolveDatasetWithFlavorByRealmRow, error)
+	// The service normalizes URLs to their last path segment before this lookup.
+	ResolveEventRepairInstance(ctx context.Context, arg ResolveEventRepairInstanceParams) (LogInstance, error)
 	ResolveExternalAPIRealm(ctx context.Context, arg ResolveExternalAPIRealmParams) (ResolveExternalAPIRealmRow, error)
 	ResolveExternalAPIServer(ctx context.Context, server string) (ResolveExternalAPIServerRow, error)
 	// Strict set inclusion, not tag count, determines precedence independently for
@@ -1320,6 +1326,7 @@ type sqlcQuerier interface {
 	// Name search for the gear builder's enchant picker. Same names appear at
 	// multiple ranks/IDs, so the ID is part of the result identity.
 	SearchSpellItemEnchantments(ctx context.Context, arg SearchSpellItemEnchantmentsParams) ([]SearchSpellItemEnchantmentsRow, error)
+	SelectEventRepairInstances(ctx context.Context, arg SelectEventRepairInstancesParams) ([]LogInstance, error)
 	SetDiscordAnnouncementDeliveryError(ctx context.Context, arg SetDiscordAnnouncementDeliveryErrorParams) error
 	SetDiscordAnnouncementMessage(ctx context.Context, arg SetDiscordAnnouncementMessageParams) (GuildDiscordLogAnnouncement, error)
 	SetDuplicateGroupIDs(ctx context.Context, arg SetDuplicateGroupIDsParams) error
@@ -1407,6 +1414,8 @@ type sqlcQuerier interface {
 	// Only non-null params are applied; NULL means "keep existing value".
 	UpdateDataset(ctx context.Context, arg UpdateDatasetParams) (Dataset, error)
 	UpdateDiscordAnnouncementRun(ctx context.Context, arg UpdateDiscordAnnouncementRunParams) (GuildDiscordLogAnnouncement, error)
+	UpdateEventRepairItem(ctx context.Context, arg UpdateEventRepairItemParams) (EventRepairItem, error)
+	UpdateEventRepairOperation(ctx context.Context, arg UpdateEventRepairOperationParams) (EventRepairOperation, error)
 	UpdateExternalCharacterLinkSyncResponse(ctx context.Context, arg UpdateExternalCharacterLinkSyncResponseParams) error
 	UpdateGearList(ctx context.Context, arg UpdateGearListParams) (GearList, error)
 	UpdateGearProgression(ctx context.Context, arg UpdateGearProgressionParams) (GearProgression, error)

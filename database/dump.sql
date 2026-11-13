@@ -1186,6 +1186,39 @@ CREATE VIEW encounter_dps_rankings_resolved WITH (security_invoker='true') AS
      LEFT JOIN log_instance_encounters encounter ON ((encounter.id = ranking.encounter_id)))
   WHERE ((NOT instance.difficulty_normalized) OR ((ranking.difficulty_name = COALESCE(encounter.difficulty, instance.difficulty_name)) AND (ranking.max_players = instance.max_players)));
 
+CREATE TABLE event_repair_items (
+    operation_id uuid NOT NULL,
+    instance_id uuid NOT NULL,
+    state text DEFAULT 'pending'::text NOT NULL,
+    reason text DEFAULT ''::text NOT NULL,
+    evidence_hash text DEFAULT ''::text NOT NULL,
+    changes jsonb DEFAULT '[]'::jsonb NOT NULL,
+    plan jsonb DEFAULT '{}'::jsonb NOT NULL,
+    CONSTRAINT event_repair_items_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'ready'::text, 'skipped'::text, 'applied'::text, 'stale'::text])))
+);
+
+ALTER TABLE ONLY event_repair_items FORCE ROW LEVEL SECURITY;
+
+CREATE TABLE event_repair_operations (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    operation text NOT NULL,
+    version integer NOT NULL,
+    state text DEFAULT 'dry_running'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid NOT NULL,
+    tenant_id uuid NOT NULL,
+    selection jsonb NOT NULL,
+    total integer DEFAULT 0 NOT NULL,
+    processed integer DEFAULT 0 NOT NULL,
+    applied integer DEFAULT 0 NOT NULL,
+    skipped integer DEFAULT 0 NOT NULL,
+    last_error text DEFAULT ''::text NOT NULL,
+    CONSTRAINT event_repair_operations_state_check CHECK ((state = ANY (ARRAY['dry_running'::text, 'ready'::text, 'applying'::text, 'completed'::text, 'cancelled'::text])))
+);
+
+ALTER TABLE ONLY event_repair_operations FORCE ROW LEVEL SECURITY;
+
 CREATE TABLE external_character_link_syncs (
     user_id uuid NOT NULL,
     source text NOT NULL,
@@ -4197,6 +4230,12 @@ ALTER TABLE ONLY encounter_dps_rankings
 ALTER TABLE ONLY encounter_dps_rankings
     ADD CONSTRAINT encounter_dps_rankings_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY event_repair_items
+    ADD CONSTRAINT event_repair_items_pkey PRIMARY KEY (operation_id, instance_id);
+
+ALTER TABLE ONLY event_repair_operations
+    ADD CONSTRAINT event_repair_operations_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY external_character_link_syncs
     ADD CONSTRAINT external_character_link_syncs_pkey PRIMARY KEY (user_id, source);
 
@@ -4857,6 +4896,10 @@ CREATE INDEX dbc_consumable_buffs_spell_idx ON dbc_consumable_buffs USING btree 
 
 CREATE INDEX discord_membership_grant_checks_due_idx ON discord_membership_grant_checks USING btree (next_check_at, user_id) WHERE (suspended_until_login = false);
 
+CREATE INDEX event_repair_items_work ON event_repair_items USING btree (operation_id, state, instance_id);
+
+CREATE INDEX event_repair_operations_history ON event_repair_operations USING btree (tenant_id, created_at DESC, id);
+
 CREATE UNIQUE INDEX files_unique_owner_hash ON log_file USING btree (owner, hash);
 
 CREATE INDEX game_player_gear_history_player_time ON game_player_gear_history USING btree (realm_id, player_id, equipped_at DESC);
@@ -5455,6 +5498,12 @@ ALTER TABLE ONLY encounter_dps_rankings
 ALTER TABLE ONLY encounter_dps_rankings
     ADD CONSTRAINT encounter_dps_rankings_talent_build_id_fkey FOREIGN KEY (talent_build_id) REFERENCES talent_builds(id);
 
+ALTER TABLE ONLY event_repair_items
+    ADD CONSTRAINT event_repair_items_operation_id_fkey FOREIGN KEY (operation_id) REFERENCES event_repair_operations(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY event_repair_operations
+    ADD CONSTRAINT event_repair_operations_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES tenants(id);
+
 ALTER TABLE ONLY external_character_link_syncs
     ADD CONSTRAINT external_character_link_syncs_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 
@@ -6039,6 +6088,10 @@ ALTER TABLE ONLY wow_servers
 
 ALTER TABLE encounter_dps_rankings ENABLE ROW LEVEL SECURITY;
 
+ALTER TABLE event_repair_items ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE event_repair_operations ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE guild_renown_kill_facts ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE item_daily_prices ENABLE ROW LEVEL SECURITY;
@@ -6124,6 +6177,10 @@ ALTER TABLE leaderboard_variant_player_observations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE renown_kill_facts ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY tenant_admin_bypass ON encounter_dps_rankings USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON event_repair_items USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON event_repair_operations USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON guild_renown_kill_facts USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
@@ -6215,6 +6272,14 @@ CREATE POLICY tenant_admin_bypass ON wow_servers USING ((current_setting('app.te
 
 CREATE POLICY tenant_isolation ON encounter_dps_rankings USING ((realm_id IN ( SELECT wow_server_realms.id
    FROM wow_server_realms)));
+
+CREATE POLICY tenant_isolation ON event_repair_items USING ((EXISTS ( SELECT 1
+   FROM event_repair_operations o
+  WHERE ((o.id = event_repair_items.operation_id) AND (o.tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)))))) WITH CHECK ((EXISTS ( SELECT 1
+   FROM event_repair_operations o
+  WHERE ((o.id = event_repair_items.operation_id) AND (o.tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))))));
+
+CREATE POLICY tenant_isolation ON event_repair_operations USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
 
 CREATE POLICY tenant_isolation ON guild_renown_kill_facts USING ((realm_id IN ( SELECT realm.id
    FROM (public.wow_server_realms realm
