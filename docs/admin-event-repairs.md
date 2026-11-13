@@ -71,19 +71,22 @@ next successful checkpoint. Errors use 400 for invalid input, 404 for unknown ID
 The named operation is `razorgore-phase-two`, version 1. It supports two
 conservative repair paths:
 
-1. **Phase-two numerical repair.** Requires a single clean Razorgore encounter,
-   complete contiguous persisted P1/P2 phases, direct-player contributions, and
-   exact full-damage upper-bound reconciliation against source credits. Shared
-   DPS and survivability trackers reconstruct ranked/unranked damage, effective
-   healing, absorbs, DPS/HPS, phase-two duration, inferred role, deaths, and alive
-   percentage. Existing spec/subspec/talent identities are preserved. Existing
-   speedrun proof and full-encounter timing must independently agree; numerical
-   repair never shortens speedrun timing.
-2. **Pre-threshold false-kill correction.** Requires one complete persisted P1,
-   an explicit terminal Razorgore death, unambiguous hostile activity, and no
-   surviving other boss kill. It corrects encounter outcome/ranking window,
-   hostile end state and phase outcome; removes false encounter ranking rows;
-   and removes invalid speedrun source/proof when no boss kills remain.
+1. **Phase-two numerical repair.** A single clean encounter can use the
+   direct-player proof path. Multi-pull addon instances use indexed classification,
+   aura-duration possession expiry, pet aggregation, and shared DPS/survivability
+   trackers. Persisted contiguous P1/P2 phases and complete metric streams are
+   required. Repairs include ranked/unranked damage, healing, absorbs, DPS/HPS,
+   duration, inferred role, deaths, and alive percentage. Spec/subspec/talent
+   identities stay unchanged. Historical source reconciliation can reject an
+   ambiguous instance even when a fresh-parser comparison is available.
+2. **Pre-threshold false-kill correction.** Requires complete persisted P1 and
+   explicit terminal Razorgore death with unambiguous hostile activity. It corrects
+   encounter/window, hostile and phase outcomes, then removes false ranking rows.
+   The standalone path removes the invalid speedrun source when no boss survives.
+   In a multi-pull instance with a proven surviving kill, proof is replaced with
+   that first true kill and completion is recomputed from original full encounter
+   endpoints. Wipes have no source rankings; non-Razorgore metrics/proof entries
+   remain unchanged and proof evidence is checked before any mutation.
 
 Original encounter and instance boundaries stay unchanged. A fully matching
 repaired state is a no-op but still enqueues ratings on apply.
@@ -91,7 +94,8 @@ repaired state is a no-op but still enqueues ratings on apply.
 Other cases are skipped with diagnostic reasons requiring original-log reparse.
 The unit_classification stream can carry ownership/controller transitions, but
 snapshots omit possession expiry and some UNIT_INFO changes are not emitted.
-General pet/possession replay is not implemented; the direct-player path proves
-its narrower attribution bounds instead of guessing history. Missing persisted
+The addon classification path requires authoritative possession durations and
+rejects missing attribution evidence. The direct-player fallback proves narrower
+attribution bounds instead of guessing history. Missing persisted
 phases are not inferred from potentially truncated egg casts. The implementation
 does not fabricate approximate ranking totals or perform duration-only repairs.

@@ -29,10 +29,12 @@ type RazorgoreRepairPlan struct {
 	hostile         *database.LogInstanceEncounterHostile
 	phase           *database.LogInstanceEncounterPhase
 	numeric         *razorgoreNumericPlan
+	multi           *razorgoreMultiPlan
 	seal            [sha256.Size]byte
 }
 
 type razorgoreEvidence struct {
+	Group           database.WoWLogGroup
 	MissingInstance bool
 	Realm           database.WowServerRealm
 	Server          database.WowServer
@@ -104,6 +106,11 @@ func loadRazorgoreEvidence(ctx context.Context, db database.Store, instanceID uu
 		return e, fmt.Errorf("load instance: %w", err)
 	}
 
+	if e.Instance.LogGroupID != uuid.Nil {
+		if e.Group, err = db.RazorgoreRepairLogGroup(ctx, e.Instance.LogGroupID); err != nil {
+			return e, err
+		}
+	}
 	if e.Realm, err = db.GetWoWServerRealm(ctx, e.Instance.RealmID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return e, nil
@@ -153,6 +160,9 @@ func ApplyRazorgore(ctx context.Context, tx database.Store, plan *RazorgoreRepai
 	}
 	if len(fresh.Changes) == 0 {
 		return nil
+	}
+	if fresh.multi != nil {
+		return applyRazorgoreMulti(ctx, tx, fresh.multi)
 	}
 	if fresh.numeric != nil {
 		return applyRazorgoreNumeric(ctx, tx, fresh.numeric)
@@ -215,7 +225,8 @@ func razorgorePlanSeal(p *RazorgoreRepairPlan) ([sha256.Size]byte, error) {
 		Hostile *database.LogInstanceEncounterHostile
 		Phase   *database.LogInstanceEncounterPhase
 		Numeric *razorgoreNumericPlan
-	}{p, p.hostile, p.phase, p.numeric}
+		Multi   *razorgoreMultiPlan
+	}{p, p.hostile, p.phase, p.numeric, p.multi}
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		return [sha256.Size]byte{}, err
@@ -259,6 +270,12 @@ func evaluateRazorgoreEvidence(e razorgoreEvidence) (*RazorgoreRepairPlan, error
 	p.TenantID = e.Server.TenantID.UUID
 	if e.Instance.Name != "Blackwing Lair" || e.Instance.InvalidatedAt.Valid || slices.Contains(e.Instance.Capabilities, "server-side") {
 		return skip("instance is not an active legacy Blackwing Lair source (authoritative encounter results require reparse)")
+	}
+	if len(e.Encounters) > 1 && e.Group.Format.Valid {
+		if err := evaluateRazorgoreMulti(e, p); err != nil {
+			return skip(err.Error())
+		}
+		return p, nil
 	}
 	for _, phase := range e.Phases {
 		if phase.Key == "razorgore_p2" {

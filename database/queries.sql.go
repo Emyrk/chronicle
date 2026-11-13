@@ -5652,6 +5652,31 @@ func (q *sqlQuerier) RazorgoreRepairInstance(ctx context.Context, instanceID uui
 	return i, err
 }
 
+const razorgoreRepairLogGroup = `-- name: RazorgoreRepairLogGroup :one
+SELECT id, owner, created_at, updated_at, log_type, format, flavor, invalidated_at, invalid_reason, parse_generation, unlisted, upload_source, raw_files_pinned FROM wow_log_groups WHERE id = $1
+`
+
+func (q *sqlQuerier) RazorgoreRepairLogGroup(ctx context.Context, id uuid.UUID) (WoWLogGroup, error) {
+	row := q.db.QueryRow(ctx, razorgoreRepairLogGroup, id)
+	var i WoWLogGroup
+	err := row.Scan(
+		&i.ID,
+		&i.Owner,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.LogType,
+		&i.Format,
+		&i.Flavor,
+		&i.InvalidatedAt,
+		&i.InvalidReason,
+		&i.ParseGeneration,
+		&i.Unlisted,
+		&i.UploadSource,
+		&i.RawFilesPinned,
+	)
+	return i, err
+}
+
 const razorgoreRepairMetrics = `-- name: RazorgoreRepairMetrics :exec
 UPDATE encounter_dps_rankings
 SET damage_done = $1, unranked_damage_done = $2,
@@ -5791,6 +5816,41 @@ func (q *sqlQuerier) RazorgoreRepairRankings(ctx context.Context, instanceID uui
 		return nil, err
 	}
 	return items, nil
+}
+
+const razorgoreRepairSpeedrunProof = `-- name: RazorgoreRepairSpeedrunProof :exec
+UPDATE instance_speedruns SET proof = $1, qualified = $2,
+ completion_time = $3, duration_ms = $4,
+ ranked_completion_time = $5, ranked_duration_ms = $6,
+ boss_to_boss_completion_time = $7, boss_to_boss_duration_ms = $8
+WHERE instance_id = $9
+`
+
+type RazorgoreRepairSpeedrunProofParams struct {
+	Proof                    []byte             `db:"proof" json:"proof"`
+	Qualified                bool               `db:"qualified" json:"qualified"`
+	CompletionTime           pgtype.Timestamptz `db:"completion_time" json:"completion_time"`
+	DurationMs               int64              `db:"duration_ms" json:"duration_ms"`
+	RankedCompletionTime     pgtype.Timestamptz `db:"ranked_completion_time" json:"ranked_completion_time"`
+	RankedDurationMs         pgtype.Int8        `db:"ranked_duration_ms" json:"ranked_duration_ms"`
+	BossToBossCompletionTime pgtype.Timestamptz `db:"boss_to_boss_completion_time" json:"boss_to_boss_completion_time"`
+	BossToBossDurationMs     pgtype.Int8        `db:"boss_to_boss_duration_ms" json:"boss_to_boss_duration_ms"`
+	InstanceID               uuid.UUID          `db:"instance_id" json:"instance_id"`
+}
+
+func (q *sqlQuerier) RazorgoreRepairSpeedrunProof(ctx context.Context, arg RazorgoreRepairSpeedrunProofParams) error {
+	_, err := q.db.Exec(ctx, razorgoreRepairSpeedrunProof,
+		arg.Proof,
+		arg.Qualified,
+		arg.CompletionTime,
+		arg.DurationMs,
+		arg.RankedCompletionTime,
+		arg.RankedDurationMs,
+		arg.BossToBossCompletionTime,
+		arg.BossToBossDurationMs,
+		arg.InstanceID,
+	)
+	return err
 }
 
 const razorgoreRepairSpeedruns = `-- name: RazorgoreRepairSpeedruns :many

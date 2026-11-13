@@ -42,3 +42,13 @@ SET damage_done = @damage_done, unranked_damage_done = @unranked_damage_done,
  player_role = @player_role, player_deaths = @player_deaths,
  alive_percentage = @alive_percentage
 WHERE id = @id AND instance_id = @instance_id AND encounter_id = @encounter_id;
+
+-- name: RazorgoreRepairLogGroup :one
+SELECT * FROM wow_log_groups WHERE id = @id;
+
+-- name: RazorgoreRepairSpeedrunProof :exec
+UPDATE instance_speedruns SET proof = @proof, qualified = @qualified,
+ completion_time = @completion_time, duration_ms = @duration_ms,
+ ranked_completion_time = @ranked_completion_time, ranked_duration_ms = @ranked_duration_ms,
+ boss_to_boss_completion_time = @boss_to_boss_completion_time, boss_to_boss_duration_ms = @boss_to_boss_duration_ms
+WHERE instance_id = @instance_id;
