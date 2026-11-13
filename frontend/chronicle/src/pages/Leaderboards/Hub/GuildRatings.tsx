@@ -24,6 +24,8 @@ export interface GuildRatingData {
   error?: string
 }
 
+const PAGE_SIZE = 50
+
 const EMPTY_GUILD_RATINGS: Record<RatingMetric, GuildRating[]> = { peak: [], mastery: [], renown: [] }
 
 export interface MetricRow {
@@ -43,7 +45,7 @@ export const METRIC_COLUMN_ROWS = 5
  * guild rating cards so both read the same. Without columns, each column shows
  * its fixed number of skeleton rows while loading.
  */
-export function MetricColumns({ columns, onOpen, ranksKnown = true }: { columns?: Record<RatingMetric, MetricRow[]>; onOpen: (metric: RatingMetric) => void; ranksKnown?: boolean }) {
+export function MetricColumns({ columns, onOpen }: { columns?: Record<RatingMetric, MetricRow[]>; onOpen: (metric: RatingMetric) => void }) {
   return (
     <div role={columns ? undefined : "status"} aria-label={columns ? undefined : "Loading"} className="grid flex-1 max-sm:divide-y sm:grid-cols-3 sm:divide-x">
       {RATING_METRICS.map((m) => {
@@ -71,7 +73,7 @@ export function MetricColumns({ columns, onOpen, ranksKnown = true }: { columns?
               ))}
               {columns?.[m].map((r, i) => (
                 <li key={r.id} className="flex items-center gap-2 border-b border-white/5 px-3 py-2.5 last:border-b-0">
-                  {ranksKnown && <span className="w-3 font-mono text-xs text-muted-foreground">{i + 1}</span>}
+                  <span className="w-3 font-mono text-xs text-muted-foreground">{i + 1}</span>
                   <span className="flex min-w-0 flex-1 items-center gap-2 text-sm font-medium">{r.name}</span>
                   {r.raw && <span className="shrink-0 font-mono text-[11px] text-muted-foreground tabular-nums">{r.raw}</span>}
                   <span className="font-mono text-sm tabular-nums" style={i === 0 ? { color: t.accent } : undefined}>
@@ -211,7 +213,7 @@ export function GuildRatingBoards({
           <BoardHeader oneBoss={oneBoss} title={title} theme={theme} subtitle={data?.live ? undefined : `${all.peak.length} guilds ranked`} toolbar={toolbar}>
             <BoardSearch query={query} onQuery={setQuery} />
           </BoardHeader>
-          <MetricColumns ranksKnown={!data?.live}
+          <MetricColumns
             columns={{ peak: toRows(all.peak.slice(0, 5)), mastery: toRows(all.mastery.slice(0, 5)), renown: toRows(all.renown.slice(0, 5)) }}
             onOpen={onView}
           />
@@ -334,8 +336,9 @@ function GuildFullTable({
   const published = useQuery({queryKey:["hub-guild-v2-page",pageKey,page],queryFn:()=>live!.loadPage!({scope:oneBoss ? {boss:oneBoss} : {},metric,period:"all",query,page}),enabled:!!live?.loadPage,retry:false})
   const byGuild = (m: RatingMetric) => new Map(ratings[m].map((g) => [g.guild, g]))
   const scores = { peak: byGuild("peak"), mastery: byGuild("mastery"), renown: byGuild("renown") }
-  const ranked = live ? (published.data?.rows ?? []).map(row => ({rank:0,g:{guild:row.entry.name,guildId:row.entry.guid,logo:row.entry.logo,score:row.entry.score,detail:row.entry.detail,realmLabel:row.entry.realmLabel,ms:row.peakRun?.ms ?? row.entry.durationMs,date:row.peakRun?.date,log:row.peakRun?.log} as GuildRating})) : ratings[metric].map((g, i) => ({ rank: i + 1, g }))
+  const ranked = live ? (published.data?.rows ?? []).map((row, i) => ({rank:row.rank > 0 ? row.rank : page * PAGE_SIZE + i + 1,g:{guild:row.entry.name,guildId:row.entry.guid,logo:row.entry.logo,score:row.entry.score,detail:row.entry.detail,realmLabel:row.entry.realmLabel,ms:row.peakRun?.ms ?? row.entry.durationMs,date:row.peakRun?.date,log:row.peakRun?.log} as GuildRating})) : ratings[metric].map((g, i) => ({ rank: i + 1, g }))
   const needle = query.trim().toLowerCase()
+  const showRanks = needle === ""
   const rows = !live && needle ? ranked.filter((r) => r.g.guild.toLowerCase().includes(needle)) : ranked
   const top = ranked[0]?.g.score ?? 1
   const timeLabel = oneBoss ? "Kill time" : kindLabel === "Bosses" ? "Total kill time" : "Clear time"
@@ -377,9 +380,8 @@ function GuildFullTable({
         <table className={cn("w-full table-auto text-sm", view === "peak" ? "sm:min-w-[42rem]" : "min-w-[42rem]")}>
           <thead className="border-b bg-black/10 text-[11px] tracking-wider text-muted-foreground uppercase">
             <tr>
-              {/* Live boards have no global rank, so "#" would only ever be empty. */}
-              {!live && <th className="w-14 px-4 py-2.5 text-left font-medium sm:px-5">#</th>}
-              <th className={cn("w-[26%] px-2 py-2.5 pr-6 text-left font-medium whitespace-nowrap", live && "pl-4 sm:pl-5")}>Guild</th>
+              {showRanks && <th className="w-14 px-4 py-2.5 text-left font-medium sm:px-5">#</th>}
+              <th className={cn("w-[26%] px-2 py-2.5 pr-6 text-left font-medium whitespace-nowrap", !showRanks && "pl-4 sm:pl-5")}>Guild</th>
               {view === "overview" ? (
                 RATING_METRICS.map((m) => {
                   const t = METRIC_THEMES[m]
@@ -421,12 +423,12 @@ function GuildFullTable({
           <tbody>
             {rows.map(({ rank, g }) => (
               <tr key={g.guildId ? `${g.detail}:${g.guildId}` : g.guild} className="border-b border-white/5 transition-colors last:border-b-0 hover:bg-white/[.025]">
-                {!live && (
+                {showRanks && (
                   <td className="px-4 py-2 sm:px-5">
                     <RankMark rank={rank} size="sm" />
                   </td>
                 )}
-                <td className={cn("px-2 py-2 pr-2 whitespace-nowrap sm:pr-8", live && "pl-4 sm:pl-5")}>
+                <td className={cn("px-2 py-2 pr-2 whitespace-nowrap sm:pr-8", !showRanks && "pl-4 sm:pl-5")}>
                   {/* Capped on phones so a long guild name truncates instead of widening the table; tighter
                       when the boss bars share the row. */}
                   <span className={cn("flex items-center gap-2.5 font-medium sm:max-w-none", view === "peak" && bossBars ? "max-w-[8.5rem]" : "max-w-[12rem]")}>
@@ -441,7 +443,7 @@ function GuildFullTable({
                       <td
                         key={m}
                         className={cn("px-3 py-2 font-mono tabular-nums", sortBy !== m && "text-muted-foreground")}
-                        style={sortBy === m && rank === 1 ? { color: METRIC_THEMES[m].accent } : undefined}
+                        style={showRanks && sortBy === m && rank === 1 ? { color: METRIC_THEMES[m].accent } : undefined}
                       >
                         {score ? METRIC_THEMES[m].format(score.score) : "—"}
                       </td>
@@ -452,7 +454,7 @@ function GuildFullTable({
                     {view === "peak" && bossBars && <td className="px-2 py-2 sm:hidden">{peakBars(g)}</td>}
                     <td className={cn("px-3 py-2", view === "peak" && "pr-4 sm:pr-3")}>
                       <div className={cn("flex flex-col items-start gap-1", view === "peak" && "items-end sm:items-start")}>
-                        <span className="font-mono text-base tabular-nums" style={rank === 1 ? { color: theme.accent } : undefined}>
+                        <span className="font-mono text-base tabular-nums" style={showRanks && rank === 1 ? { color: theme.accent } : undefined}>
                           {theme.format(g.score)}
                         </span>
                         <span className="h-0.5 w-20 overflow-hidden rounded-full bg-white/5">

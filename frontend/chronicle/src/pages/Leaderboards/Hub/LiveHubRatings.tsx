@@ -158,7 +158,6 @@ export function LiveHubRatings(props: LiveHubRatingsProps) {
     [context],
   );
   const live: RatingLiveData = {
-    ranksKnown: false,
     catchupStatus: false,
     pageKey: key,
     loadPage: pager,

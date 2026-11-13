@@ -63,8 +63,6 @@ export interface RatingLiveData {
   peakLabels?: PeakComponentLabels
   /** New summary reads do not imply that a historical catch-up worker exists. */
   catchupStatus?: boolean
-  /** Realm-filtered pages have no published global rank number. */
-  ranksKnown?: boolean
   cohort?: RatingLiveCohort
   board: (selection: RatingLiveSelection) => RatingLiveState<RatingLiveBoard>
   page?: (selection: RatingLiveSelection & { query: string; page: number }) => RatingLiveState<RatingLivePage>
