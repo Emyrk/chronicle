@@ -43,9 +43,9 @@ type razorgoreEvidence struct {
 	Speedruns  []database.InstanceSpeedrun
 }
 
-// EvaluateRazorgore supports pre-egg-threshold false kills when no other boss
-// kill survives. Phase-two numerical repair requires a verified complete replay
-// of event-time classification, which this operation does not yet implement.
+// EvaluateRazorgore supports proven direct-player phase-two numerical repairs
+// and pre-egg-threshold false kills when no other boss kill survives. General
+// pet/possession replay is rejected rather than guessing classification history.
 func EvaluateRazorgore(ctx context.Context, db database.Store, instanceID uuid.UUID) (*RazorgoreRepairPlan, error) {
 	var e razorgoreEvidence
 	var err error

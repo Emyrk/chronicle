@@ -63,20 +63,30 @@ next successful checkpoint. Errors use 400 for invalid input, 404 for unknown ID
 
 ## Version 1 support and limits
 
-The named operation is `razorgore-phase-two`, version 1. Its currently supported
-mutation is a conservative **pre-threshold false-kill correction**, not general
-phase-two damage reconstruction. It requires one complete persisted P1, an
-explicit terminal Razorgore death, unambiguous hostile activity, and no surviving
-other boss kill. It corrects the encounter outcome/ranking window, hostile end
-state and phase outcome; removes false encounter ranking rows; and removes the
-invalid speedrun source/proof when no boss kills remain. Original encounter and
-instance boundaries stay unchanged. A fully matching repaired state is a no-op
-but still enqueues ratings on apply.
+The named operation is `razorgore-phase-two`, version 1. It supports two
+conservative repair paths:
 
-Other cases are skipped with diagnostic reasons. In particular, phase-two player
-DPS/HPS reconstruction needs a verified complete event-time classification replay.
+1. **Phase-two numerical repair.** Requires a single clean Razorgore encounter,
+   complete contiguous persisted P1/P2 phases, direct-player contributions, and
+   exact full-damage upper-bound reconciliation against source credits. Shared
+   DPS and survivability trackers reconstruct ranked/unranked damage, effective
+   healing, absorbs, DPS/HPS, phase-two duration, inferred role, deaths, and alive
+   percentage. Existing spec/subspec/talent identities are preserved. Existing
+   speedrun proof and full-encounter timing must independently agree; numerical
+   repair never shortens speedrun timing.
+2. **Pre-threshold false-kill correction.** Requires one complete persisted P1,
+   an explicit terminal Razorgore death, unambiguous hostile activity, and no
+   surviving other boss kill. It corrects encounter outcome/ranking window,
+   hostile end state and phase outcome; removes false encounter ranking rows;
+   and removes invalid speedrun source/proof when no boss kills remain.
+
+Original encounter and instance boundaries stay unchanged. A fully matching
+repaired state is a no-op but still enqueues ratings on apply.
+
+Other cases are skipped with diagnostic reasons requiring original-log reparse.
 The unit_classification stream can carry ownership/controller transitions, but
-that numerical replay is not implemented in this version. Those cases currently
-require original-log reparse. Missing persisted phases are not inferred
-from potentially truncated egg casts. The implementation does not fabricate
-approximate ranking totals or claim successful duration-only repair.
+snapshots omit possession expiry and some UNIT_INFO changes are not emitted.
+General pet/possession replay is not implemented; the direct-player path proves
+its narrower attribution bounds instead of guessing history. Missing persisted
+phases are not inferred from potentially truncated egg casts. The implementation
+does not fabricate approximate ranking totals or perform duration-only repairs.
