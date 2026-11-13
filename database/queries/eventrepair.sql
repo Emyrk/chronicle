@@ -62,6 +62,7 @@ SELECT i.* FROM log_instances i
 JOIN wow_server_realms r ON r.id = i.realm_id
 JOIN wow_servers s ON s.id = r.server_id
 WHERE s.tenant_id = @tenant_id
+  AND (@instance_name::text = '' OR i.name = @instance_name::text)
   AND (sqlc.narg('realm_id')::uuid IS NULL OR i.realm_id = sqlc.narg('realm_id'))
   AND (sqlc.narg('after_date')::timestamptz IS NULL OR i.start_time >= sqlc.narg('after_date'))
   AND (sqlc.narg('before_date')::timestamptz IS NULL OR i.start_time < sqlc.narg('before_date'))

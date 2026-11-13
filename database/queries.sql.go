@@ -6144,24 +6144,27 @@ SELECT i.id, i.realm_id, i.log_group_id, i.name, i.hashed_slug, i.guild_id, i.st
 JOIN wow_server_realms r ON r.id = i.realm_id
 JOIN wow_servers s ON s.id = r.server_id
 WHERE s.tenant_id = $1
-  AND ($2::uuid IS NULL OR i.realm_id = $2)
-  AND ($3::timestamptz IS NULL OR i.start_time >= $3)
-  AND ($4::timestamptz IS NULL OR i.start_time < $4)
+  AND ($2::text = '' OR i.name = $2::text)
+  AND ($3::uuid IS NULL OR i.realm_id = $3)
+  AND ($4::timestamptz IS NULL OR i.start_time >= $4)
+  AND ($5::timestamptz IS NULL OR i.start_time < $5)
 ORDER BY i.start_time DESC NULLS LAST, i.id
-LIMIT LEAST(GREATEST($5::integer, 0), 1000)
+LIMIT LEAST(GREATEST($6::integer, 0), 1000)
 `
 
 type SelectEventRepairInstancesParams struct {
-	TenantID   uuid.NullUUID      `db:"tenant_id" json:"tenant_id"`
-	RealmID    uuid.NullUUID      `db:"realm_id" json:"realm_id"`
-	AfterDate  pgtype.Timestamptz `db:"after_date" json:"after_date"`
-	BeforeDate pgtype.Timestamptz `db:"before_date" json:"before_date"`
-	LimitCount int32              `db:"limit_count" json:"limit_count"`
+	TenantID     uuid.NullUUID      `db:"tenant_id" json:"tenant_id"`
+	InstanceName string             `db:"instance_name" json:"instance_name"`
+	RealmID      uuid.NullUUID      `db:"realm_id" json:"realm_id"`
+	AfterDate    pgtype.Timestamptz `db:"after_date" json:"after_date"`
+	BeforeDate   pgtype.Timestamptz `db:"before_date" json:"before_date"`
+	LimitCount   int32              `db:"limit_count" json:"limit_count"`
 }
 
 func (q *sqlQuerier) SelectEventRepairInstances(ctx context.Context, arg SelectEventRepairInstancesParams) ([]LogInstance, error) {
 	rows, err := q.db.Query(ctx, selectEventRepairInstances,
 		arg.TenantID,
+		arg.InstanceName,
 		arg.RealmID,
 		arg.AfterDate,
 		arg.BeforeDate,
