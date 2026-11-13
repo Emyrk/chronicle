@@ -173,7 +173,12 @@ That release introduced `instances.MoltenCoreDamageTargets(flavor)["Lucifron"]`:
 Lucifron (12118) and Flamewaker Protectors (12119) are ranked targets; incidental
 Core Hounds are not. The evaluator reads persisted parser metadata, compares
 semantic versions numerically, and skips current/modern, unknown, malformed, or
-ambiguous development versions rather than guessing commit dates. An existing
+ambiguous development versions rather than guessing commit dates. The actual
+`parser_version` stamp is `GitTag+GitCommit`; SemVer build metadata is retained in
+the preview but does not change release ordering. When present,
+`versions["chronicle"]` must agree with that release. A missing exact stamp or the
+schema's `0.0` placeholder may use the persisted Chronicle tag; other malformed
+or conflicting stamps still skip. An existing
 receipt for this script also skips, without another receipt or ratings enqueue.
 
 The only mutable source fields are Lucifron ranking rows' `damage_done`,
@@ -185,6 +190,18 @@ unranked flags remain unchanged. Missing/corrupt structural evidence is a skip.
 The public report and receipt carry before/after values and explicit attribution
 omissions; they never assign uncertain pet damage to a guessed current owner.
 An eligible verified no-op still records a receipt and queues ratings on Apply.
+
+Complete clean Lucifron kills are supported. Wipes without rankings are ignored
+and remain untouched; non-clean attempts with ranking rows are conservatively
+unsupported. Direct-player replay does not require the modern classification
+stream: a complete effective-damage upper bound must reconcile independently to
+each player's persisted ranked + unranked total. Pet/totem rollup requires proven
+encounter-terminal ownership, matching the parser's fight-end aggregation rather
+than an instance's current owner. Explicitly ownerless terminal pets can produce
+omissions without invalidating reconciled player totals. Uncertain nonplayer
+credit mixed with player damage cannot be proved by equal totals alone and skips;
+control history also skips rather than guessing possession expiry. These are
+evidence limits, not a claim to support every historical log.
 
 Version-1 `details` has this stable shape (arrays are always arrays, not null):
 
