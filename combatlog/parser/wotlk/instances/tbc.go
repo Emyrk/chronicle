@@ -28,6 +28,9 @@ var MagtheridonsLairFactory = &instances.CommonFactory{
 	ZoneNames: []string{"magtheridon's lair"},
 	MapIDs:    []uint32{544},
 	Hostiles:  instances.FromMap(MagtheridonsLairHostiles()),
+	FlavoredRankings: func(database.WoWFlavor) *rankings.Rankings {
+		return &rankings.Rankings{}
+	},
 }
 
 func BloodFurnaceHostiles() map[uint32]instances.Identity {
@@ -836,6 +839,11 @@ var KarazhanFactory = &instances.CommonFactory{
 	ZoneNames: []string{"karazhan"},
 	MapIDs:    []uint32{532},
 	Hostiles:  instances.FromMap(KarazhanHostiles()),
+	FlavoredRankings: func(fl database.WoWFlavor) *rankings.Rankings {
+		rules := KarazhanSpeedrunRequirements()
+		rules.Speedrun.LevelRange = instances.Level70Cap(fl)
+		return rules
+	},
 }
 
 // HyjalSummitHostiles returns creature entry IDs for Hyjal Summit (map 534).

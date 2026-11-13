@@ -306,6 +306,12 @@ export interface AdminLog {
 }
 
 // From chroniclesdk/user.go
+export interface AdminLogTenant {
+    readonly id: string;
+    readonly name: string;
+}
+
+// From chroniclesdk/user.go
 export interface AdminLogsResponse {
     readonly logs: readonly AdminLog[];
     readonly has_more: boolean;
@@ -1691,6 +1697,10 @@ export interface DuplicateInstance {
     readonly uploader_name: string;
     readonly player_count: number;
     readonly duration_ms?: number;
+    /**
+     * IsRanked marks the duplicate that represents this run in rankings and ratings.
+     */
+    readonly is_ranked: boolean;
 }
 
 // From chroniclesdk/log.go
@@ -3589,6 +3599,8 @@ export interface InstanceSearchResult {
     readonly difficulty_name: string;
     readonly max_players: number;
     readonly started_at: string;
+    readonly invalidated_at?: string;
+    readonly invalid_reason?: string;
     /**
      * PlayerCount is the number of distinct players in the run.
      */
@@ -4176,6 +4188,7 @@ export interface LeaderboardHighlightSnapshot {
     readonly max_players: number;
     readonly status: string;
     readonly refreshed_at?: string;
+    readonly statistics_refreshed_at?: string;
     readonly configuration_fingerprint: string;
 }
 
@@ -5544,6 +5557,11 @@ export interface RecentInstance {
     readonly max_players: number;
     readonly dynamic_difficulty: number;
     /**
+     * MixedDifficulty is true when bosses in the run were fought on more
+     * than one difficulty (e.g. some heroic, some normal).
+     */
+    readonly mixed_difficulty?: boolean;
+    /**
      * HasPositions is true when the log recorded unit positions, so the run
      * has a replay. Set by /raidlogs/recent only.
      */
@@ -6183,6 +6201,11 @@ export interface SiteConfig {
      * The root remains a fully usable Chronicle site.
      */
     readonly root_domain_discovery: boolean;
+    /**
+     * RootUploadsDisabled prevents client uploads on the root site while leaving
+     * community tenants unchanged.
+     */
+    readonly root_uploads_disabled: boolean;
     /**
      * DefaultFormat is the primary domain's preferred log parse format.
      * Nil means no preference — fall back to the compiled-in server default.
@@ -7158,6 +7181,7 @@ export interface UpdateSiteConfigRequest {
     readonly branding?: Branding;
     readonly discoverable?: boolean;
     readonly root_domain_discovery?: boolean;
+    readonly root_uploads_disabled?: boolean;
     readonly default_format?: string;
     readonly available_formats?: readonly string[];
     /**
@@ -7756,7 +7780,7 @@ export interface WoWParsedLogJobOutput {
  * original encounter start. Absent when the full encounter is scored.
  */
 export interface WoWRankingWindow {
-    readonly basis: string; // "selected-unit-activity"
+    readonly basis: string; // "selected-unit-activity" or "phase"
     readonly start_offset_ms: number;
     readonly end_offset_ms: number;
     readonly duration_ms: number;

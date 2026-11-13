@@ -436,6 +436,8 @@ type sqlcQuerier interface {
 	// the clean-only snapshot cohort consistently.
 	GetInstanceCleanEncounterKillTimes(ctx context.Context, instanceID uuid.UUID) ([]GetInstanceCleanEncounterKillTimesRow, error)
 	GetInstanceEncounterCharacterFights(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceEncounterHostile, error)
+	// Only Razorgore uses its persisted phase-two window; legacy or invalid windows
+	// and every other boss retain full encounter duration.
 	GetInstanceEncounterKillTimes(ctx context.Context, instanceID uuid.UUID) ([]GetInstanceEncounterKillTimesRow, error)
 	GetInstanceLogOwner(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	GetInstanceLoot(ctx context.Context, arg GetInstanceLootParams) ([]GetInstanceLootRow, error)
@@ -467,6 +469,7 @@ type sqlcQuerier interface {
 	GetItemTemplatesByNames(ctx context.Context, arg GetItemTemplatesByNamesParams) ([]WorldItemTemplate, error)
 	GetItemTemplatesBySetID(ctx context.Context, arg GetItemTemplatesBySetIDParams) ([]GetItemTemplatesBySetIDRow, error)
 	GetLatestRegressionSnapshot(ctx context.Context, fixtureID uuid.UUID) (RegressionSnapshot, error)
+	GetLeaderboardHighlight(ctx context.Context, arg GetLeaderboardHighlightParams) (LeaderboardHighlight, error)
 	GetLeaderboardHighlightFreshness(ctx context.Context, arg GetLeaderboardHighlightFreshnessParams) (GetLeaderboardHighlightFreshnessRow, error)
 	GetLeaderboardHighlightGeneration(ctx context.Context, tenantID uuid.UUID) (int64, error)
 	GetLeaderboardOperation(ctx context.Context, arg GetLeaderboardOperationParams) (LeaderboardOperation, error)

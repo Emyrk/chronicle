@@ -86,8 +86,12 @@ func TestInitialSeeds(t *testing.T) {
 			require.Equal(t, first, rows)
 		}
 	}
-	// Later expansion calibrations must not add variants to these initial defaults.
-	require.Empty(t, selectKind(effective["tbc"], "variant"))
+	// Only raids whose projected data uses an explicit player cap add TBC variants.
+	require.ElementsMatch(t, []database.ResolveLeaderboardConfigurationRow{
+		{Kind: "variant", InstanceName: "Gruul's Lair", MaxPlayers: 25},
+		{Kind: "variant", InstanceName: "Karazhan", MaxPlayers: 10},
+		{Kind: "variant", InstanceName: "Magtheridon's Lair", MaxPlayers: 25},
+	}, selectKind(effective["tbc"], "variant"))
 	require.Empty(t, selectKind(effective["vanilla"], "variant"))
 	// Check exact sets against the live canonical registry factories, not just the snapshot.
 	for _, factory := range []*common.CommonFactory{wrath.UlduarFactory, wrath.ObsidianSanctumFactory} {

@@ -9,6 +9,7 @@ export interface HomeBootstrap {
   productName: string;
   foreverLanding: boolean;
   uploadsDisabled: boolean;
+  rootUploadsDisabled: boolean;
 }
 export const HomeBootstrapContext = createContext<HomeBootstrap | null>(null);
 export function useHomeBootstrap() {
@@ -26,6 +27,7 @@ export function useHomeConfig(): HomeBootstrap | null {
       productName: seoProductName(data.dataset_flavor),
       foreverLanding: !!data.dataset_flavor?.includes("wow-forever") && !!data.forever_landing_enabled,
       uploadsDisabled: !!data.client_uploads_disabled,
+      rootUploadsDisabled: !!data.root_uploads_disabled && !data.tenant,
     };
   }
   return bootstrap;

@@ -141,7 +141,7 @@ func init() {
 
 	register("Earthbind Totem",
 		modifierTotemicMastery,
-		variant{id: 5913, duration: 45 * time.Second},
+		variant{id: 2630, duration: 45 * time.Second},
 	)
 
 	register("Stoneclaw Totem",

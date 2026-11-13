@@ -103,7 +103,9 @@ func TestSourceRepairBumpsHighlightGenerationAtomically(t *testing.T) {
 func TestDirectIntegrationTenantScope(t *testing.T) {
 	t.Parallel()
 	s := newSourceFixture(t)
-	resolved, err := SourceContext(s.ctx, s.db, []uuid.UUID{s.instance})
+	s.exec(`UPDATE tenants SET include_in_all=false WHERE id=$1`, s.tenant)
+
+	resolved, err := GroupSourceContext(s.ctx, s.db, s.group)
 	require.NoError(t, err)
 	require.Equal(t, s.tenant, servicetenant.TenantIDFromContext(resolved))
 	require.NoError(t, s.db.InTx(resolved, func(tx database.Store) error {

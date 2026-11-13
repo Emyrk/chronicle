@@ -230,7 +230,7 @@ type WoWEncounter struct {
 // WoWRankingWindow marks the interval scored for boss rankings, relative to the
 // original encounter start. Absent when the full encounter is scored.
 type WoWRankingWindow struct {
-	Basis         string `json:"basis"` // "selected-unit-activity"
+	Basis         string `json:"basis"` // "selected-unit-activity" or "phase"
 	StartOffsetMs int64  `json:"start_offset_ms"`
 	EndOffsetMs   int64  `json:"end_offset_ms"`
 	DurationMs    int64  `json:"duration_ms"`
@@ -665,6 +665,9 @@ type RecentInstance struct {
 	DifficultyName    string            `json:"difficulty_name"`
 	MaxPlayers        int               `json:"max_players"`
 	DynamicDifficulty int               `json:"dynamic_difficulty"`
+	// MixedDifficulty is true when bosses in the run were fought on more
+	// than one difficulty (e.g. some heroic, some normal).
+	MixedDifficulty bool `json:"mixed_difficulty,omitempty"`
 	// HasPositions is true when the log recorded unit positions, so the run
 	// has a replay. Set by /raidlogs/recent only.
 	HasPositions bool `json:"has_positions,omitempty"`
@@ -686,4 +689,6 @@ type DuplicateInstance struct {
 	UploaderName string    `json:"uploader_name"`
 	PlayerCount  int64     `json:"player_count"`
 	DurationMs   *float64  `json:"duration_ms,omitempty"`
+	// IsRanked marks the duplicate that represents this run in rankings and ratings.
+	IsRanked bool `json:"is_ranked"`
 }

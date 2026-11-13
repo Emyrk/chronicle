@@ -1,0 +1,1 @@
+ALTER TABLE site_config ADD COLUMN root_uploads_disabled BOOLEAN NOT NULL DEFAULT FALSE;

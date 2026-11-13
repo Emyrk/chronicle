@@ -299,18 +299,21 @@ func (api *API) DeleteWoWLogFiles(w http.ResponseWriter, r *http.Request) {
 }
 
 // clientUploadsDisabled checks whether client uploads are disabled at the
-// server-option, site-config (DB), or per-tenant level.
+// server-option, site-config, root-site, or per-tenant level.
 func (api *API) clientUploadsDisabled(ctx context.Context) bool {
 	if api.Opts.ClientUploadsDisabled {
 		return true
 	}
-	if t := servicetenant.TenantFromContext(ctx); t != nil && t.DisableClientUpload {
-		return true
-	}
-	if config, err := api.Opts.Zed.GetSiteConfig(ctx); err == nil && config.ClientUploadsDisabled {
-		return true
-	}
-	return false
+	config, err := api.Opts.Zed.GetSiteConfig(ctx)
+	return err == nil && siteUploadRequestsDisabled(config, servicetenant.TenantFromContext(ctx))
+}
+
+func siteClientUploadsDisabled(config database.SiteConfig, tenant *database.Tenant) bool {
+	return config.ClientUploadsDisabled || (tenant != nil && tenant.DisableClientUpload)
+}
+
+func siteUploadRequestsDisabled(config database.SiteConfig, tenant *database.Tenant) bool {
+	return siteClientUploadsDisabled(config, tenant) || (tenant == nil && config.RootUploadsDisabled)
 }
 
 func uploadUnlisted(r *http.Request) (bool, error) {

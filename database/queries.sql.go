@@ -6295,49 +6295,81 @@ func (q *sqlQuerier) ClearWoWLogGroupInvalidation(ctx context.Context, logGroupI
 }
 
 const countAllWoWLogGroups = `-- name: CountAllWoWLogGroups :one
-SELECT COUNT(*)::int FROM wow_log_groups
-LEFT JOIN LATERAL (
-  SELECT COALESCE(array_agg(inst_names.name ORDER BY inst_names.name), ARRAY[]::text[]) AS instance_names
-  FROM (
-    SELECT DISTINCT li.name
-    FROM log_instances li
-    WHERE li.log_group_id = wow_log_groups.id
-      AND btrim(li.name) <> ''
-
-    UNION
-
-    SELECT sm.instance_name AS name
-    FROM server_upload_meta sm
-    WHERE sm.log_group_id = wow_log_groups.id
-      AND btrim(sm.instance_name) <> ''
-      AND NOT EXISTS (
-        SELECT 1
-        FROM log_instances li
-        WHERE li.log_group_id = wow_log_groups.id
-          AND btrim(li.name) <> ''
-      )
-  ) inst_names
-) instances_agg ON true
+SELECT COUNT(*)::int
+FROM wow_log_groups
 WHERE
-  CASE WHEN $1::uuid != '00000000-0000-0000-0000-000000000000'::uuid
-       THEN wow_log_groups.owner = $1
-       ELSE true END
-  AND
-  CASE WHEN $2::boolean
-       THEN cardinality(instances_agg.instance_names) = 0
-       WHEN $3::text != ''
-       THEN $3 = ANY(instances_agg.instance_names)
-       ELSE true END
+  ($1::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR wow_log_groups.owner = $1)
+  AND (
+    NOT $2::boolean
+    OR NOT EXISTS (
+      SELECT 1 FROM log_instances li
+      WHERE li.log_group_id = wow_log_groups.id AND btrim(li.name) <> ''
+    ) AND NOT EXISTS (
+      SELECT 1 FROM server_upload_meta sm
+      WHERE sm.log_group_id = wow_log_groups.id AND btrim(sm.instance_name) <> ''
+    )
+  )
+  AND (
+    $3::text = ''
+    OR EXISTS (
+      SELECT 1 FROM log_instances li
+      WHERE li.log_group_id = wow_log_groups.id AND li.name = $3
+    )
+    OR (
+      NOT EXISTS (
+        SELECT 1 FROM log_instances li
+        WHERE li.log_group_id = wow_log_groups.id AND btrim(li.name) <> ''
+      )
+      AND EXISTS (
+        SELECT 1 FROM server_upload_meta sm
+        WHERE sm.log_group_id = wow_log_groups.id AND sm.instance_name = $3
+      )
+    )
+  )
+  AND (
+    $4::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+    OR EXISTS (
+      SELECT 1
+      FROM (
+        SELECT li.realm_id FROM log_instances li WHERE li.log_group_id = wow_log_groups.id
+        UNION
+        SELECT sm.realm_id FROM server_upload_meta sm WHERE sm.log_group_id = wow_log_groups.id AND sm.realm_id IS NOT NULL
+      ) realms
+      JOIN wow_server_realms wsr ON wsr.id = realms.realm_id
+      JOIN wow_servers ws ON ws.id = wsr.server_id
+      WHERE ws.tenant_id = $4
+    )
+  )
+  AND (
+    $5::text = ''
+    OR $5::text = 'all'
+    OR ($5::text = 'valid' AND wow_log_groups.invalidated_at IS NULL)
+    OR ($5::text = 'invalid' AND wow_log_groups.invalidated_at IS NOT NULL)
+  )
+  AND ($6::timestamptz IS NULL OR wow_log_groups.created_at >= $6)
+  AND ($7::timestamptz IS NULL OR wow_log_groups.created_at < $7)
 `
 
 type CountAllWoWLogGroupsParams struct {
-	FilterUserID          uuid.UUID `db:"filter_user_id" json:"filter_user_id"`
-	FilterWithoutInstance bool      `db:"filter_without_instance" json:"filter_without_instance"`
-	FilterInstanceName    string    `db:"filter_instance_name" json:"filter_instance_name"`
+	FilterUserID          uuid.UUID          `db:"filter_user_id" json:"filter_user_id"`
+	FilterWithoutInstance bool               `db:"filter_without_instance" json:"filter_without_instance"`
+	FilterInstanceName    string             `db:"filter_instance_name" json:"filter_instance_name"`
+	FilterTenantID        uuid.UUID          `db:"filter_tenant_id" json:"filter_tenant_id"`
+	FilterValidity        string             `db:"filter_validity" json:"filter_validity"`
+	CreatedFrom           pgtype.Timestamptz `db:"created_from" json:"created_from"`
+	CreatedBefore         pgtype.Timestamptz `db:"created_before" json:"created_before"`
 }
 
 func (q *sqlQuerier) CountAllWoWLogGroups(ctx context.Context, arg CountAllWoWLogGroupsParams) (int32, error) {
-	row := q.db.QueryRow(ctx, countAllWoWLogGroups, arg.FilterUserID, arg.FilterWithoutInstance, arg.FilterInstanceName)
+	row := q.db.QueryRow(ctx, countAllWoWLogGroups,
+		arg.FilterUserID,
+		arg.FilterWithoutInstance,
+		arg.FilterInstanceName,
+		arg.FilterTenantID,
+		arg.FilterValidity,
+		arg.CreatedFrom,
+		arg.CreatedBefore,
+	)
 	var column_1 int32
 	err := row.Scan(&column_1)
 	return column_1, err
@@ -7210,109 +7242,92 @@ const listAllWoWLogGroupsWithOwnerPaginated = `-- name: ListAllWoWLogGroupsWithO
 SELECT
   wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason, wow_log_groups.parse_generation, wow_log_groups.unlisted, wow_log_groups.upload_source, wow_log_groups.raw_files_pinned,
   u.username AS owner_name,
-  files_agg.files,
   files_agg.total_size_bytes,
-  instances_output.output AS processing_output,
+  EXISTS (
+    SELECT 1
+    FROM parsed_log_group plg
+    WHERE plg.id = wow_log_groups.id
+      AND plg.parse_generation = wow_log_groups.parse_generation
+      AND plg.finalized_at IS NOT NULL
+  ) AS processed,
   instances_agg.instance_names,
   instances_agg.first_instance_name,
   tenants_agg.tenant_names
-FROM
-  wow_log_groups
-    LEFT JOIN users u ON u.id = wow_log_groups.owner
-    -- Files aggregate with total size
-    LEFT JOIN LATERAL (
-      SELECT
-        COALESCE(
-          jsonb_agg(
-            jsonb_build_object(
-              'id', lf.id,
-              'owner', lf.owner,
-              'wow_log_id', lf.wow_log_id,
-              'hash', lf.hash,
-              'size_bytes', lf.size_bytes,
-              'mime_type', lf.mime_type,
-              'compressed_size_bytes', lf.compressed_size_bytes,
-              'content_encoding', lf.content_encoding,
-              'created_at', lf.created_at,
-              'updated_at', lf.updated_at
-            )
-            ORDER BY lf.created_at
-          ) FILTER (WHERE lf.id IS NOT NULL),
-          '[]'::jsonb
-        )::wow_log_group_files AS files,
-        COALESCE(SUM(lf.size_bytes), 0) AS total_size_bytes
-      FROM log_file lf
-      WHERE lf.wow_log_id = wow_log_groups.id
-    ) files_agg ON true
+FROM wow_log_groups
+LEFT JOIN users u ON u.id = wow_log_groups.owner
+LEFT JOIN LATERAL (
+  SELECT COALESCE(SUM(lf.size_bytes), 0)::bigint AS total_size_bytes
+  FROM log_file lf
+  WHERE lf.wow_log_id = wow_log_groups.id
+) files_agg ON true
+LEFT JOIN LATERAL (
+  SELECT
+    COALESCE(array_agg(inst_names.name ORDER BY inst_names.name), ARRAY[]::text[]) AS instance_names,
+    MIN(inst_names.name) AS first_instance_name
+  FROM (
+    SELECT DISTINCT li.name
+    FROM log_instances li
+    WHERE li.log_group_id = wow_log_groups.id
+      AND btrim(li.name) <> ''
 
-    LEFT JOIN parsed_log_group plg ON plg.id = wow_log_groups.id
-      AND plg.parse_generation = wow_log_groups.parse_generation
-      AND plg.finalized_at IS NOT NULL
+    UNION
 
-    -- Instances from DB tables
-    LEFT JOIN LATERAL (
-      SELECT jsonb_build_object(
-          'complete', CASE WHEN plg.id IS NOT NULL THEN to_jsonb(wow_log_groups.updated_at) ELSE NULL END,
-          'instances', COALESCE((
-              SELECT jsonb_agg(inst_data)
-              FROM (
-                  SELECT jsonb_build_object(
-                      'id', li.id,
-                      'name', li.name,
-                      'slug', li.hashed_slug,
-                      'realm_id', li.realm_id,
-                      'log_group_id', li.log_group_id,
-                      'encounters', COALESCE((
-                          SELECT jsonb_agg(jsonb_build_object(
-                              'id', e.id,
-                              'instance_id', e.instance_id,
-                            'boss', e.boss,
-                            'name', e.name,
-                            'kill_type', e.kill_type,
-                            'remaining', e.remaining,
-                              'start_time', e.start_time,
-                              'end_time', e.end_time
-                          ) ORDER BY e.start_time)
-                          FROM log_instance_encounters e
-                          WHERE e.instance_id = li.id
-                      ), '[]'::jsonb)
-                  ) AS inst_data
-                  FROM log_instances li
-                  WHERE li.log_group_id = wow_log_groups.id
-                  ORDER BY li.name
-              ) sub
-          ), '[]'::jsonb)
-      ) AS output
-    ) instances_output ON true
-    -- Instance names aggregate
-    LEFT JOIN LATERAL (
-      SELECT
-        COALESCE(array_agg(inst_names.name ORDER BY inst_names.name), ARRAY[]::text[]) AS instance_names,
-        MIN(inst_names.name) AS first_instance_name
-      FROM (
-        SELECT DISTINCT li.name
+    SELECT sm.instance_name AS name
+    FROM server_upload_meta sm
+    WHERE sm.log_group_id = wow_log_groups.id
+      AND btrim(sm.instance_name) <> ''
+      AND NOT EXISTS (
+        SELECT 1
         FROM log_instances li
         WHERE li.log_group_id = wow_log_groups.id
           AND btrim(li.name) <> ''
-
-        UNION
-
-        SELECT sm.instance_name AS name
-        FROM server_upload_meta sm
-        WHERE sm.log_group_id = wow_log_groups.id
-          AND btrim(sm.instance_name) <> ''
-          AND NOT EXISTS (
-            SELECT 1
-            FROM log_instances li
-            WHERE li.log_group_id = wow_log_groups.id
-              AND btrim(li.name) <> ''
-          )
-      ) inst_names
-    ) instances_agg ON true
-    -- Tenants resolved from parsed instance realms, or server upload realms
-    LEFT JOIN LATERAL (
-      SELECT
-        COALESCE(array_agg(DISTINCT t.name ORDER BY t.name), ARRAY[]::text[]) AS tenant_names
+      )
+  ) inst_names
+) instances_agg ON true
+LEFT JOIN LATERAL (
+  SELECT COALESCE(array_agg(DISTINCT t.name ORDER BY t.name), ARRAY[]::text[]) AS tenant_names
+  FROM (
+    SELECT li.realm_id FROM log_instances li WHERE li.log_group_id = wow_log_groups.id
+    UNION
+    SELECT sm.realm_id FROM server_upload_meta sm WHERE sm.log_group_id = wow_log_groups.id AND sm.realm_id IS NOT NULL
+  ) realms
+  JOIN wow_server_realms wsr ON wsr.id = realms.realm_id
+  JOIN wow_servers ws ON ws.id = wsr.server_id
+  JOIN tenants t ON t.id = ws.tenant_id
+) tenants_agg ON true
+WHERE
+  ($1::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR wow_log_groups.owner = $1)
+  AND (
+    NOT $2::boolean
+    OR NOT EXISTS (
+      SELECT 1 FROM log_instances li
+      WHERE li.log_group_id = wow_log_groups.id AND btrim(li.name) <> ''
+    ) AND NOT EXISTS (
+      SELECT 1 FROM server_upload_meta sm
+      WHERE sm.log_group_id = wow_log_groups.id AND btrim(sm.instance_name) <> ''
+    )
+  )
+  AND (
+    $3::text = ''
+    OR EXISTS (
+      SELECT 1 FROM log_instances li
+      WHERE li.log_group_id = wow_log_groups.id AND li.name = $3
+    )
+    OR (
+      NOT EXISTS (
+        SELECT 1 FROM log_instances li
+        WHERE li.log_group_id = wow_log_groups.id AND btrim(li.name) <> ''
+      )
+      AND EXISTS (
+        SELECT 1 FROM server_upload_meta sm
+        WHERE sm.log_group_id = wow_log_groups.id AND sm.instance_name = $3
+      )
+    )
+  )
+  AND (
+    $4::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+    OR EXISTS (
+      SELECT 1
       FROM (
         SELECT li.realm_id FROM log_instances li WHERE li.log_group_id = wow_log_groups.id
         UNION
@@ -7320,50 +7335,50 @@ FROM
       ) realms
       JOIN wow_server_realms wsr ON wsr.id = realms.realm_id
       JOIN wow_servers ws ON ws.id = wsr.server_id
-      JOIN tenants t ON t.id = ws.tenant_id
-    ) tenants_agg ON true
-WHERE
-  -- Filter by user ID (skip if nil UUID)
-  CASE WHEN $1::uuid != '00000000-0000-0000-0000-000000000000'::uuid
-       THEN wow_log_groups.owner = $1
-       ELSE true END
-  AND
-  -- Filter to logs without an instance, or by instance name when provided
-  CASE WHEN $2::boolean
-       THEN cardinality(instances_agg.instance_names) = 0
-       WHEN $3::text != ''
-       THEN $3 = ANY(instances_agg.instance_names)
-       ELSE true END
+      WHERE ws.tenant_id = $4
+    )
+  )
+  AND (
+    $5::text = ''
+    OR $5::text = 'all'
+    OR ($5::text = 'valid' AND wow_log_groups.invalidated_at IS NULL)
+    OR ($5::text = 'invalid' AND wow_log_groups.invalidated_at IS NOT NULL)
+  )
+  AND ($6::timestamptz IS NULL OR wow_log_groups.created_at >= $6)
+  AND ($7::timestamptz IS NULL OR wow_log_groups.created_at < $7)
 ORDER BY
-  CASE WHEN $4::text = 'date' AND $5::text = 'desc' THEN wow_log_groups.created_at END DESC,
-  CASE WHEN $4::text = 'date' AND $5::text = 'asc' THEN wow_log_groups.created_at END ASC,
-  CASE WHEN $4::text = 'user' AND $5::text = 'desc' THEN u.username END DESC NULLS LAST,
-  CASE WHEN $4::text = 'user' AND $5::text = 'asc' THEN u.username END ASC NULLS LAST,
-  CASE WHEN $4::text = 'size' AND $5::text = 'desc' THEN files_agg.total_size_bytes END DESC,
-  CASE WHEN $4::text = 'size' AND $5::text = 'asc' THEN files_agg.total_size_bytes END ASC,
-  CASE WHEN $4::text = 'instance' AND $5::text = 'desc' THEN instances_agg.first_instance_name END DESC NULLS LAST,
-  CASE WHEN $4::text = 'instance' AND $5::text = 'asc' THEN instances_agg.first_instance_name END ASC NULLS LAST,
+  CASE WHEN $8::text = 'date' AND $9::text = 'desc' THEN wow_log_groups.created_at END DESC,
+  CASE WHEN $8::text = 'date' AND $9::text = 'asc' THEN wow_log_groups.created_at END ASC,
+  CASE WHEN $8::text = 'user' AND $9::text = 'desc' THEN u.username END DESC NULLS LAST,
+  CASE WHEN $8::text = 'user' AND $9::text = 'asc' THEN u.username END ASC NULLS LAST,
+  CASE WHEN $8::text = 'size' AND $9::text = 'desc' THEN files_agg.total_size_bytes END DESC,
+  CASE WHEN $8::text = 'size' AND $9::text = 'asc' THEN files_agg.total_size_bytes END ASC,
+  CASE WHEN $8::text = 'instance' AND $9::text = 'desc' THEN instances_agg.first_instance_name END DESC NULLS LAST,
+  CASE WHEN $8::text = 'instance' AND $9::text = 'asc' THEN instances_agg.first_instance_name END ASC NULLS LAST,
   wow_log_groups.id
-LIMIT $7
-OFFSET $6
+LIMIT $11
+OFFSET $10
 `
 
 type ListAllWoWLogGroupsWithOwnerPaginatedParams struct {
-	FilterUserID          uuid.UUID `db:"filter_user_id" json:"filter_user_id"`
-	FilterWithoutInstance bool      `db:"filter_without_instance" json:"filter_without_instance"`
-	FilterInstanceName    string    `db:"filter_instance_name" json:"filter_instance_name"`
-	SortBy                string    `db:"sort_by" json:"sort_by"`
-	SortOrder             string    `db:"sort_order" json:"sort_order"`
-	OffsetCount           int32     `db:"offset_count" json:"offset_count"`
-	LimitCount            int32     `db:"limit_count" json:"limit_count"`
+	FilterUserID          uuid.UUID          `db:"filter_user_id" json:"filter_user_id"`
+	FilterWithoutInstance bool               `db:"filter_without_instance" json:"filter_without_instance"`
+	FilterInstanceName    string             `db:"filter_instance_name" json:"filter_instance_name"`
+	FilterTenantID        uuid.UUID          `db:"filter_tenant_id" json:"filter_tenant_id"`
+	FilterValidity        string             `db:"filter_validity" json:"filter_validity"`
+	CreatedFrom           pgtype.Timestamptz `db:"created_from" json:"created_from"`
+	CreatedBefore         pgtype.Timestamptz `db:"created_before" json:"created_before"`
+	SortBy                string             `db:"sort_by" json:"sort_by"`
+	SortOrder             string             `db:"sort_order" json:"sort_order"`
+	OffsetCount           int32              `db:"offset_count" json:"offset_count"`
+	LimitCount            int32              `db:"limit_count" json:"limit_count"`
 }
 
 type ListAllWoWLogGroupsWithOwnerPaginatedRow struct {
 	WoWLogGroup       WoWLogGroup `db:"wo_wlog_group" json:"wo_wlog_group"`
 	OwnerName         pgtype.Text `db:"owner_name" json:"owner_name"`
-	Files             []LogFile   `db:"files" json:"files"`
-	TotalSizeBytes    interface{} `db:"total_size_bytes" json:"total_size_bytes"`
-	ProcessingOutput  []byte      `db:"processing_output" json:"processing_output"`
+	TotalSizeBytes    int64       `db:"total_size_bytes" json:"total_size_bytes"`
+	Processed         bool        `db:"processed" json:"processed"`
 	InstanceNames     interface{} `db:"instance_names" json:"instance_names"`
 	FirstInstanceName interface{} `db:"first_instance_name" json:"first_instance_name"`
 	TenantNames       interface{} `db:"tenant_names" json:"tenant_names"`
@@ -7374,6 +7389,10 @@ func (q *sqlQuerier) ListAllWoWLogGroupsWithOwnerPaginated(ctx context.Context, 
 		arg.FilterUserID,
 		arg.FilterWithoutInstance,
 		arg.FilterInstanceName,
+		arg.FilterTenantID,
+		arg.FilterValidity,
+		arg.CreatedFrom,
+		arg.CreatedBefore,
 		arg.SortBy,
 		arg.SortOrder,
 		arg.OffsetCount,
@@ -7401,9 +7420,8 @@ func (q *sqlQuerier) ListAllWoWLogGroupsWithOwnerPaginated(ctx context.Context, 
 			&i.WoWLogGroup.UploadSource,
 			&i.WoWLogGroup.RawFilesPinned,
 			&i.OwnerName,
-			&i.Files,
 			&i.TotalSizeBytes,
-			&i.ProcessingOutput,
+			&i.Processed,
 			&i.InstanceNames,
 			&i.FirstInstanceName,
 			&i.TenantNames,
@@ -9440,7 +9458,12 @@ SELECT
     COALESCE(kill.duration_ms, 0)::bigint AS kill_duration_ms
 FROM grouped g
 LEFT JOIN LATERAL (
-    SELECT (EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000)::bigint AS duration_ms
+    SELECT (CASE WHEN lie.name = 'Razorgore the Untamed'
+          AND lie.ranking_start_offset_ms >= 0
+          AND lie.ranking_end_offset_ms > lie.ranking_start_offset_ms
+        THEN lie.ranking_end_offset_ms - lie.ranking_start_offset_ms
+        ELSE EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000
+    END)::bigint AS duration_ms
     FROM log_instance_encounters lie
     WHERE lie.instance_id = g.instance_id
       AND lie.name = g.encounter_name
@@ -15481,8 +15504,47 @@ func (q *sqlQuerier) BumpLeaderboardHighlightGeneration(ctx context.Context, ten
 	return err
 }
 
+const getLeaderboardHighlight = `-- name: GetLeaderboardHighlight :one
+SELECT tenant_id, instance_name, difficulty_name, max_players, realm_scope, configuration_fingerprint, payload, refresh_started_at, refreshed_at, source_generation, statistics_refreshed_at FROM leaderboard_highlights
+WHERE tenant_id= $1::uuid AND realm_scope= $2::uuid
+ AND instance_name= $3::text AND difficulty_name= $4::text AND max_players= $5::smallint
+`
+
+type GetLeaderboardHighlightParams struct {
+	TenantID       uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RealmScope     uuid.UUID `db:"realm_scope" json:"realm_scope"`
+	InstanceName   string    `db:"instance_name" json:"instance_name"`
+	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16     `db:"max_players" json:"max_players"`
+}
+
+func (q *sqlQuerier) GetLeaderboardHighlight(ctx context.Context, arg GetLeaderboardHighlightParams) (LeaderboardHighlight, error) {
+	row := q.db.QueryRow(ctx, getLeaderboardHighlight,
+		arg.TenantID,
+		arg.RealmScope,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+	)
+	var i LeaderboardHighlight
+	err := row.Scan(
+		&i.TenantID,
+		&i.InstanceName,
+		&i.DifficultyName,
+		&i.MaxPlayers,
+		&i.RealmScope,
+		&i.ConfigurationFingerprint,
+		&i.Payload,
+		&i.RefreshStartedAt,
+		&i.RefreshedAt,
+		&i.SourceGeneration,
+		&i.StatisticsRefreshedAt,
+	)
+	return i, err
+}
+
 const getLeaderboardHighlightFreshness = `-- name: GetLeaderboardHighlightFreshness :one
-SELECT configuration_fingerprint,source_generation,refreshed_at FROM leaderboard_highlights
+SELECT configuration_fingerprint,source_generation,refreshed_at,statistics_refreshed_at FROM leaderboard_highlights
 WHERE tenant_id= $1::uuid AND realm_scope= $2::uuid
  AND instance_name= $3::text AND difficulty_name= $4::text AND max_players= $5::smallint
 `
@@ -15499,6 +15561,7 @@ type GetLeaderboardHighlightFreshnessRow struct {
 	ConfigurationFingerprint string             `db:"configuration_fingerprint" json:"configuration_fingerprint"`
 	SourceGeneration         int64              `db:"source_generation" json:"source_generation"`
 	RefreshedAt              pgtype.Timestamptz `db:"refreshed_at" json:"refreshed_at"`
+	StatisticsRefreshedAt    pgtype.Timestamptz `db:"statistics_refreshed_at" json:"statistics_refreshed_at"`
 }
 
 func (q *sqlQuerier) GetLeaderboardHighlightFreshness(ctx context.Context, arg GetLeaderboardHighlightFreshnessParams) (GetLeaderboardHighlightFreshnessRow, error) {
@@ -15510,7 +15573,12 @@ func (q *sqlQuerier) GetLeaderboardHighlightFreshness(ctx context.Context, arg G
 		arg.MaxPlayers,
 	)
 	var i GetLeaderboardHighlightFreshnessRow
-	err := row.Scan(&i.ConfigurationFingerprint, &i.SourceGeneration, &i.RefreshedAt)
+	err := row.Scan(
+		&i.ConfigurationFingerprint,
+		&i.SourceGeneration,
+		&i.RefreshedAt,
+		&i.StatisticsRefreshedAt,
+	)
 	return i, err
 }
 
@@ -15550,7 +15618,7 @@ func (q *sqlQuerier) LeaderboardHighlightRealms(ctx context.Context, tenantID uu
 }
 
 const listLeaderboardHighlights = `-- name: ListLeaderboardHighlights :many
-SELECT tenant_id, instance_name, difficulty_name, max_players, realm_scope, configuration_fingerprint, payload, refresh_started_at, refreshed_at, source_generation FROM leaderboard_highlights WHERE tenant_id= $1::uuid AND realm_scope= $2::uuid ORDER BY instance_name,difficulty_name,max_players LIMIT 256
+SELECT tenant_id, instance_name, difficulty_name, max_players, realm_scope, configuration_fingerprint, payload, refresh_started_at, refreshed_at, source_generation, statistics_refreshed_at FROM leaderboard_highlights WHERE tenant_id= $1::uuid AND realm_scope= $2::uuid ORDER BY instance_name,difficulty_name,max_players LIMIT 256
 `
 
 type ListLeaderboardHighlightsParams struct {
@@ -15578,6 +15646,7 @@ func (q *sqlQuerier) ListLeaderboardHighlights(ctx context.Context, arg ListLead
 			&i.RefreshStartedAt,
 			&i.RefreshedAt,
 			&i.SourceGeneration,
+			&i.StatisticsRefreshedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -15590,9 +15659,9 @@ func (q *sqlQuerier) ListLeaderboardHighlights(ctx context.Context, arg ListLead
 }
 
 const publishLeaderboardHighlights = `-- name: PublishLeaderboardHighlights :exec
-INSERT INTO leaderboard_highlights(tenant_id,instance_name,difficulty_name,max_players,realm_scope,configuration_fingerprint,source_generation,payload,refresh_started_at)
-VALUES ($1::uuid,$2::text,$3::text,$4::smallint,$5::uuid,$6::text,$7::bigint,$8::jsonb,$9::timestamptz)
-ON CONFLICT(tenant_id,instance_name,difficulty_name,max_players,realm_scope) DO UPDATE SET configuration_fingerprint=EXCLUDED.configuration_fingerprint,source_generation=EXCLUDED.source_generation,payload=EXCLUDED.payload,refresh_started_at=EXCLUDED.refresh_started_at,refreshed_at=clock_timestamp()
+INSERT INTO leaderboard_highlights(tenant_id,instance_name,difficulty_name,max_players,realm_scope,configuration_fingerprint,source_generation,payload,refresh_started_at,statistics_refreshed_at)
+VALUES ($1::uuid,$2::text,$3::text,$4::smallint,$5::uuid,$6::text,$7::bigint,$8::jsonb,$9::timestamptz,$10::timestamptz)
+ON CONFLICT(tenant_id,instance_name,difficulty_name,max_players,realm_scope) DO UPDATE SET configuration_fingerprint=EXCLUDED.configuration_fingerprint,source_generation=EXCLUDED.source_generation,payload=EXCLUDED.payload,refresh_started_at=EXCLUDED.refresh_started_at,statistics_refreshed_at=EXCLUDED.statistics_refreshed_at,refreshed_at=CASE WHEN $11::boolean THEN clock_timestamp() ELSE leaderboard_highlights.refreshed_at END
 WHERE leaderboard_highlights.refresh_started_at<=EXCLUDED.refresh_started_at
 `
 
@@ -15606,6 +15675,8 @@ type PublishLeaderboardHighlightsParams struct {
 	SourceGeneration         int64              `db:"source_generation" json:"source_generation"`
 	Payload                  []byte             `db:"payload" json:"payload"`
 	RefreshStartedAt         pgtype.Timestamptz `db:"refresh_started_at" json:"refresh_started_at"`
+	StatisticsRefreshedAt    pgtype.Timestamptz `db:"statistics_refreshed_at" json:"statistics_refreshed_at"`
+	RatingsRefreshed         bool               `db:"ratings_refreshed" json:"ratings_refreshed"`
 }
 
 func (q *sqlQuerier) PublishLeaderboardHighlights(ctx context.Context, arg PublishLeaderboardHighlightsParams) error {
@@ -15619,6 +15690,8 @@ func (q *sqlQuerier) PublishLeaderboardHighlights(ctx context.Context, arg Publi
 		arg.SourceGeneration,
 		arg.Payload,
 		arg.RefreshStartedAt,
+		arg.StatisticsRefreshedAt,
+		arg.RatingsRefreshed,
 	)
 	return err
 }
@@ -21492,8 +21565,11 @@ SELECT
     u.username as uploader_name,
     (SELECT COUNT(*) FROM log_instance_players lip WHERE lip.instance_id = li.id) as player_count,
     COALESCE((SELECT EXTRACT(EPOCH FROM (MAX(lie.end_time) - MIN(lie.start_time))) * 1000
-     FROM log_instance_encounters lie WHERE lie.instance_id = li.id), 0)::float8 as duration_ms
+     FROM log_instance_encounters lie WHERE lie.instance_id = li.id), 0)::float8 as duration_ms,
+    -- The duplicate chosen to represent this run in rankings and ratings.
+    COALESCE(rr.representative_instance_id = li.id, false)::boolean as is_ranked
 FROM log_instances li
+LEFT JOIN ranking_runs rr ON rr.run_id = li.duplicate_group_id
 JOIN parsed_log_group plg ON plg.id = li.log_group_id
 JOIN wow_log_groups wlg ON wlg.id = plg.id
   AND plg.parse_generation = wlg.parse_generation
@@ -21513,6 +21589,7 @@ type ListInstancesByDuplicateGroupRow struct {
 	UploaderName string      `db:"uploader_name" json:"uploader_name"`
 	PlayerCount  int64       `db:"player_count" json:"player_count"`
 	DurationMs   float64     `db:"duration_ms" json:"duration_ms"`
+	IsRanked     bool        `db:"is_ranked" json:"is_ranked"`
 }
 
 func (q *sqlQuerier) ListInstancesByDuplicateGroup(ctx context.Context, duplicateGroupID uuid.NullUUID) ([]ListInstancesByDuplicateGroupRow, error) {
@@ -21533,6 +21610,7 @@ func (q *sqlQuerier) ListInstancesByDuplicateGroup(ctx context.Context, duplicat
 			&i.UploaderName,
 			&i.PlayerCount,
 			&i.DurationMs,
+			&i.IsRanked,
 		); err != nil {
 			return nil, err
 		}
@@ -21571,7 +21649,8 @@ SELECT
     li.recorder_name,
     li.difficulty_name,
     li.max_players,
-    li.dynamic_difficulty
+    li.dynamic_difficulty,
+    li.mixed_difficulty
 FROM log_instances_resolved li
 JOIN parsed_log_group plg ON plg.id = li.log_group_id
 JOIN wow_log_groups wlg ON wlg.id = plg.id
@@ -21665,6 +21744,7 @@ type ListInstancesByTimeRangeRow struct {
 	DifficultyName     string             `db:"difficulty_name" json:"difficulty_name"`
 	MaxPlayers         int32              `db:"max_players" json:"max_players"`
 	DynamicDifficulty  int32              `db:"dynamic_difficulty" json:"dynamic_difficulty"`
+	MixedDifficulty    bool               `db:"mixed_difficulty" json:"mixed_difficulty"`
 }
 
 func (q *sqlQuerier) ListInstancesByTimeRange(ctx context.Context, arg ListInstancesByTimeRangeParams) ([]ListInstancesByTimeRangeRow, error) {
@@ -21709,6 +21789,7 @@ func (q *sqlQuerier) ListInstancesByTimeRange(ctx context.Context, arg ListInsta
 			&i.DifficultyName,
 			&i.MaxPlayers,
 			&i.DynamicDifficulty,
+			&i.MixedDifficulty,
 		); err != nil {
 			return nil, err
 		}
@@ -21809,6 +21890,7 @@ instance_rows AS (
         li.difficulty_name,
         li.max_players,
         li.dynamic_difficulty,
+        li.mixed_difficulty,
         ('unit-position' = ANY(li.capabilities))::boolean AS has_positions
     FROM log_instances_resolved li
     JOIN matching_runs ON matching_runs.run_id = COALESCE(li.duplicate_group_id, li.id)
@@ -21850,7 +21932,7 @@ instance_rows AS (
 ),
 ranked_instances AS (
     SELECT
-        instance_rows.id, instance_rows.slug, instance_rows.name, instance_rows.realm_id, instance_rows.realm_name, instance_rows.uploader_id, instance_rows.uploader_name, instance_rows.uploaded_at, instance_rows.first_encounter_time, instance_rows.player_count, instance_rows.boss_count, instance_rows.encounter_count, instance_rows.boss_kills, instance_rows.duration_ms, instance_rows.combat_duration_ms, instance_rows.guild_id, instance_rows.guild_name, instance_rows.has_youtube_video, instance_rows.duplicate_group_id, instance_rows.run_id, instance_rows.recorder_name, instance_rows.difficulty_name, instance_rows.max_players, instance_rows.dynamic_difficulty, instance_rows.has_positions,
+        instance_rows.id, instance_rows.slug, instance_rows.name, instance_rows.realm_id, instance_rows.realm_name, instance_rows.uploader_id, instance_rows.uploader_name, instance_rows.uploaded_at, instance_rows.first_encounter_time, instance_rows.player_count, instance_rows.boss_count, instance_rows.encounter_count, instance_rows.boss_kills, instance_rows.duration_ms, instance_rows.combat_duration_ms, instance_rows.guild_id, instance_rows.guild_name, instance_rows.has_youtube_video, instance_rows.duplicate_group_id, instance_rows.run_id, instance_rows.recorder_name, instance_rows.difficulty_name, instance_rows.max_players, instance_rows.dynamic_difficulty, instance_rows.mixed_difficulty, instance_rows.has_positions,
         ROW_NUMBER() OVER (
             PARTITION BY instance_rows.run_id
             ORDER BY
@@ -21904,6 +21986,7 @@ SELECT
     ranked_instances.difficulty_name,
     ranked_instances.max_players,
     ranked_instances.dynamic_difficulty,
+    ranked_instances.mixed_difficulty,
     ranked_instances.has_positions
 FROM ranked_instances
 JOIN selected_runs USING (run_id)
@@ -21951,6 +22034,7 @@ type ListRecentInstanceGroupsRow struct {
 	DifficultyName     string             `db:"difficulty_name" json:"difficulty_name"`
 	MaxPlayers         int32              `db:"max_players" json:"max_players"`
 	DynamicDifficulty  int32              `db:"dynamic_difficulty" json:"dynamic_difficulty"`
+	MixedDifficulty    bool               `db:"mixed_difficulty" json:"mixed_difficulty"`
 	HasPositions       bool               `db:"has_positions" json:"has_positions"`
 }
 
@@ -22001,6 +22085,7 @@ func (q *sqlQuerier) ListRecentInstanceGroups(ctx context.Context, arg ListRecen
 			&i.DifficultyName,
 			&i.MaxPlayers,
 			&i.DynamicDifficulty,
+			&i.MixedDifficulty,
 			&i.HasPositions,
 		); err != nil {
 			return nil, err
@@ -25285,6 +25370,11 @@ WITH members AS MATERIALIZED (
         li.end_time,
         li.duplicate_group_id,
         li.updated_at AS instance_updated_at,
+        -- A partial upload stays eligible, but clean duplicates take priority.
+        EXISTS (
+            SELECT 1 FROM log_instance_encounters encounter
+            WHERE encounter.instance_id = li.id AND encounter.invalidated_at IS NOT NULL
+        ) AS partially_invalid,
         COUNT(DISTINCT coverage.encounter_name) FILTER (
             WHERE coverage.encounter_id IS NOT NULL
         )::integer AS boss_coverage
@@ -25296,20 +25386,24 @@ WITH members AS MATERIALIZED (
 ),
 ranked AS (
     SELECT
-        members.run_id, members.id, members.realm_id, members.instance_name, members.difficulty_name, members.max_players, members.start_time, members.end_time, members.duplicate_group_id, members.instance_updated_at, members.boss_coverage,
-        COUNT(*) OVER (PARTITION BY run_id)::integer AS member_count,
-        (MAX(instance_updated_at) OVER (PARTITION BY run_id))::timestamptz AS source_updated_at,
+        members.run_id, members.id, members.realm_id, members.instance_name, members.difficulty_name, members.max_players, members.start_time, members.end_time, members.duplicate_group_id, members.instance_updated_at, members.partially_invalid, members.boss_coverage,
+        COUNT(*) OVER (PARTITION BY members.run_id)::integer AS member_count,
+        (MAX(instance_updated_at) OVER (PARTITION BY members.run_id))::timestamptz AS source_updated_at,
         ROW_NUMBER() OVER (
-            PARTITION BY run_id
-            ORDER BY boss_coverage DESC,
-                (id = duplicate_group_id) DESC NULLS LAST,
-                start_time ASC,
-                id ASC
+            PARTITION BY members.run_id
+            ORDER BY members.partially_invalid ASC,
+                -- When every eligible upload is partial, retain the current representative.
+                CASE WHEN members.partially_invalid THEN members.id = incumbent.representative_instance_id END DESC NULLS LAST,
+                members.boss_coverage DESC,
+                (members.id = members.duplicate_group_id) DESC NULLS LAST,
+                members.start_time ASC,
+                members.id ASC
         ) AS representative_rank
     FROM members
+    LEFT JOIN ranking_runs incumbent ON incumbent.run_id = members.run_id
 ),
 expected AS MATERIALIZED (
-    SELECT run_id, id, realm_id, instance_name, difficulty_name, max_players, start_time, end_time, duplicate_group_id, instance_updated_at, boss_coverage, member_count, source_updated_at, representative_rank FROM ranked
+    SELECT run_id, id, realm_id, instance_name, difficulty_name, max_players, start_time, end_time, duplicate_group_id, instance_updated_at, partially_invalid, boss_coverage, member_count, source_updated_at, representative_rank FROM ranked
     WHERE representative_rank = 1
 ),
 discrepancies AS (
@@ -25438,6 +25532,11 @@ members AS MATERIALIZED (
         li.end_time,
         li.duplicate_group_id,
         li.updated_at AS instance_updated_at,
+        -- A partial upload stays eligible, but clean duplicates take priority.
+        EXISTS (
+            SELECT 1 FROM log_instance_encounters encounter
+            WHERE encounter.instance_id = li.id AND encounter.invalidated_at IS NOT NULL
+        ) AS partially_invalid,
         COUNT(DISTINCT coverage.encounter_name) FILTER (
             WHERE coverage.encounter_id IS NOT NULL
         )::integer AS boss_coverage
@@ -25465,17 +25564,21 @@ members AS MATERIALIZED (
 ),
 ranked AS (
     SELECT
-        members.run_id, members.id, members.realm_id, members.instance_name, members.difficulty_name, members.max_players, members.start_time, members.end_time, members.duplicate_group_id, members.instance_updated_at, members.boss_coverage,
-        COUNT(*) OVER (PARTITION BY run_id)::integer AS member_count,
-        (MAX(instance_updated_at) OVER (PARTITION BY run_id))::timestamptz AS source_updated_at,
+        members.run_id, members.id, members.realm_id, members.instance_name, members.difficulty_name, members.max_players, members.start_time, members.end_time, members.duplicate_group_id, members.instance_updated_at, members.partially_invalid, members.boss_coverage,
+        COUNT(*) OVER (PARTITION BY members.run_id)::integer AS member_count,
+        (MAX(instance_updated_at) OVER (PARTITION BY members.run_id))::timestamptz AS source_updated_at,
         ROW_NUMBER() OVER (
-            PARTITION BY run_id
-            ORDER BY boss_coverage DESC,
-                (id = duplicate_group_id) DESC NULLS LAST,
-                start_time ASC,
-                id ASC
+            PARTITION BY members.run_id
+            ORDER BY members.partially_invalid ASC,
+                -- When every eligible upload is partial, retain the current representative.
+                CASE WHEN members.partially_invalid THEN members.id = incumbent.representative_instance_id END DESC NULLS LAST,
+                members.boss_coverage DESC,
+                (members.id = members.duplicate_group_id) DESC NULLS LAST,
+                members.start_time ASC,
+                members.id ASC
         ) AS representative_rank
     FROM members
+    LEFT JOIN ranking_runs incumbent ON incumbent.run_id = members.run_id
 )
 SELECT
     run_id,
@@ -26311,6 +26414,10 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
           WHERE rr.run_id = COALESCE(li.duplicate_group_id, li.id)
       )
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
+        EXISTS (
+            SELECT 1 FROM log_instance_encounters invalid
+            WHERE invalid.instance_id = li.id AND invalid.invalidated_at IS NOT NULL
+        ) ASC,
         -- Prefer the upload with the broadest boss-ranking coverage. The group
         -- anchor is the first upload, but it may be truncated before the final boss.
         (SELECT COUNT(DISTINCT coverage.encounter_name)
@@ -26691,6 +26798,10 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
         WHERE rr.run_id = COALESCE(li.duplicate_group_id, li.id)
     )
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
+        EXISTS (
+            SELECT 1 FROM log_instance_encounters invalid
+            WHERE invalid.instance_id = li.id AND invalid.invalidated_at IS NOT NULL
+        ) ASC,
         (SELECT COUNT(DISTINCT coverage.encounter_name)
          FROM encounter_dps_rankings coverage
          WHERE coverage.instance_id = li.id
@@ -26875,7 +26986,12 @@ WITH deduped AS (
         COALESCE(g.name, '')::text AS guild_name,
         COALESCE(li.guild_id::text, '')::text AS guild_id,
         wsr.name AS realm_name,
-        EXTRACT(EPOCH FROM (lie.end_time - lie.start_time))::double precision AS duration_secs,
+        (CASE WHEN lie.name = 'Razorgore the Untamed'
+              AND lie.ranking_start_offset_ms >= 0
+              AND lie.ranking_end_offset_ms > lie.ranking_start_offset_ms
+            THEN (lie.ranking_end_offset_ms - lie.ranking_start_offset_ms) / 1000.0
+            ELSE EXTRACT(EPOCH FROM (lie.end_time - lie.start_time))
+        END)::double precision AS duration_secs,
         lie.end_time AS killed_at
     FROM log_instance_encounters lie
     JOIN log_instances_resolved li ON li.id = lie.instance_id
@@ -26899,7 +27015,7 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
           ELSE true
       END
     ORDER BY lie.name, COALESCE(li.duplicate_group_id, li.id),
-             EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) ASC
+             duration_secs ASC
 )
 SELECT
     d.encounter_id,
@@ -26994,7 +27110,12 @@ const rankingsKillTimeStats = `-- name: RankingsKillTimeStats :many
 WITH deduped AS (
     SELECT DISTINCT ON (lie.name, COALESCE(li.duplicate_group_id, li.id))
         lie.name AS encounter_name,
-        EXTRACT(EPOCH FROM (lie.end_time - lie.start_time))::double precision AS duration_secs
+        (CASE WHEN lie.name = 'Razorgore the Untamed'
+              AND lie.ranking_start_offset_ms >= 0
+              AND lie.ranking_end_offset_ms > lie.ranking_start_offset_ms
+            THEN (lie.ranking_end_offset_ms - lie.ranking_start_offset_ms) / 1000.0
+            ELSE EXTRACT(EPOCH FROM (lie.end_time - lie.start_time))
+        END)::double precision AS duration_secs
     FROM log_instance_encounters lie
     JOIN log_instances_resolved li ON li.id = lie.instance_id
 JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
@@ -27104,7 +27225,12 @@ WITH deduped AS (
         COALESCE(g.name, '')::text AS guild_name,
         COALESCE(li.guild_id::text, '')::text AS guild_id,
         wsr.name AS realm_name,
-        EXTRACT(EPOCH FROM (lie.end_time - lie.start_time))::double precision AS duration_secs,
+        (CASE WHEN lie.name = 'Razorgore the Untamed'
+              AND lie.ranking_start_offset_ms >= 0
+              AND lie.ranking_end_offset_ms > lie.ranking_start_offset_ms
+            THEN (lie.ranking_end_offset_ms - lie.ranking_start_offset_ms) / 1000.0
+            ELSE EXTRACT(EPOCH FROM (lie.end_time - lie.start_time))
+        END)::double precision AS duration_secs,
         lie.end_time AS killed_at
     FROM log_instance_encounters lie
     JOIN log_instances_resolved li ON li.id = lie.instance_id
@@ -27123,7 +27249,7 @@ WITH deduped AS (
       AND cardinality($7::text[]) <= 64
       AND li.guild_id IS NOT NULL
     ORDER BY lie.name, COALESCE(li.duplicate_group_id, li.id),
-             EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) ASC
+             duration_secs ASC
 ), best_per_guild AS (
     SELECT DISTINCT ON (d.encounter_name, d.guild_id) d.encounter_id, d.encounter_name, d.instance_id, d.log_hashed_slug, d.instance_name, d.guild_name, d.guild_id, d.realm_name, d.duration_secs, d.killed_at
     FROM deduped d
@@ -27249,6 +27375,10 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
           WHERE rr.run_id = COALESCE(li.duplicate_group_id, li.id)
       )
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
+        EXISTS (
+            SELECT 1 FROM log_instance_encounters invalid
+            WHERE invalid.instance_id = li.id AND invalid.invalidated_at IS NOT NULL
+        ) ASC,
         -- Prefer the upload with the broadest boss-ranking coverage. The group
         -- anchor is the first upload, but it may be truncated before the final boss.
         (SELECT COUNT(DISTINCT coverage.encounter_name)
@@ -30131,7 +30261,7 @@ func (q *sqlQuerier) UpsertSidekickWoWDirectory(ctx context.Context, arg UpsertS
 }
 
 const getSiteConfig = `-- name: GetSiteConfig :one
-SELECT id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, ads_enabled, root_domain_discovery, landing_featured_instance_id, forever_landing_enabled FROM site_config WHERE id = TRUE
+SELECT id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, ads_enabled, root_domain_discovery, landing_featured_instance_id, forever_landing_enabled, root_uploads_disabled FROM site_config WHERE id = TRUE
 `
 
 func (q *sqlQuerier) GetSiteConfig(ctx context.Context) (SiteConfig, error) {
@@ -30151,6 +30281,7 @@ func (q *sqlQuerier) GetSiteConfig(ctx context.Context) (SiteConfig, error) {
 		&i.RootDomainDiscovery,
 		&i.LandingFeaturedInstanceID,
 		&i.ForeverLandingEnabled,
+		&i.RootUploadsDisabled,
 	)
 	return i, err
 }
@@ -30161,14 +30292,15 @@ UPDATE site_config SET
     branding = COALESCE($2, branding),
     discoverable = COALESCE($3, discoverable),
     root_domain_discovery = COALESCE($4, root_domain_discovery),
-    default_format = COALESCE($5, default_format),
-    available_formats = COALESCE($6, available_formats),
-    client_uploads_disabled = COALESCE($7, client_uploads_disabled),
-    ads_enabled = COALESCE($8, ads_enabled),
-    forever_landing_enabled = COALESCE($9, forever_landing_enabled),
+    root_uploads_disabled = COALESCE($5, root_uploads_disabled),
+    default_format = COALESCE($6, default_format),
+    available_formats = COALESCE($7, available_formats),
+    client_uploads_disabled = COALESCE($8, client_uploads_disabled),
+    ads_enabled = COALESCE($9, ads_enabled),
+    forever_landing_enabled = COALESCE($10, forever_landing_enabled),
     updated_at = now()
 WHERE id = TRUE
-RETURNING id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, ads_enabled, root_domain_discovery, landing_featured_instance_id, forever_landing_enabled
+RETURNING id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, ads_enabled, root_domain_discovery, landing_featured_instance_id, forever_landing_enabled, root_uploads_disabled
 `
 
 type UpdateSiteConfigParams struct {
@@ -30176,6 +30308,7 @@ type UpdateSiteConfigParams struct {
 	Branding              []byte        `db:"branding" json:"branding"`
 	Discoverable          pgtype.Bool   `db:"discoverable" json:"discoverable"`
 	RootDomainDiscovery   pgtype.Bool   `db:"root_domain_discovery" json:"root_domain_discovery"`
+	RootUploadsDisabled   pgtype.Bool   `db:"root_uploads_disabled" json:"root_uploads_disabled"`
 	DefaultFormat         NullLogFormat `db:"default_format" json:"default_format"`
 	AvailableFormats      []string      `db:"available_formats" json:"available_formats"`
 	ClientUploadsDisabled pgtype.Bool   `db:"client_uploads_disabled" json:"client_uploads_disabled"`
@@ -30189,6 +30322,7 @@ func (q *sqlQuerier) UpdateSiteConfig(ctx context.Context, arg UpdateSiteConfigP
 		arg.Branding,
 		arg.Discoverable,
 		arg.RootDomainDiscovery,
+		arg.RootUploadsDisabled,
 		arg.DefaultFormat,
 		arg.AvailableFormats,
 		arg.ClientUploadsDisabled,
@@ -30210,6 +30344,7 @@ func (q *sqlQuerier) UpdateSiteConfig(ctx context.Context, arg UpdateSiteConfigP
 		&i.RootDomainDiscovery,
 		&i.LandingFeaturedInstanceID,
 		&i.ForeverLandingEnabled,
+		&i.RootUploadsDisabled,
 	)
 	return i, err
 }
@@ -30219,7 +30354,7 @@ UPDATE site_config SET
     landing_featured_instance_id = $1::uuid,
     updated_at = now()
 WHERE id = TRUE
-RETURNING id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, ads_enabled, root_domain_discovery, landing_featured_instance_id, forever_landing_enabled
+RETURNING id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, ads_enabled, root_domain_discovery, landing_featured_instance_id, forever_landing_enabled, root_uploads_disabled
 `
 
 // NULL clears the setting, so this cannot share UpdateSiteConfig's COALESCE pattern.
@@ -30240,6 +30375,7 @@ func (q *sqlQuerier) UpdateSiteConfigLandingFeaturedInstance(ctx context.Context
 		&i.RootDomainDiscovery,
 		&i.LandingFeaturedInstanceID,
 		&i.ForeverLandingEnabled,
+		&i.RootUploadsDisabled,
 	)
 	return i, err
 }
@@ -30435,7 +30571,12 @@ SELECT
     lie.name AS encounter_name,
     COALESCE(lie.difficulty, instance.difficulty_name) AS difficulty_name,
     instance.max_players::smallint AS max_players,
-    (EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000)::bigint AS duration_ms
+    (CASE WHEN lie.name = 'Razorgore the Untamed'
+          AND lie.ranking_start_offset_ms >= 0
+          AND lie.ranking_end_offset_ms > lie.ranking_start_offset_ms
+        THEN lie.ranking_end_offset_ms - lie.ranking_start_offset_ms
+        ELSE EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000
+    END)::bigint AS duration_ms
 FROM log_instance_encounters lie
 JOIN log_instances_resolved instance ON instance.id = lie.instance_id
 WHERE lie.instance_id = $1
@@ -30486,7 +30627,12 @@ func (q *sqlQuerier) GetInstanceCleanEncounterKillTimes(ctx context.Context, ins
 const getInstanceEncounterKillTimes = `-- name: GetInstanceEncounterKillTimes :many
 SELECT
     lie.name AS encounter_name,
-    (EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000)::bigint AS duration_ms
+    (CASE WHEN lie.name = 'Razorgore the Untamed'
+          AND lie.ranking_start_offset_ms >= 0
+          AND lie.ranking_end_offset_ms > lie.ranking_start_offset_ms
+        THEN lie.ranking_end_offset_ms - lie.ranking_start_offset_ms
+        ELSE EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000
+    END)::bigint AS duration_ms
 FROM log_instance_encounters lie
 WHERE lie.instance_id = $1
   AND lie.boss = true
@@ -30500,6 +30646,8 @@ type GetInstanceEncounterKillTimesRow struct {
 	DurationMs    int64  `db:"duration_ms" json:"duration_ms"`
 }
 
+// Only Razorgore uses its persisted phase-two window; legacy or invalid windows
+// and every other boss retain full encounter duration.
 func (q *sqlQuerier) GetInstanceEncounterKillTimes(ctx context.Context, instanceID uuid.UUID) ([]GetInstanceEncounterKillTimesRow, error) {
 	rows, err := q.db.Query(ctx, getInstanceEncounterKillTimes, instanceID)
 	if err != nil {
@@ -30668,7 +30816,12 @@ SELECT
     lie.instance_id,
     lie.name AS encounter_name,
     lie.end_time AS killed_at,
-    (EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000)::bigint AS duration_ms,
+    (CASE WHEN lie.name = 'Razorgore the Untamed'
+          AND lie.ranking_start_offset_ms >= 0
+          AND lie.ranking_end_offset_ms > lie.ranking_start_offset_ms
+        THEN lie.ranking_end_offset_ms - lie.ranking_start_offset_ms
+        ELSE EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000
+    END)::bigint AS duration_ms,
     COALESCE(CASE WHEN tpbs.server_status IN ('ok', 'low_confidence') THEN tpbs.server_precise_score END, -1)::float8 AS parse
 FROM log_instance_encounters lie
 LEFT JOIN time_parse_scores tps
@@ -31043,7 +31196,12 @@ deduped AS (
         COALESCE((
             SELECT jsonb_agg(jsonb_build_object(
                 'encounter_name', lie.name,
-                'duration_ms', (EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000)::bigint
+                'duration_ms', (CASE WHEN lie.name = 'Razorgore the Untamed'
+                      AND lie.ranking_start_offset_ms >= 0
+                      AND lie.ranking_end_offset_ms > lie.ranking_start_offset_ms
+                    THEN lie.ranking_end_offset_ms - lie.ranking_start_offset_ms
+                    ELSE EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000
+                END)::bigint
             ) ORDER BY lie.start_time)
             FROM log_instance_encounters lie
             WHERE lie.instance_id = sr.instance_id
@@ -33558,7 +33716,12 @@ current_members AS MATERIALIZED (
         speedrun.instance_name,
         COALESCE(encounter.difficulty, instance.difficulty_name) AS difficulty_name,
         instance.max_players AS max_players,
-        (EXTRACT(EPOCH FROM (encounter.end_time - encounter.start_time)) * 1000)::bigint AS duration_ms,
+        (CASE WHEN encounter.name = 'Razorgore the Untamed'
+          AND encounter.ranking_start_offset_ms >= 0
+          AND encounter.ranking_end_offset_ms > encounter.ranking_start_offset_ms
+        THEN encounter.ranking_end_offset_ms - encounter.ranking_start_offset_ms
+        ELSE EXTRACT(EPOCH FROM (encounter.end_time - encounter.start_time)) * 1000
+    END)::bigint AS duration_ms,
         encounter.end_time AS killed_at
     FROM representative_instances representative
     JOIN log_instances_resolved instance ON instance.id = representative.id
@@ -33570,9 +33733,19 @@ current_members AS MATERIALIZED (
       AND encounter.kill_type = 'clean'
       AND encounter.invalidated_at IS NULL
       AND encounter.end_time > encounter.start_time
-      AND (EXTRACT(EPOCH FROM (encounter.end_time - encounter.start_time)) * 1000)::bigint > 0
+      AND (CASE WHEN encounter.name = 'Razorgore the Untamed'
+          AND encounter.ranking_start_offset_ms >= 0
+          AND encounter.ranking_end_offset_ms > encounter.ranking_start_offset_ms
+        THEN encounter.ranking_end_offset_ms - encounter.ranking_start_offset_ms
+        ELSE EXTRACT(EPOCH FROM (encounter.end_time - encounter.start_time)) * 1000
+    END)::bigint > 0
     ORDER BY representative.run_id, encounter.name, COALESCE(encounter.difficulty, instance.difficulty_name), instance.max_players,
-        (EXTRACT(EPOCH FROM (encounter.end_time - encounter.start_time)) * 1000)::bigint ASC,
+        (CASE WHEN encounter.name = 'Razorgore the Untamed'
+          AND encounter.ranking_start_offset_ms >= 0
+          AND encounter.ranking_end_offset_ms > encounter.ranking_start_offset_ms
+        THEN encounter.ranking_end_offset_ms - encounter.ranking_start_offset_ms
+        ELSE EXTRACT(EPOCH FROM (encounter.end_time - encounter.start_time)) * 1000
+    END)::bigint ASC,
         encounter.end_time ASC
 ),
 upserted AS (

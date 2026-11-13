@@ -630,6 +630,7 @@ func (api *API) ListDuplicateInstances(w http.ResponseWriter, r *http.Request) {
 			RecorderName: row.RecorderName,
 			UploaderName: row.UploaderName,
 			PlayerCount:  row.PlayerCount,
+			IsRanked:     row.IsRanked,
 		}
 		if row.DurationMs != 0 {
 			d := row.DurationMs

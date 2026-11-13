@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Emyrk/chronicle/combatlog/parser/common/logscanner"
 )
 
 // Blizzard v22 layouts are documented at https://wowcoach.gg/docs/combat-log.
@@ -62,7 +64,7 @@ func newHermesProxyTransformReader(r io.Reader) *transformReader {
 
 func newTransformReaderWithOptions(r io.Reader, preserveTimestamp, trimPlayerNameSuffix bool, advancedFields int) *transformReader {
 	return &transformReader{
-		scanner:              bufio.NewScanner(r),
+		scanner:              logscanner.New(r),
 		guids:                newGUIDNormalizer(),
 		names:                make(map[string]string),
 		preserveTimestamp:    preserveTimestamp,

@@ -1,6 +1,15 @@
 # See the dedicated "version" documentation section.
 version: "2"
 linters:
+  settings:
+    govet:
+      # Go 1.26's inline analyzer reports optimization suggestions rather than
+      # correctness problems, and is not part of the Go version used by CI.
+      disable: [inline]
+    staticcheck:
+      # QF checks are optional rewrites. QF1012 is newly enabled by newer local
+      # golangci-lint releases but not by the CI-pinned release.
+      checks: [all, "-ST1000", "-ST1003", "-ST1016", "-ST1020", "-ST1021", "-ST1022", "-QF1012"]
   exclusions:
     rules:
       # sqlc emits deferred Close calls in batch readers. Callers must still

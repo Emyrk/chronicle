@@ -9,8 +9,8 @@
 //
 // Every compiled query is wrapped in a fixed frame (see compile.go) that
 // joins wow_server_realms so tenant row-level security applies, hides
-// unfinalized, unlisted and invalidated logs, and collapses duplicate uploads
-// to one result. The tree cannot alter the frame.
+// unfinalized and unlisted logs, and collapses duplicate uploads to one result.
+// Validity is an ordinary instance.validity field condition.
 //
 // The wire types live in chroniclesdk (so TypeScript types are generated);
 // this package aliases them.

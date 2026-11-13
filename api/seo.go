@@ -89,10 +89,12 @@ func (api *API) brandingResolver(r *http.Request) *frontend.HTMLBranding {
 	if r.URL.Path == "/" {
 		config, err := api.Opts.Zed.GetSiteConfig(r.Context())
 		if err == nil {
+			rootUploadsDisabled := t == nil && config.RootUploadsDisabled
 			resolved.Home = &frontend.HomeConfig{
 				Flavor:                api.resolvedSiteFlavor(r.Context()).Strings(),
 				ForeverLandingEnabled: config.ForeverLandingEnabled,
-				UploadsDisabled:       api.Opts.ClientUploadsDisabled || config.ClientUploadsDisabled || (t != nil && t.DisableClientUpload),
+				UploadsDisabled:       api.Opts.ClientUploadsDisabled || siteUploadRequestsDisabled(config, t),
+				RootUploadsDisabled:   rootUploadsDisabled,
 			}
 		}
 	}

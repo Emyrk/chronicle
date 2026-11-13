@@ -20,6 +20,7 @@ import { activeDebuffsAt, type MapDebuff, type MapEncounterPositions, type MapPo
 import { inferRoles } from "../Roles/roles.processor";
 import { deriveRecentHealGain, isDeadAt, type EncounterEffects } from "./replayEffects";
 import type { MapSceneFollowSource, MapSceneFollowUnit, MapSceneUnitTrack } from "./MapScene3D";
+import { totemLifetimes } from "./totemLifetime";
 import { isMapUnitDespawned, isMapUnitPositionExpired, shouldShowMapUnit } from "./mapUnitVisibility";
 import {
   AUTO_FIT_MIN_SPAN_YARDS,
@@ -364,11 +365,17 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
   const cursorMs = timestampMs
     ?? (preview && encounter ? previewCursorMs(encounter.startMs, encounter.endMs, preview.elapsedMs, preview.maxSpeed) : encounter?.endMs)
     ?? null;
+  const totems = useMemo(
+    () => encounter ? totemLifetimes(encounter, props.context.instance.units ?? {}) : new Map(),
+    [encounter, props.context.instance.units],
+  );
   const visibleUnits = useMemo(() => {
     if (!encounter || cursorMs === null) return [];
     return Array.from(encounter.positionsByUnit.entries()).flatMap(([guid, positions]) => {
       const player = props.context.instance.players?.[guid];
       const metadata = props.context.instance.units?.[guid];
+      const totem = totems.get(guid);
+      if (totem && (cursorMs < totem.startMs || cursorMs >= totem.endMs)) return [];
       if (isMapUnitDespawned(metadata?.despawnAtMs, cursorMs)) return [];
       if (!player && !shouldShowMapUnit(
         props.context.instance.name,
@@ -400,6 +407,7 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
     props.context.instance.name,
     props.context.instance.players,
     props.context.instance.units,
+    totems,
     wholeRun,
   ]);
   const mapId = dominantMapId(visibleUnits.map((unit) => unit.sample));

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -17,6 +18,8 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const HighlightVersion = 2
@@ -92,6 +95,12 @@ func HighlightFresh(fingerprint string, sourceGeneration int64, refreshedAt time
 	return fingerprint == currentFingerprint && sourceGeneration == currentGeneration && !refreshedAt.Before(now.Add(-HighlightStaleAfter))
 }
 
+// HighlightStatisticsDue is independent of source generation: new ratings and
+// speedruns can publish without recalculating the legacy box-plot distribution.
+func HighlightStatisticsDue(fingerprint, currentFingerprint string, refreshedAt pgtype.Timestamptz, now time.Time) bool {
+	return fingerprint != currentFingerprint || !refreshedAt.Valid || refreshedAt.Time.Before(now.Add(-HighlightStaleAfter))
+}
+
 func HighlightFingerprint(rows []database.ResolveLeaderboardConfigurationRow, cohort HighlightCohort) string {
 	selected := []database.ResolveLeaderboardConfigurationRow{}
 	for _, r := range rows {
@@ -116,12 +125,12 @@ func HighlightEmpty(p chroniclesdk.HubLandingPreview) bool {
 
 // BuildHighlights reuses SQL read formulas. Realm restricts subjects, never benchmarks.
 func BuildHighlights(ctx context.Context, store database.Store, tenant, realm uuid.UUID, c HighlightCohort, config []database.ResolveLeaderboardConfigurationRow) (chroniclesdk.HubLandingPreview, error) {
+	return buildHighlights(ctx, store, tenant, realm, c, config, true)
+}
+
+func buildHighlights(ctx context.Context, store database.Store, tenant, realm uuid.UUID, c HighlightCohort, config []database.ResolveLeaderboardConfigurationRow, includeStatistics bool) (chroniclesdk.HubLandingPreview, error) {
 	out := emptyHighlight(c)
 	request := leaderboardread.Request{Instance: c.Instance, Difficulty: c.Difficulty, MaxPlayers: c.Size, Subject: "player", Kind: "boss", Score: "peak", Metric: "dps", Set: "default"}
-	selection, err := leaderboardread.Select(config, request)
-	if err != nil {
-		return out, err
-	}
 	for _, subject := range []string{"player", "guild"} {
 		for _, score := range []string{"peak", "mastery", "renown"} {
 			req := request
@@ -187,12 +196,12 @@ func BuildHighlights(ctx context.Context, store database.Store, tenant, realm uu
 	if realm != uuid.Nil {
 		realmIDs = append(realmIDs, realm)
 	}
-	stats, err := store.RankingsBoxPlotStatsNoJIT(ctx, database.RankingsBoxPlotStatsParams{InstanceNames: []string{c.Instance}, EncounterNames: selection.Bosses, DifficultyNames: []string{c.Difficulty}, RealmIds: realmIDs, ExactCohort: true, FilterMaxPlayers: c.Size, Metric: "dps"})
-	if err != nil {
-		return out, err
-	}
-	for _, r := range stats[:min(len(stats), HighlightLimit)] {
-		out.Statistics = append(out.Statistics, chroniclesdk.RankingsBoxPlotStats{PlayerClass: strings.ReplaceAll(r.PlayerClass, "_", ""), PlayerSpec: r.PlayerSpec, PlayerSubSpec: r.PlayerSubSpec, MinDPS: r.MinDps, Q1DPS: r.Q1Dps, MedianDPS: r.MedianDps, Q3DPS: r.Q3Dps, MaxDPS: r.MaxDps, Count: r.Count})
+	if includeStatistics {
+		stats, err := buildHighlightStatistics(ctx, store, c, config, realmIDs)
+		if err != nil {
+			return out, err
+		}
+		out.Statistics = stats
 	}
 	clears, err := store.SpeedrunLeaderboard(ctx, database.SpeedrunLeaderboardParams{InstanceName: c.Instance, RealmIds: realmIDs, FilterDifficulty: true, DifficultyName: c.Difficulty, FilterInstanceMaxPlayers: true, InstanceMaxPlayers: c.Size, ResultLimit: HighlightLimit})
 	if err != nil {
@@ -204,6 +213,22 @@ func BuildHighlights(ctx context.Context, store database.Store, tenant, realm uu
 			entry.DuplicateGroupID = &r.DuplicateGroupID.UUID
 		}
 		out.Speedruns = append(out.Speedruns, entry)
+	}
+	return out, nil
+}
+
+func buildHighlightStatistics(ctx context.Context, store database.Store, c HighlightCohort, config []database.ResolveLeaderboardConfigurationRow, realmIDs []uuid.UUID) ([]chroniclesdk.RankingsBoxPlotStats, error) {
+	selection, err := leaderboardread.Select(config, leaderboardread.Request{Instance: c.Instance, Difficulty: c.Difficulty, MaxPlayers: c.Size, Subject: "player", Kind: "boss", Score: "peak", Metric: "dps", Set: "default"})
+	if err != nil {
+		return nil, err
+	}
+	stats, err := store.RankingsBoxPlotStatsNoJIT(ctx, database.RankingsBoxPlotStatsParams{InstanceNames: []string{c.Instance}, EncounterNames: selection.Bosses, DifficultyNames: []string{c.Difficulty}, RealmIds: realmIDs, ExactCohort: true, FilterMaxPlayers: c.Size, Metric: "dps"})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]chroniclesdk.RankingsBoxPlotStats, 0, min(len(stats), HighlightLimit))
+	for _, r := range stats[:min(len(stats), HighlightLimit)] {
+		out = append(out, chroniclesdk.RankingsBoxPlotStats{PlayerClass: strings.ReplaceAll(r.PlayerClass, "_", ""), PlayerSpec: r.PlayerSpec, PlayerSubSpec: r.PlayerSubSpec, MinDPS: r.MinDps, Q1DPS: r.Q1Dps, MedianDPS: r.MedianDps, Q3DPS: r.Q3Dps, MaxDPS: r.MaxDps, Count: r.Count})
 	}
 	return out, nil
 }
@@ -233,9 +258,41 @@ func RefreshHighlights(ctx context.Context, store database.Store, tenant, realm 
 	if realm != uuid.Nil && !slices.Contains(realms, realm) {
 		return fmt.Errorf("realm does not belong to tenant")
 	}
-	preview, err := BuildHighlights(ctx, store, tenant, realm, c, rows)
-	if err != nil {
+	fingerprint := HighlightFingerprint(rows, c)
+	previous, err := store.GetLeaderboardHighlight(ctx, database.GetLeaderboardHighlightParams{
+		TenantID: tenant, RealmScope: realm, InstanceName: c.Instance, DifficultyName: c.Difficulty, MaxPlayers: c.Size,
+	})
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return err
+	}
+	hasPrevious := err == nil
+	statisticsDue := !hasPrevious || HighlightStatisticsDue(previous.ConfigurationFingerprint, fingerprint, previous.StatisticsRefreshedAt, started)
+	ratingsDue := !hasPrevious || !HighlightFresh(previous.ConfigurationFingerprint, previous.SourceGeneration, previous.RefreshedAt.Time, fingerprint, generation, started)
+	var preview chroniclesdk.HubLandingPreview
+	if hasPrevious {
+		if err := json.Unmarshal(previous.Payload, &preview); err != nil {
+			return err
+		}
+	}
+	if ratingsDue {
+		fresh, err := buildHighlights(ctx, store, tenant, realm, c, rows, false)
+		if err != nil {
+			return err
+		}
+		fresh.Statistics = preview.Statistics
+		preview = fresh
+	}
+	statisticsRefreshedAt := previous.StatisticsRefreshedAt
+	if statisticsDue {
+		realmIDs := []uuid.UUID{}
+		if realm != uuid.Nil {
+			realmIDs = append(realmIDs, realm)
+		}
+		preview.Statistics, err = buildHighlightStatistics(ctx, store, c, rows, realmIDs)
+		if err != nil {
+			return err
+		}
+		statisticsRefreshedAt = database.Timestamptz(started)
 	}
 	payload, err := json.Marshal(preview)
 	if err != nil {
@@ -251,8 +308,8 @@ func RefreshHighlights(ctx context.Context, store database.Store, tenant, realm 
 	if err != nil {
 		return err
 	}
-	if !slices.Contains(currentCohorts, c) || HighlightFingerprint(current, c) != HighlightFingerprint(rows, c) {
+	if !slices.Contains(currentCohorts, c) || HighlightFingerprint(current, c) != fingerprint {
 		return fmt.Errorf("highlight configuration changed during refresh")
 	}
-	return store.PublishLeaderboardHighlights(ctx, database.PublishLeaderboardHighlightsParams{TenantID: tenant, RealmScope: realm, InstanceName: c.Instance, DifficultyName: c.Difficulty, MaxPlayers: c.Size, ConfigurationFingerprint: HighlightFingerprint(rows, c), SourceGeneration: generation, Payload: payload, RefreshStartedAt: database.Timestamptz(started)})
+	return store.PublishLeaderboardHighlights(ctx, database.PublishLeaderboardHighlightsParams{TenantID: tenant, RealmScope: realm, InstanceName: c.Instance, DifficultyName: c.Difficulty, MaxPlayers: c.Size, ConfigurationFingerprint: fingerprint, SourceGeneration: generation, Payload: payload, RefreshStartedAt: database.Timestamptz(started), StatisticsRefreshedAt: statisticsRefreshedAt, RatingsRefreshed: ratingsDue})
 }

@@ -154,7 +154,7 @@ export function RaidCard({ instance, instances, bossCount, parseScore, onExplore
         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-black/30" />
         
         {/* Badge stack - top right corner */}
-        {(parseScore !== undefined || activeInstance.has_positions || activeInstance.has_youtube_video || isHeroic(activeInstance)) && (
+        {(parseScore !== undefined || activeInstance.has_positions || activeInstance.has_youtube_video || isHeroic(activeInstance) || activeInstance.mixed_difficulty) && (
           <div className={`absolute right-2 z-20 flex flex-col items-end gap-1.5 ${uploads.length > 1 ? "top-11" : "top-2"}`}>
             {parseScore !== undefined && (
               <div
@@ -176,7 +176,7 @@ export function RaidCard({ instance, instances, bossCount, parseScore, onExplore
                 <span className="text-xs font-semibold">Video</span>
               </div>
             )}
-            {isHeroic(activeInstance) && <HeroicBadge />}
+            {(isHeroic(activeInstance) || activeInstance.mixed_difficulty) && <HeroicBadge mixed={activeInstance.mixed_difficulty} />}
           </div>
         )}
         

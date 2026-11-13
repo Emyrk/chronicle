@@ -23,6 +23,8 @@ WITH matched AS (
     li.difficulty_name,
     li.max_players,
     COALESCE(li.start_time, wlg.created_at) AS started_at,
+    li.invalidated_at,
+    li.invalid_reason,
     COALESCE(li.start_time, wlg.created_at) AS sort_value
   FROM log_instances li
   JOIN wow_server_realms wsr ON wsr.id = li.realm_id
@@ -33,7 +35,7 @@ WITH matched AS (
     AND NOT wlg.unlisted
   LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
   LEFT JOIN guilds g ON g.id = li.guild_id
-  WHERE li.invalidated_at IS NULL
+  WHERE TRUE
     AND ((strpos(lower(COALESCE(NULLIF(btrim(li.name), ''), NULLIF(btrim(sm.instance_name), ''), li.name)), lower($1::text)) > 0) AND ($2::text = ANY(li.capabilities)) AND ($3::text = ANY(li.capabilities)) AND (EXISTS (SELECT 1 FROM log_instance_encounters k1 WHERE k1.instance_id = li.id AND k1.boss AND k1.kill_type IN ('clean', 'partial') AND lower(k1.name) = ANY(ARRAY(SELECT lower(v) FROM unnest($5::text[]) v)) AND (EXTRACT(EPOCH FROM (k1.end_time - k1.start_time)) * 1000)::bigint < $4::bigint)) AND (EXISTS (SELECT 1 FROM time_parse_scores tps2 JOIN time_parse_boss_scores tbs3 ON tbs3.time_parse_score_id = tps2.id WHERE tps2.tenant_id = $9::uuid AND tps2.instance_id = li.id AND tps2.lookback_days = $6::smallint AND tps2.policy_version = $7::smallint AND tps2.query_version = $8::smallint AND tbs3.realm_status IN ('ok', 'low_confidence') AND lower(tbs3.encounter_name) = ANY(ARRAY(SELECT lower(v) FROM unnest($11::text[]) v)) AND tbs3.realm_display_score >= $10::bigint)) AND (NOT (EXISTS (SELECT 1 FROM log_instance_encounters e4 WHERE e4.instance_id = li.id AND ((lower(e4.name) = lower($12::text)) AND (e4.kill_type::text = ANY($13::text[])))))) AND (EXISTS (SELECT 1 FROM log_instance_players p5 WHERE p5.instance_id = li.id AND ((p5.class::text = $14::text) AND (EXISTS (SELECT 1 FROM encounter_dps_rankings r6 WHERE r6.instance_id = li.id AND r6.player_guid = p5.unit_guid::text AND r6.encounter_id IS NULL AND lower(r6.player_sub_spec) = lower($15::text))) AND (EXISTS (SELECT 1 FROM encounter_dps_rankings r7 WHERE r7.instance_id = li.id AND r7.player_guid = p5.unit_guid::text AND r7.encounter_id IS NOT NULL AND lower(r7.encounter_name) = ANY(ARRAY(SELECT lower(v) FROM unnest($17::text[]) v)) AND lower(r7.player_sub_spec) = lower($16::text))) AND (EXISTS (SELECT 1 FROM (SELECT DISTINCT ON (x.encounter_name) x.encounter_name, x.display_score, x.status
       FROM parse_score_results x
       WHERE x.tenant_id = $9::uuid AND x.instance_id = li.id AND x.player_guid = p5.unit_guid::text AND x.metric = $18::text
@@ -43,7 +45,7 @@ WITH matched AS (
 -- Summary columns are computed only for the page of results, after the
 -- limit, so they never slow the search itself.
 SELECT p.id, p.hashed_slug, p.name, p.realm_id, p.realm_name, p.guild_id, p.guild_name,
-  p.difficulty_name, p.max_players, p.started_at,
+  p.difficulty_name, p.max_players, p.started_at, p.invalidated_at, p.invalid_reason,
   (SELECT count(DISTINCT lp.unit_guid) FROM log_instance_players lp WHERE lp.instance_id = p.id) AS player_count,
   (SELECT count(DISTINCT be.name) FROM log_instance_encounters be
     WHERE be.instance_id = p.id AND be.boss AND be.kill_type IN ('clean', 'partial')) AS bosses_killed,

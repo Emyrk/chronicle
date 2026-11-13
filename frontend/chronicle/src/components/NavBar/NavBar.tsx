@@ -4,7 +4,7 @@ import { Settings, Upload, LogOut, FileText, Shield, Key, Castle, Menu, Swords, 
 import type { LucideIcon } from "lucide-react";
 import { serverCapabilities } from "@/config/serverCapabilities";
 import { useAuth } from "@/hooks/useAuth";
-import { useAuthorizationCheck, useMarkWhatsNewRead, useMyFavorites, useSiteConfig, useWhatsNewStatus } from "@/api/queries";
+import { uploadsDisabledForSite, useAuthorizationCheck, useMarkWhatsNewRead, useMyFavorites, useSiteConfig, useWhatsNewStatus } from "@/api/queries";
 import type { Branding } from "@/api/typesGenerated";
 import { Button } from "../ui/button";
 import { FavoritesMenu } from "../Favorites";
@@ -68,7 +68,7 @@ export function NavBar() {
   const hasUnreadWhatsNew = whatsNewStatus.data?.has_unread ?? false;
   const { data: favorites } = useMyFavorites({ enabled: isAuthenticated });
   const hasFavorites = !!favorites && (favorites.guilds.length > 0 || favorites.players.length > 0);
-  const uploadsEnabled = !siteConfig?.client_uploads_disabled || hasAdminLogs;
+  const uploadsEnabled = !uploadsDisabledForSite(siteConfig) || hasAdminLogs;
 
   // Resolve branding: tenant overrides site-level.
   const branding: Branding | null = siteConfig?.tenant?.branding ?? siteConfig?.branding ?? null;

@@ -62,10 +62,16 @@ func Search(ctx context.Context, db database.Store, compiled Compiled, opts Sear
 				guildName pgtype.Text
 			)
 			var clear pgtype.Int8
+			var invalidatedAt pgtype.Timestamptz
 			var cursorValue pgtype.Text
 			if err := rows.Scan(&r.ID, &slug, &r.Name, &r.RealmID, &r.RealmName, &r.GuildID, &guildName,
-				&r.DifficultyName, &r.MaxPlayers, &r.StartedAt, &r.PlayerCount, &r.BossesKilled, &clear, &cursorValue); err != nil {
+				&r.DifficultyName, &r.MaxPlayers, &r.StartedAt, &invalidatedAt, &r.InvalidReason,
+				&r.PlayerCount, &r.BossesKilled, &clear, &cursorValue); err != nil {
 				return xerrors.Errorf("scan: %w", err)
+			}
+			if invalidatedAt.Valid {
+				t := invalidatedAt.Time
+				r.InvalidatedAt = &t
 			}
 			if clear.Valid {
 				r.ClearTimeMS = &clear.Int64

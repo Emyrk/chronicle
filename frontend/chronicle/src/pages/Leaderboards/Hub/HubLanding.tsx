@@ -264,13 +264,14 @@ function HubLanding({
             item.instance_name === row.instance_name && item.difficulty_name === row.difficulty_name && item.max_players === row.max_players)
           const cohort = { difficulty: row.difficulty_name, maxPlayers: row.max_players }
           const renown = tab === "overview" ? awardsForCohort(renownAwards?.get(row.instance_name), row.difficulty_name, row.max_players) : undefined
+          const snapshotAge = tab === "statistics" ? snapshot?.statistics_refreshed_at : snapshot?.refreshed_at
           const showSnapshotAge = !landingBlocked
             && landingSnapshots !== undefined
             && tab !== "parsing"
-            && snapshot?.refreshed_at
-            && snapshot.status !== "not_prepared"
-            && snapshot.status !== "rebuilding"
-            && !(snapshot.status === "stale" && !preview)
+            && snapshotAge
+            && snapshot?.status !== "not_prepared"
+            && snapshot?.status !== "rebuilding"
+            && !(snapshot?.status === "stale" && !preview)
           return <div key={`${row.instance_name}|${row.difficulty_name}|${row.max_players}`} onClickCapture={instanceHref ? undefined : (e) => {
             e.preventDefault()
             onOpen(row.instance_name, cohort)
@@ -294,10 +295,10 @@ function HubLanding({
                     </span>
                   )}
                 </div>
-                {showSnapshotAge && snapshot && (
-                  <time className="shrink-0 text-right" dateTime={snapshot.refreshed_at} title={snapshot.refreshed_at}>
-                    {snapshot.status === "stale" && "Stale · "}
-                    {formatSnapshotAge(snapshot.refreshed_at)}
+                {showSnapshotAge && snapshotAge && (
+                  <time className="shrink-0 text-right" dateTime={snapshotAge} title={snapshotAge}>
+                    {snapshot?.status === "stale" && "Stale · "}
+                    {formatSnapshotAge(snapshotAge)}
                   </time>
                 )}
               </div>

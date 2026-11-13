@@ -236,6 +236,7 @@ func (api *API) instancesByTimeRange(w http.ResponseWriter, r *http.Request, gro
 			DifficultyName:     row.DifficultyName,
 			MaxPlayers:         int(row.MaxPlayers),
 			DynamicDifficulty:  int(row.DynamicDifficulty),
+			MixedDifficulty:    row.MixedDifficulty,
 		}
 		if row.DuplicateGroupID.Valid {
 			inst.DuplicateGroupID = &row.DuplicateGroupID.UUID
@@ -318,6 +319,7 @@ func (api *API) writeRecentInstanceGroups(ctx context.Context, w http.ResponseWr
 			DifficultyName:     row.DifficultyName,
 			MaxPlayers:         int(row.MaxPlayers),
 			DynamicDifficulty:  int(row.DynamicDifficulty),
+			MixedDifficulty:    row.MixedDifficulty,
 			HasPositions:       row.HasPositions,
 		}
 		if row.DuplicateGroupID.Valid {

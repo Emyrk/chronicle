@@ -7,10 +7,12 @@ import {
   useAdminBulkReparseLogs,
   useAdminUsers,
   useAdminLogs,
+  useAdminLogTenants,
   useAdminInstanceNames,
   useAuthorizationCheck,
   type AdminLog,
   type AdminLogsSortField,
+  type AdminLogsValidity,
 } from "@/api/queries";
 import { FileText, Loader2, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, ArrowUpDown, ArrowUp, ArrowDown, X, Filter, RefreshCw, Trash2, Ban, Check } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
@@ -192,12 +194,18 @@ export function AdminLogsPage() {
   const [filterUserId, setFilterUserId] = useState<string>("");
   const [filterInstanceName, setFilterInstanceName] = useState<string>("");
   const [filterWithoutInstance, setFilterWithoutInstance] = useState(false);
+  const [filterTenantId, setFilterTenantId] = useState("");
+  const [filterValidity, setFilterValidity] = useState<AdminLogsValidity>("all");
+  const [filterCreatedFrom, setFilterCreatedFrom] = useState("");
+  const [filterCreatedTo, setFilterCreatedTo] = useState("");
   const [selectedLogIds, setSelectedLogIds] = useState<Set<string>>(new Set());
   const pageSize = 50;
 
   const { data: instanceNames } = useAdminInstanceNames();
+  const { data: tenants } = useAdminLogTenants();
+  const invalidDateRange = Boolean(filterCreatedFrom && filterCreatedTo && filterCreatedFrom > filterCreatedTo);
 
-  const { data, isLoading, error } = useAdminLogs({
+  const { data, isLoading, isFetching, error } = useAdminLogs({
     limit: pageSize,
     offset: page * pageSize,
     sortBy,
@@ -205,6 +213,12 @@ export function AdminLogsPage() {
     userId: filterUserId || undefined,
     instanceName: filterInstanceName || undefined,
     withoutInstance: filterWithoutInstance,
+    tenantId: filterTenantId || undefined,
+    validity: filterValidity,
+    createdFrom: filterCreatedFrom || undefined,
+    createdTo: filterCreatedTo || undefined,
+  }, {
+    enabled: !invalidDateRange,
   });
 
   const toggleSort = (field: AdminLogsSortField) => {
@@ -238,15 +252,25 @@ export function AdminLogsPage() {
     setPage(0);
   };
 
-  const clearFilters = () => {
+  const resetPageAndSelection = () => {
     setSelectedLogIds(new Set());
-    setFilterUserId("");
-    setFilterInstanceName("");
-    setFilterWithoutInstance(false);
     setPage(0);
   };
 
-  const hasActiveFilters = filterUserId || filterInstanceName || filterWithoutInstance;
+  const clearFilters = () => {
+    setFilterUserId("");
+    setFilterInstanceName("");
+    setFilterWithoutInstance(false);
+    setFilterTenantId("");
+    setFilterValidity("all");
+    setFilterCreatedFrom("");
+    setFilterCreatedTo("");
+    resetPageAndSelection();
+  };
+
+  const hasActiveFilters = Boolean(
+    filterUserId || filterInstanceName || filterWithoutInstance || filterTenantId || filterValidity !== "all" || filterCreatedFrom || filterCreatedTo,
+  );
   const totalPages = data ? Math.ceil(data.total_count / pageSize) : 0;
   const visibleLogIds = data?.logs.map((log) => log.id) ?? [];
   const selectedVisibleCount = visibleLogIds.filter((logId) => selectedLogIds.has(logId)).length;
@@ -433,6 +457,63 @@ export function AdminLogsPage() {
           ))}
         </select>
 
+        <select
+          value={filterTenantId}
+          onChange={(event) => {
+            setFilterTenantId(event.target.value);
+            resetPageAndSelection();
+          }}
+          className="h-8 px-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          aria-label="Tenant"
+        >
+          <option value="">All tenants</option>
+          {tenants?.map((tenant) => (
+            <option key={tenant.id} value={tenant.id}>
+              {tenant.name}
+            </option>
+          ))}
+        </select>
+
+        <select
+          value={filterValidity}
+          onChange={(event) => {
+            setFilterValidity(event.target.value as AdminLogsValidity);
+            resetPageAndSelection();
+          }}
+          className="h-8 px-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          aria-label="Validity"
+        >
+          <option value="all">All validity</option>
+          <option value="valid">Valid</option>
+          <option value="invalid">Invalid</option>
+        </select>
+
+        <label className="flex items-center gap-1 text-xs text-muted-foreground">
+          Uploaded from
+          <input
+            type="date"
+            value={filterCreatedFrom}
+            onChange={(event) => {
+              setFilterCreatedFrom(event.target.value);
+              resetPageAndSelection();
+            }}
+            className="h-8 rounded-md border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+        </label>
+
+        <label className="flex items-center gap-1 text-xs text-muted-foreground">
+          through
+          <input
+            type="date"
+            value={filterCreatedTo}
+            onChange={(event) => {
+              setFilterCreatedTo(event.target.value);
+              resetPageAndSelection();
+            }}
+            className="h-8 rounded-md border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+        </label>
+
         <Button
           variant={filterWithoutInstance ? "secondary" : "outline"}
           size="sm"
@@ -451,13 +532,18 @@ export function AdminLogsPage() {
         )}
 
         {data && (
-          <span className="text-xs text-muted-foreground ml-auto">
+          <span className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
+            {isFetching && !isLoading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             {data.total_count} {data.total_count === 1 ? "log" : "logs"}
           </span>
         )}
       </div>
 
-      {!isLoading && !error && data && data.logs.length > 0 && (
+      {invalidDateRange && (
+        <p className="text-sm text-destructive">The upload start date must be on or before the end date.</p>
+      )}
+
+      {!isLoading && !error && !invalidDateRange && data && data.logs.length > 0 && (
         <Card className="p-4">
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2">
@@ -567,7 +653,7 @@ export function AdminLogsPage() {
       )}
 
       {/* Error state */}
-      {error && !isLoading && (
+      {error && !isLoading && !invalidDateRange && (
         <Card className="p-6">
           <div className="flex flex-col items-center gap-4 text-center">
             <div>
@@ -579,7 +665,7 @@ export function AdminLogsPage() {
       )}
 
       {/* Empty state */}
-      {!isLoading && !error && (!data || data.logs.length === 0) && (
+      {!isLoading && !error && !invalidDateRange && (!data || data.logs.length === 0) && (
         <Card className="p-6">
           <div className="flex flex-col items-center gap-4 text-center">
             <FileText className="h-12 w-12 text-muted-foreground" />
@@ -596,7 +682,7 @@ export function AdminLogsPage() {
       )}
 
       {/* Logs list */}
-      {!isLoading && !error && data && data.logs.length > 0 && (
+      {!isLoading && !error && !invalidDateRange && data && data.logs.length > 0 && (
         <>
           <Card className="overflow-hidden divide-y divide-border/50">
             {data.logs.map((log) => (

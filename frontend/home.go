@@ -14,12 +14,14 @@ type HomeConfig struct {
 	Flavor                []string
 	ForeverLandingEnabled bool
 	UploadsDisabled       bool
+	RootUploadsDisabled   bool
 }
 
 type homeBootstrap struct {
-	ProductName     string `json:"productName"`
-	ForeverLanding  bool   `json:"foreverLanding"`
-	UploadsDisabled bool   `json:"uploadsDisabled"`
+	ProductName         string `json:"productName"`
+	ForeverLanding      bool   `json:"foreverLanding"`
+	UploadsDisabled     bool   `json:"uploadsDisabled"`
+	RootUploadsDisabled bool   `json:"rootUploadsDisabled"`
 }
 
 type homeManifest struct {
@@ -46,7 +48,10 @@ func (m *homeManifest) render(config *HomeConfig) (string, string) {
 	if m == nil || config == nil {
 		return "", ""
 	}
-	bootstrap := homeBootstrap{UploadsDisabled: config.UploadsDisabled}
+	bootstrap := homeBootstrap{
+		UploadsDisabled:     config.UploadsDisabled,
+		RootUploadsDisabled: config.RootUploadsDisabled,
+	}
 	for _, product := range m.Products {
 		if slices.Contains(config.Flavor, product[0]) {
 			bootstrap.ProductName = product[1]
@@ -58,7 +63,9 @@ func (m *homeManifest) render(config *HomeConfig) (string, string) {
 	if bootstrap.ProductName != "" {
 		key = "named"
 	}
-	if bootstrap.UploadsDisabled {
+	if bootstrap.RootUploadsDisabled {
+		key += "-root-closed"
+	} else if bootstrap.UploadsDisabled {
 		key += "-closed"
 	} else {
 		key += "-open"

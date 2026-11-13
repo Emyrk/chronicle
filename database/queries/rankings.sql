@@ -143,6 +143,10 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
         WHERE rr.run_id = COALESCE(li.duplicate_group_id, li.id)
     )
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
+        EXISTS (
+            SELECT 1 FROM log_instance_encounters invalid
+            WHERE invalid.instance_id = li.id AND invalid.invalidated_at IS NOT NULL
+        ) ASC,
         (SELECT COUNT(DISTINCT coverage.encounter_name)
          FROM encounter_dps_rankings coverage
          WHERE coverage.instance_id = li.id
@@ -237,6 +241,10 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
           WHERE rr.run_id = COALESCE(li.duplicate_group_id, li.id)
       )
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
+        EXISTS (
+            SELECT 1 FROM log_instance_encounters invalid
+            WHERE invalid.instance_id = li.id AND invalid.invalidated_at IS NOT NULL
+        ) ASC,
         -- Prefer the upload with the broadest boss-ranking coverage. The group
         -- anchor is the first upload, but it may be truncated before the final boss.
         (SELECT COUNT(DISTINCT coverage.encounter_name)
@@ -549,6 +557,10 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
           WHERE rr.run_id = COALESCE(li.duplicate_group_id, li.id)
       )
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
+        EXISTS (
+            SELECT 1 FROM log_instance_encounters invalid
+            WHERE invalid.instance_id = li.id AND invalid.invalidated_at IS NOT NULL
+        ) ASC,
         -- Prefer the upload with the broadest boss-ranking coverage. The group
         -- anchor is the first upload, but it may be truncated before the final boss.
         (SELECT COUNT(DISTINCT coverage.encounter_name)
@@ -1002,7 +1014,12 @@ WHERE
 WITH deduped AS (
     SELECT DISTINCT ON (lie.name, COALESCE(li.duplicate_group_id, li.id))
         lie.name AS encounter_name,
-        EXTRACT(EPOCH FROM (lie.end_time - lie.start_time))::double precision AS duration_secs
+        (CASE WHEN lie.name = 'Razorgore the Untamed'
+              AND lie.ranking_start_offset_ms >= 0
+              AND lie.ranking_end_offset_ms > lie.ranking_start_offset_ms
+            THEN (lie.ranking_end_offset_ms - lie.ranking_start_offset_ms) / 1000.0
+            ELSE EXTRACT(EPOCH FROM (lie.end_time - lie.start_time))
+        END)::double precision AS duration_secs
     FROM log_instance_encounters lie
     JOIN log_instances_resolved li ON li.id = lie.instance_id
 JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
@@ -1093,7 +1110,12 @@ WITH deduped AS (
         COALESCE(g.name, '')::text AS guild_name,
         COALESCE(li.guild_id::text, '')::text AS guild_id,
         wsr.name AS realm_name,
-        EXTRACT(EPOCH FROM (lie.end_time - lie.start_time))::double precision AS duration_secs,
+        (CASE WHEN lie.name = 'Razorgore the Untamed'
+              AND lie.ranking_start_offset_ms >= 0
+              AND lie.ranking_end_offset_ms > lie.ranking_start_offset_ms
+            THEN (lie.ranking_end_offset_ms - lie.ranking_start_offset_ms) / 1000.0
+            ELSE EXTRACT(EPOCH FROM (lie.end_time - lie.start_time))
+        END)::double precision AS duration_secs,
         lie.end_time AS killed_at
     FROM log_instance_encounters lie
     JOIN log_instances_resolved li ON li.id = lie.instance_id
@@ -1117,7 +1139,7 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
           ELSE true
       END
     ORDER BY lie.name, COALESCE(li.duplicate_group_id, li.id),
-             EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) ASC
+             duration_secs ASC
 )
 SELECT
     d.encounter_id,
@@ -1151,7 +1173,12 @@ WITH deduped AS (
         COALESCE(g.name, '')::text AS guild_name,
         COALESCE(li.guild_id::text, '')::text AS guild_id,
         wsr.name AS realm_name,
-        EXTRACT(EPOCH FROM (lie.end_time - lie.start_time))::double precision AS duration_secs,
+        (CASE WHEN lie.name = 'Razorgore the Untamed'
+              AND lie.ranking_start_offset_ms >= 0
+              AND lie.ranking_end_offset_ms > lie.ranking_start_offset_ms
+            THEN (lie.ranking_end_offset_ms - lie.ranking_start_offset_ms) / 1000.0
+            ELSE EXTRACT(EPOCH FROM (lie.end_time - lie.start_time))
+        END)::double precision AS duration_secs,
         lie.end_time AS killed_at
     FROM log_instance_encounters lie
     JOIN log_instances_resolved li ON li.id = lie.instance_id
@@ -1170,7 +1197,7 @@ WITH deduped AS (
       AND cardinality(@encounter_names::text[]) <= 64
       AND li.guild_id IS NOT NULL
     ORDER BY lie.name, COALESCE(li.duplicate_group_id, li.id),
-             EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) ASC
+             duration_secs ASC
 ), best_per_guild AS (
     SELECT DISTINCT ON (d.encounter_name, d.guild_id) d.*
     FROM deduped d

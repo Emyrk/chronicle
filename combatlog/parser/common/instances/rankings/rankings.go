@@ -89,6 +89,9 @@ const (
 type DamageTargets struct {
 	Mode     string   `json:"mode"`                // "boss-only" or "entries"
 	EntryIDs []uint32 `json:"entry_ids,omitempty"` // complete whitelist for entries mode
+	// PhaseKey selects an exact phase interval when used as a duration rule.
+	// It does not alter target matching; DamageByEncounter owns that selector.
+	PhaseKey string `json:"phase_key,omitempty"`
 }
 
 const (

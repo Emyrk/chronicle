@@ -26,6 +26,7 @@ import type {
   AdminLogsResponse as AdminLogsResponseGenerated,
   User as UserGenerated,
   AdminLog as AdminLogGenerated,
+  AdminLogTenant as AdminLogTenantGenerated,
   Session as SessionGenerated,
   AuthorizationRequest as AuthorizationRequestGenerated,
   AuthorizationResponse as AuthorizationResponseGenerated,
@@ -112,6 +113,7 @@ export type AdminUsersResponse = AdminUsersResponseGenerated;
 export type AdminLogsResponse = AdminLogsResponseGenerated;
 export type User = UserGenerated;
 export type AdminLog = AdminLogGenerated;
+export type AdminLogTenant = AdminLogTenantGenerated;
 export type Session = SessionGenerated;
 export type AuthorizationRequest = AuthorizationRequestGenerated;
 export type AuthorizationResponse = AuthorizationResponseGenerated;
@@ -1648,6 +1650,7 @@ export function useAdminActiveCustomPanels(
 }
 
 export type AdminLogsSortField = "date" | "user" | "size" | "instance";
+export type AdminLogsValidity = "all" | "valid" | "invalid";
 
 export interface AdminLogsParams {
   limit?: number;
@@ -1657,6 +1660,27 @@ export interface AdminLogsParams {
   userId?: string;
   instanceName?: string;
   withoutInstance?: boolean;
+  tenantId?: string;
+  validity?: AdminLogsValidity;
+  createdFrom?: string;
+  createdTo?: string;
+}
+
+export function adminLogsURL(params: AdminLogsParams = {}): string {
+  const searchParams = new URLSearchParams({
+    limit: String(params.limit ?? 50),
+    offset: String(params.offset ?? 0),
+    sort_by: params.sortBy ?? "date",
+    sort_order: params.sortOrder ?? "desc",
+  });
+  if (params.userId) searchParams.set("user_id", params.userId);
+  if (params.instanceName) searchParams.set("instance_name", params.instanceName);
+  if (params.withoutInstance) searchParams.set("without_instance", "true");
+  if (params.tenantId) searchParams.set("tenant_id", params.tenantId);
+  if (params.validity && params.validity !== "all") searchParams.set("validity", params.validity);
+  if (params.createdFrom) searchParams.set("created_from", params.createdFrom);
+  if (params.createdTo) searchParams.set("created_to", params.createdTo);
+  return `/api/v1/admin/logs?${searchParams}`;
 }
 
 export function useAdminLogs(
@@ -1671,25 +1695,46 @@ export function useAdminLogs(
     userId,
     instanceName,
     withoutInstance = false,
+    tenantId,
+    validity = "all",
+    createdFrom,
+    createdTo,
   } = params;
 
   return useQuery({
-    queryKey: ["admin", "logs", { limit, offset, sortBy, sortOrder, userId, instanceName, withoutInstance }],
+    queryKey: ["admin", "logs", { limit, offset, sortBy, sortOrder, userId, instanceName, withoutInstance, tenantId, validity, createdFrom, createdTo }],
     queryFn: async () => {
-      const searchParams = new URLSearchParams({
-        limit: String(limit),
-        offset: String(offset),
-        sort_by: sortBy,
-        sort_order: sortOrder,
-      });
-      if (userId) searchParams.set("user_id", userId);
-      if (instanceName) searchParams.set("instance_name", instanceName);
-      if (withoutInstance) searchParams.set("without_instance", "true");
-      const response = await fetch(`/api/v1/admin/logs?${searchParams}`);
+      const response = await fetch(adminLogsURL({
+        limit,
+        offset,
+        sortBy,
+        sortOrder,
+        userId,
+        instanceName,
+        withoutInstance,
+        tenantId,
+        validity,
+        createdFrom,
+        createdTo,
+      }));
       if (!response.ok) throw new Error("Failed to fetch logs");
       return response.json() as Promise<AdminLogsResponse>;
     },
     retry: false,
+    placeholderData: keepPreviousData,
+    ...options,
+  });
+}
+
+export function useAdminLogTenants(options?: Omit<UseQueryOptions<AdminLogTenant[]>, "queryKey" | "queryFn">) {
+  return useQuery({
+    queryKey: ["admin", "logs", "tenants"],
+    queryFn: async () => {
+      const response = await fetch("/api/v1/admin/logs/tenants");
+      if (!response.ok) throw new Error("Failed to fetch log tenants");
+      return response.json() as Promise<AdminLogTenant[]>;
+    },
+    staleTime: 5 * 60 * 1000,
     ...options,
   });
 }
@@ -1925,7 +1970,7 @@ export function useAdminOutdatedInstances(instanceName?: string, parserVersion?:
     },
   });
 }
-export { useSiteConfig } from "./siteConfigQuery";
+export { rootUploadsDisabledForSite, uploadsDisabledForSite, useSiteConfig } from "./siteConfigQuery";
 
 // useDiscoverableServers lists every discoverable Chronicle server, even from a tenant subdomain.
 export function useDiscoverableServers(enabled = true) {

@@ -7,7 +7,7 @@ import { LogIn, Loader2, Upload as UploadIcon, HardDrive, HelpCircle } from "luc
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
-import { useAuthorizationCheck, useLogGroups, useSiteConfig, type WoWLogGroup } from "@/api/queries";
+import { uploadsDisabledForSite, useAuthorizationCheck, useLogGroups, useSiteConfig, type WoWLogGroup } from "@/api/queries";
 import { LogsCalendar } from "./components/LogsCalendar";
 import { CalendarDayContent } from "./components/CalendarDayContent";
 import { UploadsTable, type SortField, type SortDirection } from "./components/UploadsTable";
@@ -97,7 +97,7 @@ export function LogsListView({
     enabled: isAuthenticated,
   });
   const hasAdminLogs = authz?.adminLogs ?? false;
-  const showUpload = !siteConfig?.client_uploads_disabled || hasAdminLogs;
+  const showUpload = !uploadsDisabledForSite(siteConfig) || hasAdminLogs;
   
   // Table sort state
   const [sortField, setSortField] = useState<SortField>("date");

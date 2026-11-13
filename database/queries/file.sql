@@ -228,147 +228,28 @@ ORDER BY
 SELECT
   sqlc.embed(wow_log_groups),
   u.username AS owner_name,
-  files_agg.files,
   files_agg.total_size_bytes,
-  instances_output.output AS processing_output,
+  EXISTS (
+    SELECT 1
+    FROM parsed_log_group plg
+    WHERE plg.id = wow_log_groups.id
+      AND plg.parse_generation = wow_log_groups.parse_generation
+      AND plg.finalized_at IS NOT NULL
+  ) AS processed,
   instances_agg.instance_names,
   instances_agg.first_instance_name,
   tenants_agg.tenant_names
-FROM
-  wow_log_groups
-    LEFT JOIN users u ON u.id = wow_log_groups.owner
-    -- Files aggregate with total size
-    LEFT JOIN LATERAL (
-      SELECT
-        COALESCE(
-          jsonb_agg(
-            jsonb_build_object(
-              'id', lf.id,
-              'owner', lf.owner,
-              'wow_log_id', lf.wow_log_id,
-              'hash', lf.hash,
-              'size_bytes', lf.size_bytes,
-              'mime_type', lf.mime_type,
-              'compressed_size_bytes', lf.compressed_size_bytes,
-              'content_encoding', lf.content_encoding,
-              'created_at', lf.created_at,
-              'updated_at', lf.updated_at
-            )
-            ORDER BY lf.created_at
-          ) FILTER (WHERE lf.id IS NOT NULL),
-          '[]'::jsonb
-        )::wow_log_group_files AS files,
-        COALESCE(SUM(lf.size_bytes), 0) AS total_size_bytes
-      FROM log_file lf
-      WHERE lf.wow_log_id = wow_log_groups.id
-    ) files_agg ON true
-
-    LEFT JOIN parsed_log_group plg ON plg.id = wow_log_groups.id
-      AND plg.parse_generation = wow_log_groups.parse_generation
-      AND plg.finalized_at IS NOT NULL
-
-    -- Instances from DB tables
-    LEFT JOIN LATERAL (
-      SELECT jsonb_build_object(
-          'complete', CASE WHEN plg.id IS NOT NULL THEN to_jsonb(wow_log_groups.updated_at) ELSE NULL END,
-          'instances', COALESCE((
-              SELECT jsonb_agg(inst_data)
-              FROM (
-                  SELECT jsonb_build_object(
-                      'id', li.id,
-                      'name', li.name,
-                      'slug', li.hashed_slug,
-                      'realm_id', li.realm_id,
-                      'log_group_id', li.log_group_id,
-                      'encounters', COALESCE((
-                          SELECT jsonb_agg(jsonb_build_object(
-                              'id', e.id,
-                              'instance_id', e.instance_id,
-                            'boss', e.boss,
-                            'name', e.name,
-                            'kill_type', e.kill_type,
-                            'remaining', e.remaining,
-                              'start_time', e.start_time,
-                              'end_time', e.end_time
-                          ) ORDER BY e.start_time)
-                          FROM log_instance_encounters e
-                          WHERE e.instance_id = li.id
-                      ), '[]'::jsonb)
-                  ) AS inst_data
-                  FROM log_instances li
-                  WHERE li.log_group_id = wow_log_groups.id
-                  ORDER BY li.name
-              ) sub
-          ), '[]'::jsonb)
-      ) AS output
-    ) instances_output ON true
-    -- Instance names aggregate
-    LEFT JOIN LATERAL (
-      SELECT
-        COALESCE(array_agg(inst_names.name ORDER BY inst_names.name), ARRAY[]::text[]) AS instance_names,
-        MIN(inst_names.name) AS first_instance_name
-      FROM (
-        SELECT DISTINCT li.name
-        FROM log_instances li
-        WHERE li.log_group_id = wow_log_groups.id
-          AND btrim(li.name) <> ''
-
-        UNION
-
-        SELECT sm.instance_name AS name
-        FROM server_upload_meta sm
-        WHERE sm.log_group_id = wow_log_groups.id
-          AND btrim(sm.instance_name) <> ''
-          AND NOT EXISTS (
-            SELECT 1
-            FROM log_instances li
-            WHERE li.log_group_id = wow_log_groups.id
-              AND btrim(li.name) <> ''
-          )
-      ) inst_names
-    ) instances_agg ON true
-    -- Tenants resolved from parsed instance realms, or server upload realms
-    LEFT JOIN LATERAL (
-      SELECT
-        COALESCE(array_agg(DISTINCT t.name ORDER BY t.name), ARRAY[]::text[]) AS tenant_names
-      FROM (
-        SELECT li.realm_id FROM log_instances li WHERE li.log_group_id = wow_log_groups.id
-        UNION
-        SELECT sm.realm_id FROM server_upload_meta sm WHERE sm.log_group_id = wow_log_groups.id AND sm.realm_id IS NOT NULL
-      ) realms
-      JOIN wow_server_realms wsr ON wsr.id = realms.realm_id
-      JOIN wow_servers ws ON ws.id = wsr.server_id
-      JOIN tenants t ON t.id = ws.tenant_id
-    ) tenants_agg ON true
-WHERE
-  -- Filter by user ID (skip if nil UUID)
-  CASE WHEN @filter_user_id::uuid != '00000000-0000-0000-0000-000000000000'::uuid
-       THEN wow_log_groups.owner = @filter_user_id
-       ELSE true END
-  AND
-  -- Filter to logs without an instance, or by instance name when provided
-  CASE WHEN @filter_without_instance::boolean
-       THEN cardinality(instances_agg.instance_names) = 0
-       WHEN @filter_instance_name::text != ''
-       THEN @filter_instance_name = ANY(instances_agg.instance_names)
-       ELSE true END
-ORDER BY
-  CASE WHEN @sort_by::text = 'date' AND @sort_order::text = 'desc' THEN wow_log_groups.created_at END DESC,
-  CASE WHEN @sort_by::text = 'date' AND @sort_order::text = 'asc' THEN wow_log_groups.created_at END ASC,
-  CASE WHEN @sort_by::text = 'user' AND @sort_order::text = 'desc' THEN u.username END DESC NULLS LAST,
-  CASE WHEN @sort_by::text = 'user' AND @sort_order::text = 'asc' THEN u.username END ASC NULLS LAST,
-  CASE WHEN @sort_by::text = 'size' AND @sort_order::text = 'desc' THEN files_agg.total_size_bytes END DESC,
-  CASE WHEN @sort_by::text = 'size' AND @sort_order::text = 'asc' THEN files_agg.total_size_bytes END ASC,
-  CASE WHEN @sort_by::text = 'instance' AND @sort_order::text = 'desc' THEN instances_agg.first_instance_name END DESC NULLS LAST,
-  CASE WHEN @sort_by::text = 'instance' AND @sort_order::text = 'asc' THEN instances_agg.first_instance_name END ASC NULLS LAST,
-  wow_log_groups.id
-LIMIT @limit_count
-OFFSET @offset_count;
-
--- name: CountAllWoWLogGroups :one
-SELECT COUNT(*)::int FROM wow_log_groups
+FROM wow_log_groups
+LEFT JOIN users u ON u.id = wow_log_groups.owner
 LEFT JOIN LATERAL (
-  SELECT COALESCE(array_agg(inst_names.name ORDER BY inst_names.name), ARRAY[]::text[]) AS instance_names
+  SELECT COALESCE(SUM(lf.size_bytes), 0)::bigint AS total_size_bytes
+  FROM log_file lf
+  WHERE lf.wow_log_id = wow_log_groups.id
+) files_agg ON true
+LEFT JOIN LATERAL (
+  SELECT
+    COALESCE(array_agg(inst_names.name ORDER BY inst_names.name), ARRAY[]::text[]) AS instance_names,
+    MIN(inst_names.name) AS first_instance_name
   FROM (
     SELECT DISTINCT li.name
     FROM log_instances li
@@ -389,16 +270,135 @@ LEFT JOIN LATERAL (
       )
   ) inst_names
 ) instances_agg ON true
+LEFT JOIN LATERAL (
+  SELECT COALESCE(array_agg(DISTINCT t.name ORDER BY t.name), ARRAY[]::text[]) AS tenant_names
+  FROM (
+    SELECT li.realm_id FROM log_instances li WHERE li.log_group_id = wow_log_groups.id
+    UNION
+    SELECT sm.realm_id FROM server_upload_meta sm WHERE sm.log_group_id = wow_log_groups.id AND sm.realm_id IS NOT NULL
+  ) realms
+  JOIN wow_server_realms wsr ON wsr.id = realms.realm_id
+  JOIN wow_servers ws ON ws.id = wsr.server_id
+  JOIN tenants t ON t.id = ws.tenant_id
+) tenants_agg ON true
 WHERE
-  CASE WHEN @filter_user_id::uuid != '00000000-0000-0000-0000-000000000000'::uuid
-       THEN wow_log_groups.owner = @filter_user_id
-       ELSE true END
-  AND
-  CASE WHEN @filter_without_instance::boolean
-       THEN cardinality(instances_agg.instance_names) = 0
-       WHEN @filter_instance_name::text != ''
-       THEN @filter_instance_name = ANY(instances_agg.instance_names)
-       ELSE true END;
+  (@filter_user_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR wow_log_groups.owner = @filter_user_id)
+  AND (
+    NOT @filter_without_instance::boolean
+    OR NOT EXISTS (
+      SELECT 1 FROM log_instances li
+      WHERE li.log_group_id = wow_log_groups.id AND btrim(li.name) <> ''
+    ) AND NOT EXISTS (
+      SELECT 1 FROM server_upload_meta sm
+      WHERE sm.log_group_id = wow_log_groups.id AND btrim(sm.instance_name) <> ''
+    )
+  )
+  AND (
+    @filter_instance_name::text = ''
+    OR EXISTS (
+      SELECT 1 FROM log_instances li
+      WHERE li.log_group_id = wow_log_groups.id AND li.name = @filter_instance_name
+    )
+    OR (
+      NOT EXISTS (
+        SELECT 1 FROM log_instances li
+        WHERE li.log_group_id = wow_log_groups.id AND btrim(li.name) <> ''
+      )
+      AND EXISTS (
+        SELECT 1 FROM server_upload_meta sm
+        WHERE sm.log_group_id = wow_log_groups.id AND sm.instance_name = @filter_instance_name
+      )
+    )
+  )
+  AND (
+    @filter_tenant_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+    OR EXISTS (
+      SELECT 1
+      FROM (
+        SELECT li.realm_id FROM log_instances li WHERE li.log_group_id = wow_log_groups.id
+        UNION
+        SELECT sm.realm_id FROM server_upload_meta sm WHERE sm.log_group_id = wow_log_groups.id AND sm.realm_id IS NOT NULL
+      ) realms
+      JOIN wow_server_realms wsr ON wsr.id = realms.realm_id
+      JOIN wow_servers ws ON ws.id = wsr.server_id
+      WHERE ws.tenant_id = @filter_tenant_id
+    )
+  )
+  AND (
+    @filter_validity::text = ''
+    OR @filter_validity::text = 'all'
+    OR (@filter_validity::text = 'valid' AND wow_log_groups.invalidated_at IS NULL)
+    OR (@filter_validity::text = 'invalid' AND wow_log_groups.invalidated_at IS NOT NULL)
+  )
+  AND (sqlc.narg('created_from')::timestamptz IS NULL OR wow_log_groups.created_at >= sqlc.narg('created_from'))
+  AND (sqlc.narg('created_before')::timestamptz IS NULL OR wow_log_groups.created_at < sqlc.narg('created_before'))
+ORDER BY
+  CASE WHEN @sort_by::text = 'date' AND @sort_order::text = 'desc' THEN wow_log_groups.created_at END DESC,
+  CASE WHEN @sort_by::text = 'date' AND @sort_order::text = 'asc' THEN wow_log_groups.created_at END ASC,
+  CASE WHEN @sort_by::text = 'user' AND @sort_order::text = 'desc' THEN u.username END DESC NULLS LAST,
+  CASE WHEN @sort_by::text = 'user' AND @sort_order::text = 'asc' THEN u.username END ASC NULLS LAST,
+  CASE WHEN @sort_by::text = 'size' AND @sort_order::text = 'desc' THEN files_agg.total_size_bytes END DESC,
+  CASE WHEN @sort_by::text = 'size' AND @sort_order::text = 'asc' THEN files_agg.total_size_bytes END ASC,
+  CASE WHEN @sort_by::text = 'instance' AND @sort_order::text = 'desc' THEN instances_agg.first_instance_name END DESC NULLS LAST,
+  CASE WHEN @sort_by::text = 'instance' AND @sort_order::text = 'asc' THEN instances_agg.first_instance_name END ASC NULLS LAST,
+  wow_log_groups.id
+LIMIT @limit_count
+OFFSET @offset_count;
+
+-- name: CountAllWoWLogGroups :one
+SELECT COUNT(*)::int
+FROM wow_log_groups
+WHERE
+  (@filter_user_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR wow_log_groups.owner = @filter_user_id)
+  AND (
+    NOT @filter_without_instance::boolean
+    OR NOT EXISTS (
+      SELECT 1 FROM log_instances li
+      WHERE li.log_group_id = wow_log_groups.id AND btrim(li.name) <> ''
+    ) AND NOT EXISTS (
+      SELECT 1 FROM server_upload_meta sm
+      WHERE sm.log_group_id = wow_log_groups.id AND btrim(sm.instance_name) <> ''
+    )
+  )
+  AND (
+    @filter_instance_name::text = ''
+    OR EXISTS (
+      SELECT 1 FROM log_instances li
+      WHERE li.log_group_id = wow_log_groups.id AND li.name = @filter_instance_name
+    )
+    OR (
+      NOT EXISTS (
+        SELECT 1 FROM log_instances li
+        WHERE li.log_group_id = wow_log_groups.id AND btrim(li.name) <> ''
+      )
+      AND EXISTS (
+        SELECT 1 FROM server_upload_meta sm
+        WHERE sm.log_group_id = wow_log_groups.id AND sm.instance_name = @filter_instance_name
+      )
+    )
+  )
+  AND (
+    @filter_tenant_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+    OR EXISTS (
+      SELECT 1
+      FROM (
+        SELECT li.realm_id FROM log_instances li WHERE li.log_group_id = wow_log_groups.id
+        UNION
+        SELECT sm.realm_id FROM server_upload_meta sm WHERE sm.log_group_id = wow_log_groups.id AND sm.realm_id IS NOT NULL
+      ) realms
+      JOIN wow_server_realms wsr ON wsr.id = realms.realm_id
+      JOIN wow_servers ws ON ws.id = wsr.server_id
+      WHERE ws.tenant_id = @filter_tenant_id
+    )
+  )
+  AND (
+    @filter_validity::text = ''
+    OR @filter_validity::text = 'all'
+    OR (@filter_validity::text = 'valid' AND wow_log_groups.invalidated_at IS NULL)
+    OR (@filter_validity::text = 'invalid' AND wow_log_groups.invalidated_at IS NOT NULL)
+  )
+  AND (sqlc.narg('created_from')::timestamptz IS NULL OR wow_log_groups.created_at >= sqlc.narg('created_from'))
+  AND (sqlc.narg('created_before')::timestamptz IS NULL OR wow_log_groups.created_at < sqlc.narg('created_before'));
 
 -- name: InvalidateWoWLogGroup :exec
 WITH invalidated_instances AS (
