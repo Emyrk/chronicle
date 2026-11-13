@@ -65,6 +65,15 @@ func evaluateRazorgoreNumeric(e razorgoreEvidence, p *RazorgoreRepairPlan) error
 	if len(phases) != 2 || phases[0].EncounterID != c.ID || phases[1].EncounterID != c.ID || phases[0].Key != "razorgore_p1" || phases[1].Key != "razorgore_p2" || phases[0].PhaseOrder != 0 || phases[1].PhaseOrder != 1 || phases[0].StartOffsetMs != 0 || phases[0].EndOffsetMs != phases[1].StartOffsetMs || phases[1].EndOffsetMs != duration || phases[1].StartOffsetMs <= 0 || phases[1].StartOffsetMs >= duration || phases[0].KillType != database.KillTypeClean || phases[1].KillType != database.KillTypeClean {
 		return errors.New("numerical repair needs two complete contiguous clean persisted phases")
 	}
+	// A single addon pull with a saved classification timeline uses the same
+	// event-time attribution and explicit omission accounting as multi-pull logs.
+	if e.Group.Format.Valid && e.Group.Format.LogFormat == database.LogFormat112aCcAddon {
+		for _, row := range e.Events {
+			if row.Type == database.LogInstanceEventTypeUnitClassification {
+				return evaluateRazorgoreMulti(e, p)
+			}
+		}
+	}
 	window := &encounter.RankingWindow{Start: start.Add(time.Duration(phases[1].StartOffsetMs) * time.Millisecond), End: end}
 	var boss guid.GUID
 	for _, h := range e.Hostiles {

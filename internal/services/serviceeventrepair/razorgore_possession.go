@@ -2,13 +2,13 @@ package serviceeventrepair
 
 import (
 	"errors"
-	"fmt"
 	"math"
 	"time"
 
 	"github.com/Emyrk/chronicle/api/chronicleproto"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounter"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/combatmetrics"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/rankings"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
@@ -90,7 +90,7 @@ func razorgoreControlCasts(e razorgoreEvidence, c database.LogInstanceEncounter)
 // replayRazorgoreClassified is the numerical candidate boundary for a single
 // encounter. It does not change proof, source identities, or encounter outcomes.
 // Callers must validate the encounter/window and orchestrate the whole instance.
-func replayRazorgoreClassified(e razorgoreEvidence, c database.LogInstanceEncounter, window *encounter.RankingWindow, format database.LogFormat) (*rankings.DPSResult, *rankings.SurvivabilityResult, error) {
+func replayRazorgoreClassified(e razorgoreEvidence, c database.LogInstanceEncounter, window *encounter.RankingWindow, format database.LogFormat, reports ...*RazorgoreRepairPlan) (*rankings.DPSResult, *rankings.SurvivabilityResult, error) {
 	if format != database.LogFormat112aCcAddon {
 		return nil, nil, errors.New("classification possession replay requires addon duration semantics")
 	}
@@ -113,6 +113,10 @@ func replayRazorgoreClassified(e razorgoreEvidence, c database.LogInstanceEncoun
 	}
 	if !hasClassification {
 		return nil, nil, errors.New("missing classification timeline")
+	}
+	var report *RazorgoreRepairPlan
+	if len(reports) > 0 {
+		report = reports[0]
 	}
 	units := unitdb.New()
 	tracker := rankings.NewDPSTracker(units, nil, rankings.DamageRuleNone)
@@ -196,8 +200,9 @@ func replayRazorgoreClassified(e razorgoreEvidence, c database.LogInstanceEncoun
 					units.Info[m.Target] = unitinfo.Info{Guid: m.Target, Affiliation: unitdb.AffiliationHostile}
 				}
 			}
-			if !event.at.Before(window.Start) && m.Caster != nil && !m.Caster.IsPlayer() && !classified[*m.Caster] {
-				return nil, nil, errors.New("damage caster lacks prior classification")
+			if !event.at.Before(window.Start) && !m.Target.IsPlayer() && m.Caster != nil && !m.Caster.IsPlayer() && !classified[*m.Caster] {
+				recordRazorgoreOmission(report, c.ID, "damage", *m.Caster, combatmetrics.EffectiveDamage(m), "source ownership is not known at event time")
+				continue
 			}
 			// Unknown nonplayer targets may be pets. Without a classification there is
 			// no reliable player-owned exclusion, so do not silently assume hostile.
@@ -209,19 +214,40 @@ func replayRazorgoreClassified(e razorgoreEvidence, c database.LogInstanceEncoun
 						attributable = attributable || cls.Relation.HasOwner() || cls.Possession != nil
 					}
 					if attributable && !event.at.Before(window.Start) {
-						entry, _ := m.Target.GetEntry()
-						return nil, nil, fmt.Errorf("player-attributable damage target lacks classification or registry identity: entry %d event %d", entry, event.index)
+						recordRazorgoreOmission(report, c.ID, "damage", m.Target, combatmetrics.EffectiveDamage(m), "target ownership or hostility is not known at event time")
+						continue
 					}
 				}
 			}
 			damage = append(damage, m)
 		case *messages.Heal:
-			if !event.at.Before(window.Start) && ((!m.Caster.IsPlayer() && !classified[m.Caster]) || (!m.Target.IsPlayer() && !classified[m.Target])) {
-				return nil, nil, errors.New("healing unit lacks prior classification")
+			if m.Amount < 0 || m.Overheal < 0 {
+				return nil, nil, errors.New("invalid healing amount")
+			}
+			if !event.at.Before(window.Start) {
+				amount := max(int64(m.Amount)-int64(m.Overheal), 0)
+				if !m.Caster.IsPlayer() && !classified[m.Caster] {
+					recordRazorgoreOmission(report, c.ID, "heal", m.Caster, amount, "source ownership is not known at event time")
+					continue
+				}
+				if !m.Target.IsPlayer() && !classified[m.Target] {
+					recordRazorgoreOmission(report, c.ID, "heal", m.Target, amount, "target ownership is not known at event time")
+					continue
+				}
 			}
 		case *messages.Absorbed:
-			if !event.at.Before(window.Start) && ((!m.Caster.IsPlayer() && !classified[m.Caster]) || (!m.Target.IsPlayer() && !classified[m.Target])) {
-				return nil, nil, errors.New("absorb unit lacks prior classification")
+			if m.Amount < 0 {
+				return nil, nil, errors.New("invalid absorb amount")
+			}
+			if !event.at.Before(window.Start) {
+				if !m.Caster.IsPlayer() && !classified[m.Caster] {
+					recordRazorgoreOmission(report, c.ID, "absorbed", m.Caster, int64(m.Amount), "source ownership is not known at event time")
+					continue
+				}
+				if !m.Target.IsPlayer() && !classified[m.Target] {
+					recordRazorgoreOmission(report, c.ID, "absorbed", m.Target, int64(m.Amount), "target ownership is not known at event time")
+					continue
+				}
 			}
 		}
 		if err := tracker.ProcessMessage(true, c.ID, event.message); err != nil {

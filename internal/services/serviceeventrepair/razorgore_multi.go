@@ -111,7 +111,7 @@ func evaluateRazorgoreMulti(e razorgoreEvidence, p *RazorgoreRepairPlan) error {
 				return err
 			}
 			trueKills = append(trueKills, rankings.KillRecord{EntryID: 12435, GUID: boss, Timestamp: c.EndTime.Time})
-			stats, life, err := replayRazorgoreClassified(e, c, window, e.Group.Format.LogFormat)
+			stats, life, err := replayRazorgoreClassified(e, c, window, e.Group.Format.LogFormat, p)
 			if err != nil {
 				return fmt.Errorf("pull %s: %w", c.ID, err)
 			}
