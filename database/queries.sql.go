@@ -5716,6 +5716,49 @@ func (q *sqlQuerier) InsertEventRepairItem(ctx context.Context, arg InsertEventR
 	return i, err
 }
 
+const listAllEventRepairOperations = `-- name: ListAllEventRepairOperations :many
+SELECT id, operation, version, state, created_at, updated_at, created_by, tenant_id, selection, total, processed, applied, skipped, last_error, applied_by, cancelled_by, apply_requested_at, cancelled_at FROM event_repair_operations ORDER BY created_at DESC, id LIMIT 100
+`
+
+func (q *sqlQuerier) ListAllEventRepairOperations(ctx context.Context) ([]EventRepairOperation, error) {
+	rows, err := q.db.Query(ctx, listAllEventRepairOperations)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []EventRepairOperation
+	for rows.Next() {
+		var i EventRepairOperation
+		if err := rows.Scan(
+			&i.ID,
+			&i.Operation,
+			&i.Version,
+			&i.State,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.CreatedBy,
+			&i.TenantID,
+			&i.Selection,
+			&i.Total,
+			&i.Processed,
+			&i.Applied,
+			&i.Skipped,
+			&i.LastError,
+			&i.AppliedBy,
+			&i.CancelledBy,
+			&i.ApplyRequestedAt,
+			&i.CancelledAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEventRepairItems = `-- name: ListEventRepairItems :many
 SELECT i.operation_id, i.instance_id, i.state, i.reason, i.evidence_hash, i.changes, i.plan FROM event_repair_items i JOIN event_repair_operations o ON o.id = i.operation_id
 WHERE i.operation_id = $1 AND o.tenant_id = $2
@@ -5994,6 +6037,36 @@ func (q *sqlQuerier) LockEventRepairOperation(ctx context.Context, arg LockEvent
 	return i, err
 }
 
+const lookupEventRepairOperation = `-- name: LookupEventRepairOperation :one
+SELECT id, operation, version, state, created_at, updated_at, created_by, tenant_id, selection, total, processed, applied, skipped, last_error, applied_by, cancelled_by, apply_requested_at, cancelled_at FROM event_repair_operations WHERE id = $1
+`
+
+func (q *sqlQuerier) LookupEventRepairOperation(ctx context.Context, id uuid.UUID) (EventRepairOperation, error) {
+	row := q.db.QueryRow(ctx, lookupEventRepairOperation, id)
+	var i EventRepairOperation
+	err := row.Scan(
+		&i.ID,
+		&i.Operation,
+		&i.Version,
+		&i.State,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CreatedBy,
+		&i.TenantID,
+		&i.Selection,
+		&i.Total,
+		&i.Processed,
+		&i.Applied,
+		&i.Skipped,
+		&i.LastError,
+		&i.AppliedBy,
+		&i.CancelledBy,
+		&i.ApplyRequestedAt,
+		&i.CancelledAt,
+	)
+	return i, err
+}
+
 const refreshEventRepairProgress = `-- name: RefreshEventRepairProgress :one
 UPDATE event_repair_operations o
 SET total = counts.total, processed = counts.processed,
@@ -6136,6 +6209,33 @@ func (q *sqlQuerier) ResolveEventRepairInstance(ctx context.Context, arg Resolve
 		&i.MixedDifficulty,
 		&i.DifficultyNormalized,
 	)
+	return i, err
+}
+
+const resolveEventRepairTarget = `-- name: ResolveEventRepairTarget :one
+SELECT i.id AS instance_id, s.tenant_id FROM log_instances i
+JOIN wow_server_realms r ON r.id = i.realm_id
+JOIN wow_servers s ON s.id = r.server_id
+WHERE ($1::uuid IS NULL OR s.tenant_id = $1)
+  AND (i.id::text = $2::text OR i.hashed_slug = $2::text)
+  AND s.tenant_id IS NOT NULL
+ORDER BY (i.id::text = $2::text) DESC, i.id LIMIT 1
+`
+
+type ResolveEventRepairTargetParams struct {
+	TenantID  uuid.NullUUID `db:"tenant_id" json:"tenant_id"`
+	Reference string        `db:"reference" json:"reference"`
+}
+
+type ResolveEventRepairTargetRow struct {
+	InstanceID uuid.UUID     `db:"instance_id" json:"instance_id"`
+	TenantID   uuid.NullUUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) ResolveEventRepairTarget(ctx context.Context, arg ResolveEventRepairTargetParams) (ResolveEventRepairTargetRow, error) {
+	row := q.db.QueryRow(ctx, resolveEventRepairTarget, arg.TenantID, arg.Reference)
+	var i ResolveEventRepairTargetRow
+	err := row.Scan(&i.InstanceID, &i.TenantID)
 	return i, err
 }
 

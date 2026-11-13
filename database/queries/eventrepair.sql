@@ -131,3 +131,18 @@ UPDATE event_repair_operations
 SET state = @state, last_error = @last_error, updated_at = now()
 WHERE id = @id AND tenant_id = @tenant_id
 RETURNING *;
+
+-- name: LookupEventRepairOperation :one
+SELECT * FROM event_repair_operations WHERE id = @id;
+
+-- name: ListAllEventRepairOperations :many
+SELECT * FROM event_repair_operations ORDER BY created_at DESC, id LIMIT 100;
+
+-- name: ResolveEventRepairTarget :one
+SELECT i.id AS instance_id, s.tenant_id FROM log_instances i
+JOIN wow_server_realms r ON r.id = i.realm_id
+JOIN wow_servers s ON s.id = r.server_id
+WHERE (sqlc.narg('tenant_id')::uuid IS NULL OR s.tenant_id = sqlc.narg('tenant_id'))
+  AND (i.id::text = @reference::text OR i.hashed_slug = @reference::text)
+  AND s.tenant_id IS NOT NULL
+ORDER BY (i.id::text = @reference::text) DESC, i.id LIMIT 1;

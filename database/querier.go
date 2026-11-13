@@ -822,6 +822,7 @@ type sqlcQuerier interface {
 	ListAdminProofRequests(ctx context.Context, tenantID uuid.UUID) ([]ProofRequest, error)
 	ListAffectedAuraDurationCandidates(ctx context.Context, datasetID uuid.UUID) ([]ListAffectedAuraDurationCandidatesRow, error)
 	ListAffectedAuraDurationsByDataset(ctx context.Context, datasetID uuid.UUID) ([]ListAffectedAuraDurationsByDatasetRow, error)
+	ListAllEventRepairOperations(ctx context.Context) ([]EventRepairOperation, error)
 	ListAllProofEvidenceCleanup(ctx context.Context) ([]ProofRequest, error)
 	// Root-domain site admins only: caller must use AdminBypass to include tenants
 	// excluded by root-domain RLS.
@@ -1105,6 +1106,7 @@ type sqlcQuerier interface {
 	LockUserStorageQuota(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	LockUsersForUpdate(ctx context.Context, ids []uuid.UUID) ([]uuid.UUID, error)
 	LockWoWLogGroupParseGeneration(ctx context.Context, id uuid.UUID) (int64, error)
+	LookupEventRepairOperation(ctx context.Context, id uuid.UUID) (EventRepairOperation, error)
 	// Authorized admin lookup only; RLS still applies.
 	LookupLeaderboardOperation(ctx context.Context, id uuid.UUID) (LeaderboardOperation, error)
 	MarkBillingWebhookEventProcessed(ctx context.Context, stripeEventID string) error
@@ -1287,6 +1289,7 @@ type sqlcQuerier interface {
 	ResolveDatasetWithFlavorByRealm(ctx context.Context, id uuid.UUID) (ResolveDatasetWithFlavorByRealmRow, error)
 	// The service normalizes URLs to their last path segment before this lookup.
 	ResolveEventRepairInstance(ctx context.Context, arg ResolveEventRepairInstanceParams) (LogInstance, error)
+	ResolveEventRepairTarget(ctx context.Context, arg ResolveEventRepairTargetParams) (ResolveEventRepairTargetRow, error)
 	ResolveExternalAPIRealm(ctx context.Context, arg ResolveExternalAPIRealmParams) (ResolveExternalAPIRealmRow, error)
 	ResolveExternalAPIServer(ctx context.Context, server string) (ResolveExternalAPIServerRow, error)
 	// Strict set inclusion, not tag count, determines precedence independently for
