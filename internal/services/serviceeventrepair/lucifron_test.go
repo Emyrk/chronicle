@@ -31,6 +31,8 @@ func fixtureLucifron(t *testing.T) razorgoreEvidence {
 	e.Encounters[0].Name = "Lucifron"
 	e.Phases = nil
 	e.Hostiles = nil
+	e.Rankings[0].EncounterName = "Lucifron"
+	e.Rankings[0].InstanceName = "Molten Core"
 	e.Rankings[0].PlayerGuid = lucifronTestPlayer
 	e.Rankings[0].PlayerName = "Warrior"
 	e.Rankings[0].DurationSecs = 60
@@ -48,10 +50,10 @@ func fixtureLucifron(t *testing.T) razorgoreEvidence {
 
 func TestLucifronVersions(t *testing.T) {
 	t.Parallel()
-	for _, v := range []string{"v1.0.172", "1.0.172", "v1.0.99", "v0.99.999"} {
+	for _, v := range []string{"v1.0.172", "1.0.172", "v1.0.99", "v0.99.999", "v1.0.172+abcdef", "v1.0.99+abc.def"} {
 		require.True(t, lucifronVersionEligible(v), v)
 	}
-	for _, v := range []string{"", "unknown", "v1.0.173", "v1.0.174", "v1.1.0", "v2.0.0", "v1.0.173-rc.1", "v1.0.172-5-gabc", "v1.0.172-dirty", "v1.0.172+abc", "v1.0", " v1.0.172", "v1.00.172"} {
+	for _, v := range []string{"", "unknown", "v1.0.173", "v1.0.174", "v1.0.173+abcdef", "v1.1.0", "v2.0.0", "v1.0.173-rc.1", "v1.0.172-5-gabc", "v1.0.172-dirty", "v1.0", " v1.0.172", "v1.00.172"} {
 		require.False(t, lucifronVersionEligible(v), v)
 	}
 }
@@ -154,15 +156,19 @@ func TestLucifronMalformedEvents(t *testing.T) {
 
 func TestLucifronPetOwnershipAndControl(t *testing.T) {
 	t.Parallel()
-	for _, kind := range []string{"terminal owner", "early owner", "unknown owner", "control"} {
+	for _, kind := range []string{"terminal owner", "terminal totem", "early owner", "unknown owner", "control"} {
 		t.Run(kind, func(t *testing.T) {
 			t.Parallel()
 			e := fixtureLucifron(t)
-			e.Events[0].Events = numericFrame(t, e, lucifronDamage(1, lucifronTestPet, lucifronTestBoss, 200))
+			petGUID := lucifronTestPet
+			if kind == "terminal totem" {
+				petGUID = "0xF1300009DB000001"
+			}
+			e.Events[0].Events = numericFrame(t, e, lucifronDamage(1, petGUID, lucifronTestBoss, 200))
 			owner := lucifronTestPlayer
-			pet, err := guid.FromString(lucifronTestPet)
+			pet, err := guid.FromString(petGUID)
 			require.NoError(t, err)
-			snapshot := &chronicleproto.UnitClassification{Meta: &chronicleproto.EventMeta{Index: 2, OffsetMilli: 60000}, Target: lucifronTestPet, UnitType: int32(unitdb.UnitTypeFromGUID(pet)), Owner: &owner}
+			snapshot := &chronicleproto.UnitClassification{Meta: &chronicleproto.EventMeta{Index: 2, OffsetMilli: 60000}, Target: petGUID, UnitType: int32(unitdb.UnitTypeFromGUID(pet)), Owner: &owner}
 			switch kind {
 			case "early owner":
 				snapshot.Meta.OffsetMilli = 59000
@@ -174,7 +180,7 @@ func TestLucifronPetOwnershipAndControl(t *testing.T) {
 			e.Events = append(e.Events, database.LogInstanceEvent{InstanceID: e.Instance.ID, Type: database.LogInstanceEventTypeUnitClassification, Events: numericFrame(t, e, snapshot)})
 			p, err := evaluateLucifronEvidence(e)
 			require.NoError(t, err)
-			if kind == "terminal owner" {
+			if kind == "terminal owner" || kind == "terminal totem" {
 				require.False(t, p.RequiresReparse, p.Reason)
 				require.EqualValues(t, 200, p.lucifron.Metrics[0].DamageDone)
 			} else {
@@ -334,4 +340,72 @@ func TestRepairApplyRejectsOtherScriptsSealedPlan(t *testing.T) {
 	require.NoError(t, validateRazorgorePlan(razorgorePlan))
 	require.Error(t, ApplyLucifron(ctx, lucifron, razorgorePlan))
 	require.Empty(t, lucifron.updates)
+}
+
+func TestLucifronPersistedVersionMetadata(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		exact, tag string
+		want       bool
+	}{
+		{"v1.0.172+abcdef", "v1.0.172", true},
+		{"v1.0.173+abcdef", "v1.0.173", false},
+		{"v1.0.99+abcdef", "v1.0.99", true},
+		{"0.0", "v1.0.172", true},
+		{"", "v1.0.172", true},
+		{"v1.0.172+abcdef", "v1.0.173", false},
+		{"v1.0.172+abcdef", "unknown", false},
+		{"unknown+abcdef", "v1.0.172", false},
+		{"v1.0.172-4-gabcdef", "v1.0.172", false},
+		{"v1.0.173-rc.1+abcdef", "v1.0.173-rc.1", false},
+	} {
+		e := fixtureLucifron(t)
+		e.Instance.ParserVersion = tc.exact
+		e.Instance.Versions = database.VersionsMap{"chronicle": tc.tag}
+		p, err := evaluateLucifronEvidence(e)
+		require.NoError(t, err)
+		require.Equal(t, !tc.want, p.RequiresReparse, "exact=%q tag=%q: %s", tc.exact, tc.tag, p.Reason)
+	}
+}
+
+func TestLucifronPreservesUnrankedWipes(t *testing.T) {
+	t.Parallel()
+	e := fixtureLucifron(t)
+	wipe := e.Encounters[0]
+	wipe.ID = uuid.New()
+	wipe.KillType = database.KillTypeReset
+	e.Encounters = append(e.Encounters, wipe)
+	p, err := evaluateLucifronEvidence(e)
+	require.NoError(t, err)
+	require.False(t, p.RequiresReparse, p.Reason)
+	require.Len(t, p.lucifron.Metrics, 1)
+	require.Equal(t, e.Encounters[0].ID, p.lucifron.Metrics[0].EncounterID)
+	bad := e.Rankings[0]
+	bad.EncounterID.UUID = wipe.ID
+	e.Rankings = append(e.Rankings, bad)
+	p, err = evaluateLucifronEvidence(e)
+	require.NoError(t, err)
+	require.True(t, p.RequiresReparse)
+	require.Contains(t, p.Reason, "non-clean")
+	e.Rankings = nil
+	e.Encounters = []database.LogInstanceEncounter{wipe}
+	p, err = evaluateLucifronEvidence(e)
+	require.NoError(t, err)
+	require.True(t, p.RequiresReparse)
+	require.Contains(t, p.Reason, "no clean ranked")
+}
+
+func TestLucifronVerifiedNoop(t *testing.T) {
+	t.Parallel()
+	e := fixtureLucifron(t)
+	e.Rankings[0].DamageDone = 170
+	e.Rankings[0].UnrankedDamageDone = 30
+	e.Rankings[0].Dps = 170.0 / 60
+	p, err := evaluateLucifronEvidence(e)
+	require.NoError(t, err)
+	require.False(t, p.RequiresReparse, p.Reason)
+	require.NotNil(t, p.lucifron)
+	require.Empty(t, p.lucifron.Metrics)
+	require.Empty(t, p.Changes)
+	require.Len(t, p.Details["players"], 1, "no-op retains reviewable before/after diagnostics")
 }

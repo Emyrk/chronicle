@@ -171,16 +171,21 @@ func TestLucifronRankingMutationPreservesOtherFieldsAndRollsBack(t *testing.T) {
 	}
 	require.NotEqual(t, uuid.Nil, target.ID)
 	params := database.LucifronRepairRankingParams{ID: target.ID, InstanceID: instance, EncounterID: target.EncounterID.UUID, DamageDone: 400, UnrankedDamageDone: 260, Dps: 400.0 / 60}
-	f.service.jobs[OperationLucifron].apply = func(ctx context.Context, tx database.Store, _ *RepairPlan) error {
-		n, err := tx.LucifronRepairRanking(ctx, params)
-		if err != nil {
-			return err
+	_, err = f.pool.Exec(f.ctx, `UPDATE log_instances SET name='Molten Core',parser_version='v1.0.172' WHERE id=$1`, instance)
+	require.NoError(t, err)
+	evidence, err := loadRazorgoreEvidence(f.ctx, f.db, instance)
+	require.NoError(t, err)
+	for _, c := range evidence.Encounters {
+		if c.ID == target.EncounterID.UUID {
+			evidence.Encounters = []database.LogInstanceEncounter{c}
+			break
 		}
-		if n != 1 {
-			return errors.New("missing Lucifron ranking")
-		}
-		return nil
 	}
+	blob := numericFrame(t, evidence, lucifronDamage(1, lucifronTestPlayer, lucifronTestBoss, 400), lucifronDamage(2, lucifronTestPlayer, lucifronTestHound, 260))
+	_, err = f.pool.Exec(f.ctx, `INSERT INTO log_instance_events(instance_id,type,events) VALUES($1,'damage',$2)`, instance, blob)
+	require.NoError(t, err)
+	job := f.service.jobs[OperationLucifron]
+	job.evaluate, job.revalidate, job.apply = EvaluateLucifron, RevalidateLucifron, ApplyLucifron
 	_, err = f.service.ProcessPage(f.ctx, f.id, "dry_running")
 	require.NoError(t, err)
 	_, err = f.service.Apply(f.ctx, f.id, uuid.New())
@@ -216,6 +221,10 @@ func TestLucifronRankingMutationPreservesOtherFieldsAndRollsBack(t *testing.T) {
 	}
 	require.Equal(t, before, after, "only Lucifron ranked/unranked damage and DPS may change")
 	require.Equal(t, 1, f.canonicalJobs(t))
+	events, err := f.db.RazorgoreRepairEvents(f.ctx, instance)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	require.Equal(t, blob, events[0].Events, "stored events must remain byte-identical")
 	wrong := params
 	wrong.InstanceID = uuid.New()
 	n, err := f.db.LucifronRepairRanking(f.ctx, wrong)
@@ -229,5 +238,36 @@ func TestLucifronRankingMutationPreservesOtherFieldsAndRollsBack(t *testing.T) {
 			require.NoError(t, err)
 			require.Zero(t, n, "SQL also rejects other encounters")
 		}
+	}
+}
+
+func TestLucifronRealEvaluatorSkipsCompleteWithoutReceipt(t *testing.T) {
+	t.Parallel()
+	for _, version := range []string{"v1.0.173", "v1.0.174", "unknown", "v1.0.172"} {
+		t.Run(version, func(t *testing.T) {
+			t.Parallel()
+			f := lucifronLifecycleFixture(t, 1)
+			instance := receiptInstance(t, f)
+			_, err := f.pool.Exec(f.ctx, `UPDATE log_instances SET name='Molten Core',parser_version=$2 WHERE id=$1`, instance, version)
+			require.NoError(t, err)
+			job := f.service.jobs[OperationLucifron]
+			job.evaluate, job.revalidate, job.apply = EvaluateLucifron, RevalidateLucifron, ApplyLucifron
+			_, err = f.service.ProcessPage(f.ctx, f.id, "dry_running")
+			require.NoError(t, err, "sealed skips must revalidate rather than retry forever")
+			report, err := f.service.Get(f.ctx, f.id)
+			require.NoError(t, err)
+			require.Equal(t, "completed", report.State)
+			require.Equal(t, "skipped", report.Items[0].State)
+			require.Empty(t, report.LastError)
+			if version == "v1.0.172" {
+				require.Contains(t, report.Items[0].Reason, "no clean ranked Lucifron encounter")
+			} else {
+				require.Contains(t, report.Items[0].Reason, "parser version")
+			}
+			require.Zero(t, f.canonicalJobs(t))
+			receipts, err := f.db.ListInstanceEventRepairReceipts(f.ctx, instance)
+			require.NoError(t, err)
+			require.Empty(t, receipts)
+		})
 	}
 }

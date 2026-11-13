@@ -37,14 +37,41 @@ type lucifronPlayerChange struct {
 	AfterDPS             float64   `json:"after_dps"`
 }
 
-// Only complete release versions prove which side of the historical rule change
-// produced a source row. Git descriptions and prereleases are not release proof.
-func lucifronVersionEligible(version string) bool {
+// ExactParserVersion persists GitTag+GitCommit. Build metadata does not change
+// release ordering; prereleases/git descriptions cannot prove the rule boundary.
+func lucifronRelease(version string) string {
 	v := version
 	if !strings.HasPrefix(v, "v") {
 		v = "v" + v
 	}
-	return semver.IsValid(v) && semver.Canonical(v) == v && strings.Count(v, ".") == 2 && semver.Prerelease(v) == "" && semver.Build(v) == "" && semver.Compare(v, lucifronRuleVersion) < 0
+	if !semver.IsValid(v) || semver.Prerelease(v) != "" {
+		return ""
+	}
+	release := strings.TrimSuffix(v, semver.Build(v))
+	if semver.Canonical(v) != release || strings.Count(release, ".") != 2 {
+		return ""
+	}
+	return release
+}
+
+func lucifronVersionEligible(version string) bool {
+	release := lucifronRelease(version)
+	return release != "" && semver.Compare(release, lucifronRuleVersion) < 0
+}
+
+func lucifronParserVersion(instance database.LogInstance) (string, bool) {
+	exact := instance.ParserVersion
+	tag, hasTag := instance.Versions["chronicle"]
+	// The schema's historical placeholder is not contradictory release evidence.
+	// Use the parser's persisted GitTag when no exact stamp was recorded.
+	if (exact == "" || exact == "0.0") && hasTag {
+		exact = tag
+	}
+	release := lucifronRelease(exact)
+	if release == "" || (hasTag && lucifronRelease(tag) != release) {
+		return exact, false
+	}
+	return exact, lucifronVersionEligible(exact)
 }
 
 func EvaluateLucifron(ctx context.Context, db database.Store, instanceID uuid.UUID) (*RepairPlan, error) {
@@ -62,7 +89,7 @@ func EvaluateLucifron(ctx context.Context, db database.Store, instanceID uuid.UU
 }
 
 func RevalidateLucifron(ctx context.Context, db database.Store, p *RepairPlan) error {
-	if p == nil || p.operation != OperationLucifron || p.lucifron == nil {
+	if p == nil || p.operation != OperationLucifron {
 		return errors.New("missing Lucifron prepared payload")
 	}
 	return RevalidateRazorgore(ctx, db, p)
@@ -90,8 +117,9 @@ func ApplyLucifron(ctx context.Context, db database.Store, p *RepairPlan) error 
 
 func evaluateLucifronEvidence(e razorgoreEvidence) (*RepairPlan, error) {
 	targets := instances.MoltenCoreDamageTargets(database.FlavorFromStrings(e.Group.Flavor))["Lucifron"].EntryIDs
-	p := &RepairPlan{InstanceID: e.Instance.ID, TenantID: e.Server.TenantID.UUID, Details: map[string]any{
-		"parser_version": e.Instance.ParserVersion, "rule_version": lucifronRuleVersion,
+	parserVersion, eligible := lucifronParserVersion(e.Instance)
+	p := &RepairPlan{Warnings: []string{}, Changes: []string{}, InstanceID: e.Instance.ID, TenantID: e.Server.TenantID.UUID, Details: map[string]any{
+		"parser_version": parserVersion, "rule_version": lucifronRuleVersion,
 		"ranked_target_entries": slices.Clone(targets), "players": []lucifronPlayerChange{}, "omissions": []razorgoreOmission{},
 	}}
 	var err error
@@ -109,11 +137,11 @@ func evaluateLucifronEvidence(e razorgoreEvidence) (*RepairPlan, error) {
 	if e.MissingInstance || e.Instance.Name != "Molten Core" || e.Instance.InvalidatedAt.Valid || !e.Server.TenantID.Valid || e.Server.TenantID.UUID == uuid.Nil || e.Realm.ID != e.Instance.RealmID || e.Server.ID != e.Realm.ServerID {
 		return skip("missing or invalid Molten Core source identity")
 	}
-	if !lucifronVersionEligible(e.Instance.ParserVersion) {
+	if !eligible {
 		return skip("parser version is unknown, ambiguous, or not strictly before " + lucifronRuleVersion)
 	}
 	for _, r := range e.Receipts {
-		if r.Operation == "lucifron-ranked-damage" {
+		if r.Operation == OperationLucifron {
 			return skip("Lucifron repair already recorded")
 		}
 	}
@@ -128,13 +156,22 @@ func evaluateLucifronEvidence(e razorgoreEvidence) (*RepairPlan, error) {
 			return skip("duplicate Lucifron encounter")
 		}
 		seen[c.ID] = true
+		if c.KillType != database.KillTypeClean {
+			hasRankings := slices.ContainsFunc(e.Rankings, func(row database.EncounterDpsRanking) bool {
+				return row.EncounterID.Valid && row.EncounterID.UUID == c.ID
+			})
+			if hasRankings {
+				return skip("non-clean Lucifron encounter has unsupported source rankings")
+			}
+			continue // Wipes without source rankings are immutable and irrelevant.
+		}
 		found = true
 		if err := evaluateLucifronEncounter(e, c, targets, p); err != nil {
 			return skip(err.Error())
 		}
 	}
 	if !found {
-		return skip("no Lucifron encounter")
+		return skip("no clean ranked Lucifron encounter")
 	}
 	p.Reason = "Lucifron ranked damage reconstructed from stored evidence"
 	return p, nil
@@ -245,7 +282,7 @@ func evaluateLucifronEncounter(e razorgoreEvidence, c database.LogInstanceEncoun
 			continue
 		}
 		player, err := guid.FromString(row.PlayerGuid)
-		if err != nil || !player.IsPlayer() || player.IsZero() || rows[player] || row.InstanceID != e.Instance.ID {
+		if err != nil || !player.IsPlayer() || player.IsZero() || rows[player] || row.InstanceID != e.Instance.ID || row.EncounterName != "Lucifron" || row.InstanceName != "Molten Core" {
 			return errors.New("invalid or duplicate Lucifron ranking identity")
 		}
 		rows[player] = true
