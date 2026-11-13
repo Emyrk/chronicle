@@ -33,6 +33,7 @@ const SharedViewRedirect = lazy(() => import("./pages/SharedViewRedirect").then(
 const RecentRaids = lazy(() => import("./pages/Recent/RecentRaids").then(({ RecentRaids }) => ({ default: RecentRaids })))
 const ProtoDecode = lazy(() => import("./pages/Debug/ProtoDecode").then(({ ProtoDecode }) => ({ default: ProtoDecode })))
 const YouTubeSyncV3Page = lazy(() => import("./pages/YouTubeSyncV3/YouTubeSyncV3Page").then(({ YouTubeSyncV3Page }) => ({ default: YouTubeSyncV3Page })))
+const AdminEventRepairs = lazy(() => import("./pages/Admin/AdminEventRepairs").then(({ AdminEventRepairs }) => ({ default: AdminEventRepairs })))
 const AdminLayout = lazy(() => import("./pages/Admin/AdminLayout").then(({ AdminLayout }) => ({ default: AdminLayout })))
 const AdminUsersOverview = lazy(() => import("./pages/Admin/AdminUsersOverview").then(({ AdminUsersOverview }) => ({ default: AdminUsersOverview })))
 const AdminLogsPage = lazy(() => import("./pages/Admin/AdminLogsPage").then(({ AdminLogsPage }) => ({ default: AdminLogsPage })))
@@ -278,6 +279,7 @@ function App({ homeLanding }: { homeLanding?: ComponentType } = {}) {
           <Route path="cache-stats" element={<AdminCacheStatsPage />} />
           <Route path="custom-panels" element={<AdminCustomPanelsPage />} />
           <Route path="billing" element={<AdminBillingPage />} />
+          <Route path="event-repairs" element={<AdminEventRepairs />} />
           <Route path="parsing" element={<AdminParsingPage />} />
         </Route>
         <Route path="/servers" element={<ServersLayout />}>

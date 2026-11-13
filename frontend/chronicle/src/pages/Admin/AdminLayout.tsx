@@ -46,6 +46,7 @@ const tabs: Tab[] = [
   { path: "/admin/custom-panels", label: "Developer Panels", icon: PanelsTopLeft },
   { path: "/admin/cache-stats", label: "Cache Stats", icon: Database },
   { path: "/admin/billing", label: "Billing", icon: CreditCard },
+  { path: "/admin/event-repairs", label: "Event Repairs", icon: RefreshCw },
   { path: "/admin/parsing", label: "Parsing", icon: Camera },
 ];
 
