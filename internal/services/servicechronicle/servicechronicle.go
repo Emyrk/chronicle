@@ -91,8 +91,9 @@ func (s *Service) Start(ctx context.Context) error {
 		EmitParsingLogs: s.emitParseLogs,
 		PrimaryDomain:   tenantSvc.PrimaryDomain(),
 		// Stamp the build-tag flavor on new log groups.
-		DefaultFlavor:    BuildTagFlavor(),
-		DefaultDatasetID: servicedataset.DefaultDatasetID,
+		DefaultFlavor:       BuildTagFlavor(),
+		DefaultDatasetID:    servicedataset.DefaultDatasetID,
+		ResolveParseDataset: resolveParseDataset,
 		ResolveDataset: func(ctx context.Context, realmID uuid.UUID) chronicle.ResolvedDataset {
 			dsID, flavor, additionalFlavor := datasetSvc.ResolveDatasetWithFlavorForRealm(ctx, realmID)
 			return chronicle.ResolvedDataset{

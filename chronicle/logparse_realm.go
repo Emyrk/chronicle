@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/Emyrk/chronicle/database/dbstatic"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 // resolvedRealm is the result of the three-tier realm resolution.
@@ -323,4 +325,50 @@ func (w *WorkerLogParse) realmRejectionMessage(ctx context.Context, db *authz.Au
 
 	b, _ := json.Marshal(r)
 	return string(b)
+}
+
+// Strict publication never creates realm metadata or masks database errors.
+// Only a genuinely missing name may select an already-existing Unknown row;
+// the worker still compares its ID, and its name for an unresolved prescan,
+// with the captured dependency realm.
+func resolveStrictPublicationRealm(ctx context.Context, db parseRealmQuerier, name string, jobRealmID uuid.UUID) (resolvedRealm, error) {
+	if jobRealmID != uuid.Nil {
+		row, err := db.GetWoWServerRealm(ctx, jobRealmID)
+		if err != nil {
+			return resolvedRealm{}, err
+		}
+		return resolvedRealm{ID: row.ID, Name: row.Name}, nil
+	}
+	if name != "" {
+		row, err := db.GetWoWServerRealmByName(ctx, name)
+		if err == nil {
+			return resolvedRealm{ID: row.ID, Name: row.Name}, nil
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return resolvedRealm{}, err
+		}
+	}
+	row, err := db.GetWoWServerRealm(servicetenant.AdminBypass(ctx), dbstatic.RealmUnknown())
+	if err != nil {
+		return resolvedRealm{}, err
+	}
+	return resolvedRealm{ID: row.ID, Name: name}, nil
+}
+
+type parseRealmQuerier interface {
+	GetWoWServerRealm(context.Context, uuid.UUID) (database.WowServerRealm, error)
+	GetWoWServerRealmByName(context.Context, string) (database.WowServerRealm, error)
+}
+
+func lookupPreParseRealm(ctx context.Context, db parseRealmQuerier, name string) (resolvedRealm, error) {
+	row, err := db.GetWoWServerRealmByName(ctx, name)
+	if err == nil {
+		return resolvedRealm{ID: row.ID, Name: row.Name}, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return resolvedRealm{}, err
+	}
+	// Do not create Unknown here. Strict resolution must lock an existing row;
+	// if it has not been provisioned the attempt fails before staging any output.
+	return resolvedRealm{ID: dbstatic.RealmUnknown(), Name: name}, nil
 }

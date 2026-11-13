@@ -72,26 +72,27 @@ const (
 )
 
 type Chronicle struct {
-	AppContext         context.Context
-	Storage            storage.ObjectStorage
-	logger             *slog.Logger
-	TemporaryDirectory string
-	queue              *riverqueue.Queues
-	Zed                *authz.Authz
-	ps                 pubsub.Pubsub
-	WoWDB              *gamedb.WoWDB
-	ItemFetcher        gamedb.GearResolver
-	metrics            *logParseMetrics
-	accountMetrics     *accountMetrics
-	emitParsingLogs    bool
-	registryMu         sync.Mutex
-	registryByFlavor   map[string]*registry.Registry
-	parseProfileMu     sync.RWMutex
-	primaryDomain      string
-	defaultFlavor      database.WoWFlavor
-	defaultDatasetID   uuid.UUID
-	recordParseAbort   func(context.Context, parseGenerationAbortOutput) error
-	resolveDataset     func(ctx context.Context, realmID uuid.UUID) ResolvedDataset
+	AppContext          context.Context
+	Storage             storage.ObjectStorage
+	logger              *slog.Logger
+	TemporaryDirectory  string
+	queue               *riverqueue.Queues
+	Zed                 *authz.Authz
+	ps                  pubsub.Pubsub
+	WoWDB               *gamedb.WoWDB
+	ItemFetcher         gamedb.GearResolver
+	metrics             *logParseMetrics
+	accountMetrics      *accountMetrics
+	emitParsingLogs     bool
+	registryMu          sync.Mutex
+	registryByFlavor    map[string]*registry.Registry
+	parseProfileMu      sync.RWMutex
+	primaryDomain       string
+	defaultFlavor       database.WoWFlavor
+	defaultDatasetID    uuid.UUID
+	recordParseAbort    func(context.Context, parseGenerationAbortOutput) error
+	resolveDataset      func(ctx context.Context, realmID uuid.UUID) ResolvedDataset
+	resolveParseDataset ParseDatasetResolver
 
 	mu                     sync.Mutex
 	insertParsedInstanceMu sync.Mutex
@@ -118,26 +119,30 @@ type Options struct {
 	// The resolver follows the server > tenant > default chain.
 	// If nil, the default dataset is always used.
 	ResolveDataset func(ctx context.Context, realmID uuid.UUID) ResolvedDataset
+	// ResolveParseDataset enables authoritative runtime fencing. Production must
+	// provide a transaction-bound resolver; legacy test/offline callers may omit it.
+	ResolveParseDataset ParseDatasetResolver
 }
 
 func New(ctx context.Context, logger *slog.Logger, opts Options) (*Chronicle, error) {
 	c := &Chronicle{
-		AppContext:         ctx,
-		primaryDomain:      opts.PrimaryDomain,
-		defaultFlavor:      opts.DefaultFlavor,
-		defaultDatasetID:   opts.DefaultDatasetID,
-		Storage:            opts.Storage,
-		Zed:                opts.Zed,
-		ps:                 opts.Ps,
-		logger:             logger,
-		WoWDB:              opts.WoWDB,
-		TemporaryDirectory: filepath.Join(os.TempDir(), "chronicle_uploads"),
-		metrics:            newLogParseMetrics(opts.Registry),
-		accountMetrics:     newAccountMetrics(opts.Registry),
-		ItemFetcher:        opts.WoWDB,
-		emitParsingLogs:    opts.EmitParsingLogs,
-		registryByFlavor:   make(map[string]*registry.Registry),
-		resolveDataset:     opts.ResolveDataset,
+		AppContext:          ctx,
+		primaryDomain:       opts.PrimaryDomain,
+		defaultFlavor:       opts.DefaultFlavor,
+		defaultDatasetID:    opts.DefaultDatasetID,
+		Storage:             opts.Storage,
+		Zed:                 opts.Zed,
+		ps:                  opts.Ps,
+		logger:              logger,
+		WoWDB:               opts.WoWDB,
+		TemporaryDirectory:  filepath.Join(os.TempDir(), "chronicle_uploads"),
+		metrics:             newLogParseMetrics(opts.Registry),
+		accountMetrics:      newAccountMetrics(opts.Registry),
+		ItemFetcher:         opts.WoWDB,
+		emitParsingLogs:     opts.EmitParsingLogs,
+		registryByFlavor:    make(map[string]*registry.Registry),
+		resolveDataset:      opts.ResolveDataset,
+		resolveParseDataset: opts.ResolveParseDataset,
 	}
 
 	err := c.initStorage(ctx)
@@ -181,6 +186,7 @@ func (c *Chronicle) Registry() *registry.Registry {
 // tenant flavor tags resolved for a realm.
 type ResolvedDataset struct {
 	DatasetID        uuid.UUID
+	Revision         int64
 	Flavor           database.WoWFlavor
 	AdditionalFlavor database.WoWFlavor
 }

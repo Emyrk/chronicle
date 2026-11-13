@@ -32,9 +32,9 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/combatlog/parser/unitname"
+	"github.com/Emyrk/chronicle/combatlog/parsernext/snapshot"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
-	"github.com/Emyrk/chronicle/database/dbstatic"
 	"github.com/Emyrk/chronicle/database/gamedb/talents"
 	"github.com/Emyrk/chronicle/database/jsontransform"
 	"github.com/Emyrk/chronicle/internal/guildrenames"
@@ -249,14 +249,6 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		current := logGroup.WoWLogGroup.ParseGeneration
 		return w.parent.abortStaleParseGeneration(ctx, job.Args.LogID, job.Args.ParseGeneration, "initial_generation_check", staleParseGeneration(parseGeneration, &current))
 	}
-	if err := w.parent.stageParseGeneration(ctx, job.Args.LogID, parseGeneration); err != nil {
-		if errors.Is(err, errStaleParseGeneration) {
-			jobResult = "cancelled"
-			return w.parent.abortStaleParseGeneration(ctx, job.Args.LogID, job.Args.ParseGeneration, "stage_output", err)
-		}
-		jobResult = "failure"
-		return fmt.Errorf("stage parse generation: %w", err)
-	}
 
 	// ── Resolve format & flavor ─────────────────────────────────────────
 	//
@@ -268,9 +260,10 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 	//   1. wow_log_groups.flavor column (when non-empty) is authoritative.
 	//   2. Falls back to the realm-resolved dataset's default_flavor
 	//      (seeded from the compiled-in server identity).
-	//   3. When the fallback is used, the resolved flavor is persisted back
-	//      to wow_log_groups.flavor so subsequent reparses use the correct
-	//      value without re-resolving.
+	//   3. Strict attempts retain this column as input and recompute inferred
+	//      defaults/tenant additions on retries. Only legacy/offline attempts
+	//      persist the resolved flavor back into it. Historical nonempty rows
+	//      remain declared input: their provenance cannot be reconstructed.
 	lg := logGroup.WoWLogGroup
 	invalidLog := lg.InvalidatedAt.Valid
 	publicLog := !lg.Unlisted
@@ -344,15 +337,13 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 			}
 			return river.JobCancel(fmt.Errorf("%s", msg))
 		}
-		if r, lookupErr := db.GetWoWServerRealmByName(ctx, realmName); lookupErr == nil {
-			preRealmID = r.ID
-			realmName = r.Name
-			preRealmName = r.Name
-		} else {
-			// Realm not yet in DB — use the well-known "Unknown" realm so
-			// dataset/flavor resolution can still look up the default dataset.
-			preRealmID = dbstatic.RealmUnknown()
+		preRealm, lookupErr := lookupPreParseRealm(ctx, db, realmName)
+		if lookupErr != nil {
+			return fmt.Errorf("lookup pre-parse realm: %w", lookupErr)
 		}
+		preRealmID = preRealm.ID
+		realmName = preRealm.Name
+		preRealmName = preRealm.Name
 
 		// Early tenant validation.
 		if preRealmID != uuid.Nil && job.Args.TenantID != uuid.Nil {
@@ -364,8 +355,44 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		}
 	}
 
-	resolved := w.parent.resolveForRealm(ctx, preRealmID)
-	gameDB := w.parent.WoWDB.ForDataset(resolved.DatasetID)
+	var resolved ResolvedDataset
+	var identityFence *parseIdentityFence
+	if w.parent.resolveParseDataset != nil {
+		err = db.InTx(ctx, func(tx *authz.AuthzTX) error {
+			var resolveErr error
+			resolved, resolveErr = w.parent.resolveParseDataset(ctx, tx, preRealmID, true)
+			return resolveErr
+		}, nil)
+		if err != nil {
+			return fmt.Errorf("capture authoritative parse dataset: %w", err)
+		}
+		build, buildErr := version.BinaryIdentity()
+		if buildErr != nil {
+			return fmt.Errorf("capture executable identity: %w", buildErr)
+		}
+		identityFence, _, err = newParseIdentityFence(resolved, preRealmID, logFormat, flavor, explicitFlavor, build, w.parent.resolveParseDataset)
+		if err != nil {
+			return err
+		}
+		identityFence.captureUnresolvedRealm(preRealmName, job.Args.RealmID)
+		ctx = snapshot.WithCompatibility(ctx, identityFence.identity)
+	} else {
+		resolved = w.parent.resolveForRealm(ctx, preRealmID)
+	}
+	if err := w.parent.stageParseGeneration(ctx, job.Args.LogID, parseGeneration, identityFence); err != nil {
+		if errors.Is(err, errStaleParseGeneration) {
+			jobResult = "cancelled"
+			return w.parent.abortStaleParseGeneration(ctx, job.Args.LogID, job.Args.ParseGeneration, "stage_output", err)
+		}
+		jobResult = "failure"
+		return fmt.Errorf("stage parse generation: %w", err)
+	}
+
+	gameDB, closeGameDB, err := w.parent.acquireParseGameDB(ctx, resolved.DatasetID, identityFence)
+	if err != nil {
+		return err
+	}
+	defer closeGameDB()
 
 	// If the log group didn't have an explicit flavor (from the upload request),
 	// use the dataset default. Tenant additional flavors always augment the
@@ -373,15 +400,10 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 	var flavorChanged bool
 	flavor, flavorChanged = resolveLogFlavor(flavor, explicitFlavor, resolved)
 	if flavorChanged {
-		err := db.InTx(ctx, func(tx *authz.AuthzTX) error {
-			if err := lockExpectedParseGeneration(ctx, tx, job.Args.LogID, parseGeneration); err != nil {
-				return err
-			}
-			return tx.UpdateWoWLogGroupFlavor(ctx, database.UpdateWoWLogGroupFlavorParams{
-				ID:     lg.ID,
-				Flavor: flavor.Strings(),
-			})
-		}, nil)
+		err := w.parent.persistAttemptFlavor(ctx, job.Args.LogID, parseGeneration, flavor, identityFence)
+		if isParseIdentityError(err) {
+			return err
+		}
 		if errors.Is(err, errStaleParseGeneration) {
 			jobResult = "cancelled"
 			return w.parent.abortStaleParseGeneration(ctx, job.Args.LogID, job.Args.ParseGeneration, "persist_flavor", err)
@@ -399,6 +421,10 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		)
 	}
 
+	if err := w.parent.checkParseIdentity(ctx, identityFence); err != nil {
+		return err
+	}
+
 	ctx = parsectx.With(ctx, parsectx.Context{
 		Type:        lg.LogType,
 		Format:      logFormat,
@@ -414,6 +440,9 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 	})
 	if err != nil {
 		jobResult = "failure"
+		return err
+	}
+	if err := w.parent.checkParseIdentity(ctx, identityFence); err != nil {
 		return err
 	}
 	report.CPUProfileAvailable = profileCaptured
@@ -493,9 +522,23 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		if finalized.Realm != nil {
 			reportedRealmName = finalized.Realm.RealmName
 		}
-		realm := resolveRealm(ctx, db, finalized, job.Args.RealmID)
+		var realm resolvedRealm
+		if identityFence != nil {
+			var realmErr error
+			realm, realmErr = resolveStrictPublicationRealm(ctx, db, reportedRealmName, job.Args.RealmID)
+			if realmErr != nil {
+				return fmt.Errorf("resolve publication realm: %w", realmErr)
+			}
+		} else {
+			realm = resolveRealm(ctx, db, finalized, job.Args.RealmID)
+		}
 		realmID := realm.ID
 		realmName := realm.Name
+		if identityFence != nil {
+			if err := identityFence.checkPublicationRealm(realm); err != nil {
+				return err
+			}
+		}
 		if job.Args.RealmID != uuid.Nil && reportedRealmName != "" && reportedRealmName != realmName {
 			w.parent.logger.WarnContext(ctx, "server-side log realm differs from upload-key realm",
 				"log_group_id", job.Args.LogID,
@@ -547,6 +590,9 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		var dbinstance database.LogInstance
 		err = db.InTx(ctx, func(tx *authz.AuthzTX) error {
 			if err := lockExpectedParseGeneration(ctx, tx, job.Args.LogID, parseGeneration); err != nil {
+				return err
+			}
+			if err := identityFence.check(ctx, tx, true); err != nil {
 				return err
 			}
 			// Unlisted logs still update current player gear and talents, but must not
@@ -902,6 +948,9 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 			if errors.Is(err, errStaleParseGeneration) {
 				return w.parent.abortStaleParseGeneration(ctx, job.Args.LogID, job.Args.ParseGeneration, "write_instance", err)
 			}
+			if isParseIdentityError(err) {
+				return err
+			}
 			return river.JobCancel(fmt.Errorf("insert finalized encounters: %w", err))
 		}
 
@@ -922,6 +971,9 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 				if err := lockExpectedParseGeneration(ctx, tx, job.Args.LogID, parseGeneration); err != nil {
 					return err
 				}
+				if err := identityFence.check(ctx, tx, true); err != nil {
+					return err
+				}
 				var err error
 				rankingRunAffectedIDs, err = detectAndLinkDuplicate(ctx, tx, dbinstance.ID, dbinstance.RealmID, dbinstance.Name, dbinstance.MaxPlayers, instanceStart, builder.participants)
 				if err != nil {
@@ -929,6 +981,9 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 				}
 				return w.parent.EnqueueRankingRunRefreshTx(ctx, tx, rankingRunAffectedIDs...)
 			}, nil)
+			if isParseIdentityError(dupErr) {
+				return dupErr
+			}
 			if errors.Is(dupErr, errStaleParseGeneration) {
 				w.parent.insertParsedInstanceMu.Unlock()
 				insertLockHeld = false
@@ -957,6 +1012,9 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 				if err := lockExpectedParseGeneration(ctx, tx, job.Args.LogID, parseGeneration); err != nil {
 					return err
 				}
+				if err := identityFence.check(ctx, tx, true); err != nil {
+					return err
+				}
 				runs, err := serviceratings.PrepareDirectRunsTx(ctx, tx, []uuid.UUID{dbinstance.ID})
 				if err != nil {
 					return err
@@ -974,6 +1032,9 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 				}
 				return w.parent.EnqueueRankingRunRefreshTx(ctx, tx, dbinstance.ID)
 			}, nil)
+			if isParseIdentityError(rankErr) {
+				return rankErr
+			}
 			if errors.Is(rankErr, errStaleParseGeneration) {
 				jobResult = "cancelled"
 				return w.parent.abortStaleParseGeneration(ctx, job.Args.LogID, job.Args.ParseGeneration, "write_rankings", rankErr)
@@ -1000,6 +1061,9 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 	// parse so live windows immediately include late historical uploads.
 	membershipErr := db.InTx(ctx, func(tx *authz.AuthzTX) error {
 		if err := lockExpectedParseGeneration(ctx, tx, job.Args.LogID, parseGeneration); err != nil {
+			return err
+		}
+		if err := identityFence.check(ctx, tx, true); err != nil {
 			return err
 		}
 		if result, err := tx.RefreshParseScoreMembershipsForLogGroup(ctx, database.RefreshParseScoreMembershipsForLogGroupParams{
@@ -1036,7 +1100,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		return fmt.Errorf("fence parse membership refresh: %w", membershipErr)
 	}
 
-	if err := w.parent.finalizeParseGeneration(ctx, job.Args.LogID, parseGeneration); err != nil {
+	if err := w.parent.finalizeParseGeneration(ctx, job.Args.LogID, parseGeneration, identityFence); err != nil {
 		if errors.Is(err, errStaleParseGeneration) {
 			jobResult = "cancelled"
 			return w.parent.abortStaleParseGeneration(ctx, job.Args.LogID, job.Args.ParseGeneration, "finalize_output", err)
