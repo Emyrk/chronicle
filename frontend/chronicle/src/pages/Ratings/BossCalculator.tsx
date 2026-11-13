@@ -18,10 +18,26 @@ const OTHER_BWL_BOSSES = [
 const MAX_LABELLED_BARS = 14
 
 /** The lens buttons above the calculator. */
-export function LensTabs({ lens, onChange, compact }: { lens: Lens; onChange: (lens: Lens) => void; compact?: boolean }) {
+export function LensTabs({
+  lens,
+  onChange,
+  compact,
+  only,
+}: {
+  lens: Lens
+  onChange: (lens: Lens) => void
+  compact?: boolean
+  /** Limit the tabs, e.g. to the ratings where per-kill metrics are shown elsewhere. */
+  only?: readonly Lens[]
+}) {
+  const lenses = only ? LENSES.filter((l) => only.includes(l.id)) : LENSES
   return (
-    <div className={cn("grid grid-cols-2 gap-2 sm:grid-cols-5", compact ? "mb-3" : "mb-4")} role="tablist" aria-label="Metric lens">
-      {LENSES.map((l) => (
+    <div
+      className={cn("grid gap-2", lenses.length === 5 ? "grid-cols-2 sm:grid-cols-5" : "grid-cols-3", compact ? "mb-3" : "mb-4")}
+      role="tablist"
+      aria-label="Metric lens"
+    >
+      {lenses.map((l) => (
         <button
           key={l.id}
           type="button"
@@ -105,12 +121,20 @@ export function BossCalculator({
 }
 
 /** BossCalculator with its own lens and slider state, for embedding outside the ratings page. */
-export function StandaloneBossCalculator({ dataset, initialLens = "mastery" }: { dataset: RatingDataset; initialLens?: Lens }) {
+export function StandaloneBossCalculator({
+  dataset,
+  initialLens = "mastery",
+  lenses,
+}: {
+  dataset: RatingDataset
+  initialLens?: Lens
+  lenses?: readonly Lens[]
+}) {
   const [lens, setLens] = useState<Lens>(initialLens)
   const [killCount, setKillCount] = useState(dataset.kills.length)
   return (
     <>
-      <LensTabs lens={lens} onChange={setLens} compact />
+      <LensTabs lens={lens} onChange={setLens} compact only={lenses} />
       <BossCalculator lens={lens} dataset={dataset} killCount={killCount} setKillCount={setKillCount} benchmark={dataset.benchmark} />
     </>
   )

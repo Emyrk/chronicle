@@ -30,6 +30,7 @@ type Character = Pick<ArmorySearchResult, "realm_id" | "id">;
 const MASTERY = METRIC_THEMES.mastery.accent;
 const PEAK = METRIC_THEMES.peak.accent;
 const RENOWN = METRIC_THEMES.renown.accent;
+const RATING_LENSES = ["peak", "mastery", "renown"] as const;
 const fmt = (v: number | null) => (v === null ? "—" : v.toFixed(1));
 
 /** Per-raid career contributions; expand a raid for its bosses against the benchmark. */
@@ -325,7 +326,8 @@ function BossCalculatorDialog({
               </DialogDescription>
             </DialogHeader>
             {/* Keyed so a different boss starts with every kill logged. */}
-            <StandaloneBossCalculator key={dataset.key} dataset={dataset} />
+            {/* The armory table already shows raw performance; only the ratings need explaining here. */}
+            <StandaloneBossCalculator key={dataset.key} dataset={dataset} lenses={RATING_LENSES} />
           </>
         )}
       </DialogContent>
