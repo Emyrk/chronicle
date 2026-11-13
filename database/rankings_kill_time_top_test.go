@@ -9,9 +9,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/dbtestutil"
 	"github.com/Emyrk/chronicle/internal/testutil"
+	"github.com/Emyrk/chronicle/internal/timeparsepolicy"
 )
 
 // Each chosen boss gets its guilds' fastest kills in one query: a guild ranks once
@@ -189,6 +191,25 @@ func TestRazorgoreRankedKillTimes(t *testing.T) {
 			require.Len(t, cohortKills, 1)
 			require.Equal(t, tc.wantMS, cohortKills[0].DurationMS)
 
+			var logGroupID uuid.UUID
+			require.NoError(t, pool.QueryRow(ctx, `SELECT log_group_id FROM log_instances WHERE id = $1`, instanceID).Scan(&logGroupID))
+			_, err = store.RefreshTimeParseBossKillMembershipsForLogGroup(ctx, database.RefreshTimeParseBossKillMembershipsForLogGroupParams{
+				LogGroupID: logGroupID, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
+			})
+			require.NoError(t, err)
+			memberships, err := store.ListTimeParseBossKillMemberships(ctx, database.ListTimeParseBossKillMembershipsParams{
+				TenantID: uuid.Nil, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
+			})
+			require.NoError(t, err)
+			require.Len(t, memberships, 1)
+			require.Equal(t, tc.wantMS, memberships[0].DurationMs)
+			require.True(t, memberships[0].KilledAt.Time.Equal(killedAt))
+			guildKills, err := store.GuildSpeedrunBossKills(ctx, database.GuildSpeedrunBossKillsParams{InstanceIds: []uuid.UUID{instanceID}})
+			require.NoError(t, err)
+			require.Len(t, guildKills, 1)
+			require.Equal(t, tc.wantMS, guildKills[0].DurationMs)
+			require.True(t, guildKills[0].KilledAt.Time.Equal(killedAt))
+
 			leaders, err := store.RankingsKillTimeLeaderboard(ctx, database.RankingsKillTimeLeaderboardParams{InstanceName: "Blackwing Lair", QueryLimit: 10})
 			require.NoError(t, err)
 			require.Len(t, leaders, 1)
@@ -204,6 +225,29 @@ func TestRazorgoreRankedKillTimes(t *testing.T) {
 			require.Len(t, stats, 1)
 			require.InDelta(t, float64(tc.wantMS)/1000, stats[0].MinSecs, 1e-6)
 			require.InDelta(t, float64(tc.wantMS)/1000, stats[0].MedianSecs, 1e-6)
+			if tc.name == "phase two" {
+				// A shorter full encounter with a slower phase two must not win
+				// membership selection over the original 60.125-second phase two.
+				_, err = store.InsertEncounter(ctx, database.InsertEncounterParams{
+					ID: uuid.New(), InstanceID: instanceID, Name: tc.boss, Boss: true,
+					KillType: database.KillTypeClean, Remaining: guid.GUIDs{},
+					StartTime: database.Timestamptz(killedAt.Add(time.Minute)), EndTime: database.Timestamptz(killedAt.Add(3 * time.Minute)),
+					RankingStartOffsetMs: pgtype.Int8{Int64: 30000, Valid: true}, RankingEndOffsetMs: pgtype.Int8{Int64: 120000, Valid: true},
+				})
+				require.NoError(t, err)
+				_, err = store.RefreshTimeParseBossKillMembershipsForLogGroup(ctx, database.RefreshTimeParseBossKillMembershipsForLogGroupParams{
+					LogGroupID: logGroupID, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
+				})
+				require.NoError(t, err)
+				memberships, err = store.ListTimeParseBossKillMemberships(ctx, database.ListTimeParseBossKillMembershipsParams{
+					TenantID: uuid.Nil, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
+				})
+				require.NoError(t, err)
+				require.Len(t, memberships, 1)
+				require.Equal(t, tc.wantMS, memberships[0].DurationMs)
+				require.True(t, memberships[0].KilledAt.Time.Equal(killedAt))
+			}
+
 		})
 	}
 }

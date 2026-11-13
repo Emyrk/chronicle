@@ -9458,7 +9458,12 @@ SELECT
     COALESCE(kill.duration_ms, 0)::bigint AS kill_duration_ms
 FROM grouped g
 LEFT JOIN LATERAL (
-    SELECT (EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000)::bigint AS duration_ms
+    SELECT (CASE WHEN lie.name = 'Razorgore the Untamed'
+          AND lie.ranking_start_offset_ms >= 0
+          AND lie.ranking_end_offset_ms > lie.ranking_start_offset_ms
+        THEN lie.ranking_end_offset_ms - lie.ranking_start_offset_ms
+        ELSE EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000
+    END)::bigint AS duration_ms
     FROM log_instance_encounters lie
     WHERE lie.instance_id = g.instance_id
       AND lie.name = g.encounter_name
@@ -29918,7 +29923,12 @@ SELECT
     lie.instance_id,
     lie.name AS encounter_name,
     lie.end_time AS killed_at,
-    (EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000)::bigint AS duration_ms,
+    (CASE WHEN lie.name = 'Razorgore the Untamed'
+          AND lie.ranking_start_offset_ms >= 0
+          AND lie.ranking_end_offset_ms > lie.ranking_start_offset_ms
+        THEN lie.ranking_end_offset_ms - lie.ranking_start_offset_ms
+        ELSE EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000
+    END)::bigint AS duration_ms,
     COALESCE(CASE WHEN tpbs.server_status IN ('ok', 'low_confidence') THEN tpbs.server_precise_score END, -1)::float8 AS parse
 FROM log_instance_encounters lie
 LEFT JOIN time_parse_scores tps
@@ -32813,7 +32823,12 @@ current_members AS MATERIALIZED (
         speedrun.instance_name,
         COALESCE(encounter.difficulty, instance.difficulty_name) AS difficulty_name,
         instance.max_players AS max_players,
-        (EXTRACT(EPOCH FROM (encounter.end_time - encounter.start_time)) * 1000)::bigint AS duration_ms,
+        (CASE WHEN encounter.name = 'Razorgore the Untamed'
+          AND encounter.ranking_start_offset_ms >= 0
+          AND encounter.ranking_end_offset_ms > encounter.ranking_start_offset_ms
+        THEN encounter.ranking_end_offset_ms - encounter.ranking_start_offset_ms
+        ELSE EXTRACT(EPOCH FROM (encounter.end_time - encounter.start_time)) * 1000
+    END)::bigint AS duration_ms,
         encounter.end_time AS killed_at
     FROM representative_instances representative
     JOIN log_instances_resolved instance ON instance.id = representative.id
@@ -32825,9 +32840,19 @@ current_members AS MATERIALIZED (
       AND encounter.kill_type = 'clean'
       AND encounter.invalidated_at IS NULL
       AND encounter.end_time > encounter.start_time
-      AND (EXTRACT(EPOCH FROM (encounter.end_time - encounter.start_time)) * 1000)::bigint > 0
+      AND (CASE WHEN encounter.name = 'Razorgore the Untamed'
+          AND encounter.ranking_start_offset_ms >= 0
+          AND encounter.ranking_end_offset_ms > encounter.ranking_start_offset_ms
+        THEN encounter.ranking_end_offset_ms - encounter.ranking_start_offset_ms
+        ELSE EXTRACT(EPOCH FROM (encounter.end_time - encounter.start_time)) * 1000
+    END)::bigint > 0
     ORDER BY representative.run_id, encounter.name, COALESCE(encounter.difficulty, instance.difficulty_name), instance.max_players,
-        (EXTRACT(EPOCH FROM (encounter.end_time - encounter.start_time)) * 1000)::bigint ASC,
+        (CASE WHEN encounter.name = 'Razorgore the Untamed'
+          AND encounter.ranking_start_offset_ms >= 0
+          AND encounter.ranking_end_offset_ms > encounter.ranking_start_offset_ms
+        THEN encounter.ranking_end_offset_ms - encounter.ranking_start_offset_ms
+        ELSE EXTRACT(EPOCH FROM (encounter.end_time - encounter.start_time)) * 1000
+    END)::bigint ASC,
         encounter.end_time ASC
 ),
 upserted AS (

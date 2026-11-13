@@ -535,7 +535,12 @@ SELECT
     lie.instance_id,
     lie.name AS encounter_name,
     lie.end_time AS killed_at,
-    (EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000)::bigint AS duration_ms,
+    (CASE WHEN lie.name = 'Razorgore the Untamed'
+          AND lie.ranking_start_offset_ms >= 0
+          AND lie.ranking_end_offset_ms > lie.ranking_start_offset_ms
+        THEN lie.ranking_end_offset_ms - lie.ranking_start_offset_ms
+        ELSE EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000
+    END)::bigint AS duration_ms,
     COALESCE(CASE WHEN tpbs.server_status IN ('ok', 'low_confidence') THEN tpbs.server_precise_score END, -1)::float8 AS parse
 FROM log_instance_encounters lie
 LEFT JOIN time_parse_scores tps
