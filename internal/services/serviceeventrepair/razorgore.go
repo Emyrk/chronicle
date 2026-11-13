@@ -270,7 +270,13 @@ func evaluateRazorgoreEvidence(e razorgoreEvidence) (*RazorgoreRepairPlan, error
 	if err != nil {
 		return nil, err
 	}
-	p := &RazorgoreRepairPlan{InstanceID: e.Instance.ID, EvidenceHash: hash, Changes: []string{}}
+	p := &RazorgoreRepairPlan{
+		InstanceID: e.Instance.ID, EvidenceHash: hash, Changes: []string{},
+		Warnings: []string{},
+		// Keep the version-1 diagnostic shape stable even without reconstructed
+		// phases or omissions. Evaluators replace these with their typed slices.
+		Details: map[string]any{"phases": []any{}, "omissions": []any{}},
+	}
 	skip := func(reason string) (*RazorgoreRepairPlan, error) {
 		p.RequiresReparse = true
 		p.Reason = reason
