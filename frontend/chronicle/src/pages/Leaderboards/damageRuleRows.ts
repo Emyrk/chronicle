@@ -35,7 +35,7 @@ const FRONTEND_DAMAGE_RULES: Record<string, Record<string, FrontendDamageRule>> 
       mode: "entries",
       entry_ids: [12435],
       rankedTime: "phase-two",
-      note: "Only damage to Razorgore counts; add damage is excluded. On servers with egg tracking, kills only count after all eggs are destroyed. Ranked damage and boss kill time use phase two, from the final egg being destroyed until Razorgore dies. Phase one remains available in the full log. Servers without egg tracking retain full-encounter timing and legacy kill detection.",
+      note: "On servers with egg tracking, only damage dealt directly to Razorgore the Untamed during his final combat phase counts toward ranked boss parses. Damage dealt to Grethok the Controller and all spawning dragonkin or orc adds during the egg-destroying phase is completely excluded from your ranking. Kills only count after all eggs are destroyed, and ranked time runs from the final egg being destroyed until Razorgore dies. Phase one remains available in the full log. Servers without egg tracking retain full-encounter timing and legacy kill detection.",
     },
   },
   Ulduar: {

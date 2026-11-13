@@ -59,8 +59,9 @@ describe("Leaderboard ruleset", () => {
       rankedTime: "phase-two",
       targets: [{ id: 12435, name: "Razorgore the Untamed", boss: true }],
     })
-    expect(razor.note).toContain("add damage is excluded")
-    expect(razor.note).toContain("kills only count after all eggs are destroyed")
+    expect(razor.note).toContain("only damage dealt directly to Razorgore the Untamed during his final combat phase")
+    expect(razor.note).toContain("Grethok the Controller and all spawning dragonkin or orc adds")
+    expect(razor.note).toContain("Kills only count after all eggs are destroyed")
     expect(razor.note).toContain("from the final egg being destroyed until Razorgore dies")
     expect(razor.note).toContain("Servers without egg tracking retain full-encounter timing")
     expect(rows.find((row) => row.name === "Broodlord Lashlayer")?.rankedTime).toBe("window")
