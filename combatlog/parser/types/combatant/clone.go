@@ -6,6 +6,7 @@ import "slices"
 func (c Combatant) Clone() Combatant {
 	c.Guild = clonePointer(c.Guild)
 	c.Level = clonePointer(c.Level)
+	c.Faction = clonePointer(c.Faction)
 	c.GearSetups = CloneGear(c.GearSetups)
 	c.Talents = CloneTalents(c.Talents)
 	c.Glyphs = clonePointer(c.Glyphs)

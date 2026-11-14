@@ -1,15 +1,18 @@
 package combatant
 
 import (
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	"github.com/Emyrk/chronicle/combatlog/parser/types"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCloneDetachesMetadata(t *testing.T) {
 	t.Parallel()
 	level := int32(60)
 	enchant := 1
-	source := Combatant{Guild: &Guild{Name: "Original"}, Level: &level,
+	faction := types.HeroFactionAlliance
+	source := Combatant{Guild: &Guild{Name: "Original"}, Level: &level, Faction: &faction,
 		GearSetups: []GearItem{{ItemID: 100, EnchantID: &enchant, BonusIDs: []int{1}}},
 		Talents:    &Talents{Trees: [3][]uint8{{1}}},
 		Glyphs:     &Glyphs{Groups: []GlyphGroup{{Major: [3]int{1}}}},
@@ -18,6 +21,7 @@ func TestCloneDetachesMetadata(t *testing.T) {
 	clone := source.Clone()
 	clone.Guild.Name = "Changed"
 	*clone.Level = 1
+	*clone.Faction = types.HeroFactionHorde
 	clone.GearSetups[0].ItemID = 200
 	*clone.GearSetups[0].EnchantID = 2
 	clone.GearSetups[0].BonusIDs[0] = 2
@@ -27,6 +31,7 @@ func TestCloneDetachesMetadata(t *testing.T) {
 	*clone.V22.AdditionalUnknownStat = 3
 	require.Equal(t, "Original", source.Guild.Name)
 	require.Equal(t, int32(60), *source.Level)
+	require.Equal(t, types.HeroFactionAlliance, *source.Faction)
 	require.Equal(t, 100, source.GearSetups[0].ItemID)
 	require.Equal(t, 1, *source.GearSetups[0].EnchantID)
 	require.Equal(t, 1, source.GearSetups[0].BonusIDs[0])

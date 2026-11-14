@@ -67,51 +67,51 @@ func TestCombatantInfoEmitter_FightStarted(t *testing.T) {
 	assert.Equal(t, 12345, emitted[0].GearSetups[0].ItemID, "fight-start history must remain detached")
 }
 
-func TestCombatantInfoEmitter_FightStartedUsesParseWidePlayerData(t *testing.T) {
+func TestCombatantInfoEmitter_UsesCanonicalPlayerData(t *testing.T) {
 	t.Parallel()
-
-	playerGUID := mustGUID(t, "0x0000000000000001")
-	units := unitdb.New()
-	units.UpdatePlayer(combatant.Combatant{
-		Name: "TestPlayer",
-		Guid: playerGUID,
-		GearSetups: []combatant.GearItem{
-			{ItemID: 12345, EnchantID: intPtr(100)},
-		},
-	})
-	tracker := armory.New(units)
-	tracker.Players[playerGUID] = combatant.Combatant{
-		Name: "CurrentName",
-		Guid: playerGUID,
+	for _, observed := range []bool{false, true} {
+		name := "parse_wide_only"
+		if observed {
+			name = "observed_in_instance"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			playerGUID := mustGUID(t, "0x0000000000000001")
+			units := unitdb.New()
+			units.UpdatePlayer(combatant.Combatant{Name: "TestPlayer", Guid: playerGUID,
+				GearSetups: []combatant.GearItem{{ItemID: 12345, EnchantID: intPtr(100)}}})
+			tracker := armory.New(units)
+			wantName := "TestPlayer"
+			if observed {
+				tracker.Player(&messages.Combatant{Combatant: combatant.Combatant{Name: "CurrentName", Guid: playerGUID}})
+				wantName = "CurrentName"
+			}
+			_, locallyObserved := tracker.CurrentPlayer(playerGUID)
+			require.Equal(t, observed, locallyObserved)
+			chars := characters.NewCharacters(units, creatures.TurtleCharacterFactories(), identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+			var emitted []*messages.Combatant
+			cie := &CombatantInfoEmitter{armory: tracker, characters: chars, units: units,
+				emit: func(evt *messages.Combatant) { emitted = append(emitted, evt) }}
+			msg := &messages.Damage{MessageBase: messages.Base(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)),
+				Caster: &playerGUID, Target: mustGUID(t, "0x0030000000000002")}
+			_, err := chars.Process(msg)
+			require.NoError(t, err)
+			cie.FightStarted(uuid.New(), msg)
+			char, ok := chars.Get(playerGUID)
+			require.True(t, ok)
+			cie.ActivityChange(msg, char)
+			require.Len(t, emitted, 2)
+			for _, event := range emitted {
+				require.Equal(t, playerGUID, event.Guid)
+				require.Equal(t, wantName, event.Name)
+				require.Len(t, event.GearSetups, 1)
+				require.Equal(t, 12345, event.GearSetups[0].ItemID)
+			}
+			emitted[0].GearSetups[0].ItemID = 999
+			require.Equal(t, 12345, units.Players[playerGUID].GearSetups[0].ItemID)
+			require.Equal(t, 12345, emitted[1].GearSetups[0].ItemID)
+		})
 	}
-	chars := characters.NewCharacters(units, creatures.TurtleCharacterFactories(), identifier.NewIdentifier(map[uint32]identifier.Identity{}))
-
-	var emitted []*messages.Combatant
-	cie := &CombatantInfoEmitter{
-		armory:     tracker,
-		characters: chars,
-		units:      units,
-		emit: func(evt *messages.Combatant) {
-			emitted = append(emitted, evt)
-		},
-	}
-
-	now := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
-	msg := &messages.Damage{
-		MessageBase: messages.Base(now),
-		Caster:      &playerGUID,
-		Target:      mustGUID(t, "0x0030000000000002"),
-	}
-	_, err := chars.Process(msg)
-	require.NoError(t, err)
-
-	cie.FightStarted(uuid.New(), msg)
-
-	require.Len(t, emitted, 1)
-	assert.Equal(t, playerGUID, emitted[0].Guid)
-	assert.Equal(t, "CurrentName", emitted[0].Name)
-	require.Len(t, emitted[0].GearSetups, 1)
-	assert.Equal(t, 12345, emitted[0].GearSetups[0].ItemID)
 }
 
 func TestCombatantInfoEmitter_NoDataInArmory(t *testing.T) {
