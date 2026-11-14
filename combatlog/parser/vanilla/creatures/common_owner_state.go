@@ -167,3 +167,79 @@ func (c *HooktoothFrenzy) RestoreState(s CommonOwnerState, resolve func(string) 
 	*c = HooktoothFrenzy{Common: common}
 	return nil
 }
+
+func InitCoreRager() *coreRager { return new(coreRager) }
+
+func (c *coreRager) CaptureState(capture func(*characters.Common) (string, error)) (CommonOwnerState, error) {
+	if c == nil {
+		return CommonOwnerState{}, fmt.Errorf("missing coreRager dependencies")
+	}
+	return captureCommonOwner("coreRager", c.Common, capture)
+}
+func (c *coreRager) RestoreState(s CommonOwnerState, resolve func(string) (*characters.Common, error)) error {
+	if c == nil {
+		return fmt.Errorf("missing coreRager destination/dependencies")
+	}
+	common, e := s.resolve("coreRager", resolve)
+	if e != nil {
+		return e
+	}
+	*c = coreRager{Common: common}
+	return nil
+}
+
+func InitSonOfTheFlame() *sonOfTheFlameCharacter { return new(sonOfTheFlameCharacter) }
+
+func (c *sonOfTheFlameCharacter) CaptureState(capture func(*characters.Common) (string, error)) (CommonOwnerState, error) {
+	if c == nil || c.all == nil {
+		return CommonOwnerState{}, fmt.Errorf("missing sonOfTheFlameCharacter dependencies")
+	}
+	return captureCommonOwner("sonOfTheFlameCharacter", c.Common, capture)
+}
+func (c *sonOfTheFlameCharacter) RestoreState(s CommonOwnerState, all *characters.Characters, resolve func(string) (*characters.Common, error)) error {
+	if c == nil || all == nil {
+		return fmt.Errorf("missing sonOfTheFlameCharacter destination/dependencies")
+	}
+	common, e := s.resolve("sonOfTheFlameCharacter", resolve)
+	if e != nil {
+		return e
+	}
+	*c = sonOfTheFlameCharacter{Common: common, all: all}
+	return nil
+}
+
+func (c *RazorAdCharacter) CaptureState(capture func(*characters.Common) (string, error)) (CommonOwnerState, error) {
+	if c == nil || c.all == nil {
+		return CommonOwnerState{}, fmt.Errorf("missing RazorAdCharacter dependencies")
+	}
+	return captureCommonOwner("RazorAdCharacter", c.Common, capture)
+}
+func (c *RazorAdCharacter) RestoreState(s CommonOwnerState, all *characters.Characters, resolve func(string) (*characters.Common, error)) error {
+	if c == nil || all == nil {
+		return fmt.Errorf("missing RazorAdCharacter destination/dependencies")
+	}
+	common, e := s.resolve("RazorAdCharacter", resolve)
+	if e != nil {
+		return e
+	}
+	*c = RazorAdCharacter{Common: common, all: all}
+	return nil
+}
+
+func (c *FragmentOfRupturan) CaptureState(capture func(*characters.Common) (string, error)) (CommonOwnerState, error) {
+	if c == nil || c.all == nil {
+		return CommonOwnerState{}, fmt.Errorf("missing FragmentOfRupturan dependencies")
+	}
+	return captureCommonOwner("FragmentOfRupturan", c.Common, capture)
+}
+func (c *FragmentOfRupturan) RestoreState(s CommonOwnerState, all *characters.Characters, resolve func(string) (*characters.Common, error)) error {
+	if c == nil || all == nil {
+		return fmt.Errorf("missing FragmentOfRupturan destination/dependencies")
+	}
+	common, e := s.resolve("FragmentOfRupturan", resolve)
+	if e != nil {
+		return e
+	}
+	*c = FragmentOfRupturan{Common: common, all: all}
+	return nil
+}
