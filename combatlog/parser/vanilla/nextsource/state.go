@@ -25,10 +25,12 @@ import (
 // Never supply connection strings, credentials, or host-local file paths.
 // Format/Flavor must match construction; all fields are checked once at restore.
 type Compatibility struct {
-	DatasetContent        string `json:"dataset_content"`
-	Format                string `json:"format"`
-	Flavor                string `json:"flavor"`
-	ParserVersion         string `json:"parser_version"`
+	DatasetContent string `json:"dataset_content"`
+	Format         string `json:"format"`
+	Flavor         string `json:"flavor"`
+	ParserVersion  string `json:"parser_version"`
+	// BuildVersion is HEADER display metadata, not ParserVersion. Empty is valid.
+	BuildVersion          string `json:"build_version"`
 	CustomOverrideVersion string `json:"custom_override_version"`
 }
 
@@ -70,7 +72,7 @@ func (p *Pipeline) CaptureState(identity Compatibility, owners []next.DamageOwne
 	if p.identity != nil && *p.identity != identity {
 		return State{}, fmt.Errorf("pipeline compatibility identity changed")
 	}
-	if identity.Format != p.format || identity.Flavor != p.flavor {
+	if identity.Format != p.format || identity.Flavor != p.flavor || identity.BuildVersion != p.buildVersion {
 		return State{}, fmt.Errorf("compatibility differs from pipeline construction")
 	}
 	refs := map[stategraph.Path]*messages.Damage{}
@@ -197,6 +199,9 @@ func RestoreState(ctx context.Context, logger *slog.Logger, db gamedb.GameDB, ge
 	if err := strictPipelineValue(source.Payload, &pv); err != nil {
 		return fail(err)
 	}
+	if pv.BuildVersion != expected.BuildVersion {
+		return fail(fmt.Errorf("source build version differs from trusted construction"))
+	}
 	decoderPayload, ok := state.Values["/root/decoder"]
 	if !ok {
 		return fail(fmt.Errorf("missing decoder state"))
@@ -205,7 +210,7 @@ func RestoreState(ctx context.Context, logger *slog.Logger, db gamedb.GameDB, ge
 	if err != nil {
 		return fail(err)
 	}
-	candidate, err := New(ctx, logger, db, gear, pv.BuildVersion)
+	candidate, err := New(ctx, logger, db, gear, expected.BuildVersion)
 	if err != nil {
 		return fail(err)
 	}
@@ -238,7 +243,7 @@ func RestoreState(ctx context.Context, logger *slog.Logger, db gamedb.GameDB, ge
 	options := next.DecoderOptions{CountedSpells: candidate}
 	// Reuse construction's runtime gear/talent/logger inputs, not serialized data.
 	options.Combatants = decoderRuntimeOptions(ctx, logger, gear)
-	restoredDecoder, err := decoder.Restore(db, pv.BuildVersion, options)
+	restoredDecoder, err := decoder.Restore(db, expected.BuildVersion, options)
 	if err != nil {
 		return fail(err)
 	}
