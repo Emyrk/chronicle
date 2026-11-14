@@ -94,7 +94,7 @@ fields and ambiguous canonical identities fail. The underlying runner's nil
 return on stale-generation abort is **not** treated as publication proof. Empty
 or encounter-free logs are intentionally unsupported in this first slice.
 
-## Exact v2 allowlist
+## Exact v3 allowlist
 
 The artifact repeats its schema, partial-coverage warning and field allowlists.
 
@@ -168,18 +168,57 @@ legitimate), and any row-count/content difference is visible in the artifact.
 Publication checks alone cannot certify that an expected nonempty ranking cohort
 was produced: the baseline fixture must establish that expectation.
 
-The schema is now `chronicle-parser-baseline-v2`. Compare the **whole artifact**,
+The current schema is `chronicle-parser-baseline-v3`. Compare the **whole artifact**,
 including version, coverage, allowlists and unsupported-table inventory. `diff`
 returns nonzero for different coverage; never compare an intersection or strip
-coverage metadata. v1 and v2 artifacts are not comparable as equal coverage.
+coverage metadata. Artifacts with different versions are not comparable as equal coverage.
+
+## Combat structure and log flavor coverage (v3)
+
+Each instance's `combat_structure` section exports all columns of:
+
+- `log_instance_units`: instance reference, WoW GUID, name, creature entry and
+  nullable owner GUID.
+- `log_instance_players`: instance reference, WoW GUID, name, level, class, race
+  and nullable canonical guild reference.
+- `log_instance_encounter_hostiles`: canonical encounter reference, hostile WoW
+  GUID, boss flag and full ordered activity periods. Start/end/last-active
+  timestamps, reasons, end states and embedded event evidence remain exact.
+- `log_instance_encounter_phases`: canonical phase/encounter references, key,
+  name, phase order, exact start/end offsets and kill type.
+- `log_instance_raid_group_snapshots`: canonical snapshot/instance/encounter
+  references, snapshot type, exact observation time and full raid composition.
+  Group/slot ordering is preserved. Joined display-only encounter name and kill
+  time from the read query are not columns of this table and are not duplicated.
+
+The top-level `log_group` contains canonical `id`, persisted `log_type`, nullable
+`format` and the full persisted `flavor` array. This captures parser flavor
+publication without exporting owner, upload bookkeeping or generation timestamps.
+
+Instance and encounter references reuse existing canonical mappings. Phase
+identity uses `(encounter, key)`; snapshot identity uses `(instance, encounter,
+type, observed_at)`. Unit/player identities use their WoW GUID, and hostile rows
+use `(encounter, WoW GUID)`. Duplicate identities or missing/cross-instance
+references fail. Player guild identities use the same `(realm_id, name)` lookup
+as ranking references. Natural GUIDs are never replaced with generated IDs.
+
+Only database row ordering is canonicalized. Activity period order, embedded
+event evidence, phase-order values, composition slots, flavor order and decoded
+event order are not sorted away. Nested semantic timestamps and numbers are not
+rounded or scrubbed. Empty optional collections remain visible as empty arrays.
+
+**Coverage is still incomplete.** Shared `guilds`, `game_players` and
+`game_player_gear_history` outputs, loot, overview metrics and speedruns are the
+remaining layer before real-fixture end-to-end baseline validation. Guild reads
+in this tool currently serve identity resolution only, not shared-history parity.
+No unrelated player or gear history is exported. A future shared-history layer
+must explicitly distinguish rows touched by this parse from preexisting fixture
+state; current-player rows can represent newer observations from other logs.
 
 ## Unsupported synchronous outputs
 
 All other tables are unsupported, notably:
 
-- `log_instance_units`, `log_instance_players`,
-  `log_instance_encounter_hostiles`, `log_instance_encounter_phases`,
-  `log_instance_raid_group_snapshots`.
 - `guilds`, `game_players`, `game_player_gear_history`, `instance_loot`.
   These are the exact guild/loot write targets of
   `combatlog/parser/common/armory/armory.go` and
@@ -205,4 +244,6 @@ instance/encounter/stream absence, scope isolation, canonical generated IDs,
 precision-sensitive timestamps/offsets/durations, malformed protobuf and local
 DB validation. Ranking tests additionally cover randomized generated identities,
 reference failures, exact ranking evidence, all three membership refresh/read
-paths, talent references and affected-run scope isolation. No real production fixture is included or downloaded.
+paths, talent references and affected-run scope isolation. Combat-structure tests
+cover random phase/snapshot/guild IDs, scope rejection, exact period evidence,
+phase offsets/order, raid slots/observation times and persisted log flavor. No real production fixture is included or downloaded.
