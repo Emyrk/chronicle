@@ -370,8 +370,7 @@ func (t *DPSTracker) FightEnded(encounterID uuid.UUID, m messages.Message) {
 		if isPlayer {
 			if p, ok := t.units.Players[g]; ok && p.Talents != nil {
 				// Deep copy the summary so it's not mutated later.
-				cp := *p.Talents
-				talents = &cp
+				talents = combatant.CloneTalents(p.Talents)
 			}
 		}
 		var observedForm string
@@ -416,8 +415,7 @@ func (t *DPSTracker) repairPendingTalentSnapshots(player guid.GUID) {
 	}
 
 	for _, stats := range pending {
-		copy := *combatantInfo.Talents
-		stats.Talents = &copy
+		stats.Talents = combatant.CloneTalents(combatantInfo.Talents)
 	}
 	delete(t.pendingTalentSnapshots, player)
 }
