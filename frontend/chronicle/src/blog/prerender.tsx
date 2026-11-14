@@ -20,6 +20,8 @@ export interface BlogManifestPost {
   description: string;
   published_at: string;
   flavor_sets: readonly (readonly string[])[];
+  voting_enabled: boolean;
+  feedback_enabled: boolean;
 }
 
 function renderRoute(path: string): string {
@@ -59,6 +61,8 @@ export function blogManifest(): { posts: BlogManifestPost[] } {
       description: post.description,
       published_at: post.publishedAt,
       flavor_sets: post.flavorSets ?? [],
+      voting_enabled: post.votingEnabled === true,
+      feedback_enabled: post.feedbackEnabled === true,
     })),
   };
 }

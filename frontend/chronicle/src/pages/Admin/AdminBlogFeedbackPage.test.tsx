@@ -7,7 +7,7 @@ import { AdminBlogFeedbackPage } from "./AdminBlogFeedbackPage";
 
 it("shows redacted review labels and moderator-only downvote totals", () => {
   const client = new QueryClient();
-  const data: AdminBlogInteractions = [{ id: "feedback-1", post_slug: "test", user_id: "opaque-user-id", tenant_id: "opaque-tenant-id", body: "<script>bad()</script>", status: "pending", consent: false, deleted: false }];
+  const data: AdminBlogInteractions = [{ id: "feedback-1", updated_at: "2026-01-01T00:00:00Z", post_slug: "test", user_id: "opaque-user-id", tenant_id: "opaque-tenant-id", body: "<script>bad()</script>", status: "pending", consent: false, deleted: false }];
   client.setQueryData(["admin", "blogInteractions"], data);
   const markup = renderToStaticMarkup(<QueryClientProvider client={client}><MemoryRouter><AdminBlogFeedbackPage /></MemoryRouter></QueryClientProvider>);
   expect(markup).toContain("opaque-user-id");

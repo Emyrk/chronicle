@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import type { BlogAdminFeedback, BlogAdminVotes, BlogInteractions, BlogOwnFeedback, BlogVoteRequest, BlogFeedbackRequest } from "./typesGenerated";
+import type { BlogAdminFeedback, BlogAdminVotes, BlogInteractions, BlogOwnFeedback, BlogVoteRequest, BlogFeedbackRequest, BlogModerationRequest } from "./typesGenerated";
 export type OwnFeedback = BlogOwnFeedback;
 export type AdminBlogInteractions = readonly BlogAdminFeedback[];
 
@@ -42,4 +42,12 @@ export function useAdminBlogMutation() {
       await Promise.all([client.invalidateQueries({ queryKey: ["admin", "blogInteractions"] }), client.invalidateQueries({ queryKey: ["blogInteractions"] })]);
     },
   });
+}
+
+export function blogFeedbackMutation(body: string, consent: boolean) {
+  return { resource: "feedback" as const, method: "PUT" as const, body: { body: body.trim(), consent } satisfies BlogFeedbackRequest };
+}
+
+export function blogModerationMutation(id: string, action: "approve" | "reject", updatedAt: string) {
+  return { path: `feedback/${encodeURIComponent(id)}/${action}`, method: "POST" as const, body: { expected_updated_at: updatedAt } satisfies BlogModerationRequest };
 }

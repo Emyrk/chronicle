@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useAdminBlogInteractions, useAdminBlogMutation, useAdminBlogVotes } from "@/api/blogInteractions";
+import { blogModerationMutation, useAdminBlogInteractions, useAdminBlogMutation, useAdminBlogVotes } from "@/api/blogInteractions";
 import { BLOG_POSTS } from "@/blog/blogRegistry";
 import { Button } from "@/components/ui/button";
 
@@ -50,8 +50,8 @@ export function AdminBlogFeedbackPage() {
         </header>
         <p className="whitespace-pre-wrap break-words text-sm leading-6">{item.body}</p>
         <div className="flex flex-wrap gap-2">
-          <Button disabled={mutation.isPending || !item.consent || item.deleted || item.status === "approved"} onClick={() => mutation.mutate({ path: `feedback/${item.id}/approve`, method: "POST" })}>Approve publication</Button>
-          <Button variant="outline" disabled={mutation.isPending || item.deleted || item.status === "rejected"} onClick={() => mutation.mutate({ path: `feedback/${item.id}/reject`, method: "POST" })}>Reject</Button>
+          <Button disabled={mutation.isPending || !item.consent || item.deleted || item.status === "approved"} onClick={() => mutation.mutate(blogModerationMutation(item.id, "approve", item.updated_at))}>Approve publication</Button>
+          <Button variant="outline" disabled={mutation.isPending || item.deleted || item.status === "rejected"} onClick={() => mutation.mutate(blogModerationMutation(item.id, "reject", item.updated_at))}>Reject</Button>
           <Button variant="outline" disabled={mutation.isPending || item.deleted} onClick={() => { if (window.confirm("Soft-delete this feedback? The response slot remains reserved.")) mutation.mutate({ path: `feedback/${item.id}/delete`, method: "POST" }); }}>Delete</Button>
           <Button variant="outline" disabled={mutation.isPending} onClick={() => { if (window.confirm("Ban this author from submitting blog feedback?")) mutation.mutate({ path: `users/${encodeURIComponent(item.user_id)}/ban`, method: "POST" }); }}>Ban author</Button>
           <Button variant="outline" disabled={mutation.isPending} onClick={() => { if (window.confirm("Restore this author's ability to submit blog feedback?")) mutation.mutate({ path: `users/${encodeURIComponent(item.user_id)}/unban`, method: "POST" }); }}>Unban author</Button>

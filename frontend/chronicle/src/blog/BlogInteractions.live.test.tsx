@@ -3,15 +3,15 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { BlogInteractions } from "./BlogInteractions";
 import type { BlogPostMetadata } from "./blogRegistry";
 
-const state = vi.hoisted(() => ({ authenticated: false, banned: false, vote: 0 }));
+const state = vi.hoisted(() => ({ authenticated: false, banned: false, vote: 0, feedback: null as null | { id: string; body: string; status: string; deleted: boolean; consent: boolean } }));
 vi.mock("react", async (original) => ({ ...await original<typeof import("react")>(), useSyncExternalStore: () => true }));
 vi.mock("@/hooks/useAuth", () => ({ useAuth: () => ({ session: state.authenticated ? { user_id: "secret-user" } : undefined, isLoading: false }) }));
 vi.mock("@/api/blogInteractions", () => ({
-  useBlogInteractions: () => ({ data: { enabled: true, up_votes: 12, down_votes: 987654, own_vote: state.vote, feedback_banned: state.banned, feedback: [{ id: "public", body: "Good <script>alert(1)</script>", server_relation: "This server" }] } }),
+  useBlogInteractions: () => ({ data: { voting_enabled: true, feedback_enabled: true, own_feedback: state.feedback, up_votes: 12, down_votes: 987654, own_vote: state.vote, feedback_banned: state.banned, feedback: [{ id: "public", body: "Good <script>alert(1)</script>", server_relation: "This server" }] } }),
   useBlogMutation: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 const post: BlogPostMetadata = { id: "test", title: "Test", description: "", publishedAt: "2026-01-01", rarity: "common", tag: "Docs", icon: "book", votingEnabled: true, feedbackEnabled: true };
-beforeEach(() => { state.authenticated = false; state.banned = false; state.vote = 0; });
+beforeEach(() => { state.authenticated = false; state.banned = false; state.vote = 0; state.feedback = null; });
 it("shows anonymous approved feedback and upvotes but never downvote totals", () => {
   const markup = renderToStaticMarkup(<BlogInteractions post={post} />);
   expect(markup).toContain("Anonymous reader · This server");
@@ -42,4 +42,22 @@ it("hides submission form for banned users", () => {
   const markup = renderToStaticMarkup(<BlogInteractions post={post} />);
   expect(markup).toContain("Your account cannot submit");
   expect(markup).not.toContain("Send feedback");
+});
+
+it("allows saving existing private feedback without publication consent", () => {
+  state.authenticated = true;
+  state.feedback = { id: "own", body: "Private suggestion", status: "pending", deleted: false, consent: false };
+  const markup = renderToStaticMarkup(<BlogInteractions post={post} />);
+  expect(markup).toContain("Private suggestion");
+  expect(markup).not.toMatch(/<input[^>]*type="checkbox"[^>]*required/);
+  expect(markup).not.toMatch(/<button[^>]*disabled=""[^>]*>Save feedback<\/button>/);
+  expect(markup).not.toContain('checked=""');
+  expect(markup).toContain("withdraw permission");
+});
+it("restores existing publication consent when editing", () => {
+  state.authenticated = true;
+  state.feedback = { id: "own", body: "Published suggestion", status: "approved", deleted: false, consent: true };
+  const markup = renderToStaticMarkup(<BlogInteractions post={post} />);
+  expect(markup).toContain('checked=""');
+  expect(markup).not.toMatch(/<button[^>]*disabled=""[^>]*>Save feedback<\/button>/);
 });
