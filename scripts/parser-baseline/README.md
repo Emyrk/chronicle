@@ -1,16 +1,19 @@
-# Temporary parser baseline CLI (partial coverage)
+# Temporary parser baseline CLI (controlled-fixture publication coverage)
 
 This local-only tool invokes `Chronicle.RunLogParseBaseline` against an existing
 seeded database, then writes deterministic, indented JSON to stdout. It does not
 start River or enqueue ranking refresh, score computation or notifications.
-**Matching artifacts prove equality only for the explicit fields below, not full
-parser equivalence.** All tables outside the allowlist are unsupported.
+**Matching artifacts prove equality only for the explicit fields below and the
+controlled fixture scope, not arbitrary production-database equivalence.** All
+tables outside the allowlist are unsupported.
 
 ## Safety and fixture prerequisites
 
 - Use disposable, exclusively owned local PostgreSQL databases named
   `parser_baseline_*`. The CLI requires `--isolated-db` and
-  `BASELINE_DATABASE_URL`. It rejects remote hosts (including multi-host
+  `BASELINE_DATABASE_URL`. Both commands also require `--fresh-armory-seed`,
+  attesting that shared guild/player/gear tables were empty before this public
+  parse. `run` verifies those tables are empty before parsing. It rejects remote hosts (including multi-host
   fallbacks). A loopback proxy or tunnel is not proof of isolation: never point
   this at production, even through a tunnel. Nothing provisions, migrates,
   downloads or resets a database automatically.
@@ -66,7 +69,7 @@ requires a realm instead of exercising implicit realm pre-scan resolution.
 ```sh
 # Set this explicitly to your disposable local clone. No DATABASE_URL fallback.
 export BASELINE_DATABASE_URL='postgres://localhost/parser_baseline_before?sslmode=disable'
-/tmp/parser-baseline run --isolated-db --args fixture-args.json \
+/tmp/parser-baseline run --isolated-db --fresh-armory-seed --args fixture-args.json \
   --storage /path/to/local-object-copy --expect-instances 1 > before.json.tmp \
   && mv before.json.tmp before.json
 
@@ -82,7 +85,7 @@ an empty/truncated file from a failed command is not a baseline.
 To re-export an already successfully parsed clone without parsing again:
 
 ```sh
-/tmp/parser-baseline export --isolated-db --args fixture-args.json \
+/tmp/parser-baseline export --isolated-db --fresh-armory-seed --args fixture-args.json \
   --expect-instances 1 > before.json.tmp && mv before.json.tmp before.json
 ```
 
@@ -94,13 +97,13 @@ fields and ambiguous canonical identities fail. The underlying runner's nil
 return on stale-generation abort is **not** treated as publication proof. Empty
 or encounter-free logs are intentionally unsupported in this first slice.
 
-## Exact v3 allowlist
+## Exact v4 allowlist
 
-The artifact repeats its schema, partial-coverage warning and field allowlists.
+The artifact repeats its schema, controlled-fixture scope and field allowlists.
 
 | Table | Exported fields |
 | --- | --- |
-| `log_instances` | canonical `id`, `realm_id`, `name`, `capabilities`, `recorder_name`, `recorder_guid`, `start_time`, `end_time`, `difficulty_name`, `max_players`, `dynamic_difficulty`, `vehicle_control_intervals` |
+| `log_instances` | canonical `id`, `realm_id`, `name`, canonical nullable `guild_id`, `capabilities`, `recorder_name`, `recorder_guid`, `start_time`, `end_time`, `difficulty_name`, `max_players`, `dynamic_difficulty`, `vehicle_control_intervals` |
 | `log_instance_encounters` | canonical `id`/`instance_id`, `name`, `remaining`, `boss`, `start_time`, `end_time`, `kill_type`, `map_id`, `ranking_start_offset_ms`, `ranking_end_offset_ms` |
 | `log_instance_events` | parent canonical instance, stream type, canonical encounter per segment, exact first Unix-millisecond timestamp, all decoded protobuf fields in original event order |
 
@@ -144,7 +147,7 @@ in `rankings.go` and in each artifact:
 Generated row IDs become natural-key strings. Talent identity uses
 `(dataset_id, player_class, talent_layout)`; guild references use `(realm_id,
 name)` after looking up the actual referenced guild, not a denormalized name.
-Guild table coverage remains unsupported apart from this identity lookup.
+Guild rows are also exported by the controlled-fixture publication layer below.
 Instance/encounter references use the same mappings as the event export. Ranking
 identity uses instance, encounter, encounter name and player; trash rankings also
 include spec/sub-spec. Membership identity uses tenant, policy/query version and
@@ -168,7 +171,7 @@ legitimate), and any row-count/content difference is visible in the artifact.
 Publication checks alone cannot certify that an expected nonempty ranking cohort
 was produced: the baseline fixture must establish that expectation.
 
-The current schema is `chronicle-parser-baseline-v3`. Compare the **whole artifact**,
+The current schema is `chronicle-parser-baseline-v4`. Compare the **whole artifact**,
 including version, coverage, allowlists and unsupported-table inventory. `diff`
 returns nonzero for different coverage; never compare an intersection or strip
 coverage metadata. Artifacts with different versions are not comparable as equal coverage.
@@ -207,30 +210,80 @@ event evidence, phase-order values, composition slots, flavor order and decoded
 event order are not sorted away. Nested semantic timestamps and numbers are not
 rounded or scrubbed. Empty optional collections remain visible as empty arrays.
 
-**Coverage is still incomplete.** Shared `guilds`, `game_players` and
-`game_player_gear_history` outputs, loot, overview metrics and speedruns are the
-remaining layer before real-fixture end-to-end baseline validation. Guild reads
-in this tool currently serve identity resolution only, not shared-history parity.
-No unrelated player or gear history is exported. A future shared-history layer
-must explicitly distinguish rows touched by this parse from preexisting fixture
-state; current-player rows can represent newer observations from other logs.
+## Remaining publication tables (v4)
 
-## Unsupported synchronous outputs
+The `publication` section completes the requested synchronous output-table
+inventory **for the controlled public, single-log fixture described below**:
 
-All other tables are unsupported, notably:
+- `guilds`: canonical `(realm_id, name)` identity, realm and name. `created_at`
+  is excluded as insertion wall-clock bookkeeping. Instance guild affiliation
+  is now also included in `log_instances` and resolved through this mapping.
+- `game_players`: every column except insertion `created_at`, including exact
+  semantic `updated_at`, nullable canonical `updated_from_instance`, gear,
+  talents, identity, guild, level, class, gender and race.
+- `game_player_gear_history`: every column except insertion `created_at`, scoped
+  to selected instance IDs. Exact `equipped_at`, gear-slot order and nullable
+  average item level remain visible. Player/realm references must resolve.
+- `instance_loot`: every column. Generated IDs become canonical content keys plus
+  occurrence numbers. Identical loot rows retain their multiplicity. Source and
+  recipient GUIDs/timestamps, item fields, suffix and quantity remain exact.
+- `instance_overview_metrics`: every column except operational `created_at` and
+  `updated_at`. Exactly one row is required per instance. Requirements, deaths,
+  wipes, ordered incoming-damage evidence, all semantic durations and metrics
+  version remain exact.
+- `instance_speedruns`: every column except insertion `created_at`. All six
+  semantic timing endpoints, three duration variants, qualification, addon
+  version and proof are retained. Proof is decoded JSON, not base64, preserving
+  nested evidence, numeric precision, timestamps and array order. A missing row
+  is represented as absence, since the writer conditionally skips speedruns.
 
-- `guilds`, `game_players`, `game_player_gear_history`, `instance_loot`.
-  These are the exact guild/loot write targets of
-  `combatlog/parser/common/armory/armory.go` and
-  `combatlog/parser/common/loot/loot.go`, via `database/queries/armory.sql` and
-  `database/queries/loot.sql`. `world_item_template` is a reference lookup for
-  item metadata and low-quality loot filtering, not a parser output table.
-- `instance_overview_metrics`, `instance_speedruns`.
+The artifact's unsupported synchronous-table inventory is now empty **within
+these explicit field and fixture limits**. Earlier field exclusions still apply
+(hashed slugs, parser-version bookkeeping, the instance `versions` map and
+`category`, duplicate-group storage identity, and invalidation metadata). This is not a claim that every database column or
+trigger side effect is compared. Async ranking-run projections, computed score
+results/receipts, notifications/River state and reattached preexisting shared-view
+or video links remain excluded. No retired `rating_*` schema is assumed.
 
-Async computed scores, ranking-run refresh results and notification/River state
-are deliberately excluded. No retired `rating_*` schema is assumed. Extending
-coverage requires explicit queries/field policies/tests, not dumping every
-associated table and silently normalizing it.
+### Shared armory isolation contract
+
+`armory.Tracker.Insert` upserts all observed guilds/players, not just encounter
+participants. Current-player updates only win when `player.Seen` is newer, and
+can inherit preexisting gear/talents if the new observation omits those fields.
+Unlisted logs intentionally clear provenance and skip public gear history.
+Consequently, after-the-fact participant joins cannot establish the writer set.
+
+This tool therefore requires **public logs and initially empty `guilds`,
+`game_players`, and `game_player_gear_history`**, with no other parse or writer in
+the clone. `run` checks emptiness and rejects unlisted input; `export` rejects
+unlisted publication. Both commands require `--fresh-armory-seed`. Export-only
+cannot prove the earlier state: that flag is an operator attestation, not an audit
+trail. Re-export only an output originally produced under this contract.
+
+Current players are selected by `updated_from_instance` in the selected log;
+gear history by selected instance IDs. All guilds in the selected instance realms
+are included, catching observed guilds without a majority/participant reference.
+Counts across shared armory tables must equal these scoped result counts, or
+export fails rather than dumping unrelated history. Other-realm guilds and
+players/gear without selected provenance are rejected. Same-realm preseeded
+guilds or preexisting player values that were overwritten cannot be identified
+post hoc, which is why the empty-before-parse attestation is mandatory.
+
+Do not delete shared state from a live or populated database to meet this
+contract. Prepare a separate disposable fixture with only reference/input data.
+Populated/shared-history fixtures and cross-log duplicate closure remain
+unsupported; their parity requires a different acquisition boundary. Multi-
+instance outputs within the one selected log are allowed. These constraints and
+field allowlists are included in the whole-artifact comparison contract.
+
+### Next validation boundary
+
+Publication table coverage is now implemented. The next step is **real fixture
+end-to-end validation**, not another generic export abstraction. No production
+corpus was accessed or acquired to build this tooling. A controlled real-log
+fixture must still establish expected nonempty rankings, memberships, speedruns,
+loot and armory output as appropriate. Empty optional arrays do not certify
+fixture completeness, and output parity cannot certify matching reference data.
 
 ## Validation
 
@@ -246,4 +299,7 @@ DB validation. Ranking tests additionally cover randomized generated identities,
 reference failures, exact ranking evidence, all three membership refresh/read
 paths, talent references and affected-run scope isolation. Combat-structure tests
 cover random phase/snapshot/guild IDs, scope rejection, exact period evidence,
-phase offsets/order, raid slots/observation times and persisted log flavor. No real production fixture is included or downloaded.
+phase offsets/order, raid slots/observation times and persisted log flavor. Final
+publication tests cover shared-state isolation, randomized guild/loot IDs, exact
+observation/loot times, speedrun proof, overview evidence and duplicate loot
+multiplicity. No real production fixture is included or downloaded.
