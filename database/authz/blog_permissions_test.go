@@ -72,7 +72,7 @@ func TestBlogActionPermissions(t *testing.T) {
 				require.NoError(t, err)
 				admin := role == "admin" || role == "technical_admin"
 				member := role == "member" || role == "guild member" || admin
-				want := (admin || permission.member && member) && (!banned || !permission.banSensitive)
+				want := ((!permission.member && (admin || role == "is_admin_users")) || permission.member && member) && (!banned || !permission.banSensitive)
 				require.Equal(t, want, allowed, "role=%s action=%s banned=%v", role, permission.name, banned)
 			}
 		}

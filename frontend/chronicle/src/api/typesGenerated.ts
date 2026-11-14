@@ -803,10 +803,10 @@ export interface BlogInteractions {
     readonly feedback_enabled: boolean;
     readonly enabled: boolean;
     readonly up_votes: number;
-    readonly own_vote: number;
+    readonly own_vote?: number;
     readonly feedback: readonly BlogPublicFeedback[];
     readonly own_feedback?: BlogOwnFeedback;
-    readonly feedback_banned: boolean;
+    readonly feedback_banned?: boolean;
 }
 
 // From chroniclesdk/blog.go

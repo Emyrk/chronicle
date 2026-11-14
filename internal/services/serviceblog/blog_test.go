@@ -198,3 +198,29 @@ func TestFeedbackActionPermissionBeforeAdmission(t *testing.T) {
 		require.Zero(t, store.saves)
 	}
 }
+
+type publicOnlyStore struct {
+	Store
+	voteUser uuid.UUID
+}
+
+func (s *publicOnlyStore) Votes(_ context.Context, _ string, user uuid.UUID) (Votes, error) {
+	s.voteUser = user
+	return Votes{Up: 4}, nil
+}
+func (s *publicOnlyStore) PublicFeedback(context.Context, string) ([]Feedback, error) {
+	return []Feedback{{Body: "approved"}}, nil
+}
+func TestReadDeniedOwnStateRetainsPublicProjection(t *testing.T) {
+	t.Parallel()
+	store := &publicOnlyStore{}
+	s := New(Options{Store: store, Eligible: func(context.Context, string, string) (bool, error) { return true, nil }})
+	// OwnFeedback and Bans are deliberately unimplemented: denied own permission
+	// must never load either private state, including when authentication exists.
+	state, err := s.ReadWithAccess(context.Background(), "post", uuid.New(), false, false)
+	require.NoError(t, err)
+	require.Equal(t, int64(4), state.Votes.Up)
+	require.Len(t, state.Feedback, 1)
+	require.Nil(t, state.Own)
+	require.Equal(t, uuid.Nil, store.voteUser)
+}

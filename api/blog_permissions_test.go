@@ -85,3 +85,11 @@ func TestBlogHandlersDenyWithoutDataAccess(t *testing.T) {
 		require.Equal(t, http.StatusForbidden, w.Code)
 	}
 }
+
+func TestOwnBlogReadPermissionFailsClosedWithoutBlockingPublic(t *testing.T) {
+	t.Parallel()
+	a := &API{}
+	r := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(authz.AsUser(context.Background(), uuid.New()))
+	require.False(t, a.canReadOwnBlog(r, "read_own_blog_vote"))
+	require.False(t, a.canReadOwnBlog(r, "read_own_blog_feedback"))
+}

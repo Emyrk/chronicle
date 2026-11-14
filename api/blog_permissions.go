@@ -86,3 +86,12 @@ func (a *API) requireBlogPermission(w http.ResponseWriter, r *http.Request, acti
 	}
 	return false
 }
+
+// Denied or unavailable own-state authorization must not take public content away.
+func (a *API) canReadOwnBlog(r *http.Request, action string) bool {
+	actor, ok := authz.ActorFromContext(r.Context())
+	if !ok || a.Zed == nil {
+		return false
+	}
+	return checkBlogPermission(r.Context(), actor, action, func(ctx context.Context, p rel.Relationship) (bool, error) { return a.Zed.CheckOne(ctx, nil, p) }) == nil
+}

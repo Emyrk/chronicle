@@ -111,13 +111,13 @@ definition chronicle {
   permission submit_blog_feedback = (chronicle_member + chronicle_guild_member + administer) - feedback_banned
   permission create_blog_feedback = submit_blog_feedback
   permission edit_blog_feedback = submit_blog_feedback
-  permission list_blog_feedback = administer
-  permission read_blog_vote_totals = administer
-  permission approve_blog_feedback = administer
-  permission reject_blog_feedback = administer
-  permission delete_blog_feedback = administer
-  permission ban_blog_feedback = administer
-  permission unban_blog_feedback = administer
+  permission list_blog_feedback = admin_users
+  permission read_blog_vote_totals = admin_users
+  permission approve_blog_feedback = admin_users
+  permission reject_blog_feedback = admin_users
+  permission delete_blog_feedback = admin_users
+  permission ban_blog_feedback = admin_users
+  permission unban_blog_feedback = admin_users
 
   permission create_tenant_application = technical_admin + chronicle_guild_member
 

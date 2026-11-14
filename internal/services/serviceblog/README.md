@@ -63,7 +63,8 @@ consenting records per post.
 
 Public approved feedback and upvote totals remain anonymous reads. Authenticated
 reads check `read_own_blog_vote` and `read_own_blog_feedback` before including own
-state. Vote mutations require `vote_blog`; withdrawal requires
+state. Denied or unavailable own-state authorization omits those fields without
+blocking the public projection. Vote mutations require `vote_blog`; withdrawal requires
 `withdraw_blog_feedback`. Feedback PUT requires `submit_blog_feedback` and checks
 `create_blog_feedback` or `edit_blog_feedback` after resolving whether a record
 exists, before consuming admission tokens. All member permissions derive from
@@ -74,7 +75,7 @@ feedback and vote.
 Admin routes require distinct `list_blog_feedback`, `read_blog_vote_totals`,
 `approve_blog_feedback`, `reject_blog_feedback`, `delete_blog_feedback`,
 `ban_blog_feedback` or `unban_blog_feedback` permissions. Each derives from
-`administer`, not the broader `admin_users` permission, and adds no new role.
+`admin_users`, preserving the prior moderation audience, and adds no new role.
 Unknown action routes fail closed. Authentication remains required independently
 of these policy checks. Authorization errors cannot expose private state or invoke
 a mutation.

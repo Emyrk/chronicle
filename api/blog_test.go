@@ -46,6 +46,8 @@ func TestBlogPublicProjection(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &out))
 	require.NotContains(t, out, "down_votes")
 	require.NotContains(t, out, "own_feedback")
+	require.NotContains(t, out, "own_vote")
+	require.NotContains(t, out, "feedback_banned")
 	var feedback []map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(out["feedback"], &feedback))
 	require.Len(t, feedback, 1)

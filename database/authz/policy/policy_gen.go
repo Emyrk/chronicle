@@ -1808,7 +1808,7 @@ func (obj *ObjChronicle) CanEdit_blog_feedback_User(sub *ObjUser) rel.Relationsh
 
 // CanList_blog_feedback_User checks if the subject has list_blog_feedback permission
 // // Object: chronicle:<id>
-// Schema: permission list_blog_feedback = administer
+// Schema: permission list_blog_feedback = admin_users
 func (obj *ObjChronicle) CanList_blog_feedback_User(sub *ObjUser) rel.Relationship {
 	r, s := obj.src.Obj, sub.src
 	return rel.Relationship{
@@ -1823,7 +1823,7 @@ func (obj *ObjChronicle) CanList_blog_feedback_User(sub *ObjUser) rel.Relationsh
 
 // CanRead_blog_vote_totals_User checks if the subject has read_blog_vote_totals permission
 // // Object: chronicle:<id>
-// Schema: permission read_blog_vote_totals = administer
+// Schema: permission read_blog_vote_totals = admin_users
 func (obj *ObjChronicle) CanRead_blog_vote_totals_User(sub *ObjUser) rel.Relationship {
 	r, s := obj.src.Obj, sub.src
 	return rel.Relationship{
@@ -1838,7 +1838,7 @@ func (obj *ObjChronicle) CanRead_blog_vote_totals_User(sub *ObjUser) rel.Relatio
 
 // CanApprove_blog_feedback_User checks if the subject has approve_blog_feedback permission
 // // Object: chronicle:<id>
-// Schema: permission approve_blog_feedback = administer
+// Schema: permission approve_blog_feedback = admin_users
 func (obj *ObjChronicle) CanApprove_blog_feedback_User(sub *ObjUser) rel.Relationship {
 	r, s := obj.src.Obj, sub.src
 	return rel.Relationship{
@@ -1853,7 +1853,7 @@ func (obj *ObjChronicle) CanApprove_blog_feedback_User(sub *ObjUser) rel.Relatio
 
 // CanReject_blog_feedback_User checks if the subject has reject_blog_feedback permission
 // // Object: chronicle:<id>
-// Schema: permission reject_blog_feedback = administer
+// Schema: permission reject_blog_feedback = admin_users
 func (obj *ObjChronicle) CanReject_blog_feedback_User(sub *ObjUser) rel.Relationship {
 	r, s := obj.src.Obj, sub.src
 	return rel.Relationship{
@@ -1868,7 +1868,7 @@ func (obj *ObjChronicle) CanReject_blog_feedback_User(sub *ObjUser) rel.Relation
 
 // CanDelete_blog_feedback_User checks if the subject has delete_blog_feedback permission
 // // Object: chronicle:<id>
-// Schema: permission delete_blog_feedback = administer
+// Schema: permission delete_blog_feedback = admin_users
 func (obj *ObjChronicle) CanDelete_blog_feedback_User(sub *ObjUser) rel.Relationship {
 	r, s := obj.src.Obj, sub.src
 	return rel.Relationship{
@@ -1883,7 +1883,7 @@ func (obj *ObjChronicle) CanDelete_blog_feedback_User(sub *ObjUser) rel.Relation
 
 // CanBan_blog_feedback_User checks if the subject has ban_blog_feedback permission
 // // Object: chronicle:<id>
-// Schema: permission ban_blog_feedback = administer
+// Schema: permission ban_blog_feedback = admin_users
 func (obj *ObjChronicle) CanBan_blog_feedback_User(sub *ObjUser) rel.Relationship {
 	r, s := obj.src.Obj, sub.src
 	return rel.Relationship{
@@ -1898,7 +1898,7 @@ func (obj *ObjChronicle) CanBan_blog_feedback_User(sub *ObjUser) rel.Relationshi
 
 // CanUnban_blog_feedback_User checks if the subject has unban_blog_feedback permission
 // // Object: chronicle:<id>
-// Schema: permission unban_blog_feedback = administer
+// Schema: permission unban_blog_feedback = admin_users
 func (obj *ObjChronicle) CanUnban_blog_feedback_User(sub *ObjUser) rel.Relationship {
 	r, s := obj.src.Obj, sub.src
 	return rel.Relationship{

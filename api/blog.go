@@ -42,18 +42,24 @@ func blogOwn(f serviceblog.Feedback) chroniclesdk.BlogOwnFeedback {
 func (a *API) GetBlogInteractions(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "private, no-store")
 	user := uuid.Nil
+	ownVote, ownFeedback := false, false
 	if claims, ok := chronauth.AuthenticatedClaims(r.Context()); ok {
-		if !a.requireBlogPermission(w, r, "read_own_blog_vote") || !a.requireBlogPermission(w, r, "read_own_blog_feedback") {
-			return
-		}
+		ownVote = a.canReadOwnBlog(r, "read_own_blog_vote")
+		ownFeedback = a.canReadOwnBlog(r, "read_own_blog_feedback")
 		user = claims.Subject
 	}
-	state, err := a.blog.Read(r.Context(), chi.URLParam(r, "slug"), user)
+	state, err := a.blog.ReadWithAccess(r.Context(), chi.URLParam(r, "slug"), user, ownVote, ownFeedback)
 	if err != nil {
 		blogError(w, r, err)
 		return
 	}
-	out := chroniclesdk.BlogInteractions{VotingEnabled: state.VotingEnabled, FeedbackEnabled: state.FeedbackEnabled, Enabled: state.Enabled, UpVotes: state.Votes.Up, OwnVote: state.Votes.Own, Feedback: []chroniclesdk.BlogPublicFeedback{}, FeedbackBanned: state.Banned}
+	out := chroniclesdk.BlogInteractions{VotingEnabled: state.VotingEnabled, FeedbackEnabled: state.FeedbackEnabled, Enabled: state.Enabled, UpVotes: state.Votes.Up, Feedback: []chroniclesdk.BlogPublicFeedback{}}
+	if ownVote {
+		out.OwnVote = &state.Votes.Own
+	}
+	if ownFeedback {
+		out.FeedbackBanned = &state.Banned
+	}
 	tenant := servicetenant.TenantFromContext(r.Context())
 	for _, f := range state.Feedback {
 		relation := "Another server"

@@ -120,6 +120,11 @@ type State struct {
 }
 
 func (s *Service) Read(ctx context.Context, slug string, user uuid.UUID) (State, error) {
+	return s.ReadWithAccess(ctx, slug, user, true, true)
+}
+
+// ReadWithAccess always returns the public projection but only loads authorized own state.
+func (s *Service) ReadWithAccess(ctx context.Context, slug string, user uuid.UUID, ownVote, ownFeedback bool) (State, error) {
 	out := State{Feedback: []Feedback{}}
 	for _, kind := range []string{"vote", "feedback"} {
 		if err := s.eligible(ctx, slug, kind); err != nil {
@@ -137,7 +142,11 @@ func (s *Service) Read(ctx context.Context, slug string, user uuid.UUID) (State,
 	out.Enabled = out.VotingEnabled || out.FeedbackEnabled
 	var err error
 	if out.VotingEnabled {
-		out.Votes, err = s.opts.Store.Votes(ctx, slug, user)
+		voteUser := uuid.Nil
+		if ownVote {
+			voteUser = user
+		}
+		out.Votes, err = s.opts.Store.Votes(ctx, slug, voteUser)
 		if err != nil {
 			return out, err
 		}
@@ -147,7 +156,7 @@ func (s *Service) Read(ctx context.Context, slug string, user uuid.UUID) (State,
 		if err != nil {
 			return out, err
 		}
-		if user != uuid.Nil {
+		if user != uuid.Nil && ownFeedback {
 			out.Own, err = s.opts.Store.OwnFeedback(ctx, slug, user)
 			if err != nil {
 				return out, err

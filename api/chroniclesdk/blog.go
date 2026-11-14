@@ -31,10 +31,10 @@ type BlogInteractions struct {
 	FeedbackEnabled bool                 `json:"feedback_enabled"`
 	Enabled         bool                 `json:"enabled"`
 	UpVotes         int64                `json:"up_votes"`
-	OwnVote         int16                `json:"own_vote"`
+	OwnVote         *int16               `json:"own_vote,omitempty"`
 	Feedback        []BlogPublicFeedback `json:"feedback"`
 	OwnFeedback     *BlogOwnFeedback     `json:"own_feedback,omitempty"`
-	FeedbackBanned  bool                 `json:"feedback_banned"`
+	FeedbackBanned  *bool                `json:"feedback_banned,omitempty"`
 }
 type BlogModerationRequest struct {
 	ExpectedUpdatedAt time.Time `json:"expected_updated_at"`
