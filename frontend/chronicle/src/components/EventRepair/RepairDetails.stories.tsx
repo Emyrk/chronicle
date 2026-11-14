@@ -69,3 +69,18 @@ export const LucifronComparison: Story = {
     await expect(within(dialog).getByText("166.67")).toBeVisible();
   },
 };
+
+export const LucifronHistoricalGap: Story = {
+  args: { repairs: [{ ...receipt, operation: "lucifron-ranked-damage", version: 3, warnings: ["Historical damage could not be attributed."], details: {
+    parser_version: "v1.0.172", rule_version: "v1.0.173", ranked_target_entries: [12118, 12119], players: [], omissions: [],
+    reconciliation: [{ encounter_id: "encounter-eluzia", player_guid: "guid-eluzia", player_name: "Eluzia",
+      persisted_full_damage: 58027, attributed_full_damage: 53631, unexplained_damage: 4396 }],
+  } }] },
+  play: async ({ canvasElement }) => {
+    await userEvent.click(within(canvasElement).getByRole("button", { name: "Adjusted by repair, with warnings" }));
+    const dialog = within(await modal().findByRole("dialog"));
+    for (const text of ["Eluzia", "58,027", "53,631", "4,396"]) await expect(dialog.getByText(text)).toBeVisible();
+    await expect(dialog.getByText(/excluded from both repaired ranked and unranked damage/)).toBeVisible();
+    await expect(dialog.getByText(/not additional amounts to add to the source omissions/)).toBeVisible();
+  },
+};

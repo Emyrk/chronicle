@@ -49,11 +49,20 @@ interface LucifronPlayer {
   before_dps: number;
   after_dps: number;
 }
+interface LucifronReconciliation {
+  encounter_id: string;
+  player_guid: string;
+  player_name: string;
+  persisted_full_damage: number;
+  attributed_full_damage: number;
+  unexplained_damage: number;
+}
 interface LucifronDetails {
   parser_version: string;
   rule_version: "v1.0.173";
   ranked_target_entries: number[];
   players: LucifronPlayer[];
+  reconciliation?: LucifronReconciliation[];
   omissions: Omission[];
 }
 function isLucifronPlayer(value: unknown): value is LucifronPlayer {
@@ -61,13 +70,20 @@ function isLucifronPlayer(value: unknown): value is LucifronPlayer {
     && typeof value.player_name === "string" && [value.before_ranked_damage, value.after_ranked_damage,
       value.before_unranked_damage, value.after_unranked_damage, value.before_dps, value.after_dps].every(isFiniteNumber);
 }
+function isReconciliation(value: unknown): value is LucifronReconciliation {
+  return isRecord(value) && typeof value.encounter_id === "string" && typeof value.player_guid === "string"
+    && typeof value.player_name === "string" && [value.persisted_full_damage, value.attributed_full_damage,
+      value.unexplained_damage].every((amount) => isFiniteNumber(amount) && amount >= 0);
+}
 function isLucifronDetails(value: unknown): value is LucifronDetails {
   return isRecord(value) && typeof value.parser_version === "string" && value.rule_version === "v1.0.173"
     && Array.isArray(value.ranked_target_entries) && value.ranked_target_entries.every((entry) => isFiniteNumber(entry) && Number.isInteger(entry) && entry > 0)
+    && (!("reconciliation" in value) || (Array.isArray(value.reconciliation) && value.reconciliation.every(isReconciliation)))
     && Array.isArray(value.players) && value.players.every(isLucifronPlayer)
     && Array.isArray(value.omissions) && value.omissions.every(isOmission);
 }
 function LucifronReport({ details }: { details: LucifronDetails }) {
+  const gaps = (details.reconciliation ?? []).filter((row) => row.unexplained_damage > 0);
   const number = (value: number) => value.toLocaleString("en-US", { maximumFractionDigits: 2 });
   return <div className="space-y-3">
     <h4 className="font-medium">Lucifron ranked damage</h4>
@@ -89,6 +105,21 @@ function LucifronReport({ details }: { details: LucifronDetails }) {
       </table>
       {!details.players.length && <p className="p-2 text-muted-foreground">No player changes reported.</p>}
     </div>
+    {gaps.length > 0 && <section className="space-y-2 rounded border border-amber-500/40 bg-amber-500/5 p-3" aria-label="Historical damage reconciliation">
+      <h4 className="font-medium">Historical unattributed damage</h4>
+      <p>Historical damage that cannot be attributed from the available events is excluded from both repaired ranked and unranked damage. Repaired totals are a conservative lower bound based on attributable evidence.</p>
+      <p className="text-muted-foreground">These gaps reconcile persisted full damage against attributed full damage. They are not additional amounts to add to the source omissions below.</p>
+      <div className="styled-scrollbar overflow-x-auto">
+        <table className="w-full text-left text-xs">
+          <caption className="sr-only">Nonzero player damage gaps</caption>
+          <thead><tr>{["Player / encounter", "Persisted full damage", "Attributed full damage", "Unexplained damage"].map((label) => <th key={label} scope="col" className="p-2">{label}</th>)}</tr></thead>
+          <tbody>{gaps.map((row, index) => <tr key={index} className="border-t align-top">
+            <th scope="row" className="min-w-40 max-w-64 break-all p-2 font-normal"><span className="block font-medium">{row.player_name || "Unnamed player"}</span><span className="block font-mono text-muted-foreground">{row.player_guid}</span><span className="block font-mono text-muted-foreground">Encounter {row.encounter_id}</span></th>
+            <td className="p-2 font-mono">{number(row.persisted_full_damage)}</td><td className="p-2 font-mono">{number(row.attributed_full_damage)}</td><td className="p-2 font-mono">{number(row.unexplained_damage)}</td>
+          </tr>)}</tbody>
+        </table>
+      </div>
+    </section>}
   </div>;
 }
 

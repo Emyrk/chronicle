@@ -100,3 +100,25 @@ it("Lucifron renders shared omissions and warnings without discarding the compar
   expect(html).toContain("12,500 omitted across 3 events");
   expect(html).toContain("Player damage and DPS");
 });
+
+const reconciliation = [{ encounter_id: "encounter-eluzia", player_guid: "guid-eluzia", player_name: "Eluzia",
+  persisted_full_damage: 58027, attributed_full_damage: 53631, unexplained_damage: 4396 }];
+it("explains nonzero historical gaps without adding them to source omissions", () => {
+  const html = renderToStaticMarkup(<RepairDetails operation="lucifron-ranked-damage" version={3} details={{ ...lucifron, reconciliation }} />);
+  for (const text of ["Eluzia", "58,027", "53,631", "4,396", "encounter-eluzia", "guid-eluzia", "excluded from both repaired ranked and unranked damage", "not additional amounts to add to the source omissions", "conservative lower bound"]) expect(html).toContain(text);
+});
+it.each([1, 2, 3])("preserves v%s missing and empty reconciliation compatibility", (version) => {
+  for (const details of [lucifron, { ...lucifron, reconciliation: [] }, { ...lucifron, reconciliation: [{ ...reconciliation[0], unexplained_damage: 0 }] }]) {
+    const html = renderToStaticMarkup(<RepairDetails operation="lucifron-ranked-damage" version={version} details={details} />);
+    expect(html).toContain("Player damage and DPS");
+    expect(html).not.toContain('aria-label="Historical damage reconciliation"');
+  }
+});
+it("rejects present malformed reconciliation instead of silently hiding it", () => {
+  for (const value of [undefined, null, {}, [null], [{ ...reconciliation[0], player_name: 1 }],
+    ...["4396", NaN, Infinity, -1].map((unexplained_damage) => [{ ...reconciliation[0], unexplained_damage }])]) {
+    const html = renderToStaticMarkup(<RepairDetails operation="lucifron-ranked-damage" version={3} details={{ ...lucifron, reconciliation: value }} />);
+    expect(html).toContain("No compatible detail view");
+    expect(html).not.toContain("Player damage and DPS");
+  }
+});
