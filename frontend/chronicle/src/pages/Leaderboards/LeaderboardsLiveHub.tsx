@@ -149,6 +149,7 @@ export function LeaderboardsLiveHub() {
   return <div className="flex min-w-0 2xl:gap-6">
     <div className="min-w-0 flex-1">
       <LeaderboardMaintenanceNotice tenantID={siteConfig?.tenant?.id} />
+      <LeaderboardReportNotice />
       <LeaderboardsHubApp instance={instance ?? undefined} onInstance={chooseInstance}
         instanceHref={instanceHref} tabHref={tabHref} allInstancesHref={allInstancesHref}
         tab={tab} onTab={chooseTab} realm={realm} onRealm={(name) => choose("realm_ids", available.find((row) => row.name === name)?.id)}
@@ -171,7 +172,6 @@ export function LeaderboardsLiveHub() {
           difficulty={params.get("difficulty")} size={params.get("size")}
           onCohort={(difficulty, size) => { const next = new URLSearchParams(params); next.delete("page"); if (size) { next.set("difficulty", difficulty); next.set("size", size) } else { next.delete("difficulty"); next.delete("size") } setParams(next) }}
           onEncounters={(names) => choose("encounters", names.join(",") || undefined)} />} />
-      <LeaderboardReportNotice />
     </div>
     <AdRailStack primaryPlacement="leaderboards-right-rail" secondaryPlacement="leaderboards-right-rail-lower" />
     <MobileBottomAd placement="rankings-mobile-bottom" />

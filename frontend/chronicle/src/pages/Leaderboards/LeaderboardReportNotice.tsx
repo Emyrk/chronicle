@@ -2,10 +2,11 @@ import { Flag } from "lucide-react"
 
 const DISCORD_URL = "https://discord.gg/gz97ABFVAj"
 
-// A quiet note under the boards inviting players to report results that look wrong.
+// A quiet one-line note above the boards inviting players to report results that look wrong.
+// Leaderboard layouts fill at least a screen, so a note below them lands out of sight.
 export function LeaderboardReportNotice() {
   return (
-    <p className="mt-6 flex items-start gap-2 text-xs text-muted-foreground">
+    <p className="mx-auto flex w-full max-w-[1920px] items-start gap-2 px-3 pt-2 text-xs text-muted-foreground sm:px-4">
       <Flag aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
       <span>
         See a result that looks wrong? Most are logging or parsing mistakes, not cheating, and they can be fixed.{" "}

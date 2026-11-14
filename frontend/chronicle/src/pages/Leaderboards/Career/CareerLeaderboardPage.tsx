@@ -50,6 +50,7 @@ export function CareerLeaderboardPage() {
   }
   return (
     <>
+      <LeaderboardReportNotice />
       <CareerLeaderboard
         view={view}
         onView={(next) => update({ view: next === "overview" ? undefined : next })}
@@ -73,7 +74,6 @@ export function CareerLeaderboardPage() {
         request={request}
         allHref="/leaderboards"
       />
-      <LeaderboardReportNotice />
     </>
   )
 }
