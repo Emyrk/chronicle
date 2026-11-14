@@ -50,12 +50,12 @@ func (a *API) GetBlogInteractions(w http.ResponseWriter, r *http.Request) {
 		blogError(w, r, err)
 		return
 	}
-	out := chroniclesdk.BlogInteractions{Enabled: state.Enabled, UpVotes: state.Votes.Up, OwnVote: state.Votes.Own, Feedback: []chroniclesdk.BlogPublicFeedback{}, FeedbackBanned: state.Banned}
+	out := chroniclesdk.BlogInteractions{VotingEnabled: state.VotingEnabled, FeedbackEnabled: state.FeedbackEnabled, Enabled: state.Enabled, UpVotes: state.Votes.Up, OwnVote: state.Votes.Own, Feedback: []chroniclesdk.BlogPublicFeedback{}, FeedbackBanned: state.Banned}
 	tenant := servicetenant.TenantFromContext(r.Context())
 	for _, f := range state.Feedback {
-		relation := "different server"
+		relation := "Another server"
 		if tenant != nil && tenant.ID == f.TenantID {
-			relation = "same server"
+			relation = "This server"
 		}
 		out.Feedback = append(out.Feedback, chroniclesdk.BlogPublicFeedback{ID: f.ID, Body: f.Body, ServerRelation: relation})
 	}

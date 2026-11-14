@@ -4,7 +4,8 @@ This constructed service owns eligibility, validation, admission and interaction
 HTTP adapters own authentication, user-admin authorization and anonymous response projection.
 The SQL adapter owns atomic global account/post uniqueness and immutable submission provenance.
 
-Each manifest post must explicitly set `interactions_enabled: true`. Missing posts,
+Each manifest post must explicitly set `voting_enabled: true` or
+`feedback_enabled: true` independently for the respective feature. Missing posts,
 missing metadata, disabled posts and inaccessible flavor variants deny mutations.
 Current posts remain disabled. The client cannot authorize interactions itself.
 
@@ -14,7 +15,7 @@ component. Each starts with five tokens and refills one token per twenty minutes
 Limiter failures deny writes. Validation and eligibility checks precede consumption.
 Moderation and feedback bans are administrative operations and do not consume tokens.
 
-Feedback is plain text, trimmed to 1 through 300 Unicode code points. Public consent
+Feedback is plain text, trimmed to 1 through 300 Unicode code points. Private submissions do not require consent. Public consent
 and moderator approval are both required for public display. Edits reset approval.
 Deletion leaves a reservation so the same account cannot submit another record for
 that post. Submission tenant never changes when the author edits from another site.

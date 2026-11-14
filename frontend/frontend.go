@@ -70,12 +70,13 @@ type blogManifest struct {
 }
 
 type blogManifestPost struct {
-	InteractionsEnabled bool       `json:"interactions_enabled"`
-	Path                string     `json:"path"`
-	Title               string     `json:"title"`
-	Description         string     `json:"description"`
-	PublishedAt         string     `json:"published_at"`
-	FlavorSets          [][]string `json:"flavor_sets"`
+	VotingEnabled   bool       `json:"voting_enabled"`
+	FeedbackEnabled bool       `json:"feedback_enabled"`
+	Path            string     `json:"path"`
+	Title           string     `json:"title"`
+	Description     string     `json:"description"`
+	PublishedAt     string     `json:"published_at"`
+	FlavorSets      [][]string `json:"flavor_sets"`
 }
 
 type handler struct {
@@ -517,7 +518,7 @@ func filePath(p string) string {
 
 // BlogInteractionsEnabled resolves opt-in from the server's build manifest, never client input.
 // Unknown posts, missing manifests, and inaccessible flavor variants fail closed.
-func BlogInteractionsEnabled(siteFS fs.FS, slug string, flavor []string) (bool, error) {
+func BlogInteractionsEnabled(siteFS fs.FS, slug string, flavor []string, kind string) (bool, error) {
 	if slug == "" || strings.ContainsAny(slug, "/\\") || slug == "." || slug == ".." {
 		return false, nil
 	}
@@ -528,5 +529,6 @@ func BlogInteractionsEnabled(siteFS fs.FS, slug string, flavor []string) (bool, 
 	h := handler{blogPosts: posts}
 	route := "/blog/" + slug
 	post, ok := posts[route]
-	return ok && post.InteractionsEnabled && h.blogPathAllowed(route, flavor), nil
+	enabled := (kind == "vote" && post.VotingEnabled) || (kind == "feedback" && post.FeedbackEnabled)
+	return ok && enabled && h.blogPathAllowed(route, flavor), nil
 }

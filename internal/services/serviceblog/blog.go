@@ -62,7 +62,7 @@ type Options struct {
 	Bans            Bans
 	VoteLimiter     Limiter
 	FeedbackLimiter Limiter
-	Eligible        func(context.Context, string) (bool, error)
+	Eligible        func(context.Context, string, string) (bool, error)
 	// FeedbackCreated is inactive by default. It runs best-effort after the first
 	// successful insert only, not edits. Delivery is not durable or exactly-once.
 	// Consumers must be idempotent. No rewards are issued by this service.
@@ -76,11 +76,11 @@ func New(opts Options) *Service { return &Service{opts: opts} }
 type RateLimited struct{ Result ratelimit.Result }
 
 func (*RateLimited) Error() string { return "too many blog interactions" }
-func (s *Service) eligible(ctx context.Context, slug string) error {
+func (s *Service) eligible(ctx context.Context, slug string, kind string) error {
 	if s.opts.Eligible == nil {
 		return ErrDisabled
 	}
-	ok, err := s.opts.Eligible(ctx, slug)
+	ok, err := s.opts.Eligible(ctx, slug, kind)
 	if err != nil {
 		return err
 	}
@@ -107,37 +107,50 @@ func take(ctx context.Context, limiter Limiter, user uuid.UUID) error {
 }
 
 type State struct {
-	Enabled  bool
-	Votes    Votes
-	Feedback []Feedback
-	Own      *Feedback
-	Banned   bool
+	VotingEnabled   bool
+	FeedbackEnabled bool
+	Enabled         bool
+	Votes           Votes
+	Feedback        []Feedback
+	Own             *Feedback
+	Banned          bool
 }
 
 func (s *Service) Read(ctx context.Context, slug string, user uuid.UUID) (State, error) {
 	out := State{Feedback: []Feedback{}}
-	if err := s.eligible(ctx, slug); err != nil {
-		if errors.Is(err, ErrDisabled) {
-			return out, nil
+	for _, kind := range []string{"vote", "feedback"} {
+		if err := s.eligible(ctx, slug, kind); err != nil {
+			if errors.Is(err, ErrDisabled) {
+				continue
+			}
+			return out, err
 		}
-		return out, err
+		if kind == "vote" {
+			out.VotingEnabled = true
+		} else {
+			out.FeedbackEnabled = true
+		}
 	}
-	out.Enabled = true
+	out.Enabled = out.VotingEnabled || out.FeedbackEnabled
 	var err error
-	out.Votes, err = s.opts.Store.Votes(ctx, slug, user)
-	if err != nil {
-		return out, err
-	}
-	out.Feedback, err = s.opts.Store.PublicFeedback(ctx, slug)
-	if err != nil {
-		return out, err
-	}
-	if user != uuid.Nil {
-		out.Own, err = s.opts.Store.OwnFeedback(ctx, slug, user)
+	if out.VotingEnabled {
+		out.Votes, err = s.opts.Store.Votes(ctx, slug, user)
 		if err != nil {
 			return out, err
 		}
-		out.Banned, err = s.opts.Bans.Banned(ctx, user)
+	}
+	if out.FeedbackEnabled {
+		out.Feedback, err = s.opts.Store.PublicFeedback(ctx, slug)
+		if err != nil {
+			return out, err
+		}
+		if user != uuid.Nil {
+			out.Own, err = s.opts.Store.OwnFeedback(ctx, slug, user)
+			if err != nil {
+				return out, err
+			}
+			out.Banned, err = s.opts.Bans.Banned(ctx, user)
+		}
 	}
 	return out, err
 }
@@ -145,7 +158,7 @@ func (s *Service) Vote(ctx context.Context, slug string, user uuid.UUID, vote in
 	if vote < -1 || vote > 1 {
 		return ErrInvalid
 	}
-	if err := s.eligible(ctx, slug); err != nil {
+	if err := s.eligible(ctx, slug, "vote"); err != nil {
 		return err
 	}
 	if err := take(ctx, s.opts.VoteLimiter, user); err != nil {
@@ -155,7 +168,7 @@ func (s *Service) Vote(ctx context.Context, slug string, user uuid.UUID, vote in
 }
 func ValidateFeedback(body string, consent bool) (string, error) {
 	body = strings.TrimSpace(body)
-	if !consent || !utf8.ValidString(body) || utf8.RuneCountInString(body) < 1 || utf8.RuneCountInString(body) > 300 {
+	if !utf8.ValidString(body) || utf8.RuneCountInString(body) < 1 || utf8.RuneCountInString(body) > 300 {
 		return "", ErrInvalid
 	}
 	return body, nil
@@ -165,7 +178,7 @@ func (s *Service) Save(ctx context.Context, slug string, user, tenant uuid.UUID,
 	if err != nil {
 		return Feedback{}, err
 	}
-	if err = s.eligible(ctx, slug); err != nil {
+	if err = s.eligible(ctx, slug, "feedback"); err != nil {
 		return Feedback{}, err
 	}
 	if user == uuid.Nil || tenant == uuid.Nil {
@@ -188,7 +201,7 @@ func (s *Service) Save(ctx context.Context, slug string, user, tenant uuid.UUID,
 	if err = take(ctx, s.opts.FeedbackLimiter, user); err != nil {
 		return Feedback{}, err
 	}
-	feedback, created, err := s.opts.Store.SaveFeedback(ctx, Feedback{ID: uuid.New(), PostSlug: slug, UserID: user, TenantID: tenant, Body: body, Consent: true, Status: "pending"})
+	feedback, created, err := s.opts.Store.SaveFeedback(ctx, Feedback{ID: uuid.New(), PostSlug: slug, UserID: user, TenantID: tenant, Body: body, Consent: consent, Status: "pending"})
 	if err == nil && created && s.opts.FeedbackCreated != nil {
 		if hookErr := s.opts.FeedbackCreated(ctx, feedback); hookErr != nil {
 			logger := s.opts.Logger
@@ -201,7 +214,7 @@ func (s *Service) Save(ctx context.Context, slug string, user, tenant uuid.UUID,
 	return feedback, err
 }
 func (s *Service) Delete(ctx context.Context, slug string, user uuid.UUID) error {
-	if err := s.eligible(ctx, slug); err != nil {
+	if err := s.eligible(ctx, slug, "feedback"); err != nil {
 		return err
 	}
 	own, err := s.opts.Store.OwnFeedback(ctx, slug, user)

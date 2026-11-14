@@ -799,6 +799,8 @@ export interface BlogFeedbackRequest {
 
 // From chroniclesdk/blog.go
 export interface BlogInteractions {
+    readonly voting_enabled: boolean;
+    readonly feedback_enabled: boolean;
     readonly enabled: boolean;
     readonly up_votes: number;
     readonly own_vote: number;

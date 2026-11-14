@@ -22,11 +22,11 @@ func (a *API) newBlogService() *serviceblog.Service {
 		Bans:            blogBans{zed: a.Zed},
 		VoteLimiter:     ratelimit.New(db, "blog_vote", limit),
 		FeedbackLimiter: ratelimit.New(db, "blog_feedback", limit),
-		Eligible: func(ctx context.Context, slug string) (bool, error) {
+		Eligible: func(ctx context.Context, slug string, kind string) (bool, error) {
 			if servicetenant.TenantFromContext(ctx) == nil {
 				return false, nil
 			}
-			return frontend.BlogInteractionsEnabled(frontend.FS(), slug, a.resolvedSiteFlavor(ctx).Strings())
+			return frontend.BlogInteractionsEnabled(frontend.FS(), slug, a.resolvedSiteFlavor(ctx).Strings(), kind)
 		},
 	})
 }

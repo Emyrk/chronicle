@@ -38,7 +38,7 @@ func (blogPublicStore) PublicFeedback(context.Context, string) ([]serviceblog.Fe
 }
 func TestBlogPublicProjection(t *testing.T) {
 	t.Parallel()
-	a := &API{blog: serviceblog.New(serviceblog.Options{Store: blogPublicStore{}, Eligible: func(context.Context, string) (bool, error) { return true, nil }})}
+	a := &API{blog: serviceblog.New(serviceblog.Options{Store: blogPublicStore{}, Eligible: func(context.Context, string, string) (bool, error) { return true, nil }})}
 	w := httptest.NewRecorder()
 	a.GetBlogInteractions(w, httptest.NewRequest(http.MethodGet, "/", nil))
 	require.Equal(t, http.StatusOK, w.Code)

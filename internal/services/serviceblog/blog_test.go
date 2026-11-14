@@ -56,7 +56,7 @@ func TestValidateFeedback(t *testing.T) {
 		require.ErrorIs(t, err, ErrInvalid)
 	}
 	_, err = ValidateFeedback("hello", false)
-	require.ErrorIs(t, err, ErrInvalid)
+	require.NoError(t, err)
 	_, err = ValidateFeedback(strings.Repeat("🌍", 300), true)
 	require.NoError(t, err)
 }
@@ -82,7 +82,7 @@ func TestVoteAdmission(t *testing.T) {
 			t.Parallel()
 			store := &testStore{}
 			limiter := &testLimiter{result: ratelimit.Result{Allowed: tc.allowed}, err: tc.limitErr}
-			s := New(Options{Store: store, VoteLimiter: limiter, Eligible: func(context.Context, string) (bool, error) { return tc.enabled, nil }})
+			s := New(Options{Store: store, VoteLimiter: limiter, Eligible: func(context.Context, string, string) (bool, error) { return tc.enabled, nil }})
 			user := uuid.New()
 			err := s.Vote(context.Background(), "post", user, tc.vote)
 			if tc.want != nil {
@@ -118,7 +118,7 @@ func TestFeedbackAdmissionAndHook(t *testing.T) {
 			}
 			limiter := &testLimiter{result: ratelimit.Result{Allowed: true}}
 			hooks := 0
-			s := New(Options{Store: store, Bans: testBans{tc.banned}, FeedbackLimiter: limiter, Eligible: func(context.Context, string) (bool, error) { return true, nil }, FeedbackCreated: func(context.Context, Feedback) error { hooks++; return nil }})
+			s := New(Options{Store: store, Bans: testBans{tc.banned}, FeedbackLimiter: limiter, Eligible: func(context.Context, string, string) (bool, error) { return true, nil }, FeedbackCreated: func(context.Context, Feedback) error { hooks++; return nil }})
 			f, err := s.Save(context.Background(), "post", uuid.New(), uuid.New(), " body ", true)
 			if tc.want != nil {
 				require.ErrorIs(t, err, tc.want)
@@ -143,7 +143,7 @@ func (s *testStore) DeleteOwnFeedback(context.Context, string, uuid.UUID) error 
 func TestBanDoesNotAffectVoteOrDelete(t *testing.T) {
 	t.Parallel()
 	limiter := &testLimiter{result: ratelimit.Result{Allowed: true}}
-	s := New(Options{Store: &testStore{own: &Feedback{}}, Bans: testBans{banned: true}, VoteLimiter: limiter, FeedbackLimiter: limiter, Eligible: func(context.Context, string) (bool, error) { return true, nil }})
+	s := New(Options{Store: &testStore{own: &Feedback{}}, Bans: testBans{banned: true}, VoteLimiter: limiter, FeedbackLimiter: limiter, Eligible: func(context.Context, string, string) (bool, error) { return true, nil }})
 	user := uuid.New()
 	require.NoError(t, s.Vote(context.Background(), "post", user, 1))
 	require.NoError(t, s.Delete(context.Background(), "post", user))
@@ -160,9 +160,19 @@ func TestModerationRequiresReviewedRevision(t *testing.T) {
 func TestFeedbackHookFailureDoesNotFailSavedFeedback(t *testing.T) {
 	t.Parallel()
 	store := &testStore{created: true}
-	s := New(Options{Store: store, Bans: testBans{}, FeedbackLimiter: &testLimiter{result: ratelimit.Result{Allowed: true}}, Eligible: func(context.Context, string) (bool, error) { return true, nil }, FeedbackCreated: func(context.Context, Feedback) error { return errors.New("consumer offline") }})
+	s := New(Options{Store: store, Bans: testBans{}, FeedbackLimiter: &testLimiter{result: ratelimit.Result{Allowed: true}}, Eligible: func(context.Context, string, string) (bool, error) { return true, nil }, FeedbackCreated: func(context.Context, Feedback) error { return errors.New("consumer offline") }})
 	f, err := s.Save(context.Background(), "post", uuid.New(), uuid.New(), "body", true)
 	require.NoError(t, err)
 	require.Equal(t, "body", f.Body)
 	require.Equal(t, 1, store.saves)
+}
+
+func TestPrivateFeedbackPreservesConsent(t *testing.T) {
+	t.Parallel()
+	s := New(Options{Store: &testStore{created: true}, Bans: testBans{}, FeedbackLimiter: &testLimiter{result: ratelimit.Result{Allowed: true}}, Eligible: func(_ context.Context, _ string, kind string) (bool, error) { return kind == "feedback", nil }})
+	user := uuid.New()
+	saved, err := s.Save(context.Background(), "post", user, uuid.New(), "private", false)
+	require.NoError(t, err)
+	require.False(t, saved.Consent)
+	require.ErrorIs(t, s.Vote(context.Background(), "post", user, 1), ErrDisabled)
 }
