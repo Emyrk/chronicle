@@ -141,6 +141,11 @@ export function BeyondTheBestParsePost({ post }: PostProps) {
           It doesn&apos;t matter whether there are 50 other players below you or 5,000. As long as the benchmark remains
           unchanged, your distance from it remains the same.
         </p>
+        <p>
+          <strong>Peak is independent of the population size. Only the benchmark matters.</strong> That&apos;s
+          deliberate: the goal is to remove population-size bias from ratings, so a spec with a handful of recorded
+          kills is measured the same way as a spec with thousands.
+        </p>
         <p>This is the distinction I wanted to establish:</p>
         <PullQuote>
           Parses measure your position within a population. Peak measures your distance from a benchmark.
@@ -466,7 +471,7 @@ function DotStrip({ population, you, highlight }: { population: readonly number[
       {population.map((v, i) => (
         <span
           key={i}
-          className="absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full"
+          className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full ${population.length > 20 ? "size-1.5 sm:size-2" : "size-2.5"}`}
           style={{ left: x(v), background: highlight?.includes(v) ? "#f87171" : "#71717a" }}
         />
       ))}
@@ -521,35 +526,63 @@ function WeekendStrip() {
   );
 }
 
+// A bigger population with the same 2,000 DPS record: 40 kills spread from 900 to ~1,990.
+const LARGE_POPULATION = Array.from({ length: 40 }, (_, i) => 900 + i * 28);
+const BENCHMARK = 2000;
+
+/** The same kill against a small and a large population: the parse moves, Peak doesn't. */
 function PositionVsDistance() {
-  const parse = parseAgainst(FRIDAY_POPULATION, YOU);
+  const rows = [
+    { label: "Small population", population: FRIDAY_POPULATION },
+    { label: "Large population", population: LARGE_POPULATION },
+  ];
+  const peak = Math.round((100 * YOU) / BENCHMARK);
   return (
-    <Figure label="Position vs distance">
-      <div className="grid gap-5 sm:grid-cols-2">
-        <div>
-          <div className="text-sm font-semibold text-foreground">Parse: your place in the crowd</div>
-          <div className="mt-3">
-            <DotStrip population={FRIDAY_POPULATION} you={YOU} />
-          </div>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Ahead of {FRIDAY_POPULATION.filter((v) => v < YOU).length} of {FRIDAY_POPULATION.length} kills:{" "}
-            <strong style={{ color: parseHexColor(parse) }}>parse {parse}</strong>. Moves when the crowd moves.
-          </p>
-        </div>
-        <div>
-          <div className="text-sm font-semibold text-foreground">Peak: your distance from the best</div>
-          <div className="relative mt-5 h-5 overflow-hidden rounded-full bg-border">
-            <div className="h-full rounded-full" style={{ width: "80%", background: PEAK }} />
-          </div>
-          <div className="mt-1 flex justify-between font-mono text-[11px] text-muted-foreground">
-            <span>0</span>
-            <span>you · 1,600</span>
-            <span>benchmark · 2,000</span>
-          </div>
-          <p className="mt-2 text-sm text-muted-foreground">
-            1,600 ÷ 2,000 = <strong style={{ color: PEAK }}>Peak 80</strong>. Moves only when the record moves.
-          </p>
-        </div>
+    <Figure
+      label="Same kill, two population sizes"
+      caption="Example numbers. A 1,600 DPS kill, and the same 2,000 DPS record in both populations."
+    >
+      <div className="hidden grid-cols-[minmax(0,1fr)_5rem_5rem] gap-4 pb-2 text-xs tracking-wider text-muted-foreground uppercase sm:grid">
+        <span>Comparison</span>
+        <span className="text-right">Parse</span>
+        <span className="text-right">Peak</span>
+      </div>
+      <div className="space-y-4">
+        {rows.map(({ label, population }) => {
+          const parse = parseAgainst(population, YOU);
+          return (
+            <div key={label} className="grid grid-cols-[minmax(0,1fr)_5rem_5rem] items-center gap-4">
+              <div className="min-w-0">
+                <div className="text-sm text-foreground">
+                  {label} <span className="text-muted-foreground">· {population.length} kills</span>
+                </div>
+                <DotStrip population={population} you={YOU} />
+              </div>
+              <div className="text-right">
+                <div className="font-mono text-2xl font-bold" style={{ color: parseHexColor(parse) }}>
+                  {parse}
+                </div>
+                <div className="text-[11px] text-muted-foreground sm:hidden">parse</div>
+              </div>
+              <div className="text-right">
+                <div className="font-mono text-2xl font-bold" style={{ color: PEAK }}>
+                  {peak}
+                </div>
+                <div className="text-[11px] text-muted-foreground sm:hidden">Peak</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-4 grid gap-3 border-t border-border pt-3 text-sm text-muted-foreground sm:grid-cols-2">
+        <p>
+          <strong className="text-foreground">Parse</strong> counts the kills you beat, so it moves when the population
+          grows or shrinks.
+        </p>
+        <p>
+          <strong style={{ color: PEAK }}>Peak</strong> is 1,600 ÷ 2,000 in both. Population size isn&apos;t an input;
+          only the benchmark is.
+        </p>
       </div>
     </Figure>
   );
