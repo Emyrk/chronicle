@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, expect, it, vi } from "vitest";
-import { BlogCardStats, BlogInteractions, BlogScore } from "./BlogInteractions";
+import { BlogCardStats, BlogInteractions, BlogScore, FeedbackEditor } from "./BlogInteractions";
 import type { BlogPostMetadata } from "./blogRegistry";
 
 const state = vi.hoisted(() => ({ authenticated: false, banned: false, vote: 0, feedback: null as null | { id: string; body: string; status: string; deleted: boolean; consent: boolean } }));
@@ -8,7 +8,7 @@ vi.mock("react", async (original) => ({ ...await original<typeof import("react")
 vi.mock("@/hooks/useAuth", () => ({ useAuth: () => ({ session: state.authenticated ? { user_id: "secret-user" } : undefined, isLoading: false }) }));
 vi.mock("@/api/blogInteractions", () => ({
   useBlogInteractions: () => ({ data: { voting_enabled: true, feedback_enabled: true, own_feedback: state.feedback, up_votes: 12, down_votes: 987654, own_vote: state.vote, feedback_banned: state.banned, feedback: [{ id: "public", body: "Good <script>alert(1)</script>", server_relation: "This server" }] } }),
-  useBlogMutation: () => ({ mutate: vi.fn(), isPending: false }),
+  useBlogMutation: () => ({ mutate: vi.fn(), reset: vi.fn(), isPending: false }),
   useBlogSummaries: () => ({ data: new Map([["test", { slug: "test", up_votes: 7, public_feedback: 3 }]]) }),
 }));
 const post: BlogPostMetadata = { id: "test", title: "Test", description: "", publishedAt: "2026-01-01", rarity: "common", tag: "Docs", icon: "book", votingEnabled: true, feedbackEnabled: true };
@@ -52,22 +52,29 @@ it("hides submission form for banned users", () => {
   expect(markup).not.toContain("Send feedback");
 });
 
-it("allows saving existing private feedback without publication consent", () => {
+it("shows saved feedback read-only with an edit action", () => {
   state.authenticated = true;
   state.feedback = { id: "own", body: "Private suggestion", status: "pending", deleted: false, consent: false };
   const markup = renderToStaticMarkup(<BlogInteractions post={post} />);
   expect(markup).toContain("Private suggestion");
+  expect(markup).toContain("Edit</button>");
+  expect(markup).not.toContain("<textarea");
+  expect(markup).toContain("only moderators can read this");
+});
+it("allows updating existing private feedback without publication consent", () => {
+  const markup = renderToStaticMarkup(<FeedbackEditor postID="test" initialEditing feedback={{ id: "own", body: "Private suggestion", status: "pending", deleted: false, consent: false }} />);
+  expect(markup).toContain("Private suggestion");
   expect(markup).not.toMatch(/<input[^>]*type="checkbox"[^>]*required/);
-  expect(markup).not.toMatch(/<button[^>]*disabled=""[^>]*>Save feedback<\/button>/);
+  expect(markup).not.toMatch(/<button[^>]*disabled=""[^>]*>Update feedback<\/button>/);
+  expect(markup).toContain("Update feedback");
+  expect(markup).toContain("Cancel");
   expect(markup).not.toContain('checked=""');
   expect(markup).toContain("withdraw permission");
 });
 it("restores existing publication consent when editing", () => {
-  state.authenticated = true;
-  state.feedback = { id: "own", body: "Published suggestion", status: "approved", deleted: false, consent: true };
-  const markup = renderToStaticMarkup(<BlogInteractions post={post} />);
+  const markup = renderToStaticMarkup(<FeedbackEditor postID="test" initialEditing feedback={{ id: "own", body: "Published suggestion", status: "approved", deleted: false, consent: true }} />);
   expect(markup).toContain('checked=""');
-  expect(markup).not.toMatch(/<button[^>]*disabled=""[^>]*>Save feedback<\/button>/);
+  expect(markup).not.toMatch(/<button[^>]*disabled=""[^>]*>Update feedback<\/button>/);
 });
 
 it("shows the upvote score for the title and hides it when voting is off", () => {

@@ -1,5 +1,5 @@
 import { useState, useSyncExternalStore } from "react";
-import { MessageSquare, ThumbsDown, ThumbsUp } from "lucide-react";
+import { MessageSquare, Pencil, ThumbsDown, ThumbsUp } from "lucide-react";
 import { useBlogMutation, useBlogInteractions, useBlogSummaries, blogFeedbackMutation, type OwnFeedback } from "@/api/blogInteractions";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
@@ -128,19 +128,37 @@ function LiveCardStats({ post }: { post: BlogPostMetadata }) {
   </span>;
 }
 
-function FeedbackEditor({ postID, feedback }: { postID: string; feedback: OwnFeedback | null }) {
+/** Saved feedback reads as a fixed card; Edit opens the form, and a successful save closes it. */
+export function FeedbackEditor({ postID, feedback, initialEditing = false }: { postID: string; feedback: OwnFeedback | null; initialEditing?: boolean }) {
+  const [editing, setEditing] = useState(initialEditing || !feedback);
   const [body, setBody] = useState(feedback?.body ?? "");
   const [consent, setConsent] = useState(feedback?.consent ?? false);
   const mutation = useBlogMutation(postID);
   const length = Array.from(body.trim()).length;
   const tooLong = length > 300;
+  const statusBadge = feedback && <span className="rounded-full border border-border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wide text-muted-foreground">{feedbackStatusLabel(feedback)}</span>;
+
+  if (feedback && !editing) {
+    return <div className="space-y-3 rounded-lg border border-border bg-card p-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold">Your feedback</h3>
+        {statusBadge}
+      </div>
+      <p className="whitespace-pre-wrap break-words border-l-2 border-border pl-3 text-[15px] leading-6 text-foreground">{feedback.body}</p>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
+        <p className="text-xs leading-5 text-muted-foreground">{feedback.consent ? "You allowed Chronicle to publish this anonymously after moderation." : "Private: only moderators can read this."}</p>
+        <Button size="sm" variant="outline" onClick={() => { mutation.reset(); setEditing(true); }}><Pencil className="mr-1.5 h-3.5 w-3.5" />Edit</Button>
+      </div>
+    </div>;
+  }
+
   return <form className="space-y-4 rounded-lg border border-border bg-card p-5" onSubmit={(event) => {
     event.preventDefault();
-    mutation.mutate(blogFeedbackMutation(body, consent));
+    mutation.mutate(blogFeedbackMutation(body, consent), { onSuccess: () => setEditing(false) });
   }}>
     <div className="flex flex-wrap items-center justify-between gap-2">
-      <label htmlFor="blog-feedback" className="text-sm font-semibold">Your feedback</label>
-      {feedback && <span className="rounded-full border border-border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wide text-muted-foreground">{feedbackStatusLabel(feedback)}</span>}
+      <label htmlFor="blog-feedback" className="text-sm font-semibold">{feedback ? "Edit your feedback" : "Your feedback"}</label>
+      {statusBadge}
     </div>
     <textarea id="blog-feedback" value={body} onChange={(event) => setBody(event.target.value)} maxLength={600} required rows={4} placeholder="What worked, what was confusing, what should come next?" className="styled-scrollbar w-full resize-y rounded-md border border-input bg-background p-3 text-sm leading-6 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
     <label className="flex cursor-pointer items-start gap-2.5 text-sm">
@@ -148,13 +166,13 @@ function FeedbackEditor({ postID, feedback }: { postID: string; feedback: OwnFee
       <span>Allow Chronicle to publish this anonymously after moderation.<span className="mt-0.5 block text-xs text-muted-foreground">Leave unchecked to keep it private. Uncheck and save to withdraw permission.</span></span>
     </label>
     <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-      <p className="text-xs leading-5 text-muted-foreground">One response per post. Your name is never shown. Edits go back to review.</p>
+      <p className="text-xs leading-5 text-muted-foreground">{feedback ? "Updating sends your feedback back to review." : "One response per post. Your name is never shown."}</p>
       <div className="ml-auto flex items-center gap-3">
         <span className={`font-mono text-xs ${tooLong ? "text-destructive" : "text-muted-foreground"}`}>{length}/300</span>
-        <Button type="submit" disabled={mutation.isPending || !body.trim() || tooLong}>{mutation.isPending ? "Saving…" : feedback ? "Save feedback" : "Send feedback"}</Button>
+        {feedback && <Button type="button" variant="ghost" disabled={mutation.isPending} onClick={() => { setBody(feedback.body); setConsent(feedback.consent); mutation.reset(); setEditing(false); }}>Cancel</Button>}
+        <Button type="submit" disabled={mutation.isPending || !body.trim() || tooLong}>{mutation.isPending ? "Saving…" : feedback ? "Update feedback" : "Send feedback"}</Button>
       </div>
     </div>
     {mutation.error && <p role="alert" className="text-sm text-destructive">{mutation.error.message}</p>}
-    {mutation.isSuccess && <p role="status" className="text-sm text-muted-foreground">Feedback saved.</p>}
   </form>;
 }
