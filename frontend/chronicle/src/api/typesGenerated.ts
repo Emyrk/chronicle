@@ -37,6 +37,165 @@ export interface AccountPurgeStatus {
     readonly error: string;
 }
 
+// From chroniclesdk/achievements.go
+/**
+ * Achievement is one versioned achievement definition.
+ */
+export interface Achievement {
+    readonly id: string;
+    readonly version: number;
+    readonly category_id: string;
+    readonly series_id?: string;
+    /**
+     * Tier is the 1-based tier within SeriesID, or 0 when not in a series.
+     */
+    readonly tier: number;
+    readonly visibility: AchievementVisibility;
+    /**
+     * Name and Description are empty for unearned hidden achievements.
+     */
+    readonly name: string;
+    readonly description: string;
+    /**
+     * Icon is a frontend icon key. Defaults to the category icon when empty.
+     */
+    readonly icon?: string;
+    readonly points: number;
+    /**
+     * Keybind is the key sequence for keybind achievements, such as "Shift+E".
+     * The frontend renders it platform-aware.
+     */
+    readonly keybind?: string;
+    readonly requirements: readonly AchievementRequirement[];
+    /**
+     * RequiredAchievementIDs is set only for set achievements.
+     */
+    readonly required_achievement_ids?: readonly string[];
+    readonly rewards: readonly AchievementReward[];
+    /**
+     * FeatureURL is an optional in-app link to where the achievement is earned.
+     */
+    readonly feature_url?: string;
+    readonly completion_rate: AchievementCompletionRate;
+    readonly introduced_at: string;
+    readonly retired_at?: string;
+}
+
+// From chroniclesdk/achievements.go
+/**
+ * AchievementCategory is a WoW-style navigation group.
+ */
+export interface AchievementCategory {
+    readonly id: string;
+    readonly name: string;
+    readonly description: string;
+    /**
+     * Icon is a frontend icon key, such as "book-open" or "keyboard".
+     */
+    readonly icon: string;
+}
+
+// From chroniclesdk/achievements.go
+/**
+ * AchievementCompletionRate is the share of the catalog-wide account cohort
+ * that has earned an achievement. Computed asynchronously and cached.
+ */
+export interface AchievementCompletionRate {
+    readonly earned_account_count: number;
+    readonly eligible_account_count: number;
+    readonly calculated_at: string;
+    readonly frozen_at?: string;
+}
+
+// From chroniclesdk/achievements.go
+/**
+ * AchievementProgress is the viewer's state for one achievement. Absent
+ * entries mean not started.
+ */
+export interface AchievementProgress {
+    readonly achievement_id: string;
+    readonly version: number;
+    readonly earned_at?: string;
+    /**
+     * Retroactive is true when the award came from backfilled evidence; EarnedAt
+     * is then the earliest evidence timestamp or the migration award time.
+     */
+    readonly retroactive: boolean;
+    /**
+     * Current and Required describe multi-action or counter progress. Both are
+     * 0 for one-shot achievements.
+     */
+    readonly current: number;
+    readonly required: number;
+}
+
+// From chroniclesdk/achievements.go
+/**
+ * AchievementRequirement is a structured prerequisite, shown wherever the
+ * achievement is shown.
+ */
+export interface AchievementRequirement {
+    readonly kind: AchievementRequirementKind;
+    /**
+     * Label is user-facing, such as "Requires Honored reputation".
+     */
+    readonly label: string;
+    /**
+     * Met is whether the current viewer satisfies the requirement. Always
+     * false for anonymous viewers.
+     */
+    readonly met: boolean;
+}
+
+// From chroniclesdk/achievements.go
+/**
+ * AchievementReward is a cosmetic or presentation reward.
+ */
+export interface AchievementReward {
+    readonly id: string;
+    readonly kind: AchievementRewardKind;
+    readonly name: string;
+}
+
+// From chroniclesdk/achievements.go
+/**
+ * AchievementSeries groups achievements that represent increasing
+ * proficiency in one concept, displayed as tiers.
+ */
+export interface AchievementSeries {
+    readonly id: string;
+    readonly category_id: string;
+    readonly name: string;
+    readonly description: string;
+}
+
+// From chroniclesdk/achievements.go
+/**
+ * AchievementViewer is the signed-in account's achievement state.
+ */
+export interface AchievementViewer {
+    readonly earned_points: number;
+    readonly progress: readonly AchievementProgress[];
+}
+
+// From chroniclesdk/achievements.go
+/**
+ * AchievementsResponse is returned by GET /api/v1/achievements.
+ */
+export interface AchievementsResponse {
+    readonly categories: readonly AchievementCategory[];
+    readonly series: readonly AchievementSeries[];
+    readonly achievements: readonly Achievement[];
+    /**
+     * TotalPoints is the sum of points across active, non-Feat achievements.
+     */
+    readonly total_points: number;
+    /**
+     * Viewer is nil for anonymous requests.
+     */
+    readonly viewer: AchievementViewer | null;
+}
+
 // From chroniclesdk/panel_layout.go
 export interface ActionBarSlotsResponse {
     readonly slot_1: string | null;
@@ -696,6 +855,21 @@ export interface ArmorySearchResult {
     readonly guild_name?: string;
     readonly updated_at: string;
 }
+
+// From chroniclesdk/achievements.go
+export type AchievementRequirementKind = "capability" | "permission" | "reputation" | "unreleased";
+
+export const AchievementRequirementKinds: AchievementRequirementKind[] = ["capability", "permission", "reputation", "unreleased"];
+
+// From chroniclesdk/achievements.go
+export type AchievementRewardKind = "background" | "badge" | "border" | "name" | "title";
+
+export const AchievementRewardKinds: AchievementRewardKind[] = ["background", "badge", "border", "name", "title"];
+
+// From chroniclesdk/achievements.go
+export type AchievementVisibility = "feat_of_strength" | "hidden" | "visible";
+
+export const AchievementVisibilitys: AchievementVisibility[] = ["feat_of_strength", "hidden", "visible"];
 
 // From chroniclesdk/item_pricing.go
 export type AuctionHouseFaction = "alliance" | "horde" | "merged";
