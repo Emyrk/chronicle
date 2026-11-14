@@ -87,7 +87,9 @@ func New(opts Options) *Service { return &Service{opts: opts} }
 
 type RateLimited struct{ Result ratelimit.Result }
 
-func (*RateLimited) Error() string { return "too many blog interactions" }
+func (*RateLimited) Error() string {
+	return "Too many blog interactions. Please wait at least 20 minutes and try again."
+}
 func (s *Service) eligible(ctx context.Context, slug string, kind string) error {
 	if s.opts.Eligible == nil {
 		return ErrDisabled
