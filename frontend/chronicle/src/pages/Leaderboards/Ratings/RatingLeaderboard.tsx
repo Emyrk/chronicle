@@ -217,7 +217,7 @@ export function BoardSkeleton() {
 }
 
 /**
- * Overview / Peak / Ranked Mastery / Renown, as a compact segmented switch that lives in the board's
+ * Overview / Peak / Mastery / Renown, as a compact segmented switch that lives in the board's
  * header: a setting of the board, not another row of page tabs. The chosen one takes its metric color.
  */
 export function MetricTabs({ view, onView, className, disabledViews }: { view: RatingView; onView: (view: RatingView) => void; className?: string; disabledViews?: Partial<Record<RatingView, string>> }) {
@@ -250,8 +250,7 @@ export function MetricTabs({ view, onView, className, disabledViews }: { view: R
           >
             {/* A phone keeps the labels and drops the icons so all four fit. */}
             <t.icon className="hidden size-3.5 sm:block" />
-            {/* "Ranked Mastery" pushed the switch off a phone screen; the board header still names it in full. */}
-            {m === "mastery" ? "Mastery" : t.label}
+            {t.label}
           </button>
         )
       })}

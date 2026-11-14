@@ -509,7 +509,7 @@ const METRIC_HINTS: Record<RatingMetric, { title: string; body: string }> = {
     body: "Your best DPS/HPS on the boss against the benchmark: the rank-1 DPS/HPS for your spec. If someone beats the benchmark, your Peak goes down. Across several bosses it averages each boss's Peak, and a boss without a kill counts as 0.",
   },
   mastery: {
-    title: "Ranked Mastery",
+    title: "Mastery",
     body: "30% Peak + 50% Form + 20% Floor, each your DPS/HPS against the benchmark for your spec. Form and Floor count as 0 until you have three kills of a boss, so it rewards repeated strong kills, not one great one. Across several bosses it averages them, and a missed boss counts as 0.",
   },
   renown: {
@@ -634,7 +634,7 @@ function formatClock(ms: number) {
 }
 
 /**
- * Ranked Mastery's parts, right of the score: 30% Peak + 50% Form + 20% Floor is the estimate, and
+ * Mastery's parts, right of the score: 30% Peak + 50% Form + 20% Floor is the estimate, and
  * Evidence is how much of the five kills per boss that end the ranking discount are in.
  */
 export function MasteryPartHeaders() {

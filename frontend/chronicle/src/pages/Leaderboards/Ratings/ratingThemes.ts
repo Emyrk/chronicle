@@ -20,7 +20,7 @@ export const METRIC_THEMES: Record<RatingView, MetricTheme> = {
     label: "Overview",
     icon: LayoutGrid,
     accent: "#d4d6dc",
-    tagline: "Peak, Ranked Mastery, and Renown side by side.",
+    tagline: "Peak, Mastery, and Renown side by side.",
     format: (v) => v.toFixed(1),
   },
   peak: {
@@ -32,7 +32,7 @@ export const METRIC_THEMES: Record<RatingView, MetricTheme> = {
     format: (v) => v.toFixed(1),
   },
   mastery: {
-    label: "Ranked Mastery",
+    label: "Mastery",
     icon: ShieldCheck,
     accent: "#72aac6",
     tagline: "Repeatable strength, weighted by how much evidence backs it.",

@@ -18,7 +18,7 @@ type leaderboardOGTab struct {
 
 // leaderboardOGTabs keys the hub's tab path segments. Overview has no segment.
 var leaderboardOGTabs = map[string]leaderboardOGTab{
-	"ratings":      {"Ratings", "Character and guild boards for Peak, Ranked Mastery, and Renown."},
+	"ratings":      {"Ratings", "Character and guild boards for Peak, Mastery, and Renown."},
 	"performances": {"Performances", "Best single-fight DPS and HPS, each linking to the log it came from."},
 	"speedruns":    {"Speedruns", "Fastest full clears, boss kills, and combined kill times for a set of bosses."},
 	"statistics":   {"Statistics", "Spec distributions, kill times, full clear times, and success rates."},
@@ -31,7 +31,7 @@ const leaderboardOGOverview = "Each raid's headline leaders at a glance: fastest
 // leaderboardOGRatingViews mirrors the shareable ?rating= boards (Ratings/ratingThemes.ts).
 var leaderboardOGRatingViews = map[string]string{
 	"peak":    "Peak",
-	"mastery": "Ranked Mastery",
+	"mastery": "Mastery",
 	"renown":  "Renown",
 }
 

@@ -494,7 +494,7 @@ function LiveCardBody({ tab, preview }: { tab: HubTab; preview?: HubLandingPrevi
       {!preview?.speedruns.length && !guild && !preview?.player.peak.length && <UnavailableHighlight />}
     </>
   } else if (tab === "ratings") {
-    rows = <>{playerLine("peak", "Peak")}{playerLine("ranked_mastery", "Ranked Mastery")}{playerLine("renown", "Renown")}
+    rows = <>{playerLine("peak", "Peak")}{playerLine("ranked_mastery", "Mastery")}{playerLine("renown", "Renown")}
       {!preview?.player.peak.length && !preview?.player.ranked_mastery.length && !preview?.player.renown.length && <UnavailableHighlight />}</>
   } else if (tab === "speedruns") {
     rows = <>{[0, 1, 2].map(speedLine)}{!preview?.speedruns.length && <UnavailableHighlight label="No qualifying full clears" />}</>

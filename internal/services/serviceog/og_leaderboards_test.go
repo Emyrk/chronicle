@@ -28,7 +28,7 @@ func TestLeaderboardOG(t *testing.T) {
 		{name: "InstanceTab", instance: "Ahn'Qiraj-Temple", tab: "statistics", wantTitle: "Ahn'Qiraj Temple Statistics"},
 		{name: "EscapedInstance", instance: "Ahn%27Qiraj-Temple", tab: "parsing", wantTitle: "Ahn'Qiraj Temple Parsing"},
 		{name: "UnknownTabIsOverview", instance: "Naxxramas", tab: "nope", wantTitle: "Naxxramas Leaderboards"},
-		{name: "RatingView", instance: "Naxxramas", tab: "ratings", query: "rating=mastery", wantTitle: "Naxxramas Ranked Mastery"},
+		{name: "RatingView", instance: "Naxxramas", tab: "ratings", query: "rating=mastery", wantTitle: "Naxxramas Mastery"},
 		{name: "GuildRatingView", segment: "ratings", query: "rating=renown&subject=guild", wantTitle: "Raid Guild Renown"},
 		{name: "GuildRatings", segment: "ratings", query: "subject=guilds&rating=bogus", wantTitle: "Raid Guild Ratings"},
 		{name: "RatingIgnoredOffRatingsTab", segment: "speedruns", query: "rating=peak", wantTitle: "Raid Speedruns"},

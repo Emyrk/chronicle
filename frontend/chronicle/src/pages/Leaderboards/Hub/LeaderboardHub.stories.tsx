@@ -164,7 +164,7 @@ export const RaidGuilds: Story = {
     await expect(within(canvas.getByRole("navigation", { name: "Breadcrumb" })).getByText("Guilds")).toBeInTheDocument()
     // The metric link opens the full guild table on the Ratings tab straight away, no boss cards.
     await userEvent.click(card.getByRole("button", { name: "Full Mastery board" }))
-    await expect(await canvas.findByRole("region", { name: "Guild Ranked Mastery · MC full list" })).toBeInTheDocument()
+    await expect(await canvas.findByRole("region", { name: "Guild Mastery · MC full list" })).toBeInTheDocument()
     await expect(canvas.queryByRole("region", { name: "Boss boards" })).not.toBeInTheDocument()
   },
 }
@@ -219,7 +219,7 @@ export const RatingsTab: Story = {
     await expect(list.getByText("No characters match.")).toBeInTheDocument()
     // A single metric is the table alone: no way back to boards, no boss cards.
     await userEvent.click(tabs().getByRole("button", { name: "Mastery" }))
-    const mastery = within(await canvas.findByRole("region", { name: /Ranked Mastery full list/ }))
+    const mastery = within(await canvas.findByRole("region", { name: /Mastery full list/ }))
     await expect(mastery.queryByRole("button", { name: "Back to boards" })).not.toBeInTheDocument()
     await expect(canvas.queryByRole("region", { name: "By boss" })).not.toBeInTheDocument()
   },
