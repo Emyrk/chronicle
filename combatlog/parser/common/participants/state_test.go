@@ -126,6 +126,10 @@ func TestTrackerStateRejectsCorruptionAtomically(t *testing.T) {
 		`{"active":null,"fight_active":false,"known":[],"dead":[]}`,
 		`{"active":[],"fight_active":false,"known":[],"dead":[],"dead":[]}`,
 		`{"active":[{"guid":1,"active":true,"active":false}],"fight_active":true,"known":[1],"dead":[]}`,
+		`{"active":[{"guid":1}],"fight_active":true,"known":[1],"dead":[]}`,
+		`{"active":[{"guid":1,"active":null}],"fight_active":true,"known":[1],"dead":[]}`,
+		`{"active":[{"active":false}],"fight_active":true,"known":[1],"dead":[]}`,
+		`{"active":[{"guid":null,"active":false}],"fight_active":true,"known":[1],"dead":[]}`,
 		`{"active":[],"fight_active":true,"known":[],"dead":[1]}`,
 		`{"active":[],"fight_active":true,"known":[1,1],"dead":[]}`,
 	} {
