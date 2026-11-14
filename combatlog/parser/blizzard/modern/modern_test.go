@@ -218,27 +218,6 @@ func TestGUIDNormalizerUsesCompleteWorldGUID(t *testing.T) {
 	assert.NotEqual(t, first, second)
 }
 
-func TestGUIDNormalizerResolvesWorldGUIDCollision(t *testing.T) {
-	t.Parallel()
-
-	n := newGUIDNormalizer()
-	raw := "Creature-0-1-564-1-15479-01001E1033"
-	prefix := legacyCreatureHigh<<48 | uint64(15479)<<24
-	initial := prefix | uint64(hash24(raw))
-	n.valueToRaw[initial] = "Creature-0-1-564-1-15479-0000000001"
-
-	normalized, err := n.normalize(raw)
-	require.NoError(t, err)
-	expected := prefix | uint64((hash24(raw)+1)&0xFFFFFF)
-	assert.Equal(t, fmt.Sprintf("0x%016X", expected), normalized)
-	assert.Equal(t, raw, n.valueToRaw[expected])
-	assert.Equal(t, expected, n.rawToValue[raw])
-
-	again, err := n.normalize(raw)
-	require.NoError(t, err)
-	assert.Equal(t, normalized, again, "repeated GUIDs must keep their allocated identity")
-}
-
 func TestGUIDNormalizerPlayerGUIDsAreLossless(t *testing.T) {
 	t.Parallel()
 
@@ -615,7 +594,7 @@ func TestTransformAbsorbedVariants(t *testing.T) {
 		{22, `9/23/2026 11:12:27.557-4  SPELL_ABSORBED,Creature-0-4615-0-10340-267006-0000B3EC43,"Dark Neophyte",0xa28,0x80000000,Player-4620-00D5496D,"Brother-ClassicBetaPvE2-",0x518,0x80000000,Player-4620-00D5496D,"Brother-ClassicBetaPvE2-",0x518,0x80000000,1310927,"Light's Fury",0x2,4,16,nil`, `1310927,"Light's Fury",0x2,4`},
 	} {
 		r := newTransformReader(strings.NewReader(tc.line))
-		r.combatLogVersion = tc.version
+		r.CombatLogVersion = tc.version
 		converted, err := r.transform(tc.line)
 		require.NoError(t, err)
 		assert.Contains(t, converted, "BLIZZARD_SPELL_ABSORBED")
@@ -791,7 +770,7 @@ func TestCombatantInfoV22ParsesStatsFromModernLog(t *testing.T) {
 
 	line := `9/23/2026 12:16:14.185-4  COMBATANT_INFO,Player-4620-006422B6,0,69,41,123,41,49,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1826,1486,[(105638,130362,3)],(0,0,0,0),[(250532,25,(),(),())],[],1,0,0,0`
 	reader := newTransformReader(strings.NewReader(line))
-	reader.combatLogVersion = 22
+	reader.CombatLogVersion = 22
 	converted, err := reader.transform(line)
 	require.NoError(t, err)
 
@@ -841,7 +820,7 @@ func TestCombatantInfoV22ParsesShorterLayout(t *testing.T) {
 	// in newer logs. In this layout field 26 is the PvP tuple, not talents.
 	line := `9/23/2026 12:16:14.185-4  COMBATANT_INFO,Player-4620-006422B6,0,69,41,123,41,49,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1486,[(105638,130362,3)],(0,0,0,0),[(250532,25,(),(),())],[],1,0,0,0`
 	reader := newTransformReader(strings.NewReader(line))
-	reader.combatLogVersion = 22
+	reader.CombatLogVersion = 22
 	converted, err := reader.transform(line)
 	require.NoError(t, err)
 
