@@ -5,6 +5,6 @@
 -- revision column and sequence.
 DO $$
 BEGIN
-    RAISE EXCEPTION 'migration 000372 is irreversible: dataset revision history must be preserved';
+    RAISE EXCEPTION 'migration 000386 is irreversible: dataset revision history must be preserved';
 END
 $$;
