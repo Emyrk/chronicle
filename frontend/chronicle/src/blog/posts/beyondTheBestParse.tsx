@@ -110,10 +110,6 @@ export function BeyondTheBestParsePost({ post }: PostProps) {
           That doesn&apos;t mean two players are equally skilled, but the numbers now answer the same question. Guilds
           work the same way, using encounter and clear times instead of DPS.
         </p>
-        <p>
-          There&apos;s a practical side too. I moderate logs myself, and a benchmark lets me focus on the few kills that
-          set each reference point.
-        </p>
 
         <Chapter index={3} />
         <p>
