@@ -30,7 +30,7 @@ require the global user-administration permission. Approval and rejection requir
 
 Votes and feedback use separate PostgreSQL buckets, `blog_vote` and `blog_feedback`.
 Each is keyed by `ratelimit.UserSubject(userID.String())`, with no post or tenant
-component. Each starts with five tokens and refills one token per twenty minutes.
+component. Each starts with ten tokens and refills two tokens per twenty minutes (one every ten minutes).
 Limiter failures deny writes. Validation and eligibility checks precede consumption.
 Moderation and feedback bans are administrative operations and do not consume tokens.
 

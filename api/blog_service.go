@@ -15,7 +15,7 @@ import (
 
 func (a *API) newBlogService() *serviceblog.Service {
 	db := database.New(a.Opts.Pool)
-	limit := ratelimit.Limit{PerSecond: 1.0 / 1200, Burst: 5}
+	limit := ratelimit.Limit{PerSecond: 2.0 / 1200, Burst: 10}
 	return serviceblog.New(serviceblog.Options{
 		Logger: a.Opts.Logger,
 		AuthorizeFeedback: func(ctx context.Context, user uuid.UUID, editing bool) error {

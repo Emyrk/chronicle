@@ -19,13 +19,13 @@ func TestBlogRateLimitResponse(t *testing.T) {
 	t.Parallel()
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPut, "/", nil)
-	blogError(w, r, &serviceblog.RateLimited{Result: ratelimit.Result{RetryAfter: 1200 * time.Second, Status: ratelimit.Status{Limit: 5}}})
+	blogError(w, r, &serviceblog.RateLimited{Result: ratelimit.Result{RetryAfter: 600 * time.Second, Status: ratelimit.Status{Limit: 10}}})
 	require.Equal(t, http.StatusTooManyRequests, w.Code)
-	require.Equal(t, "1200", w.Header().Get("Retry-After"))
-	require.Equal(t, "5", w.Header().Get("RateLimit-Limit"))
+	require.Equal(t, "600", w.Header().Get("Retry-After"))
+	require.Equal(t, "10", w.Header().Get("RateLimit-Limit"))
 	var response chroniclesdk.Response
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
-	require.NotEmpty(t, response.Message)
+	require.Contains(t, response.Message, "wait at least 20 minutes")
 }
 
 type blogPublicStore struct{ serviceblog.Store }

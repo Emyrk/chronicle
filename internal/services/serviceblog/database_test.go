@@ -28,21 +28,21 @@ func TestPostgresAdmissionAndLifecycle(t *testing.T) {
 	// PostgreSQL now() is transaction-stable, so exact empty-bucket retry duration
 	// can be asserted without sleeps or mutating production limiter timestamps.
 	err = db.InTx(ctx, func(tx database.Store) error {
-		limit := ratelimit.Limit{PerSecond: 1.0 / 1200, Burst: 5}
+		limit := ratelimit.Limit{PerSecond: 2.0 / 1200, Burst: 10}
 		voteLimiter := ratelimit.New(tx, "blog_vote", limit)
 		feedbackLimiter := ratelimit.New(tx, "blog_feedback", limit)
 		require.Equal(t, limit, voteLimiter.Limit())
 		require.Equal(t, limit, feedbackLimiter.Limit())
 		s := New(Options{Store: NewDatabaseStore(tx), Bans: testBans{}, VoteLimiter: voteLimiter, FeedbackLimiter: feedbackLimiter, Eligible: func(context.Context, string, string) (bool, error) { return true, nil }})
-		for i := 0; i < 5; i++ {
+		for i := 0; i < 10; i++ {
 			require.NoError(t, s.Vote(ctx, fmt.Sprint("post", i), user, 1))
 		}
 		var limited *RateLimited
 		require.ErrorAs(t, s.Vote(ctx, "another-post", user, -1), &limited)
-		require.Equal(t, 1200*time.Second, limited.Result.RetryAfter)
+		require.Equal(t, 600*time.Second, limited.Result.RetryAfter)
 		// Feedback has its own full bucket despite exhausted votes. Submitting from
-		// root and another tenant still shares the same five-token account bucket.
-		for i := 0; i < 5; i++ {
+		// root and another tenant still shares the same ten-token account bucket.
+		for i := 0; i < 10; i++ {
 			origin := tenant
 			if i%2 == 0 {
 				origin = uuid.Nil
@@ -50,9 +50,9 @@ func TestPostgresAdmissionAndLifecycle(t *testing.T) {
 			_, err := s.Save(ctx, fmt.Sprint("post", i), user, origin, "private", false)
 			require.NoError(t, err)
 		}
-		_, err := s.Save(ctx, "sixth", user, uuid.Nil, "private", false)
+		_, err := s.Save(ctx, "eleventh", user, uuid.Nil, "private", false)
 		require.ErrorAs(t, err, &limited)
-		require.Equal(t, 1200*time.Second, limited.Result.RetryAfter)
+		require.Equal(t, 600*time.Second, limited.Result.RetryAfter)
 		stored, err := tx.GetBlogFeedback(ctx, database.GetBlogFeedbackParams{PostSlug: "post0", UserID: user})
 		require.NoError(t, err)
 		require.False(t, stored.OriginalTenantID.Valid)
