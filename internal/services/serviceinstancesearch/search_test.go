@@ -107,6 +107,44 @@ func TestCancellationStillChargesRuntime(t *testing.T) {
 	require.Equal(t, 92.0, status.Remaining)
 }
 
+func TestExecuteAdvancedTierCheckPrecedesSharedBucketCharge(t *testing.T) {
+	t.Parallel()
+	db, _ := dbtestutil.NewDB(t)
+	limit := ratelimit.Limit{PerSecond: 0, Burst: 100}
+	tier := "free"
+	s := New(testutil.Logger(t), db, prometheus.NewRegistry(), func(context.Context, uuid.UUID) (UserAccess, error) {
+		return UserAccess{Limit: limit, Tier: tier}, nil
+	})
+	s.runtimeCost = func(time.Duration) int { return 1 }
+	ctx := testutil.Context(t, testutil.WaitShort)
+	caller := Caller{UserID: uuid.New(), TenantID: uuid.New()}
+	ran := false
+
+	_, result := s.ExecuteAdvanced(ctx, caller, "revered", 9, []string{"spell.name"}, func(context.Context, database.Store) (any, error) {
+		ran = true
+		return "ok", nil
+	})
+	require.ErrorIs(t, result.Err, ErrSupporterRequired)
+	require.False(t, ran)
+	status, _, err := s.Peek(ctx, caller)
+	require.NoError(t, err)
+	require.Equal(t, 100.0, status.Remaining)
+
+	tier = "revered"
+	value, result := s.ExecuteAdvanced(ctx, caller, "revered", 9, []string{"spell.name"}, func(context.Context, database.Store) (any, error) {
+		ran = true
+		return "ok", nil
+	})
+	require.NoError(t, result.Err)
+	require.Equal(t, "ok", value)
+	require.True(t, ran)
+	require.Equal(t, 9, result.Cost)
+	require.Equal(t, 1, result.RuntimeCost)
+	status, _, err = s.Peek(ctx, caller)
+	require.NoError(t, err)
+	require.Equal(t, 90.0, status.Remaining)
+}
+
 func TestSearchGoCaller(t *testing.T) {
 	t.Parallel()
 	db, _ := dbtestutil.NewDB(t)

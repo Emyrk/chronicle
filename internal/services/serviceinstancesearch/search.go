@@ -142,6 +142,78 @@ func (s *Service) bucket(ctx context.Context, c Caller) (*ratelimit.Limiter, str
 	return s.users, ratelimit.UserSubject(c.UserID.String()), access, err
 }
 
+// TierAtLeast reports whether tier includes minimum. Tier names use the billing
+// supporter tier strings plus "free".
+func TierAtLeast(tier, minimum string) bool { return tierAtLeast(tier, minimum) }
+
+// PeekAccess reads the shared bucket and resolved supporter access without
+// spending tokens.
+func (s *Service) PeekAccess(ctx context.Context, c Caller) (ratelimit.Status, UserAccess, error) {
+	limiter, subject, access, err := s.bucket(ctx, c)
+	if err != nil {
+		return ratelimit.Status{}, access, err
+	}
+	st, err := limiter.PeekWithLimit(ctx, subject, access.Limit)
+	return st, access, err
+}
+
+// ExecuteAdvanced admits and runs another advanced-search workload through the
+// exact same user bucket, concurrency slots, and runtime accounting as instance
+// search. The tier check happens before any token charge.
+func (s *Service) ExecuteAdvanced(ctx context.Context, c Caller, requiredTier string, staticCost int, fields []string, execute func(context.Context, database.Store) (any, error)) (any, Result) {
+	start := time.Now()
+	result := Result{Cost: staticCost, RequiredTier: requiredTier}
+	fail := func(err error, outcome string) (any, Result) {
+		result.Err = err
+		s.observe(start, c, false, outcome)
+		return nil, result
+	}
+	limiter, subject, access, err := s.bucket(ctx, c)
+	if err != nil {
+		return fail(err, "error")
+	}
+	limit := access.Limit
+	if c.UserID == uuid.Nil || !tierAtLeast(access.Tier, requiredTier) {
+		result.Status, _ = limiter.PeekWithLimit(ctx, subject, limit)
+		return fail(ErrSupporterRequired, "supporter_required")
+	}
+	take, err := limiter.TakeWithLimit(ctx, subject, float64(staticCost), limit)
+	if err != nil {
+		return fail(err, "error")
+	}
+	result.Status = take.Status
+	if !take.Allowed {
+		result.RetryAfter = take.RetryAfter
+		if float64(staticCost) > limit.Burst {
+			return fail(ErrTooComplex, "rate_limited")
+		}
+		return fail(ErrRateLimited, "rate_limited")
+	}
+	select {
+	case s.slots <- struct{}{}:
+		defer func() { <-s.slots }()
+	default:
+		if st, refundErr := limiter.RefundWithLimit(ctx, subject, float64(staticCost), limit); refundErr == nil {
+			result.Status = st
+		} else {
+			s.logger.Error("advanced search rate limit refund", slog.String("error", refundErr.Error()))
+		}
+		result.RetryAfter = time.Second
+		return fail(ErrBusy, "busy")
+	}
+	for _, field := range fields {
+		s.fieldUses.WithLabelValues(field).Inc()
+	}
+	executionStart := time.Now()
+	value, err := execute(ctx, s.store)
+	s.chargeRuntime(ctx, limiter, subject, limit, time.Since(executionStart), &result)
+	if err != nil {
+		return fail(err, "error")
+	}
+	s.observe(start, c, false, "ok")
+	return value, result
+}
+
 // ResolveCaller checks the user's supporter permissions without touching the
 // rate bucket. HTTP calls it on malformed bodies to preserve auth-error precedence.
 func (s *Service) ResolveCaller(ctx context.Context, c Caller) error {

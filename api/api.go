@@ -651,6 +651,10 @@ func (api *API) Routes() chi.Router {
 			})
 
 			r.Get("/healthz", healthz)
+			// Register advanced spell search before the public WoWDB mount so the
+			// existing service remains independent of search admission/runtime.
+			r.Post("/wowdb/spells/search", api.SpellSearch)
+			r.Get("/wowdb/spells/search/limit", api.SpellSearchLimit)
 			if api.Opts.WoWDB != nil {
 				r.Mount("/wowdb", api.Opts.WoWDB)
 			}
