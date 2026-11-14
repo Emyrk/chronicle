@@ -816,6 +816,7 @@ export interface BlogModerationRequest {
 
 // From chroniclesdk/blog.go
 export interface BlogOwnFeedback {
+    readonly consent: boolean;
     readonly id: string;
     readonly body: string;
     readonly status: string;

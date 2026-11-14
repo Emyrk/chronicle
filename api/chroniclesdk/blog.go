@@ -20,6 +20,7 @@ type BlogPublicFeedback struct {
 	ServerRelation string    `json:"server_relation"`
 }
 type BlogOwnFeedback struct {
+	Consent bool      `json:"consent"`
 	ID      uuid.UUID `json:"id"`
 	Body    string    `json:"body"`
 	Status  string    `json:"status"`

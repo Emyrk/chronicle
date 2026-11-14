@@ -9,7 +9,6 @@ import (
 	"github.com/Emyrk/chronicle/frontend"
 	"github.com/Emyrk/chronicle/internal/ratelimit"
 	"github.com/Emyrk/chronicle/internal/services/serviceblog"
-	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/google/uuid"
 )
 
@@ -23,9 +22,6 @@ func (a *API) newBlogService() *serviceblog.Service {
 		VoteLimiter:     ratelimit.New(db, "blog_vote", limit),
 		FeedbackLimiter: ratelimit.New(db, "blog_feedback", limit),
 		Eligible: func(ctx context.Context, slug string, kind string) (bool, error) {
-			if servicetenant.TenantFromContext(ctx) == nil {
-				return false, nil
-			}
 			return frontend.BlogInteractionsEnabled(frontend.FS(), slug, a.resolvedSiteFlavor(ctx).Strings(), kind)
 		},
 	})

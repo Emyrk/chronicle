@@ -30,3 +30,8 @@ a crash between persistence and invocation can lose the event. There is no durab
 outbox, retry or exactly-once guarantee. Hook errors are logged and do not fail the
 already persisted submission. Consumers must use the feedback ID as an
 idempotency key. This hook does not grant rewards or entitlements.
+
+Root-site submissions store a null original tenant. Root requests are eligible under
+the same build-manifest rules as tenant requests. Public labels say `This server`
+only when both tenant IDs are non-null and equal; otherwise they say `Another server`.
+Own-feedback responses include consent so edits preserve the author's publication choice.

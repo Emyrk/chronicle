@@ -68,7 +68,7 @@ func (d *databaseStore) SaveFeedback(ctx context.Context, f Feedback) (Feedback,
 		}
 		return feedback(row), false, err
 	}
-	row, err := d.db.InsertBlogFeedback(ctx, database.InsertBlogFeedbackParams{PostSlug: f.PostSlug, UserID: f.UserID, OriginalTenantID: uuid.NullUUID{UUID: f.TenantID, Valid: true}, Body: pgtype.Text{String: f.Body, Valid: true}, PublicConsent: f.Consent})
+	row, err := d.db.InsertBlogFeedback(ctx, database.InsertBlogFeedbackParams{PostSlug: f.PostSlug, UserID: f.UserID, OriginalTenantID: uuid.NullUUID{UUID: f.TenantID, Valid: f.TenantID != uuid.Nil}, Body: pgtype.Text{String: f.Body, Valid: true}, PublicConsent: f.Consent})
 	var pgerr *pgconn.PgError
 	if errors.As(err, &pgerr) && pgerr.Code == "23505" {
 		return Feedback{}, false, ErrConflict

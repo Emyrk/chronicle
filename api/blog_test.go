@@ -55,3 +55,9 @@ func TestBlogPublicProjection(t *testing.T) {
 	require.Contains(t, feedback[0], "server_relation")
 	require.Equal(t, "private, no-store", w.Header().Get("Cache-Control"))
 }
+
+func TestBlogOwnConsent(t *testing.T) {
+	t.Parallel()
+	require.False(t, blogOwn(serviceblog.Feedback{Consent: false}).Consent)
+	require.True(t, blogOwn(serviceblog.Feedback{Consent: true}).Consent)
+}

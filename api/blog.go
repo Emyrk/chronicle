@@ -37,7 +37,7 @@ func blogError(w http.ResponseWriter, r *http.Request, err error) {
 	httpapi.Write(r.Context(), w, status, chroniclesdk.Response{Message: err.Error()})
 }
 func blogOwn(f serviceblog.Feedback) chroniclesdk.BlogOwnFeedback {
-	return chroniclesdk.BlogOwnFeedback{ID: f.ID, Body: f.Body, Status: f.Status, Deleted: f.Deleted}
+	return chroniclesdk.BlogOwnFeedback{ID: f.ID, Body: f.Body, Status: f.Status, Deleted: f.Deleted, Consent: f.Consent}
 }
 func (a *API) GetBlogInteractions(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "private, no-store")
@@ -54,7 +54,7 @@ func (a *API) GetBlogInteractions(w http.ResponseWriter, r *http.Request) {
 	tenant := servicetenant.TenantFromContext(r.Context())
 	for _, f := range state.Feedback {
 		relation := "Another server"
-		if tenant != nil && tenant.ID == f.TenantID {
+		if tenant != nil && tenant.ID != uuid.Nil && f.TenantID != uuid.Nil && tenant.ID == f.TenantID {
 			relation = "This server"
 		}
 		out.Feedback = append(out.Feedback, chroniclesdk.BlogPublicFeedback{ID: f.ID, Body: f.Body, ServerRelation: relation})
@@ -83,11 +83,11 @@ func (a *API) PutBlogFeedback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tenant := servicetenant.TenantFromContext(r.Context())
-	if tenant == nil {
-		blogError(w, r, serviceblog.ErrDisabled)
-		return
+	tenantID := uuid.Nil
+	if tenant != nil {
+		tenantID = tenant.ID
 	}
-	f, err := a.blog.Save(r.Context(), chi.URLParam(r, "slug"), chronauth.MustAuthenticatedClaims(r.Context()).Subject, tenant.ID, req.Body, req.Consent)
+	f, err := a.blog.Save(r.Context(), chi.URLParam(r, "slug"), chronauth.MustAuthenticatedClaims(r.Context()).Subject, tenantID, req.Body, req.Consent)
 	if err != nil {
 		blogError(w, r, err)
 		return

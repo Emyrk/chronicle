@@ -181,7 +181,7 @@ func (s *Service) Save(ctx context.Context, slug string, user, tenant uuid.UUID,
 	if err = s.eligible(ctx, slug, "feedback"); err != nil {
 		return Feedback{}, err
 	}
-	if user == uuid.Nil || tenant == uuid.Nil {
+	if user == uuid.Nil {
 		return Feedback{}, ErrInvalid
 	}
 	banned, err := s.opts.Bans.Banned(ctx, user)

@@ -10,7 +10,7 @@ import (
 
 func TestBlogInteractionsEligibility(t *testing.T) {
 	t.Parallel()
-	manifest := fstest.MapFS{"blog-manifest.json": &fstest.MapFile{Data: []byte(`{"posts":[{"path":"/blog/enabled","voting_enabled":true,"flavor_sets":[["vanilla","turtle"]]},{"path":"/blog/disabled"}]}`)}}
+	manifest := fstest.MapFS{"blog-manifest.json": &fstest.MapFile{Data: []byte(`{"posts":[{"path":"/blog/enabled","voting_enabled":true,"feedback_enabled":true,"flavor_sets":[["vanilla","turtle"]]},{"path":"/blog/disabled"}]}`)}}
 	for _, tc := range []struct {
 		slug   string
 		flavor []string
@@ -22,9 +22,11 @@ func TestBlogInteractionsEligibility(t *testing.T) {
 	} {
 		t.Run(tc.slug+strings.Join(tc.flavor, "-"), func(t *testing.T) {
 			t.Parallel()
-			got, err := BlogInteractionsEnabled(manifest, tc.slug, tc.flavor, "vote")
-			require.NoError(t, err)
-			require.Equal(t, tc.want, got)
+			for _, kind := range []string{"vote", "feedback"} {
+				got, err := BlogInteractionsEnabled(manifest, tc.slug, tc.flavor, kind)
+				require.NoError(t, err)
+				require.Equal(t, tc.want, got)
+			}
 		})
 	}
 	got, err := BlogInteractionsEnabled(fstest.MapFS{}, "enabled", nil, "vote")
