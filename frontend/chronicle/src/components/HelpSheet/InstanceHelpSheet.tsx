@@ -303,7 +303,7 @@ export function InstanceHelpSheet({ open: controlledOpen, onOpenChange }: Instan
       
       {/* Sheet */}
       <Sheet open={isOpen} onOpenChange={handleOpenChange}>
-        <SheetContent side="right" className="relative w-80 overflow-visible">
+        <SheetContent side="right" className="w-80 overflow-visible">
           <div className="styled-scrollbar min-h-0 flex-1 overflow-y-auto">
           <SheetHeader>
             <SheetTitle className="flex items-center gap-2">
