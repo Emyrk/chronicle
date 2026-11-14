@@ -4,7 +4,6 @@ import { useBlogMutation, useBlogInteractions, useBlogSummaries, blogFeedbackMut
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import type { BlogPostMetadata } from "./blogRegistry";
-import { rarityColor } from "./blogFormat";
 
 const subscribe = () => () => {};
 /** Interactions are live only. Keep prerendering and the first hydration render identical. */
@@ -23,18 +22,16 @@ function LiveInteractions({ post }: { post: BlogPostMetadata }) {
   const votingEnabled = post.votingEnabled !== false && publicQuery.data?.voting_enabled;
   const feedbackEnabled = post.feedbackEnabled !== false && publicQuery.data?.feedback_enabled;
   const disabled = mutation.isPending || own.isLoading || !session || !own.data || !own.data.voting_enabled;
-  const accent = rarityColor(post.rarity);
   const signInHref = `/login?from=${encodeURIComponent(`/blog/${post.id}`)}`;
   return (
     <>
-    {votingEnabled && <div className="pointer-events-none fixed inset-x-0 bottom-6 z-40 flex justify-center px-4">
-      <div role="group" aria-label="Vote on this post" className="pointer-events-auto flex flex-wrap items-center justify-center gap-x-2 gap-y-2 rounded-2xl sm:gap-x-3 border-2 bg-card px-3 py-2 sm:rounded-full sm:px-4 sm:py-2.5" style={{ borderColor: accent, boxShadow: `0 8px 32px -4px color-mix(in srgb, ${accent} 60%, transparent)` }}>
-        <span className="text-sm font-semibold sm:text-base" style={{ color: accent }}>{own.data?.own_vote ? "Thanks!" : <>Was this<span className="hidden sm:inline"> post</span> helpful?</>}</span>
-        <Button className="rounded-full px-3 sm:px-4" variant={own.data?.own_vote === 1 ? "default" : "outline"} aria-pressed={own.data?.own_vote === 1} disabled={disabled} onClick={() => mutation.mutate({ resource: "vote", method: "PUT", body: { vote: own.data?.own_vote === 1 ? 0 : 1 } })}>
+    {votingEnabled && <div className="pointer-events-none fixed inset-x-0 bottom-4 z-40 flex justify-center px-4">
+      <div role="group" aria-label="Vote on this post" className="pointer-events-auto flex flex-wrap items-center justify-center gap-2 rounded-full border border-white/15 bg-neutral-700 px-3 py-2 shadow-xl shadow-black/50">
+        <Button size="sm" className="rounded-full" variant={own.data?.own_vote === 1 ? "default" : "outline"} aria-pressed={own.data?.own_vote === 1} disabled={disabled} onClick={() => mutation.mutate({ resource: "vote", method: "PUT", body: { vote: own.data?.own_vote === 1 ? 0 : 1 } })}>
           <ThumbsUp className="mr-2 h-4 w-4" /> Helpful{publicQuery.data ? ` · ${publicQuery.data.up_votes}` : ""}
         </Button>
-        <Button className="rounded-full px-3 sm:px-4" variant={own.data?.own_vote === -1 ? "default" : "outline"} aria-pressed={own.data?.own_vote === -1} disabled={disabled} onClick={() => mutation.mutate({ resource: "vote", method: "PUT", body: { vote: own.data?.own_vote === -1 ? 0 : -1 } })}>
-          <ThumbsDown className="h-4 w-4 sm:mr-2" /><span className="sr-only sm:not-sr-only">Not for me</span>
+        <Button size="sm" className="rounded-full" variant={own.data?.own_vote === -1 ? "default" : "outline"} aria-pressed={own.data?.own_vote === -1} disabled={disabled} onClick={() => mutation.mutate({ resource: "vote", method: "PUT", body: { vote: own.data?.own_vote === -1 ? 0 : -1 } })}>
+          <ThumbsDown className="mr-2 h-4 w-4" /> Not for me
         </Button>
         {!authLoading && !session && <a href={signInHref} className="px-1 text-xs text-primary underline">Sign in to vote</a>}
         {own.data?.own_vote !== 0 && own.data?.own_vote !== undefined && <span className="hidden px-1 text-xs text-muted-foreground sm:inline">Select your vote again to remove it.</span>}
