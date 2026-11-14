@@ -39,10 +39,11 @@ const STATUS_TEXT: Record<string, string> = {
  * breadcrumb and one tab per metric, and the hub's own rating boards and
  * tables fed with career data.
  */
-export function CareerLeaderboard({ view, onView, filters, onFilters, realm, realms, onRealm, state, request, allHref }: {
+export function CareerLeaderboard({ view, onView, filters, subSpecs, onFilters, realm, realms, onRealm, state, request, allHref }: {
   view: RatingView
   onView: (view: RatingView) => void
   filters: CareerFilters
+  subSpecs: readonly string[]
   onFilters: (filters: CareerFilters) => void
   realm: string
   realms: readonly string[]
@@ -74,6 +75,7 @@ export function CareerLeaderboard({ view, onView, filters, onFilters, realm, rea
     { label: selectedLabels.length === 0 ? "Every raid" : selectedLabels.length === 1 ? selectedLabels[0] : `${selectedLabels.length} raids` },
     ...(scope.cls ? [{ label: CLASS_DISPLAY[scope.cls], color: CLASS_CSS_VAR[scope.cls] }] : []),
     ...(scope.spec ? [{ label: scope.spec, color: CLASS_CSS_VAR[scope.cls!] }] : []),
+    ...(scope.subSpec ? [{ label: scope.subSpec, color: CLASS_CSS_VAR[scope.cls!] }] : []),
   ]
   const roleLabel = filters.role === "all" ? "DPS + Healing" : filters.role === "dps" ? "DPS" : "Healing"
 
@@ -113,9 +115,10 @@ export function CareerLeaderboard({ view, onView, filters, onFilters, realm, rea
               showBoss={false}
               classDisabled={guildMode ? "Guild ratings don't split by class. Switch to Characters to filter by class." : undefined}
               specs={scope.cls ? [...(SPEC_BY_CLASS[scope.cls] ?? [])] : []}
+              subSpecs={[...subSpecs]}
               onChange={(next) => onFilters({ ...filters, scope: { cls: next.cls, spec: next.spec, subSpec: next.subSpec } })}
               compact={isMobile}
-              compactSummary={[scope.cls ? CLASS_DISPLAY[scope.cls] : undefined, scope.spec, guildMode ? undefined : roleLabel, guildMode ? "Guilds" : "Characters"].filter(Boolean).join(" · ")}
+              compactSummary={[scope.cls ? CLASS_DISPLAY[scope.cls] : undefined, scope.spec, scope.subSpec, guildMode ? undefined : roleLabel, guildMode ? "Guilds" : "Characters"].filter(Boolean).join(" · ")}
               extra={
                 <>
                   {!guildMode && (

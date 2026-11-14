@@ -103,7 +103,7 @@ function Harness({ initialView = "overview", initialFilters = { subject: "charac
   const [realm, setRealm] = useState("All realms")
   const state = fixed ?? { status: "ready", data: respond(filters.subject, filters.raids) }
   return (
-    <CareerLeaderboard view={view} onView={setView} filters={filters} onFilters={setFilters}
+    <CareerLeaderboard view={view} onView={setView} filters={filters} subSpecs={filters.scope.cls === "DRUID" && filters.scope.spec === "Feral" ? ["Bear", "Cat"] : []} onFilters={setFilters}
       realm={realm} realms={["All realms", "Nordanaar", "Tel'Abim"]} onRealm={setRealm} state={state}
       request={new URLSearchParams([["subject", filters.subject], ...filters.raids.map((r) => ["raid", r])])} allHref="/leaderboards" />
   )

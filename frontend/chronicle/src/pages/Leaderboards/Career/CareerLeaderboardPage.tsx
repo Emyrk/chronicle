@@ -1,6 +1,7 @@
 import { useSearchParams } from "react-router-dom"
 import { useCareerLeaderboard } from "@/api/career"
 import { useSiteConfig } from "@/api/queries"
+import { subspecRulesForFlavor } from "@/pages/Subspecs/subspecs"
 import { useHubSummary } from "../Hub/hubSummaryAdapter"
 import type { RatingView } from "../Ratings/ratingThemes"
 import { CareerLeaderboard } from "./CareerLeaderboard"
@@ -30,6 +31,11 @@ export function CareerLeaderboardPage() {
     raids: params.getAll("raid"),
     realmID: realm?.id,
   }
+  const subSpecs = filters.scope.cls && filters.scope.spec
+    ? subspecRulesForFlavor(config?.dataset_flavor ?? [])
+      .find((rule) => rule.className.toUpperCase() === filters.scope.cls && rule.spec === filters.scope.spec)
+      ?.subspecs.map((subSpec) => subSpec.name) ?? []
+    : []
   // The boards show each metric's top; the full tables page separately.
   const request = careerLeaderboardParams(filters, 25)
   const query = useCareerLeaderboard(config?.tenant?.id, request)
@@ -52,6 +58,7 @@ export function CareerLeaderboardPage() {
       view={view}
       onView={(next) => update({ view: next === "overview" ? undefined : next })}
       filters={filters}
+      subSpecs={subSpecs}
       onFilters={(next) => {
         const updated = new URLSearchParams(params)
         const set = (key: string, value?: string) => (value ? updated.set(key, value) : updated.delete(key))
