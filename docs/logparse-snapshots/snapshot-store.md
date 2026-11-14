@@ -8,7 +8,7 @@ A likely external location is:
 snapshots/log-groups/<log-id>/parse
 ```
 
-That external key identifies the logical snapshot. The archive itself uses absolute internal paths such as `/root/encounters`, `/root/shared/units`, and `/root/instances/0003/events/damage`.
+That external key identifies the logical snapshot. The archive itself uses absolute internal paths such as `/root/parse-state`, `/root/shared/units`, and `/root/instances/0003/events/damage`.
 
 ## Archive records
 

@@ -11,71 +11,760 @@
       }
     },
     {
-      "path": "/root/encounters",
-      "kind": "value",
-      "type": "github.com/Emyrk/chronicle/combatlog/parser/common/encounters.State",
-      "metadata": {
-        "label": "encounters.State",
-        "source": "combatlog/parser/common/encounters/consumer.go"
-      }
-    },
-    {
-      "path": "/root/encounters/auras",
-      "kind": "reference",
-      "type": "github.com/Emyrk/chronicle/combatlog/parser/common/auras.Tracking",
-      "target": "/root/shared/auras"
-    },
-    {
-      "path": "/root/encounters/consume-tracker",
-      "kind": "reference",
-      "type": "github.com/Emyrk/chronicle/combatlog/parser/common/consumeevidence.Tracker",
-      "target": "/root/shared/consume-tracker"
-    },
-    {
-      "path": "/root/encounters/current-instance",
-      "kind": "reference",
-      "type": "github.com/Emyrk/chronicle/combatlog/parser/common/instances.Hookable",
-      "target": "/root/instances/0000",
-      "metadata": {
-        "label": "State.CurrentInstance",
-        "source": "combatlog/parser/common/encounters/consumer.go"
-      }
-    },
-    {
-      "path": "/root/encounters/instances",
+      "path": "/root/character-shared-state",
       "kind": "directory",
       "metadata": {
-        "label": "State.Instances aliases",
-        "source": "combatlog/parser/common/encounters/consumer.go"
+        "classification": "type_catalog",
+        "label": "known Characters.sharedState values",
+        "not_runtime_instances": true,
+        "source": "combatlog/parser/common/characters/lookup.go"
       }
     },
     {
-      "path": "/root/encounters/instances/0000",
-      "kind": "reference",
-      "type": "github.com/Emyrk/chronicle/combatlog/parser/common/instances.Hookable",
-      "target": "/root/instances/0000",
+      "path": "/root/character-shared-state/common",
+      "kind": "directory"
+    },
+    {
+      "path": "/root/character-shared-state/common/room",
+      "kind": "directory",
       "metadata": {
-        "label": "State.Instances[0]",
-        "source": "combatlog/parser/common/encounters/consumer.go"
+        "classification": "shared_character_state",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/common/characters.Room",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/common/characters.Room",
+        "note": "maps GUIDs to RoomMechanic and tracks the boss",
+        "source": "combatlog/parser/common/characters/roommechanic.go"
       }
     },
     {
-      "path": "/root/encounters/raid-groups",
-      "kind": "reference",
-      "type": "github.com/Emyrk/chronicle/combatlog/parser/common/raidgroups.Tracker",
-      "target": "/root/shared/raid-groups"
+      "path": "/root/character-shared-state/vanilla",
+      "kind": "directory"
     },
     {
-      "path": "/root/encounters/units",
-      "kind": "reference",
-      "type": "github.com/Emyrk/chronicle/combatlog/parser/common/unitdb.Units",
-      "target": "/root/shared/units"
+      "path": "/root/character-shared-state/vanilla/cthun",
+      "kind": "directory",
+      "metadata": {
+        "classification": "shared_character_state",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.CthunParty",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.CthunParty",
+        "note": "eye instance stored for body coordination",
+        "source": "combatlog/parser/vanilla/creatures/anhqiraj.go"
+      }
     },
     {
-      "path": "/root/encounters/vehicles",
-      "kind": "reference",
-      "type": "github.com/Emyrk/chronicle/combatlog/parser/common/vehicles.Tracker",
-      "target": "/root/shared/vehicles"
+      "path": "/root/character-shared-state/vanilla/worg-pup-captures",
+      "kind": "directory",
+      "metadata": {
+        "classification": "shared_character_state",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.worgPupCaptures",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.worgPupCaptures",
+        "note": "capture count and last touched time",
+        "source": "combatlog/parser/vanilla/creatures/spire.go"
+      }
+    },
+    {
+      "path": "/root/character-shared-state/wotlk",
+      "kind": "directory"
+    },
+    {
+      "path": "/root/character-shared-state/wotlk/kael-thas",
+      "kind": "directory",
+      "metadata": {
+        "classification": "shared_character_state",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.kaelThasState",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.kaelThasState",
+        "note": "phase, source, weapon death state, and character map",
+        "source": "combatlog/parser/wotlk/creatures/kaelthas.go"
+      }
+    },
+    {
+      "path": "/root/character-shared-state/wotlk/mimiron",
+      "kind": "directory",
+      "metadata": {
+        "classification": "shared_character_state",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.mimironState",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.mimironState",
+        "note": "phase, source, character map, and phase-four component state",
+        "source": "combatlog/parser/wotlk/creatures/mimiron.go"
+      }
+    },
+    {
+      "path": "/root/character-shared-state/wotlk/thorim",
+      "kind": "directory",
+      "metadata": {
+        "classification": "shared_character_state",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.thorimState",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.thorimState",
+        "note": "phase, source, and character map",
+        "source": "combatlog/parser/wotlk/creatures/thorim.go"
+      }
+    },
+    {
+      "path": "/root/character-shared-state/wotlk/yogg-saron",
+      "kind": "directory",
+      "metadata": {
+        "classification": "shared_character_state",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.yoggSaronState",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.yoggSaronState",
+        "note": "phase, source, current Sara, and character map",
+        "source": "combatlog/parser/wotlk/creatures/yoggsaron.go"
+      }
+    },
+    {
+      "path": "/root/character-types",
+      "kind": "directory",
+      "metadata": {
+        "classification": "type_catalog",
+        "label": "possible concrete Character implementations",
+        "not_runtime_instances": true,
+        "source": "combatlog/parser/common/characters/character.go"
+      }
+    },
+    {
+      "path": "/root/character-types/common",
+      "kind": "directory"
+    },
+    {
+      "path": "/root/character-types/common/ads-go-with-boss",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/common/characters.AdsGoWithBoss",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/common/characters.AdsGoWithBoss",
+        "note": "wrapper around another character",
+        "source": "combatlog/parser/common/characters/adsonboss.go"
+      }
+    },
+    {
+      "path": "/root/character-types/common/common",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/common/characters.Common",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/common/characters.Common",
+        "note": "default character implementation",
+        "source": "combatlog/parser/common/characters/common.go"
+      }
+    },
+    {
+      "path": "/root/character-types/common/death-on-cast",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/common/characters.DeathOnCast",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/common/characters.DeathOnCast",
+        "note": "wrapper around another character",
+        "source": "combatlog/parser/common/characters/deathoncast.go"
+      }
+    },
+    {
+      "path": "/root/character-types/common/ignore-cast",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/common/characters.IgnoreCast",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/common/characters.IgnoreCast",
+        "note": "wrapper around another character",
+        "source": "combatlog/parser/common/characters/ignorecast.go"
+      }
+    },
+    {
+      "path": "/root/character-types/common/ignore-friendly-fire",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/common/characters.IgnoreFriendlyFire",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/common/characters.IgnoreFriendlyFire",
+        "note": "wrapper around another character",
+        "source": "combatlog/parser/common/characters/friendlyfire.go"
+      }
+    },
+    {
+      "path": "/root/character-types/common/never-active",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/common/characters.NeverActive",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/common/characters.NeverActive",
+        "note": "no activity history",
+        "source": "combatlog/parser/common/characters/neveractive.go"
+      }
+    },
+    {
+      "path": "/root/character-types/common/permanent-death",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/common/characters.PermanentDeath",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/common/characters.PermanentDeath",
+        "note": "wrapper around another character",
+        "source": "combatlog/parser/common/characters/permanentdeath.go"
+      }
+    },
+    {
+      "path": "/root/character-types/common/phase-provider",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/common/characters.phaseProviderCharacter",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/common/characters.phaseProviderCharacter",
+        "note": "runtime wrapper",
+        "source": "combatlog/parser/common/characters/phaseprovider.go"
+      }
+    },
+    {
+      "path": "/root/character-types/common/room-mechanic",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/common/characters.RoomMechanic",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/common/characters.RoomMechanic",
+        "note": "shares room state across characters",
+        "source": "combatlog/parser/common/characters/roommechanic.go"
+      }
+    },
+    {
+      "path": "/root/character-types/common/scripted-defeat",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/common/characters.scriptedDefeatCharacter",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/common/characters.scriptedDefeatCharacter",
+        "note": "runtime wrapper with defeat detector",
+        "source": "combatlog/parser/common/characters/scripteddefeat.go"
+      }
+    },
+    {
+      "path": "/root/character-types/common/starts-new-fight",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/common/characters.StartsNewFight",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/common/characters.StartsNewFight",
+        "note": "wrapper around another character",
+        "source": "combatlog/parser/common/characters/startsnewfight.go"
+      }
+    },
+    {
+      "path": "/root/character-types/contracts",
+      "kind": "directory"
+    },
+    {
+      "path": "/root/character-types/contracts/character",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/common/characters.Character",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/common/characters.Character",
+        "note": "interface contract",
+        "source": "combatlog/parser/common/characters/character.go"
+      }
+    },
+    {
+      "path": "/root/character-types/contracts/character-base",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/common/characters.CharacterBase",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/common/characters.CharacterBase",
+        "note": "extended lifecycle interface",
+        "source": "combatlog/parser/common/characters/common.go"
+      }
+    },
+    {
+      "path": "/root/character-types/primitives",
+      "kind": "directory"
+    },
+    {
+      "path": "/root/character-types/primitives/base-inactivity",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/common/characters.Base[*period.InactivityPeriod]",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/common/characters.Base[*period.InactivityPeriod]",
+        "note": "owns activity history and last slain state",
+        "source": "combatlog/parser/common/characters/character.go"
+      }
+    },
+    {
+      "path": "/root/character-types/primitives/base-object-period",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/common/characters.Base[*vanilla.ObjectPeriod]",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/common/characters.Base[*vanilla.ObjectPeriod]",
+        "note": "custom object activity period",
+        "source": "combatlog/parser/vanilla/creatures/lightwell.go"
+      }
+    },
+    {
+      "path": "/root/character-types/primitives/base-totem-period",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/common/characters.Base[*vanilla.TotemPeriod]",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/common/characters.Base[*vanilla.TotemPeriod]",
+        "note": "custom totem activity period",
+        "source": "combatlog/parser/vanilla/creatures/totem.go"
+      }
+    },
+    {
+      "path": "/root/character-types/vanilla",
+      "kind": "directory"
+    },
+    {
+      "path": "/root/character-types/vanilla/archmage-arugal",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.archmageArugal",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.archmageArugal",
+        "note": "wraps a selected base character",
+        "source": "combatlog/parser/vanilla/creatures/sfk.go"
+      }
+    },
+    {
+      "path": "/root/character-types/vanilla/bloodaxe-worg-pup",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.BloodaxeWorgPup",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.BloodaxeWorgPup",
+        "note": "VanillaPlus custom state",
+        "source": "combatlog/parser/vanilla/creatures/spire.go"
+      }
+    },
+    {
+      "path": "/root/character-types/vanilla/broodlord-lashlayer",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.broodlordLashlayer",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.broodlordLashlayer",
+        "note": "",
+        "source": "combatlog/parser/vanilla/creatures/bwl.go"
+      }
+    },
+    {
+      "path": "/root/character-types/vanilla/core-hound",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.CoreHound",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.CoreHound",
+        "note": "",
+        "source": "combatlog/parser/vanilla/creatures/corehound.go"
+      }
+    },
+    {
+      "path": "/root/character-types/vanilla/core-rager",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.coreRager",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.coreRager",
+        "note": "",
+        "source": "combatlog/parser/vanilla/creatures/moltencore.go"
+      }
+    },
+    {
+      "path": "/root/character-types/vanilla/critter",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.Critter",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.Critter",
+        "note": "",
+        "source": "combatlog/parser/vanilla/creatures/critter.go"
+      }
+    },
+    {
+      "path": "/root/character-types/vanilla/cthun-party",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.CthunParty",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.CthunParty",
+        "note": "C'Thun eye and body coordinate through shared state",
+        "source": "combatlog/parser/vanilla/creatures/anhqiraj.go"
+      }
+    },
+    {
+      "path": "/root/character-types/vanilla/disciple-of-naralex",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.DiscipleOfNaralex",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.DiscipleOfNaralex",
+        "note": "",
+        "source": "combatlog/parser/vanilla/creatures/wailingcaverns.go"
+      }
+    },
+    {
+      "path": "/root/character-types/vanilla/diseased-ghoul",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.DiseasedGhoul",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.DiseasedGhoul",
+        "note": "",
+        "source": "combatlog/parser/vanilla/creatures/scholomance.go"
+      }
+    },
+    {
+      "path": "/root/character-types/vanilla/fragment-of-rupturan",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.FragmentOfRupturan",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.FragmentOfRupturan",
+        "note": "",
+        "source": "combatlog/parser/vanilla/creatures/rupturan.go"
+      }
+    },
+    {
+      "path": "/root/character-types/vanilla/high-priest-thekal-party",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.HighPriestThekalParty",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.HighPriestThekalParty",
+        "note": "",
+        "source": "combatlog/parser/vanilla/creatures/zulgurub.go"
+      }
+    },
+    {
+      "path": "/root/character-types/vanilla/hooktooth-frenzy",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.HooktoothFrenzy",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.HooktoothFrenzy",
+        "note": "",
+        "source": "combatlog/parser/vanilla/creatures/zulgurub.go"
+      }
+    },
+    {
+      "path": "/root/character-types/vanilla/kel-thuzad",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.kelThuzad",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.kelThuzad",
+        "note": "",
+        "source": "combatlog/parser/vanilla/creatures/naxx.go"
+      }
+    },
+    {
+      "path": "/root/character-types/vanilla/majordomo-party",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.MajordomoParty",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.MajordomoParty",
+        "note": "",
+        "source": "combatlog/parser/vanilla/creatures/majordomo.go"
+      }
+    },
+    {
+      "path": "/root/character-types/vanilla/nefarian",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.nefarian",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.nefarian",
+        "note": "",
+        "source": "combatlog/parser/vanilla/creatures/bwl.go"
+      }
+    },
+    {
+      "path": "/root/character-types/vanilla/object",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.Object",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.Object",
+        "note": "custom object period",
+        "source": "combatlog/parser/vanilla/creatures/lightwell.go"
+      }
+    },
+    {
+      "path": "/root/character-types/vanilla/onyxia",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.Onyxia",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.Onyxia",
+        "note": "",
+        "source": "combatlog/parser/vanilla/creatures/onyxia.go"
+      }
+    },
+    {
+      "path": "/root/character-types/vanilla/razor-ad",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.RazorAdCharacter",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.RazorAdCharacter",
+        "note": "",
+        "source": "combatlog/parser/vanilla/creatures/bwl.go"
+      }
+    },
+    {
+      "path": "/root/character-types/vanilla/razorgore",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.razorgore",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.razorgore",
+        "note": "",
+        "source": "combatlog/parser/vanilla/creatures/bwl.go"
+      }
+    },
+    {
+      "path": "/root/character-types/vanilla/shadowflame-spark",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.shadowflameSpark",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.shadowflameSpark",
+        "note": "",
+        "source": "combatlog/parser/vanilla/creatures/bwl.go"
+      }
+    },
+    {
+      "path": "/root/character-types/vanilla/sneed-shredder",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.SneedShredder",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.SneedShredder",
+        "note": "",
+        "source": "combatlog/parser/vanilla/creatures/deadmines.go"
+      }
+    },
+    {
+      "path": "/root/character-types/vanilla/son-of-the-flame",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.sonOfTheFlameCharacter",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.sonOfTheFlameCharacter",
+        "note": "",
+        "source": "combatlog/parser/vanilla/creatures/moltencore.go"
+      }
+    },
+    {
+      "path": "/root/character-types/vanilla/thaddius-party",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.ThaddiusParty",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.ThaddiusParty",
+        "note": "",
+        "source": "combatlog/parser/vanilla/creatures/naxx.go"
+      }
+    },
+    {
+      "path": "/root/character-types/vanilla/totem",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.Totem",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.Totem",
+        "note": "custom totem period",
+        "source": "combatlog/parser/vanilla/creatures/totem.go"
+      }
+    },
+    {
+      "path": "/root/character-types/vanilla/vanilla-plus-mograine",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.vanillaPlusMograineCharacter",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures.vanillaPlusMograineCharacter",
+        "note": "",
+        "source": "combatlog/parser/vanilla/creatures/sm.go"
+      }
+    },
+    {
+      "path": "/root/character-types/wotlk",
+      "kind": "directory"
+    },
+    {
+      "path": "/root/character-types/wotlk/algalon",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.algalonCharacter",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.algalonCharacter",
+        "note": "",
+        "source": "combatlog/parser/wotlk/creatures/algalon.go"
+      }
+    },
+    {
+      "path": "/root/character-types/wotlk/assembly-of-iron",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.assemblyOfIronCharacter",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.assemblyOfIronCharacter",
+        "note": "",
+        "source": "combatlog/parser/wotlk/creatures/assemblyofiron.go"
+      }
+    },
+    {
+      "path": "/root/character-types/wotlk/attumen-the-huntsman",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.attumenTheHuntsman",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.attumenTheHuntsman",
+        "note": "",
+        "source": "combatlog/parser/wotlk/creatures/karazhan.go"
+      }
+    },
+    {
+      "path": "/root/character-types/wotlk/coilfang-guardian",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.coilfangGuardian",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.coilfangGuardian",
+        "note": "",
+        "source": "combatlog/parser/wotlk/creatures/serpentshrinecavern.go"
+      }
+    },
+    {
+      "path": "/root/character-types/wotlk/freya",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.freyaCharacter",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.freyaCharacter",
+        "note": "",
+        "source": "combatlog/parser/wotlk/creatures/freya.go"
+      }
+    },
+    {
+      "path": "/root/character-types/wotlk/hodir",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.hodirCharacter",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.hodirCharacter",
+        "note": "",
+        "source": "combatlog/parser/wotlk/creatures/hodir.go"
+      }
+    },
+    {
+      "path": "/root/character-types/wotlk/kael-thas",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.kaelThasCharacter",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.kaelThasCharacter",
+        "note": "",
+        "source": "combatlog/parser/wotlk/creatures/kaelthas.go"
+      }
+    },
+    {
+      "path": "/root/character-types/wotlk/kologarn",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.kologarnCharacter",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.kologarnCharacter",
+        "note": "",
+        "source": "combatlog/parser/wotlk/creatures/kologarn.go"
+      }
+    },
+    {
+      "path": "/root/character-types/wotlk/log-based",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.LogBased",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.LogBased",
+        "note": "server-side log character",
+        "source": "combatlog/parser/wotlk/creatures/logbased.go"
+      }
+    },
+    {
+      "path": "/root/character-types/wotlk/malygos-phase-two-add",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.malygosPhaseTwoAdd",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.malygosPhaseTwoAdd",
+        "note": "",
+        "source": "combatlog/parser/wotlk/creatures/eyeofeternity.go"
+      }
+    },
+    {
+      "path": "/root/character-types/wotlk/mimiron",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.mimironCharacter",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.mimironCharacter",
+        "note": "",
+        "source": "combatlog/parser/wotlk/creatures/mimiron.go"
+      }
+    },
+    {
+      "path": "/root/character-types/wotlk/razorscale-add",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.razorscaleAdd",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.razorscaleAdd",
+        "note": "",
+        "source": "combatlog/parser/wotlk/creatures/razorscale.go"
+      }
+    },
+    {
+      "path": "/root/character-types/wotlk/thorim",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.thorimCharacter",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.thorimCharacter",
+        "note": "",
+        "source": "combatlog/parser/wotlk/creatures/thorim.go"
+      }
+    },
+    {
+      "path": "/root/character-types/wotlk/unstartable",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.Unstartable",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.Unstartable",
+        "note": "wrapper used by LogBased",
+        "source": "combatlog/parser/wotlk/creatures/logbased.go"
+      }
+    },
+    {
+      "path": "/root/character-types/wotlk/yogg-saron",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.yoggSaronCharacter",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.yoggSaronCharacter",
+        "note": "",
+        "source": "combatlog/parser/wotlk/creatures/yoggsaron.go"
+      }
+    },
+    {
+      "path": "/root/character-types/wotlk/yogg-saron-guardian",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.yoggSaronGuardian",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.yoggSaronGuardian",
+        "note": "",
+        "source": "combatlog/parser/wotlk/creatures/yoggsaron.go"
+      }
     },
     {
       "path": "/root/instances",
@@ -101,10 +790,177 @@
       "target": "/root/shared/auras"
     },
     {
+      "path": "/root/instances/0000/characters",
+      "kind": "value",
+      "type": "github.com/Emyrk/chronicle/combatlog/parser/common/characters.Characters",
+      "metadata": {
+        "classification": "semantic",
+        "dynamic_entries": "GUID",
+        "label": "Hookable.Characters",
+        "source": "combatlog/parser/common/characters/lookup.go"
+      }
+    },
+    {
+      "path": "/root/instances/0000/characters/activity-changed",
+      "kind": "value",
+      "type": "map[github.com/Emyrk/chronicle/combatlog/parser/common/characters.Character]struct{}",
+      "metadata": {
+        "classification": "transient",
+        "label": "Characters.activityChanged",
+        "source": "combatlog/parser/common/characters/lookup.go"
+      }
+    },
+    {
+      "path": "/root/instances/0000/characters/all",
+      "kind": "value",
+      "type": "github.com/Emyrk/chronicle/combatlog/parser/common/characters/characterset.Set[characters.Character]",
+      "metadata": {
+        "classification": "semantic",
+        "label": "Characters.All",
+        "owns": "all concrete Character values keyed by GUID",
+        "source": "combatlog/parser/common/characters/characterset/set.go"
+      }
+    },
+    {
+      "path": "/root/instances/0000/characters/all/awake",
+      "kind": "directory",
+      "metadata": {
+        "classification": "semantic_index",
+        "key": "GUID",
+        "label": "characterset.Set.awake",
+        "source": "combatlog/parser/common/characters/characterset/set.go",
+        "state": [
+          "character reference",
+          "touchedAt",
+          "dormantAfter"
+        ]
+      }
+    },
+    {
+      "path": "/root/instances/0000/characters/all/entries",
+      "kind": "directory",
+      "metadata": {
+        "classification": "dynamic",
+        "key": "GUID",
+        "label": "characterset.Set.characters",
+        "source": "combatlog/parser/common/characters/characterset/set.go",
+        "value_types": "/root/character-types"
+      }
+    },
+    {
+      "path": "/root/instances/0000/characters/by-entry",
+      "kind": "value",
+      "type": "map[uint32][]github.com/Emyrk/chronicle/combatlog/parser/common/characters.Character",
+      "metadata": {
+        "classification": "derived_index",
+        "label": "Characters.ByEntry",
+        "source": "combatlog/parser/common/characters/lookup.go"
+      }
+    },
+    {
+      "path": "/root/instances/0000/characters/callbacks",
+      "kind": "directory",
+      "metadata": {
+        "classification": "runtime_wiring",
+        "fields": [
+          "noKnownParticipantsAlive",
+          "phaseTransitionCb",
+          "period hooks"
+        ],
+        "label": "runtime callbacks",
+        "source": "combatlog/parser/common/characters/lookup.go"
+      }
+    },
+    {
+      "path": "/root/instances/0000/characters/explicit-encounter",
+      "kind": "value",
+      "type": "bool",
+      "metadata": {
+        "classification": "semantic",
+        "label": "Characters.explicitEncounter",
+        "source": "combatlog/parser/common/characters/lookup.go"
+      }
+    },
+    {
+      "path": "/root/instances/0000/characters/factories",
+      "kind": "value",
+      "type": "[]github.com/Emyrk/chronicle/combatlog/parser/common/characters.CharacterFactory",
+      "metadata": {
+        "classification": "runtime_dependency",
+        "label": "Characters.factories",
+        "order_is_semantic": true,
+        "source": "combatlog/parser/common/characters/lookup.go"
+      }
+    },
+    {
+      "path": "/root/instances/0000/characters/hooks",
+      "kind": "value",
+      "type": "[]github.com/Emyrk/chronicle/combatlog/parser/common/characters.SetHook",
+      "metadata": {
+        "classification": "runtime_wiring",
+        "label": "Characters.hooks",
+        "order_is_semantic": true,
+        "source": "combatlog/parser/common/characters/lookup.go"
+      }
+    },
+    {
+      "path": "/root/instances/0000/characters/identifier",
+      "kind": "reference",
+      "type": "github.com/Emyrk/chronicle/combatlog/parser/common/identifier.Identifier",
+      "target": "/root/instances/0000/identifier",
+      "metadata": {
+        "classification": "shared_reference",
+        "label": "Characters.idf",
+        "source": "combatlog/parser/common/characters/lookup.go"
+      }
+    },
+    {
+      "path": "/root/instances/0000/characters/shared-state",
+      "kind": "value",
+      "type": "map[string]any",
+      "metadata": {
+        "classification": "semantic_polymorphic",
+        "known_types": "/root/character-shared-state",
+        "label": "Characters.sharedState",
+        "source": "combatlog/parser/common/characters/lookup.go"
+      }
+    },
+    {
+      "path": "/root/instances/0000/characters/staged-transitions",
+      "kind": "value",
+      "type": "[]github.com/Emyrk/chronicle/combatlog/parser/common/phases.Transition",
+      "metadata": {
+        "classification": "semantic_pending",
+        "label": "Characters.stagedTransitions",
+        "source": "combatlog/parser/common/characters/lookup.go"
+      }
+    },
+    {
+      "path": "/root/instances/0000/characters/units",
+      "kind": "reference",
+      "type": "github.com/Emyrk/chronicle/combatlog/parser/common/unitdb.Units",
+      "target": "/root/shared/units",
+      "metadata": {
+        "classification": "shared_reference",
+        "label": "Characters.db",
+        "source": "combatlog/parser/common/characters/lookup.go"
+      }
+    },
+    {
       "path": "/root/instances/0000/consume-tracker",
       "kind": "reference",
       "type": "github.com/Emyrk/chronicle/combatlog/parser/common/consumeevidence.Tracker",
       "target": "/root/shared/consume-tracker"
+    },
+    {
+      "path": "/root/instances/0000/identifier",
+      "kind": "value",
+      "type": "github.com/Emyrk/chronicle/combatlog/parser/common/identifier.Identifier",
+      "metadata": {
+        "classification": "semantic",
+        "label": "Hookable.Identifier",
+        "source": "combatlog/parser/common/instances/hookable.go"
+      }
     },
     {
       "path": "/root/instances/0000/raid-groups",
@@ -120,6 +976,73 @@
     },
     {
       "path": "/root/instances/0000/vehicles",
+      "kind": "reference",
+      "type": "github.com/Emyrk/chronicle/combatlog/parser/common/vehicles.Tracker",
+      "target": "/root/shared/vehicles"
+    },
+    {
+      "path": "/root/parse-state",
+      "kind": "value",
+      "type": "github.com/Emyrk/chronicle/combatlog/parser/common/encounters.State",
+      "metadata": {
+        "label": "parse-wide encounters.State coordinator",
+        "source": "combatlog/parser/common/encounters/consumer.go"
+      }
+    },
+    {
+      "path": "/root/parse-state/auras",
+      "kind": "reference",
+      "type": "github.com/Emyrk/chronicle/combatlog/parser/common/auras.Tracking",
+      "target": "/root/shared/auras"
+    },
+    {
+      "path": "/root/parse-state/consume-tracker",
+      "kind": "reference",
+      "type": "github.com/Emyrk/chronicle/combatlog/parser/common/consumeevidence.Tracker",
+      "target": "/root/shared/consume-tracker"
+    },
+    {
+      "path": "/root/parse-state/current-instance",
+      "kind": "reference",
+      "type": "github.com/Emyrk/chronicle/combatlog/parser/common/instances.Hookable",
+      "target": "/root/instances/0000",
+      "metadata": {
+        "label": "State.CurrentInstance",
+        "source": "combatlog/parser/common/encounters/consumer.go"
+      }
+    },
+    {
+      "path": "/root/parse-state/instances",
+      "kind": "directory",
+      "metadata": {
+        "label": "State.Instances aliases",
+        "source": "combatlog/parser/common/encounters/consumer.go"
+      }
+    },
+    {
+      "path": "/root/parse-state/instances/0000",
+      "kind": "reference",
+      "type": "github.com/Emyrk/chronicle/combatlog/parser/common/instances.Hookable",
+      "target": "/root/instances/0000",
+      "metadata": {
+        "label": "State.Instances[0]",
+        "source": "combatlog/parser/common/encounters/consumer.go"
+      }
+    },
+    {
+      "path": "/root/parse-state/raid-groups",
+      "kind": "reference",
+      "type": "github.com/Emyrk/chronicle/combatlog/parser/common/raidgroups.Tracker",
+      "target": "/root/shared/raid-groups"
+    },
+    {
+      "path": "/root/parse-state/units",
+      "kind": "reference",
+      "type": "github.com/Emyrk/chronicle/combatlog/parser/common/unitdb.Units",
+      "target": "/root/shared/units"
+    },
+    {
+      "path": "/root/parse-state/vehicles",
       "kind": "reference",
       "type": "github.com/Emyrk/chronicle/combatlog/parser/common/vehicles.Tracker",
       "target": "/root/shared/vehicles"
@@ -180,43 +1103,351 @@
   ],
   "dependencies": [
     {
-      "from": "/root/encounters",
+      "from": "/root/character-types/common/ads-go-with-boss",
+      "to": "/root/character-types/contracts/character-base"
+    },
+    {
+      "from": "/root/character-types/common/common",
+      "to": "/root/character-types/primitives/base-inactivity"
+    },
+    {
+      "from": "/root/character-types/common/death-on-cast",
+      "to": "/root/character-types/contracts/character-base"
+    },
+    {
+      "from": "/root/character-types/common/ignore-cast",
+      "to": "/root/character-types/contracts/character-base"
+    },
+    {
+      "from": "/root/character-types/common/ignore-friendly-fire",
+      "to": "/root/character-types/contracts/character-base"
+    },
+    {
+      "from": "/root/character-types/common/never-active",
+      "to": "/root/character-types/contracts/character"
+    },
+    {
+      "from": "/root/character-types/common/permanent-death",
+      "to": "/root/character-types/contracts/character-base"
+    },
+    {
+      "from": "/root/character-types/common/phase-provider",
+      "to": "/root/character-types/contracts/character"
+    },
+    {
+      "from": "/root/character-types/common/room-mechanic",
+      "to": "/root/character-shared-state/common/room"
+    },
+    {
+      "from": "/root/character-types/common/room-mechanic",
+      "to": "/root/character-types/common/common"
+    },
+    {
+      "from": "/root/character-types/common/scripted-defeat",
+      "to": "/root/character-types/contracts/character"
+    },
+    {
+      "from": "/root/character-types/common/starts-new-fight",
+      "to": "/root/character-types/contracts/character-base"
+    },
+    {
+      "from": "/root/character-types/contracts/character-base",
+      "to": "/root/character-types/contracts/character"
+    },
+    {
+      "from": "/root/character-types/primitives/base-inactivity",
+      "to": "/root/character-types/contracts/character-base"
+    },
+    {
+      "from": "/root/character-types/primitives/base-object-period",
+      "to": "/root/character-types/contracts/character"
+    },
+    {
+      "from": "/root/character-types/primitives/base-totem-period",
+      "to": "/root/character-types/contracts/character"
+    },
+    {
+      "from": "/root/character-types/vanilla/archmage-arugal",
+      "to": "/root/character-types/contracts/character-base"
+    },
+    {
+      "from": "/root/character-types/vanilla/bloodaxe-worg-pup",
+      "to": "/root/character-shared-state/vanilla/worg-pup-captures"
+    },
+    {
+      "from": "/root/character-types/vanilla/bloodaxe-worg-pup",
+      "to": "/root/character-types/common/common"
+    },
+    {
+      "from": "/root/character-types/vanilla/broodlord-lashlayer",
+      "to": "/root/character-types/common/starts-new-fight"
+    },
+    {
+      "from": "/root/character-types/vanilla/core-hound",
+      "to": "/root/character-types/common/common"
+    },
+    {
+      "from": "/root/character-types/vanilla/core-rager",
+      "to": "/root/character-types/common/common"
+    },
+    {
+      "from": "/root/character-types/vanilla/critter",
+      "to": "/root/character-types/common/never-active"
+    },
+    {
+      "from": "/root/character-types/vanilla/cthun-party",
+      "to": "/root/character-shared-state/vanilla/cthun"
+    },
+    {
+      "from": "/root/character-types/vanilla/cthun-party",
+      "to": "/root/character-types/common/common"
+    },
+    {
+      "from": "/root/character-types/vanilla/disciple-of-naralex",
+      "to": "/root/character-types/common/never-active"
+    },
+    {
+      "from": "/root/character-types/vanilla/diseased-ghoul",
+      "to": "/root/character-types/common/common"
+    },
+    {
+      "from": "/root/character-types/vanilla/fragment-of-rupturan",
+      "to": "/root/character-types/common/common"
+    },
+    {
+      "from": "/root/character-types/vanilla/high-priest-thekal-party",
+      "to": "/root/character-types/common/common"
+    },
+    {
+      "from": "/root/character-types/vanilla/hooktooth-frenzy",
+      "to": "/root/character-types/common/common"
+    },
+    {
+      "from": "/root/character-types/vanilla/kel-thuzad",
+      "to": "/root/character-types/common/permanent-death"
+    },
+    {
+      "from": "/root/character-types/vanilla/majordomo-party",
+      "to": "/root/character-types/common/common"
+    },
+    {
+      "from": "/root/character-types/vanilla/nefarian",
+      "to": "/root/character-shared-state/common/room"
+    },
+    {
+      "from": "/root/character-types/vanilla/nefarian",
+      "to": "/root/character-types/common/room-mechanic"
+    },
+    {
+      "from": "/root/character-types/vanilla/object",
+      "to": "/root/character-types/primitives/base-object-period"
+    },
+    {
+      "from": "/root/character-types/vanilla/onyxia",
+      "to": "/root/character-types/common/common"
+    },
+    {
+      "from": "/root/character-types/vanilla/razor-ad",
+      "to": "/root/character-types/common/common"
+    },
+    {
+      "from": "/root/character-types/vanilla/razorgore",
+      "to": "/root/character-types/common/common"
+    },
+    {
+      "from": "/root/character-types/vanilla/shadowflame-spark",
+      "to": "/root/character-types/common/common"
+    },
+    {
+      "from": "/root/character-types/vanilla/sneed-shredder",
+      "to": "/root/character-types/common/common"
+    },
+    {
+      "from": "/root/character-types/vanilla/son-of-the-flame",
+      "to": "/root/character-types/common/common"
+    },
+    {
+      "from": "/root/character-types/vanilla/thaddius-party",
+      "to": "/root/character-types/common/common"
+    },
+    {
+      "from": "/root/character-types/vanilla/totem",
+      "to": "/root/character-types/primitives/base-totem-period"
+    },
+    {
+      "from": "/root/character-types/vanilla/vanilla-plus-mograine",
+      "to": "/root/character-types/common/common"
+    },
+    {
+      "from": "/root/character-types/wotlk/algalon",
+      "to": "/root/character-types/common/common"
+    },
+    {
+      "from": "/root/character-types/wotlk/assembly-of-iron",
+      "to": "/root/character-types/common/common"
+    },
+    {
+      "from": "/root/character-types/wotlk/attumen-the-huntsman",
+      "to": "/root/character-types/common/common"
+    },
+    {
+      "from": "/root/character-types/wotlk/coilfang-guardian",
+      "to": "/root/character-types/common/common"
+    },
+    {
+      "from": "/root/character-types/wotlk/freya",
+      "to": "/root/character-types/common/common"
+    },
+    {
+      "from": "/root/character-types/wotlk/hodir",
+      "to": "/root/character-types/common/common"
+    },
+    {
+      "from": "/root/character-types/wotlk/kael-thas",
+      "to": "/root/character-shared-state/wotlk/kael-thas"
+    },
+    {
+      "from": "/root/character-types/wotlk/kael-thas",
+      "to": "/root/character-types/common/room-mechanic"
+    },
+    {
+      "from": "/root/character-types/wotlk/kologarn",
+      "to": "/root/character-types/common/common"
+    },
+    {
+      "from": "/root/character-types/wotlk/log-based",
+      "to": "/root/character-types/primitives/base-inactivity"
+    },
+    {
+      "from": "/root/character-types/wotlk/malygos-phase-two-add",
+      "to": "/root/character-types/common/common"
+    },
+    {
+      "from": "/root/character-types/wotlk/mimiron",
+      "to": "/root/character-shared-state/wotlk/mimiron"
+    },
+    {
+      "from": "/root/character-types/wotlk/mimiron",
+      "to": "/root/character-types/common/common"
+    },
+    {
+      "from": "/root/character-types/wotlk/razorscale-add",
+      "to": "/root/character-types/common/common"
+    },
+    {
+      "from": "/root/character-types/wotlk/thorim",
+      "to": "/root/character-shared-state/wotlk/thorim"
+    },
+    {
+      "from": "/root/character-types/wotlk/thorim",
+      "to": "/root/character-types/common/room-mechanic"
+    },
+    {
+      "from": "/root/character-types/wotlk/unstartable",
+      "to": "/root/character-types/contracts/character-base"
+    },
+    {
+      "from": "/root/character-types/wotlk/yogg-saron",
+      "to": "/root/character-shared-state/wotlk/yogg-saron"
+    },
+    {
+      "from": "/root/character-types/wotlk/yogg-saron",
+      "to": "/root/character-types/common/common"
+    },
+    {
+      "from": "/root/character-types/wotlk/yogg-saron-guardian",
+      "to": "/root/character-shared-state/wotlk/yogg-saron"
+    },
+    {
+      "from": "/root/character-types/wotlk/yogg-saron-guardian",
+      "to": "/root/character-types/common/common"
+    },
+    {
+      "from": "/root/instances/0000",
+      "to": "/root/instances/0000/characters"
+    },
+    {
+      "from": "/root/instances/0000",
       "to": "/root/shared/auras"
     },
     {
-      "from": "/root/encounters",
+      "from": "/root/instances/0000",
       "to": "/root/shared/consume-tracker"
     },
     {
-      "from": "/root/encounters",
+      "from": "/root/instances/0000",
       "to": "/root/shared/raid-groups"
     },
     {
-      "from": "/root/encounters",
+      "from": "/root/instances/0000",
       "to": "/root/shared/units"
     },
     {
-      "from": "/root/encounters",
+      "from": "/root/instances/0000",
       "to": "/root/shared/vehicles"
     },
     {
-      "from": "/root/instances/0000",
-      "to": "/root/shared/auras"
+      "from": "/root/instances/0000/characters",
+      "to": "/root/instances/0000/characters/all"
     },
     {
-      "from": "/root/instances/0000",
-      "to": "/root/shared/consume-tracker"
+      "from": "/root/instances/0000/characters",
+      "to": "/root/instances/0000/characters/shared-state"
     },
     {
-      "from": "/root/instances/0000",
-      "to": "/root/shared/raid-groups"
+      "from": "/root/instances/0000/characters",
+      "to": "/root/instances/0000/identifier"
     },
     {
-      "from": "/root/instances/0000",
+      "from": "/root/instances/0000/characters",
       "to": "/root/shared/units"
     },
     {
-      "from": "/root/instances/0000",
+      "from": "/root/instances/0000/characters/shared-state",
+      "to": "/root/character-shared-state/common/room"
+    },
+    {
+      "from": "/root/instances/0000/characters/shared-state",
+      "to": "/root/character-shared-state/vanilla/cthun"
+    },
+    {
+      "from": "/root/instances/0000/characters/shared-state",
+      "to": "/root/character-shared-state/vanilla/worg-pup-captures"
+    },
+    {
+      "from": "/root/instances/0000/characters/shared-state",
+      "to": "/root/character-shared-state/wotlk/kael-thas"
+    },
+    {
+      "from": "/root/instances/0000/characters/shared-state",
+      "to": "/root/character-shared-state/wotlk/mimiron"
+    },
+    {
+      "from": "/root/instances/0000/characters/shared-state",
+      "to": "/root/character-shared-state/wotlk/thorim"
+    },
+    {
+      "from": "/root/instances/0000/characters/shared-state",
+      "to": "/root/character-shared-state/wotlk/yogg-saron"
+    },
+    {
+      "from": "/root/parse-state",
+      "to": "/root/shared/auras"
+    },
+    {
+      "from": "/root/parse-state",
+      "to": "/root/shared/consume-tracker"
+    },
+    {
+      "from": "/root/parse-state",
+      "to": "/root/shared/raid-groups"
+    },
+    {
+      "from": "/root/parse-state",
+      "to": "/root/shared/units"
+    },
+    {
+      "from": "/root/parse-state",
       "to": "/root/shared/vehicles"
     }
   ]

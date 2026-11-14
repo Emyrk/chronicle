@@ -52,21 +52,20 @@ describe("state graph model", () => {
   it("layers dependents above their dependencies and folds references onto owners", () => {
     const layout = layoutStateGraph(indexStateGraph(target()));
     const layer = (p: string) => layout.boxes.find((box) => box.path === p)!.layer;
-    expect(layer("/root/encounters")).toBe(0);
-    expect(layer("/root/instances/0000")).toBe(1);
-    expect(layer("/root/shared/units")).toBe(2);
+    expect(layer("/root/parse-state")).toBeLessThan(layer("/root/instances/0000"));
+    expect(layer("/root/instances/0000")).toBeLessThan(layer("/root/shared/units"));
 
-    const encountersToInstance = layout.edges.find(
-      (edge) => edge.from === "/root/encounters" && edge.to === "/root/instances/0000",
+    const parseStateToInstance = layout.edges.find(
+      (edge) => edge.from === "/root/parse-state" && edge.to === "/root/instances/0000",
     )!;
-    expect(encountersToInstance.dependency).toBe(false);
-    expect(encountersToInstance.references).toEqual([
-      "/root/encounters/current-instance",
-      "/root/encounters/instances/0000",
+    expect(parseStateToInstance.dependency).toBe(false);
+    expect(parseStateToInstance.references).toEqual([
+      "/root/parse-state/current-instance",
+      "/root/parse-state/instances/0000",
     ]);
-    const unitsEdge = layout.edges.find((edge) => edge.from === "/root/encounters" && edge.to === "/root/shared/units")!;
+    const unitsEdge = layout.edges.find((edge) => edge.from === "/root/parse-state" && edge.to === "/root/shared/units")!;
     expect(unitsEdge.dependency).toBe(true);
-    expect(unitsEdge.references).toEqual(["/root/encounters/units"]);
+    expect(unitsEdge.references).toEqual(["/root/parse-state/units"]);
   });
 
   it("shortens Go type names", () => {
