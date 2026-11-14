@@ -194,6 +194,7 @@ func (w *WorkerLogParse) parseCombatLog(
 			if consumeErr != nil {
 				return nil, fmt.Errorf("consume parsernext Vanilla log: %w", consumeErr)
 			}
+			totalLines = source.Summary().Lines
 			observed := pipeline.Capabilities()
 			if observed.RaidGroup {
 				logCapabilities = append(logCapabilities, "raidgroup")
@@ -362,6 +363,9 @@ func (w *WorkerLogParse) parseCombatLog(
 		timing.consumerTimes = consumerTimes
 	}
 
+	// Legacy parsers return their own named map element types, so they do not
+	// satisfy this local interface. Preserve existing report behavior here; fixing
+	// missed-spell reporting for all engines requires a separate behavior decision.
 	type missedSpellEntry struct {
 		Count int
 		Name  string

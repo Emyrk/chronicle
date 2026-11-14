@@ -105,3 +105,9 @@ func (s *Source) Advance(ctx context.Context) ([]messages.Message, error) {
 }
 
 func (s *Source) DetailedTimes() map[string]time.Duration { return s.pipeline.DetailedTimes() }
+
+// MissedSpells exposes the pipeline's diagnostic counts without changing the
+// legacy daemon's report conversion contract.
+func (s *Source) MissedSpells() map[chrondbc.SpellID]MissedSpell {
+	return s.pipeline.MissedSpells()
+}
