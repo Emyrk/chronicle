@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { X } from "lucide-react";
 import { useSiteConfig } from "@/api/queries";
 import { iconUrl } from "@/config/iconUrl";
@@ -7,6 +7,8 @@ import { SERVER_NAME } from "@/config/serverCapabilities";
 const KEY = "ratings-letter-banner-dismissed";
 const POST_PATH = "/blog/beyond-the-best-parse";
 const TEN_YEARS_MS = 10 * 365 * 24 * 60 * 60 * 1000;
+const subscribe = () => () => {};
+const serverDismissed = () => false;
 
 function readDismissed(): boolean {
   try {
@@ -41,8 +43,10 @@ function postHref(): string {
  */
 export function LetterBanner() {
   const { data: siteConfig } = useSiteConfig();
-  const [dismissed, setDismissed] = useState(readDismissed);
-  if (dismissed) return null;
+  // Read browser storage only after hydration, keeping the server and first client render equal.
+  const storedDismissed = useSyncExternalStore(subscribe, readDismissed, serverDismissed);
+  const [dismissed, setDismissed] = useState(false);
+  if (dismissed || storedDismissed) return null;
 
   const dismiss = () => {
     writeDismissed(siteConfig?.primary_domain);
