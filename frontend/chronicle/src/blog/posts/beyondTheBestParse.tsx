@@ -17,7 +17,7 @@ const GOBLIN = "/c/images/blog/goblin.webp";
 /** Chapters in reading order; the goblin comments as each one comes into view. */
 const CHAPTERS = [
   { numeral: "Prologue", title: "A letter", icon: "inv_letter_15", quip: "A letter from the boss. Read the whole thing, I'm counting." },
-  { numeral: "Chapter I", title: "Why move beyond parses?", icon: "ability_hunter_snipershot", quip: "Same DPS, different parse? Depends who showed up that week." },
+  { numeral: "Chapter I", title: "Why add ratings alongside parses?", icon: "ability_hunter_snipershot", quip: "Same DPS, different parse? Depends who showed up that week." },
   { numeral: "Chapter II", title: "Distance from the best, rather than position in the population", icon: "inv_misc_spyglass_02", quip: "Distance from the best. Now that's something I can measure." },
   { numeral: "Chapter III", title: "Recognizing more than one exceptional performance", icon: "inv_misc_pocketwatch_01", quip: "One lucky night, or every night? Those cost different amounts." },
   { numeral: "Chapter IV", title: "Comparing achievements across raids and specializations", icon: "inv_misc_coin_01", quip: "835 points... out of what? Exactly." },
