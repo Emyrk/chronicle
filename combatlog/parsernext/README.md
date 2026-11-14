@@ -1,6 +1,6 @@
 # parsernext foundation
 
-This is an isolated, runnable **complete-file source ingestion** foundation, plus a bounded Vanilla combat-record decoder, not a complete combat parser. Production continues using `combatlog/parser`
+This is an isolated, runnable **complete-file source ingestion** foundation, plus a Vanilla record decoder and file-local message source, not a complete combat parser. Production continues using `combatlog/parser`
 and `chronicle/logparse_parse.go` unchanged. There are no legacy parser execution wrappers,
 registration side effects, database/River calls, or raid constructors here.
 
@@ -147,7 +147,7 @@ It cannot construct a raid through a registered constructor or imported package.
 ## Deliberately not implemented
 
 Combat-message decoding beyond the explicitly listed records; timezone reconstruction beyond header interpretation; other expansion combat rules;
-character/raid state; event sorting or the full synthetic pipeline; multiple-file merging;
+character/raid state; event sorting or the full synthetic pipeline inside parsernext; multiple-file merging;
 semantic export parity; checkpoints, restore, snapshot schemas/codecs; publication.
 There are no no-op implementations claiming these features work.
 
@@ -185,9 +185,8 @@ from a CC-v2 line without its newline.
 
  It returns the existing concrete
 `*messages.Damage`, `*messages.Heal`, `*messages.Slain` payloads, plus the existing
-power-burn `*messages.ResourceChange` emitted locally by SPELL_DMG. All other records (including
-HEADER (in this stateless function), SPELL_FAIL, BUFF_DURATION and DEBUFF_DURATION) return `ErrUnsupportedRecord`, not successful empty
-output. This is deliberately a record decoder, not a whole-file combat parser.
+power-burn `*messages.ResourceChange` emitted locally by SPELL_DMG. Stateful records (HEADER and COMBATANT records in this stateless function) return
+`ErrUnsupportedRecord`. Unknown record names retain their raw content as UnparsedLine. This is deliberately a record decoder, not a whole-file combat parser.
 Call it from a `ReadFile` visitor for an explicitly selected Vanilla source;
 callers must decide how to handle unsupported records rather than silently
 claiming the complete log was decoded.
@@ -291,34 +290,35 @@ Headers advertise version strings but do **not** establish observed raid-layout,
 resource or position capabilities. RG/RAID_COMPOSITION and UNIT_STATE now update an explicit capability owner in
 the stateful decoder. UNIT_STATE preserves the partial-observation quirk below.
 
-### Remaining stateful/outcome work
+### Combatant state and complete record outcomes
 
-Combatant/transmog reconciliation and the ordered synthetic pipeline remain
-unmigrated. The decoded roster/zone/unit messages do not establish an identity
-registry or change unknown-unit semantics. SPELL_FAIL silently ignores client failures; consumed-field errors are surfaced
-by legacy advance even though its handler does not check them; BUFF_DURATION/DEBUFF_DURATION return placeholder Skip
-messages. They remain `ErrUnsupportedRecord` until outcome policy is approved.
-Loot and other metadata records also remain unsupported.
+`Decoder` owns name-keyed combatant/transmog caches and talent normalization.
+It retains these alongside clock/version/capability state across explicitly reused
+file sources. Combatant inputs accept dataset talent trees and optional gear and
+logging dependencies. No snapshot codec or identity redesign is implemented.
 
-The saved public Capybara fixture has 185,808 records: 179,109 are now covered
-by supported event names (including 31 HEADER records), and the remaining 6,699
-are exactly:
+SPELL_FAIL silently drops client-side failures, with no new log/report/counter.
+Server-side failures emit SpellFail. Malformed consumed fields remain errors,
+including when the optional server flag is false. BUFF_DURATION/DEBUFF_DURATION
+emit the existing Skip payload with reason `aura duration update not implemented`.
+Unknown records, including CHANNEL_START, CHANNEL_UPDATE and COMBAT_END, emit
+UnparsedLine retaining raw record content for later work.
 
-| Unsupported record | Count |
-| --- | ---: |
-| SPELL_FAIL | 6,103 |
-| COMBATANT_INFO | 374 |
-| COMBATANT_TRANSMOG | 138 |
-| COMBATANT_TALENTS | 73 |
-| COMBAT_END | 9 |
-| CHANNEL_START | 1 |
-| CHANNEL_UPDATE | 1 |
+### Pull source and completion
 
-These are coverage counts, not proof of full-log/export equivalence. The original
-header implementation overlay matched all 31 real headers and 185,808 clock
-transitions; nonheader timestamp probes deliberately avoid parsing unsupported
-metadata. Tests additionally cover malformed/repeated headers, semantic/lexical
-errors, fatal jumps and isolation between separately constructed file decoders.
+`common.NewFileReader` pulls one bounded owned physical line at a time. `ReadFile`
+delegates to it. Summary becomes available only after a clean EOF, not when the
+last line is delivered. Read failures and cancellation remain failures; no whole
+file message buffer or goroutine bridge is used.
+
+`vanilla.NewSource(reader, maxLineBytes, decoder)` implements the existing
+Advance shape without importing the legacy parser. Use a fresh Source for each
+file and retain Decoder explicitly for continuity. The source does not apply a
+second clock or run synthetics. It marks framing/read errors fatal so existing
+consumers cannot swallow them as recoverable malformed records. Ordinary record
+errors remain recoverable. Its summary certifies physical ingestion, not semantic
+validity or terminal finalization. Output is provisional until completion.
+
 
 ### Metadata and capability observations
 

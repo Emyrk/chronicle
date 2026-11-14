@@ -2,7 +2,6 @@ package parserv2
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
@@ -29,7 +28,7 @@ func (p *Parser) auraCast(ctx context.Context, ts time.Time, m *Matched) ([]mess
 }
 
 func (p *Parser) auraUpdate(ctx context.Context, ts time.Time, buff bool, m *Matched) ([]messages.Message, error) {
-	return messages.Skip(ts, "not yet implements"), nil
+	return next.DecodeAuraDuration(ts)
 }
 
 func (p *Parser) energize(ctx context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
@@ -190,28 +189,7 @@ func (p *Parser) spellStart(_ context.Context, ts time.Time, m *Matched) ([]mess
 }
 
 func (p *Parser) spellFail(_ context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
-	if !strings.HasPrefix(strings.TrimSpace(m.peek()), "0x") {
-		// Client failure, ignoring for now.
-		return []messages.Message{}, nil
-	}
-
-	caster := m.Guid()
-	spell := m.DBCSpellByID(p.ctx, p.wowDB)
-	serverSide := true
-	if m.Remain() > 0 {
-		serverSide = m.Bool()
-	}
-
-	if !serverSide {
-		return []messages.Message{}, nil
-	}
-
-	return set(&messages.SpellFail{
-		MessageBase:    messages.Base(ts),
-		SpellData:      spell,
-		Caster:         caster,
-		FailedByServer: serverSide,
-	})
+	return next.DecodeSpellFail(p.ctx, p.wowDB, ts, m)
 }
 
 func (p *Parser) slain(_ context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
@@ -230,10 +208,6 @@ func (p *Parser) loot(ctx context.Context, ts time.Time, m *Matched) ([]messages
 
 func (p *Parser) lootTrade(ctx context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
 	return next.DecodeLootTrade(ts, m)
-}
-
-func set(m ...messages.Message) ([]messages.Message, error) {
-	return m, nil
 }
 
 // Apply even on decode error: legacy UNIT_STATE observes resources before
