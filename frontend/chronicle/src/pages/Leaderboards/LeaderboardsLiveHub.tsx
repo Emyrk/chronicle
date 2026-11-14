@@ -5,6 +5,7 @@ import { difficultyChipClassName } from "@/components/EncounterDifficulty/encoun
 import { landingRealmError, useLandingHighlights } from "./Hub/landingHighlights"
 import { useCallback, useState, type ReactNode } from "react"
 import { LeaderboardMaintenanceNotice } from "./LeaderboardMaintenanceNotice"
+import { LeaderboardReportNotice } from "./LeaderboardReportNotice"
 import { cn } from "@/lib/utils"
 import { useQuery } from "@tanstack/react-query"
 import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom"
@@ -170,6 +171,7 @@ export function LeaderboardsLiveHub() {
           difficulty={params.get("difficulty")} size={params.get("size")}
           onCohort={(difficulty, size) => { const next = new URLSearchParams(params); next.delete("page"); if (size) { next.set("difficulty", difficulty); next.set("size", size) } else { next.delete("difficulty"); next.delete("size") } setParams(next) }}
           onEncounters={(names) => choose("encounters", names.join(",") || undefined)} />} />
+      <LeaderboardReportNotice />
     </div>
     <AdRailStack primaryPlacement="leaderboards-right-rail" secondaryPlacement="leaderboards-right-rail-lower" />
     <MobileBottomAd placement="rankings-mobile-bottom" />

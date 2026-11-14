@@ -4,6 +4,7 @@ import { useSiteConfig } from "@/api/queries"
 import { useHubSummary } from "../Hub/hubSummaryAdapter"
 import type { RatingView } from "../Ratings/ratingThemes"
 import { CareerLeaderboard } from "./CareerLeaderboard"
+import { LeaderboardReportNotice } from "../LeaderboardReportNotice"
 import { careerLeaderboardParams, type CareerBoardsState, type CareerFilters, type CareerRole } from "./careerLeaderboardModel"
 
 const VIEWS: RatingView[] = ["overview", "peak", "mastery", "renown"]
@@ -48,28 +49,31 @@ export function CareerLeaderboardPage() {
     setParams(next, { replace: true })
   }
   return (
-    <CareerLeaderboard
-      view={view}
-      onView={(next) => update({ view: next === "overview" ? undefined : next })}
-      filters={filters}
-      onFilters={(next) => {
-        const updated = new URLSearchParams(params)
-        const set = (key: string, value?: string) => (value ? updated.set(key, value) : updated.delete(key))
-        set("subject", next.subject === "guilds" ? "guilds" : undefined)
-        set("role", next.role === "all" ? undefined : next.role)
-        set("class", next.scope.cls)
-        set("spec", next.scope.spec)
-        set("sub_spec", next.scope.subSpec)
-        updated.delete("raid")
-        for (const raid of next.raids) updated.append("raid", raid)
-        setParams(updated, { replace: true })
-      }}
-      realm={realm?.name ?? ALL_REALMS}
-      realms={[ALL_REALMS, ...realms.map((r) => r.name)]}
-      onRealm={(name) => update({ realm: realms.find((r) => r.name === name)?.id })}
-      state={state}
-      request={request}
-      allHref="/leaderboards"
-    />
+    <>
+      <CareerLeaderboard
+        view={view}
+        onView={(next) => update({ view: next === "overview" ? undefined : next })}
+        filters={filters}
+        onFilters={(next) => {
+          const updated = new URLSearchParams(params)
+          const set = (key: string, value?: string) => (value ? updated.set(key, value) : updated.delete(key))
+          set("subject", next.subject === "guilds" ? "guilds" : undefined)
+          set("role", next.role === "all" ? undefined : next.role)
+          set("class", next.scope.cls)
+          set("spec", next.scope.spec)
+          set("sub_spec", next.scope.subSpec)
+          updated.delete("raid")
+          for (const raid of next.raids) updated.append("raid", raid)
+          setParams(updated, { replace: true })
+        }}
+        realm={realm?.name ?? ALL_REALMS}
+        realms={[ALL_REALMS, ...realms.map((r) => r.name)]}
+        onRealm={(name) => update({ realm: realms.find((r) => r.name === name)?.id })}
+        state={state}
+        request={request}
+        allHref="/leaderboards"
+      />
+      <LeaderboardReportNotice />
+    </>
   )
 }
