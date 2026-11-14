@@ -282,3 +282,19 @@ func TestWrapperRejectsMissingReferencesWithoutMutatingDestination(t *testing.T)
 		require.Error(t, err)
 	}
 }
+
+func TestBaseRejectsTypedNilLastSlain(t *testing.T) {
+	t.Parallel()
+	lookup := stateLookup()
+	base := NewBaseCharacter[*period.InactivityPeriod](1, lookup)
+	base.LastSlain = (*messages.Slain)(nil)
+	_, err := base.CaptureState(nil, func(messages.Message) (string, error) { return "/slain", nil })
+	require.Error(t, err)
+	base.LastSlain = &messages.Slain{}
+	state, err := base.CaptureState(nil, func(messages.Message) (string, error) { return "/slain", nil })
+	require.NoError(t, err)
+	candidate := NewBaseCharacter[*period.InactivityPeriod](2, lookup)
+	err = candidate.RestoreState(state, lookup, nil, func(string) (messages.Message, error) { return (*messages.Slain)(nil), nil })
+	require.Error(t, err)
+	require.Equal(t, guid.GUID(2), candidate.ID())
+}
