@@ -1,14 +1,15 @@
 package parsernext_test
 
 import (
+	"encoding/json"
 	"fmt"
+	"github.com/Emyrk/chronicle/database"
 	"strings"
 	"testing"
 
 	"github.com/Emyrk/chronicle/combatlog/parsernext"
 	"github.com/Emyrk/chronicle/combatlog/parsernext/common"
 	"github.com/Emyrk/chronicle/combatlog/parsernext/forever"
-	"github.com/Emyrk/chronicle/combatlog/parsernext/formats"
 	"github.com/Emyrk/chronicle/combatlog/parsernext/tbc"
 	"github.com/Emyrk/chronicle/combatlog/parsernext/vanilla"
 	"github.com/Emyrk/chronicle/combatlog/parsernext/wotlk"
@@ -22,14 +23,15 @@ func (unreadable) Read([]byte) (int, error) { panic("unsupported selection read 
 func TestSelectionMatrix(t *testing.T) {
 	t.Parallel()
 	accepted := map[parsernext.Selection]bool{
-		{Format: formats.VanillaCompanion, Expansion: vanilla.Name}: true,
-		{Format: formats.TBCCompanion, Expansion: tbc.Name}:         true,
-		{Format: formats.WrathCompanion, Expansion: wotlk.Name}:     true,
-		{Format: formats.AzerothCore, Expansion: wotlk.Name}:        true,
-		{Format: formats.CLEUv22, Expansion: forever.Name}:          true,
+		{Format: database.LogFormat335aCcAddon, Expansion: tbc.Name}:      true,
+		{Format: database.LogFormat112aCcAddon, Expansion: vanilla.Name}:  true,
+		{Format: database.LogFormat243CcAddon, Expansion: tbc.Name}:       true,
+		{Format: database.LogFormat335aCcAddon, Expansion: wotlk.Name}:    true,
+		{Format: database.LogFormatAzerothcoreMod, Expansion: wotlk.Name}: true,
+		{Format: database.LogFormatV22Cleu, Expansion: forever.Name}:      true,
 	}
 	for _, expansion := range []common.Expansion{vanilla.Name, tbc.Name, wotlk.Name, forever.Name, "", "unknown"} {
-		for _, format := range []formats.ID{formats.VanillaCompanion, formats.TBCCompanion, formats.WrathCompanion, formats.AzerothCore, "v9-cleu", formats.CLEUv22, "", "unknown", "hermesproxy_1_14_2_cc", "1.12a-superwow-addon"} {
+		for _, format := range append(database.AllLogFormatValues(), "", "unknown") {
 			selection := parsernext.Selection{Format: format, Expansion: expansion}
 			t.Run(fmt.Sprintf("%s/%s", expansion, format), func(t *testing.T) {
 				t.Parallel()
@@ -46,5 +48,26 @@ func TestSelectionMatrix(t *testing.T) {
 				require.Equal(t, "physical source only\n", seen[0].Raw)
 			})
 		}
+	}
+}
+
+func TestCanonicalFormatNamesRemainCompatible(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		format database.LogFormat
+		wire   string
+	}{
+		{database.LogFormat112aCcAddon, "1.12a-cc-addon"},
+		{database.LogFormat243CcAddon, "2.4.3-cc-addon"},
+		{database.LogFormat335aCcAddon, "3.3.5a-cc-addon"},
+		{database.LogFormatAzerothcoreMod, "azerothcore-mod"},
+		{database.LogFormatV22Cleu, "v22-cleu"},
+	} {
+		encoded, err := json.Marshal(tc.format)
+		require.NoError(t, err)
+		require.JSONEq(t, fmt.Sprintf("%q", tc.wire), string(encoded))
+		var decoded database.LogFormat
+		require.NoError(t, json.Unmarshal([]byte(fmt.Sprintf("%q", tc.wire)), &decoded))
+		require.Equal(t, tc.format, decoded)
 	}
 }
