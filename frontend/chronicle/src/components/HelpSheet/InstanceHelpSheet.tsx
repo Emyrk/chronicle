@@ -120,16 +120,16 @@ function KeybindsCard({ visible }: { visible: boolean }) {
   const groups = useInstanceKeybindGroups();
   if (!visible || groups.length === 0) return null;
 
-  return createPortal(
-    <div className="fixed inset-0 z-[99] flex items-center justify-center pointer-events-none">
-      <Card className="pointer-events-auto max-h-[80vh] w-[460px] overflow-hidden shadow-2xl animate-in fade-in-0 zoom-in-95 duration-200 bg-card/95 backdrop-blur-sm border-border/50">
+  return (
+    <div className="pointer-events-none absolute inset-y-0 right-full z-[99] flex w-[calc(100vw-100%)] items-center justify-center">
+      <Card className="pointer-events-auto max-h-[80vh] w-[min(460px,calc(100vw-2rem))] overflow-hidden border-border/50 bg-card/95 shadow-2xl backdrop-blur-sm animate-in fade-in-0 zoom-in-95 duration-200">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
             <Keyboard className="h-5 w-5 text-primary" />
             Shortcuts
           </CardTitle>
         </CardHeader>
-        <CardContent className="styled-scrollbar space-y-4 overflow-y-auto">
+        <CardContent className="styled-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto">
           {groups.map((group) => (
             <section key={group.id}>
               <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -152,8 +152,7 @@ function KeybindsCard({ visible }: { visible: boolean }) {
           ))}
         </CardContent>
       </Card>
-    </div>,
-    document.body,
+    </div>
   );
 }
 
@@ -304,7 +303,8 @@ export function InstanceHelpSheet({ open: controlledOpen, onOpenChange }: Instan
       
       {/* Sheet */}
       <Sheet open={isOpen} onOpenChange={handleOpenChange}>
-        <SheetContent side="right" className="w-80 overflow-y-auto">
+        <SheetContent side="right" className="w-80 overflow-visible">
+          <div className="styled-scrollbar min-h-0 flex-1 overflow-y-auto">
           <SheetHeader>
             <SheetTitle className="flex items-center gap-2">
               <span>📖</span>
@@ -362,11 +362,12 @@ export function InstanceHelpSheet({ open: controlledOpen, onOpenChange }: Instan
               </div>
             ))}
           </div>
+          </div>
+
+          {/* Keep shortcuts inside the modal's scroll-lock boundary. */}
+          <KeybindsCard visible={isOpen && !hoveredItem} />
         </SheetContent>
       </Sheet>
-      
-      {/* Keybinds card (hidden when hovering an item) */}
-      <KeybindsCard visible={isOpen && !hoveredItem} />
       
       {/* Spotlight overlay (rendered outside sheet to avoid z-index issues) */}
       {isOpen && (
