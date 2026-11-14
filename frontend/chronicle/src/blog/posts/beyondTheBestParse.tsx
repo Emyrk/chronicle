@@ -95,9 +95,9 @@ export function BeyondTheBestParsePost({ post }: PostProps) {
         </PullQuote>
         <PositionVsDistance />
         <p>
-          It isn&apos;t perfect. A new record raises the benchmark and lowers existing ratings, and a thin spec&apos;s
-          record may be less representative. But there&apos;s no rolling window: Peak uses all eligible recorded
-          history.
+          <strong>It isn&apos;t perfect.</strong> The benchmark depends on the best-performing player of a spec, so a
+          new record lowers everyone else&apos;s Peak, and determining the benchmark might need more work. But
+          there&apos;s no rolling window: Peak uses all eligible recorded history.
         </p>
 
         <h3>A common scale for different performances</h3>
