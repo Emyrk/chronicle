@@ -41,12 +41,12 @@ custom converters. Done/serialized/partially encoded buffers are rejected.
 
 `SlainDetective.CaptureLastDamageReferences` captures only its target-keyed Damage
 cache. `NewSlainDetectiveFromReferences` constructs a new owner and requires a
-fresh caller-supplied zone Location; zone snapshotting is deliberately not
-implemented here. The algorithm itself remains unchanged in its existing package.
+fresh caller-supplied zone Location; the subsequent complete Slain codec now captures that Location through its
+owner-local helper (including the synthetic-origin flag). The algorithm itself remains unchanged in its existing package.
 
 The integration test reconstructs the real `DPSTracker.damageCredits` pointer-keyed
 map from canonical references and calls `ClassifyDamage`. Full ranking state,
-results, assembly indexes, zone state, and other owners do not yet have codecs.
+results, assembly indexes, and other owners do not yet have codecs.
 Their future codecs must use these same Damage references, not copy messages.
 
 ## Already-written Slain events
