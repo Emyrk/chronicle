@@ -34,3 +34,21 @@ func TestBufferedBuilderDefersConversionUntilSerialization(t *testing.T) {
 	require.NoError(t, err)
 	require.Error(t, builder.SerializeBuffered(nil))
 }
+
+func TestPendingDamageAdapterRejectsInvalidState(t *testing.T) {
+	t.Parallel()
+	builder := encounterevents.NewBufferedBuilder[*messages.Damage, *chronicleproto.Damage]()
+	state, err := encounterevents.CapturePendingDamage(builder, nil)
+	require.NoError(t, err)
+	restored, err := state.Restore(nil)
+	require.NoError(t, err)
+	require.NoError(t, restored.SerializeBuffered(nil))
+	_, err = encounterevents.CapturePendingDamage(restored, nil)
+	require.Error(t, err)
+	invalid := encounterevents.PendingDamageState{Count: 1}
+	_, err = invalid.Restore(nil)
+	require.Error(t, err)
+	invalid.Entries = []encounterevents.PendingDamageReference{{Path: "/root/missing", Index: 0}}
+	_, err = invalid.Restore(func(string) (*messages.Damage, error) { return nil, nil })
+	require.Error(t, err)
+}

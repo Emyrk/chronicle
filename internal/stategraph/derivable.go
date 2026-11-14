@@ -33,24 +33,7 @@ func (r DerivableType[T]) Restore(ctx context.Context, g Graph, payloads map[Pat
 	if !r.Derivable || r.Type == "" || r.Version == 0 || r.Derive == nil {
 		return nil, fmt.Errorf("invalid derivable registration")
 	}
-	if g.Version != FormatVersion {
-		return nil, fmt.Errorf("unsupported graph version %d", g.Version)
-	}
-	registry, err := New(string(g.Root))
-	if err != nil {
-		return nil, err
-	}
-	for _, node := range g.Nodes {
-		if err := registry.add(node); err != nil {
-			return nil, err
-		}
-	}
-	for _, dep := range g.Dependencies {
-		if err := registry.DependsOn(string(dep.From), string(dep.To)); err != nil {
-			return nil, err
-		}
-	}
-	validated, err := registry.Graph()
+	validated, err := g.validated()
 	if err != nil {
 		return nil, err
 	}
