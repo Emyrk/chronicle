@@ -3,6 +3,13 @@
 Dated, one line per lesson: what we believed → what the data said. What it cost to learn is the
 reason it is here; the rules themselves live in README / the render-map skill (`.agents/skills/render-map`).
 
+## 2026-11-08 — Placed-WMO dungeons (Deadmines), `classify_map.py`
+
+- **"A terrain fetch whose WMOs are mostly buried is the Deadmines shape."** Belief (the ticket's rule). Result: Lordaeron's Undercity is 63% buried by area (86% of its interior groups) and the cull deleting it is the intended 3D map; Zul'Gurub's cave WMOs are 88-92% buried. Buried share alone cannot warn. What separated the gate maps: a backdrop group (g045: 28.5x the median diagonal, 6.1x the others' area; no other map has one), and a dominant interior WMO that is >= 95% buried (Deadmines 0.98-0.99, Lordaeron 0.856: a thin margin).
+- **Ceiling drop is geometry, not a measured p95.** The spike notes gave group 021 (Mast Room) p95 28.4 / max 48.9; the vertical drop from each downward face to the nearest upward face of the same group gives p50 27.5 / p95 64.5 / max 65.3 on the 68-yd-tall room (3D-nearest variants give less, floors from other groups change nothing). The spike's measurement is not reproducible from the notes; the recipe's 70 sits just over 65.3.
+- **Dressing by directory also catches the docks.** Deadmines' two excavation platforms are in another listfile directory than `az_deadmines` and are dungeon (the log walks them), so the dressing list is a list to opt out of.
+- **The exit tunnel (same directory) is 42 yd from the rest.** Distance alone would flag it, so with names the directory rule decides and distance only applies without a listfile.
+
 ## 2026-10-29 — Emerald Sanctum 1.12 terrain
 
 - **Monolithic does not mean nested-chunk scanning works.** Emerald's `MCNK` data after `MCNR` is not reliable to iterate as generic chunks. The 1.12 header offsets at 0x14/0x1c/0x24 point directly to the `MCVT`/`MCLY`/`MCAL` payloads; validate those ranges and normalize them in memory for the existing terrain pipeline.
