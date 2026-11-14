@@ -48,7 +48,7 @@ func (s *HeaderState) ApplyHeader(result HeaderResult) {
 	}
 }
 
-// Decoder owns semantic clock/header state independently of source framing.
+// Decoder owns clock/header and combatant state independently of source framing.
 // A fresh instance matches a fresh legacy parser. Reusing it explicitly retains
 // continuity across input boundaries; completing ReadFile does not reset or
 // finalize this state. Reader errors and provisional output remain the caller
@@ -58,14 +58,21 @@ type Decoder struct {
 	spells           SpellLookup
 	chronicleVersion string
 	state            HeaderState
+	combatants       CombatantState
+	combatantOptions CombatantOptions
 }
 
-// NewDecoder accepts only read-only lookup/build-version dependencies.
-func NewDecoder(spells SpellLookup, chronicleVersion string) *Decoder {
-	return &Decoder{spells: spells, chronicleVersion: chronicleVersion}
+// NewDecoder accepts lookup/build-version dependencies and optional combatant inputs.
+func NewDecoder(spells SpellLookup, chronicleVersion string, combatants ...CombatantOptions) *Decoder {
+	d := &Decoder{spells: spells, chronicleVersion: chronicleVersion}
+	if len(combatants) > 0 {
+		d.combatantOptions = combatants[0]
+	}
+	return d
 }
 
-// State returns a copy; updating it cannot change the decoder's state.
+// State returns a copy of the header/clock state, not a combatant snapshot.
+// Updating it cannot change the decoder's state.
 func (d *Decoder) State() HeaderState { return d.state }
 func (d *Decoder) DecodeRecord(ctx context.Context, content string) ([]messages.Message, error) {
 	ts, event, fields, err := ccv2.ParseLine(content)
@@ -93,6 +100,14 @@ func (d *Decoder) DecodeRecord(ctx context.Context, content string) ([]messages.
 		d.capabilities.UnitResources = d.capabilities.UnitResources || r.Observed.UnitResources
 		d.capabilities.UnitPosition = d.capabilities.UnitPosition || r.Observed.UnitPosition
 		return r.Messages, err
+	}
+	switch event {
+	case "COMBATANT_INFO":
+		return d.combatants.DecodeInfo(ts, &recordFields{fields: fields}, d.state.version, d.combatantOptions)
+	case "COMBATANT_TRANSMOG":
+		return d.combatants.DecodeTransmog(ts, &recordFields{fields: fields})
+	case "COMBATANT_TALENTS":
+		return d.combatants.DecodeTalents(ts, &recordFields{fields: fields}, d.combatantOptions.TalentTrees)
 	}
 	return decodeFields(ctx, d.spells, ts, event, fields)
 }
