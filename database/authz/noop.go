@@ -23,8 +23,9 @@ func (noopAuthorizer) Delete(_ context.Context, _ *rel.PreconditionedFilter) err
 // but never need authorization checks.
 func NewDatabaseOnly(logger *slog.Logger, db database.Store) *Authz {
 	z := &Authz{
-		logger: logger,
-		db:     db,
+		databaseOnly: true,
+		logger:       logger,
+		db:           db,
 	}
 	z.interceptor = &interceptor{
 		Authorizer: noopAuthorizer{},
