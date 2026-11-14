@@ -1,25 +1,73 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowUpRight, Calculator } from "lucide-react";
+import { ArrowUpRight, Calculator, LayoutGrid } from "lucide-react";
 import type { ArmorySearchResult } from "@/api/typesGenerated";
 import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { BossCalculator, LensTabs } from "@/pages/Ratings/BossCalculator";
+import { RaidPanel } from "@/pages/Ratings/RaidPanel";
 import type { Lens } from "@/pages/Ratings/ratingLens";
-import { datasetFromGroup, type RatingDataset } from "@/pages/Ratings/useMyRatingData";
+import {
+  datasetFromGroup,
+  groupKey,
+  type RaidBoss,
+  type RaidView,
+  type RatingDataset,
+} from "@/pages/Ratings/useMyRatingData";
 import { explorableBosses, raidName, type RaidRating } from "./careerRatingsModel";
 
 export type ExplorerCharacter = Pick<ArmorySearchResult, "realm_id" | "id">;
 
-/** What to open: a raid, optionally one of its bosses, through a lens. */
+/** What to open: a raid's bosses, or one of them, through a lens. */
 export interface BossExplorerTarget {
   raid: RaidRating;
+  /** One boss; undefined shows every boss of the raid. */
   boss?: string;
   lens: Lens;
 }
 
 /** The armory table already shows raw performance; the explorer covers parses and the ratings. */
 const EXPLORER_LENSES = ["parse", "peak", "mastery", "renown"] as const;
+
+/** Every boss of the raid as the ratings explainer's raid view; bosses never killed count as zero. */
+function raidView(raid: RaidRating, sample: RatingDataset): RaidView {
+  const bosses: RaidBoss[] = [
+    ...raid.bosses.map((b) => ({
+      ...b,
+      groupKey: b.group && groupKey(b.group),
+      values: b.group?.kills.map((k) => k.value) ?? [],
+    })),
+    ...raid.missingBosses.map((name) => ({
+      encounterName: name,
+      kills: 0,
+      benchmark: 0,
+      peak: 0,
+      form: 0,
+      floor: 0,
+      mastery: 0,
+      rawPeak: 0,
+      renown: 0,
+      values: [],
+    })),
+  ];
+  const avg = (pick: (b: RaidBoss) => number) =>
+    bosses.length === 0 ? 0 : bosses.reduce((s, b) => s + pick(b), 0) / bosses.length;
+  return {
+    scope: {
+      key: raid.key,
+      label: sample.cohortLabel,
+      cohort: "",
+      metric: sample.unit.toLowerCase(),
+      kills: raid.kills,
+    },
+    raidLabel: raidName(raid),
+    unit: sample.unit,
+    bosses,
+    peak: avg((b) => b.peak),
+    mastery: avg((b) => b.mastery),
+    renown: bosses.reduce((s, b) => s + b.renown, 0),
+  };
+}
 
 /** Calculator icon button that opens the explorer. */
 export function ExploreButton({ label, onClick, className }: { label: string; onClick: () => void; className?: string }) {
@@ -40,7 +88,7 @@ export function ExploreButton({ label, onClick, className }: { label: string; on
 }
 
 /**
- * One modal for a raid's boss kills: pick a boss, then read its kills as
+ * One modal for a raid's kills: every boss at once, or one boss's kills as
  * parses or as Peak, Mastery, and Renown.
  */
 export function BossExplorerDialog({
@@ -51,8 +99,8 @@ export function BossExplorerDialog({
 }: {
   target?: BossExplorerTarget;
   character: ExplorerCharacter;
-  /** The ratings explainer for a boss, with this character selected. */
-  ratingsHref?: (raidKey: string, boss: string) => string;
+  /** The ratings explainer for a raid or one of its bosses, with this character selected. */
+  ratingsHref?: (raidKey: string, boss?: string) => string;
   onClose: () => void;
 }) {
   return (
@@ -79,25 +127,27 @@ function ExplorerBody({
 }: {
   target: BossExplorerTarget;
   character: ExplorerCharacter;
-  ratingsHref?: (raidKey: string, boss: string) => string;
+  ratingsHref?: (raidKey: string, boss?: string) => string;
 }) {
   const { raid } = target;
   const bosses = explorableBosses(raid);
+  // undefined: every boss.
   const [bossName, setBossName] = useState(
-    () => bosses.find((b) => b.encounterName === target.boss)?.encounterName ?? bosses[0]?.encounterName,
+    () => bosses.find((b) => b.encounterName === target.boss)?.encounterName,
   );
   const [lens, setLens] = useState<Lens>(target.lens);
   const boss = bosses.find((b) => b.encounterName === bossName);
   const dataset = boss?.group ? datasetFromGroup(character, boss.group) : undefined;
-  const href = boss && ratingsHref?.(raid.key, boss.encounterName);
+  const sample = dataset ?? (bosses[0]?.group && datasetFromGroup(character, bosses[0].group));
+  const href = ratingsHref?.(raid.key, boss?.encounterName);
 
   return (
     <>
       <DialogHeader>
         <DialogTitle className="font-wow text-xl">{dataset?.bossName ?? raidName(raid)}</DialogTitle>
         <DialogDescription>
-          {raidName(raid)}
-          {dataset && ` · ${dataset.cohortLabel} ${dataset.unit} · every logged kill`}
+          {dataset ? raidName(raid) : "All bosses"}
+          {sample && ` · ${sample.cohortLabel} ${sample.unit} · every logged kill`}
           {href && (
             <>
               {" · "}
@@ -110,38 +160,51 @@ function ExplorerBody({
         </DialogDescription>
       </DialogHeader>
 
-      {bosses.length > 1 && (
-        <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Boss">
-          {bosses.map((b) => (
-            <button
-              key={b.encounterName}
-              type="button"
-              role="tab"
-              aria-selected={b.encounterName === bossName}
-              onClick={() => setBossName(b.encounterName)}
-              className={cn(
-                "cursor-pointer rounded-full border px-3 py-1 font-wow text-xs transition-colors",
-                b.encounterName === bossName
-                  ? "border-sky-400 bg-sky-500/10 text-foreground"
-                  : "border-border bg-background text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {b.encounterName}
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Boss">
+        <BossTab active={!bossName} onClick={() => setBossName(undefined)}>
+          <LayoutGrid className="size-3.5" />
+          All bosses
+        </BossTab>
+        {bosses.map((b) => (
+          <BossTab key={b.encounterName} active={b.encounterName === bossName} onClick={() => setBossName(b.encounterName)}>
+            {b.encounterName}
+          </BossTab>
+        ))}
+      </div>
 
-      {dataset ? (
+      {sample ? (
         <>
           <LensTabs lens={lens} onChange={setLens} compact only={EXPLORER_LENSES} />
-          {/* Keyed so a different boss starts with every kill logged. */}
-          <ExplorerCalculator key={dataset.key} lens={lens} dataset={dataset} />
+          {dataset ? (
+            // Keyed so a different boss starts with every kill logged.
+            <ExplorerCalculator key={dataset.key} lens={lens} dataset={dataset} />
+          ) : (
+            <RaidPanel lens={lens} view={raidView(raid, sample)} onSelectBoss={setBossName} />
+          )}
         </>
       ) : (
         <p className="text-sm text-muted-foreground">No kill history for this raid as this spec yet.</p>
       )}
     </>
+  );
+}
+
+function BossTab({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      className={cn(
+        "inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 font-wow text-xs transition-colors",
+        active
+          ? "border-sky-400 bg-sky-500/10 text-foreground"
+          : "border-border bg-background text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {children}
+    </button>
   );
 }
 

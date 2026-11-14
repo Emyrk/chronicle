@@ -13,7 +13,7 @@ import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/componen
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { specializationIconUrl } from "@/config/specializationIcon";
 import { METRIC_THEMES } from "@/pages/Leaderboards/Ratings/ratingThemes";
-import { careerStatusText, cohortKey, cohortLabel, raidCoverage } from "./careerRatingsModel";
+import { careerStatusText, cohortKey, cohortLabel } from "./careerRatingsModel";
 
 interface CareerRatingCardProps {
   data?: CareerPlayerResponse;
@@ -35,7 +35,6 @@ export function CareerRatingCard({ data, cohort, onCohortChange, isLoading, erro
     ?? (summary
       ? careerStatusText(summary.performance_status)
       : data && (careerStatusText(data.status) ?? "No rated kills yet."));
-  const coverage = cohort ? raidCoverage(cohort) : undefined;
 
   return (
     // min-h matches JourneyStatsCard so toggling modes doesn't shift the layout.
@@ -82,14 +81,9 @@ export function CareerRatingCard({ data, cohort, onCohortChange, isLoading, erro
             </div>
           </div>
         )}
-        {(message || coverage || summary?.refresh_pending) && (
+        {(message || summary?.refresh_pending) && (
           <div className="space-y-0.5 text-xs text-muted-foreground">
             {message && <p role="status">{message}</p>}
-            {coverage && coverage.total > 0 && summary?.mastery !== null && (
-              <p>
-                {coverage.rated} of {coverage.total} raids rated · raids without kills count as zero
-              </p>
-            )}
             {summary?.refresh_pending && <p role="status">Updating · showing the last calculated values</p>}
           </div>
         )}
