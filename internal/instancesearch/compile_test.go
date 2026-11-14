@@ -183,6 +183,7 @@ func TestDescribe(t *testing.T) {
 	require.True(t, sorts[instancesearch.SortClearParse].ParseScope)
 
 	require.Equal(t, 21, byName["player.parse"].Cost)
+	require.Equal(t, 40, byName["encounter.hostile_count"].Cost)
 	require.Equal(t, chroniclesdk.InstanceSearchFieldScopeEncounter, byName["encounter.outcome"].Scope)
 }
 
@@ -386,6 +387,7 @@ func TestCost(t *testing.T) {
 	require.Equal(t, 3, cheap)
 	require.Equal(t, 21, heavy)
 	require.Equal(t, 26, player)
+	require.Equal(t, 45, cost(`{"any_encounter":{"field":"encounter.hostile_count","op":">","value":3}}`))
 	require.Equal(t, 7, cost(`{"or": [{"field": "instance.name", "op": "=", "value": "a"}, {"field": "instance.name", "op": "=", "value": "b"}]}`))
 	require.Equal(t, 4, cost(`{"not": {"field": "instance.name", "op": "=", "value": "a"}}`))
 	require.Equal(t, 13, cost(`{"count_players": {"where": {"field": "player.class", "op": "=", "value": "MAGE"}, "op": ">", "value": 1}}`))
@@ -429,4 +431,27 @@ func mustJSON(t *testing.T, v any) json.RawMessage {
 	raw, err := json.Marshal(v)
 	require.NoError(t, err)
 	return raw
+}
+
+func TestHostileCountNumericScope(t *testing.T) {
+	t.Parallel()
+	for _, op := range []string{"=", "!=", "<", "<=", ">", ">=", "between"} {
+		t.Run(op, func(t *testing.T) {
+			t.Parallel()
+			value := "3"
+			if op == "between" {
+				value = "[0,3]"
+			}
+			raw := `{"any_encounter":{"field":"encounter.hostile_count","op":"` + op + `","value":` + value + `}}`
+			compiled, err := instancesearch.Compile(where(t, raw), instancesearch.Options{})
+			require.NoError(t, err)
+			require.Equal(t, 45, compiled.Cost)
+			require.Contains(t, compiled.SQL, "log_instance_encounter_hostiles")
+		})
+	}
+	_, err := instancesearch.Compile(where(t, `{"field":"encounter.hostile_count","op":"=","value":0}`), instancesearch.Options{})
+	require.ErrorContains(t, err, "must be used inside any_encounter or count_encounters")
+	compiled, err := instancesearch.Compile(where(t, `{"count_encounters":{"where":{"field":"encounter.hostile_count","op":">","value":3},"op":">=","value":2}}`), instancesearch.Options{})
+	require.NoError(t, err)
+	require.Equal(t, 51, compiled.Cost)
 }

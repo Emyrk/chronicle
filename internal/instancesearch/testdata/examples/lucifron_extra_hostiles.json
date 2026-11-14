@@ -1,0 +1,28 @@
+{
+  "title": "Lucifron kills with extra recorded hostiles",
+  "category": "Bosses",
+  "description": "One Lucifron kill with more than three recorded hostile participants, including the boss. Participation metadata is not a complete census of damage targets. Expensive: 40 tokens for the count predicate.",
+  "query": {
+    "where": {
+      "any_encounter": {
+        "and": [
+          {
+            "field": "encounter.name",
+            "op": "=",
+            "value": "Lucifron"
+          },
+          {
+            "field": "encounter.killed",
+            "op": "=",
+            "value": true
+          },
+          {
+            "field": "encounter.hostile_count",
+            "op": ">",
+            "value": 3
+          }
+        ]
+      }
+    }
+  }
+}

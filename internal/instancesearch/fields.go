@@ -635,6 +635,14 @@ var fields = []*field{
 		Doc: "clean (kill), partial (kill with gaps), wipe or reset.", value: column("{a}.kill_type::text")},
 	{Name: "encounter.killed", Scope: scopeEncounter, Type: typeBool,
 		Doc: "The encounter ended in a kill (clean or partial).", value: column("({a}.kill_type " + killedSQL + ")")},
+	// Deliberately expensive: a correlated row count for every candidate pull,
+	// unlike ordinary scalar predicates (2) or existing costly time fields (20).
+	{Name: "encounter.hostile_count", Cost: 40, Scope: scopeEncounter, Type: typeInt,
+		Doc: "Recorded hostile participation rows for this pull, including the boss. Not a complete census of damage targets; zero means no recorded rows, not proof of no hostiles.",
+		value: func(c *compiler, s scope, p pred) valueSQL {
+			h := c.alias("h")
+			return valueSQL{Expr: fmt.Sprintf("(SELECT count(*) FROM log_instance_encounter_hostiles %s WHERE %s.encounter_id = %s.id)", h, h, s.alias)}
+		}},
 	{Name: "encounter.duration_ms", Scope: scopeEncounter, Type: typeInt, Unit: "ms",
 		Doc: "Pull duration.",
 		value: func(c *compiler, s scope, p pred) valueSQL {

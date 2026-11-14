@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { InstanceSearchFieldsResponse } from "@/api/typesGenerated";
 import fixture from "./fixtures/searchFields.json";
-import { HONORED_FIELDS, fieldLock, treeNeedsHonored } from "./fieldTiers";
+import { HONORED_FIELDS, fieldLock, treeNeedsHonored, treeNeedsRevered } from "./fieldTiers";
 import { KINDS } from "./sentenceKinds";
 import { emptyForm, formToTree, type SearchForm } from "./queryModel";
 
@@ -48,4 +48,18 @@ describe("fieldTiers", () => {
       expect(treeNeedsHonored(formToTree({ ...emptyForm(), ...sample })), kind).toBe(def.tier === "honored");
     }
   });
+});
+
+it.each(["", "honored", "revered", "exalted"])("requires Revered for hostile count at tier %s", (tier) => {
+  const revered = tier === "revered" || tier === "exalted";
+  expect(fieldLock(field("encounter.hostile_count"), { loggedIn: true, honored: tier !== "", revered })).toBe(revered ? null : "revered");
+  expect(fieldLock(field("instance.name"), { loggedIn: true, revered })).toBeNull();
+  expect(field("encounter.hostile_count").cost).toBe(40);
+});
+it("finds restricted fields in shared nested queries and fails closed while loading", () => {
+  const predicate = { field: "encounter.hostile_count", op: ">=" as const, value: 3 };
+  expect(fieldLock(field("encounter.hostile_count"), {})).toBe("revered");
+  expect(treeNeedsRevered({ not: { or: [{ count_encounters: { where: predicate, op: ">=", value: 1 } }] } })).toBe(true);
+  expect(treeNeedsRevered({ any_encounter: predicate })).toBe(true);
+  expect(treeNeedsRevered({ field: "player.dps", op: ">", value: 1 })).toBe(false);
 });

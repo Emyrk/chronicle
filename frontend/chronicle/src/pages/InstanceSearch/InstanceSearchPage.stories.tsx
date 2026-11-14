@@ -1,3 +1,4 @@
+import { expect, fn, userEvent, waitFor, within } from "storybook/test";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { http, HttpResponse, delay } from "msw";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -373,4 +374,31 @@ export const TooComplex: Story = {
 /** The /search/guide page (Tools & FAQ), with the live field reference. */
 export const Guide: Story = {
   render: () => <SearchGuidePage />,
+};
+
+const hostileTree: Node = { any_encounter: { field: "encounter.hostile_count", op: ">=", value: 2 } };
+const hostileSearch = fn();
+export const HostileCountLocked: Story = {
+  parameters: { initialEntry: url(hostileTree, "blocks"), msw: { handlers: [
+    http.post("/api/v1/raidlogs/search", () => { hostileSearch(); return HttpResponse.json({ results: [] }); }),
+    ...handlers({ loggedIn: true, tier: "honored" }),
+  ] } },
+  beforeEach: () => { hostileSearch.mockClear(); },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText(/Hostile count requires Revered supporter access/)).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: /Edit/ }));
+    await expect(await canvas.findByRole("button", { name: "Search", exact: true })).toBeDisabled();
+    await expect(canvas.getByRole("link", { name: "View supporter perks" })).toHaveAttribute("href", "/supporter");
+    await expect(hostileSearch).not.toHaveBeenCalled();
+  },
+};
+export const HostileCountRevered: Story = {
+  parameters: { initialEntry: url(hostileTree, "blocks"), msw: { handlers: handlers({ loggedIn: true, tier: "revered", search: "empty" }) } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole("button", { name: /Edit/ }));
+    await waitFor(() => expect(canvas.getByRole("button", { name: "Search", exact: true })).toBeEnabled());
+    await expect(canvas.queryByText(/Hostile count requires Revered supporter access/)).not.toBeInTheDocument();
+  },
 };

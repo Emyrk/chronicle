@@ -178,9 +178,20 @@ func newFixture(t *testing.T) *fixture {
 	player(f.mc2, "PriestA", "PRIEST", beta)
 	player(f.mc2, "PriestB", "PRIEST", beta)
 	bear := player(f.mc2, "Bearonly", "DRUID", beta)
-	encounter(f.mc2, "Ragnaros", true, "wipe", 0, 100*time.Second)
+	ragWipe := encounter(f.mc2, "Ragnaros", true, "wipe", 0, 100*time.Second)
 	rag2 := encounter(f.mc2, "Ragnaros", true, "clean", 200*time.Second, 400*time.Second)
 	ranking(f.mc2, rag2, realmA, bear, "Bearonly", "DRUID", "Feral", "Bear", "tank", 300, 1)
+	// Hostile rows are per pull. Include the boss; reuse GUIDs between pulls to
+	// prove the count is not an instance-wide distinct census.
+	hostiles := func(enc uuid.UUID, count int) {
+		for i := range count {
+			exec("INSERT INTO log_instance_encounter_hostiles (encounter_id, id, periods) VALUES ($1, $2, '{}')", enc, fmt.Sprintf("0xF130002F5600%04X", i))
+		}
+	}
+	hostiles(rag, 3)
+	hostiles(ragWipe, 5)
+	hostiles(rag2, 1)
+	hostiles(encounter(f.other, "Ragnaros", true, "clean", 0, 60*time.Second), 4)
 	// Bearonly went Cat on trash. The aggregated trash row has no encounter_id.
 	exec(`INSERT INTO encounter_dps_rankings (encounter_id, instance_id, encounter_name, instance_name, player_guid, player_name,
 			player_class, player_spec, player_sub_spec, player_role, realm_id, realm_name, damage_done, duration_secs, dps, killed_at, player_deaths)
@@ -334,6 +345,14 @@ func TestSearch(t *testing.T) {
 		require.Nil(t, ex.Evidence.Children[0].OK)
 		require.Nil(t, ex.Evidence.Children[0].Value)
 
+		ex = f.explain(t, f.tenantA, `{"any_encounter":{"field":"encounter.hostile_count","op":"=","value":3}}`, f.mc1)
+		require.True(t, ex.Matched)
+		require.Len(t, ex.Evidence.Witnesses, 1)
+		require.EqualValues(t, 3, ex.Evidence.Witnesses[0].Evidence.Value)
+		ex = f.explain(t, f.tenantA, `{"any_encounter":{"and":[{"field":"encounter.name","op":"=","value":"Majordomo Executus"},{"field":"encounter.hostile_count","op":"=","value":0}]}}`, f.mc1)
+		require.True(t, ex.Matched)
+		require.EqualValues(t, 0, ex.Evidence.Witnesses[0].Evidence.Children[1].Value)
+
 		// A wipe is a witness pull with its outcome and duration.
 		ex = f.explain(t, f.tenantA, `{"any_encounter": {"field": "encounter.outcome", "op": "=", "value": "wipe"}}`, f.mc2)
 		require.True(t, ex.Matched)
@@ -438,6 +457,13 @@ func TestSearch(t *testing.T) {
 		require.Len(t, f.search(t, f.tenantA, instancesearch.Query{}).Results, 3)
 	})
 
+	t.Run("HostileCountTenantIsolation", func(t *testing.T) {
+		t.Parallel()
+		q := where(t, `{"any_encounter":{"field":"encounter.hostile_count","op":"=","value":4}}`)
+		require.Empty(t, ids(f.search(t, f.tenantA, q)))
+		require.Equal(t, []uuid.UUID{f.other}, ids(f.search(t, f.tenantB, q)))
+	})
+
 	t.Run("Semantics", func(t *testing.T) {
 		t.Parallel()
 		mc1 := []uuid.UUID{f.mc1}
@@ -446,6 +472,11 @@ func TestSearch(t *testing.T) {
 			query string
 			want  []uuid.UUID
 		}{
+			{"HostilesExact", `{"any_encounter":{"field":"encounter.hostile_count","op":"=","value":3}}`, mc1},
+			{"HostilesGreater", `{"any_encounter":{"field":"encounter.hostile_count","op":">","value":3}}`, []uuid.UUID{f.mc2}},
+			{"HostilesRange", `{"any_encounter":{"field":"encounter.hostile_count","op":"between","value":[2,3]}}`, mc1},
+			{"HostilesZeroRecorded", `{"any_encounter":{"and":[{"field":"encounter.name","op":"=","value":"Majordomo Executus"},{"field":"encounter.hostile_count","op":"=","value":0}]}}`, mc1},
+			{"HostilesSamePull", `{"any_encounter":{"and":[{"field":"encounter.name","op":"=","value":"Ragnaros"},{"field":"encounter.killed","op":"=","value":true},{"field":"encounter.hostile_count","op":">","value":3}]}}`, nil},
 			// mc2's druid was Bear on a boss and Cat only on trash, so the
 			// default (bosses) excludes it.
 			{"SamePlayerBearAndCat", `{"any_player": {"and": [
