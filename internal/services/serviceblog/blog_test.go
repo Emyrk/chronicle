@@ -118,7 +118,7 @@ func TestFeedbackAdmissionAndHook(t *testing.T) {
 			}
 			limiter := &testLimiter{result: ratelimit.Result{Allowed: true}}
 			hooks := 0
-			s := New(Options{Store: store, Bans: testBans{tc.banned}, FeedbackLimiter: limiter, Eligible: func(context.Context, string) (bool, error) { return true, nil }, FeedbackCreated: func(context.Context, Feedback) { hooks++ }})
+			s := New(Options{Store: store, Bans: testBans{tc.banned}, FeedbackLimiter: limiter, Eligible: func(context.Context, string) (bool, error) { return true, nil }, FeedbackCreated: func(context.Context, Feedback) error { hooks++; return nil }})
 			f, err := s.Save(context.Background(), "post", uuid.New(), uuid.New(), " body ", true)
 			if tc.want != nil {
 				require.ErrorIs(t, err, tc.want)
@@ -155,4 +155,14 @@ func TestModerationRequiresReviewedRevision(t *testing.T) {
 	s := New(Options{})
 	require.ErrorIs(t, s.Moderate(context.Background(), uuid.New(), "approve", time.Time{}), ErrInvalid)
 	require.ErrorIs(t, s.Moderate(context.Background(), uuid.New(), "reject", time.Time{}), ErrInvalid)
+}
+
+func TestFeedbackHookFailureDoesNotFailSavedFeedback(t *testing.T) {
+	t.Parallel()
+	store := &testStore{created: true}
+	s := New(Options{Store: store, Bans: testBans{}, FeedbackLimiter: &testLimiter{result: ratelimit.Result{Allowed: true}}, Eligible: func(context.Context, string) (bool, error) { return true, nil }, FeedbackCreated: func(context.Context, Feedback) error { return errors.New("consumer offline") }})
+	f, err := s.Save(context.Background(), "post", uuid.New(), uuid.New(), "body", true)
+	require.NoError(t, err)
+	require.Equal(t, "body", f.Body)
+	require.Equal(t, 1, store.saves)
 }

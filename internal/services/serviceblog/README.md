@@ -26,5 +26,6 @@ Public responses expose only feedback ID, body and a same/different-server label
 It runs after a successful first database insert only. Edits, moderation, deletion,
 conflicting inserts and failed requests do not invoke it. Delivery is best effort:
 a crash between persistence and invocation can lose the event. There is no durable
-outbox, retry or exactly-once guarantee. Consumers must use the feedback ID as an
+outbox, retry or exactly-once guarantee. Hook errors are logged and do not fail the
+already persisted submission. Consumers must use the feedback ID as an
 idempotency key. This hook does not grant rewards or entitlements.

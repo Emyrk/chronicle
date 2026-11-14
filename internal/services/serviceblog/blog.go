@@ -4,6 +4,7 @@ package serviceblog
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -65,7 +66,8 @@ type Options struct {
 	// FeedbackCreated is inactive by default. It runs best-effort after the first
 	// successful insert only, not edits. Delivery is not durable or exactly-once.
 	// Consumers must be idempotent. No rewards are issued by this service.
-	FeedbackCreated func(context.Context, Feedback)
+	Logger          *slog.Logger
+	FeedbackCreated func(context.Context, Feedback) error
 }
 type Service struct{ opts Options }
 
@@ -188,7 +190,13 @@ func (s *Service) Save(ctx context.Context, slug string, user, tenant uuid.UUID,
 	}
 	feedback, created, err := s.opts.Store.SaveFeedback(ctx, Feedback{ID: uuid.New(), PostSlug: slug, UserID: user, TenantID: tenant, Body: body, Consent: true, Status: "pending"})
 	if err == nil && created && s.opts.FeedbackCreated != nil {
-		s.opts.FeedbackCreated(ctx, feedback)
+		if hookErr := s.opts.FeedbackCreated(ctx, feedback); hookErr != nil {
+			logger := s.opts.Logger
+			if logger == nil {
+				logger = slog.Default()
+			}
+			logger.ErrorContext(ctx, "blog feedback-created hook failed", "feedback_id", feedback.ID, "error", hookErr)
+		}
 	}
 	return feedback, err
 }

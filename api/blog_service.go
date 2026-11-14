@@ -17,6 +17,7 @@ func (a *API) newBlogService() *serviceblog.Service {
 	db := database.New(a.Opts.Pool)
 	limit := ratelimit.Limit{PerSecond: 1.0 / 1200, Burst: 5}
 	return serviceblog.New(serviceblog.Options{
+		Logger:          a.Opts.Logger,
 		Store:           serviceblog.NewDatabaseStore(db),
 		Bans:            blogBans{zed: a.Zed},
 		VoteLimiter:     ratelimit.New(db, "blog_vote", limit),
