@@ -1,6 +1,7 @@
 package wotlk
 
 import (
+	"github.com/Emyrk/chronicle/combatlog/parsernext/formats/cleu"
 	"testing"
 	"time"
 
@@ -34,14 +35,14 @@ func TestParseLine_SwingDamage(t *testing.T) {
 
 	// Suffix fields: amount, overkill, school, resisted, blocked, absorbed, critical, glancing, crushing
 	assert.Equal(t, int32(244), m.Int32())
-	assert.Equal(t, int32(0), m.Int32())   // overkill
-	assert.Equal(t, int32(1), m.Int32())   // school (Physical)
-	assert.Equal(t, int32(0), m.Int32())   // resisted
-	assert.Equal(t, int32(0), m.Int32())   // blocked
-	assert.Equal(t, int32(0), m.Int32())   // absorbed
-	assert.Nil(t, m.NilBool())             // critical = nil
-	assert.Nil(t, m.NilBool())             // glancing = nil
-	assert.Nil(t, m.NilBool())             // crushing = nil
+	assert.Equal(t, int32(0), m.Int32()) // overkill
+	assert.Equal(t, int32(1), m.Int32()) // school (Physical)
+	assert.Equal(t, int32(0), m.Int32()) // resisted
+	assert.Equal(t, int32(0), m.Int32()) // blocked
+	assert.Equal(t, int32(0), m.Int32()) // absorbed
+	assert.Nil(t, m.NilBool())           // critical = nil
+	assert.Nil(t, m.NilBool())           // glancing = nil
+	assert.Nil(t, m.NilBool())           // crushing = nil
 	require.NoError(t, m.Error())
 	assert.Equal(t, 0, m.Remain())
 }
@@ -106,11 +107,11 @@ func TestParseLine_SpellCastSuccess(t *testing.T) {
 
 	// Consume all fields without error
 	_ = m.Guid()      // sourceGUID
-	_ = m.String()     // sourceName
-	_ = m.HexUint32()  // sourceFlags
-	_ = m.Guid()       // destGUID
-	_ = m.String()     // destName
-	_ = m.HexUint32()  // destFlags
+	_ = m.String()    // sourceName
+	_ = m.HexUint32() // sourceFlags
+	_ = m.Guid()      // destGUID
+	_ = m.String()    // destName
+	_ = m.HexUint32() // destFlags
 	spellID := m.Int32()
 	spellName := m.String()
 	school := m.School()
@@ -130,11 +131,11 @@ func TestParseLine_SwingMissed(t *testing.T) {
 	assert.Equal(t, "SWING_MISSED", event)
 
 	_ = m.Guid()      // sourceGUID
-	_ = m.String()     // sourceName
-	_ = m.HexUint32()  // sourceFlags
-	_ = m.Guid()       // destGUID
-	_ = m.String()     // destName
-	_ = m.HexUint32()  // destFlags
+	_ = m.String()    // sourceName
+	_ = m.HexUint32() // sourceFlags
+	_ = m.Guid()      // destGUID
+	_ = m.String()    // destName
+	_ = m.HexUint32() // destFlags
 	missType := m.String()
 	assert.Equal(t, "MISS", missType)
 	require.NoError(t, m.Error())
@@ -149,8 +150,8 @@ func TestParseLine_NilDestGUID(t *testing.T) {
 	assert.Equal(t, "SPELL_CAST_SUCCESS", event)
 
 	_ = m.Guid()      // sourceGUID
-	_ = m.String()     // sourceName
-	_ = m.HexUint32()  // sourceFlags
+	_ = m.String()    // sourceName
+	_ = m.HexUint32() // sourceFlags
 
 	// dest GUID is 0x0000000000000000 — should parse fine as a zero GUID
 	destGUID := m.Guid()
@@ -277,3 +278,41 @@ func TestExtractUnixMilli_NoSeparator(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestSharedCLEULexicalParity(t *testing.T) {
+	t.Parallel()
+	for _, payload := range []string{"EVENT", `EVENT,"a,b",nil,,`, " ", `"EVENT", a"b,c"d`, `EVENT,"unclosed,a`, "", ",bad"} {
+		for _, tc := range []struct {
+			prefix string
+			legacy func(string) (time.Time, string, *Matched, error)
+		}{{"1/2 03:04:05.006  ", ParseLine}, {"-123  ", ParseLineUnixMillis}} {
+			line := tc.prefix + payload
+			_, wantEvent, wantFields, wantErr := cleu.ParseLine(line)
+			_, gotEvent, cursor, gotErr := tc.legacy(line)
+			require.Equal(t, wantEvent, gotEvent)
+			if wantErr != nil {
+				require.EqualError(t, gotErr, wantErr.Error())
+				require.Nil(t, cursor)
+				continue
+			}
+			require.NoError(t, gotErr)
+			require.Equal(t, wantFields, cursor.parts)
+			require.Zero(t, cursor.index)
+			for _, want := range wantFields {
+				require.Equal(t, want, cursor.String())
+			}
+			require.NoError(t, cursor.Error())
+			require.Zero(t, cursor.Remain())
+		}
+	}
+}
+
+func TestLegacyTimestampErrorPrecedence(t *testing.T) {
+	t.Parallel()
+	for _, parse := range []func(string) (time.Time, string, *Matched, error){ParseLine, ParseLineUnixMillis} {
+		ts, event, cursor, err := parse("invalid  ")
+		require.ErrorContains(t, err, "parsing")
+		require.True(t, ts.IsZero())
+		require.Empty(t, event)
+		require.Nil(t, cursor)
+	}
+}
