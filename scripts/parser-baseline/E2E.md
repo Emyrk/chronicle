@@ -126,6 +126,84 @@ BASELINE_BINARY="$ROOT/bin/parser-baseline-current" \
   bash "$ROOT/scripts/run-corpus.sh" octowow
 ```
 
+### Deterministic trash naming follow-up
+
+The ordinary encounter-name fallback now chooses the most numerous nonempty
+hostile display name, counting each eligible mob GUID once (not activity periods
+or events), with alphabetical ties. Existing named/function/boss/authoritative
+encounter precedence is unchanged. The previous fallback selected the first
+hostile after activity-start sorting; tied starts could retain map iteration
+order. No event ordering or remaining-hostile ordering was changed.
+
+The `trash_names_01` Crusader rerun completed two parses and a negative control
+using the updated current-checkout CLI. Each parse produced 3 instances, 106
+encounters and 532,430 events. **All encounter names now match between repeats.**
+The remaining strict differences are 19 Auchenai classification fields, 430
+Hyjal remaining-hostile positions and 2,551 Hyjal classification fields (3,000
+total). Exact-time event multiset and remaining-GUID multiset diagnostics account
+for all of them as ordering/index assignment; no unexplained semantic changes
+remain in this pair. Strict artifacts are still unequal and were not normalized.
+The negative control still detects exactly one `player_deaths` change.
+
+Results and diagnostic evidence are preserved under
+`~/Desktop/parsing_snapshots/results/trash_names_01/crusader/`; all original
+corpus resources remain intact. The naming regression tests exercise every
+three-mob insertion order, majority over activity count and entry-ID grouping,
+alphabetical ties, empty names and existing override priorities. The instances
+subtree tests, ten race-enabled focused repetitions and focused lint passed.
+
+### Bounded expansion to 100 real source logs
+
+The Desktop corpus now contains **100 distinct, checksum-verified public source
+logs**, 25 each for ChromieCraft, Crusader Storm, OctoWoW and Capybara. The 96 new
+inputs total 436,517,949 compressed bytes and 4,327,224,232 expanded bytes, covering
+10/10/13/12 selected map names respectively. Discovery used a fixed 30-day window,
+bounded pages and size caps, serial requests and bounded 429/5xx retries. One
+expanded-checksum mismatch was preserved as rejected evidence, not accepted.
+
+All 96 new inputs finalized synchronous parsing at generation 1. **85 canonical
+exports succeeded; 11 were rejected**, yielding 89 export fixtures including the
+original four—not 100 successful baselines and not a repeat-parity result:
+
+| Flavor | New inputs | New exports | Export rejects |
+| --- | ---: | ---: | ---: |
+| ChromieCraft | 24 | 19 | 5 |
+| Crusader Storm | 24 | 23 | 1 |
+| OctoWoW | 24 | 22 | 2 |
+| Capybara | 24 | 21 | 3 |
+
+The new exports contain 160 instances, 5,078 encounters and 32,248,118 events.
+Six rejects have ambiguous encounter identities; five mismatch production's
+expected instance count (three expected 2/found 1; two expected 3/found 4).
+Causes remain uninvestigated. No identity/count guard was weakened, and local
+reference datasets remain approximations without world item/creature templates.
+These 96 fixtures received one parse/export attempt, not per-fixture repeats or
+negative controls; earlier repeat/control evidence is retained separately.
+
+Nine initial Capybara fixture-seeding failures were isolated to an unrelated
+migration-default `Gehennas` realm colliding by name with production's actual
+realm UUID/server. Fresh retry clones renamed only that unrelated default row,
+preserved its metadata, and inserted the exact source realm identity. Original
+seeds and failed databases remain intact. Eight retries exported; the ninth
+hit an instance-count guard. This was external fixture setup, not a parser fix.
+
+All artifacts are streamed directly to gzip (967,625,067 bytes total), with
+per-input summaries and database evidence retained. Filesystem growth was about
+14.2 GiB, below the 35 GiB budget; about 80.9 GiB remained free, above the 50 GiB
+reserve. All 105 retained database attempts have zero River jobs. Latest outcomes
+are in `~/Desktop/parsing_snapshots/expansion_100/final-summary.json` and
+`corpus-index.csv`; each batch includes exact input/binary/generation provenance,
+checksums and database audits. All 100 accepted inputs have distinct expanded
+hashes. Historical input/reference/artifact checksums and original seeds remain
+unchanged; original container/volume are retained.
+
+Seven mocked acquisition-safety tests, Python compilation, guarded seeder build
+and `go vet`, replay collision/ID rejection checks, and checksum audits passed.
+A scan of 1,569 persisted non-PGDATA files found zero exact raw-token matches;
+credentials remained environment-only. Production access was read-only HTTP.
+No production database access or mutations occurred. The Desktop expansion
+README documents full commands, caps, retries, retained rejects and limitations.
+
 The remainder of this document records the earlier ChromieCraft-only run.
 
 ## Fixture and reference scope
