@@ -181,7 +181,7 @@ from a CC-v2 line without its newline.
 | Casts | SPELL_START, SPELL_GO |
 | Auras | AURA_CAST, BUFF_ADD, BUFF_REM, DEBUFF_ADD, DEBUFF_REM |
 | Resources/dispel | ENERGIZE, DISPEL |
-| Metadata/capabilities | RG, RAID_COMPOSITION, UNIT_STATE, UNIT_INFO, ZONE_INFO, LOOT_TRADE |
+| Metadata/capabilities | RG, RAID_COMPOSITION, UNIT_STATE, UNIT_INFO, ZONE_INFO, LOOT_TRADE, LOOT |
 
  It returns the existing concrete
 `*messages.Damage`, `*messages.Heal`, `*messages.Slain` payloads, plus the existing
@@ -295,13 +295,13 @@ the stateful decoder. UNIT_STATE preserves the partial-observation quirk below.
 
 Combatant/transmog reconciliation and the ordered synthetic pipeline remain
 unmigrated. The decoded roster/zone/unit messages do not establish an identity
-registry or change unknown-unit semantics. SPELL_FAIL silently ignores client failures and can
-swallow field errors; BUFF_DURATION/DEBUFF_DURATION return placeholder Skip
+registry or change unknown-unit semantics. SPELL_FAIL silently ignores client failures; consumed-field errors are surfaced
+by legacy advance even though its handler does not check them; BUFF_DURATION/DEBUFF_DURATION return placeholder Skip
 messages. They remain `ErrUnsupportedRecord` until outcome policy is approved.
 Loot and other metadata records also remain unsupported.
 
-The saved public Capybara fixture has 185,808 records: 179,000 are now covered
-by supported event names (including 31 HEADER records), and the remaining 6,808
+The saved public Capybara fixture has 185,808 records: 179,109 are now covered
+by supported event names (including 31 HEADER records), and the remaining 6,699
 are exactly:
 
 | Unsupported record | Count |
@@ -309,7 +309,6 @@ are exactly:
 | SPELL_FAIL | 6,103 |
 | COMBATANT_INFO | 374 |
 | COMBATANT_TRANSMOG | 138 |
-| LOOT | 109 |
 | COMBATANT_TALENTS | 73 |
 | COMBAT_END | 9 |
 | CHANNEL_START | 1 |
@@ -341,10 +340,34 @@ Generated metadata tests use synthetic names/GUIDs; no further raw public player
 metadata is checked in. Full saved-source overlay replay executes the original
 parser in order (including all headers and version-dependent combatant handling),
 compares every supported message plus clock/version/capability state, and counts
-unsupported records separately: 179,000 matched and 6,808 unsupported.
+unsupported records separately: 179,109 matched and 6,699 unsupported.
 
 Next concrete boundaries are combatant/transmog caches and dataset-dependent
-talent normalization, plus the ordered synthetic pipeline. LOOT remains outside
-this extraction because its legacy short-item payload can panic at `rest[3]`;
-it needs an explicit malformed-input decision before being exposed as safe
-record decoding. SPELL_FAIL/aura-duration outcome decisions remain pending.
+talent normalization, plus the ordered synthetic pipeline. LOOT now has an approved bounds check replacing the old `rest[3]` panic with
+an ordinary decode error; valid payloads and earlier item parsing errors remain
+unchanged. SPELL_FAIL/aura-duration outcome decisions remain pending.
+
+### Pending record outcomes: what legacy actually discards
+
+* `SPELL_FAIL` with a first field not starting with lowercase `0x` is treated as
+  a client failure and ignored without parsing the remainder. With a GUID prefix,
+  it reads caster/spell and optional server-side boolean (default true). False
+  emits no message. True emits SpellFail, but trailing reason fields are ignored.
+  The saved public source has 4,572 false and 1,531 true cases. An anonymized
+  example is `1|SPELL_FAIL|0x0000000000000001|11578|false|89`: no failure message
+  survives, including reason 89. The reason's meaning is not inferred here.
+  The handler itself omits Error(), but `advance` has a deferred cursor-error
+  check: malformed **consumed** fields still return errors, possibly alongside
+  a message. Unconsumed client-prefix/reason fields are not validated.
+* `BUFF_DURATION`/`DEBUFF_DURATION` emit a SkippedMessage with reason
+  `not yet implements`, without reading their fields. Timestamp/reason survive;
+  no aura duration/update semantics are decoded. Neither event appears in this
+  saved Capybara source, so tests use clearly synthetic examples.
+* `CHANNEL_START`, `CHANNEL_UPDATE`, and `COMBAT_END` have no CC-v2 handlers and
+  become UnparsedLine, retaining raw content but no affected units/semantic
+  channel or combat transition. Saved examples (GUID anonymized) are
+  observed payload shapes are `45924|<GUID>|-1`, `45924|<GUID>|0`, and empty,
+  respectively. Their numeric fields are not assigned new meanings here.
+
+Parsernext still rejects these events explicitly. No skip policy, channel state
+or combat-finalization meaning has been introduced by this extraction.
