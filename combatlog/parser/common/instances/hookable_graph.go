@@ -30,13 +30,14 @@ import (
 )
 
 const hookableGraphType = "instances.hookable"
-const hookableGraphVersion uint32 = 4
+const hookableGraphVersion uint32 = 5
 
 type preprocessorGraphRef struct {
 	Recipe string `json:"recipe"`
 	Owner  string `json:"owner"`
 }
 type hookableGraphState struct {
+	VariantRecipe string                 `json:"variant_recipe"`
 	RealmRef      string                 `json:"realm_ref"`
 	VersionsRef   string                 `json:"versions_ref"`
 	PrefixHooks   []preprocessorGraphRef `json:"prefix_hooks"`
@@ -199,7 +200,7 @@ func RegisterHookableGraphOwner(r *ownergraph.Registry, recipes ...*HookableGrap
 			if err := ValidateHookableCharactersRuntime(h.Characters); err != nil {
 				return nil, err
 			}
-			v := hookableGraphState{Recipe: recipe.ID, Zone: h.CurrentZone, MapID: h.activeMapID, Verbose: h.verbose, Realm: h.realm, Versions: h.versions, Recorder: h.recorderGUID, LastActivity: h.lastActivity, LastProcessed: h.lastProcessedAt, IgnoredEnds: h.ignoredEncounterEnds, BossDeathEnds: h.bossDeathEndsExplicitFight, Refs: map[string]string{}}
+			v := hookableGraphState{VariantRecipe: recipe.variantRecipeID(), Recipe: recipe.ID, Zone: h.CurrentZone, MapID: h.activeMapID, Verbose: h.verbose, Realm: h.realm, Versions: h.versions, Recorder: h.recorderGUID, LastActivity: h.lastActivity, LastProcessed: h.lastProcessedAt, IgnoredEnds: h.ignoredEncounterEnds, BossDeathEnds: h.bossDeathEndsExplicitFight, Refs: map[string]string{}}
 			if h.realm != nil {
 				ref, err := c.Ref(h.realm)
 				if err != nil {
@@ -324,7 +325,7 @@ func RegisterHookableGraphOwner(r *ownergraph.Registry, recipes ...*HookableGrap
 			if recipe == nil {
 				return fmt.Errorf("unknown Hookable recipe")
 			}
-			if v.Recipe != recipe.ID || v.Finalized || v.Finalizing || v.Flushing || len(v.Refs) != len(hookableRefKeys) {
+			if v.VariantRecipe != recipe.variantRecipeID() || v.Recipe != recipe.ID || v.Finalized || v.Finalizing || v.Flushing || len(v.Refs) != len(hookableRefKeys) {
 				return fmt.Errorf("invalid Hookable checkpoint recipe/lifecycle")
 			}
 			for _, key := range hookableRefKeys {

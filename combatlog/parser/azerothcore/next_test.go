@@ -30,6 +30,9 @@ func TestNextSourceLegacyParity(t *testing.T) {
 		{"companion zone", `3000  SPELL_CAST_FAILED,0x0000000000000001,"Player",0x400,0x0000000000000001,"Player",0x400,1,"Spell",0x1,"[3Z:Dalaran,none,0,,0,0,0,571,0,]"`},
 		{"companion split", "3000  SPELL_CAST_FAILED,0x0000000000000001,Player,0x400,0x0000000000000001,Player,0x400,1,Spell,0x1,\"[3Z:Dalaran,none,0,,0,0,0,\"\n3000  SPELL_CAST_FAILED,0x0000000000000001,Player,0x400,0x0000000000000001,Player,0x400,1,Spell,0x1,\"~571,0,]\""},
 		{"oversize scanner token", strings.Repeat("x", 65536)},
+		{"NUL sparse padding", strings.Repeat("\x00", 3*65536) + heal + "\n" + strings.Repeat("\x00", 3*65536) + heal + "\n" + strings.Repeat("\x00", 3*65536)},
+		{"NUL only", strings.Repeat("\x00", 3*65536)},
+		{"oversize nonNUL after padding", strings.Repeat("\x00", 3*65536) + strings.Repeat("x", 65536)},
 
 		{"companion", `3000  SPELL_CAST_FAILED,0x0000000000000001,"Player",0x400,0x0000000000000001,"Player",0x400,1,"Spell",0x1,"not a companion payload"`},
 	} {
@@ -70,7 +73,7 @@ func (r *sourceErrorReader) Read(p []byte) (int, error) {
 
 func TestNextSourceScannerFailure(t *testing.T) {
 	t.Parallel()
-	for _, raw := range []string{"", "3000  CHRONICLE_LOOT_MONEY", "3000  CHRONICLE_LOOT_MONEY\n"} {
+	for _, raw := range []string{"", "3000  CHRONICLE_LOOT_MONEY", "3000  CHRONICLE_LOOT_MONEY\n", "\x00\x00", "\x00\x003000  CHRONICLE_LOOT_MONEY\n\x00\x00"} {
 		ctx := nextContext()
 		old, err := New(ctx, slog.Default(), &sourceErrorReader{data: raw}, stubSpellDB{}, nil)
 		require.NoError(t, err)

@@ -10,6 +10,7 @@ import (
 	"sort"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/encounter"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/instancehook"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/rankings"
@@ -49,7 +50,15 @@ type HookGraphRecipe struct {
 // is already retained in Hookable.CurrentZone; no function comes from archives.
 const AzerothCoreFallbackRecipeID = "azerothcore/fallback/v1"
 
+// EncounterVariantGraphRecipe names a trusted finalization policy. Classification
+// runs only at finalization, never during semantic restore or runtime binding.
+type EncounterVariantGraphRecipe struct {
+	ID       string
+	Classify func(encounter.Encounter, database.WoWFlavor, []instancehook.Preprocessor) string
+}
+
 type HookableGraphRecipe struct {
+	EncounterVariant    *EncounterVariantGraphRecipe
 	AzerothCoreFallback bool
 	PrefixHooks         []HookGraphRecipe
 	SuffixHooks         []HookGraphRecipe
@@ -133,6 +142,7 @@ func (r *HookableGraphRecipe) New(ctx context.Context, logger *slog.Logger, unit
 		h.derivedName = NewMultiInstanceZone(r.DerivedNames)
 	}
 	h.hooks = append(append(append([]instancehook.Hook(nil), h.graphPrefixHooks...), h.hooks...), h.graphSuffixHooks...)
+	h.bindGraphEncounterVariant()
 	if err = h.bindGraphRuntime(); err != nil {
 		return nil, err
 	}
@@ -349,6 +359,7 @@ func (h *Hookable) WireGraphRuntime(logger *slog.Logger) error {
 			h.graphCollectorRevision = v.GraphRuntimeRevision()
 		}
 	}
+	h.bindGraphEncounterVariant()
 	h.graphAwaitingRuntime = false
 	return h.bindGraphRuntime()
 }
@@ -369,6 +380,12 @@ func (h *Hookable) validateGraphRecipe(r *HookableGraphRecipe) error {
 	}
 	if h.graphRecipe != r || h.name != name || h.Category != r.Category || !reflect.DeepEqual(h.rankingRules, r.Rankings) || h.finalizing || h.finalized || h.flushingDeferredEnd {
 		return fmt.Errorf("Hookable checkpoint recipe or lifecycle mismatch")
+	}
+	if r.EncounterVariant != nil && (r.EncounterVariant.ID == "" || r.EncounterVariant.Classify == nil) {
+		return fmt.Errorf("invalid encounter variant recipe")
+	}
+	if !h.graphAwaitingRuntime && (h.encounterVariant != nil) != (r.EncounterVariant != nil) {
+		return fmt.Errorf("encounter variant runtime mismatch")
 	}
 	if h.events == nil || h.units == nil || h.Identifier == nil {
 		return fmt.Errorf("missing Hookable graph dependency")
@@ -510,4 +527,19 @@ func (r *HookableGraphRecipe) zoneBinding(z zone.Zone) (string, func(zone.Zone) 
 	// Zero IDs and empty names are accepted by the original production fallback.
 	// Do not invent metadata constraints that would drop those observed zones.
 	return z.Name, func(next zone.Zone) bool { return next.InstanceID == z.InstanceID }, nil
+}
+
+func (r *HookableGraphRecipe) variantRecipeID() string {
+	if r.EncounterVariant == nil {
+		return ""
+	}
+	return r.EncounterVariant.ID
+}
+func (h *Hookable) bindGraphEncounterVariant() {
+	h.encounterVariant = nil
+	if recipe := h.graphRecipe.EncounterVariant; recipe != nil {
+		h.encounterVariant = func(enc encounter.Encounter) string {
+			return recipe.Classify(enc, h.graphRecipe.Flavor, h.preprocessors)
+		}
+	}
 }

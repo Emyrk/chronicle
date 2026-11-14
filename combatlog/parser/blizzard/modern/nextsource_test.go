@@ -56,3 +56,56 @@ func TestNextSourceV22Ordering(t *testing.T) {
 		}
 	}
 }
+
+func TestNextSourceNULPaddingAndScannerFailures(t *testing.T) {
+	t.Parallel()
+	padding := strings.Repeat("\x00", 3*bufSize)
+	for _, format := range []database.LogFormat{database.LogFormatHermesproxy1142Cc, database.LogFormatV9Cleu, database.LogFormatV22Cleu} {
+		t.Run(string(format), func(t *testing.T) {
+			t.Parallel()
+			record := "9/3 12:00:00.000  COMBAT_LOG_VERSION,9,ADVANCED_LOG_ENABLED,0\n"
+			if format == database.LogFormatV9Cleu {
+				record = "9/3/2026 12:00:00.000  COMBAT_LOG_VERSION,9,ADVANCED_LOG_ENABLED,0\n"
+			}
+			if format == database.LogFormatV22Cleu {
+				record = "9/3/2026 12:00:00.000-6  COMBAT_LOG_VERSION,22,ADVANCED_LOG_ENABLED,0\n"
+			}
+			for _, tc := range []struct {
+				name  string
+				input io.Reader
+				fatal bool
+			}{
+				{"padding around records", strings.NewReader(padding + record + padding + record + padding), false},
+				{"oversized record", strings.NewReader(record + padding + strings.Repeat("x", bufSize)), true},
+				{"reader failure after padding", io.MultiReader(strings.NewReader(record+padding), failingModernReader{}), true},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					source, err := NewNext(nextTestContext(t, format), slog.Default(), tc.input, hermesProxyTestDB{}, nil, nil)
+					require.NoError(t, err)
+					var terminal error
+					for range 10 {
+						_, terminal = source.Advance(t.Context())
+						if terminal != nil {
+							break
+						}
+					}
+					if tc.fatal {
+						require.True(t, parseerrors.IsFatalError(terminal), "%v", terminal)
+						_, again := source.Advance(t.Context())
+						require.Equal(t, terminal, again)
+						require.False(t, source.pipeline.completedFile)
+					} else {
+						require.ErrorIs(t, terminal, io.EOF)
+						require.True(t, source.pipeline.completedFile)
+					}
+				})
+			}
+			if format != database.LogFormatHermesproxy1142Cc {
+				for _, input := range []io.Reader{strings.NewReader(padding + strings.Repeat("x", bufSize)), io.MultiReader(strings.NewReader(padding), failingModernReader{})} {
+					_, err := NewNext(nextTestContext(t, format), slog.Default(), input, hermesProxyTestDB{}, nil, nil)
+					require.Error(t, err)
+				}
+			}
+		})
+	}
+}

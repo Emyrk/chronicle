@@ -8,6 +8,7 @@ import (
 // Common and Vanilla dependencies are registered separately by composition.
 func RegisterGraphOwners(r *ownergraph.Registry) error {
 	registrations := []func() error{
+		func() error { return registerXT002GraphOwner(r) },
 		func() error {
 			return ownergraph.Register(r, ownergraph.Codec[attumenTheHuntsman]{Type: AttumenTheHuntsmanStateType, Version: AttumenTheHuntsmanStateVersion, Init: func() *attumenTheHuntsman { return new(attumenTheHuntsman) }, Capture: func(c *attumenTheHuntsman, ctx *ownergraph.Capture) ([]byte, error) {
 				if e := c.validateGraph(); e != nil {

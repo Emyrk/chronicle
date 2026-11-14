@@ -13,6 +13,7 @@ import (
 	"maps"
 	"time"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/logscanner"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parseerrors"
@@ -196,7 +197,7 @@ func (p *Pipeline) OpenFile(reader io.Reader, maxLineBytes int) (*Source, error)
 	if maxLineBytes <= 0 {
 		return nil, fmt.Errorf("max line bytes must be positive")
 	}
-	scanner := bufio.NewScanner(reader)
+	scanner := logscanner.New(reader)
 	scanner.Buffer(make([]byte, min(maxLineBytes, 64*1024)), maxLineBytes)
 	source := &Source{scanner: scanner, pipeline: p}
 	p.boundary = false

@@ -74,9 +74,10 @@ type CommonFactory struct {
 	EncounterVariant func(encounter.Encounter, database.WoWFlavor, []instancehook.Preprocessor) string
 	// GraphID explicitly opts this code-defined factory into portable graph recipes.
 	// Empty IDs and unsupported runtime extensions fail closed.
-	GraphID            string
-	GraphPreprocessors []PreprocessorGraphRecipe
-	GraphZoneName      ZoneNameRecipe
+	GraphID               string
+	GraphPreprocessors    []PreprocessorGraphRecipe
+	GraphEncounterVariant *EncounterVariantGraphRecipe
+	GraphZoneName         ZoneNameRecipe
 
 	Name      string
 	Category  InstanceCategory

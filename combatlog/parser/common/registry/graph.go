@@ -288,6 +288,11 @@ func (p *PreparedGraph) RegisterOwners(r *ownergraph.Registry, compatibility sna
 	if p.acore != nil {
 		registrations = append(registrations, func() error { return p.acore.RegisterHook(r) })
 	}
+	for _, hook := range p.hooks {
+		if hook.EncounterVariant != nil && hook.EncounterVariant.ID != wotlkinstances.UlduarEncounterVariantGraphRecipe().ID {
+			return fmt.Errorf("unsupported encounter variant recipe")
+		}
+	}
 	preprocessors := map[string]bool{}
 	for _, hook := range p.hooks {
 		for _, recipe := range hook.Preprocessors {
@@ -300,6 +305,7 @@ func (p *PreparedGraph) RegisterOwners(r *ownergraph.Registry, compatibility sna
 	}{
 		{wotlkinstances.SartharionPreprocessorGraphRecipe().ID, wotlkinstances.RegisterSartharionPreprocessorGraphOwner},
 		{wotlkinstances.ThorimPreprocessorGraphRecipe().ID, wotlkinstances.RegisterThorimPreprocessorGraphOwner},
+		{wotlkinstances.XTVariantPreprocessorGraphRecipe().ID, wotlkinstances.RegisterXTVariantPreprocessorGraphOwner},
 		{wotlkinstances.MalygosPreprocessorGraphRecipe().ID, wotlkinstances.RegisterMalygosPreprocessorGraphOwner},
 		{wotlkinstances.IcecrownPreprocessorGraphRecipe().ID, wotlkinstances.RegisterIcecrownPreprocessorGraphOwner},
 	} {

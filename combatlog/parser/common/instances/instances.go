@@ -543,6 +543,7 @@ var (
 )
 
 var KrolDokStrongholdFactory = &CommonFactory{
+	GraphID:   "vanilla/instances/KrolDokStrongholdFactory/v1",
 	Name:      "Krol'dok Stronghold",
 	ZoneNames: []string{"krol'dok stronghold"},
 	Hostiles:  FromMap(KrolDokStrongholdHostiles()),

@@ -3,22 +3,20 @@ package azerothcore
 import (
 	"bufio"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/azerothcore/synthetic"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/logscanner"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parseerrors"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	parservanilla "github.com/Emyrk/chronicle/combatlog/parser/vanilla"
 	nextacore "github.com/Emyrk/chronicle/combatlog/parsernext/azerothcore"
-	"github.com/Emyrk/chronicle/combatlog/parsernext/common"
 	"github.com/Emyrk/chronicle/combatlog/parsernext/formats/cleu"
 	"github.com/Emyrk/chronicle/combatlog/parsernext/formats/cleu/companion"
 	"github.com/Emyrk/chronicle/combatlog/parsernext/snapshot"
@@ -43,7 +41,7 @@ type NextPipeline struct {
 	activeSource  *NextSource
 	fatal         error
 	input         *scannerCompatibleReader
-	reader        *common.FileReader
+	reader        *bufio.Scanner
 	decoder       *nextacore.Decoder
 	synthetics    *synthetic.Synthetic
 	lastDate      time.Time
@@ -93,10 +91,7 @@ func (p *NextPipeline) OpenFile(r io.Reader) (*NextSource, error) {
 		return nil, fmt.Errorf("source is required")
 	}
 	input := &scannerCompatibleReader{reader: r}
-	reader, e := common.NewFileReader(input, bufio.MaxScanTokenSize-1)
-	if e != nil {
-		return nil, e
-	}
+	reader := logscanner.New(input)
 	p.input = input
 	p.reader = reader
 	p.boundary = false
@@ -178,20 +173,16 @@ func (p *NextPipeline) process(ctx context.Context) ([]messages.Message, error) 
 }
 
 func (p *NextPipeline) advance(ctx context.Context) (_ []messages.Message, final error) {
-	line, err := p.reader.Next(ctx)
-	if err == io.EOF {
+	if !p.reader.Scan() {
+		if err := p.reader.Err(); err != nil {
+			return nil, parseerrors.AsFatalError(err)
+		}
 		if p.input.err != nil {
 			return nil, parseerrors.AsFatalError(p.input.err)
 		}
 		return nil, io.EOF
 	}
-	if err != nil {
-		if errors.Is(err, common.ErrLineTooLong) {
-			err = bufio.ErrTooLong
-		}
-		return nil, parseerrors.AsFatalError(err)
-	}
-	raw := strings.TrimSuffix(strings.TrimSuffix(line.Raw, "\n"), "\r")
+	raw := p.reader.Text()
 	if raw == "" {
 		return messages.Unparsed(time.Time{}, raw), nil
 	}
@@ -255,9 +246,9 @@ func (s *NextSource) Advance(ctx context.Context) ([]messages.Message, error) {
 	return batch, e
 }
 
-// Scanner emits a final partial token before exposing a non-EOF reader error.
-// FileReader intentionally rejects partial failed lines, so adapt only that
-// input contract here and surface the original terminal error on next Advance.
+// Preserve the original reader failure separately from scanner EOF. The final
+// partial record is emitted first; advance then exposes the saved terminal error
+// instead of marking this file as successfully consumed.
 type scannerCompatibleReader struct {
 	reader io.Reader
 	err    error

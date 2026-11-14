@@ -32,4 +32,4 @@ Read-only and `mode=compare` operations do not bump revisions. Failed mutations 
 
 ## Irreversible migration
 
-Revision history is monotonic compatibility state. The down migration for `000372` intentionally fails instead of dropping the revision column or sequence. Resetting either could reuse an old compatibility identity and allow stale parser output to appear current.
+Revision history is monotonic compatibility state. The down migration for `000386` intentionally fails instead of dropping the revision column or sequence. Resetting either could reuse an old compatibility identity and allow stale parser output to appear current.

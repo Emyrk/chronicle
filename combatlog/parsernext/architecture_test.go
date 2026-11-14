@@ -63,6 +63,10 @@ func TestProductionDependencyDirection(t *testing.T) {
 			if owner == "formats/cleu" && allowedCLEUCompatibility[imported] {
 				continue
 			}
+			if imported == "github.com/Emyrk/chronicle/combatlog/parser/common/logscanner" {
+				require.Contains(t, []string{"cleusource/source.go", "formats/modern/transform.go"}, filepath.ToSlash(path), "only native CLEU/modern framing reuses the shared NUL-aware scanner")
+				continue
+			}
 			if owner == "cleusource" && allowedCLEUSourceCompatibility[imported] {
 				continue
 			}
