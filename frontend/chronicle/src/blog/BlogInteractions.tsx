@@ -10,7 +10,7 @@ const subscribe = () => () => {};
 /** Interactions are live only. Keep prerendering and the first hydration render identical. */
 export function BlogInteractions({ post }: { post: BlogPostMetadata }) {
   const hydrated = useSyncExternalStore(subscribe, () => true, () => false);
-  if (!hydrated || (post.votingEnabled === false && !post.feedbackEnabled)) return null;
+  if (!hydrated || (post.votingEnabled === false && post.feedbackEnabled === false)) return null;
   return <LiveInteractions post={post} />;
 }
 
@@ -21,7 +21,7 @@ function LiveInteractions({ post }: { post: BlogPostMetadata }) {
   const mutation = useBlogMutation(post.id);
   if (publicQuery.data && !publicQuery.data.voting_enabled && !publicQuery.data.feedback_enabled) return null;
   const votingEnabled = post.votingEnabled !== false && publicQuery.data?.voting_enabled;
-  const feedbackEnabled = post.feedbackEnabled && publicQuery.data?.feedback_enabled;
+  const feedbackEnabled = post.feedbackEnabled !== false && publicQuery.data?.feedback_enabled;
   const disabled = mutation.isPending || own.isLoading || !session || !own.data || !own.data.voting_enabled;
   const accent = rarityColor(post.rarity);
   const signInHref = `/login?from=${encodeURIComponent(`/blog/${post.id}`)}`;
@@ -91,7 +91,7 @@ export function BlogCardStats({ post }: { post: BlogPostMetadata }) {
 function LiveCardStats({ post }: { post: BlogPostMetadata }) {
   const summary = useBlogSummaries().data?.get(post.id);
   const upVotes = post.votingEnabled === false ? 0 : summary?.up_votes ?? 0;
-  const feedback = post.feedbackEnabled ? summary?.public_feedback ?? 0 : 0;
+  const feedback = post.feedbackEnabled !== false ? summary?.public_feedback ?? 0 : 0;
   if (upVotes <= 0 && feedback <= 0) return null;
   return <span className="relative z-10 inline-flex items-center gap-3 font-mono text-xs text-muted-foreground">
     {upVotes > 0 && <span title={`${upVotes} ${upVotes === 1 ? "reader" : "readers"} found this helpful`} className="inline-flex items-center gap-1"><ThumbsUp className="h-3.5 w-3.5" aria-hidden />+{upVotes}</span>}

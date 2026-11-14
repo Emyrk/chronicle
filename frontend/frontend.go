@@ -71,7 +71,7 @@ type blogManifest struct {
 
 type blogManifestPost struct {
 	VotingEnabled   *bool      `json:"voting_enabled"`
-	FeedbackEnabled bool       `json:"feedback_enabled"`
+	FeedbackEnabled *bool      `json:"feedback_enabled"`
 	Path            string     `json:"path"`
 	Title           string     `json:"title"`
 	Description     string     `json:"description"`
@@ -529,6 +529,6 @@ func BlogInteractionsEnabled(siteFS fs.FS, slug string, flavor []string, kind st
 	h := handler{blogPosts: posts}
 	route := "/blog/" + slug
 	post, ok := posts[route]
-	enabled := (kind == "vote" && (post.VotingEnabled == nil || *post.VotingEnabled)) || (kind == "feedback" && post.FeedbackEnabled)
+	enabled := (kind == "vote" && (post.VotingEnabled == nil || *post.VotingEnabled)) || (kind == "feedback" && (post.FeedbackEnabled == nil || *post.FeedbackEnabled))
 	return ok && enabled && h.blogPathAllowed(route, flavor), nil
 }

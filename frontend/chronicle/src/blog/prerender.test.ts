@@ -8,7 +8,7 @@ it("emits independent interaction eligibility for every post", () => {
   for (const post of manifest.posts) {
     const source = BLOG_POSTS.find((candidate) => candidate.id === post.id)!;
     expect(post.voting_enabled).toBe(source.votingEnabled !== false);
-    expect(post.feedback_enabled).toBe(source.feedbackEnabled === true);
+    expect(post.feedback_enabled).toBe(source.feedbackEnabled !== false);
   }
 });
 
@@ -22,6 +22,6 @@ it("serializes voting defaults and independent feature overrides", () => {
   expect(manifest.posts).toEqual([
     expect.objectContaining({ id: "vote-only", voting_enabled: true, feedback_enabled: false }),
     expect.objectContaining({ id: "feedback-only", voting_enabled: false, feedback_enabled: true }),
-    expect.objectContaining({ id: "omitted", voting_enabled: true, feedback_enabled: false }),
+    expect.objectContaining({ id: "omitted", voting_enabled: true, feedback_enabled: true }),
   ]);
 });

@@ -57,7 +57,7 @@ export interface BlogPostMetadata {
   hintDescription?: string;
   hintHref?: string;
   hintEnabled?: boolean;
-  /** Voting defaults to enabled; feedback requires explicit opt-in. */
+  /** Voting and feedback default to enabled; explicit false opts out. */
   votingEnabled?: boolean;
   feedbackEnabled?: boolean;
 }
@@ -183,7 +183,7 @@ function normalizeBlogPostMetadata(value: unknown): BlogPostMetadata {
   }
   return {
     votingEnabled: value.votingEnabled !== false,
-    feedbackEnabled: value.feedbackEnabled === true,
+    feedbackEnabled: value.feedbackEnabled !== false,
     id,
     title: requiredString(value, "title", id),
     description: requiredString(value, "description", id),

@@ -62,7 +62,7 @@ export function blogManifest(posts: readonly BlogPostMetadata[] = BLOG_POSTS): {
       published_at: post.publishedAt,
       flavor_sets: post.flavorSets ?? [],
       voting_enabled: post.votingEnabled !== false,
-      feedback_enabled: post.feedbackEnabled === true,
+      feedback_enabled: post.feedbackEnabled !== false,
     })),
   };
 }

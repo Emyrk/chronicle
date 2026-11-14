@@ -32,9 +32,10 @@ describe("blog registry", () => {
     expect(BLOG_POSTS.every((post) => typeof post.component === "function")).toBe(true);
   });
 
-  it("defaults voting on and feedback off while honoring explicit settings", () => {
+  it("defaults both interactions on while honoring explicit settings", () => {
     const create = (fields: object) => createBlogPosts([{ ...baseMetadata, ...fields }], { test: TestComponent })[0];
-    expect(create({})).toMatchObject({ votingEnabled: true, feedbackEnabled: false });
+    expect(create({})).toMatchObject({ votingEnabled: true, feedbackEnabled: true });
+    expect(create({ feedbackEnabled: false })).toMatchObject({ votingEnabled: true, feedbackEnabled: false });
     expect(create({ votingEnabled: true, feedbackEnabled: true })).toMatchObject({ votingEnabled: true, feedbackEnabled: true });
     expect(create({ votingEnabled: false, feedbackEnabled: true })).toMatchObject({ votingEnabled: false, feedbackEnabled: true });
     for (const field of ["votingEnabled", "feedbackEnabled"]) {

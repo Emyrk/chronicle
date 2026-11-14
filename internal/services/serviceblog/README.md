@@ -6,10 +6,9 @@ The SQL adapter owns atomic global account/post uniqueness and immutable submiss
 
 ## Enabling a post
 
-Voting is enabled by default for every known, flavor-accessible blog post.
-Set `votingEnabled: false` on a post in `assets/turtle/generated/blog-posts.json`
-to disable voting explicitly. Feedback remains opt-in: only `feedbackEnabled: true`
-enables collection, and omission defaults to false. For example,
+Voting and feedback are enabled by default for every known, flavor-accessible
+blog post. Set `votingEnabled: false` and/or `feedbackEnabled: false` on a post in
+`assets/turtle/generated/blog-posts.json` to opt out independently. For example,
 `"votingEnabled": false, "feedbackEnabled": true` collects feedback without votes.
 
 Run `pnpm -C frontend/chronicle build` after changing metadata. The blog prerender
@@ -17,8 +16,9 @@ step emits the independent `voting_enabled` and `feedback_enabled` flags into
 `blog-manifest.json`; the server uses that built manifest as its authority.
 Deploy the matching frontend build and backend together. Missing posts, missing
 manifests, explicitly disabled features and inaccessible flavor variants deny direct mutations.
-A known post in an older manifest without `voting_enabled` also defaults to voting
-on; `feedback_enabled` still defaults to false.
+A known post in an older manifest without either flag also defaults to both
+features on. Public feedback still requires explicit publication consent and
+moderator approval; enabling feedback does not publish submissions automatically.
 The client cannot authorize interactions itself.
 
 The public interaction endpoint is `GET /api/v1/blog/{slug}/interactions`.

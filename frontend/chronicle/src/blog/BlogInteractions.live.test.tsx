@@ -22,10 +22,13 @@ it("shows anonymous approved feedback and upvotes but never downvote totals", ()
   expect(markup).toContain('/login?from=%2Fblog%2Ftest');
   expect(markup).not.toContain("Your feedback");
 });
-it("defaults to voting only and honors explicit voting opt-out", () => {
+it("defaults both features on and honors explicit opt-outs", () => {
   const defaults = renderToStaticMarkup(<BlogInteractions post={{ ...post, votingEnabled: undefined, feedbackEnabled: undefined }} />);
   expect(defaults).toContain("Helpful · 12");
-  expect(defaults).not.toContain("Community feedback");
+  expect(defaults).toContain("Community feedback");
+  const feedbackDisabled = renderToStaticMarkup(<BlogInteractions post={{ ...post, feedbackEnabled: false }} />);
+  expect(feedbackDisabled).toContain("Helpful · 12");
+  expect(feedbackDisabled).not.toContain("Community feedback");
   expect(renderToStaticMarkup(<BlogInteractions post={{ ...post, votingEnabled: false, feedbackEnabled: false }} />)).toBe("");
   const markup = renderToStaticMarkup(<BlogInteractions post={{ ...post, votingEnabled: false }} />);
   expect(markup).not.toContain("Helpful");
