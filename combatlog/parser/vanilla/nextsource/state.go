@@ -15,31 +15,58 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/synthetic"
+	"github.com/Emyrk/chronicle/combatlog/parsernext/snapshot"
 	next "github.com/Emyrk/chronicle/combatlog/parsernext/vanilla"
 	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/Emyrk/chronicle/internal/stategraph"
 )
 
-// Compatibility is a caller-attested identity, NOT a checksum computed here.
-// DatasetContent must identify immutable content (a UUID alone is insufficient).
-// Never supply connection strings, credentials, or host-local file paths.
-// Format/Flavor must match construction; all fields are checked once at restore.
+// Compatibility is the snapshot header. Runtime identity must also be bound at
+// construction with snapshot.WithCompatibility; a capture-only claim is rejected.
 type Compatibility struct {
-	DatasetContent string             `json:"dataset_content"`
-	Format         database.LogFormat `json:"format"`
-	Flavor         string             `json:"flavor"`
-	ParserVersion  string             `json:"parser_version"`
-	// BuildVersion is HEADER display metadata, not ParserVersion. Empty is valid.
+	DatasetID       string             `json:"dataset_id"`
+	DatasetRevision int64              `json:"dataset_revision"`
+	BuildIdentity   string             `json:"build_identity"`
+	Format          database.LogFormat `json:"format"`
+	Flavor          string             `json:"flavor"`
+	// BuildVersion is HEADER display metadata, never the executable identity.
 	BuildVersion          string `json:"build_version"`
 	CustomOverrideVersion string `json:"custom_override_version"`
 }
 
+func (c Compatibility) RuntimeIdentity() snapshot.Compatibility {
+	return snapshot.Compatibility{DatasetID: c.DatasetID, DatasetRevision: c.DatasetRevision, BuildIdentity: c.BuildIdentity, Format: string(c.Format), Flavor: c.Flavor}
+}
 func (c Compatibility) validate() error {
-	if c.DatasetContent == "" || c.Format == "" || c.Flavor == "" || c.ParserVersion == "" || c.CustomOverrideVersion == "" {
-		return fmt.Errorf("complete immutable compatibility identity required")
+	if err := c.RuntimeIdentity().Validate(); err != nil {
+		return err
+	}
+	if c.CustomOverrideVersion == "" {
+		return fmt.Errorf("custom override identity required")
 	}
 	return nil
+}
+
+// constructionIdentity checks trusted context before New can initialize any
+// synthetic owner or look up dependency data. Missing binding permits ordinary
+// parsing, but can never capture or restore a snapshot.
+func constructionIdentity(ctx context.Context) (*snapshot.Compatibility, error) {
+	identity, ok := snapshot.FromContext(ctx)
+	if !ok {
+		return nil, nil
+	}
+	if err := identity.Validate(); err != nil {
+		return nil, err
+	}
+	metadata, ok := parsectx.FromContext(ctx)
+	if !ok || string(metadata.Format) != identity.Format || metadata.Flavor.CanonicalKey() != identity.Flavor {
+		return nil, fmt.Errorf("snapshot identity differs from construction format/flavor")
+	}
+	if metadata.DatasetID.String() != "00000000-0000-0000-0000-000000000000" && metadata.DatasetID.String() != identity.DatasetID {
+		return nil, fmt.Errorf("snapshot identity differs from construction dataset")
+	}
+	return &identity, nil
 }
 
 // State is ONE typed graph plus its semantic Value payloads and compatibility
@@ -52,9 +79,8 @@ type State struct {
 	Values        map[stategraph.Path]stategraph.ValuePayload `json:"values"`
 }
 
-// StateVersion remains 1: LogFormat replaces a Go string only; the JSON format
-// field keeps the exact canonical string payload. This codec is not deployed.
-const StateVersion uint32 = 1
+// Version 2 requires exact executable and revision-bound dataset identity.
+const StateVersion uint32 = 2
 const pipelineType = "vanilla/nextsource.Pipeline"
 
 type pipelineValue struct {
@@ -70,6 +96,12 @@ func (p *Pipeline) CaptureState(identity Compatibility, owners []next.DamageOwne
 		return State{}, fmt.Errorf("pipeline is not at a successful complete-file boundary")
 	}
 	if err := identity.validate(); err != nil {
+		return State{}, err
+	}
+	if p.construction == nil {
+		return State{}, fmt.Errorf("snapshot construction identity required")
+	}
+	if err := p.construction.Check(identity.RuntimeIdentity()); err != nil {
 		return State{}, err
 	}
 	if p.identity != nil && *p.identity != identity {
@@ -154,6 +186,16 @@ func RestoreState(ctx context.Context, logger *slog.Logger, db gamedb.GameDB, ge
 	}
 	fail := func(err error) (*Pipeline, map[stategraph.Path]*messages.Damage, error) { return nil, nil, err }
 	if err := expected.validate(); err != nil {
+		return fail(err)
+	}
+	construction, err := constructionIdentity(ctx)
+	if err != nil {
+		return fail(err)
+	}
+	if construction == nil {
+		return fail(fmt.Errorf("snapshot construction identity required"))
+	}
+	if err := construction.Check(expected.RuntimeIdentity()); err != nil {
 		return fail(err)
 	}
 	if state.Version != StateVersion || state.Compatibility != expected {
