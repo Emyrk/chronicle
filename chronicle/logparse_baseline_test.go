@@ -75,6 +75,28 @@ func TestBaselineEngineSelection(t *testing.T) {
 	require.Empty(t, c.NewWorkerLogParse().(*WorkerLogParse).baselineEngine)
 }
 
+func TestBaselineParserNextFormats(t *testing.T) {
+	t.Parallel()
+	for _, format := range []database.LogFormat{
+		database.LogFormat112aCcAddon, database.LogFormat243CcAddon,
+		database.LogFormat335aCcAddon, database.LogFormatAzerothcoreMod,
+		database.LogFormatV9Cleu, database.LogFormatV22Cleu,
+		database.LogFormatHermesproxy1142Cc,
+	} {
+		require.NoError(t, BaselineParserNext.ValidateFormat(format))
+	}
+	for _, format := range []database.LogFormat{"", "unknown"} {
+		require.ErrorContains(t, BaselineParserNext.ValidateFormat(format), "does not support")
+		worker := &WorkerLogParse{baselineEngine: BaselineParserNext}
+		_, err := worker.parseCombatLog(t.Context(), format, nil, nil, nil, nil, false, nil, "")
+		require.ErrorContains(t, err, "does not support")
+	}
+	// Opt-in never escapes the workerless tooling boundary.
+	c := &Chronicle{queue: &riverqueue.Queues{}}
+	require.EqualError(t, c.RunLogParseBaselineWithEngine(t.Context(), ArgsLogParse{}, BaselineParserNext), "baseline parsing requires a Chronicle without a queue")
+	require.Empty(t, c.NewWorkerLogParse().(*WorkerLogParse).baselineEngine)
+}
+
 func TestBaselineUnsupportedFormatPrecedesWorkerWrites(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitLong)
