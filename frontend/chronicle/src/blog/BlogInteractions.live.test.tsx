@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, expect, it, vi } from "vitest";
-import { BlogInteractions } from "./BlogInteractions";
+import { BlogInteractions, BlogScore } from "./BlogInteractions";
 import type { BlogPostMetadata } from "./blogRegistry";
 
 const state = vi.hoisted(() => ({ authenticated: false, banned: false, vote: 0, feedback: null as null | { id: string; body: string; status: string; deleted: boolean; consent: boolean } }));
@@ -63,4 +63,9 @@ it("restores existing publication consent when editing", () => {
   const markup = renderToStaticMarkup(<BlogInteractions post={post} />);
   expect(markup).toContain('checked=""');
   expect(markup).not.toMatch(/<button[^>]*disabled=""[^>]*>Save feedback<\/button>/);
+});
+
+it("shows the upvote score for the title and hides it when voting is off", () => {
+  expect(renderToStaticMarkup(<BlogScore post={post} />)).toContain("+12");
+  expect(renderToStaticMarkup(<BlogScore post={{ ...post, votingEnabled: false }} />)).toBe("");
 });

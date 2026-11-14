@@ -22,8 +22,22 @@ function LiveInteractions({ post }: { post: BlogPostMetadata }) {
   const votingEnabled = post.votingEnabled !== false && publicQuery.data?.voting_enabled;
   const feedbackEnabled = post.feedbackEnabled && publicQuery.data?.feedback_enabled;
   const disabled = mutation.isPending || own.isLoading || !session || !own.data || !own.data.voting_enabled;
+  const signInHref = `/login?from=${encodeURIComponent(`/blog/${post.id}`)}`;
   return (
-    <section aria-label="Post feedback" className="mx-auto mb-12 w-full max-w-3xl px-4 sm:px-10">
+    <>
+    {votingEnabled && <div className="pointer-events-none fixed inset-x-0 bottom-4 z-40 flex justify-center px-4">
+      <div role="group" aria-label="Vote on this post" className="pointer-events-auto flex flex-wrap items-center justify-center gap-2 rounded-full border border-border bg-card/95 px-3 py-2 shadow-lg backdrop-blur">
+        <Button size="sm" className="rounded-full" variant={own.data?.own_vote === 1 ? "default" : "outline"} aria-pressed={own.data?.own_vote === 1} disabled={disabled} onClick={() => mutation.mutate({ resource: "vote", method: "PUT", body: { vote: own.data?.own_vote === 1 ? 0 : 1 } })}>
+          <ThumbsUp className="mr-2 h-4 w-4" /> Helpful{publicQuery.data ? ` · ${publicQuery.data.up_votes}` : ""}
+        </Button>
+        <Button size="sm" className="rounded-full" variant={own.data?.own_vote === -1 ? "default" : "outline"} aria-pressed={own.data?.own_vote === -1} disabled={disabled} onClick={() => mutation.mutate({ resource: "vote", method: "PUT", body: { vote: own.data?.own_vote === -1 ? 0 : -1 } })}>
+          <ThumbsDown className="mr-2 h-4 w-4" /> Not for me
+        </Button>
+        {!authLoading && !session && <a href={signInHref} className="px-1 text-xs text-primary underline">Sign in to vote</a>}
+        {own.data?.own_vote !== 0 && own.data?.own_vote !== undefined && <span className="hidden px-1 text-xs text-muted-foreground sm:inline">Select your vote again to remove it.</span>}
+      </div>
+    </div>}
+    {(feedbackEnabled || publicQuery.error || mutation.error) && <section aria-label="Post feedback" className="mx-auto mb-12 w-full max-w-3xl px-4 sm:px-10">
       <div className="space-y-6 border-t border-border pt-8">
         <header>
           <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">From the community</p>
@@ -31,16 +45,7 @@ function LiveInteractions({ post }: { post: BlogPostMetadata }) {
         </header>
         {publicQuery.isLoading && <p role="status">Loading feedback…</p>}
         {publicQuery.error && <p role="alert">{publicQuery.error.message} <Button variant="outline" onClick={() => void publicQuery.refetch()}>Retry</Button></p>}
-        {votingEnabled && <div className="flex flex-wrap items-center gap-3">
-          <Button variant={own.data?.own_vote === 1 ? "default" : "outline"} aria-pressed={own.data?.own_vote === 1} disabled={disabled} onClick={() => mutation.mutate({ resource: "vote", method: "PUT", body: { vote: own.data?.own_vote === 1 ? 0 : 1 } })}>
-            <ThumbsUp className="mr-2 h-4 w-4" /> Helpful{publicQuery.data ? ` · ${publicQuery.data.up_votes}` : ""}
-          </Button>
-          <Button variant={own.data?.own_vote === -1 ? "default" : "outline"} aria-pressed={own.data?.own_vote === -1} disabled={disabled} onClick={() => mutation.mutate({ resource: "vote", method: "PUT", body: { vote: own.data?.own_vote === -1 ? 0 : -1 } })}>
-            <ThumbsDown className="mr-2 h-4 w-4" /> Not for me
-          </Button>
-          {own.data?.own_vote !== 0 && own.data?.own_vote !== undefined && <span className="text-xs text-muted-foreground">Select your vote again to remove it.</span>}
-        </div>}
-        {!authLoading && !session && <p className="text-sm text-muted-foreground"><a href={`/login?from=${encodeURIComponent(`/blog/${post.id}`)}`} className="text-primary underline">Sign in</a> to {post.votingEnabled !== false && post.feedbackEnabled ? "vote or leave feedback" : post.votingEnabled !== false ? "vote" : "leave feedback"}. Public feedback is anonymous.</p>}
+        {feedbackEnabled && !authLoading && !session && <p className="text-sm text-muted-foreground"><a href={signInHref} className="text-primary underline">Sign in</a> to leave feedback. Public feedback is anonymous.</p>}
         {own.data?.feedback_banned && <p role="status" className="text-sm text-muted-foreground">Your account cannot submit feedback. You can still vote.</p>}
         {mutation.error && <p role="alert" className="text-sm text-destructive">{mutation.error.message}</p>}
         {feedbackEnabled && session && own.data && !own.data.feedback_banned && !own.data.own_feedback?.deleted && <FeedbackEditor key={`${session.user_id}:${own.data.own_feedback?.body ?? "new"}:${own.data.own_feedback?.consent ?? false}`} postID={post.id} feedback={own.data.own_feedback ?? null} />}
@@ -54,8 +59,23 @@ function LiveInteractions({ post }: { post: BlogPostMetadata }) {
           </article>)}
         </div>}
       </div>
-    </section>
+    </section>}
+    </>
   );
+}
+
+/** Upvote total shown beside the post title. Live only, like the vote bar. */
+export function BlogScore({ post }: { post: BlogPostMetadata }) {
+  const hydrated = useSyncExternalStore(subscribe, () => true, () => false);
+  if (!hydrated || post.votingEnabled === false) return null;
+  return <LiveScore postID={post.id} />;
+}
+
+function LiveScore({ postID }: { postID: string }) {
+  const { session, isLoading: authLoading } = useAuth();
+  const { data } = useBlogInteractions(postID, session?.user_id, authLoading);
+  if (!data?.voting_enabled || data.up_votes <= 0) return null;
+  return <span title={`${data.up_votes} ${data.up_votes === 1 ? "reader" : "readers"} found this helpful`} className="ml-3 inline-flex translate-y-[-0.2em] items-center gap-1 rounded-full border border-border bg-muted/50 px-2.5 py-0.5 align-middle font-mono text-sm text-foreground"><ThumbsUp className="h-3.5 w-3.5" aria-hidden />+{data.up_votes}</span>;
 }
 
 function FeedbackEditor({ postID, feedback }: { postID: string; feedback: OwnFeedback | null }) {
