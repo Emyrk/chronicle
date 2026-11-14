@@ -3,7 +3,7 @@ import { MessageSquare, Pencil, ThumbsDown, ThumbsUp } from "lucide-react";
 import { useBlogMutation, useBlogInteractions, useBlogSummaries, blogFeedbackMutation, type OwnFeedback } from "@/api/blogInteractions";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
-import { blogRewardDescription, type BlogStorageReward } from "./blogStorageRewards";
+import type { BlogStorageReward } from "./blogStorageRewards";
 import type { BlogPostMetadata } from "./blogRegistry";
 
 const subscribe = () => () => {};
@@ -64,14 +64,7 @@ function LiveInteractions({ post }: { post: BlogPostMetadata }) {
         {own.data?.own_vote !== 0 && own.data?.own_vote !== undefined && <span className="hidden px-1 text-xs text-muted-foreground lg:inline">Select your vote again to remove it.</span>}
       </div>
     </div>}
-    {!authLoading && session && own.data && ((votingEnabled && own.data.vote_reward) || (feedbackEnabled && own.data.feedback_reward)) && <aside aria-label="Blog storage rewards" className="mx-auto mb-6 w-full max-w-3xl px-4 sm:px-10">
-      <div className="space-y-2 rounded-lg border border-border bg-card p-4 text-sm">
-        <h2 className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Storage rewards</h2>
-        {votingEnabled && own.data.vote_reward && <StorageReward reward={own.data.vote_reward} category="vote" />}
-        {feedbackEnabled && own.data.feedback_reward && <StorageReward reward={own.data.feedback_reward} category="feedback" canEarn={!own.data.feedback_banned && !own.data.own_feedback?.deleted} />}
-        <p className="text-xs leading-5 text-muted-foreground">Account-wide, not per server. Each reward lasts 60 days. Vote and feedback rewards do not stack across posts: up to 7 MB combined. A first interaction on another post refreshes that category. Changing a vote, editing feedback, or deleting and recreating it on the same post does not refresh rewards.</p>
-      </div>
-    </aside>}
+
     {(feedbackEnabled || publicQuery.error || mutation.error) && <section id={FEEDBACK_SECTION_ID} aria-label="Post feedback" className="mx-auto mb-12 w-full max-w-3xl scroll-mt-8 px-4 sm:px-10">
       <div className="space-y-6 border-t border-border pt-8">
         <header className="flex flex-wrap items-end justify-between gap-3">
@@ -103,11 +96,6 @@ function LiveInteractions({ post }: { post: BlogPostMetadata }) {
     </section>}
     </>
   );
-}
-
-function StorageReward({ reward, category, canEarn = true }: { reward: BlogStorageReward; category: "vote" | "feedback"; canEarn?: boolean }) {
-  const [now] = useState(() => Date.now());
-  return <p>{blogRewardDescription(reward, category, canEarn, now)}</p>;
 }
 
 /** Upvote total shown beside the post title. Live only, like the vote bar. */

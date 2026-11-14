@@ -93,25 +93,15 @@ it("shows index card counts only for enabled interactions", () => {
   expect(renderToStaticMarkup(<BlogCardStats post={{ ...post, id: "other" }} />)).toBe("");
 });
 
-it("shows reward opportunities only with authenticated reward data", () => {
-  state.reward = { eligible: true };
-  expect(renderToStaticMarkup(<BlogInteractions post={post} />)).not.toContain("Storage rewards");
+it("keeps reward details out of the page even when eligible or active", () => {
   state.authenticated = true;
-  const markup = renderToStaticMarkup(<BlogInteractions post={post} />);
-  expect(markup).toContain("Vote: +2 MB");
-  expect(markup).toContain("Feedback: +5 MB");
-  expect(markup).toContain("Earn it for 60 days");
-  expect(markup).toContain("up to 7 MB combined");
-  expect(markup).toContain("private or public");
-  state.reward = undefined;
-  expect(renderToStaticMarkup(<BlogInteractions post={post} />)).not.toContain("Storage rewards");
-});
-it("does not offer rewards for disabled or blocked interactions", () => {
-  state.authenticated = true;
-  state.reward = { eligible: true };
-  state.banned = true;
-  const markup = renderToStaticMarkup(<BlogInteractions post={{ ...post, votingEnabled: false }} />);
-  expect(markup).not.toContain("Vote: +2 MB");
-  expect(markup).not.toContain("Earn it for 60 days");
-  expect(markup).toContain("Feedback rewards are unavailable");
+  for (const reward of [{ eligible: true }, { eligible: false, expires_at: "2099-01-01T00:00:00Z" }]) {
+    state.reward = reward;
+    const markup = renderToStaticMarkup(<BlogInteractions post={post} />);
+    expect(markup).not.toContain("Storage rewards");
+    expect(markup).not.toContain("Blog storage rewards");
+    expect(markup).not.toContain("60 days");
+    expect(markup).not.toContain("7 MB");
+    expect(markup).toContain("Helpful");
+  }
 });

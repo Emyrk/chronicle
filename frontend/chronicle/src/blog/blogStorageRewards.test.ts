@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { blogRewardDescription, blogRewardSuccessMessage } from "./blogStorageRewards";
+import { blogRewardSuccessMessage } from "./blogStorageRewards";
 
 const now = Date.parse("2026-01-01T00:00:00Z");
 const future = "2026-02-01T00:00:00Z";
@@ -21,19 +21,8 @@ describe("blog storage rewards", () => {
       expect(blogRewardSuccessMessage({ eligible: false, expires_at: past }, category, true, now)).toBeUndefined();
     }
   });
-  it("shows active expiry and an eligible post's refresh opportunity", () => {
-    const text = blogRewardDescription({ eligible: true, expires_at: future }, "vote", true, now);
-    expect(text).toContain("+2 MB active. Expires");
-    expect(text).toContain("Refresh it for 60 days");
-  });
-  it("shows expiry without promising another reward on the same post", () => {
-    const text = blogRewardDescription({ eligible: false, expires_at: past }, "feedback", true, now);
-    expect(text).toContain("+5 MB expired");
-    expect(text).toContain("Already earned on this post");
-    expect(text).not.toContain("Earn it");
-  });
-  it("treats exact expiry as expired and handles malformed dates safely", () => {
-    expect(blogRewardDescription({ eligible: true, expires_at: new Date(now).toISOString() }, "vote", true, now)).toContain("expired");
-    expect(blogRewardDescription({ eligible: true, expires_at: "invalid" }, "vote", true, now)).not.toContain("Invalid Date");
+  it("includes the category amount and 60-day duration", () => {
+    expect(blogRewardSuccessMessage({ eligible: true }, "vote", true, now)).toContain("+2 MB for 60 days");
+    expect(blogRewardSuccessMessage({ eligible: true }, "feedback", true, now)).toContain("+5 MB for 60 days");
   });
 });
