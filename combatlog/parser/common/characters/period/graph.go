@@ -28,24 +28,10 @@ func RegisterGraphOwners(r *ownergraph.Registry) error {
 	}}); e != nil {
 		return e
 	}
-	if e := ownergraph.Register(r, ownergraph.Codec[InactivityPeriod]{Type: StateType + ".Inactivity", Version: StateVersion, Init: func() *InactivityPeriod { return new(InactivityPeriod) }, Capture: func(p *InactivityPeriod, c *ownergraph.Capture) ([]byte, error) {
-		s, e := p.CaptureState(ownergraph.Reference[*Moment](c), ownergraph.Reference[messages.Message](c))
-		if e != nil {
-			return nil, e
-		}
-		if s.value.HasTimeoutPredicate {
-			return nil, fmt.Errorf("period callback requires trusted graph adapter")
-		}
-		return s.Encode()
-	}, Restore: func(p *InactivityPeriod, v uint32, b []byte, c *ownergraph.Restore) error {
-		s, e := DecodeState(v, b)
-		if e != nil {
-			return e
-		}
-		return p.RestoreState(s, ownergraph.Loader[*Moment](c), ownergraph.Loader[messages.Message](c), nil)
-	}}); e != nil {
+	if e := registerInactivityGraphOwner(r); e != nil {
 		return e
 	}
+
 	if e := registerRetainedMessage[messages.Timeout](r, "messages.Timeout"); e != nil {
 		return e
 	}
@@ -53,6 +39,12 @@ func RegisterGraphOwners(r *ownergraph.Registry) error {
 		return e
 	}
 	if e := registerRetainedMessage[messages.Aura](r, "messages.Aura"); e != nil {
+		return e
+	}
+	if e := registerRetainedMessage[messages.UnitCombatEnter](r, "messages.UnitCombatEnter"); e != nil {
+		return e
+	}
+	if e := registerRetainedMessage[messages.UnitEvade](r, "messages.UnitEvade"); e != nil {
 		return e
 	}
 	return registerRetainedMessage[messages.EncounterBoundary](r, "messages.EncounterBoundary")

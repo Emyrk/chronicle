@@ -52,12 +52,19 @@ const (
 )
 
 type Hookable struct {
-	name        string
-	derivedName *MultiInstanceZone
-	Category    InstanceCategory
-	timings     *timings.Accumulator
-	logger      *slog.Logger
-	units       *unitdb.Units
+	graphVersionsMessage    *messages.Versions
+	graphPrefixHooks        []instancehook.Hook
+	graphSuffixHooks        []instancehook.Hook
+	graphRecipe             *HookableGraphRecipe
+	graphAwaitingRuntime    bool
+	graphProjectionRevision uint64
+	graphCollectorRevision  uint64
+	name                    string
+	derivedName             *MultiInstanceZone
+	Category                InstanceCategory
+	timings                 *timings.Accumulator
+	logger                  *slog.Logger
+	units                   *unitdb.Units
 
 	// Static
 	MatchesZoneF func(z zone.Zone) bool
@@ -152,6 +159,11 @@ func (f *CommonFactory) NewHookable(ctx context.Context, logger *slog.Logger, db
 }
 
 func NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z zone.Zone, ip InstanceParams) *Hookable {
+	h, _ := newHookable(ctx, logger, db, z, ip, nil)
+	return h
+}
+
+func newHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z zone.Zone, ip InstanceParams, recipe *HookableGraphRecipe) (*Hookable, error) {
 	p := participants.New()
 	g := armory.New(db)
 
@@ -180,6 +192,13 @@ func NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z z
 	}
 
 	chrs := characters.NewCharacters(db, cres, ip.Idf)
+	if recipe != nil {
+		var err error
+		chrs, err = recipe.Factories.New(db, ip.Idf)
+		if err != nil {
+			return nil, err
+		}
+	}
 	chrs.SetNoKnownParticipantsAliveProvider(p.NoKnownParticipantsAlive)
 	chrs.RegisterHook(p)
 
@@ -259,6 +278,7 @@ func NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z z
 	}
 
 	c := &Hookable{
+		graphRecipe:                recipe,
 		name:                       ip.Name,
 		Category:                   ip.Category,
 		logger:                     logger,
@@ -317,7 +337,7 @@ func NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z z
 		}
 	}
 
-	return c
+	return c, nil
 }
 
 func (h *Hookable) AddHook(hook instancehook.Hook) {
@@ -352,9 +372,30 @@ func (h *Hookable) ProcessRaidGroupMetadata(msg *messages.RaidGroup) error {
 // references the shared parse-wide tracker. The adapter projects active auras
 // into encounter event streams on the first real message after FightStarted,
 // manages synthetic expiry, and forwards death notifications.
-func (h *Hookable) AttachAuraProjection(tracker *auras.Tracking) {
-	tracker.AddObserver(h.g.ObserveAura)
-	proj := auras.NewProjection(tracker)
+// Trusted graph composition rejects invalid/repeated attachments without mutation.
+func (h *Hookable) AttachAuraProjection(tracker *auras.Tracking) error {
+	return h.attachAuraProjection(tracker, nil, false)
+}
+
+// AttachAuraAndConsume validates both adapters before installing any shared aura
+// observers. Failed trusted composition leaves the instance and tracker untouched.
+func (h *Hookable) AttachAuraAndConsume(tracker *auras.Tracking, shared *consumeevidence.Tracker) error {
+	return h.attachAuraProjection(tracker, shared, true)
+}
+
+func (h *Hookable) attachAuraProjection(tracker *auras.Tracking, shared *consumeevidence.Tracker, withConsume bool) error {
+	if h.graphRecipe != nil {
+		if err := ValidateHookableCharactersRuntime(h.Characters); err != nil {
+			return err
+		}
+		if tracker == nil {
+			return fmt.Errorf("missing aura tracker")
+		}
+		if withConsume && shared == nil {
+			return fmt.Errorf("missing consume tracker dependencies")
+		}
+	}
+	proj := auras.NewProjectionWithoutObserver(tracker)
 	proj.SetEmit(func(evt *messages.Aura) {
 		if h.currentFight != nil && h.currentFight.active() {
 			err := h.currentFight.Events.Process(evt)
@@ -363,16 +404,65 @@ func (h *Hookable) AttachAuraProjection(tracker *auras.Tracking) {
 			}
 		}
 	})
-	h.Characters.RegisterHook(proj)
-	h.Auras = tracker
-	// Prepend so projection events are emitted before hooks that might read them.
-	h.hooks = append([]instancehook.Hook{proj}, h.hooks...)
+	// Validate the proposed composition before exposing hooks or observers.
+	next := *h
+	next.Auras = tracker
+	next.hooks = append([]instancehook.Hook{proj}, h.hooks...)
+	next.graphProjectionRevision = proj.GraphRuntimeRevision()
+	if withConsume {
+		col := h.newConsumeCollector(tracker, shared)
+		next.hooks = append(next.hooks, col)
+		next.graphCollectorRevision = col.GraphRuntimeRevision()
+	}
+	if h.graphRecipe != nil {
+		_, hooks, err := next.graphHooks()
+		if err != nil {
+			return err
+		}
+		if err := h.Characters.BindGraphRuntimeWithHook(h, hooks, proj); err != nil {
+			return err
+		}
+	} else {
+		h.Characters.RegisterHook(proj)
+	}
+	*h = next
+	tracker.AddObserver(h.g.ObserveAura)
+	proj.AttachObserver()
+	return nil
 }
 
 // AttachConsumeCollector creates and registers a consume evidence collector
 // that reads from the shared parse-wide Tracker and emits evidence into this
-// instance's fight event stream.
-func (h *Hookable) AttachConsumeCollector(auraTracker *auras.Tracking, shared *consumeevidence.Tracker) {
+// instance's fight event stream. Trusted graph composition returns validation
+// errors without changing the instance or its dependencies.
+func (h *Hookable) AttachConsumeCollector(auraTracker *auras.Tracking, shared *consumeevidence.Tracker) error {
+	if h.graphRecipe != nil {
+		if err := ValidateHookableCharactersRuntime(h.Characters); err != nil {
+			return err
+		}
+		if auraTracker == nil || shared == nil {
+			return fmt.Errorf("missing consume tracker dependencies")
+		}
+	}
+	col := h.newConsumeCollector(auraTracker, shared)
+	next := *h
+	next.hooks = append(append([]instancehook.Hook(nil), h.hooks...), col)
+	next.graphCollectorRevision = col.GraphRuntimeRevision()
+	if h.graphRecipe != nil {
+		_, hooks, err := next.graphHooks()
+		if err != nil {
+			return err
+		}
+		if err := h.Characters.BindGraphRuntime(h, hooks); err != nil {
+			return err
+		}
+	}
+	*h = next
+	return nil
+}
+
+// Preparing a collector only installs its local callback, never shared observers.
+func (h *Hookable) newConsumeCollector(auraTracker *auras.Tracking, shared *consumeevidence.Tracker) *consumeevidence.Collector {
 	col := consumeevidence.NewCollector(auraTracker, shared)
 	col.SetEmit(func(evt *messages.Consume) {
 		if h.currentFight != nil && h.currentFight.active() {
@@ -382,7 +472,7 @@ func (h *Hookable) AttachConsumeCollector(auraTracker *auras.Tracking, shared *c
 			}
 		}
 	})
-	h.hooks = append(h.hooks, col)
+	return col
 }
 
 // initDerivedRankings creates a SpeedrunTracker for each sub-instance defined
@@ -442,8 +532,18 @@ func (h *Hookable) HasExplicitEncounter(encounterID int32) bool {
 }
 
 func (h *Hookable) SetVersions(versions map[string]string, player *guid.GUID) {
+	h.graphVersionsMessage = nil
 	h.versions = versions
 	h.recorderGUID = player
+}
+
+// SetVersionsMessage retains the canonical header used by parse-wide state.
+func (h *Hookable) SetVersionsMessage(m *messages.Versions, onlyIfUnset bool) {
+	if m == nil || (onlyIfUnset && h.versions != nil) {
+		return
+	}
+	h.SetVersions(m.Versions, m.Player)
+	h.graphVersionsMessage = m
 }
 
 func (h *Hookable) SetVersionsIfUnset(versions map[string]string, player *guid.GUID) {
@@ -618,6 +718,9 @@ func (h *Hookable) flushDeferredEncounterEndBefore(m messages.Message) error {
 }
 
 func (h *Hookable) Process(m messages.Message) error {
+	if h.graphAwaitingRuntime {
+		return fmt.Errorf("Hookable graph runtime is not wired")
+	}
 	if h.finalizing || h.finalized {
 		return fmt.Errorf("cannot process message after instance finalization started")
 	}
@@ -692,7 +795,7 @@ func (h *Hookable) process(m messages.Message) (finalError error) {
 			h.explicitEncounter = nil
 		}
 	case *messages.Versions:
-		h.SetVersions(msg.Versions, msg.Player)
+		h.SetVersionsMessage(msg, false)
 	case *messages.Realm:
 		if h.realm != nil {
 			if h.realm.RealmName != msg.RealmName {
@@ -907,6 +1010,11 @@ func (h *Hookable) FightDetectionHandler(m messages.Message) (func() error, erro
 		// character has not joined yet, keep transitions on the fight until its
 		// provider is discovered later in the same or a subsequent message.
 		fight := h.currentFight
+		if h.graphRecipe != nil {
+			if err := ValidateHookableCharactersRuntime(h.Characters); err != nil {
+				return nil, err
+			}
+		}
 		h.Characters.SetPhaseTransitionCallback(func(t phases.Transition) {
 			if fight.Phases == nil {
 				fight.StagedPhaseTransitions = append(fight.StagedPhaseTransitions, t)
@@ -914,6 +1022,11 @@ func (h *Hookable) FightDetectionHandler(m messages.Message) (func() error, erro
 			}
 			fight.Phases.transition(t)
 		})
+		if h.graphRecipe != nil {
+			if err := h.bindGraphRuntime(); err != nil {
+				return nil, err
+			}
+		}
 		fight.StagedPhaseTransitions = append(
 			fight.StagedPhaseTransitions,
 			h.Characters.DrainStagedTransitions()...,
@@ -1082,7 +1195,17 @@ func (h *Hookable) finalizeFight() error {
 	}
 
 	// End the fight and clear the phase transition callback.
+	if h.graphRecipe != nil {
+		if err := ValidateHookableCharactersRuntime(h.Characters); err != nil {
+			return err
+		}
+	}
 	h.Characters.SetPhaseTransitionCallback(nil)
+	if h.graphRecipe != nil {
+		if err := h.bindGraphRuntime(); err != nil {
+			return err
+		}
+	}
 	h.currentFight = nil
 	h.completedFights = append(h.completedFights, fight)
 	return nil
@@ -1285,6 +1408,9 @@ func (h *Hookable) drainOpenFight(ctx context.Context) error {
 }
 
 func (h *Hookable) Finalize(ctx context.Context) (*FinalizedInstance, error) {
+	if h.graphAwaitingRuntime {
+		return nil, fmt.Errorf("Hookable graph runtime is not wired")
+	}
 	if h.finalizing || h.finalized {
 		return nil, fmt.Errorf("instance finalization already started")
 	}

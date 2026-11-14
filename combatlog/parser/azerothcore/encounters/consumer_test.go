@@ -29,11 +29,11 @@ func TestServerSideKnownInstanceUsesRegistryRankings(t *testing.T) {
 	logger := slog.Default()
 	state := New(ctx, logger, registry.RegistryForFlavor(logger, flavor))
 
-	state.Zone(messages.Zone{Zone: zone.Zone{
+	require.NoError(t, state.Zone(messages.Zone{Zone: zone.Zone{
 		Name:       "Molten Core",
 		MapID:      409,
 		InstanceID: 123,
-	}})
+	}}))
 
 	require.NotNil(t, state.CurrentInstance)
 	require.Equal(t, "Molten Core", state.CurrentInstance.Name())
@@ -58,11 +58,11 @@ func TestServerSideUnknownInstanceFallsBackToGeneric(t *testing.T) {
 	logger := slog.Default()
 	state := New(ctx, logger, registry.RegistryForFlavor(logger, flavor))
 
-	state.Zone(messages.Zone{Zone: zone.Zone{
+	require.NoError(t, state.Zone(messages.Zone{Zone: zone.Zone{
 		Name:       "Unknown OctoWoW Instance",
 		MapID:      999999,
 		InstanceID: 456,
-	}})
+	}}))
 
 	require.NotNil(t, state.CurrentInstance)
 	require.Equal(t, "Unknown OctoWoW Instance", state.CurrentInstance.Name())

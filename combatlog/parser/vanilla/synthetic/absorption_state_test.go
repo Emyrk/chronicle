@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -15,6 +17,21 @@ import (
 	"github.com/Emyrk/chronicle/internal/stategraph"
 	"github.com/stretchr/testify/require"
 )
+
+func TestAbsorptionWireGraphRuntimePreservesShieldState(t *testing.T) {
+	t.Parallel()
+	shield := &activeShield{spellName: "shield", estRemaining: 42}
+	absorption := &Absorption{activeShields: map[guid.GUID][]*activeShield{2: {shield}}}
+	before, err := absorption.CaptureState(nil)
+	require.NoError(t, err)
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	absorption.WireGraphRuntime(logger)
+	require.Same(t, logger, absorption.logger)
+	require.Same(t, shield, absorption.activeShields[2][0])
+	after, err := absorption.CaptureState(nil)
+	require.NoError(t, err)
+	require.Equal(t, before, after)
+}
 
 type shieldFetcher map[chrondbc.SpellID]*chrondbc.Spell
 

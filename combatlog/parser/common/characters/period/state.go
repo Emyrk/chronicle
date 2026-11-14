@@ -309,6 +309,14 @@ func supportedMessage(m messages.Message) error {
 		if m == nil {
 			return fmt.Errorf("nil timeout reference")
 		}
+	case *messages.UnitCombatEnter:
+		if m == nil {
+			return fmt.Errorf("nil combat enter reference")
+		}
+	case *messages.UnitEvade:
+		if m == nil {
+			return fmt.Errorf("nil evade reference")
+		}
 	case *messages.EncounterBoundary:
 		if m == nil {
 			return fmt.Errorf("nil boundary reference")

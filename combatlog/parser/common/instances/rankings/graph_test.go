@@ -64,9 +64,11 @@ func TestDPSGraphCanonicalDependencies(t *testing.T) {
 	require.NoError(t, RegisterDPSGraphOwner(r))
 	require.NoError(t, unitdb.RegisterGraphOwner(r))
 	require.NoError(t, identifier.RegisterGraphOwner(r, recipe))
+	require.Equal(t, 2, calls, "fresh construction and registration each prepare static configuration once")
+	preparedCalls := calls
 	snapshot, err := r.Capture(&root{tracker, units, idf})
 	require.NoError(t, err)
-	require.Equal(t, 1, calls, "capture must not rebuild static configuration")
+	require.Equal(t, preparedCalls, calls, "capture must not rebuild static configuration")
 	value, err := r.Restore(snapshot)
 	require.NoError(t, err)
 	restored := value.(*root)
@@ -74,7 +76,7 @@ func TestDPSGraphCanonicalDependencies(t *testing.T) {
 	require.Same(t, restored.Identifier, restored.Tracker.identifier)
 	require.NotSame(t, units, restored.Units)
 	require.NotSame(t, idf, restored.Identifier)
-	require.Equal(t, 2, calls, "trusted static identifier is reconstructed once, not once per reference")
+	require.Equal(t, preparedCalls, calls, "restore must use prepared configuration without invoking the factory")
 	require.Equal(t, tracker.damageDone, restored.Tracker.damageDone)
 	require.Equal(t, tracker.results, restored.Tracker.results, "restore does not finalize or process gameplay")
 }

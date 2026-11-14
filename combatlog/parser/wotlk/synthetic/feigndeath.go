@@ -21,6 +21,7 @@ type feignDeath struct {
 	ctx            context.Context
 	spells         gamedb.SpellFetcher
 	classForPlayer func(guid.GUID) types.HeroClasses
+	classOwner     *unitInfo
 	lastDamage     map[guid.GUID]*messages.Damage
 	spell          *chrondbc.Spell
 }

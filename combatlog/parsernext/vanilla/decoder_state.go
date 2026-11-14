@@ -206,3 +206,11 @@ func (s DecoderState) Restore(spells SpellLookup, chronicleVersion string, optio
 	}
 	return d, nil
 }
+
+// WireGraphRuntime attaches fresh read dependencies to a semantically restored
+// decoder. The enclosing pipeline owns the once-only lifecycle guard.
+func (d *Decoder) WireGraphRuntime(spells SpellLookup, options DecoderOptions) {
+	d.spells = spells
+	d.countedSpells = options.CountedSpells
+	d.combatantOptions = options.Combatants
+}

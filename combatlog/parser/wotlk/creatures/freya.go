@@ -25,10 +25,9 @@ func NewFreyaEncounterCharacter(id guid.GUID, all *characters.Characters) (chara
 	c.SetRecentlySlainDuration(time.Second * 30)
 
 	config := freyaDefeatConfig()
-	config.AuraCleanup.NoKnownParticipantsAlive = all.NoKnownParticipantsAlive
 	return &freyaCharacter{
 		Common: c,
-		defeat: characters.NewScriptedDefeatDetector(id, config),
+		defeat: characters.NewScriptedDefeatDetector(id, config).WithParticipantOwner(all),
 	}, true
 }
 

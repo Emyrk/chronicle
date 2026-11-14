@@ -18,6 +18,7 @@ import (
 	parservanilla "github.com/Emyrk/chronicle/combatlog/parser/vanilla"
 	"github.com/Emyrk/chronicle/combatlog/parser/wotlk/synthetic"
 	"github.com/Emyrk/chronicle/combatlog/parsernext/cleusource"
+	"github.com/Emyrk/chronicle/combatlog/parsernext/snapshot"
 	nexttbc "github.com/Emyrk/chronicle/combatlog/parsernext/tbc"
 	nextwotlk "github.com/Emyrk/chronicle/combatlog/parsernext/wotlk"
 	"github.com/Emyrk/chronicle/database"
@@ -32,6 +33,9 @@ type nextSynthetic interface {
 // NextPipeline retains native CLEU decoder and synthetic state across
 // consecutive complete files. Use one serial NextSource at a time.
 type NextPipeline struct {
+	construction      *snapshot.Compatibility
+	completedFile     bool
+	graphPending      bool
 	native            *cleusource.Pipeline
 	synthetics        nextSynthetic
 	gear              gamedb.GearResolver
@@ -52,6 +56,10 @@ type NextSource struct {
 // selected by explicit parsectx metadata. It owns no reader, finalizer, consumer,
 // publication, or database lifecycle.
 func NewNextPipeline(ctx context.Context, logger *slog.Logger, gameDB gamedb.GameDB, gear gamedb.GearResolver, reg *registry.Registry) (*NextPipeline, error) {
+	identity, identityErr := nextConstructionIdentity(ctx)
+	if identityErr != nil {
+		return nil, identityErr
+	}
 	if gameDB == nil {
 		return nil, fmt.Errorf("wowDB cannot be nil")
 	}
@@ -80,10 +88,11 @@ func NewNextPipeline(ctx context.Context, logger *slog.Logger, gameDB gamedb.Gam
 	}
 
 	return &NextPipeline{
-		native:     native,
-		synthetics: synthetic.New(ctx, logger, gameDB, reg, pipelineNames{pipeline: native}),
-		gear:       gear,
-		boundary:   true,
+		native:       native,
+		construction: identity,
+		synthetics:   synthetic.New(ctx, logger, gameDB, reg, pipelineNames{pipeline: native}),
+		gear:         gear,
+		boundary:     true,
 		metrics: parservanilla.Metrics{
 			MatchingTime:   make(map[string]time.Duration),
 			UnmatchingTime: make(map[string]time.Duration),
@@ -104,6 +113,9 @@ func NewNext(ctx context.Context, logger *slog.Logger, reader io.Reader, gameDB 
 // OpenFile opens the next complete file. Decoder, clock, companion, name,
 // synthetic, metrics, and diagnostic state remain owned by the pipeline.
 func (p *NextPipeline) OpenFile(reader io.Reader) (*NextSource, error) {
+	if p.graphPending {
+		return nil, fmt.Errorf("CLEU graph runtime is unwired")
+	}
 	if p.fatal != nil {
 		return nil, fmt.Errorf("native CLEU pipeline cannot be reused after fatal error: %w", p.fatal)
 	}
@@ -135,6 +147,7 @@ func (s *NextSource) Advance(ctx context.Context) ([]messages.Message, error) {
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			p.boundary = true
+			p.completedFile = true
 		} else if parseerrors.IsFatalError(err) {
 			p.fatal = err
 		}

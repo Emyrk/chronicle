@@ -44,9 +44,10 @@ type ScriptedDefeatConfig struct {
 // Character so encounters can compose it with Common, RoomMechanic, or another
 // activity implementation and decide how a detected defeat ends that activity.
 type ScriptedDefeatDetector struct {
-	id     guid.GUID
-	config ScriptedDefeatConfig
-	active bool
+	id               guid.GUID
+	config           ScriptedDefeatConfig
+	participantOwner *Characters
+	active           bool
 
 	lastIncomingDamage time.Time
 	pendingEvade       time.Time

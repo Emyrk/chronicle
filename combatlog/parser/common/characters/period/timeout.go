@@ -40,7 +40,8 @@ type InactivityTimer struct {
 type InactivityPeriod struct {
 	*WorkingPeriod[InactivityTimer]
 
-	timeoutAsDeathIf func() bool
+	timeoutAsDeathIf    func() bool
+	trustedTimeoutOwner TrustedTimeoutOwner
 }
 
 // NewInactivityPeriod creates a new inactivity-based period with the given
@@ -59,6 +60,7 @@ func (p *InactivityPeriod) WithTimeoutAsDeath(set bool) *InactivityPeriod {
 
 func (p *InactivityPeriod) WithTimeoutAsDeathIf(condition func() bool) *InactivityPeriod {
 	p.timeoutAsDeathIf = condition
+	p.trustedTimeoutOwner = nil
 	return p
 }
 

@@ -2,6 +2,7 @@ package synthetic
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -24,6 +25,7 @@ func WithAuraCastCorrelation() Option {
 // Synthetic processes the raw combat log events, and occasionally will insert
 // or mutate synthetic events to help downstream consumers.
 type Synthetic struct {
+	graphPending bool
 	logger       *slog.Logger
 	flavor       database.WoWFlavor
 	slain        *SlainDetective
@@ -90,6 +92,9 @@ func (s *Synthetic) DetailedTimes() map[string]time.Duration {
 }
 
 func (s *Synthetic) ProcessMessages(msgs []messages.Message) ([]messages.Message, error) {
+	if s.graphPending {
+		return nil, fmt.Errorf("synthetic runtime is unwired")
+	}
 	if s.auraOwner != nil {
 		now := time.Now()
 		s.auraOwner.ProcessMessages(msgs)

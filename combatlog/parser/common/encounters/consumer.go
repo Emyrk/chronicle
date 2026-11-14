@@ -13,12 +13,12 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/raidgroups"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/vehicles"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/zoner"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/realm"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb"
 )
 
@@ -47,9 +47,15 @@ func (t *timingAccumulator) Snapshot() map[string]time.Duration {
 type InstanceResolver func(verbose bool, z zone.Zone, db *unitdb.Units) *instances.Hookable
 
 type State struct {
-	ctx    context.Context
-	logger *slog.Logger
-	spells gamedb.SpellFetcher
+	graphProcessing      bool
+	graphFailed          bool
+	graphRecipe          *GraphRecipe
+	graphAwaitingRuntime bool
+	graphWiringAttempted bool
+	finalized            bool
+	ctx                  context.Context
+	logger               *slog.Logger
+	spells               gamedb.SpellFetcher
 
 	// CurrentZone is the zone the player is currently in.
 	CurrentZone     *zoner.Location
@@ -109,7 +115,15 @@ func NewWithInstanceResolver(ctx context.Context, logger *slog.Logger, res Insta
 	return s
 }
 
-func New(ctx context.Context, logger *slog.Logger, reg *registry.Registry) *State {
+// InstanceRegistry is the narrow production registry capability used by State.
+// Keeping the interface here also lets registry prepare portable State recipes
+// without introducing a package cycle.
+type InstanceRegistry interface {
+	Flavor() database.WoWFlavor
+	GetInstance(context.Context, bool, zone.Zone, *unitdb.Units, database.WoWFlavor) *instances.Hookable
+}
+
+func New(ctx context.Context, logger *slog.Logger, reg InstanceRegistry) *State {
 	return NewWithInstanceResolver(ctx, logger, func(verbose bool, z zone.Zone, db *unitdb.Units) *instances.Hookable {
 		return reg.GetInstance(ctx, verbose, z, db, reg.Flavor())
 	})
@@ -118,11 +132,29 @@ func New(ctx context.Context, logger *slog.Logger, reg *registry.Registry) *Stat
 // SetSpellFetcher configures dataset-scoped spell resolution for UNIT_INFO aura
 // snapshot reconciliation.
 func (s *State) SetSpellFetcher(spells gamedb.SpellFetcher) {
+	if s.graphRecipe != nil {
+		s.graphRecipe = nil
+	} // explicit runtime mutation invalidates graph provenance
 	s.spells = spells
 }
 
 // nolint: staticcheck
-func (s *State) Process(m messages.Message) error {
+func (s *State) Process(m messages.Message) (processErr error) {
+	if s.graphAwaitingRuntime || s.finalized {
+		return fmt.Errorf("encounter state is unwired or finalized")
+	}
+	if s.graphRecipe != nil {
+		if s.graphProcessing || s.graphFailed {
+			return fmt.Errorf("encounter graph processing is failed or reentrant")
+		}
+		s.graphProcessing = true
+		defer func() {
+			s.graphProcessing = false
+			if processErr != nil {
+				s.graphFailed = true
+			}
+		}()
+	}
 	totalStart := time.Now()
 	defer func() {
 		s.timings.Add("encounter_state.total", time.Since(totalStart))
@@ -138,7 +170,9 @@ func (s *State) Process(m messages.Message) error {
 	if s.CurrentInstance != nil && s.CurrentInstance.ShouldSplitDerived(m) {
 		z := s.CurrentInstance.CurrentZone
 		z.Seen = m.Date()
-		s.createInstance(z)
+		if err := s.createInstance(z); err != nil {
+			return err
+		}
 	}
 
 	// Capture whether this message arrived during an encounter before processing
@@ -156,12 +190,14 @@ func (s *State) Process(m messages.Message) error {
 		// discovered without replacing an instance's own header. New instances
 		// receive CurrentVersions in matchOrCreateInstance.
 		for _, instance := range s.Instances {
-			instance.SetVersionsIfUnset(typed.Versions, typed.Player)
+			instance.SetVersionsMessage(typed, true)
 		}
 	case *messages.Zone:
 		if s.instanceResolver != nil {
 			zoneStart := time.Now()
-			s.Zone(*typed)
+			if err := s.Zone(*typed); err != nil {
+				return err
+			}
 			s.timings.Add("encounter_state.zone", time.Since(zoneStart))
 		}
 	case *messages.EncounterBoundary:
@@ -258,6 +294,10 @@ func (s *State) InstanceProcessDuration(instance *instances.Hookable) time.Durat
 // Finalize performs parse-level cleanup. Call once after all messages have been
 // processed and all instances have been finalized.
 func (s *State) Finalize() {
+	if s.graphAwaitingRuntime || s.finalized {
+		return
+	}
+	s.finalized = true
 	s.Auras.Finalize()
 }
 
@@ -271,7 +311,10 @@ func (s *State) DetailedTimes() map[string]time.Duration {
 	return times
 }
 
-func (s *State) Zone(z messages.Zone) {
+func (s *State) Zone(z messages.Zone) error {
+	if s.graphAwaitingRuntime || s.finalized {
+		return fmt.Errorf("encounter state is unwired or finalized")
+	}
 	result := s.CurrentZone.Process(z)
 	switch result {
 	case zone.NoChange:
@@ -283,7 +326,7 @@ func (s *State) Zone(z messages.Zone) {
 		// Concatenated logs can re-enter the same zone with the same instance ID.
 		// Split after the prior run has been inactive for its configured gap.
 		if s.CurrentInstance == nil || !s.CurrentInstance.ShouldStartNewRun(z.Seen) {
-			return
+			return nil
 		}
 	case zone.InfoUpdated:
 		// Late-arriving difficulty info: propagate to current instance without
@@ -296,25 +339,24 @@ func (s *State) Zone(z messages.Zone) {
 				slog.Int("max_players", s.CurrentZone.MaxPlayers),
 			)
 		}
-		return
+		return nil
 	case zone.DifficultyChanged:
 		// Difficulty changed within the same zone: match only an existing
 		// instance that has the same difficulty, otherwise create a new one.
 		// This lets 10N → 25H → 10N reuse the original 10N hookable.
-		s.matchOrCreateInstance(z)
-		return
+		return s.matchOrCreateInstance(z)
 	case zone.ZoneChanged:
 		// Different zone entirely: match by name/mapID and known difficulty.
 	}
 
-	s.matchOrCreateInstance(z)
+	return s.matchOrCreateInstance(z)
 }
 
 // matchOrCreateInstance looks for an existing hookable that matches z. Known
 // difficulty metadata must match even when an intervening zone caused
 // Location.Process to report ZoneChanged instead of DifficultyChanged. If no
 // match is found, a new hookable is created via the instance resolver.
-func (s *State) matchOrCreateInstance(z messages.Zone) {
+func (s *State) matchOrCreateInstance(z messages.Zone) error {
 	matched := false
 	for _, inst := range s.Instances {
 		if !inst.MatchesZone(z.Zone) {
@@ -345,7 +387,9 @@ func (s *State) matchOrCreateInstance(z messages.Zone) {
 	}
 
 	if !matched {
-		s.createInstance(z.Zone)
+		if err := s.createInstance(z.Zone); err != nil {
+			return err
+		}
 	}
 
 	s.logger.Info(fmt.Sprintf("Zone changed to %q (instance %d)", z.Name, z.InstanceID),
@@ -355,6 +399,7 @@ func (s *State) matchOrCreateInstance(z messages.Zone) {
 		slog.Uint64("exited_instance_id", uint64(s.CurrentZone.InstanceID)),
 		slog.Time("seen", z.Seen),
 	)
+	return nil
 }
 
 const syntheticZoneMetadataWindow = time.Second
@@ -379,29 +424,31 @@ func shouldAdoptUnmatchedInstanceMetadata(current *instances.Hookable, selectedA
 	return current.CurrentZone.InstanceType == "" || z.InstanceType == "" || current.CurrentZone.InstanceType == z.InstanceType
 }
 
-func (s *State) createInstance(z zone.Zone) {
+func (s *State) createInstance(z zone.Zone) error {
 	instance := s.instanceResolver(s.verbose, z, s.Units)
 	if instance == nil {
 		if shouldAdoptUnmatchedInstanceMetadata(s.CurrentInstance, s.currentInstanceSelectedAt, z) {
 			s.CurrentInstance.UpdateZoneDifficulty(z)
-			return
+			return nil
 		}
 		s.CurrentInstance = nil
 		s.currentInstanceSelectedAt = time.Time{}
-		return
+		return nil
 	}
-	s.CurrentInstance = instance
-	s.currentInstanceSelectedAt = z.Seen
 
-	s.CurrentInstance.SetRealm(s.CurrentRealm)
+	instance.SetRealm(s.CurrentRealm)
 	if s.CurrentVersions != nil {
-		s.CurrentInstance.SetVersions(s.CurrentVersions.Versions, s.CurrentVersions.Player)
+		instance.SetVersionsMessage(s.CurrentVersions, false)
 	}
 	// These trackers are parse-wide and intentionally shared across instance segments.
-	s.CurrentInstance.AttachVehicleTracker(s.Vehicles)
-	s.CurrentInstance.AttachAuraProjection(s.Auras)
-	s.CurrentInstance.AttachConsumeCollector(s.Auras, s.ConsumeTracker)
-	s.CurrentInstance.AttachRaidGroupTracker(s.RaidGroups)
+	instance.AttachVehicleTracker(s.Vehicles)
+	if err := instance.AttachAuraAndConsume(s.Auras, s.ConsumeTracker); err != nil {
+		return fmt.Errorf("attach aura/consume adapters: %w", err)
+	}
+	instance.AttachRaidGroupTracker(s.RaidGroups)
+	s.CurrentInstance = instance
+	s.currentInstanceSelectedAt = z.Seen
 	s.logger.Info("Matched new instance", slog.String("name", s.CurrentInstance.Name()))
 	s.Instances = append(s.Instances, s.CurrentInstance)
+	return nil
 }

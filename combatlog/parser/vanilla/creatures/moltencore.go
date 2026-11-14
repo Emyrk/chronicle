@@ -57,7 +57,7 @@ func NewSonOfTheFlameCharacter(id guid.GUID, all *characters.Characters) (charac
 
 	return &sonOfTheFlameCharacter{
 		Common: characters.NewCommonCharacter(id, all).
-			WithTimeoutAsDeathIf(characters.IfEntryAlive(ragnarosEntry)),
+			WithTimeoutAsDeathWhileEntryAlive(ragnarosEntry),
 		all: all,
 	}, true
 }
@@ -156,7 +156,7 @@ func NewCoreRager(id guid.GUID, all *characters.Characters) (characters.Characte
 	}
 
 	c := characters.NewCommonCharacter(id, all).
-		WithTimeoutAsDeathIf(characters.IfEntryAlive(11988))
+		WithTimeoutAsDeathWhileEntryAlive(11988)
 	return &coreRager{c}, true
 }
 

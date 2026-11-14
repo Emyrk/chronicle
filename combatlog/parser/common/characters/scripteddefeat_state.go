@@ -34,7 +34,7 @@ func (d *ScriptedDefeatDetector) CaptureState() (ScriptedDefeatDetectorState, er
 	}
 	c := d.config
 	return ScriptedDefeatDetectorState{scriptedDefeatValue{
-		ID: d.id, PositiveOverkill: c.PositiveOverkill, Evade: c.Evade, EvadeWindow: c.EvadeConfirmationWindow, DistinctAuras: c.AuraCleanup.DistinctAuras, BurstWindow: c.AuraCleanup.BurstWindow, DamageWindow: c.AuraCleanup.DamageWindow, HasParticipantCallback: c.AuraCleanup.NoKnownParticipantsAlive != nil,
+		ID: d.id, PositiveOverkill: c.PositiveOverkill, Evade: c.Evade, EvadeWindow: c.EvadeConfirmationWindow, DistinctAuras: c.AuraCleanup.DistinctAuras, BurstWindow: c.AuraCleanup.BurstWindow, DamageWindow: c.AuraCleanup.DamageWindow, HasParticipantCallback: c.AuraCleanup.NoKnownParticipantsAlive != nil || d.participantOwner != nil,
 		Active: d.active, LastIncomingDamage: d.lastIncomingDamage, PendingEvade: d.pendingEvade, CleanupBurstStart: d.cleanupBurstStart, CleanupAuras: maps.Clone(d.cleanupAuras),
 	}}, nil
 }

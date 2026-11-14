@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parsernext/snapshot"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/Emyrk/chronicle/internal/stategraph/ownergraph"
 )
@@ -12,7 +13,12 @@ import (
 const projectionGraphVersion uint32 = 1
 
 type GraphOptions struct {
+	// Compatibility binds caller-supplied dependencies to authoritative session identity.
+	Compatibility     snapshot.Compatibility
 	DurationModifiers *chrondbc.DurationModifierSet
+	// ObserverTracking authorizes this tracker's registration-time observer list for capture only.
+	// Restore leaves observers empty for explicit aggregate runtime wiring.
+	ObserverTracking *Tracking
 }
 
 type projectionGraphState struct {
@@ -22,24 +28,54 @@ type projectionGraphState struct {
 }
 
 func RegisterGraphOwners(r *ownergraph.Registry, options GraphOptions) error {
-	if options.DurationModifiers != nil {
-		return fmt.Errorf("aura graph snapshots do not support non-default duration modifiers without session compatibility metadata")
+	bound := options.Compatibility != (snapshot.Compatibility{})
+	if bound {
+		if err := options.Compatibility.Validate(); err != nil {
+			return err
+		}
+	}
+	if options.DurationModifiers != nil && !bound {
+		return fmt.Errorf("configured auras dependency requires session compatibility metadata")
+	}
+	observerCount := 0
+	if options.ObserverTracking != nil {
+		observerCount = len(options.ObserverTracking.observers)
 	}
 	if err := ownergraph.Register(r, ownergraph.Codec[Tracking]{
-		Type: TrackingStateType, Version: TrackingStateVersion,
+		Type: TrackingStateType, Version: 2,
 		Init: func() *Tracking { return new(Tracking) },
 		Capture: func(t *Tracking, c *ownergraph.Capture) ([]byte, error) {
-			if t.mods != nil {
-				return nil, fmt.Errorf("aura graph snapshots do not support non-default duration modifiers without session compatibility metadata")
+			if t.mods != nil && !bound {
+				return nil, fmt.Errorf("configured auras dependency requires session compatibility metadata")
+			}
+			if t.mods != options.DurationModifiers {
+				return nil, fmt.Errorf("auras capture dependency differs from trusted registration")
+			}
+			if len(t.observers) != 0 && (t != options.ObserverTracking || len(t.observers) != observerCount) {
+				return nil, fmt.Errorf("aura observers require trusted capture binding")
 			}
 			state, err := t.CaptureState(ownergraph.Reference[*chrondbc.Spell](c))
 			if err != nil {
 				return nil, err
 			}
-			return state.Encode()
+			data, err := state.Encode()
+			if err != nil {
+				return nil, err
+			}
+			return json.Marshal(configuredGraphState{Compatibility: options.Compatibility, Configured: options.DurationModifiers != nil, StateVersion: TrackingStateVersion, State: data})
 		},
 		Restore: func(t *Tracking, version uint32, payload []byte, c *ownergraph.Restore) error {
-			state, err := DecodeTrackingState(version, payload)
+			if version != 2 {
+				return fmt.Errorf("unsupported configured auras graph version %d", version)
+			}
+			var value configuredGraphState
+			if err := decodeConfiguredGraphState(payload, &value); err != nil {
+				return err
+			}
+			if value.Compatibility != options.Compatibility || value.Configured != (options.DurationModifiers != nil) {
+				return fmt.Errorf("incompatible auras graph dependency identity")
+			}
+			state, err := DecodeTrackingState(value.StateVersion, value.State)
 			if err != nil {
 				return err
 			}
@@ -137,3 +173,24 @@ func (p *Projection) WireGraphRuntime(emit func(*messages.Aura)) {
 	p.SetEmit(emit)
 	p.AttachObserver()
 }
+
+// configuredGraphState keeps trusted construction identity outside the leaf codec.
+type configuredGraphState struct {
+	Compatibility snapshot.Compatibility `json:"compatibility"`
+	Configured    bool                   `json:"configured"`
+	StateVersion  uint32                 `json:"state_version"`
+	State         json.RawMessage        `json:"state"`
+}
+
+func decodeConfiguredGraphState(b []byte, value *configuredGraphState) error {
+	if _, err := requiredFields(b, nil, "compatibility", "configured", "state_version", "state"); err != nil {
+		return err
+	}
+	return decodeJSON(b, value)
+}
+
+// GraphObserverCount reports observers without exposing or invoking callbacks.
+func (t *Tracking) GraphObserverCount() int { return len(t.observers) }
+
+// GraphDurationModifiers returns the configured dependency for aggregate validation.
+func (t *Tracking) GraphDurationModifiers() *chrondbc.DurationModifierSet { return t.mods }

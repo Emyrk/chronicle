@@ -44,9 +44,12 @@ type SetHook interface {
 }
 
 type Characters struct {
-	snapshotRecipe     string
-	snapshotFactoryIDs []string
-	restoreRuntime     *charactersRuntimeShape
+	snapshotRecipe       string
+	snapshotFactoryIDs   []string
+	restoreRuntime       *charactersRuntimeShape
+	graphRuntimeOwner    any
+	runtimeRevision      uint64
+	graphRuntimeRevision uint64
 
 	All *characterset.Set[Character]
 	// ByEntry only works on creatures
@@ -91,6 +94,7 @@ func NewCharacters(db *unitdb.Units, factories []CharacterFactory, id *identifie
 
 // SetNoKnownParticipantsAliveProvider installs the current fight's player-life signal.
 func (c *Characters) SetNoKnownParticipantsAliveProvider(provider func() bool) {
+	c.runtimeRevision++
 	c.noKnownParticipantsAlive = provider
 }
 
@@ -100,6 +104,7 @@ func (c *Characters) NoKnownParticipantsAlive() bool {
 }
 
 func (c *Characters) RegisterHook(hook SetHook) {
+	c.runtimeRevision++
 	c.hooks = append(c.hooks, hook)
 }
 
@@ -107,6 +112,7 @@ func (c *Characters) RegisterHook(hook SetHook) {
 // use to emit phase transitions. Hookable sets this so transitions are recorded
 // on the active ongoingFight.
 func (c *Characters) SetPhaseTransitionCallback(cb phases.TransitionCallback) {
+	c.runtimeRevision++
 	c.phaseTransitionCb = cb
 }
 

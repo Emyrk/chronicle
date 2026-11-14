@@ -106,16 +106,16 @@ func (pc *PeriodCollector[M]) Timeout(reason string, now time.Time) {
 
 func (pc *PeriodCollector[M]) String() string {
 	var str strings.Builder
-	str.WriteString(fmt.Sprintf("%d Periods", len(pc.History)))
-	str.WriteString(fmt.Sprintf(", Active=%t", pc.IsActive()))
+	fmt.Fprintf(&str, "%d Periods", len(pc.History))
+	fmt.Fprintf(&str, ", Active=%t", pc.IsActive())
 	if prd, ok := pc.Current(); ok && prd.IsActive() {
 		tmp := prd.Get().LastActive
-		str.WriteString(fmt.Sprintf(", LatAct=%s", tmp.String()))
+		fmt.Fprintf(&str, ", LatAct=%s", tmp.String())
 	}
 
 	str.WriteString("\n")
 	for _, p := range pc.History {
-		str.WriteString(fmt.Sprintf("  %s\n", p.String()))
+		fmt.Fprintf(&str, "  %s\n", p.String())
 	}
 
 	return str.String()

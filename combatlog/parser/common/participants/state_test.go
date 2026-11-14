@@ -3,6 +3,8 @@ package participants
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -158,4 +160,47 @@ func TestTrackerStateCaptureRejectsIncompleteTracker(t *testing.T) {
 	tracker = &Tracker{}
 	_, err = tracker.CaptureState()
 	require.Error(t, err)
+}
+
+func TestTrackerStateRetainsActiveCreatures(t *testing.T) {
+	t.Parallel()
+	tracker := New()
+	creature := guid.GUID(0xF130000064000001)
+	tracker.Active[creature] = true // ActivityChange records all active characters.
+	state, err := tracker.CaptureState()
+	require.NoError(t, err)
+	data, err := state.Encode()
+	require.NoError(t, err)
+	path := filepath.Join(t.TempDir(), "participants.json")
+	require.NoError(t, os.WriteFile(path, data, 0600))
+	data, err = os.ReadFile(path)
+	require.NoError(t, err)
+	restoredState, err := DecodeTrackerState(TrackerStateVersion, data)
+	require.NoError(t, err)
+	restored, err := restoredState.Restore()
+	require.NoError(t, err)
+	require.True(t, restored.Active[creature])
+	require.Empty(t, restored.known)
+	require.Empty(t, restored.dead)
+}
+
+func TestTrackerStateRejectsInvalidParticipantIDs(t *testing.T) {
+	t.Parallel()
+	creature := guid.GUID(0xF130000064000001)
+	for _, kind := range []string{"zero active", "creature known", "creature dead"} {
+		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
+			tracker := New()
+			switch kind {
+			case "zero active":
+				tracker.Active[0] = true
+			case "creature known":
+				tracker.known[creature] = struct{}{}
+			case "creature dead":
+				tracker.dead[creature] = struct{}{}
+			}
+			_, err := tracker.CaptureState()
+			require.Error(t, err)
+		})
+	}
 }

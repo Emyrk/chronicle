@@ -25,7 +25,8 @@ import (
 //
 // Helpful for programmatically seeing which mobs exist in which zones.
 type Creatures struct {
-	logger *slog.Logger
+	logger       *slog.Logger
+	graphPending bool
 
 	// CurrentZone is the zone the player is currently in.
 	CurrentZone  zone.Zone
@@ -55,6 +56,9 @@ func New(logger *slog.Logger) *Creatures {
 }
 
 func (s *Creatures) Consume(ctx context.Context, p consumers.Advancer) error {
+	if s.graphPending {
+		return fmt.Errorf("identity graph runtime is not wired")
+	}
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -102,6 +106,9 @@ func (s *Creatures) UnitCastedSpell(id guid.GUID, spell *chrondbc.Spell) {
 
 // nolint: staticcheck
 func (s *Creatures) Process(m messages.Message) error {
+	if s.graphPending {
+		return fmt.Errorf("identity graph runtime is not wired")
+	}
 	switch typed := m.(type) {
 	case *messages.Zone:
 		s.Zone(*typed)

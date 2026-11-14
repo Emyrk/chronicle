@@ -53,6 +53,8 @@ type Pipeline struct {
 	maxRegression time.Duration
 	excluded      map[string]struct{}
 	boundary      bool
+	cleanEOF      bool
+	wired         bool
 	activeSource  *Source
 	lineDuration  time.Duration
 	decodeContext context.Context
@@ -86,19 +88,9 @@ func New(ctx context.Context, logger *slog.Logger, db gamedb.SpellFetcher, facto
 		excluded:      make(map[string]struct{}),
 		boundary:      true,
 	}
-	hooks := cleu.Hooks{
-		LookupSpell:     pipeline.lookupSpell,
-		DecodeCompanion: pipeline.decodeCompanion,
-		RecordGUIDName:  pipeline.recordGUIDName,
-		WarnUnparsed: func(raw string) {
-			pipeline.logger.Warn("Unparsed line", slog.String("line", raw))
-		},
-	}
-	decoder, err := factory(cleu.Context{Format: pipeline.format, Flavor: pipeline.flavor}, hooks)
-	if err != nil {
+	if err := pipeline.WireGraphRuntime(ctx, logger, db, factory); err != nil {
 		return nil, err
 	}
-	pipeline.decoder = decoder
 	return pipeline, nil
 }
 
@@ -188,9 +180,13 @@ func (p *Pipeline) normalizeTimestamp(ts time.Time) time.Time {
 type Source struct {
 	scanner  *bufio.Scanner
 	pipeline *Pipeline
+	fatal    error
 }
 
 func (p *Pipeline) OpenFile(reader io.Reader, maxLineBytes int) (*Source, error) {
+	if !p.wired {
+		return nil, fmt.Errorf("pipeline runtime is not wired")
+	}
 	if !p.boundary {
 		return nil, fmt.Errorf("previous file has not completed successfully")
 	}
@@ -204,6 +200,7 @@ func (p *Pipeline) OpenFile(reader io.Reader, maxLineBytes int) (*Source, error)
 	scanner.Buffer(make([]byte, min(maxLineBytes, 64*1024)), maxLineBytes)
 	source := &Source{scanner: scanner, pipeline: p}
 	p.boundary = false
+	p.cleanEOF = false
 	p.activeSource = source
 	return source, nil
 }
@@ -212,6 +209,9 @@ func (s *Source) Advance(ctx context.Context) ([]messages.Message, error) {
 	if s.pipeline.activeSource != s {
 		return nil, fmt.Errorf("source is no longer the active file")
 	}
+	if s.fatal != nil {
+		return nil, s.fatal
+	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -219,9 +219,11 @@ func (s *Source) Advance(ctx context.Context) ([]messages.Message, error) {
 	defer func() { s.pipeline.lineDuration += time.Since(started) }()
 	if !s.scanner.Scan() {
 		if err := s.scanner.Err(); err != nil {
-			return nil, parseerrors.AsFatalError(err)
+			s.fatal = parseerrors.AsFatalError(err)
+			return nil, s.fatal
 		}
 		s.pipeline.boundary = true
+		s.pipeline.cleanEOF = true
 		return nil, io.EOF
 	}
 	raw := s.scanner.Text()
@@ -244,7 +246,8 @@ func (s *Source) Advance(ctx context.Context) ([]messages.Message, error) {
 	excluded := false
 	if _, excluded = s.pipeline.excluded[event]; !excluded && !s.pipeline.lastDate.IsZero() && timestamp.Before(s.pipeline.lastDate.Add(-s.pipeline.maxRegression)) {
 		difference := timestamp.Sub(s.pipeline.lastDate)
-		return nil, parseerrors.AsFatalError(fmt.Errorf("log dates went backwards by %s: latest %v, current %v", difference, s.pipeline.lastDate, timestamp))
+		s.fatal = parseerrors.AsFatalError(fmt.Errorf("log dates went backwards by %s: latest %v, current %v", difference, s.pipeline.lastDate, timestamp))
+		return nil, s.fatal
 	}
 
 	// Legacy advances the watermark before dispatch, including malformed events.
@@ -260,6 +263,9 @@ func (s *Source) Advance(ctx context.Context) ([]messages.Message, error) {
 		err = cursor.Error()
 	}
 	if err != nil {
+		if parseerrors.IsFatalError(err) {
+			s.fatal = err
+		}
 		return nil, err
 	}
 	return decoded, nil

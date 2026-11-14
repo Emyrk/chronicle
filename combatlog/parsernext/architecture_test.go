@@ -42,7 +42,7 @@ func TestProductionDependencyDirection(t *testing.T) {
 				continue
 			}
 			if imported == "github.com/Emyrk/chronicle/database" {
-				require.Contains(t, []string{"file.go", "vanilla/profile.go", "tbc/profile.go", "wotlk/profile.go", "forever/profile.go", "formats/modern/normalizer.go", "formats/cleu/decoder.go", "tbc/decoder.go", "wotlk/decoder.go", "azerothcore/decoder.go", "formats/modern/handlers.go", "formats/modern/decoder.go", "wotlk/source.go", "cleusource/source.go"}, filepath.ToSlash(path))
+				require.Contains(t, []string{"file.go", "vanilla/profile.go", "tbc/profile.go", "wotlk/profile.go", "forever/profile.go", "formats/modern/normalizer.go", "formats/cleu/decoder.go", "tbc/decoder.go", "wotlk/decoder.go", "azerothcore/decoder.go", "azerothcore/state.go", "formats/modern/handlers.go", "formats/modern/decoder.go", "wotlk/source.go", "cleusource/source.go", "cleusource/state.go", "formats/modern/state.go"}, filepath.ToSlash(path))
 				require.Nil(t, spec.Name, "canonical database import only, no aliases or dot imports")
 				ast.Inspect(file, func(node ast.Node) bool {
 					selector, ok := node.(*ast.SelectorExpr)
@@ -83,12 +83,21 @@ func TestProductionDependencyDirection(t *testing.T) {
 				}
 				continue
 			}
+			if imported == "github.com/Emyrk/chronicle/internal/stategraph/ownergraph" {
+				require.Equal(t, "vanilla/spell_graph.go", filepath.ToSlash(path), "only the prepared spell codec composes typed owners")
+				continue
+			}
 			require.True(t, strings.HasPrefix(imported, prefix), "%s imports outside parsernext: %s", path, imported)
 			dependency := strings.TrimPrefix(imported, prefix)
 			switch owner {
 			case ".":
 				require.Contains(t, []string{"common", "vanilla", "tbc", "wotlk", "forever", "snapshot"}, dependency)
 			case "vanilla":
+				if dependency == "snapshot" {
+					// Prepared spell owners use only the compatibility value contract.
+					require.Equal(t, "vanilla/spell_graph.go", filepath.ToSlash(path))
+					continue
+				}
 				require.Contains(t, []string{"common", "common/units", "common/critters", "formats/ccv2"}, dependency, "%s -> %s", owner, dependency)
 			case "tbc", "wotlk", "azerothcore":
 				require.Contains(t, []string{"common", "formats/cleu", "cleusource"}, dependency, "%s -> %s", owner, dependency)
@@ -98,7 +107,11 @@ func TestProductionDependencyDirection(t *testing.T) {
 				require.Contains(t, []string{"common"}, dependency, "%s -> %s", owner, dependency)
 			case "formats/modern":
 				require.Equal(t, "formats/cleu", dependency)
-			case "common", "common/units", "common/critters", "formats/ccv2", "formats/cleu", "formats/cleu/companion":
+			case "formats/cleu/companion":
+				// Companion state reuses only the strict CLEU value decoder.
+				require.Equal(t, "formats/cleu/companion/state.go", filepath.ToSlash(path))
+				require.Equal(t, "formats/cleu", dependency)
+			case "common", "common/units", "common/critters", "formats/ccv2", "formats/cleu":
 				t.Errorf("leaf package %s imports %s", owner, imported)
 			case "snapshot":
 				require.Contains(t, []string{"common", "vanilla", "tbc", "wotlk", "forever"}, dependency)

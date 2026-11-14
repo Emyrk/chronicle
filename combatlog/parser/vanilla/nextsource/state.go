@@ -92,7 +92,7 @@ type pipelineValue struct {
 // External owners are ordered pending-buffer canonical Damage paths. Their
 // aliases stay shared with Slain. Caller snapshots the external owners separately.
 func (p *Pipeline) CaptureState(identity Compatibility, owners []next.DamageOwner) (State, error) {
-	if !p.boundary {
+	if !p.boundary || p.failed || p.graphPending || !p.completedFile || p.activeSource != nil {
 		return State{}, fmt.Errorf("pipeline is not at a successful complete-file boundary")
 	}
 	if err := identity.validate(); err != nil {
@@ -176,9 +176,14 @@ func (p *Pipeline) CaptureState(identity Compatibility, owners []next.DamageOwne
 	return State{Version: StateVersion, Compatibility: identity, Graph: combined, Values: values}, nil
 }
 
-// RestoreState checks the context once, restores all candidate owners privately,
-// then returns the new pipeline and canonical Damage table for external buffers.
-// Caller must pass the same effective flavor-overridden non-counting GameDB.
+// RestoreState is the legacy source-only, DB-backed convenience restore, not a
+// semantic session restore. It checks compatibility, privately constructs owners,
+// immediately wires runtime dependencies, and returns a ready-to-process pipeline
+// and canonical Damage table for external buffers. No explicit wiring is needed.
+// Construction and retained spell derivation may query db. Caller must pass the
+// same effective flavor-overridden non-counting GameDB.
+// Full session checkpoints must instead use the prepared ownergraph path via
+// RegisterGraphOwner, followed by explicit WireGraphRuntime after validation.
 // Diagnostic wall-clock timings restart; missed-spell counts are retained.
 func RestoreState(ctx context.Context, logger *slog.Logger, db gamedb.GameDB, gear gamedb.GearResolver, expected Compatibility, state State) (*Pipeline, map[stategraph.Path]*messages.Damage, error) {
 	if logger == nil {
@@ -294,6 +299,7 @@ func RestoreState(ctx context.Context, logger *slog.Logger, db gamedb.GameDB, ge
 	}
 	bound := expected
 	candidate.identity = &bound
+	candidate.completedFile = true
 	candidate.decoder = restoredDecoder
 	candidate.synthetics = synthetics
 	if pv.Missed != nil {

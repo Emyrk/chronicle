@@ -33,6 +33,12 @@ type shieldValue struct {
 	Exhausted  bool         `json:"exhausted"`
 }
 
+// WireGraphRuntime binds runtime-only logging without processing messages or
+// changing restored shield state.
+func (a *Absorption) WireGraphRuntime(logger *slog.Logger) {
+	a.logger = logger
+}
+
 func (a *Absorption) CaptureState(capture func(*chrondbc.Spell) (string, error)) (AbsorptionState, error) {
 	s := AbsorptionState{}
 	if a.activeShields == nil {

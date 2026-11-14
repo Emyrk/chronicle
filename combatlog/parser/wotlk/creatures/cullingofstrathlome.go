@@ -16,11 +16,10 @@ func NewMalGanis(id guid.GUID, all *characters.Characters) (characters.Character
 	config := characters.ScriptedDefeatConfig{
 		PositiveOverkill: true,
 		AuraCleanup: characters.AuraCleanupDefeatConfig{
-			DistinctAuras:            5,
-			BurstWindow:              100 * time.Millisecond,
-			DamageWindow:             500 * time.Millisecond,
-			NoKnownParticipantsAlive: all.NoKnownParticipantsAlive,
+			DistinctAuras: 5,
+			BurstWindow:   100 * time.Millisecond,
+			DamageWindow:  500 * time.Millisecond,
 		},
 	}
-	return characters.NewScriptedDefeatCharacter(id, c, config), true
+	return characters.NewScriptedDefeatCharacterWithParticipantOwner(id, c, config, all), true
 }

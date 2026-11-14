@@ -97,7 +97,7 @@ func (v unitTelemetryValue) validate() error {
 	return nil
 }
 func (e *UnitTelemetryEmitter) CaptureState() (UnitTelemetryEmitterState, error) {
-	if e == nil || e.positions == nil || e.resources == nil {
+	if e == nil || e.restoreEmitter != nil || e.positions == nil || e.resources == nil {
 		return UnitTelemetryEmitterState{}, fmt.Errorf("nil telemetry owner/cache")
 	}
 	v := unitTelemetryValue{Positions: make(map[guid.GUID]positionValue, len(e.positions)), Resources: make(map[guid.GUID]resourceValue, len(e.resources)), Dead: maps.Clone(e.dead), FightActive: e.fightActive, EmittedPosition: maps.Clone(e.emittedPosition), EmittedResource: maps.Clone(e.emittedResource), HasCharacters: e.characters != nil, HasEmitter: e.emit != nil}
@@ -127,10 +127,9 @@ func DecodeUnitTelemetryEmitterState(version uint32, payload []byte) (UnitTeleme
 	return UnitTelemetryEmitterState{v}, nil
 }
 
-// RestoreState copies value snapshots, including private MessageBase state, and
-// injects the canonical lookup/emitter without calling either. No hook registration
-// or format selection occurs here; existing V22-only Hookable wiring is unchanged.
-func (e *UnitTelemetryEmitter) RestoreState(s UnitTelemetryEmitterState, chars *characters.Characters, emit func(messages.Message)) error {
+// RestoreSemanticState restores retained values and the canonical character owner
+// without installing or invoking runtime callbacks.
+func (e *UnitTelemetryEmitter) RestoreSemanticState(s UnitTelemetryEmitterState, chars *characters.Characters) error {
 	if e == nil {
 		return fmt.Errorf("nil telemetry destination")
 	}
@@ -138,7 +137,7 @@ func (e *UnitTelemetryEmitter) RestoreState(s UnitTelemetryEmitterState, chars *
 	if err := v.validate(); err != nil {
 		return err
 	}
-	if v.HasCharacters != (chars != nil) || v.HasEmitter != (emit != nil) {
+	if v.HasCharacters != (chars != nil) {
 		return fmt.Errorf("telemetry dependency presence mismatch")
 	}
 	positions := make(map[guid.GUID]messages.UnitPosition, len(v.Positions))
@@ -149,6 +148,47 @@ func (e *UnitTelemetryEmitter) RestoreState(s UnitTelemetryEmitterState, chars *
 	for id, p := range v.Resources {
 		resources[id] = p.restore()
 	}
-	*e = UnitTelemetryEmitter{characters: chars, emit: emit, positions: positions, resources: resources, dead: maps.Clone(v.Dead), fightActive: v.FightActive, emittedPosition: maps.Clone(v.EmittedPosition), emittedResource: maps.Clone(v.EmittedResource)}
+	*e = UnitTelemetryEmitter{characters: chars, restoreEmitter: telemetryCopy(&v.HasEmitter), positions: positions, resources: resources, dead: maps.Clone(v.Dead), fightActive: v.FightActive, emittedPosition: maps.Clone(v.EmittedPosition), emittedResource: maps.Clone(v.EmittedResource)}
 	return nil
+}
+
+// RestoreState preserves standalone restoration with immediate callback wiring.
+// Build a temporary owner so failed dependency validation leaves e unchanged.
+func (e *UnitTelemetryEmitter) RestoreState(s UnitTelemetryEmitterState, chars *characters.Characters, emit func(messages.Message)) error {
+	if e == nil {
+		return fmt.Errorf("nil telemetry destination")
+	}
+	var fresh UnitTelemetryEmitter
+	if err := fresh.RestoreSemanticState(s, chars); err != nil {
+		return err
+	}
+	if err := fresh.WireGraphRuntime(emit); err != nil {
+		return err
+	}
+	*e = fresh
+	return nil
+}
+
+// WireGraphRuntime installs the archived callback shape exactly once, without
+// emitting retained telemetry. A mismatch leaves the owner awaiting wiring.
+func (e *UnitTelemetryEmitter) WireGraphRuntime(emit func(messages.Message)) error {
+	if e == nil || e.restoreEmitter == nil {
+		return fmt.Errorf("telemetry not awaiting runtime wiring")
+	}
+	if *e.restoreEmitter != (emit != nil) {
+		return fmt.Errorf("telemetry emitter presence mismatch")
+	}
+	e.emit = emit
+	e.restoreEmitter = nil
+	return nil
+}
+
+func (e *UnitTelemetryEmitter) GraphCharacters() *characters.Characters { return e.characters }
+
+// GraphHasEmitter reports the restored requirement before wiring.
+func (e *UnitTelemetryEmitter) GraphHasEmitter() bool {
+	if e.restoreEmitter != nil {
+		return *e.restoreEmitter
+	}
+	return e.emit != nil
 }

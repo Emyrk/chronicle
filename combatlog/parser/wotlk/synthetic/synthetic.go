@@ -2,6 +2,7 @@ package synthetic
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -31,7 +32,9 @@ type Options struct {
 }
 
 type Synthetic struct {
-	logger *slog.Logger
+	graphPending bool
+	options      Options
+	logger       *slog.Logger
 
 	unitInfo     *unitInfo
 	petOwnership *petOwnership
@@ -69,6 +72,7 @@ func NewWithOptions(ctx context.Context, logger *slog.Logger, wowDB gamedb.GameD
 
 	unitInfo := newUnitInfo(ctx, logger, wowDB, names, wowDB)
 	s := &Synthetic{
+		options:      options,
 		slain:        synthetic.NewSlainDetective(),
 		logger:       logger,
 		wowDB:        wowDB,
@@ -80,6 +84,7 @@ func NewWithOptions(ctx context.Context, logger *slog.Logger, wowDB gamedb.GameD
 	format, _ := parsectx.Format(ctx)
 	if format == database.LogFormat335aCcAddon {
 		s.feignDeath = newFeignDeath(ctx, wowDB, unitInfo.classForPlayer)
+		s.feignDeath.classOwner = unitInfo
 	}
 	if options.GenerateAbsorbs {
 		s.absorption = synthetic.NewAbsorption(logger)
@@ -103,6 +108,9 @@ func (s *Synthetic) DetailedTimes() map[string]time.Duration {
 }
 
 func (s *Synthetic) ProcessMessages(msgs []messages.Message) ([]messages.Message, error) {
+	if s.graphPending {
+		return nil, fmt.Errorf("synthetic graph runtime is unwired")
+	}
 	now := time.Now()
 	msgs = s.unitInfo.ProcessMessages(msgs)
 	s.unitInfoDur += time.Since(now)

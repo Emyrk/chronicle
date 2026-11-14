@@ -72,6 +72,11 @@ type RankingEncounterSet struct {
 type CommonFactory struct {
 	// EncounterVariant classifies finalized outcomes; empty preserves unknown history.
 	EncounterVariant func(encounter.Encounter, database.WoWFlavor, []instancehook.Preprocessor) string
+	// GraphID explicitly opts this code-defined factory into portable graph recipes.
+	// Empty IDs and unsupported runtime extensions fail closed.
+	GraphID            string
+	GraphPreprocessors []PreprocessorGraphRecipe
+	GraphZoneName      ZoneNameRecipe
 
 	Name      string
 	Category  InstanceCategory
