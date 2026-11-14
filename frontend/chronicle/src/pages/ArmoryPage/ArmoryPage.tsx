@@ -26,6 +26,7 @@ import { ActivityHeaderCard, GearHeaderCard, TalentsHeaderCard } from "./TabHead
 import { JourneyStatsCard } from "./overview/JourneyStatsCard";
 import { CareerRatingCard } from "./overview/CareerRatingCard";
 import { ScoreCard } from "./overview/ScoreCard";
+import { PerformanceViewToggle, type PerformanceView } from "./overview/PerformanceViewToggle";
 import { defaultMetric, type ParseMetric } from "./overview/util";
 import { useCharacterParses } from "@/api/rankingsQueries";
 import {
@@ -44,14 +45,6 @@ type OverviewMode = "journey" | "performance";
 const MODES: Array<[OverviewMode, string]> = [
   ["journey", "Journey"],
   ["performance", "Performance"],
-];
-
-/** Performance mode shows career ratings, or the older 60-day parse scores. */
-type PerformanceView = "ratings" | "parses";
-
-const PERFORMANCE_VIEWS: Array<[PerformanceView, string]> = [
-  ["ratings", "Ratings"],
-  ["parses", "Parses"],
 ];
 
 const TABS = [
@@ -233,24 +226,7 @@ function ArmoryPageContent({ player }: { player: ArmoryPlayer }) {
         </Button>
       ))}
       {mode === "performance" && (
-        <div
-          className="col-span-2 flex rounded-md border border-border p-0.5 sm:col-span-1"
-          role="group"
-          aria-label="Performance view"
-        >
-          {PERFORMANCE_VIEWS.map(([key, label]) => (
-            <Button
-              key={key}
-              variant={performanceView === key ? "secondary" : "ghost"}
-              size="sm"
-              className="h-7 flex-1 px-2.5 text-xs sm:flex-none"
-              aria-pressed={performanceView === key}
-              onClick={() => setPerformanceView(key)}
-            >
-              {label}
-            </Button>
-          ))}
-        </div>
+        <PerformanceViewToggle view={performanceView} onChange={setPerformanceView} />
       )}
     </div>
   ) : undefined;
@@ -295,7 +271,10 @@ function ArmoryPageContent({ player }: { player: ArmoryPlayer }) {
           {/* Keep one identity header mounted while its tab-specific controls change. */}
           <div className="mt-8">
             <IdentityHeader player={player} titleAction={favoriteButton} actions={modeSelector}>
-              <div className="w-full lg:w-[480px]">
+              {/* Both Performance views share a min height so switching doesn't shift the page. */}
+              <div
+                className={`w-full lg:w-[480px] ${activeTab === "overview" && mode === "performance" ? "grid min-h-[236px]" : ""}`}
+              >
                 {activeTab === "overview" && showParses && (
                   <ScoreCard
                     score={score}

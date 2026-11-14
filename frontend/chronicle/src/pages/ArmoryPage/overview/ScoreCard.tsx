@@ -65,7 +65,7 @@ export function ScoreCard({
           </div>
         )}
       </CardHeader>
-      <CardContent className="flex items-center gap-6">
+      <CardContent className="flex grow items-center gap-6">
         <div className="shrink-0">
           <div className={`font-mono text-5xl leading-none font-bold ${score ? parseColor(score.display_value) : "text-muted-foreground"}`}>
             {score ? score.display_value : "—"}
