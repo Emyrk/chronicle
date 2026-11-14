@@ -140,13 +140,13 @@ is performed.
 
 The architecture test enforces production import direction and rejects old
 parser execution, database/publication, River and other external imports except
-the exact Vanilla message/value compatibility imports enumerated in the test.
+the exact Vanilla message/value, fatal-error and semver compatibility imports enumerated in the test.
 `common` cannot acquire expansion dependencies transitively through local imports.
 It cannot construct a raid through a registered constructor or imported package.
 
 ## Deliberately not implemented
 
-Combat-message decoding beyond the explicitly listed records; clocks/timezone reconstruction; other expansion combat rules;
+Combat-message decoding beyond the explicitly listed records; timezone reconstruction beyond header interpretation; other expansion combat rules;
 character/raid state; event sorting or the full synthetic pipeline; multiple-file merging;
 semantic export parity; checkpoints, restore, snapshot schemas/codecs; publication.
 There are no no-op implementations claiming these features work.
@@ -185,7 +185,7 @@ from a CC-v2 line without its newline.
  It returns the existing concrete
 `*messages.Damage`, `*messages.Heal`, `*messages.Slain` payloads, plus the existing
 power-burn `*messages.ResourceChange` emitted locally by SPELL_DMG. All other records (including
-HEADER, SPELL_FAIL, BUFF_UPDATE and DEBUFF_UPDATE) return `ErrUnsupportedRecord`, not successful empty
+HEADER (in this stateless function), SPELL_FAIL, BUFF_DURATION and DEBUFF_DURATION) return `ErrUnsupportedRecord`, not successful empty
 output. This is deliberately a record decoder, not a whole-file combat parser.
 Call it from a `ReadFile` visitor for an explicitly selected Vanilla source;
 callers must decide how to handle unsupported records rather than silently
@@ -251,15 +251,73 @@ records (one per event) plus generated boundary cases cover this family.
 The saved Capybara replay now compares 178,288 supported records, leaving 7,520
 unsupported, against the pre-extraction implementations with fallback spell data.
 
-### Next stateful boundary
+### Stateful header and timestamp boundary
 
-HEADER handling owns version/capability observations and interacts with the
-parser's last timestamp. The ordered synthetic pipeline carries combat state;
-identity/raid/combatant records carry roster and metadata observations. None of
-those concerns is migrated or inferred by this pure record decoder.
+`vanilla.NewDecoder(spellLookup, chronicleBuildVersion)` creates independent
+clock/header state, matching a fresh legacy parser. Its `DecodeRecord` method
+supports HEADER plus the record families above;
+the stateless `vanilla.DecodeRecord` function still rejects HEADER because it
+cannot supply per-source timestamp/version interpretation. Neither entry point
+reads a file or claims unsupported identity/metadata was parsed.
 
-Two existing legacy handlers need an explicit outcome policy before migration:
-SPELL_FAIL silently ignores client failures and can swallow field errors;
-BUFF_UPDATE/DEBUFF_UPDATE return placeholder Skip messages. They remain
-`ErrUnsupportedRecord` here, rather than being presented as successful decoding.
-Loot and metadata records are also outside the current supported list.
+```go
+decoder := vanilla.NewDecoder(spells, buildVersion)
+// Inside the existing ReadFile visitor:
+content := strings.TrimSuffix(strings.TrimSuffix(line.Raw, "\n"), "\r")
+messages, err := decoder.DecodeRecord(ctx, content)
+```
+
+`DecodeHeader` returns emitted Realm/Versions messages separately from an
+optional companion-version update. Invalid semver retains the last valid
+version, while malformed required fields/date strings return the original
+errors. Legacy handlers delegate and retain the version-dependent combatant
+interpretation. The build version is an explicit read-only input; header parsing
+needs no database, roster or identity service.
+
+`HeaderState` owns only the last timestamp and last valid companion version.
+HEADER inherits the previous record's time. For an initial header, UTC is used
+for its emitted messages **without updating the clock**. Exactly one second of
+backward movement is tolerated; larger jumps remain fatal. Successful lexical
+records advance time before semantic decoding, including unsupported records or
+semantic failures. Lexical failures do not update time. These are preserved
+legacy quirks, not new timestamp policy. State is not a checkpoint/saved payload;
+callers decide whether to discard it with provisional output after an ingestion
+failure. Completing a file does not finalize/reset the decoder. A future session
+can explicitly retain this owner across consecutive files; separate decoder
+instances provide isolation. No automatic continuity/reset policy is imposed.
+
+Headers advertise version strings but do **not** establish observed raid-layout,
+resource or position capabilities. Those flags are set by successfully parsed
+RG/RAID_COMPOSITION/UNIT_STATE records in legacy code and are not claimed here.
+
+### Remaining stateful/outcome work
+
+Roster, combatant, identity and zone observations and the ordered synthetic
+pipeline remain unmigrated. SPELL_FAIL silently ignores client failures and can
+swallow field errors; BUFF_DURATION/DEBUFF_DURATION return placeholder Skip
+messages. They remain `ErrUnsupportedRecord` until outcome policy is approved.
+Loot and other metadata records also remain unsupported.
+
+The saved public Capybara fixture has 185,808 records: 178,319 are now covered
+by supported event names (including 31 HEADER records), and the remaining 7,489
+are exactly:
+
+| Unsupported record | Count |
+| --- | ---: |
+| SPELL_FAIL | 6,103 |
+| UNIT_INFO | 663 |
+| COMBATANT_INFO | 374 |
+| COMBATANT_TRANSMOG | 138 |
+| LOOT | 109 |
+| COMBATANT_TALENTS | 73 |
+| ZONE_INFO | 15 |
+| COMBAT_END | 9 |
+| LOOT_TRADE | 3 |
+| CHANNEL_START | 1 |
+| CHANNEL_UPDATE | 1 |
+
+These are coverage counts, not proof of full-log/export equivalence. The original
+header implementation overlay matched all 31 real headers and 185,808 clock
+transitions; nonheader timestamp probes deliberately avoid parsing unsupported
+metadata. Tests additionally cover malformed/repeated headers, semantic/lexical
+errors, fatal jumps and isolation between separately constructed file decoders.
