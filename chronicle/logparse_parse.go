@@ -97,8 +97,8 @@ func (w *WorkerLogParse) parseCombatLog(
 	preRealmName string,
 ) (*parseResult, error) {
 	// Defend the selection seam too, before constructing consumers or reading files.
-	if w.baselineEngine != "" {
-		if err := w.baselineEngine.ValidateFormat(logFormat); err != nil {
+	if w.parserEngine != "" {
+		if err := w.parserEngine.ValidateFormat(logFormat); err != nil {
 			return nil, err
 		}
 	}
@@ -116,7 +116,7 @@ func (w *WorkerLogParse) parseCombatLog(
 		return w.loadFile(ctx, files[0])
 	}
 
-	if w.baselineEngine == BaselineParserNextVanilla || (w.baselineEngine == BaselineParserNext && logFormat == database.LogFormat112aCcAddon) {
+	if w.parserEngine == chroniclesdk.ParserEngineNext && logFormat == database.LogFormat112aCcAddon {
 		session, err := newVanillaFileSession(ctx, logLogger, gameDB, reg, identityMode, preRealmName)
 		if err != nil {
 			return nil, err
@@ -191,7 +191,7 @@ func (w *WorkerLogParse) parseCombatLog(
 		}
 		loadFileDuration = time.Since(loadStart)
 
-		p, err := newCLEUSource(ctx, w.baselineEngine, logFormat, logLogger, bytes.NewReader(data), overriddenGameDB, gameDB, reg)
+		p, err := newCLEUSource(ctx, w.parserEngine, logFormat, logLogger, bytes.NewReader(data), overriddenGameDB, gameDB, reg)
 		if err != nil {
 			return nil, fmt.Errorf("create CLEU parser: %w", err)
 		}
@@ -245,7 +245,7 @@ func (w *WorkerLogParse) parseCombatLog(
 		}
 		loadFileDuration = time.Since(loadStart)
 
-		p, err := newCLEUSource(ctx, w.baselineEngine, logFormat, logLogger, bytes.NewReader(data), overriddenGameDB, gameDB, reg)
+		p, err := newCLEUSource(ctx, w.parserEngine, logFormat, logLogger, bytes.NewReader(data), overriddenGameDB, gameDB, reg)
 		if err == nil && logFormat == database.LogFormatHermesproxy1142Cc {
 			p.SetRealmClockInfo(scanCompanionHeaderClock(data))
 		}
@@ -254,7 +254,7 @@ func (w *WorkerLogParse) parseCombatLog(
 		}
 		c.Advancer = p
 		var parseAdvancer consumers.Advancer = p
-		if logFormat == database.LogFormatV22Cleu && w.baselineEngine != BaselineParserNext {
+		if logFormat == database.LogFormatV22Cleu && w.parserEngine != chroniclesdk.ParserEngineNext {
 			parseAdvancer = reorder.New(p, blizzardmodern.ReorderWindow)
 		}
 		consumeErr = c.ConsumeAll(ctx, parseAdvancer)
@@ -279,7 +279,7 @@ func (w *WorkerLogParse) parseCombatLog(
 			consumers.Advancer
 			Metrics() vanilla.Metrics
 		}
-		if w.baselineEngine == BaselineParserNext {
+		if w.parserEngine == chroniclesdk.ParserEngineNext {
 			p, err = azerothcore.NewNext(ctx, logLogger, rdr, overriddenGameDB, gameDB)
 		} else {
 			p, err = azerothcore.New(ctx, logLogger, rdr, overriddenGameDB, gameDB)

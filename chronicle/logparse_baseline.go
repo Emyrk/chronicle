@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
+	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/database"
 
 	"github.com/riverqueue/river"
@@ -23,7 +25,7 @@ import (
 // nil; callers must verify publication in the database rather than treating nil
 // as proof that a baseline was produced. Cancellation errors are returned intact.
 // BaselineEngine is a tooling-only choice. It is not persisted in River args or
-// server configuration; production workers always retain the legacy zero value.
+// server configuration. Production workers select the shared ParserEngine from job args.
 type BaselineEngine string
 
 const (
@@ -85,5 +87,8 @@ func (c *Chronicle) RunLogParseBaselineWithEngine(ctx context.Context, args Args
 			return err
 		}
 	}
-	return (&WorkerLogParse{parent: c, baselineEngine: engine}).work(ctx, &river.Job[ArgsLogParse]{Args: args}, newRankingRunRefreshPlan(args))
+	if engine == BaselineParserNextVanilla {
+		engine = BaselineParserNext
+	}
+	return (&WorkerLogParse{parent: c, parserEngine: chroniclesdk.ParserEngine(engine)}).work(ctx, &river.Job[ArgsLogParse]{Args: args}, newRankingRunRefreshPlan(args))
 }

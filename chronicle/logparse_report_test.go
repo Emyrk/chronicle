@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Emyrk/chronicle/api/chroniclesdk"
+
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/nextsource"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/parserv2"
 	"github.com/Emyrk/chronicle/database"
@@ -35,14 +37,14 @@ func TestBaselineVanillaParseReport(t *testing.T) {
 		"1|SPELL_FAIL|client-side|125|false", // intentional drop still consumes a line
 		"malformed",                          // recoverable record failure still consumes a physical line
 	}, "\n")
-	for _, engine := range []BaselineEngine{BaselineLegacy, BaselineParserNextVanilla} {
+	for _, engine := range []chroniclesdk.ParserEngine{chroniclesdk.ParserEngineLegacy, chroniclesdk.ParserEngineNext} {
 		t.Run(string(engine), func(t *testing.T) {
 			t.Parallel()
 			c := &Chronicle{logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
-			worker := &WorkerLogParse{parent: c, baselineEngine: engine}
+			worker := &WorkerLogParse{parent: c, parserEngine: chroniclesdk.ParserEngine(engine)}
 			result, err := worker.parseCombatLog(t.Context(), database.LogFormat112aCcAddon, nil, nil, reportGameDB{}, nil, false, []byte(input), "")
 			require.NoError(t, err)
-			if engine == BaselineParserNextVanilla {
+			if engine == chroniclesdk.ParserEngineNext {
 				require.EqualValues(t, 4, result.report.totalLines)
 				source := result.consumers.Advancer.(*nextsource.Source)
 				require.Equal(t, 1, source.MissedSpells()[123].Count)

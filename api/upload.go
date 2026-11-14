@@ -49,9 +49,10 @@ func parseFlavorParam(raw string) database.WoWFlavor {
 // reparseOverride carries optional admin overrides applied to the log group
 // before reparsing. Any nil/empty field leaves the persisted value unchanged.
 type reparseOverride struct {
-	LogType *database.LogType
-	Format  *database.LogFormat
-	Flavor  database.WoWFlavor
+	ParserEngine chroniclesdk.ParserEngine
+	LogType      *database.LogType
+	Format       *database.LogFormat
+	Flavor       database.WoWFlavor
 }
 
 func (api *API) enqueueReparseLogGroup(ctx context.Context, logID uuid.UUID, verbose bool, identityMode bool, profile bool, override reparseOverride) (int64, error) {
@@ -68,6 +69,24 @@ func (api *API) enqueueReparseLogGroup(ctx context.Context, logID uuid.UUID, ver
 				http.StatusBadRequest,
 			)
 		}
+	}
+
+	group, err := api.Zed.GetWoWLogGroupByID(ctx, logID)
+	if err != nil {
+		return 0, err
+	}
+	format := group.WoWLogGroup.LogType.Format()
+	if group.WoWLogGroup.Format.Valid {
+		format = group.WoWLogGroup.Format.LogFormat
+	}
+	if override.LogType != nil {
+		format = override.LogType.Format()
+	}
+	if override.Format != nil {
+		format = *override.Format
+	}
+	if err := override.ParserEngine.ValidateFormat(format); err != nil {
+		return 0, httpapi.NewAPIError(err, "Unsupported parser engine for log format", http.StatusBadRequest)
 	}
 
 	// A new reparse supersedes any previous profile, even when this reparse is
@@ -109,7 +128,7 @@ func (api *API) enqueueReparseLogGroup(ctx context.Context, logID uuid.UUID, ver
 		realmID = meta.UUID
 	}
 
-	res, err := api.Chronicle.EnqueueReParseLog(ctx, logID, verbose, identityMode, profile, realmID)
+	res, err := api.Chronicle.EnqueueReParseLog(ctx, logID, verbose, identityMode, profile, realmID, override.ParserEngine)
 	if err != nil {
 		return 0, err
 	}
@@ -144,7 +163,12 @@ func (api *API) WoWLogReparse(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	engine, engineOK := api.authorizeParserEngine(w, r)
+	if !engineOK {
+		return
+	}
 	var override reparseOverride
+	override.ParserEngine = engine
 	q := r.URL.Query()
 	// Admin overrides: log_type, format, and/or flavor. Any of these requires
 	// admin; check once if at least one is present.
@@ -552,6 +576,10 @@ func clientUploadSource(isSidekick bool) database.UploadSource {
 // WoWLogUploadV2 handles single-file uploads for parserv2 logs.
 func (api *API) WoWLogUploadV2(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	engine, engineOK := api.authorizeParserEngine(w, r)
+	if !engineOK {
+		return
+	}
 
 	if api.clientUploadsDisabled(ctx) {
 		actor, _ := authz.ActorFromContext(ctx)
@@ -624,6 +652,7 @@ func (api *API) WoWLogUploadV2(w http.ResponseWriter, r *http.Request) {
 	// middleware). Anything still empty falls through to UploadLogs (format)
 	// or to the parser's dataset resolution (flavor).
 	var meta chronicle.UploadMeta
+	meta.ParserEngine = engine
 	meta.Source = clientUploadSource(api.Opts.Sidekick != nil && api.Opts.Sidekick.IsSidekickRequest(ctx))
 	if f := r.URL.Query().Get("format"); f != "" {
 		format := database.LogFormat(f)
@@ -647,6 +676,14 @@ func (api *API) WoWLogUploadV2(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	format := meta.Format
+	if format == "" {
+		format = logType.Format()
+	}
+	if err := engine.ValidateFormat(format); err != nil {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: err.Error()})
+		return
+	}
 	var artifactInputs []chronicle.ArtifactInput
 	artifactFile, artifactHeader, artifactErr := r.FormFile("sidekick_storage")
 	switch {
@@ -743,4 +780,22 @@ func (api *API) WoWLogUploadV2(w http.ResponseWriter, r *http.Request) {
 		Cleanup: report,
 		Files:   fileIDs,
 	})
+}
+
+// authorizeParserEngine validates before touching upload storage or parse state.
+func (api *API) authorizeParserEngine(w http.ResponseWriter, r *http.Request) (chroniclesdk.ParserEngine, bool) {
+	engine := chroniclesdk.ParserEngine(r.URL.Query().Get("parser_engine"))
+	if err := engine.Validate(); err != nil {
+		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: err.Error()})
+		return "", false
+	}
+	if engine == chroniclesdk.ParserEngineNext {
+		actor, _ := authz.ActorFromContext(r.Context())
+		allowed, err := api.Zed.CheckOne(r.Context(), nil, policy.New().GlobalChronicle().CanAdmin_logs_User(actor))
+		if err != nil || !allowed {
+			httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: "Only admins can select parsernext"})
+			return "", false
+		}
+	}
+	return engine, true
 }

@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import { UploadView, type UploadViewProps } from "./Upload";
+import { MultiUpload } from "./MultiUpload";
 
 const defaultProps: UploadViewProps = {
   isAuthenticated: true,
@@ -84,5 +85,40 @@ describe("UploadView cleanup", () => {
     expect(markup).toContain("Upload rejected");
     expect(markup).toContain('href="/logs/older-log"');
     expect(markup).toContain("Parsed reports are preserved.");
+  });
+});
+
+
+describe("MultiUpload parser engine", () => {
+  it.each([false, true])("uses effective admin permission (%s) for the batch selector", (hasAdminLogs) => {
+    const markup = renderToStaticMarkup(
+      <MemoryRouter>
+        <MultiUpload format="3.3.5a-cc-addon" unlistedLog={false} canMarkUnlisted={true} onUnlistedLogChange={() => {}} hasAdminLogs={hasAdminLogs} />
+      </MemoryRouter>,
+    );
+    expect(markup.includes('id="parser-engine"')).toBe(hasAdminLogs);
+    if (hasAdminLogs) expect(markup).toContain('<option value="legacy" selected="">');
+  });
+});
+
+describe("UploadView parser engine", () => {
+  it("hides the selector without effective admin permission", () => {
+    expect(render({ parserEngine: "parsernext" })).not.toContain('id="parser-engine"');
+  });
+
+  it("defaults administrators to legacy", () => {
+    const markup = render({ hasAdminLogs: true });
+    expect(markup).toContain('<option value="legacy" selected="">');
+    expect(markup).toContain("Parsernext (experimental)");
+  });
+
+  it("shows explicit parsernext selection and locks it during submission", () => {
+    const markup = render({ hasAdminLogs: true, parserEngine: "parsernext", uploading: true });
+    expect(markup).toContain('<option value="parsernext" selected="">');
+    expect(markup).toMatch(/<select id="parser-engine"[^>]*disabled=""/);
+  });
+
+  it("does not offer parsernext on the retired upload transport", () => {
+    expect(render({ hasAdminLogs: true, useV2Upload: false })).not.toContain('id="parser-engine"');
   });
 });

@@ -6,6 +6,8 @@ import (
 	"io"
 	"log/slog"
 
+	"github.com/Emyrk/chronicle/api/chroniclesdk"
+
 	"github.com/Emyrk/chronicle/combatlog/consumers"
 	blizzardmodern "github.com/Emyrk/chronicle/combatlog/parser/blizzard/modern"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
@@ -25,15 +27,15 @@ type clockedParseSource interface {
 
 // newCLEUSource keeps actual engine selection testable independently of storage
 // and publication. Empty/legacy selection never constructs a parsernext source.
-func newCLEUSource(ctx context.Context, engine BaselineEngine, format database.LogFormat, logger *slog.Logger, input io.Reader, db gamedb.GameDB, gear gamedb.GearResolver, reg *registry.Registry) (clockedParseSource, error) {
+func newCLEUSource(ctx context.Context, engine chroniclesdk.ParserEngine, format database.LogFormat, logger *slog.Logger, input io.Reader, db gamedb.GameDB, gear gamedb.GearResolver, reg *registry.Registry) (clockedParseSource, error) {
 	switch format {
 	case database.LogFormat243CcAddon, database.LogFormat335aCcAddon:
-		if engine == BaselineParserNext {
+		if engine == chroniclesdk.ParserEngineNext {
 			return wotlk.NewNext(ctx, logger, input, db, gear, reg)
 		}
 		return wotlk.NewLegacy(ctx, logger, input, db, gear, reg)
 	case database.LogFormatV9Cleu, database.LogFormatV22Cleu, database.LogFormatHermesproxy1142Cc:
-		if engine == BaselineParserNext {
+		if engine == chroniclesdk.ParserEngineNext {
 			return blizzardmodern.NewNext(ctx, logger, input, db, gear, reg)
 		}
 		if format == database.LogFormatHermesproxy1142Cc {

@@ -19,9 +19,11 @@ import { InstructionsSuperwow } from "./InstructionsSuperwow";
 import { InstructionsWotlk } from "./InstructionsWotlk";
 import { InstructionsChronicleCompanion } from "./InstructionsChronicleCompanion";
 import { InstructionsForever } from "./InstructionsForever";
-import type { RawLogCleanup } from "@/api/typesGenerated";
+import type { ParserEngine, RawLogCleanup } from "@/api/typesGenerated";
 import { RawLogCleanupSummary } from "./RawLogCleanupSummary";
 import { RootCommunityUploadPrompt } from "@/components/RootCommunityContext/RootCommunityContext";
+import { uploadV2URL } from "@/api/uploadV2";
+import { ParserEnginePicker } from "./ParserEnginePicker";
 import { MultiUpload } from "./MultiUpload";
 import { VisibilityPicker } from "./VisibilityPicker";
 
@@ -120,6 +122,8 @@ export interface UploadViewProps {
   authLoading: boolean;
   hasUploadPermission: boolean;
   hasAdminLogs: boolean;
+  parserEngine?: ParserEngine;
+  onParserEngineChange?: (value: ParserEngine) => void;
   canMarkUnlisted: boolean;
   /** Billing is on and the uploader can't unlist yet: point them at the Revered tier. */
   showUnlistedUpsell?: boolean;
@@ -160,6 +164,8 @@ export function UploadView({
   authLoading,
   hasUploadPermission,
   hasAdminLogs,
+  parserEngine = "legacy",
+  onParserEngineChange,
   canMarkUnlisted,
   showUnlistedUpsell,
   combatLog,
@@ -412,6 +418,10 @@ export function UploadView({
               </div>
             )}
 
+            {useV2Upload && (
+              <ParserEnginePicker hasAdminLogs={hasAdminLogs} value={parserEngine} onChange={onParserEngineChange} disabled={uploading} />
+            )}
+
             {/* Admin-only flavor override */}
             {hasAdminLogs && (
               <div className="space-y-2">
@@ -603,6 +613,8 @@ export function Upload() {
 
   // Admin-only flavor override (sent as query param).
   const [flavorOverride, setFlavorOverride] = useState<string>("");
+  // Deliberately local: opening a new upload starts with the legacy engine.
+  const [parserEngine, setParserEngine] = useState<ParserEngine>("legacy");
 
   const [combatLog, setCombatLog] = useState<File | null>(null);
   const [rawCombatLog, setRawCombatLog] = useState<File | null>(null);
@@ -756,18 +768,10 @@ export function Upload() {
         });
       });
 
-      // Use different endpoint based on upload version
-      let endpoint = useV2Upload
-        ? "/api/v1/raidlogs/logs/upload-v2"
-        : "/api/v1/raidlogs/logs/upload";
-      const params = new URLSearchParams();
-      params.set("unlisted", String(unlistedLog));
-      if (useV2Upload) {
-        // Send the resolved format and any admin flavor override.
-        if (effectiveFormat) params.set("format", effectiveFormat);
-        if (flavorOverride) params.set("flavor", flavorOverride);
-      }
-      endpoint += `?${params.toString()}`;
+      // The submission closure retains its selected engine through compression.
+      const endpoint = useV2Upload
+        ? uploadV2URL({ format: effectiveFormat, flavorOverride, unlistedLog, hasAdminLogs, parserEngine })
+        : `/api/v1/raidlogs/logs/upload?unlisted=${unlistedLog}`;
       xhr.open("POST", endpoint);
       xhr.send(formData);
     } catch (err) {
@@ -777,10 +781,10 @@ export function Upload() {
         detail: err instanceof Error ? err.message : String(err),
       });
     }
-  }, [combatLog, rawCombatLog, sidekickStorage, useV2Upload, effectiveFormat, flavorOverride, unlistedLog]);
+  }, [combatLog, rawCombatLog, sidekickStorage, useV2Upload, effectiveFormat, flavorOverride, unlistedLog, hasAdminLogs, parserEngine]);
 
   if (isMultiple) {
-    return <MultiUpload format={effectiveFormat} unlistedLog={unlistedLog} canMarkUnlisted={canMarkUnlisted} onUnlistedLogChange={setUnlistedLog} showUnlistedUpsell={showUnlistedUpsell} />;
+    return <MultiUpload hasAdminLogs={hasAdminLogs} parserEngine={parserEngine} onParserEngineChange={setParserEngine} format={effectiveFormat} unlistedLog={unlistedLog} canMarkUnlisted={canMarkUnlisted} onUnlistedLogChange={setUnlistedLog} showUnlistedUpsell={showUnlistedUpsell} />;
   }
 
   if (uploadsDisabled) {
@@ -811,6 +815,8 @@ export function Upload() {
       authLoading={authLoading}
       hasUploadPermission={hasUploadPermission}
       hasAdminLogs={hasAdminLogs}
+      parserEngine={parserEngine}
+      onParserEngineChange={setParserEngine}
       canMarkUnlisted={canMarkUnlisted}
       showUnlistedUpsell={showUnlistedUpsell}
       combatLog={combatLog}

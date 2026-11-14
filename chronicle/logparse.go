@@ -63,8 +63,11 @@ type OutputLogParse struct {
 }
 
 type ArgsLogParse struct {
-	LogID           uuid.UUID `json:"log_group_id"`
-	ParseGeneration int64     `json:"parse_generation"`
+	// ParserEngine is persisted with the job so automatic retries retain their selection.
+	// Empty values in older jobs use legacy execution.
+	ParserEngine    chroniclesdk.ParserEngine `json:"parser_engine,omitempty"`
+	LogID           uuid.UUID                 `json:"log_group_id"`
+	ParseGeneration int64                     `json:"parse_generation"`
 	// RealmID is optional
 	RealmID      uuid.UUID `json:"realm_id,omitempty"`
 	TenantID     uuid.UUID `json:"tenant_id,omitempty"`
@@ -141,8 +144,8 @@ func replacementParseFailureRefreshIDs(ctx context.Context, job *river.Job[ArgsL
 
 type WorkerLogParse struct {
 	parent *Chronicle
-	// Set only by synchronous baseline tooling, never from River args.
-	baselineEngine BaselineEngine
+	// Per-execution selection; Work copies this worker before applying durable job args.
+	parserEngine chroniclesdk.ParserEngine
 
 	river.WorkerDefaults[ArgsLogParse]
 }
@@ -191,8 +194,13 @@ func insertInstanceWithSlugFallback(
 }
 
 func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse]) error {
+	if err := job.Args.ParserEngine.Validate(); err != nil {
+		return err
+	}
+	execution := *w
+	execution.parserEngine = job.Args.ParserEngine
 	rankingRunRefresh := newRankingRunRefreshPlan(job.Args)
-	err := w.work(ctx, job, rankingRunRefresh)
+	err := execution.work(ctx, job, rankingRunRefresh)
 	failureIDs := replacementParseFailureRefreshIDs(ctx, job, rankingRunRefresh, err)
 	if len(failureIDs) > 0 {
 		if refreshErr := w.parent.EnqueueRankingRunRefresh(ctx, failureIDs...); refreshErr != nil {
@@ -205,11 +213,6 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse], rankingRunRefresh *rankingRunRefreshPlan) error {
 	if job.Args.TenantID != uuid.Nil {
 		ctx = servicetenant.WithTenantID(ctx, job.Args.TenantID)
-	}
-	if job.Args.Replacement {
-		if err := w.parent.RemoveParseCPUProfile(ctx, job.Args.LogID); err != nil {
-			return fmt.Errorf("clear superseded parse CPU profile: %w", err)
-		}
 	}
 	parseGeneration := effectiveParseGeneration(job.Args.ParseGeneration)
 	jobStart := time.Now()
@@ -271,6 +274,14 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 	logFormat := lg.LogType.Format()
 	if lg.Format.Valid {
 		logFormat = lg.Format.LogFormat
+	}
+	if err := w.parserEngine.ValidateFormat(logFormat); err != nil {
+		return err
+	}
+	if job.Args.Replacement {
+		if err := w.parent.RemoveParseCPUProfile(ctx, job.Args.LogID); err != nil {
+			return fmt.Errorf("clear superseded parse CPU profile: %w", err)
+		}
 	}
 	var flavor database.WoWFlavor
 	explicitFlavor := len(lg.Flavor) > 0
@@ -1439,8 +1450,21 @@ func newReplacementArgsLogParse(ctx context.Context, logID uuid.UUID, parseGener
 	return args
 }
 
-func (c *Chronicle) EnqueueParseLog(ctx context.Context, log database.WoWLogGroup, verbose bool, identityMode bool, realmID uuid.UUID) (*rivertype.JobInsertResult, error) {
-	res, err := c.queue.Insert(ctx, newArgsLogParse(ctx, log.ID, log.ParseGeneration, verbose, identityMode, false, realmID), &river.InsertOpts{
+func (c *Chronicle) EnqueueParseLog(ctx context.Context, log database.WoWLogGroup, verbose bool, identityMode bool, realmID uuid.UUID, engines ...chroniclesdk.ParserEngine) (*rivertype.JobInsertResult, error) {
+	engine, err := requestedParserEngine(engines)
+	if err != nil {
+		return nil, err
+	}
+	format := log.LogType.Format()
+	if log.Format.Valid {
+		format = log.Format.LogFormat
+	}
+	if err := engine.ValidateFormat(format); err != nil {
+		return nil, err
+	}
+	args := newArgsLogParse(ctx, log.ID, log.ParseGeneration, verbose, identityMode, false, realmID)
+	args.ParserEngine = engine
+	res, err := c.queue.Insert(ctx, args, &river.InsertOpts{
 		Tags: []string{
 			fmt.Sprintf("owner_%s", log.Owner.String()),
 		},

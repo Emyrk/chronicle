@@ -247,10 +247,12 @@ func (c *Chronicle) initStorage(ctx context.Context) error {
 // after parsing. Empty fields fall back to server-side derivation: Format from
 // logType, Flavor from the build-tag default.
 type UploadMeta struct {
-	Format   database.LogFormat
-	Flavor   database.WoWFlavor
-	Source   database.UploadSource
-	Unlisted bool
+	// ParserEngine applies to this upload attempt only; fresh append/reparse requests default to legacy.
+	ParserEngine chroniclesdk.ParserEngine
+	Format       database.LogFormat
+	Flavor       database.WoWFlavor
+	Source       database.UploadSource
+	Unlisted     bool
 }
 
 func (c *Chronicle) freeStorageForUpload(ctx context.Context, user database.ChronicleUser, incomingStorageBytes int64, excludeLogGroupID uuid.UUID) (database.ChronicleUser, *chroniclesdk.RawLogCleanup, error) {
@@ -299,6 +301,13 @@ func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, artifa
 
 // UploadLogsWithCleanup reports raw storage deleted by this attempt, even on error.
 func (c *Chronicle) UploadLogsWithCleanup(ctx context.Context, inputs []UploadInput, artifacts []ArtifactInput, logType database.LogType, realmID uuid.UUID, meta UploadMeta) (*database.WoWLogGroup, []database.LogFile, *chroniclesdk.RawLogCleanup, error) {
+	format := meta.Format
+	if format == "" {
+		format = logType.Format()
+	}
+	if err := meta.ParserEngine.ValidateFormat(format); err != nil {
+		return nil, nil, nil, err
+	}
 	var report *chroniclesdk.RawLogCleanup
 	clean := cleanup.New()
 	defer clean.Do()
@@ -658,7 +667,7 @@ func (c *Chronicle) UploadLogsWithCleanup(ctx context.Context, inputs []UploadIn
 		clean.Add(func() { _, _ = c.Storage.RemoveFile(ctx, BucketRaidLogs, []string{storageObject.Key}) })
 	}
 
-	res, err := c.EnqueueParseLog(ctx, group, false, false, realmID)
+	res, err := c.EnqueueParseLog(ctx, group, false, false, realmID, meta.ParserEngine)
 	if err != nil {
 		return nil, nil, report, fmt.Errorf("enqueue log parse job: %w", err)
 	}

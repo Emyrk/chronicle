@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Emyrk/chronicle/api/chroniclesdk"
+
 	blizzardmodern "github.com/Emyrk/chronicle/combatlog/parser/blizzard/modern"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
 	"github.com/Emyrk/chronicle/combatlog/parser/wotlk"
@@ -21,7 +23,7 @@ func TestCLEUSourceExecutionIdentity(t *testing.T) {
 			t.Run(string(format)+"/"+string(engine), func(t *testing.T) {
 				t.Parallel()
 				ctx := parsectx.With(t.Context(), parsectx.Context{Format: format, Flavor: database.WoWFlavor{database.FlavorWrath}})
-				source, err := newCLEUSource(ctx, engine, format, logger, strings.NewReader("9/3/2026 12:00:04.000-6  COMBAT_LOG_VERSION,22,ADVANCED_LOG_ENABLED,0"), sessionGameDB{}, sessionGameDB{}, nil)
+				source, err := newCLEUSource(ctx, chroniclesdk.ParserEngine(engine), format, logger, strings.NewReader("9/3/2026 12:00:04.000-6  COMBAT_LOG_VERSION,22,ADVANCED_LOG_ENABLED,0"), sessionGameDB{}, sessionGameDB{}, nil)
 				require.NoError(t, err)
 				native := format == database.LogFormat243CcAddon || format == database.LogFormat335aCcAddon
 				if native {

@@ -5091,6 +5091,11 @@ export interface ParseScoreTierCutoff {
     readonly value: number | null;
 }
 
+// From chroniclesdk/parser_engine.go
+export type ParserEngine = "legacy" | "parsernext";
+
+export const ParserEngines: ParserEngine[] = ["legacy", "parsernext"];
+
 // From chroniclesdk/parser_version.go
 /**
  * ParserVersionResponse is returned by GET /api/v1/parser-version.
@@ -7984,5 +7989,3 @@ export interface WoWTrailerEntry {
 export type WoWUnitType = 2 | 3 | 1 | 0 | 4;
 
 export const WoWUnitTypes: WoWUnitType[] = [2, 3, 1, 0, 4];
-
-

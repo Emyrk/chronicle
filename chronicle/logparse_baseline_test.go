@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"testing"
 
+	"github.com/Emyrk/chronicle/api/chroniclesdk"
+
 	"github.com/Emyrk/chronicle/chronicle/riverqueue"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
@@ -68,11 +70,11 @@ func TestBaselineEngineSelection(t *testing.T) {
 	c := &Chronicle{}
 	require.ErrorContains(t, c.RunLogParseBaselineWithEngine(t.Context(), ArgsLogParse{}, "invalid"), "unsupported baseline engine")
 	// Unsupported formats fail before any read dependencies or consumers are used.
-	w := &WorkerLogParse{baselineEngine: BaselineParserNextVanilla}
-	_, err := w.parseCombatLog(t.Context(), database.LogFormat335aCcAddon, nil, nil, nil, nil, false, nil, "")
+	w := &WorkerLogParse{parserEngine: chroniclesdk.ParserEngineNext}
+	_, err := w.parseCombatLog(t.Context(), database.LogFormat112aSuperwowAddon, nil, nil, nil, nil, false, nil, "")
 	require.ErrorContains(t, err, "does not support")
 	// Ordinary worker construction cannot inherit a baseline selection.
-	require.Empty(t, c.NewWorkerLogParse().(*WorkerLogParse).baselineEngine)
+	require.Empty(t, c.NewWorkerLogParse().(*WorkerLogParse).parserEngine)
 }
 
 func TestBaselineParserNextFormats(t *testing.T) {
@@ -87,14 +89,14 @@ func TestBaselineParserNextFormats(t *testing.T) {
 	}
 	for _, format := range []database.LogFormat{"", "unknown"} {
 		require.ErrorContains(t, BaselineParserNext.ValidateFormat(format), "does not support")
-		worker := &WorkerLogParse{baselineEngine: BaselineParserNext}
+		worker := &WorkerLogParse{parserEngine: chroniclesdk.ParserEngineNext}
 		_, err := worker.parseCombatLog(t.Context(), format, nil, nil, nil, nil, false, nil, "")
 		require.ErrorContains(t, err, "does not support")
 	}
 	// Opt-in never escapes the workerless tooling boundary.
 	c := &Chronicle{queue: &riverqueue.Queues{}}
 	require.EqualError(t, c.RunLogParseBaselineWithEngine(t.Context(), ArgsLogParse{}, BaselineParserNext), "baseline parsing requires a Chronicle without a queue")
-	require.Empty(t, c.NewWorkerLogParse().(*WorkerLogParse).baselineEngine)
+	require.Empty(t, c.NewWorkerLogParse().(*WorkerLogParse).parserEngine)
 }
 
 func TestBaselineUnsupportedFormatPrecedesWorkerWrites(t *testing.T) {

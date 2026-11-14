@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/Emyrk/chronicle/api/chroniclesdk"
+
 	"github.com/Emyrk/chronicle/internal/services/serviceratings"
 
 	"github.com/Emyrk/chronicle/chronicle/riverqueue"
@@ -23,13 +25,14 @@ import (
 const KindLogReparse = "log-reparse"
 
 type ArgsLogReparse struct {
-	LogID           uuid.UUID `json:"log_group_id"`
-	ParseGeneration int64     `json:"parse_generation"`
-	RealmID         uuid.UUID `json:"realm_id,omitempty"`
-	TenantID        uuid.UUID `json:"tenant_id,omitempty"`
-	Verbose         bool      `json:"verbose,omitempty"`
-	IdentityMode    bool      `json:"identity_mode,omitempty"`
-	Profile         bool      `json:"profile,omitempty"`
+	ParserEngine    chroniclesdk.ParserEngine `json:"parser_engine,omitempty"`
+	LogID           uuid.UUID                 `json:"log_group_id"`
+	ParseGeneration int64                     `json:"parse_generation"`
+	RealmID         uuid.UUID                 `json:"realm_id,omitempty"`
+	TenantID        uuid.UUID                 `json:"tenant_id,omitempty"`
+	Verbose         bool                      `json:"verbose,omitempty"`
+	IdentityMode    bool                      `json:"identity_mode,omitempty"`
+	Profile         bool                      `json:"profile,omitempty"`
 }
 
 type logReparseMetadata struct {
@@ -69,6 +72,9 @@ func (c *Chronicle) NewWorkerReLogParse() river.Worker[ArgsLogReparse] {
 }
 
 func (w *WorkerLogReparse) Work(ctx context.Context, job *river.Job[ArgsLogReparse]) error {
+	if err := job.Args.ParserEngine.Validate(); err != nil {
+		return err
+	}
 	// Clear the parsed data for the log group and re-initiate parsing
 	db := w.parent.Zed
 	parseGeneration := effectiveParseGeneration(job.Args.ParseGeneration)
@@ -85,6 +91,13 @@ func (w *WorkerLogReparse) Work(ctx context.Context, job *river.Job[ArgsLogRepar
 		return w.parent.abortStaleParseGeneration(ctx, job.Args.LogID, job.Args.ParseGeneration, "initial_generation_check", staleParseGeneration(parseGeneration, &current))
 	}
 
+	format := logGroup.WoWLogGroup.LogType.Format()
+	if logGroup.WoWLogGroup.Format.Valid {
+		format = logGroup.WoWLogGroup.Format.LogFormat
+	}
+	if err := job.Args.ParserEngine.ValidateFormat(format); err != nil {
+		return err
+	}
 	var metadata logReparseMetadata
 	if len(job.Metadata) > 0 {
 		if err := json.Unmarshal(job.Metadata, &metadata); err != nil {
@@ -105,6 +118,7 @@ func (w *WorkerLogReparse) Work(ctx context.Context, job *river.Job[ArgsLogRepar
 		parseCtx = servicetenant.WithTenantID(ctx, job.Args.TenantID)
 	}
 	parseArgs := newReplacementArgsLogParse(parseCtx, job.Args.LogID, parseGeneration, job.Args.Verbose, job.Args.IdentityMode, job.Args.Profile, job.Args.RealmID, previousRankingRunIDs)
+	parseArgs.ParserEngine = job.Args.ParserEngine
 	insertOpts := parseArgs.InsertOpts()
 	insertOpts.Pending = true
 	insertOpts.Tags = []string{fmt.Sprintf("owner_%s", logGroup.WoWLogGroup.Owner.String())}
@@ -123,7 +137,10 @@ func (w *WorkerLogReparse) Work(ctx context.Context, job *river.Job[ArgsLogRepar
 	return nil
 }
 
-func (c *Chronicle) EnqueueReParseLog(ctx context.Context, logID uuid.UUID, verbose bool, identityMode bool, profile bool, realmID uuid.UUID) (*rivertype.JobInsertResult, error) {
+func (c *Chronicle) EnqueueReParseLog(ctx context.Context, logID uuid.UUID, verbose bool, identityMode bool, profile bool, realmID uuid.UUID, engines ...chroniclesdk.ParserEngine) (*rivertype.JobInsertResult, error) {
+	if _, err := requestedParserEngine(engines); err != nil {
+		return nil, err
+	}
 	sourceCtx, resolveErr := serviceratings.GroupSourceContext(ctx, c.Zed, logID)
 	if resolveErr != nil {
 		return nil, resolveErr
@@ -136,13 +153,28 @@ func (c *Chronicle) EnqueueReParseLog(ctx context.Context, logID uuid.UUID, verb
 			return errors.New("reparse transaction does not expose pgx transaction")
 		}
 		var err error
-		result, err = c.enqueueReParseLog(ctx, tx, pgxTx, logID, verbose, identityMode, profile, realmID)
+		result, err = c.enqueueReParseLog(ctx, tx, pgxTx, logID, verbose, identityMode, profile, realmID, engines...)
 		return err
 	}, nil)
 	return result, err
 }
 
-func (c *Chronicle) enqueueReParseLog(ctx context.Context, db database.Store, tx pgx.Tx, logID uuid.UUID, verbose bool, identityMode bool, profile bool, realmID uuid.UUID) (*rivertype.JobInsertResult, error) {
+func (c *Chronicle) enqueueReParseLog(ctx context.Context, db database.Store, tx pgx.Tx, logID uuid.UUID, verbose bool, identityMode bool, profile bool, realmID uuid.UUID, engines ...chroniclesdk.ParserEngine) (*rivertype.JobInsertResult, error) {
+	engine, err := requestedParserEngine(engines)
+	if err != nil {
+		return nil, err
+	}
+	group, err := db.GetWoWLogGroupByID(ctx, logID)
+	if err != nil {
+		return nil, err
+	}
+	format := group.WoWLogGroup.LogType.Format()
+	if group.WoWLogGroup.Format.Valid {
+		format = group.WoWLogGroup.Format.LogFormat
+	}
+	if err := engine.ValidateFormat(format); err != nil {
+		return nil, err
+	}
 	identities, err := db.RankingRunIdentitiesByLogGroupID(ctx, logID)
 	if err != nil {
 		return nil, fmt.Errorf("load ranking run identities: %w", err)
@@ -165,6 +197,7 @@ func (c *Chronicle) enqueueReParseLog(ctx context.Context, db database.Store, tx
 
 	t := servicetenant.TenantIDFromContext(ctx)
 	args := ArgsLogReparse{
+		ParserEngine:    engine,
 		LogID:           logID,
 		ParseGeneration: generation,
 		RealmID:         realmID,

@@ -10,7 +10,9 @@ import {
   FolderOpen,
 } from "lucide-react";
 import { compressFile } from "@/api/compress";
-import type { RawLogCleanup } from "@/api/typesGenerated";
+import type { ParserEngine, RawLogCleanup } from "@/api/typesGenerated";
+import { uploadV2URL } from "@/api/uploadV2";
+import { ParserEnginePicker } from "./ParserEnginePicker";
 import { RawLogCleanupSummary } from "./RawLogCleanupSummary";
 import { VisibilityPicker } from "./VisibilityPicker";
 import { Button } from "@/components/ui/button";
@@ -72,6 +74,8 @@ async function uploadSingleFile(
   file: File,
   format: string,
   unlistedLog: boolean,
+  hasAdminLogs: boolean,
+  parserEngine: ParserEngine,
   onProgress: (pct: number) => void,
   onStatusChange: (status: FileStatus) => void,
 ): Promise<{ logId: string; cleanup?: RawLogCleanup }> {
@@ -123,11 +127,7 @@ async function uploadSingleFile(
       reject(new Error("Network error"));
     });
 
-    let endpoint = "/api/v1/raidlogs/logs/upload-v2";
-    const params = new URLSearchParams();
-    params.set("unlisted", String(unlistedLog));
-    if (format) params.set("format", format);
-    endpoint += `?${params.toString()}`;
+    const endpoint = uploadV2URL({ format, unlistedLog, hasAdminLogs, parserEngine });
 
     xhr.open("POST", endpoint);
     xhr.send(formData);
@@ -138,6 +138,9 @@ async function uploadSingleFile(
 const MAX_CONCURRENT = 3;
 
 export interface MultiUploadProps {
+  hasAdminLogs?: boolean;
+  parserEngine?: ParserEngine;
+  onParserEngineChange?: (value: ParserEngine) => void;
   format: string;
   unlistedLog: boolean;
   canMarkUnlisted: boolean;
@@ -145,7 +148,7 @@ export interface MultiUploadProps {
   showUnlistedUpsell?: boolean;
 }
 
-export function MultiUpload({ format, unlistedLog, canMarkUnlisted, onUnlistedLogChange, showUnlistedUpsell }: MultiUploadProps) {
+export function MultiUpload({ hasAdminLogs = false, parserEngine = "legacy", onParserEngineChange, format, unlistedLog, canMarkUnlisted, onUnlistedLogChange, showUnlistedUpsell }: MultiUploadProps) {
   const [entries, setEntries] = useState<UploadEntry[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -201,6 +204,8 @@ export function MultiUpload({ format, unlistedLog, canMarkUnlisted, onUnlistedLo
           entry.file,
           format,
           unlistedLog,
+          hasAdminLogs,
+          parserEngine,
           (pct) => updateEntry(entry.id, { progress: pct }),
           (status) => updateEntry(entry.id, { status }),
         );
@@ -236,7 +241,7 @@ export function MultiUpload({ format, unlistedLog, canMarkUnlisted, onUnlistedLo
 
     await runPool();
     setIsUploading(false);
-  }, [entries, format, unlistedLog, updateEntry]);
+  }, [entries, format, unlistedLog, updateEntry, hasAdminLogs, parserEngine]);
 
   const pendingCount = entries.filter(
     (e) => e.status === "pending" || e.status === "error",
@@ -288,7 +293,8 @@ export function MultiUpload({ format, unlistedLog, canMarkUnlisted, onUnlistedLo
         </p>
       </div>
 
-      <Card className="mb-4 p-4">
+      <Card className="mb-4 p-4 space-y-4">
+        <ParserEnginePicker hasAdminLogs={hasAdminLogs} value={parserEngine} onChange={onParserEngineChange} disabled={isUploading} />
         <VisibilityPicker unlistedLog={unlistedLog} canMarkUnlisted={canMarkUnlisted} onChange={onUnlistedLogChange} showUnlistedUpsell={showUnlistedUpsell} />
       </Card>
 
