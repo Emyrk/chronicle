@@ -347,6 +347,33 @@ CREATE TABLE billing_webhook_events (
     processed_at timestamp with time zone
 );
 
+CREATE TABLE blog_feedback (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    post_slug text NOT NULL,
+    user_id uuid NOT NULL,
+    original_tenant_id uuid,
+    body text,
+    public_consent boolean DEFAULT false NOT NULL,
+    status text DEFAULT 'pending'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    deleted_at timestamp with time zone,
+    CONSTRAINT blog_feedback_body_check CHECK (((body IS NULL) OR (((char_length(body) >= 1) AND (char_length(body) <= 300)) AND (body = btrim(body, ((((((((((((((((((((((((chr(9) || chr(10)) || chr(11)) || chr(12)) || chr(13)) || chr(32)) || chr(133)) || chr(160)) || chr(5760)) || chr(8192)) || chr(8193)) || chr(8194)) || chr(8195)) || chr(8196)) || chr(8197)) || chr(8198)) || chr(8199)) || chr(8200)) || chr(8201)) || chr(8202)) || chr(8232)) || chr(8233)) || chr(8239)) || chr(8287)) || chr(12288))))))),
+    CONSTRAINT blog_feedback_check CHECK ((((deleted_at IS NULL) AND (body IS NOT NULL)) OR ((deleted_at IS NOT NULL) AND (body IS NULL) AND (NOT public_consent)))),
+    CONSTRAINT blog_feedback_post_slug_check CHECK ((post_slug <> ''::text)),
+    CONSTRAINT blog_feedback_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text])))
+);
+
+CREATE TABLE blog_votes (
+    post_slug text NOT NULL,
+    user_id uuid NOT NULL,
+    value smallint NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT blog_votes_post_slug_check CHECK ((post_slug <> ''::text)),
+    CONSTRAINT blog_votes_value_check CHECK ((value = ANY (ARRAY['-1'::integer, 1])))
+);
+
 CREATE TABLE cache_generations (
     namespace text NOT NULL,
     scope text NOT NULL,
@@ -4121,6 +4148,15 @@ ALTER TABLE ONLY billing_subscriptions
 ALTER TABLE ONLY billing_webhook_events
     ADD CONSTRAINT billing_webhook_events_pkey PRIMARY KEY (stripe_event_id);
 
+ALTER TABLE ONLY blog_feedback
+    ADD CONSTRAINT blog_feedback_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY blog_feedback
+    ADD CONSTRAINT blog_feedback_post_slug_user_id_key UNIQUE (post_slug, user_id);
+
+ALTER TABLE ONLY blog_votes
+    ADD CONSTRAINT blog_votes_pkey PRIMARY KEY (post_slug, user_id);
+
 ALTER TABLE ONLY cache_generations
     ADD CONSTRAINT cache_generations_pkey PRIMARY KEY (namespace, scope, scope_id);
 
@@ -4913,6 +4949,10 @@ CREATE INDEX billing_entitlements_user_key_idx ON billing_entitlements USING btr
 
 CREATE INDEX billing_reconciliation_runs_started_at_idx ON billing_reconciliation_runs USING btree (started_at DESC);
 
+CREATE INDEX blog_feedback_moderation_idx ON blog_feedback USING btree (status, created_at, id);
+
+CREATE INDEX blog_feedback_public_idx ON blog_feedback USING btree (post_slug, created_at, id) WHERE ((status = 'approved'::text) AND public_consent AND (deleted_at IS NULL));
+
 CREATE INDEX dbc_affected_aura_duration_modifiers_modifier_idx ON dbc_affected_aura_duration_modifiers USING btree (dataset_id, modifier_spell_id);
 
 CREATE INDEX dbc_consumable_buffs_spell_idx ON dbc_consumable_buffs USING btree (dataset_id, spell_id);
@@ -5402,6 +5442,15 @@ ALTER TABLE ONLY billing_entitlements
 
 ALTER TABLE ONLY billing_subscriptions
     ADD CONSTRAINT billing_subscriptions_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY blog_feedback
+    ADD CONSTRAINT blog_feedback_original_tenant_id_fkey FOREIGN KEY (original_tenant_id) REFERENCES tenants(id) ON DELETE SET NULL;
+
+ALTER TABLE ONLY blog_feedback
+    ADD CONSTRAINT blog_feedback_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id);
+
+ALTER TABLE ONLY blog_votes
+    ADD CONSTRAINT blog_votes_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id);
 
 ALTER TABLE ONLY class_buff_ignores
     ADD CONSTRAINT class_buff_ignores_by_dataset_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;

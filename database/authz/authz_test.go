@@ -977,3 +977,27 @@ func TestCosmeticTierAuthorization(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, assignments, authz.CosmeticTierAssignment{CosmeticID: honoredCosmetic, Tier: "exalted"})
 }
+
+func TestBlogFeedbackBanPreservedAcrossRoleChanges(t *testing.T) {
+	t.Parallel()
+	broker := testservices.Authz(t)
+	zed := serviceauthz.Authz(broker)
+	ctx := testutil.Context(t, testutil.WaitLong)
+	userID := uuid.New()
+	b := policy.New()
+	check := b.GlobalChronicle().CanSubmit_blog_feedback_User(b.User(userID))
+	allowed, err := zed.CheckOne(ctx, nil, check)
+	require.NoError(t, err)
+	require.False(t, allowed)
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, userID, nil))
+	allowed, err = zed.CheckOne(ctx, nil, check)
+	require.NoError(t, err)
+	require.True(t, allowed)
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, userID, []string{"feedback_banned"}))
+	for _, roles := range [][]string{nil, {"admin"}, {"technical_admin"}} {
+		require.NoError(t, zed.SetUserChronicleRoles(ctx, userID, roles))
+		allowed, err = zed.CheckOne(ctx, nil, check)
+		require.NoError(t, err)
+		require.False(t, allowed)
+	}
+}

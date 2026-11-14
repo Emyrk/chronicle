@@ -165,6 +165,8 @@ type sqlcQuerier interface {
 	DeleteAllParsedLogsByGroupID(ctx context.Context, id uuid.UUID) error
 	DeleteAllTelemetryNotices(ctx context.Context) error
 	DeleteBillingEntitlementsByProviderCustomerID(ctx context.Context, arg DeleteBillingEntitlementsByProviderCustomerIDParams) error
+	DeleteBlogFeedback(ctx context.Context, arg DeleteBlogFeedbackParams) (BlogFeedback, error)
+	DeleteBlogVote(ctx context.Context, arg DeleteBlogVoteParams) error
 	DeleteClassBuffIgnore(ctx context.Context, arg DeleteClassBuffIgnoreParams) error
 	// Release representative IDs that moved to a different logical run before the
 	// state-based refresh upserts all desired rows in arbitrary UUID order.
@@ -341,6 +343,10 @@ type sqlcQuerier interface {
 	GetBillingSubscriptionByProviderID(ctx context.Context, arg GetBillingSubscriptionByProviderIDParams) (BillingSubscription, error)
 	GetBillingSubscriptionByUserID(ctx context.Context, userID uuid.UUID) (BillingSubscription, error)
 	GetBillingWebhookEvent(ctx context.Context, stripeEventID string) (BillingWebhookEvent, error)
+	GetBlogFeedback(ctx context.Context, arg GetBlogFeedbackParams) (BlogFeedback, error)
+	GetBlogFeedbackByID(ctx context.Context, id uuid.UUID) (BlogFeedback, error)
+	GetBlogVote(ctx context.Context, arg GetBlogVoteParams) (BlogVote, error)
+	GetBlogVoteTotals(ctx context.Context, postSlug string) (GetBlogVoteTotalsRow, error)
 	GetCacheGeneration(ctx context.Context, arg GetCacheGenerationParams) (CacheGeneration, error)
 	GetCanonicalSpellByID(ctx context.Context, arg GetCanonicalSpellByIDParams) (GetCanonicalSpellByIDRow, error)
 	GetCanonicalSpellsByName(ctx context.Context, arg GetCanonicalSpellsByNameParams) ([]GetCanonicalSpellsByNameRow, error)
@@ -676,6 +682,7 @@ type sqlcQuerier interface {
 	InsertAffectedAuraDurations(ctx context.Context, arg []InsertAffectedAuraDurationsParams) *InsertAffectedAuraDurationsBatchResults
 	InsertBillingReconciliationRun(ctx context.Context, id uuid.UUID) (BillingReconciliationRun, error)
 	InsertBillingWebhookEvent(ctx context.Context, arg InsertBillingWebhookEventParams) (int64, error)
+	InsertBlogFeedback(ctx context.Context, arg InsertBlogFeedbackParams) (BlogFeedback, error)
 	InsertCustomPanelRelease(ctx context.Context, arg InsertCustomPanelReleaseParams) (CustomPanelRelease, error)
 	InsertDataset(ctx context.Context, arg InsertDatasetParams) (Dataset, error)
 	InsertDerivedConsumableBuffs(ctx context.Context, datasetID uuid.UUID) (int64, error)
@@ -827,6 +834,7 @@ type sqlcQuerier interface {
 	ListActiveAdminTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
 	ListActivePublicTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
 	ListAdminActiveCustomPanelInstallations(ctx context.Context) ([]ListAdminActiveCustomPanelInstallationsRow, error)
+	ListAdminBlogFeedback(ctx context.Context, arg ListAdminBlogFeedbackParams) ([]BlogFeedback, error)
 	ListAdminProofRequests(ctx context.Context, tenantID uuid.UUID) ([]ProofRequest, error)
 	ListAffectedAuraDurationCandidates(ctx context.Context, datasetID uuid.UUID) ([]ListAffectedAuraDurationCandidatesRow, error)
 	ListAffectedAuraDurationsByDataset(ctx context.Context, datasetID uuid.UUID) ([]ListAffectedAuraDurationsByDatasetRow, error)
@@ -992,6 +1000,7 @@ type sqlcQuerier interface {
 	// requests and characters removed from the armory still render without them.
 	ListProofSubjectClasses(ctx context.Context, requestID uuid.UUID) ([]ListProofSubjectClassesRow, error)
 	ListProofSubjects(ctx context.Context, requestID uuid.UUID) ([]ProofRequestSubject, error)
+	ListPublicBlogFeedback(ctx context.Context, arg ListPublicBlogFeedbackParams) ([]BlogFeedback, error)
 	// Modules with a release people can still run, most tracked first, then newest release.
 	ListPublicLuaProjects(ctx context.Context) ([]LuaProject, error)
 	ListRaidCompositionsByUser(ctx context.Context, arg ListRaidCompositionsByUserParams) ([]RaidComposition, error)
@@ -1127,6 +1136,7 @@ type sqlcQuerier interface {
 	MarkLogGroupArtifactsStorageDeleted(ctx context.Context, arg MarkLogGroupArtifactsStorageDeletedParams) ([]LogGroupArtifact, error)
 	MarkWhatsNewRead(ctx context.Context, arg MarkWhatsNewReadParams) (UserWhatsNewState, error)
 	MarkWoWLogGroupUnlisted(ctx context.Context, id uuid.UUID) (WoWLogGroup, error)
+	ModerateBlogFeedback(ctx context.Context, arg ModerateBlogFeedbackParams) (BlogFeedback, error)
 	MoveDiscordAnnouncementSources(ctx context.Context, arg MoveDiscordAnnouncementSourcesParams) error
 	NextLeaderboardOperationRealm(ctx context.Context, arg NextLeaderboardOperationRealmParams) (uuid.UUID, error)
 	PauseEphemeralInferenceRun(ctx context.Context, arg PauseEphemeralInferenceRunParams) (InferenceRun, error)
@@ -1449,6 +1459,7 @@ type sqlcQuerier interface {
 	UnstarLuaProject(ctx context.Context, arg UnstarLuaProjectParams) error
 	UntrackUserPanelLayout(ctx context.Context, arg UntrackUserPanelLayoutParams) (int64, error)
 	UpdateAccountPurgeProgress(ctx context.Context, arg UpdateAccountPurgeProgressParams) error
+	UpdateBlogFeedback(ctx context.Context, arg UpdateBlogFeedbackParams) (BlogFeedback, error)
 	// Only non-null params are applied; NULL means "keep existing value".
 	UpdateDataset(ctx context.Context, arg UpdateDatasetParams) (Dataset, error)
 	UpdateDiscordAnnouncementRun(ctx context.Context, arg UpdateDiscordAnnouncementRunParams) (GuildDiscordLogAnnouncement, error)
@@ -1504,6 +1515,7 @@ type sqlcQuerier interface {
 	UpsertBillingEntitlement(ctx context.Context, arg UpsertBillingEntitlementParams) (BillingEntitlement, error)
 	UpsertBillingSubscription(ctx context.Context, arg UpsertBillingSubscriptionParams) (BillingSubscription, error)
 	UpsertBillingSubscriptionIfChanged(ctx context.Context, arg UpsertBillingSubscriptionIfChangedParams) (int64, error)
+	UpsertBlogVote(ctx context.Context, arg UpsertBlogVoteParams) (BlogVote, error)
 	UpsertClassBuffIgnore(ctx context.Context, arg UpsertClassBuffIgnoreParams) error
 	UpsertConsumableDisambiguationIfCandidate(ctx context.Context, arg UpsertConsumableDisambiguationIfCandidateParams) (UpsertConsumableDisambiguationIfCandidateRow, error)
 	// NULL ignored/hide_duration leaves that flag unchanged.

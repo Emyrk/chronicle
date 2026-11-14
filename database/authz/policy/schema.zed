@@ -25,6 +25,7 @@ definition chronicle {
   relation photo_proof_submitter: user
   relation photo_proof_reviewer: user
   relation photo_proof_banned: user
+  relation feedback_banned: user
 
   // Deprecated Stripe feature roles. Billing no longer writes them; migration 9
   // removes old relationships. Keep the relations during rollout so older
@@ -99,6 +100,7 @@ definition chronicle {
   // A site-wide ban overrides every site-wide submission grant.
   permission submit_photo_proof = (photo_proof_submitter + stripe_submit_photo_proof + supporter + has_honored) - photo_proof_banned
   permission review_photo_proof = photo_proof_reviewer + technical_admin
+  permission submit_blog_feedback = (chronicle_member + chronicle_guild_member + administer) - feedback_banned
 
   permission create_tenant_application = technical_admin + chronicle_guild_member
 
