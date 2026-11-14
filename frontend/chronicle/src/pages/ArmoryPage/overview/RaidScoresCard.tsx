@@ -10,6 +10,13 @@ import { parseColor, parseHexColor } from "@/pages/Instance/parseColors";
 import type { EncounterSummary, RaidSummary } from "../parseAggregation";
 import { PerformanceSpecSelector } from "./PerformanceSpecSelector";
 import type { ParseMetric } from "./util";
+import { explorableBosses, type RaidRating } from "./careerRatingsModel";
+import {
+  BossExplorerDialog,
+  ExploreButton,
+  type BossExplorerTarget,
+  type ExplorerCharacter,
+} from "./BossExplorerDialog";
 
 interface RaidScoresCardProps {
   raids: RaidSummary[];
@@ -22,6 +29,17 @@ interface RaidScoresCardProps {
   selectedSpec: string | null;
   onSpecChange: (spec: string | null) => void;
   isLoading: boolean;
+  /** Career rating raids; a boss with kill history there opens the kill explorer. */
+  ratingRaids?: RaidRating[];
+  character?: ExplorerCharacter;
+  ratingsHref?: (raidKey: string, boss?: string) => string;
+}
+
+/** The rating raid holding this boss's kill history, if any. */
+function ratingRaidFor(raids: RaidRating[] | undefined, instanceName: string, encounterName: string) {
+  return raids?.find(
+    (r) => r.instanceName === instanceName && explorableBosses(r).some((b) => b.encounterName === encounterName),
+  );
 }
 
 /** Per-raid score ledger; expand a raid for its per-boss breakdown. */
@@ -35,7 +53,15 @@ export function RaidScoresCard({
   selectedSpec,
   onSpecChange,
   isLoading,
+  ratingRaids,
+  character,
+  ratingsHref,
 }: RaidScoresCardProps) {
+  const [exploring, setExploring] = useState<BossExplorerTarget>();
+  const explore = (instanceName: string, encounterName: string) => {
+    const raid = character && ratingRaidFor(ratingRaids, instanceName, encounterName);
+    return raid ? () => setExploring({ raid, boss: encounterName, lens: "parse" }) : undefined;
+  };
   const [open, setOpen] = useState<string | null>(raids[0] ? raidKey(raids[0]) : null);
   // Open the biggest raid once data arrives (state initializes before load).
   const [autoOpened, setAutoOpened] = useState(false);
@@ -150,11 +176,17 @@ export function RaidScoresCard({
                         <TableHead className="text-right">Kills</TableHead>
                         <TableHead className="w-64">Score</TableHead>
                         <TableHead className="text-right">Best</TableHead>
+                        {character && <TableHead className="w-8" />}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {raid.encounters.map((e) => (
-                        <EncounterRow key={e.encounterName} encounter={e} />
+                        <EncounterRow
+                          key={e.encounterName}
+                          encounter={e}
+                          showExplore={!!character}
+                          onExplore={explore(raid.instanceName, e.encounterName)}
+                        />
                       ))}
                     </TableBody>
                   </Table>
@@ -164,6 +196,14 @@ export function RaidScoresCard({
           );
         })}
       </CardContent>
+      {character && (
+        <BossExplorerDialog
+          target={exploring}
+          character={character}
+          ratingsHref={ratingsHref}
+          onClose={() => setExploring(undefined)}
+        />
+      )}
     </Card>
   );
 }
@@ -214,7 +254,16 @@ function ScoreInputsTooltip({
   );
 }
 
-function EncounterRow({ encounter }: { encounter: EncounterSummary }) {
+function EncounterRow({
+  encounter,
+  showExplore,
+  onExplore,
+}: {
+  encounter: EncounterSummary;
+  /** Reserve the explorer column, even when this boss has no kill history. */
+  showExplore?: boolean;
+  onExplore?: () => void;
+}) {
   return (
     <TableRow>
       <TableCell className="font-wow">{encounter.encounterName}</TableCell>
@@ -250,6 +299,11 @@ function EncounterRow({ encounter }: { encounter: EncounterSummary }) {
           </span>
         </ScoreInputsTooltip>
       </TableCell>
+      {showExplore && (
+        <TableCell className="py-1 text-right">
+          {onExplore && <ExploreButton label={`Explore ${encounter.encounterName} kills`} onClick={onExplore} />}
+        </TableCell>
+      )}
     </TableRow>
   );
 }

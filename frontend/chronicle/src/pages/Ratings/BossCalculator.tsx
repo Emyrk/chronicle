@@ -33,7 +33,7 @@ export function LensTabs({
   const lenses = only ? LENSES.filter((l) => only.includes(l.id)) : LENSES
   return (
     <div
-      className={cn("grid gap-2", lenses.length === 5 ? "grid-cols-2 sm:grid-cols-5" : "grid-cols-3", compact ? "mb-3" : "mb-4")}
+      className={cn("grid gap-2", lenses.length === 5 ? "grid-cols-2 sm:grid-cols-5" : lenses.length === 4 ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3", compact ? "mb-3" : "mb-4")}
       role="tablist"
       aria-label="Metric lens"
     >

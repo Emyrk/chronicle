@@ -204,3 +204,12 @@ export function raidCoverage(cohort: CareerPlayerCohort): { rated: number; total
   const weighted = cohort.summary.contributions.filter((c) => c.include_average);
   return { rated: weighted.filter((c) => c.eligible_metric_kills > 0).length, total: weighted.length };
 }
+
+export function raidName(r: Pick<RaidRating, "instanceName" | "difficultyName" | "maxPlayers">): string {
+  return [r.instanceName, r.difficultyName, r.maxPlayers > 0 ? `${r.maxPlayers}` : ""].filter(Boolean).join(" ");
+}
+
+/** Bosses with kill history the boss explorer can show. */
+export function explorableBosses(raid: RaidRating): BossRating[] {
+  return raid.bosses.filter((b) => b.group);
+}

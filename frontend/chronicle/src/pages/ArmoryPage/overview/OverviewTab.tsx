@@ -149,6 +149,18 @@ export function OverviewTab({
                 selectedSpec={parseView.selectedSpec}
                 onSpecChange={parseView.onSpecChange}
                 isLoading={parsesQuery.isLoading}
+                ratingRaids={ratings.raids}
+                character={player}
+                ratingsHref={(raid, boss) =>
+                  ratingsExplainerHref({
+                    realm: player.realm_name,
+                    player: player.id,
+                    raid,
+                    spec: ratings.cohort ? cohortKey(ratings.cohort) : undefined,
+                    metric: ratings.metric,
+                    boss,
+                  })
+                }
               />
             ) : (
             <RaidRatingsCard

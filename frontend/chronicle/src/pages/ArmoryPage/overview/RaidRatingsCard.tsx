@@ -1,17 +1,19 @@
 import { entityAttributes, raidEntity, bossEntity } from "@/components/EntityMenu/entity";
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowUpRight, Calculator } from "lucide-react";
-import type { ArmorySearchResult } from "@/api/typesGenerated";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { StandaloneBossCalculator } from "@/pages/Ratings/BossCalculator";
-import { datasetFromGroup } from "@/pages/Ratings/useMyRatingData";
+import { ArrowUpRight } from "lucide-react";
+import {
+  BossExplorerDialog,
+  ExploreButton,
+  type BossExplorerTarget,
+  type ExplorerCharacter,
+} from "./BossExplorerDialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card/Card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/Collapsible/Collapsible";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/Table/Table";
 import { getInstanceAccentColor } from "@/pages/Logs/utils/instanceImages";
 import { METRIC_THEMES } from "@/pages/Leaderboards/Ratings/ratingThemes";
-import type { BossRating, RaidRating } from "./careerRatingsModel";
+import { explorableBosses, raidName, type BossRating, type RaidRating } from "./careerRatingsModel";
 
 interface RaidRatingsCardProps {
   raids: RaidRating[];
@@ -19,18 +21,15 @@ interface RaidRatingsCardProps {
   isLoading: boolean;
   /** Shown instead of the raid list when there is nothing to rate. */
   emptyMessage?: string;
-  /** The character, for the per-boss ratings calculator. */
-  character?: Character;
+  /** The character, for the boss explorer. */
+  character?: ExplorerCharacter;
   /** The ratings explainer for one raid (or one of its bosses), with this character selected. */
   ratingsHref?: (raidKey: string, boss?: string) => string;
 }
 
-type Character = Pick<ArmorySearchResult, "realm_id" | "id">;
-
 const MASTERY = METRIC_THEMES.mastery.accent;
 const PEAK = METRIC_THEMES.peak.accent;
 const RENOWN = METRIC_THEMES.renown.accent;
-const RATING_LENSES = ["peak", "mastery", "renown"] as const;
 const fmt = (v: number | null) => (v === null ? "—" : v.toFixed(1));
 
 /** Per-raid career contributions; expand a raid for its bosses against the benchmark. */
@@ -46,6 +45,11 @@ export function RaidRatingsCard({
   const untouched = raids.filter((r) => r.kills === 0 && r.rated);
   const [open, setOpen] = useState<string | null>(null);
   const openKey = open ?? active[0]?.key ?? null;
+  const [exploring, setExploring] = useState<BossExplorerTarget>();
+  const explore = (raid: RaidRating) =>
+    character && raid.rated && explorableBosses(raid).length > 0
+      ? (boss?: string) => setExploring({ raid, boss, lens: "mastery" })
+      : undefined;
 
   return (
     <Card className="gap-0 border-0 bg-transparent px-0 pt-4 pb-0 shadow-none">
@@ -71,8 +75,8 @@ export function RaidRatingsCard({
             metric={metric}
             open={openKey === raid.key}
             onOpenChange={(o) => setOpen(o ? raid.key : "")}
-            character={character}
-            ratingsHref={ratingsHref && ((boss?: string) => ratingsHref(raid.key, boss))}
+            onExplore={explore(raid)}
+            ratingsHref={ratingsHref && (() => ratingsHref(raid.key))}
           />
         ))}
         {untouched.length > 0 && (
@@ -89,12 +93,16 @@ export function RaidRatingsCard({
           </div>
         )}
       </CardContent>
+      {character && (
+        <BossExplorerDialog
+          target={exploring}
+          character={character}
+          ratingsHref={ratingsHref}
+          onClose={() => setExploring(undefined)}
+        />
+      )}
     </Card>
   );
-}
-
-function raidName(r: Pick<RaidRating, "instanceName" | "difficultyName" | "maxPlayers">): string {
-  return [r.instanceName, r.difficultyName, r.maxPlayers > 0 ? `${r.maxPlayers}` : ""].filter(Boolean).join(" ");
 }
 
 function RaidRow({
@@ -102,15 +110,16 @@ function RaidRow({
   metric,
   open,
   onOpenChange,
-  character,
+  onExplore,
   ratingsHref,
 }: {
   raid: RaidRating;
   metric: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  character?: Character;
-  ratingsHref?: (boss?: string) => string;
+  /** Opens the boss explorer, on one boss or the raid's first. */
+  onExplore?: (boss?: string) => void;
+  ratingsHref?: () => string;
 }) {
   const accent = getInstanceAccentColor(raid.instanceName);
   const bossTotal = raid.bosses.length + raid.missingBosses.length;
@@ -149,6 +158,13 @@ function RaidRow({
               >
                 {raidName(raid)}
               </div>
+              {onExplore && (
+                <ExploreButton
+                  label={`Explore ${raidName(raid)} kills`}
+                  onClick={() => onExplore()}
+                  className="pointer-events-auto -my-1.5 shrink-0 self-center"
+                />
+              )}
               {ratingsHref && (
                 <Link
                   to={ratingsHref()}
@@ -177,7 +193,7 @@ function RaidRow({
       </div>
       <CollapsibleContent>
         <div className="styled-scrollbar overflow-x-auto bg-popover px-6 py-4">
-          <BossTable raid={raid} metric={metric} character={character} ratingsHref={ratingsHref} />
+          <BossTable raid={raid} metric={metric} onExplore={onExplore} />
         </div>
       </CollapsibleContent>
     </Collapsible>
@@ -222,20 +238,16 @@ function BossBars({ raid }: { raid: RaidRating }) {
 function BossTable({
   raid,
   metric,
-  character,
-  ratingsHref,
+  onExplore,
 }: {
   raid: RaidRating;
   metric: string;
-  character?: Character;
-  ratingsHref?: (boss?: string) => string;
+  onExplore?: (boss?: string) => void;
 }) {
   const unit = metric.toUpperCase();
-  const [explaining, setExplaining] = useState<BossRating>();
-  const canExplain = raid.rated && !!character;
+  const canExplain = !!onExplore;
   return (
-    <>
-      <Table>
+    <Table>
       <TableHeader>
         <TableRow>
           <TableHead>Boss</TableHead>
@@ -263,7 +275,7 @@ function BossTable({
             boss={b}
             instanceName={raid.instanceName}
             rated={raid.rated}
-            onExplain={canExplain ? () => setExplaining(b) : undefined}
+            onExplain={onExplore && (() => onExplore(b.encounterName))}
           />
         ))}
         {raid.missingBosses.length > 0 && (
@@ -274,64 +286,7 @@ function BossTable({
           </TableRow>
         )}
       </TableBody>
-      </Table>
-      {character && (
-        <BossCalculatorDialog
-          boss={explaining}
-          raidName={raidName(raid)}
-          character={character}
-          href={explaining && ratingsHref?.(explaining.encounterName)}
-          onClose={() => setExplaining(undefined)}
-        />
-      )}
-    </>
-  );
-}
-
-function BossCalculatorDialog({
-  boss,
-  raidName,
-  character,
-  href,
-  onClose,
-}: {
-  boss?: BossRating;
-  raidName: string;
-  character: Character;
-  href?: string;
-  onClose: () => void;
-}) {
-  const dataset = boss?.group ? datasetFromGroup(character, boss.group) : undefined;
-  return (
-    <Dialog open={!!dataset} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="styled-scrollbar max-h-[90vh] bg-card max-w-[calc(100%-2rem)] overflow-y-auto sm:max-w-5xl">
-        {dataset && (
-          <>
-            <DialogHeader>
-              <DialogTitle className="font-wow text-xl">{dataset.bossName}</DialogTitle>
-              <DialogDescription>
-                {raidName} · {dataset.cohortLabel} {dataset.unit} · how these kills become Peak, Mastery, and Renown
-                {href && (
-                  <>
-                    {" · "}
-                    <Link
-                      to={href}
-                      className="inline-flex items-center gap-0.5 text-sky-300 hover:text-sky-200 hover:underline"
-                    >
-                      Open in How Ratings Work
-                      <ArrowUpRight className="size-3" />
-                    </Link>
-                  </>
-                )}
-              </DialogDescription>
-            </DialogHeader>
-            {/* Keyed so a different boss starts with every kill logged. */}
-            {/* The armory table already shows raw performance; only the ratings need explaining here. */}
-            <StandaloneBossCalculator key={dataset.key} dataset={dataset} lenses={RATING_LENSES} />
-          </>
-        )}
-      </DialogContent>
-    </Dialog>
+    </Table>
   );
 }
 
@@ -396,15 +351,7 @@ function BossRow({
       {onExplain && (
         <TableCell className="py-1 text-right">
           {boss.group && (
-            <button
-              type="button"
-              onClick={onExplain}
-              title={`How ${boss.encounterName}'s ratings are calculated`}
-              aria-label={`How ${boss.encounterName}'s ratings are calculated`}
-              className="inline-flex cursor-pointer items-center rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-sky-500/15 hover:text-sky-300"
-            >
-              <Calculator className="size-4" />
-            </button>
+            <ExploreButton label={`Explore ${boss.encounterName} kills`} onClick={onExplain} />
           )}
         </TableCell>
       )}

@@ -132,9 +132,10 @@ function ArmoryPageContent({ player }: { player: ArmoryPlayer }) {
   const activity = useRecentActivity(player, isOverview);
   const lootQuery = useArmoryLoot(player.realm_name, player.id, isOverview && mode === "journey");
   // Journey shows all-spec Renown; Performance adds the boss-level history.
+  // The Parses view also loads the history: its bosses open the same kill explorer.
   const ratings = useCareerRatings(player, {
-    career: isOverview && !showParses,
-    history: isOverview && mode === "performance" && !showParses,
+    career: isOverview,
+    history: isOverview && mode === "performance",
   });
 
   // Parses view: best-3 average per boss over the last 60 days.
