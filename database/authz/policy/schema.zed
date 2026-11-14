@@ -100,7 +100,24 @@ definition chronicle {
   // A site-wide ban overrides every site-wide submission grant.
   permission submit_photo_proof = (photo_proof_submitter + stripe_submit_photo_proof + supporter + has_honored) - photo_proof_banned
   permission review_photo_proof = photo_proof_reviewer + technical_admin
+  // Blog action permissions are independent policy boundaries, not new roles.
+  // Public approved feedback and upvote totals remain anonymous HTTP reads;
+  // no wildcard global-reader relationship is needed for that projection.
+  permission vote_blog = chronicle_member + chronicle_guild_member + administer
+  permission read_own_blog_vote = chronicle_member + chronicle_guild_member + administer
+  permission read_own_blog_feedback = chronicle_member + chronicle_guild_member + administer
+  permission withdraw_blog_feedback = chronicle_member + chronicle_guild_member + administer
+  // Bans prohibit publication changes, not reading or withdrawing one's feedback.
   permission submit_blog_feedback = (chronicle_member + chronicle_guild_member + administer) - feedback_banned
+  permission create_blog_feedback = submit_blog_feedback
+  permission edit_blog_feedback = submit_blog_feedback
+  permission list_blog_feedback = administer
+  permission read_blog_vote_totals = administer
+  permission approve_blog_feedback = administer
+  permission reject_blog_feedback = administer
+  permission delete_blog_feedback = administer
+  permission ban_blog_feedback = administer
+  permission unban_blog_feedback = administer
 
   permission create_tenant_application = technical_admin + chronicle_guild_member
 

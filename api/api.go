@@ -408,7 +408,6 @@ func (api *API) Routes() chi.Router {
 				r.Put("/blog/{slug}/feedback", api.PutBlogFeedback)
 				r.Delete("/blog/{slug}/feedback", api.DeleteBlogFeedback)
 				r.Group(func(r chi.Router) {
-					r.Use(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User))
 					r.Get("/admin/blog/feedback", api.AdminBlogFeedback)
 					r.Get("/admin/blog/{slug}/votes", api.AdminBlogVotes)
 					r.Post("/admin/blog/feedback/{id}/{action}", api.AdminModerateBlogFeedback)

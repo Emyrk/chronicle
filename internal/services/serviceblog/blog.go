@@ -14,12 +14,13 @@ import (
 )
 
 var (
-	ErrDisabled = errors.New("blog interactions are not available")
-	ErrInvalid  = errors.New("invalid blog interaction")
-	ErrBanned   = errors.New("feedback submissions are disabled for this account")
-	ErrReserved = errors.New("feedback has been deleted and cannot be recreated")
-	ErrConflict = errors.New("feedback changed; refresh before retrying")
-	ErrNotFound = errors.New("feedback not found")
+	ErrForbidden = errors.New("blog action is not permitted")
+	ErrDisabled  = errors.New("blog interactions are not available")
+	ErrInvalid   = errors.New("invalid blog interaction")
+	ErrBanned    = errors.New("feedback submissions are disabled for this account")
+	ErrReserved  = errors.New("feedback has been deleted and cannot be recreated")
+	ErrConflict  = errors.New("feedback changed; refresh before retrying")
+	ErrNotFound  = errors.New("feedback not found")
 )
 
 type Feedback struct {
@@ -58,11 +59,13 @@ type Limiter interface {
 	Take(context.Context, string, float64) (ratelimit.Result, error)
 }
 type Options struct {
-	Store           Store
-	Bans            Bans
-	VoteLimiter     Limiter
-	FeedbackLimiter Limiter
-	Eligible        func(context.Context, string, string) (bool, error)
+	// AuthorizeFeedback checks the dedicated create/edit permission before admission.
+	AuthorizeFeedback func(context.Context, uuid.UUID, bool) error
+	Store             Store
+	Bans              Bans
+	VoteLimiter       Limiter
+	FeedbackLimiter   Limiter
+	Eligible          func(context.Context, string, string) (bool, error)
 	// FeedbackCreated is inactive by default. It runs best-effort after the first
 	// successful insert only, not edits. Delivery is not durable or exactly-once.
 	// Consumers must be idempotent. No rewards are issued by this service.
@@ -198,6 +201,11 @@ func (s *Service) Save(ctx context.Context, slug string, user, tenant uuid.UUID,
 	if own != nil && own.Deleted {
 		return Feedback{}, ErrReserved
 	}
+	if s.opts.AuthorizeFeedback != nil {
+		if err = s.opts.AuthorizeFeedback(ctx, user, own != nil); err != nil {
+			return Feedback{}, err
+		}
+	}
 	if err = take(ctx, s.opts.FeedbackLimiter, user); err != nil {
 		return Feedback{}, err
 	}
@@ -230,7 +238,7 @@ func (s *Service) Delete(ctx context.Context, slug string, user uuid.UUID) error
 	return s.opts.Store.DeleteOwnFeedback(ctx, slug, user)
 }
 
-// Admin methods are unthrottled; transport must enforce the global user-admin permission.
+// Admin methods are unthrottled; transport must enforce each dedicated blog permission.
 func (s *Service) List(ctx context.Context) ([]Feedback, error) {
 	return s.opts.Store.ListFeedback(ctx)
 }

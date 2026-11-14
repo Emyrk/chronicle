@@ -176,3 +176,25 @@ func TestPrivateFeedbackPreservesConsent(t *testing.T) {
 	require.False(t, saved.Consent)
 	require.ErrorIs(t, s.Vote(context.Background(), "post", user, 1), ErrDisabled)
 }
+
+func TestFeedbackActionPermissionBeforeAdmission(t *testing.T) {
+	t.Parallel()
+	for _, editing := range []bool{false, true} {
+		store := &testStore{}
+		if editing {
+			store.own = &Feedback{}
+		}
+		limiter := &testLimiter{result: ratelimit.Result{Allowed: true}}
+		called := false
+		s := New(Options{Store: store, Bans: testBans{}, FeedbackLimiter: limiter, Eligible: func(context.Context, string, string) (bool, error) { return true, nil }, AuthorizeFeedback: func(_ context.Context, _ uuid.UUID, isEdit bool) error {
+			called = true
+			require.Equal(t, editing, isEdit)
+			return ErrForbidden
+		}})
+		_, err := s.Save(context.Background(), "post", uuid.New(), uuid.Nil, "body", false)
+		require.ErrorIs(t, err, ErrForbidden)
+		require.True(t, called)
+		require.Zero(t, limiter.calls)
+		require.Zero(t, store.saves)
+	}
+}

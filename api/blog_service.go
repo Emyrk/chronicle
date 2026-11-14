@@ -9,6 +9,7 @@ import (
 	"github.com/Emyrk/chronicle/frontend"
 	"github.com/Emyrk/chronicle/internal/ratelimit"
 	"github.com/Emyrk/chronicle/internal/services/serviceblog"
+	"github.com/authzed/gochugaru/rel"
 	"github.com/google/uuid"
 )
 
@@ -16,7 +17,16 @@ func (a *API) newBlogService() *serviceblog.Service {
 	db := database.New(a.Opts.Pool)
 	limit := ratelimit.Limit{PerSecond: 1.0 / 1200, Burst: 5}
 	return serviceblog.New(serviceblog.Options{
-		Logger:          a.Opts.Logger,
+		Logger: a.Opts.Logger,
+		AuthorizeFeedback: func(ctx context.Context, user uuid.UUID, editing bool) error {
+			action := "create_blog_feedback"
+			if editing {
+				action = "edit_blog_feedback"
+			}
+			return checkBlogPermission(ctx, policy.New().User(user), action, func(ctx context.Context, check rel.Relationship) (bool, error) {
+				return a.Zed.CheckOne(ctx, nil, check)
+			})
+		},
 		Store:           serviceblog.NewDatabaseStore(db),
 		Bans:            blogBans{zed: a.Zed},
 		VoteLimiter:     ratelimit.New(db, "blog_vote", limit),

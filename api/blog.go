@@ -26,7 +26,7 @@ func blogError(w http.ResponseWriter, r *http.Request, err error) {
 		status = http.StatusBadRequest
 	case errors.Is(err, serviceblog.ErrDisabled), errors.Is(err, serviceblog.ErrNotFound):
 		status = http.StatusNotFound
-	case errors.Is(err, serviceblog.ErrBanned):
+	case errors.Is(err, serviceblog.ErrBanned), errors.Is(err, serviceblog.ErrForbidden):
 		status = http.StatusForbidden
 	case errors.Is(err, serviceblog.ErrReserved), errors.Is(err, serviceblog.ErrConflict):
 		status = http.StatusConflict
@@ -43,6 +43,9 @@ func (a *API) GetBlogInteractions(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "private, no-store")
 	user := uuid.Nil
 	if claims, ok := chronauth.AuthenticatedClaims(r.Context()); ok {
+		if !a.requireBlogPermission(w, r, "read_own_blog_vote") || !a.requireBlogPermission(w, r, "read_own_blog_feedback") {
+			return
+		}
 		user = claims.Subject
 	}
 	state, err := a.blog.Read(r.Context(), chi.URLParam(r, "slug"), user)
@@ -66,6 +69,9 @@ func (a *API) GetBlogInteractions(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(r.Context(), w, http.StatusOK, out)
 }
 func (a *API) PutBlogVote(w http.ResponseWriter, r *http.Request) {
+	if !a.requireBlogPermission(w, r, "vote_blog") {
+		return
+	}
 	var req chroniclesdk.BlogVoteRequest
 	if !httpapi.Read(r.Context(), w, r, &req) {
 		return
@@ -78,6 +84,9 @@ func (a *API) PutBlogVote(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(r.Context(), w, http.StatusNoContent, nil)
 }
 func (a *API) PutBlogFeedback(w http.ResponseWriter, r *http.Request) {
+	if !a.requireBlogPermission(w, r, "submit_blog_feedback") {
+		return
+	}
 	var req chroniclesdk.BlogFeedbackRequest
 	if !httpapi.Read(r.Context(), w, r, &req) {
 		return
@@ -95,6 +104,9 @@ func (a *API) PutBlogFeedback(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(r.Context(), w, http.StatusOK, blogOwn(f))
 }
 func (a *API) DeleteBlogFeedback(w http.ResponseWriter, r *http.Request) {
+	if !a.requireBlogPermission(w, r, "withdraw_blog_feedback") {
+		return
+	}
 	err := a.blog.Delete(r.Context(), chi.URLParam(r, "slug"), chronauth.MustAuthenticatedClaims(r.Context()).Subject)
 	if err != nil {
 		blogError(w, r, err)
@@ -103,6 +115,9 @@ func (a *API) DeleteBlogFeedback(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(r.Context(), w, http.StatusNoContent, nil)
 }
 func (a *API) AdminBlogFeedback(w http.ResponseWriter, r *http.Request) {
+	if !a.requireBlogPermission(w, r, "list_blog_feedback") {
+		return
+	}
 	rows, err := a.blog.List(r.Context())
 	if err != nil {
 		blogError(w, r, err)
@@ -115,6 +130,14 @@ func (a *API) AdminBlogFeedback(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(r.Context(), w, http.StatusOK, out)
 }
 func (a *API) AdminModerateBlogFeedback(w http.ResponseWriter, r *http.Request) {
+	action := chi.URLParam(r, "action")
+	if action != "approve" && action != "reject" && action != "delete" {
+		httpapi.Forbidden(w, nil)
+		return
+	}
+	if !a.requireBlogPermission(w, r, action) {
+		return
+	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		blogError(w, r, serviceblog.ErrInvalid)
@@ -131,16 +154,20 @@ func (a *API) AdminModerateBlogFeedback(w http.ResponseWriter, r *http.Request) 
 	httpapi.Write(r.Context(), w, http.StatusNoContent, nil)
 }
 func (a *API) AdminBanBlogFeedback(w http.ResponseWriter, r *http.Request) {
+	action := chi.URLParam(r, "action")
+	if action != "ban" && action != "unban" {
+		httpapi.Forbidden(w, nil)
+		return
+	}
+	if !a.requireBlogPermission(w, r, action) {
+		return
+	}
 	id, err := uuid.Parse(chi.URLParam(r, "user_id"))
 	if err != nil {
 		blogError(w, r, serviceblog.ErrInvalid)
 		return
 	}
-	action := chi.URLParam(r, "action")
-	if action != "ban" && action != "unban" {
-		blogError(w, r, serviceblog.ErrInvalid)
-		return
-	}
+
 	if err = a.blog.Ban(r.Context(), id, action == "ban"); err != nil {
 		blogError(w, r, err)
 		return
@@ -149,6 +176,9 @@ func (a *API) AdminBanBlogFeedback(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) AdminBlogVotes(w http.ResponseWriter, r *http.Request) {
+	if !a.requireBlogPermission(w, r, "read_blog_vote_totals") {
+		return
+	}
 	votes, err := a.blog.AdminVotes(r.Context(), chi.URLParam(r, "slug"))
 	if err != nil {
 		blogError(w, r, err)
