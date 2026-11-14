@@ -24057,6 +24057,266 @@ func (q *sqlQuerier) UnlinkDuplicateGroup(ctx context.Context, id uuid.UUID) (Un
 	return i, err
 }
 
+const baselineBossMemberships = `-- name: BaselineBossMemberships :many
+SELECT membership.id, membership.tenant_id, membership.policy_version, membership.query_version, membership.run_id, membership.encounter_name, membership.instance_id, membership.log_group_id, membership.instance_name, membership.difficulty_name, membership.max_players, membership.duration_ms, membership.killed_at FROM time_parse_boss_kill_memberships membership
+WHERE membership.log_group_id = $1 OR membership.run_id IN (
+    SELECT COALESCE(duplicate_group_id, id) FROM log_instances WHERE log_group_id = $1
+)
+`
+
+func (q *sqlQuerier) BaselineBossMemberships(ctx context.Context, logGroupID uuid.UUID) ([]TimeParseBossKillMembership, error) {
+	rows, err := q.db.Query(ctx, baselineBossMemberships, logGroupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TimeParseBossKillMembership
+	for rows.Next() {
+		var i TimeParseBossKillMembership
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.PolicyVersion,
+			&i.QueryVersion,
+			&i.RunID,
+			&i.EncounterName,
+			&i.InstanceID,
+			&i.LogGroupID,
+			&i.InstanceName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.DurationMs,
+			&i.KilledAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const baselineClearMemberships = `-- name: BaselineClearMemberships :many
+SELECT membership.id, membership.tenant_id, membership.policy_version, membership.query_version, membership.run_id, membership.instance_id, membership.log_group_id, membership.instance_name, membership.difficulty_name, membership.max_players, membership.duration_ms, membership.start_time FROM time_parse_clear_time_memberships membership
+WHERE membership.log_group_id = $1 OR membership.run_id IN (
+    SELECT COALESCE(duplicate_group_id, id) FROM log_instances WHERE log_group_id = $1
+)
+`
+
+func (q *sqlQuerier) BaselineClearMemberships(ctx context.Context, logGroupID uuid.UUID) ([]TimeParseClearTimeMembership, error) {
+	rows, err := q.db.Query(ctx, baselineClearMemberships, logGroupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TimeParseClearTimeMembership
+	for rows.Next() {
+		var i TimeParseClearTimeMembership
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.PolicyVersion,
+			&i.QueryVersion,
+			&i.RunID,
+			&i.InstanceID,
+			&i.LogGroupID,
+			&i.InstanceName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.DurationMs,
+			&i.StartTime,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const baselineEncounterRankings = `-- name: BaselineEncounterRankings :many
+
+SELECT ranking.id, ranking.encounter_id, ranking.instance_id, ranking.encounter_name, ranking.instance_name, ranking.player_guid, ranking.player_name, ranking.player_class, ranking.player_spec, ranking.player_role, ranking.player_level, ranking.talent_build_id, ranking.difficulty_name, ranking.max_players, ranking.realm_id, ranking.realm_name, ranking.guild_id, ranking.guild_name, ranking.damage_done, ranking.duration_secs, ranking.dps, ranking.avg_ilvl, ranking.log_hashed_slug, ranking.killed_at, ranking.created_at, ranking.healing_done, ranking.absorbed_done, ranking.hps, ranking.player_sub_spec, ranking.player_deaths, ranking.alive_percentage, ranking.unranked_damage_done FROM encounter_dps_rankings ranking
+WHERE ranking.instance_id IN (SELECT id FROM log_instances WHERE log_group_id = $1)
+`
+
+// Read-only scoped queries for temporary parser baseline tooling. Membership
+// refresh can select a representative outside this log group: include affected
+// runs, not only rows whose representative belongs to the selected group.
+func (q *sqlQuerier) BaselineEncounterRankings(ctx context.Context, logGroupID uuid.UUID) ([]EncounterDpsRanking, error) {
+	rows, err := q.db.Query(ctx, baselineEncounterRankings, logGroupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []EncounterDpsRanking
+	for rows.Next() {
+		var i EncounterDpsRanking
+		if err := rows.Scan(
+			&i.ID,
+			&i.EncounterID,
+			&i.InstanceID,
+			&i.EncounterName,
+			&i.InstanceName,
+			&i.PlayerGuid,
+			&i.PlayerName,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerRole,
+			&i.PlayerLevel,
+			&i.TalentBuildID,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.RealmID,
+			&i.RealmName,
+			&i.GuildID,
+			&i.GuildName,
+			&i.DamageDone,
+			&i.DurationSecs,
+			&i.Dps,
+			&i.AvgIlvl,
+			&i.LogHashedSlug,
+			&i.KilledAt,
+			&i.CreatedAt,
+			&i.HealingDone,
+			&i.AbsorbedDone,
+			&i.Hps,
+			&i.PlayerSubSpec,
+			&i.PlayerDeaths,
+			&i.AlivePercentage,
+			&i.UnrankedDamageDone,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const baselineParseMemberships = `-- name: BaselineParseMemberships :many
+SELECT membership.id, membership.tenant_id, membership.policy_version, membership.query_version, membership.run_id, membership.encounter_name, membership.player_guid, membership.instance_id, membership.log_group_id, membership.difficulty_name, membership.max_players, membership.player_class, membership.player_spec, membership.player_sub_spec, membership.killed_at, membership.dps, membership.hps FROM parse_score_memberships membership
+WHERE membership.log_group_id = $1 OR membership.run_id IN (
+    SELECT COALESCE(duplicate_group_id, id) FROM log_instances WHERE log_group_id = $1
+)
+`
+
+func (q *sqlQuerier) BaselineParseMemberships(ctx context.Context, logGroupID uuid.UUID) ([]ParseScoreMembership, error) {
+	rows, err := q.db.Query(ctx, baselineParseMemberships, logGroupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ParseScoreMembership
+	for rows.Next() {
+		var i ParseScoreMembership
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.PolicyVersion,
+			&i.QueryVersion,
+			&i.RunID,
+			&i.EncounterName,
+			&i.PlayerGuid,
+			&i.InstanceID,
+			&i.LogGroupID,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerSubSpec,
+			&i.KilledAt,
+			&i.Dps,
+			&i.Hps,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const baselineRankingGuilds = `-- name: BaselineRankingGuilds :many
+SELECT guild.id, guild.realm_id, guild.name, guild.created_at FROM guilds guild
+WHERE guild.id IN (
+    SELECT ranking.guild_id FROM encounter_dps_rankings ranking
+    JOIN log_instances instance ON instance.id = ranking.instance_id
+    WHERE instance.log_group_id = $1
+)
+`
+
+func (q *sqlQuerier) BaselineRankingGuilds(ctx context.Context, logGroupID uuid.UUID) ([]Guild, error) {
+	rows, err := q.db.Query(ctx, baselineRankingGuilds, logGroupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Guild
+	for rows.Next() {
+		var i Guild
+		if err := rows.Scan(
+			&i.ID,
+			&i.RealmID,
+			&i.Name,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const baselineTalentBuilds = `-- name: BaselineTalentBuilds :many
+SELECT build.id, build.player_class, build.talent_summary, build.talent_layout, build.spec, build.sub_spec, build.created_at, build.dataset_id FROM talent_builds build
+WHERE build.id IN (
+    SELECT ranking.talent_build_id FROM encounter_dps_rankings ranking
+    JOIN log_instances instance ON instance.id = ranking.instance_id
+    WHERE instance.log_group_id = $1
+)
+`
+
+func (q *sqlQuerier) BaselineTalentBuilds(ctx context.Context, logGroupID uuid.UUID) ([]TalentBuild, error) {
+	rows, err := q.db.Query(ctx, baselineTalentBuilds, logGroupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TalentBuild
+	for rows.Next() {
+		var i TalentBuild
+		if err := rows.Scan(
+			&i.ID,
+			&i.PlayerClass,
+			&i.TalentSummary,
+			&i.TalentLayout,
+			&i.Spec,
+			&i.SubSpec,
+			&i.CreatedAt,
+			&i.DatasetID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const deleteParseScoreMembershipsByInstance = `-- name: DeleteParseScoreMembershipsByInstance :exec
 WITH variants AS (DELETE FROM parse_variant_memberships variant WHERE variant.instance_id = $1)
 DELETE FROM parse_score_memberships membership WHERE membership.instance_id = $1
