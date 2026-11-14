@@ -19,6 +19,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
 	"github.com/Emyrk/chronicle/combatlog/parser/unitname"
+	next "github.com/Emyrk/chronicle/combatlog/parsernext/vanilla"
 	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/Emyrk/chronicle/database/gamedb/talents"
@@ -905,42 +906,7 @@ func (p *Parser) combatantInfo(ctx context.Context, ts time.Time, m *Matched) ([
 
 // 1771542038|SWING|0xF130002C3600BE05|0x000000000001C80A|52|2|1|1|0|0|0
 func (p *Parser) swing(ctx context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
-	caster := m.Guid()
-	target := m.Guid()
-	amount := int32(m.Int64())
-	info := m.SwingHitInfo()
-	victimState := VictimState(m.Int64())
-	components := m.Int32() // Number of damage components probably does not matter
-	blocked := int32(m.Int64())
-	absorbed := int32(m.Int64())
-	resisted := int32(m.Int64())
-
-	if err := m.Error(); err != nil {
-		return nil, err
-	}
-
-	auto, err := p.wowDB.Spell(p.ctx, chrondbc.SpellIDAutoAttack)
-	if err != nil {
-		if chrondbc.IsSpellNotFound(err) {
-			auto = ptr.Ref(chrondbc.UnknownSpell(chrondbc.SpellIDAutoAttack))
-		} else {
-			return nil, fmt.Errorf("fetching auto attack spell: %w", err)
-		}
-	}
-	ht := HitType(amount, components, info, victimState)
-
-	return set(&messages.Damage{
-		MessageBase:     messages.Base(ts),
-		SpellName:       ptr.Ref("Auto Attack"),
-		SpellData:       auto,
-		Caster:          ptr.Ref(caster),
-		Target:          target,
-		HitType:         ht,
-		Amount:          amount,
-		School:          types.PhysicalSchool,
-		Trailer:         Trailer(blocked, absorbed, resisted),
-		EnvironmentType: nil,
-	})
+	return next.DecodeSwing(p.ctx, p.wowDB, ts, m)
 }
 
 // 1771542037|HEAL|0x000000000001C80A|0x000000000001C80A|27805|507|0|0
@@ -1469,19 +1435,7 @@ func (p *Parser) spellFail(_ context.Context, ts time.Time, m *Matched) ([]messa
 }
 
 func (p *Parser) slain(_ context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
-	id := m.Guid()
-
-	if err := m.Error(); err != nil {
-		return nil, err
-	}
-
-	var dmg *messages.Damage // For unit tests, this is dumb
-	return set(&messages.Slain{
-		MessageBase: messages.Base(ts),
-		Victim:      id,
-		Killer:      nil,
-		Attribution: dmg,
-	})
+	return next.DecodeDeath(ts, m)
 }
 
 func (p *Parser) dispel(ctx context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
