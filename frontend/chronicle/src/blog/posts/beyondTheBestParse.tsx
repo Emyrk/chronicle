@@ -96,8 +96,7 @@ export function BeyondTheBestParsePost({ post }: PostProps) {
         <PositionVsDistance />
         <p>
           <strong>It isn&apos;t perfect.</strong> The benchmark depends on the best-performing player of a spec, so a
-          new record lowers everyone else&apos;s Peak, and determining the benchmark might need more work. But
-          there&apos;s no rolling window: Peak uses all eligible recorded history.
+          new record lowers everyone else&apos;s Peak, and determining the benchmark might need more work.
         </p>
 
         <h3>A common scale for different performances</h3>
