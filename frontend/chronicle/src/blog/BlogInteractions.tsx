@@ -9,7 +9,7 @@ const subscribe = () => () => {};
 /** Interactions are live only. Keep prerendering and the first hydration render identical. */
 export function BlogInteractions({ post }: { post: BlogPostMetadata }) {
   const hydrated = useSyncExternalStore(subscribe, () => true, () => false);
-  if (!hydrated || (!post.votingEnabled && !post.feedbackEnabled)) return null;
+  if (!hydrated || (post.votingEnabled === false && !post.feedbackEnabled)) return null;
   return <LiveInteractions post={post} />;
 }
 
@@ -19,7 +19,7 @@ function LiveInteractions({ post }: { post: BlogPostMetadata }) {
   const own = publicQuery;
   const mutation = useBlogMutation(post.id);
   if (publicQuery.data && !publicQuery.data.voting_enabled && !publicQuery.data.feedback_enabled) return null;
-  const votingEnabled = post.votingEnabled && publicQuery.data?.voting_enabled;
+  const votingEnabled = post.votingEnabled !== false && publicQuery.data?.voting_enabled;
   const feedbackEnabled = post.feedbackEnabled && publicQuery.data?.feedback_enabled;
   const disabled = mutation.isPending || own.isLoading || !session || !own.data || !own.data.voting_enabled;
   return (
@@ -40,7 +40,7 @@ function LiveInteractions({ post }: { post: BlogPostMetadata }) {
           </Button>
           {own.data?.own_vote !== 0 && own.data?.own_vote !== undefined && <span className="text-xs text-muted-foreground">Select your vote again to remove it.</span>}
         </div>}
-        {!authLoading && !session && <p className="text-sm text-muted-foreground"><a href={`/login?from=${encodeURIComponent(`/blog/${post.id}`)}`} className="text-primary underline">Sign in</a> to {post.votingEnabled && post.feedbackEnabled ? "vote or leave feedback" : post.votingEnabled ? "vote" : "leave feedback"}. Public feedback is anonymous.</p>}
+        {!authLoading && !session && <p className="text-sm text-muted-foreground"><a href={`/login?from=${encodeURIComponent(`/blog/${post.id}`)}`} className="text-primary underline">Sign in</a> to {post.votingEnabled !== false && post.feedbackEnabled ? "vote or leave feedback" : post.votingEnabled !== false ? "vote" : "leave feedback"}. Public feedback is anonymous.</p>}
         {own.data?.feedback_banned && <p role="status" className="text-sm text-muted-foreground">Your account cannot submit feedback. You can still vote.</p>}
         {mutation.error && <p role="alert" className="text-sm text-destructive">{mutation.error.message}</p>}
         {feedbackEnabled && session && own.data && !own.data.feedback_banned && !own.data.own_feedback?.deleted && <FeedbackEditor key={`${session.user_id}:${own.data.own_feedback?.body ?? "new"}:${own.data.own_feedback?.consent ?? false}`} postID={post.id} feedback={own.data.own_feedback ?? null} />}

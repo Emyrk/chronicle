@@ -57,7 +57,7 @@ export interface BlogPostMetadata {
   hintDescription?: string;
   hintHref?: string;
   hintEnabled?: boolean;
-  /** Interactions are opt-in; omitted flags default to false. */
+  /** Voting defaults to enabled; feedback requires explicit opt-in. */
   votingEnabled?: boolean;
   feedbackEnabled?: boolean;
 }
@@ -182,7 +182,7 @@ function normalizeBlogPostMetadata(value: unknown): BlogPostMetadata {
     }
   }
   return {
-    votingEnabled: value.votingEnabled === true,
+    votingEnabled: value.votingEnabled !== false,
     feedbackEnabled: value.feedbackEnabled === true,
     id,
     title: requiredString(value, "title", id),

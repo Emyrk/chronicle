@@ -17,7 +17,7 @@ export function AdminBlogFeedbackPage() {
   const mutation = useAdminBlogMutation();
   const [status, setStatus] = useState("pending");
   const feedback = query.data?.filter((item) => status === "all" || (status === "deleted" ? item.deleted : !item.deleted && item.status === status)) ?? [];
-  const postIDs = [...new Set([...BLOG_POSTS.filter((post) => post.votingEnabled).map((post) => post.id), ...(query.data ?? []).map((item) => item.post_slug)])];
+  const postIDs = [...new Set([...BLOG_POSTS.filter((post) => post.votingEnabled !== false).map((post) => post.id), ...(query.data ?? []).map((item) => item.post_slug)])];
   return <div className="mx-auto max-w-5xl space-y-6 p-4 sm:p-8">
     <header>
       <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Journal moderation</p>
