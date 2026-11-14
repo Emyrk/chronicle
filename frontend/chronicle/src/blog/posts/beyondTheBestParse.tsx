@@ -162,8 +162,8 @@ export function BeyondTheBestParsePost({ post }: PostProps) {
         <p>
           Ratings and parse history should complement each other, not compete for space. Now that ratings handle the
           big-picture questions, I&apos;d like parse history to focus on individual performances, progress, and what
-          happened in each fight. I don&apos;t have time to rebuild that properly yet, and I don&apos;t want to rush
-          another redesign.
+          happened in each fight. <strong>More ways to explore your data can and will be added.</strong> I just
+          don&apos;t want to rush another redesign, so it will come in steps rather than all at once.
         </p>
 
         <Chapter index={7} />
