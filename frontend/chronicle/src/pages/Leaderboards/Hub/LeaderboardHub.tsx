@@ -2,6 +2,7 @@ import { Fragment, useMemo, useState, type ReactNode, type Ref } from "react"
 import { useActiveTabInView } from "@/hooks/useActiveTabInView"
 import { createPortal } from "react-dom"
 import { Link } from "react-router-dom"
+import { HubReportLink } from "./HubReportLink"
 import { ArrowRight, Check, ChevronDown, ChevronLeft, CircleHelp, HeartPulse, Swords, Timer, PanelLeft, Globe, List, X, type LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -756,15 +757,18 @@ export function HubBanner<T extends string>({
     >
       <img src={background} alt="" className="absolute inset-0 h-full w-full object-cover opacity-60" />
       <div className="absolute inset-0 bg-gradient-to-t from-card via-card/80 to-card/30" />
-      {/* Desktop: the banner's corner links to the explainer for Peak, Mastery, and Renown. */}
-      <Link
-        to="/ratings"
-        title="How ratings work"
-        aria-label="How ratings work"
-        className="absolute top-3 right-4 z-10 hidden size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground sm:inline-flex"
-      >
-        <CircleHelp className="size-5" />
-      </Link>
+      {/* Desktop: the banner's corner holds the report flag and the explainer for Peak, Mastery, and Renown. */}
+      <div className="absolute top-3 right-4 z-10 hidden items-center sm:flex">
+        <HubReportLink />
+        <Link
+          to="/ratings"
+          title="How ratings work"
+          aria-label="How ratings work"
+          className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground"
+        >
+          <CircleHelp className="size-5" />
+        </Link>
+      </div>
       <div className="relative flex min-w-0 items-end gap-3 px-3 pt-4 pb-3 sm:flex-wrap sm:gap-4 sm:px-6 sm:pt-10 sm:pb-4">
         <div className="min-w-0 flex-1">
           {/* Breadcrumb: the parent is the way back to the grid; the rest names the current scope. */}

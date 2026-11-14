@@ -3,6 +3,7 @@ import { useState, type ReactNode } from "react"
 import { useActiveTabInView } from "@/hooks/useActiveTabInView"
 import { Link } from "react-router-dom"
 import type { CareerLeaderboardEntry, HubLandingPreview, RankingsInstanceSummary, SupportedInstance } from "@/api/typesGenerated"
+import { HubReportLink } from "./HubReportLink"
 import { AlertTriangle, ArrowRight, CircleHelp, RotateCw, Skull, Swords, Timer } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { CLASS_CSS_VAR, CLASS_DISPLAY } from "@/pages/Rankings/classDisplay"
@@ -140,12 +141,13 @@ export function LeaderboardsHubApp({
                 )}</HubTabHint>
               })}
             </nav>
-            {/* Desktop: like the instance banner's corner, the bar ends with the explainer for Peak, Mastery, and Renown. */}
+            {/* Desktop: like the instance banner's corner, the bar ends with the report flag and the explainer for Peak, Mastery, and Renown. */}
+            <HubReportLink className="ml-2 hidden sm:inline-flex" />
             <Link
               to="/ratings"
               title="How ratings work"
               aria-label="How ratings work"
-              className="ml-2 hidden size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground sm:inline-flex"
+              className="hidden size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground sm:inline-flex"
             >
               <CircleHelp className="size-5" />
             </Link>
