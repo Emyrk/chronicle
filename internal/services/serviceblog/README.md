@@ -4,10 +4,26 @@ This constructed service owns eligibility, validation, admission and interaction
 HTTP adapters own authentication, user-admin authorization and anonymous response projection.
 The SQL adapter owns atomic global account/post uniqueness and immutable submission provenance.
 
-Each manifest post must explicitly set `voting_enabled: true` or
-`feedback_enabled: true` independently for the respective feature. Missing posts,
-missing metadata, disabled posts and inaccessible flavor variants deny mutations.
-Current posts remain disabled. The client cannot authorize interactions itself.
+## Enabling a post
+
+Set `votingEnabled: true` and/or `feedbackEnabled: true` on the post in
+`assets/turtle/generated/blog-posts.json`. Both are optional and default to false.
+For example, `"votingEnabled": true, "feedbackEnabled": false` enables voting
+without collecting feedback. No existing post is enabled by this feature.
+
+Run `pnpm -C frontend/chronicle build` after changing metadata. The blog prerender
+step emits the independent `voting_enabled` and `feedback_enabled` flags into
+`blog-manifest.json`; the server uses that built manifest as its authority.
+Deploy the matching frontend build and backend together. Missing posts, missing
+metadata, disabled posts and inaccessible flavor variants deny direct mutations.
+The client cannot authorize interactions itself.
+
+The public interaction endpoint is `GET /api/v1/blog/{slug}/interactions`.
+Authenticated vote and feedback mutations use `PUT` on `/vote` and `/feedback`
+under that post path. A vote of zero removes the account's vote.
+The moderation UI is `/admin/blog-feedback`; its APIs under `/api/v1/admin/blog`
+require the global user-administration permission. Approval and rejection require
+`expected_updated_at` from the reviewed record, so stale reviews cannot publish edits.
 
 Votes and feedback use separate PostgreSQL buckets, `blog_vote` and `blog_feedback`.
 Each is keyed by `ratelimit.UserSubject(userID.String())`, with no post or tenant
