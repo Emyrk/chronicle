@@ -131,7 +131,7 @@ export function RepairDetails({ operation, version, warnings, details }: {
 }) {
   const messages = warningMessages(warnings);
   const known = operation === "razorgore-phase-two" && version === 1 && isRazorgoreDetails(details);
-  const lucifron = operation === "lucifron-ranked-damage" && (version === 1 || version === 2) && isLucifronDetails(details);
+  const lucifron = operation === "lucifron-ranked-damage" && (version === 1 || version === 2 || version === 3) && isLucifronDetails(details);
   return <div className="space-y-3 text-xs">
     {hasWarnings(warnings, details) && <div className="rounded border border-amber-500/40 bg-amber-500/10 p-2 text-amber-300">
       <p className="font-medium">Repair warnings</p>

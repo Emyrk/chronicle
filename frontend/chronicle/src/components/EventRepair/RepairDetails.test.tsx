@@ -78,7 +78,7 @@ const lucifron = {
     before_ranked_damage: 12000, after_ranked_damage: 10000, before_unranked_damage: 1000,
     after_unranked_damage: 3000, before_dps: 200, after_dps: 166.67 }], omissions: [],
 };
-it.each([1, 2])("renders Lucifron v%s before/after metrics and the confirmed ranking rule", (version) => {
+it.each([1, 2, 3])("renders Lucifron v%s before/after metrics and the confirmed ranking rule", (version) => {
   const html = renderToStaticMarkup(<RepairDetails operation="lucifron-ranked-damage" version={version} details={lucifron} />);
   for (const text of ["Lucifron ranked damage", "v1.0.172", "v1.0.173", "Lucifron (12118)", "Flamewaker Protector (12119)", "Core Hounds excluded", "Mage", "player-guid", "lucifron-encounter", "12,000", "10,000", "1,000", "3,000", "200", "166.67", "Before", "After", "No omitted values reported."]) expect(html).toContain(text);
 });
@@ -90,7 +90,7 @@ it("Lucifron guards reject malformed metrics and unsupported payload versions", 
     expect(html).not.toContain("Player damage and DPS");
     expect(html).toContain(details === null ? "Detailed repair data is not available" : "No compatible detail view");
   }
-  const html = renderToStaticMarkup(<RepairDetails operation="lucifron-ranked-damage" version={3} details={lucifron} />);
+  const html = renderToStaticMarkup(<RepairDetails operation="lucifron-ranked-damage" version={4} details={lucifron} />);
   expect(html).not.toContain("Player damage and DPS");
   expect(html).toContain("Saved repair JSON");
 });
