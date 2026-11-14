@@ -1,6 +1,7 @@
 package modern
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -8,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/logscanner"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parseerrors"
@@ -17,7 +19,6 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/types/realmclock"
 	vanilla "github.com/Emyrk/chronicle/combatlog/parser/vanilla"
 	synthetic "github.com/Emyrk/chronicle/combatlog/parser/wotlk/synthetic"
-	"github.com/Emyrk/chronicle/combatlog/parsernext/common"
 	"github.com/Emyrk/chronicle/combatlog/parsernext/formats/cleu"
 	"github.com/Emyrk/chronicle/combatlog/parsernext/formats/cleu/companion"
 	next "github.com/Emyrk/chronicle/combatlog/parsernext/formats/modern"
@@ -46,7 +47,8 @@ type NextPipeline struct {
 	boundary                         bool
 	completedFile                    bool
 	graphPending                     bool
-	reader                           *common.FileReader
+	reader                           *bufio.Scanner
+	firstLine                        *string
 	decoder                          *next.Decoder
 	pending                          []string
 	synthetics                       *synthetic.Synthetic
@@ -134,18 +136,36 @@ func (p *NextPipeline) OpenFile(input io.Reader) (*NextSource, error) {
 	if input == nil {
 		return nil, fmt.Errorf("source is required")
 	}
+	reader := logscanner.New(input)
+	reader.Buffer(make([]byte, bufSize), bufSize)
 	year := p.year
+	var firstLine *string
 	if p.format == database.LogFormatV9Cleu || p.format == database.LogFormatV22Cleu {
-		var e error
-		input, year, e = readBaseYear(input)
-		if e != nil {
-			return nil, e
+		for reader.Scan() {
+			raw := strings.TrimSpace(reader.Text())
+			if raw == "" {
+				continue
+			}
+			idx := strings.Index(raw, "  ")
+			if idx < 0 {
+				return nil, fmt.Errorf("modern Blizzard CLEU first record has no separator")
+			}
+			ts, err := parseTimestamp(raw[:idx])
+			if err != nil {
+				return nil, err
+			}
+			year = ts.Year()
+			firstLine = &raw
+			break
+		}
+		if firstLine == nil {
+			if err := reader.Err(); err != nil {
+				return nil, fmt.Errorf("read modern Blizzard CLEU header: %w", err)
+			}
+			return nil, fmt.Errorf("modern Blizzard CLEU log is empty")
 		}
 	}
-	reader, e := common.NewFileReader(input, bufSize)
-	if e != nil {
-		return nil, e
-	}
+	p.firstLine = firstLine
 	p.reader = reader
 	p.pending = nil
 	p.year = year
@@ -240,17 +260,23 @@ func (p *nextPipeline) Advance(ctx context.Context) ([]messages.Message, error) 
 }
 func (p *nextPipeline) decode(ctx context.Context) ([]messages.Message, error) {
 	for len(p.pending) == 0 {
-		line, err := p.reader.Next(ctx)
-		if err == io.EOF {
-			return nil, io.EOF
+		var raw string
+		if p.firstLine != nil {
+			raw = *p.firstLine
+			p.firstLine = nil
+		} else {
+			if !p.reader.Scan() {
+				if err := p.reader.Err(); err != nil {
+					return nil, parseerrors.AsFatalError(err)
+				}
+				return nil, io.EOF
+			}
+			raw = strings.TrimSpace(p.reader.Text())
 		}
-		if err != nil {
-			return nil, parseerrors.AsFatalError(err)
-		}
-		raw := strings.TrimSpace(line.Raw)
 		if raw == "" {
 			continue
 		}
+		var err error
 		p.pending, err = p.decoder.NormalizeLine(raw)
 		if err != nil {
 			return nil, parseerrors.AsFatalError(err)

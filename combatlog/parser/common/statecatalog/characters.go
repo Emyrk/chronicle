@@ -200,6 +200,7 @@ func characterTypeSpecs() []typeSpec {
 		{vanilla + "son-of-the-flame", vanillaPkg + "sonOfTheFlameCharacter", "combatlog/parser/vanilla/creatures/moltencore.go", common + "common", "", ""},
 		{vanilla + "vanilla-plus-mograine", vanillaPkg + "vanillaPlusMograineCharacter", "combatlog/parser/vanilla/creatures/sm.go", common + "common", "", ""},
 
+		{wotlk + "xt002", wotlkPkg + "xt002Character", "combatlog/parser/wotlk/creatures/xt002.go", common + "common", "", "XT boss links current-pull heart activity through canonical Characters"},
 		{wotlk + "log-based", wotlkPkg + "LogBased", "combatlog/parser/wotlk/creatures/logbased.go", primitives + "base-inactivity", "", "server-side log character"},
 		{wotlk + "unstartable", wotlkPkg + "Unstartable", "combatlog/parser/wotlk/creatures/logbased.go", contracts + "character-base", "", "wrapper used by LogBased"},
 		{wotlk + "algalon", wotlkPkg + "algalonCharacter", "combatlog/parser/wotlk/creatures/algalon.go", common + "common", "", ""},

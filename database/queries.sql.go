@@ -24266,7 +24266,7 @@ func (q *sqlQuerier) BaselineClearMemberships(ctx context.Context, logGroupID uu
 
 const baselineEncounterRankings = `-- name: BaselineEncounterRankings :many
 
-SELECT ranking.id, ranking.encounter_id, ranking.instance_id, ranking.encounter_name, ranking.instance_name, ranking.player_guid, ranking.player_name, ranking.player_class, ranking.player_spec, ranking.player_role, ranking.player_level, ranking.talent_build_id, ranking.difficulty_name, ranking.max_players, ranking.realm_id, ranking.realm_name, ranking.guild_id, ranking.guild_name, ranking.damage_done, ranking.duration_secs, ranking.dps, ranking.avg_ilvl, ranking.log_hashed_slug, ranking.killed_at, ranking.created_at, ranking.healing_done, ranking.absorbed_done, ranking.hps, ranking.player_sub_spec, ranking.player_deaths, ranking.alive_percentage, ranking.unranked_damage_done FROM encounter_dps_rankings ranking
+SELECT ranking.id, ranking.encounter_id, ranking.instance_id, ranking.encounter_name, ranking.instance_name, ranking.player_guid, ranking.player_name, ranking.player_class, ranking.player_spec, ranking.player_role, ranking.player_level, ranking.talent_build_id, ranking.difficulty_name, ranking.max_players, ranking.realm_id, ranking.realm_name, ranking.guild_id, ranking.guild_name, ranking.damage_done, ranking.duration_secs, ranking.dps, ranking.avg_ilvl, ranking.log_hashed_slug, ranking.killed_at, ranking.created_at, ranking.healing_done, ranking.absorbed_done, ranking.hps, ranking.player_sub_spec, ranking.player_deaths, ranking.alive_percentage, ranking.unranked_damage_done, ranking.encounter_variant FROM encounter_dps_rankings ranking
 WHERE ranking.instance_id IN (SELECT id FROM log_instances WHERE log_group_id = $1)
 `
 
@@ -24315,6 +24315,7 @@ func (q *sqlQuerier) BaselineEncounterRankings(ctx context.Context, logGroupID u
 			&i.PlayerDeaths,
 			&i.AlivePercentage,
 			&i.UnrankedDamageDone,
+			&i.EncounterVariant,
 		); err != nil {
 			return nil, err
 		}

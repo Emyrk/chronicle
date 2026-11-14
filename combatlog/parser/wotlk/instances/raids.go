@@ -1014,20 +1014,21 @@ func UlduarRankingEncounterSets(flavor database.WoWFlavor) []instances.RankingEn
 }
 
 var UlduarFactory = &instances.CommonFactory{
-	EncounterVariant:     ulduarEncounterVariant,
-	GraphID:              "wotlk/instances/UlduarFactory/v1",
-	Name:                 "Ulduar",
-	Category:             instances.InstanceCategoryRaid,
-	ZoneNames:            []string{"ulduar"},
-	MapIDs:               []uint32{603},
-	Hostiles:             instances.FromMap(UlduarHostiles()),
-	ProgressionBosses:    UlduarProgressionBosses,
-	RankingEncounterSets: UlduarRankingEncounterSets,
+	EncounterVariant:      ulduarEncounterVariant,
+	GraphEncounterVariant: UlduarEncounterVariantGraphRecipe(),
+	GraphID:               "wotlk/instances/UlduarFactory/v1",
+	Name:                  "Ulduar",
+	Category:              instances.InstanceCategoryRaid,
+	ZoneNames:             []string{"ulduar"},
+	MapIDs:                []uint32{603},
+	Hostiles:              instances.FromMap(UlduarHostiles()),
+	ProgressionBosses:     UlduarProgressionBosses,
+	RankingEncounterSets:  UlduarRankingEncounterSets,
 	FlavoredRankings: func(database.WoWFlavor) *rankings.Rankings {
 		return UlduarSpeedrunRequirements()
 	},
 	Preprocessors: func() []instancehook.Preprocessor {
 		return []instancehook.Preprocessor{&thorimArenaStarterCombat{}, &xtVariantEvidence{}}
 	},
-	GraphPreprocessors: []instances.PreprocessorGraphRecipe{ThorimPreprocessorGraphRecipe()},
+	GraphPreprocessors: []instances.PreprocessorGraphRecipe{ThorimPreprocessorGraphRecipe(), XTVariantPreprocessorGraphRecipe()},
 }

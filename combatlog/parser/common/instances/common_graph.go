@@ -34,6 +34,9 @@ func (f *CommonFactory) PrepareGraph(format database.LogFormat, flavor database.
 	if (f.NameFromZone != nil) != (f.GraphZoneName != "") || (f.GraphZoneName != "" && f.GraphZoneName != ZoneNameRecipeOnyxiaProgression) || (f.Preprocessors != nil) != (len(f.GraphPreprocessors) > 0) {
 		return nil, fmt.Errorf("factory %s has unsupported dynamic name/preprocessor recipe", f.GraphID)
 	}
+	if (f.EncounterVariant != nil) != (f.GraphEncounterVariant != nil) || (f.GraphEncounterVariant != nil && (f.GraphEncounterVariant.ID == "" || f.GraphEncounterVariant.Classify == nil)) {
+		return nil, fmt.Errorf("factory %s has unsupported encounter variant recipe", f.GraphID)
+	}
 	// Verify the explicit ordered recipes against the existing constructor during
 	// trusted preparation. Neither this factory nor recipe.New runs on restore.
 	if f.Preprocessors != nil {
@@ -49,7 +52,11 @@ func (f *CommonFactory) PrepareGraph(format database.LogFormat, flavor database.
 	}
 	// Freeze matching inputs, rather than retaining the mutable registry factory.
 	match := CommonFactory{ZoneNames: slices.Clone(f.ZoneNames), MapIDs: slices.Clone(f.MapIDs), InstanceTypes: slices.Clone(f.InstanceTypes)}
-	h := &HookableGraphRecipe{Preprocessors: slices.Clone(f.GraphPreprocessors), ID: f.GraphID, Format: format, Flavor: slices.Clone(flavor), Factories: factories, Name: f.Name, Category: f.Category, MatchesZone: match.MatchZone}
+	h := &HookableGraphRecipe{EncounterVariant: f.GraphEncounterVariant, Preprocessors: slices.Clone(f.GraphPreprocessors), ID: f.GraphID, Format: format, Flavor: slices.Clone(flavor), Factories: factories, Name: f.Name, Category: f.Category, MatchesZone: match.MatchZone}
+	if f.GraphEncounterVariant != nil {
+		variant := *f.GraphEncounterVariant
+		h.EncounterVariant = &variant
+	}
 	if f.FlavoredRankings != nil {
 		h.Rankings = f.FlavoredRankings(flavor)
 	}
