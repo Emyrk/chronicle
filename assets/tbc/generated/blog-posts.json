@@ -1,5 +1,18 @@
 [
   {
+    "id": "beyond-the-best-parse",
+    "title": "Beyond the Best Parse: Why I Introduced Ratings to Chronicle",
+    "description": "Removing the old Armory view was a mistake. It's back, with parse history in the new view too. Here's why I introduced ratings, what problems they try to solve, and where I'd like to take Chronicle.",
+    "publishedAt": "2026-11-14",
+    "rarity": "rare",
+    "tag": "Announcement",
+    "icon": "inv_letter_15",
+    "flavor": "There's more than one way to be a raider.",
+    "hintTitle": "Parses are back on the Armory",
+    "hintDescription": "Switch a character's Performance view between Ratings and Parses.",
+    "hintHref": "/armory"
+  },
+  {
     "id": "ratings",
     "title": "How ratings work",
     "description": "Chronicle now rates players across their whole history: Peak for your best kill, Mastery for what to expect from you, and Renown for how much you've done. A new page explains each one with an example player, or with your own kills.",

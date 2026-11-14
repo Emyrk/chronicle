@@ -26,6 +26,7 @@ import {
   VehicleSupportPost,
   YoutubeSyncPost,
 } from "./posts/announcements";
+import { BeyondTheBestParsePost } from "./posts/beyondTheBestParse";
 import { InstanceSearchPost } from "./posts/instanceSearch";
 import { RatingsPost } from "./posts/ratings";
 
@@ -65,6 +66,7 @@ export interface BlogPostDefinition extends BlogPostMetadata {
 }
 
 const BLOG_COMPONENTS = {
+  "beyond-the-best-parse": BeyondTheBestParsePost,
   ratings: RatingsPost,
   "instance-search": InstanceSearchPost,
   "alt-click-compare": EntityInspectorPost,
