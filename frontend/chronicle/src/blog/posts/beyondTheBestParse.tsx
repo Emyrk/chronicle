@@ -180,7 +180,7 @@ export function BeyondTheBestParsePost({ post }: PostProps) {
         </PullQuote>
         <p>Thanks for being part of the project.</p>
         <p className="font-wow text-2xl" style={{ color: GOLD }}>
-          — Steven
+          — Chronicle
         </p>
       </div>
       <ReadingBar bodyRef={bodyRef} />
