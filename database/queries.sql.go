@@ -2530,7 +2530,7 @@ func (q *sqlQuerier) UpsertBillingSubscriptionIfChanged(ctx context.Context, arg
 
 const deleteBlogFeedback = `-- name: DeleteBlogFeedback :one
 UPDATE blog_feedback SET body = NULL, public_consent = false, status = 'pending',
-  deleted_at = now(), updated_at = now()
+  deleted_at = now(), updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 microsecond')
 WHERE post_slug = $1 AND user_id = $2 AND deleted_at IS NULL
 RETURNING id, post_slug, user_id, original_tenant_id, body, public_consent, status, created_at, updated_at, deleted_at
 `
@@ -2793,18 +2793,21 @@ func (q *sqlQuerier) ListPublicBlogFeedback(ctx context.Context, arg ListPublicB
 }
 
 const moderateBlogFeedback = `-- name: ModerateBlogFeedback :one
-UPDATE blog_feedback SET status = $1, updated_at = now()
-WHERE id = $2 AND deleted_at IS NULL
+UPDATE blog_feedback SET status = $1,
+  updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 microsecond')
+WHERE id = $2 AND deleted_at IS NULL AND updated_at = $3
 RETURNING id, post_slug, user_id, original_tenant_id, body, public_consent, status, created_at, updated_at, deleted_at
 `
 
 type ModerateBlogFeedbackParams struct {
-	Status string    `db:"status" json:"status"`
-	ID     uuid.UUID `db:"id" json:"id"`
+	Status            string             `db:"status" json:"status"`
+	ID                uuid.UUID          `db:"id" json:"id"`
+	ExpectedUpdatedAt pgtype.Timestamptz `db:"expected_updated_at" json:"expected_updated_at"`
 }
 
+// Guard the exact revision the moderator reviewed, not a newly fetched revision.
 func (q *sqlQuerier) ModerateBlogFeedback(ctx context.Context, arg ModerateBlogFeedbackParams) (BlogFeedback, error) {
-	row := q.db.QueryRow(ctx, moderateBlogFeedback, arg.Status, arg.ID)
+	row := q.db.QueryRow(ctx, moderateBlogFeedback, arg.Status, arg.ID, arg.ExpectedUpdatedAt)
 	var i BlogFeedback
 	err := row.Scan(
 		&i.ID,
@@ -2823,7 +2826,7 @@ func (q *sqlQuerier) ModerateBlogFeedback(ctx context.Context, arg ModerateBlogF
 
 const updateBlogFeedback = `-- name: UpdateBlogFeedback :one
 UPDATE blog_feedback SET body = $1, public_consent = $2,
-  status = 'pending', updated_at = now()
+  status = 'pending', updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 microsecond')
 WHERE post_slug = $3 AND user_id = $4 AND deleted_at IS NULL
 RETURNING id, post_slug, user_id, original_tenant_id, body, public_consent, status, created_at, updated_at, deleted_at
 `

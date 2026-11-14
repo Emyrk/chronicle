@@ -22,13 +22,13 @@ RETURNING *;
 
 -- name: UpdateBlogFeedback :one
 UPDATE blog_feedback SET body = sqlc.narg(body), public_consent = @public_consent,
-  status = 'pending', updated_at = now()
+  status = 'pending', updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 microsecond')
 WHERE post_slug = @post_slug AND user_id = @user_id AND deleted_at IS NULL
 RETURNING *;
 
 -- name: DeleteBlogFeedback :one
 UPDATE blog_feedback SET body = NULL, public_consent = false, status = 'pending',
-  deleted_at = now(), updated_at = now()
+  deleted_at = now(), updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 microsecond')
 WHERE post_slug = @post_slug AND user_id = @user_id AND deleted_at IS NULL
 RETURNING *;
 
@@ -39,8 +39,10 @@ SELECT * FROM blog_feedback WHERE post_slug = @post_slug AND user_id = @user_id;
 SELECT * FROM blog_feedback WHERE id = @id;
 
 -- name: ModerateBlogFeedback :one
-UPDATE blog_feedback SET status = @status, updated_at = now()
-WHERE id = @id AND deleted_at IS NULL
+-- Guard the exact revision the moderator reviewed, not a newly fetched revision.
+UPDATE blog_feedback SET status = @status,
+  updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 microsecond')
+WHERE id = @id AND deleted_at IS NULL AND updated_at = @expected_updated_at
 RETURNING *;
 
 -- name: ListPublicBlogFeedback :many

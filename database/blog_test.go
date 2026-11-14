@@ -29,7 +29,7 @@ func TestBlogFeedbackLifecycle(t *testing.T) {
 	rows, err := db.ListPublicBlogFeedback(ctx, list)
 	require.NoError(t, err)
 	require.Empty(t, rows)
-	_, err = db.ModerateBlogFeedback(ctx, database.ModerateBlogFeedbackParams{ID: row.ID, Status: "approved"})
+	_, err = db.ModerateBlogFeedback(ctx, database.ModerateBlogFeedbackParams{ID: row.ID, Status: "approved", ExpectedUpdatedAt: row.UpdatedAt})
 	require.NoError(t, err)
 	rows, err = db.ListPublicBlogFeedback(ctx, list)
 	require.NoError(t, err)
@@ -37,7 +37,10 @@ func TestBlogFeedbackLifecycle(t *testing.T) {
 	edited, err := db.UpdateBlogFeedback(ctx, database.UpdateBlogFeedbackParams{PostSlug: "post", UserID: user, Body: input.Body, PublicConsent: false})
 	require.NoError(t, err)
 	require.Equal(t, "pending", edited.Status)
-	_, err = db.ModerateBlogFeedback(ctx, database.ModerateBlogFeedbackParams{ID: row.ID, Status: "approved"})
+	_, err = db.ModerateBlogFeedback(ctx, database.ModerateBlogFeedbackParams{ID: row.ID, Status: "approved", ExpectedUpdatedAt: row.UpdatedAt})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	row = edited
+	_, err = db.ModerateBlogFeedback(ctx, database.ModerateBlogFeedbackParams{ID: row.ID, Status: "approved", ExpectedUpdatedAt: row.UpdatedAt})
 	require.NoError(t, err)
 	rows, err = db.ListPublicBlogFeedback(ctx, list)
 	require.NoError(t, err)
@@ -53,7 +56,7 @@ func TestBlogFeedbackLifecycle(t *testing.T) {
 	require.Equal(t, "23505", pgerr.Code)
 	_, err = db.UpdateBlogFeedback(ctx, database.UpdateBlogFeedbackParams{PostSlug: "post", UserID: user, Body: input.Body})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
-	_, err = db.ModerateBlogFeedback(ctx, database.ModerateBlogFeedbackParams{ID: row.ID, Status: "approved"})
+	_, err = db.ModerateBlogFeedback(ctx, database.ModerateBlogFeedbackParams{ID: row.ID, Status: "approved", ExpectedUpdatedAt: row.UpdatedAt})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	reserved, err := db.GetBlogFeedback(ctx, database.GetBlogFeedbackParams{PostSlug: "post", UserID: user})
 	require.NoError(t, err)
@@ -78,7 +81,7 @@ func TestBlogConstraintsAndVotes(t *testing.T) {
 	}
 	row, err := db.InsertBlogFeedback(ctx, database.InsertBlogFeedbackParams{PostSlug: "unicode", UserID: user, Body: pgtype.Text{String: strings.Repeat("界", 300), Valid: true}})
 	require.NoError(t, err)
-	_, err = db.ModerateBlogFeedback(ctx, database.ModerateBlogFeedbackParams{ID: row.ID, Status: "invalid"})
+	_, err = db.ModerateBlogFeedback(ctx, database.ModerateBlogFeedbackParams{ID: row.ID, Status: "invalid", ExpectedUpdatedAt: row.UpdatedAt})
 	require.Error(t, err)
 	_, err = db.InsertBlogFeedback(ctx, database.InsertBlogFeedbackParams{PostSlug: "null", UserID: user})
 	require.Error(t, err)
@@ -97,4 +100,30 @@ func TestBlogConstraintsAndVotes(t *testing.T) {
 	totals, err := db.GetBlogVoteTotals(ctx, "post")
 	require.NoError(t, err)
 	require.Zero(t, totals.Upvotes+totals.Downvotes)
+}
+
+// Revisions must change even inside one transaction, where now() is constant.
+func TestBlogFeedbackRevisionInTransaction(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitLong)
+	db, _ := dbtestutil.NewDB(t)
+	user := uuid.New()
+	_, err := db.InsertUser(ctx, database.InsertUserParams{ID: user, Username: user.String()})
+	require.NoError(t, err)
+	err = db.InTx(ctx, func(tx database.Store) error {
+		row, err := tx.InsertBlogFeedback(ctx, database.InsertBlogFeedbackParams{PostSlug: "revision", UserID: user, Body: pgtype.Text{String: "before", Valid: true}, PublicConsent: true})
+		if err != nil {
+			return err
+		}
+		edited, err := tx.UpdateBlogFeedback(ctx, database.UpdateBlogFeedbackParams{PostSlug: "revision", UserID: user, Body: pgtype.Text{String: "after", Valid: true}, PublicConsent: true})
+		if err != nil {
+			return err
+		}
+		require.True(t, edited.UpdatedAt.Time.After(row.UpdatedAt.Time))
+		_, err = tx.ModerateBlogFeedback(ctx, database.ModerateBlogFeedbackParams{ID: row.ID, Status: "approved", ExpectedUpdatedAt: row.UpdatedAt})
+		require.ErrorIs(t, err, pgx.ErrNoRows)
+		_, err = tx.ModerateBlogFeedback(ctx, database.ModerateBlogFeedbackParams{ID: row.ID, Status: "approved", ExpectedUpdatedAt: edited.UpdatedAt})
+		return err
+	}, nil)
+	require.NoError(t, err)
 }
