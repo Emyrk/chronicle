@@ -65,6 +65,48 @@ This is **not combat parsing**. GUID/spell interpretation, message schemas,
 header clock rules, synthetic events, identities, consumers and publication are
 unchanged. Their ownership/migration choices still require explicit approval.
 
+## Known-critter classification contract (not pipeline wiring)
+
+`common/units.Classification` separates entity `Kind`, refinement `Category`,
+explicit `Known` status, `TrackFight`, and `RankedDamageTarget`. It owns neither
+GUIDs nor observed names. A classifier's `handled` result is distinct from known
+status: **unhandled does not mean unknown** and must continue through ordinary
+classification. Knownness is not inferred from a label or from participation.
+
+`vanilla.ClassifyCritter(id)` handles only actual creature GUIDs whose entries
+are in `common/critters`. It returns a known creature/critter with both fight
+tracking and ranked-damage-target eligibility false. `critters.Name(entry)`
+provides a canonical label whether or not a name has been observed. The caller
+retains the original GUID and observed-name ownership; this slice introduces no
+second observation store, GUID representation or payload format.
+
+Accepted behavior: **critters are known, labeled/countable units, not unknown
+identities. Their damage/death events remain recordable and visible independently
+of tracking/ranking eligibility. They never participate in fight detection or
+activity and never qualify as ranked-damage targets.** There is deliberately no
+`RecordEvents` flag that could suppress events based on this classification.
+Unknown-reporting consumers must honor handled/known separately from tracking.
+
+The existing entry/name table has one owner, `common/critters`; legacy
+`parser/common/critters.IsCritter` delegates only entry lookup while retaining its
+existing creature-GUID guard. Legacy unknown reporting, activity/ranking paths
+and published payloads remain unchanged. The new model **is not yet wired into
+an event pipeline, unknown-report collector or ranking publication**; contract
+tests are not evidence of migrated runtime event visibility.
+
+Only Vanilla's narrow critter boundary may import the existing `parser/guid`
+value helpers, explicitly allowed by the architecture test. No legacy decoder,
+consumer or raid constructor is imported into parsernext. Shared classification
+and critter lookup modules remain standard-library-only leaves.
+
+Player metadata/handling stays distinct from creature classification. Player,
+pet, object, vehicle and unrecognized creature GUIDs are unhandled by this
+critter-only function, leaving existing player/raid-friendly behavior untouched.
+Vehicle/control roles and future Team1/Team2 relationships are intentionally not
+modeled as new kinds or battleground policy. Temporal identity observations,
+GUID/entry payload deduplication, broader classification and consumer/publication
+integration still require separate approval.
+
 ## Explicit source compositions
 
 | Expansion policy | Wire-format IDs accepted for ingestion |
@@ -90,16 +132,17 @@ is performed.
 | Package | Owns now | Direction / future boundary |
 | --- | --- | --- |
 | root `parsernext` | Explicit composition validation and complete-file entry point | Imports profiles + common; future pipeline composition stays here |
-| `common` | Physical line, completed-file summary, reader lifecycle | Standard library only; no expansion/raid construction or global types drawer |
+| `common`, `common/units`, `common/critters` | Source lifecycle, classification contract and known critter labels | Standard library only; no expansion/raid construction, observation store or global types drawer |
 | `formats`, `formats/ccv2` | Stable wire-format names and shared CC-v2 lexical decoding | Standard library only; no identity or combat-message dependencies |
-| `vanilla` | Vanilla source-compatibility policy | Imports common/formats; future vanilla state/rules stay here |
+| `vanilla` | Vanilla source selection and known-critter classification | Imports explicit common leaves/formats and the narrowly approved GUID value helpers; no pipeline wiring yet |
 | `tbc` | TBC source-compatibility policy | Imports common/formats; **never routes through WotLK** |
 | `wotlk` | Wrath source-compatibility policy | Imports common/formats; Wrath-specific state/rules stay here |
 | `forever` | Explicit Forever source-compatibility policy | Imports common/formats; Forever-specific state/rules stay here |
 | `snapshot` | Documented orchestration boundary only | No executable snapshot API or persistence support yet |
 
-The architecture test enforces production import direction and rejects imports
-of the old parser, database/publication code, River and other external packages.
+The architecture test enforces production import direction and rejects old
+parser execution, database/publication, River and other external imports except
+the exact existing GUID helper import approved for Vanilla's critter boundary.
 `common` cannot acquire expansion dependencies transitively through local imports.
 It cannot construct a raid through a registered constructor or imported package.
 
