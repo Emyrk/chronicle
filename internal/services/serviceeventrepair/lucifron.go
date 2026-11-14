@@ -192,7 +192,7 @@ func evaluateLucifronEncounter(e razorgoreEvidence, c database.LogInstanceEncoun
 	if c.RankingStartOffsetMs.Valid && c.RankingStartOffsetMs.Int64 != 0 || c.RankingEndOffsetMs.Valid && c.RankingEndOffsetMs.Int64 != duration.Milliseconds() {
 		return errors.New("lucifron has an unsupported ranking window")
 	}
-	replay, err := lucifronEvents(e, c)
+	replay, err := lucifronEvents(e, c, p)
 	if err != nil {
 		return err
 	}

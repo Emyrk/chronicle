@@ -102,9 +102,12 @@ func TestLucifronCapturedSourceReplay(t *testing.T) {
 		}
 	}
 	require.NotEqual(t, uuid.Nil, c.ID)
+	preview, err := EvaluateLucifron(ctx, &razorgoreStore{e: e}, meta.ID)
+	require.NoError(t, err)
+	t.Logf("EVALUATOR requires_reparse=%t reason=%s warnings=%v", preview.RequiresReparse, preview.Reason, preview.Warnings)
 	// Independent reference: production DPSTracker + unitdb possession machinery,
 	// not repair arithmetic. No persisted ranking value feeds this computation.
-	replay, err := lucifronEvents(e, c)
+	replay, err := lucifronEvents(e, c, nil)
 	require.NoError(t, err)
 	raw, err := razorgoreFrame(read("_events_aura_cast"), c.ID, c.StartTime.Time)
 	require.NoError(t, err)

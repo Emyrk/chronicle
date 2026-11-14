@@ -170,12 +170,13 @@ Razorgore producers use `phases` (encounter ID, offsets, reconstructed flag) and
 (encounter ID, stream, unit GUID, amount, count, reason).
 
 
-## Lucifron ranked damage, version 2
+## Lucifron ranked damage, version 3
 
-Lucifron implementation version 2 adds evidenced player mind-control support.
-Version-1 previews and failed operations cannot apply/retry under the new
+Lucifron implementation version 2 added evidenced player mind-control support;
+version 3 adds the narrow zero-effective invalid-GUID filtering described below.
+Version-1/2 previews and failed operations cannot apply/retry under the new
 evaluator; create a fresh dry run. Permanent receipts remain unique by script,
-not version, so an existing version-1 receipt still prevents reapplication.
+not version, so an existing receipt still prevents reapplication.
 The public details shape is unchanged and old receipts remain readable.
 
 The script `lucifron-ranked-damage` uses the same selection, preview, explicit
@@ -299,6 +300,30 @@ some UNIT_INFO updates are not emitted. Unrecorded equal-total ownership swaps
 could preserve all player totals while changing the ranked split. Stable recorded
 owners and per-player reconciliation reduce that uncertainty but do not eliminate
 it. Review the warning before authorizing Apply.
+
+### Zero-effective invalid-GUID records (version 3)
+
+Version 3 skips invalid/zero-GUID damage records only when shared effective damage
+is zero: health damage after overkill **plus absorbed damage**. Positive effective
+damage remains unsafe, including fully absorbed hits. Negative damage evidence,
+corrupt streams, invalid metadata, and ambiguous chronology still skip the repair.
+Only unowned, uncontrolled zero-entity player-type classifications with unknown
+affiliation and no spell are ignored alongside these records. Ownership, aura,
+and control inference policies are unchanged.
+
+Skipped records retain inert timeline markers for ordering and possession expiry.
+Counted warnings appear in both preview and permanent receipt; original streams
+remain unchanged. Version-2 previews must be recreated before Apply; permanent
+same-script receipts still prohibit reapplication across versions.
+
+The captured `UsNpz4ih3BOBRcWn` sample passes this narrow decoding rule with one
+zero-effective damage record and two harmless classifications skipped. It is
+**not ready**: the evaluator still requires a recorded owner before first nonplayer
+damage. Independent production replay also fails full-total reconciliation
+(58,027 historical versus 53,631 reconstructed for one player). The private replay
+used the supplied exact `v1.0.9+v1.0.0-27-g94346040` parser stamp and explicitly
+assumed historical zero for the unexported current unranked column. No ownership
+policy was broadened to force acceptance; no live Apply or sweep was performed.
 
 ### Captured-source acceptance reproduction
 

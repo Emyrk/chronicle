@@ -273,12 +273,12 @@ func TestLucifronRealEvaluatorSkipsCompleteWithoutReceipt(t *testing.T) {
 	}
 }
 
-func TestLucifronVersionOneCannotApplyOrRetryWithNewEvaluator(t *testing.T) {
+func TestLucifronVersionTwoCannotApplyOrRetryWithNewEvaluator(t *testing.T) {
 	t.Parallel()
 	f := lucifronLifecycleFixture(t, 1)
 	_, err := f.service.ProcessPage(f.ctx, f.id, "dry_running")
 	require.NoError(t, err)
-	_, err = f.pool.Exec(f.ctx, `UPDATE event_repair_operations SET version=1 WHERE id=$1`, f.id)
+	_, err = f.pool.Exec(f.ctx, `UPDATE event_repair_operations SET version=2 WHERE id=$1`, f.id)
 	require.NoError(t, err)
 	_, err = f.service.Apply(f.ctx, f.id, uuid.New())
 	require.ErrorIs(t, err, ErrConflict)

@@ -12,9 +12,18 @@ import (
 
 func TestLucifronInferenceWarningPersistsThroughReceipt(t *testing.T) {
 	t.Parallel()
+	assertLucifronWarningsPersist(t, fixtureLucifronStableOwner(t), []string{"Stable recorded-owner inference"}, 1)
+}
+
+func TestLucifronZeroEventWarningsPersistThroughReceipt(t *testing.T) {
+	t.Parallel()
+	assertLucifronWarningsPersist(t, fixtureLucifronZeroEvents(t), []string{"Skipped 1 invalid-GUID damage records", "Skipped 2 harmless zero-entity classification records"}, 0)
+}
+
+func assertLucifronWarningsPersist(t *testing.T, e razorgoreEvidence, warnings []string, expectedWrites int) {
+	t.Helper()
 	f := lucifronLifecycleFixture(t, 1)
 	instance := receiptInstance(t, f)
-	e := fixtureLucifronStableOwner(t)
 	e.Instance.ID = instance
 	e.Server.TenantID.UUID = f.tenant
 	for i := range e.Encounters {
@@ -42,9 +51,10 @@ func TestLucifronInferenceWarningPersistsThroughReceipt(t *testing.T) {
 	preview, err := f.service.Get(f.ctx, f.id)
 	require.NoError(t, err)
 	require.Equal(t, "ready", preview.State)
-	require.Len(t, preview.Items[0].Warnings, 1)
-	require.Contains(t, preview.Items[0].Warnings[0], "Stable recorded-owner inference")
-	require.Contains(t, preview.Items[0].Warnings[0], "terminal ownership is not proven")
+	require.Len(t, preview.Items[0].Warnings, len(warnings))
+	for i, warning := range warnings {
+		require.Contains(t, preview.Items[0].Warnings[i], warning)
+	}
 	receipts, err := f.db.ListInstanceEventRepairReceipts(f.ctx, instance)
 	require.NoError(t, err)
 	require.Empty(t, receipts)
@@ -57,14 +67,14 @@ func TestLucifronInferenceWarningPersistsThroughReceipt(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "completed", report.State)
 	require.Equal(t, preview.Items[0].Warnings, report.Items[0].Warnings)
-	require.Len(t, store.updates, 1)
+	require.Len(t, store.updates, expectedWrites)
 	receipts, err = f.db.ListInstanceEventRepairReceipts(f.ctx, instance)
 	require.NoError(t, err)
 	require.Len(t, receipts, 1)
 	expected, err := json.Marshal(preview.Items[0].Warnings)
 	require.NoError(t, err)
 	require.JSONEq(t, string(expected), string(receipts[0].Warnings))
-	require.EqualValues(t, 2, receipts[0].Version)
+	require.EqualValues(t, LucifronVersion, receipts[0].Version)
 	require.Equal(t, 1, f.canonicalJobs(t))
 	after, err := json.Marshal(store.e)
 	require.NoError(t, err)
@@ -74,7 +84,7 @@ func TestLucifronInferenceWarningPersistsThroughReceipt(t *testing.T) {
 	receipts, err = f.db.ListInstanceEventRepairReceipts(f.ctx, instance)
 	require.NoError(t, err)
 	require.Len(t, receipts, 1)
-	require.JSONEq(t, string(expected), string(receipts[0].Warnings), "inference provenance outlives admin history")
+	require.JSONEq(t, string(expected), string(receipts[0].Warnings), "warning provenance outlives admin history")
 }
 
 func TestLucifronInferenceWarningIsSealed(t *testing.T) {

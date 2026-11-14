@@ -73,7 +73,7 @@ func TestLucifronPlayerControlMatchesParserDamageSemantics(t *testing.T) {
 	c := e.Encounters[0]
 	tracker := rankings.NewDPSTracker(units, nil, rankings.DamageRuleNone)
 	tracker.FightStarted(c.ID, nil)
-	replay, err := lucifronEvents(e, c)
+	replay, err := lucifronEvents(e, c, nil)
 	require.NoError(t, err)
 	var damages []*messages.Damage
 	for _, event := range replay {

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/api/chronicleproto"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/combatmetrics"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
@@ -18,8 +19,9 @@ import (
 
 // Only damage and optional historical classification are needed. Healing,
 // absorbs, deaths and unrelated boss metrics are not replayed or rewritten.
-func lucifronEvents(e razorgoreEvidence, c database.LogInstanceEncounter) ([]razorgoreReplayEvent, error) {
+func lucifronEvents(e razorgoreEvidence, c database.LogInstanceEncounter, p *RepairPlan) ([]razorgoreReplayEvent, error) {
 	result := []razorgoreReplayEvent{}
+	skippedDamage, skippedClassification := 0, 0
 	seen := map[database.LogInstanceEventType]bool{}
 	parse := func(s string) (guid.GUID, error) {
 		g, err := guid.FromString(s)
@@ -61,17 +63,9 @@ func lucifronEvents(e razorgoreEvidence, c database.LogInstanceEncounter) ([]raz
 			var message messages.Message
 			switch m := event.(type) {
 			case *chronicleproto.Damage:
-				target, err := parse(m.Target)
-				if err != nil {
-					return nil, err
-				}
-				damage := &messages.Damage{MessageBase: base, Target: target, Amount: m.Amount, Overkill: m.Overkill, HitType: types.HitType(m.HitType)}
-				if m.Caster != nil {
-					caster, err := parse(*m.Caster)
-					if err != nil {
-						return nil, err
-					}
-					damage.Caster = &caster
+				damage := &messages.Damage{MessageBase: base, Amount: m.Amount, Overkill: m.Overkill, HitType: types.HitType(m.HitType)}
+				if m.Amount < 0 || m.Overkill < 0 {
+					return nil, errors.New("negative damage evidence")
 				}
 				for _, tail := range m.Tailers {
 					if tail == nil {
@@ -79,8 +73,34 @@ func lucifronEvents(e razorgoreEvidence, c database.LogInstanceEncounter) ([]raz
 					}
 					damage.Trailer = append(damage.Trailer, types.TrailerEntry{Amount: tail.Amount, HitType: types.HitType(tail.HitType)})
 				}
+				target, targetErr := parse(m.Target)
+				var casterErr error
+				if m.Caster != nil {
+					caster, err := parse(*m.Caster)
+					casterErr = err
+					damage.Caster = &caster
+				}
+				if targetErr != nil || casterErr != nil {
+					if combatmetrics.EffectiveDamage(damage) != 0 {
+						return nil, errors.New("invalid event GUID")
+					}
+					skippedDamage++
+					// Keep an inert timestamp/index marker so dropping a record never
+					// bypasses stream chronology or changes lazy possession expiry.
+					message = &messages.Damage{MessageBase: base}
+					break
+				}
+				damage.Target = target
 				message = damage
 			case *chronicleproto.UnitClassification:
+				sentinel, sentinelErr := guid.FromString(m.Target)
+				if sentinelErr == nil && sentinel.IsZero() && m.UnitType == int32(unitdb.UnitTypePlayer) && m.Affiliation == int32(unitdb.AffiliationUnknown) && m.Owner == nil && m.Controller == nil && m.SpellId == 0 {
+					// UnitTypeFromGUID(0) yields Player; this exact unowned,
+					// uncontrolled zero-entity sentinel cannot carry attribution.
+					skippedClassification++
+					message = &messages.Damage{MessageBase: base}
+					break
+				}
 				target, err := parse(m.Target)
 				if err != nil {
 					return nil, err
@@ -125,6 +145,14 @@ func lucifronEvents(e razorgoreEvidence, c database.LogInstanceEncounter) ([]raz
 	for i := 1; i < len(result); i++ {
 		if result[i].index == result[i-1].index || result[i].at.Before(result[i-1].at) {
 			return nil, errors.New("ambiguous damage/classification chronology")
+		}
+	}
+	if p != nil {
+		if skippedDamage > 0 {
+			p.Warnings = append(p.Warnings, fmt.Sprintf("Skipped %d invalid-GUID damage records with zero effective damage in encounter %s; original events unchanged", skippedDamage, c.ID))
+		}
+		if skippedClassification > 0 {
+			p.Warnings = append(p.Warnings, fmt.Sprintf("Skipped %d harmless zero-entity classification records in encounter %s; original events unchanged", skippedClassification, c.ID))
 		}
 	}
 	return result, nil
