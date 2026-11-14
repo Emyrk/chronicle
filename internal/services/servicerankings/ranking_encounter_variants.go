@@ -40,8 +40,8 @@ func rankingEncounterVariants(w http.ResponseWriter, r *http.Request, instances,
 				err = errors.New("encounter variant refers to an unselected boss")
 				break
 			}
-			if len(instances) != 1 || instances[0] != "Ulduar" || boss != "Hodir" || (variant != "normal" && variant != "hard") {
-				err = errors.New("encounter variant is not supported for this boss; only Ulduar Hodir normal or hard is supported")
+			if len(instances) != 1 || instances[0] != "Ulduar" || (boss != "Hodir" && boss != "XT-002 Deconstructor") || (variant != "normal" && variant != "hard") {
+				err = errors.New("encounter variant is not supported for this boss; only Ulduar Hodir and XT-002 Deconstructor normal or hard are supported")
 				break
 			}
 		}

@@ -22,6 +22,7 @@ func TestRankingEncounterVariants(t *testing.T) {
 		{name: "combined omitted"},
 		{name: "combined empty map", raw: "{}"},
 		{name: "hard mixed selection", raw: ` { "Hodir" : "hard" } `, want: `{"Hodir":"hard"}`, instances: []string{"Ulduar"}, bosses: []string{"Hodir", "Freya"}},
+		{name: "two exact bosses", raw: `{"XT-002 Deconstructor":"normal","Hodir":"hard"}`, want: `{"Hodir":"hard","XT-002 Deconstructor":"normal"}`, instances: []string{"Ulduar"}, bosses: []string{"Hodir", "XT-002 Deconstructor"}},
 		{name: "normal", raw: `{"Hodir":"normal"}`, want: `{"Hodir":"normal"}`, instances: []string{"Ulduar"}, bosses: []string{"Hodir"}},
 		{name: "unselected", raw: `{"Hodir":"hard"}`, instances: []string{"Ulduar"}, bosses: []string{"Freya"}, invalid: true},
 		{name: "unscoped", raw: `{"Hodir":"hard"}`, bosses: []string{"Hodir"}, invalid: true},

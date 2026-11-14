@@ -58,7 +58,7 @@ export function v2RatingParams(
   const selected = scope.boss ? [scope.boss] : context.selected;
   if (context.encounterVariant) {
     if (selected.length !== 1 || !supportsEncounterVariant(context.instance, selected[0]))
-      throw new Error("Encounter variants require a single supported boss. Select Hodir or Combined.");
+      throw new Error("Encounter variants require a single supported boss. Select Hodir, XT-002 Deconstructor, or Combined.");
     p.set("encounter_variant", context.encounterVariant);
   }
   const variants = Object.fromEntries(Object.entries(context.encounterVariants ?? {})

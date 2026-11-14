@@ -42,31 +42,33 @@ func (s *variantParseStore) ListParseVariantResultsForInstance(context.Context, 
 
 func TestIndividualParseEncounterVariantIsolation(t *testing.T) {
 	t.Parallel()
-	for _, metric := range []parsepolicy.Metric{parsepolicy.MetricDPS, parsepolicy.MetricHPS} {
-		t.Run(string(metric), func(t *testing.T) {
-			t.Parallel()
-			store := &variantParseStore{}
-			rankings := []database.ListRankingsForInstanceRow{}
-			players := []chroniclesdk.InstanceParsePlayer{}
-			for _, variant := range []string{"normal", "hard", ""} {
-				rankings = append(rankings, database.ListRankingsForInstanceRow{PlayerGuid: variant, EncounterName: "Hodir", DifficultyName: "heroic", MaxPlayers: 25, EncounterVariant: pgtype.Text{String: variant, Valid: variant != ""}, PlayerClass: "Warrior", PlayerSpec: "Fury", Dps: 100, Hps: 100})
-				players = append(players, chroniclesdk.InstanceParsePlayer{PlayerGUID: variant, Bosses: []chroniclesdk.InstanceParseBoss{{EncounterName: "Hodir", DifficultyName: "heroic", MaxPlayers: 25, MetricValue: 100, PreciseScore: 42, DisplayScore: 42, Status: "ok"}}})
-			}
-			cutoff := database.Timestamptz(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
-			require.NoError(t, applyVariantParses(t.Context(), store, uuid.Nil, uuid.New(), rankings, players, []string{"Hodir"}, metric, parsepolicy.CohortModeSpec, cutoff, pgtype.Timestamptz{}, false))
-			require.Len(t, store.calls, 2)
-			for _, call := range store.calls {
-				require.Equal(t, string(metric), call.Metric)
-				require.Equal(t, "heroic", call.DifficultyName)
-				require.Equal(t, int16(25), call.MaxPlayers)
-			}
-			require.Greater(t, players[0].Bosses[0].PreciseScore, players[1].Bosses[0].PreciseScore)
-			require.Equal(t, "normal", *players[0].Bosses[0].EncounterVariant)
-			require.Equal(t, "hard", *players[1].Bosses[0].EncounterVariant)
-			require.Nil(t, players[2].Bosses[0].EncounterVariant)
-			require.Equal(t, 42.0, players[2].Bosses[0].PreciseScore, "unknown retains Combined")
-			require.Equal(t, players[0].Bosses[0].PreciseScore, players[0].AverageParse.PreciseScore)
-		})
+	for _, boss := range []string{"Hodir", "XT-002 Deconstructor"} {
+		for _, metric := range []parsepolicy.Metric{parsepolicy.MetricDPS, parsepolicy.MetricHPS} {
+			t.Run(boss+"/"+string(metric), func(t *testing.T) {
+				t.Parallel()
+				store := &variantParseStore{}
+				rankings := []database.ListRankingsForInstanceRow{}
+				players := []chroniclesdk.InstanceParsePlayer{}
+				for _, variant := range []string{"normal", "hard", ""} {
+					rankings = append(rankings, database.ListRankingsForInstanceRow{PlayerGuid: variant, EncounterName: boss, DifficultyName: "heroic", MaxPlayers: 25, EncounterVariant: pgtype.Text{String: variant, Valid: variant != ""}, PlayerClass: "Warrior", PlayerSpec: "Fury", Dps: 100, Hps: 100})
+					players = append(players, chroniclesdk.InstanceParsePlayer{PlayerGUID: variant, Bosses: []chroniclesdk.InstanceParseBoss{{EncounterName: boss, DifficultyName: "heroic", MaxPlayers: 25, MetricValue: 100, PreciseScore: 42, DisplayScore: 42, Status: "ok"}}})
+				}
+				cutoff := database.Timestamptz(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+				require.NoError(t, applyVariantParses(t.Context(), store, uuid.Nil, uuid.New(), rankings, players, []string{boss}, metric, parsepolicy.CohortModeSpec, cutoff, pgtype.Timestamptz{}, false))
+				require.Len(t, store.calls, 2)
+				for _, call := range store.calls {
+					require.Equal(t, string(metric), call.Metric)
+					require.Equal(t, "heroic", call.DifficultyName)
+					require.Equal(t, int16(25), call.MaxPlayers)
+				}
+				require.Greater(t, players[0].Bosses[0].PreciseScore, players[1].Bosses[0].PreciseScore)
+				require.Equal(t, "normal", *players[0].Bosses[0].EncounterVariant)
+				require.Equal(t, "hard", *players[1].Bosses[0].EncounterVariant)
+				require.Nil(t, players[2].Bosses[0].EncounterVariant)
+				require.Equal(t, 42.0, players[2].Bosses[0].PreciseScore, "unknown retains Combined")
+				require.Equal(t, players[0].Bosses[0].PreciseScore, players[0].AverageParse.PreciseScore)
+			})
+		}
 	}
 }
 
