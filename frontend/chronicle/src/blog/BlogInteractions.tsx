@@ -133,6 +133,7 @@ export function FeedbackEditor({ postID, feedback, initialEditing = false }: { p
   const [editing, setEditing] = useState(initialEditing || !feedback);
   const [body, setBody] = useState(feedback?.body ?? "");
   const [consent, setConsent] = useState(feedback?.consent ?? false);
+  const [confirming, setConfirming] = useState(false);
   const mutation = useBlogMutation(postID);
   const length = Array.from(body.trim()).length;
   const tooLong = length > 300;
@@ -152,27 +153,41 @@ export function FeedbackEditor({ postID, feedback, initialEditing = false }: { p
     </div>;
   }
 
+  const save = () => mutation.mutate(blogFeedbackMutation(body, consent), { onSuccess: () => { setConfirming(false); setEditing(false); } });
   return <form className="space-y-4 rounded-lg border border-border bg-card p-5" onSubmit={(event) => {
     event.preventDefault();
-    mutation.mutate(blogFeedbackMutation(body, consent), { onSuccess: () => setEditing(false) });
+    // Any edit resets approval; make readers confirm before approved feedback disappears.
+    if (feedback?.status === "approved" && !confirming) {
+      setConfirming(true);
+      return;
+    }
+    save();
   }}>
     <div className="flex flex-wrap items-center justify-between gap-2">
       <label htmlFor="blog-feedback" className="text-sm font-semibold">{feedback ? "Edit your feedback" : "Your feedback"}</label>
       {statusBadge}
     </div>
-    <textarea id="blog-feedback" value={body} onChange={(event) => setBody(event.target.value)} maxLength={600} required rows={4} placeholder="What worked, what was confusing, what should come next?" className="styled-scrollbar w-full resize-y rounded-md border border-input bg-background p-3 text-sm leading-6 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+    <textarea id="blog-feedback" value={body} onChange={(event) => { setBody(event.target.value); setConfirming(false); }} maxLength={600} required rows={4} placeholder="What worked, what was confusing, what should come next?" className="styled-scrollbar w-full resize-y rounded-md border border-input bg-background p-3 text-sm leading-6 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
     <label className="flex cursor-pointer items-start gap-2.5 text-sm">
       <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-primary" />
       <span>Allow Chronicle to publish this anonymously after moderation.<span className="mt-0.5 block text-xs text-muted-foreground">Leave unchecked to keep it private. Uncheck and save to withdraw permission.</span></span>
     </label>
-    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+    {confirming ? <div role="alertdialog" aria-labelledby="blog-feedback-confirm" className="space-y-3 rounded-md border border-amber-500/40 bg-amber-500/10 p-4">
+      <p id="blog-feedback-confirm" className="text-sm leading-6">
+        Your feedback is approved{feedback?.consent ? " and public" : ""}. Updating it removes the approval{feedback?.consent ? " and hides it from other readers" : ""} until a moderator approves it again.
+      </p>
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button type="button" variant="ghost" disabled={mutation.isPending} onClick={() => setConfirming(false)}>Keep editing</Button>
+        <Button type="submit" disabled={mutation.isPending}>{mutation.isPending ? "Saving…" : "Update anyway"}</Button>
+      </div>
+    </div> : <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
       <p className="text-xs leading-5 text-muted-foreground">{feedback ? "Updating sends your feedback back to review." : "One response per post. Your name is never shown."}</p>
       <div className="ml-auto flex items-center gap-3">
         <span className={`font-mono text-xs ${tooLong ? "text-destructive" : "text-muted-foreground"}`}>{length}/300</span>
-        {feedback && <Button type="button" variant="ghost" disabled={mutation.isPending} onClick={() => { setBody(feedback.body); setConsent(feedback.consent); mutation.reset(); setEditing(false); }}>Cancel</Button>}
+        {feedback && <Button type="button" variant="ghost" disabled={mutation.isPending} onClick={() => { setBody(feedback.body); setConsent(feedback.consent); setConfirming(false); mutation.reset(); setEditing(false); }}>Cancel</Button>}
         <Button type="submit" disabled={mutation.isPending || !body.trim() || tooLong}>{mutation.isPending ? "Saving…" : feedback ? "Update feedback" : "Send feedback"}</Button>
       </div>
-    </div>
+    </div>}
     {mutation.error && <p role="alert" className="text-sm text-destructive">{mutation.error.message}</p>}
   </form>;
 }
