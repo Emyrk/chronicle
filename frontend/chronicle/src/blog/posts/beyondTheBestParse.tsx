@@ -257,7 +257,10 @@ function Figure({ label, caption, children }: { label: string; caption?: string;
 // Illustrative kills for one spec on one boss. Parses here are simply the share
 // of earlier kills you beat, so the numbers below are computed, not typed in.
 const FRIDAY_POPULATION = [920, 1080, 1180, 1260, 1330, 1390, 1440, 1500, 1550, 1640];
-const SATURDAY_TOP_GUILD = [1720, 1810, 1930];
+// The weekend: Friday's 28 of 31 kills below 1,600 parse 90; Saturday's 4 top
+// kills make Sunday's identical kill 28 of 35, a parse of 80.
+const WEEKEND_FRIDAY = [...Array.from({ length: 28 }, (_, i) => 900 + i * 25), 1620, 1660, 1700];
+const SATURDAY_TOP_GUILD = [1760, 1830, 1890, 1950];
 const YOU = 1600;
 
 function parseAgainst(population: readonly number[], value: number): number {
@@ -291,9 +294,9 @@ function DotStrip({ population, you, highlight }: { population: readonly number[
 }
 
 function WeekendStrip() {
-  const saturday = [...FRIDAY_POPULATION, ...SATURDAY_TOP_GUILD];
+  const saturday = [...WEEKEND_FRIDAY, ...SATURDAY_TOP_GUILD];
   const days = [
-    { day: "Friday", note: "Your guild raids", population: FRIDAY_POPULATION, you: YOU, highlight: undefined },
+    { day: "Friday", note: "Your guild raids", population: WEEKEND_FRIDAY, you: YOU, highlight: undefined },
     { day: "Saturday", note: "The strongest guild raids", population: saturday, you: undefined, highlight: SATURDAY_TOP_GUILD },
     { day: "Sunday", note: "Another guild raids", population: saturday, you: YOU, highlight: undefined },
   ];
