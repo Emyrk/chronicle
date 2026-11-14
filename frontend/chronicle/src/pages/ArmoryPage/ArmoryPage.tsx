@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Shield, Calendar, Sparkles, LayoutDashboard, Hammer } from "lucide-react";
@@ -24,6 +25,16 @@ import { IdentityHeader } from "./overview/IdentityHeader";
 import { ActivityHeaderCard, GearHeaderCard, TalentsHeaderCard } from "./TabHeaderCards";
 import { JourneyStatsCard } from "./overview/JourneyStatsCard";
 import { CareerRatingCard } from "./overview/CareerRatingCard";
+import { ScoreCard } from "./overview/ScoreCard";
+import { defaultMetric, type ParseMetric } from "./overview/util";
+import { useCharacterParses } from "@/api/rankingsQueries";
+import {
+  filterParsesBySpec,
+  performanceSpecs,
+  scoreParses,
+  summarizeRaids,
+  topEncounters,
+} from "./parseAggregation";
 import { RenownStat } from "./overview/RenownStat";
 import { useCareerRatings } from "./overview/useCareerRatings";
 import { useRecentActivity } from "./overview/useRecentActivity";
@@ -33,6 +44,14 @@ type OverviewMode = "journey" | "performance";
 const MODES: Array<[OverviewMode, string]> = [
   ["journey", "Journey"],
   ["performance", "Performance"],
+];
+
+/** Performance mode shows career ratings, or the older 60-day parse scores. */
+type PerformanceView = "ratings" | "parses";
+
+const PERFORMANCE_VIEWS: Array<[PerformanceView, string]> = [
+  ["ratings", "Ratings"],
+  ["parses", "Parses"],
 ];
 
 const TABS = [
@@ -104,6 +123,11 @@ function ArmoryPageContent({ player }: { player: ArmoryPlayer }) {
   const activeTab = (searchParams.get("tab") as TabKey) || "overview";
   const mode: OverviewMode =
     searchParams.get("mode") === "performance" ? "performance" : "journey";
+  const performanceView: PerformanceView =
+    searchParams.get("view") === "parses" ? "parses" : "ratings";
+  const showParses = mode === "performance" && performanceView === "parses";
+  const [metric, setMetric] = useState<ParseMetric>(() => defaultMetric(player));
+  const [performanceSpec, setPerformanceSpec] = useState<string | null>(null);
   const { isAuthenticated } = useAuth();
   const favorites = useMyFavorites({ enabled: isAuthenticated });
   const toggleFavorite = useToggleFavoritePlayer();
@@ -116,16 +140,42 @@ function ArmoryPageContent({ player }: { player: ArmoryPlayer }) {
   const lootQuery = useArmoryLoot(player.realm_name, player.id, isOverview && mode === "journey");
   // Journey shows all-spec Renown; Performance adds the boss-level history.
   const ratings = useCareerRatings(player, {
-    career: isOverview,
-    history: isOverview && mode === "performance",
+    career: isOverview && !showParses,
+    history: isOverview && mode === "performance" && !showParses,
   });
+
+  // Parses view: best-3 average per boss over the last 60 days.
+  const parsesQuery = useCharacterParses(isOverview && showParses ? player.id : undefined, metric);
+  const parses = useMemo(() => parsesQuery.data?.parses ?? [], [parsesQuery.data]);
+  const specs = useMemo(() => performanceSpecs(parses), [parses]);
+  const selectedSpec = performanceSpec && specs.includes(performanceSpec) ? performanceSpec : null;
+  const selectedParses = useMemo(
+    () => filterParsesBySpec(parses, selectedSpec),
+    [parses, selectedSpec],
+  );
+  const score = useMemo(() => scoreParses(selectedParses), [selectedParses]);
+  const top3 = useMemo(
+    () => topEncounters(summarizeRaids(selectedParses), 3),
+    [selectedParses],
+  );
 
   const setMode = (nextMode: OverviewMode) => {
     const next = new URLSearchParams(searchParams);
     if (nextMode === "journey") {
       next.delete("mode");
+      next.delete("view");
     } else {
       next.set("mode", nextMode);
+    }
+    setSearchParams(next, { replace: true });
+  };
+
+  const setPerformanceView = (nextView: PerformanceView) => {
+    const next = new URLSearchParams(searchParams);
+    if (nextView === "ratings") {
+      next.delete("view");
+    } else {
+      next.set("view", nextView);
     }
     setSearchParams(next, { replace: true });
   };
@@ -182,6 +232,26 @@ function ArmoryPageContent({ player }: { player: ArmoryPlayer }) {
           {label}
         </Button>
       ))}
+      {mode === "performance" && (
+        <div
+          className="col-span-2 flex rounded-md border border-border p-0.5 sm:col-span-1"
+          role="group"
+          aria-label="Performance view"
+        >
+          {PERFORMANCE_VIEWS.map(([key, label]) => (
+            <Button
+              key={key}
+              variant={performanceView === key ? "secondary" : "ghost"}
+              size="sm"
+              className="h-7 flex-1 px-2.5 text-xs sm:flex-none"
+              aria-pressed={performanceView === key}
+              onClick={() => setPerformanceView(key)}
+            >
+              {label}
+            </Button>
+          ))}
+        </div>
+      )}
     </div>
   ) : undefined;
 
@@ -226,7 +296,20 @@ function ArmoryPageContent({ player }: { player: ArmoryPlayer }) {
           <div className="mt-8">
             <IdentityHeader player={player} titleAction={favoriteButton} actions={modeSelector}>
               <div className="w-full lg:w-[480px]">
-                {activeTab === "overview" && mode === "performance" && (
+                {activeTab === "overview" && showParses && (
+                  <ScoreCard
+                    score={score}
+                    top3={top3}
+                    metric={metric}
+                    onMetricChange={setMetric}
+                    playerClass={player.class}
+                    specs={specs}
+                    selectedSpec={selectedSpec}
+                    onSpecChange={setPerformanceSpec}
+                    isLoading={parsesQuery.isLoading}
+                  />
+                )}
+                {activeTab === "overview" && mode === "performance" && !showParses && (
                   <CareerRatingCard
                     data={ratings.career}
                     cohort={ratings.cohort}
@@ -262,6 +345,11 @@ function ArmoryPageContent({ player }: { player: ArmoryPlayer }) {
                 player={player}
                 onOpenTab={openTab}
                 ratings={ratings}
+                parseView={
+                  showParses
+                    ? { metric, selectedSpec, specs, onSpecChange: setPerformanceSpec }
+                    : undefined
+                }
               />
             </div>
           )}

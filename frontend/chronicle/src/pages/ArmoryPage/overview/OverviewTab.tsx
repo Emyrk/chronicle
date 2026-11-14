@@ -8,9 +8,19 @@ import {
   useSupportedInstanceProgressionBosses,
 } from "@/api/queries";
 import { useCharacterEncounters, useCharacterParses } from "@/api/rankingsQueries";
-import { averageScoreByInstance, bestScoreByInstance, summarizeProgress } from "../parseAggregation";
+import {
+  averageScoreByInstance,
+  bestScoreByInstance,
+  filterParsesBySpec,
+  summarizeProgress,
+  summarizeRaids,
+} from "../parseAggregation";
+import {
+  DEFAULT_PERFORMANCE_COMPARISON_STATE,
+  serializePerformanceComparisonState,
+} from "./performanceComparisonState";
 import type { CareerRatings } from "./useCareerRatings";
-import { defaultMetric } from "./util";
+import { defaultMetric, type ParseMetric } from "./util";
 import { cohortKey } from "./careerRatingsModel";
 import { ratingsExplainerHref } from "@/pages/Ratings/ratingsLink";
 import { useRecentActivity } from "./useRecentActivity";
@@ -18,6 +28,7 @@ import { TalentsCard } from "./TalentsCard";
 import { GearStripCard } from "./GearStripCard";
 import { RaidCalendarCard } from "./RaidCalendarCard";
 import { RaidRatingsCard } from "./RaidRatingsCard";
+import { RaidScoresCard } from "./RaidScoresCard";
 import { RecentNightsCard } from "./RecentNightsCard";
 import { ProgressionCard } from "./ProgressionCard";
 import { FirstKillsCard } from "./FirstKillsCard";
@@ -28,12 +39,20 @@ interface OverviewTabProps {
   player: ArmoryPlayer;
   onOpenTab: (tab: "gear" | "talents" | "activity") => void;
   ratings: CareerRatings;
+  /** Set when Performance shows the 60-day parse scores instead of ratings. */
+  parseView?: {
+    metric: ParseMetric;
+    selectedSpec: string | null;
+    specs: string[];
+    onSpecChange: (spec: string | null) => void;
+  };
 }
 
 export function OverviewTab({
   player,
   onOpenTab,
   ratings,
+  parseView,
 }: OverviewTabProps) {
   const [searchParams] = useSearchParams();
   const isPerformance = searchParams.get("mode") === "performance";
@@ -48,7 +67,8 @@ export function OverviewTab({
 
   // Performance mode: calendar nights colored by their best parse, recent
   // nights labeled with their average parse.
-  const parsesQuery = useCharacterParses(isPerformance ? player.id : undefined, defaultMetric(player));
+  const parseMetric = parseView?.metric ?? defaultMetric(player);
+  const parsesQuery = useCharacterParses(isPerformance ? player.id : undefined, parseMetric);
   const nightScores = useMemo(
     () => (isPerformance ? bestScoreByInstance(parsesQuery.data?.parses ?? []) : new Map<string, number>()),
     [parsesQuery.data, isPerformance],
@@ -57,6 +77,18 @@ export function OverviewTab({
     () => (isPerformance ? averageScoreByInstance(parsesQuery.data?.parses ?? []) : new Map<string, number>()),
     [parsesQuery.data, isPerformance],
   );
+
+  // Parses view: per-raid best-3 averages for the selected spec.
+  const parseRaids = useMemo(
+    () => (parseView ? summarizeRaids(filterParsesBySpec(parsesQuery.data?.parses ?? [], parseView.selectedSpec)) : []),
+    [parsesQuery.data, parseView],
+  );
+  const performanceHistoryPath = `/performance-history?${serializePerformanceComparisonState({
+    ...DEFAULT_PERFORMANCE_COMPARISON_STATE,
+    realmName: player.realm_name,
+    players: [{ id: player.id, realmName: player.realm_name, spec: null, subSpec: null, hidden: false }],
+    metric: parseMetric,
+  }).toString()}`;
 
   // Journey mode: participation, progression, and loot.
   const encountersQuery = useCharacterEncounters(player.id, player.realm_id, !isPerformance);
@@ -106,6 +138,19 @@ export function OverviewTab({
         {isPerformance ? (
         <>
           <div className="lg:col-span-12">
+            {parseView ? (
+              <RaidScoresCard
+                raids={parseRaids}
+                metric={parseView.metric}
+                performanceHistoryPath={performanceHistoryPath}
+                bossCounts={bossCounts}
+                playerClass={player.class}
+                specs={parseView.specs}
+                selectedSpec={parseView.selectedSpec}
+                onSpecChange={parseView.onSpecChange}
+                isLoading={parsesQuery.isLoading}
+              />
+            ) : (
             <RaidRatingsCard
               raids={ratings.raids}
               metric={ratings.metric}
@@ -123,6 +168,7 @@ export function OverviewTab({
                 })
               }
             />
+            )}
           </div>
           <div className="lg:col-span-12">
             <RecentNightsCard
