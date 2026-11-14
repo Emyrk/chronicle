@@ -129,7 +129,7 @@ function KeybindsCard({ visible }: { visible: boolean }) {
             Shortcuts
           </CardTitle>
         </CardHeader>
-        <CardContent className="styled-scrollbar space-y-4 overflow-y-auto">
+        <CardContent className="styled-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto">
           {groups.map((group) => (
             <section key={group.id}>
               <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
