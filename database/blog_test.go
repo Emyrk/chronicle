@@ -2,6 +2,7 @@ package database_test
 
 import (
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/Emyrk/chronicle/database"
@@ -126,4 +127,57 @@ func TestBlogFeedbackRevisionInTransaction(t *testing.T) {
 		return err
 	}, nil)
 	require.NoError(t, err)
+}
+
+func TestBlogConcurrentUniqueness(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitLong)
+	db, _ := dbtestutil.NewDB(t)
+	user := uuid.New()
+	_, err := db.InsertUser(ctx, database.InsertUserParams{ID: user, Username: user.String()})
+	require.NoError(t, err)
+	const writers = 8
+	start := make(chan struct{})
+	feedbackErrors := make(chan error, writers)
+	voteErrors := make(chan error, writers)
+	var wg sync.WaitGroup
+	for i := 0; i < writers; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			<-start
+			_, err := db.InsertBlogFeedback(ctx, database.InsertBlogFeedbackParams{PostSlug: "concurrent", UserID: user, Body: pgtype.Text{String: "feedback", Valid: true}})
+			feedbackErrors <- err
+			value := int16(1)
+			if i%2 == 0 {
+				value = -1
+			}
+			_, err = db.UpsertBlogVote(ctx, database.UpsertBlogVoteParams{PostSlug: "concurrent", UserID: user, Value: value})
+			voteErrors <- err
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+	close(feedbackErrors)
+	close(voteErrors)
+	successes := 0
+	for err := range feedbackErrors {
+		if err == nil {
+			successes++
+			continue
+		}
+		var pgerr *pgconn.PgError
+		require.ErrorAs(t, err, &pgerr)
+		require.Equal(t, "23505", pgerr.Code)
+	}
+	require.Equal(t, 1, successes)
+	for err := range voteErrors {
+		require.NoError(t, err)
+	}
+	rows, err := db.ListAdminBlogFeedback(ctx, database.ListAdminBlogFeedbackParams{PostSlug: "concurrent", LimitCount: 100})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	totals, err := db.GetBlogVoteTotals(ctx, "concurrent")
+	require.NoError(t, err)
+	require.Equal(t, int64(1), totals.Upvotes+totals.Downvotes)
 }
