@@ -798,6 +798,16 @@ export interface BlogFeedbackRequest {
 }
 
 // From chroniclesdk/blog.go
+/**
+ * BlogInteractionSummary is the public blog-index projection for one post.
+ */
+export interface BlogInteractionSummary {
+    readonly slug: string;
+    readonly up_votes: number;
+    readonly public_feedback: number;
+}
+
+// From chroniclesdk/blog.go
 export interface BlogInteractions {
     readonly voting_enabled: boolean;
     readonly feedback_enabled: boolean;
@@ -7969,3 +7979,5 @@ export interface WoWTrailerEntry {
 export type WoWUnitType = 2 | 3 | 1 | 0 | 4;
 
 export const WoWUnitTypes: WoWUnitType[] = [2, 3, 1, 0, 4];
+
+

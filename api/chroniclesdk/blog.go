@@ -36,6 +36,13 @@ type BlogInteractions struct {
 	OwnFeedback     *BlogOwnFeedback     `json:"own_feedback,omitempty"`
 	FeedbackBanned  *bool                `json:"feedback_banned,omitempty"`
 }
+
+// BlogInteractionSummary is the public blog-index projection for one post.
+type BlogInteractionSummary struct {
+	Slug           string `json:"slug"`
+	UpVotes        int64  `json:"up_votes"`
+	PublicFeedback int64  `json:"public_feedback"`
+}
 type BlogModerationRequest struct {
 	ExpectedUpdatedAt time.Time `json:"expected_updated_at"`
 }

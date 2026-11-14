@@ -2749,6 +2749,48 @@ func (q *sqlQuerier) ListAdminBlogFeedback(ctx context.Context, arg ListAdminBlo
 	return items, nil
 }
 
+const listBlogInteractionSummaries = `-- name: ListBlogInteractionSummaries :many
+SELECT s.post_slug::text AS post_slug,
+       sum(s.upvotes)::bigint AS upvotes,
+       sum(s.public_feedback)::bigint AS public_feedback
+FROM (
+  SELECT post_slug, count(*) AS upvotes, 0::bigint AS public_feedback
+  FROM blog_votes WHERE value = 1 GROUP BY post_slug
+  UNION ALL
+  SELECT post_slug, 0::bigint, count(*)
+  FROM blog_feedback WHERE status = 'approved' AND public_consent AND deleted_at IS NULL GROUP BY post_slug
+) s
+GROUP BY s.post_slug
+ORDER BY s.post_slug
+`
+
+type ListBlogInteractionSummariesRow struct {
+	PostSlug       string `db:"post_slug" json:"post_slug"`
+	Upvotes        int64  `db:"upvotes" json:"upvotes"`
+	PublicFeedback int64  `db:"public_feedback" json:"public_feedback"`
+}
+
+// Public totals only: upvotes and approved, consented, undeleted feedback. Never downvotes.
+func (q *sqlQuerier) ListBlogInteractionSummaries(ctx context.Context) ([]ListBlogInteractionSummariesRow, error) {
+	rows, err := q.db.Query(ctx, listBlogInteractionSummaries)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListBlogInteractionSummariesRow
+	for rows.Next() {
+		var i ListBlogInteractionSummariesRow
+		if err := rows.Scan(&i.PostSlug, &i.Upvotes, &i.PublicFeedback); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPublicBlogFeedback = `-- name: ListPublicBlogFeedback :many
 SELECT id, post_slug, user_id, original_tenant_id, body, public_consent, status, created_at, updated_at, deleted_at FROM blog_feedback
 WHERE post_slug = $1 AND status = 'approved' AND public_consent AND deleted_at IS NULL

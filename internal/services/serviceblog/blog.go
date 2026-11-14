@@ -34,6 +34,13 @@ type Feedback struct {
 	Consent   bool
 	Deleted   bool
 }
+
+// Summary is the public per-post projection shown on the blog index.
+type Summary struct {
+	Slug           string
+	UpVotes        int64
+	PublicFeedback int64
+}
 type Votes struct {
 	Up, Down int64
 	Own      int16
@@ -50,6 +57,8 @@ type Store interface {
 	DeleteOwnFeedback(context.Context, string, uuid.UUID) error
 	ListFeedback(context.Context) ([]Feedback, error)
 	Moderate(context.Context, uuid.UUID, string, time.Time) error
+	// Summaries returns public totals for every post with at least one upvote or public feedback.
+	Summaries(context.Context) ([]Summary, error)
 }
 type Bans interface {
 	Banned(context.Context, uuid.UUID) (bool, error)
@@ -165,6 +174,33 @@ func (s *Service) ReadWithAccess(ctx context.Context, slug string, user uuid.UUI
 		}
 	}
 	return out, err
+}
+
+// Summaries returns public totals, zeroing each count whose interaction is disabled for the
+// post in this context, and omitting posts with nothing left to show.
+func (s *Service) Summaries(ctx context.Context) ([]Summary, error) {
+	rows, err := s.opts.Store.Summaries(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Summary, 0, len(rows))
+	for _, row := range rows {
+		for kind, count := range map[string]*int64{"vote": &row.UpVotes, "feedback": &row.PublicFeedback} {
+			if *count == 0 {
+				continue
+			}
+			if err := s.eligible(ctx, row.Slug, kind); err != nil {
+				if !errors.Is(err, ErrDisabled) {
+					return nil, err
+				}
+				*count = 0
+			}
+		}
+		if row.UpVotes > 0 || row.PublicFeedback > 0 {
+			out = append(out, row)
+		}
+	}
+	return out, nil
 }
 func (s *Service) Vote(ctx context.Context, slug string, user uuid.UUID, vote int16) error {
 	if vote < -1 || vote > 1 {

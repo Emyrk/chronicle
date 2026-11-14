@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, expect, it, vi } from "vitest";
-import { BlogInteractions, BlogScore } from "./BlogInteractions";
+import { BlogCardStats, BlogInteractions, BlogScore } from "./BlogInteractions";
 import type { BlogPostMetadata } from "./blogRegistry";
 
 const state = vi.hoisted(() => ({ authenticated: false, banned: false, vote: 0, feedback: null as null | { id: string; body: string; status: string; deleted: boolean; consent: boolean } }));
@@ -9,6 +9,7 @@ vi.mock("@/hooks/useAuth", () => ({ useAuth: () => ({ session: state.authenticat
 vi.mock("@/api/blogInteractions", () => ({
   useBlogInteractions: () => ({ data: { voting_enabled: true, feedback_enabled: true, own_feedback: state.feedback, up_votes: 12, down_votes: 987654, own_vote: state.vote, feedback_banned: state.banned, feedback: [{ id: "public", body: "Good <script>alert(1)</script>", server_relation: "This server" }] } }),
   useBlogMutation: () => ({ mutate: vi.fn(), isPending: false }),
+  useBlogSummaries: () => ({ data: new Map([["test", { slug: "test", up_votes: 7, public_feedback: 3 }]]) }),
 }));
 const post: BlogPostMetadata = { id: "test", title: "Test", description: "", publishedAt: "2026-01-01", rarity: "common", tag: "Docs", icon: "book", votingEnabled: true, feedbackEnabled: true };
 beforeEach(() => { state.authenticated = false; state.banned = false; state.vote = 0; state.feedback = null; });
@@ -68,4 +69,14 @@ it("restores existing publication consent when editing", () => {
 it("shows the upvote score for the title and hides it when voting is off", () => {
   expect(renderToStaticMarkup(<BlogScore post={post} />)).toContain("+12");
   expect(renderToStaticMarkup(<BlogScore post={{ ...post, votingEnabled: false }} />)).toBe("");
+});
+
+it("shows index card counts only for enabled interactions", () => {
+  const both = renderToStaticMarkup(<BlogCardStats post={post} />);
+  expect(both).toContain("+7");
+  expect(both).toContain("3 public responses");
+  const voteOnly = renderToStaticMarkup(<BlogCardStats post={{ ...post, feedbackEnabled: false }} />);
+  expect(voteOnly).toContain("+7");
+  expect(voteOnly).not.toContain("public responses");
+  expect(renderToStaticMarkup(<BlogCardStats post={{ ...post, id: "other" }} />)).toBe("");
 });

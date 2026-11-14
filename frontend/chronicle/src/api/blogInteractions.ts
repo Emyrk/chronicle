@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import type { BlogAdminFeedback, BlogAdminVotes, BlogInteractions, BlogOwnFeedback, BlogVoteRequest, BlogFeedbackRequest, BlogModerationRequest } from "./typesGenerated";
+import type { BlogInteractionSummary, BlogAdminFeedback, BlogAdminVotes, BlogInteractions, BlogOwnFeedback, BlogVoteRequest, BlogFeedbackRequest, BlogModerationRequest } from "./typesGenerated";
 export type OwnFeedback = BlogOwnFeedback;
 export type AdminBlogInteractions = readonly BlogAdminFeedback[];
 
@@ -21,6 +21,16 @@ export function useBlogInteractions(id: string, userID: string | undefined, auth
     retry: false,
   });
 }
+/** Public upvote and feedback totals for every post, for the blog index. */
+export function useBlogSummaries() {
+  return useQuery({
+    queryKey: ["blogInteractionSummaries"],
+    queryFn: () => blogRequest<readonly BlogInteractionSummary[]>("/api/v1/blog/interactions"),
+    select: (rows) => new Map(rows.map((row) => [row.slug, row])),
+    staleTime: 60_000,
+    retry: false,
+  });
+}
 export function useAdminBlogVotes(id: string) {
   return useQuery({ queryKey: ["admin", "blogVotes", id], queryFn: () => blogRequest<BlogAdminVotes>(`/api/v1/admin/blog/${encodeURIComponent(id)}/votes`), retry: false });
 }
@@ -28,7 +38,9 @@ export function useBlogMutation(id: string) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: ({ resource, method, body }: { resource: "vote"; method: "PUT"; body: BlogVoteRequest } | { resource: "feedback"; method: "PUT"; body: BlogFeedbackRequest }) => blogRequest(`${base(id)}/${resource}`, method, body),
-    onSuccess: () => client.invalidateQueries({ queryKey: ["blogInteractions", id] }),
+    onSuccess: async () => {
+      await Promise.all([client.invalidateQueries({ queryKey: ["blogInteractions", id] }), client.invalidateQueries({ queryKey: ["blogInteractionSummaries"] })]);
+    },
   });
 }
 export function useAdminBlogInteractions() {

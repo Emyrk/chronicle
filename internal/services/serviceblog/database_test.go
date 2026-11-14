@@ -120,3 +120,47 @@ func TestPostgresAdminListIncludesOlderTombstones(t *testing.T) {
 	}
 	require.True(t, found, "oldest tombstone must remain available to moderators")
 }
+
+func TestPostgresSummariesArePublicAndEligible(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitLong)
+	db, _ := dbtestutil.NewDB(t)
+	users := make([]uuid.UUID, 4)
+	for i := range users {
+		users[i] = uuid.New()
+		_, err := db.InsertUser(ctx, database.InsertUserParams{ID: users[i], Username: users[i].String()})
+		require.NoError(t, err)
+	}
+	vote := func(slug string, user uuid.UUID, value int16) {
+		_, err := db.UpsertBlogVote(ctx, database.UpsertBlogVoteParams{PostSlug: slug, UserID: user, Value: value})
+		require.NoError(t, err)
+	}
+	feedback := func(slug string, user uuid.UUID, consent bool, status string) {
+		row, err := db.InsertBlogFeedback(ctx, database.InsertBlogFeedbackParams{PostSlug: slug, UserID: user, Body: pgtype.Text{String: "hi", Valid: true}, PublicConsent: consent})
+		require.NoError(t, err)
+		if status != "pending" {
+			_, err = db.ModerateBlogFeedback(ctx, database.ModerateBlogFeedbackParams{ID: row.ID, Status: status, ExpectedUpdatedAt: row.UpdatedAt})
+			require.NoError(t, err)
+		}
+	}
+	vote("alpha", users[0], 1)
+	vote("alpha", users[1], 1)
+	vote("alpha", users[2], -1)
+	feedback("alpha", users[0], true, "approved")
+	feedback("alpha", users[1], false, "approved") // private
+	feedback("alpha", users[2], true, "pending")   // unmoderated
+	vote("beta", users[0], -1)                     // downvotes alone show nothing
+	vote("gamma", users[0], 1)
+	feedback("gamma", users[0], true, "approved")
+
+	// Feedback is disabled for gamma in this context.
+	s := New(Options{Store: NewDatabaseStore(db), Eligible: func(_ context.Context, slug string, kind string) (bool, error) {
+		return slug != "gamma" || kind == "vote", nil
+	}})
+	summaries, err := s.Summaries(ctx)
+	require.NoError(t, err)
+	require.Equal(t, []Summary{
+		{Slug: "alpha", UpVotes: 2, PublicFeedback: 1},
+		{Slug: "gamma", UpVotes: 1},
+	}, summaries)
+}

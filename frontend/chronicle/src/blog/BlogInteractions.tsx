@@ -1,6 +1,6 @@
 import { useState, useSyncExternalStore } from "react";
-import { ThumbsDown, ThumbsUp } from "lucide-react";
-import { useBlogMutation, useBlogInteractions, blogFeedbackMutation, type OwnFeedback } from "@/api/blogInteractions";
+import { MessageSquare, ThumbsDown, ThumbsUp } from "lucide-react";
+import { useBlogMutation, useBlogInteractions, useBlogSummaries, blogFeedbackMutation, type OwnFeedback } from "@/api/blogInteractions";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import type { BlogPostMetadata } from "./blogRegistry";
@@ -76,6 +76,24 @@ function LiveScore({ postID }: { postID: string }) {
   const { data } = useBlogInteractions(postID, session?.user_id, authLoading);
   if (!data?.voting_enabled || data.up_votes <= 0) return null;
   return <span title={`${data.up_votes} ${data.up_votes === 1 ? "reader" : "readers"} found this helpful`} className="ml-3 inline-flex translate-y-[-0.2em] items-center gap-1 rounded-full border border-border bg-muted/50 px-2.5 py-0.5 align-middle font-mono text-sm text-foreground"><ThumbsUp className="h-3.5 w-3.5" aria-hidden />+{data.up_votes}</span>;
+}
+
+/** Upvote and public feedback counts for a blog index card. Live only. */
+export function BlogCardStats({ post }: { post: BlogPostMetadata }) {
+  const hydrated = useSyncExternalStore(subscribe, () => true, () => false);
+  if (!hydrated) return null;
+  return <LiveCardStats post={post} />;
+}
+
+function LiveCardStats({ post }: { post: BlogPostMetadata }) {
+  const summary = useBlogSummaries().data?.get(post.id);
+  const upVotes = post.votingEnabled === false ? 0 : summary?.up_votes ?? 0;
+  const feedback = post.feedbackEnabled ? summary?.public_feedback ?? 0 : 0;
+  if (upVotes <= 0 && feedback <= 0) return null;
+  return <span className="relative z-10 inline-flex items-center gap-3 font-mono text-xs text-muted-foreground">
+    {upVotes > 0 && <span title={`${upVotes} ${upVotes === 1 ? "reader" : "readers"} found this helpful`} className="inline-flex items-center gap-1"><ThumbsUp className="h-3.5 w-3.5" aria-hidden />+{upVotes}</span>}
+    {feedback > 0 && <span title={`${feedback} public ${feedback === 1 ? "response" : "responses"}`} className="inline-flex items-center gap-1"><MessageSquare className="h-3.5 w-3.5" aria-hidden />{feedback}</span>}
+  </span>;
 }
 
 function FeedbackEditor({ postID, feedback }: { postID: string; feedback: OwnFeedback | null }) {

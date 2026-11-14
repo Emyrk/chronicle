@@ -36,6 +36,17 @@ func (d *databaseStore) Votes(ctx context.Context, slug string, user uuid.UUID) 
 	}
 	return out, nil
 }
+func (d *databaseStore) Summaries(ctx context.Context) ([]Summary, error) {
+	rows, err := d.db.ListBlogInteractionSummaries(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Summary, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, Summary{Slug: row.PostSlug, UpVotes: row.Upvotes, PublicFeedback: row.PublicFeedback})
+	}
+	return out, nil
+}
 func (d *databaseStore) SetVote(ctx context.Context, slug string, user uuid.UUID, value int16) error {
 	if value == 0 {
 		return d.db.DeleteBlogVote(ctx, database.DeleteBlogVoteParams{PostSlug: slug, UserID: user})

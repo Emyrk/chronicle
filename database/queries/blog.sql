@@ -55,3 +55,18 @@ SELECT * FROM blog_feedback
 WHERE (@post_slug::text = '' OR post_slug = @post_slug)
   AND (@status::text = '' OR status = @status)
 ORDER BY created_at DESC, id LIMIT @limit_count::int OFFSET @offset_count::int;
+
+-- name: ListBlogInteractionSummaries :many
+-- Public totals only: upvotes and approved, consented, undeleted feedback. Never downvotes.
+SELECT s.post_slug::text AS post_slug,
+       sum(s.upvotes)::bigint AS upvotes,
+       sum(s.public_feedback)::bigint AS public_feedback
+FROM (
+  SELECT post_slug, count(*) AS upvotes, 0::bigint AS public_feedback
+  FROM blog_votes WHERE value = 1 GROUP BY post_slug
+  UNION ALL
+  SELECT post_slug, 0::bigint, count(*)
+  FROM blog_feedback WHERE status = 'approved' AND public_consent AND deleted_at IS NULL GROUP BY post_slug
+) s
+GROUP BY s.post_slug
+ORDER BY s.post_slug;

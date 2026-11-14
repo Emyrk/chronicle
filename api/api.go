@@ -394,6 +394,7 @@ func (api *API) Routes() chi.Router {
 			r.Group(func(r chi.Router) {
 				r.Use(api.Auth.Authenticated(true))
 				r.Get("/whoami", api.WhoAmI)
+				r.Get("/blog/interactions", api.ListBlogInteractionSummaries)
 				r.Get("/blog/{slug}/interactions", api.GetBlogInteractions)
 				// Public by unguessable ID: the purge finishes by deleting the
 				// account that started it.

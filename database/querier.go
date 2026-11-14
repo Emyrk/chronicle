@@ -852,6 +852,8 @@ type sqlcQuerier interface {
 	ListBillingEntitlementsByUserID(ctx context.Context, userID uuid.UUID) ([]BillingEntitlement, error)
 	ListBillingProviderCustomersForReconciliation(ctx context.Context) ([]ListBillingProviderCustomersForReconciliationRow, error)
 	ListBillingSubscriptionsForReconciliation(ctx context.Context) ([]BillingSubscription, error)
+	// Public totals only: upvotes and approved, consented, undeleted feedback. Never downvotes.
+	ListBlogInteractionSummaries(ctx context.Context) ([]ListBlogInteractionSummariesRow, error)
 	ListCacheGenerations(ctx context.Context) ([]CacheGeneration, error)
 	ListCareerGuildBossInputs(ctx context.Context, arg ListCareerGuildBossInputsParams) ([]ListCareerGuildBossInputsRow, error)
 	ListCareerGuildRenownInputs(ctx context.Context, arg ListCareerGuildRenownInputsParams) ([]ListCareerGuildRenownInputsRow, error)

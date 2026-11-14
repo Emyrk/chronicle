@@ -74,6 +74,21 @@ func (a *API) GetBlogInteractions(w http.ResponseWriter, r *http.Request) {
 	}
 	httpapi.Write(r.Context(), w, http.StatusOK, out)
 }
+
+// ListBlogInteractionSummaries returns public counts for the blog index.
+func (a *API) ListBlogInteractionSummaries(w http.ResponseWriter, r *http.Request) {
+	summaries, err := a.blog.Summaries(r.Context())
+	if err != nil {
+		blogError(w, r, err)
+		return
+	}
+	out := make([]chroniclesdk.BlogInteractionSummary, 0, len(summaries))
+	for _, s := range summaries {
+		out = append(out, chroniclesdk.BlogInteractionSummary{Slug: s.Slug, UpVotes: s.UpVotes, PublicFeedback: s.PublicFeedback})
+	}
+	w.Header().Set("Cache-Control", "private, max-age=60")
+	httpapi.Write(r.Context(), w, http.StatusOK, out)
+}
 func (a *API) PutBlogVote(w http.ResponseWriter, r *http.Request) {
 	if !a.requireBlogPermission(w, r, "vote_blog") {
 		return
