@@ -558,6 +558,13 @@ CREATE TABLE dataset_talent_trees (
     updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
+CREATE SEQUENCE datasets_revision_seq
+    START WITH 2
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
 CREATE TABLE datasets (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     name text NOT NULL,
@@ -571,6 +578,7 @@ CREATE TABLE datasets (
     spells_imported_at timestamp with time zone,
     spells_count integer DEFAULT 0 NOT NULL,
     icon_base_url text DEFAULT ''::text NOT NULL,
+    revision bigint DEFAULT nextval('datasets_revision_seq'::regclass) NOT NULL,
     CONSTRAINT datasets_slug_format CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$'::text))
 );
 

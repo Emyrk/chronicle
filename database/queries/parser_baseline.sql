@@ -6,6 +6,10 @@
 SELECT ranking.* FROM encounter_dps_rankings ranking
 WHERE ranking.instance_id IN (SELECT id FROM log_instances WHERE log_group_id = $1);
 
+-- name: BaselineInstanceDifficulties :many
+-- Persisted rows, not the analysis query derived from encounter difficulties.
+SELECT * FROM log_instance_difficulties WHERE instance_id = $1 ORDER BY difficulty;
+
 -- name: BaselineTalentBuilds :many
 SELECT build.* FROM talent_builds build
 WHERE build.id IN (

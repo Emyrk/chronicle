@@ -45,6 +45,8 @@ type sqlcQuerier interface {
 	// refresh can select a representative outside this log group: include affected
 	// runs, not only rows whose representative belongs to the selected group.
 	BaselineEncounterRankings(ctx context.Context, logGroupID uuid.UUID) ([]EncounterDpsRanking, error)
+	// Persisted rows, not the analysis query derived from encounter difficulties.
+	BaselineInstanceDifficulties(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceDifficulty, error)
 	BaselineInstancePlayerGuilds(ctx context.Context, instanceID uuid.UUID) ([]Guild, error)
 	BaselineLoot(ctx context.Context, logGroupID uuid.UUID) ([]InstanceLoot, error)
 	BaselineOverview(ctx context.Context, logGroupID uuid.UUID) ([]InstanceOverviewMetric, error)
@@ -61,6 +63,7 @@ type sqlcQuerier interface {
 	BulkUpsertGuildPagePanels(ctx context.Context, dollar_1 []byte) error
 	BumpLeaderboardHighlightGeneration(ctx context.Context, tenantID uuid.UUID) error
 	CancelEventRepairOperation(ctx context.Context, arg CancelEventRepairOperationParams) (EventRepairOperation, error)
+	BumpDatasetRevision(ctx context.Context, id uuid.UUID) (int64, error)
 	CarryForwardFinalizedParsedLogGroup(ctx context.Context, arg CarryForwardFinalizedParsedLogGroupParams) error
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
 	CensusPlayerCounts(ctx context.Context, arg CensusPlayerCountsParams) ([]CensusPlayerCountsRow, error)
@@ -153,6 +156,19 @@ type sqlcQuerier interface {
 	CountUserTalentBuilds(ctx context.Context, arg CountUserTalentBuildsParams) (int64, error)
 	CreateEventRepairOperation(ctx context.Context, arg CreateEventRepairOperationParams) (EventRepairOperation, error)
 	// 	// Discord Integration
+	// ============================================================
+	// Gear Lists
+	// ============================================================
+	CreateGearList(ctx context.Context, arg CreateGearListParams) (GearList, error)
+	// ============================================================
+	// Gear Progressions
+	// ============================================================
+	CreateGearProgression(ctx context.Context, arg CreateGearProgressionParams) (GearProgression, error)
+	// ============================================================
+	// Stat Weights
+	// ============================================================
+	CreateGearStatWeight(ctx context.Context, arg CreateGearStatWeightParams) (GearStatWeight, error)
+	// Discord Integration
 	CreateGuildDiscordInstallState(ctx context.Context, arg CreateGuildDiscordInstallStateParams) (GuildDiscordInstallState, error)
 	// Guild Join Requests
 	CreateGuildJoinRequest(ctx context.Context, arg CreateGuildJoinRequestParams) (GuildJoinRequest, error)
@@ -393,6 +409,7 @@ type sqlcQuerier interface {
 	// Returns row counts for each per-dataset data table, plus whether talent
 	// trees have been imported. Used by the dataset management UI.
 	GetDatasetImportSummary(ctx context.Context, datasetID uuid.UUID) (GetDatasetImportSummaryRow, error)
+	GetDatasetRevision(ctx context.Context, id uuid.UUID) (int64, error)
 	GetDatasetTalentTrees(ctx context.Context, datasetID uuid.UUID) ([]byte, error)
 	GetDeploymentInfo(ctx context.Context) (DeploymentInfo, error)
 	GetDiscordAnnouncement(ctx context.Context, id uuid.UUID) (GuildDiscordLogAnnouncement, error)
@@ -1103,6 +1120,11 @@ type sqlcQuerier interface {
 	ListWorlds(ctx context.Context) ([]World, error)
 	LockEventRepairItem(ctx context.Context, arg LockEventRepairItemParams) (EventRepairItem, error)
 	LockEventRepairOperation(ctx context.Context, arg LockEventRepairOperationParams) (EventRepairOperation, error)
+	// Locks the effective dataset so its revision and default flavor remain stable through publication.
+	LockDatasetForResolution(ctx context.Context, id uuid.UUID) (LockDatasetForResolutionRow, error)
+	// Holds a row-level share lock until the surrounding transaction completes.
+	// Dataset mutations bump revision with UPDATE, which conflicts with this lock.
+	LockDatasetRevision(ctx context.Context, id uuid.UUID) (int64, error)
 	LockLeaderboardCareerPublication(ctx context.Context, arg LockLeaderboardCareerPublicationParams) (uuid.UUID, error)
 	// Future direct writers call BEFORE source mutation in the same transaction.
 	// An overlap increments revision without invalidating the active owner's token.
@@ -1119,6 +1141,14 @@ type sqlcQuerier interface {
 	// Serialize submissions by the same account across all tenants. Locking the
 	// applicant, not a proof row, also works for their first request.
 	LockProofApplicant(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
+	// Locks the realm row so its server assignment cannot change before publication.
+	// An unknown realm returns no rows; publication callers must fail closed rather
+	// than treating it as an unlocked default-dataset resolution.
+	LockRealmDatasetResolution(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
+	// Locks the server row so its tenant and default dataset cannot change before publication.
+	LockServerDatasetResolution(ctx context.Context, id uuid.UUID) (LockServerDatasetResolutionRow, error)
+	// Locks the tenant row so its default dataset and additive flavor cannot change before publication.
+	LockTenantDatasetResolution(ctx context.Context, id uuid.UUID) (LockTenantDatasetResolutionRow, error)
 	LockUserStorageQuota(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	LockUsersForUpdate(ctx context.Context, ids []uuid.UUID) ([]uuid.UUID, error)
 	LockWoWLogGroupParseGeneration(ctx context.Context, id uuid.UUID) (int64, error)

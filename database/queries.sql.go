@@ -3700,6 +3700,20 @@ func (q *sqlQuerier) UpsertDatasetClassBuffs(ctx context.Context, arg UpsertData
 	return err
 }
 
+const bumpDatasetRevision = `-- name: BumpDatasetRevision :one
+UPDATE datasets
+SET revision = nextval('datasets_revision_seq')
+WHERE id = $1
+RETURNING revision
+`
+
+func (q *sqlQuerier) BumpDatasetRevision(ctx context.Context, id uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, bumpDatasetRevision, id)
+	var revision int64
+	err := row.Scan(&revision)
+	return revision, err
+}
+
 const deleteDataset = `-- name: DeleteDataset :exec
 DELETE FROM datasets WHERE id = $1
 `
@@ -3711,7 +3725,7 @@ func (q *sqlQuerier) DeleteDataset(ctx context.Context, id uuid.UUID) error {
 
 const getDataset = `-- name: GetDataset :one
 
-SELECT id, name, slug, wow_version, build_version, description, created_at, updated_at, default_flavor, spells_imported_at, spells_count, icon_base_url FROM datasets WHERE id = $1
+SELECT id, name, slug, wow_version, build_version, description, created_at, updated_at, default_flavor, spells_imported_at, spells_count, icon_base_url, revision FROM datasets WHERE id = $1
 `
 
 // Dataset queries. These run with AdminBypass context since the datasets table
@@ -3732,12 +3746,13 @@ func (q *sqlQuerier) GetDataset(ctx context.Context, id uuid.UUID) (Dataset, err
 		&i.SpellsImportedAt,
 		&i.SpellsCount,
 		&i.IconBaseUrl,
+		&i.Revision,
 	)
 	return i, err
 }
 
 const getDatasetBySlug = `-- name: GetDatasetBySlug :one
-SELECT id, name, slug, wow_version, build_version, description, created_at, updated_at, default_flavor, spells_imported_at, spells_count, icon_base_url FROM datasets WHERE slug = $1
+SELECT id, name, slug, wow_version, build_version, description, created_at, updated_at, default_flavor, spells_imported_at, spells_count, icon_base_url, revision FROM datasets WHERE slug = $1
 `
 
 func (q *sqlQuerier) GetDatasetBySlug(ctx context.Context, slug string) (Dataset, error) {
@@ -3756,6 +3771,7 @@ func (q *sqlQuerier) GetDatasetBySlug(ctx context.Context, slug string) (Dataset
 		&i.SpellsImportedAt,
 		&i.SpellsCount,
 		&i.IconBaseUrl,
+		&i.Revision,
 	)
 	return i, err
 }
@@ -3846,10 +3862,21 @@ func (q *sqlQuerier) GetDatasetImportSummary(ctx context.Context, datasetID uuid
 	return i, err
 }
 
+const getDatasetRevision = `-- name: GetDatasetRevision :one
+SELECT revision FROM datasets WHERE id = $1
+`
+
+func (q *sqlQuerier) GetDatasetRevision(ctx context.Context, id uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, getDatasetRevision, id)
+	var revision int64
+	err := row.Scan(&revision)
+	return revision, err
+}
+
 const insertDataset = `-- name: InsertDataset :one
 INSERT INTO datasets (name, slug, wow_version, build_version, description, default_flavor, icon_base_url)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, name, slug, wow_version, build_version, description, created_at, updated_at, default_flavor, spells_imported_at, spells_count, icon_base_url
+RETURNING id, name, slug, wow_version, build_version, description, created_at, updated_at, default_flavor, spells_imported_at, spells_count, icon_base_url, revision
 `
 
 type InsertDatasetParams struct {
@@ -3886,6 +3913,7 @@ func (q *sqlQuerier) InsertDataset(ctx context.Context, arg InsertDatasetParams)
 		&i.SpellsImportedAt,
 		&i.SpellsCount,
 		&i.IconBaseUrl,
+		&i.Revision,
 	)
 	return i, err
 }
@@ -3970,7 +3998,7 @@ func (q *sqlQuerier) ListDatasetImportCounts(ctx context.Context) ([]ListDataset
 }
 
 const listDatasets = `-- name: ListDatasets :many
-SELECT id, name, slug, wow_version, build_version, description, created_at, updated_at, default_flavor, spells_imported_at, spells_count, icon_base_url FROM datasets ORDER BY name
+SELECT id, name, slug, wow_version, build_version, description, created_at, updated_at, default_flavor, spells_imported_at, spells_count, icon_base_url, revision FROM datasets ORDER BY name
 `
 
 func (q *sqlQuerier) ListDatasets(ctx context.Context) ([]Dataset, error) {
@@ -3995,6 +4023,7 @@ func (q *sqlQuerier) ListDatasets(ctx context.Context) ([]Dataset, error) {
 			&i.SpellsImportedAt,
 			&i.SpellsCount,
 			&i.IconBaseUrl,
+			&i.Revision,
 		); err != nil {
 			return nil, err
 		}
@@ -4045,6 +4074,96 @@ func (q *sqlQuerier) ListTenantsByDataset(ctx context.Context, defaultDatasetID 
 	return items, nil
 }
 
+const lockDatasetForResolution = `-- name: LockDatasetForResolution :one
+SELECT revision, default_flavor
+FROM datasets
+WHERE id = $1
+FOR SHARE
+`
+
+type LockDatasetForResolutionRow struct {
+	Revision      int64    `db:"revision" json:"revision"`
+	DefaultFlavor []string `db:"default_flavor" json:"default_flavor"`
+}
+
+// Locks the effective dataset so its revision and default flavor remain stable through publication.
+func (q *sqlQuerier) LockDatasetForResolution(ctx context.Context, id uuid.UUID) (LockDatasetForResolutionRow, error) {
+	row := q.db.QueryRow(ctx, lockDatasetForResolution, id)
+	var i LockDatasetForResolutionRow
+	err := row.Scan(&i.Revision, &i.DefaultFlavor)
+	return i, err
+}
+
+const lockDatasetRevision = `-- name: LockDatasetRevision :one
+SELECT revision FROM datasets WHERE id = $1 FOR SHARE
+`
+
+// Holds a row-level share lock until the surrounding transaction completes.
+// Dataset mutations bump revision with UPDATE, which conflicts with this lock.
+func (q *sqlQuerier) LockDatasetRevision(ctx context.Context, id uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, lockDatasetRevision, id)
+	var revision int64
+	err := row.Scan(&revision)
+	return revision, err
+}
+
+const lockRealmDatasetResolution = `-- name: LockRealmDatasetResolution :one
+SELECT server_id
+FROM wow_server_realms
+WHERE id = $1
+FOR SHARE
+`
+
+// Locks the realm row so its server assignment cannot change before publication.
+// An unknown realm returns no rows; publication callers must fail closed rather
+// than treating it as an unlocked default-dataset resolution.
+func (q *sqlQuerier) LockRealmDatasetResolution(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockRealmDatasetResolution, id)
+	var server_id uuid.UUID
+	err := row.Scan(&server_id)
+	return server_id, err
+}
+
+const lockServerDatasetResolution = `-- name: LockServerDatasetResolution :one
+SELECT tenant_id, default_dataset_id AS server_dataset_id
+FROM wow_servers
+WHERE id = $1
+FOR SHARE
+`
+
+type LockServerDatasetResolutionRow struct {
+	TenantID        uuid.NullUUID `db:"tenant_id" json:"tenant_id"`
+	ServerDatasetID uuid.NullUUID `db:"server_dataset_id" json:"server_dataset_id"`
+}
+
+// Locks the server row so its tenant and default dataset cannot change before publication.
+func (q *sqlQuerier) LockServerDatasetResolution(ctx context.Context, id uuid.UUID) (LockServerDatasetResolutionRow, error) {
+	row := q.db.QueryRow(ctx, lockServerDatasetResolution, id)
+	var i LockServerDatasetResolutionRow
+	err := row.Scan(&i.TenantID, &i.ServerDatasetID)
+	return i, err
+}
+
+const lockTenantDatasetResolution = `-- name: LockTenantDatasetResolution :one
+SELECT default_dataset_id AS tenant_dataset_id, additional_flavor
+FROM tenants
+WHERE id = $1
+FOR SHARE
+`
+
+type LockTenantDatasetResolutionRow struct {
+	TenantDatasetID  uuid.NullUUID `db:"tenant_dataset_id" json:"tenant_dataset_id"`
+	AdditionalFlavor []string      `db:"additional_flavor" json:"additional_flavor"`
+}
+
+// Locks the tenant row so its default dataset and additive flavor cannot change before publication.
+func (q *sqlQuerier) LockTenantDatasetResolution(ctx context.Context, id uuid.UUID) (LockTenantDatasetResolutionRow, error) {
+	row := q.db.QueryRow(ctx, lockTenantDatasetResolution, id)
+	var i LockTenantDatasetResolutionRow
+	err := row.Scan(&i.TenantDatasetID, &i.AdditionalFlavor)
+	return i, err
+}
+
 const resolveDatasetByRealm = `-- name: ResolveDatasetByRealm :one
 SELECT
     s.default_dataset_id AS server_dataset_id,
@@ -4075,7 +4194,7 @@ func (q *sqlQuerier) ResolveDatasetByRealm(ctx context.Context, id uuid.UUID) (R
 }
 
 const resolveDatasetWithFlavorByRealm = `-- name: ResolveDatasetWithFlavorByRealm :one
-SELECT d.id AS dataset_id, d.default_flavor, COALESCE(t.additional_flavor, '{}')::text[] AS additional_flavor
+SELECT d.id AS dataset_id, d.revision, d.default_flavor, COALESCE(t.additional_flavor, '{}')::text[] AS additional_flavor
 FROM wow_server_realms r
 JOIN wow_servers s ON s.id = r.server_id
 LEFT JOIN tenants t ON t.id = s.tenant_id
@@ -4088,6 +4207,7 @@ WHERE r.id = $1
 
 type ResolveDatasetWithFlavorByRealmRow struct {
 	DatasetID        uuid.UUID `db:"dataset_id" json:"dataset_id"`
+	Revision         int64     `db:"revision" json:"revision"`
 	DefaultFlavor    []string  `db:"default_flavor" json:"default_flavor"`
 	AdditionalFlavor []string  `db:"additional_flavor" json:"additional_flavor"`
 }
@@ -4098,7 +4218,12 @@ type ResolveDatasetWithFlavorByRealmRow struct {
 func (q *sqlQuerier) ResolveDatasetWithFlavorByRealm(ctx context.Context, id uuid.UUID) (ResolveDatasetWithFlavorByRealmRow, error) {
 	row := q.db.QueryRow(ctx, resolveDatasetWithFlavorByRealm, id)
 	var i ResolveDatasetWithFlavorByRealmRow
-	err := row.Scan(&i.DatasetID, &i.DefaultFlavor, &i.AdditionalFlavor)
+	err := row.Scan(
+		&i.DatasetID,
+		&i.Revision,
+		&i.DefaultFlavor,
+		&i.AdditionalFlavor,
+	)
 	return i, err
 }
 
@@ -4113,7 +4238,7 @@ UPDATE datasets SET
     icon_base_url     = COALESCE($7, icon_base_url),
     updated_at        = now()
 WHERE id = $8
-RETURNING id, name, slug, wow_version, build_version, description, created_at, updated_at, default_flavor, spells_imported_at, spells_count, icon_base_url
+RETURNING id, name, slug, wow_version, build_version, description, created_at, updated_at, default_flavor, spells_imported_at, spells_count, icon_base_url, revision
 `
 
 type UpdateDatasetParams struct {
@@ -4153,6 +4278,7 @@ func (q *sqlQuerier) UpdateDataset(ctx context.Context, arg UpdateDatasetParams)
 		&i.SpellsImportedAt,
 		&i.SpellsCount,
 		&i.IconBaseUrl,
+		&i.Revision,
 	)
 	return i, err
 }
@@ -24200,6 +24326,31 @@ func (q *sqlQuerier) BaselineEncounterRankings(ctx context.Context, logGroupID u
 	return items, nil
 }
 
+const baselineInstanceDifficulties = `-- name: BaselineInstanceDifficulties :many
+SELECT instance_id, difficulty FROM log_instance_difficulties WHERE instance_id = $1 ORDER BY difficulty
+`
+
+// Persisted rows, not the analysis query derived from encounter difficulties.
+func (q *sqlQuerier) BaselineInstanceDifficulties(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceDifficulty, error) {
+	rows, err := q.db.Query(ctx, baselineInstanceDifficulties, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LogInstanceDifficulty
+	for rows.Next() {
+		var i LogInstanceDifficulty
+		if err := rows.Scan(&i.InstanceID, &i.Difficulty); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const baselineInstancePlayerGuilds = `-- name: BaselineInstancePlayerGuilds :many
 SELECT guild.id, guild.realm_id, guild.name, guild.created_at FROM guilds guild
 WHERE guild.id IN (
@@ -24416,7 +24567,7 @@ func (q *sqlQuerier) BaselinePublishedGuilds(ctx context.Context, logGroupID uui
 }
 
 const baselinePublishedPlayers = `-- name: BaselinePublishedPlayers :many
-SELECT player.id, player.realm_id, player.created_at, player.guild_id, player.name, player.class, player.gender, player.race, player.gear, player.updated_at, player.updated_from_instance, player.level, player.talents FROM game_players player
+SELECT player.id, player.realm_id, player.created_at, player.guild_id, player.name, player.class, player.gender, player.race, player.gear, player.updated_at, player.updated_from_instance, player.level, player.talents, player.faction FROM game_players player
 WHERE player.updated_from_instance IN (SELECT id FROM log_instances WHERE log_group_id = $1)
 `
 
@@ -24443,6 +24594,7 @@ func (q *sqlQuerier) BaselinePublishedPlayers(ctx context.Context, logGroupID uu
 			&i.UpdatedFromInstance,
 			&i.Level,
 			&i.Talents,
+			&i.Faction,
 		); err != nil {
 			return nil, err
 		}
