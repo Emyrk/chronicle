@@ -1,3 +1,4 @@
+import { BlogCardStats, BlogInteractions } from "./BlogInteractions";
 import { useState, useSyncExternalStore } from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { Link, Navigate, Outlet, Route, Routes, useMatch, useParams } from "react-router-dom";
@@ -187,8 +188,9 @@ function FeaturedPostCard({ post }: { post: BlogPostDefinition }) {
         </h2>
         <p className="max-w-3xl text-base leading-7 text-pretty text-foreground sm:text-[17px]">{post.description}</p>
         {post.flavor && <p className="text-[15px] italic text-yellow-400">“{post.flavor}”</p>}
-        <div className="mt-1">
+        <div className="mt-1 flex flex-wrap items-center gap-4">
           <span aria-hidden className={buttonVariants()}>Read the notes</span>
+          <BlogCardStats post={post} />
         </div>
       </div>
     </article>
@@ -217,9 +219,12 @@ function BlogPostCard({ post }: { post: BlogPostDefinition }) {
         <Link to={blogPostPath(post.id)} className="after:absolute after:inset-0 focus-visible:outline-none">{post.title}</Link>
       </h3>
       <p className="text-sm leading-6 text-pretty text-muted-foreground">{post.description}</p>
-      <span aria-hidden className="mt-auto self-end text-xs font-medium text-primary group-hover:underline">
-        Read →
-      </span>
+      <div className="mt-auto flex items-center justify-between gap-3">
+        <BlogCardStats post={post} />
+        <span aria-hidden className="ml-auto text-xs font-medium text-primary group-hover:underline">
+          Read →
+        </span>
+      </div>
     </article>
   );
 }
@@ -235,6 +240,7 @@ function BlogPostRoute({ enforceFlavor }: { enforceFlavor: boolean }) {
   return (
     <>
       <Post post={post} />
+      <BlogInteractions key={post.id} post={post} />
       <PostNavigation post={post} />
     </>
   );

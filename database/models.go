@@ -997,6 +997,27 @@ type BillingWebhookEvent struct {
 	ProcessedAt   pgtype.Timestamptz `db:"processed_at" json:"processed_at"`
 }
 
+type BlogFeedback struct {
+	ID               uuid.UUID          `db:"id" json:"id"`
+	PostSlug         string             `db:"post_slug" json:"post_slug"`
+	UserID           uuid.UUID          `db:"user_id" json:"user_id"`
+	OriginalTenantID uuid.NullUUID      `db:"original_tenant_id" json:"original_tenant_id"`
+	Body             pgtype.Text        `db:"body" json:"body"`
+	PublicConsent    bool               `db:"public_consent" json:"public_consent"`
+	Status           string             `db:"status" json:"status"`
+	CreatedAt        pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	DeletedAt        pgtype.Timestamptz `db:"deleted_at" json:"deleted_at"`
+}
+
+type BlogVote struct {
+	PostSlug  string             `db:"post_slug" json:"post_slug"`
+	UserID    uuid.UUID          `db:"user_id" json:"user_id"`
+	Value     int16              `db:"value" json:"value"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
 type CacheGeneration struct {
 	Namespace  string    `db:"namespace" json:"namespace"`
 	Scope      string    `db:"scope" json:"scope"`

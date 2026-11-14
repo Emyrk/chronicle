@@ -2528,6 +2528,425 @@ func (q *sqlQuerier) UpsertBillingSubscriptionIfChanged(ctx context.Context, arg
 	return result.RowsAffected(), nil
 }
 
+const deleteBlogFeedback = `-- name: DeleteBlogFeedback :one
+UPDATE blog_feedback SET body = NULL, public_consent = false, status = 'pending',
+  deleted_at = now(), updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 microsecond')
+WHERE post_slug = $1 AND user_id = $2 AND deleted_at IS NULL
+RETURNING id, post_slug, user_id, original_tenant_id, body, public_consent, status, created_at, updated_at, deleted_at
+`
+
+type DeleteBlogFeedbackParams struct {
+	PostSlug string    `db:"post_slug" json:"post_slug"`
+	UserID   uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) DeleteBlogFeedback(ctx context.Context, arg DeleteBlogFeedbackParams) (BlogFeedback, error) {
+	row := q.db.QueryRow(ctx, deleteBlogFeedback, arg.PostSlug, arg.UserID)
+	var i BlogFeedback
+	err := row.Scan(
+		&i.ID,
+		&i.PostSlug,
+		&i.UserID,
+		&i.OriginalTenantID,
+		&i.Body,
+		&i.PublicConsent,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const deleteBlogVote = `-- name: DeleteBlogVote :exec
+DELETE FROM blog_votes WHERE post_slug = $1 AND user_id = $2
+`
+
+type DeleteBlogVoteParams struct {
+	PostSlug string    `db:"post_slug" json:"post_slug"`
+	UserID   uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) DeleteBlogVote(ctx context.Context, arg DeleteBlogVoteParams) error {
+	_, err := q.db.Exec(ctx, deleteBlogVote, arg.PostSlug, arg.UserID)
+	return err
+}
+
+const getBlogFeedback = `-- name: GetBlogFeedback :one
+SELECT id, post_slug, user_id, original_tenant_id, body, public_consent, status, created_at, updated_at, deleted_at FROM blog_feedback WHERE post_slug = $1 AND user_id = $2
+`
+
+type GetBlogFeedbackParams struct {
+	PostSlug string    `db:"post_slug" json:"post_slug"`
+	UserID   uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) GetBlogFeedback(ctx context.Context, arg GetBlogFeedbackParams) (BlogFeedback, error) {
+	row := q.db.QueryRow(ctx, getBlogFeedback, arg.PostSlug, arg.UserID)
+	var i BlogFeedback
+	err := row.Scan(
+		&i.ID,
+		&i.PostSlug,
+		&i.UserID,
+		&i.OriginalTenantID,
+		&i.Body,
+		&i.PublicConsent,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const getBlogFeedbackByID = `-- name: GetBlogFeedbackByID :one
+SELECT id, post_slug, user_id, original_tenant_id, body, public_consent, status, created_at, updated_at, deleted_at FROM blog_feedback WHERE id = $1
+`
+
+func (q *sqlQuerier) GetBlogFeedbackByID(ctx context.Context, id uuid.UUID) (BlogFeedback, error) {
+	row := q.db.QueryRow(ctx, getBlogFeedbackByID, id)
+	var i BlogFeedback
+	err := row.Scan(
+		&i.ID,
+		&i.PostSlug,
+		&i.UserID,
+		&i.OriginalTenantID,
+		&i.Body,
+		&i.PublicConsent,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const getBlogVote = `-- name: GetBlogVote :one
+SELECT post_slug, user_id, value, created_at, updated_at FROM blog_votes WHERE post_slug = $1 AND user_id = $2
+`
+
+type GetBlogVoteParams struct {
+	PostSlug string    `db:"post_slug" json:"post_slug"`
+	UserID   uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) GetBlogVote(ctx context.Context, arg GetBlogVoteParams) (BlogVote, error) {
+	row := q.db.QueryRow(ctx, getBlogVote, arg.PostSlug, arg.UserID)
+	var i BlogVote
+	err := row.Scan(
+		&i.PostSlug,
+		&i.UserID,
+		&i.Value,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getBlogVoteTotals = `-- name: GetBlogVoteTotals :one
+SELECT count(*) FILTER (WHERE value = 1) AS upvotes,
+       count(*) FILTER (WHERE value = -1) AS downvotes
+FROM blog_votes WHERE post_slug = $1
+`
+
+type GetBlogVoteTotalsRow struct {
+	Upvotes   int64 `db:"upvotes" json:"upvotes"`
+	Downvotes int64 `db:"downvotes" json:"downvotes"`
+}
+
+func (q *sqlQuerier) GetBlogVoteTotals(ctx context.Context, postSlug string) (GetBlogVoteTotalsRow, error) {
+	row := q.db.QueryRow(ctx, getBlogVoteTotals, postSlug)
+	var i GetBlogVoteTotalsRow
+	err := row.Scan(&i.Upvotes, &i.Downvotes)
+	return i, err
+}
+
+const insertBlogFeedback = `-- name: InsertBlogFeedback :one
+INSERT INTO blog_feedback (post_slug, user_id, original_tenant_id, body, public_consent)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, post_slug, user_id, original_tenant_id, body, public_consent, status, created_at, updated_at, deleted_at
+`
+
+type InsertBlogFeedbackParams struct {
+	PostSlug         string        `db:"post_slug" json:"post_slug"`
+	UserID           uuid.UUID     `db:"user_id" json:"user_id"`
+	OriginalTenantID uuid.NullUUID `db:"original_tenant_id" json:"original_tenant_id"`
+	Body             pgtype.Text   `db:"body" json:"body"`
+	PublicConsent    bool          `db:"public_consent" json:"public_consent"`
+}
+
+func (q *sqlQuerier) InsertBlogFeedback(ctx context.Context, arg InsertBlogFeedbackParams) (BlogFeedback, error) {
+	row := q.db.QueryRow(ctx, insertBlogFeedback,
+		arg.PostSlug,
+		arg.UserID,
+		arg.OriginalTenantID,
+		arg.Body,
+		arg.PublicConsent,
+	)
+	var i BlogFeedback
+	err := row.Scan(
+		&i.ID,
+		&i.PostSlug,
+		&i.UserID,
+		&i.OriginalTenantID,
+		&i.Body,
+		&i.PublicConsent,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const listAdminBlogFeedback = `-- name: ListAdminBlogFeedback :many
+SELECT blog_feedback.id, blog_feedback.post_slug, blog_feedback.user_id, blog_feedback.original_tenant_id, blog_feedback.body, blog_feedback.public_consent, blog_feedback.status, blog_feedback.created_at, blog_feedback.updated_at, blog_feedback.deleted_at,
+       COALESCE(users.username, '')::text AS author_username,
+       COALESCE(discord_auth.linked_id, '')::text AS author_discord_id
+FROM blog_feedback
+LEFT JOIN users ON users.id = blog_feedback.user_id
+LEFT JOIN LATERAL (
+  SELECT linked_id FROM user_auth_links
+  WHERE user_auth_links.user_id = blog_feedback.user_id AND provider = 'discord'
+  ORDER BY created_at LIMIT 1
+) AS discord_auth ON true
+WHERE ($1::text = '' OR blog_feedback.post_slug = $1)
+  AND ($2::text = '' OR blog_feedback.status = $2)
+ORDER BY blog_feedback.created_at DESC, blog_feedback.id LIMIT $4::int OFFSET $3::int
+`
+
+type ListAdminBlogFeedbackParams struct {
+	PostSlug    string `db:"post_slug" json:"post_slug"`
+	Status      string `db:"status" json:"status"`
+	OffsetCount int32  `db:"offset_count" json:"offset_count"`
+	LimitCount  int32  `db:"limit_count" json:"limit_count"`
+}
+
+type ListAdminBlogFeedbackRow struct {
+	BlogFeedback    BlogFeedback `db:"blog_feedback" json:"blog_feedback"`
+	AuthorUsername  string       `db:"author_username" json:"author_username"`
+	AuthorDiscordID string       `db:"author_discord_id" json:"author_discord_id"`
+}
+
+// Moderator-only: includes the author's username and linked Discord ID.
+func (q *sqlQuerier) ListAdminBlogFeedback(ctx context.Context, arg ListAdminBlogFeedbackParams) ([]ListAdminBlogFeedbackRow, error) {
+	rows, err := q.db.Query(ctx, listAdminBlogFeedback,
+		arg.PostSlug,
+		arg.Status,
+		arg.OffsetCount,
+		arg.LimitCount,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAdminBlogFeedbackRow
+	for rows.Next() {
+		var i ListAdminBlogFeedbackRow
+		if err := rows.Scan(
+			&i.BlogFeedback.ID,
+			&i.BlogFeedback.PostSlug,
+			&i.BlogFeedback.UserID,
+			&i.BlogFeedback.OriginalTenantID,
+			&i.BlogFeedback.Body,
+			&i.BlogFeedback.PublicConsent,
+			&i.BlogFeedback.Status,
+			&i.BlogFeedback.CreatedAt,
+			&i.BlogFeedback.UpdatedAt,
+			&i.BlogFeedback.DeletedAt,
+			&i.AuthorUsername,
+			&i.AuthorDiscordID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBlogInteractionSummaries = `-- name: ListBlogInteractionSummaries :many
+SELECT s.post_slug::text AS post_slug,
+       sum(s.upvotes)::bigint AS upvotes,
+       sum(s.public_feedback)::bigint AS public_feedback
+FROM (
+  SELECT post_slug, count(*) AS upvotes, 0::bigint AS public_feedback
+  FROM blog_votes WHERE value = 1 GROUP BY post_slug
+  UNION ALL
+  SELECT post_slug, 0::bigint, count(*)
+  FROM blog_feedback WHERE status = 'approved' AND public_consent AND deleted_at IS NULL GROUP BY post_slug
+) s
+GROUP BY s.post_slug
+ORDER BY s.post_slug
+`
+
+type ListBlogInteractionSummariesRow struct {
+	PostSlug       string `db:"post_slug" json:"post_slug"`
+	Upvotes        int64  `db:"upvotes" json:"upvotes"`
+	PublicFeedback int64  `db:"public_feedback" json:"public_feedback"`
+}
+
+// Public totals only: upvotes and approved, consented, undeleted feedback. Never downvotes.
+func (q *sqlQuerier) ListBlogInteractionSummaries(ctx context.Context) ([]ListBlogInteractionSummariesRow, error) {
+	rows, err := q.db.Query(ctx, listBlogInteractionSummaries)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListBlogInteractionSummariesRow
+	for rows.Next() {
+		var i ListBlogInteractionSummariesRow
+		if err := rows.Scan(&i.PostSlug, &i.Upvotes, &i.PublicFeedback); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPublicBlogFeedback = `-- name: ListPublicBlogFeedback :many
+SELECT id, post_slug, user_id, original_tenant_id, body, public_consent, status, created_at, updated_at, deleted_at FROM blog_feedback
+WHERE post_slug = $1 AND status = 'approved' AND public_consent AND deleted_at IS NULL
+ORDER BY created_at, id LIMIT $3::int OFFSET $2::int
+`
+
+type ListPublicBlogFeedbackParams struct {
+	PostSlug    string `db:"post_slug" json:"post_slug"`
+	OffsetCount int32  `db:"offset_count" json:"offset_count"`
+	LimitCount  int32  `db:"limit_count" json:"limit_count"`
+}
+
+func (q *sqlQuerier) ListPublicBlogFeedback(ctx context.Context, arg ListPublicBlogFeedbackParams) ([]BlogFeedback, error) {
+	rows, err := q.db.Query(ctx, listPublicBlogFeedback, arg.PostSlug, arg.OffsetCount, arg.LimitCount)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BlogFeedback
+	for rows.Next() {
+		var i BlogFeedback
+		if err := rows.Scan(
+			&i.ID,
+			&i.PostSlug,
+			&i.UserID,
+			&i.OriginalTenantID,
+			&i.Body,
+			&i.PublicConsent,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const moderateBlogFeedback = `-- name: ModerateBlogFeedback :one
+UPDATE blog_feedback SET status = $1,
+  updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 microsecond')
+WHERE id = $2 AND deleted_at IS NULL AND updated_at = $3
+RETURNING id, post_slug, user_id, original_tenant_id, body, public_consent, status, created_at, updated_at, deleted_at
+`
+
+type ModerateBlogFeedbackParams struct {
+	Status            string             `db:"status" json:"status"`
+	ID                uuid.UUID          `db:"id" json:"id"`
+	ExpectedUpdatedAt pgtype.Timestamptz `db:"expected_updated_at" json:"expected_updated_at"`
+}
+
+// Guard the exact revision the moderator reviewed, not a newly fetched revision.
+func (q *sqlQuerier) ModerateBlogFeedback(ctx context.Context, arg ModerateBlogFeedbackParams) (BlogFeedback, error) {
+	row := q.db.QueryRow(ctx, moderateBlogFeedback, arg.Status, arg.ID, arg.ExpectedUpdatedAt)
+	var i BlogFeedback
+	err := row.Scan(
+		&i.ID,
+		&i.PostSlug,
+		&i.UserID,
+		&i.OriginalTenantID,
+		&i.Body,
+		&i.PublicConsent,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const updateBlogFeedback = `-- name: UpdateBlogFeedback :one
+UPDATE blog_feedback SET body = $1, public_consent = $2,
+  status = 'pending', updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 microsecond')
+WHERE post_slug = $3 AND user_id = $4 AND deleted_at IS NULL
+RETURNING id, post_slug, user_id, original_tenant_id, body, public_consent, status, created_at, updated_at, deleted_at
+`
+
+type UpdateBlogFeedbackParams struct {
+	Body          pgtype.Text `db:"body" json:"body"`
+	PublicConsent bool        `db:"public_consent" json:"public_consent"`
+	PostSlug      string      `db:"post_slug" json:"post_slug"`
+	UserID        uuid.UUID   `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) UpdateBlogFeedback(ctx context.Context, arg UpdateBlogFeedbackParams) (BlogFeedback, error) {
+	row := q.db.QueryRow(ctx, updateBlogFeedback,
+		arg.Body,
+		arg.PublicConsent,
+		arg.PostSlug,
+		arg.UserID,
+	)
+	var i BlogFeedback
+	err := row.Scan(
+		&i.ID,
+		&i.PostSlug,
+		&i.UserID,
+		&i.OriginalTenantID,
+		&i.Body,
+		&i.PublicConsent,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const upsertBlogVote = `-- name: UpsertBlogVote :one
+INSERT INTO blog_votes (post_slug, user_id, value)
+VALUES ($1, $2, $3)
+ON CONFLICT (post_slug, user_id) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
+RETURNING post_slug, user_id, value, created_at, updated_at
+`
+
+type UpsertBlogVoteParams struct {
+	PostSlug string    `db:"post_slug" json:"post_slug"`
+	UserID   uuid.UUID `db:"user_id" json:"user_id"`
+	Value    int16     `db:"value" json:"value"`
+}
+
+func (q *sqlQuerier) UpsertBlogVote(ctx context.Context, arg UpsertBlogVoteParams) (BlogVote, error) {
+	row := q.db.QueryRow(ctx, upsertBlogVote, arg.PostSlug, arg.UserID, arg.Value)
+	var i BlogVote
+	err := row.Scan(
+		&i.PostSlug,
+		&i.UserID,
+		&i.Value,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const deleteDatasetCacheGenerations = `-- name: DeleteDatasetCacheGenerations :exec
 DELETE FROM cache_generations
 WHERE scope = 'dataset' AND scope_id = $1

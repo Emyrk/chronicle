@@ -1,7 +1,7 @@
 import { renderToString } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
 import { BlogApp } from "./BlogApp";
-import { BLOG_POSTS, blogPostPath } from "./blogRegistry";
+import { BLOG_POSTS, blogPostPath, type BlogPostMetadata } from "./blogRegistry";
 
 export { withBlogMetadata } from "./blogHead";
 
@@ -20,6 +20,8 @@ export interface BlogManifestPost {
   description: string;
   published_at: string;
   flavor_sets: readonly (readonly string[])[];
+  voting_enabled: boolean;
+  feedback_enabled: boolean;
 }
 
 function renderRoute(path: string): string {
@@ -50,15 +52,17 @@ export function prerenderBlogPages(): PrerenderedBlogPage[] {
   ];
 }
 
-export function blogManifest(): { posts: BlogManifestPost[] } {
+export function blogManifest(posts: readonly BlogPostMetadata[] = BLOG_POSTS): { posts: BlogManifestPost[] } {
   return {
-    posts: BLOG_POSTS.map((post) => ({
+    posts: posts.map((post) => ({
       id: post.id,
       path: blogPostPath(post.id),
       title: post.title,
       description: post.description,
       published_at: post.publishedAt,
       flavor_sets: post.flavorSets ?? [],
+      voting_enabled: post.votingEnabled !== false,
+      feedback_enabled: post.feedbackEnabled !== false,
     })),
   };
 }

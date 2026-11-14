@@ -38,6 +38,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/billing"
 	"github.com/Emyrk/chronicle/internal/itempricing"
 	"github.com/Emyrk/chronicle/internal/services/serviceapplication"
+	"github.com/Emyrk/chronicle/internal/services/serviceblog"
 	"github.com/Emyrk/chronicle/internal/services/servicecache"
 	"github.com/Emyrk/chronicle/internal/services/servicechoose"
 	"github.com/Emyrk/chronicle/internal/services/servicedataset"
@@ -87,6 +88,8 @@ func browserOnlyMiddleware(accessURL *url.URL) func(http.Handler) http.Handler {
 }
 
 type Options struct {
+	// Blog overrides the constructed interaction service, primarily for tests.
+	Blog                  *serviceblog.Service
 	Logger                *slog.Logger
 	Storage               storage.ObjectStorage
 	Zed                   *authz.Authz
@@ -174,6 +177,7 @@ type Options struct {
 }
 
 type API struct {
+	blog               *serviceblog.Service
 	AppContext         context.Context
 	Opts               *Options
 	Auth               *chronauth.Service
@@ -275,6 +279,7 @@ func New(ctx context.Context, opts Options) (*API, error) {
 		opts.InstanceSearch = serviceinstancesearch.New(opts.Logger, database.New(opts.Pool), opts.Registry, newInstanceSearchUserLimitResolver(opts.Zed))
 	}
 	api := &API{
+		blog:               opts.Blog,
 		luaArtifactBacklog: luaArtifactBacklog,
 		uiUsageMetrics:     newUIUsageMetrics(opts.Registry),
 		instanceSearch:     opts.InstanceSearch,
@@ -286,6 +291,9 @@ func New(ctx context.Context, opts Options) (*API, error) {
 		Zed:                opts.Zed,
 		CustomPanels:       custompanelapi.New(custompanelapi.Options{HTTPClient: opts.CustomPanelHTTPClient}),
 		liveSessionRemote:  liveRemote,
+	}
+	if api.blog == nil {
+		api.blog = api.newBlogService()
 	}
 	if liveRemote == nil {
 		api.liveSessions = servicelivesession.New(servicelivesession.Options{
@@ -386,6 +394,8 @@ func (api *API) Routes() chi.Router {
 			r.Group(func(r chi.Router) {
 				r.Use(api.Auth.Authenticated(true))
 				r.Get("/whoami", api.WhoAmI)
+				r.Get("/blog/interactions", api.ListBlogInteractionSummaries)
+				r.Get("/blog/{slug}/interactions", api.GetBlogInteractions)
 				// Public by unguessable ID: the purge finishes by deleting the
 				// account that started it.
 				r.Get("/account-purges/{purgeID}", api.GetAccountPurgeStatus)
@@ -395,6 +405,15 @@ func (api *API) Routes() chi.Router {
 				r.Use(
 					api.Auth.Authenticated(false),
 				)
+				r.Put("/blog/{slug}/vote", api.PutBlogVote)
+				r.Put("/blog/{slug}/feedback", api.PutBlogFeedback)
+				r.Delete("/blog/{slug}/feedback", api.DeleteBlogFeedback)
+				r.Group(func(r chi.Router) {
+					r.Get("/admin/blog/feedback", api.AdminBlogFeedback)
+					r.Get("/admin/blog/{slug}/votes", api.AdminBlogVotes)
+					r.Post("/admin/blog/feedback/{id}/{action}", api.AdminModerateBlogFeedback)
+					r.Post("/admin/blog/users/{user_id}/{action}", api.AdminBanBlogFeedback)
+				})
 				r.Get("/whoami/dump", api.DumpToken)
 				r.Post("/authcheck", api.checkAuthorization)
 				if api.liveSessionRemote != nil {

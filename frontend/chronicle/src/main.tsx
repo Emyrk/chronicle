@@ -30,7 +30,7 @@ async function mount() {
     ? (await import('./pages/Landing/Start2Page')).Start2Page
     : undefined
   const application: ReactNode = isBlogRoute ? (
-    <BlogApp />
+    <QueryClientProvider client={queryClient}><BlogApp /></QueryClientProvider>
   ) : (
     <QueryClientProvider client={queryClient}>
       <InferenceRuntimeProvider>

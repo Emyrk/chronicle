@@ -380,6 +380,7 @@ func (z *Authz) SetUserChronicleRoles(ctx context.Context, userID uuid.UUID, rol
 	gChron := b.GlobalChronicle()
 	usr := b.User(userID)
 
+	// feedback_banned is moderation-owned and must survive ordinary role replacement.
 	managedRelations := []string{
 		"technical_admin",
 		"admin",
@@ -446,6 +447,8 @@ func (z *Authz) SetUserChronicleRoles(ctx context.Context, userID uuid.UUID, rol
 			gChron.Photo_proof_submitter(usr)
 		case "photo_proof_reviewer":
 			gChron.Photo_proof_reviewer(usr)
+		case "feedback_banned":
+			gChron.Feedback_banned(usr)
 		case "photo_proof_banned":
 			gChron.Photo_proof_banned(usr)
 		case "admin_queues", "is_admin_queues":

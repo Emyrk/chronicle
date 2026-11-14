@@ -4,6 +4,7 @@ import { iconUrl } from "@/config/iconUrl";
 import { LessonPlayer } from "@/pages/Instance/PanelExplainer/LessonPlayer";
 import { formatPublishedDate, rarityColor, RARITY_LABELS } from "../blogFormat";
 import type { BlogPostDefinition } from "../blogRegistry";
+import { BlogScore } from "../BlogInteractions";
 
 /** Shared layout for short announcement-style posts. */
 export function ShortPost({ post, children }: { post: BlogPostDefinition; children: ReactNode }) {
@@ -27,7 +28,7 @@ export function ShortPost({ post, children }: { post: BlogPostDefinition; childr
             </span>
             <span className="text-muted-foreground">{formatPublishedDate(post.publishedAt)}</span>
           </div>
-          <h1 className="font-wow text-3xl leading-tight sm:text-4xl" style={{ color }}>{post.title}</h1>
+          <h1 className="font-wow text-3xl leading-tight sm:text-4xl" style={{ color }}>{post.title}<BlogScore post={post} /></h1>
         </div>
       </header>
 

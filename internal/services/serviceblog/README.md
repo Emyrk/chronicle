@@ -1,0 +1,81 @@
+# Blog interactions
+
+This constructed service owns eligibility, validation, admission and interaction rules.
+HTTP adapters own authentication, user-admin authorization and anonymous response projection.
+The SQL adapter owns atomic global account/post uniqueness and immutable submission provenance.
+
+## Enabling a post
+
+Voting and feedback are enabled by default for every known, flavor-accessible
+blog post. Set `votingEnabled: false` and/or `feedbackEnabled: false` on a post in
+`assets/turtle/generated/blog-posts.json` to opt out independently. For example,
+`"votingEnabled": false, "feedbackEnabled": true` collects feedback without votes.
+
+Run `pnpm -C frontend/chronicle build` after changing metadata. The blog prerender
+step emits the independent `voting_enabled` and `feedback_enabled` flags into
+`blog-manifest.json`; the server uses that built manifest as its authority.
+Deploy the matching frontend build and backend together. Missing posts, missing
+manifests, explicitly disabled features and inaccessible flavor variants deny direct mutations.
+A known post in an older manifest without either flag also defaults to both
+features on. Public feedback still requires explicit publication consent and
+moderator approval; enabling feedback does not publish submissions automatically.
+The client cannot authorize interactions itself.
+
+The public interaction endpoint is `GET /api/v1/blog/{slug}/interactions`.
+Authenticated vote and feedback mutations use `PUT` on `/vote` and `/feedback`
+under that post path. A vote of zero removes the account's vote.
+The moderation UI is `/admin/blog-feedback`; its APIs under `/api/v1/admin/blog`
+require the global user-administration permission. Approval and rejection require
+`expected_updated_at` from the reviewed record, so stale reviews cannot publish edits.
+
+Votes and feedback use separate PostgreSQL buckets, `blog_vote` and `blog_feedback`.
+Each is keyed by `ratelimit.UserSubject(userID.String())`, with no post or tenant
+component. Each starts with ten tokens and refills two tokens per twenty minutes (one every ten minutes).
+Limiter failures deny writes. Validation and eligibility checks precede consumption.
+Moderation and feedback bans are administrative operations and do not consume tokens.
+
+Feedback is plain text, trimmed to 1 through 300 Unicode code points. Private submissions do not require consent. Public consent
+and moderator approval are both required for public display. Edits reset approval.
+Deletion leaves a reservation so the same account cannot submit another record for
+that post. Submission tenant never changes when the author edits from another site.
+Public responses expose only feedback ID, body and a same/different-server label.
+
+## Optional feedback-created hook
+
+`Options.FeedbackCreated` defaults to nil and production wiring leaves it inactive.
+It runs after a successful first database insert only. Edits, moderation, deletion,
+conflicting inserts and failed requests do not invoke it. Delivery is best effort:
+a crash between persistence and invocation can lose the event. There is no durable
+outbox, retry or exactly-once guarantee. Hook errors are logged and do not fail the
+already persisted submission. Consumers must use the feedback ID as an
+idempotency key. This hook does not grant rewards or entitlements.
+
+Root-site submissions store a null original tenant. Root requests are eligible under
+the same build-manifest rules as tenant requests. Public labels say `This server`
+only when both tenant IDs are non-null and equal; otherwise they say `Another server`.
+Own-feedback responses include consent so edits preserve the author's publication choice.
+
+Administrative listing traverses all SQL pages in a repeatable-read snapshot,
+including tombstones. Public feedback currently returns at most 1,000 approved,
+consenting records per post.
+
+## Dedicated authorization
+
+Public approved feedback and upvote totals remain anonymous reads. Authenticated
+reads check `read_own_blog_vote` and `read_own_blog_feedback` before including own
+state. Denied or unavailable own-state authorization omits those fields without
+blocking the public projection. Vote mutations require `vote_blog`; withdrawal requires
+`withdraw_blog_feedback`. Feedback PUT requires `submit_blog_feedback` and checks
+`create_blog_feedback` or `edit_blog_feedback` after resolving whether a record
+exists, before consuming admission tokens. All member permissions derive from
+existing account membership or administration. Only submission, creation and
+editing subtract `feedback_banned`; banned accounts can still read and withdraw
+feedback and vote.
+
+Admin routes require distinct `list_blog_feedback`, `read_blog_vote_totals`,
+`approve_blog_feedback`, `reject_blog_feedback`, `delete_blog_feedback`,
+`ban_blog_feedback` or `unban_blog_feedback` permissions. Each derives from
+`admin_users`, preserving the prior moderation audience, and adds no new role.
+Unknown action routes fail closed. Authentication remains required independently
+of these policy checks. Authorization errors cannot expose private state or invoke
+a mutation.
