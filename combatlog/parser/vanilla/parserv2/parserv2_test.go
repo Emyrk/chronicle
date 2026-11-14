@@ -83,7 +83,6 @@ func TestParserMessages(t *testing.T) {
 			&messages.Slain{
 				MessageBase: messages.Base(time.UnixMilli(1771959313535)),
 				Victim:      guid.GUID(0xF130002D9900DE15),
-				Attribution: (*messages.Damage)(nil),
 			})
 	})
 
