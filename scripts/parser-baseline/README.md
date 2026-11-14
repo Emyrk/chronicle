@@ -49,7 +49,8 @@ Build the same command at each candidate revision, using identical build tags
 where required by the selected server:
 
 ```sh
-go build -o /tmp/parser-baseline ./scripts/parser-baseline
+go build -ldflags "-X github.com/Emyrk/chronicle/internal/version.GitCommit=$(git rev-parse HEAD)" \
+  -o /tmp/parser-baseline ./scripts/parser-baseline
 ```
 
 Supply the existing `ArgsLogParse` JSON (unknown fields are rejected):
@@ -96,6 +97,29 @@ row. Missing outputs, stale generations, malformed event payloads, unknown event
 fields and ambiguous canonical identities fail. The underlying runner's nil
 return on stale-generation abort is **not** treated as publication proof. Empty
 or encounter-free logs are intentionally unsupported in this first slice.
+
+## Baseline-only engine selection
+
+`run --engine legacy` is the default. `run --engine parsernext-vanilla` selects
+`parser/vanilla/nextsource` for `1.12a-cc-addon` only. It reuses the existing
+consumers, finalizers and fenced publication. Unsupported names and formats fail;
+there is no fallback. The selection is call-local and is never stored in River
+arguments, database settings or production configuration. Production workers keep
+the legacy default. `export` does not select an engine.
+
+Pass `--provenance /new/path/run.json` to record the attempted engine and Go VCS
+revision/dirty status separately from stdout's comparable artifact. If Go omits
+VCS settings, the standard `version.GitCommit` linker input supplies the revision
+(as in the build command above); dirty status remains explicitly unknown. The path is
+exclusive-create; existing evidence is never overwritten. Provenance existence
+does not prove success: both the run exit status and canonical export validation
+must pass. Build a clean committed checkout for a precise revision; overlay builds
+need a separate manifest naming the overlaid revision/files/hashes too.
+
+For old/new validation, use separate fresh clones of the same seed and private
+object copies. Compress stdout directly (with pipefail or explicit subprocess
+status checks), preserve complete exports, and retain strict differences even
+when a separate diagnostic attributes differences to known event ordering noise.
 
 ## Exact v4 allowlist
 

@@ -12,6 +12,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"strings"
 	"syscall"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/database/gamedb/talents"
 	"github.com/Emyrk/chronicle/database/storage"
+	"github.com/Emyrk/chronicle/internal/version"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -44,12 +46,21 @@ func run(ctx context.Context, arguments []string, output io.Writer) error {
 	storagePath := flags.String("storage", "", "local object-storage root (run only)")
 	isolated := flags.Bool("isolated-db", false, "confirm disposable, exclusively owned local DB and local storage")
 	freshArmory := flags.Bool("fresh-armory-seed", false, "attest shared armory tables were empty before this public parse")
+	engineName := flags.String("engine", string(chronicle.BaselineLegacy), "run-only engine: legacy or parsernext-vanilla")
+	provenancePath := flags.String("provenance", "", "exclusive-create run provenance JSON outside the comparable export")
 	expected := flags.Int("expect-instances", 0, "required exact number of published instances")
 	if err := flags.Parse(arguments[1:]); err != nil {
 		return err
 	}
 	if flags.NArg() != 0 || !*isolated || !*freshArmory || *expected < 1 || *argsPath == "" {
 		return errors.New("--isolated-db, --fresh-armory-seed, --args and positive --expect-instances are required; positional arguments are not supported")
+	}
+	engine := chronicle.BaselineEngine(*engineName)
+	if err := engine.Validate(); err != nil {
+		return err
+	}
+	if arguments[0] == "export" && (engine != chronicle.BaselineLegacy || *provenancePath != "") {
+		return errors.New("--engine and --provenance select a run, not an export")
 	}
 	args, err := readArgs(*argsPath)
 	if err != nil {
@@ -76,7 +87,7 @@ func run(ctx context.Context, arguments []string, output io.Writer) error {
 		if *storagePath == "" {
 			return errors.New("run requires --storage")
 		}
-		if err := parse(ctx, store, pool, args, *storagePath); err != nil {
+		if err := parse(ctx, store, pool, args, *storagePath, engine, *provenancePath); err != nil {
 			return err
 		}
 	}
@@ -130,9 +141,16 @@ func validateDatabase(config *pgx.ConnConfig) error {
 	return nil
 }
 
-func parse(ctx context.Context, store database.Store, pool *pgxpool.Pool, args chronicle.ArgsLogParse, storagePath string) error {
+func parse(ctx context.Context, store database.Store, pool *pgxpool.Pool, args chronicle.ArgsLogParse, storagePath string, engine chronicle.BaselineEngine, provenancePath string) error {
 	group, err := store.GetWoWLogGroupByID(ctx, args.LogID)
 	if err != nil {
+		return err
+	}
+	format := group.WoWLogGroup.LogType.Format()
+	if group.WoWLogGroup.Format.Valid {
+		format = group.WoWLogGroup.Format.LogFormat
+	}
+	if err := engine.ValidateFormat(format); err != nil {
 		return err
 	}
 	if group.WoWLogGroup.ParseGeneration != args.ParseGeneration {
@@ -196,5 +214,42 @@ func parse(ctx context.Context, store database.Store, pool *pgxpool.Pool, args c
 	if err != nil {
 		return err
 	}
-	return c.RunLogParseBaseline(ctx, args)
+	if provenancePath != "" {
+		if err := writeProvenance(provenancePath, engine); err != nil {
+			return err
+		}
+	}
+	return c.RunLogParseBaselineWithEngine(ctx, args, engine)
+}
+
+// Provenance is deliberately not part of the canonical semantic export. A run
+// record describes the attempted engine/build; publication success is established
+// separately by the exporter, never inferred from provenance existence.
+func writeProvenance(path string, engine chronicle.BaselineEngine) error {
+	// Standard build metadata is also available when this environment omits Go VCS settings.
+	revision, modified := version.GitCommit, "unknown"
+	if info, ok := debug.ReadBuildInfo(); ok {
+		for _, setting := range info.Settings {
+			switch setting.Key {
+			case "vcs.revision":
+				revision = setting.Value
+			case "vcs.modified":
+				modified = setting.Value
+			}
+		}
+	}
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if err != nil {
+		return fmt.Errorf("create provenance: %w", err)
+	}
+	err = json.NewEncoder(file).Encode(struct {
+		Engine   chronicle.BaselineEngine `json:"engine"`
+		Revision string                   `json:"revision"`
+		Modified string                   `json:"modified"`
+	}{engine, revision, modified})
+	closeErr := file.Close()
+	if err != nil {
+		return err
+	}
+	return closeErr
 }

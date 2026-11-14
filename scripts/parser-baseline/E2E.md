@@ -348,3 +348,81 @@ ranges the map of unique hostiles and appends timeout IDs
 and uses membership tests (`InstancePageView.tsx:446-470`). In this fixture the
 three collections have 15, 1 and 0 unique GUIDs; all three multisets match, and
 only the first collection's order differs. No sorting change was made.
+
+
+## Vanilla parsernext baseline-engine comparison
+
+The baseline CLI now accepts `run --engine legacy|parsernext-vanilla`. Production
+selection remains unchanged. This validation used only the saved local Capybara
+corpus and fresh isolated database clones; it did not acquire new inputs.
+
+### Independent decoder and preserved evidence
+
+- Candidate semantic code: `960eb2357` (baseline engine seam).
+- Independent legacy decoder: all production `parserv2` source overlaid from
+  `8122f7c20`, before the parsernext lexical/record/state extractions.
+- Synthetic processing, consumers, finalization, publication and the canonical
+  exporter were intentionally identical shared code in both binaries.
+- Private evidence: `~/Desktop/parsing_snapshots/results/vanilla_engine_02/`.
+  Each fixture retains both complete gzip canonical exports, exclusive run
+  provenance, binary hashes, logs, strict JSONL differences and diagnostic output.
+- The historical seed was at schema 341. An initial run in `vanilla_engine_01`
+  rejected both engines on the missing `raw_files_pinned` column. That evidence
+  remains preserved. Subsequent runs migrated only fresh clones to current schema.
+- Go omitted embedded VCS settings in this environment. The full-corpus build
+  manifest pins the exact checkout and legacy overlay hashes separately. A fresh
+  paired control in `vanilla_engine_03`, built at `6dead0da3` using the standard
+  `version.GitCommit` linker input, verifies exact revision-bearing provenance.
+  Changes after `960eb2357` concern provenance and selection tests, not semantics.
+
+### Complete canonical export results
+
+All 25 saved Capybara inputs were attempted in both engines. Of these, **22 pairs
+exported successfully**, covering **52 instances, 1,586 encounters and 11,791,956
+persisted events** per engine. Two pairs were strictly equal. Twenty pairs retained
+3,741 exact differing fields:
+
+| Difference | Fields | Diagnostic finding |
+| --- | ---: | --- |
+| Unit-classification event positions | 3,487 | Same-timestamp payload multisets match when only event index is ignored in separate diagnostic copies. |
+| Remaining-hostile array positions | 249 | All 44 affected arrays have identical multisets. |
+| `talent_builds.sub_spec` | 5 | Real persisted Bear/Cat differences; not normalized away. |
+
+All other fields in the complete canonical exports matched. Strict artifacts and
+strict differences remain unchanged; diagnostic equivalence is **not** a strict
+parity verdict.
+
+Three inputs were rejected symmetrically by the exporter: two for ambiguous
+encounter semantic identities (`instance/1` and `instance/0` respectively), and
+one for expecting three published instances but finding four. No fallback or
+relaxed identity/count check was used; those pairs have no comparable export.
+Exact fixture identifiers and errors are retained in the private run summary.
+
+### Existing publication nondeterminism
+
+Four additional legacy-only parses of one affected fixture, in
+`vanilla_engine_04`, produced two independent old/old pairs. Both reproduced the
+same `talent_builds.sub_spec` Bear/Cat difference. This field remains part of the
+strict comparison.
+
+The publisher iterates maps in `chronicle/logparse.go` before calling
+`UpsertTalentBuild`. That SQL conflicts on `(dataset_id, player_class,
+talent_layout)` but updates `sub_spec`, so different Bear/Cat observations of the
+same layout compete by write order. This validation does not change that policy.
+A separate deterministic publication decision is needed before claiming strict
+repeatable parity for these fixtures.
+
+### Safety and checks
+
+The runner maintained a 50 GiB free-disk floor and ended with approximately
+55.5 GiB free. Only its own successful transient clones were released after their
+complete gzip exports were validated. Historical inputs, seeds, databases and
+prior evidence were preserved; failed clones remain available for investigation.
+Every attempted run had zero River jobs.
+
+The full baseline CLI test package and baseline-specific Chronicle integration
+tests passed under the race detector using isolated local test databases.
+Targeted lint passed. Tests cover invalid engines, unsupported formats before
+worker side effects, the unchanged production default, and exclusive separate
+provenance. Next work is resolving the explicit exporter/publication blockers,
+not production activation, snapshot codecs or classification-policy changes.
