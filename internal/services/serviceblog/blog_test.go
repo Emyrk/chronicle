@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Emyrk/chronicle/internal/ratelimit"
 	"github.com/google/uuid"
@@ -147,4 +148,11 @@ func TestBanDoesNotAffectVoteOrDelete(t *testing.T) {
 	require.NoError(t, s.Vote(context.Background(), "post", user, 1))
 	require.NoError(t, s.Delete(context.Background(), "post", user))
 	require.Equal(t, 2, limiter.calls)
+}
+
+func TestModerationRequiresReviewedRevision(t *testing.T) {
+	t.Parallel()
+	s := New(Options{})
+	require.ErrorIs(t, s.Moderate(context.Background(), uuid.New(), "approve", time.Time{}), ErrInvalid)
+	require.ErrorIs(t, s.Moderate(context.Background(), uuid.New(), "reject", time.Time{}), ErrInvalid)
 }

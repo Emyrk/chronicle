@@ -774,6 +774,7 @@ export interface BillingSummary {
 
 // From chroniclesdk/blog.go
 export interface BlogAdminFeedback {
+    readonly updated_at: string;
     readonly id: string;
     readonly post_slug: string;
     readonly user_id: string;
@@ -804,6 +805,11 @@ export interface BlogInteractions {
     readonly feedback: readonly BlogPublicFeedback[];
     readonly own_feedback?: BlogOwnFeedback;
     readonly feedback_banned: boolean;
+}
+
+// From chroniclesdk/blog.go
+export interface BlogModerationRequest {
+    readonly expected_updated_at: string;
 }
 
 // From chroniclesdk/blog.go

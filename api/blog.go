@@ -16,7 +16,7 @@ import (
 
 func blogError(w http.ResponseWriter, r *http.Request, err error) {
 	var limited *serviceblog.RateLimited
-	status := http.StatusInternalServerError
+	var status int
 	switch {
 	case errors.As(err, &limited):
 		ratelimit.SetHeaders(w, limited.Result.Status)
@@ -28,7 +28,7 @@ func blogError(w http.ResponseWriter, r *http.Request, err error) {
 		status = http.StatusNotFound
 	case errors.Is(err, serviceblog.ErrBanned):
 		status = http.StatusForbidden
-	case errors.Is(err, serviceblog.ErrReserved):
+	case errors.Is(err, serviceblog.ErrReserved), errors.Is(err, serviceblog.ErrConflict):
 		status = http.StatusConflict
 	default:
 		httpapi.InternalServerError(w, err)
@@ -110,7 +110,7 @@ func (a *API) AdminBlogFeedback(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]chroniclesdk.BlogAdminFeedback, 0, len(rows))
 	for _, f := range rows {
-		out = append(out, chroniclesdk.BlogAdminFeedback{ID: f.ID, PostSlug: f.PostSlug, UserID: f.UserID, TenantID: f.TenantID, Body: f.Body, Status: f.Status, Consent: f.Consent, Deleted: f.Deleted})
+		out = append(out, chroniclesdk.BlogAdminFeedback{UpdatedAt: f.UpdatedAt, ID: f.ID, PostSlug: f.PostSlug, UserID: f.UserID, TenantID: f.TenantID, Body: f.Body, Status: f.Status, Consent: f.Consent, Deleted: f.Deleted})
 	}
 	httpapi.Write(r.Context(), w, http.StatusOK, out)
 }
@@ -120,7 +120,11 @@ func (a *API) AdminModerateBlogFeedback(w http.ResponseWriter, r *http.Request) 
 		blogError(w, r, serviceblog.ErrInvalid)
 		return
 	}
-	if err = a.blog.Moderate(r.Context(), id, chi.URLParam(r, "action")); err != nil {
+	var req chroniclesdk.BlogModerationRequest
+	if chi.URLParam(r, "action") != "delete" && !httpapi.Read(r.Context(), w, r, &req) {
+		return
+	}
+	if err = a.blog.Moderate(r.Context(), id, chi.URLParam(r, "action"), req.ExpectedUpdatedAt); err != nil {
 		blogError(w, r, err)
 		return
 	}

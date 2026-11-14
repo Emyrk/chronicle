@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/Emyrk/chronicle/internal/ratelimit"
@@ -16,18 +17,20 @@ var (
 	ErrInvalid  = errors.New("invalid blog interaction")
 	ErrBanned   = errors.New("feedback submissions are disabled for this account")
 	ErrReserved = errors.New("feedback has been deleted and cannot be recreated")
+	ErrConflict = errors.New("feedback changed; refresh before retrying")
 	ErrNotFound = errors.New("feedback not found")
 )
 
 type Feedback struct {
-	ID       uuid.UUID
-	PostSlug string
-	UserID   uuid.UUID
-	TenantID uuid.UUID
-	Body     string
-	Status   string
-	Consent  bool
-	Deleted  bool
+	UpdatedAt time.Time
+	ID        uuid.UUID
+	PostSlug  string
+	UserID    uuid.UUID
+	TenantID  uuid.UUID
+	Body      string
+	Status    string
+	Consent   bool
+	Deleted   bool
 }
 type Votes struct {
 	Up, Down int64
@@ -44,7 +47,7 @@ type Store interface {
 	SaveFeedback(context.Context, Feedback) (Feedback, bool, error)
 	DeleteOwnFeedback(context.Context, string, uuid.UUID) error
 	ListFeedback(context.Context) ([]Feedback, error)
-	Moderate(context.Context, uuid.UUID, string) error
+	Moderate(context.Context, uuid.UUID, string, time.Time) error
 }
 type Bans interface {
 	Banned(context.Context, uuid.UUID) (bool, error)
@@ -210,13 +213,13 @@ func (s *Service) Delete(ctx context.Context, slug string, user uuid.UUID) error
 func (s *Service) List(ctx context.Context) ([]Feedback, error) {
 	return s.opts.Store.ListFeedback(ctx)
 }
-func (s *Service) Moderate(ctx context.Context, id uuid.UUID, action string) error {
-	if id == uuid.Nil {
+func (s *Service) Moderate(ctx context.Context, id uuid.UUID, action string, expected time.Time) error {
+	if id == uuid.Nil || (action != "delete" && expected.IsZero()) {
 		return ErrInvalid
 	}
 	switch action {
 	case "approve", "reject", "delete":
-		return s.opts.Store.Moderate(ctx, id, action)
+		return s.opts.Store.Moderate(ctx, id, action, expected)
 	default:
 		return ErrInvalid
 	}

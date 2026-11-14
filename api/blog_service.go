@@ -4,10 +4,13 @@ import (
 	"context"
 
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/authz"
+	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/Emyrk/chronicle/frontend"
 	"github.com/Emyrk/chronicle/internal/ratelimit"
 	"github.com/Emyrk/chronicle/internal/services/serviceblog"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
+	"github.com/google/uuid"
 )
 
 func (a *API) newBlogService() *serviceblog.Service {
@@ -25,4 +28,22 @@ func (a *API) newBlogService() *serviceblog.Service {
 			return frontend.BlogInteractionsEnabled(frontend.FS(), slug, a.resolvedSiteFlavor(ctx).Strings())
 		},
 	})
+}
+
+type blogBans struct{ zed *authz.Authz }
+
+func (b blogBans) Banned(ctx context.Context, user uuid.UUID) (bool, error) {
+	p := policy.New()
+	allowed, err := b.zed.CheckOne(ctx, nil, p.GlobalChronicle().CanSubmit_blog_feedback_User(p.User(user)))
+	return !allowed, err
+}
+func (b blogBans) SetBanned(ctx context.Context, user uuid.UUID, banned bool) error {
+	p := policy.New()
+	if banned {
+		p.GlobalChronicle().Feedback_banned(p.User(user))
+	} else {
+		p.GlobalChronicle().Delete().Feedback_banned(p.User(user))
+	}
+	_, err := b.zed.Write(ctx, *p.Txn())
+	return err
 }

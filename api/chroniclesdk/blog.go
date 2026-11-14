@@ -1,6 +1,9 @@
 package chroniclesdk
 
-import "github.com/google/uuid"
+import (
+	"github.com/google/uuid"
+	"time"
+)
 
 type BlogVoteRequest struct {
 	Vote int16 `json:"vote"`
@@ -30,15 +33,19 @@ type BlogInteractions struct {
 	OwnFeedback    *BlogOwnFeedback     `json:"own_feedback,omitempty"`
 	FeedbackBanned bool                 `json:"feedback_banned"`
 }
+type BlogModerationRequest struct {
+	ExpectedUpdatedAt time.Time `json:"expected_updated_at"`
+}
 type BlogAdminFeedback struct {
-	ID       uuid.UUID `json:"id"`
-	PostSlug string    `json:"post_slug"`
-	UserID   uuid.UUID `json:"user_id"`
-	TenantID uuid.UUID `json:"tenant_id"`
-	Body     string    `json:"body"`
-	Status   string    `json:"status"`
-	Consent  bool      `json:"consent"`
-	Deleted  bool      `json:"deleted"`
+	UpdatedAt time.Time `json:"updated_at"`
+	ID        uuid.UUID `json:"id"`
+	PostSlug  string    `json:"post_slug"`
+	UserID    uuid.UUID `json:"user_id"`
+	TenantID  uuid.UUID `json:"tenant_id"`
+	Body      string    `json:"body"`
+	Status    string    `json:"status"`
+	Consent   bool      `json:"consent"`
+	Deleted   bool      `json:"deleted"`
 }
 type BlogAdminVotes struct {
 	UpVotes   int64 `json:"up_votes"`
