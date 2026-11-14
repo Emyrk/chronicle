@@ -44,6 +44,7 @@ Use inside `any_encounter` / `count_encounters`. One encounter is one pull.
 | `encounter.boss` | bool | =, != |  | The encounter is a boss fight. |
 | `encounter.outcome` | enum: clean, partial, wipe, reset | =, !=, in, not_in |  | clean (kill), partial (kill with gaps), wipe or reset. |
 | `encounter.killed` | bool | =, != |  | The encounter ended in a kill (clean or partial). |
+| `encounter.hostile_count` | int | =, !=, <, <=, >, >=, between |  | Recorded hostile participation rows for this pull, including the boss. Not a complete census of damage targets; zero means no recorded rows, not proof of no hostiles. |
 | `encounter.duration_ms` | int (ms) | =, !=, <, <=, >, >=, between |  | Pull duration. |
 | `encounter.kill_time_parse` | int (0-100) | =, !=, <, <=, >, >=, between | parse_scope | Kill-time parse for this kill. |
 

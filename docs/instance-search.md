@@ -223,3 +223,23 @@ Keyset pagination on `(sort_key, li.id)` like `ListRecentInstances`. The fixed s
   - Add `CREATE EXTENSION IF NOT EXISTS pg_trgm` in a migration. Production runs Postgres 17 with `pg_trgm` available but not installed. Creating it is quick and touches no data.
   - Add a `similar` operator using trigram similarity (`similarity(lower(col), lower($n)) >= threshold`, or the `%` operator).
   - Without a trigram GIN index on `lower(col)` it scans every row, so give it a higher cost. A GIN index on a large table such as `log_instance_players(name)` would need the usual migration-impact review.
+
+### Recorded hostile counts
+
+`encounter.hostile_count` counts persisted `log_instance_encounter_hostiles` rows
+for exactly the quantified encounter, including the boss. It measures recorded
+participation metadata, not a complete census of damage targets. A count of zero
+means no rows were recorded, not proof that no hostiles participated.
+
+The field costs **40 tokens per predicate**, versus the normal 2 and existing
+expensive time predicates at 20. This intentionally high static price discourages
+broad scans: each candidate pull requires a correlated row count. The existing
+primary key `(encounter_id, id)` supports the lookup, so no migration is needed.
+This is a rate-budget weight, not a measured runtime estimate or a new tier gate.
+Existing advanced-search login requirements and runtime charging still apply.
+
+For a Lucifron kill with more than three recorded hostiles, put name, killed, and
+count predicates inside **one** `any_encounter` so they cannot match different
+pulls. See `testdata/examples/lucifron_extra_hostiles.json` in
+`internal/instancesearch`; this example costs 49 tokens (1 base + 4 quantifier +
+2 name + 2 killed + 40 count) before runtime charging.

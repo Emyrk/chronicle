@@ -618,6 +618,27 @@
       "cost": 2
     },
     {
+      "name": "encounter.hostile_count",
+      "scope": "encounter",
+      "type": "int",
+      "ops": [
+        "=",
+        "!=",
+        "\u003c",
+        "\u003c=",
+        "\u003e",
+        "\u003e=",
+        "between"
+      ],
+      "doc": "Recorded hostile participation rows for this pull, including the boss. Not a complete census of damage targets; zero means no recorded rows, not proof of no hostiles.",
+      "bosses": false,
+      "parse_scope": false,
+      "metric": false,
+      "on": false,
+      "anonymous": false,
+      "cost": 40
+    },
+    {
       "name": "encounter.duration_ms",
       "scope": "encounter",
       "type": "int",
