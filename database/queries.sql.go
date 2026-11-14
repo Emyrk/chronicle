@@ -2528,6 +2528,31 @@ func (q *sqlQuerier) UpsertBillingSubscriptionIfChanged(ctx context.Context, arg
 	return result.RowsAffected(), nil
 }
 
+const claimBlogVoteReward = `-- name: ClaimBlogVoteReward :execrows
+INSERT INTO blog_vote_reward_receipts (user_id, post_slug)
+SELECT $1, $2
+WHERE NOT $3::boolean OR EXISTS (
+  SELECT 1 FROM blog_votes WHERE user_id = $1 AND post_slug = $2
+)
+ON CONFLICT DO NOTHING
+`
+
+type ClaimBlogVoteRewardParams struct {
+	UserID   uuid.UUID `db:"user_id" json:"user_id"`
+	PostSlug string    `db:"post_slug" json:"post_slug"`
+	Removing bool      `db:"removing" json:"removing"`
+}
+
+// Existing votes predate rewards and are not new interactions. Record their
+// reservation too, so removing and recreating them cannot earn a reward.
+func (q *sqlQuerier) ClaimBlogVoteReward(ctx context.Context, arg ClaimBlogVoteRewardParams) (int64, error) {
+	result, err := q.db.Exec(ctx, claimBlogVoteReward, arg.UserID, arg.PostSlug, arg.Removing)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteBlogFeedback = `-- name: DeleteBlogFeedback :one
 UPDATE blog_feedback SET body = NULL, public_consent = false, status = 'pending',
   deleted_at = now(), updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 microsecond')
@@ -2617,6 +2642,39 @@ func (q *sqlQuerier) GetBlogFeedbackByID(ctx context.Context, id uuid.UUID) (Blo
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const getBlogRewardState = `-- name: GetBlogRewardState :one
+SELECT
+  NOT EXISTS (SELECT 1 FROM blog_vote_reward_receipts WHERE blog_vote_reward_receipts.user_id = $1 AND blog_vote_reward_receipts.post_slug = $2)
+    AND NOT EXISTS (SELECT 1 FROM blog_votes WHERE blog_votes.user_id = $1 AND blog_votes.post_slug = $2) AS vote_eligible,
+  NOT EXISTS (SELECT 1 FROM blog_feedback WHERE blog_feedback.user_id = $1 AND blog_feedback.post_slug = $2) AS feedback_eligible,
+  (SELECT expires_at FROM data_grants WHERE data_grants.user_id = $1 AND source = 'blog-vote') AS vote_expires_at,
+  (SELECT expires_at FROM data_grants WHERE data_grants.user_id = $1 AND source = 'blog-feedback') AS feedback_expires_at
+`
+
+type GetBlogRewardStateParams struct {
+	UserID   uuid.UUID `db:"user_id" json:"user_id"`
+	PostSlug string    `db:"post_slug" json:"post_slug"`
+}
+
+type GetBlogRewardStateRow struct {
+	VoteEligible      pgtype.Bool        `db:"vote_eligible" json:"vote_eligible"`
+	FeedbackEligible  bool               `db:"feedback_eligible" json:"feedback_eligible"`
+	VoteExpiresAt     pgtype.Timestamptz `db:"vote_expires_at" json:"vote_expires_at"`
+	FeedbackExpiresAt pgtype.Timestamptz `db:"feedback_expires_at" json:"feedback_expires_at"`
+}
+
+func (q *sqlQuerier) GetBlogRewardState(ctx context.Context, arg GetBlogRewardStateParams) (GetBlogRewardStateRow, error) {
+	row := q.db.QueryRow(ctx, getBlogRewardState, arg.UserID, arg.PostSlug)
+	var i GetBlogRewardStateRow
+	err := row.Scan(
+		&i.VoteEligible,
+		&i.FeedbackEligible,
+		&i.VoteExpiresAt,
+		&i.FeedbackExpiresAt,
 	)
 	return i, err
 }

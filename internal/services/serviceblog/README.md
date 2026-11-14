@@ -40,6 +40,24 @@ Deletion leaves a reservation so the same account cannot submit another record f
 that post. Submission tenant never changes when the author edits from another site.
 Public responses expose only feedback ID, body and a same/different-server label.
 
+## Storage rewards
+
+A first vote on a post grants 2 MB for 60 days. First feedback grants 5 MB for
+60 days, whether private or submitted for moderation. Separate account-wide
+`blog-vote` and `blog-feedback` data grants cap the combined bonus at 7 MB.
+A new interaction on another post replaces that category's expiry with now plus
+60 days, never adding bytes or stacking time. Existing quota expiry and storage
+settings grant displays apply unchanged.
+
+Interaction writes and grants commit in one transaction. Vote reward receipts
+survive removal; feedback tombstones already reserve deleted submissions.
+Toggles, edits, withdrawal and recreation never refresh a bonus. Existing votes
+and feedback are not rewarded retroactively. Votes deleted before this feature
+have no historical record and cannot be distinguished from a first vote.
+The additive migration creates an empty receipt table without a data backfill.
+Private reward eligibility and expiry follow the corresponding own-state read
+permission. Rewards do not depend on public consent or moderation approval.
+
 ## Optional feedback-created hook
 
 `Options.FeedbackCreated` defaults to nil and production wiring leaves it inactive.

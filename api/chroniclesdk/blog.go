@@ -26,7 +26,14 @@ type BlogOwnFeedback struct {
 	Status  string    `json:"status"`
 	Deleted bool      `json:"deleted"`
 }
+type BlogStorageReward struct {
+	Eligible  bool       `json:"eligible"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+}
+
 type BlogInteractions struct {
+	VoteReward      *BlogStorageReward   `json:"vote_reward,omitempty"`
+	FeedbackReward  *BlogStorageReward   `json:"feedback_reward,omitempty"`
 	VotingEnabled   bool                 `json:"voting_enabled"`
 	FeedbackEnabled bool                 `json:"feedback_enabled"`
 	Enabled         bool                 `json:"enabled"`

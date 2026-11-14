@@ -1018,6 +1018,11 @@ type BlogVote struct {
 	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
 
+type BlogVoteRewardReceipt struct {
+	UserID   uuid.UUID `db:"user_id" json:"user_id"`
+	PostSlug string    `db:"post_slug" json:"post_slug"`
+}
+
 type CacheGeneration struct {
 	Namespace  string    `db:"namespace" json:"namespace"`
 	Scope      string    `db:"scope" json:"scope"`

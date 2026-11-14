@@ -80,7 +80,7 @@ type Options struct {
 	Eligible          func(context.Context, string, string) (bool, error)
 	// FeedbackCreated is inactive by default. It runs best-effort after the first
 	// successful insert only, not edits. Delivery is not durable or exactly-once.
-	// Consumers must be idempotent. No rewards are issued by this service.
+	// Consumers must be idempotent. Storage rewards are committed by the database store, not this hook.
 	Logger          *slog.Logger
 	FeedbackCreated func(context.Context, Feedback) error
 }
@@ -123,7 +123,19 @@ func take(ctx context.Context, limiter Limiter, user uuid.UUID) error {
 	return nil
 }
 
+type Reward struct {
+	Eligible  bool
+	ExpiresAt *time.Time
+}
+
+// RewardStore provides account-wide reward state without exposing it publicly.
+type RewardStore interface {
+	Rewards(context.Context, string, uuid.UUID) (Reward, Reward, error)
+}
+
 type State struct {
+	VoteReward      *Reward
+	FeedbackReward  *Reward
 	VotingEnabled   bool
 	FeedbackEnabled bool
 	Enabled         bool
@@ -178,7 +190,22 @@ func (s *Service) ReadWithAccess(ctx context.Context, slug string, user uuid.UUI
 			out.Banned, err = s.opts.Bans.Banned(ctx, user)
 		}
 	}
-	return out, err
+	if err != nil {
+		return out, err
+	}
+	if rewards, ok := s.opts.Store.(RewardStore); ok && user != uuid.Nil && (ownVote || ownFeedback) {
+		vote, feedback, rewardErr := rewards.Rewards(ctx, slug, user)
+		if rewardErr != nil {
+			return out, rewardErr
+		}
+		if ownVote && out.VotingEnabled {
+			out.VoteReward = &vote
+		}
+		if ownFeedback && out.FeedbackEnabled {
+			out.FeedbackReward = &feedback
+		}
+	}
+	return out, nil
 }
 
 // Summaries returns public totals, zeroing each count whose interaction is disabled for the

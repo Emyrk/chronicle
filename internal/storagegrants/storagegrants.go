@@ -40,3 +40,19 @@ func SupportStorageGrant(user uuid.UUID) database.UpsertDataGrantParams {
 		ExpiresAt: database.Timestamptz(time.Now().Add(time.Hour * 24 * 30)), // 30 days
 	}
 }
+
+const (
+	BlogVoteSource     = "blog-vote"
+	BlogFeedbackSource = "blog-feedback"
+	BlogRewardDuration = 60 * 24 * time.Hour
+)
+
+func BlogVoteStorageGrant(user uuid.UUID, now time.Time) database.UpsertDataGrantParams {
+	return database.UpsertDataGrantParams{UserID: user, Source: BlogVoteSource, StorageBytes: 2_000_000,
+		Description: pgtype.Text{String: "Blog vote bonus", Valid: true}, ExpiresAt: database.Timestamptz(now.Add(BlogRewardDuration))}
+}
+
+func BlogFeedbackStorageGrant(user uuid.UUID, now time.Time) database.UpsertDataGrantParams {
+	return database.UpsertDataGrantParams{UserID: user, Source: BlogFeedbackSource, StorageBytes: 5_000_000,
+		Description: pgtype.Text{String: "Blog feedback bonus", Valid: true}, ExpiresAt: database.Timestamptz(now.Add(BlogRewardDuration))}
+}

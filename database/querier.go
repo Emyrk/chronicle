@@ -45,6 +45,9 @@ type sqlcQuerier interface {
 	CarryForwardFinalizedParsedLogGroup(ctx context.Context, arg CarryForwardFinalizedParsedLogGroupParams) error
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
 	CensusPlayerCounts(ctx context.Context, arg CensusPlayerCountsParams) ([]CensusPlayerCountsRow, error)
+	// Existing votes predate rewards and are not new interactions. Record their
+	// reservation too, so removing and recreating them cannot earn a reward.
+	ClaimBlogVoteReward(ctx context.Context, arg ClaimBlogVoteRewardParams) (int64, error)
 	ClaimDiscordAnnouncementDelivery(ctx context.Context, id uuid.UUID) (GuildDiscordLogAnnouncement, error)
 	ClaimDueDiscordMembershipGrantChecks(ctx context.Context, arg ClaimDueDiscordMembershipGrantChecksParams) ([]ClaimDueDiscordMembershipGrantChecksRow, error)
 	ClaimLeaderboardCareer(ctx context.Context, tenantID uuid.UUID) (LeaderboardDirtyCareer, error)
@@ -345,6 +348,7 @@ type sqlcQuerier interface {
 	GetBillingWebhookEvent(ctx context.Context, stripeEventID string) (BillingWebhookEvent, error)
 	GetBlogFeedback(ctx context.Context, arg GetBlogFeedbackParams) (BlogFeedback, error)
 	GetBlogFeedbackByID(ctx context.Context, id uuid.UUID) (BlogFeedback, error)
+	GetBlogRewardState(ctx context.Context, arg GetBlogRewardStateParams) (GetBlogRewardStateRow, error)
 	GetBlogVote(ctx context.Context, arg GetBlogVoteParams) (BlogVote, error)
 	GetBlogVoteTotals(ctx context.Context, postSlug string) (GetBlogVoteTotalsRow, error)
 	GetCacheGeneration(ctx context.Context, arg GetCacheGenerationParams) (CacheGeneration, error)

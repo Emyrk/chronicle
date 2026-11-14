@@ -1,7 +1,5 @@
-export interface BlogStorageReward {
-  eligible: boolean;
-  expires_at?: string;
-}
+import type { BlogStorageReward } from "@/api/typesGenerated";
+export type { BlogStorageReward } from "@/api/typesGenerated";
 
 type Category = "vote" | "feedback";
 const amount = (category: Category) => category === "vote" ? 2 : 5;

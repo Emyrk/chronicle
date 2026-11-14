@@ -3,7 +3,6 @@ import { blogRewardSuccessMessage, type BlogStorageReward } from "../blog/blogSt
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { BlogInteractionSummary, BlogAdminFeedback, BlogAdminVotes, BlogInteractions, BlogOwnFeedback, BlogVoteRequest, BlogFeedbackRequest, BlogModerationRequest } from "./typesGenerated";
-type RewardInteractions = BlogInteractions & { vote_reward?: BlogStorageReward; feedback_reward?: BlogStorageReward };
 export type OwnFeedback = BlogOwnFeedback;
 export type AdminBlogInteractions = readonly BlogAdminFeedback[];
 
@@ -19,7 +18,7 @@ const base = (id: string) => `/api/v1/blog/${encodeURIComponent(id)}`;
 export function useBlogInteractions(id: string, userID: string | undefined, authLoading: boolean) {
   return useQuery({
     queryKey: ["blogInteractions", id, userID ?? "anonymous"],
-    queryFn: () => blogRequest<RewardInteractions>(`${base(id)}/interactions`),
+    queryFn: () => blogRequest<BlogInteractions>(`${base(id)}/interactions`),
     enabled: !authLoading,
     retry: false,
   });
@@ -46,7 +45,7 @@ export function useBlogMutation(id: string, rewards?: { vote?: BlogStorageReward
     onSuccess: async (_data, variables, context) => {
       const message = blogRewardSuccessMessage(context?.reward, variables.resource, variables.resource !== "vote" || variables.body.vote !== 0);
       if (message) toast.success(message);
-      await Promise.all([client.invalidateQueries({ queryKey: ["blogInteractions", id] }), client.invalidateQueries({ queryKey: ["blogInteractionSummaries"] })]);
+      await Promise.all([client.invalidateQueries({ queryKey: ["blogInteractions"] }), client.invalidateQueries({ queryKey: ["blogInteractionSummaries"] }), client.invalidateQueries({ queryKey: ["my-storage"] })]);
     },
   });
 }

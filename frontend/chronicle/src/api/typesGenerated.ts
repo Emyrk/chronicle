@@ -814,6 +814,8 @@ export interface BlogInteractionSummary {
 
 // From chroniclesdk/blog.go
 export interface BlogInteractions {
+    readonly vote_reward?: BlogStorageReward;
+    readonly feedback_reward?: BlogStorageReward;
     readonly voting_enabled: boolean;
     readonly feedback_enabled: boolean;
     readonly enabled: boolean;
@@ -846,6 +848,12 @@ export interface BlogPublicFeedback {
     readonly id: string;
     readonly body: string;
     readonly server_relation: string;
+}
+
+// From chroniclesdk/blog.go
+export interface BlogStorageReward {
+    readonly eligible: boolean;
+    readonly expires_at?: string;
 }
 
 // From chroniclesdk/blog.go
