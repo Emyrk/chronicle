@@ -35,10 +35,11 @@ type auraMessageValue struct {
 	State       types.AuraState           `json:"state"`
 }
 type slainMessageValue struct {
-	Base        messages.MessageBaseState `json:"base"`
-	Victim      guid.GUID                 `json:"victim"`
-	Killer      *guid.GUID                `json:"killer"`
-	Attribution string                    `json:"attribution"`
+	Base                 messages.MessageBaseState `json:"base"`
+	Victim               guid.GUID                 `json:"victim"`
+	Killer               *guid.GUID                `json:"killer"`
+	Attribution          string                    `json:"attribution"`
+	AttributionNilDamage bool                      `json:"attribution_nil_damage,omitempty"`
 }
 type timeoutMessageValue struct {
 	Base messages.MessageBaseState `json:"base"`
@@ -103,12 +104,20 @@ func CaptureMessage(m messages.Message, capture func(messages.Message) (string, 
 		if m == nil {
 			return MessageState{}, fmt.Errorf("nil slain")
 		}
-		ref, err := captureMessage(m.Attribution, capture)
-		if err != nil {
-			return MessageState{}, err
+		var ref string
+		// CCv2 DEATH can retain a typed-nil *Damage in its Message interface.
+		// Preserve that distinction exactly; it is not a canonical referenced owner.
+		damage, isDamage := m.Attribution.(*messages.Damage)
+		nilDamage := isDamage && damage == nil
+		if !nilDamage {
+			var err error
+			ref, err = captureMessage(m.Attribution, capture)
+			if err != nil {
+				return MessageState{}, err
+			}
 		}
 		kind = "slain"
-		payload = slainMessageValue{m.CaptureState(), m.Victim, copyPointer(m.Killer), ref}
+		payload = slainMessageValue{Base: m.CaptureState(), Victim: m.Victim, Killer: copyPointer(m.Killer), Attribution: ref, AttributionNilDamage: nilDamage}
 	case *messages.Timeout:
 		if m == nil {
 			return MessageState{}, fmt.Errorf("nil timeout")
@@ -216,9 +225,15 @@ func (s MessageState) Restore(resolve func(string) (messages.Message, error), sp
 		}
 		return &messages.Aura{MessageBase: v.Base.Restore(), IsBuff: v.IsBuff, Source: v.Source, Target: v.Target, SpellName: v.SpellName, SpellID: v.SpellID, SpellData: sp, Amount: v.Amount, Application: v.Application, Transition: v.Transition, State: v.State}, nil
 	case *slainMessageValue:
+		if v.AttributionNilDamage && v.Attribution != "" {
+			return nil, fmt.Errorf("conflicting slain attribution")
+		}
 		attribution, err := resolveMessage(v.Attribution, resolve)
 		if err != nil {
 			return nil, err
+		}
+		if v.AttributionNilDamage {
+			attribution = (*messages.Damage)(nil)
 		}
 		return &messages.Slain{MessageBase: v.Base.Restore(), Victim: v.Victim, Killer: v.Killer, Attribution: attribution}, nil
 	case *timeoutMessageValue:
