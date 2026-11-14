@@ -11,7 +11,6 @@ type PostProps = { post: BlogPostDefinition };
 const GOLD = "#f0c060";
 const PEAK = METRIC_THEMES.peak.accent;
 const MASTERY = METRIC_THEMES.mastery.accent;
-const RENOWN = METRIC_THEMES.renown.accent;
 const PARCHMENT = "radial-gradient(ellipse at 30% 15%, #ead9ae 0%, #d3ba8c 55%, #bda276 100%)";
 const GOBLIN = "/c/images/blog/goblin.webp";
 
@@ -149,14 +148,13 @@ export function BeyondTheBestParsePost({ post }: PostProps) {
         <RenownLedger />
         <p>Renown isn&apos;t a 0–100 rating. It only adds up, and that&apos;s intentional.</p>
         <PullQuote>I don&apos;t believe there&apos;s only one way to be a valuable raider.</PullQuote>
-        <RatingTrio />
 
         <Chapter index={6} />
         <p>
-          People weren&apos;t only using the old Armory to summarize their performance. They used it to explore
-          individual parses and revisit specific kills.
+          The old Armory wasn&apos;t only a summary of your performance. It also showed your individual parses, and I
+          underestimated how much that mattered.
         </p>
-        <PullQuote>In trying to improve the summary, I removed access to the underlying history.</PullQuote>
+        <PullQuote>In trying to improve the summary, I removed access to parses.</PullQuote>
         <p>
           That was the wrong decision. <strong>The old Armory view is back, with some new enhancements:</strong>
         </p>
@@ -550,62 +548,6 @@ function RenownLedger() {
         Example awards. Never spent, never lost.
       </figcaption>
     </figure>
-  );
-}
-
-function RatingTrio() {
-  const items = [
-    {
-      name: "Peak",
-      color: PEAK,
-      Icon: METRIC_THEMES.peak.icon,
-      honours: "Exceptional performance",
-      question: METRIC_THEMES.peak.question,
-      scale: "0–100 against the benchmark",
-      flavor: "One perfect pull is enough.",
-    },
-    {
-      name: "Mastery",
-      color: MASTERY,
-      Icon: METRIC_THEMES.mastery.icon,
-      honours: "Consistent performance",
-      question: METRIC_THEMES.mastery.question,
-      scale: "0–100 against the benchmark",
-      flavor: "Again. And again. And again.",
-    },
-    {
-      name: "Renown",
-      color: RENOWN,
-      Icon: METRIC_THEMES.renown.icon,
-      honours: "Sustained participation",
-      question: METRIC_THEMES.renown.question,
-      scale: "No cap. It only goes up.",
-      flavor: "Every kill counts, and keeps counting.",
-    },
-  ];
-  return (
-    <div className="not-prose my-8 grid gap-3 sm:grid-cols-3">
-      {items.map(({ name, color, Icon, honours, question, scale, flavor }) => (
-        <article key={name} className="rounded-lg border-2 border-[#4a4a6a] bg-[#1a1a2e] p-3 text-xs leading-snug shadow-lg">
-          <div className="flex items-center gap-2">
-            <span
-              className="flex size-9 shrink-0 items-center justify-center rounded border-2"
-              style={{ borderColor: `${color}aa`, background: `${color}22` }}
-            >
-              <Icon className="size-5" style={{ color }} />
-            </span>
-            <h4 className="text-base font-semibold" style={{ color }}>
-              {name}
-            </h4>
-          </div>
-          <div className="mt-2 text-white">Rating</div>
-          <div className="text-white">{honours}</div>
-          <div className="mt-1 text-[#1eff00]">{question}</div>
-          <div className="mt-1 text-white/80">{scale}</div>
-          <div className="mt-2 text-[#ffd200]">&ldquo;{flavor}&rdquo;</div>
-        </article>
-      ))}
-    </div>
   );
 }
 
