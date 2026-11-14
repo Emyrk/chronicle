@@ -1,7 +1,10 @@
 package encounterevents
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/Emyrk/chronicle/api/chronicleproto"
@@ -9,17 +12,20 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 )
 
+const PendingDamageStateType = "encounterevents.PendingDamageBuilder"
+const PendingDamageStateVersion uint32 = 1
+
 // PendingDamageState is only the active, unencoded Damage builder. Other
 // builders (notably already-serialized Slain) are outside this adapter and must
 // retain their existing bytes; they must not be rebuilt from attributed Damage.
 type PendingDamageState struct {
-	First   time.Time
-	Count   int64
-	Entries []PendingDamageReference
+	First   time.Time                `json:"first"`
+	Count   int64                    `json:"count"`
+	Entries []PendingDamageReference `json:"entries"`
 }
 type PendingDamageReference struct {
-	Path  string
-	Index int32
+	Path  string `json:"path"`
+	Index int32  `json:"index"`
 }
 
 // CapturePendingDamage visits actual pending objects in stable event order. The
@@ -49,6 +55,86 @@ func CapturePendingDamage(b *Builder[*messages.Damage, *chronicleproto.Damage], 
 		s.Entries[i] = PendingDamageReference{Path: p, Index: entry.index}
 	}
 	return s, nil
+}
+
+func (s PendingDamageState) Encode() ([]byte, error) { return json.Marshal(s) }
+
+func DecodePendingDamageState(version uint32, payload []byte) (PendingDamageState, error) {
+	if version != PendingDamageStateVersion {
+		return PendingDamageState{}, fmt.Errorf("unsupported %s version %d", PendingDamageStateType, version)
+	}
+	fields, err := decodeDamageObject(payload, "pending damage state")
+	if err != nil {
+		return PendingDamageState{}, err
+	}
+	if len(fields) != 3 {
+		return PendingDamageState{}, fmt.Errorf("pending damage state requires three fields")
+	}
+	for _, name := range []string{"first", "count", "entries"} {
+		if len(fields[name]) == 0 {
+			return PendingDamageState{}, fmt.Errorf("pending damage field %q is missing", name)
+		}
+	}
+	for _, name := range []string{"first", "count"} {
+		if bytes.Equal(bytes.TrimSpace(fields[name]), []byte("null")) {
+			return PendingDamageState{}, fmt.Errorf("pending damage field %q is null", name)
+		}
+	}
+	var state PendingDamageState
+	decoder := json.NewDecoder(bytes.NewReader(payload))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&state); err != nil {
+		return PendingDamageState{}, err
+	}
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		return PendingDamageState{}, fmt.Errorf("trailing pending damage state")
+	}
+	if state.Count < 0 || state.Count != int64(len(state.Entries)) {
+		return PendingDamageState{}, fmt.Errorf("inconsistent pending damage count")
+	}
+	for i, entry := range state.Entries {
+		if entry.Path == "" {
+			return PendingDamageState{}, fmt.Errorf("empty pending damage reference %d", i)
+		}
+	}
+	return state, nil
+}
+
+func decodeDamageObject(payload []byte, label string) (map[string]json.RawMessage, error) {
+	decoder := json.NewDecoder(bytes.NewReader(payload))
+	token, err := decoder.Token()
+	if err != nil {
+		return nil, err
+	}
+	if token != json.Delim('{') {
+		return nil, fmt.Errorf("%s must be an object", label)
+	}
+	fields := make(map[string]json.RawMessage)
+	for decoder.More() {
+		token, err := decoder.Token()
+		if err != nil {
+			return nil, err
+		}
+		name, ok := token.(string)
+		if !ok {
+			return nil, fmt.Errorf("%s field name is not a string", label)
+		}
+		if _, exists := fields[name]; exists {
+			return nil, fmt.Errorf("duplicate %s field %q", label, name)
+		}
+		var value json.RawMessage
+		if err := decoder.Decode(&value); err != nil {
+			return nil, err
+		}
+		fields[name] = value
+	}
+	if _, err := decoder.Token(); err != nil {
+		return nil, err
+	}
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		return nil, fmt.Errorf("trailing %s data", label)
+	}
+	return fields, nil
 }
 
 func (s PendingDamageState) Restore(resolve func(string) (*messages.Damage, error)) (*Builder[*messages.Damage, *chronicleproto.Damage], error) {
