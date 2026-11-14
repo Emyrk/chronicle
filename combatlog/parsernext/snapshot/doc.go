@@ -1,6 +1,5 @@
-// Package snapshot reserves the orchestration boundary for future snapshots.
-// No snapshot/resume support is implemented yet. State schemas and codecs must
-// live beside their state owners (common or an expansion), not in this package.
-// Future orchestration may assemble owner-provided snapshots; it must not own
-// combat state or import the legacy parser to fake resumability.
+// Package snapshot provides strict runtime compatibility identities and reserves
+// the orchestration boundary for future complete-session snapshots. State codecs
+// live beside their owners. Compatibility alone does not prove that a complete
+// session graph can be captured or restored, and never bypasses owner guards.
 package snapshot

@@ -1,8 +1,41 @@
-# parsernext foundation
+# parsernext
 
-This is an isolated, runnable **complete-file source ingestion** foundation, plus a Vanilla record decoder and file-local message source, not a complete combat parser. Production continues using `combatlog/parser`
-and `chronicle/logparse_parse.go` unchanged. There are no legacy parser execution wrappers,
-registration side effects, database/River calls, or raid constructors here.
+## Current implementation
+
+Parsernext owns record decoding for Vanilla companion, TBC companion, Wrath
+companion, AzerothCore, V9, HermesProxy, and V22 records. Format and flavor are
+independent, explicit parsing-context values. Wire syntax never selects custom
+content flavor.
+
+The pipeline remains **raw text → format decoder → format-specific synthetics →
+shared consumers → existing publication**. Shared CLEU lexical mechanics and
+record semantics have one parsernext owner. Legacy adapters reuse extracted
+algorithms where compatible; the independent legacy CLEU matcher remains as the
+comparison/default-execution path during migration.
+
+Independent raw-reader compositions are exposed by Vanilla `nextsource`, native
+`wotlk.NewNext`, modern `modern.NewNext`, and `azerothcore.NewNext`. These adapters
+live beside the existing synthetic compositions; they do not instantiate the old
+parser. Modern includes V9, HermesProxy, and V22. V22 reorders once, after its
+synthetic stage. The tooling-only `--engine parsernext` selects these sources in
+`scripts/parser-baseline`. Ordinary server workers retain legacy selection.
+
+Decoder and source parity tests cover these formats. Real-log corpus coverage is
+separate: the preserved corpus contains Vanilla, TBC, and Wrath, but no complete
+V9/HermesProxy/V22/AzerothCore log groups. Small V22 fixtures and inline format
+tests must not be described as equivalent full-corpus validation.
+
+Full-session snapshot composition, restore validation across every consumer,
+queued parsernext jobs, and production opt-in remain unfinished. No source or
+record-decoder test establishes those capabilities. See [session composition
+status](snapshot/STATUS.md) for the supported building blocks, missing graph
+adapters, and review gate before full-session real-log resume testing.
+
+## Source-ingestion foundation
+
+The `Selection`/`ReadFile` API below is a low-level source inspection contract,
+not the dispatch API used by the independent raw-reader compositions. Its
+expansion/profile matrix does not infer flavor or choose a consumer pipeline.
 
 ## Implemented boundary
 
@@ -152,12 +185,14 @@ the exact Vanilla message/value, fatal-error and semver compatibility imports en
 `common` cannot acquire expansion dependencies transitively through local imports.
 It cannot construct a raid through a registered constructor or imported package.
 
-## Deliberately not implemented
+## Foundation scope versus session scope
 
-Combat-message decoding beyond the explicitly listed records; timezone reconstruction beyond header interpretation; other expansion combat rules;
-character/raid state; event sorting or the full synthetic pipeline inside parsernext; multiple-file merging;
-semantic export parity; checkpoints, restore, snapshot schemas/codecs; publication.
-There are no no-op implementations claiming these features work.
+`ReadFile` itself does not decode messages, apply expansion rules, run synthetics,
+construct character/raid state, reorder events, or publish results. Those roles
+belong to the format compositions and existing shared consumers described above.
+Its source summary is not a snapshot. Full-session restore and queued-parsernext
+execution remain separate work; do not infer support from successful ingestion
+or format-level parity tests.
 
 When state is introduced, its snapshot schema and codec must live beside its
 owner (`common` or its expansion). `snapshot` may orchestrate owner-provided
