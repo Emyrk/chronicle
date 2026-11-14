@@ -47,7 +47,11 @@ export function BeyondTheBestParsePost({ post }: PostProps) {
         <p>
           I saw the old Armory as a summary of your parses, and I believed ratings could summarize better. What I
           overlooked is that it was also{" "}
-          <strong>your window into individual parses and performance history.</strong> Ratings don&apos;t replace that.
+          <strong>your window into individual parses and performance history.</strong>
+        </p>
+        <p>
+          <strong>Ratings are not parses, and they don&apos;t replace them.</strong> They answer a different question.
+          Your parses are important, and they deserve their own place on your profile.
         </p>
         <p>
           <strong>I&apos;ve since restored the old view and added parse history to the toggled view.</strong> That

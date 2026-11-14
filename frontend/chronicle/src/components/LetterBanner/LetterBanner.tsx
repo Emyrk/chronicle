@@ -64,9 +64,9 @@ export function LetterBanner() {
             Parses are back on the Armory
           </div>
           <div className="text-xs text-[#cfb88a] sm:text-sm">
-            <span className="sm:hidden">A letter on what went wrong, and why ratings exist.</span>
+            <span className="sm:hidden">A letter from Chronicle on what went wrong, and why ratings exist.</span>
             <span className="hidden sm:inline">
-              A letter on what I got wrong with the Armory, what&apos;s been fixed, and why ratings exist.
+              A letter from Chronicle on what went wrong with the Armory, what&apos;s been fixed, and why ratings exist.
             </span>
           </div>
         </div>
