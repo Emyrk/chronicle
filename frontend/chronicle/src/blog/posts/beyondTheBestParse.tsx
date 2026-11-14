@@ -14,19 +14,18 @@ const MASTERY = METRIC_THEMES.mastery.accent;
 const PARCHMENT = "radial-gradient(ellipse at 30% 15%, #ead9ae 0%, #d3ba8c 55%, #bda276 100%)";
 const GOBLIN = "/c/images/blog/goblin.webp";
 
-/** Chapters in reading order; the goblin comments as each one comes into view. */
+/** Chapters in reading order; the reading bar names the one in view. */
 const CHAPTERS = [
-  { numeral: "Prologue", title: "A letter", icon: "inv_letter_15", quip: "A letter from the boss. Read the whole thing, I'm counting." },
-  { numeral: "Chapter I", title: "Why add ratings alongside parses?", icon: "ability_hunter_snipershot", quip: "Same DPS, different parse? Depends who showed up that week." },
-  { numeral: "Chapter II", title: "Distance from the best, rather than position in the population", icon: "inv_misc_spyglass_02", quip: "Distance from the best. Now that's something I can measure." },
-  { numeral: "Chapter III", title: "Recognizing more than one exceptional performance", icon: "inv_misc_pocketwatch_01", quip: "One lucky night, or every night? Those cost different amounts." },
-  { numeral: "Chapter IV", title: "Comparing achievements across raids and specializations", icon: "inv_misc_coin_01", quip: "835 points... out of what? Exactly." },
-  { numeral: "Chapter V", title: "Renown: Recognizing participation", icon: "inv_crown_01", quip: "Points for showing up? Now you're speaking my language." },
-  { numeral: "Chapter VI", title: "What I got wrong with the Armory", icon: "inv_misc_wrench_01", quip: "He broke it, he fixed it. I've seen worse repair bills." },
-  { numeral: "Chapter VII", title: "Moving forward", icon: "inv_misc_book_09", quip: "Nearly there, friend. The ledger almost balances." },
+  { numeral: "Prologue", title: "A letter", icon: "inv_letter_15" },
+  { numeral: "Chapter I", title: "Why add ratings alongside parses?", icon: "ability_hunter_snipershot" },
+  { numeral: "Chapter II", title: "Distance from the best, rather than position in the population", icon: "inv_misc_spyglass_02" },
+  { numeral: "Chapter III", title: "Recognizing more than one exceptional performance", icon: "inv_misc_pocketwatch_01" },
+  { numeral: "Chapter IV", title: "Comparing achievements across raids and specializations", icon: "inv_misc_coin_01" },
+  { numeral: "Chapter V", title: "Renown: Recognizing participation", icon: "inv_crown_01" },
+  { numeral: "Chapter VI", title: "What I got wrong with the Armory", icon: "inv_misc_wrench_01" },
+  { numeral: "Chapter VII", title: "Moving forward", icon: "inv_misc_book_09" },
 ] as const;
 
-const DONE_QUIP = "Quest complete! No refunds.";
 /** Reading progress that counts as finished. */
 const DONE_AT = 0.995;
 
@@ -611,16 +610,22 @@ function Reward({ icon, title, body }: { icon: ReactNode; title: string; body: s
 
 /**
  * An experience bar pinned to the bottom of the screen: how far through the
- * letter you are, which chapter you're in, and a goblin riding along.
+ * letter you are and which chapter you're in.
  */
 function ReadingBar({ bodyRef }: { bodyRef: React.RefObject<HTMLDivElement | null> }) {
   const [progress, setProgress] = useState(0);
   const [chapter, setChapter] = useState(0);
-  const [quipVisible, setQuipVisible] = useState(false);
+
+  // Lift the floating vote bar above this bar while it is mounted.
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty("--blog-dock-inset", "2.25rem");
+    return () => {
+      root.style.removeProperty("--blog-dock-inset");
+    };
+  }, []);
 
   useEffect(() => {
-    let spoken: string | undefined;
-    let hideTimer: number | undefined;
     const update = () => {
       const body = bodyRef.current;
       if (!body) return;
@@ -633,20 +638,11 @@ function ReadingBar({ bodyRef }: { bodyRef: React.RefObject<HTMLDivElement | nul
         if (el.getBoundingClientRect().top < window.innerHeight * 0.4) current = Number(el.dataset.chapter);
       });
       setChapter(current);
-      // The goblin speaks up for a few seconds whenever a new chapter starts.
-      const key = next >= DONE_AT ? "done" : String(current);
-      if (next > 0.01 && key !== spoken) {
-        spoken = key;
-        setQuipVisible(true);
-        window.clearTimeout(hideTimer);
-        hideTimer = window.setTimeout(() => setQuipVisible(false), 4500);
-      }
     };
     update();
     window.addEventListener("scroll", update, { passive: true });
     window.addEventListener("resize", update);
     return () => {
-      window.clearTimeout(hideTimer);
       window.removeEventListener("scroll", update);
       window.removeEventListener("resize", update);
     };
@@ -654,8 +650,6 @@ function ReadingBar({ bodyRef }: { bodyRef: React.RefObject<HTMLDivElement | nul
 
   const done = progress >= DONE_AT;
   const pct = Math.round(progress * 100);
-  const quip = done ? DONE_QUIP : CHAPTERS[chapter].quip;
-  const onRight = progress > 0.55;
   return (
     <div
       className="not-prose pointer-events-none fixed inset-x-0 bottom-0 z-40 px-3 pb-2 transition-opacity duration-300 sm:px-6"
@@ -663,21 +657,6 @@ function ReadingBar({ bodyRef }: { bodyRef: React.RefObject<HTMLDivElement | nul
       aria-hidden="true"
     >
       <div className="relative mx-auto max-w-3xl">
-        {/* The goblin rides the fill's leading edge, kept inside the bar. */}
-        <div
-          className="absolute bottom-full -mb-3 -translate-x-1/2 transition-[left] duration-200 ease-out"
-          style={{ left: `clamp(2rem, ${pct}%, calc(100% - 2rem))` }}
-        >
-          <div className="relative">
-            <img src={GOBLIN} alt="" className="h-14 w-auto max-w-none drop-shadow-[0_4px_6px_rgba(0,0,0,0.6)] sm:h-16" />
-            <div
-              className={`absolute bottom-full mb-1 w-56 rounded-lg border-2 border-[#4a4a6a] bg-[#1a1a2e] px-3 py-2 text-xs leading-snug text-[#ffd200] shadow-xl shadow-black/60 transition-opacity duration-300 ${onRight ? "right-0" : "left-0"}`}
-              style={{ opacity: quipVisible ? 1 : 0 }}
-            >
-              {quip}
-            </div>
-          </div>
-        </div>
         <div className="relative h-5 overflow-hidden rounded-md border-2 border-[#4a4a6a] bg-[#14141f] shadow-xl shadow-black/60">
           <div
             className="h-full transition-[width] duration-200 ease-out"

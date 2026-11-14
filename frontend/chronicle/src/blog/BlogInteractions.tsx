@@ -46,7 +46,7 @@ function LiveInteractions({ post }: { post: BlogPostMetadata }) {
   const publicFeedback = publicQuery.data?.feedback ?? [];
   return (
     <>
-    {(votingEnabled || feedbackEnabled) && <div className="pointer-events-none fixed inset-x-0 bottom-4 z-40 flex justify-center px-4">
+    {(votingEnabled || feedbackEnabled) && <div className="pointer-events-none fixed inset-x-0 bottom-[calc(1rem+var(--blog-dock-inset,0px))] z-40 flex justify-center px-4">
       <div role="group" aria-label="Vote on this post" className="pointer-events-auto flex flex-wrap items-center justify-center gap-2 rounded-full border border-white/15 bg-neutral-700 px-3 py-2 shadow-xl shadow-black/50">
         {votingEnabled && <>
           <Button size="sm" className="rounded-full" variant={own.data?.own_vote === 1 ? "default" : "outline"} aria-pressed={own.data?.own_vote === 1} disabled={disabled} onClick={() => mutation.mutate({ resource: "vote", method: "PUT", body: { vote: own.data?.own_vote === 1 ? 0 : 1 } })}>
