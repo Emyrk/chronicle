@@ -85,6 +85,7 @@ const ConsumablesPage = lazy(() => import("./pages/Technical").then(({ Consumabl
 const CooldownSpellsPage = lazy(() => import("./pages/Technical").then(({ CooldownSpellsPage }) => ({ default: CooldownSpellsPage })))
 const MapGalleryPage = lazy(() => import("./pages/Technical").then(({ MapGalleryPage }) => ({ default: MapGalleryPage })))
 const MiniaturesPage = lazy(() => import("./pages/Technical").then(({ MiniaturesPage }) => ({ default: MiniaturesPage })))
+const StateGraphExplorerPage = lazy(() => import("./pages/Technical").then(({ StateGraphExplorerPage }) => ({ default: StateGraphExplorerPage })))
 const AccountLayout = lazy(() => import("./pages/Settings").then(({ AccountLayout }) => ({ default: AccountLayout })))
 const ProfileSettings = lazy(() => import("./pages/Settings").then(({ ProfileSettings }) => ({ default: ProfileSettings })))
 const PurgeAccount = lazy(() => import("./pages/Settings/PurgeAccount").then(({ PurgeAccount }) => ({ default: PurgeAccount })))
@@ -330,6 +331,7 @@ function App({ homeLanding }: { homeLanding?: ComponentType } = {}) {
           <Route path="cooldowns" element={<CooldownSpellsPage />} />
           <Route path="maps" element={<MapGalleryPage />} />
           <Route path="miniatures" element={<MiniaturesPage />} />
+          <Route path="state-graph" element={<StateGraphExplorerPage />} />
         </Route>
         <Route path="/contact" element={<Contact />} />
         <Route path="/supporter" element={<BecomeSupporter />} />
