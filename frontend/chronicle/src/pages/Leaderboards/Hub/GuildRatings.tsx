@@ -40,7 +40,7 @@ export interface MetricRow {
 export const METRIC_COLUMN_ROWS = 5
 
 /**
- * Peak, Ranked Mastery, and Renown side by side, each column its own board
+ * Peak, Mastery, and Renown side by side, each column its own board
  * whose header (and footer link) opens the full one. Shared by the player and
  * guild rating cards so both read the same. Without columns, each column shows
  * its fixed number of skeleton rows while loading.
@@ -88,8 +88,7 @@ export function MetricColumns({ columns, onOpen }: { columns?: Record<RatingMetr
               className="mt-auto flex cursor-pointer items-center gap-1 border-t border-white/5 px-3 py-2.5 text-xs font-medium transition-colors hover:bg-white/[.04] hover:underline"
               style={{ color: t.accent }}
             >
-              {/* "Ranked Mastery" wraps the link onto two lines in a narrow column. */}
-              Full {m === "mastery" ? "Mastery" : t.label} board
+              Full {t.label} board
               <ArrowRight className="size-3" />
             </button>
           </div>
