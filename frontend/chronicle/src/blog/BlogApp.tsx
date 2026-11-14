@@ -1,3 +1,4 @@
+import { BlogInteractions } from "./BlogInteractions";
 import { useState, useSyncExternalStore } from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { Link, Navigate, Outlet, Route, Routes, useMatch, useParams } from "react-router-dom";
@@ -235,6 +236,7 @@ function BlogPostRoute({ enforceFlavor }: { enforceFlavor: boolean }) {
   return (
     <>
       <Post post={post} />
+      <BlogInteractions key={post.id} post={post} />
       <PostNavigation post={post} />
     </>
   );

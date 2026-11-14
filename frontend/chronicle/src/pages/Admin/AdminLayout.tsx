@@ -33,6 +33,7 @@ type Tab = {
 };
 
 const tabs: Tab[] = [
+  { path: "/admin/blog-feedback", label: "Blog Feedback", icon: FileText },
   { path: "/admin/users-overview", label: "Users", icon: Users },
   { path: "/admin/logs", label: "Logs", icon: FileText },
   { path: "/admin/leaderboard", label: "Leaderboard", icon: Trophy },

@@ -57,6 +57,9 @@ export interface BlogPostMetadata {
   hintDescription?: string;
   hintHref?: string;
   hintEnabled?: boolean;
+  /** Interactions are opt-in; omitted flags default to false. */
+  votingEnabled?: boolean;
+  feedbackEnabled?: boolean;
 }
 
 export interface BlogPostDefinition extends BlogPostMetadata {
@@ -173,7 +176,14 @@ function normalizeBlogPostMetadata(value: unknown): BlogPostMetadata {
   if (value.hintEnabled !== undefined && typeof value.hintEnabled !== "boolean") {
     throw new Error(`Blog post ${id} has invalid hintEnabled`);
   }
+  for (const field of ["votingEnabled", "feedbackEnabled"]) {
+    if (value[field] !== undefined && typeof value[field] !== "boolean") {
+      throw new Error(`Blog post ${id} has invalid ${field}`);
+    }
+  }
   return {
+    votingEnabled: value.votingEnabled === true,
+    feedbackEnabled: value.feedbackEnabled === true,
     id,
     title: requiredString(value, "title", id),
     description: requiredString(value, "description", id),

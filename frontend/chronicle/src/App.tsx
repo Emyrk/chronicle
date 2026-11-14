@@ -46,6 +46,7 @@ const RegressionPage = lazy(() => import("./pages/Admin/RegressionPage").then(({
 const AdminOutdatedInstancesPage = lazy(() => import("./pages/Admin/AdminOutdatedInstancesPage").then(({ AdminOutdatedInstancesPage }) => ({ default: AdminOutdatedInstancesPage })))
 const AdminApplicationsListPage = lazy(() => import("./pages/Admin/AdminApplicationsListPage").then(({ AdminApplicationsListPage }) => ({ default: AdminApplicationsListPage })))
 const AdminCacheStatsPage = lazy(() => import("./pages/Admin/AdminCacheStatsPage").then(({ AdminCacheStatsPage }) => ({ default: AdminCacheStatsPage })))
+const AdminBlogFeedbackPage = lazy(() => import("./pages/Admin/AdminBlogFeedbackPage").then(({ AdminBlogFeedbackPage }) => ({ default: AdminBlogFeedbackPage })))
 const AdminParsingPage = lazy(() => import("./pages/Admin/AdminParsingPage").then(({ AdminParsingPage }) => ({ default: AdminParsingPage })))
 const AdminCustomPanelsPage = lazy(() => import("./pages/Admin/AdminCustomPanelsPage").then(({ AdminCustomPanelsPage }) => ({ default: AdminCustomPanelsPage })))
 const AdminBillingPage = lazy(() => import("./pages/Admin/AdminBillingPage").then(({ AdminBillingPage }) => ({ default: AdminBillingPage })))
@@ -281,6 +282,7 @@ function App({ homeLanding }: { homeLanding?: ComponentType } = {}) {
           <Route path="billing" element={<AdminBillingPage />} />
           <Route path="event-repairs" element={<AdminEventRepairs />} />
           <Route path="parsing" element={<AdminParsingPage />} />
+          <Route path="blog-feedback" element={<AdminBlogFeedbackPage />} />
         </Route>
         <Route path="/servers" element={<ServersLayout />}>
           <Route index element={<ServersPage />} />
