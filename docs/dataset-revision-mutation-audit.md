@@ -2,7 +2,7 @@
 
 Dataset revisions fence parser inputs against concurrent publication. Every parsing-relevant dataset mutation must update the dataset and bump its revision in the same database transaction. Cache generation publication, when applicable, is part of that transaction as well.
 
-This matrix records the write paths covered by migration `000372_add_dataset_revision`. It is an implementation audit, not a production rollout plan.
+This matrix records the write paths covered by migration `000386_add_dataset_revision`. It is an implementation audit, not a production rollout plan.
 
 | Mutation path | Revision transaction |
 | --- | --- |
@@ -32,4 +32,4 @@ Read-only and `mode=compare` operations do not bump revisions. Failed mutations 
 
 ## Irreversible migration
 
-Revision history is monotonic compatibility state. The down migration for `000372` intentionally fails instead of dropping the revision column or sequence. Resetting either could reuse an old compatibility identity and allow stale parser output to appear current.
+Revision history is monotonic compatibility state. The down migration for `000386` intentionally fails instead of dropping the revision column or sequence. Resetting either could reuse an old compatibility identity and allow stale parser output to appear current.

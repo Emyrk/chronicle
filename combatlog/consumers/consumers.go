@@ -22,9 +22,12 @@ type detailedTimingConsumer interface {
 }
 
 type Consumers struct {
-	logger   *slog.Logger
-	list     []Consumer
-	Advancer Advancer
+	graphPending       bool
+	graphWireAttempted bool
+	graphRecipes       []GraphRecipe
+	logger             *slog.Logger
+	list               []Consumer
+	Advancer           Advancer
 
 	time map[string]time.Duration
 }
@@ -78,6 +81,9 @@ func (c Consumers) ConsumeAll(ctx context.Context, p Advancer) error {
 }
 
 func (c Consumers) Advance(ctx context.Context, p Advancer) ([]messages.Message, error) {
+	if c.graphPending {
+		return nil, fmt.Errorf("consumers graph runtime is not wired")
+	}
 	now := time.Now()
 	msgs, err := p.Advance(ctx)
 	c.time["parser"] += time.Since(now)
@@ -92,15 +98,25 @@ func (c Consumers) Advance(ctx context.Context, p Advancer) ([]messages.Message,
 	}
 
 	for _, msg := range msgs {
-		for _, consumer := range c.list {
-			now := time.Now()
-			err = consumer.Process(msg)
-			c.time[fmt.Sprintf("%T", consumer)] += time.Since(now)
-			if err != nil {
-				return nil, fmt.Errorf("consumer process: %w", err)
-			}
+		if err := c.Process(msg); err != nil {
+			return nil, err
 		}
 	}
-
 	return msgs, nil
+}
+
+// Process delivers a message in the configured order.
+func (c Consumers) Process(msg messages.Message) error {
+	if c.graphPending {
+		return fmt.Errorf("consumers graph runtime is not wired")
+	}
+	for _, consumer := range c.list {
+		now := time.Now()
+		err := consumer.Process(msg)
+		c.time[fmt.Sprintf("%T", consumer)] += time.Since(now)
+		if err != nil {
+			return fmt.Errorf("consumer process: %w", err)
+		}
+	}
+	return nil
 }

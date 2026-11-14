@@ -1,6 +1,7 @@
 package modern
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -8,19 +9,20 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/logscanner"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parseerrors"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/reorder"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/realmclock"
 	vanilla "github.com/Emyrk/chronicle/combatlog/parser/vanilla"
-	"github.com/Emyrk/chronicle/combatlog/parser/wotlk"
-	"github.com/Emyrk/chronicle/combatlog/parser/wotlk/companion"
 	synthetic "github.com/Emyrk/chronicle/combatlog/parser/wotlk/synthetic"
-	"github.com/Emyrk/chronicle/combatlog/parsernext/common"
 	"github.com/Emyrk/chronicle/combatlog/parsernext/formats/cleu"
+	"github.com/Emyrk/chronicle/combatlog/parsernext/formats/cleu/companion"
 	next "github.com/Emyrk/chronicle/combatlog/parsernext/formats/modern"
+	"github.com/Emyrk/chronicle/combatlog/parsernext/snapshot"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
@@ -32,8 +34,21 @@ type NextSource struct {
 	pipeline *nextPipeline
 	output   reorder.Advancer
 }
-type nextPipeline struct {
-	reader                           *common.FileReader
+type nextPipeline = NextPipeline
+
+// NextPipeline retains semantic owners across serial complete files. Reader,
+// normalized pending records and V22 reorder buffers are strictly file-local.
+type NextPipeline struct {
+	logger                           *slog.Logger
+	db                               gamedb.GameDB
+	names                            *pipelineNames
+	construction                     *snapshot.Compatibility
+	activeSource                     *NextSource
+	boundary                         bool
+	completedFile                    bool
+	graphPending                     bool
+	reader                           *bufio.Scanner
+	firstLine                        *string
 	decoder                          *next.Decoder
 	pending                          []string
 	synthetics                       *synthetic.Synthetic
@@ -50,78 +65,153 @@ type nextPipeline struct {
 // NewNext reads mandatory Format/Flavor from parsectx, never from headers.
 // It constructs no old parser: companion, names and synthetics are independent
 // pipeline components. V22 reorder is included; do not wrap it a second time.
-func NewNext(ctx context.Context, logger *slog.Logger, input io.Reader, wowDB gamedb.GameDB, gear gamedb.GearResolver, reg *registry.Registry) (*NextSource, error) {
-	_ = gear // Modern combatant gear is decoded from the wire, as in the legacy adapter.
-	if _, err := next.NewNormalizer(ctx); err != nil {
-		return nil, err
+func NewNext(ctx context.Context, logger *slog.Logger, input io.Reader, db gamedb.GameDB, gear gamedb.GearResolver, reg *registry.Registry) (*NextSource, error) {
+	p, e := NewNextPipeline(ctx, logger, db, gear, reg)
+	if e != nil {
+		return nil, e
 	}
-	if wowDB == nil {
+	return p.OpenFile(input)
+}
+func NewNextPipeline(ctx context.Context, logger *slog.Logger, db gamedb.GameDB, gear gamedb.GearResolver, reg *registry.Registry) (*NextPipeline, error) {
+	_ = gear
+	identity, e := modernConstructionIdentity(ctx)
+	if e != nil {
+		return nil, e
+	}
+	if _, e := next.NewNormalizer(ctx); e != nil {
+		return nil, e
+	}
+	if db == nil {
 		return nil, fmt.Errorf("wowDB cannot be nil")
-	}
-	format, ok := parsectx.Format(ctx)
-	if !ok {
-		return nil, fmt.Errorf("modern source format is required")
 	}
 	if logger == nil {
 		logger = slog.Default()
 	}
-	year := time.Now().Year()
-	if format == database.LogFormatV9Cleu || format == database.LogFormatV22Cleu {
-		var err error
-		input, year, err = readBaseYear(input)
-		if err != nil {
-			return nil, err
-		}
+	format, _ := parsectx.Format(ctx)
+	p := &NextPipeline{logger: logger, db: db, names: &pipelineNames{values: map[guid.GUID]string{}}, companion: companion.New(logger), year: time.Now().Year(), format: format, boundary: true, construction: identity}
+	decoder, e := next.NewDecoder(ctx, p.decoderOptions())
+	if e != nil {
+		return nil, e
 	}
-	reader, err := common.NewFileReader(input, bufSize)
-	if err != nil {
-		return nil, err
-	}
-	names := wotlk.NewGUIDNames()
-	cp := companion.New(logger)
-	pipeline := &nextPipeline{reader: reader, year: year, format: format, companion: cp}
-	decoder, err := next.NewDecoder(ctx, next.DecoderOptions{Spells: wowDB, Hooks: cleu.Hooks{
+	p.decoder = decoder
+	p.synthetics = synthetic.NewWithOptions(ctx, logger, db, reg, p.names, modernSyntheticOptions())
+	return p, nil
+}
+func modernSyntheticOptions() synthetic.Options {
+	return synthetic.Options{CreditEarthShield: true, GenerateAbsorbs: false, DetectZone: false}
+}
+func (p *NextPipeline) decoderOptions() next.DecoderOptions {
+	return next.DecoderOptions{Spells: p.db, Hooks: cleu.Hooks{
 		LookupSpell: func(id chrondbc.SpellID, _ ...string) *chrondbc.Spell {
 			if id == 0 {
 				return nil
 			}
-			spell, _ := wowDB.Spell(context.Background(), id)
+			spell, _ := p.db.Spell(context.Background(), id)
 			return spell
 		},
-		RecordGUIDName: names.Record,
-		WarnUnparsed:   func(raw string) { logger.Warn("Unparsed line", slog.String("line", raw)) },
+		RecordGUIDName: p.names.Record,
+		WarnUnparsed:   func(raw string) { p.logger.Warn("Unparsed line", slog.String("line", raw)) },
 		DecodeCompanion: func(ts time.Time, payload string) ([]messages.Message, bool, error) {
 			if !companion.IsCompanionMessage(payload) {
 				return nil, false, nil
 			}
-			batch, err := cp.Feed(ts, payload)
-			if info := cp.RealmClockInfo(); err == nil && info != nil {
-				pipeline.setRealmClock(info)
+			batch, e := p.companion.Feed(ts, payload)
+			if info := p.companion.RealmClockInfo(); e == nil && info != nil {
+				p.setRealmClock(info)
 			}
-			return batch, true, err
+			return batch, true, e
 		},
-	}})
-	if err != nil {
-		return nil, err
+	}}
+}
+func (p *NextPipeline) OpenFile(input io.Reader) (*NextSource, error) {
+	if p.graphPending {
+		return nil, fmt.Errorf("modern runtime is unwired")
 	}
-	pipeline.decoder = decoder
-	pipeline.synthetics = synthetic.NewWithOptions(ctx, logger, wowDB, reg, names, synthetic.Options{CreditEarthShield: true, GenerateAbsorbs: false, DetectZone: false})
-	source := &NextSource{pipeline: pipeline, output: pipeline}
-	if format == database.LogFormatV22Cleu {
-		// Reordering is file-local by contract. Complete-file sessions must drain
-		// this buffer at EOF and create a fresh one for the next file; events must
-		// not be reordered across file boundaries, even if timestamps overlap.
-		source.output = reorder.New(pipeline, ReorderWindow)
+	if p.fatal != nil {
+		return nil, fmt.Errorf("modern pipeline failed: %w", p.fatal)
 	}
+	if !p.boundary {
+		return nil, fmt.Errorf("previous file has not completed successfully")
+	}
+	if input == nil {
+		return nil, fmt.Errorf("source is required")
+	}
+	reader := logscanner.New(input)
+	reader.Buffer(make([]byte, bufSize), bufSize)
+	year := p.year
+	var firstLine *string
+	if p.format == database.LogFormatV9Cleu || p.format == database.LogFormatV22Cleu {
+		for reader.Scan() {
+			raw := strings.TrimSpace(reader.Text())
+			if raw == "" {
+				continue
+			}
+			idx := strings.Index(raw, "  ")
+			if idx < 0 {
+				return nil, fmt.Errorf("modern Blizzard CLEU first record has no separator")
+			}
+			ts, err := parseTimestamp(raw[:idx])
+			if err != nil {
+				return nil, err
+			}
+			year = ts.Year()
+			firstLine = &raw
+			break
+		}
+		if firstLine == nil {
+			if err := reader.Err(); err != nil {
+				return nil, fmt.Errorf("read modern Blizzard CLEU header: %w", err)
+			}
+			return nil, fmt.Errorf("modern Blizzard CLEU log is empty")
+		}
+	}
+	p.firstLine = firstLine
+	p.reader = reader
+	p.pending = nil
+	p.year = year
+	p.boundary = false
+	source := &NextSource{pipeline: p, output: p}
+	if p.format == database.LogFormatV22Cleu {
+		source.output = reorder.New(p, ReorderWindow)
+	}
+	p.activeSource = source
 	return source, nil
 }
+
+type pipelineNames struct{ values map[guid.GUID]string }
+
+func (n *pipelineNames) Record(id guid.GUID, name string) {
+	if id != 0 && name != "" {
+		n.values[id] = name
+	}
+}
+func (n *pipelineNames) Get(id guid.GUID) (string, bool) { name, ok := n.values[id]; return name, ok }
 
 // Match the legacy scanner's default bound rather than silently accepting a new
 // record-size policy. Framing errors are fatal, never successful EOF.
 const bufSize = 64 * 1024
 
 func (s *NextSource) Advance(ctx context.Context) ([]messages.Message, error) {
-	return s.output.Advance(ctx)
+	if s.pipeline.activeSource != s {
+		return nil, parseerrors.AsFatalError(fmt.Errorf("source is no longer active"))
+	}
+	if s.pipeline.fatal != nil {
+		return nil, s.pipeline.fatal
+	}
+	if e := ctx.Err(); e != nil {
+		return nil, e
+	}
+	if s.pipeline.boundary {
+		return nil, io.EOF
+	}
+	batch, e := s.output.Advance(ctx)
+	if e == io.EOF {
+		s.pipeline.boundary = true
+		s.pipeline.completedFile = true
+		s.pipeline.reader = nil
+		s.pipeline.pending = nil
+	}
+	return batch, e
 }
 func (s *NextSource) GUIDMappings() []GUIDMapping             { return s.pipeline.decoder.GUIDMappings() }
 func (s *NextSource) SawRaidGroup() bool                      { return s.pipeline.companion.SawRaidGroup() }
@@ -146,6 +236,9 @@ func (p *nextPipeline) Advance(ctx context.Context) ([]messages.Message, error) 
 	if p.fatal != nil {
 		return nil, p.fatal
 	}
+	if e := ctx.Err(); e != nil {
+		return nil, e
+	}
 	start := time.Now()
 	batch, err := p.decode(ctx)
 	p.parseDuration += time.Since(start)
@@ -160,23 +253,30 @@ func (p *nextPipeline) Advance(ctx context.Context) ([]messages.Message, error) 
 	batch, err = p.synthetics.ProcessMessages(batch)
 	p.syntheticDuration += time.Since(start)
 	if err != nil {
-		return nil, fmt.Errorf("processing synthetics: %w", err)
+		p.fatal = parseerrors.AsFatalError(fmt.Errorf("processing synthetics: %w", err))
+		return nil, p.fatal
 	}
 	return batch, nil
 }
 func (p *nextPipeline) decode(ctx context.Context) ([]messages.Message, error) {
 	for len(p.pending) == 0 {
-		line, err := p.reader.Next(ctx)
-		if err == io.EOF {
-			return nil, io.EOF
+		var raw string
+		if p.firstLine != nil {
+			raw = *p.firstLine
+			p.firstLine = nil
+		} else {
+			if !p.reader.Scan() {
+				if err := p.reader.Err(); err != nil {
+					return nil, parseerrors.AsFatalError(err)
+				}
+				return nil, io.EOF
+			}
+			raw = strings.TrimSpace(p.reader.Text())
 		}
-		if err != nil {
-			return nil, parseerrors.AsFatalError(err)
-		}
-		raw := strings.TrimSpace(line.Raw)
 		if raw == "" {
 			continue
 		}
+		var err error
 		p.pending, err = p.decoder.NormalizeLine(raw)
 		if err != nil {
 			return nil, parseerrors.AsFatalError(err)

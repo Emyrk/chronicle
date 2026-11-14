@@ -35,6 +35,8 @@ type Common struct {
 	*Base[*period.InactivityPeriod]
 	timeout          time.Duration
 	timeoutAsDeathIf TimeoutAsDeathCondition
+	timeoutRecipe    string
+	timeoutEntry     uint32
 }
 
 func NewCommonCharacter(id guid.GUID, all *Characters) *Common {
@@ -50,11 +52,15 @@ func (c *Common) WithTimeout(timeout time.Duration) *Common {
 }
 
 func (c *Common) WithTimeoutAsDeath() *Common {
-	return c.WithTimeoutAsDeathIf(func(*Characters) bool { return true })
+	c.WithTimeoutAsDeathIf(func(*Characters) bool { return true })
+	c.timeoutRecipe = "always"
+	return c
 }
 
 func (c *Common) WithTimeoutAsDeathIf(condition TimeoutAsDeathCondition) *Common {
 	c.timeoutAsDeathIf = condition
+	c.timeoutRecipe = ""
+	c.timeoutEntry = 0
 	return c
 }
 
@@ -70,7 +76,9 @@ func (c *Common) Process(m messages.Message) error {
 
 func (c *Common) Start(reason string, m messages.Message) {
 	activity := period.NewInactivityPeriod(c.ID(), c.timeout)
-	if c.timeoutAsDeathIf != nil {
+	if c.timeoutRecipe != "" {
+		activity.WithTrustedTimeoutOwner(c)
+	} else if c.timeoutAsDeathIf != nil {
 		activity.WithTimeoutAsDeathIf(func() bool {
 			return c.timeoutAsDeathIf(c.Lookup())
 		})

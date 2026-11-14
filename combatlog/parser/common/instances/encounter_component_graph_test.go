@@ -35,7 +35,7 @@ type componentSpellState struct {
 	MaxDuration int32            `json:"max_duration"`
 }
 
-func encounterComponentRegistry(t *testing.T) *ownergraph.Registry {
+func encounterComponentRegistry(t *testing.T, observer ...*auras.Tracking) *ownergraph.Registry {
 	t.Helper()
 	r := ownergraph.NewRegistry()
 	require.NoError(t, RegisterEncounterComponentGraph(r))
@@ -44,7 +44,11 @@ func encounterComponentRegistry(t *testing.T) *ownergraph.Registry {
 	require.NoError(t, rankings.RegisterDPSGraphOwner(r))
 	require.NoError(t, unitdb.RegisterGraphOwner(r))
 	require.NoError(t, messages.RegisterDamageGraphOwner(r))
-	require.NoError(t, auras.RegisterGraphOwners(r, auras.GraphOptions{}))
+	options := auras.GraphOptions{}
+	if len(observer) > 0 {
+		options.ObserverTracking = observer[0]
+	}
+	require.NoError(t, auras.RegisterGraphOwners(r, options))
 	require.NoError(t, vehicles.RegisterGraphOwner(r))
 	require.NoError(t, raidgroups.RegisterGraphOwner(r))
 	require.NoError(t, participants.RegisterGraphOwner(r))
@@ -117,8 +121,8 @@ func encounterComponentFixture(t *testing.T) (*EncounterComponentGraph, uuid.UUI
 
 func TestEncounterComponentGraphDiskRestoreAndContinuation(t *testing.T) {
 	t.Parallel()
-	registry := encounterComponentRegistry(t)
 	original, fightID, _ := encounterComponentFixture(t)
+	registry := encounterComponentRegistry(t, original.Auras)
 	snapshot, err := registry.Capture(original)
 	require.NoError(t, err)
 	wire, err := json.Marshal(snapshot)
@@ -192,9 +196,9 @@ func TestEncounterComponentGraphDiskRestoreAndContinuation(t *testing.T) {
 	require.NotEmpty(t, restoredConsumes)
 	require.Same(t, restoredAuras[0].SpellData, restoredConsumes[0].SpellData)
 
-	originalAfter, err := encounterComponentRegistry(t).Capture(original)
+	originalAfter, err := encounterComponentRegistry(t, original.Auras).Capture(original)
 	require.NoError(t, err)
-	restoredAfter, err := encounterComponentRegistry(t).Capture(restored)
+	restoredAfter, err := encounterComponentRegistry(t, restored.Auras).Capture(restored)
 	require.NoError(t, err)
 	originalBytes, err := json.Marshal(originalAfter)
 	require.NoError(t, err)
@@ -243,7 +247,7 @@ func TestEncounterComponentGraphRejectsMalformedDependencies(t *testing.T) {
 	_, err := incomplete.Capture(root)
 	require.ErrorContains(t, err, "unsupported owner")
 
-	r := encounterComponentRegistry(t)
+	r := encounterComponentRegistry(t, root.Auras)
 	snapshot, err := r.Capture(root)
 	require.NoError(t, err)
 	wire, err := json.Marshal(snapshot)

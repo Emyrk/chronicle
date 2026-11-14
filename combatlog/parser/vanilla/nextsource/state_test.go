@@ -23,6 +23,7 @@ import (
 	"github.com/Emyrk/chronicle/database/gamedb/talents"
 	"github.com/Emyrk/chronicle/internal/gamedataoverrides"
 	"github.com/Emyrk/chronicle/internal/stategraph"
+	"github.com/Emyrk/chronicle/internal/stategraph/ownergraph"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -262,6 +263,7 @@ func TestPipelineStateDecodeRejectsMalformed(t *testing.T) {
 	ctx := testContext(t)
 	p, err := New(ctx, nil, &stateDB{}, nil, "build")
 	require.NoError(t, err)
+	drain(t, ctx, p, nil)
 	s, err := p.CaptureState(testIdentity(), nil)
 	require.NoError(t, err)
 	b := stateWire(t, s)
@@ -317,6 +319,7 @@ func TestPipelineStateTrustedBuildCompatibility(t *testing.T) {
 	require.NoError(t, err)
 	identity := testIdentity()
 	identity.BuildVersion = ""
+	drain(t, ctx, p, nil)
 	state, err = p.CaptureState(identity, nil)
 	require.NoError(t, err)
 	restored, _, err := RestoreState(ctx, nil, db, nil, identity, state)
@@ -343,6 +346,7 @@ func TestStrictCompatibilityRejectsBeforeDependencies(t *testing.T) {
 	ctx := testContext(t)
 	p, err := New(ctx, nil, &stateDB{}, nil, "build")
 	require.NoError(t, err)
+	drain(t, ctx, p, nil)
 	state, err := p.CaptureState(testIdentity(), nil)
 	require.NoError(t, err)
 	for _, change := range []func(*Compatibility){
@@ -389,4 +393,39 @@ func TestStrictCompatibilityRejectsBeforeDependencies(t *testing.T) {
 	state.Version = 1
 	_, _, err = RestoreState(ctx, nil, nil, nil, testIdentity(), state)
 	require.Error(t, err)
+}
+
+func TestPreparedPipelineRestoreDoesNotQueryDependencies(t *testing.T) {
+	t.Parallel()
+	ctx := testContext(t)
+	spy := &stateDB{}
+	p, err := New(ctx, nil, spy, nil, "build")
+	require.NoError(t, err)
+	drain(t, ctx, p, []byte("10051|SPELL_DMG|0x0000000000000002|0x0000000000000001|17|100|50,0,0|0|0|2,0,0,0"))
+	registry := ownergraph.NewRegistry()
+	require.NoError(t, RegisterGraphOwner(registry, testIdentity()))
+	require.NoError(t, messages.RegisterDamageGraphOwner(registry))
+	require.NoError(t, registerFixtureSpell(registry))
+	state, err := registry.Capture(p)
+	require.NoError(t, err)
+	spy.calls = 0
+	restored, err := registry.Restore(state)
+	require.NoError(t, err)
+	require.Zero(t, spy.calls)
+	require.True(t, restored.(*Pipeline).graphPending)
+	require.Nil(t, restored.(*Pipeline).spells)
+
+	// The older source-only format still derives retained spells from GameDB.
+	// Keep this distinction explicit rather than promising query-free legacy restore.
+	legacy, err := p.CaptureState(testIdentity(), nil)
+	require.NoError(t, err)
+	spy.calls = 0
+	ready, _, err := RestoreState(ctx, nil, spy, nil, testIdentity(), legacy)
+	require.NoError(t, err)
+	require.Positive(t, spy.calls)
+	require.False(t, ready.graphPending)
+	require.Same(t, spy, ready.spells)
+	drain(t, ctx, ready, nil)
+	_, err = ready.CaptureState(testIdentity(), nil)
+	require.NoError(t, err)
 }

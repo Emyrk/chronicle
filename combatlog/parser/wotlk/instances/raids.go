@@ -47,6 +47,7 @@ func VoAHostiles() map[uint32]instances.Identity {
 }
 
 var VoAFactory = &instances.CommonFactory{
+	GraphID:   "wotlk/instances/VoAFactory/v1",
 	Name:      "Vault of Archavon",
 	Category:  instances.InstanceCategoryRaid,
 	ZoneNames: []string{"vault of archavon"},
@@ -113,6 +114,7 @@ func ObsidianSanctumHostiles() map[uint32]instances.Identity {
 }
 
 var ObsidianSanctumFactory = &instances.CommonFactory{
+	GraphID:   "wotlk/instances/ObsidianSanctumFactory/v1",
 	Name:      "Obsidian Sanctum",
 	Category:  instances.InstanceCategoryRaid,
 	ZoneNames: []string{"the obsidian sanctum"},
@@ -121,6 +123,7 @@ var ObsidianSanctumFactory = &instances.CommonFactory{
 	Preprocessors: func() []instancehook.Preprocessor {
 		return []instancehook.Preprocessor{&sartharionDrakePowerActivity{}}
 	},
+	GraphPreprocessors: []instances.PreprocessorGraphRecipe{SartharionPreprocessorGraphRecipe()},
 	ProgressionBosses: func(database.WoWFlavor) []string {
 		return []string{
 			"Sartharion",
@@ -204,13 +207,15 @@ func onyxiaDerivedName(fl database.WoWFlavor) *instances.MultiInstanceZone {
 }
 
 var OnyxiaFactory = &instances.CommonFactory{
-	Name:         "Onyxia's Lair",
-	Category:     instances.InstanceCategoryRaid,
-	NameFromZone: onyxiaZoneName,
-	DerivedName:  onyxiaDerivedName,
-	ZoneNames:    []string{"onyxia's lair", "奥妮克希亚的巢穴"},
-	MapIDs:       []uint32{249},
-	Hostiles:     instances.OnyxiaHostiles,
+	GraphID:       "wotlk/instances/OnyxiaFactory/v1",
+	Name:          "Onyxia's Lair",
+	Category:      instances.InstanceCategoryRaid,
+	NameFromZone:  onyxiaZoneName,
+	GraphZoneName: instances.ZoneNameRecipeOnyxiaProgression,
+	DerivedName:   onyxiaDerivedName,
+	ZoneNames:     []string{"onyxia's lair", "奥妮克希亚的巢穴"},
+	MapIDs:        []uint32{249},
+	Hostiles:      instances.OnyxiaHostiles,
 	FlavoredRankings: func(fl database.WoWFlavor) *rankings.Rankings {
 		if fl.Has(database.FlavorAzerothcoreProgression) {
 			return nil
@@ -262,6 +267,7 @@ func NaxxramasSpeedrunRequirements() []rankings.SpeedrunRequirement {
 }
 
 var NaxxramasFactory = &instances.CommonFactory{
+	GraphID:  "wotlk/instances/NaxxramasFactory/v1",
 	Name:     "Naxxramas",
 	Category: instances.InstanceCategoryRaid,
 	ZoneNames: []string{
@@ -298,6 +304,7 @@ func EyeOfEternityHostiles() map[uint32]instances.Identity {
 }
 
 var EyeOfEternityFactory = &instances.CommonFactory{
+	GraphID:   "wotlk/instances/EyeOfEternityFactory/v1",
 	Name:      "Eye of Eternity",
 	Category:  instances.InstanceCategoryRaid,
 	ZoneNames: []string{"the eye of eternity", "eye of eternity"},
@@ -306,6 +313,7 @@ var EyeOfEternityFactory = &instances.CommonFactory{
 	Preprocessors: func() []instancehook.Preprocessor {
 		return []instancehook.Preprocessor{&malygosDamageCredit{}}
 	},
+	GraphPreprocessors: []instances.PreprocessorGraphRecipe{MalygosPreprocessorGraphRecipe()},
 }
 
 // RubySanctumHostiles returns creature entry IDs for The Ruby Sanctum (map 724).
@@ -351,6 +359,7 @@ func RubySanctumProgressionBosses(database.WoWFlavor) []string {
 }
 
 var RubySanctumFactory = &instances.CommonFactory{
+	GraphID:           "wotlk/instances/RubySanctumFactory/v1",
 	Name:              "Ruby Sanctum",
 	Category:          instances.InstanceCategoryRaid,
 	ZoneNames:         []string{"the ruby sanctum", "ruby sanctum"},
@@ -405,6 +414,7 @@ func TrialOfTheCrusaderHostiles() map[uint32]instances.Identity {
 }
 
 var TrialOfTheCrusaderFactory = &instances.CommonFactory{
+	GraphID:   "wotlk/instances/TrialOfTheCrusaderFactory/v1",
 	Name:      "Trial of the Crusader",
 	Category:  instances.InstanceCategoryRaid,
 	ZoneNames: []string{"trial of the crusader", "trial of the grand crusader"},
@@ -562,6 +572,7 @@ func IcecrownCitadelProgressionBosses(database.WoWFlavor) []string {
 }
 
 var IcecrownCitadelFactory = &instances.CommonFactory{
+	GraphID:           "wotlk/instances/IcecrownCitadelFactory/v1",
 	Name:              "Icecrown Citadel",
 	Category:          instances.InstanceCategoryRaid,
 	ProgressionBosses: IcecrownCitadelProgressionBosses,
@@ -571,9 +582,10 @@ var IcecrownCitadelFactory = &instances.CommonFactory{
 	Preprocessors: func() []instancehook.Preprocessor {
 		return []instancehook.Preprocessor{&icecrownScriptedActivity{}}
 	},
-	ZoneNames: []string{"icecrown citadel", "цитадель ледяной короны"},
-	MapIDs:    []uint32{631},
-	Hostiles:  instances.FromMap(IcecrownCitadelHostiles()),
+	GraphPreprocessors: []instances.PreprocessorGraphRecipe{IcecrownPreprocessorGraphRecipe()},
+	ZoneNames:          []string{"icecrown citadel", "цитадель ледяной короны"},
+	MapIDs:             []uint32{631},
+	Hostiles:           instances.FromMap(IcecrownCitadelHostiles()),
 }
 
 // UlduarHostiles returns creature entry IDs for Ulduar (map 603).
@@ -1002,18 +1014,21 @@ func UlduarRankingEncounterSets(flavor database.WoWFlavor) []instances.RankingEn
 }
 
 var UlduarFactory = &instances.CommonFactory{
-	EncounterVariant:     ulduarEncounterVariant,
-	Name:                 "Ulduar",
-	Category:             instances.InstanceCategoryRaid,
-	ZoneNames:            []string{"ulduar"},
-	MapIDs:               []uint32{603},
-	Hostiles:             instances.FromMap(UlduarHostiles()),
-	ProgressionBosses:    UlduarProgressionBosses,
-	RankingEncounterSets: UlduarRankingEncounterSets,
+	EncounterVariant:      ulduarEncounterVariant,
+	GraphEncounterVariant: UlduarEncounterVariantGraphRecipe(),
+	GraphID:               "wotlk/instances/UlduarFactory/v1",
+	Name:                  "Ulduar",
+	Category:              instances.InstanceCategoryRaid,
+	ZoneNames:             []string{"ulduar"},
+	MapIDs:                []uint32{603},
+	Hostiles:              instances.FromMap(UlduarHostiles()),
+	ProgressionBosses:     UlduarProgressionBosses,
+	RankingEncounterSets:  UlduarRankingEncounterSets,
 	FlavoredRankings: func(database.WoWFlavor) *rankings.Rankings {
 		return UlduarSpeedrunRequirements()
 	},
 	Preprocessors: func() []instancehook.Preprocessor {
 		return []instancehook.Preprocessor{&thorimArenaStarterCombat{}, &xtVariantEvidence{}}
 	},
+	GraphPreprocessors: []instances.PreprocessorGraphRecipe{ThorimPreprocessorGraphRecipe(), XTVariantPreprocessorGraphRecipe()},
 }

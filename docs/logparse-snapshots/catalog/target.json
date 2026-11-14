@@ -168,6 +168,17 @@
       }
     },
     {
+      "path": "/root/character-types/common/graph-never-active-value",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/common/characters.graphNeverActiveValue",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/common/characters.graphNeverActiveValue",
+        "note": "internal ownergraph box for value-form NeverActive; unboxed on load to preserve the original dynamic value type, not a gameplay factory product",
+        "source": "combatlog/parser/common/characters/wrapper_graph.go"
+      }
+    },
+    {
       "path": "/root/character-types/common/ignore-cast",
       "kind": "directory",
       "metadata": {
@@ -844,6 +855,17 @@
       }
     },
     {
+      "path": "/root/character-types/wotlk/xt002",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.xt002Character",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/wotlk/creatures.xt002Character",
+        "note": "XT boss links current-pull heart activity through canonical Characters",
+        "source": "combatlog/parser/wotlk/creatures/xt002.go"
+      }
+    },
+    {
       "path": "/root/character-types/wotlk/yogg-saron",
       "kind": "directory",
       "metadata": {
@@ -1214,6 +1236,10 @@
       "to": "/root/character-types/contracts/character-base"
     },
     {
+      "from": "/root/character-types/common/graph-never-active-value",
+      "to": "/root/character-types/common/never-active"
+    },
+    {
       "from": "/root/character-types/common/ignore-cast",
       "to": "/root/character-types/contracts/character-base"
     },
@@ -1508,6 +1534,10 @@
     {
       "from": "/root/character-types/wotlk/valithria-dreamwalker",
       "to": "/root/instances/0000/characters"
+    },
+    {
+      "from": "/root/character-types/wotlk/xt002",
+      "to": "/root/character-types/common/common"
     },
     {
       "from": "/root/character-types/wotlk/yogg-saron",

@@ -121,3 +121,78 @@ func NewCharacterFactories(flavor database.WoWFlavor) []characters.CharacterFact
 
 	return cres
 }
+
+// GraphFactoryRecipe names the exact existing factory order, including creature-only
+// wrappers and the direct vehicle fallbacks. It never runs a gameplay factory.
+func GraphFactoryRecipe(flavor database.WoWFlavor) characters.TrustedFactoryRecipe {
+	base := creatures.VanillaGraphFactoryRecipe(flavor)
+	ids := base.FactoryIDs
+	if flavor.Has(database.FlavorTBC, database.FlavorWrath) {
+		ids = append([]string{
+			"tbc/creature/NewAttumenTheHuntsman",
+			"tbc/creature/NewCoilfangGuardian",
+			"tbc/creature/NewTaintedElementals",
+			"tbc/creature/NewMorogrimTidewalker",
+			"tbc/creature/NewLeotherasTheBlind",
+			"tbc/creature/NewKaelThasEncounterCharacter",
+			"tbc/creature/NewReliquaryEncounterCharacter",
+		}, ids...)
+	}
+	if flavor.Has(database.FlavorWrath) {
+		ids = append([]string{
+			"wrath/creature/NewVoidSentry",
+			"wrath/creature/NewAzureEnforcer",
+			"wrath/creature/NewCrazedManaWraith",
+			"wrath/creature/NewMageHunterAscendant",
+			"wrath/creature/NewCrystallineFrayer",
+			"wrath/creature/NewOmarTheUnscarred",
+			"wrath/creature/NewDrakkariFrenzy",
+			"wrath/creature/NewClaw",
+			"wrath/creature/NewEmalon",
+			"wrath/creature/NewSarthrion",
+			"wrath/creature/NewMalygos",
+			"wrath/creature/NewNexusLord",
+			"wrath/creature/NewScionOfEternity",
+			"wrath/creature/NewPowerSpark",
+			"wrath/creature/NewMalGanis",
+			"wrath/creature/NewHalionCharacter",
+			"wrath/creature/NewDeathspeakerHighPriest",
+			"wrath/creature/NewLadyDeathwhisper",
+			"wrath/creature/NewGunshipBattleCharacter",
+			"wrath/creature/NewProfessorPutricide",
+			"wrath/creature/NewValithriaDreamwalker",
+			"wrath/creature/NewSindragosa",
+			"wrath/creature/NewLichKing",
+			"wrath/creature/NewXT002",
+			"wrath/creature/NewIgnisIronConstruct",
+			"wrath/creature/NewAlgalon",
+			"wrath/creature/NewAssemblyOfIronCharacter",
+			"wrath/creature/NewRazorscaleAdd",
+			"wrath/creature/NewFreyaEncounterCharacter",
+			"wrath/creature/NewHodirEncounterCharacter",
+			"wrath/creature/NewKologarnEncounterCharacter",
+			"wrath/creature/NewSif",
+			"wrath/creature/NewThorimEncounterCharacter",
+			"wrath/creature/NewMimironBoomerXP500",
+			"wrath/creature/NewMimironEncounterCharacter",
+			"wrath/creature/NewYoggSaronGuardian",
+			"wrath/creature/NewYoggSaronEncounterCharacter",
+			"wrath/direct/NewXT002",
+			"wrath/direct/NewGunshipBattleCharacter",
+			"wrath/direct/NewProfessorPutricide",
+			"wrath/direct/NewFlameLeviathan",
+			"wrath/direct/NewMechanolift",
+			"wrath/direct/NewVortex",
+			"wrath/direct/NewKologarnEncounterCharacter",
+			"wrath/direct/NewMimironEncounterCharacter",
+			"wrath/direct/NewYoggSaronEncounterCharacter",
+		}, ids...)
+	}
+	return characters.TrustedFactoryRecipe{ID: "wotlk/characters/" + flavor.CanonicalKey(), FactoryIDs: ids, Factories: NewCharacterFactories(flavor)}
+}
+func AzerothCoreGraphFactoryRecipe() characters.TrustedFactoryRecipe {
+	return characters.TrustedFactoryRecipe{ID: "azerothcore/characters/v1", FactoryIDs: []string{"NewTotemCharacter",
+		"NewCritterCharacter",
+		"NewObject",
+		"NewLogBasedCharacter"}, Factories: AzerothServersideCoreCharacterFactories()}
+}

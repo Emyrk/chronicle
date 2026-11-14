@@ -12,10 +12,12 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/Emyrk/chronicle/api/chronicleproto"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/characters"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/rankings"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
@@ -39,19 +41,19 @@ func TestZoneInstanceMetadataUpgradeCreatesInstance(t *testing.T) {
 	})
 
 	seen := time.Date(2026, time.November, 6, 5, 54, 15, 0, time.UTC)
-	state.Zone(messages.Zone{Zone: zone.Zone{
+	require.NoError(t, state.Zone(messages.Zone{Zone: zone.Zone{
 		Seen:         seen,
 		Name:         "木喉要塞",
 		InstanceType: "none",
-	}})
+	}}))
 	require.Nil(t, state.CurrentInstance)
 
-	state.Zone(messages.Zone{Zone: zone.Zone{
+	require.NoError(t, state.Zone(messages.Zone{Zone: zone.Zone{
 		Seen:         seen.Add(25 * time.Second),
 		Name:         "木喉要塞",
 		IsInstance:   true,
 		InstanceType: "raid",
-	}})
+	}}))
 
 	require.Len(t, state.Instances, 1)
 	require.NotNil(t, state.CurrentInstance)
@@ -75,20 +77,20 @@ func TestSyntheticZoneAdoptsLateCompanionDifficulty(t *testing.T) {
 	})
 
 	seen := time.Date(2026, time.November, 8, 10, 5, 36, 0, time.UTC)
-	state.Zone(messages.Zone{
+	require.NoError(t, state.Zone(messages.Zone{
 		MessageBase: messages.Base(seen, messages.WithSynthetic()),
 		Zone: zone.Zone{
 			Seen:       seen,
 			Name:       "ulduar",
 			IsInstance: true,
 		},
-	})
+	}))
 	require.Len(t, state.Instances, 1)
 	instance := state.CurrentInstance
 	require.NotNil(t, instance)
 	require.False(t, instance.CurrentZone.HasDifficulty())
 
-	state.Zone(messages.Zone{Zone: zone.Zone{
+	require.NoError(t, state.Zone(messages.Zone{Zone: zone.Zone{
 		Seen:            seen.Add(5 * time.Minute),
 		Name:            "ulduar",
 		InstanceType:    "raid",
@@ -97,7 +99,7 @@ func TestSyntheticZoneAdoptsLateCompanionDifficulty(t *testing.T) {
 		DifficultyName:  "10 Player",
 		MaxPlayers:      10,
 		SubZone:         "The Scrapyard",
-	}})
+	}}))
 
 	require.Len(t, state.Instances, 1)
 	require.Same(t, instance, state.CurrentInstance)
@@ -124,14 +126,14 @@ func TestLocalizedZoneMetadataPreservesSyntheticInstance(t *testing.T) {
 	})
 
 	seen := time.Date(2026, time.November, 5, 17, 28, 6, 184_000_000, time.UTC)
-	state.Zone(messages.Zone{
+	require.NoError(t, state.Zone(messages.Zone{
 		MessageBase: messages.Base(seen.Add(-33*time.Minute), messages.WithSynthetic()),
 		Zone: zone.Zone{
 			Seen:       seen.Add(-33 * time.Minute),
 			Name:       "icecrown citadel",
 			IsInstance: true,
 		},
-	})
+	}))
 	require.Len(t, state.Instances, 1)
 	instance := state.CurrentInstance
 	require.NotNil(t, instance)
@@ -139,7 +141,7 @@ func TestLocalizedZoneMetadataPreservesSyntheticInstance(t *testing.T) {
 	// Warmane first reports the localized zone, then the synthetic detector
 	// reselects the existing ICC hookable just before authoritative localized
 	// metadata arrives.
-	state.Zone(messages.Zone{Zone: zone.Zone{
+	require.NoError(t, state.Zone(messages.Zone{Zone: zone.Zone{
 		Seen:            seen.Add(-310 * time.Millisecond),
 		Name:            "цитадель ледяной короны",
 		InstanceType:    "raid",
@@ -147,20 +149,20 @@ func TestLocalizedZoneMetadataPreservesSyntheticInstance(t *testing.T) {
 		DifficultyIndex: 1,
 		DifficultyName:  "10 игроков",
 		MaxPlayers:      10,
-	}})
+	}}))
 	require.Nil(t, state.CurrentInstance)
 
-	state.Zone(messages.Zone{
+	require.NoError(t, state.Zone(messages.Zone{
 		MessageBase: messages.Base(seen, messages.WithSynthetic()),
 		Zone: zone.Zone{
 			Seen:       seen,
 			Name:       "icecrown citadel",
 			IsInstance: true,
 		},
-	})
+	}))
 	require.Same(t, instance, state.CurrentInstance)
 
-	state.Zone(messages.Zone{Zone: zone.Zone{
+	require.NoError(t, state.Zone(messages.Zone{Zone: zone.Zone{
 		Seen:            seen.Add(17 * time.Millisecond),
 		Name:            "цитадель ледяной короны",
 		InstanceType:    "raid",
@@ -169,7 +171,7 @@ func TestLocalizedZoneMetadataPreservesSyntheticInstance(t *testing.T) {
 		DifficultyName:  "10 игроков",
 		MaxPlayers:      10,
 		SubZone:         "Черепной вал",
-	}})
+	}}))
 
 	require.Same(t, instance, state.CurrentInstance)
 	require.Len(t, state.Instances, 1)
@@ -177,12 +179,12 @@ func TestLocalizedZoneMetadataPreservesSyntheticInstance(t *testing.T) {
 	require.Equal(t, 10, instance.CurrentZone.MaxPlayers)
 	require.Equal(t, "Черепной вал", instance.CurrentZone.SubZone)
 
-	state.Zone(messages.Zone{Zone: zone.Zone{
+	require.NoError(t, state.Zone(messages.Zone{Zone: zone.Zone{
 		Seen:         seen.Add(2 * time.Second),
 		Name:         "неизвестный рейд",
 		InstanceType: "raid",
 		IsInstance:   true,
-	}})
+	}}))
 	require.Nil(t, state.CurrentInstance, "an unrelated unrecognized zone must still leave the instance")
 }
 
@@ -205,26 +207,26 @@ func TestZoneReentryDoesNotReuseDifferentDifficulty(t *testing.T) {
 	})
 
 	firstSeen := time.Date(2026, 8, 4, 21, 0, 0, 0, time.UTC)
-	state.Zone(messages.Zone{Zone: zone.Zone{
+	require.NoError(t, state.Zone(messages.Zone{Zone: zone.Zone{
 		Seen:            firstSeen,
 		Name:            "naxxramas",
 		DifficultyIndex: 1,
 		DifficultyName:  "10 Player",
 		MaxPlayers:      10,
-	}})
-	state.Zone(messages.Zone{Zone: zone.Zone{
+	}}))
+	require.NoError(t, state.Zone(messages.Zone{Zone: zone.Zone{
 		Seen: firstSeen.Add(time.Minute),
 		Name: "dalaran",
-	}})
+	}}))
 	require.Nil(t, state.CurrentInstance)
 
-	state.Zone(messages.Zone{Zone: zone.Zone{
+	require.NoError(t, state.Zone(messages.Zone{Zone: zone.Zone{
 		Seen:            firstSeen.Add(2 * time.Minute),
 		Name:            "naxxramas",
 		DifficultyIndex: 2,
 		DifficultyName:  "25 Player",
 		MaxPlayers:      25,
-	}})
+	}}))
 
 	require.Len(t, state.Instances, 2)
 	require.Equal(t, 10, state.Instances[0].CurrentZone.MaxPlayers)
@@ -289,7 +291,7 @@ func TestEncounterUsesSingleKnownMapWhenZoneOmitsIt(t *testing.T) {
 	})
 
 	seen := time.Date(2026, time.October, 22, 20, 0, 0, 0, time.UTC)
-	state.Zone(messages.Zone{Zone: zone.Zone{Seen: seen, Name: "emerald sanctum"}})
+	require.NoError(t, state.Zone(messages.Zone{Zone: zone.Zone{Seen: seen, Name: "emerald sanctum"}}))
 	player := guid.GUID(1)
 	boss := guid.GUID(0xF130000000000000 | uint64(bossEntry)<<24 | 1)
 	require.NoError(t, state.Process(&messages.Damage{
@@ -341,12 +343,12 @@ func TestEncountersRetainMapAtFightStart(t *testing.T) {
 	player := guid.GUID(1)
 	fight := func(mapID, bossEntry uint32, start time.Time) {
 		t.Helper()
-		state.Zone(messages.Zone{Zone: zone.Zone{
+		require.NoError(t, state.Zone(messages.Zone{Zone: zone.Zone{
 			Seen:       start,
 			Name:       "multi-map raid",
 			MapID:      mapID,
 			InstanceID: mapID,
-		}})
+		}}))
 		boss := guid.GUID(0xF130000000000000 | uint64(bossEntry)<<24 | 1)
 		require.NoError(t, state.Process(&messages.Damage{
 			MessageBase: messages.Base(start.Add(time.Second)), Caster: &player, Target: boss, Amount: 1,
@@ -402,7 +404,7 @@ func TestDerivedInstanceFightStartsNewInstance(t *testing.T) {
 	})
 
 	seen := time.Date(2026, time.August, 30, 11, 0, 0, 0, time.UTC)
-	state.Zone(messages.Zone{Zone: zone.Zone{Seen: seen, Name: "tower of karazhan", InstanceID: 35}})
+	require.NoError(t, state.Zone(messages.Zone{Zone: zone.Zone{Seen: seen, Name: "tower of karazhan", InstanceID: 35}}))
 	player := guid.GUID(1)
 	upperBoss := guid.GUID(0xF130000000000000 | uint64(upperBossEntry)<<24 | 1)
 	lowerBoss := guid.GUID(0xF130000000000000 | uint64(lowerBossEntry)<<24 | 1)
@@ -452,10 +454,10 @@ func TestVersionsApplyAcrossLogInstances(t *testing.T) {
 	})
 
 	seen := time.Date(2026, 8, 25, 20, 0, 0, 0, time.UTC)
-	state.Zone(messages.Zone{Zone: zone.Zone{Seen: seen, Name: "Obsidian Sanctum"}})
+	require.NoError(t, state.Zone(messages.Zone{Zone: zone.Zone{Seen: seen, Name: "Obsidian Sanctum"}}))
 	originalVersions := map[string]string{"addon": "0.6.0"}
 	state.CurrentInstance.SetVersions(originalVersions, nil)
-	state.Zone(messages.Zone{Zone: zone.Zone{Seen: seen.Add(time.Hour), Name: "Naxxramas"}})
+	require.NoError(t, state.Zone(messages.Zone{Zone: zone.Zone{Seen: seen.Add(time.Hour), Name: "Naxxramas"}}))
 
 	versions := map[string]string{
 		"addon":                     "0.7.0",
@@ -467,7 +469,7 @@ func TestVersionsApplyAcrossLogInstances(t *testing.T) {
 		Versions:    versions,
 	}))
 
-	state.Zone(messages.Zone{Zone: zone.Zone{Seen: seen.Add(2 * time.Hour), Name: "Eye of Eternity"}})
+	require.NoError(t, state.Zone(messages.Zone{Zone: zone.Zone{Seen: seen.Add(2 * time.Hour), Name: "Eye of Eternity"}}))
 	require.Len(t, state.Instances, 3)
 
 	wantVersions := []map[string]string{originalVersions, versions, versions}
@@ -495,7 +497,7 @@ func TestRaidGroupTrackerAttachedToNewInstance(t *testing.T) {
 	})
 
 	seen := time.Date(2026, time.August, 31, 20, 0, 0, 0, time.UTC)
-	state.Zone(messages.Zone{Zone: zone.Zone{Seen: seen, Name: "raid group test"}})
+	require.NoError(t, state.Zone(messages.Zone{Zone: zone.Zone{Seen: seen, Name: "raid group test"}}))
 
 	player := guid.GUID(1)
 	boss := guid.GUID(0xF130000000000000 | uint64(bossEntry)<<24 | 1)
@@ -561,24 +563,83 @@ func TestSameSizeModeChangesDoNotSplitInstance(t *testing.T) {
 		return instances.NewHookable(ctx, logger, db, z, instances.InstanceParams{Name: "Icecrown Citadel", MatchesZone: func(other zone.Zone) bool { return other.Name == z.Name }, Idf: identifier.NewIdentifier(map[uint32]instances.Identity{})})
 	})
 	z := zone.Zone{Name: "icecrown citadel", InstanceType: "raid", IsInstance: true, MaxPlayers: 25, DifficultyIndex: 2, DifficultyName: "25 Player"}
-	state.Zone(messages.Zone{Zone: z})
+	require.NoError(t, state.Zone(messages.Zone{Zone: z}))
 	first := state.CurrentInstance
 	for _, index := range []int{4, 2} {
 		z.DifficultyIndex = index
-		state.Zone(messages.Zone{Zone: z})
+		require.NoError(t, state.Zone(messages.Zone{Zone: z}))
 		require.Same(t, first, state.CurrentInstance)
 		require.Equal(t, index, first.CurrentZone.DifficultyIndex)
 	}
 	for _, dynamic := range []int{1, 0} {
 		z.DynamicDifficulty = dynamic
-		state.Zone(messages.Zone{Zone: z})
+		require.NoError(t, state.Zone(messages.Zone{Zone: z}))
 		require.Same(t, first, state.CurrentInstance)
 		require.Equal(t, dynamic, first.CurrentZone.DynamicDifficulty)
 	}
 	require.Len(t, state.Instances, 1)
 	z.MaxPlayers = 10
 	z.DifficultyIndex = 1
-	state.Zone(messages.Zone{Zone: z})
+	require.NoError(t, state.Zone(messages.Zone{Zone: z}))
 	require.Len(t, state.Instances, 2)
 	require.NotSame(t, first, state.CurrentInstance)
+}
+
+func TestTrustedAttachmentErrorPropagatesBeforeInstanceExposure(t *testing.T) {
+	t.Parallel()
+	ctx := parsectx.With(t.Context(), parsectx.Context{Format: database.LogFormat243CcAddon})
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	state := NewWithInstanceResolver(ctx, logger, func(_ bool, z zone.Zone, db *unitdb.Units) *instances.Hookable {
+		recipe := &instances.HookableGraphRecipe{
+			ID: "attachment-test", Format: database.LogFormat243CcAddon,
+			Name: "test", MatchesZone: func(zone.Zone) bool { return true },
+			Factories: characters.TrustedFactoryRecipe{ID: "common"},
+		}
+		inst, err := recipe.New(ctx, logger, db, z, identifier.NewIdentifier(nil))
+		require.NoError(t, err)
+		inst.Characters.SetPhaseTransitionCallback(nil) // invalidate trusted binding
+		return inst
+	})
+	observers := state.Auras.GraphObserverCount()
+	err := state.Process(&messages.Zone{Zone: zone.Zone{
+		Seen: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), Name: "test", IsInstance: true,
+	}})
+	require.ErrorContains(t, err, "attach aura/consume adapters")
+	require.Nil(t, state.CurrentInstance)
+	require.Empty(t, state.Instances)
+	require.Equal(t, observers, state.Auras.GraphObserverCount())
+}
+
+func TestConsumeAttachmentFailureDoesNotLeakAuraObservers(t *testing.T) {
+	t.Parallel()
+	ctx := parsectx.With(t.Context(), parsectx.Context{Format: database.LogFormat243CcAddon})
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	var candidate *instances.Hookable
+	state := NewWithInstanceResolver(ctx, logger, func(_ bool, z zone.Zone, db *unitdb.Units) *instances.Hookable {
+		recipe := &instances.HookableGraphRecipe{
+			ID: "attachment-test", Format: database.LogFormat243CcAddon,
+			Name: "test", MatchesZone: func(zone.Zone) bool { return true },
+			Factories: characters.TrustedFactoryRecipe{ID: "common"},
+		}
+		inst, err := recipe.New(ctx, logger, db, z, identifier.NewIdentifier(nil))
+		require.NoError(t, err)
+		candidate = inst
+		return inst
+	})
+	state.ConsumeTracker = nil // aura attachment is valid, consume attachment is not
+	observers := state.Auras.GraphObserverCount()
+	err := state.Process(&messages.Zone{Zone: zone.Zone{
+		Seen: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), Name: "test", IsInstance: true,
+	}})
+	require.ErrorContains(t, err, "attach aura/consume adapters")
+	require.Nil(t, state.CurrentInstance)
+	require.Empty(t, state.Instances)
+	require.Equal(t, observers, state.Auras.GraphObserverCount())
+	require.NoError(t, instances.ValidateHookableCharactersRuntime(candidate.Characters))
+	require.Nil(t, candidate.Auras)
+	// Prove this was the second-stage failure: the old sequential path would
+	// successfully add two observers before rejecting the consume dependency.
+	require.NoError(t, candidate.AttachAuraProjection(state.Auras))
+	require.Equal(t, observers+2, state.Auras.GraphObserverCount())
+	require.Error(t, candidate.AttachConsumeCollector(state.Auras, nil))
 }

@@ -163,6 +163,7 @@ func characterTypeSpecs() []typeSpec {
 		{primitives + "base-object-period", commonPkg + "Base[*vanilla.ObjectPeriod]", "combatlog/parser/vanilla/creatures/lightwell.go", contracts + "character", "", "custom object activity period"},
 		{common + "common", commonPkg + "Common", "combatlog/parser/common/characters/common.go", primitives + "base-inactivity", "", "default character implementation"},
 		{common + "never-active", commonPkg + "NeverActive", "combatlog/parser/common/characters/neveractive.go", contracts + "character", "", "no activity history"},
+		{common + "graph-never-active-value", commonPkg + "graphNeverActiveValue", "combatlog/parser/common/characters/wrapper_graph.go", common + "never-active", "", "internal ownergraph box for value-form NeverActive; unboxed on load to preserve the original dynamic value type, not a gameplay factory product"},
 		{common + "ads-go-with-boss", commonPkg + "AdsGoWithBoss", "combatlog/parser/common/characters/adsonboss.go", contracts + "character-base", "", "wrapper around another character"},
 		{common + "death-on-cast", commonPkg + "DeathOnCast", "combatlog/parser/common/characters/deathoncast.go", contracts + "character-base", "", "wrapper around another character"},
 		{common + "ignore-cast", commonPkg + "IgnoreCast", "combatlog/parser/common/characters/ignorecast.go", contracts + "character-base", "", "wrapper around another character"},
@@ -199,6 +200,7 @@ func characterTypeSpecs() []typeSpec {
 		{vanilla + "son-of-the-flame", vanillaPkg + "sonOfTheFlameCharacter", "combatlog/parser/vanilla/creatures/moltencore.go", common + "common", "", ""},
 		{vanilla + "vanilla-plus-mograine", vanillaPkg + "vanillaPlusMograineCharacter", "combatlog/parser/vanilla/creatures/sm.go", common + "common", "", ""},
 
+		{wotlk + "xt002", wotlkPkg + "xt002Character", "combatlog/parser/wotlk/creatures/xt002.go", common + "common", "", "XT boss links current-pull heart activity through canonical Characters"},
 		{wotlk + "log-based", wotlkPkg + "LogBased", "combatlog/parser/wotlk/creatures/logbased.go", primitives + "base-inactivity", "", "server-side log character"},
 		{wotlk + "unstartable", wotlkPkg + "Unstartable", "combatlog/parser/wotlk/creatures/logbased.go", contracts + "character-base", "", "wrapper used by LogBased"},
 		{wotlk + "algalon", wotlkPkg + "algalonCharacter", "combatlog/parser/wotlk/creatures/algalon.go", common + "common", "", ""},

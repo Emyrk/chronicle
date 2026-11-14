@@ -20,6 +20,8 @@ type UnitTelemetryEmitter struct {
 
 	characters *characters.Characters
 	emit       func(messages.Message)
+	// restoreEmitter records the callback requirement until graph runtime wiring.
+	restoreEmitter *bool
 
 	positions map[guid.GUID]messages.UnitPosition
 	resources map[guid.GUID]messages.UnitResources

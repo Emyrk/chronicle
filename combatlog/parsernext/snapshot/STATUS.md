@@ -1,53 +1,82 @@
 # Session composition status
 
-This is a review checkpoint, not a full-session snapshot contract. Owner-local
-state codecs and bounded graph tests do not establish production-session resume.
+The durable `chronicle.CompleteFileSession` facade and its production owner graph
+are implemented. This remains a review checkpoint, not a claim of production
+rollout or real-corpus full-session validation. See the
+[complete-file session contract](../../../docs/logparse-snapshots/complete-file-session.md)
+for construction, exact integration coverage, and checkpoint durability behavior.
 
-## Implemented building blocks
+## Revised input and serialization API
+
+`ProcessFiles(ctx, []FileBundle)` accepts explicitly caller-associated complete
+logical files plus ordered artifacts. It never queries storage, infers group/part
+association, or applies new safe-ready filters. Envelope v2 retains completed
+bundle metadata as authoritative provenance, not a historical availability gate. Native 3.3.5a merges Sidekick
+through the existing inserter and drains its tail before advancing the prefix;
+consumer-retained references remain in the shared graph. Mid-bundle checkpoints
+are forbidden. Missing-artifact policy remains pending explicit user direction.
+
+`Snapshot(io.Writer)` only serializes and never closes, compresses, flushes, or
+commits the caller's destination. Successful serialization is not a durable-store
+acknowledgment. `SnapshotPath(path)` is the separate local atomic-file helper with
+pre-rename preservation and typed post-rename durability uncertainty. Restoring
+from an `io.Reader` supports caller-owned decompression, including gzip.
+
+## Implemented composition
 
 - `internal/stategraph/ownergraph` explicitly registers owner codecs, interns
   shared pointers, allocates all objects before loading, resolves references, and
-  validates the restored graph. Its generated owner IDs are internal references,
-  not stable semantic identities across independent snapshots.
-- `parser/common/characters/graph.go` composes the bounded character graph with
-  units, identifiers, periods, retained messages, rooms, and shared references.
-  `parser/vanilla/creatures/graph.go` supplies the bounded Nefarian adapter.
-  Character runtime wiring is a separate operation after semantic restoration.
-- `parser/common/instances.EncounterRankingGraph` is a bounded downstream
-  component root connecting in-progress event buffers, optional finalized event
-  bytes, and DPS tracking. Leaf adapters reuse the existing owner codecs and
-  share canonical Damage, Units, and Identifier references. Disk JSON roundtrip
-  tests restore fresh independent objects and compare suffix processing, eager
-  bytes, and ranking output. This is not a Hookable or full-session checkpoint.
-  Callers register trusted dependency codecs explicitly and quiesce the owners
-  together; missing registrations or malformed references fail closed. Static
-  Identifier configuration uses its existing trusted recipe, once per canonical
-  owner. No gameplay or hook registration is performed by these adapters.
-- `parser/common/instances.EncounterComponentGraph` connects that event/DPS
-  component to shared Units, aura tracking/projection, vehicles, raid groups,
-  participants, armory, and consume evidence tracking/collection. It validates
-  required canonical aliases at capture and restore. Restored observers and
-  emitters remain absent until a separate, once-only `WireGraphRuntime` call.
-  Disk roundtrip and suffix tests cover shared spell identity, detached armory
-  history, independent restores, and aura/consume output equivalence.
-  **Current configuration limit:** graph adapters reject non-nil aura duration
-  modifiers and consumable catalogs at registration and capture. Their existing
-  leaf codecs rely on a compatible session fingerprint, which this component
-  does not yet supply. Do not disable production configuration to work around
-  this restriction. Full-session compatibility binding must precede support.
-- Owner-local state APIs also exist for auras, vehicles, raid groups, armory,
-  encounter event builders, telemetry, participants, consumables, overview,
-  overhealing, phases, rankings, and numerous creature implementations. Their
-  presence does not mean that all these objects are registered in one graph.
-- Vanilla `parser/vanilla/nextsource` retains decoding and synthetic state across
-  complete files and has source-pipeline snapshot tests. Those snapshots do not
-  include the downstream consumer graph.
-- Native TBC/Wrath `parser/wotlk.NewNextPipeline` retains its decoder and synthetic
-  composition across serial `OpenFile` calls. `NewNext` remains the single-reader
-  compatibility constructor. This pipeline has no snapshot API or consumer
-  ownership; it does not enable multiple files in the production worker.
+  validates the restored graph. Generated owner IDs are internal references, not
+  stable semantic identities across independently captured snapshots.
+- `chronicle/logparse_checkpoint_graph.go` supplies the full session root: retained
+  source, ordered consumers, `encounters.State`, optional identity collection,
+  capabilities, and line count. All use one reference context. The identity
+  collector intentionally retains its own Units owner, separate from encounters.
+- `parser/common/registry/graph.go` prepares the actual registered production
+  factories and registers their explicit owner closure. `encounters.State` and
+  `instances.Hookable` have aggregate graph codecs, including current/completed
+  fights, derived names/rankings, phase and ranking state, realm/header metadata,
+  and shared parse-wide trackers. Unsupported opaque recipes fail closed.
+- Character/period and Vanilla/TBC/Wrath creature codecs preserve canonical
+  references, retained messages, rooms, wrapper owners, and custom periods.
+  Named factory recipes preserve production ordering. Typed preprocessors and
+  AzerothCore hooks have explicit recipes rather than archive-selected functions.
+- Aura duration modifiers, consumable catalogs, and prepared effective spells are
+  supported with explicit compatibility-bound dependencies. They are not disabled
+  to obtain snapshot support. Callers preload and retain compatible dependencies;
+  semantic restoration does not query services or execute gameplay factories.
+- Event/DPS and shared-tracker component roots remain useful focused test fixtures,
+  but are no longer the only supported graph roots. Component tests alone still
+  do not establish full-session correctness.
 
-Paths above are relative to `combatlog/`, except `internal/stategraph/ownergraph`.
+Paths above are repository-relative for `chronicle/` and `internal/`; `parser/`
+paths are relative to `combatlog/`.
+
+## Source and validation coverage
+
+The complete-file facade admits Vanilla CC (`1.12a-cc-addon`), native TBC/Wrath
+companion formats, modern V9/V22/Hermes, and AzerothCore mod sources. Each has a
+retained pipeline and graph adapter. Source and registry adapter tests exist;
+native pipelines are no longer limited to snapshot-free construction.
+
+Vanilla and expansion deterministic session fixtures exercise disk continuation
+with production encounter recipes and identity collection on/off. Refer to the
+session contract for the exact matrix, rather than assuming all admitted tag
+combinations or encounter mechanics have been exercised. AzerothCore session
+implementation includes the approved full unknown-zone fallback and known-zone
+server classification. Its original 16 deterministic full-session scenarios have
+passed; the expanded matrix has 24 scenarios including canonical AzerothCore
+Wrath. The expansion matrix now has 30 wire/flavor tuples with identity collection
+off/on, or 60 scenarios, including AzerothCore and Epoch flavor coverage. The
+Epoch fixture checks the Onyxia entry 45133 boss/name selector. The expanded matrices passed targeted race validation in Chronicle.
+
+V22 reordering is file-local: drain at EOF, then start a fresh reorder buffer for
+the next file. Compare resumed and uninterrupted runs with identical file
+boundaries, never with concatenated input permitting cross-file reordering.
+
+SuperWoW (`1.12a-superwow-addon`) is intentionally retired from the complete-file
+facade, not pending source coverage. Lower-level historical adapters do not
+change that admission policy.
 
 ## Lifecycle boundaries
 
@@ -56,8 +85,8 @@ graph. `Consumers.ConsumeAll` drives messages through those existing consumers.
 A clean file EOF is not encounter finalization. `WorkerLogParse.work` finalizes
 instance hooks separately, then performs authoritative publication.
 
-The Vanilla complete-file session is tooling-only. Its fatal source or consumer
-failure invalidates the session. Consumers may already have mutated provisional
+The complete-file facade is not selected by the production worker. Its fatal
+source or consumer failure invalidates the session. Consumers may already have mutated provisional
 state; failure does not promise rollback. The caller must discard that graph or
 explicitly restore a prior supported snapshot.
 
@@ -90,18 +119,32 @@ atomic publication or hide an earlier finalized prefix pending all later files.
 A snapshot is optional transferable state, including for a headless thin daemon;
 it is not a prerequisite for publication. EOF remains distinct from Finalize.
 
-A checkpoint identifies a successfully parsed ordered prefix. Resume must verify
-that prefix and allow only append-only continuation; a changed, removed, or
-reordered earlier file requires parsing again from the first file. Storage append
-chunks must not be assumed to be complete input files. Re-resolve dataset/flavor
+For continued prefix publication, serialize the in-flight **pre-Finalize**
+checkpoint to disk or a database first; fights may remain open. Restore that
+persisted checkpoint either to consume later complete files or to Finalize
+immediately before authoritative output publication. Discard the terminal
+finalized instance. Do not add a `.Clone()` or in-memory detached-copy Finalize
+path. Only in-flight parser checkpoints are serializable/resumable parser state;
+finalized output is never a checkpoint. An ordinary terminal parse may still
+Finalize without taking a checkpoint when no continuation is required.
+
+A checkpoint is authoritative for its successfully processed history. Resume takes
+only explicitly ordered future bundles and never looks up, revalidates, or reloads
+historical files/artifacts. Historical additions, changes, or deletions are ignored;
+incorporating them requires an explicit fresh parse. Saved file/artifact IDs prevent
+silent replay, without checking historical availability. Cumulative provenance is
+separate from the future cursor, which starts at zero on each restore. An empty
+suffix can restore and Finalize immediately. Storage append chunks must not be
+assumed to be complete input files. Re-resolve dataset/flavor
 at acceptance boundaries: changed dataset selection, dataset revision, flavor,
 or executable identity likewise requires restart from the first file.
 
 Revision SQL, isolated parse-local GameDB acquisition, and transaction-owned
 revision fences must be connected to orchestration, not decoder processing.
 Fences protect each publication transaction without promising rollback of
-previous successful Finalize publications. Configured graph restoration remains
-disabled until fully bound orchestration exists.
+previous successful Finalize publications. The facade accepts preloaded,
+compatibility-bound configured graphs; connecting checkpoint/resume orchestration
+to production publication remains separate work.
 
 ## Runtime integration and prefix-manifest limits
 
@@ -124,7 +167,8 @@ Unknown fallback requires its existing database row. A strict publication cannot
 switch to a different realm than the one used to resolve its dependencies.
 
 `chronicle.BuildLogparsePrefixManifest` and `ValidateLogparsePrefix` are pure
-metadata helpers, not wired checkpoint/resume processing. They require one
+metadata helpers for the separate worker utility, not a gate on authoritative
+checkpoint continuation. They require one
 consistent database view containing the base, safe-ready parts, and all finalized
 parts. The base row's sizes are aggregate totals, so all finalized sizes must be
 subtracted to recover the stable base size, including finalized parts hidden
@@ -132,33 +176,36 @@ behind a pending upload. Only safe-ready parts become accepted input. The helper
 trusts recorded hashes and does not download or verify object bytes. Sparse source
 sequences remain valid; storage-part boundaries are not parser-file boundaries.
 
-## Still required for full-session resume
+## Remaining integration and review work
 
-See [instance wiring checklist](INSTANCE_WIRING.md) for the existing hook order,
-runtime callback dependencies, and remaining aggregate fields. Component restore
-must not be mistaken for a process-safe `Hookable` restore.
+See the [instance wiring contract](INSTANCE_WIRING.md) for hook order, callback
+ownership, and aggregate coverage. Semantic restoration and runtime attachment
+are separate phases. `CompleteFileSession.WireRuntime` preflights dependencies
+before attachment; restored graphs cannot process input before wiring.
 
-1. Graph adapters and an explicit composition root for `encounters.State`,
-   `instances.Hookable`, the consumer set, optional identity collection, and
-   their shared parse-wide state. Reuse owner-local codecs rather than flattening
-   or duplicating their state.
-2. Registration of every concrete character type reachable under a supported
-   trusted factory recipe. The declarative state catalog is not codec coverage.
-   Unsupported concrete owners must fail closed.
-3. Composition of decoder/synthetic state and downstream owners with a common
-   reference context wherever they share mutable objects. Separate snapshots
-   must not silently clone a shared Damage or other mutable reference.
-4. Native and modern format snapshot coverage, plus modern/AzerothCore
-   complete-file pipeline lifecycles. Reordering is explicitly file-local: drain
-   the V22 buffer at EOF and create a fresh buffer for the next file. Do not
-   reorder across file boundaries, even if timestamps overlap. Validate resume
-   against uninterrupted processing with the same file boundaries, not against
-   concatenated input that permits cross-boundary reordering.
-5. Explicit fresh-runtime dependency injection and hook wiring after all semantic
-   owners are restored. Restore must not replay factories, process gameplay,
-   register external observers, query services, finalize, or publish.
-6. Session-level compatibility checks, successful-file progress, and terminal
-   lifecycle handling. No production resume or queued replacement is enabled.
+The facade validates a strict checkpoint envelope, exact runtime compatibility,
+and future-input replay protection before restoring owners. Completed descriptors
+are provenance only. Successful whole-bundle EOF advances progress;
+source/consumer failures invalidate the session without rollback. Checkpoint
+replacement uses a synchronized temporary file and atomic rename. A post-rename
+directory-sync failure reports uncertain durability, not successful publication
+or rollback. Terminal Finalize forbids later processing or snapshots of that live
+graph; prior persisted checkpoints remain independently resumable.
+
+Independent review of the expanded facade and deterministic matrices, including
+AzerothCore known zones, unknown-zone fallback, and identity collection, found no
+remaining concrete blockers. The integrated affected-package race suite passed.
+This does not replace the real-corpus and production integration gates below.
+
+Still required:
+
+1. Jointly review the concrete root, supported-owner inventory, aliases, runtime
+   wiring, and failure policy before the first real-corpus full-session comparison.
+2. Run separately approved real-corpus resume comparisons. Synthetic integration
+   coverage and existing format parity are not substitutes.
+3. Separately design and review production checkpoint storage/acceptance,
+   database publication, River selection, and UI exposure. None is selected by
+   this facade, and no queued production replacement is enabled.
 
 ## Review and validation gate
 

@@ -16,6 +16,8 @@ func TestCollectorGraphRestoreDefersRuntimeCallback(t *testing.T) {
 	require.NoError(t, RegisterGraphOwners(registry, GraphOptions{}))
 	tracker := NewTracker(nil)
 	collector := NewCollector(auras.New(nil), tracker)
+	calls := 0
+	collector.SetEmit(func(*messages.Consume) { calls++ })
 	snapshot, err := registry.Capture(collector)
 	require.NoError(t, err)
 
@@ -23,6 +25,8 @@ func TestCollectorGraphRestoreDefersRuntimeCallback(t *testing.T) {
 	require.NoError(t, err)
 	restored := value.(*Collector)
 	require.Nil(t, restored.emit)
+	require.Zero(t, restored.GraphRuntimeRevision())
+	require.Zero(t, calls)
 	require.NotNil(t, restored.auraTracker)
 	require.NotNil(t, restored.shared)
 
@@ -43,4 +47,21 @@ func TestConsumeGraphRejectsCatalogWithoutCompatibilityMetadata(t *testing.T) {
 	require.NoError(t, RegisterGraphOwners(registry, GraphOptions{}))
 	_, err := registry.Capture(NewTracker(catalog))
 	require.ErrorContains(t, err, "session compatibility metadata")
+}
+
+func TestGraphRuntimeRevisionTracksEveryEmitterReplacement(t *testing.T) {
+	t.Parallel()
+	value := new(Collector)
+	require.Zero(t, value.GraphRuntimeRevision())
+	value.SetEmit(nil)
+	require.Equal(t, uint64(1), value.GraphRuntimeRevision())
+	calls := 0
+	fn := func(*messages.Consume) { calls++ }
+	value.SetEmit(fn)
+	require.Equal(t, uint64(2), value.GraphRuntimeRevision())
+	value.SetEmit(fn)
+	require.Equal(t, uint64(3), value.GraphRuntimeRevision())
+	value.SetEmit(nil)
+	require.Equal(t, uint64(4), value.GraphRuntimeRevision())
+	require.Zero(t, calls)
 }

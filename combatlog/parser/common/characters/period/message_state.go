@@ -41,6 +41,19 @@ type slainMessageValue struct {
 	Attribution          string                    `json:"attribution"`
 	AttributionNilDamage bool                      `json:"attribution_nil_damage,omitempty"`
 }
+type combatEnterMessageValue struct {
+	Base      messages.MessageBaseState `json:"base"`
+	UnitGUID  guid.GUID                 `json:"unit_guid"`
+	UnitName  string                    `json:"unit_name"`
+	OtherGUID guid.GUID                 `json:"other_guid"`
+	OtherName string                    `json:"other_name"`
+}
+type evadeMessageValue struct {
+	Base     messages.MessageBaseState `json:"base"`
+	UnitGUID guid.GUID                 `json:"unit_guid"`
+	UnitName string                    `json:"unit_name"`
+	Reason   uint8                     `json:"reason"`
+}
 type timeoutMessageValue struct {
 	Base messages.MessageBaseState `json:"base"`
 }
@@ -118,6 +131,18 @@ func CaptureMessage(m messages.Message, capture func(messages.Message) (string, 
 		}
 		kind = "slain"
 		payload = slainMessageValue{Base: m.CaptureState(), Victim: m.Victim, Killer: copyPointer(m.Killer), Attribution: ref, AttributionNilDamage: nilDamage}
+	case *messages.UnitCombatEnter:
+		if m == nil {
+			return MessageState{}, fmt.Errorf("nil combat enter")
+		}
+		kind = "unit_combat_enter"
+		payload = combatEnterMessageValue{m.CaptureState(), m.UnitGUID, m.UnitName, m.OtherGUID, m.OtherName}
+	case *messages.UnitEvade:
+		if m == nil {
+			return MessageState{}, fmt.Errorf("nil evade")
+		}
+		kind = "unit_evade"
+		payload = evadeMessageValue{m.CaptureState(), m.UnitGUID, m.UnitName, m.Reason}
 	case *messages.Timeout:
 		if m == nil {
 			return MessageState{}, fmt.Errorf("nil timeout")
@@ -149,6 +174,10 @@ func (s MessageState) decodePayload() (any, error) {
 		v = &auraMessageValue{}
 	case "slain":
 		v = &slainMessageValue{}
+	case "unit_combat_enter":
+		v = &combatEnterMessageValue{}
+	case "unit_evade":
+		v = &evadeMessageValue{}
 	case "timeout":
 		v = &timeoutMessageValue{}
 	case "boundary":
@@ -168,6 +197,10 @@ func (s MessageState) decodePayload() (any, error) {
 	case *auraMessageValue:
 		base = &v.Base
 	case *slainMessageValue:
+		base = &v.Base
+	case *combatEnterMessageValue:
+		base = &v.Base
+	case *evadeMessageValue:
 		base = &v.Base
 	case *timeoutMessageValue:
 		base = &v.Base
@@ -236,6 +269,10 @@ func (s MessageState) Restore(resolve func(string) (messages.Message, error), sp
 			attribution = (*messages.Damage)(nil)
 		}
 		return &messages.Slain{MessageBase: v.Base.Restore(), Victim: v.Victim, Killer: v.Killer, Attribution: attribution}, nil
+	case *combatEnterMessageValue:
+		return &messages.UnitCombatEnter{MessageBase: v.Base.Restore(), UnitGUID: v.UnitGUID, UnitName: v.UnitName, OtherGUID: v.OtherGUID, OtherName: v.OtherName}, nil
+	case *evadeMessageValue:
+		return &messages.UnitEvade{MessageBase: v.Base.Restore(), UnitGUID: v.UnitGUID, UnitName: v.UnitName, Reason: v.Reason}, nil
 	case *timeoutMessageValue:
 		return &messages.Timeout{MessageBase: v.Base.Restore()}, nil
 	case *boundaryMessageValue:

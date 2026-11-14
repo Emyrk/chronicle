@@ -61,9 +61,9 @@ type sqlcQuerier interface {
 	BaselineSpeedruns(ctx context.Context, logGroupID uuid.UUID) ([]InstanceSpeedrun, error)
 	BaselineTalentBuilds(ctx context.Context, logGroupID uuid.UUID) ([]TalentBuild, error)
 	BulkUpsertGuildPagePanels(ctx context.Context, dollar_1 []byte) error
+	BumpDatasetRevision(ctx context.Context, id uuid.UUID) (int64, error)
 	BumpLeaderboardHighlightGeneration(ctx context.Context, tenantID uuid.UUID) error
 	CancelEventRepairOperation(ctx context.Context, arg CancelEventRepairOperationParams) (EventRepairOperation, error)
-	BumpDatasetRevision(ctx context.Context, id uuid.UUID) (int64, error)
 	CarryForwardFinalizedParsedLogGroup(ctx context.Context, arg CarryForwardFinalizedParsedLogGroupParams) error
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
 	CensusPlayerCounts(ctx context.Context, arg CensusPlayerCountsParams) ([]CensusPlayerCountsRow, error)
@@ -155,7 +155,6 @@ type sqlcQuerier interface {
 	CountUserPanelLayoutsTotal(ctx context.Context, userID uuid.NullUUID) (int32, error)
 	CountUserTalentBuilds(ctx context.Context, arg CountUserTalentBuildsParams) (int64, error)
 	CreateEventRepairOperation(ctx context.Context, arg CreateEventRepairOperationParams) (EventRepairOperation, error)
-	// 	// Discord Integration
 	// ============================================================
 	// Gear Lists
 	// ============================================================
@@ -1118,13 +1117,13 @@ type sqlcQuerier interface {
 	ListWoWServers(ctx context.Context) ([]WowServer, error)
 	ListWoWServersByTenantID(ctx context.Context, tenantID uuid.NullUUID) ([]WowServer, error)
 	ListWorlds(ctx context.Context) ([]World, error)
-	LockEventRepairItem(ctx context.Context, arg LockEventRepairItemParams) (EventRepairItem, error)
-	LockEventRepairOperation(ctx context.Context, arg LockEventRepairOperationParams) (EventRepairOperation, error)
 	// Locks the effective dataset so its revision and default flavor remain stable through publication.
 	LockDatasetForResolution(ctx context.Context, id uuid.UUID) (LockDatasetForResolutionRow, error)
 	// Holds a row-level share lock until the surrounding transaction completes.
 	// Dataset mutations bump revision with UPDATE, which conflicts with this lock.
 	LockDatasetRevision(ctx context.Context, id uuid.UUID) (int64, error)
+	LockEventRepairItem(ctx context.Context, arg LockEventRepairItemParams) (EventRepairItem, error)
+	LockEventRepairOperation(ctx context.Context, arg LockEventRepairOperationParams) (EventRepairOperation, error)
 	LockLeaderboardCareerPublication(ctx context.Context, arg LockLeaderboardCareerPublicationParams) (uuid.UUID, error)
 	// Future direct writers call BEFORE source mutation in the same transaction.
 	// An overlap increments revision without invalidating the active owner's token.
