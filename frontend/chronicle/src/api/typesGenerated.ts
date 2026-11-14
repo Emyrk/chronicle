@@ -772,6 +772,63 @@ export interface BillingSummary {
     readonly prices?: readonly BillingPrice[];
 }
 
+// From chroniclesdk/blog.go
+export interface BlogAdminFeedback {
+    readonly id: string;
+    readonly post_slug: string;
+    readonly user_id: string;
+    readonly tenant_id: string;
+    readonly body: string;
+    readonly status: string;
+    readonly consent: boolean;
+    readonly deleted: boolean;
+}
+
+// From chroniclesdk/blog.go
+export interface BlogAdminVotes {
+    readonly up_votes: number;
+    readonly down_votes: number;
+}
+
+// From chroniclesdk/blog.go
+export interface BlogFeedbackRequest {
+    readonly body: string;
+    readonly consent: boolean;
+}
+
+// From chroniclesdk/blog.go
+export interface BlogInteractions {
+    readonly enabled: boolean;
+    readonly up_votes: number;
+    readonly own_vote: number;
+    readonly feedback: readonly BlogPublicFeedback[];
+    readonly own_feedback?: BlogOwnFeedback;
+    readonly feedback_banned: boolean;
+}
+
+// From chroniclesdk/blog.go
+export interface BlogOwnFeedback {
+    readonly id: string;
+    readonly body: string;
+    readonly status: string;
+    readonly deleted: boolean;
+}
+
+// From chroniclesdk/blog.go
+/**
+ * BlogPublicFeedback deliberately has no account or tenant identifiers.
+ */
+export interface BlogPublicFeedback {
+    readonly id: string;
+    readonly body: string;
+    readonly server_relation: string;
+}
+
+// From chroniclesdk/blog.go
+export interface BlogVoteRequest {
+    readonly vote: number;
+}
+
 // From chroniclesdk/time_parses.go
 /**
  * BossKillTimeParse is a per-boss kill-time parse.
@@ -1776,6 +1833,21 @@ export interface EventRepairOperation {
 // From chroniclesdk/event_repairs.go
 export interface EventRepairOperationsResponse {
     readonly operations: readonly EventRepairOperation[];
+}
+
+// From chroniclesdk/event_repairs.go
+/**
+ * EventRepairReceipt is public repair provenance, not privileged job contents.
+ * AppliedAt records the source/receipt/ratings enqueue commit, not ratings completion.
+ */
+export interface EventRepairReceipt {
+    readonly operation_id: string;
+    readonly operation: string;
+    readonly version: number;
+    readonly applied_at: string;
+    readonly warnings: readonly string[];
+    // empty interface{} type, falling back to unknown
+    readonly details: Record<string, unknown>;
 }
 
 // From chroniclesdk/tenant.go
@@ -7888,14 +7960,3 @@ export interface WoWTrailerEntry {
 export type WoWUnitType = 2 | 3 | 1 | 0 | 4;
 
 export const WoWUnitTypes: WoWUnitType[] = [2, 3, 1, 0, 4];
-
-// From chroniclesdk/event_repairs.go
-export interface EventRepairReceipt {
-    readonly operation_id: string;
-    readonly operation: string;
-    readonly version: number;
-    readonly applied_at: string;
-    readonly warnings: readonly string[];
-    // empty interface{} type, falling back to unknown
-    readonly details: Record<string, unknown>;
-}

@@ -70,11 +70,12 @@ type blogManifest struct {
 }
 
 type blogManifestPost struct {
-	Path        string     `json:"path"`
-	Title       string     `json:"title"`
-	Description string     `json:"description"`
-	PublishedAt string     `json:"published_at"`
-	FlavorSets  [][]string `json:"flavor_sets"`
+	InteractionsEnabled bool       `json:"interactions_enabled"`
+	Path                string     `json:"path"`
+	Title               string     `json:"title"`
+	Description         string     `json:"description"`
+	PublishedAt         string     `json:"published_at"`
+	FlavorSets          [][]string `json:"flavor_sets"`
 }
 
 type handler struct {
@@ -512,4 +513,20 @@ func filePath(p string) string {
 		p = "/" + p
 	}
 	return strings.TrimPrefix(path.Clean(p), "/")
+}
+
+// BlogInteractionsEnabled resolves opt-in from the server's build manifest, never client input.
+// Unknown posts, missing manifests, and inaccessible flavor variants fail closed.
+func BlogInteractionsEnabled(siteFS fs.FS, slug string, flavor []string) (bool, error) {
+	if slug == "" || strings.ContainsAny(slug, "/\\") || slug == "." || slug == ".." {
+		return false, nil
+	}
+	posts, err := loadBlogManifest(siteFS)
+	if err != nil {
+		return false, err
+	}
+	h := handler{blogPosts: posts}
+	route := "/blog/" + slug
+	post, ok := posts[route]
+	return ok && post.InteractionsEnabled && h.blogPathAllowed(route, flavor), nil
 }
