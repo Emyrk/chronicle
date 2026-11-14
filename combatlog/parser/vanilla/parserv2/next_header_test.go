@@ -94,7 +94,7 @@ func TestNextHeaderSourceIsolation(t *testing.T) {
 	require.NoError(t, err)
 	state = fresh.State()
 	require.True(t, state.LastTimestamp().IsZero(), "header UTC fallback is not written back to the clock")
-	_, err = fresh.DecodeRecord(t.Context(), "10000|UNIT_STATE")
+	_, err = fresh.DecodeRecord(t.Context(), "10000|COMBATANT_INFO")
 	require.ErrorIs(t, err, next.ErrUnsupportedRecord)
 	state = fresh.State()
 	require.Equal(t, time.UnixMilli(10000), state.LastTimestamp(), "unsupported semantics still observe the physical record time")
