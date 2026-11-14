@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Emyrk/chronicle/combatlog/parser/guid"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/instancehook"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/google/uuid"
@@ -36,6 +36,19 @@ type LootTracker struct {
 	units *unitdb.Units
 
 	loot []*FinalLoot
+}
+
+// Snapshot returns finalized loot observations without exposing the tracker's
+// mutable internal slice. Call it after Finalize to resolve recipient GUIDs.
+func (lt *LootTracker) Snapshot() []FinalLoot {
+	if lt == nil {
+		return nil
+	}
+	out := make([]FinalLoot, 0, len(lt.loot))
+	for _, drop := range lt.loot {
+		out = append(out, *drop)
+	}
+	return out
 }
 
 func (lt *LootTracker) Insert(ctx context.Context, instanceID uuid.UUID, realmID uuid.UUID, tx *authz.AuthzTX) error {

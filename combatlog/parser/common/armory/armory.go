@@ -71,6 +71,80 @@ func New(units *unitdb.Units) *Tracker {
 	}
 }
 
+// Observation is the read-only input to Insert's guild/player writes. It
+// excludes transient talent/name maps and write-time database metadata.
+type Observation struct {
+	Guilds           []GuildObservation
+	ParticipantCount int
+	Players          []PlayerObservation
+}
+
+type GuildObservation struct {
+	Name    string
+	Members []guid.GUID
+}
+
+type PlayerObservation struct {
+	GUID      guid.GUID
+	Name      string
+	GuildName string
+	HeroClass types.HeroClasses
+	Gender    types.HeroGender
+	Race      types.HeroRaces
+	Seen      time.Time
+	Level     int16
+	Gear      []GearObservation
+	Talents   *combatant.Talents
+}
+
+type GearObservation struct {
+	ItemID        int32    `json:"item_id"`
+	Name          string   `json:"name"`
+	EnchantID     *int32   `json:"enchant_id"`
+	TransmogID    *int32   `json:"transmog_id"`
+	GemEnchantIDs [4]int32 `json:"gem_enchant_ids"`
+}
+
+// Snapshot copies only fields read by Insert, in its stable guild/player order.
+// Unit levels are resolved here so the receiver needs no unit database.
+func (g *Tracker) Snapshot(udb *unitdb.Units) Observation {
+	out := Observation{ParticipantCount: len(g.Participant)}
+	for _, name := range sortedGuildNames(g.Guilds) {
+		members := make([]guid.GUID, 0, len(g.Guilds[name]))
+		for id := range g.Guilds[name] {
+			members = append(members, id)
+		}
+		slices.Sort(members)
+		out.Guilds = append(out.Guilds, GuildObservation{Name: name, Members: members})
+	}
+	for _, id := range sortedPlayerGUIDs(g.Players) {
+		player := g.Players[id]
+		obs := PlayerObservation{GUID: player.Guid, Name: player.Name, HeroClass: player.HeroClass,
+			Gender: player.Gender, Race: player.Race, Seen: player.Seen, Level: persistedPlayerLevel(player, udb),
+			Talents: cloneTalents(player.Talents)}
+		if player.Guild != nil {
+			obs.GuildName = player.Guild.Name
+		}
+		for _, item := range player.GearSetups {
+			gear := GearObservation{ItemID: int32(item.ItemID), Name: item.Name}
+			if item.EnchantID != nil {
+				value := int32(*item.EnchantID)
+				gear.EnchantID = &value
+			}
+			if item.TransmogID != nil {
+				value := int32(*item.TransmogID)
+				gear.TransmogID = &value
+			}
+			for i, value := range item.GemEnchantIDs {
+				gear.GemEnchantIDs[i] = int32(value)
+			}
+			obs.Gear = append(obs.Gear, gear)
+		}
+		out.Players = append(out.Players, obs)
+	}
+	return out
+}
+
 func (g *Tracker) insertGuilds(ctx context.Context, realmID uuid.UUID, tx *authz.AuthzTX) (map[string]uuid.UUID, *database.Guild, error) {
 	guildIDs := make(map[string]uuid.UUID)
 	mostGuildPlayers := 0
