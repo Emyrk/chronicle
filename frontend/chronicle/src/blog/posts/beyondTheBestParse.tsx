@@ -121,7 +121,7 @@ export function BeyondTheBestParsePost({ post }: PostProps) {
         </p>
         <TwoPlayers />
         <PullQuote>
-          Peak recognizes your best performance. Mastery considers your broader performance history.
+          Peak recognizes your best performance. Mastery recognizes your consistency.
         </PullQuote>
         <p>
           Mastery blends your Peak with the rest of your kills, so repeatable results count for more than a single great
