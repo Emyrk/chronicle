@@ -22,8 +22,9 @@ summary, err := parsernext.ReadFile(ctx, parsernext.Selection{
 owned physical lines in file order, bounds each line's memory, and returns byte
 count, line count and SHA-256 only after clean EOF and successful callbacks.
 CRLF, LF, blank lines and final unterminated lines are preserved exactly. Empty
-input is a successful empty **source**, not a valid combat log. No timestamps,
-CSV fields, companion frames, units or combat events are interpreted.
+input is a successful empty **source**, not a valid combat log. `ReadFile` itself
+interprets no timestamps, CSV fields, companion frames, units or combat events.
+The separate CC-v2 lexical decoder described below can be called by its visitor.
 
 On cancellation, reader failure, visitor failure or line overflow, the result is
 zero and an error is returned. Already emitted callbacks cannot be rolled back;
@@ -31,6 +32,38 @@ the caller must discard provisional derived state. The caller owns the reader
 and must supply cancellation for blocking I/O; this API neither closes it nor
 claims it can interrupt arbitrary `io.Reader.Read` calls. Each call owns one
 complete source lifecycle; no state carries into a subsequent file.
+
+## CC-v2 lexical extraction
+
+`formats/ccv2.ParseLine` is the single implementation of the existing
+`1.12a-cc-addon` pipe-record envelope: Unix-millisecond timestamp, event name and
+ordered string payload fields. Legacy `parserv2.ParseLine` delegates to it and
+retains its own `Matched` cursor and typed helpers. The new leaf package imports
+only the standard library; it does not import or hide the old parser.
+
+To use it in a `ReadFile` visitor, remove the physical line terminator as the
+legacy `bufio.ScanLines` does, then decode:
+
+```go
+content := strings.TrimSuffix(strings.TrimSuffix(line.Raw, "\n"), "\r")
+timestamp, event, fields, err := ccv2.ParseLine(content)
+```
+
+Only lexical semantics have moved. Timestamp parsing still happens **before**
+trimming; event/payload fields are trimmed without dropping empty fields; a
+record with only timestamp and event is accepted. Empty/malformed errors remain
+unchanged, including the historical "at least 3 parts" text and `time.Now()`
+returned alongside a numeric timestamp error. Consumers must ignore results on
+error. These quirks are characterized, not silently repaired in this extraction.
+
+The legacy scanner currently reports EOF even when `scanner.Err()` is non-nil;
+characterization tests retain that limitation. The new complete-file reader
+already rejects read failures, but this extraction does not change the legacy
+lifecycle or claim equivalent error handling across those entry points.
+
+This is **not combat parsing**. GUID/spell interpretation, message schemas,
+header clock rules, synthetic events, identities, consumers and publication are
+unchanged. Their ownership/migration choices still require explicit approval.
 
 ## Explicit source compositions
 
@@ -58,7 +91,7 @@ is performed.
 | --- | --- | --- |
 | root `parsernext` | Explicit composition validation and complete-file entry point | Imports profiles + common; future pipeline composition stays here |
 | `common` | Physical line, completed-file summary, reader lifecycle | Standard library only; no expansion/raid construction or global types drawer |
-| `formats` | Stable wire-format names | Standard library only; future wire-specific decoding belongs here where genuinely shared |
+| `formats`, `formats/ccv2` | Stable wire-format names and shared CC-v2 lexical decoding | Standard library only; no identity or combat-message dependencies |
 | `vanilla` | Vanilla source-compatibility policy | Imports common/formats; future vanilla state/rules stay here |
 | `tbc` | TBC source-compatibility policy | Imports common/formats; **never routes through WotLK** |
 | `wotlk` | Wrath source-compatibility policy | Imports common/formats; Wrath-specific state/rules stay here |
