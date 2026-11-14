@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { BarChart3, Calculator } from "lucide-react";
 import { iconUrl } from "@/config/iconUrl";
 import { parseHexColor } from "@/pages/Instance/parseColors";
@@ -254,9 +254,6 @@ function Figure({ label, caption, children }: { label: string; caption?: string;
   );
 }
 
-// Illustrative kills for one spec on one boss. Parses here are simply the share
-// of earlier kills you beat, so the numbers below are computed, not typed in.
-const FRIDAY_POPULATION = [920, 1080, 1180, 1260, 1330, 1390, 1440, 1500, 1550, 1640];
 // The weekend: Friday's 28 of 31 kills below 1,600 parse 90; Saturday's 4 top
 // kills make Sunday's identical kill 28 of 35, a parse of 80.
 const WEEKEND_FRIDAY = [...Array.from({ length: 28 }, (_, i) => 900 + i * 25), 1620, 1660, 1700];
@@ -333,64 +330,92 @@ function WeekendStrip() {
   );
 }
 
-// A bigger population with the same 2,000 DPS record: 40 kills spread from 900 to ~1,990.
-const LARGE_POPULATION = Array.from({ length: 40 }, (_, i) => 900 + i * 28);
-const BENCHMARK = 2000;
+// Real Baron Geddon kills from one Chronicle server's 60-day parse cohorts, as of
+// 2026-11-14. Players are left anonymous; each cohort's best kill is its benchmark.
+const REAL_COHORTS = [
+  {
+    spec: "Beast Mastery Hunter",
+    icon: "/c/icons/spec_hunter_beastmastery.png",
+    kills: 641,
+    top: [
+      { dps: 2013, parse: 100 },
+      { dps: 1624, parse: 100 },
+      { dps: 1598, parse: 100 },
+      { dps: 1587, parse: 100 },
+      { dps: 1563, parse: 99 },
+    ],
+  },
+  {
+    spec: "Enhancement Shaman",
+    icon: "/c/icons/spec_shaman_enhancement.png",
+    kills: 795,
+    top: [
+      { dps: 1382, parse: 100 },
+      { dps: 1252, parse: 100 },
+      { dps: 1128, parse: 100 },
+      { dps: 1116, parse: 100 },
+      { dps: 1106, parse: 100 },
+    ],
+  },
+] as const;
 
-/** The same kill against a small and a large population: the parse moves, Peak doesn't. */
+/** The top of two real cohorts: parses bunch up at 100, Peak keeps the distance to the best. */
 function PositionVsDistance() {
-  const rows = [
-    { label: "Small population", population: FRIDAY_POPULATION },
-    { label: "Large population", population: LARGE_POPULATION },
-  ];
-  const peak = Math.round((100 * YOU) / BENCHMARK);
   return (
     <Figure
-      label="Same kill, two population sizes"
-      caption="Example numbers. A 1,600 DPS kill, and the same 2,000 DPS record in both populations."
+      label="Real kills · Baron Geddon · last 60 days"
+      caption="Top five kills in two real cohorts on one Chronicle server, players left anonymous. Peak here is each kill against the cohort's best."
     >
-      <div className="hidden grid-cols-[minmax(0,1fr)_5rem_5rem] gap-4 pb-2 text-xs tracking-wider text-muted-foreground uppercase sm:grid">
-        <span>Comparison</span>
-        <span className="text-right">Parse</span>
-        <span className="text-right">Peak</span>
-      </div>
-      <div className="space-y-4">
-        {rows.map(({ label, population }) => {
-          const parse = parseAgainst(population, YOU);
+      <div className="grid gap-6 sm:grid-cols-2">
+        {REAL_COHORTS.map((cohort) => {
+          const best = cohort.top[0].dps;
           return (
-            <div key={label} className="grid grid-cols-[minmax(0,1fr)_5rem_5rem] items-center gap-4">
-              <div className="min-w-0">
-                <div className="text-sm text-foreground">
-                  {label} <span className="text-muted-foreground">· {population.length} kills</span>
+            <div key={cohort.spec}>
+              <div className="flex items-center gap-2">
+                <img src={cohort.icon} alt="" width={28} height={28} className="size-7 rounded" />
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-foreground">{cohort.spec}</div>
+                  <div className="text-[11px] text-muted-foreground">{cohort.kills} kills in the comparison</div>
                 </div>
-                <DotStrip population={population} you={YOU} />
               </div>
-              <div className="text-right">
-                <div className="font-mono text-2xl font-bold" style={{ color: parseHexColor(parse) }}>
-                  {parse}
-                </div>
-                <div className="text-[11px] text-muted-foreground sm:hidden">parse</div>
-              </div>
-              <div className="text-right">
-                <div className="font-mono text-2xl font-bold" style={{ color: PEAK }}>
-                  {peak}
-                </div>
-                <div className="text-[11px] text-muted-foreground sm:hidden">Peak</div>
+              <div className="mt-3 grid grid-cols-[1.5rem_minmax(0,1fr)_2.5rem_2.75rem] items-center gap-x-2 gap-y-1.5 text-sm">
+                <span />
+                <span className="text-[11px] tracking-wider text-muted-foreground uppercase">DPS</span>
+                <span className="text-right text-[11px] tracking-wider text-muted-foreground uppercase">Parse</span>
+                <span className="text-right text-[11px] tracking-wider text-muted-foreground uppercase">Peak</span>
+                {cohort.top.map((kill, i) => {
+                  const peak = (100 * kill.dps) / best;
+                  return (
+                    <Fragment key={i}>
+                      <span className="font-mono text-xs text-muted-foreground">#{i + 1}</span>
+                      <span className="relative h-5 overflow-hidden rounded bg-border/60">
+                        <span
+                          className="absolute inset-y-0 left-0 rounded"
+                          style={{ width: `${peak}%`, background: `${PEAK}55` }}
+                        />
+                        <span className="relative px-1.5 font-mono text-xs leading-5 text-foreground">
+                          {kill.dps.toLocaleString()}
+                        </span>
+                      </span>
+                      <span className="text-right font-mono font-bold" style={{ color: parseHexColor(kill.parse) }}>
+                        {kill.parse}
+                      </span>
+                      <span className="text-right font-mono font-bold" style={{ color: PEAK }}>
+                        {Math.round(peak)}
+                      </span>
+                    </Fragment>
+                  );
+                })}
               </div>
             </div>
           );
         })}
       </div>
-      <div className="mt-4 grid gap-3 border-t border-border pt-3 text-sm text-muted-foreground sm:grid-cols-2">
-        <p>
-          <strong className="text-foreground">Parse</strong> counts the kills you beat, so it moves when the population
-          grows or shrinks.
-        </p>
-        <p>
-          <strong style={{ color: PEAK }}>Peak</strong> is 1,600 ÷ 2,000 in both. Population size isn&apos;t an input;
-          only the benchmark is.
-        </p>
-      </div>
+      <p className="mt-4 border-t border-border pt-3 text-sm text-muted-foreground">
+        A 2,013 and a 1,624 DPS kill both parse <strong style={{ color: parseHexColor(100) }}>100</strong>: each beat
+        nearly everyone else. Peak keeps the gap: <strong style={{ color: PEAK }}>100</strong> and{" "}
+        <strong style={{ color: PEAK }}>81</strong>.
+      </p>
     </Figure>
   );
 }
