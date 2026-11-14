@@ -8,6 +8,7 @@ import (
 
 	"github.com/Emyrk/chronicle/database"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -94,16 +95,27 @@ func (d *databaseStore) PublicFeedback(ctx context.Context, slug string) ([]Feed
 	return out, nil
 }
 func (d *databaseStore) ListFeedback(ctx context.Context) ([]Feedback, error) {
-	rows, err := d.db.ListAdminBlogFeedback(ctx, database.ListAdminBlogFeedbackParams{LimitCount: 1000})
-	if err != nil {
-		return nil, err
-	}
-	out := make([]Feedback, 0, len(rows))
-	for _, r := range rows {
-		out = append(out, feedback(r))
-	}
-	return out, nil
+	const pageSize int32 = 1000
+	out := make([]Feedback, 0)
+	// Keep pagination in one repeatable-read snapshot so concurrent inserts cannot
+	// shift offsets and duplicate or omit older records, including tombstones.
+	err := d.db.InTx(ctx, func(tx database.Store) error {
+		for offset := int32(0); ; offset += pageSize {
+			rows, err := tx.ListAdminBlogFeedback(ctx, database.ListAdminBlogFeedbackParams{LimitCount: pageSize, OffsetCount: offset})
+			if err != nil {
+				return err
+			}
+			for _, row := range rows {
+				out = append(out, feedback(row))
+			}
+			if len(rows) < int(pageSize) {
+				return nil
+			}
+		}
+	}, &pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	return out, err
 }
+
 func (d *databaseStore) Moderate(ctx context.Context, id uuid.UUID, action string, expected time.Time) error {
 	if action == "delete" {
 		row, err := d.db.GetBlogFeedbackByID(ctx, id)

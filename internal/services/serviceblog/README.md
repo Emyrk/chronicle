@@ -35,3 +35,7 @@ Root-site submissions store a null original tenant. Root requests are eligible u
 the same build-manifest rules as tenant requests. Public labels say `This server`
 only when both tenant IDs are non-null and equal; otherwise they say `Another server`.
 Own-feedback responses include consent so edits preserve the author's publication choice.
+
+Administrative listing traverses all SQL pages in a repeatable-read snapshot,
+including tombstones. Public feedback currently returns at most 1,000 approved,
+consenting records per post.

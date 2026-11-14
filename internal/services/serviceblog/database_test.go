@@ -11,6 +11,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/ratelimit"
 	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -82,4 +83,40 @@ func TestPostgresAdmissionAndLifecycle(t *testing.T) {
 		return nil
 	}, nil)
 	require.NoError(t, err)
+}
+
+func TestPostgresAdminListIncludesOlderTombstones(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitLong)
+	db, _ := dbtestutil.NewDB(t)
+	user := uuid.New()
+	_, err := db.InsertUser(ctx, database.InsertUserParams{ID: user, Username: user.String()})
+	require.NoError(t, err)
+	store := NewDatabaseStore(db)
+	oldest, _, err := store.SaveFeedback(ctx, Feedback{PostSlug: "oldest", UserID: user, Body: "old", Consent: false})
+	require.NoError(t, err)
+	require.NoError(t, store.DeleteOwnFeedback(ctx, "oldest", user))
+	require.NoError(t, db.InTx(ctx, func(tx database.Store) error {
+		for i := 0; i < 1001; i++ {
+			_, err := tx.InsertBlogFeedback(ctx, database.InsertBlogFeedbackParams{PostSlug: fmt.Sprintf("post-%04d", i), UserID: user, Body: pgtype.Text{String: "private", Valid: true}})
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}, nil))
+	rows, err := store.ListFeedback(ctx)
+	require.NoError(t, err)
+	require.Len(t, rows, 1002)
+	seen := make(map[uuid.UUID]bool, len(rows))
+	found := false
+	for _, row := range rows {
+		require.False(t, seen[row.ID])
+		seen[row.ID] = true
+		if row.ID == oldest.ID {
+			require.True(t, row.Deleted)
+			found = true
+		}
+	}
+	require.True(t, found, "oldest tombstone must remain available to moderators")
 }
