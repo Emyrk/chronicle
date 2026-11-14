@@ -218,19 +218,14 @@ func (s SurvivabilityTrackerState) validate() error {
 			return fmt.Errorf("nil transitions for survivability player %s", player.GUID)
 		}
 		dead := false
-		var previous time.Time
-		for i, transition := range player.Transitions {
+		for _, transition := range player.Transitions {
 			if transition.At.IsZero() {
 				return fmt.Errorf("zero transition time for survivability player %s", player.GUID)
-			}
-			if i > 0 && transition.At.Before(previous) {
-				return fmt.Errorf("out-of-order transitions for survivability player %s", player.GUID)
 			}
 			if transition.Dead == dead {
 				return fmt.Errorf("non-alternating transitions for survivability player %s", player.GUID)
 			}
 			dead = transition.Dead
-			previous = transition.At
 		}
 		if dead != player.Dead {
 			return fmt.Errorf("life state mismatch for survivability player %s", player.GUID)
