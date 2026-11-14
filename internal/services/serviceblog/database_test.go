@@ -119,6 +119,14 @@ func TestPostgresAdminListIncludesOlderTombstones(t *testing.T) {
 		}
 	}
 	require.True(t, found, "oldest tombstone must remain available to moderators")
+	require.Equal(t, user.String(), rows[0].AuthorUsername)
+	require.Empty(t, rows[0].AuthorDiscordID)
+
+	_, err = db.InsertUserAuth(ctx, database.InsertUserAuthParams{ID: uuid.New(), LinkedID: "123456789012345678", UserID: user, Provider: "discord"})
+	require.NoError(t, err)
+	rows, err = store.ListFeedback(ctx)
+	require.NoError(t, err)
+	require.Equal(t, "123456789012345678", rows[0].AuthorDiscordID)
 }
 
 func TestPostgresSummariesArePublicAndEligible(t *testing.T) {

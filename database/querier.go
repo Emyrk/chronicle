@@ -834,7 +834,8 @@ type sqlcQuerier interface {
 	ListActiveAdminTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
 	ListActivePublicTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
 	ListAdminActiveCustomPanelInstallations(ctx context.Context) ([]ListAdminActiveCustomPanelInstallationsRow, error)
-	ListAdminBlogFeedback(ctx context.Context, arg ListAdminBlogFeedbackParams) ([]BlogFeedback, error)
+	// Moderator-only: includes the author's username and linked Discord ID.
+	ListAdminBlogFeedback(ctx context.Context, arg ListAdminBlogFeedbackParams) ([]ListAdminBlogFeedbackRow, error)
 	ListAdminProofRequests(ctx context.Context, tenantID uuid.UUID) ([]ProofRequest, error)
 	ListAffectedAuraDurationCandidates(ctx context.Context, datasetID uuid.UUID) ([]ListAffectedAuraDurationCandidatesRow, error)
 	ListAffectedAuraDurationsByDataset(ctx context.Context, datasetID uuid.UUID) ([]ListAffectedAuraDurationsByDatasetRow, error)

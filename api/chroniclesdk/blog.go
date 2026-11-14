@@ -56,6 +56,9 @@ type BlogAdminFeedback struct {
 	Status    string    `json:"status"`
 	Consent   bool      `json:"consent"`
 	Deleted   bool      `json:"deleted"`
+	// AuthorUsername and AuthorDiscordID are empty when the account or Discord link is gone.
+	AuthorUsername  string `json:"author_username"`
+	AuthorDiscordID string `json:"author_discord_id"`
 }
 type BlogAdminVotes struct {
 	UpVotes   int64 `json:"up_votes"`

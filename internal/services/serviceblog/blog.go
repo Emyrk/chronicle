@@ -33,6 +33,9 @@ type Feedback struct {
 	Status    string
 	Consent   bool
 	Deleted   bool
+	// Author identity is filled only for moderator listings, never public projections.
+	AuthorUsername  string
+	AuthorDiscordID string
 }
 
 // Summary is the public per-post projection shown on the blog index.

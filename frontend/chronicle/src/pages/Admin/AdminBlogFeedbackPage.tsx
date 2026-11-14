@@ -22,7 +22,7 @@ export function AdminBlogFeedbackPage() {
     <header>
       <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Journal moderation</p>
       <h1 className="mt-2 text-2xl font-bold">Blog feedback</h1>
-      <p className="mt-2 text-sm text-muted-foreground">Author names are redacted. Only approved responses with publication permission appear publicly.</p>
+      <p className="mt-2 text-sm text-muted-foreground">Author details are visible to moderators only. Public feedback is always anonymous, and only approved responses with publication permission appear publicly.</p>
     </header>
     {query.isLoading && <p role="status">Loading moderation queue…</p>}
     {query.error && <p role="alert">{query.error.message} <Button variant="outline" onClick={() => void query.refetch()}>Retry</Button></p>}
@@ -45,12 +45,25 @@ export function AdminBlogFeedbackPage() {
       {feedback.length === 0 && <p className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">No feedback in this queue.</p>}
       {feedback.map((item) => <article key={item.id} className="space-y-4 rounded-lg border border-border bg-card p-5">
         <header className="flex flex-wrap justify-between gap-2">
-          <div><a href={`/blog/${encodeURIComponent(item.post_slug)}`} className="font-semibold text-primary hover:underline">{item.post_slug}</a><p className="mt-1 break-all font-mono text-xs text-muted-foreground">User {item.user_id}</p></div>
+          <div className="min-w-0">
+            <a href={`/blog/${encodeURIComponent(item.post_slug)}`} className="font-semibold text-primary hover:underline">{item.post_slug}</a>
+            <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5 text-xs">
+              <dt className="text-muted-foreground">Username</dt>
+              <dd className="font-medium">{item.author_username || <span className="text-muted-foreground">Unknown account</span>}</dd>
+              <dt className="text-muted-foreground">User ID</dt>
+              <dd className="break-all font-mono text-muted-foreground">{item.user_id}</dd>
+              <dt className="text-muted-foreground">Discord</dt>
+              <dd className="break-all font-mono">{item.author_discord_id
+                ? <a href={`https://discord.com/users/${encodeURIComponent(item.author_discord_id)}`} target="_blank" rel="noreferrer" className="text-primary hover:underline">{item.author_discord_id}</a>
+                : <span className="text-muted-foreground">Not linked</span>}</dd>
+            </dl>
+          </div>
           <p className="text-xs text-muted-foreground">{item.deleted ? "Deleted" : item.status} · {item.consent ? "Publication allowed" : "Private feedback"}</p>
         </header>
         <p className="whitespace-pre-wrap break-words text-sm leading-6">{item.body}</p>
-        <div className="flex flex-wrap gap-2">
-          <Button disabled={mutation.isPending || !item.consent || item.deleted || item.status === "approved"} onClick={() => mutation.mutate(blogModerationMutation(item.id, "approve", item.updated_at))}>Approve publication</Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Approving private feedback clears it from the queue; only consented feedback is ever published. */}
+          <Button disabled={mutation.isPending || item.deleted || item.status === "approved"} onClick={() => mutation.mutate(blogModerationMutation(item.id, "approve", item.updated_at))}>{item.consent ? "Approve publication" : "Approve (stays private)"}</Button>
           <Button variant="outline" disabled={mutation.isPending || item.deleted || item.status === "rejected"} onClick={() => mutation.mutate(blogModerationMutation(item.id, "reject", item.updated_at))}>Reject</Button>
           <Button variant="outline" disabled={mutation.isPending || item.deleted} onClick={() => { if (window.confirm("Soft-delete this feedback? The response slot remains reserved.")) mutation.mutate({ path: `feedback/${item.id}/delete`, method: "POST" }); }}>Delete</Button>
           <Button variant="outline" disabled={mutation.isPending} onClick={() => { if (window.confirm("Ban this author from submitting blog feedback?")) mutation.mutate({ path: `users/${encodeURIComponent(item.user_id)}/ban`, method: "POST" }); }}>Ban author</Button>

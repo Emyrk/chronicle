@@ -51,10 +51,20 @@ WHERE post_slug = @post_slug AND status = 'approved' AND public_consent AND dele
 ORDER BY created_at, id LIMIT @limit_count::int OFFSET @offset_count::int;
 
 -- name: ListAdminBlogFeedback :many
-SELECT * FROM blog_feedback
-WHERE (@post_slug::text = '' OR post_slug = @post_slug)
-  AND (@status::text = '' OR status = @status)
-ORDER BY created_at DESC, id LIMIT @limit_count::int OFFSET @offset_count::int;
+-- Moderator-only: includes the author's username and linked Discord ID.
+SELECT sqlc.embed(blog_feedback),
+       COALESCE(users.username, '')::text AS author_username,
+       COALESCE(discord_auth.linked_id, '')::text AS author_discord_id
+FROM blog_feedback
+LEFT JOIN users ON users.id = blog_feedback.user_id
+LEFT JOIN LATERAL (
+  SELECT linked_id FROM user_auth_links
+  WHERE user_auth_links.user_id = blog_feedback.user_id AND provider = 'discord'
+  ORDER BY created_at LIMIT 1
+) AS discord_auth ON true
+WHERE (@post_slug::text = '' OR blog_feedback.post_slug = @post_slug)
+  AND (@status::text = '' OR blog_feedback.status = @status)
+ORDER BY blog_feedback.created_at DESC, blog_feedback.id LIMIT @limit_count::int OFFSET @offset_count::int;
 
 -- name: ListBlogInteractionSummaries :many
 -- Public totals only: upvotes and approved, consented, undeleted feedback. Never downvotes.

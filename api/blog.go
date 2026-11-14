@@ -146,7 +146,7 @@ func (a *API) AdminBlogFeedback(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]chroniclesdk.BlogAdminFeedback, 0, len(rows))
 	for _, f := range rows {
-		out = append(out, chroniclesdk.BlogAdminFeedback{UpdatedAt: f.UpdatedAt, ID: f.ID, PostSlug: f.PostSlug, UserID: f.UserID, TenantID: f.TenantID, Body: f.Body, Status: f.Status, Consent: f.Consent, Deleted: f.Deleted})
+		out = append(out, chroniclesdk.BlogAdminFeedback{UpdatedAt: f.UpdatedAt, ID: f.ID, PostSlug: f.PostSlug, UserID: f.UserID, TenantID: f.TenantID, Body: f.Body, Status: f.Status, Consent: f.Consent, Deleted: f.Deleted, AuthorUsername: f.AuthorUsername, AuthorDiscordID: f.AuthorDiscordID})
 	}
 	httpapi.Write(r.Context(), w, http.StatusOK, out)
 }

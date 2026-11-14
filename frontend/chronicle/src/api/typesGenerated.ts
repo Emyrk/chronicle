@@ -783,6 +783,11 @@ export interface BlogAdminFeedback {
     readonly status: string;
     readonly consent: boolean;
     readonly deleted: boolean;
+    /**
+     * AuthorUsername and AuthorDiscordID are empty when the account or Discord link is gone.
+     */
+    readonly author_username: string;
+    readonly author_discord_id: string;
 }
 
 // From chroniclesdk/blog.go

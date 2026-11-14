@@ -2700,10 +2700,19 @@ func (q *sqlQuerier) InsertBlogFeedback(ctx context.Context, arg InsertBlogFeedb
 }
 
 const listAdminBlogFeedback = `-- name: ListAdminBlogFeedback :many
-SELECT id, post_slug, user_id, original_tenant_id, body, public_consent, status, created_at, updated_at, deleted_at FROM blog_feedback
-WHERE ($1::text = '' OR post_slug = $1)
-  AND ($2::text = '' OR status = $2)
-ORDER BY created_at DESC, id LIMIT $4::int OFFSET $3::int
+SELECT blog_feedback.id, blog_feedback.post_slug, blog_feedback.user_id, blog_feedback.original_tenant_id, blog_feedback.body, blog_feedback.public_consent, blog_feedback.status, blog_feedback.created_at, blog_feedback.updated_at, blog_feedback.deleted_at,
+       COALESCE(users.username, '')::text AS author_username,
+       COALESCE(discord_auth.linked_id, '')::text AS author_discord_id
+FROM blog_feedback
+LEFT JOIN users ON users.id = blog_feedback.user_id
+LEFT JOIN LATERAL (
+  SELECT linked_id FROM user_auth_links
+  WHERE user_auth_links.user_id = blog_feedback.user_id AND provider = 'discord'
+  ORDER BY created_at LIMIT 1
+) AS discord_auth ON true
+WHERE ($1::text = '' OR blog_feedback.post_slug = $1)
+  AND ($2::text = '' OR blog_feedback.status = $2)
+ORDER BY blog_feedback.created_at DESC, blog_feedback.id LIMIT $4::int OFFSET $3::int
 `
 
 type ListAdminBlogFeedbackParams struct {
@@ -2713,7 +2722,14 @@ type ListAdminBlogFeedbackParams struct {
 	LimitCount  int32  `db:"limit_count" json:"limit_count"`
 }
 
-func (q *sqlQuerier) ListAdminBlogFeedback(ctx context.Context, arg ListAdminBlogFeedbackParams) ([]BlogFeedback, error) {
+type ListAdminBlogFeedbackRow struct {
+	BlogFeedback    BlogFeedback `db:"blog_feedback" json:"blog_feedback"`
+	AuthorUsername  string       `db:"author_username" json:"author_username"`
+	AuthorDiscordID string       `db:"author_discord_id" json:"author_discord_id"`
+}
+
+// Moderator-only: includes the author's username and linked Discord ID.
+func (q *sqlQuerier) ListAdminBlogFeedback(ctx context.Context, arg ListAdminBlogFeedbackParams) ([]ListAdminBlogFeedbackRow, error) {
 	rows, err := q.db.Query(ctx, listAdminBlogFeedback,
 		arg.PostSlug,
 		arg.Status,
@@ -2724,20 +2740,22 @@ func (q *sqlQuerier) ListAdminBlogFeedback(ctx context.Context, arg ListAdminBlo
 		return nil, err
 	}
 	defer rows.Close()
-	var items []BlogFeedback
+	var items []ListAdminBlogFeedbackRow
 	for rows.Next() {
-		var i BlogFeedback
+		var i ListAdminBlogFeedbackRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.PostSlug,
-			&i.UserID,
-			&i.OriginalTenantID,
-			&i.Body,
-			&i.PublicConsent,
-			&i.Status,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
+			&i.BlogFeedback.ID,
+			&i.BlogFeedback.PostSlug,
+			&i.BlogFeedback.UserID,
+			&i.BlogFeedback.OriginalTenantID,
+			&i.BlogFeedback.Body,
+			&i.BlogFeedback.PublicConsent,
+			&i.BlogFeedback.Status,
+			&i.BlogFeedback.CreatedAt,
+			&i.BlogFeedback.UpdatedAt,
+			&i.BlogFeedback.DeletedAt,
+			&i.AuthorUsername,
+			&i.AuthorDiscordID,
 		); err != nil {
 			return nil, err
 		}

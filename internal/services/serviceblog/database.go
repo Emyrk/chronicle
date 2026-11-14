@@ -117,7 +117,9 @@ func (d *databaseStore) ListFeedback(ctx context.Context) ([]Feedback, error) {
 				return err
 			}
 			for _, row := range rows {
-				out = append(out, feedback(row))
+				f := feedback(row.BlogFeedback)
+				f.AuthorUsername, f.AuthorDiscordID = row.AuthorUsername, row.AuthorDiscordID
+				out = append(out, f)
 			}
 			if len(rows) < int(pageSize) {
 				return nil
