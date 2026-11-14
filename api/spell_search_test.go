@@ -48,3 +48,18 @@ func TestSpellSearchRejectsMalformedDataset(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 	require.Contains(t, rec.Body.String(), "Invalid dataset_id")
 }
+
+func TestSpellSearchRejectsOversizedBody(t *testing.T) {
+	t.Parallel()
+	db, _ := dbtestutil.NewDB(t)
+	search := serviceinstancesearch.New(testutil.Logger(t), db, prometheus.NewRegistry(), nil)
+	api := &API{instanceSearch: search}
+	body := `{ "context": { "level": null, "difficulty": 0 } }` + strings.Repeat(" ", spellSearchMaxBody)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/wowdb/spells/search", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+
+	api.SpellSearch(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Contains(t, rec.Body.String(), "request body too large")
+}

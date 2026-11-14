@@ -86,13 +86,24 @@ func (api *API) SpellSearch(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(httpapi.DatasetHeader, datasetID.String())
 	caller := instanceSearchCaller(r)
 	var query chroniclesdk.SpellSearchRequest
-	decoder := json.NewDecoder(io.LimitReader(r.Body, spellSearchMaxBody))
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, spellSearchMaxBody))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&query); err != nil {
+	decodeErr := decoder.Decode(&query)
+	if decodeErr == nil {
+		var extra any
+		if err := decoder.Decode(&extra); err != io.EOF {
+			if err == nil {
+				decodeErr = errors.New("request body must contain one JSON value")
+			} else {
+				decodeErr = err
+			}
+		}
+	}
+	if decodeErr != nil {
 		if status, _, peekErr := api.instanceSearch.Peek(ctx, caller); peekErr == nil {
 			ratelimit.SetHeaders(w, status)
 		}
-		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "Request body must be valid JSON.", Detail: err.Error()})
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "Request body must be valid JSON.", Detail: decodeErr.Error()})
 		return
 	}
 	compiled, err := spellsearch.Compile(datasetID, query, spellsearch.Options{})
