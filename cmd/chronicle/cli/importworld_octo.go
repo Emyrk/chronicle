@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/Emyrk/chronicle/database"
 
 	"github.com/coder/serpent"
 )
@@ -16,7 +16,7 @@ func init() {
 
 // importWorldOcto imports world data for OctoWoW.
 // OctoWoW shares the same world data as Turtle WoW.
-func importWorldOcto(ctx context.Context, pool *pgxpool.Pool, inv *serpent.Invocation, opts ImportWorldOptions) error {
+func importWorldOcto(ctx context.Context, pool database.DBTX, inv *serpent.Invocation, opts ImportWorldOptions) error {
 	dataDir := turtleDataDir // same world dump as turtle
 
 	detected, err := detectFiles(dataDir)

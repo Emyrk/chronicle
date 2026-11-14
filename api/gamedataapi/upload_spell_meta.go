@@ -2,6 +2,7 @@ package gamedataapi
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -15,6 +16,27 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
+
+type spellMetaMutationError struct {
+	message string
+	err     error
+}
+
+func (e *spellMetaMutationError) Error() string {
+	return e.err.Error()
+}
+
+func writeSpellMetaMutationError(ctx context.Context, w http.ResponseWriter, fallbackMessage string, err error) {
+	var mutationErr *spellMetaMutationError
+	if errors.As(err, &mutationErr) {
+		fallbackMessage = mutationErr.message
+		err = mutationErr.err
+	}
+	httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
+		Message: fallbackMessage,
+		Detail:  err.Error(),
+	})
+}
 
 // cutIconPrefix strips the "Interface\Icons\" DBC path prefix case-insensitively.
 func (h *Handler) handleSpellDescriptionVariablesUpload(ctx context.Context, w http.ResponseWriter, mode string, table *dbc.Table, datasetID uuid.UUID) {
@@ -42,39 +64,33 @@ func (h *Handler) handleSpellDescriptionVariablesUpload(ctx context.Context, w h
 		return
 	}
 
-	if _, err := h.pool.Exec(ctx, `DELETE FROM dbc_spell_description_variables WHERE dataset_id = $1`, datasetID); err != nil {
-		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-			Message: "Failed to clear existing description variables",
-			Detail:  err.Error(),
-		})
-		return
-	}
+	if err := h.mutateDataset(ctx, datasetID, []servicecache.Namespace{servicecache.NamespaceSpells}, func(tx database.Store) error {
+		if _, err := tx.Exec(ctx, `DELETE FROM dbc_spell_description_variables WHERE dataset_id = $1`, datasetID); err != nil {
+			return &spellMetaMutationError{message: "Failed to clear existing description variables", err: err}
+		}
 
-	const batchSize = 500
-	batch := &pgx.Batch{}
-	for _, row := range rows {
-		batch.Queue(`INSERT INTO dbc_spell_description_variables (dataset_id, id, variables) VALUES ($1,$2,$3)`,
-			datasetID, row.ID, row.Variables,
-		)
-		if batch.Len() >= batchSize {
-			if err := flushBatch(ctx, h.pool, batch); err != nil {
-				httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-					Message: "Failed to insert description variables",
-					Detail:  err.Error(),
-				})
-				return
+		const batchSize = 500
+		batch := &pgx.Batch{}
+		for _, row := range rows {
+			batch.Queue(`INSERT INTO dbc_spell_description_variables (dataset_id, id, variables) VALUES ($1,$2,$3)`,
+				datasetID, row.ID, row.Variables,
+			)
+			if batch.Len() >= batchSize {
+				if err := flushBatch(ctx, tx, batch); err != nil {
+					return &spellMetaMutationError{message: "Failed to insert description variables", err: err}
+				}
+				batch = &pgx.Batch{}
 			}
-			batch = &pgx.Batch{}
 		}
-	}
-	if batch.Len() > 0 {
-		if err := flushBatch(ctx, h.pool, batch); err != nil {
-			httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-				Message: "Failed to insert description variables (final batch)",
-				Detail:  err.Error(),
-			})
-			return
+		if batch.Len() > 0 {
+			if err := flushBatch(ctx, tx, batch); err != nil {
+				return &spellMetaMutationError{message: "Failed to insert description variables (final batch)", err: err}
+			}
 		}
+		return nil
+	}); err != nil {
+		writeSpellMetaMutationError(ctx, w, "Failed to replace description variables", err)
+		return
 	}
 
 	resp.Inserted = len(rows)
@@ -115,39 +131,33 @@ func (h *Handler) handleSpellCastTimesUpload(ctx context.Context, w http.Respons
 		return
 	}
 
-	if _, err := h.pool.Exec(ctx, `DELETE FROM dbc_spell_cast_times WHERE dataset_id = $1`, datasetID); err != nil {
-		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-			Message: "Failed to clear existing spell cast times",
-			Detail:  err.Error(),
-		})
-		return
-	}
+	if err := h.mutateDataset(ctx, datasetID, []servicecache.Namespace{servicecache.NamespaceSpells}, func(tx database.Store) error {
+		if _, err := tx.Exec(ctx, `DELETE FROM dbc_spell_cast_times WHERE dataset_id = $1`, datasetID); err != nil {
+			return &spellMetaMutationError{message: "Failed to clear existing spell cast times", err: err}
+		}
 
-	const batchSize = 500
-	batch := &pgx.Batch{}
-	for _, row := range rows {
-		batch.Queue(`INSERT INTO dbc_spell_cast_times (dataset_id, id, base, per_level, minimum) VALUES ($1,$2,$3,$4,$5)`,
-			datasetID, row.ID, row.Base, row.PerLevel, row.Minimum,
-		)
-		if batch.Len() >= batchSize {
-			if err := flushBatch(ctx, h.pool, batch); err != nil {
-				httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-					Message: "Failed to write batch",
-					Detail:  err.Error(),
-				})
-				return
+		const batchSize = 500
+		batch := &pgx.Batch{}
+		for _, row := range rows {
+			batch.Queue(`INSERT INTO dbc_spell_cast_times (dataset_id, id, base, per_level, minimum) VALUES ($1,$2,$3,$4,$5)`,
+				datasetID, row.ID, row.Base, row.PerLevel, row.Minimum,
+			)
+			if batch.Len() >= batchSize {
+				if err := flushBatch(ctx, tx, batch); err != nil {
+					return &spellMetaMutationError{message: "Failed to write batch", err: err}
+				}
+				batch = &pgx.Batch{}
 			}
-			batch = &pgx.Batch{}
 		}
-	}
-	if batch.Len() > 0 {
-		if err := flushBatch(ctx, h.pool, batch); err != nil {
-			httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-				Message: "Failed to write final batch",
-				Detail:  err.Error(),
-			})
-			return
+		if batch.Len() > 0 {
+			if err := flushBatch(ctx, tx, batch); err != nil {
+				return &spellMetaMutationError{message: "Failed to write final batch", err: err}
+			}
 		}
+		return nil
+	}); err != nil {
+		writeSpellMetaMutationError(ctx, w, "Failed to replace spell cast times", err)
+		return
 	}
 
 	resp.Inserted = len(rows)
@@ -246,46 +256,40 @@ func (h *Handler) handleSpellRangesUpload(ctx context.Context, w http.ResponseWr
 		return
 	}
 
-	if _, err := h.pool.Exec(ctx, `DELETE FROM dbc_spell_ranges WHERE dataset_id = $1`, datasetID); err != nil {
-		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-			Message: "Failed to clear existing spell ranges",
-			Detail:  err.Error(),
-		})
-		return
-	}
+	if err := h.mutateDataset(ctx, datasetID, []servicecache.Namespace{servicecache.NamespaceSpells}, func(tx database.Store) error {
+		if _, err := tx.Exec(ctx, `DELETE FROM dbc_spell_ranges WHERE dataset_id = $1`, datasetID); err != nil {
+			return &spellMetaMutationError{message: "Failed to clear existing spell ranges", err: err}
+		}
 
-	const batchSize = 500
-	batch := &pgx.Batch{}
-	for _, row := range rows {
-		var rangeMin, rangeMax float32
-		if len(row.RangeMin) > 0 {
-			rangeMin = row.RangeMin[0]
-		}
-		if len(row.RangeMax) > 0 {
-			rangeMax = row.RangeMax[0]
-		}
-		batch.Queue(`INSERT INTO dbc_spell_ranges (dataset_id, id, range_min, range_max, flags, name) VALUES ($1,$2,$3,$4,$5,$6)`,
-			datasetID, row.ID, rangeMin, rangeMax, row.Flags, row.DisplayName_lang.String(),
-		)
-		if batch.Len() >= batchSize {
-			if err := flushBatch(ctx, h.pool, batch); err != nil {
-				httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-					Message: "Failed to write batch",
-					Detail:  err.Error(),
-				})
-				return
+		const batchSize = 500
+		batch := &pgx.Batch{}
+		for _, row := range rows {
+			var rangeMin, rangeMax float32
+			if len(row.RangeMin) > 0 {
+				rangeMin = row.RangeMin[0]
 			}
-			batch = &pgx.Batch{}
+			if len(row.RangeMax) > 0 {
+				rangeMax = row.RangeMax[0]
+			}
+			batch.Queue(`INSERT INTO dbc_spell_ranges (dataset_id, id, range_min, range_max, flags, name) VALUES ($1,$2,$3,$4,$5,$6)`,
+				datasetID, row.ID, rangeMin, rangeMax, row.Flags, row.DisplayName_lang.String(),
+			)
+			if batch.Len() >= batchSize {
+				if err := flushBatch(ctx, tx, batch); err != nil {
+					return &spellMetaMutationError{message: "Failed to write batch", err: err}
+				}
+				batch = &pgx.Batch{}
+			}
 		}
-	}
-	if batch.Len() > 0 {
-		if err := flushBatch(ctx, h.pool, batch); err != nil {
-			httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-				Message: "Failed to write final batch",
-				Detail:  err.Error(),
-			})
-			return
+		if batch.Len() > 0 {
+			if err := flushBatch(ctx, tx, batch); err != nil {
+				return &spellMetaMutationError{message: "Failed to write final batch", err: err}
+			}
 		}
+		return nil
+	}); err != nil {
+		writeSpellMetaMutationError(ctx, w, "Failed to replace spell ranges", err)
+		return
 	}
 
 	resp.Inserted = len(rows)
@@ -318,39 +322,33 @@ func (h *Handler) handleSpellIconsUpload(ctx context.Context, w http.ResponseWri
 		return
 	}
 
-	if _, err := h.pool.Exec(ctx, `DELETE FROM dbc_spell_icons WHERE dataset_id = $1`, datasetID); err != nil {
-		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-			Message: "Failed to clear existing spell icons",
-			Detail:  err.Error(),
-		})
-		return
-	}
+	if err := h.mutateDataset(ctx, datasetID, []servicecache.Namespace{servicecache.NamespaceSpells}, func(tx database.Store) error {
+		if _, err := tx.Exec(ctx, `DELETE FROM dbc_spell_icons WHERE dataset_id = $1`, datasetID); err != nil {
+			return &spellMetaMutationError{message: "Failed to clear existing spell icons", err: err}
+		}
 
-	const batchSize = 500
-	batch := &pgx.Batch{}
-	for _, row := range rows {
-		batch.Queue(`INSERT INTO dbc_spell_icons (dataset_id, id, texture_filename) VALUES ($1,$2,$3)`,
-			datasetID, row.ID, cutIconPrefix(row.TextureFilename),
-		)
-		if batch.Len() >= batchSize {
-			if err := flushBatch(ctx, h.pool, batch); err != nil {
-				httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-					Message: "Failed to write batch",
-					Detail:  err.Error(),
-				})
-				return
+		const batchSize = 500
+		batch := &pgx.Batch{}
+		for _, row := range rows {
+			batch.Queue(`INSERT INTO dbc_spell_icons (dataset_id, id, texture_filename) VALUES ($1,$2,$3)`,
+				datasetID, row.ID, cutIconPrefix(row.TextureFilename),
+			)
+			if batch.Len() >= batchSize {
+				if err := flushBatch(ctx, tx, batch); err != nil {
+					return &spellMetaMutationError{message: "Failed to write batch", err: err}
+				}
+				batch = &pgx.Batch{}
 			}
-			batch = &pgx.Batch{}
 		}
-	}
-	if batch.Len() > 0 {
-		if err := flushBatch(ctx, h.pool, batch); err != nil {
-			httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-				Message: "Failed to write final batch",
-				Detail:  err.Error(),
-			})
-			return
+		if batch.Len() > 0 {
+			if err := flushBatch(ctx, tx, batch); err != nil {
+				return &spellMetaMutationError{message: "Failed to write final batch", err: err}
+			}
 		}
+		return nil
+	}); err != nil {
+		writeSpellMetaMutationError(ctx, w, "Failed to replace spell icons", err)
+		return
 	}
 
 	resp.Inserted = len(rows)
@@ -383,39 +381,33 @@ func (h *Handler) handleSpellCategoriesUpload(ctx context.Context, w http.Respon
 		return
 	}
 
-	if _, err := h.pool.Exec(ctx, `DELETE FROM dbc_spell_categories WHERE dataset_id = $1`, datasetID); err != nil {
-		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-			Message: "Failed to clear existing spell categories",
-			Detail:  err.Error(),
-		})
-		return
-	}
+	if err := h.mutateDataset(ctx, datasetID, []servicecache.Namespace{servicecache.NamespaceSpells}, func(tx database.Store) error {
+		if _, err := tx.Exec(ctx, `DELETE FROM dbc_spell_categories WHERE dataset_id = $1`, datasetID); err != nil {
+			return &spellMetaMutationError{message: "Failed to clear existing spell categories", err: err}
+		}
 
-	const batchSize = 500
-	batch := &pgx.Batch{}
-	for _, row := range rows {
-		batch.Queue(`INSERT INTO dbc_spell_categories (dataset_id, id, flags, uses_per_week, name, max_charges, charge_recovery_time, type_mask) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-			datasetID, row.ID, row.Flags, row.UsesPerWeek, row.Name_lang.String(), row.MaxCharges, row.ChargeRecoveryTime, row.TypeMask,
-		)
-		if batch.Len() >= batchSize {
-			if err := flushBatch(ctx, h.pool, batch); err != nil {
-				httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-					Message: "Failed to write batch",
-					Detail:  err.Error(),
-				})
-				return
+		const batchSize = 500
+		batch := &pgx.Batch{}
+		for _, row := range rows {
+			batch.Queue(`INSERT INTO dbc_spell_categories (dataset_id, id, flags, uses_per_week, name, max_charges, charge_recovery_time, type_mask) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+				datasetID, row.ID, row.Flags, row.UsesPerWeek, row.Name_lang.String(), row.MaxCharges, row.ChargeRecoveryTime, row.TypeMask,
+			)
+			if batch.Len() >= batchSize {
+				if err := flushBatch(ctx, tx, batch); err != nil {
+					return &spellMetaMutationError{message: "Failed to write batch", err: err}
+				}
+				batch = &pgx.Batch{}
 			}
-			batch = &pgx.Batch{}
 		}
-	}
-	if batch.Len() > 0 {
-		if err := flushBatch(ctx, h.pool, batch); err != nil {
-			httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-				Message: "Failed to write final batch",
-				Detail:  err.Error(),
-			})
-			return
+		if batch.Len() > 0 {
+			if err := flushBatch(ctx, tx, batch); err != nil {
+				return &spellMetaMutationError{message: "Failed to write final batch", err: err}
+			}
 		}
+		return nil
+	}); err != nil {
+		writeSpellMetaMutationError(ctx, w, "Failed to replace spell categories", err)
+		return
 	}
 
 	resp.Inserted = len(rows)
@@ -448,39 +440,33 @@ func (h *Handler) handleSpellRadiiUpload(ctx context.Context, w http.ResponseWri
 		return
 	}
 
-	if _, err := h.pool.Exec(ctx, `DELETE FROM dbc_spell_radii WHERE dataset_id = $1`, datasetID); err != nil {
-		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-			Message: "Failed to clear existing spell radii",
-			Detail:  err.Error(),
-		})
-		return
-	}
+	if err := h.mutateDataset(ctx, datasetID, []servicecache.Namespace{servicecache.NamespaceSpells}, func(tx database.Store) error {
+		if _, err := tx.Exec(ctx, `DELETE FROM dbc_spell_radii WHERE dataset_id = $1`, datasetID); err != nil {
+			return &spellMetaMutationError{message: "Failed to clear existing spell radii", err: err}
+		}
 
-	const batchSize = 500
-	batch := &pgx.Batch{}
-	for _, row := range rows {
-		batch.Queue(`INSERT INTO dbc_spell_radii (dataset_id, id, radius, radius_per_level, radius_min, radius_max) VALUES ($1,$2,$3,$4,$5,$6)`,
-			datasetID, row.ID, row.Radius, row.RadiusPerLevel, row.RadiusMin, row.RadiusMax,
-		)
-		if batch.Len() >= batchSize {
-			if err := flushBatch(ctx, h.pool, batch); err != nil {
-				httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-					Message: "Failed to write batch",
-					Detail:  err.Error(),
-				})
-				return
+		const batchSize = 500
+		batch := &pgx.Batch{}
+		for _, row := range rows {
+			batch.Queue(`INSERT INTO dbc_spell_radii (dataset_id, id, radius, radius_per_level, radius_min, radius_max) VALUES ($1,$2,$3,$4,$5,$6)`,
+				datasetID, row.ID, row.Radius, row.RadiusPerLevel, row.RadiusMin, row.RadiusMax,
+			)
+			if batch.Len() >= batchSize {
+				if err := flushBatch(ctx, tx, batch); err != nil {
+					return &spellMetaMutationError{message: "Failed to write batch", err: err}
+				}
+				batch = &pgx.Batch{}
 			}
-			batch = &pgx.Batch{}
 		}
-	}
-	if batch.Len() > 0 {
-		if err := flushBatch(ctx, h.pool, batch); err != nil {
-			httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-				Message: "Failed to write final batch",
-				Detail:  err.Error(),
-			})
-			return
+		if batch.Len() > 0 {
+			if err := flushBatch(ctx, tx, batch); err != nil {
+				return &spellMetaMutationError{message: "Failed to write final batch", err: err}
+			}
 		}
+		return nil
+	}); err != nil {
+		writeSpellMetaMutationError(ctx, w, "Failed to replace spell radii", err)
+		return
 	}
 
 	resp.Inserted = len(rows)
@@ -513,39 +499,33 @@ func (h *Handler) handleSpellFocusObjectsUpload(ctx context.Context, w http.Resp
 		return
 	}
 
-	if _, err := h.pool.Exec(ctx, `DELETE FROM dbc_spell_focus_objects WHERE dataset_id = $1`, datasetID); err != nil {
-		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-			Message: "Failed to clear existing spell focus objects",
-			Detail:  err.Error(),
-		})
-		return
-	}
+	if err := h.mutateDataset(ctx, datasetID, []servicecache.Namespace{servicecache.NamespaceSpells}, func(tx database.Store) error {
+		if _, err := tx.Exec(ctx, `DELETE FROM dbc_spell_focus_objects WHERE dataset_id = $1`, datasetID); err != nil {
+			return &spellMetaMutationError{message: "Failed to clear existing spell focus objects", err: err}
+		}
 
-	const batchSize = 500
-	batch := &pgx.Batch{}
-	for _, row := range rows {
-		batch.Queue(`INSERT INTO dbc_spell_focus_objects (dataset_id, id, name) VALUES ($1,$2,$3)`,
-			datasetID, row.ID, row.Name_lang.String(),
-		)
-		if batch.Len() >= batchSize {
-			if err := flushBatch(ctx, h.pool, batch); err != nil {
-				httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-					Message: "Failed to write batch",
-					Detail:  err.Error(),
-				})
-				return
+		const batchSize = 500
+		batch := &pgx.Batch{}
+		for _, row := range rows {
+			batch.Queue(`INSERT INTO dbc_spell_focus_objects (dataset_id, id, name) VALUES ($1,$2,$3)`,
+				datasetID, row.ID, row.Name_lang.String(),
+			)
+			if batch.Len() >= batchSize {
+				if err := flushBatch(ctx, tx, batch); err != nil {
+					return &spellMetaMutationError{message: "Failed to write batch", err: err}
+				}
+				batch = &pgx.Batch{}
 			}
-			batch = &pgx.Batch{}
 		}
-	}
-	if batch.Len() > 0 {
-		if err := flushBatch(ctx, h.pool, batch); err != nil {
-			httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-				Message: "Failed to write final batch",
-				Detail:  err.Error(),
-			})
-			return
+		if batch.Len() > 0 {
+			if err := flushBatch(ctx, tx, batch); err != nil {
+				return &spellMetaMutationError{message: "Failed to write final batch", err: err}
+			}
 		}
+		return nil
+	}); err != nil {
+		writeSpellMetaMutationError(ctx, w, "Failed to replace spell focus objects", err)
+		return
 	}
 
 	resp.Inserted = len(rows)

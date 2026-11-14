@@ -32,6 +32,7 @@ type DatasetStore interface {
 	ListDatasets(ctx context.Context) ([]database.Dataset, error)
 	InsertDataset(ctx context.Context, arg database.InsertDatasetParams) (database.Dataset, error)
 	UpdateDataset(ctx context.Context, arg database.UpdateDatasetParams) (database.Dataset, error)
+	BumpDatasetRevision(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteDataset(ctx context.Context, id uuid.UUID) error
 	ListTenantsByDataset(ctx context.Context, datasetID uuid.NullUUID) ([]database.ListTenantsByDatasetRow, error)
 	ResolveDatasetByRealm(ctx context.Context, id uuid.UUID) (database.ResolveDatasetByRealmRow, error)
@@ -172,14 +173,22 @@ func (s *Service) ensureDefaultDataset(ctx context.Context) error {
 	}
 	flavor := database.ServerFlavor(services.ServerName, baseFlavor)
 
-	_, err := s.db.UpdateDataset(ctx, database.UpdateDatasetParams{
-		ID:            DefaultDatasetID,
-		WowVersion:    pgtype.Text{String: wowVersion, Valid: true},
-		BuildVersion:  pgtype.Int4{Int32: buildVersion, Valid: true},
-		DefaultFlavor: flavor.Strings(),
-	})
+	err := s.db.InTx(ctx, func(tx database.Store) error {
+		if _, err := tx.UpdateDataset(ctx, database.UpdateDatasetParams{
+			ID:            DefaultDatasetID,
+			WowVersion:    pgtype.Text{String: wowVersion, Valid: true},
+			BuildVersion:  pgtype.Int4{Int32: buildVersion, Valid: true},
+			DefaultFlavor: flavor.Strings(),
+		}); err != nil {
+			return fmt.Errorf("update default dataset build info: %w", err)
+		}
+		if _, err := tx.BumpDatasetRevision(ctx, DefaultDatasetID); err != nil {
+			return fmt.Errorf("bump default dataset revision: %w", err)
+		}
+		return nil
+	}, nil)
 	if err != nil {
-		return fmt.Errorf("update default dataset build info: %w", err)
+		return err
 	}
 
 	logger.Info("default dataset ensured",

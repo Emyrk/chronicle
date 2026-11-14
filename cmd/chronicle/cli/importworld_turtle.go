@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/Emyrk/chronicle/database"
 	dbcdatacli "github.com/Emyrk/chronicle/scripts/dbcdata/cli"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/coder/serpent"
 )
@@ -127,7 +127,7 @@ const turtleDataDir = "importdata/world/turtle"
 
 // importWorldTurtle imports world data for the Turtle WoW server.
 // It reads JSON files from importdata/world/turtle/ and DBC data from the WoW client.
-func importWorldTurtle(ctx context.Context, pool *pgxpool.Pool, inv *serpent.Invocation, opts ImportWorldOptions) error {
+func importWorldTurtle(ctx context.Context, pool database.DBTX, inv *serpent.Invocation, opts ImportWorldOptions) error {
 	dataDir := turtleDataDir
 
 	detected, err := detectFiles(dataDir)

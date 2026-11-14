@@ -13,7 +13,7 @@ import (
 // either source is uploaded; whichever upload happens second will populate the
 // complete result.
 func (h *Handler) deriveConsumables(ctx context.Context, datasetID uuid.UUID) error {
-	return h.zed.InTx(ctx, func(tx *authz.AuthzTX) error {
+	return h.mutateDatasetAuthz(ctx, datasetID, nil, func(tx *authz.AuthzTX) error {
 		if err := tx.DeleteConsumablesByDataset(ctx, datasetID); err != nil {
 			return fmt.Errorf("clear derived consumables: %w", err)
 		}
@@ -27,5 +27,5 @@ func (h *Handler) deriveConsumables(ctx context.Context, datasetID uuid.UUID) er
 		}
 
 		return nil
-	}, nil)
+	})
 }

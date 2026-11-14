@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/Emyrk/chronicle/database"
+
 	"github.com/Emyrk/chronicle/database/gamedb/dbcdb"
 	dbcdatacli "github.com/Emyrk/chronicle/scripts/dbcdata/cli"
 	"github.com/coder/serpent"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func init() {
@@ -20,7 +21,7 @@ const azerothcoreDataDir = "importdata/world/azerothcore"
 // importWorldAzerothcore imports world data for the Azerothcore server (WotLK 3.3.5a).
 // Items are sourced from JSON files converted from the cmangos/wotlk-db MySQL dumps.
 // See scripts/convert_cmangos_sql_to_json.py for the conversion tool.
-func importWorldAzerothcore(ctx context.Context, pool *pgxpool.Pool, inv *serpent.Invocation, opts ImportWorldOptions) error {
+func importWorldAzerothcore(ctx context.Context, pool database.DBTX, inv *serpent.Invocation, opts ImportWorldOptions) error {
 	dataDir := azerothcoreDataDir
 
 	detected, err := detectFiles(dataDir)

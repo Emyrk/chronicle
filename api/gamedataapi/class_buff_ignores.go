@@ -64,17 +64,22 @@ func (h *Handler) SetClassBuffIgnores(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	datasetIDs := make(map[uuid.UUID]struct{}, len(req.DatasetIDs))
+	datasetIDs := make([]uuid.UUID, 0, len(req.DatasetIDs))
+	seenDatasetIDs := make(map[uuid.UUID]struct{}, len(req.DatasetIDs))
 	for _, datasetID := range req.DatasetIDs {
 		if datasetID == uuid.Nil {
 			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "dataset_ids cannot contain the nil UUID"})
 			return
 		}
-		datasetIDs[datasetID] = struct{}{}
+		if _, seen := seenDatasetIDs[datasetID]; seen {
+			continue
+		}
+		seenDatasetIDs[datasetID] = struct{}{}
+		datasetIDs = append(datasetIDs, datasetID)
 	}
 
 	store := database.New(h.pool)
-	for datasetID := range datasetIDs {
+	for _, datasetID := range datasetIDs {
 		if _, err := store.GetDataset(ctx, datasetID); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "unknown dataset_id"})
@@ -85,8 +90,8 @@ func (h *Handler) SetClassBuffIgnores(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := store.InTx(ctx, func(tx database.Store) error {
-		for datasetID := range datasetIDs {
+	if err := h.mutateDataset(ctx, datasetIDs[0], nil, func(tx database.Store) error {
+		for _, datasetID := range datasetIDs {
 			if err := tx.UpsertClassBuffIgnore(ctx, database.UpsertClassBuffIgnoreParams{
 				DatasetID: datasetID,
 				SpellName: req.SpellName,
@@ -95,8 +100,13 @@ func (h *Handler) SetClassBuffIgnores(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 		}
+		for _, datasetID := range datasetIDs[1:] {
+			if _, err := tx.BumpDatasetRevision(ctx, datasetID); err != nil {
+				return err
+			}
+		}
 		return nil
-	}, nil); err != nil {
+	}); err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
