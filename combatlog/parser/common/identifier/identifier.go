@@ -38,8 +38,11 @@ func (id Identity) CanBattle() bool {
 }
 
 type Identifier struct {
-	byEntryId    map[uint32]Identity
-	unknownUnits map[uint32]int // unclassified creature entry IDs, with hit count
+	byEntryId           map[uint32]Identity
+	unknownUnits        map[uint32]int // unclassified creature entry IDs, with hit count
+	recipeID            string
+	configuration       string
+	dynamicallyModified bool
 }
 
 func NewIdentifier(byEntryId map[uint32]Identity) *Identifier {
@@ -50,6 +53,7 @@ func NewIdentifier(byEntryId map[uint32]Identity) *Identifier {
 }
 
 func (i *Identifier) AddEntryId(entryId uint32, identity Identity) {
+	i.dynamicallyModified = true
 	i.byEntryId[entryId] = identity
 }
 
