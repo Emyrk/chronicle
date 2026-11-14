@@ -1778,6 +1778,21 @@ export interface EventRepairOperationsResponse {
     readonly operations: readonly EventRepairOperation[];
 }
 
+// From chroniclesdk/event_repairs.go
+/**
+ * EventRepairReceipt is public repair provenance, not privileged job contents.
+ * AppliedAt records the source/receipt/ratings enqueue commit, not ratings completion.
+ */
+export interface EventRepairReceipt {
+    readonly operation_id: string;
+    readonly operation: string;
+    readonly version: number;
+    readonly applied_at: string;
+    readonly warnings: readonly string[];
+    // empty interface{} type, falling back to unknown
+    readonly details: Record<string, unknown>;
+}
+
 // From chroniclesdk/tenant.go
 /**
  * ExternalLinking configures each character linking method for a tenant.
@@ -6574,6 +6589,103 @@ export interface SpeedrunRulesResponse {
     readonly level_range?: SpeedrunLevelRangeRequirement;
 }
 
+// From chroniclesdk/spell_search.go
+/**
+ * SpellSearchContext selects the spell variant and optional level used while
+ * evaluating effect values. Difficulty defaults to zero.
+ */
+export interface SpellSearchContext {
+    readonly level: number | null;
+    readonly difficulty: number;
+}
+
+// From chroniclesdk/spell_search.go
+/**
+ * SpellSearchCursor is the last spell ID from the previous page.
+ */
+export interface SpellSearchCursor {
+    readonly spell_id: number;
+}
+
+// From chroniclesdk/spell_search.go
+/**
+ * SpellSearchLimitResponse describes the shared advanced-search bucket.
+ */
+export interface SpellSearchLimitResponse {
+    readonly logged_in: boolean;
+    readonly allowed: boolean;
+    readonly required_tier: string;
+    readonly limit: number;
+    readonly remaining: number;
+    readonly refill_per_minute: number;
+    readonly reset_seconds: number;
+}
+
+// From chroniclesdk/spell_search.go
+/**
+ * SpellSearchNode is one node of the search tree. Exactly one of And, Or, Not,
+ * AnyEffect, AnyPower or Field must be set.
+ */
+export interface SpellSearchNode {
+    readonly and?: readonly SpellSearchNode[];
+    readonly or?: readonly SpellSearchNode[];
+    readonly not?: SpellSearchNode;
+    /**
+     * AnyEffect matches when one resolved-difficulty effect row satisfies the
+     * subtree. Every predicate in the subtree refers to that same effect row.
+     */
+    readonly any_effect?: SpellSearchNode;
+    /**
+     * AnyPower matches when one power row satisfies the subtree. Every predicate
+     * in the subtree refers to that same power row.
+     */
+    readonly any_power?: SpellSearchNode;
+    readonly field?: string;
+    readonly op?: SpellSearchOp;
+    // empty interface{} type, falling back to unknown
+    readonly value?: unknown;
+}
+
+// From chroniclesdk/spell_search.go
+export type SpellSearchOp = "contains" | "=" | ">" | ">=" | "has" | "in" | "<" | "<=" | "!=";
+
+export const SpellSearchOps: SpellSearchOp[] = ["contains", "=", ">", ">=", "has", "in", "<", "<=", "!="];
+
+// From chroniclesdk/spell_search.go
+/**
+ * SpellSearchRequest is the body of POST /api/v1/wowdb/spells/search.
+ */
+export interface SpellSearchRequest {
+    readonly context: SpellSearchContext;
+    readonly where?: SpellSearchNode;
+    readonly limit?: number;
+    readonly cursor?: SpellSearchCursor;
+}
+
+// From chroniclesdk/spell_search.go
+/**
+ * SpellSearchResponse is one page ordered by spell ID ascending.
+ */
+export interface SpellSearchResponse {
+    readonly results: readonly SpellSearchResult[];
+    readonly next?: SpellSearchCursor;
+}
+
+// From chroniclesdk/spell_search.go
+/**
+ * SpellSearchResult is one lightweight WoWDB spell row.
+ */
+export interface SpellSearchResult {
+    readonly id: number;
+    readonly name: string;
+    readonly subtext: string;
+    readonly description: string;
+    readonly spell_level: number;
+    readonly base_level: number;
+    readonly school: number;
+    readonly spell_icon_id: number;
+}
+
 // From chroniclesdk/account.go
 export interface StartAccountPurgeRequest {
     /**
@@ -7888,14 +8000,3 @@ export interface WoWTrailerEntry {
 export type WoWUnitType = 2 | 3 | 1 | 0 | 4;
 
 export const WoWUnitTypes: WoWUnitType[] = [2, 3, 1, 0, 4];
-
-// From chroniclesdk/event_repairs.go
-export interface EventRepairReceipt {
-    readonly operation_id: string;
-    readonly operation: string;
-    readonly version: number;
-    readonly applied_at: string;
-    readonly warnings: readonly string[];
-    // empty interface{} type, falling back to unknown
-    readonly details: Record<string, unknown>;
-}
