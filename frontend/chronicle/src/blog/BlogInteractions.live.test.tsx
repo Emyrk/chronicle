@@ -7,15 +7,14 @@ const state = vi.hoisted(() => ({ authenticated: false, banned: false, vote: 0 }
 vi.mock("react", async (original) => ({ ...await original<typeof import("react")>(), useSyncExternalStore: () => true }));
 vi.mock("@/hooks/useAuth", () => ({ useAuth: () => ({ session: state.authenticated ? { user_id: "secret-user" } : undefined, isLoading: false }) }));
 vi.mock("@/api/blogInteractions", () => ({
-  useBlogPublic: () => ({ data: { upvotes: 12, downvotes: 987654, feedback: [{ id: "public", body: "Good <script>alert(1)</script>", created_at: "2026-01-01" }] } }),
-  useBlogOwn: () => ({ data: state.authenticated ? { vote: state.vote, banned: state.banned, feedback: null } : undefined }),
+  useBlogInteractions: () => ({ data: { enabled: true, up_votes: 12, down_votes: 987654, own_vote: state.vote, feedback_banned: state.banned, feedback: [{ id: "public", body: "Good <script>alert(1)</script>", server_relation: "This server" }] } }),
   useBlogMutation: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 const post: BlogPostMetadata = { id: "test", title: "Test", description: "", publishedAt: "2026-01-01", rarity: "common", tag: "Docs", icon: "book", votingEnabled: true, feedbackEnabled: true };
 beforeEach(() => { state.authenticated = false; state.banned = false; state.vote = 0; });
 it("shows anonymous approved feedback and upvotes but never downvote totals", () => {
   const markup = renderToStaticMarkup(<BlogInteractions post={post} />);
-  expect(markup).toContain("Anonymous reader");
+  expect(markup).toContain("Anonymous reader · This server");
   expect(markup).toContain("Helpful · 12");
   expect(markup).not.toContain("987654");
   expect(markup).toContain("&lt;script&gt;");

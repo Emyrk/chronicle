@@ -7,14 +7,11 @@ import { AdminBlogFeedbackPage } from "./AdminBlogFeedbackPage";
 
 it("shows redacted review labels and moderator-only downvote totals", () => {
   const client = new QueryClient();
-  const data: AdminBlogInteractions = {
-    posts: [{ post_id: "test", upvotes: 12, downvotes: 7 }],
-    feedback: [{ id: "feedback-1", post_id: "test", user_id: "private-user-id", author_label: "Reader a1b2", body: "<script>bad()</script>", status: "pending", publication_consent: false, created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", banned: false }],
-  };
+  const data: AdminBlogInteractions = [{ id: "feedback-1", post_slug: "test", user_id: "opaque-user-id", tenant_id: "opaque-tenant-id", body: "<script>bad()</script>", status: "pending", consent: false, deleted: false }];
   client.setQueryData(["admin", "blogInteractions"], data);
   const markup = renderToStaticMarkup(<QueryClientProvider client={client}><MemoryRouter><AdminBlogFeedbackPage /></MemoryRouter></QueryClientProvider>);
-  expect(markup).toContain("Reader a1b2");
-  expect(markup).not.toContain("private-user-id");
+  expect(markup).toContain("opaque-user-id");
+  expect(markup).not.toContain("opaque-tenant-id");
   expect(markup).toContain("Downvotes");
   expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>Approve publication<\/button>/);
   expect(markup).toContain("&lt;script&gt;");
