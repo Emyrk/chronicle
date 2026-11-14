@@ -321,6 +321,7 @@ func (c *Characters) WireStateRuntime(runtime CharactersRuntime) error {
 			return fmt.Errorf("nil runtime set hook")
 		}
 	}
+	c.runtimeRevision++
 	c.hooks = slices.Clone(runtime.Hooks)
 	c.noKnownParticipantsAlive = runtime.NoKnownParticipantsAlive
 	c.phaseTransitionCb = runtime.PhaseTransition

@@ -89,6 +89,8 @@ type castEpisode struct {
 // and emits Consume messages into the active fight's event stream. It holds
 // only per-encounter state (snapshot, dedup set).
 type Collector struct {
+	// runtimeRevision tracks explicit emitter replacements; it is not persisted.
+	runtimeRevision uint64
 	instancehook.BaseHook
 
 	auraTracker *auras.Tracking
@@ -113,8 +115,12 @@ func NewCollector(auraTracker *auras.Tracking, shared *Tracker) *Collector {
 // SetEmit sets the callback used to inject Consume messages into the active
 // fight's event stream.
 func (c *Collector) SetEmit(fn func(*messages.Consume)) {
+	c.runtimeRevision++
 	c.emit = fn
 }
+
+// GraphRuntimeRevision identifies emitter wiring changes for aggregate capture validation.
+func (c *Collector) GraphRuntimeRevision() uint64 { return c.runtimeRevision }
 
 func (c *Collector) emitConsume(ev *messages.Consume) {
 	if ev.ItemID != nil && ev.ItemName == nil {

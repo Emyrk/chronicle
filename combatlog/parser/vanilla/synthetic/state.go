@@ -17,6 +17,9 @@ import (
 // constructs another registry nor duplicates shared Damage or spell objects.
 // The enclosing source enforces a successful full-file boundary.
 func (s *Synthetic) CaptureValues(damage func(guid.GUID, *messages.Damage) (string, error), spell func(*chrondbc.Spell) (string, error)) (map[stategraph.Path]stategraph.ValuePayload, error) {
+	if s.graphPending || s.knownArmor == nil {
+		return nil, fmt.Errorf("synthetic runtime is unwired")
+	}
 	if len(s.knownArmor.previous) != 0 {
 		return nil, fmt.Errorf("unsupported populated legacy armor cache")
 	}
@@ -64,6 +67,19 @@ func (s *Synthetic) CaptureValues(damage func(guid.GUID, *messages.Damage) (stri
 // Format/flavor and runtime dependencies come from the compatibility-checked
 // caller. Timings are diagnostic and restart; semantic state does not.
 func RestoreValues(ctx context.Context, logger *slog.Logger, db gamedb.GameDB, values map[stategraph.Path]stategraph.ValuePayload, damage func(string) (*messages.Damage, error), spell func(string) (*chrondbc.Spell, error)) (*Synthetic, error) {
+	candidate, err := RestoreSemanticValues(values, damage, spell)
+	if err != nil {
+		return nil, err
+	}
+	if err := candidate.WireGraphRuntime(ctx, logger, db); err != nil {
+		return nil, err
+	}
+	return candidate, nil
+}
+
+// RestoreSemanticValues loads only retained semantic owners and canonical refs.
+// It never constructs runtime processors, queries dependencies or emits messages.
+func RestoreSemanticValues(values map[stategraph.Path]stategraph.ValuePayload, damage func(string) (*messages.Damage, error), spell func(string) (*chrondbc.Spell, error)) (*Synthetic, error) {
 	if len(values) != 4 && len(values) != 5 {
 		return nil, fmt.Errorf("unexpected synthetic owner count")
 	}
@@ -94,7 +110,7 @@ func RestoreValues(ctx context.Context, logger *slog.Logger, db gamedb.GameDB, v
 	if err != nil {
 		return nil, err
 	}
-	absorptionOwner, err := absorption.Restore(logger, spell)
+	absorptionOwner, err := absorption.Restore(nil, spell)
 	if err != nil {
 		return nil, err
 	}
@@ -138,11 +154,24 @@ func RestoreValues(ctx context.Context, logger *slog.Logger, db gamedb.GameDB, v
 	} else if len(values) != 4 {
 		return nil, fmt.Errorf("unexpected synthetic owner")
 	}
-	candidate := New(ctx, logger, db)
+	candidate := &Synthetic{graphPending: true}
 	candidate.slain = slainOwner
 	candidate.absorption = absorptionOwner
 	candidate.razuvious = razOwner
 	candidate.vanillaPlus = plusOwner
 	candidate.auraOwner = auraOwner
 	return candidate, nil
+}
+
+// WireGraphRuntime installs stateless runtime processors after semantic load.
+func (s *Synthetic) WireGraphRuntime(ctx context.Context, logger *slog.Logger, db gamedb.GameDB) error {
+	if !s.graphPending || ctx == nil || db == nil {
+		return fmt.Errorf("synthetic runtime not ready")
+	}
+	runtime := New(ctx, logger, db)
+	s.logger, s.flavor, s.wowDB = runtime.logger, runtime.flavor, runtime.wowDB
+	s.mitigation, s.extraAttack, s.demons, s.possession, s.knownObjects, s.knownArmor = runtime.mitigation, runtime.extraAttack, runtime.demons, runtime.possession, runtime.knownObjects, runtime.knownArmor
+	s.absorption.logger = logger
+	s.graphPending = false
+	return nil
 }

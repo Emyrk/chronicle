@@ -13,7 +13,7 @@ func (p *InactivityPeriod) CaptureState(moments func(*Moment) (string, error), m
 	if err != nil {
 		return State{}, err
 	}
-	v := periodValue{Kind: "inactivity", Me: p.me, HasTimeoutPredicate: p.timeoutAsDeathIf != nil, Timer: &timerValue{p.Meta.NextTimeout, p.Meta.BumpBy, p.Meta.PendingReset, p.Meta.ResetDeadline, p.Meta.ResetReason, path}}
+	v := periodValue{Kind: "inactivity", Me: p.me, HasTimeoutPredicate: p.timeoutAsDeathIf != nil || p.trustedTimeoutOwner != nil, Timer: &timerValue{p.Meta.NextTimeout, p.Meta.BumpBy, p.Meta.PendingReset, p.Meta.ResetDeadline, p.Meta.ResetReason, path}}
 	return capturePeriod(v, p.Period, moments)
 }
 

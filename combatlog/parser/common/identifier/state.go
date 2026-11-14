@@ -80,7 +80,7 @@ type stateValue struct {
 }
 
 func (i *Identifier) CaptureState() (State, error) {
-	if i == nil || i.recipeID == "" || i.dynamicallyModified {
+	if i == nil || i.recipeID == "" || i.dynamicallyModified || i.serverClassification {
 		return State{}, fmt.Errorf("identifier requires unmodified trusted static recipe")
 	}
 	current, err := fingerprint(i.byEntryId)

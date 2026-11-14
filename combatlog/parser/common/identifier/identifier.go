@@ -38,11 +38,14 @@ func (id Identity) CanBattle() bool {
 }
 
 type Identifier struct {
-	byEntryId           map[uint32]Identity
-	unknownUnits        map[uint32]int // unclassified creature entry IDs, with hit count
-	recipeID            string
-	configuration       string
-	dynamicallyModified bool
+	serverClassification  bool
+	staticEntries         map[uint32]Identity
+	classificationUpdates map[uint32]classificationValue
+	byEntryId             map[uint32]Identity
+	unknownUnits          map[uint32]int // unclassified creature entry IDs, with hit count
+	recipeID              string
+	configuration         string
+	dynamicallyModified   bool
 }
 
 func NewIdentifier(byEntryId map[uint32]Identity) *Identifier {
@@ -55,6 +58,26 @@ func NewIdentifier(byEntryId map[uint32]Identity) *Identifier {
 func (i *Identifier) AddEntryId(entryId uint32, identity Identity) {
 	i.dynamicallyModified = true
 	i.byEntryId[entryId] = identity
+}
+
+// UpdateServerClassification applies the server's scalar metadata without
+// accepting a runtime function or changing configured encounter semantics.
+func (i *Identifier) UpdateServerClassification(entry uint32, affiliation types.Affiliation, name string, boss bool) {
+	identity, known := i.byEntryId[entry]
+	identity.Affiliation = affiliation
+	if name != "" || !known {
+		identity.Name = name
+	}
+	identity.Boss = identity.Boss || boss
+	if i.serverClassification {
+		if i.byEntryId == nil {
+			i.byEntryId = make(map[uint32]Identity)
+		}
+		i.byEntryId[entry] = identity
+		i.classificationUpdates[entry] = classificationValue{identity.Affiliation, identity.Name, identity.Boss}
+		return
+	}
+	i.AddEntryId(entry, identity)
 }
 
 func (i *Identifier) IdentifyUnit(id guid.GUID) Identity {

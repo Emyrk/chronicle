@@ -151,7 +151,7 @@ func NewBroodlordWhelp(id guid.GUID, all *characters.Characters) (characters.Cha
 		return nil, false
 	}
 	return characters.NewCommonCharacter(id, all).
-		WithTimeoutAsDeathIf(characters.IfEntryAlive(broodlordLashlayerEntry)), true
+		WithTimeoutAsDeathWhileEntryAlive(broodlordLashlayerEntry), true
 }
 
 type RazorAdCharacter struct {

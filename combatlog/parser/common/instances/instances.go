@@ -12,6 +12,7 @@ import (
 // are preserved for backward compatibility.
 var (
 	WindhornCanyonFactory = &CommonFactory{
+		GraphID:   "vanilla/WindhornCanyonFactory",
 		Name:      "Windhorn Canyon",
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"windhorn canyon"},
@@ -19,6 +20,7 @@ var (
 	}
 
 	DeadminesFactory = &CommonFactory{
+		GraphID:   "vanilla/DeadminesFactory",
 		Name:      "Deadmines",
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"the deadmines", "deadmines", "死亡矿井"},
@@ -30,6 +32,7 @@ var (
 	}
 
 	ShadowfangKeepFactory = &CommonFactory{
+		GraphID:   "vanilla/ShadowfangKeepFactory",
 		Name:      "Shadowfang Keep",
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"shadowfang keep", "影牙城堡"},
@@ -38,6 +41,7 @@ var (
 	}
 
 	WailingCavernsFactory = &CommonFactory{
+		GraphID:   "vanilla/WailingCavernsFactory",
 		Name:      "Wailing Caverns",
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"wailing caverns", "哀嚎洞穴"},
@@ -46,6 +50,7 @@ var (
 	}
 
 	RazorfenKraulFactory = &CommonFactory{
+		GraphID:   "vanilla/RazorfenKraulFactory",
 		Name:      "Razorfen Kraul",
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"razorfen kraul", "剃刀沼泽"},
@@ -54,6 +59,7 @@ var (
 	}
 
 	ScarletMonasteryCathedralFactory = &CommonFactory{
+		GraphID:   "vanilla/ScarletMonasteryCathedralFactory",
 		Name:      "Scarlet Monastery Cathedral",
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"scarlet monastery cathedral", "血色修道院-大教堂"},
@@ -61,6 +67,7 @@ var (
 	}
 
 	ScarletMonasteryLibraryFactory = &CommonFactory{
+		GraphID:   "vanilla/ScarletMonasteryLibraryFactory",
 		Name:      "Scarlet Monastery Library",
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"scarlet monastery library", "血色修道院-图书馆"},
@@ -68,6 +75,7 @@ var (
 	}
 
 	ScarletMonasteryGraveyardFactory = &CommonFactory{
+		GraphID:   "vanilla/ScarletMonasteryGraveyardFactory",
 		Name:      "Scarlet Monastery Graveyard",
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"scarlet monastery graveyard", "血色修道院-墓地"},
@@ -85,6 +93,7 @@ var (
 	}
 
 	ScarletMonasteryArmoryFactory = &CommonFactory{
+		GraphID:   "vanilla/ScarletMonasteryArmoryFactory",
 		Name:      "Scarlet Monastery Armory",
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"scarlet monastery armory", "血色修道院-军械库"},
@@ -92,6 +101,7 @@ var (
 	}
 
 	ScarletMonasteryArmoryVPRaid = &CommonFactory{
+		GraphID:   "vanilla/ScarletMonasteryArmoryVPRaid",
 		Name:      "Scarlet Monastery",
 		Category:  InstanceCategoryRaid,
 		ZoneNames: []string{"scarlet monastery"},
@@ -106,6 +116,7 @@ var (
 	}
 
 	AllScarletMonasteryFactory = &CommonFactory{
+		GraphID:   "vanilla/AllScarletMonasteryFactory",
 		MultiZone: true,
 		Name:      "Scarlet Monastery",
 		Category:  InstanceCategoryDungeon,
@@ -123,6 +134,7 @@ var (
 	}
 
 	BlackrockSpireFactory = &CommonFactory{
+		GraphID:  "vanilla/BlackrockSpireFactory",
 		Name:     "Blackrock Spire",
 		Category: InstanceCategoryDungeon,
 		DerivedName: func(database.WoWFlavor) *MultiInstanceZone {
@@ -146,6 +158,7 @@ var (
 	}
 
 	MoltenCoreFactory = &CommonFactory{
+		GraphID:   "vanilla/MoltenCoreFactory",
 		Name:      "Molten Core",
 		Category:  InstanceCategoryRaid,
 		ZoneNames: []string{"molten core", "熔火之心"},
@@ -163,6 +176,7 @@ var (
 	}
 
 	TowerOfKarazhanFactory = &CommonFactory{
+		GraphID:  "vanilla/TowerOfKarazhanFactory",
 		Name:     "Tower of Karazhan",
 		Category: InstanceCategoryRaid,
 		DerivedName: func(database.WoWFlavor) *MultiInstanceZone {
@@ -196,6 +210,7 @@ var (
 	}
 
 	OnyxiaFactory = &CommonFactory{
+		GraphID:   "vanilla/OnyxiaFactory",
 		Name:      "Onyxia's Lair",
 		Category:  InstanceCategoryRaid,
 		ZoneNames: []string{"onyxia's lair", "奥妮克希亚的巢穴"},
@@ -215,6 +230,7 @@ var (
 	}
 
 	RagefireChasmFactory = &CommonFactory{
+		GraphID:   "vanilla/RagefireChasmFactory",
 		Name:      "Ragefire Chasm",
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"ragefire chasm", "怒焰裂谷"},
@@ -226,6 +242,7 @@ var (
 	}
 
 	ZulGurubFactory = &CommonFactory{
+		GraphID:           "vanilla/ZulGurubFactory",
 		Name:              "Zul'Gurub",
 		Category:          InstanceCategoryRaid,
 		ZoneNames:         []string{"zul'gurub", "祖尔格拉布"},
@@ -243,6 +260,7 @@ var (
 	}
 
 	EmeraldSanctumFactory = &CommonFactory{
+		GraphID:   "vanilla/EmeraldSanctumFactory",
 		Name:      "Emerald Sanctum",
 		Category:  InstanceCategoryRaid,
 		ZoneNames: []string{"emerald sanctum", "翡翠圣殿"},
@@ -263,6 +281,7 @@ var (
 	}
 
 	BlackrockDepthsFactory = &CommonFactory{
+		GraphID:   "vanilla/BlackrockDepthsFactory",
 		Name:      "Blackrock Depths",
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"blackrock depths", "黑石深渊"},
@@ -271,6 +290,7 @@ var (
 	}
 
 	ScholomanceFactory = &CommonFactory{
+		GraphID:   "vanilla/ScholomanceFactory",
 		Name:      "Scholomance",
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"scholomance", "通灵学院"},
@@ -279,6 +299,7 @@ var (
 	}
 
 	TempleOfAhnQirajFactory = &CommonFactory{
+		GraphID:   "vanilla/TempleOfAhnQirajFactory",
 		Name:      "Temple of Ahn'Qiraj",
 		Category:  InstanceCategoryRaid,
 		ZoneNames: []string{"ahn'qiraj", "temple of ahn'qiraj", "ahn'qiraj temple", "安其拉神庙", "安其拉"},
@@ -295,6 +316,7 @@ var (
 	}
 
 	RuinsOfAhnQirajFactory = &CommonFactory{
+		GraphID:   "vanilla/RuinsOfAhnQirajFactory",
 		Name:      "Ruins of Ahn'Qiraj",
 		Category:  InstanceCategoryRaid,
 		ZoneNames: []string{"ruins of ahn'qiraj", "安其拉废墟"},
@@ -311,6 +333,7 @@ var (
 	}
 
 	BlackwingLairFactory = &CommonFactory{
+		GraphID:           "vanilla/BlackwingLairFactory",
 		Name:              "Blackwing Lair",
 		Category:          InstanceCategoryRaid,
 		ZoneNames:         []string{"blackwing lair", "黑翼之巢"},
@@ -335,6 +358,7 @@ var (
 	}
 
 	NaxxramasFactory = &CommonFactory{
+		GraphID:  "vanilla/NaxxramasFactory",
 		Name:     "Naxxramas",
 		Category: InstanceCategoryRaid,
 		ZoneNames: []string{
@@ -356,6 +380,7 @@ var (
 	}
 
 	StratholmeFactory = &CommonFactory{
+		GraphID:   "vanilla/StratholmeFactory",
 		Name:      "Stratholme",
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"stratholme", "斯坦索姆"},
@@ -364,6 +389,7 @@ var (
 	}
 
 	BlackMorassFactory = &CommonFactory{
+		GraphID:   "vanilla/BlackMorassFactory",
 		Name:      "Black Morass",
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"the black morass", "黑色沼泽"},
@@ -372,6 +398,7 @@ var (
 	}
 
 	DireMaulFactory = &CommonFactory{
+		GraphID:   "vanilla/DireMaulFactory",
 		Name:      "Dire Maul",
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"dire maul", "厄运之槌"},
@@ -380,6 +407,7 @@ var (
 	}
 
 	StormwindVaultFactory = &CommonFactory{
+		GraphID:   "vanilla/StormwindVaultFactory",
 		Name:      "Stormwind Vault",
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"stormwind vault", "暴风城地牢"},
@@ -387,6 +415,7 @@ var (
 	}
 
 	StockadesFactory = &CommonFactory{
+		GraphID:   "vanilla/StockadesFactory",
 		Name:      "Stormwind Stockade",
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"stormwind stockade", "the stockade", "监狱"},
@@ -395,6 +424,7 @@ var (
 	}
 
 	SunkenTempleFactory = &CommonFactory{
+		GraphID:   "vanilla/SunkenTempleFactory",
 		Name:      "Sunken Temple",
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"sunken temple", "the temple of atal'hakkar", "阿塔哈卡神庙"},
@@ -403,6 +433,7 @@ var (
 	}
 
 	TimbermawHoldFactory = &CommonFactory{
+		GraphID:       "vanilla/TimbermawHoldFactory",
 		Name:          "Timbermaw Hold",
 		Category:      InstanceCategoryRaid,
 		ZoneNames:     []string{"timbermaw hold", "木喉要塞"},
@@ -419,6 +450,7 @@ var (
 	}
 
 	FrostmaneHollowFactory = &CommonFactory{
+		GraphID:   "vanilla/FrostmaneHollowFactory",
 		Name:      "Frostmane Hollow",
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"frostmane hollow"},
@@ -426,6 +458,7 @@ var (
 	}
 
 	ZulFarrakFactory = &CommonFactory{
+		GraphID:   "vanilla/ZulFarrakFactory",
 		Name:      "Zul'Farrak",
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"zul'farrak", "祖尔法拉克"},
@@ -434,6 +467,7 @@ var (
 	}
 
 	BlackfathomDeepsFactory = &CommonFactory{
+		GraphID:   "vanilla/BlackfathomDeepsFactory",
 		Name:      "Blackfathom Deeps",
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"blackfathom deeps"},
@@ -442,6 +476,7 @@ var (
 	}
 
 	UldamanFactory = &CommonFactory{
+		GraphID:   "vanilla/UldamanFactory",
 		Name:      "Uldaman",
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"uldaman"},
@@ -450,6 +485,7 @@ var (
 	}
 
 	GnomereganFactory = &CommonFactory{
+		GraphID:   "vanilla/GnomereganFactory",
 		Name:      "Gnomeregan",
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"gnomeregan"},
@@ -458,6 +494,7 @@ var (
 	}
 
 	RazorfenDownsFactory = &CommonFactory{
+		GraphID:   "vanilla/RazorfenDownsFactory",
 		Name:      "Razorfen Downs",
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"razorfen downs"},
@@ -466,6 +503,7 @@ var (
 	}
 
 	MaraudonFactory = &CommonFactory{
+		GraphID:   "vanilla/MaraudonFactory",
 		Name:      "Maraudon",
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"maraudon"},
@@ -474,6 +512,7 @@ var (
 	}
 
 	ExcavationSiteWetlandsFactory = &CommonFactory{
+		GraphID:   "vanilla/ExcavationSiteWetlandsFactory",
 		Name:      "Excavation Site: Wetlands",
 		ZoneNames: []string{"excavation site: wetlands", "挖掘场：湿地"},
 		MapIDs:    []uint32{2998},
@@ -483,6 +522,7 @@ var (
 	// RuinsOfLordaeronFactory is the WoW Forever "Ruins of Lordaeron" dungeon.
 	// The combat log reports the zone as "Ruins of Lordaeron" (map 2999).
 	RuinsOfLordaeronFactory = &CommonFactory{
+		GraphID:   "vanilla/RuinsOfLordaeronFactory",
 		Name:      "Ruins of Lordaeron",
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"ruins of lordaeron"},
@@ -493,6 +533,7 @@ var (
 
 var (
 	TheDrownedCityFactory = &CommonFactory{
+		GraphID:   "vanilla/TheDrownedCityFactory",
 		Name:      "The Drowned City",
 		ZoneNames: []string{"the drowned city"},
 		Category:  InstanceCategoryDungeon,

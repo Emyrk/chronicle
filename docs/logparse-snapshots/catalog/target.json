@@ -168,6 +168,17 @@
       }
     },
     {
+      "path": "/root/character-types/common/graph-never-active-value",
+      "kind": "directory",
+      "metadata": {
+        "classification": "character_type",
+        "go_type": "github.com/Emyrk/chronicle/combatlog/parser/common/characters.graphNeverActiveValue",
+        "label": "github.com/Emyrk/chronicle/combatlog/parser/common/characters.graphNeverActiveValue",
+        "note": "internal ownergraph box for value-form NeverActive; unboxed on load to preserve the original dynamic value type, not a gameplay factory product",
+        "source": "combatlog/parser/common/characters/wrapper_graph.go"
+      }
+    },
+    {
       "path": "/root/character-types/common/ignore-cast",
       "kind": "directory",
       "metadata": {
@@ -1212,6 +1223,10 @@
     {
       "from": "/root/character-types/common/death-on-cast",
       "to": "/root/character-types/contracts/character-base"
+    },
+    {
+      "from": "/root/character-types/common/graph-never-active-value",
+      "to": "/root/character-types/common/never-active"
     },
     {
       "from": "/root/character-types/common/ignore-cast",

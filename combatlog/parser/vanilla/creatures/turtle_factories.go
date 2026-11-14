@@ -158,3 +158,144 @@ func TurtleCharacterFactories() []characters.CharacterFactory {
 		database.FlavorTurtle,
 	})
 }
+
+// VanillaGraphFactoryRecipe explicitly names the ordered existing factories.
+// Keep these IDs beside the production list; count validation fails closed when
+// a factory is added without registering its portable contract.
+func VanillaGraphFactoryRecipe(flavor database.WoWFlavor) characters.TrustedFactoryRecipe {
+	ids := []string{
+		// ── Global (always included) ───────────────────────────────────
+		"NewTotemCharacter",
+		"NewCritterCharacter",
+		"NewObject",
+	}
+
+	ids = append(ids, []string{
+		// ── Stock vanilla content ──────────────────────────────────────
+		// SFK
+		"NewHauntingSpirit",
+		"NewArchmageArgual",
+		// Sunken Temple
+		"NewAtalalDeathwalkerSpirit",
+		// Wailing Caverns
+		"NewDiscipleOfNaralex",
+		// Deadmines
+		"NewSneedShredder",
+		"NewEdwinVanCleef",
+		// Dire Maul
+		"NewImmolthar",
+		"EyeofImmolthar",
+		"NewKingGordok",
+		// Molten Core
+		"NewCoreHoundCharacter",
+		"NewMajordomoPartyCharacter",
+		"NewIncindisCharacter",
+		"NewSonOfTheFlameCharacter",
+		"NewSulfuronHarbingerCharacter",
+		"NewSmoldarisBasaltharCharacter",
+		"NewSorcererThaneCharacter",
+		"NewRagnarosCharacter",
+		"NewCoreRager",
+		"NewGolemaggCharacter",
+		// Blackwing Lair
+		"NewBroodlordLashlayer",
+		"NewBroodlordWhelp",
+		"NewRazorgore",
+		"NewRazorAdCharacter",
+		"NewShadowflameSpark",
+		"NewNefarian",
+		"NewVaelChained",
+		// Onyxia
+		"NewOnyxiaCharacter",
+		"NewBroodcommanderAxelusCharacter",
+		// Zul'Gurub
+		"NewHighPriestArlokk",
+		"NewHighPriestMarli",
+		"NewHighPriestessJeklik",
+		"NewHighPriestThekalParty",
+		"NewJindoHexxer",
+		"NewHooktoothFrenzy",
+		// Scholomance
+		"NewJandiceBarov",
+		"NewDiseasedGhoul",
+		// Stratholme
+		"NewCryptScarab",
+		// AQ 40
+		"NewCthun",
+		"NewTentacles",
+		// Naxx
+		"NewNothThePlaguebringer",
+		"NewMaexxna",
+		"NewGluth",
+		"NewGrobbulus",
+		"NewAnubRekhan",
+		"NewThaddiusParty",
+		"NewGothikRoom",
+		"NewKelThuzadRoom",
+		"NewHeiganTheUnclean",
+		"NewPlagueBeast",
+		"NewDiseasedMaggot",
+		"NewEyeStalk",
+		// L/UBRS
+		"NewMotherSmolderweb",
+	}...)
+
+	// ── VanillaPlus content ────────────────────────────────────────
+	if flavor.Has(database.FlavorVanillaPlus) {
+		ids = append(ids, []string{
+			// SM (V+)
+			"NewVanillaPlusMograineCharacter",
+			"NewVanillaPlusSMSoul",
+			"NewVanillaPlusSMSoulHunter",
+			"NewVanillaPlusBrotherMicheal",
+			"NewVanillaPlusBloodaxeWorgPup",
+			"NewVanillaPlusScarletCharger",
+			"NewVanillaPlusScarletSharpshooter",
+			"NewVanillaPlusScarletSorcerer",
+		}...)
+	}
+
+	// ── Nightmare of Ursol content (Turtle, OctoWoW) ───────────────
+	if flavor.Has(database.FlavorNightmareOfUrsol) {
+		ids = append(ids, []string{
+			// Timbermaw Hold
+			"NewKarrsh",
+			"NewChieftainPartath",
+			"NewOrmanos",
+			"NewUrsol",
+			"NewNightmareFiend",
+			"NewVileSkitterer",
+			"NewSelenaxxFoulheart",
+			"NewLoktanagTheVile",
+			"NewPerotharn",
+		}...)
+	}
+
+	// ── Turtle WoW custom content ──────────────────────────────────
+	if flavor.Has(database.FlavorTurtle) || flavor.Has(database.FlavorOctoWoW) || flavor.Has(database.FlavorNightmareOfUrsol) {
+		ids = append(ids, []string{
+			// Kara 40
+			"NewNetherInfernal",
+			"NewKruul",
+			"NewKing",
+			"NewMephistroth",
+			"NewDemonicEye",
+			"NewSanvTasDal",
+			"NewDraeneiNetherWalker",
+			"NewKeeperGnarlmoon",
+			"NewAnomalus",
+			"NewEchoOfMedivh",
+			"NewFragmentOfRupturan",
+			"NewRupturanTheBroken",
+			"NewFelheart",
+			"NewLivingStone",
+			"NewIncantagos",
+			"NewManascaleSuppressor",
+			"NewNightmareCrawler",
+			// Emerald Sanctum
+			"NewSolnius",
+		}...)
+	}
+
+	return characters.TrustedFactoryRecipe{ID: "vanilla/characters/" + flavor.CanonicalKey(), FactoryIDs: ids, Factories: VanillaCharacterFactories(flavor)}
+}

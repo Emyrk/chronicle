@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"reflect"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/auras"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parsernext/snapshot"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/Emyrk/chronicle/internal/stategraph/ownergraph"
 )
@@ -14,7 +16,9 @@ import (
 const collectorGraphVersion uint32 = 1
 
 type GraphOptions struct {
-	Catalog ConsumableCatalog
+	// Compatibility binds caller-supplied dependencies to authoritative session identity.
+	Compatibility snapshot.Compatibility
+	Catalog       ConsumableCatalog
 }
 
 type collectorGraphState struct {
@@ -25,24 +29,53 @@ type collectorGraphState struct {
 }
 
 func RegisterGraphOwners(r *ownergraph.Registry, options GraphOptions) error {
-	if options.Catalog != nil {
-		return fmt.Errorf("consume evidence graph snapshots do not support non-default catalogs without session compatibility metadata")
+	bound := options.Compatibility != (snapshot.Compatibility{})
+	if bound {
+		if err := options.Compatibility.Validate(); err != nil {
+			return err
+		}
+	}
+	if options.Catalog != nil && !bound {
+		return fmt.Errorf("configured consumeevidence dependency requires session compatibility metadata")
+	}
+	if options.Catalog != nil && !reflect.TypeOf(options.Catalog).Comparable() {
+		return fmt.Errorf("catalog dependency must support identity comparison")
 	}
 	if err := ownergraph.Register(r, ownergraph.Codec[Tracker]{
-		Type: TrackerStateType, Version: TrackerStateVersion,
+		Type: TrackerStateType, Version: 2,
 		Init: func() *Tracker { return new(Tracker) },
 		Capture: func(t *Tracker, c *ownergraph.Capture) ([]byte, error) {
-			if t.catalog != nil {
-				return nil, fmt.Errorf("consume evidence graph snapshots do not support non-default catalogs without session compatibility metadata")
+			if t.catalog != nil && !bound {
+				return nil, fmt.Errorf("configured consumeevidence dependency requires session compatibility metadata")
+			}
+			if t.catalog != nil && !reflect.TypeOf(t.catalog).Comparable() {
+				return nil, fmt.Errorf("catalog dependency must support identity comparison")
+			}
+			if t.catalog != options.Catalog {
+				return nil, fmt.Errorf("consumeevidence capture dependency differs from trusted registration")
 			}
 			state, err := t.CaptureState(ownergraph.Reference[*chrondbc.Spell](c))
 			if err != nil {
 				return nil, err
 			}
-			return state.Encode()
+			data, err := state.Encode()
+			if err != nil {
+				return nil, err
+			}
+			return json.Marshal(configuredGraphState{Compatibility: options.Compatibility, Configured: options.Catalog != nil, StateVersion: TrackerStateVersion, State: data})
 		},
 		Restore: func(t *Tracker, version uint32, payload []byte, c *ownergraph.Restore) error {
-			state, err := DecodeTrackerState(version, payload)
+			if version != 2 {
+				return fmt.Errorf("unsupported configured consumeevidence graph version %d", version)
+			}
+			var value configuredGraphState
+			if err := decodeConfiguredGraphState(payload, &value); err != nil {
+				return err
+			}
+			if value.Compatibility != options.Compatibility || value.Configured != (options.Catalog != nil) {
+				return fmt.Errorf("incompatible consumeevidence graph dependency identity")
+			}
+			state, err := DecodeTrackerState(value.StateVersion, value.State)
 			if err != nil {
 				return err
 			}
@@ -132,7 +165,27 @@ func decodeCollectorGraphState(payload []byte, value *collectorGraphState) error
 	return nil
 }
 
+// GraphCatalog returns the configured dependency for trusted graph registration.
+func (t *Tracker) GraphCatalog() ConsumableCatalog { return t.catalog }
+
 func (c *Collector) GraphAuras() *auras.Tracking { return c.auraTracker }
 func (c *Collector) GraphShared() *Tracker       { return c.shared }
 
 func (c *Collector) WireGraphRuntime(emit func(*messages.Consume)) { c.SetEmit(emit) }
+
+// configuredGraphState keeps trusted construction identity outside the leaf codec.
+type configuredGraphState struct {
+	Compatibility snapshot.Compatibility `json:"compatibility"`
+	Configured    bool                   `json:"configured"`
+	StateVersion  uint32                 `json:"state_version"`
+	State         json.RawMessage        `json:"state"`
+}
+
+func decodeConfiguredGraphState(b []byte, value *configuredGraphState) error {
+	if err := validateStateJSON(b, "configured consume tracker graph", []string{"compatibility", "configured", "state_version", "state"}); err != nil {
+		return err
+	}
+	d := json.NewDecoder(bytes.NewReader(b))
+	d.DisallowUnknownFields()
+	return d.Decode(value)
+}

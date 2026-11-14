@@ -15,6 +15,7 @@ import (
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/parseerrors"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/synthetic"
 	"github.com/Emyrk/chronicle/combatlog/parsernext/snapshot"
 	next "github.com/Emyrk/chronicle/combatlog/parsernext/vanilla"
@@ -25,6 +26,9 @@ import (
 // Pipeline retains semantic state across consecutive complete files. Use one
 // serial file source at a time. It owns no consumer, finalizer or write service.
 type Pipeline struct {
+	graphPending      bool
+	failed            bool
+	completedFile     bool
 	construction      *snapshot.Compatibility
 	identity          *Compatibility
 	activeSource      *Source
@@ -67,6 +71,9 @@ func New(ctx context.Context, logger *slog.Logger, db gamedb.GameDB, gear gamedb
 }
 
 func (p *Pipeline) Spell(ctx context.Context, id chrondbc.SpellID) (*chrondbc.Spell, error) {
+	if p.graphPending || p.spells == nil {
+		return nil, fmt.Errorf("pipeline runtime is unwired")
+	}
 	spell, err := p.spells.Spell(ctx, id)
 	if err != nil {
 		entry := p.missed[id]
@@ -97,7 +104,9 @@ type Source struct {
 }
 
 func (p *Pipeline) OpenFile(reader io.Reader, maxLineBytes int) (*Source, error) {
-	if !p.boundary {
+	// Recoverable malformed records do not poison a pipeline. Only terminal
+	// parser/synthetic failures do; cancellation before reading is retryable.
+	if !p.boundary || p.failed || p.graphPending {
 		return nil, fmt.Errorf("previous file has not completed successfully")
 	}
 	source, err := next.NewSource(reader, maxLineBytes, p.decoder)
@@ -113,12 +122,22 @@ func (s *Source) Advance(ctx context.Context) ([]messages.Message, error) {
 	if s.pipeline.activeSource != s {
 		return nil, fmt.Errorf("source is no longer the active file")
 	}
+	if s.pipeline.failed {
+		return nil, parseerrors.AsFatalError(fmt.Errorf("pipeline has a terminal failure"))
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	now := time.Now()
 	batch, err := s.Source.Advance(ctx)
 	s.pipeline.lineDuration += time.Since(now)
 	if err != nil {
-		if errors.Is(err, io.EOF) {
+		if errors.Is(err, io.EOF) && !parseerrors.IsFatalError(err) {
 			s.pipeline.boundary = true
+			s.pipeline.completedFile = !s.pipeline.failed
+			s.pipeline.activeSource = nil
+		} else if parseerrors.IsFatalError(err) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			s.pipeline.failed = true
 		}
 		return nil, err
 	}
@@ -126,7 +145,8 @@ func (s *Source) Advance(ctx context.Context) ([]messages.Message, error) {
 	batch, err = s.pipeline.synthetics.ProcessMessages(batch)
 	s.pipeline.syntheticDuration += time.Since(now)
 	if err != nil {
-		return nil, fmt.Errorf("processing synthetics: %w", err)
+		s.pipeline.failed = true
+		return nil, parseerrors.AsFatalError(fmt.Errorf("processing synthetics: %w", err))
 	}
 	return batch, nil
 }

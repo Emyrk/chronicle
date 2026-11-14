@@ -43,6 +43,8 @@ type projectedAura struct {
 // expiry for projected auras that receive no real in-combat evidence. It never
 // processes aura messages itself; all tracking happens in the shared Tracking.
 type Projection struct {
+	// runtimeRevision tracks explicit emitter replacements; it is not persisted.
+	runtimeRevision uint64
 	instancehook.BaseHook
 
 	tracker *Tracking
@@ -67,9 +69,15 @@ type Projection struct {
 // NewProjection creates a new instance-level projection adapter that references
 // the shared parse-wide tracker.
 func NewProjection(tracker *Tracking) *Projection {
-	p := &Projection{tracker: tracker}
+	p := NewProjectionWithoutObserver(tracker)
 	p.AttachObserver()
 	return p
+}
+
+// NewProjectionWithoutObserver prepares an adapter for validated composition.
+// The caller must AttachObserver only after the composition is accepted.
+func NewProjectionWithoutObserver(tracker *Tracking) *Projection {
+	return &Projection{tracker: tracker}
 }
 
 // AttachObserver is an explicit runtime composition step. Snapshot restore must
@@ -82,8 +90,12 @@ func (p *Projection) AttachObserver() {
 // SetEmit sets the callback used to inject synthetic aura messages into the
 // active fight's event stream.
 func (p *Projection) SetEmit(fn func(*messages.Aura)) {
+	p.runtimeRevision++
 	p.emit = fn
 }
+
+// GraphRuntimeRevision identifies emitter wiring changes for aggregate capture validation.
+func (p *Projection) GraphRuntimeRevision() uint64 { return p.runtimeRevision }
 
 // ProcessMessage handles projection and synthetic expiry on each real message.
 // On the first non-synthetic message after FightStarted it emits projected

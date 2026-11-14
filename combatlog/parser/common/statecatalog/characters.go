@@ -163,6 +163,7 @@ func characterTypeSpecs() []typeSpec {
 		{primitives + "base-object-period", commonPkg + "Base[*vanilla.ObjectPeriod]", "combatlog/parser/vanilla/creatures/lightwell.go", contracts + "character", "", "custom object activity period"},
 		{common + "common", commonPkg + "Common", "combatlog/parser/common/characters/common.go", primitives + "base-inactivity", "", "default character implementation"},
 		{common + "never-active", commonPkg + "NeverActive", "combatlog/parser/common/characters/neveractive.go", contracts + "character", "", "no activity history"},
+		{common + "graph-never-active-value", commonPkg + "graphNeverActiveValue", "combatlog/parser/common/characters/wrapper_graph.go", common + "never-active", "", "internal ownergraph box for value-form NeverActive; unboxed on load to preserve the original dynamic value type, not a gameplay factory product"},
 		{common + "ads-go-with-boss", commonPkg + "AdsGoWithBoss", "combatlog/parser/common/characters/adsonboss.go", contracts + "character-base", "", "wrapper around another character"},
 		{common + "death-on-cast", commonPkg + "DeathOnCast", "combatlog/parser/common/characters/deathoncast.go", contracts + "character-base", "", "wrapper around another character"},
 		{common + "ignore-cast", commonPkg + "IgnoreCast", "combatlog/parser/common/characters/ignorecast.go", contracts + "character-base", "", "wrapper around another character"},

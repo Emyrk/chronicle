@@ -65,23 +65,7 @@ func (a AzerothCoreInstanceHook) ProcessMessage(_ bool, _ uuid.UUID, m messages.
 			return nil
 		}
 
-		identity, known := a.ID.HostileEntries()[entry]
-		if known {
-			// Preserve configured encounter names and custom encounter functions,
-			// while preferring server-reported classification metadata.
-			identity.Affiliation = msg.Affiliation
-			if msg.Name != "" {
-				identity.Name = msg.Name
-			}
-			identity.Boss = identity.Boss || msg.Boss
-		} else {
-			identity = instances.Identity{
-				Affiliation: msg.Affiliation,
-				Name:        msg.Name,
-				Boss:        msg.Boss,
-			}
-		}
-		a.ID.AddEntryId(entry, identity)
+		a.ID.UpdateServerClassification(entry, msg.Affiliation, msg.Name, msg.Boss)
 	}
 	return nil
 }

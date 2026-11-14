@@ -182,7 +182,8 @@ func (s TrackerState) validate() error {
 	}
 	active := make(map[guid.GUID]struct{}, len(s.value.Active))
 	for _, value := range s.value.Active {
-		if value.GUID.IsZero() || !value.GUID.IsPlayer() {
+		// ActivityChange retains every active character, not just players.
+		if value.GUID.IsZero() {
 			return fmt.Errorf("invalid active participant %s", value.GUID)
 		}
 		if _, exists := active[value.GUID]; exists {

@@ -49,6 +49,7 @@ func NexusHostiles() map[uint32]instances.Identity {
 }
 
 var NexusFactory = &instances.CommonFactory{
+	GraphID:   "wotlk/instances/NexusFactory/v1",
 	Name:      "The Nexus",
 	Category:  instances.InstanceCategoryDungeon,
 	ZoneNames: []string{"the nexus"},
@@ -89,6 +90,7 @@ func OculusHostiles() map[uint32]instances.Identity {
 }
 
 var OculusFactory = &instances.CommonFactory{
+	GraphID:   "wotlk/instances/OculusFactory/v1",
 	ZoneNames: []string{"the oculus", "oculus"},
 	Name:      "The Oculus",
 	Category:  instances.InstanceCategoryDungeon,
@@ -119,6 +121,7 @@ func ForgeOfSoulsHostiles() map[uint32]instances.Identity {
 }
 
 var ForgeOfSoulsFactory = &instances.CommonFactory{
+	GraphID:   "wotlk/instances/ForgeOfSoulsFactory/v1",
 	Name:      "Forge of Souls",
 	Category:  instances.InstanceCategoryDungeon,
 	ZoneNames: []string{"forge of souls"},
@@ -153,6 +156,7 @@ func HallsOfReflectionHostiles() map[uint32]instances.Identity {
 }
 
 var HallsOfReflectionFactory = &instances.CommonFactory{
+	GraphID:   "wotlk/instances/HallsOfReflectionFactory/v1",
 	Name:      "Halls of Reflection",
 	Category:  instances.InstanceCategoryDungeon,
 	ZoneNames: []string{"halls of reflection"},
@@ -197,6 +201,7 @@ func UtgardeKeepHostiles() map[uint32]instances.Identity {
 }
 
 var UtgardeKeepFactory = &instances.CommonFactory{
+	GraphID:   "wotlk/instances/UtgardeKeepFactory/v1",
 	Name:      "Utgarde Keep",
 	Category:  instances.InstanceCategoryDungeon,
 	ZoneNames: []string{"utgarde keep"},
@@ -244,6 +249,7 @@ func UtgardePinnacleHostiles() map[uint32]instances.Identity {
 }
 
 var UtgardePinnacleFactory = &instances.CommonFactory{
+	GraphID:     "wotlk/instances/UtgardePinnacleFactory/v1",
 	Name:        "Utgarde Pinnacle",
 	Category:    instances.InstanceCategoryDungeon,
 	MultiZone:   false,
@@ -331,6 +337,7 @@ func CullingOfStratholmeHostiles() map[uint32]instances.Identity {
 }
 
 var CullingOfStratholmeFactory = &instances.CommonFactory{
+	GraphID:   "wotlk/instances/CullingOfStratholmeFactory/v1",
 	Name:      "Culling of Stratholme",
 	Category:  instances.InstanceCategoryDungeon,
 	ZoneNames: []string{"the culling of stratholme"},
@@ -378,6 +385,7 @@ func HallsOfStoneHostiles() map[uint32]instances.Identity {
 }
 
 var HallsOfStoneFactory = &instances.CommonFactory{
+	GraphID:   "wotlk/instances/HallsOfStoneFactory/v1",
 	Name:      "Halls of Stone",
 	Category:  instances.InstanceCategoryDungeon,
 	ZoneNames: []string{"halls of stone"},
@@ -422,6 +430,7 @@ func DrakTharonKeepHostiles() map[uint32]instances.Identity {
 }
 
 var DrakTharonKeepFactory = &instances.CommonFactory{
+	GraphID:   "wotlk/instances/DrakTharonKeepFactory/v1",
 	Name:      "Drak'Tharon Keep",
 	Category:  instances.InstanceCategoryDungeon,
 	ZoneNames: []string{"drak'tharon keep"},
@@ -469,6 +478,7 @@ func AzjolNerubHostiles() map[uint32]instances.Identity {
 }
 
 var AzjolNerubFactory = &instances.CommonFactory{
+	GraphID:   "wotlk/instances/AzjolNerubFactory/v1",
 	Name:      "Azjol-Nerub",
 	Category:  instances.InstanceCategoryDungeon,
 	ZoneNames: []string{"azjol-nerub"},
@@ -533,6 +543,7 @@ func HallsOfLightningHostiles() map[uint32]instances.Identity {
 }
 
 var HallsOfLightningFactory = &instances.CommonFactory{
+	GraphID:   "wotlk/instances/HallsOfLightningFactory/v1",
 	Name:      "Halls of Lightning",
 	Category:  instances.InstanceCategoryDungeon,
 	ZoneNames: []string{"halls of lightning"},
@@ -574,6 +585,7 @@ func GundrakHostiles() map[uint32]instances.Identity {
 }
 
 var GundrakFactory = &instances.CommonFactory{
+	GraphID:   "wotlk/instances/GundrakFactory/v1",
 	Name:      "Gundrak",
 	Category:  instances.InstanceCategoryDungeon,
 	ZoneNames: []string{"gundrak"},
@@ -627,6 +639,7 @@ func VioletHoldHostiles() map[uint32]instances.Identity {
 }
 
 var VioletHoldFactory = &instances.CommonFactory{
+	GraphID:   "wotlk/instances/VioletHoldFactory/v1",
 	Name:      "Violet Hold",
 	Category:  instances.InstanceCategoryDungeon,
 	ZoneNames: []string{"the violet hold"},
@@ -672,6 +685,7 @@ func AhnkahetOldKingdomHostiles() map[uint32]instances.Identity {
 }
 
 var AhnkahetOldKingdomFactory = &instances.CommonFactory{
+	GraphID:   "wotlk/instances/AhnkahetOldKingdomFactory/v1",
 	Name:      "Ahn'kahet: The Old Kingdom",
 	Category:  instances.InstanceCategoryDungeon,
 	ZoneNames: []string{"ahn'kahet: the old kingdom"},
@@ -714,6 +728,7 @@ func TrialOfTheChampionHostiles() map[uint32]instances.Identity {
 }
 
 var TrialOfTheChampionFactory = &instances.CommonFactory{
+	GraphID:   "wotlk/instances/TrialOfTheChampionFactory/v1",
 	Name:      "Trial of the Champion",
 	Category:  instances.InstanceCategoryDungeon,
 	ZoneNames: []string{"trial of the champion"},
@@ -788,6 +803,7 @@ func PitOfSaronHostiles() map[uint32]instances.Identity {
 }
 
 var PitOfSaronFactory = &instances.CommonFactory{
+	GraphID:   "wotlk/instances/PitOfSaronFactory/v1",
 	Name:      "Pit of Saron",
 	Category:  instances.InstanceCategoryDungeon,
 	ZoneNames: []string{"pit of saron"},
