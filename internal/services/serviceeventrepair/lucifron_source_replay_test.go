@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/Emyrk/chronicle/api/chronicleproto"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/combatmetrics"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/rankings"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
@@ -140,6 +141,14 @@ func TestLucifronCapturedSourceReplay(t *testing.T) {
 	tracker := rankings.NewDPSTracker(units, nil, rankings.DamageRuleNone)
 	tracker.FightStarted(c.ID, nil)
 	var damage []*messages.Damage
+	referenceOmissions := &RepairPlan{}
+	observedOwners := map[guid.GUID]bool{}
+	for _, event := range replay {
+		if snapshot, ok := event.message.(*messages.UnitClassificationEvent); ok && snapshot.Owner != nil {
+			observedOwners[snapshot.Target] = true
+		}
+	}
+
 	for _, event := range replay {
 		require.NoError(t, units.ProcessMessage(event.message))
 		switch m := event.message.(type) {
@@ -156,6 +165,9 @@ func TestLucifronCapturedSourceReplay(t *testing.T) {
 			}
 			units.Info[m.Target] = info
 		case *messages.Damage:
+			if m.Caster != nil && !m.Caster.IsPlayer() && !m.Target.IsPlayer() && observedOwners[*m.Caster] && units.Info[*m.Caster].Owner == nil {
+				recordRazorgoreOmission(referenceOmissions, c.ID, "damage", *m.Caster, combatmetrics.EffectiveDamage(m), "damage precedes first recorded owner; attribution unknown")
+			}
 			if _, ok := units.Info[m.Target]; !ok && !m.Target.IsPlayer() {
 				entry, _ := m.Target.GetEntry()
 				if _, known := instances.MoltenCoreHostiles()[entry]; known {
@@ -174,6 +186,7 @@ func TestLucifronCapturedSourceReplay(t *testing.T) {
 	result := razorgoreMergePetDamage(tracker.Result()[c.ID])
 	var full, ranked, unranked int64
 	players := 0
+	expectedReconciliation := []lucifronReconciliation{}
 	lines := "player_guid,player_name,historical_total,reference_total,reference_ranked,reference_unranked,reference_dps\n"
 	for _, r := range e.Rankings {
 		if !r.EncounterID.Valid || r.EncounterID.UUID != c.ID {
@@ -185,7 +198,11 @@ func TestLucifronCapturedSourceReplay(t *testing.T) {
 		if v == nil {
 			v = &rankings.UnitCombatStats{}
 		}
-		require.Equal(t, r.DamageDone, v.DamageDone, "historical total for %s", r.PlayerName)
+		persisted := r.DamageDone + r.UnrankedDamageDone
+		require.LessOrEqual(t, v.DamageDone, persisted, "attributed total for %s", r.PlayerName)
+		if gap := persisted - v.DamageDone; gap > 0 {
+			expectedReconciliation = append(expectedReconciliation, lucifronReconciliation{c.ID, r.PlayerGuid, r.PlayerName, persisted, v.DamageDone, gap})
+		}
 		players++
 		full += v.DamageDone
 		ranked += v.RankedDamageDone
@@ -202,7 +219,10 @@ func TestLucifronCapturedSourceReplay(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, before, after, "evaluation must not mutate original source evidence")
 	require.False(t, p.RequiresReparse, p.Reason)
-	require.Empty(t, p.Details["omissions"], "source acceptance must not silently omit contributions")
+	expectedOmissions, _ := referenceOmissions.Details["omissions"].([]razorgoreOmission)
+	require.ElementsMatch(t, expectedOmissions, p.Details["omissions"], "all source omissions independently accounted for")
+	require.ElementsMatch(t, expectedReconciliation, p.Details["reconciliation"], "all historical gaps independently accounted for")
+	t.Logf("RECONCILIATION %+v OMISSIONS %+v", expectedReconciliation, expectedOmissions)
 	require.Len(t, p.Details["players"], players)
 	t.Logf("READY players=%d warnings=%d parser=%s", players, len(p.Warnings), e.Instance.ParserVersion)
 	if !p.RequiresReparse {

@@ -123,7 +123,7 @@ func TestLucifronOwnershipInferenceRejectsGapsAndTransitions(t *testing.T) {
 			case "unknown owner":
 				first.Owner = nil
 			case "reconciliation":
-				e.Rankings[0].DamageDone++
+				e.Rankings[0].DamageDone--
 			case "owned player":
 				snapshots = append(snapshots, lucifronOwnerSnapshot(t, lucifronTestPlayer, &other, 4, 4000))
 			case "nonplayer control":
@@ -133,10 +133,13 @@ func TestLucifronOwnershipInferenceRejectsGapsAndTransitions(t *testing.T) {
 			e.Events[1].Events = numericFrame(t, e, snapshots...)
 			p, err := evaluateLucifronEvidence(e)
 			require.NoError(t, err)
-			require.True(t, p.RequiresReparse, p.Reason)
-			if kind == "late owner then terminal" || kind == "terminal-only owner" {
-				require.Contains(t, p.Reason, "recorded owner must precede first nonplayer damage")
+			if kind == "owner after damage" || kind == "late owner then terminal" || kind == "terminal-only owner" || kind == "unclassified source" || kind == "unknown owner" {
+				require.False(t, p.RequiresReparse, p.Reason)
+				require.Len(t, p.Details["reconciliation"], 1)
+				require.NotEmpty(t, p.Details["omissions"])
+				return
 			}
+			require.True(t, p.RequiresReparse, p.Reason)
 			require.Nil(t, p.lucifron)
 		})
 	}

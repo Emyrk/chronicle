@@ -35,6 +35,15 @@ type lucifronPlayerChange struct {
 	AfterDPS             float64   `json:"after_dps"`
 }
 
+type lucifronReconciliation struct {
+	EncounterID          uuid.UUID `json:"encounter_id"`
+	PlayerGUID           string    `json:"player_guid"`
+	PlayerName           string    `json:"player_name"`
+	PersistedFullDamage  int64     `json:"persisted_full_damage"`
+	AttributedFullDamage int64     `json:"attributed_full_damage"`
+	UnexplainedDamage    int64     `json:"unexplained_damage"`
+}
+
 func lucifronVersionEligible(version string) bool {
 	_, eligible := parserVersionBefore(database.LogInstance{ParserVersion: version}, lucifronRuleVersion)
 	return eligible
@@ -121,7 +130,8 @@ func evaluateLucifronEvidence(e razorgoreEvidence) (*RepairPlan, error) {
 	parserVersion, eligible := lucifronParserVersion(e.Instance)
 	p := &RepairPlan{Warnings: []string{}, Changes: []string{}, InstanceID: e.Instance.ID, TenantID: e.Server.TenantID.UUID, Details: map[string]any{
 		"parser_version": parserVersion, "rule_version": lucifronRuleVersion,
-		"ranked_target_entries": slices.Clone(targets), "players": []lucifronPlayerChange{}, "omissions": []razorgoreOmission{},
+		"ranked_target_entries": slices.Clone(targets), "reconciliation": []lucifronReconciliation{},
+		"players": []lucifronPlayerChange{}, "omissions": []razorgoreOmission{},
 	}}
 	var err error
 	p.EvidenceHash, err = razorgoreEvidenceHash(e)
@@ -178,6 +188,9 @@ func evaluateLucifronEvidence(e razorgoreEvidence) (*RepairPlan, error) {
 		return skip("no clean ranked Lucifron encounter")
 	}
 	p.Reason = "Lucifron ranked damage reconstructed from stored evidence"
+	if len(p.Details["reconciliation"].([]lucifronReconciliation)) > 0 {
+		p.Reason = "Lucifron conservative lower bound reconstructed; unexplained historical damage excluded"
+	}
 	return p, nil
 }
 
@@ -203,7 +216,7 @@ func evaluateLucifronEncounter(e razorgoreEvidence, c database.LogInstanceEncoun
 	// Validate recorded control before replay. Player identity is unchanged by
 	// possession: the parser credits direct player casters to themselves and
 	// excludes player targets even while hostile. No controller receives their
-	// damage. Unsupported creature control still cannot use this upper bound.
+	// damage. Unsupported creature control still cannot use this reconstruction.
 	if err := validateLucifronControl(e, c, replay); err != nil {
 		return err
 	}
@@ -217,7 +230,6 @@ func evaluateLucifronEncounter(e razorgoreEvidence, c database.LogInstanceEncoun
 	}
 	totals := map[guid.GUID]int64{}
 	ranked := map[guid.GUID]int64{}
-	uncertainCredit := false
 	classified := map[guid.GUID]*messages.UnitClassificationEvent{}
 	knownHostiles := instances.MoltenCoreHostiles()
 	observedOwned := map[guid.GUID]bool{}
@@ -253,7 +265,11 @@ func evaluateLucifronEncounter(e razorgoreEvidence, c database.LogInstanceEncoun
 		player := *m.Caster
 		if !player.IsPlayer() {
 			owner, ok := owners[player]
-			if !ok {
+			if !ok || event.index <= owner.FirstIndex {
+				if ok {
+					recordRazorgoreOmission(p, c.ID, "damage", player, amount, "damage precedes first recorded owner; attribution unknown")
+					continue
+				}
 				entry, _ := player.GetEntry()
 				if _, hostile := knownHostiles[entry]; hostile && !observedOwned[player] {
 					// Registry hostiles such as Lucifron are not missing-owner
@@ -268,23 +284,20 @@ func evaluateLucifronEncounter(e razorgoreEvidence, c database.LogInstanceEncoun
 				}
 				reason := "unclassified source has no proven player attribution"
 				if known {
-					reason = "classified source has no proven encounter-terminal owner"
+					reason = "classified source has no usable recorded owner"
 				}
 				if player.IsPet() || totem {
-					reason = "pet or totem has no proven encounter-terminal owner"
+					reason = "pet or totem has no usable recorded owner"
 				}
-				// Fight-end rollup cannot assign a pet whose explicit terminal
-				// owner is nil. Its omitted contribution cannot offset an excluded
-				// direct-player term. Missing terminal evidence has no such proof.
-				if !terminalUnowned[player] {
-					uncertainCredit = true
-				} else {
+				// Preserve the distinction between explicit unowned rollup and
+				// missing ownership evidence; neither is assigned to a player.
+				if terminalUnowned[player] {
 					reason = "explicit encounter-terminal snapshot has no owner; excluded from player rollup"
 				}
 				recordRazorgoreOmission(p, c.ID, "damage", player, amount, reason)
 				continue
 			}
-			player = owner
+			player = owner.Player
 		}
 		if totals[player] > math.MaxInt64-amount {
 			return errors.New("damage total overflow")
@@ -294,11 +307,6 @@ func evaluateLucifronEncounter(e razorgoreEvidence, c database.LogInstanceEncoun
 		if slices.Contains(targets, entry) {
 			ranked[player] += amount
 		}
-	}
-	// An unattributed source could offset an excluded direct-player term. Equal
-	// sums alone cannot prove which terms were credited in that mixed case.
-	if uncertainCredit && len(totals) > 0 {
-		return errors.New("uncertain nonplayer credits prevent direct-player upper-bound proof")
 	}
 	rows := map[guid.GUID]bool{}
 	for _, row := range e.Rankings {
@@ -310,11 +318,16 @@ func evaluateLucifronEncounter(e razorgoreEvidence, c database.LogInstanceEncoun
 			return errors.New("invalid or duplicate Lucifron ranking identity")
 		}
 		rows[player] = true
-		if row.DamageDone < 0 || row.UnrankedDamageDone < 0 || row.DamageDone > math.MaxInt64-row.UnrankedDamageDone || row.DamageDone+row.UnrankedDamageDone != totals[player] {
-			return errors.New("full damage upper bound does not reconcile to persisted player credit")
+		if row.DamageDone < 0 || row.UnrankedDamageDone < 0 || row.DamageDone > math.MaxInt64-row.UnrankedDamageDone || row.DamageDone+row.UnrankedDamageDone < totals[player] {
+			return errors.New("attributed full damage exceeds persisted player credit or invalid source damage")
 		}
 		if row.DurationSecs <= 0 || math.IsNaN(row.DurationSecs) || math.IsInf(row.DurationSecs, 0) || row.DurationSecs != duration.Seconds() {
 			return errors.New("lucifron source duration does not match encounter")
+		}
+		persisted := row.DamageDone + row.UnrankedDamageDone
+		if gap := persisted - totals[player]; gap > 0 {
+			p.Details["reconciliation"] = append(p.Details["reconciliation"].([]lucifronReconciliation), lucifronReconciliation{c.ID, row.PlayerGuid, row.PlayerName, persisted, totals[player], gap})
+			p.Warnings = append(p.Warnings, fmt.Sprintf("Conservative lower bound for %s in encounter %s: persisted full damage %d, positively attributed %d, unexplained %d excluded from both ranked and unranked damage; this player gap and source omissions are separate views, not additive", row.PlayerGuid, c.ID, persisted, totals[player], gap))
 		}
 		after := ranked[player]
 		unranked := totals[player] - after

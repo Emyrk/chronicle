@@ -177,7 +177,7 @@ version 3 adds the narrow zero-effective invalid-GUID filtering described below.
 Version-1/2 previews and failed operations cannot apply/retry under the new
 evaluator; create a fresh dry run. Permanent receipts remain unique by script,
 not version, so an existing receipt still prevents reapplication.
-The public details shape is unchanged and old receipts remain readable.
+Version 3 adds the always-array `reconciliation` field; old receipts remain readable.
 
 The script `lucifron-ranked-damage` uses the same selection, preview, explicit
 apply, retry/cancel, permanent receipts, and transactional ratings lifecycle.
@@ -282,16 +282,16 @@ Passing control validation does not imply that the rest of a log is repairable.
 The classification emitter records ownership/activity changes, but emits terminal
 snapshots only for units still active at fight end. Traps and totems may therefore
 have valid encounter-local owner observations without a terminal snapshot. The
-approved fallback requires a valid player owner recorded before the source's first
-credited damage, with every encounter-local ownership snapshot agreeing. Owner
+approved fallback requires a valid player owner recorded before each
+credited damage event, with every encounter-local ownership snapshot agreeing. Owner
 changes, explicit clearing, chains, contradictory classifications, unsupported
 control, and ambiguous chronology skip. No observation is borrowed from another
 encounter or from final instance metadata. Known ordinary hostile NPC sources are
 not mislabeled as missing-owner player contributions.
 
-Every player's reconstructed full damage must still exactly reconcile against
-persisted ranked + unranked damage. Other unresolved contributions that could
-offset those credits remain a skip. Inferred sources carry an explicit warning in
+Version 2 required every player's reconstructed full damage to exactly reconcile
+against persisted ranked + unranked damage. Version 3 supersedes this requirement
+with the explicit conservative lower-bound policy below. Inferred sources carry an explicit warning in
 the dry-run and permanent receipt distinguishing stable recorded ownership from
 terminal proof; original streams are unchanged.
 
@@ -308,22 +308,49 @@ is zero: health damage after overkill **plus absorbed damage**. Positive effecti
 damage remains unsafe, including fully absorbed hits. Negative damage evidence,
 corrupt streams, invalid metadata, and ambiguous chronology still skip the repair.
 Only unowned, uncontrolled zero-entity player-type classifications with unknown
-affiliation and no spell are ignored alongside these records. Ownership, aura,
-and control inference policies are unchanged.
+affiliation and no spell are ignored alongside these records. Aura and control validation remain unchanged; ownership attribution follows the
+explicit event-local lower-bound policy below.
 
 Skipped records retain inert timeline markers for ordering and possession expiry.
 Counted warnings appear in both preview and permanent receipt; original streams
 remain unchanged. Version-2 previews must be recreated before Apply; permanent
 same-script receipts still prohibit reapplication across versions.
 
-The captured `UsNpz4ih3BOBRcWn` sample passes this narrow decoding rule with one
-zero-effective damage record and two harmless classifications skipped. It is
-**not ready**: the evaluator still requires a recorded owner before first nonplayer
-damage. Independent production replay also fails full-total reconciliation
-(58,027 historical versus 53,631 reconstructed for one player). The private replay
-used the supplied exact `v1.0.9+v1.0.0-27-g94346040` parser stamp and explicitly
-assumed historical zero for the unexported current unranked column. No ownership
-policy was broadened to force acceptance; no live Apply or sweep was performed.
+### Conservative event-local attribution (version 3)
+
+The user explicitly approved preferring a low estimate over inflated ranked damage.
+A consistent recorded owner may credit only events strictly after its first
+observation in encounter event-index order. Earlier events remain unassigned in
+`details.omissions`; a later/terminal snapshot never backdates ownership. Conflicts,
+clearing, chains, nonplayer control, corruption, and chronology failures still skip.
+
+Repaired ranked and unranked values contain only positively attributed damage to
+eligible ranked and other NPC targets respectively. Historical full totals may
+exceed the reconstructed attributed total. That difference is excluded from **both**
+columns, never used to fill ranked or unranked damage. Reconstruction exceeding
+persisted full damage still skips, as do invalid source numeric values.
+
+`details.reconciliation` is always an array, with a row only for each nonzero gap:
+`encounter_id`, `player_guid`, `player_name`, `persisted_full_damage`,
+`attributed_full_damage`, and `unexplained_damage`. Source omissions and player gaps
+are distinct views, **not additive quantities**. Warnings and permanent receipts
+preserve both. Stable recorded-owner inference remains an inference, not proof of
+complete ownership history; this policy deliberately accepts undercount uncertainty
+instead of requiring exact historical-total parity.
+
+Read-only replay of `UsNpz4ih3BOBRcWn` independently reconstructs Eluzia's ranked
+38,381, positively attributed unranked 15,250, full 53,631 and DPS
+650.2609108159393 over 59.024 seconds. Historical full damage is 58,027; the
+4,396 gap is reported, not moved to unranked. Two late-owner sources contribute
+1,528 (three events) and 2,868 (five events) before their owner observations;
+those events remain source omissions. Subsequent observed-owner damage is eligible.
+The user-supplied 38,381 was a cross-check, never an expected-value input.
+All 25 players total 646,512 ranked and 256,876 attributed unranked (903,388 full),
+versus 907,784 historical. The sample also retains the one zero-effective damage
+and two harmless classification warnings. Parser stamp:
+`v1.0.9+v1.0.0-27-g94346040`. The public export's missing current unranked column
+remains an explicit historical-zero assumption, not a verified database value.
+No live Apply or sweep was performed.
 
 ### Captured-source acceptance reproduction
 
@@ -340,8 +367,8 @@ scratch directory using the instance's normal authorized access:
 
 The probe requires one clean Lucifron encounter. It independently computes
 expected values with production `unitdb`/`DPSTracker` semantics, without seeding
-expected splits from the repair. It requires a ready plan, zero unexpected
-omissions, exact per-player historical full totals and ranked/unranked splits,
+expected splits from the repair. It requires a ready plan, independently accounted-for source omissions and
+per-player historical full-total gaps, exact attributed ranked/unranked splits,
 matching DPS, and immutable source evidence. It writes `independent-reference.csv`
 only into the supplied private directory.
 

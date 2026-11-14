@@ -92,21 +92,22 @@ func TestLucifronEffectiveTargetsAndImmutability(t *testing.T) {
 	details, err := json.Marshal(p.Details)
 	require.NoError(t, err)
 	require.Contains(t, string(details), `"omissions":[]`)
+	require.Contains(t, string(details), `"reconciliation":[]`)
 	require.Contains(t, string(details), `"before_ranked_damage":200`)
 }
 
 func TestLucifronStructuralSkips(t *testing.T) {
 	t.Parallel()
 	tests := map[string]func(*razorgoreEvidence){
-		"modern":           func(e *razorgoreEvidence) { e.Instance.ParserVersion = "v1.0.173" },
-		"missing stream":   func(e *razorgoreEvidence) { e.Events = nil },
-		"corrupt gzip":     func(e *razorgoreEvidence) { e.Events[0].Events = []byte("invalid") },
-		"duplicate stream": func(e *razorgoreEvidence) { e.Events = append(e.Events, e.Events[0]) },
-		"wrong total":      func(e *razorgoreEvidence) { e.Rankings[0].DamageDone++ },
-		"wrong duration":   func(e *razorgoreEvidence) { e.Rankings[0].DurationSecs = 30 },
-		"missing row":      func(e *razorgoreEvidence) { e.Rankings = nil },
-		"duplicate row":    func(e *razorgoreEvidence) { e.Rankings = append(e.Rankings, e.Rankings[0]) },
-		"wrong encounter":  func(e *razorgoreEvidence) { e.Encounters[0].Boss = false },
+		"modern":              func(e *razorgoreEvidence) { e.Instance.ParserVersion = "v1.0.173" },
+		"missing stream":      func(e *razorgoreEvidence) { e.Events = nil },
+		"corrupt gzip":        func(e *razorgoreEvidence) { e.Events[0].Events = []byte("invalid") },
+		"duplicate stream":    func(e *razorgoreEvidence) { e.Events = append(e.Events, e.Events[0]) },
+		"over reconstruction": func(e *razorgoreEvidence) { e.Rankings[0].DamageDone-- },
+		"wrong duration":      func(e *razorgoreEvidence) { e.Rankings[0].DurationSecs = 30 },
+		"missing row":         func(e *razorgoreEvidence) { e.Rankings = nil },
+		"duplicate row":       func(e *razorgoreEvidence) { e.Rankings = append(e.Rankings, e.Rankings[0]) },
+		"wrong encounter":     func(e *razorgoreEvidence) { e.Encounters[0].Boss = false },
 		"receipt": func(e *razorgoreEvidence) {
 			e.Receipts = []database.EventRepairReceipt{{Operation: "lucifron-ranked-damage"}}
 		},
@@ -190,11 +191,15 @@ func TestLucifronPetOwnershipAndControl(t *testing.T) {
 			e.Events = append(e.Events, database.LogInstanceEvent{InstanceID: e.Instance.ID, Type: database.LogInstanceEventTypeUnitClassification, Events: numericFrame(t, e, snapshots...)})
 			p, err := evaluateLucifronEvidence(e)
 			require.NoError(t, err)
-			if kind == "terminal owner" || kind == "terminal totem" {
+			switch kind {
+			case "terminal owner", "terminal totem":
 				require.False(t, p.RequiresReparse, p.Reason)
 				require.EqualValues(t, 200, p.Details["players"].([]lucifronPlayerChange)[0].AfterRankedDamage)
-			} else {
+			case "control":
 				require.True(t, p.RequiresReparse, p.Reason)
+			default:
+				require.False(t, p.RequiresReparse, p.Reason)
+				require.Len(t, p.Details["reconciliation"], 1)
 			}
 		})
 	}
@@ -215,14 +220,14 @@ func TestLucifronOmissions(t *testing.T) {
 	require.EqualValues(t, 150, omissions[0].Amount)
 	require.Equal(t, 2, omissions[0].Count)
 	require.NotEmpty(t, p.Warnings)
-	// Equality is insufficient when unattributed pet credit could offset excluded
-	// direct-player damage. Never silently bless that coincidental equality.
+	// Explicitly omit uncertain sources without rejecting independently attributed direct damage.
 	e.Rankings[0].DamageDone = 200
 	e.Events[0].Events = numericFrame(t, e, lucifronDamage(1, lucifronTestPet, lucifronTestBoss, 50), lucifronDamage(2, lucifronTestPlayer, lucifronTestBoss, 200))
 	p, err = evaluateLucifronEvidence(e)
 	require.NoError(t, err)
-	require.True(t, p.RequiresReparse)
-	require.Contains(t, p.Reason, "upper-bound")
+	require.False(t, p.RequiresReparse, p.Reason)
+	require.Len(t, p.Details["omissions"], 1)
+	require.Empty(t, p.Details["reconciliation"])
 }
 
 type lucifronStore struct {

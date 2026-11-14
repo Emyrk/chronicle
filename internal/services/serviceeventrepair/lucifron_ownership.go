@@ -15,8 +15,13 @@ import (
 // A terminal snapshot establishes fight-end rollup. Otherwise the approved
 // policy permits stable recorded-owner INFERENCE, not proof of a complete
 // ownership history: UNIT_INFO updates need not emit classification snapshots.
-// Exact per-player source reconciliation remains mandatory in the caller.
-func lucifronRecordedOwners(events []razorgoreReplayEvent, end time.Time, encounterID uuid.UUID, p *RepairPlan) (map[guid.GUID]guid.GUID, error) {
+// Only events after the first observation may receive this recorded owner.
+type lucifronRecordedOwner struct {
+	Player     guid.GUID
+	FirstIndex int32
+}
+
+func lucifronRecordedOwners(events []razorgoreReplayEvent, end time.Time, encounterID uuid.UUID, p *RepairPlan) (map[guid.GUID]lucifronRecordedOwner, error) {
 	firstDamage := map[guid.GUID]int32{}
 	for _, event := range events {
 		if m, ok := event.message.(*messages.Damage); ok && m.Caster != nil && !m.Caster.IsPlayer() && !m.Target.IsPlayer() && combatmetrics.EffectiveDamage(m) > 0 {
@@ -25,7 +30,7 @@ func lucifronRecordedOwners(events []razorgoreReplayEvent, end time.Time, encoun
 			}
 		}
 	}
-	owners := map[guid.GUID]guid.GUID{}
+	owners := map[guid.GUID]lucifronRecordedOwner{}
 	firstSnapshot := map[guid.GUID]int32{}
 	terminal := map[guid.GUID]bool{}
 	seen := map[guid.GUID]bool{}
@@ -76,12 +81,9 @@ func lucifronRecordedOwners(events []razorgoreReplayEvent, end time.Time, encoun
 		}
 		// Even terminal ownership cannot retroactively establish who owned a
 		// source when its earlier damage occurred.
-		if firstSnapshot[source] >= firstDamage[source] {
-			return nil, errors.New("recorded owner must precede first nonplayer damage")
-		}
-		owners[source] = owner
+		owners[source] = lucifronRecordedOwner{Player: owner, FirstIndex: firstSnapshot[source]}
 		if !terminal[source] {
-			p.Warnings = append(p.Warnings, fmt.Sprintf("Stable recorded-owner inference in encounter %s for source %s -> owner %s: encounter-local snapshots agree before damage, but terminal ownership is not proven; all player full totals must reconcile", encounterID, source, owner))
+			p.Warnings = append(p.Warnings, fmt.Sprintf("Stable recorded-owner inference in encounter %s for source %s -> owner %s: encounter-local snapshots agree, but terminal ownership is not proven; only damage after the first owner observation is attributed; any historical full-total gap is reported separately", encounterID, source, owner))
 		}
 	}
 	return owners, nil
