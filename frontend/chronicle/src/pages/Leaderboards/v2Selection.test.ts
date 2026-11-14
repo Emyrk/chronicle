@@ -110,3 +110,13 @@ describe("encounter variant URLs", () => {
     expect(params.get("page")).toBe("3")
   })
 })
+
+it("round-trips independent XT and Hodir cohorts across unsupported tabs", () => {
+ const variants = { "XT-002 Deconstructor": "normal" as const, Hodir: "hard" as const };
+ const params = hubEncounterVariantParams(new URLSearchParams("page=5"), variants);
+ expect(params.get("encounter_variants")).toBe('{"Hodir":"hard","XT-002 Deconstructor":"normal"}');
+ expect(params.has("page")).toBe(false);
+ expect(hubEncounterVariants(params, "Ulduar")).toEqual(variants);
+ expect(hubEncounterVariants(params, "Other")).toEqual({});
+ expect(hubPath("speedruns", params, "Ulduar")).toContain("encounter_variants=");
+});

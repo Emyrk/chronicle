@@ -87,6 +87,7 @@ func NewCharacterFactories(flavor database.WoWFlavor) []characters.CharacterFact
 			NewLichKing,
 
 			// Ulduar,
+			NewXT002,
 			NewIgnisIronConstruct,
 			NewAlgalon,
 			NewAssemblyOfIronCharacter,
@@ -105,6 +106,7 @@ func NewCharacterFactories(flavor database.WoWFlavor) []characters.CharacterFact
 		// machines, and Yogg-Saron can use vehicle GUIDs, so they must not rely
 		// solely on the CreatureFactories wrappers.
 		wrath = append(wrath,
+			NewXT002,
 			NewGunshipBattleCharacter,
 			NewProfessorPutricide,
 			NewFlameLeviathan,

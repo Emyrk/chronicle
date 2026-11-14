@@ -138,7 +138,7 @@ func (f *CommonFactory) NewHookable(ctx context.Context, logger *slog.Logger, db
 	}
 	var variant func(encounter.Encounter) string
 	if f.EncounterVariant != nil {
-		variant = func(enc encounter.Encounter) string { return f.EncounterVariant(enc, flavor) }
+		variant = func(enc encounter.Encounter) string { return f.EncounterVariant(enc, flavor, preprocessors) }
 	}
 	return NewHookable(ctx, logger, db, z, InstanceParams{
 		Name:             name,

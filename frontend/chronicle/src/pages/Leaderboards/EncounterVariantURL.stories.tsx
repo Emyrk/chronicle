@@ -18,8 +18,8 @@ const handlers = [
       { kind: "instance", instance_name },
       { kind: "variant", instance_name, difficulty_name: "Normal", max_players: 10 },
       { kind: "set", instance_name, set_key: "default", set_name: "Default" },
-      ...["Hodir", "Freya"].map((encounter_name, position) => ({ kind: "member", instance_name, set_key: "default", encounter_name, position })),
-      ...["Hodir", "Freya"].map(encounter_name => ({ kind: "boss", instance_name, encounter_name })),
+      ...["Hodir", "XT-002 Deconstructor", "Freya"].map((encounter_name, position) => ({ kind: "member", instance_name, set_key: "default", encounter_name, position })),
+      ...["Hodir", "XT-002 Deconstructor", "Freya"].map(encounter_name => ({ kind: "boss", instance_name, encounter_name })),
     ]),
   })),
   http.get("/api/v1/rankings/instances", () => HttpResponse.json(instances.map(instance_name => ({ instance_name, category: "raid", difficulty_name: "Normal", max_players: 10, total_kills: 1 })))),
@@ -160,5 +160,23 @@ export const RatingsSharedLink: Story = {
     for (const [key, value] of new URL(initial, "https://test").searchParams) {
       await expect(params.get(key)).toBe(value)
     }
+  },
+}
+
+export const IndependentXTAndHodir: Story = {
+  render: at(`/leaderboards/Ulduar/performances?${new URLSearchParams({ encounters: "Hodir,XT-002 Deconstructor", encounter_variants: '{"Hodir":"hard","XT-002 Deconstructor":"normal"}' })}`),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    const mixed = '{"Hodir":"hard","XT-002 Deconstructor":"normal"}'
+    await expect(await canvas.findByRole("button", { name: "XT-002 Deconstructor Normal", exact: true })).toHaveAttribute("aria-pressed", "true")
+    await expect(canvas.getByRole("button", { name: "Hodir Hard mode", exact: true })).toHaveAttribute("aria-pressed", "true")
+    await waitFor(() => expect(requests).toHaveBeenCalledWith("/api/v1/rankings/leaderboard", mixed, "0"))
+    const tabs = within(canvas.getByRole("navigation", { name: "Leaderboard section" }))
+    await userEvent.click(tabs.getByRole("link", { name: "Speedruns" }))
+    await waitFor(() => expect(canvas.getByRole("button", { name: "XT-002 Deconstructor Normal", exact: true })).toBeDisabled())
+    await waitFor(() => expect(requests).toHaveBeenCalledWith("/api/v1/rankings/kill-time-leaderboard", null, null))
+    await userEvent.click(tabs.getByRole("link", { name: "Performances" }))
+    await userEvent.click(canvas.getByRole("button", { name: "Hard mode", exact: true }))
+    await waitFor(() => expect(requests).toHaveBeenCalledWith("/api/v1/rankings/leaderboard", '{"Hodir":"hard","XT-002 Deconstructor":"hard"}', "0"))
   },
 }

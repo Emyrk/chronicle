@@ -172,3 +172,15 @@ func TestEncounterVariantSelectionAndCursor(t *testing.T) {
 	_, err = Select(rows, r)
 	require.ErrorContains(t, err, "boss or Renown")
 }
+
+func TestXTAndHodirIndependentVariants(t *testing.T) {
+	t.Parallel()
+	rows := []database.ResolveLeaderboardConfigurationRow{{Kind: "instance", InstanceName: "Ulduar"}, {Kind: "boss", InstanceName: "Ulduar", EncounterName: "Hodir"}, {Kind: "boss", InstanceName: "Ulduar", EncounterName: "XT-002 Deconstructor"}}
+	r := Request{Instance: "Ulduar", Subject: "player", Kind: "boss", Score: "peak", Metric: "dps", Bosses: []string{"Hodir", "XT-002 Deconstructor"}, EncounterVariants: map[string]string{"Hodir": "hard", "XT-002 Deconstructor": "normal"}}
+	selected, err := Select(rows, r)
+	require.NoError(t, err)
+	require.EqualValues(t, 2, selected.Denominator)
+	before := Fingerprint(uuid.Nil, r, selected)
+	r.EncounterVariants["XT-002 Deconstructor"] = "hard"
+	require.NotEqual(t, before, Fingerprint(uuid.Nil, r, selected))
+}

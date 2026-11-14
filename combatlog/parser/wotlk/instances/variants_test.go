@@ -73,8 +73,8 @@ func TestUlduarVariantScopeAndOutcomes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			enc := encounter.Encounter{Name: tc.boss, Boss: true, KillType: tc.kill, Combat: encounter.Fight{MapID: tc.mapID, Start: start, End: start.Add(tc.duration)}}
-			require.Equal(t, tc.want, ulduarEncounterVariant(enc, database.WoWFlavor{database.FlavorWrath}))
-			require.Empty(t, ulduarEncounterVariant(enc, database.WoWFlavor{}), "non-Wrath must stay unknown")
+			require.Equal(t, tc.want, ulduarEncounterVariant(enc, database.WoWFlavor{database.FlavorWrath}, nil))
+			require.Empty(t, ulduarEncounterVariant(enc, database.WoWFlavor{}, nil), "non-Wrath must stay unknown")
 		})
 	}
 }
