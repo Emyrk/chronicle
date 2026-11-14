@@ -56,17 +56,27 @@ func (s *HeaderState) ApplyHeader(result HeaderResult) {
 type Decoder struct {
 	capabilities     Capabilities
 	spells           SpellLookup
+	countedSpells    SpellLookup
 	chronicleVersion string
 	state            HeaderState
 	combatants       CombatantState
 	combatantOptions CombatantOptions
 }
 
-// NewDecoder accepts lookup/build-version dependencies and optional combatant inputs.
-func NewDecoder(spells SpellLookup, chronicleVersion string, combatants ...CombatantOptions) *Decoder {
+// DecoderOptions supplies optional combatant inputs and the legacy counted lookup.
+// CountedSpells is used only for the record families that previously called
+// Parser.Spell; direct lookups must not inflate missing-spell diagnostics.
+type DecoderOptions struct {
+	Combatants    CombatantOptions
+	CountedSpells SpellLookup
+}
+
+// NewDecoder accepts lookup/build-version dependencies and optional inputs.
+func NewDecoder(spells SpellLookup, chronicleVersion string, options ...DecoderOptions) *Decoder {
 	d := &Decoder{spells: spells, chronicleVersion: chronicleVersion}
-	if len(combatants) > 0 {
-		d.combatantOptions = combatants[0]
+	if len(options) > 0 {
+		d.combatantOptions = options[0].Combatants
+		d.countedSpells = options[0].CountedSpells
 	}
 	return d
 }
@@ -109,7 +119,14 @@ func (d *Decoder) DecodeRecord(ctx context.Context, content string) ([]messages.
 	case "COMBATANT_TALENTS":
 		return d.combatants.DecodeTalents(ts, &recordFields{fields: fields}, d.combatantOptions.TalentTrees)
 	}
-	return decodeFields(ctx, d.spells, ts, event, fields, content)
+	spells := d.spells
+	switch event {
+	case "HEAL", "SPELL_DMG", "MISS", "SPELL_START", "SPELL_GO", "AURA_CAST", "DISPEL":
+		if d.countedSpells != nil {
+			spells = d.countedSpells
+		}
+	}
+	return decodeFields(ctx, spells, ts, event, fields, content)
 }
 
 func (d *Decoder) Capabilities() Capabilities { return d.capabilities }
