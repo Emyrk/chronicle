@@ -215,6 +215,10 @@ func (s SpeedrunTrackerState) validateShape() error {
 			if kill.EntryID == 0 || kill.GUID.IsZero() || kill.Timestamp.IsZero() {
 				return fmt.Errorf("invalid speedrun requirement %d kill %d", i, j)
 			}
+			entryID, ok := kill.GUID.GetEntry()
+			if !ok || entryID != kill.EntryID {
+				return fmt.Errorf("speedrun requirement %d kill %d GUID entry mismatch", i, j)
+			}
 			if _, exists := proofGUIDs[kill.GUID]; exists {
 				return fmt.Errorf("duplicate speedrun proof GUID %s", kill.GUID)
 			}
