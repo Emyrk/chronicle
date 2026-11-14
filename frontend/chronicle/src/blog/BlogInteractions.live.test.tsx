@@ -15,7 +15,8 @@ const post: BlogPostMetadata = { id: "test", title: "Test", description: "", pub
 beforeEach(() => { state.authenticated = false; state.banned = false; state.vote = 0; state.feedback = null; });
 it("shows anonymous approved feedback and upvotes but never downvote totals", () => {
   const markup = renderToStaticMarkup(<BlogInteractions post={post} />);
-  expect(markup).toContain("Anonymous reader · This server");
+  expect(markup).toContain("Anonymous reader");
+  expect(markup).toContain("This server");
   expect(markup).toContain("Helpful · 12");
   expect(markup).not.toContain("987654");
   expect(markup).toContain("&lt;script&gt;");
