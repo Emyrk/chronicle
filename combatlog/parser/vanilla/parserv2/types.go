@@ -46,21 +46,21 @@ func Resisted(amount int32) types.TrailerEntry     { return next.Resisted(amount
 func Absorbed(amount int32) types.TrailerEntry     { return next.Absorbed(amount) }
 func School(s int32) types.School                  { return next.School(s) }
 
-type SpellMissInfo int32
+type SpellMissInfo = next.SpellMissInfo
 
 const (
-	SPELL_MISS_NONE    SpellMissInfo = 0  //   -- No miss (shouldn't normally appear)
-	SPELL_MISS_MISS    SpellMissInfo = 1  //   -- Miss
-	SPELL_MISS_RESIST  SpellMissInfo = 2  //   -- Resist (also used for SMSG_PROCRESIST)
-	SPELL_MISS_DODGE   SpellMissInfo = 3  //   -- Dodge
-	SPELL_MISS_PARRY   SpellMissInfo = 4  //   -- Parry
-	SPELL_MISS_BLOCK   SpellMissInfo = 5  //   -- Block
-	SPELL_MISS_EVADE   SpellMissInfo = 6  //   -- Evade
-	SPELL_MISS_IMMUNE  SpellMissInfo = 7  //   -- Immune
-	SPELL_MISS_IMMUNE2 SpellMissInfo = 8  //   -- Immune (variant)
-	SPELL_MISS_DEFLECT SpellMissInfo = 9  //   -- Deflect
-	SPELL_MISS_ABSORB  SpellMissInfo = 10 //  -- Absorb
-	SPELL_MISS_REFLECT SpellMissInfo = 11 //  -- Reflect
+	SPELL_MISS_NONE    = next.SPELL_MISS_NONE
+	SPELL_MISS_MISS    = next.SPELL_MISS_MISS
+	SPELL_MISS_RESIST  = next.SPELL_MISS_RESIST
+	SPELL_MISS_DODGE   = next.SPELL_MISS_DODGE
+	SPELL_MISS_PARRY   = next.SPELL_MISS_PARRY
+	SPELL_MISS_BLOCK   = next.SPELL_MISS_BLOCK
+	SPELL_MISS_EVADE   = next.SPELL_MISS_EVADE
+	SPELL_MISS_IMMUNE  = next.SPELL_MISS_IMMUNE
+	SPELL_MISS_IMMUNE2 = next.SPELL_MISS_IMMUNE2
+	SPELL_MISS_DEFLECT = next.SPELL_MISS_DEFLECT
+	SPELL_MISS_ABSORB  = next.SPELL_MISS_ABSORB
+	SPELL_MISS_REFLECT = next.SPELL_MISS_REFLECT
 )
 
 //go:generate stringer -type AuraEffect -trimprefix AuraEffect

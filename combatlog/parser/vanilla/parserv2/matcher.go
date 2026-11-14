@@ -20,7 +20,6 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
 	"github.com/Emyrk/chronicle/combatlog/parser/unitname"
 	next "github.com/Emyrk/chronicle/combatlog/parsernext/vanilla"
-	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/Emyrk/chronicle/database/gamedb/talents"
 	"github.com/Emyrk/chronicle/internal/ptr"
@@ -141,32 +140,7 @@ func (p *Parser) header(ctx context.Context, ts time.Time, m *Matched) ([]messag
 }
 
 func (p *Parser) auraCast(ctx context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
-	spell := m.DBCSpellByID(p.ctx, p)
-	caster := m.Guid()
-	target := m.OptionalGuid()
-	effect := chrondbc.Effect(m.Int32())
-	auraName := chrondbc.AuraEffect(m.Int32())
-	amplitude := m.Int32()
-	effectMiscValue := m.Int32()
-	durationMS := m.Int32()
-	capStatus := m.Int32()
-
-	if err := m.Error(); err != nil {
-		return nil, err
-	}
-
-	return set(&messages.AuraCast{
-		MessageBase:     messages.Base(ts),
-		Spell:           spell,
-		Caster:          caster,
-		Target:          target,
-		Effect:          effect,
-		Amplitude:       amplitude,
-		EffectAuraName:  auraName,
-		DurationMS:      durationMS,
-		AuraCapStatus:   capStatus,
-		EffectMiscValue: effectMiscValue,
-	})
+	return next.DecodeAuraCast(p.ctx, p, ts, m)
 }
 
 func (p *Parser) auraUpdate(ctx context.Context, ts time.Time, buff bool, m *Matched) ([]messages.Message, error) {
@@ -174,84 +148,11 @@ func (p *Parser) auraUpdate(ctx context.Context, ts time.Time, buff bool, m *Mat
 }
 
 func (p *Parser) energize(ctx context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
-	target := m.Guid()
-	caster := m.OptionalGuid()
-	spell := m.DBCSpellByID(p.ctx, p.wowDB)
-	powerType := m.PowerType()
-	amount := m.Int32()
-	periodic := m.Int64() == 1
-
-	var _ = periodic
-
-	if err := m.Error(); err != nil {
-		return nil, err
-	}
-
-	dir := types.ChangeDirectionGain
-	if amount < 0 {
-		dir = types.ChangeDirectionLoss
-		amount = -amount
-	}
-
-	var name *string
-	if spell != nil {
-		name = ptr.Ref(spell.Name())
-	}
-
-	return set(&messages.ResourceChange{
-		MessageBase: messages.Base(ts),
-		Target:      target,
-		Amount:      amount,
-		Resource:    powerType,
-		Caster:      caster,
-		SpellName:   name,
-		SpellData:   spell,
-		Direction:   dir,
-	})
+	return next.DecodeEnergize(p.ctx, p.wowDB, ts, m)
 }
 
 func (p *Parser) aura(ctx context.Context, event string, ts time.Time, buff bool, m *Matched) ([]messages.Message, error) {
-	target := m.Guid()
-	m.skip() // buff slot
-	spell := m.DBCSpellByID(p.ctx, p.wowDB)
-	stack := m.Int32()
-	m.skip() // aura level
-	m.skip() // aura slot
-	stateNum := m.Int32()
-
-	if err := m.Error(); err != nil {
-		return nil, err
-	}
-
-	spName := ""
-	if spell != nil {
-		spName = spell.Name()
-	}
-
-	var state = types.AuraStateUnknown
-	switch stateNum {
-	case 0:
-		state = types.AuraStateAdded
-	case 1:
-		state = types.AuraStateRemoved
-	case 2:
-		switch event {
-		case "BUFF_ADD", "DEBUFF_ADD":
-			state = types.AuraStateAdded
-		case "BUFF_REM", "DEBUFF_REM":
-			state = types.AuraStateRemoved
-		}
-	}
-
-	return set(&messages.Aura{
-		MessageBase: messages.Base(ts),
-		IsBuff:      buff,
-		Target:      target,
-		SpellName:   spName,
-		SpellData:   spell,
-		Amount:      stack,
-		State:       state,
-	})
+	return next.DecodeAura(p.ctx, p.wowDB, event, ts, buff, m)
 }
 
 // raidComposition parses a roster-index snapshot. The encoded subgroup is the
@@ -915,175 +816,15 @@ func (p *Parser) heal(ctx context.Context, ts time.Time, m *Matched) ([]messages
 }
 
 func (p *Parser) spellMiss(ctx context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
-	caster := m.Guid()
-	target := m.Guid()
-	spell := m.DBCSpellByID(p.ctx, p)
-	hit := m.SpellMissInfo()
-
-	if err := m.Error(); err != nil {
-		return nil, err
-	}
-
-	var name *string
-	var school types.School
-	if spell != nil {
-		name = ptr.Ref(spell.Name())
-		school = spell.School.ToType()
-
-		dt := spell.SpellDamageType()
-		// If it can only be periodic, then add the periodic modifier as well.
-		if dt == chrondbc.SpellDamagePeriodic {
-			hit |= types.HitTypePeriodic
-		}
-	}
-
-	return set(&messages.Damage{
-		MessageBase:     messages.Base(ts),
-		SpellName:       name,
-		SpellData:       spell,
-		Caster:          ptr.Ref(caster),
-		Target:          target,
-		HitType:         hit,
-		Amount:          0,
-		School:          school,
-		Trailer:         nil,
-		EnvironmentType: nil,
-	})
+	return next.DecodeMiss(p.ctx, p, ts, m)
 }
 
 func (p *Parser) dmgShield(ctx context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
-	caster := m.Guid()
-	target := m.Guid()
-	damage := m.Int32()
-	school := m.School()
-
-	if err := m.Error(); err != nil {
-		return nil, err
-	}
-
-	var spellID chrondbc.SpellID
-	switch school {
-	case types.PhysicalSchool:
-		spellID = gamedb.ReflectPhysical
-	case types.HolySchool:
-		spellID = gamedb.ReflectHoly
-	case types.FireSchool:
-		spellID = gamedb.ReflectFire
-	case types.NatureSchool:
-		spellID = gamedb.ReflectNature
-	case types.FrostSchool:
-		spellID = gamedb.ReflectFrost
-	case types.ShadowSchool:
-		spellID = gamedb.ReflectShadow
-	case types.ArcaneSchool:
-		spellID = gamedb.ReflectArcane
-	default:
-		return nil, fmt.Errorf("unknown school type: %d", school)
-	}
-
-	spell, err := p.wowDB.Spell(p.ctx, spellID)
-	if err != nil {
-		if chrondbc.IsSpellNotFound(err) {
-			spell = ptr.Ref(chrondbc.UnknownSpell(spellID))
-		} else {
-			return nil, fmt.Errorf("fetching environment spell: %w", err)
-		}
-	}
-
-	return set(&messages.Damage{
-		MessageBase: messages.Base(ts),
-		Caster:      ptr.Ref(caster),
-		SpellName:   ptr.Ref(spell.Name()),
-		SpellData:   spell,
-		Target:      target,
-		HitType:     types.HitTypeHit,
-		Amount:      damage,
-		School:      school,
-	})
+	return next.DecodeDamageShield(p.ctx, p.wowDB, ts, m)
 }
 
 func (p *Parser) envDmg(ctx context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
-	target := m.Guid()
-	dmgType := m.Int32()
-	damage := m.Int32()
-	absorbed := m.Int32()
-	resisted := m.Int32()
-
-	if err := m.Error(); err != nil {
-		return nil, err
-	}
-
-	var trailer types.Trailer
-	if absorbed > 0 {
-		trailer = append(trailer, types.TrailerEntry{
-			Amount:  ptr.Ref(uint32(absorbed)),
-			HitType: types.HitTypePartialAbsorb,
-		})
-	}
-
-	if resisted > 0 {
-		trailer = append(trailer, types.TrailerEntry{
-			Amount:  ptr.Ref(uint32(resisted)),
-			HitType: types.HitTypePartialResist,
-		})
-	}
-
-	var spellID chrondbc.SpellID
-	var envType types.EnvironmentType
-	var school types.School
-	switch dmgType {
-	case 0: // Fatigue
-		envType = types.EnvironmentTypeFatigue
-		school = types.PhysicalSchool
-		spellID = gamedb.EnvironmentFatigue
-	case 1: // Drowning
-		envType = types.EnvironmentTypeDrowning
-		school = types.PhysicalSchool
-		spellID = gamedb.EnvironmentDrowning
-	case 2: // Falling
-		envType = types.EnvironmentTypeFall
-		school = types.PhysicalSchool
-		spellID = gamedb.EnvironmentFalling
-	case 3: // Lava
-		envType = types.EnvironmentTypeLava
-		spellID = 16455
-		school = types.FireSchool
-	case 4: // Slime
-		envType = types.EnvironmentTypeSlime
-		spellID = 16456
-		school = types.NatureSchool
-	case 5: // Fire
-		envType = types.EnvironmentTypeFire
-		school = types.FireSchool
-		spellID = gamedb.EnvironmentFire
-	case 6: // Fall to void
-		envType = types.EnvironmentTypeFall
-		school = types.PhysicalSchool
-		spellID = gamedb.EnvironmentFalling
-	default:
-		return nil, fmt.Errorf("unknown environment damage type: %d", dmgType)
-	}
-
-	spell, err := p.wowDB.Spell(p.ctx, spellID)
-	if err != nil {
-		if chrondbc.IsSpellNotFound(err) {
-			spell = ptr.Ref(chrondbc.UnknownSpell(spellID))
-		} else {
-			return nil, fmt.Errorf("fetching environment spell: %w", err)
-		}
-	}
-
-	return set(&messages.Damage{
-		MessageBase:     messages.Base(ts),
-		SpellName:       ptr.Ref(spell.Name()),
-		SpellData:       spell,
-		Target:          target,
-		HitType:         types.HitTypeEnvironment,
-		Amount:          damage,
-		School:          school,
-		Trailer:         trailer,
-		EnvironmentType: &envType,
-	})
+	return next.DecodeEnvironmentDamage(p.ctx, p.wowDB, ts, m)
 }
 
 // 1771564201000|SPELL_DMG|0xF130002C3800949D|0x000000000001C7AC|22482|67|0,0,0|0|0|2,0,0,0
@@ -1161,70 +902,11 @@ func powerBurnResourceChange(
 // spellGo does indicate a spell being landed/missed. These logs also appear as
 // SPELL_DMG and "MISS" logs.
 func (p *Parser) spellGo(_ context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
-	itemID := m.Int32() // 0 if no item triggered it
-	spellData := m.DBCSpellByID(p.ctx, p)
-	caster := m.Guid()
-	target := m.OptionalGuid() // 0x0000000000000000 if no target
-	castFlags := m.CastFlags()
-	targetsHit := m.Int32()
-	numMissed := m.Int32()
-	var corpseOwner *guid.GUID
-	if m.peek() != "" {
-		corpseOwner = m.OptionalGuid()
-	}
-
-	if err := m.Error(); err != nil {
-		return nil, err
-	}
-
-	var item *int32
-	if itemID != 0 {
-		item = ptr.Ref(itemID)
-	}
-
-	return set(&messages.SpellGo{
-		MessageBase:      messages.Base(ts),
-		ItemID:           item,
-		SpellData:        spellData,
-		Caster:           caster,
-		Target:           target,
-		Flags:            castFlags,
-		NumTargetsHit:    targetsHit,
-		NumTargetsMissed: numMissed,
-		CorpseOwner:      corpseOwner,
-	})
+	return next.DecodeSpellGo(p.ctx, p, ts, m)
 }
 
 func (p *Parser) spellStart(_ context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
-	itemID := m.Int32() // 0 if no item triggered it
-	spellData := m.DBCSpellByID(p.ctx, p)
-	caster := m.Guid()
-	target := m.OptionalGuid() // 0x0000000000000000 if no target
-	castFlags := m.CastFlags()
-	castTime := m.Int32()        // In millis
-	channelDuration := m.Int32() // In millis, 0 if not a channel
-	spellType := m.Int32()       // 0 = normal, 1 = channel, 2 = auto repeating
-
-	if err := m.Error(); err != nil {
-		return nil, err
-	}
-
-	var item *int32
-	if itemID != 0 {
-		item = ptr.Ref(itemID)
-	}
-
-	return set(&messages.SpellStart{
-		MessageBase:     messages.Base(ts),
-		ItemID:          item,
-		SpellData:       spellData,
-		Caster:          caster,
-		Target:          target,
-		Flags:           castFlags,
-		CastTime:        time.Duration(castTime) * time.Millisecond,
-		ChannelDuration: time.Duration(channelDuration) * time.Millisecond,
-		SpellType:       spellType,
-	})
+	return next.DecodeSpellStart(p.ctx, p, ts, m)
 }
 
 func (p *Parser) spellFail(_ context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
@@ -1257,20 +939,7 @@ func (p *Parser) slain(_ context.Context, ts time.Time, m *Matched) ([]messages.
 }
 
 func (p *Parser) dispel(ctx context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
-	caster := m.Guid()
-	target := m.Guid()
-	spell := m.DBCSpellByID(p.ctx, p)
-
-	if err := m.Error(); err != nil {
-		return nil, err
-	}
-
-	return set(&messages.Dispel{
-		MessageBase: messages.Base(ts),
-		Caster:      caster,
-		Target:      target,
-		Spell:       spell,
-	})
+	return next.DecodeDispel(p.ctx, p, ts, m)
 }
 
 func (p *Parser) loot(ctx context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {

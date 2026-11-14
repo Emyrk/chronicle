@@ -1,6 +1,6 @@
 # parsernext foundation
 
-This is an isolated, runnable **complete-file source ingestion** foundation, plus a bounded Vanilla SWING/DEATH/HEAL/SPELL_DMG decoder, not a complete combat parser. Production continues using `combatlog/parser`
+This is an isolated, runnable **complete-file source ingestion** foundation, plus a bounded Vanilla combat-record decoder, not a complete combat parser. Production continues using `combatlog/parser`
 and `chronicle/logparse_parse.go` unchanged. There are no legacy parser execution wrappers,
 registration side effects, database/River calls, or raid constructors here.
 
@@ -48,7 +48,7 @@ content := strings.TrimSuffix(strings.TrimSuffix(line.Raw, "\n"), "\r")
 timestamp, event, fields, err := ccv2.ParseLine(content)
 ```
 
-Only lexical semantics have moved. Timestamp parsing still happens **before**
+At this lexical boundary, timestamp parsing still happens **before**
 trimming; event/payload fields are trimmed without dropping empty fields; a
 record with only timestamp and event is accepted. Empty/malformed errors remain
 unchanged, including the historical "at least 3 parts" text and `time.Now()`
@@ -132,7 +132,7 @@ is performed.
 | root `parsernext` | Explicit composition validation and complete-file entry point | Imports profiles + common; future pipeline composition stays here |
 | `common`, `common/units`, `common/critters` | Source lifecycle, classification contract and known critter labels | Standard library only; no expansion/raid construction, observation store or global types drawer |
 | `formats`, `formats/ccv2` | Stable wire-format names and shared CC-v2 lexical decoding | Standard library only; no identity or combat-message dependencies |
-| `vanilla` | Vanilla source selection, known-critter classification, SWING/DEATH/HEAL/SPELL_DMG decoding | Explicit common/format leaves and listed message/value compatibility; no encounter/publication wiring |
+| `vanilla` | Vanilla source selection, known-critter classification, the combat records listed below | Explicit common/format leaves and listed message/value compatibility; no encounter/publication wiring |
 | `tbc` | TBC source-compatibility policy | Imports common/formats; **never routes through WotLK** |
 | `wotlk` | Wrath source-compatibility policy | Imports common/formats; Wrath-specific state/rules stay here |
 | `forever` | Explicit Forever source-compatibility policy | Imports common/formats; Forever-specific state/rules stay here |
@@ -146,8 +146,8 @@ It cannot construct a raid through a registered constructor or imported package.
 
 ## Deliberately not implemented
 
-Combat-message decoding beyond SWING/DEATH/HEAL/SPELL_DMG; clocks/timezone reconstruction; other expansion combat rules;
-character/raid state; event sorting or synthetic events; multiple-file merging;
+Combat-message decoding beyond the explicitly listed records; clocks/timezone reconstruction; other expansion combat rules;
+character/raid state; event sorting or the full synthetic pipeline; multiple-file merging;
 semantic export parity; checkpoints, restore, snapshot schemas/codecs; publication.
 There are no no-op implementations claiming these features work.
 
@@ -172,29 +172,37 @@ isolation. Shared-layer tests require no raid registry, game data or database.
 
 ## Runnable Vanilla combat slice
 
-`vanilla.DecodeRecord(ctx, spellLookup, content)` decodes **SWING, DEATH, HEAL and SPELL_DMG only**
-from a CC-v2 line without its newline. It returns the existing concrete
+`vanilla.DecodeRecord(ctx, spellLookup, content)` decodes the following **explicitly supported records**
+from a CC-v2 line without its newline.
+
+| Family | Supported event names |
+| --- | --- |
+| Damage/heal/death | SWING, DEATH, HEAL, SPELL_DMG, MISS, ENV_DMG, DMG_SHIELD |
+| Casts | SPELL_START, SPELL_GO |
+| Auras | AURA_CAST, BUFF_ADD, BUFF_REM, DEBUFF_ADD, DEBUFF_REM |
+| Resources/dispel | ENERGIZE, DISPEL |
+
+ It returns the existing concrete
 `*messages.Damage`, `*messages.Heal`, `*messages.Slain` payloads, plus the existing
 power-burn `*messages.ResourceChange` emitted locally by SPELL_DMG. All other records (including
-HEADER, MISS, ENV_DMG and DMG_SHIELD) return `ErrUnsupportedRecord`, not successful empty
+HEADER, SPELL_FAIL, BUFF_UPDATE and DEBUFF_UPDATE) return `ErrUnsupportedRecord`, not successful empty
 output. This is deliberately a record decoder, not a whole-file combat parser.
 Call it from a `ReadFile` visitor for an explicitly selected Vanilla source;
 callers must decide how to handle unsupported records rather than silently
 claiming the complete log was decoded.
 
-Vanilla owns the extracted melee hit/trailer conversions and SWING/DEATH/HEAL/SPELL_DMG
-construction. Legacy handlers delegate to those same functions using their
+Vanilla owns the extracted combat conversions and message construction. Legacy handlers delegate to those same functions using their
 existing cursor. `CombatFields` is the narrow migration seam; `SpellLookup`
 requires only dataset-aware `Spell(context.Context, chrondbc.SpellID)`. Auto
 Attack lookup, missing-spell fallback, integer narrowing, GUID validation,
 trailer ordering, nil attribution and tolerated extra fields remain unchanged.
 Temporary dependencies are precisely GUID, messages, legacy combat values,
-chrondbc spell values, ptr and bitmask—not the old parser or GameDB implementation.
+chrondbc spell values, dependency-free synthetic spell IDs, ptr and bitmask—not the old parser or GameDB implementation.
 No identity store or payload schema is introduced. Critter events are not
 filtered by this decoder. Fight/ranking eligibility and synthetics are still
 outside this boundary.
 
-Parity tests use 22 unmodified Capybara SWING/DEATH/HEAL/SPELL_DMG records selected for distinct
+Parity tests use 22 unmodified Capybara SWING/DEATH records selected for distinct
 hit-info/victim-state combinations, plus malformed fields, missing fields,
 integer narrowing and missing/erroring spell lookups. The same tests can be run
 against pre-extraction legacy files using a Go overlay to avoid a circular
@@ -211,8 +219,47 @@ Periodic/hybrid spell classification, mitigation order and power-burn synthesis
 retain their original behavior, including default-difficulty effect selection.
 The full synthetic pipeline is still not invoked by DecodeRecord.
 
-The spell parity fixture contains 367 unchanged saved Capybara records. Its
+The spell parity fixture contains 17 representative unchanged saved Capybara records. Its
 lookup uses deterministic test spell values/fallbacks, not a claim of complete
 production-dataset parity. Additional explicit spell fixtures cover periodic,
 hybrid, crit/periodic healing and power burn, plus malformed and missing fields.
-ENV_DMG, DMG_SHIELD and MISS remain unsupported; they are not silently ignored.
+MISS, ENV_DMG and DMG_SHIELD are now decoded too. HEADER and the other unmigrated records remain explicit errors.
+
+### Remaining damage records
+
+MISS retains its zero-damage payload and periodic-only modifier. ENV_DMG and
+DMG_SHIELD use the stable synthetic IDs in the dependency-free
+`database/gamedb/chrondbc/spellids` module; GameDB retains typed compatibility
+aliases and owns actual spell construction. No GameDB implementation import
+was added to parsernext. Existing error messages and lookup fallback remain.
+
+The checked-in spell fixture is reduced to 17 representative cases; 11 further
+public records cover MISS/shields (the saved Capybara log has no ENV_DMG).
+Synthetic tests enumerate environmental damage kinds and unknown kinds.
+`CHRONICLE_PARSER_PARITY_GZIP` enables full local saved-corpus replay without
+checking hundreds of raw records into git. The pre-extraction overlay replay
+compared 53,628 supported records, with 132,180 unsupported records counted
+separately, using missing-spell fallback—not complete production export parity.
+
+### Pure casts, aura records, resources and dispels
+
+These handlers now share their original implementation with the legacy adapter.
+Optional GUID sentinels, unchecked ignored aura fields, optional corpse owner,
+cast flags, resource-sign handling (including legacy int32 overflow), aura state
+fallbacks and lookup choice/error precedence are preserved. Nine public source
+records (one per event) plus generated boundary cases cover this family.
+The saved Capybara replay now compares 178,288 supported records, leaving 7,520
+unsupported, against the pre-extraction implementations with fallback spell data.
+
+### Next stateful boundary
+
+HEADER handling owns version/capability observations and interacts with the
+parser's last timestamp. The ordered synthetic pipeline carries combat state;
+identity/raid/combatant records carry roster and metadata observations. None of
+those concerns is migrated or inferred by this pure record decoder.
+
+Two existing legacy handlers need an explicit outcome policy before migration:
+SPELL_FAIL silently ignores client failures and can swallow field errors;
+BUFF_UPDATE/DEBUFF_UPDATE return placeholder Skip messages. They remain
+`ErrUnsupportedRecord` here, rather than being presented as successful decoding.
+Loot and metadata records are also outside the current supported list.

@@ -93,67 +93,16 @@ func (m *Matched) Guid() guid.GUID {
 	return parseMatch(m, guid.FromString)
 }
 
-func (m *Matched) OptionalGuid() *guid.GUID {
-	return parseMatch(m, func(s string) (*guid.GUID, error) {
-		if s == "" || s == "nil" || s == "0x0000000000000000" {
-			return nil, nil
-		}
-		id, err := guid.FromString(s)
-		if err != nil {
-			return nil, err
-		}
-		if id == 0 {
-			return nil, nil
-		}
-		return &id, nil
-	})
-}
+func (m *Matched) OptionalGuid() *guid.GUID { return next.ReadOptionalGUID(m) }
 
 func (m *Matched) SwingHitInfo() SwingHitInfo {
 	v := m.Uint64()
 	return SwingHitInfo(v)
 }
 
-func (m *Matched) CastFlags() types.CastFlags {
-	return parseMatch(m, func(s string) (types.CastFlags, error) {
-		cf, err := strconv.ParseUint(s, 10, 64)
-		if err != nil {
-			return 0, err
-		}
-		return types.CastFlags(cf), nil
-	})
-}
+func (m *Matched) CastFlags() types.CastFlags { return next.ReadCastFlags(m) }
 
-func (m *Matched) SpellMissInfo() types.HitType {
-	switch SpellMissInfo(m.Int32()) {
-	case SPELL_MISS_NONE:
-		return types.HitTypeNone
-	case SPELL_MISS_MISS:
-		return types.HitTypeMiss
-	case SPELL_MISS_RESIST:
-		return types.HitTypeFullResist
-	case SPELL_MISS_DODGE:
-		return types.HitTypeDodge
-	case SPELL_MISS_PARRY:
-		return types.HitTypeParry
-	case SPELL_MISS_BLOCK:
-		return types.HitTypeFullBlock
-	case SPELL_MISS_EVADE:
-		return types.HitTypeEvade
-	case SPELL_MISS_IMMUNE:
-		return types.HitTypeImmune
-	case SPELL_MISS_IMMUNE2:
-		return types.HitTypeImmune
-	case SPELL_MISS_DEFLECT:
-		return types.HitTypeDeflect
-	case SPELL_MISS_ABSORB:
-		return types.HitTypeFullAbsorb
-	case SPELL_MISS_REFLECT:
-		return types.HitTypeReflect
-	default:
-		return types.HitTypeNone
-	}
-}
+func (m *Matched) SpellMissInfo() types.HitType { return next.SpellMissHit(m.Int32()) }
 
 func (m *Matched) Uint64() uint64 {
 	return parseMatch(m, func(s string) (uint64, error) {
@@ -257,3 +206,7 @@ type spellByIDer interface {
 func (m *Matched) DBCSpellByID(ctx context.Context, db spellByIDer) *chrondbc.Spell {
 	return next.ReadSpell(ctx, db, m)
 }
+
+// Peek and Skip expose the legacy cursor behavior at the migration boundary.
+func (m *Matched) Peek() string { return m.peek() }
+func (m *Matched) Skip()        { m.skip() }

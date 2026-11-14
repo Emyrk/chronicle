@@ -2,22 +2,22 @@ package gamedb
 
 import (
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
+	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/spellids"
 	"github.com/Gophercraft/core/i18n"
 )
 
 const (
-	EnvironmentFalling  chrondbc.SpellID = 900001
-	EnvironmentDrowning chrondbc.SpellID = 900002
-	EnvironmentFatigue  chrondbc.SpellID = 900003
-	EnvironmentFire     chrondbc.SpellID = 900004
-
-	ReflectPhysical chrondbc.SpellID = 900101
-	ReflectHoly     chrondbc.SpellID = 900102
-	ReflectFire     chrondbc.SpellID = 900103
-	ReflectNature   chrondbc.SpellID = 900104
-	ReflectFrost    chrondbc.SpellID = 900105
-	ReflectShadow   chrondbc.SpellID = 900106
-	ReflectArcane   chrondbc.SpellID = 900107
+	EnvironmentFalling  chrondbc.SpellID = spellids.EnvironmentFalling
+	EnvironmentDrowning chrondbc.SpellID = spellids.EnvironmentDrowning
+	EnvironmentFatigue  chrondbc.SpellID = spellids.EnvironmentFatigue
+	EnvironmentFire     chrondbc.SpellID = spellids.EnvironmentFire
+	ReflectPhysical     chrondbc.SpellID = spellids.ReflectPhysical
+	ReflectHoly         chrondbc.SpellID = spellids.ReflectHoly
+	ReflectFire         chrondbc.SpellID = spellids.ReflectFire
+	ReflectNature       chrondbc.SpellID = spellids.ReflectNature
+	ReflectFrost        chrondbc.SpellID = spellids.ReflectFrost
+	ReflectShadow       chrondbc.SpellID = spellids.ReflectShadow
+	ReflectArcane       chrondbc.SpellID = spellids.ReflectArcane
 )
 
 func customEffects(effect chrondbc.Effect, aura chrondbc.AuraEffect) []chrondbc.SpellEffect {
