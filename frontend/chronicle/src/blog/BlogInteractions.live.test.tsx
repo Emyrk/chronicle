@@ -1,18 +1,19 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, expect, it, vi } from "vitest";
 import { BlogCardStats, BlogInteractions, BlogScore, FeedbackEditor } from "./BlogInteractions";
+import type { BlogStorageReward } from "./blogStorageRewards";
 import type { BlogPostMetadata } from "./blogRegistry";
 
-const state = vi.hoisted(() => ({ authenticated: false, banned: false, vote: 0, feedback: null as null | { id: string; body: string; status: string; deleted: boolean; consent: boolean } }));
+const state = vi.hoisted(() => ({ reward: undefined as BlogStorageReward | undefined, authenticated: false, banned: false, vote: 0, feedback: null as null | { id: string; body: string; status: string; deleted: boolean; consent: boolean } }));
 vi.mock("react", async (original) => ({ ...await original<typeof import("react")>(), useSyncExternalStore: () => true }));
 vi.mock("@/hooks/useAuth", () => ({ useAuth: () => ({ session: state.authenticated ? { user_id: "secret-user" } : undefined, isLoading: false }) }));
 vi.mock("@/api/blogInteractions", () => ({
-  useBlogInteractions: () => ({ data: { voting_enabled: true, feedback_enabled: true, own_feedback: state.feedback, up_votes: 12, down_votes: 987654, own_vote: state.vote, feedback_banned: state.banned, feedback: [{ id: "public", body: "Good <script>alert(1)</script>", server_relation: "This server" }] } }),
+  useBlogInteractions: () => ({ data: { vote_reward: state.reward, feedback_reward: state.reward, voting_enabled: true, feedback_enabled: true, own_feedback: state.feedback, up_votes: 12, down_votes: 987654, own_vote: state.vote, feedback_banned: state.banned, feedback: [{ id: "public", body: "Good <script>alert(1)</script>", server_relation: "This server" }] } }),
   useBlogMutation: () => ({ mutate: vi.fn(), reset: vi.fn(), isPending: false }),
   useBlogSummaries: () => ({ data: new Map([["test", { slug: "test", up_votes: 7, public_feedback: 3 }]]) }),
 }));
 const post: BlogPostMetadata = { id: "test", title: "Test", description: "", publishedAt: "2026-01-01", rarity: "common", tag: "Docs", icon: "book", votingEnabled: true, feedbackEnabled: true };
-beforeEach(() => { state.authenticated = false; state.banned = false; state.vote = 0; state.feedback = null; });
+beforeEach(() => { state.reward = undefined; state.authenticated = false; state.banned = false; state.vote = 0; state.feedback = null; });
 it("shows anonymous approved feedback and upvotes but never downvote totals", () => {
   const markup = renderToStaticMarkup(<BlogInteractions post={post} />);
   expect(markup).toContain("Anonymous reader");
@@ -90,4 +91,27 @@ it("shows index card counts only for enabled interactions", () => {
   expect(voteOnly).toContain("+7");
   expect(voteOnly).not.toContain("public responses");
   expect(renderToStaticMarkup(<BlogCardStats post={{ ...post, id: "other" }} />)).toBe("");
+});
+
+it("shows reward opportunities only with authenticated reward data", () => {
+  state.reward = { eligible: true };
+  expect(renderToStaticMarkup(<BlogInteractions post={post} />)).not.toContain("Storage rewards");
+  state.authenticated = true;
+  const markup = renderToStaticMarkup(<BlogInteractions post={post} />);
+  expect(markup).toContain("Vote: +2 MB");
+  expect(markup).toContain("Feedback: +5 MB");
+  expect(markup).toContain("Earn it for 60 days");
+  expect(markup).toContain("up to 7 MB combined");
+  expect(markup).toContain("private or public");
+  state.reward = undefined;
+  expect(renderToStaticMarkup(<BlogInteractions post={post} />)).not.toContain("Storage rewards");
+});
+it("does not offer rewards for disabled or blocked interactions", () => {
+  state.authenticated = true;
+  state.reward = { eligible: true };
+  state.banned = true;
+  const markup = renderToStaticMarkup(<BlogInteractions post={{ ...post, votingEnabled: false }} />);
+  expect(markup).not.toContain("Vote: +2 MB");
+  expect(markup).not.toContain("Earn it for 60 days");
+  expect(markup).toContain("Feedback rewards are unavailable");
 });
