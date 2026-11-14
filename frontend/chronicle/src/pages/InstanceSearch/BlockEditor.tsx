@@ -40,6 +40,7 @@ export interface BlockContext {
   disabled?: boolean;
   /** Whether the viewer is Honored / logged in; false locks those fields (see fieldTiers). */
   honored?: boolean;
+  revered?: boolean;
   loggedIn?: boolean;
 }
 
@@ -487,15 +488,16 @@ function PredicateEditor({
 }
 
 function LockBadge({ lock }: { lock: FieldLock }) {
-  const honored = lock === "honored";
+  const honored = lock !== "login";
+  const label = lock === "revered" ? "Revered" : "Honored";
   return (
     <span
       className={cn("inline-flex items-center gap-1 rounded px-1.5 py-px text-2xs font-semibold ring-1 ring-current/40", !honored && "text-amber-400")}
-      style={honored ? { color: TIER_COLOR.honored } : undefined}
-      title={honored ? "Honored supporters can search by this" : "Log in to search by this"}
+      style={honored ? { color: TIER_COLOR[lock === "revered" ? "revered" : "honored"] } : undefined}
+      title={honored ? `${label} supporters can search by this` : "Log in to search by this"}
     >
       <Lock className="h-3 w-3" />
-      {honored ? "Honored" : "Log in"}
+      {honored ? label : "Log in"}
     </span>
   );
 }
@@ -511,7 +513,7 @@ function fieldOptions(fields: readonly InstanceSearchField[], ctx: BlockContext)
       group,
       // Spec also covers sub-specs (Bear / Cat, Tank / DPS, Fury Prot).
       keywords: `${f.name} ${f.doc}${f.name === SPEC_FIELD ? " sub-spec bear cat tank dps fury prot" : ""}`,
-      ...(lockOf(f, ctx) ? { disabled: true, ...(lockOf(f, ctx) === "honored" ? { hint: "Honored", hintColor: TIER_COLOR.honored } : { hint: "Log in" }) } : {}),
+      ...(lockOf(f, ctx) ? { disabled: true, ...(lockOf(f, ctx) === "revered" ? { hint: "Revered", hintColor: TIER_COLOR.revered } : lockOf(f, ctx) === "honored" ? { hint: "Honored", hintColor: TIER_COLOR.honored } : { hint: "Log in" }) } : {}),
     }));
 }
 

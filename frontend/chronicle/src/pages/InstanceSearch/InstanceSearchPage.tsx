@@ -40,7 +40,7 @@ import { addRecentSearch, loadRecentSearches, saveRecentSearches, type RecentSea
 import { HonoredLockTooltip } from "./HonoredLockTooltip";
 import { EXAMPLES, type SearchExample } from "./examples";
 import { SentenceForm } from "./SentenceForm";
-import { treeNeedsHonored } from "./fieldTiers";
+import { treeNeedsHonored, treeNeedsRevered } from "./fieldTiers";
 import { bossOptions, realmOptions, zoneOptions } from "./searchOptions";
 import {
   buildQuery,
@@ -123,6 +123,7 @@ export function InstanceSearchPage() {
   // the server accepts the same queries from anyone logged in). Form and
   // Blocks are open to everyone. Assume unlocked while the session loads so
   // supporters never see a flash of locks.
+  const reveredUnlocked = !supporter.isLoading && supporter.atLeast("revered");
   const advancedUnlocked = supporter.isLoading || supporter.atLeast("honored");
   const [showUpsell, setShowUpsell] = useState(false);
   const fields = useSearchFields();
@@ -242,6 +243,8 @@ export function InstanceSearchPage() {
 
   const anonBlocked = !isAuthenticated && mode === "form" && !formIsBasic(form);
   // Honored-only fields (UI-only lock, like Code).
+  const reveredBlocked = !reveredUnlocked && treeNeedsRevered(draftTree);
+  const submittedReveredBlocked = !reveredUnlocked && treeNeedsRevered(submittedTree);
   const honoredBlocked = !advancedUnlocked && !preview && treeNeedsHonored(draftTree);
   const draftSortOption = fields.data?.sorts.find((option) => option.field === draftSort.field);
   const sortBlocked = draftSortOption ? !sortTierUnlocked(draftSortOption.minimum_tier, supporter.tier, supporter.isLoading) : false;
@@ -309,6 +312,7 @@ export function InstanceSearchPage() {
   };
 
   const runQuery = (q: string, m: Mode) => {
+    if (!reveredUnlocked && treeNeedsRevered(decodeQuery(q))) return;
     setCollapsed(true);
     const next = new URLSearchParams(params);
     next.set("q", q);
@@ -338,13 +342,16 @@ export function InstanceSearchPage() {
   };
 
   const results = useInfiniteQuery({
-    queryKey: ["instance-search", "results", submittedParam, submittedSort, isAuthenticated],
-    queryFn: ({ pageParam }) => runSearch(buildQuery(submittedTree, isAuthenticated ? undefined : 25, submittedSort), pageParam),
+    queryKey: ["instance-search", "results", submittedParam, submittedSort, isAuthenticated, submittedReveredBlocked],
+    queryFn: ({ pageParam }) => {
+      if (submittedReveredBlocked) throw new Error("Hostile count requires Revered supporter access.");
+      return runSearch(buildQuery(submittedTree, isAuthenticated ? undefined : 25, submittedSort), pageParam);
+    },
     initialPageParam: undefined as InstanceSearchCursor | undefined,
     getNextPageParam: (last) => last.page.next ?? undefined,
     // Wait for the session: searching before it loads would run (and spend)
     // the search once as anonymous and again as the logged-in user.
-    enabled: submittedParam !== null && !authLoading,
+    enabled: submittedParam !== null && !authLoading && !submittedReveredBlocked,
     retry: false,
     refetchOnWindowFocus: false,
     staleTime: Infinity,
@@ -444,6 +451,10 @@ export function InstanceSearchPage() {
         </div>
         <BudgetLine budget={budget} lastCost={lastCost} lastRuntimeCost={lastRuntimeCost} pending={collapsed ? null : (liveCost?.total ?? null)} />
       </div>
+
+      {(reveredBlocked || submittedReveredBlocked) && <p role="status" className="text-sm" style={{ color: TIER_COLOR.revered }}>
+        Hostile count requires Revered supporter access. <Link to="/supporter" className="font-semibold underline">View supporter perks</Link>
+      </p>}
 
       {collapsed ? (
         <SearchSummary tree={submittedTree} resultLabel={resultLabel} onEdit={() => setCollapsed(false)} onNew={newSearch} />
@@ -548,7 +559,7 @@ export function InstanceSearchPage() {
             <BlockEditor
               tree={blocks}
               onChange={setBlocks}
-              ctx={{ fields: fields.data?.fields ?? [], costs: fields.data, zones, bosses: allBosses, realms: realmNames, disabled: preview, honored: advancedUnlocked, loggedIn: isAuthenticated }}
+              ctx={{ fields: fields.data?.fields ?? [], costs: fields.data, zones, bosses: allBosses, realms: realmNames, disabled: preview, honored: advancedUnlocked, revered: reveredUnlocked, loggedIn: isAuthenticated }}
             />
           )}
         </div>
@@ -568,8 +579,8 @@ export function InstanceSearchPage() {
         <div className="flex flex-wrap items-center gap-3 px-3 py-2.5">
         <Button
           onClick={submit}
-          disabled={preview || anonBlocked || honoredBlocked || sortBlocked || codeInvalid || tooComplex || results.isFetching}
-          title={preview ? "Honored supporters can run code searches" : honoredBlocked ? "This search uses conditions for Honored supporters" : sortBlocked ? `This sort requires ${draftSortOption?.minimum_tier}` : undefined}
+          disabled={preview || anonBlocked || honoredBlocked || reveredBlocked || sortBlocked || codeInvalid || tooComplex || results.isFetching}
+          title={reveredBlocked ? "Hostile count requires Revered supporter access" : preview ? "Honored supporters can run code searches" : honoredBlocked ? "This search uses conditions for Honored supporters" : sortBlocked ? `This sort requires ${draftSortOption?.minimum_tier}` : undefined}
           className="gap-1.5"
         >
           {results.isFetching && !results.isFetchingNextPage ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
