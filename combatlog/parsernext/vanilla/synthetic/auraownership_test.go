@@ -15,7 +15,7 @@ import (
 func TestAuraOwnershipCorrelatesTightAuraCast(t *testing.T) {
 	t.Parallel()
 
-	processor := newAuraOwnership()
+	processor := NewAuraOwnership()
 	ts := time.UnixMilli(1000)
 	caster := guid.GUID(1)
 	target := guid.GUID(2)
@@ -43,7 +43,7 @@ func TestAuraOwnershipCorrelatesTightAuraCast(t *testing.T) {
 func TestAuraOwnershipRejectsStaleAuraCast(t *testing.T) {
 	t.Parallel()
 
-	processor := newAuraOwnership()
+	processor := NewAuraOwnership()
 	ts := time.UnixMilli(1000)
 	caster := guid.GUID(1)
 	target := guid.GUID(2)
@@ -70,7 +70,7 @@ func TestAuraOwnershipRejectsStaleAuraCast(t *testing.T) {
 func TestAuraOwnershipRequiresMatchingTargetAndSpell(t *testing.T) {
 	t.Parallel()
 
-	processor := newAuraOwnership()
+	processor := NewAuraOwnership()
 	ts := time.UnixMilli(1000)
 	caster := guid.GUID(1)
 	target := guid.GUID(2)
@@ -97,7 +97,7 @@ func TestAuraOwnershipRequiresMatchingTargetAndSpell(t *testing.T) {
 func TestAuraOwnershipLatestCasterWins(t *testing.T) {
 	t.Parallel()
 
-	processor := newAuraOwnership()
+	processor := NewAuraOwnership()
 	ts := time.UnixMilli(1000)
 	casterA := guid.GUID(1)
 	casterB := guid.GUID(2)
@@ -122,7 +122,7 @@ func TestAuraOwnershipLatestCasterWins(t *testing.T) {
 func TestAuraOwnershipReusesCastForMultipleAuraEffects(t *testing.T) {
 	t.Parallel()
 
-	processor := newAuraOwnership()
+	processor := NewAuraOwnership()
 	ts := time.UnixMilli(1000)
 	caster := guid.GUID(1)
 	target := guid.GUID(2)
@@ -144,7 +144,7 @@ func TestAuraOwnershipReusesCastForMultipleAuraEffects(t *testing.T) {
 func TestAuraOwnershipIncludesExactWindowBoundary(t *testing.T) {
 	t.Parallel()
 
-	processor := newAuraOwnership()
+	processor := NewAuraOwnership()
 	ts := time.UnixMilli(1000)
 	caster := guid.GUID(1)
 	target := guid.GUID(2)
@@ -163,7 +163,7 @@ func TestAuraOwnershipIncludesExactWindowBoundary(t *testing.T) {
 func TestAuraOwnershipDoesNotOverrideAuthoritativeSource(t *testing.T) {
 	t.Parallel()
 
-	processor := newAuraOwnership()
+	processor := NewAuraOwnership()
 	ts := time.UnixMilli(1000)
 	castCaster := guid.GUID(1)
 	auraCaster := guid.GUID(4)
