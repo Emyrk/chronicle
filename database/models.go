@@ -3136,6 +3136,14 @@ type LuaProjectStar struct {
 	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
+type OauthDeveloperApp struct {
+	ID         uuid.UUID          `db:"id" json:"id"`
+	UserID     uuid.UUID          `db:"user_id" json:"user_id"`
+	Name       string             `db:"name" json:"name"`
+	SecretHash []byte             `db:"secret_hash" json:"secret_hash"`
+	CreatedAt  pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
 type OauthDeviceSession struct {
 	DeviceSignature              string             `db:"device_signature" json:"device_signature"`
 	UserSignature                string             `db:"user_signature" json:"user_signature"`
@@ -3175,6 +3183,13 @@ type OauthTokenSession struct {
 	Request         []byte             `db:"request" json:"request"`
 	ExpiresAt       pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
 	CreatedAt       pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
+type OauthUsedRefreshToken struct {
+	Signature string             `db:"signature" json:"signature"`
+	RequestID string             `db:"request_id" json:"request_id"`
+	Request   []byte             `db:"request" json:"request"`
+	ExpiresAt pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
 }
 
 type ParseScoreMembership struct {

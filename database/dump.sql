@@ -3051,6 +3051,15 @@ CREATE TABLE lua_projects (
     CONSTRAINT lua_projects_kind_check CHECK ((kind = ANY (ARRAY['panel'::text, 'guide'::text])))
 );
 
+CREATE TABLE oauth_developer_apps (
+    id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    name text NOT NULL,
+    secret_hash bytea NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT oauth_developer_apps_name_check CHECK (((length(name) >= 1) AND (length(name) <= 100)))
+);
+
 CREATE TABLE oauth_device_sessions (
     device_signature text NOT NULL,
     user_signature text NOT NULL,
@@ -3096,6 +3105,13 @@ CREATE TABLE oauth_token_sessions (
     expires_at timestamp with time zone NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT oauth_token_sessions_token_type_check CHECK ((token_type = ANY (ARRAY['access'::text, 'refresh'::text, 'authorize'::text])))
+);
+
+CREATE TABLE oauth_used_refresh_tokens (
+    signature text NOT NULL,
+    request_id text NOT NULL,
+    request jsonb NOT NULL,
+    expires_at timestamp with time zone NOT NULL
 );
 
 CREATE TABLE parse_score_memberships (
@@ -4704,6 +4720,12 @@ ALTER TABLE ONLY lua_projects
 ALTER TABLE ONLY lua_projects
     ADD CONSTRAINT lua_projects_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY oauth_developer_apps
+    ADD CONSTRAINT oauth_developer_apps_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY oauth_developer_apps
+    ADD CONSTRAINT oauth_developer_apps_user_id_key UNIQUE (user_id);
+
 ALTER TABLE ONLY oauth_device_sessions
     ADD CONSTRAINT oauth_device_sessions_pkey PRIMARY KEY (device_signature);
 
@@ -4718,6 +4740,9 @@ ALTER TABLE ONLY oauth_server_secrets
 
 ALTER TABLE ONLY oauth_token_sessions
     ADD CONSTRAINT oauth_token_sessions_pkey PRIMARY KEY (token_type, signature);
+
+ALTER TABLE ONLY oauth_used_refresh_tokens
+    ADD CONSTRAINT oauth_used_refresh_tokens_pkey PRIMARY KEY (signature);
 
 ALTER TABLE ONLY parse_score_memberships
     ADD CONSTRAINT parse_score_memberships_pkey PRIMARY KEY (id);
@@ -5394,6 +5419,8 @@ CREATE INDEX oauth_token_sessions_expires_at_idx ON oauth_token_sessions USING b
 
 CREATE INDEX oauth_token_sessions_request_id_idx ON oauth_token_sessions USING btree (request_id, token_type);
 
+CREATE INDEX oauth_used_refresh_tokens_expires_at_idx ON oauth_used_refresh_tokens USING btree (expires_at);
+
 CREATE INDEX parse_variant_memberships_cohort ON parse_variant_memberships USING btree (tenant_id, policy_version, query_version, encounter_name, difficulty_name, max_players, encounter_variant, player_class, player_spec, player_sub_spec, killed_at);
 
 CREATE INDEX parse_variant_memberships_instance ON parse_variant_memberships USING btree (instance_id);
@@ -5946,6 +5973,9 @@ ALTER TABLE ONLY lua_project_stars
 
 ALTER TABLE ONLY lua_projects
     ADD CONSTRAINT lua_projects_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES users(id);
+
+ALTER TABLE ONLY oauth_developer_apps
+    ADD CONSTRAINT oauth_developer_apps_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY oauth_relay_codes
     ADD CONSTRAINT oauth_relay_codes_user_auth_session_id_fkey FOREIGN KEY (user_auth_session_id) REFERENCES user_auth_session(id) ON DELETE CASCADE;
