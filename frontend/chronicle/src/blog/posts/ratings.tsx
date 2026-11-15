@@ -47,8 +47,8 @@ export function RatingsPost({ post }: PostProps) {
         </li>
         <li>
           <strong style={{ color: RENOWN }}>Renown</strong> answers &ldquo;How much content has this player done?&rdquo;
-          Every boss has a Renown award, and each kill earns it, however you performed. Harder bosses are worth more.
-          Renown only goes up.
+          Bosses on the Renown list have an award, and each kill earns it, however you performed. Renown adds up across
+          your history, but it can drop if a log is removed or awards change.
         </li>
       </ul>
 
@@ -62,9 +62,10 @@ export function RatingsPost({ post }: PostProps) {
 
       <h2>Why ratings change</h2>
       <p>
-        The benchmark covers all time, so it only goes up. When someone sets a new record, everyone else&apos;s Peak and
-        Mastery on that boss dip a little, even if they haven&apos;t raided since. Your kills and their parses stay the
-        same. The page has a slider to try it.
+        The benchmark covers all time, so it only goes up, unless the log holding the record is removed. When someone
+        sets a new record, everyone else&apos;s Peak and Mastery on that boss dip a little, even if they haven&apos;t
+        raided since. Your kills and their parses stay the same. If a log is removed or invalidated, its kills leave your
+        ratings too, so Renown can go down as well. The page has a slider to try it.
       </p>
 
       <h2>The fine print</h2>
@@ -74,7 +75,8 @@ export function RatingsPost({ post }: PostProps) {
           spec and subspec. If you play more than one spec, each is rated separately.
         </li>
         <li>
-          Each kill counts toward DPS <em>or</em> HPS, whichever is higher for that kill, never both.
+          Each kill counts toward DPS <em>or</em> HPS, never both. Healing specs count whichever is higher for that kill;
+          every other spec always counts as DPS.
         </li>
         <li>
           Over several bosses, Peak and Mastery are the average across every boss, and a boss you haven&apos;t killed

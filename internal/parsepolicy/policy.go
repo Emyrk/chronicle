@@ -1,7 +1,8 @@
 // Package parsepolicy defines the parse scoring semantics for Chronicle.
 //
-// A "parse" is a 0–100 score for a player's metric (DPS or HPS) on a boss,
-// computed by value-interpolation within a cohort of comparable performances.
+// A "parse" is a 0–100 score for a player's metric (DPS or HPS) on a boss: the
+// kill's rank position (midpoint plotting positions, ties averaged) within a
+// cohort of comparable performances, interpolated between neighbouring kills.
 // This package owns the scoring algorithm, eligibility rules, sample-size
 // thresholds, and Average Parse merging — but has no database, HTTP, or
 // frontend dependencies.
