@@ -4,6 +4,7 @@ import { ArrowLeft, ArrowRight } from "lucide-react";
 import { Link, Navigate, Outlet, Route, Routes, useMatch, useParams } from "react-router-dom";
 import { buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Toaster } from "@/components/ui/Sonner/Sonner";
 import { iconUrl } from "@/config/iconUrl";
 import { serverCapabilities } from "@/config/serverCapabilities";
 import { usePageTracking } from "@/hooks/usePageTracking";
@@ -50,6 +51,7 @@ function BlogLayout() {
       <main>
         <Outlet />
       </main>
+      <Toaster />
     </div>
   );
 }
