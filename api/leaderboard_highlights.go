@@ -82,9 +82,10 @@ func (api *API) LeaderboardHighlights(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Fingerprint mismatch covers seed/config/default-set mutations without unsafe
-	// callbacks or synchronous calculation. Hourly dispatch repairs missed nudges.
+	// callbacks or synchronous calculation. Automatic nudges wait until the next
+	// UTC hour (plus queue delay); hourly dispatch repairs missed nudges.
 	if needRefresh && api.Queues != nil {
-		_, enqueueErr := api.Queues.Insert(ctx, serviceratings.ArgsHighlightDispatch{TenantID: tenant.ID}, nil)
+		_, enqueueErr := api.Queues.Insert(ctx, serviceratings.AutomaticHighlightDispatch(tenant.ID, time.Now()), nil)
 		if enqueueErr != nil && api.Opts.Logger != nil {
 			api.Opts.Logger.WarnContext(ctx, "queue leaderboard highlight refresh", "error", enqueueErr)
 		}
@@ -110,6 +111,7 @@ func (api *API) AdminRefreshLeaderboardHighlights(w http.ResponseWriter, r *http
 		httpapi.Write(r.Context(), w, 400, chroniclesdk.Response{Message: "Unknown tenant"})
 		return
 	}
+	// Zero boundary keeps admin requests immediate and distinct from hourly nudges.
 	if _, err = api.Queues.Insert(r.Context(), serviceratings.ArgsHighlightDispatch{TenantID: req.TenantID}, nil); err != nil {
 		httpapi.InternalServerError(w, err)
 		return
