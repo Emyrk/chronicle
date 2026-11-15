@@ -14,8 +14,8 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/consumers"
 	"github.com/Emyrk/chronicle/combatlog/parser/azerothcore"
 	"github.com/Emyrk/chronicle/combatlog/parser/blizzard/modern"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/creatures"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounters"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/identitycatalog"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
@@ -101,17 +101,16 @@ func prepareCompleteSession(o CompleteSessionOptions, graph *ownergraph.Registry
 		}
 		return nil
 	}}}
-	if o.Compatibility.IdentityMode {
-		if err := creatures.RegisterGraphOwner(graph); err != nil {
-			return err
-		}
-		recipes = append(recipes, consumers.GraphRecipe{ID: "identity", Validate: func(c consumers.Consumer) error {
-			if _, ok := c.(*creatures.Creatures); !ok {
-				return fmt.Errorf("wrong identity consumer")
-			}
-			return nil
-		}})
+	if err := identitycatalog.RegisterGraphOwner(graph, o.Registry); err != nil {
+		return err
 	}
+	recipes = append(recipes, consumers.GraphRecipe{ID: "identity-catalogue/v1", Validate: func(c consumers.Consumer) error {
+		if _, ok := c.(*identitycatalog.Collector); !ok {
+			return fmt.Errorf("wrong catalogue consumer")
+		}
+		return nil
+	}})
+
 	if err := consumers.RegisterGraphOwner(graph, recipes); err != nil {
 		return err
 	}
@@ -158,12 +157,9 @@ func NewCompleteFileSession(ctx context.Context, o CompleteSessionOptions) (*Com
 	if o.Compatibility.Realm != "" {
 		state.CurrentRealm = &realm.Info{RealmName: o.Compatibility.Realm}
 	}
-	if o.Compatibility.IdentityMode {
-		result.creaturesState = creatures.New(o.Logger)
-		result.consumers = consumers.New(o.Logger, state, result.creaturesState)
-	} else {
-		result.consumers = consumers.New(o.Logger, state)
-	}
+	result.catalogueState = identitycatalog.New(o.Registry)
+	result.consumers = consumers.New(o.Logger, state, result.catalogueState)
+
 	var source any
 	switch o.Compatibility.Source.Format {
 	case database.LogFormat112aCcAddon:
@@ -262,16 +258,13 @@ func (s *CompleteFileSession) WireRuntime(ctx context.Context) error {
 	if err = s.root.result.encountersState.ValidateGraphRuntime(ctx, o.Logger); err != nil {
 		return s.invalidate(err)
 	}
-	if c := s.root.result.creaturesState; c != nil {
-		if err = c.ValidateGraphRuntime(o.Logger); err != nil {
-			return s.invalidate(err)
-		}
+	// All dependency preflight precedes runtime attachment. The catalogue has
+	// no mutable runtime dependencies; its trusted registry is codec configuration.
+	runtime := []consumers.GraphRuntime{
+		{ID: "encounters", Preflight: func(c consumers.Consumer) error { return c.(*encounters.State).ValidateGraphRuntime(ctx, o.Logger) }, Wire: func(c consumers.Consumer) error { return c.(*encounters.State).WireGraphRuntime(ctx, o.Logger) }},
+		{ID: "identity-catalogue/v1", Preflight: func(c consumers.Consumer) error { return nil }, Wire: func(c consumers.Consumer) error { return nil }},
 	}
-	// All dependency preflight precedes all runtime attachment.
-	runtime := []consumers.GraphRuntime{{ID: "encounters", Preflight: func(c consumers.Consumer) error { return c.(*encounters.State).ValidateGraphRuntime(ctx, o.Logger) }, Wire: func(c consumers.Consumer) error { return c.(*encounters.State).WireGraphRuntime(ctx, o.Logger) }}}
-	if s.root.result.creaturesState != nil {
-		runtime = append(runtime, consumers.GraphRuntime{ID: "identity", Preflight: func(c consumers.Consumer) error { return c.(*creatures.Creatures).ValidateGraphRuntime(o.Logger) }, Wire: func(c consumers.Consumer) error { return c.(*creatures.Creatures).WireGraphRuntime(o.Logger) }})
-	}
+
 	if err = s.root.result.consumers.WireGraphRuntime(o.Logger, runtime); err != nil {
 		return s.invalidate(err)
 	}

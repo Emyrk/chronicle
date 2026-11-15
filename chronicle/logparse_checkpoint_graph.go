@@ -7,8 +7,8 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/consumers"
 	"github.com/Emyrk/chronicle/combatlog/parser/azerothcore"
 	"github.com/Emyrk/chronicle/combatlog/parser/blizzard/modern"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/creatures"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounters"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/identitycatalog"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/nextsource"
 	"github.com/Emyrk/chronicle/combatlog/parser/wotlk"
 	"github.com/Emyrk/chronicle/database"
@@ -23,20 +23,17 @@ type completeSessionValue struct {
 	Source       string   `json:"source"`
 	Consumers    string   `json:"consumers"`
 	Encounters   string   `json:"encounters"`
-	Creatures    string   `json:"creatures"`
+	Catalogue    string   `json:"catalogue"`
 	Capabilities []string `json:"capabilities"`
 	Lines        int64    `json:"lines"`
 }
 
 func registerCompleteSessionRoot(r *ownergraph.Registry, identity SessionCompatibility) error {
 	validate := func(root *completeSessionRoot) error {
-		if root.result == nil || root.result.encountersState == nil || root.result.consumers == nil || (root.result.creaturesState != nil) != identity.IdentityMode || root.result.report.totalLines < 0 {
+		if root.result == nil || root.result.encountersState == nil || root.result.consumers == nil || root.result.catalogueState == nil || root.result.report.totalLines < 0 {
 			return fmt.Errorf("incomplete session root")
 		}
-		expected := []consumers.Consumer{root.result.encountersState}
-		if identity.IdentityMode {
-			expected = append(expected, root.result.creaturesState)
-		}
+		expected := []consumers.Consumer{root.result.encountersState, root.result.catalogueState}
 		if err := root.result.consumers.ValidateGraphOrder(expected...); err != nil {
 			return err
 		}
@@ -62,7 +59,7 @@ func registerCompleteSessionRoot(r *ownergraph.Registry, identity SessionCompati
 		}
 		return nil
 	}
-	return ownergraph.Register(r, ownergraph.Codec[completeSessionRoot]{Type: "chronicle.complete-file-session", Version: 1, Init: func() *completeSessionRoot { return new(completeSessionRoot) }, Capture: func(root *completeSessionRoot, c *ownergraph.Capture) ([]byte, error) {
+	return ownergraph.Register(r, ownergraph.Codec[completeSessionRoot]{Type: "chronicle.complete-file-session", Version: 2, Init: func() *completeSessionRoot { return new(completeSessionRoot) }, Capture: func(root *completeSessionRoot, c *ownergraph.Capture) ([]byte, error) {
 		if err := validate(root); err != nil {
 			return nil, err
 		}
@@ -77,16 +74,16 @@ func registerCompleteSessionRoot(r *ownergraph.Registry, identity SessionCompati
 			}
 			*ref.dest = path
 		}
-		if root.result.creaturesState != nil {
-			path, err := c.Ref(root.result.creaturesState)
+		if root.result.catalogueState != nil {
+			path, err := c.Ref(root.result.catalogueState)
 			if err != nil {
 				return nil, err
 			}
-			value.Creatures = path
+			value.Catalogue = path
 		}
 		return json.Marshal(value)
 	}, Restore: func(root *completeSessionRoot, version uint32, data []byte, c *ownergraph.Restore) error {
-		if version != 1 {
+		if version != 2 {
 			return fmt.Errorf("unsupported session root version")
 		}
 		var value completeSessionValue
@@ -97,7 +94,7 @@ func registerCompleteSessionRoot(r *ownergraph.Registry, identity SessionCompati
 		if err := json.Unmarshal(data, &fields); err != nil {
 			return err
 		}
-		for _, name := range []string{"source", "consumers", "encounters", "creatures", "capabilities", "lines"} {
+		for _, name := range []string{"source", "consumers", "encounters", "catalogue", "capabilities", "lines"} {
 			if len(fields[name]) == 0 {
 				return fmt.Errorf("missing session root field %s", name)
 			}
@@ -127,8 +124,8 @@ func registerCompleteSessionRoot(r *ownergraph.Registry, identity SessionCompati
 		if err != nil {
 			return err
 		}
-		if value.Creatures != "" {
-			root.result.creaturesState, err = ownergraph.LoadAs[*creatures.Creatures](c, value.Creatures)
+		if value.Catalogue != "" {
+			root.result.catalogueState, err = ownergraph.LoadAs[*identitycatalog.Collector](c, value.Catalogue)
 			if err != nil {
 				return err
 			}

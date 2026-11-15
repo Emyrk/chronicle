@@ -225,6 +225,8 @@ type sqlcQuerier interface {
 	DeleteLeaderboardCareerSubject(ctx context.Context, arg DeleteLeaderboardCareerSubjectParams) error
 	DeleteLeaderboardRunEvidence(ctx context.Context, arg DeleteLeaderboardRunEvidenceParams) error
 	DeleteLogGroupArtifactsByKind(ctx context.Context, arg DeleteLogGroupArtifactsByKindParams) ([]LogGroupArtifact, error)
+	// Publication must delete, insert the header, and insert every record in one caller-owned transaction.
+	DeleteLogIdentityCatalogue(ctx context.Context, logGroupID uuid.UUID) error
 	DeleteLogInstanceByIDAndGroup(ctx context.Context, arg DeleteLogInstanceByIDAndGroupParams) (uuid.UUID, error)
 	DeleteLogInstancesByIDs(ctx context.Context, ids []uuid.UUID) (int64, error)
 	// Queue every stored package before cascades remove the project's dependent rows.
@@ -293,6 +295,7 @@ type sqlcQuerier interface {
 	// Event-time scope, not an ingestion snapshot. The existing realm/end index
 	// supports a bounded chronological page; run_id breaks equal-date ties.
 	DiscoverLeaderboardOperationRuns(ctx context.Context, arg DiscoverLeaderboardOperationRunsParams) ([]DiscoverLeaderboardOperationRunsRow, error)
+	DownloadLogIdentityCatalogueRecords(ctx context.Context, logGroupID uuid.UUID) ([]LogIdentityCatalogueRecord, error)
 	DrainLeaderboardOperation(ctx context.Context, arg DrainLeaderboardOperationParams) error
 	EncountersByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceEncounter, error)
 	EnqueueLeaderboardCareer(ctx context.Context, tenantID uuid.UUID) error
@@ -513,6 +516,7 @@ type sqlcQuerier interface {
 	GetLogGroupArtifact(ctx context.Context, arg GetLogGroupArtifactParams) (LogGroupArtifact, error)
 	GetLogGroupArtifacts(ctx context.Context, logGroupID uuid.UUID) ([]LogGroupArtifact, error)
 	GetLogGroupInstanceIDByOrdinal(ctx context.Context, arg GetLogGroupInstanceIDByOrdinalParams) (uuid.UUID, error)
+	GetLogIdentityCatalogue(ctx context.Context, logGroupID uuid.UUID) (LogIdentityCatalogue, error)
 	GetLogInstanceForDiscordAnnouncement(ctx context.Context, id uuid.UUID) (LogInstancesResolved, error)
 	// Fetch instance metadata needed for parse scoring.
 	GetLogInstanceForScoring(ctx context.Context, id uuid.UUID) (GetLogInstanceForScoringRow, error)
@@ -753,6 +757,8 @@ type sqlcQuerier interface {
 	InsertLeaderboardVariantRenown(ctx context.Context, arg InsertLeaderboardVariantRenownParams) error
 	InsertLogFile(ctx context.Context, arg InsertLogFileParams) (LogFile, error)
 	InsertLogGroupArtifact(ctx context.Context, arg InsertLogGroupArtifactParams) (LogGroupArtifact, error)
+	InsertLogIdentityCatalogue(ctx context.Context, arg InsertLogIdentityCatalogueParams) (LogIdentityCatalogue, error)
+	InsertLogIdentityCatalogueRecords(ctx context.Context, arg []InsertLogIdentityCatalogueRecordsParams) *InsertLogIdentityCatalogueRecordsBatchResults
 	InsertLogInstanceEvents(ctx context.Context, arg []InsertLogInstanceEventsParams) *InsertLogInstanceEventsBatchResults
 	// Modification Requests
 	InsertModificationRequest(ctx context.Context, arg InsertModificationRequestParams) (ApplicationModificationRequest, error)
@@ -992,6 +998,8 @@ type sqlcQuerier interface {
 	ListLogFilePartsForDeletion(ctx context.Context, logFileID uuid.UUID) ([]LogFilePart, error)
 	ListLogGroupArtifacts(ctx context.Context, logGroupID uuid.UUID) ([]LogGroupArtifact, error)
 	ListLogGroupArtifactsForParse(ctx context.Context, logGroupID uuid.UUID) ([]LogGroupArtifact, error)
+	ListLogIdentityCatalogueRecords(ctx context.Context, arg ListLogIdentityCatalogueRecordsParams) ([]LogIdentityCatalogueRecord, error)
+	ListLogIdentityCatalogues(ctx context.Context, logGroupIds []uuid.UUID) ([]LogIdentityCatalogue, error)
 	ListLuaProjectArtifactGarbage(ctx context.Context) ([]string, error)
 	ListLuaProjectContributors(ctx context.Context, projectID uuid.UUID) ([]ListLuaProjectContributorsRow, error)
 	ListLuaProjectReleases(ctx context.Context, projectID uuid.UUID) ([]LuaProjectRelease, error)

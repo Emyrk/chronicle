@@ -12230,6 +12230,228 @@ func (q *sqlQuerier) UpsertGuildSettings(ctx context.Context, arg UpsertGuildSet
 	return i, err
 }
 
+const deleteLogIdentityCatalogue = `-- name: DeleteLogIdentityCatalogue :exec
+DELETE FROM log_identity_catalogues WHERE log_group_id = $1
+`
+
+// Publication must delete, insert the header, and insert every record in one caller-owned transaction.
+func (q *sqlQuerier) DeleteLogIdentityCatalogue(ctx context.Context, logGroupID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteLogIdentityCatalogue, logGroupID)
+	return err
+}
+
+const downloadLogIdentityCatalogueRecords = `-- name: DownloadLogIdentityCatalogueRecords :many
+SELECT log_group_id, guid, classification, is_unknown, has_conflicts, payload FROM log_identity_catalogue_records WHERE log_group_id = $1 ORDER BY guid
+`
+
+func (q *sqlQuerier) DownloadLogIdentityCatalogueRecords(ctx context.Context, logGroupID uuid.UUID) ([]LogIdentityCatalogueRecord, error) {
+	rows, err := q.db.Query(ctx, downloadLogIdentityCatalogueRecords, logGroupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LogIdentityCatalogueRecord
+	for rows.Next() {
+		var i LogIdentityCatalogueRecord
+		if err := rows.Scan(
+			&i.LogGroupID,
+			&i.Guid,
+			&i.Classification,
+			&i.IsUnknown,
+			&i.HasConflicts,
+			&i.Payload,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getLogIdentityCatalogue = `-- name: GetLogIdentityCatalogue :one
+SELECT log_group_id, generation, dataset_id, dataset_revision, format, flavor, parser_engine, parser_build, catalogue_version, rule_version, first_seen, last_seen, guid_count, event_count, zero_guid_count, created_at FROM log_identity_catalogues WHERE log_group_id = $1
+`
+
+func (q *sqlQuerier) GetLogIdentityCatalogue(ctx context.Context, logGroupID uuid.UUID) (LogIdentityCatalogue, error) {
+	row := q.db.QueryRow(ctx, getLogIdentityCatalogue, logGroupID)
+	var i LogIdentityCatalogue
+	err := row.Scan(
+		&i.LogGroupID,
+		&i.Generation,
+		&i.DatasetID,
+		&i.DatasetRevision,
+		&i.Format,
+		&i.Flavor,
+		&i.ParserEngine,
+		&i.ParserBuild,
+		&i.CatalogueVersion,
+		&i.RuleVersion,
+		&i.FirstSeen,
+		&i.LastSeen,
+		&i.GuidCount,
+		&i.EventCount,
+		&i.ZeroGuidCount,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const insertLogIdentityCatalogue = `-- name: InsertLogIdentityCatalogue :one
+INSERT INTO log_identity_catalogues (log_group_id, generation, dataset_id, dataset_revision, format, flavor, parser_engine, parser_build, catalogue_version, rule_version, first_seen, last_seen, guid_count, event_count, zero_guid_count)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING log_group_id, generation, dataset_id, dataset_revision, format, flavor, parser_engine, parser_build, catalogue_version, rule_version, first_seen, last_seen, guid_count, event_count, zero_guid_count, created_at
+`
+
+type InsertLogIdentityCatalogueParams struct {
+	LogGroupID       uuid.UUID          `db:"log_group_id" json:"log_group_id"`
+	Generation       int64              `db:"generation" json:"generation"`
+	DatasetID        uuid.UUID          `db:"dataset_id" json:"dataset_id"`
+	DatasetRevision  int64              `db:"dataset_revision" json:"dataset_revision"`
+	Format           string             `db:"format" json:"format"`
+	Flavor           string             `db:"flavor" json:"flavor"`
+	ParserEngine     string             `db:"parser_engine" json:"parser_engine"`
+	ParserBuild      string             `db:"parser_build" json:"parser_build"`
+	CatalogueVersion int32              `db:"catalogue_version" json:"catalogue_version"`
+	RuleVersion      int32              `db:"rule_version" json:"rule_version"`
+	FirstSeen        pgtype.Timestamptz `db:"first_seen" json:"first_seen"`
+	LastSeen         pgtype.Timestamptz `db:"last_seen" json:"last_seen"`
+	GuidCount        int64              `db:"guid_count" json:"guid_count"`
+	EventCount       int64              `db:"event_count" json:"event_count"`
+	ZeroGuidCount    int64              `db:"zero_guid_count" json:"zero_guid_count"`
+}
+
+func (q *sqlQuerier) InsertLogIdentityCatalogue(ctx context.Context, arg InsertLogIdentityCatalogueParams) (LogIdentityCatalogue, error) {
+	row := q.db.QueryRow(ctx, insertLogIdentityCatalogue,
+		arg.LogGroupID,
+		arg.Generation,
+		arg.DatasetID,
+		arg.DatasetRevision,
+		arg.Format,
+		arg.Flavor,
+		arg.ParserEngine,
+		arg.ParserBuild,
+		arg.CatalogueVersion,
+		arg.RuleVersion,
+		arg.FirstSeen,
+		arg.LastSeen,
+		arg.GuidCount,
+		arg.EventCount,
+		arg.ZeroGuidCount,
+	)
+	var i LogIdentityCatalogue
+	err := row.Scan(
+		&i.LogGroupID,
+		&i.Generation,
+		&i.DatasetID,
+		&i.DatasetRevision,
+		&i.Format,
+		&i.Flavor,
+		&i.ParserEngine,
+		&i.ParserBuild,
+		&i.CatalogueVersion,
+		&i.RuleVersion,
+		&i.FirstSeen,
+		&i.LastSeen,
+		&i.GuidCount,
+		&i.EventCount,
+		&i.ZeroGuidCount,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const listLogIdentityCatalogueRecords = `-- name: ListLogIdentityCatalogueRecords :many
+SELECT log_group_id, guid, classification, is_unknown, has_conflicts, payload FROM log_identity_catalogue_records
+WHERE log_group_id = $1
+  AND (NOT $2::boolean OR guid > $3::wow_guid)
+  AND ($4::text = 'all' OR ($4::text = 'unknown' AND is_unknown) OR ($4::text = 'conflicts' AND has_conflicts))
+ORDER BY guid LIMIT $5::integer
+`
+
+type ListLogIdentityCatalogueRecordsParams struct {
+	LogGroupID uuid.UUID `db:"log_group_id" json:"log_group_id"`
+	HasAfter   bool      `db:"has_after" json:"has_after"`
+	AfterGuid  guid.GUID `db:"after_guid" json:"after_guid"`
+	Review     string    `db:"review" json:"review"`
+	RowLimit   int32     `db:"row_limit" json:"row_limit"`
+}
+
+func (q *sqlQuerier) ListLogIdentityCatalogueRecords(ctx context.Context, arg ListLogIdentityCatalogueRecordsParams) ([]LogIdentityCatalogueRecord, error) {
+	rows, err := q.db.Query(ctx, listLogIdentityCatalogueRecords,
+		arg.LogGroupID,
+		arg.HasAfter,
+		arg.AfterGuid,
+		arg.Review,
+		arg.RowLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LogIdentityCatalogueRecord
+	for rows.Next() {
+		var i LogIdentityCatalogueRecord
+		if err := rows.Scan(
+			&i.LogGroupID,
+			&i.Guid,
+			&i.Classification,
+			&i.IsUnknown,
+			&i.HasConflicts,
+			&i.Payload,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLogIdentityCatalogues = `-- name: ListLogIdentityCatalogues :many
+SELECT log_group_id, generation, dataset_id, dataset_revision, format, flavor, parser_engine, parser_build, catalogue_version, rule_version, first_seen, last_seen, guid_count, event_count, zero_guid_count, created_at FROM log_identity_catalogues WHERE log_group_id = ANY($1::uuid[])
+`
+
+func (q *sqlQuerier) ListLogIdentityCatalogues(ctx context.Context, logGroupIds []uuid.UUID) ([]LogIdentityCatalogue, error) {
+	rows, err := q.db.Query(ctx, listLogIdentityCatalogues, logGroupIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LogIdentityCatalogue
+	for rows.Next() {
+		var i LogIdentityCatalogue
+		if err := rows.Scan(
+			&i.LogGroupID,
+			&i.Generation,
+			&i.DatasetID,
+			&i.DatasetRevision,
+			&i.Format,
+			&i.Flavor,
+			&i.ParserEngine,
+			&i.ParserBuild,
+			&i.CatalogueVersion,
+			&i.RuleVersion,
+			&i.FirstSeen,
+			&i.LastSeen,
+			&i.GuidCount,
+			&i.EventCount,
+			&i.ZeroGuidCount,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const abandonAwaitingInferenceRun = `-- name: AbandonAwaitingInferenceRun :one
 UPDATE inference_runs
 SET status = 'abandoned',

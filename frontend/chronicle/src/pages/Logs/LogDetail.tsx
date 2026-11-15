@@ -1,3 +1,4 @@
+import { IdentityCatalogue } from "./IdentityCatalogue";
 import { AdminReparseControls } from "./AdminReparseControls";
 import type { ParserEngine } from "@/api/typesGenerated";
 import { useState, useMemo, useRef, useEffect } from "react";
@@ -27,7 +28,6 @@ import {
   Timer,
   ChevronRight,
   AlertTriangle,
-  Fingerprint,
   Flame,
 } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
@@ -70,7 +70,7 @@ import {
   type WoWEncounter,
   type Video,
 } from "@/api/queries";
-import type { WoWSimpleParsedInstance, LogParseReport, IdentityReport, Duration } from "@/api/typesGenerated";
+import type { WoWSimpleParsedInstance, LogParseReport, Duration } from "@/api/typesGenerated";
 
 
 function formatDate(timestamp: unknown): string {
@@ -612,150 +612,6 @@ function TimingSection({ report, logId }: { report: LogParseReport; logId: strin
   );
 }
 
-function IdentitySection({ identity }: { identity: IdentityReport }) {
-  const zonedUnits = identity.zoned_units ? Object.entries(identity.zoned_units) : [];
-  const zoneSpells = identity.zone_spells ? Object.entries(identity.zone_spells) : [];
-  const unitSpells = identity.unit_spells ? Object.entries(identity.unit_spells) : [];
-  const goCode = (identity as Record<string, unknown>).go_code as string | undefined;
-  const [copied, setCopied] = useState(false);
-
-  // Build a name lookup from zonedUnits for unit_spells (keyed by entry ID)
-  const creatureNames = new Map<string, string>();
-  for (const [, creatures] of zonedUnits) {
-    for (const c of creatures) {
-      creatureNames.set(String(c.entry_id), c.name);
-    }
-  }
-
-  const totalCreatures = zonedUnits.reduce((sum, [, creatures]) => sum + creatures.length, 0);
-  const totalSpells = zoneSpells.reduce((sum, [, spells]) => sum + spells.length, 0);
-
-  return (
-    <Card className="p-6">
-      <details className="group">
-        <summary className="cursor-pointer flex items-center gap-2 font-semibold text-lg list-none [&::-webkit-details-marker]:hidden">
-          <ChevronRight className="h-5 w-5 text-muted-foreground transition-transform group-open:rotate-90" />
-          <Fingerprint className="h-5 w-5 text-blue-500" />
-          Identity Report
-          <span className="text-sm font-normal text-muted-foreground whitespace-nowrap">
-            ({totalCreatures} creatures, {totalSpells} spells)
-          </span>
-        </summary>
-
-        <div className="mt-4 space-y-4">
-          {/* Generated Go Code */}
-          {goCode && (
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="text-sm font-medium text-muted-foreground">Generated Go Code</h4>
-                <button
-                  className="text-xs px-2 py-1 rounded bg-muted hover:bg-muted/80 transition-colors"
-                  onClick={() => {
-                    navigator.clipboard.writeText(goCode);
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 2000);
-                  }}
-                >
-                  {copied ? "Copied!" : "Copy"}
-                </button>
-              </div>
-              <pre className="text-xs font-mono bg-muted/50 rounded p-3 overflow-x-auto max-h-96 overflow-y-auto whitespace-pre">
-                {goCode}
-              </pre>
-            </div>
-          )}
-          {/* Creatures by Zone */}
-          {zonedUnits.length > 0 && (
-            <div>
-              <h4 className="text-sm font-medium text-muted-foreground mb-2">Creatures by Zone</h4>
-              <div className="space-y-3">
-                {zonedUnits
-                  .sort(([a], [b]) => a.localeCompare(b))
-                  .map(([zone, creatures]) => (
-                  <details key={zone}>
-                    <summary className="cursor-pointer text-sm font-medium p-2 bg-muted/50 rounded hover:bg-muted transition-colors">
-                      {zone} <span className="text-muted-foreground">({creatures.length} creatures)</span>
-                    </summary>
-                    <div className="mt-1 ml-4 grid gap-1 text-xs max-h-80 overflow-y-auto">
-                      {creatures
-                        .sort((a, b) => a.entry_id - b.entry_id)
-                        .map((c) => (
-                        <div key={c.entry_id} className="flex justify-between font-mono p-1 bg-muted/30 rounded">
-                          <span>
-                            {c.name} <span className="text-muted-foreground">({c.entry_id})</span>
-                          </span>
-                          <span className="text-muted-foreground">{c.unique_count}× unique</span>
-                        </div>
-                      ))}
-                    </div>
-                  </details>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Spells by Zone */}
-          {zoneSpells.length > 0 && (
-            <div>
-              <h4 className="text-sm font-medium text-muted-foreground mb-2">Spells by Zone</h4>
-              <div className="space-y-3">
-                {zoneSpells
-                  .sort(([a], [b]) => a.localeCompare(b))
-                  .map(([zone, spells]) => (
-                  <details key={zone}>
-                    <summary className="cursor-pointer text-sm font-medium p-2 bg-muted/50 rounded hover:bg-muted transition-colors">
-                      {zone} <span className="text-muted-foreground">({spells.length} spells)</span>
-                    </summary>
-                    <div className="mt-1 ml-4 grid gap-1 text-xs max-h-80 overflow-y-auto">
-                      {spells
-                        .sort((a, b) => a.spell_id - b.spell_id)
-                        .map((s) => (
-                        <div key={s.spell_id} className="flex justify-between font-mono p-1 bg-muted/30 rounded">
-                          <span>Spell {s.spell_id}</span>
-                          <span className="text-muted-foreground">{s.count}× seen</span>
-                        </div>
-                      ))}
-                    </div>
-                  </details>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Spells by Creature */}
-          {unitSpells.length > 0 && (
-            <div>
-              <h4 className="text-sm font-medium text-muted-foreground mb-2">Spells by Creature</h4>
-              <div className="space-y-3">
-                {unitSpells
-                  .sort(([a], [b]) => {
-                    const nameA = creatureNames.get(a) ?? a;
-                    const nameB = creatureNames.get(b) ?? b;
-                    return nameA.localeCompare(nameB);
-                  })
-                  .map(([entryId, spells]) => (
-                  <details key={entryId}>
-                    <summary className="cursor-pointer text-sm font-medium p-2 bg-muted/50 rounded hover:bg-muted transition-colors">
-                      {creatureNames.get(entryId) ?? `Creature ${entryId}`}{" "}
-                      <span className="text-muted-foreground">({entryId}) — {spells.length} spells</span>
-                    </summary>
-                    <div className="mt-1 ml-4 grid gap-1 text-xs max-h-80 overflow-y-auto">
-                      {spells.sort().map((spell) => (
-                        <div key={spell} className="font-mono p-1 bg-muted/30 rounded">
-                          {spell}
-                        </div>
-                      ))}
-                    </div>
-                  </details>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </details>
-    </Card>
-  );
-}
 
 function BossEncounterRow({ encounter }: { encounter: WoWEncounter }) {
   const badgeStyle = 
@@ -1592,6 +1448,8 @@ export function LogDetailView({
             </p>
           )}
 
+          <IdentityCatalogue key={`${log.id}:${log.status.id}:${log.status.state}`} logId={log.id} hasAdminLogs={canProfile} />
+
           {/* Reparse format + flavor panel (admin) */}
           {canProfile && showReparseAxis && (
             <Card className="p-4 space-y-3 border-purple-500/40">
@@ -1759,9 +1617,6 @@ export function LogDetailView({
           {parsedOutput?.report && (
             <>
               <TimingSection report={parsedOutput.report} logId={log.id} />
-              {parsedOutput.report.identity && (
-                <IdentitySection identity={parsedOutput.report.identity} />
-              )}
             </>
           )}
 

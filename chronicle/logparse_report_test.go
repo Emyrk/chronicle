@@ -2,6 +2,7 @@ package chronicle
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"strings"
@@ -70,5 +71,30 @@ func TestBaselineVanillaParseReport(t *testing.T) {
 				require.GreaterOrEqual(t, result.report.consumerTimes[key].Nanoseconds(), int64(0))
 			}
 		})
+	}
+}
+
+// Catalogue collection is independent of the deprecated identity flag and parser
+// selection. A tiny real CCv2 source also covers GUIDs outside registered zones.
+func TestIdentityCatalogueAlwaysOnAcrossEngines(t *testing.T) {
+	t.Parallel()
+	input := []byte("1|HEAL|0x0000000000000001|0x0000000000000002|123|100|0|0\n")
+	var baseline []byte
+	for _, engine := range []chroniclesdk.ParserEngine{chroniclesdk.ParserEngineLegacy, chroniclesdk.ParserEngineNext} {
+		for _, oldIdentityFlag := range []bool{false, true} {
+			worker := &WorkerLogParse{parent: &Chronicle{logger: slog.New(slog.NewTextHandler(io.Discard, nil))}, parserEngine: engine}
+			result, err := worker.parseCombatLog(t.Context(), database.LogFormat112aCcAddon, nil, nil, reportGameDB{}, nil, oldIdentityFlag, input, "")
+			require.NoError(t, err)
+			require.NotNil(t, result.catalogueState)
+			records := result.catalogueState.Records()
+			require.Len(t, records, 2, "both observed GUIDs must survive without registered instances")
+			wire, err := json.Marshal(records)
+			require.NoError(t, err)
+			if baseline == nil {
+				baseline = wire
+			} else {
+				require.JSONEq(t, string(baseline), string(wire))
+			}
+		}
 	}
 }

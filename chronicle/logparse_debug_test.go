@@ -60,7 +60,7 @@ func TestDebugCompleteCaptureBeforeFinalize(t *testing.T) {
 	data := []byte(inputs[0] + "\n" + inputs[1])
 	result, err := w.parseDebugSession(ctx, opts.Compatibility.Source.Format, []database.LogFile{{ID: uuid.New()}}, nil, opts.GameDB, opts.Registry, data, "")
 	require.NoError(t, err)
-	require.NotNil(t, result.creaturesState)
+	require.NotNil(t, result.catalogueState)
 	require.NotEmpty(t, result.encountersState.Instances)
 	var saved bytes.Buffer
 	require.NoError(t, result.snapshot(&saved))
@@ -121,5 +121,5 @@ func assertDebugFixtureCapture(t *testing.T, ctx context.Context, opts CompleteS
 	var b bytes.Buffer
 	require.NoError(t, result.snapshot(&b))
 	require.NotEmpty(t, b.Bytes())
-	require.NotNil(t, result.creaturesState)
+	require.NotNil(t, result.catalogueState)
 }

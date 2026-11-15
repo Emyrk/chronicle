@@ -2797,6 +2797,42 @@ CREATE TABLE leaderboard_variant_renown (
     CONSTRAINT leaderboard_variant_renown_points_check CHECK (((points >= (0)::double precision) AND (points < 'Infinity'::double precision)))
 );
 
+CREATE TABLE log_identity_catalogue_records (
+    log_group_id uuid NOT NULL,
+    guid wow_guid NOT NULL,
+    classification text NOT NULL,
+    is_unknown boolean NOT NULL,
+    has_conflicts boolean NOT NULL,
+    payload jsonb NOT NULL,
+    CONSTRAINT log_identity_catalogue_records_payload_check CHECK ((jsonb_typeof(payload) = 'object'::text))
+);
+
+CREATE TABLE log_identity_catalogues (
+    log_group_id uuid NOT NULL,
+    generation bigint NOT NULL,
+    dataset_id uuid NOT NULL,
+    dataset_revision bigint NOT NULL,
+    format text NOT NULL,
+    flavor text NOT NULL,
+    parser_engine text NOT NULL,
+    parser_build text NOT NULL,
+    catalogue_version integer NOT NULL,
+    rule_version integer NOT NULL,
+    first_seen timestamp with time zone,
+    last_seen timestamp with time zone,
+    guid_count bigint NOT NULL,
+    event_count bigint NOT NULL,
+    zero_guid_count bigint NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT log_identity_catalogues_catalogue_version_check CHECK ((catalogue_version > 0)),
+    CONSTRAINT log_identity_catalogues_dataset_revision_check CHECK ((dataset_revision >= 0)),
+    CONSTRAINT log_identity_catalogues_event_count_check CHECK ((event_count >= 0)),
+    CONSTRAINT log_identity_catalogues_generation_check CHECK ((generation > 0)),
+    CONSTRAINT log_identity_catalogues_guid_count_check CHECK ((guid_count >= 0)),
+    CONSTRAINT log_identity_catalogues_rule_version_check CHECK ((rule_version > 0)),
+    CONSTRAINT log_identity_catalogues_zero_guid_count_check CHECK ((zero_guid_count >= 0))
+);
+
 CREATE TABLE log_instance_difficulties (
     instance_id uuid NOT NULL,
     difficulty text NOT NULL
@@ -4609,6 +4645,12 @@ ALTER TABLE ONLY log_group_artifacts
 ALTER TABLE ONLY log_group_artifacts
     ADD CONSTRAINT log_group_artifacts_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY log_identity_catalogue_records
+    ADD CONSTRAINT log_identity_catalogue_records_pkey PRIMARY KEY (log_group_id, guid);
+
+ALTER TABLE ONLY log_identity_catalogues
+    ADD CONSTRAINT log_identity_catalogues_pkey PRIMARY KEY (log_group_id);
+
 ALTER TABLE ONLY log_instance_difficulties
     ADD CONSTRAINT log_instance_difficulties_pkey PRIMARY KEY (instance_id, difficulty);
 
@@ -5319,6 +5361,10 @@ CREATE UNIQUE INDEX log_group_artifacts_log_file_part_id_idx ON log_group_artifa
 
 CREATE INDEX log_group_artifacts_log_group_id_idx ON log_group_artifacts USING btree (log_group_id);
 
+CREATE INDEX log_identity_catalogue_records_conflicts_idx ON log_identity_catalogue_records USING btree (log_group_id, guid) WHERE has_conflicts;
+
+CREATE INDEX log_identity_catalogue_records_unknown_idx ON log_identity_catalogue_records USING btree (log_group_id, guid) WHERE is_unknown;
+
 CREATE UNIQUE INDEX log_instance_raid_group_clean_kill_idx ON log_instance_raid_group_snapshots USING btree (encounter_id) WHERE (snapshot_type = 'clean_kill'::raid_group_snapshot_type);
 
 CREATE UNIQUE INDEX log_instance_raid_group_final_idx ON log_instance_raid_group_snapshots USING btree (instance_id) WHERE (snapshot_type = 'final'::raid_group_snapshot_type);
@@ -5816,6 +5862,12 @@ ALTER TABLE ONLY log_group_artifacts
 
 ALTER TABLE ONLY log_group_artifacts
     ADD CONSTRAINT log_group_artifacts_log_group_id_fkey FOREIGN KEY (log_group_id) REFERENCES wow_log_groups(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY log_identity_catalogue_records
+    ADD CONSTRAINT log_identity_catalogue_records_log_group_id_fkey FOREIGN KEY (log_group_id) REFERENCES log_identity_catalogues(log_group_id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY log_identity_catalogues
+    ADD CONSTRAINT log_identity_catalogues_log_group_id_fkey FOREIGN KEY (log_group_id) REFERENCES wow_log_groups(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY log_instance_difficulties
     ADD CONSTRAINT log_instance_difficulties_instance_id_fkey FOREIGN KEY (instance_id) REFERENCES log_instances(id) ON DELETE CASCADE;

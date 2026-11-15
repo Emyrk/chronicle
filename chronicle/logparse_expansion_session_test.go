@@ -183,7 +183,7 @@ func TestExpansionCompleteSessionDiskContinuation(t *testing.T) {
 					require.Equal(t, baseline.root.result.logCapabilities, branch.root.result.logCapabilities)
 					require.Equal(t, baseline.root.result.report.totalLines, branch.root.result.report.totalLines)
 					if identityMode {
-						require.Equal(t, baseline.root.result.creaturesState, branch.root.result.creaturesState)
+						require.Equal(t, baseline.root.result.catalogueState, branch.root.result.catalogueState)
 					}
 
 					require.Error(t, branch.ProcessFile(ctx, opts.Files[1], strings.NewReader(inputs[1])))

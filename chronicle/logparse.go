@@ -20,14 +20,11 @@ import (
 	"github.com/Emyrk/chronicle/chroniclebot"
 	"github.com/Emyrk/chronicle/combatlog/parseoptions"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/creatures"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounter"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/rankings"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/totems"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/warlockdemon"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
@@ -481,10 +478,6 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		}
 	}
 	report.MissedSpells = parsed.report.missedSpells
-
-	if parsed.creaturesState != nil {
-		report.Identity = buildIdentityReport(parsed.creaturesState)
-	}
 
 	if parsed.snapshot != nil {
 		jobID := int64(0)
@@ -1131,7 +1124,20 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		return fmt.Errorf("fence parse membership refresh: %w", membershipErr)
 	}
 
-	if err := w.parent.finalizeParseGeneration(ctx, job.Args.LogID, parseGeneration, identityFence); err != nil {
+	buildIdentity, err := version.BinaryIdentity()
+	if err != nil {
+		return fmt.Errorf("capture catalogue executable identity: %w", err)
+	}
+	catalogue, err := prepareIdentityCatalogue(database.InsertLogIdentityCatalogueParams{
+		LogGroupID: job.Args.LogID, Generation: parseGeneration,
+		DatasetID: resolved.DatasetID, DatasetRevision: resolved.Revision,
+		Format: string(logFormat), Flavor: flavor.CanonicalKey(),
+		ParserEngine: string(w.parserEngine), ParserBuild: buildIdentity,
+	}, parsed.catalogueState)
+	if err != nil {
+		return fmt.Errorf("prepare identity catalogue: %w", err)
+	}
+	if err := w.parent.finalizeParseGeneration(ctx, job.Args.LogID, parseGeneration, identityFence, catalogue); err != nil {
 		if errors.Is(err, errStaleParseGeneration) {
 			jobResult = "cancelled"
 			return w.parent.abortStaleParseGeneration(ctx, job.Args.LogID, job.Args.ParseGeneration, "finalize_output", err)
@@ -1403,52 +1409,6 @@ func (w *logParseInstanceBuilder) seen(ids ...guid.GUID) {
 			Entry:      int32(entry),
 		})
 	}
-}
-
-func buildIdentityReport(cs *creatures.Creatures) *chroniclesdk.IdentityReport {
-	rpt := &chroniclesdk.IdentityReport{
-		ZonedUnits: make(map[string][]chroniclesdk.IdentityCreature),
-		ZoneSpells: make(map[string][]chroniclesdk.IdentitySpell),
-		UnitSpells: make(map[uint32][]string),
-	}
-
-	for zone, units := range cs.ZonedUnits {
-		for entryID, name := range units {
-			if _, ok := totems.EntryIsTotem(entryID); ok {
-				continue
-			}
-			if _, ok := warlockdemon.IsWarlockDemonEntry(entryID); ok {
-				continue
-			}
-			count := len(cs.UnitQuantity[entryID])
-			rpt.ZonedUnits[zone] = append(rpt.ZonedUnits[zone], chroniclesdk.IdentityCreature{
-				EntryID:     entryID,
-				Name:        name,
-				UniqueCount: count,
-			})
-		}
-	}
-
-	for zone, spells := range cs.ZoneSpells {
-		for spellID, count := range spells {
-			rpt.ZoneSpells[zone] = append(rpt.ZoneSpells[zone], chroniclesdk.IdentitySpell{
-				SpellID: int32(spellID),
-				Count:   count,
-			})
-		}
-	}
-
-	for entryID, spells := range cs.UnitSpells {
-		names := make([]string, 0, len(spells))
-		for name := range spells {
-			names = append(names, name)
-		}
-		rpt.UnitSpells[entryID] = names
-	}
-
-	rpt.GoCode = rpt.GenerateGoCode()
-
-	return rpt
 }
 
 func newArgsLogParse(ctx context.Context, logID uuid.UUID, parseGeneration int64, verbose bool, identityMode bool, profile bool, realmID uuid.UUID) ArgsLogParse {

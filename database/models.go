@@ -2874,6 +2874,34 @@ type LogGroupArtifact struct {
 	LogFilePartID    uuid.NullUUID      `db:"log_file_part_id" json:"log_file_part_id"`
 }
 
+type LogIdentityCatalogue struct {
+	LogGroupID       uuid.UUID          `db:"log_group_id" json:"log_group_id"`
+	Generation       int64              `db:"generation" json:"generation"`
+	DatasetID        uuid.UUID          `db:"dataset_id" json:"dataset_id"`
+	DatasetRevision  int64              `db:"dataset_revision" json:"dataset_revision"`
+	Format           string             `db:"format" json:"format"`
+	Flavor           string             `db:"flavor" json:"flavor"`
+	ParserEngine     string             `db:"parser_engine" json:"parser_engine"`
+	ParserBuild      string             `db:"parser_build" json:"parser_build"`
+	CatalogueVersion int32              `db:"catalogue_version" json:"catalogue_version"`
+	RuleVersion      int32              `db:"rule_version" json:"rule_version"`
+	FirstSeen        pgtype.Timestamptz `db:"first_seen" json:"first_seen"`
+	LastSeen         pgtype.Timestamptz `db:"last_seen" json:"last_seen"`
+	GuidCount        int64              `db:"guid_count" json:"guid_count"`
+	EventCount       int64              `db:"event_count" json:"event_count"`
+	ZeroGuidCount    int64              `db:"zero_guid_count" json:"zero_guid_count"`
+	CreatedAt        pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
+type LogIdentityCatalogueRecord struct {
+	LogGroupID     uuid.UUID `db:"log_group_id" json:"log_group_id"`
+	Guid           guid.GUID `db:"guid" json:"guid"`
+	Classification string    `db:"classification" json:"classification"`
+	IsUnknown      bool      `db:"is_unknown" json:"is_unknown"`
+	HasConflicts   bool      `db:"has_conflicts" json:"has_conflicts"`
+	Payload        []byte    `db:"payload" json:"payload"`
+}
+
 type LogInstance struct {
 	ID         uuid.UUID   `db:"id" json:"id"`
 	RealmID    uuid.UUID   `db:"realm_id" json:"realm_id"`

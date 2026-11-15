@@ -97,7 +97,7 @@ func TestBundleCheckpointAuthorityAfterHistoricalFilesDeleted(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, normalizedSessionOutput(t, want), normalizedSessionOutput(t, got))
 	require.Equal(t, normalizedExpansionEvents(t, baseline, want), normalizedExpansionEvents(t, terminal, got))
-	require.Equal(t, baseline.root.result.creaturesState, terminal.root.result.creaturesState)
+	require.Equal(t, baseline.root.result.catalogueState, terminal.root.result.catalogueState)
 }
 
 func TestBundleRestoreRejectsHistoricalIDsAsFutureReplay(t *testing.T) {

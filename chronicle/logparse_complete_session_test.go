@@ -124,8 +124,8 @@ func TestCompleteSessionDiskContinuation(t *testing.T) {
 			require.NotSame(t, first.root.result.encountersState.Units, second.root.result.encountersState.Units)
 			require.NotSame(t, first.root.result.encountersState.Auras, second.root.result.encountersState.Auras)
 			if identityMode {
-				require.NotSame(t, first.root.result.creaturesState, second.root.result.creaturesState)
-				require.NotSame(t, first.root.result.creaturesState.Units, first.root.result.encountersState.Units)
+				require.NotSame(t, first.root.result.catalogueState, second.root.result.catalogueState)
+				require.NotNil(t, first.root.result.catalogueState)
 			}
 
 			require.Zero(t, first.root.result.encountersState.Auras.GraphObserverCount())
@@ -303,7 +303,7 @@ func TestCompleteSessionRejectsDifferentConsumerOwner(t *testing.T) {
 	require.NoError(t, original.ProcessFile(ctx, opts.Files[0], strings.NewReader(inputs[0])))
 	other, err := opts.Prepared.NewEncounterState(ctx, opts.Logger)
 	require.NoError(t, err)
-	original.root.result.consumers = consumers.New(opts.Logger, other)
+	original.root.result.consumers = consumers.New(opts.Logger, other, original.root.result.catalogueState)
 	require.ErrorContains(t, original.SnapshotPath(filepath.Join(t.TempDir(), "bad")), "consumer root owner mismatch")
 }
 

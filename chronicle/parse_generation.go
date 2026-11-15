@@ -3,6 +3,7 @@ package chronicle
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 
 	"github.com/Emyrk/chronicle/internal/services/serviceratings"
@@ -179,12 +180,18 @@ func (c *Chronicle) stageParseGeneration(ctx context.Context, logID uuid.UUID, g
 	}, nil)
 }
 
-func (c *Chronicle) finalizeParseGeneration(ctx context.Context, logID uuid.UUID, generation int64, identity *parseIdentityFence) error {
+func (c *Chronicle) finalizeParseGeneration(ctx context.Context, logID uuid.UUID, generation int64, identity *parseIdentityFence, catalogue *preparedCatalogue) error {
+	if catalogue == nil || catalogue.Header.LogGroupID != logID || catalogue.Header.Generation != generation {
+		return fmt.Errorf("catalogue publication identity mismatch")
+	}
 	return c.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
 		if err := lockExpectedParseGeneration(ctx, tx, logID, generation); err != nil {
 			return err
 		}
 		if err := identity.check(ctx, tx, true); err != nil {
+			return err
+		}
+		if err := publishIdentityCatalogue(ctx, tx, catalogue); err != nil {
 			return err
 		}
 		_, err := tx.FinalizeParsedLogGroup(ctx, database.FinalizeParsedLogGroupParams{

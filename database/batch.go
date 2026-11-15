@@ -1808,6 +1808,64 @@ func (b *InsertInstanceUnitsBatchResults) Close() error {
 	return b.br.Close()
 }
 
+const insertLogIdentityCatalogueRecords = `-- name: InsertLogIdentityCatalogueRecords :batchexec
+INSERT INTO log_identity_catalogue_records (log_group_id, guid, classification, is_unknown, has_conflicts, payload)
+VALUES ($1, $2, $3, $4, $5, $6)
+`
+
+type InsertLogIdentityCatalogueRecordsBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type InsertLogIdentityCatalogueRecordsParams struct {
+	LogGroupID     uuid.UUID `db:"log_group_id" json:"log_group_id"`
+	Guid           guid.GUID `db:"guid" json:"guid"`
+	Classification string    `db:"classification" json:"classification"`
+	IsUnknown      bool      `db:"is_unknown" json:"is_unknown"`
+	HasConflicts   bool      `db:"has_conflicts" json:"has_conflicts"`
+	Payload        []byte    `db:"payload" json:"payload"`
+}
+
+func (q *sqlQuerier) InsertLogIdentityCatalogueRecords(ctx context.Context, arg []InsertLogIdentityCatalogueRecordsParams) *InsertLogIdentityCatalogueRecordsBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.LogGroupID,
+			a.Guid,
+			a.Classification,
+			a.IsUnknown,
+			a.HasConflicts,
+			a.Payload,
+		}
+		batch.Queue(insertLogIdentityCatalogueRecords, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &InsertLogIdentityCatalogueRecordsBatchResults{br, len(arg), false}
+}
+
+func (b *InsertLogIdentityCatalogueRecordsBatchResults) Exec(f func(int, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		if b.closed {
+			if f != nil {
+				f(t, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		_, err := b.br.Exec()
+		if f != nil {
+			f(t, err)
+		}
+	}
+}
+
+func (b *InsertLogIdentityCatalogueRecordsBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
 const insertLogInstanceEvents = `-- name: InsertLogInstanceEvents :batchexec
 INSERT INTO
   log_instance_events(instance_id, type, events)

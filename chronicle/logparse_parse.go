@@ -14,8 +14,8 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/azerothcore"
 	azencounters "github.com/Emyrk/chronicle/combatlog/parser/azerothcore/encounters"
 	blizzardmodern "github.com/Emyrk/chronicle/combatlog/parser/blizzard/modern"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/creatures"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounters"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/identitycatalog"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
 	"github.com/Emyrk/chronicle/combatlog/parser/messagesource"
@@ -64,7 +64,7 @@ func (f overrideGameDB) SpellsByName(ctx context.Context, name string) ([]*chron
 type parseResult struct {
 	snapshot        func(io.Writer) error
 	encountersState *encounters.State
-	creaturesState  *creatures.Creatures
+	catalogueState  *identitycatalog.Collector
 	consumers       *consumers.Consumers
 	logCapabilities []string
 	report          parseTimingReport
@@ -140,7 +140,7 @@ func (w *WorkerLogParse) parseCombatLog(
 	if err != nil {
 		return nil, err
 	}
-	encountersState, creaturesState, c := state.encountersState, state.creaturesState, state.consumers
+	encountersState, catalogueState, c := state.encountersState, state.catalogueState, state.consumers
 	logCapabilities := state.logCapabilities
 
 	parseStart := time.Now()
@@ -342,7 +342,7 @@ func (w *WorkerLogParse) parseCombatLog(
 
 	return &parseResult{
 		encountersState: encountersState,
-		creaturesState:  creaturesState,
+		catalogueState:  catalogueState,
 		consumers:       c,
 		logCapabilities: logCapabilities,
 		report:          timing,
@@ -432,14 +432,8 @@ func newParseState(ctx context.Context, logFormat database.LogFormat, logLogger 
 		encountersState.CurrentRealm = &realm.Info{RealmName: preRealmName}
 	}
 
-	var creaturesState *creatures.Creatures
-	var c *consumers.Consumers
-	if identityMode {
-		creaturesState = creatures.New(logLogger)
-		c = consumers.New(logLogger, encountersState, creaturesState)
-	} else {
-		c = consumers.New(logLogger, encountersState)
-	}
+	catalogueState := identitycatalog.New(reg)
+	c := consumers.New(logLogger, encountersState, catalogueState)
 
-	return &parseResult{encountersState: encountersState, creaturesState: creaturesState, consumers: c, logCapabilities: initialLogCapabilities(logFormat)}, nil
+	return &parseResult{encountersState: encountersState, catalogueState: catalogueState, consumers: c, logCapabilities: initialLogCapabilities(logFormat)}, nil
 }

@@ -796,6 +796,8 @@ func (api *API) Routes() chi.Router {
 								r.Post("/append", api.WoWLogAppend)
 								r.Post("/reparse", api.WoWLogReparse)
 								r.Get("/profile/download", api.WoWLogParseProfileDownload)
+								r.Get("/identity-catalogue", api.WoWLogIdentityCatalogue)
+								r.Get("/identity-catalogue/download", api.WoWLogIdentityCatalogueDownload)
 								r.Put("/raw-files-pinned", api.UpdateWoWLogRawFilesPinned)
 								r.Delete("/delete-files", api.DeleteWoWLogFiles)
 								r.Delete("/instances/{instance_id}", api.WoWLogDeleteInstance)

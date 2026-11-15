@@ -2794,6 +2794,88 @@ export interface HubSummary {
     readonly speedruns: readonly SpeedrunLeaderboardEntry[];
 }
 
+// From chroniclesdk/identity_catalogue.go
+export interface IdentityCatalogueContext {
+    readonly zone: string;
+    readonly map_id: number;
+    readonly instance_id: number;
+    readonly category: string;
+    readonly affiliation: string;
+    readonly recognition: string;
+    readonly first_seen: string;
+    readonly last_seen: string;
+    readonly observations: number;
+}
+
+// From chroniclesdk/identity_catalogue.go
+export interface IdentityCatalogueEvidence {
+    readonly role: string;
+    readonly related_guid?: string;
+    readonly spell_id?: number;
+    readonly name?: string;
+    readonly first_seen: string;
+    readonly last_seen: string;
+    readonly observations: number;
+}
+
+// From chroniclesdk/identity_catalogue.go
+/**
+ * IdentityCatalogueHeader records the provenance of one successful parse generation.
+ */
+export interface IdentityCatalogueHeader {
+    readonly log_group_id: string;
+    readonly generation: number;
+    readonly dataset_id: string;
+    readonly dataset_revision: number;
+    readonly format: string;
+    readonly flavor: string;
+    readonly parser_engine: string;
+    readonly parser_build: string;
+    readonly catalogue_version: number;
+    readonly rule_version: number;
+    readonly first_seen: string | null;
+    readonly last_seen: string | null;
+    readonly guid_count: number;
+    readonly event_count: number;
+    readonly zero_guid_count: number;
+    readonly created_at: string;
+}
+
+// From chroniclesdk/identity_catalogue.go
+/**
+ * Wire types mirror identitycatalog without importing its registry dependency,
+ * which itself uses chroniclesdk. Keep these fields synchronized with the collector.
+ */
+export interface IdentityCatalogueRecord {
+    readonly guid: string;
+    readonly entry: number;
+    readonly kind: string;
+    readonly category: string;
+    readonly affiliation: string;
+    readonly recognition: string;
+    readonly unknown: boolean;
+    readonly conflict: boolean;
+    readonly first_seen: string;
+    readonly last_seen: string;
+    readonly observations: number;
+    readonly contexts: readonly IdentityCatalogueContext[];
+    readonly evidence: readonly IdentityCatalogueEvidence[];
+    readonly evidence_overflow: number;
+    readonly evidence_truncations: number;
+}
+
+// From chroniclesdk/identity_catalogue.go
+/**
+ * IdentityCatalogueResponse is shared by the paged review and complete download.
+ * Old logs have a null catalogue and an empty records array. Continue pagination
+ * with next_after and the catalogue's generation; a replacement returns HTTP 409.
+ */
+export interface IdentityCatalogueResponse {
+    readonly catalogue: IdentityCatalogueHeader | null;
+    readonly records: readonly IdentityCatalogueRecord[];
+    readonly next_after?: string;
+}
+
 // From chroniclesdk/log.go
 /**
  * IdentityCreature represents a creature seen during identity mode parsing.

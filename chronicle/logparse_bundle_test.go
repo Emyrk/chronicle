@@ -102,7 +102,7 @@ func TestBundleSidekickDiskContinuation(t *testing.T) {
 					require.Equal(t, normalizedExpansionEvents(t, baseline, want), normalizedExpansionEvents(t, s, got))
 					require.Equal(t, baseline.root.result.logCapabilities, s.root.result.logCapabilities)
 					if identity {
-						require.Equal(t, baseline.root.result.creaturesState, s.root.result.creaturesState)
+						require.Equal(t, baseline.root.result.catalogueState, s.root.result.catalogueState)
 					}
 				}
 				// Artifact text is not part of combat-log line metrics.

@@ -76,7 +76,7 @@ func assertACoreSessionOutput(t *testing.T, wantSession, gotSession *CompleteFil
 	require.Equal(t, wantSession.root.result.logCapabilities, gotSession.root.result.logCapabilities)
 	require.Equal(t, wantSession.root.result.report.totalLines, gotSession.root.result.report.totalLines)
 	if wantSession.options.Compatibility.IdentityMode {
-		require.Equal(t, wantSession.root.result.creaturesState, gotSession.root.result.creaturesState)
+		require.Equal(t, wantSession.root.result.catalogueState, gotSession.root.result.catalogueState)
 	}
 }
 func TestACoreCompleteSessionProductionDiskParity(t *testing.T) {
@@ -138,7 +138,7 @@ func TestACoreCompleteSessionProductionDiskParity(t *testing.T) {
 							state := s.root.result.encountersState
 							require.Zero(t, state.Auras.GraphObserverCount())
 							if identityMode {
-								require.NotSame(t, state.Units, s.root.result.creaturesState.Units)
+								require.NotNil(t, s.root.result.catalogueState)
 							}
 							require.NoError(t, s.WireRuntime(ctx))
 							for _, instance := range state.Instances {
