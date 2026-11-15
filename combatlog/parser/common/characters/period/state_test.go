@@ -236,7 +236,7 @@ func TestPeriodAndMessageStateRejectUnsupportedAndMalformed(t *testing.T) {
 	}
 	_, err = period.DecodeState(period.StateVersion+1, b)
 	require.Error(t, err)
-	_, err = period.CaptureMessage(&messages.Heal{}, nil, nil)
+	_, err = period.CaptureMessage(&messages.SpellStart{}, nil, nil)
 	require.Error(t, err)
 	_, err = period.CaptureState(nil, nil, nil)
 	require.Error(t, err)
@@ -287,7 +287,7 @@ func TestPeriodCancellationKeepsStaleTimerFieldsAndDistinctMessages(t *testing.T
 	require.NotSame(t, got.Start.Timestamp, got.LastActive.Timestamp)
 	require.Equal(t, first, got.Start.Timestamp)
 	require.Equal(t, second, got.LastActive.Timestamp)
-	p.Begin("unsupported", &messages.Heal{})
+	p.Begin("unsupported", &messages.SpellStart{})
 	_, err = period.CaptureState(p, r.moment, r.message)
 	require.Error(t, err)
 }

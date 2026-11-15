@@ -72,6 +72,51 @@ type boundaryMessageValue struct {
 	PreserveActivity bool                      `json:"preserve_activity"`
 }
 
+type resourceChangeMessageValue struct {
+	Base         messages.MessageBaseState `json:"base"`
+	SpellPath    string                    `json:"spell_path"`
+	Target       guid.GUID                 `json:"target"`
+	Amount       int32                     `json:"amount"`
+	OverResource int32                     `json:"over_resource"`
+	Resource     types.Resource            `json:"resource"`
+	Caster       *guid.GUID                `json:"caster"`
+	SpellName    *string                   `json:"spell_name"`
+	Direction    types.ChangeDirection     `json:"direction"`
+}
+
+type healMessageValue struct {
+	Base      messages.MessageBaseState `json:"base"`
+	SpellPath string                    `json:"spell_path"`
+	Caster    guid.GUID                 `json:"caster"`
+	Target    guid.GUID                 `json:"target"`
+	SpellName string                    `json:"spell_name"`
+	Amount    int32                     `json:"amount"`
+	Overheal  int32                     `json:"overheal"`
+	Absorbed  int32                     `json:"absorbed"`
+	HitType   types.HitType             `json:"hit_type"`
+	School    types.School              `json:"school"`
+}
+
+type dispelMessageValue struct {
+	Base      messages.MessageBaseState `json:"base"`
+	SpellPath string                    `json:"spell_path"`
+	Caster    guid.GUID                 `json:"caster"`
+	Target    guid.GUID                 `json:"target"`
+}
+
+type spellGoMessageValue struct {
+	Base             messages.MessageBaseState `json:"base"`
+	SpellPath        string                    `json:"spell_path"`
+	ItemID           *int32                    `json:"item_id"`
+	SpellID          chrondbc.SpellID          `json:"spell_id"`
+	Caster           guid.GUID                 `json:"caster"`
+	Target           *guid.GUID                `json:"target"`
+	Flags            types.CastFlags           `json:"flags"`
+	NumTargetsHit    int32                     `json:"num_targets_hit"`
+	NumTargetsMissed int32                     `json:"num_targets_missed"`
+	CorpseOwner      *guid.GUID                `json:"corpse_owner"`
+}
+
 func copyPointer[T any](p *T) *T {
 	if p == nil {
 		return nil
@@ -93,6 +138,46 @@ func CaptureMessage(m messages.Message, capture func(messages.Message) (string, 
 		}
 		kind = "damage"
 		payload = damageMessageValue{ref}
+	case *messages.ResourceChange:
+		if m == nil {
+			return MessageState{}, fmt.Errorf("nil resource_change")
+		}
+		path, err := captureRetainedSpell(m.SpellData, spell)
+		if err != nil {
+			return MessageState{}, err
+		}
+		kind = "resource_change"
+		payload = resourceChangeMessageValue{Base: m.CaptureState(), SpellPath: path, Target: m.Target, Amount: m.Amount, OverResource: m.OverResource, Resource: m.Resource, Caster: copyPointer(m.Caster), SpellName: copyPointer(m.SpellName), Direction: m.Direction}
+	case *messages.Heal:
+		if m == nil {
+			return MessageState{}, fmt.Errorf("nil heal")
+		}
+		path, err := captureRetainedSpell(m.SpellData, spell)
+		if err != nil {
+			return MessageState{}, err
+		}
+		kind = "heal"
+		payload = healMessageValue{Base: m.CaptureState(), SpellPath: path, Caster: m.Caster, Target: m.Target, SpellName: m.SpellName, Amount: m.Amount, Overheal: m.Overheal, Absorbed: m.Absorbed, HitType: m.HitType, School: m.School}
+	case *messages.Dispel:
+		if m == nil {
+			return MessageState{}, fmt.Errorf("nil dispel")
+		}
+		path, err := captureRetainedSpell(m.Spell, spell)
+		if err != nil {
+			return MessageState{}, err
+		}
+		kind = "dispel"
+		payload = dispelMessageValue{Base: m.CaptureState(), SpellPath: path, Caster: m.Caster, Target: m.Target}
+	case *messages.SpellGo:
+		if m == nil {
+			return MessageState{}, fmt.Errorf("nil spell_go")
+		}
+		path, err := captureRetainedSpell(m.SpellData, spell)
+		if err != nil {
+			return MessageState{}, err
+		}
+		kind = "spell_go"
+		payload = spellGoMessageValue{Base: m.CaptureState(), SpellPath: path, ItemID: copyPointer(m.ItemID), SpellID: m.SpellID, Caster: m.Caster, Target: copyPointer(m.Target), Flags: m.Flags, NumTargetsHit: m.NumTargetsHit, NumTargetsMissed: m.NumTargetsMissed, CorpseOwner: copyPointer(m.CorpseOwner)}
 	case *messages.Aura:
 		if m == nil {
 			return MessageState{}, fmt.Errorf("nil aura")
@@ -170,6 +255,14 @@ func (s MessageState) decodePayload() (any, error) {
 	switch s.value.Kind {
 	case "damage":
 		v = &damageMessageValue{}
+	case "resource_change":
+		v = &resourceChangeMessageValue{}
+	case "heal":
+		v = &healMessageValue{}
+	case "dispel":
+		v = &dispelMessageValue{}
+	case "spell_go":
+		v = &spellGoMessageValue{}
 	case "aura":
 		v = &auraMessageValue{}
 	case "slain":
@@ -194,6 +287,14 @@ func (s MessageState) decodePayload() (any, error) {
 		if v.Reference == "" {
 			return nil, fmt.Errorf("empty damage reference")
 		}
+	case *resourceChangeMessageValue:
+		base = &v.Base
+	case *healMessageValue:
+		base = &v.Base
+	case *dispelMessageValue:
+		base = &v.Base
+	case *spellGoMessageValue:
+		base = &v.Base
 	case *auraMessageValue:
 		base = &v.Base
 	case *slainMessageValue:
@@ -242,6 +343,30 @@ func (s MessageState) Restore(resolve func(string) (messages.Message, error), sp
 			return nil, fmt.Errorf("reference is not canonical damage")
 		}
 		return d, nil
+	case *resourceChangeMessageValue:
+		sp, err := resolveRetainedSpell(v.SpellPath, spell)
+		if err != nil {
+			return nil, err
+		}
+		return &messages.ResourceChange{MessageBase: v.Base.Restore(), SpellData: sp, Target: v.Target, Amount: v.Amount, OverResource: v.OverResource, Resource: v.Resource, Caster: v.Caster, SpellName: v.SpellName, Direction: v.Direction}, nil
+	case *healMessageValue:
+		sp, err := resolveRetainedSpell(v.SpellPath, spell)
+		if err != nil {
+			return nil, err
+		}
+		return &messages.Heal{MessageBase: v.Base.Restore(), SpellData: sp, Caster: v.Caster, Target: v.Target, SpellName: v.SpellName, Amount: v.Amount, Overheal: v.Overheal, Absorbed: v.Absorbed, HitType: v.HitType, School: v.School}, nil
+	case *dispelMessageValue:
+		sp, err := resolveRetainedSpell(v.SpellPath, spell)
+		if err != nil {
+			return nil, err
+		}
+		return &messages.Dispel{MessageBase: v.Base.Restore(), Spell: sp, Caster: v.Caster, Target: v.Target}, nil
+	case *spellGoMessageValue:
+		sp, err := resolveRetainedSpell(v.SpellPath, spell)
+		if err != nil {
+			return nil, err
+		}
+		return &messages.SpellGo{MessageBase: v.Base.Restore(), SpellData: sp, ItemID: v.ItemID, SpellID: v.SpellID, Caster: v.Caster, Target: v.Target, Flags: v.Flags, NumTargetsHit: v.NumTargetsHit, NumTargetsMissed: v.NumTargetsMissed, CorpseOwner: v.CorpseOwner}, nil
 	case *auraMessageValue:
 		var sp *chrondbc.Spell
 		if v.SpellPath != "" {
@@ -280,4 +405,37 @@ func (s MessageState) Restore(resolve func(string) (messages.Message, error), sp
 	default:
 		return nil, fmt.Errorf("unsupported message payload")
 	}
+}
+
+func captureRetainedSpell(sp *chrondbc.Spell, capture func(*chrondbc.Spell) (string, error)) (string, error) {
+	if sp == nil {
+		return "", nil
+	}
+	if capture == nil {
+		return "", fmt.Errorf("missing spell capture")
+	}
+	path, err := capture(sp)
+	if err != nil {
+		return "", err
+	}
+	if path == "" {
+		return "", fmt.Errorf("empty spell reference")
+	}
+	return path, nil
+}
+func resolveRetainedSpell(path string, resolve func(string) (*chrondbc.Spell, error)) (*chrondbc.Spell, error) {
+	if path == "" {
+		return nil, nil
+	}
+	if resolve == nil {
+		return nil, fmt.Errorf("missing spell resolver")
+	}
+	sp, err := resolve(path)
+	if err != nil {
+		return nil, err
+	}
+	if sp == nil {
+		return nil, fmt.Errorf("nil resolved spell")
+	}
+	return sp, nil
 }

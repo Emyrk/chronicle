@@ -293,6 +293,22 @@ func canonicalJSON(payload []byte) ([]byte, error) {
 
 func supportedMessage(m messages.Message) error {
 	switch m := m.(type) {
+	case *messages.ResourceChange:
+		if m == nil {
+			return fmt.Errorf("nil resource_change reference")
+		}
+	case *messages.Heal:
+		if m == nil {
+			return fmt.Errorf("nil heal reference")
+		}
+	case *messages.Dispel:
+		if m == nil {
+			return fmt.Errorf("nil dispel reference")
+		}
+	case *messages.SpellGo:
+		if m == nil {
+			return fmt.Errorf("nil spell_go reference")
+		}
 	case *messages.Damage:
 		if m == nil {
 			return fmt.Errorf("nil damage reference")

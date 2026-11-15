@@ -47,6 +47,18 @@ func RegisterGraphOwners(r *ownergraph.Registry) error {
 	if e := registerRetainedMessage[messages.UnitEvade](r, "messages.UnitEvade"); e != nil {
 		return e
 	}
+	if e := registerRetainedMessage[messages.ResourceChange](r, "messages.ResourceChange"); e != nil {
+		return e
+	}
+	if e := registerRetainedMessage[messages.Heal](r, "messages.Heal"); e != nil {
+		return e
+	}
+	if e := registerRetainedMessage[messages.Dispel](r, "messages.Dispel"); e != nil {
+		return e
+	}
+	if e := registerRetainedMessage[messages.SpellGo](r, "messages.SpellGo"); e != nil {
+		return e
+	}
 	return registerRetainedMessage[messages.EncounterBoundary](r, "messages.EncounterBoundary")
 }
 
