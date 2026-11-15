@@ -1,14 +1,12 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import type { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import type { MeshBVH } from "three-mesh-bvh";
 import { loopingWhelpStand } from "./whelpAnimation";
 import { mapAssetUrl, type WowMapFloorBounds, type WowMapLayer, type WowMapMeshLiquid } from "@/pages/Technical/mapGallery";
 import type { MapCameraPose } from "./cameraPath";
 import type { DroneProbe } from "./droneCamera";
-import { CAPSULE_AVATAR, WALK_AVATAR_CLIPS, walkAvatarUrl, type WalkAvatarState } from "./walkAvatars";
+import { CAPSULE_AVATAR, walkAvatarUrl } from "./walkAvatars";
 import {
   AIM_AHEAD_FRACTION,
   BOSS_ENGAGE_YARDS,
@@ -30,24 +28,18 @@ import {
   type DampedValue,
   type DirectorUnit,
 } from "./cameraDirector";
-import { participantHue, participantLabel, type LiveMapPresence } from "../../liveSessionProtocol";
+import type { LiveMapPresence } from "../../liveSessionProtocol";
 import { actionForKey, cameraAngles, cameraCollisionDistance, cameraOffset, clampMobileMapInput, DEFAULT_AD_STRAFE, easeAngleToward, freeCamTravelSpeed, IDLE_MOBILE_MAP_INPUT, lookDrag, planarStep, pointerLossEndsDrag, rightDragWalkAxes, setWalkMouseButton, shouldFollowWalkCamera, walkCameraSettling, walkDragButton, walkMovementYaw, walkMouseControl, WALK_TOGGLE_KEY, wheelZoomDistance, type MapControlAction, type MobileMapInput } from "./mapControls";
 import { unwrapCompassRadians } from "./mapCompassModel";
 import { climbElevations, createShotHold, directorPullIn, fallbackShot, FOLLOW_CENTRE_WINDOW_MS, FOLLOW_SHOT_CHECK_MS, FOLLOW_STEEP_ELEVATION_DEG, releaseSteepShot, shotCheckDue, steepPullIn, FOLLOW_SIGHT_STRIDE, FOLLOW_STEEP_MIN_DISTANCE_YARDS, seesFraming, sightPicks, type ShotAnswer, FOLLOW_SLICE_MS, followSprings, followYawStep, handOverFollowSpring, handOverFollowYaw, startFollowTrackBuild, wrapAngle, type FollowTrackBuild, followKeyAt, glideDurationMs, glidePoseAt, glideTurnMs, unwrapNear, holdShot, isReplayJump, type FollowKey, type FollowTrack, type FollowYawProbe, type GlidePose } from "./followCamera";
 import { BOSS_SPIRE, bossSpireCastGlow, CAST_ARC_TEXTURE_STEPS, DEAD_RING, DEBUFF_PLANE, DISPEL_COLORS, DROP_LINE, drawUnitPlate, ENEMY_RED, guardianWell, HALO_COLORS, MARKS_SCALE, OWNER_LINE, TARGET_LINE, TRAIL_LINE, UNIT_PLATE, unitPlateSize, type UnitPlateInfo, TOKEN_LAYOUT, type DispelKind, type HaloKind } from "./unitTokenArt";
 import { UnitTokenTextures } from "./unitTokens";
 import type { PlanInput, PlanItem, PlanMarkerIcon, PlanPoint } from "./plan/mapPlan";
-import { raidTargetMarkerImage } from "./plan/planArt";
 import { PlanLayer, type PlanSurface } from "./plan/planLayer";
-import { BAR_ABSORB, BAR_BACKGROUND, BAR_DEAD, BAR_HEAL, CAST_ARC_OPACITY, COOLDOWN_ICON_COLOR, COOLDOWN_ICON_SCALE, CUT_ARC_COLOR, CUT_TICK_COLOR, DEAD_COLOR, INTERRUPT_LABEL_COLOR, WALK_AVATAR_COLOR, WALK_AVATAR_EMISSIVE } from "./mapPalette";
+import { BAR_ABSORB, BAR_BACKGROUND, BAR_DEAD, BAR_HEAL, CAST_ARC_OPACITY, COOLDOWN_ICON_COLOR, COOLDOWN_ICON_SCALE, DEAD_COLOR, INTERRUPT_LABEL_COLOR } from "./mapPalette";
 import {
   clampToRadius,
   corsTextureUrl,
-  dungeonMeshBytes,
-  dungeonMeshPlacement,
-  floorBelow,
-  releaseDungeonMeshBytes,
-  FloorHeightCache,
   AIRBORNE_YARDS,
   LOGGED_Z_CLEARANCE_YARDS,
   medianHeight,
@@ -86,11 +78,18 @@ import {
 import { deadUnitVisualState } from "./mapDeathVisibility";
 import type { MapMarkerKind, MapSceneGround, MapUnitHealth } from "./useMapScene";
 import { publishedModelGeometryScale, publishedModelGroupScale } from "./modelSizing";
-import { cachedModelAsset, modelAnimationState, modelAnimationTimeSeconds, selectModelAnimation, usesStaticDeathFallback, type ModelLocomotion } from "./modelAnimation";
+import { modelAnimationState, modelAnimationTimeSeconds, selectModelAnimation, usesStaticDeathFallback, type ModelLocomotion } from "./modelAnimation";
 import { setMaterialEmissive, type MapBodyMaterial } from "./mapMaterials";
+import { CAST_ARC_SIZE, createArcTexture, createAvatar, createIconMaterial, createTextTexture, createUnitCalloutMarker, createUnitGeometries, createWalkAvatarModel, easeOutBack, easeOutCubic, playWalkAvatarState, shortNumber, type WalkAvatarModel } from "./sceneFactories";
+import { bakedGeometry, disposeModelMaterials, gltfLoader, loadAnimatedGameModel, loadFlappingWhelp, loadGameModelAnimationPack, loadWalkAvatar } from "./sceneLoaders";
+import { DEEP_BREATH_GROUND_LIFT, GROUND_WIDTH, KEY_MAX_STEP_S, MESH_PLAYER_HEIGHT_YARDS, PLAYER_GEOMETRY_HEIGHT } from "./sceneConstants";
+import { LivePresence } from "./livePresence";
+import { DungeonWorld, type DungeonMesh } from "./dungeonWorld";
+import { DebugOverlayLayer } from "./debugOverlays";
 
 /** Ground plane width in scene units; depth follows the artwork's aspect. */
-export const GROUND_WIDTH = 100;
+export { GROUND_WIDTH };
+
 const MUTED_OPACITY = TOKEN_LAYOUT.mutedOpacity;
 const LABEL_HEIGHT = 5;
 // The hovered unit's nameplate is this many screen pixels per canvas pixel (at 1x),
@@ -102,13 +101,11 @@ export { MAX_EFFECT_PRIMITIVES };
 const MAX_EXTRAPOLATE_MS = 250;
 const BEAM_HEIGHT = 1.5;
 const BOLT_WIDTH = 0.18;
-const DEBUG_PATH_SEGMENT_YARDS = 4;
 const MAX_DEEP_BREATH_POINTS = 20;
 const MAX_RADIAL_EFFECTS = 8;
 const RADIAL_GROUND_LIFT = 0.1;
 const DEEP_BREATH_AREA_OPACITY = 0.12;
 const DEEP_BREATH_POINT_SIZE_PX = 7;
-const DEEP_BREATH_GROUND_LIFT = 0.12;
 // How far a melee attacker steps toward its target, at most.
 const LUNGE_DISTANCE = 1.2;
 const SLASH_HEIGHT = 1.2;
@@ -164,7 +161,6 @@ const INTERRUPT_LABEL_MS = 550;
 const INTERRUPT_LABEL_HEIGHT = 1.6;
 // The cast progress outline around an icon, in 5 % steps.
 const CAST_ARC_STEPS = 20;
-const CAST_ARC_SIZE = 1.25;
 // Loaded icon textures kept for reuse, keyed by URL.
 const MAX_ICON_TEXTURES = 128;
 // A failed icon load is retried after this long (real time).
@@ -190,10 +186,6 @@ const TILES_MAX_POLAR = Math.PI / 3;
 const MESH_MAX_POLAR = Math.PI / 2 - 0.05;
 
 // --- Dungeon mesh mode (the real cave as the ground, see dungeonMeshes.ts) ---
-// On the mesh, units start from true scale: a player capsule stands this tall.
-const MESH_PLAYER_HEIGHT_YARDS = 2;
-// The player capsule's geometry height (CapsuleGeometry radius 0.9, length 1.2).
-const PLAYER_GEOMETRY_HEIGHT = 3;
 // On calibrated flat artwork the disc represents a character's footprint, not
 // their standing height. Keeping that distinction makes close fight framing
 // readable even on physically small dungeon floors.
@@ -217,11 +209,6 @@ const MESH_PAN_RADIUS_YARDS = FOCUS_RADIUS_YARDS;
 const MESH_FULL_MAP_DISTANCE_FACTOR = 3;
 // The camera stays at least this far (scene units) above the floor beneath it.
 const MESH_CAMERA_CLEARANCE = 0.3;
-// Floor probes span these scene heights, outside any published dungeon mesh.
-const FLOOR_PROBE_HEIGHT = 100;
-// A face steeper than this is a wall, not a floor a unit without a logged height can stand on.
-const FLOOR_MAX_SLOPE_DEG = 50;
-const FLOOR_MIN_UP = Math.cos((FLOOR_MAX_SLOPE_DEG * Math.PI) / 180);
 // The camera direction the mesh starts from: steeper than ANGLED_OFFSET so
 // the rock between the camera and a sunken chamber hides less of the fight.
 const MESH_ANGLED_OFFSET = new THREE.Vector3(0, 1.6, 0.75);
@@ -246,18 +233,6 @@ const KEY_ROTATE_SPEED = 1.6;
 // The free cam looks no closer to straight down than this (pitch, radians);
 // the bottom limit is OrbitControls' maxPolarAngle for the mode.
 const FREE_CAM_MAX_PITCH = Math.PI / 2 - 0.01;
-// A dropped frame never jumps the camera further than this.
-const KEY_MAX_STEP_S = 0.1;
-
-// --- Live session presence: everyone's camera or walking character ---
-/** Your presence goes out at most this often while it changes... */
-const PRESENCE_SEND_MS = 100;
-/** ...and others' ease toward each update at this rate (per second). */
-const PRESENCE_EASE_PER_S = 12;
-/** A camera glyph is this long next to a player (geometry units, as PLAYER_GEOMETRY_HEIGHT). */
-const PRESENCE_CAMERA_LENGTH = 3;
-/** Name tags keep one size on screen (their height, in view heights), near or far. */
-const PRESENCE_LABEL_HEIGHT = 0.03;
 
 // --- Unit tokens: flat discs on the ground (geometry units, as PLAYER_GEOMETRY_HEIGHT) ---
 // Sizes come from unitTokenArt, which the map legend page lays its art out with too.
@@ -453,28 +428,6 @@ export interface MapSceneFocus {
   zoom: number;
 }
 
-interface DungeonMeshCave {
-  mesh: THREE.Mesh;
-  bvh: MeshBVH;
-  /** World -> mesh-local, for floor probes. */
-  inverse: THREE.Matrix4;
-}
-
-interface DungeonMesh {
-  url: string;
-  /** The entry's world bounds: the plan layer's world <-> scene transform. */
-  bounds: WowMapFloorBounds;
-  group: THREE.Group;
-  /** The walkable geometry (everything but the water planes). */
-  caves: DungeonMeshCave[];
-  /** Water (and other liquid) planes: units stand on them, but they never block the camera. */
-  liquids: DungeonMeshCave[];
-  /** Scene units per yard. */
-  scale: number;
-  /** Bounding-sphere radius, for the full-map zoom limit. */
-  radius: number;
-}
-
 export interface MapUnitCallout {
   title: string;
   subtitle: string;
@@ -593,10 +546,6 @@ interface AnimatedGameModel {
   packFailed: boolean;
   stateKey: string | null;
   clipName: string | null;
-}
-
-interface AnimatedGameModelTemplate extends WalkAvatarTemplate {
-  box: THREE.Box3;
 }
 
 interface FlappingWhelp {
@@ -718,59 +667,6 @@ export interface MapScene3DEffectHover {
   y: number;
 }
 
-interface RemotePresence {
-  presence: LiveMapPresence;
-  seeded: boolean;
-  /** Eased toward the goal each frame. */
-  position: THREE.Vector3;
-  target: THREE.Vector3;
-  goalPosition: THREE.Vector3;
-  goalTarget: THREE.Vector3;
-  group: THREE.Group;
-  /** Placed and turned as a whole; holds the walker and the camera glyph. */
-  body: THREE.Group;
-  walker: THREE.Mesh;
-  camera: THREE.Mesh;
-  cameraGeometry: THREE.BufferGeometry;
-  material: THREE.MeshBasicMaterial;
-  label: THREE.Sprite;
-}
-
-// Someone else in the live session: a capsule in their colour while they
-// walk, a camera (a four-sided cone opening toward what it looks at) while
-// they orbit, and their name above.
-function createRemotePresence(participantId: string, playerGeometry: THREE.BufferGeometry): RemotePresence {
-  const material = new THREE.MeshBasicMaterial({ color: new THREE.Color().setHSL(participantHue(participantId) / 360, 0.8, 0.6), transparent: true, opacity: 0.9 });
-  const walker = new THREE.Mesh(playerGeometry, material);
-  // Apex at the camera, opening along +z, which lookAt turns toward the target.
-  const cameraGeometry = new THREE.ConeGeometry(PRESENCE_CAMERA_LENGTH * 0.45, PRESENCE_CAMERA_LENGTH, 4)
-    .rotateX(-Math.PI / 2)
-    .translate(0, 0, PRESENCE_CAMERA_LENGTH / 2);
-  const camera = new THREE.Mesh(cameraGeometry, material);
-  const body = new THREE.Group();
-  body.add(walker, camera);
-  const label = createLabelSprite(participantLabel(participantId));
-  label.material.sizeAttenuation = false;
-  label.scale.multiplyScalar(PRESENCE_LABEL_HEIGHT / label.scale.y);
-  const group = new THREE.Group();
-  group.add(body, label);
-  return {
-    presence: { ground: "", mode: "camera", position: [0, 0, 0], target: [0, 0, 1] },
-    seeded: false,
-    position: new THREE.Vector3(),
-    target: new THREE.Vector3(),
-    goalPosition: new THREE.Vector3(),
-    goalTarget: new THREE.Vector3(),
-    group,
-    body,
-    walker,
-    camera,
-    cameraGeometry,
-    material,
-    label,
-  };
-}
-
 interface WalkState {
   /** Feet, in scene units. */
   position: THREE.Vector3;
@@ -798,127 +694,8 @@ interface WalkState {
   bodyTurn: number;
 }
 
-// You, in walk mode: a gold player capsule (no facing cone; the camera shows the way).
-function createAvatar(geometries: Record<MapMarkerKind | "cone", THREE.BufferGeometry>): THREE.Group {
-  const material = new THREE.MeshStandardMaterial({ color: WALK_AVATAR_COLOR, emissive: WALK_AVATAR_EMISSIVE, roughness: 0.5 });
-  const group = new THREE.Group();
-  group.add(new THREE.Mesh(geometries.player, material));
-  return group;
-}
-
-/** Seconds to cross-fade between a monster's idle, walk, run and in-air clips. */
-const WALK_AVATAR_FADE_S = 0.2;
 /** How fast the body turns into and out of a strafe (1/s; ~95% of the way in 0.25 s). */
 const WALK_BODY_TURN_RATE = 12;
-
-// A chosen monster in walk mode: its clone of the loaded model, and its clips.
-interface WalkAvatarModel {
-  root: THREE.Object3D;
-  mixer: THREE.AnimationMixer;
-  actions: Record<WalkAvatarState, THREE.AnimationAction | null>;
-  state: WalkAvatarState | null;
-}
-
-interface WalkAvatarTemplate {
-  scene: THREE.Group;
-  clips: THREE.AnimationClip[];
-}
-
-/** A creature keeps its own height in yards, within these (a chicken stays visible, a gryphon out of the camera). */
-const WALK_AVATAR_MIN_YARDS = 1.5;
-const WALK_AVATAR_MAX_YARDS = 3.5;
-
-// Each creature's glTF, loaded once and cloned for every walk. Never disposed
-// (like the dungeon meshes); a failed load is forgotten so it can be retried.
-const walkAvatarTemplates = new Map<string, Promise<WalkAvatarTemplate>>();
-function loadWalkAvatar(url: string): Promise<WalkAvatarTemplate> {
-  let template = walkAvatarTemplates.get(url);
-  if (!template) {
-    template = gltfLoader().then((loader) => loader.loadAsync(url)).then((gltf) => {
-      // Feet on the ground at the creature's height in yards (the avatar group's
-      // PLAYER_GEOMETRY_HEIGHT is a MESH_PLAYER_HEIGHT_YARDS tall player), turned
-      // to face -z (glTF models face +z).
-      const height = new THREE.Box3().setFromObject(gltf.scene).max.y;
-      const yards = Math.min(WALK_AVATAR_MAX_YARDS, Math.max(WALK_AVATAR_MIN_YARDS, height));
-      if (height > 0) gltf.scene.scale.multiplyScalar((yards * PLAYER_GEOMETRY_HEIGHT) / (MESH_PLAYER_HEIGHT_YARDS * height));
-      gltf.scene.rotation.y = Math.PI;
-      return { scene: gltf.scene, clips: gltf.animations };
-    });
-    template.catch(() => walkAvatarTemplates.delete(url));
-    walkAvatarTemplates.set(url, template);
-  }
-  return template;
-}
-
-// Keep the skinned source separate from the flattened static model cache. All
-// visible Rookery Whelps share these assets but need their own skeleton pose.
-const flappingWhelpTemplates = new Map<string, Promise<WalkAvatarTemplate>>();
-function loadFlappingWhelp(url: string): Promise<WalkAvatarTemplate> {
-  let template = flappingWhelpTemplates.get(url);
-  if (!template) {
-    template = gltfLoader().then((loader) => loader.loadAsync(url)).then((gltf) => ({ scene: gltf.scene, clips: gltf.animations }));
-    template.catch(() => flappingWhelpTemplates.delete(url));
-    flappingWhelpTemplates.set(url, template);
-  }
-  return template;
-}
-
-// Original game models retain their skinned base hierarchy. Animation packs are
-// fetched separately after a visible unit has attached the base model.
-const animatedGameModelTemplates = new Map<string, Promise<AnimatedGameModelTemplate>>();
-const gameModelAnimationPacks = new Map<string, Promise<THREE.AnimationClip[]>>();
-
-function loadAnimatedGameModel(url: string): Promise<AnimatedGameModelTemplate> {
-  return cachedModelAsset(animatedGameModelTemplates, url, () =>
-    gltfLoader().then((loader) => loader.loadAsync(url)).then((gltf) => ({
-      scene: gltf.scene,
-      clips: gltf.animations,
-      box: new THREE.Box3().setFromObject(gltf.scene),
-    })),
-  );
-}
-
-function loadGameModelAnimationPack(url: string): Promise<THREE.AnimationClip[]> {
-  return cachedModelAsset(gameModelAnimationPacks, url, () =>
-    gltfLoader().then((loader) => loader.loadAsync(url)).then((gltf) => gltf.animations),
-  );
-}
-
-function createWalkAvatarModel(template: WalkAvatarTemplate): WalkAvatarModel {
-  const root = cloneSkinned(template.scene);
-  // Geometry and materials are the template's: disposeAvatar leaves them be.
-  root.traverse((child) => { child.userData.sharedAsset = true; });
-  const mixer = new THREE.AnimationMixer(root);
-  const clipFor = (names: readonly string[]) => names.map((name) => template.clips.find((clip) => clip.name === name)).find((clip) => clip) ?? null;
-  const actions = {} as Record<WalkAvatarState, THREE.AnimationAction | null>;
-  for (const state of Object.keys(WALK_AVATAR_CLIPS) as WalkAvatarState[]) {
-    const clip = clipFor(WALK_AVATAR_CLIPS[state]);
-    actions[state] = clip ? mixer.clipAction(clip) : null;
-  }
-  return { root, mixer, actions, state: null };
-}
-
-function playWalkAvatarState(model: WalkAvatarModel, state: WalkAvatarState) {
-  if (model.state === state) return;
-  const previous = model.state ? model.actions[model.state] : null;
-  const next = model.actions[state];
-  model.state = state;
-  // States can share a clip (a blob runs with its walk).
-  if (!next || next === previous) return;
-  next.reset().setEffectiveWeight(1).fadeIn(WALK_AVATAR_FADE_S).play();
-  previous?.fadeOut(WALK_AVATAR_FADE_S);
-}
-
-function createUnitGeometries(): Record<MapMarkerKind | "cone", THREE.BufferGeometry> {
-  // Bodies stand on the ground plane; the cone sits in front of the body and
-  // points along -z, which a rotation of `facing` about y turns to the unit's
-  // heading (WoW facing is counter-clockwise from world north = artwork up).
-  const player = new THREE.CapsuleGeometry(0.9, 1.2, 4, 12).translate(0, 1.5, 0);
-  const hostile = new THREE.BoxGeometry(1.8, 1.8, 1.8).translate(0, 0.9, 0);
-  const pet = new THREE.CylinderGeometry(0.6, 0.6, 1.2, 12).translate(0, 0.6, 0);
-  const cone = new THREE.ConeGeometry(0.55, 1.3, 10).rotateX(-Math.PI / 2).translate(0, 0.6, -1.9);
-  return { player, hostile, pet, cone };
-}
 
 /**
  * Imperative three.js scene for the Map panel's 3D view: the artwork as a
@@ -936,8 +713,6 @@ export class MapScene3D {
   private readonly geometries = createUnitGeometries();
   private readonly groundGroup = new THREE.Group();
   private alignmentOverlay = false;
-  private readonly debugOverlayGroup = new THREE.Group();
-  private debugOverlays: readonly MapDebugOverlay[] = [];
   private readonly unitsGroup = new THREE.Group();
   private readonly units = new Map<string, UnitObject>();
   private readonly textureLoader = new THREE.TextureLoader();
@@ -945,18 +720,16 @@ export class MapScene3D {
   private readonly bossMinis = new Map<string, BossMini | null>();
   // The real dungeon mesh while "3D map" is on; `dungeonMeshRequest` is the
   // load in flight (a later request or toggle-off abandons it).
-  private dungeonMesh: DungeonMesh | null = null;
-  // On the flat artwork: the map-percent step of one yard along world x and
-  // world y (setFlatYards), for walking there.
-  private flatYards: { x: MapPoint; y: MapPoint } | null = null;
+  private readonly world = new DungeonWorld();
+  private readonly debugLayer = new DebugOverlayLayer(this.world);
+  private get dungeonMesh(): DungeonMesh | null {
+    return this.world.dungeonMesh;
+  }
   private dungeonMeshRequest: { url: string } | null = null;
   private readonly meshLight = new THREE.HemisphereLight(0xfff4e0, 0x6b5a48, 1.2);
   private focus: MapSceneFocus | null = null;
   // Scene point of `focus` at its floor height while the mesh is on.
   private focusCentre: THREE.Vector3 | null = null;
-  private readonly floorHeights = new FloorHeightCache((x, z, ceiling) => this.sampleFloor(x, z, ceiling));
-  private readonly unitFloorHeights = new FloorHeightCache((x, z, ceiling) => this.sampleFloor(x, z, ceiling));
-  private readonly floorRay = new THREE.Ray();
   private constraining = false;
   // Nameplates (drawUnitPlate) over the hovered unit, the selected unit, its
   // target, their target and pinned units; each redrawn when what it shows changes.
@@ -1028,14 +801,11 @@ export class MapScene3D {
   private directorAt = 0;
   // Scratch for the Director's own maths; the effect layer owns `vector`.
   private readonly directorVector = new THREE.Vector3();
-  private readonly directorFrom = new THREE.Vector3();
-  private readonly directorTo = new THREE.Vector3();
   private readonly directorAim = new THREE.Vector3();
   private readonly directorEye = new THREE.Vector3();
   // Camera collision scratch, and the orbit distance the user wants (the
   // camera may sit closer while a wall is in the way) and the one last set.
   private readonly collisionEye = new THREE.Vector3();
-  private readonly collisionPoint = new THREE.Vector3();
   private readonly collisionBefore = new THREE.Vector3();
   private readonly collisionFrom = new THREE.Vector3();
   private readonly collisionDirection = new THREE.Vector3();
@@ -1210,11 +980,7 @@ export class MapScene3D {
   private readonly trailColors = new Float32Array(MAX_TRAIL_SEGMENTS * 8);
   private readonly trailLines: THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>;
   private tokenAt = 0;
-  private onPresence: ((presence: LiveMapPresence | null) => void) | null = null;
-  private lastPresence: { json: string; at: number } | null = null;
-  private presenceTimer = 0;
-  private readonly remotePresences = new Map<string, RemotePresence>();
-  private presenceAt = 0;
+  private readonly presence: LivePresence;
   private onWalkChange: (walking: boolean) => void = () => {};
   private readonly walkHead = new THREE.Vector3();
   private keyMoveLastMs = 0;
@@ -1259,6 +1025,13 @@ export class MapScene3D {
   ) {
     this.capture = options.capture ?? null;
     this.now = options.now ?? (() => performance.now());
+    this.presence = new LivePresence({
+      scene: this.scene,
+      geometries: this.geometries,
+      now: this.now,
+      requestRender: () => this.requestRender(),
+      currentPresence: () => this.currentPresence(),
+    });
     this.container = container;
     this.keyWindow = container.ownerDocument.defaultView ?? window;
     this.onContextLost = onContextLost;
@@ -1304,7 +1077,7 @@ export class MapScene3D {
     // Lifts the cave's albedo textures (roughness 1, no vertex colour) while the mesh is on.
     this.meshLight.visible = false;
     this.scene.add(this.meshLight);
-    this.scene.add(this.groundGroup, this.debugOverlayGroup, this.unitsGroup, this.planLayer.group);
+    this.scene.add(this.groundGroup, this.debugLayer.debugOverlayGroup, this.unitsGroup, this.planLayer.group);
 
     const beamGeometry = new THREE.BufferGeometry();
     beamGeometry.setAttribute("position", new THREE.BufferAttribute(this.beamPositions, 3).setUsage(THREE.DynamicDrawUsage));
@@ -1651,67 +1424,8 @@ export class MapScene3D {
 
   /** Persistent map diagnostics, independent of replay combat effects. */
   setDebugOverlays(overlays: readonly MapDebugOverlay[]) {
-    this.debugOverlays = overlays;
-    this.rebuildDebugOverlays();
+    this.debugLayer.setDebugOverlays(overlays, this.aspect);
     this.requestRender();
-  }
-
-  private clearDebugOverlays() {
-    for (const child of [...this.debugOverlayGroup.children]) {
-      this.debugOverlayGroup.remove(child);
-      const mesh = child as THREE.Mesh<THREE.BufferGeometry, THREE.Material>;
-      mesh.geometry?.dispose();
-      if (Array.isArray(mesh.material)) for (const material of mesh.material) material.dispose();
-      else mesh.material?.dispose();
-    }
-  }
-
-  private rebuildDebugOverlays() {
-    this.clearDebugOverlays();
-    const dungeon = this.dungeonMesh;
-    if (!dungeon) return;
-    for (const overlay of this.debugOverlays) {
-      if (overlay.kind !== "path") continue;
-      const projected = projectMapDebugPoints(overlay.points, overlay.mapId, dungeon.bounds, this.aspect, GROUND_WIDTH);
-      if (projected.length < 2) continue;
-      // Independently height-probe short strips along every polyline segment so
-      // non-straight server paths follow both their exact centerline and the mesh.
-      let stripIndex = 0;
-      for (let pointIndex = 1; pointIndex < projected.length; pointIndex++) {
-        const from = projected[pointIndex - 1];
-        const to = projected[pointIndex];
-        const dx = to.x - from.x;
-        const dz = to.z - from.z;
-        const length = Math.hypot(dx, dz);
-        if (length <= 1e-4) continue;
-        const directionX = dx / length;
-        const directionZ = dz / length;
-        const stripCount = Math.max(1, Math.ceil(length / (DEBUG_PATH_SEGMENT_YARDS * dungeon.scale)));
-        const stripLength = length / stripCount;
-        const yaw = Math.atan2(-directionX, -directionZ);
-        for (let index = 0; index < stripCount; index++, stripIndex++) {
-          const distance = stripLength * (index + 0.5);
-          const x = from.x + directionX * distance;
-          const z = from.z + directionZ * distance;
-          const floor = this.floorHeights.heightAt(`debug-overlay-${overlay.id}-${stripIndex}`, x, z);
-          const material = new THREE.MeshBasicMaterial({
-            color: overlay.color,
-            transparent: true,
-            opacity: overlay.opacity,
-            blending: THREE.AdditiveBlending,
-            depthWrite: false,
-            side: THREE.DoubleSide,
-          });
-          const path = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), material);
-          path.position.set(x, floor + DEEP_BREATH_GROUND_LIFT * dungeon.scale, z);
-          path.rotation.y = yaw;
-          path.scale.set(overlay.widthYards * dungeon.scale, 1, stripLength * 1.05);
-          path.renderOrder = 2;
-          path.userData.debugOverlayId = overlay.id;
-          this.debugOverlayGroup.add(path);
-        }
-      }
-    }
   }
 
   /**
@@ -1741,7 +1455,7 @@ export class MapScene3D {
     if (this.dungeonMesh) {
       // The parsed mesh is shared with other scenes (see parsedDungeonMesh): just let go of this copy.
       this.scene.remove(this.dungeonMesh.group);
-      this.dungeonMesh = null;
+      this.world.dungeonMesh = null;
     }
     if (!request) {
       this.applyGroundMode();
@@ -1752,14 +1466,14 @@ export class MapScene3D {
     const pending = { url: request.url };
     this.dungeonMeshRequest = pending;
     this.onDungeonMesh("loading");
-    void this.loadDungeonMesh(request).then((mesh) => {
+    void this.world.loadDungeonMesh(request).then((mesh) => {
       if (this.disposed || this.dungeonMeshRequest !== pending) return;
       this.dungeonMeshRequest = null;
       if (!mesh) {
         this.onDungeonMesh("failed");
         return;
       }
-      this.dungeonMesh = mesh;
+      this.world.dungeonMesh = mesh;
       this.scene.add(mesh.group);
       this.applyGroundMode();
       this.viewAnimation = null;
@@ -1982,7 +1696,7 @@ export class MapScene3D {
       scale: mesh.scale,
       toPlane: (point) => mapPointToScene(point, this.aspect, GROUND_WIDTH),
       probe: {
-        floorAt: (x, z) => this.floorHeights.heightAt("drone", x, z, this.cameraCeiling()),
+        floorAt: (x, z) => this.world.floorHeights.heightAt("drone", x, z, this.cameraCeiling()),
         clearShot: (x, z, distance, yaw) => this.droneClearShot(x, z, distance, yaw),
       },
     };
@@ -2115,7 +1829,7 @@ export class MapScene3D {
   // native token geometry instead.
   private updateUnitScale(force = false) {
     const screenScale = this.camera.position.distanceTo(this.controls.target) / this.baseDistance();
-    const yards = this.yardScale();
+    const yards = this.world.yardScale(this.aspect);
     const trueScale = yards === null ? null : this.dungeonMesh
       ? (MESH_PLAYER_HEIGHT_YARDS * yards) / PLAYER_GEOMETRY_HEIGHT
       : (FLAT_PLAYER_TOKEN_DIAMETER_YARDS * yards) / (2 * TOKEN_RADIUS.player);
@@ -2151,7 +1865,7 @@ export class MapScene3D {
     const mesh = this.dungeonMesh;
     const loggedZ = object.loggedZ;
     const tracked = mesh && loggedZ === undefined ? this.trackedFloor(guid, object, x, z, mesh.scale) : null;
-    const floor = !mesh ? 0 : tracked ?? this.unitFloorHeights.heightAt(guid, x, z, this.probeCeiling(loggedZ, mesh.scale));
+    const floor = !mesh ? 0 : tracked ?? this.world.unitFloorHeights.heightAt(guid, x, z, this.probeCeiling(loggedZ, mesh.scale));
     object.floorTracked = tracked !== null;
     const logged = mesh && loggedZ !== undefined ? loggedZ * mesh.scale : null;
     const y = mesh && logged !== null && logged - floor > AIRBORNE_YARDS * mesh.scale ? logged : floor;
@@ -2205,27 +1919,7 @@ export class MapScene3D {
 
   // The floor below the free cam's pivot at (x, z), before its lift.
   private pivotFloor(x: number, z: number): number {
-    return this.floorHeights.heightAt("camera-target", x, z, this.cameraCeiling());
-  }
-
-  // The cave floor below (x, z) in scene units: the first surface below
-  // `ceiling` when given and hit, else the highest; null when every probe
-  // misses the mesh (or the tiles show).
-  private sampleFloor(x: number, z: number, ceiling: number | undefined): number | null {
-    return floorBelow((fromY) => this.castFloor(x, z, fromY), FLOOR_PROBE_HEIGHT, ceiling);
-  }
-
-  // The highest cave or water surface below (x, fromY, z), or null for none:
-  // a unit swimming near the surface stands on the water, not the lake bed.
-  private castFloor(x: number, z: number, fromY: number): number | null {
-    const mesh = this.dungeonMesh;
-    // The flat artwork is the floor everywhere.
-    if (!mesh) return 0;
-    let best: number | null = null;
-    for (const cave of mesh.caves) best = this.highestHit(cave, x, z, fromY, THREE.FrontSide, best);
-    // Liquid planes may be wound either way up.
-    for (const liquid of mesh.liquids) best = this.highestHit(liquid, x, z, fromY, THREE.DoubleSide, best);
-    return best;
+    return this.world.floorHeights.heightAt("camera-target", x, z, this.cameraCeiling());
   }
 
   // The unit's floor from its track (no logged height), or null while there
@@ -2277,7 +1971,7 @@ export class MapScene3D {
         },
       })),
       scale: mesh.scale,
-      candidatesAt: (x, z) => this.floorCandidates(x, z),
+      candidatesAt: (x, z) => this.world.floorCandidates(x, z),
     }, this.now);
     const slice = () => {
       const current = this.floorBuild;
@@ -2301,51 +1995,6 @@ export class MapScene3D {
     this.floorBuild = { build, inputs, timer: setTimeout(slice, 0) };
   }
 
-  // Every walkable surface under (x, z) in scene units, highest first: the
-  // cave faces a downward probe meets (walls, steeper than FLOOR_MAX_SLOPE_DEG,
-  // left out) and the water planes.
-  private floorCandidates(x: number, z: number): number[] {
-    const mesh = this.dungeonMesh;
-    if (!mesh) return [];
-    const floors: number[] = [];
-    for (const cave of mesh.caves) this.collectFloors(cave, x, z, THREE.FrontSide, floors);
-    for (const liquid of mesh.liquids) this.collectFloors(liquid, x, z, THREE.DoubleSide, floors);
-    return floors.sort((a, b) => b - a);
-  }
-
-  // Adds to `floors` every walkable surface a downward probe through (x, z) hits on `cave`.
-  private collectFloors(cave: DungeonMeshCave, x: number, z: number, side: THREE.Side, floors: number[]) {
-    this.floorRay.origin.set(x, FLOOR_PROBE_HEIGHT, z);
-    this.floorRay.direction.set(0, -1, 0);
-    this.floorRay.applyMatrix4(cave.inverse);
-    for (const hit of cave.bvh.raycast(this.floorRay, side)) {
-      if (!hit.face || Math.abs(this.vector.copy(hit.face.normal).transformDirection(cave.mesh.matrixWorld).y) < FLOOR_MIN_UP) continue;
-      floors.push(this.vector.copy(hit.point).applyMatrix4(cave.mesh.matrixWorld).y);
-    }
-  }
-
-  // The higher of `best` and the surface a downward probe from (x, fromY, z) hits on `cave`.
-  private highestHit(cave: DungeonMeshCave, x: number, z: number, fromY: number, side: THREE.Side, best: number | null): number | null {
-    this.floorRay.origin.set(x, fromY, z);
-    this.floorRay.direction.set(0, -1, 0);
-    this.floorRay.applyMatrix4(cave.inverse);
-    const hit = cave.bvh.raycastFirst(this.floorRay, side);
-    if (!hit) return best;
-    const y = this.vector.copy(hit.point).applyMatrix4(cave.mesh.matrixWorld).y;
-    return best === null || y > best ? y : best;
-  }
-
-  // Loads the mesh, zeroes its centring node translations so it sits in raw
-  // WoW coordinates, places it under the artwork projection and builds a BVH
-  // per cave mesh for floor probes. Resolves null on any failure.
-  // The parsed mesh is shared (see parsedDungeonMesh); this scene draws its own
-  // copy of the node tree, which shares the parsed geometry and materials.
-  private async loadDungeonMesh(request: DungeonMeshRequest): Promise<DungeonMesh | null> {
-    const parsed = await parsedDungeonMesh(request);
-    if (!parsed) return null;
-    return { url: request.url, bounds: request.bounds, group: parsed.template.clone(), caves: parsed.caves, liquids: parsed.liquids, scale: parsed.scale, radius: parsed.radius };
-  }
-
   // Shows the mesh or the tiles, re-grounds every unit and re-applies the
   // scale and camera limits for the mode.
   private applyGroundMode() {
@@ -2353,13 +2002,13 @@ export class MapScene3D {
     const mesh = this.dungeonMesh !== null;
     this.groundGroup.visible = !mesh;
     this.meshLight.visible = mesh;
-    this.floorHeights.clear();
-    this.unitFloorHeights.clear();
+    this.world.floorHeights.clear();
+    this.world.unitFloorHeights.clear();
     this.ensureFloorTracks();
     for (const [guid, object] of this.units) this.placeUnit(guid, object, object.base.x, object.base.z);
     this.updateCameraLimits();
     this.updateUnitScale(true);
-    this.rebuildDebugOverlays();
+    this.debugLayer.rebuildDebugOverlays(this.aspect);
     this.requestRender();
   }
 
@@ -2378,7 +2027,7 @@ export class MapScene3D {
       this.controls.maxPolarAngle = MESH_MAX_POLAR;
       const { x, z } = mapPointToScene(this.focus.centre, this.aspect, GROUND_WIDTH);
       this.focusCentre ??= new THREE.Vector3();
-      this.focusCentre.set(x, this.floorHeights.heightAt("focus", x, z), z);
+      this.focusCentre.set(x, this.world.floorHeights.heightAt("focus", x, z), z);
       this.controls.maxDistance = (MESH_MAX_DISTANCE_FACTOR * this.baseDistance()) / this.focus.zoom;
     } else {
       this.focusCentre = null;
@@ -2440,7 +2089,7 @@ export class MapScene3D {
     // spot may be a wall top, a ledge or a roof, and lifting the camera onto
     // that tips the view straight down. Walls between the camera and the
     // target are the collision pass's job.
-    const below = this.castFloor(position.x, position.z, position.y + MESH_CAMERA_CLEARANCE);
+    const below = this.world.castFloor(position.x, position.z, position.y + MESH_CAMERA_CLEARANCE);
     if (below !== null && position.y < below + MESH_CAMERA_CLEARANCE) {
       position.y = below + MESH_CAMERA_CLEARANCE;
       moved = true;
@@ -2490,32 +2139,6 @@ export class MapScene3D {
     this.updateUnitScale();
   }
 
-  // Whether the cave stands between the two points (the camera's line to the fight).
-  private meshBlocks(from: THREE.Vector3, to: THREE.Vector3): boolean {
-    return this.meshHitDistance(from, to) !== null;
-  }
-
-  // How far (scene units) from `from` toward `to` the first cave surface is,
-  // or null when the segment is clear. Walls count from either side.
-  private meshHitDistance(from: THREE.Vector3, to: THREE.Vector3): number | null {
-    const mesh = this.dungeonMesh;
-    if (!mesh) return null;
-    let nearest: number | null = null;
-    for (const cave of mesh.caves) {
-      const origin = this.directorFrom.copy(from).applyMatrix4(cave.inverse);
-      const end = this.directorTo.copy(to).applyMatrix4(cave.inverse);
-      const length = origin.distanceTo(end);
-      if (length <= 1e-6) continue;
-      this.floorRay.origin.copy(origin);
-      this.floorRay.direction.copy(end).sub(origin).divideScalar(length);
-      const hit = cave.bvh.raycastFirst(this.floorRay, THREE.DoubleSide);
-      if (!hit || hit.distance >= length) continue;
-      const distance = from.distanceTo(this.collisionPoint.copy(hit.point).applyMatrix4(cave.mesh.matrixWorld));
-      if (nearest === null || distance < nearest) nearest = distance;
-    }
-    return nearest;
-  }
-
   // Keeps the cave from standing between the orbit target and the camera: a
   // wall pulls the camera in along its line of sight, and once clear it eases
   // back out to the distance the user (or the Director) chose. `arrived` is
@@ -2537,7 +2160,7 @@ export class MapScene3D {
     // what this ray allows), so a cave wall is not a one-frame pull-in.
     if (this.directing() && this.directorWant !== null) {
       const want = this.directorWant;
-      const hit = want > 0 ? this.meshHitDistance(from, this.collisionEye.copy(direction).multiplyScalar(want).add(from)) : null;
+      const hit = want > 0 ? this.world.meshHitDistance(from, this.collisionEye.copy(direction).multiplyScalar(want).add(from)) : null;
       this.directorAllowed = directorPullIn(want, hit, ORBIT_COLLISION_PADDING, this.controls.minDistance);
       this.orbitWantDistance = shown;
       return false;
@@ -2555,7 +2178,7 @@ export class MapScene3D {
   // having been `shown` away and wanting to be `want` away (scene units).
   // `easing` is true while it is still easing back out from a wall that is gone.
   private collideCamera(from: THREE.Vector3, direction: THREE.Vector3, shown: number, want: number, padding: number, min: number, dt: number): { distance: number; easing: boolean } {
-    const hit = want > 0 ? this.meshHitDistance(from, this.collisionEye.copy(direction).multiplyScalar(want).add(from)) : null;
+    const hit = want > 0 ? this.world.meshHitDistance(from, this.collisionEye.copy(direction).multiplyScalar(want).add(from)) : null;
     const distance = cameraCollisionDistance(shown, want, hit, padding, min, CAMERA_COLLISION_RETURN_RATE, dt);
     return { distance, easing: distance < want && (hit === null || hit - padding > distance) };
   }
@@ -2584,7 +2207,7 @@ export class MapScene3D {
         z + Math.cos(yaw) * Math.cos(elevation) * out,
       );
       // A wall on the aim line would pull the camera in: not this shot.
-      if (this.meshBlocks(aim, eye)) return false;
+      if (this.world.meshBlocks(aim, eye)) return false;
       if (pose && elevationDeg > FOLLOW_STEEP_ELEVATION_DEG) {
         const from = this.directorPoseAim.set(pose.x, pose.floor + lift, pose.z);
         const to = this.directorPoseEye.set(
@@ -2592,10 +2215,10 @@ export class MapScene3D {
           pose.floor + Math.sin(elevation) * out,
           pose.z + Math.cos(yaw) * Math.cos(elevation) * out,
         );
-        const hit = this.meshHitDistance(from, to);
+        const hit = this.world.meshHitDistance(from, to);
         if (hit !== null && hit - ORBIT_COLLISION_PADDING < steepMin) return false;
       }
-      return seesFraming(this.sightCount, (k) => this.sightBoss[k]!, (k) => !this.meshBlocks(eye, this.sightTargets[k]!)) || "aim";
+      return seesFraming(this.sightCount, (k) => this.sightBoss[k]!, (k) => !this.world.meshBlocks(eye, this.sightTargets[k]!)) || "aim";
     });
   }
 
@@ -2603,7 +2226,7 @@ export class MapScene3D {
   // cinematic elevation with a clear line to the aim point, climbing in steps;
   // the shot shortens only if even the highest one is blocked.
   private droneClearShot(x: number, z: number, distance: number, yaw: number): { elevation: number; distance: number } {
-    const floor = this.floorHeights.heightAt("director-shot", x, z, this.cameraCeiling());
+    const floor = this.world.floorHeights.heightAt("director-shot", x, z, this.cameraCeiling());
     const aim = this.directorAim.set(x, floor + MESH_PLAYER_HEIGHT_YARDS * (this.dungeonMesh?.scale ?? 1), z);
     for (const elevationDeg of DIRECTOR_CLIMB) {
       const elevation = (elevationDeg * Math.PI) / 180;
@@ -2612,7 +2235,7 @@ export class MapScene3D {
         floor + Math.sin(elevation) * distance,
         z + Math.cos(yaw) * Math.cos(elevation) * distance,
       );
-      if (!this.meshBlocks(aim, eye)) return { elevation: elevationDeg, distance };
+      if (!this.world.meshBlocks(aim, eye)) return { elevation: elevationDeg, distance };
     }
     // Still blocked overhead: come in closer instead.
     return { elevation: MAX_CINEMATIC_ELEVATION_DEG, distance: this.shortenedShot(distance) };
@@ -2653,7 +2276,7 @@ export class MapScene3D {
       sample: (x, z, radius, height, framed) => {
         if (!this.dungeonMesh) return false;
         // No floor below (a chasm, off the mesh): skip the sample rather than cast from y = 0.
-        const floor = this.sampleFloor(x, z, this.probeCeiling(height, scale));
+        const floor = this.world.sampleFloor(x, z, this.probeCeiling(height, scale));
         if (floor === null) return false;
         from.set(x, floor + lift, z);
         // The framed units at player height: over their own logged or tracked
@@ -2678,8 +2301,8 @@ export class MapScene3D {
       clearYaw: (yaw) => {
         if (!this.dungeonMesh) return true;
         to.set(from.x + Math.sin(yaw) * out, up, from.z + Math.cos(yaw) * out);
-        if (this.meshBlocks(from, to)) return false;
-        return seesFraming(count, (k) => boss[k]!, (k) => !this.meshBlocks(to, targets[k]!)) || "aim";
+        if (this.world.meshBlocks(from, to)) return false;
+        return seesFraming(count, (k) => boss[k]!, (k) => !this.world.meshBlocks(to, targets[k]!)) || "aim";
       },
     };
   }
@@ -2809,7 +2432,7 @@ export class MapScene3D {
       const checkYaw = gliding ? yaw : placedYaw;
       const checkX = gliding ? centreX - Math.sin(yaw) * ahead : goal.x;
       const checkZ = gliding ? centreZ - Math.cos(yaw) * ahead : goal.z;
-      const floor = this.floorHeights.heightAt("director-shot", checkX, checkZ, this.cameraCeiling());
+      const floor = this.world.floorHeights.heightAt("director-shot", checkX, checkZ, this.cameraCeiling());
       let pose: { x: number; z: number; floor: number } | null = null;
       if (!gliding && !cutting) {
         pose = this.shotPose;
@@ -2960,7 +2583,7 @@ export class MapScene3D {
     }
     const mesh = this.dungeonMesh;
     if (mesh) {
-      const hit = this.raycaster.intersectObject(mesh.group, true)[0];
+      const hit = this.world.intersectMesh(this.raycaster);
       return hit ? { point: hit.point.clone(), guid: null } : null;
     }
     // Tiles: the ground is the y = 0 plane.
@@ -3036,7 +2659,7 @@ export class MapScene3D {
     canvas.removeEventListener("contextmenu", this.handleWalkContextMenu);
     if (this.walk) this.disposeAvatar(this.walk.avatar);
     this.walk = null;
-    clearTimeout(this.presenceTimer);
+    this.presence.dispose();
     for (const line of this.targetLines) {
       line.geometry.dispose();
       line.material.map?.dispose();
@@ -3048,19 +2671,17 @@ export class MapScene3D {
     this.columnBox.dispose();
     this.tokenEdge.dispose();
     this.bossSpire.dispose();
-    for (const presence of this.remotePresences.values()) this.disposeRemotePresence(presence);
-    this.remotePresences.clear();
     clearTimeout(this.unitClickTimer);
     this.keyWindow.removeEventListener("keydown", this.handleKeyDown, { capture: true });
     this.keyWindow.removeEventListener("keyup", this.handleKeyUp);
     this.keyWindow.removeEventListener("blur", this.releaseKeys);
     for (const guid of [...this.units.keys()]) this.removeUnit(guid);
-    this.clearDebugOverlays();
+    this.debugLayer.clearDebugOverlays();
     for (const guid of [...this.plates.keys()]) this.removePlate(guid);
     this.clearGround();
     this.dungeonMeshRequest = null;
     // The renderer's disposal frees this scene's GPU copy of the (shared) mesh.
-    this.dungeonMesh = null;
+    this.world.dungeonMesh = null;
     for (const geometry of Object.values(this.geometries)) geometry.dispose();
     for (const mini of this.bossMinis.values()) {
       mini?.geometry.dispose();
@@ -3661,8 +3282,8 @@ export class MapScene3D {
     token.bossSpire?.material.dispose();
     object.drop?.material.dispose();
     this.units.delete(guid);
-    this.floorHeights.delete(guid);
-    this.unitFloorHeights.delete(guid);
+    this.world.floorHeights.delete(guid);
+    this.world.unitFloorHeights.delete(guid);
     const wobbling = this.wobbling.indexOf(object);
     if (wobbling >= 0) this.wobbling.splice(wobbling, 1);
     const lunging = this.lunging.indexOf(object);
@@ -3678,7 +3299,7 @@ export class MapScene3D {
       ? deriveActiveRadialEffects(fx, cursorMs, this.activeRadialEffects)
       : this.activeRadialEffects;
     if (!fx) radials.length = 0;
-    const yardScale = this.yardScale();
+    const yardScale = this.world.yardScale(this.aspect);
     if (yardScale === null) {
       this.commitPool(this.radialRings, 0);
       this.commitPool(this.radialSpheres, 0);
@@ -3740,7 +3361,7 @@ export class MapScene3D {
     this.deepBreathAreaPositions.length = 0;
     for (let index = 0; index < projected.length; index++) {
       const point = projected[index];
-      const floor = this.floorHeights.heightAt(`deep-breath-${path.key}-${index}`, point.x, point.z);
+      const floor = this.world.floorHeights.heightAt(`deep-breath-${path.key}-${index}`, point.x, point.z);
       const floorY = floor + DEEP_BREATH_GROUND_LIFT * mesh.scale;
       positions[index * 3] = point.x;
       positions[index * 3 + 1] = floorY;
@@ -3767,7 +3388,7 @@ export class MapScene3D {
       : this.activeDeepBreaths;
     if (!fx) breaths.length = 0;
     const breath = breaths[0];
-    const yardScale = this.yardScale();
+    const yardScale = this.world.yardScale(this.aspect);
     if (!breath || yardScale === null) {
       this.hideDeepBreath();
       return;
@@ -4941,11 +4562,9 @@ export class MapScene3D {
     this.requestRender();
   }
 
-  /** Called with where you are on the mesh (throttled), for a live session; null once you are not. */
+  /** Called with where you are on the mesh (throttled), for a live session; null once you are not (LivePresence). */
   setOnPresence(callback: ((presence: LiveMapPresence | null) => void) | null) {
-    this.onPresence = callback;
-    this.lastPresence = null;
-    if (callback) this.emitPresence(true);
+    this.presence.setOnPresence(callback);
   }
 
   // Your camera, or your character while walking; null off the mesh.
@@ -4962,97 +4581,19 @@ export class MapScene3D {
     return { ground: mesh.url, mode: "camera", position: vector(this.camera.position), target: vector(this.controls.target) };
   }
 
-  /**
-   * Sends your presence when it changed (at most every PRESENCE_SEND_MS, the
-   * last change always going out), or regardless with `force` (the heartbeat).
-   */
+  /** Sends your presence when it changed (throttled), or regardless with `force` (the heartbeat; LivePresence). */
   emitPresence(force = false) {
-    const send = this.onPresence;
-    if (!send || this.disposed) return;
-    const presence = this.currentPresence();
-    const json = JSON.stringify(presence);
-    const last = this.lastPresence;
-    const now = this.now();
-    if (!force && last) {
-      if (json === last.json) return;
-      const wait = PRESENCE_SEND_MS - (now - last.at);
-      if (wait > 0) {
-        if (!this.presenceTimer) {
-          this.presenceTimer = window.setTimeout(() => {
-            this.presenceTimer = 0;
-            this.emitPresence();
-          }, wait);
-        }
-        return;
-      }
-    }
-    clearTimeout(this.presenceTimer);
-    this.presenceTimer = 0;
-    this.lastPresence = { json, at: now };
-    send(presence);
+    this.presence.emitPresence(force);
   }
 
-  /** Everyone else's presence in the live session, drawn where it is on the same mesh. */
+  /** Everyone else's presence in the live session, drawn where it is on the same mesh (LivePresence). */
   setRemotePresences(presences: ReadonlyMap<string, LiveMapPresence>) {
-    for (const [participantId, object] of this.remotePresences) {
-      if (presences.has(participantId)) continue;
-      this.disposeRemotePresence(object);
-      this.remotePresences.delete(participantId);
-    }
-    for (const [participantId, presence] of presences) {
-      let object = this.remotePresences.get(participantId);
-      if (!object) {
-        object = createRemotePresence(participantId, this.geometries.player);
-        this.scene.add(object.group);
-        this.remotePresences.set(participantId, object);
-      }
-      // A change of mode jumps rather than gliding from the sky to the floor.
-      const jump = !object.seeded || object.presence.mode !== presence.mode;
-      object.presence = presence;
-      object.goalPosition.fromArray(presence.position);
-      object.goalTarget.fromArray(presence.target);
-      if (jump) {
-        object.position.copy(object.goalPosition);
-        object.target.copy(object.goalTarget);
-        object.seeded = true;
-      }
-    }
-    this.requestRender();
+    this.presence.setRemotePresences(presences);
   }
 
   // Eases others' presences toward their latest update; true while any moves.
   private updateRemotePresences(now: number): boolean {
-    const dt = this.presenceAt ? Math.min(KEY_MAX_STEP_S, (now - this.presenceAt) / 1000) : 0;
-    this.presenceAt = now;
-    if (this.remotePresences.size === 0) return false;
-    const mesh = this.dungeonMesh;
-    const ease = 1 - Math.exp(-PRESENCE_EASE_PER_S * dt);
-    let moving = false;
-    for (const object of this.remotePresences.values()) {
-      const shown = mesh !== null && object.presence.ground === mesh.url;
-      object.group.visible = shown;
-      if (!shown) continue;
-      object.position.lerp(object.goalPosition, ease);
-      object.target.lerp(object.goalTarget, ease);
-      const settle = 1e-4;
-      if (object.position.distanceToSquared(object.goalPosition) > settle * settle
-        || object.target.distanceToSquared(object.goalTarget) > settle * settle) {
-        moving = true;
-      }
-      const walking = object.presence.mode === "walk";
-      object.walker.visible = walking;
-      object.camera.visible = !walking;
-      object.body.position.copy(object.position);
-      object.body.scale.setScalar(this.unitScale);
-      if (walking) {
-        object.body.rotation.set(0, Math.atan2(object.position.x - object.target.x, object.position.z - object.target.z), 0);
-      } else {
-        object.body.lookAt(object.target);
-      }
-      const labelHeight = walking ? PLAYER_GEOMETRY_HEIGHT + 0.2 : 1.6;
-      object.label.position.set(object.position.x, object.position.y + labelHeight * this.unitScale, object.position.z);
-    }
-    return moving;
+    return this.presence.updateRemotePresences(now, this.dungeonMesh, this.unitScale);
   }
 
   // The token parts that follow the replay: cast arcs, halos for the
@@ -5234,14 +4775,6 @@ export class MapScene3D {
     });
   }
 
-  private disposeRemotePresence(object: RemotePresence) {
-    this.scene.remove(object.group);
-    object.material.dispose();
-    object.cameraGeometry.dispose();
-    object.label.material.map?.dispose();
-    object.label.material.dispose();
-  }
-
   /** The plan items to draw (the current step's, plus any being drawn), and the selected one. */
   setPlanItems(items: readonly PlanItem[], selectedId: string | null) {
     this.planItems = items;
@@ -5273,7 +4806,7 @@ export class MapScene3D {
     const rect = this.renderer.domElement.getBoundingClientRect();
     this.pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
     this.raycaster.setFromCamera(this.pointer, this.camera);
-    const hit = this.raycaster.intersectObject(mesh.group, true)[0];
+    const hit = this.world.intersectMesh(this.raycaster);
     return hit ? this.sceneToPlan(hit.point) : null;
   }
 
@@ -5304,7 +4837,7 @@ export class MapScene3D {
     this.planSurface = mesh ? {
       scale: mesh.scale,
       toScene: (point) => this.planToScene(point),
-      floorAt: (x, z, hintY) => this.castFloor(x, z, (hintY ?? this.cameraCeiling() ?? 1e4) + WALK_STEP_YARDS * mesh.scale) ?? hintY ?? 0,
+      floorAt: (x, z, hintY) => this.world.castFloor(x, z, (hintY ?? this.cameraCeiling() ?? 1e4) + WALK_STEP_YARDS * mesh.scale) ?? hintY ?? 0,
     } : null;
     this.planLayer.setItems(this.planItems, this.planSelected, this.planSurface);
   }
@@ -5345,7 +4878,7 @@ export class MapScene3D {
 
   /** Walk mode needs yards: the dungeon mesh's, or the flat artwork's (setFlatYards). */
   canWalk(): boolean {
-    return this.yardScale() !== null;
+    return this.world.yardScale(this.aspect) !== null;
   }
 
   /**
@@ -5354,18 +4887,8 @@ export class MapScene3D {
    * units; null when the artwork has no world mapping.
    */
   setFlatYards(perYard: { x: MapPoint; y: MapPoint } | null) {
-    this.flatYards = perYard;
+    this.world.flatYards = perYard;
     this.updateUnitScale();
-  }
-
-  // Scene units per yard: the mesh's, else the flat artwork's.
-  private yardScale(): number | null {
-    if (this.dungeonMesh) return this.dungeonMesh.scale;
-    const perYard = this.flatYards;
-    if (!perYard) return null;
-    const length = (step: MapPoint) => Math.hypot((step.leftPercent / 100) * GROUND_WIDTH, (step.topPercent / 100) * GROUND_WIDTH * this.aspect);
-    const scale = (length(perYard.x) + length(perYard.y)) / 2;
-    return Number.isFinite(scale) && scale > 0 ? scale : null;
   }
 
   setWalking(on: boolean) {
@@ -5378,7 +4901,7 @@ export class MapScene3D {
 
   // The character starts where the camera looks, facing away from it.
   private startWalk() {
-    const scale = this.yardScale();
+    const scale = this.world.yardScale(this.aspect);
     if (scale === null) {
       this.onWalkChange(false);
       return;
@@ -5397,7 +4920,7 @@ export class MapScene3D {
     const target = this.controls.target;
     const offset = new THREE.Vector3().copy(this.camera.position).sub(target);
     const position = target.clone();
-    position.y = this.castFloor(position.x, position.z, position.y + WALK_STEP_YARDS * scale) ?? position.y;
+    position.y = this.world.castFloor(position.x, position.z, position.y + WALK_STEP_YARDS * scale) ?? position.y;
     const camYaw = cameraAngles(offset).yaw;
     const avatar = createAvatar(this.geometries);
     avatar.scale.setScalar((MESH_PLAYER_HEIGHT_YARDS * scale) / PLAYER_GEOMETRY_HEIGHT);
@@ -5432,12 +4955,12 @@ export class MapScene3D {
   // framing), on the floor there, keeping the camera's angle and zoom.
   private moveWalkTo(viewport: MapViewport) {
     const walk = this.walk;
-    if (!walk || this.yardScale() === null) return;
+    if (!walk || this.world.yardScale(this.aspect) === null) return;
     // The full map's centre is nowhere in particular: then the fight's focus.
     const whole = viewport.zoom <= FULL_MAP_VIEWPORT.zoom && this.focus;
     const point = whole && this.focus ? this.focus.centre : { leftPercent: viewport.centerX * 100, topPercent: viewport.centerY * 100 };
     const { x, z } = mapPointToScene(point, this.aspect, GROUND_WIDTH);
-    walk.position.set(x, this.floorHeights.heightAt("walk", x, z, this.cameraCeiling()), z);
+    walk.position.set(x, this.world.floorHeights.heightAt("walk", x, z, this.cameraCeiling()), z);
     walk.vy = 0;
     walk.grounded = true;
     this.requestRender();
@@ -5454,7 +4977,7 @@ export class MapScene3D {
     this.disposeAvatar(walk.avatar);
     // The free cam picks up behind and above where the character stood, its
     // pivot at the character's feet (still in the air if they were flying).
-    const distance = Math.max(walk.camDistance, WALK_EXIT_DISTANCE_YARDS) * (this.yardScale() ?? 1);
+    const distance = Math.max(walk.camDistance, WALK_EXIT_DISTANCE_YARDS) * (this.world.yardScale(this.aspect) ?? 1);
     const pitch = Math.max(walk.camPitch, WALK_START_PITCH);
     this.controls.target.copy(walk.position);
     this.pivotLift = Math.max(0, walk.position.y - this.pivotFloor(walk.position.x, walk.position.z));
@@ -5480,12 +5003,12 @@ export class MapScene3D {
       const walk = this.walk;
       const start = startGuid ? this.units.get(startGuid) : null;
       const lookAt = lookAtGuid ? this.units.get(lookAtGuid) : null;
-      const scale = this.yardScale();
+      const scale = this.world.yardScale(this.aspect);
       if (walk && start && lookAt && scale !== null) {
         const away = new THREE.Vector3().copy(start.base).sub(lookAt.base).setY(0);
         if (away.lengthSq() > 1e-6) away.normalize().multiplyScalar(1.5 * scale);
         walk.position.copy(start.base).add(away);
-        walk.position.y = this.floorHeights.heightAt("walk-capture", walk.position.x, walk.position.z, this.cameraCeiling());
+        walk.position.y = this.world.floorHeights.heightAt("walk-capture", walk.position.x, walk.position.z, this.cameraCeiling());
         const dx = lookAt.base.x - walk.position.x;
         const dz = lookAt.base.z - walk.position.z;
         walk.yaw = Math.atan2(-dx, -dz);
@@ -5552,7 +5075,7 @@ export class MapScene3D {
   private updateWalk(now: number): boolean {
     const walk = this.walk;
     if (!walk) return false;
-    const scale = this.yardScale();
+    const scale = this.world.yardScale(this.aspect);
     if (scale === null) {
       this.stopWalk();
       return false;
@@ -5605,7 +5128,7 @@ export class MapScene3D {
     if (!walk.grounded) walk.vy -= WALK_GRAVITY_YPS2 * scale * dt;
     const ceiling = walk.position.y + WALK_STEP_YARDS * scale;
     walk.position.y += walk.vy * dt;
-    const floor = this.castFloor(walk.position.x, walk.position.z, ceiling);
+    const floor = this.world.castFloor(walk.position.x, walk.position.z, ceiling);
     if (floor !== null) {
       const stepping = walk.grounded && walk.vy <= 0 && walk.position.y - floor <= WALK_STEP_YARDS * scale;
       if (walk.position.y <= floor || stepping) {
@@ -5778,295 +5301,3 @@ function setBodyColor(object: UnitObject) {
   }
 }
 
-// Loaded on first use so the glTF loader and meshopt decoder stay out of the
-// 3D chunk until a boss mini is needed. The minis use EXT_meshopt_compression.
-// One glTF loader (and meshopt decoder) for every scene.
-let sharedGltfLoader: Promise<GLTFLoader> | null = null;
-function gltfLoader(): Promise<GLTFLoader> {
-  sharedGltfLoader ??= createGltfLoader();
-  return sharedGltfLoader;
-}
-
-// A dungeon mesh parsed and placed once, with its floor-probe trees: scenes
-// clone `template` (sharing geometry and materials), so a remounted view (a
-// layout change, focus mode, the panel's help page) skips the download, the
-// parse and the BVH build. Never disposed by a scene; a scene's renderer
-// frees its own GPU copies when it is disposed.
-interface ParsedDungeonMesh {
-  template: THREE.Group;
-  caves: DungeonMeshCave[];
-  /** Water (and other liquid) planes: units stand on them, but they never block the camera. */
-  liquids: DungeonMeshCave[];
-  scale: number;
-  radius: number;
-}
-const parsedDungeonMeshes = new Map<string, Promise<ParsedDungeonMesh | null>>();
-const MAX_PARSED_DUNGEON_MESHES = 2;
-
-function parsedDungeonMesh(request: DungeonMeshRequest): Promise<ParsedDungeonMesh | null> {
-  let parsed = parsedDungeonMeshes.get(request.url);
-  if (!parsed) {
-    parsed = parseDungeonMesh(request);
-    parsedDungeonMeshes.set(request.url, parsed);
-    void parsed.then((result) => {
-      if (!result) parsedDungeonMeshes.delete(request.url);
-    });
-    for (const oldest of parsedDungeonMeshes.keys()) {
-      if (parsedDungeonMeshes.size <= MAX_PARSED_DUNGEON_MESHES) break;
-      parsedDungeonMeshes.delete(oldest);
-    }
-  }
-  return parsed;
-}
-
-async function parseDungeonMesh(request: DungeonMeshRequest): Promise<ParsedDungeonMesh | null> {
-  try {
-    // The bytes may already be on their way: the map prefetches them while the encounter processes.
-    const [loader, { MeshBVH }, bytes] = await Promise.all([gltfLoader(), import("three-mesh-bvh"), dungeonMeshBytes(request.url)]);
-    const gltf = await loader.parseAsync(bytes, THREE.LoaderUtils.extractUrlBase(request.url));
-    releaseDungeonMeshBytes(request.url);
-    for (const node of gltf.scene.children) node.position.set(0, 0, 0);
-    const placement = dungeonMeshPlacement(request.bounds, GROUND_WIDTH);
-    const template = new THREE.Group();
-    template.rotation.y = placement.rotationY;
-    template.scale.setScalar(placement.scale);
-    template.position.set(placement.x, 0, placement.z);
-    template.add(gltf.scene);
-    template.updateMatrixWorld(true);
-    const caves: DungeonMeshCave[] = [];
-    const liquids: DungeonMeshCave[] = [];
-    gltf.scene.traverse((child) => {
-      const mesh = child as THREE.Mesh;
-      if (!mesh.isMesh) return;
-      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-      if (isLiquid(mesh, gltf.scene)) {
-        // Water planes: translucent, drawn after the cave without writing
-        // depth; tinted when the entry says the liquid is not water.
-        for (const material of materials) {
-          material.transparent = true;
-          material.depthWrite = false;
-          if (request.liquid && "color" in material && material.color instanceof THREE.Color) {
-            material.color.set(request.liquid.color);
-            material.opacity = request.liquid.opacity;
-          }
-        }
-        mesh.renderOrder = 1;
-        liquids.push({ mesh, bvh: new MeshBVH(mesh.geometry), inverse: mesh.matrixWorld.clone().invert() });
-        return;
-      }
-      // Probes use the template's fixed transforms, which every clone shares.
-      caves.push({ mesh, bvh: new MeshBVH(mesh.geometry), inverse: mesh.matrixWorld.clone().invert() });
-    });
-    if (caves.length === 0) return null;
-    const radius = new THREE.Box3().setFromObject(template).getBoundingSphere(new THREE.Sphere()).radius;
-    return { template, caves, liquids, scale: placement.scale, radius };
-  } catch (error) {
-    console.warn("Dungeon mesh unavailable, keeping the map tiles", request.url, error);
-    return null;
-  }
-}
-
-async function createGltfLoader(): Promise<GLTFLoader> {
-  const [{ GLTFLoader }, { MeshoptDecoder }] = await Promise.all([
-    import("three/examples/jsm/loaders/GLTFLoader.js"),
-    import("three/examples/jsm/libs/meshopt_decoder.module.js"),
-  ]);
-  return new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
-}
-
-function disposeModelMaterials(materials: readonly THREE.Material[]) {
-  for (const material of new Set(materials)) {
-    const map = (material as THREE.MeshStandardMaterial).map;
-    map?.dispose();
-    material.dispose();
-  }
-}
-
-// The minis' positions are quantized (KHR_mesh_quantization) with the scale in
-// the node transform; bake that into float positions, float UVs and fresh
-// normals.
-function bakedGeometry(mesh: THREE.Mesh): THREE.BufferGeometry {
-  const source = mesh.geometry.getAttribute("position");
-  const positions = new Float32Array(source.count * 3);
-  const vertex = new THREE.Vector3();
-  const skinned = mesh instanceof THREE.SkinnedMesh ? mesh : null;
-  skinned?.skeleton.update();
-  for (let index = 0; index < source.count; index++) {
-    vertex.fromBufferAttribute(source, index);
-    skinned?.applyBoneTransform(index, vertex);
-    vertex.applyMatrix4(mesh.matrixWorld).toArray(positions, index * 3);
-  }
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-  const uv = mesh.geometry.getAttribute("uv");
-  if (uv) {
-    const uvs = new Float32Array(uv.count * 2);
-    for (let index = 0; index < uv.count; index++) {
-      uvs[index * 2] = uv.getX(index);
-      uvs[index * 2 + 1] = uv.getY(index);
-    }
-    geometry.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
-  }
-  const index = mesh.geometry.getIndex();
-  if (index) geometry.setIndex(new THREE.BufferAttribute(index.array.slice(), 1));
-  geometry.computeVertexNormals();
-  return geometry;
-}
-
-// The mesh's water planes are the `liquid_*` nodes (a multi-primitive node
-// becomes a group of meshes, so check the ancestors too).
-function isLiquid(object: THREE.Object3D, root: THREE.Object3D): boolean {
-  for (let node: THREE.Object3D | null = object; node && node !== root; node = node.parent) {
-    if (/^liquid/i.test(node.name)) return true;
-  }
-  return false;
-}
-
-// 16800 -> "16.8k", 1250000 -> "1.25M", 950 -> "950".
-function shortNumber(value: number): string {
-  if (value >= 1_000_000) return `${+(value / 1_000_000).toFixed(2)}M`;
-  if (value >= 10_000) return `${+(value / 1000).toFixed(1)}k`;
-  return String(Math.round(value));
-}
-
-function createUnitCalloutMarker(callout: MapUnitCallout, onLoad: () => void): THREE.Sprite {
-  const texture = new THREE.TextureLoader().load(raidTargetMarkerImage(callout.marker), onLoad);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false }));
-  sprite.center.set(0.5, 0);
-  sprite.visible = false;
-  sprite.renderOrder = 6;
-  return sprite;
-}
-
-function createLabelSprite(text: string): THREE.Sprite {
-  const scale = 2;
-  const canvas = document.createElement("canvas");
-  const context = canvas.getContext("2d")!;
-  const font = `500 ${11 * scale}px ui-sans-serif, system-ui, sans-serif`;
-  context.font = font;
-  const paddingX = 6 * scale;
-  canvas.width = Math.ceil(context.measureText(text).width + paddingX * 2);
-  canvas.height = 18 * scale;
-  context.font = font;
-  context.fillStyle = "rgba(0, 0, 0, 0.85)";
-  context.beginPath();
-  context.roundRect(0, 0, canvas.width, canvas.height, 4 * scale);
-  context.fill();
-  context.fillStyle = "#ffffff";
-  context.textBaseline = "middle";
-  context.fillText(text, paddingX, canvas.height / 2 + scale);
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true }));
-  const worldHeight = 2.4;
-  sprite.scale.set(worldHeight * canvas.width / canvas.height, worldHeight, 1);
-  sprite.center.set(0.5, 0);
-  sprite.renderOrder = 10;
-  sprite.userData.text = text;
-  return sprite;
-}
-
-// Combat text: coloured, outlined, no background.
-function createTextTexture(text: string, color: string): { texture: THREE.CanvasTexture; aspect: number } {
-  const scale = 2;
-  const canvas = document.createElement("canvas");
-  const context = canvas.getContext("2d")!;
-  const font = `600 ${11 * scale}px ui-sans-serif, system-ui, sans-serif`;
-  context.font = font;
-  const padding = 3 * scale;
-  canvas.width = Math.ceil(context.measureText(text).width + padding * 2);
-  canvas.height = 16 * scale;
-  context.font = font;
-  context.textBaseline = "middle";
-  context.lineJoin = "round";
-  context.lineWidth = 3 * scale;
-  context.strokeStyle = "rgba(0, 0, 0, 0.9)";
-  context.strokeText(text, padding, canvas.height / 2 + scale);
-  context.fillStyle = color;
-  context.fillText(text, padding, canvas.height / 2 + scale);
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return { texture, aspect: canvas.width / canvas.height };
-}
-
-function easeOutCubic(t: number): number {
-  return 1 - (1 - t) ** 3;
-}
-
-// Overshoots past 1 by an amount set by `overshoot`, then settles at 1.
-function easeOutBack(t: number, overshoot: number): number {
-  const x = t - 1;
-  return 1 + (overshoot + 1) * x ** 3 + overshoot * x ** 2;
-}
-
-// A white outline round a square icon, traced `fraction` of the way round
-// clockwise from 12 o'clock. Drawn on a canvas CAST_ARC_SIZE times the icon,
-// about 2 px wide at the icon's on-screen size. A `cut` outline is grey with
-// a red tick across its end.
-function createArcTexture(fraction: number, cut: boolean): THREE.CanvasTexture {
-  const size = 128;
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const context = canvas.getContext("2d")!;
-  const inset = (size * (1 - 1 / CAST_ARC_SIZE)) / 2 - 6;
-  const far = size - inset;
-  const middle = size / 2;
-  const points: [number, number][] = [[middle, inset], [far, inset], [far, far], [inset, far], [inset, inset], [middle, inset]];
-  let remaining = fraction * 4 * (far - inset);
-  let endX = points[0][0];
-  let endY = points[0][1];
-  let alongX = 1;
-  let alongY = 0;
-  context.strokeStyle = cut ? CUT_ARC_COLOR : "#ffffff";
-  context.lineWidth = 8;
-  context.lineCap = "butt";
-  context.lineJoin = "miter";
-  context.beginPath();
-  context.moveTo(...points[0]);
-  for (let index = 1; index < points.length && remaining > 0; index++) {
-    const [fromX, fromY] = points[index - 1];
-    const [toX, toY] = points[index];
-    const length = Math.hypot(toX - fromX, toY - fromY);
-    const part = Math.min(1, remaining / length);
-    endX = fromX + (toX - fromX) * part;
-    endY = fromY + (toY - fromY) * part;
-    alongX = (toX - fromX) / length;
-    alongY = (toY - fromY) / length;
-    context.lineTo(endX, endY);
-    remaining -= length;
-  }
-  context.stroke();
-  if (cut) {
-    // Across the outline, sticking out a little on both sides.
-    context.strokeStyle = CUT_TICK_COLOR;
-    context.lineWidth = 6;
-    context.beginPath();
-    context.moveTo(endX - alongY * 12, endY + alongX * 12);
-    context.lineTo(endX + alongY * 12, endY - alongX * 12);
-    context.stroke();
-  }
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
-}
-
-// A sprite material whose `userData.saturation.value` (1 = colour, 0 = grey)
-// mixes the texel towards its luminance. Every icon sprite has its own
-// material and uniform; the shared cache key compiles one program for all.
-function createIconMaterial(): THREE.SpriteMaterial {
-  const material = new THREE.SpriteMaterial({ depthTest: false, transparent: true });
-  const saturation = { value: 1 };
-  material.userData.saturation = saturation;
-  material.onBeforeCompile = (shader) => {
-    shader.uniforms.uSaturation = saturation;
-    shader.fragmentShader = `uniform float uSaturation;\n${shader.fragmentShader}`.replace(
-      "#include <map_fragment>",
-      "#include <map_fragment>\ndiffuseColor.rgb = mix(vec3(dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722))), diffuseColor.rgb, uSaturation);",
-    );
-  };
-  material.customProgramCacheKey = () => "cast-icon-saturation";
-  return material;
-}
