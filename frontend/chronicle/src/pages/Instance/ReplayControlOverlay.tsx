@@ -39,7 +39,10 @@ import { SlainSchema, type Slain } from "@/api/proto/chronicle_pb";
 import { isPlayerGuidFast } from "./EventsPanels/processors/guidCache";
 import { useReplayToggleKey } from "./replayToggleKey";
 import { ReplayPlayTooltip } from "./ReplayPlayTooltip";
-import { useSyncModeContext, useSyncModeContextOptional } from "./SyncModeContext";
+import { useSyncModeContext, useSyncModeContextOptional, type SyncModeContextValue } from "./SyncModeContext";
+import { syncModeClock } from "./EventsPanels/Map/replayClock";
+import { ReplayScrubber } from "./ReplayScrubber";
+import { deathMarkers, REPLAY_SPEEDS, type ScrubberSource } from "./replayScrubberModel";
 
 export type ReplayPosition = "top" | "bottom";
 
@@ -116,7 +119,13 @@ function formatNumber(n: number): string {
   return n.toLocaleString();
 }
 
-const SPEEDS = [0.25, 0.5, 1, 2, 4];
+/**
+ * The page's Replay as the scrubber's source: the SyncMode clock, but with the
+ * timestamp as SyncMode holds it (the bar has always shown it, Replay on or off).
+ */
+function replayScrubberSource(sync: SyncModeContextValue): ScrubberSource {
+  return { ...syncModeClock(sync), nowMs: sync.currentTimestamp?.getTime() ?? null };
+}
 
 /**
  * Load the timestamps of player deaths from the slain stream.
@@ -174,12 +183,8 @@ function DeathMarkers({
 }) {
   const markers = useMemo(() => {
     if (!bounds) return [];
-    const start = bounds.start.getTime();
-    const total = bounds.end.getTime() - start;
-    if (total <= 0) return [];
-    return deaths
-      .map((d) => (d.getTime() - start) / total)
-      .filter((p) => p >= 0 && p <= 1);
+    const range = { startMs: bounds.start.getTime(), endMs: bounds.end.getTime() };
+    return deathMarkers(deaths, (death) => death.getTime(), range, { outside: "drop" });
   }, [deaths, bounds]);
 
   if (markers.length === 0) return null;
@@ -189,11 +194,11 @@ function DeathMarkers({
   // thumb width (~16px) on each side so markers align with the thumb position.
   return (
     <div className="pointer-events-none absolute -top-3 left-2 right-2 h-3">
-      {markers.map((p, i) => (
+      {markers.map((marker, i) => (
         <Skull
           key={i}
           className="absolute h-3 w-3 -translate-x-1/2 text-red-500/90"
-          style={{ left: `${p * 100}%` }}
+          style={{ left: `${marker.left}%` }}
         />
       ))}
     </div>
@@ -213,7 +218,7 @@ function SpeedChips({
 }) {
   return (
     <div className="flex gap-1">
-      {SPEEDS.map((speed) => (
+      {REPLAY_SPEEDS.map((speed) => (
         <Button
           key={speed}
           variant={value === speed ? "default" : "outline"}
@@ -249,14 +254,6 @@ export function ReplayTransportBar({
   const sync = useSyncModeContextOptional();
   const youtubeActive = sync?.externalDriver === "youtube";
   const controlsDisabled = !sync?.enabled || youtubeActive;
-
-  const progress = useMemo(() => {
-    if (!sync?.encounterBounds || !sync.currentTimestamp) return 0;
-    const start = sync.encounterBounds.start.getTime();
-    const duration = sync.encounterBounds.end.getTime() - start;
-    if (duration <= 0) return 0;
-    return Math.max(0, Math.min(100, ((sync.currentTimestamp.getTime() - start) / duration) * 100));
-  }, [sync]);
 
   const elapsed = useMemo(() => {
     if (!sync?.encounterBounds || !sync.currentTimestamp) return 0;
@@ -301,13 +298,6 @@ export function ReplayTransportBar({
   const handleRestart = () => {
     const timestamp = sync.encounterBounds?.start ?? initialTimestamp;
     if (timestamp) sync.setTimestamp(timestamp);
-  };
-
-  const handleSliderChange = (percent: number) => {
-    if (!sync.encounterBounds) return;
-    const start = sync.encounterBounds.start.getTime();
-    const duration = sync.encounterBounds.end.getTime() - start;
-    sync.setTimestamp(new Date(start + (duration * percent) / 100));
   };
 
   return (
@@ -355,20 +345,15 @@ export function ReplayTransportBar({
         <span className="w-[4.5rem] shrink-0 font-mono text-sm tabular-nums text-primary">
           {formatClockShort(elapsed)}
         </span>
-        <div className="relative min-w-16 flex-1">
+        <ReplayScrubber
+          variant="range"
+          source={replayScrubberSource(sync)}
+          disabled={controlsDisabled || !sync.encounterBounds}
+          className="relative min-w-16 flex-1"
+          ariaLabel="Replay position"
+        >
           <DeathMarkers deaths={deaths} bounds={sync.encounterBounds} />
-          <input
-            type="range"
-            value={progress}
-            min={0}
-            max={100}
-            step={0.1}
-            onChange={(event) => handleSliderChange(Number(event.target.value))}
-            disabled={controlsDisabled || !sync.encounterBounds}
-            className="w-full cursor-pointer accent-primary disabled:cursor-default"
-            aria-label="Replay position"
-          />
-        </div>
+        </ReplayScrubber>
         <SpeedChips
           value={sync.playbackSpeed}
           onChange={sync.setPlaybackSpeed}
@@ -468,16 +453,6 @@ export function ReplayControlOverlay({ initialTimestamp }: ReplayControlOverlayP
     return "play";
   });
 
-  // Calculate progress within encounter bounds
-  const progress = useMemo(() => {
-    if (!sync.encounterBounds || !sync.currentTimestamp) return 0;
-    const { start, end } = sync.encounterBounds;
-    const total = end.getTime() - start.getTime();
-    if (total <= 0) return 0;
-    const current = sync.currentTimestamp.getTime() - start.getTime();
-    return Math.max(0, Math.min(100, (current / total) * 100));
-  }, [sync.encounterBounds, sync.currentTimestamp]);
-
   // Calculate elapsed time within encounter
   const elapsed = useMemo(() => {
     if (!sync.encounterBounds || !sync.currentTimestamp) return 0;
@@ -489,14 +464,6 @@ export function ReplayControlOverlay({ initialTimestamp }: ReplayControlOverlayP
     if (!sync.encounterBounds) return 0;
     return sync.encounterBounds.end.getTime() - sync.encounterBounds.start.getTime();
   }, [sync.encounterBounds]);
-
-  // Handle slider change
-  const handleSliderChange = (percent: number) => {
-    if (!sync.encounterBounds) return;
-    const { start, end } = sync.encounterBounds;
-    const total = end.getTime() - start.getTime();
-    sync.setTimestamp(new Date(start.getTime() + (total * percent) / 100));
-  };
 
   // Restart from encounter start
   const handleRestart = () => {
@@ -556,19 +523,14 @@ export function ReplayControlOverlay({ initialTimestamp }: ReplayControlOverlayP
   );
 
   const scrubber = (extraClass?: string) => (
-    <div className={cn("relative", extraClass)}>
+    <ReplayScrubber
+      variant="range"
+      source={replayScrubberSource(sync)}
+      disabled={controlsDisabled || !sync.encounterBounds}
+      className={cn("relative", extraClass)}
+    >
       <DeathMarkers deaths={deaths} bounds={sync.encounterBounds} />
-      <input
-        type="range"
-        value={progress}
-        min={0}
-        max={100}
-        step={0.1}
-        onChange={(e) => handleSliderChange(parseFloat(e.target.value))}
-        disabled={controlsDisabled || !sync.encounterBounds}
-        className="w-full cursor-pointer accent-primary disabled:cursor-default"
-      />
-    </div>
+    </ReplayScrubber>
   );
 
   const pinnedTop = position === "top";

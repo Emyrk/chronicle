@@ -14,6 +14,8 @@ import { ReplayToggleFlash } from "../../ReplayToggleFlash";
 import { useReplayStepKeys } from "../../replayStepKey";
 import { ReplayPlayTooltip } from "../../ReplayPlayTooltip";
 import { ReplayTransportBar, usePlayerDeathTimes } from "../../ReplayControlOverlay";
+import { ReplayScrubber } from "../../ReplayScrubber";
+import { scrubAria, type ScrubberSource } from "../../replayScrubberModel";
 import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { PortalContainerProvider, usePortalContainer } from "@/components/ui/PortalContainerContext";
 import type { Encounter } from "../../InstancePage";
@@ -102,6 +104,8 @@ function storeMapSource(source: ReplayMapSource) {
 
 /** How often the mini map's preview clock ticks; the 3D view extrapolates between ticks. */
 const PREVIEW_TICK_MS = 250;
+/** How far an arrow key moves the mini map's scrubber. */
+const MINI_KEY_STEP_MS = 5_000;
 
 function readStoredMesh(): boolean | null {
   try {
@@ -222,37 +226,31 @@ function ExpandMapButton({ context, overlay = false, onExpand }: { context: Pane
  * over the "Replay from here" button while the preview shows.
  * `fraction` is how far through the fight it is.
  */
-function MiniScrubber({ fraction, onSeek, raised = false }: { fraction: number; onSeek: (fraction: number) => void; raised?: boolean }) {
-  const percent = Math.min(100, Math.max(0, fraction * 100));
-  const seekAt = (event: React.PointerEvent<HTMLDivElement>) => {
-    const bounds = event.currentTarget.getBoundingClientRect();
-    onSeek(Math.min(1, Math.max(0, (event.clientX - bounds.left) / Math.max(1, bounds.width))));
-  };
+function MiniScrubber({ source, raised = false }: { source: ScrubberSource; raised?: boolean }) {
   return (
-    <div
-      role="slider"
-      aria-label="Seek"
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-valuenow={Math.round(percent)}
-      className={cn("group/scrub absolute left-1/2 z-40 h-3 w-1/2 -translate-x-1/2 cursor-pointer touch-none", raised ? "bottom-[4.25rem]" : "bottom-10")}
-      onPointerDown={(event) => {
-        if (event.button !== 0) return;
-        event.currentTarget.setPointerCapture(event.pointerId);
-        seekAt(event);
-      }}
-      onPointerMove={(event) => {
-        if (event.currentTarget.hasPointerCapture(event.pointerId)) seekAt(event);
-      }}
+    <ReplayScrubber
+      variant="track"
+      source={source}
+      aria={{ label: "Seek", ...scrubAria(source.nowMs, source.bounds, "percent") }}
+      // Arrows step 5 s, Page Up/Down a tenth, Home/End the ends (the clock's seek clamps a preview's end short of its wrap).
+      keyboard={{ stepMs: MINI_KEY_STEP_MS, pageFraction: 0.1 }}
+      className={cn(
+        "group/scrub absolute left-1/2 z-40 h-3 w-1/2 -translate-x-1/2 cursor-pointer touch-none outline-none focus-visible:ring-1 focus-visible:ring-primary/70",
+        raised ? "bottom-[4.25rem]" : "bottom-10",
+      )}
     >
-      <div className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 overflow-hidden rounded-full bg-black/60 shadow-[0_0_0_1px_rgba(255,255,255,.12)] transition-[height] group-hover/scrub:h-1.5">
-        <div className="h-full bg-primary/90" style={{ width: `${percent}%` }} />
-      </div>
-      <div
-        className="pointer-events-none absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary opacity-0 shadow-[0_0_0_2px_rgba(0,0,0,.6)] transition-opacity group-hover/scrub:opacity-100"
-        style={{ left: `${percent}%` }}
-      />
-    </div>
+      {({ percent }) => (
+        <>
+          <div className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 overflow-hidden rounded-full bg-black/60 shadow-[0_0_0_1px_rgba(255,255,255,.12)] transition-[height] group-hover/scrub:h-1.5">
+            <div className="h-full bg-primary/90" style={{ width: `${percent}%` }} />
+          </div>
+          <div
+            className="pointer-events-none absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary opacity-0 shadow-[0_0_0_2px_rgba(0,0,0,.6)] transition-opacity group-hover/scrub:opacity-100"
+            style={{ left: `${percent}%` }}
+          />
+        </>
+      )}
+    </ReplayScrubber>
   );
 }
 
@@ -1093,10 +1091,7 @@ function SingleEncounterReplayMap({
         {compact && (
           <MiniScrubber
             raised={previewOn && Boolean(props.context.onOpenReplay)}
-            fraction={(ready.cursorMs - ready.encounterStartMs) / Math.max(1, ready.encounterEndMs - ready.encounterStartMs)}
-            onSeek={(fraction) => {
-              clock.seek(ready.encounterStartMs + fraction * (ready.encounterEndMs - ready.encounterStartMs));
-            }}
+            source={{ nowMs: ready.cursorMs, bounds: { startMs: ready.encounterStartMs, endMs: ready.encounterEndMs }, seek: clock.seek }}
           />
         )}
         {/* X toggles the replay: flash play or pause over the map, like a video player. */}
