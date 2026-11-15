@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/rivertype"
 )
 
 // HighlightSchedule aligns automatic refreshes to UTC hours, not process startup.
@@ -27,6 +28,9 @@ func AutomaticHighlightDispatch(tenant uuid.UUID, now time.Time) ArgsHighlightDi
 }
 
 // PeriodicHighlightDispatch serves the current hour even if the scheduler is late.
+// The periodic sweep may revisit a tenant whose scheduled nudge already completed.
+// Accept that bounded two-source traversal: freshness checks skip current leaves.
+// Completed jobs do not dedupe, so later admin requests can still repair changes.
 func PeriodicHighlightDispatch(now time.Time) ArgsHighlightDispatch {
 	return ArgsHighlightDispatch{Boundary: now.UTC().Truncate(time.Hour)}
 }
@@ -45,6 +49,9 @@ func (a ArgsHighlightDispatch) InsertOpts() river.InsertOpts {
 
 func (a ArgsHighlightDispatch) insertOpts(now time.Time) river.InsertOpts {
 	opts := insertOptions()
+	// Keep repeated nudges coalesced while a conflicting leaf's page recheck
+	// waits. This is dispatch-only; refresh leaves never retry.
+	opts.UniqueOpts.ByState = append(opts.UniqueOpts.ByState, rivertype.JobStateRetryable)
 	// River marks even past ScheduledAt values as scheduled. Omit the time
 	// once due so periodic and continuation jobs are available immediately.
 	if a.Boundary.After(now) {

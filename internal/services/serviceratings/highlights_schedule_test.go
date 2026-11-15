@@ -133,6 +133,18 @@ func TestHighlightRiverUniqueness(t *testing.T) {
 	}
 	require.Equal(t, 1, inserted)
 	require.Equal(t, rivertype.JobStateScheduled, results[0].Job.State)
+	_, err = pool.Exec(ctx, `UPDATE river_job SET state='retryable',attempted_at=now() WHERE id=$1`, results[0].Job.ID)
+	require.NoError(t, err)
+	retryingID := results[0].Job.ID
+	for i := range results {
+		wg.Go(func() { results[i], errs[i] = client.Insert(ctx, auto, nil) })
+	}
+	wg.Wait()
+	for i, result := range results {
+		require.NoError(t, errs[i])
+		require.True(t, result.UniqueSkippedAsDuplicate)
+		require.Equal(t, retryingID, result.Job.ID)
+	}
 	periodic, err := client.Insert(ctx, PeriodicHighlightDispatch(time.Now().Add(-time.Minute)), nil)
 	require.NoError(t, err)
 	require.Equal(t, rivertype.JobStateAvailable, periodic.Job.State)
