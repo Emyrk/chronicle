@@ -83,7 +83,7 @@ func debugInput(id string, b []byte) CompleteFile {
 // parseDebugSession uses the same logical file (including ready append parts)
 // and explicit Sidekick order as ordinary parsing. It never treats append chunks
 // as separate complete files. Publication remains exclusively with the worker.
-func (w *WorkerLogParse) parseDebugSession(ctx context.Context, format database.LogFormat, files []database.LogFile, artifacts []database.LogGroupArtifact, db gamedb.GameDB, reg *registry.Registry, preloaded []byte, realm string) (*parseResult, error) {
+func (w *parseCompute) parseDebugSession(ctx context.Context, format database.LogFormat, files []database.LogFile, artifacts []database.LogGroupArtifact, db gamedb.GameDB, reg *registry.Registry, preloaded []byte, realm string) (*parseResult, error) {
 	identity, ok := snapshot.FromContext(ctx)
 	if !ok {
 		return nil, fmt.Errorf("debug snapshot requires authoritative parse identity")
@@ -91,8 +91,8 @@ func (w *WorkerLogParse) parseDebugSession(ctx context.Context, format database.
 	if len(files) != 1 {
 		return nil, fmt.Errorf("debug snapshot requires one logical file")
 	}
-	logger := w.parent.logger
-	if !w.parent.EmitParsingLogs() {
+	logger := w.logger
+	if !w.emitParsingLogs {
 		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
 	start := time.Now()
@@ -112,7 +112,7 @@ func (w *WorkerLogParse) parseDebugSession(ctx context.Context, format database.
 			if a.Kind != ArtifactKindSidekickStorage {
 				continue
 			}
-			payload, err := w.parent.Storage.DownloadFile(ctx, BucketRaidLogs, a.ObjectKey)
+			payload, err := w.storage.DownloadFile(ctx, BucketRaidLogs, a.ObjectKey)
 			if err != nil {
 				return nil, fmt.Errorf("load debug Sidekick input: %w", err)
 			}

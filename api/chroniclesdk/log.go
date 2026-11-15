@@ -264,6 +264,9 @@ type WoWLogGroupState struct {
 	WoWLogGroup
 
 	Status JobStatus `json:"status"`
+	// PublicationPending includes native parsing and accepted checkpoints that
+	// have not yet been published. A completed parse job is not publication.
+	PublicationPending bool `json:"publication_pending"`
 }
 
 type WoWParsedLogJobOutput struct {
@@ -391,12 +394,15 @@ type WoWAttendanceInstance struct {
 
 type WoWParsedInstance struct {
 	WoWInstance
-	RealmName      string                        `json:"realm_name,omitempty"`
-	Encounters     []WoWEncounterWithHostiles    `json:"encounters"`
-	Units          map[GUIDString]InstanceUnit   `json:"units"`
-	NamesByEntry   map[uint32]string             `json:"names_by_entry,omitempty"`
-	SummonsByOwner map[GUIDString][]GUIDString   `json:"summons_by_owner,omitempty"`
-	Players        map[GUIDString]InstancePlayer `json:"players"`
+	// PublicationPending signals replacement work for this instance's parent log.
+	// Exposed with public instance metadata; no private log-group access is needed.
+	PublicationPending bool                          `json:"publication_pending"`
+	RealmName          string                        `json:"realm_name,omitempty"`
+	Encounters         []WoWEncounterWithHostiles    `json:"encounters"`
+	Units              map[GUIDString]InstanceUnit   `json:"units"`
+	NamesByEntry       map[uint32]string             `json:"names_by_entry,omitempty"`
+	SummonsByOwner     map[GUIDString][]GUIDString   `json:"summons_by_owner,omitempty"`
+	Players            map[GUIDString]InstancePlayer `json:"players"`
 }
 
 // SpeedrunRequirement describes one rule for a valid speedrun.

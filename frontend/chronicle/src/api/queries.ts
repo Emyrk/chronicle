@@ -1480,8 +1480,8 @@ export function useInstance(instanceId: string, options?: Omit<UseQueryOptions<W
   return useQuery({
     queryKey: ["instance", instanceId],
     retry: false,
-    queryFn: async () => {
-      const response = await fetch(`/api/v1/raidlogs/instances/${instanceId}`);
+    queryFn: async ({ signal }) => {
+      const response = await fetch(`/api/v1/raidlogs/instances/${instanceId}`, { signal });
       if (!response.ok) throw new Error("Failed to fetch instance");
       return response.json() as Promise<WoWParsedInstance>;
     },

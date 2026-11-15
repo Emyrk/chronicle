@@ -3325,6 +3325,35 @@ type ParsedLogGroup struct {
 	FinalizedAt     pgtype.Timestamptz `db:"finalized_at" json:"finalized_at"`
 }
 
+type ParserCheckpointAttempt struct {
+	AttemptID            uuid.UUID          `db:"attempt_id" json:"attempt_id"`
+	LogGroupID           uuid.UUID          `db:"log_group_id" json:"log_group_id"`
+	Generation           int64              `db:"generation" json:"generation"`
+	Iteration            int64              `db:"iteration" json:"iteration"`
+	PredecessorAttemptID uuid.NullUUID      `db:"predecessor_attempt_id" json:"predecessor_attempt_id"`
+	ProducingBinary      string             `db:"producing_binary" json:"producing_binary"`
+	DatasetIdentity      []byte             `db:"dataset_identity" json:"dataset_identity"`
+	InputIdentity        []byte             `db:"input_identity" json:"input_identity"`
+	ParserEngine         string             `db:"parser_engine" json:"parser_engine"`
+	ObjectKey            string             `db:"object_key" json:"object_key"`
+	ObjectDigest         string             `db:"object_digest" json:"object_digest"`
+	AcceptedAt           pgtype.Timestamptz `db:"accepted_at" json:"accepted_at"`
+}
+
+type ParserHandoff struct {
+	LogGroupID           uuid.UUID          `db:"log_group_id" json:"log_group_id"`
+	Generation           int64              `db:"generation" json:"generation"`
+	NativeEnabled        bool               `db:"native_enabled" json:"native_enabled"`
+	HeadIteration        int64              `db:"head_iteration" json:"head_iteration"`
+	HeadAttemptID        uuid.NullUUID      `db:"head_attempt_id" json:"head_attempt_id"`
+	ParseLeaseToken      uuid.NullUUID      `db:"parse_lease_token" json:"parse_lease_token"`
+	ParseLeaseExpiresAt  pgtype.Timestamptz `db:"parse_lease_expires_at" json:"parse_lease_expires_at"`
+	PublishedIteration   int64              `db:"published_iteration" json:"published_iteration"`
+	PublicationIteration int64              `db:"publication_iteration" json:"publication_iteration"`
+	PublicationToken     uuid.NullUUID      `db:"publication_token" json:"publication_token"`
+	PublicationExpiresAt pgtype.Timestamptz `db:"publication_expires_at" json:"publication_expires_at"`
+}
+
 type ProofRequest struct {
 	ID                    uuid.UUID          `db:"id" json:"id"`
 	ApplicantID           uuid.UUID          `db:"applicant_id" json:"applicant_id"`

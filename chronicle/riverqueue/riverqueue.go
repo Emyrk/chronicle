@@ -41,6 +41,10 @@ type Options struct {
 
 	LogParsingWorkers int
 	InsertOnly        bool
+	// ExplicitQueues suppresses the default five-worker queue.
+	ExplicitQueues bool
+	// DisableUI avoids starting an HTTP UI in headless processes.
+	DisableUI bool
 }
 type Queues struct {
 	*river.Client[pgx.Tx]
@@ -60,13 +64,15 @@ func New(_ context.Context, opts Options) (*Queues, error) {
 	if registry == nil {
 		registry = prometheus.NewRegistry()
 	}
+	queues := map[string]river.QueueConfig{}
+	if !opts.ExplicitQueues {
+		queues[river.QueueDefault] = river.QueueConfig{MaxWorkers: 5}
+	}
 	return &Queues{
-		UI:      nil,
-		opts:    opts,
-		workers: river.NewWorkers(),
-		queues: map[string]river.QueueConfig{
-			river.QueueDefault: {MaxWorkers: 5},
-		},
+		UI:       nil,
+		opts:     opts,
+		workers:  river.NewWorkers(),
+		queues:   queues,
 		registry: registry,
 		metrics:  newRiverMetrics(registry),
 	}, nil
@@ -156,6 +162,10 @@ func (q *Queues) Start(ctx context.Context) error {
 		}()
 	}
 
+	q.Client = riverClient
+	if q.opts.DisableUI {
+		return nil
+	}
 	riverUI, err := webUI(ctx, q.opts.Logger, riverClient)
 	if err != nil {
 		return err

@@ -273,6 +273,13 @@ func (api *API) Instance(w http.ResponseWriter, r *http.Request) {
 	}
 
 	out := db2sdk.WowDecoratedInstance(inst, units, players, encounters, fights, phases)
+	// Instance middleware already authorized this exact instance. Resolve only its
+	// associated log's pending signal without requiring private log-group access.
+	out.PublicationPending, err = api.Chronicle.NativePublicationPending(ctx, inst.LogGroupID)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
 	setDifficulties(&out.WoWInstance)
 	setDataset(&out.WoWInstance)
 	httpapi.Write(ctx, w, http.StatusOK, out)

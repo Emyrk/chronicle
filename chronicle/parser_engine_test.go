@@ -1,6 +1,7 @@
 package chronicle
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -58,7 +59,7 @@ func TestNormalWorkerEngineIsPerJob(t *testing.T) {
 	worker := c.NewWorkerLogParse().(*WorkerLogParse)
 	job := &river.Job[ArgsLogParse]{JobRow: &rivertype.JobRow{Attempt: 1, MaxAttempts: 5}, Args: ArgsLogParse{LogID: id, ParseGeneration: 1, ParserEngine: chroniclesdk.ParserEngineNext, Replacement: true}}
 	for range 2 {
-		require.ErrorContains(t, worker.Work(ctx, job), "does not support format")
+		require.ErrorContains(t, worker.Work(ctx, job), "lacks immutable producing build")
 	}
 	require.Empty(t, worker.parserEngine, "job selection must not mutate shared worker")
 	_, err := db.GetParsedLogGroupByID(ctx, id)
@@ -88,18 +89,25 @@ func TestParserEngineDurableEnqueueAndReparse(t *testing.T) {
 	retried, err := client.JobRetry(ctx, inserted.Job.ID)
 	require.NoError(t, err)
 	require.Equal(t, inserted.Job.EncodedArgs, retried.EncodedArgs)
-	reparse, err := c.enqueueReParseLog(ctx, db, nil, group.ID, false, false, false, uuid.Nil, chroniclesdk.ParserEngineNext)
+	var reparse *rivertype.JobInsertResult
+	err = db.InTx(ctx, func(tx database.Store) error {
+		pgxTx, ok := database.PGXTx(tx)
+		require.True(t, ok)
+		var err error
+		reparse, err = c.enqueueReParseLog(ctx, tx, pgxTx, group.ID, false, false, false, uuid.Nil, chroniclesdk.ParserEngineNext)
+		return err
+	}, nil)
 	require.NoError(t, err)
-	var args ArgsLogReparse
+	var args ArgsNativeLogParse
 	require.NoError(t, json.Unmarshal(reparse.Job.EncodedArgs, &args))
 	require.Equal(t, chroniclesdk.ParserEngineNext, args.ParserEngine)
-	worker := c.NewWorkerReLogParse()
-	require.NoError(t, worker.Work(ctx, &river.Job[ArgsLogReparse]{JobRow: reparse.Job, Args: args}))
+	require.NotEmpty(t, args.BinaryIdentity)
+	require.NotEqual(t, uuid.Nil, args.RequestID)
 	jobs, err := c.ListLogGroupJobs(ctx, group.ID)
 	require.NoError(t, err)
 	found := false
 	for _, job := range jobs.Jobs {
-		if job.Kind != KindLogParse {
+		if job.Kind != KindNativeLogParse {
 			continue
 		}
 		var got ArgsLogParse
@@ -111,6 +119,25 @@ func TestParserEngineDurableEnqueueAndReparse(t *testing.T) {
 		}
 	}
 	require.True(t, found, "reparse must durably stage a native replacement parse")
+	// Appending preserves generation but must enqueue distinct work even when
+	// a worker could already have frozen the previous prefix.
+	appendOnce := func(ctx context.Context) *rivertype.JobInsertResult {
+		var result *rivertype.JobInsertResult
+		err := db.InTx(ctx, func(tx database.Store) error {
+			pgxTx, ok := database.PGXTx(tx)
+			require.True(t, ok)
+			var err error
+			result, err = c.enqueueAppendParse(ctx, tx, pgxTx, group.ID, uuid.Nil)
+			return err
+		}, nil)
+		require.NoError(t, err)
+		return result
+	}
+	firstAppend, secondAppend := appendOnce(ctx), appendOnce(ctx)
+	require.NotEqual(t, firstAppend.Job.ID, secondAppend.Job.ID)
+	var appendArgs ArgsNativeLogParse
+	require.NoError(t, json.Unmarshal(secondAppend.Job.EncodedArgs, &appendArgs))
+	require.Equal(t, args.ParseGeneration, appendArgs.ParseGeneration)
 	// A fresh request does not inherit an earlier attempt's selection.
 	legacy, err := c.enqueueReParseLog(ctx, db, nil, group.ID, false, false, false, uuid.Nil)
 	require.NoError(t, err)

@@ -7983,10 +7983,20 @@ export interface WoWLogGroup {
 // From chroniclesdk/log.go
 export interface WoWLogGroupState extends WoWLogGroup {
     readonly status: JobStatus;
+    /**
+     * PublicationPending includes native parsing and accepted checkpoints that
+     * have not yet been published. A completed parse job is not publication.
+     */
+    readonly publication_pending: boolean;
 }
 
 // From chroniclesdk/log.go
 export interface WoWParsedInstance extends WoWInstance {
+    /**
+     * PublicationPending signals replacement work for this instance's parent log.
+     * Exposed with public instance metadata; no private log-group access is needed.
+     */
+    readonly publication_pending: boolean;
     readonly realm_name?: string;
     readonly encounters: readonly WoWEncounterWithHostiles[];
     readonly units: Record<string, InstanceUnit>;

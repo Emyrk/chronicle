@@ -104,6 +104,8 @@ func (s *Service) Start(ctx context.Context) error {
 	q.AddQueue(riverqueue.QueueLogParsing, river.QueueConfig{
 		MaxWorkers: int(s.logParsingWorkers),
 	})
+	q.AddQueue(chronicle.QueueNativeLogParsing, river.QueueConfig{MaxWorkers: int(s.logParsingWorkers)})
+	q.AddQueue(chronicle.QueueLogFinalizing, river.QueueConfig{MaxWorkers: int(s.logParsingWorkers)})
 	q.AddQueue(riverqueue.QueueDiscordSync, river.QueueConfig{
 		MaxWorkers: 2,
 	})
@@ -112,6 +114,13 @@ func (s *Service) Start(ctx context.Context) error {
 	})
 
 	riverqueue.AddWorker(q, &serviceeventrepair.Worker{Service: serviceeventrepair.New(servicedbstore.DatabaseStore(s.broker), q)})
+	nativeWorker, err := chron.NewWorkerNativeLogParse(pool)
+	if err != nil {
+		return fmt.Errorf("create native parser worker: %w", err)
+	}
+	riverqueue.AddWorker(q, nativeWorker)
+	riverqueue.AddWorker(q, chron.NewWorkerFinalizeLogParse())
+	riverqueue.AddWorker(q, chron.NewWorkerNativeCheckpointGC())
 	riverqueue.AddWorker(q, chron.NewWorkerLogParse())
 	riverqueue.AddWorker(q, chron.NewWorkerReLogParse())
 	riverqueue.AddWorker(q, chron.NewWorkerRegressionSnapshot())

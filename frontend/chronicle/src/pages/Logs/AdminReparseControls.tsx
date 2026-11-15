@@ -1,3 +1,5 @@
+import { Flame } from "lucide-react";
+import { DropdownMenuItem } from "@/components/ui/DropdownMenu/DropdownMenu";
 import type { ReactNode } from "react";
 import type { ParserEngine } from "@/api/typesGenerated";
 import { ParserEnginePicker } from "../Upload/ParserEnginePicker";
@@ -35,4 +37,13 @@ export function AdminReparseControls({ hasAdminLogs = false, canReparse, parserE
       </details>
     </section>
   );
+}
+
+
+export function AdminProfileMenuItem({ parserEngine, onSelect }: { parserEngine: ParserEngine; onSelect: () => void }) {
+  const requiresLegacy = parserEngine !== "legacy";
+  return <DropdownMenuItem disabled={requiresLegacy} onSelect={requiresLegacy ? undefined : onSelect} className="flex flex-col items-start gap-1">
+    <span className="flex items-center"><Flame className="h-4 w-4 mr-2 text-orange-500" />Reparse (CPU Profile)</span>
+    {requiresLegacy && <span className="text-xs">CPU profiling currently requires Legacy</span>}
+  </DropdownMenuItem>;
 }

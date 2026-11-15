@@ -86,7 +86,7 @@ type parseTimingReport struct {
 // preloadedFirst is optional pre-loaded data for files[0] (from the realm
 // pre-scan). When non-nil, the first file is read from this buffer instead
 // of re-downloading from object storage.
-func (w *WorkerLogParse) parseCombatLog(
+func (w *parseCompute) parseCombatLog(
 	ctx context.Context,
 	logFormat database.LogFormat,
 	files []database.LogFile,
@@ -103,8 +103,8 @@ func (w *WorkerLogParse) parseCombatLog(
 			return nil, err
 		}
 	}
-	logLogger := w.parent.logger
-	if !w.parent.EmitParsingLogs() {
+	logLogger := w.logger
+	if !w.emitParsingLogs {
 		logLogger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
 
@@ -208,7 +208,7 @@ func (w *WorkerLogParse) parseCombatLog(
 				}
 			}
 			if len(sidekickArtifacts) > 0 {
-				sidekickSource = newSidekickArtifactSource(w.parent.Storage, w.parent.logger, sidekickArtifacts)
+				sidekickSource = newSidekickArtifactSource(w.storage, w.logger, sidekickArtifacts)
 				parseSource = messagesource.NewInserter(parseSource, sidekickSource)
 			}
 		}

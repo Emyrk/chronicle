@@ -121,7 +121,7 @@ describe("LogDetailView admin tool placement", () => {
       <QueryClientProvider client={new QueryClient()}>
         <MemoryRouter>
           <LogDetailView
-            log={{ id: artifact.log_group_id, owner: "owner", log_type: "vanilla", upload_source: "web", unlisted: false, raw_files_pinned: false, parsed_bytes: 0, created_at: artifact.created_at, updated_at: artifact.updated_at, files: [], status: { id: 1, state: "completed", kind: "log-parse", attempt: 1, max_attempts: 5, created_at: artifact.created_at, scheduled_at: artifact.created_at, attempted_at: null, finalized_at: null, errors: [], output: {} } }}
+            log={{ id: artifact.log_group_id, publication_pending: false, owner: "owner", log_type: "vanilla", upload_source: "web", unlisted: false, raw_files_pinned: false, parsed_bytes: 0, created_at: artifact.created_at, updated_at: artifact.updated_at, files: [], status: { id: 1, state: "completed", kind: "log-parse", attempt: 1, max_attempts: 5, created_at: artifact.created_at, scheduled_at: artifact.created_at, attempted_at: null, finalized_at: null, errors: [], output: {} } }}
             logLoading={false} logError={null} onDelete={noop} isDeleting={false} showDeleteConfirm={false} setShowDeleteConfirm={noop}
             onReparse={noop} isReparsing={false} canReparse canProfile={hasAdminLogs}
             onDeleteFiles={noop} isDeletingFiles={false} canDeleteFiles={false} canDownloadFiles={false}

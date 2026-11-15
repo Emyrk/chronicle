@@ -3270,6 +3270,53 @@ CREATE TABLE parse_variant_results (
     CONSTRAINT parse_variant_results_metric_check CHECK ((metric = ANY (ARRAY['dps'::text, 'hps'::text])))
 );
 
+CREATE TABLE parser_checkpoint_attempts (
+    attempt_id uuid NOT NULL,
+    log_group_id uuid NOT NULL,
+    generation bigint NOT NULL,
+    iteration bigint NOT NULL,
+    predecessor_attempt_id uuid,
+    producing_binary text NOT NULL,
+    dataset_identity jsonb NOT NULL,
+    input_identity jsonb NOT NULL,
+    parser_engine text NOT NULL,
+    object_key text NOT NULL,
+    object_digest text NOT NULL,
+    accepted_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    CONSTRAINT parser_checkpoint_attempts_check CHECK (((iteration = 1) = (predecessor_attempt_id IS NULL))),
+    CONSTRAINT parser_checkpoint_attempts_dataset_identity_check CHECK ((jsonb_typeof(dataset_identity) = 'object'::text)),
+    CONSTRAINT parser_checkpoint_attempts_generation_check CHECK ((generation > 0)),
+    CONSTRAINT parser_checkpoint_attempts_input_identity_check CHECK ((jsonb_typeof(input_identity) = 'object'::text)),
+    CONSTRAINT parser_checkpoint_attempts_iteration_check CHECK ((iteration > 0)),
+    CONSTRAINT parser_checkpoint_attempts_object_digest_check CHECK ((object_digest <> ''::text)),
+    CONSTRAINT parser_checkpoint_attempts_object_key_check CHECK ((object_key <> ''::text)),
+    CONSTRAINT parser_checkpoint_attempts_parser_engine_check CHECK ((parser_engine <> ''::text)),
+    CONSTRAINT parser_checkpoint_attempts_producing_binary_check CHECK ((producing_binary <> ''::text))
+);
+
+CREATE TABLE parser_handoffs (
+    log_group_id uuid NOT NULL,
+    generation bigint DEFAULT 1 NOT NULL,
+    native_enabled boolean DEFAULT true NOT NULL,
+    head_iteration bigint DEFAULT 0 NOT NULL,
+    head_attempt_id uuid,
+    parse_lease_token uuid,
+    parse_lease_expires_at timestamp with time zone,
+    published_iteration bigint DEFAULT 0 NOT NULL,
+    publication_iteration bigint DEFAULT 0 NOT NULL,
+    publication_token uuid,
+    publication_expires_at timestamp with time zone,
+    CONSTRAINT parser_handoffs_check CHECK (((head_iteration = 0) = (head_attempt_id IS NULL))),
+    CONSTRAINT parser_handoffs_check1 CHECK (((parse_lease_token IS NULL) = (parse_lease_expires_at IS NULL))),
+    CONSTRAINT parser_handoffs_check2 CHECK (((publication_token IS NULL) = (publication_expires_at IS NULL))),
+    CONSTRAINT parser_handoffs_check3 CHECK ((published_iteration <= publication_iteration)),
+    CONSTRAINT parser_handoffs_check4 CHECK ((publication_iteration <= head_iteration)),
+    CONSTRAINT parser_handoffs_generation_check CHECK ((generation > 0)),
+    CONSTRAINT parser_handoffs_head_iteration_check CHECK ((head_iteration >= 0)),
+    CONSTRAINT parser_handoffs_publication_iteration_check CHECK ((publication_iteration >= 0)),
+    CONSTRAINT parser_handoffs_published_iteration_check CHECK ((published_iteration >= 0))
+);
+
 CREATE TABLE proof_request_subjects (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     request_id uuid NOT NULL,
@@ -4744,6 +4791,21 @@ ALTER TABLE ONLY parse_variant_results
 ALTER TABLE ONLY parsed_log_group
     ADD CONSTRAINT parsed_log_group_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY parser_checkpoint_attempts
+    ADD CONSTRAINT parser_checkpoint_attempts_log_group_id_attempt_id_key UNIQUE (log_group_id, attempt_id);
+
+ALTER TABLE ONLY parser_checkpoint_attempts
+    ADD CONSTRAINT parser_checkpoint_attempts_log_group_id_iteration_attempt_i_key UNIQUE (log_group_id, iteration, attempt_id);
+
+ALTER TABLE ONLY parser_checkpoint_attempts
+    ADD CONSTRAINT parser_checkpoint_attempts_log_group_id_iteration_key UNIQUE (log_group_id, iteration);
+
+ALTER TABLE ONLY parser_checkpoint_attempts
+    ADD CONSTRAINT parser_checkpoint_attempts_pkey PRIMARY KEY (attempt_id);
+
+ALTER TABLE ONLY parser_handoffs
+    ADD CONSTRAINT parser_handoffs_pkey PRIMARY KEY (log_group_id);
+
 ALTER TABLE ONLY proof_request_subjects
     ADD CONSTRAINT proof_request_subjects_pkey PRIMARY KEY (id);
 
@@ -5973,6 +6035,18 @@ ALTER TABLE ONLY parse_variant_results
 
 ALTER TABLE ONLY parsed_log_group
     ADD CONSTRAINT parsed_log_group_id_fkey FOREIGN KEY (id) REFERENCES wow_log_groups(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY parser_checkpoint_attempts
+    ADD CONSTRAINT parser_checkpoint_attempts_log_group_id_fkey FOREIGN KEY (log_group_id) REFERENCES parser_handoffs(log_group_id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY parser_checkpoint_attempts
+    ADD CONSTRAINT parser_checkpoint_attempts_log_group_id_predecessor_attemp_fkey FOREIGN KEY (log_group_id, predecessor_attempt_id) REFERENCES parser_checkpoint_attempts(log_group_id, attempt_id);
+
+ALTER TABLE ONLY parser_handoffs
+    ADD CONSTRAINT parser_handoffs_head_fk FOREIGN KEY (log_group_id, head_iteration, head_attempt_id) REFERENCES parser_checkpoint_attempts(log_group_id, iteration, attempt_id);
+
+ALTER TABLE ONLY parser_handoffs
+    ADD CONSTRAINT parser_handoffs_log_group_id_fkey FOREIGN KEY (log_group_id) REFERENCES wow_log_groups(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY proof_request_subjects
     ADD CONSTRAINT proof_request_subjects_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES guilds(id);

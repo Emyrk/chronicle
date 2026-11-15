@@ -35,8 +35,9 @@ func (c *Chronicle) storeParserSnapshot(ctx context.Context, groupID uuid.UUID, 
 	id := uuid.New()
 	key := c.artifactPath(groupID, id)
 	committed := false
+	_, nativePublication := ctx.Value(publicationContextKey{}).(ParsePublicationFence)
 	defer func() {
-		if !committed {
+		if !committed && !nativePublication {
 			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
 			defer cancel()
 			_, _ = c.Storage.RemoveFile(cleanupCtx, BucketRaidLogs, []string{key})
@@ -48,7 +49,7 @@ func (c *Chronicle) storeParserSnapshot(ctx context.Context, groupID uuid.UUID, 
 	sum := sha256.Sum256(contents.Bytes())
 	now := database.Timestamptz(time.Now())
 	var old []database.LogGroupArtifact
-	err := c.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
+	err := c.parsePublicationTx(ctx, false, func(tx *authz.AuthzTX) error {
 		current, err := tx.LockWoWLogGroupParseGeneration(ctx, groupID)
 		if err != nil {
 			return err

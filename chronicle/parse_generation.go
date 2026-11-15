@@ -120,6 +120,15 @@ func advanceParseGeneration(ctx context.Context, db database.Store, logID uuid.U
 	if err != nil {
 		return 0, err
 	}
+	// Keep any durable native handoff in the same generation authority, even
+	// when the explicit reparse switches back to the legacy engine.
+	if _, err := db.GetParserHandoff(ctx, logID); err == nil {
+		if _, err := db.AdvanceParserHandoffGeneration(ctx, database.AdvanceParserHandoffGenerationParams{LogGroupID: logID, ExpectedGeneration: generation - 1}); err != nil {
+			return 0, fmt.Errorf("advance handoff generation: %w", err)
+		}
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return 0, err
+	}
 	if clearParsed {
 		identities, err := db.RankingRunIdentitiesByLogGroupID(ctx, logID)
 		if err != nil {
@@ -150,7 +159,7 @@ func fenceParseGenerationPreservingFinalized(ctx context.Context, db database.St
 }
 
 func (c *Chronicle) stageParseGeneration(ctx context.Context, logID uuid.UUID, generation int64, identity *parseIdentityFence) error {
-	return c.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
+	return c.parsePublicationTx(ctx, false, func(tx *authz.AuthzTX) error {
 		if err := tx.AcquireRankingRunRefreshLock(ctx); err != nil {
 			return err
 		}
@@ -184,7 +193,7 @@ func (c *Chronicle) finalizeParseGeneration(ctx context.Context, logID uuid.UUID
 	if catalogue == nil || catalogue.Header.LogGroupID != logID || catalogue.Header.Generation != generation {
 		return fmt.Errorf("catalogue publication identity mismatch")
 	}
-	return c.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
+	return c.parsePublicationTx(ctx, true, func(tx *authz.AuthzTX) error {
 		if err := lockExpectedParseGeneration(ctx, tx, logID, generation); err != nil {
 			return err
 		}

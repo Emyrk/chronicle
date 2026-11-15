@@ -32,6 +32,8 @@ type sqlcQuerier interface {
 	AdvanceLeaderboardOperation(ctx context.Context, arg AdvanceLeaderboardOperationParams) error
 	AdvanceLeaderboardOperationPhase(ctx context.Context, arg AdvanceLeaderboardOperationPhaseParams) error
 	AdvanceLeaderboardOperationScope(ctx context.Context, arg AdvanceLeaderboardOperationScopeParams) error
+	AdvanceParserHandoffGeneration(ctx context.Context, arg AdvanceParserHandoffGenerationParams) (ParserHandoff, error)
+	AdvanceParserHandoffHead(ctx context.Context, arg AdvanceParserHandoffHeadParams) (ParserHandoff, error)
 	AdvanceWoWLogGroupParseGeneration(ctx context.Context, id uuid.UUID) (int64, error)
 	AssignWorldToServer(ctx context.Context, arg AssignWorldToServerParams) error
 	// Offline repair only. Never call this from startup. Use the last inspected ID
@@ -67,6 +69,9 @@ type sqlcQuerier interface {
 	CarryForwardFinalizedParsedLogGroup(ctx context.Context, arg CarryForwardFinalizedParsedLogGroupParams) error
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
 	CensusPlayerCounts(ctx context.Context, arg CensusPlayerCountsParams) ([]CensusPlayerCountsRow, error)
+	// Use after writes in intermediate publication transactions. Zero rows means
+	// roll back ALL writes. A final publication transaction uses Complete instead.
+	CheckParserPublication(ctx context.Context, arg CheckParserPublicationParams) (ParserHandoff, error)
 	ClaimDiscordAnnouncementDelivery(ctx context.Context, id uuid.UUID) (GuildDiscordLogAnnouncement, error)
 	ClaimDueDiscordMembershipGrantChecks(ctx context.Context, arg ClaimDueDiscordMembershipGrantChecksParams) ([]ClaimDueDiscordMembershipGrantChecksRow, error)
 	ClaimLeaderboardCareer(ctx context.Context, tenantID uuid.UUID) (LeaderboardDirtyCareer, error)
@@ -84,6 +89,10 @@ type sqlcQuerier interface {
 	ClaimLeaderboardVariantPlayerBossBenchmark(ctx context.Context, arg ClaimLeaderboardVariantPlayerBossBenchmarkParams) ([]LeaderboardVariantDirtyPlayerBossBenchmark, error)
 	ClaimLeaderboardVariantPlayerBossSubject(ctx context.Context, arg ClaimLeaderboardVariantPlayerBossSubjectParams) ([]LeaderboardVariantDirtyPlayerBossSubject, error)
 	ClaimLuaProjectArtifactGarbage(ctx context.Context, asOf pgtype.Timestamptz) ([]string, error)
+	ClaimParserHandoffLease(ctx context.Context, arg ClaimParserHandoffLeaseParams) (ParserHandoff, error)
+	// Reservation authority is independent of parse head, but an explicit new
+	// generation invalidates prior attempts and tokens. Active claims serialize.
+	ClaimParserPublication(ctx context.Context, arg ClaimParserPublicationParams) (ParserHandoff, error)
 	ClearApplicationReviewsByReviewer(ctx context.Context, userID uuid.NullUUID) error
 	ClearDiscordMembershipGrantCheckClaim(ctx context.Context, arg ClearDiscordMembershipGrantCheckClaimParams) (int64, error)
 	ClearInferenceThreadByOwner(ctx context.Context, arg ClearInferenceThreadByOwnerParams) (InferenceThread, error)
@@ -107,6 +116,7 @@ type sqlcQuerier interface {
 	CompleteInferenceClientToolRequest(ctx context.Context, arg CompleteInferenceClientToolRequestParams) (InferenceClientToolRequest, error)
 	CompleteLeaderboardCareer(ctx context.Context, arg CompleteLeaderboardCareerParams) error
 	CompleteLeaderboardOperation(ctx context.Context, arg CompleteLeaderboardOperationParams) error
+	CompleteParserPublication(ctx context.Context, arg CompleteParserPublicationParams) (ParserHandoff, error)
 	CompleteProofEvidenceCleanup(ctx context.Context, arg CompleteProofEvidenceCleanupParams) error
 	ComputeLeaderboardGuildBossBenchmark(ctx context.Context, arg []ComputeLeaderboardGuildBossBenchmarkParams) *ComputeLeaderboardGuildBossBenchmarkBatchResults
 	ComputeLeaderboardGuildBossSubject(ctx context.Context, arg []ComputeLeaderboardGuildBossSubjectParams) *ComputeLeaderboardGuildBossSubjectBatchResults
@@ -316,6 +326,10 @@ type sqlcQuerier interface {
 	EnqueueLeaderboardVariantPlayerBossSubject(ctx context.Context, arg EnqueueLeaderboardVariantPlayerBossSubjectParams) error
 	EnsureDeploymentToken(ctx context.Context, deploymentToken pgtype.Text) (pgtype.Text, error)
 	EnsureLeaderboardCareerSweep(ctx context.Context, tenantID uuid.UUID) error
+	// Protocol and transaction requirements: database/PARSER_HANDOFF.md.
+	// Caller holds the wow_log_groups row lock and supplies its current
+	// parse_generation as initial_generation in this same transaction.
+	EnsureParserHandoff(ctx context.Context, arg EnsureParserHandoffParams) error
 	ExpireInferenceClientToolRequest(ctx context.Context, arg ExpireInferenceClientToolRequestParams) (InferenceClientToolRequest, error)
 	ExpireStaleInferenceRuns(ctx context.Context) (int64, error)
 	ExpireStaleLogFileParts(ctx context.Context, arg ExpireStaleLogFilePartsParams) ([]LogFilePart, error)
@@ -549,6 +563,8 @@ type sqlcQuerier interface {
 	GetParseVariantMembershipCohort(ctx context.Context, arg GetParseVariantMembershipCohortParams) ([]float64, error)
 	GetParsedBytesByOwner(ctx context.Context, owner uuid.UUID) (GetParsedBytesByOwnerRow, error)
 	GetParsedLogGroupByID(ctx context.Context, id uuid.UUID) (ParsedLogGroup, error)
+	GetParserCheckpointAttempt(ctx context.Context, arg GetParserCheckpointAttemptParams) (ParserCheckpointAttempt, error)
+	GetParserHandoff(ctx context.Context, logGroupID uuid.UUID) (ParserHandoff, error)
 	GetPendingInferenceClientToolRequestByThreadForUpdate(ctx context.Context, arg GetPendingInferenceClientToolRequestByThreadForUpdateParams) (InferenceClientToolRequest, error)
 	GetPlayerGearHistory(ctx context.Context, arg GetPlayerGearHistoryParams) ([]GetPlayerGearHistoryRow, error)
 	// Do not tenant-filter: switching sites must not bypass the account limit.
@@ -769,6 +785,7 @@ type sqlcQuerier interface {
 	InsertParseScoreResult(ctx context.Context, arg InsertParseScoreResultParams) error
 	InsertParseVariantResult(ctx context.Context, arg InsertParseVariantResultParams) error
 	InsertParsedLogGroup(ctx context.Context, id uuid.UUID) error
+	InsertParserCheckpointAttempt(ctx context.Context, arg InsertParserCheckpointAttemptParams) (ParserCheckpointAttempt, error)
 	InsertProofRequest(ctx context.Context, arg InsertProofRequestParams) (ProofRequest, error)
 	InsertProofSubject(ctx context.Context, arg InsertProofSubjectParams) error
 	InsertRegressionFixture(ctx context.Context, arg InsertRegressionFixtureParams) (RegressionFixture, error)
@@ -1026,6 +1043,9 @@ type sqlcQuerier interface {
 	// membership row instead of seeking by encounter.
 	ListParseScoreSpreadValues(ctx context.Context, arg ListParseScoreSpreadValuesParams) ([]ListParseScoreSpreadValuesRow, error)
 	ListParseVariantResultsForInstance(ctx context.Context, arg ListParseVariantResultsForInstanceParams) ([]ParseVariantResult, error)
+	// Explicit log deletion only. Caller holds the log-generation row lock until
+	// object removal and the metadata cascade commit, preventing late acceptance.
+	ListParserCheckpointAttemptsForDeletion(ctx context.Context, arg ListParserCheckpointAttemptsForDeletionParams) ([]ParserCheckpointAttempt, error)
 	ListPendingEventRepairItems(ctx context.Context, arg ListPendingEventRepairItemsParams) ([]EventRepairItem, error)
 	// Receipt-less results are authoritative historical data. Read them without
 	// joining snapshot tables or score memberships so they can never be recomputed.
@@ -1155,6 +1175,11 @@ type sqlcQuerier interface {
 	LockLogFilePartSequence(ctx context.Context, logFileID uuid.UUID) (uuid.UUID, error)
 	// Serializes module creation for one owner so concurrent requests cannot exceed the quota.
 	LockLuaProjectOwner(ctx context.Context, ownerID uuid.UUID) (uuid.UUID, error)
+	// Lock first, then insert, advance, and River enqueue in the SAME transaction.
+	LockParserHandoffForAcceptance(ctx context.Context, arg LockParserHandoffForAcceptanceParams) (ParserHandoff, error)
+	// Must be first operation in EVERY publication transaction. Hold this row lock
+	// through all serving writes and the final token check. No parse-head predicate.
+	LockParserPublication(ctx context.Context, arg LockParserPublicationParams) (ParserHandoff, error)
 	LockPendingProofRequest(ctx context.Context, arg LockPendingProofRequestParams) (ProofRequest, error)
 	// Root-domain site admins only (AdminBypass context).
 	LockPendingProofRequestByID(ctx context.Context, id uuid.UUID) (ProofRequest, error)
@@ -1338,9 +1363,14 @@ type sqlcQuerier interface {
 	RefreshTimeParseClearTimeMembershipsForLogGroup(ctx context.Context, arg RefreshTimeParseClearTimeMembershipsForLogGroupParams) (RefreshTimeParseClearTimeMembershipsForLogGroupRow, error)
 	RegisterLuaProjectUpload(ctx context.Context, objectKey string) error
 	ReleaseAdvisoryLock(ctx context.Context, lockKey int64) (bool, error)
+	ReleaseParserHandoffLease(ctx context.Context, arg ReleaseParserHandoffLeaseParams) (ParserHandoff, error)
+	// Release preserves the high-water iteration, even after expiry or failure.
+	ReleaseParserPublication(ctx context.Context, arg ReleaseParserPublicationParams) (ParserHandoff, error)
 	RememberLeaderboardCareerRunIdentities(ctx context.Context, arg RememberLeaderboardCareerRunIdentitiesParams) error
 	RemoveLeaderboardDirectPlaceholder(ctx context.Context, arg RemoveLeaderboardDirectPlaceholderParams) error
 	RenameSidekickInstallation(ctx context.Context, arg RenameSidekickInstallationParams) (SidekickInstallation, error)
+	RenewParserHandoffLease(ctx context.Context, arg RenewParserHandoffLeaseParams) (ParserHandoff, error)
+	RenewParserPublication(ctx context.Context, arg RenewParserPublicationParams) (ParserHandoff, error)
 	RepairDiscordMembershipGrantChecks(ctx context.Context, arg RepairDiscordMembershipGrantChecksParams) ([]DiscordMembershipGrantCheck, error)
 	RepairOperationGuildBossBenchmarks(ctx context.Context, arg RepairOperationGuildBossBenchmarksParams) (RepairOperationGuildBossBenchmarksRow, error)
 	RepairOperationGuildBossSubjects(ctx context.Context, arg RepairOperationGuildBossSubjectsParams) (RepairOperationGuildBossSubjectsRow, error)
@@ -1435,6 +1465,7 @@ type sqlcQuerier interface {
 	// Leaves updated_at alone: it dates main. A null flavor keeps the current tags.
 	SetLuaProjectSettings(ctx context.Context, arg SetLuaProjectSettingsParams) (LuaProject, error)
 	SetPanelLayoutCode(ctx context.Context, arg SetPanelLayoutCodeParams) (int64, error)
+	SetParserHandoffNativeEnabled(ctx context.Context, arg SetParserHandoffNativeEnabledParams) error
 	SetPrimaryUserCharacter(ctx context.Context, arg SetPrimaryUserCharacterParams) (UserCharacterLink, error)
 	SetResetToken(ctx context.Context, arg SetResetTokenParams) error
 	// Assigns or removes a default dataset from a server.

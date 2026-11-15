@@ -75,6 +75,9 @@ func (w *WorkerLogReparse) Work(ctx context.Context, job *river.Job[ArgsLogRepar
 	if err := job.Args.ParserEngine.Validate(); err != nil {
 		return err
 	}
+	if job.Args.ParserEngine == chroniclesdk.ParserEngineNext {
+		return river.JobCancel(errors.New("native reparse job lacks immutable producing build; explicitly reparse with the current build"))
+	}
 	// Clear the parsed data for the log group and re-initiate parsing
 	db := w.parent.Zed
 	parseGeneration := effectiveParseGeneration(job.Args.ParseGeneration)
@@ -164,6 +167,9 @@ func (c *Chronicle) enqueueReParseLog(ctx context.Context, db database.Store, tx
 	if err != nil {
 		return nil, err
 	}
+	if engine == chroniclesdk.ParserEngineNext && profile {
+		return nil, errNativeProfileUnsupported
+	}
 	group, err := db.GetWoWLogGroupByID(ctx, logID)
 	if err != nil {
 		return nil, err
@@ -180,11 +186,19 @@ func (c *Chronicle) enqueueReParseLog(ctx context.Context, db database.Store, tx
 		return nil, fmt.Errorf("load ranking run identities: %w", err)
 	}
 
-	generation, err := advanceParseGeneration(ctx, db, logID, true)
+	generation, err := advanceParseGeneration(ctx, db, logID, engine != chroniclesdk.ParserEngineNext)
 	if err != nil {
 		return nil, fmt.Errorf("advance parse generation: %w", err)
 	}
 
+	if engine == chroniclesdk.ParserEngineNext {
+		args := newReplacementArgsLogParse(ctx, logID, generation, verbose, identityMode, profile, realmID, rankingRunLogGroupIdentitySeeds(identities))
+		args.ParserEngine = engine
+		return c.enqueueNativeParse(ctx, db, tx, args, nil)
+	}
+	if err := db.SetParserHandoffNativeEnabled(ctx, database.SetParserHandoffNativeEnabledParams{LogGroupID: logID, NativeEnabled: false}); err != nil {
+		return nil, err
+	}
 	if err := c.EnqueueRankingRunRefreshTx(ctx, db, rankingRunLogGroupIdentitySeeds(identities)...); err != nil {
 		return nil, err
 	}
@@ -217,8 +231,8 @@ func (c *Chronicle) ListLogGroupJobs(ctx context.Context, groupID uuid.UUID) (*r
 	opts := river.NewJobListParams().Where(`args->>'log_group_id' = @group_id`, map[string]any{
 		"group_id": groupID.String(),
 	}).
-		Queues(riverqueue.QueueLogParsing).
-		Kinds(KindLogParse, KindLogReparse).
+		Queues(riverqueue.QueueLogParsing, QueueNativeLogParsing, QueueLogFinalizing).
+		Kinds(KindLogParse, KindLogReparse, KindNativeLogParse, KindFinalizeLogParse).
 		OrderBy(river.JobListOrderByScheduledAt, river.SortOrderDesc)
 
 	list, err := c.queue.JobList(ctx, opts)

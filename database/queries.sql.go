@@ -25430,6 +25430,712 @@ func (q *sqlQuerier) BaselineTalentBuilds(ctx context.Context, logGroupID uuid.U
 	return items, nil
 }
 
+const advanceParserHandoffGeneration = `-- name: AdvanceParserHandoffGeneration :one
+UPDATE parser_handoffs
+SET generation = generation + 1, parse_lease_token = NULL, parse_lease_expires_at = NULL,
+    publication_token = NULL, publication_expires_at = NULL
+WHERE log_group_id = $1 AND generation = $2
+RETURNING log_group_id, generation, native_enabled, head_iteration, head_attempt_id, parse_lease_token, parse_lease_expires_at, published_iteration, publication_iteration, publication_token, publication_expires_at
+`
+
+type AdvanceParserHandoffGenerationParams struct {
+	LogGroupID         uuid.UUID `db:"log_group_id" json:"log_group_id"`
+	ExpectedGeneration int64     `db:"expected_generation" json:"expected_generation"`
+}
+
+func (q *sqlQuerier) AdvanceParserHandoffGeneration(ctx context.Context, arg AdvanceParserHandoffGenerationParams) (ParserHandoff, error) {
+	row := q.db.QueryRow(ctx, advanceParserHandoffGeneration, arg.LogGroupID, arg.ExpectedGeneration)
+	var i ParserHandoff
+	err := row.Scan(
+		&i.LogGroupID,
+		&i.Generation,
+		&i.NativeEnabled,
+		&i.HeadIteration,
+		&i.HeadAttemptID,
+		&i.ParseLeaseToken,
+		&i.ParseLeaseExpiresAt,
+		&i.PublishedIteration,
+		&i.PublicationIteration,
+		&i.PublicationToken,
+		&i.PublicationExpiresAt,
+	)
+	return i, err
+}
+
+const advanceParserHandoffHead = `-- name: AdvanceParserHandoffHead :one
+UPDATE parser_handoffs AS h
+SET head_iteration = a.iteration, head_attempt_id = a.attempt_id
+FROM parser_checkpoint_attempts AS a
+WHERE h.log_group_id = $1 AND h.generation = $2
+  AND h.parse_lease_token = $3::uuid
+  AND h.parse_lease_expires_at > clock_timestamp()
+  AND h.head_iteration = $4
+  AND h.head_attempt_id IS NOT DISTINCT FROM $5::uuid
+  AND a.log_group_id = h.log_group_id AND a.generation = h.generation
+  AND a.attempt_id = $6::uuid AND a.iteration = h.head_iteration + 1
+  AND a.predecessor_attempt_id IS NOT DISTINCT FROM h.head_attempt_id
+RETURNING h.log_group_id, h.generation, h.native_enabled, h.head_iteration, h.head_attempt_id, h.parse_lease_token, h.parse_lease_expires_at, h.published_iteration, h.publication_iteration, h.publication_token, h.publication_expires_at
+`
+
+type AdvanceParserHandoffHeadParams struct {
+	LogGroupID           uuid.UUID     `db:"log_group_id" json:"log_group_id"`
+	Generation           int64         `db:"generation" json:"generation"`
+	LeaseToken           uuid.UUID     `db:"lease_token" json:"lease_token"`
+	PredecessorIteration int64         `db:"predecessor_iteration" json:"predecessor_iteration"`
+	PredecessorAttemptID uuid.NullUUID `db:"predecessor_attempt_id" json:"predecessor_attempt_id"`
+	AttemptID            uuid.UUID     `db:"attempt_id" json:"attempt_id"`
+}
+
+func (q *sqlQuerier) AdvanceParserHandoffHead(ctx context.Context, arg AdvanceParserHandoffHeadParams) (ParserHandoff, error) {
+	row := q.db.QueryRow(ctx, advanceParserHandoffHead,
+		arg.LogGroupID,
+		arg.Generation,
+		arg.LeaseToken,
+		arg.PredecessorIteration,
+		arg.PredecessorAttemptID,
+		arg.AttemptID,
+	)
+	var i ParserHandoff
+	err := row.Scan(
+		&i.LogGroupID,
+		&i.Generation,
+		&i.NativeEnabled,
+		&i.HeadIteration,
+		&i.HeadAttemptID,
+		&i.ParseLeaseToken,
+		&i.ParseLeaseExpiresAt,
+		&i.PublishedIteration,
+		&i.PublicationIteration,
+		&i.PublicationToken,
+		&i.PublicationExpiresAt,
+	)
+	return i, err
+}
+
+const checkParserPublication = `-- name: CheckParserPublication :one
+SELECT log_group_id, generation, native_enabled, head_iteration, head_attempt_id, parse_lease_token, parse_lease_expires_at, published_iteration, publication_iteration, publication_token, publication_expires_at FROM parser_handoffs
+WHERE log_group_id = $1 AND generation = $2
+  AND publication_iteration = $3
+  AND publication_iteration > published_iteration
+  AND publication_token = $4::uuid
+  AND publication_expires_at > clock_timestamp()
+FOR UPDATE
+`
+
+type CheckParserPublicationParams struct {
+	LogGroupID       uuid.UUID `db:"log_group_id" json:"log_group_id"`
+	Generation       int64     `db:"generation" json:"generation"`
+	Iteration        int64     `db:"iteration" json:"iteration"`
+	PublicationToken uuid.UUID `db:"publication_token" json:"publication_token"`
+}
+
+// Use after writes in intermediate publication transactions. Zero rows means
+// roll back ALL writes. A final publication transaction uses Complete instead.
+func (q *sqlQuerier) CheckParserPublication(ctx context.Context, arg CheckParserPublicationParams) (ParserHandoff, error) {
+	row := q.db.QueryRow(ctx, checkParserPublication,
+		arg.LogGroupID,
+		arg.Generation,
+		arg.Iteration,
+		arg.PublicationToken,
+	)
+	var i ParserHandoff
+	err := row.Scan(
+		&i.LogGroupID,
+		&i.Generation,
+		&i.NativeEnabled,
+		&i.HeadIteration,
+		&i.HeadAttemptID,
+		&i.ParseLeaseToken,
+		&i.ParseLeaseExpiresAt,
+		&i.PublishedIteration,
+		&i.PublicationIteration,
+		&i.PublicationToken,
+		&i.PublicationExpiresAt,
+	)
+	return i, err
+}
+
+const claimParserHandoffLease = `-- name: ClaimParserHandoffLease :one
+UPDATE parser_handoffs
+SET parse_lease_token = $1::uuid,
+    parse_lease_expires_at = clock_timestamp() + $2::interval
+WHERE log_group_id = $3 AND generation = $4
+  AND $2::interval > interval '0 seconds'
+  AND (parse_lease_token IS NULL OR parse_lease_expires_at <= clock_timestamp())
+RETURNING log_group_id, generation, native_enabled, head_iteration, head_attempt_id, parse_lease_token, parse_lease_expires_at, published_iteration, publication_iteration, publication_token, publication_expires_at
+`
+
+type ClaimParserHandoffLeaseParams struct {
+	LeaseToken    uuid.UUID       `db:"lease_token" json:"lease_token"`
+	LeaseDuration pgtype.Interval `db:"lease_duration" json:"lease_duration"`
+	LogGroupID    uuid.UUID       `db:"log_group_id" json:"log_group_id"`
+	Generation    int64           `db:"generation" json:"generation"`
+}
+
+func (q *sqlQuerier) ClaimParserHandoffLease(ctx context.Context, arg ClaimParserHandoffLeaseParams) (ParserHandoff, error) {
+	row := q.db.QueryRow(ctx, claimParserHandoffLease,
+		arg.LeaseToken,
+		arg.LeaseDuration,
+		arg.LogGroupID,
+		arg.Generation,
+	)
+	var i ParserHandoff
+	err := row.Scan(
+		&i.LogGroupID,
+		&i.Generation,
+		&i.NativeEnabled,
+		&i.HeadIteration,
+		&i.HeadAttemptID,
+		&i.ParseLeaseToken,
+		&i.ParseLeaseExpiresAt,
+		&i.PublishedIteration,
+		&i.PublicationIteration,
+		&i.PublicationToken,
+		&i.PublicationExpiresAt,
+	)
+	return i, err
+}
+
+const claimParserPublication = `-- name: ClaimParserPublication :one
+UPDATE parser_handoffs AS h
+SET publication_iteration = a.iteration,
+    publication_token = $1::uuid,
+    publication_expires_at = clock_timestamp() + $2::interval
+FROM parser_checkpoint_attempts AS a
+WHERE h.log_group_id = $3
+  AND a.log_group_id = h.log_group_id AND a.attempt_id = $4::uuid
+  AND a.generation = h.generation
+  AND a.iteration <= h.head_iteration
+  AND a.iteration > h.published_iteration
+  AND a.iteration >= h.publication_iteration
+  AND $2::interval > interval '0 seconds'
+  AND (h.publication_token IS NULL OR h.publication_expires_at <= clock_timestamp())
+RETURNING h.log_group_id, h.generation, h.native_enabled, h.head_iteration, h.head_attempt_id, h.parse_lease_token, h.parse_lease_expires_at, h.published_iteration, h.publication_iteration, h.publication_token, h.publication_expires_at
+`
+
+type ClaimParserPublicationParams struct {
+	PublicationToken uuid.UUID       `db:"publication_token" json:"publication_token"`
+	LeaseDuration    pgtype.Interval `db:"lease_duration" json:"lease_duration"`
+	LogGroupID       uuid.UUID       `db:"log_group_id" json:"log_group_id"`
+	AttemptID        uuid.UUID       `db:"attempt_id" json:"attempt_id"`
+}
+
+// Reservation authority is independent of parse head, but an explicit new
+// generation invalidates prior attempts and tokens. Active claims serialize.
+func (q *sqlQuerier) ClaimParserPublication(ctx context.Context, arg ClaimParserPublicationParams) (ParserHandoff, error) {
+	row := q.db.QueryRow(ctx, claimParserPublication,
+		arg.PublicationToken,
+		arg.LeaseDuration,
+		arg.LogGroupID,
+		arg.AttemptID,
+	)
+	var i ParserHandoff
+	err := row.Scan(
+		&i.LogGroupID,
+		&i.Generation,
+		&i.NativeEnabled,
+		&i.HeadIteration,
+		&i.HeadAttemptID,
+		&i.ParseLeaseToken,
+		&i.ParseLeaseExpiresAt,
+		&i.PublishedIteration,
+		&i.PublicationIteration,
+		&i.PublicationToken,
+		&i.PublicationExpiresAt,
+	)
+	return i, err
+}
+
+const completeParserPublication = `-- name: CompleteParserPublication :one
+UPDATE parser_handoffs
+SET published_iteration = publication_iteration,
+    publication_token = NULL, publication_expires_at = NULL
+WHERE log_group_id = $1 AND generation = $2
+  AND publication_iteration = $3
+  AND publication_iteration > published_iteration
+  AND publication_token = $4::uuid
+  AND publication_expires_at > clock_timestamp()
+RETURNING log_group_id, generation, native_enabled, head_iteration, head_attempt_id, parse_lease_token, parse_lease_expires_at, published_iteration, publication_iteration, publication_token, publication_expires_at
+`
+
+type CompleteParserPublicationParams struct {
+	LogGroupID       uuid.UUID `db:"log_group_id" json:"log_group_id"`
+	Generation       int64     `db:"generation" json:"generation"`
+	Iteration        int64     `db:"iteration" json:"iteration"`
+	PublicationToken uuid.UUID `db:"publication_token" json:"publication_token"`
+}
+
+func (q *sqlQuerier) CompleteParserPublication(ctx context.Context, arg CompleteParserPublicationParams) (ParserHandoff, error) {
+	row := q.db.QueryRow(ctx, completeParserPublication,
+		arg.LogGroupID,
+		arg.Generation,
+		arg.Iteration,
+		arg.PublicationToken,
+	)
+	var i ParserHandoff
+	err := row.Scan(
+		&i.LogGroupID,
+		&i.Generation,
+		&i.NativeEnabled,
+		&i.HeadIteration,
+		&i.HeadAttemptID,
+		&i.ParseLeaseToken,
+		&i.ParseLeaseExpiresAt,
+		&i.PublishedIteration,
+		&i.PublicationIteration,
+		&i.PublicationToken,
+		&i.PublicationExpiresAt,
+	)
+	return i, err
+}
+
+const ensureParserHandoff = `-- name: EnsureParserHandoff :exec
+
+INSERT INTO parser_handoffs (log_group_id, generation)
+VALUES ($1, $2::bigint)
+ON CONFLICT (log_group_id) DO NOTHING
+`
+
+type EnsureParserHandoffParams struct {
+	LogGroupID        uuid.UUID `db:"log_group_id" json:"log_group_id"`
+	InitialGeneration int64     `db:"initial_generation" json:"initial_generation"`
+}
+
+// Protocol and transaction requirements: database/PARSER_HANDOFF.md.
+// Caller holds the wow_log_groups row lock and supplies its current
+// parse_generation as initial_generation in this same transaction.
+func (q *sqlQuerier) EnsureParserHandoff(ctx context.Context, arg EnsureParserHandoffParams) error {
+	_, err := q.db.Exec(ctx, ensureParserHandoff, arg.LogGroupID, arg.InitialGeneration)
+	return err
+}
+
+const getParserCheckpointAttempt = `-- name: GetParserCheckpointAttempt :one
+SELECT attempt_id, log_group_id, generation, iteration, predecessor_attempt_id, producing_binary, dataset_identity, input_identity, parser_engine, object_key, object_digest, accepted_at FROM parser_checkpoint_attempts
+WHERE log_group_id = $1 AND attempt_id = $2::uuid
+`
+
+type GetParserCheckpointAttemptParams struct {
+	LogGroupID uuid.UUID `db:"log_group_id" json:"log_group_id"`
+	AttemptID  uuid.UUID `db:"attempt_id" json:"attempt_id"`
+}
+
+func (q *sqlQuerier) GetParserCheckpointAttempt(ctx context.Context, arg GetParserCheckpointAttemptParams) (ParserCheckpointAttempt, error) {
+	row := q.db.QueryRow(ctx, getParserCheckpointAttempt, arg.LogGroupID, arg.AttemptID)
+	var i ParserCheckpointAttempt
+	err := row.Scan(
+		&i.AttemptID,
+		&i.LogGroupID,
+		&i.Generation,
+		&i.Iteration,
+		&i.PredecessorAttemptID,
+		&i.ProducingBinary,
+		&i.DatasetIdentity,
+		&i.InputIdentity,
+		&i.ParserEngine,
+		&i.ObjectKey,
+		&i.ObjectDigest,
+		&i.AcceptedAt,
+	)
+	return i, err
+}
+
+const getParserHandoff = `-- name: GetParserHandoff :one
+SELECT log_group_id, generation, native_enabled, head_iteration, head_attempt_id, parse_lease_token, parse_lease_expires_at, published_iteration, publication_iteration, publication_token, publication_expires_at FROM parser_handoffs WHERE log_group_id = $1
+`
+
+func (q *sqlQuerier) GetParserHandoff(ctx context.Context, logGroupID uuid.UUID) (ParserHandoff, error) {
+	row := q.db.QueryRow(ctx, getParserHandoff, logGroupID)
+	var i ParserHandoff
+	err := row.Scan(
+		&i.LogGroupID,
+		&i.Generation,
+		&i.NativeEnabled,
+		&i.HeadIteration,
+		&i.HeadAttemptID,
+		&i.ParseLeaseToken,
+		&i.ParseLeaseExpiresAt,
+		&i.PublishedIteration,
+		&i.PublicationIteration,
+		&i.PublicationToken,
+		&i.PublicationExpiresAt,
+	)
+	return i, err
+}
+
+const insertParserCheckpointAttempt = `-- name: InsertParserCheckpointAttempt :one
+INSERT INTO parser_checkpoint_attempts (
+  attempt_id, log_group_id, generation, iteration, predecessor_attempt_id,
+  producing_binary, dataset_identity, input_identity, parser_engine, object_key, object_digest
+)
+SELECT $1::uuid, h.log_group_id, h.generation, h.head_iteration + 1, h.head_attempt_id,
+       $2, $3::jsonb, $4::jsonb,
+       $5, $6, $7
+FROM parser_handoffs AS h
+WHERE h.log_group_id = $8 AND h.generation = $9
+  AND h.parse_lease_token = $10::uuid
+  AND h.parse_lease_expires_at > clock_timestamp()
+  AND h.head_iteration = $11
+  AND h.head_attempt_id IS NOT DISTINCT FROM $12::uuid
+RETURNING attempt_id, log_group_id, generation, iteration, predecessor_attempt_id, producing_binary, dataset_identity, input_identity, parser_engine, object_key, object_digest, accepted_at
+`
+
+type InsertParserCheckpointAttemptParams struct {
+	AttemptID            uuid.UUID     `db:"attempt_id" json:"attempt_id"`
+	ProducingBinary      string        `db:"producing_binary" json:"producing_binary"`
+	DatasetIdentity      []byte        `db:"dataset_identity" json:"dataset_identity"`
+	InputIdentity        []byte        `db:"input_identity" json:"input_identity"`
+	ParserEngine         string        `db:"parser_engine" json:"parser_engine"`
+	ObjectKey            string        `db:"object_key" json:"object_key"`
+	ObjectDigest         string        `db:"object_digest" json:"object_digest"`
+	LogGroupID           uuid.UUID     `db:"log_group_id" json:"log_group_id"`
+	Generation           int64         `db:"generation" json:"generation"`
+	LeaseToken           uuid.UUID     `db:"lease_token" json:"lease_token"`
+	PredecessorIteration int64         `db:"predecessor_iteration" json:"predecessor_iteration"`
+	PredecessorAttemptID uuid.NullUUID `db:"predecessor_attempt_id" json:"predecessor_attempt_id"`
+}
+
+func (q *sqlQuerier) InsertParserCheckpointAttempt(ctx context.Context, arg InsertParserCheckpointAttemptParams) (ParserCheckpointAttempt, error) {
+	row := q.db.QueryRow(ctx, insertParserCheckpointAttempt,
+		arg.AttemptID,
+		arg.ProducingBinary,
+		arg.DatasetIdentity,
+		arg.InputIdentity,
+		arg.ParserEngine,
+		arg.ObjectKey,
+		arg.ObjectDigest,
+		arg.LogGroupID,
+		arg.Generation,
+		arg.LeaseToken,
+		arg.PredecessorIteration,
+		arg.PredecessorAttemptID,
+	)
+	var i ParserCheckpointAttempt
+	err := row.Scan(
+		&i.AttemptID,
+		&i.LogGroupID,
+		&i.Generation,
+		&i.Iteration,
+		&i.PredecessorAttemptID,
+		&i.ProducingBinary,
+		&i.DatasetIdentity,
+		&i.InputIdentity,
+		&i.ParserEngine,
+		&i.ObjectKey,
+		&i.ObjectDigest,
+		&i.AcceptedAt,
+	)
+	return i, err
+}
+
+const listParserCheckpointAttemptsForDeletion = `-- name: ListParserCheckpointAttemptsForDeletion :many
+SELECT attempt_id, log_group_id, generation, iteration, predecessor_attempt_id, producing_binary, dataset_identity, input_identity, parser_engine, object_key, object_digest, accepted_at FROM parser_checkpoint_attempts
+WHERE log_group_id = $1 AND iteration > $2
+ORDER BY iteration
+LIMIT 100
+`
+
+type ListParserCheckpointAttemptsForDeletionParams struct {
+	LogGroupID     uuid.UUID `db:"log_group_id" json:"log_group_id"`
+	AfterIteration int64     `db:"after_iteration" json:"after_iteration"`
+}
+
+// Explicit log deletion only. Caller holds the log-generation row lock until
+// object removal and the metadata cascade commit, preventing late acceptance.
+func (q *sqlQuerier) ListParserCheckpointAttemptsForDeletion(ctx context.Context, arg ListParserCheckpointAttemptsForDeletionParams) ([]ParserCheckpointAttempt, error) {
+	rows, err := q.db.Query(ctx, listParserCheckpointAttemptsForDeletion, arg.LogGroupID, arg.AfterIteration)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ParserCheckpointAttempt
+	for rows.Next() {
+		var i ParserCheckpointAttempt
+		if err := rows.Scan(
+			&i.AttemptID,
+			&i.LogGroupID,
+			&i.Generation,
+			&i.Iteration,
+			&i.PredecessorAttemptID,
+			&i.ProducingBinary,
+			&i.DatasetIdentity,
+			&i.InputIdentity,
+			&i.ParserEngine,
+			&i.ObjectKey,
+			&i.ObjectDigest,
+			&i.AcceptedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockParserHandoffForAcceptance = `-- name: LockParserHandoffForAcceptance :one
+SELECT log_group_id, generation, native_enabled, head_iteration, head_attempt_id, parse_lease_token, parse_lease_expires_at, published_iteration, publication_iteration, publication_token, publication_expires_at FROM parser_handoffs
+WHERE log_group_id = $1 AND generation = $2
+  AND parse_lease_token = $3::uuid
+  AND parse_lease_expires_at > clock_timestamp()
+  AND head_iteration = $4
+  AND head_attempt_id IS NOT DISTINCT FROM $5::uuid
+FOR UPDATE
+`
+
+type LockParserHandoffForAcceptanceParams struct {
+	LogGroupID           uuid.UUID     `db:"log_group_id" json:"log_group_id"`
+	Generation           int64         `db:"generation" json:"generation"`
+	LeaseToken           uuid.UUID     `db:"lease_token" json:"lease_token"`
+	PredecessorIteration int64         `db:"predecessor_iteration" json:"predecessor_iteration"`
+	PredecessorAttemptID uuid.NullUUID `db:"predecessor_attempt_id" json:"predecessor_attempt_id"`
+}
+
+// Lock first, then insert, advance, and River enqueue in the SAME transaction.
+func (q *sqlQuerier) LockParserHandoffForAcceptance(ctx context.Context, arg LockParserHandoffForAcceptanceParams) (ParserHandoff, error) {
+	row := q.db.QueryRow(ctx, lockParserHandoffForAcceptance,
+		arg.LogGroupID,
+		arg.Generation,
+		arg.LeaseToken,
+		arg.PredecessorIteration,
+		arg.PredecessorAttemptID,
+	)
+	var i ParserHandoff
+	err := row.Scan(
+		&i.LogGroupID,
+		&i.Generation,
+		&i.NativeEnabled,
+		&i.HeadIteration,
+		&i.HeadAttemptID,
+		&i.ParseLeaseToken,
+		&i.ParseLeaseExpiresAt,
+		&i.PublishedIteration,
+		&i.PublicationIteration,
+		&i.PublicationToken,
+		&i.PublicationExpiresAt,
+	)
+	return i, err
+}
+
+const lockParserPublication = `-- name: LockParserPublication :one
+SELECT log_group_id, generation, native_enabled, head_iteration, head_attempt_id, parse_lease_token, parse_lease_expires_at, published_iteration, publication_iteration, publication_token, publication_expires_at FROM parser_handoffs
+WHERE log_group_id = $1 AND generation = $2
+  AND publication_iteration = $3
+  AND publication_iteration > published_iteration
+  AND publication_token = $4::uuid
+  AND publication_expires_at > clock_timestamp()
+FOR UPDATE
+`
+
+type LockParserPublicationParams struct {
+	LogGroupID       uuid.UUID `db:"log_group_id" json:"log_group_id"`
+	Generation       int64     `db:"generation" json:"generation"`
+	Iteration        int64     `db:"iteration" json:"iteration"`
+	PublicationToken uuid.UUID `db:"publication_token" json:"publication_token"`
+}
+
+// Must be first operation in EVERY publication transaction. Hold this row lock
+// through all serving writes and the final token check. No parse-head predicate.
+func (q *sqlQuerier) LockParserPublication(ctx context.Context, arg LockParserPublicationParams) (ParserHandoff, error) {
+	row := q.db.QueryRow(ctx, lockParserPublication,
+		arg.LogGroupID,
+		arg.Generation,
+		arg.Iteration,
+		arg.PublicationToken,
+	)
+	var i ParserHandoff
+	err := row.Scan(
+		&i.LogGroupID,
+		&i.Generation,
+		&i.NativeEnabled,
+		&i.HeadIteration,
+		&i.HeadAttemptID,
+		&i.ParseLeaseToken,
+		&i.ParseLeaseExpiresAt,
+		&i.PublishedIteration,
+		&i.PublicationIteration,
+		&i.PublicationToken,
+		&i.PublicationExpiresAt,
+	)
+	return i, err
+}
+
+const releaseParserHandoffLease = `-- name: ReleaseParserHandoffLease :one
+UPDATE parser_handoffs
+SET parse_lease_token = NULL, parse_lease_expires_at = NULL
+WHERE log_group_id = $1 AND generation = $2
+  AND parse_lease_token = $3::uuid
+RETURNING log_group_id, generation, native_enabled, head_iteration, head_attempt_id, parse_lease_token, parse_lease_expires_at, published_iteration, publication_iteration, publication_token, publication_expires_at
+`
+
+type ReleaseParserHandoffLeaseParams struct {
+	LogGroupID uuid.UUID `db:"log_group_id" json:"log_group_id"`
+	Generation int64     `db:"generation" json:"generation"`
+	LeaseToken uuid.UUID `db:"lease_token" json:"lease_token"`
+}
+
+func (q *sqlQuerier) ReleaseParserHandoffLease(ctx context.Context, arg ReleaseParserHandoffLeaseParams) (ParserHandoff, error) {
+	row := q.db.QueryRow(ctx, releaseParserHandoffLease, arg.LogGroupID, arg.Generation, arg.LeaseToken)
+	var i ParserHandoff
+	err := row.Scan(
+		&i.LogGroupID,
+		&i.Generation,
+		&i.NativeEnabled,
+		&i.HeadIteration,
+		&i.HeadAttemptID,
+		&i.ParseLeaseToken,
+		&i.ParseLeaseExpiresAt,
+		&i.PublishedIteration,
+		&i.PublicationIteration,
+		&i.PublicationToken,
+		&i.PublicationExpiresAt,
+	)
+	return i, err
+}
+
+const releaseParserPublication = `-- name: ReleaseParserPublication :one
+UPDATE parser_handoffs
+SET publication_token = NULL, publication_expires_at = NULL
+WHERE log_group_id = $1 AND generation = $2
+  AND publication_iteration = $3
+  AND publication_token = $4::uuid
+RETURNING log_group_id, generation, native_enabled, head_iteration, head_attempt_id, parse_lease_token, parse_lease_expires_at, published_iteration, publication_iteration, publication_token, publication_expires_at
+`
+
+type ReleaseParserPublicationParams struct {
+	LogGroupID       uuid.UUID `db:"log_group_id" json:"log_group_id"`
+	Generation       int64     `db:"generation" json:"generation"`
+	Iteration        int64     `db:"iteration" json:"iteration"`
+	PublicationToken uuid.UUID `db:"publication_token" json:"publication_token"`
+}
+
+// Release preserves the high-water iteration, even after expiry or failure.
+func (q *sqlQuerier) ReleaseParserPublication(ctx context.Context, arg ReleaseParserPublicationParams) (ParserHandoff, error) {
+	row := q.db.QueryRow(ctx, releaseParserPublication,
+		arg.LogGroupID,
+		arg.Generation,
+		arg.Iteration,
+		arg.PublicationToken,
+	)
+	var i ParserHandoff
+	err := row.Scan(
+		&i.LogGroupID,
+		&i.Generation,
+		&i.NativeEnabled,
+		&i.HeadIteration,
+		&i.HeadAttemptID,
+		&i.ParseLeaseToken,
+		&i.ParseLeaseExpiresAt,
+		&i.PublishedIteration,
+		&i.PublicationIteration,
+		&i.PublicationToken,
+		&i.PublicationExpiresAt,
+	)
+	return i, err
+}
+
+const renewParserHandoffLease = `-- name: RenewParserHandoffLease :one
+UPDATE parser_handoffs
+SET parse_lease_expires_at = clock_timestamp() + $1::interval
+WHERE log_group_id = $2 AND generation = $3
+  AND parse_lease_token = $4::uuid
+  AND parse_lease_expires_at > clock_timestamp()
+  AND $1::interval > interval '0 seconds'
+RETURNING log_group_id, generation, native_enabled, head_iteration, head_attempt_id, parse_lease_token, parse_lease_expires_at, published_iteration, publication_iteration, publication_token, publication_expires_at
+`
+
+type RenewParserHandoffLeaseParams struct {
+	LeaseDuration pgtype.Interval `db:"lease_duration" json:"lease_duration"`
+	LogGroupID    uuid.UUID       `db:"log_group_id" json:"log_group_id"`
+	Generation    int64           `db:"generation" json:"generation"`
+	LeaseToken    uuid.UUID       `db:"lease_token" json:"lease_token"`
+}
+
+func (q *sqlQuerier) RenewParserHandoffLease(ctx context.Context, arg RenewParserHandoffLeaseParams) (ParserHandoff, error) {
+	row := q.db.QueryRow(ctx, renewParserHandoffLease,
+		arg.LeaseDuration,
+		arg.LogGroupID,
+		arg.Generation,
+		arg.LeaseToken,
+	)
+	var i ParserHandoff
+	err := row.Scan(
+		&i.LogGroupID,
+		&i.Generation,
+		&i.NativeEnabled,
+		&i.HeadIteration,
+		&i.HeadAttemptID,
+		&i.ParseLeaseToken,
+		&i.ParseLeaseExpiresAt,
+		&i.PublishedIteration,
+		&i.PublicationIteration,
+		&i.PublicationToken,
+		&i.PublicationExpiresAt,
+	)
+	return i, err
+}
+
+const renewParserPublication = `-- name: RenewParserPublication :one
+UPDATE parser_handoffs
+SET publication_expires_at = clock_timestamp() + $1::interval
+WHERE log_group_id = $2 AND generation = $3
+  AND publication_iteration = $4
+  AND publication_token = $5::uuid
+  AND publication_expires_at > clock_timestamp()
+  AND $1::interval > interval '0 seconds'
+RETURNING log_group_id, generation, native_enabled, head_iteration, head_attempt_id, parse_lease_token, parse_lease_expires_at, published_iteration, publication_iteration, publication_token, publication_expires_at
+`
+
+type RenewParserPublicationParams struct {
+	LeaseDuration    pgtype.Interval `db:"lease_duration" json:"lease_duration"`
+	LogGroupID       uuid.UUID       `db:"log_group_id" json:"log_group_id"`
+	Generation       int64           `db:"generation" json:"generation"`
+	Iteration        int64           `db:"iteration" json:"iteration"`
+	PublicationToken uuid.UUID       `db:"publication_token" json:"publication_token"`
+}
+
+func (q *sqlQuerier) RenewParserPublication(ctx context.Context, arg RenewParserPublicationParams) (ParserHandoff, error) {
+	row := q.db.QueryRow(ctx, renewParserPublication,
+		arg.LeaseDuration,
+		arg.LogGroupID,
+		arg.Generation,
+		arg.Iteration,
+		arg.PublicationToken,
+	)
+	var i ParserHandoff
+	err := row.Scan(
+		&i.LogGroupID,
+		&i.Generation,
+		&i.NativeEnabled,
+		&i.HeadIteration,
+		&i.HeadAttemptID,
+		&i.ParseLeaseToken,
+		&i.ParseLeaseExpiresAt,
+		&i.PublishedIteration,
+		&i.PublicationIteration,
+		&i.PublicationToken,
+		&i.PublicationExpiresAt,
+	)
+	return i, err
+}
+
+const setParserHandoffNativeEnabled = `-- name: SetParserHandoffNativeEnabled :exec
+UPDATE parser_handoffs
+SET native_enabled = $1::boolean
+WHERE log_group_id = $2
+`
+
+type SetParserHandoffNativeEnabledParams struct {
+	NativeEnabled bool      `db:"native_enabled" json:"native_enabled"`
+	LogGroupID    uuid.UUID `db:"log_group_id" json:"log_group_id"`
+}
+
+func (q *sqlQuerier) SetParserHandoffNativeEnabled(ctx context.Context, arg SetParserHandoffNativeEnabledParams) error {
+	_, err := q.db.Exec(ctx, setParserHandoffNativeEnabled, arg.NativeEnabled, arg.LogGroupID)
+	return err
+}
+
 const deleteParseScoreMembershipsByInstance = `-- name: DeleteParseScoreMembershipsByInstance :exec
 WITH variants AS (DELETE FROM parse_variant_memberships variant WHERE variant.instance_id = $1)
 DELETE FROM parse_score_memberships membership WHERE membership.instance_id = $1

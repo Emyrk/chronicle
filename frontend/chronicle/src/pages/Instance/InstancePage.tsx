@@ -1,3 +1,4 @@
+import { usePublicationPolling } from "./publicationPolling";
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { ArrowLeft, Loader2, Youtube, Timer, TriangleAlert } from "lucide-react";
@@ -7,7 +8,7 @@ import { InstanceEventsProvider } from "@/hooks/instanceEvents";
 import { DatasetProvider } from "@/hooks/useDatasetId";
 import { PlayerSpecializationProvider } from "@/components/ui/PlayerMetricChart/PlayerSpecializationContext";
 import { PlayerCosmeticsProvider } from "@/components/ui/PlayerMetricChart/PlayerCosmeticsContext";
-import type { ActivityPeriod, EventRepairReceipt, InstancePlayer, KillType, VehicleControlMetadata } from "@/api/typesGenerated";
+import type { WoWParsedInstance, ActivityPeriod, EventRepairReceipt, InstancePlayer, KillType, VehicleControlMetadata } from "@/api/typesGenerated";
 import type { ResolvedInstanceUnit } from "./instanceUnits";
 import { transformToInstance } from "./transformInstance";
 import { Card } from "@/components/ui/Card/Card";
@@ -295,17 +296,10 @@ export function InstancePageInner({
 export function InstancePage() {
   const { instanceId } = useParams<{ instanceId: string }>();
   const navigate = useNavigate();
-  // Track user selection; null means use default
-  const [userSelectedEncounterIds, setUserSelectedEncounterIds] = useState<string[] | null>(null);
-
+  const polling = usePublicationPolling(instanceId ?? "");
   const { data: apiInstance, isLoading: instanceLoading, error: instanceError } = useInstance(
     instanceId || "",
-    { enabled: !!instanceId }
-  );
-
-  const { data: youtubeData } = useInstanceYoutube(
-    instanceId || "",
-    { enabled: !!instanceId }
+    polling
   );
 
   // Canonicalize URL: redirect from UUID to slug when available
@@ -314,6 +308,19 @@ export function InstancePage() {
       navigate(`/instances/${apiInstance.slug}${window.location.search}`, { replace: true });
     }
   }, [apiInstance?.slug, instanceId, navigate]);
+
+  return <ResolvedInstanceRuntime key={apiInstance?.id ?? "loading"} apiInstance={apiInstance} instanceLoading={instanceLoading} instanceError={instanceError} />;
+}
+
+/** The resolved database ID is the publication boundary, never the stable route slug. */
+function ResolvedInstanceRuntime({ apiInstance, instanceLoading, instanceError }: {
+  apiInstance?: WoWParsedInstance;
+  instanceLoading: boolean;
+  instanceError: Error | null;
+}) {
+  // A replacement ID remounts this state AND every provider/panel below it.
+  const [userSelectedEncounterIds, setUserSelectedEncounterIds] = useState<string[] | null>(null);
+  const { data: youtubeData } = useInstanceYoutube(apiInstance?.id ?? "", { enabled: !!apiInstance });
 
   // Check if user can delete this log (uploader or admin) - if so, show link to log detail
   const { isAuthenticated } = useAuth();

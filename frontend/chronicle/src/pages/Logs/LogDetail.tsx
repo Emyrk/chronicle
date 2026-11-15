@@ -1,5 +1,5 @@
 import { IdentityCatalogue } from "./IdentityCatalogue";
-import { AdminReparseControls } from "./AdminReparseControls";
+import { AdminReparseControls, AdminProfileMenuItem } from "./AdminReparseControls";
 import type { ParserEngine } from "@/api/typesGenerated";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
@@ -28,7 +28,6 @@ import {
   Timer,
   ChevronRight,
   AlertTriangle,
-  Flame,
 } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
@@ -1405,10 +1404,7 @@ export function LogDetailView({
                       Reparse (Verbose)
                     </DropdownMenuItem>
                     {canProfile && (
-                      <DropdownMenuItem onClick={() => onReparse(false, false, undefined, undefined, undefined, true)}>
-                        <Flame className="h-4 w-4 mr-2 text-orange-500" />
-                        Reparse (CPU Profile)
-                      </DropdownMenuItem>
+                      <AdminProfileMenuItem parserEngine={parserEngine} onSelect={() => onReparse(false, false, undefined, undefined, undefined, true)} />
                     )}
                     {canDownloadFiles && (
                       <>

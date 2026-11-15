@@ -334,6 +334,7 @@ func (api *API) Routes() chi.Router {
 		}
 		liveConnectSources = []string{scheme + "://" + public.Host}
 	}
+	r.Use(parserCompatibilityMiddleware)
 	r.Use(
 		httpmw.Recover(api.Opts.Logger),
 		httpmw.Log500(api.Opts.Logger),

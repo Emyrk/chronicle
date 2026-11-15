@@ -1,3 +1,4 @@
+import { IncrementalEpoch } from "./incrementalEpoch";
 /**
  * Hook for aggregating events based on a PanelDefinition.
  * 
@@ -190,7 +191,7 @@ export function usePanelAggregation<TResult>(
     panelIndex,
     enabled = true,
   } = options;
-  const eventsContext = useInstanceEventsContext();
+  const { fetchStream } = useInstanceEventsContext();
   const syncMode = useSyncModeContextOptional();
   const timingContext = usePanelTimingContext();
   // Extract stable function ref to avoid re-triggering effects
@@ -251,11 +252,16 @@ export function usePanelAggregation<TResult>(
     panelContextKeyData,
   ]);
   
-  // Reset incremental state when panel or context changes (encounter switch, entity selection, etc.)
+  // A context epoch distinguishes replacements (including A -> B -> A) from
+  // superseded cursor ticks within the SAME context, whose progress remains useful.
+  const incrementalContextEpoch = useMemo(() => new IncrementalEpoch(), []);
   useEffect(() => {
+    incrementalContextEpoch.invalidate();
     incrementalStateRef.current = null;
     prevTimestampRef.current = null;
-  }, [panel.id, panelContextKey]);
+    lastProcessedTimestampRef.current = null;
+    return () => { incrementalContextEpoch.invalidate(); };
+  }, [panel.id, panelContextKey, incrementalContextEpoch]);
   
   // Stable merged filter array — reference equality lets mainThreadProcessor skip recompilation
   // during sync mode ticks where only the timestamp changes.
@@ -311,7 +317,6 @@ export function usePanelAggregation<TResult>(
   
   useEffect(() => {
     if (!isSyncMode || !syncTimestamp) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- throttling requires setState
       setThrottledSyncTimestamp(null);
       lastProcessedTimestampRef.current = null;
       if (throttleTimeoutRef.current) {
@@ -349,9 +354,8 @@ export function usePanelAggregation<TResult>(
   }, [isSyncMode, syncTimestamp]);
   
   // Worker-based processing (default mode)
-  // Note: We intentionally use eventsContext.fetchStream (not eventsContext) to avoid
+  // Note: We intentionally use fetchStream (not eventsContext) to avoid
   // re-running when other properties of eventsContext change.
-  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const processWithWorker = useCallback(async (requestId: number) => {
     setLoading(true);
     setProcessing(false);
@@ -365,7 +369,7 @@ export function usePanelAggregation<TResult>(
       const requiredStreams = new Set([...panel.streams, "unit_classification" as const]);
       const fetchedStreams = await Promise.all(
         Array.from(requiredStreams).map(async (type) => {
-          const stream = await eventsContext.fetchStream(type);
+          const stream = await fetchStream(type);
           return { type, data: stream.data };
         })
       );
@@ -449,11 +453,11 @@ export function usePanelAggregation<TResult>(
       setLoading(false);
       setProcessing(false);
     }
-  }, [eventsContext.fetchStream, panel, panelContext, panelOption, panelContextData, mergedFilters, panelIndex]);
+  }, [fetchStream, panel, panelContext, panelOption, panelContextData, mergedFilters, panelIndex]);
   
   // Main thread incremental processing (sync mode)
-  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const processMainThread = useCallback(async (requestId: number, stopAt: Date | null) => {
+    const isCurrentContext = incrementalContextEpoch.capture();
     setLoading(true);
     setProcessing(false);
     setError(null);
@@ -464,7 +468,7 @@ export function usePanelAggregation<TResult>(
       const requiredStreams = new Set([...panel.streams, "unit_classification" as const]);
       const streams = new Map<StreamType, CachedStream>();
       for (const type of requiredStreams) {
-        const stream = await eventsContext.fetchStream(type);
+        const stream = await fetchStream(type);
         streams.set(type, stream);
       }
       
@@ -488,12 +492,15 @@ export function usePanelAggregation<TResult>(
         stopAtTimestamp: stopAt,
         previousState: incrementalStateRef.current,
         onProgress: (_state, count) => {
-          // Update metrics during processing (use ref to avoid dep issues)
+          if (!isCurrentContext()) return;
+          // Same-context superseded cursor ticks may still advance progress.
           updateMetricsRef.current?.(count, 0);
         },
         yieldEveryN: 10000,
       });
       
+      // Never let old-instance/context work mutate replacement metrics or timestamps.
+      if (!isCurrentContext()) return;
       // Check if this response is stale (newer request started)
       const isStale = requestId !== requestIdRef.current || abortRef.current;
       
@@ -549,7 +556,7 @@ export function usePanelAggregation<TResult>(
       setLoading(false);
       setProcessing(false);
     }
-  }, [eventsContext.fetchStream, panel, panelContext, panelOption, panelContextData, mergedFilters, panelContextKey]);
+  }, [fetchStream, panel, panelContextKey, incrementalContextEpoch, memoizedContext]);
   
   // Track previous sync mode to detect transitions
   const prevSyncModeRef = useRef(isSyncMode);
@@ -565,7 +572,8 @@ export function usePanelAggregation<TResult>(
       return;
     }
     
-    const requestId = ++requestIdRef.current;
+    const requestCounter = requestIdRef;
+    const requestId = ++requestCounter.current;
     workerRequestIdRef.current = requestId;  // Mark this request as worker-owned
     abortRef.current = false;
     
@@ -582,10 +590,10 @@ export function usePanelAggregation<TResult>(
     return () => {
       // Abort any in-flight worker request
       workerRequestIdRef.current = null;
-      requestIdRef.current++;
+      requestCounter.current++;
       abortRef.current = true;
     };
-  }, [eventsContext.fetchStream, panel, streamsKey, enabled, panelContextKey, isSyncMode, processWithWorker]);
+  }, [fetchStream, panel, streamsKey, enabled, panelContextKey, isSyncMode, processWithWorker]);
   
   // Effect for sync mode (incremental processing)
   // This effect ONLY runs when in sync mode with a valid timestamp
@@ -597,7 +605,8 @@ export function usePanelAggregation<TResult>(
     
     prevSyncModeRef.current = true;
     
-    const requestId = ++requestIdRef.current;
+    const requestCounter = requestIdRef;
+    const requestId = ++requestCounter.current;
     abortRef.current = false;
     
     processMainThread(requestId, throttledSyncTimestamp);
@@ -608,7 +617,7 @@ export function usePanelAggregation<TResult>(
       // and we shouldn't abort that request when this cleanup runs later
       // (due to throttledSyncTimestamp changing)
       if (workerRequestIdRef.current === null) {
-        requestIdRef.current++;
+        requestCounter.current++;
         abortRef.current = true;
       }
     };

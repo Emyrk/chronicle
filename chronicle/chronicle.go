@@ -978,7 +978,7 @@ func (c *Chronicle) appendLog(ctx context.Context, group database.WoWLogGroup, n
 		if !ok {
 			return errors.New("server log part transaction does not expose pgx transaction")
 		}
-		if _, err := c.enqueueReParseLog(ctx, tx, pgxTx, group.ID, false, false, false, opts.realmID); err != nil {
+		if _, err := c.enqueueAppendParse(ctx, tx, pgxTx, group.ID, opts.realmID); err != nil {
 			return fmt.Errorf("enqueue reparse after server log part: %w", err)
 		}
 		return nil
@@ -1083,9 +1083,17 @@ func (c *Chronicle) WoWLogGroup(ctx context.Context, groupID uuid.UUID) (*chroni
 		}
 	}
 	sdkGroup.Artifacts = sdkArtifacts
+	publicationPending := false
+	handoff, err := c.Zed.GetParserHandoff(ctx, groupID)
+	if err == nil {
+		publicationPending = nativePublicationPending(handoff, list.Jobs)
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return nil, fmt.Errorf("fetch publication state: %w", err)
+	}
 	return &chroniclesdk.WoWLogGroupState{
-		WoWLogGroup: sdkGroup,
-		Status:      jobStatus,
+		PublicationPending: publicationPending,
+		WoWLogGroup:        sdkGroup,
+		Status:             jobStatus,
 	}, nil
 }
 
@@ -1463,6 +1471,12 @@ func (c *Chronicle) DeleteWoWLogGroup(ctx context.Context, logID uuid.UUID) erro
 			return err
 		}
 		if err := serviceratings.EnqueueSourceRepairTx(ctx, tx, rankingRunLogGroupIdentitySeeds(current)); err != nil {
+			return err
+		}
+		// Accepted native artifacts are not ordinary log-group attachments.
+		// Remove them while the log lock excludes new acceptance, before the
+		// cascading metadata deletion would make their storage keys unreachable.
+		if err := c.removeAcceptedCheckpointsForDeletion(ctx, tx, logID); err != nil {
 			return err
 		}
 		if err := tx.DeleteWoWLogGroup(ctx, logID); err != nil {

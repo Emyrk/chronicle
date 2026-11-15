@@ -143,6 +143,8 @@ type WorkerLogParse struct {
 	parent *Chronicle
 	// Per-execution selection; Work copies this worker before applying durable job args.
 	parserEngine chroniclesdk.ParserEngine
+	// Present only for primary publication of an immutable native checkpoint.
+	finalization *nativeFinalization
 
 	river.WorkerDefaults[ArgsLogParse]
 }
@@ -193,6 +195,9 @@ func insertInstanceWithSlugFallback(
 func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse]) error {
 	if err := job.Args.ParserEngine.Validate(); err != nil {
 		return err
+	}
+	if job.Args.ParserEngine == chroniclesdk.ParserEngineNext {
+		return river.JobCancel(errors.New("native job lacks immutable producing build; explicitly reparse with the current build"))
 	}
 	execution := *w
 	execution.parserEngine = job.Args.ParserEngine
@@ -275,7 +280,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 	if err := w.parserEngine.ValidateFormat(logFormat); err != nil {
 		return err
 	}
-	if job.Args.Replacement {
+	if job.Args.Replacement && w.finalization == nil {
 		if err := w.parent.RemoveParseCPUProfile(ctx, job.Args.LogID); err != nil {
 			return fmt.Errorf("clear superseded parse CPU profile: %w", err)
 		}
@@ -303,7 +308,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		return river.JobCancel(errors.New("SuperWoW log parsing is no longer supported"))
 	}
 	const expectedFiles = 1
-	if len(files) != expectedFiles {
+	if len(files) != expectedFiles && w.finalization == nil {
 		jobResult = "cancelled"
 		return river.JobCancel(fmt.Errorf("log group (type %s) expects %d files, has %d", logGroup.WoWLogGroup.LogType, expectedFiles, len(files)))
 	}
@@ -314,7 +319,11 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 	preRealmID := job.Args.RealmID
 	var preloadedFirst []byte
 	var preRealmName string
-	if preRealmID == uuid.Nil {
+	if w.finalization != nil {
+		preRealmID = w.finalization.realmID
+		preRealmName = w.finalization.realmName
+	}
+	if preRealmID == uuid.Nil && w.finalization == nil {
 		// Load and decompress the first file for the realm pre-scan.
 		// The bytes are kept and passed to parseCombatLog to avoid a
 		// second download from object storage.
@@ -366,7 +375,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 	var resolved ResolvedDataset
 	var identityFence *parseIdentityFence
 	if w.parent.resolveParseDataset != nil {
-		err = db.InTx(ctx, func(tx *authz.AuthzTX) error {
+		err = w.parent.parsePublicationTx(ctx, false, func(tx *authz.AuthzTX) error {
 			var resolveErr error
 			resolved, resolveErr = w.parent.resolveParseDataset(ctx, tx, preRealmID, true)
 			return resolveErr
@@ -387,13 +396,15 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 	} else {
 		resolved = w.parent.resolveForRealm(ctx, preRealmID)
 	}
-	if err := w.parent.stageParseGeneration(ctx, job.Args.LogID, parseGeneration, identityFence); err != nil {
-		if errors.Is(err, errStaleParseGeneration) {
-			jobResult = "cancelled"
-			return w.parent.abortStaleParseGeneration(ctx, job.Args.LogID, job.Args.ParseGeneration, "stage_output", err)
+	if w.finalization == nil {
+		if err := w.parent.stageParseGeneration(ctx, job.Args.LogID, parseGeneration, identityFence); err != nil {
+			if errors.Is(err, errStaleParseGeneration) {
+				jobResult = "cancelled"
+				return w.parent.abortStaleParseGeneration(ctx, job.Args.LogID, job.Args.ParseGeneration, "stage_output", err)
+			}
+			jobResult = "failure"
+			return fmt.Errorf("stage parse generation: %w", err)
 		}
-		jobResult = "failure"
-		return fmt.Errorf("stage parse generation: %w", err)
 	}
 
 	gameDB, closeGameDB, err := w.parent.acquireParseGameDB(ctx, resolved.DatasetID, identityFence)
@@ -443,7 +454,10 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 
 	// ── Parse ────────────────────────────────────────────────────────────
 	reg := w.parent.RegistryForFlavor(flavor)
-	parsed, profileCaptured, err := w.parseCombatLogWithOptionalCPUProfile(ctx, job.Args.LogID, job.Args.Profile, func() (*parseResult, error) {
+	parsed, profileCaptured, err := w.parseCombatLogWithOptionalCPUProfile(ctx, job.Args.LogID, job.Args.Profile && w.finalization == nil, func() (*parseResult, error) {
+		if w.finalization != nil {
+			return w.finalization.restore(ctx, gameDB, reg, identityFence)
+		}
 		if job.Args.Verbose && w.parserEngine == chroniclesdk.ParserEngineNext {
 			return w.parseDebugSession(ctx, logFormat, files, artifacts, gameDB, reg, preloadedFirst, preRealmName)
 		}
@@ -486,6 +500,12 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		}
 		if err := w.parent.storeParserSnapshot(ctx, job.Args.LogID, parseGeneration, jobID, parsed.snapshot); err != nil {
 			return fmt.Errorf("store pre-finalize debug snapshot: %w", err)
+		}
+	}
+	// Native work only deletes serving output after the exact artifact restores.
+	if w.finalization != nil {
+		if err := w.parent.stageParseGeneration(ctx, job.Args.LogID, parseGeneration, identityFence); err != nil {
+			return err
 		}
 	}
 	// Track total finalize and DB insert durations
@@ -612,7 +632,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 			}
 		}()
 		var dbinstance database.LogInstance
-		err = db.InTx(ctx, func(tx *authz.AuthzTX) error {
+		err = w.parent.parsePublicationTx(ctx, false, func(tx *authz.AuthzTX) error {
 			if err := lockExpectedParseGeneration(ctx, tx, job.Args.LogID, parseGeneration); err != nil {
 				return err
 			}
@@ -991,7 +1011,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 			rankingRunAffectedIDs = []uuid.UUID{dbinstance.ID}
 		}
 		if publicLog && instanceStart.Valid {
-			dupErr := db.InTx(ctx, func(tx *authz.AuthzTX) error {
+			dupErr := w.parent.parsePublicationTx(ctx, false, func(tx *authz.AuthzTX) error {
 				if err := lockExpectedParseGeneration(ctx, tx, job.Args.LogID, parseGeneration); err != nil {
 					return err
 				}
@@ -1025,7 +1045,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		// transaction so a ranking error cannot roll back the parsed instance.
 		playerRankings := rankableLog && finalized.Rankings != nil && finalized.Rankings.DPS != nil && finalized.RankingRules != nil
 		if playerRankings {
-			rankErr := db.InTx(ctx, func(tx *authz.AuthzTX) error {
+			rankErr := w.parent.parsePublicationTx(ctx, false, func(tx *authz.AuthzTX) error {
 				// Acquire the refresh lock before the parse-generation row lock,
 				// matching deletion and reparse, to avoid a lock-order cycle.
 				if publicLog {
@@ -1083,7 +1103,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 
 	// Keep compact current-known cohorts synchronized after every successful
 	// parse so live windows immediately include late historical uploads.
-	membershipErr := db.InTx(ctx, func(tx *authz.AuthzTX) error {
+	membershipErr := w.parent.parsePublicationTx(ctx, false, func(tx *authz.AuthzTX) error {
 		if err := lockExpectedParseGeneration(ctx, tx, job.Args.LogID, parseGeneration); err != nil {
 			return err
 		}
@@ -1444,6 +1464,19 @@ func (c *Chronicle) EnqueueParseLog(ctx context.Context, log database.WoWLogGrou
 	}
 	args := newArgsLogParse(ctx, log.ID, log.ParseGeneration, verbose, identityMode, false, realmID)
 	args.ParserEngine = engine
+	if engine == chroniclesdk.ParserEngineNext {
+		var result *rivertype.JobInsertResult
+		err := c.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
+			pgxTx, ok := tx.PGXTx()
+			if !ok {
+				return errors.New("native enqueue requires pgx transaction")
+			}
+			var err error
+			result, err = c.enqueueNativeParse(ctx, tx, pgxTx, args, &river.InsertOpts{Tags: []string{fmt.Sprintf("owner_%s", log.Owner.String())}})
+			return err
+		}, nil)
+		return result, err
+	}
 	res, err := c.queue.Insert(ctx, args, &river.InsertOpts{
 		Tags: []string{
 			fmt.Sprintf("owner_%s", log.Owner.String()),
