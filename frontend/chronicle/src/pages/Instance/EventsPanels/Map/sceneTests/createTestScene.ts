@@ -40,8 +40,8 @@ interface SceneInternals {
   walk: { avatar: THREE.Group } | null;
   dungeonMesh: { url: string; scale: number; group: THREE.Group; caves: { mesh: THREE.Mesh; bvh: unknown }[] } | null;
   units: Map<string, { base: THREE.Vector3; floorY: number; floorTracked: boolean; token: { arc: THREE.Object3D } }>;
-  bars: THREE.InstancedMesh;
-  floorTracks: unknown;
+  hud: { bars: THREE.InstancedMesh };
+  unitLayer: { floorTracks: unknown };
   directing(): boolean;
 }
 
@@ -388,8 +388,8 @@ export async function createTestScene(options: TestSceneOptions = {}) {
       return { base: object.base.clone(), floorY: object.floorY, floorTracked: object.floorTracked, castArc: object.token.arc.visible };
     },
     /** How many health-bar quads the bar pool draws (a living unit's bar is a backing and a fill, a dead one's only the backing). */
-    barQuads: () => internals.bars.count,
-    floorTracks: () => internals.floorTracks,
+    barQuads: () => internals.hud.bars.count,
+    floorTracks: () => internals.unitLayer.floorTracks,
     mesh: () => internals.dungeonMesh,
   };
 

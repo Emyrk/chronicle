@@ -1,8 +1,5 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
-import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import { loopingWhelpStand } from "./whelpAnimation";
 import { mapAssetUrl, type WowMapFloorBounds, type WowMapLayer, type WowMapMeshLiquid } from "@/pages/Technical/mapGallery";
 import type { MapCameraPose } from "./cameraPath";
 import type { DroneProbe } from "./droneCamera";
@@ -30,149 +27,43 @@ import {
 } from "./cameraDirector";
 import type { LiveMapPresence } from "../../liveSessionProtocol";
 import { actionForKey, cameraAngles, cameraCollisionDistance, cameraOffset, clampMobileMapInput, DEFAULT_AD_STRAFE, easeAngleToward, freeCamTravelSpeed, IDLE_MOBILE_MAP_INPUT, lookDrag, planarStep, pointerLossEndsDrag, rightDragWalkAxes, setWalkMouseButton, shouldFollowWalkCamera, walkCameraSettling, walkDragButton, walkMovementYaw, walkMouseControl, WALK_TOGGLE_KEY, wheelZoomDistance, type MapControlAction, type MobileMapInput } from "./mapControls";
-import { unwrapCompassRadians } from "./mapCompassModel";
 import { climbElevations, createShotHold, directorPullIn, fallbackShot, FOLLOW_CENTRE_WINDOW_MS, FOLLOW_SHOT_CHECK_MS, FOLLOW_STEEP_ELEVATION_DEG, releaseSteepShot, shotCheckDue, steepPullIn, FOLLOW_SIGHT_STRIDE, FOLLOW_STEEP_MIN_DISTANCE_YARDS, seesFraming, sightPicks, type ShotAnswer, FOLLOW_SLICE_MS, followSprings, followYawStep, handOverFollowSpring, handOverFollowYaw, startFollowTrackBuild, wrapAngle, type FollowTrackBuild, followKeyAt, glideDurationMs, glidePoseAt, glideTurnMs, unwrapNear, holdShot, isReplayJump, type FollowKey, type FollowTrack, type FollowYawProbe, type GlidePose } from "./followCamera";
-import { BOSS_SPIRE, bossSpireCastGlow, CAST_ARC_TEXTURE_STEPS, DEAD_RING, DEBUFF_PLANE, DISPEL_COLORS, DROP_LINE, drawUnitPlate, ENEMY_RED, guardianWell, HALO_COLORS, MARKS_SCALE, OWNER_LINE, TARGET_LINE, TRAIL_LINE, UNIT_PLATE, unitPlateSize, type UnitPlateInfo, TOKEN_LAYOUT, type DispelKind, type HaloKind } from "./unitTokenArt";
+import { type DispelKind } from "./unitTokenArt";
 import { UnitTokenTextures } from "./unitTokens";
 import type { PlanInput, PlanItem, PlanMarkerIcon, PlanPoint } from "./plan/mapPlan";
 import { PlanLayer, type PlanSurface } from "./plan/planLayer";
-import { BAR_ABSORB, BAR_BACKGROUND, BAR_DEAD, BAR_HEAL, CAST_ARC_OPACITY, COOLDOWN_ICON_COLOR, COOLDOWN_ICON_SCALE, DEAD_COLOR, INTERRUPT_LABEL_COLOR } from "./mapPalette";
 import {
   clampToRadius,
-  corsTextureUrl,
-  AIRBORNE_YARDS,
-  LOGGED_Z_CLEARANCE_YARDS,
   medianHeight,
 } from "./dungeonMeshes";
 import { MAP_CURSOR, MAP_HOSTILE_CURSOR, MAP_UNIT_CURSOR } from "./mapCursors";
-import { FLOOR_SLICE_MS, FLOOR_TRACK_TOLERANCE_YARDS, floorTrackAt, startFloorTrackBuild, type FloorTrackBuild, type FloorTracks } from "./walkableFloors";
-import { flatArtworkUnitScale, FOCUS_RADIUS_YARDS, FULL_MAP_VIEWPORT, healthBarColor, interpolateViewport, mapPointToScene, MAX_HEALTH_BARS, MAX_PLAYER_HEALTH_BARS, PLAYER_BAR_SCALE, topDownMapDistance, type MapPoint, type MapViewport } from "./mapModel";
-import { deepBreathPathForPrimarySpell, ONYXIA_DEEP_BREATH_RADIUS_YARDS } from "./deepBreathLanes";
-import { projectMapDebugPoints, type MapDebugOverlay } from "./mapDebugOverlays";
+import { FLOOR_TRACK_TOLERANCE_YARDS, floorTrackAt, type FloorTracks } from "./walkableFloors";
+import { flatArtworkUnitScale, FOCUS_RADIUS_YARDS, FULL_MAP_VIEWPORT, interpolateViewport, mapPointToScene, topDownMapDistance, type MapPoint, type MapViewport } from "./mapModel";
+import { type MapDebugOverlay } from "./mapDebugOverlays";
 import {
-  DEFAULT_EFFECT_OPTIONS,
-  DEEP_BREATH_POINT_LINGER_MS,
-  deriveActiveRadialEffects,
-  deriveActiveDeepBreaths,
-  deriveActiveEffects,
-  deriveCastIcons,
-  deriveCombatText,
-  deriveRecentHealGain,
-  deriveLastHitTargets,
-  deriveUnitCasts,
-  deathStartedAt,
-  INTERRUPTED_ICON_MS,
-  INTERRUPTED_PLAYER_ICON_MS,
   MAX_EFFECT_PRIMITIVES,
-  schoolColor,
-  type ActiveRadialEffect,
-  type ActiveDeepBreath,
-  type ActiveEffect,
-  type CastIcon,
-  type CombatText,
   type DeriveEffectsOptions,
   type EncounterEffects,
   type ReplayEffectKind,
-  type UnitCast,
 } from "./replayEffects";
-import { deadUnitVisualState } from "./mapDeathVisibility";
 import type { MapMarkerKind, MapSceneGround, MapUnitHealth } from "./useMapScene";
-import { publishedModelGeometryScale, publishedModelGroupScale } from "./modelSizing";
-import { modelAnimationState, modelAnimationTimeSeconds, selectModelAnimation, usesStaticDeathFallback, type ModelLocomotion } from "./modelAnimation";
-import { setMaterialEmissive, type MapBodyMaterial } from "./mapMaterials";
-import { CAST_ARC_SIZE, createArcTexture, createAvatar, createIconMaterial, createTextTexture, createUnitCalloutMarker, createUnitGeometries, createWalkAvatarModel, easeOutBack, easeOutCubic, playWalkAvatarState, shortNumber, type WalkAvatarModel } from "./sceneFactories";
-import { bakedGeometry, disposeModelMaterials, gltfLoader, loadAnimatedGameModel, loadFlappingWhelp, loadGameModelAnimationPack, loadWalkAvatar } from "./sceneLoaders";
-import { DEEP_BREATH_GROUND_LIFT, GROUND_WIDTH, KEY_MAX_STEP_S, MESH_PLAYER_HEIGHT_YARDS, PLAYER_GEOMETRY_HEIGHT } from "./sceneConstants";
+import { type ModelLocomotion } from "./modelAnimation";
+import { createAvatar, createUnitGeometries, createWalkAvatarModel, playWalkAvatarState, type WalkAvatarModel } from "./sceneFactories";
+import { loadWalkAvatar } from "./sceneLoaders";
+import { GROUND_WIDTH, KEY_MAX_STEP_S, MESH_PLAYER_HEIGHT_YARDS, PLAYER_GEOMETRY_HEIGHT, TOKEN_RADIUS } from "./sceneConstants";
 import { LivePresence } from "./livePresence";
 import { DungeonWorld, type DungeonMesh } from "./dungeonWorld";
 import { DebugOverlayLayer } from "./debugOverlays";
+import { UnitLayer, type UnitObject } from "./unitLayer";
+import { EffectsLayer } from "./effectsLayer";
+import { HudLayer } from "./hudLayer";
+import { raycastUnits } from "./unitPicking";
 
 /** Ground plane width in scene units; depth follows the artwork's aspect. */
 export { GROUND_WIDTH };
 
-const MUTED_OPACITY = TOKEN_LAYOUT.mutedOpacity;
-const LABEL_HEIGHT = 5;
-// The hovered unit's nameplate is this many screen pixels per canvas pixel (at 1x),
-// at every zoom: about 135 px wide.
-const PLATE_SCREEN_SCALE = 0.8;
 /** Primitive pool size for each effect kind; also the derivation cap's ceiling. */
 export { MAX_EFFECT_PRIMITIVES };
-// Never run the effect clock further ahead of the last replay tick (real time).
-const MAX_EXTRAPOLATE_MS = 250;
-const BEAM_HEIGHT = 1.5;
-const BOLT_WIDTH = 0.18;
-const MAX_DEEP_BREATH_POINTS = 20;
-const MAX_RADIAL_EFFECTS = 8;
-const RADIAL_GROUND_LIFT = 0.1;
-const DEEP_BREATH_AREA_OPACITY = 0.12;
-const DEEP_BREATH_POINT_SIZE_PX = 7;
-// How far a melee attacker steps toward its target, at most.
-const LUNGE_DISTANCE = 1.2;
-const SLASH_HEIGHT = 1.2;
-const SLASH_RADIUS = 1.8;
-// Health bars sit between the body and the hover label.
-const BAR_HEIGHT = 3.9;
-const BAR_WIDTH = 2.6;
-const BAR_THICKNESS = 0.36;
-const BAR_PADDING = 0.14;
-// The power strip under the health bar, and the gap between them.
-const POWER_STRIP_THICKNESS = 0.16;
-const POWER_STRIP_GAP = 0.05;
-// Quads per bar: backing, health, healed, absorb, power.
-const BAR_QUADS = 5;
-const BAR_POOL_SIZE = (MAX_HEALTH_BARS + MAX_PLAYER_HEALTH_BARS) * BAR_QUADS;
-const Z_AXIS = new THREE.Vector3(0, 0, 1);
-const MAX_COMBAT_TEXT = 8;
-const COMBAT_TEXT_HEIGHT = 1.8;
-// Rendered label textures kept for reuse (spell name + colour).
-const MAX_LABEL_TEXTURES = 128;
-// Spell icons above casters: pooled sprites over the bars and combat text.
-const MAX_CAST_ICONS = 12;
-// About 26 px at the constant on-screen size.
-const CAST_ICON_SIZE = 2.6;
-// Gap between a caster's health bar and the bottom of its icons.
-const CAST_ICON_BAR_GAP = 0.55;
-// Gap above the icons for combat text and the hover label.
-const CAST_ICON_TOP_GAP = 0.3;
-// Above this many icons, all draw at CAST_ICON_CROWDED_SCALE.
-const CAST_ICON_CROWDED = 8;
-const CAST_ICON_CROWDED_SCALE = 0.8;
-// A cast grows in from CAST_ICON_GROW_FROM over this long (replay time).
-const CAST_ICON_GROW_MS = 150;
-const CAST_ICON_GROW_FROM = 0.75;
-// A cast going off pops to CAST_ICON_POP_SCALE and back over this long.
-const CAST_ICON_POP_MS = 180;
-const CAST_ICON_POP_SCALE = 1.35;
-// A white ring flashes around the icon as the cast goes off.
-const CAST_ICON_FLASH_MS = 120;
-// An interrupted icon (times from the interrupt): a quick impact bump, drains
-// to grey and dims, wiggles 3 times by up to +-8 degrees (decaying), then
-// fades and shrinks over its last INTERRUPT_FADE_MS. Enemies also float
-// "Interrupted" above the icon.
-const INTERRUPT_IMPACT_MS = 80;
-const INTERRUPT_IMPACT_SCALE = 1.15;
-const INTERRUPT_GREY_MS = 150;
-const INTERRUPT_BRIGHTNESS = 0.7;
-const INTERRUPT_WIGGLE_MS = 240;
-const INTERRUPT_WIGGLE = (8 * Math.PI) / 180;
-const INTERRUPT_FADE_MS = 300;
-const INTERRUPT_SHRINK = 0.85;
-const INTERRUPT_LABEL_MS = 550;
-const INTERRUPT_LABEL_HEIGHT = 1.6;
-// The cast progress outline around an icon, in 5 % steps.
-const CAST_ARC_STEPS = 20;
-// Loaded icon textures kept for reuse, keyed by URL.
-const MAX_ICON_TEXTURES = 128;
-// A failed icon load is retried after this long (real time).
-const ICON_RETRY_MS = 30_000;
-// Published tabletop models have a 1-unit footprint; modelSizing scales them
-// a little wider than the 1.8-unit hostile box so they read at boss-fight zoom.
-// The minis face +z (glTF front); the facing cone and WoW facing use -z.
-const BOSS_MINI_YAW = Math.PI;
-// Gap between the top of a boss mini and its health bar.
-const BOSS_MINI_BAR_GAP = 0.6;
-// Lift that keeps a dead (lying) primitive body above the ground.
-const DEAD_LIFT = 0.9;
 // Default camera directions from the target.
 const ANGLED_OFFSET = new THREE.Vector3(0, 0.85, 0.75);
 const TOP_DOWN_OFFSET = new THREE.Vector3(0, 1, 0);
@@ -194,12 +85,6 @@ const FLAT_PLAYER_TOKEN_DIAMETER_YARDS = 1.25;
 // (constant on-screen) size, so the raid stays visible without being giants
 // at Fit.
 const MESH_MIN_SCREEN_SCALE = 0.5;
-// Legacy fallback for published models without a client-derived world height.
-// Guardians (pets, totems) keep a player's scale: they stand on their chip.
-const MESH_BOSS_SCALE = 2.5;
-// A guardian's model is grown to at least this tall (geometry units; a
-// player capsule is 3), so a totem published at its true, tiny size reads.
-const MIN_GUARDIAN_MODEL_HEIGHT = 1.2;
 // With a fight focused, the camera can back off to this multiple of the Fit
 // distance, and the target can pan this far (yards) from the focus centre.
 const MESH_MAX_DISTANCE_FACTOR = 2.5;
@@ -234,32 +119,6 @@ const KEY_ROTATE_SPEED = 1.6;
 // the bottom limit is OrbitControls' maxPolarAngle for the mode.
 const FREE_CAM_MAX_PITCH = Math.PI / 2 - 0.01;
 
-// --- Unit tokens: flat discs on the ground (geometry units, as PLAYER_GEOMETRY_HEIGHT) ---
-// Sizes come from unitTokenArt, which the map legend page lays its art out with too.
-// WoW raid target markers use the same authored art and token-relative scale as map-plan markers.
-const RAID_TARGET_MARKER_SIZE = 3.2;
-const RAID_TARGET_MARKER_LIFT = 0.25;
-const TOKEN_RADIUS: Record<MapMarkerKind, number> = TOKEN_LAYOUT.radius;
-const BOSS_TOKEN_RADIUS = TOKEN_LAYOUT.bossRadius;
-const MINI_TOKEN_RADIUS = TOKEN_LAYOUT.miniRadius;
-// Heights: the shadow and the disc's underside sit just off the floor; the
-// rest stack above the disc's face (its underside plus its thickness).
-const TOKEN_GROUND = { shadow: 0.12, underside: 0.15 };
-const TOKEN_LIFT = { marks: 0.02, debuff: 0.035, arc: 0.05, halo: 0.07 };
-const TOKEN_THICKNESS = TOKEN_LAYOUT.thickness;
-/** A boss sigil lies flat, at the height a player's disc face would be. */
-const SIGIL_FACE = 0.45;
-const TOKEN_PLANE = TOKEN_LAYOUT.plane;
-const SIGIL_SPIN = TOKEN_LAYOUT.sigilSpin;
-// Target lines: ribbon width (geometry units), lift above the floor, and dash period and speed.
-const TARGET_LINE_WIDTH = TARGET_LINE.width;
-const TARGETS_TARGET_LINE_WIDTH = TARGET_LINE.targetsTargetWidth;
-const TARGET_LINE_LIFT = 0.25;
-const MAX_OWNER_LINES = 256;
-// Movement trail segments drawn at once (every unit's together).
-const MAX_TRAIL_SEGMENTS = 8192;
-const TARGET_LINE_DASH = TARGET_LINE.dash;
-const TARGET_LINE_SPEED = TARGET_LINE.speed;
 
 const ORBIT_NEAR = 0.5;
 const ORBIT_FAR = 2000;
@@ -402,14 +261,6 @@ export interface MapSceneUnitTrack {
   samples: readonly { ms: number; point: MapPoint }[];
 }
 
-/** What the no-Z floor tracks were built for. */
-interface FloorTrackInputs {
-  key: string;
-  aspect: number;
-  url: string;
-  endMs: number;
-}
-
 /** What a follow track was built for. */
 interface FollowTrackInputs {
   key: string;
@@ -500,126 +351,6 @@ export interface MapUnitRoles {
   target: string | null;
   targetsTarget: string | null;
   pinned: ReadonlySet<string>;
-}
-
-// The flat token parts around a unit's body (the disc itself, until a model replaces it).
-interface UnitToken {
-  /** Disc radius in geometry units (PLAYER_GEOMETRY_HEIGHT is a player's height). */
-  radius: number;
-  /** Height of the disc's face (or the sigil) above the floor. */
-  face: number;
-  /** The disc's edge: its ring colour, darkening toward the ground. */
-  edge: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
-  shadow: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
-  halo: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
-  pin: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
-  arc: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
-  /** A debuffed player's tint and glow, in the dispel type's colour. */
-  debuff: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
-  /** Bosses: the turning tick ring, the sigil under a model, and the crystal while there is none. */
-  ticks: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | null;
-  sigil: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | null;
-  /** A guardian with a model stands on this: its disc's face (paw, ring). */
-  chip: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | null;
-  bossSpire: THREE.Mesh<THREE.BufferGeometry, THREE.MeshLambertMaterial> | null;
-}
-
-interface BossMini {
-  geometry: THREE.BufferGeometry;
-  /** The model's own materials when every primitive has a base-colour texture; cloned per unit. */
-  materials: THREE.MeshStandardMaterial[] | null;
-  /** Health bar height, above the model's bounding box. */
-  barHeight: number;
-  /** Hover label height, the same distance above the bar as for primitives. */
-  labelHeight: number;
-  /** Lift that keeps the model above the ground while it lies dead. */
-  deadLift: number;
-}
-
-interface AnimatedGameModel {
-  root: THREE.Object3D;
-  mixer: THREE.AnimationMixer;
-  clips: Map<string, THREE.AnimationClip>;
-  animationUrl: string;
-  packRequested: boolean;
-  packLoaded: boolean;
-  packFailed: boolean;
-  stateKey: string | null;
-  clipName: string | null;
-}
-
-interface FlappingWhelp {
-  mixer: THREE.AnimationMixer;
-  root: THREE.Object3D;
-  clipDuration: number;
-  phaseSeconds: number;
-}
-
-interface UnitObject {
-  group: THREE.Group;
-  body: THREE.Mesh;
-  calloutMarker: THREE.Sprite | null;
-  calloutKey: string;
-  // Lambert with the unit's tint, or a textured model's cloned lit/unlit materials.
-  bodyMaterial: MapBodyMaterial;
-  bodyMaterials: MapBodyMaterial[];
-  textured: boolean;
-  /** The facing notch (diamonds too, for bosses), turning with the unit. */
-  coneMaterial: THREE.MeshBasicMaterial;
-  cone: THREE.Mesh;
-  token: UnitToken;
-  icon: string | null;
-  boss: boolean;
-  /** The body shows a loaded model rather than the flat disc. */
-  mini: boolean;
-  healthFraction: number | null;
-  powerLevel: { fraction: number; color: string } | null;
-  owner: string | undefined;
-  /** The log records which way it faces; otherwise enemies face whoever they last hit. */
-  loggedFacing: boolean;
-  /** An enemy's facing toward the unit it last hit, while the log has none. */
-  hitFacing: number | undefined;
-  kind: MapMarkerKind;
-  name: string;
-  color: string;
-  dead: boolean;
-  /** Replayed position; lunges offset `group.position` from it. */
-  base: THREE.Vector3;
-  /** The floor under `base`; below it while the unit is in the air. */
-  floorY: number;
-  /** In the air: the line from the token down to its shadow on the floor (null until first airborne). */
-  drop: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | null;
-  /** Logged world position, retained for encounter-specific fixed geometry. */
-  worldX: number;
-  worldY: number;
-  /** Logged world height (yards), or undefined when the log has none. */
-  loggedZ: number | undefined;
-  /** The replay time of the drawn sample (MapScene3DUnit.atMs). */
-  sampleMs: number | undefined;
-  /** `floorY` came from the unit's floor track (no logged height), not a probe. */
-  floorTracked: boolean;
-  health: MapUnitHealth | null;
-  /** The declutter gives it a health bar (hidden while it has a nameplate). */
-  bar: boolean;
-  /** Published miniature or original-model URL; the primitive shows until it loads. */
-  miniatureUrl: string | undefined;
-  animationUrl: string | undefined;
-  gameModel: boolean;
-  locomotion: ModelLocomotion;
-  animatedGameModel: AnimatedGameModel | null;
-  flapWings: boolean;
-  flappingWhelp: FlappingWhelp | null;
-  mapScale: number;
-  /** Client-derived standing height in world yards. */
-  worldHeight: number | undefined;
-  barHeight: number;
-  labelHeight: number;
-  deadLift: number;
-  /** Height the model stands at: the floor, or a guardian's chip. */
-  modelBase: number;
-  /** Its movement trail (MapScene3DUnit.trail), or null for none. */
-  trail: MapScene3DTrailPoint[] | null;
-  muted: boolean;
 }
 
 export interface MapScene3DEffects {
@@ -714,10 +445,16 @@ export class MapScene3D {
   private readonly groundGroup = new THREE.Group();
   private alignmentOverlay = false;
   private readonly unitsGroup = new THREE.Group();
-  private readonly units = new Map<string, UnitObject>();
+  // Units, their models, trails and target lines, and the no-Z floor tracks (unitLayer.ts).
+  private readonly unitLayer: UnitLayer;
+  // Effect pools and the effect clock (effectsLayer.ts).
+  private readonly effectsLayer: EffectsLayer;
+  // Health bars, nameplates, cast icons, combat text and the compass (hudLayer.ts).
+  private readonly hud: HudLayer;
+  private get units(): ReadonlyMap<string, UnitObject> {
+    return this.unitLayer.units;
+  }
   private readonly textureLoader = new THREE.TextureLoader();
-  // Unit miniatures by candidate-URL key: null while loading or after all candidates fail.
-  private readonly bossMinis = new Map<string, BossMini | null>();
   // The real dungeon mesh while "3D map" is on; `dungeonMeshRequest` is the
   // load in flight (a later request or toggle-off abandons it).
   private readonly world = new DungeonWorld();
@@ -731,9 +468,6 @@ export class MapScene3D {
   // Scene point of `focus` at its floor height while the mesh is on.
   private focusCentre: THREE.Vector3 | null = null;
   private constraining = false;
-  // Nameplates (drawUnitPlate) over the hovered unit, the selected unit, its
-  // target, their target and pinned units; each redrawn when what it shows changes.
-  private readonly plates = new Map<string, { sprite: THREE.Sprite; canvas: HTMLCanvasElement; key: string }>();
   private hoveredGuid: string | null = null;
   // A click on a unit (inspect it); held briefly so a double-click (zoom) cancels it.
   private onUnitClick: ((guid: string) => void) | null = null;
@@ -762,8 +496,6 @@ export class MapScene3D {
   private disposed = false;
   private readonly capture: { width: number; height: number } | null;
   private readonly now: () => number;
-  // Boss minis still loading, and whether the caller still has asset data in flight (spell icons).
-  private bossMinisLoading = 0;
   private externalPending = false;
 
   // --- Cinematic camera, "the Director" (chronicle-1079) ---
@@ -824,12 +556,6 @@ export class MapScene3D {
   private followTrackFor: FollowTrackInputs | null = null;
   // The build in flight, a slice per timer tick so a long run never blocks a frame.
   private followBuild: { build: FollowTrackBuild; inputs: FollowTrackInputs; timer: ReturnType<typeof setTimeout> } | null = null;
-  // Floors for the units the log gives no height (chronicle-1597), chosen up
-  // front from the follow source's unit tracks, built off the frame loop like
-  // the follow track; the last finished build, what it was for, and the build in flight.
-  private floorTracks: FloorTracks | null = null;
-  private floorTracksFor: FloorTrackInputs | null = null;
-  private floorBuild: { build: FloorTrackBuild; inputs: FloorTrackInputs; timer: ReturnType<typeof setTimeout> } | null = null;
   // How far past the pan radius the Director left the camera: the user's
   // pan limit grows by this on handover (and only shrinks), so grabbing the
   // camera never snaps it back toward the focus in one step.
@@ -892,37 +618,6 @@ export class MapScene3D {
     start: number;
   } | null = null;
 
-  // Effects layer: pooled primitives, re-derived from the effect clock on
-  // every rendered frame. Nothing here is allocated per frame.
-  private effects: MapScene3DEffects | null = null;
-  private clock = { ms: 0, at: 0, playing: false, speed: 1 };
-  // The effect clock's time at the last updateEffects, for the bars' heal chunk.
-  private effectCursorMs = 0;
-  private readonly activeEffects: ActiveEffect[] = [];
-  private readonly activeRadialEffects: ActiveRadialEffect[] = [];
-  private readonly activeDeepBreaths: ActiveDeepBreath[] = [];
-  // The server path being drawn, fixed when it starts: Onyxia keeps flying and
-  // turning afterwards, but the ground-target sequence stays in room space.
-  private deepBreathPathLock: { primarySpellId: number; startMs: number } | null = null;
-  private readonly deepBreathAreaPositions: THREE.Vector3[] = [];
-  private readonly deepBreathAreas: THREE.InstancedMesh<THREE.CircleGeometry, THREE.MeshBasicMaterial>;
-  private readonly deepBreathLine: THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>;
-  private readonly deepBreathPoints: THREE.Points<THREE.BufferGeometry, THREE.PointsMaterial>;
-  private readonly effectOptions: DeriveEffectsOptions = { ...DEFAULT_EFFECT_OPTIONS };
-  private readonly visibleUnits = { has: (guid: string) => this.units.has(guid) };
-  private readonly effectColors = new Map<string, THREE.Color>();
-  private readonly wobbling: UnitObject[] = [];
-  private readonly lunging: UnitObject[] = [];
-  private readonly beamPositions = new Float32Array(MAX_EFFECT_PRIMITIVES * 6);
-  private readonly beamColors = new Float32Array(MAX_EFFECT_PRIMITIVES * 6);
-  private readonly beams: THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>;
-  private readonly rings: THREE.InstancedMesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
-  private readonly radialSpheres: THREE.InstancedMesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
-  private readonly radialRings: THREE.InstancedMesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
-  private readonly bolts: THREE.InstancedMesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
-  private readonly slashes: THREE.InstancedMesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
-  // Background, fill, heal chunk and absorb quads per bar.
-  private readonly bars: THREE.InstancedMesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   private readonly matrix = new THREE.Matrix4();
   private readonly color = new THREE.Color();
   private readonly vector = new THREE.Vector3();
@@ -930,11 +625,6 @@ export class MapScene3D {
   private readonly vectorC = new THREE.Vector3();
   private readonly scaleVector = new THREE.Vector3();
   private readonly quaternion = new THREE.Quaternion();
-  // Index into activeEffects of each pooled primitive, for hover picking.
-  private readonly beamEffects = new Int16Array(MAX_EFFECT_PRIMITIVES);
-  private readonly boltEffects = new Int16Array(MAX_EFFECT_PRIMITIVES);
-  private readonly slashEffects = new Int16Array(MAX_EFFECT_PRIMITIVES);
-  private readonly ringEffects = new Int16Array(MAX_EFFECT_PRIMITIVES);
   private pointerInside = false;
   // The window the map lives in: a popped-out panel has its own.
   private readonly keyWindow: Window;
@@ -953,66 +643,16 @@ export class MapScene3D {
   private planSurface: PlanSurface | null = null;
   private planInput: PlanInput | null = null;
   private planPointer: number | null = null;
-  // A flat plane (radius 1) lying on the ground, shared by every token part.
-  private readonly tokenPlane = new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2);
-  private readonly columnBox = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
-  // An open cylinder (radius 1, height 1) hanging below y = 0: a disc's edge.
-  private readonly tokenEdge = new THREE.CylinderGeometry(1, 1, 1, 40, 1, true).translate(0, -0.5, 0);
-  // A boss's crystal while it has no model (radius 1), its tip at y = 0.
-  private readonly bossSpire = new THREE.LatheGeometry(BOSS_SPIRE.profile.map(([x, y]) => new THREE.Vector2(x, y)), BOSS_SPIRE.sides);
-  private roles: MapUnitRoles = { selected: null, target: null, targetsTarget: null, pinned: new Set() };
-  private readonly unitCasts = new Map<string, UnitCast>();
-  private readonly lastHitTargets = new Map<string, string>();
-  // Enemies on the map without a logged facing.
-  private readonly hitFacingSources = {
-    has: (guid: string) => {
-      const object = this.units.get(guid);
-      return object !== undefined && object.kind === "hostile" && !object.loggedFacing;
-    },
-  };
-  private readonly targetLines: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>[] = [];
-  // Owner lines (guardian -> owner), one segment each, rewritten every frame.
-  private readonly ownerLinePositions = new Float32Array(MAX_OWNER_LINES * 6);
-  private readonly ownerLineColors = new Float32Array(MAX_OWNER_LINES * 6);
-  private readonly ownerLines: THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>;
-  // Movement trails, every unit's segments in one buffer; colours carry alpha for the fade.
-  private readonly trailPositions = new Float32Array(MAX_TRAIL_SEGMENTS * 6);
-  private readonly trailColors = new Float32Array(MAX_TRAIL_SEGMENTS * 8);
-  private readonly trailLines: THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>;
-  private tokenAt = 0;
   private readonly presence: LivePresence;
   private onWalkChange: (walking: boolean) => void = () => {};
   private readonly walkHead = new THREE.Vector3();
   private keyMoveLastMs = 0;
-  private hoveredEffectKey = "";
   private readonly onEffectHover: (hover: MapScene3DEffectHover | null) => void;
-  private readonly combatText: CombatText[] = [];
-  private readonly combatSprites: THREE.Sprite[] = [];
-  private readonly labelTextures = new Map<string, { texture: THREE.CanvasTexture; aspect: number }>();
-  private readonly castIcons: CastIcon[] = [];
-  private readonly castSprites: THREE.Sprite[] = [];
-  // Progress outlines and go flashes, one per icon sprite.
-  private readonly castArcs: THREE.Sprite[] = [];
-  // "Interrupted" labels, one per icon sprite.
-  private readonly castLabels: THREE.Sprite[] = [];
-  // Outline textures by step (index CAST_ARC_STEPS is the full ring), made on
-  // first use; cut outlines (grey, red tick) likewise.
-  private readonly arcTextures: (THREE.CanvasTexture | undefined)[] = [];
-  private readonly cutArcTextures: (THREE.CanvasTexture | undefined)[] = [];
-  // Index into castIcons of each shown icon sprite, for hover picking.
-  private readonly castSpriteIcons = new Int16Array(MAX_CAST_ICONS);
-  // Top of each caster's icons (unscaled height), for text and the hover label.
-  private readonly castIconTops = new Map<string, number>();
-  private readonly castIconCast = { caster: "", spellId: 0, spellName: "", phase: "casting" as CastIcon["phase"] };
-  // Icon textures by URL, in least-recently-used order; a number is the time a load failed.
-  private readonly iconTextures = new Map<string, THREE.Texture | "loading" | number>();
 
   private readonly container: HTMLElement;
   private readonly onContextLost: () => void;
   private readonly onUserViewport: (viewport: MapViewport) => void;
   private readonly onDungeonMesh: (state: DungeonMeshState) => void;
-  private readonly onCompassYaw: (yaw: number) => void;
-  private lastCompassYaw = Number.NaN;
 
   constructor(
     container: HTMLElement,
@@ -1038,7 +678,6 @@ export class MapScene3D {
     this.onEffectHover = onEffectHover;
     this.onUserViewport = onUserViewport;
     this.onDungeonMesh = onDungeonMesh;
-    this.onCompassYaw = onCompassYaw;
     // Throws when WebGL is unavailable; the caller falls back to 2D.
     // A capture scene keeps its drawing buffer so the video encoder can read
     // each frame, and renders at exactly the output size.
@@ -1079,151 +718,71 @@ export class MapScene3D {
     this.scene.add(this.meshLight);
     this.scene.add(this.groundGroup, this.debugLayer.debugOverlayGroup, this.unitsGroup, this.planLayer.group);
 
-    const beamGeometry = new THREE.BufferGeometry();
-    beamGeometry.setAttribute("position", new THREE.BufferAttribute(this.beamPositions, 3).setUsage(THREE.DynamicDrawUsage));
-    beamGeometry.setAttribute("color", new THREE.BufferAttribute(this.beamColors, 3).setUsage(THREE.DynamicDrawUsage));
-    beamGeometry.setDrawRange(0, 0);
-    this.beams = new THREE.LineSegments(beamGeometry, new THREE.LineBasicMaterial({
-      vertexColors: true,
-      transparent: true,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    }));
-    this.beams.frustumCulled = false;
-    const ownerGeometry = new THREE.BufferGeometry();
-    ownerGeometry.setAttribute("position", new THREE.BufferAttribute(this.ownerLinePositions, 3).setUsage(THREE.DynamicDrawUsage));
-    ownerGeometry.setAttribute("color", new THREE.BufferAttribute(this.ownerLineColors, 3).setUsage(THREE.DynamicDrawUsage));
-    ownerGeometry.setDrawRange(0, 0);
-    this.ownerLines = new THREE.LineSegments(ownerGeometry, new THREE.LineBasicMaterial({
-      vertexColors: true,
-      transparent: true,
-      opacity: OWNER_LINE.opacity,
-      depthWrite: false,
-    }));
-    this.ownerLines.frustumCulled = false;
-    this.scene.add(this.ownerLines);
-    const trailGeometry = new THREE.BufferGeometry();
-    trailGeometry.setAttribute("position", new THREE.BufferAttribute(this.trailPositions, 3).setUsage(THREE.DynamicDrawUsage));
-    trailGeometry.setAttribute("color", new THREE.BufferAttribute(this.trailColors, 4).setUsage(THREE.DynamicDrawUsage));
-    trailGeometry.setDrawRange(0, 0);
-    this.trailLines = new THREE.LineSegments(trailGeometry, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false }));
-    this.trailLines.frustumCulled = false;
-    this.scene.add(this.trailLines);
-    const glow = () => new THREE.MeshBasicMaterial({ transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
-    this.rings = this.createPool(new THREE.RingGeometry(0.85, 1, 40).rotateX(-Math.PI / 2), glow(), MAX_EFFECT_PRIMITIVES);
-    this.radialSpheres = this.createPool(
-      new THREE.SphereGeometry(1, 32, 16),
-      new THREE.MeshBasicMaterial({
-        transparent: true,
-        opacity: 0.3,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-      }),
-      MAX_RADIAL_EFFECTS,
-    );
-    this.radialSpheres.renderOrder = 2;
-    this.radialRings = this.createPool(new THREE.RingGeometry(0.9, 1, 64).rotateX(-Math.PI / 2), glow(), MAX_RADIAL_EFFECTS);
-    this.radialRings.frustumCulled = false;
-    this.radialRings.renderOrder = 2;
-    // Spell bolts: unit boxes stretched along the source -> target segment.
-    this.bolts = this.createPool(new THREE.BoxGeometry(1, 1, 1), glow(), MAX_EFFECT_PRIMITIVES);
-    // Melee slashes: a third of a ring, centred on +x before rotation.
-    this.slashes = this.createPool(
-      new THREE.RingGeometry(0.75, 1, 16, 1, -Math.PI / 3, (Math.PI * 2) / 3).rotateX(-Math.PI / 2),
-      glow(),
-      MAX_EFFECT_PRIMITIVES,
-    );
-    this.deepBreathAreas = new THREE.InstancedMesh(
-      new THREE.CircleGeometry(1, 64).rotateX(-Math.PI / 2),
-      new THREE.MeshBasicMaterial({
-        color: 0xff6a00,
-        transparent: true,
-        opacity: DEEP_BREATH_AREA_OPACITY,
-        depthTest: false,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-      }),
-      MAX_DEEP_BREATH_POINTS,
-    );
-    this.deepBreathAreas.count = 0;
-    this.deepBreathAreas.visible = false;
-    this.deepBreathAreas.frustumCulled = false;
-    this.deepBreathAreas.renderOrder = 1;
-    this.deepBreathAreas.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    this.deepBreathLine = new THREE.Line(
-      new THREE.BufferGeometry(),
-      new THREE.LineBasicMaterial({
-        color: 0xff6a00,
-        transparent: true,
-        opacity: 0.9,
-        blending: THREE.AdditiveBlending,
-        depthTest: false,
-        depthWrite: false,
-      }),
-    );
-    this.deepBreathLine.visible = false;
-    this.deepBreathLine.frustumCulled = false;
-    this.deepBreathLine.renderOrder = 2;
-    this.deepBreathPoints = new THREE.Points(
-      new THREE.BufferGeometry(),
-      new THREE.PointsMaterial({
-        color: 0xffa040,
-        size: DEEP_BREATH_POINT_SIZE_PX,
-        sizeAttenuation: false,
-        transparent: true,
-        opacity: 0.95,
-        blending: THREE.AdditiveBlending,
-        depthTest: false,
-        depthWrite: false,
-      }),
-    );
-    this.deepBreathPoints.visible = false;
-    this.deepBreathPoints.frustumCulled = false;
-    this.deepBreathPoints.renderOrder = 3;
-    // Health bars: camera-facing quads drawn over everything, in instance order.
-    this.bars = this.createPool(
-      new THREE.PlaneGeometry(1, 1),
-      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.92, depthTest: false, depthWrite: false }),
-      BAR_POOL_SIZE,
-    );
-    this.bars.renderOrder = 9;
-    this.scene.add(
-      this.beams,
-      this.rings,
-      this.radialSpheres,
-      this.radialRings,
-      this.bolts,
-      this.slashes,
-      this.deepBreathAreas,
-      this.deepBreathLine,
-      this.deepBreathPoints,
-      this.bars,
-    );
-    for (let index = 0; index < MAX_COMBAT_TEXT; index++) {
-      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ depthTest: false, transparent: true }));
-      sprite.center.set(0.5, 0);
-      sprite.renderOrder = 10;
-      sprite.visible = false;
-      this.combatSprites.push(sprite);
-      this.scene.add(sprite);
-    }
-    for (let index = 0; index < MAX_CAST_ICONS; index++) {
-      const sprite = new THREE.Sprite(createIconMaterial());
-      sprite.renderOrder = 11;
-      sprite.visible = false;
-      this.castSprites.push(sprite);
-      const arc = new THREE.Sprite(new THREE.SpriteMaterial({ depthTest: false, depthWrite: false, transparent: true }));
-      arc.renderOrder = 12;
-      arc.visible = false;
-      this.castArcs.push(arc);
-      const label = new THREE.Sprite(new THREE.SpriteMaterial({ depthTest: false, transparent: true }));
-      label.center.set(0.5, 0);
-      label.renderOrder = 12;
-      label.visible = false;
-      this.castLabels.push(label);
-      this.scene.add(sprite, arc, label);
-    }
+    // The effects layer builds its pools in the order the scene always did,
+    // calling back between the beams and the rest so the unit layer's owner
+    // and trail lines come in between (object ids break draw-order ties
+    // between transparent pools at the origin).
+    const built: { unitLayer?: UnitLayer } = {};
+    this.effectsLayer = new EffectsLayer({
+      scene: this.scene,
+      world: this.world,
+      camera: this.camera,
+      renderer: this.renderer,
+      raycaster: this.raycaster,
+      pointer: this.pointer,
+      scratch: { color: this.color, matrix: this.matrix, quaternion: this.quaternion, scaleVector: this.scaleVector, vector: this.vector, vectorB: this.vectorB },
+      units: () => this.unitLayer,
+      hud: () => this.hud,
+      now: this.now,
+      requestRender: () => this.requestRender(),
+      onEffectHover: (hover) => this.onEffectHover(hover),
+      aspect: () => this.aspect,
+      dungeonMesh: () => this.dungeonMesh,
+      unitScale: () => this.unitScale,
+      pointerInside: () => this.pointerInside,
+    }, (effects) => {
+      built.unitLayer = new UnitLayer({
+        scene: this.scene,
+        unitsGroup: this.unitsGroup,
+        world: this.world,
+        tokenTextures: this.tokenTextures,
+        camera: this.camera,
+        scratch: { color: this.color, matrix: this.matrix, vector: this.vector, vectorB: this.vectorB },
+        effects,
+        now: this.now,
+        requestRender: () => this.requestRender(),
+        updatePlates: () => this.updatePlates(),
+        updateCursor: () => this.updateCursor(),
+        aspect: () => this.aspect,
+        disposed: () => this.disposed,
+        dungeonMesh: () => this.dungeonMesh,
+        followSource: () => this.followSource,
+        unitScale: () => this.unitScale,
+        worldUnitScale: () => this.worldUnitScale,
+        hoveredGuid: () => this.hoveredGuid,
+        setHoveredGuid: (guid) => {
+          this.hoveredGuid = guid;
+        },
+      });
+    });
+    this.unitLayer = built.unitLayer!;
+    // Health bars, combat text and cast icon sprites, after the effect pools as before.
+    this.hud = new HudLayer({
+      scene: this.scene,
+      camera: this.camera,
+      renderer: this.renderer,
+      textureLoader: this.textureLoader,
+      scratch: { color: this.color, matrix: this.matrix, scaleVector: this.scaleVector, vector: this.vector, vectorB: this.vectorB, vectorC: this.vectorC },
+      units: this.unitLayer,
+      effects: this.effectsLayer,
+      now: this.now,
+      requestRender: () => this.requestRender(),
+      onCompassYaw: onCompassYaw,
+      cameraYaw: () => this.cameraYaw(),
+      disposed: () => this.disposed,
+      hoveredGuid: () => this.hoveredGuid,
+      unitScale: () => this.unitScale,
+    });
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.maxPolarAngle = TILES_MAX_POLAR;
@@ -1356,70 +915,13 @@ export class MapScene3D {
     else this.resetCamera(false);
   }
 
+  /** Sets the combat events to draw, or turns effects off with `null`. */
   setUnits(units: MapScene3DUnit[]) {
-    this.ensureFloorTracks();
-    const seen = new Set<string>();
-    for (const unit of units) {
-      seen.add(unit.guid);
-      let object = this.units.get(unit.guid);
-      const calloutKey = unit.callout ? `${unit.callout.title}|${unit.callout.subtitle}|${unit.callout.marker}` : "";
-      if (object && (object.kind !== unit.kind || object.miniatureUrl !== unit.miniatureUrl || object.animationUrl !== unit.animationUrl || object.gameModel !== Boolean(unit.gameModel) || object.mapScale !== (unit.mapScale ?? 1) || object.worldHeight !== unit.worldHeight || object.calloutKey !== calloutKey || object.flapWings !== Boolean(unit.flapWings))) {
-        this.removeUnit(unit.guid);
-        object = undefined;
-      }
-      if (!object) object = this.addUnit(unit);
-      object.name = unit.name;
-      object.health = unit.health;
-      object.bar = Boolean(unit.bar);
-      object.worldX = unit.worldX;
-      object.worldY = unit.worldY;
-      object.loggedZ = unit.z;
-      object.sampleMs = unit.atMs;
-      object.locomotion = unit.locomotion ?? "Stand";
-      object.healthFraction = unit.healthFraction ?? null;
-      object.powerLevel = unit.power ?? null;
-      object.owner = unit.owner;
-      object.trail = unit.trail && unit.trail.length > 1 ? unit.trail : null;
-      object.muted = unit.muted;
-      if (object.color !== unit.color || object.icon !== (unit.icon ?? null)) {
-        object.color = unit.color;
-        object.icon = unit.icon ?? null;
-        this.applyTokenFace(object);
-      }
-      const { x, z } = mapPointToScene(unit.point, this.aspect, GROUND_WIDTH);
-      this.placeUnit(unit.guid, object, x, z);
-      object.loggedFacing = unit.facing !== undefined;
-      const dispel = object.dead ? null : unit.dispel ?? null;
-      object.token.debuff.visible = dispel !== null;
-      if (dispel) object.token.debuff.material.color.set(DISPEL_COLORS[dispel]);
-      // Without a logged facing an enemy keeps facing whoever it last hit (updateTokens).
-      this.applyFacing(object, unit.facing ?? (unit.kind === "hostile" ? object.hitFacing : undefined));
-      object.group.scale.setScalar(this.scaleOf(object));
-      this.layoutDrop(object);
-      const opacity = unit.muted ? MUTED_OPACITY : 1;
-      for (const material of object.bodyMaterials) {
-        material.opacity = opacity;
-        material.depthWrite = !unit.muted && object.mini;
-      }
-      object.coneMaterial.opacity = opacity;
-      object.token.shadow.material.opacity = opacity;
-      object.token.edge.material.opacity = opacity;
-      if (object.token.chip) object.token.chip.material.opacity = opacity;
-      setBodyColor(object);
-    }
-    for (const guid of [...this.units.keys()]) {
-      if (!seen.has(guid)) this.removeUnit(guid);
-    }
-    this.updatePlates();
-    this.requestRender();
+    this.unitLayer.setUnits(units);
   }
 
-  /** Sets the combat events to draw, or turns effects off with `null`. */
   setEffects(effects: MapScene3DEffects | null) {
-    this.effects = effects?.fx ? effects : null;
-    if (this.effects) Object.assign(this.effectOptions, this.effects.options, { visibleGuids: this.visibleUnits });
-    this.effectColors.clear();
-    this.requestRender();
+    this.effectsLayer.setEffects(effects);
   }
 
   /** Persistent map diagnostics, independent of replay combat effects. */
@@ -1429,23 +931,19 @@ export class MapScene3D {
   }
 
   /**
-   * Anchors the effect clock on a replay tick. While playing, frames run
-   * ahead of the last tick at `speed` (up to MAX_EXTRAPOLATE_MS) so short
-   * effects animate smoothly between the coarse ticks.
-   */
-  setEffectClock(cursorMs: number, playing: boolean, speed: number) {
-    this.clock.ms = cursorMs;
-    this.clock.at = this.now();
-    this.clock.playing = playing;
-    this.clock.speed = speed;
-    this.requestRender();
-  }
-
-  /**
    * Swaps the tiles for the real dungeon mesh (`request`), loading it on first
    * use, or back to the tiles with `null`. Reports loading / ready / failed
    * through `onDungeonMesh`; a failed load leaves the tiles showing.
    */
+  /**
+   * Anchors the effect clock on a replay tick. While playing, frames run
+   * ahead of the last tick at `speed` (up to MAX_EXTRAPOLATE_MS) so short
+   * effects animate smoothly between the coarse ticks (EffectsLayer).
+   */
+  setEffectClock(cursorMs: number, playing: boolean, speed: number) {
+    this.effectsLayer.setEffectClock(cursorMs, playing, speed);
+  }
+
   setDungeonMesh(request: DungeonMeshRequest | null) {
     const current = this.dungeonMesh?.url ?? this.dungeonMeshRequest?.url ?? null;
     if ((request?.url ?? null) === current) return;
@@ -1566,14 +1064,8 @@ export class MapScene3D {
   setFollowSource(source: MapSceneFollowSource | null) {
     if (source === this.followSource) return;
     this.followSource = source;
-    this.ensureFloorTracks();
+    this.unitLayer.ensureFloorTracks();
     this.requestRender();
-  }
-
-  // The replay time the effects show at `now` (the effect clock, run ahead while playing).
-  private replayNow(now: number): number {
-    const { clock } = this;
-    return clock.playing ? clock.ms + Math.min(now - clock.at, MAX_EXTRAPOLATE_MS) * clock.speed : clock.ms;
   }
 
   // The framing track for the current source and followed unit, or null
@@ -1587,7 +1079,7 @@ export class MapScene3D {
     const source = this.followSource;
     if (!mesh || !source) return null;
     const subject = this.directorSubject;
-    const speed = Math.max(1, this.clock.speed);
+    const speed = Math.max(1, this.effectsLayer.clock.speed);
     const built = this.followTrackFor;
     const fits = this.followInputsMatch(built, source.key, subject, mesh.scale);
     const stale = !fits
@@ -1597,10 +1089,10 @@ export class MapScene3D {
       // Built before the no-Z floor tracks landed (a slower build): the yaw
       // probe reads units' heights from them. Later changes to them (growth)
       // are picked up by the next rebuild.
-      || (built!.floors === null && this.floorTracks !== null);
+      || (built!.floors === null && this.unitLayer.floorTracks !== null);
     const pending = this.followBuild?.inputs ?? null;
-    if (stale && !(this.followInputsMatch(pending, source.key, subject, mesh.scale) && pending!.speed === speed && (pending!.floors !== null || this.floorTracks === null))) {
-      this.startFollowBuild(source, { key: source.key, subject, aspect: this.aspect, scale: mesh.scale, speed, endMs: source.endMs, floors: this.floorTracks });
+    if (stale && !(this.followInputsMatch(pending, source.key, subject, mesh.scale) && pending!.speed === speed && (pending!.floors !== null || this.unitLayer.floorTracks === null))) {
+      this.startFollowBuild(source, { key: source.key, subject, aspect: this.aspect, scale: mesh.scale, speed, endMs: source.endMs, floors: this.unitLayer.floorTracks });
     }
     return fits ? this.followTrack : null;
   }
@@ -1678,8 +1170,8 @@ export class MapScene3D {
    * minis, the dungeon mesh, or data the caller says is in flight.
    */
   pendingAssets(): number {
-    let pending = this.tokenTextures.pendingCount() + this.bossMinisLoading + (this.dungeonMeshRequest ? 1 : 0) + (this.externalPending ? 1 : 0);
-    for (const texture of this.iconTextures.values()) if (texture === "loading") pending++;
+    let pending = this.tokenTextures.pendingCount() + this.unitLayer.bossMinisLoading + (this.dungeonMeshRequest ? 1 : 0) + (this.externalPending ? 1 : 0);
+    for (const texture of this.hud.iconTextures.values()) if (texture === "loading") pending++;
     return pending;
   }
 
@@ -1842,64 +1334,11 @@ export class MapScene3D {
     this.unitScale = scale;
     this.worldUnitScale = worldScale;
     for (const object of this.units.values()) {
-      object.group.scale.setScalar(this.scaleOf(object));
-      this.layoutDrop(object);
+      object.group.scale.setScalar(this.unitLayer.scaleOf(object));
+      this.unitLayer.layoutDrop(object);
     }
     this.planLayer.setUnitScale(scale);
     this.updatePlates();
-  }
-
-  // Client-sized models use true world yards on calibrated maps. On artwork
-  // without yard calibration, keep the old readable baseline instead.
-  private scaleOf(object: UnitObject): number {
-    if (object.worldHeight !== undefined) return publishedModelGroupScale(object.worldHeight, this.worldUnitScale, this.unitScale);
-    return this.dungeonMesh && object.miniatureUrl && object.kind !== "pet" ? this.unitScale * MESH_BOSS_SCALE : this.unitScale;
-  }
-
-  // Puts the unit at (x, z) on the mesh floor while it shows, else at 0. A
-  // logged height (`loggedZ`, yards) picks the floor nearest below it, and
-  // lifts the unit off it when well above (a knock-up, a fall). Without one,
-  // the unit's floor track picks a floor it can walk to (until the track is
-  // built, or off it, the highest floor as before).
-  private placeUnit(guid: string, object: UnitObject, x: number, z: number) {
-    const mesh = this.dungeonMesh;
-    const loggedZ = object.loggedZ;
-    const tracked = mesh && loggedZ === undefined ? this.trackedFloor(guid, object, x, z, mesh.scale) : null;
-    const floor = !mesh ? 0 : tracked ?? this.world.unitFloorHeights.heightAt(guid, x, z, this.probeCeiling(loggedZ, mesh.scale));
-    object.floorTracked = tracked !== null;
-    const logged = mesh && loggedZ !== undefined ? loggedZ * mesh.scale : null;
-    const y = mesh && logged !== null && logged - floor > AIRBORNE_YARDS * mesh.scale ? logged : floor;
-    object.floorY = floor;
-    object.base.set(x, y, z);
-    object.group.position.copy(object.base);
-    this.layoutDrop(object);
-  }
-
-  // In the air, the shadow stays on the floor and a thin line joins it to
-  // the token; both sit in the token's group, so in its (scaled) units.
-  private layoutDrop(object: UnitObject) {
-    const scale = object.group.scale.y || 1;
-    const drop = (object.base.y - object.floorY) / scale;
-    object.token.shadow.position.y = TOKEN_GROUND.shadow - drop;
-    if (drop <= 0) {
-      if (object.drop) object.drop.visible = false;
-      return;
-    }
-    if (!object.drop) {
-      object.drop = new THREE.Mesh(this.columnBox, new THREE.MeshBasicMaterial({
-        color: DROP_LINE.color, transparent: true, opacity: DROP_LINE.opacity, depthWrite: false,
-      }));
-      object.group.add(object.drop);
-    }
-    object.drop.visible = true;
-    object.drop.scale.set(DROP_LINE.width, drop + TOKEN_GROUND.underside - TOKEN_GROUND.shadow, DROP_LINE.width);
-    object.drop.position.y = TOKEN_GROUND.shadow - drop;
-  }
-
-  // Where a probe for a logged height starts (scene units): just above the
-  // unit's feet, so the roof or canopy over it is not hit.
-  private probeCeiling(loggedZ: number | undefined, scale: number): number | undefined {
-    return loggedZ === undefined ? undefined : (loggedZ + LOGGED_Z_CLEARANCE_YARDS) * scale;
   }
 
   // The probe start for the camera's aim point: from the median logged height
@@ -1914,85 +1353,12 @@ export class MapScene3D {
     for (const [guid, object] of this.units) {
       if (!framed || framed.has(guid)) heights.push(object.loggedZ ?? (object.floorTracked ? object.floorY / mesh.scale : undefined));
     }
-    return this.probeCeiling(medianHeight(heights), mesh.scale);
+    return this.unitLayer.probeCeiling(medianHeight(heights), mesh.scale);
   }
 
   // The floor below the free cam's pivot at (x, z), before its lift.
   private pivotFloor(x: number, z: number): number {
     return this.world.floorHeights.heightAt("camera-target", x, z, this.cameraCeiling());
-  }
-
-  // The unit's floor from its track (no logged height), or null while there
-  // is none for it here (not built yet, other data, no floor on its path).
-  private trackedFloor(guid: string, object: UnitObject, x: number, z: number, scale: number): number | null {
-    const track = this.floorTracks?.units.get(guid);
-    if (!track || object.sampleMs === undefined) return null;
-    return floorTrackAt(track, object.sampleMs, x, z, FLOOR_TRACK_TOLERANCE_YARDS * scale);
-  }
-
-  // Keeps the no-Z floor tracks current: a new source, aspect or mesh drops
-  // the old tracks and builds new ones; more streamed data rebuilds once the
-  // build in flight (if any) is done, the old tracks serving meanwhile.
-  private ensureFloorTracks() {
-    const mesh = this.dungeonMesh;
-    const source = this.followSource;
-    if (!mesh || !source?.unitTracks) {
-      if (this.floorBuild) clearTimeout(this.floorBuild.timer);
-      this.floorBuild = null;
-      this.floorTracks = null;
-      this.floorTracksFor = null;
-      return;
-    }
-    const inputs: FloorTrackInputs = { key: source.key, aspect: this.aspect, url: mesh.url, endMs: source.endMs };
-    const same = (other: FloorTrackInputs | null | undefined) => other !== null && other !== undefined
-      && other.key === inputs.key && other.aspect === inputs.aspect && other.url === inputs.url;
-    const built = this.floorTracksFor;
-    if (same(built) && built!.endMs >= inputs.endMs) return;
-    if (!same(built)) {
-      this.floorTracks = null;
-      this.floorTracksFor = null;
-    }
-    if (same(this.floorBuild?.inputs)) return;
-    this.startFloorBuild(source, inputs);
-  }
-
-  // Starts (or restarts) the sliced floor-track build for `inputs`; when it
-  // is done, every unit is placed again on its tracked floor.
-  private startFloorBuild(source: MapSceneFollowSource, inputs: FloorTrackInputs) {
-    if (this.floorBuild) clearTimeout(this.floorBuild.timer);
-    const mesh = this.dungeonMesh!;
-    const { aspect } = inputs;
-    const build = startFloorTrackBuild({
-      // Projected per unit as the build reaches it, not all up front.
-      units: (source.unitTracks?.() ?? []).map((unit) => ({
-        guid: unit.guid,
-        get samples() {
-          return unit.samples.map(({ ms, point }) => ({ ms, ...mapPointToScene(point, aspect, GROUND_WIDTH) }));
-        },
-      })),
-      scale: mesh.scale,
-      candidatesAt: (x, z) => this.world.floorCandidates(x, z),
-    }, this.now);
-    const slice = () => {
-      const current = this.floorBuild;
-      if (this.disposed || !current || current.build !== build) return;
-      if (this.dungeonMesh?.url !== inputs.url) {
-        this.floorBuild = null;
-        return;
-      }
-      if (!build.step(FLOOR_SLICE_MS)) {
-        current.timer = setTimeout(slice, 0);
-        return;
-      }
-      this.floorBuild = null;
-      this.floorTracks = build.result;
-      this.floorTracksFor = inputs;
-      for (const [guid, object] of this.units) this.placeUnit(guid, object, object.base.x, object.base.z);
-      this.requestRender();
-      // Data that streamed in meanwhile gets its own build.
-      this.ensureFloorTracks();
-    };
-    this.floorBuild = { build, inputs, timer: setTimeout(slice, 0) };
   }
 
   // Shows the mesh or the tiles, re-grounds every unit and re-applies the
@@ -2004,8 +1370,8 @@ export class MapScene3D {
     this.meshLight.visible = mesh;
     this.world.floorHeights.clear();
     this.world.unitFloorHeights.clear();
-    this.ensureFloorTracks();
-    for (const [guid, object] of this.units) this.placeUnit(guid, object, object.base.x, object.base.z);
+    this.unitLayer.ensureFloorTracks();
+    for (const [guid, object] of this.units) this.unitLayer.placeUnit(guid, object, object.base.x, object.base.z);
     this.updateCameraLimits();
     this.updateUnitScale(true);
     this.debugLayer.rebuildDebugOverlays(this.aspect);
@@ -2120,10 +1486,7 @@ export class MapScene3D {
   }
 
   private emitCompassYaw() {
-    const yaw = unwrapCompassRadians(this.lastCompassYaw, this.cameraYaw());
-    if (Number.isFinite(this.lastCompassYaw) && Math.abs(yaw - this.lastCompassYaw) < Math.PI / 360) return;
-    this.lastCompassYaw = yaw;
-    this.onCompassYaw(yaw);
+    this.hud.emitCompassYaw();
   }
 
   // Puts the camera `distance` from (x, z) on the floor, `elevationDeg` above
@@ -2276,7 +1639,7 @@ export class MapScene3D {
       sample: (x, z, radius, height, framed) => {
         if (!this.dungeonMesh) return false;
         // No floor below (a chasm, off the mesh): skip the sample rather than cast from y = 0.
-        const floor = this.world.sampleFloor(x, z, this.probeCeiling(height, scale));
+        const floor = this.world.sampleFloor(x, z, this.unitLayer.probeCeiling(height, scale));
         if (floor === null) return false;
         from.set(x, floor + lift, z);
         // The framed units at player height: over their own logged or tracked
@@ -2352,23 +1715,23 @@ export class MapScene3D {
     this.directorAt = now;
     this.directorInFrame.clear();
     if (frame) for (const guid of frame.guids) this.directorInFrame.add(guid);
-    const replayMs = this.replayNow(now);
+    const replayMs = this.effectsLayer.replayNow(now);
     const track = this.currentFollowTrack(replayMs);
     if (!frame && !track) return false;
 
     // A replay jump: the clock moved by more than playback explains. A pause
     // or resume since the last frame re-anchors instead (the paused time is
     // not playback it missed).
-    const previousMs = this.clock.playing === this.directorReplayPlaying ? this.directorReplayMs : null;
-    const expectedMs = this.clock.playing ? (now - this.directorReplayAt) * this.clock.speed : 0;
-    const jumped = previousMs !== null && isReplayJump(previousMs, replayMs, expectedMs, this.clock.speed, this.clock.playing);
+    const previousMs = this.effectsLayer.clock.playing === this.directorReplayPlaying ? this.directorReplayMs : null;
+    const expectedMs = this.effectsLayer.clock.playing ? (now - this.directorReplayAt) * this.effectsLayer.clock.speed : 0;
+    const jumped = previousMs !== null && isReplayJump(previousMs, replayMs, expectedMs, this.effectsLayer.clock.speed, this.effectsLayer.clock.playing);
     this.directorReplayMs = replayMs;
     this.directorReplayAt = now;
-    this.directorReplayPlaying = this.clock.playing;
+    this.directorReplayPlaying = this.effectsLayer.clock.playing;
 
     // Where the group is, and the springs' goals: sampled ahead by each
     // spring's trail, which the spring then takes back.
-    const springs = track ? followSprings(this.clock.speed, this.clock.playing) : null;
+    const springs = track ? followSprings(this.effectsLayer.clock.speed, this.effectsLayer.clock.playing) : null;
     const key = track ? followKeyAt(track, replayMs, this.followKey) : null;
     const led = track ? followKeyAt(track, replayMs + springs!.leadMs, this.followLedKey) : null;
     const sized = track ? followKeyAt(track, replayMs + springs!.distanceLeadMs, this.followSizedKey) : null;
@@ -2531,7 +1894,7 @@ export class MapScene3D {
       && Math.abs(elevation - shotElevation) <= DIRECTOR_SETTLED
       && Math.abs(wrapAngle(shotYaw - yaw)) <= DIRECTOR_SETTLED_YAW;
     // Playing, the track keeps moving; paused, the line-of-sight hold may still release.
-    return !settled || (key !== null && this.clock.playing) || this.shotHold.lowerSinceMs !== null;
+    return !settled || (key !== null && this.effectsLayer.clock.playing) || this.shotHold.lowerSinceMs !== null;
   }
 
   // The distance the Director's camera sits at: `distance`, or nearer while
@@ -2575,7 +1938,7 @@ export class MapScene3D {
       -((event.clientY - rect.top) / rect.height) * 2 + 1,
     );
     this.raycaster.setFromCamera(this.pointer, this.camera);
-    const unitHit = this.raycaster.intersectObjects([...this.units.values()].map((unit) => unit.body), false)[0];
+    const unitHit = raycastUnits(this.raycaster, this.units);
     if (unitHit) {
       const guid = (unitHit.object.userData.guid as string | undefined) ?? null;
       const object = guid ? this.units.get(guid) : undefined;
@@ -2638,7 +2001,6 @@ export class MapScene3D {
   dispose() {
     this.disposed = true;
     if (this.followBuild) clearTimeout(this.followBuild.timer);
-    if (this.floorBuild) clearTimeout(this.floorBuild.timer);
     this.unlockPointer();
     cancelAnimationFrame(this.frame);
     this.resizeObserver.disconnect();
@@ -2660,1432 +2022,53 @@ export class MapScene3D {
     if (this.walk) this.disposeAvatar(this.walk.avatar);
     this.walk = null;
     this.presence.dispose();
-    for (const line of this.targetLines) {
-      line.geometry.dispose();
-      line.material.map?.dispose();
-      line.material.dispose();
-    }
+    this.unitLayer.dispose();
     this.planLayer.dispose();
     this.tokenTextures.dispose();
-    this.tokenPlane.dispose();
-    this.columnBox.dispose();
-    this.tokenEdge.dispose();
-    this.bossSpire.dispose();
     clearTimeout(this.unitClickTimer);
     this.keyWindow.removeEventListener("keydown", this.handleKeyDown, { capture: true });
     this.keyWindow.removeEventListener("keyup", this.handleKeyUp);
     this.keyWindow.removeEventListener("blur", this.releaseKeys);
-    for (const guid of [...this.units.keys()]) this.removeUnit(guid);
     this.debugLayer.clearDebugOverlays();
-    for (const guid of [...this.plates.keys()]) this.removePlate(guid);
+    this.hud.dispose();
     this.clearGround();
     this.dungeonMeshRequest = null;
     // The renderer's disposal frees this scene's GPU copy of the (shared) mesh.
     this.world.dungeonMesh = null;
     for (const geometry of Object.values(this.geometries)) geometry.dispose();
-    for (const mini of this.bossMinis.values()) {
-      mini?.geometry.dispose();
-      for (const material of new Set(mini?.materials ?? [])) {
-        material.map?.dispose();
-        material.dispose();
-      }
-    }
-    this.beams.geometry.dispose();
-    this.beams.material.dispose();
-    this.ownerLines.geometry.dispose();
-    this.ownerLines.material.dispose();
-    this.trailLines.geometry.dispose();
-    this.trailLines.material.dispose();
-    this.deepBreathAreas.geometry.dispose();
-    this.deepBreathAreas.material.dispose();
-    this.deepBreathAreas.dispose();
-    this.deepBreathLine.geometry.dispose();
-    this.deepBreathLine.material.dispose();
-    this.deepBreathPoints.geometry.dispose();
-    this.deepBreathPoints.material.dispose();
-    for (const pool of [this.rings, this.bolts, this.slashes, this.bars]) {
-      pool.geometry.dispose();
-      pool.material.dispose();
-      pool.dispose();
-    }
-    for (const sprite of this.combatSprites) sprite.material.dispose();
-    for (const { texture } of this.labelTextures.values()) texture.dispose();
-    for (const sprite of [...this.castSprites, ...this.castArcs, ...this.castLabels]) sprite.material.dispose();
-    for (const texture of [...this.arcTextures, ...this.cutArcTextures]) texture?.dispose();
-    for (const texture of this.iconTextures.values()) {
-      if (typeof texture === "object") texture.dispose();
-    }
+    this.effectsLayer.dispose();
     this.renderer.dispose();
     this.renderer.forceContextLoss();
     canvas.remove();
   }
 
-  private addUnit(unit: MapScene3DUnit): UnitObject {
-    const boss = unit.boss === true;
-    const radius = boss ? BOSS_TOKEN_RADIUS : TOKEN_RADIUS[unit.kind];
-    const overlay = (map: THREE.Texture | null, size: number, lift: number, opacity = 1) => {
-      const mesh = new THREE.Mesh(this.tokenPlane, new THREE.MeshBasicMaterial({
-        map, transparent: true, opacity, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
-      }));
-      mesh.scale.setScalar(size);
-      mesh.position.y = lift;
-      return mesh;
-    };
-    // The body is the disc (a flat plane) until a model loads into it.
-    const bodyMaterial = new THREE.MeshLambertMaterial({ transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
-    const body = new THREE.Mesh(this.tokenPlane, bodyMaterial);
-    body.scale.setScalar(boss ? radius * TOKEN_PLANE.sigil : radius);
-    const face = boss ? SIGIL_FACE : TOKEN_GROUND.underside + radius * TOKEN_THICKNESS;
-    body.position.y = face;
-    const edge = new THREE.Mesh(this.tokenEdge, new THREE.MeshBasicMaterial({ map: this.tokenTextures.edge(), transparent: true }));
-    edge.scale.set(radius, face - TOKEN_GROUND.underside, radius);
-    edge.position.y = face;
-    edge.visible = !boss;
-    const cone = overlay(null, radius * MARKS_SCALE, face + TOKEN_LIFT.marks);
-    const coneMaterial = cone.material;
-    const shadow = overlay(this.tokenTextures.shadow(), radius * TOKEN_PLANE.shadow, TOKEN_GROUND.shadow);
-    const halo = overlay(null, radius * TOKEN_PLANE.halo, face + TOKEN_LIFT.halo);
-    const pin = overlay(this.tokenTextures.halo("pinned"), radius * TOKEN_PLANE.pin, face + TOKEN_LIFT.halo);
-    pin.material.color.setHex(HALO_COLORS.pinned);
-    const arc = overlay(null, radius * TOKEN_PLANE.arc, face + TOKEN_LIFT.arc);
-    const debuff = overlay(this.tokenTextures.debuffTint(), radius * DEBUFF_PLANE, face + TOKEN_LIFT.debuff);
-    debuff.visible = false;
-    const ticks = boss ? overlay(this.tokenTextures.sigilTicks(), radius * TOKEN_PLANE.ticks * TOKEN_PLANE.sigil, face + TOKEN_LIFT.marks) : null;
-    let bossSpire: UnitToken["bossSpire"] = null;
-    if (boss) {
-      bossSpire = new THREE.Mesh(this.bossSpire, new THREE.MeshLambertMaterial({ color: ENEMY_RED, emissive: BOSS_SPIRE.glow, flatShading: true }));
-      bossSpire.scale.setScalar(radius);
-      bossSpire.position.y = face;
-    }
-    const group = new THREE.Group();
-    group.userData.guid = unit.guid;
-    body.userData.guid = unit.guid;
-    group.add(shadow, edge, body, cone, debuff, arc, halo, pin);
-    if (ticks) group.add(ticks);
-    if (bossSpire) group.add(bossSpire);
-    this.unitsGroup.add(group);
-    const calloutMarker = unit.callout ? createUnitCalloutMarker(unit.callout, () => this.requestRender()) : null;
-    if (calloutMarker) this.scene.add(calloutMarker);
-    const object: UnitObject = {
-      group,
-      body,
-      calloutMarker,
-      calloutKey: unit.callout ? `${unit.callout.title}|${unit.callout.subtitle}|${unit.callout.marker}` : "",
-      bodyMaterial,
-      bodyMaterials: [bodyMaterial],
-      coneMaterial,
-      cone,
-      token: { radius, face, edge, shadow, halo, pin, arc, debuff, ticks, sigil: null, chip: null, bossSpire },
-      icon: unit.icon ?? null,
-      boss,
-      mini: false,
-      healthFraction: unit.healthFraction ?? null,
-      powerLevel: unit.power ?? null,
-      owner: unit.owner,
-      loggedFacing: unit.facing !== undefined,
-      hitFacing: undefined,
-      kind: unit.kind,
-      name: unit.name,
-      color: unit.color,
-      textured: false,
-      dead: false,
-      base: new THREE.Vector3(),
-      floorY: 0,
-      drop: null,
-      worldX: unit.worldX,
-      worldY: unit.worldY,
-      loggedZ: unit.z,
-      sampleMs: unit.atMs,
-      floorTracked: false,
-      health: unit.health,
-      bar: Boolean(unit.bar),
-      miniatureUrl: unit.miniatureUrl,
-      animationUrl: unit.animationUrl,
-      gameModel: Boolean(unit.gameModel),
-      locomotion: unit.locomotion ?? "Stand",
-      animatedGameModel: null,
-      flapWings: Boolean(unit.flapWings),
-      flappingWhelp: null,
-      mapScale: unit.mapScale ?? 1,
-      worldHeight: unit.worldHeight,
-      barHeight: BAR_HEIGHT,
-      labelHeight: LABEL_HEIGHT,
-      deadLift: DEAD_LIFT,
-      modelBase: 0,
-      trail: null,
-      muted: unit.muted,
-    };
-    this.applyTokenFace(object);
-    group.scale.setScalar(this.scaleOf(object));
-    this.units.set(unit.guid, object);
-    if (object.miniatureUrl && object.gameModel && object.animationUrl) {
-      this.requestAnimatedGameModel(object);
-    } else if (object.miniatureUrl) {
-      const mini = this.requestBossMini(object.miniatureUrl, object.gameModel, object.mapScale, object.worldHeight);
-      if (mini) this.applyBossMini(object, mini);
-    }
-    return object;
-  }
-
-  // Turns the unit (`facing` radians, or undefined for no known facing). The
-  // disc's icon and the cast arc keep north up; the notch turns, and shows
-  // only when the facing is known.
-  private applyFacing(object: UnitObject, facing: number | undefined) {
-    const angle = facing ?? 0;
-    object.group.rotation.y = angle;
-    if (!object.mini) object.body.rotation.y = -angle;
-    object.token.arc.rotation.y = -angle;
-    object.token.pin.rotation.y = -angle;
-    object.cone.visible = facing !== undefined && (object.boss || !object.mini);
-  }
-
-  // Enemies with no logged facing turn toward whoever they last hit (kept
-  // after the hit, so they do not snap back to north).
-  private updateHitFacings() {
-    const fx = this.effects?.fx;
-    if (!fx) return;
-    deriveLastHitTargets(fx, this.effectCursorMs, this.hitFacingSources, this.lastHitTargets);
-    for (const [guid, targetGuid] of this.lastHitTargets) {
-      const object = this.units.get(guid);
-      const target = this.units.get(targetGuid);
-      if (!object || !target || object.loggedFacing || object.dead) continue;
-      const dx = target.base.x - object.base.x;
-      const dz = target.base.z - object.base.z;
-      if (dx * dx + dz * dz < 1e-8) continue;
-      // Rotating -z (the notch) by θ about y gives (-sin θ, 0, -cos θ).
-      object.hitFacing = Math.atan2(-dx, -dz);
-      this.applyFacing(object, object.hitFacing);
-    }
-  }
-
-  // The disc's face and the notch for the unit's colour, icon and death.
-  private applyTokenFace(object: UnitObject) {
-    const ring = object.dead ? DEAD_RING : object.color;
-    object.coneMaterial.map = this.tokenTextures.facingMarks(object.boss ? ENEMY_RED : ring, object.boss);
-    object.coneMaterial.color.setHex(object.dead && object.boss ? 0x777777 : 0xffffff);
-    object.coneMaterial.needsUpdate = true;
-    object.token.edge.material.color.set(ring);
-    if (object.token.chip) {
-      const chipMap = this.tokenTextures.disc(null, ring, object.dead, guardianWell(object.name));
-      if (object.token.chip.material.map !== chipMap) {
-        object.token.chip.material.map = chipMap;
-        object.token.chip.material.needsUpdate = true;
-      }
-    }
-    if (object.mini) return;
-    const map = object.boss
-      ? this.tokenTextures.sigil()
-      : this.tokenTextures.disc(object.icon, ring, object.dead, object.kind === "hostile" ? "enemy" : object.kind === "pet" ? guardianWell(object.name) : null);
-    if (object.bodyMaterial.map !== map) {
-      object.bodyMaterial.map = map;
-      object.bodyMaterial.needsUpdate = true;
-    }
-    object.bodyMaterial.color.setHex(object.boss && object.dead ? 0x777777 : 0xffffff);
-  }
-
-  private requestAnimatedGameModel(object: UnitObject) {
-    const url = object.miniatureUrl;
-    const animationUrl = object.animationUrl;
-    if (!url || !animationUrl || object.animatedGameModel) return;
-    const guid = object.group.userData.guid as string;
-    this.bossMinisLoading++;
-    void loadAnimatedGameModel(url).then((template) => {
-      if (this.disposed || this.units.get(guid) !== object || object.miniatureUrl !== url || object.animationUrl !== animationUrl) return;
-      const root = cloneSkinned(template.scene);
-      const nativeHeight = Math.max(1e-3, template.box.max.y - template.box.min.y);
-      let scale = publishedModelGeometryScale(true, nativeHeight, object.mapScale, object.worldHeight);
-      const guardian = !object.boss && object.kind === "pet";
-      if (guardian) scale *= Math.max(1, MIN_GUARDIAN_MODEL_HEIGHT / (nativeHeight * scale));
-      root.scale.setScalar(scale);
-      root.rotation.y = BOSS_MINI_YAW;
-      const materials: MapBodyMaterial[] = [];
-      root.traverse((child) => {
-        const mesh = child as THREE.Mesh;
-        if (!mesh.isMesh) return;
-        const clone = (source: THREE.Material) => {
-          const material = source.clone() as MapBodyMaterial;
-          material.transparent = true;
-          materials.push(material);
-          return material;
-        };
-        mesh.material = Array.isArray(mesh.material) ? mesh.material.map(clone) : clone(mesh.material);
-      });
-      for (const material of object.bodyMaterials) material.dispose();
-      const hidden = new THREE.MeshLambertMaterial({ visible: false });
-      object.body.material = hidden;
-      object.bodyMaterial = materials[0] ?? hidden;
-      object.bodyMaterials = [hidden, ...materials];
-      object.textured = true;
-      object.mini = true;
-      object.body.scale.setScalar(1);
-      object.body.position.y = 0;
-      object.body.rotation.set(0, 0, 0);
-      object.modelBase = guardian ? object.token.face : 0;
-      root.position.y = object.modelBase - template.box.min.y * scale;
-      object.body.add(root);
-      this.applyRetainedModelLayout(object, template.box, scale);
-      const clips = new Map(template.clips.map((clip) => [clip.name, clip]));
-      object.animatedGameModel = {
-        root,
-        mixer: new THREE.AnimationMixer(root),
-        clips,
-        animationUrl,
-        packRequested: false,
-        packLoaded: false,
-        packFailed: false,
-        stateKey: null,
-        clipName: null,
-      };
-      setBodyColor(object);
-      this.applyTokenFace(object);
-      this.requestRender();
-    }).catch((error) => console.error("Failed to load animated game model", url, error)).finally(() => {
-      this.bossMinisLoading--;
-      this.requestRender();
-    });
-  }
-
-  private applyRetainedModelLayout(object: UnitObject, nativeBox: THREE.Box3, scale: number) {
-    const { token } = object;
-    const guardian = !object.boss && object.kind === "pet";
-    if (guardian) {
-      if (!token.chip) {
-        token.chip = new THREE.Mesh(this.tokenPlane, new THREE.MeshBasicMaterial({
-          transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3,
-        }));
-        token.chip.scale.setScalar(token.radius);
-        token.chip.position.y = token.face;
-        object.group.add(token.chip);
-      }
-    } else {
-      token.radius = MINI_TOKEN_RADIUS;
-      token.edge.visible = false;
-      token.face = TOKEN_GROUND.underside;
-      token.halo.position.y = token.pin.position.y = token.face + TOKEN_LIFT.halo;
-      token.arc.position.y = token.face + TOKEN_LIFT.arc;
-      token.debuff.position.y = token.face + TOKEN_LIFT.debuff;
-      token.debuff.scale.setScalar(MINI_TOKEN_RADIUS * DEBUFF_PLANE);
-      object.cone.position.y = token.face + TOKEN_LIFT.marks;
-      if (token.ticks) token.ticks.position.y = token.face + TOKEN_LIFT.marks;
-      for (const [part, size] of [[token.halo, TOKEN_PLANE.halo], [token.pin, TOKEN_PLANE.pin], [token.arc, TOKEN_PLANE.arc], [token.shadow, TOKEN_PLANE.shadow]] as const) {
-        part.scale.setScalar(MINI_TOKEN_RADIUS * size);
-      }
-      if (token.bossSpire) token.bossSpire.visible = false;
-      if (object.boss && !token.sigil) {
-        token.sigil = new THREE.Mesh(this.tokenPlane, new THREE.MeshBasicMaterial({
-          map: this.tokenTextures.sigil(), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
-        }));
-        token.sigil.scale.setScalar(MINI_TOKEN_RADIUS * TOKEN_PLANE.sigil);
-        token.sigil.position.y = token.face;
-        token.ticks?.scale.setScalar(MINI_TOKEN_RADIUS * TOKEN_PLANE.sigil);
-        object.group.add(token.sigil);
-      }
-      if (object.boss) object.cone.scale.setScalar(MINI_TOKEN_RADIUS * MARKS_SCALE);
-      else object.cone.visible = false;
-    }
-    const top = object.modelBase + (nativeBox.max.y - nativeBox.min.y) * scale;
-    object.barHeight = Math.max(BAR_HEIGHT, top + BOSS_MINI_BAR_GAP);
-    object.labelHeight = object.barHeight + LABEL_HEIGHT - BAR_HEIGHT;
-    // Static death fallback rotates -z into +y, so lift the back of the model
-    // to the floor when a source Death clip is unavailable.
-    object.deadLift = object.modelBase - nativeBox.min.z * scale;
-  }
-
-  private requestGameModelAnimationPack(object: UnitObject, model: AnimatedGameModel) {
-    if (model.packRequested || model.packFailed) return;
-    model.packRequested = true;
-    const guid = object.group.userData.guid as string;
-    this.bossMinisLoading++;
-    void loadGameModelAnimationPack(model.animationUrl).then((clips) => {
-      if (this.disposed || this.units.get(guid) !== object || object.animatedGameModel !== model) return;
-      for (const clip of clips) model.clips.set(clip.name, clip);
-      model.packLoaded = true;
-      model.stateKey = null;
-      this.requestRender();
-    }).catch((error) => {
-      // Do not retry every render frame. Changing the manifest URL recreates
-      // the unit and permits a fresh request.
-      model.packFailed = true;
-      console.error("Failed to load game-model animation pack", model.animationUrl, error);
-    }).finally(() => {
-      this.bossMinisLoading--;
-      this.requestRender();
-    });
-  }
-
-  // Returns the published unit model if loaded, starting its load on first use.
-  private requestBossMini(url: string, gameModel: boolean, mapScale: number, worldHeight?: number): BossMini | null {
-    const cacheKey = `${gameModel ? "game" : "miniature"}:${worldHeight ?? "baseline"}:${mapScale}:${url}`;
-    if (this.bossMinis.has(cacheKey)) return this.bossMinis.get(cacheKey) ?? null;
-    this.bossMinis.set(cacheKey, null);
-    this.bossMinisLoading++;
-    void this.loadBossMiniCandidate(url, gameModel, mapScale, worldHeight).then((mini) => {
-      this.bossMinisLoading--;
-      if (!mini) return;
-      if (this.disposed) {
-        mini.geometry.dispose();
-        for (const material of new Set(mini.materials ?? [])) {
-          material.map?.dispose();
-          material.dispose();
-        }
-        return;
-      }
-      this.bossMinis.set(cacheKey, mini);
-      for (const object of this.units.values()) {
-        if (object.miniatureUrl === url && object.gameModel === gameModel && object.mapScale === mapScale && object.worldHeight === worldHeight) this.applyBossMini(object, mini);
-      }
-      this.updatePlates();
-      this.requestRender();
-    });
-    return null;
-  }
-
-  // Loads every primitive in a published model as plain float geometry, sized
-  // and turned to face -z. Original models commonly split their creature skin
-  // across several materials, so preserve a material group for each primitive.
-  private async loadBossMiniCandidate(url: string, gameModel: boolean, mapScale: number, worldHeight?: number): Promise<BossMini | null> {
-    const sourceMaterials: THREE.Material[] = [];
-    try {
-      const gltf = await (await gltfLoader()).loadAsync(url);
-      gltf.scene.updateMatrixWorld(true);
-      const geometries: THREE.BufferGeometry[] = [];
-      const sourceGeometries = new Set<THREE.BufferGeometry>();
-      let allTextured = true;
-      gltf.scene.traverse((child) => {
-        const mesh = child as THREE.Mesh<THREE.BufferGeometry, THREE.Material | THREE.Material[]>;
-        if (!mesh.isMesh) return;
-        geometries.push(bakedGeometry(mesh));
-        sourceGeometries.add(mesh.geometry);
-        const source = Array.isArray(mesh.material) ? null : mesh.material;
-        sourceMaterials.push(...(Array.isArray(mesh.material) ? mesh.material : [mesh.material]));
-        if (!(source instanceof THREE.MeshStandardMaterial) || !source.map) allTextured = false;
-      });
-      for (const geometry of sourceGeometries) geometry.dispose();
-      if (geometries.length === 0) {
-        disposeModelMaterials(sourceMaterials);
-        return null;
-      }
-      const mini = mergeGeometries(geometries, allTextured);
-      for (const geometry of geometries) geometry.dispose();
-      if (!mini) {
-        disposeModelMaterials(sourceMaterials);
-        return null;
-      }
-      const materials = allTextured
-        ? sourceMaterials.map((material) => material as THREE.MeshStandardMaterial)
-        : null;
-      if (materials) {
-        for (const material of new Set(materials)) material.map!.colorSpace = THREE.SRGBColorSpace;
-      } else {
-        disposeModelMaterials(sourceMaterials);
-        sourceMaterials.length = 0;
-      }
-      mini.rotateY(BOSS_MINI_YAW);
-      mini.computeBoundingBox();
-      const nativeBox = mini.boundingBox!;
-      const nativeHeight = Math.max(1e-3, nativeBox.max.y - nativeBox.min.y);
-      const modelScale = publishedModelGeometryScale(gameModel, nativeHeight, mapScale, worldHeight);
-      mini.scale(modelScale, modelScale, modelScale);
-      mini.computeBoundingBox();
-      if (gameModel) {
-        mini.translate(0, -mini.boundingBox!.min.y, 0);
-        mini.computeBoundingBox();
-      }
-      mini.computeBoundingSphere();
-      const box = mini.boundingBox!;
-      const barHeight = Math.max(BAR_HEIGHT, box.max.y + BOSS_MINI_BAR_GAP);
-      const result = {
-        geometry: mini,
-        materials,
-        barHeight,
-        labelHeight: barHeight + LABEL_HEIGHT - BAR_HEIGHT,
-        // Lying down turns -z into +y, so the back of the model rests on the ground.
-        deadLift: -box.min.z,
-      };
-      sourceMaterials.length = 0;
-      return result;
-    } catch (error) {
-      disposeModelMaterials(sourceMaterials);
-      console.error("Failed to load published unit model", url, error);
-      return null;
-    }
-  }
-
-  private requestFlappingWhelp(object: UnitObject) {
-    if (!object.flapWings || !object.miniatureUrl || object.flappingWhelp) return;
-    const guid = object.group.userData.guid as string;
-    const url = object.miniatureUrl;
-    void loadFlappingWhelp(url).then((template) => {
-      if (this.disposed || this.units.get(guid) !== object || object.miniatureUrl !== url) return;
-      const stand = template.clips.find((clip) => clip.name === "Stand");
-      if (!stand || stand.duration <= 0) return; // Keep the static model if the clip is absent.
-      const wingLoop = loopingWhelpStand(stand);
-      const root = cloneSkinned(template.scene);
-      const box = new THREE.Box3().setFromObject(template.scene);
-      const height = Math.max(1e-3, box.max.y - box.min.y);
-      const scale = publishedModelGeometryScale(true, height, object.mapScale, object.worldHeight);
-      root.scale.setScalar(scale);
-      root.position.y = -box.min.y * scale;
-      root.rotation.y = BOSS_MINI_YAW;
-      const materials: MapBodyMaterial[] = [];
-      root.traverse((child) => {
-        const mesh = child as THREE.Mesh;
-        if (!mesh.isMesh) return;
-        const clone = (source: THREE.Material) => {
-          const material = source.clone() as MapBodyMaterial;
-          material.transparent = true;
-          materials.push(material);
-          return material;
-        };
-        mesh.material = Array.isArray(mesh.material) ? mesh.material.map(clone) : clone(mesh.material);
-      });
-      for (const material of object.bodyMaterials) material.dispose();
-      const hidden = new THREE.MeshLambertMaterial({ visible: false });
-      object.body.material = hidden;
-      object.bodyMaterial = materials[0] ?? hidden;
-      object.bodyMaterials = [hidden, ...materials];
-      object.textured = true;
-      object.body.add(root);
-      const mixer = new THREE.AnimationMixer(root);
-      mixer.clipAction(wingLoop).play();
-      object.flappingWhelp = { root, mixer, clipDuration: wingLoop.duration, phaseSeconds: parseInt(guid.slice(-4), 16) * 0.071 };
-      setBodyColor(object);
-      this.requestRender();
-    }).catch((error) => console.error("Failed to animate Rookery Whelp", url, error));
-  }
-
-  private applyUnitModelMaterials(object: UnitObject, mini: BossMini) {
-    const opacity = object.bodyMaterial.opacity;
-    if (!mini.materials) {
-      const material = object.bodyMaterial;
-      material.map = null;
-      material.depthWrite = opacity >= 1;
-      material.polygonOffset = false;
-      material.needsUpdate = true;
-      object.body.material = material;
-      object.bodyMaterials = [material];
-      object.textured = false;
-      return;
-    }
-    const materials = mini.materials.map((source) => {
-      const material = source.clone();
-      material.transparent = true;
-      material.opacity = opacity;
-      material.depthWrite = opacity >= 1;
-      return material;
-    });
-    for (const material of object.bodyMaterials) material.dispose();
-    object.body.material = materials.length === 1 ? materials[0]! : materials;
-    object.bodyMaterial = materials[0]!;
-    object.bodyMaterials = materials;
-    object.textured = true;
-  }
-
-  private applyBossMini(object: UnitObject, mini: BossMini) {
-    if (!object.boss && object.kind === "pet") {
-      this.applyGuardianMini(object, mini);
-      return;
-    }
-    object.mini = true;
-    object.body.geometry = mini.geometry;
-    object.body.scale.setScalar(1);
-    object.body.position.y = 0;
-    object.body.rotation.set(0, 0, 0);
-    this.applyUnitModelMaterials(object, mini);
-    const { token } = object;
-    token.radius = MINI_TOKEN_RADIUS;
-    token.edge.visible = false;
-    // A model stands on the floor; its rings lie there too.
-    token.face = TOKEN_GROUND.underside;
-    token.halo.position.y = token.pin.position.y = token.face + TOKEN_LIFT.halo;
-    token.arc.position.y = token.face + TOKEN_LIFT.arc;
-    token.debuff.position.y = token.face + TOKEN_LIFT.debuff;
-    token.debuff.scale.setScalar(MINI_TOKEN_RADIUS * DEBUFF_PLANE);
-    object.cone.position.y = token.face + TOKEN_LIFT.marks;
-    if (token.ticks) token.ticks.position.y = token.face + TOKEN_LIFT.marks;
-    for (const [part, size] of [[token.halo, TOKEN_PLANE.halo], [token.pin, TOKEN_PLANE.pin], [token.arc, TOKEN_PLANE.arc], [token.shadow, TOKEN_PLANE.shadow]] as const) {
-      part.scale.setScalar(MINI_TOKEN_RADIUS * size);
-    }
-    if (token.bossSpire) token.bossSpire.visible = false;
-    if (object.boss && !token.sigil) {
-      // The model stands on the sigil.
-      token.sigil = new THREE.Mesh(this.tokenPlane, new THREE.MeshBasicMaterial({
-        map: this.tokenTextures.sigil(), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
-      }));
-      token.sigil.scale.setScalar(MINI_TOKEN_RADIUS * TOKEN_PLANE.sigil);
-      token.sigil.position.y = token.face;
-      token.ticks?.scale.setScalar(MINI_TOKEN_RADIUS * TOKEN_PLANE.sigil);
-      object.group.add(token.sigil);
-    }
-    if (object.boss) object.cone.scale.setScalar(MINI_TOKEN_RADIUS * MARKS_SCALE);
-    else object.cone.visible = false;
-    setBodyColor(object);
-    object.barHeight = mini.barHeight;
-    object.labelHeight = mini.labelHeight;
-    object.deadLift = mini.deadLift;
-    object.modelBase = 0;
-    if (object.dead) object.body.position.y = mini.deadLift;
-    this.requestFlappingWhelp(object);
-  }
-
-  // A guardian's model (a totem, a pet) keeps the guardian's disc as a chip
-  // to stand on, with its ring, facing notch, halos and shadow at disc size;
-  // a tiny model is grown to MIN_GUARDIAN_MODEL_HEIGHT.
-  private applyGuardianMini(object: UnitObject, mini: BossMini) {
-    const { token } = object;
-    const box = mini.geometry.boundingBox!;
-    const scale = Math.max(1, MIN_GUARDIAN_MODEL_HEIGHT / Math.max(1e-3, box.max.y - box.min.y));
-    if (!token.chip) {
-      token.chip = new THREE.Mesh(this.tokenPlane, new THREE.MeshBasicMaterial({
-        transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3,
-      }));
-      token.chip.scale.setScalar(token.radius);
-      token.chip.position.y = token.face;
-      object.group.add(token.chip);
-    }
-    object.mini = true;
-    object.body.geometry = mini.geometry;
-    object.body.scale.setScalar(scale);
-    object.body.rotation.set(0, 0, 0);
-    object.modelBase = token.face;
-    object.deadLift = token.face + mini.deadLift * scale;
-    object.body.position.y = object.dead ? object.deadLift : object.modelBase;
-    if (object.dead) object.body.rotation.x = -Math.PI / 2;
-    this.applyUnitModelMaterials(object, mini);
-    setBodyColor(object);
-    this.applyTokenFace(object);
-    object.barHeight = Math.max(BAR_HEIGHT, token.face + box.max.y * scale + BOSS_MINI_BAR_GAP);
-    object.labelHeight = object.barHeight + LABEL_HEIGHT - BAR_HEIGHT;
-  }
-
-  private removeUnit(guid: string) {
-    const object = this.units.get(guid);
-    if (!object) return;
-    this.unitsGroup.remove(object.group);
-    if (object.calloutMarker) {
-      this.scene.remove(object.calloutMarker);
-      object.calloutMarker.material.map?.dispose();
-      object.calloutMarker.material.dispose();
-    }
-    if (object.animatedGameModel) {
-      object.animatedGameModel.mixer.stopAllAction();
-      object.animatedGameModel.mixer.uncacheRoot(object.animatedGameModel.root);
-    }
-    if (object.flappingWhelp) {
-      object.flappingWhelp.mixer.stopAllAction();
-      object.flappingWhelp.mixer.uncacheRoot(object.flappingWhelp.root);
-    }
-    for (const material of object.bodyMaterials) material.dispose();
-    object.coneMaterial.dispose();
-    const { token } = object;
-    for (const part of [token.shadow, token.edge, token.halo, token.pin, token.arc, token.debuff, token.ticks, token.sigil, token.chip]) part?.material.dispose();
-    token.bossSpire?.material.dispose();
-    object.drop?.material.dispose();
-    this.units.delete(guid);
-    this.world.floorHeights.delete(guid);
-    this.world.unitFloorHeights.delete(guid);
-    const wobbling = this.wobbling.indexOf(object);
-    if (wobbling >= 0) this.wobbling.splice(wobbling, 1);
-    const lunging = this.lunging.indexOf(object);
-    if (lunging >= 0) this.lunging.splice(lunging, 1);
-    if (this.hoveredGuid === guid) {
-      this.hoveredGuid = null;
-      this.updateCursor();
-    }
-  }
-
-  private updateRadialEffects(fx: EncounterEffects | null, cursorMs: number) {
-    const radials = fx
-      ? deriveActiveRadialEffects(fx, cursorMs, this.activeRadialEffects)
-      : this.activeRadialEffects;
-    if (!fx) radials.length = 0;
-    const yardScale = this.world.yardScale(this.aspect);
-    if (yardScale === null) {
-      this.commitPool(this.radialRings, 0);
-      this.commitPool(this.radialSpheres, 0);
-      return;
-    }
-
-    let ringCount = 0;
-    let sphereCount = 0;
-    const filterGuids = this.effectOptions.filterGuids;
-    for (const radial of radials) {
-      const source = this.units.get(radial.source);
-      if ((filterGuids && !filterGuids.has(radial.source)) || !source || !source.group.visible) continue;
-      const radius = radial.radiusYards * yardScale * radial.progress;
-      if (radius <= 0) continue;
-      if (radial.shape === "sphere") {
-        if (sphereCount >= MAX_RADIAL_EFFECTS) continue;
-        this.matrix.makeScale(radius, radius, radius).setPosition(
-          source.base.x,
-          source.base.y + BEAM_HEIGHT * this.unitScale,
-          source.base.z,
-        );
-        this.radialSpheres.setMatrixAt(sphereCount, this.matrix);
-        this.radialSpheres.setColorAt(sphereCount, this.color.set(radial.color).multiplyScalar(1 - radial.progress));
-        sphereCount++;
-        continue;
-      }
-      if (ringCount >= MAX_RADIAL_EFFECTS) continue;
-      this.matrix.makeScale(radius, 1, radius).setPosition(
-        source.base.x,
-        source.base.y + RADIAL_GROUND_LIFT * this.unitScale,
-        source.base.z,
-      );
-      this.radialRings.setMatrixAt(ringCount, this.matrix);
-      this.radialRings.setColorAt(ringCount, this.color.set(radial.color).multiplyScalar(1 - radial.progress));
-      ringCount++;
-    }
-    this.commitPool(this.radialRings, ringCount);
-    this.commitPool(this.radialSpheres, sphereCount);
-  }
-
-  private hideDeepBreath() {
-    this.deepBreathAreas.count = 0;
-    this.deepBreathAreas.visible = false;
-    this.deepBreathLine.visible = false;
-    this.deepBreathPoints.visible = false;
-    this.deepBreathPathLock = null;
-  }
-
-  // Projects the authoritative ordered server targets into room space. Onyxia's
-  // current position and facing never alter this fixed geometry.
-  private setDeepBreathPath(primarySpellId: number, startMs: number): boolean {
-    const mesh = this.dungeonMesh;
-    const path = deepBreathPathForPrimarySpell(primarySpellId);
-    if (!mesh || !path) return false;
-    const projected = projectMapDebugPoints(path.points, path.mapId, mesh.bounds, this.aspect, GROUND_WIDTH);
-    if (projected.length !== path.points.length || projected.length > MAX_DEEP_BREATH_POINTS) return false;
-
-    const positions = new Float32Array(projected.length * 3);
-    this.deepBreathAreaPositions.length = 0;
-    for (let index = 0; index < projected.length; index++) {
-      const point = projected[index];
-      const floor = this.world.floorHeights.heightAt(`deep-breath-${path.key}-${index}`, point.x, point.z);
-      const floorY = floor + DEEP_BREATH_GROUND_LIFT * mesh.scale;
-      positions[index * 3] = point.x;
-      positions[index * 3 + 1] = floorY;
-      positions[index * 3 + 2] = point.z;
-      this.deepBreathAreaPositions.push(new THREE.Vector3(point.x, floorY, point.z));
-    }
-    this.deepBreathLine.geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    this.deepBreathPoints.geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    this.deepBreathPathLock = { primarySpellId, startMs };
-    return true;
-  }
-
-  /**
-   * Keeps the complete server centerline visible while the chain advances, but
-   * only shows the 30-yard damage circle for the ground spell resolving now.
-   */
-  private updateDeepBreath(fx: EncounterEffects | null, cursorMs: number) {
-    if (this.effects?.mapId !== 249) {
-      this.hideDeepBreath();
-      return;
-    }
-    const breaths = fx
-      ? deriveActiveDeepBreaths(fx, cursorMs, this.activeDeepBreaths, this.effects?.mapId)
-      : this.activeDeepBreaths;
-    if (!fx) breaths.length = 0;
-    const breath = breaths[0];
-    const yardScale = this.world.yardScale(this.aspect);
-    if (!breath || yardScale === null) {
-      this.hideDeepBreath();
-      return;
-    }
-
-    const lock = this.deepBreathPathLock;
-    if (!lock || lock.primarySpellId !== breath.routeSpellId || lock.startMs !== breath.startMs) {
-      if (!this.setDeepBreathPath(breath.routeSpellId, breath.startMs)) {
-        this.hideDeepBreath();
-        return;
-      }
-    }
-    const point = this.deepBreathAreaPositions[breath.pointIndex];
-    if (!point) {
-      this.hideDeepBreath();
-      return;
-    }
-    const radius = ONYXIA_DEEP_BREATH_RADIUS_YARDS * yardScale;
-    this.matrix.makeScale(radius, radius, radius);
-    this.matrix.setPosition(point);
-    this.deepBreathAreas.setMatrixAt(0, this.matrix);
-    this.deepBreathAreas.count = 1;
-    this.deepBreathAreas.instanceMatrix.needsUpdate = true;
-    this.deepBreathAreas.material.opacity = DEEP_BREATH_AREA_OPACITY
-      * Math.max(0, 1 - (cursorMs - breath.pointStartedMs) / DEEP_BREATH_POINT_LINGER_MS);
-    this.deepBreathAreas.visible = true;
-    this.deepBreathLine.visible = true;
-    this.deepBreathPoints.visible = true;
-  }
-
-  // The whelps' Stand clip flaps even if the replay/video is paused. Their
-  // skeletons are independent; the source geometry and textures are shared.
-  private updateWhelpAnimations(now: number): boolean {
-    let active = false;
-    for (const object of this.units.values()) {
-      const wing = object.flappingWhelp;
-      if (!wing || object.dead || !object.group.visible) continue;
-      wing.mixer.setTime((now / 1000 + wing.phaseSeconds) % wing.clipDuration);
-      active = true;
-    }
-    return active;
-  }
-
-  private updateGameModelAnimations(fx: EncounterEffects | null, cursorMs: number): boolean {
-    let visible = false;
-    for (const object of this.units.values()) {
-      const model = object.animatedGameModel;
-      if (!model || !object.group.visible) continue;
-      visible = true;
-      const guid = object.group.userData.guid as string;
-      const deadSinceMs = fx ? deathStartedAt(fx, guid, cursorMs) : null;
-      const state = modelAnimationState(fx, guid, cursorMs, object.locomotion, this.unitCasts.has(guid), deadSinceMs);
-      const clipName = selectModelAnimation(model.clips, state.candidates);
-      const needsPack = state.candidates.some((candidate) => candidate !== "Stand")
-        && (!clipName || !state.candidates.includes(clipName) || clipName === "Stand");
-      if (needsPack) this.requestGameModelAnimationPack(object, model);
-      const deathFallback = usesStaticDeathFallback(deadSinceMs, clipName, model.packLoaded || model.packFailed);
-      object.body.rotation.x = deathFallback ? -Math.PI / 2 : 0;
-      object.body.position.y = deathFallback ? object.deadLift : object.modelBase;
-      if (!clipName) continue;
-      const clip = model.clips.get(clipName);
-      if (!clip || clip.duration <= 0) continue;
-      if (model.stateKey !== state.key || model.clipName !== clipName) {
-        model.mixer.stopAllAction();
-        const action = model.mixer.clipAction(clip);
-        action.reset();
-        action.clampWhenFinished = !state.loop;
-        action.setLoop(state.loop ? THREE.LoopRepeat : THREE.LoopOnce, state.loop ? Infinity : 1);
-        action.play();
-        model.stateKey = state.key;
-        model.clipName = clipName;
-      }
-      const action = model.mixer.clipAction(clip);
-      action.time = modelAnimationTimeSeconds(cursorMs, state.startedAtMs, clip.duration, state.loop);
-      model.mixer.update(0);
-    }
-    return visible && this.clock.playing;
-  }
-
-  // Applies the effects at the effect clock's current time. Returns whether
-  // another frame is needed to keep them animating.
+  // Applies the effects at the effect clock's current time (EffectsLayer).
   private updateEffects(now: number): boolean {
-    for (const object of this.wobbling) {
-      object.body.rotation.z = 0;
-      for (const material of object.bodyMaterials) setMaterialEmissive(material, null);
-    }
-    this.wobbling.length = 0;
-    for (const object of this.lunging) object.group.position.copy(object.base);
-    this.lunging.length = 0;
-    const fx = this.effects?.fx ?? null;
-    const { clock } = this;
-    const cursorMs = clock.playing ? clock.ms + Math.min(now - clock.at, MAX_EXTRAPOLATE_MS) * clock.speed : clock.ms;
-    this.effectCursorMs = cursorMs;
-
-    for (const object of this.units.values()) {
-      const guid = object.group.userData.guid as string;
-      const deadSinceMs = fx ? deathStartedAt(fx, guid, cursorMs) : null;
-      this.setDead(object, deadSinceMs !== null);
-      this.updateDeadUnitVisibility(object, deadSinceMs, cursorMs);
-    }
-    if (fx) deriveUnitCasts(fx, cursorMs, this.unitCasts);
-    else this.unitCasts.clear();
-    this.updateHitFacings();
-    this.updateRadialEffects(fx, cursorMs);
-    this.updateDeepBreath(fx, cursorMs);
-
-    let beamCount = 0;
-    let ringCount = 0;
-    let boltCount = 0;
-    let slashCount = 0;
-    const active = fx ? deriveActiveEffects(fx, cursorMs, this.effectOptions, this.activeEffects) : this.activeEffects;
-    if (!fx) active.length = 0;
-    for (let index = 0; index < active.length; index++) {
-      const effect = active[index];
-      const target = this.units.get(effect.target);
-      if (!target) continue;
-      const color = this.effectColor(effect.color);
-      const fade = 1 - effect.progress;
-      if (effect.type === "beam" || effect.type === "streak") {
-        const source = effect.source ? this.units.get(effect.source) : undefined;
-        if (!source) continue;
-        // A short streak travelling from the source to the target: spells as
-        // a thick bolt (thicker on crits), ranged autos as a thin line.
-        const head = Math.min(1, effect.progress * 1.5);
-        const tail = Math.max(0, head - 0.4);
-        const from = source.base;
-        const to = target.base;
-        const lift = BEAM_HEIGHT * this.unitScale;
-        const brightness = Math.min(1.5, fade * (0.6 + 0.4 * effect.intensity));
-        const tailPoint = this.vector.set(from.x + (to.x - from.x) * tail, from.y + (to.y - from.y) * tail + lift, from.z + (to.z - from.z) * tail);
-        const headPoint = this.vectorB.set(from.x + (to.x - from.x) * head, from.y + (to.y - from.y) * head + lift, from.z + (to.z - from.z) * head);
-        if (effect.type === "beam") {
-          const length = tailPoint.distanceTo(headPoint);
-          if (boltCount >= MAX_EFFECT_PRIMITIVES || length <= 0) continue;
-          const width = BOLT_WIDTH * (1 + 0.8 * (effect.intensity - 1)) * this.unitScale;
-          this.quaternion.setFromUnitVectors(Z_AXIS, headPoint.sub(tailPoint).divideScalar(length));
-          tailPoint.addScaledVector(headPoint, length / 2);
-          this.matrix.compose(tailPoint, this.quaternion, this.scaleVector.set(width, width, length));
-          this.bolts.setMatrixAt(boltCount, this.matrix);
-          this.bolts.setColorAt(boltCount, this.color.copy(color).multiplyScalar(brightness));
-          this.boltEffects[boltCount] = index;
-          boltCount++;
-          continue;
-        }
-        if (beamCount >= MAX_EFFECT_PRIMITIVES) continue;
-        const offset = beamCount * 6;
-        this.beamPositions[offset] = tailPoint.x;
-        this.beamPositions[offset + 1] = tailPoint.y;
-        this.beamPositions[offset + 2] = tailPoint.z;
-        this.beamPositions[offset + 3] = headPoint.x;
-        this.beamPositions[offset + 4] = headPoint.y;
-        this.beamPositions[offset + 5] = headPoint.z;
-        this.beamColors[offset] = color.r * brightness * 0.3;
-        this.beamColors[offset + 1] = color.g * brightness * 0.3;
-        this.beamColors[offset + 2] = color.b * brightness * 0.3;
-        this.beamColors[offset + 3] = color.r * brightness;
-        this.beamColors[offset + 4] = color.g * brightness;
-        this.beamColors[offset + 5] = color.b * brightness;
-        this.beamEffects[beamCount] = index;
-        beamCount++;
-      } else if (effect.type === "lunge") {
-        // The attacker steps toward its target and back.
-        const source = effect.source ? this.units.get(effect.source) : undefined;
-        if (!source || source.dead || this.lunging.includes(source)) continue;
-        const toward = this.vector.subVectors(target.base, source.base).setY(0);
-        const distance = toward.length();
-        if (distance <= 0) continue;
-        const step = Math.sin(effect.progress * Math.PI) * Math.min(LUNGE_DISTANCE * this.unitScale, distance * 0.4);
-        source.group.position.copy(source.base).addScaledVector(toward, step / distance);
-        this.lunging.push(source);
-      } else if (effect.type === "slash") {
-        // An arc on the attacker's side of the target, sweeping across it.
-        const source = effect.source ? this.units.get(effect.source) : undefined;
-        if (!source || slashCount >= MAX_EFFECT_PRIMITIVES) continue;
-        const angle = Math.atan2(-(source.base.z - target.base.z), source.base.x - target.base.x) + (effect.progress - 0.5) * 1.4;
-        const radius = SLASH_RADIUS * (0.8 + 0.3 * effect.progress) * this.unitScale;
-        this.matrix.makeRotationY(angle).scale(this.scaleVector.set(radius, 1, radius))
-          .setPosition(target.base.x, target.base.y + SLASH_HEIGHT * this.unitScale, target.base.z);
-        this.slashes.setMatrixAt(slashCount, this.matrix);
-        this.slashes.setColorAt(slashCount, this.color.copy(color).multiplyScalar(fade * Math.min(2, 0.7 + 0.5 * effect.intensity)));
-        this.slashEffects[slashCount] = index;
-        slashCount++;
-      } else if (effect.type === "hit") {
-        if (target.dead) continue;
-        // Damped shake about the unit's facing axis plus an emissive flash.
-        target.body.rotation.z = Math.sin(effect.progress * Math.PI * 6) * 0.3 * fade * Math.min(2, effect.intensity);
-        for (const material of target.bodyMaterials) {
-          setMaterialEmissive(material, color, fade * 0.6 * Math.min(2, effect.intensity));
-        }
-        if (!this.wobbling.includes(target)) this.wobbling.push(target);
-      } else if (ringCount < MAX_EFFECT_PRIMITIVES) {
-        // "impact": a small quick burst under a melee ability's target;
-        // "heal": a ring rising up the healed target, sized by the healing
-        // (bigger and gold on crits).
-        const radius = (effect.type === "heal"
-          ? (0.9 + 0.4 * effect.progress) * (0.5 + 0.5 * effect.intensity)
-          : 0.6 + 1.8 * effect.progress) * this.unitScale;
-        const brightness = fade * (effect.type === "impact" ? 1.2 : 1);
-        const position = target.base;
-        const y = position.y + (effect.type === "heal" ? (0.2 + 2.4 * effect.progress) * this.unitScale : 0.05);
-        this.matrix.makeScale(radius, 1, radius).setPosition(position.x, y, position.z);
-        this.rings.setMatrixAt(ringCount, this.matrix);
-        this.rings.setColorAt(ringCount, this.color.copy(color).multiplyScalar(brightness));
-        this.ringEffects[ringCount] = index;
-        ringCount++;
-      }
-    }
-
-    this.beams.geometry.setDrawRange(0, beamCount * 2);
-    this.beams.geometry.attributes.position.needsUpdate = beamCount > 0;
-    this.beams.geometry.attributes.color.needsUpdate = beamCount > 0;
-    // Raycasts compute bounds lazily; they change every frame.
-    this.beams.geometry.boundingSphere = null;
-    this.commitPool(this.rings, ringCount);
-    this.commitPool(this.bolts, boltCount);
-    this.commitPool(this.slashes, slashCount);
-    // Icons first: combat text on a unit with icons floats above them.
-    this.updateCastIcons(fx, cursorMs);
-    this.updateCombatText(fx, cursorMs);
-    const modelsAnimating = this.updateGameModelAnimations(fx, cursorMs);
-    return (fx !== null && clock.playing) || modelsAnimating;
+    return this.effectsLayer.updateEffects(now);
   }
 
-  private updateCombatText(fx: EncounterEffects | null, cursorMs: number) {
-    const sources = this.effects?.combatTextGuids ?? null;
-    const healGuids = this.effects?.healTextGuids ?? null;
-    const any = Boolean(fx && ((sources && sources.size > 0) || (healGuids && healGuids.size > 0)));
-    const texts = any
-      ? deriveCombatText(fx!, cursorMs, sources, healGuids, this.effects?.suppressNameGuids ?? null, this.effectOptions, MAX_COMBAT_TEXT, this.combatText)
-      : this.combatText;
-    if (!any) texts.length = 0;
-    let shown = 0;
-    for (const text of texts) {
-      const target = this.units.get(text.target);
-      if (!target || !target.group.visible) continue;
-      const sprite = this.combatSprites[shown];
-      const label = this.labelTexture(text.text, this.effects!.resolveColor(text.color), text.crit);
-      if (sprite.material.map !== label.texture) {
-        sprite.material.map = label.texture;
-        sprite.material.needsUpdate = true;
-      }
-      sprite.material.opacity = 1 - text.progress * text.progress;
-      const height = COMBAT_TEXT_HEIGHT * (text.crit ? 1.25 : 1) * this.unitScale;
-      sprite.scale.set(height * label.aspect, height, 1);
-      // Float up from above the bar (or the unit's cast icons); stagger
-      // labels on the same target.
-      const iconTop = this.castIconTops.get(text.target);
-      const start = iconTop !== undefined ? iconTop + CAST_ICON_TOP_GAP : target.labelHeight + 0.5;
-      const lift = (start + 2 * text.progress + (shown % 3) * 1.2) * this.scaleOf(target);
-      sprite.position.set(target.base.x, target.base.y + lift, target.base.z);
-      sprite.visible = true;
-      shown++;
-    }
-    for (let index = shown; index < MAX_COMBAT_TEXT; index++) this.combatSprites[index].visible = false;
+  private updateWhelpAnimations(now: number): boolean {
+    return this.unitLayer.updateWhelpAnimations(now);
   }
 
-  private updateCastIcons(fx: EncounterEffects | null, cursorMs: number) {
-    const castIcons = this.effects?.castIcons;
-    const on = Boolean(fx && castIcons && castIcons.guids.size > 0);
-    const icons = on
-      ? deriveCastIcons(fx!, cursorMs, castIcons!.guids, Math.min(MAX_CAST_ICONS, this.effectOptions.maxEffects), this.castIcons, {
-        priorityGuids: castIcons!.priorityGuids,
-        enemyGuids: castIcons!.enemyGuids,
-        filterGuids: this.effectOptions.filterGuids,
-        isProc: castIcons!.isProc,
-        isCooldown: castIcons!.isCooldown,
-      })
-      : this.castIcons;
-    if (!on) icons.length = 0;
-    const right = this.vectorB.set(1, 0, 0).applyQuaternion(this.camera.quaternion);
-    let visible = 0;
-    for (const icon of icons) {
-      if (this.units.get(icon.caster)?.group.visible) visible++;
-    }
-    const baseSize = CAST_ICON_SIZE * (visible > CAST_ICON_CROWDED ? CAST_ICON_CROWDED_SCALE : 1);
-    this.castIconTops.clear();
-    // Every pooled sprite starts each frame in colour, upright and untinted,
-    // so scrubbing back before an interrupt shows the colour icon again.
-    for (const sprite of this.castSprites) {
-      sprite.material.userData.saturation.value = 1;
-      sprite.material.rotation = 0;
-      sprite.material.color.setHex(0xffffff);
-    }
-    let shown = 0;
-    for (let index = 0; index < icons.length; index++) {
-      const icon = icons[index];
-      const caster = this.units.get(icon.caster);
-      if (!caster || !caster.group.visible) continue;
-      // The question mark stands in while the icon loads or after it failed.
-      const texture = this.iconTexture(castIcons!.iconUrl(icon.spellId)) ?? this.iconTexture(castIcons!.placeholderUrl);
-      if (!texture) continue;
-      const sprite = this.castSprites[shown];
-      const arc = this.castArcs[shown];
-      const material = sprite.material;
-      if (material.map !== texture) {
-        material.map = texture;
-        material.needsUpdate = true;
-      }
-      let scale = 1;
-      let opacity = 1;
-      let rotation = 0;
-      let arcTexture: THREE.CanvasTexture | null = null;
-      let arcOpacity = 0;
-      let flash = false;
-      let label = false;
-      if (icon.phase === "casting") {
-        // Grows in, then holds while the outline sweeps round with the cast.
-        scale = icon.elapsedMs < CAST_ICON_GROW_MS
-          ? CAST_ICON_GROW_FROM + (1 - CAST_ICON_GROW_FROM) * easeOutCubic(icon.elapsedMs / CAST_ICON_GROW_MS)
-          : 1;
-        const step = Math.floor(icon.progress * CAST_ARC_STEPS);
-        if (step > 0) {
-          arcTexture = this.arcTexture(step, false);
-          arcOpacity = CAST_ARC_OPACITY;
-        }
-      } else if (icon.phase === "instant") {
-        // Pops as the cast goes off with a white ring flash, then fades.
-        const pop = icon.elapsedMs / CAST_ICON_POP_MS;
-        if (pop < 0.35) scale = 1 + (CAST_ICON_POP_SCALE - 1) * easeOutCubic(pop / 0.35);
-        else if (pop < 1) scale = CAST_ICON_POP_SCALE - (CAST_ICON_POP_SCALE - 1) * easeOutBack((pop - 0.35) / 0.65, 1.7);
-        opacity = 1 - icon.progress * icon.progress;
-        if (icon.elapsedMs < CAST_ICON_FLASH_MS) {
-          arcTexture = this.arcTexture(CAST_ARC_STEPS, false);
-          arcOpacity = 1 - icon.elapsedMs / CAST_ICON_FLASH_MS;
-          flash = true;
-        }
-      } else {
-        // Interrupted: the icon bumps, drains to grey and wiggles; the
-        // outline freezes where the cast was cut, then everything fades.
-        const elapsed = icon.elapsedMs;
-        const lingerMs = icon.enemy ? INTERRUPTED_ICON_MS : INTERRUPTED_PLAYER_ICON_MS;
-        if (elapsed < INTERRUPT_IMPACT_MS) {
-          const impact = elapsed / INTERRUPT_IMPACT_MS;
-          scale = impact < 0.5
-            ? 1 + (INTERRUPT_IMPACT_SCALE - 1) * easeOutCubic(impact / 0.5)
-            : INTERRUPT_IMPACT_SCALE - (INTERRUPT_IMPACT_SCALE - 1) * easeOutBack((impact - 0.5) / 0.5, 1.7);
-        }
-        const grey = 1 - (1 - Math.min(1, elapsed / INTERRUPT_GREY_MS)) ** 2;
-        material.userData.saturation.value = 1 - grey;
-        material.color.setScalar(1 - (1 - INTERRUPT_BRIGHTNESS) * grey);
-        if (elapsed < INTERRUPT_WIGGLE_MS) {
-          const wiggle = elapsed / INTERRUPT_WIGGLE_MS;
-          rotation = Math.sin(wiggle * Math.PI * 6) * INTERRUPT_WIGGLE * (1 - wiggle);
-        }
-        const fadeFrom = lingerMs - INTERRUPT_FADE_MS;
-        if (elapsed > fadeFrom) {
-          const fade = ((elapsed - fadeFrom) / INTERRUPT_FADE_MS) ** 2;
-          opacity = 1 - fade;
-          scale *= 1 - (1 - INTERRUPT_SHRINK) * fade;
-        }
-        const step = Math.floor(icon.cutProgress * CAST_ARC_STEPS);
-        if (step > 0) {
-          arcTexture = this.arcTexture(step, true);
-          arcOpacity = 1;
-        }
-        label = icon.enemy && elapsed < INTERRUPT_LABEL_MS;
-      }
-      if (icon.cooldown && !arcTexture) {
-        arcTexture = this.arcTexture(CAST_ARC_STEPS, false);
-        arcOpacity = 1;
-      }
-      material.opacity = opacity;
-      material.rotation = rotation;
-      const iconSize = baseSize * (icon.cooldown ? COOLDOWN_ICON_SCALE : 1);
-      const size = iconSize * scale * this.unitScale;
-      sprite.scale.set(size, size, 1);
-      // Directly above the health bar; the newest icon on a caster is
-      // centred and an older one sits to its right.
-      let slot = 0;
-      for (let previous = 0; previous < index; previous++) {
-        if (icons[previous].caster === icon.caster) slot++;
-      }
-      const bottom = caster.barHeight + CAST_ICON_BAR_GAP;
-      const casterScale = this.scaleOf(caster);
-      sprite.position.set(caster.base.x, caster.base.y + (bottom + iconSize / 2) * casterScale, caster.base.z)
-        .addScaledVector(right, slot * baseSize * 1.1 * this.unitScale);
-      sprite.visible = true;
-      if (arcTexture) {
-        const arcMaterial = arc.material;
-        if (arcMaterial.map !== arcTexture) {
-          arcMaterial.map = arcTexture;
-          arcMaterial.needsUpdate = true;
-        }
-        const blending = flash ? THREE.AdditiveBlending : THREE.NormalBlending;
-        if (arcMaterial.blending !== blending) {
-          arcMaterial.blending = blending;
-          arcMaterial.needsUpdate = true;
-        }
-        arcMaterial.opacity = arcOpacity * opacity;
-        // A cooldown's ring is gold; the cut-off part of an interrupt keeps its own colours.
-        arcMaterial.color.set(icon.cooldown && icon.phase !== "interrupted" ? COOLDOWN_ICON_COLOR : "#ffffff");
-        arc.scale.set(size * CAST_ARC_SIZE, size * CAST_ARC_SIZE, 1);
-        arc.position.copy(sprite.position);
-        arc.visible = true;
-      } else {
-        arc.visible = false;
-      }
-      let top = bottom + iconSize;
-      const labelSprite = this.castLabels[shown];
-      if (label) {
-        const text = this.labelTexture("Interrupted", INTERRUPT_LABEL_COLOR, false);
-        if (labelSprite.material.map !== text.texture) {
-          labelSprite.material.map = text.texture;
-          labelSprite.material.needsUpdate = true;
-        }
-        labelSprite.material.opacity = opacity;
-        const height = INTERRUPT_LABEL_HEIGHT * this.unitScale;
-        labelSprite.scale.set(height * text.aspect, height, 1);
-        labelSprite.position.copy(sprite.position).setY(caster.base.y + (top + 0.1) * casterScale);
-        labelSprite.visible = true;
-        top += 0.1 + INTERRUPT_LABEL_HEIGHT;
-      } else {
-        labelSprite.visible = false;
-      }
-      this.castIconTops.set(icon.caster, Math.max(this.castIconTops.get(icon.caster) ?? 0, top));
-      this.castSpriteIcons[shown] = index;
-      shown++;
-    }
-    for (let index = shown; index < MAX_CAST_ICONS; index++) {
-      this.castSprites[index].visible = false;
-      this.castArcs[index].visible = false;
-      this.castLabels[index].visible = false;
-    }
-    // Nameplates sit above their unit's icons.
-    this.updatePlates();
-  }
-
-  // The cast outline traced `step / CAST_ARC_STEPS` of the way round,
-  // clockwise from 12 o'clock (grey with a red tick at the end when `cut`);
-  // created on first use and kept.
-  private arcTexture(step: number, cut: boolean): THREE.CanvasTexture {
-    const textures = cut ? this.cutArcTextures : this.arcTextures;
-    let texture = textures[step];
-    if (!texture) {
-      texture = createArcTexture(step / CAST_ARC_STEPS, cut);
-      textures[step] = texture;
-    }
-    return texture;
-  }
-
-  /** Starts loading cast icons ahead of their first draw, through the same cache as iconTexture. */
+  /** Starts loading cast icons ahead of their first draw, through the same cache as iconTexture (HudLayer). */
   preloadIcons(urls: readonly string[]) {
-    // Newest insert is most recently used, so walk backwards: the earliest
-    // urls end up freshest and are the last to be evicted.
-    for (let i = Math.min(urls.length, MAX_ICON_TEXTURES) - 1; i >= 0; i--) {
-      if (this.disposed) return;
-      this.iconTexture(urls[i]!);
-    }
+    this.hud.preloadIcons(urls);
   }
 
-  // The icon's texture once loaded, starting the load on first use; null
-  // while loading or after a failed load (retried after ICON_RETRY_MS).
-  private iconTexture(url: string): THREE.Texture | null {
-    const cached = this.iconTextures.get(url);
-    if (cached !== undefined && !(typeof cached === "number" && this.now() - cached >= ICON_RETRY_MS)) {
-      // Re-insert to keep the cache in least-recently-used order.
-      this.iconTextures.delete(url);
-      this.iconTextures.set(url, cached);
-      return typeof cached === "object" ? cached : null;
-    }
-    this.iconTextures.delete(url);
-    this.iconTextures.set(url, "loading");
-    this.textureLoader.load(corsTextureUrl(url), (texture) => {
-      if (this.disposed || this.iconTextures.get(url) !== "loading") {
-        texture.dispose();
-        return;
-      }
-      texture.colorSpace = THREE.SRGBColorSpace;
-      this.iconTextures.set(url, texture);
-      this.requestRender();
-    }, undefined, () => {
-      if (this.disposed || this.iconTextures.get(url) !== "loading") return;
-      this.iconTextures.set(url, this.now());
-      this.requestRender();
-    });
-    if (this.iconTextures.size > MAX_ICON_TEXTURES) {
-      // Evict the least recently used icon that is not on screen.
-      for (const [oldestUrl, oldest] of this.iconTextures) {
-        if (typeof oldest === "object" && this.castSprites.some((sprite) => sprite.visible && sprite.material.map === oldest)) continue;
-        if (typeof oldest === "object") oldest.dispose();
-        this.iconTextures.delete(oldestUrl);
-        break;
-      }
-    }
-    return null;
-  }
-
-  private labelTexture(text: string, color: string, crit: boolean) {
-    const key = `${text}|${color}|${crit}`;
-    let label = this.labelTextures.get(key);
-    if (label) {
-      // Re-insert to keep the cache in least-recently-used order.
-      this.labelTextures.delete(key);
-      this.labelTextures.set(key, label);
-      return label;
-    }
-    label = createTextTexture(crit ? `${text}!` : text, color);
-    this.labelTextures.set(key, label);
-    if (this.labelTextures.size > MAX_LABEL_TEXTURES) {
-      const [oldestKey, oldest] = this.labelTextures.entries().next().value!;
-      // Still drawn this frame by another sprite? Keep it one more round.
-      if (![...this.combatSprites, ...this.castLabels].some((sprite) => sprite.material.map === oldest.texture)) {
-        oldest.texture.dispose();
-        this.labelTextures.delete(oldestKey);
-      }
-    }
-    return label;
-  }
-
-  // Reports the spell effect under the pointer when it changes.
+  // Picks the effect under the pointer for the tooltip (EffectsLayer).
   private updateEffectHover() {
-    let hit: { effect: ActiveEffect | null; key: string } | null = null;
-    let iconSprite: THREE.Sprite | null = null;
-    if (this.pointerInside && this.effects) {
-      this.raycaster.setFromCamera(this.pointer, this.camera);
-      // Cast icons draw over everything, so they are picked first.
-      for (let index = 0; index < MAX_CAST_ICONS; index++) {
-        const sprite = this.castSprites[index];
-        if (!sprite.visible || this.raycaster.intersectObject(sprite, false).length === 0) continue;
-        const icon = this.castIcons[this.castSpriteIcons[index]];
-        if (!icon) continue;
-        Object.assign(this.castIconCast, { caster: icon.caster, spellId: icon.spellId, spellName: icon.spellName, phase: icon.phase });
-        hit = { effect: null, key: `icon|${icon.caster}|${icon.spellId}` };
-        iconSprite = sprite;
-        break;
-      }
-    }
-    if (!hit && this.pointerInside && this.effects) {
-      this.raycaster.params.Line.threshold = 0.4 * this.unitScale;
-      const pools: [THREE.Object3D, Int16Array][] = [
-        [this.bolts, this.boltEffects],
-        [this.beams, this.beamEffects],
-        [this.slashes, this.slashEffects],
-        [this.rings, this.ringEffects],
-      ];
-      for (const [object, effects] of pools) {
-        const intersection = this.raycaster.intersectObject(object, false)[0];
-        if (!intersection) continue;
-        const primitive = intersection.instanceId ?? Math.floor((intersection.index ?? 0) / 2);
-        const effect = this.activeEffects[effects[primitive]];
-        if (!effect || (effect.spellId == null && !effect.spellName)) continue;
-        hit = { effect, key: `${effect.type}|${effect.source}|${effect.target}|${effect.eventMs}` };
-        break;
-      }
-    }
-    if ((hit?.key ?? "") === this.hoveredEffectKey) return;
-    this.hoveredEffectKey = hit?.key ?? "";
-    const rect = this.renderer.domElement.getBoundingClientRect();
-    if (hit && !hit.effect && iconSprite) {
-      const projected = this.vector.copy(iconSprite.position).project(this.camera);
-      const cast = this.castIconCast;
-      this.onEffectHover({
-        eventKind: cast.phase === "casting" ? "cast_start" : cast.phase === "interrupted" ? "interrupt" : "cast_go",
-        spellId: cast.spellId,
-        spellName: cast.spellName,
-        amount: 0,
-        x: (projected.x + 1) / 2 * rect.width,
-        y: (1 - projected.y) / 2 * rect.height,
-      });
-      return;
-    }
-    const target = hit?.effect ? this.units.get(hit.effect.target) : undefined;
-    if (!hit?.effect || !target) {
-      this.onEffectHover(null);
-      return;
-    }
-    const projected = this.vector.copy(target.base).setY(target.base.y + BEAM_HEIGHT * this.unitScale).project(this.camera);
-    this.onEffectHover({
-      eventKind: hit.effect.eventKind,
-      spellId: hit.effect.spellId,
-      spellName: hit.effect.spellName,
-      amount: hit.effect.amount,
-      x: (projected.x + 1) / 2 * rect.width,
-      y: (1 - projected.y) / 2 * rect.height,
-    });
+    this.effectsLayer.updateEffectHover();
   }
 
-  private createPool(geometry: THREE.BufferGeometry, material: THREE.MeshBasicMaterial, size: number) {
-    const pool = new THREE.InstancedMesh(geometry, material, size);
-    pool.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    // Allocate the colour buffer once, up front.
-    for (let index = 0; index < size; index++) pool.setColorAt(index, this.color.setRGB(0, 0, 0));
-    pool.count = 0;
-    pool.frustumCulled = false;
-    return pool;
-  }
-
-  private commitPool(pool: THREE.InstancedMesh, count: number) {
-    pool.count = count;
-    pool.boundingSphere = null;
-    if (count === 0) return;
-    pool.instanceMatrix.needsUpdate = true;
-    pool.instanceColor!.needsUpdate = true;
-  }
-
-  // Health bars above the units, facing the camera at a constant screen size,
-  // with a thin power strip under the health while the unit is alive and has
-  // power, over the declutter's picks; players' are smaller. Units with a nameplate (hovered,
-  // selected, its target chain, pinned) show their health there instead.
+  // Health bars above the units (HudLayer).
   private updateBars() {
-    // Sizes for the bar being drawn: players' are smaller.
-    let width = 0;
-    let thickness = 0;
-    let padding = 0;
-    let strip = 0;
-    let stripGap = 0;
-    const right = this.vectorB.set(1, 0, 0).applyQuaternion(this.camera.quaternion);
-    const up = this.vectorC.set(0, 1, 0).applyQuaternion(this.camera.quaternion);
-    let count = 0;
-    // The bar's lift above the unit's base, in scene units.
-    let barLift = BAR_HEIGHT;
-    const fx = this.effects?.fx ?? null;
-    // `down`: how far below the health bar's centre, across the screen.
-    const quad = (base: THREE.Vector3, from: number, to: number, quadWidth: number, quadHeight: number, color: THREE.Color | number, down = 0) => {
-      const center = this.vector.copy(base).setY(base.y + barLift).addScaledVector(right, ((from + to) / 2 - 0.5) * width).addScaledVector(up, -down);
-      this.matrix.compose(center, this.camera.quaternion, this.scaleVector.set(quadWidth, quadHeight, 1));
-      this.bars.setMatrixAt(count, this.matrix);
-      this.bars.setColorAt(count, typeof color === "number" ? this.color.setHex(color) : color);
-      count++;
-    };
-    // A unit with a nameplate shows its health and power there instead.
-    const plated = this.plateGuids();
-    for (const [guid, object] of this.units) {
-      const { health } = object;
-      if (!object.bar || plated.has(guid) || !object.group.visible || !health || count + BAR_QUADS > BAR_POOL_SIZE) continue;
-      const dead = health.dead || object.dead;
-      barLift = object.barHeight * this.scaleOf(object);
-      const size = this.unitScale * (object.kind === "player" ? PLAYER_BAR_SCALE : 1);
-      width = BAR_WIDTH * size;
-      thickness = BAR_THICKNESS * size;
-      padding = BAR_PADDING * size;
-      strip = POWER_STRIP_THICKNESS * size;
-      stripGap = POWER_STRIP_GAP * size;
-      const fraction = health.max > 0 ? Math.min(1, Math.max(0, health.current / health.max)) : 0;
-      const absorb = health.max > 0 ? Math.min(1 - fraction, Math.max(0, health.absorb / health.max)) : 0;
-      // From the effect clock while effects run, so the chunk shrinks
-      // smoothly between replay ticks; the tick's value otherwise.
-      const gain = fx ? deriveRecentHealGain(fx, object.group.userData.guid as string, this.effectCursorMs) : health.healGain ?? 0;
-      const healed = health.max > 0 ? Math.min(fraction, Math.max(0, gain / health.max)) : 0;
-      const power = dead ? null : object.powerLevel;
-      // The backing grows down to hold the power strip.
-      const below = power ? stripGap + strip : 0;
-      quad(object.base, 0, 1, width + padding, thickness + padding + below, dead ? BAR_DEAD : BAR_BACKGROUND, below / 2);
-      if (dead) continue;
-      if (fraction > 0) quad(object.base, 0, fraction, width * fraction, thickness, this.color.setStyle(healthBarColor(fraction)));
-      if (healed > 0) quad(object.base, fraction - healed, fraction, width * healed, thickness, BAR_HEAL);
-      if (absorb > 0) quad(object.base, fraction, fraction + absorb, width * absorb, thickness, BAR_ABSORB);
-      if (power && power.fraction > 0) {
-        quad(object.base, 0, power.fraction, width * power.fraction, strip, this.color.setStyle(power.color), (thickness + strip) / 2 + stripGap);
-      }
-    }
-    this.commitPool(this.bars, count);
+    this.hud.updateBars();
   }
 
-  // Slain totems disappear immediately. Dead non-boss enemies leave their
-  // ground frame behind while the loaded 3D model and its shadow fade together.
-  // Boss corpses stay fully visible.
-  private updateDeadUnitVisibility(object: UnitObject, deadSinceMs: number | null, cursorMs: number) {
-    const hostileModel = object.mini && object.kind === "hostile";
-    const state = deadUnitVisualState(deadSinceMs, cursorMs, {
-      boss: object.boss,
-      hostileModel,
-      totem: object.kind === "pet" && guardianWell(object.name) === "totem",
-    });
-    object.group.visible = state.unitVisible;
-    if (!hostileModel) return;
-    object.body.visible = state.modelOpacity > 0;
-    for (const material of object.bodyMaterials) {
-      material.opacity = state.modelOpacity;
-      material.depthWrite = state.modelOpacity >= 1;
-    }
-    object.token.shadow.material.opacity = state.shadowOpacity;
-  }
-
-  // Slain units: a model lies down, grey; a disc greys with a skull. Until resurrected.
-  private setDead(object: UnitObject, dead: boolean) {
-    if (object.dead === dead) return;
-    object.dead = dead;
-    if (object.mini) {
-      // Retained skinned models use their source Death clip; static flattened
-      // models still lie down because they have no skeleton to pose.
-      if (!object.animatedGameModel) {
-        object.body.rotation.x = dead ? -Math.PI / 2 : 0;
-        object.body.position.y = dead ? object.deadLift : object.modelBase;
-      }
-      setBodyColor(object);
-    }
-    this.applyTokenFace(object);
-  }
-
-  private effectColor(css: string): THREE.Color {
-    let color = this.effectColors.get(css);
-    if (!color) {
-      color = new THREE.Color(this.effects?.resolveColor(css) ?? css);
-      this.effectColors.set(css, color);
-    }
-    return color;
+  // Nameplates over the hovered and selected units (HudLayer).
+  private updatePlates() {
+    this.hud.updatePlates();
   }
 
   private clearGround() {
@@ -4096,101 +2079,6 @@ export class MapScene3D {
       mesh.material.dispose();
       this.groundGroup.remove(mesh);
     }
-  }
-
-  // The units with a nameplate: the hovered unit, the selected unit, its
-  // target, their target and pinned units.
-  private plateGuids(): Set<string> {
-    const { roles } = this;
-    const guids = new Set<string>(roles.pinned);
-    for (const guid of [roles.selected, roles.target, roles.targetsTarget, this.hoveredGuid]) {
-      if (guid) guids.add(guid);
-    }
-    return guids;
-  }
-
-  // Nameplates: name, health, power and cast, live, at a fixed screen size.
-  private updatePlates() {
-    const wanted = this.plateGuids();
-    for (const guid of [...this.plates.keys()]) {
-      const object = this.units.get(guid);
-      if (!wanted.has(guid) || !object || !object.group.visible) this.removePlate(guid);
-    }
-    for (const guid of wanted) {
-      const object = this.units.get(guid);
-      if (object?.group.visible) this.updatePlate(guid, object);
-    }
-  }
-
-  private updatePlate(guid: string, object: UnitObject) {
-    let plate = this.plates.get(guid);
-    if (!plate) {
-      const canvas = document.createElement("canvas");
-      const texture = new THREE.CanvasTexture(canvas);
-      texture.colorSpace = THREE.SRGBColorSpace;
-      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true }));
-      sprite.center.set(0.5, 0);
-      this.scene.add(sprite);
-      plate = { sprite, canvas, key: "" };
-      this.plates.set(guid, plate);
-    }
-    // The hovered unit's plate draws over the others.
-    plate.sprite.renderOrder = guid === this.hoveredGuid ? 11 : 10;
-    const info = this.plateInfo(guid, object);
-    const size = unitPlateSize(info);
-    // Redraw only when something it shows changes (to the percent).
-    const key = JSON.stringify(info, (_key, value: unknown) => (typeof value === "number" ? Math.round(value * 100) / 100 : value));
-    if (key !== plate.key) {
-      plate.key = key;
-      if (plate.canvas.width !== size.width * UNIT_PLATE.scale || plate.canvas.height !== size.height * UNIT_PLATE.scale) {
-        plate.canvas.width = size.width * UNIT_PLATE.scale;
-        plate.canvas.height = size.height * UNIT_PLATE.scale;
-        plate.sprite.material.map?.dispose();
-        const texture = new THREE.CanvasTexture(plate.canvas);
-        texture.colorSpace = THREE.SRGBColorSpace;
-        plate.sprite.material.map = texture;
-        plate.sprite.material.needsUpdate = true;
-      }
-      drawUnitPlate(plate.canvas.getContext("2d")!, info);
-      plate.sprite.material.map!.needsUpdate = true;
-    }
-    // Above the unit's cast icons while it has any.
-    const iconTop = this.castIconTops.get(guid);
-    const height = iconTop !== undefined ? iconTop + CAST_ICON_TOP_GAP : object.labelHeight;
-    const { position } = object.group;
-    plate.sprite.position.set(position.x, position.y + height * this.scaleOf(object), position.z);
-    // A fixed size on screen, like a game's nameplate, however close the camera is.
-    const viewportHeight = this.renderer.domElement.clientHeight || 1;
-    const worldPerPixel = (2 * this.camera.position.distanceTo(plate.sprite.position) * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)) / viewportHeight;
-    plate.sprite.scale.set(size.width * PLATE_SCREEN_SCALE * worldPerPixel, size.height * PLATE_SCREEN_SCALE * worldPerPixel, 1);
-  }
-
-  // What a unit's nameplate shows, from what the scene already has.
-  private plateInfo(guid: string, object: UnitObject): UnitPlateInfo {
-    const health = object.healthFraction ?? (object.health && object.health.max > 0 ? object.health.current / object.health.max : null);
-    const cast = this.unitCasts.get(guid);
-    return {
-      name: object.name,
-      nameColor: object.kind === "hostile" ? ENEMY_RED : object.color,
-      owner: object.owner ? this.units.get(object.owner)?.name ?? null : null,
-      health: health === null ? null : {
-        fraction: health,
-        color: healthBarColor(health),
-        text: object.health && object.health.max > 0 ? `${shortNumber(object.health.current)} / ${shortNumber(object.health.max)}` : null,
-      },
-      power: object.powerLevel,
-      cast: cast ? { name: cast.spellName || "Casting", progress: cast.progress, color: `#${this.castColor(cast).getHexString()}` } : null,
-      dead: object.dead,
-    };
-  }
-
-  private removePlate(guid: string) {
-    const plate = this.plates.get(guid);
-    if (!plate) return;
-    this.scene.remove(plate.sprite);
-    plate.sprite.material.map?.dispose();
-    plate.sprite.material.dispose();
-    this.plates.delete(guid);
   }
 
   private readonly handlePointerMove = (event: PointerEvent) => {
@@ -4239,11 +2127,11 @@ export class MapScene3D {
       -((event.clientY - rect.top) / rect.height) * 2 + 1,
     );
     this.raycaster.setFromCamera(this.pointer, this.camera);
-    const hit = this.raycaster.intersectObjects([...this.units.values()].map((unit) => unit.body), false)[0];
+    const hit = raycastUnits(this.raycaster, this.units);
     const guid = (hit?.object.userData.guid as string | undefined) ?? null;
     this.pointerInside = true;
     // The next frame re-picks the effect under the pointer.
-    if (this.effects) this.requestRender();
+    if (this.effectsLayer.effects) this.requestRender();
     if (guid === this.hoveredGuid) return;
     this.hoveredGuid = guid;
     this.updateCursor();
@@ -4558,8 +2446,7 @@ export class MapScene3D {
 
   /** The target frames' units: halos for the selected chain and pins, and the chain's target lines. */
   setUnitRoles(roles: MapUnitRoles) {
-    this.roles = roles;
-    this.requestRender();
+    this.unitLayer.setUnitRoles(roles);
   }
 
   /** Called with where you are on the mesh (throttled), for a live session; null once you are not (LivePresence). */
@@ -4596,183 +2483,9 @@ export class MapScene3D {
     return this.presence.updateRemotePresences(now, this.dungeonMesh, this.unitScale);
   }
 
-  // The token parts that follow the replay: cast arcs, halos for the
-  // selected chain and pins, the boss sigils' turn, and
-  // the chain's target lines.
+  // The token parts that follow the replay (UnitLayer.updateTokens).
   private updateTokens(now: number) {
-    const dt = this.tokenAt ? Math.min(KEY_MAX_STEP_S, (now - this.tokenAt) / 1000) : 0;
-    this.tokenAt = now;
-    const { roles } = this;
-    for (const [guid, object] of this.units) {
-      const { token } = object;
-      const cast = object.dead ? undefined : this.unitCasts.get(guid);
-      const castColor = cast ? this.castColor(cast) : null;
-      token.arc.visible = Boolean(cast);
-      if (cast && castColor) {
-        const map = this.tokenTextures.castArc(Math.min(CAST_ARC_TEXTURE_STEPS, Math.floor(cast.progress * CAST_ARC_TEXTURE_STEPS)));
-        if (token.arc.material.map !== map) {
-          token.arc.material.map = map;
-          token.arc.material.needsUpdate = true;
-        }
-        token.arc.material.color.copy(castColor);
-      }
-      const kind: HaloKind | null = guid === roles.selected ? "selected"
-        : guid === roles.target ? "target"
-          : guid === roles.targetsTarget ? "targetsTarget" : null;
-      token.halo.visible = kind !== null;
-      if (kind) {
-        const map = this.tokenTextures.halo(kind);
-        if (token.halo.material.map !== map) {
-          token.halo.material.map = map;
-          token.halo.material.needsUpdate = true;
-        }
-        token.halo.material.color.setHex(HALO_COLORS[kind]);
-      }
-      token.pin.visible = roles.pinned.has(guid);
-      token.pin.material.color.setHex(HALO_COLORS.pinned);
-      if (object.calloutMarker) {
-        const unitScale = this.scaleOf(object);
-        object.calloutMarker.visible = object.group.visible;
-        object.calloutMarker.position.set(
-          object.group.position.x,
-          object.group.position.y + (object.barHeight + RAID_TARGET_MARKER_LIFT) * unitScale,
-          object.group.position.z,
-        );
-        object.calloutMarker.scale.setScalar(RAID_TARGET_MARKER_SIZE * unitScale);
-      }
-      if (token.ticks) token.ticks.rotation.y = (now / 1000) * SIGIL_SPIN - object.group.rotation.y;
-      if (token.bossSpire) {
-        const { material } = token.bossSpire;
-        token.bossSpire.rotation.y = (now / 1000) * BOSS_SPIRE.spin - object.group.rotation.y;
-        material.color.set(object.dead ? BOSS_SPIRE.dead : ENEMY_RED);
-        material.emissive.setHex(object.dead ? 0x000000 : BOSS_SPIRE.glow);
-        // While casting, it turns and glows in the spell's colour, building as the cast fills.
-        if (cast && castColor) {
-          const glow = bossSpireCastGlow(cast.progress, now / 1000);
-          material.color.lerp(castColor, glow);
-          material.emissive.lerp(castColor, glow / 2);
-        }
-      }
-    }
-    this.updateTargetLines(dt);
-    this.updateOwnerLines();
-    this.updateTrails();
-  }
-
-  // Each living unit's movement trail, in its colour, fading from the unit
-  // back to nothing; dimmer for muted units. It starts at the unit; older
-  // points stand at their logged height on the mesh, never below the unit's
-  // floor (a swimmer's log sits under the surface), on the flat artwork at 0.
-  private updateTrails() {
-    const mesh = this.dungeonMesh;
-    const lift = OWNER_LINE.lift * this.unitScale;
-    let count = 0;
-    for (const object of this.units.values()) {
-      const trail = object.trail;
-      if (!trail || object.dead) continue;
-      this.color.set(object.color);
-      const opacity = TRAIL_LINE.opacity * (object.muted ? TRAIL_LINE.mutedFactor : 1);
-      const last = trail.length - 1;
-      for (let index = 0; index < last && count < MAX_TRAIL_SEGMENTS; index++) {
-        for (const [slot, at] of [[0, index], [1, index + 1]] as const) {
-          const { point, z } = trail[at];
-          const scene = mapPointToScene(point, this.aspect, GROUND_WIDTH);
-          const y = !mesh ? 0 : at === 0 || z === undefined ? object.base.y : Math.max(z * mesh.scale, object.floorY);
-          this.trailPositions.set([scene.x, y + lift, scene.z], count * 6 + slot * 3);
-          this.trailColors.set([this.color.r, this.color.g, this.color.b, opacity * (1 - at / last)], count * 8 + slot * 4);
-        }
-        count++;
-      }
-    }
-    const geometry = this.trailLines.geometry;
-    geometry.setDrawRange(0, count * 2);
-    geometry.attributes.position.needsUpdate = count > 0;
-    geometry.attributes.color.needsUpdate = count > 0;
-  }
-
-  // A thin line from each guardian to its owner, in the owner's colour: dim,
-  // bright when either end is selected, a target in the chain, or pinned.
-  private updateOwnerLines() {
-    const { roles } = this;
-    const lit = (guid: string) => guid === roles.selected || guid === roles.target || guid === roles.targetsTarget || roles.pinned.has(guid);
-    let count = 0;
-    const lift = OWNER_LINE.lift * this.unitScale;
-    for (const [guid, guardian] of this.units) {
-      if (!guardian.owner || count >= MAX_OWNER_LINES) continue;
-      const owner = this.units.get(guardian.owner);
-      if (!owner || owner.dead || guardian.dead) continue;
-      const offset = count * 6;
-      const from = guardian.group.position;
-      const to = owner.group.position;
-      this.ownerLinePositions.set([from.x, from.y + lift, from.z, to.x, to.y + lift, to.z], offset);
-      const brightness = lit(guid) || lit(guardian.owner) ? 1 : OWNER_LINE.dim;
-      this.color.set(owner.color).multiplyScalar(brightness);
-      this.ownerLineColors.set([this.color.r, this.color.g, this.color.b, this.color.r, this.color.g, this.color.b], offset);
-      count++;
-    }
-    const geometry = this.ownerLines.geometry;
-    geometry.setDrawRange(0, count * 2);
-    geometry.attributes.position.needsUpdate = count > 0;
-    geometry.attributes.color.needsUpdate = count > 0;
-  }
-
-  // A cast's colour: its event's school, else its spell's (cast starts carry none).
-  private castColor(cast: UnitCast): THREE.Color {
-    const css = cast.school ? schoolColor(cast.school) : (cast.spellId ? this.effects?.castSchoolColor?.(cast.spellId) : null) ?? schoolColor(0);
-    return this.effectColor(css);
-  }
-
-  // Selected -> its target (dashes in the cast's school colour while casting,
-  // the unit's colour otherwise) and target -> target's target (purple dots).
-  private updateTargetLines(dt: number) {
-    const { roles } = this;
-    const shown = (object: UnitObject | undefined) => object?.group.visible ? object : undefined;
-    const selected = shown(roles.selected ? this.units.get(roles.selected) : undefined);
-    const target = shown(roles.target ? this.units.get(roles.target) : undefined);
-    const targetsTarget = shown(roles.targetsTarget ? this.units.get(roles.targetsTarget) : undefined);
-    const cast = roles.selected && selected && !selected.dead ? this.unitCasts.get(roles.selected) : undefined;
-    const lines: [UnitObject | undefined, UnitObject | undefined, THREE.Color, boolean][] = [
-      [selected && !selected.dead ? selected : undefined, target, cast ? this.castColor(cast) : this.color.set(selected?.color ?? "#ffffff").clone(), false],
-      [target, targetsTarget && roles.targetsTarget !== roles.selected ? targetsTarget : undefined, new THREE.Color(HALO_COLORS.targetsTarget), true],
-    ];
-    lines.forEach(([from, to, color, dotted], index) => {
-      let line = this.targetLines[index];
-      if (!line) {
-        const map = this.tokenTextures.dash(dotted).clone();
-        map.needsUpdate = true;
-        line = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
-        line.renderOrder = 5;
-        this.targetLines[index] = line;
-        this.scene.add(line);
-      }
-      line.visible = Boolean(from && to);
-      if (!from || !to) return;
-      const lift = TARGET_LINE_LIFT * this.unitScale;
-      const start = this.vector.copy(from.group.position).setY(from.group.position.y + lift);
-      const end = this.vectorB.copy(to.group.position).setY(to.group.position.y + lift);
-      const along = end.clone().sub(start);
-      const length = along.length();
-      if (length < 1e-6) {
-        line.visible = false;
-        return;
-      }
-      along.divideScalar(length);
-      // A ribbon along the line, turned to face the camera about its own axis.
-      const toCamera = this.camera.position.clone().sub(start);
-      const normal = toCamera.sub(along.clone().multiplyScalar(toCamera.dot(along))).normalize();
-      const side = new THREE.Vector3().crossVectors(normal, along).normalize();
-      this.matrix.makeBasis(along, side, normal);
-      line.quaternion.setFromRotationMatrix(this.matrix);
-      line.position.copy(start).add(end).multiplyScalar(0.5);
-      const width = (dotted ? TARGETS_TARGET_LINE_WIDTH : TARGET_LINE_WIDTH) * this.unitScale;
-      line.scale.set(length, width, 1);
-      const map = line.material.map!;
-      const period = TARGET_LINE_DASH * this.unitScale * (dotted ? 0.6 : 1);
-      map.repeat.x = length / period;
-      map.offset.x -= (dt * TARGET_LINE_SPEED) / (dotted ? 0.6 : 1);
-      line.material.color.copy(color);
-      line.material.opacity = dotted ? TARGET_LINE.targetsTargetOpacity : TARGET_LINE.opacity;
-    });
+    this.unitLayer.updateTokens(now);
   }
 
   /** The plan items to draw (the current step's, plus any being drawn), and the selected one. */
@@ -5289,15 +3002,6 @@ export class MapScene3D {
     this.renderer.render(this.scene, this.camera);
     this.emitPresence();
     return animating;
-  }
-}
-
-// Untextured bodies take the unit's colour; textured minis keep their texture
-// (white multiply). Both turn grey when dead.
-function setBodyColor(object: UnitObject) {
-  if (!object.mini) return;
-  for (const material of object.bodyMaterials) {
-    material.color.set(object.dead ? DEAD_COLOR : object.textured ? 0xffffff : object.color);
   }
 }
 
