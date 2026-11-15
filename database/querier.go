@@ -1448,6 +1448,14 @@ type sqlcQuerier interface {
 	// Returns distinct realm names that have at least one qualified speedrun.
 	SpeedrunRealmNames(ctx context.Context) ([]string, error)
 	StarLuaProject(ctx context.Context, arg StarLuaProjectParams) error
+	// Characters seen in listed raid logs since a cutoff, by class, race and observed
+	// faction, for the /stats census. RLS on wow_server_realms scopes it to the
+	// request tenant (root: untenanted and include_in_all realms). A character counts
+	// when its latest sighting (updated_from_instance) is a listed, valid log, or
+	// when any listed, valid log since the cutoff shows it, so a character seen only
+	// in unlisted or invalidated logs is excluded. The exact sighting check only runs
+	// for characters whose latest sighting is not listed. Background job only.
+	StatsCensusCounts(ctx context.Context, since pgtype.Timestamptz) ([]StatsCensusCountsRow, error)
 	// Counts the request tenant's distinct players seen in listed logs since a
 	// cutoff. Heavier than the raid count, so the job runs it only when the raid
 	// count alone does not decide the threshold. Background job only.

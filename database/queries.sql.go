@@ -34346,6 +34346,77 @@ func (q *sqlQuerier) ListStatsSnapshotMeta(ctx context.Context, tenantID uuid.UU
 	return items, nil
 }
 
+const statsCensusCounts = `-- name: StatsCensusCounts :many
+SELECT
+  gp.class,
+  gp.race,
+  gp.faction,
+  COUNT(*)::bigint AS count
+FROM game_players gp
+JOIN wow_server_realms wsr ON wsr.id = gp.realm_id
+WHERE gp.updated_at >= $1::timestamptz
+  AND (
+    EXISTS (
+      SELECT 1
+      FROM log_instances li
+      JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted AND wlg.invalidated_at IS NULL
+      WHERE li.id = gp.updated_from_instance
+        AND li.invalidated_at IS NULL
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM log_instance_players lip
+      JOIN log_instances li ON li.id = lip.instance_id
+        AND li.realm_id = gp.realm_id
+        AND li.start_time >= $1::timestamptz
+        AND li.invalidated_at IS NULL
+      JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted AND wlg.invalidated_at IS NULL
+      WHERE lip.unit_guid = gp.id
+    )
+  )
+GROUP BY gp.class, gp.race, gp.faction
+ORDER BY gp.class, gp.race, gp.faction
+`
+
+type StatsCensusCountsRow struct {
+	Class   WowPlayableClass     `db:"class" json:"class"`
+	Race    WowPlayableRace      `db:"race" json:"race"`
+	Faction NullWowPlayerFaction `db:"faction" json:"faction"`
+	Count   int64                `db:"count" json:"count"`
+}
+
+// Characters seen in listed raid logs since a cutoff, by class, race and observed
+// faction, for the /stats census. RLS on wow_server_realms scopes it to the
+// request tenant (root: untenanted and include_in_all realms). A character counts
+// when its latest sighting (updated_from_instance) is a listed, valid log, or
+// when any listed, valid log since the cutoff shows it, so a character seen only
+// in unlisted or invalidated logs is excluded. The exact sighting check only runs
+// for characters whose latest sighting is not listed. Background job only.
+func (q *sqlQuerier) StatsCensusCounts(ctx context.Context, since pgtype.Timestamptz) ([]StatsCensusCountsRow, error) {
+	rows, err := q.db.Query(ctx, statsCensusCounts, since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []StatsCensusCountsRow
+	for rows.Next() {
+		var i StatsCensusCountsRow
+		if err := rows.Scan(
+			&i.Class,
+			&i.Race,
+			&i.Faction,
+			&i.Count,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const statsTenantPlayerCount = `-- name: StatsTenantPlayerCount :one
 SELECT COUNT(DISTINCT (li.realm_id, lip.unit_guid))::bigint
 FROM log_instances li

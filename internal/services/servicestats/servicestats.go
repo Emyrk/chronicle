@@ -147,6 +147,7 @@ func New(opts Options) (*Service, error) {
 func DefaultFamilies() []Family {
 	return []Family{
 		aboutFamily(),
+		censusFamily(),
 	}
 }
 
