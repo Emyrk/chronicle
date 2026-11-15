@@ -94,6 +94,9 @@ export function MobileMapHost({ wholeRun = false, ...props }: PanelRenderProps<M
       >
         <ReplayPlayer
           player={player}
+          // In the open world the 3D map notice goes below the top row (Close, Drop in, the way back), in short.
+          noticeCopy={mobileWorldOpen ? "short" : "full"}
+          noticePlacement={mobileWorldOpen ? "below-controls" : "top"}
           fallback={!mobileWorldOpen ? (
             <>
               <div className="pointer-events-none absolute inset-0"><ReplayPlayerFlatView player={player} trailSeconds={map.effectSettings.trailSeconds} /></div>
