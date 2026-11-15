@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { blogPostMatchesFlavor, findBlogPost } from "../blogRegistry";
+import { blogPostMatchesFlavor, blogPostsForFlavor, findBlogPost } from "../blogRegistry";
 import { prerenderBlogPages } from "../prerender";
 
 const pages = new Map(prerenderBlogPages().map((page) => [page.path, page]));
@@ -42,5 +42,19 @@ describe("explainer posts", () => {
       expect(blogPostMatchesFlavor(findBlogPost(id)!, ["wrath", "azerothcore"])).toBe(true);
       expect(blogPostMatchesFlavor(findBlogPost(id)!, ["vanilla", "wow-forever"])).toBe(true);
     }
+  });
+
+  it("keeps the announcement featured except on Turtle-content sites", () => {
+    expect(blogPostsForFlavor(["wrath", "azerothcore"])[0].id).toBe("beyond-the-best-parse");
+    expect(blogPostsForFlavor(["vanilla", "wow-forever"])[0].id).toBe("beyond-the-best-parse");
+    expect(blogPostsForFlavor(["vanilla", "nightmare-of-ursol", "octowow"])[0].id).toBe("turtle-wow-forks");
+  });
+
+  it("links each fork's /stats page and the server picker, not /parsing", () => {
+    const forks = page("/blog/turtle-wow-forks").html;
+    for (const href of ["https://capy.chronicleclassic.com/stats", "https://ravencraft.chronicleclassic.com/stats", "https://octo.chronicleclassic.com/stats", "https://choose.chronicleclassic.com/", "/stats/methodology"]) {
+      expect(forks).toContain(`href="${href}"`);
+    }
+    expect(page("/blog/parses-and-ratings-explained").html).not.toContain('href="/parsing"');
   });
 });

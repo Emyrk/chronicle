@@ -28,8 +28,8 @@ export function ParsesAndRatingsExplainedPost({ post }: PostProps) {
       <ul>
         <li>
           <strong>Comparable kills</strong> are kills of the same boss on the same server (every realm of it), at the
-          same difficulty and raid size, by the same class and, on most servers, the same spec and subspec. A few
-          servers compare by class only.
+          same difficulty and raid size, by the same class and, on most servers, the same spec and subspec. A server
+          can choose to compare by class only.
         </li>
         <li>
           <strong>The window</strong> is the 60 days before your raid started. Your own raid is never part of its own
@@ -58,16 +58,13 @@ export function ParsesAndRatingsExplainedPost({ post }: PostProps) {
           don&apos;t change it.
         </li>
       </ul>
-      <p>
-        The <a href="/parsing">parsing page</a> has more detail.
-      </p>
-
       <h2>What are Peak, Mastery and Renown?</h2>
       <p>
         Ratings don&apos;t use parses. They compare your raw DPS or HPS to the <strong>benchmark</strong>: the best
         kill anyone of your class, spec and subspec has ever recorded on that boss on your server, at that difficulty
-        and raid size. Each kill counts once, as DPS or as HPS (healing specs count whichever is higher; other specs
-        always count as DPS). Only clean boss kills count, where every enemy in the fight died.
+        and raid size. Each kill counts once, as DPS or as HPS. On most servers, healing specs count whichever is higher
+        and other specs always count as DPS; on servers that compare by class, every kill counts whichever is
+        higher. Only clean boss kills count, where every enemy in the fight died.
       </p>
       <ul>
         <li>
@@ -82,16 +79,19 @@ export function ParsesAndRatingsExplainedPost({ post }: PostProps) {
           100 until you have at least three.
         </li>
         <li>
-          <strong>Renown</strong> is how much you&apos;ve done. Every boss has a Renown award, and each kill earns it in
-          full, however you performed. It adds up across bosses and raids.
+          <strong>Renown</strong> is how much you&apos;ve done. Each boss on the Renown list has an award, and each kill earns it
+          in full, however you performed. It adds up across bosses and raids.
         </li>
       </ul>
       <p>For a whole raid or your career:</p>
       <ul>
         <li>
-          Peak and Mastery for a raid are the average over all its bosses. A boss you haven&apos;t killed counts as 0.
+          Peak and Mastery for a raid are the average over the raid&apos;s standard boss list (optional bosses are left
+          out). A boss you haven&apos;t killed counts as 0.
         </li>
-        <li>Across raids, bigger raids weigh more than small ones.</li>
+        <li>
+          Across raids, each raid has a weight that Chronicle sets, with harder, later raids generally weighing more.
+        </li>
         <li>Each spec you play is rated separately.</li>
         <li>Guilds are rated the same way using kill times: the fastest kill on the server is the benchmark.</li>
       </ul>
@@ -99,7 +99,7 @@ export function ParsesAndRatingsExplainedPost({ post }: PostProps) {
       <h2>Why did my rating change?</h2>
       <ul>
         <li>
-          <strong>Someone set a new record.</strong> The benchmark covers all time, so it only goes up. When it does,
+          <strong>Someone set a new record.</strong> The benchmark covers all time, so it normally only goes up. When it does,
           everyone else&apos;s Peak and Mastery on that boss dip a little.
         </li>
         <li>
@@ -227,8 +227,8 @@ export function TurtleWoWForksPost({ post }: PostProps) {
       <h2>What is a Turtle WoW fork?</h2>
       <p>
         A fork is a server that runs Turtle WoW&apos;s custom content: extra bosses in Molten Core and Blackwing
-        Lair, Karazhan, Timbermaw Hold and more. On Chronicle these servers share Turtle&apos;s boss lists, parses and
-        speedrun rules, and each has its own leaderboards.
+        Lair, Karazhan, Timbermaw Hold and more. On Chronicle these servers share Turtle&apos;s boss lists and speedrun
+        rules; each has its own parses and leaderboards.
       </p>
 
       <h2>Which forks are most active?</h2>
@@ -247,8 +247,11 @@ export function TurtleWoWForksPost({ post }: PostProps) {
           <a href="https://ravencraft.chronicleclassic.com/stats">Ravencraft</a>
         </li>
         <li>
-          OctoWoW and every other server: pick one from the <a href="https://chronicleclassic.com/">server list</a> and
-          open its <code>/stats</code> page.
+          <a href="https://octo.chronicleclassic.com/stats">OctoWoW</a>
+        </li>
+        <li>
+          Every other server: pick one in the <a href="https://choose.chronicleclassic.com/">server picker</a> and open
+          its <code>/stats</code> page.
         </li>
       </ul>
 
