@@ -3,7 +3,6 @@ import { parseLivePresenceSurface } from "../../liveSessionProtocol";
 import { useLiveSessionOptional } from "../../LiveSessionContext";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import { useReplayStepKeys } from "../../replayStepKey";
-import { LEEROY_UNIT_CALLOUTS } from "../../Leeroy/leeroyFeaturedUnits";
 import type { PanelRenderProps } from "../types";
 import { useEmbeddedPanel, useEmbeddedPanelWithResult } from "../useEmbeddedPanel";
 import type { UnitInspectSelection } from "../UnitInspectContext";
@@ -34,6 +33,7 @@ import type { ReplayCamera } from "./replayPlayerModel";
 import { useMapSceneEncounter } from "./useMapScene";
 import { useLocalLoopClock, useSyncModeClock } from "./useReplayClock";
 import { useReplayPlayer } from "./useReplayPlayer";
+import { featuredUnitCallouts } from "./replayFeaturedUnits";
 import { DEFAULT_WALK_AVATAR, readStoredWalkAvatar, storeWalkAvatar } from "./walkAvatars";
 
 const RAID_FRAMES_PANEL = createRaidFramesPanel();
@@ -243,7 +243,7 @@ export function useMapHost({ props, kind, wholeRun, immersive, mobileWorldOpen }
     walkAvatar,
     livePresence: caps.presence ? livePresence : null,
     presenceSurface,
-    unitCallouts: props.context.instance.id === "leeroy" ? LEEROY_UNIT_CALLOUTS : undefined,
+    unitCallouts: featuredUnitCallouts(props.context.instance.replayFeaturedUnits),
     unitRoles,
     showCompass: caps.compass,
   };

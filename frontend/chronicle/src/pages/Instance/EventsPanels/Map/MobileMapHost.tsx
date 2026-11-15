@@ -6,7 +6,7 @@ import { ReplayToggleFlash } from "../../ReplayToggleFlash";
 import type { PanelRenderProps } from "../types";
 import type { MapResult } from "./map.processor";
 import { IDLE_MOBILE_MAP_INPUT, type MobileMapInput } from "./mapControls";
-import { LeeroyFeaturedUnits, ReloadingChip } from "./MapChrome";
+import { FeaturedUnits, ReloadingChip } from "./MapChrome";
 import { MapFloorPicker } from "./MapFloorPicker";
 import { mapOwnsPortalContainer } from "./mapHostModel";
 import { MobileMapControls } from "./MobileMapControls";
@@ -117,7 +117,7 @@ export function MobileMapHost({ wholeRun = false, ...props }: PanelRenderProps<M
           }}
           overlay={(
             <>
-              {props.context.instance.id === "leeroy" && <LeeroyFeaturedUnits />}
+              <FeaturedUnits units={props.context.instance.replayFeaturedUnits} />
               {mobileWorldOpen && (
                 <MobileMapControls
                   walking={walking}

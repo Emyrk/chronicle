@@ -36,6 +36,7 @@ import { shouldShowInstanceAdRail } from "./instanceAdRail";
 import { useEntityRaidContext, type EntityRaidContext } from "@/components/EntityMenu/entityMenuContext";
 import type { PositionCoordinateSpace } from "./positionCoordinateSpace";
 import type { MapCameraMark } from "./EventsPanels/Map/cameraPath";
+import type { ReplayFeaturedUnit } from "./EventsPanels/Map/replayFeaturedUnits";
 
 // Types for the Instance page
 export interface EnemyUnit {
@@ -113,6 +114,8 @@ export interface Instance {
   positionCoordinateSpace?: PositionCoordinateSpace;
   /** Optional authored replay camera, used by cinematic reconstructions. */
   replayCameraPath?: readonly MapCameraMark[];
+  /** Optional featured characters the replay map calls out (cards and raid markers), used by cinematic reconstructions. */
+  replayFeaturedUnits?: readonly ReplayFeaturedUnit[];
   // Unlisted logs preserve combat analysis for authorized users but omit public ranking features.
   unlisted?: boolean;
   // Parse format and server-mechanics flavor of the source log group

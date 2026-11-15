@@ -1,15 +1,8 @@
 import { MARKER_COLORS } from "../EventsPanels/Map/plan/planArt";
-import type { PlanMarkerIcon } from "../EventsPanels/Map/plan/mapPlan";
+import type { ReplayFeaturedUnit } from "../EventsPanels/Map/replayFeaturedUnits";
 
-export interface LeeroyFeaturedUnit {
-  guid: string;
-  name: string;
-  role: string;
-  color: string;
-  marker: PlanMarkerIcon;
-}
-
-export const LEEROY_FEATURED_UNITS: readonly LeeroyFeaturedUnit[] = [
+/** Leeroy's featured characters, handed to the replay map on the page's instance (`replayFeaturedUnits`). */
+export const LEEROY_FEATURED_UNITS: readonly ReplayFeaturedUnit[] = [
   {
     guid: "0x00000000000A0001",
     name: "Leeroy",
@@ -25,7 +18,3 @@ export const LEEROY_FEATURED_UNITS: readonly LeeroyFeaturedUnit[] = [
     marker: "triangle",
   },
 ];
-
-export const LEEROY_UNIT_CALLOUTS = new Map(
-  LEEROY_FEATURED_UNITS.map((unit) => [unit.guid, { title: unit.name, subtitle: unit.role, color: unit.color, marker: unit.marker }]),
-);

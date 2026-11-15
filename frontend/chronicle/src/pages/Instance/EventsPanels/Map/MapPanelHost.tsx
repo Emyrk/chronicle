@@ -12,7 +12,7 @@ import { LivePresenceIndicator } from "../../LivePresenceIndicator";
 import { ReplayToggleFlash } from "../../ReplayToggleFlash";
 import { ReplayPlayTooltip } from "../../ReplayPlayTooltip";
 import { MiniScrubber } from "./MiniScrubber";
-import { ExpandMapButton, FullscreenEncounterPicker, FullscreenReplayBar, KeybindTooltip, LeeroyFeaturedUnits, ReloadingChip, WalkHint } from "./MapChrome";
+import { ExpandMapButton, FullscreenEncounterPicker, FullscreenReplayBar, KeybindTooltip, FeaturedUnits, ReloadingChip, WalkHint } from "./MapChrome";
 import { BROWSER_FULLSCREEN_KEYS, framingButtonClass, mapFramingButtonClass, WINDOW_FULLSCREEN_KEYS } from "./mapChromeStyles";
 import { mapOwnsPortalContainer } from "./mapHostModel";
 import { useFullscreenElement } from "./useFullscreenElement";
@@ -342,7 +342,7 @@ export function MapPanelHost({
         }}
         overlay={(
           <>
-          {props.context.instance.id === "leeroy" && <LeeroyFeaturedUnits />}
+          <FeaturedUnits units={props.context.instance.replayFeaturedUnits} />
           {videoOpen && videoEncounter && dungeonMesh && (
             <Suspense fallback={null}>
               <VideoRenderDialog
