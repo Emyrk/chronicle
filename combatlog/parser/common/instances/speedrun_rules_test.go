@@ -69,6 +69,7 @@ func TestBlackwingLairDamageTargets(t *testing.T) {
 	rules := BlackwingLairFactory.FlavoredRankings(database.WoWFlavor{database.FlavorVanilla})
 	require.Equal(t, map[string]rankings.DamageTargets{
 		"Broodlord Lashlayer":   {Mode: rankings.DamageTargetsBossOnly},
+		"Chromaggus":            {Mode: rankings.DamageTargetsBossOnly},
 		"Firemaw":               {Mode: rankings.DamageTargetsBossOnly},
 		"Razorgore the Untamed": {Mode: rankings.DamageTargetsEntries, EntryIDs: []uint32{12435}},
 	}, rules.DamageByEncounter)
@@ -86,6 +87,7 @@ func TestBlackwingLairRazorgoreDurationRule(t *testing.T) {
 			}
 			require.Equal(t, want, rules.DurationTargets("Razorgore the Untamed"))
 			require.Equal(t, rankings.DamageTargets{Mode: rankings.DamageTargetsBossOnly}, rules.DurationTargets("Broodlord Lashlayer"))
+			require.Equal(t, rankings.DamageTargets{Mode: rankings.DamageTargetsBossOnly}, rules.DurationTargets("Chromaggus"))
 		})
 	}
 }
