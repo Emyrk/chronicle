@@ -4,12 +4,17 @@ import {
   cameraModeFor,
   defaultViewport,
   directorFraming,
+  effectiveMeshState,
   focusParts,
   followState,
+  meshlessReady,
   meshWanted,
   prefersRenderedCanvas,
+  rawProjection,
+  sceneFieldsFor,
   shouldHoldScene,
   shownScene,
+  stageView,
   type ReadyMapScene,
 } from "./replayPlayerModel";
 
@@ -99,5 +104,59 @@ describe("camera", () => {
     expect(followState(true, false, true)).toEqual({ canFollow: true, following: true });
     expect(followState(false, true, false)).toEqual({ canFollow: true, following: false });
     expect(followState(false, false, true)).toEqual({ canFollow: false, following: false });
+  });
+});
+
+describe("backdrop held scene (the landing)", () => {
+  it("re-holds only when the map or mesh changes, not on another encounter or floor", () => {
+    const held = scene();
+    expect(shouldHoldScene(scene({ encounterId: "e2" }), held, "backdrop")).toBe(false);
+    expect(shouldHoldScene(scene({ selectedFloorNumber: 2 }), held, "backdrop")).toBe(false);
+    expect(shouldHoldScene(scene({ mapName: "Onyxia's Lair" }), held, "backdrop")).toBe(true);
+    expect(shouldHoldScene(scene({ mesh: null }), held, "backdrop")).toBe(true);
+    expect(shouldHoldScene(scene(), null, "backdrop")).toBe(true);
+  });
+
+  it("shows the held scene, frozen, whenever the live one is briefly empty, loading or not", () => {
+    const held = scene();
+    expect(shownScene(null, held, false, "backdrop")).toEqual({ ready: held, reloading: true });
+    expect(shownScene(null, null, false, "backdrop")).toEqual({ ready: null, reloading: false });
+  });
+});
+
+describe("mesh policies", () => {
+  it("projects on the mesh once it loads, or always", () => {
+    expect(rawProjection("when-mesh-ready", true, true, "ready")).toBe(true);
+    expect(rawProjection("when-mesh-ready", true, true, "loading")).toBe(false);
+    expect(rawProjection("when-mesh-ready", true, false, "ready")).toBe(false);
+    expect(rawProjection("always", false, false, "failed")).toBe(true);
+  });
+
+  it("plays on the tiles when the mesh fails or is missing under use-tiles (Explore); reports the failure otherwise", () => {
+    expect(effectiveMeshState("failed", "use-tiles")).toBe("ready");
+    expect(effectiveMeshState("loading", "use-tiles")).toBe("loading");
+    expect(effectiveMeshState("failed", "report")).toBe("failed");
+    expect(meshlessReady("use-tiles", true, false)).toBe(true);
+    expect(meshlessReady("use-tiles", true, true)).toBe(false);
+    expect(meshlessReady("use-tiles", false, false)).toBe(false);
+    expect(meshlessReady("report", true, false)).toBe(false);
+  });
+});
+
+describe("stage and scene fields", () => {
+  it("shows the 3D view, the 2D map or the mesh-only message without WebGL, or nothing when the host hides", () => {
+    expect(stageView(true, false, "none")).toBe("3d");
+    expect(stageView(false, false, "2d")).toBe("2d");
+    expect(stageView(false, true, "2d")).toBe("mesh-only");
+    expect(stageView(false, false, "none")).toBe("none");
+  });
+
+  it("passes every scene field to the panel; the landing keeps its old default coordinate space and no alignment artwork", () => {
+    expect(sceneFieldsFor("all")).toEqual({ focus: true, followSource: true, alignmentGround: true, worldCoordinates: true });
+    expect(sceneFieldsFor("backdrop")).toEqual({ focus: true, followSource: true, alignmentGround: false, worldCoordinates: false });
+  });
+
+  it("gives the export none of the fields that change filmed frames (camera limits, walkable floors, unit scale)", () => {
+    expect(sceneFieldsFor("capture")).toEqual({ focus: false, followSource: false, alignmentGround: false, worldCoordinates: false });
   });
 });
