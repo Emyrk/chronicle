@@ -30,7 +30,10 @@ func New() *Tracker {
 
 func (t *Tracker) ActivityChange(_ messages.Message, chars ...characters.Character) {
 	for _, c := range chars {
-		if c.IsActive() {
+		// Environmental/unknown-source damage can retain a zero-GUID character.
+		// Keep that attribution in the character/event state, but do not count
+		// the absent actor as a participant (matching known/dead membership).
+		if !c.ID().IsZero() && c.IsActive() {
 			t.Active[c.ID()] = true
 		}
 	}
