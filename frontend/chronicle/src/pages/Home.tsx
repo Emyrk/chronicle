@@ -1039,8 +1039,8 @@ function RaidSpotlight() {
 }
 
 /** Latest logs as raid cards, like the Recent page. */
-function LatestUploads() {
-  const { data } = useRecentUploads();
+export function LatestUploads() {
+  const { data, isSuccess } = useRecentUploads();
   const uploads = (data?.instances ?? []).slice(0, 12);
 
   return (
@@ -1052,7 +1052,9 @@ function LatestUploads() {
             Recent →
           </Link>
         </div>
-        {uploads.length === 0 && (
+        {/* Only claim "no uploads" once the API has answered. The prerendered HTML and the
+            pre-fetch render have no data, which is not the same as an empty tenant. */}
+        {isSuccess && uploads.length === 0 && (
           <div className="rounded-lg border px-4 py-8 text-center text-sm text-muted-foreground">
             No uploads yet.
           </div>
