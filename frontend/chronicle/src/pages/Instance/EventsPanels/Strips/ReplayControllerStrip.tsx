@@ -1,9 +1,12 @@
-import { useCallback, useMemo, useRef, type PointerEvent } from "react";
+import { useCallback, useMemo } from "react";
 import { Pause, Play, PowerOff, RotateCcw, Skull } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import { useReplayToggleKey } from "../../replayToggleKey";
 import { ReplayPlayTooltip } from "../../ReplayPlayTooltip";
+import { ReplayScrubber } from "../../ReplayScrubber";
+import { fractionAt, REPLAY_SPEEDS, scrubAria, type ScrubberSource } from "../../replayScrubberModel";
+import { syncModeClock } from "../Map/replayClock";
 import type { PanelContext, PanelDefinition } from "../types";
 import { usePanelAggregation } from "../usePanelAggregation";
 import { usePlayerLifeState } from "../usePlayerLifeState";
@@ -23,8 +26,6 @@ import {
   replayDurabilityBars,
   type ReplayBounds,
 } from "./replayControllerModel";
-
-const SPEEDS = [0.25, 0.5, 1, 2, 4];
 
 const DURABILITY_PANEL: PanelDefinition<StatusResult, StatusProcessorEvent> = {
   ...statusProcessor,
@@ -80,7 +81,6 @@ const controlButtonClass = "flex h-7 w-7 shrink-0 items-center justify-center ro
 export function ReplayControllerStrip({ result, context, bars: barKind }: StripRenderProps<ReplayControllerResult> & { bars: "durability" | "damage" }) {
   const damage = barKind === "damage";
   const sync = useSyncModeContextOptional();
-  const trackRef = useRef<HTMLDivElement>(null);
   const boundsDates = sync?.encounterBounds ?? null;
   const bounds = useMemo((): ReplayBounds | null =>
     boundsDates ? { startMs: boundsDates.start.getTime(), endMs: boundsDates.end.getTime() } : null,
@@ -101,14 +101,14 @@ export function ReplayControllerStrip({ result, context, bars: barKind }: StripR
 
   const durationMs = bounds ? Math.max(0, bounds.endMs - bounds.startMs) : 0;
   const elapsedMs = bounds && cursorMs !== null ? Math.min(durationMs, Math.max(0, cursorMs - bounds.startMs)) : durationMs;
-  const headPercent = durationMs > 0 ? (elapsedMs / durationMs) * 100 : 0;
+  const headPercent = fractionAt(bounds ? bounds.startMs + elapsedMs : null, bounds) * 100;
   const playing = enabled && Boolean(sync?.isPlaying);
 
   // Replay turns on with the first play or scrub, like the design: no separate enable step.
   const seek = (timestampMs: number) => {
     if (!sync) return;
     if (!sync.enabled) sync.enable();
-    sync.setTimestamp(new Date(timestampMs));
+    syncModeClock(sync).seek(timestampMs);
   };
 
   const togglePlay = () => {
@@ -134,24 +134,8 @@ export function ReplayControllerStrip({ result, context, bars: barKind }: StripR
     sync.play();
   };
 
-  const scrubTo = (clientX: number) => {
-    const track = trackRef.current;
-    if (!track || !bounds) return;
-    const rect = track.getBoundingClientRect();
-    const fraction = Math.min(1, Math.max(0, (clientX - rect.left) / Math.max(1, rect.width)));
-    seek(bounds.startMs + fraction * durationMs);
-  };
-
-  const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
-    if (disabled || event.button !== 0) return;
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    scrubTo(event.clientX);
-  };
-
-  const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) scrubTo(event.clientX);
-  };
+  // The track reads the page's Replay through its clock; with Replay off the head sits at the end.
+  const scrubSource: ScrubberSource = { nowMs: bounds ? bounds.startMs + elapsedMs : null, bounds, seek };
 
   return (
     <div className="flex h-full min-h-0 items-center gap-3 bg-card px-3">
@@ -184,7 +168,7 @@ export function ReplayControllerStrip({ result, context, bars: barKind }: StripR
           </span>
         </div>
         <div className="flex gap-px rounded-md border border-border bg-popover p-px">
-          {SPEEDS.map((speed) => {
+          {REPLAY_SPEEDS.map((speed) => {
             const active = (sync?.playbackSpeed ?? 1) === speed;
             return (
               <button
@@ -215,16 +199,12 @@ export function ReplayControllerStrip({ result, context, bars: barKind }: StripR
       </div>
 
       <div className="flex h-full min-w-0 flex-1 flex-col justify-center py-1.5">
-        <div
-          ref={trackRef}
-          role="slider"
-          aria-label="Replay position"
-          aria-valuemin={0}
-          aria-valuemax={Math.round(durationMs / 1000)}
-          aria-valuenow={Math.round(elapsedMs / 1000)}
-          aria-valuetext={formatReplayClock(elapsedMs)}
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
+        <ReplayScrubber
+          variant="track"
+          source={scrubSource}
+          disabled={disabled}
+          aria={{ label: "Replay position", ...scrubAria(scrubSource.nowMs, bounds, "seconds"), valueText: formatReplayClock(elapsedMs) }}
+          preventDefaultOnPress
           className={cn("relative h-[60px] select-none touch-none", disabled ? "cursor-default opacity-50" : "cursor-pointer")}
         >
           <div className="absolute inset-x-0 bottom-[18px] top-[14px] flex items-stretch gap-px">
@@ -274,7 +254,7 @@ export function ReplayControllerStrip({ result, context, bars: barKind }: StripR
             className="pointer-events-none absolute bottom-[1px] -ml-[7px] h-3.5 w-3.5 rounded-full bg-[var(--color-class-warrior)] shadow-[0_0_0_2px_var(--card),0_1px_4px_rgba(0,0,0,.6)]"
             style={{ left: `${headPercent}%` }}
           />
-        </div>
+        </ReplayScrubber>
         <div className="relative h-3.5">
           {ticks.map((tick) => (
             <span

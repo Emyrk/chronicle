@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Pause, Play, Rotate3d } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { LandingFeaturedDeath, LandingFeaturedRun } from "@/api/typesGenerated";
 import { Button } from "@/components/ui/button";
 import { ClassIcon } from "@/pages/RaidPlanner/ClassIcon";
 import { trackFunnel } from "@/utils/funnel";
+import { ReplayScrubber } from "@/pages/Instance/ReplayScrubber";
+import { deathMarkers, markerPercent, scrubAria, scrubKeyTarget, type ScrubPhase } from "@/pages/Instance/replayScrubberModel";
 import { HeroClipLayer } from "./HeroClipLayer";
 import type { HeroClip } from "./heroClips";
 import type { HeroDeathRecap, HeroReplay } from "./heroReplay";
@@ -80,7 +82,7 @@ function formatClock(ms: number) {
 }
 
 function percentOf(ms: number, durationMs: number) {
-  return durationMs > 0 ? Math.min(100, Math.max(0, (ms / durationMs) * 100)) : 0;
+  return Math.min(100, Math.max(0, markerPercent(ms, { startMs: 0, endMs: durationMs })));
 }
 
 /** The boss being fought (or last fought) at `currentMs`; before the first pull, the first boss. */
@@ -235,11 +237,8 @@ export function HeroScrubber({ run, currentMs, playback, onRequestLive, onExplor
     return playback && boss ? () => playback.seek(boss.start_offset_ms, { cut: true }) : undefined;
   };
 
-  const msAtPointer = (clientX: number) => {
-    const rect = trackRef.current?.getBoundingClientRect();
-    if (!rect || rect.width === 0) return 0;
-    return clampMs(((clientX - rect.left) / rect.width) * run.duration_ms);
-  };
+  // The scrubber's track runs over the run's offsets (ms from its start), the same as `playback.seek`.
+  const trackBounds = { startMs: 0, endMs: run.duration_ms };
   // At most one replay seek per frame while dragging.
   const seekSoon = (ms: number) => {
     if (!playback) return;
@@ -249,23 +248,14 @@ export function HeroScrubber({ run, currentMs, playback, onRequestLive, onExplor
       playback.seek(ms);
     });
   };
-  const onTrackPointerDown = (e: PointerEvent<HTMLDivElement>) => {
-    if (e.button !== 0) return;
-    trackInteraction("drag");
-    e.currentTarget.setPointerCapture(e.pointerId);
-    const ms = msAtPointer(e.clientX);
-    setDragMs(ms);
-    seekSoon(ms);
-  };
-  const onTrackPointerMove = (e: PointerEvent<HTMLDivElement>) => {
-    if (dragMs === null) return;
-    const ms = msAtPointer(e.clientX);
-    setDragMs(ms);
-    seekSoon(ms);
-  };
-  const endDrag = (e: PointerEvent<HTMLDivElement>) => {
-    if (dragMs === null) return;
-    const ms = msAtPointer(e.clientX);
+  // Dragging shows the pointer's time and seeks at most once a frame; the release seeks exactly there.
+  const onScrub = (ms: number, phase: ScrubPhase) => {
+    if (phase === "start") trackInteraction("drag");
+    if (phase !== "end") {
+      setDragMs(ms);
+      seekSoon(ms);
+      return;
+    }
     if (seekFrame.current !== null) cancelAnimationFrame(seekFrame.current);
     seekFrame.current = null;
     goTo(ms);
@@ -290,13 +280,17 @@ export function HeroScrubber({ run, currentMs, playback, onRequestLive, onExplor
       e.preventDefault();
       trackInteraction("play_pause");
       playback?.togglePlay();
-    } else if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+    } else {
+      const target = scrubKeyTarget(e.key, shownMs, trackBounds, { stepMs: KEY_SEEK_MS, homeEnd: false, vertical: false });
+      if (target === null) return;
       e.preventDefault();
-      goTo(shownMs + (e.key === "ArrowLeft" ? -KEY_SEEK_MS : KEY_SEEK_MS));
+      goTo(target);
     }
   };
 
   const openDeath = hoveredDeath ?? focusedDeath ?? tappedDeath;
+  // Every death has a dot; one outside the run is pinned to the bar's nearer end.
+  const deathDots = deathMarkers(run.deaths, (death) => death.offset_ms, trackBounds, { outside: "clamp" });
   const duration = formatClock(run.duration_ms);
 
   return (
@@ -322,24 +316,21 @@ export function HeroScrubber({ run, currentMs, playback, onRequestLive, onExplor
         </div>
         <div className="relative min-w-0 flex-1">
           {/* The hit area is taller than the 6 px bar; horizontal drags scrub, vertical ones still scroll the page. */}
-          <div
-            role="slider"
+          <ReplayScrubber
+            variant="track"
+            source={{ nowMs: shownMs, bounds: trackBounds, seek: goTo }}
             tabIndex={0}
-            aria-label="Replay position"
-            aria-valuemin={0}
-            aria-valuemax={Math.floor(run.duration_ms / 1000)}
-            aria-valuenow={Math.floor(shownMs / 1000)}
-            aria-valuetext={`${formatClock(shownMs)} of ${duration}`}
+            aria={{ label: "Replay position", ...scrubAria(shownMs, trackBounds, "seconds", Math.floor), valueText: `${formatClock(shownMs)} of ${duration}` }}
+            measureRef={trackRef}
+            onScrub={onScrub}
+            onScrubCancel={() => setDragMs(null)}
             className="relative flex h-6 cursor-pointer touch-pan-y items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            onPointerDown={onTrackPointerDown}
-            onPointerMove={onTrackPointerMove}
-            onPointerUp={endDrag}
-            onPointerCancel={() => setDragMs(null)}
           >
+            {({ percent }) => (
             <div ref={trackRef} className="relative h-1.5 w-full rounded-full bg-white/20">
               <div
                 className="absolute inset-y-0 left-0 rounded-full bg-primary"
-                style={{ width: `${percentOf(shownMs, run.duration_ms)}%` }}
+                style={{ width: `${percent}%` }}
               />
               {run.bosses.map((boss, i) => (
                 <div
@@ -350,15 +341,16 @@ export function HeroScrubber({ run, currentMs, playback, onRequestLive, onExplor
                 />
               ))}
             </div>
-          </div>
-          {run.deaths.map((death, i) => (
+            )}
+          </ReplayScrubber>
+          {deathDots.map(({ death, left }, i) => (
             // 24 px hit target around the 10 px dot.
             <button
               key={i}
               type="button"
               aria-label={`${death.victim_name} fell at ${formatClock(death.offset_ms)}${death.killer_name ? `, killed by ${death.killer_name}` : ""}. Play from 10 seconds before.`}
               className="absolute top-0 flex h-6 w-6 -translate-x-1/2 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-[#f0a8a8]"
-              style={{ left: `${percentOf(death.offset_ms, run.duration_ms)}%` }}
+              style={{ left: `${left}%` }}
               onPointerDown={(e) => {
                 lastPointerType.current = e.pointerType;
               }}
@@ -372,12 +364,12 @@ export function HeroScrubber({ run, currentMs, playback, onRequestLive, onExplor
             </button>
           ))}
           {/* Every card stays mounted (hidden until open), so its class icon loads once with the bar and a hover fetches nothing. */}
-          {run.deaths.map((death, i) => (
+          {deathDots.map(({ death, left }, i) => (
             <DeathCard
               key={i}
               death={death}
               recap={recapFor(death, playback?.deathRecaps)}
-              leftPercent={percentOf(death.offset_ms, run.duration_ms)}
+              leftPercent={left}
               open={openDeath === i}
             />
           ))}

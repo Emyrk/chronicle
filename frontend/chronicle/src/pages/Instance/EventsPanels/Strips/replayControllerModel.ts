@@ -1,3 +1,4 @@
+import { deathMarkers } from "../../replayScrubberModel";
 import { PARTY_DAMAGE_SERIES_ID, REPLAY_CONTROLLER_BIN_MS, type ReplayControllerResult } from "./replayController.processor";
 
 export interface ReplayBounds {
@@ -38,10 +39,6 @@ export function formatReplayClock(ms: number): string {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
-}
-
-function trackPercent(timestampMs: number, bounds: ReplayBounds): number {
-  return ((timestampMs - bounds.startMs) / Math.max(1, bounds.endMs - bounds.startMs)) * 100;
 }
 
 /** Aim for about this many bars whatever the fight length. */
@@ -133,27 +130,22 @@ export function replayDurabilityBars(
   });
 }
 
-/** Player deaths inside the bounds. */
+/** Player deaths (the selected encounters' rostered players) inside the bounds. */
 export function replayControllerMarkers(
   result: ReplayControllerResult,
   bounds: ReplayBounds,
   cursorMs: number | null,
 ): ReplayMarker[] {
-  const inBounds = (timestampMs: number) => timestampMs >= bounds.startMs && timestampMs <= bounds.endMs;
-  const marker = (kind: ReplayMarker["kind"], timestampMs: number, label: string): ReplayMarker => ({
-    kind,
-    left: trackPercent(timestampMs, bounds),
-    title: `${formatReplayClock(timestampMs - bounds.startMs)} ${label}`,
-    past: cursorMs === null || timestampMs <= cursorMs,
-  });
-  const markers: ReplayMarker[] = [];
-  if (result.baseMs !== null) {
-    for (const death of result.timeline.playerDeaths) {
-      const timestampMs = result.baseMs + death.offsetMs;
-      if (inBounds(timestampMs)) markers.push(marker("death", timestampMs, `${death.playerName} died`));
-    }
-  }
-  return markers.sort((left, right) => left.left - right.left);
+  const baseMs = result.baseMs;
+  if (baseMs === null) return [];
+  return deathMarkers(result.timeline.playerDeaths, (death) => baseMs + death.offsetMs, bounds, { outside: "drop", cursorMs })
+    .map((marker): ReplayMarker => ({
+      kind: "death",
+      left: marker.left,
+      title: `${formatReplayClock(marker.atMs - bounds.startMs)} ${marker.death.playerName} died`,
+      past: marker.past,
+    }))
+    .sort((left, right) => left.left - right.left);
 }
 
 const TICK_STEPS_MS = [15_000, 30_000, 60_000, 120_000, 300_000, 600_000, 1_800_000];
