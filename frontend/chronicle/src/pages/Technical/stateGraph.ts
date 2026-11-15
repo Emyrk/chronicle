@@ -129,9 +129,10 @@ export function indexStateGraph(graph: StateGraph): GraphIndex {
 }
 
 /** Ports stategraph.Registry.validate, but collects every issue instead of stopping at the first. */
-export function validateStateGraph(graph: StateGraph): StateGraphIssue[] {
+export function validateStateGraph(graph: StateGraph, options: { skipCycleDetection?: boolean; index?: GraphIndex } = {}): StateGraphIssue[] {
   const issues: StateGraphIssue[] = [];
-  const byPath = new Map<string, StateGraphNode>();
+  const byPath = options.index?.byPath ?? new Map<string, StateGraphNode>();
+  const seenPaths = new Set<string>();
 
   const rootErr = pathError(graph.root);
   if (rootErr) issues.push({ path: graph.root, message: rootErr });
@@ -139,8 +140,9 @@ export function validateStateGraph(graph: StateGraph): StateGraphIssue[] {
   for (const node of graph.nodes) {
     const err = pathError(node.path);
     if (err) issues.push({ path: node.path, message: err });
-    if (byPath.has(node.path)) issues.push({ path: node.path, message: "Path is registered more than once" });
-    byPath.set(node.path, node);
+    if (seenPaths.has(node.path)) issues.push({ path: node.path, message: "Path is registered more than once" });
+    seenPaths.add(node.path);
+    if (!options.index) byPath.set(node.path, node);
   }
 
   const root = byPath.get(graph.root);
@@ -196,7 +198,7 @@ export function validateStateGraph(graph: StateGraph): StateGraphIssue[] {
     if (dep.from === dep.to) issues.push({ path: dep.from, message: "Dependency cannot target itself" });
     else push(adjacency, dep.from, dep.to);
   }
-  const cycle = findCycle(adjacency);
+  const cycle = options.skipCycleDetection ? undefined : findCycle(adjacency);
   if (cycle) issues.push({ path: cycle[0], message: `Dependency cycle: ${cycle.join(" → ")}` });
 
   return issues;

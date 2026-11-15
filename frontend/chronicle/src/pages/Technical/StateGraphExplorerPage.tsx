@@ -1,3 +1,5 @@
+import { LargeGraphInspector } from "./LargeGraphInspector";
+import { needsBoundedInspector } from "./largeGraph";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -93,10 +95,11 @@ export function StateGraphExplorerPage() {
 
   const graph = payload.result.graph;
   const index = useMemo(() => (graph ? indexStateGraph(graph) : undefined), [graph]);
-  const layout = useMemo(() => (index ? layoutStateGraph(index) : undefined), [index]);
+  const bounded = useMemo(() => graph ? needsBoundedInspector(graph) : false, [graph]);
+  const layout = useMemo(() => (index && !bounded ? layoutStateGraph(index) : undefined), [index, bounded]);
   const issues = useMemo(
-    () => [...payload.result.issues, ...(graph ? validateStateGraph(graph) : [])],
-    [payload, graph],
+    () => [...payload.result.issues, ...(graph ? validateStateGraph(graph, { skipCycleDetection: bounded, index }) : [])],
+    [payload, graph, bounded, index],
   );
 
   const select = (path?: string) => {
@@ -133,9 +136,11 @@ export function StateGraphExplorerPage() {
         The viewer accepts up to 32 MiB of decompressed JSON; larger snapshots must be inspected offline.
       </p>
 
-      <PayloadBar payload={payload} onLoad={load} />
+      <PayloadBar payload={payload} index={index} onLoad={load} />
 
-      {!index || !layout ? (
+      {index && bounded ? (
+        <LargeGraphInspector key={payload.label} index={index} issues={issues} selected={selected} onSelect={select} />
+      ) : !index || !layout ? (
         <Card className="p-4">
           <IssueList issues={issues} onSelect={select} />
         </Card>
@@ -288,7 +293,7 @@ function ResizeHandle({ onPointerDown, onReset }: { onPointerDown: (event: React
 // ---------------------------------------------------------------------------
 // Payload loading
 
-function PayloadBar({ payload, onLoad }: { payload: Payload; onLoad: (label: string, result: ParseResult) => void }) {
+function PayloadBar({ payload, index, onLoad }: { payload: Payload; index?: GraphIndex; onLoad: (label: string, result: ParseResult) => void }) {
   const [pasteOpen, setPasteOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [copied, setCopied] = useState(false);
@@ -320,7 +325,7 @@ function PayloadBar({ payload, onLoad }: { payload: Payload; onLoad: (label: str
           <div className="text-xs uppercase tracking-wide text-muted-foreground">Payload</div>
           <div className="truncate font-mono text-sm">{payload.label}</div>
         </div>
-        {graph && <GraphStats index={indexStateGraph(graph)} />}
+        {index && <GraphStats index={index} />}
         <div className="flex flex-wrap gap-2">
           <button type="button" className={button} onClick={() => setPasteOpen(!pasteOpen)}>
             <ClipboardPaste className="h-3.5 w-3.5" /> Paste JSON
@@ -331,7 +336,7 @@ function PayloadBar({ payload, onLoad }: { payload: Payload; onLoad: (label: str
           <button type="button" className={button} onClick={() => onLoad(DEFAULT_SOURCE, coerceStateGraph(targetJSON))}>
             <RotateCcw className="h-3.5 w-3.5" /> Reset
           </button>
-          <button type="button" className={button} onClick={copy} disabled={!graph}>
+          <button type="button" className={button} onClick={copy} disabled={!graph || needsBoundedInspector(graph)} title="Copy is available for small graphs; use the original download for large snapshots">
             <Copy className="h-3.5 w-3.5" /> {copied ? "Copied" : "Copy"}
           </button>
           <input
