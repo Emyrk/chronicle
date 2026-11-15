@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { wholeRunUnplayable } from "./wholeRun";
 
 /** How far the panel has got loading one selection's data. */
 export interface LoadCycle {
@@ -30,20 +29,6 @@ export function useLoadSettled(key: string, loading: boolean): boolean {
   const next = nextLoadCycle(cycle, key, loading);
   if (next !== cycle) setCycle(next);
   return loadSettled(next, loading);
-}
-
-/** Whether the default whole run cannot play (see wholeRunUnplayable), judged only once the selection has loaded. */
-export function useWholeRunUnplayable({ selectionKey, loading, ...state }: {
-  /** The selected encounters, as a key: a new selection starts a new load. */
-  selectionKey: string;
-  /** The panel is loading or processing. */
-  loading: boolean;
-  webglUnavailable: boolean;
-  meshFailed: boolean;
-  sceneMessage: { pending?: boolean } | null;
-}): boolean {
-  const settled = useLoadSettled(selectionKey, loading);
-  return wholeRunUnplayable({ ...state, settled });
 }
 
 /** Whether to make a once-only selection now, and whether it has been made. */

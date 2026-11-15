@@ -1,11 +1,12 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { wholeRunUnplayable } from "./wholeRun";
 import {
   loadSettled,
   miniExpandStep,
   nextLoadCycle,
   selectOnceStep,
-  useWholeRunUnplayable,
+  useLoadSettled,
   type LoadCycle,
   type MiniExpand,
 } from "./wholeRunPlayback";
@@ -19,14 +20,14 @@ function settledAcross(renders: Array<[key: string, loading: boolean]>): boolean
   });
 }
 
-function UnplayableProbe({ loading, message }: { loading: boolean; message: { pending?: boolean } | null }) {
-  const unplayable = useWholeRunUnplayable({
-    selectionKey: "a,b",
-    loading,
-    webglUnavailable: false,
-    meshFailed: false,
-    sceneMessage: message,
-  });
+/** MapContent's load tracking feeding the 3D map's fallback, as on a panel's first render. */
+function UnplayableProbe({ loading, message, webglUnavailable = false }: {
+  loading: boolean;
+  message: { pending?: boolean } | null;
+  webglUnavailable?: boolean;
+}) {
+  const settled = useLoadSettled("a,b", loading);
+  const unplayable = wholeRunUnplayable({ webglUnavailable, meshFailed: false, sceneMessage: message, settled });
   return <span>{unplayable ? "fallback" : "plays"}</span>;
 }
 
@@ -37,8 +38,7 @@ describe("whole-run fallback timing", () => {
   });
 
   it("still falls back at once without WebGL", () => {
-    const markup = renderToStaticMarkup(<FallbackProbeNoWebgl />);
-    expect(markup).toBe("<span>fallback</span>");
+    expect(renderToStaticMarkup(<UnplayableProbe loading={false} message={null} webglUnavailable />)).toBe("<span>fallback</span>");
   });
 
   it("counts a result only after loading has been on for the current selection", () => {
@@ -48,6 +48,19 @@ describe("whole-run fallback timing", () => {
       ["a,b", true], // processing
       ["a,b", false], // done
     ])).toEqual([false, false, false, true]);
+  });
+
+  it("falls back after Expand on the 2D mini map, which mounts the 3D map on an already loaded selection", () => {
+    // MapContent (which outlives the swap) saw the Summary load this selection;
+    // Expand then mounts the 3D map with loading off, and it says "No position telemetry".
+    const settled = settledAcross([
+      ["a,b", false], // the Summary's panel mounts
+      ["a,b", true], // loads
+      ["a,b", false], // the 2D overview shows
+      ["a,b", false], // Expand: the 3D map mounts, no new load
+    ]);
+    expect(settled[3]).toBe(true);
+    expect(wholeRunUnplayable({ webglUnavailable: false, meshFailed: false, sceneMessage: {}, settled: settled[3] })).toBe(true);
   });
 
   it("starts over on a new selection, whose first render still shows the old result", () => {
@@ -60,17 +73,6 @@ describe("whole-run fallback timing", () => {
     ])).toEqual([false, true, false, false, true]);
   });
 });
-
-function FallbackProbeNoWebgl() {
-  const unplayable = useWholeRunUnplayable({
-    selectionKey: "a,b",
-    loading: false,
-    webglUnavailable: true,
-    meshFailed: false,
-    sceneMessage: null,
-  });
-  return <span>{unplayable ? "fallback" : "plays"}</span>;
-}
 
 describe("selectOnceStep", () => {
   it("selects the first time it is wanted, and never again", () => {

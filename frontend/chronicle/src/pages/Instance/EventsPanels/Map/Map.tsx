@@ -60,8 +60,8 @@ import { DEFAULT_EFFECT_SETTINGS, useEffectSettings } from "./mapViewSettings";
 import { DEFAULT_WALK_AVATAR, readStoredWalkAvatar, storeWalkAvatar } from "./walkAvatars";
 import { previewElapsedAt, useMapScene } from "./useMapScene";
 import { canEncodeVideo } from "./videoSupport";
-import { encounterJumps, mapPresentationForSelection, wholeRunWanted } from "./wholeRun";
-import { miniExpandStep, useSelectOnce, useWholeRunUnplayable, type MiniExpand, type MiniExpandEvent } from "./wholeRunPlayback";
+import { encounterJumps, mapPresentationForSelection, wholeRunUnplayable, wholeRunWanted } from "./wholeRun";
+import { miniExpandStep, useLoadSettled, useSelectOnce, type MiniExpand, type MiniExpandEvent } from "./wholeRunPlayback";
 import { PlanControls } from "./plan/PlanControls";
 import { ROLE_TOKENS, usePlanEditor, usePlanShortcuts, type PlanRosterEntry } from "./plan/usePlanEditor";
 import type { PlanItem } from "./plan/mapPlan";
@@ -312,8 +312,12 @@ function FullscreenReplayBar({ onEnable }: { onEnable?: () => void }) {
   );
 }
 
-/** Fullscreen, middle left: the run's boss encounters, one click to replay another. */
-function FullscreenEncounterPicker({ encounters, selectedIds, onSelect }: {
+/**
+ * Fullscreen, middle left: the run's boss encounters, one click to watch another.
+ * A pick only selects, as the encounter list does: it never turns on the page's
+ * Replay (its analytics mode); the map's preview keeps it playing.
+ */
+export function FullscreenEncounterPicker({ encounters, selectedIds, onSelect }: {
   encounters: Encounter[];
   selectedIds: string[];
   onSelect: (encounterIds: string[]) => void;
@@ -369,6 +373,11 @@ interface ReplayMapProps extends PanelRenderProps<MapResult> {
   fullscreenRoot?: HTMLElement | null;
   /** Told whenever the map enters or leaves fullscreen (or window fullscreen). */
   onImmersiveChange?: (immersive: boolean) => void;
+  /**
+   * The panel has loaded the current selection, as seen by MapContent, which
+   * outlives this map (Expand on the 2D mini map mounts it on loaded data).
+   */
+  selectionLoaded?: boolean;
   /** Mobile Map panel: inert 2D preview that opens the 3D world fullscreen. */
   mobile?: boolean;
 }
@@ -381,6 +390,7 @@ function SingleEncounterReplayMap({
   onUnplayable,
   fullscreenRoot,
   onImmersiveChange,
+  selectionLoaded = false,
   ...props
 }: ReplayMapProps) {
   const sync = useSyncModeContextOptional();
@@ -516,9 +526,10 @@ function SingleEncounterReplayMap({
     setMapSourceState(source);
     storeMapSource(source);
   };
-  // Preview: with the page's Replay off, the mini map (and the full map's whole
-  // run) plays on a loop by its own clock, so the map shows what it does.
-  const previewOn = (mini || mobile || wholeRun) && !sync?.enabled;
+  // Preview: with the page's Replay off, the mini map, the full map's whole run
+  // and any fullscreen map play on a loop by their own clock, so the map shows
+  // what it does without switching the page's analytics into Replay.
+  const previewOn = (mini || mobile || wholeRun || immersive) && !sync?.enabled;
   // A whole raid compressed into the normal 90-second preview can hit 32×,
   // making players and map changes unreadably jumpy on a phone.
   const previewMaxSpeed = mobile && wholeRun ? 4 : undefined;
@@ -746,12 +757,11 @@ function SingleEncounterReplayMap({
 
   // The whole run falls back when it cannot play; a scene message counts only
   // once the panel has loaded this selection (a fresh panel renders empty first).
-  const unplayable = useWholeRunUnplayable({
-    selectionKey: props.context.selectedEncounterIds.join(","),
-    loading: Boolean(props.loading || props.processing),
+  const unplayable = wholeRunUnplayable({
     webglUnavailable,
     meshFailed: dungeonMesh !== null && meshState === "failed",
     sceneMessage: scene.status === "message" ? scene : null,
+    settled: selectionLoaded,
   });
   useEffect(() => {
     if (unplayable) onUnplayable?.();
@@ -804,24 +814,14 @@ function SingleEncounterReplayMap({
     if (previewOn) setPreviewElapsedMs(previewElapsedAt(ready.encounterStartMs, ready.encounterEndMs, timestampMs, previewMaxSpeed));
     else sync?.setTimestamp(new Date(timestampMs));
   };
-  // Hand the preview over to Replay at the same moment, still playing (the
-  // preview keeps playing until the user asks for Replay, even fullscreen).
-  // Enabled first, so the Replay controls keep this point rather than resetting.
-  const replayFrom = (timestampMs: number) => {
+  // Replay turns on only from an explicit Replay control (Replay from here,
+  // the fullscreen bar's Enable Replay): the preview hands over at the same
+  // moment, still playing. Enabled first, so Replay keeps this point.
+  const replayFromHere = () => {
     if (!sync) return;
     sync.enable();
-    sync.setTimestamp(new Date(timestampMs));
+    sync.setTimestamp(new Date(ready.cursorMs));
     sync.play();
-  };
-  const replayFromHere = () => replayFrom(ready.cursorMs);
-  // The fullscreen picker during a preview: Replay that encounter from its start.
-  const pickEncounter = (encounterIds: string[]) => {
-    if (previewOn) {
-      const picked = props.context.instance.encounters.find((encounter) => encounter.id === encounterIds[0]);
-      const startMs = picked ? Date.parse(picked.start_time) : Number.NaN;
-      if (Number.isFinite(startMs)) replayFrom(startMs);
-    }
-    props.context.onSelectEncounters?.(encounterIds);
   };
   const toggleMesh = () => {
     const next = !meshOn;
@@ -1364,7 +1364,7 @@ function SingleEncounterReplayMap({
             <FullscreenEncounterPicker
               encounters={props.context.instance.encounters}
               selectedIds={props.context.selectedEncounterIds}
-              onSelect={pickEncounter}
+              onSelect={props.context.onSelectEncounters}
             />
           )}
           <InspectCards guids={pinned} onRemove={unpin} raidFrames={raidFrames} auras={auras} />
@@ -1469,6 +1469,8 @@ function MapContent({ forceMini = false, ...props }: PanelRenderProps<MapResult>
   const mini = forceMini || isMiniMapOption(props.panelOption);
   const selectedCount = props.context.selectedEncounterIds.length;
   const wholeRun = wholeRunWanted(wholeRunChoice, { mini, unplayable: defaultRunFailed, selectedCount });
+  // Tracked here, not in the 3D map: this outlives the 2D overview's swap to 3D.
+  const selectionLoaded = useLoadSettled(props.context.selectedEncounterIds.join(","), Boolean(props.loading || props.processing));
   const instanceEncounters = props.context.instance.encounters;
   const onSelectEncounters = props.context.onSelectEncounters;
   const onApplyPreset = props.context.onApplyPreset;
@@ -1550,6 +1552,7 @@ function MapContent({ forceMini = false, ...props }: PanelRenderProps<MapResult>
       onExitWholeRun={selectedCount !== 1 ? exitWholeRun : undefined}
       onUnplayable={selectedCount !== 1 && (wholeRunChoice === null || miniExpand !== null) ? handleUnplayable : undefined}
       fullscreenRoot={expandRoot}
+      selectionLoaded={selectionLoaded}
       onImmersiveChange={miniExpand !== null ? handleImmersiveChange : undefined}
     />
   ) : (
