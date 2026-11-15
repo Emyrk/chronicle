@@ -106,9 +106,11 @@ func (s *Service) RefreshTenant(ctx context.Context, queue JobInserter, tenantID
 }
 
 // isDue reports whether a family or the threshold check last run at last is
-// due at now. Run markers are stamped when a run finishes, after the dispatch
-// tick that started it, so half a dispatch interval of slack keeps an hourly
-// family on every tick (not every other one) and a 6h family on every sixth.
+// due at now. Family markers carry the time the run was queued and the
+// threshold row the time it was checked, both a little after the dispatch
+// tick that caused them, and River's periodic ticks drift; half a dispatch
+// interval of slack keeps an hourly family on every tick (not every other
+// one) and a 6h family on every sixth.
 func isDue(now, last time.Time, cadence time.Duration) bool {
 	return now.Sub(last) >= cadence-DispatchInterval/2
 }
@@ -180,7 +182,11 @@ type ProducerRefresh struct {
 // producer's timeout, stores its pages, deletes the family's pages it no
 // longer emits and pings IndexNow for changed indexable pages. It does
 // nothing for an unknown family or an ineligible tenant.
-func (s *Service) RefreshProducer(ctx context.Context, tenantID uuid.UUID, producerKey string) (ProducerRefresh, error) {
+//
+// queuedAt is when the run was queued (the River job's CreatedAt; zero means
+// now). It stamps the family's run marker, so time spent waiting in a busy
+// queue or computing never pushes the next run back a tick.
+func (s *Service) RefreshProducer(ctx context.Context, tenantID uuid.UUID, producerKey string, queuedAt time.Time) (ProducerRefresh, error) {
 	f := s.byProducer[producerKey]
 	if f == nil {
 		return ProducerRefresh{}, nil
@@ -241,7 +247,11 @@ func (s *Service) RefreshProducer(ctx context.Context, tenantID uuid.UUID, produ
 			result.Changed = append(result.Changed, p.path)
 		}
 	}
-	if _, err := s.upsert(ctx, tenantID, marker, producerKey, struct{}{}, 0, math.MaxInt32, now); err != nil {
+	ranAt := queuedAt
+	if ranAt.IsZero() || ranAt.After(now) {
+		ranAt = now
+	}
+	if _, err := s.upsert(ctx, tenantID, marker, producerKey, struct{}{}, 0, math.MaxInt32, ranAt); err != nil {
 		return ProducerRefresh{}, fmt.Errorf("store run marker: %w", err)
 	}
 	result.Pruned, err = s.store.DeleteStatsFamilyStale(ctx, database.DeleteStatsFamilyStaleParams{
@@ -410,10 +420,12 @@ const QueueStats = "stats"
 // QueueWorkers is the stats queue's worker count.
 const QueueWorkers = 2
 
-func insertOpts(byArgs bool, maxAttempts int) river.InsertOpts {
+// insertOpts: dispatch and tenant jobs are cheap and schedule the rest, so
+// they run at default priority, ahead of the producer jobs (low priority).
+func insertOpts(byArgs bool, maxAttempts, priority int) river.InsertOpts {
 	return river.InsertOpts{
 		Queue:       QueueStats,
-		Priority:    riverconst.PriorityLow,
+		Priority:    priority,
 		MaxAttempts: maxAttempts,
 		UniqueOpts:  river.UniqueOpts{ByArgs: byArgs, ByState: activeJobStates},
 	}
@@ -425,8 +437,10 @@ const KindDispatch = "stats-snapshots-dispatch"
 // ArgsDispatch fans out ArgsTenant jobs.
 type ArgsDispatch struct{}
 
-func (ArgsDispatch) Kind() string                 { return KindDispatch }
-func (ArgsDispatch) InsertOpts() river.InsertOpts { return insertOpts(false, 3) }
+func (ArgsDispatch) Kind() string { return KindDispatch }
+func (ArgsDispatch) InsertOpts() river.InsertOpts {
+	return insertOpts(false, 3, riverconst.PriorityDefault)
+}
 
 // KindTenant is the River kind of the per-tenant job.
 const KindTenant = "stats-snapshots-tenant"
@@ -436,8 +450,10 @@ type ArgsTenant struct {
 	TenantID uuid.UUID `json:"tenant_id"`
 }
 
-func (ArgsTenant) Kind() string                 { return KindTenant }
-func (ArgsTenant) InsertOpts() river.InsertOpts { return insertOpts(true, 3) }
+func (ArgsTenant) Kind() string { return KindTenant }
+func (ArgsTenant) InsertOpts() river.InsertOpts {
+	return insertOpts(true, 3, riverconst.PriorityDefault)
+}
 
 // KindProducer is the River kind of the per-family job.
 const KindProducer = "stats-snapshots-producer"
@@ -450,15 +466,19 @@ type ArgsProducer struct {
 	Key      string    `json:"key"`
 }
 
-func (ArgsProducer) Kind() string                 { return KindProducer }
-func (ArgsProducer) InsertOpts() river.InsertOpts { return insertOpts(true, 1) }
+func (ArgsProducer) Kind() string { return KindProducer }
+func (ArgsProducer) InsertOpts() river.InsertOpts {
+	return insertOpts(true, 1, riverconst.PriorityLow)
+}
 
 // JobInserter enqueues River jobs (riverqueue.Queues satisfies it).
 type JobInserter interface {
 	Insert(ctx context.Context, args river.JobArgs, opts *river.InsertOpts) (*rivertype.JobInsertResult, error)
 }
 
-// DispatchWorker enqueues one ArgsTenant job for each discoverable site.
+// DispatchWorker enqueues one ArgsTenant job for each discoverable site and
+// drops the pages of hidden ones, so a site made discoverable again never
+// serves stale pages before its producers rerun.
 type DispatchWorker struct {
 	river.WorkerDefaults[ArgsDispatch]
 	Service *Service
@@ -466,11 +486,17 @@ type DispatchWorker struct {
 }
 
 func (w *DispatchWorker) Work(ctx context.Context, _ *river.Job[ArgsDispatch]) error {
-	ids, err := w.Service.discoverableTenants(ctx)
+	ids, hidden, err := w.Service.discoverableTenants(ctx)
 	if err != nil {
 		return err
 	}
 	var errs []error
+	for _, id := range hidden {
+		// The activity row stays; it is rechecked on its own cadence.
+		if _, err := w.Service.store.DeleteStatsTenantPages(servicetenant.AdminBypass(ctx), database.DeleteStatsTenantPagesParams{TenantID: id, KeepProducerKey: activityKey}); err != nil {
+			errs = append(errs, fmt.Errorf("drop stats pages of hidden site %s: %w", id, err))
+		}
+	}
 	for _, id := range ids {
 		if _, err := w.Queue.Insert(ctx, ArgsTenant{TenantID: id}, nil); err != nil {
 			errs = append(errs, fmt.Errorf("enqueue stats refresh for %s: %w", id, err))
@@ -479,28 +505,30 @@ func (w *DispatchWorker) Work(ctx context.Context, _ *river.Job[ArgsDispatch]) e
 	return errors.Join(errs...)
 }
 
-// discoverableTenants lists the root site (uuid.Nil) and tenants that search
-// engines may index; hidden sites get no /stats pages.
-func (s *Service) discoverableTenants(ctx context.Context) ([]uuid.UUID, error) {
+// discoverableTenants splits the root site (uuid.Nil) and the tenants into
+// those search engines may index and hidden ones, which get no /stats pages.
+func (s *Service) discoverableTenants(ctx context.Context) (visible, hidden []uuid.UUID, err error) {
 	ctx = servicetenant.AdminBypass(ctx)
-	var ids []uuid.UUID
 	cfg, err := s.store.GetSiteConfig(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("read site config: %w", err)
+		return nil, nil, fmt.Errorf("read site config: %w", err)
 	}
-	if cfg.Discoverable {
-		ids = append(ids, uuid.Nil)
-	}
-	tenants, err := s.store.ListTenants(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list tenants: %w", err)
-	}
-	for _, t := range tenants {
-		if t.Discoverable {
-			ids = append(ids, t.ID)
+	add := func(id uuid.UUID, discoverable bool) {
+		if discoverable {
+			visible = append(visible, id)
+		} else {
+			hidden = append(hidden, id)
 		}
 	}
-	return ids, nil
+	add(uuid.Nil, cfg.Discoverable)
+	tenants, err := s.store.ListTenants(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("list tenants: %w", err)
+	}
+	for _, t := range tenants {
+		add(t.ID, t.Discoverable)
+	}
+	return visible, hidden, nil
 }
 
 // TenantWorker runs RefreshTenant.
@@ -531,7 +559,7 @@ func (w *ProducerWorker) Timeout(job *river.Job[ArgsProducer]) time.Duration {
 }
 
 func (w *ProducerWorker) Work(ctx context.Context, job *river.Job[ArgsProducer]) error {
-	_, err := w.Service.RefreshProducer(ctx, job.Args.TenantID, job.Args.Key)
+	_, err := w.Service.RefreshProducer(ctx, job.Args.TenantID, job.Args.Key, job.CreatedAt)
 	return err
 }
 

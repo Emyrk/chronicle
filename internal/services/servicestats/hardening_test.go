@@ -3,6 +3,7 @@ package servicestats_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net/http"
 	"slices"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/riverqueue/river"
 	"github.com/stretchr/testify/require"
 
 	"github.com/Emyrk/chronicle/database"
@@ -151,12 +153,12 @@ func TestShadowedOutputsSkipped(t *testing.T) {
 
 	_, err := svc.RefreshTenant(ctx, &recordingQueue{}, tenant, false)
 	require.NoError(t, err)
-	res, err := svc.RefreshProducer(ctx, tenant, "boss")
+	res, err := svc.RefreshProducer(ctx, tenant, "boss", time.Time{})
 	require.NoError(t, err)
 	require.Equal(t, 1, res.Pages)
 	require.Equal(t, []string{"/stats/naxxramas/patchwerk"}, res.Changed, "the shadowed page is not pinged")
 	require.NotContains(t, store.pageKeys(tenant), "boss/naxxramas/speedruns", "the shadowed page is not stored")
-	_, err = svc.RefreshProducer(ctx, tenant, "speedruns")
+	_, err = svc.RefreshProducer(ctx, tenant, "speedruns", time.Time{})
 	require.NoError(t, err)
 
 	// A shadowed row stored before (e.g. by an older deploy) stays out of the sitemap.
@@ -187,77 +189,88 @@ func TestInvalidKeyWritesNothing(t *testing.T) {
 	svc := newMemService(t, store, time.Now, emitting("/stats/probe/{name}", "probe", time.Hour, "probe/a", "probe/NOT-A-SLUG"))
 	_, err := svc.RefreshTenant(ctx, &recordingQueue{}, tenant, false)
 	require.NoError(t, err)
-	_, err = svc.RefreshProducer(ctx, tenant, "probe")
+	_, err = svc.RefreshProducer(ctx, tenant, "probe", time.Time{})
 	require.ErrorContains(t, err, "invalid or duplicate page key")
 	require.Equal(t, []string{"_activity"}, store.pageKeys(tenant))
 }
 
-// With realistic timing (the dispatch fires about hourly and each run takes
-// a few minutes, so markers land after the tick) an hourly family runs on
-// every tick, a 6h family on every sixth, and the threshold check every 6h.
+// With realistic timing (the dispatch fires about hourly, River's ticks
+// drift, jobs wait in the queue and runs take time) an hourly family runs on
+// every tick, a 6h family on every sixth, and the threshold check every 6h,
+// even when the queue is busy enough that runs finish close to the next tick.
 func TestCadenceRealisticClock(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
-	tenant := uuid.New()
-	start := time.Date(2026, 11, 16, 0, 0, 0, 0, time.UTC)
-	var mu sync.Mutex
-	clock := start
-	now := func() time.Time { mu.Lock(); defer mu.Unlock(); return clock }
-	advance := func(d time.Duration) { mu.Lock(); clock = clock.Add(d); mu.Unlock() }
+	for _, tc := range []struct {
+		name               string
+		queueWait, compute time.Duration
+	}{
+		{"quiet queue", 30 * time.Second, 3 * time.Minute},
+		{"busy queue", 40 * time.Minute, 15 * time.Minute},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := context.Background()
+			tenant := uuid.New()
+			start := time.Date(2026, 11, 16, 0, 0, 0, 0, time.UTC)
+			var mu sync.Mutex
+			clock := start
+			now := func() time.Time { mu.Lock(); defer mu.Unlock(); return clock }
+			advance := func(d time.Duration) { mu.Lock(); clock = clock.Add(d); mu.Unlock() }
 
-	runs := map[string]int{}
-	family := func(pattern, key string, cadence time.Duration) servicestats.Family {
-		return servicestats.Family{
-			Pattern: pattern,
-			Producer: funcProducer{key: key, cadence: cadence, compute: func(context.Context, servicestats.Tenant) ([]servicestats.Output, error) {
+			runs := map[string]int{}
+			family := func(pattern, key string, cadence time.Duration) servicestats.Family {
+				return servicestats.Family{
+					Pattern: pattern,
+					Producer: funcProducer{key: key, cadence: cadence, compute: func(context.Context, servicestats.Tenant) ([]servicestats.Output, error) {
+						mu.Lock()
+						runs[key]++
+						mu.Unlock()
+						advance(tc.compute)
+						return []servicestats.Output{{Key: key, Payload: map[string]int{}, SampleN: 1, MinSample: 1}}, nil
+					}},
+					Render: titleRender,
+				}
+			}
+			store := &memStore{raids: 80}
+			svc := newMemService(t, store, now, family("/stats/hourly", "hourly", time.Hour), family("/stats/sixhourly", "sixhourly", 6*time.Hour))
+
+			queue := &recordingQueue{}
+			for tick := 0; tick < 24; tick++ {
 				mu.Lock()
-				runs[key]++
+				clock = start.Add(time.Duration(tick)*time.Hour + time.Duration(tick%3)*20*time.Second)
 				mu.Unlock()
-				advance(3 * time.Minute) // the run takes a while; its marker lands after the tick
-				return []servicestats.Output{{Key: key, Payload: map[string]int{}, SampleN: 1, MinSample: 1}}, nil
-			}},
-			Render: titleRender,
-		}
+				_, err := svc.RefreshTenant(ctx, queue, tenant, false)
+				require.NoError(t, err)
+				queuedAt := now() // the producer jobs' CreatedAt
+				advance(tc.queueWait)
+				for _, job := range queue.take() {
+					_, err := svc.RefreshProducer(ctx, tenant, job.(servicestats.ArgsProducer).Key, queuedAt)
+					require.NoError(t, err)
+				}
+			}
+			require.Equal(t, 24, runs["hourly"])
+			require.Equal(t, 4, runs["sixhourly"])
+			require.EqualValues(t, 4, store.raidCalls.Load(), "threshold check every 6h")
+		})
 	}
-	store := &memStore{raids: 80}
-	svc := newMemService(t, store, now, family("/stats/hourly", "hourly", time.Hour), family("/stats/sixhourly", "sixhourly", 6*time.Hour))
-
-	queue := &recordingQueue{}
-	for tick := 0; tick < 24; tick++ {
-		mu.Lock()
-		// River's periodic schedule drifts a little around the hour.
-		clock = start.Add(time.Duration(tick)*time.Hour + time.Duration(tick%3)*20*time.Second)
-		mu.Unlock()
-		_, err := svc.RefreshTenant(ctx, queue, tenant, false)
-		require.NoError(t, err)
-		advance(30 * time.Second) // queue latency
-		for _, job := range queue.take() {
-			_, err := svc.RefreshProducer(ctx, tenant, job.(servicestats.ArgsProducer).Key)
-			require.NoError(t, err)
-		}
-	}
-	require.Equal(t, 24, runs["hourly"])
-	require.Equal(t, 4, runs["sixhourly"])
-	require.EqualValues(t, 4, store.raidCalls.Load(), "threshold check every 6h")
 }
 
 func TestStatsJobOptions(t *testing.T) {
 	t.Parallel()
-	for _, opts := range []struct {
-		name        string
-		queue       string
+	for name, tc := range map[string]struct {
+		opts        river.InsertOpts
 		maxAttempts int
+		priority    int
 	}{
-		{"producer", servicestats.ArgsProducer{}.InsertOpts().Queue, servicestats.ArgsProducer{}.InsertOpts().MaxAttempts},
-		{"tenant", servicestats.ArgsTenant{}.InsertOpts().Queue, servicestats.ArgsTenant{}.InsertOpts().MaxAttempts},
-		{"dispatch", servicestats.ArgsDispatch{}.InsertOpts().Queue, servicestats.ArgsDispatch{}.InsertOpts().MaxAttempts},
+		// The hourly tenant job is the producers' retry, and the cheap
+		// scheduling jobs run ahead of the producers.
+		"producer": {servicestats.ArgsProducer{}.InsertOpts(), 1, 4},
+		"tenant":   {servicestats.ArgsTenant{}.InsertOpts(), 3, 3},
+		"dispatch": {servicestats.ArgsDispatch{}.InsertOpts(), 3, 3},
 	} {
-		require.Equal(t, servicestats.QueueStats, opts.queue, opts.name)
-		want := 3
-		if opts.name == "producer" {
-			want = 1 // the hourly tenant job is the retry
-		}
-		require.Equal(t, want, opts.maxAttempts, opts.name)
+		require.Equal(t, servicestats.QueueStats, tc.opts.Queue, name)
+		require.Equal(t, tc.maxAttempts, tc.opts.MaxAttempts, name)
+		require.Equal(t, tc.priority, tc.opts.Priority, name)
 	}
 }
 
@@ -278,4 +291,94 @@ func TestHiddenAndEncodedPaths404(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, get(t, h, tenant, "/stats/methodolog%79").Code)
 	require.EqualValues(t, 0, store.reads.Load(), "decided before any database read")
 	require.Equal(t, http.StatusOK, get(t, h, tenant, "/stats/about").Code)
+}
+
+// When the site lookup fails, pages with nothing behind them stay 404; only
+// pages that exist become 500.
+func TestSiteLookupFailure(t *testing.T) {
+	t.Parallel()
+	served, empty := uuid.New(), uuid.New()
+	store := &snapshotStore{}
+	store.about(served, `{"raids":80,"window_days":180}`, 80)
+	store.eligible(served, true)
+	store.eligible(empty, false)
+	h := servicestatsHandlerWithError(t, store)
+
+	require.Equal(t, http.StatusNotFound, get(t, h, served, "/stats/nope").Code, "unknown path")
+	require.EqualValues(t, 0, store.reads.Load(), "an unknown path never reads")
+	require.Equal(t, http.StatusNotFound, get(t, h, empty, "/stats/about").Code, "no snapshot")
+	require.Equal(t, http.StatusNotFound, get(t, h, empty, "/stats/methodology").Code, "ineligible tenant")
+	require.Equal(t, http.StatusInternalServerError, get(t, h, served, "/stats/about").Code)
+	require.Equal(t, http.StatusInternalServerError, get(t, h, served, "/stats/methodology").Code)
+}
+
+func servicestatsHandlerWithError(t *testing.T, store *snapshotStore) http.Handler {
+	t.Helper()
+	return newService(t, store).Handler(func(*http.Request) (servicestats.Site, error) {
+		return servicestats.Site{}, errors.New("site lookup failed")
+	})
+}
+
+// A hidden root site (no tenant) is 404 like a hidden tenant.
+func TestHiddenRootSite404(t *testing.T) {
+	t.Parallel()
+	store := &snapshotStore{}
+	store.about(uuid.Nil, `{"raids":80,"window_days":180}`, 80)
+	store.eligible(uuid.Nil, true)
+	hidden := servicestats.Site{Name: "Chronicle", Origin: "https://chronicleclassic.com", Discoverable: false}
+	visible := hidden
+	visible.Discoverable = true
+
+	require.Equal(t, http.StatusOK, get(t, handler(newService(t, store), visible), uuid.Nil, "/stats/about").Code)
+	reads := store.reads.Load()
+	for _, path := range []string{"/stats/about", "/stats/methodology"} {
+		require.Equal(t, http.StatusNotFound, get(t, handler(newService(t, store), hidden), uuid.Nil, path).Code, path)
+	}
+	require.Equal(t, reads, store.reads.Load(), "decided before any database read")
+}
+
+// dispatchStore answers the dispatch's queries and records page deletions.
+type dispatchStore struct {
+	database.Store
+	rootDiscoverable bool
+	tenants          []database.Tenant
+	mu               sync.Mutex
+	dropped          []database.DeleteStatsTenantPagesParams
+}
+
+func (d *dispatchStore) GetSiteConfig(context.Context) (database.SiteConfig, error) {
+	return database.SiteConfig{Discoverable: d.rootDiscoverable}, nil
+}
+
+func (d *dispatchStore) ListTenants(context.Context) ([]database.Tenant, error) {
+	return d.tenants, nil
+}
+
+func (d *dispatchStore) DeleteStatsTenantPages(_ context.Context, arg database.DeleteStatsTenantPagesParams) (int64, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.dropped = append(d.dropped, arg)
+	return 1, nil
+}
+
+// The dispatch queues discoverable sites and drops hidden sites' pages
+// (keeping their activity rows), including a hidden root site.
+func TestDispatchDropsHiddenSitesPages(t *testing.T) {
+	t.Parallel()
+	visible, hidden := uuid.New(), uuid.New()
+	store := &dispatchStore{tenants: []database.Tenant{{ID: visible, Discoverable: true}, {ID: hidden}}}
+	svc, err := servicestats.New(servicestats.Options{Logger: testutil.Logger(t), Store: store})
+	require.NoError(t, err)
+	queue := &recordingQueue{}
+	require.NoError(t, (&servicestats.DispatchWorker{Service: svc, Queue: queue}).Work(context.Background(), nil))
+
+	var queued []uuid.UUID
+	for _, job := range queue.take() {
+		queued = append(queued, job.(servicestats.ArgsTenant).TenantID)
+	}
+	require.Equal(t, []uuid.UUID{visible}, queued)
+	require.ElementsMatch(t, []database.DeleteStatsTenantPagesParams{
+		{TenantID: uuid.Nil, KeepProducerKey: "_activity"},
+		{TenantID: hidden, KeepProducerKey: "_activity"},
+	}, store.dropped)
 }

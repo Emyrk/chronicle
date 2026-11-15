@@ -250,7 +250,11 @@ func TestRefresh(t *testing.T) {
 		return out
 	}
 
-	// The dispatch skips sites that are not discoverable.
+	// The dispatch skips sites that are not discoverable and drops their
+	// pages (keeping the activity row), so a site made discoverable again
+	// never serves stale pages.
+	exec(`INSERT INTO stats_snapshots (tenant_id, page_key, producer_key, payload, sample_n, min_sample, computed_at, payload_changed_at)
+		VALUES ($1, 'about', 'about', '{}', 99, 1, now(), now()), ($1, '_activity', '_activity', '{"eligible":true}', 99, 1, now(), now())`, hidden)
 	require.NoError(t, (&servicestats.DispatchWorker{Service: svc, Queue: queue}).Work(ctx, nil))
 	dispatched := map[uuid.UUID]bool{}
 	for _, job := range queue.take() {
@@ -258,6 +262,7 @@ func TestRefresh(t *testing.T) {
 	}
 	require.True(t, dispatched[alpha])
 	require.False(t, dispatched[hidden], "non-discoverable tenants get no jobs")
+	require.Equal(t, []string{"_activity"}, keys(hidden), "a hidden site's pages are dropped")
 
 	// The tenant job checks the threshold and queues every due family. The
 	// raid count alone qualifies alpha, so players are not counted.
@@ -270,16 +275,16 @@ func TestRefresh(t *testing.T) {
 
 	// Each family runs on its own: a timeout and an error don't stop the rest.
 	start := time.Now()
-	_, err = svc.RefreshProducer(ctx, alpha, "slow")
+	_, err = svc.RefreshProducer(ctx, alpha, "slow", time.Time{})
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	require.Less(t, time.Since(start), 5*time.Second, "the timeout returns even though the producer ignores it")
-	_, err = svc.RefreshProducer(ctx, alpha, "failing")
+	_, err = svc.RefreshProducer(ctx, alpha, "failing", time.Time{})
 	require.ErrorContains(t, err, "boom")
-	pr, err := svc.RefreshProducer(ctx, alpha, "probe")
+	pr, err := svc.RefreshProducer(ctx, alpha, "probe", time.Time{})
 	require.NoError(t, err)
 	require.Equal(t, 2, pr.Pages)
 	require.ElementsMatch(t, []string{"/stats/probe/a", "/stats/probe/b"}, pr.Changed)
-	_, err = svc.RefreshProducer(ctx, alpha, "about")
+	_, err = svc.RefreshProducer(ctx, alpha, "about", time.Time{})
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{"_activity", "about", "_ran:about", "probe/a", "probe/b", "_ran:probe"}, keys(alpha))
 
@@ -312,7 +317,7 @@ func TestRefresh(t *testing.T) {
 	// payload_changed_at, and sends no ping.
 	first := rows(alpha)["probe/a"]
 	now = now.Add(2 * time.Hour)
-	pr, err = svc.RefreshProducer(ctx, alpha, "probe")
+	pr, err = svc.RefreshProducer(ctx, alpha, "probe", time.Time{})
 	require.NoError(t, err)
 	require.Empty(t, pr.Changed)
 	require.Empty(t, in.take())
@@ -325,7 +330,7 @@ func TestRefresh(t *testing.T) {
 	probeValue.Store(7)
 	probeNames.Store(&[]string{"a"})
 	now = now.Add(time.Hour)
-	pr, err = svc.RefreshProducer(ctx, alpha, "probe")
+	pr, err = svc.RefreshProducer(ctx, alpha, "probe", time.Time{})
 	require.NoError(t, err)
 	require.Equal(t, []string{"/stats/probe/a"}, pr.Changed)
 	require.EqualValues(t, 1, pr.Pruned)
@@ -357,7 +362,7 @@ func TestRefresh(t *testing.T) {
 	require.NotNil(t, tr.Activity.Players)
 	require.Equal(t, []string{"_activity"}, keys(beta))
 	require.Empty(t, producers())
-	pr, err = svc.RefreshProducer(ctx, beta, "probe")
+	pr, err = svc.RefreshProducer(ctx, beta, "probe", time.Time{})
 	require.NoError(t, err)
 	require.Zero(t, pr.Pages, "producers do nothing for ineligible tenants")
 

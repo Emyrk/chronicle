@@ -223,7 +223,6 @@ func TestStatsNoIndex(t *testing.T) {
 	noindex(get(t, h, small, "/stats/about"))            // below the page's minimum sample
 	noindex(get(t, h, tenant, "/stats/about?sort=desc")) // query-parameter variant
 
-
 	require.NotContains(t, get(t, h, tenant, "/stats/about").Body.String(), "noindex")
 }
 
