@@ -39,7 +39,7 @@ function RaidExplanation({ lens, view }: { lens: Lens; view: RaidView }) {
       ) : (
         <>
           <p className="mt-2 text-sm text-muted-foreground">
-            Renown adds up: every kill of every boss earns that boss's award, whichever metric it was rated on.
+            Renown adds up: every kill of a boss on the Renown list earns that boss's award, whichever metric it was rated on.
           </p>
           <Score label={`${view.raidLabel} Renown`} value={fmtInt(view.renown)} />
         </>

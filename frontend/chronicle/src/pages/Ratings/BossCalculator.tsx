@@ -243,8 +243,8 @@ function LensExplanation({
           <h3 className="text-xl font-semibold">Renown</h3>
           <LensQuestion lens="renown" />
           <p className="mt-2 text-sm text-muted-foreground">
-            Every boss has a Renown award. Each kill earns that award, however you performed. Harder bosses are worth
-            more:{" "}
+            Bosses on the Renown list have an award, and a boss without one earns nothing. Each kill earns that award,
+            however you performed. Awards differ by boss:{" "}
             {dataset.example
               ? `Nefarian is worth ${award}, and the rest of Blackwing Lair is worth 2 each.`
               : `${bossName} is worth ${fmtInt(award)} per kill here.`}
