@@ -98,6 +98,7 @@ import { DungeonWorld, type DungeonMesh } from "./dungeonWorld";
 import { DebugOverlayLayer } from "./debugOverlays";
 import { CameraArbiter, type CameraOwner } from "./cameraArbiter";
 import { TweenRig } from "./tweenRig";
+import { ScriptedRig } from "./scriptedRig";
 import { MapInputState, mobileInputActive, MouseDrag, type InputFrame } from "./inputFrame";
 import { UnitLayer, type UnitObject } from "./unitLayer";
 import { EffectsLayer } from "./effectsLayer";
@@ -447,6 +448,8 @@ export class MapScene3D {
   private groundKey = "";
   private aspect = 1;
   private viewport: MapViewport = FULL_MAP_VIEWPORT;
+  // Authored poses, camera marks and capture frames (scriptedRig.ts).
+  private readonly scripted = new ScriptedRig();
   // The viewport re-framing and the double-click move (tweenRig.ts).
   private readonly tween = new TweenRig({
     camera: this.camera,
@@ -1191,13 +1194,9 @@ export class MapScene3D {
       this.tween.move = null;
       this.tween.view = null;
     }
-    this.camera.position.fromArray(pose.position);
-    this.controls.target.fromArray(pose.target);
+    this.scripted.apply(pose, this.camera, this.controls.target);
+    // A raised pivot stays raised: the free cam's lift above the floor.
     this.pivotLift = Math.max(0, pose.target[1] - this.pivotFloor(pose.target[0], pose.target[2]));
-    if (pose.fov !== undefined) this.camera.fov = pose.fov;
-    if (pose.near !== undefined) this.camera.near = pose.near;
-    if (pose.far !== undefined) this.camera.far = pose.far;
-    this.camera.updateProjectionMatrix();
     this.controls.update();
     if (options.constrain !== false) this.constrainCamera();
     this.updateUnitScale();
