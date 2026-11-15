@@ -12,3 +12,4 @@ export const MESH_PLAYER_HEIGHT_YARDS = 2;
 export const PLAYER_GEOMETRY_HEIGHT = 3;
 // A dropped frame never jumps the camera further than this.
 export const KEY_MAX_STEP_S = 0.1;
+export const DEEP_BREATH_GROUND_LIFT = 0.12;

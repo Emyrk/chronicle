@@ -82,9 +82,10 @@ import { modelAnimationState, modelAnimationTimeSeconds, selectModelAnimation, u
 import { setMaterialEmissive, type MapBodyMaterial } from "./mapMaterials";
 import { CAST_ARC_SIZE, createArcTexture, createAvatar, createIconMaterial, createTextTexture, createUnitCalloutMarker, createUnitGeometries, createWalkAvatarModel, easeOutBack, easeOutCubic, playWalkAvatarState, shortNumber, type WalkAvatarModel } from "./sceneFactories";
 import { bakedGeometry, disposeModelMaterials, gltfLoader, loadAnimatedGameModel, loadFlappingWhelp, loadGameModelAnimationPack, loadWalkAvatar } from "./sceneLoaders";
-import { GROUND_WIDTH, KEY_MAX_STEP_S, MESH_PLAYER_HEIGHT_YARDS, PLAYER_GEOMETRY_HEIGHT } from "./sceneConstants";
+import { DEEP_BREATH_GROUND_LIFT, GROUND_WIDTH, KEY_MAX_STEP_S, MESH_PLAYER_HEIGHT_YARDS, PLAYER_GEOMETRY_HEIGHT } from "./sceneConstants";
 import { LivePresence } from "./livePresence";
 import { DungeonWorld, type DungeonMesh } from "./dungeonWorld";
+import { DebugOverlayLayer } from "./debugOverlays";
 
 /** Ground plane width in scene units; depth follows the artwork's aspect. */
 export { GROUND_WIDTH };
@@ -100,13 +101,11 @@ export { MAX_EFFECT_PRIMITIVES };
 const MAX_EXTRAPOLATE_MS = 250;
 const BEAM_HEIGHT = 1.5;
 const BOLT_WIDTH = 0.18;
-const DEBUG_PATH_SEGMENT_YARDS = 4;
 const MAX_DEEP_BREATH_POINTS = 20;
 const MAX_RADIAL_EFFECTS = 8;
 const RADIAL_GROUND_LIFT = 0.1;
 const DEEP_BREATH_AREA_OPACITY = 0.12;
 const DEEP_BREATH_POINT_SIZE_PX = 7;
-const DEEP_BREATH_GROUND_LIFT = 0.12;
 // How far a melee attacker steps toward its target, at most.
 const LUNGE_DISTANCE = 1.2;
 const SLASH_HEIGHT = 1.2;
@@ -714,8 +713,6 @@ export class MapScene3D {
   private readonly geometries = createUnitGeometries();
   private readonly groundGroup = new THREE.Group();
   private alignmentOverlay = false;
-  private readonly debugOverlayGroup = new THREE.Group();
-  private debugOverlays: readonly MapDebugOverlay[] = [];
   private readonly unitsGroup = new THREE.Group();
   private readonly units = new Map<string, UnitObject>();
   private readonly textureLoader = new THREE.TextureLoader();
@@ -724,6 +721,7 @@ export class MapScene3D {
   // The real dungeon mesh while "3D map" is on; `dungeonMeshRequest` is the
   // load in flight (a later request or toggle-off abandons it).
   private readonly world = new DungeonWorld();
+  private readonly debugLayer = new DebugOverlayLayer(this.world);
   private get dungeonMesh(): DungeonMesh | null {
     return this.world.dungeonMesh;
   }
@@ -1079,7 +1077,7 @@ export class MapScene3D {
     // Lifts the cave's albedo textures (roughness 1, no vertex colour) while the mesh is on.
     this.meshLight.visible = false;
     this.scene.add(this.meshLight);
-    this.scene.add(this.groundGroup, this.debugOverlayGroup, this.unitsGroup, this.planLayer.group);
+    this.scene.add(this.groundGroup, this.debugLayer.debugOverlayGroup, this.unitsGroup, this.planLayer.group);
 
     const beamGeometry = new THREE.BufferGeometry();
     beamGeometry.setAttribute("position", new THREE.BufferAttribute(this.beamPositions, 3).setUsage(THREE.DynamicDrawUsage));
@@ -1426,67 +1424,8 @@ export class MapScene3D {
 
   /** Persistent map diagnostics, independent of replay combat effects. */
   setDebugOverlays(overlays: readonly MapDebugOverlay[]) {
-    this.debugOverlays = overlays;
-    this.rebuildDebugOverlays();
+    this.debugLayer.setDebugOverlays(overlays, this.aspect);
     this.requestRender();
-  }
-
-  private clearDebugOverlays() {
-    for (const child of [...this.debugOverlayGroup.children]) {
-      this.debugOverlayGroup.remove(child);
-      const mesh = child as THREE.Mesh<THREE.BufferGeometry, THREE.Material>;
-      mesh.geometry?.dispose();
-      if (Array.isArray(mesh.material)) for (const material of mesh.material) material.dispose();
-      else mesh.material?.dispose();
-    }
-  }
-
-  private rebuildDebugOverlays() {
-    this.clearDebugOverlays();
-    const dungeon = this.dungeonMesh;
-    if (!dungeon) return;
-    for (const overlay of this.debugOverlays) {
-      if (overlay.kind !== "path") continue;
-      const projected = projectMapDebugPoints(overlay.points, overlay.mapId, dungeon.bounds, this.aspect, GROUND_WIDTH);
-      if (projected.length < 2) continue;
-      // Independently height-probe short strips along every polyline segment so
-      // non-straight server paths follow both their exact centerline and the mesh.
-      let stripIndex = 0;
-      for (let pointIndex = 1; pointIndex < projected.length; pointIndex++) {
-        const from = projected[pointIndex - 1];
-        const to = projected[pointIndex];
-        const dx = to.x - from.x;
-        const dz = to.z - from.z;
-        const length = Math.hypot(dx, dz);
-        if (length <= 1e-4) continue;
-        const directionX = dx / length;
-        const directionZ = dz / length;
-        const stripCount = Math.max(1, Math.ceil(length / (DEBUG_PATH_SEGMENT_YARDS * dungeon.scale)));
-        const stripLength = length / stripCount;
-        const yaw = Math.atan2(-directionX, -directionZ);
-        for (let index = 0; index < stripCount; index++, stripIndex++) {
-          const distance = stripLength * (index + 0.5);
-          const x = from.x + directionX * distance;
-          const z = from.z + directionZ * distance;
-          const floor = this.world.floorHeights.heightAt(`debug-overlay-${overlay.id}-${stripIndex}`, x, z);
-          const material = new THREE.MeshBasicMaterial({
-            color: overlay.color,
-            transparent: true,
-            opacity: overlay.opacity,
-            blending: THREE.AdditiveBlending,
-            depthWrite: false,
-            side: THREE.DoubleSide,
-          });
-          const path = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), material);
-          path.position.set(x, floor + DEEP_BREATH_GROUND_LIFT * dungeon.scale, z);
-          path.rotation.y = yaw;
-          path.scale.set(overlay.widthYards * dungeon.scale, 1, stripLength * 1.05);
-          path.renderOrder = 2;
-          path.userData.debugOverlayId = overlay.id;
-          this.debugOverlayGroup.add(path);
-        }
-      }
-    }
   }
 
   /**
@@ -2069,7 +2008,7 @@ export class MapScene3D {
     for (const [guid, object] of this.units) this.placeUnit(guid, object, object.base.x, object.base.z);
     this.updateCameraLimits();
     this.updateUnitScale(true);
-    this.rebuildDebugOverlays();
+    this.debugLayer.rebuildDebugOverlays(this.aspect);
     this.requestRender();
   }
 
@@ -2737,7 +2676,7 @@ export class MapScene3D {
     this.keyWindow.removeEventListener("keyup", this.handleKeyUp);
     this.keyWindow.removeEventListener("blur", this.releaseKeys);
     for (const guid of [...this.units.keys()]) this.removeUnit(guid);
-    this.clearDebugOverlays();
+    this.debugLayer.clearDebugOverlays();
     for (const guid of [...this.plates.keys()]) this.removePlate(guid);
     this.clearGround();
     this.dungeonMeshRequest = null;
