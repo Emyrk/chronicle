@@ -101,6 +101,28 @@ func (s *Service) GetDataset(ctx context.Context, id uuid.UUID) (database.Datase
 	return s.db.GetDataset(ctx, id)
 }
 
+// SiteFlavor resolves a site's flavor tags: the tenant's default dataset
+// flavor plus the tenant's additional tags, or the build's server flavor when
+// there is no tenant, dataset or service (s may be nil).
+func (s *Service) SiteFlavor(ctx context.Context, tenant *database.Tenant) database.WoWFlavor {
+	if s != nil && tenant != nil && tenant.DefaultDatasetID.Valid {
+		dataset, err := s.GetDataset(ctx, tenant.DefaultDatasetID.UUID)
+		if err == nil {
+			flavor := database.FlavorFromStrings(dataset.DefaultFlavor).
+				Merge(database.FlavorFromStrings(tenant.AdditionalFlavor))
+			if len(flavor) > 0 {
+				return flavor
+			}
+		}
+	}
+
+	base := database.FlavorVanilla
+	if services.ServerBuild == vsn.V3_3_5a {
+		base = database.FlavorWrath
+	}
+	return database.ServerFlavor(services.ServerName, base)
+}
+
 func (s *Service) ResolveDatasetForRealm(ctx context.Context, realmID uuid.UUID) uuid.UUID {
 	if resolved, ok := s.LookupDatasetForRealm(ctx, realmID); ok {
 		return resolved

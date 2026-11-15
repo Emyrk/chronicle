@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/services/servicestats"
@@ -16,6 +18,22 @@ type statsSiteFacts struct {
 	name         string
 	turtleFork   bool
 	discoverable bool
+}
+
+// mountStats routes the server-rendered /stats answer pages, ahead of the SPA
+// fallback. Without a stats service, /stats falls through to the SPA.
+func (api *API) mountStats(r chi.Router) {
+	if api.Opts.Stats == nil {
+		return
+	}
+	stats := api.Opts.Stats.Handler(api.statsSiteResolver)
+	indexNowKey := api.Opts.Stats.IndexNowKeyHandler()
+	// chi answers HEAD with 405 unless it is registered; crawlers use it.
+	for _, method := range []string{http.MethodGet, http.MethodHead} {
+		r.Method(method, "/stats", stats)
+		r.Method(method, "/stats/*", stats)
+		r.Method(method, servicestats.IndexNowKeyPath, indexNowKey)
+	}
 }
 
 // statsSiteResolver resolves the Site for a /stats request.

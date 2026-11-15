@@ -340,7 +340,8 @@ func (s *Service) Start(ctx context.Context) error {
 	// Refresh the public /stats page snapshots per tenant.
 	stats := servicestats.Stats(s.broker)
 	riverqueue.AddWorker(q, &servicestats.DispatchWorker{Service: stats, Queue: q})
-	riverqueue.AddWorker(q, &servicestats.TenantWorker{Service: stats})
+	riverqueue.AddWorker(q, &servicestats.TenantWorker{Service: stats, Queue: q})
+	riverqueue.AddWorker(q, &servicestats.ProducerWorker{Service: stats})
 	q.AddPeriodicJob(servicestats.PeriodicDispatch())
 
 	// Daily bounded repair for parse-enabled tenants and root.

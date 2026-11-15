@@ -946,13 +946,7 @@ func (api *API) Routes() chi.Router {
 		}
 	})
 
-	if api.Opts.Stats != nil {
-		// Server-rendered answer pages, ahead of the SPA fallback.
-		stats := api.Opts.Stats.Handler(api.statsSiteResolver)
-		r.Get("/stats", stats.ServeHTTP)
-		r.Get("/stats/*", stats.ServeHTTP)
-		r.Get(servicestats.IndexNowKeyPath, api.Opts.Stats.IndexNowKeyHandler().ServeHTTP)
-	}
+	api.mountStats(r)
 
 	r.NotFound(frontend.Handler(frontend.FS(), api.OGRoutes(), api.brandingResolver, api.blogFlavorResolver).ServeHTTP)
 

@@ -528,7 +528,11 @@ func (api *API) loadSitemapURLs(ctx context.Context) (*sitemapDynamic, error) {
 
 	urls := make([]sitemapURL, 0, len(guilds)+len(instances)+len(stats))
 	for _, page := range stats {
-		urls = append(urls, sitemapURL{Location: page.Path, LastMod: page.LastMod.UTC().Format(time.RFC3339)})
+		lastMod := ""
+		if !page.LastMod.IsZero() {
+			lastMod = page.LastMod.UTC().Format(time.RFC3339)
+		}
+		urls = append(urls, sitemapURL{Location: page.Path, LastMod: lastMod})
 	}
 	for _, g := range guilds {
 		urls = append(urls, sitemapURL{Location: "/g/" + g.ID.String(), LastMod: sitemapLastMod(g.PageUpdatedAt)})

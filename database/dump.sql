@@ -3570,9 +3570,12 @@ CREATE TABLE site_config (
 CREATE TABLE stats_snapshots (
     tenant_id uuid NOT NULL,
     page_key text NOT NULL,
+    producer_key text NOT NULL,
     payload jsonb NOT NULL,
     sample_n integer NOT NULL,
-    computed_at timestamp with time zone NOT NULL
+    min_sample integer NOT NULL,
+    computed_at timestamp with time zone NOT NULL,
+    payload_changed_at timestamp with time zone NOT NULL
 );
 
 ALTER TABLE ONLY stats_snapshots FORCE ROW LEVEL SECURITY;
@@ -5419,6 +5422,8 @@ CREATE INDEX sidekick_issues_history_idx ON sidekick_issues USING btree (sidekic
 CREATE INDEX sidekick_oauth_grants_sidekick_id_idx ON sidekick_oauth_grants USING btree (sidekick_id) WHERE (revoked_at IS NULL);
 
 CREATE UNIQUE INDEX sidekick_wow_directories_sidekick_id_id_idx ON sidekick_wow_directories USING btree (sidekick_id, id) WHERE (id IS NOT NULL);
+
+CREATE INDEX stats_snapshots_producer ON stats_snapshots USING btree (tenant_id, producer_key);
 
 CREATE INDEX telemetry_notices_audience_idx ON telemetry_notices USING btree (audience);
 

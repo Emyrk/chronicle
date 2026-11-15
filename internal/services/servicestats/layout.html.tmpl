@@ -4,14 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Content.Title}}</title>
-  <meta name="description" content="{{.DescriptionV}}">
+  <meta name="description" content="{{.Description}}">
   <link rel="canonical" href="{{.Canonical}}">
   {{- if .Robots}}
   <meta name="robots" content="{{.Robots}}">
   {{- end}}
   <meta property="og:type" content="website">
   <meta property="og:title" content="{{.Content.Title}}">
-  <meta property="og:description" content="{{.DescriptionV}}">
+  <meta property="og:description" content="{{.Description}}">
   <meta property="og:url" content="{{.Canonical}}">
   <script type="application/ld+json">{{.JSONLD}}</script>
   <style>
@@ -38,10 +38,12 @@
   <main>
     <h1>{{.Content.Title}}</h1>
     <p class="lead">{{.Content.Lead}}</p>
+    {{- if .Snapshot}}
     <p class="updated">Updated <time datetime="{{.UpdatedISO}}">{{.Updated}}</time>
       &middot; Sample: {{.SampleN}}{{with .Content.SampleLabel}} {{.}}{{end}}
       {{- with .Content.Window}} &middot; Window: {{.}}{{end}}
       &middot; <a href="{{.Methodology}}">Methodology</a></p>
+    {{- end}}
     {{- with .Content.Table}}
     <table>
       {{- with .Caption}}
@@ -57,10 +59,12 @@
       </tbody>
     </table>
     {{- end}}
-    {{- with .Content.Methodology}}
-    <section id="methodology">
-      <h2>Methodology</h2>
-      {{- range .}}
+    {{- range .Content.Sections}}
+    <section{{with .ID}} id="{{.}}"{{end}}>
+      {{- with .Heading}}
+      <h2>{{.}}</h2>
+      {{- end}}
+      {{- range .Paragraphs}}
       <p>{{.}}</p>
       {{- end}}
     </section>

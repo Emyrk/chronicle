@@ -1,9 +1,10 @@
 // Package servicestats serves the public, server-rendered /stats answer pages
 // from precomputed per-tenant snapshots. See README.md for how to add a page.
 //
-// It owns the snapshot producers, the background job that refreshes them, the
-// tenant activity threshold, page rendering, sitemap entries and IndexNow
-// pings. The api package owns route wiring and resolves the per-request Site.
+// It owns the page families and their producers, the background jobs that
+// refresh them, the tenant activity threshold, page rendering, sitemap entries
+// and IndexNow pings. The api package owns route wiring and resolves the
+// per-request Site.
 package servicestats
 
 import (
@@ -22,6 +23,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/serviceaccessurl"
+	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
@@ -31,8 +33,13 @@ import (
 type Options struct {
 	Logger *slog.Logger
 	Store  database.Store
-	// Pages defaults to DefaultPages(Store).
-	Pages []Page
+	// Families defaults to DefaultFamilies().
+	Families []Family
+	// Static defaults to DefaultStaticPages().
+	Static []StaticPage
+	// SiteFlavor resolves a tenant's flavor tags (nil tenant = root site).
+	// Defaults to the build's server flavor.
+	SiteFlavor func(ctx context.Context, tenant *database.Tenant) database.WoWFlavor
 	// AccessURL is the root site's URL. Its scheme is used for every origin
 	// and its host for the root site's canonical host.
 	AccessURL *url.URL
@@ -52,15 +59,18 @@ type Options struct {
 type Service struct {
 	logger        *slog.Logger
 	store         database.Store
-	pages         []Page
-	pageByPath    map[string]Page
+	families      []*Family
+	byProducer    map[string]*Family
+	static        map[string]StaticPage
+	staticOrder   []StaticPage
+	siteFlavor    func(ctx context.Context, tenant *database.Tenant) database.WoWFlavor
 	accessURL     *url.URL
 	primaryDomain string
 	indexNow      *indexNow
 	now           func() time.Time
 }
 
-// New validates the page registry and builds a Service.
+// New validates the registry and builds a Service.
 func New(opts Options) (*Service, error) {
 	if opts.Store == nil {
 		return nil, errors.New("servicestats: store is required")
@@ -68,8 +78,15 @@ func New(opts Options) (*Service, error) {
 	if opts.Logger == nil {
 		opts.Logger = slog.Default()
 	}
-	if opts.Pages == nil {
-		opts.Pages = DefaultPages(opts.Store)
+	if opts.Families == nil {
+		opts.Families = DefaultFamilies()
+	}
+	if opts.Static == nil {
+		opts.Static = DefaultStaticPages()
+	}
+	if opts.SiteFlavor == nil {
+		var datasets *servicedataset.Service
+		opts.SiteFlavor = datasets.SiteFlavor
 	}
 	if opts.Now == nil {
 		opts.Now = time.Now
@@ -77,32 +94,39 @@ func New(opts Options) (*Service, error) {
 	s := &Service{
 		logger:        opts.Logger,
 		store:         opts.Store,
-		pages:         opts.Pages,
-		pageByPath:    make(map[string]Page, len(opts.Pages)),
+		byProducer:    map[string]*Family{},
+		static:        map[string]StaticPage{},
+		staticOrder:   opts.Static,
+		siteFlavor:    opts.SiteFlavor,
 		accessURL:     opts.AccessURL,
 		primaryDomain: strings.ToLower(opts.PrimaryDomain),
 		now:           opts.Now,
 	}
-	keys := make(map[string]bool, len(opts.Pages))
-	for _, p := range opts.Pages {
-		if p.Producer == nil || p.Render == nil {
-			return nil, fmt.Errorf("servicestats: page %q needs a producer and a render func", p.Path)
+	for i := range opts.Families {
+		f := opts.Families[i]
+		if err := f.compile(); err != nil {
+			return nil, fmt.Errorf("servicestats: %w", err)
 		}
-		if p.Path != "/stats" && !strings.HasPrefix(p.Path, "/stats/") {
-			return nil, fmt.Errorf("servicestats: page path %q must be under /stats", p.Path)
+		key := f.Producer.Key()
+		if s.byProducer[key] != nil {
+			return nil, fmt.Errorf("servicestats: duplicate producer key %q", key)
 		}
-		key := p.Producer.Key()
-		if key == "" || strings.HasPrefix(key, "_") {
-			return nil, fmt.Errorf("servicestats: page %q has invalid key %q", p.Path, key)
+		for _, other := range s.families {
+			if f.sameShape(other) {
+				return nil, fmt.Errorf("servicestats: patterns %q and %q match the same paths", f.Pattern, other.Pattern)
+			}
 		}
-		if keys[key] {
-			return nil, fmt.Errorf("servicestats: duplicate page key %q", key)
+		s.byProducer[key] = &f
+		s.families = append(s.families, &f)
+	}
+	for _, p := range opts.Static {
+		if _, err := parsePath(p.Path); err != nil || p.Render == nil {
+			return nil, fmt.Errorf("servicestats: invalid static page %q", p.Path)
 		}
-		if _, ok := s.pageByPath[p.Path]; ok {
-			return nil, fmt.Errorf("servicestats: duplicate page path %q", p.Path)
+		if _, ok := s.static[p.Path]; ok {
+			return nil, fmt.Errorf("servicestats: duplicate static page %q", p.Path)
 		}
-		keys[key] = true
-		s.pageByPath[p.Path] = p
+		s.static[p.Path] = p
 	}
 	if opts.IndexNowKey != "" {
 		in, err := newIndexNow(opts.IndexNowKey, opts.IndexNowEndpoint, opts.HTTPClient, opts.Logger)
@@ -114,11 +138,41 @@ func New(opts Options) (*Service, error) {
 	return s, nil
 }
 
-// DefaultPages is the registry of /stats pages. Add new pages here.
-func DefaultPages(store database.Store) []Page {
-	return []Page{
-		aboutPage(store),
+// DefaultFamilies is the registry of /stats page families. Add new ones here.
+func DefaultFamilies() []Family {
+	return []Family{
+		aboutFamily(),
 	}
+}
+
+// DefaultStaticPages is the registry of /stats pages without snapshots.
+func DefaultStaticPages() []StaticPage {
+	return []StaticPage{
+		methodologyPage(),
+	}
+}
+
+// Family returns the registered (compiled) family for a producer key, or nil.
+func (s *Service) Family(producerKey string) *Family {
+	return s.byProducer[producerKey]
+}
+
+// match returns the most specific family page for path.
+func (s *Service) match(path string) (*Family, Page, bool) {
+	var (
+		best     *Family
+		bestPage Page
+	)
+	for _, f := range s.families {
+		page, ok := f.match(path)
+		if !ok {
+			continue
+		}
+		if best == nil || f.moreSpecific(best) {
+			best, bestPage = f, page
+		}
+	}
+	return best, bestPage, best != nil
 }
 
 // Runtime is the broker-managed wrapper that owns the process's Service.
@@ -150,6 +204,7 @@ func (*Runtime) DependsOn() []string {
 		servicedbstore.OnDatabaseStore(),
 		serviceaccessurl.OnAccessURL(),
 		servicetenant.OnTenant(),
+		servicedataset.OnDataset(),
 	}
 }
 
@@ -177,6 +232,7 @@ func (r *Runtime) Start(context.Context) error {
 	stats, err := New(Options{
 		Logger:        servicelogger.Logger(r.broker),
 		Store:         servicedbstore.DatabaseStore(r.broker),
+		SiteFlavor:    servicedataset.Dataset(r.broker).SiteFlavor,
 		AccessURL:     accessURL,
 		PrimaryDomain: servicetenant.Tenant(r.broker).PrimaryDomain(),
 		IndexNowKey:   r.indexNowKey,

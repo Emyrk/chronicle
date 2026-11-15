@@ -3580,11 +3580,14 @@ type SiteConfig struct {
 }
 
 type StatsSnapshot struct {
-	TenantID   uuid.UUID          `db:"tenant_id" json:"tenant_id"`
-	PageKey    string             `db:"page_key" json:"page_key"`
-	Payload    []byte             `db:"payload" json:"payload"`
-	SampleN    int32              `db:"sample_n" json:"sample_n"`
-	ComputedAt pgtype.Timestamptz `db:"computed_at" json:"computed_at"`
+	TenantID         uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	PageKey          string             `db:"page_key" json:"page_key"`
+	ProducerKey      string             `db:"producer_key" json:"producer_key"`
+	Payload          []byte             `db:"payload" json:"payload"`
+	SampleN          int32              `db:"sample_n" json:"sample_n"`
+	MinSample        int32              `db:"min_sample" json:"min_sample"`
+	ComputedAt       pgtype.Timestamptz `db:"computed_at" json:"computed_at"`
+	PayloadChangedAt pgtype.Timestamptz `db:"payload_changed_at" json:"payload_changed_at"`
 }
 
 type TalentBuild struct {

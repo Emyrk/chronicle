@@ -233,11 +233,14 @@ type sqlcQuerier interface {
 	DeleteSidekickConfigOverride(ctx context.Context, arg DeleteSidekickConfigOverrideParams) ([]byte, error)
 	DeleteSidekickInstallation(ctx context.Context, arg DeleteSidekickInstallationParams) (SidekickInstallation, error)
 	DeleteSidekickWoWDirectoriesExcept(ctx context.Context, arg DeleteSidekickWoWDirectoriesExceptParams) (int64, error)
-	// Drops every snapshot of a tenant, used when it falls below the /stats
-	// activity threshold.
-	DeleteStatsSnapshots(ctx context.Context, tenantID uuid.UUID) (int64, error)
-	// Drops snapshots for pages that are no longer registered.
-	DeleteStatsSnapshotsExcept(ctx context.Context, arg DeleteStatsSnapshotsExceptParams) (int64, error)
+	// Drops one family's snapshots that its latest run did not emit.
+	DeleteStatsFamilyStale(ctx context.Context, arg DeleteStatsFamilyStaleParams) (int64, error)
+	// Drops a tenant's snapshots except one producer's (the activity row), used
+	// when the tenant falls below the /stats activity threshold.
+	DeleteStatsTenantPages(ctx context.Context, arg DeleteStatsTenantPagesParams) (int64, error)
+	// Drops snapshots of families no longer registered, once they are old enough
+	// that a rolling deploy or rollback cannot still be serving them.
+	DeleteStatsUnregistered(ctx context.Context, arg DeleteStatsUnregisteredParams) (int64, error)
 	DeleteTenant(ctx context.Context, id uuid.UUID) error
 	DeleteTimeParseBossKillMembershipSeries(ctx context.Context, arg DeleteTimeParseBossKillMembershipSeriesParams) error
 	DeleteTimeParseBossKillMembershipsByInstance(ctx context.Context, instanceID uuid.UUID) error
@@ -563,7 +566,7 @@ type sqlcQuerier interface {
 	GetSidekickInstallationForOAuthRequest(ctx context.Context, arg GetSidekickInstallationForOAuthRequestParams) (uuid.UUID, error)
 	GetSiteConfig(ctx context.Context) (SiteConfig, error)
 	GetSpellItemEnchantmentByID(ctx context.Context, arg GetSpellItemEnchantmentByIDParams) (DbcSpellItemEnchantment, error)
-	// Reads one /stats page's snapshot. The only query a /stats page hit runs.
+	// Reads one /stats snapshot by primary key. The only query a /stats page hit runs.
 	GetStatsSnapshot(ctx context.Context, arg GetStatsSnapshotParams) (StatsSnapshot, error)
 	GetTenantByID(ctx context.Context, id uuid.UUID) (Tenant, error)
 	// Tenant queries. These run with AdminBypass context since the tenants table
@@ -1445,11 +1448,14 @@ type sqlcQuerier interface {
 	// Returns distinct realm names that have at least one qualified speedrun.
 	SpeedrunRealmNames(ctx context.Context) ([]string, error)
 	StarLuaProject(ctx context.Context, arg StarLuaProjectParams) error
+	// Counts the request tenant's distinct players seen in listed logs since a
+	// cutoff. Heavier than the raid count, so the job runs it only when the raid
+	// count alone does not decide the threshold. Background job only.
+	StatsTenantPlayerCount(ctx context.Context, since pgtype.Timestamptz) (int64, error)
 	// Counts the request tenant's listed raids (logical runs, so duplicate uploads
-	// count once) and distinct players since a cutoff. RLS on wow_server_realms
-	// scopes it to the tenant in context (root: untenanted and include_in_all
-	// realms). Runs only in the background snapshot job, never per page request.
-	StatsTenantActivity(ctx context.Context, since pgtype.Timestamptz) (StatsTenantActivityRow, error)
+	// count once) since a cutoff. RLS on wow_server_realms scopes it to the tenant
+	// in context (root: untenanted and include_in_all realms). Background job only.
+	StatsTenantRaidCount(ctx context.Context, since pgtype.Timestamptz) (int64, error)
 	// Atomically refills a leaky bucket by the time since its last update
 	// (capped at burst) and takes cost tokens if enough are available. A new
 	// bucket starts full. A refused take still stores the refilled level, so
@@ -1575,9 +1581,9 @@ type sqlcQuerier interface {
 	UpsertSidekickConfigOverride(ctx context.Context, arg UpsertSidekickConfigOverrideParams) ([]byte, error)
 	UpsertSidekickInstallation(ctx context.Context, arg UpsertSidekickInstallationParams) (SidekickInstallation, error)
 	UpsertSidekickWoWDirectory(ctx context.Context, arg UpsertSidekickWoWDirectoryParams) error
-	// Writes a snapshot and reports whether its payload differs from the stored
-	// one (always true for a new row). jsonb compares normalized values, so key
-	// order and whitespace never count as a change.
+	// Writes a snapshot and reports whether its payload changed (always true for a
+	// new row). payload_changed_at moves only on a change. jsonb compares
+	// normalized values, so key order and whitespace never count as a change.
 	UpsertStatsSnapshot(ctx context.Context, arg UpsertStatsSnapshotParams) (bool, error)
 	// Insert a unique talent build, returning its ID. If the build already exists,
 	// return the existing row's ID.

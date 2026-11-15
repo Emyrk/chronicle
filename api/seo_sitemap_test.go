@@ -158,8 +158,10 @@ func TestSitemapDynamicURLs(t *testing.T) {
 
 	// One indexable /stats page; another tenant's snapshot stays out.
 	statsAt := time.Date(2026, 11, 14, 6, 30, 0, 0, time.UTC)
+	statsChangedAt := time.Date(2026, 11, 12, 18, 0, 0, 0, time.UTC)
 	for _, tenant := range []uuid.UUID{ourTenant, uuid.New()} {
-		_, err = seedPool.Exec(ctx, "INSERT INTO stats_snapshots (tenant_id, page_key, payload, sample_n, computed_at) VALUES ($1, 'about', '{}', 50, $2)", tenant, statsAt)
+		_, err = seedPool.Exec(ctx, `INSERT INTO stats_snapshots (tenant_id, page_key, producer_key, payload, sample_n, min_sample, computed_at, payload_changed_at)
+			VALUES ($1, 'about', 'about', '{}', 50, 10, $2, $3)`, tenant, statsAt, statsChangedAt)
 		require.NoError(t, err)
 	}
 	api.Opts.Stats, err = servicestats.New(servicestats.Options{Logger: testutil.Logger(t), Store: database.New(pool)})
@@ -197,7 +199,9 @@ func TestSitemapDynamicURLs(t *testing.T) {
 	require.NotContains(t, lastmods, base+"/instances/"+unlisted.String())
 	require.NotContains(t, lastmods, base+"/instances/"+theirSlug, "another tenant's instances are excluded")
 
-	require.Equal(t, "2026-11-14T06:30:00Z", lastmods[base+"/stats/about"], "a /stats page's lastmod is its computed_at")
+	require.Equal(t, "2026-11-12T18:00:00Z", lastmods[base+"/stats/about"], "a /stats page's lastmod is when its payload last changed")
+	require.Contains(t, lastmods, base+"/stats/methodology")
+	require.Empty(t, lastmods[base+"/stats/methodology"], "static pages have no lastmod")
 
 	require.Contains(t, lastmods, base+"/g/"+ourGuild.String())
 	require.NotContains(t, lastmods, base+"/g/"+theirGuild.String())
