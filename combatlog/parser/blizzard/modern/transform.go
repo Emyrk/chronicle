@@ -107,7 +107,7 @@ func (r *transformReader) Read(p []byte) (int, error) {
 // cannot be parsed safely. A damaged quoted name can contain a newline, leaving
 // one physical line with an open quote and the next without a timestamp.
 func malformedPhysicalLine(line string) bool {
-	if !utf8.ValidString(line) || strings.Index(line, "  ") < 0 {
+	if !utf8.ValidString(line) || !strings.Contains(line, "  ") {
 		return true
 	}
 
