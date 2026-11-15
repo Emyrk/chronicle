@@ -27,6 +27,7 @@ import {
   YoutubeSyncPost,
 } from "./posts/announcements";
 import { BeyondTheBestParsePost } from "./posts/beyondTheBestParse";
+import { ParsesAndRatingsExplainedPost, SpeedrunRulesPost, TurtleWoWForksPost } from "./posts/explainers";
 import { InstanceSearchPost } from "./posts/instanceSearch";
 import { RatingsPost } from "./posts/ratings";
 
@@ -69,6 +70,9 @@ export interface BlogPostDefinition extends BlogPostMetadata {
 }
 
 const BLOG_COMPONENTS = {
+  "parses-and-ratings-explained": ParsesAndRatingsExplainedPost,
+  "speedrun-rules": SpeedrunRulesPost,
+  "turtle-wow-forks": TurtleWoWForksPost,
   "beyond-the-best-parse": BeyondTheBestParsePost,
   ratings: RatingsPost,
   "instance-search": InstanceSearchPost,

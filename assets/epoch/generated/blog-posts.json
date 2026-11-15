@@ -1,5 +1,43 @@
 [
   {
+    "id": "parses-and-ratings-explained",
+    "title": "What is a Chronicle parse, and how do Peak, Mastery and Renown work?",
+    "description": "A parse scores one boss kill from 0 to 100 against comparable kills from the previous 60 days. Peak, Mastery and Renown rate your whole history against the best your spec has ever done. Here is exactly how each is calculated.",
+    "publishedAt": "2026-11-14",
+    "rarity": "common",
+    "tag": "Guide",
+    "icon": "inv_misc_book_11",
+    "hintEnabled": false
+  },
+  {
+    "id": "speedrun-rules",
+    "title": "What counts as a valid speedrun clear on Chronicle?",
+    "description": "Every required boss in one log, on one difficulty, from the Chronicle addon or server-side logging, in a listed guild run. Order and wipes don't matter. The full rules, how the clock works, and where servers differ.",
+    "publishedAt": "2026-11-14",
+    "rarity": "common",
+    "tag": "Guide",
+    "icon": "inv_misc_pocketwatch_01",
+    "hintEnabled": false
+  },
+  {
+    "id": "turtle-wow-forks",
+    "title": "Which Turtle WoW fork servers are still raiding in 2026?",
+    "description": "Turtle WoW closed in May 2026, but forks such as CapybaraCraft, OctoWoW and Ravencraft carry its content on. Where to find each server's current raid activity, counted from uploaded combat logs.",
+    "publishedAt": "2026-11-15",
+    "rarity": "common",
+    "tag": "Guide",
+    "icon": "inv_misc_book_09",
+    "flavorSets": [
+      [
+        "turtle"
+      ],
+      [
+        "nightmare-of-ursol"
+      ]
+    ],
+    "hintEnabled": false
+  },
+  {
     "id": "beyond-the-best-parse",
     "title": "Beyond the Best Parse: Why I Introduced Ratings to Chronicle",
     "description": "Removing the old Armory view was a mistake. It's back, with parse history in the new view too. Here's why I introduced ratings, what problems they try to solve, and where I'd like to take Chronicle.",
