@@ -35,15 +35,14 @@ export const DUNGEON_REQUEST: DungeonMeshRequest = { url: DUNGEON_URL, bounds: D
 interface SceneInternals {
   camera: THREE.PerspectiveCamera;
   controls: OrbitControls;
-  cameraMove: object | null;
-  viewAnimation: object | null;
+  tween: { view: object | null; move: object | null };
+  free: object;
   walk: { avatar: THREE.Group } | null;
   dungeonMesh: { url: string; scale: number; group: THREE.Group; caves: { mesh: THREE.Mesh; bvh: unknown }[] } | null;
   units: Map<string, { base: THREE.Vector3; floorY: number; floorTracked: boolean; token: { arc: THREE.Object3D } }>;
   hud: { bars: THREE.InstancedMesh };
   unitLayer: { floorTracks: unknown; targetLines: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>[] };
   presence: { remotePresences: Map<string, { position: THREE.Vector3 }> };
-  directing(): boolean;
 }
 
 /**
@@ -242,7 +241,7 @@ export async function createTestScene(options: TestSceneOptions = {}) {
     let still = 0;
     let count = 0;
     let last = poseKey();
-    while (still < quiet || internals.viewAnimation || internals.cameraMove) {
+    while (still < quiet || internals.tween.view || internals.tween.move) {
       if (count >= max) throw new Error(`camera still moving after ${max} frames`);
       frame();
       count++;
@@ -334,11 +333,17 @@ export async function createTestScene(options: TestSceneOptions = {}) {
   const probe = {
     /** Who moves the camera right now. The one probe for camera ownership. */
     owner: (): CameraOwner => {
-      if (internals.walk) return "walk";
-      if (internals.cameraMove) return "double-click";
-      if (internals.viewAnimation) return "view-tween";
-      if (internals.directing()) return "director";
-      return "user";
+      // The scene's own owner (cameraArbiter), in the names these tests use.
+      switch (scene.cameraOwner()) {
+        case "walk":
+          return "walk";
+        case "tween":
+          return internals.tween.move ? "double-click" : "view-tween";
+        case "director":
+          return "director";
+        default:
+          return "user";
+      }
     },
     /** The camera's position and the point it orbits (the free cam's pivot, walk mode's head), rounded to `digits`. */
     pose: (digits = 3): CameraPose => ({ position: roundVector(internals.camera.position, digits), target: roundVector(internals.controls.target, digits) }),
@@ -448,9 +453,9 @@ export async function createTestScene(options: TestSceneOptions = {}) {
    * the wheel) while `run` ran.
    */
   const countFreeCamPlacements = (run: () => void): number => {
-    const sceneObject = scene as unknown as Record<string, unknown>;
+    const sceneObject = internals.free as unknown as Record<string, unknown>;
     const original = sceneObject.placeFreeCam as (...args: unknown[]) => unknown;
-    if (typeof original !== "function") throw new Error("countFreeCamPlacements: MapScene3D has no placeFreeCam any more. Update createTestScene.ts.");
+    if (typeof original !== "function") throw new Error("countFreeCamPlacements: the free rig has no placeFreeCam any more. Update createTestScene.ts.");
     let count = 0;
     sceneObject.placeFreeCam = function (this: unknown, ...args: unknown[]) {
       count++;
