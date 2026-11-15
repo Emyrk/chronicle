@@ -36,6 +36,7 @@ import (
 	"github.com/Emyrk/chronicle/database/storage"
 	"github.com/Emyrk/chronicle/frontend"
 	"github.com/Emyrk/chronicle/internal/billing"
+	"github.com/Emyrk/chronicle/internal/clientip"
 	"github.com/Emyrk/chronicle/internal/itempricing"
 	"github.com/Emyrk/chronicle/internal/services/serviceapplication"
 	"github.com/Emyrk/chronicle/internal/services/serviceblog"
@@ -114,6 +115,10 @@ type Options struct {
 
 	Billing *billing.Service
 
+	// ClientIP derives client IPs for rate limits. The zero value ignores
+	// Cloudflare headers.
+	ClientIP clientip.Resolver
+
 	Registry  *prometheus.Registry
 	AccessURL *url.URL
 	// AdsTxtURL is the canonical ads.txt URL. When set, /ads.txt redirects to it.
@@ -190,6 +195,7 @@ type API struct {
 	luaArtifactBacklog prometheus.Gauge
 	uiUsageMetrics     *uiUsageMetrics
 	instanceSearch     *serviceinstancesearch.Service
+	clientIP           clientip.Resolver
 	// censusCache holds each tenant's default census (Census).
 	censusCache    tenantcache.Cache[[]database.CensusPlayerCountsRow]
 	discoveryStats discoveryStatsCache
@@ -283,6 +289,7 @@ func New(ctx context.Context, opts Options) (*API, error) {
 		luaArtifactBacklog: luaArtifactBacklog,
 		uiUsageMetrics:     newUIUsageMetrics(opts.Registry),
 		instanceSearch:     opts.InstanceSearch,
+		clientIP:           opts.ClientIP,
 		Opts:               &opts,
 		AppContext:         ctx,
 		Auth:               service,

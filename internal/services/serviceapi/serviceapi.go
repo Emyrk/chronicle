@@ -21,6 +21,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/leaderboardconfig"
 	"github.com/Emyrk/chronicle/internal/services/serviceaccessurl"
+	"github.com/Emyrk/chronicle/internal/services/serviceclientip"
 	"github.com/Emyrk/chronicle/internal/services/serviceapplication"
 	"github.com/Emyrk/chronicle/internal/services/serviceassets"
 	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
@@ -145,6 +146,7 @@ func (s *Service) DependsOn() []string {
 		servicerankings.OnRankings(),
 		servicemail.OnMailer(),
 		serviceaccessurl.OnAccessURL(),
+		serviceclientip.OnClientIP(),
 		servicetenant.OnTenant(),
 		servicechoose.OnChoose(),
 		serviceapplication.OnApplication(),
@@ -312,6 +314,7 @@ func (s *Service) Start(ctx context.Context) error {
 
 		Billing:                  billingService,
 		AccessURL:                au,
+		ClientIP:                 serviceclientip.Resolver(s.broker),
 		AdsTxtURL:                adsTxtURL,
 		NitroPaySiteID:           s.nitroPaySiteID,
 		GA4ID:                    s.ga4MeasurementID,

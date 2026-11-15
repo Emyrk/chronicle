@@ -6,7 +6,9 @@ import (
 
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/clientip"
 	"github.com/Emyrk/chronicle/internal/services"
+	"github.com/Emyrk/chronicle/internal/services/serviceclientip"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 	"github.com/coder/serpent"
@@ -58,6 +60,7 @@ type Service struct {
 	db          externalAPIStore
 	router      chi.Router
 	rateLimiter *externalIPLimiter
+	clientIP    clientip.Resolver
 	openapi     OpenAPIDocument
 }
 
@@ -71,11 +74,13 @@ func (s *Service) DependsOn() []string {
 	return []string{
 		servicelogger.OnLogger(),
 		servicedbstore.OnDatabaseStore(),
+		serviceclientip.OnClientIP(),
 	}
 }
 
 func (s *Service) Start(_ context.Context) error {
 	s.db = servicedbstore.DatabaseStore(s.broker)
+	s.clientIP = serviceclientip.Resolver(s.broker)
 	s.setupRoutes()
 	servicelogger.Logger(s.broker).Info("external API service started")
 	return nil
@@ -83,7 +88,7 @@ func (s *Service) Start(_ context.Context) error {
 
 func (s *Service) setupRoutes() {
 	s.router = chi.NewRouter()
-	s.rateLimiter = newExternalIPLimiter()
+	s.rateLimiter = newExternalIPLimiter(s.clientIP)
 	s.openapi = newOpenAPIDocument()
 	s.registerRoutes()
 }

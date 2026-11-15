@@ -2,15 +2,14 @@ package serviceexternalapi
 
 import (
 	"math"
-	"net"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
+	"github.com/Emyrk/chronicle/internal/clientip"
 	"golang.org/x/time/rate"
 )
 
@@ -34,6 +33,7 @@ type externalIPLimiter struct {
 	requestsPerMinute int
 	burst             int
 	lastCleanup       time.Time
+	clientIP          clientip.Resolver
 }
 
 type externalLimiterEntry struct {
@@ -41,8 +41,10 @@ type externalLimiterEntry struct {
 	lastSeen time.Time
 }
 
-func newExternalIPLimiter() *externalIPLimiter {
-	return newExternalIPLimiterWithConfig(externalRateLimitPerMinute, externalRateLimitBurst)
+func newExternalIPLimiter(clientIP clientip.Resolver) *externalIPLimiter {
+	l := newExternalIPLimiterWithConfig(externalRateLimitPerMinute, externalRateLimitBurst)
+	l.clientIP = clientIP
+	return l
 }
 
 func newExternalIPLimiterWithConfig(requestsPerMinute, burst int) *externalIPLimiter {
@@ -60,7 +62,7 @@ func (l *externalIPLimiter) middleware(next http.Handler) http.Handler {
 
 func (l *externalIPLimiter) middlewareWithCost(cost int, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		limiter := l.get(externalClientIP(r))
+		limiter := l.get(l.clientIP.IP(r))
 		allowed := limiter.AllowN(time.Now(), cost)
 		l.setHeaders(w, limiter)
 		if !allowed {
@@ -80,7 +82,7 @@ func (l *externalIPLimiter) middlewareWithCost(cost int, next http.Handler) http
 // prefix cannot accidentally turn the status check into a limited request.
 func (l *externalIPLimiter) statusMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		l.setHeaders(w, l.get(externalClientIP(r)))
+		l.setHeaders(w, l.get(l.clientIP.IP(r)))
 		next.ServeHTTP(w, r)
 	})
 }
@@ -119,21 +121,4 @@ func (l *externalIPLimiter) get(ip string) *rate.Limiter {
 	}
 	entry.lastSeen = now
 	return entry.limiter
-}
-
-// externalClientIP gets the original client IP as provided by Chronicle's
-// reverse proxy, falling back to the direct peer address for local requests.
-func externalClientIP(r *http.Request) string {
-	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
-		if index := strings.IndexByte(forwarded, ','); index >= 0 {
-			forwarded = forwarded[:index]
-		}
-		return strings.TrimSpace(forwarded)
-	}
-
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return host
 }

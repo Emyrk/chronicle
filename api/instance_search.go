@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -45,8 +44,8 @@ func newInstanceSearchUserLimitResolver(zed *authz.Authz) serviceinstancesearch.
 		return serviceinstancesearch.AccessForTier(highestSupporterTier(permissions[0], permissions[1], permissions[2])), nil
 	}
 }
-func instanceSearchCaller(r *http.Request) serviceinstancesearch.Caller {
-	c := serviceinstancesearch.Caller{TenantID: servicetenant.TenantIDFromContext(r.Context()), IP: instanceSearchClientIP(r)}
+func (api *API) instanceSearchCaller(r *http.Request) serviceinstancesearch.Caller {
+	c := serviceinstancesearch.Caller{TenantID: servicetenant.TenantIDFromContext(r.Context()), IP: api.clientIP.IP(r)}
 	if claims, ok := chronauth.AuthenticatedClaims(r.Context()); ok {
 		c.UserID = claims.Subject
 	}
@@ -134,7 +133,7 @@ func (api *API) invalidSearchBody(w http.ResponseWriter, r *http.Request, c serv
 
 func (api *API) InstanceSearch(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
-	c := instanceSearchCaller(r)
+	c := api.instanceSearchCaller(r)
 	var q chroniclesdk.InstanceSearchQuery
 	if err := json.NewDecoder(io.LimitReader(r.Body, instanceSearchMaxBody)).Decode(&q); err != nil {
 		api.invalidSearchBody(w, r, c, err, false, start)
@@ -150,7 +149,7 @@ func (api *API) InstanceSearch(w http.ResponseWriter, r *http.Request) {
 }
 func (api *API) InstanceSearchExplain(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
-	c := instanceSearchCaller(r)
+	c := api.instanceSearchCaller(r)
 	var req chroniclesdk.InstanceSearchExplainRequest
 	if err := json.NewDecoder(io.LimitReader(r.Body, instanceSearchMaxBody)).Decode(&req); err != nil {
 		api.invalidSearchBody(w, r, c, err, true, start)
@@ -163,7 +162,7 @@ func (api *API) InstanceSearchExplain(w http.ResponseWriter, r *http.Request) {
 	}
 }
 func (api *API) InstanceSearchLimit(w http.ResponseWriter, r *http.Request) {
-	c := instanceSearchCaller(r)
+	c := api.instanceSearchCaller(r)
 	st, limit, err := api.instanceSearch.Peek(r.Context(), c)
 	if err != nil {
 		httpapi.Write(r.Context(), w, http.StatusInternalServerError, chroniclesdk.Response{Message: "Search is unavailable right now."})
@@ -174,15 +173,4 @@ func (api *API) InstanceSearchLimit(w http.ResponseWriter, r *http.Request) {
 }
 func (api *API) InstanceSearchFields(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(r.Context(), w, http.StatusOK, instancesearch.Describe())
-}
-func instanceSearchClientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		first, _, _ := strings.Cut(xff, ",")
-		return strings.TrimSpace(first)
-	}
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return host
 }
