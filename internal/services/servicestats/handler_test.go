@@ -223,9 +223,6 @@ func TestStatsNoIndex(t *testing.T) {
 	noindex(get(t, h, small, "/stats/about"))            // below the page's minimum sample
 	noindex(get(t, h, tenant, "/stats/about?sort=desc")) // query-parameter variant
 
-	hidden := forever
-	hidden.Discoverable = false
-	noindex(get(t, handler(newService(t, store), hidden), tenant, "/stats/about"))
 
 	require.NotContains(t, get(t, h, tenant, "/stats/about").Body.String(), "noindex")
 }

@@ -63,7 +63,7 @@ func (s *Service) RefreshTenant(ctx context.Context, queue JobInserter, tenantID
 	}
 	due := func(key string, cadence time.Duration) bool {
 		at, ok := lastRun[key]
-		return force || !ok || now.Sub(at) >= cadence
+		return force || !ok || isDue(now, at, cadence)
 	}
 
 	registered := []string{activityKey}
@@ -103,6 +103,14 @@ func (s *Service) RefreshTenant(ctx context.Context, queue JobInserter, tenantID
 		result.Due = append(result.Due, key)
 	}
 	return result, errors.Join(errs...)
+}
+
+// isDue reports whether a family or the threshold check last run at last is
+// due at now. Run markers are stamped when a run finishes, after the dispatch
+// tick that started it, so half a dispatch interval of slack keeps an hourly
+// family on every tick (not every other one) and a 6h family on every sixth.
+func isDue(now, last time.Time, cadence time.Duration) bool {
+	return now.Sub(last) >= cadence-DispatchInterval/2
 }
 
 // checkActivity returns the tenant's threshold check, recomputing it when due
@@ -196,10 +204,12 @@ func (s *Service) RefreshProducer(ctx context.Context, tenantID uuid.UUID, produ
 		return ProducerRefresh{}, fmt.Errorf("compute %q: %w", producerKey, err)
 	}
 
-	now := s.now()
-	result := ProducerRefresh{Pages: len(outputs)}
-	marker := runMarkerPrefix + producerKey
-	keep := []string{marker}
+	// Validate every key before the first write, so a bad run changes nothing.
+	type page struct {
+		out  Output
+		path string
+	}
+	var pages []page
 	seen := map[string]bool{}
 	for _, out := range outputs {
 		path, ok := f.PathForKey(out.Key)
@@ -207,13 +217,28 @@ func (s *Service) RefreshProducer(ctx context.Context, tenantID uuid.UUID, produ
 			return ProducerRefresh{}, fmt.Errorf("producer %q emitted an invalid or duplicate page key %q", producerKey, out.Key)
 		}
 		seen[out.Key] = true
-		changed, err := s.upsert(ctx, tenantID, out.Key, producerKey, out.Payload, int64(out.SampleN), int64(out.MinSample), now)
-		if err != nil {
-			return ProducerRefresh{}, fmt.Errorf("store %q: %w", out.Key, err)
+		if !s.servesFamily(path, f) {
+			// Another family or a static page owns this URL, so the page could
+			// never be served: don't store, list or ping it.
+			s.logger.WarnContext(ctx, "stats page shadowed by another page, skipped",
+				slog.String("producer", producerKey), slog.String("key", out.Key), slog.String("path", path))
+			continue
 		}
-		keep = append(keep, out.Key)
-		if changed && out.SampleN >= out.MinSample {
-			result.Changed = append(result.Changed, path)
+		pages = append(pages, page{out, path})
+	}
+
+	now := s.now()
+	result := ProducerRefresh{Pages: len(pages)}
+	marker := runMarkerPrefix + producerKey
+	keep := []string{marker}
+	for _, p := range pages {
+		changed, err := s.upsert(ctx, tenantID, p.out.Key, producerKey, p.out.Payload, int64(p.out.SampleN), int64(p.out.MinSample), now)
+		if err != nil {
+			return ProducerRefresh{}, fmt.Errorf("store %q: %w", p.out.Key, err)
+		}
+		keep = append(keep, p.out.Key)
+		if changed && p.out.SampleN >= p.out.MinSample {
+			result.Changed = append(result.Changed, p.path)
 		}
 	}
 	if _, err := s.upsert(ctx, tenantID, marker, producerKey, struct{}{}, 0, math.MaxInt32, now); err != nil {
@@ -378,11 +403,18 @@ var activeJobStates = []rivertype.JobState{
 	rivertype.JobStateRunning,
 }
 
-func insertOpts(byArgs bool) river.InsertOpts {
+// QueueStats is the River queue every /stats job runs on, so heavy producers
+// never take workers from other queues. Register it with QueueWorkers.
+const QueueStats = "stats"
+
+// QueueWorkers is the stats queue's worker count.
+const QueueWorkers = 2
+
+func insertOpts(byArgs bool, maxAttempts int) river.InsertOpts {
 	return river.InsertOpts{
-		Queue:       river.QueueDefault,
+		Queue:       QueueStats,
 		Priority:    riverconst.PriorityLow,
-		MaxAttempts: 3,
+		MaxAttempts: maxAttempts,
 		UniqueOpts:  river.UniqueOpts{ByArgs: byArgs, ByState: activeJobStates},
 	}
 }
@@ -394,7 +426,7 @@ const KindDispatch = "stats-snapshots-dispatch"
 type ArgsDispatch struct{}
 
 func (ArgsDispatch) Kind() string                 { return KindDispatch }
-func (ArgsDispatch) InsertOpts() river.InsertOpts { return insertOpts(false) }
+func (ArgsDispatch) InsertOpts() river.InsertOpts { return insertOpts(false, 3) }
 
 // KindTenant is the River kind of the per-tenant job.
 const KindTenant = "stats-snapshots-tenant"
@@ -402,23 +434,24 @@ const KindTenant = "stats-snapshots-tenant"
 // ArgsTenant refreshes one tenant. TenantID is uuid.Nil for root.
 type ArgsTenant struct {
 	TenantID uuid.UUID `json:"tenant_id"`
-	Force    bool      `json:"force,omitempty"`
 }
 
 func (ArgsTenant) Kind() string                 { return KindTenant }
-func (ArgsTenant) InsertOpts() river.InsertOpts { return insertOpts(true) }
+func (ArgsTenant) InsertOpts() river.InsertOpts { return insertOpts(true, 3) }
 
 // KindProducer is the River kind of the per-family job.
 const KindProducer = "stats-snapshots-producer"
 
-// ArgsProducer runs one family's producer for one tenant.
+// ArgsProducer runs one family's producer for one tenant. It is tried once:
+// the next hourly tenant job re-queues a family that failed, so slow or broken
+// producers can't pile up retries.
 type ArgsProducer struct {
 	TenantID uuid.UUID `json:"tenant_id"`
 	Key      string    `json:"key"`
 }
 
 func (ArgsProducer) Kind() string                 { return KindProducer }
-func (ArgsProducer) InsertOpts() river.InsertOpts { return insertOpts(true) }
+func (ArgsProducer) InsertOpts() river.InsertOpts { return insertOpts(true, 1) }
 
 // JobInserter enqueues River jobs (riverqueue.Queues satisfies it).
 type JobInserter interface {
@@ -478,7 +511,7 @@ type TenantWorker struct {
 }
 
 func (w *TenantWorker) Work(ctx context.Context, job *river.Job[ArgsTenant]) error {
-	_, err := w.Service.RefreshTenant(ctx, w.Queue, job.Args.TenantID, job.Args.Force)
+	_, err := w.Service.RefreshTenant(ctx, w.Queue, job.Args.TenantID, false)
 	return err
 }
 

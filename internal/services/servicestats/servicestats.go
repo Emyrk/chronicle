@@ -126,6 +126,11 @@ func New(opts Options) (*Service, error) {
 		if _, ok := s.static[p.Path]; ok {
 			return nil, fmt.Errorf("servicestats: duplicate static page %q", p.Path)
 		}
+		for _, f := range s.families {
+			if _, ok := f.Match(p.Path); ok {
+				return nil, fmt.Errorf("servicestats: static page %q is also matched by family pattern %q", p.Path, f.Pattern)
+			}
+		}
 		s.static[p.Path] = p
 	}
 	if opts.IndexNowKey != "" {
@@ -155,6 +160,16 @@ func DefaultStaticPages() []StaticPage {
 // Family returns the registered (compiled) family for a producer key, or nil.
 func (s *Service) Family(producerKey string) *Family {
 	return s.byProducer[producerKey]
+}
+
+// servesFamily reports whether a request for path would be served by f: no
+// static page has the path and f is the most specific family matching it.
+func (s *Service) servesFamily(path string, f *Family) bool {
+	if _, static := s.static[path]; static {
+		return false
+	}
+	matched, _, ok := s.match(path)
+	return ok && matched == f
 }
 
 // match returns the most specific family page for path.

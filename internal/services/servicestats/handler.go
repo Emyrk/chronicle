@@ -46,16 +46,39 @@ type layoutData struct {
 
 // Handler serves the /stats pages. A hit reads exactly one snapshot row by
 // primary key (a static page reads the tenant's activity row) and never runs
-// an aggregate query. Unknown paths and pages without a snapshot, including
-// every page of a tenant below the activity threshold, are 404.
+// an aggregate query. Unknown paths, percent-encoded path variants, hidden
+// (non-discoverable) sites and pages without a snapshot, including every page
+// of a tenant below the activity threshold, are 404.
 func (s *Service) Handler(resolve SiteResolver) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Percent-encoded variants of a path (e.g. /stats/%61bout) are not the
+		// page; serving them would create duplicate URLs.
+		if r.URL.RawPath != "" && r.URL.RawPath != r.URL.Path {
+			http.NotFound(w, r)
+			return
+		}
 		ctx := r.Context()
 		tenantID := servicetenant.TenantIDFromContext(ctx)
-		data := layoutData{Methodology: MethodologyPath}
+		static, isStatic := s.static[r.URL.Path]
+		family, page, isFamily := s.match(r.URL.Path)
+		if !isStatic && !isFamily {
+			http.NotFound(w, r)
+			return
+		}
+		site, err := resolve(r)
+		if err != nil {
+			s.serverError(ctx, w, "resolve stats site", err)
+			return
+		}
+		// Hidden sites get no pages, even stale ones (the dispatch skips them).
+		if !site.Discoverable {
+			http.NotFound(w, r)
+			return
+		}
+		data := layoutData{Site: site, Methodology: MethodologyPath}
 		var minSample, sampleN int
 
-		if static, ok := s.static[r.URL.Path]; ok {
+		if isStatic {
 			activity, found, err := s.activity(ctx, tenantID)
 			if err != nil {
 				s.serverError(ctx, w, "read stats activity", err)
@@ -65,18 +88,8 @@ func (s *Service) Handler(resolve SiteResolver) http.Handler {
 				http.NotFound(w, r)
 				return
 			}
-			site, err := resolve(r)
-			if err != nil {
-				s.serverError(ctx, w, "resolve stats site", err)
-				return
-			}
-			data.Site, data.Content, data.Canonical = site, static.Render(site), site.Origin+static.Path
+			data.Content, data.Canonical = static.Render(site), site.Origin+static.Path
 		} else {
-			family, page, ok := s.match(r.URL.Path)
-			if !ok {
-				http.NotFound(w, r)
-				return
-			}
 			row, err := s.store.GetStatsSnapshot(ctx, database.GetStatsSnapshotParams{TenantID: tenantID, PageKey: page.Key})
 			if errors.Is(err, pgx.ErrNoRows) || err == nil && row.ProducerKey != family.Producer.Key() {
 				http.NotFound(w, r)
@@ -84,11 +97,6 @@ func (s *Service) Handler(resolve SiteResolver) http.Handler {
 			}
 			if err != nil {
 				s.serverError(ctx, w, "read stats snapshot", err)
-				return
-			}
-			site, err := resolve(r)
-			if err != nil {
-				s.serverError(ctx, w, "resolve stats site", err)
 				return
 			}
 			snap := Snapshot{
@@ -100,7 +108,7 @@ func (s *Service) Handler(resolve SiteResolver) http.Handler {
 				s.serverError(ctx, w, "render stats page", err)
 				return
 			}
-			data.Site, data.Content, data.Canonical = site, content, site.Origin+page.Path
+			data.Content, data.Canonical = content, site.Origin+page.Path
 			data.Snapshot = true
 			data.Updated = FormatDate(snap.ComputedAt)
 			data.UpdatedISO = snap.ComputedAt.UTC().Format(time.RFC3339)
@@ -115,7 +123,7 @@ func (s *Service) Handler(resolve SiteResolver) http.Handler {
 		}
 		// Query-parameter variants are never indexed; their canonical is the
 		// clean URL.
-		indexable := data.Site.Discoverable && sampleN >= minSample && r.URL.RawQuery == ""
+		indexable := sampleN >= minSample && r.URL.RawQuery == ""
 		if !indexable {
 			data.Robots = "noindex"
 		}
@@ -191,7 +199,7 @@ func (s *Service) SitemapEntries(ctx context.Context) ([]SitemapEntry, error) {
 			continue
 		}
 		path, ok := f.PathForKey(m.PageKey)
-		if !ok {
+		if !ok || !s.servesFamily(path, f) {
 			continue
 		}
 		entries = append(entries, SitemapEntry{Path: path, LastMod: m.PayloadChangedAt.Time})
