@@ -1448,6 +1448,20 @@ type sqlcQuerier interface {
 	// Returns distinct realm names that have at least one qualified speedrun.
 	SpeedrunRealmNames(ctx context.Context) ([]string, error)
 	StarLuaProject(ctx context.Context, arg StarLuaProjectParams) error
+	// The request tenant's listed raids, dungeon runs (logical runs, so duplicate
+	// uploads count once) and uploaded logs, since @since and since @since_recent
+	// (the later cutoff), in one scan. RLS on wow_server_realms scopes it to the
+	// tenant in context. Background job only.
+	StatsHubActivity(ctx context.Context, arg StatsHubActivityParams) (StatsHubActivityRow, error)
+	// The request tenant's raids and dungeons with listed runs since @since, with
+	// run counts (logical runs) since @since and since @since_recent.
+	StatsHubInstances(ctx context.Context, arg StatsHubInstancesParams) ([]StatsHubInstancesRow, error)
+	// Distinct players seen in the request tenant's listed logs since @since and
+	// since @since_recent, in one scan. Background job only.
+	StatsHubPlayers(ctx context.Context, arg StatsHubPlayersParams) (StatsHubPlayersRow, error)
+	// Qualified speedruns per instance name in the request tenant's listed,
+	// valid logs, all time (the speedrun boards' scope).
+	StatsHubSpeedruns(ctx context.Context) ([]StatsHubSpeedrunsRow, error)
 	// Counts the request tenant's distinct players seen in listed logs since a
 	// cutoff. Heavier than the raid count, so the job runs it only when the raid
 	// count alone does not decide the threshold. Background job only.

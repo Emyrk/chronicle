@@ -33,10 +33,13 @@ import (
 type Options struct {
 	Logger *slog.Logger
 	Store  database.Store
-	// Families defaults to DefaultFamilies().
+	// Families defaults to DefaultFamilies(Store, Now).
 	Families []Family
 	// Static defaults to DefaultStaticPages().
 	Static []StaticPage
+	// Redirects defaults to DefaultRedirects(): old /stats paths mapped to
+	// their replacements (301).
+	Redirects map[string]string
 	// SiteFlavor resolves a tenant's flavor tags (nil tenant = root site).
 	// Defaults to the build's server flavor.
 	SiteFlavor func(ctx context.Context, tenant *database.Tenant) database.WoWFlavor
@@ -63,6 +66,7 @@ type Service struct {
 	byProducer    map[string]*Family
 	static        map[string]StaticPage
 	staticOrder   []StaticPage
+	redirects     map[string]string
 	siteFlavor    func(ctx context.Context, tenant *database.Tenant) database.WoWFlavor
 	accessURL     *url.URL
 	primaryDomain string
@@ -78,18 +82,21 @@ func New(opts Options) (*Service, error) {
 	if opts.Logger == nil {
 		opts.Logger = slog.Default()
 	}
+	if opts.Now == nil {
+		opts.Now = time.Now
+	}
 	if opts.Families == nil {
-		opts.Families = DefaultFamilies()
+		opts.Families = DefaultFamilies(opts.Store, opts.Now)
 	}
 	if opts.Static == nil {
 		opts.Static = DefaultStaticPages()
 	}
+	if opts.Redirects == nil {
+		opts.Redirects = DefaultRedirects()
+	}
 	if opts.SiteFlavor == nil {
 		var datasets *servicedataset.Service
 		opts.SiteFlavor = datasets.SiteFlavor
-	}
-	if opts.Now == nil {
-		opts.Now = time.Now
 	}
 	s := &Service{
 		logger:        opts.Logger,
@@ -97,6 +104,7 @@ func New(opts Options) (*Service, error) {
 		byProducer:    map[string]*Family{},
 		static:        map[string]StaticPage{},
 		staticOrder:   opts.Static,
+		redirects:     opts.Redirects,
 		siteFlavor:    opts.SiteFlavor,
 		accessURL:     opts.AccessURL,
 		primaryDomain: strings.ToLower(opts.PrimaryDomain),
@@ -133,6 +141,15 @@ func New(opts Options) (*Service, error) {
 		}
 		s.static[p.Path] = p
 	}
+	for from, to := range opts.Redirects {
+		_, fromErr := parsePath(from)
+		_, toErr := parsePath(to)
+		_, static := s.static[from]
+		_, _, family := s.match(from)
+		if fromErr != nil || toErr != nil || static || family {
+			return nil, fmt.Errorf("servicestats: invalid redirect %q -> %q", from, to)
+		}
+	}
 	if opts.IndexNowKey != "" {
 		in, err := newIndexNow(opts.IndexNowKey, opts.IndexNowEndpoint, opts.HTTPClient, opts.Logger)
 		if err != nil {
@@ -144,9 +161,18 @@ func New(opts Options) (*Service, error) {
 }
 
 // DefaultFamilies is the registry of /stats page families. Add new ones here.
-func DefaultFamilies() []Family {
+// now is the service clock.
+func DefaultFamilies(store database.Store, now func() time.Time) []Family {
 	return []Family{
-		aboutFamily(),
+		hubFamily(store, now),
+	}
+}
+
+// DefaultRedirects maps retired /stats paths to their replacements.
+func DefaultRedirects() map[string]string {
+	return map[string]string{
+		// A1's placeholder, replaced by the hub.
+		"/stats/about": hubPath,
 	}
 }
 

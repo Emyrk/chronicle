@@ -279,18 +279,19 @@ func TestHiddenAndEncodedPaths404(t *testing.T) {
 	t.Parallel()
 	tenant := uuid.New()
 	store := &snapshotStore{}
-	store.about(tenant, `{"raids":80,"window_days":180}`, 80)
+	store.hub(tenant, hubJSON([4]int{80, 0, 20, 400}, [4]int{300, 0, 70, 900}), 300)
 	store.eligible(tenant, true)
 	hidden := forever
 	hidden.Discoverable = false
 
-	require.Equal(t, http.StatusNotFound, get(t, handler(newService(t, store), hidden), tenant, "/stats/about").Code)
+	require.Equal(t, http.StatusNotFound, get(t, handler(newService(t, store), hidden), tenant, "/stats").Code)
 	require.Equal(t, http.StatusNotFound, get(t, handler(newService(t, store), hidden), tenant, "/stats/methodology").Code)
 	h := handler(newService(t, store), forever)
-	require.Equal(t, http.StatusNotFound, get(t, h, tenant, "/stats/%61bout").Code)
+	require.Equal(t, http.StatusNotFound, get(t, h, tenant, "/st%61ts").Code)
+	require.Equal(t, http.StatusNotFound, get(t, h, tenant, "/stats/%61bout").Code, "an encoded redirect source is not redirected")
 	require.Equal(t, http.StatusNotFound, get(t, h, tenant, "/stats/methodolog%79").Code)
 	require.EqualValues(t, 0, store.reads.Load(), "decided before any database read")
-	require.Equal(t, http.StatusOK, get(t, h, tenant, "/stats/about").Code)
+	require.Equal(t, http.StatusOK, get(t, h, tenant, "/stats").Code)
 }
 
 // When the site lookup fails, pages with nothing behind them stay 404; only

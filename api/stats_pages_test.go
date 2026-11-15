@@ -12,8 +12,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/internal/services/servicestats"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
+	"github.com/Emyrk/chronicle/internal/testutil"
 )
 
 func TestIsTurtleFork(t *testing.T) {
@@ -31,6 +33,10 @@ func (statsRouteStore) GetStatsSnapshot(context.Context, database.GetStatsSnapsh
 	return database.StatsSnapshot{}, pgx.ErrNoRows
 }
 
+func (statsRouteStore) GetSiteConfig(context.Context) (database.SiteConfig, error) {
+	return database.SiteConfig{Discoverable: true}, nil
+}
+
 // /stats routes answer GET and HEAD (chi returns 405 for an unregistered
 // HEAD) and are handled by the stats service, not the SPA fallback.
 func TestMountStatsAnswersHead(t *testing.T) {
@@ -39,16 +45,19 @@ func TestMountStatsAnswersHead(t *testing.T) {
 	require.NoError(t, err)
 	api := testSEOAPI(t)
 	api.Opts.Stats = stats
+	// The site resolver reads the site config (upload settings).
+	api.Opts.Zed = authz.NewDatabaseOnly(testutil.Logger(t), statsRouteStore{})
 	r := chi.NewRouter()
 	api.mountStats(r)
 	r.NotFound(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusTeapot) })
 
 	for _, method := range []string{http.MethodGet, http.MethodHead} {
 		for path, want := range map[string]int{
-			"/stats/about":  http.StatusNotFound,
-			"/stats":        http.StatusNotFound,
-			"/indexnow.txt": http.StatusOK,
-			"/recent":       http.StatusTeapot,
+			"/stats/about":       http.StatusMovedPermanently,
+			"/stats":             http.StatusNotFound,
+			"/stats/methodology": http.StatusNotFound,
+			"/indexnow.txt":      http.StatusOK,
+			"/recent":            http.StatusTeapot,
 		} {
 			rec := httptest.NewRecorder()
 			// A discoverable tenant, so the site resolves from context.

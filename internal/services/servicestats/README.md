@@ -112,7 +112,7 @@ type Tenant struct {
 }
 
 type Family struct {
-	Pattern  string   // "/stats/about" or "/stats/{instance}/{boss}"
+	Pattern  string   // "/stats" or "/stats/{instance}/{boss}"
 	Producer Producer
 	Render   func(site Site, page Page, snap Snapshot) (Content, error)
 }
@@ -131,6 +131,19 @@ beats `/stats/{instance}/{boss}` for `/stats/naxxramas/speedruns`, and a
 `boss/naxxramas/speedruns` output from the boss family is skipped. Families
 that would match exactly the same paths, and static pages a family matches,
 are rejected by `New`.
+
+## Pages today
+
+- `/stats`, the server hub (`hub.go`, family `hub`, hourly): raids, dungeon
+  runs, logs uploaded and players seen in uploaded logs over 30 and 180 days;
+  the raids and dungeons with listed runs, linking `/stats/<instance>` and,
+  when the instance has qualified speedruns, `/stats/<instance>/speedruns`;
+  census, gear and leaderboard links; and how to upload logs (left out when
+  the site has client uploads turned off). The lead is built from the
+  server's own numbers (`hubLead`).
+- `/stats/methodology` (static).
+- `/stats/about`, A1's placeholder, is a 301 to `/stats` (`DefaultRedirects`).
+  Redirect sources must not be served by a family or static page.
 
 ## Adding a page family
 
@@ -153,12 +166,17 @@ are rejected by `New`.
    - `Lead`: 2-3 self-contained sentences, answer first, with the key number,
      "As of <FormatDate(snap.ComputedAt)>", the sample size and the window.
    - `SampleLabel` and `Window`: shown in the "Updated" line.
-   - `Table`: the data as a real table. `Cell.Href` links rows into the SPA.
-   - `Sections`: extra prose. `Links`: SPA pages for the interactive view.
+   - `Tables`: the data as real tables. `Cell.Href` links rows into the SPA
+     or other /stats pages.
+   - `Sections`: extra prose, each with optional links. `Links`: SPA pages
+     for the interactive view.
+   - Link per-instance pages with `InstancePath(Slug(name))` and
+     `SpeedrunsPath(Slug(name))` so every family agrees on instance URLs.
    - `Description` defaults to `Lead`.
    - Say what the numbers count: players seen in uploaded logs, not the
      server's population.
-3. **Register it** in `DefaultFamilies` (`servicestats.go`). That is all the
+3. **Register it** in `DefaultFamilies(store, now)` (`servicestats.go`); the
+   producer gets the store and the service clock from there. That is all the
    wiring: routing (GET and HEAD), the layout, the sitemap, noindex rules,
    caching, pruning and IndexNow come for free. A page with no snapshot
    behind it goes in `DefaultStaticPages` instead (see `methodology.go`).

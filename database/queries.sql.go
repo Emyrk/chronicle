@@ -34346,6 +34346,176 @@ func (q *sqlQuerier) ListStatsSnapshotMeta(ctx context.Context, tenantID uuid.UU
 	return items, nil
 }
 
+const statsHubActivity = `-- name: StatsHubActivity :one
+SELECT
+  COUNT(DISTINCT COALESCE(li.duplicate_group_id, li.id)) FILTER (WHERE li.category = 'raid' AND li.start_time >= $1::timestamptz)::bigint AS raids_recent,
+  COUNT(DISTINCT COALESCE(li.duplicate_group_id, li.id)) FILTER (WHERE li.category = 'raid')::bigint AS raids,
+  COUNT(DISTINCT COALESCE(li.duplicate_group_id, li.id)) FILTER (WHERE li.category = 'dungeon' AND li.start_time >= $1::timestamptz)::bigint AS dungeons_recent,
+  COUNT(DISTINCT COALESCE(li.duplicate_group_id, li.id)) FILTER (WHERE li.category = 'dungeon')::bigint AS dungeons,
+  COUNT(DISTINCT li.log_group_id) FILTER (WHERE li.start_time >= $1::timestamptz)::bigint AS logs_recent,
+  COUNT(DISTINCT li.log_group_id)::bigint AS logs
+FROM log_instances li
+JOIN wow_server_realms wsr ON wsr.id = li.realm_id
+JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
+WHERE li.start_time >= $2::timestamptz
+  AND li.invalidated_at IS NULL
+`
+
+type StatsHubActivityParams struct {
+	SinceRecent pgtype.Timestamptz `db:"since_recent" json:"since_recent"`
+	Since       pgtype.Timestamptz `db:"since" json:"since"`
+}
+
+type StatsHubActivityRow struct {
+	RaidsRecent    int64 `db:"raids_recent" json:"raids_recent"`
+	Raids          int64 `db:"raids" json:"raids"`
+	DungeonsRecent int64 `db:"dungeons_recent" json:"dungeons_recent"`
+	Dungeons       int64 `db:"dungeons" json:"dungeons"`
+	LogsRecent     int64 `db:"logs_recent" json:"logs_recent"`
+	Logs           int64 `db:"logs" json:"logs"`
+}
+
+// The request tenant's listed raids, dungeon runs (logical runs, so duplicate
+// uploads count once) and uploaded logs, since @since and since @since_recent
+// (the later cutoff), in one scan. RLS on wow_server_realms scopes it to the
+// tenant in context. Background job only.
+func (q *sqlQuerier) StatsHubActivity(ctx context.Context, arg StatsHubActivityParams) (StatsHubActivityRow, error) {
+	row := q.db.QueryRow(ctx, statsHubActivity, arg.SinceRecent, arg.Since)
+	var i StatsHubActivityRow
+	err := row.Scan(
+		&i.RaidsRecent,
+		&i.Raids,
+		&i.DungeonsRecent,
+		&i.Dungeons,
+		&i.LogsRecent,
+		&i.Logs,
+	)
+	return i, err
+}
+
+const statsHubInstances = `-- name: StatsHubInstances :many
+SELECT
+  li.name,
+  li.category::text AS category,
+  COUNT(DISTINCT COALESCE(li.duplicate_group_id, li.id)) FILTER (WHERE li.start_time >= $1::timestamptz)::bigint AS runs_recent,
+  COUNT(DISTINCT COALESCE(li.duplicate_group_id, li.id))::bigint AS runs
+FROM log_instances li
+JOIN wow_server_realms wsr ON wsr.id = li.realm_id
+JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
+WHERE li.start_time >= $2::timestamptz
+  AND li.invalidated_at IS NULL
+  AND li.category IN ('raid', 'dungeon')
+GROUP BY li.name, li.category
+ORDER BY li.category DESC, runs DESC, li.name
+`
+
+type StatsHubInstancesParams struct {
+	SinceRecent pgtype.Timestamptz `db:"since_recent" json:"since_recent"`
+	Since       pgtype.Timestamptz `db:"since" json:"since"`
+}
+
+type StatsHubInstancesRow struct {
+	Name       string `db:"name" json:"name"`
+	Category   string `db:"category" json:"category"`
+	RunsRecent int64  `db:"runs_recent" json:"runs_recent"`
+	Runs       int64  `db:"runs" json:"runs"`
+}
+
+// The request tenant's raids and dungeons with listed runs since @since, with
+// run counts (logical runs) since @since and since @since_recent.
+func (q *sqlQuerier) StatsHubInstances(ctx context.Context, arg StatsHubInstancesParams) ([]StatsHubInstancesRow, error) {
+	rows, err := q.db.Query(ctx, statsHubInstances, arg.SinceRecent, arg.Since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []StatsHubInstancesRow
+	for rows.Next() {
+		var i StatsHubInstancesRow
+		if err := rows.Scan(
+			&i.Name,
+			&i.Category,
+			&i.RunsRecent,
+			&i.Runs,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const statsHubPlayers = `-- name: StatsHubPlayers :one
+SELECT
+  COUNT(DISTINCT (li.realm_id, lip.unit_guid)) FILTER (WHERE li.start_time >= $1::timestamptz)::bigint AS players_recent,
+  COUNT(DISTINCT (li.realm_id, lip.unit_guid))::bigint AS players
+FROM log_instances li
+JOIN wow_server_realms wsr ON wsr.id = li.realm_id
+JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
+JOIN log_instance_players lip ON lip.instance_id = li.id
+WHERE li.start_time >= $2::timestamptz
+  AND li.invalidated_at IS NULL
+`
+
+type StatsHubPlayersParams struct {
+	SinceRecent pgtype.Timestamptz `db:"since_recent" json:"since_recent"`
+	Since       pgtype.Timestamptz `db:"since" json:"since"`
+}
+
+type StatsHubPlayersRow struct {
+	PlayersRecent int64 `db:"players_recent" json:"players_recent"`
+	Players       int64 `db:"players" json:"players"`
+}
+
+// Distinct players seen in the request tenant's listed logs since @since and
+// since @since_recent, in one scan. Background job only.
+func (q *sqlQuerier) StatsHubPlayers(ctx context.Context, arg StatsHubPlayersParams) (StatsHubPlayersRow, error) {
+	row := q.db.QueryRow(ctx, statsHubPlayers, arg.SinceRecent, arg.Since)
+	var i StatsHubPlayersRow
+	err := row.Scan(&i.PlayersRecent, &i.Players)
+	return i, err
+}
+
+const statsHubSpeedruns = `-- name: StatsHubSpeedruns :many
+SELECT sr.instance_name, COUNT(*)::bigint AS speedruns
+FROM instance_speedruns sr
+JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
+JOIN log_instances li ON li.id = sr.instance_id AND li.invalidated_at IS NULL
+JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
+WHERE sr.qualified
+GROUP BY sr.instance_name
+`
+
+type StatsHubSpeedrunsRow struct {
+	InstanceName string `db:"instance_name" json:"instance_name"`
+	Speedruns    int64  `db:"speedruns" json:"speedruns"`
+}
+
+// Qualified speedruns per instance name in the request tenant's listed,
+// valid logs, all time (the speedrun boards' scope).
+func (q *sqlQuerier) StatsHubSpeedruns(ctx context.Context) ([]StatsHubSpeedrunsRow, error) {
+	rows, err := q.db.Query(ctx, statsHubSpeedruns)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []StatsHubSpeedrunsRow
+	for rows.Next() {
+		var i StatsHubSpeedrunsRow
+		if err := rows.Scan(&i.InstanceName, &i.Speedruns); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const statsTenantPlayerCount = `-- name: StatsTenantPlayerCount :one
 SELECT COUNT(DISTINCT (li.realm_id, lip.unit_guid))::bigint
 FROM log_instances li
