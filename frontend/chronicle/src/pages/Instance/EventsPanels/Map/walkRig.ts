@@ -43,7 +43,7 @@ export interface WalkRigHost {
   /** Scratch for the head and the camera direction (owned by the scene, as before). */
   head: THREE.Vector3;
   direction: THREE.Vector3;
-  /** The collision pass for a camera `want` away from `from` along `direction` (MapScene3D.collideCamera). */
+  /** The collision pass for a camera `want` away from `from` along `direction` (CameraCollision.cast). */
   collideCamera(from: THREE.Vector3, direction: THREE.Vector3, shown: number, want: number, padding: number, min: number, dt: number): { distance: number; easing: boolean };
   walking(): boolean;
 }

@@ -6,8 +6,8 @@
  * only when the fight leaves the dead zones. Its line of sight climbs (and
  * shortens) around the cave, a replay jump glides or cuts, and a wall eases
  * its camera in from last frame's collision ray (the deliberate one-frame
- * lag: MapScene3D's collision pass writes `allowed` after the camera is
- * placed, and the next frame reads it).
+ * lag: the orbit pass in cameraCollision.ts writes `allowed` after the
+ * camera is placed, and the next frame reads it).
  *
  * MapScene3D keeps the decision of whether it runs (`directing`, through the
  * camera arbiter) and placing the camera (`place`: the floor, the pivot, the

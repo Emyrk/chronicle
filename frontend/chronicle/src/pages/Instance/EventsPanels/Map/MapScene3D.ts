@@ -5,8 +5,7 @@ import type { MapCameraPose } from "./cameraPath";
 import type { DroneProbe } from "./droneCamera";
 import { CAPSULE_AVATAR, walkAvatarUrl } from "./walkAvatars";
 import type { LiveMapPresence } from "../../liveSessionProtocol";
-import { actionForKey, cameraAngles, cameraCollisionDistance, cameraOffset, clampMobileMapInput, frameStepSeconds, IDLE_MOBILE_MAP_INPUT, type MobileMapInput, planarStep, pointerLossEndsDrag, turnYaw, WALK_TOGGLE_KEY, walkDragButton, walkMouseControl, walkMovementYaw, wheelZoomDistance } from "./mapControls";
-import { directorPullIn } from "./followCamera";
+import { actionForKey, cameraAngles, cameraOffset, clampMobileMapInput, frameStepSeconds, IDLE_MOBILE_MAP_INPUT, type MobileMapInput, planarStep, pointerLossEndsDrag, turnYaw, WALK_TOGGLE_KEY, walkDragButton, walkMouseControl, walkMovementYaw, wheelZoomDistance } from "./mapControls";
 import { type DispelKind } from "./unitTokenArt";
 import { UnitTokenTextures } from "./unitTokens";
 import type { PlanInput, PlanItem, PlanMarkerIcon, PlanPoint } from "./plan/mapPlan";
@@ -30,10 +29,8 @@ import { createAvatar, createUnitGeometries, createWalkAvatarModel, playWalkAvat
 import { loadWalkAvatar } from "./sceneLoaders";
 import { GROUND_WIDTH, MESH_PLAYER_HEIGHT_YARDS, ORBIT_FAR, ORBIT_NEAR, PLAYER_GEOMETRY_HEIGHT, TOKEN_RADIUS } from "./sceneConstants";
 import {
-  COLLISION_RETURN_RATE_PER_S,
   DEFAULT_AD_STRAFE,
   DOUBLE_CLICK_OUT_FACTOR,
-  FREE_CAM_COLLISION_PADDING_SCENE_UNITS,
   MESH_FULL_MAP_DISTANCE_FACTOR,
   MESH_MAX_DISTANCE_FACTOR,
   MESH_MAX_POLAR_RADIANS,
@@ -68,6 +65,7 @@ import { ScriptedRig } from "./scriptedRig";
 import { FreeRig } from "./freeRig";
 import { WalkRig } from "./walkRig";
 import { DirectorRig } from "./directorRig";
+import { CameraCollision } from "./cameraCollision";
 import { MapInputState, mobileInputActive, MouseDrag, type InputFrame } from "./inputFrame";
 import { UnitLayer, type UnitObject } from "./unitLayer";
 import { EffectsLayer } from "./effectsLayer";
@@ -97,8 +95,6 @@ const MESH_MIN_SCREEN_SCALE = 0.5;
 // With a fight focused, the target can pan this far (yards) from the focus
 // centre (the zoom limits are in controlProfile).
 const MESH_PAN_RADIUS_YARDS = FOCUS_RADIUS_YARDS;
-// The camera stays at least this far (scene units) above the floor beneath it.
-const MESH_CAMERA_CLEARANCE = 0.3;
 // The camera direction the mesh starts from: steeper than ANGLED_OFFSET so
 // the rock between the camera and a sunken chamber hides less of the fight.
 const MESH_ANGLED_OFFSET = new THREE.Vector3(0, 1.6, 0.75);
@@ -481,15 +477,14 @@ export class MapScene3D {
   }
   // Scratch for the camera angle reads (cameraYaw, cameraElevationDeg) and the free cam; the effect layer owns `vector`.
   private readonly directorVector = new THREE.Vector3();
-  // Camera collision scratch, and the orbit distance the user wants (the
-  // camera may sit closer while a wall is in the way) and the one last set.
-  private readonly collisionEye = new THREE.Vector3();
+  // The one collision and floor-clamp pass, each rig by its policy (cameraCollision.ts).
+  private readonly collision = new CameraCollision({
+    camera: this.camera,
+    controls: () => this.controls,
+    world: this.world,
+  });
+  // Scratch: the camera before the orbit pass, to tell whether it moved it.
   private readonly collisionBefore = new THREE.Vector3();
-  private readonly collisionFrom = new THREE.Vector3();
-  private readonly collisionDirection = new THREE.Vector3();
-  private orbitWantDistance: number | null = null;
-  private orbitShownDistance: number | null = null;
-  private collisionLastMs = 0;
   // How far past the pan radius the Director left the camera: the user's
   // pan limit grows by this on handover (and only shrinks), so grabbing the
   // camera never snaps it back toward the focus in one step.
@@ -529,8 +524,8 @@ export class MapScene3D {
     camera: this.camera,
     controls: () => this.controls,
     head: this.walkHead,
-    direction: this.collisionDirection,
-    collideCamera: (from, direction, shown, want, padding, min, dt) => this.collideCamera(from, direction, shown, want, padding, min, dt),
+    direction: this.collision.direction,
+    collideCamera: (from, direction, shown, want, padding, min, dt) => this.collision.cast(from, direction, shown, want, padding, min, dt),
     walking: () => this.walk !== null,
   });
   private readonly onEffectHover: (hover: MapScene3DEffectHover | null) => void;
@@ -676,7 +671,7 @@ export class MapScene3D {
       capture: this.capture !== null,
       scratch: this.directorVector,
       pivotFloor: (x, z) => this.pivotFloor(x, z),
-      wantDistance: () => this.orbitWantDistance,
+      wantDistance: () => this.collision.wantDistance,
       requestRender: () => this.requestRender(),
     });
     this.controls.addEventListener("change", this.handleControlsChange);
@@ -1184,7 +1179,7 @@ export class MapScene3D {
     const mesh = this.dungeonMesh;
     if (this.constraining) return false;
     if (!mesh || this.walk) {
-      this.orbitWantDistance = this.orbitShownDistance = null;
+      this.collision.reset();
       return false;
     }
     const { target } = this.controls;
@@ -1222,24 +1217,18 @@ export class MapScene3D {
       target.y = floor;
       moved = true;
     }
-    // Only the floor below the camera lifts it: the highest surface over its
-    // spot may be a wall top, a ledge or a roof, and lifting the camera onto
-    // that tips the view straight down. Walls between the camera and the
-    // target are the collision pass's job.
-    const below = this.world.castFloor(position.x, position.z, position.y + MESH_CAMERA_CLEARANCE);
-    if (below !== null && position.y < below + MESH_CAMERA_CLEARANCE) {
-      position.y = below + MESH_CAMERA_CLEARANCE;
-      moved = true;
-    }
+    // The camera above the floor beneath it, then clear of the cave (the
+    // Director measures only: it eases in from the ray next frame).
+    if (this.collision.clampAboveFloor(position)) moved = true;
     const before = this.collisionBefore.copy(position);
-    const easing = this.collideOrbitCamera(dt, arrived);
+    const easing = this.collision.orbit(dt, arrived, this.directing() ? this.directorRig : null);
     if (!position.equals(before)) moved = true;
     if (moved) {
       this.constraining = true;
       this.controls.update();
       this.constraining = false;
     }
-    this.orbitShownDistance = position.distanceTo(target);
+    this.collision.shown(position.distanceTo(target));
     return easing;
   }
 
@@ -1271,50 +1260,6 @@ export class MapScene3D {
     this.controls.update();
     this.constrainCamera();
     this.updateUnitScale();
-  }
-
-  // Keeps the cave from standing between the orbit target and the camera: a
-  // wall pulls the camera in along its line of sight, and once clear it eases
-  // back out to the distance the user (or the Director) chose. `arrived` is
-  // the distance before this constrain pass: when it differs from the one the
-  // last pass left, something else moved the camera (a zoom, a new shot) and
-  // that becomes the new choice. True while it is still easing out.
-  private collideOrbitCamera(dt: number, arrived: number): boolean {
-    const { target } = this.controls;
-    const { position } = this.camera;
-    const shown = position.distanceTo(target);
-    const mesh = this.dungeonMesh;
-    if (!mesh || shown <= 1e-6) return false;
-    // From the fight's height, as clearShot does: the target sits on the
-    // floor, which a ray from it would graze at once.
-    const from = this.collisionFrom.copy(target);
-    from.y += MESH_PLAYER_HEIGHT_YARDS * mesh.scale;
-    const direction = this.collisionDirection.copy(position).sub(target).divideScalar(shown);
-    // The Director eases its own camera in from a wall (updateDirector reads
-    // what this ray allows), so a cave wall is not a one-frame pull-in.
-    if (this.directing() && this.directorRig.want !== null) {
-      const want = this.directorRig.want;
-      const hit = want > 0 ? this.world.meshHitDistance(from, this.collisionEye.copy(direction).multiplyScalar(want).add(from)) : null;
-      this.directorRig.allowed = directorPullIn(want, hit, FREE_CAM_COLLISION_PADDING_SCENE_UNITS, this.controls.minDistance);
-      this.orbitWantDistance = shown;
-      return false;
-    }
-    const last = this.orbitShownDistance;
-    if (last === null || this.orbitWantDistance === null || Math.abs(arrived - last) > 1e-4 * Math.max(1, arrived)) this.orbitWantDistance = arrived;
-    const want = this.orbitWantDistance;
-    const { distance: next, easing } = this.collideCamera(from, direction, shown, want, FREE_CAM_COLLISION_PADDING_SCENE_UNITS, Math.min(want, this.controls.minDistance), dt);
-    if (next !== shown) position.sub(target).multiplyScalar(next / shown).add(target);
-    return easing;
-  }
-
-  // Camera collision for both modes (chronicle-1513): how far out from
-  // `from` along `direction` (a unit vector) the camera may sit this frame,
-  // having been `shown` away and wanting to be `want` away (scene units).
-  // `easing` is true while it is still easing back out from a wall that is gone.
-  private collideCamera(from: THREE.Vector3, direction: THREE.Vector3, shown: number, want: number, padding: number, min: number, dt: number): { distance: number; easing: boolean } {
-    const hit = want > 0 ? this.world.meshHitDistance(from, this.collisionEye.copy(direction).multiplyScalar(want).add(from)) : null;
-    const distance = cameraCollisionDistance(shown, want, hit, padding, min, COLLISION_RETURN_RATE_PER_S, dt);
-    return { distance, easing: distance < want && (hit === null || hit - padding > distance) };
   }
 
   // One Director step (DirectorRig.update); returns whether the camera needs another frame.
@@ -2189,7 +2134,7 @@ export class MapScene3D {
       if (!this.controls.enabled) return;
       // From the distance the user chose, not where a wall pulled the camera in.
       const { yaw, pitch, distance } = this.free.freeCamAngles();
-      const next = wheelZoomDistance(this.orbitWantDistance ?? distance, event.deltaY, this.controls.minDistance, this.controls.maxDistance);
+      const next = wheelZoomDistance(this.collision.wantDistance ?? distance, event.deltaY, this.controls.minDistance, this.controls.maxDistance);
       this.handleControlsStart();
       this.free.placeFreeCam(yaw, pitch, next);
       this.handleControlsEnd();
@@ -2279,11 +2224,10 @@ export class MapScene3D {
     // whether it is still moving, so the loop idles again once it settles.
     // Walking, the character places the camera; OrbitControls would clamp it back.
     const damping = !walking && this.controls.update();
-    const collisionDt = frameStepSeconds(now, this.collisionLastMs);
-    this.collisionLastMs = now;
+    const collisionDt = this.collision.step(now);
     // A camera pulled in by a wall eases back out once the wall is gone.
     const uncolliding = !walking && this.constrainCamera(collisionDt);
-    if (!uncolliding && !damping) this.collisionLastMs = 0;
+    if (!uncolliding && !damping) this.collision.rest();
     const effectsAnimating = this.updateEffects(now);
     const whelpsAnimating = this.updateWhelpAnimations(now);
     const animating = effectsAnimating || whelpsAnimating || reframing || moving || directing || keyMoving || (!this.walkCaptureActive && walking) || presencesMoving || damping || uncolliding;
