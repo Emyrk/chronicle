@@ -218,3 +218,23 @@ export function createIconMaterial(): THREE.SpriteMaterial {
   material.customProgramCacheKey = () => "cast-icon-saturation";
   return material;
 }
+
+// Instanced primitive pools (effects and health bars): `color` is the scratch
+// colour the caller shares, written while the pool is set up.
+export function createPool(geometry: THREE.BufferGeometry, material: THREE.MeshBasicMaterial, size: number, color: THREE.Color) {
+  const pool = new THREE.InstancedMesh(geometry, material, size);
+  pool.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  // Allocate the colour buffer once, up front.
+  for (let index = 0; index < size; index++) pool.setColorAt(index, color.setRGB(0, 0, 0));
+  pool.count = 0;
+  pool.frustumCulled = false;
+  return pool;
+}
+
+export function commitPool(pool: THREE.InstancedMesh, count: number) {
+  pool.count = count;
+  pool.boundingSphere = null;
+  if (count === 0) return;
+  pool.instanceMatrix.needsUpdate = true;
+  pool.instanceColor!.needsUpdate = true;
+}

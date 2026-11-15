@@ -42,44 +42,30 @@ import {
 import { MAP_CURSOR, MAP_HOSTILE_CURSOR, MAP_UNIT_CURSOR } from "./mapCursors";
 import { FLOOR_TRACK_TOLERANCE_YARDS, floorTrackAt, type FloorTracks } from "./walkableFloors";
 import { flatArtworkUnitScale, FOCUS_RADIUS_YARDS, FULL_MAP_VIEWPORT, healthBarColor, interpolateViewport, mapPointToScene, MAX_HEALTH_BARS, MAX_PLAYER_HEALTH_BARS, PLAYER_BAR_SCALE, topDownMapDistance, type MapPoint, type MapViewport } from "./mapModel";
-import { deepBreathPathForPrimarySpell, ONYXIA_DEEP_BREATH_RADIUS_YARDS } from "./deepBreathLanes";
-import { projectMapDebugPoints, type MapDebugOverlay } from "./mapDebugOverlays";
+import { type MapDebugOverlay } from "./mapDebugOverlays";
 import {
-  DEFAULT_EFFECT_OPTIONS,
-  DEEP_BREATH_POINT_LINGER_MS,
-  deriveActiveRadialEffects,
-  deriveActiveDeepBreaths,
-  deriveActiveEffects,
   deriveCastIcons,
   deriveCombatText,
   deriveRecentHealGain,
-  deriveLastHitTargets,
-  deriveUnitCasts,
-  deathStartedAt,
   INTERRUPTED_ICON_MS,
   INTERRUPTED_PLAYER_ICON_MS,
   MAX_EFFECT_PRIMITIVES,
-  schoolColor,
-  type ActiveRadialEffect,
-  type ActiveDeepBreath,
-  type ActiveEffect,
   type CastIcon,
   type CombatText,
   type DeriveEffectsOptions,
   type EncounterEffects,
   type ReplayEffectKind,
-  type UnitCast,
 } from "./replayEffects";
 import type { MapMarkerKind, MapSceneGround, MapUnitHealth } from "./useMapScene";
 import { type ModelLocomotion } from "./modelAnimation";
-import { setMaterialEmissive } from "./mapMaterials";
-import { CAST_ARC_SIZE, createArcTexture, createAvatar, createIconMaterial, createTextTexture, createUnitGeometries, createWalkAvatarModel, easeOutBack, easeOutCubic, playWalkAvatarState, shortNumber, type WalkAvatarModel } from "./sceneFactories";
+import { CAST_ARC_SIZE, createArcTexture, createAvatar, createIconMaterial, createTextTexture, createUnitGeometries, createWalkAvatarModel, easeOutBack, easeOutCubic, playWalkAvatarState, shortNumber, type WalkAvatarModel, commitPool, createPool } from "./sceneFactories";
 import { loadWalkAvatar } from "./sceneLoaders";
-import { BAR_HEIGHT, DEEP_BREATH_GROUND_LIFT, GROUND_WIDTH, KEY_MAX_STEP_S, MESH_PLAYER_HEIGHT_YARDS, PLAYER_GEOMETRY_HEIGHT, TOKEN_RADIUS } from "./sceneConstants";
+import { BAR_HEIGHT, GROUND_WIDTH, KEY_MAX_STEP_S, MAX_CAST_ICONS, MESH_PLAYER_HEIGHT_YARDS, PLAYER_GEOMETRY_HEIGHT, TOKEN_RADIUS } from "./sceneConstants";
 import { LivePresence } from "./livePresence";
 import { DungeonWorld, type DungeonMesh } from "./dungeonWorld";
 import { DebugOverlayLayer } from "./debugOverlays";
 import { UnitLayer, type UnitObject } from "./unitLayer";
+import { EffectsLayer, type EffectsHud } from "./effectsLayer";
 
 /** Ground plane width in scene units; depth follows the artwork's aspect. */
 export { GROUND_WIDTH };
@@ -89,19 +75,6 @@ export { GROUND_WIDTH };
 const PLATE_SCREEN_SCALE = 0.8;
 /** Primitive pool size for each effect kind; also the derivation cap's ceiling. */
 export { MAX_EFFECT_PRIMITIVES };
-// Never run the effect clock further ahead of the last replay tick (real time).
-const MAX_EXTRAPOLATE_MS = 250;
-const BEAM_HEIGHT = 1.5;
-const BOLT_WIDTH = 0.18;
-const MAX_DEEP_BREATH_POINTS = 20;
-const MAX_RADIAL_EFFECTS = 8;
-const RADIAL_GROUND_LIFT = 0.1;
-const DEEP_BREATH_AREA_OPACITY = 0.12;
-const DEEP_BREATH_POINT_SIZE_PX = 7;
-// How far a melee attacker steps toward its target, at most.
-const LUNGE_DISTANCE = 1.2;
-const SLASH_HEIGHT = 1.2;
-const SLASH_RADIUS = 1.8;
 const BAR_WIDTH = 2.6;
 const BAR_THICKNESS = 0.36;
 const BAR_PADDING = 0.14;
@@ -111,13 +84,10 @@ const POWER_STRIP_GAP = 0.05;
 // Quads per bar: backing, health, healed, absorb, power.
 const BAR_QUADS = 5;
 const BAR_POOL_SIZE = (MAX_HEALTH_BARS + MAX_PLAYER_HEALTH_BARS) * BAR_QUADS;
-const Z_AXIS = new THREE.Vector3(0, 0, 1);
 const MAX_COMBAT_TEXT = 8;
 const COMBAT_TEXT_HEIGHT = 1.8;
 // Rendered label textures kept for reuse (spell name + colour).
 const MAX_LABEL_TEXTURES = 128;
-// Spell icons above casters: pooled sprites over the bars and combat text.
-const MAX_CAST_ICONS = 12;
 // About 26 px at the constant on-screen size.
 const CAST_ICON_SIZE = 2.6;
 // Gap between a caster's health bar and the bottom of its icons.
@@ -538,6 +508,8 @@ export class MapScene3D {
   private readonly unitsGroup = new THREE.Group();
   // Units, their models, trails and target lines, and the no-Z floor tracks (unitLayer.ts).
   private readonly unitLayer: UnitLayer;
+  // Effect pools and the effect clock (effectsLayer.ts).
+  private readonly effectsLayer: EffectsLayer;
   private get units(): ReadonlyMap<string, UnitObject> {
     return this.unitLayer.units;
   }
@@ -708,35 +680,6 @@ export class MapScene3D {
     start: number;
   } | null = null;
 
-  // Effects layer: pooled primitives, re-derived from the effect clock on
-  // every rendered frame. Nothing here is allocated per frame.
-  private effects: MapScene3DEffects | null = null;
-  private clock = { ms: 0, at: 0, playing: false, speed: 1 };
-  // The effect clock's time at the last updateEffects, for the bars' heal chunk.
-  private effectCursorMs = 0;
-  private readonly activeEffects: ActiveEffect[] = [];
-  private readonly activeRadialEffects: ActiveRadialEffect[] = [];
-  private readonly activeDeepBreaths: ActiveDeepBreath[] = [];
-  // The server path being drawn, fixed when it starts: Onyxia keeps flying and
-  // turning afterwards, but the ground-target sequence stays in room space.
-  private deepBreathPathLock: { primarySpellId: number; startMs: number } | null = null;
-  private readonly deepBreathAreaPositions: THREE.Vector3[] = [];
-  private readonly deepBreathAreas: THREE.InstancedMesh<THREE.CircleGeometry, THREE.MeshBasicMaterial>;
-  private readonly deepBreathLine: THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>;
-  private readonly deepBreathPoints: THREE.Points<THREE.BufferGeometry, THREE.PointsMaterial>;
-  private readonly effectOptions: DeriveEffectsOptions = { ...DEFAULT_EFFECT_OPTIONS };
-  private readonly visibleUnits = { has: (guid: string) => this.units.has(guid) };
-  private readonly effectColors = new Map<string, THREE.Color>();
-  private readonly wobbling: UnitObject[] = [];
-  private readonly lunging: UnitObject[] = [];
-  private readonly beamPositions = new Float32Array(MAX_EFFECT_PRIMITIVES * 6);
-  private readonly beamColors = new Float32Array(MAX_EFFECT_PRIMITIVES * 6);
-  private readonly beams: THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>;
-  private readonly rings: THREE.InstancedMesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
-  private readonly radialSpheres: THREE.InstancedMesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
-  private readonly radialRings: THREE.InstancedMesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
-  private readonly bolts: THREE.InstancedMesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
-  private readonly slashes: THREE.InstancedMesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   // Background, fill, heal chunk and absorb quads per bar.
   private readonly bars: THREE.InstancedMesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   private readonly matrix = new THREE.Matrix4();
@@ -746,11 +689,6 @@ export class MapScene3D {
   private readonly vectorC = new THREE.Vector3();
   private readonly scaleVector = new THREE.Vector3();
   private readonly quaternion = new THREE.Quaternion();
-  // Index into activeEffects of each pooled primitive, for hover picking.
-  private readonly beamEffects = new Int16Array(MAX_EFFECT_PRIMITIVES);
-  private readonly boltEffects = new Int16Array(MAX_EFFECT_PRIMITIVES);
-  private readonly slashEffects = new Int16Array(MAX_EFFECT_PRIMITIVES);
-  private readonly ringEffects = new Int16Array(MAX_EFFECT_PRIMITIVES);
   private pointerInside = false;
   // The window the map lives in: a popped-out panel has its own.
   private readonly keyWindow: Window;
@@ -769,20 +707,10 @@ export class MapScene3D {
   private planSurface: PlanSurface | null = null;
   private planInput: PlanInput | null = null;
   private planPointer: number | null = null;
-  private readonly unitCasts = new Map<string, UnitCast>();
-  private readonly lastHitTargets = new Map<string, string>();
-  // Enemies on the map without a logged facing.
-  private readonly hitFacingSources = {
-    has: (guid: string) => {
-      const object = this.units.get(guid);
-      return object !== undefined && object.kind === "hostile" && !object.loggedFacing;
-    },
-  };
   private readonly presence: LivePresence;
   private onWalkChange: (walking: boolean) => void = () => {};
   private readonly walkHead = new THREE.Vector3();
   private keyMoveLastMs = 0;
-  private hoveredEffectKey = "";
   private readonly onEffectHover: (hover: MapScene3DEffectHover | null) => void;
   private readonly combatText: CombatText[] = [];
   private readonly combatSprites: THREE.Sprite[] = [];
@@ -877,140 +805,71 @@ export class MapScene3D {
     this.scene.add(this.meshLight);
     this.scene.add(this.groundGroup, this.debugLayer.debugOverlayGroup, this.unitsGroup, this.planLayer.group);
 
-    const beamGeometry = new THREE.BufferGeometry();
-    beamGeometry.setAttribute("position", new THREE.BufferAttribute(this.beamPositions, 3).setUsage(THREE.DynamicDrawUsage));
-    beamGeometry.setAttribute("color", new THREE.BufferAttribute(this.beamColors, 3).setUsage(THREE.DynamicDrawUsage));
-    beamGeometry.setDrawRange(0, 0);
-    this.beams = new THREE.LineSegments(beamGeometry, new THREE.LineBasicMaterial({
-      vertexColors: true,
-      transparent: true,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    }));
-    this.beams.frustumCulled = false;
-    // The unit layer builds its owner and trail lines here, between the effect
-    // beams and the other pools, so every pool keeps its creation order (object
-    // ids break draw-order ties between transparent pools at the origin).
-    this.unitLayer = new UnitLayer({
+    // The effects layer builds its pools in the order the scene always did,
+    // calling back between the beams and the rest so the unit layer's owner
+    // and trail lines come in between (object ids break draw-order ties
+    // between transparent pools at the origin).
+    const built: { unitLayer?: UnitLayer } = {};
+    const effectsHud: EffectsHud = {
+      updateCombatText: (fx, cursorMs) => this.updateCombatText(fx, cursorMs),
+      updateCastIcons: (fx, cursorMs) => this.updateCastIcons(fx, cursorMs),
+      castIcons: this.castIcons,
+      castSprites: this.castSprites,
+      castSpriteIcons: this.castSpriteIcons,
+      castIconCast: this.castIconCast,
+    };
+    this.effectsLayer = new EffectsLayer({
       scene: this.scene,
-      unitsGroup: this.unitsGroup,
       world: this.world,
-      tokenTextures: this.tokenTextures,
       camera: this.camera,
-      scratch: { color: this.color, matrix: this.matrix, vector: this.vector, vectorB: this.vectorB },
-      effects: {
-        clock: this.clock,
-        unitCasts: this.unitCasts,
-        wobbling: this.wobbling,
-        lunging: this.lunging,
-        castColor: (cast) => this.castColor(cast),
-      },
+      renderer: this.renderer,
+      raycaster: this.raycaster,
+      pointer: this.pointer,
+      scratch: { color: this.color, matrix: this.matrix, quaternion: this.quaternion, scaleVector: this.scaleVector, vector: this.vector, vectorB: this.vectorB },
+      units: () => this.unitLayer,
+      hud: () => effectsHud,
       now: this.now,
       requestRender: () => this.requestRender(),
-      updatePlates: () => this.updatePlates(),
-      updateCursor: () => this.updateCursor(),
+      onEffectHover: (hover) => this.onEffectHover(hover),
       aspect: () => this.aspect,
-      disposed: () => this.disposed,
       dungeonMesh: () => this.dungeonMesh,
-      followSource: () => this.followSource,
       unitScale: () => this.unitScale,
-      worldUnitScale: () => this.worldUnitScale,
-      hoveredGuid: () => this.hoveredGuid,
-      setHoveredGuid: (guid) => {
-        this.hoveredGuid = guid;
-      },
+      pointerInside: () => this.pointerInside,
+    }, (effects) => {
+      built.unitLayer = new UnitLayer({
+        scene: this.scene,
+        unitsGroup: this.unitsGroup,
+        world: this.world,
+        tokenTextures: this.tokenTextures,
+        camera: this.camera,
+        scratch: { color: this.color, matrix: this.matrix, vector: this.vector, vectorB: this.vectorB },
+        effects,
+        now: this.now,
+        requestRender: () => this.requestRender(),
+        updatePlates: () => this.updatePlates(),
+        updateCursor: () => this.updateCursor(),
+        aspect: () => this.aspect,
+        disposed: () => this.disposed,
+        dungeonMesh: () => this.dungeonMesh,
+        followSource: () => this.followSource,
+        unitScale: () => this.unitScale,
+        worldUnitScale: () => this.worldUnitScale,
+        hoveredGuid: () => this.hoveredGuid,
+        setHoveredGuid: (guid) => {
+          this.hoveredGuid = guid;
+        },
+      });
     });
-    const glow = () => new THREE.MeshBasicMaterial({ transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
-    this.rings = this.createPool(new THREE.RingGeometry(0.85, 1, 40).rotateX(-Math.PI / 2), glow(), MAX_EFFECT_PRIMITIVES);
-    this.radialSpheres = this.createPool(
-      new THREE.SphereGeometry(1, 32, 16),
-      new THREE.MeshBasicMaterial({
-        transparent: true,
-        opacity: 0.3,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-      }),
-      MAX_RADIAL_EFFECTS,
-    );
-    this.radialSpheres.renderOrder = 2;
-    this.radialRings = this.createPool(new THREE.RingGeometry(0.9, 1, 64).rotateX(-Math.PI / 2), glow(), MAX_RADIAL_EFFECTS);
-    this.radialRings.frustumCulled = false;
-    this.radialRings.renderOrder = 2;
-    // Spell bolts: unit boxes stretched along the source -> target segment.
-    this.bolts = this.createPool(new THREE.BoxGeometry(1, 1, 1), glow(), MAX_EFFECT_PRIMITIVES);
-    // Melee slashes: a third of a ring, centred on +x before rotation.
-    this.slashes = this.createPool(
-      new THREE.RingGeometry(0.75, 1, 16, 1, -Math.PI / 3, (Math.PI * 2) / 3).rotateX(-Math.PI / 2),
-      glow(),
-      MAX_EFFECT_PRIMITIVES,
-    );
-    this.deepBreathAreas = new THREE.InstancedMesh(
-      new THREE.CircleGeometry(1, 64).rotateX(-Math.PI / 2),
-      new THREE.MeshBasicMaterial({
-        color: 0xff6a00,
-        transparent: true,
-        opacity: DEEP_BREATH_AREA_OPACITY,
-        depthTest: false,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-      }),
-      MAX_DEEP_BREATH_POINTS,
-    );
-    this.deepBreathAreas.count = 0;
-    this.deepBreathAreas.visible = false;
-    this.deepBreathAreas.frustumCulled = false;
-    this.deepBreathAreas.renderOrder = 1;
-    this.deepBreathAreas.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    this.deepBreathLine = new THREE.Line(
-      new THREE.BufferGeometry(),
-      new THREE.LineBasicMaterial({
-        color: 0xff6a00,
-        transparent: true,
-        opacity: 0.9,
-        blending: THREE.AdditiveBlending,
-        depthTest: false,
-        depthWrite: false,
-      }),
-    );
-    this.deepBreathLine.visible = false;
-    this.deepBreathLine.frustumCulled = false;
-    this.deepBreathLine.renderOrder = 2;
-    this.deepBreathPoints = new THREE.Points(
-      new THREE.BufferGeometry(),
-      new THREE.PointsMaterial({
-        color: 0xffa040,
-        size: DEEP_BREATH_POINT_SIZE_PX,
-        sizeAttenuation: false,
-        transparent: true,
-        opacity: 0.95,
-        blending: THREE.AdditiveBlending,
-        depthTest: false,
-        depthWrite: false,
-      }),
-    );
-    this.deepBreathPoints.visible = false;
-    this.deepBreathPoints.frustumCulled = false;
-    this.deepBreathPoints.renderOrder = 3;
+    this.unitLayer = built.unitLayer!;
     // Health bars: camera-facing quads drawn over everything, in instance order.
-    this.bars = this.createPool(
+    this.bars = createPool(
       new THREE.PlaneGeometry(1, 1),
       new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.92, depthTest: false, depthWrite: false }),
       BAR_POOL_SIZE,
+      this.color,
     );
     this.bars.renderOrder = 9;
-    this.scene.add(
-      this.beams,
-      this.rings,
-      this.radialSpheres,
-      this.radialRings,
-      this.bolts,
-      this.slashes,
-      this.deepBreathAreas,
-      this.deepBreathLine,
-      this.deepBreathPoints,
-      this.bars,
-    );
+    this.scene.add(this.bars);
     for (let index = 0; index < MAX_COMBAT_TEXT; index++) {
       const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ depthTest: false, transparent: true }));
       sprite.center.set(0.5, 0);
@@ -1173,10 +1032,7 @@ export class MapScene3D {
   }
 
   setEffects(effects: MapScene3DEffects | null) {
-    this.effects = effects?.fx ? effects : null;
-    if (this.effects) Object.assign(this.effectOptions, this.effects.options, { visibleGuids: this.visibleUnits });
-    this.effectColors.clear();
-    this.requestRender();
+    this.effectsLayer.setEffects(effects);
   }
 
   /** Persistent map diagnostics, independent of replay combat effects. */
@@ -1186,23 +1042,19 @@ export class MapScene3D {
   }
 
   /**
-   * Anchors the effect clock on a replay tick. While playing, frames run
-   * ahead of the last tick at `speed` (up to MAX_EXTRAPOLATE_MS) so short
-   * effects animate smoothly between the coarse ticks.
-   */
-  setEffectClock(cursorMs: number, playing: boolean, speed: number) {
-    this.clock.ms = cursorMs;
-    this.clock.at = this.now();
-    this.clock.playing = playing;
-    this.clock.speed = speed;
-    this.requestRender();
-  }
-
-  /**
    * Swaps the tiles for the real dungeon mesh (`request`), loading it on first
    * use, or back to the tiles with `null`. Reports loading / ready / failed
    * through `onDungeonMesh`; a failed load leaves the tiles showing.
    */
+  /**
+   * Anchors the effect clock on a replay tick. While playing, frames run
+   * ahead of the last tick at `speed` (up to MAX_EXTRAPOLATE_MS) so short
+   * effects animate smoothly between the coarse ticks (EffectsLayer).
+   */
+  setEffectClock(cursorMs: number, playing: boolean, speed: number) {
+    this.effectsLayer.setEffectClock(cursorMs, playing, speed);
+  }
+
   setDungeonMesh(request: DungeonMeshRequest | null) {
     const current = this.dungeonMesh?.url ?? this.dungeonMeshRequest?.url ?? null;
     if ((request?.url ?? null) === current) return;
@@ -1327,12 +1179,6 @@ export class MapScene3D {
     this.requestRender();
   }
 
-  // The replay time the effects show at `now` (the effect clock, run ahead while playing).
-  private replayNow(now: number): number {
-    const { clock } = this;
-    return clock.playing ? clock.ms + Math.min(now - clock.at, MAX_EXTRAPOLATE_MS) * clock.speed : clock.ms;
-  }
-
   // The framing track for the current source and followed unit, or null
   // while none fits (or the last build found nobody to frame: the per-frame
   // path then frames). A missing track is built in slices off the frame loop;
@@ -1344,7 +1190,7 @@ export class MapScene3D {
     const source = this.followSource;
     if (!mesh || !source) return null;
     const subject = this.directorSubject;
-    const speed = Math.max(1, this.clock.speed);
+    const speed = Math.max(1, this.effectsLayer.clock.speed);
     const built = this.followTrackFor;
     const fits = this.followInputsMatch(built, source.key, subject, mesh.scale);
     const stale = !fits
@@ -1983,23 +1829,23 @@ export class MapScene3D {
     this.directorAt = now;
     this.directorInFrame.clear();
     if (frame) for (const guid of frame.guids) this.directorInFrame.add(guid);
-    const replayMs = this.replayNow(now);
+    const replayMs = this.effectsLayer.replayNow(now);
     const track = this.currentFollowTrack(replayMs);
     if (!frame && !track) return false;
 
     // A replay jump: the clock moved by more than playback explains. A pause
     // or resume since the last frame re-anchors instead (the paused time is
     // not playback it missed).
-    const previousMs = this.clock.playing === this.directorReplayPlaying ? this.directorReplayMs : null;
-    const expectedMs = this.clock.playing ? (now - this.directorReplayAt) * this.clock.speed : 0;
-    const jumped = previousMs !== null && isReplayJump(previousMs, replayMs, expectedMs, this.clock.speed, this.clock.playing);
+    const previousMs = this.effectsLayer.clock.playing === this.directorReplayPlaying ? this.directorReplayMs : null;
+    const expectedMs = this.effectsLayer.clock.playing ? (now - this.directorReplayAt) * this.effectsLayer.clock.speed : 0;
+    const jumped = previousMs !== null && isReplayJump(previousMs, replayMs, expectedMs, this.effectsLayer.clock.speed, this.effectsLayer.clock.playing);
     this.directorReplayMs = replayMs;
     this.directorReplayAt = now;
-    this.directorReplayPlaying = this.clock.playing;
+    this.directorReplayPlaying = this.effectsLayer.clock.playing;
 
     // Where the group is, and the springs' goals: sampled ahead by each
     // spring's trail, which the spring then takes back.
-    const springs = track ? followSprings(this.clock.speed, this.clock.playing) : null;
+    const springs = track ? followSprings(this.effectsLayer.clock.speed, this.effectsLayer.clock.playing) : null;
     const key = track ? followKeyAt(track, replayMs, this.followKey) : null;
     const led = track ? followKeyAt(track, replayMs + springs!.leadMs, this.followLedKey) : null;
     const sized = track ? followKeyAt(track, replayMs + springs!.distanceLeadMs, this.followSizedKey) : null;
@@ -2162,7 +2008,7 @@ export class MapScene3D {
       && Math.abs(elevation - shotElevation) <= DIRECTOR_SETTLED
       && Math.abs(wrapAngle(shotYaw - yaw)) <= DIRECTOR_SETTLED_YAW;
     // Playing, the track keeps moving; paused, the line-of-sight hold may still release.
-    return !settled || (key !== null && this.clock.playing) || this.shotHold.lowerSinceMs !== null;
+    return !settled || (key !== null && this.effectsLayer.clock.playing) || this.shotHold.lowerSinceMs !== null;
   }
 
   // The distance the Director's camera sits at: `distance`, or nearer while
@@ -2304,16 +2150,8 @@ export class MapScene3D {
     // The renderer's disposal frees this scene's GPU copy of the (shared) mesh.
     this.world.dungeonMesh = null;
     for (const geometry of Object.values(this.geometries)) geometry.dispose();
-    this.beams.geometry.dispose();
-    this.beams.material.dispose();
-    this.deepBreathAreas.geometry.dispose();
-    this.deepBreathAreas.material.dispose();
-    this.deepBreathAreas.dispose();
-    this.deepBreathLine.geometry.dispose();
-    this.deepBreathLine.material.dispose();
-    this.deepBreathPoints.geometry.dispose();
-    this.deepBreathPoints.material.dispose();
-    for (const pool of [this.rings, this.bolts, this.slashes, this.bars]) {
+    this.effectsLayer.dispose();
+    for (const pool of [this.bars]) {
       pool.geometry.dispose();
       pool.material.dispose();
       pool.dispose();
@@ -2330,304 +2168,26 @@ export class MapScene3D {
     canvas.remove();
   }
 
-  // Enemies with no logged facing turn toward whoever they last hit (kept
-  // after the hit, so they do not snap back to north).
-  private updateHitFacings() {
-    const fx = this.effects?.fx;
-    if (!fx) return;
-    deriveLastHitTargets(fx, this.effectCursorMs, this.hitFacingSources, this.lastHitTargets);
-    for (const [guid, targetGuid] of this.lastHitTargets) {
-      const object = this.units.get(guid);
-      const target = this.units.get(targetGuid);
-      if (!object || !target || object.loggedFacing || object.dead) continue;
-      const dx = target.base.x - object.base.x;
-      const dz = target.base.z - object.base.z;
-      if (dx * dx + dz * dz < 1e-8) continue;
-      // Rotating -z (the notch) by θ about y gives (-sin θ, 0, -cos θ).
-      object.hitFacing = Math.atan2(-dx, -dz);
-      this.unitLayer.applyFacing(object, object.hitFacing);
-    }
-  }
-
-  private updateRadialEffects(fx: EncounterEffects | null, cursorMs: number) {
-    const radials = fx
-      ? deriveActiveRadialEffects(fx, cursorMs, this.activeRadialEffects)
-      : this.activeRadialEffects;
-    if (!fx) radials.length = 0;
-    const yardScale = this.world.yardScale(this.aspect);
-    if (yardScale === null) {
-      this.commitPool(this.radialRings, 0);
-      this.commitPool(this.radialSpheres, 0);
-      return;
-    }
-
-    let ringCount = 0;
-    let sphereCount = 0;
-    const filterGuids = this.effectOptions.filterGuids;
-    for (const radial of radials) {
-      const source = this.units.get(radial.source);
-      if ((filterGuids && !filterGuids.has(radial.source)) || !source || !source.group.visible) continue;
-      const radius = radial.radiusYards * yardScale * radial.progress;
-      if (radius <= 0) continue;
-      if (radial.shape === "sphere") {
-        if (sphereCount >= MAX_RADIAL_EFFECTS) continue;
-        this.matrix.makeScale(radius, radius, radius).setPosition(
-          source.base.x,
-          source.base.y + BEAM_HEIGHT * this.unitScale,
-          source.base.z,
-        );
-        this.radialSpheres.setMatrixAt(sphereCount, this.matrix);
-        this.radialSpheres.setColorAt(sphereCount, this.color.set(radial.color).multiplyScalar(1 - radial.progress));
-        sphereCount++;
-        continue;
-      }
-      if (ringCount >= MAX_RADIAL_EFFECTS) continue;
-      this.matrix.makeScale(radius, 1, radius).setPosition(
-        source.base.x,
-        source.base.y + RADIAL_GROUND_LIFT * this.unitScale,
-        source.base.z,
-      );
-      this.radialRings.setMatrixAt(ringCount, this.matrix);
-      this.radialRings.setColorAt(ringCount, this.color.set(radial.color).multiplyScalar(1 - radial.progress));
-      ringCount++;
-    }
-    this.commitPool(this.radialRings, ringCount);
-    this.commitPool(this.radialSpheres, sphereCount);
-  }
-
-  private hideDeepBreath() {
-    this.deepBreathAreas.count = 0;
-    this.deepBreathAreas.visible = false;
-    this.deepBreathLine.visible = false;
-    this.deepBreathPoints.visible = false;
-    this.deepBreathPathLock = null;
-  }
-
-  // Projects the authoritative ordered server targets into room space. Onyxia's
-  // current position and facing never alter this fixed geometry.
-  private setDeepBreathPath(primarySpellId: number, startMs: number): boolean {
-    const mesh = this.dungeonMesh;
-    const path = deepBreathPathForPrimarySpell(primarySpellId);
-    if (!mesh || !path) return false;
-    const projected = projectMapDebugPoints(path.points, path.mapId, mesh.bounds, this.aspect, GROUND_WIDTH);
-    if (projected.length !== path.points.length || projected.length > MAX_DEEP_BREATH_POINTS) return false;
-
-    const positions = new Float32Array(projected.length * 3);
-    this.deepBreathAreaPositions.length = 0;
-    for (let index = 0; index < projected.length; index++) {
-      const point = projected[index];
-      const floor = this.world.floorHeights.heightAt(`deep-breath-${path.key}-${index}`, point.x, point.z);
-      const floorY = floor + DEEP_BREATH_GROUND_LIFT * mesh.scale;
-      positions[index * 3] = point.x;
-      positions[index * 3 + 1] = floorY;
-      positions[index * 3 + 2] = point.z;
-      this.deepBreathAreaPositions.push(new THREE.Vector3(point.x, floorY, point.z));
-    }
-    this.deepBreathLine.geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    this.deepBreathPoints.geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    this.deepBreathPathLock = { primarySpellId, startMs };
-    return true;
-  }
-
-  /**
-   * Keeps the complete server centerline visible while the chain advances, but
-   * only shows the 30-yard damage circle for the ground spell resolving now.
-   */
-  private updateDeepBreath(fx: EncounterEffects | null, cursorMs: number) {
-    if (this.effects?.mapId !== 249) {
-      this.hideDeepBreath();
-      return;
-    }
-    const breaths = fx
-      ? deriveActiveDeepBreaths(fx, cursorMs, this.activeDeepBreaths, this.effects?.mapId)
-      : this.activeDeepBreaths;
-    if (!fx) breaths.length = 0;
-    const breath = breaths[0];
-    const yardScale = this.world.yardScale(this.aspect);
-    if (!breath || yardScale === null) {
-      this.hideDeepBreath();
-      return;
-    }
-
-    const lock = this.deepBreathPathLock;
-    if (!lock || lock.primarySpellId !== breath.routeSpellId || lock.startMs !== breath.startMs) {
-      if (!this.setDeepBreathPath(breath.routeSpellId, breath.startMs)) {
-        this.hideDeepBreath();
-        return;
-      }
-    }
-    const point = this.deepBreathAreaPositions[breath.pointIndex];
-    if (!point) {
-      this.hideDeepBreath();
-      return;
-    }
-    const radius = ONYXIA_DEEP_BREATH_RADIUS_YARDS * yardScale;
-    this.matrix.makeScale(radius, radius, radius);
-    this.matrix.setPosition(point);
-    this.deepBreathAreas.setMatrixAt(0, this.matrix);
-    this.deepBreathAreas.count = 1;
-    this.deepBreathAreas.instanceMatrix.needsUpdate = true;
-    this.deepBreathAreas.material.opacity = DEEP_BREATH_AREA_OPACITY
-      * Math.max(0, 1 - (cursorMs - breath.pointStartedMs) / DEEP_BREATH_POINT_LINGER_MS);
-    this.deepBreathAreas.visible = true;
-    this.deepBreathLine.visible = true;
-    this.deepBreathPoints.visible = true;
+  // Applies the effects at the effect clock's current time (EffectsLayer).
+  private updateEffects(now: number): boolean {
+    return this.effectsLayer.updateEffects(now);
   }
 
   private updateWhelpAnimations(now: number): boolean {
     return this.unitLayer.updateWhelpAnimations(now);
   }
 
-  // Applies the effects at the effect clock's current time. Returns whether
-  // another frame is needed to keep them animating.
-  private updateEffects(now: number): boolean {
-    for (const object of this.wobbling) {
-      object.body.rotation.z = 0;
-      for (const material of object.bodyMaterials) setMaterialEmissive(material, null);
-    }
-    this.wobbling.length = 0;
-    for (const object of this.lunging) object.group.position.copy(object.base);
-    this.lunging.length = 0;
-    const fx = this.effects?.fx ?? null;
-    const { clock } = this;
-    const cursorMs = clock.playing ? clock.ms + Math.min(now - clock.at, MAX_EXTRAPOLATE_MS) * clock.speed : clock.ms;
-    this.effectCursorMs = cursorMs;
-
-    for (const object of this.units.values()) {
-      const guid = object.group.userData.guid as string;
-      const deadSinceMs = fx ? deathStartedAt(fx, guid, cursorMs) : null;
-      this.unitLayer.setDead(object, deadSinceMs !== null);
-      this.unitLayer.updateDeadUnitVisibility(object, deadSinceMs, cursorMs);
-    }
-    if (fx) deriveUnitCasts(fx, cursorMs, this.unitCasts);
-    else this.unitCasts.clear();
-    this.updateHitFacings();
-    this.updateRadialEffects(fx, cursorMs);
-    this.updateDeepBreath(fx, cursorMs);
-
-    let beamCount = 0;
-    let ringCount = 0;
-    let boltCount = 0;
-    let slashCount = 0;
-    const active = fx ? deriveActiveEffects(fx, cursorMs, this.effectOptions, this.activeEffects) : this.activeEffects;
-    if (!fx) active.length = 0;
-    for (let index = 0; index < active.length; index++) {
-      const effect = active[index];
-      const target = this.units.get(effect.target);
-      if (!target) continue;
-      const color = this.effectColor(effect.color);
-      const fade = 1 - effect.progress;
-      if (effect.type === "beam" || effect.type === "streak") {
-        const source = effect.source ? this.units.get(effect.source) : undefined;
-        if (!source) continue;
-        // A short streak travelling from the source to the target: spells as
-        // a thick bolt (thicker on crits), ranged autos as a thin line.
-        const head = Math.min(1, effect.progress * 1.5);
-        const tail = Math.max(0, head - 0.4);
-        const from = source.base;
-        const to = target.base;
-        const lift = BEAM_HEIGHT * this.unitScale;
-        const brightness = Math.min(1.5, fade * (0.6 + 0.4 * effect.intensity));
-        const tailPoint = this.vector.set(from.x + (to.x - from.x) * tail, from.y + (to.y - from.y) * tail + lift, from.z + (to.z - from.z) * tail);
-        const headPoint = this.vectorB.set(from.x + (to.x - from.x) * head, from.y + (to.y - from.y) * head + lift, from.z + (to.z - from.z) * head);
-        if (effect.type === "beam") {
-          const length = tailPoint.distanceTo(headPoint);
-          if (boltCount >= MAX_EFFECT_PRIMITIVES || length <= 0) continue;
-          const width = BOLT_WIDTH * (1 + 0.8 * (effect.intensity - 1)) * this.unitScale;
-          this.quaternion.setFromUnitVectors(Z_AXIS, headPoint.sub(tailPoint).divideScalar(length));
-          tailPoint.addScaledVector(headPoint, length / 2);
-          this.matrix.compose(tailPoint, this.quaternion, this.scaleVector.set(width, width, length));
-          this.bolts.setMatrixAt(boltCount, this.matrix);
-          this.bolts.setColorAt(boltCount, this.color.copy(color).multiplyScalar(brightness));
-          this.boltEffects[boltCount] = index;
-          boltCount++;
-          continue;
-        }
-        if (beamCount >= MAX_EFFECT_PRIMITIVES) continue;
-        const offset = beamCount * 6;
-        this.beamPositions[offset] = tailPoint.x;
-        this.beamPositions[offset + 1] = tailPoint.y;
-        this.beamPositions[offset + 2] = tailPoint.z;
-        this.beamPositions[offset + 3] = headPoint.x;
-        this.beamPositions[offset + 4] = headPoint.y;
-        this.beamPositions[offset + 5] = headPoint.z;
-        this.beamColors[offset] = color.r * brightness * 0.3;
-        this.beamColors[offset + 1] = color.g * brightness * 0.3;
-        this.beamColors[offset + 2] = color.b * brightness * 0.3;
-        this.beamColors[offset + 3] = color.r * brightness;
-        this.beamColors[offset + 4] = color.g * brightness;
-        this.beamColors[offset + 5] = color.b * brightness;
-        this.beamEffects[beamCount] = index;
-        beamCount++;
-      } else if (effect.type === "lunge") {
-        // The attacker steps toward its target and back.
-        const source = effect.source ? this.units.get(effect.source) : undefined;
-        if (!source || source.dead || this.lunging.includes(source)) continue;
-        const toward = this.vector.subVectors(target.base, source.base).setY(0);
-        const distance = toward.length();
-        if (distance <= 0) continue;
-        const step = Math.sin(effect.progress * Math.PI) * Math.min(LUNGE_DISTANCE * this.unitScale, distance * 0.4);
-        source.group.position.copy(source.base).addScaledVector(toward, step / distance);
-        this.lunging.push(source);
-      } else if (effect.type === "slash") {
-        // An arc on the attacker's side of the target, sweeping across it.
-        const source = effect.source ? this.units.get(effect.source) : undefined;
-        if (!source || slashCount >= MAX_EFFECT_PRIMITIVES) continue;
-        const angle = Math.atan2(-(source.base.z - target.base.z), source.base.x - target.base.x) + (effect.progress - 0.5) * 1.4;
-        const radius = SLASH_RADIUS * (0.8 + 0.3 * effect.progress) * this.unitScale;
-        this.matrix.makeRotationY(angle).scale(this.scaleVector.set(radius, 1, radius))
-          .setPosition(target.base.x, target.base.y + SLASH_HEIGHT * this.unitScale, target.base.z);
-        this.slashes.setMatrixAt(slashCount, this.matrix);
-        this.slashes.setColorAt(slashCount, this.color.copy(color).multiplyScalar(fade * Math.min(2, 0.7 + 0.5 * effect.intensity)));
-        this.slashEffects[slashCount] = index;
-        slashCount++;
-      } else if (effect.type === "hit") {
-        if (target.dead) continue;
-        // Damped shake about the unit's facing axis plus an emissive flash.
-        target.body.rotation.z = Math.sin(effect.progress * Math.PI * 6) * 0.3 * fade * Math.min(2, effect.intensity);
-        for (const material of target.bodyMaterials) {
-          setMaterialEmissive(material, color, fade * 0.6 * Math.min(2, effect.intensity));
-        }
-        if (!this.wobbling.includes(target)) this.wobbling.push(target);
-      } else if (ringCount < MAX_EFFECT_PRIMITIVES) {
-        // "impact": a small quick burst under a melee ability's target;
-        // "heal": a ring rising up the healed target, sized by the healing
-        // (bigger and gold on crits).
-        const radius = (effect.type === "heal"
-          ? (0.9 + 0.4 * effect.progress) * (0.5 + 0.5 * effect.intensity)
-          : 0.6 + 1.8 * effect.progress) * this.unitScale;
-        const brightness = fade * (effect.type === "impact" ? 1.2 : 1);
-        const position = target.base;
-        const y = position.y + (effect.type === "heal" ? (0.2 + 2.4 * effect.progress) * this.unitScale : 0.05);
-        this.matrix.makeScale(radius, 1, radius).setPosition(position.x, y, position.z);
-        this.rings.setMatrixAt(ringCount, this.matrix);
-        this.rings.setColorAt(ringCount, this.color.copy(color).multiplyScalar(brightness));
-        this.ringEffects[ringCount] = index;
-        ringCount++;
-      }
-    }
-
-    this.beams.geometry.setDrawRange(0, beamCount * 2);
-    this.beams.geometry.attributes.position.needsUpdate = beamCount > 0;
-    this.beams.geometry.attributes.color.needsUpdate = beamCount > 0;
-    // Raycasts compute bounds lazily; they change every frame.
-    this.beams.geometry.boundingSphere = null;
-    this.commitPool(this.rings, ringCount);
-    this.commitPool(this.bolts, boltCount);
-    this.commitPool(this.slashes, slashCount);
-    // Icons first: combat text on a unit with icons floats above them.
-    this.updateCastIcons(fx, cursorMs);
-    this.updateCombatText(fx, cursorMs);
-    const modelsAnimating = this.unitLayer.updateGameModelAnimations(fx, cursorMs);
-    return (fx !== null && clock.playing) || modelsAnimating;
+  // Picks the effect under the pointer for the tooltip (EffectsLayer).
+  private updateEffectHover() {
+    this.effectsLayer.updateEffectHover();
   }
 
   private updateCombatText(fx: EncounterEffects | null, cursorMs: number) {
-    const sources = this.effects?.combatTextGuids ?? null;
-    const healGuids = this.effects?.healTextGuids ?? null;
+    const sources = this.effectsLayer.effects?.combatTextGuids ?? null;
+    const healGuids = this.effectsLayer.effects?.healTextGuids ?? null;
     const any = Boolean(fx && ((sources && sources.size > 0) || (healGuids && healGuids.size > 0)));
     const texts = any
-      ? deriveCombatText(fx!, cursorMs, sources, healGuids, this.effects?.suppressNameGuids ?? null, this.effectOptions, MAX_COMBAT_TEXT, this.combatText)
+      ? deriveCombatText(fx!, cursorMs, sources, healGuids, this.effectsLayer.effects?.suppressNameGuids ?? null, this.effectsLayer.effectOptions, MAX_COMBAT_TEXT, this.combatText)
       : this.combatText;
     if (!any) texts.length = 0;
     let shown = 0;
@@ -2635,7 +2195,7 @@ export class MapScene3D {
       const target = this.units.get(text.target);
       if (!target || !target.group.visible) continue;
       const sprite = this.combatSprites[shown];
-      const label = this.labelTexture(text.text, this.effects!.resolveColor(text.color), text.crit);
+      const label = this.labelTexture(text.text, this.effectsLayer.effects!.resolveColor(text.color), text.crit);
       if (sprite.material.map !== label.texture) {
         sprite.material.map = label.texture;
         sprite.material.needsUpdate = true;
@@ -2656,13 +2216,13 @@ export class MapScene3D {
   }
 
   private updateCastIcons(fx: EncounterEffects | null, cursorMs: number) {
-    const castIcons = this.effects?.castIcons;
+    const castIcons = this.effectsLayer.effects?.castIcons;
     const on = Boolean(fx && castIcons && castIcons.guids.size > 0);
     const icons = on
-      ? deriveCastIcons(fx!, cursorMs, castIcons!.guids, Math.min(MAX_CAST_ICONS, this.effectOptions.maxEffects), this.castIcons, {
+      ? deriveCastIcons(fx!, cursorMs, castIcons!.guids, Math.min(MAX_CAST_ICONS, this.effectsLayer.effectOptions.maxEffects), this.castIcons, {
         priorityGuids: castIcons!.priorityGuids,
         enemyGuids: castIcons!.enemyGuids,
-        filterGuids: this.effectOptions.filterGuids,
+        filterGuids: this.effectsLayer.effectOptions.filterGuids,
         isProc: castIcons!.isProc,
         isCooldown: castIcons!.isCooldown,
       })
@@ -2908,92 +2468,6 @@ export class MapScene3D {
     return label;
   }
 
-  // Reports the spell effect under the pointer when it changes.
-  private updateEffectHover() {
-    let hit: { effect: ActiveEffect | null; key: string } | null = null;
-    let iconSprite: THREE.Sprite | null = null;
-    if (this.pointerInside && this.effects) {
-      this.raycaster.setFromCamera(this.pointer, this.camera);
-      // Cast icons draw over everything, so they are picked first.
-      for (let index = 0; index < MAX_CAST_ICONS; index++) {
-        const sprite = this.castSprites[index];
-        if (!sprite.visible || this.raycaster.intersectObject(sprite, false).length === 0) continue;
-        const icon = this.castIcons[this.castSpriteIcons[index]];
-        if (!icon) continue;
-        Object.assign(this.castIconCast, { caster: icon.caster, spellId: icon.spellId, spellName: icon.spellName, phase: icon.phase });
-        hit = { effect: null, key: `icon|${icon.caster}|${icon.spellId}` };
-        iconSprite = sprite;
-        break;
-      }
-    }
-    if (!hit && this.pointerInside && this.effects) {
-      this.raycaster.params.Line.threshold = 0.4 * this.unitScale;
-      const pools: [THREE.Object3D, Int16Array][] = [
-        [this.bolts, this.boltEffects],
-        [this.beams, this.beamEffects],
-        [this.slashes, this.slashEffects],
-        [this.rings, this.ringEffects],
-      ];
-      for (const [object, effects] of pools) {
-        const intersection = this.raycaster.intersectObject(object, false)[0];
-        if (!intersection) continue;
-        const primitive = intersection.instanceId ?? Math.floor((intersection.index ?? 0) / 2);
-        const effect = this.activeEffects[effects[primitive]];
-        if (!effect || (effect.spellId == null && !effect.spellName)) continue;
-        hit = { effect, key: `${effect.type}|${effect.source}|${effect.target}|${effect.eventMs}` };
-        break;
-      }
-    }
-    if ((hit?.key ?? "") === this.hoveredEffectKey) return;
-    this.hoveredEffectKey = hit?.key ?? "";
-    const rect = this.renderer.domElement.getBoundingClientRect();
-    if (hit && !hit.effect && iconSprite) {
-      const projected = this.vector.copy(iconSprite.position).project(this.camera);
-      const cast = this.castIconCast;
-      this.onEffectHover({
-        eventKind: cast.phase === "casting" ? "cast_start" : cast.phase === "interrupted" ? "interrupt" : "cast_go",
-        spellId: cast.spellId,
-        spellName: cast.spellName,
-        amount: 0,
-        x: (projected.x + 1) / 2 * rect.width,
-        y: (1 - projected.y) / 2 * rect.height,
-      });
-      return;
-    }
-    const target = hit?.effect ? this.units.get(hit.effect.target) : undefined;
-    if (!hit?.effect || !target) {
-      this.onEffectHover(null);
-      return;
-    }
-    const projected = this.vector.copy(target.base).setY(target.base.y + BEAM_HEIGHT * this.unitScale).project(this.camera);
-    this.onEffectHover({
-      eventKind: hit.effect.eventKind,
-      spellId: hit.effect.spellId,
-      spellName: hit.effect.spellName,
-      amount: hit.effect.amount,
-      x: (projected.x + 1) / 2 * rect.width,
-      y: (1 - projected.y) / 2 * rect.height,
-    });
-  }
-
-  private createPool(geometry: THREE.BufferGeometry, material: THREE.MeshBasicMaterial, size: number) {
-    const pool = new THREE.InstancedMesh(geometry, material, size);
-    pool.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    // Allocate the colour buffer once, up front.
-    for (let index = 0; index < size; index++) pool.setColorAt(index, this.color.setRGB(0, 0, 0));
-    pool.count = 0;
-    pool.frustumCulled = false;
-    return pool;
-  }
-
-  private commitPool(pool: THREE.InstancedMesh, count: number) {
-    pool.count = count;
-    pool.boundingSphere = null;
-    if (count === 0) return;
-    pool.instanceMatrix.needsUpdate = true;
-    pool.instanceColor!.needsUpdate = true;
-  }
-
   // Health bars above the units, facing the camera at a constant screen size,
   // with a thin power strip under the health while the unit is alive and has
   // power, over the declutter's picks; players' are smaller. Units with a nameplate (hovered,
@@ -3010,7 +2484,7 @@ export class MapScene3D {
     let count = 0;
     // The bar's lift above the unit's base, in scene units.
     let barLift = BAR_HEIGHT;
-    const fx = this.effects?.fx ?? null;
+    const fx = this.effectsLayer.effects?.fx ?? null;
     // `down`: how far below the health bar's centre, across the screen.
     const quad = (base: THREE.Vector3, from: number, to: number, quadWidth: number, quadHeight: number, color: THREE.Color | number, down = 0) => {
       const center = this.vector.copy(base).setY(base.y + barLift).addScaledVector(right, ((from + to) / 2 - 0.5) * width).addScaledVector(up, -down);
@@ -3036,7 +2510,7 @@ export class MapScene3D {
       const absorb = health.max > 0 ? Math.min(1 - fraction, Math.max(0, health.absorb / health.max)) : 0;
       // From the effect clock while effects run, so the chunk shrinks
       // smoothly between replay ticks; the tick's value otherwise.
-      const gain = fx ? deriveRecentHealGain(fx, object.group.userData.guid as string, this.effectCursorMs) : health.healGain ?? 0;
+      const gain = fx ? deriveRecentHealGain(fx, object.group.userData.guid as string, this.effectsLayer.effectCursorMs) : health.healGain ?? 0;
       const healed = health.max > 0 ? Math.min(fraction, Math.max(0, gain / health.max)) : 0;
       const power = dead ? null : object.powerLevel;
       // The backing grows down to hold the power strip.
@@ -3050,16 +2524,7 @@ export class MapScene3D {
         quad(object.base, 0, power.fraction, width * power.fraction, strip, this.color.setStyle(power.color), (thickness + strip) / 2 + stripGap);
       }
     }
-    this.commitPool(this.bars, count);
-  }
-
-  private effectColor(css: string): THREE.Color {
-    let color = this.effectColors.get(css);
-    if (!color) {
-      color = new THREE.Color(this.effects?.resolveColor(css) ?? css);
-      this.effectColors.set(css, color);
-    }
-    return color;
+    commitPool(this.bars, count);
   }
 
   private clearGround() {
@@ -3142,7 +2607,7 @@ export class MapScene3D {
   // What a unit's nameplate shows, from what the scene already has.
   private plateInfo(guid: string, object: UnitObject): UnitPlateInfo {
     const health = object.healthFraction ?? (object.health && object.health.max > 0 ? object.health.current / object.health.max : null);
-    const cast = this.unitCasts.get(guid);
+    const cast = this.effectsLayer.unitCasts.get(guid);
     return {
       name: object.name,
       nameColor: object.kind === "hostile" ? ENEMY_RED : object.color,
@@ -3153,7 +2618,7 @@ export class MapScene3D {
         text: object.health && object.health.max > 0 ? `${shortNumber(object.health.current)} / ${shortNumber(object.health.max)}` : null,
       },
       power: object.powerLevel,
-      cast: cast ? { name: cast.spellName || "Casting", progress: cast.progress, color: `#${this.castColor(cast).getHexString()}` } : null,
+      cast: cast ? { name: cast.spellName || "Casting", progress: cast.progress, color: `#${this.effectsLayer.castColor(cast).getHexString()}` } : null,
       dead: object.dead,
     };
   }
@@ -3217,7 +2682,7 @@ export class MapScene3D {
     const guid = (hit?.object.userData.guid as string | undefined) ?? null;
     this.pointerInside = true;
     // The next frame re-picks the effect under the pointer.
-    if (this.effects) this.requestRender();
+    if (this.effectsLayer.effects) this.requestRender();
     if (guid === this.hoveredGuid) return;
     this.hoveredGuid = guid;
     this.updateCursor();
@@ -3572,12 +3037,6 @@ export class MapScene3D {
   // The token parts that follow the replay (UnitLayer.updateTokens).
   private updateTokens(now: number) {
     this.unitLayer.updateTokens(now);
-  }
-
-  // A cast's colour: its event's school, else its spell's (cast starts carry none).
-  private castColor(cast: UnitCast): THREE.Color {
-    const css = cast.school ? schoolColor(cast.school) : (cast.spellId ? this.effects?.castSchoolColor?.(cast.spellId) : null) ?? schoolColor(0);
-    return this.effectColor(css);
   }
 
   /** The plan items to draw (the current step's, plus any being drawn), and the selected one. */
