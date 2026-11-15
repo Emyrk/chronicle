@@ -11,16 +11,58 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/rivertype"
 )
 
+// HighlightSchedule aligns automatic refreshes to UTC hours, not process startup.
+type HighlightSchedule struct{}
+
+func (HighlightSchedule) Next(now time.Time) time.Time {
+	return now.UTC().Truncate(time.Hour).Add(time.Hour)
+}
+
+// AutomaticHighlightDispatch coalesces nudges until the next UTC hour. Zero
+// Boundary is reserved for immediate admin/legacy dispatches.
+func AutomaticHighlightDispatch(tenant uuid.UUID, now time.Time) ArgsHighlightDispatch {
+	return ArgsHighlightDispatch{TenantID: tenant, Boundary: (HighlightSchedule{}).Next(now)}
+}
+
+// PeriodicHighlightDispatch serves the current hour even if the scheduler is late.
+// The periodic sweep may revisit a tenant whose scheduled nudge already completed.
+// Accept that bounded two-source traversal: freshness checks skip current leaves.
+// Completed jobs do not dedupe, so later admin requests can still repair changes.
+func PeriodicHighlightDispatch(now time.Time) ArgsHighlightDispatch {
+	// River v0.43's periodic enqueuer may invoke constructors up to 100ms
+	// early. Select the upcoming boundary in that window so the sweep shares
+	// the scheduled nudges' identity. Late invocations still use this hour.
+	const earlyWindow = 100 * time.Millisecond
+	return ArgsHighlightDispatch{Boundary: now.UTC().Add(earlyWindow).Truncate(time.Hour)}
+}
+
 type ArgsHighlightDispatch struct {
+	Boundary    time.Time `json:"boundary,omitempty"`
 	TenantID    uuid.UUID `json:"tenant_id"`
 	AfterTenant uuid.UUID `json:"after_tenant"`
 	Offset      int       `json:"offset"`
 }
 
-func (ArgsHighlightDispatch) Kind() string                 { return "leaderboard-highlights-dispatch" }
-func (ArgsHighlightDispatch) InsertOpts() river.InsertOpts { return insertOptions() }
+func (ArgsHighlightDispatch) Kind() string { return "leaderboard-highlights-dispatch" }
+func (a ArgsHighlightDispatch) InsertOpts() river.InsertOpts {
+	return a.insertOpts(time.Now())
+}
+
+func (a ArgsHighlightDispatch) insertOpts(now time.Time) river.InsertOpts {
+	opts := insertOptions()
+	// Keep repeated nudges coalesced while a conflicting leaf's page recheck
+	// waits. This is dispatch-only; refresh leaves never retry.
+	opts.UniqueOpts.ByState = append(opts.UniqueOpts.ByState, rivertype.JobStateRetryable)
+	// River marks even past ScheduledAt values as scheduled. Omit the time
+	// once due so periodic and continuation jobs are available immediately.
+	if a.Boundary.After(now) {
+		opts.ScheduledAt = a.Boundary
+	}
+	return opts
+}
 
 type ArgsHighlightRefresh struct {
 	TenantID   uuid.UUID `json:"tenant_id"`
@@ -49,6 +91,17 @@ type HighlightDispatcher struct {
 	Queue JobInserter
 }
 
+// A conflicting leaf may have already read the old generation. Recheck the
+// page after its one-minute timeout instead of losing the nudge. Normal River
+// retries are bounded by the dispatcher's three attempts (no unbounded snooze).
+// Queue delays or persistent failures can exhaust them; hourly sweeps repair
+// remaining stale scopes. Refresh leaves retain MaxAttempts=1 and uniqueness.
+func (*HighlightDispatcher) NextRetry(*river.Job[ArgsHighlightDispatch]) time.Time {
+	return time.Now().Add(2 * time.Minute)
+}
+
+var errHighlightRefreshOutstanding = errors.New("highlight refresh outstanding; recheck dispatch page")
+
 func (d *HighlightDispatcher) Work(ctx context.Context, j *river.Job[ArgsHighlightDispatch]) error {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -58,12 +111,12 @@ func (d *HighlightDispatcher) Work(ctx context.Context, j *river.Job[ArgsHighlig
 			return err
 		}
 		for _, id := range tenants {
-			if _, err = d.Queue.Insert(ctx, ArgsHighlightDispatch{TenantID: id}, nil); err != nil {
+			if _, err = d.Queue.Insert(ctx, ArgsHighlightDispatch{TenantID: id, Boundary: j.Args.Boundary}, nil); err != nil {
 				return err
 			}
 		}
 		if len(tenants) == 100 {
-			_, err = d.Queue.Insert(ctx, ArgsHighlightDispatch{AfterTenant: tenants[len(tenants)-1]}, nil)
+			_, err = d.Queue.Insert(ctx, ArgsHighlightDispatch{AfterTenant: tenants[len(tenants)-1], Boundary: j.Args.Boundary}, nil)
 		}
 		return err
 	}
@@ -87,6 +140,7 @@ func (d *HighlightDispatcher) Work(ctx context.Context, j *river.Job[ArgsHighlig
 		return err
 	}
 	now := time.Now()
+	conflict := false
 	storedByRealm := make(map[uuid.UUID]map[highlightKey]database.LeaderboardHighlight)
 	for i := j.Args.Offset; i < end; i++ {
 		c := cohorts[i/len(realms)]
@@ -108,14 +162,22 @@ func (d *HighlightDispatcher) Work(ctx context.Context, j *river.Job[ArgsHighlig
 		if exists && HighlightFresh(row.ConfigurationFingerprint, row.SourceGeneration, row.RefreshedAt.Time, fingerprint, generation, now) && !HighlightStatisticsDue(row.ConfigurationFingerprint, fingerprint, row.StatisticsRefreshedAt, now) {
 			continue
 		}
-		if _, err = d.Queue.Insert(ctx, ArgsHighlightRefresh{TenantID: j.Args.TenantID, RealmID: realm, Instance: c.Instance, Difficulty: c.Difficulty, Size: c.Size}, nil); err != nil {
-			return err
+		result, insertErr := d.Queue.Insert(ctx, ArgsHighlightRefresh{TenantID: j.Args.TenantID, RealmID: realm, Instance: c.Instance, Difficulty: c.Difficulty, Size: c.Size}, nil)
+		if insertErr != nil {
+			return insertErr
 		}
+		conflict = conflict || result.UniqueSkippedAsDuplicate
 	}
 	if end < total {
-		_, err = d.Queue.Insert(ctx, ArgsHighlightDispatch{TenantID: j.Args.TenantID, Offset: end}, nil)
+		_, err = d.Queue.Insert(ctx, ArgsHighlightDispatch{TenantID: j.Args.TenantID, Offset: end, Boundary: j.Args.Boundary}, nil)
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	if conflict {
+		return errHighlightRefreshOutstanding
+	}
+	return nil
 }
 
 type HighlightWorker struct {

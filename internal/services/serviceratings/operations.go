@@ -105,7 +105,7 @@ func (w *OperationWorker) Work(ctx context.Context, j *river.Job[ArgsOperationPa
 	if err == nil && w.Queue != nil {
 		current, readErr := w.Store.GetLeaderboardOperation(ctx, database.GetLeaderboardOperationParams{ID: j.Args.OperationID, TenantID: j.Args.TenantID})
 		if readErr == nil && current.State == "completed" {
-			_, enqueueErr := w.Queue.Insert(ctx, ArgsHighlightDispatch{TenantID: j.Args.TenantID}, nil)
+			_, enqueueErr := w.Queue.Insert(ctx, AutomaticHighlightDispatch(j.Args.TenantID, time.Now()), nil)
 			outcome := "success"
 			if enqueueErr != nil {
 				outcome = "failed"

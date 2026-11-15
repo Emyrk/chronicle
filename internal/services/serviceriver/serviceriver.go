@@ -198,7 +198,9 @@ func (s *Service) Start(ctx context.Context) error {
 	ratings.HighlightDispatcher.Queue = q
 	riverqueue.AddWorker(q, ratings.HighlightDispatcher)
 	riverqueue.AddWorker(q, ratings.HighlightWorker)
-	q.AddPeriodicJob(river.NewPeriodicJob(river.PeriodicInterval(time.Hour), func() (river.JobArgs, *river.InsertOpts) { return serviceratings.ArgsHighlightDispatch{}, nil }, &river.PeriodicJobOpts{ID: "leaderboard-highlights-hourly", RunOnStart: false}))
+	q.AddPeriodicJob(river.NewPeriodicJob(serviceratings.HighlightSchedule{}, func() (river.JobArgs, *river.InsertOpts) {
+		return serviceratings.PeriodicHighlightDispatch(time.Now()), nil
+	}, &river.PeriodicJobOpts{ID: "leaderboard-highlights-hourly", RunOnStart: false}))
 	ratings.OperationDispatcher.Queue = q
 	ratings.OperationWorker.Queue = q
 	ratings.RepairWorker.Queue = q
