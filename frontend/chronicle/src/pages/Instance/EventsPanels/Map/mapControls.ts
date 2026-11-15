@@ -5,7 +5,7 @@
  * way: the free cam is walk mode with a hidden character (chronicle-1514).
  * The tunables live in controlProfile.ts.
  */
-import { FRAME_STEP_MAX_S, FREE_CAM_FAST_FACTOR, LOOK_RADIANS_PER_PX, MOBILE_STICK_DEAD_ZONE, STICK_PITCH_RADIANS_PER_S, TURN_RADIANS_PER_S, WALK_CAMERA_SETTLED_RADIANS, WHEEL_ZOOM_RATE } from "./controlProfile";
+import { FIRST_FRAME_STEP_S, FRAME_STEP_MAX_S, FREE_CAM_FAST_FACTOR, LOOK_RADIANS_PER_PX, MOBILE_STICK_DEAD_ZONE, STICK_PITCH_RADIANS_PER_S, TURN_RADIANS_PER_S, WALK_CAMERA_SETTLED_RADIANS, WHEEL_ZOOM_RATE } from "./controlProfile";
 
 /** The A/D strafe setting's default (Map settings → Controls); defined in controlProfile. */
 export { DEFAULT_AD_STRAFE } from "./controlProfile";
@@ -140,6 +140,16 @@ export function cameraAngles(offset: CameraOffset, flatEpsilon = 1e-9): { yaw: n
  */
 export function frameStepSeconds(now: number, lastMs: number): number {
   return lastMs ? Math.min(FRAME_STEP_MAX_S, (now - lastMs) / 1000) : 0;
+}
+
+/**
+ * The step of a per-frame clock that can restart: FIRST_FRAME_STEP_S on its
+ * first frame (`lastMs` 0: none yet, or the render loop slept since, see
+ * MapScene3D.restartFrameClocks), so a wake never takes one stale 0.1 s
+ * step; frameStepSeconds after that.
+ */
+export function clockStepSeconds(now: number, lastMs: number): number {
+  return lastMs ? frameStepSeconds(now, lastMs) : FIRST_FRAME_STEP_S;
 }
 
 /** A turn input (-1…1, + is left) held for `dt` seconds: walk mode turns the character with it, the free cam its camera. */

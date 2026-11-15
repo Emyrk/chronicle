@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { actionForKey, frameStepSeconds, stickPitch, turnYaw, cameraAngles, cameraCollisionDistance, cameraOffset, freeCamTravelSpeed, lookDrag, planarStep, wheelZoomDistance, clampMobileMapInput, DEFAULT_AD_STRAFE, easeAngleToward, keyLabel, MAP_CONTROL_ACTIONS, MAP_CONTROL_KEYBINDS, mobileJoystickAxis, pointerLossEndsDrag, rightDragWalkAxes, setWalkMouseButton, shouldFollowWalkCamera, walkCameraSettling, walkDragButton, walkMovementYaw, walkMouseControl, WALK_TOGGLE_KEY } from "./mapControls";
-import { FRAME_STEP_MAX_S, FREE_CAM_FAST_FACTOR, STICK_PITCH_RADIANS_PER_S, TURN_RADIANS_PER_S, LOOK_RADIANS_PER_PX, WALK_CAMERA_SETTLED_RADIANS } from "./controlProfile";
+import { actionForKey, clockStepSeconds, frameStepSeconds, stickPitch, turnYaw, cameraAngles, cameraCollisionDistance, cameraOffset, freeCamTravelSpeed, lookDrag, planarStep, wheelZoomDistance, clampMobileMapInput, DEFAULT_AD_STRAFE, easeAngleToward, keyLabel, MAP_CONTROL_ACTIONS, MAP_CONTROL_KEYBINDS, mobileJoystickAxis, pointerLossEndsDrag, rightDragWalkAxes, setWalkMouseButton, shouldFollowWalkCamera, walkCameraSettling, walkDragButton, walkMovementYaw, walkMouseControl, WALK_TOGGLE_KEY } from "./mapControls";
+import { FIRST_FRAME_STEP_S, FRAME_STEP_MAX_S, FREE_CAM_FAST_FACTOR, STICK_PITCH_RADIANS_PER_S, TURN_RADIANS_PER_S, LOOK_RADIANS_PER_PX, WALK_CAMERA_SETTLED_RADIANS } from "./controlProfile";
 
 describe("easeAngleToward", () => {
   it("eases toward the target without snapping", () => {
@@ -313,6 +313,14 @@ describe("frameStepSeconds", () => {
     expect(frameStepSeconds(1000, 0)).toBe(0);
     expect(frameStepSeconds(1016, 1000)).toBeCloseTo(0.016, 9);
     expect(frameStepSeconds(5000, 1000)).toBe(FRAME_STEP_MAX_S);
+  });
+});
+
+describe("clockStepSeconds", () => {
+  it("takes a first-frame step when the clock (re)starts, then the clamped elapsed time", () => {
+    expect(clockStepSeconds(5000, 0)).toBe(FIRST_FRAME_STEP_S);
+    expect(clockStepSeconds(1016, 1000)).toBeCloseTo(0.016, 9);
+    expect(clockStepSeconds(5000, 1000)).toBe(FRAME_STEP_MAX_S);
   });
 });
 

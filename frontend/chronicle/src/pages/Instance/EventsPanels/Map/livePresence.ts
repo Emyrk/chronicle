@@ -8,7 +8,7 @@
 import * as THREE from "three";
 import { participantHue, participantLabel, type LiveMapPresence } from "../../liveSessionProtocol";
 import { PLAYER_GEOMETRY_HEIGHT } from "./sceneConstants";
-import { frameStepSeconds } from "./mapControls";
+import { clockStepSeconds } from "./mapControls";
 import { createLabelSprite } from "./sceneFactories";
 
 // --- Live session presence: everyone's camera or walking character ---
@@ -171,7 +171,7 @@ export class LivePresence {
 
   // Eases others' presences toward their latest update; true while any moves.
   updateRemotePresences(now: number, mesh: { url: string } | null, unitScale: number): boolean {
-    const dt = frameStepSeconds(now, this.presenceAt);
+    const dt = clockStepSeconds(now, this.presenceAt);
     this.presenceAt = now;
     if (this.remotePresences.size === 0) return false;
     const ease = 1 - Math.exp(-PRESENCE_EASE_PER_S * dt);
@@ -209,6 +209,11 @@ export class LivePresence {
     object.cameraGeometry.dispose();
     object.label.material.map?.dispose();
     object.label.material.dispose();
+  }
+
+  /** The render loop slept: the next frame starts the easing clock again (MapScene3D.restartFrameClocks). */
+  restartClock() {
+    this.presenceAt = 0;
   }
 
   dispose() {

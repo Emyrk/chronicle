@@ -41,7 +41,8 @@ interface SceneInternals {
   dungeonMesh: { url: string; scale: number; group: THREE.Group; caves: { mesh: THREE.Mesh; bvh: unknown }[] } | null;
   units: Map<string, { base: THREE.Vector3; floorY: number; floorTracked: boolean; token: { arc: THREE.Object3D } }>;
   hud: { bars: THREE.InstancedMesh };
-  unitLayer: { floorTracks: unknown };
+  unitLayer: { floorTracks: unknown; targetLines: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>[] };
+  presence: { remotePresences: Map<string, { position: THREE.Vector3 }> };
   directing(): boolean;
 }
 
@@ -379,6 +380,10 @@ export async function createTestScene(options: TestSceneOptions = {}) {
     /** How many health-bar quads the bar pool draws (a living unit's bar is a backing and a fill, a dead one's only the backing). */
     barQuads: () => internals.hud.bars.count,
     floorTracks: () => internals.unitLayer.floorTracks,
+    /** The dash offset of each target line's texture (it crawls along the line over time). */
+    targetLineDashes: () => internals.unitLayer.targetLines.map((line) => line.material.map?.offset.x ?? 0),
+    /** Where another live-session participant is drawn now (eased toward their latest update). */
+    remotePresence: (participantId: string) => internals.presence.remotePresences.get(participantId)?.position.clone(),
     mesh: () => internals.dungeonMesh,
   };
 

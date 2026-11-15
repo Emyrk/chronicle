@@ -549,10 +549,13 @@ describe("free cam on the mobile layout", () => {
     h.input.touchUp(1, 460, 300);
     h.settle();
     const after = h.probe.angles();
-    // MOBILE_ORBIT_ROTATE_SPEED 0.35 over the 600 px canvas, spread over frames by
-    // damping. The loop now sleeps once OrbitControls reports the coast has
-    // stopped, leaving ~1.5e-4 rad of it unapplied (chronicle-1982).
-    expect(after.yaw - before.yaw).toBeCloseTo((-2 * Math.PI * 60 / 600) * 0.35, 3);
+    // MOBILE_ORBIT_ROTATE_SPEED 0.35 over the 600 px canvas (0.219911 rad),
+    // spread over frames by damping. Since chronicle-1982 the loop sleeps once
+    // OrbitControls reports the coast has stopped (its own epsilon), which in
+    // the harness leaves exactly 0.000150 rad of it unapplied.
+    const full = (-2 * Math.PI * 60 / 600) * 0.35;
+    expect(after.yaw - before.yaw).toBeCloseTo(-0.219762, 6);
+    expect(full - (after.yaw - before.yaw)).toBeCloseTo(-0.00015, 6);
     expect(after.distance).toBeCloseTo(before.distance, 6);
     expect(h.probe.target().toArray()).toEqual([0, 0, 0]);
   });

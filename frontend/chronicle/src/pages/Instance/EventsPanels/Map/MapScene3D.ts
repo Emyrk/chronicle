@@ -26,7 +26,7 @@ import {
   type DirectorUnit,
 } from "./cameraDirector";
 import type { LiveMapPresence } from "../../liveSessionProtocol";
-import { actionForKey, cameraAngles, cameraCollisionDistance, cameraOffset, clampMobileMapInput, easeAngleToward, frameStepSeconds, freeCamTravelSpeed, IDLE_MOBILE_MAP_INPUT, lookDrag, type MobileMapInput, planarStep, pointerLossEndsDrag, shouldFollowWalkCamera, stickPitch, turnYaw, WALK_TOGGLE_KEY, walkCameraSettling, walkDragButton, walkMouseControl, walkMovementYaw, wheelZoomDistance } from "./mapControls";
+import { actionForKey, cameraAngles, cameraCollisionDistance, cameraOffset, clampMobileMapInput, clockStepSeconds, easeAngleToward, frameStepSeconds, freeCamTravelSpeed, IDLE_MOBILE_MAP_INPUT, lookDrag, type MobileMapInput, planarStep, pointerLossEndsDrag, shouldFollowWalkCamera, stickPitch, turnYaw, WALK_TOGGLE_KEY, walkCameraSettling, walkDragButton, walkMouseControl, walkMovementYaw, wheelZoomDistance } from "./mapControls";
 import { climbElevations, createShotHold, directorPullIn, fallbackShot, FOLLOW_CENTRE_WINDOW_MS, FOLLOW_SHOT_CHECK_MS, FOLLOW_STEEP_ELEVATION_DEG, releaseSteepShot, shotCheckDue, steepPullIn, FOLLOW_SIGHT_STRIDE, FOLLOW_STEEP_MIN_DISTANCE_YARDS, seesFraming, sightPicks, type ShotAnswer, FOLLOW_SLICE_MS, followSprings, followYawStep, handOverFollowSpring, handOverFollowYaw, startFollowTrackBuild, wrapAngle, type FollowTrackBuild, followKeyAt, glideDurationMs, glidePoseAt, glideTurnMs, unwrapNear, holdShot, isReplayJump, type FollowKey, type FollowTrack, type FollowYawProbe, type GlidePose } from "./followCamera";
 import { type DispelKind } from "./unitTokenArt";
 import { UnitTokenTextures } from "./unitTokens";
@@ -56,8 +56,6 @@ import {
   DEFAULT_AD_STRAFE,
   DOUBLE_CLICK_MS,
   DOUBLE_CLICK_OUT_FACTOR,
-  FIRST_FRAME_STEP_S,
-  FRAME_STEP_MAX_S,
   FREE_CAM_COLLISION_PADDING_SCENE_UNITS,
   FREE_CAM_MAX_PITCH_RADIANS,
   FREE_CAM_MIN_DISTANCE_SCENE_UNITS,
@@ -1677,7 +1675,7 @@ export class MapScene3D {
       bossEngageDistance: BOSS_ENGAGE_YARDS * mesh.scale,
       subjectGuid: this.directorSubject,
     });
-    const dt = this.directorAt === 0 ? FIRST_FRAME_STEP_S : Math.min(FRAME_STEP_MAX_S, (now - this.directorAt) / 1000);
+    const dt = clockStepSeconds(now, this.directorAt);
     this.directorAt = now;
     this.directorInFrame.clear();
     if (frame) for (const guid of frame.guids) this.directorInFrame.add(guid);
@@ -2356,7 +2354,7 @@ export class MapScene3D {
       return false;
     }
     // The first active frame has no previous one to measure from: it steps one nominal frame.
-    const dt = this.keyMoveLastMs ? frameStepSeconds(now, this.keyMoveLastMs) : FIRST_FRAME_STEP_S;
+    const dt = clockStepSeconds(now, this.keyMoveLastMs);
     this.keyMoveLastMs = now;
     if (dt <= 0) return true;
     const target = this.controls.target;
@@ -2910,8 +2908,21 @@ export class MapScene3D {
       // effects, a re-framing, the Director, coasting damping); otherwise
       // rendering stays on demand.
       if (this.renderFrame(now)) this.requestRender();
+      else this.restartFrameClocks();
     });
   };
+
+  // The loop is going to sleep: the clocks that step from their last frame
+  // start again, so the first frame after the next wake takes a first-frame
+  // step (FIRST_FRAME_STEP_S), not one 0.1 s step for the whole sleep. The
+  // free-cam mover and the collision ease-out already restart whenever they
+  // stop; walk mode never lets the loop sleep. Capture scenes (stepped by
+  // captureFrame) never get here.
+  private restartFrameClocks() {
+    this.directorAt = 0;
+    this.unitLayer.restartClock();
+    this.presence.restartClock();
+  }
 
   // One frame of the render loop at `now` (ms). Returns whether something is
   // still moving and needs another frame.
