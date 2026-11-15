@@ -17,15 +17,16 @@ export type ReadyMapScene = Extract<MapScene, { status: "ready" }>;
  * panel reprocesses, re-held when the encounter, map, floor or mesh changes.
  * `"backdrop"` (the landing): whenever the live scene is briefly empty, re-held
  * only when the map or mesh changes, so a moment without units never unmounts the view.
+ * `"none"` (the export): never; only the live scene is filmed.
  */
-export type HeldSceneRule = "panel" | "backdrop";
+export type HeldSceneRule = "panel" | "backdrop" | "none";
 
 /**
  * Re-hold the live scene only when what it shows changes: the frozen view
  * ignores the held copy's per-tick data.
  */
 export function shouldHoldScene(live: ReadyMapScene | null, held: ReadyMapScene | null, rule: HeldSceneRule = "panel"): boolean {
-  if (!live) return false;
+  if (!live || rule === "none") return false;
   if (!held || held.mapName !== live.mapName || held.mesh !== live.mesh) return true;
   return rule === "panel" && (held.encounterId !== live.encounterId || held.selectedFloorNumber !== live.selectedFloorNumber);
 }
@@ -36,7 +37,7 @@ export function shouldHoldScene(live: ReadyMapScene | null, held: ReadyMapScene 
  * unmounting the view and rebuilding it once the new data arrives.
  */
 export function shownScene<S>(live: S | null, held: S | null, reprocessing: boolean, rule: HeldSceneRule = "panel"): { ready: S | null; reloading: boolean } {
-  const reloading = !live && (rule === "backdrop" || reprocessing) && held !== null;
+  const reloading = !live && rule !== "none" && (rule === "backdrop" || reprocessing) && held !== null;
   return { ready: live ?? (reloading ? held : null), reloading };
 }
 

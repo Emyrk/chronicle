@@ -124,6 +124,13 @@ describe("backdrop held scene (the landing)", () => {
   });
 });
 
+describe("no held scene (the export)", () => {
+  it("never holds, and shows only the live scene", () => {
+    expect(shouldHoldScene(scene(), null, "none")).toBe(false);
+    expect(shownScene(null, scene(), true, "none")).toEqual({ ready: null, reloading: false });
+  });
+});
+
 describe("mesh policies", () => {
   it("projects on the mesh once it loads, or always", () => {
     expect(rawProjection("when-mesh-ready", true, true, "ready")).toBe(true);

@@ -11,11 +11,13 @@ import type { DirectorUnit } from "./cameraDirector";
 import { buildDroneTrack, dronePoseAt, fightMsAtVideoMs, RENDER_SPEEDS, speedFileName, videoFrameRange, type RenderSpeed } from "./droneCamera";
 import type { MapResult } from "./map.processor";
 import { FULL_MAP_VIEWPORT, replayPositionAt, type ReplayMapSource } from "./mapModel";
-import type { DungeonMeshRequest, DungeonMeshState, MapScene3D } from "./MapScene3D";
+import type { DungeonMeshRequest, MapScene3D } from "./MapScene3D";
 import type { EffectSettings } from "./mapViewSettings";
 import MapView3D from "./MapView3D";
 import { isDeadAt } from "./replayEffects";
-import { useMapScene } from "./useMapScene";
+import { ReplayPlayer } from "./ReplayPlayer";
+import type { ReplayCamera } from "./replayPlayerModel";
+import { useReplayPlayer } from "./useReplayPlayer";
 import { useSteppedClock } from "./useReplayClock";
 import { exportCanvasVideo, pickVideoOutput, VIDEO_FPS, type CanvasVideoExportResult, type VideoOutputConfig } from "./videoExport";
 import { createVideoDamageMeter, drawVideoMeter, type VideoMeterSnapshot } from "./videoMeter";
@@ -251,15 +253,36 @@ function RenderStage({ panelProps, mapSource, showHiddenUnits, dungeonMesh, unit
   const clock = useSteppedClock();
   const { seek } = clock;
   const fetchStream = useContext(InstanceEventsContext)?.fetchStream ?? null;
-  const scene = useMapScene(panelProps, { rawDungeonProjection: true, mapSource, showHiddenUnits, clock });
-  const ready = scene.status === "ready" ? scene : null;
-  const [meshState, setMeshState] = useState<DungeonMeshState>("loading");
   const [scene3d, setScene3d] = useState<MapScene3D | null>(null);
+  const onProgressRef = useRef(onProgress);
+  const onRenderedRef = useRef(onRendered);
+  // The ReplayPlayer as a capture view: the dialog's own mesh request and miniatures, the drone posing the camera
+  // through captureFrame (no Director, no input, a fixed view), only the live scene, and only the scene fields the
+  // export always had, so the frames stay the same. Without WebGL it reports the error and shows nothing.
+  const player = useReplayPlayer({
+    source: panelProps,
+    clock,
+    mapSource,
+    showHiddenUnits,
+    meshOn: true,
+    renderedCanvas: "never",
+    rawProjection: "always",
+    camera: CAPTURE_CAMERA,
+    heldScene: "none",
+    dungeonMesh,
+    unitModelUrls,
+    unitModels: unitModelUrls ? "manifest" : "none",
+    fixedView: STATIC_VIEW,
+    webglFallback: "none",
+    onUnavailable: () => onProgressRef.current({ phase: "error", message: "WebGL is unavailable." }),
+    interactive: false,
+    sceneFields: "capture",
+    onScene: setScene3d,
+  });
+  const { ready, meshState } = player;
   const containerRef = useRef<HTMLDivElement>(null);
   const readyRef = useRef(ready);
   const waiterRef = useRef<{ ms: number; resolve: () => void } | null>(null);
-  const onProgressRef = useRef(onProgress);
-  const onRenderedRef = useRef(onRendered);
 
   const startMs = ready?.encounterStartMs ?? null;
   useEffect(() => {
@@ -412,30 +435,12 @@ function RenderStage({ panelProps, mapSource, showHiddenUnits, dungeonMesh, unit
   if (!ready) return null;
   return (
     <div ref={containerRef} className="absolute inset-0">
-      <MapView3D
-        ground={ready.ground}
-        worldMapId={ready.worldMapId}
-        markers={ready.markers}
-        projectSample={ready.projectSample}
-        cursorMs={ready.cursorMs}
-        playing={false}
-        playbackSpeed={1}
-        view={STATIC_VIEW}
-        effects={ready.effects}
-        bossGuids={ready.bossGuids}
-        tankGuids={ready.tankGuids}
-        unitModelUrls={unitModelUrls}
-        onUnavailable={() => onProgressRef.current({ phase: "error", message: "WebGL is unavailable." })}
-        dungeonMesh={dungeonMesh}
-        onDungeonMeshState={setMeshState}
-        effectSettings={effectSettings}
-        debuffSpellIds={ready.debuffSpellIds}
-        capture={output}
-        onScene={setScene3d}
-      />
+      <ReplayPlayer player={player} bare view3d={MapView3D} view={{ effectSettings, capture: output }} />
     </div>
   );
 }
 
 // The drone places the camera itself; the view request only seeds the scene.
 const STATIC_VIEW = { viewport: FULL_MAP_VIEWPORT, key: "video" };
+/** The user's camera, never the Director: the drone poses it frame by frame. */
+const CAPTURE_CAMERA: ReplayCamera = { mode: "user" };
