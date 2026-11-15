@@ -172,20 +172,44 @@ func bounded(s string) string {
 // EventCount counts Process calls carrying at least one audited GUID, once per
 // message regardless of the number of GUIDs or roles. GUID-free messages do not count.
 func (c *Collector) EventCount() int64 { return c.eventCount }
-func (r *Record) evidence(e Evidence, t time.Time) {
-	if len(e.Name) > EvidenceStringLimit || len(e.Role) > EvidenceStringLimit {
-		r.EvidenceTruncations++
+
+// diagnosticEvidence derives the budget from persisted history, including old
+// snapshots. Becoming known never discards unresolved-context evidence.
+func (r *Record) diagnosticEvidence() bool {
+	if r.GUID.IsZero() || r.Conflict || r.Unknown {
+		return true
 	}
+	for _, ctx := range r.Contexts {
+		if ctx.Recognition == "unknown" {
+			return true
+		}
+	}
+	return false
+}
+func (r *Record) evidence(e Evidence, t time.Time) {
+	truncated := len(e.Name) > EvidenceStringLimit || len(e.Role) > EvidenceStringLimit
 	e.Name = bounded(e.Name)
 	e.Role = bounded(e.Role)
 	for i := range r.Evidence {
 		v := &r.Evidence[i]
 		same := v.RelatedGUID == nil && e.RelatedGUID == nil || v.RelatedGUID != nil && e.RelatedGUID != nil && *v.RelatedGUID == *e.RelatedGUID
 		if same && v.Role == e.Role && v.SpellID == e.SpellID && v.Name == e.Name {
+			if truncated {
+				r.EvidenceTruncations++
+			}
 			v.Observations++
 			bounds(&v.FirstSeen, &v.LastSeen, t)
 			return
 		}
+	}
+	// Known-only histories keep their deterministic first entry. Deliberately
+	// omitted routine details are not diagnostic overflow. Existing snapshots
+	// may already hold more entries; preserve and continue updating those.
+	if !r.diagnosticEvidence() && len(r.Evidence) >= 1 {
+		return
+	}
+	if truncated {
+		r.EvidenceTruncations++
 	}
 	if len(r.Evidence) >= EvidenceLimit {
 		r.EvidenceOverflow++

@@ -12,6 +12,16 @@ func (c *Collector) Process(msg messages.Message) error {
 		return nil
 	}
 	t := msg.Date()
+	// Select evidence budgets only after this message's contexts, classifications,
+	// ownership and cycle checks have finalized every record's diagnostic status.
+	type pendingEvidence struct {
+		record *Record
+		value  Evidence
+	}
+	var pendingBuffer [16]pendingEvidence
+	pending := pendingBuffer[:0]
+	queue := func(r *Record, e Evidence) { pending = append(pending, pendingEvidence{r, e}) }
+
 	// Server affiliation is observation-local. Apply it before counting the
 	// context so a metadata event never creates a misleading unknown context.
 	var metadataGUID guid.GUID
@@ -41,7 +51,7 @@ func (c *Collector) Process(msg messages.Message) error {
 			r = c.observe(id, t, aff)
 			seen[id] = r
 		}
-		r.evidence(Evidence{Role: role}, t)
+		queue(r, Evidence{Role: role})
 		roles = append(roles, observedRole{id, role})
 	}
 	text := func(s, role string) {
@@ -54,7 +64,7 @@ func (c *Collector) Process(msg messages.Message) error {
 		r := seen[target]
 		if r != nil {
 			o := owner
-			r.evidence(Evidence{Role: "owner/direct", RelatedGUID: &o}, t)
+			queue(r, Evidence{Role: "owner/direct", RelatedGUID: &o})
 		}
 	}
 	classification := func(id guid.GUID, aff string) {
@@ -62,7 +72,7 @@ func (c *Collector) Process(msg messages.Message) error {
 			return
 		}
 		r := seen[id]
-		r.evidence(Evidence{Role: "classification/affiliation", Name: aff}, t)
+		queue(r, Evidence{Role: "classification/affiliation", Name: aff})
 		if r.Affiliation != "unknown" && r.Affiliation != aff {
 			r.Conflict = true
 		}
@@ -70,7 +80,7 @@ func (c *Collector) Process(msg messages.Message) error {
 	}
 	spellEvidence := func(id guid.GUID, role string, spell int32, name string) {
 		if spell != 0 || name != "" {
-			seen[id].evidence(Evidence{Role: "spell/" + role, SpellID: spell, Name: name}, t)
+			queue(seen[id], Evidence{Role: "spell/" + role, SpellID: spell, Name: name})
 		}
 	}
 	var spells []int32
@@ -142,11 +152,11 @@ func (c *Collector) Process(msg messages.Message) error {
 		if m.Owner != nil {
 			owner(m.Guid, *m.Owner)
 		}
-		seen[m.Guid].evidence(Evidence{Role: "name", Name: m.Name}, t)
+		queue(seen[m.Guid], Evidence{Role: "name", Name: m.Name})
 		classification(m.Guid, affiliation(m.Affiliation))
 	case *messages.Combatant:
 		add(m.Guid, "Combatant.Guid")
-		seen[m.Guid].evidence(Evidence{Role: "name", Name: m.Name}, t)
+		queue(seen[m.Guid], Evidence{Role: "name", Name: m.Name})
 	case *messages.CombatantTalents:
 		add(m.Guid, "CombatantTalents.Guid")
 	case *messages.Versions:
@@ -287,7 +297,7 @@ func (c *Collector) Process(msg messages.Message) error {
 		add(m.VehicleGUID, "VehicleControl.VehicleGUID")
 		add(m.ControllerGUID, "VehicleControl.ControllerGUID")
 		controller := m.ControllerGUID
-		seen[m.VehicleGUID].evidence(Evidence{Role: "vehicle/" + string(m.Action), RelatedGUID: &controller}, t)
+		queue(seen[m.VehicleGUID], Evidence{Role: "vehicle/" + string(m.Action), RelatedGUID: &controller})
 	case *messages.NewOwner:
 		add(m.Target, "NewOwner.Target")
 		add(m.NewOwner, "NewOwner.NewOwner")
@@ -300,7 +310,7 @@ func (c *Collector) Process(msg messages.Message) error {
 		if m.Gained {
 			role = "controller/gained"
 		}
-		seen[m.Target].evidence(Evidence{Role: role, RelatedGUID: &controller}, t)
+		queue(seen[m.Target], Evidence{Role: role, RelatedGUID: &controller})
 		if m.Spell != nil {
 			addSpell(int32(m.Spell.ID))
 		}
@@ -312,7 +322,7 @@ func (c *Collector) Process(msg messages.Message) error {
 		if m.Controller != nil {
 			add(*m.Controller, "UnitClassificationEvent.Controller")
 			controller := *m.Controller
-			seen[m.Target].evidence(Evidence{Role: "controller/observed", RelatedGUID: &controller}, t)
+			queue(seen[m.Target], Evidence{Role: "controller/observed", RelatedGUID: &controller})
 		}
 		if m.Spell != nil {
 			addSpell(int32(m.Spell.ID))
@@ -380,8 +390,11 @@ func (c *Collector) Process(msg messages.Message) error {
 			root = o
 		}
 		if root != id {
-			r.evidence(Evidence{Role: "owner/root", RelatedGUID: &root}, t)
+			queue(r, Evidence{Role: "owner/root", RelatedGUID: &root})
 		}
+	}
+	for _, p := range pending {
+		p.record.evidence(p.value, t)
 	}
 	return nil
 }

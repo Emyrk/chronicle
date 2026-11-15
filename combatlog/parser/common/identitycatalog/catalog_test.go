@@ -64,16 +64,16 @@ func TestEvidenceOverflowDoesNotCapGUIDs(t *testing.T) {
 	t.Parallel()
 	c := New(nil)
 	for i := 1; i <= EvidenceLimit*3; i++ {
-		require.NoError(t, c.Process(&messages.SpellGo{Caster: 1, SpellID: chrondbc.SpellID(i)}))
+		require.NoError(t, c.Process(&messages.SpellGo{Caster: 0, SpellID: chrondbc.SpellID(i)}))
 		require.NoError(t, c.Process(&messages.UnitTarget{Unit: guid.GUID(i)}))
 	}
-	require.Len(t, c.Records(), EvidenceLimit*3)
-	r := c.records[1]
+	require.Len(t, c.Records(), EvidenceLimit*3+1)
+	r := c.records[0]
 	require.Len(t, r.Evidence, EvidenceLimit)
 	require.Positive(t, r.EvidenceOverflow)
 	detached := c.Records()
 	detached[0].Evidence[0].Role = "changed"
-	require.NotEqual(t, "changed", c.records[1].Evidence[0].Role)
+	require.NotEqual(t, "changed", c.records[0].Evidence[0].Role)
 }
 func TestGraphContinuation(t *testing.T) {
 	t.Parallel()
@@ -81,7 +81,7 @@ func TestGraphContinuation(t *testing.T) {
 	ts := time.Unix(100, 0).UTC()
 	root := guid.GUID(1)
 	pet := guid.GUID(2)
-	child := guid.GUID(3)
+	child := guid.GUID(0xF13000FFFF000003)
 	for _, m := range []messages.Message{&messages.Zone{Zone: zone.Zone{Name: "Somewhere", InstanceID: 1}}, &messages.NewOwner{MessageBase: messages.Base(ts), Target: pet, NewOwner: root}, &messages.NewOwner{MessageBase: messages.Base(ts), Target: child, NewOwner: pet}} {
 		require.NoError(t, c.Process(m))
 	}
@@ -143,9 +143,9 @@ func TestThreatRoles(t *testing.T) {
 func TestRawAndResolvedSpellEvidence(t *testing.T) {
 	t.Parallel()
 	c := New(nil)
-	require.NoError(t, c.Process(&messages.Damage{Target: 1, SpellID: 12, SpellData: &chrondbc.Spell{ID: 13}}))
+	require.NoError(t, c.Process(&messages.Damage{Target: 0, SpellID: 12, SpellData: &chrondbc.Spell{ID: 13}}))
 	var ids []int32
-	for _, e := range c.records[1].Evidence {
+	for _, e := range c.records[0].Evidence {
 		if strings.HasPrefix(e.Role, "spell/") {
 			ids = append(ids, e.SpellID)
 		}
@@ -327,7 +327,7 @@ func BenchmarkCollectorPopulatedRegistry(b *testing.B) {
 
 func TestSpellRoleAttribution(t *testing.T) {
 	t.Parallel()
-	caster, target, shield := guid.GUID(1), guid.GUID(2), guid.GUID(3)
+	caster, target, shield := guid.GUID(0xF13000FFFF000001), guid.GUID(0xF13000FFFF000002), guid.GUID(0xF13000FFFF000003)
 	cases := []struct {
 		name string
 		msg  messages.Message
