@@ -1,7 +1,9 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter } from "react-router-dom";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { WoWLogArtifact, WoWLogFile } from "@/api/queries";
-import { UploadedArtifactRow, UploadedLogFileRows } from "./LogDetail";
+import { LogDetailView, UploadedArtifactRow, UploadedLogFileRows } from "./LogDetail";
 
 const artifact: WoWLogArtifact = {
   id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
@@ -108,5 +110,36 @@ describe("UploadedArtifactRow", () => {
 
     expect(markup).toContain("ChronicleSidekickBridgeWoTLK.lua");
     expect(markup).not.toContain("/download");
+  });
+});
+
+
+describe("LogDetailView admin tool placement", () => {
+  it.each([false, true])("separates diagnostics from title for admin=%s while preserving ordinary reparse", (hasAdminLogs) => {
+    const noop = () => {};
+    const markup = renderToStaticMarkup(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter>
+          <LogDetailView
+            log={{ id: artifact.log_group_id, owner: "owner", log_type: "vanilla", upload_source: "web", unlisted: false, raw_files_pinned: false, parsed_bytes: 0, created_at: artifact.created_at, updated_at: artifact.updated_at, files: [], status: { id: 1, state: "completed", kind: "log-parse", attempt: 1, max_attempts: 5, created_at: artifact.created_at, scheduled_at: artifact.created_at, attempted_at: null, finalized_at: null, errors: [], output: {} } }}
+            logLoading={false} logError={null} onDelete={noop} isDeleting={false} showDeleteConfirm={false} setShowDeleteConfirm={noop}
+            onReparse={noop} isReparsing={false} canReparse canProfile={hasAdminLogs}
+            onDeleteFiles={noop} isDeletingFiles={false} canDeleteFiles={false} canDownloadFiles={false}
+            canUploadYoutube={false} canDeleteInstance={false} onDeleteInstance={noop} isDeletingInstance={false}
+            onRefresh={noop} isRefreshing={false} canMarkUnlisted={false} onMarkUnlisted={noop} isMarkingUnlisted={false}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    const header = markup.match(/<header[^>]*>([\s\S]*?)<\/header>/)?.[1];
+    expect(header).toContain("Log Upload");
+    expect(header).not.toContain('id="parser-engine"');
+    expect(header).not.toContain("Admin parser tools");
+    expect(markup.includes('aria-label="Admin parser tools"')).toBe(hasAdminLogs);
+    if (!hasAdminLogs) {
+      expect(header).toContain("Reparse");
+      expect(markup).not.toContain("Verbose");
+      expect(markup).not.toContain("CPU Profile");
+    }
   });
 });

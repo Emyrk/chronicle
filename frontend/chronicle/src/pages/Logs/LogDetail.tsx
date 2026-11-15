@@ -1,4 +1,4 @@
-import { ParserEnginePicker } from "../Upload/ParserEnginePicker";
+import { AdminReparseControls } from "./AdminReparseControls";
 import type { ParserEngine } from "@/api/typesGenerated";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
@@ -1465,8 +1465,8 @@ export function LogDetailView({
       ) : (
         <>
           {/* Header */}
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0">
+          <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-2xl font-bold">{instanceNames || "Log Upload"}</h1>
                 {log.unlisted && <UnlistedBadge />}
@@ -1483,7 +1483,7 @@ export function LogDetailView({
             </div>
 
             {/* Action Buttons */}
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
               <Button
                 variant="outline"
                 size="sm"
@@ -1509,10 +1509,16 @@ export function LogDetailView({
                 )}
                 <span className="sr-only">Refresh</span>
               </Button>
-              {canReparse && canProfile && (
-                <ParserEnginePicker context="reparse" hasAdminLogs={canProfile} value={parserEngine} onChange={setParserEngine} disabled={isReparsing || !isJobComplete(log.status.state)} />
+              {canReparse && !canProfile && (
+                <Button variant="outline" size="sm" disabled={isReparsing || !isJobComplete(log.status.state)} onClick={() => onReparse(false)}>
+                  <Play className="h-4 w-4 mr-2" />
+                  {isReparsing ? "Reparsing..." : "Reparse"}
+                </Button>
               )}
-              {canReparse && (
+            </div>
+          </header>
+
+          <AdminReparseControls hasAdminLogs={canProfile} canReparse={canReparse} parserEngine={parserEngine} onParserEngineChange={setParserEngine} disabled={isReparsing || !isJobComplete(log.status.state)}>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
@@ -1578,9 +1584,7 @@ export function LogDetailView({
                     )}
                   </DropdownMenuContent>
                 </DropdownMenu>
-              )}
-            </div>
-          </div>
+          </AdminReparseControls>
 
           {log.status.state === RIVER_STATES.discarded && (!log.status.errors || log.status.errors.length === 0) && (
             <p className="text-sm text-muted-foreground">
@@ -1589,7 +1593,7 @@ export function LogDetailView({
           )}
 
           {/* Reparse format + flavor panel (admin) */}
-          {showReparseAxis && (
+          {canProfile && showReparseAxis && (
             <Card className="p-4 space-y-3 border-purple-500/40">
               <h3 className="font-medium text-sm">Reparse with format + flavor</h3>
               <div className="grid gap-3 sm:grid-cols-2">
