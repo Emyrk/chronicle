@@ -145,7 +145,7 @@ export function ReplayPlayer({ player, view = {}, header, overlay, transport, fa
         debuffSpellIds={ready.debuffSpellIds}
         followGuid={followGuid !== undefined ? followGuid : player.followGuid}
         onFollowChange={player.setFollowGuid}
-        onScene={player.setScene3d}
+        onScene={player.onScene}
       />
     </Suspense>
   ));

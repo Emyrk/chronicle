@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { PanelRenderProps } from "../types";
 import { fetchUnitModelUrls, type PublishedUnitModelUrls } from "./bossMinis";
@@ -56,6 +56,8 @@ export interface ReplayCameraHandle {
   topDown: () => void;
   /** Report the current orbit pose through the view's `onCameraCapture`. */
   capturePose: () => void;
+  /** The live 3D scene (for capture), or null before it exists and after it is disposed. */
+  scene: () => MapScene3D | null;
 }
 
 export interface ReplayPlayerState {
@@ -107,9 +109,8 @@ export interface ReplayPlayerState {
   /** A unit frame's Follow: the Director on that unit (resumed if the user had pinned a framing); again stops it. */
   followUnit: (guid: string) => void;
   cameraHandle: ReplayCameraHandle;
-  /** The live 3D scene (for capture), or null. */
-  scene3d: MapScene3D | null;
-  setScene3d: (scene: MapScene3D | null) => void;
+  /** Handed to the view: keeps the live 3D scene for `cameraHandle.scene()` (no re-render). */
+  onScene: (scene: MapScene3D | null) => void;
   cutKey: number;
   topDownKey: number;
   cameraCaptureKey: number;
@@ -198,8 +199,12 @@ export function useReplayPlayer(options: ReplayPlayerOptions): ReplayPlayerState
   const cut = useCallback(() => setCutKey((key) => key + 1), []);
   const topDown = useCallback(() => setTopDownKey((key) => key + 1), []);
   const capturePose = useCallback(() => setCameraCaptureKey((key) => key + 1), []);
-  const cameraHandle = useMemo((): ReplayCameraHandle => ({ cut, topDown, capturePose }), [capturePose, cut, topDown]);
-  const [scene3d, setScene3d] = useState<MapScene3D | null>(null);
+  const sceneRef = useRef<MapScene3D | null>(null);
+  const onScene = useCallback((created: MapScene3D | null) => {
+    sceneRef.current = created;
+  }, []);
+  const scene3d = useCallback(() => sceneRef.current, []);
+  const cameraHandle = useMemo((): ReplayCameraHandle => ({ cut, topDown, capturePose, scene: scene3d }), [capturePose, cut, scene3d, topDown]);
   const markWebglUnavailable = useCallback(() => setWebglUnavailable(true), []);
 
   const unitModelsQuery = useQuery({
@@ -254,8 +259,7 @@ export function useReplayPlayer(options: ReplayPlayerOptions): ReplayPlayerState
     setFollowGuid,
     followUnit,
     cameraHandle,
-    scene3d,
-    setScene3d,
+    onScene,
     cutKey,
     topDownKey,
     cameraCaptureKey,
