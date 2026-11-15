@@ -5057,6 +5057,16 @@ export interface ParseScoreCohortResponse {
 
 // From chroniclesdk/rankings.go
 /**
+ * ParseScoreNormalFit describes a normal distribution fitted to one cohort.
+ */
+export interface ParseScoreNormalFit {
+    readonly mean: number;
+    readonly standard_deviation: number;
+    readonly max_cdf_gap: number;
+}
+
+// From chroniclesdk/rankings.go
+/**
  * ParseScoreSpread summarizes one exact DPS/HPS cohort for public parse pages.
  */
 export interface ParseScoreSpread {
@@ -5071,6 +5081,7 @@ export interface ParseScoreSpread {
     readonly min: number;
     readonly median: number;
     readonly max: number;
+    readonly normal_fit?: ParseScoreNormalFit;
     readonly cutoffs: readonly ParseScoreTierCutoff[];
 }
 

@@ -5,6 +5,7 @@ import { parseHexColor } from "@/pages/Instance/parseColors";
 import {
   buildHistogram,
   fitNormalDistribution,
+  normalFitLabel,
   outlierZoomRange,
   PARSE_TIERS,
   type CohortDirection,
@@ -32,12 +33,6 @@ function niceCeil(value: number): number {
     if (factor * magnitude >= value) return factor * magnitude;
   }
   return 10 * magnitude;
-}
-
-function normalFitLabel(maxCdfGap: number): string {
-  if (maxCdfGap <= 0.06) return "close fit";
-  if (maxCdfGap <= 0.12) return "rough fit";
-  return "poor fit";
 }
 
 function NormalFitBadge({

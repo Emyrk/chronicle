@@ -88,6 +88,12 @@ export interface NormalDistributionFit {
   maxCdfGap: number;
 }
 
+export function normalFitLabel(maxCdfGap: number): "close fit" | "rough fit" | "poor fit" {
+  if (maxCdfGap <= 0.06) return "close fit";
+  if (maxCdfGap <= 0.12) return "rough fit";
+  return "poor fit";
+}
+
 /** Standard normal CDF using the Abramowitz and Stegun erf approximation. */
 export function normalCdf(value: number, mean = 0, standardDeviation = 1): number {
   if (standardDeviation <= 0) return value < mean ? 0 : 1;

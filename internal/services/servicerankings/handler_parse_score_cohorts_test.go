@@ -313,6 +313,7 @@ func TestParseScoreSpreads_MatchCohortScores(t *testing.T) {
 	spreads := callParseScoreSpreads(t, svc, "date=2026-10-15&metric=dps&encounter_name=Ragnaros")
 	require.True(t, spreads.Available)
 	require.Len(t, spreads.Spreads, 2, "unknown specs are excluded")
+	assert.Nil(t, spreads.Spreads[0].NormalFit, "one-value cohort has no normal fit")
 	assert.Equal(t, "MAGE", spreads.Spreads[0].PlayerClass, "sorted by median, best first")
 
 	fury := spreads.Spreads[1]
@@ -321,6 +322,10 @@ func TestParseScoreSpreads_MatchCohortScores(t *testing.T) {
 	assert.Equal(t, 6, fury.SampleSize)
 	assert.Equal(t, 100.0, fury.Min)
 	assert.Equal(t, 350.0, fury.Median)
+	require.NotNil(t, fury.NormalFit)
+	assert.Equal(t, 350.0, fury.NormalFit.Mean)
+	assert.InDelta(t, 170.7825, fury.NormalFit.StandardDeviation, 0.0001)
+	assert.InDelta(t, 0.143445, fury.NormalFit.MaxCDFGap, 0.0001)
 	assert.Equal(t, 600.0, fury.Max)
 
 	// Each tier cutoff is the weakest value the cohort viewer scores at or above it.
