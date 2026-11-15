@@ -13,9 +13,14 @@ import type {
 const CACHE_KEY_PREFIX = "chronicle_discovery_v2_";
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const CHRONICLE_HOSTED_DISCOVERY_URL = "https://legacy.chronicleclassic.com";
-const LANDING_ORIGIN_HEADERS = {
+// Discovery only answers browser requests from the landing origin (BrowserOnly on the API).
+// Browsers send that Origin themselves; the build-time prerender runs in Node and must send
+// it explicitly, or it gets a 403 and would prerender the baseline only.
+const BUILD_DISCOVERY_HEADERS = {
   Origin: "https://chronicleclassic.com",
   Referer: "https://chronicleclassic.com/",
+  Accept: "application/json",
+  "User-Agent": "ChronicleLandingBuild/1.0 (+https://chronicleclassic.com)",
 };
 
 interface SourcedDiscoveryEntry extends DiscoveryEntry {
@@ -160,13 +165,7 @@ function isHTTPURL(value: string): boolean {
 
 async function fetchDiscovery(url: string): Promise<SourcedDiscoveryEntry[]> {
   try {
-    // Discovery only answers requests from the landing origin. Browsers send
-    // that Origin themselves; the build-time prerender runs in Node and must
-    // send it explicitly, or it gets a 403 and prerenders the baseline only.
-    const resp = await fetch(
-      discoveryEndpoint(url),
-      import.meta.env.SSR ? { headers: LANDING_ORIGIN_HEADERS } : undefined,
-    );
+    const resp = await fetch(discoveryEndpoint(url));
     if (!resp.ok) return [];
     const data = (await resp.json()) as DiscoveryEntry[];
     if (!Array.isArray(data)) return [];
@@ -178,6 +177,43 @@ async function fetchDiscovery(url: string): Promise<SourcedDiscoveryEntry[]> {
   }
 }
 
+/**
+ * Build-time discovery. Unlike the browser path, which quietly shows what it has, any failure
+ * here throws: a prerender that silently fell back to the baseline once shipped a directory
+ * of two servers to production.
+ */
+async function fetchDiscoveryForBuild(url: string): Promise<SourcedDiscoveryEntry[]> {
+  const endpoint = `${url}/api/v1/discovery`;
+  let resp: Response;
+  try {
+    resp = await fetch(endpoint, { headers: BUILD_DISCOVERY_HEADERS });
+  } catch (err) {
+    throw new Error(`landing build: discovery request to ${endpoint} failed: ${String(err)}`);
+  }
+  if (!resp.ok) {
+    const body = (await resp.text().catch(() => "")).replace(/\s+/g, " ").slice(0, 200);
+    const via = [resp.headers.get("server"), resp.headers.get("cf-mitigated")].filter(Boolean).join(", ");
+    throw new Error(
+      `landing build: discovery ${endpoint} returned HTTP ${resp.status}${via ? ` (${via})` : ""}: ${body}`,
+    );
+  }
+  let data: unknown;
+  try {
+    data = await resp.json();
+  } catch (err) {
+    throw new Error(`landing build: discovery ${endpoint} returned invalid JSON: ${String(err)}`);
+  }
+  if (!Array.isArray(data)) {
+    throw new Error(`landing build: discovery ${endpoint} returned ${typeof data}, expected an array`);
+  }
+  if (data.length === 0) {
+    throw new Error(`landing build: discovery ${endpoint} returned no servers`);
+  }
+  return (data as DiscoveryEntry[])
+    .filter((entry) => typeof entry.url === "string" && isHTTPURL(entry.url))
+    .map((entry) => ({ ...entry, discoverySource: url }));
+}
+
 async function fetchDiscoveryEntries(discoveryUrls: string[]): Promise<SourcedDiscoveryEntry[]> {
   const results = await Promise.allSettled(discoveryUrls.map(fetchDiscovery));
   const entries: SourcedDiscoveryEntry[] = [];
@@ -187,13 +223,24 @@ async function fetchDiscoveryEntries(discoveryUrls: string[]): Promise<SourcedDi
   return entries;
 }
 
-/** Resolve the complete directory for build-time prerendering. */
+/**
+ * Resolve the complete directory for build-time prerendering. Throws when any discovery
+ * source cannot be read, so the build fails instead of shipping the baseline.
+ */
 export async function discoverServers(
   baseline: ServerEntry[],
   discoveryUrls: string[],
 ): Promise<ServerEntry[]> {
   if (discoveryUrls.length === 0) return baseline;
-  return mergeDiscovery(baseline, await fetchDiscoveryEntries(discoveryUrls));
+  const entries = (await Promise.all(discoveryUrls.map(fetchDiscoveryForBuild))).flat();
+  const servers = mergeDiscovery(baseline, entries);
+  const listed = new Set(servers.map((server) => server.chronicleUrl));
+  const skipped = entries.filter((entry) => !listed.has(entry.url)).map((entry) => entry.url);
+  if (skipped.length > 0) {
+    console.warn(`landing build: discovered servers left out (no display name): ${skipped.join(", ")}`);
+  }
+  console.log(`landing build: ${servers.length} servers (${entries.length} discovered, ${baseline.length} baseline)`);
+  return servers;
 }
 
 /**
