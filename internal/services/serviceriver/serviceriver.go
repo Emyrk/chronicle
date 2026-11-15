@@ -339,6 +339,7 @@ func (s *Service) Start(ctx context.Context) error {
 
 	// Refresh the public /stats page snapshots per tenant.
 	stats := servicestats.Stats(s.broker)
+	q.AddQueue(servicestats.QueueStats, river.QueueConfig{MaxWorkers: servicestats.QueueWorkers})
 	riverqueue.AddWorker(q, &servicestats.DispatchWorker{Service: stats, Queue: q})
 	riverqueue.AddWorker(q, &servicestats.TenantWorker{Service: stats, Queue: q})
 	riverqueue.AddWorker(q, &servicestats.ProducerWorker{Service: stats})

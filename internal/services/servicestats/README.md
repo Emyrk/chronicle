@@ -44,22 +44,35 @@ DispatchWorker (hourly)                    /stats/<...>
   and handed to producers as `Tenant.Activity`.
 - **Page minimum sample** (`Output.MinSample`): below it the page still
   renders with `<meta name="robots" content="noindex">` (and `X-Robots-Tag`)
-  and is left out of the sitemap. Query-parameter variants and
-  non-discoverable sites are noindex too. Non-discoverable sites are also
-  skipped by the dispatch.
-- **Isolation:** every family runs in its own River job with its own timeout
-  (`Producer.Timeout`, default `DefaultProducerTimeout`), so a slow or failing
-  producer never blocks the others. A failed family is retried by River and
-  re-queued by the next tenant job.
+  and is left out of the sitemap. Query-parameter variants are noindex too.
+- **404s:** unknown paths, percent-encoded variants of a path (`RawPath` set
+  and different from `Path`, e.g. `/stats/%61bout`), non-discoverable sites
+  (the dispatch skips them, so their pages would be stale) and pages without a
+  snapshot. All are decided before any database read except the last.
+- **Isolation:** every /stats job runs on its own River queue, `stats`
+  (`QueueWorkers` workers), and every family in its own job with its own
+  timeout (`Producer.Timeout`, default `DefaultProducerTimeout`), so a slow or
+  failing producer never blocks the others or other queues. Producer jobs get
+  one attempt: the next hourly tenant job re-queues a family that failed.
+- **Cadence:** a family (or the threshold check) is due when
+  `now − last run ≥ cadence − DispatchInterval/2`. Run markers are stamped
+  when a run finishes, after the tick that started it; the slack keeps an
+  hourly family on every tick and a 6h family on every sixth.
+- **Validation and shadowing:** a run's keys are all validated before the
+  first write; one bad key fails the run and writes nothing. An output whose
+  URL is served by another page (a static page, or a more specific family) is
+  skipped with a warning, so it is never stored, listed in the sitemap or
+  pinged. `New` rejects a static page that a family pattern also matches.
 - **Pruning:** after a run, a family's pages it didn't emit are deleted (only
   that family's). Rows of a family that is no longer registered are kept for
   `UnregisteredRetention` (7 days) so a rolling deploy or rollback can still
   serve them. An internal `_ran:<family>` row records each family's last
   successful run, so a family that emitted nothing isn't rerun every hour.
 - **Caching:** `Cache-Control: public, max-age=300, s-maxage=3600`.
-- **Sitemap:** indexable stored pages of registered families (path from
-  `Family.PathForKey`, `lastmod = payload_changed_at`), plus the static pages
-  when the tenant has any (`api/seo.go`, `loadSitemapURLs`).
+- **Sitemap:** indexable stored pages of registered families that the family
+  actually serves (path from `Family.PathForKey`, `lastmod =
+  payload_changed_at`), plus the static pages when the tenant has any
+  (`api/seo.go`, `loadSitemapURLs`).
 - **IndexNow:** off unless `CHRONICLE_INDEXNOW_KEY` is set. Then the key is
   served at `/indexnow.txt` and producer runs ping IndexNow (best effort) with
   the indexable pages whose payload changed. Only discoverable tenants.
@@ -105,8 +118,10 @@ page key is the family key followed by the parameter values in pattern order,
 e.g. pattern `/stats/{instance}/{boss}` with family `boss` gives key
 `boss/naxxramas/patchwerk`. When two families match a path, the one with a
 literal segment at the first difference wins, so `/stats/{instance}/speedruns`
-beats `/stats/{instance}/{boss}` for `/stats/naxxramas/speedruns`. Families
-that would match exactly the same paths are rejected by `New`.
+beats `/stats/{instance}/{boss}` for `/stats/naxxramas/speedruns`, and a
+`boss/naxxramas/speedruns` output from the boss family is skipped. Families
+that would match exactly the same paths, and static pages a family matches,
+are rejected by `New`.
 
 ## Adding a page family
 

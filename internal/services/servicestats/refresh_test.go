@@ -82,12 +82,18 @@ func (q *recordingQueue) take() []river.JobArgs {
 // funcProducer is a configurable producer for the refresh tests.
 type funcProducer struct {
 	key     string
+	cadence time.Duration
 	timeout time.Duration
 	compute func(ctx context.Context, tenant servicestats.Tenant) ([]servicestats.Output, error)
 }
 
-func (p funcProducer) Key() string            { return p.key }
-func (p funcProducer) Cadence() time.Duration { return time.Hour }
+func (p funcProducer) Key() string { return p.key }
+func (p funcProducer) Cadence() time.Duration {
+	if p.cadence == 0 {
+		return time.Hour
+	}
+	return p.cadence
+}
 func (p funcProducer) Timeout() time.Duration { return p.timeout }
 func (p funcProducer) Compute(ctx context.Context, tenant servicestats.Tenant) ([]servicestats.Output, error) {
 	return p.compute(ctx, tenant)

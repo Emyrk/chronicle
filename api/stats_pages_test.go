@@ -7,11 +7,13 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/services/servicestats"
+	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 )
 
 func TestIsTurtleFork(t *testing.T) {
@@ -49,7 +51,10 @@ func TestMountStatsAnswersHead(t *testing.T) {
 			"/recent":       http.StatusTeapot,
 		} {
 			rec := httptest.NewRecorder()
-			r.ServeHTTP(rec, httptest.NewRequest(method, path, nil))
+			// A discoverable tenant, so the site resolves from context.
+			req := httptest.NewRequest(method, path, nil)
+			req = req.WithContext(servicetenant.WithTenant(req.Context(), database.Tenant{ID: uuid.New(), Discoverable: true}))
+			r.ServeHTTP(rec, req)
 			require.Equal(t, want, rec.Code, "%s %s", method, path)
 		}
 	}
