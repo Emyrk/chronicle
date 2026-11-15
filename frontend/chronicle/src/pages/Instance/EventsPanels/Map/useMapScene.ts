@@ -231,6 +231,8 @@ export type MapScene =
     detail: string;
     /** While loading: the selected encounter's dungeon mesh, when the manifest has one, so it can be fetched early. */
     meshHint?: WowMapMeshInstance | null;
+    /** Still loading (artwork, telemetry or floor support), not a final answer. */
+    pending?: boolean;
     /** Available when another floor may resolve the missing artwork. */
     floors?: number[];
     selectedFloorNumber?: number | null;
@@ -341,6 +343,13 @@ export function previewCursorMs(startMs: number, endMs: number, elapsedMs: numbe
   return startMs + ((elapsedMs * previewSpeed(span, maxSpeed)) % span);
 }
 
+/** The preview's elapsed time that puts its cursor at `cursorMs` (the inverse of previewCursorMs, short of the loop's wrap). */
+export function previewElapsedAt(startMs: number, endMs: number, cursorMs: number, maxSpeed = 32): number {
+  const span = Math.max(1, endMs - startMs);
+  const offset = Math.min(span * 0.999, Math.max(0, cursorMs - startMs));
+  return offset / previewSpeed(span, maxSpeed);
+}
+
 /**
  * Everything the Map panel's views share: the encounter at the replay cursor,
  * the artwork canvas and the projected unit markers. Both the 2D and 3D views
@@ -433,7 +442,7 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
     manualFloorNumber, floorUncertain, setFloorNumber,
   } : {};
   if (floorSelection.pending) return {
-    status: "message", title: "Choosing encounter floor", detail: "Loading geometry support. You can choose a floor manually while it loads.", ...floorControls,
+    status: "message", pending: true, title: "Choosing encounter floor", detail: "Loading geometry support. You can choose a floor manually while it loads.", ...floorControls,
   };
   if (!iconBaseUrl) return { status: "message", title: "Map artwork unavailable", detail: "This instance's dataset has no icon base URL." };
   if (manifestQuery.isLoading || props.loading) {
@@ -442,7 +451,7 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
     const selectedMapId = props.context.instance.encounters.find((candidate) => candidate.id === props.context.selectedEncounterIds[0])?.mapId;
     const hintArtwork = manifestQuery.data && selectedMapId ? resolveMapArtwork(manifestQuery.data, selectedMapId, undefined, props.context.instance.name) : null;
     const meshHint = hintArtwork?.kind === "instance" ? placeableDungeonMesh(hintArtwork.instance.mesh) : null;
-    return { status: "message", title: "Loading map", detail: "Fetching artwork and position telemetry…", meshHint };
+    return { status: "message", pending: true, title: "Loading map", detail: "Fetching artwork and position telemetry…", meshHint };
   }
   if (manifestQuery.error) return { status: "message", title: "Map artwork unavailable", detail: manifestQuery.error.message };
   if (!encounter || visibleUnits.length === 0 || mapId === null || cursorMs === null) {
