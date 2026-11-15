@@ -49,128 +49,62 @@ func RegisterGraphOwners(r *ownergraph.Registry, options GraphOptions) error {
 	registrations := []func() error{
 		func() error { return registerNeverActiveValueGraphOwner(r) },
 		func() error {
-			return ownergraph.Register(r, ownergraph.Codec[Characters]{Type: CharactersStateType, Version: CharactersStateVersion, Init: func() *Characters { return new(Characters) }, Capture: func(c *Characters, ctx *ownergraph.Capture) ([]byte, error) {
-				if len(c.hooks) != 0 || c.phaseTransitionCb != nil || c.noKnownParticipantsAlive != nil {
-					if options.ValidateRuntime == nil {
-						return nil, fmt.Errorf("character graph runtime callbacks require explicit recipe wiring")
-					}
-					if err := options.ValidateRuntime(c); err != nil {
-						return nil, err
-					}
-				}
-				s, e := c.CaptureState(graphCharacterReference(ctx), ctx.Ref)
-				if e != nil {
-					return nil, e
-				}
-				db, e := ctx.Ref(c.db)
-				if e != nil {
-					return nil, e
-				}
-				id, e := ctx.Ref(c.idf)
-				if e != nil {
-					return nil, e
-				}
-				return graphPayload(s, map[string]string{"units": db, "identifier": id})
-			}, Restore: func(c *Characters, v uint32, b []byte, ctx *ownergraph.Restore) error {
-				g, e := graphDecode(b)
-				if e != nil {
-					return e
-				}
-				s, e := DecodeCharactersState(v, g.State)
-				if e != nil {
-					return e
-				}
-				db, e := ownergraph.LoadAs[*unitdb.Units](ctx, g.Refs["units"])
-				if e != nil {
-					return e
-				}
-				id, e := ownergraph.LoadAs[*identifier.Identifier](ctx, g.Refs["identifier"])
-				if e != nil {
-					return e
-				}
-				return c.RestoreState(s, options.Factories, db, id, graphCharacterLoader(ctx), ctx.Resolve)
-			}})
+			// These adapters bind trusted construction options; snapshot logic stays
+			// on Characters rather than retaining runtime options in serialized state.
+			return ownergraph.Register(r, ownergraph.Codec[Characters]{
+				Type:    CharactersStateType,
+				Version: CharactersStateVersion,
+				Init:    func() *Characters { return new(Characters) },
+				Capture: func(c *Characters, ctx *ownergraph.Capture) ([]byte, error) { return c.captureGraphState(ctx, options) },
+				Restore: func(c *Characters, v uint32, b []byte, ctx *ownergraph.Restore) error {
+					return c.restoreGraphState(v, b, ctx, options)
+				},
+			})
 		},
 		func() error {
-			return ownergraph.Register(r, ownergraph.Codec[Base[*period.InactivityPeriod]]{Type: BaseStateType + ".Inactivity", Version: BaseStateVersion, Init: func() *Base[*period.InactivityPeriod] { return new(Base[*period.InactivityPeriod]) }, Capture: func(c *Base[*period.InactivityPeriod], ctx *ownergraph.Capture) ([]byte, error) {
-				s, e := c.CaptureState(ownergraph.Reference[*period.InactivityPeriod](ctx), ownergraph.Reference[messages.Message](ctx))
-				if e != nil {
-					return nil, e
-				}
-				lookup, e := ctx.Ref(c.lookup)
-				if e != nil {
-					return nil, e
-				}
-				return graphPayload(s, map[string]string{"lookup": lookup})
-			}, Restore: func(c *Base[*period.InactivityPeriod], v uint32, b []byte, ctx *ownergraph.Restore) error {
-				g, e := graphDecode(b)
-				if e != nil {
-					return e
-				}
-				s, e := DecodeBaseState(v, g.State)
-				if e != nil {
-					return e
-				}
-				lookup, e := ownergraph.ResolveAs[*Characters](ctx, g.Refs["lookup"])
-				if e != nil {
-					return e
-				}
-				return c.RestoreState(s, lookup, ownergraph.Loader[*period.InactivityPeriod](ctx), ownergraph.Loader[messages.Message](ctx))
-			}})
+			return ownergraph.Register(r, ownergraph.Codec[Base[*period.InactivityPeriod]]{
+				Type:    BaseStateType + ".Inactivity",
+				Version: BaseStateVersion,
+				Init:    func() *Base[*period.InactivityPeriod] { return new(Base[*period.InactivityPeriod]) },
+				Capture: (*Base[*period.InactivityPeriod]).captureGraphState,
+				Restore: (*Base[*period.InactivityPeriod]).restoreGraphState,
+			})
 		},
 		func() error {
-			return ownergraph.Register(r, ownergraph.Codec[Common]{Type: CommonStateType, Version: CommonStateVersion, Init: func() *Common { return new(Common) }, Capture: (*Common).captureGraphState, Restore: (*Common).restoreGraphState})
+			return ownergraph.Register(r, ownergraph.Codec[Common]{
+				Type:    CommonStateType,
+				Version: CommonStateVersion,
+				Init:    func() *Common { return new(Common) },
+				Capture: (*Common).captureGraphState,
+				Restore: (*Common).restoreGraphState,
+			})
 		},
 		func() error {
-			return ownergraph.Register(r, ownergraph.Codec[NeverActive]{Type: NeverActiveStateType, Version: NeverActiveStateVersion, Init: func() *NeverActive { return new(NeverActive) }, Capture: func(c *NeverActive, _ *ownergraph.Capture) ([]byte, error) { return c.CaptureState().Encode() }, Restore: func(c *NeverActive, v uint32, b []byte, _ *ownergraph.Restore) error {
-				s, e := DecodeNeverActiveState(v, b)
-				if e != nil {
-					return e
-				}
-				return c.RestoreState(s)
-			}})
+			return ownergraph.Register(r, ownergraph.Codec[NeverActive]{
+				Type:    NeverActiveStateType,
+				Version: NeverActiveStateVersion,
+				Init:    func() *NeverActive { return new(NeverActive) },
+				Capture: (*NeverActive).captureGraphState,
+				Restore: (*NeverActive).restoreGraphState,
+			})
 		},
 		func() error {
-			return ownergraph.Register(r, ownergraph.Codec[Room]{Type: RoomStateType, Version: RoomStateVersion, Init: func() *Room { return new(Room) }, Capture: func(c *Room, ctx *ownergraph.Capture) ([]byte, error) {
-				s, e := c.CaptureState(ownergraph.Reference[*RoomMechanic](ctx))
-				if e != nil {
-					return nil, e
-				}
-				return s.Encode()
-			}, Restore: func(c *Room, v uint32, b []byte, ctx *ownergraph.Restore) error {
-				s, e := DecodeRoomState(v, b)
-				if e != nil {
-					return e
-				}
-				return c.RestoreState(s, ownergraph.Resolver[*RoomMechanic](ctx))
-			}})
+			return ownergraph.Register(r, ownergraph.Codec[Room]{
+				Type:    RoomStateType,
+				Version: RoomStateVersion,
+				Init:    func() *Room { return new(Room) },
+				Capture: (*Room).captureGraphState,
+				Restore: (*Room).restoreGraphState,
+			})
 		},
 		func() error {
-			return ownergraph.Register(r, ownergraph.Codec[RoomMechanic]{Type: RoomMechanicStateType, Version: RoomMechanicStateVersion, Init: func() *RoomMechanic { return new(RoomMechanic) }, Capture: func(c *RoomMechanic, ctx *ownergraph.Capture) ([]byte, error) {
-				s, e := c.CaptureState(ownergraph.Reference[*Common](ctx), ownergraph.Reference[*Room](ctx), ownergraph.Reference[messages.Message](ctx))
-				if e != nil {
-					return nil, e
-				}
-				all, e := ctx.Ref(c.all)
-				if e != nil {
-					return nil, e
-				}
-				return graphPayload(s, map[string]string{"all": all})
-			}, Restore: func(c *RoomMechanic, v uint32, b []byte, ctx *ownergraph.Restore) error {
-				g, e := graphDecode(b)
-				if e != nil {
-					return e
-				}
-				s, e := DecodeRoomMechanicState(v, g.State)
-				if e != nil {
-					return e
-				}
-				all, e := ownergraph.ResolveAs[*Characters](ctx, g.Refs["all"])
-				if e != nil {
-					return e
-				}
-				return c.RestoreState(s, all, ownergraph.Loader[*Common](ctx), ownergraph.Resolver[*Room](ctx), ownergraph.Loader[messages.Message](ctx))
-			}})
+			return ownergraph.Register(r, ownergraph.Codec[RoomMechanic]{
+				Type:    RoomMechanicStateType,
+				Version: RoomMechanicStateVersion,
+				Init:    func() *RoomMechanic { return new(RoomMechanic) },
+				Capture: (*RoomMechanic).captureGraphState,
+				Restore: (*RoomMechanic).restoreGraphState,
+			})
 		},
 	}
 	for _, register := range registrations {
@@ -221,36 +155,19 @@ func (c *Characters) WireGraphRuntimeWith(runtime CharactersRuntime) error {
 }
 
 func RegisterAdsGraphOwner(r *ownergraph.Registry) error {
-	return ownergraph.Register(r, ownergraph.Codec[AdsGoWithBoss]{Type: AdsGoWithBossStateType, Version: AdsGoWithBossStateVersion, Init: func() *AdsGoWithBoss { return new(AdsGoWithBoss) }, Capture: func(c *AdsGoWithBoss, ctx *ownergraph.Capture) ([]byte, error) {
-		s, e := c.CaptureState(ownergraph.Reference[CharacterBase](ctx))
-		if e != nil {
-			return nil, e
-		}
-		all, e := ctx.Ref(c.all)
-		if e != nil {
-			return nil, e
-		}
-		return graphPayload(s, map[string]string{"all": all})
-	}, Restore: func(c *AdsGoWithBoss, v uint32, b []byte, ctx *ownergraph.Restore) error {
-		g, e := graphDecode(b)
-		if e != nil {
-			return e
-		}
-		s, e := DecodeAdsGoWithBossState(v, g.State)
-		if e != nil {
-			return e
-		}
-		all, e := ownergraph.ResolveAs[*Characters](ctx, g.Refs["all"])
-		if e != nil {
-			return e
-		}
-		return c.RestoreState(s, ownergraph.Loader[CharacterBase](ctx), all)
-	}, Validate: func(c *AdsGoWithBoss) error {
-		if _, ok := c.CharacterBase.(interface{ WireGraphPeriodHook(period.Hook) }); !ok {
-			return fmt.Errorf("unsupported wrapped runtime period owner")
-		}
-		return nil
-	}})
+	return ownergraph.Register(r, ownergraph.Codec[AdsGoWithBoss]{
+		Type:    AdsGoWithBossStateType,
+		Version: AdsGoWithBossStateVersion,
+		Init:    func() *AdsGoWithBoss { return new(AdsGoWithBoss) },
+		Capture: (*AdsGoWithBoss).captureGraphState,
+		Restore: (*AdsGoWithBoss).restoreGraphState,
+		Validate: func(c *AdsGoWithBoss) error {
+			if _, ok := c.CharacterBase.(interface{ WireGraphPeriodHook(period.Hook) }); !ok {
+				return fmt.Errorf("unsupported wrapped runtime period owner")
+			}
+			return nil
+		},
+	})
 }
 func (c *AdsGoWithBoss) WireGraphPeriodHook(h period.Hook) {
 	c.CharacterBase.(interface{ WireGraphPeriodHook(period.Hook) }).WireGraphPeriodHook(h)
@@ -368,4 +285,132 @@ func (c *Characters) BindGraphRuntimeWithHook(owner any, expectedHooks []SetHook
 	}
 	*c = next
 	return nil
+}
+
+func (c *Characters) captureGraphState(ctx *ownergraph.Capture, options GraphOptions) ([]byte, error) {
+	if len(c.hooks) != 0 || c.phaseTransitionCb != nil || c.noKnownParticipantsAlive != nil {
+		if options.ValidateRuntime == nil {
+			return nil, fmt.Errorf("character graph runtime callbacks require explicit recipe wiring")
+		}
+		if err := options.ValidateRuntime(c); err != nil {
+			return nil, err
+		}
+	}
+	s, e := c.CaptureState(graphCharacterReference(ctx), ctx.Ref)
+	if e != nil {
+		return nil, e
+	}
+	db, e := ctx.Ref(c.db)
+	if e != nil {
+		return nil, e
+	}
+	id, e := ctx.Ref(c.idf)
+	if e != nil {
+		return nil, e
+	}
+	return graphPayload(s, map[string]string{"units": db, "identifier": id})
+}
+
+func (c *Characters) restoreGraphState(v uint32, b []byte, ctx *ownergraph.Restore, options GraphOptions) error {
+	g, e := graphDecode(b)
+	if e != nil {
+		return e
+	}
+	s, e := DecodeCharactersState(v, g.State)
+	if e != nil {
+		return e
+	}
+	db, e := ownergraph.LoadAs[*unitdb.Units](ctx, g.Refs["units"])
+	if e != nil {
+		return e
+	}
+	id, e := ownergraph.LoadAs[*identifier.Identifier](ctx, g.Refs["identifier"])
+	if e != nil {
+		return e
+	}
+	return c.RestoreState(s, options.Factories, db, id, graphCharacterLoader(ctx), ctx.Resolve)
+}
+
+func (c *NeverActive) captureGraphState(_ *ownergraph.Capture) ([]byte, error) {
+	return c.CaptureState().Encode()
+}
+
+func (c *NeverActive) restoreGraphState(v uint32, b []byte, _ *ownergraph.Restore) error {
+	s, e := DecodeNeverActiveState(v, b)
+	if e != nil {
+		return e
+	}
+	return c.RestoreState(s)
+}
+
+func (c *Room) captureGraphState(ctx *ownergraph.Capture) ([]byte, error) {
+	s, e := c.CaptureState(ownergraph.Reference[*RoomMechanic](ctx))
+	if e != nil {
+		return nil, e
+	}
+	return s.Encode()
+}
+
+func (c *Room) restoreGraphState(v uint32, b []byte, ctx *ownergraph.Restore) error {
+	s, e := DecodeRoomState(v, b)
+	if e != nil {
+		return e
+	}
+	return c.RestoreState(s, ownergraph.Resolver[*RoomMechanic](ctx))
+}
+
+func (c *RoomMechanic) captureGraphState(ctx *ownergraph.Capture) ([]byte, error) {
+	s, e := c.CaptureState(ownergraph.Reference[*Common](ctx), ownergraph.Reference[*Room](ctx), ownergraph.Reference[messages.Message](ctx))
+	if e != nil {
+		return nil, e
+	}
+	all, e := ctx.Ref(c.all)
+	if e != nil {
+		return nil, e
+	}
+	return graphPayload(s, map[string]string{"all": all})
+}
+
+func (c *RoomMechanic) restoreGraphState(v uint32, b []byte, ctx *ownergraph.Restore) error {
+	g, e := graphDecode(b)
+	if e != nil {
+		return e
+	}
+	s, e := DecodeRoomMechanicState(v, g.State)
+	if e != nil {
+		return e
+	}
+	all, e := ownergraph.ResolveAs[*Characters](ctx, g.Refs["all"])
+	if e != nil {
+		return e
+	}
+	return c.RestoreState(s, all, ownergraph.Loader[*Common](ctx), ownergraph.Resolver[*Room](ctx), ownergraph.Loader[messages.Message](ctx))
+}
+
+func (c *AdsGoWithBoss) captureGraphState(ctx *ownergraph.Capture) ([]byte, error) {
+	s, e := c.CaptureState(ownergraph.Reference[CharacterBase](ctx))
+	if e != nil {
+		return nil, e
+	}
+	all, e := ctx.Ref(c.all)
+	if e != nil {
+		return nil, e
+	}
+	return graphPayload(s, map[string]string{"all": all})
+}
+
+func (c *AdsGoWithBoss) restoreGraphState(v uint32, b []byte, ctx *ownergraph.Restore) error {
+	g, e := graphDecode(b)
+	if e != nil {
+		return e
+	}
+	s, e := DecodeAdsGoWithBossState(v, g.State)
+	if e != nil {
+		return e
+	}
+	all, e := ownergraph.ResolveAs[*Characters](ctx, g.Refs["all"])
+	if e != nil {
+		return e
+	}
+	return c.RestoreState(s, ownergraph.Loader[CharacterBase](ctx), all)
 }

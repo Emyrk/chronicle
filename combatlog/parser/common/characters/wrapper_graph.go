@@ -15,119 +15,74 @@ func RegisterWrapperGraphOwners(r *ownergraph.Registry) error {
 	registrations := []func() error{
 		func() error { return registerScriptedDefeatGraphOwner(r) },
 		func() error {
-			return ownergraph.Register(r, ownergraph.Codec[PermanentDeath]{Type: PermanentDeathStateType, Version: PermanentDeathStateVersion, Init: func() *PermanentDeath { return new(PermanentDeath) },
-				Capture: func(c *PermanentDeath, ctx *ownergraph.Capture) ([]byte, error) {
-					s, e := c.CaptureState(ownergraph.Reference[CharacterBase](ctx))
-					if e != nil {
-						return nil, e
-					}
-					return s.Encode()
-				}, Restore: func(c *PermanentDeath, v uint32, b []byte, ctx *ownergraph.Restore) error {
-					s, e := DecodePermanentDeathState(v, b)
-					if e != nil {
-						return e
-					}
-					return c.RestoreState(s, ownergraph.Loader[CharacterBase](ctx))
-				}, Validate: func(c *PermanentDeath) error { return validateWrappedPeriod(c.CharacterBase) }})
+			return ownergraph.Register(r, ownergraph.Codec[PermanentDeath]{
+				Type:     PermanentDeathStateType,
+				Version:  PermanentDeathStateVersion,
+				Init:     func() *PermanentDeath { return new(PermanentDeath) },
+				Capture:  (*PermanentDeath).captureGraphState,
+				Restore:  (*PermanentDeath).restoreGraphState,
+				Validate: func(c *PermanentDeath) error { return validateWrappedPeriod(c.CharacterBase) },
+			})
 		},
 		func() error {
-			return ownergraph.Register(r, ownergraph.Codec[StartsNewFight]{Type: StartsNewFightStateType, Version: StartsNewFightStateVersion, Init: func() *StartsNewFight { return new(StartsNewFight) },
-				Capture: func(c *StartsNewFight, ctx *ownergraph.Capture) ([]byte, error) {
-					s, e := c.CaptureState(ownergraph.Reference[CharacterBase](ctx))
-					if e != nil {
-						return nil, e
-					}
-					return s.Encode()
-				}, Restore: func(c *StartsNewFight, v uint32, b []byte, ctx *ownergraph.Restore) error {
-					s, e := DecodeStartsNewFightState(v, b)
-					if e != nil {
-						return e
-					}
-					return c.RestoreState(s, ownergraph.Loader[CharacterBase](ctx))
-				}, Validate: func(c *StartsNewFight) error { return validateWrappedPeriod(c.CharacterBase) }})
+			return ownergraph.Register(r, ownergraph.Codec[StartsNewFight]{
+				Type:     StartsNewFightStateType,
+				Version:  StartsNewFightStateVersion,
+				Init:     func() *StartsNewFight { return new(StartsNewFight) },
+				Capture:  (*StartsNewFight).captureGraphState,
+				Restore:  (*StartsNewFight).restoreGraphState,
+				Validate: func(c *StartsNewFight) error { return validateWrappedPeriod(c.CharacterBase) },
+			})
 		},
 		func() error {
-			return ownergraph.Register(r, ownergraph.Codec[DeathOnCast]{Type: DeathOnCastStateType, Version: DeathOnCastStateVersion, Init: func() *DeathOnCast { return new(DeathOnCast) },
-				Capture: func(c *DeathOnCast, ctx *ownergraph.Capture) ([]byte, error) {
-					s, e := c.CaptureState(ownergraph.Reference[CharacterBase](ctx))
-					if e != nil {
-						return nil, e
-					}
-					return s.Encode()
-				}, Restore: func(c *DeathOnCast, v uint32, b []byte, ctx *ownergraph.Restore) error {
-					s, e := DecodeDeathOnCastState(v, b)
-					if e != nil {
-						return e
-					}
-					return c.RestoreState(s, ownergraph.Loader[CharacterBase](ctx))
-				}, Validate: func(c *DeathOnCast) error { return validateWrappedPeriod(c.CharacterBase) }})
+			return ownergraph.Register(r, ownergraph.Codec[DeathOnCast]{
+				Type:     DeathOnCastStateType,
+				Version:  DeathOnCastStateVersion,
+				Init:     func() *DeathOnCast { return new(DeathOnCast) },
+				Capture:  (*DeathOnCast).captureGraphState,
+				Restore:  (*DeathOnCast).restoreGraphState,
+				Validate: func(c *DeathOnCast) error { return validateWrappedPeriod(c.CharacterBase) },
+			})
 		},
 		func() error {
-			return ownergraph.Register(r, ownergraph.Codec[IgnoreCast]{Type: IgnoreCastStateType, Version: IgnoreCastStateVersion, Init: func() *IgnoreCast { return new(IgnoreCast) },
-				Capture: func(c *IgnoreCast, ctx *ownergraph.Capture) ([]byte, error) {
-					s, e := c.CaptureState(ownergraph.Reference[CharacterBase](ctx))
-					if e != nil {
-						return nil, e
-					}
-					return s.Encode()
-				}, Restore: func(c *IgnoreCast, v uint32, b []byte, ctx *ownergraph.Restore) error {
-					s, e := DecodeIgnoreCastState(v, b)
-					if e != nil {
-						return e
-					}
-					return c.RestoreState(s, ownergraph.Loader[CharacterBase](ctx))
-				}, Validate: func(c *IgnoreCast) error { return validateWrappedPeriod(c.CharacterBase) }})
+			return ownergraph.Register(r, ownergraph.Codec[IgnoreCast]{
+				Type:     IgnoreCastStateType,
+				Version:  IgnoreCastStateVersion,
+				Init:     func() *IgnoreCast { return new(IgnoreCast) },
+				Capture:  (*IgnoreCast).captureGraphState,
+				Restore:  (*IgnoreCast).restoreGraphState,
+				Validate: func(c *IgnoreCast) error { return validateWrappedPeriod(c.CharacterBase) },
+			})
 		},
 		func() error {
-			return ownergraph.Register(r, ownergraph.Codec[IgnoreFriendlyFire]{Type: IgnoreFriendlyFireStateType, Version: IgnoreFriendlyFireStateVersion, Init: func() *IgnoreFriendlyFire { return new(IgnoreFriendlyFire) },
-				Capture: func(c *IgnoreFriendlyFire, ctx *ownergraph.Capture) ([]byte, error) {
-					s, e := c.CaptureState(ownergraph.Reference[CharacterBase](ctx))
-					if e != nil {
-						return nil, e
-					}
-					return s.Encode()
-				}, Restore: func(c *IgnoreFriendlyFire, v uint32, b []byte, ctx *ownergraph.Restore) error {
-					s, e := DecodeIgnoreFriendlyFireState(v, b)
-					if e != nil {
-						return e
-					}
-					return c.RestoreState(s, ownergraph.Loader[CharacterBase](ctx))
-				}, Validate: func(c *IgnoreFriendlyFire) error { return validateWrappedPeriod(c.CharacterBase) }})
+			return ownergraph.Register(r, ownergraph.Codec[IgnoreFriendlyFire]{
+				Type:     IgnoreFriendlyFireStateType,
+				Version:  IgnoreFriendlyFireStateVersion,
+				Init:     func() *IgnoreFriendlyFire { return new(IgnoreFriendlyFire) },
+				Capture:  (*IgnoreFriendlyFire).captureGraphState,
+				Restore:  (*IgnoreFriendlyFire).restoreGraphState,
+				Validate: func(c *IgnoreFriendlyFire) error { return validateWrappedPeriod(c.CharacterBase) },
+			})
 		},
 		func() error {
-			return ownergraph.Register(r, ownergraph.Codec[phaseProviderCharacter]{Type: PhaseProviderCharacterStateType, Version: PhaseProviderCharacterStateVersion, Init: func() *phaseProviderCharacter { return new(phaseProviderCharacter) },
-				Capture: func(c *phaseProviderCharacter, ctx *ownergraph.Capture) ([]byte, error) {
-					s, e := c.CaptureState(ownergraph.Reference[Character](ctx), ownergraph.Reference[phases.PhaseProvider](ctx))
-					if e != nil {
-						return nil, e
-					}
-					return s.Encode()
-				}, Restore: func(c *phaseProviderCharacter, v uint32, b []byte, ctx *ownergraph.Restore) error {
-					s, e := DecodePhaseProviderCharacterState(v, b)
-					if e != nil {
-						return e
-					}
-					return c.RestoreState(s, ownergraph.Loader[Character](ctx), ownergraph.Loader[phases.PhaseProvider](ctx))
-				}, Validate: func(c *phaseProviderCharacter) error { return validateWrappedPeriod(c.Character) }})
+			return ownergraph.Register(r, ownergraph.Codec[phaseProviderCharacter]{
+				Type:     PhaseProviderCharacterStateType,
+				Version:  PhaseProviderCharacterStateVersion,
+				Init:     func() *phaseProviderCharacter { return new(phaseProviderCharacter) },
+				Capture:  (*phaseProviderCharacter).captureGraphState,
+				Restore:  (*phaseProviderCharacter).restoreGraphState,
+				Validate: func(c *phaseProviderCharacter) error { return validateWrappedPeriod(c.Character) },
+			})
 		},
 		func() error {
-			return ownergraph.Register(r, ownergraph.Codec[scriptedDefeatCharacter]{Type: ScriptedDefeatCharacterStateType, Version: ScriptedDefeatCharacterStateVersion, Init: func() *scriptedDefeatCharacter { return new(scriptedDefeatCharacter) },
-				Capture: func(c *scriptedDefeatCharacter, ctx *ownergraph.Capture) ([]byte, error) {
-					if e := c.validateGraphOwner(); e != nil {
-						return nil, e
-					}
-					s, e := c.CaptureState(ownergraph.Reference[Character](ctx), ownergraph.Reference[*ScriptedDefeatDetector](ctx))
-					if e != nil {
-						return nil, e
-					}
-					return s.Encode()
-				}, Restore: func(c *scriptedDefeatCharacter, v uint32, b []byte, ctx *ownergraph.Restore) error {
-					s, e := DecodeScriptedDefeatCharacterState(v, b)
-					if e != nil {
-						return e
-					}
-					return c.RestoreState(s, ownergraph.Loader[Character](ctx), ownergraph.Loader[*ScriptedDefeatDetector](ctx))
-				}, Validate: func(c *scriptedDefeatCharacter) error { return c.validateGraphOwner() }})
+			return ownergraph.Register(r, ownergraph.Codec[scriptedDefeatCharacter]{
+				Type:     ScriptedDefeatCharacterStateType,
+				Version:  ScriptedDefeatCharacterStateVersion,
+				Init:     func() *scriptedDefeatCharacter { return new(scriptedDefeatCharacter) },
+				Capture:  (*scriptedDefeatCharacter).captureGraphState,
+				Restore:  (*scriptedDefeatCharacter).restoreGraphState,
+				Validate: func(c *scriptedDefeatCharacter) error { return c.validateGraphOwner() },
+			})
 		},
 	}
 	for _, register := range registrations {
@@ -140,31 +95,13 @@ func RegisterWrapperGraphOwners(r *ownergraph.Registry) error {
 
 // RegisterBaseGraphOwner explicitly registers a custom-period Base specialization.
 func RegisterBaseGraphOwner[M period.IsPeriod](r *ownergraph.Registry, tag string) error {
-	return ownergraph.Register(r, ownergraph.Codec[Base[M]]{Type: tag, Version: BaseStateVersion, Init: func() *Base[M] { return new(Base[M]) }, Capture: func(c *Base[M], ctx *ownergraph.Capture) ([]byte, error) {
-		s, e := c.CaptureState(ownergraph.Reference[M](ctx), ownergraph.Reference[messages.Message](ctx))
-		if e != nil {
-			return nil, e
-		}
-		ref, e := ctx.Ref(c.lookup)
-		if e != nil {
-			return nil, e
-		}
-		return graphPayload(s, map[string]string{"lookup": ref})
-	}, Restore: func(c *Base[M], v uint32, b []byte, ctx *ownergraph.Restore) error {
-		g, e := graphDecode(b)
-		if e != nil {
-			return e
-		}
-		s, e := DecodeBaseState(v, g.State)
-		if e != nil {
-			return e
-		}
-		lookup, e := ownergraph.ResolveAs[*Characters](ctx, g.Refs["lookup"])
-		if e != nil {
-			return e
-		}
-		return c.RestoreState(s, lookup, ownergraph.Loader[M](ctx), ownergraph.Loader[messages.Message](ctx))
-	}})
+	return ownergraph.Register(r, ownergraph.Codec[Base[M]]{
+		Type:    tag,
+		Version: BaseStateVersion,
+		Init:    func() *Base[M] { return new(Base[M]) },
+		Capture: (*Base[M]).captureGraphState,
+		Restore: (*Base[M]).restoreGraphState,
+	})
 }
 func wireWrappedPeriod(c any, h period.Hook) {
 	c.(interface{ WireGraphPeriodHook(period.Hook) }).WireGraphPeriodHook(h)
@@ -195,15 +132,13 @@ func (c *phaseProviderCharacter) WireGraphPeriodHook(h period.Hook) {
 type graphNeverActiveValue struct{ NeverActive }
 
 func registerNeverActiveValueGraphOwner(r *ownergraph.Registry) error {
-	return ownergraph.Register(r, ownergraph.Codec[graphNeverActiveValue]{Type: "characters.NeverActive.Value", Version: NeverActiveStateVersion, Init: func() *graphNeverActiveValue { return new(graphNeverActiveValue) }, Capture: func(c *graphNeverActiveValue, _ *ownergraph.Capture) ([]byte, error) {
-		return c.CaptureState().Encode()
-	}, Restore: func(c *graphNeverActiveValue, v uint32, b []byte, _ *ownergraph.Restore) error {
-		s, e := DecodeNeverActiveState(v, b)
-		if e != nil {
-			return e
-		}
-		return c.RestoreState(s)
-	}})
+	return ownergraph.Register(r, ownergraph.Codec[graphNeverActiveValue]{
+		Type:    "characters.NeverActive.Value",
+		Version: NeverActiveStateVersion,
+		Init:    func() *graphNeverActiveValue { return new(graphNeverActiveValue) },
+		Capture: (*graphNeverActiveValue).captureGraphState,
+		Restore: (*graphNeverActiveValue).restoreGraphState,
+	})
 }
 func graphCharacterReference(ctx *ownergraph.Capture) func(Character) (string, error) {
 	values := map[NeverActive]*graphNeverActiveValue{}
@@ -302,49 +237,13 @@ func NewScriptedDefeatCharacterWithParticipantOwner(id guid.GUID, c Character, c
 	return &scriptedDefeatCharacter{Character: c, defeat: NewScriptedDefeatDetector(id, config).WithParticipantOwner(all)}
 }
 func registerScriptedDefeatGraphOwner(r *ownergraph.Registry) error {
-	return ownergraph.Register(r, ownergraph.Codec[ScriptedDefeatDetector]{Type: ScriptedDefeatDetectorStateType, Version: ScriptedDefeatDetectorStateVersion, Init: func() *ScriptedDefeatDetector { return new(ScriptedDefeatDetector) }, Capture: func(c *ScriptedDefeatDetector, ctx *ownergraph.Capture) ([]byte, error) {
-		s, e := c.CaptureState()
-		if e != nil {
-			return nil, e
-		}
-		refs := map[string]string{}
-		if s.value.HasParticipantCallback {
-			if c.participantOwner == nil {
-				return nil, fmt.Errorf("scripted defeat participant callback requires trusted runtime adapter")
-			}
-			refs["participants"], e = ctx.Ref(c.participantOwner)
-			if e != nil {
-				return nil, e
-			}
-		}
-		return graphPayload(s, refs)
-	}, Restore: func(c *ScriptedDefeatDetector, v uint32, b []byte, ctx *ownergraph.Restore) error {
-		g, e := graphDecode(b)
-		if e != nil {
-			return e
-		}
-		s, e := DecodeScriptedDefeatDetectorState(v, g.State)
-		if e != nil {
-			return e
-		}
-		ref := g.Refs["participants"]
-		if len(g.Refs) > 1 || (len(g.Refs) == 1 && ref == "") || s.value.HasParticipantCallback != (ref != "") {
-			return fmt.Errorf("participant owner mismatch")
-		}
-		var all *Characters
-		if ref != "" {
-			all, e = ownergraph.ResolveAs[*Characters](ctx, ref)
-			if e != nil {
-				return e
-			}
-		}
-		s.value.HasParticipantCallback = false
-		if e := c.RestoreState(s, nil); e != nil {
-			return e
-		}
-		c.participantOwner = all
-		return nil
-	}})
+	return ownergraph.Register(r, ownergraph.Codec[ScriptedDefeatDetector]{
+		Type:    ScriptedDefeatDetectorStateType,
+		Version: ScriptedDefeatDetectorStateVersion,
+		Init:    func() *ScriptedDefeatDetector { return new(ScriptedDefeatDetector) },
+		Capture: (*ScriptedDefeatDetector).captureGraphState,
+		Restore: (*ScriptedDefeatDetector).restoreGraphState,
+	})
 }
 
 func (c *scriptedDefeatCharacter) validateGraphOwner() error {
@@ -367,5 +266,206 @@ func (d *ScriptedDefeatDetector) ValidateGraphBinding(id guid.GUID, all *Charact
 	if d.participantOwner != nil && d.participantOwner != all {
 		return fmt.Errorf("scripted defeat participant owner mismatch")
 	}
+	return nil
+}
+
+func (c *PermanentDeath) captureGraphState(ctx *ownergraph.Capture) ([]byte, error) {
+	s, e := c.CaptureState(ownergraph.Reference[CharacterBase](ctx))
+	if e != nil {
+		return nil, e
+	}
+	return s.Encode()
+}
+
+func (c *PermanentDeath) restoreGraphState(v uint32, b []byte, ctx *ownergraph.Restore) error {
+	s, e := DecodePermanentDeathState(v, b)
+	if e != nil {
+		return e
+	}
+	return c.RestoreState(s, ownergraph.Loader[CharacterBase](ctx))
+}
+
+func (c *StartsNewFight) captureGraphState(ctx *ownergraph.Capture) ([]byte, error) {
+	s, e := c.CaptureState(ownergraph.Reference[CharacterBase](ctx))
+	if e != nil {
+		return nil, e
+	}
+	return s.Encode()
+}
+
+func (c *StartsNewFight) restoreGraphState(v uint32, b []byte, ctx *ownergraph.Restore) error {
+	s, e := DecodeStartsNewFightState(v, b)
+	if e != nil {
+		return e
+	}
+	return c.RestoreState(s, ownergraph.Loader[CharacterBase](ctx))
+}
+
+func (c *DeathOnCast) captureGraphState(ctx *ownergraph.Capture) ([]byte, error) {
+	s, e := c.CaptureState(ownergraph.Reference[CharacterBase](ctx))
+	if e != nil {
+		return nil, e
+	}
+	return s.Encode()
+}
+
+func (c *DeathOnCast) restoreGraphState(v uint32, b []byte, ctx *ownergraph.Restore) error {
+	s, e := DecodeDeathOnCastState(v, b)
+	if e != nil {
+		return e
+	}
+	return c.RestoreState(s, ownergraph.Loader[CharacterBase](ctx))
+}
+
+func (c *IgnoreCast) captureGraphState(ctx *ownergraph.Capture) ([]byte, error) {
+	s, e := c.CaptureState(ownergraph.Reference[CharacterBase](ctx))
+	if e != nil {
+		return nil, e
+	}
+	return s.Encode()
+}
+
+func (c *IgnoreCast) restoreGraphState(v uint32, b []byte, ctx *ownergraph.Restore) error {
+	s, e := DecodeIgnoreCastState(v, b)
+	if e != nil {
+		return e
+	}
+	return c.RestoreState(s, ownergraph.Loader[CharacterBase](ctx))
+}
+
+func (c *IgnoreFriendlyFire) captureGraphState(ctx *ownergraph.Capture) ([]byte, error) {
+	s, e := c.CaptureState(ownergraph.Reference[CharacterBase](ctx))
+	if e != nil {
+		return nil, e
+	}
+	return s.Encode()
+}
+
+func (c *IgnoreFriendlyFire) restoreGraphState(v uint32, b []byte, ctx *ownergraph.Restore) error {
+	s, e := DecodeIgnoreFriendlyFireState(v, b)
+	if e != nil {
+		return e
+	}
+	return c.RestoreState(s, ownergraph.Loader[CharacterBase](ctx))
+}
+
+func (c *phaseProviderCharacter) captureGraphState(ctx *ownergraph.Capture) ([]byte, error) {
+	s, e := c.CaptureState(ownergraph.Reference[Character](ctx), ownergraph.Reference[phases.PhaseProvider](ctx))
+	if e != nil {
+		return nil, e
+	}
+	return s.Encode()
+}
+
+func (c *phaseProviderCharacter) restoreGraphState(v uint32, b []byte, ctx *ownergraph.Restore) error {
+	s, e := DecodePhaseProviderCharacterState(v, b)
+	if e != nil {
+		return e
+	}
+	return c.RestoreState(s, ownergraph.Loader[Character](ctx), ownergraph.Loader[phases.PhaseProvider](ctx))
+}
+
+func (c *scriptedDefeatCharacter) captureGraphState(ctx *ownergraph.Capture) ([]byte, error) {
+	if e := c.validateGraphOwner(); e != nil {
+		return nil, e
+	}
+	s, e := c.CaptureState(ownergraph.Reference[Character](ctx), ownergraph.Reference[*ScriptedDefeatDetector](ctx))
+	if e != nil {
+		return nil, e
+	}
+	return s.Encode()
+}
+
+func (c *scriptedDefeatCharacter) restoreGraphState(v uint32, b []byte, ctx *ownergraph.Restore) error {
+	s, e := DecodeScriptedDefeatCharacterState(v, b)
+	if e != nil {
+		return e
+	}
+	return c.RestoreState(s, ownergraph.Loader[Character](ctx), ownergraph.Loader[*ScriptedDefeatDetector](ctx))
+}
+
+func (c *Base[M]) captureGraphState(ctx *ownergraph.Capture) ([]byte, error) {
+	s, e := c.CaptureState(ownergraph.Reference[M](ctx), ownergraph.Reference[messages.Message](ctx))
+	if e != nil {
+		return nil, e
+	}
+	ref, e := ctx.Ref(c.lookup)
+	if e != nil {
+		return nil, e
+	}
+	return graphPayload(s, map[string]string{"lookup": ref})
+}
+
+func (c *Base[M]) restoreGraphState(v uint32, b []byte, ctx *ownergraph.Restore) error {
+	g, e := graphDecode(b)
+	if e != nil {
+		return e
+	}
+	s, e := DecodeBaseState(v, g.State)
+	if e != nil {
+		return e
+	}
+	lookup, e := ownergraph.ResolveAs[*Characters](ctx, g.Refs["lookup"])
+	if e != nil {
+		return e
+	}
+	return c.RestoreState(s, lookup, ownergraph.Loader[M](ctx), ownergraph.Loader[messages.Message](ctx))
+}
+
+func (c *graphNeverActiveValue) captureGraphState(_ *ownergraph.Capture) ([]byte, error) {
+	return c.CaptureState().Encode()
+}
+
+func (c *graphNeverActiveValue) restoreGraphState(v uint32, b []byte, _ *ownergraph.Restore) error {
+	s, e := DecodeNeverActiveState(v, b)
+	if e != nil {
+		return e
+	}
+	return c.RestoreState(s)
+}
+
+func (c *ScriptedDefeatDetector) captureGraphState(ctx *ownergraph.Capture) ([]byte, error) {
+	s, e := c.CaptureState()
+	if e != nil {
+		return nil, e
+	}
+	refs := map[string]string{}
+	if s.value.HasParticipantCallback {
+		if c.participantOwner == nil {
+			return nil, fmt.Errorf("scripted defeat participant callback requires trusted runtime adapter")
+		}
+		refs["participants"], e = ctx.Ref(c.participantOwner)
+		if e != nil {
+			return nil, e
+		}
+	}
+	return graphPayload(s, refs)
+}
+
+func (c *ScriptedDefeatDetector) restoreGraphState(v uint32, b []byte, ctx *ownergraph.Restore) error {
+	g, e := graphDecode(b)
+	if e != nil {
+		return e
+	}
+	s, e := DecodeScriptedDefeatDetectorState(v, g.State)
+	if e != nil {
+		return e
+	}
+	ref := g.Refs["participants"]
+	if len(g.Refs) > 1 || (len(g.Refs) == 1 && ref == "") || s.value.HasParticipantCallback != (ref != "") {
+		return fmt.Errorf("participant owner mismatch")
+	}
+	var all *Characters
+	if ref != "" {
+		all, e = ownergraph.ResolveAs[*Characters](ctx, ref)
+		if e != nil {
+			return e
+		}
+	}
+	s.value.HasParticipantCallback = false
+	if e := c.RestoreState(s, nil); e != nil {
+		return e
+	}
+	c.participantOwner = all
 	return nil
 }

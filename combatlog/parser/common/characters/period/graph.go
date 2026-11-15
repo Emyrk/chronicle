@@ -8,24 +8,13 @@ import (
 )
 
 func RegisterGraphOwners(r *ownergraph.Registry) error {
-	if e := ownergraph.Register(r, ownergraph.Codec[Moment]{Type: MomentStateType, Version: MomentStateVersion, Init: func() *Moment { return new(Moment) }, Capture: func(m *Moment, c *ownergraph.Capture) ([]byte, error) {
-		s, e := CaptureMoment(m, ownergraph.Reference[messages.Message](c))
-		if e != nil {
-			return nil, e
-		}
-		return s.Encode()
-	}, Restore: func(m *Moment, v uint32, b []byte, c *ownergraph.Restore) error {
-		s, e := DecodeMomentState(v, b)
-		if e != nil {
-			return e
-		}
-		fresh, e := s.Restore(ownergraph.Loader[messages.Message](c))
-		if e != nil {
-			return e
-		}
-		*m = *fresh
-		return nil
-	}}); e != nil {
+	if e := ownergraph.Register(r, ownergraph.Codec[Moment]{
+		Type:    MomentStateType,
+		Version: MomentStateVersion,
+		Init:    func() *Moment { return new(Moment) },
+		Capture: (*Moment).captureGraphState,
+		Restore: (*Moment).restoreGraphState,
+	}); e != nil {
 		return e
 	}
 	if e := registerInactivityGraphOwner(r); e != nil {
@@ -64,31 +53,64 @@ func RegisterGraphOwners(r *ownergraph.Registry) error {
 
 // These are the retained-message adapters already owned by this package; each
 // explicit concrete registration uses its existing codec, never field discovery.
+// Message structs belong to messages, so this package cannot add receiver methods
+// to them. Named generic adapters preserve the existing period-owned DTO boundary.
 func registerRetainedMessage[T any](r *ownergraph.Registry, typ string) error {
-	return ownergraph.Register(r, ownergraph.Codec[T]{Type: typ, Version: MessageStateVersion, Init: func() *T { return new(T) }, Capture: func(v *T, c *ownergraph.Capture) ([]byte, error) {
-		m, ok := any(v).(messages.Message)
-		if !ok {
-			return nil, fmt.Errorf("not a message")
-		}
-		s, e := CaptureMessage(m, ownergraph.Reference[messages.Message](c), ownergraph.Reference[*chrondbc.Spell](c))
-		if e != nil {
-			return nil, e
-		}
-		return s.Encode()
-	}, Restore: func(v *T, version uint32, b []byte, c *ownergraph.Restore) error {
-		s, e := DecodeMessageState(version, b)
-		if e != nil {
-			return e
-		}
-		m, e := s.Restore(ownergraph.Loader[messages.Message](c), ownergraph.Loader[*chrondbc.Spell](c))
-		if e != nil {
-			return e
-		}
-		typed, ok := any(m).(*T)
-		if !ok {
-			return fmt.Errorf("retained message type mismatch")
-		}
-		*v = *typed
-		return nil
-	}})
+	return ownergraph.Register(r, ownergraph.Codec[T]{
+		Type:    typ,
+		Version: MessageStateVersion,
+		Init:    func() *T { return new(T) },
+		Capture: captureRetainedMessageGraphState[T],
+		Restore: restoreRetainedMessageGraphState[T],
+	})
+}
+
+func (m *Moment) captureGraphState(c *ownergraph.Capture) ([]byte, error) {
+	s, e := CaptureMoment(m, ownergraph.Reference[messages.Message](c))
+	if e != nil {
+		return nil, e
+	}
+	return s.Encode()
+}
+
+func (m *Moment) restoreGraphState(v uint32, b []byte, c *ownergraph.Restore) error {
+	s, e := DecodeMomentState(v, b)
+	if e != nil {
+		return e
+	}
+	fresh, e := s.Restore(ownergraph.Loader[messages.Message](c))
+	if e != nil {
+		return e
+	}
+	*m = *fresh
+	return nil
+}
+
+func captureRetainedMessageGraphState[T any](v *T, c *ownergraph.Capture) ([]byte, error) {
+	m, ok := any(v).(messages.Message)
+	if !ok {
+		return nil, fmt.Errorf("not a message")
+	}
+	s, e := CaptureMessage(m, ownergraph.Reference[messages.Message](c), ownergraph.Reference[*chrondbc.Spell](c))
+	if e != nil {
+		return nil, e
+	}
+	return s.Encode()
+}
+
+func restoreRetainedMessageGraphState[T any](v *T, version uint32, b []byte, c *ownergraph.Restore) error {
+	s, e := DecodeMessageState(version, b)
+	if e != nil {
+		return e
+	}
+	m, e := s.Restore(ownergraph.Loader[messages.Message](c), ownergraph.Loader[*chrondbc.Spell](c))
+	if e != nil {
+		return e
+	}
+	typed, ok := any(m).(*T)
+	if !ok {
+		return fmt.Errorf("retained message type mismatch")
+	}
+	*v = *typed
+	return nil
 }

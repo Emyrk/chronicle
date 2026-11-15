@@ -39,62 +39,73 @@ type inactivityGraphValue struct {
 }
 
 func registerInactivityGraphOwner(r *ownergraph.Registry) error {
-	return ownergraph.Register(r, ownergraph.Codec[InactivityPeriod]{Type: StateType + ".Inactivity", Version: StateVersion, Init: func() *InactivityPeriod { return new(InactivityPeriod) }, Capture: func(p *InactivityPeriod, ctx *ownergraph.Capture) ([]byte, error) {
-		s, e := p.CaptureState(ownergraph.Reference[*Moment](ctx), ownergraph.Reference[messages.Message](ctx))
-		if e != nil {
-			return nil, e
-		}
-		var ref string
-		if s.value.HasTimeoutPredicate {
+	return ownergraph.Register(r, ownergraph.Codec[InactivityPeriod]{
+		Type:    StateType + ".Inactivity",
+		Version: StateVersion,
+		Init:    func() *InactivityPeriod { return new(InactivityPeriod) },
+		Capture: (*InactivityPeriod).captureGraphState,
+		Restore: (*InactivityPeriod).restoreGraphState,
+		Validate: func(p *InactivityPeriod) error {
 			if p.trustedTimeoutOwner == nil {
-				return nil, fmt.Errorf("period callback requires trusted graph adapter")
+				return nil
 			}
-			if e := p.trustedTimeoutOwner.ValidateTimeoutRecipe(); e != nil {
-				return nil, e
+			if p.me != p.trustedTimeoutOwner.ID() {
+				return fmt.Errorf("timeout owner identity mismatch")
 			}
-			ref, e = ctx.Ref(p.trustedTimeoutOwner)
-			if e != nil {
-				return nil, e
-			}
+			return p.trustedTimeoutOwner.ValidateTimeoutRecipe()
+		},
+	})
+}
+
+func (p *InactivityPeriod) captureGraphState(ctx *ownergraph.Capture) ([]byte, error) {
+	s, e := p.CaptureState(ownergraph.Reference[*Moment](ctx), ownergraph.Reference[messages.Message](ctx))
+	if e != nil {
+		return nil, e
+	}
+	var ref string
+	if s.value.HasTimeoutPredicate {
+		if p.trustedTimeoutOwner == nil {
+			return nil, fmt.Errorf("period callback requires trusted graph adapter")
 		}
-		b, e := s.Encode()
+		if e := p.trustedTimeoutOwner.ValidateTimeoutRecipe(); e != nil {
+			return nil, e
+		}
+		ref, e = ctx.Ref(p.trustedTimeoutOwner)
 		if e != nil {
 			return nil, e
 		}
-		return json.Marshal(inactivityGraphValue{b, ref})
-	}, Restore: func(p *InactivityPeriod, v uint32, b []byte, ctx *ownergraph.Restore) error {
-		var g inactivityGraphValue
-		if e := decodeComplete(b, &g); e != nil {
-			return e
-		}
-		s, e := DecodeState(v, g.State)
+	}
+	b, e := s.Encode()
+	if e != nil {
+		return nil, e
+	}
+	return json.Marshal(inactivityGraphValue{b, ref})
+}
+
+func (p *InactivityPeriod) restoreGraphState(v uint32, b []byte, ctx *ownergraph.Restore) error {
+	var g inactivityGraphValue
+	if e := decodeComplete(b, &g); e != nil {
+		return e
+	}
+	s, e := DecodeState(v, g.State)
+	if e != nil {
+		return e
+	}
+	if s.value.HasTimeoutPredicate != (g.Owner != "") {
+		return fmt.Errorf("timeout owner presence mismatch")
+	}
+	var owner TrustedTimeoutOwner
+	if g.Owner != "" {
+		owner, e = ownergraph.ResolveAs[TrustedTimeoutOwner](ctx, g.Owner)
 		if e != nil {
 			return e
 		}
-		if s.value.HasTimeoutPredicate != (g.Owner != "") {
-			return fmt.Errorf("timeout owner presence mismatch")
-		}
-		var owner TrustedTimeoutOwner
-		if g.Owner != "" {
-			owner, e = ownergraph.ResolveAs[TrustedTimeoutOwner](ctx, g.Owner)
-			if e != nil {
-				return e
-			}
-		}
-		// Runtime callback attachment is deferred until the enclosing graph is wired.
-		s.value.HasTimeoutPredicate = false
-		if e := p.RestoreState(s, ownergraph.Loader[*Moment](ctx), ownergraph.Loader[messages.Message](ctx), nil); e != nil {
-			return e
-		}
-		p.trustedTimeoutOwner = owner
-		return nil
-	}, Validate: func(p *InactivityPeriod) error {
-		if p.trustedTimeoutOwner == nil {
-			return nil
-		}
-		if p.me != p.trustedTimeoutOwner.ID() {
-			return fmt.Errorf("timeout owner identity mismatch")
-		}
-		return p.trustedTimeoutOwner.ValidateTimeoutRecipe()
-	}})
+	}
+	// Runtime callback attachment is deferred until the enclosing graph is wired.
+	s.value.HasTimeoutPredicate = false
+	if e := p.RestoreState(s, ownergraph.Loader[*Moment](ctx), ownergraph.Loader[messages.Message](ctx), nil); e != nil {
+		return e
+	}
+	p.trustedTimeoutOwner = owner
+	return nil
 }
