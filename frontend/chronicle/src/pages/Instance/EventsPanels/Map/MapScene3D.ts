@@ -97,6 +97,7 @@ import {
 import { LivePresence } from "./livePresence";
 import { DungeonWorld, type DungeonMesh } from "./dungeonWorld";
 import { DebugOverlayLayer } from "./debugOverlays";
+import { CameraArbiter, type CameraOwner } from "./cameraArbiter";
 import { MapInputState, mobileInputActive, MouseDrag, type InputFrame } from "./inputFrame";
 import { UnitLayer, type UnitObject } from "./unitLayer";
 import { EffectsLayer } from "./effectsLayer";
@@ -464,9 +465,25 @@ export class MapScene3D {
   // On while the mesh shows and the framing is the default one: every frame it
   // springs the camera toward a shot holding the boss and the group.
   private director: MapSceneDirector | null = null;
-  // The user took the camera; a viewport request (Follow, encounter jump,
-  // selection) hands it back.
-  private directorPaused = false;
+  // Who owns the camera: every take, and every hand-back to the Director
+  // (Follow, encounter jump, selection), goes through it (cameraArbiter.ts).
+  private readonly arbiter = new CameraArbiter({
+    cancelViewTween: () => {
+      this.viewAnimation = null;
+    },
+    cancelMove: () => {
+      this.cameraMove = null;
+    },
+    stopDirector: () => {
+      this.directorRunning = false;
+    },
+    dropFollow: () => {
+      this.directorSubject = null;
+    },
+    walking: () => this.walk !== null,
+    tweening: () => this.viewAnimation !== null || this.cameraMove !== null,
+    directorAvailable: () => this.director !== null && this.dungeonMesh !== null,
+  });
   // The unit the shot follows instead of the group (double-clicked, or a
   // unit frame's Follow); changes are reported through onFollowChange.
   private subject: string | null = null;
@@ -923,6 +940,7 @@ export class MapScene3D {
       this.applyGroundMode();
       this.viewAnimation = null;
       this.placeCamera(this.viewport, ANGLED_OFFSET.clone().normalize());
+      this.syncCameraOwner();
       return;
     }
     const pending = { url: request.url };
@@ -945,6 +963,7 @@ export class MapScene3D {
       // springing in from the overview makes the replay feel unnecessarily slow.
       this.directorRunning = false;
       if (this.director && !this.alignmentOverlay) this.engageDirector(true);
+      this.syncCameraOwner();
       this.onDungeonMesh("ready");
     });
   }
@@ -969,6 +988,7 @@ export class MapScene3D {
     if (!director || this.alignmentOverlay) {
       this.directorRunning = false;
       this.directorSnapPending = false;
+      this.syncCameraOwner();
       return;
     }
     this.engageDirector();
@@ -990,10 +1010,12 @@ export class MapScene3D {
   // The first shot after an asynchronous mesh load can opt to snap into place.
   // Already following: nothing to seed, or the springs would stutter.
   private engageDirector(snap = false) {
-    this.directorPaused = false;
-    this.cameraMove = null;
+    this.arbiter.handBack();
     if (snap) this.directorSnapPending = true;
-    if (this.directorRunning) return;
+    if (this.directorRunning) {
+      this.syncCameraOwner();
+      return;
+    }
     this.directorRunning = true;
     this.directorGoal.seeded = false;
     this.directorInFrame.clear();
@@ -1019,6 +1041,7 @@ export class MapScene3D {
     this.shotRaw = null;
     this.shotRelease = false;
     this.shotShallow = null;
+    this.syncCameraOwner();
   }
 
   /**
@@ -1104,7 +1127,7 @@ export class MapScene3D {
 
   /** Whether the Director is the one moving the camera right now. */
   private directing(): boolean {
-    return this.director !== null && this.dungeonMesh !== null && !this.directorPaused && this.cameraMove === null && this.walk === null;
+    return this.director !== null && this.dungeonMesh !== null && this.arbiter.directorHeld && this.cameraMove === null && this.walk === null;
   }
 
   /** Captures the exact orbit-camera pose for camera marks and authored paths. */
@@ -1162,11 +1185,12 @@ export class MapScene3D {
   applyCameraPose(pose: MapCameraPose, options: { pauseDirector?: boolean; constrain?: boolean } = {}) {
     if (this.walk) this.stopWalk();
     if (options.pauseDirector !== false) {
-      this.directorPaused = true;
-      this.directorRunning = false;
+      this.arbiter.take("scripted", "pose");
+    } else {
+      // Under the Director: the pose stops a tween in flight, and the Director keeps the camera.
+      this.cameraMove = null;
+      this.viewAnimation = null;
     }
-    this.cameraMove = null;
-    this.viewAnimation = null;
     this.camera.position.fromArray(pose.position);
     this.controls.target.fromArray(pose.target);
     this.pivotLift = Math.max(0, pose.target[1] - this.pivotFloor(pose.target[0], pose.target[2]));
@@ -1177,6 +1201,7 @@ export class MapScene3D {
     this.controls.update();
     if (options.constrain !== false) this.constrainCamera();
     this.updateUnitScale();
+    this.syncCameraOwner();
     this.requestRender();
   }
 
@@ -1209,25 +1234,25 @@ export class MapScene3D {
     this.viewport = viewport;
     if (durationMs > 0) {
       this.viewAnimation = { from, direction, start: this.now(), duration: durationMs };
+      this.arbiter.tweenStarted();
+      this.syncCameraOwner();
       this.requestRender();
       return;
     }
     this.viewAnimation = null;
     this.placeCamera(viewport, direction);
+    this.syncCameraOwner();
   }
 
   /** Re-frames the current viewport straight down (`topDown`) or angled. */
   resetCamera(topDown: boolean) {
     if (this.walk) this.stopWalk();
-    this.viewAnimation = null;
     // Asking for top-down takes the camera from the Director, as a drag does;
-    // Follow (a new viewport request) hands it back.
-    if (topDown) {
-      this.directorPaused = true;
-      this.directorRunning = false;
-      this.cameraMove = null;
-    }
+    // Follow (a new viewport request) hands it back. Angled only stops a tween.
+    if (topDown) this.arbiter.take("free", "top-down");
+    else this.viewAnimation = null;
     this.placeCamera(this.viewport, (topDown ? TOP_DOWN_OFFSET : ANGLED_OFFSET).clone().normalize());
+    this.syncCameraOwner();
   }
 
   // The full map at zoom 1 sits at the default angled distance; zoom moves
@@ -1948,9 +1973,7 @@ export class MapScene3D {
       ? MIN_DOUBLE_CLICK_DISTANCE_YARDS * this.dungeonMesh.scale
       : this.controls.minDistance;
     const wanted = event.shiftKey ? current * DOUBLE_CLICK_OUT_FACTOR : Math.max(closest, current / 2);
-    this.directorPaused = true;
-    this.directorRunning = false;
-    this.viewAnimation = null;
+    this.arbiter.take("tween", "double-click");
     this.cameraMove = {
       from: target.clone(),
       to: hit.point.clone(),
@@ -1959,6 +1982,7 @@ export class MapScene3D {
       direction: this.camera.position.clone().sub(target).normalize(),
       start: this.now(),
     };
+    this.syncCameraOwner();
     this.requestRender();
   };
 
@@ -2249,12 +2273,9 @@ export class MapScene3D {
   // Director until a viewport request (Follow, a jump, a new selection)
   // hands the camera back.
   private readonly handleControlsStart = () => {
-    this.viewAnimation = null;
-    this.cameraMove = null;
-    this.directorPaused = true;
-    this.directorRunning = false;
-    this.directorSubject = null;
+    this.arbiter.take("free", "gesture");
     this.gestureStart = this.cameraViewport();
+    this.syncCameraOwner();
   };
 
   // The user panned or zoomed: remember and report where they left it. A
@@ -2498,6 +2519,21 @@ export class MapScene3D {
     this.planLayer.setItems(this.planItems, this.planSelected, this.planSurface);
   }
 
+  /** Who owns the camera now: the Director, the user's free cam, walk mode, a tween or a scripted pose (cameraArbiter.ts). */
+  cameraOwner(): CameraOwner {
+    return this.arbiter.owner();
+  }
+
+  /** Called with the new camera owner whenever it changes. */
+  setOnCameraOwnerChange(callback: ((owner: CameraOwner) => void) | null) {
+    this.arbiter.setOnChange(callback);
+  }
+
+  // Reports the camera owner if it changed (once a change has settled).
+  private syncCameraOwner() {
+    this.arbiter.sync();
+  }
+
   /** Called when the followed unit changes: Follow, a double-click, or the user taking the camera (null). */
   setOnFollowChange(callback: ((guid: string | null) => void) | null) {
     this.onFollowChange = callback ?? (() => {});
@@ -2553,6 +2589,7 @@ export class MapScene3D {
     if (on === (this.walk !== null)) return;
     if (on) this.startWalk();
     else this.stopWalk();
+    this.syncCameraOwner();
   }
 
   // The character starts where the camera looks, facing away from it.
@@ -2568,11 +2605,7 @@ export class MapScene3D {
       this.input.drag = null;
       this.unlockPointer();
     }
-    this.viewAnimation = null;
-    this.cameraMove = null;
-    this.directorPaused = true;
-    this.directorRunning = false;
-    this.directorSubject = null;
+    this.arbiter.take("walk", "walk");
     const target = this.controls.target;
     const offset = new THREE.Vector3().copy(this.camera.position).sub(target);
     const position = target.clone();
@@ -2687,6 +2720,7 @@ export class MapScene3D {
     walk.camPitch = 0;
     this.updateWalk(elapsedMs + 1, this.input.frame());
     this.walkCaptureElapsedMs = elapsedMs;
+    this.syncCameraOwner();
     this.requestRender();
   }
 
@@ -2954,6 +2988,8 @@ export class MapScene3D {
     this.updatePlates();
     this.renderer.render(this.scene, this.camera);
     this.emitPresence();
+    // A tween or move that ended this frame hands the camera on.
+    this.syncCameraOwner();
     return animating;
   }
 }
