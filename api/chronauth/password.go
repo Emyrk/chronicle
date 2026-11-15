@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net"
 	"net/http"
 	"net/mail"
 	"strings"
@@ -59,7 +58,7 @@ func (s *Service) PasswordRegister(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	// Rate limit: one registration per IP per 5 minutes
-	ip := extractIP(r)
+	ip := s.clientIP.Key(r)
 	if !s.checkRegisterRateLimit(ip) {
 		httpapi.Write(ctx, w, http.StatusTooManyRequests, map[string]string{
 			"message": "Please wait before registering again.",
@@ -253,7 +252,7 @@ func (s *Service) PasswordRegister(w http.ResponseWriter, r *http.Request) {
 func (s *Service) PasswordLogin(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	ip := extractIP(r)
+	ip := s.clientIP.Key(r)
 	if !s.checkLoginRateLimit(ip) {
 		httpapi.Write(ctx, w, http.StatusTooManyRequests, map[string]string{
 			"message": "Too many login attempts. Please wait a few seconds.",
@@ -480,7 +479,7 @@ func (s *Service) ResendVerification(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ip := extractIP(r)
+	ip := s.clientIP.Key(r)
 	if !s.checkRegisterRateLimit(ip) {
 		httpapi.Write(ctx, w, http.StatusTooManyRequests, map[string]string{
 			"message": "Please wait before requesting another verification email.",
@@ -678,19 +677,4 @@ func (s *Service) ResetPassword(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(ctx, w, http.StatusOK, map[string]string{
 		"message": "Password reset successfully. You can now sign in.",
 	})
-}
-
-func extractIP(r *http.Request) string {
-	// Check X-Forwarded-For first (Railway / reverse proxies)
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		if idx := strings.IndexByte(xff, ','); idx != -1 {
-			return strings.TrimSpace(xff[:idx])
-		}
-		return strings.TrimSpace(xff)
-	}
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return host
 }

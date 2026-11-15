@@ -17,6 +17,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/dbtestutil"
+	"github.com/Emyrk/chronicle/internal/clientip"
 	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -326,7 +327,7 @@ func TestAuthenticationMiddlewarePassesChronicleJWTsThrough(t *testing.T) {
 
 func TestDeviceAuthorizationRateLimit(t *testing.T) {
 	t.Parallel()
-	limiter := newDeviceAuthorizationLimiter()
+	limiter := newDeviceAuthorizationLimiter(clientip.Resolver{})
 	handler := limiter.middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	}))
@@ -343,6 +344,46 @@ func TestDeviceAuthorizationRateLimit(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusTooManyRequests, rec.Code)
 	require.NotEmpty(t, rec.Header().Get("Retry-After"))
+}
+
+func TestDeviceAuthorizationRateLimitBuckets(t *testing.T) {
+	t.Parallel()
+
+	exhaust := func(t *testing.T, limiter *deviceAuthorizationLimiter, remote string, headers map[string]string) http.Handler {
+		t.Helper()
+		handler := limiter.middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusNoContent)
+		}))
+		for attempt := 0; attempt < deviceAuthorizationBurst; attempt++ {
+			require.Equal(t, http.StatusNoContent, serveDevice(handler, remote, headers))
+		}
+		return handler
+	}
+
+	t.Run("ipv6 shares a bucket per /64", func(t *testing.T) {
+		t.Parallel()
+		handler := exhaust(t, newDeviceAuthorizationLimiter(clientip.Resolver{}), "[2001:db8:1:2::1]:1", nil)
+		require.Equal(t, http.StatusTooManyRequests, serveDevice(handler, "[2001:db8:1:2:ffff::9]:1", nil))
+		require.Equal(t, http.StatusNoContent, serveDevice(handler, "[2001:db8:1:3::1]:1", nil))
+	})
+	t.Run("a forged forwarded-for does not change the bucket behind cloudflare", func(t *testing.T) {
+		t.Parallel()
+		handler := exhaust(t, newDeviceAuthorizationLimiter(clientip.Resolver{TrustCloudflare: true}), "10.0.0.1:1",
+			map[string]string{"CF-Connecting-IP": "203.0.113.7", "X-Forwarded-For": "1.1.1.1"})
+		require.Equal(t, http.StatusTooManyRequests, serveDevice(handler, "10.0.0.1:1",
+			map[string]string{"CF-Connecting-IP": "203.0.113.7", "X-Forwarded-For": "2.2.2.2"}))
+	})
+}
+
+func serveDevice(handler http.Handler, remote string, headers map[string]string) int {
+	req := httptest.NewRequest(http.MethodPost, "/device/authorize", nil)
+	req.RemoteAddr = remote
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	return rec.Code
 }
 
 func TestCleanupExpiredOAuthSessions(t *testing.T) {

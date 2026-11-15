@@ -25,6 +25,7 @@ import (
 	"github.com/Emyrk/chronicle/chroniclemail"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
+	"github.com/Emyrk/chronicle/internal/clientip"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/gorilla/sessions"
@@ -59,6 +60,8 @@ var (
 )
 
 type Options struct {
+	// ClientIP derives the client IP for login and registration rate limits.
+	ClientIP  clientip.Resolver
 	AccessURL *url.URL
 	DevServer bool
 	Zed       *authz.Authz
@@ -75,6 +78,7 @@ type Options struct {
 }
 
 type Service struct {
+	clientIP  clientip.Resolver
 	Providers goth.Providers
 	Store     *sessions.CookieStore
 	// legacyStore migrates session cookies signed with the old public key.
@@ -209,6 +213,7 @@ func New(ctx context.Context, logger *slog.Logger, opts Options) (*Service, erro
 	}
 
 	return &Service{
+		clientIP:          opts.ClientIP,
 		Providers:         providers,
 		Store:             store,
 		legacyStore:       newLegacyCookieStore(secure),

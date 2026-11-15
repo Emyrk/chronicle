@@ -1,12 +1,13 @@
 package servicegamedata
 
 import (
-	"net"
 	"net/http"
 	"sync"
 	"time"
 
 	"golang.org/x/time/rate"
+
+	"github.com/Emyrk/chronicle/internal/clientip"
 )
 
 // ipLimiter manages per-IP token buckets for rate limiting.
@@ -15,6 +16,7 @@ type ipLimiter struct {
 	limiters map[string]*entry
 	rate     rate.Limit
 	burst    int
+	clientIP clientip.Resolver
 }
 
 type entry struct {
@@ -22,11 +24,12 @@ type entry struct {
 	lastSeen time.Time
 }
 
-func newIPLimiter(r rate.Limit, burst int) *ipLimiter {
+func newIPLimiter(r rate.Limit, burst int, clientIP clientip.Resolver) *ipLimiter {
 	l := &ipLimiter{
 		limiters: make(map[string]*entry),
 		rate:     r,
 		burst:    burst,
+		clientIP: clientIP,
 	}
 	go l.cleanup()
 	return l
@@ -67,7 +70,7 @@ func (l *ipLimiter) cleanup() {
 // middleware returns chi-compatible middleware that enforces the rate limit.
 func (l *ipLimiter) middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ip := extractIP(r)
+		ip := l.clientIP.Key(r)
 		if !l.get(ip).Allow() {
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("Retry-After", "12")
@@ -77,22 +80,4 @@ func (l *ipLimiter) middleware(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
-}
-
-// extractIP gets the client IP from X-Forwarded-For (first entry) or RemoteAddr.
-func extractIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		// First IP in the chain is the original client.
-		for i := range len(xff) {
-			if xff[i] == ',' {
-				return xff[:i]
-			}
-		}
-		return xff
-	}
-	ip, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return ip
 }

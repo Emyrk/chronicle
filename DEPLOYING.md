@@ -298,6 +298,15 @@ Use Certbot or your preferred ACME client to add HTTPS. After TLS is working, co
 
 The repository also includes an example under `services/nginx/`.
 
+### Client IPs and Cloudflare
+
+Chronicle's rate limits (login and registration, search, the external API, the OAuth device flow, and the game-data search routes) key on the client IP. IPv4 clients get one bucket per address and IPv6 clients one per `/64`. By default Chronicle reads the first `X-Forwarded-For` hop, then the connection's address. The first hop is whatever the client sent unless your proxy overwrites the header, so a proxy that appends (like `$proxy_add_x_forwarded_for` above) lets a client pick its own bucket.
+
+If every request reaches Chronicle through Cloudflare, set `CHRONICLE_BEHIND_CLOUDFLARE=true` and Chronicle uses the `CF-Connecting-IP` header, which Cloudflare always overwrites with the real client address.
+
+> [!WARNING]
+> Enable `CHRONICLE_BEHIND_CLOUDFLARE` only when the origin is reachable **solely** through Cloudflare: no public platform domain (for example a `*.up.railway.app` address) and no open origin port, or an origin lock such as Cloudflare Authenticated Origin Pulls or an allowlist of Cloudflare's IP ranges. Otherwise anyone can reach the origin directly, send their own `CF-Connecting-IP`, and choose their own rate-limit bucket. A value that is not a valid IP address is ignored.
+
 ## Upgrades
 
 Production installations should pin a release tag:
@@ -340,6 +349,7 @@ docker compose logs -f chronicle
 | `CHRONICLE_PROMETHEUS_ADDRESS` | `0.0.0.0:9091` | Prometheus listen address |
 | `CHRONICLE_PROMETHEUS_SHARED_KEY` | unset | Optional bearer token required to access Prometheus metrics |
 | `CHRONICLE_PROMETHEUS_IP_ALLOW` | unset | Optional comma-separated IP addresses allowed to access Prometheus metrics |
+| `CHRONICLE_BEHIND_CLOUDFLARE` | `false` | Use `CF-Connecting-IP` as the client IP for rate limits. Only safe when the origin is reachable solely through Cloudflare, see [Client IPs and Cloudflare](#client-ips-and-cloudflare) |
 | `CHRONICLE_PPROF_ENABLED` | `false` | Enable Go pprof on its separate listener |
 | `CHRONICLE_PPROF_ADDRESS` | `0.0.0.0:6060` | pprof listen address |
 | `CHRONICLE_OCR_URL` | unset | Optional OCR service URL |

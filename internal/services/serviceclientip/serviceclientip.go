@@ -43,7 +43,7 @@ func (s *Service) Options() serpent.OptionSet {
 	return serpent.OptionSet{
 		{
 			Name:        "behind-cloudflare",
-			Description: "Trust the CF-Connecting-IP header as the client IP for rate limits. Only enable when all traffic reaches the server through Cloudflare, otherwise clients can forge it.",
+			Description: "Trust the CF-Connecting-IP header as the client IP for rate limits. Only enable when the origin is reachable solely through Cloudflare (no public platform domain, or an origin lock), otherwise clients can forge it.",
 			Flag:        "behind-cloudflare",
 			Env:         "CHRONICLE_BEHIND_CLOUDFLARE",
 			Default:     "false",

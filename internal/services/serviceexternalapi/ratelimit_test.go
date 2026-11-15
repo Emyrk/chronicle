@@ -96,3 +96,26 @@ func TestExternalIPLimiterCloudflare(t *testing.T) {
 		require.Equal(t, http.StatusTooManyRequests, request(handler, "203.0.113.8", "192.0.2.1"))
 	})
 }
+
+func TestExternalIPLimiterBucketsIPv6By64(t *testing.T) {
+	t.Parallel()
+
+	limiter := newExternalIPLimiterWithConfig(1, 1)
+	handler := limiter.middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	request := func(forwardedFor string) int {
+		req := httptest.NewRequest(http.MethodGet, "/openapi.json", nil)
+		req.Header.Set("X-Forwarded-For", forwardedFor)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	require.Equal(t, http.StatusNoContent, request("2001:db8:1:2::1"))
+	require.Equal(t, http.StatusTooManyRequests, request("2001:db8:1:2:ffff::9"))
+	require.Equal(t, http.StatusNoContent, request("2001:db8:1:3::1"))
+	require.Equal(t, http.StatusNoContent, request("192.0.2.1"))
+	require.Equal(t, http.StatusTooManyRequests, request("192.0.2.1"))
+	require.Equal(t, http.StatusNoContent, request("192.0.2.2"))
+}
