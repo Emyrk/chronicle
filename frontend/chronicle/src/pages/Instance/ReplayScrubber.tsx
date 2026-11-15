@@ -1,15 +1,6 @@
-import { useRef, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
-import {
-  fractionAt,
-  scrubDrag,
-  scrubKeyTarget,
-  timeAtFraction,
-  type ScrubAria,
-  type ScrubKeyOptions,
-  type ScrubPhase,
-  type ScrubPointerEvent,
-  type ScrubberSource,
-} from "./replayScrubberModel";
+import { useRef, type CSSProperties, type ReactNode, type RefObject } from "react";
+import { fractionAt, timeAtFraction, type ScrubAria, type ScrubKeyOptions, type ScrubPhase, type ScrubberSource } from "./replayScrubberModel";
+import { trackScrubberFocus, trackScrubberPointer } from "./replayScrubberTrack";
 
 /** What a scrubber's children draw from. */
 export interface ReplayScrubberState {
@@ -34,7 +25,7 @@ interface RangeProps extends CommonProps {
 }
 
 /** A pointer-driven slider track (the mini map, the Replay strip, the landing hero). */
-interface TrackProps extends CommonProps {
+export interface TrackProps extends CommonProps {
   variant: "track";
   aria: ScrubAria & { label: string; valueText?: string };
   /** Focusable, and seeks with the keys these options allow. */
@@ -44,6 +35,8 @@ interface TrackProps extends CommonProps {
   measureRef?: RefObject<HTMLElement | null>;
   /** Prevent the browser's default on press (text selection, touch gestures). */
   preventDefaultOnPress?: boolean;
+  /** A mouse or touch press focuses the slider (default). Off: only Tab focuses it, so a click leaves focus where it was. */
+  focusOnPress?: boolean;
   style?: CSSProperties;
   /** Replaces the default (seek on press and drag, nothing on release) for a host with its own drag handling. */
   onScrub?: (ms: number, phase: ScrubPhase) => void;
@@ -87,47 +80,17 @@ function RangeScrubber({ source, disabled = false, className, ariaLabel, childre
   );
 }
 
-function TrackScrubber({
-  source,
-  disabled = false,
-  className,
-  aria,
-  keyboard,
-  tabIndex,
-  measureRef,
-  preventDefaultOnPress = false,
-  style,
-  onScrub,
-  onScrubCancel,
-  children,
-}: TrackProps) {
+function TrackScrubber(props: TrackProps) {
+  const { source, aria, className, style, children } = props;
   const draggingRef = useRef(false);
   const fraction = fractionAt(source.nowMs, source.bounds);
-
-  const rectOf = (event: PointerEvent<HTMLDivElement>) => (measureRef?.current ?? event.currentTarget).getBoundingClientRect();
-  const handle = (pointer: ScrubPointerEvent) => {
-    const next = scrubDrag(draggingRef.current, pointer, disabled);
-    draggingRef.current = next.dragging;
-    if (!next.scrub || !source.bounds) return;
-    const ms = timeAtFraction(next.scrub.fraction, source.bounds);
-    if (onScrub) onScrub(ms, next.scrub.phase);
-    else if (next.scrub.phase !== "end") source.seek(ms);
-  };
-
-  const onKeyDown = keyboard
-    ? (event: KeyboardEvent<HTMLDivElement>) => {
-      if (disabled || !source.bounds) return;
-      const target = scrubKeyTarget(event.key, source.nowMs ?? source.bounds.startMs, source.bounds, keyboard);
-      if (target === null) return;
-      event.preventDefault();
-      source.seek(target);
-    }
-    : undefined;
-
+  const focus = trackScrubberFocus(props);
+  // The drag state is read only inside the pointer handlers, never while rendering.
+  const pointer = () => trackScrubberPointer(props, draggingRef);
   return (
     <div
       role="slider"
-      tabIndex={tabIndex ?? (keyboard ? 0 : undefined)}
+      tabIndex={focus.tabIndex}
       aria-label={aria.label}
       aria-valuemin={aria.valueMin}
       aria-valuemax={aria.valueMax}
@@ -135,24 +98,12 @@ function TrackScrubber({
       aria-valuetext={aria.valueText}
       className={className}
       style={style}
-      onPointerDown={(event) => {
-        if (disabled || event.button !== 0) return;
-        if (preventDefaultOnPress) event.preventDefault();
-        event.currentTarget.setPointerCapture(event.pointerId);
-        handle({ type: "down", button: event.button, clientX: event.clientX, rect: rectOf(event) });
-      }}
-      onPointerMove={(event) => {
-        if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
-        handle({ type: "move", clientX: event.clientX, rect: rectOf(event) });
-      }}
-      onPointerUp={(event) => {
-        handle({ type: "up", clientX: event.clientX, rect: rectOf(event) });
-      }}
-      onPointerCancel={() => {
-        draggingRef.current = scrubDrag(draggingRef.current, { type: "cancel" }).dragging;
-        onScrubCancel?.();
-      }}
-      onKeyDown={onKeyDown}
+      onMouseDown={focus.onMouseDown}
+      onPointerDown={(event) => pointer().onPointerDown(event)}
+      onPointerMove={(event) => pointer().onPointerMove(event)}
+      onPointerUp={(event) => pointer().onPointerUp(event)}
+      onPointerCancel={() => pointer().onPointerCancel()}
+      onKeyDown={focus.onKeyDown}
     >
       {typeof children === "function" ? children({ fraction, percent: fraction * 100 }) : children}
     </div>
