@@ -9,11 +9,26 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BlogApp } from './blog/BlogApp'
 import { InferenceRuntimeProvider } from './features/chat/runtime'
 import { reloadAfterRouteLoadFailure } from './lib/routeLoadRecovery'
+import { trackAIReferral } from './lib/aiReferral'
 
 window.addEventListener('vite:preloadError', (event) => {
   if (reloadAfterRouteLoadFailure()) {
     event.preventDefault()
   }
+})
+
+// Tag sessions that arrive from AI assistants (once per session; no-op without GA4).
+trackAIReferral({
+  gtag: window.gtag,
+  storage: (() => {
+    try {
+      return window.sessionStorage
+    } catch {
+      return undefined
+    }
+  })(),
+  referrer: document.referrer,
+  search: window.location.search,
 })
 
 const queryClient = new QueryClient()

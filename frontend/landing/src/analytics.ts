@@ -1,3 +1,5 @@
+import { trackAIReferral } from "./aiReferral.ts";
+
 declare global {
   interface Window {
     dataLayer: unknown[][];
@@ -26,6 +28,20 @@ for (const parameter of ["chr_src", "chr_pos", "chr_cmp"]) {
 }
 
 gtag("config", googleAnalyticsMeasurementID, chronicleAttribution);
+
+// Tag sessions that arrive from AI assistants (once per session).
+trackAIReferral({
+  gtag,
+  storage: (() => {
+    try {
+      return window.sessionStorage;
+    } catch {
+      return undefined;
+    }
+  })(),
+  referrer: document.referrer,
+  search: window.location.search,
+});
 
 const script = document.createElement("script");
 script.async = true;
