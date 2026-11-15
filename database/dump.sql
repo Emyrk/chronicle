@@ -3567,6 +3567,16 @@ CREATE TABLE site_config (
     CONSTRAINT site_config_id_check CHECK (id)
 );
 
+CREATE TABLE stats_snapshots (
+    tenant_id uuid NOT NULL,
+    page_key text NOT NULL,
+    payload jsonb NOT NULL,
+    sample_n integer NOT NULL,
+    computed_at timestamp with time zone NOT NULL
+);
+
+ALTER TABLE ONLY stats_snapshots FORCE ROW LEVEL SECURITY;
+
 CREATE TABLE talent_builds (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     player_class text NOT NULL,
@@ -4803,6 +4813,9 @@ ALTER TABLE ONLY sidekick_wow_directories
 
 ALTER TABLE ONLY site_config
     ADD CONSTRAINT site_config_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY stats_snapshots
+    ADD CONSTRAINT stats_snapshots_pkey PRIMARY KEY (tenant_id, page_key);
 
 ALTER TABLE ONLY talent_builds
     ADD CONSTRAINT talent_builds_dataset_class_layout_key UNIQUE (dataset_id, player_class, talent_layout);
@@ -6283,6 +6296,8 @@ CREATE POLICY receipt_tenant_write ON event_repair_receipts FOR INSERT WITH CHEC
 
 ALTER TABLE renown_kill_facts ENABLE ROW LEVEL SECURITY;
 
+ALTER TABLE stats_snapshots ENABLE ROW LEVEL SECURITY;
+
 CREATE POLICY tenant_admin_bypass ON encounter_dps_rankings USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON event_repair_items USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
@@ -6372,6 +6387,8 @@ CREATE POLICY tenant_admin_bypass ON leaderboard_variant_player_boss_subjects US
 CREATE POLICY tenant_admin_bypass ON leaderboard_variant_player_observations USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON renown_kill_facts USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_admin_bypass ON stats_snapshots USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON wow_server_realms USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
@@ -6476,6 +6493,8 @@ CREATE POLICY tenant_isolation ON leaderboard_variant_player_observations USING 
 
 CREATE POLICY tenant_isolation ON renown_kill_facts USING ((realm_id IN ( SELECT wow_server_realms.id
    FROM wow_server_realms)));
+
+CREATE POLICY tenant_isolation ON stats_snapshots USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
 
 CREATE POLICY tenant_isolation ON wow_servers USING (
 CASE

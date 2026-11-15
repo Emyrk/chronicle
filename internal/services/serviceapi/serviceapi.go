@@ -46,6 +46,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/serviceratings"
 	"github.com/Emyrk/chronicle/internal/services/serviceriver"
 	"github.com/Emyrk/chronicle/internal/services/servicesidekick"
+	"github.com/Emyrk/chronicle/internal/services/servicestats"
 	"github.com/Emyrk/chronicle/internal/services/servicestorage"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/services/servicewhatsnew"
@@ -158,6 +159,7 @@ func (s *Service) DependsOn() []string {
 		serviceinference.OnInference(),
 		serviceinstancesearch.OnSearch(),
 		servicesidekick.OnSidekick(),
+		servicestats.OnStats(),
 	}
 }
 
@@ -338,6 +340,7 @@ func (s *Service) Start(ctx context.Context) error {
 		WhatsNew:                 servicewhatsnew.WhatsNew(s.broker),
 		Inference:                serviceinference.Inference(s.broker),
 		InstanceSearch:           serviceinstancesearch.SearchService(s.broker),
+		Stats:                    servicestats.Stats(s.broker),
 	})
 
 	if err != nil {

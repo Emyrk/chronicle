@@ -233,6 +233,11 @@ type sqlcQuerier interface {
 	DeleteSidekickConfigOverride(ctx context.Context, arg DeleteSidekickConfigOverrideParams) ([]byte, error)
 	DeleteSidekickInstallation(ctx context.Context, arg DeleteSidekickInstallationParams) (SidekickInstallation, error)
 	DeleteSidekickWoWDirectoriesExcept(ctx context.Context, arg DeleteSidekickWoWDirectoriesExceptParams) (int64, error)
+	// Drops every snapshot of a tenant, used when it falls below the /stats
+	// activity threshold.
+	DeleteStatsSnapshots(ctx context.Context, tenantID uuid.UUID) (int64, error)
+	// Drops snapshots for pages that are no longer registered.
+	DeleteStatsSnapshotsExcept(ctx context.Context, arg DeleteStatsSnapshotsExceptParams) (int64, error)
 	DeleteTenant(ctx context.Context, id uuid.UUID) error
 	DeleteTimeParseBossKillMembershipSeries(ctx context.Context, arg DeleteTimeParseBossKillMembershipSeriesParams) error
 	DeleteTimeParseBossKillMembershipsByInstance(ctx context.Context, instanceID uuid.UUID) error
@@ -558,6 +563,8 @@ type sqlcQuerier interface {
 	GetSidekickInstallationForOAuthRequest(ctx context.Context, arg GetSidekickInstallationForOAuthRequestParams) (uuid.UUID, error)
 	GetSiteConfig(ctx context.Context) (SiteConfig, error)
 	GetSpellItemEnchantmentByID(ctx context.Context, arg GetSpellItemEnchantmentByIDParams) (DbcSpellItemEnchantment, error)
+	// Reads one /stats page's snapshot. The only query a /stats page hit runs.
+	GetStatsSnapshot(ctx context.Context, arg GetStatsSnapshotParams) (StatsSnapshot, error)
 	GetTenantByID(ctx context.Context, id uuid.UUID) (Tenant, error)
 	// Tenant queries. These run with AdminBypass context since the tenants table
 	// itself is not behind RLS (only wow_servers/wow_server_realms are).
@@ -1066,6 +1073,9 @@ type sqlcQuerier interface {
 	ListSpellVariantsForCheck(ctx context.Context, datasetID uuid.UUID) ([]ListSpellVariantsForCheckRow, error)
 	// Modules the user tracks, most recently starred first.
 	ListStarredLuaProjects(ctx context.Context, userID uuid.UUID) ([]LuaProject, error)
+	// Lists a tenant's snapshots without payloads, for the sitemap and for the
+	// snapshot job's cadence check.
+	ListStatsSnapshotMeta(ctx context.Context, tenantID uuid.UUID) ([]ListStatsSnapshotMetaRow, error)
 	ListTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
 	ListTenants(ctx context.Context) ([]Tenant, error)
 	// Tenants that use this dataset, either directly (tenant.default_dataset_id)
@@ -1435,6 +1445,11 @@ type sqlcQuerier interface {
 	// Returns distinct realm names that have at least one qualified speedrun.
 	SpeedrunRealmNames(ctx context.Context) ([]string, error)
 	StarLuaProject(ctx context.Context, arg StarLuaProjectParams) error
+	// Counts the request tenant's listed raids (logical runs, so duplicate uploads
+	// count once) and distinct players since a cutoff. RLS on wow_server_realms
+	// scopes it to the tenant in context (root: untenanted and include_in_all
+	// realms). Runs only in the background snapshot job, never per page request.
+	StatsTenantActivity(ctx context.Context, since pgtype.Timestamptz) (StatsTenantActivityRow, error)
 	// Atomically refills a leaky bucket by the time since its last update
 	// (capped at burst) and takes cost tokens if enough are available. A new
 	// bucket starts full. A refused take still stores the refilled level, so
@@ -1560,6 +1575,10 @@ type sqlcQuerier interface {
 	UpsertSidekickConfigOverride(ctx context.Context, arg UpsertSidekickConfigOverrideParams) ([]byte, error)
 	UpsertSidekickInstallation(ctx context.Context, arg UpsertSidekickInstallationParams) (SidekickInstallation, error)
 	UpsertSidekickWoWDirectory(ctx context.Context, arg UpsertSidekickWoWDirectoryParams) error
+	// Writes a snapshot and reports whether its payload differs from the stored
+	// one (always true for a new row). jsonb compares normalized values, so key
+	// order and whitespace never count as a change.
+	UpsertStatsSnapshot(ctx context.Context, arg UpsertStatsSnapshotParams) (bool, error)
 	// Insert a unique talent build, returning its ID. If the build already exists,
 	// return the existing row's ID.
 	UpsertTalentBuild(ctx context.Context, arg UpsertTalentBuildParams) (uuid.UUID, error)

@@ -3579,6 +3579,14 @@ type SiteConfig struct {
 	RootUploadsDisabled       bool               `db:"root_uploads_disabled" json:"root_uploads_disabled"`
 }
 
+type StatsSnapshot struct {
+	TenantID   uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	PageKey    string             `db:"page_key" json:"page_key"`
+	Payload    []byte             `db:"payload" json:"payload"`
+	SampleN    int32              `db:"sample_n" json:"sample_n"`
+	ComputedAt pgtype.Timestamptz `db:"computed_at" json:"computed_at"`
+}
+
 type TalentBuild struct {
 	ID            uuid.UUID          `db:"id" json:"id"`
 	PlayerClass   string             `db:"player_class" json:"player_class"`

@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Content.Title}}</title>
+  <meta name="description" content="{{.DescriptionV}}">
+  <link rel="canonical" href="{{.Canonical}}">
+  {{- if .Robots}}
+  <meta name="robots" content="{{.Robots}}">
+  {{- end}}
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="{{.Content.Title}}">
+  <meta property="og:description" content="{{.DescriptionV}}">
+  <meta property="og:url" content="{{.Canonical}}">
+  <script type="application/ld+json">{{.JSONLD}}</script>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin: 0; background: #0b1117; color: #e6edf3; font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    header, main, footer { max-width: 920px; margin: 0 auto; padding: 1rem 1.25rem; }
+    header a { color: #e6edf3; font-weight: 600; text-decoration: none; }
+    a { color: #d8b76a; }
+    h1 { font-size: 1.9rem; line-height: 1.25; margin: 0.5rem 0 1rem; }
+    .lead { font-size: 1.15rem; }
+    .updated { color: #9fb0bf; font-size: 0.9rem; }
+    table { width: 100%; border-collapse: collapse; margin: 1.5rem 0; }
+    caption { text-align: left; color: #9fb0bf; padding-bottom: 0.5rem; }
+    th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #23303b; }
+    th { color: #9fb0bf; font-weight: 600; }
+    ul.links { padding-left: 1.2rem; }
+    footer { color: #9fb0bf; font-size: 0.9rem; border-top: 1px solid #23303b; }
+  </style>
+</head>
+<body>
+  <header>
+    <a href="/">{{.Site.Label}} on Chronicle</a>
+  </header>
+  <main>
+    <h1>{{.Content.Title}}</h1>
+    <p class="lead">{{.Content.Lead}}</p>
+    <p class="updated">Updated <time datetime="{{.UpdatedISO}}">{{.Updated}}</time>
+      &middot; Sample: {{.SampleN}}{{with .Content.SampleLabel}} {{.}}{{end}}
+      {{- with .Content.Window}} &middot; Window: {{.}}{{end}}
+      &middot; <a href="{{.Methodology}}">Methodology</a></p>
+    {{- with .Content.Table}}
+    <table>
+      {{- with .Caption}}
+      <caption>{{.}}</caption>
+      {{- end}}
+      <thead>
+        <tr>{{range .Headers}}<th scope="col">{{.}}</th>{{end}}</tr>
+      </thead>
+      <tbody>
+        {{- range .Rows}}
+        <tr>{{range .}}<td>{{if .Href}}<a href="{{.Href}}">{{.Text}}</a>{{else}}{{.Text}}{{end}}</td>{{end}}</tr>
+        {{- end}}
+      </tbody>
+    </table>
+    {{- end}}
+    {{- with .Content.Methodology}}
+    <section id="methodology">
+      <h2>Methodology</h2>
+      {{- range .}}
+      <p>{{.}}</p>
+      {{- end}}
+    </section>
+    {{- end}}
+    {{- with .Content.Links}}
+    <h2>Explore on Chronicle</h2>
+    <ul class="links">
+      {{- range .}}
+      <li><a href="{{.Href}}">{{.Text}}</a></li>
+      {{- end}}
+    </ul>
+    {{- end}}
+  </main>
+  <footer>
+    <p>Numbers come from combat logs players upload to Chronicle. They count what appears in uploaded logs, not the whole server.
+      <a href="{{.Methodology}}">How these numbers are computed</a>.</p>
+  </footer>
+</body>
+</html>

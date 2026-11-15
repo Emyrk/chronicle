@@ -38,6 +38,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicesecrets"
 	"github.com/Emyrk/chronicle/internal/services/servicesidekick"
 	"github.com/Emyrk/chronicle/internal/services/servicestorage"
+	"github.com/Emyrk/chronicle/internal/services/servicestats"
 	"github.com/Emyrk/chronicle/internal/services/servicestripecli"
 	"github.com/Emyrk/chronicle/internal/services/servicetelemetry"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
@@ -64,6 +65,7 @@ func ServerCmd() *serpent.Command {
 		servicetenant.New(srvs),
 		servicechoose.New(srvs),
 		servicedbstore.New(srvs),
+		servicestats.NewRuntime(srvs),
 		servicebilling.New(srvs),
 		serviceriver.New(srvs),
 		serviceauthz.New(srvs),

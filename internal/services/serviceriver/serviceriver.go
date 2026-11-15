@@ -29,6 +29,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicerankings"
 	"github.com/Emyrk/chronicle/internal/services/serviceratings"
 	"github.com/Emyrk/chronicle/internal/services/serviceretention"
+	"github.com/Emyrk/chronicle/internal/services/servicestats"
 	"github.com/Emyrk/chronicle/internal/services/servicetelemetry"
 	"github.com/google/uuid"
 	"github.com/riverqueue/river"
@@ -80,6 +81,7 @@ func (s *Service) DependsOn() []string {
 		servicetelemetry.OnTelemetry(),
 		servicerankings.OnRankings(),
 		serviceratings.OnRatings(),
+		servicestats.OnStats(),
 	}
 }
 
@@ -334,6 +336,12 @@ func (s *Service) Start(ctx context.Context) error {
 		},
 		&river.PeriodicJobOpts{RunOnStart: false},
 	))
+
+	// Refresh the public /stats page snapshots per tenant.
+	stats := servicestats.Stats(s.broker)
+	riverqueue.AddWorker(q, &servicestats.DispatchWorker{Service: stats, Queue: q})
+	riverqueue.AddWorker(q, &servicestats.TenantWorker{Service: stats})
+	q.AddPeriodicJob(servicestats.PeriodicDispatch())
 
 	// Daily bounded repair for parse-enabled tenants and root.
 	q.AddPeriodicJob(river.NewPeriodicJob(

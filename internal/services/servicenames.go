@@ -36,4 +36,5 @@ const (
 	ServiceSecrets     = "secrets"
 	ServiceChoose      = "choose"
 	ServiceClientIP    = "clientip"
+	ServiceStats       = "stats"
 )

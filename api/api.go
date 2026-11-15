@@ -46,6 +46,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/serviceinstancesearch"
 	"github.com/Emyrk/chronicle/internal/services/servicelivesession"
 	"github.com/Emyrk/chronicle/internal/services/serviceproof"
+	"github.com/Emyrk/chronicle/internal/services/servicestats"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/services/servicewhatsnew"
 	"github.com/Emyrk/chronicle/internal/tenantcache"
@@ -179,6 +180,10 @@ type Options struct {
 
 	// WhatsNew tracks whether authenticated users have opened the current What's New revision.
 	WhatsNew *servicewhatsnew.Service
+
+	// Stats serves the public /stats answer pages. When nil, /stats falls
+	// through to the SPA.
+	Stats *servicestats.Service
 }
 
 type API struct {
@@ -202,6 +207,8 @@ type API struct {
 	landing        landingFeaturedCache
 	// sitemapCache holds each tenant's guild, character and raid sitemap URLs.
 	sitemapCache tenantcache.Cache[*sitemapDynamic]
+	// statsSite holds each tenant's /stats page facts (name, Turtle fork).
+	statsSite tenantcache.Cache[statsSiteFacts]
 	// sitemapRendered holds the rendered sitemap XML per tenant and canonical host.
 	sitemapRendered sitemapRenderCache
 	// sitemapBlogFS overrides the frontend build the sitemap reads blog posts from (tests).
@@ -938,6 +945,14 @@ func (api *API) Routes() chi.Router {
 			}))
 		}
 	})
+
+	if api.Opts.Stats != nil {
+		// Server-rendered answer pages, ahead of the SPA fallback.
+		stats := api.Opts.Stats.Handler(api.statsSiteResolver)
+		r.Get("/stats", stats.ServeHTTP)
+		r.Get("/stats/*", stats.ServeHTTP)
+		r.Get(servicestats.IndexNowKeyPath, api.Opts.Stats.IndexNowKeyHandler().ServeHTTP)
+	}
 
 	r.NotFound(frontend.Handler(frontend.FS(), api.OGRoutes(), api.brandingResolver, api.blogFlavorResolver).ServeHTTP)
 

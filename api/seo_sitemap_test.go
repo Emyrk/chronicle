@@ -20,6 +20,7 @@ import (
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/dbtestutil"
 	"github.com/Emyrk/chronicle/internal/services/servicedataset"
+	"github.com/Emyrk/chronicle/internal/services/servicestats"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/testutil"
 )
@@ -155,6 +156,24 @@ func TestSitemapDynamicURLs(t *testing.T) {
 	require.NoError(t, err)
 	api.sitemapBlogFS = fstest.MapFS{"blog-manifest.json": &fstest.MapFile{Data: manifest}}
 
+	// One indexable /stats page; another tenant's snapshot stays out.
+	statsAt := time.Date(2026, 11, 14, 6, 30, 0, 0, time.UTC)
+	for _, tenant := range []uuid.UUID{ourTenant, uuid.New()} {
+		_, err = seedPool.Exec(ctx, "INSERT INTO stats_snapshots (tenant_id, page_key, payload, sample_n, computed_at) VALUES ($1, 'about', '{}', 50, $2)", tenant, statsAt)
+		require.NoError(t, err)
+	}
+	api.Opts.Stats, err = servicestats.New(servicestats.Options{Logger: testutil.Logger(t), Store: database.New(pool)})
+	require.NoError(t, err)
+
+	// The /stats site facts come from the tenant and its dataset flavor. The
+	// request's tenant has no name or branding, so the name falls back.
+	site, err := api.statsSiteResolver(request(true))
+	require.NoError(t, err)
+	require.Equal(t, servicestats.Site{
+		Name: "Chronicle", TurtleFork: true,
+		Origin: "https://everlook.chronicleclassic.com", Discoverable: true,
+	}, site)
+
 	res := httptest.NewRecorder()
 	api.sitemapXML(res, request(true))
 	require.Equal(t, http.StatusOK, res.Code, res.Body.String())
@@ -177,6 +196,8 @@ func TestSitemapDynamicURLs(t *testing.T) {
 	require.NotContains(t, lastmods, base+"/instances/"+unlistedSlug, "unlisted instances are excluded")
 	require.NotContains(t, lastmods, base+"/instances/"+unlisted.String())
 	require.NotContains(t, lastmods, base+"/instances/"+theirSlug, "another tenant's instances are excluded")
+
+	require.Equal(t, "2026-11-14T06:30:00Z", lastmods[base+"/stats/about"], "a /stats page's lastmod is its computed_at")
 
 	require.Contains(t, lastmods, base+"/g/"+ourGuild.String())
 	require.NotContains(t, lastmods, base+"/g/"+theirGuild.String())
