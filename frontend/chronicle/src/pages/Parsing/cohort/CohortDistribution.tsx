@@ -1,4 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { cn } from "@/lib/utils";
 import { parseHexColor } from "@/pages/Instance/parseColors";
 import {
@@ -8,6 +9,7 @@ import {
   PARSE_TIERS,
   type CohortDirection,
   type HistogramBin,
+  type NormalDistributionFit,
   type ScoredValue,
 } from "./cohortStats";
 
@@ -36,6 +38,52 @@ function normalFitLabel(maxCdfGap: number): string {
   if (maxCdfGap <= 0.06) return "close fit";
   if (maxCdfGap <= 0.12) return "rough fit";
   return "poor fit";
+}
+
+function NormalFitBadge({
+  fit,
+  sampleSize,
+  formatValue,
+}: {
+  fit: NormalDistributionFit;
+  sampleSize: number;
+  formatValue: (value: number) => string;
+}) {
+  const gapPercent = (fit.maxCdfGap * 100).toFixed(1);
+  const label = normalFitLabel(fit.maxCdfGap);
+  return (
+    <HintTooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex cursor-help rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary transition-colors hover:border-primary/50 hover:bg-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+          aria-label={`Normal distribution ${label}, ${gapPercent}% maximum CDF gap. Show fit details.`}
+        >
+          Normal: {label} · {gapPercent}% CDF gap
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" sideOffset={6} className="w-72 space-y-2.5 p-3 text-left text-xs text-balance">
+        <div>
+          <p className="font-semibold text-zinc-100">Fitted normal distribution</p>
+          <p className="mt-0.5 text-zinc-400">The curve uses the mean and standard deviation of all {sampleSize} observations.</p>
+        </div>
+        <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 tabular-nums">
+          <dt className="text-zinc-400">Mean (μ)</dt>
+          <dd className="font-medium text-zinc-100">{formatValue(fit.mean)}</dd>
+          <dt className="text-zinc-400">Standard deviation (σ)</dt>
+          <dd className="font-medium text-zinc-100">{formatValue(fit.standardDeviation)}</dd>
+          <dt className="text-zinc-400">Maximum CDF gap</dt>
+          <dd className="font-medium text-zinc-100">{gapPercent} percentage points</dd>
+        </dl>
+        <p className="border-t border-white/10 pt-2 text-zinc-300">
+          At the distribution’s largest mismatch, the observed cumulative share differs from the curve by {gapPercent} percentage points.
+        </p>
+        <p className="text-[10px] leading-relaxed text-zinc-500">
+          Close ≤ 6% · rough ≤ 12% · poor &gt; 12%. This is a descriptive distance, not a confidence score or significance test.
+        </p>
+      </TooltipContent>
+    </HintTooltip>
+  );
 }
 
 function useWidth() {
@@ -159,14 +207,7 @@ export function CohortDistribution({
       <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <span className="flex flex-wrap items-center gap-2 text-sm font-medium text-foreground">
           Distribution
-          {normalFit && (
-            <span
-              className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary"
-              title="Largest gap between the cohort's cumulative distribution and the fitted normal curve. Lower is closer. This is descriptive, not a significance test."
-            >
-              Normal: {normalFitLabel(normalFit.maxCdfGap)} · {(normalFit.maxCdfGap * 100).toFixed(1)}% CDF gap
-            </span>
-          )}
+          {normalFit && <NormalFitBadge fit={normalFit} sampleSize={values.length} formatValue={formatValue} />}
         </span>
         <span className="flex items-center gap-3 text-xs text-muted-foreground">
           {zoom ? (
