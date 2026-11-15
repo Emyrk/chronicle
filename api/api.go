@@ -349,6 +349,7 @@ func (api *API) Routes() chi.Router {
 		httpmw.ContentSecurityPolicy(api.adsEnabledForRequest, liveConnectSources...),
 		httpmw.NoWWW(),
 		httpmw.PrometheusMW(api.Opts.Registry, api.metricTenant),
+		httpmw.AIBotMetrics(api.Opts.Registry, api.metricTenant),
 		middleware.Compress(5,
 			"text/html", "text/css", "application/javascript", "text/javascript",
 			"application/json", "text/javascript",
