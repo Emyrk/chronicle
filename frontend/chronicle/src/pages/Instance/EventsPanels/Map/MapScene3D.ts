@@ -38,7 +38,7 @@ import {
 } from "./dungeonMeshes";
 import { MAP_CURSOR, MAP_HOSTILE_CURSOR, MAP_UNIT_CURSOR } from "./mapCursors";
 import { FLOOR_TRACK_TOLERANCE_YARDS, floorTrackAt, type FloorTracks } from "./walkableFloors";
-import { flatArtworkUnitScale, FOCUS_RADIUS_YARDS, FULL_MAP_VIEWPORT, interpolateViewport, mapPointToScene, topDownMapDistance, type MapPoint, type MapViewport } from "./mapModel";
+import { flatArtworkUnitScale, FOCUS_RADIUS_YARDS, FULL_MAP_VIEWPORT, mapPointToScene, topDownMapDistance, type MapPoint, type MapViewport } from "./mapModel";
 import { type MapDebugOverlay } from "./mapDebugOverlays";
 import {
   MAX_EFFECT_PRIMITIVES,
@@ -54,7 +54,6 @@ import { GROUND_WIDTH, MESH_PLAYER_HEIGHT_YARDS, ORBIT_FAR, ORBIT_NEAR, PLAYER_G
 import {
   COLLISION_RETURN_RATE_PER_S,
   DEFAULT_AD_STRAFE,
-  DOUBLE_CLICK_MS,
   DOUBLE_CLICK_OUT_FACTOR,
   FREE_CAM_COLLISION_PADDING_SCENE_UNITS,
   FREE_CAM_MAX_PITCH_RADIANS,
@@ -98,6 +97,7 @@ import { LivePresence } from "./livePresence";
 import { DungeonWorld, type DungeonMesh } from "./dungeonWorld";
 import { DebugOverlayLayer } from "./debugOverlays";
 import { CameraArbiter, type CameraOwner } from "./cameraArbiter";
+import { TweenRig } from "./tweenRig";
 import { MapInputState, mobileInputActive, MouseDrag, type InputFrame } from "./inputFrame";
 import { UnitLayer, type UnitObject } from "./unitLayer";
 import { EffectsLayer } from "./effectsLayer";
@@ -447,8 +447,17 @@ export class MapScene3D {
   private groundKey = "";
   private aspect = 1;
   private viewport: MapViewport = FULL_MAP_VIEWPORT;
-  // A re-framing easing the camera from `from` to `this.viewport`.
-  private viewAnimation: { from: MapViewport; direction: THREE.Vector3; start: number; duration: number } | null = null;
+  // The viewport re-framing and the double-click move (tweenRig.ts).
+  private readonly tween = new TweenRig({
+    camera: this.camera,
+    controls: () => this.controls,
+    viewport: () => this.viewport,
+    placeCamera: (viewport, direction) => this.placeCamera(viewport, direction),
+    constrainCamera: () => {
+      this.constrainCamera();
+    },
+    updateUnitScale: () => this.updateUnitScale(),
+  });
   // The camera's viewport when the user's current gesture began.
   private gestureStart: MapViewport | null = null;
   private unitScale = 1;
@@ -469,10 +478,10 @@ export class MapScene3D {
   // (Follow, encounter jump, selection), goes through it (cameraArbiter.ts).
   private readonly arbiter = new CameraArbiter({
     cancelViewTween: () => {
-      this.viewAnimation = null;
+      this.tween.view = null;
     },
     cancelMove: () => {
-      this.cameraMove = null;
+      this.tween.move = null;
     },
     stopDirector: () => {
       this.directorRunning = false;
@@ -481,7 +490,7 @@ export class MapScene3D {
       this.directorSubject = null;
     },
     walking: () => this.walk !== null,
-    tweening: () => this.viewAnimation !== null || this.cameraMove !== null,
+    tweening: () => this.tween.active(),
     directorAvailable: () => this.director !== null && this.dungeonMesh !== null,
   });
   // The unit the shot follows instead of the group (double-clicked, or a
@@ -587,15 +596,6 @@ export class MapScene3D {
   private readonly directorReach: DampedValue = { value: 0, velocity: 0 };
   // Refilled per frame so the Director allocates nothing while it runs.
   private readonly directorUnits: DirectorUnit[] = [];
-  // A double-click easing the camera to the point (and distance) clicked.
-  private cameraMove: {
-    from: THREE.Vector3;
-    to: THREE.Vector3;
-    fromDistance: number;
-    toDistance: number;
-    direction: THREE.Vector3;
-    start: number;
-  } | null = null;
 
   private readonly matrix = new THREE.Matrix4();
   private readonly color = new THREE.Color();
@@ -938,7 +938,7 @@ export class MapScene3D {
     }
     if (!request) {
       this.applyGroundMode();
-      this.viewAnimation = null;
+      this.tween.view = null;
       this.placeCamera(this.viewport, ANGLED_OFFSET.clone().normalize());
       this.syncCameraOwner();
       return;
@@ -956,7 +956,7 @@ export class MapScene3D {
       this.world.dungeonMesh = mesh;
       this.scene.add(mesh.group);
       this.applyGroundMode();
-      this.viewAnimation = null;
+      this.tween.view = null;
       this.placeCamera(this.viewport, (this.alignmentOverlay ? TOP_DOWN_OFFSET : MESH_ANGLED_OFFSET).clone().normalize());
       // Start on the first valid cinematic shot immediately. The mesh already
       // had an asynchronous load; making the camera spend another few seconds
@@ -1127,7 +1127,7 @@ export class MapScene3D {
 
   /** Whether the Director is the one moving the camera right now. */
   private directing(): boolean {
-    return this.director !== null && this.dungeonMesh !== null && this.arbiter.directorHeld && this.cameraMove === null && this.walk === null;
+    return this.director !== null && this.dungeonMesh !== null && this.arbiter.directorHeld && this.tween.move === null && this.walk === null;
   }
 
   /** Captures the exact orbit-camera pose for camera marks and authored paths. */
@@ -1188,8 +1188,8 @@ export class MapScene3D {
       this.arbiter.take("scripted", "pose");
     } else {
       // Under the Director: the pose stops a tween in flight, and the Director keeps the camera.
-      this.cameraMove = null;
-      this.viewAnimation = null;
+      this.tween.move = null;
+      this.tween.view = null;
     }
     this.camera.position.fromArray(pose.position);
     this.controls.target.fromArray(pose.target);
@@ -1221,7 +1221,7 @@ export class MapScene3D {
     }
     if (this.director && this.dungeonMesh && !this.alignmentOverlay) {
       this.viewport = viewport;
-      this.viewAnimation = null;
+      this.tween.view = null;
       // Back to the group: Follow and encounter jumps drop a followed unit.
       this.directorSubject = null;
       this.engageDirector();
@@ -1233,13 +1233,13 @@ export class MapScene3D {
     const from = this.cameraViewport();
     this.viewport = viewport;
     if (durationMs > 0) {
-      this.viewAnimation = { from, direction, start: this.now(), duration: durationMs };
+      this.tween.view = { from, direction, start: this.now(), duration: durationMs };
       this.arbiter.tweenStarted();
       this.syncCameraOwner();
       this.requestRender();
       return;
     }
-    this.viewAnimation = null;
+    this.tween.view = null;
     this.placeCamera(viewport, direction);
     this.syncCameraOwner();
   }
@@ -1250,7 +1250,7 @@ export class MapScene3D {
     // Asking for top-down takes the camera from the Director, as a drag does;
     // Follow (a new viewport request) hands it back. Angled only stops a tween.
     if (topDown) this.arbiter.take("free", "top-down");
-    else this.viewAnimation = null;
+    else this.tween.view = null;
     this.placeCamera(this.viewport, (topDown ? TOP_DOWN_OFFSET : ANGLED_OFFSET).clone().normalize());
     this.syncCameraOwner();
   }
@@ -1281,15 +1281,9 @@ export class MapScene3D {
     };
   }
 
-  // Steps a running re-framing; returns whether it needs another frame.
+  // Steps a running re-framing (TweenRig); returns whether it needs another frame.
   private updateViewAnimation(now: number): boolean {
-    const animation = this.viewAnimation;
-    if (!animation) return false;
-    const t = Math.min(1, Math.max(0, (now - animation.start) / animation.duration));
-    this.placeCamera(interpolateViewport(animation.from, this.viewport, 1 - (1 - t) ** 3), animation.direction.clone());
-    if (t < 1) return true;
-    this.viewAnimation = null;
-    return false;
+    return this.tween.updateView(now);
   }
 
   private baseDistance(): number {
@@ -1900,22 +1894,9 @@ export class MapScene3D {
     return Math.min(distance, smoothDamp(this.directorReach, allowed, smooth, dt));
   }
 
-  // Steps a double-click move; returns whether it needs another frame.
+  // Steps a double-click move (TweenRig); returns whether it needs another frame.
   private updateCameraMove(now: number): boolean {
-    const move = this.cameraMove;
-    if (!move) return false;
-    const t = Math.min(1, Math.max(0, (now - move.start) / DOUBLE_CLICK_MS));
-    // easeInOutCubic.
-    const eased = t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
-    const target = this.controls.target.copy(move.from).lerp(move.to, eased);
-    const distance = move.fromDistance + (move.toDistance - move.fromDistance) * eased;
-    this.camera.position.copy(move.direction).multiplyScalar(distance).add(target);
-    this.controls.update();
-    this.constrainCamera();
-    this.updateUnitScale();
-    if (t < 1) return true;
-    this.cameraMove = null;
-    return false;
+    return this.tween.updateMove(now);
   }
 
   // The scene point under the pointer: a unit's body, else the mesh floor or
@@ -1974,7 +1955,7 @@ export class MapScene3D {
       : this.controls.minDistance;
     const wanted = event.shiftKey ? current * DOUBLE_CLICK_OUT_FACTOR : Math.max(closest, current / 2);
     this.arbiter.take("tween", "double-click");
-    this.cameraMove = {
+    this.tween.move = {
       from: target.clone(),
       to: hit.point.clone(),
       fromDistance: current,
