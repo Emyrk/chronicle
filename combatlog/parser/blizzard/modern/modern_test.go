@@ -167,6 +167,26 @@ func TestReadBaseYearPreservesInput(t *testing.T) {
 	assert.Equal(t, input, string(preserved))
 }
 
+func TestTransformReaderSkipsMalformedPhysicalLines(t *testing.T) {
+	t.Parallel()
+
+	input := strings.Join([]string{
+		`11/8/2026 11:34:26.689-3  COMBAT_LOG_VERSION,22,ADVANCED_LOG_ENABLED,1,BUILD_VERSION,1.18.0,PROJECT_ID,2`,
+		"11/8/2026 15:51:43.543-3  SPELL_AURA_APPLIED,Player-6932-015E9274,\"Grigori- B\x86R\xa2\xc5",
+		"\xb0\x1cB\t\xe8\xeeBEo\xa0\xc5\xcbzkB-JxJ-US\",0x518,0x80000000",
+		`11/8/2026 15:51:44.000-3  SPELL_AURA_APPLIED,Player-1,"truncated`,
+		`continuation without a timestamp"`,
+		`11/8/2026 15:51:45.000-3  ZONE_CHANGE,389,"Ragefire Chasm",1`,
+	}, "\n")
+
+	converted, err := io.ReadAll(newTransformReader(strings.NewReader(input)))
+	require.NoError(t, err)
+	assert.Contains(t, string(converted), "BLIZZARD_COMBAT_LOG_VERSION")
+	assert.Contains(t, string(converted), "BLIZZARD_ZONE_CHANGE")
+	assert.NotContains(t, string(converted), "SPELL_AURA_APPLIED")
+	assert.Len(t, strings.Split(strings.TrimSpace(string(converted)), "\n"), 2)
+}
+
 func TestGUIDNormalizer(t *testing.T) {
 	t.Parallel()
 
@@ -1062,6 +1082,19 @@ func TestTransformWorldMarkers(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, uint32(564), marker.InstanceID)
 	assert.Equal(t, int32(8), marker.Marker)
+	assert.False(t, marker.Placed)
+
+	removed, err = reader.transform(`9/8/2026 12:02:00.000-6  WORLD_MARKER_REMOVED,3`)
+	require.NoError(t, err)
+	ts, _, matched, err = wotlk.ParseLine(removed)
+	require.NoError(t, err)
+	parsed, err = (&Parser{}).worldMarkerRemoved(ts, matched, "")
+	require.NoError(t, err)
+	require.Len(t, parsed, 1)
+	marker, ok = parsed[0].(*messages.WorldMarker)
+	require.True(t, ok)
+	assert.Zero(t, marker.InstanceID)
+	assert.Equal(t, int32(3), marker.Marker)
 	assert.False(t, marker.Placed)
 }
 

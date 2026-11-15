@@ -367,10 +367,14 @@ func (p *Parser) worldMarkerRemoved(ts time.Time, m *wotlk.Matched, _ string) ([
 func (p *Parser) worldMarker(ts time.Time, m *wotlk.Matched, placed bool) ([]messages.Message, error) {
 	marker := &messages.WorldMarker{
 		MessageBase: messages.Base(ts),
-		InstanceID:  m.Uint32(),
-		Marker:      m.Int32(),
 		Placed:      placed,
 	}
+	// Current clients only include the marker index when removing a marker.
+	// Continue accepting the older instanceID,marker layout for compatibility.
+	if placed || m.Remain() >= 2 {
+		marker.InstanceID = m.Uint32()
+	}
+	marker.Marker = m.Int32()
 	if placed {
 		var err error
 		marker.X, err = strconv.ParseFloat(m.String(), 64)

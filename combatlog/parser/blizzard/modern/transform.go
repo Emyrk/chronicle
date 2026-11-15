@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/logscanner"
 )
@@ -83,7 +84,7 @@ func (r *transformReader) Read(p []byte) (int, error) {
 			break
 		}
 		line := strings.TrimSpace(r.scanner.Text())
-		if line == "" {
+		if line == "" || malformedPhysicalLine(line) {
 			continue
 		}
 		converted, err := r.transform(line)
@@ -100,6 +101,26 @@ func (r *transformReader) Read(p []byte) (int, error) {
 		return r.buf.Read(p)
 	}
 	return 0, r.err
+}
+
+// malformedPhysicalLine identifies byte-corrupted or truncated records that
+// cannot be parsed safely. A damaged quoted name can contain a newline, leaving
+// one physical line with an open quote and the next without a timestamp.
+func malformedPhysicalLine(line string) bool {
+	if !utf8.ValidString(line) || strings.Index(line, "  ") < 0 {
+		return true
+	}
+
+	quoted := false
+	for i := 0; i < len(line); i++ {
+		switch {
+		case line[i] == '"':
+			quoted = !quoted
+		case line[i] < ' ' || line[i] == 0x7f:
+			return true
+		}
+	}
+	return quoted
 }
 
 func (r *transformReader) transform(line string) (string, error) {
