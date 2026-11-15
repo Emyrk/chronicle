@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/Gophercraft/core/vsn"
@@ -69,6 +70,9 @@ type Service struct {
 	ogSiteStats     tenantcache.Cache[database.SiteStatsRow]
 	ogCensus        tenantcache.Cache[[]database.CensusPlayerCountsRow]
 	ogHighlights    tenantcache.Cache[[]chroniclesdk.HubLandingPreview]
+	// leaderboardNames caches each flavor's known instance names (flavor key → set);
+	// the registry is fixed at startup.
+	leaderboardNames sync.Map
 }
 
 func New(opts Options) *Service {
@@ -121,7 +125,19 @@ func canonicalOrigin(s *Service, r *http.Request) string {
 	if s != nil && s.accessURL != nil && s.accessURL.Scheme != "" {
 		scheme = s.accessURL.Scheme
 	}
-	return scheme + "://" + ogHost(r)
+	return scheme + "://" + s.canonicalHost(r)
+}
+
+// canonicalHost is the one host page URLs (canonicals, og:url) use for the
+// request: its own host when it is one of the site's canonical hosts, else the
+// first one (see servicetenant.CanonicalHost). With no canonical host
+// configured the validated request host is kept.
+func (s *Service) canonicalHost(r *http.Request) string {
+	if s == nil {
+		return ogHost(r)
+	}
+	hosts := servicetenant.CanonicalHosts(servicetenant.TenantFromContext(r.Context()), s.tenant, s.accessURL)
+	return servicetenant.CanonicalHost(hosts, ogHost(r))
 }
 
 // ogCacheWait bounds how long a page waits for a card's first cached fetch.

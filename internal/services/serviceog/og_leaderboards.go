@@ -7,6 +7,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/frontend"
 )
 
@@ -43,6 +45,9 @@ func (s *Service) leaderboardRoutes() []frontend.OGRoute {
 		return func(r *http.Request) *frontend.OGData {
 			flavor := s.resolvedSiteFlavor(r.Context())
 			seg, inst, t := chi.URLParam(r, segment), chi.URLParam(r, instance), chi.URLParam(r, tab)
+			if s.leaderboardNotFound(flavor, seg, inst, t) {
+				return &frontend.OGData{NotFound: true}
+			}
 			og := leaderboardOG(seoProductName(flavor), canonicalRequestURL(s, r), seg, inst, t, r.URL.Query())
 			tabID, instanceName := leaderboardOGSelection(seg, inst, t)
 			og.ImageURL = s.leaderboardCardURL(r, flavor, tabID, instanceName)
@@ -135,4 +140,78 @@ func leaderboardOGInstanceName(segment string) string {
 		}
 	}
 	return name
+}
+
+// leaderboardNotFound reports whether a hub URL names something that does not
+// exist: a lone segment that is neither a tab nor a raid, a raid the site's
+// registry does not know, or an unknown tab after a raid (which the SPA would
+// quietly show as Overview). It answers false whenever it cannot tell, so a
+// service without a registry never 404s.
+func (s *Service) leaderboardNotFound(flavor database.WoWFlavor, segment, instance, tab string) bool {
+	if instance != "" {
+		if tab != "" && tab != "overview" {
+			if _, ok := leaderboardOGTabs[tab]; !ok {
+				return true
+			}
+		}
+	} else {
+		if segment == "" {
+			return false // the hub landing
+		}
+		if _, ok := leaderboardOGTabs[segment]; ok {
+			return false // a landing tab
+		}
+		if segment == "overview" {
+			return false
+		}
+		instance = segment
+	}
+	known, ok := s.leaderboardInstances(flavor)
+	if !ok {
+		return false
+	}
+	_, found := known[normalizeLeaderboardInstance(instance)]
+	return !found
+}
+
+// normalizeLeaderboardInstance folds an instance path segment or registry name
+// to one comparable form: decoded, dashes as spaces, single-spaced, lowercase.
+func normalizeLeaderboardInstance(name string) string {
+	if decoded, err := url.PathUnescape(name); err == nil {
+		name = decoded
+	}
+	return strings.ToLower(strings.Join(strings.Fields(strings.ReplaceAll(name, "-", " ")), " "))
+}
+
+// leaderboardInstances returns the normalized names of every raid and dungeon
+// the site's flavor registry knows, including derived (sub-raid) names. The set
+// is built once per flavor: the registry is fixed at startup. ok is false when
+// the service has no registry.
+func (s *Service) leaderboardInstances(flavor database.WoWFlavor) (names map[string]struct{}, ok bool) {
+	if s == nil {
+		return nil, false
+	}
+	key := flavor.CanonicalKey()
+	if cached, hit := s.leaderboardNames.Load(key); hit {
+		return cached.(map[string]struct{}), true
+	}
+	if s.chronicle == nil {
+		return nil, false
+	}
+	names = leaderboardInstanceNames(s.chronicle.RegistryForFlavor(flavor).AllInstanceDetails())
+	s.leaderboardNames.Store(key, names)
+	return names, true
+}
+
+// leaderboardInstanceNames normalizes every instance name, and derived
+// (sub-raid) name, in details.
+func leaderboardInstanceNames(details []registry.InstanceDetail) map[string]struct{} {
+	names := make(map[string]struct{}, len(details))
+	for _, d := range details {
+		names[normalizeLeaderboardInstance(d.Name)] = struct{}{}
+		for _, derived := range d.DerivedNames {
+			names[normalizeLeaderboardInstance(derived)] = struct{}{}
+		}
+	}
+	return names
 }

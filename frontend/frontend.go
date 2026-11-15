@@ -29,6 +29,11 @@ type OGData struct {
 	Description string
 	URL         string
 	ImageURL    string
+	// NotFound marks a page whose subject definitely does not exist (an unknown
+	// raid, guild, character or leaderboard segment). The SPA shell is still
+	// served so it can render its own not-found view, but with HTTP 404 and
+	// noindex. Resolvers must not set it for lookup errors, which are transient.
+	NotFound bool
 }
 
 // OGRoute registers a chi route pattern that resolves Open Graph metadata.
@@ -156,6 +161,23 @@ func loadBlogManifest(siteFS fs.FS) (map[string]blogManifestPost, error) {
 
 type ogResultKey struct{}
 
+// statusOverrideWriter rewrites one status code, so http.ServeContent's 200 for
+// the SPA shell can be sent as a 404.
+type statusOverrideWriter struct {
+	http.ResponseWriter
+	from, to int
+}
+
+func (w *statusOverrideWriter) WriteHeader(code int) {
+	if code == w.from {
+		code = w.to
+	}
+	w.ResponseWriter.WriteHeader(code)
+}
+
+// Unwrap supports http.ResponseController.
+func (w *statusOverrideWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
 // discardResponseWriter is an http.ResponseWriter that discards all output.
 type discardResponseWriter struct{}
 
@@ -235,7 +257,15 @@ func (h *handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	}
 
 	// Route metadata overrides tenant defaults while retaining tenant identity.
-	if og := h.resolveOG(req); og != nil {
+	if og := h.resolveOG(req); og != nil && og.NotFound {
+		// A real 404 for crawlers; the SPA shell below still renders its not-found view.
+		resp = &statusOverrideWriter{ResponseWriter: resp, from: http.StatusOK, to: http.StatusNotFound}
+		state.Robots = "noindex, nofollow"
+		state.CanonicalURL = ""
+		if og.ImageURL != "" {
+			state.ImageURL = og.ImageURL
+		}
+	} else if og != nil {
 		state.OGTitle = og.Title
 		state.OGDescription = og.Description
 		state.OGURL = og.URL

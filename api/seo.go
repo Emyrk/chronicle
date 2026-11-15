@@ -144,7 +144,7 @@ func canonicalRequestURL(api *API, r *http.Request) string {
 
 // canonicalOrigin returns the canonical scheme and host for SEO URLs.
 func canonicalOrigin(api *API, r *http.Request) string {
-	return canonicalScheme(api) + "://" + ogHost(r)
+	return canonicalScheme(api) + "://" + api.canonicalHost(r)
 }
 
 func canonicalScheme(api *API) string {
@@ -175,7 +175,7 @@ func absoluteAssetURL(api *API, r *http.Request, raw string) string {
 	if api.Opts.AccessURL != nil && api.Opts.AccessURL.Scheme != "" {
 		scheme = api.Opts.AccessURL.Scheme
 	}
-	return scheme + "://" + ogHost(r) + u.String()
+	return scheme + "://" + api.canonicalHost(r) + u.String()
 }
 
 func websiteJSONLD(name, description, canonical, image string) string {
@@ -431,27 +431,20 @@ func (api *API) sitemapHost(r *http.Request) string {
 // tenant's subdomain for a tenant, the access URL and primary domain for the
 // site itself. It is never empty.
 func (api *API) canonicalHosts(r *http.Request) []string {
-	primary := ""
-	if api.Opts.Tenant != nil {
-		primary = strings.ToLower(api.Opts.Tenant.PrimaryDomain())
-	}
-	var hosts []string
-	if t := servicetenant.TenantFromContext(r.Context()); t != nil {
-		if t.Slug.Valid && t.Slug.String != "" && primary != "" {
-			hosts = append(hosts, strings.ToLower(t.Slug.String)+"."+primary)
-		}
-	} else {
-		if api.Opts.AccessURL != nil && api.Opts.AccessURL.Host != "" {
-			hosts = append(hosts, strings.ToLower(api.Opts.AccessURL.Host))
-		}
-		if primary != "" && !slices.Contains(hosts, primary) {
-			hosts = append(hosts, primary)
-		}
-	}
+	hosts := api.configuredCanonicalHosts(r)
 	if len(hosts) == 0 {
 		hosts = append(hosts, "chronicleclassic.com")
 	}
 	return hosts
+}
+
+func (api *API) configuredCanonicalHosts(r *http.Request) []string {
+	return servicetenant.CanonicalHosts(servicetenant.TenantFromContext(r.Context()), api.Opts.Tenant, api.Opts.AccessURL)
+}
+
+// canonicalHost is the one host SEO URLs use for this request.
+func (api *API) canonicalHost(r *http.Request) string {
+	return servicetenant.CanonicalHost(api.configuredCanonicalHosts(r), ogHost(r))
 }
 
 // acceptsGzip reports whether the request's Accept-Encoding allows gzip.
