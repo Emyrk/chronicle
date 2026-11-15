@@ -7,7 +7,6 @@ import {
   type DungeonMeshState,
   type MapScene3DEffectHover,
   type MapScene3DUnit,
-  type MapSceneDirector,
 } from "../MapScene3D";
 import type { MapViewport } from "../mapModel";
 import {
@@ -36,36 +35,22 @@ export const DUNGEON_REQUEST: DungeonMeshRequest = { url: DUNGEON_URL, bounds: D
 interface SceneInternals {
   camera: THREE.PerspectiveCamera;
   controls: OrbitControls;
-  director: MapSceneDirector | null;
-  directorPaused: boolean;
-  directorRunning: boolean;
-  subject: string | null;
   cameraMove: object | null;
   viewAnimation: object | null;
-  walk: {
-    position: THREE.Vector3;
-    yaw: number;
-    vy: number;
-    grounded: boolean;
-    camYaw: number;
-    camPitch: number;
-    camDistance: number;
-    camShown: number;
-    drag: { buttons: number; x: number; y: number } | null;
-    avatar: THREE.Group;
-  } | null;
-  orbitDrag: { buttons: number; x: number; y: number; dragging: boolean } | null;
-  heldActions: Set<string>;
-  pivotLift: number;
-  fastTravel: boolean;
-  orbitWantDistance: number | null;
+  walk: { avatar: THREE.Group } | null;
   dungeonMesh: { url: string; scale: number; group: THREE.Group; caves: { mesh: THREE.Mesh; bvh: unknown }[] } | null;
-  units: Map<string, { base: THREE.Vector3; floorY: number; floorTracked: boolean; group: THREE.Group }>;
+  units: Map<string, { base: THREE.Vector3; floorY: number; floorTracked: boolean; token: { arc: THREE.Object3D } }>;
+  bars: THREE.InstancedMesh;
   floorTracks: unknown;
   directing(): boolean;
 }
 
-/** The per-frame updates renderFrame calls (private MapScene3D methods); traceFrame lists them in call order. */
+/**
+ * The per-frame updates renderFrame calls (private MapScene3D methods);
+ * traceFrame lists them in call order and throws when one is no longer a
+ * method on the scene. This list (and traceFrame's wrapping) is the one place
+ * an extraction updates when it moves a step: see README, "Frame order".
+ */
 export const FRAME_STEPS = [
   "updateViewAnimation",
   "updateCameraMove",
@@ -357,8 +342,7 @@ export async function createTestScene(options: TestSceneOptions = {}) {
   // --- What the scene shows ---
 
   const probe = {
-    internals,
-    /** Who moves the camera right now. */
+    /** Who moves the camera right now. The one probe for camera ownership. */
     owner: (): CameraOwner => {
       if (internals.walk) return "walk";
       if (internals.cameraMove) return "double-click";
@@ -366,8 +350,7 @@ export async function createTestScene(options: TestSceneOptions = {}) {
       if (internals.directing()) return "director";
       return "user";
     },
-    director: () => ({ paused: internals.directorPaused, running: internals.directorRunning, subject: internals.subject }),
-    /** The orbit camera's position and target, rounded to `digits`. */
+    /** The camera's position and the point it orbits (the free cam's pivot, walk mode's head), rounded to `digits`. */
     pose: (digits = 3): CameraPose => ({ position: roundVector(internals.camera.position, digits), target: roundVector(internals.controls.target, digits) }),
     /** The pose on one line, for inline snapshots: "camera x,y,z -> target x,y,z". */
     poseLine: (digits = 3) => {
@@ -375,24 +358,39 @@ export async function createTestScene(options: TestSceneOptions = {}) {
       return `camera ${position.join(",")} -> target ${target.join(",")}`;
     },
     camera: () => internals.camera,
+    /** The point the camera orbits: the free cam's pivot, walk mode's head. */
     target: () => internals.controls.target,
-    controls: () => internals.controls,
     distance: () => internals.camera.position.distanceTo(internals.controls.target),
-    /** The free cam's yaw (0 looks from +z), pitch and distance about its pivot. */
+    /**
+     * The camera's yaw (0 looks from +z), pitch and distance about the point
+     * it orbits, from the scene graph: the free cam's angles about its pivot,
+     * walk mode's camera angles about the head.
+     */
     angles: () => {
       const offset = internals.camera.position.clone().sub(internals.controls.target);
       const horizontal = Math.hypot(offset.x, offset.z);
       return { yaw: Math.atan2(offset.x, offset.z), pitch: Math.atan2(offset.y, horizontal), distance: offset.length() };
     },
-    walk: () => internals.walk,
-    heldActions: () => [...internals.heldActions].sort(),
-    orbitDrag: () => internals.orbitDrag,
-    pivotLift: () => internals.pivotLift,
-    fastTravel: () => internals.fastTravel,
-    mesh: () => internals.dungeonMesh,
-    unit: (guid: string) => internals.units.get(guid),
+    /**
+     * Walk mode's character as drawn, or null when not walking: its feet,
+     * its facing (rotation about y; 0 faces -z, and strafing turns the body
+     * toward where it goes) and whether it shows (not in first person).
+     */
+    avatar: () => {
+      const avatar = internals.walk?.avatar;
+      if (!avatar) return null;
+      return { position: avatar.position.clone(), facing: avatar.rotation.y, visible: avatar.visible };
+    },
+    /** A unit as placed: its base (feet), the floor under it, whether that came from its floor track, and whether its cast arc shows. */
+    unit: (guid: string) => {
+      const object = internals.units.get(guid);
+      if (!object) return undefined;
+      return { base: object.base.clone(), floorY: object.floorY, floorTracked: object.floorTracked, castArc: object.token.arc.visible };
+    },
+    /** How many health-bar quads the bar pool draws (a living unit's bar is a backing and a fill, a dead one's only the backing). */
+    barQuads: () => internals.bars.count,
     floorTracks: () => internals.floorTracks,
-    unitCount: () => internals.units.size,
+    mesh: () => internals.dungeonMesh,
   };
 
   /**
@@ -407,6 +405,9 @@ export async function createTestScene(options: TestSceneOptions = {}) {
     const restore: (() => void)[] = [];
     const wrap = (owner: Record<string, unknown>, method: string, name: string) => {
       const original = owner[method] as (...args: unknown[]) => unknown;
+      if (typeof original !== "function") {
+        throw new Error(`traceFrame: frame step "${name}" is no longer a method where the harness looks for it. Update FRAME_STEPS and traceFrame in createTestScene.ts (README, "Frame order").`);
+      }
       const had = Object.prototype.hasOwnProperty.call(owner, method);
       owner[method] = function (this: unknown, ...args: unknown[]) {
         if (inFrame && depth === 0) steps.push(name);
@@ -427,6 +428,7 @@ export async function createTestScene(options: TestSceneOptions = {}) {
     wrap(internals.controls as unknown as Record<string, unknown>, "update", "controls.update");
     wrap(renderer as unknown as Record<string, unknown>, "render", "render");
     const renderFrame = sceneObject.renderFrame as (now: number) => boolean;
+    if (typeof renderFrame !== "function") throw new Error("traceFrame: MapScene3D has no renderFrame any more. Update traceFrame in createTestScene.ts.");
     sceneObject.renderFrame = function (this: unknown, now: number) {
       inFrame = true;
       try {

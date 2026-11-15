@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { createTestScene, testUnit } from "./createTestScene";
+import { IDLE_MOBILE_MAP_INPUT } from "../mapControls";
+import { createTestScene, testUnit, type TestScene } from "./createTestScene";
 import { mapPointAt } from "./syntheticDungeon";
 
 // Characterisation (chronicle-1967): who owns the camera after each handoff,
 // as MapScene3D does it today. See README.md before changing an expectation.
+// Ownership is read only through h.probe.owner(); the followed unit through
+// what the scene reports to its host (h.events.follow) and where the camera
+// ends up.
 
 const BOSS = new Set(["boss"]);
 const FIGHT = [
@@ -18,10 +22,15 @@ async function fightScene() {
   return h;
 }
 
+/** The pivot's ground distance from scene (x, z). */
+function pivotFrom(h: TestScene, x: number, z: number) {
+  return Math.hypot(h.probe.target().x - x, h.probe.target().z - z);
+}
+
 describe("camera ownership with the Director running", () => {
   it("the Director has the camera once the mesh loads, on its first shot", async () => {
     const h = await fightScene();
-    expect(h.probe.director()).toEqual({ paused: false, running: true, subject: null });
+    expect(h.events.follow).toEqual([]);
     expect(h.probe.poseLine()).toMatchInlineSnapshot(`"camera 0,8.709,21.439 -> target 0,0,5.06"`);
   });
 
@@ -30,10 +39,13 @@ describe("camera ownership with the Director running", () => {
     const before = h.probe.angles();
     h.input.drag(0, 40, 0);
     expect(h.probe.owner()).toBe("user");
-    expect(h.probe.director()).toEqual({ paused: true, running: false, subject: null });
     // The move that crosses the 5 px slop starts the drag and is not looked with: 30 of the 40 px turn the view.
     expect(h.probe.angles().yaw - before.yaw).toBeCloseTo(-30 * 0.006, 6);
     expect(h.probe.angles().distance).toBeCloseTo(before.distance, 6);
+    // It stays the user's: the Director does not move the camera on later frames.
+    const pose = h.probe.poseLine(6);
+    h.frames(30);
+    expect(h.probe.poseLine(6)).toBe(pose);
   });
 
   it("a left press that stays within the click slop leaves it with the Director", async () => {
@@ -56,6 +68,15 @@ describe("camera ownership with the Director running", () => {
     expect(h.probe.target().distanceTo(before)).toBeGreaterThan(1);
   });
 
+  it("a one-finger touch drag (OrbitControls' rotate) takes it", async () => {
+    const h = await fightScene();
+    h.input.touchDown(1, 400, 300);
+    h.input.touchMove(1, 430, 300);
+    h.input.touchMove(1, 460, 300);
+    h.input.touchUp(1, 460, 300);
+    expect(h.probe.owner()).toBe("user");
+  });
+
   it("a wheel tick takes it and zooms from the current distance", async () => {
     const h = await fightScene();
     const before = h.probe.distance();
@@ -64,19 +85,38 @@ describe("camera ownership with the Director running", () => {
     expect(h.probe.distance()).toBeCloseTo(before * Math.exp(-100 * 0.0015), 3);
   });
 
-  it("a movement key takes it while the pointer is over the map", async () => {
+  it("a movement key takes it while the pointer is over the map, and moves the pivot", async () => {
     const h = await fightScene();
+    const before = h.probe.target().clone();
     h.input.hover();
     h.input.keyDown("KeyW");
     expect(h.probe.owner()).toBe("user");
-    expect(h.probe.heldActions()).toEqual(["forward"]);
+    h.frames(30);
+    expect(h.probe.target().distanceTo(before)).toBeGreaterThan(1);
   });
 
   it("a movement key with the pointer off the map does nothing", async () => {
     const h = await fightScene();
+    const before = h.probe.poseLine();
     h.input.keyDown("KeyW");
     expect(h.probe.owner()).toBe("director");
-    expect(h.probe.heldActions()).toEqual([]);
+    h.frames(30);
+    expect(h.probe.poseLine()).toBe(before);
+  });
+
+  it("the mobile move pad does not take it: the Director keeps it while the pad nudges the pivot", async () => {
+    const h = await fightScene();
+    h.scene.setMobileInput(IDLE_MOBILE_MAP_INPUT);
+    h.settle();
+    const before = h.probe.target().clone();
+    h.scene.setMobileInput({ ...IDLE_MOBILE_MAP_INPUT, forward: 1 });
+    expect(h.probe.owner()).toBe("director");
+    h.frames(30);
+    expect(h.probe.owner()).toBe("director");
+    // The pad and the Director both write the pivot every frame (README, oddity 1).
+    expect(h.probe.target().distanceTo(before)).toBeGreaterThan(0.05);
+    h.scene.setMobileInput(IDLE_MOBILE_MAP_INPUT);
+    expect(h.events.userViewports).toEqual([]);
   });
 
   it("a viewport request (Follow, an encounter jump) hands it back", async () => {
@@ -84,9 +124,11 @@ describe("camera ownership with the Director running", () => {
     h.input.drag(0, 40, 0);
     h.scene.setViewport({ centerX: 0.5, centerY: 0.5, zoom: 2 }, 500);
     expect(h.probe.owner()).toBe("director");
-    expect(h.probe.director()).toEqual({ paused: false, running: true, subject: null });
     h.settle();
     expect(h.probe.owner()).toBe("director");
+    // Back on the group, from the direction the user's drag left the camera (the Director keeps the user's yaw).
+    expect(pivotFrom(h, 0, 5.06)).toBeLessThan(0.5);
+    expect(h.probe.poseLine()).toMatchInlineSnapshot(`"camera -2.789,8.709,21.187 -> target 0.143,0,5.073"`);
   });
 
   it("a cut hands it back", async () => {
@@ -94,19 +136,28 @@ describe("camera ownership with the Director running", () => {
     h.input.wheel(-100);
     h.scene.cutDirector();
     expect(h.probe.owner()).toBe("director");
-    expect(h.probe.director().running).toBe(true);
   });
 
-  it("following a unit hands it back on that unit; following nobody returns to the group", async () => {
+  it("following a unit hands it back and frames that unit; following nobody returns to the group", async () => {
     const h = await fightScene();
     h.input.drag(0, 40, 0);
     h.scene.followUnit("p2");
     expect(h.probe.owner()).toBe("director");
-    expect(h.probe.director().subject).toBe("p2");
     expect(h.events.follow).toEqual(["p2"]);
+    h.settle();
+    // The shot centres on p2 (-5, 8), from the yaw the drag left.
+    expect(pivotFrom(h, -5, 8)).toBeLessThan(1);
     h.scene.followUnit(null);
-    expect(h.probe.director().subject).toBeNull();
     expect(h.events.follow).toEqual(["p2", null]);
+    h.settle();
+    expect(pivotFrom(h, 0, 5.06)).toBeLessThan(0.5);
+  });
+
+  it("following a unit with no drag before frames it head-on from the Director's own yaw", async () => {
+    const h = await fightScene();
+    h.scene.followUnit("p2");
+    h.settle();
+    expect(h.probe.poseLine()).toMatchInlineSnapshot(`"camera -5,8.709,23.579 -> target -5,0,7.2"`);
   });
 
   it("a new focus alone does not hand it back", async () => {
@@ -120,11 +171,10 @@ describe("camera ownership with the Director running", () => {
     const h = await fightScene();
     h.scene.followUnit("p1");
     h.input.drag(0, 40, 0);
-    expect(h.probe.director().subject).toBeNull();
     expect(h.events.follow).toEqual(["p1", null]);
   });
 
-  it("a double-click on a unit hands the Director that unit", async () => {
+  it("a double-click on a unit hands the Director that unit, and the shot moves to it", async () => {
     const h = await fightScene();
     h.input.drag(0, 40, 0);
     h.settle();
@@ -132,7 +182,9 @@ describe("camera ownership with the Director running", () => {
     const at = h.screenOf(p1.x, p1.y, p1.z);
     h.input.doubleClick(at.x, at.y);
     expect(h.probe.owner()).toBe("director");
-    expect(h.probe.director()).toEqual({ paused: false, running: true, subject: "p1" });
+    expect(h.events.follow).toEqual(["p1"]);
+    h.settle();
+    expect(pivotFrom(h, 5, 5)).toBeLessThan(1);
   });
 
   it("a double-click on the floor eases the camera there and leaves it with the user", async () => {
@@ -141,9 +193,9 @@ describe("camera ownership with the Director running", () => {
     const at = h.screenOf(6, 0, 12);
     h.input.doubleClick(at.x, at.y);
     expect(h.probe.owner()).toBe("double-click");
-    expect(h.probe.director()).toEqual({ paused: true, running: false, subject: null });
     h.settle();
     expect(h.probe.owner()).toBe("user");
+    expect(h.events.follow).toEqual([]);
     // The pivot lands on the floor point clicked, at half the distance (never under 10 yards).
     const target = h.probe.target();
     expect(target.x).toBeCloseTo(6, 1);
@@ -165,14 +217,13 @@ describe("camera ownership with the Director running", () => {
     const h = await fightScene();
     h.scene.resetCamera(true);
     expect(h.probe.owner()).toBe("user");
-    expect(h.probe.director()).toEqual({ paused: true, running: false, subject: null });
     expect(h.probe.poseLine()).toMatchInlineSnapshot(`"camera 0,113.358,0 -> target 0,0,0"`);
   });
 
   it("an angled reset does not take it from the Director", async () => {
     const h = await fightScene();
     h.scene.resetCamera(false);
-    expect(h.probe.director().paused).toBe(false);
+    expect(h.probe.owner()).toBe("director");
   });
 
   it("walk mode takes it; leaving walk mode leaves it with the user", async () => {
@@ -181,7 +232,6 @@ describe("camera ownership with the Director running", () => {
     h.input.keyDown("KeyG");
     expect(h.probe.owner()).toBe("walk");
     expect(h.events.walk).toEqual([true]);
-    expect(h.probe.director()).toEqual({ paused: true, running: false, subject: null });
     h.frames(5);
     h.input.keyDown("Escape");
     expect(h.probe.owner()).toBe("user");
@@ -189,6 +239,9 @@ describe("camera ownership with the Director running", () => {
     // The free cam picks up 30 yards out, behind and above where the character stood.
     expect(h.probe.distance()).toBeCloseTo(30, 3);
     expect(h.probe.poseLine()).toMatchInlineSnapshot(`"camera 0,10.287,33.241 -> target 0,0,5.06"`);
+    // The Director does not take it back by itself.
+    h.frames(30);
+    expect(h.probe.owner()).toBe("user");
   });
 
   it("a viewport request while walking moves the character, not the camera owner", async () => {
@@ -196,7 +249,8 @@ describe("camera ownership with the Director running", () => {
     h.scene.setWalking(true);
     h.scene.setViewport({ centerX: 0.3, centerY: 0.5, zoom: 2 });
     expect(h.probe.owner()).toBe("walk");
-    expect(h.probe.walk()!.position.x).toBeCloseTo(-20, 6);
+    h.frame();
+    expect(h.probe.avatar()!.position.x).toBeCloseTo(-20, 6);
   });
 
   it("following a unit while walking leaves walk mode for the Director", async () => {
@@ -244,6 +298,8 @@ describe("camera ownership without the Director", () => {
     const at = h.screenOf(p1.x, p1.y, p1.z);
     h.input.doubleClick(at.x, at.y);
     expect(h.probe.owner()).toBe("double-click");
+    h.settle();
     expect(h.events.follow).toEqual([]);
+    expect(pivotFrom(h, 5, 5)).toBeLessThan(0.5);
   });
 });

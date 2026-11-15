@@ -46,19 +46,30 @@ it("a wheel tick takes the camera from the Director", async () => {
   delay, the sliced floor-track build and the presence throttle.
 - **Input, as the browser sends it:** `h.input.drag(button, dx, dy)`, `click`,
   `doubleClick`, `wheel`, `keyDown`/`keyUp`/`hold(code, ms)`, `hover`/`leave`,
-  `touchDown`/`touchMove`/`touchUp`, `blurWindow`. Map keys only act while
+  `touchDown`/`touchMove`/`touchUp`, `pointerCancel`, `blurWindow`. The
+  mobile layout's pad and stick go through the scene's own
+  `setMobileInput`. Map keys only act while
   the pointer is over the map, so call `h.input.hover()` first in free cam.
   `h.screenOf(x, y, z)` gives the pixel to click for a scene point.
-- **What the scene shows:** read it through `h.probe`: `owner()` (who moves
-  the camera), `director()`, `pose()`/`poseLine()`, `angles()`, `distance()`,
-  `walk()`, `unit(guid)`, `floorTracks()`, `mesh()`. `h.events` records what
-  the scene reported to its host (follow, walk, viewport and mesh-state
-  callbacks). `h.renders.count` counts draws, `h.awake` tells you whether a
-  frame is queued, and `h.traceFrame()` lists the steps of the next frame in
-  order.
+- **What the scene shows:** read it through `h.probe`, and prefer what is on
+  the scene graph:
+  - the camera: `pose()`/`poseLine()`, `angles()` (yaw, pitch and distance
+    about walk mode's head or the free cam's pivot), `distance()`, `target()`;
+  - walk mode's character as drawn: `avatar()` (feet, facing, visible);
+  - units: `unit(guid)` (a snapshot: base, floor, cast arc), `barQuads()`;
+  - `floorTracks()` and `mesh()`.
+
+  `owner()` is the one probe for who moves the camera. `h.events` records
+  what the scene reported to its host: follow (the followed unit), walk,
+  viewport and mesh-state callbacks. `h.renders.count` counts draws,
+  `h.awake` tells you whether a frame is queued, and `h.traceFrame()` lists
+  the steps of the next frame in order.
 - **Probes are the only place tests reach into private state.** They all go
   through `SceneInternals` in `createTestScene.ts`. When a refactor moves a
-  field, update that interface and the probe, not the tests.
+  field, update that interface and the probe, not the tests. Don't add
+  probes for input or camera-rig state (held keys, drag buttons, walk yaw,
+  wanted distance): later cars replace that state. Assert what it does to the
+  camera and the character instead.
 - **The synthetic dungeon** uses one scene unit per yard, centred on the
   origin. `testUnit(guid, x, z)` and `mapPointAt(x, z)` take scene
   coordinates. The ground spans x/z -40..40 at y 0. The balcony spans
@@ -70,6 +81,24 @@ it("a wheel tick takes the camera from the Director", async () => {
 - No network, no CDN: `fetch` is stubbed and serves only the synthetic GLB.
   Boss minis, icons and walk-mode avatars do not load.
 
+## Frame order
+
+`frameOrder.test.ts` checks the order two ways:
+
+- **What a drawn frame shows.** No drawn camera is past where the wall
+  allows, or outside the pan radius. A cast and a death show in the frame the
+  clock reaches them. These checks survive steps moving between modules.
+  Note that today a camera writer that calls `controls.update()` also
+  constrains the camera, through OrbitControls' `change` event (oddity 4).
+  So these checks still hold if the explicit constraint pass moves before
+  the writers.
+- **The traced order.** `h.traceFrame()` wraps the methods named in
+  `FRAME_STEPS` (in `createTestScene.ts`), plus `controls.update` and the
+  draw. It throws when a named step is no longer a method on the scene. That
+  list and `traceFrame`'s wrapping are the one place an extraction updates
+  when it moves a frame step: point them at the step's new home, and keep
+  the order tests as they are.
+
 ## The seams
 
 `MapScene3DOptions` takes two seams; production passes neither, so the
@@ -77,7 +106,9 @@ defaults are unchanged:
 
 - `createRenderer`: the renderer factory (a `THREE.WebGLRenderer` by default).
 - `now`: the clock the scene stamps tweens, cuts, throttles and the effect
-  clock with (`performance.now` by default).
+  clock with (`performance.now` by default). It also sets the slice budget of
+  the follow-track and floor-track builds. On the manual clock that budget
+  never runs out, so a build finishes in its first `setTimeout` slice.
 
 ## What Node cannot pin
 
@@ -87,10 +118,10 @@ defaults are unchanged:
   and that shared geometry, materials and BVHs are left alone. They cannot
   check what WebGL frees.
 - Real pointer lock and context loss. Pointer lock is granted only when a
-  test sets `document.grantPointerLock`.
-- Slice timing of the floor-track build: `startFloorTrackBuild` is called
-  without the scene's `now`, so its budget reads real `performance.now`. The
-  result does not depend on it.
+  test sets `document.grantPointerLock`, and a test drops it by clearing
+  `document.pointerLockElement`.
+- Builds that run out of their time budget mid-way. On the manual clock every
+  build finishes in one slice.
 
 ## Oddities
 
@@ -104,7 +135,9 @@ later car may fix one deliberately and update its test.
    Side effects:
    - The mover rewrites the camera every frame, even while the Director has it.
    - `setMobileInput` never sees the stick go from idle to active, so the
-     stick never calls `handleControlsStart`/`End`.
+     stick never calls `handleControlsStart`/`End`. The mobile move pad
+     therefore never takes the camera from the Director: both write the
+     pivot every frame and the pivot creeps (`cameraOwnership`).
    - Both mouse buttons travel on every frame from the press, while a key
      press restarts the travel clock and loses its first frame (59 of 60
      frames move).
@@ -133,3 +166,15 @@ later car may fix one deliberately and update its test.
    they are placed again (`floors`).
 8. **The drag that crosses the 5 px click slop is not looked with.** Of a
    40 px drag, 30 px turn the view (`cameraOwnership`, `wowInput`).
+9. **A glide across a wall puts the camera inside it.** The free cam's pivot
+   rides the highest surface under it. A double-click move that glides the
+   pivot across the wall therefore lifts it onto the wall's top (y 25). Once
+   past, the collision pass pulls the camera in to OrbitControls' 1-yard
+   minimum, which is inside the wall for a frame (`cameraCollision`).
+10. **Losing the pointer lock mid-drag does not end the drag.** Nothing
+    listens for `pointerlockchange`. The drag goes on, reading clientX/Y
+    deltas instead of movementX/Y, until the button is released. The release
+    still ends it, so nothing stays stuck (`wowInput`).
+11. **A click or double-click picks a unit through the mesh.**
+    `pickScenePoint` raycasts unit tokens before the mesh, so a unit behind a
+    wall is picked if its token is under the cursor (`frameOrder`).

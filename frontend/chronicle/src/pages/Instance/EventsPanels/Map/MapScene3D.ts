@@ -1916,7 +1916,7 @@ export class MapScene3D {
         const height = unit.z ?? (floor === null ? undefined : floor / inputs.scale);
         return { guid: unit.guid, x, z, player: unit.player, boss: unit.boss, dead: unit.dead, height };
       }),
-    });
+    }, this.now);
     const slice = () => {
       const current = this.followBuild;
       if (this.disposed || !current || current.build !== build) return;
@@ -2278,7 +2278,7 @@ export class MapScene3D {
       })),
       scale: mesh.scale,
       candidatesAt: (x, z) => this.floorCandidates(x, z),
-    });
+    }, this.now);
     const slice = () => {
       const current = this.floorBuild;
       if (this.disposed || !current || current.build !== build) return;

@@ -32,8 +32,10 @@ describe("dispose", () => {
     expect(h.renders.disposed).toBe(true);
     expect(h.container.children).not.toContain(h.canvas);
     // Keys no longer reach it.
-    h.input.keyDown("KeyW");
-    expect(h.probe.heldActions()).toEqual([]);
+    const pose = h.probe.poseLine(6);
+    h.input.hover();
+    h.input.hold("KeyW", 300);
+    expect(h.probe.poseLine(6)).toBe(pose);
   });
 
   it("releases the pointer lock it holds", async () => {

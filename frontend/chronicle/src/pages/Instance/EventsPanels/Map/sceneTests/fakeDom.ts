@@ -1,7 +1,7 @@
 /**
  * The little of the browser MapScene3D touches, for Node: a window and a
  * document (EventTargets that count their listeners), a container and a
- * canvas with a no-op 2D context, ResizeObserver, requestAnimationFrame on a
+ * canvas with a no-op 2D context (and Path2D), ResizeObserver, requestAnimationFrame on a
  * manual clock, and pointer lock. Installed on globalThis by installFakeDom
  * and removed again by its `uninstall`.
  *
@@ -250,7 +250,10 @@ export interface FakeDom {
   uninstall: () => void;
 }
 
-const GLOBALS = ["window", "document", "ResizeObserver", "requestAnimationFrame", "cancelAnimationFrame"] as const;
+/** Path2D for canvas-drawn token art: accepted and never drawn. */
+class FakePath2D {}
+
+const GLOBALS = ["window", "document", "ResizeObserver", "requestAnimationFrame", "cancelAnimationFrame", "Path2D"] as const;
 
 let installed: FakeDom | null = null;
 
@@ -270,6 +273,7 @@ export function installFakeDom(): FakeDom {
   define("ResizeObserver", FakeResizeObserver);
   define("requestAnimationFrame", frames.request);
   define("cancelAnimationFrame", frames.cancel);
+  define("Path2D", FakePath2D);
   const dom: FakeDom = {
     window,
     document,
