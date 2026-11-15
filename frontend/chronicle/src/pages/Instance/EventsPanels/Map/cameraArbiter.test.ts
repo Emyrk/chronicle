@@ -118,7 +118,7 @@ describe("CameraArbiter: reporting", () => {
     const { arbiter, rig } = setup();
     const onChange = vi.fn();
     arbiter.setOnChange(onChange);
-    expect(onChange.mock.calls).toEqual([["director"]]);
+    expect(onChange.mock.calls).toEqual([["director", false]]);
     onChange.mockClear();
     arbiter.sync();
     expect(onChange).not.toHaveBeenCalled();
@@ -173,5 +173,42 @@ describe("CameraArbiter: reporting", () => {
     });
     arbiter.setOnChange(onChange);
     expect(onChange.mock.calls.length).toBeLessThanOrEqual(4);
+  });
+});
+
+describe("CameraArbiter: taken from the follow camera", () => {
+  it("any take but a pose, while the follow camera has the camera, marks it taken until a hand-back", () => {
+    for (const reason of Object.keys(TAKE_EFFECTS) as TakeReason[]) {
+      const { arbiter } = setup();
+      arbiter.take(reason === "pose" ? "scripted" : "free", reason);
+      expect(arbiter.taken).toBe(reason !== "pose");
+      arbiter.handBack();
+      expect(arbiter.taken).toBe(false);
+    }
+  });
+
+  it("a take with no follow camera on (after a pinned framing) is not taken from it; turning it off after a take keeps it", () => {
+    const { arbiter, rig } = setup({ follow: false });
+    arbiter.take("free", "gesture");
+    expect(arbiter.taken).toBe(false);
+    arbiter.handBack();
+    rig.follow = true;
+    arbiter.take("free", "gesture");
+    rig.follow = false;
+    expect(arbiter.taken).toBe(true);
+  });
+
+  it("reports a change of taken even when the owner stays the same", () => {
+    const { arbiter, rig } = setup();
+    const onChange = vi.fn();
+    arbiter.setOnChange(onChange);
+    expect(onChange.mock.calls).toEqual([["director", false]]);
+    arbiter.take("free", "gesture");
+    arbiter.sync();
+    rig.follow = false;
+    arbiter.sync();
+    arbiter.handBack();
+    arbiter.sync();
+    expect(onChange.mock.calls).toEqual([["director", false], ["free", true], ["free", false]]);
   });
 });

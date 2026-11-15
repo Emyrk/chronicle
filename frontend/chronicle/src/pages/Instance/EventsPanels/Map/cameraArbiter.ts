@@ -21,8 +21,9 @@
  *
  * Only one of scripted/free/director is ever held (the base owner); walk and
  * tween claim the camera while their rig is active and fall back to the base
- * when they end. With the follow camera on, any owner but "director" (and
- * "scripted", the host's own pose) is the viewer's camera.
+ * when they end. `taken` says whether the viewer took the camera from the
+ * follow camera (any take but a host's pose, while following) and has not
+ * handed it back: the host offers its way back then.
  */
 
 export type CameraOwner = "scripted" | "walk" | "tween" | "free" | "director";
@@ -78,8 +79,10 @@ export interface CameraArbiterClients {
 export class CameraArbiter {
   private base: "scripted" | "free" | "director" = "director";
   private reported: CameraOwner | null = null;
+  private reportedTaken = false;
+  private takenFromFollow = false;
   private readonly clients: CameraArbiterClients;
-  private onChange: (owner: CameraOwner) => void = () => {};
+  private onChange: (owner: CameraOwner, taken: boolean) => void = () => {};
   // Reporting now; a sync from inside the callback is run after it returns.
   private reporting = false;
   private resync = false;
@@ -97,6 +100,15 @@ export class CameraArbiter {
     return "free";
   }
 
+  /**
+   * Whether the viewer took the camera from the follow camera (a gesture,
+   * walk mode, top-down, a double-click; not a host's pose) and has not
+   * handed it back since. Turning the follow camera off keeps it.
+   */
+  get taken(): boolean {
+    return this.takenFromFollow;
+  }
+
   /** Whether the camera is handed to the Director (it runs whenever it can and no move or walk has the camera). */
   get directorHeld(): boolean {
     return this.base === "director";
@@ -110,6 +122,7 @@ export class CameraArbiter {
    */
   take(owner: Exclude<CameraOwner, "director">, reason: TakeReason) {
     const effects = TAKE_EFFECTS[reason];
+    if (reason !== "pose" && this.base === "director" && this.clients.followCamera()) this.takenFromFollow = true;
     if (effects.cancelViewTween) this.clients.cancelViewTween();
     if (effects.cancelMove) this.clients.cancelMove();
     this.base = owner === "scripted" ? "scripted" : "free";
@@ -124,6 +137,7 @@ export class CameraArbiter {
    */
   handBack() {
     this.base = "director";
+    this.takenFromFollow = false;
     this.clients.cancelMove();
   }
 
@@ -132,15 +146,15 @@ export class CameraArbiter {
     if (this.base === "scripted") this.base = "free";
   }
 
-  /** Called with the owner now (null: nothing), and again whenever it changes (see sync). */
-  setOnChange(callback: ((owner: CameraOwner) => void) | null) {
+  /** Called with the owner and `taken` now (null: nothing), and again whenever either changes (see sync). */
+  setOnChange(callback: ((owner: CameraOwner, taken: boolean) => void) | null) {
     this.onChange = callback ?? (() => {});
     this.reported = null;
     this.sync();
   }
 
   /**
-   * Reports the owner if it changed since the last report. The scene calls
+   * Reports the owner (and `taken`) if either changed since the last report. The scene calls
    * this once a change has settled (after a take and what follows it, a
    * hand-back, a rig starting or ending) and at the end of every frame, so a
    * take that starts a move reports the move, not a passing "free".
@@ -160,9 +174,11 @@ export class CameraArbiter {
       for (let round = 0; round < 4; round++) {
         this.resync = false;
         const owner = this.owner();
-        if (owner !== this.reported) {
+        const taken = this.takenFromFollow;
+        if (owner !== this.reported || taken !== this.reportedTaken) {
           this.reported = owner;
-          this.onChange(owner);
+          this.reportedTaken = taken;
+          this.onChange(owner, taken);
         }
         if (!this.resync) break;
       }

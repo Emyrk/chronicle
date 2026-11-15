@@ -270,3 +270,80 @@ describe("the owner report stays honest", () => {
     expect(h.scene.cameraOwner()).toBe("director");
   });
 });
+
+describe("taken from the follow camera (the host's way back)", () => {
+  /** Records (owner, taken) reports from now on, past the one subscribing gives. */
+  function recordTaken(h: TestScene): string[] {
+    const reports: string[] = [];
+    h.scene.setOnCameraOwnerChange((owner, taken) => reports.push(`${owner}${taken ? " (taken)" : ""}`));
+    reports.length = 0;
+    return reports;
+  }
+
+  it("every way of taking the camera while following marks it taken", async () => {
+    const takes: [string, (h: TestScene) => void][] = [
+      ["look-around drag", (h) => h.input.drag(0, 40, 0)],
+      ["wheel", (h) => h.input.wheel(-100)],
+      ["key", (h) => {
+        h.input.hover();
+        h.input.keyDown("KeyW");
+      }],
+      ["mobile pad", (h) => h.scene.setMobileInput({ ...IDLE_MOBILE_MAP_INPUT, forward: 1 })],
+      ["mobile stick", (h) => h.scene.setMobileInput({ ...IDLE_MOBILE_MAP_INPUT, turn: 1 })],
+      ["top-down", (h) => h.scene.resetCamera(true)],
+      ["double-click", (h) => {
+        const at = h.screenOf(6, 0, 12);
+        h.input.doubleClick(at.x, at.y);
+      }],
+      ["walk mode", (h) => h.scene.setWalking(true)],
+    ];
+    for (const [name, take] of takes) {
+      const { h } = await fightScene();
+      expect(h.scene.cameraTaken(), name).toBe(false);
+      take(h);
+      h.frames(3);
+      expect(h.scene.cameraTaken(), name).toBe(true);
+      expect(h.scene.cameraOwner(), name).not.toBe("director");
+    }
+  });
+
+  it("every hand-back clears it: Follow (a viewport request), a cut, following a unit", async () => {
+    const handBacks: [string, (h: TestScene) => void][] = [
+      ["viewport", (h) => h.scene.setViewport({ centerX: 0.5, centerY: 0.5, zoom: 2 })],
+      ["cut", (h) => h.scene.cutDirector()],
+      ["follow a unit", (h) => h.scene.followUnit("p1")],
+    ];
+    for (const [name, handBack] of handBacks) {
+      const { h } = await fightScene();
+      const reports = recordTaken(h);
+      h.input.drag(0, 40, 0);
+      handBack(h);
+      expect(reports, name).toEqual(["free (taken)", "director"]);
+    }
+  });
+
+  it("turning the follow camera off after a take keeps it taken; turning it on hands back", async () => {
+    const { h } = await fightScene();
+    const reports = recordTaken(h);
+    h.input.drag(0, 40, 0);
+    h.scene.setDirector(null);
+    h.scene.setDirector({ bossGuids: BOSS });
+    expect(reports).toEqual(["free (taken)", "director"]);
+  });
+
+  it("first load, a mesh swap, a host's pose and a take after the follow camera was turned off are not taken", async () => {
+    const { h } = await fightScene();
+    const reports = recordTaken(h);
+    h.scene.setDungeonMesh(null);
+    expect(await h.loadMesh()).toBe("ready");
+    h.settle();
+    h.scene.applyCameraPose({ position: [0, 20, 30], target: [0, 0, 0] });
+    h.scene.setViewport({ centerX: 0.5, centerY: 0.5, zoom: 2 });
+    // A pinned Fit: the host turns the follow camera off, then the viewer drags.
+    h.scene.setDirector(null);
+    h.input.drag(0, 40, 0);
+    expect(reports).toEqual(["scripted", "director", "free"]);
+    expect(h.scene.cameraTaken()).toBe(false);
+  });
+});
+

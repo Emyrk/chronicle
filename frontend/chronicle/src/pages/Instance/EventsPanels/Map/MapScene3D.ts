@@ -1829,12 +1829,18 @@ export class MapScene3D {
     return this.arbiter.owner();
   }
 
+  /** Whether the viewer took the camera from the follow camera and has not handed it back (cameraArbiter.ts: taken). */
+  cameraTaken(): boolean {
+    return this.arbiter.taken;
+  }
+
   /**
-   * Called with the camera owner now, then whenever it changes (once a change
-   * settles, and at the end of a frame). It may act on the scene: a change it
-   * causes is reported after it returns, never from inside it.
+   * Called with the camera owner and cameraTaken() now, then whenever either
+   * changes (once a change settles, and at the end of a frame). It may act on
+   * the scene: a change it causes is reported after it returns, never from
+   * inside it.
    */
-  setOnCameraOwnerChange(callback: ((owner: CameraOwner) => void) | null) {
+  setOnCameraOwnerChange(callback: ((owner: CameraOwner, taken: boolean) => void) | null) {
     this.arbiter.setOnChange(callback);
   }
 
