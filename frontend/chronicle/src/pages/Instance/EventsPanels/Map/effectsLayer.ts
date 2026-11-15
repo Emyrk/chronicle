@@ -121,7 +121,7 @@ export class EffectsLayer {
   // Effects layer: pooled primitives, re-derived from the effect clock on
   // every rendered frame. Nothing here is allocated per frame.
   effects: MapScene3DEffects | null = null;
-  clock = { ms: 0, at: 0, playing: false, speed: 1 };
+  readonly clock = { ms: 0, at: 0, playing: false, speed: 1 };
   // The effect clock's time at the last updateEffects, for the bars' heal chunk.
   effectCursorMs = 0;
   private readonly activeEffects: ActiveEffect[] = [];
@@ -331,6 +331,7 @@ export class EffectsLayer {
     return this.host.hud().castIconCast;
   }
 
+  /** Sets the combat events to draw, or turns effects off with `null`. */
   setEffects(effects: MapScene3DEffects | null) {
     this.effects = effects?.fx ? effects : null;
     if (this.effects) Object.assign(this.effectOptions, this.effects.options, { visibleGuids: this.visibleUnits });

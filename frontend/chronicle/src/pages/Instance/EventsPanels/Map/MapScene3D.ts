@@ -915,11 +915,11 @@ export class MapScene3D {
     else this.resetCamera(false);
   }
 
-  /** Sets the combat events to draw, or turns effects off with `null`. */
   setUnits(units: MapScene3DUnit[]) {
     this.unitLayer.setUnits(units);
   }
 
+  /** Sets the combat events to draw, or turns effects off with `null`. */
   setEffects(effects: MapScene3DEffects | null) {
     this.effectsLayer.setEffects(effects);
   }
@@ -931,11 +931,6 @@ export class MapScene3D {
   }
 
   /**
-   * Swaps the tiles for the real dungeon mesh (`request`), loading it on first
-   * use, or back to the tiles with `null`. Reports loading / ready / failed
-   * through `onDungeonMesh`; a failed load leaves the tiles showing.
-   */
-  /**
    * Anchors the effect clock on a replay tick. While playing, frames run
    * ahead of the last tick at `speed` (up to MAX_EXTRAPOLATE_MS) so short
    * effects animate smoothly between the coarse ticks (EffectsLayer).
@@ -944,6 +939,11 @@ export class MapScene3D {
     this.effectsLayer.setEffectClock(cursorMs, playing, speed);
   }
 
+  /**
+   * Swaps the tiles for the real dungeon mesh (`request`), loading it on first
+   * use, or back to the tiles with `null`. Reports loading / ready / failed
+   * through `onDungeonMesh`; a failed load leaves the tiles showing.
+   */
   setDungeonMesh(request: DungeonMeshRequest | null) {
     const current = this.dungeonMesh?.url ?? this.dungeonMeshRequest?.url ?? null;
     if ((request?.url ?? null) === current) return;
