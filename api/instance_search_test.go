@@ -18,6 +18,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chronauth/claims"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/database/dbtestutil"
+	"github.com/Emyrk/chronicle/internal/clientip"
 	"github.com/Emyrk/chronicle/internal/services/serviceinstancesearch"
 	"github.com/Emyrk/chronicle/internal/testutil"
 )
@@ -280,6 +281,31 @@ func TestInstanceSearch(t *testing.T) {
 		require.Equal(t, float64(1), priestUses)
 		// ok/user and login_required/anon.
 		require.Equal(t, 2, series["chronicle_instance_search_duration_seconds"])
+	})
+}
+
+func TestInstanceSearchCallerIP(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/raidlogs/search", nil)
+	req.RemoteAddr = "10.0.0.1:1234"
+	req.Header.Set("CF-Connecting-IP", "203.0.113.7")
+	req.Header.Set("X-Forwarded-For", "192.0.2.1, 10.0.0.2")
+
+	t.Run("CloudflareTrusted", func(t *testing.T) {
+		t.Parallel()
+		api := &API{clientIP: clientip.Resolver{TrustCloudflare: true}}
+		require.Equal(t, "203.0.113.7", api.instanceSearchCaller(req).IP)
+
+		forged := req.Clone(req.Context())
+		forged.Header.Set("X-Forwarded-For", "198.51.100.99")
+		require.Equal(t, "203.0.113.7", api.instanceSearchCaller(forged).IP)
+	})
+
+	t.Run("CloudflareNotTrusted", func(t *testing.T) {
+		t.Parallel()
+		api := &API{}
+		require.Equal(t, "192.0.2.1", api.instanceSearchCaller(req).IP)
 	})
 }
 

@@ -17,6 +17,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicecache"
 	"github.com/Emyrk/chronicle/internal/services/servicechoose"
 	"github.com/Emyrk/chronicle/internal/services/servicechronicle"
+	"github.com/Emyrk/chronicle/internal/services/serviceclientip"
 	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
 	"github.com/Emyrk/chronicle/internal/services/serviceexternalapi"
@@ -52,6 +53,7 @@ func ServerCmd() *serpent.Command {
 	apiService := serviceapi.New(srvs)
 	err := srvs.Register(
 		serviceaccessurl.New(srvs),
+		serviceclientip.New(srvs),
 		servicesecrets.New(srvs),
 		servicelogger.New(srvs),
 		servicepprof.New(srvs),

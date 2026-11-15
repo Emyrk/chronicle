@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
+	"github.com/Emyrk/chronicle/internal/clientip"
 	"github.com/stretchr/testify/require"
 )
 
@@ -61,20 +62,37 @@ func TestExternalIPLimiter(t *testing.T) {
 	require.Equal(t, http.StatusTooManyRequests, stillRejected.Code)
 }
 
-func TestExternalClientIP(t *testing.T) {
+func TestExternalIPLimiterCloudflare(t *testing.T) {
 	t.Parallel()
 
-	t.Run("forwarded", func(t *testing.T) {
+	newHandler := func(trust bool) http.Handler {
+		limiter := newExternalIPLimiterWithConfig(1, 1)
+		limiter.clientIP = clientip.Resolver{TrustCloudflare: trust}
+		return limiter.middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusNoContent)
+		}))
+	}
+	request := func(handler http.Handler, cfIP, forwardedFor string) int {
+		req := httptest.NewRequest(http.MethodGet, "/openapi.json", nil)
+		req.Header.Set("CF-Connecting-IP", cfIP)
+		req.Header.Set("X-Forwarded-For", forwardedFor)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	t.Run("forged forwarded-for shares the cloudflare bucket", func(t *testing.T) {
 		t.Parallel()
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
-		req.Header.Set("X-Forwarded-For", " 192.0.2.1, 198.51.100.2")
-		require.Equal(t, "192.0.2.1", externalClientIP(req))
+		handler := newHandler(true)
+		require.Equal(t, http.StatusNoContent, request(handler, "203.0.113.7", "192.0.2.1"))
+		require.Equal(t, http.StatusTooManyRequests, request(handler, "203.0.113.7", "192.0.2.99"))
+		require.Equal(t, http.StatusNoContent, request(handler, "203.0.113.8", "192.0.2.1"))
 	})
 
-	t.Run("remote address", func(t *testing.T) {
+	t.Run("cloudflare header ignored when untrusted", func(t *testing.T) {
 		t.Parallel()
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
-		req.RemoteAddr = "192.0.2.3:1234"
-		require.Equal(t, "192.0.2.3", externalClientIP(req))
+		handler := newHandler(false)
+		require.Equal(t, http.StatusNoContent, request(handler, "203.0.113.7", "192.0.2.1"))
+		require.Equal(t, http.StatusTooManyRequests, request(handler, "203.0.113.8", "192.0.2.1"))
 	})
 }

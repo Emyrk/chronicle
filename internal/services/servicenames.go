@@ -35,4 +35,5 @@ const (
 	ServiceInference   = "inference"
 	ServiceSecrets     = "secrets"
 	ServiceChoose      = "choose"
+	ServiceClientIP    = "clientip"
 )
