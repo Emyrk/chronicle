@@ -27,13 +27,45 @@ func TestHighlightHourBoundaries(t *testing.T) {
 		require.Equal(t, next, args.Boundary)
 		require.Equal(t, next, args.insertOpts(now).ScheduledAt)
 		require.Equal(t, next, (HighlightSchedule{}).Next(now))
-		periodic := PeriodicHighlightDispatch(now)
-		require.Equal(t, next.Add(-time.Hour), periodic.Boundary)
-		require.False(t, periodic.insertOpts(now).ScheduledAt.After(now), "late periodic work must be immediately eligible")
 	}
 	require.True(t, (ArgsHighlightDispatch{TenantID: tenant}).InsertOpts().ScheduledAt.IsZero())
 	require.Equal(t, 1, (ArgsHighlightRefresh{}).InsertOpts().MaxAttempts)
 	require.Equal(t, 3, (ArgsHighlightDispatch{}).InsertOpts().MaxAttempts)
+}
+
+func TestPeriodicHighlightBoundaryEarlyAndLate(t *testing.T) {
+	t.Parallel()
+	boundary := time.Date(2026, 1, 1, 13, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name         string
+		offset       time.Duration
+		previousHour bool
+	}{
+		{"outside_early_window", -100*time.Millisecond - time.Nanosecond, true},
+		{"early_window_edge", -100 * time.Millisecond, false},
+		{"early", -50 * time.Millisecond, false},
+		{"just_before", -time.Nanosecond, false},
+		{"exact", 0, false},
+		{"just_after", time.Nanosecond, false},
+		{"late", 3 * time.Minute, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			now := boundary.Add(tc.offset).In(time.FixedZone("offset", 19800))
+			want := boundary
+			if tc.previousHour {
+				want = boundary.Add(-time.Hour)
+			}
+			args := PeriodicHighlightDispatch(now)
+			require.Equal(t, want, args.Boundary)
+			if want.After(now) {
+				require.Equal(t, AutomaticHighlightDispatch(uuid.Nil, now), args, "early periodic work must share the upcoming boundary identity")
+				require.Equal(t, want, args.insertOpts(now).ScheduledAt, "early work must wait for its boundary")
+			} else {
+				require.True(t, args.insertOpts(now).ScheduledAt.IsZero(), "due work must be immediately eligible")
+			}
+		})
+	}
 }
 
 type highlightDispatchStore struct {

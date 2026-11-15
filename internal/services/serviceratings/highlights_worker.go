@@ -32,7 +32,11 @@ func AutomaticHighlightDispatch(tenant uuid.UUID, now time.Time) ArgsHighlightDi
 // Accept that bounded two-source traversal: freshness checks skip current leaves.
 // Completed jobs do not dedupe, so later admin requests can still repair changes.
 func PeriodicHighlightDispatch(now time.Time) ArgsHighlightDispatch {
-	return ArgsHighlightDispatch{Boundary: now.UTC().Truncate(time.Hour)}
+	// River v0.43's periodic enqueuer may invoke constructors up to 100ms
+	// early. Select the upcoming boundary in that window so the sweep shares
+	// the scheduled nudges' identity. Late invocations still use this hour.
+	const earlyWindow = 100 * time.Millisecond
+	return ArgsHighlightDispatch{Boundary: now.UTC().Add(earlyWindow).Truncate(time.Hour)}
 }
 
 type ArgsHighlightDispatch struct {
