@@ -10,6 +10,8 @@ import {
   RUN_UNIT_STALE_MS,
   runPositionAt,
   WHOLE_RUN_ENCOUNTER_ID,
+  wholeRunUnplayable,
+  wholeRunWanted,
 } from "./wholeRun";
 
 function sample(timestampMs: number, x = 0): MapPositionSample {
@@ -160,5 +162,47 @@ describe("runPositionAt", () => {
 
   it("is null for a unit without samples", () => {
     expect(runPositionAt([], 5_000, true)).toBeNull();
+  });
+});
+
+describe("wholeRunWanted", () => {
+  it("plays the whole run by default on the full map once encounters are selected", () => {
+    expect(wholeRunWanted(null, { mini: false, unplayable: false, selectedCount: 8 })).toBe(true);
+    expect(wholeRunWanted(null, { mini: false, unplayable: false, selectedCount: 0 })).toBe(false);
+  });
+
+  it("keeps the mini map on its overview until asked", () => {
+    expect(wholeRunWanted(null, { mini: true, unplayable: false, selectedCount: 8 })).toBe(false);
+  });
+
+  it("falls back to the overview when the default run cannot play", () => {
+    expect(wholeRunWanted(null, { mini: false, unplayable: true, selectedCount: 8 })).toBe(false);
+  });
+
+  it("follows the user's own Whole run / Overview choice", () => {
+    expect(wholeRunWanted(false, { mini: false, unplayable: false, selectedCount: 8 })).toBe(false);
+    expect(wholeRunWanted(true, { mini: true, unplayable: true, selectedCount: 0 })).toBe(true);
+  });
+});
+
+describe("wholeRunUnplayable", () => {
+  const playable = { webglUnavailable: false, meshFailed: false, sceneMessage: null, settled: true };
+
+  it("plays a ready scene", () => {
+    expect(wholeRunUnplayable(playable)).toBe(false);
+  });
+
+  it("gives up without WebGL or when the dungeon mesh failed, loaded or not", () => {
+    expect(wholeRunUnplayable({ ...playable, webglUnavailable: true, settled: false })).toBe(true);
+    expect(wholeRunUnplayable({ ...playable, meshFailed: true, settled: false })).toBe(true);
+  });
+
+  it("gives up on a message such as no position telemetry once the selection has loaded", () => {
+    expect(wholeRunUnplayable({ ...playable, sceneMessage: {} })).toBe(true);
+  });
+
+  it("waits while the scene is loading or the selection has not loaded yet", () => {
+    expect(wholeRunUnplayable({ ...playable, sceneMessage: { pending: true } })).toBe(false);
+    expect(wholeRunUnplayable({ ...playable, sceneMessage: {}, settled: false })).toBe(false);
   });
 });

@@ -231,6 +231,8 @@ function SpeedChips({
 
 export interface ReplayTransportBarProps {
   initialTimestamp?: Date;
+  /** Replaces Enable Replay's default (enable at `initialTimestamp` or the start), e.g. to hand a map preview over. */
+  onEnable?: () => void;
   deaths: Date[];
   actions?: React.ReactNode;
   className?: string;
@@ -239,6 +241,7 @@ export interface ReplayTransportBarProps {
 /** Compact replay transport shared by the floating overlay and replay strips. */
 export function ReplayTransportBar({
   initialTimestamp,
+  onEnable,
   deaths,
   actions,
   className,
@@ -289,11 +292,11 @@ export function ReplayTransportBar({
     );
   }
 
-  const handleEnable = () => {
+  const handleEnable = onEnable ?? (() => {
     sync.enable();
     const timestamp = initialTimestamp ?? sync.encounterBounds?.start;
     if (timestamp) sync.setTimestamp(timestamp);
-  };
+  });
 
   const handleRestart = () => {
     const timestamp = sync.encounterBounds?.start ?? initialTimestamp;
@@ -393,7 +396,7 @@ export function ReplayTransportBar({
             size="sm"
             className="gap-1.5 shadow-lg"
             onClick={handleEnable}
-            disabled={!initialTimestamp && !sync.encounterBounds}
+            disabled={!onEnable && !initialTimestamp && !sync.encounterBounds}
           >
             <Play className="h-4 w-4" />
             Enable Replay

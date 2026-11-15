@@ -204,6 +204,9 @@ export function GridLayoutEditor({
               "group/resize-panel relative border border-border bg-card",
               seamless ? "rounded-none shadow-none" : "rounded-lg shadow-sm",
               item.kind === "strip" ? "overflow-visible focus-within:z-50" : "overflow-hidden",
+              // The grid places items with a transform, which would trap a panel's window fullscreen
+              // (position: fixed) inside its item: drop it while a descendant fills the window.
+              "has-[[data-window-fullscreen]]:transform-none!",
               pulseFirstResizeHandle && index === 0 && "grid-layout-editor-pulse-resize",
             )}
           >

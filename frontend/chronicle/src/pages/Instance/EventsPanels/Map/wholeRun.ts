@@ -9,11 +9,46 @@ export const WHOLE_RUN_ENCOUNTER_ID = "whole-run";
 
 /**
  * 3D for exactly one selected encounter; the 2D route overview otherwise,
- * unless the user asked for the whole run (offered with zero or several).
+ * unless the whole run plays (see wholeRunWanted).
  */
 export function mapPresentationForSelection(selectedEncounterCount: number, wholeRun = false): MapPresentation {
   if (selectedEncounterCount === 1) return "replay-3d";
   return wholeRun ? "replay-3d" : "overview-2d";
+}
+
+/**
+ * Whether zero or several selected encounters replay the whole run. The user's
+ * own choice (Whole run / Overview) wins; otherwise the full map plays it by
+ * default, unless it could not play there, and the mini map waits for a click.
+ * With nothing selected there is nothing to replay yet: the default waits for
+ * the map to select the run's encounters.
+ */
+export function wholeRunWanted(choice: boolean | null, { mini, unplayable, selectedCount }: {
+  mini: boolean;
+  unplayable: boolean;
+  selectedCount: number;
+}): boolean {
+  if (choice !== null) return choice;
+  return !mini && !unplayable && selectedCount > 0;
+}
+
+/**
+ * Whether the default whole run cannot play, so the map falls back to the
+ * route overview: no WebGL, a dungeon mesh that failed to load, or a scene
+ * that settled on a message (no position telemetry, no artwork). A message
+ * counts only once the panel has finished loading the current selection
+ * (`settled`): before that it may just be the empty result of a fresh panel.
+ */
+export function wholeRunUnplayable({ webglUnavailable, meshFailed, sceneMessage, settled }: {
+  webglUnavailable: boolean;
+  meshFailed: boolean;
+  /** The scene shows a message instead of the map; `pending` while it is still loading. */
+  sceneMessage: { pending?: boolean } | null;
+  /** The panel has loaded the current selection (see useLoadSettled). */
+  settled: boolean;
+}): boolean {
+  if (webglUnavailable || meshFailed) return true;
+  return sceneMessage !== null && !sceneMessage.pending && settled;
 }
 
 /** The camera lead-in before an encounter's first sample when jumping to it, kept only when another encounter's data covers it. */
