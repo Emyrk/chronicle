@@ -34210,6 +34210,226 @@ func (q *sqlQuerier) ListSpellRangesByDataset(ctx context.Context, datasetID uui
 	return items, nil
 }
 
+const deleteStatsFamilyStale = `-- name: DeleteStatsFamilyStale :execrows
+DELETE FROM stats_snapshots
+WHERE tenant_id = $1 AND producer_key = $2
+  AND NOT (page_key = ANY($3::text[]))
+`
+
+type DeleteStatsFamilyStaleParams struct {
+	TenantID     uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	ProducerKey  string    `db:"producer_key" json:"producer_key"`
+	KeepPageKeys []string  `db:"keep_page_keys" json:"keep_page_keys"`
+}
+
+// Drops one family's snapshots that its latest run did not emit.
+func (q *sqlQuerier) DeleteStatsFamilyStale(ctx context.Context, arg DeleteStatsFamilyStaleParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteStatsFamilyStale, arg.TenantID, arg.ProducerKey, arg.KeepPageKeys)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteStatsTenantPages = `-- name: DeleteStatsTenantPages :execrows
+DELETE FROM stats_snapshots
+WHERE tenant_id = $1 AND producer_key <> $2
+`
+
+type DeleteStatsTenantPagesParams struct {
+	TenantID        uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	KeepProducerKey string    `db:"keep_producer_key" json:"keep_producer_key"`
+}
+
+// Drops a tenant's snapshots except one producer's (the activity row), used
+// when the tenant falls below the /stats activity threshold.
+func (q *sqlQuerier) DeleteStatsTenantPages(ctx context.Context, arg DeleteStatsTenantPagesParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteStatsTenantPages, arg.TenantID, arg.KeepProducerKey)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteStatsUnregistered = `-- name: DeleteStatsUnregistered :execrows
+DELETE FROM stats_snapshots
+WHERE tenant_id = $1
+  AND NOT (producer_key = ANY($2::text[]))
+  AND computed_at < $3::timestamptz
+`
+
+type DeleteStatsUnregisteredParams struct {
+	TenantID               uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	RegisteredProducerKeys []string           `db:"registered_producer_keys" json:"registered_producer_keys"`
+	Before                 pgtype.Timestamptz `db:"before" json:"before"`
+}
+
+// Drops snapshots of families no longer registered, once they are old enough
+// that a rolling deploy or rollback cannot still be serving them.
+func (q *sqlQuerier) DeleteStatsUnregistered(ctx context.Context, arg DeleteStatsUnregisteredParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteStatsUnregistered, arg.TenantID, arg.RegisteredProducerKeys, arg.Before)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getStatsSnapshot = `-- name: GetStatsSnapshot :one
+SELECT tenant_id, page_key, producer_key, payload, sample_n, min_sample, computed_at, payload_changed_at FROM stats_snapshots
+WHERE tenant_id = $1 AND page_key = $2
+`
+
+type GetStatsSnapshotParams struct {
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	PageKey  string    `db:"page_key" json:"page_key"`
+}
+
+// Reads one /stats snapshot by primary key. The only query a /stats page hit runs.
+func (q *sqlQuerier) GetStatsSnapshot(ctx context.Context, arg GetStatsSnapshotParams) (StatsSnapshot, error) {
+	row := q.db.QueryRow(ctx, getStatsSnapshot, arg.TenantID, arg.PageKey)
+	var i StatsSnapshot
+	err := row.Scan(
+		&i.TenantID,
+		&i.PageKey,
+		&i.ProducerKey,
+		&i.Payload,
+		&i.SampleN,
+		&i.MinSample,
+		&i.ComputedAt,
+		&i.PayloadChangedAt,
+	)
+	return i, err
+}
+
+const listStatsSnapshotMeta = `-- name: ListStatsSnapshotMeta :many
+SELECT page_key, producer_key, sample_n, min_sample, computed_at, payload_changed_at
+FROM stats_snapshots
+WHERE tenant_id = $1
+ORDER BY page_key
+`
+
+type ListStatsSnapshotMetaRow struct {
+	PageKey          string             `db:"page_key" json:"page_key"`
+	ProducerKey      string             `db:"producer_key" json:"producer_key"`
+	SampleN          int32              `db:"sample_n" json:"sample_n"`
+	MinSample        int32              `db:"min_sample" json:"min_sample"`
+	ComputedAt       pgtype.Timestamptz `db:"computed_at" json:"computed_at"`
+	PayloadChangedAt pgtype.Timestamptz `db:"payload_changed_at" json:"payload_changed_at"`
+}
+
+// Lists a tenant's snapshots without payloads, for the sitemap and for the
+// snapshot job's cadence check.
+func (q *sqlQuerier) ListStatsSnapshotMeta(ctx context.Context, tenantID uuid.UUID) ([]ListStatsSnapshotMetaRow, error) {
+	rows, err := q.db.Query(ctx, listStatsSnapshotMeta, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListStatsSnapshotMetaRow
+	for rows.Next() {
+		var i ListStatsSnapshotMetaRow
+		if err := rows.Scan(
+			&i.PageKey,
+			&i.ProducerKey,
+			&i.SampleN,
+			&i.MinSample,
+			&i.ComputedAt,
+			&i.PayloadChangedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const statsTenantPlayerCount = `-- name: StatsTenantPlayerCount :one
+SELECT COUNT(DISTINCT (li.realm_id, lip.unit_guid))::bigint
+FROM log_instances li
+JOIN wow_server_realms wsr ON wsr.id = li.realm_id
+JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
+JOIN log_instance_players lip ON lip.instance_id = li.id
+WHERE li.start_time >= $1::timestamptz
+  AND li.invalidated_at IS NULL
+`
+
+// Counts the request tenant's distinct players seen in listed logs since a
+// cutoff. Heavier than the raid count, so the job runs it only when the raid
+// count alone does not decide the threshold. Background job only.
+func (q *sqlQuerier) StatsTenantPlayerCount(ctx context.Context, since pgtype.Timestamptz) (int64, error) {
+	row := q.db.QueryRow(ctx, statsTenantPlayerCount, since)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const statsTenantRaidCount = `-- name: StatsTenantRaidCount :one
+SELECT COUNT(DISTINCT COALESCE(li.duplicate_group_id, li.id))::bigint
+FROM log_instances li
+JOIN wow_server_realms wsr ON wsr.id = li.realm_id
+JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
+WHERE li.start_time >= $1::timestamptz
+  AND li.category = 'raid'
+  AND li.invalidated_at IS NULL
+`
+
+// Counts the request tenant's listed raids (logical runs, so duplicate uploads
+// count once) since a cutoff. RLS on wow_server_realms scopes it to the tenant
+// in context (root: untenanted and include_in_all realms). Background job only.
+func (q *sqlQuerier) StatsTenantRaidCount(ctx context.Context, since pgtype.Timestamptz) (int64, error) {
+	row := q.db.QueryRow(ctx, statsTenantRaidCount, since)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const upsertStatsSnapshot = `-- name: UpsertStatsSnapshot :one
+INSERT INTO stats_snapshots (tenant_id, page_key, producer_key, payload, sample_n, min_sample, computed_at, payload_changed_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
+ON CONFLICT (tenant_id, page_key) DO UPDATE
+SET producer_key = EXCLUDED.producer_key,
+    payload = EXCLUDED.payload,
+    sample_n = EXCLUDED.sample_n,
+    min_sample = EXCLUDED.min_sample,
+    computed_at = EXCLUDED.computed_at,
+    payload_changed_at = CASE
+      WHEN stats_snapshots.payload IS DISTINCT FROM EXCLUDED.payload THEN EXCLUDED.computed_at
+      ELSE stats_snapshots.payload_changed_at
+    END
+RETURNING (payload_changed_at = computed_at)::boolean AS changed
+`
+
+type UpsertStatsSnapshotParams struct {
+	TenantID    uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	PageKey     string             `db:"page_key" json:"page_key"`
+	ProducerKey string             `db:"producer_key" json:"producer_key"`
+	Payload     []byte             `db:"payload" json:"payload"`
+	SampleN     int32              `db:"sample_n" json:"sample_n"`
+	MinSample   int32              `db:"min_sample" json:"min_sample"`
+	ComputedAt  pgtype.Timestamptz `db:"computed_at" json:"computed_at"`
+}
+
+// Writes a snapshot and reports whether its payload changed (always true for a
+// new row). payload_changed_at moves only on a change. jsonb compares
+// normalized values, so key order and whitespace never count as a change.
+func (q *sqlQuerier) UpsertStatsSnapshot(ctx context.Context, arg UpsertStatsSnapshotParams) (bool, error) {
+	row := q.db.QueryRow(ctx, upsertStatsSnapshot,
+		arg.TenantID,
+		arg.PageKey,
+		arg.ProducerKey,
+		arg.Payload,
+		arg.SampleN,
+		arg.MinSample,
+		arg.ComputedAt,
+	)
+	var changed bool
+	err := row.Scan(&changed)
+	return changed, err
+}
+
 const deleteAllTelemetryNotices = `-- name: DeleteAllTelemetryNotices :exec
 DELETE FROM telemetry_notices
 `

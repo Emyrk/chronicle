@@ -18,6 +18,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/frontend"
+	"github.com/Emyrk/chronicle/internal/services/servicestats"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -498,7 +499,7 @@ func (api *API) sitemapBlogURLs(r *http.Request) []sitemapURL {
 	return urls
 }
 
-// loadSitemapURLs reads the tenant's guild and raid pages. Character (armory)
+// loadSitemapURLs reads the tenant's /stats, guild and raid pages. Character (armory)
 // pages are deliberately not listed: they are thin per-player pages. ctx
 // carries the tenant, which RLS uses to scope every query. Locations are paths.
 func (api *API) loadSitemapURLs(ctx context.Context) (*sitemapDynamic, error) {
@@ -517,7 +518,22 @@ func (api *API) loadSitemapURLs(ctx context.Context) (*sitemapDynamic, error) {
 		return nil, fmt.Errorf("list sitemap instances: %w", err)
 	}
 
-	urls := make([]sitemapURL, 0, len(guilds)+len(instances))
+	var stats []servicestats.SitemapEntry
+	if api.Opts.Stats != nil {
+		stats, err = api.Opts.Stats.SitemapEntries(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("list sitemap stats pages: %w", err)
+		}
+	}
+
+	urls := make([]sitemapURL, 0, len(guilds)+len(instances)+len(stats))
+	for _, page := range stats {
+		lastMod := ""
+		if !page.LastMod.IsZero() {
+			lastMod = page.LastMod.UTC().Format(time.RFC3339)
+		}
+		urls = append(urls, sitemapURL{Location: page.Path, LastMod: lastMod})
+	}
 	for _, g := range guilds {
 		urls = append(urls, sitemapURL{Location: "/g/" + g.ID.String(), LastMod: sitemapLastMod(g.PageUpdatedAt)})
 	}
