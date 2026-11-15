@@ -3,14 +3,8 @@ import { useEncounterFloor } from "./useEncounterFloor";
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
-import {
-  type WowMapInstanceFloor,
-  type WowMapLayer,
-  type WowMapMeshInstance,
-  type WowMapOverlay,
-  type WowMapRenderedInstance,
-} from "@/pages/Technical/mapGallery";
-import { fetchMapManifest } from "@/pages/Technical/mapManifest";
+import { type WowMapInstanceFloor, type WowMapLayer, type WowMapMeshInstance, type WowMapOverlay, type WowMapRenderedInstance } from "@/config/mapManifest";
+import { fetchMapManifest } from "@/config/mapManifest";
 import type { PanelRenderProps } from "../types";
 import type { ReplayClock } from "./replayClock";
 import { placeableDungeonMesh, replayDungeonMesh } from "./dungeonMeshes";

@@ -1,12 +1,4 @@
-import {
-  mapAssetUrl,
-  mapFloorMesh,
-  type WowMapFloorBounds,
-  type WowMapInstance,
-  type WowMapInstanceFloor,
-  type WowMapMeshInstance,
-  type WowMapMeshLiquid,
-} from "@/pages/Technical/mapGallery";
+import { DUNGEON_MESH_FRAME, mapAssetUrl, mapFloorMesh, type WowMapFloorBounds, type WowMapInstance, type WowMapInstanceFloor, type WowMapMeshInstance, type WowMapMeshLiquid } from "@/config/mapManifest";
 
 /**
  * Real dungeon meshes for the 3D Replay Map: a glTF rendered from the game's
@@ -25,7 +17,7 @@ import {
  * left at the entrance has floor beneath him; the mirror-free alternative
  * `(wow_x, wow_z, -wow_y)` puts both off the mesh.
  */
-export const DUNGEON_MESH_FRAME = "wow-yup-mirrored-x";
+export { DUNGEON_MESH_FRAME } from "@/config/mapManifest";
 
 /** The manifest's mesh entry when the scene can place it, else null. */
 export function placeableDungeonMesh(mesh: WowMapMeshInstance | undefined): WowMapMeshInstance | null {

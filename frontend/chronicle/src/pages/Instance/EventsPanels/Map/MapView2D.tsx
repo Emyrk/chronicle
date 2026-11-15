@@ -1,11 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Navigation, PawPrint, Skull } from "lucide-react";
-import {
-  mapAssetUrl,
-  overlayTilePlacement,
-  tilePlacement,
-  type WowMapLayer,
-} from "@/pages/Technical/mapGallery";
+import { mapAssetUrl, type WowMapLayer } from "@/config/mapManifest";
+import { overlayTilePlacement, tilePlacement } from "@/pages/Technical/mapGallery";
 import {
   clampViewport,
   healthBarColor,

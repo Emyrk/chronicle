@@ -1,6 +1,6 @@
 import type { InstancePlayer, KillType, WoWHeroClasses } from "@/api/typesGenerated";
 import type { ResolvedInstanceUnit } from "@/pages/Instance/instanceUnits";
-import type { WowMapManifest } from "@/pages/Technical/mapGallery";
+import type { WowMapManifest } from "@/config/mapManifest";
 import type { StreamType } from "@/hooks/instanceEvents";
 import type { Instance } from "../../../InstancePage";
 import type { ProcessorContext } from "../../processorTypes";

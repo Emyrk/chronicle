@@ -1,15 +1,4 @@
-import {
-  hasNativeMapFloorArtwork,
-  mapFloorRender,
-  type WowMap,
-  type WowMapAssignment,
-  type WowMapFloorBounds,
-  type WowMapInstance,
-  type WowMapInstanceFloor,
-  type WowMapManifest,
-  type WowMapManualRender,
-  type WowMapRenderedInstance,
-} from "@/pages/Technical/mapGallery";
+import { hasNativeMapFloorArtwork, mapFloorRender, type WowMap, type WowMapAssignment, type WowMapFloorBounds, type WowMapInstance, type WowMapInstanceFloor, type WowMapManifest, type WowMapManualRender, type WowMapRenderedInstance } from "@/config/mapManifest";
 import type { MapEncounterPositions, MapHealthSample, MapPositionSample } from "./map.processor";
 
 export interface MapPoint {

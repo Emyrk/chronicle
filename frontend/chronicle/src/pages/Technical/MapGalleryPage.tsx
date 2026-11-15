@@ -14,19 +14,11 @@ import {
 import { useIconBaseUrl } from "@/hooks/useDatasetId";
 import { placeableDungeonMesh } from "@/pages/Instance/EventsPanels/Map/dungeonMeshes";
 import { mapDebugOverlays } from "@/pages/Instance/EventsPanels/Map/mapDebugOverlays";
-import {
-  mapAssetUrl,
-  mapFloorMesh,
-  mapGalleryItems,
-  mapManifestUrl,
-  overlayTilePlacement,
-  tilePlacement,
-  type MapGalleryItem,
-  type WowMapMeshInstance,
-} from "./mapGallery";
+import { mapAssetUrl, mapFloorMesh, mapManifestUrl, type WowMapMeshInstance } from "@/config/mapManifest";
+import { mapGalleryItems, overlayTilePlacement, tilePlacement, type MapGalleryItem } from "./mapGallery";
 import { GalleryPagination } from "./GalleryPagination";
 import { galleryPage } from "./galleryPage";
-import { fetchMapManifest } from "./mapManifest";
+import { fetchMapManifest } from "@/config/mapManifest";
 
 const MapGallery3D = lazy(() => import("./MapGallery3D"));
 

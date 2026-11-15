@@ -1,0 +1,70 @@
+{
+  "format": "chronicle-wow-map-art-v2",
+  "target": { "product": "wow_classic", "build": "1.15.0", "region": "us", "locale": "enUS" },
+  "maps": [
+    {
+      "id": 1,
+      "name": "Durotar",
+      "parentID": 0,
+      "type": 3,
+      "flags": 0,
+      "assignments": [
+        { "id": 10, "mapID": 1, "areaID": 14, "orderIndex": 0, "region": [0, 0, 0, 100, 100, 0], "uiMin": [0, 0], "uiMax": [1, 1] }
+      ],
+      "art": [
+        {
+          "phaseID": 0,
+          "artID": 7,
+          "styleID": 1,
+          "layers": [
+            {
+              "index": 0, "width": 1002, "height": 668, "tileWidth": 256, "tileHeight": 256,
+              "minScale": 1, "maxScale": 1, "additionalZoomSteps": 0,
+              "tiles": [{ "row": 0, "column": 0, "fileDataID": 100, "path": "tiles/durotar/0_0.webp" }]
+            }
+          ],
+          "overlays": [
+            { "id": 3, "offsetX": 10, "offsetY": 20, "textureWidth": 256, "textureHeight": 256, "tiles": [{ "row": 0, "column": 0, "fileDataID": 101, "path": "tiles/durotar/overlay.webp" }] }
+          ]
+        }
+      ]
+    }
+  ],
+  "instances": [
+    {
+      "mapID": 409,
+      "name": "Molten Core",
+      "instanceType": 2,
+      "directory": "MoltenCore",
+      "floorSupport": {
+        "version": 1, "path": "support/409.bin", "sha256": "abc", "datasetID": "forever", "mapID": 409,
+        "frame": "wow-yup-mirrored-x", "floorIDs": [1], "sources": [{ "floor": 1, "path": "support/409-1.bin", "sha256": "def" }], "validated": true
+      },
+      "reusedFrom": { "namespace": "turtle", "mapID": 409 },
+      "styled": { "path": "render-styled/409.webp", "width": 1024, "height": 1024, "source": "styled", "bounds": { "minX": -100, "maxX": 100, "minY": -100, "maxY": 100 }, "triangles": 5000 },
+      "renders": { "path": "renders/409.webp", "width": 1024, "height": 1024, "bounds": { "minX": -100, "maxX": 100, "minY": -100, "maxY": 100 } },
+      "mesh": {
+        "path": "3d/409.glb", "bounds": { "minX": -100, "maxX": 100, "minY": -100, "maxY": 100 }, "zMin": -50, "zMax": 50,
+        "frame": "wow-yup-mirrored-x", "liquid": { "color": "#ff5500", "opacity": 0.8 }
+      },
+      "floors": [
+        {
+          "floor": 1, "width": 1002, "height": 668, "tileWidth": 256, "tileHeight": 256,
+          "bounds": { "minX": -100, "maxX": 100, "minY": -100, "maxY": 100 },
+          "preferred2D": "art",
+          "tiles": [{ "row": 0, "column": 0, "fileDataID": 200, "path": "tiles/mc/1_0_0.webp" }],
+          "renders": { "path": "renders/409-1.webp", "width": 512, "height": 512 },
+          "mesh": { "path": "3d/409-1.glb", "bounds": { "minX": -100, "maxX": 100, "minY": -100, "maxY": 100 }, "zMin": -10, "zMax": 10, "frame": "wow-yup-mirrored-x" }
+        }
+      ]
+    },
+    {
+      "mapID": 389,
+      "name": "Ragefire Chasm",
+      "instanceType": 1,
+      "directory": "",
+      "floors": [],
+      "mesh": { "path": "3d/389.glb", "bounds": { "minX": -50, "maxX": 50, "minY": -50, "maxY": 50 }, "zMin": -20, "zMax": 20, "frame": "wow-yup-mirrored-x" }
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 import { useContext, useState } from "react";
 import { EncounterFloorContext } from "./encounterFloorContext";
 import { useQuery } from "@tanstack/react-query";
-import { mapAssetUrl, type WowMapInstance } from "@/pages/Technical/mapGallery";
+import { mapAssetUrl, type WowMapInstance } from "@/config/mapManifest";
 import type { PanelRenderProps } from "../types";
 import type { MapResult } from "./map.processor";
 import { EncounterFloorMemory, encounterFloorScope, estimateEncounterFloor, firstFloorEncounter, instanceNameFloor } from "./encounterFloor";

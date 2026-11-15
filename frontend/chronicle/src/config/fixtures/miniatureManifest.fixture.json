@@ -1,0 +1,17 @@
+{
+  "format": "chronicle-unit-miniatures-v1",
+  "miniatures": [
+    { "name": "Ragnaros", "path": "miniatures/ragnaros.glb", "entry_ids": [11502], "map_scale": 2.5, "world_heights": { "11502": 22.5 } },
+    { "name": "Core Hound", "path": "miniatures/core-hound.glb", "entry_ids": [11671, 11673] }
+  ],
+  "game_models": [
+    {
+      "name": "Onyxia",
+      "path": "miniatures/onyxia-game.glb",
+      "animation_path": "miniatures/onyxia-animations.glb",
+      "entry_ids": [10184],
+      "map_scale": 1.5,
+      "world_heights": { "10184": 18 }
+    }
+  ]
+}
