@@ -229,6 +229,30 @@ describe("the owner report stays honest", () => {
     expect(owners).toEqual(["tween", "director"]);
   });
 
+  it("a floor change (the mesh swapped out and back) does not hand a taken camera back", async () => {
+    const { h, owners } = await fightScene();
+    h.input.drag(0, 40, 0);
+    h.settle();
+    h.scene.setDungeonMesh(null);
+    expect(await h.loadMesh()).toBe("ready");
+    h.settle();
+    expect(owners).toEqual(["free"]);
+    const pose = h.probe.poseLine();
+    h.frames(30);
+    expect(h.probe.poseLine()).toBe(pose);
+  });
+
+  it("the follow camera's new settings (another boss) keep a taken camera; turning it off and on hands it back", async () => {
+    const { h, owners } = await fightScene();
+    h.input.drag(0, 40, 0);
+    h.scene.setDirector({ bossGuids: new Set(["p1"]) });
+    h.settle();
+    expect(owners).toEqual(["free"]);
+    h.scene.setDirector(null);
+    h.scene.setDirector({ bossGuids: BOSS });
+    expect(owners).toEqual(["free", "director"]);
+  });
+
   it("a host acting on the report from its callback gets the reports in order, without recursion", async () => {
     const { h } = await fightScene();
     const seen: string[] = [];

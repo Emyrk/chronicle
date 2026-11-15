@@ -853,8 +853,10 @@ export class MapScene3D {
       // Start on the first valid cinematic shot immediately. The mesh already
       // had an asynchronous load; making the camera spend another few seconds
       // springing in from the overview makes the replay feel unnecessarily slow.
+      // A camera the viewer took stays theirs (a floor change does not hand it
+      // back, chronicle-2020).
       this.directorRig.stop();
-      if (this.director && !this.alignmentOverlay) this.engageDirector(true);
+      if (this.director && !this.alignmentOverlay && this.arbiter.directorHeld) this.engageDirector(true);
       this.syncCameraOwner();
       this.onDungeonMesh("ready");
     });
@@ -876,9 +878,16 @@ export class MapScene3D {
    * shows; the tiles keep the viewport framing either way.
    */
   setDirector(director: MapSceneDirector | null) {
+    const turningOn = this.director === null;
     this.director = director;
     if (!director || this.alignmentOverlay) {
       this.directorRig.off();
+      this.syncCameraOwner();
+      return;
+    }
+    // New settings while on (another boss) keep a camera the viewer took:
+    // only turning it on hands the camera back (chronicle-2020).
+    if (!turningOn && !this.arbiter.directorHeld) {
       this.syncCameraOwner();
       return;
     }
