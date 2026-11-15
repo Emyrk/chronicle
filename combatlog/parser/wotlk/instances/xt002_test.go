@@ -19,20 +19,21 @@ import (
 	"time"
 )
 
-// Minimal deterministic events model the observed 64193 and 63849 wire signals.
+// Minimal deterministic events model the observed Heartbreak and Exposed Heart wire signals.
 // Names/player IDs are synthetic. No raw user log is included.
 func TestXTFinalizedVariants(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name   string
-		hard   bool
-		phases int
-		kill   bool
-		want   string
+		name      string
+		hardSpell chrondbc.SpellID
+		phases    int
+		kill      bool
+		want      string
 	}{
-		{"hard", true, 1, true, "hard"}, {"normal", false, 3, true, "normal"}, {"normal long finish", false, 3, true, "normal"},
-		{"incomplete phase coverage", false, 2, true, ""}, {"hard wipe", true, 1, false, ""},
-		{"normal wipe", false, 3, false, ""},
+		{"hard 25-player", 64193, 1, true, "hard"}, {"hard 10-player", 65737, 1, true, "hard"},
+		{"normal", 0, 3, true, "normal"}, {"normal long finish", 0, 3, true, "normal"},
+		{"incomplete phase coverage", 0, 2, true, ""}, {"hard wipe", 64193, 1, false, ""},
+		{"normal wipe", 0, 3, false, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -59,9 +60,9 @@ func TestXTFinalizedVariants(t *testing.T) {
 						aura(at, heart, 63849, messages.AuraTransitionRemoved)
 					}
 				}
-				if tc.hard && at == 35 {
+				if tc.hardSpell != 0 && at == 35 {
 					require.NoError(t, inst.Process(&messages.Slain{MessageBase: messages.Base(start.Add(35 * time.Second)), Victim: heart}))
-					aura(at, boss, 64193, messages.AuraTransitionApplied)
+					aura(at, boss, tc.hardSpell, messages.AuraTransitionApplied)
 				}
 			}
 			if tc.kill {
