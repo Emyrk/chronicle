@@ -95,6 +95,10 @@ func TestOpenAPISpec(t *testing.T) {
 		{Name: "General", Description: "API health and contract endpoints."},
 	}, document.Tags)
 
+	require.Equal(t, "bearer", document.Components.SecuritySchemes["developerOAuth"].Scheme)
+	require.Equal(t, []map[string][]string{{}, {"developerOAuth": {}}}, document.Paths["/raidlogs/recent"]["get"].Security)
+	require.Contains(t, document.Paths["/raidlogs/recent"]["get"].Responses, "401")
+
 	characterLogs, ok := document.Paths["/characters/{server}/{realm}/{character}/instances"]["get"]
 	require.True(t, ok)
 	require.Len(t, characterLogs.Parameters, 5)

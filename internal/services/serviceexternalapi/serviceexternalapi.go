@@ -3,12 +3,15 @@ package serviceexternalapi
 import (
 	"context"
 	"net/http"
+	"strings"
 
+	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
+	"github.com/Emyrk/chronicle/internal/services/serviceoauth"
 	"github.com/coder/serpent"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -53,9 +56,16 @@ type externalAPIStore interface {
 	InstanceEvent(context.Context, database.InstanceEventParams) (database.LogInstanceEvent, error)
 }
 
+// accessTokenValidator is intentionally narrow: external API requests only need
+// the application identity, never the owner's user-session privileges.
+type accessTokenValidator interface {
+	ValidateAccessToken(context.Context, string) (serviceoauth.AccessTokenIdentity, error)
+}
+
 type Service struct {
 	broker      *services.Services
 	db          externalAPIStore
+	oauth       accessTokenValidator
 	router      chi.Router
 	rateLimiter *externalIPLimiter
 	openapi     OpenAPIDocument
@@ -71,11 +81,13 @@ func (s *Service) DependsOn() []string {
 	return []string{
 		servicelogger.OnLogger(),
 		servicedbstore.OnDatabaseStore(),
+		serviceoauth.OnOAuth(),
 	}
 }
 
 func (s *Service) Start(_ context.Context) error {
 	s.db = servicedbstore.DatabaseStore(s.broker)
+	s.oauth = serviceoauth.OAuth(s.broker)
 	s.setupRoutes()
 	servicelogger.Logger(s.broker).Info("external API service started")
 	return nil
@@ -92,7 +104,24 @@ func (s *Service) Close(_ context.Context) error { return nil }
 func (s *Service) Options() serpent.OptionSet    { return nil }
 
 func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if s.oauth != nil && r.Header.Get("Authorization") != "" {
+		parts := strings.Fields(r.Header.Get("Authorization"))
+		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+			httpapi.Write(r.Context(), w, http.StatusUnauthorized, externalAuthError())
+			return
+		}
+		identity, err := s.oauth.ValidateAccessToken(r.Context(), parts[1])
+		if err != nil || identity.DeveloperAppID == uuid.Nil || identity.Scope != serviceoauth.ScopeExternalRead {
+			httpapi.Write(r.Context(), w, http.StatusUnauthorized, externalAuthError())
+			return
+		}
+		r = r.WithContext(withDeveloperAppID(r.Context(), identity.DeveloperAppID))
+	}
 	s.router.ServeHTTP(w, r)
+}
+
+func externalAuthError() chroniclesdk.Response {
+	return chroniclesdk.Response{Message: "Invalid developer OAuth bearer token."}
 }
 
 type HealthResponse struct {

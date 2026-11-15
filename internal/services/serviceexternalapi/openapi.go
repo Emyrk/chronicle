@@ -10,11 +10,23 @@ import (
 // OpenAPIDocument is the machine-readable contract for the external API.
 // Routes registered through Service.register are added to this document.
 type OpenAPIDocument struct {
-	OpenAPI string                                 `json:"openapi"`
-	Info    OpenAPIInfo                            `json:"info"`
-	Servers []OpenAPIServer                        `json:"servers"`
-	Tags    []OpenAPITag                           `json:"tags,omitempty"`
-	Paths   map[string]map[string]OpenAPIOperation `json:"paths"`
+	OpenAPI    string                                 `json:"openapi"`
+	Info       OpenAPIInfo                            `json:"info"`
+	Servers    []OpenAPIServer                        `json:"servers"`
+	Tags       []OpenAPITag                           `json:"tags,omitempty"`
+	Paths      map[string]map[string]OpenAPIOperation `json:"paths"`
+	Components OpenAPIComponents                      `json:"components"`
+}
+
+type OpenAPIComponents struct {
+	SecuritySchemes map[string]OpenAPISecurityScheme `json:"securitySchemes"`
+}
+
+type OpenAPISecurityScheme struct {
+	Type         string `json:"type"`
+	Scheme       string `json:"scheme"`
+	BearerFormat string `json:"bearerFormat,omitempty"`
+	Description  string `json:"description,omitempty"`
 }
 
 type OpenAPITag struct {
@@ -37,6 +49,7 @@ type OpenAPIOperation struct {
 	Summary     string                     `json:"summary"`
 	Description string                     `json:"description,omitempty"`
 	Parameters  []OpenAPIParameter         `json:"parameters,omitempty"`
+	Security    []map[string][]string      `json:"security,omitempty"`
 	Responses   map[string]OpenAPIResponse `json:"responses"`
 }
 
@@ -80,6 +93,12 @@ func newOpenAPIDocument() OpenAPIDocument {
 			{Name: "General", Description: "API health and contract endpoints."},
 		},
 		Paths: make(map[string]map[string]OpenAPIOperation),
+		Components: OpenAPIComponents{SecuritySchemes: map[string]OpenAPISecurityScheme{
+			"developerOAuth": {
+				Type: "http", Scheme: "bearer", BearerFormat: "OAuth2",
+				Description: "Optional developer application access token from /oauth/token. Anonymous access remains available.",
+			},
+		}},
 	}
 }
 
@@ -89,9 +108,11 @@ func (s *Service) register(method, path string, operation OpenAPIOperation, hand
 
 func (s *Service) registerWithRateLimitCost(method, path string, cost int, operation OpenAPIOperation, handler http.HandlerFunc) {
 	method = strings.ToLower(method)
+	operation.Security = []map[string][]string{{}, {"developerOAuth": {}}}
+	operation.Responses["401"] = OpenAPIResponse{Description: "The supplied OAuth bearer token is invalid or lacks developer API access."}
 	if path != "/health" {
 		operation.Responses["429"] = OpenAPIResponse{
-			Description: "The client IP has exceeded the external API rate limit.",
+			Description: "The client IP or developer application has exceeded the external API rate limit.",
 		}
 	}
 	if s.openapi.Paths[path] == nil {

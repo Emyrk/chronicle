@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/chronauth/claims"
@@ -65,14 +66,17 @@ func TestDeveloperAppCredentialsAndRefresh(t *testing.T) {
 	require.Equal(t, app.ID, identity.DeveloperAppID)
 	require.Equal(t, ScopeExternalRead, identity.Scope)
 	require.Equal(t, app.ClientID, identity.ClientID)
+	require.WithinDuration(t, time.Now().Add(time.Hour), identity.ExpiresAt, 2*time.Minute)
 	require.NotEqual(t, uuid.Nil, app.ID)
 	require.Error(t, func() error { _, err := service.ValidateAccessToken(ctx, token.RefreshToken); return err }())
 	valid := postForm[struct {
-		Active   bool   `json:"active"`
-		ClientID string `json:"client_id"`
+		Active    bool      `json:"active"`
+		ClientID  string    `json:"client_id"`
+		ExpiresAt time.Time `json:"expires_at"`
 	}](t, service, "/validate", url.Values{"token": {token.AccessToken}}, http.StatusOK)
 	require.True(t, valid.Active)
 	require.Equal(t, app.ClientID, valid.ClientID)
+	require.Equal(t, identity.ExpiresAt, valid.ExpiresAt)
 	require.False(t, postForm[struct {
 		Active bool `json:"active"`
 	}](t, service, "/validate", url.Values{"token": {token.RefreshToken}}, http.StatusOK).Active)

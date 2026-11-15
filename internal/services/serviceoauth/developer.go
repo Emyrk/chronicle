@@ -36,6 +36,7 @@ type AccessTokenIdentity struct {
 	DeveloperAppID         uuid.UUID `json:"developer_app_id,omitempty"`
 	UserID                 uuid.UUID `json:"user_id"`
 	Scope                  string    `json:"scope"`
+	ExpiresAt              time.Time `json:"expires_at"`
 	SidekickInstallationID uuid.UUID `json:"-"`
 }
 
@@ -54,7 +55,11 @@ func (s *Service) ValidateAccessToken(ctx context.Context, token string) (Access
 		return AccessTokenIdentity{}, fosite.ErrRequestUnauthorized
 	}
 	clientID := request.GetClient().GetID()
-	identity := AccessTokenIdentity{ClientID: clientID, UserID: userID, Scope: strings.Join(request.GetGrantedScopes(), " ")}
+	identity := AccessTokenIdentity{
+		ClientID: clientID, UserID: userID,
+		Scope:     strings.Join(request.GetGrantedScopes(), " "),
+		ExpiresAt: request.GetSession().GetExpiresAt(fosite.AccessToken),
+	}
 	if id, ok := developerAppID(clientID); ok {
 		app, err := s.store.db.GetOAuthDeveloperAppByID(ctx, id)
 		if err != nil || app.UserID != userID {

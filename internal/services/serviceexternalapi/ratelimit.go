@@ -1,6 +1,7 @@
 package serviceexternalapi
 
 import (
+	"context"
 	"math"
 	"net"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
+	"github.com/google/uuid"
 	"golang.org/x/time/rate"
 )
 
@@ -60,7 +62,7 @@ func (l *externalIPLimiter) middleware(next http.Handler) http.Handler {
 
 func (l *externalIPLimiter) middlewareWithCost(cost int, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		limiter := l.get(externalClientIP(r))
+		limiter := l.get(externalRateLimitKey(r))
 		allowed := limiter.AllowN(time.Now(), cost)
 		l.setHeaders(w, limiter)
 		if !allowed {
@@ -80,7 +82,7 @@ func (l *externalIPLimiter) middlewareWithCost(cost int, next http.Handler) http
 // prefix cannot accidentally turn the status check into a limited request.
 func (l *externalIPLimiter) statusMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		l.setHeaders(w, l.get(externalClientIP(r)))
+		l.setHeaders(w, l.get(externalRateLimitKey(r)))
 		next.ServeHTTP(w, r)
 	})
 }
@@ -119,6 +121,19 @@ func (l *externalIPLimiter) get(ip string) *rate.Limiter {
 	}
 	entry.lastSeen = now
 	return entry.limiter
+}
+
+type developerAppIDContextKey struct{}
+
+func withDeveloperAppID(ctx context.Context, id uuid.UUID) context.Context {
+	return context.WithValue(ctx, developerAppIDContextKey{}, id)
+}
+
+func externalRateLimitKey(r *http.Request) string {
+	if id, ok := r.Context().Value(developerAppIDContextKey{}).(uuid.UUID); ok && id != uuid.Nil {
+		return "app:" + id.String()
+	}
+	return "ip:" + externalClientIP(r)
 }
 
 // externalClientIP gets the original client IP as provided by Chronicle's
