@@ -18,17 +18,19 @@ import type { WoWSpell } from "@/api/wowdb";
 import type { WowMapInstance, WowMapManifest, WowMapMeshInstance } from "@/pages/Technical/mapGallery";
 import type { PanelContext } from "../types";
 import { fetchUnitModelUrls, type PublishedUnitModelUrls } from "./bossMinis";
-import { dungeonMeshLiquid, dungeonMeshUrl, replayDungeonMesh } from "./dungeonMeshes";
+import { dungeonMeshUrl, replayDungeonMesh } from "./dungeonMeshes";
 import type { MapHealthSample, MapPositionSample, MapResult } from "./map.processor";
 import { clampViewport, fitViewportToBounds, FULL_MAP_VIEWPORT, latestPositionAt, renderedDungeonMapPoint, selectHealthBars, unitFocusBounds, type MapPoint } from "./mapModel";
-import type { DungeonMeshRequest, DungeonMeshState, MapSceneFocus } from "./MapScene3D";
+import type { DungeonMeshRequest, DungeonMeshState } from "./MapScene3D";
 import type { MapCameraMark, MapCameraPose } from "./cameraPath";
 import MapView3D from "./MapView3D";
 import VideoRenderDialog, { type VideoRenderResult } from "./VideoRenderDialog";
 import type { MapViewRequest } from "./MapView2D";
 import { addEffectEvent, createEncounterEffects, isDeadAt, type EncounterEffects, type ReplayEffectEvent } from "./replayEffects";
-import { useMapScene, type MapMarkerKind, type MapSceneGround, type MapSceneMarker } from "./useMapScene";
+import type { MapMarkerKind, MapSceneGround, MapSceneMarker } from "./useMapScene";
 import { useLocalLoopClock, useSyncModeClock } from "./useReplayClock";
+import { useReplayPlayer } from "./useReplayPlayer";
+import { ReplayPlayer } from "./ReplayPlayer";
 import { DEFAULT_WALK_AVATAR, WALK_AVATARS } from "./walkAvatars";
 
 const CLASSES = ["warrior", "paladin", "hunter", "rogue", "priest", "shaman", "mage", "warlock", "druid"];
@@ -903,7 +905,6 @@ function FixturePlayer({ fixture, mesh = false, followGuid = null, effectSetting
   const [exportStatus, setExportStatus] = useState<string | null>(null);
   const [cameraMarks, setCameraMarks] = useState<MapCameraMark[]>(() => [...initialCameraMarks]);
   const [cameraPathPreview, setCameraPathPreview] = useState(captureRender && !captureWalking);
-  const [cameraCaptureKey, setCameraCaptureKey] = useState(0);
   const [manualCameraPose, setManualCameraPose] = useState<MapCameraPose | null>(() => captureWalking ? initialCameraMarks[0] ?? null : null);
   const [captureWalkMs, setCaptureWalkMs] = useState(0);
   const [cameraMarksCopied, setCameraMarksCopied] = useState(false);
@@ -945,21 +946,26 @@ function FixturePlayer({ fixture, mesh = false, followGuid = null, effectSetting
     }
   }, [cameraMarksJson]);
 
-  // As Map.tsx does with "3D map" on: units project with the pure world
-  // transform once the mesh has loaded; the tiles (calibrated) stay otherwise.
-  const [meshState, setMeshState] = useState<DungeonMeshState>("loading");
+  // The ReplayPlayer on the story's SyncMode, as the Map panel with "3D map"
+  // on: units project with the pure world transform once the mesh has loaded;
+  // the tiles (calibrated) stay otherwise. The Director has the camera on the
+  // mesh; capture mode drives it by an authored path or pose.
   const sceneClock = useSyncModeClock();
-  const scene = useMapScene(fixture.props, { rawDungeonProjection: mesh && meshState === "ready", clock: sceneClock });
-  const meshEntry = mesh && scene.status === "ready" ? scene.mesh : null;
-  const meshUrl = meshEntry && instance.iconBaseUrl ? dungeonMeshUrl(meshEntry, instance.iconBaseUrl) : null;
-  const dungeonMesh = useMemo((): DungeonMeshRequest | null =>
-    meshEntry && meshUrl ? { url: meshUrl, bounds: meshEntry.bounds, liquid: dungeonMeshLiquid(meshEntry) } : null,
-  [meshEntry, meshUrl]);
-  const focusCentre = scene.status === "ready" ? scene.focusCentre : null;
-  const fitZoom = scene.status === "ready" ? scene.autoFit?.zoom ?? null : null;
-  const focus = useMemo((): MapSceneFocus | null =>
-    focusCentre && fitZoom !== null ? { centre: focusCentre, zoom: fitZoom } : null,
-  [fitZoom, focusCentre]);
+  const player = useReplayPlayer({
+    source: fixture.props,
+    clock: sceneClock,
+    meshOn: mesh,
+    renderedCanvas: "never",
+    camera: {
+      mode: mesh ? "director" : "user",
+      path: capture
+        ? cameraPathPreview ? { marks: sortedCameraMarks, startMs: fixture.startMs } : null
+        : cameraPath ? { marks: cameraPath, startMs: fixture.startMs } : null,
+      pose: capture ? manualCameraPose : null,
+    },
+    unitModelUrls,
+  });
+  const { live: scene, meshState, dungeonMesh } = player;
 
   // `loop`: closing the YouTube overlay turns sync off; take the clock back.
   useEffect(() => {
@@ -1032,56 +1038,31 @@ function FixturePlayer({ fixture, mesh = false, followGuid = null, effectSetting
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [capture, currentTimestamp, fixture, isPlaying, pause, play, setTimestamp]);
 
-  // The panel's auto fit on selecting the boss.
-  const autoFit = scene.status === "ready" ? scene.autoFit : null;
-  const view = useMemo((): MapViewRequest => ({
-    viewport: autoFit ?? FULL_MAP_VIEWPORT,
-    key: "fit",
-  }), [autoFit]);
-
   // The scene only follows a unit it has: wait for the mesh and the unit (a
   // totem appears seconds into the fight).
-  const followable = meshState === "ready" && scene.status === "ready" && scene.markers.some((marker) => marker.guid === followGuid);
+  const followable = meshState === "ready" && scene !== null && scene.markers.some((marker) => marker.guid === followGuid);
   return (
     <div
-      data-map-capture-ready={captureRender && meshState === "ready" && scene.status === "ready"}
+      data-map-capture-ready={captureRender && meshState === "ready" && scene !== null}
       data-map-capture-ms={captureRender ? Math.round(replayMs) : undefined}
       style={{ width: capture ? "100vw" : 800, height: capture ? "100vh" : 520 }}
       className={capture ? "relative overflow-hidden bg-black" : "relative overflow-hidden rounded-md border border-white/10 bg-black/70"}
     >
-      {scene.status === "ready" ? (
-        <MapView3D
-          ground={scene.ground}
-          alignmentGround={scene.alignmentGround}
-          markers={scene.markers}
-          projectSample={scene.projectSample}
-          cursorMs={scene.cursorMs}
-          playing={scene.playing}
-          playbackSpeed={scene.playbackSpeed}
-          view={view}
-          effects={scene.effects}
-          bossGuids={scene.bossGuids}
-          tankGuids={scene.tankGuids}
-          unitModelUrls={unitModelUrls}
-          onUnavailable={() => console.warn("WebGL unavailable")}
-          dungeonMesh={dungeonMesh}
-          onDungeonMeshState={setMeshState}
-          focus={focus}
-          // As the panel's default framing: the cinematic camera on the mesh.
-          cinematic={mesh}
-          followGuid={followable ? followGuid : null}
-          effectSettings={effectSettings}
-          cameraPose={capture ? manualCameraPose : null}
-          cameraPath={capture ? (cameraPathPreview ? sortedCameraMarks : null) : cameraPath}
-          cameraPathStartMs={fixture.startMs}
-          walkCaptureFrame={capture ? walkCaptureFrame : null}
-          cameraCaptureKey={capture ? cameraCaptureKey : 0}
-          onCameraCapture={capture ? captureCameraMark : undefined}
-          walkAvatar={walkAvatar}
+      {player.ready ? (
+        <ReplayPlayer
+          player={player}
+          bare
+          view={{
+            followGuid: followable ? followGuid : null,
+            effectSettings,
+            walkCaptureFrame: capture ? walkCaptureFrame : null,
+            onCameraCapture: capture ? captureCameraMark : undefined,
+            walkAvatar,
+          }}
         />
-      ) : (
-        <div className="flex h-full items-center justify-center text-xs text-muted-foreground">{scene.title}: {scene.detail}</div>
-      )}
+      ) : player.scene.status === "message" ? (
+        <div className="flex h-full items-center justify-center text-xs text-muted-foreground">{player.scene.title}: {player.scene.detail}</div>
+      ) : null}
       {videoRender && dungeonMesh ? (
         <VideoRenderDialog
           open
@@ -1143,7 +1124,7 @@ function FixturePlayer({ fixture, mesh = false, followGuid = null, effectSetting
               </div>
               <button
                 type="button"
-                onClick={() => setCameraCaptureKey((key) => key + 1)}
+                onClick={player.cameraHandle.capturePose}
                 className="rounded-md bg-cyan-400 px-2.5 py-1.5 font-semibold text-black hover:bg-cyan-300"
               >
                 Add / replace at {elapsed.toFixed(2)}s
