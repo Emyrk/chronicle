@@ -36,6 +36,7 @@ interface SceneInternals {
   camera: THREE.PerspectiveCamera;
   controls: OrbitControls;
   tween: { view: object | null; move: object | null };
+  free: object;
   walk: { avatar: THREE.Group } | null;
   dungeonMesh: { url: string; scale: number; group: THREE.Group; caves: { mesh: THREE.Mesh; bvh: unknown }[] } | null;
   units: Map<string, { base: THREE.Vector3; floorY: number; floorTracked: boolean; token: { arc: THREE.Object3D } }>;
@@ -452,9 +453,9 @@ export async function createTestScene(options: TestSceneOptions = {}) {
    * the wheel) while `run` ran.
    */
   const countFreeCamPlacements = (run: () => void): number => {
-    const sceneObject = scene as unknown as Record<string, unknown>;
+    const sceneObject = internals.free as unknown as Record<string, unknown>;
     const original = sceneObject.placeFreeCam as (...args: unknown[]) => unknown;
-    if (typeof original !== "function") throw new Error("countFreeCamPlacements: MapScene3D has no placeFreeCam any more. Update createTestScene.ts.");
+    if (typeof original !== "function") throw new Error("countFreeCamPlacements: the free rig has no placeFreeCam any more. Update createTestScene.ts.");
     let count = 0;
     sceneObject.placeFreeCam = function (this: unknown, ...args: unknown[]) {
       count++;

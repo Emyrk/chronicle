@@ -26,7 +26,7 @@ import {
   type DirectorUnit,
 } from "./cameraDirector";
 import type { LiveMapPresence } from "../../liveSessionProtocol";
-import { actionForKey, cameraAngles, cameraCollisionDistance, cameraOffset, clampMobileMapInput, clockStepSeconds, easeAngleToward, frameStepSeconds, freeCamTravelSpeed, IDLE_MOBILE_MAP_INPUT, lookDrag, type MobileMapInput, planarStep, pointerLossEndsDrag, shouldFollowWalkCamera, stickPitch, turnYaw, WALK_TOGGLE_KEY, walkCameraSettling, walkDragButton, walkMouseControl, walkMovementYaw, wheelZoomDistance } from "./mapControls";
+import { actionForKey, cameraAngles, cameraCollisionDistance, cameraOffset, clampMobileMapInput, clockStepSeconds, easeAngleToward, frameStepSeconds, IDLE_MOBILE_MAP_INPUT, lookDrag, type MobileMapInput, planarStep, pointerLossEndsDrag, shouldFollowWalkCamera, stickPitch, turnYaw, WALK_TOGGLE_KEY, walkCameraSettling, walkDragButton, walkMouseControl, walkMovementYaw, wheelZoomDistance } from "./mapControls";
 import { climbElevations, createShotHold, directorPullIn, fallbackShot, FOLLOW_CENTRE_WINDOW_MS, FOLLOW_SHOT_CHECK_MS, FOLLOW_STEEP_ELEVATION_DEG, releaseSteepShot, shotCheckDue, steepPullIn, FOLLOW_SIGHT_STRIDE, FOLLOW_STEEP_MIN_DISTANCE_YARDS, seesFraming, sightPicks, type ShotAnswer, FOLLOW_SLICE_MS, followSprings, followYawStep, handOverFollowSpring, handOverFollowYaw, startFollowTrackBuild, wrapAngle, type FollowTrackBuild, followKeyAt, glideDurationMs, glidePoseAt, glideTurnMs, unwrapNear, holdShot, isReplayJump, type FollowKey, type FollowTrack, type FollowYawProbe, type GlidePose } from "./followCamera";
 import { type DispelKind } from "./unitTokenArt";
 import { UnitTokenTextures } from "./unitTokens";
@@ -56,14 +56,10 @@ import {
   DEFAULT_AD_STRAFE,
   DOUBLE_CLICK_OUT_FACTOR,
   FREE_CAM_COLLISION_PADDING_SCENE_UNITS,
-  FREE_CAM_MAX_PITCH_RADIANS,
-  FREE_CAM_MIN_DISTANCE_SCENE_UNITS,
-  FREE_CAM_TRAVEL_DISTANCES_PER_S,
   MESH_FULL_MAP_DISTANCE_FACTOR,
   MESH_MAX_DISTANCE_FACTOR,
   MESH_MAX_POLAR_RADIANS,
   MIN_DOUBLE_CLICK_DISTANCE_YARDS,
-  MOBILE_ORBIT_DAMPING,
   MOBILE_ORBIT_PAN_SPEED,
   MOBILE_ORBIT_ROTATE_SPEED,
   MOBILE_ORBIT_ZOOM_SPEED,
@@ -99,6 +95,7 @@ import { DebugOverlayLayer } from "./debugOverlays";
 import { CameraArbiter, type CameraOwner } from "./cameraArbiter";
 import { TweenRig } from "./tweenRig";
 import { ScriptedRig } from "./scriptedRig";
+import { FreeRig } from "./freeRig";
 import { MapInputState, mobileInputActive, MouseDrag, type InputFrame } from "./inputFrame";
 import { UnitLayer, type UnitObject } from "./unitLayer";
 import { EffectsLayer } from "./effectsLayer";
@@ -406,7 +403,11 @@ export class MapScene3D {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.PerspectiveCamera(45, 1, ORBIT_NEAR, ORBIT_FAR);
-  private readonly controls: OrbitControls;
+  // The user's free cam, with OrbitControls inside it (freeRig.ts).
+  private readonly free: FreeRig;
+  private get controls(): OrbitControls {
+    return this.free.controls;
+  }
   private readonly resizeObserver: ResizeObserver;
   private readonly raycaster = new THREE.Raycaster();
   private readonly pointer = new THREE.Vector2();
@@ -441,9 +442,13 @@ export class MapScene3D {
   // A click on a unit (inspect it); held briefly so a double-click (zoom) cancels it.
   private onUnitClick: ((guid: string) => void) | null = null;
   private pointerDownAt: { x: number; y: number } | null = null;
-  // The free cam's pivot (controls.target) rides this far (scene units)
-  // above the floor below it: Space/Z fly it up and down.
-  private pivotLift = 0;
+  // The free cam's pivot lift above the floor (FreeRig.pivotLift).
+  private get pivotLift(): number {
+    return this.free.pivotLift;
+  }
+  private set pivotLift(lift: number) {
+    this.free.pivotLift = lift;
+  }
   private unitClickTimer = 0;
   private groundKey = "";
   private aspect = 1;
@@ -630,7 +635,6 @@ export class MapScene3D {
   private readonly presence: LivePresence;
   private onWalkChange: (walking: boolean) => void = () => {};
   private readonly walkHead = new THREE.Vector3();
-  private keyMoveLastMs = 0;
   private readonly onEffectHover: (hover: MapScene3DEffectHover | null) => void;
 
   private readonly container: HTMLElement;
@@ -768,26 +772,18 @@ export class MapScene3D {
       unitScale: () => this.unitScale,
     });
 
-    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-    this.controls.maxPolarAngle = TILES_MAX_POLAR_RADIANS;
-    this.controls.minDistance = FREE_CAM_MIN_DISTANCE_SCENE_UNITS;
-    this.controls.maxDistance = TILES_MAX_DISTANCE_SCENE_UNITS;
-    // The free cam's left/right drags, keys and wheel are our own, walk
-    // mode's (chronicle-1514); OrbitControls keeps touch and the middle-drag
-    // pan. No inertia, except on the mobile layout (setMobileInput).
-    this.controls.enableDamping = false;
-    this.controls.dampingFactor = MOBILE_ORBIT_DAMPING;
-    this.controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.PAN, RIGHT: null };
-    this.controls.rotateSpeed = ORBIT_ROTATE_SPEED;
-    this.controls.zoomSpeed = ORBIT_ZOOM_SPEED;
-    this.controls.panSpeed = ORBIT_PAN_SPEED;
+    this.free = new FreeRig({
+      camera: this.camera,
+      element: this.renderer.domElement,
+      capture: this.capture !== null,
+      scratch: this.directorVector,
+      pivotFloor: (x, z) => this.pivotFloor(x, z),
+      wantDistance: () => this.orbitWantDistance,
+      requestRender: () => this.requestRender(),
+    });
     this.controls.addEventListener("change", this.handleControlsChange);
     this.controls.addEventListener("start", this.handleControlsStart);
     this.controls.addEventListener("end", this.handleControlsEnd);
-    if (this.capture) {
-      this.controls.enabled = false;
-      this.controls.enableDamping = false;
-    }
 
     this.resizeObserver = new ResizeObserver(this.resize);
     this.resizeObserver.observe(container);
@@ -2055,7 +2051,7 @@ export class MapScene3D {
       if (drag.engaged) {
         // Looks around the pivot exactly as walk mode looks around the head.
         drag.look(event, this.pointerLocked());
-        this.lookFreeCam(drag.dx, drag.dy);
+        this.free.lookFreeCam(drag.dx, drag.dy);
         return;
       }
       if (drag.pastSlop(event.clientX, event.clientY)) {
@@ -2151,36 +2147,6 @@ export class MapScene3D {
     this.pointerDownAt = null;
     this.lockPointer();
     this.handleControlsStart();
-    this.requestRender();
-  }
-
-  // The free cam's yaw and pitch around its pivot, as walk mode's
-  // camYaw/camPitch around the head; the distance stays.
-  private freeCamAngles(): { yaw: number; pitch: number; distance: number } {
-    return cameraAngles(this.directorVector.copy(this.camera.position).sub(this.controls.target));
-  }
-
-  // Places the free cam at yaw/pitch/distance from its pivot, walk mode's way,
-  // within the mode's tilt limit.
-  private placeFreeCam(yaw: number, pitch: number, distance: number) {
-    const clamped = Math.max(this.freeCamMinPitch(), Math.min(FREE_CAM_MAX_PITCH_RADIANS, pitch));
-    const offset = cameraOffset(yaw, clamped, distance);
-    this.camera.position.copy(this.controls.target).add(this.directorVector.set(offset.x, offset.y, offset.z));
-    this.controls.update();
-  }
-
-  // The lowest the free cam may look from: OrbitControls' polar limit (on the
-  // flat artwork the camera stays above the horizon so token faces show).
-  private freeCamMinPitch(): number {
-    return Math.PI / 2 - this.controls.maxPolarAngle;
-  }
-
-  // A mouse-look drag of (dx, dy) pixels on the free cam.
-  private lookFreeCam(dx: number, dy: number) {
-    if (!dx && !dy) return;
-    const { yaw, pitch, distance } = this.freeCamAngles();
-    const look = lookDrag(yaw, pitch, dx, dy, this.freeCamMinPitch(), FREE_CAM_MAX_PITCH_RADIANS);
-    this.placeFreeCam(look.yaw, look.pitch, distance);
     this.requestRender();
   }
 
@@ -2298,7 +2264,7 @@ export class MapScene3D {
     // The first orbit key takes the camera like a drag does: the Director pauses.
     if (!this.walk && held.size === 0) {
       this.handleControlsStart();
-      this.keyMoveLastMs = 0;
+      this.free.restartClock();
     }
     held.add(action);
     this.requestRender();
@@ -2338,46 +2304,16 @@ export class MapScene3D {
     const active = mobileInputActive(next);
     if (!this.walk && !wasActive && active) {
       this.handleControlsStart();
-      this.keyMoveLastMs = 0;
+      this.free.restartClock();
     }
     this.input.mobile = next;
     if (!this.walk && wasActive && !active) this.handleControlsEnd();
     if (active) this.requestRender();
   }
 
-  // Moves the free cam for held keys, both mouse buttons or the mobile
-  // controls, walk mode's way with a hidden character: W/S travel along the
-  // camera's facing, A/D turn (strafe while right-dragging), Space/Z fly the
-  // pivot up and down, with no gravity. True while any of them is active.
+  // The free-cam mover's frame step (FreeRig.update).
   private updateKeyboardCamera(now: number, input: InputFrame): boolean {
-    if (this.walk || !input.active) {
-      this.keyMoveLastMs = 0;
-      return false;
-    }
-    // The first active frame has no previous one to measure from: it steps one nominal frame.
-    const dt = clockStepSeconds(now, this.keyMoveLastMs);
-    this.keyMoveLastMs = now;
-    if (dt <= 0) return true;
-    const target = this.controls.target;
-    const angles = this.freeCamAngles();
-    const distance = angles.distance;
-    let { yaw, pitch } = angles;
-
-    if (input.turn) yaw = turnYaw(yaw, input.turn, dt);
-    // Stick up raises the camera, as walk mode's camPitch does.
-    if (input.pitch) pitch = stickPitch(pitch, input.pitch, dt);
-
-    // Travel scales with the zoom the user chose (not a wall's pull-in).
-    const speed = freeCamTravelSpeed(this.orbitWantDistance ?? distance, FREE_CAM_TRAVEL_DISTANCES_PER_S, input.fast);
-    const step = planarStep(yaw, input.forward, input.strafe, speed * dt);
-    target.x += step.x;
-    target.z += step.z;
-    if (input.vertical) this.pivotLift = Math.max(0, this.pivotLift + input.vertical * speed * dt);
-    // The pivot rides the floor below it, like walk mode's feet, plus the lift.
-    target.y = this.pivotFloor(target.x, target.z) + this.pivotLift;
-
-    this.placeFreeCam(yaw, pitch, distance);
-    return true;
+    return this.free.update(now, input, this.walk !== null);
   }
 
   /** Scales units and their attached markers relative to the map's normal size. */
@@ -2855,10 +2791,10 @@ export class MapScene3D {
     if (!walk) {
       if (!this.controls.enabled) return;
       // From the distance the user chose, not where a wall pulled the camera in.
-      const { yaw, pitch, distance } = this.freeCamAngles();
+      const { yaw, pitch, distance } = this.free.freeCamAngles();
       const next = wheelZoomDistance(this.orbitWantDistance ?? distance, event.deltaY, this.controls.minDistance, this.controls.maxDistance);
       this.handleControlsStart();
-      this.placeFreeCam(yaw, pitch, next);
+      this.free.placeFreeCam(yaw, pitch, next);
       this.handleControlsEnd();
       this.requestRender();
       return;
