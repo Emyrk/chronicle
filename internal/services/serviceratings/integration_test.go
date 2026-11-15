@@ -108,6 +108,12 @@ func TestDirectIntegrationTenantScope(t *testing.T) {
 	resolved, err := GroupSourceContext(s.ctx, s.db, s.group)
 	require.NoError(t, err)
 	require.Equal(t, s.tenant, servicetenant.TenantIDFromContext(resolved))
+
+	adminResolved, err := GroupSourceContext(servicetenant.AdminBypass(s.ctx), s.db, s.group)
+	require.NoError(t, err)
+	require.True(t, servicetenant.IsBypass(adminResolved))
+	require.Equal(t, s.tenant, servicetenant.TenantIDFromContext(adminResolved), "admin reparses must carry tenant identity into queued jobs")
+
 	require.NoError(t, s.db.InTx(resolved, func(tx database.Store) error {
 		runs, err := PrepareDirectRunsTx(resolved, tx, []uuid.UUID{s.instance})
 		if err != nil {

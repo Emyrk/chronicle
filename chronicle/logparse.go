@@ -200,9 +200,37 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 	return err
 }
 
+func restoreReplacementParseTenantContext(ctx context.Context, db database.StoreQueries, args *ArgsLogParse) (context.Context, error) {
+	if args.TenantID != uuid.Nil {
+		return servicetenant.WithTenantID(ctx, args.TenantID), nil
+	}
+	if !args.Replacement {
+		return ctx, nil
+	}
+	if len(args.PreviousRankingRunIDs) > 0 {
+		resolved, err := serviceratings.SourceContext(ctx, db, args.PreviousRankingRunIDs)
+		if err != nil {
+			return nil, fmt.Errorf("resolve replacement parse tenant from prior rankings: %w", err)
+		}
+		if tenant := servicetenant.TenantIDFromContext(resolved); tenant != uuid.Nil {
+			args.TenantID = tenant
+			return resolved, nil
+		}
+	}
+	resolved, err := serviceratings.GroupSourceContext(ctx, db, args.LogID)
+	if err != nil {
+		return nil, fmt.Errorf("resolve replacement parse tenant from log group: %w", err)
+	}
+	args.TenantID = servicetenant.TenantIDFromContext(resolved)
+	return resolved, nil
+}
+
 func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse], rankingRunRefresh *rankingRunRefreshPlan) error {
-	if job.Args.TenantID != uuid.Nil {
-		ctx = servicetenant.WithTenantID(ctx, job.Args.TenantID)
+	db := w.parent.Zed
+	var err error
+	ctx, err = restoreReplacementParseTenantContext(ctx, db, &job.Args)
+	if err != nil {
+		return err
 	}
 	if job.Args.Replacement {
 		if err := w.parent.RemoveParseCPUProfile(ctx, job.Args.LogID); err != nil {
@@ -229,7 +257,6 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		}
 	}()
 
-	db := w.parent.Zed
 	ctx = parseoptions.WithVerbose(ctx, job.Args.Verbose)
 
 	// Fetch the log group to determine log type
