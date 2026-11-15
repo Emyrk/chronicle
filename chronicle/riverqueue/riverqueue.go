@@ -2,6 +2,7 @@ package riverqueue
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -45,6 +46,7 @@ type Options struct {
 type Queues struct {
 	*river.Client[pgx.Tx]
 	UI http.Handler
+	ui *lazyUI
 
 	opts              Options
 	workers           *river.Workers
@@ -156,11 +158,14 @@ func (q *Queues) Start(ctx context.Context) error {
 		}()
 	}
 
-	riverUI, err := webUI(ctx, q.opts.Logger, riverClient)
-	if err != nil {
-		return err
-	}
-	q.UI = riverUI
+	q.ui = newLazyUI(ctx, q.opts.Logger, func(ctx context.Context) (http.Handler, error) {
+		return webUI(ctx, q.opts.Logger, riverClient)
+	})
+	q.UI = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Route middleware checks CanAdmin_queues_User before reaching this handler.
+		chronauth.MustAuthenticatedClaims(r.Context())
+		q.ui.ServeHTTP(w, r)
+	})
 	q.Client = riverClient
 
 	return nil
@@ -192,19 +197,21 @@ func webUI(ctx context.Context, parentLogger *slog.Logger, client *river.Client[
 		return nil, fmt.Errorf("start riverui server: %w", err)
 	}
 
-	riverHandler := withLogLinks(srv)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		uc := chronauth.MustAuthenticatedClaims(r.Context())
-		// TODO: Check if administrator
-		var _ = uc
-
-		riverHandler.ServeHTTP(w, r)
-	}), nil
+	return withLogLinks(srv), nil
 }
 
 func (q *Queues) Close(ctx context.Context) error {
 	if q.cancelMetricsFeed != nil {
 		q.cancelMetricsFeed()
 	}
-	return q.StopAndCancel(ctx)
+	// Signal UI shutdown without delaying the worker client's shutdown.
+	if q.ui != nil {
+		q.ui.shutdown()
+	}
+	workerErr := q.StopAndCancel(ctx)
+	var uiErr error
+	if q.ui != nil {
+		uiErr = q.ui.Close(ctx)
+	}
+	return errors.Join(workerErr, uiErr)
 }
