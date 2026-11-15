@@ -244,6 +244,7 @@ func New(ctx context.Context, opts Options) (*API, error) {
 	}
 
 	service, err := chronauth.New(ctx, opts.Logger, chronauth.Options{
+		ClientIP:          opts.ClientIP,
 		AccessURL:         opts.AccessURL,
 		DevServer:         opts.DevOAuth,
 		Discord:           opts.Discord,

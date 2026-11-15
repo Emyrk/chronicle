@@ -6,7 +6,9 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/database/authz"
+	"github.com/Emyrk/chronicle/internal/clientip"
 	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
+	"github.com/Emyrk/chronicle/internal/services/serviceclientip"
 	"github.com/go-chi/chi/v5"
 	"golang.org/x/time/rate"
 
@@ -31,8 +33,9 @@ func InternalGameData(broker *services.Services) *Service {
 }
 
 type Service struct {
-	broker *services.Services
-	router chi.Router
+	broker   *services.Services
+	router   chi.Router
+	clientIP clientip.Resolver
 }
 
 func New(broker *services.Services) *Service {
@@ -50,12 +53,14 @@ func (s *Service) DependsOn() []string {
 		servicelogger.OnLogger(),
 		servicedbstore.OnDatabaseStore(),
 		serviceauthz.OnAuthz(),
+		serviceclientip.OnClientIP(),
 	}
 }
 
 func (s *Service) Start(_ context.Context) error {
 	logger := servicelogger.Logger(s.broker)
 	zed := serviceauthz.Authz(s.broker)
+	s.clientIP = serviceclientip.Resolver(s.broker)
 	s.router = chi.NewRouter()
 	s.setupRoutes(zed)
 	logger.Info("InternalGameData service started")
@@ -81,7 +86,7 @@ func (s *Service) setupRoutes(_ *authz.Authz) {
 	s.router.Get("/sim/item/{item_id}", s.handleItemSim)
 
 	// Rate limit search endpoints: burst 30, refill 30/min (one token every 2s).
-	searchLimiter := newIPLimiter(rate.Every(2*time.Second), 30)
+	searchLimiter := newIPLimiter(rate.Every(2*time.Second), 30, s.clientIP)
 	s.router.With(searchLimiter.middleware).Get("/search/items", s.handleSearchItems)
 	s.router.With(searchLimiter.middleware).Get("/search/creatures", s.handleSearchCreatures)
 	s.router.With(searchLimiter.middleware).Get("/search/item-sets", s.handleSearchItemSets)

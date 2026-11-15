@@ -1,14 +1,13 @@
 package serviceoauth
 
 import (
-	"net"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
+	"github.com/Emyrk/chronicle/internal/clientip"
 	"golang.org/x/time/rate"
 )
 
@@ -23,6 +22,7 @@ type deviceAuthorizationLimiter struct {
 	mu          sync.Mutex
 	entries     map[string]*deviceLimiterEntry
 	lastCleanup time.Time
+	clientIP    clientip.Resolver
 }
 
 type deviceLimiterEntry struct {
@@ -30,16 +30,17 @@ type deviceLimiterEntry struct {
 	lastSeen time.Time
 }
 
-func newDeviceAuthorizationLimiter() *deviceAuthorizationLimiter {
+func newDeviceAuthorizationLimiter(clientIP clientip.Resolver) *deviceAuthorizationLimiter {
 	return &deviceAuthorizationLimiter{
 		entries:     make(map[string]*deviceLimiterEntry),
 		lastCleanup: time.Now(),
+		clientIP:    clientIP,
 	}
 }
 
 func (l *deviceAuthorizationLimiter) middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !l.get(oauthClientIP(r)).Allow() {
+		if !l.get(l.clientIP.Key(r)).Allow() {
 			w.Header().Set("Retry-After", "2")
 			httpapi.Write(r.Context(), w, http.StatusTooManyRequests, chroniclesdk.Response{Message: "Rate limit exceeded."})
 			return
@@ -68,18 +69,4 @@ func (l *deviceAuthorizationLimiter) get(ip string) *rate.Limiter {
 	}
 	entry.lastSeen = now
 	return entry.limiter
-}
-
-func oauthClientIP(r *http.Request) string {
-	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
-		if index := strings.IndexByte(forwarded, ','); index >= 0 {
-			forwarded = forwarded[:index]
-		}
-		return strings.TrimSpace(forwarded)
-	}
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return host
 }

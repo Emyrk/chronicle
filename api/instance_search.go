@@ -45,7 +45,7 @@ func newInstanceSearchUserLimitResolver(zed *authz.Authz) serviceinstancesearch.
 	}
 }
 func (api *API) instanceSearchCaller(r *http.Request) serviceinstancesearch.Caller {
-	c := serviceinstancesearch.Caller{TenantID: servicetenant.TenantIDFromContext(r.Context()), IP: api.clientIP.IP(r)}
+	c := serviceinstancesearch.Caller{TenantID: servicetenant.TenantIDFromContext(r.Context()), IP: api.clientIP.Key(r)}
 	if claims, ok := chronauth.AuthenticatedClaims(r.Context()); ok {
 		c.UserID = claims.Subject
 	}

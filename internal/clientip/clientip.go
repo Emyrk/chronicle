@@ -41,3 +41,29 @@ func (c Resolver) IP(r *http.Request) string {
 	}
 	return host
 }
+
+// ipv6BucketBits is the prefix IPv6 clients share a rate-limit bucket by: a /64 is
+// what one subscriber or host is normally assigned, so per-address buckets would
+// let a single client rotate through its whole prefix.
+const ipv6BucketBits = 64
+
+// Key returns the rate-limit bucket for the request's client: the IP from IP,
+// with IPv4 (and IPv4-mapped IPv6) per address, native IPv6 collapsed to its /64
+// ("2001:db8:1:2::/64"), and any IPv6 zone ("%eth0") dropped. A value that is
+// not an IP address is returned as is, so the key is never emptier than IP.
+func (c Resolver) Key(r *http.Request) string {
+	raw := c.IP(r)
+	addr, err := netip.ParseAddr(raw)
+	if err != nil {
+		return raw
+	}
+	addr = addr.WithZone("").Unmap()
+	if addr.Is4() {
+		return addr.String()
+	}
+	prefix, err := addr.Prefix(ipv6BucketBits)
+	if err != nil {
+		return addr.String()
+	}
+	return prefix.String()
+}

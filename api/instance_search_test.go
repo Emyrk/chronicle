@@ -309,6 +309,21 @@ func TestInstanceSearchCallerIP(t *testing.T) {
 	})
 }
 
+func TestInstanceSearchCallerKeyBucketsIPv6By64(t *testing.T) {
+	t.Parallel()
+
+	api := &API{}
+	caller := func(forwardedFor string) string {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/raidlogs/search", nil)
+		req.Header.Set("X-Forwarded-For", forwardedFor)
+		return api.instanceSearchCaller(req).IP
+	}
+	require.Equal(t, caller("2001:db8:1:2::1"), caller("2001:db8:1:2:ffff::9"))
+	require.NotEqual(t, caller("2001:db8:1:2::1"), caller("2001:db8:1:3::1"))
+	require.Equal(t, "192.0.2.1", caller("192.0.2.1"))
+	require.NotEqual(t, caller("192.0.2.1"), caller("192.0.2.2"))
+}
+
 func TestInstanceSearchSupporterLimits(t *testing.T) {
 	t.Parallel()
 

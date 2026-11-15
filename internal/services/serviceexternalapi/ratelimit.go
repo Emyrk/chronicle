@@ -62,7 +62,7 @@ func (l *externalIPLimiter) middleware(next http.Handler) http.Handler {
 
 func (l *externalIPLimiter) middlewareWithCost(cost int, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		limiter := l.get(l.clientIP.IP(r))
+		limiter := l.get(l.clientIP.Key(r))
 		allowed := limiter.AllowN(time.Now(), cost)
 		l.setHeaders(w, limiter)
 		if !allowed {
@@ -82,7 +82,7 @@ func (l *externalIPLimiter) middlewareWithCost(cost int, next http.Handler) http
 // prefix cannot accidentally turn the status check into a limited request.
 func (l *externalIPLimiter) statusMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		l.setHeaders(w, l.get(l.clientIP.IP(r)))
+		l.setHeaders(w, l.get(l.clientIP.Key(r)))
 		next.ServeHTTP(w, r)
 	})
 }

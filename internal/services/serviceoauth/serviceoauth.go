@@ -15,8 +15,10 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database/authz"
+	"github.com/Emyrk/chronicle/internal/clientip"
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/serviceaccessurl"
+	"github.com/Emyrk/chronicle/internal/services/serviceclientip"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 	"github.com/coder/serpent"
@@ -107,18 +109,20 @@ type Service struct {
 	router          chi.Router
 	browserApproval http.Handler
 	deviceLimiter   *deviceAuthorizationLimiter
+	clientIP        clientip.Resolver
 }
 
 func New(broker *services.Services) *Service { return &Service{broker: broker} }
 func (s *Service) Name() string              { return services.ServiceOAuth }
 func (s *Service) Configures() []string      { return nil }
 func (s *Service) DependsOn() []string {
-	return []string{servicelogger.OnLogger(), servicedbstore.OnDatabaseStore(), serviceaccessurl.OnAccessURL()}
+	return []string{servicelogger.OnLogger(), servicedbstore.OnDatabaseStore(), serviceaccessurl.OnAccessURL(), serviceclientip.OnClientIP()}
 }
 func (s *Service) Options() serpent.OptionSet  { return nil }
 func (s *Service) Close(context.Context) error { return nil }
 
 func (s *Service) Start(ctx context.Context) error {
+	s.clientIP = serviceclientip.Resolver(s.broker)
 	if err := s.configure(ctx, servicedbstore.DatabaseStore(s.broker), serviceaccessurl.AccessURL(s.broker)); err != nil {
 		return err
 	}
@@ -177,7 +181,7 @@ func (s *Service) configure(ctx context.Context, db oauthStore, accessURL string
 	)
 
 	s.router = chi.NewRouter()
-	s.deviceLimiter = newDeviceAuthorizationLimiter()
+	s.deviceLimiter = newDeviceAuthorizationLimiter(s.clientIP)
 	s.router.With(s.deviceLimiter.middleware).Post("/device/authorize", s.deviceAuthorization)
 	s.router.Handle("/device", http.HandlerFunc(s.serveBrowserApproval))
 	s.router.Post("/token", s.token)
