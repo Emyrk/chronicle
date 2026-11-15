@@ -5,7 +5,21 @@ native parse, and native finalize queues. The `chronicled parser` role consumes
 only `native-log-parsing`; it connects to PostgreSQL, object storage, and the
 primary compatibility HTTP endpoint. It does not run migrations or initialize
 SpiceDB, the public API, billing, Discord, or the normal game-data HTTP service.
+It registers the existing `servicepgxpool` in connect-only mode, reusing its
+configuration, diagnostics, health monitor, and broker-managed shutdown. Only
+migration execution and pubsub startup are skipped; connection role and tenant
+prepare/reset hooks remain active.
 Deploy schema changes using the ordinary primary deployment before parser startup.
+
+Database flags/environment are the same as the ordinary daemon:
+`--postgres-url` / `CHRONICLE_POSTGRES_URL` and `--db-max-conns` /
+`CHRONICLE_DB_MAX_CONNS` (default 20; a URL `pool_max_conns` takes precedence).
+The inherited development URL uses localhost:5433, database `chronicle` for the
+`turtle` build and the build's server name otherwise. Production deployments must
+set the existing database URL explicitly to avoid selecting that local default.
+No new database environment variable is needed. `--primary-url` /
+`CHRONICLE_PRIMARY_URL` remains required. Exact compatibility is checked before
+starting the broker or connecting to PostgreSQL.
 
 ## Compatibility and recovery
 

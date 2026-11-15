@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/pubsub"
@@ -34,7 +35,9 @@ func OnPGXPool() string {
 }
 
 type Service struct {
-	broker *services.Services
+	broker      *services.Services
+	connectOnly bool
+	poolHooks   []database.PoolOption
 
 	pgURL         string
 	maxConns      int64
@@ -48,6 +51,16 @@ func New(broker *services.Services) *Service {
 	return &Service{
 		broker: broker,
 	}
+}
+
+// NewConnectOnly uses the same service identity, configuration and lifecycle
+// against an already-provisioned database. Only migrations and pubsub are skipped.
+// Hooks are applied after shared PoolConfig defaults, preserving role setup.
+func NewConnectOnly(broker *services.Services, hooks ...database.PoolOption) *Service {
+	s := New(broker)
+	s.connectOnly = true
+	s.poolHooks = append([]database.PoolOption(nil), hooks...)
+	return s
 }
 
 func (s *Service) Name() string {
@@ -69,21 +82,42 @@ func (s *Service) Start(ctx context.Context) error {
 	}
 
 	s.diagnostics = newPoolDiagnostics(logger)
-	pool, err := database.NewPostgresDB(ctx, logger, dbURL,
-		database.WithMaxConns(int32(s.maxConns)),
-		database.WithTracer(s.diagnostics),
-	)
+	opts := []database.PoolOption{database.WithMaxConns(int32(s.maxConns)), database.WithTracer(s.diagnostics)}
+	var pool *pgxpool.Pool
+	if s.connectOnly {
+		cfg, ready, configErr := database.PoolConfig(logger, dbURL, opts...)
+		if configErr != nil {
+			return configErr
+		}
+		for _, hook := range s.poolHooks {
+			hook(cfg)
+		}
+		// Provisioned schema still needs shared AfterConnect role/type setup.
+		ready()
+		pool, err = pgxpool.NewWithConfig(ctx, cfg)
+		if err == nil {
+			pingCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+			err = pool.Ping(pingCtx)
+			cancel()
+			if err != nil {
+				pool.Close()
+			}
+		}
+	} else {
+		pool, err = database.NewPostgresDB(ctx, logger, dbURL, opts...)
+	}
 	if err != nil {
 		return fmt.Errorf("connect to postgres db: %w", err)
 	}
-
 	s.pool = pool
-
-	ps, err := pubsub.New(ctx, logger, s.pool, dbURL)
-	if err != nil {
-		return fmt.Errorf("initialize pubsub: %w", err)
+	if !s.connectOnly {
+		ps, err := pubsub.New(ctx, logger, s.pool, dbURL)
+		if err != nil {
+			s.pool.Close()
+			return fmt.Errorf("initialize pubsub: %w", err)
+		}
+		s.ps = ps
 	}
-	s.ps = ps
 
 	monitorCtx, monitorCancel := context.WithCancel(ctx)
 	s.monitorCancel = monitorCancel

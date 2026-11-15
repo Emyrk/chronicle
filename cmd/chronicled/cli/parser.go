@@ -22,8 +22,8 @@ import (
 // server, authorization service, tenant router, or primary worker graph starts.
 func ParserCmd() *serpent.Command {
 	broker := parserServices()
-	var primaryURL, postgresURL string
-	var workers, maxConns int64
+	var primaryURL string
+	var workers int64
 	var interval time.Duration
 	opts := broker.OptionSet()
 	for index := range opts {
@@ -33,14 +33,12 @@ func ParserCmd() *serpent.Command {
 	}
 	opts = append(opts, serpent.OptionSet{
 		{Name: "Primary URL", Flag: "primary-url", Env: "CHRONICLE_PRIMARY_URL", Required: true, Description: "Consistent primary origin for exact binary compatibility (not a mixed-build load balancer).", Value: serpent.StringOf(&primaryURL)},
-		{Name: "Postgres URL", Flag: "postgres-url", Env: "CHRONICLE_POSTGRES_URL", Required: true, Description: "Existing database; this role never runs migrations.", Value: serpent.StringOf(&postgresURL)},
-		{Name: "Postgres Max Connections", Flag: "db-max-conns", Env: "CHRONICLE_DB_MAX_CONNS", Default: "10", Value: serpent.Int64Of(&maxConns)},
 		{Name: "Parser Workers", Flag: "log-parsing-workers", Env: "CHRONICLE_LOG_PARSING_WORKERS", Default: "1", Value: serpent.Int64Of(&workers)},
 		{Name: "Compatibility Poll Interval", Flag: "compatibility-poll-interval", Env: "CHRONICLE_COMPATIBILITY_POLL_INTERVAL", Default: "5s", Value: serpent.DurationOf(&interval)},
 	}...)
 	return &serpent.Command{Use: "parser", Short: "Run only native parsing against a compatible primary", Options: opts, Handler: func(i *serpent.Invocation) error {
-		if workers < 1 || maxConns < 1 || maxConns > 2147483647 || interval <= 0 {
-			return fmt.Errorf("parser workers, max connections, and compatibility interval must be positive and bounded")
+		if workers < 1 || interval <= 0 {
+			return fmt.Errorf("parser workers and compatibility interval must be positive")
 		}
 		ctx, cancel := context.WithCancel(i.Context())
 		defer cancel()
@@ -70,11 +68,7 @@ func ParserCmd() *serpent.Command {
 			defer cancel()
 			_ = broker.Close(shutdown)
 		}()
-		pool, err := servicepgxpool.ConnectOnly(ctx, logger, postgresURL, int32(maxConns), parserPoolHooks)
-		if err != nil {
-			return err
-		}
-		defer pool.Close()
+		pool := servicepgxpool.PGXPool(broker)
 		worker, err := chronicle.NewHeadlessParseWorker(chronicle.HeadlessParseOptions{
 			Pool: pool, Storage: servicestorage.Storage(broker), Logger: logger, BinaryIdentity: identity, Admit: gate.Admit,
 		})
