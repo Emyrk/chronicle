@@ -50,7 +50,11 @@ func (s *Service) leaderboardRoutes() []frontend.OGRoute {
 			}
 			og := leaderboardOG(seoProductName(flavor), canonicalRequestURL(s, r), seg, inst, t, r.URL.Query())
 			tabID, instanceName := leaderboardOGSelection(seg, inst, t)
-			og.ImageURL = s.leaderboardCardURL(r, flavor, tabID, instanceName)
+			previews := s.leaderboardPreviews(r)
+			if facts := leaderboardOGFacts(previews, flavor, tabID, instanceName, r.URL.Query()); facts != "" {
+				og.Description += " " + facts
+			}
+			og.ImageURL = s.leaderboardCardURL(r, flavor, tabID, instanceName, previews)
 			return og
 		}
 	}

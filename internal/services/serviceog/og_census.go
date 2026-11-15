@@ -34,6 +34,9 @@ func (s *Service) censusOG(r *http.Request) *frontend.OGData {
 		})
 	})
 	if params := censusOGParams(rows, flavor); params != nil {
+		if description := censusOGDescription(params, seoProductName(flavor), og.Description); description != "" {
+			og.Description = description
+		}
 		og.ImageURL = s.ogImageURL(r, "census", params)
 	}
 	return og

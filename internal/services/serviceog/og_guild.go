@@ -169,17 +169,7 @@ func guildOGParams(host string, d guildOGData, raids map[string]guildOGRaid) url
 	}
 
 	// Best clear: the fastest full clear of the furthest raid the guild has cleared.
-	var best *database.GuildBestRunsRow
-	for i, run := range d.BestRuns {
-		raid, ok := raids[run.InstanceName]
-		if !ok || run.DurationMs <= 0 {
-			continue
-		}
-		if best == nil || raid.Order > raids[best.InstanceName].Order {
-			best = &d.BestRuns[i]
-		}
-	}
-	if best != nil {
+	if best := guildOGBestRun(d, raids); best != nil {
 		q.Set("best", strconv.FormatInt(best.DurationMs/1000, 10))
 		q.Set("bestraid", guildOGRaidShortName(best.InstanceName))
 	}
@@ -382,6 +372,10 @@ func (s *Service) guildOG(r *http.Request, rawID string) *frontend.OGData {
 	var raids map[string]guildOGRaid
 	if s.chronicle != nil {
 		raids = guildOGRaids(s.chronicle.RegistryForFlavor(s.resolvedSiteFlavor(ctx)).AllInstanceDetails())
+	}
+	// The description carries the same figures as the card, from the same lookups.
+	if description := guildOGDescription(data, raids, seoProductName(s.resolvedSiteFlavor(ctx))); description != "" {
+		og.Description = description
 	}
 	if imageURL := s.ogImageURL(r, "guild", guildOGParams(host, data, raids)); imageURL != "" {
 		og.ImageURL = imageURL
