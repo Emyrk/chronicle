@@ -1,7 +1,8 @@
-import { ArrowUpFromLine, Footprints, MoveDown, MoveLeft, MoveRight, MoveUp, X } from "lucide-react";
+import { ArrowUpFromLine, Footprints, LocateFixed, MoveDown, MoveLeft, MoveRight, MoveUp, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { IDLE_MOBILE_MAP_INPUT, mobileJoystickAxis, type MobileMapInput } from "./mapControls";
+import { BACK_TO_ACTION_LABEL } from "./BackToAction";
 
 interface MobileMapControlsProps {
   walking: boolean;
@@ -9,13 +10,15 @@ interface MobileMapControlsProps {
   onWalkingChange: (walking: boolean) => void;
   onInputChange: (input: MobileMapInput) => void;
   onClose: () => void;
+  /** The way back to the follow camera, once the viewer has taken the camera (null: hidden). */
+  onBackToAction?: (() => void) | null;
 }
 
 type MoveDirection = "forward" | "back" | "left" | "right";
 
 const controlButtonClass = "grid size-12 touch-none select-none place-items-center rounded-xl border border-white/20 bg-black/55 text-white shadow-[0_8px_24px_rgba(0,0,0,.45)] backdrop-blur-sm active:scale-95 active:bg-amber-300 active:text-black";
 
-export function MobileMapControls({ walking, canWalk, onWalkingChange, onInputChange, onClose }: MobileMapControlsProps) {
+export function MobileMapControls({ walking, canWalk, onWalkingChange, onInputChange, onClose, onBackToAction = null }: MobileMapControlsProps) {
   const [moves, setMoves] = useState<ReadonlySet<MoveDirection>>(() => new Set());
   const [look, setLook] = useState({ x: 0, y: 0 });
   const [jumping, setJumping] = useState(false);
@@ -78,6 +81,12 @@ export function MobileMapControls({ walking, canWalk, onWalkingChange, onInputCh
           <Footprints className="size-5" />
           {walking ? "Walking" : "Drop in"}
         </button>
+        {onBackToAction && (
+          // The icon alone: a phone's top row is tight (Close, Drop in, this).
+          <button type="button" onClick={onBackToAction} aria-label={BACK_TO_ACTION_LABEL} title={BACK_TO_ACTION_LABEL} className={controlButtonClass}>
+            <LocateFixed className="size-5" />
+          </button>
+        )}
       </div>
 
       <div className="pointer-events-auto absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-[max(1rem,env(safe-area-inset-left))] grid grid-cols-3 grid-rows-3 gap-1" aria-label="Movement pad">

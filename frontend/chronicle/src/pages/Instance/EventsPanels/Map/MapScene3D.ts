@@ -441,7 +441,7 @@ export class MapScene3D {
     },
     walking: () => this.walk !== null,
     tweening: () => this.tween.active(),
-    directorAvailable: () => this.director !== null && this.dungeonMesh !== null,
+    followCamera: () => this.director !== null,
   });
   // The Director's springs, follow track and line of sight (directorRig.ts).
   private readonly directorRig = new DirectorRig({
@@ -853,8 +853,10 @@ export class MapScene3D {
       // Start on the first valid cinematic shot immediately. The mesh already
       // had an asynchronous load; making the camera spend another few seconds
       // springing in from the overview makes the replay feel unnecessarily slow.
+      // A camera the viewer took stays theirs (a floor change does not hand it
+      // back, chronicle-2020).
       this.directorRig.stop();
-      if (this.director && !this.alignmentOverlay) this.engageDirector(true);
+      if (this.director && !this.alignmentOverlay && this.arbiter.directorHeld) this.engageDirector(true);
       this.syncCameraOwner();
       this.onDungeonMesh("ready");
     });
@@ -876,9 +878,16 @@ export class MapScene3D {
    * shows; the tiles keep the viewport framing either way.
    */
   setDirector(director: MapSceneDirector | null) {
+    const turningOn = this.director === null;
     this.director = director;
     if (!director || this.alignmentOverlay) {
       this.directorRig.off();
+      this.syncCameraOwner();
+      return;
+    }
+    // New settings while on (another boss) keep a camera the viewer took:
+    // only turning it on hands the camera back (chronicle-2020).
+    if (!turningOn && !this.arbiter.directorHeld) {
       this.syncCameraOwner();
       return;
     }
@@ -1810,13 +1819,33 @@ export class MapScene3D {
     this.planLayer.setItems(this.planItems, this.planSelected, this.planSurface);
   }
 
-  /** Who owns the camera now: the Director, the user's free cam, walk mode, a tween or a scripted pose (cameraArbiter.ts). */
+  /**
+   * Who owns the camera now (cameraArbiter.ts): "director" is the follow
+   * camera (the Director for the group or a followed unit, or the host's
+   * follow framing on the tiles); "free", "walk" and "tween" are the viewer's
+   * camera while the follow camera is on; "scripted" an applied pose.
+   */
   cameraOwner(): CameraOwner {
     return this.arbiter.owner();
   }
 
-  /** Called with the new camera owner whenever it changes. */
-  setOnCameraOwnerChange(callback: ((owner: CameraOwner) => void) | null) {
+  /** Whether the pointer is over the map: the map's keys (and the host's) act then. */
+  pointerOverMap(): boolean {
+    return this.pointerInside;
+  }
+
+  /** Whether the viewer took the camera from the follow camera and has not handed it back (cameraArbiter.ts: taken). */
+  cameraTaken(): boolean {
+    return this.arbiter.taken;
+  }
+
+  /**
+   * Called with the camera owner and cameraTaken() now, then whenever either
+   * changes (once a change settles, and at the end of a frame). It may act on
+   * the scene: a change it causes is reported after it returns, never from
+   * inside it.
+   */
+  setOnCameraOwnerChange(callback: ((owner: CameraOwner, taken: boolean) => void) | null) {
     this.arbiter.setOnChange(callback);
   }
 

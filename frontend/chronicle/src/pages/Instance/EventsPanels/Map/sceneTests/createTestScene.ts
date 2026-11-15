@@ -331,7 +331,12 @@ export async function createTestScene(options: TestSceneOptions = {}) {
   // --- What the scene shows ---
 
   const probe = {
-    /** Who moves the camera right now. The one probe for camera ownership. */
+    /**
+     * Who owns the camera, as the scene reports it (cameraOwner()), in these
+     * tests' names. The one probe for camera ownership. Not always who writes
+     * it this frame: "director" is the follow camera, which on the tiles
+     * (no mesh) is the host's follow framing, its viewport tweens included.
+     */
     owner: (): CameraOwner => {
       // The scene's own owner (cameraArbiter), in the names these tests use.
       switch (scene.cameraOwner()) {

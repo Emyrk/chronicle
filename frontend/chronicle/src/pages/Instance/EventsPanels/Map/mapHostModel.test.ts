@@ -6,7 +6,7 @@ const on = (caps: MapHostCapabilities) => Object.entries(caps).filter(([, value]
 describe("Map host capabilities", () => {
   it("mini map (Summary): just the replay, with play, scrubber, preview veil and Expand", () => {
     expect(on(mapHostCapabilities("mini", false))).toEqual(
-      ["compactNotice", "compass", "expand", "framing", "header", "interactive", "playback", "presence", "previewVeil", "scrubber"],
+      ["compactCamera", "compactNotice", "compass", "expand", "framing", "header", "interactive", "playback", "presence", "previewVeil", "scrubber"],
     );
   });
 

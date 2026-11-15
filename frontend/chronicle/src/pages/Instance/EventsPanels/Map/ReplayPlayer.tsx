@@ -65,6 +65,8 @@ export interface ReplayPlayerProps {
   view3d?: ComponentType<MapView3DProps>;
   /** The 3D map notice's wording: the full sentence (default), or just the fact on a small stage (the mini map). */
   noticeCopy?: "full" | "short";
+  /** Where the 3D map notice sits: under the top chips (default), or below a host's own top row (the mobile world's controls). */
+  noticePlacement?: "top" | "below-controls";
 }
 
 /** A map message (loading, no telemetry, no artwork), with whatever the host adds under it. */
@@ -113,7 +115,7 @@ export function ReplayPlayerFlatView({ player, trailSeconds }: { player: ReplayP
  * the host's chrome in its slots. Renders nothing until the scene is ready:
  * the host shows `ReplayPlayerMessage` then.
  */
-export function ReplayPlayer({ player, view = {}, header, overlay, transport, fallback, framed = false, bare = false, view3d, noticeCopy = "full" }: ReplayPlayerProps) {
+export function ReplayPlayer({ player, view = {}, header, overlay, transport, fallback, framed = false, bare = false, view3d, noticeCopy = "full", noticePlacement = "top" }: ReplayPlayerProps) {
   const ready = player.ready;
   if (!ready) return null;
   const { trailSeconds, followGuid, onUnitClick, ...viewProps } = view;
@@ -156,6 +158,7 @@ export function ReplayPlayer({ player, view = {}, header, overlay, transport, fa
       onUnitClick={input.onUnitClick}
       followGuid={input.followGuid}
       onFollowChange={input.followChanges ? player.setFollowGuid : undefined}
+      onCameraOwnerChange={input.followChanges ? player.onCameraOwnerChange : undefined}
       onScene={player.onScene}
     />
   );
@@ -170,7 +173,7 @@ export function ReplayPlayer({ player, view = {}, header, overlay, transport, fa
   // What the map says about the 3D dungeon, only while the 3D view is the stage (not over a fallback or the 2D map).
   const showsDungeon = !fallback && kind === "3d";
   const cover = showsDungeon && player.dungeon3D.cover ? <DungeonCover player={player} /> : null;
-  const notice = showsDungeon && player.dungeon3D.notice ? <DungeonNotice player={player} copy={noticeCopy} /> : null;
+  const notice = showsDungeon && player.dungeon3D.notice ? <DungeonNotice player={player} copy={noticeCopy} placement={noticePlacement} /> : null;
   if (bare) return <>{header}{stageView}{cover}{overlay}{notice}{transport}</>;
   return (
     <>
@@ -222,13 +225,17 @@ function DungeonCover({ player }: { player: ReplayPlayerState }) {
  * truncated (the full sentence in its title), at most the stage's width less 3rem each side: clear of the right-hand
  * button column (Settings, Walk, Plan at right-2, w-7) and nowhere near the camera row at the bottom left.
  */
-function DungeonNotice({ player, copy }: { player: ReplayPlayerState; copy: "full" | "short" }) {
+function DungeonNotice({ player, copy, placement }: { player: ReplayPlayerState; copy: "full" | "short"; placement: "top" | "below-controls" }) {
   const text = copy === "short" ? DUNGEON_3D_COPY.noticeShort : DUNGEON_3D_COPY.notice;
   return (
     <div
       role="status"
       title={DUNGEON_3D_COPY.notice}
-      className="absolute left-1/2 top-9 z-40 flex max-w-[calc(100%-6rem)] -translate-x-1/2 items-center gap-1.5 whitespace-nowrap rounded-sm bg-black/80 py-0.5 pl-2 pr-0.5 text-[11px] text-white/80 shadow-[0_4px_16px_rgba(0,0,0,.5)]"
+      className={cn(
+        "absolute left-1/2 z-40 flex max-w-[calc(100%-6rem)] -translate-x-1/2 items-center gap-1.5 whitespace-nowrap rounded-sm bg-black/80 py-0.5 pl-2 pr-0.5 text-[11px] text-white/80 shadow-[0_4px_16px_rgba(0,0,0,.5)]",
+        // Below the mobile world's top row (3rem buttons at the safe-area top + 0.75rem), so they never overlap.
+        placement === "below-controls" ? "top-[calc(max(0.75rem,env(safe-area-inset-top))+3.75rem)]" : "top-9",
+      )}
     >
       <span className="min-w-0 truncate">{text}</span>
       <button type="button" onClick={player.retryDungeon} disabled={!player.dungeon3D.canRetry} className={retryButtonClass}>
