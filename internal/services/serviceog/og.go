@@ -441,9 +441,10 @@ func (s *Service) buildInstanceOG(ctx context.Context, r *http.Request, host str
 		}
 	}
 
-	dur := endDate.Sub(startDate)
-	hours := int(dur.Hours())
-	minutes := int(dur.Minutes()) % 60
+	var dur time.Duration
+	if !startDate.IsZero() && endDate.After(startDate) {
+		dur = endDate.Sub(startDate)
+	}
 
 	var title strings.Builder
 	if inst.GuildName.String != "" {
@@ -451,17 +452,7 @@ func (s *Service) buildInstanceOG(ctx context.Context, r *http.Request, host str
 	}
 	title.WriteString(inst.Name)
 
-	var desc strings.Builder
-	sep := " · "
-	desc.WriteString(startDate.Format("Jan 2, 2006"))
-	desc.WriteString(sep)
-
-	fmt.Fprintf(&desc, "%dh %dm", hours, minutes)
-	desc.WriteString(sep)
-
-	fmt.Fprintf(&desc, "%d players", len(players))
-	desc.WriteString("\n")
-	desc.WriteString("Raid performance and contribution analysis tool by Chronicle.")
+	description := instanceOGDescription(startDate, dur, len(players), instanceBossesKilled(encounters))
 
 	identifier := inst.ID.String()
 	if inst.HashedSlug.Valid && inst.HashedSlug.String != "" {
@@ -474,7 +465,7 @@ func (s *Service) buildInstanceOG(ctx context.Context, r *http.Request, host str
 
 	og := &frontend.OGData{
 		Title:       title.String(),
-		Description: desc.String(),
+		Description: description,
 		URL:         fmt.Sprintf("https://%s/instances/%s", host, identifier),
 		ImageURL:    instanceOGImageURL(host, inst.Name),
 	}

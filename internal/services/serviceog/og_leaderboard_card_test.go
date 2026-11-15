@@ -118,6 +118,8 @@ func TestLeaderboardCardParams(t *testing.T) {
 func TestLeaderboardCardURL(t *testing.T) {
 	t.Parallel()
 	req := httptest.NewRequest(http.MethodGet, "https://capy.chronicleclassic.com/leaderboards/Naxxramas", nil)
-	require.Empty(t, testOGImageAPI(t, "").leaderboardCardURL(req, nil, "", "Naxxramas"), "no OG service")
-	require.Empty(t, testOGImageAPI(t, "https://og.example.com").leaderboardCardURL(req, nil, "", "Naxxramas"), "no store or tenant")
+	require.Empty(t, testOGImageAPI(t, "").leaderboardCardURL(req, nil, "", "Naxxramas", nil), "no OG service")
+	require.Empty(t, testOGImageAPI(t, "https://og.example.com").leaderboardCardURL(req, nil, "", "Naxxramas", nil), "no previews")
+	require.Nil(t, testOGImageAPI(t, "").leaderboardPreviews(req), "no OG service")
+	require.Nil(t, testOGImageAPI(t, "https://og.example.com").leaderboardPreviews(req), "no store or tenant")
 }

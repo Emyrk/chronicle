@@ -37,28 +37,37 @@ const (
 //
 // Highlights are the hub's own precomputed landing previews, read through a
 // per-tenant cache; only a cold cache waits, briefly.
-func (s *Service) leaderboardCardURL(r *http.Request, flavor database.WoWFlavor, tabID, instance string) string {
-	if !s.ogServiceConfigured() || s.store == nil {
+func (s *Service) leaderboardCardURL(r *http.Request, flavor database.WoWFlavor, tabID, instance string, previews []chroniclesdk.HubLandingPreview) string {
+	if !s.ogServiceConfigured() {
 		return ""
 	}
-	tenant := servicetenant.TenantFromContext(r.Context())
-	if tenant == nil {
-		return ""
-	}
-	tenantID := tenant.ID
-	previews := loadOGCache(r, s.logger, &s.ogHighlights, func(ctx context.Context) ([]chroniclesdk.HubLandingPreview, error) {
-		rows, err := s.store.ListLeaderboardHighlights(ctx, database.ListLeaderboardHighlightsParams{TenantID: tenantID, RealmScope: uuid.Nil})
-		if err != nil {
-			return nil, err
-		}
-		return decodeHighlights(rows), nil
-	})
 	params := leaderboardCardParams(previews, flavor, tabID, instance, r.URL.Query())
 	if params == nil {
 		return ""
 	}
 	params.Set("path", r.URL.EscapedPath())
 	return s.ogImageURL(r, "leaderboard", params)
+}
+
+// leaderboardPreviews are the tenant's stored hub highlights, through the
+// per-tenant cache, or nil with no OG service, no store, or no tenant. The card
+// and the page description both read them, so a page costs one cached read.
+func (s *Service) leaderboardPreviews(r *http.Request) []chroniclesdk.HubLandingPreview {
+	if !s.ogServiceConfigured() || s.store == nil {
+		return nil
+	}
+	tenant := servicetenant.TenantFromContext(r.Context())
+	if tenant == nil {
+		return nil
+	}
+	tenantID := tenant.ID
+	return loadOGCache(r, s.logger, &s.ogHighlights, func(ctx context.Context) ([]chroniclesdk.HubLandingPreview, error) {
+		rows, err := s.store.ListLeaderboardHighlights(ctx, database.ListLeaderboardHighlightsParams{TenantID: tenantID, RealmScope: uuid.Nil})
+		if err != nil {
+			return nil, err
+		}
+		return decodeHighlights(rows), nil
+	})
 }
 
 // decodeHighlights keeps every stored preview that decodes. A preview whose
