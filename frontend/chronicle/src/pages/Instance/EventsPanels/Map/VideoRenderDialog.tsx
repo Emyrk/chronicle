@@ -5,7 +5,6 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Switch } from "@/components/ui/Switch/Switch";
 import { InstanceEventsContext } from "@/hooks/instanceEvents";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
-import { SyncModeProvider, useSyncModeContext } from "../../SyncModeContext";
 import type { PanelRenderProps } from "../types";
 import type { PublishedUnitModelUrls } from "./bossMinis";
 import type { DirectorUnit } from "./cameraDirector";
@@ -17,6 +16,7 @@ import type { EffectSettings } from "./mapViewSettings";
 import MapView3D from "./MapView3D";
 import { isDeadAt } from "./replayEffects";
 import { useMapScene } from "./useMapScene";
+import { useSteppedClock } from "./useReplayClock";
 import { exportCanvasVideo, pickVideoOutput, VIDEO_FPS, type CanvasVideoExportResult, type VideoOutputConfig } from "./videoExport";
 import { createVideoDamageMeter, drawVideoMeter, type VideoMeterSnapshot } from "./videoMeter";
 
@@ -165,9 +165,7 @@ export default function VideoRenderDialog({ open, onOpenChange, title, fileName:
         {/* The frames as they render: CSS-scaled from the fixed output size, no input. */}
         <div className="pointer-events-none relative aspect-video w-full select-none overflow-hidden rounded-sm border border-white/10 bg-black" aria-hidden>
           {output && progress.phase !== "error" && progress.phase !== "done" && (
-            <SyncModeProvider>
-              <RenderStage {...stageProps} output={output} speed={speed} showMeter={showMeter} onProgress={setProgress} />
-            </SyncModeProvider>
+            <RenderStage {...stageProps} output={output} speed={speed} showMeter={showMeter} onProgress={setProgress} />
           )}
           {doneUrl && (
             <div className="absolute inset-0 grid place-items-center text-sm text-white/70">Done: download the MP4 below.</div>
@@ -247,12 +245,13 @@ interface RenderStageProps extends Omit<VideoRenderDialogProps, "open" | "onOpen
   onProgress: (progress: RenderProgress) => void;
 }
 
-// The capture scene and its frame loop, under a replay clock of its own (the
-// dialog's SyncModeProvider) so the page behind it never re-renders per frame.
+// The capture scene and its frame loop, on a stepped clock of its own (moved
+// once per frame) so the page behind it, and its Replay, never re-render per frame.
 function RenderStage({ panelProps, mapSource, showHiddenUnits, dungeonMesh, unitModelUrls, effectSettings, range = null, onRendered, output, speed, showMeter, onProgress }: RenderStageProps) {
-  const { enable, setTimestamp } = useSyncModeContext();
+  const clock = useSteppedClock();
+  const { seek } = clock;
   const fetchStream = useContext(InstanceEventsContext)?.fetchStream ?? null;
-  const scene = useMapScene(panelProps, { rawDungeonProjection: true, mapSource, showHiddenUnits });
+  const scene = useMapScene(panelProps, { rawDungeonProjection: true, mapSource, showHiddenUnits, clock });
   const ready = scene.status === "ready" ? scene : null;
   const [meshState, setMeshState] = useState<DungeonMeshState>("loading");
   const [scene3d, setScene3d] = useState<MapScene3D | null>(null);
@@ -265,9 +264,8 @@ function RenderStage({ panelProps, mapSource, showHiddenUnits, dungeonMesh, unit
   const startMs = ready?.encounterStartMs ?? null;
   useEffect(() => {
     if (startMs === null) return;
-    enable();
-    setTimestamp(new Date(startMs));
-  }, [enable, setTimestamp, startMs]);
+    seek(startMs);
+  }, [seek, startMs]);
 
   // After MapView3D's effects (a child's run first): the scene has this
   // commit's units, effects clock and settings once a waiter is released.
@@ -289,8 +287,8 @@ function RenderStage({ panelProps, mapSource, showHiddenUnits, dungeonMesh, unit
       return;
     }
     waiterRef.current = { ms, resolve };
-    setTimestamp(new Date(ms));
-  }), [setTimestamp]);
+    seek(ms);
+  }), [seek]);
 
   // Latched: the replay leaves the pull as soon as the render starts.
   const [prepared, setPrepared] = useState(false);
@@ -362,7 +360,7 @@ function RenderStage({ panelProps, mapSource, showHiddenUnits, dungeonMesh, unit
         renderFrame: async (index) => {
           // `ms` is video time: the camera and animations run in it; the replay steps `speed` times as fast.
           const ms = ((firstFrame + index) * 1000) / VIDEO_FPS;
-          // Whole milliseconds: the replay clock is a Date.
+          // Whole milliseconds, as when this clock was a SyncMode Date: the frames stay the same.
           const replayMs = Math.round(fight.encounterStartMs + fightMsAtVideoMs(ms, speed, fightMs));
           await showReplayAt(replayMs);
           if (meterAt) meter = meterAt(replayMs);

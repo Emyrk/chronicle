@@ -58,7 +58,8 @@ import {
 import { MapSettingsOverlay } from "./MapSettingsOverlay";
 import { DEFAULT_EFFECT_SETTINGS, useEffectSettings } from "./mapViewSettings";
 import { DEFAULT_WALK_AVATAR, readStoredWalkAvatar, storeWalkAvatar } from "./walkAvatars";
-import { previewElapsedAt, useMapScene } from "./useMapScene";
+import { useMapScene, useMapSceneEncounter } from "./useMapScene";
+import { useLocalLoopClock, useSyncModeClock } from "./useReplayClock";
 import { canEncodeVideo } from "./videoSupport";
 import { encounterJumps, mapPresentationForSelection, wholeRunUnplayable, wholeRunWanted } from "./wholeRun";
 import { miniExpandStep, useLoadSettled, useSelectOnce, type MiniExpand, type MiniExpandEvent } from "./wholeRunPlayback";
@@ -533,39 +534,33 @@ function SingleEncounterReplayMap({
   // A whole raid compressed into the normal 90-second preview can hit 32×,
   // making players and map changes unreadably jumpy on a phone.
   const previewMaxSpeed = mobile && wholeRun ? 4 : undefined;
-  const [previewPlaying, setPreviewPlaying] = useState(true);
-  const [previewElapsedMs, setPreviewElapsedMs] = useState(0);
-  useEffect(() => {
-    if (!previewOn || !previewPlaying) return;
-    let last = performance.now();
-    const timer = window.setInterval(() => {
-      const now = performance.now();
-      setPreviewElapsedMs((elapsed) => elapsed + (now - last));
-      last = now;
-    }, PREVIEW_TICK_MS);
-    return () => window.clearInterval(timer);
-  }, [previewOn, previewPlaying]);
-  const preview = useMemo(
-    () => previewOn ? {
-      elapsedMs: previewElapsedMs,
-      playing: previewPlaying,
-      maxSpeed: previewMaxSpeed,
-    } : null,
-    [previewElapsedMs, previewMaxSpeed, previewOn, previewPlaying],
-  );
+  // The page's Replay as a clock, and the preview's own: a loop over the
+  // encounter the scene shows (picked by the page's Replay cursor, as the scene does).
+  const pageClock = useSyncModeClock();
+  const previewEncounter = useMapSceneEncounter(props, wholeRun, pageClock.nowMs);
+  const previewClock = useLocalLoopClock({
+    bounds: previewEncounter ? { startMs: previewEncounter.startMs, endMs: previewEncounter.endMs } : null,
+    maxSpeed: previewMaxSpeed,
+    suspended: !previewOn,
+    tickMs: PREVIEW_TICK_MS,
+    // The preview loops, so the very end would wrap to the start.
+    seekEnd: "hold",
+  });
+  const clock = previewOn ? previewClock : pageClock;
   const scene = useMapScene(props, {
     rawDungeonProjection: show3D && meshOn && meshState === "ready",
     preferRenderedCanvas: !show3D || !meshOn || (mobile && !mobileWorldOpen),
     mapSource,
     wholeRun,
     showHiddenUnits: effectSettings.showHiddenUnits,
-    preview,
+    clock,
+    encounterAtMs: pageClock.nowMs,
   });
   // A new encounter starts its preview from the beginning.
   const [previewEncounterId, setPreviewEncounterId] = useState<string | null>(null);
   if (scene.status === "ready" && scene.encounterId !== previewEncounterId) {
     setPreviewEncounterId(scene.encounterId);
-    setPreviewElapsedMs(0);
+    previewClock.restart();
   }
   // While the panel reprocesses (a new encounter, a filter change) the scene
   // reports "loading": keep the last ready one on screen, the 3D view frozen
@@ -574,12 +569,16 @@ function SingleEncounterReplayMap({
   // it shows changes (the frozen view ignores the held copy's per-tick data).
   const liveScene = scene.status === "ready" ? scene : null;
   const [heldScene, setHeldScene] = useState<typeof liveScene>(null);
+  // Whether Replay was on, held with the scene (the scene reported it before the clock moved out of it).
+  const [heldSyncEnabled, setHeldSyncEnabled] = useState(false);
   if (liveScene && (!heldScene || heldScene.encounterId !== liveScene.encounterId || heldScene.mapName !== liveScene.mapName
     || heldScene.selectedFloorNumber !== liveScene.selectedFloorNumber || heldScene.mesh !== liveScene.mesh)) {
     setHeldScene(liveScene);
+    setHeldSyncEnabled(Boolean(sync?.enabled));
   }
   const reloading = !liveScene && (props.loading || props.processing) && heldScene !== null;
   const ready = liveScene ?? (reloading ? heldScene : null);
+  const syncEnabled = liveScene ? Boolean(sync?.enabled) : heldSyncEnabled;
   // Raid planning: drawing on the dungeon floor, a plan per world map.
   const [planOpen, setPlanOpen] = useState(false);
   const planEditor = usePlanEditor((liveScene ?? heldScene)?.worldMapId ?? 0);
@@ -811,8 +810,7 @@ function SingleEncounterReplayMap({
     : [];
   const jumpTo = (timestampMs: number) => {
     setCutKey((key) => key + 1);
-    if (previewOn) setPreviewElapsedMs(previewElapsedAt(ready.encounterStartMs, ready.encounterEndMs, timestampMs, previewMaxSpeed));
-    else sync?.setTimestamp(new Date(timestampMs));
+    clock.seek(timestampMs);
   };
   // Replay turns on only from an explicit Replay control (Replay from here,
   // the fullscreen bar's Enable Replay): the preview hands over at the same
@@ -891,9 +889,8 @@ function SingleEncounterReplayMap({
             <button
               type="button"
               onClick={() => {
-                if (previewOn) setPreviewPlaying(!previewPlaying);
-                else if (sync?.isPlaying) sync.pause();
-                else sync?.play();
+                if (clock.playing) clock.pause();
+                else clock.play();
               }}
               aria-label={ready.playing ? (previewOn ? "Pause the preview" : "Pause the replay") : (previewOn ? "Play the preview" : "Play the replay")}
               className={mapFramingButtonClass}
@@ -1098,13 +1095,7 @@ function SingleEncounterReplayMap({
             raised={previewOn && Boolean(props.context.onOpenReplay)}
             fraction={(ready.cursorMs - ready.encounterStartMs) / Math.max(1, ready.encounterEndMs - ready.encounterStartMs)}
             onSeek={(fraction) => {
-              const span = ready.encounterEndMs - ready.encounterStartMs;
-              if (previewOn) {
-                // The preview loops, so the very end would wrap to the start.
-                setPreviewElapsedMs((Math.min(fraction, 0.999) * span) / ready.playbackSpeed);
-              } else {
-                sync?.setTimestamp(new Date(ready.encounterStartMs + fraction * span));
-              }
+              clock.seek(ready.encounterStartMs + fraction * (ready.encounterEndMs - ready.encounterStartMs));
             }}
           />
         )}
@@ -1117,7 +1108,7 @@ function SingleEncounterReplayMap({
           </div>
         )}
         {/* Without Replay the map is a still: say so over it rather than in a row of its own. */}
-        {!compact && !mobile && !reloading && ready.overlayAvailable && !ready.syncEnabled && !previewOn && (
+        {!compact && !mobile && !reloading && ready.overlayAvailable && !syncEnabled && !previewOn && (
           <div className="pointer-events-none absolute left-1/2 top-2 z-40 -translate-x-1/2 whitespace-nowrap rounded-sm bg-black/75 px-2 py-0.5 text-[11px] text-white/70 shadow-[0_4px_16px_rgba(0,0,0,.5)]">
             Final positions · enable Replay to watch units move
           </div>
@@ -1379,7 +1370,7 @@ function SingleEncounterReplayMap({
             {jumps.map((jump) => (
               <span key={jump.id} className="absolute top-0 h-full w-0.5 bg-amber-300/80" style={{ left: `${jump.fraction * 100}%` }} />
             ))}
-            {(ready.syncEnabled || previewOn) && ready.runEndMs !== null && (
+            {(syncEnabled || previewOn) && ready.runEndMs !== null && (
               <span
                 className="absolute top-[-1px] h-2 w-0.5 bg-foreground"
                 style={{ left: `${Math.min(100, Math.max(0, ((ready.cursorMs - ready.runStartMs) / Math.max(1, ready.runEndMs - ready.runStartMs)) * 100))}%` }}
@@ -1392,8 +1383,8 @@ function SingleEncounterReplayMap({
                 key={jump.id}
                 type="button"
                 onClick={() => jumpTo(jump.timestampMs)}
-                disabled={!ready.syncEnabled && !previewOn}
-                title={ready.syncEnabled || previewOn ? `Jump to ${jump.name}` : "Enable Replay to jump between encounters"}
+                disabled={!syncEnabled && !previewOn}
+                title={syncEnabled || previewOn ? `Jump to ${jump.name}` : "Enable Replay to jump between encounters"}
                 className={framingButtonClass}
               >
                 {jump.name}
