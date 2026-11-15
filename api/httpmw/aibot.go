@@ -126,15 +126,16 @@ func RouteFamily(path string) string {
 }
 
 // AIBotMetrics counts requests from known AI and search bots, labelled by bot,
-// kind, route family and status class. Other traffic only pays for the
+// kind, route family, status class and tenant. tenantLabel must return a
+// bounded set of values (as for PrometheusMW). Other traffic only pays for the
 // User-Agent check and is not wrapped.
-func AIBotMetrics(register prometheus.Registerer) func(http.Handler) http.Handler {
+func AIBotMetrics(register prometheus.Registerer, tenantLabel func(*http.Request) string) func(http.Handler) http.Handler {
 	requests := promauto.With(register).NewCounterVec(prometheus.CounterOpts{
 		Namespace: "chronicle",
 		Subsystem: "ai_bot",
 		Name:      "requests_total",
-		Help:      "Requests from known AI and search bots by bot, kind, route family and status class.",
-	}, []string{"bot", "kind", "route_family", "status_class"})
+		Help:      "Requests from known AI and search bots by bot, kind, route family, status class and tenant.",
+	}, []string{"bot", "kind", "route_family", "status_class", "tenant"})
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -149,7 +150,7 @@ func AIBotMetrics(register prometheus.Registerer) func(http.Handler) http.Handle
 			if status == 0 {
 				status = http.StatusOK
 			}
-			requests.WithLabelValues(bot, kind, RouteFamily(r.URL.Path), statusClass(status)).Inc()
+			requests.WithLabelValues(bot, kind, RouteFamily(r.URL.Path), statusClass(status), tenantLabel(r)).Inc()
 		})
 	}
 }

@@ -104,12 +104,20 @@ func TestAIBotMetrics(t *testing.T) {
 
 	registry := prometheus.NewRegistry()
 	router := chi.NewRouter()
-	router.Use(httpmw.AIBotMetrics(registry))
+	router.Use(httpmw.AIBotMetrics(registry, func(r *http.Request) string {
+		if r.Host == "forever.example.com" {
+			return "forever"
+		}
+		return "root"
+	}))
 	router.Get("/blog/{slug}", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("ok")) })
 	router.Get("/instances/{id}", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNotFound) })
 
-	do := func(path, ua string) {
+	var doHost func(path, ua, host string)
+	do := func(path, ua string) { doHost(path, ua, "example.com") }
+	doHost = func(path, ua, host string) {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Host = host
 		if ua != "" {
 			req.Header.Set("User-Agent", ua)
 		}
@@ -123,8 +131,9 @@ func TestAIBotMetrics(t *testing.T) {
 	do("/blog/a", claudeUser)
 	do("/blog/b", claudeUser) // raw paths do not split the series
 	do("/instances/x", gptBot)
-	do("/no/such/page", gptBot) // unrouted, still counted
-	do("/blog/a", browser)      // not a bot
+	do("/no/such/page", gptBot)                          // unrouted, still counted
+	doHost("/blog/a", claudeUser, "forever.example.com") // tenants split the series
+	do("/blog/a", browser)                               // not a bot
 	do("/blog/a", "")
 
 	families, err := registry.Gather()
@@ -138,12 +147,13 @@ func TestAIBotMetrics(t *testing.T) {
 		for _, l := range m.Label {
 			labels[l.GetName()] = l.GetValue()
 		}
-		require.Len(t, labels, 4)
-		got[labels["bot"]+"|"+labels["kind"]+"|"+labels["route_family"]+"|"+labels["status_class"]] = m.Counter.GetValue()
+		require.Len(t, labels, 5)
+		got[labels["bot"]+"|"+labels["kind"]+"|"+labels["route_family"]+"|"+labels["status_class"]+"|"+labels["tenant"]] = m.Counter.GetValue()
 	}
 	require.Equal(t, map[string]float64{
-		"claude-user|user_fetch|blog|2xx": 2,
-		"gptbot|training|raid|4xx":        1,
-		"gptbot|training|other|4xx":       1,
+		"claude-user|user_fetch|blog|2xx|root":    2,
+		"claude-user|user_fetch|blog|2xx|forever": 1,
+		"gptbot|training|raid|4xx|root":           1,
+		"gptbot|training|other|4xx|root":          1,
 	}, got)
 }
