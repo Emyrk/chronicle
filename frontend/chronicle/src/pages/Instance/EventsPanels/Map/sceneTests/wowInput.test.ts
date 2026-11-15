@@ -378,8 +378,7 @@ describe("free cam", () => {
     expect(h.canvas.pointerLockRequests).toBe(1);
     const distance = h.probe.distance();
     h.frames(SECOND);
-    // All 60 frames move: unlike a first key press, the buttons do not restart
-    // the travel clock, which the always-awake mover keeps stamped (README, oddity 1).
+    // All 60 frames move: the first one steps a nominal frame (FIRST_FRAME_STEP_S).
     expect(h.probe.target().z).toBeCloseTo(-TRAVEL * distance, 6);
   });
 
@@ -388,8 +387,8 @@ describe("free cam", () => {
     const distance = h.probe.distance();
     h.input.hold("KeyW", 1000);
     expect(h.probe.target().x).toBeCloseTo(0, 9);
-    // The key press restarts the travel clock, so the first frame only stamps it: 59 of 60 frames move.
-    expect(h.probe.target().z).toBeCloseTo(-TRAVEL * distance * (59 / 60), 6);
+    // A key press moves on its first frame (chronicle-1982): all 60 frames move.
+    expect(h.probe.target().z).toBeCloseTo(-TRAVEL * distance, 6);
     expect(h.probe.distance()).toBeCloseTo(distance, 6);
   });
 
@@ -397,14 +396,14 @@ describe("free cam", () => {
     const h = await freeCam();
     const distance = h.probe.distance();
     h.input.hold("KeyW", 1000, { shiftKey: true });
-    expect(h.probe.target().z).toBeCloseTo(-3 * TRAVEL * distance * (59 / 60), 6);
+    expect(h.probe.target().z).toBeCloseTo(-3 * TRAVEL * distance, 6);
   });
 
   it("A and D turn the camera about its pivot at walk mode's turn rate", async () => {
     const h = await freeCam();
     const before = h.probe.angles();
     h.input.hold("KeyA", 1000);
-    expect(h.probe.angles().yaw - before.yaw).toBeCloseTo(TURN * (59 / 60), 6);
+    expect(h.probe.angles().yaw - before.yaw).toBeCloseTo(TURN, 6);
     expect(h.probe.target().toArray()).toEqual([0, 0, 0]);
   });
 
@@ -416,14 +415,14 @@ describe("free cam", () => {
     const yaw = h.probe.angles().yaw;
     h.input.hold("KeyD", 1000);
     expect(h.probe.angles().yaw).toBeCloseTo(yaw, 9);
-    expect(Math.hypot(h.probe.target().x, h.probe.target().z)).toBeCloseTo(TRAVEL * distance * (59 / 60), 6);
+    expect(Math.hypot(h.probe.target().x, h.probe.target().z)).toBeCloseTo(TRAVEL * distance, 6);
   });
 
   it("Space lifts the pivot off the floor and Z lowers it, never below the floor", async () => {
     const h = await freeCam();
     const distance = h.probe.distance();
     h.input.hold("Space", 1000);
-    expect(h.probe.target().y).toBeCloseTo(TRAVEL * distance * (59 / 60), 6);
+    expect(h.probe.target().y).toBeCloseTo(TRAVEL * distance, 6);
     h.input.hold("KeyZ", 3000);
     expect(h.probe.target().y).toBe(0);
   });
@@ -514,7 +513,7 @@ describe("free cam on the mobile layout", () => {
     h.scene.setMobileInput(pad({ forward: 1 }));
     h.frames(SECOND);
     h.scene.setMobileInput(IDLE_MOBILE_MAP_INPUT);
-    // The mover never stops stamping its clock (oddity 1), so all 60 frames move.
+    // All 60 frames move: the first one steps a nominal frame (FIRST_FRAME_STEP_S).
     expect(h.probe.target().z).toBeCloseTo(-TRAVEL * distance, 6);
     expect(h.probe.target().x).toBeCloseTo(0, 9);
   });
@@ -550,8 +549,10 @@ describe("free cam on the mobile layout", () => {
     h.input.touchUp(1, 460, 300);
     h.settle();
     const after = h.probe.angles();
-    // MOBILE_ORBIT_ROTATE_SPEED 0.35 over the 600 px canvas; damping spreads it over frames but adds up to the same turn.
-    expect(after.yaw - before.yaw).toBeCloseTo((-2 * Math.PI * 60 / 600) * 0.35, 6);
+    // MOBILE_ORBIT_ROTATE_SPEED 0.35 over the 600 px canvas, spread over frames by
+    // damping. The loop now sleeps once OrbitControls reports the coast has
+    // stopped, leaving ~1.5e-4 rad of it unapplied (chronicle-1982).
+    expect(after.yaw - before.yaw).toBeCloseTo((-2 * Math.PI * 60 / 600) * 0.35, 3);
     expect(after.distance).toBeCloseTo(before.distance, 6);
     expect(h.probe.target().toArray()).toEqual([0, 0, 0]);
   });

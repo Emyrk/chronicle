@@ -3,12 +3,13 @@ import { createTestScene, testUnit, type TestScene } from "./createTestScene";
 
 // Characterisation (chronicle-1967): when the render loop runs. A frame is
 // queued with requestAnimationFrame and queues the next one only while
-// renderFrame reports something moving.
+// renderFrame reports something moving. Until chronicle-1982 an interactive
+// scene's loop never went idle (the idle mobile input's `jump: false` counted
+// as input); these tests pin the fixed loop.
 
-/** An interactive scene with the idle mobile input neutralised, run until the loop sleeps (see README, oddity 1). */
+/** An interactive scene, run until the loop sleeps. */
 async function idleScene(): Promise<TestScene> {
   const h = await createTestScene({ units: [testUnit("p1", 0, 0)] });
-  h.neutraliseIdleMobileInput();
   h.runUntilIdle();
   expect(h.awake).toBe(false);
   return h;
@@ -22,20 +23,34 @@ function wakesThenSleeps(h: TestScene, max = 3000): number {
   return ran;
 }
 
-describe("render on demand: today", () => {
-  it("an interactive scene never goes idle: the idle mobile input counts as active", async () => {
+describe("render on demand: an idle interactive scene", () => {
+  it("stops its loop once nothing happens, and draws nothing more", async () => {
     const h = await createTestScene({ units: [testUnit("p1", 0, 0)] });
+    // Already asleep once the camera settled after setup.
+    expect(h.awake).toBe(false);
     const before = h.renders.count;
     h.frames(600);
-    expect(h.awake).toBe(true);
-    expect(h.renders.count - before).toBe(600);
-    expect(() => h.runUntilIdle(200)).toThrow(/still animating/);
+    expect(h.renders.count - before).toBe(0);
   });
 
-  it("the same holds on the flat ground, without a mesh", async () => {
+  it("the same on the flat ground, without a mesh", async () => {
     const h = await createTestScene({ mesh: false });
+    expect(h.runUntilIdle(200)).toBeLessThan(200);
     h.frames(100);
+    expect(h.awake).toBe(false);
+  });
+
+  it("on the mobile layout too: the idle pad and stick are no input", async () => {
+    const h = await createTestScene({ units: [testUnit("p1", 0, 0)] });
+    h.scene.setMobileInput({ forward: 0, strafe: 0, turn: 0, pitch: 0, jump: false });
+    expect(h.runUntilIdle(200)).toBeLessThan(200);
+    // The pad keeps it awake while held, and lets it sleep when released.
+    h.scene.setMobileInput({ forward: 1, strafe: 0, turn: 0, pitch: 0, jump: false });
+    h.frames(30);
     expect(h.awake).toBe(true);
+    h.scene.setMobileInput({ forward: 0, strafe: 0, turn: 0, pitch: 0, jump: false });
+    expect(h.runUntilIdle(200)).toBeLessThan(200);
+    expect(h.awake).toBe(false);
   });
 
   it("a capture scene never queues a frame: it draws only in captureFrame", async () => {
@@ -51,7 +66,7 @@ describe("render on demand: today", () => {
   });
 });
 
-describe("render on demand: with the idle mobile input neutralised", () => {
+describe("render on demand: what wakes it", () => {
   it("the loop goes idle when nothing moves and draws nothing more", async () => {
     const h = await idleScene();
     const before = h.renders.count;

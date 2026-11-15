@@ -47,7 +47,8 @@ describe("camera collision (free cam)", () => {
     h.input.hover();
     h.input.hold("KeyA", 500);
     const distances = [h.probe.distance()];
-    for (let index = 0; index < 120 && distances[distances.length - 1] < want; index++) {
+    // Until it is out (within float error: the camera is no longer re-placed every frame, chronicle-1982).
+    for (let index = 0; index < 120 && distances[distances.length - 1] < want - 1e-9; index++) {
       h.frame();
       distances.push(h.probe.distance());
     }
@@ -58,7 +59,8 @@ describe("camera collision (free cam)", () => {
     for (let index = 1; index < distances.length - 1; index++) {
       expect(distances[index] - distances[index - 1]).toBeCloseTo((want - distances[index - 1]) * factor, 6);
     }
-    expect(distances.length - 1).toMatchInlineSnapshot(`71`);
+    // 70 since chronicle-1982 (71 before): the 500 ms turn moves on its first frame too, so the wall clears a frame sooner.
+    expect(distances.length - 1).toMatchInlineSnapshot(`70`);
   });
 
   it("a wheel zoom while pulled in scales the distance it wants, not the one it shows", async () => {
@@ -126,7 +128,8 @@ describe("the floor clamp", () => {
     const h = await createTestScene();
     h.scene.applyCameraPose({ position: [0, 0.1, 5], target: [0, 0, 0] });
     h.frames(5);
-    expect(h.probe.camera().position.y).toBeGreaterThanOrEqual(CLEARANCE - 1e-9);
+    // Within float error of it: since chronicle-1982 the camera keeps the constraint's rounding instead of being re-placed every frame.
+    expect(h.probe.camera().position.y).toBeGreaterThanOrEqual(CLEARANCE - 1e-8);
   });
 
   it("is applied before the collision pull-in, which can then bring the camera back under that floor", async () => {

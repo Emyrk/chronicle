@@ -50,9 +50,13 @@ export function createInputFrame(): InputFrame {
   };
 }
 
-/** Whether the mobile pad, stick or jump button is giving input. */
+/**
+ * Whether the mobile pad, stick or jump button is giving input. The idle
+ * input is no input: `jump: false` does not count (it used to, so an
+ * interactive scene's render loop never went idle, chronicle-1982).
+ */
 export function mobileInputActive(input: MobileMapInput): boolean {
-  return Object.values(input).some((value) => value !== 0);
+  return input.jump || input.forward !== 0 || input.strafe !== 0 || input.turn !== 0 || input.pitch !== 0;
 }
 
 /**

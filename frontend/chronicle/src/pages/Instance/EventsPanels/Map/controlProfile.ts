@@ -28,6 +28,8 @@ export const WHEEL_ZOOM_RATE = 0.0015;
 export const COLLISION_RETURN_RATE_PER_S = 6;
 /** No frame steps the controls (or any per-frame clock) further than this, so a dropped frame never jumps. */
 export const FRAME_STEP_MAX_S = 0.1;
+/** A mover's first frame, with no previous one to measure from, steps this long: a key press moves on its first frame. */
+export const FIRST_FRAME_STEP_S = 1 / 60;
 /** A press that moves further than this is a drag, not a click (and starts the free cam's look). */
 export const UNIT_CLICK_SLOP_PX = 5;
 /** A click inspects a unit after this long, unless a double-click follows. */

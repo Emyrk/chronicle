@@ -31,7 +31,7 @@ describe("camera ownership with the Director running", () => {
   it("the Director has the camera once the mesh loads, on its first shot", async () => {
     const h = await fightScene();
     expect(h.events.follow).toEqual([]);
-    expect(h.probe.poseLine()).toMatchInlineSnapshot(`"camera 0,8.709,21.439 -> target 0,0,5.06"`);
+    expect(h.probe.poseLine()).toMatchInlineSnapshot(`"camera 0,8.709,21.44 -> target 0,0,5.06"`);
   });
 
   it("a left-drag past the click slop takes it", async () => {
@@ -104,19 +104,40 @@ describe("camera ownership with the Director running", () => {
     expect(h.probe.poseLine()).toBe(before);
   });
 
-  it("the mobile move pad does not take it: the Director keeps it while the pad nudges the pivot", async () => {
+  it("the idle mobile pad is no input; the pad takes it like any other input, and releasing it ends the gesture", async () => {
     const h = await fightScene();
     h.scene.setMobileInput(IDLE_MOBILE_MAP_INPUT);
     h.settle();
+    expect(h.probe.owner()).toBe("director");
     const before = h.probe.target().clone();
     h.scene.setMobileInput({ ...IDLE_MOBILE_MAP_INPUT, forward: 1 });
-    expect(h.probe.owner()).toBe("director");
+    expect(h.probe.owner()).toBe("user");
     h.frames(30);
-    expect(h.probe.owner()).toBe("director");
-    // The pad and the Director both write the pivot every frame (README, oddity 1).
-    expect(h.probe.target().distanceTo(before)).toBeGreaterThan(0.05);
+    expect(h.probe.owner()).toBe("user");
+    expect(h.probe.target().distanceTo(before)).toBeGreaterThan(1);
     h.scene.setMobileInput(IDLE_MOBILE_MAP_INPUT);
-    expect(h.events.userViewports).toEqual([]);
+    // As at the end of a drag that moved the view: the scene reports where the user left it.
+    expect(h.events.userViewports).toHaveLength(1);
+  });
+
+  it("the look stick takes it too", async () => {
+    const h = await fightScene();
+    h.scene.setMobileInput({ ...IDLE_MOBILE_MAP_INPUT, turn: 1 });
+    expect(h.probe.owner()).toBe("user");
+  });
+
+  it("with no input, the free-cam mover leaves the Director's camera alone", async () => {
+    const h = await fightScene();
+    h.scene.setMobileInput(IDLE_MOBILE_MAP_INPUT);
+    // Clock ticks keep frames coming while the Director holds its shot.
+    const placed = h.countFreeCamPlacements(() => {
+      for (let tick = 0; tick < 30; tick++) {
+        h.scene.setEffectClock(1000 + tick * 16, false, 1);
+        h.frame();
+      }
+    });
+    expect(h.probe.owner()).toBe("director");
+    expect(placed).toBe(0);
   });
 
   it("a viewport request (Follow, an encounter jump) hands it back", async () => {
@@ -128,7 +149,7 @@ describe("camera ownership with the Director running", () => {
     expect(h.probe.owner()).toBe("director");
     // Back on the group, from the direction the user's drag left the camera (the Director keeps the user's yaw).
     expect(pivotFrom(h, 0, 5.06)).toBeLessThan(0.5);
-    expect(h.probe.poseLine()).toMatchInlineSnapshot(`"camera -2.789,8.709,21.187 -> target 0.143,0,5.073"`);
+    expect(h.probe.poseLine()).toMatchInlineSnapshot(`"camera -2.79,8.709,21.187 -> target 0.142,0,5.073"`);
   });
 
   it("a cut hands it back", async () => {
@@ -157,7 +178,7 @@ describe("camera ownership with the Director running", () => {
     const h = await fightScene();
     h.scene.followUnit("p2");
     h.settle();
-    expect(h.probe.poseLine()).toMatchInlineSnapshot(`"camera -5,8.709,23.579 -> target -5,0,7.2"`);
+    expect(h.probe.poseLine()).toMatchInlineSnapshot(`"camera -4.999,8.709,23.579 -> target -4.999,0,7.2"`);
   });
 
   it("a new focus alone does not hand it back", async () => {

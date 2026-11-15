@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MOBILE_STICK_DEAD_ZONE, UNIT_CLICK_SLOP_PX } from "./controlProfile";
-import { buildInputFrame, MapInputState, MouseDrag } from "./inputFrame";
+import { buildInputFrame, MapInputState, mobileInputActive, MouseDrag } from "./inputFrame";
 import { IDLE_MOBILE_MAP_INPUT, mobileJoystickAxis, walkDragButton, type MapControlAction, type MobileMapInput } from "./mapControls";
 
 const keys = (...actions: MapControlAction[]) => new Set<MapControlAction>(actions);
@@ -12,6 +12,26 @@ function drag(buttons: number[], engaged = true): MouseDrag {
   result.engaged = engaged;
   return result;
 }
+
+describe("InputFrame: idle", () => {
+  it("no keys, no drag and the idle pad and stick are no input at all", () => {
+    // The idle mobile input's `jump: false` used to count as input (chronicle-1982).
+    expect(buildInputFrame(keys(), false, IDLE_MOBILE_MAP_INPUT, null)).toEqual({
+      forward: 0, strafe: 0, turn: 0, vertical: 0, jump: false, descend: false, pitch: 0,
+      looking: false, steering: false, movingForward: false, dragging: false, fast: false, active: false,
+    });
+    expect(mobileInputActive(IDLE_MOBILE_MAP_INPUT)).toBe(false);
+    expect(mobileInputActive(pad({ jump: true }))).toBe(true);
+    expect(mobileInputActive(pad({ pitch: -0.1 }))).toBe(true);
+  });
+
+  it("Shift alone, or a single held button before it engages, is not movement", () => {
+    expect(buildInputFrame(keys(), true, IDLE_MOBILE_MAP_INPUT, null).active).toBe(false);
+    expect(buildInputFrame(keys(), false, IDLE_MOBILE_MAP_INPUT, drag([0], false)).active).toBe(false);
+    // A look-only drag is not movement either: look acts on the pointer event.
+    expect(buildInputFrame(keys(), false, IDLE_MOBILE_MAP_INPUT, drag([0])).active).toBe(false);
+  });
+});
 
 describe("InputFrame: keys", () => {
   it("W/S drive forward, A/D turn (+ is left), Space/Z the vertical", () => {

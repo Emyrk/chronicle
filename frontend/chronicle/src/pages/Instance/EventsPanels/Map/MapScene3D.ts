@@ -56,6 +56,7 @@ import {
   DEFAULT_AD_STRAFE,
   DOUBLE_CLICK_MS,
   DOUBLE_CLICK_OUT_FACTOR,
+  FIRST_FRAME_STEP_S,
   FRAME_STEP_MAX_S,
   FREE_CAM_COLLISION_PADDING_SCENE_UNITS,
   FREE_CAM_MAX_PITCH_RADIANS,
@@ -1676,7 +1677,7 @@ export class MapScene3D {
       bossEngageDistance: BOSS_ENGAGE_YARDS * mesh.scale,
       subjectGuid: this.directorSubject,
     });
-    const dt = this.directorAt === 0 ? 1 / 60 : Math.min(FRAME_STEP_MAX_S, (now - this.directorAt) / 1000);
+    const dt = this.directorAt === 0 ? FIRST_FRAME_STEP_S : Math.min(FRAME_STEP_MAX_S, (now - this.directorAt) / 1000);
     this.directorAt = now;
     this.directorInFrame.clear();
     if (frame) for (const guid of frame.guids) this.directorInFrame.add(guid);
@@ -2354,7 +2355,8 @@ export class MapScene3D {
       this.keyMoveLastMs = 0;
       return false;
     }
-    const dt = frameStepSeconds(now, this.keyMoveLastMs);
+    // The first active frame has no previous one to measure from: it steps one nominal frame.
+    const dt = this.keyMoveLastMs ? frameStepSeconds(now, this.keyMoveLastMs) : FIRST_FRAME_STEP_S;
     this.keyMoveLastMs = now;
     if (dt <= 0) return true;
     const target = this.controls.target;
