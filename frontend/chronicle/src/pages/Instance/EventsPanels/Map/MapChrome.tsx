@@ -4,11 +4,11 @@ import { cn } from "@/lib/utils";
 import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import type { Encounter } from "../../InstancePage";
 import { ReplayTransportBar, usePlayerDeathTimes } from "../../ReplayControlOverlay";
-import { LEEROY_FEATURED_UNITS } from "../../Leeroy/leeroyFeaturedUnits";
 import type { PanelRenderProps } from "../types";
 import type { MapResult } from "./map.processor";
 import { framingButtonClass, mapFramingButtonClass } from "./mapChromeStyles";
 import { raidTargetMarkerImage } from "./plan/planArt";
+import type { ReplayFeaturedUnit } from "./replayFeaturedUnits";
 
 /**
  * Expands a mini map: `onExpand` (the 3D replay going fullscreen) when given,
@@ -139,11 +139,12 @@ export function ReloadingChip() {
   );
 }
 
-/** The Leeroy reconstruction's featured characters, middle left (the next car removes this host-specific branch). */
-export function LeeroyFeaturedUnits() {
+/** A reconstruction's featured characters (the instance's `replayFeaturedUnits`), middle left. */
+export function FeaturedUnits({ units }: { units: readonly ReplayFeaturedUnit[] | undefined }) {
+  if (!units?.length) return null;
   return (
     <div className="pointer-events-none absolute left-2 top-1/2 z-40 flex -translate-y-1/2 flex-col gap-1.5" aria-label="Featured characters">
-      {LEEROY_FEATURED_UNITS.map((unit) => (
+      {units.map((unit) => (
         <div
           key={unit.guid}
           className="flex items-center gap-2 rounded-md border bg-black/85 px-2.5 py-1.5 shadow-[0_6px_20px_rgba(0,0,0,.55)] backdrop-blur-sm"

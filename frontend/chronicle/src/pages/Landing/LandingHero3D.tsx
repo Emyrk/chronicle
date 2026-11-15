@@ -9,13 +9,12 @@ import { processIncrementally } from "@/pages/Instance/EventsPanels/mainThreadPr
 import { damageDoneProcessor, type DamageDoneResult } from "@/pages/Instance/EventsPanels/DamageDone/damageDone.processor";
 import { unifiedHealingProcessor, type UnifiedHealingResult } from "@/pages/Instance/EventsPanels/processors/healing.processor";
 import type { PanelRenderProps } from "@/pages/Instance/EventsPanels/types";
-import { dungeonMeshLiquid, dungeonMeshUrl } from "@/pages/Instance/EventsPanels/Map/dungeonMeshes";
 import { mapProcessor, type MapResult } from "@/pages/Instance/EventsPanels/Map/map.processor";
-import { FULL_MAP_VIEWPORT, type MapViewport } from "@/pages/Instance/EventsPanels/Map/mapModel";
-import type { DungeonMeshRequest, DungeonMeshState, MapSceneFocus } from "@/pages/Instance/EventsPanels/Map/MapScene3D";
 import MapView3D from "@/pages/Instance/EventsPanels/Map/MapView3D";
-import { useMapScene } from "@/pages/Instance/EventsPanels/Map/useMapScene";
+import { ReplayPlayer } from "@/pages/Instance/EventsPanels/Map/ReplayPlayer";
+import type { ReplayCamera } from "@/pages/Instance/EventsPanels/Map/replayPlayerModel";
 import { useLocalLoopClock } from "@/pages/Instance/EventsPanels/Map/useReplayClock";
+import { useReplayPlayer } from "@/pages/Instance/EventsPanels/Map/useReplayPlayer";
 import { liveHeroRun } from "./explore3D";
 import { serializableContext, type HeroDeathBeat, type HeroDeathRecap, type HeroReplay, type HeroWindow } from "./heroReplay";
 import { meterTotals, type HeroMeterData } from "./heroMeter";
@@ -34,6 +33,8 @@ const HERO_MAX_SPEED = 4;
 /** A boss pull plays in real time, as the run page's Watch tab does. */
 const HERO_PULL_SPEED = 1;
 const NO_PLAN_ITEMS: [] = [];
+/** As the Map panel's default framing: the cinematic Director (Explore: until the visitor takes the camera). */
+const DIRECTOR_CAMERA: ReplayCamera = { mode: "director" };
 // The hero draws neither the encounter route nor movement trails.
 // The deaths processor's streams the replay already fetched, so the death cards' recaps download nothing more.
 const HERO_DEATH_STREAMS = deathsProcessor.streams.filter((stream) => HERO_STREAMS.includes(stream));
@@ -253,7 +254,8 @@ export function HeroScene({ instance, startOffsetMs, pull = null, active, onPull
       })),
     };
   }, [deathRecaps, encounterId, meterAmounts, result, span]);
-  const [meshState, setMeshState] = useState<DungeonMeshState>("loading");
+  // Whether the mesh is up (mirrored from the player below, which reads this clock): the clock waits for it.
+  const [meshReady, setMeshReady] = useState(false);
   // The hero's own clock: loops the run (or the pull's window), skipping the gaps between encounters; it holds
   // while the hero is off screen or the mesh is still loading. A pull plays in real time, the run at most 4x.
   const heroClock = useLocalLoopClock({
@@ -261,7 +263,7 @@ export function HeroScene({ instance, startOffsetMs, pull = null, active, onPull
     playable: span?.playable,
     speed: pull ? HERO_PULL_SPEED : undefined,
     maxSpeed: HERO_MAX_SPEED,
-    suspended: !(active && meshState === "ready"),
+    suspended: !(active && meshReady),
     initialPlaying: !startPaused,
     initialOffsetMs: pull ? initialMs : startOffsetMs,
     tickMs: TICK_MS,
@@ -269,24 +271,6 @@ export function HeroScene({ instance, startOffsetMs, pull = null, active, onPull
     maxStepMs: 4 * TICK_MS,
     onLoop: encounterId ? onPullEnd : undefined,
   });
-  const [unavailable, setUnavailable] = useState(false);
-  // Bumped on a jump (a boss chip, a death): the camera cuts to the new shot rather than gliding there.
-  const [cutKey, setCutKey] = useState(0);
-  // Explore: once the visitor orbits, pans or zooms, the camera holds their view (the Director stands down);
-  // clicking a player follows them (the Director on that unit), as on the run page's Map panel.
-  const [userView, setUserView] = useState<MapViewport | null>(null);
-  const [viewRevision, setViewRevision] = useState(0);
-  const [followGuid, setFollowGuid] = useState<string | null>(null);
-  // Another pull (the boss rail) plays from its window's start, framed afresh.
-  const [clockPull, setClockPull] = useState(encounterId);
-  if (clockPull !== encounterId) {
-    setClockPull(encounterId);
-    heroClock.restart();
-    if (startPaused) heroClock.pause();
-    else heroClock.play();
-    setUserView(null);
-    setFollowGuid(null);
-  }
   const props = useMemo((): PanelRenderProps<MapResult> => ({
     result: result ?? mapProcessor.createState(),
     totalEvents: run.data?.totalEvents ?? 0,
@@ -309,59 +293,54 @@ export function HeroScene({ instance, startOffsetMs, pull = null, active, onPull
   const sceneClock = pull && span && heroClock.nowMs !== null
     ? { ...heroClock, nowMs: Math.min(Math.max(heroClock.nowMs, span.encounterStartMs), Math.max(span.encounterStartMs, span.encounterEndMs - 1)) }
     : heroClock;
-  const scene = useMapScene(props, { rawDungeonProjection: true, wholeRun: !pull, clock: sceneClock });
-  // Should the scene still lose its units for a moment, the last ready one stays up (frozen) rather than the view
-  // unmounting; as in the Map panel, re-held only when what it shows changes (the frozen view ignores its per-tick data).
-  const live = scene.status === "ready" ? scene : null;
-  const [held, setHeld] = useState<typeof live>(null);
-  if (live && (!held || held.mapName !== live.mapName || held.mesh !== live.mesh)) setHeld(live);
-  const ready = live ?? held;
+  // The ReplayPlayer as the landing's backdrop (and Explore's scene): the mesh's own projection always (the landing
+  // never shows the 2D tiles, not even while the mesh loads); the last ready scene held whenever the live one is
+  // briefly empty; positions first, then the GLB; hidden without WebGL; no creature miniatures, as before (a lighter
+  // first load). Explore takes pointer input, keeps playing on the tiles should the mesh fail, and shows the compass.
+  const player = useReplayPlayer({
+    source: props,
+    clock: sceneClock,
+    wholeRun: !pull,
+    meshOn: true,
+    renderedCanvas: "never",
+    rawProjection: "always",
+    camera: DIRECTOR_CAMERA,
+    heldScene: "backdrop",
+    meshFailure: explore ? "use-tiles" : "report",
+    prefetchMesh: false,
+    reframe: "never",
+    webglFallback: "none",
+    interactive: explore,
+    sceneFields: "backdrop",
+    unitModels: "none",
+  });
+  const { live, ready, cameraHandle, followGuid } = player;
+  if (meshReady !== (player.meshState === "ready")) setMeshReady(player.meshState === "ready");
+  // Another pull (the boss rail) plays from its window's start, framed afresh.
+  const [clockPull, setClockPull] = useState(encounterId);
+  if (clockPull !== encounterId) {
+    setClockPull(encounterId);
+    heroClock.restart();
+    if (startPaused) heroClock.pause();
+    else heroClock.play();
+    player.releaseCamera();
+    player.setFollowGuid(null);
+  }
   // The camera cuts to another pull once its scene is up (until then the last pull's view holds, frozen).
   const [cutPull, setCutPull] = useState(encounterId);
   const livePull = live && run.data ? encounterId : null;
   if (livePull !== null && livePull !== cutPull) {
     setCutPull(livePull);
-    setCutKey((key) => key + 1);
+    cameraHandle.cut();
   }
-
-  // Then the camera framing, as the Map panel's default: on a boss pull the fight (the Director frames it, cinematic below),
-  // across the whole run the party Follow.
-  const autoFit = ready?.fitByDefault ? ready.autoFit : null;
-  const focusCentre = ready?.focusCentre ?? null;
-  const focusZoom = autoFit?.zoom ?? null;
-  const focus = useMemo((): MapSceneFocus | null =>
-    focusCentre && focusZoom !== null ? { centre: focusCentre, zoom: focusZoom } : null,
-  [focusCentre, focusZoom]);
-  // Then the GLB, through the scene's dungeonMeshBytes path.
-  const mesh = ready?.mesh ?? null;
-  const iconBaseUrl = instance.iconBaseUrl;
-  // Explore on a map without a mesh: its tiles are the ground, ready at once (the backdrop shows nothing instead).
-  if (explore && ready !== null && mesh === null && meshState !== "ready") setMeshState("ready");
-  const dungeonMesh = useMemo((): DungeonMeshRequest | null =>
-    mesh && iconBaseUrl ? { url: dungeonMeshUrl(mesh, iconBaseUrl), bounds: mesh.bounds, liquid: dungeonMeshLiquid(mesh) } : null,
-  [iconBaseUrl, mesh]);
-
-  const cinematic = !explore || userView === null;
+  // "Follow the group": the Director back on the group, the visitor's view and any followed player let go.
   const followGroup = () => {
-    setUserView(null);
-    setFollowGuid(null);
-    setViewRevision((revision) => revision + 1);
-  };
-  // Clicking the followed player again lets go; following takes the camera back from the visitor.
-  const followUnit = (guid: string) => {
-    if (followGuid === guid) {
-      setFollowGuid(null);
-      return;
-    }
-    if (userView) {
-      setUserView(null);
-      setViewRevision((revision) => revision + 1);
-    }
-    setFollowGuid(guid);
+    player.followGroup();
+    player.setFollowGuid(null);
   };
   const followedName = followGuid ? instance.players?.[followGuid]?.name ?? instance.units?.[followGuid]?.name ?? null : null;
 
-  const shown = ready !== null && meshState === "ready" && !unavailable;
+  const shown = ready !== null && player.meshState === "ready" && !player.webglUnavailable;
   const togglePlay = heroClock.toggle;
   const { seek: seekClock, play } = heroClock;
   const seek = useCallback((offsetMs: number, options?: { cut?: boolean }) => {
@@ -369,8 +348,8 @@ export function HeroScene({ instance, startOffsetMs, pull = null, active, onPull
     // The scrubber's offsets are from the window's start on a pull, else from the instance's start.
     seekClock((pull ? span.startMs : instanceStartMs) + offsetMs);
     play();
-    if (options?.cut) setCutKey((key) => key + 1);
-  }, [instanceStartMs, play, pull, seekClock, span]);
+    if (options?.cut) cameraHandle.cut();
+  }, [cameraHandle, instanceStartMs, play, pull, seekClock, span]);
   const cursorMs = ready?.cursorMs ?? null;
   // A pull reports the hero's clock, from the pull's first position sample (the clock skips the frames before it).
   const currentMs = cursorMs === null ? null : pull ? (span && heroClock.nowMs !== null ? heroClock.nowMs - span.startMs : 0) : cursorMs - instanceStartMs;
@@ -401,7 +380,7 @@ export function HeroScene({ instance, startOffsetMs, pull = null, active, onPull
   }, [currentMs, deathRecaps, heroClock.requestedPlaying, liveMeter, liveRun, onReplay, renderRaidFrames, renderThreat, seek, shown, span, togglePlay]);
   useEffect(() => () => onReplay(null), [onReplay]);
 
-  if (!ready || unavailable) return null;
+  if (!ready || player.webglUnavailable) return null;
   return (
     // Fades in over the poster (which stays underneath) once the mesh is up; until then nothing new shows.
     <div
@@ -409,35 +388,17 @@ export function HeroScene({ instance, startOffsetMs, pull = null, active, onPull
       className={`absolute inset-0 transition-opacity duration-700 ${explore ? "" : "pointer-events-none"}`}
       style={{ opacity: shown ? 1 : 0 }}
     >
-      <MapView3D
-        ground={ready.ground}
-        markers={ready.markers}
-        projectSample={ready.projectSample}
-        cursorMs={ready.cursorMs}
-        playing={ready.playing}
-        playbackSpeed={ready.playbackSpeed}
-        view={{ viewport: userView ?? autoFit ?? FULL_MAP_VIEWPORT, key: explore ? `explore-${viewRevision}` : "hero" }}
-        onUserViewport={explore ? setUserView : undefined}
-        onUnitClick={explore ? followUnit : undefined}
-        followGuid={explore ? followGuid : undefined}
-        onFollowChange={explore ? setFollowGuid : undefined}
-        effects={ready.effects}
-        bossGuids={ready.bossGuids}
-        tankGuids={ready.tankGuids}
-        onUnavailable={() => setUnavailable(true)}
-        dungeonMesh={dungeonMesh}
-        // Explore keeps playing on the tiles should the mesh fail.
-        onDungeonMeshState={explore ? (state) => setMeshState(state === "failed" ? "ready" : state) : setMeshState}
-        focus={focus}
-        cinematic={cinematic}
-        // The recorded run, for the camera to look ahead in: the gaps the clock skips and the loop back glide.
-        followSource={ready.followSource}
-        cutKey={cutKey}
-        debuffSpellIds={ready.debuffSpellIds}
-        planItems={NO_PLAN_ITEMS}
-        frozen={!live}
-        // The compass only where the camera is free (Explore): on the hero backdrop it sits over the overlays.
-        showCompass={explore}
+      <ReplayPlayer
+        player={player}
+        bare
+        view3d={MapView3D}
+        view={{
+          // Explore: clicking a player follows them (the Director on that unit), as on the run page's Map panel.
+          onUnitClick: explore ? player.followUnit : undefined,
+          planItems: NO_PLAN_ITEMS,
+          // The compass only where the camera is free (Explore): on the hero backdrop it sits over the overlays.
+          showCompass: explore,
+        }}
       />
       {meterSlot && shown && span && currentMs !== null && createPortal(
         <HeroMapMeter

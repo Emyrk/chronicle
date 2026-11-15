@@ -11,16 +11,24 @@ import type { ReplayClock } from "./replayClock";
 import {
   cameraModeFor,
   defaultViewport as defaultViewportFor,
+  effectiveMeshState,
   focusParts,
   followState,
+  meshlessReady,
   meshWanted as meshWantedFor,
   prefersRenderedCanvas,
+  rawProjection,
+  sceneFieldsFor,
   shouldHoldScene,
   shownScene,
+  type HeldSceneRule,
+  type MeshFailurePolicy,
+  type RawProjectionPolicy,
   type ReadyMapScene,
   type RenderedCanvasPolicy,
   type ReplayCamera,
   type ReplayCameraMode,
+  type SceneFieldProfile,
 } from "./replayPlayerModel";
 import { useMapScene, type MapScene } from "./useMapScene";
 
@@ -44,8 +52,34 @@ export interface ReplayPlayerOptions {
   camera: ReplayCamera;
   /** A host value held with the scene while it reloads (the Map panel: whether Replay was on), returned as `heldValue`. */
   holdValue?: boolean;
-  /** Miniature model URLs to use instead of the shared manifest's (the stories'). */
+  /** Miniature model URLs to use instead of the shared manifest's (the stories', the export's). */
   unitModelUrls?: PublishedUnitModelUrls;
+  /** `"none"`: no creature miniatures, and no manifest fetch (the landing keeps its first load light). Default `"manifest"`. */
+  unitModels?: "manifest" | "none";
+  /** When the last ready scene is held (default `"panel"`; the landing: `"backdrop"`). */
+  heldScene?: HeldSceneRule;
+  /** Units on the mesh's own transform once it loads (default), or always (the landing, the export). */
+  rawProjection?: RawProjectionPolicy;
+  /** What a failed or missing mesh means (default `"report"`; Explore: `"use-tiles"`). */
+  meshFailure?: MeshFailurePolicy;
+  /** Start the mesh download as soon as the scene names it (default). Off: only once the scene is up (the landing fetches positions first). */
+  prefetchMesh?: boolean;
+  /** A mesh request the host makes itself (the export), instead of the scene's. */
+  dungeonMesh?: DungeonMeshRequest | null;
+  /** Re-frame on a new selection or encounter (default `"on-selection"`); `"never"`: the view applies once, and again only on Follow. */
+  reframe?: "on-selection" | "never";
+  /** A view the host fixes (the export), instead of the player's framing. */
+  fixedView?: MapViewRequest;
+  /** Without WebGL: the 2D map (default), or nothing (the landing hides; the export errors). */
+  webglFallback?: "2d" | "none";
+  /** Called when WebGL turns out to be unavailable. */
+  onUnavailable?: () => void;
+  /** Pointer input on the view: camera drags and unit clicks (default true; off for the landing's backdrop and the export). */
+  interactive?: boolean;
+  /** Which optional scene fields reach the view (default `"all"`; see sceneFieldsFor). */
+  sceneFields?: SceneFieldProfile;
+  /** Told when the 3D scene is created and disposed (the export starts filming once it exists). */
+  onScene?: (scene: MapScene3D | null) => void;
 }
 
 /** The imperative camera actions (bump-key props on the view underneath). */
@@ -104,6 +138,8 @@ export interface ReplayPlayerState {
   following: boolean;
   /** Back to the default framing: the Director on the mesh, the party-following camera across a run. */
   followGroup: () => void;
+  /** Hand the camera back to the Director without re-applying the default view (the landing, on a new pull). */
+  releaseCamera: () => void;
   followGuid: string | null;
   setFollowGuid: (guid: string | null) => void;
   /** A unit frame's Follow: the Director on that unit (resumed if the user had pinned a framing); again stops it. */
@@ -115,6 +151,10 @@ export interface ReplayPlayerState {
   topDownKey: number;
   cameraCaptureKey: number;
   unitModelUrls: PublishedUnitModelUrls | undefined;
+  interactive: boolean;
+  webglFallback: "2d" | "none";
+  /** Which optional scene fields the view receives. */
+  sceneFields: ReturnType<typeof sceneFieldsFor>;
 }
 
 /**
@@ -125,11 +165,13 @@ export interface ReplayPlayerState {
  */
 export function useReplayPlayer(options: ReplayPlayerOptions): ReplayPlayerState {
   const { source, clock, wholeRun = false, meshOn, renderedCanvas = "without-mesh", camera } = options;
+  const { heldScene = "panel", meshFailure = "report", reframe = "on-selection", interactive = true, webglFallback = "2d" } = options;
   const [webglUnavailable, setWebglUnavailable] = useState(false);
   const show3D = !webglUnavailable;
-  const [meshState, setMeshState] = useState<DungeonMeshState>("loading");
+  const [meshState, setMeshStateRaw] = useState<DungeonMeshState>("loading");
+  const setMeshState = useCallback((state: DungeonMeshState) => setMeshStateRaw(effectiveMeshState(state, meshFailure)), [meshFailure]);
   const scene = useMapScene(source, {
-    rawDungeonProjection: show3D && meshOn && meshState === "ready",
+    rawDungeonProjection: rawProjection(options.rawProjection ?? "when-mesh-ready", show3D, meshOn, meshState),
     preferRenderedCanvas: prefersRenderedCanvas(renderedCanvas, show3D, meshOn),
     mapSource: options.mapSource,
     wholeRun,
@@ -141,11 +183,11 @@ export function useReplayPlayer(options: ReplayPlayerOptions): ReplayPlayerState
   const live = scene.status === "ready" ? scene : null;
   const [held, setHeld] = useState<ReadyMapScene | null>(null);
   const [heldValue, setHeldValue] = useState(false);
-  if (shouldHoldScene(live, held)) {
+  if (shouldHoldScene(live, held, heldScene)) {
     setHeld(live);
     setHeldValue(Boolean(options.holdValue));
   }
-  const { ready, reloading } = shownScene(live, held, Boolean(source.loading || source.processing));
+  const { ready, reloading } = shownScene(live, held, Boolean(source.loading || source.processing), heldScene);
 
   // Everything read from the scene through plain functions comes first, ahead of the memos below.
   const { centre: focusCentre, zoom: fitZoom } = focusParts(ready);
@@ -155,7 +197,7 @@ export function useReplayPlayer(options: ReplayPlayerOptions): ReplayPlayerState
   const [storedFraming, setFraming] = useState<MapFraming>(INITIAL_MAP_FRAMING);
   // A new selection or the replay moving into another encounter re-frames;
   // loading states (e.g. reprocessing after a filter change) keep the framing.
-  const framing = ready
+  const framing = ready && reframe === "on-selection"
     ? reconcileMapFraming(storedFraming, `${source.context.selectedEncounterIds.join(",")}|${ready.encounterId}`, defaultViewport)
     : storedFraming;
   if (framing !== storedFraming) setFraming(framing);
@@ -169,16 +211,23 @@ export function useReplayPlayer(options: ReplayPlayerOptions): ReplayPlayerState
   // Start the mesh's (large) download as soon as the map knows it: before the
   // encounter finishes processing and before the 3D renderer has loaded.
   const prefetchMesh = mesh ?? (scene.status === "message" ? scene.meshHint ?? null : null);
-  const prefetchUrl = meshWanted && prefetchMesh && iconBaseUrl ? dungeonMeshUrl(prefetchMesh, iconBaseUrl) : null;
+  const prefetchUrl = options.prefetchMesh !== false && options.dungeonMesh === undefined && meshWanted && prefetchMesh && iconBaseUrl
+    ? dungeonMeshUrl(prefetchMesh, iconBaseUrl)
+    : null;
   useEffect(() => {
     if (prefetchUrl) dungeonMeshBytes(prefetchUrl).catch(() => {});
   }, [prefetchUrl]);
-  const view: MapViewRequest = { viewport: framing.viewport ?? defaultViewport, key: String(framing.revision) };
+  // Under "use-tiles", a scene without a mesh plays on its tiles at once.
+  if (meshlessReady(meshFailure, ready !== null, mesh !== null) && meshState !== "ready") setMeshStateRaw("ready");
+  const view: MapViewRequest = options.fixedView ?? { viewport: framing.viewport ?? defaultViewport, key: String(framing.revision) };
   const onUserViewport = useCallback((viewport: MapViewport) => {
     setFraming((current) => manualMapFraming(current, viewport));
   }, []);
   const applyFraming = (viewport: MapViewport) => setFraming(pinMapFraming(framing, viewport));
   const followGroup = () => setFraming({ ...framing, viewport: null, manual: false, revision: framing.revision + 1 });
+  const releaseCamera = () => {
+    if (framing.viewport !== null || framing.manual) setFraming({ ...framing, viewport: null, manual: false });
+  };
 
   const { mode: cameraMode, cinematic } = cameraModeFor(camera, framing);
   const onMesh = show3D && meshWanted && meshState === "ready";
@@ -200,25 +249,32 @@ export function useReplayPlayer(options: ReplayPlayerOptions): ReplayPlayerState
   const topDown = useCallback(() => setTopDownKey((key) => key + 1), []);
   const capturePose = useCallback(() => setCameraCaptureKey((key) => key + 1), []);
   const sceneRef = useRef<MapScene3D | null>(null);
+  const onSceneOption = options.onScene;
   const onScene = useCallback((created: MapScene3D | null) => {
     sceneRef.current = created;
-  }, []);
+    onSceneOption?.(created);
+  }, [onSceneOption]);
   const scene3d = useCallback(() => sceneRef.current, []);
   const cameraHandle = useMemo((): ReplayCameraHandle => ({ cut, topDown, capturePose, scene: scene3d }), [capturePose, cut, scene3d, topDown]);
-  const markWebglUnavailable = useCallback(() => setWebglUnavailable(true), []);
+  const onUnavailable = options.onUnavailable;
+  const markWebglUnavailable = useCallback(() => {
+    setWebglUnavailable(true);
+    onUnavailable?.();
+  }, [onUnavailable]);
 
   const unitModelsQuery = useQuery({
     queryKey: ["unit-models"],
     staleTime: 60 * 60 * 1000,
     retry: false,
-    enabled: !options.unitModelUrls,
+    enabled: !options.unitModelUrls && options.unitModels !== "none",
     queryFn: () => fetchUnitModelUrls(),
   });
 
   // Last: the compiler keeps these memos only after every other read of the scene.
-  const dungeonMesh = useMemo((): DungeonMeshRequest | null =>
+  const sceneMesh = useMemo((): DungeonMeshRequest | null =>
     meshWanted && mesh && meshUrl ? { url: meshUrl, bounds: mesh.bounds, liquid: dungeonMeshLiquid(mesh) } : null,
   [mesh, meshUrl, meshWanted]);
+  const dungeonMesh = options.dungeonMesh !== undefined ? options.dungeonMesh : sceneMesh;
 
   const focus = useMemo((): MapSceneFocus | null =>
     focusCentre && fitZoom !== null ? { centre: focusCentre, zoom: fitZoom } : null,
@@ -255,6 +311,7 @@ export function useReplayPlayer(options: ReplayPlayerOptions): ReplayPlayerState
     canFollow,
     following,
     followGroup,
+    releaseCamera,
     followGuid,
     setFollowGuid,
     followUnit,
@@ -263,6 +320,9 @@ export function useReplayPlayer(options: ReplayPlayerOptions): ReplayPlayerState
     cutKey,
     topDownKey,
     cameraCaptureKey,
-    unitModelUrls: options.unitModelUrls ?? unitModelsQuery.data,
+    unitModelUrls: options.unitModelUrls ?? (options.unitModels === "none" ? undefined : unitModelsQuery.data),
+    interactive,
+    webglFallback,
+    sceneFields: sceneFieldsFor(options.sceneFields ?? "all"),
   };
 }

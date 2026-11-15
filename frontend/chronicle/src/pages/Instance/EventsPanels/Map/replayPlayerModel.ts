@@ -7,27 +7,37 @@
 
 import type { MapCameraMark, MapCameraPose } from "./cameraPath";
 import { FULL_MAP_VIEWPORT, type MapFraming, type MapViewport } from "./mapModel";
+import type { DungeonMeshState } from "./MapScene3D";
 import type { MapScene } from "./useMapScene";
 
 export type ReadyMapScene = Extract<MapScene, { status: "ready" }>;
 
 /**
- * Re-hold the live scene only when what it shows changes (another encounter,
- * map, floor or mesh): the frozen view ignores the held copy's per-tick data.
+ * When the last ready scene is held. `"panel"` (the Map panel): only while the
+ * panel reprocesses, re-held when the encounter, map, floor or mesh changes.
+ * `"backdrop"` (the landing): whenever the live scene is briefly empty, re-held
+ * only when the map or mesh changes, so a moment without units never unmounts the view.
+ * `"none"` (the export): never; only the live scene is filmed.
  */
-export function shouldHoldScene(live: ReadyMapScene | null, held: ReadyMapScene | null): boolean {
-  if (!live) return false;
-  return !held || held.encounterId !== live.encounterId || held.mapName !== live.mapName
-    || held.selectedFloorNumber !== live.selectedFloorNumber || held.mesh !== live.mesh;
+export type HeldSceneRule = "panel" | "backdrop" | "none";
+
+/**
+ * Re-hold the live scene only when what it shows changes: the frozen view
+ * ignores the held copy's per-tick data.
+ */
+export function shouldHoldScene(live: ReadyMapScene | null, held: ReadyMapScene | null, rule: HeldSceneRule = "panel"): boolean {
+  if (!live || rule === "none") return false;
+  if (!held || held.mapName !== live.mapName || held.mesh !== live.mesh) return true;
+  return rule === "panel" && (held.encounterId !== live.encounterId || held.selectedFloorNumber !== live.selectedFloorNumber);
 }
 
 /**
- * The scene on screen: the live one; while the panel reprocesses (a new
- * encounter, a filter change) the held one, frozen, rather than unmounting the
- * view and rebuilding it once the new data arrives.
+ * The scene on screen: the live one; else the held one, frozen (while the panel
+ * reprocesses, or for a backdrop whenever the live scene is empty), rather than
+ * unmounting the view and rebuilding it once the new data arrives.
  */
-export function shownScene<S>(live: S | null, held: S | null, reprocessing: boolean): { ready: S | null; reloading: boolean } {
-  const reloading = !live && reprocessing && held !== null;
+export function shownScene<S>(live: S | null, held: S | null, reprocessing: boolean, rule: HeldSceneRule = "panel"): { ready: S | null; reloading: boolean } {
+  const reloading = !live && rule !== "none" && (rule === "backdrop" || reprocessing) && held !== null;
   return { ready: live ?? (reloading ? held : null), reloading };
 }
 
@@ -43,6 +53,55 @@ export function prefersRenderedCanvas(policy: RenderedCanvasPolicy, show3D: bool
   if (policy === "always") return true;
   if (policy === "never") return false;
   return !show3D || !meshOn;
+}
+
+/** Whether units project with the mesh's own transform: once the mesh has loaded (the panel), or always (the landing, the export). */
+export type RawProjectionPolicy = "when-mesh-ready" | "always";
+
+export function rawProjection(policy: RawProjectionPolicy, show3D: boolean, meshOn: boolean, meshState: DungeonMeshState): boolean {
+  return policy === "always" || (show3D && meshOn && meshState === "ready");
+}
+
+/**
+ * What a failed mesh means: `"report"` keeps "failed" (the panel shows the
+ * tiles, the export errors); `"use-tiles"` plays on the tiles as if ready (the
+ * landing's Explore), and a meshless instance is ready at once.
+ */
+export type MeshFailurePolicy = "report" | "use-tiles";
+
+export function effectiveMeshState(reported: DungeonMeshState, policy: MeshFailurePolicy): DungeonMeshState {
+  return policy === "use-tiles" && reported === "failed" ? "ready" : reported;
+}
+
+/** A meshless scene counts as a ready mesh under "use-tiles": its tiles are the ground. */
+export function meshlessReady(policy: MeshFailurePolicy, sceneShown: boolean, hasMesh: boolean): boolean {
+  return policy === "use-tiles" && sceneShown && !hasMesh;
+}
+
+/** What shows on the stage: the 3D view, the 2D map (WebGL fallback), the mesh-only message, or nothing (`webglFallback: "none"`). */
+export function stageView(show3D: boolean, meshOnly: boolean, webglFallback: "2d" | "none"): "3d" | "2d" | "mesh-only" | "none" {
+  if (show3D) return "3d";
+  if (webglFallback === "none") return "none";
+  return meshOnly ? "mesh-only" : "2d";
+}
+
+/**
+ * Which optional scene fields reach the 3D view. `"all"`: every one (the Map
+ * panel, the stories). `"backdrop"` (the landing): no alignment artwork and the
+ * view's default coordinate space, as the hero always had. `"capture"` (the
+ * video export): none of focus, follow source, alignment artwork or coordinate
+ * space either, because each changes the filmed frames (camera limits,
+ * walkable floors, unit scale).
+ */
+export type SceneFieldProfile = "all" | "backdrop" | "capture";
+
+export function sceneFieldsFor(profile: SceneFieldProfile) {
+  return {
+    focus: profile !== "capture",
+    followSource: profile !== "capture",
+    alignmentGround: profile === "all",
+    worldCoordinates: profile === "all",
+  };
 }
 
 /** The view a fresh selection starts on: the auto-fit when the scene asks for it, else the whole map. */

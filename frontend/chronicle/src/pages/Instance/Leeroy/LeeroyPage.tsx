@@ -13,6 +13,7 @@ import type { WowMapMeshInstance } from "@/pages/Technical/mapGallery";
 import { InstancePageInner } from "../InstancePage";
 import { LiveSessionProvider } from "../LiveSessionContext";
 import { SyncModeProvider } from "../SyncModeContext";
+import { LEEROY_FEATURED_UNITS } from "./leeroyFeaturedUnits";
 import { TimeRangeProvider } from "../TimeRangeContext";
 import { buildLeeroyStreams } from "./leeroyStreams";
 
@@ -48,6 +49,7 @@ function LeeroyInstance({ mesh }: { mesh: WowMapMeshInstance }) {
     name: "Leeroy Jenkins: The Rookery",
     maxPlayers: Object.keys(leeroyRookery.players).length,
     replayCameraPath: leeroyChargeCamera(mesh.bounds, 0),
+    replayFeaturedUnits: LEEROY_FEATURED_UNITS,
   }), [fixture, mesh]);
   const eventContext = useMemo(() => ({
     instanceId: instance.id,
