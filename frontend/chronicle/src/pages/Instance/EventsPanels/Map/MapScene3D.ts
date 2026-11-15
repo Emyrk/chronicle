@@ -26,7 +26,7 @@ import {
   type DirectorUnit,
 } from "./cameraDirector";
 import type { LiveMapPresence } from "../../liveSessionProtocol";
-import { actionForKey, cameraAngles, cameraCollisionDistance, cameraOffset, clampMobileMapInput, clockStepSeconds, easeAngleToward, frameStepSeconds, IDLE_MOBILE_MAP_INPUT, lookDrag, type MobileMapInput, planarStep, pointerLossEndsDrag, shouldFollowWalkCamera, stickPitch, turnYaw, WALK_TOGGLE_KEY, walkCameraSettling, walkDragButton, walkMouseControl, walkMovementYaw, wheelZoomDistance } from "./mapControls";
+import { actionForKey, cameraAngles, cameraCollisionDistance, cameraOffset, clampMobileMapInput, clockStepSeconds, frameStepSeconds, IDLE_MOBILE_MAP_INPUT, type MobileMapInput, planarStep, pointerLossEndsDrag, turnYaw, WALK_TOGGLE_KEY, walkDragButton, walkMouseControl, walkMovementYaw, wheelZoomDistance } from "./mapControls";
 import { climbElevations, createShotHold, directorPullIn, fallbackShot, FOLLOW_CENTRE_WINDOW_MS, FOLLOW_SHOT_CHECK_MS, FOLLOW_STEEP_ELEVATION_DEG, releaseSteepShot, shotCheckDue, steepPullIn, FOLLOW_SIGHT_STRIDE, FOLLOW_STEEP_MIN_DISTANCE_YARDS, seesFraming, sightPicks, type ShotAnswer, FOLLOW_SLICE_MS, followSprings, followYawStep, handOverFollowSpring, handOverFollowYaw, startFollowTrackBuild, wrapAngle, type FollowTrackBuild, followKeyAt, glideDurationMs, glidePoseAt, glideTurnMs, unwrapNear, holdShot, isReplayJump, type FollowKey, type FollowTrack, type FollowYawProbe, type GlidePose } from "./followCamera";
 import { type DispelKind } from "./unitTokenArt";
 import { UnitTokenTextures } from "./unitTokens";
@@ -72,18 +72,10 @@ import {
   UNIT_CLICK_SLOP_PX,
   WALK_BACK_YPS,
   WALK_BODY_TURN_RATE_PER_S,
-  WALK_CAMERA_FOLLOW_RATE_PER_S,
-  WALK_CAMERA_TURN_FOLLOW_RATE_PER_S,
-  WALK_COLLISION_PADDING_YARDS,
   WALK_EXIT_DISTANCE_YARDS,
-  WALK_EYE_YARDS,
-  WALK_FIRST_PERSON_EXIT_YARDS,
-  WALK_FIRST_PERSON_YARDS,
   WALK_FLY_YPS,
   WALK_GRAVITY_YPS2,
   WALK_JUMP_YPS,
-  WALK_MAX_DISTANCE_YARDS,
-  WALK_PITCH_LIMIT_RADIANS,
   WALK_RUN_YPS,
   WALK_START_DISTANCE_YARDS,
   WALK_START_PITCH_RADIANS,
@@ -96,6 +88,7 @@ import { CameraArbiter, type CameraOwner } from "./cameraArbiter";
 import { TweenRig } from "./tweenRig";
 import { ScriptedRig } from "./scriptedRig";
 import { FreeRig } from "./freeRig";
+import { WalkRig } from "./walkRig";
 import { MapInputState, mobileInputActive, MouseDrag, type InputFrame } from "./inputFrame";
 import { UnitLayer, type UnitObject } from "./unitLayer";
 import { EffectsLayer } from "./effectsLayer";
@@ -635,6 +628,15 @@ export class MapScene3D {
   private readonly presence: LivePresence;
   private onWalkChange: (walking: boolean) => void = () => {};
   private readonly walkHead = new THREE.Vector3();
+  // Walk mode's camera (walkRig.ts); the character stays with updateWalk.
+  private readonly walkRig = new WalkRig({
+    camera: this.camera,
+    controls: () => this.controls,
+    head: this.walkHead,
+    direction: this.collisionDirection,
+    collideCamera: (from, direction, shown, want, padding, min, dt) => this.collideCamera(from, direction, shown, want, padding, min, dt),
+    walking: () => this.walk !== null,
+  });
   private readonly onEffectHover: (hover: MapScene3DEffectHover | null) => void;
 
   private readonly container: HTMLElement;
@@ -2063,10 +2065,7 @@ export class MapScene3D {
     if (this.walk && drag) {
       // Drag looks around the character; right-drag also turns it to face the view.
       drag.look(event, this.pointerLocked());
-      const look = lookDrag(this.walk.camYaw, this.walk.camPitch, drag.dx, drag.dy, -WALK_PITCH_LIMIT_RADIANS, WALK_PITCH_LIMIT_RADIANS);
-      this.walk.camYaw = look.yaw;
-      this.walk.camPitch = look.pitch;
-      if (walkMouseControl(drag.buttons).steering) this.walk.yaw = this.walk.camYaw;
+      this.walkRig.look(this.walk, drag.dx, drag.dy, walkMouseControl(drag.buttons).steering);
       this.requestRender();
     }
     if (event.pointerType !== "mouse") {
@@ -2697,17 +2696,8 @@ export class MapScene3D {
     if (turn) {
       walk.yaw = turnYaw(walk.yaw, turn, dt);
     }
-    // Any planar movement brings a free-look camera back behind the character.
-    // Turning (keys or the look stick) moves the target yaw first, so the camera
-    // trails the turn, and keeps settling at the turn rate once the turn stops.
-    walk.camSettling = walkCameraSettling(walk.camSettling, turn, input.dragging, walk.camYaw, walk.yaw);
-    if (shouldFollowWalkCamera(forward, strafe, turn, input.dragging, walk.camSettling)) {
-      const followRate = turn || walk.camSettling ? WALK_CAMERA_TURN_FOLLOW_RATE_PER_S : WALK_CAMERA_FOLLOW_RATE_PER_S;
-      walk.camYaw = easeAngleToward(walk.camYaw, walk.yaw, followRate, dt);
-    }
-    if (input.pitch) {
-      walk.camPitch = Math.max(-WALK_PITCH_LIMIT_RADIANS, Math.min(WALK_PITCH_LIMIT_RADIANS, stickPitch(walk.camPitch, input.pitch, dt)));
-    }
+    // The camera trails behind (WalkRig.trail).
+    this.walkRig.trail(walk, input, dt);
     if (forward || strafe) {
       // Facing (yaw) points along -z turned by yaw, as a unit's facing cone does.
       const step = planarStep(walk.yaw, forward, strafe, (forward < 0 ? WALK_BACK_YPS : WALK_RUN_YPS) * scale * dt);
@@ -2751,32 +2741,8 @@ export class MapScene3D {
     walk.bodyTurn += (bodyTurn - walk.bodyTurn) * (1 - Math.exp(-WALK_BODY_TURN_RATE_PER_S * dt));
     walk.avatar.position.copy(walk.position);
     walk.avatar.rotation.y = walk.yaw + walk.bodyTurn;
-    const head = this.walkHead.set(walk.position.x, walk.position.y + WALK_EYE_YARDS * scale, walk.position.z);
-    // The camera sits as the free cam's does around its pivot (cameraOffset).
-    const direction = cameraOffset(walk.camYaw, walk.camPitch, 1);
-    // A wall between the head and the camera pulls the camera in front of it,
-    // down to first person, so the character stays in view (chronicle-1513).
-    const collision = this.collideCamera(
-      head,
-      this.collisionDirection.set(direction.x, direction.y, direction.z),
-      walk.camShown * scale,
-      walk.camDistance * scale,
-      WALK_COLLISION_PADDING_YARDS * scale,
-      0,
-      dt,
-    );
-    walk.camShown = collision.distance / scale;
-    const firstPerson = walk.camShown <= WALK_FIRST_PERSON_YARDS;
-    walk.avatar.visible = !firstPerson;
-    if (firstPerson) {
-      this.camera.position.copy(head);
-      this.camera.lookAt(head.x - direction.x, head.y - direction.y, head.z - direction.z);
-    } else {
-      const distance = walk.camShown * scale;
-      this.camera.position.set(head.x + direction.x * distance, head.y + direction.y * distance, head.z + direction.z * distance);
-      this.camera.lookAt(head);
-    }
-    this.controls.target.copy(head);
+    // The camera behind the head (WalkRig.place); in first person the body hides.
+    walk.avatar.visible = !this.walkRig.place(walk, walk.position, scale, dt);
     this.updateUnitScale();
     return true;
   }
@@ -2799,13 +2765,7 @@ export class MapScene3D {
       this.requestRender();
       return;
     }
-    const zoomingIn = event.deltaY < 0;
-    if (walk.camDistance === 0 && !zoomingIn) {
-      walk.camDistance = WALK_FIRST_PERSON_EXIT_YARDS;
-    } else {
-      const next = wheelZoomDistance(walk.camDistance, event.deltaY, 0, WALK_MAX_DISTANCE_YARDS);
-      walk.camDistance = zoomingIn && next <= WALK_FIRST_PERSON_YARDS ? 0 : next;
-    }
+    this.walkRig.zoom(walk, event.deltaY);
     this.requestRender();
   };
 
