@@ -14,19 +14,6 @@ WHERE ws.tenant_id IS NOT DISTINCT FROM sqlc.narg(tenant_id)::uuid
 ORDER BY gp.updated_at DESC NULLS LAST, g.created_at DESC, g.id
 LIMIT @result_limit;
 
--- name: ListSitemapCharacters :many
--- Most recently seen characters whose latest sighting is a listed log.
--- Walks idx_game_players_updated_at newest-first and stops at the limit.
-SELECT gp.id, r.name AS realm_name, gp.updated_at
-FROM game_players gp
-JOIN wow_server_realms r ON r.id = gp.realm_id
-JOIN wow_servers ws ON ws.id = r.server_id
-JOIN log_instances li ON li.id = gp.updated_from_instance
-JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
-WHERE ws.tenant_id IS NOT DISTINCT FROM sqlc.narg(tenant_id)::uuid
-ORDER BY gp.updated_at DESC
-LIMIT @result_limit;
-
 -- name: ListSitemapInstances :many
 -- Most recent listed, valid, finalized instance logs.
 -- Walks idx_log_instances_start_time newest-first and stops at the limit.
