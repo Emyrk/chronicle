@@ -370,6 +370,10 @@ export interface MapScene3DOptions {
    * through captureFrame.
    */
   capture?: { width: number; height: number } | null;
+  /** Builds the renderer; a WebGLRenderer by default. Tests pass a stub (there is no WebGL in Node). */
+  createRenderer?: (parameters: THREE.WebGLRendererParameters) => THREE.WebGLRenderer;
+  /** The clock (ms) the scene stamps clock anchors, tweens and throttles with; performance.now by default. */
+  now?: () => number;
 }
 
 /** What the drone camera needs from the scene: its yard scale, unit placement and mesh probe. */
@@ -984,6 +988,7 @@ export class MapScene3D {
   private frame = 0;
   private disposed = false;
   private readonly capture: { width: number; height: number } | null;
+  private readonly now: () => number;
   // Boss minis still loading, and whether the caller still has asset data in flight (spell icons).
   private bossMinisLoading = 0;
   private externalPending = false;
@@ -1253,6 +1258,7 @@ export class MapScene3D {
     options: MapScene3DOptions = {},
   ) {
     this.capture = options.capture ?? null;
+    this.now = options.now ?? (() => performance.now());
     this.container = container;
     this.keyWindow = container.ownerDocument.defaultView ?? window;
     this.onContextLost = onContextLost;
@@ -1263,7 +1269,8 @@ export class MapScene3D {
     // Throws when WebGL is unavailable; the caller falls back to 2D.
     // A capture scene keeps its drawing buffer so the video encoder can read
     // each frame, and renders at exactly the output size.
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: this.capture !== null });
+    const createRenderer = options.createRenderer ?? ((parameters) => new THREE.WebGLRenderer(parameters));
+    this.renderer = createRenderer({ antialias: true, preserveDrawingBuffer: this.capture !== null });
     this.renderer.setPixelRatio(this.capture ? 1 : Math.min(window.devicePixelRatio, 2));
     this.renderer.setClearColor(0x11100d);
     this.renderer.domElement.style.display = "block";
@@ -1714,7 +1721,7 @@ export class MapScene3D {
    */
   setEffectClock(cursorMs: number, playing: boolean, speed: number) {
     this.clock.ms = cursorMs;
-    this.clock.at = performance.now();
+    this.clock.at = this.now();
     this.clock.playing = playing;
     this.clock.speed = speed;
     this.requestRender();
@@ -1796,7 +1803,7 @@ export class MapScene3D {
   cutDirector() {
     if (!this.director) return;
     // A replay jump that lands a frame or two later still cuts, not glides.
-    this.directorCutUntil = performance.now() + DIRECTOR_CUT_WINDOW_MS;
+    this.directorCutUntil = this.now() + DIRECTOR_CUT_WINDOW_MS;
     this.directorGoal.seeded = false;
     this.directorInFrame.clear();
     this.engageDirector(true);
@@ -1909,7 +1916,7 @@ export class MapScene3D {
         const height = unit.z ?? (floor === null ? undefined : floor / inputs.scale);
         return { guid: unit.guid, x, z, player: unit.player, boss: unit.boss, dead: unit.dead, height };
       }),
-    });
+    }, this.now);
     const slice = () => {
       const current = this.followBuild;
       if (this.disposed || !current || current.build !== build) return;
@@ -2031,7 +2038,7 @@ export class MapScene3D {
     const from = this.cameraViewport();
     this.viewport = viewport;
     if (durationMs > 0) {
-      this.viewAnimation = { from, direction, start: performance.now(), duration: durationMs };
+      this.viewAnimation = { from, direction, start: this.now(), duration: durationMs };
       this.requestRender();
       return;
     }
@@ -2271,7 +2278,7 @@ export class MapScene3D {
       })),
       scale: mesh.scale,
       candidatesAt: (x, z) => this.floorCandidates(x, z),
-    });
+    }, this.now);
     const slice = () => {
       const current = this.floorBuild;
       if (this.disposed || !current || current.build !== build) return;
@@ -3000,7 +3007,7 @@ export class MapScene3D {
       fromDistance: current,
       toDistance: Math.min(this.controls.maxDistance, Math.max(this.controls.minDistance, wanted)),
       direction: this.camera.position.clone().sub(target).normalize(),
-      start: performance.now(),
+      start: this.now(),
     };
     this.requestRender();
   };
@@ -4215,7 +4222,7 @@ export class MapScene3D {
   // while loading or after a failed load (retried after ICON_RETRY_MS).
   private iconTexture(url: string): THREE.Texture | null {
     const cached = this.iconTextures.get(url);
-    if (cached !== undefined && !(typeof cached === "number" && performance.now() - cached >= ICON_RETRY_MS)) {
+    if (cached !== undefined && !(typeof cached === "number" && this.now() - cached >= ICON_RETRY_MS)) {
       // Re-insert to keep the cache in least-recently-used order.
       this.iconTextures.delete(url);
       this.iconTextures.set(url, cached);
@@ -4233,7 +4240,7 @@ export class MapScene3D {
       this.requestRender();
     }, undefined, () => {
       if (this.disposed || this.iconTextures.get(url) !== "loading") return;
-      this.iconTextures.set(url, performance.now());
+      this.iconTextures.set(url, this.now());
       this.requestRender();
     });
     if (this.iconTextures.size > MAX_ICON_TEXTURES) {
@@ -4965,7 +4972,7 @@ export class MapScene3D {
     const presence = this.currentPresence();
     const json = JSON.stringify(presence);
     const last = this.lastPresence;
-    const now = performance.now();
+    const now = this.now();
     if (!force && last) {
       if (json === last.json) return;
       const wait = PRESENCE_SEND_MS - (now - last.at);
