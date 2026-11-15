@@ -36,6 +36,7 @@ import { DEFAULT_EFFECT_SETTINGS, type EffectSettings } from "./mapViewSettings"
 import { CAPSULE_AVATAR } from "./walkAvatars";
 import type { MobileMapInput } from "./mapControls";
 import { MapCompass } from "./MapCompass";
+import type { CameraOwner } from "./cameraArbiter";
 
 export interface MapView3DProps {
   ground: MapSceneGround;
@@ -111,6 +112,12 @@ export interface MapView3DProps {
   followGuid?: string | null;
   /** Called when the followed unit changes, including when the user takes the camera (null). */
   onFollowChange?: (guid: string | null) => void;
+  /**
+   * Called with who owns the camera and whether the viewer took it from the
+   * follow camera (MapScene3D.setOnCameraOwnerChange): once the scene is set
+   * up, on every change, and with (null, false) when the scene goes away.
+   */
+  onCameraOwnerChange?: (owner: CameraOwner | null, taken: boolean) => void;
   /** An authored orbit-camera pose. Takes precedence over cameraPath. */
   cameraPose?: MapCameraPose | null;
   /** Timestamped authored poses, sampled against the frame-smoothed replay clock. */
@@ -224,6 +231,7 @@ export default function MapView3D({
   debuffSpellIds = NO_DEBUFFS,
   followGuid = null,
   onFollowChange,
+  onCameraOwnerChange,
   cameraPose = null,
   cameraPath = null,
   cameraPathStartMs = 0,
@@ -243,6 +251,7 @@ export default function MapView3D({
   const onDungeonMeshStateRef = useRef(onDungeonMeshState);
   const onCameraCaptureRef = useRef(onCameraCapture);
   const onSceneRef = useRef(onScene);
+  const onCameraOwnerChangeRef = useRef(onCameraOwnerChange);
   const captureRef = useRef(capture);
   const colorCacheRef = useRef(new Map<string, string>());
   const smoothMs = useSmoothReplayTime(cursorMs, playing, playbackSpeed);
@@ -272,7 +281,8 @@ export default function MapView3D({
     onDungeonMeshStateRef.current = onDungeonMeshState;
     onCameraCaptureRef.current = onCameraCapture;
     onSceneRef.current = onScene;
-  }, [onCameraCapture, onDungeonMeshState, onScene, onUnavailable, onUserViewport]);
+    onCameraOwnerChangeRef.current = onCameraOwnerChange;
+  }, [onCameraCapture, onCameraOwnerChange, onDungeonMeshState, onScene, onUnavailable, onUserViewport]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -350,6 +360,19 @@ export default function MapView3D({
     appliedViewKeyRef.current = view.key;
     scene.setViewport(view.viewport, animate ? VIEW_TRANSITION_MS : 0);
   }, [view]);
+
+  // After the Director and view effects above, so the first report is the
+  // camera as set up. The scene reports a change it causes from its callback
+  // after the callback returns; the host's state updates batch into a render.
+  useEffect(() => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+    scene.setOnCameraOwnerChange((owner, taken) => onCameraOwnerChangeRef.current?.(owner, taken));
+    return () => {
+      scene.setOnCameraOwnerChange(null);
+      onCameraOwnerChangeRef.current?.(null, false);
+    };
+  }, []);
 
   useEffect(() => {
     const container = containerRef.current;
