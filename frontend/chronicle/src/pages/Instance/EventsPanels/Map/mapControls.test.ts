@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { actionForKey, cameraAngles, cameraCollisionDistance, cameraOffset, FREE_CAM_FAST_FACTOR, freeCamTravelSpeed, lookDrag, LOOK_RADIANS_PER_PX, planarStep, wheelZoomDistance, clampMobileMapInput, DEFAULT_AD_STRAFE, easeAngleToward, keyLabel, MAP_CONTROL_ACTIONS, MAP_CONTROL_KEYBINDS, mobileJoystickAxis, pointerLossEndsDrag, rightDragWalkAxes, setWalkMouseButton, shouldFollowWalkCamera, WALK_CAMERA_SETTLED_RADIANS, walkCameraSettling, walkDragButton, walkMovementYaw, walkMouseControl, WALK_TOGGLE_KEY } from "./mapControls";
+import { actionForKey, cameraAngles, cameraCollisionDistance, cameraOffset, freeCamTravelSpeed, lookDrag, planarStep, wheelZoomDistance, clampMobileMapInput, DEFAULT_AD_STRAFE, easeAngleToward, keyLabel, MAP_CONTROL_ACTIONS, MAP_CONTROL_KEYBINDS, mobileJoystickAxis, pointerLossEndsDrag, rightDragWalkAxes, setWalkMouseButton, shouldFollowWalkCamera, walkCameraSettling, walkDragButton, walkMovementYaw, walkMouseControl, WALK_TOGGLE_KEY } from "./mapControls";
+import { FREE_CAM_FAST_FACTOR, LOOK_RADIANS_PER_PX, WALK_CAMERA_SETTLED_RADIANS } from "./controlProfile";
 
 describe("easeAngleToward", () => {
   it("eases toward the target without snapping", () => {

@@ -7,7 +7,8 @@
  */
 import * as THREE from "three";
 import { participantHue, participantLabel, type LiveMapPresence } from "../../liveSessionProtocol";
-import { KEY_MAX_STEP_S, PLAYER_GEOMETRY_HEIGHT } from "./sceneConstants";
+import { PLAYER_GEOMETRY_HEIGHT } from "./sceneConstants";
+import { FRAME_STEP_MAX_S } from "./controlProfile";
 import { createLabelSprite } from "./sceneFactories";
 
 // --- Live session presence: everyone's camera or walking character ---
@@ -170,7 +171,7 @@ export class LivePresence {
 
   // Eases others' presences toward their latest update; true while any moves.
   updateRemotePresences(now: number, mesh: { url: string } | null, unitScale: number): boolean {
-    const dt = this.presenceAt ? Math.min(KEY_MAX_STEP_S, (now - this.presenceAt) / 1000) : 0;
+    const dt = this.presenceAt ? Math.min(FRAME_STEP_MAX_S, (now - this.presenceAt) / 1000) : 0;
     this.presenceAt = now;
     if (this.remotePresences.size === 0) return false;
     const ease = 1 - Math.exp(-PRESENCE_EASE_PER_S * dt);
