@@ -81,6 +81,47 @@ export function summarizeCohort(
   };
 }
 
+export interface NormalDistributionFit {
+  mean: number;
+  standardDeviation: number;
+  /** Largest gap between the empirical and fitted cumulative distributions. */
+  maxCdfGap: number;
+}
+
+/** Standard normal CDF using the Abramowitz and Stegun erf approximation. */
+export function normalCdf(value: number, mean = 0, standardDeviation = 1): number {
+  if (standardDeviation <= 0) return value < mean ? 0 : 1;
+  const z = (value - mean) / (standardDeviation * Math.SQRT2);
+  const sign = z < 0 ? -1 : 1;
+  const x = Math.abs(z);
+  const t = 1 / (1 + 0.3275911 * x);
+  const erf = sign * (1 - (((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t) * Math.exp(-x * x));
+  return (1 + erf) / 2;
+}
+
+/**
+ * Fits a normal distribution with maximum-likelihood mean and variance. The
+ * CDF gap is the Kolmogorov distance, reported descriptively rather than as a
+ * p-value because the mean and variance were estimated from the same sample.
+ */
+export function fitNormalDistribution(values: readonly number[]): NormalDistributionFit | null {
+  if (values.length < 3) return null;
+  const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+  const variance = values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length;
+  const standardDeviation = Math.sqrt(variance);
+  if (!Number.isFinite(standardDeviation) || standardDeviation <= Number.EPSILON) return null;
+
+  const sorted = [...values].sort((a, b) => a - b);
+  let maxCdfGap = 0;
+  for (let index = 0; index < sorted.length; index++) {
+    const fitted = normalCdf(sorted[index], mean, standardDeviation);
+    const empiricalBefore = index / sorted.length;
+    const empiricalAfter = (index + 1) / sorted.length;
+    maxCdfGap = Math.max(maxCdfGap, Math.abs(fitted - empiricalBefore), Math.abs(empiricalAfter - fitted));
+  }
+  return { mean, standardDeviation, maxCdfGap };
+}
+
 export interface HistogramBin {
   start: number;
   end: number;
