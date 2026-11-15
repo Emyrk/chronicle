@@ -62,9 +62,9 @@ func TestBlogFeedbackLifecycle(t *testing.T) {
 	reserved, err := db.GetBlogFeedback(ctx, database.GetBlogFeedbackParams{PostSlug: "post", UserID: user})
 	require.NoError(t, err)
 	require.Equal(t, row.ID, reserved.ID)
-	rows, err = db.ListAdminBlogFeedback(ctx, database.ListAdminBlogFeedbackParams{LimitCount: 100})
+	adminRows, err := db.ListAdminBlogFeedback(ctx, database.ListAdminBlogFeedbackParams{LimitCount: 100})
 	require.NoError(t, err)
-	require.Len(t, rows, 1)
+	require.Len(t, adminRows, 1)
 }
 
 func TestBlogConstraintsAndVotes(t *testing.T) {

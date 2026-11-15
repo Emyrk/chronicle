@@ -3,6 +3,7 @@ import { MessageSquare, Pencil, ThumbsDown, ThumbsUp } from "lucide-react";
 import { useBlogMutation, useBlogInteractions, useBlogSummaries, blogFeedbackMutation, type OwnFeedback } from "@/api/blogInteractions";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
+import type { BlogStorageReward } from "./blogStorageRewards";
 import type { BlogPostMetadata } from "./blogRegistry";
 
 const subscribe = () => () => {};
@@ -36,7 +37,7 @@ function LiveInteractions({ post }: { post: BlogPostMetadata }) {
   const { session, isLoading: authLoading } = useAuth();
   const publicQuery = useBlogInteractions(post.id, session?.user_id, authLoading);
   const own = publicQuery;
-  const mutation = useBlogMutation(post.id);
+  const mutation = useBlogMutation(post.id, { vote: own.data?.vote_reward });
   if (publicQuery.data && !publicQuery.data.voting_enabled && !publicQuery.data.feedback_enabled) return null;
   const votingEnabled = post.votingEnabled !== false && publicQuery.data?.voting_enabled;
   const feedbackEnabled = post.feedbackEnabled !== false && publicQuery.data?.feedback_enabled;
@@ -63,6 +64,7 @@ function LiveInteractions({ post }: { post: BlogPostMetadata }) {
         {own.data?.own_vote !== 0 && own.data?.own_vote !== undefined && <span className="hidden px-1 text-xs text-muted-foreground lg:inline">Select your vote again to remove it.</span>}
       </div>
     </div>}
+
     {(feedbackEnabled || publicQuery.error || mutation.error) && <section id={FEEDBACK_SECTION_ID} aria-label="Post feedback" className="mx-auto mb-12 w-full max-w-3xl scroll-mt-8 px-4 sm:px-10">
       <div className="space-y-6 border-t border-border pt-8">
         <header className="flex flex-wrap items-end justify-between gap-3">
@@ -88,7 +90,7 @@ function LiveInteractions({ post }: { post: BlogPostMetadata }) {
         {feedbackEnabled && !authLoading && !session && <p className="rounded-lg border border-border bg-card px-4 py-4 text-sm text-muted-foreground"><a href={signInHref} className="font-medium text-primary underline">Sign in</a> to leave feedback. Public feedback is anonymous.</p>}
         {own.data?.feedback_banned && <p role="status" className="text-sm text-muted-foreground">Your account cannot submit feedback. You can still vote.</p>}
         {mutation.error && <p role="alert" className="text-sm text-destructive">{mutation.error.message}</p>}
-        {feedbackEnabled && session && own.data && !own.data.feedback_banned && !own.data.own_feedback?.deleted && <FeedbackEditor key={`${session.user_id}:${own.data.own_feedback?.body ?? "new"}:${own.data.own_feedback?.consent ?? false}`} postID={post.id} feedback={own.data.own_feedback ?? null} />}
+        {feedbackEnabled && session && own.data && !own.data.feedback_banned && !own.data.own_feedback?.deleted && <FeedbackEditor key={`${session.user_id}:${own.data.own_feedback?.body ?? "new"}:${own.data.own_feedback?.consent ?? false}`} postID={post.id} reward={own.data.feedback_reward} feedback={own.data.own_feedback ?? null} />}
         {feedbackEnabled && own.data?.own_feedback?.deleted && <p className="text-sm text-muted-foreground">Your feedback was removed by a moderator. This response cannot be recreated.</p>}
       </div>
     </section>}
@@ -129,12 +131,12 @@ function LiveCardStats({ post }: { post: BlogPostMetadata }) {
 }
 
 /** Saved feedback reads as a fixed card; Edit opens the form, and a successful save closes it. */
-export function FeedbackEditor({ postID, feedback, initialEditing = false }: { postID: string; feedback: OwnFeedback | null; initialEditing?: boolean }) {
+export function FeedbackEditor({ postID, feedback, reward, initialEditing = false }: { postID: string; feedback: OwnFeedback | null; reward?: BlogStorageReward; initialEditing?: boolean }) {
   const [editing, setEditing] = useState(initialEditing || !feedback);
   const [body, setBody] = useState(feedback?.body ?? "");
   const [consent, setConsent] = useState(feedback?.consent ?? false);
   const [confirming, setConfirming] = useState(false);
-  const mutation = useBlogMutation(postID);
+  const mutation = useBlogMutation(postID, { feedback: reward });
   const length = Array.from(body.trim()).length;
   const tooLong = length > 300;
   const statusBadge = feedback && <span className="rounded-full border border-border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wide text-muted-foreground">{feedbackStatusLabel(feedback)}</span>;

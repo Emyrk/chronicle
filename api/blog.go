@@ -54,6 +54,12 @@ func (a *API) GetBlogInteractions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out := chroniclesdk.BlogInteractions{VotingEnabled: state.VotingEnabled, FeedbackEnabled: state.FeedbackEnabled, Enabled: state.Enabled, UpVotes: state.Votes.Up, Feedback: []chroniclesdk.BlogPublicFeedback{}}
+	if state.VoteReward != nil {
+		out.VoteReward = &chroniclesdk.BlogStorageReward{Eligible: state.VoteReward.Eligible, ExpiresAt: state.VoteReward.ExpiresAt}
+	}
+	if state.FeedbackReward != nil {
+		out.FeedbackReward = &chroniclesdk.BlogStorageReward{Eligible: state.FeedbackReward.Eligible, ExpiresAt: state.FeedbackReward.ExpiresAt}
+	}
 	if ownVote {
 		out.OwnVote = &state.Votes.Own
 	}

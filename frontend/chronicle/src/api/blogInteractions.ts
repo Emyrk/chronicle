@@ -1,3 +1,5 @@
+import { toast } from "sonner";
+import { blogRewardSuccessMessage, type BlogStorageReward } from "../blog/blogStorageRewards";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { BlogInteractionSummary, BlogAdminFeedback, BlogAdminVotes, BlogInteractions, BlogOwnFeedback, BlogVoteRequest, BlogFeedbackRequest, BlogModerationRequest } from "./typesGenerated";
@@ -34,12 +36,16 @@ export function useBlogSummaries() {
 export function useAdminBlogVotes(id: string) {
   return useQuery({ queryKey: ["admin", "blogVotes", id], queryFn: () => blogRequest<BlogAdminVotes>(`/api/v1/admin/blog/${encodeURIComponent(id)}/votes`), retry: false });
 }
-export function useBlogMutation(id: string) {
+export function useBlogMutation(id: string, rewards?: { vote?: BlogStorageReward; feedback?: BlogStorageReward }) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: ({ resource, method, body }: { resource: "vote"; method: "PUT"; body: BlogVoteRequest } | { resource: "feedback"; method: "PUT"; body: BlogFeedbackRequest }) => blogRequest(`${base(id)}/${resource}`, method, body),
-    onSuccess: async () => {
-      await Promise.all([client.invalidateQueries({ queryKey: ["blogInteractions", id] }), client.invalidateQueries({ queryKey: ["blogInteractionSummaries"] })]);
+    // Snapshot eligibility before invalidation changes the current post's reward state.
+    onMutate: (variables) => ({ reward: rewards?.[variables.resource] }),
+    onSuccess: async (_data, variables, context) => {
+      const message = blogRewardSuccessMessage(context?.reward, variables.resource, variables.resource !== "vote" || variables.body.vote !== 0);
+      if (message) toast.success(message);
+      await Promise.all([client.invalidateQueries({ queryKey: ["blogInteractions"] }), client.invalidateQueries({ queryKey: ["blogInteractionSummaries"] }), client.invalidateQueries({ queryKey: ["my-storage"] })]);
     },
   });
 }

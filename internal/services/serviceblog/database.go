@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/storagegrants"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -48,11 +49,27 @@ func (d *databaseStore) Summaries(ctx context.Context) ([]Summary, error) {
 	return out, nil
 }
 func (d *databaseStore) SetVote(ctx context.Context, slug string, user uuid.UUID, value int16) error {
-	if value == 0 {
-		return d.db.DeleteBlogVote(ctx, database.DeleteBlogVoteParams{PostSlug: slug, UserID: user})
-	}
-	_, err := d.db.UpsertBlogVote(ctx, database.UpsertBlogVoteParams{PostSlug: slug, UserID: user, Value: value})
-	return err
+	return d.db.InTx(ctx, func(tx database.Store) error {
+		// Read before mutation to distinguish legacy votes from genuinely new ones.
+		_, existingErr := tx.GetBlogVote(ctx, database.GetBlogVoteParams{PostSlug: slug, UserID: user})
+		if existingErr != nil && !errors.Is(existingErr, sql.ErrNoRows) {
+			return existingErr
+		}
+		claimed, err := tx.ClaimBlogVoteReward(ctx, database.ClaimBlogVoteRewardParams{PostSlug: slug, UserID: user, Removing: value == 0})
+		if err != nil {
+			return err
+		}
+		if value == 0 {
+			return tx.DeleteBlogVote(ctx, database.DeleteBlogVoteParams{PostSlug: slug, UserID: user})
+		}
+		if _, err = tx.UpsertBlogVote(ctx, database.UpsertBlogVoteParams{PostSlug: slug, UserID: user, Value: value}); err != nil {
+			return err
+		}
+		if claimed > 0 && errors.Is(existingErr, sql.ErrNoRows) {
+			_, err = tx.UpsertDataGrant(ctx, storagegrants.BlogVoteStorageGrant(user, time.Now()))
+		}
+		return err
+	}, nil)
 }
 func (d *databaseStore) OwnFeedback(ctx context.Context, slug string, user uuid.UUID) (*Feedback, error) {
 	row, err := d.db.GetBlogFeedback(ctx, database.GetBlogFeedbackParams{PostSlug: slug, UserID: user})
@@ -65,7 +82,22 @@ func (d *databaseStore) OwnFeedback(ctx context.Context, slug string, user uuid.
 	f := feedback(row)
 	return &f, nil
 }
-func (d *databaseStore) SaveFeedback(ctx context.Context, f Feedback) (Feedback, bool, error) {
+func (d *databaseStore) SaveFeedback(ctx context.Context, f Feedback) (out Feedback, created bool, err error) {
+	err = d.db.InTx(ctx, func(tx database.Store) error {
+		var saveErr error
+		out, created, saveErr = (&databaseStore{db: tx}).saveFeedback(ctx, f)
+		if saveErr != nil {
+			return saveErr
+		}
+		if created {
+			_, saveErr = tx.UpsertDataGrant(ctx, storagegrants.BlogFeedbackStorageGrant(f.UserID, time.Now()))
+		}
+		return saveErr
+	}, nil)
+	return out, created && err == nil, err
+}
+
+func (d *databaseStore) saveFeedback(ctx context.Context, f Feedback) (Feedback, bool, error) {
 	own, err := d.OwnFeedback(ctx, f.PostSlug, f.UserID)
 	if err != nil {
 		return Feedback{}, false, err
@@ -152,4 +184,17 @@ func (d *databaseStore) Moderate(ctx context.Context, id uuid.UUID, action strin
 		return ErrConflict
 	}
 	return err
+}
+
+func (d *databaseStore) Rewards(ctx context.Context, slug string, user uuid.UUID) (Reward, Reward, error) {
+	row, err := d.db.GetBlogRewardState(ctx, database.GetBlogRewardStateParams{PostSlug: slug, UserID: user})
+	vote := Reward{Eligible: row.VoteEligible.Bool}
+	feedback := Reward{Eligible: row.FeedbackEligible}
+	if row.VoteExpiresAt.Valid {
+		vote.ExpiresAt = &row.VoteExpiresAt.Time
+	}
+	if row.FeedbackExpiresAt.Valid {
+		feedback.ExpiresAt = &row.FeedbackExpiresAt.Time
+	}
+	return vote, feedback, err
 }

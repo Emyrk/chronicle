@@ -80,3 +80,21 @@ FROM (
 ) s
 GROUP BY s.post_slug
 ORDER BY s.post_slug;
+
+-- name: ClaimBlogVoteReward :execrows
+-- Existing votes predate rewards and are not new interactions. Record their
+-- reservation too, so removing and recreating them cannot earn a reward.
+INSERT INTO blog_vote_reward_receipts (user_id, post_slug)
+SELECT @user_id, @post_slug
+WHERE NOT @removing::boolean OR EXISTS (
+  SELECT 1 FROM blog_votes WHERE user_id = @user_id AND post_slug = @post_slug
+)
+ON CONFLICT DO NOTHING;
+
+-- name: GetBlogRewardState :one
+SELECT
+  NOT EXISTS (SELECT 1 FROM blog_vote_reward_receipts WHERE blog_vote_reward_receipts.user_id = @user_id AND blog_vote_reward_receipts.post_slug = @post_slug)
+    AND NOT EXISTS (SELECT 1 FROM blog_votes WHERE blog_votes.user_id = @user_id AND blog_votes.post_slug = @post_slug) AS vote_eligible,
+  NOT EXISTS (SELECT 1 FROM blog_feedback WHERE blog_feedback.user_id = @user_id AND blog_feedback.post_slug = @post_slug) AS feedback_eligible,
+  (SELECT expires_at FROM data_grants WHERE data_grants.user_id = @user_id AND source = 'blog-vote') AS vote_expires_at,
+  (SELECT expires_at FROM data_grants WHERE data_grants.user_id = @user_id AND source = 'blog-feedback') AS feedback_expires_at;

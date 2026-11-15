@@ -364,6 +364,11 @@ CREATE TABLE blog_feedback (
     CONSTRAINT blog_feedback_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text])))
 );
 
+CREATE TABLE blog_vote_reward_receipts (
+    user_id uuid NOT NULL,
+    post_slug text NOT NULL
+);
+
 CREATE TABLE blog_votes (
     post_slug text NOT NULL,
     user_id uuid NOT NULL,
@@ -4154,6 +4159,9 @@ ALTER TABLE ONLY blog_feedback
 ALTER TABLE ONLY blog_feedback
     ADD CONSTRAINT blog_feedback_post_slug_user_id_key UNIQUE (post_slug, user_id);
 
+ALTER TABLE ONLY blog_vote_reward_receipts
+    ADD CONSTRAINT blog_vote_reward_receipts_pkey PRIMARY KEY (user_id, post_slug);
+
 ALTER TABLE ONLY blog_votes
     ADD CONSTRAINT blog_votes_pkey PRIMARY KEY (post_slug, user_id);
 
@@ -5448,6 +5456,9 @@ ALTER TABLE ONLY blog_feedback
 
 ALTER TABLE ONLY blog_feedback
     ADD CONSTRAINT blog_feedback_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id);
+
+ALTER TABLE ONLY blog_vote_reward_receipts
+    ADD CONSTRAINT blog_vote_reward_receipts_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id);
 
 ALTER TABLE ONLY blog_votes
     ADD CONSTRAINT blog_votes_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id);
