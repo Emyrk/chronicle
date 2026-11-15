@@ -4,30 +4,9 @@ import { mapAssetUrl, type WowMapFloorBounds, type WowMapLayer, type WowMapMeshL
 import type { MapCameraPose } from "./cameraPath";
 import type { DroneProbe } from "./droneCamera";
 import { CAPSULE_AVATAR, walkAvatarUrl } from "./walkAvatars";
-import {
-  AIM_AHEAD_FRACTION,
-  BOSS_ENGAGE_YARDS,
-  CINEMATIC_ELEVATION_DEG,
-  CINEMATIC_ELEVATION_STEP_DEG,
-  directorFrame,
-  DISTANCE_DEAD_ZONE,
-  DISTANCE_SMOOTH_SECONDS,
-  exceedsDeadZone,
-  frameDistance,
-  MAX_CINEMATIC_ELEVATION_DEG,
-  MIN_FRAME_RADIUS_YARDS,
-  smoothDamp,
-  snapDampedValue,
-  STRAGGLER_CUTOFF_YARDS,
-  STRAGGLER_RELEASE_YARDS,
-  TARGET_DEAD_ZONE_FRACTION,
-  TARGET_SMOOTH_SECONDS,
-  type DampedValue,
-  type DirectorUnit,
-} from "./cameraDirector";
 import type { LiveMapPresence } from "../../liveSessionProtocol";
-import { actionForKey, cameraAngles, cameraCollisionDistance, cameraOffset, clampMobileMapInput, clockStepSeconds, frameStepSeconds, IDLE_MOBILE_MAP_INPUT, type MobileMapInput, planarStep, pointerLossEndsDrag, turnYaw, WALK_TOGGLE_KEY, walkDragButton, walkMouseControl, walkMovementYaw, wheelZoomDistance } from "./mapControls";
-import { climbElevations, createShotHold, directorPullIn, fallbackShot, FOLLOW_CENTRE_WINDOW_MS, FOLLOW_SHOT_CHECK_MS, FOLLOW_STEEP_ELEVATION_DEG, releaseSteepShot, shotCheckDue, steepPullIn, FOLLOW_SIGHT_STRIDE, FOLLOW_STEEP_MIN_DISTANCE_YARDS, seesFraming, sightPicks, type ShotAnswer, FOLLOW_SLICE_MS, followSprings, followYawStep, handOverFollowSpring, handOverFollowYaw, startFollowTrackBuild, wrapAngle, type FollowTrackBuild, followKeyAt, glideDurationMs, glidePoseAt, glideTurnMs, unwrapNear, holdShot, isReplayJump, type FollowKey, type FollowTrack, type FollowYawProbe, type GlidePose } from "./followCamera";
+import { actionForKey, cameraAngles, cameraCollisionDistance, cameraOffset, clampMobileMapInput, frameStepSeconds, IDLE_MOBILE_MAP_INPUT, type MobileMapInput, planarStep, pointerLossEndsDrag, turnYaw, WALK_TOGGLE_KEY, walkDragButton, walkMouseControl, walkMovementYaw, wheelZoomDistance } from "./mapControls";
+import { directorPullIn } from "./followCamera";
 import { type DispelKind } from "./unitTokenArt";
 import { UnitTokenTextures } from "./unitTokens";
 import type { PlanInput, PlanItem, PlanMarkerIcon, PlanPoint } from "./plan/mapPlan";
@@ -37,7 +16,6 @@ import {
   medianHeight,
 } from "./dungeonMeshes";
 import { MAP_CURSOR, MAP_HOSTILE_CURSOR, MAP_UNIT_CURSOR } from "./mapCursors";
-import { FLOOR_TRACK_TOLERANCE_YARDS, floorTrackAt, type FloorTracks } from "./walkableFloors";
 import { flatArtworkUnitScale, FOCUS_RADIUS_YARDS, FULL_MAP_VIEWPORT, mapPointToScene, topDownMapDistance, type MapPoint, type MapViewport } from "./mapModel";
 import { type MapDebugOverlay } from "./mapDebugOverlays";
 import {
@@ -89,6 +67,7 @@ import { TweenRig } from "./tweenRig";
 import { ScriptedRig } from "./scriptedRig";
 import { FreeRig } from "./freeRig";
 import { WalkRig } from "./walkRig";
+import { DirectorRig } from "./directorRig";
 import { MapInputState, mobileInputActive, MouseDrag, type InputFrame } from "./inputFrame";
 import { UnitLayer, type UnitObject } from "./unitLayer";
 import { EffectsLayer } from "./effectsLayer";
@@ -130,20 +109,6 @@ const MESH_ANGLED_OFFSET = new THREE.Vector3(0, 1.6, 0.75);
 // walking pulls it in close and the far plane with it, for depth precision.
 const WALK_NEAR_YARDS = 0.1;
 const WALK_FAR_YARDS = 3000;
-
-// A Director spring is settled once it is within this fraction of its goal.
-const DIRECTOR_SETTLED = 1e-3;
-// The yaw counts as settled within this (radians).
-const DIRECTOR_SETTLED_YAW = 1e-3;
-// With even the highest elevation blocked, the shot comes this much closer.
-const CLEAR_SHOT_SHORTEN = 0.75;
-// The elevations the Director's line of sight climbs through.
-const DIRECTOR_CLIMB = climbElevations(CINEMATIC_ELEVATION_DEG, CINEMATIC_ELEVATION_STEP_DEG, MAX_CINEMATIC_ELEVATION_DEG);
-// A wall pulls the Director's camera in over about this long (seconds) instead
-// of in one frame; it eases back out at the distance spring's pace.
-const DIRECTOR_COLLISION_IN_SECONDS = 0.25;
-// A user's jump (cutDirector) cuts when the replay jumps within this long of it.
-const DIRECTOR_CUT_WINDOW_MS = 1_000;
 
 export type DungeonMeshState = "loading" | "ready" | "failed";
 
@@ -222,18 +187,6 @@ export interface MapSceneFollowSource {
 export interface MapSceneUnitTrack {
   guid: string;
   samples: readonly { ms: number; point: MapPoint }[];
-}
-
-/** What a follow track was built for. */
-interface FollowTrackInputs {
-  key: string;
-  subject: string | null;
-  aspect: number;
-  scale: number;
-  speed: number;
-  endMs: number;
-  /** The no-Z floor tracks the yaw probe read units' heights from (null before they land: their arrival rebuilds the track). */
-  floors: FloorTracks | null;
 }
 
 /** The fight the mesh camera is locked to: its centre (artwork point) and Fit zoom. */
@@ -485,7 +438,7 @@ export class MapScene3D {
       this.tween.move = null;
     },
     stopDirector: () => {
-      this.directorRunning = false;
+      this.directorRig.stop();
     },
     dropFollow: () => {
       this.directorSubject = null;
@@ -493,6 +446,26 @@ export class MapScene3D {
     walking: () => this.walk !== null,
     tweening: () => this.tween.active(),
     directorAvailable: () => this.director !== null && this.dungeonMesh !== null,
+  });
+  // The Director's springs, follow track and line of sight (directorRig.ts).
+  private readonly directorRig = new DirectorRig({
+    camera: this.camera,
+    controls: () => this.controls,
+    world: this.world,
+    unitLayer: () => this.unitLayer,
+    effects: () => this.effectsLayer,
+    director: () => this.director,
+    subject: () => this.directorSubject,
+    aspect: () => this.aspect,
+    now: () => this.now(),
+    disposed: () => this.disposed,
+    directing: () => this.directing(),
+    pivotFloor: (x, z) => this.pivotFloor(x, z),
+    cameraCeiling: () => this.cameraCeiling(),
+    cameraYaw: () => this.cameraYaw(),
+    cameraElevationDeg: () => this.cameraElevationDeg(),
+    place: (x, z, distance, elevationDeg, yaw) => this.placeDirectorCamera(x, z, distance, elevationDeg, yaw),
+    requestRender: () => this.requestRender(),
   });
   // The unit the shot follows instead of the group (double-clicked, or a
   // unit frame's Follow); changes are reported through onFollowChange.
@@ -506,24 +479,8 @@ export class MapScene3D {
     this.subject = guid;
     this.onFollowChange(guid);
   }
-  // The springs are seeded and following; a re-engage while this is set is a
-  // no-op, so the whole run's per-tick follow requests do not restart them.
-  private directorRunning = false;
-  // The first valid shot after the dungeon mesh loads should be visible immediately;
-  // later Director changes keep their cinematic spring.
-  private directorSnapPending = false;
-  // Springs: the aim point, the distance and the elevation above the horizon.
-  private readonly directorX: DampedValue = { value: 0, velocity: 0 };
-  private readonly directorZ: DampedValue = { value: 0, velocity: 0 };
-  private readonly directorDistance: DampedValue = { value: 0, velocity: 0 };
-  private readonly directorElevation: DampedValue = { value: CINEMATIC_ELEVATION_DEG, velocity: 0 };
-  // The goal the springs chase; it only moves when the fit leaves the dead zone.
-  private readonly directorGoal = { x: 0, z: 0, distance: 0, seeded: false };
-  private directorAt = 0;
-  // Scratch for the Director's own maths; the effect layer owns `vector`.
+  // Scratch for the camera angle reads (cameraYaw, cameraElevationDeg) and the free cam; the effect layer owns `vector`.
   private readonly directorVector = new THREE.Vector3();
-  private readonly directorAim = new THREE.Vector3();
-  private readonly directorEye = new THREE.Vector3();
   // Camera collision scratch, and the orbit distance the user wants (the
   // camera may sit closer while a wall is in the way) and the one last set.
   private readonly collisionEye = new THREE.Vector3();
@@ -533,71 +490,10 @@ export class MapScene3D {
   private orbitWantDistance: number | null = null;
   private orbitShownDistance: number | null = null;
   private collisionLastMs = 0;
-  // Who the last frame held, for the straggler hysteresis.
-  private readonly directorInFrame = new Set<string>();
-  // The look-ahead (chronicle-1579): the recorded replay, the framing track
-  // built from it off the frame loop, and what that track was built for.
-  private followSource: MapSceneFollowSource | null = null;
-  // The last finished build and what it was for; its track is null when
-  // nobody (or the followed unit) was ever there to frame, which is cached
-  // too, so an empty floor is not rebuilt every frame.
-  private followTrack: FollowTrack | null = null;
-  private followTrackFor: FollowTrackInputs | null = null;
-  // The build in flight, a slice per timer tick so a long run never blocks a frame.
-  private followBuild: { build: FollowTrackBuild; inputs: FollowTrackInputs; timer: ReturnType<typeof setTimeout> } | null = null;
   // How far past the pan radius the Director left the camera: the user's
   // pan limit grows by this on handover (and only shrinks), so grabbing the
   // camera never snaps it back toward the focus in one step.
   private panSlack = 0;
-  // Whether the replay was playing at the Director's last frame: a pause or
-  // resume re-anchors the jump check rather than reading as a jump.
-  private directorReplayPlaying = false;
-  // The track where the group is, and the position and distance springs' goals (sampled ahead by their trails).
-  private readonly followKey: FollowKey = { x: 0, z: 0, radius: 0, yaw: 0 };
-  private readonly followLedKey: FollowKey = { x: 0, z: 0, radius: 0, yaw: 0 };
-  private readonly followSizedKey: FollowKey = { x: 0, z: 0, radius: 0, yaw: 0 };
-  private readonly followYawKey: FollowKey = { x: 0, z: 0, radius: 0, yaw: 0 };
-  // The replay time the Director last framed, and when, to spot a jump.
-  private directorReplayMs: number | null = null;
-  private directorReplayAt = 0;
-  // Until when a replay jump cuts instead of gliding (a jump the user asked for).
-  private directorCutUntil = 0;
-  // Line-of-sight hysteresis, so the shot cannot flip frame to frame.
-  private readonly shotHold = createShotHold();
-  // The last line-of-sight answer, and when it may be asked again (FOLLOW_SHOT_CHECK_MS).
-  private shotRaw: ShotAnswer | null = null;
-  private shotCheckAt = 0;
-  // A wall pulled the steep camera in close: the next answer that is not steep replaces the held one.
-  private shotRelease = false;
-  // The last answer that was not steep: a release falls back to it when the answer is steep.
-  private shotShallow: ShotAnswer | null = null;
-  // The camera's actual target for the steep check (clearShot), and scratch vectors for it.
-  private readonly shotPose = { x: 0, z: 0, floor: 0 };
-  private readonly directorPoseAim = new THREE.Vector3();
-  private readonly directorPoseEye = new THREE.Vector3();
-  // The framed units the line-of-sight answer keeps in sight (sightPicks), at player height.
-  private readonly sightFramed: string[] = [];
-  private readonly sightPicked: number[] = [];
-  private readonly sightTargets: THREE.Vector3[] = [];
-  private readonly sightBoss: boolean[] = [];
-  private sightCount = 0;
-  // The glide across a replay jump, from the pose the camera had.
-  // The yaw turns on its own clock, `turn` ms, when a big turn needs longer than the move.
-  private directorGlide: { start: number; duration: number; turn: number } | null = null;
-  private readonly glideFrom: GlidePose = { x: 0, z: 0, distance: 0, elevationDeg: 0 };
-  private readonly glideTo: GlidePose = { x: 0, z: 0, distance: 0, elevationDeg: 0 };
-  private readonly glidePose: GlidePose = { x: 0, z: 0, distance: 0, elevationDeg: 0 };
-  // The yaw the Director shoots from while it follows a track (chronicle-1724),
-  // unwrapped; without a track it keeps the camera's yaw.
-  private readonly directorYaw: DampedValue = { value: 0, velocity: 0 };
-  // The Director's collision: the distance it wants (the collision ray's
-  // length), what the last ray allowed, and the eased reach between them.
-  private directorWant: number | null = null;
-  private directorAllowed: number | null = null;
-  private readonly directorReach: DampedValue = { value: 0, velocity: 0 };
-  // Refilled per frame so the Director allocates nothing while it runs.
-  private readonly directorUnits: DirectorUnit[] = [];
-
   private readonly matrix = new THREE.Matrix4();
   private readonly color = new THREE.Color();
   private readonly vector = new THREE.Vector3();
@@ -746,7 +642,7 @@ export class MapScene3D {
         aspect: () => this.aspect,
         disposed: () => this.disposed,
         dungeonMesh: () => this.dungeonMesh,
-        followSource: () => this.followSource,
+        followSource: () => this.directorRig.followSource,
         unitScale: () => this.unitScale,
         worldUnitScale: () => this.worldUnitScale,
         hoveredGuid: () => this.hoveredGuid,
@@ -930,7 +826,7 @@ export class MapScene3D {
     const current = this.dungeonMesh?.url ?? this.dungeonMeshRequest?.url ?? null;
     if ((request?.url ?? null) === current) return;
     this.dungeonMeshRequest = null;
-    this.directorRunning = false;
+    this.directorRig.stop();
     this.directorSubject = null;
     if (this.dungeonMesh) {
       // The parsed mesh is shared with other scenes (see parsedDungeonMesh): just let go of this copy.
@@ -962,7 +858,7 @@ export class MapScene3D {
       // Start on the first valid cinematic shot immediately. The mesh already
       // had an asynchronous load; making the camera spend another few seconds
       // springing in from the overview makes the replay feel unnecessarily slow.
-      this.directorRunning = false;
+      this.directorRig.stop();
       if (this.director && !this.alignmentOverlay) this.engageDirector(true);
       this.syncCameraOwner();
       this.onDungeonMesh("ready");
@@ -987,8 +883,7 @@ export class MapScene3D {
   setDirector(director: MapSceneDirector | null) {
     this.director = director;
     if (!director || this.alignmentOverlay) {
-      this.directorRunning = false;
-      this.directorSnapPending = false;
+      this.directorRig.off();
       this.syncCameraOwner();
       return;
     }
@@ -999,49 +894,16 @@ export class MapScene3D {
   /** Cuts the Director straight to its next shot (the replay jumped), instead of springing there from the old one. */
   cutDirector() {
     if (!this.director) return;
-    // A replay jump that lands a frame or two later still cuts, not glides.
-    this.directorCutUntil = this.now() + DIRECTOR_CUT_WINDOW_MS;
-    this.directorGoal.seeded = false;
-    this.directorInFrame.clear();
+    this.directorRig.cut(this.now());
     this.engageDirector(true);
     this.requestRender();
   }
 
   // Hands the camera back to the Director, springing from wherever it is now.
   // The first shot after an asynchronous mesh load can opt to snap into place.
-  // Already following: nothing to seed, or the springs would stutter.
   private engageDirector(snap = false) {
     this.arbiter.handBack();
-    if (snap) this.directorSnapPending = true;
-    if (this.directorRunning) {
-      this.syncCameraOwner();
-      return;
-    }
-    this.directorRunning = true;
-    this.directorGoal.seeded = false;
-    this.directorInFrame.clear();
-    this.directorAt = 0;
-    const { target } = this.controls;
-    this.directorX.value = target.x;
-    this.directorZ.value = target.z;
-    this.directorX.velocity = 0;
-    this.directorZ.velocity = 0;
-    this.directorDistance.value = this.camera.position.distanceTo(target);
-    this.directorDistance.velocity = 0;
-    this.directorElevation.value = this.cameraElevationDeg();
-    this.directorElevation.velocity = 0;
-    this.directorYaw.value = this.cameraYaw();
-    this.directorYaw.velocity = 0;
-    this.directorReach.value = this.directorDistance.value;
-    this.directorReach.velocity = 0;
-    this.directorWant = null;
-    this.directorAllowed = null;
-    this.directorReplayMs = null;
-    this.directorGlide = null;
-    Object.assign(this.shotHold, createShotHold());
-    this.shotRaw = null;
-    this.shotRelease = false;
-    this.shotShallow = null;
+    this.directorRig.engage(snap);
     this.syncCameraOwner();
   }
 
@@ -1050,80 +912,9 @@ export class MapScene3D {
    * frame as it comes). The framing track is built from it off the frame loop.
    */
   setFollowSource(source: MapSceneFollowSource | null) {
-    if (source === this.followSource) return;
-    this.followSource = source;
+    if (!this.directorRig.setFollowSource(source)) return;
     this.unitLayer.ensureFloorTracks();
     this.requestRender();
-  }
-
-  // The framing track for the current source and followed unit, or null
-  // while none fits (or the last build found nobody to frame: the per-frame
-  // path then frames). A missing track is built in slices off the frame loop;
-  // one for another speed, or one the data has grown past, still serves until
-  // its replacement is ready. Growth only rebuilds once the replay nears the
-  // old track's end, so a streaming result does not rebuild on every chunk.
-  private currentFollowTrack(replayMs: number): FollowTrack | null {
-    const mesh = this.dungeonMesh;
-    const source = this.followSource;
-    if (!mesh || !source) return null;
-    const subject = this.directorSubject;
-    const speed = Math.max(1, this.effectsLayer.clock.speed);
-    const built = this.followTrackFor;
-    const fits = this.followInputsMatch(built, source.key, subject, mesh.scale);
-    const stale = !fits
-      || built!.speed !== speed
-      // Not the (capped) centre window: the margin stays 3 s of real time at any speed, longer than a sliced rebuild takes.
-      || (source.endMs > built!.endMs && replayMs > built!.endMs - FOLLOW_CENTRE_WINDOW_MS * speed)
-      // Built before the no-Z floor tracks landed (a slower build): the yaw
-      // probe reads units' heights from them. Later changes to them (growth)
-      // are picked up by the next rebuild.
-      || (built!.floors === null && this.unitLayer.floorTracks !== null);
-    const pending = this.followBuild?.inputs ?? null;
-    if (stale && !(this.followInputsMatch(pending, source.key, subject, mesh.scale) && pending!.speed === speed && (pending!.floors !== null || this.unitLayer.floorTracks === null))) {
-      this.startFollowBuild(source, { key: source.key, subject, aspect: this.aspect, scale: mesh.scale, speed, endMs: source.endMs, floors: this.unitLayer.floorTracks });
-    }
-    return fits ? this.followTrack : null;
-  }
-
-  // Whether `inputs` is a build of the same data, followed unit and placement.
-  private followInputsMatch(inputs: FollowTrackInputs | null, key: string, subject: string | null, scale: number): boolean {
-    return inputs !== null && inputs.key === key && inputs.subject === subject && inputs.aspect === this.aspect && inputs.scale === scale;
-  }
-
-  // Starts (or restarts) the sliced follow-track build for `inputs`.
-  private startFollowBuild(source: MapSceneFollowSource, inputs: FollowTrackInputs) {
-    if (this.followBuild) clearTimeout(this.followBuild.timer);
-    const { aspect } = inputs;
-    const build = startFollowTrackBuild({
-      startMs: source.startMs,
-      endMs: inputs.endMs,
-      scale: inputs.scale,
-      subjectGuid: inputs.subject,
-      speed: inputs.speed,
-      initialYaw: this.cameraYaw(),
-      probe: this.followYawProbe(inputs.scale),
-      unitsAt: (ms) => source.unitsAt(ms).map((unit): DirectorUnit => {
-        const { x, z } = mapPointToScene(unit.point, aspect, GROUND_WIDTH);
-        // The sample's own height: logged, or the unit's floor track then (no-Z logs).
-        const track = unit.z === undefined ? inputs.floors?.units.get(unit.guid) : undefined;
-        const floor = track ? floorTrackAt(track, ms, x, z, FLOOR_TRACK_TOLERANCE_YARDS * inputs.scale) : null;
-        const height = unit.z ?? (floor === null ? undefined : floor / inputs.scale);
-        return { guid: unit.guid, x, z, player: unit.player, boss: unit.boss, dead: unit.dead, height };
-      }),
-    }, this.now);
-    const slice = () => {
-      const current = this.followBuild;
-      if (this.disposed || !current || current.build !== build) return;
-      if (!build.step(FOLLOW_SLICE_MS)) {
-        current.timer = setTimeout(slice, 0);
-        return;
-      }
-      this.followBuild = null;
-      this.followTrack = build.result;
-      this.followTrackFor = inputs;
-      this.requestRender();
-    };
-    this.followBuild = { build, inputs, timer: setTimeout(slice, 0) };
   }
 
   /** Whether the Director is the one moving the camera right now. */
@@ -1177,7 +968,7 @@ export class MapScene3D {
       toPlane: (point) => mapPointToScene(point, this.aspect, GROUND_WIDTH),
       probe: {
         floorAt: (x, z) => this.world.floorHeights.heightAt("drone", x, z, this.cameraCeiling()),
-        clearShot: (x, z, distance, yaw) => this.droneClearShot(x, z, distance, yaw),
+        clearShot: (x, z, distance, yaw) => this.directorRig.droneClearShot(x, z, distance, yaw),
       },
     };
   }
@@ -1328,7 +1119,7 @@ export class MapScene3D {
   private cameraCeiling(): number | undefined {
     const mesh = this.dungeonMesh;
     if (!mesh) return undefined;
-    const framed = this.directing() && this.directorInFrame.size > 0 ? this.directorInFrame : null;
+    const framed = this.directing() && this.directorRig.inFrame.size > 0 ? this.directorRig.inFrame : null;
     const heights: (number | undefined)[] = [];
     for (const [guid, object] of this.units) {
       if (!framed || framed.has(guid)) heights.push(object.loggedZ ?? (object.floorTracked ? object.floorY / mesh.scale : undefined));
@@ -1501,10 +1292,10 @@ export class MapScene3D {
     const direction = this.collisionDirection.copy(position).sub(target).divideScalar(shown);
     // The Director eases its own camera in from a wall (updateDirector reads
     // what this ray allows), so a cave wall is not a one-frame pull-in.
-    if (this.directing() && this.directorWant !== null) {
-      const want = this.directorWant;
+    if (this.directing() && this.directorRig.want !== null) {
+      const want = this.directorRig.want;
       const hit = want > 0 ? this.world.meshHitDistance(from, this.collisionEye.copy(direction).multiplyScalar(want).add(from)) : null;
-      this.directorAllowed = directorPullIn(want, hit, FREE_CAM_COLLISION_PADDING_SCENE_UNITS, this.controls.minDistance);
+      this.directorRig.allowed = directorPullIn(want, hit, FREE_CAM_COLLISION_PADDING_SCENE_UNITS, this.controls.minDistance);
       this.orbitWantDistance = shown;
       return false;
     }
@@ -1526,369 +1317,9 @@ export class MapScene3D {
     return { distance, easing: distance < want && (hit === null || hit - padding > distance) };
   }
 
-  // The line-of-sight answer at `yaw` (the track has already turned it to a
-  // clear side where it could): the lowest cinematic elevation whose camera
-  // is clear of the cave toward the aim point and sees the framed units,
-  // climbing in steps; the shot shortens only if no climb does (fallbackShot).
-  // `floor` is the floor below (x, z).
-  // With a `pose` (where the camera's spring actually holds its target, and
-  // the floor there), a steep shot must also stay clear of a wall closer than
-  // FOLLOW_STEEP_MIN_DISTANCE_YARDS from there: its line from the goal can be
-  // clear while the camera's own is not (the led spring, floor differences),
-  // and a wall that pulls a steep camera in shows only the floor.
-  private clearShot(x: number, floor: number, z: number, distance: number, yaw: number, pose: { x: number; z: number; floor: number } | null = null): ShotAnswer {
-    const lift = MESH_PLAYER_HEIGHT_YARDS * (this.dungeonMesh?.scale ?? 1);
-    const steepMin = FOLLOW_STEEP_MIN_DISTANCE_YARDS * (this.dungeonMesh?.scale ?? 1);
-    return fallbackShot(DIRECTOR_CLIMB, (elevationDeg, shortened) => {
-      // From the fight's own height, not the floor the ray would graze.
-      const aim = this.directorAim.set(x, floor + lift, z);
-      const out = shortened ? this.shortenedShot(distance) : distance;
-      const elevation = (elevationDeg * Math.PI) / 180;
-      const eye = this.directorEye.set(
-        x + Math.sin(yaw) * Math.cos(elevation) * out,
-        floor + Math.sin(elevation) * out,
-        z + Math.cos(yaw) * Math.cos(elevation) * out,
-      );
-      // A wall on the aim line would pull the camera in: not this shot.
-      if (this.world.meshBlocks(aim, eye)) return false;
-      if (pose && elevationDeg > FOLLOW_STEEP_ELEVATION_DEG) {
-        const from = this.directorPoseAim.set(pose.x, pose.floor + lift, pose.z);
-        const to = this.directorPoseEye.set(
-          pose.x + Math.sin(yaw) * Math.cos(elevation) * out,
-          pose.floor + Math.sin(elevation) * out,
-          pose.z + Math.cos(yaw) * Math.cos(elevation) * out,
-        );
-        const hit = this.world.meshHitDistance(from, to);
-        if (hit !== null && hit - FREE_CAM_COLLISION_PADDING_SCENE_UNITS < steepMin) return false;
-      }
-      return seesFraming(this.sightCount, (k) => this.sightBoss[k]!, (k) => !this.world.meshBlocks(eye, this.sightTargets[k]!)) || "aim";
-    });
-  }
-
-  // The video drone's line of sight (unchanged by chronicle-1725): the lowest
-  // cinematic elevation with a clear line to the aim point, climbing in steps;
-  // the shot shortens only if even the highest one is blocked.
-  private droneClearShot(x: number, z: number, distance: number, yaw: number): { elevation: number; distance: number } {
-    const floor = this.world.floorHeights.heightAt("director-shot", x, z, this.cameraCeiling());
-    const aim = this.directorAim.set(x, floor + MESH_PLAYER_HEIGHT_YARDS * (this.dungeonMesh?.scale ?? 1), z);
-    for (const elevationDeg of DIRECTOR_CLIMB) {
-      const elevation = (elevationDeg * Math.PI) / 180;
-      const eye = this.directorEye.set(
-        x + Math.sin(yaw) * Math.cos(elevation) * distance,
-        floor + Math.sin(elevation) * distance,
-        z + Math.cos(yaw) * Math.cos(elevation) * distance,
-      );
-      if (!this.world.meshBlocks(aim, eye)) return { elevation: elevationDeg, distance };
-    }
-    // Still blocked overhead: come in closer instead.
-    return { elevation: MAX_CINEMATIC_ELEVATION_DEG, distance: this.shortenedShot(distance) };
-  }
-
-  // Re-reads the framed units the line of sight checks: the boss and up to
-  // FOLLOW_SIGHT_MAX_PLAYERS players, at player height above where they stand.
-  private readSightTargets(bossGuids: ReadonlySet<string>, scale: number) {
-    const framed = this.sightFramed;
-    framed.length = 0;
-    for (const guid of this.directorInFrame) if (this.units.has(guid)) framed.push(guid);
-    const picked = sightPicks(framed.length, (k) => bossGuids.has(framed[k]!), this.sightPicked);
-    for (let j = 0; j < picked.length; j++) {
-      const guid = framed[picked[j]!]!;
-      const { base } = this.units.get(guid)!;
-      (this.sightTargets[j] ??= new THREE.Vector3()).set(base.x, base.y + MESH_PLAYER_HEIGHT_YARDS * scale, base.z);
-      this.sightBoss[j] = bossGuids.has(guid);
-    }
-    this.sightCount = picked.length;
-  }
-
-  // The follow track's yaw probe: per sample, the floor below the framing
-  // (found once, below that sample's units) and the base shot's distance;
-  // per yaw, the line from the framing to where updateDirector puts the
-  // camera at the base elevation (the aim point sits AIM_AHEAD_FRACTION of
-  // the radius past the framing, away from it).
-  private followYawProbe(scale: number): FollowYawProbe {
-    const from = new THREE.Vector3();
-    const to = new THREE.Vector3();
-    const elevation = (CINEMATIC_ELEVATION_DEG * Math.PI) / 180;
-    const lift = MESH_PLAYER_HEIGHT_YARDS * scale;
-    const targets: THREE.Vector3[] = [];
-    const boss: boolean[] = [];
-    let count = 0;
-    let out = 0;
-    let up = 0;
-    return {
-      sample: (x, z, radius, height, framed) => {
-        if (!this.dungeonMesh) return false;
-        // No floor below (a chasm, off the mesh): skip the sample rather than cast from y = 0.
-        const floor = this.world.sampleFloor(x, z, this.unitLayer.probeCeiling(height, scale));
-        if (floor === null) return false;
-        from.set(x, floor + lift, z);
-        // The framed units at player height: over their own logged or tracked
-        // height, else over the framing's floor (no extra floor rays).
-        count = framed.length / FOLLOW_SIGHT_STRIDE;
-        for (let k = 0; k < count; k++) {
-          const at = k * FOLLOW_SIGHT_STRIDE;
-          const own = framed[at + 2]!;
-          (targets[k] ??= new THREE.Vector3()).set(framed[at]!, (Number.isNaN(own) ? floor : own * scale) + lift, framed[at + 1]!);
-          boss[k] = framed[at + 3] === 1;
-        }
-        const distance = frameDistance(radius, {
-          verticalFov: (this.camera.fov * Math.PI) / 180,
-          aspect: this.camera.aspect,
-          elevationDeg: CINEMATIC_ELEVATION_DEG,
-          scale,
-        });
-        out = Math.cos(elevation) * distance - AIM_AHEAD_FRACTION * Math.max(radius, MIN_FRAME_RADIUS_YARDS * scale);
-        up = floor + Math.sin(elevation) * distance;
-        return true;
-      },
-      clearYaw: (yaw) => {
-        if (!this.dungeonMesh) return true;
-        to.set(from.x + Math.sin(yaw) * out, up, from.z + Math.cos(yaw) * out);
-        if (this.world.meshBlocks(from, to)) return false;
-        return seesFraming(count, (k) => boss[k]!, (k) => !this.world.meshBlocks(to, targets[k]!)) || "aim";
-      },
-    };
-  }
-
-  // How close a shot blocked even from overhead comes in.
-  private shortenedShot(distance: number): number {
-    return Math.max(MIN_DOUBLE_CLICK_DISTANCE_YARDS * (this.dungeonMesh?.scale ?? 1), distance * CLEAR_SHOT_SHORTEN);
-  }
-
-  // Re-fills the pooled unit list the framing rule reads.
-  private readDirectorUnits(bossGuids: ReadonlySet<string>): DirectorUnit[] {
-    const units = this.directorUnits;
-    let count = 0;
-    for (const [guid, object] of this.units) {
-      const slot = (units[count] ??= { guid: "", x: 0, z: 0, player: false, boss: false, dead: false });
-      slot.guid = guid;
-      slot.x = object.base.x;
-      slot.z = object.base.z;
-      slot.player = object.kind === "player";
-      slot.boss = bossGuids.has(guid);
-      slot.dead = object.dead || object.health?.dead === true;
-      count++;
-    }
-    units.length = count;
-    return units;
-  }
-
-  /**
-   * One Director step: works out the shot that holds the boss and the group
-   * and springs the camera toward it. With a follow source the shot comes
-   * from the look-ahead track at the replay time (continuous, so the springs
-   * only smooth what is left); without one, from this frame's framing, moved
-   * only when it leaves the dead zones. A replay jump glides (or cuts, when
-   * the user asked for it). Returns whether the camera needs another frame.
-   */
+  // One Director step (DirectorRig.update); returns whether the camera needs another frame.
   private updateDirector(now: number): boolean {
-    const mesh = this.dungeonMesh;
-    const director = this.director;
-    if (!mesh || !director || !this.directing()) return false;
-    const frame = directorFrame(this.readDirectorUnits(director.bossGuids), this.directorInFrame, {
-      stragglerCutoff: STRAGGLER_CUTOFF_YARDS * mesh.scale,
-      stragglerRelease: STRAGGLER_RELEASE_YARDS * mesh.scale,
-      bossEngageDistance: BOSS_ENGAGE_YARDS * mesh.scale,
-      subjectGuid: this.directorSubject,
-    });
-    const dt = clockStepSeconds(now, this.directorAt);
-    this.directorAt = now;
-    this.directorInFrame.clear();
-    if (frame) for (const guid of frame.guids) this.directorInFrame.add(guid);
-    const replayMs = this.effectsLayer.replayNow(now);
-    const track = this.currentFollowTrack(replayMs);
-    if (!frame && !track) return false;
-
-    // A replay jump: the clock moved by more than playback explains. A pause
-    // or resume since the last frame re-anchors instead (the paused time is
-    // not playback it missed).
-    const previousMs = this.effectsLayer.clock.playing === this.directorReplayPlaying ? this.directorReplayMs : null;
-    const expectedMs = this.effectsLayer.clock.playing ? (now - this.directorReplayAt) * this.effectsLayer.clock.speed : 0;
-    const jumped = previousMs !== null && isReplayJump(previousMs, replayMs, expectedMs, this.effectsLayer.clock.speed, this.effectsLayer.clock.playing);
-    this.directorReplayMs = replayMs;
-    this.directorReplayAt = now;
-    this.directorReplayPlaying = this.effectsLayer.clock.playing;
-
-    // Where the group is, and the springs' goals: sampled ahead by each
-    // spring's trail, which the spring then takes back.
-    const springs = track ? followSprings(this.effectsLayer.clock.speed, this.effectsLayer.clock.playing) : null;
-    const key = track ? followKeyAt(track, replayMs, this.followKey) : null;
-    const led = track ? followKeyAt(track, replayMs + springs!.leadMs, this.followLedKey) : null;
-    const sized = track ? followKeyAt(track, replayMs + springs!.distanceLeadMs, this.followSizedKey) : null;
-    const centreX = key ? key.x : frame!.x;
-    const centreZ = key ? key.z : frame!.z;
-    const frameRadius = sized ? sized.radius : frame!.radius;
-    const radius = Math.max(frameRadius, MIN_FRAME_RADIUS_YARDS * mesh.scale);
-    // The yaw: the track's where it has one (where the group is, and led for
-    // the spring, as the position); otherwise whatever the user last orbited to.
-    const yawLed = track ? followKeyAt(track, replayMs + springs!.yawLeadMs, this.followYawKey).yaw : null;
-    const yaw = key ? key.yaw : this.cameraYaw();
-    // The yaw the camera actually sits at: the spring's (rate-capped, so up to
-    // half a turn off the track's for a few seconds after Follow or a new
-    // track), or the track's on a cut. The aim offset and the line of sight
-    // use it; glide and cut targets use the track's.
-    const cutting = this.directorSnapPending || (jumped && now < this.directorCutUntil);
-    const placedYaw = key && !cutting ? this.directorYaw.value : yaw;
-    // The aim point sits past the fight, away from the camera, so the fight
-    // reads below the centre line with the room above it.
-    const ahead = AIM_AHEAD_FRACTION * radius;
-    const aimX = centreX - Math.sin(placedYaw) * ahead;
-    const aimZ = centreZ - Math.cos(placedYaw) * ahead;
-    const fitted = frameDistance(frameRadius, {
-      verticalFov: (this.camera.fov * Math.PI) / 180,
-      aspect: this.camera.aspect,
-      elevationDeg: this.directorElevation.value,
-      scale: mesh.scale,
-    });
-    const goal = this.directorGoal;
-    if (!goal.seeded || key) {
-      // The track is already smooth: the goal follows it exactly.
-      goal.x = aimX;
-      goal.z = aimZ;
-      goal.distance = fitted;
-      goal.seeded = true;
-    } else {
-      // Dead zones: a fight that stays put keeps the camera still.
-      if (Math.hypot(aimX - goal.x, aimZ - goal.z) > TARGET_DEAD_ZONE_FRACTION * radius) {
-        goal.x = aimX;
-        goal.z = aimZ;
-      }
-      if (exceedsDeadZone(goal.distance, fitted, DISTANCE_DEAD_ZONE)) goal.distance = fitted;
-    }
-    // The position spring chases the led aim point; the line of sight, a
-    // glide and a cut use the goal (where the group is).
-    const springX = led ? led.x - Math.sin(placedYaw) * ahead : goal.x;
-    const springZ = led ? led.z - Math.cos(placedYaw) * ahead : goal.z;
-    // While the held shot is steep, a wall that pulled the camera in close
-    // (last frame's collision) releases it for the next answer that is not;
-    // steep answers then cannot win straight back (releaseSteepShot).
-    if (this.shotHold.elevationDeg <= FOLLOW_STEEP_ELEVATION_DEG) this.shotRelease = false;
-    else if (steepPullIn(this.directorElevation.value, this.directorAllowed, FOLLOW_STEEP_MIN_DISTANCE_YARDS * mesh.scale)) this.shotRelease = true;
-    // Asked again every FOLLOW_SHOT_CHECK_MS, and at once on a cut or a jump.
-    if (shotCheckDue(now, this.shotCheckAt, this.shotRaw !== null, cutting || jumped)) {
-      this.readSightTargets(director.bossGuids, mesh.scale);
-      // Gliding (from the jump's frame on), the shot lands at the track's yaw
-      // where the group is: check there, not at the yaw the camera turns
-      // through. Otherwise, where the camera is headed, steep shots also
-      // checked from where its spring actually holds it.
-      const gliding = key !== null && (jumped || this.directorGlide !== null);
-      const checkYaw = gliding ? yaw : placedYaw;
-      const checkX = gliding ? centreX - Math.sin(yaw) * ahead : goal.x;
-      const checkZ = gliding ? centreZ - Math.cos(yaw) * ahead : goal.z;
-      const floor = this.world.floorHeights.heightAt("director-shot", checkX, checkZ, this.cameraCeiling());
-      let pose: { x: number; z: number; floor: number } | null = null;
-      if (!gliding && !cutting) {
-        pose = this.shotPose;
-        pose.x = this.directorX.value;
-        pose.z = this.directorZ.value;
-        pose.floor = this.pivotFloor(pose.x, pose.z);
-      }
-      this.shotRaw = this.clearShot(checkX, floor, checkZ, goal.distance, checkYaw, pose);
-      this.shotCheckAt = now + FOLLOW_SHOT_CHECK_MS;
-      if (this.shotRaw.elevationDeg <= FOLLOW_STEEP_ELEVATION_DEG) this.shotShallow = this.shotRaw;
-      if (this.shotRelease && releaseSteepShot(this.shotHold, this.shotRaw, now, this.shotShallow)) this.shotRelease = false;
-    }
-    const hold = holdShot(this.shotHold, this.shotRaw!.elevationDeg, this.shotRaw!.shortened, now);
-    const shotElevation = hold.elevationDeg;
-    const shotDistance = hold.shortened ? this.shortenedShot(goal.distance) : goal.distance;
-
-    if (jumped) {
-      if (now < this.directorCutUntil) {
-        this.directorCutUntil = 0;
-        this.directorSnapPending = true;
-      } else if (!this.directorSnapPending) {
-        const from = this.glideFrom;
-        from.x = this.directorX.value;
-        from.z = this.directorZ.value;
-        from.distance = this.directorDistance.value;
-        from.elevationDeg = this.directorElevation.value;
-        from.vx = this.directorX.velocity;
-        from.vz = this.directorZ.velocity;
-        from.yaw = this.directorYaw.value;
-        from.vyaw = this.directorYaw.velocity;
-        // The turn's direction is fixed here (the short way now), and a track
-        // lost mid-glide keeps this target rather than swinging back.
-        this.glideTo.yaw = key ? unwrapNear(yaw, from.yaw) : from.yaw;
-        const duration = glideDurationMs(Math.hypot(goal.x - from.x, goal.z - from.z), mesh.scale);
-        // Started a frame back, so this frame already moves (no one-frame stall).
-        this.directorGlide = { start: now - dt * 1000, duration, turn: glideTurnMs(this.glideTo.yaw - from.yaw, duration) };
-      }
-    }
-
-    if (this.directorSnapPending) {
-      this.directorSnapPending = false;
-      this.directorGlide = null;
-      // On the group, already moving with it, so the led spring has nothing to take back.
-      const x = springs ? handOverFollowSpring(this.directorX, goal.x, springX, springs).value : snapDampedValue(this.directorX, goal.x);
-      const z = springs ? handOverFollowSpring(this.directorZ, goal.z, springZ, springs).value : snapDampedValue(this.directorZ, goal.z);
-      const distance = snapDampedValue(this.directorDistance, shotDistance);
-      const elevation = snapDampedValue(this.directorElevation, shotElevation);
-      const shotYaw = springs ? handOverFollowYaw(this.directorYaw, yaw, yawLed!, springs).value : snapDampedValue(this.directorYaw, yaw);
-      this.placeDirectorCamera(x, z, this.directorReachFor(distance, dt, true), elevation, shotYaw);
-      return false;
-    }
-
-    const glide = this.directorGlide;
-    if (glide) {
-      const to = this.glideTo;
-      // Landing where the group is, at the track's yaw (not the yaw the camera is still turning from).
-      to.x = key ? centreX - Math.sin(yaw) * ahead : goal.x;
-      to.z = key ? centreZ - Math.cos(yaw) * ahead : goal.z;
-      to.distance = shotDistance;
-      to.elevationDeg = shotElevation;
-      // The target follows the track near where it was (never flipping the
-      // turn); without a track it keeps the yaw it was heading for.
-      if (key) to.yaw = unwrapNear(yaw, to.yaw!);
-      const t = Math.min(1, (now - glide.start) / glide.duration);
-      const turnT = Math.min(1, (now - glide.start) / glide.turn);
-      const lastX = this.directorX.value;
-      const lastZ = this.directorZ.value;
-      const lastYaw = this.directorYaw.value;
-      const pose = glidePoseAt(this.glideFrom, to, t, this.glidePose, glide.duration, turnT, glide.turn);
-      // The springs ride along (velocity too), so the springs, or another
-      // jump's glide, carry on from here without a corner.
-      snapDampedValue(this.directorX, pose.x);
-      snapDampedValue(this.directorZ, pose.z);
-      this.directorX.velocity = (pose.x - lastX) / dt;
-      this.directorZ.velocity = (pose.z - lastZ) / dt;
-      snapDampedValue(this.directorDistance, pose.distance);
-      snapDampedValue(this.directorElevation, pose.elevationDeg);
-      snapDampedValue(this.directorYaw, pose.yaw!);
-      this.directorYaw.velocity = (pose.yaw! - lastYaw) / dt;
-      if (t >= 1 && turnT >= 1) this.directorGlide = null;
-      this.placeDirectorCamera(pose.x, pose.z, this.directorReachFor(pose.distance, dt, false), pose.elevationDeg, pose.yaw!);
-      return true;
-    }
-
-    const smooth = springs ? springs.position : TARGET_SMOOTH_SECONDS;
-    const x = smoothDamp(this.directorX, springX, smooth, dt);
-    const z = smoothDamp(this.directorZ, springZ, smooth, dt);
-    const distance = smoothDamp(this.directorDistance, shotDistance, springs ? springs.distance : DISTANCE_SMOOTH_SECONDS, dt);
-    const elevation = smoothDamp(this.directorElevation, shotElevation, TARGET_SMOOTH_SECONDS, dt);
-    const shotYaw = springs ? followYawStep(this.directorYaw, yawLed!, springs.yaw, dt) : snapDampedValue(this.directorYaw, yaw);
-    const reach = this.directorReachFor(distance, dt, false);
-    this.placeDirectorCamera(x, z, reach, elevation, shotYaw);
-    const settled = Math.hypot(x - goal.x, z - goal.z) <= DIRECTOR_SETTLED * mesh.scale
-      && Math.abs(distance - shotDistance) <= DIRECTOR_SETTLED * mesh.scale
-      && Math.abs(reach - Math.min(distance, this.directorAllowed ?? distance)) <= DIRECTOR_SETTLED * mesh.scale
-      && Math.abs(elevation - shotElevation) <= DIRECTOR_SETTLED
-      && Math.abs(wrapAngle(shotYaw - yaw)) <= DIRECTOR_SETTLED_YAW;
-    // Playing, the track keeps moving; paused, the line-of-sight hold may still release.
-    return !settled || (key !== null && this.effectsLayer.clock.playing) || this.shotHold.lowerSinceMs !== null;
-  }
-
-  // The distance the Director's camera sits at: `distance`, or nearer while
-  // the last collision ray found a wall, easing in over
-  // DIRECTOR_COLLISION_IN_SECONDS rather than in one frame.
-  private directorReachFor(distance: number, dt: number, snap: boolean): number {
-    const previous = this.directorWant;
-    // Not held in by a wall last frame: the reach is just the distance.
-    const free = previous === null || this.directorReach.value >= previous - 1e-4 * Math.max(1, previous);
-    this.directorWant = distance;
-    const allowed = Math.min(distance, this.directorAllowed ?? distance);
-    if (snap || (free && allowed >= distance)) return snapDampedValue(this.directorReach, allowed);
-    const smooth = allowed < this.directorReach.value ? DIRECTOR_COLLISION_IN_SECONDS : DISTANCE_SMOOTH_SECONDS;
-    return Math.min(distance, smoothDamp(this.directorReach, allowed, smooth, dt));
+    return this.directorRig.update(now);
   }
 
   // Steps a double-click move (TweenRig); returns whether it needs another frame.
@@ -1966,7 +1397,7 @@ export class MapScene3D {
 
   dispose() {
     this.disposed = true;
-    if (this.followBuild) clearTimeout(this.followBuild.timer);
+    this.directorRig.dispose();
     this.unlockPointer();
     cancelAnimationFrame(this.frame);
     this.resizeObserver.disconnect();
@@ -2829,7 +2260,7 @@ export class MapScene3D {
   // stop; walk mode never lets the loop sleep. Capture scenes (stepped by
   // captureFrame) never get here.
   private restartFrameClocks() {
-    this.directorAt = 0;
+    this.directorRig.restartClock();
     this.unitLayer.restartClock();
     this.presence.restartClock();
   }
