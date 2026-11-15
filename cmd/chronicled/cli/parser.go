@@ -11,7 +11,6 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicepgxpool"
 	"github.com/Emyrk/chronicle/internal/services/servicestorage"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
-	"github.com/Emyrk/chronicle/internal/version"
 	"github.com/coder/serpent"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -43,7 +42,7 @@ func ParserCmd() *serpent.Command {
 		ctx, cancel := context.WithCancel(i.Context())
 		defer cancel()
 		logger := getLogger(i)
-		identity, err := version.BinaryIdentity()
+		identity, err := parserStartupIdentity(logger)
 		if err != nil {
 			return err
 		}

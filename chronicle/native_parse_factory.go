@@ -90,7 +90,7 @@ func NewHeadlessParseWorker(o HeadlessParseOptions) (*HeadlessParseWorker, error
 // NewWorkerNativeLogParse uses the same compute adapter in ordinary deployment;
 // this process itself is the primary, so admission checks its immutable identity.
 func (c *Chronicle) NewWorkerNativeLogParse(pool *pgxpool.Pool) (*HeadlessParseWorker, error) {
-	identity, err := version.BinaryIdentity()
+	identity, err := version.ParserCompatibilityIdentity()
 	if err != nil {
 		return nil, err
 	}

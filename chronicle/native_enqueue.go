@@ -39,7 +39,7 @@ func (c *Chronicle) enqueueNativeParse(ctx context.Context, db database.Store, t
 	if err := db.SetParserHandoffNativeEnabled(ctx, database.SetParserHandoffNativeEnabledParams{LogGroupID: args.LogID, NativeEnabled: true}); err != nil {
 		return nil, err
 	}
-	build, err := version.BinaryIdentity()
+	build, err := version.ParserCompatibilityIdentity()
 	if err != nil {
 		return nil, fmt.Errorf("capture native parse executable: %w", err)
 	}

@@ -76,7 +76,7 @@ func (w *WorkerFinalizeLogParse) Work(ctx context.Context, job *river.Job[ArgsFi
 	if w.leaseTTL <= 0 || w.renewEvery <= 0 || w.renewEvery >= w.leaseTTL {
 		return errors.New("invalid publication lease timing")
 	}
-	build, err := version.BinaryIdentity()
+	build, err := version.ParserCompatibilityIdentity()
 	if err != nil {
 		return err
 	}

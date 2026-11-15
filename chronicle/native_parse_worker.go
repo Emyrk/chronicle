@@ -76,7 +76,7 @@ func NewNativeParseWorker(o NativeParseOptions) (*WorkerNativeLogParse, error) {
 	if o.DB == nil || o.Storage == nil || o.Logger == nil || o.ResolveDataset == nil || o.AcquireGameDB == nil || o.RegistryForFlavor == nil || o.EnqueueFinalize == nil {
 		return nil, fmt.Errorf("native parser dependencies required")
 	}
-	actual, err := version.BinaryIdentity()
+	actual, err := version.ParserCompatibilityIdentity()
 	if err != nil {
 		return nil, err
 	}

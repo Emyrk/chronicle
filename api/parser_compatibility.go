@@ -11,12 +11,12 @@ import (
 // It deliberately requires no authentication or tenant lookup.
 func ParserCompatibility(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
-	identity, err := version.BinaryIdentity()
+	identity, err := version.ParserCompatibilityIdentity()
 	if err != nil {
 		httpapi.Write(r.Context(), w, http.StatusServiceUnavailable, parseradmission.Response{})
 		return
 	}
-	httpapi.Write(r.Context(), w, http.StatusOK, parseradmission.Response{BinaryIdentity: identity})
+	httpapi.Write(r.Context(), w, http.StatusOK, parseradmission.Response{BinaryIdentity: identity, DevelopmentOverride: version.IsParserDevelopmentIdentity(identity)})
 }
 
 // Register before tenant and authentication middleware. Compatibility belongs

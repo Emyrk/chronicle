@@ -17,7 +17,8 @@ import (
 const Path = "/api/v1/parser-compatibility"
 
 type Response struct {
-	BinaryIdentity string `json:"binary_identity"`
+	BinaryIdentity      string `json:"binary_identity"`
+	DevelopmentOverride bool   `json:"development_override"`
 }
 
 var ErrIncompatible = errors.New("primary parser binary is unavailable or incompatible")

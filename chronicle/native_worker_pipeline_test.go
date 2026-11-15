@@ -34,7 +34,20 @@ import (
 // finalizer against a disposable database and local object-store adapter. The
 // separate process tests cover process isolation; this covers worker wiring.
 func TestNativeWorkerDurableFinalizePipeline(t *testing.T) {
-	t.Parallel()
+	// Environment selection is process-wide; these cases must not run in parallel.
+	for _, label := range []string{"", "local-pipeline"} {
+		name := "exact"
+		if label != "" {
+			name = "development"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Setenv(version.ParserDevelopmentIdentityEnv, label)
+			testNativeWorkerDurableFinalizePipeline(t)
+		})
+	}
+}
+
+func testNativeWorkerDurableFinalizePipeline(t *testing.T) {
 	ctx := testutil.Context(t, testutil.WaitLong)
 	pool, _ := dbtestutil.NewPGXPool(t)
 	db := database.New(pool)
@@ -60,7 +73,7 @@ func TestNativeWorkerDurableFinalizePipeline(t *testing.T) {
 	resolved, err := ResolveNativeParseDataset(ctx, db, dbstatic.RealmUnknown(), false)
 	require.NoError(t, err)
 	require.NoError(t, db.UpsertDatasetTalentTrees(ctx, database.UpsertDatasetTalentTreesParams{DatasetID: resolved.DatasetID, Data: []byte(`{}`)}))
-	identity, err := version.BinaryIdentity()
+	identity, err := version.ParserCompatibilityIdentity()
 	require.NoError(t, err)
 	admissions, releases := 0, 0
 	var admittedContext context.Context

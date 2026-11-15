@@ -104,6 +104,9 @@ func ServerCmd() *serpent.Command {
 			now := time.Now()
 
 			logger := getLogger(i)
+			if _, err := parserStartupIdentity(logger); err != nil {
+				return err
+			}
 			logger.Info("🚀🚀 startup sequence initiated 🚀🚀",
 				slog.String("server", services.ServerName),
 				slog.String("tag", version.GitTag),

@@ -9,7 +9,8 @@ import (
 
 // Compatibility identifies the exact executable and dataset used to construct
 // runtime owners. DatasetRevision is a positive monotonic content revision, not
-// a UUID-only equivalence assertion. BuildIdentity is an executable SHA256.
+// a UUID-only equivalence assertion. BuildIdentity is an executable SHA256, or
+// an explicitly selected dev-sha256 compatibility label digest.
 // Runtime composition must obtain these values from authoritative metadata and
 // the running binary; snapshot payloads must never supply construction identity.
 type Compatibility struct {
@@ -33,8 +34,12 @@ func (c Compatibility) Validate() error {
 	if c.DatasetRevision <= 0 {
 		return fmt.Errorf("positive dataset revision required")
 	}
-	digest := strings.TrimPrefix(c.BuildIdentity, "sha256:")
-	if len(digest) != 64 || c.BuildIdentity != "sha256:"+digest || strings.ToLower(digest) != digest {
+	prefix := "sha256:"
+	if strings.HasPrefix(c.BuildIdentity, "dev-sha256:") {
+		prefix = "dev-sha256:"
+	}
+	digest := strings.TrimPrefix(c.BuildIdentity, prefix)
+	if len(digest) != 64 || c.BuildIdentity != prefix+digest || strings.ToLower(digest) != digest {
 		return fmt.Errorf("canonical executable sha256 identity required")
 	}
 	if _, err := hex.DecodeString(digest); err != nil {

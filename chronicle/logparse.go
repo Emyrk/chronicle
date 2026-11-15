@@ -383,7 +383,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		if err != nil {
 			return fmt.Errorf("capture authoritative parse dataset: %w", err)
 		}
-		build, buildErr := version.BinaryIdentity()
+		build, buildErr := version.ParserCompatibilityIdentity()
 		if buildErr != nil {
 			return fmt.Errorf("capture executable identity: %w", buildErr)
 		}
@@ -1144,7 +1144,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		return fmt.Errorf("fence parse membership refresh: %w", membershipErr)
 	}
 
-	buildIdentity, err := version.BinaryIdentity()
+	buildIdentity, err := version.ParserCompatibilityIdentity()
 	if err != nil {
 		return fmt.Errorf("capture catalogue executable identity: %w", err)
 	}

@@ -23,7 +23,8 @@ starting the broker or connecting to PostgreSQL.
 
 ## Compatibility and recovery
 
-Native enqueue captures `version.BinaryIdentity()`, not the display GitTag.
+Native enqueue captures `version.ParserCompatibilityIdentity()`, not the display
+GitTag. By default this is the exact executable `version.BinaryIdentity()`.
 Retries never retag jobs. The headless admission gate requires an exact identity
 match from the unauthenticated, no-store primary compatibility endpoint. It checks
 at startup and worker entry, periodically checks while running, removes only its
@@ -40,6 +41,37 @@ new native reparse on the current build to recover. Never edit the identity of a
 existing job or artifact. Historical native jobs without immutable identity likewise
 require explicit reparse. Explicit legacy selection stays on the legacy path and
 is not silently upgraded by later appends.
+
+## Separate local development builds
+
+`go run` and debugger builds can differ byte-for-byte even from the same source.
+To deliberately allow them to cooperate, set the same explicit nonsecret label
+on **both** primary and parser (in separate terminals, with the usual shared
+PostgreSQL and object-storage configuration):
+
+```sh
+CHRONICLE_PARSER_DEV_IDENTITY=local-parser-v1 go run ./cmd/chronicled server
+CHRONICLE_PARSER_DEV_IDENTITY=local-parser-v1 go run ./cmd/chronicled parser --primary-url http://localhost:4000
+```
+
+For a debugger, add `CHRONICLE_PARSER_DEV_IDENTITY=local-parser-v1` to the debug
+process environment as well. This is not enabled by `--dev-auth`. Labels must
+match `[A-Za-z0-9][A-Za-z0-9._-]{0,63}`; empty/unset preserves exact executable
+identity, and malformed labels fail startup without logging their contents.
+
+Both roles warn at startup. `/api/v1/parser-compatibility` reports
+`development_override: true` and a typed `dev-sha256:` digest, never the raw
+label. The same identity is captured in jobs, checkpoint envelopes, restoration,
+finalization, and catalogue provenance. Different labels, one-sided opt-in,
+and an unreachable primary still fail closed. Dataset ID/revision, format,
+flavor, snapshot schema/wire versions, authorization, and lease fences remain
+strict.
+
+**Never use this override in production or share a label across incompatible
+parser/schema changes.** A shared label is an operator assertion of compatibility,
+not proof from executable bytes. Change it and explicitly reparse when code
+changes are incompatible. Unset it on both roles to return to exact matching;
+previous development jobs/artifacts then require an explicit fresh reparse.
 
 ## Durable handoff
 

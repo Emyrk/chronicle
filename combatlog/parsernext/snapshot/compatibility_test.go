@@ -64,3 +64,29 @@ func TestContextBindingCopiesIdentity(t *testing.T) {
 		t.Fatal("missing binding accepted")
 	}
 }
+
+func TestDevelopmentCompatibilityStrict(t *testing.T) {
+	t.Parallel()
+	identity := fixtureIdentity()
+	identity.BuildIdentity = "dev-sha256:" + strings.Repeat("a", 64)
+	if err := identity.Check(identity); err != nil {
+		t.Fatal(err)
+	}
+	for _, change := range []func(*Compatibility){
+		func(c *Compatibility) { c.BuildIdentity = "sha256:" + strings.Repeat("a", 64) },
+		func(c *Compatibility) { c.BuildIdentity = "dev-sha256:" + strings.Repeat("b", 64) },
+		func(c *Compatibility) { c.BuildIdentity = "dev-sha256:" + strings.Repeat("A", 64) },
+		func(c *Compatibility) { c.BuildIdentity = "dev-sha256:" + strings.Repeat("x", 64) },
+		func(c *Compatibility) { c.BuildIdentity = "dev-sha256:label" },
+		func(c *Compatibility) { c.DatasetRevision++ },
+		func(c *Compatibility) { c.DatasetID = "9c716540-587a-4bf3-bd90-739c01a6ce32" },
+		func(c *Compatibility) { c.Format = "3.3.5a-cc-addon" },
+		func(c *Compatibility) { c.Flavor = "wrath" },
+	} {
+		other := identity
+		change(&other)
+		if err := identity.Check(other); err == nil {
+			t.Fatalf("accepted mismatch: %+v", other)
+		}
+	}
+}
