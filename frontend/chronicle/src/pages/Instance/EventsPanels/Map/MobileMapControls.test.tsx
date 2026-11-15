@@ -34,4 +34,11 @@ describe("MobileMapControls", () => {
 
     expect(markup).toContain("disabled");
   });
+
+  it("offers the way back only once the viewer has taken the camera (chronicle-2020)", () => {
+    const props = { walking: true, canWalk: true, onWalkingChange: vi.fn(), onInputChange: vi.fn(), onClose: vi.fn() };
+    expect(renderToStaticMarkup(<MobileMapControls {...props} />)).not.toContain("Back to the action");
+    expect(renderToStaticMarkup(<MobileMapControls {...props} onBackToAction={null} />)).not.toContain("Back to the action");
+    expect(renderToStaticMarkup(<MobileMapControls {...props} onBackToAction={vi.fn()} />)).toContain("Back to the action");
+  });
 });

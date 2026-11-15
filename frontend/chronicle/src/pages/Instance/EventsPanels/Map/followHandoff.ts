@@ -15,7 +15,7 @@
  * as before.
  */
 import type { CameraOwner } from "./cameraArbiter";
-import { manualMapFraming, type MapFraming, type MapViewport } from "./mapModel";
+import type { MapFraming } from "./mapModel";
 
 /** The scene's last camera report (MapScene3D.setOnCameraOwnerChange); owner null: no 3D scene. */
 export interface CameraHandoff {
@@ -48,11 +48,11 @@ export function followControls(canFollow: boolean, cinematic: boolean, handoff: 
 /**
  * The framing once the viewer has taken the camera: manual, as after a pan or
  * zoom, so the default framing moving on (the whole run's follow grid) no
- * longer bumps the view and hands the camera back. `viewport` is what the
- * views show for it now; the revision stays, so nothing re-frames.
+ * longer bumps the view and hands the camera back. The revision and viewport
+ * stay, so nothing re-frames (the views apply a view only on a new key).
  */
-export function releasedFraming(framing: MapFraming, viewport: MapViewport): MapFraming {
-  return framing.manual ? framing : manualMapFraming(framing, framing.viewport ?? viewport);
+export function releasedFraming(framing: MapFraming): MapFraming {
+  return framing.manual ? framing : { ...framing, manual: true };
 }
 
 /** The way back's shortcut (KeyboardEvent.code), pointer over the map like the other map keys. */

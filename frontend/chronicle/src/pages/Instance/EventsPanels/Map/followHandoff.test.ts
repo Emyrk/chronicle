@@ -64,8 +64,8 @@ describe("a whole run, the viewer owning the camera", () => {
     const following = reconcileMapFraming(framing, "run", step(0.35));
     expect(following.revision).toBe(framing.revision + 1);
     framing = following;
-    // The viewer takes the camera: the framing is released at the view it shows.
-    framing = releasedFraming(framing, step(0.35));
+    // The viewer takes the camera: the framing is released (the view stays as it is).
+    framing = releasedFraming(framing);
     const revision = framing.revision;
     expect(cameraModeFor(camera, framing).cinematic).toBe(false);
     for (const centerX of [0.4, 0.45, 0.5, 0.55]) {
@@ -74,7 +74,7 @@ describe("a whole run, the viewer owning the camera", () => {
       expect(cameraModeFor(camera, framing).cinematic).toBe(false);
     }
     // Releasing again changes nothing.
-    expect(releasedFraming(framing, step(0.9))).toBe(framing);
+    expect(releasedFraming(framing)).toBe(framing);
     // Follow (the way back does the same): the default framing again, a new view, the follow camera.
     const back = { ...framing, viewport: null, manual: false, revision: framing.revision + 1 };
     expect(cameraModeFor(camera, back).cinematic).toBe(true);

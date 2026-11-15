@@ -32,6 +32,8 @@ import {
 } from "./replayPlayerModel";
 import { useMapScene, type MapScene } from "./useMapScene";
 import { canRetryDungeon, dungeon3DOverlay, dungeon3DStatus, type Dungeon3DStatus } from "./dungeon3DModel";
+import type { CameraOwner } from "./cameraArbiter";
+import { followControls, INITIAL_CAMERA_HANDOFF, isBackToActionKey, releasedFraming, reportCameraOwner } from "./followHandoff";
 
 export interface ReplayPlayerOptions {
   /** What the scene is built from: a panel result and its context (what `useMapScene` takes). */
@@ -144,9 +146,16 @@ export interface ReplayPlayerState {
   /** The view is told the Director has the camera. */
   cinematic: boolean;
   canFollow: boolean;
+  /** The follow camera has the camera (the scene's report; the framing without a 3D scene). */
   following: boolean;
+  /** The viewer took the camera from the follow camera: offer the way back (followHandoff.ts). */
+  wayBack: boolean;
+  /** Handed to the view: the scene's camera owner reports. */
+  onCameraOwnerChange: (owner: CameraOwner | null, taken: boolean) => void;
   /** Back to the default framing: the Director on the mesh, the party-following camera across a run. */
   followGroup: () => void;
+  /** The way back ("Back to the action", R): out of walk mode if walking, then as Follow. */
+  backToAction: () => void;
   /** Hand the camera back to the Director without re-applying the default view (the landing, on a new pull). */
   releaseCamera: () => void;
   followGuid: string | null;
@@ -268,7 +277,16 @@ export function useReplayPlayer(options: ReplayPlayerOptions): ReplayPlayerState
   const dismissDungeonNotice = () => setNoticeDismissedAt(meshFailures);
   const { mode: cameraMode, cinematic } = cameraModeFor(camera, framing, options.fixedView !== undefined);
   const onMesh = show3D && meshWanted && meshState === "ready";
-  const { canFollow, following } = followState(readyWholeRun, onMesh, cinematic);
+  const { canFollow } = followState(readyWholeRun, onMesh, cinematic);
+  // The scene's camera owner decides Follow and the way back (chronicle-2020).
+  // A take releases the framing, as a pan or zoom does, so the whole run's
+  // follow grid stops handing the camera back on its own.
+  const [cameraHandoff, setCameraHandoff] = useState(INITIAL_CAMERA_HANDOFF);
+  const onCameraOwnerChange = useCallback((owner: CameraOwner | null, taken: boolean) => {
+    setCameraHandoff((current) => reportCameraOwner(current, owner, taken));
+    if (taken) setFraming(releasedFraming);
+  }, []);
+  const { following, wayBack } = followControls(canFollow, cinematic, cameraHandoff);
   const [followGuid, setFollowGuid] = useState<string | null>(null);
   const followUnit = (guid: string) => {
     if (followGuid === guid) {
@@ -292,6 +310,27 @@ export function useReplayPlayer(options: ReplayPlayerOptions): ReplayPlayerState
     onSceneOption?.(created);
   }, [onSceneOption]);
   const scene3d = useCallback(() => sceneRef.current, []);
+  const backToAction = () => {
+    // Follow while walking moves the character: leave walk mode first.
+    const scene3D = sceneRef.current;
+    if (scene3D?.cameraOwner() === "walk") scene3D.setWalking(false);
+    followGroup();
+  };
+  // R, with the pointer over the map, while the way back shows.
+  const backKeyRef = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    backKeyRef.current = wayBack ? backToAction : null;
+  });
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const back = backKeyRef.current;
+      if (!back || !isBackToActionKey(event) || !sceneRef.current?.pointerOverMap()) return;
+      event.preventDefault();
+      back();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
   const cameraHandle = useMemo((): ReplayCameraHandle => ({ cut, topDown, capturePose, scene: scene3d }), [capturePose, cut, scene3d, topDown]);
   const onUnavailable = options.onUnavailable;
   const markWebglUnavailable = useCallback(() => {
@@ -349,7 +388,10 @@ export function useReplayPlayer(options: ReplayPlayerOptions): ReplayPlayerState
     cinematic,
     canFollow,
     following,
+    wayBack,
+    onCameraOwnerChange,
     followGroup,
+    backToAction,
     releaseCamera,
     followGuid,
     setFollowGuid,

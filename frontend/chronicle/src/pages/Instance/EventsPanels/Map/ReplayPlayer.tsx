@@ -156,6 +156,7 @@ export function ReplayPlayer({ player, view = {}, header, overlay, transport, fa
       onUnitClick={input.onUnitClick}
       followGuid={input.followGuid}
       onFollowChange={input.followChanges ? player.setFollowGuid : undefined}
+      onCameraOwnerChange={input.followChanges ? player.onCameraOwnerChange : undefined}
       onScene={player.onScene}
     />
   );

@@ -37,6 +37,7 @@ import type { PlanItem } from "./plan/mapPlan";
 import { usePlayerSpecializations } from "@/components/ui/PlayerMetricChart/PlayerSpecializationContext";
 import { useMapHost } from "./useMapHost";
 import { DUNGEON_3D_COPY, planUnavailableTitle } from "./dungeon3DModel";
+import { BACK_TO_ACTION_KEYCAP, BackToActionButton } from "./BackToAction";
 
 const VideoRenderDialog = lazy(() => import("./VideoRenderDialog"));
 
@@ -205,7 +206,7 @@ export function MapPanelHost({
 
   if (!ready) return <ReplayPlayerMessage player={player} />;
 
-  const { applyFraming, followGroup, canFollow, following, followUnit } = player;
+  const { applyFraming, followGroup, canFollow, following, followUnit, wayBack, backToAction } = player;
   const jumps = ready.wholeRun && ready.runStartMs !== null && ready.runEndMs !== null
     ? encounterJumps(props.context.instance.encounters, props.result.encounters, ready.runStartMs, ready.runEndMs)
     : [];
@@ -302,6 +303,8 @@ export function MapPanelHost({
           Fit
         </button>
       )}
+      {/* Once the viewer has taken the camera from the follow camera (chronicle-2020). */}
+      {wayBack && <BackToActionButton onClick={backToAction} className={mapFramingButtonClass} />}
       <button
         type="button"
         onClick={() => applyFraming(FULL_MAP_VIEWPORT)}
@@ -548,6 +551,7 @@ export function MapPanelHost({
                     <WalkHint keys={["Z"]}>down</WalkHint>
                     <span>drag to look · wheel zoom</span>
                     <WalkHint keys={["G", "Esc"]}>leave</WalkHint>
+                    {wayBack && <WalkHint keys={[BACK_TO_ACTION_KEYCAP]}>back to the action</WalkHint>}
                   </>
                 ) : (
                   <>
@@ -559,6 +563,7 @@ export function MapPanelHost({
                     <WalkHint keys={["Q", "E"]}>rewind / fast forward</WalkHint>
                     <WalkHint keys={["X"]}>play / pause replay</WalkHint>
                     <WalkHint keys={["G"]}>walk</WalkHint>
+                    {wayBack && <WalkHint keys={[BACK_TO_ACTION_KEYCAP]}>back to the action</WalkHint>}
                     {windowed
                       ? <WalkHint keys={["Esc"]}>exit window fullscreen</WalkHint>
                       : !fullscreen && <WalkHint keys={WINDOW_FULLSCREEN_KEYS}>fill window</WalkHint>}

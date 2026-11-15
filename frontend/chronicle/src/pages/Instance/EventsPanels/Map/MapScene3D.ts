@@ -1829,6 +1829,11 @@ export class MapScene3D {
     return this.arbiter.owner();
   }
 
+  /** Whether the pointer is over the map: the map's keys (and the host's) act then. */
+  pointerOverMap(): boolean {
+    return this.pointerInside;
+  }
+
   /** Whether the viewer took the camera from the follow camera and has not handed it back (cameraArbiter.ts: taken). */
   cameraTaken(): boolean {
     return this.arbiter.taken;

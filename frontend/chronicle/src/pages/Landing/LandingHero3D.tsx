@@ -15,6 +15,7 @@ import { ReplayPlayer } from "@/pages/Instance/EventsPanels/Map/ReplayPlayer";
 import type { ReplayCamera } from "@/pages/Instance/EventsPanels/Map/replayPlayerModel";
 import { useLocalLoopClock } from "@/pages/Instance/EventsPanels/Map/useReplayClock";
 import { useReplayPlayer } from "@/pages/Instance/EventsPanels/Map/useReplayPlayer";
+import { BackToActionButton } from "@/pages/Instance/EventsPanels/Map/BackToAction";
 import { liveHeroRun } from "./explore3D";
 import { serializableContext, type HeroDeathBeat, type HeroDeathRecap, type HeroReplay, type HeroWindow } from "./heroReplay";
 import { meterTotals, type HeroMeterData } from "./heroMeter";
@@ -416,9 +417,16 @@ export function HeroScene({ instance, startOffsetMs, pull = null, active, onPull
       {explore && shown && (
         <div className="absolute left-3 top-3 flex items-center gap-2 rounded-md border bg-background/80 px-2.5 py-1.5 text-xs text-foreground shadow-lg backdrop-blur-sm lg:left-4 lg:top-4">
           {followedName && <span>Following <span className="font-semibold">{followedName}</span></span>}
-          <button type="button" onClick={followGroup} className="rounded-sm border bg-card px-2 py-1 text-xs hover:border-primary">
+          {/* Lit only while the follow camera has the camera (chronicle-2020). */}
+          <button
+            type="button"
+            onClick={followGroup}
+            aria-pressed={player.following}
+            className={player.following ? "rounded-sm border border-primary/60 bg-primary/80 px-2 py-1 text-xs text-primary-foreground hover:bg-primary/90" : "rounded-sm border bg-card px-2 py-1 text-xs hover:border-primary"}
+          >
             Follow the group
           </button>
+          {player.wayBack && <BackToActionButton onClick={player.backToAction} className="flex items-center gap-1 rounded-sm border bg-card px-2 py-1 text-xs hover:border-primary" />}
         </div>
       )}
     </div>

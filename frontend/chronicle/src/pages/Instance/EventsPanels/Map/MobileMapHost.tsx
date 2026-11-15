@@ -125,6 +125,7 @@ export function MobileMapHost({ wholeRun = false, ...props }: PanelRenderProps<M
                   onWalkingChange={setWalking}
                   onInputChange={setMobileInput}
                   onClose={closeMobileWorld}
+                  onBackToAction={player.wayBack ? player.backToAction : null}
                 />
               )}
               {floorControls && <div className="absolute bottom-2 left-2 z-40 max-w-[calc(100%-1rem)]">{floorControls}</div>}
