@@ -57,6 +57,7 @@ import { DebugOverlayLayer } from "./debugOverlays";
 import { UnitLayer, type UnitObject } from "./unitLayer";
 import { EffectsLayer } from "./effectsLayer";
 import { HudLayer } from "./hudLayer";
+import { raycastUnits } from "./unitPicking";
 
 /** Ground plane width in scene units; depth follows the artwork's aspect. */
 export { GROUND_WIDTH };
@@ -1937,7 +1938,7 @@ export class MapScene3D {
       -((event.clientY - rect.top) / rect.height) * 2 + 1,
     );
     this.raycaster.setFromCamera(this.pointer, this.camera);
-    const unitHit = this.raycaster.intersectObjects([...this.units.values()].map((unit) => unit.body), false)[0];
+    const unitHit = raycastUnits(this.raycaster, this.units);
     if (unitHit) {
       const guid = (unitHit.object.userData.guid as string | undefined) ?? null;
       const object = guid ? this.units.get(guid) : undefined;
@@ -2126,7 +2127,7 @@ export class MapScene3D {
       -((event.clientY - rect.top) / rect.height) * 2 + 1,
     );
     this.raycaster.setFromCamera(this.pointer, this.camera);
-    const hit = this.raycaster.intersectObjects([...this.units.values()].map((unit) => unit.body), false)[0];
+    const hit = raycastUnits(this.raycaster, this.units);
     const guid = (hit?.object.userData.guid as string | undefined) ?? null;
     this.pointerInside = true;
     // The next frame re-picks the effect under the pointer.
