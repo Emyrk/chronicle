@@ -175,6 +175,7 @@ func BlackwingLairDamageTargets() map[string]rankings.DamageTargets {
 		"Razorgore the Untamed": {Mode: rankings.DamageTargetsEntries, EntryIDs: []uint32{12435}},
 		"Broodlord Lashlayer":   {Mode: rankings.DamageTargetsBossOnly},
 		"Firemaw":               {Mode: rankings.DamageTargetsBossOnly},
+		"Chromaggus":            {Mode: rankings.DamageTargetsBossOnly},
 	}
 }
 
