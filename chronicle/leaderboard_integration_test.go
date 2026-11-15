@@ -186,6 +186,14 @@ func TestLeaderboardSourceActionsRetainRepairObligation(t *testing.T) {
 					_, err := advanceParseGeneration(tenantCtx, tx, group, true)
 					return err
 				}, nil))
+
+				// A failed replacement parse retries after the old instances are gone.
+				// Recover the tenant from durable leaderboard evidence carried in the job.
+				args := ArgsLogParse{LogID: group, Replacement: true, PreviousRankingRunIDs: []uuid.UUID{instance}}
+				restored, restoreErr := restoreReplacementParseTenantContext(ctx, c.Zed, &args)
+				require.NoError(t, restoreErr)
+				require.Equal(t, tenant, args.TenantID)
+				require.Equal(t, tenant, servicetenant.TenantIDFromContext(restored))
 			}
 			if action != "reparse" {
 				var jobs int

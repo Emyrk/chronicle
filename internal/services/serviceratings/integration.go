@@ -122,13 +122,13 @@ func bumpHighlightGenerations(ctx context.Context, tx database.StoreQueries, key
 // SourceContext resolves root-domain action requests BEFORE beginning a source
 // transaction. Never try to switch tenant session variables inside an open tx.
 func SourceContext(ctx context.Context, db database.StoreQueries, ids []uuid.UUID) (context.Context, error) {
-	if servicetenant.IsBypass(ctx) || servicetenant.TenantIDFromContext(ctx) != uuid.Nil {
+	if servicetenant.TenantIDFromContext(ctx) != uuid.Nil {
 		return ctx, nil
 	}
 	// Root-domain administrators can act on tenants that are intentionally hidden
 	// from the aggregate root view (include_in_all=false). Resolve the source under
-	// administrative visibility, then return a tenant-scoped context for the
-	// mutation itself so RLS remains enforced rather than bypassed.
+	// administrative visibility, then attach the tenant for downstream job args.
+	// An existing admin bypass remains effective because PrepareConn prioritizes it.
 	keys, err := db.LeaderboardRunKeysForIDs(servicetenant.AdminBypass(ctx), ids)
 	if err != nil {
 		return nil, err
