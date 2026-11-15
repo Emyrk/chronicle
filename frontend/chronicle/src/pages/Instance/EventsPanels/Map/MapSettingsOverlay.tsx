@@ -15,6 +15,7 @@ import {
   type EffectSettings,
 } from "./mapViewSettings";
 import type { SelectedReplayMapSource } from "./mapModel";
+import { DUNGEON_3D_COPY } from "./dungeon3DModel";
 import { DEFAULT_WALK_AVATAR, WALK_AVATAR_GROUPS, WALK_AVATARS } from "./walkAvatars";
 
 export interface MapSettingsOverlayProps {
@@ -26,7 +27,7 @@ export interface MapSettingsOverlayProps {
   /** The encounter has combat events to draw. */
   hasEffects: boolean;
   /** The "3D map" dungeon mesh, when the instance has one. */
-  mesh: { on: boolean; locked: boolean; loading: boolean; onToggle: () => void } | null;
+  mesh: { on: boolean; locked: boolean; loading: boolean; failed?: boolean; onRetry?: () => void; onToggle: () => void } | null;
   /** Selectable native artwork/render sources for the active 2D floor. */
   map2D: {
     value: SelectedReplayMapSource;
@@ -204,14 +205,26 @@ export function MapSettingsOverlay({
           {mesh && (
             <Toggle
               label="3D map"
-              detail={mesh.locked
-                ? "This instance has no map artwork; the dungeon mesh is all there is"
-                : mesh.loading ? "Loading the dungeon mesh…" : "Stand units on the real dungeon mesh instead of the map tiles"}
+              detail={mesh.failed
+                ? mesh.locked ? DUNGEON_3D_COPY.settingsFailedOnly : DUNGEON_3D_COPY.settingsFailed
+                : mesh.locked
+                  ? "This instance has no map artwork; the dungeon mesh is all there is"
+                  : mesh.loading ? "Loading the dungeon mesh…" : "Stand units on the real dungeon mesh instead of the map tiles"}
               checked={mesh.on}
               changed={!mesh.locked && !mesh.on}
               disabled={mesh.locked}
               onChange={() => mesh.onToggle()}
             />
+          )}
+          {mesh?.failed && mesh.onRetry && (
+            <button
+              type="button"
+              onClick={mesh.onRetry}
+              className="-mt-1 flex w-fit items-center gap-1 rounded-sm border border-border px-2 py-0.5 text-xs text-foreground hover:bg-muted"
+            >
+              <RotateCcw className="h-3 w-3" />
+              {DUNGEON_3D_COPY.retry}
+            </button>
           )}
           {map2D && (
             <Choice

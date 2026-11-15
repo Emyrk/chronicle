@@ -313,6 +313,8 @@ export function HeroScene({ instance, startOffsetMs, pull = null, active, onPull
     interactive: explore,
     sceneFields: "backdrop",
     unitModels: "none",
+    // The hero has its own handling (hidden until the 3D dungeon is up; Explore plays on the flat map).
+    notices: false,
   });
   const { live, ready, cameraHandle, followGuid } = player;
   if (meshReady !== (player.meshState === "ready")) setMeshReady(player.meshState === "ready");

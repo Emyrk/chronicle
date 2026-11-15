@@ -279,6 +279,8 @@ function RenderStage({ panelProps, mapSource, showHiddenUnits, dungeonMesh, unit
     interactive: false,
     sceneFields: "capture",
     onScene: setScene3d,
+    // The export reports a failed 3D dungeon as its own error.
+    notices: false,
   });
   const { ready, meshState } = player;
   const containerRef = useRef<HTMLDivElement>(null);

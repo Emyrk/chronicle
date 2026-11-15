@@ -1,10 +1,11 @@
 import { lazy, Suspense, type ComponentType, type ReactNode } from "react";
-import { Map as MapIcon } from "lucide-react";
+import { Loader2, Map as MapIcon, RotateCcw, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MapFloorPicker } from "./MapFloorPicker";
 import { MapView2D } from "./MapView2D";
 import { DEFAULT_EFFECT_SETTINGS } from "./mapViewSettings";
 import type { MapView3DProps } from "./MapView3D";
+import { DUNGEON_3D_COPY } from "./dungeon3DModel";
 import { stageView as stageViewFor, viewInputFor } from "./replayPlayerModel";
 import type { ReplayPlayerState } from "./useReplayPlayer";
 
@@ -164,16 +165,77 @@ export function ReplayPlayer({ player, view = {}, header, overlay, transport, fa
       : view3d
         ? view3dElement
         : <Suspense fallback={<MapMessage title="Loading 3D view" detail="Fetching the 3D renderer…" />}>{view3dElement}</Suspense>);
-  if (bare) return <>{header}{stageView}{overlay}{transport}</>;
+  // What the map says about the 3D dungeon, only while the 3D view is the stage (not over a fallback or the 2D map).
+  const showsDungeon = !fallback && kind === "3d";
+  const cover = showsDungeon && player.dungeon3D.cover ? <DungeonCover player={player} /> : null;
+  const notice = showsDungeon && player.dungeon3D.notice ? <DungeonNotice player={player} /> : null;
+  if (bare) return <>{header}{stageView}{cover}{overlay}{notice}{transport}</>;
   return (
     <>
       {header}
       {/* The card has no padding (hoverHeader): the full map keeps a thin window frame a hair inside it, the others run to the edges. */}
       <div className={cn("group/map relative min-h-0 flex-1 overflow-hidden bg-black/70", framed && "rounded-sm border border-white/15")}>
         {stageView}
+        {cover}
         {overlay}
+        {notice}
       </div>
       {transport}
     </>
+  );
+}
+
+const retryButtonClass = "flex shrink-0 items-center gap-1 rounded-sm bg-white/10 px-1.5 py-0.5 font-medium text-white hover:bg-white/20 disabled:opacity-40";
+
+/**
+ * A 3D-only dungeon (no flat map) that is still loading or failed: a plain cover
+ * instead of units on an empty ground. Under the map's controls (z-25), so the
+ * frames and buttons stay usable.
+ */
+function DungeonCover({ player }: { player: ReplayPlayerState }) {
+  const failed = player.dungeon3D.cover === "failed";
+  return (
+    <div className="absolute inset-0 z-[25] flex flex-col items-center justify-center gap-2 bg-black p-4 text-center text-xs text-white/75">
+      {failed ? (
+        <>
+          <p className="font-medium text-white/90">{DUNGEON_3D_COPY.coverFailed}</p>
+          <p>{DUNGEON_3D_COPY.coverFailedDetail}</p>
+          <button type="button" onClick={player.retryDungeon} disabled={!player.dungeon3D.canRetry} className={retryButtonClass}>
+            <RotateCcw className="h-3 w-3" />
+            {DUNGEON_3D_COPY.retry}
+          </button>
+        </>
+      ) : (
+        <p className="flex items-center gap-1.5" role="status">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          {DUNGEON_3D_COPY.coverLoading}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** The 3D dungeon failed and the flat map shows: a small notice under the top chips, with Retry and dismiss. */
+function DungeonNotice({ player }: { player: ReplayPlayerState }) {
+  return (
+    <div
+      role="status"
+      className="absolute left-1/2 top-9 z-40 flex max-w-[calc(100%-1rem)] -translate-x-1/2 items-center gap-1.5 rounded-sm bg-black/80 py-0.5 pl-2 pr-0.5 text-[11px] text-white/80 shadow-[0_4px_16px_rgba(0,0,0,.5)]"
+    >
+      <span className="min-w-0">{DUNGEON_3D_COPY.notice}</span>
+      <button type="button" onClick={player.retryDungeon} disabled={!player.dungeon3D.canRetry} className={retryButtonClass}>
+        <RotateCcw className="h-3 w-3" />
+        {DUNGEON_3D_COPY.retry}
+      </button>
+      <button
+        type="button"
+        onClick={player.dismissDungeonNotice}
+        aria-label={DUNGEON_3D_COPY.dismiss}
+        title={DUNGEON_3D_COPY.dismiss}
+        className="grid h-5 w-5 shrink-0 place-items-center rounded-sm text-white/60 hover:bg-white/10 hover:text-white"
+      >
+        <X className="h-3 w-3" />
+      </button>
+    </div>
   );
 }
