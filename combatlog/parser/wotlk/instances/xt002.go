@@ -34,7 +34,7 @@ func (e *xtVariantEvidence) ProcessMessage(msg messages.Message) error {
 	if !ok {
 		return nil
 	}
-	hard := aura.SpellID == 64193 && (entry == 33293 || entry == 33885)
+	hard := (aura.SpellID == 64193 || aura.SpellID == 65737) && (entry == 33293 || entry == 33885)
 	exposed := aura.SpellID == 63849 && (entry == 33329 || entry == 33995)
 	if !hard && !exposed {
 		return nil
