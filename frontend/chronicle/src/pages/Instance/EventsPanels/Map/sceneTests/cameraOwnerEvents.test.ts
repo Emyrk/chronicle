@@ -345,5 +345,42 @@ describe("taken from the follow camera (the host's way back)", () => {
     expect(reports).toEqual(["scripted", "director", "free"]);
     expect(h.scene.cameraTaken()).toBe(false);
   });
+
+  it("a view request while walking moves the character and keeps walk mode; out of walk mode first, it hands the camera back (why Follow leaves walk mode)", async () => {
+    const { h } = await fightScene();
+    const reports = recordTaken(h);
+    h.scene.setWalking(true);
+    h.scene.setViewport({ centerX: 0.5, centerY: 0.5, zoom: 2 });
+    expect(h.scene.cameraOwner()).toBe("walk");
+    h.scene.setWalking(false);
+    h.scene.setViewport({ centerX: 0.5, centerY: 0.5, zoom: 2 });
+    expect(reports).toEqual(["walk (taken)", "free (taken)", "director"]);
+  });
+
+  it("a jump's cut with the follow camera off does nothing; turned back on, then the view and the cut (MapView3D's order), it cuts on the follow camera", async () => {
+    const { h } = await fightScene();
+    const reports = recordTaken(h);
+    h.input.hover();
+    h.input.hold("KeyA", 300);
+    // The host released the framing on the take: the follow camera is off.
+    h.scene.setDirector(null);
+    h.settle();
+    const pose = h.probe.poseLine();
+    h.scene.cutDirector();
+    h.frames(5);
+    expect(h.probe.poseLine()).toBe(pose);
+    expect(reports).toEqual(["free (taken)"]);
+    // A jump chip now hands back first: the Director on, the view request, then the cut.
+    h.scene.setDirector({ bossGuids: BOSS });
+    h.scene.setViewport({ centerX: 0.5, centerY: 0.5, zoom: 2 });
+    h.scene.cutDirector();
+    h.frame();
+    expect(reports).toEqual(["free (taken)", "director"]);
+    // A cut snaps: the next frame holds the shot (no spring left to run).
+    const cut = h.probe.poseLine();
+    h.frame();
+    expect(h.probe.poseLine()).toBe(cut);
+    expect(cut).not.toBe(pose);
+  });
 });
 

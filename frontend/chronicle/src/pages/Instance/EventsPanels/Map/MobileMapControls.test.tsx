@@ -39,6 +39,7 @@ describe("MobileMapControls", () => {
     const props = { walking: true, canWalk: true, onWalkingChange: vi.fn(), onInputChange: vi.fn(), onClose: vi.fn() };
     expect(renderToStaticMarkup(<MobileMapControls {...props} />)).not.toContain("Back to the action");
     expect(renderToStaticMarkup(<MobileMapControls {...props} onBackToAction={null} />)).not.toContain("Back to the action");
-    expect(renderToStaticMarkup(<MobileMapControls {...props} onBackToAction={vi.fn()} />)).toContain("Back to the action");
+    // The icon alone on a phone: the label is its aria-label.
+    expect(renderToStaticMarkup(<MobileMapControls {...props} onBackToAction={vi.fn()} />)).toContain('aria-label="Back to the action"');
   });
 });

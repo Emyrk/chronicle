@@ -19,6 +19,8 @@ export interface MapHostCapabilities {
   framing: boolean;
   /** Play/pause and speed lead the camera row even with the page's Replay on. */
   playback: boolean;
+  /** The camera row stays narrow: "Back to the action" as an icon (the mini map's row wraps upward, toward the preview's pill). */
+  compactCamera: boolean;
   /** The mini map's Expand (title row and corner). */
   expand: boolean;
   /** The mini map's scrubber. */
@@ -70,6 +72,7 @@ export function mapHostCapabilities(kind: MapHostKind, immersive: boolean): MapH
     header: !mobile,
     framing: !mobile,
     playback: compact,
+    compactCamera: compact,
     expand: compact,
     scrubber: compact,
     previewVeil: compact,

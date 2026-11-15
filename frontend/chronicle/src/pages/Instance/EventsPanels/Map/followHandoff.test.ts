@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CameraOwner } from "./cameraArbiter";
-import { followControls, INITIAL_CAMERA_HANDOFF, isBackToActionKey, releasedFraming, reportCameraOwner, type CameraHandoff } from "./followHandoff";
-import { INITIAL_MAP_FRAMING, reconcileMapFraming, type MapViewport } from "./mapModel";
+import { followActions, followControls, followFraming, INITIAL_CAMERA_HANDOFF, INITIAL_FOLLOW_STATE, isBackToActionKey, onCameraReport, releasedFraming, reportCameraOwner, withFraming, type CameraHandoff, type FollowState } from "./followHandoff";
+import { INITIAL_MAP_FRAMING, reconcileMapFraming, type MapFraming, type MapViewport } from "./mapModel";
 import { cameraModeFor } from "./replayPlayerModel";
 
 /** The handoff after the scene's reports, each an owner and whether it is taken. */
@@ -56,29 +56,102 @@ describe("the Follow button and the way back", () => {
 
 describe("a whole run, the viewer owning the camera", () => {
   const step = (centerX: number): MapViewport => ({ centerX, centerY: 0.5, zoom: 3 });
+  const camera = { mode: "director" as const };
+  /** The host's state after a render: the framing reconciled with the follow grid at `centerX`, as useReplayPlayer does. */
+  const render = (state: FollowState, centerX: number, selection = "run"): FollowState =>
+    withFraming(state, (framing) => reconcileMapFraming(framing, selection, step(centerX)));
 
-  it("follow-grid steps no longer bump the view the scene acts on, nor ask for the follow camera; Follow does", () => {
-    const camera = { mode: "director" as const };
-    let framing = reconcileMapFraming(INITIAL_MAP_FRAMING, "run", step(0.3));
+  it("the scene's report of a take releases the framing: follow-grid steps then neither bump the view nor ask for the follow camera", () => {
+    let state = render(INITIAL_FOLLOW_STATE, 0.3);
+    state = onCameraReport(state, "director", false);
     // Following: each grid step bumps the view (a viewport request hands the camera to the follow camera).
-    const following = reconcileMapFraming(framing, "run", step(0.35));
-    expect(following.revision).toBe(framing.revision + 1);
-    framing = following;
-    // The viewer takes the camera: the framing is released (the view stays as it is).
-    framing = releasedFraming(framing);
-    const revision = framing.revision;
-    expect(cameraModeFor(camera, framing).cinematic).toBe(false);
+    const following = render(state, 0.35);
+    expect(following.framing.revision).toBe(state.framing.revision + 1);
+    state = following;
+    // The viewer turns with A/D (no viewport report): the scene reports the take.
+    state = onCameraReport(state, "free", true);
+    expect(state.framing.manual).toBe(true);
+    expect(cameraModeFor(camera, state.framing).cinematic).toBe(false);
+    const revision = state.framing.revision;
     for (const centerX of [0.4, 0.45, 0.5, 0.55]) {
-      framing = reconcileMapFraming(framing, "run", step(centerX));
-      expect(framing.revision).toBe(revision);
-      expect(cameraModeFor(camera, framing).cinematic).toBe(false);
+      state = render(state, centerX);
+      expect(state.framing.revision).toBe(revision);
+      expect(cameraModeFor(camera, state.framing).cinematic).toBe(false);
     }
-    // Releasing again changes nothing.
-    expect(releasedFraming(framing)).toBe(framing);
-    // Follow (the way back does the same): the default framing again, a new view, the follow camera.
-    const back = { ...framing, viewport: null, manual: false, revision: framing.revision + 1 };
+    // Later reports of the same take (walk mode ending on the free cam) change nothing.
+    expect(onCameraReport(state, "free", true)).toBe(state);
+  });
+
+  it("reports that are not a take leave the framing as it is", () => {
+    const state = render(INITIAL_FOLLOW_STATE, 0.3);
+    for (const owner of ["director", "free", "scripted", "tween"] as const) {
+      expect(onCameraReport(state, owner, false).framing).toBe(state.framing);
+    }
+    expect(onCameraReport(state, null, false).framing).toBe(state.framing);
+  });
+
+  it("picking another encounter after a take re-frames and asks for the follow camera again", () => {
+    let state = onCameraReport(render(INITIAL_FOLLOW_STATE, 0.3), "free", true);
+    const revision = state.framing.revision;
+    state = render(state, 0.6, "another encounter");
+    expect(state.framing.revision).toBe(revision + 1);
+    expect(cameraModeFor(camera, state.framing).cinematic).toBe(true);
+  });
+
+  it("Follow: the default framing again, as a new view that asks for the follow camera", () => {
+    const released = releasedFraming(reconcileMapFraming(INITIAL_MAP_FRAMING, "run", step(0.3)));
+    const back = followFraming(released);
+    expect(back.revision).toBe(released.revision + 1);
     expect(cameraModeFor(camera, back).cinematic).toBe(true);
-    expect(reconcileMapFraming(back, "run", step(0.6)).revision).toBe(back.revision + 1);
+    expect(releasedFraming(released)).toBe(released);
+  });
+});
+
+describe("the explicit ways back to the fight", () => {
+  /** followActions with recording deps: the calls in order, and the framing they leave. */
+  function setup(state: { canFollow?: boolean; following?: boolean } = {}) {
+    const calls: string[] = [];
+    let framing: MapFraming = releasedFraming(reconcileMapFraming(INITIAL_MAP_FRAMING, "run", { centerX: 0.3, centerY: 0.5, zoom: 3 }));
+    const actions = followActions({
+      canFollow: state.canFollow ?? true,
+      following: state.following ?? false,
+      leaveWalk: () => calls.push("leaveWalk"),
+      setFraming: (update) => {
+        framing = update(framing);
+        calls.push(`follow r${framing.revision}`);
+      },
+      cut: () => calls.push("cut"),
+    });
+    return { actions, calls, revision: framing.revision };
+  }
+
+  it("Follow and Back to the action leave walk mode first, then ask for the follow camera (a view request while walking would move the character)", () => {
+    const { actions, calls, revision } = setup({ following: true });
+    actions.follow();
+    expect(calls).toEqual(["leaveWalk", `follow r${revision + 1}`]);
+  });
+
+  it("a jump chip after a take hands the camera back, then cuts (MapView3D: Director, view, then cut)", () => {
+    const { actions, calls, revision } = setup();
+    actions.jump();
+    expect(calls).toEqual(["leaveWalk", `follow r${revision + 1}`, "cut"]);
+  });
+
+  it("a jump chip while following only cuts (a followed unit stays followed)", () => {
+    const { actions, calls } = setup({ following: true });
+    actions.jump();
+    expect(calls).toEqual(["cut"]);
+  });
+
+  it("Replay from here after a take hands the camera back; while following, or where Follow is not offered, it leaves the camera alone", () => {
+    const taken = setup();
+    taken.actions.resume();
+    expect(taken.calls).toEqual(["leaveWalk", `follow r${taken.revision + 1}`]);
+    for (const state of [{ following: true }, { canFollow: false }]) {
+      const { actions, calls } = setup(state);
+      actions.resume();
+      expect(calls).toEqual([]);
+    }
   });
 });
 

@@ -82,9 +82,9 @@ export function MobileMapControls({ walking, canWalk, onWalkingChange, onInputCh
           {walking ? "Walking" : "Drop in"}
         </button>
         {onBackToAction && (
-          <button type="button" onClick={onBackToAction} className={cn(controlButtonClass, "w-auto gap-2 px-3 text-xs font-semibold")}>
+          // The icon alone: a phone's top row is tight (Close, Drop in, this).
+          <button type="button" onClick={onBackToAction} aria-label={BACK_TO_ACTION_LABEL} title={BACK_TO_ACTION_LABEL} className={controlButtonClass}>
             <LocateFixed className="size-5" />
-            {BACK_TO_ACTION_LABEL}
           </button>
         )}
       </div>

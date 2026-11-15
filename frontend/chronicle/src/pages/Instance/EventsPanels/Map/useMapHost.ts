@@ -226,11 +226,13 @@ export function useMapHost({ props, kind, wholeRun, immersive, mobileWorldOpen }
   // Replay turns on only from an explicit Replay control (Replay from here,
   // the fullscreen bar's Enable Replay): the preview hands over at the same
   // moment, still playing. Enabled first, so Replay keeps this point.
+  // It also brings the camera back to the fight, if the viewer had taken it.
   const replayFromHere = () => {
     if (!sync || !ready) return;
     sync.enable();
     sync.setTimestamp(new Date(ready.cursorMs));
     sync.play();
+    player.resumeFollow();
   };
   // The view features every Map host passes through (a host adds touch input and the plan).
   const view: ReplayViewOptions = {

@@ -210,8 +210,9 @@ export function MapPanelHost({
   const jumps = ready.wholeRun && ready.runStartMs !== null && ready.runEndMs !== null
     ? encounterJumps(props.context.instance.encounters, props.result.encounters, ready.runStartMs, ready.runEndMs)
     : [];
+  // A jump chip brings the camera to the fight too (back to the follow camera if the viewer had it).
   const jumpTo = (timestampMs: number) => {
-    player.cameraHandle.cut();
+    player.jumpCamera();
     clock.seek(timestampMs);
   };
 
@@ -304,7 +305,7 @@ export function MapPanelHost({
         </button>
       )}
       {/* Once the viewer has taken the camera from the follow camera (chronicle-2020). */}
-      {wayBack && <BackToActionButton onClick={backToAction} className={mapFramingButtonClass} />}
+      {wayBack && <BackToActionButton onClick={backToAction} compact={caps.compactCamera} className={mapFramingButtonClass} />}
       <button
         type="button"
         onClick={() => applyFraming(FULL_MAP_VIEWPORT)}

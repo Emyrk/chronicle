@@ -15,7 +15,7 @@
  * as before.
  */
 import type { CameraOwner } from "./cameraArbiter";
-import type { MapFraming } from "./mapModel";
+import { INITIAL_MAP_FRAMING, type MapFraming } from "./mapModel";
 
 /** The scene's last camera report (MapScene3D.setOnCameraOwnerChange); owner null: no 3D scene. */
 export interface CameraHandoff {
@@ -53,6 +53,81 @@ export function followControls(canFollow: boolean, cinematic: boolean, handoff: 
  */
 export function releasedFraming(framing: MapFraming): MapFraming {
   return framing.manual ? framing : { ...framing, manual: true };
+}
+
+/** The framing and the scene's camera report, kept as one state so a report can release the framing in the same update. */
+export interface FollowState {
+  framing: MapFraming;
+  handoff: CameraHandoff;
+}
+
+export const INITIAL_FOLLOW_STATE: FollowState = { framing: INITIAL_MAP_FRAMING, handoff: INITIAL_CAMERA_HANDOFF };
+
+/** The state with its framing set (or updated), as setFraming does. */
+export function withFraming(state: FollowState, update: MapFraming | ((framing: MapFraming) => MapFraming)): FollowState {
+  const framing = typeof update === "function" ? update(state.framing) : update;
+  return framing === state.framing ? state : { ...state, framing };
+}
+
+/**
+ * A camera report from the scene: the handoff, and once the viewer has taken
+ * the camera the framing released (releasedFraming), so the whole run's
+ * follow grid stops handing it back on its own. A released framing also asks
+ * for the follow camera no more, so a new encounter (or Follow) re-frames and
+ * hands the camera back as a fresh choice.
+ */
+export function onCameraReport(state: FollowState, owner: CameraOwner | null, taken: boolean): FollowState {
+  const handoff = reportCameraOwner(state.handoff, owner, taken);
+  const framing = taken ? releasedFraming(state.framing) : state.framing;
+  return handoff === state.handoff && framing === state.framing ? state : { framing, handoff };
+}
+
+/** Follow's framing: the default one again, as a new view (the view request hands the camera to the follow camera). */
+export function followFraming(framing: MapFraming): MapFraming {
+  return { ...framing, viewport: null, manual: false, revision: framing.revision + 1 };
+}
+
+/** What the host's camera actions need. */
+export interface FollowActionDeps {
+  /** Follow is offered here (a whole run, or the loaded mesh). */
+  canFollow: boolean;
+  /** The follow camera has the camera now. */
+  following: boolean;
+  /** Out of walk mode, if walking: a view request while walking moves the character instead of handing the camera back. */
+  leaveWalk: () => void;
+  setFraming: (update: (framing: MapFraming) => MapFraming) => void;
+  /** Cut the follow camera straight to its next shot (a jump). */
+  cut: () => void;
+}
+
+/**
+ * The host's camera actions. Each explicit action the viewer takes to get
+ * back to the fight hands the camera back:
+ * - `follow`: the Follow button, and "Back to the action" (R): out of walk
+ *   mode, then the default framing again;
+ * - `jump`: a jump chip: back to the follow camera if the viewer has the
+ *   camera, then the cut (MapView3D applies the Director, then the view, then
+ *   the cut, so the cut lands on a live follow camera);
+ * - `resume`: "Replay from here": back to the follow camera if the viewer has
+ *   the camera. Where Follow is not offered, neither touches the camera.
+ * Picking another encounter re-frames on its own (a new selection key).
+ */
+export function followActions(deps: FollowActionDeps) {
+  const follow = () => {
+    deps.leaveWalk();
+    deps.setFraming(followFraming);
+  };
+  const resume = () => {
+    if (deps.canFollow && !deps.following) follow();
+  };
+  return {
+    follow,
+    resume,
+    jump: () => {
+      resume();
+      deps.cut();
+    },
+  };
 }
 
 /** The way back's shortcut (KeyboardEvent.code), pointer over the map like the other map keys. */
