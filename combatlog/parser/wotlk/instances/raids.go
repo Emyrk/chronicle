@@ -363,8 +363,7 @@ var RubySanctumFactory = &instances.CommonFactory{
 }
 
 // TrialOfTheCrusaderHostiles returns creature entry IDs for Trial of the Crusader (map 649).
-// This slice covers the primary raid bosses, their major adds, and the known faction champion units
-// exposed in the live AzerothCore creature templates. Champion coverage is intentionally not exhaustive.
+// This slice covers the primary raid bosses, their major adds, and both Faction Champions rosters.
 func TrialOfTheCrusaderHostiles() map[uint32]instances.Identity {
 	hostile := make(map[uint32]instances.Identity)
 	instances.LoadAdds(hostile, map[uint32]string{
@@ -385,6 +384,46 @@ func TrialOfTheCrusaderHostiles() map[uint32]instances.Identity {
 		35331: "Gnomeregan Champion",
 		35332: "Darnassus Champion",
 	})
+	for entry, name := range map[uint32]string{
+		// Horde champions.
+		34441: "Vivienne Blackwhisper",
+		34444: "Thrakgar",
+		34445: "Liandra Suncaller",
+		34447: "Caiphus the Stern",
+		34448: "Ruj'kah",
+		34449: "Ginselle Blightslinger",
+		34450: "Harkzog",
+		34451: "Birana Stormhoof",
+		34453: "Narrhok Steelbreaker",
+		34454: "Maz'dinah",
+		34455: "Broln Stouthorn",
+		34456: "Malithas Brightblade",
+		34458: "Gorgrim Shadowcleave",
+		34459: "Erin Misthoof",
+
+		// Alliance champions.
+		34460: "Kavina Grovesong",
+		34461: "Tyrius Duskblade",
+		34463: "Shaabad",
+		34465: "Velanaa",
+		34466: "Anthar Forgemender",
+		34467: "Alyssia Moonstalker",
+		34468: "Noozle Whizzlestick",
+		34469: "Melador Valestrider",
+		34470: "Saamul",
+		34471: "Baelnor Lightbearer",
+		34472: "Irieth Shadowstep",
+		34473: "Brienna Nightfell",
+		34474: "Serissa Grimdabbler",
+		34475: "Shocuul",
+	} {
+		hostile[entry] = instances.Identity{
+			Affiliation:   types.AffiliationHostile,
+			Name:          name,
+			EncounterName: "Faction Champions",
+			Boss:          true,
+		}
+	}
 	instances.LoadBosses(hostile, map[uint32]string{
 		34780: "Lord Jaraxxus",
 		34796: "Gormok the Impaler",

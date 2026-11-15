@@ -170,6 +170,59 @@ func TestOnyxiaDerivedName(t *testing.T) {
 	require.Nil(t, onyxiaDerivedName(database.WoWFlavor{database.FlavorWrath, database.FlavorAzerothcore}))
 }
 
+func TestTrialOfTheCrusaderFactionChampionIdentities(t *testing.T) {
+	t.Parallel()
+
+	hostiles := TrialOfTheCrusaderHostiles()
+	for _, entry := range []uint32{
+		34441, 34444, 34445, 34447, 34448, 34449, 34450, 34451, 34453, 34454, 34455, 34456, 34458, 34459,
+		34460, 34461, 34463, 34465, 34466, 34467, 34468, 34469, 34470, 34471, 34472, 34473, 34474, 34475,
+	} {
+		identity, ok := hostiles[entry]
+		require.True(t, ok, "missing faction champion entry %d", entry)
+		require.True(t, identity.Boss)
+		require.Equal(t, types.AffiliationHostile, identity.Affiliation)
+		require.Equal(t, "Faction Champions", identity.EncounterName)
+	}
+}
+
+func TestTrialOfTheCrusaderFactionChampionEncounter(t *testing.T) {
+	t.Parallel()
+
+	ctx := parsectx.With(context.Background(), parsectx.Context{
+		Flavor: database.WoWFlavor{database.FlavorWrath},
+	})
+	instance := TrialOfTheCrusaderFactory.New(
+		ctx,
+		slog.Default(),
+		unitdb.New(),
+		zone.Zone{Name: "trial of the crusader", MapID: 649},
+		database.WoWFlavor{database.FlavorWrath},
+	)
+	player := guid.GUID(1)
+	champion := creatureGUID(34447) // Caiphus the Stern, observed in the regression log.
+	start := time.Date(2026, time.November, 14, 17, 0, 0, 0, time.UTC)
+
+	require.NoError(t, instance.Process(&messages.Damage{
+		MessageBase: messages.Base(start),
+		Caster:      &champion,
+		Target:      player,
+		Amount:      1,
+		HitType:     types.HitTypeHit,
+	}))
+	require.NoError(t, instance.Process(&messages.Slain{
+		MessageBase: messages.Base(start.Add(time.Minute)),
+		Victim:      champion,
+		Killer:      &player,
+	}))
+
+	result, err := instance.Finalize(context.Background())
+	require.NoError(t, err)
+	require.Len(t, result.Encounters, 1)
+	require.Equal(t, "Faction Champions", result.Encounters[0].Name)
+	require.True(t, result.Encounters[0].Boss)
+}
+
 func TestRubySanctumHalionBodiesShareEncounterIdentity(t *testing.T) {
 	t.Parallel()
 
