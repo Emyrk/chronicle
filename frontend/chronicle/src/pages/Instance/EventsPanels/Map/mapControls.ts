@@ -5,7 +5,7 @@
  * way: the free cam is walk mode with a hidden character (chronicle-1514).
  * The tunables live in controlProfile.ts.
  */
-import { FREE_CAM_FAST_FACTOR, LOOK_RADIANS_PER_PX, MOBILE_STICK_DEAD_ZONE, WALK_CAMERA_SETTLED_RADIANS, WHEEL_ZOOM_RATE } from "./controlProfile";
+import { FRAME_STEP_MAX_S, FREE_CAM_FAST_FACTOR, LOOK_RADIANS_PER_PX, MOBILE_STICK_DEAD_ZONE, STICK_PITCH_RADIANS_PER_S, TURN_RADIANS_PER_S, WALK_CAMERA_SETTLED_RADIANS, WHEEL_ZOOM_RATE } from "./controlProfile";
 
 /** The A/D strafe setting's default (Map settings → Controls); defined in controlProfile. */
 export { DEFAULT_AD_STRAFE } from "./controlProfile";
@@ -120,14 +120,36 @@ export function cameraOffset(yaw: number, pitch: number, distance: number): Came
   return { x: Math.sin(yaw) * horizontal, y: Math.sin(pitch) * distance, z: Math.cos(yaw) * horizontal };
 }
 
-/** The inverse of cameraOffset: the yaw, pitch and distance of an offset from the pivot. */
-export function cameraAngles(offset: CameraOffset): { yaw: number; pitch: number; distance: number } {
+/**
+ * The inverse of cameraOffset: the yaw, pitch and distance of an offset from
+ * the pivot. Within `flatEpsilon` of straight up or down the yaw reads 0
+ * (the compass reads it with 1e-6, the camera modes with 1e-9).
+ */
+export function cameraAngles(offset: CameraOffset, flatEpsilon = 1e-9): { yaw: number; pitch: number; distance: number } {
   const horizontal = Math.hypot(offset.x, offset.z);
   return {
-    yaw: Math.abs(offset.x) + Math.abs(offset.z) < 1e-9 ? 0 : Math.atan2(offset.x, offset.z),
+    yaw: Math.abs(offset.x) + Math.abs(offset.z) < flatEpsilon ? 0 : Math.atan2(offset.x, offset.z),
     pitch: Math.atan2(offset.y, horizontal),
     distance: Math.hypot(horizontal, offset.y),
   };
+}
+
+/**
+ * The seconds a per-frame clock advances from `lastMs` (0: none yet, so 0) to
+ * `now`, never more than FRAME_STEP_MAX_S: a dropped frame never jumps.
+ */
+export function frameStepSeconds(now: number, lastMs: number): number {
+  return lastMs ? Math.min(FRAME_STEP_MAX_S, (now - lastMs) / 1000) : 0;
+}
+
+/** A turn input (-1…1, + is left) held for `dt` seconds: walk mode turns the character with it, the free cam its camera. */
+export function turnYaw(yaw: number, turn: number, dt: number): number {
+  return yaw + turn * TURN_RADIANS_PER_S * dt;
+}
+
+/** The look stick's pitch input (-1…1, up raises the camera) held for `dt` seconds, before the mode's pitch limits. */
+export function stickPitch(pitch: number, stick: number, dt: number): number {
+  return pitch + stick * STICK_PITCH_RADIANS_PER_S * dt;
 }
 
 /** A mouse-look drag of (dx, dy) pixels: drag right turns the view right, drag down raises the camera. */

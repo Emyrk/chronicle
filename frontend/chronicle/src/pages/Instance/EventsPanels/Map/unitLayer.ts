@@ -33,7 +33,7 @@ import { type MapBodyMaterial } from "./mapMaterials";
 import { createUnitCalloutMarker } from "./sceneFactories";
 import { bakedGeometry, disposeModelMaterials, gltfLoader, loadAnimatedGameModel, loadFlappingWhelp, loadGameModelAnimationPack } from "./sceneLoaders";
 import { GROUND_WIDTH } from "./sceneConstants";
-import { FRAME_STEP_MAX_S } from "./controlProfile";
+import { frameStepSeconds } from "./mapControls";
 import { DungeonWorld, type DungeonMesh } from "./dungeonWorld";
 import type { MapSceneFollowSource, MapScene3DTrailPoint, MapScene3DUnit, MapUnitRoles } from "./MapScene3D";
 import { BAR_HEIGHT, TOKEN_RADIUS } from "./sceneConstants";
@@ -1224,7 +1224,7 @@ export class UnitLayer {
   // selected chain and pins, the boss sigils' turn, and
   // the chain's target lines.
   updateTokens(now: number) {
-    const dt = this.tokenAt ? Math.min(FRAME_STEP_MAX_S, (now - this.tokenAt) / 1000) : 0;
+    const dt = frameStepSeconds(now, this.tokenAt);
     this.tokenAt = now;
     const { roles } = this;
     for (const [guid, object] of this.units) {

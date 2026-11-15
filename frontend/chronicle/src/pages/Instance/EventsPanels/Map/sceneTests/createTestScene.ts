@@ -264,7 +264,8 @@ export async function createTestScene(options: TestSceneOptions = {}) {
    * would do once that is fixed; it changes nothing else.
    */
   const neutraliseIdleMobileInput = () => {
-    (internals as unknown as { mobileInput: { jump: unknown } }).mobileInput = { ...(internals as unknown as { mobileInput: object }).mobileInput, jump: 0 };
+    const input = (internals as unknown as { input: { mobile: object } }).input;
+    input.mobile = { ...input.mobile, jump: 0 };
   };
 
   // --- Input, as the browser sends it ---
