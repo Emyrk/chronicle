@@ -28,7 +28,7 @@ import {
   type DampedValue,
   type DirectorUnit,
 } from "./cameraDirector";
-import { participantHue, participantLabel, type LiveMapPresence } from "../../liveSessionProtocol";
+import type { LiveMapPresence } from "../../liveSessionProtocol";
 import { actionForKey, cameraAngles, cameraCollisionDistance, cameraOffset, clampMobileMapInput, DEFAULT_AD_STRAFE, easeAngleToward, freeCamTravelSpeed, IDLE_MOBILE_MAP_INPUT, lookDrag, planarStep, pointerLossEndsDrag, rightDragWalkAxes, setWalkMouseButton, shouldFollowWalkCamera, walkCameraSettling, walkDragButton, walkMovementYaw, walkMouseControl, WALK_TOGGLE_KEY, wheelZoomDistance, type MapControlAction, type MobileMapInput } from "./mapControls";
 import { unwrapCompassRadians } from "./mapCompassModel";
 import { climbElevations, createShotHold, directorPullIn, fallbackShot, FOLLOW_CENTRE_WINDOW_MS, FOLLOW_SHOT_CHECK_MS, FOLLOW_STEEP_ELEVATION_DEG, releaseSteepShot, shotCheckDue, steepPullIn, FOLLOW_SIGHT_STRIDE, FOLLOW_STEEP_MIN_DISTANCE_YARDS, seesFraming, sightPicks, type ShotAnswer, FOLLOW_SLICE_MS, followSprings, followYawStep, handOverFollowSpring, handOverFollowYaw, startFollowTrackBuild, wrapAngle, type FollowTrackBuild, followKeyAt, glideDurationMs, glidePoseAt, glideTurnMs, unwrapNear, holdShot, isReplayJump, type FollowKey, type FollowTrack, type FollowYawProbe, type GlidePose } from "./followCamera";
@@ -80,9 +80,10 @@ import type { MapMarkerKind, MapSceneGround, MapUnitHealth } from "./useMapScene
 import { publishedModelGeometryScale, publishedModelGroupScale } from "./modelSizing";
 import { modelAnimationState, modelAnimationTimeSeconds, selectModelAnimation, usesStaticDeathFallback, type ModelLocomotion } from "./modelAnimation";
 import { setMaterialEmissive, type MapBodyMaterial } from "./mapMaterials";
-import { CAST_ARC_SIZE, createArcTexture, createAvatar, createIconMaterial, createLabelSprite, createTextTexture, createUnitCalloutMarker, createUnitGeometries, createWalkAvatarModel, easeOutBack, easeOutCubic, playWalkAvatarState, shortNumber, type WalkAvatarModel } from "./sceneFactories";
+import { CAST_ARC_SIZE, createArcTexture, createAvatar, createIconMaterial, createTextTexture, createUnitCalloutMarker, createUnitGeometries, createWalkAvatarModel, easeOutBack, easeOutCubic, playWalkAvatarState, shortNumber, type WalkAvatarModel } from "./sceneFactories";
 import { bakedGeometry, disposeModelMaterials, gltfLoader, loadAnimatedGameModel, loadFlappingWhelp, loadGameModelAnimationPack, loadWalkAvatar } from "./sceneLoaders";
-import { GROUND_WIDTH, MESH_PLAYER_HEIGHT_YARDS, PLAYER_GEOMETRY_HEIGHT } from "./sceneConstants";
+import { GROUND_WIDTH, KEY_MAX_STEP_S, MESH_PLAYER_HEIGHT_YARDS, PLAYER_GEOMETRY_HEIGHT } from "./sceneConstants";
+import { LivePresence } from "./livePresence";
 import { DungeonWorld, type DungeonMesh } from "./dungeonWorld";
 
 /** Ground plane width in scene units; depth follows the artwork's aspect. */
@@ -233,18 +234,6 @@ const KEY_ROTATE_SPEED = 1.6;
 // The free cam looks no closer to straight down than this (pitch, radians);
 // the bottom limit is OrbitControls' maxPolarAngle for the mode.
 const FREE_CAM_MAX_PITCH = Math.PI / 2 - 0.01;
-// A dropped frame never jumps the camera further than this.
-const KEY_MAX_STEP_S = 0.1;
-
-// --- Live session presence: everyone's camera or walking character ---
-/** Your presence goes out at most this often while it changes... */
-const PRESENCE_SEND_MS = 100;
-/** ...and others' ease toward each update at this rate (per second). */
-const PRESENCE_EASE_PER_S = 12;
-/** A camera glyph is this long next to a player (geometry units, as PLAYER_GEOMETRY_HEIGHT). */
-const PRESENCE_CAMERA_LENGTH = 3;
-/** Name tags keep one size on screen (their height, in view heights), near or far. */
-const PRESENCE_LABEL_HEIGHT = 0.03;
 
 // --- Unit tokens: flat discs on the ground (geometry units, as PLAYER_GEOMETRY_HEIGHT) ---
 // Sizes come from unitTokenArt, which the map legend page lays its art out with too.
@@ -679,59 +668,6 @@ export interface MapScene3DEffectHover {
   y: number;
 }
 
-interface RemotePresence {
-  presence: LiveMapPresence;
-  seeded: boolean;
-  /** Eased toward the goal each frame. */
-  position: THREE.Vector3;
-  target: THREE.Vector3;
-  goalPosition: THREE.Vector3;
-  goalTarget: THREE.Vector3;
-  group: THREE.Group;
-  /** Placed and turned as a whole; holds the walker and the camera glyph. */
-  body: THREE.Group;
-  walker: THREE.Mesh;
-  camera: THREE.Mesh;
-  cameraGeometry: THREE.BufferGeometry;
-  material: THREE.MeshBasicMaterial;
-  label: THREE.Sprite;
-}
-
-// Someone else in the live session: a capsule in their colour while they
-// walk, a camera (a four-sided cone opening toward what it looks at) while
-// they orbit, and their name above.
-function createRemotePresence(participantId: string, playerGeometry: THREE.BufferGeometry): RemotePresence {
-  const material = new THREE.MeshBasicMaterial({ color: new THREE.Color().setHSL(participantHue(participantId) / 360, 0.8, 0.6), transparent: true, opacity: 0.9 });
-  const walker = new THREE.Mesh(playerGeometry, material);
-  // Apex at the camera, opening along +z, which lookAt turns toward the target.
-  const cameraGeometry = new THREE.ConeGeometry(PRESENCE_CAMERA_LENGTH * 0.45, PRESENCE_CAMERA_LENGTH, 4)
-    .rotateX(-Math.PI / 2)
-    .translate(0, 0, PRESENCE_CAMERA_LENGTH / 2);
-  const camera = new THREE.Mesh(cameraGeometry, material);
-  const body = new THREE.Group();
-  body.add(walker, camera);
-  const label = createLabelSprite(participantLabel(participantId));
-  label.material.sizeAttenuation = false;
-  label.scale.multiplyScalar(PRESENCE_LABEL_HEIGHT / label.scale.y);
-  const group = new THREE.Group();
-  group.add(body, label);
-  return {
-    presence: { ground: "", mode: "camera", position: [0, 0, 0], target: [0, 0, 1] },
-    seeded: false,
-    position: new THREE.Vector3(),
-    target: new THREE.Vector3(),
-    goalPosition: new THREE.Vector3(),
-    goalTarget: new THREE.Vector3(),
-    group,
-    body,
-    walker,
-    camera,
-    cameraGeometry,
-    material,
-    label,
-  };
-}
-
 interface WalkState {
   /** Feet, in scene units. */
   position: THREE.Vector3;
@@ -1046,11 +982,7 @@ export class MapScene3D {
   private readonly trailColors = new Float32Array(MAX_TRAIL_SEGMENTS * 8);
   private readonly trailLines: THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>;
   private tokenAt = 0;
-  private onPresence: ((presence: LiveMapPresence | null) => void) | null = null;
-  private lastPresence: { json: string; at: number } | null = null;
-  private presenceTimer = 0;
-  private readonly remotePresences = new Map<string, RemotePresence>();
-  private presenceAt = 0;
+  private readonly presence: LivePresence;
   private onWalkChange: (walking: boolean) => void = () => {};
   private readonly walkHead = new THREE.Vector3();
   private keyMoveLastMs = 0;
@@ -1095,6 +1027,13 @@ export class MapScene3D {
   ) {
     this.capture = options.capture ?? null;
     this.now = options.now ?? (() => performance.now());
+    this.presence = new LivePresence({
+      scene: this.scene,
+      geometries: this.geometries,
+      now: this.now,
+      requestRender: () => this.requestRender(),
+      currentPresence: () => this.currentPresence(),
+    });
     this.container = container;
     this.keyWindow = container.ownerDocument.defaultView ?? window;
     this.onContextLost = onContextLost;
@@ -2781,7 +2720,7 @@ export class MapScene3D {
     canvas.removeEventListener("contextmenu", this.handleWalkContextMenu);
     if (this.walk) this.disposeAvatar(this.walk.avatar);
     this.walk = null;
-    clearTimeout(this.presenceTimer);
+    this.presence.dispose();
     for (const line of this.targetLines) {
       line.geometry.dispose();
       line.material.map?.dispose();
@@ -2793,8 +2732,6 @@ export class MapScene3D {
     this.columnBox.dispose();
     this.tokenEdge.dispose();
     this.bossSpire.dispose();
-    for (const presence of this.remotePresences.values()) this.disposeRemotePresence(presence);
-    this.remotePresences.clear();
     clearTimeout(this.unitClickTimer);
     this.keyWindow.removeEventListener("keydown", this.handleKeyDown, { capture: true });
     this.keyWindow.removeEventListener("keyup", this.handleKeyUp);
@@ -4686,11 +4623,9 @@ export class MapScene3D {
     this.requestRender();
   }
 
-  /** Called with where you are on the mesh (throttled), for a live session; null once you are not. */
+  /** Called with where you are on the mesh (throttled), for a live session; null once you are not (LivePresence). */
   setOnPresence(callback: ((presence: LiveMapPresence | null) => void) | null) {
-    this.onPresence = callback;
-    this.lastPresence = null;
-    if (callback) this.emitPresence(true);
+    this.presence.setOnPresence(callback);
   }
 
   // Your camera, or your character while walking; null off the mesh.
@@ -4707,97 +4642,19 @@ export class MapScene3D {
     return { ground: mesh.url, mode: "camera", position: vector(this.camera.position), target: vector(this.controls.target) };
   }
 
-  /**
-   * Sends your presence when it changed (at most every PRESENCE_SEND_MS, the
-   * last change always going out), or regardless with `force` (the heartbeat).
-   */
+  /** Sends your presence when it changed (throttled), or regardless with `force` (the heartbeat; LivePresence). */
   emitPresence(force = false) {
-    const send = this.onPresence;
-    if (!send || this.disposed) return;
-    const presence = this.currentPresence();
-    const json = JSON.stringify(presence);
-    const last = this.lastPresence;
-    const now = this.now();
-    if (!force && last) {
-      if (json === last.json) return;
-      const wait = PRESENCE_SEND_MS - (now - last.at);
-      if (wait > 0) {
-        if (!this.presenceTimer) {
-          this.presenceTimer = window.setTimeout(() => {
-            this.presenceTimer = 0;
-            this.emitPresence();
-          }, wait);
-        }
-        return;
-      }
-    }
-    clearTimeout(this.presenceTimer);
-    this.presenceTimer = 0;
-    this.lastPresence = { json, at: now };
-    send(presence);
+    this.presence.emitPresence(force);
   }
 
-  /** Everyone else's presence in the live session, drawn where it is on the same mesh. */
+  /** Everyone else's presence in the live session, drawn where it is on the same mesh (LivePresence). */
   setRemotePresences(presences: ReadonlyMap<string, LiveMapPresence>) {
-    for (const [participantId, object] of this.remotePresences) {
-      if (presences.has(participantId)) continue;
-      this.disposeRemotePresence(object);
-      this.remotePresences.delete(participantId);
-    }
-    for (const [participantId, presence] of presences) {
-      let object = this.remotePresences.get(participantId);
-      if (!object) {
-        object = createRemotePresence(participantId, this.geometries.player);
-        this.scene.add(object.group);
-        this.remotePresences.set(participantId, object);
-      }
-      // A change of mode jumps rather than gliding from the sky to the floor.
-      const jump = !object.seeded || object.presence.mode !== presence.mode;
-      object.presence = presence;
-      object.goalPosition.fromArray(presence.position);
-      object.goalTarget.fromArray(presence.target);
-      if (jump) {
-        object.position.copy(object.goalPosition);
-        object.target.copy(object.goalTarget);
-        object.seeded = true;
-      }
-    }
-    this.requestRender();
+    this.presence.setRemotePresences(presences);
   }
 
   // Eases others' presences toward their latest update; true while any moves.
   private updateRemotePresences(now: number): boolean {
-    const dt = this.presenceAt ? Math.min(KEY_MAX_STEP_S, (now - this.presenceAt) / 1000) : 0;
-    this.presenceAt = now;
-    if (this.remotePresences.size === 0) return false;
-    const mesh = this.dungeonMesh;
-    const ease = 1 - Math.exp(-PRESENCE_EASE_PER_S * dt);
-    let moving = false;
-    for (const object of this.remotePresences.values()) {
-      const shown = mesh !== null && object.presence.ground === mesh.url;
-      object.group.visible = shown;
-      if (!shown) continue;
-      object.position.lerp(object.goalPosition, ease);
-      object.target.lerp(object.goalTarget, ease);
-      const settle = 1e-4;
-      if (object.position.distanceToSquared(object.goalPosition) > settle * settle
-        || object.target.distanceToSquared(object.goalTarget) > settle * settle) {
-        moving = true;
-      }
-      const walking = object.presence.mode === "walk";
-      object.walker.visible = walking;
-      object.camera.visible = !walking;
-      object.body.position.copy(object.position);
-      object.body.scale.setScalar(this.unitScale);
-      if (walking) {
-        object.body.rotation.set(0, Math.atan2(object.position.x - object.target.x, object.position.z - object.target.z), 0);
-      } else {
-        object.body.lookAt(object.target);
-      }
-      const labelHeight = walking ? PLAYER_GEOMETRY_HEIGHT + 0.2 : 1.6;
-      object.label.position.set(object.position.x, object.position.y + labelHeight * this.unitScale, object.position.z);
-    }
-    return moving;
+    return this.presence.updateRemotePresences(now, this.dungeonMesh, this.unitScale);
   }
 
   // The token parts that follow the replay: cast arcs, halos for the
@@ -4977,14 +4834,6 @@ export class MapScene3D {
       line.material.color.copy(color);
       line.material.opacity = dotted ? TARGET_LINE.targetsTargetOpacity : TARGET_LINE.opacity;
     });
-  }
-
-  private disposeRemotePresence(object: RemotePresence) {
-    this.scene.remove(object.group);
-    object.material.dispose();
-    object.cameraGeometry.dispose();
-    object.label.material.map?.dispose();
-    object.label.material.dispose();
   }
 
   /** The plan items to draw (the current step's, plus any being drawn), and the selected one. */
