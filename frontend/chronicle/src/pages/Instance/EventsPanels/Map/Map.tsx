@@ -1,8 +1,8 @@
 /* eslint-disable react-refresh/only-export-components -- Panel factory and colocated view components intentionally share this module. */
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactElement, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
-import { AlertTriangle, AppWindow, Clapperboard, Crosshair, Expand, Focus, Footprints, Gamepad2, HeartPulse, Loader2, PenLine, Map as MapIcon, Maximize, Maximize2, Minimize2, Pause, Play, Route, Settings2, Shrink, Skull, Timer, X } from "lucide-react";
+import { AlertTriangle, AppWindow, Clapperboard, Crosshair, Expand, Focus, Footprints, Gamepad2, HeartPulse, PenLine, Map as MapIcon, Maximize, Minimize2, Pause, Play, Route, Settings2, Shrink, Skull, Timer, X } from "lucide-react";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { parseLivePresenceSurface } from "../../liveSessionProtocol";
@@ -12,9 +12,23 @@ import { useSyncModeContextOptional } from "../../SyncModeContext";
 import { ReplayToggleFlash } from "../../ReplayToggleFlash";
 import { useReplayStepKeys } from "../../replayStepKey";
 import { ReplayPlayTooltip } from "../../ReplayPlayTooltip";
-import { ReplayTransportBar, usePlayerDeathTimes } from "../../ReplayControlOverlay";
 import { MiniScrubber } from "./MiniScrubber";
-import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
+import { ExpandMapButton, FullscreenEncounterPicker, FullscreenReplayBar, KeybindTooltip, LeeroyFeaturedUnits, ReloadingChip, WalkHint } from "./MapChrome";
+import { BROWSER_FULLSCREEN_KEYS, framingButtonClass, mapFramingButtonClass, WINDOW_FULLSCREEN_KEYS } from "./mapChromeStyles";
+import { alignmentOverlayForMapMode, isMiniMapOption, mapHostCapabilities, mapOwnsPortalContainer, mapPreviewMaxSpeed, mapPreviewOn, preferredMeshState, walkModeAvailable, type MapHostKind } from "./mapHostModel";
+import {
+  ENEMY_FRAMES_STORAGE_KEY,
+  RAID_FRAMES_STORAGE_KEY,
+  readStoredAdStrafe,
+  readStoredMapSource,
+  readStoredMesh,
+  readStoredShown,
+  storeAdStrafe,
+  storeMapSource,
+  storeMesh,
+  storeShown,
+} from "./mapSettingsStorage";
+import { useFullscreenElement } from "./useFullscreenElement";
 import { PortalContainerProvider, usePortalContainer } from "@/components/ui/PortalContainerContext";
 import type { Encounter } from "../../InstancePage";
 import type { PanelDefinition, PanelRenderProps } from "../types";
@@ -28,7 +42,7 @@ import {
   FULL_MAP_VIEWPORT,
   type ReplayMapSource,
 } from "./mapModel";
-import type { DungeonMeshState, MapUnitRoles } from "./MapScene3D";
+import type { MapUnitRoles } from "./MapScene3D";
 import { useEmbeddedPanel, useEmbeddedPanelWithResult } from "../useEmbeddedPanel";
 import { UnitInspectContext, type UnitInspectSelection } from "../UnitInspectContext";
 import { InspectCards } from "./InspectCards";
@@ -60,11 +74,12 @@ import { miniExpandStep, useLoadSettled, useSelectOnce, type MiniExpand, type Mi
 import { PlanControls } from "./plan/PlanControls";
 import { ROLE_TOKENS, usePlanEditor, usePlanShortcuts, type PlanRosterEntry } from "./plan/usePlanEditor";
 import type { PlanItem } from "./plan/mapPlan";
-import { raidTargetMarkerImage } from "./plan/planArt";
 import { usePlayerSpecializations } from "@/components/ui/PlayerMetricChart/PlayerSpecializationContext";
-import { LEEROY_FEATURED_UNITS, LEEROY_UNIT_CALLOUTS } from "../../Leeroy/leeroyFeaturedUnits";
+import { LEEROY_UNIT_CALLOUTS } from "../../Leeroy/leeroyFeaturedUnits";
 
 export { mapPresentationForSelection };
+export { alignmentOverlayForMapMode, isMiniMapOption, mapOwnsPortalContainer, preferredMeshState, walkModeAvailable } from "./mapHostModel";
+export { FullscreenEncounterPicker } from "./MapChrome";
 
 const VideoRenderDialog = lazy(() => import("./VideoRenderDialog"));
 
@@ -74,248 +89,8 @@ const DIRECTOR_CAMERA: ReplayCamera = { mode: "director" };
 const RAID_FRAMES_PANEL = createRaidFramesPanel();
 const UNIT_AURAS_PANEL = createUnitAurasPanel();
 
-const MESH_STORAGE_KEY = "chronicle.map.mesh";
-const MAP_SOURCE_STORAGE_KEY = "chronicle.map.source2d";
-
-function readStoredMapSource(): ReplayMapSource {
-  try {
-    const stored = localStorage.getItem(MAP_SOURCE_STORAGE_KEY);
-    return stored === "renders" || stored === "art" ? stored : "auto";
-  } catch {
-    return "auto";
-  }
-}
-
-function storeMapSource(source: ReplayMapSource) {
-  try {
-    if (source === "auto") localStorage.removeItem(MAP_SOURCE_STORAGE_KEY);
-    else localStorage.setItem(MAP_SOURCE_STORAGE_KEY, source);
-  } catch {
-    // Storage may be unavailable; the choice still applies for this session.
-  }
-}
-
 /** How often the mini map's preview clock ticks; the 3D view extrapolates between ticks. */
 const PREVIEW_TICK_MS = 250;
-
-function readStoredMesh(): boolean | null {
-  try {
-    const stored = localStorage.getItem(MESH_STORAGE_KEY);
-    return stored === null ? null : stored === "true";
-  } catch {
-    return null;
-  }
-}
-
-export function preferredMeshState(stored: boolean | null): boolean {
-  return stored ?? true;
-}
-
-export function alignmentOverlayForMapMode(requested: boolean, meshWanted: boolean): boolean {
-  return requested && meshWanted;
-}
-
-export function walkModeAvailable(
-  show3D: boolean,
-  meshWanted: boolean,
-  meshState: DungeonMeshState,
-  flatYardsAvailable: boolean,
-): boolean {
-  return show3D && (meshWanted ? meshState === "ready" : flatYardsAvailable);
-}
-
-export function mapOwnsPortalContainer(fullscreen: boolean, windowed: boolean, mobileWorldOpen: boolean): boolean {
-  return fullscreen || windowed || mobileWorldOpen;
-}
-
-const RAID_FRAMES_STORAGE_KEY = "chronicle.map.raidFrames";
-const ENEMY_FRAMES_STORAGE_KEY = "chronicle.map.enemyFrames";
-
-// A/D strafe is optional; the default keeps A/D turning.
-const AD_STRAFE_STORAGE_KEY = "chronicle.map.adStrafe";
-
-function readStoredAdStrafe(): boolean {
-  try {
-    const stored = localStorage.getItem(AD_STRAFE_STORAGE_KEY);
-    return stored === null ? DEFAULT_AD_STRAFE : stored === "strafe";
-  } catch {
-    return DEFAULT_AD_STRAFE;
-  }
-}
-
-function storeAdStrafe(on: boolean) {
-  try {
-    localStorage.setItem(AD_STRAFE_STORAGE_KEY, on ? "strafe" : "turn");
-  } catch {
-    // Storage may be unavailable; the choice still applies for this session.
-  }
-}
-
-function readStoredShown(key: string): boolean {
-  try {
-    return localStorage.getItem(key) !== "hidden";
-  } catch {
-    return true;
-  }
-}
-
-function storeShown(key: string, shown: boolean) {
-  try {
-    localStorage.setItem(key, shown ? "shown" : "hidden");
-  } catch {
-    // Storage may be unavailable; the choice still applies for this session.
-  }
-}
-
-// null forgets the choice, so the default (preferredMeshState) applies again.
-function storeMesh(on: boolean | null) {
-  try {
-    if (on === null) localStorage.removeItem(MESH_STORAGE_KEY);
-    else localStorage.setItem(MESH_STORAGE_KEY, String(on));
-  } catch {
-    // Storage may be unavailable (private mode); the toggle still works for this session.
-  }
-}
-
-const mapFramingButtonClass = "pointer-events-auto flex items-center gap-1 rounded-sm border border-black/80 bg-black/75 px-2 py-1 text-[10px] font-medium text-white/75 shadow-[0_4px_16px_rgba(0,0,0,.5)] hover:bg-black/90 hover:text-white disabled:opacity-40 disabled:hover:text-white/75";
-const framingButtonClass = "flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:hover:text-muted-foreground";
-
-/** The Map panel option that made it a mini map before the Mini Map panel; still honoured for saved layouts and links. */
-const MINI_MAP_PANEL_OPTION = "mini";
-
-/** The panel option asks for the mini map: the replay without overlays, for small panels. */
-export function isMiniMapOption(option: string | null | undefined): boolean {
-  return (option ?? "").split(",").includes(MINI_MAP_PANEL_OPTION);
-}
-
-/**
- * Expands a mini map: `onExpand` (the 3D replay going fullscreen) when given,
- * else the full Map layout, when the page can switch layouts.
- * `overlay`: drawn on the map's top-right corner, always there; it fades while
- * the card's title row (which has its own Expand) shows over it.
- */
-function ExpandMapButton({ context, overlay = false, onExpand }: { context: PanelRenderProps<MapResult>["context"]; overlay?: boolean; onExpand?: () => void }) {
-  if (!onExpand && !context.onApplyPreset) return null;
-  return (
-    <button
-      type="button"
-      onClick={onExpand ?? (() => context.onApplyPreset?.("map"))}
-      title={onExpand ? "Watch the replay fullscreen" : "Open the full map"}
-      className={overlay
-        ? cn(mapFramingButtonClass, "absolute right-2 top-2 z-40 transition-opacity group-has-[[data-hover-header]:hover]/panel:pointer-events-none group-has-[[data-hover-header]:hover]/panel:opacity-0")
-        : framingButtonClass}
-    >
-      <Maximize2 className="h-3 w-3" />
-      Expand
-    </button>
-  );
-}
-
-/** A key drawn as a keycap. */
-function Keycap({ children }: { children: ReactNode }) {
-  return (
-    <kbd className="inline-grid h-5 min-w-5 place-items-center rounded border border-white/25 border-b-2 border-b-white/40 bg-gradient-to-b from-white/20 to-white/5 px-1 font-mono text-[10px] font-semibold leading-none text-white shadow-[0_1px_0_rgba(0,0,0,.6)]">
-      {children}
-    </kbd>
-  );
-}
-
-const WINDOW_FULLSCREEN_KEYS = ["Ctrl", "Shift", "F"];
-const BROWSER_FULLSCREEN_KEYS = ["Ctrl", "Alt", "F"];
-
-/** A map button's hover hint: what it does, then its key combinations (alternatives split by "or"). */
-function KeybindTooltip({ label, keys, children }: { label: string; keys: string[][]; children: ReactElement }) {
-  return (
-    <HintTooltip delayDuration={200}>
-      <TooltipTrigger asChild>{children}</TooltipTrigger>
-      <TooltipContent side="left" className="flex items-center gap-1.5">
-        {label}
-        {keys.map((combo, index) => (
-          <span key={combo.join("+")} className="flex items-center gap-0.5">
-            {index > 0 && <span className="mr-1 text-zinc-400">or</span>}
-            {combo.map((key) => <Keycap key={key}>{key}</Keycap>)}
-          </span>
-        ))}
-      </TooltipContent>
-    </HintTooltip>
-  );
-}
-
-/** One walk-mode control: its keycaps, then what they do. */
-function WalkHint({ keys, children }: { keys: string[]; children: ReactNode }) {
-  return (
-    <span className="inline-flex items-center gap-1 whitespace-nowrap">
-      {keys.map((key) => <Keycap key={key}>{key}</Keycap>)}
-      <span>{children}</span>
-    </span>
-  );
-}
-
-/**
- * Fullscreen's Replay controls; its own component so death times load only while fullscreen.
- * `onEnable`: what its Enable Replay does instead (a preview hands over at its own moment).
- */
-function FullscreenReplayBar({ onEnable }: { onEnable?: () => void }) {
-  const deaths = usePlayerDeathTimes();
-  return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-3 z-40 flex justify-center px-4">
-      <ReplayTransportBar
-        deaths={deaths}
-        onEnable={onEnable}
-        className="pointer-events-auto h-auto w-full max-w-4xl rounded-md border border-white/15 bg-black/70 shadow-[0_8px_32px_rgba(0,0,0,.6)] backdrop-blur-sm"
-      />
-    </div>
-  );
-}
-
-/**
- * Fullscreen, middle left: the run's boss encounters, one click to watch another.
- * A pick only selects, as the encounter list does: it never turns on the page's
- * Replay (its analytics mode); the map's preview keeps it playing.
- */
-export function FullscreenEncounterPicker({ encounters, selectedIds, onSelect }: {
-  encounters: Encounter[];
-  selectedIds: string[];
-  onSelect: (encounterIds: string[]) => void;
-}) {
-  const bosses = encounters.filter((encounter) => encounter.boss);
-  if (bosses.length === 0) return null;
-  return (
-    <nav
-      aria-label="Encounters"
-      className="styled-scrollbar absolute left-2 top-1/2 z-40 flex max-h-[60%] w-44 -translate-y-1/2 flex-col gap-0.5 overflow-y-auto rounded-sm border border-black/80 bg-black/75 p-1 shadow-[0_4px_16px_rgba(0,0,0,.5)]"
-    >
-      {bosses.map((encounter) => {
-        const selected = selectedIds.length === 1 && selectedIds[0] === encounter.id;
-        const failed = encounter.kill_type === "wipe" || encounter.kill_type === "reset";
-        return (
-          <button
-            key={encounter.id}
-            type="button"
-            onClick={() => onSelect([encounter.id])}
-            aria-pressed={selected}
-            title={failed ? `${encounter.name} (${encounter.kill_type})` : encounter.name}
-            className={cn(
-              "truncate rounded-sm px-2 py-1 text-left text-[11px]",
-              selected ? "bg-primary/80 text-primary-foreground" : "text-white/75 hover:bg-white/10 hover:text-white",
-              failed && !selected && "text-white/40",
-            )}
-          >
-            {encounter.name}
-            {failed && <span className="ml-1 text-[9px] uppercase">{encounter.kill_type}</span>}
-          </button>
-        );
-      })}
-    </nav>
-  );
-}
-
-function subscribeFullscreen(onChange: () => void) {
-  document.addEventListener("fullscreenchange", onChange);
-  return () => document.removeEventListener("fullscreenchange", onChange);
-}
-const currentFullscreenElement = () => document.fullscreenElement;
-const noFullscreenElement = () => null;
 
 interface ReplayMapProps extends PanelRenderProps<MapResult> {
   /** Replay the whole run instead of the one selected encounter. */
@@ -408,7 +183,7 @@ function SingleEncounterReplayMap({
   // Immersive modes portal popovers into the map itself. Browser fullscreen hides
   // outside content, while window fullscreen places the map above body portals.
   // Read on mount too: Expand on the 2D mini map goes fullscreen before this map mounts.
-  const fullscreenNode = useSyncExternalStore(subscribeFullscreen, currentFullscreenElement, noFullscreenElement);
+  const fullscreenNode = useFullscreenElement();
   const fullscreenTarget = fullscreenRoot ?? rootElement;
   const fullscreen = fullscreenNode !== null && fullscreenNode === fullscreenTarget;
   const inheritedPortalContainer = usePortalContainer();
@@ -418,8 +193,9 @@ function SingleEncounterReplayMap({
   useEffect(() => {
     onImmersiveChange?.(immersive);
   }, [immersive, onImmersiveChange]);
-  // Expanded (fullscreen or window fullscreen), the mini map is the full map.
-  const compact = mini && !immersive;
+  // What this host shows: expanded (fullscreen or window fullscreen), the mini map is the full map.
+  const kind: MapHostKind = mobile ? "mobile" : mini ? "mini" : "full";
+  const caps = mapHostCapabilities(kind, immersive);
   // The mini map's Expand: browser fullscreen, requested in the click itself
   // (it needs the user gesture); window fullscreen when the browser refuses.
   const expandFullscreen = useCallback(() => {
@@ -476,10 +252,8 @@ function SingleEncounterReplayMap({
   // Preview: with the page's Replay off, the mini map, the full map's whole run
   // and any fullscreen map play on a loop by their own clock, so the map shows
   // what it does without switching the page's analytics into Replay.
-  const previewOn = (mini || mobile || wholeRun || immersive) && !sync?.enabled;
-  // A whole raid compressed into the normal 90-second preview can hit 32×,
-  // making players and map changes unreadably jumpy on a phone.
-  const previewMaxSpeed = mobile && wholeRun ? 4 : undefined;
+  const previewOn = mapPreviewOn(kind, { wholeRun, immersive, replayOn: Boolean(sync?.enabled) });
+  const previewMaxSpeed = mapPreviewMaxSpeed(kind, wholeRun);
   // The page's Replay as a clock, and the preview's own: a loop over the
   // encounter the scene shows (picked by the page's Replay cursor, as the scene does).
   const pageClock = useSyncModeClock();
@@ -501,7 +275,7 @@ function SingleEncounterReplayMap({
     mapSource,
     showHiddenUnits: effectSettings.showHiddenUnits,
     meshOn,
-    renderedCanvas: mobile && !mobileWorldOpen ? "always" : "without-mesh",
+    renderedCanvas: caps.mobileWorld && !mobileWorldOpen ? "always" : "without-mesh",
     camera: scriptedCameraActive
       ? { mode: "director", path: { marks: props.context.instance.replayCameraPath ?? [], startMs: new Date(props.context.instance.startTime).getTime() } }
       : DIRECTOR_CAMERA,
@@ -612,9 +386,9 @@ function SingleEncounterReplayMap({
     panel: RAID_FRAMES_PANEL,
     context: props.context,
     durationMs: props.durationMs,
-    enabled: !compact && !mobile && (showRaidFrames || showEnemyFrames || framesWanted),
+    enabled: caps.frames && (showRaidFrames || showEnemyFrames || framesWanted),
   });
-  const auras = useEmbeddedPanel({ panel: UNIT_AURAS_PANEL, context: props.context, durationMs: props.durationMs, enabled: !compact && !mobile && framesWanted });
+  const auras = useEmbeddedPanel({ panel: UNIT_AURAS_PANEL, context: props.context, durationMs: props.durationMs, enabled: caps.frames && framesWanted });
   const cursorMs = sync?.enabled && sync.currentTimestamp ? sync.currentTimestamp.getTime() : null;
   const targetEncounter = target && raidFramesResult
     ? selectRaidFramesEncounter(raidFramesResult.encounters, props.context.selectedEncounterIds, cursorMs)
@@ -630,7 +404,7 @@ function SingleEncounterReplayMap({
   // document, so they run before the page's own Ctrl+Shift+F and Esc (focus
   // mode) on window; walk mode handles its Esc first.
   useEffect(() => {
-    if (compact || mobile) return;
+    if (!caps.fullscreen) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
       if (event.key === "Escape" && windowed && !walkWanted && !planOpen && !settingsOpen) {
@@ -647,7 +421,7 @@ function SingleEncounterReplayMap({
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [compact, immersive, mobile, planOpen, settingsOpen, toggleFullscreen, toggleWindowed, walkWanted, windowed]);
+  }, [caps.fullscreen, immersive, planOpen, settingsOpen, toggleFullscreen, toggleWindowed, walkWanted, windowed]);
 
   // The whole run falls back when it cannot play; a scene message counts only
   // once the panel has loaded this selection (a fresh panel renders empty first).
@@ -713,7 +487,7 @@ function SingleEncounterReplayMap({
     <div className="flex min-w-0 shrink-0 items-center gap-2 text-[10px] text-muted-foreground">
       {!ready.overlayAvailable && <span className="text-amber-300/80">position overlay unavailable</span>}
       <LivePresenceIndicator surface={presenceSurface} />
-      {!compact && videoEncounter && (
+      {caps.video && videoEncounter && (
         // A span carries the hint: a disabled button shows no title.
         <span title={videoBlocker ?? "Render this boss fight as an MP4 video, in your browser"}>
           <button type="button" onClick={() => setVideoOpen(true)} disabled={videoBlocker !== null} className={framingButtonClass}>
@@ -728,7 +502,7 @@ function SingleEncounterReplayMap({
           Overview
         </button>
       )}
-      {compact && <ExpandMapButton context={props.context} onExpand={expandFullscreen} />}
+      {caps.expand && <ExpandMapButton context={props.context} onExpand={expandFullscreen} />}
     </div>
   );
 
@@ -738,7 +512,7 @@ function SingleEncounterReplayMap({
   const framingControls = (
     <div data-map-controls className="absolute bottom-2 left-2 z-40 flex max-w-[calc(100%-1rem)] flex-wrap items-end gap-1">
       {/* Mini map and preview: play/pause and speed lead the row (the preview's own clock, or the page's Replay once it is on). */}
-      {(compact || previewOn) && (
+      {(caps.playback || previewOn) && (
         <>
           {/* X drives the page's Replay, not the preview's own clock. */}
           <ReplayPlayTooltip
@@ -809,16 +583,16 @@ function SingleEncounterReplayMap({
       data-window-fullscreen={mobileWorldOpen || windowed ? "" : undefined}
       className={cn(
         "flex h-full min-h-0 flex-col bg-black",
-        !mini && !mobile && !immersive && "p-1",
+        caps.framed && "p-1",
         mobileWorldOpen && "fixed inset-0 z-[100] h-[100dvh] w-screen",
         windowed && "fixed inset-0 z-[100] h-auto",
       )}
     >
       <ReplayPlayer
         player={player}
-        framed={!mini && !mobile && !immersive}
-        header={!mobile && (props.headerSlot ? createPortal(headerControls, props.headerSlot) : <div className="flex justify-end px-1">{headerControls}</div>)}
-        fallback={mobile && !mobileWorldOpen ? (
+        framed={caps.framed}
+        header={caps.header && (props.headerSlot ? createPortal(headerControls, props.headerSlot) : <div className="flex justify-end px-1">{headerControls}</div>)}
+        fallback={caps.mobileWorld && !mobileWorldOpen ? (
             <>
               <div className="pointer-events-none absolute inset-0"><ReplayPlayerFlatView player={player} trailSeconds={effectSettings.trailSeconds} /></div>
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/15" aria-hidden />
@@ -851,21 +625,7 @@ function SingleEncounterReplayMap({
         }}
         overlay={(
           <>
-          {props.context.instance.id === "leeroy" && (
-            <div className="pointer-events-none absolute left-2 top-1/2 z-40 flex -translate-y-1/2 flex-col gap-1.5" aria-label="Featured characters">
-              {LEEROY_FEATURED_UNITS.map((unit) => (
-                <div
-                  key={unit.guid}
-                  className="flex items-center gap-2 rounded-md border bg-black/85 px-2.5 py-1.5 shadow-[0_6px_20px_rgba(0,0,0,.55)] backdrop-blur-sm"
-                  style={{ borderColor: `${unit.color}99` }}
-                >
-                  <img src={raidTargetMarkerImage(unit.marker)} alt="" className="size-[18px] shrink-0 object-contain" />
-                  <span className="text-[11px] font-black uppercase tracking-[0.12em] text-white">{unit.name}</span>
-                  <span className="text-[9px] font-bold uppercase tracking-[0.16em]" style={{ color: unit.color }}>{unit.role}</span>
-                </div>
-              ))}
-            </div>
-          )}
+          {props.context.instance.id === "leeroy" && <LeeroyFeaturedUnits />}
           {videoOpen && videoEncounter && dungeonMesh && (
             <Suspense fallback={null}>
               <VideoRenderDialog
@@ -882,7 +642,7 @@ function SingleEncounterReplayMap({
               />
             </Suspense>
           )}
-          {mobile && mobileWorldOpen && (
+          {caps.mobileWorld && mobileWorldOpen && (
             <MobileMapControls
               walking={walking}
               canWalk={canWalk}
@@ -891,10 +651,10 @@ function SingleEncounterReplayMap({
               onClose={closeMobileWorld}
             />
           )}
-          {!mobile && framingControls}
-          {mobile && floorControls && <div className="absolute bottom-2 left-2 z-40 max-w-[calc(100%-1rem)]">{floorControls}</div>}
-          {!mobile && compact && <ExpandMapButton context={props.context} onExpand={expandFullscreen} overlay />}
-          {!mobile && compact && previewOn && (
+          {caps.framing && framingControls}
+          {!caps.framing && floorControls && <div className="absolute bottom-2 left-2 z-40 max-w-[calc(100%-1rem)]">{floorControls}</div>}
+          {caps.expand && <ExpandMapButton context={props.context} onExpand={expandFullscreen} overlay />}
+          {caps.previewVeil && previewOn && (
             <>
               {/* Replay is off: a greyed preview, with the way to the real Replay controls. */}
               <div className="pointer-events-none absolute inset-0 z-30 bg-slate-900/25 backdrop-saturate-50" aria-hidden />
@@ -919,7 +679,7 @@ function SingleEncounterReplayMap({
               )}
             </>
           )}
-          {compact && (
+          {caps.scrubber && (
             <MiniScrubber
               raised={previewOn && Boolean(props.context.onOpenReplay)}
               source={{ nowMs: ready.cursorMs, bounds: { startMs: ready.encounterStartMs, endMs: ready.encounterEndMs }, seek: clock.seek }}
@@ -927,20 +687,15 @@ function SingleEncounterReplayMap({
           )}
           {/* X toggles the replay: flash play or pause over the map, like a video player. */}
           <ReplayToggleFlash />
-          {reloading && (
-            <div className="pointer-events-none absolute left-1/2 top-2 z-40 flex -translate-x-1/2 items-center gap-1.5 rounded-sm bg-black/75 px-2 py-0.5 text-[11px] text-white/80 shadow-[0_4px_16px_rgba(0,0,0,.5)]">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              Loading the encounter…
-            </div>
-          )}
+          {reloading && <ReloadingChip />}
           {/* Without Replay the map is a still: say so over it rather than in a row of its own. */}
-          {!compact && !mobile && !reloading && ready.overlayAvailable && !syncEnabled && !previewOn && (
+          {caps.hints && !reloading && ready.overlayAvailable && !syncEnabled && !previewOn && (
             <div className="pointer-events-none absolute left-1/2 top-2 z-40 -translate-x-1/2 whitespace-nowrap rounded-sm bg-black/75 px-2 py-0.5 text-[11px] text-white/70 shadow-[0_4px_16px_rgba(0,0,0,.5)]">
               Final positions · enable Replay to watch units move
             </div>
           )}
           {/* The full map's whole run plays as a preview until Replay takes over. */}
-          {!compact && !mobile && !reloading && previewOn && (
+          {caps.hints && !reloading && previewOn && (
             <div className="absolute left-1/2 top-2 z-40 flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-sm bg-black/75 py-0.5 pl-2 pr-0.5 text-[11px] text-white/70 shadow-[0_4px_16px_rgba(0,0,0,.5)]">
               {wholeRun ? "Whole-run preview" : "Preview"}
               {sync && (
@@ -957,10 +712,10 @@ function SingleEncounterReplayMap({
             </div>
           )}
           {/* The mini map is just the replay: no frames, settings, walk, plan or meters. */}
-          {!compact && !mobile && (<>
+          <>
             {/* Top-left: the Raid Frames panel itself, drawn as an overlay (one
                 implementation for the map and the panel). The inspect frame below moves freely. */}
-            <UnitInspectContext.Provider value={inspectSelection}>
+            {caps.frames && <UnitInspectContext.Provider value={inspectSelection}>
               <div className="pointer-events-none absolute bottom-2 left-2 top-2 z-30 flex max-w-[calc(100%-1rem)] flex-col items-start gap-1.5">
                 {showRaidFrames ? (
                   <div className="group/raid flex max-w-full shrink-0 items-start gap-0.5">
@@ -1015,8 +770,8 @@ function SingleEncounterReplayMap({
                   </button>
                 )}
               </div>
-            </UnitInspectContext.Provider>
-            <button
+            </UnitInspectContext.Provider>}
+            {caps.settings && <button
               type="button"
               onClick={() => setSettingsOpen(true)}
               title="Map settings"
@@ -1024,8 +779,8 @@ function SingleEncounterReplayMap({
               className="absolute right-2 top-2 z-40 grid h-7 w-7 place-items-center rounded-sm border border-black/80 bg-black/75 text-white/70 shadow-[0_4px_16px_rgba(0,0,0,.5)] hover:bg-black/90 hover:text-white"
             >
               <Settings2 className="h-4 w-4" />
-            </button>
-            {show3D && (
+            </button>}
+            {caps.walk && show3D && (
               <button
                 type="button"
                 onClick={() => setWalking(!walking)}
@@ -1043,7 +798,7 @@ function SingleEncounterReplayMap({
                 <Footprints className="h-4 w-4" />
               </button>
             )}
-            {show3D && (
+            {caps.plan && show3D && (
               <button
                 type="button"
                 onClick={() => {
@@ -1062,10 +817,10 @@ function SingleEncounterReplayMap({
                 <PenLine className="h-4 w-4" />
               </button>
             )}
-            {planOpen && canPlan && (
+            {caps.plan && planOpen && canPlan && (
               <PlanControls editor={planEditor} roster={planRoster} onClose={closePlan} />
             )}
-            {(walking || show3D) && (
+            {caps.hints && (walking || show3D) && (
               <div className={cn(
                 "pointer-events-none absolute left-1/2 z-30 flex w-max max-w-[calc(100%-1rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-x-3 gap-y-1 rounded-sm bg-black/75 px-2.5 py-1.5 text-[11px] text-white/80 shadow-[0_4px_16px_rgba(0,0,0,.5)]",
                 // Above the camera/floor controls, or the fullscreen Replay bar.
@@ -1103,7 +858,7 @@ function SingleEncounterReplayMap({
                 )}
               </div>
             )}
-            {settingsOpen && (
+            {caps.settings && settingsOpen && (
               <MapSettingsOverlay
                 onClose={() => setSettingsOpen(false)}
                 effectSettings={effectSettings}
@@ -1127,7 +882,7 @@ function SingleEncounterReplayMap({
                 onResetAll={resetAllSettings}
               />
             )}
-            <TargetFrames
+            {caps.frames && <TargetFrames
               target={target}
               targetOfTarget={targetOfTarget}
               targetsTarget={targetsTarget}
@@ -1137,9 +892,9 @@ function SingleEncounterReplayMap({
               onClear={() => setTarget(null)}
               followGuid={followGuid}
               onFollow={onMesh ? followUnit : undefined}
-            />
+            />}
             {/* Below Settings, Walk and Plan (the last two only with the 3D view): fill the window, then true fullscreen. */}
-            <KeybindTooltip
+            {caps.fullscreen && <KeybindTooltip
               label={windowed ? "Exit window fullscreen" : "Fill the browser window"}
               keys={windowed ? [WINDOW_FULLSCREEN_KEYS, ["Esc"]] : [WINDOW_FULLSCREEN_KEYS]}
             >
@@ -1156,8 +911,8 @@ function SingleEncounterReplayMap({
               >
                 {windowed ? <Minimize2 className="h-4 w-4" /> : <AppWindow className="h-4 w-4" />}
               </button>
-            </KeybindTooltip>
-            {typeof document !== "undefined" && document.fullscreenEnabled && (
+            </KeybindTooltip>}
+            {caps.fullscreen && typeof document !== "undefined" && document.fullscreenEnabled && (
               <KeybindTooltip
                 label={fullscreen ? "Exit fullscreen" : "Fullscreen"}
                 keys={fullscreen ? [BROWSER_FULLSCREEN_KEYS, ["Esc"]] : [BROWSER_FULLSCREEN_KEYS]}
@@ -1177,23 +932,23 @@ function SingleEncounterReplayMap({
                 </button>
               </KeybindTooltip>
             )}
-            {immersive && props.context.onSelectEncounters && (
+            {caps.immersiveChrome && props.context.onSelectEncounters && (
               <FullscreenEncounterPicker
                 encounters={props.context.instance.encounters}
                 selectedIds={props.context.selectedEncounterIds}
                 onSelect={props.context.onSelectEncounters}
               />
             )}
-            <InspectCards guids={pinned} onRemove={unpin} raidFrames={raidFrames} auras={auras} />
-            <MeterWindows windows={meterWindows} onChange={setMeterWindows} context={props.context} durationMs={props.durationMs} />
+            {caps.frames && <InspectCards guids={pinned} onRemove={unpin} raidFrames={raidFrames} auras={auras} />}
+            {caps.meters && <MeterWindows windows={meterWindows} onChange={setMeterWindows} context={props.context} durationMs={props.durationMs} />}
             {/* Fullscreen hides the page's Replay controls: the same transport bar over the map. */}
-            {immersive && <FullscreenReplayBar onEnable={previewOn ? replayFromHere : undefined} />}
-          </>)}
+            {caps.immersiveChrome && <FullscreenReplayBar onEnable={previewOn ? replayFromHere : undefined} />}
+          </>
           </>
         )}
         transport={(
           <>
-          {!compact && !mobile && jumps.length > 0 && ready.runStartMs !== null && (
+          {caps.jumps && jumps.length > 0 && ready.runStartMs !== null && (
             <div className="flex flex-col gap-1 px-3 py-2">
               <div className="relative h-1.5 rounded bg-white/10" aria-hidden>
                 {jumps.map((jump) => (
@@ -1222,10 +977,10 @@ function SingleEncounterReplayMap({
               </div>
             </div>
           )}
-          {!compact && !mobile && webglUnavailable && (
+          {caps.notes && webglUnavailable && (
             <p className="px-3 py-1 text-[9px] text-amber-300/80">3D view needs WebGL, which this browser could not provide. Showing the replay map in 2D instead.</p>
           )}
-          {!compact && !mobile && !ready.overlayAvailable && (
+          {caps.notes && !ready.overlayAvailable && (
             <p className="px-3 py-1 text-[9px] text-amber-300/80">No compatible world-coordinate mapping is available for this floor, so unit markers are hidden.</p>
           )}
           </>
@@ -1407,7 +1162,6 @@ function MapContent({ forceMini = false, ...props }: PanelRenderProps<MapResult>
     </MapTelemetryWarning>
   );
 }
-
 
 /** The Map panel; `mini` makes the Mini Map panel (just the replay, for small spots like the Summary). */
 export function createMapPanel({ mini = false }: { mini?: boolean } = {}): PanelDefinition<MapResult, MapProcessorEvent> {
