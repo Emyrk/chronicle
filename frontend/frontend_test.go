@@ -264,6 +264,8 @@ func TestHandlerNotFoundRouteIs404WithNoindex(t *testing.T) {
 
 		require.Equal(t, http.StatusNotFound, recorder.Code)
 		require.Equal(t, "noindex, nofollow", recorder.Header().Get("X-Robots-Tag"))
+		require.Equal(t, "max-age=60", recorder.Header().Get("Cache-Control"))
+		require.NotContains(t, recorder.Header().Get("Cache-Control"), "s-maxage")
 		body := recorder.Body.String()
 		require.Contains(t, body, `<div id="root">`, "the SPA shell is still served")
 		require.Contains(t, body, `name="robots" content="noindex, nofollow"`)
@@ -278,6 +280,7 @@ func TestHandlerNotFoundRouteIs404WithNoindex(t *testing.T) {
 
 		require.Equal(t, http.StatusOK, recorder.Code)
 		require.Empty(t, recorder.Header().Get("X-Robots-Tag"))
+		require.Empty(t, recorder.Header().Get("Cache-Control"))
 		require.Contains(t, recorder.Body.String(), `<link rel="canonical" href="https://everlook.example/g/known"`)
 	})
 }

@@ -6,6 +6,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -14,7 +17,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
-	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/frontend"
@@ -217,40 +219,49 @@ func withPath(r *http.Request, path string) *http.Request {
 func TestLeaderboardInstanceNamesFromRegistry(t *testing.T) {
 	t.Parallel()
 
-	reg := registry.RegistryForFlavor(nil, database.WoWFlavor{database.FlavorVanilla, database.FlavorNightmareOfUrsol, database.FlavorTurtle})
-	names := leaderboardInstanceNames(reg.AllInstanceDetails())
-	for _, want := range []string{"Molten Core", "Molten-Core", "molten%20core"} {
+	names := knownLeaderboardInstances()
+	// Names from every flavor, whichever dataset the site uses, plus derived names
+	// that only exist for some flavors and a wing VanillaPlus removes.
+	for _, want := range []string{
+		"Molten Core", "Molten-Core", "molten%20core", "Naxxramas", "Ulduar", "Serpentshrine Cavern",
+		"Emerald Sanctum", "Upper-Tower-of-Karazhan", "Lower Tower of Karazhan", "Scarlet Monastery Library",
+	} {
 		_, ok := names[normalizeLeaderboardInstance(want)]
 		require.True(t, ok, want)
 	}
-	// Turtle's Lower/Upper Karazhan only exist as derived names.
-	_, ok := names[normalizeLeaderboardInstance("Upper-Tower-of-Karazhan")]
-	require.True(t, ok)
-	_, ok = names[normalizeLeaderboardInstance("not-a-raid")]
+	_, ok := names[normalizeLeaderboardInstance("not-a-raid")]
 	require.False(t, ok)
 }
+
+// ogRouter serves every OG route the way the frontend handler does, over a store
+// where every lookup misses, so any parameterized route with an unknown subject
+// would report NotFound.
+func ogRouter(t *testing.T) func(path string) *frontend.OGData {
+	t.Helper()
+	s := newNotFoundService(t, &notFoundStore{err: pgx.ErrNoRows, unlistedErr: pgx.ErrNoRows})
+	r := chi.NewRouter()
+	var got *frontend.OGData
+	var matched bool
+	for _, route := range s.Routes() {
+		resolve := route.Resolve
+		r.Get(route.Pattern, func(_ http.ResponseWriter, req *http.Request) { matched, got = true, resolve(req) })
+	}
+	// The result is nil when a route matches but has no metadata of its own.
+	return func(path string) *frontend.OGData {
+		got, matched = nil, false
+		req := httptest.NewRequest(http.MethodGet, "https://capy.chronicleclassic.com"+path, nil)
+		r.ServeHTTP(httptest.NewRecorder(), req.WithContext(testutil.Context(t, testutil.WaitShort)))
+		require.True(t, matched, "no OG route matched %s", path)
+		return got
+	}
+}
+
+func ogNotFound(og *frontend.OGData) bool { return og != nil && og.NotFound }
 
 func TestLeaderboardOGNotFound(t *testing.T) {
 	t.Parallel()
 
-	s := New(Options{})
-	// Stand in for a registry-backed service: seed the per-flavor set.
-	flavor := s.resolvedSiteFlavor(context.Background())
-	s.leaderboardNames.Store(flavor.CanonicalKey(), map[string]struct{}{normalizeLeaderboardInstance("Molten Core"): {}})
-
-	r := chi.NewRouter()
-	var got *frontend.OGData
-	for _, route := range s.Routes() {
-		resolve := route.Resolve
-		r.Get(route.Pattern, func(_ http.ResponseWriter, req *http.Request) { got = resolve(req) })
-	}
-	serve := func(path string) *frontend.OGData {
-		got = nil
-		r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "https://capy.chronicleclassic.com"+path, nil))
-		require.NotNil(t, got, path)
-		return got
-	}
-
+	serve := ogRouter(t)
 	for _, path := range []string{
 		"/leaderboards",
 		"/leaderboards/statistics",
@@ -258,8 +269,14 @@ func TestLeaderboardOGNotFound(t *testing.T) {
 		"/leaderboards/molten%20core",
 		"/leaderboards/Molten-Core/ratings",
 		"/leaderboards/Molten-Core/overview",
+		// Raids of other flavors than any one site's: the root host lists them all.
+		"/leaderboards/Ulduar",
+		"/leaderboards/Emerald-Sanctum/speedruns",
+		// A client-side redirect stub, not a raid.
+		"/leaderboards/configuration",
+		"/leaderboards/career",
 	} {
-		require.False(t, serve(path).NotFound, path)
+		require.False(t, ogNotFound(serve(path)), path)
 	}
 	for _, path := range []string{
 		"/leaderboards/not-a-raid",
@@ -267,11 +284,52 @@ func TestLeaderboardOGNotFound(t *testing.T) {
 		"/leaderboards/not-a-raid/ratings",
 		"/leaderboards/Molten-Core/not-a-tab",
 	} {
-		require.True(t, serve(path).NotFound, path)
+		require.True(t, ogNotFound(serve(path)), path)
 	}
+}
 
-	t.Run("without a registry nothing 404s", func(t *testing.T) {
-		t.Parallel()
-		require.False(t, New(Options{}).leaderboardNotFound(flavor, "not-a-raid", "", ""))
-	})
+// Fixed SPA routes that share a path shape with an unknown-subject route must not
+// be swallowed by it: chi prefers the static route.
+func TestStaticInstanceRoutesAreNotNotFound(t *testing.T) {
+	t.Parallel()
+
+	serve := ogRouter(t)
+	for path, title := range map[string]string{
+		"/instances/leeroy":  "Leeroy Jenkins: The Rookery",
+		"/instances/compare": "Compare Clear Times",
+	} {
+		t.Run(path, func(t *testing.T) {
+			og := serve(path)
+			require.NotNil(t, og)
+			require.False(t, og.NotFound)
+			require.Equal(t, title, og.Title)
+			require.Equal(t, "https://capy.chronicleclassic.com"+path, og.URL)
+		})
+	}
+	// A real unknown ID under the same prefix still 404s.
+	require.True(t, ogNotFound(serve("/instances/"+uuid.NewString())))
+}
+
+// Every fixed (parameter-free) route the SPA declares must stay out of the 404
+// logic, whichever parameterized OG route it shares a shape with.
+func TestSPAStaticRoutesAreNotNotFound(t *testing.T) {
+	t.Parallel()
+
+	source, err := os.ReadFile("../../../frontend/chronicle/src/App.tsx")
+	require.NoError(t, err)
+	paths := regexp.MustCompile(`<Route path="(/[^":*]*)"`).FindAllSubmatch(source, -1)
+	require.Greater(t, len(paths), 50, "App.tsx route scan found too few routes")
+
+	serve := ogRouter(t)
+	checked := 0
+	for _, match := range paths {
+		path := string(match[1])
+		for _, prefix := range []string{"/instances/", "/g/", "/armory/", "/leaderboards/"} {
+			if strings.HasPrefix(path, prefix) {
+				checked++
+				require.False(t, ogNotFound(serve(path)), "%s is a real SPA route", path)
+			}
+		}
+	}
+	require.GreaterOrEqual(t, checked, 4, "expected /instances/leeroy, /instances/compare, /leaderboards/career and /leaderboards/configuration")
 }

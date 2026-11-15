@@ -186,6 +186,11 @@ var staticOGRoutes = map[string]staticOGMetadata{
 	"/supported":     {Title: "Supported Instances", Description: "The raids and dungeons Chronicle can analyze, with notes on special timing rules."},
 	"/modules":       {Title: "Modules", Description: "Community raid panels for Chronicle, written in Lua. Track a module to add it to your raid panels, or build your own."},
 	"/gear":          {Title: "Gear", Description: "Explore gear progression, stat weights, and gear trends from raid logs."},
+
+	// Fixed SPA routes under /instances; chi prefers them over /instances/{idOrSlug}.
+	"/instances/leeroy":  {Title: "Leeroy Jenkins: The Rookery", Description: "A read-only 3D reconstruction of the Leeroy Jenkins charge through the Rookery, replayed on Chronicle's raid timeline."},
+	"/instances/compare": {Title: "Compare Clear Times", Description: "Compare raid clear times between populations: ranked raids, server cohorts, and guild cohorts."},
+
 	"/download": {
 		Title:       "Chronicle Sidekick",
 		Description: "A free tray app for Windows, macOS and Linux that finds WoW, watches your combat log and uploads your raid to Chronicle in one click.",

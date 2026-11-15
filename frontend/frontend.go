@@ -161,6 +161,10 @@ func loadBlogManifest(siteFS fs.FS) (map[string]blogManifestPost, error) {
 
 type ogResultKey struct{}
 
+// notFoundCacheControl is sent with the 404 SPA shell. It is deliberately short and
+// has no s-maxage: a log being reparsed is missing for a moment, then reappears.
+const notFoundCacheControl = "max-age=60"
+
 // statusOverrideWriter rewrites one status code, so http.ServeContent's 200 for
 // the SPA shell can be sent as a 404.
 type statusOverrideWriter struct {
@@ -260,6 +264,9 @@ func (h *handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	if og := h.resolveOG(req); og != nil && og.NotFound {
 		// A real 404 for crawlers; the SPA shell below still renders its not-found view.
 		resp = &statusOverrideWriter{ResponseWriter: resp, from: http.StatusOK, to: http.StatusNotFound}
+		// A log that is mid-reparse briefly has no instance row, so keep this short
+		// and out of shared caches' long-lived (s-maxage) tier.
+		resp.Header().Set("Cache-Control", notFoundCacheControl)
 		state.Robots = "noindex, nofollow"
 		state.CanonicalURL = ""
 		if og.ImageURL != "" {

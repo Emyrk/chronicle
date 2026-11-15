@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/Gophercraft/core/vsn"
@@ -70,12 +69,11 @@ type Service struct {
 	ogSiteStats     tenantcache.Cache[database.SiteStatsRow]
 	ogCensus        tenantcache.Cache[[]database.CensusPlayerCountsRow]
 	ogHighlights    tenantcache.Cache[[]chroniclesdk.HubLandingPreview]
-	// leaderboardNames caches each flavor's known instance names (flavor key → set);
-	// the registry is fixed at startup.
-	leaderboardNames sync.Map
 }
 
 func New(opts Options) *Service {
+	// Build the leaderboard raid-name set now, once, so no request pays for it.
+	knownLeaderboardInstances()
 	return &Service{
 		logger:        opts.Logger,
 		store:         opts.Zed,
