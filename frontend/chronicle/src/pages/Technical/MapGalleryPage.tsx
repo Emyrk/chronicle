@@ -14,19 +14,12 @@ import {
 import { useIconBaseUrl } from "@/hooks/useDatasetId";
 import { placeableDungeonMesh } from "@/pages/Instance/EventsPanels/Map/dungeonMeshes";
 import { mapDebugOverlays } from "@/pages/Instance/EventsPanels/Map/mapDebugOverlays";
-import {
-  mapAssetUrl,
-  mapFloorMesh,
-  mapGalleryItems,
-  mapManifestUrl,
-  overlayTilePlacement,
-  tilePlacement,
-  type MapGalleryItem,
-  type WowMapMeshInstance,
-} from "./mapGallery";
+import { mapAssetUrl, mapFloorMesh, mapManifestUrl, type WowMapMeshInstance } from "@/config/mapManifest";
+import { mapGalleryItems, overlayTilePlacement, tilePlacement, type MapGalleryItem } from "./mapGallery";
 import { GalleryPagination } from "./GalleryPagination";
 import { galleryPage } from "./galleryPage";
-import { fetchMapManifest } from "./mapManifest";
+import { fetchMapManifestReport } from "@/config/mapManifest";
+import { ManifestProblems } from "./ManifestProblems";
 
 const MapGallery3D = lazy(() => import("./MapGallery3D"));
 
@@ -50,10 +43,11 @@ function galleryItemMesh(item: MapGalleryItem): WowMapMeshInstance | undefined {
 
 function useMapManifest(iconBaseUrl: string | undefined) {
   return useQuery({
-    queryKey: ["wow-map-manifest", iconBaseUrl],
+    // Its own key: the replay map caches the bare manifest under "wow-map-manifest"; this page also wants the problems.
+    queryKey: ["wow-map-manifest-report", iconBaseUrl],
     enabled: Boolean(iconBaseUrl),
     staleTime: 60 * 60 * 1000,
-    queryFn: () => fetchMapManifest(iconBaseUrl!),
+    queryFn: () => fetchMapManifestReport(iconBaseUrl!),
   });
 }
 
@@ -276,7 +270,7 @@ export function MapGalleryPage() {
   const manifestQuery = useMapManifest(iconBaseUrl);
 
   const items = useMemo(
-    () => manifestQuery.data ? mapGalleryItems(manifestQuery.data) : [],
+    () => manifestQuery.data ? mapGalleryItems(manifestQuery.data.manifest) : [],
     [manifestQuery.data],
   );
   const filteredItems = useMemo(() => {
@@ -286,7 +280,7 @@ export function MapGalleryPage() {
       if (item.kind !== "zone") {
         return item.instance.name.toLowerCase().includes(query)
           || String(item.instance.mapID).includes(query)
-          || item.instance.directory.toLowerCase().includes(query);
+          || (item.instance.directory ?? "").toLowerCase().includes(query);
       }
       return item.map.name.toLowerCase().includes(query)
         || String(item.map.id).includes(query)
@@ -320,7 +314,7 @@ export function MapGalleryPage() {
                 </p>
                 {manifestQuery.data && (
                   <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.16em] text-amber-200/50">
-                    {manifestQuery.data.target.product} · build {manifestQuery.data.target.build} · {items.length} map layers
+                    {manifestQuery.data.manifest.target.product} · build {manifestQuery.data.manifest.target.build} · {items.length} map layers
                   </p>
                 )}
               </div>
@@ -391,6 +385,8 @@ export function MapGalleryPage() {
             </p>
           </Card>
         )}
+
+        {manifestQuery.data && <ManifestProblems problems={manifestQuery.data.problems} what="map manifest" />}
 
         {manifestQuery.data && filteredItems.length === 0 && (
           <Card className="p-8 text-center text-sm text-muted-foreground">

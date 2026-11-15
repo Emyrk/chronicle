@@ -104,6 +104,20 @@ export function sceneFieldsFor(profile: SceneFieldProfile) {
   };
 }
 
+/**
+ * The pointer-driven parts of the view: with `interactive` off, no unit clicks,
+ * no followed unit and no follow changes reach the view, whatever the host
+ * passes through. A host-fixed followed unit (the stories) wins over the player's.
+ */
+export function viewInputFor<C>(interactive: boolean, input: { onUnitClick?: C; followGuid?: string | null; playerFollowGuid: string | null }) {
+  if (!interactive) return { onUnitClick: undefined, followGuid: undefined, followChanges: false };
+  return {
+    onUnitClick: input.onUnitClick,
+    followGuid: input.followGuid !== undefined ? input.followGuid : input.playerFollowGuid,
+    followChanges: true,
+  };
+}
+
 /** The view a fresh selection starts on: the auto-fit when the scene asks for it, else the whole map. */
 export function defaultViewport(scene: Pick<ReadyMapScene, "fitByDefault" | "autoFit"> | null): MapViewport {
   return scene?.fitByDefault && scene.autoFit ? scene.autoFit : FULL_MAP_VIEWPORT;
@@ -150,9 +164,12 @@ export interface ReplayCamera {
   pose?: MapCameraPose | null;
 }
 
-/** The camera's effective mode, and whether the view is told the Director has it. */
-export function cameraModeFor(camera: ReplayCamera, framing: Pick<MapFraming, "manual" | "viewport">): { mode: ReplayCameraMode; cinematic: boolean } {
-  const cinematic = camera.mode === "director" && directorFraming(framing);
+/**
+ * The camera's effective mode, and whether the view is told the Director has it.
+ * A host-fixed view (`fixedView`) is the user's camera: the Director never moves it.
+ */
+export function cameraModeFor(camera: ReplayCamera, framing: Pick<MapFraming, "manual" | "viewport">, fixedView = false): { mode: ReplayCameraMode; cinematic: boolean } {
+  const cinematic = !fixedView && camera.mode === "director" && directorFraming(framing);
   const mode: ReplayCameraMode = camera.pose ? "pose" : camera.path ? "path" : cinematic ? "director" : "user";
   return { mode, cinematic };
 }

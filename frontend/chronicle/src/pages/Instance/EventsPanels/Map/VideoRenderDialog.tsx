@@ -271,13 +271,16 @@ function RenderStage({ panelProps, mapSource, showHiddenUnits, dungeonMesh, unit
     heldScene: "none",
     dungeonMesh,
     unitModelUrls,
-    unitModels: unitModelUrls ? "manifest" : "none",
+    // Never the shared manifest: only the dialog's own URLs (they win when passed), so the frames cannot change.
+    unitModels: "none",
     fixedView: STATIC_VIEW,
     webglFallback: "none",
     onUnavailable: () => onProgressRef.current({ phase: "error", message: "WebGL is unavailable." }),
     interactive: false,
     sceneFields: "capture",
     onScene: setScene3d,
+    // The export reports a failed 3D dungeon as its own error.
+    notices: false,
   });
   const { ready, meshState } = player;
   const containerRef = useRef<HTMLDivElement>(null);

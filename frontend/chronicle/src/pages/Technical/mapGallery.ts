@@ -1,186 +1,47 @@
 import type { CSSProperties } from "react";
 
-export const WOW_MAP_MANIFEST_FORMAT = "chronicle-wow-map-art-v2";
+import {
+  hasNativeMapFloorArtwork,
+  type WowMap,
+  type WowMapArt,
+  type WowMapInstance,
+  type WowMapInstanceFloor,
+  type WowMapLayer,
+  type WowMapManifest,
+  type WowMapManualRender,
+  type WowMapMeshInstance,
+  type WowMapOverlay,
+  type WowMapRenderedInstance,
+  type WowMapTile,
+} from "@/config/mapManifest";
 
-// Legacy datasets still publish v1 until their extractors migrate.
-export function isSupportedMapManifestFormat(format: string): boolean {
-  return format === WOW_MAP_MANIFEST_FORMAT || format === "chronicle-wow-map-art-v1";
-}
-
-export interface WowMapManifest {
-  format: string;
-  target: {
-    product: string;
-    build: string;
-    region: string;
-    locale: string;
-  };
-  maps: WowMap[];
-  instances?: WowMapInstance[];
-}
-
-export interface WowMap {
-  id: number;
-  name: string;
-  parentID: number;
-  type: number;
-  flags: number;
-  assignments?: WowMapAssignment[];
-  art?: WowMapArt[];
-}
-
-export interface WowMapAssignment {
-  id: number;
-  mapID: number;
-  areaID: number;
-  orderIndex: number;
-  region: number[];
-  uiMin: number[];
-  uiMax: number[];
-}
-
-export interface WowMapArt {
-  phaseID: number;
-  artID: number;
-  styleID: number;
-  layers: WowMapLayer[];
-  overlays?: WowMapOverlay[];
-}
-
-export interface WowMapOverlay {
-  id: number;
-  offsetX: number;
-  offsetY: number;
-  textureWidth: number;
-  textureHeight: number;
-  tiles: WowMapTile[];
-}
-
-/** Hash-pinned offline support geometry. Unvalidated data is local-preview-only. */
-export interface WowMapFloorSupport {
-  version: 1;
-  path: string;
-  sha256: string;
-  datasetID: string;
-  mapID: number;
-  frame: "wow-yup-mirrored-x";
-  floorIDs: number[];
-  sources: { floor: number; path: string; sha256: string }[];
-  validated: boolean;
-}
-
-export interface WowMapReuseSource {
-  namespace: string;
-  mapID: number;
-}
-
-export interface WowMapInstance {
-  floorSupport?: WowMapFloorSupport;
-  reusedFrom?: WowMapReuseSource;
-  mapID: number;
-  name: string;
-  instanceType: number;
-  directory: string;
-  floors: WowMapInstanceFloor[];
-  styled?: WowMapRenderedInstance;
-  renders?: WowMapManualRender;
-  mesh?: WowMapMeshInstance;
-}
-
-/** A dungeon's 3D mesh (glTF binary under `meshes/`) for the Replay Map, placed by its own world extent. */
-export interface WowMapMeshInstance {
-  path: string;
-  /** World-axis bounds of the mesh: `minX..maxX` is world X, `minY..maxY` world Y. */
-  bounds: WowMapFloorBounds;
-  zMin: number;
-  zMax: number;
-  /** The glTF axis convention; see `DUNGEON_MESH_FRAME`. */
-  frame: string;
-  /** Tint for the mesh's `liquid_*` planes (lava, slime); absent, the GLB's own water shows. */
-  liquid?: WowMapMeshLiquid;
-}
-
-export interface WowMapMeshLiquid {
-  /** CSS hex colour, `#rrggbb`. */
-  color: string;
-  /** 0 < opacity <= 1. */
-  opacity: number;
-}
-
-// Manually published 2D images. Only explicitly calibrated bounds permit position overlays.
-export interface WowMapManualRender {
-  path: string;
-  width: number;
-  height: number;
-  bounds?: WowMapFloorBounds;
-}
-
-export interface WowMapRenderedInstance {
-  path: string;
-  width: number;
-  height: number;
-  source: string;
-  bounds: WowMapFloorBounds;
-  triangles?: number;
-}
-
-export interface WowMapFloorBounds {
-  minX: number;
-  maxX: number;
-  minY: number;
-  maxY: number;
-}
-
-export interface WowMapInstanceFloor {
-  floor: number;
-  width: number;
-  height: number;
-  tileWidth: number;
-  tileHeight: number;
-  bounds?: WowMapFloorBounds;
-  tiles: WowMapTile[];
-  /** Preferred automatic 2D source for this floor; absent preserves render-first behavior. */
-  preferred2D?: "renders" | "art";
-  renders?: WowMapManualRender;
-  mesh?: WowMapMeshInstance;
-}
-
-export function mapFloorRender(
-  instance: WowMapInstance,
-  floor: WowMapInstanceFloor | undefined,
-): WowMapManualRender | undefined {
-  return floor?.renders ?? instance.renders;
-}
-
-export function mapFloorMesh(
-  instance: WowMapInstance,
-  floor: WowMapInstanceFloor | undefined,
-): WowMapMeshInstance | undefined {
-  return floor?.mesh ?? instance.mesh;
-}
-
-export function hasNativeMapFloorArtwork(floor: WowMapInstanceFloor | undefined): boolean {
-  return Boolean(floor && floor.width > 0 && floor.height > 0 && floor.tiles.length > 0);
-}
-
-export interface WowMapLayer {
-  index: number;
-  width: number;
-  height: number;
-  tileWidth: number;
-  tileHeight: number;
-  minScale: number;
-  maxScale: number;
-  additionalZoomSteps: number;
-  tiles: WowMapTile[];
-}
-
-export interface WowMapTile {
-  row: number;
-  column: number;
-  fileDataID: number;
-  path: string;
-}
+// The map manifest's types and helpers live in src/config/mapManifest.ts (the product's one definition, with its
+// parser). Re-exported here for modules that still import this file (the 3D engine and its scene tests).
+export {
+  hasNativeMapFloorArtwork,
+  isSupportedMapManifestFormat,
+  mapAssetUrl,
+  mapFloorMesh,
+  mapFloorRender,
+  mapManifestUrl,
+  WOW_MAP_MANIFEST_FORMAT,
+  type WowMap,
+  type WowMapArt,
+  type WowMapAssignment,
+  type WowMapFloorBounds,
+  type WowMapFloorSupport,
+  type WowMapInstance,
+  type WowMapInstanceFloor,
+  type WowMapLayer,
+  type WowMapManifest,
+  type WowMapManualRender,
+  type WowMapMeshInstance,
+  type WowMapMeshLiquid,
+  type WowMapOverlay,
+  type WowMapRenderedInstance,
+  type WowMapReuseSource,
+  type WowMapTile,
+} from "@/config/mapManifest";
 
 export type MapGalleryItem =
   | {
@@ -217,29 +78,6 @@ export type MapGalleryItem =
     floor?: WowMapInstanceFloor;
     mesh: WowMapMeshInstance;
   };
-
-function stripTrailingSlash(value: string): string {
-  return value.replace(/\/+$/, "");
-}
-
-export function mapManifestUrl(iconBaseUrl: string): string {
-  return `${stripTrailingSlash(iconBaseUrl)}/maps/manifest.json`;
-}
-
-export function mapAssetUrl(iconBaseUrl: string, path: string): string {
-  if (/^https:\/\//i.test(path)) {
-    try {
-      const url = new URL(path);
-      if (url.origin === "https://icons.chronicleclassic.com"
-        && /^\/[^/]+\/maps\/(?:original|tiles|render-styled|renders|3d)\/.+/.test(url.pathname)
-        && url.search === ""
-        && url.hash === "") return path;
-    } catch {
-      // Fall through to a same-CDN path, which will safely fail instead of fetching an arbitrary origin.
-    }
-  }
-  return `${stripTrailingSlash(iconBaseUrl)}/maps/${path.replace(/^\/+/, "")}`;
-}
 
 type WowMapCanvas = Pick<WowMapLayer, "width" | "height" | "tileWidth" | "tileHeight">;
 

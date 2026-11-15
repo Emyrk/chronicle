@@ -7,7 +7,7 @@ import {
 import { MapScene3D } from "@/pages/Instance/EventsPanels/Map/MapScene3D";
 import type { MapDebugOverlay } from "@/pages/Instance/EventsPanels/Map/mapDebugOverlays";
 import type { MapSceneGround } from "@/pages/Instance/EventsPanels/Map/useMapScene";
-import type { WowMapMeshInstance } from "./mapGallery";
+import type { WowMapMeshInstance } from "@/config/mapManifest";
 
 interface MapGallery3DProps {
   mesh: WowMapMeshInstance;

@@ -36,6 +36,7 @@ import { ROLE_TOKENS, usePlanEditor, usePlanShortcuts, type PlanRosterEntry } fr
 import type { PlanItem } from "./plan/mapPlan";
 import { usePlayerSpecializations } from "@/components/ui/PlayerMetricChart/PlayerSpecializationContext";
 import { useMapHost } from "./useMapHost";
+import { DUNGEON_3D_COPY, planUnavailableTitle } from "./dungeon3DModel";
 
 const VideoRenderDialog = lazy(() => import("./VideoRenderDialog"));
 
@@ -219,7 +220,7 @@ export function MapPanelHost({
     : null;
   const videoBlocker = !canEncodeVideo()
     ? "This browser cannot encode video (no WebCodecs VideoEncoder)"
-    : !onMesh || !dungeonMesh ? "Needs the 3D map: turn on the dungeon mesh (WebGL)" : null;
+    : !onMesh || !dungeonMesh ? DUNGEON_3D_COPY.videoNeeds3D : null;
   const videoFileName = videoEncounter
     ? `chronicle-${videoEncounter.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "boss"}-${new Date(ready.encounterStartMs).toISOString().slice(0, 10)}.mp4`
     : "";
@@ -331,6 +332,7 @@ export function MapPanelHost({
     >
       <ReplayPlayer
         player={player}
+        noticeCopy={caps.compactNotice ? "short" : "full"}
         framed={caps.framed}
         header={caps.header && (props.headerSlot ? createPortal(headerControls, props.headerSlot) : <div className="flex justify-end px-1">{headerControls}</div>)}
         view={{
@@ -514,7 +516,7 @@ export function MapPanelHost({
                 }}
                 disabled={!canPlan}
                 aria-pressed={planOpen}
-                title={canPlan ? planOpen ? "Close planning" : "Plan: draw markers, arrows, ranges and player spots on the floor" : "Planning needs the 3D map (Map settings → World → 3D map)"}
+                title={canPlan ? planOpen ? "Close planning" : "Plan: draw markers, arrows, ranges and player spots on the floor" : planUnavailableTitle(player.dungeon3D.status)}
                 aria-label="Plan"
                 className={cn(
                   "absolute right-2 top-[4.5rem] z-40 grid h-7 w-7 place-items-center rounded-sm border border-black/80 shadow-[0_4px_16px_rgba(0,0,0,.5)] disabled:opacity-40",
@@ -572,7 +574,14 @@ export function MapPanelHost({
                 onEffectSettings={updateEffectSettings}
                 show3D={show3D}
                 hasEffects={Boolean(ready.effects)}
-                mesh={show3D && meshUrl ? { on: meshWanted, locked: meshOnly || scriptedCameraActive, loading: Boolean(dungeonMesh) && meshState === "loading", onToggle: map.toggleMesh } : null}
+                mesh={show3D && meshUrl ? {
+                  on: meshWanted,
+                  locked: meshOnly || scriptedCameraActive,
+                  loading: Boolean(dungeonMesh) && meshState === "loading",
+                  failed: player.dungeon3D.status === "failed",
+                  onRetry: player.dungeon3D.canRetry ? player.retryDungeon : undefined,
+                  onToggle: map.toggleMesh,
+                } : null}
                 map2D={ready.mapSources.length > 1 && ready.mapSource ? {
                   value: ready.mapSource,
                   options: ready.mapSources,

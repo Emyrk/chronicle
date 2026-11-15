@@ -58,12 +58,13 @@ Decisions are pure functions in `replayPlayerModel.ts`, tested in
 | `prefetchMesh` | Start the GLB download as soon as the scene names it (default true). |
 | `dungeonMesh` | A mesh request the host makes itself, instead of the scene's (no prefetch then). |
 | `reframe` | `"on-selection"` (default): a new selection or encounter re-frames. `"never"`: the view applies once, and again only on Follow; `releaseCamera()` hands the camera back without re-applying it. |
-| `fixedView` | A view request the host fixes, instead of the player's framing. |
+| `fixedView` | A view request the host fixes, instead of the player's framing. It implies the user's camera and no reframing: the Director never moves a fixed view, whatever `camera.mode` and `reframe` say. |
 | `webglFallback` | Without WebGL: the 2D map (default) or `"none"` (nothing; the host hides or errors). |
 | `onUnavailable` | Told when WebGL turns out to be unavailable. |
-| `interactive` | Pointer input: camera drags, the followed unit and its changes (default true). |
+| `interactive` | Pointer input: camera drags, unit clicks, the followed unit and its changes (default true). Off, none of them reach the view, including an `onUnitClick` or `followGuid` passed through `view`. |
 | `sceneFields` | Which optional scene fields reach the view: `"all"` (default), `"backdrop"` (no alignment artwork, the view's default coordinate space), `"capture"` (also no focus or follow source: each changes filmed frames, through camera limits, walkable floors and unit scale). |
 | `onScene` | Told when the 3D scene is created and disposed. |
+| `notices` | Tell the player about the 3D dungeon on the map (default true): a dismissible notice with Retry when it failed and the flat map shows, a cover while a 3D-only dungeon loads or after it failed. The landing and the export turn it off (they have their own handling). |
 
 The returned state has the scene (`scene`, `live`, `held`, `ready`,
 `reloading`), the mesh (`meshWanted`, `meshState`, `dungeonMesh`, `onMesh`),
@@ -86,6 +87,18 @@ framing (`view`, `applyFraming`, `followGroup`, `followUnit`, `canFollow`,
 | `view3d` | The 3D view component. Default: `MapView3D` loaded lazily, behind a "Loading 3D view" message. A host that is itself a lazy 3D chunk passes the statically imported one, so there is no second chunk round trip. |
 
 It renders nothing until the scene is ready; show `ReplayPlayerMessage` then.
+
+## The 3D dungeon's state
+
+`player.dungeon3D` (from `dungeon3DModel.ts`, tested) says where the 3D
+dungeon is: `no-webgl`, `no-3d-map` (none published), `off`, `loading`,
+`ready` or `failed`, plus what the map shows about it (`notice`, `cover`)
+and whether `retryDungeon()` may run. Retry only follows a failed load: it
+hands the view a new request for the same dungeon, which the scene loads
+again only when it has none (a good, loaded dungeon is skipped, and a failed
+download or parse is not cached). It runs only when the player asks, so it
+cannot loop. Hosts use the status for honest Walk and Plan tooltips and the
+settings row.
 
 ## Capabilities
 

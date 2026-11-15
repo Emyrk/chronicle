@@ -3,20 +3,9 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Map as MapIcon, RotateCcw, Skull } from "lucide-react";
 import type { Encounter } from "../../InstancePage";
-import {
-  hasNativeMapFloorArtwork,
-  mapAssetUrl,
-  mapFloorMesh,
-  mapFloorRender,
-  overlayTilePlacement,
-  tilePlacement,
-  type WowMapInstanceFloor,
-  type WowMapLayer,
-  type WowMapManualRender,
-  type WowMapRenderedInstance,
-  type WowMapOverlay,
-} from "@/pages/Technical/mapGallery";
-import { fetchMapManifest } from "@/pages/Technical/mapManifest";
+import { hasNativeMapFloorArtwork, mapAssetUrl, mapFloorMesh, mapFloorRender, type WowMapInstanceFloor, type WowMapLayer, type WowMapManualRender, type WowMapRenderedInstance, type WowMapOverlay } from "@/config/mapManifest";
+import { overlayTilePlacement, tilePlacement } from "@/pages/Technical/mapGallery";
+import { fetchMapManifest } from "@/config/mapManifest";
 import type { PanelRenderProps } from "../types";
 import { MapFloorPicker } from "./MapFloorPicker";
 import { isMeshOnlyInstance, placeableDungeonMesh } from "./dungeonMeshes";

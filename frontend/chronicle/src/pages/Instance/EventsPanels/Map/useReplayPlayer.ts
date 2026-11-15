@@ -31,6 +31,7 @@ import {
   type SceneFieldProfile,
 } from "./replayPlayerModel";
 import { useMapScene, type MapScene } from "./useMapScene";
+import { canRetryDungeon, dungeon3DOverlay, dungeon3DStatus, type Dungeon3DStatus } from "./dungeon3DModel";
 
 export interface ReplayPlayerOptions {
   /** What the scene is built from: a panel result and its context (what `useMapScene` takes). */
@@ -68,7 +69,10 @@ export interface ReplayPlayerOptions {
   dungeonMesh?: DungeonMeshRequest | null;
   /** Re-frame on a new selection or encounter (default `"on-selection"`); `"never"`: the view applies once, and again only on Follow. */
   reframe?: "on-selection" | "never";
-  /** A view the host fixes (the export), instead of the player's framing. */
+  /**
+   * A view the host fixes (the export), instead of the player's framing. It implies the user's camera (the Director
+   * never moves it) and no reframing, whatever `camera.mode` and `reframe` say.
+   */
   fixedView?: MapViewRequest;
   /** Without WebGL: the 2D map (default), or nothing (the landing hides; the export errors). */
   webglFallback?: "2d" | "none";
@@ -80,6 +84,11 @@ export interface ReplayPlayerOptions {
   sceneFields?: SceneFieldProfile;
   /** Told when the 3D scene is created and disposed (the export starts filming once it exists). */
   onScene?: (scene: MapScene3D | null) => void;
+  /**
+   * Tell the player about the 3D dungeon on the map (default true): a notice with Retry when it failed, a cover
+   * while a 3D-only dungeon loads or after it failed. The landing and the export have their own handling.
+   */
+  notices?: boolean;
 }
 
 /** The imperative camera actions (bump-key props on the view underneath). */
@@ -153,6 +162,18 @@ export interface ReplayPlayerState {
   unitModelUrls: PublishedUnitModelUrls | undefined;
   interactive: boolean;
   webglFallback: "2d" | "none";
+  /** The 3D dungeon's state, and what the map shows about it. */
+  dungeon3D: {
+    status: Dungeon3DStatus;
+    notices: boolean;
+    notice: boolean;
+    cover: "loading" | "failed" | null;
+    canRetry: boolean;
+  };
+  /** Load the 3D dungeon again after it failed (does nothing otherwise). */
+  retryDungeon: () => void;
+  /** Hide the failure notice (until the next failure). */
+  dismissDungeonNotice: () => void;
   /** Which optional scene fields the view receives. */
   sceneFields: ReturnType<typeof sceneFieldsFor>;
 }
@@ -169,7 +190,14 @@ export function useReplayPlayer(options: ReplayPlayerOptions): ReplayPlayerState
   const [webglUnavailable, setWebglUnavailable] = useState(false);
   const show3D = !webglUnavailable;
   const [meshState, setMeshStateRaw] = useState<DungeonMeshState>("loading");
-  const setMeshState = useCallback((state: DungeonMeshState) => setMeshStateRaw(effectiveMeshState(state, meshFailure)), [meshFailure]);
+  // Failed loads so far, the failure count when the notice was dismissed, and retries asked for.
+  const [meshFailures, setMeshFailures] = useState(0);
+  const [noticeDismissedAt, setNoticeDismissedAt] = useState(-1);
+  const [meshRetry, setMeshRetry] = useState(0);
+  const setMeshState = useCallback((state: DungeonMeshState) => {
+    if (state === "failed") setMeshFailures((count) => count + 1);
+    setMeshStateRaw(effectiveMeshState(state, meshFailure));
+  }, [meshFailure]);
   const scene = useMapScene(source, {
     rawDungeonProjection: rawProjection(options.rawProjection ?? "when-mesh-ready", show3D, meshOn, meshState),
     preferRenderedCanvas: prefersRenderedCanvas(renderedCanvas, show3D, meshOn),
@@ -197,7 +225,7 @@ export function useReplayPlayer(options: ReplayPlayerOptions): ReplayPlayerState
   const [storedFraming, setFraming] = useState<MapFraming>(INITIAL_MAP_FRAMING);
   // A new selection or the replay moving into another encounter re-frames;
   // loading states (e.g. reprocessing after a filter change) keep the framing.
-  const framing = ready && reframe === "on-selection"
+  const framing = ready && reframe === "on-selection" && options.fixedView === undefined
     ? reconcileMapFraming(storedFraming, `${source.context.selectedEncounterIds.join(",")}|${ready.encounterId}`, defaultViewport)
     : storedFraming;
   if (framing !== storedFraming) setFraming(framing);
@@ -229,7 +257,16 @@ export function useReplayPlayer(options: ReplayPlayerOptions): ReplayPlayerState
     if (framing.viewport !== null || framing.manual) setFraming({ ...framing, viewport: null, manual: false });
   };
 
-  const { mode: cameraMode, cinematic } = cameraModeFor(camera, framing);
+  const dungeonStatus = dungeon3DStatus({ show3D, hasMesh: mesh !== null, meshWanted, meshState });
+  const notices = options.notices !== false;
+  const overlay = dungeon3DOverlay(dungeonStatus, { meshOnly, failures: meshFailures, dismissedAt: noticeDismissedAt });
+  const canRetry = canRetryDungeon(dungeonStatus);
+  const dungeon3D = { status: dungeonStatus, notices, notice: notices && overlay.notice, cover: notices ? overlay.cover : null, canRetry };
+  const retryDungeon = () => {
+    if (canRetry) setMeshRetry((attempt) => attempt + 1);
+  };
+  const dismissDungeonNotice = () => setNoticeDismissedAt(meshFailures);
+  const { mode: cameraMode, cinematic } = cameraModeFor(camera, framing, options.fixedView !== undefined);
   const onMesh = show3D && meshWanted && meshState === "ready";
   const { canFollow, following } = followState(readyWholeRun, onMesh, cinematic);
   const [followGuid, setFollowGuid] = useState<string | null>(null);
@@ -271,9 +308,11 @@ export function useReplayPlayer(options: ReplayPlayerOptions): ReplayPlayerState
   });
 
   // Last: the compiler keeps these memos only after every other read of the scene.
+  // A retry hands the view a new request for the same dungeon: the scene loads it again only after a failure (it
+  // skips a dungeon it already has or is loading), and a failed download or parse is not cached.
   const sceneMesh = useMemo((): DungeonMeshRequest | null =>
-    meshWanted && mesh && meshUrl ? { url: meshUrl, bounds: mesh.bounds, liquid: dungeonMeshLiquid(mesh) } : null,
-  [mesh, meshUrl, meshWanted]);
+    meshRetry >= 0 && meshWanted && mesh && meshUrl ? { url: meshUrl, bounds: mesh.bounds, liquid: dungeonMeshLiquid(mesh) } : null,
+  [mesh, meshUrl, meshWanted, meshRetry]);
   const dungeonMesh = options.dungeonMesh !== undefined ? options.dungeonMesh : sceneMesh;
 
   const focus = useMemo((): MapSceneFocus | null =>
@@ -324,5 +363,8 @@ export function useReplayPlayer(options: ReplayPlayerOptions): ReplayPlayerState
     interactive,
     webglFallback,
     sceneFields: sceneFieldsFor(options.sceneFields ?? "all"),
+    dungeon3D,
+    retryDungeon,
+    dismissDungeonNotice,
   };
 }

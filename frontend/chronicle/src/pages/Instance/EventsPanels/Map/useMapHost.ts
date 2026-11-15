@@ -34,6 +34,7 @@ import { useMapSceneEncounter } from "./useMapScene";
 import { useLocalLoopClock, useSyncModeClock } from "./useReplayClock";
 import { useReplayPlayer } from "./useReplayPlayer";
 import { featuredUnitCallouts } from "./replayFeaturedUnits";
+import { walkUnavailableTitle as walkUnavailableTitleFor } from "./dungeon3DModel";
 import { DEFAULT_WALK_AVATAR, readStoredWalkAvatar, storeWalkAvatar } from "./walkAvatars";
 
 const RAID_FRAMES_PANEL = createRaidFramesPanel();
@@ -217,9 +218,8 @@ export function useMapHost({ props, kind, wholeRun, immersive, mobileWorldOpen }
   const floorBounds = ready && "bounds" in ready.ground.canvas ? ready.ground.canvas.bounds : undefined;
   const flatYardsAvailable = ready ? flatMapYardStep(ready.projectSample, yardSample, worldCoordinates, floorBounds) !== null : false;
   const canWalk = ready ? walkModeAvailable(show3D, meshWanted, meshState, flatYardsAvailable) : false;
-  const walkUnavailableTitle = meshWanted
-    ? "Walk mode: waiting for the 3D map to load"
-    : "Walk mode unavailable: this map has no world scale";
+  // Says why: still loading, didn't load, no 3D map for this dungeon, or no world scale on its flat map.
+  const walkUnavailableTitle = walkUnavailableTitleFor(player.dungeon3D.status, meshWanted);
   // Planning only needs the rendered floor; it does not depend on yard calibration.
   const canPlan = show3D && (!meshWanted || meshState === "ready");
   const walking = walkWanted && canWalk;
