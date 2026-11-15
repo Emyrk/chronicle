@@ -187,3 +187,37 @@ describe("camera collision while the pivot glides across the wall", () => {
     expect(h.probe.target().y).toBe(0);
   });
 });
+
+describe("camera collision (the Director)", () => {
+  it("eases in from last frame's ray (chronicle-1581): the first frame with the wall in the way sits at the shot's distance, then the camera comes in over several frames", async () => {
+    // A group spread wide just west of the wall, the camera turned to look from the east, then a cut: the shot lands behind the wall.
+    const h = await createTestScene({
+      units: [testUnit("boss", 10, 0, { kind: "hostile", boss: true }), testUnit("p1", 8, 14), testUnit("p2", 8, -14)],
+      director: new Set(["boss"]),
+    });
+    h.settle();
+    h.scene.applyCameraPose({ position: [40, 20, 0], target: [4, 0, 0] });
+    h.scene.cutDirector();
+    h.frame();
+    expect(h.probe.owner()).toBe("director");
+    const first = h.probe.pose(9);
+    const shot = h.probe.distance();
+    // Not pulled in this frame: the camera stands east of the wall, at the distance the shot wants.
+    expect(first.position[0]).toBeGreaterThan(ROOM.wall.max[0]);
+    const { distance: wallDistance } = pulledIn(first.position, first.target);
+    expect(shot).toBeGreaterThan(wallDistance + 10);
+    // Then it eases in (DIRECTOR_COLLISION_IN_SECONDS), a little more each frame, not in one step.
+    const distances = [shot];
+    for (let index = 0; index < 6; index++) {
+      h.frame();
+      distances.push(h.probe.distance());
+    }
+    for (let index = 1; index < distances.length; index++) expect(distances[index]).toBeLessThan(distances[index - 1]!);
+    expect(shot - distances[1]!).toBeLessThan(1);
+    expect(distances[distances.length - 1]).toBeGreaterThan(wallDistance + 5);
+    // And settles in front of the wall, along the same line, PADDING short of it.
+    h.settle();
+    expect(h.probe.camera().position.x).toBeLessThan(ROOM.wall.min[0]);
+    expect(h.probe.distance()).toBeCloseTo(wallDistance, 2);
+  });
+});
