@@ -195,3 +195,24 @@ after rename, `SnapshotPath` returns `*CheckpointDurabilityError`. The new repla
 is visible, but its crash durability is unknown. Inspect and verify the path,
 choose a recovery action, and restore into a fresh session. No rollback is
 attempted and no durable-success claim is made for that outcome.
+
+
+## Verbose worker debugging artifacts
+
+Verbose reparses collect the identity report without changing the requested parser
+engine. Legacy verbose parsing creates no snapshot artifact. Native `parsernext`
+verbose parsing uses a complete-file session over the worker's existing logical
+file (including ready append parts), captures immediately before finalization,
+and stores a gzipped version-2 checkpoint as a `parser_snapshot` log-group artifact.
+This is an inspection artifact, not a resume-head or background checkpoint contract.
+
+A native verbose capture or persistence failure fails the parse before instance
+finalization/publication. Existing snapshots remain available until a successful,
+parse-generation-fenced replacement commits; a later failed or legacy reparse does
+not erase the earlier snapshot. The artifact timestamp and filename's generation
+and job identifiers identify the captured attempt. Old objects are removed only
+after replacement commits. Parser snapshots require admin permission to download.
+
+Downloaded `.json.gz` files contain the full checkpoint. The state-graph viewer
+uses `checkpoint.graph.graph` for visualization; it does not execute restore or
+claim the archive is resumable without the original compatible dependencies.

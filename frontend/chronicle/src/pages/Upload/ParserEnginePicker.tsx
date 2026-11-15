@@ -6,10 +6,11 @@ interface ParserEnginePickerProps {
   value: ParserEngine;
   onChange?: (value: ParserEngine) => void;
   disabled?: boolean;
+  context?: "upload" | "reparse";
 }
 
 /** Uses the effective admin_logs permission, not a user role or feature flag. */
-export function ParserEnginePicker({ hasAdminLogs, value, onChange, disabled }: ParserEnginePickerProps) {
+export function ParserEnginePicker({ hasAdminLogs, value, onChange, disabled, context = "upload" }: ParserEnginePickerProps) {
   if (!hasAdminLogs) return null;
 
   return (
@@ -27,7 +28,8 @@ export function ParserEnginePicker({ hasAdminLogs, value, onChange, disabled }: 
         <option value="parsernext">Parsernext (experimental)</option>
       </select>
       <p id="parser-engine-description" className="text-xs text-muted-foreground">
-        Admin only. Applies to this upload attempt. Parsernext is experimental; legacy remains the default.
+        Admin only. Applies to this {context} attempt. Parsernext is experimental; legacy remains the default.
+        {context === "reparse" && " Verbose includes identity details. Only verbose parsernext saves a snapshot."}
       </p>
     </div>
   );

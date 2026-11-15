@@ -1,3 +1,5 @@
+import { reparseLogURL, type ReparseLogGroupOptions } from "./reparseLog";
+export type { ReparseLogGroupOptions } from "./reparseLog";
 import { useRef } from "react";
 import { useQueries, useQuery, useMutation, useQueryClient, keepPreviousData, type QueryClient, type UseQueryOptions } from "@tanstack/react-query";
 import type { CharacterCosmeticsResponse, DiscoveryEntry, ListSidekicksResponse, NotificationSetting, NotificationSettings, RenameSidekickRequest, SidekickConfig, SidekickConfigState, SidekickInstallation, UpdateCharacterCosmeticsRequest, WhatsNewStatus } from "./typesGenerated";
@@ -1405,46 +1407,13 @@ export function useDeleteLogInstance() {
   });
 }
 
-export interface ReparseLogGroupOptions {
-  logId: string;
-  /** Enable debug mode annotations in parsed output */
-  withDebug?: boolean;
-  /** Enable identity mode to collect all creatures/spells (admin only) */
-  identityMode?: boolean;
-  /** Capture a parse-only CPU profile (admin only) */
-  profile?: boolean;
-  /** Override the log type before reparsing (admin only) */
-  logType?: string;
-  /** Override the parse format before reparsing (admin only) */
-  format?: string;
-  /** Override the server flavor (comma-joined tags) before reparsing (admin only) */
-  flavor?: string;
-}
 
 export function useReparseLogGroup() {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: async ({ logId, withDebug = false, identityMode = false, profile = false, logType, format, flavor }: ReparseLogGroupOptions) => {
-      const url = new URL(`/api/v1/raidlogs/logs/${logId}/reparse`, window.location.origin);
-      if (withDebug) {
-        url.searchParams.set("verbose", "true");
-      }
-      if (identityMode) {
-        url.searchParams.set("identity_mode", "true");
-      }
-      if (profile) {
-        url.searchParams.set("profile", "true");
-      }
-      if (logType) {
-        url.searchParams.set("log_type", logType);
-      }
-      if (format) {
-        url.searchParams.set("format", format);
-      }
-      if (flavor) {
-        url.searchParams.set("flavor", flavor);
-      }
+    mutationFn: async ({ logId, withDebug = false, identityMode = false, profile = false, logType, format, flavor, parserEngine }: ReparseLogGroupOptions) => {
+      const url = reparseLogURL({ logId, withDebug, identityMode, profile, logType, format, flavor, parserEngine }, window.location.origin);
       const response = await fetch(url.toString(), {
         method: "POST",
       });

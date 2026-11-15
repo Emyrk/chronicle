@@ -85,6 +85,28 @@ func TestWoWLogArtifactDownloadUsesRawLogPermission(t *testing.T) {
 	require.Equal(t, "text/plain;charset=UTF-8", response.Header().Get("Content-Type"))
 	require.Equal(t, `attachment; filename=ChronicleSidekickBridgeWoTLK.lua`, response.Header().Get("Content-Disposition"))
 	require.Equal(t, "18", response.Header().Get("Content-Length"))
+
+	// A paid raw-log download entitlement is not enough for internal parser state.
+	artifactID = uuid.New()
+	_, err = store.InsertLogGroupArtifact(ctx, database.InsertLogGroupArtifactParams{
+		ID: artifactID, LogGroupID: logID, Kind: chronicle.ArtifactKindParserSnapshot, SchemaVersion: 2,
+		Hash: "snapshot-hash", SizeBytes: int64(len(contents)), MimeType: "application/gzip",
+		ObjectKey: objectKey + "-snapshot", ContentEncoding: pgtype.Text{String: "gzip", Valid: true}, OriginalFilename: pgtype.Text{String: "snapshot.json.gz", Valid: true}, CreatedAt: now, UpdatedAt: now,
+	})
+	require.NoError(t, err)
+	_, err = objectStorage.UploadFile(ctx, chronicle.BucketRaidLogs, objectKey+"-snapshot", bytes.NewReader(contents))
+	require.NoError(t, err)
+	denied := httptest.NewRecorder()
+	router.ServeHTTP(denied, request())
+	require.Equal(t, http.StatusForbidden, denied.Code)
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, ownerID, []string{"technical_admin"}))
+	require.NoError(t, zed.SetStripeEntitlementRole(ctx, ownerID, "stripe_download_raw_logs", false))
+	allowed := httptest.NewRecorder()
+	router.ServeHTTP(allowed, request())
+	require.Equal(t, http.StatusOK, allowed.Code, allowed.Body.String())
+	require.Equal(t, contents, allowed.Body.Bytes())
+	require.Equal(t, "application/gzip", allowed.Header().Get("Content-Type"))
+	require.Empty(t, allowed.Header().Get("Content-Encoding"), "download must preserve the gzip file bytes")
 }
 
 func TestWoWLogGroupDownloadRequiresAdminAndExactlyOneFile(t *testing.T) {

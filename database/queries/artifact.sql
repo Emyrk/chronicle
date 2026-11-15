@@ -67,3 +67,8 @@ SET storage_deleted_at = $1,
 WHERE log_group_id = $2
   AND storage_deleted_at IS NULL
 RETURNING *;
+
+-- name: DeleteLogGroupArtifactsByKind :many
+DELETE FROM log_group_artifacts
+WHERE log_group_id = @log_group_id AND kind = @kind
+RETURNING *;

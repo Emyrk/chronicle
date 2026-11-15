@@ -224,6 +224,7 @@ type sqlcQuerier interface {
 	DeleteItemTemplatesByEntries(ctx context.Context, arg DeleteItemTemplatesByEntriesParams) error
 	DeleteLeaderboardCareerSubject(ctx context.Context, arg DeleteLeaderboardCareerSubjectParams) error
 	DeleteLeaderboardRunEvidence(ctx context.Context, arg DeleteLeaderboardRunEvidenceParams) error
+	DeleteLogGroupArtifactsByKind(ctx context.Context, arg DeleteLogGroupArtifactsByKindParams) ([]LogGroupArtifact, error)
 	DeleteLogInstanceByIDAndGroup(ctx context.Context, arg DeleteLogInstanceByIDAndGroupParams) (uuid.UUID, error)
 	DeleteLogInstancesByIDs(ctx context.Context, ids []uuid.UUID) (int64, error)
 	// Queue every stored package before cascades remove the project's dependent rows.

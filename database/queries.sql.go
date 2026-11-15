@@ -701,6 +701,52 @@ func (q *sqlQuerier) UpsertGuild(ctx context.Context, arg UpsertGuildParams) (Gu
 	return i, err
 }
 
+const deleteLogGroupArtifactsByKind = `-- name: DeleteLogGroupArtifactsByKind :many
+DELETE FROM log_group_artifacts
+WHERE log_group_id = $1 AND kind = $2
+RETURNING id, log_group_id, kind, schema_version, hash, size_bytes, mime_type, content_encoding, object_key, original_filename, storage_deleted_at, created_at, updated_at, log_file_part_id
+`
+
+type DeleteLogGroupArtifactsByKindParams struct {
+	LogGroupID uuid.UUID `db:"log_group_id" json:"log_group_id"`
+	Kind       string    `db:"kind" json:"kind"`
+}
+
+func (q *sqlQuerier) DeleteLogGroupArtifactsByKind(ctx context.Context, arg DeleteLogGroupArtifactsByKindParams) ([]LogGroupArtifact, error) {
+	rows, err := q.db.Query(ctx, deleteLogGroupArtifactsByKind, arg.LogGroupID, arg.Kind)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LogGroupArtifact
+	for rows.Next() {
+		var i LogGroupArtifact
+		if err := rows.Scan(
+			&i.ID,
+			&i.LogGroupID,
+			&i.Kind,
+			&i.SchemaVersion,
+			&i.Hash,
+			&i.SizeBytes,
+			&i.MimeType,
+			&i.ContentEncoding,
+			&i.ObjectKey,
+			&i.OriginalFilename,
+			&i.StorageDeletedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.LogFilePartID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getLogGroupArtifact = `-- name: GetLogGroupArtifact :one
 SELECT id, log_group_id, kind, schema_version, hash, size_bytes, mime_type, content_encoding, object_key, original_filename, storage_deleted_at, created_at, updated_at, log_file_part_id
 FROM log_group_artifacts

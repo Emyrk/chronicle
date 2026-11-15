@@ -62,6 +62,7 @@ func (f overrideGameDB) SpellsByName(ctx context.Context, name string) ([]*chron
 // parseResult holds everything produced by the parse phase that the
 // finalization phase needs.
 type parseResult struct {
+	snapshot        func(io.Writer) error
 	encountersState *encounters.State
 	creaturesState  *creatures.Creatures
 	consumers       *consumers.Consumers

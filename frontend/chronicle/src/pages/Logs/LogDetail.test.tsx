@@ -68,6 +68,28 @@ describe("UploadedLogFileRows", () => {
   });
 });
 
+describe("parser snapshot artifacts", () => {
+  const snapshot = { ...artifact, kind: "parser_snapshot", original_filename: "parser-snapshot.json.gz" };
+
+  it("does not expose snapshots to users with only raw-log download access", () => {
+    expect(renderToStaticMarkup(<UploadedArtifactRow logId={artifact.log_group_id} artifact={snapshot} canDownloadFiles />)).toBe("");
+  });
+
+  it("shows administrators download, direct inspector, and creation timestamp", () => {
+    const markup = renderToStaticMarkup(<UploadedArtifactRow logId={artifact.log_group_id} artifact={snapshot} canDownloadFiles={false} hasAdminLogs />);
+    expect(markup).toContain(`/api/v1/raidlogs/logs/${artifact.log_group_id}/artifacts/${artifact.id}/download`);
+    expect(markup).toContain(`/technical/state-graph?log=${artifact.log_group_id}&amp;artifact=${artifact.id}`);
+    expect(markup).toContain(`dateTime="${artifact.created_at}"`);
+    expect(markup).toContain("may predate the latest reparse");
+  });
+
+  it("does not offer actions for deleted snapshots", () => {
+    const markup = renderToStaticMarkup(<UploadedArtifactRow logId={artifact.log_group_id} artifact={{ ...snapshot, storage_deleted_at: artifact.created_at }} canDownloadFiles hasAdminLogs />);
+    expect(markup).not.toContain("/download");
+    expect(markup).not.toContain("Inspect snapshot");
+  });
+});
+
 describe("UploadedArtifactRow", () => {
   it("shows the artifact and download link with raw-log download permission", () => {
     const markup = renderToStaticMarkup(

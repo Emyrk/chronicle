@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { fetchSnapshotGraph, readStateGraphBlob } from "./stateGraphInput";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -64,7 +66,7 @@ interface Payload {
 const defaultPayload = (): Payload => ({ label: DEFAULT_SOURCE, result: coerceStateGraph(targetJSON) });
 
 export function StateGraphExplorerPage() {
-  const [payload, setPayload] = useState<Payload>(defaultPayload);
+  const [localPayload, setPayload] = useState<Payload>(defaultPayload);
   const [center, setCenterState] = useState<CenterPane>(() => loadLayout().center);
   const setCenter = (next: CenterPane) => {
     setCenterState(next);
@@ -72,6 +74,22 @@ export function StateGraphExplorerPage() {
   };
   const [searchParams, setSearchParams] = useSearchParams();
   const selected = searchParams.get("path") ?? undefined;
+  const logId = searchParams.get("log");
+  const artifactId = searchParams.get("artifact");
+  const hasSnapshotLink = logId !== null || artifactId !== null;
+  const snapshot = useQuery({
+    queryKey: ["parserSnapshot", logId, artifactId],
+    queryFn: ({ signal }) => fetchSnapshotGraph(logId ?? "", artifactId ?? "", signal),
+    enabled: hasSnapshotLink,
+    retry: false,
+    gcTime: 0,
+    refetchOnWindowFocus: false,
+  });
+  const payload = useMemo<Payload>(() => hasSnapshotLink ? {
+    label: `Snapshot ${artifactId ?? "(missing artifact ID)"} · log ${logId ?? "(missing log ID)"}`,
+    result: snapshot.data ?? { issues: [{ message: snapshot.error?.message ?? "Loading snapshot…" }] },
+  } : localPayload, [hasSnapshotLink, artifactId, logId, snapshot.data, snapshot.error, localPayload]);
+
 
   const graph = payload.result.graph;
   const index = useMemo(() => (graph ? indexStateGraph(graph) : undefined), [graph]);
@@ -90,7 +108,11 @@ export function StateGraphExplorerPage() {
 
   const load = (label: string, result: ParseResult) => {
     setPayload({ label, result });
-    select(undefined);
+    const next = new URLSearchParams(searchParams);
+    next.delete("path");
+    next.delete("log");
+    next.delete("artifact");
+    setSearchParams(next, { replace: true });
   };
 
   return (
@@ -107,7 +129,8 @@ export function StateGraphExplorerPage() {
       <p className="mb-4 max-w-3xl text-sm text-muted-foreground">
         Explore a <code className="font-mono text-xs">stategraph</code> payload: the path tree of parser state, the references that alias
         shared values, and the dependency edges a snapshot restore must honor. Defaults to the committed target catalog; paste or
-        upload any version 1 payload to inspect it.
+        upload a raw stategraph, ownergraph, or checkpoint v2 JSON payload (including gzip) to inspect it.
+        The viewer accepts up to 32 MiB of decompressed JSON; larger snapshots must be inspected offline.
       </p>
 
       <PayloadBar payload={payload} onLoad={load} />
@@ -274,7 +297,11 @@ function PayloadBar({ payload, onLoad }: { payload: Payload; onLoad: (label: str
 
   const onFile = async (file: File | undefined) => {
     if (!file) return;
-    onLoad(file.name, parseStateGraph(await file.text()));
+    try {
+      onLoad(file.name, await readStateGraphBlob(file));
+    } catch (error) {
+      onLoad(file.name, { issues: [{ message: `Unable to read payload: ${error instanceof Error ? error.message : String(error)}` }] });
+    }
   };
 
   const copy = async () => {
@@ -310,7 +337,7 @@ function PayloadBar({ payload, onLoad }: { payload: Payload; onLoad: (label: str
           <input
             ref={fileInput}
             type="file"
-            accept="application/json,.json"
+            accept="application/json,application/gzip,.json,.gz"
             className="hidden"
             onChange={(event) => {
               void onFile(event.target.files?.[0]);

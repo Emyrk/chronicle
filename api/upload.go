@@ -150,11 +150,11 @@ func (api *API) WoWLogReparse(w http.ResponseWriter, r *http.Request) {
 	verbose := r.URL.Query().Get("verbose") == "true"
 	identityMode := r.URL.Query().Get("identity_mode") == "true"
 	profile := r.URL.Query().Get("profile") == "true"
-	if identityMode || profile {
+	if verbose || identityMode || profile {
 		adminActor, _ := authz.ActorFromContext(ctx)
 		isAdmin, adminErr := api.Zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanAdmin_logs_User(adminActor))
 		if adminErr != nil || !isAdmin {
-			message := "Only admins can use identity mode"
+			message := "Only admins can use debugging reparses"
 			if profile {
 				message = "Only admins can profile reparses"
 			}

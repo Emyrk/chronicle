@@ -47,6 +47,15 @@ export function parseStateGraph(text: string): ParseResult {
 
 export function coerceStateGraph(raw: unknown): ParseResult {
   if (!isRecord(raw)) return { issues: [{ message: "Payload must be a JSON object" }] };
+  // Checkpoint v2 wraps an ownergraph, whose graph is the raw stategraph.
+  // Raw stategraph input remains supported without transformation.
+  if (!("root" in raw) && isRecord(raw.graph)) {
+    if (isRecord(raw.graph.graph)) {
+      if (raw.version !== 2) return { issues: [{ message: "Unsupported checkpoint version; expected version 2" }] };
+      return coerceStateGraph(raw.graph.graph);
+    }
+    return coerceStateGraph(raw.graph);
+  }
   const issues: StateGraphIssue[] = [];
   if (typeof raw.root !== "string") issues.push({ message: "\"root\" must be a string" });
   if (!Array.isArray(raw.nodes)) issues.push({ message: "\"nodes\" must be an array" });

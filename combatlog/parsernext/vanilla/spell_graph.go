@@ -40,7 +40,7 @@ func RegisterPreparedSpellGraphOwner(r *ownergraph.Registry, identity snapshot.C
 		if spell == nil || spell.ID != id {
 			return fmt.Errorf("invalid prepared spell %d", id)
 		}
-		baseline[id] = copyPreparedSpell(spell)
+		baseline[id] = ClonePreparedSpell(spell)
 	}
 	return ownergraph.Register(r, ownergraph.Codec[chrondbc.Spell]{
 		Type: preparedSpellGraphType, Version: 1, Init: func() *chrondbc.Spell { return new(chrondbc.Spell) },
@@ -74,7 +74,7 @@ func RegisterPreparedSpellGraphOwner(r *ownergraph.Registry, identity snapshot.C
 			if !ok {
 				return fmt.Errorf("spell %d is not prepared", ref.ID)
 			}
-			*spell = *copyPreparedSpell(trusted)
+			*spell = *ClonePreparedSpell(trusted)
 			return nil
 		},
 	})
@@ -136,7 +136,9 @@ func decodePreparedSpellGraph(b []byte, out *preparedSpellGraphState) error {
 // Keep these typed copies and comparisons aligned with chrondbc.Spell and its
 // normalized components. Spell.MarshalJSON is an API projection, not a lossless
 // state representation (notably raw FK IDs are omitted).
-func copyPreparedSpell(s *chrondbc.Spell) *chrondbc.Spell {
+// ClonePreparedSpell copies effective spell data without sharing mutable storage.
+// Callers can freeze a capture baseline separately from live parser references.
+func ClonePreparedSpell(s *chrondbc.Spell) *chrondbc.Spell {
 	if s == nil {
 		return nil
 	}

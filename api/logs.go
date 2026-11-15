@@ -212,14 +212,22 @@ func (api *API) WoWLogArtifactDownload(w http.ResponseWriter, r *http.Request) {
 		httpapi.Forbidden(w, err)
 		return
 	}
-	canDownloadRawLogs, permissionErr := api.Zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanDownload_raw_logs_User(actor))
-	if permissionErr != nil {
-		httpapi.InternalServerError(w, permissionErr)
-		return
-	}
-	if !canDownloadRawLogs {
-		httpapi.Write(ctx, w, http.StatusForbidden, chroniclesdk.Response{Message: "Raw log downloads require Chronicle Revered."})
-		return
+	if artifact.Kind == chronicle.ArtifactKindParserSnapshot {
+		allowed, err := api.Zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanAdmin_logs_User(actor))
+		if err != nil || !allowed {
+			httpapi.Forbidden(w, err)
+			return
+		}
+	} else {
+		canDownloadRawLogs, permissionErr := api.Zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanDownload_raw_logs_User(actor))
+		if permissionErr != nil {
+			httpapi.InternalServerError(w, permissionErr)
+			return
+		}
+		if !canDownloadRawLogs {
+			httpapi.Write(ctx, w, http.StatusForbidden, chroniclesdk.Response{Message: "Raw log downloads require Chronicle Revered."})
+			return
+		}
 	}
 	if artifact.StorageDeletedAt.Valid {
 		httpapi.Write(ctx, w, http.StatusGone, chroniclesdk.Response{Message: "Artifact has been deleted from storage"})

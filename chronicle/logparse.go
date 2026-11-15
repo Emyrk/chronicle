@@ -447,7 +447,10 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 	// ── Parse ────────────────────────────────────────────────────────────
 	reg := w.parent.RegistryForFlavor(flavor)
 	parsed, profileCaptured, err := w.parseCombatLogWithOptionalCPUProfile(ctx, job.Args.LogID, job.Args.Profile, func() (*parseResult, error) {
-		return w.parseCombatLog(ctx, logFormat, files, artifacts, gameDB, reg, job.Args.IdentityMode, preloadedFirst, preRealmName)
+		if job.Args.Verbose && w.parserEngine == chroniclesdk.ParserEngineNext {
+			return w.parseDebugSession(ctx, logFormat, files, artifacts, gameDB, reg, preloadedFirst, preRealmName)
+		}
+		return w.parseCombatLog(ctx, logFormat, files, artifacts, gameDB, reg, job.Args.Verbose || job.Args.IdentityMode, preloadedFirst, preRealmName)
 	})
 	if err != nil {
 		jobResult = "failure"
@@ -483,6 +486,15 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		report.Identity = buildIdentityReport(parsed.creaturesState)
 	}
 
+	if parsed.snapshot != nil {
+		jobID := int64(0)
+		if job.JobRow != nil {
+			jobID = job.ID
+		}
+		if err := w.parent.storeParserSnapshot(ctx, job.Args.LogID, parseGeneration, jobID, parsed.snapshot); err != nil {
+			return fmt.Errorf("store pre-finalize debug snapshot: %w", err)
+		}
+	}
 	// Track total finalize and DB insert durations
 	var totalFinalizeDuration time.Duration
 	var totalDBInsertDuration time.Duration

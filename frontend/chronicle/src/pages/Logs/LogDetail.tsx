@@ -1,3 +1,5 @@
+import { ParserEnginePicker } from "../Upload/ParserEnginePicker";
+import type { ParserEngine } from "@/api/typesGenerated";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -88,9 +90,12 @@ interface UploadedArtifactRowProps {
   logId: string;
   artifact: WoWLogArtifact;
   canDownloadFiles: boolean;
+  hasAdminLogs?: boolean;
 }
 
-export function UploadedArtifactRow({ logId, artifact, canDownloadFiles }: UploadedArtifactRowProps) {
+export function UploadedArtifactRow({ logId, artifact, canDownloadFiles, hasAdminLogs = false }: UploadedArtifactRowProps) {
+  const isSnapshot = artifact.kind === "parser_snapshot";
+  if (isSnapshot && !hasAdminLogs) return null;
   return (
     <div
       className={`flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg border ${artifact.storage_deleted_at ? "opacity-60" : ""}`}
@@ -99,7 +104,7 @@ export function UploadedArtifactRow({ logId, artifact, canDownloadFiles }: Uploa
         <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />
         <div className="min-w-0">
           <p className="font-medium text-sm truncate">
-            {artifact.original_filename || "Sidekick SavedVariables"}
+            {artifact.original_filename || (isSnapshot ? "Parser snapshot" : "Sidekick SavedVariables")}
           </p>
           <p className="text-xs text-muted-foreground truncate">
             Artifact · {artifact.kind} · schema v{artifact.schema_version}
@@ -109,21 +114,27 @@ export function UploadedArtifactRow({ logId, artifact, canDownloadFiles }: Uploa
       <div className="ml-auto flex items-center gap-3">
         <div className="text-right text-sm text-muted-foreground whitespace-nowrap">
           <p>{formatBytes(artifact.size_bytes)}</p>
-          <p className="hidden text-xs sm:block">{formatDate(artifact.created_at)}</p>
+          <p className="text-xs">Created: <time dateTime={artifact.created_at}>{formatDate(artifact.created_at)}</time></p>
+          {isSnapshot && <p className="text-xs">Last saved snapshot; may predate the latest reparse.</p>}
           {artifact.storage_deleted_at && (
             <p className="text-xs text-destructive">
               Deleted: {formatDate(artifact.storage_deleted_at)}
             </p>
           )}
         </div>
-        {canDownloadFiles && !artifact.storage_deleted_at && (
+        {(isSnapshot ? hasAdminLogs : canDownloadFiles) && !artifact.storage_deleted_at && (
           <a
             href={`/api/v1/raidlogs/logs/${logId}/artifacts/${artifact.id}/download`}
             download
           >
-            <Button variant="outline" size="sm" title="Download artifact">
+            <Button variant="outline" size="sm" title="Download artifact" aria-label="Download artifact">
               <Download className="h-4 w-4" />
             </Button>
+          </a>
+        )}
+        {isSnapshot && hasAdminLogs && !artifact.storage_deleted_at && (
+          <a className="text-sm underline underline-offset-4" href={`/technical/state-graph?log=${encodeURIComponent(logId)}&artifact=${encodeURIComponent(artifact.id)}`}>
+            Inspect snapshot
           </a>
         )}
       </div>
@@ -1313,7 +1324,7 @@ export interface LogDetailViewProps {
   isDeleting: boolean;
   showDeleteConfirm: boolean;
   setShowDeleteConfirm: (show: boolean) => void;
-  onReparse: (verbose: boolean, identityMode?: boolean, logType?: string, format?: string, flavor?: string, profile?: boolean) => void;
+  onReparse: (verbose: boolean, identityMode?: boolean, logType?: string, format?: string, flavor?: string, profile?: boolean, parserEngine?: ParserEngine) => void;
   isReparsing: boolean;
   canReparse: boolean;
   canProfile: boolean;
@@ -1342,7 +1353,7 @@ export function LogDetailView({
   isDeleting,
   showDeleteConfirm,
   setShowDeleteConfirm,
-  onReparse,
+  onReparse: submitReparse,
   isReparsing,
   canReparse,
   canProfile,
@@ -1362,6 +1373,10 @@ export function LogDetailView({
   isMarkingUnlisted,
 }: LogDetailViewProps) {
   const { data: allFlavorTags = [] } = useFlavors();
+  const [parserEngine, setParserEngine] = useState<ParserEngine>("legacy");
+  const onReparse: LogDetailViewProps["onReparse"] = (verbose, identityMode, logType, format, flavor, profile) => {
+    submitReparse(verbose, identityMode, logType, format, flavor, profile, canProfile ? parserEngine : undefined);
+  };
   const [showReparseAxis, setShowReparseAxis] = useState(false);
   const [reparseFormat, setReparseFormat] = useState("");
   const [reparseFlavor, setReparseFlavor] = useState("");
@@ -1494,6 +1509,9 @@ export function LogDetailView({
                 )}
                 <span className="sr-only">Refresh</span>
               </Button>
+              {canReparse && canProfile && (
+                <ParserEnginePicker context="reparse" hasAdminLogs={canProfile} value={parserEngine} onChange={setParserEngine} disabled={isReparsing || !isJobComplete(log.status.state)} />
+              )}
               {canReparse && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -1532,10 +1550,6 @@ export function LogDetailView({
                     )}
                     {canDownloadFiles && (
                       <>
-                        <DropdownMenuItem onClick={() => onReparse(false, true)}>
-                          <Play className="h-4 w-4 mr-2 text-blue-500" />
-                          Reparse (Identity)
-                        </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuSub>
                           <DropdownMenuSubTrigger>
@@ -1724,6 +1738,7 @@ export function LogDetailView({
                       key={artifact.id}
                       logId={log.id}
                       artifact={artifact}
+                      hasAdminLogs={canProfile}
                       canDownloadFiles={canDownloadFiles}
                     />
                   ))}
@@ -1869,14 +1884,14 @@ export function LogDetail() {
     });
   };
 
-  const handleReparse = (withDebug = false, identityMode = false, logType?: string, format?: string, flavor?: string, profile = false) => {
+  const handleReparse = (withDebug = false, identityMode = false, logType?: string, format?: string, flavor?: string, profile = false, parserEngine?: ParserEngine) => {
     if (!logId) return;
-    reparseLogGroup.mutate({ logId, withDebug, identityMode, profile, logType, format, flavor }, {
+    reparseLogGroup.mutate({ logId, withDebug, identityMode, profile, logType, format, flavor, parserEngine }, {
       onSuccess: () => {
         const axis = logType ?? format ?? flavor;
         const label = axis
           ? `Reparse as ${axis} started`
-          : profile ? "Profiled reparse started" : identityMode ? "Identity reparse started" : withDebug ? "Debug reparse started" : "Reparse started";
+          : profile ? "Profiled reparse started" : withDebug ? "Verbose reparse started" : identityMode ? "Identity reparse started" : "Reparse started";
         const desc = axis
           ? `Your log is being reprocessed as ${axis}.`
           : profile
@@ -1884,7 +1899,7 @@ export function LogDetail() {
             : identityMode
               ? "Your log is being reprocessed to collect all creatures and spells."
               : withDebug
-              ? "Your log is being reprocessed with debug annotations."
+              ? "Your log is being reprocessed with debug annotations and identity details. Parsernext also saves a parser snapshot; legacy does not."
               : "Your log is being reprocessed.";
         toast.success(label, { description: desc });
         refetch();
@@ -2046,14 +2061,14 @@ export function LogDetailByHash() {
     });
   };
 
-  const handleReparse = (withDebug = false, identityMode = false, logType?: string, format?: string, flavor?: string, profile = false) => {
+  const handleReparse = (withDebug = false, identityMode = false, logType?: string, format?: string, flavor?: string, profile = false, parserEngine?: ParserEngine) => {
     if (!logId) return;
-    reparseLogGroup.mutate({ logId, withDebug, identityMode, profile, logType, format, flavor }, {
+    reparseLogGroup.mutate({ logId, withDebug, identityMode, profile, logType, format, flavor, parserEngine }, {
       onSuccess: () => {
         const axis = logType ?? format ?? flavor;
         const label = axis
           ? `Reparse as ${axis} started`
-          : profile ? "Profiled reparse started" : identityMode ? "Identity reparse started" : withDebug ? "Debug reparse started" : "Reparse started";
+          : profile ? "Profiled reparse started" : withDebug ? "Verbose reparse started" : identityMode ? "Identity reparse started" : "Reparse started";
         const desc = axis
           ? `Your log is being reprocessed as ${axis}.`
           : profile
@@ -2061,7 +2076,7 @@ export function LogDetailByHash() {
             : identityMode
               ? "Your log is being reprocessed to collect all creatures and spells."
               : withDebug
-              ? "Your log is being reprocessed with debug annotations."
+              ? "Your log is being reprocessed with debug annotations and identity details. Parsernext also saves a parser snapshot; legacy does not."
               : "Your log is being reprocessed.";
         toast.success(label, { description: desc });
         refetch();
