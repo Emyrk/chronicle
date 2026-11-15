@@ -318,7 +318,8 @@ const guildOGCardTimeout = 1500 * time.Millisecond
 func (s *Service) guildOG(r *http.Request, rawID string) *frontend.OGData {
 	guildID, err := uuid.Parse(rawID)
 	if err != nil {
-		return nil
+		// Guild pages are keyed by UUID, so anything else cannot exist.
+		return &frontend.OGData{NotFound: true}
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
@@ -326,10 +327,13 @@ func (s *Service) guildOG(r *http.Request, rawID string) *frontend.OGData {
 	db := s.store
 	guild, err := db.GetGuildByID(ctx, guildID)
 	if err != nil {
+		if isNotFound(err) {
+			return &frontend.OGData{NotFound: true}
+		}
 		return nil
 	}
 
-	host := ogHost(r)
+	host := s.canonicalHost(r)
 	og := &frontend.OGData{
 		Title:       guild.Name,
 		Description: fmt.Sprintf("%s guild: raid progression and best clears on Chronicle.", guild.Name),

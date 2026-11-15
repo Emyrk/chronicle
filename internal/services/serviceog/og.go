@@ -3,6 +3,8 @@ package serviceog
 import (
 	"cmp"
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"math"
 	"net/http"
@@ -16,6 +18,7 @@ import (
 	"github.com/Emyrk/chronicle/api/db2sdk"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/Emyrk/chronicle/database"
@@ -44,13 +47,13 @@ func (s *Service) Routes() []frontend.OGRoute {
 		{
 			Pattern: "/instances/{idOrSlug}",
 			Resolve: func(r *http.Request) *frontend.OGData {
-				return s.instanceOG(r, ogHost(r), chi.URLParam(r, "idOrSlug"))
+				return s.instanceOG(r, s.canonicalHost(r), chi.URLParam(r, "idOrSlug"))
 			},
 		},
 		{
 			Pattern: "/s/{code}",
 			Resolve: func(r *http.Request) *frontend.OGData {
-				return s.shareOG(r, ogHost(r), chi.URLParam(r, "code"))
+				return s.shareOG(r, s.canonicalHost(r), chi.URLParam(r, "code"))
 			},
 		},
 		{
@@ -72,14 +75,14 @@ func (s *Service) Routes() []frontend.OGRoute {
 		{
 			Pattern: "/talents",
 			Resolve: func(r *http.Request) *frontend.OGData {
-				return flavorTalentCalculatorOG(ogHost(r), seoProductName(s.resolvedSiteFlavor(r.Context())), "", "")
+				return flavorTalentCalculatorOG(s.canonicalHost(r), seoProductName(s.resolvedSiteFlavor(r.Context())), "", "")
 			},
 		},
 		{
 			Pattern: "/talents/{class}",
 			Resolve: func(r *http.Request) *frontend.OGData {
 				class, build := chi.URLParam(r, "class"), r.URL.Query().Get("build")
-				og := flavorTalentCalculatorOG(ogHost(r), seoProductName(s.resolvedSiteFlavor(r.Context())), class, build)
+				og := flavorTalentCalculatorOG(s.canonicalHost(r), seoProductName(s.resolvedSiteFlavor(r.Context())), class, build)
 				if params := talentOGImageParams(class, build); params != nil {
 					if imageURL := s.ogImageURL(r, "talents", params); imageURL != "" {
 						og.ImageURL = imageURL
@@ -183,6 +186,11 @@ var staticOGRoutes = map[string]staticOGMetadata{
 	"/supported":     {Title: "Supported Instances", Description: "The raids and dungeons Chronicle can analyze, with notes on special timing rules."},
 	"/modules":       {Title: "Modules", Description: "Community raid panels for Chronicle, written in Lua. Track a module to add it to your raid panels, or build your own."},
 	"/gear":          {Title: "Gear", Description: "Explore gear progression, stat weights, and gear trends from raid logs."},
+
+	// Fixed SPA routes under /instances; chi prefers them over /instances/{idOrSlug}.
+	"/instances/leeroy":  {Title: "Leeroy Jenkins: The Rookery", Description: "A read-only 3D reconstruction of the Leeroy Jenkins charge through the Rookery, replayed on Chronicle's raid timeline."},
+	"/instances/compare": {Title: "Compare Clear Times", Description: "Compare raid clear times between populations: ranked raids, server cohorts, and guild cohorts."},
+
 	"/download": {
 		Title:       "Chronicle Sidekick",
 		Description: "A free tray app for Windows, macOS and Linux that finds WoW, watches your combat log and uploads your raid to Chronicle in one click.",
@@ -354,10 +362,33 @@ func (s *Service) instanceOG(r *http.Request, host, idOrSlug string) *frontend.O
 
 	inst, err := resolveInstance(ctx, s.store, idOrSlug)
 	if err != nil {
+		// Unlisted logs are not public but do exist, so only a log that is
+		// missing outright is a 404. One extra indexed lookup, on misses only.
+		if isNotFound(err) && s.instanceMissing(ctx, idOrSlug) {
+			return &frontend.OGData{NotFound: true}
+		}
 		return nil
 	}
 
 	return s.buildInstanceOG(ctx, r, host, inst, nil)
+}
+
+// isNotFound reports whether err means the row does not exist, as opposed to a
+// timeout or other failure. Only the former may become a 404.
+func isNotFound(err error) bool {
+	return errors.Is(err, pgx.ErrNoRows) || errors.Is(err, sql.ErrNoRows)
+}
+
+// instanceMissing reports whether no log, listed or not, has this ID or slug.
+// Any lookup failure other than "no rows" counts as present.
+func (s *Service) instanceMissing(ctx context.Context, idOrSlug string) bool {
+	var err error
+	if id, parseErr := uuid.Parse(idOrSlug); parseErr == nil {
+		_, err = s.store.InstanceWithUnlisted(ctx, id)
+	} else {
+		_, err = s.store.InstanceBySlugWithUnlisted(ctx, pgtype.Text{String: idOrSlug, Valid: true})
+	}
+	return err != nil && isNotFound(err)
 }
 
 func (s *Service) shareOG(r *http.Request, host, code string) *frontend.OGData {
@@ -520,18 +551,31 @@ func instanceOGImageURL(host, instanceName string) string {
 	return fmt.Sprintf("https://%s%s", host, imagePath)
 }
 
+// armoryRealmName returns the realm path segment as a plain name, whether the
+// router handed it over percent-encoded or already decoded ("Kronos III").
+// Canonical URLs re-encode it, so they never carry a raw space.
+func armoryRealmName(segment string) string {
+	if decoded, err := url.PathUnescape(segment); err == nil {
+		return decoded
+	}
+	return segment
+}
+
 func (s *Service) armoryOG(r *http.Request, realm, player string) *frontend.OGData {
 	// The request context carries the tenant, which scopes the lookups.
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
-	host := ogHost(r)
+	host := s.canonicalHost(r)
 
 	db := s.store
 
 	realmID, err := uuid.Parse(realm)
 	if err != nil {
-		r, dbErr := s.store.GetWoWServerRealmByName(ctx, realm)
+		r, dbErr := s.store.GetWoWServerRealmByName(ctx, armoryRealmName(realm))
 		if dbErr != nil {
+			if isNotFound(dbErr) {
+				return &frontend.OGData{NotFound: true}
+			}
 			return nil
 		}
 		realmID = r.ID
@@ -545,6 +589,9 @@ func (s *Service) armoryOG(r *http.Request, realm, player string) *frontend.OGDa
 		Name:       player,
 	})
 	if err != nil {
+		if isNotFound(err) {
+			return &frontend.OGData{NotFound: true}
+		}
 		return nil
 	}
 
@@ -589,7 +636,7 @@ func (s *Service) armoryOG(r *http.Request, realm, player string) *frontend.OGDa
 	og := &frontend.OGData{
 		Title:       title.String(),
 		Description: desc.String(),
-		URL:         fmt.Sprintf("https://%s/armory/%s/%s", host, realm, p.ID),
+		URL:         fmt.Sprintf("https://%s/armory/%s/%s", host, url.PathEscape(armoryRealmName(realm)), p.ID),
 	}
 	// Skip the stat lookups when there's no OG service to draw the card.
 	if s.imageBaseURL != nil && s.signingKey != "" {

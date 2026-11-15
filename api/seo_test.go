@@ -332,6 +332,25 @@ func TestSitemapCanonicalHosts(t *testing.T) {
 	require.Equal(t, []string{"everlook.chronicleclassic.com"}, api.canonicalHosts(tenantSEORequest(t, "/sitemap.xml", true)))
 }
 
+// Canonicals name one host per tenant however the request arrived, and the
+// path stays percent-encoded.
+func TestCanonicalURLUsesOneHostPerTenant(t *testing.T) {
+	t.Parallel()
+	api := testSEOAPI(t)
+
+	for _, host := range []string{"everlook.chronicleclassic.com", "chronicle-production.up.railway.app", "alias.example.org"} {
+		req := tenantSEORequest(t, "/armory/Kronos%20III/0x51", true)
+		req.Host = host
+		require.Equal(t, "https://everlook.chronicleclassic.com/armory/Kronos%20III/0x51", canonicalRequestURL(api, req), host)
+		require.Equal(t, "https://everlook.chronicleclassic.com/armory/Kronos%20III/0x51", api.brandingResolver(req).CanonicalURL, host)
+	}
+
+	root := httptest.NewRequest(http.MethodGet, "https://chronicle-production.up.railway.app/g/abc", nil)
+	require.Equal(t, "https://chronicleclassic.com/g/abc", canonicalRequestURL(api, root))
+	root.Host = "chronicleclassic.com"
+	require.Equal(t, "https://chronicleclassic.com/g/abc", canonicalRequestURL(api, root))
+}
+
 func TestAcceptsGzip(t *testing.T) {
 	t.Parallel()
 	for header, want := range map[string]bool{

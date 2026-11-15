@@ -72,6 +72,8 @@ type Service struct {
 }
 
 func New(opts Options) *Service {
+	// Build the leaderboard raid-name set now, once, so no request pays for it.
+	knownLeaderboardInstances()
 	return &Service{
 		logger:        opts.Logger,
 		store:         opts.Zed,
@@ -121,7 +123,19 @@ func canonicalOrigin(s *Service, r *http.Request) string {
 	if s != nil && s.accessURL != nil && s.accessURL.Scheme != "" {
 		scheme = s.accessURL.Scheme
 	}
-	return scheme + "://" + ogHost(r)
+	return scheme + "://" + s.canonicalHost(r)
+}
+
+// canonicalHost is the one host page URLs (canonicals, og:url) use for the
+// request: its own host when it is one of the site's canonical hosts, else the
+// first one (see servicetenant.CanonicalHost). With no canonical host
+// configured the validated request host is kept.
+func (s *Service) canonicalHost(r *http.Request) string {
+	if s == nil {
+		return ogHost(r)
+	}
+	hosts := servicetenant.CanonicalHosts(servicetenant.TenantFromContext(r.Context()), s.tenant, s.accessURL)
+	return servicetenant.CanonicalHost(hosts, ogHost(r))
 }
 
 // ogCacheWait bounds how long a page waits for a card's first cached fetch.

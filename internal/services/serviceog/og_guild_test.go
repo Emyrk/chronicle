@@ -294,8 +294,11 @@ func TestGuildOGResolver(t *testing.T) {
 		t.Parallel()
 		ctx := testutil.Context(t, testutil.WaitMedium)
 		api := newAPI(store, true)
-		require.Nil(t, api.guildOG(request(ctx), uuid.NewString()))
-		require.Nil(t, api.guildOG(request(ctx), "not-a-uuid"))
+		for _, id := range []string{uuid.NewString(), "not-a-uuid"} {
+			og := api.guildOG(request(ctx), id)
+			require.NotNil(t, og)
+			require.True(t, og.NotFound, id)
+		}
 	})
 
 	t.Run("Configured", func(t *testing.T) {

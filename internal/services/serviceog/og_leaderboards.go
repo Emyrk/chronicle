@@ -4,9 +4,11 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
 	"github.com/Emyrk/chronicle/frontend"
 )
 
@@ -43,6 +45,9 @@ func (s *Service) leaderboardRoutes() []frontend.OGRoute {
 		return func(r *http.Request) *frontend.OGData {
 			flavor := s.resolvedSiteFlavor(r.Context())
 			seg, inst, t := chi.URLParam(r, segment), chi.URLParam(r, instance), chi.URLParam(r, tab)
+			if leaderboardNotFound(seg, inst, t) {
+				return &frontend.OGData{NotFound: true}
+			}
 			og := leaderboardOG(seoProductName(flavor), canonicalRequestURL(s, r), seg, inst, t, r.URL.Query())
 			tabID, instanceName := leaderboardOGSelection(seg, inst, t)
 			og.ImageURL = s.leaderboardCardURL(r, flavor, tabID, instanceName)
@@ -52,6 +57,9 @@ func (s *Service) leaderboardRoutes() []frontend.OGRoute {
 	return []frontend.OGRoute{
 		// Before {segment}, which would read "career" as a raid.
 		{Pattern: "/leaderboards/career", Resolve: s.careerOG},
+		// A client-side redirect to the v1 configuration page, not a raid. No
+		// metadata of its own: it gets the brand card like any other page.
+		{Pattern: "/leaderboards/configuration", Resolve: func(*http.Request) *frontend.OGData { return nil }},
 		{Pattern: "/leaderboards", Resolve: resolve("", "", "")},
 		{Pattern: "/leaderboards/{segment}", Resolve: resolve("segment", "", "")},
 		{Pattern: "/leaderboards/{instance}/{tab}", Resolve: resolve("", "instance", "tab")},
@@ -136,3 +144,55 @@ func leaderboardOGInstanceName(segment string) string {
 	}
 	return name
 }
+
+// leaderboardNotFound reports whether a hub URL names something that does not
+// exist: a lone segment that is neither a tab nor a raid, an unknown raid, or an
+// unknown tab after a raid (which the SPA would quietly show as Overview).
+//
+// Raid names are checked against every instance any flavor registers, not the
+// site's own: the hub links raid names from log data parsed by each realm's own
+// dataset, so a root host listing several tenants (or a dataset lookup that
+// fell back to the default flavor) must not turn a real raid into a 404.
+func leaderboardNotFound(segment, instance, tab string) bool {
+	if instance != "" {
+		if tab != "" && tab != "overview" {
+			if _, ok := leaderboardOGTabs[tab]; !ok {
+				return true
+			}
+		}
+	} else {
+		if segment == "" {
+			return false // the hub landing
+		}
+		if _, ok := leaderboardOGTabs[segment]; ok {
+			return false // a landing tab
+		}
+		if segment == "overview" {
+			return false
+		}
+		instance = segment
+	}
+	_, found := knownLeaderboardInstances()[normalizeLeaderboardInstance(instance)]
+	return !found
+}
+
+// normalizeLeaderboardInstance folds an instance path segment or registry name
+// to one comparable form: decoded, dashes as spaces, single-spaced, lowercase.
+func normalizeLeaderboardInstance(name string) string {
+	if decoded, err := url.PathUnescape(name); err == nil {
+		name = decoded
+	}
+	return strings.ToLower(strings.Join(strings.Fields(strings.ReplaceAll(name, "-", " ")), " "))
+}
+
+// knownLeaderboardInstances is the normalized set of every instance and derived
+// name any flavor registers. The registries are code, so it is built once, with
+// no database access.
+var knownLeaderboardInstances = sync.OnceValue(func() map[string]struct{} {
+	names := registry.AllInstanceNames()
+	known := make(map[string]struct{}, len(names))
+	for _, name := range names {
+		known[normalizeLeaderboardInstance(name)] = struct{}{}
+	}
+	return known
+})

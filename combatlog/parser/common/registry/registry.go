@@ -561,3 +561,32 @@ func wrap(do func(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z 
 		return do(ctx, logger, db, z, flavor)
 	}
 }
+
+// AllInstanceNames returns, sorted, every instance name and derived (sub-raid)
+// name that any flavor can register, across the code-registered instances only.
+// It is the union over the base registry, every single flavor tag, each tag on
+// top of Vanilla, and all tags together, so it includes entries one flavor
+// removes (VanillaPlus drops the Scarlet Monastery wings) and derived names that
+// depend on a tag (Karazhan's Lower and Upper towers). Use it to tell a real
+// instance name from junk without knowing which dataset parsed a log.
+func AllInstanceNames() []string {
+	flavors := []database.WoWFlavor{nil, database.AllFlavorTagValues()}
+	for _, tag := range database.AllFlavorTagValues() {
+		flavors = append(flavors, database.WoWFlavor{tag}, database.WoWFlavor{database.FlavorVanilla, tag})
+	}
+	seen := make(map[string]struct{})
+	for _, flavor := range flavors {
+		for _, detail := range RegistryForFlavor(slog.New(slog.DiscardHandler), flavor).AllInstanceDetails() {
+			seen[detail.Name] = struct{}{}
+			for _, derived := range detail.DerivedNames {
+				seen[derived] = struct{}{}
+			}
+		}
+	}
+	names := make([]string, 0, len(seen))
+	for name := range seen {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}

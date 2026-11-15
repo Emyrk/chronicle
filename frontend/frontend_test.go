@@ -9,6 +9,7 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/require"
 )
 
@@ -234,4 +235,52 @@ func TestHandlerBlogFlavorFiltering(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A route whose subject does not exist still serves the SPA shell, so the app
+// can show its not-found view, but as a real 404 that crawlers must not index.
+func TestHandlerNotFoundRouteIs404WithNoindex(t *testing.T) {
+	t.Parallel()
+
+	indexHTML, err := os.ReadFile("chronicle/index.html")
+	require.NoError(t, err)
+	siteFS := fstest.MapFS{"index.html": &fstest.MapFile{Data: indexHTML}}
+	handler := Handler(siteFS, []OGRoute{{
+		Pattern: "/g/{id}",
+		Resolve: func(r *http.Request) *OGData {
+			if chi.URLParam(r, "id") == "known" {
+				return &OGData{Title: "Nightfall", URL: "https://everlook.example/g/known"}
+			}
+			return &OGData{NotFound: true, ImageURL: "https://everlook.example/brand.png"}
+		},
+	}}, func(_ *http.Request) *HTMLBranding {
+		return &HTMLBranding{CanonicalURL: "https://everlook.example/g/branding", ImageURL: "https://everlook.example/banner.png"}
+	}, nil)
+
+	t.Run("unknown", func(t *testing.T) {
+		t.Parallel()
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/g/missing", nil))
+
+		require.Equal(t, http.StatusNotFound, recorder.Code)
+		require.Equal(t, "noindex, nofollow", recorder.Header().Get("X-Robots-Tag"))
+		require.Equal(t, "max-age=60", recorder.Header().Get("Cache-Control"))
+		require.NotContains(t, recorder.Header().Get("Cache-Control"), "s-maxage")
+		body := recorder.Body.String()
+		require.Contains(t, body, `<div id="root">`, "the SPA shell is still served")
+		require.Contains(t, body, `name="robots" content="noindex, nofollow"`)
+		require.NotContains(t, body, `rel="canonical"`)
+		require.Contains(t, body, `property="og:image" content="https://everlook.example/brand.png"`)
+	})
+
+	t.Run("known", func(t *testing.T) {
+		t.Parallel()
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/g/known", nil))
+
+		require.Equal(t, http.StatusOK, recorder.Code)
+		require.Empty(t, recorder.Header().Get("X-Robots-Tag"))
+		require.Empty(t, recorder.Header().Get("Cache-Control"))
+		require.Contains(t, recorder.Body.String(), `<link rel="canonical" href="https://everlook.example/g/known"`)
+	})
 }
