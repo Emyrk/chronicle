@@ -368,7 +368,7 @@ function Overview() {
       accent: RATING_ACCENT.renown,
       title: "Renown",
       question: QUESTION.renown,
-      body: "Points for every boss you've killed. It only goes up.",
+      body: "Points for boss kills: each kill earns its boss's award. It adds up across your history, but can drop if a log is removed or awards change.",
     },
   ]
   // Two rows: the per-kill metrics, then the ratings built from them. Cards in a row share a height.
@@ -449,6 +449,10 @@ function BenchmarkSection({
         <p className="text-muted-foreground">
           The benchmark covers all time, so it only goes up, unless the log holding the record is removed. Drag the
           slider to set a new record and watch the {dataset.example ? "example" : "chart"} above update.
+        </p>
+        <p className="mt-3 text-muted-foreground">
+          If a log is removed or invalidated, its kills leave your ratings too, so Renown can go down as well. Renown
+          awards and raid weights are applied when ratings are calculated, so a change to them applies to past kills.
         </p>
       </div>
       <div className="rounded-lg border bg-background/40 p-4">
@@ -561,15 +565,16 @@ function MultipleBosses() {
 
 function DpsOrHps() {
   const examples = [
-    { who: "Fury Warrior", dps: 1150, hps: 40 },
-    { who: "Holy Priest", dps: 90, hps: 820 },
-    { who: "Shadow Priest", dps: 610, hps: 650 },
+    { who: "Fury Warrior", healer: false, dps: 1150, hps: 40 },
+    { who: "Holy Priest", healer: true, dps: 90, hps: 820 },
+    { who: "Shadow Priest", healer: false, dps: 610, hps: 650 },
   ]
   return (
     <Section title="DPS or HPS?">
       <p className="mb-3 text-muted-foreground">
-        Each kill counts toward <strong>either</strong> DPS or HPS, never both. Chronicle takes whichever of the two
-        numbers is higher for that kill (DPS wins a tie). The kill is then rated only on that board.
+        Each kill counts toward <strong>either</strong> DPS or HPS, never both. Healing specs (Holy and Discipline
+        Priest, Restoration Druid and Shaman, Holy Paladin) count whichever of the two numbers is higher, and DPS wins
+        a tie. Every other spec always counts as DPS. The kill is then rated only on that board.
       </p>
       <table className="mb-3 text-sm tabular-nums">
         <thead>
@@ -582,7 +587,7 @@ function DpsOrHps() {
         </thead>
         <tbody>
           {examples.map((e) => {
-            const dps = e.dps >= e.hps
+            const dps = !e.healer || e.dps >= e.hps
             return (
               <tr key={e.who}>
                 <td className="pr-6">{e.who}</td>
@@ -594,10 +599,14 @@ function DpsOrHps() {
           })}
         </tbody>
       </table>
+      <p className="mb-3 text-muted-foreground">
+        This is decided kill by kill. If a Holy Priest damages more than they heal on one fight, that kill is rated as
+        DPS. Their other kills stay on the HPS board. The Shadow Priest above heals more than they damage, but Shadow
+        isn&apos;t a healing spec, so the kill still counts as DPS. Servers that score by class instead of spec let
+        every class count its higher number.
+      </p>
       <p className="text-muted-foreground">
-        This is decided kill by kill. If a Shadow Priest heals more than they damage on one fight, that kill is rated
-        as HPS. Their other kills stay on the DPS board. Renown doesn't care which one was picked: each kill earns its
-        award once.
+        Renown doesn&apos;t care which one was picked: each kill earns its award once.
       </p>
     </Section>
   )
@@ -614,7 +623,7 @@ function Guilds() {
       <p className="text-muted-foreground">
         A 5:00 kill against a 4:00 record scores 80. Form and Floor average speed (1 ÷ time) rather than kill times,
         so one very slow kill can't drag the average down more than one very fast kill pulls it up. Guild Renown
-        counts every boss the guild has killed.
+        works like player Renown: each boss kill earns that boss's award.
       </p>
     </Section>
   )
@@ -625,14 +634,20 @@ function Cohorts() {
     <Section title="Who You're Compared Against">
       <ul className="list-inside list-disc space-y-1 text-muted-foreground">
         <li>
-          Your <strong>cohort</strong> is the same server, boss, difficulty, raid size, class, spec, and subspec. DPS
-          and HPS are separate.
+          Your <strong>cohort</strong> is the same server (every realm of it), boss, difficulty, raid size, class, spec,
+          and subspec. DPS and HPS are separate. Servers that score by class use class alone.
         </li>
         <li>Ratings count your whole history. There are no seasons or rolling windows.</li>
-        <li>Only clean boss kills count. Wipes, trash, unlisted logs, and invalidated raids don't.</li>
+        <li>
+          Only clean boss kills count, where every enemy in the fight died. Wipes, trash, unlisted logs, and
+          invalidated raids don't. A kill with adds still alive counts for parses but not for ratings.
+        </li>
         <li>Duplicate uploads of the same raid count once.</li>
         <li>If you play more than one spec, each spec is rated separately.</li>
-        <li>Renown awards can differ by difficulty or raid size. They're set per boss, not by performance.</li>
+        <li>
+          Only bosses on the Renown list earn Renown, and a boss without an award earns nothing. Awards can differ by
+          difficulty or raid size. They're set per boss, not by performance.
+        </li>
       </ul>
     </Section>
   )

@@ -29,14 +29,16 @@ export function ParsingPage() {
       <section className="mb-8">
         <h2 className="text-xl font-semibold mb-3">What Is a Parse?</h2>
         <p className="text-muted-foreground mb-3">
-          A parse is a <strong>0–100 score</strong> for your DPS or HPS on a
-          boss kill. It tells you how your performance compares to other players
-          of your spec (or class, depending on the server) on the same boss,
-          difficulty, and raid size.
+          A parse is a <strong>0–100 score</strong> for your DPS or HPS on one
+          boss kill. It places your kill among comparable kills from the 60
+          days before your raid: same boss, difficulty, and raid size, by the
+          same spec (or class, depending on the server).
         </p>
         <p className="text-muted-foreground">
           Higher is better. A score of 100 means you matched or beat the best
-          recorded performance in the dataset.
+          comparable kill in that window. DPS and HPS are scored separately:
+          every player gets a DPS parse and an HPS parse on each kill where
+          they did any damage or healing.
         </p>
       </section>
 
@@ -44,71 +46,80 @@ export function ParsingPage() {
       <section className="mb-8">
         <h2 className="text-xl font-semibold mb-3">How Is the Score Computed?</h2>
         <p className="text-muted-foreground mb-3">
-          Chronicle collects every eligible kill from the{" "}
-          <strong>rolling time window (by default, the last 60 days)</strong> on a given boss into a comparison
-          cohort — each raid counts as a separate datapoint. Your metric (DPS
-          or HPS) is then placed on a 0–100 scale by{" "}
-          <strong>linear interpolation</strong> between those values. If you
-          match or beat the highest value in the cohort, you score 100.
-          Performances with the same metric value receive the same score. On
-          small servers this grows the dataset faster than a best-per-player
-          approach and matches how parses (vs rankings) conventionally work.
+          Chronicle collects every comparable kill from the{" "}
+          <strong>60 days before your raid started</strong> into a comparison
+          cohort. Your own raid is never part of its own cohort. Comparable
+          kills are kills of the same boss on the same server (every realm of
+          it), at the same difficulty and raid size, by the same class and, on
+          most servers, the same spec and subspec. Every kill is a separate
+          datapoint, not just each player&apos;s best, so a cohort fills up
+          faster on small servers.
         </p>
         <p className="text-muted-foreground mb-3">
-          The 60-day rolling window keeps scores reflecting the{" "}
-          <strong>current state of the server</strong> — as gear improves, new
-          buffs are discovered, and the player pool evolves, old kills age out
-          so the cohort stays relevant. Every player in the same raid is
-          compared against the same date-bounded dataset.
+          The score is your <strong>rank position</strong> in that cohort,
+          smoothed between neighbours. Kills are sorted by DPS or HPS, and each
+          one gets the position (rank − 0.5) ÷ number of kills, counting from
+          the lowest, so tied kills
+          share the average of their positions. Your value is placed on that
+          scale by <strong>linear interpolation</strong> between the two
+          kills either side of it. Roughly, a 75 means about three quarters of
+          the comparable kills were lower than yours. Matching or beating the
+          best kill in the cohort scores 100.
+        </p>
+        <p className="text-muted-foreground mb-3">
+          The 60-day window keeps scores reflecting the{" "}
+          <strong>current state of the server</strong>: as gear improves, new
+          buffs are discovered, and the player pool evolves, old kills age out.
+          Everyone in a raid is compared over the same dates, each against the
+          kills of their own class or spec.
         </p>
       </section>
 
-      {/* Why not strict percentile */}
+      {/* Rank, not percent of best */}
       <section className="mb-8 p-4 bg-muted/30 rounded-lg">
         <h2 className="text-xl font-semibold mb-3">
-          Why Not a Strict Rank-Based Percentile?
+          A Rank, Not a Percentage of the Best
         </h2>
         <p className="text-muted-foreground mb-3">
-          On retail-scale sites like Warcraft Logs, there are thousands of kills
-          per boss per spec, so a simple ranking percentile works well. Private
-          servers are different: some specs might have only a handful of recorded
-          kills on a particular boss.
+          A parse is not your DPS as a percentage of the top DPS. It is where
+          your kill ranks, so it depends on how the other kills are spread. If
+          most comparable kills are close together, small differences move the
+          score a lot. With 10 comparable kills, a kill that only equals
+          the lowest of them scores about 5, however close its DPS is to the best.
         </p>
         <p className="text-muted-foreground mb-3">
-          A strict ranking would make scores jumpy and unfairly harsh. For
-          example, with 10 kills recorded, last place would score near 0 even if
-          their DPS was 95% of first place. Value-based interpolation avoids
-          this — your score reflects <em>how close</em> you are to the best,
-          not just where you rank in a tiny list.
+          Private servers can have only a handful of recorded kills for a spec
+          on a boss, which makes scores jumpy. To keep that visible, Chronicle
+          shows the <strong>sample size</strong> (&quot;N kills in cohort&quot;).
+          A parse needs at least <strong>5 comparable kills</strong>, and with
+          5–19 kills it is marked <strong>low confidence</strong>.
         </p>
         <p className="text-muted-foreground">
-          To keep things transparent, Chronicle always shows the{" "}
-          <strong>sample size</strong> ("N kills in cohort"). Scores require at
-          least <strong>5 kills</strong> in the cohort; with 5–19 kills a{" "}
-          <strong>low-confidence indicator</strong> is shown.
+          Peak, Mastery, and Renown work differently: they compare your raw
+          performance with the best ever recorded rather than ranking it. See{" "}
+          <Link to="/ratings" className="text-blue-400 hover:text-blue-300 font-medium">
+            How Ratings Work
+          </Link>
+          .
         </p>
       </section>
 
-      {/* Historical cohorts */}
+      {/* Stored parses */}
       <section className="mb-8">
         <h2 className="text-xl font-semibold mb-3">
-          Historical Cohorts
+          When a Parse Is Worked Out
         </h2>
         <p className="text-muted-foreground mb-3">
-          A historical parse uses the rolling window ending on the raid's date.
-          For example, a raid on October 1 is compared against eligible kills
-          from the preceding 60 days, rather than kills from today's window.
-        </p>
-        <p className="text-muted-foreground mb-3">
-          Chronicle uses the data it currently knows about for that date range.
-          A historical log uploaded later, a corrected log, or an invalidated
-          duplicate can therefore change an older raid's parse score. Historical
-          parses are date-bounded comparisons, not permanently frozen records.
+          A kill&apos;s parse is worked out <strong>once</strong>, when its log
+          is processed, against the kills Chronicle knew about in the 60 days
+          before that raid started. For example, a raid on October 1 is
+          compared against eligible kills from the preceding 60 days.
         </p>
         <p className="text-muted-foreground">
-          A "current" comparison mode also exists, which compares the raid
-          against the latest rolling window instead of the window around the
-          raid's date.
+          After that it stays the same. Later kills, historical logs uploaded
+          afterwards, and invalidated duplicates don&apos;t change it. A kill
+          that had fewer than 5 comparable kills at the time has no parse, and
+          doesn&apos;t get one later.
         </p>
       </section>
 
@@ -118,7 +129,7 @@ export function ParsingPage() {
         <p className="text-muted-foreground mb-3">
           When multiple bosses are selected, the parse pill shows the{" "}
           <strong>arithmetic mean</strong> of your per-boss parses over the
-          bosses you killed, along with coverage (e.g. "10/12").
+          bosses you have a parse for, along with coverage (e.g. "10/12").
         </p>
         <p className="text-muted-foreground">
           Partial clears always count for the bosses they include — you're never
@@ -130,9 +141,17 @@ export function ParsingPage() {
       <section className="mb-8">
         <h2 className="text-xl font-semibold mb-3">Eligibility</h2>
         <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-          <li>Only <strong>boss kills</strong> are scored — wipes and trash are excluded.</li>
           <li>
-            Duplicate uploads of the same raid count once; the best copy is used.
+            Only <strong>boss kills</strong> are scored, including kills where
+            some adds were still alive. Wipes and trash are excluded.
+          </li>
+          <li>
+            Only listed, valid logs count. Unlisted logs are not scored, and
+            invalidated logs are left out of comparisons.
+          </li>
+          <li>
+            Duplicate uploads of the same raid count once; the copy that
+            covers the most bosses is used.
           </li>
           <li>
             Players with an unknown spec are not scored on servers that use
