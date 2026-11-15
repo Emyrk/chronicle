@@ -35,19 +35,20 @@ export function wholeRunWanted(choice: boolean | null, { mini, unplayable, selec
 /**
  * Whether the default whole run cannot play, so the map falls back to the
  * route overview: no WebGL, a dungeon mesh that failed to load, or a scene
- * that settled on a message (no position telemetry, no artwork) rather than one
- * still loading.
+ * that settled on a message (no position telemetry, no artwork). A message
+ * counts only once the panel has finished loading the current selection
+ * (`settled`): before that it may just be the empty result of a fresh panel.
  */
-export function wholeRunUnplayable({ webglUnavailable, meshFailed, sceneMessage, loading }: {
+export function wholeRunUnplayable({ webglUnavailable, meshFailed, sceneMessage, settled }: {
   webglUnavailable: boolean;
   meshFailed: boolean;
   /** The scene shows a message instead of the map; `pending` while it is still loading. */
   sceneMessage: { pending?: boolean } | null;
-  /** The panel is still loading or processing. */
-  loading: boolean;
+  /** The panel has loaded the current selection (see useLoadSettled). */
+  settled: boolean;
 }): boolean {
   if (webglUnavailable || meshFailed) return true;
-  return sceneMessage !== null && !sceneMessage.pending && !loading;
+  return sceneMessage !== null && !sceneMessage.pending && settled;
 }
 
 /** The camera lead-in before an encounter's first sample when jumping to it, kept only when another encounter's data covers it. */

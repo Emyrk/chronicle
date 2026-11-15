@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components -- Panel factory and colocated view components intentionally share this module. */
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactElement, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
@@ -60,7 +60,8 @@ import { DEFAULT_EFFECT_SETTINGS, useEffectSettings } from "./mapViewSettings";
 import { DEFAULT_WALK_AVATAR, readStoredWalkAvatar, storeWalkAvatar } from "./walkAvatars";
 import { previewElapsedAt, useMapScene } from "./useMapScene";
 import { canEncodeVideo } from "./videoSupport";
-import { encounterJumps, mapPresentationForSelection, wholeRunUnplayable, wholeRunWanted } from "./wholeRun";
+import { encounterJumps, mapPresentationForSelection, wholeRunWanted } from "./wholeRun";
+import { miniExpandStep, useSelectOnce, useWholeRunUnplayable, type MiniExpand, type MiniExpandEvent } from "./wholeRunPlayback";
 import { PlanControls } from "./plan/PlanControls";
 import { ROLE_TOKENS, usePlanEditor, usePlanShortcuts, type PlanRosterEntry } from "./plan/usePlanEditor";
 import type { PlanItem } from "./plan/mapPlan";
@@ -294,13 +295,17 @@ function WalkHint({ keys, children }: { keys: string[]; children: ReactNode }) {
   );
 }
 
-/** Fullscreen's Replay controls; its own component so death times load only while fullscreen. */
-function FullscreenReplayBar() {
+/**
+ * Fullscreen's Replay controls; its own component so death times load only while fullscreen.
+ * `onEnable`: what its Enable Replay does instead (a preview hands over at its own moment).
+ */
+function FullscreenReplayBar({ onEnable }: { onEnable?: () => void }) {
   const deaths = usePlayerDeathTimes();
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-3 z-40 flex justify-center px-4">
       <ReplayTransportBar
         deaths={deaths}
+        onEnable={onEnable}
         className="pointer-events-auto h-auto w-full max-w-4xl rounded-md border border-white/15 bg-black/70 shadow-[0_8px_32px_rgba(0,0,0,.6)] backdrop-blur-sm"
       />
     </div>
@@ -345,19 +350,39 @@ function FullscreenEncounterPicker({ encounters, selectedIds, onSelect }: {
   );
 }
 
+function subscribeFullscreen(onChange: () => void) {
+  document.addEventListener("fullscreenchange", onChange);
+  return () => document.removeEventListener("fullscreenchange", onChange);
+}
+const currentFullscreenElement = () => document.fullscreenElement;
+const noFullscreenElement = () => null;
+
 interface ReplayMapProps extends PanelRenderProps<MapResult> {
   /** Replay the whole run instead of the one selected encounter. */
   wholeRun?: boolean;
   onExitWholeRun?: () => void;
   /** Mini map: just the replay, without frames, settings, walk or plan (the full map's while fullscreen). */
   mini?: boolean;
-  /** The whole run is the map's default rather than the user's choice: called when it cannot play, to fall back. */
+  /** Called when the whole run cannot play (no positions, no WebGL, mesh failed), to fall back. */
   onUnplayable?: () => void;
+  /** What goes fullscreen: an element around the map that outlives it (the 2D overview's swap to 3D); else the map's own root. */
+  fullscreenRoot?: HTMLElement | null;
+  /** Told whenever the map enters or leaves fullscreen (or window fullscreen). */
+  onImmersiveChange?: (immersive: boolean) => void;
   /** Mobile Map panel: inert 2D preview that opens the 3D world fullscreen. */
   mobile?: boolean;
 }
 
-function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = false, mobile = false, onUnplayable, ...props }: ReplayMapProps) {
+function SingleEncounterReplayMap({
+  wholeRun = false,
+  onExitWholeRun,
+  mini = false,
+  mobile = false,
+  onUnplayable,
+  fullscreenRoot,
+  onImmersiveChange,
+  ...props
+}: ReplayMapProps) {
   const sync = useSyncModeContextOptional();
   useReplayStepKeys((deltaMs) => {
     if (!sync || sync.externalDriver !== "none" || sync.readOnly || !sync.encounterBounds) return false;
@@ -416,36 +441,39 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
   // Desktop fullscreen: the whole map (frames, settings, meters) fills the screen.
   // Immersive modes portal popovers into the map itself. Browser fullscreen hides
   // outside content, while window fullscreen places the map above body portals.
-  const [fullscreenElement, setFullscreenElement] = useState<HTMLElement | null>(null);
-  const fullscreen = fullscreenElement !== null;
+  // Read on mount too: Expand on the 2D mini map goes fullscreen before this map mounts.
+  const fullscreenNode = useSyncExternalStore(subscribeFullscreen, currentFullscreenElement, noFullscreenElement);
+  const fullscreenTarget = fullscreenRoot ?? rootElement;
+  const fullscreen = fullscreenNode !== null && fullscreenNode === fullscreenTarget;
   const inheritedPortalContainer = usePortalContainer();
-  useEffect(() => {
-    const handleFullscreenChange = () => setFullscreenElement(
-      document.fullscreenElement !== null && document.fullscreenElement === rootRef.current ? rootRef.current : null,
-    );
-    document.addEventListener("fullscreenchange", handleFullscreenChange);
-    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
-  }, []);
   // Window fullscreen: the map covers the browser window (the browser's own bar stays).
   const [windowed, setWindowed] = useState(false);
   const immersive = fullscreen || windowed;
+  useEffect(() => {
+    onImmersiveChange?.(immersive);
+  }, [immersive, onImmersiveChange]);
   // Expanded (fullscreen or window fullscreen), the mini map is the full map.
   const compact = mini && !immersive;
   // The mini map's Expand: browser fullscreen, requested in the click itself
   // (it needs the user gesture); window fullscreen when the browser refuses.
   const expandFullscreen = useCallback(() => {
-    const request = rootRef.current?.requestFullscreen?.({ navigationUI: "hide" });
+    const request = fullscreenTarget?.requestFullscreen?.({ navigationUI: "hide" });
     if (!request) {
       setWindowed(true);
       return;
     }
     void request.catch(() => setWindowed(true));
-  }, []);
+  }, [fullscreenTarget]);
+  // From window fullscreen, window fullscreen stays on until the browser's is
+  // in, so the map never shows inline (or as the mini map) in between.
   const toggleFullscreen = useCallback(() => {
-    setWindowed(false);
-    if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
-    else void rootRef.current?.requestFullscreen?.({ navigationUI: "hide" }).catch(() => undefined);
-  }, []);
+    if (document.fullscreenElement) {
+      setWindowed(false);
+      void document.exitFullscreen().catch(() => undefined);
+      return;
+    }
+    void fullscreenTarget?.requestFullscreen?.({ navigationUI: "hide" }).then(() => setWindowed(false), () => undefined);
+  }, [fullscreenTarget]);
   const toggleWindowed = useCallback(() => {
     if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
     setWindowed((current) => !current);
@@ -716,42 +744,14 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [compact, immersive, mobile, planOpen, settingsOpen, toggleFullscreen, toggleWindowed, walkWanted, windowed]);
 
-  // Expanded, the map runs the page's Replay (its fullscreen Replay bar and
-  // encounter picker drive it): a preview hands over at the same moment, still
-  // playing, once per expansion. Back inline, the preview takes over again
-  // where Replay is, and Replay goes back off.
-  const previewHandedOver = useRef(false);
-  const handoverCursorMs = ready?.cursorMs ?? null;
-  useEffect(() => {
-    if (!immersive || !previewOn || previewHandedOver.current || handoverCursorMs === null) return;
-    if (!sync || sync.readOnly || sync.externalDriver !== "none") return;
-    previewHandedOver.current = true;
-    sync.enable();
-    sync.setTimestamp(new Date(handoverCursorMs));
-    if (previewPlaying) sync.play();
-  }, [handoverCursorMs, immersive, previewOn, previewPlaying, sync]);
-  const previewStartMs = ready?.encounterStartMs ?? null;
-  const previewEndMs = ready?.encounterEndMs ?? null;
-  useEffect(() => {
-    if (immersive || !previewHandedOver.current) return;
-    previewHandedOver.current = false;
-    // Replay turned off while expanded: the preview carries on from where it was.
-    if (!sync?.enabled) return;
-    const replayMs = sync.currentTimestamp?.getTime() ?? null;
-    if (replayMs !== null && previewStartMs !== null && previewEndMs !== null) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- taking the clock back from the page's Replay, an external store
-      setPreviewElapsedMs(previewElapsedAt(previewStartMs, previewEndMs, replayMs, previewMaxSpeed));
-    }
-    setPreviewPlaying(sync.isPlaying);
-    sync.disable();
-  }, [immersive, previewEndMs, previewMaxSpeed, previewStartMs, sync]);
-
-  // The default whole run falls back to the route overview when it cannot play.
-  const unplayable = wholeRunUnplayable({
+  // The whole run falls back when it cannot play; a scene message counts only
+  // once the panel has loaded this selection (a fresh panel renders empty first).
+  const unplayable = useWholeRunUnplayable({
+    selectionKey: props.context.selectedEncounterIds.join(","),
+    loading: Boolean(props.loading || props.processing),
     webglUnavailable,
     meshFailed: dungeonMesh !== null && meshState === "failed",
     sceneMessage: scene.status === "message" ? scene : null,
-    loading: Boolean(props.loading || props.processing),
   });
   useEffect(() => {
     if (unplayable) onUnplayable?.();
@@ -804,13 +804,24 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
     if (previewOn) setPreviewElapsedMs(previewElapsedAt(ready.encounterStartMs, ready.encounterEndMs, timestampMs, previewMaxSpeed));
     else sync?.setTimestamp(new Date(timestampMs));
   };
-  // Hand the preview over to Replay at the same moment, still playing.
+  // Hand the preview over to Replay at the same moment, still playing (the
+  // preview keeps playing until the user asks for Replay, even fullscreen).
   // Enabled first, so the Replay controls keep this point rather than resetting.
-  const replayFromHere = () => {
+  const replayFrom = (timestampMs: number) => {
     if (!sync) return;
     sync.enable();
-    sync.setTimestamp(new Date(ready.cursorMs));
+    sync.setTimestamp(new Date(timestampMs));
     sync.play();
+  };
+  const replayFromHere = () => replayFrom(ready.cursorMs);
+  // The fullscreen picker during a preview: Replay that encounter from its start.
+  const pickEncounter = (encounterIds: string[]) => {
+    if (previewOn) {
+      const picked = props.context.instance.encounters.find((encounter) => encounter.id === encounterIds[0]);
+      const startMs = picked ? Date.parse(picked.start_time) : Number.NaN;
+      if (Number.isFinite(startMs)) replayFrom(startMs);
+    }
+    props.context.onSelectEncounters?.(encounterIds);
   };
   const toggleMesh = () => {
     const next = !meshOn;
@@ -1114,7 +1125,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
         {/* The full map's whole run plays as a preview until Replay takes over. */}
         {!compact && !mobile && !reloading && previewOn && (
           <div className="absolute left-1/2 top-2 z-40 flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-sm bg-black/75 py-0.5 pl-2 pr-0.5 text-[11px] text-white/70 shadow-[0_4px_16px_rgba(0,0,0,.5)]">
-            Whole-run preview
+            {wholeRun ? "Whole-run preview" : "Preview"}
             {sync && (
               <button
                 type="button"
@@ -1353,13 +1364,13 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
             <FullscreenEncounterPicker
               encounters={props.context.instance.encounters}
               selectedIds={props.context.selectedEncounterIds}
-              onSelect={props.context.onSelectEncounters}
+              onSelect={pickEncounter}
             />
           )}
           <InspectCards guids={pinned} onRemove={unpin} raidFrames={raidFrames} auras={auras} />
           <MeterWindows windows={meterWindows} onChange={setMeterWindows} context={props.context} durationMs={props.durationMs} />
           {/* Fullscreen hides the page's Replay controls: the same transport bar over the map. */}
-          {immersive && <FullscreenReplayBar />}
+          {immersive && <FullscreenReplayBar onEnable={previewOn ? replayFromHere : undefined} />}
         </>)}
       </div>
       {!compact && !mobile && jumps.length > 0 && ready.runStartMs !== null && (
@@ -1452,24 +1463,60 @@ function MapContent({ forceMini = false, ...props }: PanelRenderProps<MapResult>
   const [wholeRunChoice, setWholeRunChoice] = useState<boolean | null>(null);
   // The default whole run could not play here (no positions, no WebGL, mesh failed).
   const [defaultRunFailed, setDefaultRunFailed] = useState(false);
-  const markDefaultRunFailed = useCallback(() => setDefaultRunFailed(true), []);
   const exitWholeRun = useCallback(() => setWholeRunChoice(false), []);
   const isMobile = useIsMobile();
   // The Mini Map panel is always mini; a Map panel is mini with the (older) "mini" option.
   const mini = forceMini || isMiniMapOption(props.panelOption);
   const selectedCount = props.context.selectedEncounterIds.length;
   const wholeRun = wholeRunWanted(wholeRunChoice, { mini, unplayable: defaultRunFailed, selectedCount });
-  // The full map's default whole run with nothing selected: select the run's
-  // encounters (once, so clearing the selection later is left alone).
-  const autoSelect = !isMobile && !mini && wholeRunChoice === null && !defaultRunFailed && selectedCount === 0;
-  const autoSelected = useRef(false);
   const instanceEncounters = props.context.instance.encounters;
   const onSelectEncounters = props.context.onSelectEncounters;
-  useEffect(() => {
-    if (!autoSelect || autoSelected.current || !onSelectEncounters) return;
-    autoSelected.current = true;
-    onSelectEncounters(runEncounterIds(instanceEncounters));
-  }, [autoSelect, instanceEncounters, onSelectEncounters]);
+  const onApplyPreset = props.context.onApplyPreset;
+  // The full map's default whole run with nothing selected: select the run's
+  // encounters (once, so clearing the selection later is left alone).
+  const selectRun = useMemo(
+    () => onSelectEncounters ? () => onSelectEncounters(runEncounterIds(instanceEncounters)) : undefined,
+    [instanceEncounters, onSelectEncounters],
+  );
+  useSelectOnce(!isMobile && !mini && wholeRunChoice === null && !defaultRunFailed && selectedCount === 0, selectRun);
+  // What goes fullscreen: a wrapper that stays mounted while the 2D overview swaps for the 3D replay.
+  const [expandRoot, setExpandRoot] = useState<HTMLDivElement | null>(null);
+  // Expand from the 2D mini map (see miniExpandStep); the ref is what handlers read.
+  const [miniExpand, setMiniExpand] = useState<MiniExpand>(null);
+  const miniExpandRef = useRef<MiniExpand>(null);
+  const stepMiniExpand = useCallback((event: MiniExpandEvent) => {
+    const step = miniExpandStep(miniExpandRef.current, event);
+    if (step.state === miniExpandRef.current) return;
+    miniExpandRef.current = step.state;
+    setMiniExpand(step.state);
+    if (step.restore) setWholeRunChoice(step.restoreChoice);
+    if (step.exitFullscreen && expandRoot && document.fullscreenElement === expandRoot) {
+      void document.exitFullscreen().catch(() => undefined);
+    }
+    if (step.openMapTab) onApplyPreset?.("map");
+  }, [expandRoot, onApplyPreset]);
+  const handleImmersiveChange = useCallback(
+    (immersive: boolean) => stepMiniExpand(immersive ? "immersive" : "inline"),
+    [stepMiniExpand],
+  );
+  const handleUnplayable = useCallback(() => {
+    if (miniExpandRef.current) stepMiniExpand("unplayable");
+    else setDefaultRunFailed(true);
+  }, [stepMiniExpand]);
+  // Expand on the 2D mini map: the whole run, fullscreen, requested in the
+  // click (it needs the user gesture). Without fullscreen: the Map tab, as before.
+  const expandRun = () => {
+    const request = expandRoot?.requestFullscreen?.({ navigationUI: "hide" });
+    if (!request) {
+      onApplyPreset?.("map");
+      return;
+    }
+    if (selectedCount === 0) selectRun?.();
+    miniExpandRef.current = { phase: "requested", restoreChoice: wholeRunChoice };
+    setMiniExpand(miniExpandRef.current);
+    setWholeRunChoice(true);
+    void request.catch(() => stepMiniExpand("refused"));
+  };
   if (isMobile) {
     return (
       <MapTelemetryWarning props={props}>
@@ -1478,30 +1525,12 @@ function MapContent({ forceMini = false, ...props }: PanelRenderProps<MapResult>
     );
   }
   const presentation = mapPresentationForSelection(selectedCount, wholeRun);
-  if (presentation === "replay-3d" && selectedCount !== 1) {
-    return (
-      <MapTelemetryWarning props={props}>
-        <SingleEncounterReplayMap
-          {...props}
-          mini={mini}
-          wholeRun
-          onExitWholeRun={exitWholeRun}
-          onUnplayable={wholeRunChoice === null ? markDefaultRunFailed : undefined}
-        />
-      </MapTelemetryWarning>
-    );
-  }
-  if (presentation === "replay-3d") {
-    return (
-      <MapTelemetryWarning props={props}>
-        <SingleEncounterReplayMap {...props} mini={mini} />
-      </MapTelemetryWarning>
-    );
-  }
+  // Without browser fullscreen, Expand opens the Map tab as it always has.
+  const expandRunAvailable = typeof document !== "undefined" && document.fullscreenEnabled;
   // With nothing selected there is no data to replay: take the run's encounters
   // (what the page selects by default) so the processor has the whole run.
   const startWholeRun = () => {
-    if (selectedCount === 0) onSelectEncounters?.(runEncounterIds(instanceEncounters));
+    if (selectedCount === 0) selectRun?.();
     setWholeRunChoice(true);
   };
   const wholeRunButton = (
@@ -1510,29 +1539,44 @@ function MapContent({ forceMini = false, ...props }: PanelRenderProps<MapResult>
         <Route className="h-3 w-3" />
         Whole run
       </button>
-      {mini && <ExpandMapButton context={props.context} />}
+      {mini && <ExpandMapButton context={props.context} onExpand={expandRunAvailable ? expandRun : undefined} />}
+    </div>
+  );
+  const content = presentation === "replay-3d" ? (
+    <SingleEncounterReplayMap
+      {...props}
+      mini={mini}
+      wholeRun={selectedCount !== 1}
+      onExitWholeRun={selectedCount !== 1 ? exitWholeRun : undefined}
+      onUnplayable={selectedCount !== 1 && (wholeRunChoice === null || miniExpand !== null) ? handleUnplayable : undefined}
+      fullscreenRoot={expandRoot}
+      onImmersiveChange={miniExpand !== null ? handleImmersiveChange : undefined}
+    />
+  ) : (
+    <div className="flex h-full min-h-0 flex-col">
+      {props.headerSlot ? createPortal(wholeRunButton, props.headerSlot) : <div className="flex justify-end px-3 pt-2">{wholeRunButton}</div>}
+      <div className="relative min-h-0 flex-1">
+        <MapOverview2D {...props} mini={mini} />
+        {mini && <ExpandMapButton context={props.context} onExpand={expandRunAvailable ? expandRun : undefined} overlay />}
+        {/* The mini map's way into the 3D replay: the whole run, playing on its own. */}
+        {mini && (
+          <button
+            type="button"
+            onClick={startWholeRun}
+            title="Watch the whole run in 3D"
+            className="absolute bottom-8 left-1/2 z-40 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-black/60 bg-primary/90 px-3 py-1.5 text-xs font-medium text-primary-foreground shadow-[0_4px_16px_rgba(0,0,0,.6)] hover:bg-primary"
+          >
+            <Play className="h-3.5 w-3.5" />
+            Watch the run
+          </button>
+        )}
+      </div>
     </div>
   );
   return (
     <MapTelemetryWarning props={props}>
-      <div className="flex h-full min-h-0 flex-col">
-        {props.headerSlot ? createPortal(wholeRunButton, props.headerSlot) : <div className="flex justify-end px-3 pt-2">{wholeRunButton}</div>}
-        <div className="relative min-h-0 flex-1">
-          <MapOverview2D {...props} mini={mini} />
-          {mini && <ExpandMapButton context={props.context} overlay />}
-          {/* The mini map's way into the 3D replay: the whole run, playing on its own. */}
-          {mini && (
-            <button
-              type="button"
-              onClick={startWholeRun}
-              title="Watch the whole run in 3D"
-              className="absolute bottom-8 left-1/2 z-40 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-black/60 bg-primary/90 px-3 py-1.5 text-xs font-medium text-primary-foreground shadow-[0_4px_16px_rgba(0,0,0,.6)] hover:bg-primary"
-            >
-              <Play className="h-3.5 w-3.5" />
-              Watch the run
-            </button>
-          )}
-        </div>
+      <div ref={setExpandRoot} className="h-full min-h-0 [&:fullscreen]:bg-black">
+        {content}
       </div>
     </MapTelemetryWarning>
   );

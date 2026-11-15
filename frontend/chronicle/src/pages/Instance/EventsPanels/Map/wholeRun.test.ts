@@ -186,23 +186,23 @@ describe("wholeRunWanted", () => {
 });
 
 describe("wholeRunUnplayable", () => {
-  const playable = { webglUnavailable: false, meshFailed: false, sceneMessage: null, loading: false };
+  const playable = { webglUnavailable: false, meshFailed: false, sceneMessage: null, settled: true };
 
   it("plays a ready scene", () => {
     expect(wholeRunUnplayable(playable)).toBe(false);
   });
 
-  it("gives up without WebGL or when the dungeon mesh failed", () => {
-    expect(wholeRunUnplayable({ ...playable, webglUnavailable: true })).toBe(true);
-    expect(wholeRunUnplayable({ ...playable, meshFailed: true })).toBe(true);
+  it("gives up without WebGL or when the dungeon mesh failed, loaded or not", () => {
+    expect(wholeRunUnplayable({ ...playable, webglUnavailable: true, settled: false })).toBe(true);
+    expect(wholeRunUnplayable({ ...playable, meshFailed: true, settled: false })).toBe(true);
   });
 
-  it("gives up on a settled message such as no position telemetry", () => {
+  it("gives up on a message such as no position telemetry once the selection has loaded", () => {
     expect(wholeRunUnplayable({ ...playable, sceneMessage: {} })).toBe(true);
   });
 
-  it("waits while the scene or the panel is still loading", () => {
+  it("waits while the scene is loading or the selection has not loaded yet", () => {
     expect(wholeRunUnplayable({ ...playable, sceneMessage: { pending: true } })).toBe(false);
-    expect(wholeRunUnplayable({ ...playable, sceneMessage: {}, loading: true })).toBe(false);
+    expect(wholeRunUnplayable({ ...playable, sceneMessage: {}, settled: false })).toBe(false);
   });
 });
