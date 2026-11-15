@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { InstanceEventsProvider, useInstanceEventsContext, type CachedStream, type StreamType } from "@/hooks/instanceEvents";
@@ -14,7 +14,8 @@ import { mapProcessor, type MapResult } from "@/pages/Instance/EventsPanels/Map/
 import { FULL_MAP_VIEWPORT, type MapViewport } from "@/pages/Instance/EventsPanels/Map/mapModel";
 import type { DungeonMeshRequest, DungeonMeshState, MapSceneFocus } from "@/pages/Instance/EventsPanels/Map/MapScene3D";
 import MapView3D from "@/pages/Instance/EventsPanels/Map/MapView3D";
-import { previewSpeed, useMapScene } from "@/pages/Instance/EventsPanels/Map/useMapScene";
+import { useMapScene } from "@/pages/Instance/EventsPanels/Map/useMapScene";
+import { useLocalLoopClock } from "@/pages/Instance/EventsPanels/Map/useReplayClock";
 import { liveHeroRun } from "./explore3D";
 import { serializableContext, type HeroDeathBeat, type HeroDeathRecap, type HeroReplay, type HeroWindow } from "./heroReplay";
 import { meterTotals, type HeroMeterData } from "./heroMeter";
@@ -70,20 +71,6 @@ interface LandingHero3DProps {
   meterSlot?: HTMLElement | null;
   /** Where in the slot the meter window opens (default: above the hero's scrubber). */
   meterPosition?: { right: number; bottom: number };
-}
-
-/**
- * Where the clock may be, in run time: inside an encounter. Between pulls the
- * log has no positions and the scene has no one to show, so a time in a gap
- * moves on to the next encounter's start (past the last, back to the first).
- */
-function playableRunMs(ms: number, encounters: readonly [number, number][], durationMs: number): number {
-  const at = ((ms % durationMs) + durationMs) % durationMs;
-  for (const [start, end] of encounters) {
-    if (at < start) return start;
-    if (at <= end) return at;
-  }
-  return encounters[0]?.[0] ?? at;
 }
 
 // Positions first: the featured run's streams, through the Map panel's processor (on the main thread, yielding).
@@ -234,14 +221,15 @@ export function HeroScene({ instance, startOffsetMs, pull = null, active, onPull
       let firstSampleMs = Infinity;
       for (const samples of encounter.positionsByUnit.values()) firstSampleMs = Math.min(firstSampleMs, samples[0]?.timestampMs ?? Infinity);
       const playFromMs = Number.isFinite(firstSampleMs) ? Math.min(Math.max(0, firstSampleMs - startMs), durationMs - 1) : 0;
-      return { startMs, endMs: startMs + durationMs, durationMs, playable: [[playFromMs, durationMs]] as [number, number][], encounterStartMs: encounter.startMs, encounterEndMs: encounter.endMs };
+      return { startMs, endMs: startMs + durationMs, durationMs, playable: [[startMs + playFromMs, startMs + durationMs]] as [number, number][], encounterStartMs: encounter.startMs, encounterEndMs: encounter.endMs };
     }
     const encounters = [...result.encounters.values()];
     const startMs = Math.min(...encounters.map((encounter) => encounter.startMs));
     const endMs = Math.max(...encounters.map((encounter) => encounter.endMs));
-    // Each encounter's span in run time, in order.
+    // Each encounter's span, in order: between pulls the log has no positions and the scene has no one
+    // to show, so the clock skips the gaps (past the last, back to the first).
     const playable = encounters
-      .map((encounter): [number, number] => [encounter.startMs - startMs, encounter.endMs - startMs])
+      .map((encounter): [number, number] => [encounter.startMs, encounter.endMs])
       .sort((left, right) => left[0] - right[0]);
     return { startMs, endMs, durationMs: Math.max(1, endMs - startMs), playable, encounterStartMs: startMs, encounterEndMs: endMs };
   }, [encounterId, instanceStartMs, pullEndOffsetMs, pullStartOffsetMs, result]);
@@ -265,16 +253,25 @@ export function HeroScene({ instance, startOffsetMs, pull = null, active, onPull
       })),
     };
   }, [deathRecaps, encounterId, meterAmounts, result, span]);
-  const speed = pull ? HERO_PULL_SPEED : span ? previewSpeed(span.durationMs, HERO_MAX_SPEED) : 1;
-
-  // The hero's own clock, in run time (window time for a pull); useMapScene's preview loops it over the run.
-  const [runMs, setRunMs] = useState(pull ? initialMs : startOffsetMs);
-  const [userPlaying, setUserPlaying] = useState(!startPaused);
   const [meshState, setMeshState] = useState<DungeonMeshState>("loading");
+  // The hero's own clock: loops the run (or the pull's window), skipping the gaps between encounters; it holds
+  // while the hero is off screen or the mesh is still loading. A pull plays in real time, the run at most 4x.
+  const heroClock = useLocalLoopClock({
+    bounds: span ? { startMs: span.startMs, endMs: span.endMs } : null,
+    playable: span?.playable,
+    speed: pull ? HERO_PULL_SPEED : undefined,
+    maxSpeed: HERO_MAX_SPEED,
+    suspended: !(active && meshState === "ready"),
+    initialPlaying: !startPaused,
+    initialOffsetMs: pull ? initialMs : startOffsetMs,
+    tickMs: TICK_MS,
+    // Capped, so a throttled timer never leaps the replay ahead.
+    maxStepMs: 4 * TICK_MS,
+    onLoop: encounterId ? onPullEnd : undefined,
+  });
   const [unavailable, setUnavailable] = useState(false);
   // Bumped on a jump (a boss chip, a death): the camera cuts to the new shot rather than gliding there.
   const [cutKey, setCutKey] = useState(0);
-  const playing = userPlaying && active && meshState === "ready";
   // Explore: once the visitor orbits, pans or zooms, the camera holds their view (the Director stands down);
   // clicking a player follows them (the Director on that unit), as on the run page's Map panel.
   const [userView, setUserView] = useState<MapViewport | null>(null);
@@ -284,32 +281,12 @@ export function HeroScene({ instance, startOffsetMs, pull = null, active, onPull
   const [clockPull, setClockPull] = useState(encounterId);
   if (clockPull !== encounterId) {
     setClockPull(encounterId);
-    setRunMs(0);
-    setUserPlaying(!startPaused);
+    heroClock.restart();
+    if (startPaused) heroClock.pause();
+    else heroClock.play();
     setUserView(null);
     setFollowGuid(null);
   }
-  // The clock and the end callback as the timer reads them, without restarting it.
-  const runMsRef = useRef(runMs);
-  const onPullEndRef = useRef(onPullEnd);
-  useEffect(() => {
-    runMsRef.current = runMs;
-    onPullEndRef.current = onPullEnd;
-  });
-  useEffect(() => {
-    if (!playing || !span) return;
-    let last = performance.now();
-    const timer = window.setInterval(() => {
-      const now = performance.now();
-      // Capped, so a throttled timer never leaps the replay ahead.
-      const step = Math.min(now - last, 4 * TICK_MS) * speed;
-      last = now;
-      if (encounterId && playableRunMs(runMsRef.current, span.playable, span.durationMs) + step >= span.durationMs) onPullEndRef.current?.();
-      setRunMs((ms) => playableRunMs(playableRunMs(ms, span.playable, span.durationMs) + step, span.playable, span.durationMs));
-    }, TICK_MS);
-    return () => window.clearInterval(timer);
-  }, [encounterId, playing, span, speed]);
-
   const props = useMemo((): PanelRenderProps<MapResult> => ({
     result: result ?? mapProcessor.createState(),
     totalEvents: run.data?.totalEvents ?? 0,
@@ -326,20 +303,13 @@ export function HeroScene({ instance, startOffsetMs, pull = null, active, onPull
       entitySelection: { enemyIds: new Set(), playerIds: new Set() },
     },
   }), [instance, result, run.data, span]);
-  const playableMs = span ? playableRunMs(runMs, span.playable, span.durationMs) : runMs;
   // Always the mesh's own projection: the landing never shows the 2D tiles, not even while the mesh loads.
-  // A pull is the single encounter the Watch tab's Map panel shows; its preview runs from the encounter's first sample
-  // and loops at its last, so outside them (any lead-in, the window's tail) the scene holds the nearest sample.
-  const pullElapsedMs = span
-    ? Math.min(Math.max(0, span.startMs + playableMs - span.encounterStartMs), Math.max(0, span.encounterEndMs - span.encounterStartMs - 1))
-    : 0;
-  const scene = useMapScene(props, {
-    rawDungeonProjection: true,
-    wholeRun: !pull,
-    preview: pull
-      ? { elapsedMs: pullElapsedMs, playing, maxSpeed: HERO_PULL_SPEED }
-      : { elapsedMs: playableMs / speed, playing, maxSpeed: HERO_MAX_SPEED },
-  });
+  // A pull is the single encounter the Watch tab's Map panel shows: outside its first and last samples (any
+  // lead-in, the window's tail) the scene holds the nearest one.
+  const sceneClock = pull && span && heroClock.nowMs !== null
+    ? { ...heroClock, nowMs: Math.min(Math.max(heroClock.nowMs, span.encounterStartMs), Math.max(span.encounterStartMs, span.encounterEndMs - 1)) }
+    : heroClock;
+  const scene = useMapScene(props, { rawDungeonProjection: true, wholeRun: !pull, clock: sceneClock });
   // Should the scene still lose its units for a moment, the last ready one stays up (frozen) rather than the view
   // unmounting; as in the Map panel, re-held only when what it shows changes (the frozen view ignores its per-tick data).
   const live = scene.status === "ready" ? scene : null;
@@ -392,19 +362,21 @@ export function HeroScene({ instance, startOffsetMs, pull = null, active, onPull
   const followedName = followGuid ? instance.players?.[followGuid]?.name ?? instance.units?.[followGuid]?.name ?? null : null;
 
   const shown = ready !== null && meshState === "ready" && !unavailable;
-  const togglePlay = useCallback(() => setUserPlaying((current) => !current), []);
+  const togglePlay = heroClock.toggle;
+  const { seek: seekClock, play } = heroClock;
   const seek = useCallback((offsetMs: number, options?: { cut?: boolean }) => {
     if (!span) return;
-    setRunMs(pull ? Math.min(span.durationMs, Math.max(0, offsetMs)) : instanceStartMs + offsetMs - span.startMs);
-    setUserPlaying(true);
+    // The scrubber's offsets are from the window's start on a pull, else from the instance's start.
+    seekClock((pull ? span.startMs : instanceStartMs) + offsetMs);
+    play();
     if (options?.cut) setCutKey((key) => key + 1);
-  }, [instanceStartMs, pull, span]);
+  }, [instanceStartMs, play, pull, seekClock, span]);
   const cursorMs = ready?.cursorMs ?? null;
   // A pull reports the hero's clock, from the pull's first position sample (the clock skips the frames before it).
-  const currentMs = cursorMs === null ? null : pull ? playableMs : cursorMs - instanceStartMs;
+  const currentMs = cursorMs === null ? null : pull ? (span && heroClock.nowMs !== null ? heroClock.nowMs - span.startMs : 0) : cursorMs - instanceStartMs;
   // The live stats follow the hero's clock from the pull's start (chips, the scrubber and deaths move it through `seek`):
   // the meter's damage and the threat table at the cursor, and the raid frames. Explore's modal shows them too.
-  const stats = useHeroStats(instance, encounterId, shown && span && currentMs !== null ? span.startMs + playableMs : null, HERO_STREAMS);
+  const stats = useHeroStats(instance, encounterId, shown && span && currentMs !== null ? heroClock.nowMs : null, HERO_STREAMS);
   const cursorDamage = stats?.damage ?? null;
   const breakouts = stats?.breakouts ?? null;
   // The run page link's run, and on a pull the per-player breakouts a bar click drills into.
@@ -425,8 +397,8 @@ export function HeroScene({ instance, startOffsetMs, pull = null, active, onPull
       onReplay(null);
       return;
     }
-    onReplay({ run: liveRun, currentMs, playing: userPlaying, togglePlay, seek, deathRecaps, meter: liveMeter, renderRaidFrames, renderThreat });
-  }, [currentMs, deathRecaps, liveMeter, liveRun, onReplay, renderRaidFrames, renderThreat, seek, shown, span, togglePlay, userPlaying]);
+    onReplay({ run: liveRun, currentMs, playing: heroClock.requestedPlaying, togglePlay, seek, deathRecaps, meter: liveMeter, renderRaidFrames, renderThreat });
+  }, [currentMs, deathRecaps, heroClock.requestedPlaying, liveMeter, liveRun, onReplay, renderRaidFrames, renderThreat, seek, shown, span, togglePlay]);
   useEffect(() => () => onReplay(null), [onReplay]);
 
   if (!ready || unavailable) return null;
@@ -471,7 +443,7 @@ export function HeroScene({ instance, startOffsetMs, pull = null, active, onPull
         <HeroMapMeter
           context={props.context}
           durationMs={span.durationMs}
-          cursorMs={span.startMs + playableMs}
+          cursorMs={heroClock.nowMs ?? span.startMs}
           startMs={span.startMs}
           endMs={span.endMs}
           position={meterPosition}

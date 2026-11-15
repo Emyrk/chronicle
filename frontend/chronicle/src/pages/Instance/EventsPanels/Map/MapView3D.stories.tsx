@@ -28,6 +28,7 @@ import VideoRenderDialog, { type VideoRenderResult } from "./VideoRenderDialog";
 import type { MapViewRequest } from "./MapView2D";
 import { addEffectEvent, createEncounterEffects, isDeadAt, type EncounterEffects, type ReplayEffectEvent } from "./replayEffects";
 import { useMapScene, type MapMarkerKind, type MapSceneGround, type MapSceneMarker } from "./useMapScene";
+import { useLocalLoopClock, useSyncModeClock } from "./useReplayClock";
 import { DEFAULT_WALK_AVATAR, WALK_AVATARS } from "./walkAvatars";
 
 const CLASSES = ["warrior", "paladin", "hunter", "rogue", "priest", "shaman", "mage", "warlock", "druid"];
@@ -175,17 +176,16 @@ function syntheticHealth(units: SyntheticUnit[], fx: EncounterEffects): Map<stri
 
 const FULL_VIEW = { viewport: FULL_MAP_VIEWPORT, key: "full" };
 
+/** The synthetic stories' clock: a local loop over `durationMs` at a fixed speed, in coarse 100 ms ticks as SyncModeContext ticks. */
+function useStoryLoopMs(durationMs: number, playbackSpeed: number): number {
+  return useLocalLoopClock({ bounds: { startMs: 0, endMs: durationMs }, speed: playbackSpeed, tickMs: 100 }).nowMs ?? 0;
+}
+
 function SyntheticReplay({ players, playbackSpeed, mutedEvery, effects }: { players: number; playbackSpeed: number; mutedEvery: number; effects: boolean }) {
   const [units] = useState(() => syntheticUnits(players));
   const [fx] = useState(() => syntheticEffects(players));
   const [healthByUnit] = useState(() => syntheticHealth(units, fx));
-  const [cursorMs, setCursorMs] = useState(0);
-
-  // Mirrors SyncModeContext: coarse 100 ms ticks scaled by playback speed.
-  useEffect(() => {
-    const id = setInterval(() => setCursorMs((previous) => (previous + 100 * playbackSpeed) % DURATION_MS), 100);
-    return () => clearInterval(id);
-  }, [playbackSpeed]);
+  const cursorMs = useStoryLoopMs(DURATION_MS, playbackSpeed);
 
   const selected = new Set(mutedEvery > 0 ? units.filter((unit, index) => unit.kind === "player" && index % mutedEvery === 0).map((unit) => unit.guid) : []);
   const bars = selectHealthBars(units.map((unit) => unit.guid), healthByUnit, cursorMs, BOSS_GUIDS);
@@ -550,12 +550,7 @@ function BossFightReplay({ players, playbackSpeed }: { players: number; playback
     });
     return { viewport, key: "fit" };
   });
-  const [cursorMs, setCursorMs] = useState(0);
-
-  useEffect(() => {
-    const id = setInterval(() => setCursorMs((previous) => (previous + 100 * playbackSpeed) % FIGHT_MS), 100);
-    return () => clearInterval(id);
-  }, [playbackSpeed]);
+  const cursorMs = useStoryLoopMs(FIGHT_MS, playbackSpeed);
 
   const bars = selectHealthBars(units.map((unit) => unit.guid), healthByUnit, cursorMs, BOSS_GUIDS);
   const markers = units.flatMap((unit): MapSceneMarker[] => {
@@ -653,12 +648,7 @@ function healHealth(fx: EncounterEffects): Map<string, MapHealthSample[]> {
 function HealReplay({ playbackSpeed }: { playbackSpeed: number }) {
   const [fx] = useState(healEvents);
   const [healthByUnit] = useState(() => healHealth(fx));
-  const [cursorMs, setCursorMs] = useState(0);
-
-  useEffect(() => {
-    const id = setInterval(() => setCursorMs((previous) => (previous + 100 * playbackSpeed) % HEALS_MS), 100);
-    return () => clearInterval(id);
-  }, [playbackSpeed]);
+  const cursorMs = useStoryLoopMs(HEALS_MS, playbackSpeed);
 
   const bars = selectHealthBars(healUnits.map((unit) => unit.guid), healthByUnit, cursorMs, BOSS_GUIDS);
   const markers = healUnits.flatMap((unit): MapSceneMarker[] => {
@@ -752,12 +742,7 @@ function bossMiniEffects(): EncounterEffects {
 function BossMiniReplay({ playbackSpeed }: { playbackSpeed: number }) {
   const unitModelUrls = useStoryUnitModelUrls();
   const [fx] = useState(bossMiniEffects);
-  const [cursorMs, setCursorMs] = useState(0);
-
-  useEffect(() => {
-    const id = setInterval(() => setCursorMs((previous) => (previous + 100 * playbackSpeed) % DURATION_MS), 100);
-    return () => clearInterval(id);
-  }, [playbackSpeed]);
+  const cursorMs = useStoryLoopMs(DURATION_MS, playbackSpeed);
 
   return (
     <div style={{ width: 800, height: 520 }} className="overflow-hidden rounded-md border border-white/10 bg-black/70">
@@ -963,7 +948,8 @@ function FixturePlayer({ fixture, mesh = false, followGuid = null, effectSetting
   // As Map.tsx does with "3D map" on: units project with the pure world
   // transform once the mesh has loaded; the tiles (calibrated) stay otherwise.
   const [meshState, setMeshState] = useState<DungeonMeshState>("loading");
-  const scene = useMapScene(fixture.props, { rawDungeonProjection: mesh && meshState === "ready" });
+  const sceneClock = useSyncModeClock();
+  const scene = useMapScene(fixture.props, { rawDungeonProjection: mesh && meshState === "ready", clock: sceneClock });
   const meshEntry = mesh && scene.status === "ready" ? scene.mesh : null;
   const meshUrl = meshEntry && instance.iconBaseUrl ? dungeonMeshUrl(meshEntry, instance.iconBaseUrl) : null;
   const dungeonMesh = useMemo((): DungeonMeshRequest | null =>
@@ -1825,12 +1811,7 @@ function CastPhaseReplay({ playbackSpeed, events = castEvents, selected = CAST_S
   selected?: ReadonlySet<string>;
 }) {
   const [fx] = useState(events);
-  const [cursorMs, setCursorMs] = useState(0);
-
-  useEffect(() => {
-    const id = setInterval(() => setCursorMs((previous) => (previous + 100 * playbackSpeed) % CASTS_MS), 100);
-    return () => clearInterval(id);
-  }, [playbackSpeed]);
+  const cursorMs = useStoryLoopMs(CASTS_MS, playbackSpeed);
 
   const markers = castUnits.flatMap((unit): MapSceneMarker[] => {
     const sample = latestPositionAt(unit.positions, cursorMs);

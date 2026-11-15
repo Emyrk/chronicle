@@ -11,8 +11,8 @@ import {
   type WowMapRenderedInstance,
 } from "@/pages/Technical/mapGallery";
 import { fetchMapManifest } from "@/pages/Technical/mapManifest";
-import { useSyncModeContextOptional } from "../../SyncModeContext";
 import type { PanelRenderProps } from "../types";
+import type { ReplayClock } from "./replayClock";
 import { placeableDungeonMesh, replayDungeonMesh } from "./dungeonMeshes";
 import { groupCentre, isStaleRunSample, mergeRunEncounters, RUN_UNIT_STALE_MS, runPositionAt, runSignature } from "./wholeRun";
 import { POWER_COLORS } from "../RaidFrames/raidFrameShared";
@@ -253,7 +253,6 @@ export type MapScene =
     manualFloorNumber: number | null;
     floorUncertain: boolean;
     overlayAvailable: boolean;
-    syncEnabled: boolean;
     playing: boolean;
     playbackSpeed: number;
     cursorMs: number;
@@ -322,32 +321,34 @@ export interface MapSceneOptions {
   /** Reveal units suppressed by map-specific visibility rules. */
   showHiddenUnits?: boolean;
   /**
-   * A clock of the scene's own for when the page's Replay is off (the mini
-   * map's preview): `elapsedMs` of real time loops the encounter at
-   * `previewSpeed(span)`. Ignored while Replay is on.
+   * The replay's clock, chosen by the host: the page's Replay (SyncMode
+   * adapter), a local loop or a stepped clock. Without one, or while it has no
+   * time, the scene shows the encounter's end, paused.
    */
-  preview?: { elapsedMs: number; playing: boolean; maxSpeed?: number } | null;
+  clock?: ReplayClock | null;
+  /**
+   * Which selected encounter the scene shows: the one at this replay time
+   * (the page's Replay cursor), else the last. Defaults to the clock's time;
+   * a host looping one encounter on its own clock passes the page's.
+   */
+  encounterAtMs?: number | null;
 }
 
-/** How long one preview loop takes, whatever the fight's length. */
-const PREVIEW_LOOP_MS = 90_000;
-
-/** The preview's playback speed: a loop takes about PREVIEW_LOOP_MS, never slower than real time. */
-export function previewSpeed(spanMs: number, maxSpeed = 32): number {
-  return Math.max(1, Math.min(maxSpeed, Math.round(spanMs / PREVIEW_LOOP_MS)));
-}
-
-/** Where the preview is in the encounter after `elapsedMs` of real time, looping. */
-export function previewCursorMs(startMs: number, endMs: number, elapsedMs: number, maxSpeed = 32): number {
-  const span = Math.max(1, endMs - startMs);
-  return startMs + ((elapsedMs * previewSpeed(span, maxSpeed)) % span);
-}
-
-/** The preview's elapsed time that puts its cursor at `cursorMs` (the inverse of previewCursorMs, short of the loop's wrap). */
-export function previewElapsedAt(startMs: number, endMs: number, cursorMs: number, maxSpeed = 32): number {
-  const span = Math.max(1, endMs - startMs);
-  const offset = Math.min(span * 0.999, Math.max(0, cursorMs - startMs));
-  return offset / previewSpeed(span, maxSpeed);
+/**
+ * The encounter the scene replays: the merged run, or the selected encounter
+ * at `atMs` (the last one without). Exported so a host can size its own clock
+ * to it before the scene exists.
+ */
+export function useMapSceneEncounter(props: PanelRenderProps<MapResult>, wholeRun: boolean, atMs: number | null): MapEncounterPositions | null {
+  const resultSignature = wholeRun ? runSignature(props.result.encounters) : "";
+  return useMemo(
+    () => wholeRun
+      ? cachedRun(props.result.encounters)
+      : selectMapEncounter(props.result.encounters, props.context.selectedEncounterIds, atMs),
+    // resultSignature: the run is re-merged as the result streams in.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [props.context.selectedEncounterIds, props.result.encounters, atMs, wholeRun, resultSignature],
+  );
 }
 
 /**
@@ -356,24 +357,12 @@ export function previewElapsedAt(startMs: number, endMs: number, cursorMs: numbe
  * consume this so filters, selection, floor and cursor stay identical.
  */
 export function useMapScene(props: PanelRenderProps<MapResult>, options: MapSceneOptions = {}): MapScene {
-  const sync = useSyncModeContextOptional();
   const iconBaseUrl = props.context.instance.iconBaseUrl;
   const manifestQuery = useMapManifest(iconBaseUrl);
-  const timestampMs = sync?.enabled && sync.currentTimestamp ? sync.currentTimestamp.getTime() : null;
+  const clock = options.clock ?? null;
   const wholeRun = Boolean(options.wholeRun);
-  const resultSignature = wholeRun ? runSignature(props.result.encounters) : "";
-  const encounter = useMemo(
-    () => wholeRun
-      ? cachedRun(props.result.encounters)
-      : selectMapEncounter(props.result.encounters, props.context.selectedEncounterIds, timestampMs),
-    // resultSignature: the run is re-merged as the result streams in.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [props.context.selectedEncounterIds, props.result.encounters, timestampMs, wholeRun, resultSignature],
-  );
-  const preview = !sync?.enabled ? options.preview ?? null : null;
-  const cursorMs = timestampMs
-    ?? (preview && encounter ? previewCursorMs(encounter.startMs, encounter.endMs, preview.elapsedMs, preview.maxSpeed) : encounter?.endMs)
-    ?? null;
+  const encounter = useMapSceneEncounter(props, wholeRun, options.encounterAtMs !== undefined ? options.encounterAtMs : clock?.nowMs ?? null);
+  const cursorMs = clock?.nowMs ?? encounter?.endMs ?? null;
   const totems = useMemo(
     () => encounter ? totemLifetimes(encounter, props.context.instance.units ?? {}) : new Map(),
     [encounter, props.context.instance.units],
@@ -688,9 +677,8 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
     setFloorNumber,
     manualFloorNumber,
     floorUncertain,    overlayAvailable: artwork.kind !== "instance" || overlayAvailable,
-    syncEnabled: Boolean(sync?.enabled),
-    playing: preview ? preview.playing : Boolean(sync?.enabled && sync.isPlaying),
-    playbackSpeed: preview ? previewSpeed(encounter.endMs - encounter.startMs, preview.maxSpeed) : sync?.playbackSpeed ?? 1,
+    playing: clock?.playing ?? false,
+    playbackSpeed: clock?.speed ?? 1,
     cursorMs,
     encounterStartMs: encounter.startMs,
     encounterEndMs: encounter.endMs,
