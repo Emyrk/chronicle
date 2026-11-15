@@ -40,8 +40,6 @@ import { BAR_ABSORB, BAR_BACKGROUND, BAR_DEAD, BAR_HEAL, CAST_ARC_OPACITY, COOLD
 import {
   clampToRadius,
   corsTextureUrl,
-  floorBelow,
-  FloorHeightCache,
   AIRBORNE_YARDS,
   LOGGED_Z_CLEARANCE_YARDS,
   medianHeight,
@@ -83,8 +81,9 @@ import { publishedModelGeometryScale, publishedModelGroupScale } from "./modelSi
 import { modelAnimationState, modelAnimationTimeSeconds, selectModelAnimation, usesStaticDeathFallback, type ModelLocomotion } from "./modelAnimation";
 import { setMaterialEmissive, type MapBodyMaterial } from "./mapMaterials";
 import { CAST_ARC_SIZE, createArcTexture, createAvatar, createIconMaterial, createLabelSprite, createTextTexture, createUnitCalloutMarker, createUnitGeometries, createWalkAvatarModel, easeOutBack, easeOutCubic, playWalkAvatarState, shortNumber, type WalkAvatarModel } from "./sceneFactories";
-import { bakedGeometry, disposeModelMaterials, gltfLoader, loadAnimatedGameModel, loadFlappingWhelp, loadGameModelAnimationPack, loadWalkAvatar, parsedDungeonMesh, type DungeonMeshCave } from "./sceneLoaders";
+import { bakedGeometry, disposeModelMaterials, gltfLoader, loadAnimatedGameModel, loadFlappingWhelp, loadGameModelAnimationPack, loadWalkAvatar } from "./sceneLoaders";
 import { GROUND_WIDTH, MESH_PLAYER_HEIGHT_YARDS, PLAYER_GEOMETRY_HEIGHT } from "./sceneConstants";
+import { DungeonWorld, type DungeonMesh } from "./dungeonWorld";
 
 /** Ground plane width in scene units; depth follows the artwork's aspect. */
 export { GROUND_WIDTH };
@@ -210,11 +209,6 @@ const MESH_PAN_RADIUS_YARDS = FOCUS_RADIUS_YARDS;
 const MESH_FULL_MAP_DISTANCE_FACTOR = 3;
 // The camera stays at least this far (scene units) above the floor beneath it.
 const MESH_CAMERA_CLEARANCE = 0.3;
-// Floor probes span these scene heights, outside any published dungeon mesh.
-const FLOOR_PROBE_HEIGHT = 100;
-// A face steeper than this is a wall, not a floor a unit without a logged height can stand on.
-const FLOOR_MAX_SLOPE_DEG = 50;
-const FLOOR_MIN_UP = Math.cos((FLOOR_MAX_SLOPE_DEG * Math.PI) / 180);
 // The camera direction the mesh starts from: steeper than ANGLED_OFFSET so
 // the rock between the camera and a sunken chamber hides less of the fight.
 const MESH_ANGLED_OFFSET = new THREE.Vector3(0, 1.6, 0.75);
@@ -444,21 +438,6 @@ interface FollowTrackInputs {
 export interface MapSceneFocus {
   centre: MapPoint;
   zoom: number;
-}
-
-interface DungeonMesh {
-  url: string;
-  /** The entry's world bounds: the plan layer's world <-> scene transform. */
-  bounds: WowMapFloorBounds;
-  group: THREE.Group;
-  /** The walkable geometry (everything but the water planes). */
-  caves: DungeonMeshCave[];
-  /** Water (and other liquid) planes: units stand on them, but they never block the camera. */
-  liquids: DungeonMeshCave[];
-  /** Scene units per yard. */
-  scale: number;
-  /** Bounding-sphere radius, for the full-map zoom limit. */
-  radius: number;
 }
 
 export interface MapUnitCallout {
@@ -808,18 +787,15 @@ export class MapScene3D {
   private readonly bossMinis = new Map<string, BossMini | null>();
   // The real dungeon mesh while "3D map" is on; `dungeonMeshRequest` is the
   // load in flight (a later request or toggle-off abandons it).
-  private dungeonMesh: DungeonMesh | null = null;
-  // On the flat artwork: the map-percent step of one yard along world x and
-  // world y (setFlatYards), for walking there.
-  private flatYards: { x: MapPoint; y: MapPoint } | null = null;
+  private readonly world = new DungeonWorld();
+  private get dungeonMesh(): DungeonMesh | null {
+    return this.world.dungeonMesh;
+  }
   private dungeonMeshRequest: { url: string } | null = null;
   private readonly meshLight = new THREE.HemisphereLight(0xfff4e0, 0x6b5a48, 1.2);
   private focus: MapSceneFocus | null = null;
   // Scene point of `focus` at its floor height while the mesh is on.
   private focusCentre: THREE.Vector3 | null = null;
-  private readonly floorHeights = new FloorHeightCache((x, z, ceiling) => this.sampleFloor(x, z, ceiling));
-  private readonly unitFloorHeights = new FloorHeightCache((x, z, ceiling) => this.sampleFloor(x, z, ceiling));
-  private readonly floorRay = new THREE.Ray();
   private constraining = false;
   // Nameplates (drawUnitPlate) over the hovered unit, the selected unit, its
   // target, their target and pinned units; each redrawn when what it shows changes.
@@ -891,14 +867,11 @@ export class MapScene3D {
   private directorAt = 0;
   // Scratch for the Director's own maths; the effect layer owns `vector`.
   private readonly directorVector = new THREE.Vector3();
-  private readonly directorFrom = new THREE.Vector3();
-  private readonly directorTo = new THREE.Vector3();
   private readonly directorAim = new THREE.Vector3();
   private readonly directorEye = new THREE.Vector3();
   // Camera collision scratch, and the orbit distance the user wants (the
   // camera may sit closer while a wall is in the way) and the one last set.
   private readonly collisionEye = new THREE.Vector3();
-  private readonly collisionPoint = new THREE.Vector3();
   private readonly collisionBefore = new THREE.Vector3();
   private readonly collisionFrom = new THREE.Vector3();
   private readonly collisionDirection = new THREE.Vector3();
@@ -1556,7 +1529,7 @@ export class MapScene3D {
           const distance = stripLength * (index + 0.5);
           const x = from.x + directionX * distance;
           const z = from.z + directionZ * distance;
-          const floor = this.floorHeights.heightAt(`debug-overlay-${overlay.id}-${stripIndex}`, x, z);
+          const floor = this.world.floorHeights.heightAt(`debug-overlay-${overlay.id}-${stripIndex}`, x, z);
           const material = new THREE.MeshBasicMaterial({
             color: overlay.color,
             transparent: true,
@@ -1604,7 +1577,7 @@ export class MapScene3D {
     if (this.dungeonMesh) {
       // The parsed mesh is shared with other scenes (see parsedDungeonMesh): just let go of this copy.
       this.scene.remove(this.dungeonMesh.group);
-      this.dungeonMesh = null;
+      this.world.dungeonMesh = null;
     }
     if (!request) {
       this.applyGroundMode();
@@ -1615,14 +1588,14 @@ export class MapScene3D {
     const pending = { url: request.url };
     this.dungeonMeshRequest = pending;
     this.onDungeonMesh("loading");
-    void this.loadDungeonMesh(request).then((mesh) => {
+    void this.world.loadDungeonMesh(request).then((mesh) => {
       if (this.disposed || this.dungeonMeshRequest !== pending) return;
       this.dungeonMeshRequest = null;
       if (!mesh) {
         this.onDungeonMesh("failed");
         return;
       }
-      this.dungeonMesh = mesh;
+      this.world.dungeonMesh = mesh;
       this.scene.add(mesh.group);
       this.applyGroundMode();
       this.viewAnimation = null;
@@ -1845,7 +1818,7 @@ export class MapScene3D {
       scale: mesh.scale,
       toPlane: (point) => mapPointToScene(point, this.aspect, GROUND_WIDTH),
       probe: {
-        floorAt: (x, z) => this.floorHeights.heightAt("drone", x, z, this.cameraCeiling()),
+        floorAt: (x, z) => this.world.floorHeights.heightAt("drone", x, z, this.cameraCeiling()),
         clearShot: (x, z, distance, yaw) => this.droneClearShot(x, z, distance, yaw),
       },
     };
@@ -1978,7 +1951,7 @@ export class MapScene3D {
   // native token geometry instead.
   private updateUnitScale(force = false) {
     const screenScale = this.camera.position.distanceTo(this.controls.target) / this.baseDistance();
-    const yards = this.yardScale();
+    const yards = this.world.yardScale(this.aspect);
     const trueScale = yards === null ? null : this.dungeonMesh
       ? (MESH_PLAYER_HEIGHT_YARDS * yards) / PLAYER_GEOMETRY_HEIGHT
       : (FLAT_PLAYER_TOKEN_DIAMETER_YARDS * yards) / (2 * TOKEN_RADIUS.player);
@@ -2014,7 +1987,7 @@ export class MapScene3D {
     const mesh = this.dungeonMesh;
     const loggedZ = object.loggedZ;
     const tracked = mesh && loggedZ === undefined ? this.trackedFloor(guid, object, x, z, mesh.scale) : null;
-    const floor = !mesh ? 0 : tracked ?? this.unitFloorHeights.heightAt(guid, x, z, this.probeCeiling(loggedZ, mesh.scale));
+    const floor = !mesh ? 0 : tracked ?? this.world.unitFloorHeights.heightAt(guid, x, z, this.probeCeiling(loggedZ, mesh.scale));
     object.floorTracked = tracked !== null;
     const logged = mesh && loggedZ !== undefined ? loggedZ * mesh.scale : null;
     const y = mesh && logged !== null && logged - floor > AIRBORNE_YARDS * mesh.scale ? logged : floor;
@@ -2068,27 +2041,7 @@ export class MapScene3D {
 
   // The floor below the free cam's pivot at (x, z), before its lift.
   private pivotFloor(x: number, z: number): number {
-    return this.floorHeights.heightAt("camera-target", x, z, this.cameraCeiling());
-  }
-
-  // The cave floor below (x, z) in scene units: the first surface below
-  // `ceiling` when given and hit, else the highest; null when every probe
-  // misses the mesh (or the tiles show).
-  private sampleFloor(x: number, z: number, ceiling: number | undefined): number | null {
-    return floorBelow((fromY) => this.castFloor(x, z, fromY), FLOOR_PROBE_HEIGHT, ceiling);
-  }
-
-  // The highest cave or water surface below (x, fromY, z), or null for none:
-  // a unit swimming near the surface stands on the water, not the lake bed.
-  private castFloor(x: number, z: number, fromY: number): number | null {
-    const mesh = this.dungeonMesh;
-    // The flat artwork is the floor everywhere.
-    if (!mesh) return 0;
-    let best: number | null = null;
-    for (const cave of mesh.caves) best = this.highestHit(cave, x, z, fromY, THREE.FrontSide, best);
-    // Liquid planes may be wound either way up.
-    for (const liquid of mesh.liquids) best = this.highestHit(liquid, x, z, fromY, THREE.DoubleSide, best);
-    return best;
+    return this.world.floorHeights.heightAt("camera-target", x, z, this.cameraCeiling());
   }
 
   // The unit's floor from its track (no logged height), or null while there
@@ -2140,7 +2093,7 @@ export class MapScene3D {
         },
       })),
       scale: mesh.scale,
-      candidatesAt: (x, z) => this.floorCandidates(x, z),
+      candidatesAt: (x, z) => this.world.floorCandidates(x, z),
     }, this.now);
     const slice = () => {
       const current = this.floorBuild;
@@ -2164,51 +2117,6 @@ export class MapScene3D {
     this.floorBuild = { build, inputs, timer: setTimeout(slice, 0) };
   }
 
-  // Every walkable surface under (x, z) in scene units, highest first: the
-  // cave faces a downward probe meets (walls, steeper than FLOOR_MAX_SLOPE_DEG,
-  // left out) and the water planes.
-  private floorCandidates(x: number, z: number): number[] {
-    const mesh = this.dungeonMesh;
-    if (!mesh) return [];
-    const floors: number[] = [];
-    for (const cave of mesh.caves) this.collectFloors(cave, x, z, THREE.FrontSide, floors);
-    for (const liquid of mesh.liquids) this.collectFloors(liquid, x, z, THREE.DoubleSide, floors);
-    return floors.sort((a, b) => b - a);
-  }
-
-  // Adds to `floors` every walkable surface a downward probe through (x, z) hits on `cave`.
-  private collectFloors(cave: DungeonMeshCave, x: number, z: number, side: THREE.Side, floors: number[]) {
-    this.floorRay.origin.set(x, FLOOR_PROBE_HEIGHT, z);
-    this.floorRay.direction.set(0, -1, 0);
-    this.floorRay.applyMatrix4(cave.inverse);
-    for (const hit of cave.bvh.raycast(this.floorRay, side)) {
-      if (!hit.face || Math.abs(this.vector.copy(hit.face.normal).transformDirection(cave.mesh.matrixWorld).y) < FLOOR_MIN_UP) continue;
-      floors.push(this.vector.copy(hit.point).applyMatrix4(cave.mesh.matrixWorld).y);
-    }
-  }
-
-  // The higher of `best` and the surface a downward probe from (x, fromY, z) hits on `cave`.
-  private highestHit(cave: DungeonMeshCave, x: number, z: number, fromY: number, side: THREE.Side, best: number | null): number | null {
-    this.floorRay.origin.set(x, fromY, z);
-    this.floorRay.direction.set(0, -1, 0);
-    this.floorRay.applyMatrix4(cave.inverse);
-    const hit = cave.bvh.raycastFirst(this.floorRay, side);
-    if (!hit) return best;
-    const y = this.vector.copy(hit.point).applyMatrix4(cave.mesh.matrixWorld).y;
-    return best === null || y > best ? y : best;
-  }
-
-  // Loads the mesh, zeroes its centring node translations so it sits in raw
-  // WoW coordinates, places it under the artwork projection and builds a BVH
-  // per cave mesh for floor probes. Resolves null on any failure.
-  // The parsed mesh is shared (see parsedDungeonMesh); this scene draws its own
-  // copy of the node tree, which shares the parsed geometry and materials.
-  private async loadDungeonMesh(request: DungeonMeshRequest): Promise<DungeonMesh | null> {
-    const parsed = await parsedDungeonMesh(request);
-    if (!parsed) return null;
-    return { url: request.url, bounds: request.bounds, group: parsed.template.clone(), caves: parsed.caves, liquids: parsed.liquids, scale: parsed.scale, radius: parsed.radius };
-  }
-
   // Shows the mesh or the tiles, re-grounds every unit and re-applies the
   // scale and camera limits for the mode.
   private applyGroundMode() {
@@ -2216,8 +2124,8 @@ export class MapScene3D {
     const mesh = this.dungeonMesh !== null;
     this.groundGroup.visible = !mesh;
     this.meshLight.visible = mesh;
-    this.floorHeights.clear();
-    this.unitFloorHeights.clear();
+    this.world.floorHeights.clear();
+    this.world.unitFloorHeights.clear();
     this.ensureFloorTracks();
     for (const [guid, object] of this.units) this.placeUnit(guid, object, object.base.x, object.base.z);
     this.updateCameraLimits();
@@ -2241,7 +2149,7 @@ export class MapScene3D {
       this.controls.maxPolarAngle = MESH_MAX_POLAR;
       const { x, z } = mapPointToScene(this.focus.centre, this.aspect, GROUND_WIDTH);
       this.focusCentre ??= new THREE.Vector3();
-      this.focusCentre.set(x, this.floorHeights.heightAt("focus", x, z), z);
+      this.focusCentre.set(x, this.world.floorHeights.heightAt("focus", x, z), z);
       this.controls.maxDistance = (MESH_MAX_DISTANCE_FACTOR * this.baseDistance()) / this.focus.zoom;
     } else {
       this.focusCentre = null;
@@ -2303,7 +2211,7 @@ export class MapScene3D {
     // spot may be a wall top, a ledge or a roof, and lifting the camera onto
     // that tips the view straight down. Walls between the camera and the
     // target are the collision pass's job.
-    const below = this.castFloor(position.x, position.z, position.y + MESH_CAMERA_CLEARANCE);
+    const below = this.world.castFloor(position.x, position.z, position.y + MESH_CAMERA_CLEARANCE);
     if (below !== null && position.y < below + MESH_CAMERA_CLEARANCE) {
       position.y = below + MESH_CAMERA_CLEARANCE;
       moved = true;
@@ -2353,32 +2261,6 @@ export class MapScene3D {
     this.updateUnitScale();
   }
 
-  // Whether the cave stands between the two points (the camera's line to the fight).
-  private meshBlocks(from: THREE.Vector3, to: THREE.Vector3): boolean {
-    return this.meshHitDistance(from, to) !== null;
-  }
-
-  // How far (scene units) from `from` toward `to` the first cave surface is,
-  // or null when the segment is clear. Walls count from either side.
-  private meshHitDistance(from: THREE.Vector3, to: THREE.Vector3): number | null {
-    const mesh = this.dungeonMesh;
-    if (!mesh) return null;
-    let nearest: number | null = null;
-    for (const cave of mesh.caves) {
-      const origin = this.directorFrom.copy(from).applyMatrix4(cave.inverse);
-      const end = this.directorTo.copy(to).applyMatrix4(cave.inverse);
-      const length = origin.distanceTo(end);
-      if (length <= 1e-6) continue;
-      this.floorRay.origin.copy(origin);
-      this.floorRay.direction.copy(end).sub(origin).divideScalar(length);
-      const hit = cave.bvh.raycastFirst(this.floorRay, THREE.DoubleSide);
-      if (!hit || hit.distance >= length) continue;
-      const distance = from.distanceTo(this.collisionPoint.copy(hit.point).applyMatrix4(cave.mesh.matrixWorld));
-      if (nearest === null || distance < nearest) nearest = distance;
-    }
-    return nearest;
-  }
-
   // Keeps the cave from standing between the orbit target and the camera: a
   // wall pulls the camera in along its line of sight, and once clear it eases
   // back out to the distance the user (or the Director) chose. `arrived` is
@@ -2400,7 +2282,7 @@ export class MapScene3D {
     // what this ray allows), so a cave wall is not a one-frame pull-in.
     if (this.directing() && this.directorWant !== null) {
       const want = this.directorWant;
-      const hit = want > 0 ? this.meshHitDistance(from, this.collisionEye.copy(direction).multiplyScalar(want).add(from)) : null;
+      const hit = want > 0 ? this.world.meshHitDistance(from, this.collisionEye.copy(direction).multiplyScalar(want).add(from)) : null;
       this.directorAllowed = directorPullIn(want, hit, ORBIT_COLLISION_PADDING, this.controls.minDistance);
       this.orbitWantDistance = shown;
       return false;
@@ -2418,7 +2300,7 @@ export class MapScene3D {
   // having been `shown` away and wanting to be `want` away (scene units).
   // `easing` is true while it is still easing back out from a wall that is gone.
   private collideCamera(from: THREE.Vector3, direction: THREE.Vector3, shown: number, want: number, padding: number, min: number, dt: number): { distance: number; easing: boolean } {
-    const hit = want > 0 ? this.meshHitDistance(from, this.collisionEye.copy(direction).multiplyScalar(want).add(from)) : null;
+    const hit = want > 0 ? this.world.meshHitDistance(from, this.collisionEye.copy(direction).multiplyScalar(want).add(from)) : null;
     const distance = cameraCollisionDistance(shown, want, hit, padding, min, CAMERA_COLLISION_RETURN_RATE, dt);
     return { distance, easing: distance < want && (hit === null || hit - padding > distance) };
   }
@@ -2447,7 +2329,7 @@ export class MapScene3D {
         z + Math.cos(yaw) * Math.cos(elevation) * out,
       );
       // A wall on the aim line would pull the camera in: not this shot.
-      if (this.meshBlocks(aim, eye)) return false;
+      if (this.world.meshBlocks(aim, eye)) return false;
       if (pose && elevationDeg > FOLLOW_STEEP_ELEVATION_DEG) {
         const from = this.directorPoseAim.set(pose.x, pose.floor + lift, pose.z);
         const to = this.directorPoseEye.set(
@@ -2455,10 +2337,10 @@ export class MapScene3D {
           pose.floor + Math.sin(elevation) * out,
           pose.z + Math.cos(yaw) * Math.cos(elevation) * out,
         );
-        const hit = this.meshHitDistance(from, to);
+        const hit = this.world.meshHitDistance(from, to);
         if (hit !== null && hit - ORBIT_COLLISION_PADDING < steepMin) return false;
       }
-      return seesFraming(this.sightCount, (k) => this.sightBoss[k]!, (k) => !this.meshBlocks(eye, this.sightTargets[k]!)) || "aim";
+      return seesFraming(this.sightCount, (k) => this.sightBoss[k]!, (k) => !this.world.meshBlocks(eye, this.sightTargets[k]!)) || "aim";
     });
   }
 
@@ -2466,7 +2348,7 @@ export class MapScene3D {
   // cinematic elevation with a clear line to the aim point, climbing in steps;
   // the shot shortens only if even the highest one is blocked.
   private droneClearShot(x: number, z: number, distance: number, yaw: number): { elevation: number; distance: number } {
-    const floor = this.floorHeights.heightAt("director-shot", x, z, this.cameraCeiling());
+    const floor = this.world.floorHeights.heightAt("director-shot", x, z, this.cameraCeiling());
     const aim = this.directorAim.set(x, floor + MESH_PLAYER_HEIGHT_YARDS * (this.dungeonMesh?.scale ?? 1), z);
     for (const elevationDeg of DIRECTOR_CLIMB) {
       const elevation = (elevationDeg * Math.PI) / 180;
@@ -2475,7 +2357,7 @@ export class MapScene3D {
         floor + Math.sin(elevation) * distance,
         z + Math.cos(yaw) * Math.cos(elevation) * distance,
       );
-      if (!this.meshBlocks(aim, eye)) return { elevation: elevationDeg, distance };
+      if (!this.world.meshBlocks(aim, eye)) return { elevation: elevationDeg, distance };
     }
     // Still blocked overhead: come in closer instead.
     return { elevation: MAX_CINEMATIC_ELEVATION_DEG, distance: this.shortenedShot(distance) };
@@ -2516,7 +2398,7 @@ export class MapScene3D {
       sample: (x, z, radius, height, framed) => {
         if (!this.dungeonMesh) return false;
         // No floor below (a chasm, off the mesh): skip the sample rather than cast from y = 0.
-        const floor = this.sampleFloor(x, z, this.probeCeiling(height, scale));
+        const floor = this.world.sampleFloor(x, z, this.probeCeiling(height, scale));
         if (floor === null) return false;
         from.set(x, floor + lift, z);
         // The framed units at player height: over their own logged or tracked
@@ -2541,8 +2423,8 @@ export class MapScene3D {
       clearYaw: (yaw) => {
         if (!this.dungeonMesh) return true;
         to.set(from.x + Math.sin(yaw) * out, up, from.z + Math.cos(yaw) * out);
-        if (this.meshBlocks(from, to)) return false;
-        return seesFraming(count, (k) => boss[k]!, (k) => !this.meshBlocks(to, targets[k]!)) || "aim";
+        if (this.world.meshBlocks(from, to)) return false;
+        return seesFraming(count, (k) => boss[k]!, (k) => !this.world.meshBlocks(to, targets[k]!)) || "aim";
       },
     };
   }
@@ -2672,7 +2554,7 @@ export class MapScene3D {
       const checkYaw = gliding ? yaw : placedYaw;
       const checkX = gliding ? centreX - Math.sin(yaw) * ahead : goal.x;
       const checkZ = gliding ? centreZ - Math.cos(yaw) * ahead : goal.z;
-      const floor = this.floorHeights.heightAt("director-shot", checkX, checkZ, this.cameraCeiling());
+      const floor = this.world.floorHeights.heightAt("director-shot", checkX, checkZ, this.cameraCeiling());
       let pose: { x: number; z: number; floor: number } | null = null;
       if (!gliding && !cutting) {
         pose = this.shotPose;
@@ -2823,7 +2705,7 @@ export class MapScene3D {
     }
     const mesh = this.dungeonMesh;
     if (mesh) {
-      const hit = this.raycaster.intersectObject(mesh.group, true)[0];
+      const hit = this.world.intersectMesh(this.raycaster);
       return hit ? { point: hit.point.clone(), guid: null } : null;
     }
     // Tiles: the ground is the y = 0 plane.
@@ -2923,7 +2805,7 @@ export class MapScene3D {
     this.clearGround();
     this.dungeonMeshRequest = null;
     // The renderer's disposal frees this scene's GPU copy of the (shared) mesh.
-    this.dungeonMesh = null;
+    this.world.dungeonMesh = null;
     for (const geometry of Object.values(this.geometries)) geometry.dispose();
     for (const mini of this.bossMinis.values()) {
       mini?.geometry.dispose();
@@ -3524,8 +3406,8 @@ export class MapScene3D {
     token.bossSpire?.material.dispose();
     object.drop?.material.dispose();
     this.units.delete(guid);
-    this.floorHeights.delete(guid);
-    this.unitFloorHeights.delete(guid);
+    this.world.floorHeights.delete(guid);
+    this.world.unitFloorHeights.delete(guid);
     const wobbling = this.wobbling.indexOf(object);
     if (wobbling >= 0) this.wobbling.splice(wobbling, 1);
     const lunging = this.lunging.indexOf(object);
@@ -3541,7 +3423,7 @@ export class MapScene3D {
       ? deriveActiveRadialEffects(fx, cursorMs, this.activeRadialEffects)
       : this.activeRadialEffects;
     if (!fx) radials.length = 0;
-    const yardScale = this.yardScale();
+    const yardScale = this.world.yardScale(this.aspect);
     if (yardScale === null) {
       this.commitPool(this.radialRings, 0);
       this.commitPool(this.radialSpheres, 0);
@@ -3603,7 +3485,7 @@ export class MapScene3D {
     this.deepBreathAreaPositions.length = 0;
     for (let index = 0; index < projected.length; index++) {
       const point = projected[index];
-      const floor = this.floorHeights.heightAt(`deep-breath-${path.key}-${index}`, point.x, point.z);
+      const floor = this.world.floorHeights.heightAt(`deep-breath-${path.key}-${index}`, point.x, point.z);
       const floorY = floor + DEEP_BREATH_GROUND_LIFT * mesh.scale;
       positions[index * 3] = point.x;
       positions[index * 3 + 1] = floorY;
@@ -3630,7 +3512,7 @@ export class MapScene3D {
       : this.activeDeepBreaths;
     if (!fx) breaths.length = 0;
     const breath = breaths[0];
-    const yardScale = this.yardScale();
+    const yardScale = this.world.yardScale(this.aspect);
     if (!breath || yardScale === null) {
       this.hideDeepBreath();
       return;
@@ -5136,7 +5018,7 @@ export class MapScene3D {
     const rect = this.renderer.domElement.getBoundingClientRect();
     this.pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
     this.raycaster.setFromCamera(this.pointer, this.camera);
-    const hit = this.raycaster.intersectObject(mesh.group, true)[0];
+    const hit = this.world.intersectMesh(this.raycaster);
     return hit ? this.sceneToPlan(hit.point) : null;
   }
 
@@ -5167,7 +5049,7 @@ export class MapScene3D {
     this.planSurface = mesh ? {
       scale: mesh.scale,
       toScene: (point) => this.planToScene(point),
-      floorAt: (x, z, hintY) => this.castFloor(x, z, (hintY ?? this.cameraCeiling() ?? 1e4) + WALK_STEP_YARDS * mesh.scale) ?? hintY ?? 0,
+      floorAt: (x, z, hintY) => this.world.castFloor(x, z, (hintY ?? this.cameraCeiling() ?? 1e4) + WALK_STEP_YARDS * mesh.scale) ?? hintY ?? 0,
     } : null;
     this.planLayer.setItems(this.planItems, this.planSelected, this.planSurface);
   }
@@ -5208,7 +5090,7 @@ export class MapScene3D {
 
   /** Walk mode needs yards: the dungeon mesh's, or the flat artwork's (setFlatYards). */
   canWalk(): boolean {
-    return this.yardScale() !== null;
+    return this.world.yardScale(this.aspect) !== null;
   }
 
   /**
@@ -5217,18 +5099,8 @@ export class MapScene3D {
    * units; null when the artwork has no world mapping.
    */
   setFlatYards(perYard: { x: MapPoint; y: MapPoint } | null) {
-    this.flatYards = perYard;
+    this.world.flatYards = perYard;
     this.updateUnitScale();
-  }
-
-  // Scene units per yard: the mesh's, else the flat artwork's.
-  private yardScale(): number | null {
-    if (this.dungeonMesh) return this.dungeonMesh.scale;
-    const perYard = this.flatYards;
-    if (!perYard) return null;
-    const length = (step: MapPoint) => Math.hypot((step.leftPercent / 100) * GROUND_WIDTH, (step.topPercent / 100) * GROUND_WIDTH * this.aspect);
-    const scale = (length(perYard.x) + length(perYard.y)) / 2;
-    return Number.isFinite(scale) && scale > 0 ? scale : null;
   }
 
   setWalking(on: boolean) {
@@ -5241,7 +5113,7 @@ export class MapScene3D {
 
   // The character starts where the camera looks, facing away from it.
   private startWalk() {
-    const scale = this.yardScale();
+    const scale = this.world.yardScale(this.aspect);
     if (scale === null) {
       this.onWalkChange(false);
       return;
@@ -5260,7 +5132,7 @@ export class MapScene3D {
     const target = this.controls.target;
     const offset = new THREE.Vector3().copy(this.camera.position).sub(target);
     const position = target.clone();
-    position.y = this.castFloor(position.x, position.z, position.y + WALK_STEP_YARDS * scale) ?? position.y;
+    position.y = this.world.castFloor(position.x, position.z, position.y + WALK_STEP_YARDS * scale) ?? position.y;
     const camYaw = cameraAngles(offset).yaw;
     const avatar = createAvatar(this.geometries);
     avatar.scale.setScalar((MESH_PLAYER_HEIGHT_YARDS * scale) / PLAYER_GEOMETRY_HEIGHT);
@@ -5295,12 +5167,12 @@ export class MapScene3D {
   // framing), on the floor there, keeping the camera's angle and zoom.
   private moveWalkTo(viewport: MapViewport) {
     const walk = this.walk;
-    if (!walk || this.yardScale() === null) return;
+    if (!walk || this.world.yardScale(this.aspect) === null) return;
     // The full map's centre is nowhere in particular: then the fight's focus.
     const whole = viewport.zoom <= FULL_MAP_VIEWPORT.zoom && this.focus;
     const point = whole && this.focus ? this.focus.centre : { leftPercent: viewport.centerX * 100, topPercent: viewport.centerY * 100 };
     const { x, z } = mapPointToScene(point, this.aspect, GROUND_WIDTH);
-    walk.position.set(x, this.floorHeights.heightAt("walk", x, z, this.cameraCeiling()), z);
+    walk.position.set(x, this.world.floorHeights.heightAt("walk", x, z, this.cameraCeiling()), z);
     walk.vy = 0;
     walk.grounded = true;
     this.requestRender();
@@ -5317,7 +5189,7 @@ export class MapScene3D {
     this.disposeAvatar(walk.avatar);
     // The free cam picks up behind and above where the character stood, its
     // pivot at the character's feet (still in the air if they were flying).
-    const distance = Math.max(walk.camDistance, WALK_EXIT_DISTANCE_YARDS) * (this.yardScale() ?? 1);
+    const distance = Math.max(walk.camDistance, WALK_EXIT_DISTANCE_YARDS) * (this.world.yardScale(this.aspect) ?? 1);
     const pitch = Math.max(walk.camPitch, WALK_START_PITCH);
     this.controls.target.copy(walk.position);
     this.pivotLift = Math.max(0, walk.position.y - this.pivotFloor(walk.position.x, walk.position.z));
@@ -5343,12 +5215,12 @@ export class MapScene3D {
       const walk = this.walk;
       const start = startGuid ? this.units.get(startGuid) : null;
       const lookAt = lookAtGuid ? this.units.get(lookAtGuid) : null;
-      const scale = this.yardScale();
+      const scale = this.world.yardScale(this.aspect);
       if (walk && start && lookAt && scale !== null) {
         const away = new THREE.Vector3().copy(start.base).sub(lookAt.base).setY(0);
         if (away.lengthSq() > 1e-6) away.normalize().multiplyScalar(1.5 * scale);
         walk.position.copy(start.base).add(away);
-        walk.position.y = this.floorHeights.heightAt("walk-capture", walk.position.x, walk.position.z, this.cameraCeiling());
+        walk.position.y = this.world.floorHeights.heightAt("walk-capture", walk.position.x, walk.position.z, this.cameraCeiling());
         const dx = lookAt.base.x - walk.position.x;
         const dz = lookAt.base.z - walk.position.z;
         walk.yaw = Math.atan2(-dx, -dz);
@@ -5415,7 +5287,7 @@ export class MapScene3D {
   private updateWalk(now: number): boolean {
     const walk = this.walk;
     if (!walk) return false;
-    const scale = this.yardScale();
+    const scale = this.world.yardScale(this.aspect);
     if (scale === null) {
       this.stopWalk();
       return false;
@@ -5468,7 +5340,7 @@ export class MapScene3D {
     if (!walk.grounded) walk.vy -= WALK_GRAVITY_YPS2 * scale * dt;
     const ceiling = walk.position.y + WALK_STEP_YARDS * scale;
     walk.position.y += walk.vy * dt;
-    const floor = this.castFloor(walk.position.x, walk.position.z, ceiling);
+    const floor = this.world.castFloor(walk.position.x, walk.position.z, ceiling);
     if (floor !== null) {
       const stepping = walk.grounded && walk.vy <= 0 && walk.position.y - floor <= WALK_STEP_YARDS * scale;
       if (walk.position.y <= floor || stepping) {
