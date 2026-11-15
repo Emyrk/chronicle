@@ -1040,9 +1040,6 @@ type sqlcQuerier interface {
 	ListSidekickIssues(ctx context.Context, arg ListSidekickIssuesParams) ([]SidekickIssue, error)
 	ListSidekickOAuthGrantRequestIDs(ctx context.Context, sidekickID uuid.UUID) ([]string, error)
 	ListSidekickWoWDirectories(ctx context.Context, sidekickID uuid.UUID) ([]SidekickWowDirectory, error)
-	// Most recently seen characters whose latest sighting is a listed log.
-	// Walks idx_game_players_updated_at newest-first and stops at the limit.
-	ListSitemapCharacters(ctx context.Context, arg ListSitemapCharactersParams) ([]ListSitemapCharactersRow, error)
 	// Queries behind /sitemap.xml. Each is capped and scoped to one tenant's own
 	// servers: RLS on wow_server_realms limits rows to what the tenant can see, and
 	// the tenant_id match drops include_in_all servers whose pages are canonical

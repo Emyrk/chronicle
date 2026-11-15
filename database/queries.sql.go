@@ -32301,51 +32301,6 @@ func (q *sqlQuerier) UpdateSiteConfigLandingFeaturedInstance(ctx context.Context
 	return i, err
 }
 
-const listSitemapCharacters = `-- name: ListSitemapCharacters :many
-SELECT gp.id, r.name AS realm_name, gp.updated_at
-FROM game_players gp
-JOIN wow_server_realms r ON r.id = gp.realm_id
-JOIN wow_servers ws ON ws.id = r.server_id
-JOIN log_instances li ON li.id = gp.updated_from_instance
-JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
-WHERE ws.tenant_id IS NOT DISTINCT FROM $1::uuid
-ORDER BY gp.updated_at DESC
-LIMIT $2
-`
-
-type ListSitemapCharactersParams struct {
-	TenantID    uuid.NullUUID `db:"tenant_id" json:"tenant_id"`
-	ResultLimit int32         `db:"result_limit" json:"result_limit"`
-}
-
-type ListSitemapCharactersRow struct {
-	ID        guid.GUID          `db:"id" json:"id"`
-	RealmName string             `db:"realm_name" json:"realm_name"`
-	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
-}
-
-// Most recently seen characters whose latest sighting is a listed log.
-// Walks idx_game_players_updated_at newest-first and stops at the limit.
-func (q *sqlQuerier) ListSitemapCharacters(ctx context.Context, arg ListSitemapCharactersParams) ([]ListSitemapCharactersRow, error) {
-	rows, err := q.db.Query(ctx, listSitemapCharacters, arg.TenantID, arg.ResultLimit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListSitemapCharactersRow
-	for rows.Next() {
-		var i ListSitemapCharactersRow
-		if err := rows.Scan(&i.ID, &i.RealmName, &i.UpdatedAt); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listSitemapGuilds = `-- name: ListSitemapGuilds :many
 
 SELECT g.id, gp.updated_at AS page_updated_at

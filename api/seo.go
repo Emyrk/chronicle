@@ -266,9 +266,8 @@ func (api *API) robotsTXT(w http.ResponseWriter, r *http.Request) {
 // paths and the blog they stay well under the 50,000 URLs (and 50 MB) one
 // sitemap file may hold, so /sitemap.xml needs no sitemap index.
 const (
-	sitemapGuildLimit     = 1000
-	sitemapCharacterLimit = 5000
-	sitemapInstanceLimit  = 1000
+	sitemapGuildLimit    = 1000
+	sitemapInstanceLimit = 1000
 )
 
 type sitemapURLSet struct {
@@ -499,7 +498,8 @@ func (api *API) sitemapBlogURLs(r *http.Request) []sitemapURL {
 	return urls
 }
 
-// loadSitemapURLs reads the tenant's guild, character and raid pages. ctx
+// loadSitemapURLs reads the tenant's guild and raid pages. Character (armory)
+// pages are deliberately not listed: they are thin per-player pages. ctx
 // carries the tenant, which RLS uses to scope every query. Locations are paths.
 func (api *API) loadSitemapURLs(ctx context.Context) (*sitemapDynamic, error) {
 	tenantID := uuid.NullUUID{}
@@ -512,24 +512,14 @@ func (api *API) loadSitemapURLs(ctx context.Context) (*sitemapDynamic, error) {
 	if err != nil {
 		return nil, fmt.Errorf("list sitemap guilds: %w", err)
 	}
-	characters, err := db.ListSitemapCharacters(ctx, database.ListSitemapCharactersParams{TenantID: tenantID, ResultLimit: sitemapCharacterLimit})
-	if err != nil {
-		return nil, fmt.Errorf("list sitemap characters: %w", err)
-	}
 	instances, err := db.ListSitemapInstances(ctx, database.ListSitemapInstancesParams{TenantID: tenantID, ResultLimit: sitemapInstanceLimit})
 	if err != nil {
 		return nil, fmt.Errorf("list sitemap instances: %w", err)
 	}
 
-	urls := make([]sitemapURL, 0, len(guilds)+len(characters)+len(instances))
+	urls := make([]sitemapURL, 0, len(guilds)+len(instances))
 	for _, g := range guilds {
 		urls = append(urls, sitemapURL{Location: "/g/" + g.ID.String(), LastMod: sitemapLastMod(g.PageUpdatedAt)})
-	}
-	for _, c := range characters {
-		urls = append(urls, sitemapURL{
-			Location: "/armory/" + url.PathEscape(c.RealmName) + "/" + c.ID.String(),
-			LastMod:  sitemapLastMod(c.UpdatedAt),
-		})
 	}
 	for _, inst := range instances {
 		identifier := inst.ID.String()

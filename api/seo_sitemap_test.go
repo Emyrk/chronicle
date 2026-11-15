@@ -6,7 +6,6 @@ import (
 	"encoding/xml"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -25,7 +24,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/testutil"
 )
 
-// The sitemap lists the tenant's listed raids, guilds and characters plus the
+// The sitemap lists the tenant's listed raids, and guilds (never characters) plus the
 // blog posts its flavor serves, and nothing unlisted or from another tenant.
 func TestSitemapDynamicURLs(t *testing.T) {
 	t.Parallel()
@@ -109,8 +108,6 @@ func TestSitemapDynamicURLs(t *testing.T) {
 	for id, slug := range map[uuid.UUID]*string{listed: &listedSlug, unlisted: &unlistedSlug, theirs: &theirSlug} {
 		require.NoError(t, seedPool.QueryRow(ctx, "SELECT hashed_slug FROM log_instances WHERE id = $1", id).Scan(slug))
 	}
-	var realmName string
-	require.NoError(t, seedPool.QueryRow(ctx, "SELECT name FROM wow_server_realms WHERE id = $1", ourRealm).Scan(&realmName))
 
 	// Query as production does: app.tenant_id on the connection, as the chronicle role so RLS applies.
 	cfg, err := pgxpool.ParseConfig(connURL)
@@ -184,10 +181,11 @@ func TestSitemapDynamicURLs(t *testing.T) {
 	require.Contains(t, lastmods, base+"/g/"+ourGuild.String())
 	require.NotContains(t, lastmods, base+"/g/"+theirGuild.String())
 
-	armory := base + "/armory/" + url.PathEscape(realmName) + "/"
-	require.Contains(t, lastmods, armory+"0x0000000000000051")
-	require.NotEmpty(t, lastmods[armory+"0x0000000000000051"])
-	require.NotContains(t, lastmods, armory+"0x0000000000000052", "a character last seen in an unlisted log is excluded")
+	// Characters are seeded (one listed, one unlisted) to prove none are listed.
+	for loc := range lastmods {
+		require.NotContains(t, loc, "/armory/", "character pages are not in the sitemap")
+	}
+	require.Contains(t, lastmods, base+"/armory", "the armory index stays")
 
 	hidden := httptest.NewRecorder()
 	api.sitemapXML(hidden, request(false))
