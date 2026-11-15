@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import fixture from "./fixtures/mapManifest.fixture.json";
-import { fetchMapManifestReport, parseMapManifest } from "./mapManifest";
+import { fetchMapManifestReport, mapFloorMesh, mapFloorRender, parseMapManifest } from "./mapManifest";
 
 type Json = Record<string, unknown> & { maps: Json[]; instances: Json[] } & { [key: string]: unknown };
 
@@ -86,29 +86,21 @@ describe("map manifest parser: each rejected field drops only its entry, with a 
     expect(reject((m) => { m.instances[0].mapID = "409"; }).problem.reason).toBe("mapID is not a number");
   });
 
-  it("accepts an empty directory (mesh-only dungeons publish one) but not a missing one", () => {
-    expect(reject((m) => { delete m.instances[1].directory; }).problem.reason).toBe("directory is not a string");
-  });
-
   it("drops a 3D dungeon in the wrong axis frame, keeping the instance and its flat maps", () => {
     const { manifest, problem } = reject((m) => { (m.instances[0].mesh as Json).frame = "wow-zup"; });
     expect(manifest.instances?.[0].mesh).toBeUndefined();
     expect(manifest.instances?.[0].renders).toBeDefined();
-    expect(problem).toEqual({ path: "instances[0] (Molten Core, map 409).mesh", reason: '3D dungeon frame "wow-zup" is not wow-yup-mirrored-x' });
+    expect(problem).toEqual({ path: "instances[0] (Molten Core, map 409).mesh", reason: '3D map frame "wow-zup" is not wow-yup-mirrored-x' });
   });
 
   it("drops a 3D dungeon with empty bounds", () => {
     const { manifest, problem } = reject((m) => { ((m.instances[1].mesh as Json).bounds as Json).maxX = -50; });
     expect(manifest.instances?.[1].mesh).toBeUndefined();
-    expect(problem.reason).toBe("3D dungeon bounds are empty (max must exceed min)");
+    expect(problem.reason).toBe("3D map bounds are empty (max must exceed min)");
   });
 
   it("drops a 3D dungeon without a path", () => {
-    expect(reject((m) => { (m.instances[1].mesh as Json).path = ""; }).problem.reason).toBe("3D dungeon has no path");
-  });
-
-  it("drops a 3D dungeon whose height range is inverted", () => {
-    expect(reject((m) => { (m.instances[1].mesh as Json).zMax = -30; }).problem.reason).toBe("3D dungeon zMax is below zMin");
+    expect(reject((m) => { (m.instances[1].mesh as Json).path = ""; }).problem.reason).toBe("3D map has no path");
   });
 
   it("drops only a malformed liquid tint, keeping the 3D dungeon", () => {
@@ -138,18 +130,32 @@ describe("map manifest parser: each rejected field drops only its entry, with a 
     expect(problem.reason).toBe('"satellite" is not renders or art');
   });
 
-  it("drops only a floor render without a path", () => {
+  it("marks a floor render without a path invalid: that floor gets no render, not the instance-wide one", () => {
     const { manifest, problem } = reject((m) => { (floorOf(m).renders as Json).path = undefined; });
-    expect(manifest.instances?.[0].floors[0].renders).toBeUndefined();
-    expect(manifest.instances?.[0].floors[0].mesh).toBeDefined();
+    const instance = manifest.instances![0];
+    expect(instance.floors[0].renders?.invalid).toBe("render has no path");
+    expect(mapFloorRender(instance, instance.floors[0])).toBeUndefined();
+    expect(instance.renders?.path).toBe("renders/409.webp");
+    expect(instance.floors[0].mesh).toBeDefined();
     expect(problem.reason).toBe("render has no path");
   });
 
-  it("drops only a floor's own 3D dungeon when it is malformed", () => {
-    const { manifest, problem } = reject((m) => { (floorOf(m).mesh as Json).zMin = "low"; });
-    expect(manifest.instances?.[0].floors[0].mesh).toBeUndefined();
-    expect(manifest.instances?.[0].floors[0].tiles).toHaveLength(1);
-    expect(problem.reason).toBe("3D dungeon zMin is not a number");
+  it("marks a floor's own 3D map in the wrong frame invalid: that floor gets no 3D map, not the instance-wide one", () => {
+    const { manifest, problem } = reject((m) => { (floorOf(m).mesh as Json).frame = "wow-zup"; });
+    const instance = manifest.instances![0];
+    expect(mapFloorMesh(instance, instance.floors[0])).toBeUndefined();
+    // As before this parser: the old placement check rejected the floor's entry after the fallback, so no 3D.
+    expect(instance.mesh?.path).toBe("3d/409.glb");
+    // The entry stays, marked, so floor support still matches its path.
+    expect(instance.floors[0].mesh?.path).toBe("3d/409-1.glb");
+    expect(instance.floors[0].tiles).toHaveLength(1);
+    expect(problem.path).toBe("instances[0] (Molten Core, map 409).floors[0] (floor 1).mesh");
+  });
+
+  it("drops a styled render without its source, which is how the viewer tells it from tiles", () => {
+    const { manifest, problem } = reject((m) => { delete (m.instances[0].styled as Json).source; });
+    expect(manifest.instances?.[0].styled).toBeUndefined();
+    expect(problem.reason).toBe("styled render has no source (it marks the canvas as a styled render)");
   });
 
   it("drops only a styled render without bounds", () => {
@@ -165,23 +171,69 @@ describe("map manifest parser: each rejected field drops only its entry, with a 
     expect(problem.reason).toBe("bounds are empty (max must exceed min)");
   });
 
-  it("drops only malformed floor support", () => {
-    const { manifest, problem } = reject((m) => { (m.instances[0].floorSupport as Json).version = 2; });
-    expect(manifest.instances?.[0].floorSupport).toBeUndefined();
-    expect(problem.reason).toBe("floor support version 2 is not 1");
-  });
-
-  it("drops only a malformed reuse source", () => {
-    const { manifest, problem } = reject((m) => { (m.instances[0].reusedFrom as Json).mapID = "409"; });
-    expect(manifest.instances?.[0].reusedFrom).toBeUndefined();
-    expect(problem.reason).toBe("reusedFrom needs a namespace and a numeric mapID");
-  });
-
   it("treats a non-list of maps as no maps, keeping the instances", () => {
     const { manifest, problem } = reject((m) => { (m as Record<string, unknown>).maps = {}; });
     expect(manifest.maps).toEqual([]);
     expect(manifest.instances).toHaveLength(2);
     expect(problem).toEqual({ path: "maps", reason: "is not a list" });
+  });
+});
+
+describe("map manifest parser: fields the viewer never reads never cost an entry", () => {
+  /** Breaks fields nobody reads, parses, and expects no problems and the entry still whole. */
+  function stillWhole(breakIt: (manifest: Json) => void) {
+    const manifest = copy();
+    breakIt(manifest);
+    const parsed = parseMapManifest(manifest);
+    expect(parsed.problems).toEqual([]);
+    return parsed.manifest;
+  }
+
+  it("an instance missing instanceType and directory loads whole: floors, renders and 3D map", () => {
+    const manifest = stillWhole((m) => { delete m.instances[0].instanceType; delete m.instances[0].directory; });
+    expect(manifest.instances?.[0].floors).toHaveLength(1);
+    expect(manifest.instances?.[0].mesh?.path).toBe("3d/409.glb");
+    expect(manifest.instances?.[0].renders?.path).toBe("renders/409.webp");
+  });
+
+  it("a map missing parentID and type, with flags null, loads whole with its art", () => {
+    const manifest = stillWhole((m) => { delete m.maps[0].parentID; delete m.maps[0].type; m.maps[0].flags = null; });
+    expect(manifest.maps[0].art?.[0].layers).toHaveLength(1);
+    expect(manifest.maps[0].assignments).toHaveLength(1);
+  });
+
+  it("an assignment missing orderIndex and areaID loads whole", () => {
+    const manifest = stillWhole((m) => { const assignment = (m.maps[0].assignments as Json[])[0]; delete assignment.orderIndex; delete assignment.areaID; });
+    expect(manifest.maps[0].assignments?.[0].region).toEqual([0, 0, 0, 100, 100, 0]);
+  });
+
+  it("a layer missing minScale, maxScale and additionalZoomSteps loads whole", () => {
+    const manifest = stillWhole((m) => {
+      const layer = ((m.maps[0].art as Json[])[0].layers as Json[])[0];
+      delete layer.minScale;
+      delete layer.maxScale;
+      delete layer.additionalZoomSteps;
+    });
+    expect(manifest.maps[0].art?.[0].layers[0].tiles).toHaveLength(1);
+  });
+
+  it("an art entry missing styleID and phaseID loads whole", () => {
+    const manifest = stillWhole((m) => { const art = (m.maps[0].art as Json[])[0]; delete art.styleID; delete art.phaseID; });
+    expect(manifest.maps[0].art?.[0].layers).toHaveLength(1);
+  });
+
+  it("other unread or key-only fields pass through too: tile fileDataID, overlay texture size, 3D map heights, styled triangles, reuse source, floor support (checked where it is used)", () => {
+    const manifest = stillWhole((m) => {
+      delete (((m.maps[0].art as Json[])[0].layers as Json[])[0].tiles as Json[])[0].fileDataID;
+      delete ((m.maps[0].art as Json[])[0].overlays as Json[])[0].textureWidth;
+      delete (m.instances[0].mesh as Json).zMin;
+      (m.instances[0].mesh as Json).zMax = "high";
+      delete (m.instances[0].styled as Json).triangles;
+      (m.instances[0].reusedFrom as Json).mapID = "409";
+      (m.instances[0].floorSupport as Json).version = 2;
+    });
+    expect(manifest.instances?.[0].mesh?.path).toBe("3d/409.glb");
+    expect(manifest.instances?.[0].floorSupport?.version).toBe(2);
   });
 });
 
@@ -198,7 +250,7 @@ describe("fetchMapManifestReport", () => {
     expect(problems).toHaveLength(2);
     expect(manifest.instances).toHaveLength(2);
     expect(warn).toHaveBeenCalledTimes(2);
-    expect(warn).toHaveBeenCalledWith('Map manifest: dropped instances[0] (Molten Core, map 409).mesh: 3D dungeon frame "wow-zup" is not wow-yup-mirrored-x');
+    expect(warn).toHaveBeenCalledWith('Map manifest: dropped instances[0] (Molten Core, map 409).mesh: 3D map frame "wow-zup" is not wow-yup-mirrored-x');
     warn.mockRestore();
   });
 });

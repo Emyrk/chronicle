@@ -280,7 +280,7 @@ export function MapGalleryPage() {
       if (item.kind !== "zone") {
         return item.instance.name.toLowerCase().includes(query)
           || String(item.instance.mapID).includes(query)
-          || item.instance.directory.toLowerCase().includes(query);
+          || (item.instance.directory ?? "").toLowerCase().includes(query);
       }
       return item.map.name.toLowerCase().includes(query)
         || String(item.map.id).includes(query)

@@ -31,37 +31,41 @@ export interface WowMapManifest {
 export interface WowMap {
   id: number;
   name: string;
-  parentID: number;
-  type: number;
-  flags: number;
+  // Published but never read by the viewer: passed through, never checked.
+  parentID?: number;
+  type?: number;
+  flags?: number;
   assignments?: WowMapAssignment[];
   art?: WowMapArt[];
 }
 
 export interface WowMapAssignment {
+  /** Read only as part of a cache key. */
   id: number;
   mapID: number;
-  areaID: number;
-  orderIndex: number;
+  areaID?: number;
+  orderIndex?: number;
   region: number[];
   uiMin: number[];
   uiMax: number[];
 }
 
 export interface WowMapArt {
+  /** phaseID and artID are read only as gallery keys and sort order. */
   phaseID: number;
   artID: number;
-  styleID: number;
+  styleID?: number;
   layers: WowMapLayer[];
   overlays?: WowMapOverlay[];
 }
 
 export interface WowMapOverlay {
+  /** Read only as part of React and cache keys. */
   id: number;
   offsetX: number;
   offsetY: number;
-  textureWidth: number;
-  textureHeight: number;
+  textureWidth?: number;
+  textureHeight?: number;
   tiles: WowMapTile[];
 }
 
@@ -88,8 +92,9 @@ export interface WowMapInstance {
   reusedFrom?: WowMapReuseSource;
   mapID: number;
   name: string;
-  instanceType: number;
-  directory: string;
+  /** Shown and searched on the Technical map atlas only; passed through, never checked. */
+  instanceType?: number;
+  directory?: string;
   floors: WowMapInstanceFloor[];
   styled?: WowMapRenderedInstance;
   renders?: WowMapManualRender;
@@ -101,12 +106,17 @@ export interface WowMapMeshInstance {
   path: string;
   /** World-axis bounds of the mesh: `minX..maxX` is world X, `minY..maxY` world Y. */
   bounds: WowMapFloorBounds;
-  zMin: number;
-  zMax: number;
+  zMin?: number;
+  zMax?: number;
   /** The glTF axis convention; see `DUNGEON_MESH_FRAME`. */
   frame: string;
   /** Tint for the mesh's `liquid_*` planes (lava, slime); absent, the GLB's own water shows. */
   liquid?: WowMapMeshLiquid;
+  /**
+   * Set by the parser on a floor's own entry that is malformed (the reason): that floor then has no 3D map rather
+   * than falling back to the instance-wide one, placed by other bounds. The entry stays for floor support's path.
+   */
+  invalid?: string;
 }
 
 export interface WowMapMeshLiquid {
@@ -122,12 +132,15 @@ export interface WowMapManualRender {
   width: number;
   height: number;
   bounds?: WowMapFloorBounds;
+  /** Set by the parser on a floor's own render that is malformed (the reason): that floor then has no render. */
+  invalid?: string;
 }
 
 export interface WowMapRenderedInstance {
   path: string;
   width: number;
   height: number;
+  /** Its presence marks a styled render: the viewer tells canvases apart with `"source" in canvas`. */
   source: string;
   bounds: WowMapFloorBounds;
   triangles?: number;
@@ -150,40 +163,48 @@ export interface WowMapInstanceFloor {
   tiles: WowMapTile[];
   /** Preferred automatic 2D source for this floor; absent preserves render-first behavior. */
   preferred2D?: "renders" | "art";
+  /** A floor's own render; marked `invalid` by the parser when malformed, and then the floor has none. */
   renders?: WowMapManualRender;
+  /** A floor's own 3D map; marked `invalid` by the parser when malformed, and then the floor has none. */
   mesh?: WowMapMeshInstance;
 }
 
 export interface WowMapLayer {
+  /** Read only as part of gallery keys. */
   index: number;
   width: number;
   height: number;
   tileWidth: number;
   tileHeight: number;
-  minScale: number;
-  maxScale: number;
-  additionalZoomSteps: number;
+  minScale?: number;
+  maxScale?: number;
+  additionalZoomSteps?: number;
   tiles: WowMapTile[];
 }
 
 export interface WowMapTile {
   row: number;
   column: number;
+  /** Read only as part of React and cache keys. */
   fileDataID: number;
   path: string;
 }
 
+/** The floor's render, else the instance's; a floor whose own render is marked invalid has none. */
 export function mapFloorRender(
   instance: WowMapInstance,
   floor: WowMapInstanceFloor | undefined,
 ): WowMapManualRender | undefined {
+  if (floor?.renders?.invalid) return undefined;
   return floor?.renders ?? instance.renders;
 }
 
+/** The floor's 3D map, else the instance's; a floor whose own 3D map is marked invalid has none. */
 export function mapFloorMesh(
   instance: WowMapInstance,
   floor: WowMapInstanceFloor | undefined,
 ): WowMapMeshInstance | undefined {
+  if (floor?.mesh?.invalid) return undefined;
   return floor?.mesh ?? instance.mesh;
 }
 
@@ -240,11 +261,6 @@ function missingNumber(raw: Raw, fields: readonly string[]): string | null {
   return fields.find((field) => !isNumber(raw[field])) ?? null;
 }
 
-/** The first required field of `fields` that is not a non-empty string, or null. */
-function missingText(raw: Raw, fields: readonly string[]): string | null {
-  return fields.find((field) => !isText(raw[field])) ?? null;
-}
-
 class Problems {
   readonly list: ManifestProblem[] = [];
   drop(path: string, reason: string): null {
@@ -273,9 +289,14 @@ function boundsReason(value: unknown): string | null {
   return null;
 }
 
+// What is checked is what the viewer reads to place and load things: positions, sizes, bounds, paths, the 3D map's
+// axis frame, the assignment rectangles, names and map ids. Fields read only as React or cache keys (tile fileDataID,
+// layer index, overlay and assignment ids, art phase and art ids) and fields the viewer never reads are passed
+// through unchecked: an entry is never dropped over a field nobody uses.
+
 function parseTile(raw: unknown, path: string, problems: Problems): WowMapTile | null {
   if (!isObject(raw)) return problems.drop(path, "tile is not an object");
-  const missing = missingNumber(raw, ["row", "column", "fileDataID"]);
+  const missing = missingNumber(raw, ["row", "column"]);
   if (missing) return problems.drop(path, `tile ${missing} is not a number`);
   if (!isText(raw.path)) return problems.drop(path, "tile has no path");
   return raw as unknown as WowMapTile;
@@ -283,22 +304,20 @@ function parseTile(raw: unknown, path: string, problems: Problems): WowMapTile |
 
 function parseLayer(raw: unknown, path: string, problems: Problems): WowMapLayer | null {
   if (!isObject(raw)) return problems.drop(path, "layer is not an object");
-  const missing = missingNumber(raw, ["index", "width", "height", "tileWidth", "tileHeight", "minScale", "maxScale", "additionalZoomSteps"]);
+  const missing = missingNumber(raw, ["width", "height", "tileWidth", "tileHeight"]);
   if (missing) return problems.drop(path, `layer ${missing} is not a number`);
   return { ...raw, tiles: parseList(raw.tiles, `${path}.tiles`, problems, (tile, at) => parseTile(tile, at, problems)) } as unknown as WowMapLayer;
 }
 
 function parseOverlay(raw: unknown, path: string, problems: Problems): WowMapOverlay | null {
   if (!isObject(raw)) return problems.drop(path, "overlay is not an object");
-  const missing = missingNumber(raw, ["id", "offsetX", "offsetY", "textureWidth", "textureHeight"]);
+  const missing = missingNumber(raw, ["offsetX", "offsetY"]);
   if (missing) return problems.drop(path, `overlay ${missing} is not a number`);
   return { ...raw, tiles: parseList(raw.tiles, `${path}.tiles`, problems, (tile, at) => parseTile(tile, at, problems)) } as unknown as WowMapOverlay;
 }
 
 function parseArt(raw: unknown, path: string, problems: Problems): WowMapArt | null {
   if (!isObject(raw)) return problems.drop(path, "art is not an object");
-  const missing = missingNumber(raw, ["phaseID", "artID", "styleID"]);
-  if (missing) return problems.drop(path, `art ${missing} is not a number`);
   if (!Array.isArray(raw.layers)) return problems.drop(path, "art has no layer list");
   const art: Raw = { ...raw, layers: parseList(raw.layers, `${path}.layers`, problems, (layer, at) => parseLayer(layer, at, problems)) };
   if (raw.overlays !== undefined) art.overlays = parseList(raw.overlays, `${path}.overlays`, problems, (overlay, at) => parseOverlay(overlay, at, problems));
@@ -309,8 +328,7 @@ const isNumberList = (value: unknown) => Array.isArray(value) && value.every(isN
 
 function parseAssignment(raw: unknown, path: string, problems: Problems): WowMapAssignment | null {
   if (!isObject(raw)) return problems.drop(path, "assignment is not an object");
-  const missing = missingNumber(raw, ["id", "mapID", "areaID", "orderIndex"]);
-  if (missing) return problems.drop(path, `assignment ${missing} is not a number`);
+  if (!isNumber(raw.mapID)) return problems.drop(path, "assignment mapID is not a number");
   const badList = ["region", "uiMin", "uiMax"].find((field) => !isNumberList(raw[field]));
   if (badList) return problems.drop(path, `assignment ${badList} is not a list of numbers`);
   return raw as unknown as WowMapAssignment;
@@ -319,8 +337,7 @@ function parseAssignment(raw: unknown, path: string, problems: Problems): WowMap
 function parseMap(raw: unknown, path: string, problems: Problems): WowMap | null {
   if (!isObject(raw)) return problems.drop(path, "map is not an object");
   const label = `${path} (map ${String(raw.id ?? "?")})`;
-  const missing = missingNumber(raw, ["id", "parentID", "type", "flags"]);
-  if (missing) return problems.drop(label, `${missing} is not a number`);
+  if (!isNumber(raw.id)) return problems.drop(label, "id is not a number");
   if (!isText(raw.name)) return problems.drop(label, "has no name");
   const map: Raw = { ...raw };
   if (raw.assignments !== undefined) map.assignments = parseList(raw.assignments, `${label}.assignments`, problems, (item, at) => parseAssignment(item, at, problems));
@@ -328,23 +345,34 @@ function parseMap(raw: unknown, path: string, problems: Problems): WowMap | null
   return map as unknown as WowMap;
 }
 
-/** An optional sub-entry: kept when valid, else removed from its parent with a problem. */
+/** An optional sub-entry: kept when valid, else removed from its parent (the parse records the problem). */
 function optional<T>(parent: Raw, field: string, path: string, parse: (raw: unknown, path: string) => T | null) {
   if (parent[field] === undefined) return;
   const parsed = parse(parent[field], `${path}.${field}`);
-  if (parsed === null) delete parent[field];
-  else parent[field] = parsed;
+  if (parsed !== null) parent[field] = parsed;
+  else delete parent[field];
+}
+
+/**
+ * A floor's own render or 3D map: kept when valid; when malformed, kept but marked `invalid` with its reason, so
+ * `mapFloorRender` / `mapFloorMesh` give that floor none instead of the instance-wide one (placed by other bounds),
+ * as before this parser, while floor support still matches the entry's path.
+ */
+function floorAsset<T>(parent: Raw, field: string, path: string, problems: Problems, parse: (raw: unknown, path: string) => T | null) {
+  const raw = parent[field];
+  if (raw === undefined) return;
+  const parsed = parse(raw, `${path}.${field}`);
+  if (parsed !== null) parent[field] = parsed;
+  else if (isObject(raw)) parent[field] = { ...raw, invalid: problems.list[problems.list.length - 1]?.reason ?? "invalid" };
+  else delete parent[field];
 }
 
 function parseMesh(raw: unknown, path: string, problems: Problems): WowMapMeshInstance | null {
-  if (!isObject(raw)) return problems.drop(path, "3D dungeon entry is not an object");
-  if (!isText(raw.path)) return problems.drop(path, "3D dungeon has no path");
-  if (raw.frame !== DUNGEON_MESH_FRAME) return problems.drop(path, `3D dungeon frame "${String(raw.frame ?? "missing")}" is not ${DUNGEON_MESH_FRAME}`);
+  if (!isObject(raw)) return problems.drop(path, "3D map entry is not an object");
+  if (!isText(raw.path)) return problems.drop(path, "3D map has no path");
+  if (raw.frame !== DUNGEON_MESH_FRAME) return problems.drop(path, `3D map frame "${String(raw.frame ?? "missing")}" is not ${DUNGEON_MESH_FRAME}`);
   const bounds = boundsReason(raw.bounds);
-  if (bounds) return problems.drop(path, `3D dungeon ${bounds}`);
-  const missing = missingNumber(raw, ["zMin", "zMax"]);
-  if (missing) return problems.drop(path, `3D dungeon ${missing} is not a number`);
-  if ((raw.zMax as number) < (raw.zMin as number)) return problems.drop(path, "3D dungeon zMax is below zMin");
+  if (bounds) return problems.drop(path, `3D map ${bounds}`);
   const mesh: Raw = { ...raw };
   optional(mesh, "liquid", path, (liquid, at) => {
     if (!isObject(liquid) || typeof liquid.color !== "string" || !/^#[0-9a-f]{6}$/i.test(liquid.color)) return problems.drop(at, "liquid colour is not #rrggbb");
@@ -369,29 +397,13 @@ function parseManualRender(raw: unknown, path: string, problems: Problems): WowM
 
 function parseStyled(raw: unknown, path: string, problems: Problems): WowMapRenderedInstance | null {
   if (!isObject(raw)) return problems.drop(path, "styled render is not an object");
-  const text = missingText(raw, ["path", "source"]);
-  if (text) return problems.drop(path, `styled render has no ${text}`);
+  if (!isText(raw.path)) return problems.drop(path, "styled render has no path");
+  if (typeof raw.source !== "string") return problems.drop(path, "styled render has no source (it marks the canvas as a styled render)");
   const missing = missingNumber(raw, ["width", "height"]);
   if (missing) return problems.drop(path, `styled render ${missing} is not a number`);
   const bounds = boundsReason(raw.bounds);
   if (bounds) return problems.drop(path, `styled render ${bounds}`);
-  if (raw.triangles !== undefined && !isNumber(raw.triangles)) return problems.drop(path, "styled render triangles is not a number");
   return raw as unknown as WowMapRenderedInstance;
-}
-
-function parseFloorSupport(raw: unknown, path: string, problems: Problems): WowMapFloorSupport | null {
-  if (!isObject(raw)) return problems.drop(path, "floor support is not an object");
-  if (raw.version !== 1) return problems.drop(path, `floor support version ${String(raw.version)} is not 1`);
-  const text = missingText(raw, ["path", "sha256", "datasetID"]);
-  if (text) return problems.drop(path, `floor support has no ${text}`);
-  if (!isNumber(raw.mapID)) return problems.drop(path, "floor support mapID is not a number");
-  if (raw.frame !== "wow-yup-mirrored-x") return problems.drop(path, "floor support frame is not wow-yup-mirrored-x");
-  if (!isNumberList(raw.floorIDs)) return problems.drop(path, "floor support floorIDs is not a list of numbers");
-  if (!Array.isArray(raw.sources) || !raw.sources.every((source) => isObject(source) && isNumber(source.floor) && isText(source.path) && isText(source.sha256))) {
-    return problems.drop(path, "floor support sources are malformed");
-  }
-  if (typeof raw.validated !== "boolean") return problems.drop(path, "floor support validated is not true or false");
-  return raw as unknown as WowMapFloorSupport;
 }
 
 function parseFloor(raw: unknown, path: string, problems: Problems): WowMapInstanceFloor | null {
@@ -405,25 +417,21 @@ function parseFloor(raw: unknown, path: string, problems: Problems): WowMapInsta
     return reason ? problems.drop(at, reason) : bounds;
   });
   optional(floor, "preferred2D", label, (value, at) => value === "renders" || value === "art" ? value : problems.drop(at, `"${String(value)}" is not renders or art`));
-  optional(floor, "renders", label, (render, at) => parseManualRender(render, at, problems));
-  optional(floor, "mesh", label, (mesh, at) => parseMesh(mesh, at, problems));
+  // A floor's own render or 3D map that is invalid leaves the floor with none, not the instance-wide one (placed by
+  // other bounds), as before this parser: the old placement check rejected the floor's entry after the fallback.
+  floorAsset(floor, "renders", label, problems, (render, at) => parseManualRender(render, at, problems));
+  floorAsset(floor, "mesh", label, problems, (mesh, at) => parseMesh(mesh, at, problems));
   return floor as unknown as WowMapInstanceFloor;
 }
 
 function parseInstance(raw: unknown, path: string, problems: Problems): WowMapInstance | null {
   if (!isObject(raw)) return problems.drop(path, "instance is not an object");
   const label = `${path} (${isText(raw.name) ? raw.name : "unnamed"}, map ${String(raw.mapID ?? "?")})`;
-  const missing = missingNumber(raw, ["mapID", "instanceType"]);
-  if (missing) return problems.drop(label, `${missing} is not a number`);
+  if (!isNumber(raw.mapID)) return problems.drop(label, "mapID is not a number");
   if (!isText(raw.name)) return problems.drop(label, "has no name");
-  // Published instances may leave the extractor's directory empty (mesh-only dungeons): any string will do.
-  if (typeof raw.directory !== "string") return problems.drop(label, "directory is not a string");
   if (!Array.isArray(raw.floors)) return problems.drop(label, "has no floor list");
   const instance: Raw = { ...raw, floors: parseList(raw.floors, `${label}.floors`, problems, (floor, at) => parseFloor(floor, at, problems)) };
-  optional(instance, "floorSupport", label, (value, at) => parseFloorSupport(value, at, problems));
-  optional(instance, "reusedFrom", label, (value, at) => isObject(value) && isText(value.namespace) && isNumber(value.mapID)
-    ? value
-    : problems.drop(at, "reusedFrom needs a namespace and a numeric mapID"));
+  // floorSupport is checked where it is used (usableFloorSupport), so it passes through here.
   optional(instance, "styled", label, (value, at) => parseStyled(value, at, problems));
   optional(instance, "renders", label, (value, at) => parseManualRender(value, at, problems));
   optional(instance, "mesh", label, (value, at) => parseMesh(value, at, problems));
