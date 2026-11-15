@@ -15,6 +15,7 @@ import {
   shouldHoldScene,
   shownScene,
   stageView,
+  viewInputFor,
   type ReadyMapScene,
 } from "./replayPlayerModel";
 
@@ -165,5 +166,19 @@ describe("stage and scene fields", () => {
 
   it("gives the export none of the fields that change filmed frames (camera limits, walkable floors, unit scale)", () => {
     expect(sceneFieldsFor("capture")).toEqual({ focus: false, followSource: false, alignmentGround: false, worldCoordinates: false });
+  });
+});
+
+describe("contract hardening", () => {
+  it("drops unit clicks, the followed unit and follow changes from the view when not interactive, whatever the host passes", () => {
+    const click = () => {};
+    expect(viewInputFor(false, { onUnitClick: click, followGuid: "a", playerFollowGuid: "b" })).toEqual({ onUnitClick: undefined, followGuid: undefined, followChanges: false });
+    expect(viewInputFor(true, { onUnitClick: click, followGuid: "a", playerFollowGuid: "b" })).toEqual({ onUnitClick: click, followGuid: "a", followChanges: true });
+    expect(viewInputFor(true, { playerFollowGuid: "b" })).toEqual({ onUnitClick: undefined, followGuid: "b", followChanges: true });
+  });
+
+  it("never gives a host-fixed view to the Director, even with a director camera", () => {
+    expect(cameraModeFor({ mode: "director" }, { manual: false, viewport: null }, true)).toEqual({ mode: "user", cinematic: false });
+    expect(cameraModeFor({ mode: "director" }, { manual: false, viewport: null }, false)).toEqual({ mode: "director", cinematic: true });
   });
 });

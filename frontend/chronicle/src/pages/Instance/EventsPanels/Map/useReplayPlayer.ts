@@ -68,7 +68,10 @@ export interface ReplayPlayerOptions {
   dungeonMesh?: DungeonMeshRequest | null;
   /** Re-frame on a new selection or encounter (default `"on-selection"`); `"never"`: the view applies once, and again only on Follow. */
   reframe?: "on-selection" | "never";
-  /** A view the host fixes (the export), instead of the player's framing. */
+  /**
+   * A view the host fixes (the export), instead of the player's framing. It implies the user's camera (the Director
+   * never moves it) and no reframing, whatever `camera.mode` and `reframe` say.
+   */
   fixedView?: MapViewRequest;
   /** Without WebGL: the 2D map (default), or nothing (the landing hides; the export errors). */
   webglFallback?: "2d" | "none";
@@ -197,7 +200,7 @@ export function useReplayPlayer(options: ReplayPlayerOptions): ReplayPlayerState
   const [storedFraming, setFraming] = useState<MapFraming>(INITIAL_MAP_FRAMING);
   // A new selection or the replay moving into another encounter re-frames;
   // loading states (e.g. reprocessing after a filter change) keep the framing.
-  const framing = ready && reframe === "on-selection"
+  const framing = ready && reframe === "on-selection" && options.fixedView === undefined
     ? reconcileMapFraming(storedFraming, `${source.context.selectedEncounterIds.join(",")}|${ready.encounterId}`, defaultViewport)
     : storedFraming;
   if (framing !== storedFraming) setFraming(framing);
@@ -229,7 +232,7 @@ export function useReplayPlayer(options: ReplayPlayerOptions): ReplayPlayerState
     if (framing.viewport !== null || framing.manual) setFraming({ ...framing, viewport: null, manual: false });
   };
 
-  const { mode: cameraMode, cinematic } = cameraModeFor(camera, framing);
+  const { mode: cameraMode, cinematic } = cameraModeFor(camera, framing, options.fixedView !== undefined);
   const onMesh = show3D && meshWanted && meshState === "ready";
   const { canFollow, following } = followState(readyWholeRun, onMesh, cinematic);
   const [followGuid, setFollowGuid] = useState<string | null>(null);

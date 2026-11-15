@@ -5,7 +5,7 @@ import { MapFloorPicker } from "./MapFloorPicker";
 import { MapView2D } from "./MapView2D";
 import { DEFAULT_EFFECT_SETTINGS } from "./mapViewSettings";
 import type { MapView3DProps } from "./MapView3D";
-import { stageView as stageViewFor } from "./replayPlayerModel";
+import { stageView as stageViewFor, viewInputFor } from "./replayPlayerModel";
 import type { ReplayPlayerState } from "./useReplayPlayer";
 
 const LazyMapView3D = lazy(() => import("./MapView3D"));
@@ -113,9 +113,10 @@ export function ReplayPlayerFlatView({ player, trailSeconds }: { player: ReplayP
 export function ReplayPlayer({ player, view = {}, header, overlay, transport, fallback, framed = false, bare = false, view3d }: ReplayPlayerProps) {
   const ready = player.ready;
   if (!ready) return null;
-  const { trailSeconds, followGuid, ...viewProps } = view;
+  const { trailSeconds, followGuid, onUnitClick, ...viewProps } = view;
   const fields = player.sceneFields;
   const interactive = player.interactive;
+  const input = viewInputFor(interactive, { onUnitClick, followGuid, playerFollowGuid: player.followGuid });
   const View3D = view3d ?? LazyMapView3D;
   const view3dElement = (
     <View3D
@@ -149,8 +150,9 @@ export function ReplayPlayer({ player, view = {}, header, overlay, transport, fa
       topDownKey={player.topDownKey}
       frozen={player.reloading}
       debuffSpellIds={ready.debuffSpellIds}
-      followGuid={followGuid !== undefined ? followGuid : interactive ? player.followGuid : undefined}
-      onFollowChange={interactive ? player.setFollowGuid : undefined}
+      onUnitClick={input.onUnitClick}
+      followGuid={input.followGuid}
+      onFollowChange={input.followChanges ? player.setFollowGuid : undefined}
       onScene={player.onScene}
     />
   );

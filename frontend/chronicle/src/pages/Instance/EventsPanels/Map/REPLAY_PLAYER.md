@@ -58,10 +58,10 @@ Decisions are pure functions in `replayPlayerModel.ts`, tested in
 | `prefetchMesh` | Start the GLB download as soon as the scene names it (default true). |
 | `dungeonMesh` | A mesh request the host makes itself, instead of the scene's (no prefetch then). |
 | `reframe` | `"on-selection"` (default): a new selection or encounter re-frames. `"never"`: the view applies once, and again only on Follow; `releaseCamera()` hands the camera back without re-applying it. |
-| `fixedView` | A view request the host fixes, instead of the player's framing. |
+| `fixedView` | A view request the host fixes, instead of the player's framing. It implies the user's camera and no reframing: the Director never moves a fixed view, whatever `camera.mode` and `reframe` say. |
 | `webglFallback` | Without WebGL: the 2D map (default) or `"none"` (nothing; the host hides or errors). |
 | `onUnavailable` | Told when WebGL turns out to be unavailable. |
-| `interactive` | Pointer input: camera drags, the followed unit and its changes (default true). |
+| `interactive` | Pointer input: camera drags, unit clicks, the followed unit and its changes (default true). Off, none of them reach the view, including an `onUnitClick` or `followGuid` passed through `view`. |
 | `sceneFields` | Which optional scene fields reach the view: `"all"` (default), `"backdrop"` (no alignment artwork, the view's default coordinate space), `"capture"` (also no focus or follow source: each changes filmed frames, through camera limits, walkable floors and unit scale). |
 | `onScene` | Told when the 3D scene is created and disposed. |
 
