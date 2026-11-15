@@ -441,7 +441,7 @@ export class MapScene3D {
     },
     walking: () => this.walk !== null,
     tweening: () => this.tween.active(),
-    directorAvailable: () => this.director !== null && this.dungeonMesh !== null,
+    followCamera: () => this.director !== null,
   });
   // The Director's springs, follow track and line of sight (directorRig.ts).
   private readonly directorRig = new DirectorRig({
@@ -1810,12 +1810,21 @@ export class MapScene3D {
     this.planLayer.setItems(this.planItems, this.planSelected, this.planSurface);
   }
 
-  /** Who owns the camera now: the Director, the user's free cam, walk mode, a tween or a scripted pose (cameraArbiter.ts). */
+  /**
+   * Who owns the camera now (cameraArbiter.ts): "director" is the follow
+   * camera (the Director for the group or a followed unit, or the host's
+   * follow framing on the tiles); "free", "walk" and "tween" are the viewer's
+   * camera while the follow camera is on; "scripted" an applied pose.
+   */
   cameraOwner(): CameraOwner {
     return this.arbiter.owner();
   }
 
-  /** Called with the new camera owner whenever it changes. */
+  /**
+   * Called with the camera owner now, then whenever it changes (once a change
+   * settles, and at the end of a frame). It may act on the scene: a change it
+   * causes is reported after it returns, never from inside it.
+   */
   setOnCameraOwnerChange(callback: ((owner: CameraOwner) => void) | null) {
     this.arbiter.setOnChange(callback);
   }

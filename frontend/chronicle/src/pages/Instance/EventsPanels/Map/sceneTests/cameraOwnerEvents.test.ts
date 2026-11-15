@@ -14,10 +14,12 @@ const FIGHT = [
   testUnit("p2", -5, 8),
 ];
 
-/** Records the owner changes from now on. */
+/** Records the owner changes from now on (subscribing reports the owner it starts from, checked and dropped here). */
 function record(h: TestScene): CameraOwner[] {
   const owners: CameraOwner[] = [];
   h.scene.setOnCameraOwnerChange((owner) => owners.push(owner));
+  expect(owners).toEqual([h.scene.cameraOwner()]);
+  owners.length = 0;
   return owners;
 }
 
@@ -164,5 +166,83 @@ describe("camera owner changes without the Director", () => {
     h.input.doubleClick(at.x, at.y);
     h.settle();
     expect(owners).toEqual(["tween", "free"]);
+  });
+});
+
+// chronicle-2020: the report the host's Follow button and its way back read.
+describe("the owner report stays honest", () => {
+  it("subscribing reports the owner it starts from", async () => {
+    const flat = await createTestScene({ mesh: false });
+    const seen: CameraOwner[] = [];
+    flat.scene.setOnCameraOwnerChange((owner) => seen.push(owner));
+    expect(seen).toEqual(["free"]);
+    const { h } = await fightScene();
+    h.scene.setOnCameraOwnerChange((owner) => seen.push(owner));
+    expect(seen).toEqual(["free", "director"]);
+  });
+
+  it("a look-around drag, an A/D turn and the mobile turn stick take it, though only some report a viewport", async () => {
+    const reported: number[] = [];
+    for (const look of [
+      (h: TestScene) => h.input.drag(0, 40, 0),
+      (h: TestScene) => {
+        h.input.hover();
+        h.input.hold("KeyA", 300);
+      },
+      (h: TestScene) => h.scene.setMobileInput({ ...IDLE_MOBILE_MAP_INPUT, turn: 1 }),
+    ]) {
+      const { h, owners } = await fightScene();
+      look(h);
+      h.frames(5);
+      expect(owners).toEqual(["free"]);
+      reported.push(h.events.userViewports.length);
+    }
+    // Here the A/D turn and the stick turn the camera with no viewport report
+    // at all: the host's framing never hears of them, so only the owner
+    // report can tell (a drag's report depends on where the orbit leaves the
+    // centre of view).
+    expect(reported).toEqual([1, 0, 0]);
+  });
+
+  it("on the tiles the follow camera's own viewport tweens stay with it; a viewer's drag takes it", async () => {
+    const h = await createTestScene({ mesh: false, units: FIGHT, director: BOSS });
+    const owners = record(h);
+    expect(owners).toEqual([]);
+    expect(h.scene.cameraOwner()).toBe("director");
+    // The whole run's follow grid moving on.
+    h.scene.setViewport({ centerX: 0.4, centerY: 0.5, zoom: 2 }, 250);
+    h.settle();
+    h.scene.setViewport({ centerX: 0.45, centerY: 0.5, zoom: 2 }, 250);
+    h.settle();
+    expect(owners).toEqual([]);
+    h.input.drag(0, 40, 0);
+    expect(owners).toEqual(["free"]);
+  });
+
+  it("a viewport tween still running when the Director takes over reports the Director, which writes after it", async () => {
+    const h = await createTestScene({ units: FIGHT });
+    const owners = record(h);
+    h.scene.setViewport({ centerX: 0.3, centerY: 0.3, zoom: 3 }, 500);
+    expect(h.scene.cameraOwner()).toBe("tween");
+    h.scene.setDirector({ bossGuids: BOSS });
+    h.settle();
+    expect(owners).toEqual(["tween", "director"]);
+  });
+
+  it("a host acting on the report from its callback gets the reports in order, without recursion", async () => {
+    const { h } = await fightScene();
+    const seen: string[] = [];
+    let depth = 0;
+    h.scene.setOnCameraOwnerChange((owner) => {
+      depth++;
+      seen.push(`${owner}@${depth}`);
+      // Hands it straight back (a host re-rendering into a viewport request).
+      if (owner === "free") h.scene.setViewport({ centerX: 0.5, centerY: 0.5, zoom: 2 });
+      depth--;
+    });
+    seen.length = 0;
+    h.input.drag(0, 40, 0);
+    expect(seen).toEqual(["free@1", "director@1"]);
+    expect(h.scene.cameraOwner()).toBe("director");
   });
 });
