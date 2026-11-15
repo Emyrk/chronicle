@@ -5,10 +5,10 @@ import { classEntity, entityAttributes, specEntity, type EntityStat } from "@/co
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/Tooltip/tooltip"
 import { cn } from "@/lib/utils"
 import { parseHexColor } from "@/pages/Instance/parseColors"
-import { formatMetric } from "@/pages/Parsing/cohort/cohortStats"
+import { formatMetric, normalFitLabel } from "@/pages/Parsing/cohort/cohortStats"
 import { CLASS_CSS_VAR, CLASS_DISPLAY } from "@/pages/Rankings/classDisplay"
 import { formatBoxPlotTick } from "@/pages/Rankings/boxPlotScale"
-import { spreadBands, spreadCutoff, spreadScale, spreadSpecLabel, type SpreadScale } from "./spreadBands"
+import { normalCurvePath, spreadBands, spreadCutoff, spreadScale, spreadSpecLabel, type SpreadScale } from "./spreadBands"
 
 /** Tier cutoffs shown as columns beside each bar. */
 const COLUMN_FLOORS = [50, 75, 95, 99] as const
@@ -77,6 +77,7 @@ export function SpreadChart({
           ))}
           <div className="w-14 shrink-0 text-right md:hidden">95+</div>
           <div className="hidden w-12 shrink-0 text-right sm:block">Kills</div>
+          <div className="hidden w-16 shrink-0 text-right sm:block">Fit</div>
           <div className="hidden w-6 shrink-0 sm:block" />
         </div>
 
@@ -116,6 +117,10 @@ export function SpreadChart({
 
         {/* Legend */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 pt-2 text-[11px] text-muted-foreground">
+          <span className="flex items-center gap-1.5">
+            <span className="h-0.5 w-4 rounded-full bg-primary" aria-hidden />
+            Fitted normal curve
+          </span>
           <span>Parse</span>
           {LEGEND.map((tier) => (
             <span key={tier.floor} className="flex items-center gap-1">
@@ -138,8 +143,55 @@ function TrailingColumnSpacers() {
       ))}
       <div className="w-14 shrink-0 md:hidden" />
       <div className="hidden w-12 shrink-0 sm:block" />
+      <div className="hidden w-16 shrink-0 sm:block" />
       <div className="hidden w-6 shrink-0 sm:block" />
     </>
+  )
+}
+
+function NormalFitCell({ spread, metricLabel }: { spread: ParseScoreSpread; metricLabel: string }) {
+  const fit = spread.normal_fit
+  if (!fit) return <span className="hidden w-16 shrink-0 sm:block" />
+
+  const gapPercent = (fit.max_cdf_gap * 100).toFixed(1)
+  const label = normalFitLabel(fit.max_cdf_gap)
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "hidden w-16 shrink-0 justify-end sm:flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 rounded-sm",
+            label === "close fit" ? "text-emerald-300" : label === "rough fit" ? "text-amber-300" : "text-rose-300",
+          )}
+          aria-label={`Normal distribution ${label}, ${gapPercent}% maximum CDF gap`}
+        >
+          <span className="rounded border border-current/25 bg-current/5 px-1.5 py-0.5 font-mono text-[10px] tabular-nums">
+            {gapPercent}%
+          </span>
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top" sideOffset={6} className="w-72 space-y-2.5 p-3 text-left text-xs text-balance">
+        <div>
+          <p className="font-semibold text-zinc-100">Normal distribution: {label}</p>
+          <p className="mt-0.5 text-zinc-400">The line is fitted to all {spread.sample_size.toLocaleString()} kills in this cohort.</p>
+        </div>
+        <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 tabular-nums">
+          <dt className="text-zinc-400">Mean (μ)</dt>
+          <dd className="font-medium text-zinc-100">{formatMetric(fit.mean)} {metricLabel}</dd>
+          <dt className="text-zinc-400">Standard deviation (σ)</dt>
+          <dd className="font-medium text-zinc-100">{formatMetric(fit.standard_deviation)} {metricLabel}</dd>
+          <dt className="text-zinc-400">Maximum CDF gap</dt>
+          <dd className="font-medium text-zinc-100">{gapPercent} percentage points</dd>
+        </dl>
+        <p className="border-t border-white/10 pt-2 text-zinc-300">
+          At the largest mismatch, the observed cumulative share differs from the fitted curve by {gapPercent} percentage points.
+        </p>
+        <p className="text-[10px] leading-relaxed text-zinc-500">
+          Close ≤ 6% · rough ≤ 12% · poor &gt; 12%. This is descriptive, not a confidence score or significance test.
+        </p>
+      </TooltipContent>
+    </Tooltip>
   )
 }
 
@@ -163,6 +215,7 @@ function SpreadRow({
   const className = CLASS_DISPLAY[spread.player_class] ?? spread.player_class
   const specLabel = spreadSpecLabel(spread) || className
   const bands = spreadBands(spread)
+  const curvePath = spread.normal_fit ? normalCurvePath(spread.normal_fit, scale) : null
   const scored = spread.status !== "sample_too_small"
   const value = (floor: number) => {
     const cutoff = spreadCutoff(spread, floor)
@@ -204,7 +257,7 @@ function SpreadRow({
               <span className="truncate font-medium" style={{ color }}>{specLabel}</span>
             </span>
 
-            <span className={cn("relative h-5 flex-1", !scored && "opacity-40")}>
+            <span className={cn("relative h-5 flex-1 overflow-hidden", !scored && "opacity-40")}>
               {bands.map((band, i) => {
                 // The sub-25 tail (deaths, late joins) and the 100 tail (a few
                 // outliers) are drawn as whiskers so the bar spans 25→100.
@@ -229,6 +282,17 @@ function SpreadRow({
                   />
                 )
               })}
+              {curvePath && (
+                <svg
+                  viewBox="0 0 100 20"
+                  preserveAspectRatio="none"
+                  className="pointer-events-none absolute inset-0 h-full w-full"
+                  aria-hidden
+                >
+                  <path d={curvePath} fill="none" className="stroke-card" strokeWidth={4} vectorEffect="non-scaling-stroke" />
+                  <path d={curvePath} fill="none" className="stroke-primary" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+                </svg>
+              )}
             </span>
 
             {COLUMN_FLOORS.map((floor) => (
@@ -277,6 +341,7 @@ function SpreadRow({
           <p className="mt-2 text-[10px] text-muted-foreground">Click for spec details</p>
         </TooltipContent>
       </Tooltip>
+      <NormalFitCell spread={spread} metricLabel={metricLabel} />
       <button
         type="button"
         onClick={onHide}

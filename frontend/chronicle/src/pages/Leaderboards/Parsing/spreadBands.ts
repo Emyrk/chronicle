@@ -1,4 +1,4 @@
-import type { ParseScoreSpread, RankingsFilterClass, TimeParseSpread } from "@/api/typesGenerated"
+import type { ParseScoreNormalFit, ParseScoreSpread, RankingsFilterClass, TimeParseSpread } from "@/api/typesGenerated"
 import { niceStep } from "@/pages/Parsing/cohort/cohortStats"
 
 export interface SpreadBand {
@@ -108,6 +108,17 @@ export function spreadScale(spreads: readonly ParseScoreSpread[], targetTicks = 
   const ticks: number[] = []
   for (let tick = min; tick <= max + step / 2; tick += step) ticks.push(tick)
   return { min, max, ticks }
+}
+
+export function normalCurvePath(fit: ParseScoreNormalFit, scale: SpreadScale): string | null {
+  if (fit.standard_deviation <= 0 || scale.max <= scale.min) return null
+  return Array.from({ length: 81 }, (_, index) => {
+    const x = (index / 80) * 100
+    const value = scale.min + (index / 80) * (scale.max - scale.min)
+    const z = (value - fit.mean) / fit.standard_deviation
+    const y = 18 - Math.exp(-(z ** 2) / 2) * 14
+    return `${index === 0 ? "M" : "L"}${x.toFixed(2)},${y.toFixed(2)}`
+  }).join(" ")
 }
 
 /** Off-role rows have a median below this share of the best median. */

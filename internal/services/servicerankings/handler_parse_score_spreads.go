@@ -3,6 +3,7 @@ package servicerankings
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/http"
 	"sort"
 
@@ -146,6 +147,36 @@ func parseScoreTenantScope(ctx context.Context, store parseScoreCohortQuerier) (
 	return ids, nil
 }
 
+func fitParseSpreadNormal(sorted []float64) *chroniclesdk.ParseScoreNormalFit {
+	if len(sorted) < 3 {
+		return nil
+	}
+	var sum float64
+	for _, value := range sorted {
+		sum += value
+	}
+	mean := sum / float64(len(sorted))
+	var squaredDifferenceSum float64
+	for _, value := range sorted {
+		squaredDifferenceSum += (value - mean) * (value - mean)
+	}
+	standardDeviation := math.Sqrt(squaredDifferenceSum / float64(len(sorted)))
+	if math.IsNaN(standardDeviation) || math.IsInf(standardDeviation, 0) || standardDeviation <= math.SmallestNonzeroFloat64 {
+		return nil
+	}
+
+	var maxCDFGap float64
+	for index, value := range sorted {
+		fitted := 0.5 * (1 + math.Erf((value-mean)/(standardDeviation*math.Sqrt2)))
+		empiricalBefore := float64(index) / float64(len(sorted))
+		empiricalAfter := float64(index+1) / float64(len(sorted))
+		maxCDFGap = max(maxCDFGap, math.Abs(fitted-empiricalBefore), math.Abs(empiricalAfter-fitted))
+	}
+	return &chroniclesdk.ParseScoreNormalFit{
+		Mean: mean, StandardDeviation: standardDeviation, MaxCDFGap: maxCDFGap,
+	}
+}
+
 // summarizeParseSpread scores one exact cohort the same way the cohort
 // viewer does (excluding each value's own run) and reduces it to a spread.
 func summarizeParseSpread(values []parsepolicy.GroupedScoreValue) chroniclesdk.ParseScoreSpread {
@@ -184,6 +215,6 @@ func summarizeParseSpread(values []parsepolicy.GroupedScoreValue) chroniclesdk.P
 	}
 	return chroniclesdk.ParseScoreSpread{
 		SampleSize: len(values), Status: string(status),
-		Min: sorted[0], Median: median, Max: sorted[len(sorted)-1], Cutoffs: cutoffs,
+		Min: sorted[0], Median: median, Max: sorted[len(sorted)-1], NormalFit: fitParseSpreadNormal(sorted), Cutoffs: cutoffs,
 	}
 }

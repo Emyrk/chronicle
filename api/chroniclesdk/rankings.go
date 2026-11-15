@@ -310,6 +310,13 @@ type ParseScoreTierCutoff struct {
 	Value *float64 `json:"value"`
 }
 
+// ParseScoreNormalFit describes a normal distribution fitted to one cohort.
+type ParseScoreNormalFit struct {
+	Mean              float64 `json:"mean"`
+	StandardDeviation float64 `json:"standard_deviation"`
+	MaxCDFGap         float64 `json:"max_cdf_gap"`
+}
+
 // ParseScoreSpread summarizes one exact DPS/HPS cohort for public parse pages.
 type ParseScoreSpread struct {
 	EncounterName  string                 `json:"encounter_name"`
@@ -323,6 +330,7 @@ type ParseScoreSpread struct {
 	Min            float64                `json:"min"`
 	Median         float64                `json:"median"`
 	Max            float64                `json:"max"`
+	NormalFit      *ParseScoreNormalFit   `json:"normal_fit,omitempty"`
 	Cutoffs        []ParseScoreTierCutoff `json:"cutoffs"`
 }
 

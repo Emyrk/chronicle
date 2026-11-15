@@ -5,6 +5,7 @@ import {
   formatClock,
   niceStep,
   normalCdf,
+  normalFitLabel,
   outlierZoomRange,
   parseTierIndex,
   summarizeCohort,
@@ -93,6 +94,15 @@ describe("fitNormalDistribution", () => {
     expect(fitNormalDistribution([])).toBeNull();
     expect(fitNormalDistribution([1, 2])).toBeNull();
     expect(fitNormalDistribution([4, 4, 4])).toBeNull();
+  });
+});
+
+describe("normalFitLabel", () => {
+  it("labels descriptive CDF gap bands", () => {
+    expect(normalFitLabel(0.06)).toBe("close fit");
+    expect(normalFitLabel(0.061)).toBe("rough fit");
+    expect(normalFitLabel(0.12)).toBe("rough fit");
+    expect(normalFitLabel(0.121)).toBe("poor fit");
   });
 });
 
