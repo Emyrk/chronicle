@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   buildHistogram,
+  fitNormalDistribution,
   formatClock,
   niceStep,
+  normalCdf,
   outlierZoomRange,
   parseTierIndex,
   summarizeCohort,
@@ -62,6 +64,42 @@ describe("summarizeCohort", () => {
     expect(summarizeCohort([3, 1, 4, 2], "lower")).toEqual({ count: 4, best: 1, median: 2.5, worst: 4 });
     expect(summarizeCohort([3, 1, 2], "higher")).toEqual({ count: 3, best: 3, median: 2, worst: 1 });
     expect(summarizeCohort([], "lower")).toBeNull();
+  });
+});
+
+describe("fitNormalDistribution", () => {
+  it("fits the sample mean and standard deviation", () => {
+    const fit = fitNormalDistribution([1, 2, 3]);
+    expect(fit).not.toBeNull();
+    expect(fit!.mean).toBe(2);
+    expect(fit!.standardDeviation).toBeCloseTo(Math.sqrt(2 / 3));
+    expect(fit!.maxCdfGap).toBeGreaterThan(0);
+    expect(fit!.maxCdfGap).toBeLessThan(0.5);
+  });
+
+  it("reports a larger CDF gap for a visibly non-normal sample", () => {
+    const normalQuantiles = [
+      -2.326, -1.645, -1.282, -1.036, -0.842, -0.674, -0.524, -0.385, -0.253, -0.126,
+      0,
+      0.126, 0.253, 0.385, 0.524, 0.674, 0.842, 1.036, 1.282, 1.645, 2.326,
+    ];
+    const skewed = [...Array.from({ length: 18 }, (_, index) => index / 20), 4, 8, 16];
+    expect(fitNormalDistribution(normalQuantiles)!.maxCdfGap).toBeLessThan(
+      fitNormalDistribution(skewed)!.maxCdfGap,
+    );
+  });
+
+  it("does not fit an empty, tiny, or constant sample", () => {
+    expect(fitNormalDistribution([])).toBeNull();
+    expect(fitNormalDistribution([1, 2])).toBeNull();
+    expect(fitNormalDistribution([4, 4, 4])).toBeNull();
+  });
+});
+
+describe("normalCdf", () => {
+  it("is centered on the fitted mean", () => {
+    expect(normalCdf(0)).toBeCloseTo(0.5, 6);
+    expect(normalCdf(-1)).toBeCloseTo(1 - normalCdf(1), 6);
   });
 });
 

@@ -1,7 +1,15 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { parseHexColor } from "@/pages/Instance/parseColors";
-import { buildHistogram, outlierZoomRange, PARSE_TIERS, type CohortDirection, type HistogramBin, type ScoredValue } from "./cohortStats";
+import {
+  buildHistogram,
+  fitNormalDistribution,
+  outlierZoomRange,
+  PARSE_TIERS,
+  type CohortDirection,
+  type HistogramBin,
+  type ScoredValue,
+} from "./cohortStats";
 
 const HEIGHT = 200;
 const MARGIN = { top: 16, right: 12, bottom: 28, left: 36 };
@@ -22,6 +30,12 @@ function niceCeil(value: number): number {
     if (factor * magnitude >= value) return factor * magnitude;
   }
   return 10 * magnitude;
+}
+
+function normalFitLabel(maxCdfGap: number): string {
+  if (maxCdfGap <= 0.06) return "close fit";
+  if (maxCdfGap <= 0.12) return "rough fit";
+  return "poor fit";
 }
 
 function useWidth() {
@@ -90,11 +104,26 @@ export function CohortDistribution({
 
   const plotWidth = Math.max(0, width - MARGIN.left - MARGIN.right);
   const plotHeight = HEIGHT - MARGIN.top - MARGIN.bottom;
-  const yMax = niceCeil(Math.max(1, ...bins.map((bin) => bin.total)));
   const domainStart = bins[0]?.start ?? 0;
   const domainEnd = bins[bins.length - 1]?.end ?? 1;
+  const binWidth = bins[0]?.end - bins[0]?.start || 1;
+  const normalFit = useMemo(() => fitNormalDistribution(values.map((value) => value.value)), [values]);
+  const expectedNormalCount = (value: number) => {
+    if (!normalFit) return 0;
+    const z = (value - normalFit.mean) / normalFit.standardDeviation;
+    const density = Math.exp(-(z ** 2) / 2) / (normalFit.standardDeviation * Math.sqrt(2 * Math.PI));
+    return density * binWidth * values.length;
+  };
+  const normalPeakX = normalFit ? Math.min(domainEnd, Math.max(domainStart, normalFit.mean)) : domainStart;
+  const yMax = niceCeil(Math.max(1, ...bins.map((bin) => bin.total), expectedNormalCount(normalPeakX)));
   const x = (value: number) => MARGIN.left + ((value - domainStart) / (domainEnd - domainStart)) * plotWidth;
   const y = (count: number) => MARGIN.top + plotHeight - (count / yMax) * plotHeight;
+  const normalPath = normalFit
+    ? Array.from({ length: 81 }, (_, index) => {
+        const value = domainStart + ((domainEnd - domainStart) * index) / 80;
+        return `${index === 0 ? "M" : "L"}${x(value)},${y(expectedNormalCount(value))}`;
+      }).join(" ")
+    : null;
   const slot = bins.length > 0 ? plotWidth / bins.length : 0;
   const barWidth = Math.max(2, Math.min(MAX_BAR_WIDTH, slot - SEGMENT_GAP));
   const labelEvery = Math.max(1, Math.ceil(56 / Math.max(slot, 1)));
@@ -128,7 +157,17 @@ export function CohortDistribution({
   return (
     <div className="rounded-lg border border-border bg-card p-4">
       <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <span className="text-sm font-medium text-foreground">Distribution</span>
+        <span className="flex flex-wrap items-center gap-2 text-sm font-medium text-foreground">
+          Distribution
+          {normalFit && (
+            <span
+              className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary"
+              title="Largest gap between the cohort's cumulative distribution and the fitted normal curve. Lower is closer. This is descriptive, not a significance test."
+            >
+              Normal: {normalFitLabel(normalFit.maxCdfGap)} · {(normalFit.maxCdfGap * 100).toFixed(1)}% CDF gap
+            </span>
+          )}
+        </span>
         <span className="flex items-center gap-3 text-xs text-muted-foreground">
           {zoom ? (
             <>
@@ -190,6 +229,13 @@ export function CohortDistribution({
                 dimmed={hovered !== null && hovered !== binIndex}
               />
             ))}
+
+            {normalPath && (
+              <g pointerEvents="none" aria-hidden>
+                <path d={normalPath} fill="none" className="stroke-card" strokeWidth={5} strokeLinejoin="round" />
+                <path d={normalPath} fill="none" className="stroke-primary" strokeWidth={2.25} strokeLinejoin="round" />
+              </g>
+            )}
 
             {bins.map((bin, binIndex) =>
               binIndex % labelEvery === 0 ? (
@@ -279,6 +325,12 @@ export function CohortDistribution({
       )}
 
       <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+        {normalFit && (
+          <span className="flex items-center gap-1.5">
+            <span className="h-0.5 w-4 rounded-full bg-primary" aria-hidden />
+            Fitted normal curve
+          </span>
+        )}
         <span>Parse</span>
         {presentTiers.map((tier) => (
           <span key={tier.floor} className="flex items-center gap-1.5">
