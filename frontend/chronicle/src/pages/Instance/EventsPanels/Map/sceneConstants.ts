@@ -1,3 +1,6 @@
+import type { MapMarkerKind } from "./useMapScene";
+import { TOKEN_LAYOUT } from "./unitTokenArt";
+
 /**
  * Scene constants shared by MapScene3D and the modules split out of it
  * (chronicle-1970). Moved verbatim out of MapScene3D.ts; GROUND_WIDTH is
@@ -13,3 +16,6 @@ export const PLAYER_GEOMETRY_HEIGHT = 3;
 // A dropped frame never jumps the camera further than this.
 export const KEY_MAX_STEP_S = 0.1;
 export const DEEP_BREATH_GROUND_LIFT = 0.12;
+// Health bars sit between the body and the hover label.
+export const BAR_HEIGHT = 3.9;
+export const TOKEN_RADIUS: Record<MapMarkerKind, number> = TOKEN_LAYOUT.radius;
