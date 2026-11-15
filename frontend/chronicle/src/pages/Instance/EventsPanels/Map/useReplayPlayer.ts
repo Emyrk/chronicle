@@ -46,8 +46,6 @@ export interface ReplayPlayerOptions {
   holdValue?: boolean;
   /** Miniature model URLs to use instead of the shared manifest's (the stories'). */
   unitModelUrls?: PublishedUnitModelUrls;
-  /** A followed unit the host sets itself (the stories), instead of the player's Follow state. */
-  followGuid?: string | null;
 }
 
 /** The imperative camera actions (bump-key props on the view underneath). */
@@ -184,8 +182,7 @@ export function useReplayPlayer(options: ReplayPlayerOptions): ReplayPlayerState
   const { mode: cameraMode, cinematic } = cameraModeFor(camera, framing);
   const onMesh = show3D && meshWanted && meshState === "ready";
   const { canFollow, following } = followState(readyWholeRun, onMesh, cinematic);
-  const [ownFollowGuid, setFollowGuid] = useState<string | null>(null);
-  const followGuid = options.followGuid !== undefined ? options.followGuid : ownFollowGuid;
+  const [followGuid, setFollowGuid] = useState<string | null>(null);
   const followUnit = (guid: string) => {
     if (followGuid === guid) {
       setFollowGuid(null);

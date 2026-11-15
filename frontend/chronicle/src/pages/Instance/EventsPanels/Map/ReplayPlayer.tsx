@@ -33,6 +33,8 @@ export type ReplayViewOptions = Pick<MapView3DProps,
   | "walkCaptureFrame"
   | "showCompass"
 > & {
+  /** A followed unit the host fixes itself (the stories), instead of the player's Follow state. */
+  followGuid?: string | null;
   /** Movement trails on the 2D view, in seconds. */
   trailSeconds?: number;
 };
@@ -104,7 +106,7 @@ export function ReplayPlayerFlatView({ player, trailSeconds }: { player: ReplayP
 export function ReplayPlayer({ player, view = {}, header, overlay, transport, fallback, framed = false, bare = false }: ReplayPlayerProps) {
   const ready = player.ready;
   if (!ready) return null;
-  const { trailSeconds, ...viewProps } = view;
+  const { trailSeconds, followGuid, ...viewProps } = view;
   const stageView = fallback ?? (!player.show3D ? (player.meshOnly
     ? <MapMessage title="No map artwork for this instance" detail={`${ready.mapName} has no 2D map; it is 3D only, and this browser could not provide WebGL.`} />
     : <ReplayPlayerFlatView player={player} trailSeconds={trailSeconds} />
@@ -141,7 +143,7 @@ export function ReplayPlayer({ player, view = {}, header, overlay, transport, fa
         topDownKey={player.topDownKey}
         frozen={player.reloading}
         debuffSpellIds={ready.debuffSpellIds}
-        followGuid={player.followGuid}
+        followGuid={followGuid !== undefined ? followGuid : player.followGuid}
         onFollowChange={player.setFollowGuid}
         onScene={player.setScene3d}
       />
