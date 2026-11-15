@@ -11,10 +11,11 @@ import {
   type UnitImageSet,
 } from "@/config/unitImages";
 import {
-  fetchMiniatureManifest,
+  fetchMiniatureManifestReport,
   miniatureAssetUrl,
   miniatureManifestUrl,
 } from "@/pages/Instance/EventsPanels/Map/bossMinis";
+import { ManifestProblems } from "./ManifestProblems";
 import { GalleryPagination } from "./GalleryPagination";
 import { galleryPage } from "./galleryPage";
 import { MiniaturePreview } from "./MiniaturePreview";
@@ -129,10 +130,10 @@ export function MiniaturesPage() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const manifestQuery = useQuery({
-    queryKey: ["unit-miniature-manifest"],
+    queryKey: ["unit-miniature-manifest-report"],
     staleTime: 60 * 60 * 1000,
     retry: false,
-    queryFn: () => fetchMiniatureManifest(),
+    queryFn: () => fetchMiniatureManifestReport(),
   });
   const imageManifestQuery = useQuery({
     queryKey: ["unit-image-manifest"],
@@ -140,7 +141,7 @@ export function MiniaturesPage() {
     retry: false,
     queryFn: () => fetchUnitImageManifest(),
   });
-  const models = registryModels(manifestQuery.data, activeTab);
+  const models = registryModels(manifestQuery.data?.manifest, activeTab);
   const tabDetails = TAB_DETAILS[activeTab];
   const imageSetsByEntry = useMemo(() => new Map(
     imageManifestQuery.data?.units.flatMap((unit) => unit.entry_ids.map((entry) => [entry, unit] as const)) ?? [],
@@ -203,7 +204,7 @@ export function MiniaturesPage() {
           >
             {(["miniatures", "game_models"] as const).map((tab) => {
               const details = TAB_DETAILS[tab];
-              const count = registryModels(manifestQuery.data, tab).length;
+              const count = registryModels(manifestQuery.data?.manifest, tab).length;
               const selected = activeTab === tab;
               return (
                 <button
@@ -300,6 +301,8 @@ export function MiniaturesPage() {
             <p className="mt-2 break-all font-mono text-xs text-muted-foreground">{miniatureManifestUrl()}</p>
           </Card>
         )}
+
+        {manifestQuery.data && <ManifestProblems problems={manifestQuery.data.problems} what="model registry" />}
 
         {manifestQuery.data && filteredModels.length === 0 && (
           <Card
