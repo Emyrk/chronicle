@@ -1,8 +1,8 @@
 /**
- * What the replay map tells a player about the 3D dungeon (pure, tested):
- * which state it is in, what shows on the map, and what the Walk, Plan and
- * settings controls say. Copy is plain: no internal words (the "mesh" is "the
- * 3D dungeon" or "the 3D map"; the tiles are "the flat map").
+ * What the replay map tells a player about the 3D map (pure, tested): which
+ * state it is in, what shows on the map, and what the Walk, Plan and settings
+ * controls say. Copy is plain and uses one term, the settings toggle's own:
+ * "the 3D map" (never "mesh" or "3D dungeon"); the tiles are "the flat map".
  */
 
 import type { DungeonMeshState } from "./MapScene3D";
@@ -24,19 +24,30 @@ export function dungeon3DStatus(input: { show3D: boolean; hasMesh: boolean; mesh
 
 /** Every user-facing string this module adds. */
 export const DUNGEON_3D_COPY = {
-  notice: "The 3D dungeon didn't load. Showing the flat map.",
+  notice: "The 3D map didn't load. Showing the flat map.",
+  /** The mini map's notice: just the fact, beside Retry. */
+  noticeShort: "The 3D map didn't load.",
   retry: "Retry",
   dismiss: "Dismiss",
-  coverLoading: "Loading the 3D dungeon…",
-  coverFailed: "The 3D dungeon didn't load.",
+  coverLoading: "Loading the 3D map…",
+  coverFailed: "The 3D map didn't load.",
   coverFailedDetail: "This dungeon has no flat map to show instead.",
-  walkFailed: "Walk mode: the 3D dungeon didn't load",
+  walkFailed: "Walk mode: the 3D map didn't load",
   walkNoMap: "Walk mode: this dungeon has no 3D map yet",
   planLoading: "Plan: waiting for the 3D map to load",
-  planFailed: "Plan: the 3D dungeon didn't load",
+  planFailed: "Plan: the 3D map didn't load",
   planNoMap: "Plan: this dungeon has no 3D map yet",
-  settingsFailed: "The 3D dungeon didn't load. Showing the flat map.",
-  settingsFailedOnly: "The 3D dungeon didn't load.",
+  // Map settings → World → Ground → "3D map".
+  settingsFailed: "The 3D map didn't load. Showing the flat map.",
+  settingsFailedOnly: "The 3D map didn't load.",
+  settingsOn: "Show units on the 3D map instead of the flat map",
+  settingsLoading: "Loading the 3D map…",
+  settingsOnly: "This dungeon has no flat map; the 3D map is all there is",
+  settingsFlatMap: "Choose the flat map shown when the 3D map is off",
+  settingsAlignment: "Lay the flat map over the 3D map to compare their alignment",
+  settingsAlignmentOff: "Turn on the 3D map to compare it with the flat map",
+  // "Render video" in the map's title row, while it cannot run.
+  videoNeeds3D: "Needs the 3D map: turn it on in Map settings (needs WebGL)",
 } as const;
 
 // Unchanged strings, kept here so the tooltips stay in one place.

@@ -71,4 +71,11 @@ describe("copy", () => {
   it("uses no internal words", () => {
     for (const text of Object.values(DUNGEON_3D_COPY)) expect(text).not.toMatch(/mesh|bvh|manifest|glb|tiles/i);
   });
+
+  it("calls it the 3D map everywhere, the settings toggle's own label (never the 3D dungeon)", () => {
+    for (const text of Object.values(DUNGEON_3D_COPY)) expect(text).not.toMatch(/3D dungeon/i);
+    expect(DUNGEON_3D_COPY.notice).toBe("The 3D map didn't load. Showing the flat map.");
+    expect(DUNGEON_3D_COPY.noticeShort).toBe("The 3D map didn't load.");
+    expect(DUNGEON_3D_COPY.coverLoading).toBe("Loading the 3D map…");
+  });
 });

@@ -36,7 +36,7 @@ import { ROLE_TOKENS, usePlanEditor, usePlanShortcuts, type PlanRosterEntry } fr
 import type { PlanItem } from "./plan/mapPlan";
 import { usePlayerSpecializations } from "@/components/ui/PlayerMetricChart/PlayerSpecializationContext";
 import { useMapHost } from "./useMapHost";
-import { planUnavailableTitle } from "./dungeon3DModel";
+import { DUNGEON_3D_COPY, planUnavailableTitle } from "./dungeon3DModel";
 
 const VideoRenderDialog = lazy(() => import("./VideoRenderDialog"));
 
@@ -220,7 +220,7 @@ export function MapPanelHost({
     : null;
   const videoBlocker = !canEncodeVideo()
     ? "This browser cannot encode video (no WebCodecs VideoEncoder)"
-    : !onMesh || !dungeonMesh ? "Needs the 3D map: turn on the dungeon mesh (WebGL)" : null;
+    : !onMesh || !dungeonMesh ? DUNGEON_3D_COPY.videoNeeds3D : null;
   const videoFileName = videoEncounter
     ? `chronicle-${videoEncounter.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "boss"}-${new Date(ready.encounterStartMs).toISOString().slice(0, 10)}.mp4`
     : "";
@@ -332,6 +332,7 @@ export function MapPanelHost({
     >
       <ReplayPlayer
         player={player}
+        noticeCopy={caps.compactNotice ? "short" : "full"}
         framed={caps.framed}
         header={caps.header && (props.headerSlot ? createPortal(headerControls, props.headerSlot) : <div className="flex justify-end px-1">{headerControls}</div>)}
         view={{

@@ -208,8 +208,8 @@ export function MapSettingsOverlay({
               detail={mesh.failed
                 ? mesh.locked ? DUNGEON_3D_COPY.settingsFailedOnly : DUNGEON_3D_COPY.settingsFailed
                 : mesh.locked
-                  ? "This instance has no map artwork; the dungeon mesh is all there is"
-                  : mesh.loading ? "Loading the dungeon mesh…" : "Stand units on the real dungeon mesh instead of the map tiles"}
+                  ? DUNGEON_3D_COPY.settingsOnly
+                  : mesh.loading ? DUNGEON_3D_COPY.settingsLoading : DUNGEON_3D_COPY.settingsOn}
               checked={mesh.on}
               changed={!mesh.locked && !mesh.on}
               disabled={mesh.locked}
@@ -229,7 +229,7 @@ export function MapSettingsOverlay({
           {map2D && (
             <Choice
               label="2D map"
-              detail="Choose the flat map shown when the 3D dungeon mesh is off"
+              detail={DUNGEON_3D_COPY.settingsFlatMap}
               value={map2D.value}
               options={map2D.options.map((source) => source === "renders"
                 ? { value: source, label: "Render", title: "Use the published top-down render" }
@@ -242,8 +242,8 @@ export function MapSettingsOverlay({
             <Toggle
               label="2D alignment overlay"
               detail={mesh.on
-                ? "Lay the map artwork over the dungeon mesh to compare their coordinate alignment"
-                : "Turn on the 3D map to compare it with the 2D artwork"}
+                ? DUNGEON_3D_COPY.settingsAlignment
+                : DUNGEON_3D_COPY.settingsAlignmentOff}
               checked={effectSettings.alignmentOverlay}
               changed={changed("alignmentOverlay")}
               disabled={!mesh.on}

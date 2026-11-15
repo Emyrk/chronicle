@@ -25,6 +25,8 @@ export interface MapHostCapabilities {
   scrubber: boolean;
   /** The mini map's preview veil, Preview tag and "Replay from here". */
   previewVeil: boolean;
+  /** The short form of the 3D map notice, for a small stage. */
+  compactNotice: boolean;
   /** "Render video" in the title row. */
   video: boolean;
   /** The stage's status chips (final positions, the preview's "Replay from here") and the camera-key hints. */
@@ -71,6 +73,7 @@ export function mapHostCapabilities(kind: MapHostKind, immersive: boolean): MapH
     expand: compact,
     scrubber: compact,
     previewVeil: compact,
+    compactNotice: compact,
     video: full,
     hints: full,
     frames: full,

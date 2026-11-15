@@ -63,6 +63,8 @@ export interface ReplayPlayerProps {
    * itself a lazy 3D chunk (the landing, the export) passes the statically imported one: no extra chunk round trip.
    */
   view3d?: ComponentType<MapView3DProps>;
+  /** The 3D map notice's wording: the full sentence (default), or just the fact on a small stage (the mini map). */
+  noticeCopy?: "full" | "short";
 }
 
 /** A map message (loading, no telemetry, no artwork), with whatever the host adds under it. */
@@ -111,7 +113,7 @@ export function ReplayPlayerFlatView({ player, trailSeconds }: { player: ReplayP
  * the host's chrome in its slots. Renders nothing until the scene is ready:
  * the host shows `ReplayPlayerMessage` then.
  */
-export function ReplayPlayer({ player, view = {}, header, overlay, transport, fallback, framed = false, bare = false, view3d }: ReplayPlayerProps) {
+export function ReplayPlayer({ player, view = {}, header, overlay, transport, fallback, framed = false, bare = false, view3d, noticeCopy = "full" }: ReplayPlayerProps) {
   const ready = player.ready;
   if (!ready) return null;
   const { trailSeconds, followGuid, onUnitClick, ...viewProps } = view;
@@ -168,7 +170,7 @@ export function ReplayPlayer({ player, view = {}, header, overlay, transport, fa
   // What the map says about the 3D dungeon, only while the 3D view is the stage (not over a fallback or the 2D map).
   const showsDungeon = !fallback && kind === "3d";
   const cover = showsDungeon && player.dungeon3D.cover ? <DungeonCover player={player} /> : null;
-  const notice = showsDungeon && player.dungeon3D.notice ? <DungeonNotice player={player} /> : null;
+  const notice = showsDungeon && player.dungeon3D.notice ? <DungeonNotice player={player} copy={noticeCopy} /> : null;
   if (bare) return <>{header}{stageView}{cover}{overlay}{notice}{transport}</>;
   return (
     <>
@@ -215,14 +217,20 @@ function DungeonCover({ player }: { player: ReplayPlayerState }) {
   );
 }
 
-/** The 3D dungeon failed and the flat map shows: a small notice under the top chips, with Retry and dismiss. */
-function DungeonNotice({ player }: { player: ReplayPlayerState }) {
+/**
+ * The 3D map failed and the flat map shows: a small notice under the top chips, with Retry and dismiss. One line,
+ * truncated (the full sentence in its title), at most the stage's width less 3rem each side: clear of the right-hand
+ * button column (Settings, Walk, Plan at right-2, w-7) and nowhere near the camera row at the bottom left.
+ */
+function DungeonNotice({ player, copy }: { player: ReplayPlayerState; copy: "full" | "short" }) {
+  const text = copy === "short" ? DUNGEON_3D_COPY.noticeShort : DUNGEON_3D_COPY.notice;
   return (
     <div
       role="status"
-      className="absolute left-1/2 top-9 z-40 flex max-w-[calc(100%-1rem)] -translate-x-1/2 items-center gap-1.5 rounded-sm bg-black/80 py-0.5 pl-2 pr-0.5 text-[11px] text-white/80 shadow-[0_4px_16px_rgba(0,0,0,.5)]"
+      title={DUNGEON_3D_COPY.notice}
+      className="absolute left-1/2 top-9 z-40 flex max-w-[calc(100%-6rem)] -translate-x-1/2 items-center gap-1.5 whitespace-nowrap rounded-sm bg-black/80 py-0.5 pl-2 pr-0.5 text-[11px] text-white/80 shadow-[0_4px_16px_rgba(0,0,0,.5)]"
     >
-      <span className="min-w-0">{DUNGEON_3D_COPY.notice}</span>
+      <span className="min-w-0 truncate">{text}</span>
       <button type="button" onClick={player.retryDungeon} disabled={!player.dungeon3D.canRetry} className={retryButtonClass}>
         <RotateCcw className="h-3 w-3" />
         {DUNGEON_3D_COPY.retry}
