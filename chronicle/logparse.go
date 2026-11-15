@@ -579,6 +579,14 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 			continue
 		}
 
+		// Root uploads have no existing ranking-run identity to resolve yet. Bind
+		// the finalized realm's tenant before opening any publication transaction.
+		// Shadow ctx per instance so a root upload never leaks this scope to the next.
+		ctx, err := parsePublicationContext(ctx, db, realmID)
+		if err != nil {
+			return fmt.Errorf("resolve instance publication tenant: %w", err)
+		}
+
 		// Compute the instance time range before persisting guilds so historical
 		// guild rename rules can use the log's timestamp.
 		var instanceStart, instanceEnd pgtype.Timestamptz

@@ -372,3 +372,25 @@ func lookupPreParseRealm(ctx context.Context, db parseRealmQuerier, name string)
 	// if it has not been provisioned the attempt fails before staging any output.
 	return resolvedRealm{ID: dbstatic.RealmUnknown(), Name: name}, nil
 }
+
+// parsePublicationContext scopes initial root uploads before their source rows
+// exist. Like serviceratings.SourceContext, discovery alone has administrative
+// visibility; publication uses ordinary tenant RLS on a newly acquired connection.
+func parsePublicationContext(ctx context.Context, db database.StoreQueries, realmID uuid.UUID) (context.Context, error) {
+	if servicetenant.IsBypass(ctx) || servicetenant.TenantIDFromContext(ctx) != uuid.Nil {
+		return ctx, nil
+	}
+	discovery := servicetenant.AdminBypass(ctx)
+	realm, err := db.GetWoWServerRealm(discovery, realmID)
+	if err != nil {
+		return nil, err
+	}
+	server, err := db.GetWoWServer(discovery, realm.ServerID)
+	if err != nil {
+		return nil, err
+	}
+	if !server.TenantID.Valid || server.TenantID.UUID == uuid.Nil {
+		return ctx, nil
+	}
+	return servicetenant.WithTenantID(ctx, server.TenantID.UUID), nil
+}

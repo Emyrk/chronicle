@@ -19,6 +19,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
@@ -224,4 +225,82 @@ func (s *actionNotifyStore) InTx(ctx context.Context, fn func(database.Store) er
 		s.once.Do(func() { s.pid <- raw.Conn().PgConn().PID() })
 		return fn(tx)
 	}, opts)
+}
+
+// Root uploads have no source identity before their first instance transaction.
+// Test with the production tenant connection hooks and forced RLS, not bypass.
+func TestRootUploadPublicationScopesHighlightGeneration(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitLong)
+	url := dbtestutil.NewConnectionURL(t)
+	cfg, ready, err := database.PoolConfig(slog.Default(), url)
+	require.NoError(t, err)
+	cfg.PrepareConn = func(ctx context.Context, c *pgx.Conn) (bool, error) { return true, servicetenant.PrepareConn(ctx, c) }
+	cfg.AfterRelease = func(c *pgx.Conn) bool { servicetenant.ResetConn(c); return true }
+	ready()
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
+	require.NoError(t, err)
+	defer pool.Close()
+	db := database.New(pool)
+	admin := servicetenant.AdminBypass(ctx)
+	owner, realm := insertVisibilityTestOwnerAndRealm(t, admin, db)
+	group := insertVisibilityTestLogGroup(t, admin, db, owner)
+	tenant := uuid.New()
+	_, err = pool.Exec(admin, `INSERT INTO tenants(id,name,include_in_all) VALUES($1,'Root upload',true)`, tenant)
+	require.NoError(t, err)
+	_, err = pool.Exec(admin, `UPDATE wow_servers SET tenant_id=$1 WHERE id=(SELECT server_id FROM wow_server_realms WHERE id=$2)`, tenant, realm)
+	require.NoError(t, err)
+	client, err := river.NewClient(riverpgxv5.New(pool), &river.Config{SkipUnknownJobCheck: true})
+	require.NoError(t, err)
+	c := &Chronicle{queue: &riverqueue.Queues{Client: client}}
+	publish := func(publication context.Context) error {
+		return db.InTx(publication, func(tx database.Store) error {
+			instance := insertVisibilityTestInstance(t, publication, tx, group, realm, "Molten Core", time.Now())
+			return c.EnqueueRankingRunRefreshTx(publication, tx, instance)
+		}, nil)
+	}
+	// Reproduce the reported error and prove the source+queue transaction rolls back.
+	err = publish(ctx)
+	var pgErr *pgconn.PgError
+	require.ErrorAs(t, err, &pgErr)
+	require.Equal(t, "42501", pgErr.Code)
+	require.Contains(t, pgErr.Message, "leaderboard_highlight_sources")
+	identities, err := db.RankingRunIdentitiesByLogGroupID(admin, group)
+	require.NoError(t, err)
+	require.Empty(t, identities)
+	jobs, err := client.JobList(admin, river.NewJobListParams())
+	require.NoError(t, err)
+	require.Empty(t, jobs.Jobs)
+	for _, hidden := range []bool{false, true} {
+		_, err = pool.Exec(admin, `UPDATE tenants SET include_in_all=$2 WHERE id=$1`, tenant, !hidden)
+		require.NoError(t, err)
+		scoped, err := parsePublicationContext(ctx, db, realm)
+		require.NoError(t, err)
+		require.Equal(t, tenant, servicetenant.TenantIDFromContext(scoped))
+		require.False(t, servicetenant.IsBypass(scoped))
+		require.Equal(t, uuid.Nil, servicetenant.TenantIDFromContext(ctx))
+		require.NoError(t, publish(scoped))
+	}
+	generation, err := db.GetLeaderboardHighlightGeneration(servicetenant.WithTenantID(ctx, tenant), tenant)
+	require.NoError(t, err)
+	require.EqualValues(t, 2, generation)
+	jobs, err = client.JobList(admin, river.NewJobListParams())
+	require.NoError(t, err)
+	require.Len(t, jobs.Jobs, 2)
+	explicit := servicetenant.WithTenantID(ctx, uuid.New())
+	got, err := parsePublicationContext(explicit, db, uuid.Nil)
+	require.NoError(t, err)
+	require.Equal(t, explicit, got)
+	require.False(t, servicetenant.IsBypass(got))
+	// An explicitly selected other tenant must not be replaced by realm discovery
+	// or elevated to bypass: the cross-tenant write remains forbidden by RLS.
+	err = db.InTx(got, func(tx database.Store) error { return tx.BumpLeaderboardHighlightGeneration(got, tenant) }, nil)
+	require.ErrorAs(t, err, &pgErr)
+	require.Equal(t, "42501", pgErr.Code)
+	generation, err = db.GetLeaderboardHighlightGeneration(servicetenant.WithTenantID(ctx, tenant), tenant)
+	require.NoError(t, err)
+	require.EqualValues(t, 2, generation, "rejected cross-tenant publication must not alter source generation")
+	got, err = parsePublicationContext(admin, db, uuid.Nil)
+	require.NoError(t, err)
+	require.Equal(t, admin, got)
 }
