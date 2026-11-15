@@ -41,7 +41,8 @@ interface SceneInternals {
   dungeonMesh: { url: string; scale: number; group: THREE.Group; caves: { mesh: THREE.Mesh; bvh: unknown }[] } | null;
   units: Map<string, { base: THREE.Vector3; floorY: number; floorTracked: boolean; token: { arc: THREE.Object3D } }>;
   hud: { bars: THREE.InstancedMesh };
-  unitLayer: { floorTracks: unknown };
+  unitLayer: { floorTracks: unknown; targetLines: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>[] };
+  presence: { remotePresences: Map<string, { position: THREE.Vector3 }> };
   directing(): boolean;
 }
 
@@ -234,9 +235,8 @@ export async function createTestScene(options: TestSceneOptions = {}) {
 
   /**
    * Steps frames until the camera has held still for `quiet` frames and no
-   * tween or double-click move is running. Use this, not runUntilIdle, on an
-   * interactive scene: its loop never idles today (see README, "Oddities").
-   * Returns the frames run; throws past `max`.
+   * tween or double-click move is running (whether or not the loop is still
+   * awake). Returns the frames run; throws past `max`.
    */
   const settle = (max = 3000, quiet = 10) => {
     let still = 0;
@@ -256,16 +256,6 @@ export async function createTestScene(options: TestSceneOptions = {}) {
     return [...internals.camera.position.toArray(), ...internals.controls.target.toArray()].map((value) => value.toFixed(6)).join(",");
   }
 
-  /**
-   * Works around the always-awake loop (README, "Oddities" 1): the idle
-   * mobile input's `jump: false` counts as active input, so the free-cam
-   * mover reports motion every frame. With `jump` stored as 0 the rest of the
-   * render-on-demand logic can be observed. Characterises what the loop
-   * would do once that is fixed; it changes nothing else.
-   */
-  const neutraliseIdleMobileInput = () => {
-    (internals as unknown as { mobileInput: { jump: unknown } }).mobileInput = { ...(internals as unknown as { mobileInput: object }).mobileInput, jump: 0 };
-  };
 
   // --- Input, as the browser sends it ---
 
@@ -390,6 +380,10 @@ export async function createTestScene(options: TestSceneOptions = {}) {
     /** How many health-bar quads the bar pool draws (a living unit's bar is a backing and a fill, a dead one's only the backing). */
     barQuads: () => internals.hud.bars.count,
     floorTracks: () => internals.unitLayer.floorTracks,
+    /** The dash offset of each target line's texture (it crawls along the line over time). */
+    targetLineDashes: () => internals.unitLayer.targetLines.map((line) => line.material.map?.offset.x ?? 0),
+    /** Where another live-session participant is drawn now (eased toward their latest update). */
+    remotePresence: (participantId: string) => internals.presence.remotePresences.get(participantId)?.position.clone(),
     mesh: () => internals.dungeonMesh,
   };
 
@@ -439,11 +433,35 @@ export async function createTestScene(options: TestSceneOptions = {}) {
     };
     restore.push(() => delete sceneObject.renderFrame);
     try {
+      // The next frame: wake the loop if it sleeps (an idle scene queues none).
+      if (dom.frames.pending === 0) (scene as unknown as { requestRender: () => void }).requestRender();
       frame(ms);
     } finally {
       for (const undo of restore.reverse()) undo();
     }
     return steps;
+  };
+
+  /**
+   * How many times the free cam placed its camera from yaw, pitch and
+   * distance (the private placeFreeCam: the free-cam mover, mouse look and
+   * the wheel) while `run` ran.
+   */
+  const countFreeCamPlacements = (run: () => void): number => {
+    const sceneObject = scene as unknown as Record<string, unknown>;
+    const original = sceneObject.placeFreeCam as (...args: unknown[]) => unknown;
+    if (typeof original !== "function") throw new Error("countFreeCamPlacements: MapScene3D has no placeFreeCam any more. Update createTestScene.ts.");
+    let count = 0;
+    sceneObject.placeFreeCam = function (this: unknown, ...args: unknown[]) {
+      count++;
+      return original.apply(this, args);
+    };
+    try {
+      run();
+    } finally {
+      delete sceneObject.placeFreeCam;
+    }
+    return count;
   };
 
   /** The container pixel (x, y) a scene point draws at, with the camera as it is now. */
@@ -480,7 +498,7 @@ export async function createTestScene(options: TestSceneOptions = {}) {
     runUntilIdle,
     settle,
     traceFrame,
-    neutraliseIdleMobileInput,
+    countFreeCamPlacements,
     /** Whether a frame is queued (the loop is awake). */
     get awake() {
       return dom.frames.pending > 0;

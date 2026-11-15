@@ -3,12 +3,13 @@ import { createTestScene, testUnit, type TestScene } from "./createTestScene";
 
 // Characterisation (chronicle-1967): when the render loop runs. A frame is
 // queued with requestAnimationFrame and queues the next one only while
-// renderFrame reports something moving.
+// renderFrame reports something moving. Until chronicle-1982 an interactive
+// scene's loop never went idle (the idle mobile input's `jump: false` counted
+// as input); these tests pin the fixed loop.
 
-/** An interactive scene with the idle mobile input neutralised, run until the loop sleeps (see README, oddity 1). */
+/** An interactive scene, run until the loop sleeps. */
 async function idleScene(): Promise<TestScene> {
   const h = await createTestScene({ units: [testUnit("p1", 0, 0)] });
-  h.neutraliseIdleMobileInput();
   h.runUntilIdle();
   expect(h.awake).toBe(false);
   return h;
@@ -22,20 +23,34 @@ function wakesThenSleeps(h: TestScene, max = 3000): number {
   return ran;
 }
 
-describe("render on demand: today", () => {
-  it("an interactive scene never goes idle: the idle mobile input counts as active", async () => {
+describe("render on demand: an idle interactive scene", () => {
+  it("stops its loop once nothing happens, and draws nothing more", async () => {
     const h = await createTestScene({ units: [testUnit("p1", 0, 0)] });
+    // Already asleep once the camera settled after setup.
+    expect(h.awake).toBe(false);
     const before = h.renders.count;
     h.frames(600);
-    expect(h.awake).toBe(true);
-    expect(h.renders.count - before).toBe(600);
-    expect(() => h.runUntilIdle(200)).toThrow(/still animating/);
+    expect(h.renders.count - before).toBe(0);
   });
 
-  it("the same holds on the flat ground, without a mesh", async () => {
+  it("the same on the flat ground, without a mesh", async () => {
     const h = await createTestScene({ mesh: false });
+    expect(h.runUntilIdle(200)).toBeLessThan(200);
     h.frames(100);
+    expect(h.awake).toBe(false);
+  });
+
+  it("on the mobile layout too: the idle pad and stick are no input", async () => {
+    const h = await createTestScene({ units: [testUnit("p1", 0, 0)] });
+    h.scene.setMobileInput({ forward: 0, strafe: 0, turn: 0, pitch: 0, jump: false });
+    expect(h.runUntilIdle(200)).toBeLessThan(200);
+    // The pad keeps it awake while held, and lets it sleep when released.
+    h.scene.setMobileInput({ forward: 1, strafe: 0, turn: 0, pitch: 0, jump: false });
+    h.frames(30);
     expect(h.awake).toBe(true);
+    h.scene.setMobileInput({ forward: 0, strafe: 0, turn: 0, pitch: 0, jump: false });
+    expect(h.runUntilIdle(200)).toBeLessThan(200);
+    expect(h.awake).toBe(false);
   });
 
   it("a capture scene never queues a frame: it draws only in captureFrame", async () => {
@@ -51,7 +66,7 @@ describe("render on demand: today", () => {
   });
 });
 
-describe("render on demand: with the idle mobile input neutralised", () => {
+describe("render on demand: what wakes it", () => {
   it("the loop goes idle when nothing moves and draws nothing more", async () => {
     const h = await idleScene();
     const before = h.renders.count;
@@ -132,5 +147,63 @@ describe("render on demand: with the idle mobile input neutralised", () => {
     h.scene.setEffectClock(5000, true, 1);
     h.scene.setUnits([testUnit("p1", 3, 0)]);
     expect(h.awake).toBe(false);
+  });
+});
+
+// chronicle-1982 review: every clock that steps from its last frame starts
+// again when the loop sleeps, so the first frame after a wake takes a
+// first-frame step (1/60 s), not one capped 0.1 s step for the whole sleep.
+describe("render on demand: the first frame after a sleep", () => {
+  const FIGHT = [testUnit("boss", 0, 0, { kind: "hostile", boss: true }), testUnit("p1", 5, 5), testUnit("p2", -5, 8)];
+
+  it("the Director eases off from rest: the first frame moves the camera less than the second", async () => {
+    const h = await createTestScene({ units: FIGHT, director: new Set(["boss"]) });
+    expect(h.probe.owner()).toBe("director");
+    h.runUntilIdle();
+    // Asleep for two seconds, then the boss and the group move 30 units.
+    h.clock.advance(2000);
+    h.scene.setUnits(FIGHT.map((unit) => testUnit(unit.guid, (unit.point.leftPercent - 50) + 30, unit.point.topPercent - 50, { kind: unit.kind, boss: unit.boss })));
+    const steps: number[] = [];
+    let last = h.probe.target().clone();
+    for (let frame = 0; frame < 3; frame++) {
+      h.frame();
+      steps.push(h.probe.target().distanceTo(last));
+      last = h.probe.target().clone();
+    }
+    expect(steps[0]).toBeGreaterThan(0);
+    expect(steps[0]).toBeLessThan(steps[1]);
+    expect(steps[1]).toBeLessThan(steps[2]);
+  });
+
+  it("another participant's presence eases by one frame's step, not by the whole sleep", async () => {
+    const h = await createTestScene();
+    const ground = h.probe.mesh()!.url;
+    h.scene.setRemotePresences(new Map([["x", { ground, mode: "walk", position: [0, 0, 0], target: [0, 0, -1] }]]) as never);
+    h.runUntilIdle();
+    h.clock.advance(2000);
+    h.scene.setRemotePresences(new Map([["x", { ground, mode: "walk", position: [10, 0, 0], target: [10, 0, -1] }]]) as never);
+    h.frame();
+    // PRESENCE_EASE_PER_S 12 over one 1/60 s step.
+    expect(h.probe.remotePresence("x")!.x).toBeCloseTo(10 * (1 - Math.exp(-12 / 60)), 6);
+  });
+
+  it("the target-line dash advances by one frame's step on the first frame, as on every other", async () => {
+    const h = await createTestScene({ units: FIGHT });
+    h.scene.setUnitRoles({ selected: "p1", target: "boss", targetsTarget: null, pinned: new Set() });
+    h.runUntilIdle();
+    expect(h.probe.targetLineDashes().length).toBeGreaterThan(0);
+    h.clock.advance(2000);
+    // A held key keeps frames coming, so the first frame can be compared with the next.
+    h.input.hover();
+    h.input.keyDown("KeyW");
+    const dashes: number[] = [h.probe.targetLineDashes()[0]!];
+    for (let frame = 0; frame < 2; frame++) {
+      h.frame();
+      dashes.push(h.probe.targetLineDashes()[0]!);
+    }
+    const first = dashes[1]! - dashes[0]!;
+    const second = dashes[2]! - dashes[1]!;
+    expect(first).not.toBe(0);
+    expect(first).toBeCloseTo(second, 9);
   });
 });

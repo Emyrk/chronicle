@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { actionForKey, cameraAngles, cameraCollisionDistance, cameraOffset, FREE_CAM_FAST_FACTOR, freeCamTravelSpeed, lookDrag, LOOK_RADIANS_PER_PX, planarStep, wheelZoomDistance, clampMobileMapInput, DEFAULT_AD_STRAFE, easeAngleToward, keyLabel, MAP_CONTROL_ACTIONS, MAP_CONTROL_KEYBINDS, mobileJoystickAxis, pointerLossEndsDrag, rightDragWalkAxes, setWalkMouseButton, shouldFollowWalkCamera, WALK_CAMERA_SETTLED_RADIANS, walkCameraSettling, walkDragButton, walkMovementYaw, walkMouseControl, WALK_TOGGLE_KEY } from "./mapControls";
+import { actionForKey, clockStepSeconds, frameStepSeconds, stickPitch, turnYaw, cameraAngles, cameraCollisionDistance, cameraOffset, freeCamTravelSpeed, lookDrag, planarStep, wheelZoomDistance, clampMobileMapInput, DEFAULT_AD_STRAFE, easeAngleToward, keyLabel, MAP_CONTROL_ACTIONS, MAP_CONTROL_KEYBINDS, mobileJoystickAxis, pointerLossEndsDrag, rightDragWalkAxes, setWalkMouseButton, shouldFollowWalkCamera, walkCameraSettling, walkDragButton, walkMovementYaw, walkMouseControl, WALK_TOGGLE_KEY } from "./mapControls";
+import { FIRST_FRAME_STEP_S, FRAME_STEP_MAX_S, FREE_CAM_FAST_FACTOR, STICK_PITCH_RADIANS_PER_S, TURN_RADIANS_PER_S, LOOK_RADIANS_PER_PX, WALK_CAMERA_SETTLED_RADIANS } from "./controlProfile";
 
 describe("easeAngleToward", () => {
   it("eases toward the target without snapping", () => {
@@ -304,5 +305,29 @@ describe("freeCamTravelSpeed", () => {
 
   it("travels faster with Shift", () => {
     expect(freeCamTravelSpeed(100, 0.5, true)).toBe(FREE_CAM_FAST_FACTOR * freeCamTravelSpeed(100, 0.5, false));
+  });
+});
+
+describe("frameStepSeconds", () => {
+  it("is 0 before the clock's first frame, the elapsed seconds after, and never more than the clamp", () => {
+    expect(frameStepSeconds(1000, 0)).toBe(0);
+    expect(frameStepSeconds(1016, 1000)).toBeCloseTo(0.016, 9);
+    expect(frameStepSeconds(5000, 1000)).toBe(FRAME_STEP_MAX_S);
+  });
+});
+
+describe("clockStepSeconds", () => {
+  it("takes a first-frame step when the clock (re)starts, then the clamped elapsed time", () => {
+    expect(clockStepSeconds(5000, 0)).toBe(FIRST_FRAME_STEP_S);
+    expect(clockStepSeconds(1016, 1000)).toBeCloseTo(0.016, 9);
+    expect(clockStepSeconds(5000, 1000)).toBe(FRAME_STEP_MAX_S);
+  });
+});
+
+describe("turnYaw and stickPitch", () => {
+  it("integrate the turn and stick inputs at the profile's rates", () => {
+    expect(turnYaw(0.5, 1, 0.5)).toBeCloseTo(0.5 + TURN_RADIANS_PER_S / 2, 12);
+    expect(turnYaw(0, -1, 0.25)).toBeCloseTo(-TURN_RADIANS_PER_S / 4, 12);
+    expect(stickPitch(0.2, 1, 0.5)).toBeCloseTo(0.2 + STICK_PITCH_RADIANS_PER_S / 2, 12);
   });
 });

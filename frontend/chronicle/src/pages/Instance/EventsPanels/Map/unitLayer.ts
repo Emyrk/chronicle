@@ -32,7 +32,8 @@ import { modelAnimationState, modelAnimationTimeSeconds, selectModelAnimation, u
 import { type MapBodyMaterial } from "./mapMaterials";
 import { createUnitCalloutMarker } from "./sceneFactories";
 import { bakedGeometry, disposeModelMaterials, gltfLoader, loadAnimatedGameModel, loadFlappingWhelp, loadGameModelAnimationPack } from "./sceneLoaders";
-import { GROUND_WIDTH, KEY_MAX_STEP_S } from "./sceneConstants";
+import { GROUND_WIDTH } from "./sceneConstants";
+import { clockStepSeconds } from "./mapControls";
 import { DungeonWorld, type DungeonMesh } from "./dungeonWorld";
 import type { MapSceneFollowSource, MapScene3DTrailPoint, MapScene3DUnit, MapUnitRoles } from "./MapScene3D";
 import { BAR_HEIGHT, TOKEN_RADIUS } from "./sceneConstants";
@@ -1219,11 +1220,16 @@ export class UnitLayer {
     this.requestRender();
   }
 
+  /** The render loop slept: the next frame starts the token clock (the target-line dash) again (MapScene3D.restartFrameClocks). */
+  restartClock() {
+    this.tokenAt = 0;
+  }
+
   // The token parts that follow the replay: cast arcs, halos for the
   // selected chain and pins, the boss sigils' turn, and
   // the chain's target lines.
   updateTokens(now: number) {
-    const dt = this.tokenAt ? Math.min(KEY_MAX_STEP_S, (now - this.tokenAt) / 1000) : 0;
+    const dt = clockStepSeconds(now, this.tokenAt);
     this.tokenAt = now;
     const { roles } = this;
     for (const [guid, object] of this.units) {

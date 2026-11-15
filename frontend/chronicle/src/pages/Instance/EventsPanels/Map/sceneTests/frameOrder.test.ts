@@ -99,7 +99,8 @@ describe("frame order, as the drawn frame shows it", () => {
       h.frames(5);
     }
     h.settle();
-    expect(draws.length).toBeGreaterThan(30);
+    // At least one draw per tick (the loop sleeps between ticks since chronicle-1982).
+    expect(draws.length).toBeGreaterThanOrEqual(6);
     expect(draws.filter(Boolean)).toEqual([]);
     // The wall held it: it wanted to go far further out than the wall allows.
     expect(h.probe.distance()).toBeLessThan(15);
@@ -240,8 +241,11 @@ describe("frame order, as renderFrame calls its steps", () => {
     }
   });
 
-  it("draws exactly once per frame", async () => {
+  it("draws exactly once per frame while the loop runs", async () => {
     const h = await createTestScene();
+    // A held key keeps the loop running (an idle scene draws nothing, chronicle-1982).
+    h.input.hover();
+    h.input.keyDown("KeyW");
     const before = h.renders.count;
     h.frames(10);
     expect(h.renders.count - before).toBe(10);

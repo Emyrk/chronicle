@@ -3,7 +3,12 @@
  * so a control follows the physical key on any keyboard layout. The same keys
  * and drags drive the free camera and walk mode ("join the fight") the same
  * way: the free cam is walk mode with a hidden character (chronicle-1514).
+ * The tunables live in controlProfile.ts.
  */
+import { FIRST_FRAME_STEP_S, FRAME_STEP_MAX_S, FREE_CAM_FAST_FACTOR, LOOK_RADIANS_PER_PX, MOBILE_STICK_DEAD_ZONE, STICK_PITCH_RADIANS_PER_S, TURN_RADIANS_PER_S, WALK_CAMERA_SETTLED_RADIANS, WHEEL_ZOOM_RATE } from "./controlProfile";
+
+/** The A/D strafe setting's default (Map settings → Controls); defined in controlProfile. */
+export { DEFAULT_AD_STRAFE } from "./controlProfile";
 
 export const MAP_CONTROL_ACTIONS = [
   { id: "forward", label: "Move forward", defaultKey: "KeyW" },
@@ -18,7 +23,6 @@ export const MAP_CONTROL_ACTIONS = [
 
 export type MapControlAction = (typeof MAP_CONTROL_ACTIONS)[number]["id"];
 
-export const DEFAULT_AD_STRAFE = false;
 
 /** Continuous touch input for the fullscreen mobile world. Values are normalized to -1…1. */
 export interface MobileMapInput {
@@ -54,7 +58,7 @@ const STRAFE_SWAP: Partial<Record<MapControlAction, MapControlAction>> = {
   turn_right: "strafe_right",
 };
 
-export function mobileJoystickAxis(value: number, deadZone = 0.14): number {
+export function mobileJoystickAxis(value: number, deadZone = MOBILE_STICK_DEAD_ZONE): number {
   const clamped = Math.max(-1, Math.min(1, Number.isFinite(value) ? value : 0));
   const magnitude = Math.abs(clamped);
   if (magnitude <= deadZone) return 0;
@@ -99,12 +103,6 @@ export function cameraCollisionDistance(
   return allowed - next < 1e-4 * Math.max(1, allowed) ? allowed : next;
 }
 
-/** Mouse look: radians per pixel dragged, in both camera modes, whatever the window size. */
-export const LOOK_RADIANS_PER_PX = 0.006;
-/** The wheel scales the camera distance by e^(deltaY * this), in both camera modes. */
-export const WHEEL_ZOOM_RATE = 0.0015;
-/** Shift multiplies the free cam's travel speed by this. */
-export const FREE_CAM_FAST_FACTOR = 3;
 
 export interface CameraOffset {
   x: number;
@@ -122,14 +120,46 @@ export function cameraOffset(yaw: number, pitch: number, distance: number): Came
   return { x: Math.sin(yaw) * horizontal, y: Math.sin(pitch) * distance, z: Math.cos(yaw) * horizontal };
 }
 
-/** The inverse of cameraOffset: the yaw, pitch and distance of an offset from the pivot. */
-export function cameraAngles(offset: CameraOffset): { yaw: number; pitch: number; distance: number } {
+/**
+ * The inverse of cameraOffset: the yaw, pitch and distance of an offset from
+ * the pivot. Within `flatEpsilon` of straight up or down the yaw reads 0
+ * (the compass reads it with 1e-6, the camera modes with 1e-9).
+ */
+export function cameraAngles(offset: CameraOffset, flatEpsilon = 1e-9): { yaw: number; pitch: number; distance: number } {
   const horizontal = Math.hypot(offset.x, offset.z);
   return {
-    yaw: Math.abs(offset.x) + Math.abs(offset.z) < 1e-9 ? 0 : Math.atan2(offset.x, offset.z),
+    yaw: Math.abs(offset.x) + Math.abs(offset.z) < flatEpsilon ? 0 : Math.atan2(offset.x, offset.z),
     pitch: Math.atan2(offset.y, horizontal),
     distance: Math.hypot(horizontal, offset.y),
   };
+}
+
+/**
+ * The seconds a per-frame clock advances from `lastMs` (0: none yet, so 0) to
+ * `now`, never more than FRAME_STEP_MAX_S: a dropped frame never jumps.
+ */
+export function frameStepSeconds(now: number, lastMs: number): number {
+  return lastMs ? Math.min(FRAME_STEP_MAX_S, (now - lastMs) / 1000) : 0;
+}
+
+/**
+ * The step of a per-frame clock that can restart: FIRST_FRAME_STEP_S on its
+ * first frame (`lastMs` 0: none yet, or the render loop slept since, see
+ * MapScene3D.restartFrameClocks), so a wake never takes one stale 0.1 s
+ * step; frameStepSeconds after that.
+ */
+export function clockStepSeconds(now: number, lastMs: number): number {
+  return lastMs ? frameStepSeconds(now, lastMs) : FIRST_FRAME_STEP_S;
+}
+
+/** A turn input (-1…1, + is left) held for `dt` seconds: walk mode turns the character with it, the free cam its camera. */
+export function turnYaw(yaw: number, turn: number, dt: number): number {
+  return yaw + turn * TURN_RADIANS_PER_S * dt;
+}
+
+/** The look stick's pitch input (-1…1, up raises the camera) held for `dt` seconds, before the mode's pitch limits. */
+export function stickPitch(pitch: number, stick: number, dt: number): number {
+  return pitch + stick * STICK_PITCH_RADIANS_PER_S * dt;
 }
 
 /** A mouse-look drag of (dx, dy) pixels: drag right turns the view right, drag down raises the camera. */
@@ -217,9 +247,6 @@ export function walkDragButton(pointerType: string, button: number): number {
 export function pointerLossEndsDrag(eventType: string, pointerType: string): boolean {
   return eventType === "pointercancel" || pointerType !== "mouse";
 }
-
-/** Within this many radians the camera has settled behind the character. */
-export const WALK_CAMERA_SETTLED_RADIANS = 0.002;
 
 /**
  * Whether the camera is still settling behind the character after a turn:

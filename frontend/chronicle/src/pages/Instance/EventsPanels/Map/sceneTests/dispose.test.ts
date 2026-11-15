@@ -23,6 +23,8 @@ describe("dispose", () => {
 
   it("stops the frame loop, disconnects its ResizeObserver, disposes the renderer and removes the canvas", async () => {
     const h = await createTestScene();
+    // Wake the loop first (an idle scene's loop is asleep, chronicle-1982).
+    h.scene.setEffectClock(0, false, 1);
     expect(h.awake).toBe(true);
     expect(h.container.children).toContain(h.canvas);
     expect([...FakeResizeObserver.live].some((observer) => observer.observed.has(h.container))).toBe(true);

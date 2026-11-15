@@ -19,6 +19,7 @@ pnpm vitest run --project unit src/pages/Instance/EventsPanels/Map/sceneTests
 | `fakeDom.ts` | The bits of the browser the scene touches: window, document, canvas, `ResizeObserver`, `requestAnimationFrame` on a manual clock, pointer lock, event classes |
 | `syntheticDungeon.ts` | A small dungeon built in code as GLB bytes: ground, a balcony (second floor) and a wall |
 | `*.test.ts` | One file per behaviour group: camera ownership, WoW input, frame order, floors, camera collision, render on demand, dispose |
+| `sceneGraphFingerprint.test.ts` | The whole scene graph (models, trails, lines, effect pools, HUD, relative object ids) at several clock times, compared with `__snapshots__/sceneGraphFingerprint.txt`. A refactor leaves it unchanged; a deliberate change updates it with `-u` and says what changed in its PR |
 
 ## Writing a test
 
@@ -63,7 +64,9 @@ it("a wheel tick takes the camera from the Director", async () => {
   what the scene reported to its host: follow (the followed unit), walk,
   viewport and mesh-state callbacks. `h.renders.count` counts draws,
   `h.awake` tells you whether a frame is queued, and `h.traceFrame()` lists
-  the steps of the next frame in order.
+  the steps of the next frame in order (waking the loop for it if it
+  sleeps). `h.countFreeCamPlacements(run)` counts how often the free cam
+  placed its camera while `run` ran.
 - **Probes are the only place tests reach into private state.** They all go
   through `SceneInternals` in `createTestScene.ts`. When a refactor moves a
   field, update that interface and the probe, not the tests. Don't add
@@ -125,25 +128,15 @@ defaults are unchanged:
 
 ## Oddities
 
-Behaviour these tests pin that looks like a bug. Nothing here is fixed; a
-later car may fix one deliberately and update its test.
+Behaviour these tests pin that looks like a bug. A car may fix one
+deliberately and update its test; the fixed ones are struck through.
 
-1. **An interactive scene's loop never goes idle.** `IDLE_MOBILE_MAP_INPUT.jump`
-   is `false`, and `updateKeyboardCamera` (and `setMobileInput`) treat any
-   value `!== 0` as active input. So the free-cam mover reports motion every
-   frame and the scene renders at full frame rate forever (`renderOnDemand`).
-   Side effects:
-   - The mover rewrites the camera every frame, even while the Director has it.
-   - `setMobileInput` never sees the stick go from idle to active, so the
-     stick never calls `handleControlsStart`/`End`. The mobile move pad
-     therefore never takes the camera from the Director: both write the
-     pivot every frame and the pivot creeps (`cameraOwnership`).
-   - Both mouse buttons travel on every frame from the press, while a key
-     press restarts the travel clock and loses its first frame (59 of 60
-     frames move).
-
-   `h.neutraliseIdleMobileInput()` works around it so the rest of
-   render-on-demand can be pinned.
+1. ~~**An interactive scene's loop never went idle.**~~ Fixed in
+   chronicle-1982: the idle mobile input's `jump: false` counted as input.
+   Now an idle scene's loop stops, the free-cam mover leaves the Director's
+   camera alone, the mobile pad and stick take the camera like any input,
+   and a key press moves on its first frame (`renderOnDemand`,
+   `cameraOwnership`, `wowInput`).
 2. **A new focus does not hand the camera back to the Director**, unlike a
    viewport request, a cut or a follow (`cameraOwnership`).
 3. **A plain click reports a user viewport.** OrbitControls ends a gesture
