@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { Activity, AlertTriangle, Braces, Check, ChevronDown, Clipboard, Clock3, ExternalLink, LoaderCircle, Play, RefreshCw, Terminal } from "lucide-react"
+import { Link } from "react-router-dom"
+import { Activity, AlertTriangle, ArrowUpRight, Braces, Check, ChevronDown, Clipboard, Clock3, ExternalLink, KeyRound, LoaderCircle, Play, RefreshCw, Terminal } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -64,7 +65,7 @@ function RateLimitStatusCard({ server }: { server: string }) {
         <div>
           <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.2em] text-cyan-300">
             <Activity className="h-3.5 w-3.5" />
-            Your rate limit
+            Anonymous rate limit
             {data && <span className="ml-auto h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_10px_rgba(110,231,183,0.8)]" aria-label="API online" />}
           </div>
 
@@ -329,6 +330,17 @@ export function APIExplorer() {
               <ExternalLink className="h-3.5 w-3.5" />
             </a>
           </div>
+          <Link
+            to="/developers/api/app"
+            className="mt-9 flex max-w-3xl items-center gap-4 rounded-lg border border-cyan-300/20 bg-cyan-300/[0.06] p-5 transition-colors hover:border-cyan-300/50 hover:bg-cyan-300/[0.1] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
+          >
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-md border border-cyan-300/25 bg-cyan-300/10 text-cyan-300"><KeyRound className="size-5" /></span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-mono text-[10px] uppercase tracking-[0.2em] text-cyan-300">Developer access</span>
+              <span className="mt-1 block text-sm text-slate-200">Create and manage your OAuth app</span>
+            </span>
+            <ArrowUpRight className="size-5 shrink-0 text-cyan-300" />
+          </Link>
           <RateLimitStatusCard server={server} />
           {data && (
             <div className="mt-10 flex flex-wrap gap-x-8 gap-y-3 border-t border-white/10 pt-5 font-mono text-xs text-slate-500">

@@ -129,6 +129,7 @@ const LeaderboardsV2 = lazy(() => import("./pages/Leaderboards/LeaderboardsLiveH
 const LeaderboardsPage = lazy(() => import("./pages/Leaderboards/LeaderboardsPage").then(({ LeaderboardsPage }) => ({ default: LeaderboardsPage })))
 const LegacyLeaderboardsRedirect = lazy(() => import("./pages/Leaderboards/LeaderboardsPage").then(({ LegacyLeaderboardsRedirect }) => ({ default: LegacyLeaderboardsRedirect })))
 const CensusPage = lazy(() => import("./pages/Census/CensusPage").then(({ CensusPage }) => ({ default: CensusPage })))
+const DeveloperAppPage = lazy(() => import("./pages/APIExplorer/DeveloperAppPage").then(({ DeveloperAppPage }) => ({ default: DeveloperAppPage })))
 const APIExplorer = lazy(() => import("./pages/APIExplorer/APIExplorer").then(({ APIExplorer }) => ({ default: APIExplorer })))
 const LuaProjectsPage = lazy(() => import("./pages/LuaProjects/LuaProjectsPage").then(({ LuaProjectsPage }) => ({ default: LuaProjectsPage })))
 const LuaProjectPage = lazy(() => import("./pages/LuaProjects/LuaProjectPage").then(({ LuaProjectPage }) => ({ default: LuaProjectPage })))
@@ -263,6 +264,7 @@ function App({ homeLanding }: { homeLanding?: ComponentType } = {}) {
         <Route path="/lua-projects/*" element={<RenamedPathRedirect from="/lua-projects" to="/modules" />} />
         <Route path="/tools/developer-panels" element={<CustomPanelsPage />} />
         <Route path="/tools/custom-panels" element={<RenamedPathRedirect from="/tools/custom-panels" to="/tools/developer-panels" />} />
+        <Route path="/developers/api/app" element={<DeveloperAppPage />} />
         <Route path="/developers/api" element={<APIExplorer />} />
         <Route path="/debug/proto" element={<ProtoDecode />} />
         <Route path="/admin" element={<AdminLayout />}>

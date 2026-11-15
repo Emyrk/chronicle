@@ -4,7 +4,7 @@ The external API at `/api/external/v1` accepts optional OAuth bearer tokens. Ano
 
 ## Developer application
 
-An authenticated Chronicle browser user may manage **one** app. The management routes use the existing browser authentication middleware. There is no settings UI yet.
+An authenticated Chronicle browser user may manage **one** app at `/developers/api/app`, linked from the public API explorer at `/developers/api`. The management routes use the existing browser authentication middleware.
 
 | Method | Route | Result |
 | --- | --- | --- |
