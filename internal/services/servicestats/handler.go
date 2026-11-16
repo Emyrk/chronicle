@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/Emyrk/chronicle/database"
@@ -67,6 +68,12 @@ func (s *Service) Handler(resolve SiteResolver) http.Handler {
 		}
 		site, err := resolve(r)
 		if err != nil {
+			// Only a page that exists is worth a 500; a page with nothing
+			// behind it stays a 404 even when the site lookup fails.
+			if exists, existsErr := s.pageExists(ctx, tenantID, isStatic, family, page); existsErr == nil && !exists {
+				http.NotFound(w, r)
+				return
+			}
 			s.serverError(ctx, w, "resolve stats site", err)
 			return
 		}
@@ -141,6 +148,23 @@ func (s *Service) Handler(resolve SiteResolver) http.Handler {
 		}
 		_, _ = w.Write(buf.Bytes())
 	})
+}
+
+// pageExists reports whether a matched path has something to serve: the
+// tenant is eligible (static pages) or the page's snapshot is stored.
+func (s *Service) pageExists(ctx context.Context, tenantID uuid.UUID, isStatic bool, family *Family, page Page) (bool, error) {
+	if isStatic {
+		activity, found, err := s.activity(ctx, tenantID)
+		return found && activity.Eligible, err
+	}
+	row, err := s.store.GetStatsSnapshot(ctx, database.GetStatsSnapshotParams{TenantID: tenantID, PageKey: page.Key})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return row.ProducerKey == family.Producer.Key(), nil
 }
 
 func (s *Service) serverError(ctx context.Context, w http.ResponseWriter, msg string, err error) {

@@ -47,17 +47,26 @@ DispatchWorker (hourly)                    /stats/<...>
   and is left out of the sitemap. Query-parameter variants are noindex too.
 - **404s:** unknown paths, percent-encoded variants of a path (`RawPath` set
   and different from `Path`, e.g. `/stats/%61bout`), non-discoverable sites
-  (the dispatch skips them, so their pages would be stale) and pages without a
-  snapshot. All are decided before any database read except the last.
+  (root or tenant) and pages without a snapshot. All are decided before any
+  database read except the last. If the site lookup fails, a page with nothing
+  behind it is still 404; only an existing page becomes 500.
+- **Hidden sites:** the dispatch skips non-discoverable sites and deletes
+  their pages (the activity row stays), so a site made discoverable again
+  serves nothing stale; its pages return after its producers rerun.
 - **Isolation:** every /stats job runs on its own River queue, `stats`
   (`QueueWorkers` workers), and every family in its own job with its own
   timeout (`Producer.Timeout`, default `DefaultProducerTimeout`), so a slow or
   failing producer never blocks the others or other queues. Producer jobs get
   one attempt: the next hourly tenant job re-queues a family that failed.
+  Dispatch and tenant jobs run at default priority, ahead of producer jobs
+  (low priority).
 - **Cadence:** a family (or the threshold check) is due when
-  `now − last run ≥ cadence − DispatchInterval/2`. Run markers are stamped
-  when a run finishes, after the tick that started it; the slack keeps an
-  hourly family on every tick and a 6h family on every sixth.
+  `now − last run ≥ cadence − DispatchInterval/2`. A family's run marker is
+  stamped with the time its job was queued (the River job's `CreatedAt`,
+  passed to `RefreshProducer`), not when the run finished, so queue waits and
+  compute time never push the next run back a tick. The slack absorbs the
+  drift of River's periodic ticks, keeping an hourly family on every tick and
+  a 6h family on every sixth.
 - **Validation and shadowing:** a run's keys are all validated before the
   first write; one bad key fails the run and writes nothing. An output whose
   URL is served by another page (a static page, or a more specific family) is
