@@ -55,6 +55,9 @@ type Tenant struct {
 	DatasetID uuid.UUID
 	// Activity is the tenant's latest threshold check.
 	Activity Activity
+	// Store is for the producer's queries. Compute's ctx scopes every query to
+	// the tenant (row-level security); a producer must not widen that scope.
+	Store database.Store
 }
 
 // Activity is the stored result of the tenant threshold check.
@@ -339,6 +342,8 @@ type Section struct {
 	ID         string
 	Heading    string
 	Paragraphs []string
+	// Table is an optional table shown after the paragraphs.
+	Table *Table
 }
 
 // Link is a link into the SPA.

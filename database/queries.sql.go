@@ -34346,6 +34346,100 @@ func (q *sqlQuerier) ListStatsSnapshotMeta(ctx context.Context, tenantID uuid.UU
 	return items, nil
 }
 
+const statsCensusCounts = `-- name: StatsCensusCounts :many
+SELECT
+  gp.class,
+  gp.race,
+  gp.faction,
+  (COUNT(*) FILTER (
+    WHERE gp.updated_at >= $1::timestamptz
+      AND (seen.pointer_ok OR seen.last_sighting >= $1::timestamptz)
+  ))::bigint AS count_recent,
+  COUNT(*)::bigint AS count_long
+FROM game_players gp
+JOIN wow_server_realms wsr ON wsr.id = gp.realm_id
+CROSS JOIN LATERAL (
+  SELECT
+    p.ok AS pointer_ok,
+    CASE WHEN p.ok THEN NULL ELSE (
+      SELECT max(li.start_time)
+      FROM log_instance_players lip
+      JOIN log_instances li ON li.id = lip.instance_id
+        AND li.realm_id = gp.realm_id
+        AND li.category = 'raid'
+        AND li.start_time >= $2::timestamptz
+        AND li.invalidated_at IS NULL
+      JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted AND wlg.invalidated_at IS NULL
+      WHERE lip.unit_guid = gp.id
+    ) END AS last_sighting
+  FROM (
+    SELECT EXISTS (
+      SELECT 1
+      FROM log_instances li
+      JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted AND wlg.invalidated_at IS NULL
+      WHERE li.id = gp.updated_from_instance
+        AND li.category = 'raid'
+        AND li.invalidated_at IS NULL
+    ) AS ok
+  ) p
+) seen
+WHERE gp.updated_at >= $2::timestamptz
+  AND (seen.pointer_ok OR seen.last_sighting IS NOT NULL)
+GROUP BY gp.class, gp.race, gp.faction
+ORDER BY gp.class, gp.race, gp.faction
+`
+
+type StatsCensusCountsParams struct {
+	SinceRecent pgtype.Timestamptz `db:"since_recent" json:"since_recent"`
+	SinceLong   pgtype.Timestamptz `db:"since_long" json:"since_long"`
+}
+
+type StatsCensusCountsRow struct {
+	Class       WowPlayableClass     `db:"class" json:"class"`
+	Race        WowPlayableRace      `db:"race" json:"race"`
+	Faction     NullWowPlayerFaction `db:"faction" json:"faction"`
+	CountRecent int64                `db:"count_recent" json:"count_recent"`
+	CountLong   int64                `db:"count_long" json:"count_long"`
+}
+
+// Characters seen in listed raid logs, by class, race and observed faction, for
+// the /stats census, over two windows in one pass: count_long since
+// @since_long and count_recent since @since_recent (the later cutoff). RLS on
+// wow_server_realms scopes it to the request tenant (root: untenanted and
+// include_in_all realms). "Seen in raid logs" means a listed, valid raid log
+// (dungeons do not count). A character counts for a window when it was updated
+// in the window and its latest sighting (updated_from_instance) is such a log,
+// or such a log started in the window shows it, so a character seen only in
+// unlisted, invalidated or dungeon logs is excluded. The exact sighting check
+// (the latest start time among listed raid logs since @since_long, which decides
+// both windows) only runs for characters whose latest sighting does not qualify.
+// Background job only.
+func (q *sqlQuerier) StatsCensusCounts(ctx context.Context, arg StatsCensusCountsParams) ([]StatsCensusCountsRow, error) {
+	rows, err := q.db.Query(ctx, statsCensusCounts, arg.SinceRecent, arg.SinceLong)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []StatsCensusCountsRow
+	for rows.Next() {
+		var i StatsCensusCountsRow
+		if err := rows.Scan(
+			&i.Class,
+			&i.Race,
+			&i.Faction,
+			&i.CountRecent,
+			&i.CountLong,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const statsTenantPlayerCount = `-- name: StatsTenantPlayerCount :one
 SELECT COUNT(DISTINCT (li.realm_id, lip.unit_guid))::bigint
 FROM log_instances li

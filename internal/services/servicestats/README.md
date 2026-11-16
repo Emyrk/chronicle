@@ -144,6 +144,8 @@ are rejected by `New`.
    timeout. Write SQL in `database/queries/*.sql` and run `make gen/db`.
    Prefer existing precomputed tables (parse spreads, summaries, census cache)
    over scanning raw logs, and reuse `tenant.Activity` instead of recounting.
+   `tenant.Store` is the store to query with: `ctx` carries the tenant, so row
+   level security scopes every query. `census.go` is a small worked example.
 2. **Write a render func** `func(site Site, page Page, snap Snapshot)
    (Content, error)`. Decode the payload with `Decode[T](snap)` and read URL
    parameters from `page.Params`. No database access. Fill `Content` to meet
@@ -154,7 +156,8 @@ are rejected by `New`.
      "As of <FormatDate(snap.ComputedAt)>", the sample size and the window.
    - `SampleLabel` and `Window`: shown in the "Updated" line.
    - `Table`: the data as a real table. `Cell.Href` links rows into the SPA.
-   - `Sections`: extra prose. `Links`: SPA pages for the interactive view.
+   - `Sections`: extra prose, each with an optional `Table` of its own.
+     `Links`: SPA pages for the interactive view.
    - `Description` defaults to `Lead`.
    - Say what the numbers count: players seen in uploaded logs, not the
      server's population.
