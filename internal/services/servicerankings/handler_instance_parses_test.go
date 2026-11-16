@@ -22,6 +22,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -35,6 +36,23 @@ type noMembershipCohortStore struct {
 func (s *noMembershipCohortStore) GetParseScoreMembershipCohort(context.Context, database.GetParseScoreMembershipCohortParams) ([]float64, error) {
 	s.queries++
 	return nil, fmt.Errorf("membership cohort query must not run")
+}
+
+type rlsInvalidationStore struct {
+	database.Store
+	rows      []database.ListEncounterPlayerPerformanceInvalidationsForInstanceRow
+	sawBypass bool
+}
+
+func (s *rlsInvalidationStore) ListEncounterPlayerPerformanceInvalidationsForInstance(
+	ctx context.Context,
+	_ uuid.UUID,
+) ([]database.ListEncounterPlayerPerformanceInvalidationsForInstanceRow, error) {
+	s.sawBypass = servicetenant.IsBypass(ctx)
+	if !s.sawBypass {
+		return nil, nil
+	}
+	return s.rows, nil
 }
 
 // parsesTestFixture holds state for instance parses handler tests.
@@ -387,6 +405,34 @@ func TestHandleInstanceParses_ReturnsSelectedPerformanceInvalidation(t *testing.
 
 	filtered := requestInstanceParses(t, f.store, f.instanceID, "?encounter_names=Golemagg&metric=dps")
 	assert.Empty(t, filtered.Invalidations)
+}
+
+func TestHandleInstanceParses_LoadsInvalidationsAcrossTenantRLS(t *testing.T) {
+	t.Parallel()
+	f := setupParsesTest(t)
+	invalidatedAt := time.Now().UTC()
+	store := &rlsInvalidationStore{
+		Store: f.store,
+		rows: []database.ListEncounterPlayerPerformanceInvalidationsForInstanceRow{{
+			PlayerGuid:    "Player-1",
+			PlayerName:    "Speedhack",
+			EncounterName: "High Priestess Arlokk",
+			Reason:        "test",
+			InvalidatedAt: pgtype.Timestamptz{Time: invalidatedAt, Valid: true},
+		}},
+	}
+
+	response := requestInstanceParsesWithHandler(
+		t,
+		servicerankings.NewTestableParsesService(store, slog.Default()).HandleInstanceParses,
+		f.instanceID,
+		"?encounter_names=High%20Priestess%20Arlokk&metric=dps",
+	)
+
+	require.True(t, store.sawBypass)
+	require.Len(t, response.Invalidations, 1)
+	assert.Equal(t, "Speedhack", response.Invalidations[0].PlayerName)
+	assert.Equal(t, "test", response.Invalidations[0].Reason)
 }
 
 func TestHandleInstanceParses_PersistedProjection(t *testing.T) {

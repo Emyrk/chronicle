@@ -481,7 +481,10 @@ func loadInstanceParseInvalidations(
 	instanceID uuid.UUID,
 	encounterSet map[string]struct{},
 ) ([]chroniclesdk.InstanceParseInvalidation, error) {
-	rows, err := store.ListEncounterPlayerPerformanceInvalidationsForInstance(ctx, instanceID)
+	// The instance ID already scopes this public parse response. Resolve markers
+	// across tenant RLS so root-domain and cross-community instance links show the
+	// same invalidation state as the instance itself.
+	rows, err := store.ListEncounterPlayerPerformanceInvalidationsForInstance(servicetenant.AdminBypass(ctx), instanceID)
 	if err != nil {
 		return nil, err
 	}
