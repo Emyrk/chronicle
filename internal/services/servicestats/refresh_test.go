@@ -254,7 +254,7 @@ func TestRefresh(t *testing.T) {
 	// pages (keeping the activity row), so a site made discoverable again
 	// never serves stale pages.
 	exec(`INSERT INTO stats_snapshots (tenant_id, page_key, producer_key, payload, sample_n, min_sample, computed_at, payload_changed_at)
-		VALUES ($1, 'about', 'about', '{}', 99, 1, now(), now()), ($1, '_activity', '_activity', '{"eligible":true}', 99, 1, now(), now())`, hidden)
+		VALUES ($1, 'about', 'about', '{}', 99, 1, now(), now()), ($1, '_activity', '_activity', '{"eligible":false}', 99, 1, now(), now())`, hidden)
 	require.NoError(t, (&servicestats.DispatchWorker{Service: svc, Queue: queue}).Work(ctx, nil))
 	dispatched := map[uuid.UUID]bool{}
 	for _, job := range queue.take() {
