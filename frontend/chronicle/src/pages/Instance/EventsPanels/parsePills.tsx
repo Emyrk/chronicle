@@ -228,6 +228,8 @@ export function buildParsePillMap(
   const pills = new Map<string, ParsePillData>();
   const invalidationsByPlayer = new Map<string, Map<string, InstanceParseInvalidation>>();
 
+  // Older backend replicas do not include this newly added field during a
+  // rolling deployment. Treat an absent field like an empty invalidation list.
   for (const invalidation of parsesData.invalidations ?? []) {
     let byEncounter = invalidationsByPlayer.get(invalidation.player_guid);
     if (!byEncounter) {

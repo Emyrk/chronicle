@@ -20,6 +20,39 @@ function response(overrides: Partial<InstanceParsesResponse> = {}): InstancePars
 }
 
 describe("buildParsePillMap", () => {
+  it("supports responses from backends that predate invalidations", () => {
+    const legacyResponse: Partial<InstanceParsesResponse> = response({
+      players: [{
+        player_guid: "Player-1",
+        player_name: "Marigold",
+        player_class: "DRUID",
+        player_spec: "Feral",
+        player_sub_spec: "",
+        player_role: "dps",
+        bosses: [{
+          encounter_variant: null,
+          difficulty_name: "Normal",
+          max_players: 40,
+          encounter_name: "Ragnaros",
+          metric_value: 500,
+          precise_score: 95,
+          display_score: 95,
+          rank: 1,
+          sample_size: 100,
+          status: "ok",
+        }],
+        average_parse: null,
+        status: "",
+        reason: "",
+      }],
+    });
+    delete legacyResponse.invalidations;
+
+    const pills = buildParsePillMap(legacyResponse as InstanceParsesResponse, "dps");
+
+    expect(pills?.get("Player-1")?.displayScore).toBe(95);
+  });
+
   it("shows an invalidation marker even when the ranking row was removed", () => {
     const pills = buildParsePillMap(response({
       invalidations: [{
