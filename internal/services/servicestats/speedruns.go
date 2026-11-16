@@ -22,10 +22,11 @@ import (
 
 const (
 	speedrunsKey = "speedruns"
-	// speedrunsCadence is hourly. Each board costs one leaderboard query, the one
-	// the app already runs on demand, so an instance with several boards runs a
-	// handful per tenant per hour; a new record is visible within the hour.
-	speedrunsCadence = time.Hour
+	// speedrunsCadence is every three hours. Each board costs one leaderboard
+	// query, the one the app already runs on demand, and that query ranks every
+	// qualified run of the board before its limit, so it is heavier than it looks;
+	// records are rare, so a few hours is soon enough for a new one to show.
+	speedrunsCadence = 3 * time.Hour
 	// speedrunsTimeout is longer than the default because a tenant can have a
 	// board per instance, difficulty and raid size.
 	speedrunsTimeout = 5 * time.Minute
@@ -86,11 +87,10 @@ func (speedrunsProducer) Compute(ctx context.Context, tenant Tenant) ([]Output, 
 			continue
 		}
 		// Two instance names that slug alike would share a URL. Keep the first
-		// by name, so the page never mixes two instances.
+		// with a ranked clear, by name, so the page never mixes two instances.
 		if owner, taken := slugOwner[slug]; taken && owner != b.InstanceName {
 			continue
 		}
-		slugOwner[slug] = b.InstanceName
 
 		rows, err := tenant.Store.SpeedrunLeaderboard(ctx, database.SpeedrunLeaderboardParams{
 			InstanceName:             b.InstanceName,
@@ -107,6 +107,7 @@ func (speedrunsProducer) Compute(ctx context.Context, tenant Tenant) ([]Output, 
 		if board.Ranked == 0 {
 			continue
 		}
+		slugOwner[slug] = b.InstanceName
 		p := byInstance[slug]
 		if p == nil {
 			p = &speedrunsPayload{Instance: b.InstanceName}
@@ -139,10 +140,22 @@ func speedrunsFamily() Family {
 // first, one per guild). Rows without a guild or a time are skipped.
 func buildSpeedrunBoard(difficulty string, maxPlayers int32, rows []database.SpeedrunLeaderboardRow) speedrunBoard {
 	board := speedrunBoard{Difficulty: difficulty, MaxPlayers: maxPlayers}
+	ranked := make([]database.SpeedrunLeaderboardRow, 0, len(rows))
 	for _, r := range rows {
-		if !r.GuildID.Valid || r.GuildName == "" || r.DurationMs <= 0 || !r.CompletionTime.Valid {
-			continue
+		if r.GuildID.Valid && r.GuildName != "" && r.DurationMs > 0 && r.CompletionTime.Valid {
+			ranked = append(ranked, r)
 		}
+	}
+	// The query orders by duration only, so equal times could come back in
+	// either order from run to run. Break ties by guild ID, so an unchanged board
+	// gives an unchanged payload (payload_changed_at, the sitemap, IndexNow).
+	sort.SliceStable(ranked, func(i, j int) bool {
+		if ranked[i].DurationMs != ranked[j].DurationMs {
+			return ranked[i].DurationMs < ranked[j].DurationMs
+		}
+		return ranked[i].GuildID.UUID.String() < ranked[j].GuildID.UUID.String()
+	})
+	for _, r := range ranked {
 		board.Ranked++
 		if len(board.Runs) >= speedrunsShown {
 			continue
@@ -181,15 +194,16 @@ func sortSpeedrunBoards(boards []speedrunBoard) {
 // boardLabel names a board: its difficulty and raid size, without repeating the
 // size when the difficulty already carries it ("25 Player").
 func boardLabel(b speedrunBoard) string {
+	difficulty := capitalize(b.Difficulty)
 	size := ""
 	if b.MaxPlayers > 0 {
 		size = strconv.Itoa(int(b.MaxPlayers))
 	}
 	switch {
-	case b.Difficulty != "" && (size == "" || strings.Contains(b.Difficulty, size)):
-		return b.Difficulty
-	case b.Difficulty != "" && size != "":
-		return b.Difficulty + ", " + size + " players"
+	case difficulty != "" && (size == "" || strings.Contains(difficulty, size)):
+		return difficulty
+	case difficulty != "" && size != "":
+		return difficulty + ", " + size + " players"
 	case size != "":
 		return size + " players"
 	default:
@@ -197,12 +211,11 @@ func boardLabel(b speedrunBoard) string {
 	}
 }
 
-// formatClock formats a duration in milliseconds as m:ss, or h:mm:ss from an hour.
+// formatClock formats a duration in milliseconds as m:ss, with minutes running
+// past 60 ("95:30"), truncating seconds: the way the leaderboard's speedrun hub
+// shows a time, so the same run reads the same here and in the app.
 func formatClock(ms int64) string {
 	secs := ms / 1000
-	if secs >= 3600 {
-		return fmt.Sprintf("%d:%02d:%02d", secs/3600, secs/60%60, secs%60)
-	}
 	return fmt.Sprintf("%d:%02d", secs/60, secs%60)
 }
 
@@ -282,7 +295,8 @@ func renderSpeedruns(site Site, _ Page, snap Snapshot) (Content, error) {
 	content.Sections = append(content.Sections, Section{
 		Heading: "What counts as a clear",
 		Paragraphs: []string{
-			"A clear is ranked when one log shows every required boss of the raid killed on a single difficulty, recorded by the Chronicle addon or a server-side logging module, in a listed log whose raid is mostly one guild. Time is the full raid, from the first fight to the last required kill.",
+			"A clear is ranked when one log shows every required boss of the raid killed on a single difficulty, recorded by the Chronicle addon or a server-side logging module, in a listed log, with the raid attributed to a guild: the guild with more than half of the players who did damage or healing. Time is the full raid, from the first fight to the last required kill.",
+			"Where a raid has a level cap, every player who fought must be at or under it: Classic raids are capped at level 60 on TBC and Wrath servers, and TBC raids at 70 on Wrath servers. Deadmines (level 26) and Ragefire Chasm (level 20) have caps everywhere. One player over the cap, or with an unknown level, disqualifies the run.",
 			"Each guild appears once, with its fastest valid clear. A raid uploaded by several players counts once. The table shows guild names only.",
 		},
 	})

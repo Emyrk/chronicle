@@ -52,7 +52,7 @@ func TestSpeedrunsPage(t *testing.T) {
 
 	require.Contains(t, body, `<th scope="col">Rank</th><th scope="col">Guild</th><th scope="col">Time</th><th scope="col">Date</th><th scope="col">Raid</th>`)
 	require.Contains(t, body, `<td>1</td><td><a href="/g/11111111-1111-1111-1111-111111111111">Nightfall</a></td><td>38:12</td><td>2026-11-10</td><td><a href="/instances/abc123">View raid</a></td>`)
-	require.Contains(t, body, `<td>2</td><td>Dawn &lt;b&gt;Patrol&lt;/b&gt;</td><td>1:02:05</td><td>2026-11-11</td><td><a href="/instances/def456">View raid</a></td>`, "names are escaped; an hour or more shows h:mm:ss")
+	require.Contains(t, body, `<td>2</td><td>Dawn &lt;b&gt;Patrol&lt;/b&gt;</td><td>62:05</td><td>2026-11-11</td><td><a href="/instances/def456">View raid</a></td>`, "names are escaped; minutes run past 60 like the app's speedrun hub")
 	require.Equal(t, 2, strings.Count(body, "<table>"), "the main board and the second board")
 	require.Contains(t, body, "<caption>Fastest clears: Hard, 20 players</caption>")
 	require.Contains(t, body, `<td><a href="/instances/ghi789">View raid</a></td>`)
@@ -132,6 +132,11 @@ func TestSpeedrunsProducerAgainstDatabase(t *testing.T) {
 	exec("INSERT INTO tenants (id, slug, name, include_in_all, discoverable) VALUES ($1, 'speed', 'speed', false, true)", tenant)
 	exec("INSERT INTO wow_servers (id, name, tenant_id) VALUES ($1, 'speed server', $2)", server, tenant)
 	exec("INSERT INTO wow_server_realms (id, server_id, name) VALUES ($1, $2, 'speed-realm')", realm, server)
+	// A second tenant, with faster clears of the same raid: it must never leak in.
+	otherTenant, otherServer, otherRealm := uuid.New(), uuid.New(), uuid.New()
+	exec("INSERT INTO tenants (id, slug, name, include_in_all, discoverable) VALUES ($1, 'elsewhere', 'elsewhere', false, true)", otherTenant)
+	exec("INSERT INTO wow_servers (id, name, tenant_id) VALUES ($1, 'other server', $2)", otherServer, otherTenant)
+	exec("INSERT INTO wow_server_realms (id, server_id, name) VALUES ($1, $2, 'other-realm')", otherRealm, otherServer)
 
 	// The threshold: 50 listed raids make the tenant eligible.
 	lg := uuid.New()
@@ -140,23 +145,27 @@ func TestSpeedrunsProducerAgainstDatabase(t *testing.T) {
 	exec(`INSERT INTO log_instances (id, realm_id, log_group_id, name, start_time, category)
 		SELECT gen_random_uuid(), $1, $2, 'Filler', now() - interval '5 days', 'raid' FROM generate_series(1, $3::int)`, realm, lg, servicestats.MinTenantRaids)
 
-	guild := func(name string) uuid.UUID {
+	guildIn := func(r uuid.UUID, name string) uuid.UUID {
 		id := uuid.New()
-		exec("INSERT INTO guilds (id, realm_id, name) VALUES ($1, $2, $3)", id, realm, name)
+		exec("INSERT INTO guilds (id, realm_id, name) VALUES ($1, $2, $3)", id, r, name)
 		return id
 	}
-	// clear seeds one speedrun of instanceName for a guild.
-	clear := func(instanceName string, g uuid.UUID, ms int64, qualified, unlisted bool, dup any, slug any) {
+	guild := func(name string) uuid.UUID { return guildIn(realm, name) }
+	// clearIn seeds one speedrun of instanceName on a realm, of the given raid size.
+	clearIn := func(r uuid.UUID, size int, instanceName string, g uuid.UUID, ms int64, qualified, unlisted bool, dup any, slug any) {
 		group, inst := uuid.New(), uuid.New()
 		exec("INSERT INTO wow_log_groups (id, owner, created_at, updated_at, unlisted) VALUES ($1, $2, now(), now(), $3)", group, user, unlisted)
 		exec("INSERT INTO parsed_log_group (id, finalized_at) VALUES ($1, now())", group)
 		start := time.Now().Add(-48 * time.Hour)
 		exec(`INSERT INTO log_instances (id, realm_id, log_group_id, name, start_time, category, difficulty_name, max_players, hashed_slug, duplicate_group_id)
-			VALUES ($1, $2, $3, $4, $5, 'raid', '', 40, $6, $7)`, inst, realm, group, instanceName, start, slug, dup)
+			VALUES ($1, $2, $3, $4, $5, 'raid', '', $8, $6, $7)`, inst, r, group, instanceName, start, slug, dup, size)
 		exec(`INSERT INTO instance_speedruns (instance_id, instance_name, realm_id, guild_id, qualified, start_time, completion_time, duration_ms,
 				ranked_start_time, ranked_completion_time, ranked_duration_ms, boss_to_boss_start_time, boss_to_boss_completion_time, boss_to_boss_duration_ms, proof)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $6, $7, $8, $6, $7, $8, '{}'::jsonb)`,
-			inst, instanceName, realm, g, qualified, start, start.Add(time.Duration(ms)*time.Millisecond), ms)
+			inst, instanceName, r, g, qualified, start, start.Add(time.Duration(ms)*time.Millisecond), ms)
+	}
+	clear := func(instanceName string, g uuid.UUID, ms int64, qualified, unlisted bool, dup any, slug any) {
+		clearIn(realm, 40, instanceName, g, ms, qualified, unlisted, dup, slug)
 	}
 
 	fast, mid, hidden, invalid := guild("Fast Guild"), guild("Mid Guild"), guild("Unlisted Guild"), guild("Unqualified Guild")
@@ -167,6 +176,17 @@ func TestSpeedrunsProducerAgainstDatabase(t *testing.T) {
 	clear("Molten Core", mid, 2_900_000, true, false, nil, nil)      // the guild's slower run
 	clear("Molten Core", hidden, 1_000_000, true, true, nil, nil)    // unlisted log: never ranked
 	clear("Molten Core", invalid, 1_100_000, false, false, nil, nil) // not a qualified clear
+	// One raid uploaded twice, by the log of two guilds: a single logical run, ranked once
+	// for the faster copy.
+	raidTwice := uuid.New()
+	dupA, dupB := guild("Duplicate A"), guild("Duplicate B")
+	clear("Molten Core", dupA, 2_330_000, true, false, raidTwice, nil)
+	clear("Molten Core", dupB, 2_340_000, true, false, raidTwice, nil)
+	// A second raid size is its own board on the same page.
+	clearIn(realm, 20, "Molten Core", guild("Small Guild"), 3_000_000, true, false, nil, "slug-small")
+	// Another tenant's faster clears are invisible here.
+	clearIn(otherRealm, 40, "Molten Core", guildIn(otherRealm, "Foreign Guild"), 900_000, true, false, nil, "slug-foreign")
+	clearIn(otherRealm, 40, "Naxxramas", guildIn(otherRealm, "Foreign Naxx"), 900_000, true, false, nil, nil)
 	clear("Onyxia's Lair", invalid, 900_000, false, false, nil, nil) // an instance with no valid run
 	clear("Onyxia's Lair", hidden, 800_000, true, true, nil, nil)
 
@@ -182,7 +202,7 @@ func TestSpeedrunsProducerAgainstDatabase(t *testing.T) {
 
 	_, err = svc.RefreshTenant(ctx, &recordingQueue{}, tenant, true)
 	require.NoError(t, err)
-	_, err = svc.RefreshProducer(ctx, tenant, "speedruns")
+	_, err = svc.RefreshProducer(ctx, tenant, "speedruns", time.Time{})
 	require.NoError(t, err)
 
 	tenantCtx := servicetenant.WithTenantID(ctx, tenant)
@@ -194,15 +214,16 @@ func TestSpeedrunsProducerAgainstDatabase(t *testing.T) {
 			keys = append(keys, m.PageKey)
 		}
 	}
-	require.Equal(t, []string{"speedruns/molten-core"}, keys, "no page for Onyxia's Lair: its only runs are unlisted or unqualified")
+	require.Equal(t, []string{"speedruns/molten-core"}, keys, "no page for Onyxia's Lair (unlisted or unqualified runs) or Naxxramas (another tenant's)")
 
 	snap, err := store.GetStatsSnapshot(tenantCtx, database.GetStatsSnapshotParams{TenantID: tenant, PageKey: "speedruns/molten-core"})
 	require.NoError(t, err)
 	var payload struct {
 		Instance string `json:"instance"`
 		Boards   []struct {
-			Ranked int `json:"ranked"`
-			Runs   []struct {
+			MaxPlayers int `json:"max_players"`
+			Ranked     int `json:"ranked"`
+			Runs       []struct {
 				Rank       int    `json:"rank"`
 				Guild      string `json:"guild"`
 				DurationMs int64  `json:"duration_ms"`
@@ -212,14 +233,25 @@ func TestSpeedrunsProducerAgainstDatabase(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(snap.Payload, &payload))
 	require.Equal(t, "Molten Core", payload.Instance)
-	require.Len(t, payload.Boards, 1)
-	require.Equal(t, 2, payload.Boards[0].Ranked, "one run per guild; unlisted and unqualified guilds are not ranked")
-	runs := payload.Boards[0].Runs
-	require.Len(t, runs, 2)
-	require.Equal(t, "Fast Guild", runs[0].Guild)
-	require.EqualValues(t, 2_292_000, runs[0].DurationMs, "the guild's fastest run")
-	require.Equal(t, "slug-fast", runs[0].RaidID)
-	require.Equal(t, "Mid Guild", runs[1].Guild)
-	require.EqualValues(t, 2_400_000, runs[1].DurationMs)
-	require.EqualValues(t, 2, snap.SampleN)
+	require.Len(t, payload.Boards, 2, "one board per raid size")
+
+	main := payload.Boards[0]
+	require.Equal(t, 40, main.MaxPlayers, "the board with the most ranked guilds leads")
+	require.Equal(t, 3, main.Ranked, "one run per guild; unlisted, unqualified and other-tenant guilds are not ranked, and a raid uploaded twice ranks once")
+	var guilds []string
+	for _, r := range main.Runs {
+		guilds = append(guilds, r.Guild)
+	}
+	require.Equal(t, []string{"Fast Guild", "Duplicate A", "Mid Guild"}, guilds, "fastest first; the slower copy of the duplicated raid (Duplicate B) is gone")
+	require.EqualValues(t, 2_292_000, main.Runs[0].DurationMs, "the guild's fastest run")
+	require.Equal(t, "slug-fast", main.Runs[0].RaidID)
+	require.EqualValues(t, 2_400_000, main.Runs[2].DurationMs)
+
+	small := payload.Boards[1]
+	require.Equal(t, 20, small.MaxPlayers)
+	require.Len(t, small.Runs, 1)
+	require.Equal(t, "Small Guild", small.Runs[0].Guild)
+	require.Equal(t, "slug-small", small.Runs[0].RaidID)
+	require.EqualValues(t, 3, snap.SampleN, "the sample is the main board's ranked guilds")
+	require.NotContains(t, string(snap.Payload), "Foreign")
 }

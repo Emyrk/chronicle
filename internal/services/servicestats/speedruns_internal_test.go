@@ -85,6 +85,7 @@ func TestSortSpeedrunBoardsAndLabels(t *testing.T) {
 
 	require.Equal(t, "25 Player", boardLabel(speedrunBoard{Difficulty: "25 Player", MaxPlayers: 25}))
 	require.Equal(t, "Heroic, 25 players", boardLabel(speedrunBoard{Difficulty: "Heroic", MaxPlayers: 25}))
+	require.Equal(t, "Heroic, 25 players", boardLabel(speedrunBoard{Difficulty: "heroic", MaxPlayers: 25}), "difficulty names are capitalized")
 	require.Equal(t, "40 players", boardLabel(speedrunBoard{MaxPlayers: 40}))
 	require.Equal(t, "Normal", boardLabel(speedrunBoard{Difficulty: "Normal"}))
 	require.Empty(t, boardLabel(speedrunBoard{}))
@@ -92,7 +93,7 @@ func TestSortSpeedrunBoardsAndLabels(t *testing.T) {
 
 func TestFormatClock(t *testing.T) {
 	t.Parallel()
-	for ms, want := range map[int64]string{0: "0:00", 59_000: "0:59", 2_292_000: "38:12", 3_600_000: "1:00:00", 5_233_099: "1:27:13"} {
+	for ms, want := range map[int64]string{0: "0:00", 59_000: "0:59", 2_292_000: "38:12", 3_600_000: "60:00", 5_730_000: "95:30", 5_233_099: "87:13"} {
 		require.Equal(t, want, formatClock(ms))
 	}
 }
@@ -172,5 +173,41 @@ func TestSpeedrunsProducerSlugCollision(t *testing.T) {
 	out, err := speedrunsProducer{}.Compute(context.Background(), Tenant{Store: store})
 	require.NoError(t, err)
 	require.Len(t, out, 1, "two instances that slug alike never share a page")
+	require.Equal(t, "Zul'Gurub", out[0].Payload.(*speedrunsPayload).Instance)
+}
+
+// Equal times come back from the query in either order; the board breaks the tie
+// by guild ID so an unchanged board is an unchanged payload.
+func TestBuildSpeedrunBoardTieOrderIsStable(t *testing.T) {
+	t.Parallel()
+	done := time.Date(2026, 11, 10, 20, 0, 0, 0, time.UTC)
+	a, b, c := run("A", 2_000_000, done, "a"), run("B", 2_000_000, done, "b"), run("C", 1_900_000, done, "c")
+	forward := buildSpeedrunBoard("", 40, []database.SpeedrunLeaderboardRow{a, b, c})
+	backward := buildSpeedrunBoard("", 40, []database.SpeedrunLeaderboardRow{b, a, c})
+	require.Equal(t, forward, backward)
+	require.Equal(t, "C", forward.Runs[0].Guild)
+	first, second := forward.Runs[1], forward.Runs[2]
+	require.Less(t, first.GuildID, second.GuildID, "tied runs ordered by guild ID")
+	require.Equal(t, []int{1, 2, 3}, []int{forward.Runs[0].Rank, first.Rank, second.Rank})
+}
+
+// An instance with no ranked clear does not claim its slug, so a later instance
+// that slugs alike can have the page.
+func TestSpeedrunsProducerSlugClaimedByRankedInstanceOnly(t *testing.T) {
+	t.Parallel()
+	done := time.Now()
+	store := &speedrunStore{
+		boards: []database.SpeedrunInstanceBoardsRow{
+			{InstanceName: "Zul Gurub", MaxPlayers: 20},
+			{InstanceName: "Zul'Gurub", MaxPlayers: 20},
+		},
+		rows: map[string][]database.SpeedrunLeaderboardRow{
+			"Zul Gurub||2": {},
+			"Zul'Gurub||2": {run("B", 1000, done, "b")},
+		},
+	}
+	out, err := speedrunsProducer{}.Compute(context.Background(), Tenant{Store: store})
+	require.NoError(t, err)
+	require.Len(t, out, 1)
 	require.Equal(t, "Zul'Gurub", out[0].Payload.(*speedrunsPayload).Instance)
 }
