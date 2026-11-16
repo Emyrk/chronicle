@@ -132,6 +132,18 @@ beats `/stats/{instance}/{boss}` for `/stats/naxxramas/speedruns`, and a
 that would match exactly the same paths, and static pages a family matches,
 are rejected by `New`.
 
+## Instance slugs
+
+Every page family that puts an instance in its path (`/stats/{instance}/speedruns`,
+and the boss pages `/stats/{instance}/{boss}`) builds the segment with
+`InstanceSlug(name)`: lowercase, each run of characters other than `[a-z0-9]`
+becomes one `-`, no leading or trailing `-`. "Molten Core" is `molten-core`,
+"Onyxia's Lair" is `onyxia-s-lair`, "Zul'Gurub" is `zul-gurub`. It is a pure
+function of the name, so a producer's page key and a link to it always agree.
+Two names that slug alike would share a URL; a producer keeps the first (by
+instance name) and skips the other (see the `speedruns` producer). Boss
+names should get the same treatment (one shared helper, same rule).
+
 ## Adding a page family
 
 1. **Write a producer.** Run the expensive queries in `Compute`. `ctx` is
@@ -144,6 +156,8 @@ are rejected by `New`.
    timeout. Write SQL in `database/queries/*.sql` and run `make gen/db`.
    Prefer existing precomputed tables (parse spreads, summaries, census cache)
    over scanning raw logs, and reuse `tenant.Activity` instead of recounting.
+   `tenant.Store` is the store to query with: `ctx` carries the tenant, so row
+   level security scopes every query. `census.go` is a small worked example.
 2. **Write a render func** `func(site Site, page Page, snap Snapshot)
    (Content, error)`. Decode the payload with `Decode[T](snap)` and read URL
    parameters from `page.Params`. No database access. Fill `Content` to meet
@@ -154,7 +168,8 @@ are rejected by `New`.
      "As of <FormatDate(snap.ComputedAt)>", the sample size and the window.
    - `SampleLabel` and `Window`: shown in the "Updated" line.
    - `Table`: the data as a real table. `Cell.Href` links rows into the SPA.
-   - `Sections`: extra prose. `Links`: SPA pages for the interactive view.
+   - `Sections`: extra prose, each with an optional `Table` of its own.
+     `Links`: SPA pages for the interactive view.
    - `Description` defaults to `Lead`.
    - Say what the numbers count: players seen in uploaded logs, not the
      server's population.

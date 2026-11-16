@@ -271,7 +271,7 @@ func TestRefresh(t *testing.T) {
 	require.True(t, tr.Eligible)
 	require.EqualValues(t, servicestats.MinTenantRaids, tr.Activity.Raids, "only alpha's raids count")
 	require.Nil(t, tr.Activity.Players)
-	require.ElementsMatch(t, []string{"about", "probe", "slow", "failing"}, producers())
+	require.ElementsMatch(t, []string{"about", "speedruns", "probe", "slow", "failing"}, producers())
 
 	// Each family runs on its own: a timeout and an error don't stop the rest.
 	start := time.Now()
@@ -308,10 +308,11 @@ func TestRefresh(t *testing.T) {
 	}
 	require.ElementsMatch(t, []any{"https://alpha.chronicleclassic.com/stats/probe/a", "https://alpha.chronicleclassic.com/stats/probe/b", "https://alpha.chronicleclassic.com/stats/about"}, urls)
 
-	// Families that ran are not due again; the failed ones are retried.
+	// Families that ran are not due again; the failed ones are retried, and so is
+	// speedruns, which this test never ran.
 	_, err = svc.RefreshTenant(ctx, queue, alpha, false)
 	require.NoError(t, err)
-	require.ElementsMatch(t, []string{"slow", "failing"}, producers())
+	require.ElementsMatch(t, []string{"speedruns", "slow", "failing"}, producers())
 
 	// Recomputing an unchanged payload moves computed_at but not
 	// payload_changed_at, and sends no ping.
