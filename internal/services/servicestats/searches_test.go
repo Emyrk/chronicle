@@ -195,9 +195,9 @@ func TestSearchesProducerAgainstDatabase(t *testing.T) {
 
 	_, err = svc.RefreshTenant(ctx, &recordingQueue{}, tenant, true)
 	require.NoError(t, err)
-	_, err = svc.RefreshProducer(ctx, tenant, "searches")
+	_, err = svc.RefreshProducer(ctx, tenant, "searches", time.Time{})
 	require.NoError(t, err)
-	_, err = svc.RefreshProducer(ctx, tenant, "searches-index")
+	_, err = svc.RefreshProducer(ctx, tenant, "searches-index", time.Time{})
 	require.NoError(t, err)
 
 	tenantCtx := servicetenant.WithTenantID(ctx, tenant)
