@@ -228,7 +228,7 @@ export function buildParsePillMap(
   const pills = new Map<string, ParsePillData>();
   const invalidationsByPlayer = new Map<string, Map<string, InstanceParseInvalidation>>();
 
-  for (const invalidation of parsesData.invalidations) {
+  for (const invalidation of parsesData.invalidations ?? []) {
     let byEncounter = invalidationsByPlayer.get(invalidation.player_guid);
     if (!byEncounter) {
       byEncounter = new Map();
