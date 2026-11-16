@@ -34346,53 +34346,6 @@ func (q *sqlQuerier) ListStatsSnapshotMeta(ctx context.Context, tenantID uuid.UU
 	return items, nil
 }
 
-const statsHubActivity = `-- name: StatsHubActivity :one
-SELECT
-  COUNT(DISTINCT COALESCE(li.duplicate_group_id, li.id)) FILTER (WHERE li.category = 'raid' AND li.start_time >= $1::timestamptz)::bigint AS raids_recent,
-  COUNT(DISTINCT COALESCE(li.duplicate_group_id, li.id)) FILTER (WHERE li.category = 'raid')::bigint AS raids,
-  COUNT(DISTINCT COALESCE(li.duplicate_group_id, li.id)) FILTER (WHERE li.category = 'dungeon' AND li.start_time >= $1::timestamptz)::bigint AS dungeons_recent,
-  COUNT(DISTINCT COALESCE(li.duplicate_group_id, li.id)) FILTER (WHERE li.category = 'dungeon')::bigint AS dungeons,
-  COUNT(DISTINCT li.log_group_id) FILTER (WHERE li.start_time >= $1::timestamptz)::bigint AS logs_recent,
-  COUNT(DISTINCT li.log_group_id)::bigint AS logs
-FROM log_instances li
-JOIN wow_server_realms wsr ON wsr.id = li.realm_id
-JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
-WHERE li.start_time >= $2::timestamptz
-  AND li.invalidated_at IS NULL
-`
-
-type StatsHubActivityParams struct {
-	SinceRecent pgtype.Timestamptz `db:"since_recent" json:"since_recent"`
-	Since       pgtype.Timestamptz `db:"since" json:"since"`
-}
-
-type StatsHubActivityRow struct {
-	RaidsRecent    int64 `db:"raids_recent" json:"raids_recent"`
-	Raids          int64 `db:"raids" json:"raids"`
-	DungeonsRecent int64 `db:"dungeons_recent" json:"dungeons_recent"`
-	Dungeons       int64 `db:"dungeons" json:"dungeons"`
-	LogsRecent     int64 `db:"logs_recent" json:"logs_recent"`
-	Logs           int64 `db:"logs" json:"logs"`
-}
-
-// The request tenant's listed raids, dungeon runs (logical runs, so duplicate
-// uploads count once) and uploaded logs, since @since and since @since_recent
-// (the later cutoff), in one scan. RLS on wow_server_realms scopes it to the
-// tenant in context. Background job only.
-func (q *sqlQuerier) StatsHubActivity(ctx context.Context, arg StatsHubActivityParams) (StatsHubActivityRow, error) {
-	row := q.db.QueryRow(ctx, statsHubActivity, arg.SinceRecent, arg.Since)
-	var i StatsHubActivityRow
-	err := row.Scan(
-		&i.RaidsRecent,
-		&i.Raids,
-		&i.DungeonsRecent,
-		&i.Dungeons,
-		&i.LogsRecent,
-		&i.Logs,
-	)
-	return i, err
-}
-
 const statsHubInstances = `-- name: StatsHubInstances :many
 SELECT
   li.name,
@@ -34422,7 +34375,9 @@ type StatsHubInstancesRow struct {
 }
 
 // The request tenant's raids and dungeons with listed runs since @since, with
-// run counts (logical runs) since @since and since @since_recent.
+// run counts (logical runs, so duplicate uploads count once) since @since and
+// since @since_recent. A logical run has one instance name, so the hub's raid
+// and dungeon totals are sums of these rows.
 func (q *sqlQuerier) StatsHubInstances(ctx context.Context, arg StatsHubInstancesParams) ([]StatsHubInstancesRow, error) {
 	rows, err := q.db.Query(ctx, statsHubInstances, arg.SinceRecent, arg.Since)
 	if err != nil {
@@ -34446,6 +34401,38 @@ func (q *sqlQuerier) StatsHubInstances(ctx context.Context, arg StatsHubInstance
 		return nil, err
 	}
 	return items, nil
+}
+
+const statsHubLogs = `-- name: StatsHubLogs :one
+SELECT
+  COUNT(DISTINCT li.log_group_id) FILTER (WHERE li.start_time >= $1::timestamptz)::bigint AS logs_recent,
+  COUNT(DISTINCT li.log_group_id)::bigint AS logs
+FROM log_instances li
+JOIN wow_server_realms wsr ON wsr.id = li.realm_id
+JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
+WHERE li.start_time >= $2::timestamptz
+  AND li.invalidated_at IS NULL
+  AND li.category IN ('raid', 'dungeon')
+`
+
+type StatsHubLogsParams struct {
+	SinceRecent pgtype.Timestamptz `db:"since_recent" json:"since_recent"`
+	Since       pgtype.Timestamptz `db:"since" json:"since"`
+}
+
+type StatsHubLogsRow struct {
+	LogsRecent int64 `db:"logs_recent" json:"logs_recent"`
+	Logs       int64 `db:"logs" json:"logs"`
+}
+
+// The request tenant's listed logs with raids or dungeons that started since
+// @since and since @since_recent (the later cutoff), in one scan without the
+// players join. RLS on wow_server_realms scopes it. Background job only.
+func (q *sqlQuerier) StatsHubLogs(ctx context.Context, arg StatsHubLogsParams) (StatsHubLogsRow, error) {
+	row := q.db.QueryRow(ctx, statsHubLogs, arg.SinceRecent, arg.Since)
+	var i StatsHubLogsRow
+	err := row.Scan(&i.LogsRecent, &i.Logs)
+	return i, err
 }
 
 const statsHubPlayers = `-- name: StatsHubPlayers :one

@@ -133,8 +133,9 @@ func jsonLD(t *testing.T, body string) map[string]any {
 var forever = servicestats.Site{Name: "WoW Forever", Origin: "https://forever.chronicleclassic.com", Discoverable: true}
 
 const (
-	naxx = `{"name":"Naxxramas","slug":"naxxramas","category":"raid","runs_recent":40,"runs":210,"speedruns":3}`
-	dm   = `{"name":"The Deadmines","slug":"the-deadmines","category":"dungeon","runs_recent":7,"runs":30,"speedruns":0}`
+	// Naxxramas has stored instance and speedrun pages; the Deadmines has none.
+	naxx = `{"name":"Naxxramas","category":"raid","runs_recent":40,"runs":210,"speedruns":3,"path":"/stats/raids/naxxramas","speedruns_path":"/stats/raids/naxxramas/speedruns"}`
+	dm   = `{"name":"The Deadmines","category":"dungeon","runs_recent":7,"runs":30,"speedruns":2}`
 )
 
 // The hub is complete HTML without JS and carries every page-spec element,
@@ -156,15 +157,17 @@ func TestHubPageSpec(t *testing.T) {
 	title := "Raid logs, rankings and census for WoW Forever"
 	require.Contains(t, body, "<title>"+title+"</title>")
 	require.Contains(t, body, "<h1>"+title+"</h1>")
-	require.Contains(t, body, "As of 2026-11-14, players uploaded 1,234 raids and 56 dungeon runs from WoW Forever to Chronicle in the last 30 days, in 300 logs, with 5,678 players seen in those logs. The most-logged raid is Naxxramas, with 40 runs in that time.")
+	require.Contains(t, body, "As of 2026-11-14, uploaded logs show 1,234 raids and 56 dungeon runs on WoW Forever in the last 30 days, from 300 logs, with 5,678 players seen in them. The most-run raid in those logs is Naxxramas, with 40 runs in that time.")
+	require.Contains(t, body, "by when each raid happened")
+	require.Contains(t, body, "Window: last 30 and 180 days", "the window line covers both windows the page shows")
 	require.Contains(t, body, "not everyone on the server")
 	require.Contains(t, body, `Updated <time datetime="2026-11-14T06:30:00Z">2026-11-14</time>`)
 	require.Contains(t, body, "Sample: 4,200 raids and dungeon runs")
 	require.Contains(t, body, `<a href="/stats/methodology">Methodology</a>`)
 	require.Contains(t, body, "<td>Players seen in uploaded logs</td><td>5,678</td><td>9,000</td>")
-	require.Contains(t, body, "<td>Logs uploaded</td><td>300</td><td>900</td>")
-	require.Contains(t, body, `<td><a href="/stats/naxxramas">Naxxramas</a></td><td>Raid</td><td>40</td><td>210</td><td><a href="/stats/naxxramas/speedruns">3 speedruns</a></td>`)
-	require.Contains(t, body, `<td><a href="/stats/the-deadmines">The Deadmines</a></td><td>Dungeon</td><td>7</td><td>30</td><td>-</td>`, "no speedrun link without speedruns")
+	require.Contains(t, body, "<td>Logs with those runs</td><td>300</td><td>900</td>")
+	require.Contains(t, body, `<td><a href="/stats/raids/naxxramas">Naxxramas</a></td><td>Raid</td><td>40</td><td>210</td><td><a href="/stats/raids/naxxramas/speedruns">3 speedruns</a></td>`)
+	require.Contains(t, body, `<td>The Deadmines</td><td>Dungeon</td><td>7</td><td>30</td><td>2 speedruns</td>`, "no links to pages that aren't stored")
 	require.Contains(t, body, `<section id="upload">`)
 	require.Contains(t, body, `<a href="/upload">Upload a combat log</a>`)
 	require.Contains(t, body, `<a href="/download">Download the addon and Sidekick</a>`)
@@ -176,6 +179,7 @@ func TestHubPageSpec(t *testing.T) {
 	require.NotContains(t, body, `id="root"`, "not the SPA shell")
 
 	page := jsonLD(t, body)
+	require.Equal(t, title, page["name"])
 	require.Equal(t, "WebPage", page["@type"])
 	require.Equal(t, "2026-11-12T18:00:00Z", page["dateModified"], "dateModified is when the payload last changed")
 	require.Equal(t, "https://forever.chronicleclassic.com/stats", page["url"])
@@ -210,7 +214,7 @@ func TestTurtleForkLabel(t *testing.T) {
 
 	body := get(t, handler(newService(t, store), site), tenant, "/stats").Body.String()
 	require.Contains(t, body, "<title>Raid logs, rankings and census for Capybara (Turtle WoW fork)</title>")
-	require.Contains(t, body, `<meta name="description" content="As of 2026-11-14, players uploaded 80 raids and 0 dungeon runs from Capybara (Turtle WoW fork)`)
+	require.Contains(t, body, `<meta name="description" content="As of 2026-11-14, uploaded logs show 80 raids and 0 dungeon runs on Capybara (Turtle WoW fork)`)
 
 	require.Equal(t, "Turtle WoW", servicestats.Site{Name: "Turtle WoW", TurtleFork: true}.Label(), "no doubled suffix")
 }

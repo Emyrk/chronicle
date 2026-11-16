@@ -73,23 +73,19 @@ JOIN log_instance_players lip ON lip.instance_id = li.id
 WHERE li.start_time >= @since::timestamptz
   AND li.invalidated_at IS NULL;
 
--- name: StatsHubActivity :one
--- The request tenant's listed raids, dungeon runs (logical runs, so duplicate
--- uploads count once) and uploaded logs, since @since and since @since_recent
--- (the later cutoff), in one scan. RLS on wow_server_realms scopes it to the
--- tenant in context. Background job only.
+-- name: StatsHubLogs :one
+-- The request tenant's listed logs with raids or dungeons that started since
+-- @since and since @since_recent (the later cutoff), in one scan without the
+-- players join. RLS on wow_server_realms scopes it. Background job only.
 SELECT
-  COUNT(DISTINCT COALESCE(li.duplicate_group_id, li.id)) FILTER (WHERE li.category = 'raid' AND li.start_time >= @since_recent::timestamptz)::bigint AS raids_recent,
-  COUNT(DISTINCT COALESCE(li.duplicate_group_id, li.id)) FILTER (WHERE li.category = 'raid')::bigint AS raids,
-  COUNT(DISTINCT COALESCE(li.duplicate_group_id, li.id)) FILTER (WHERE li.category = 'dungeon' AND li.start_time >= @since_recent::timestamptz)::bigint AS dungeons_recent,
-  COUNT(DISTINCT COALESCE(li.duplicate_group_id, li.id)) FILTER (WHERE li.category = 'dungeon')::bigint AS dungeons,
   COUNT(DISTINCT li.log_group_id) FILTER (WHERE li.start_time >= @since_recent::timestamptz)::bigint AS logs_recent,
   COUNT(DISTINCT li.log_group_id)::bigint AS logs
 FROM log_instances li
 JOIN wow_server_realms wsr ON wsr.id = li.realm_id
 JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
 WHERE li.start_time >= @since::timestamptz
-  AND li.invalidated_at IS NULL;
+  AND li.invalidated_at IS NULL
+  AND li.category IN ('raid', 'dungeon');
 
 -- name: StatsHubPlayers :one
 -- Distinct players seen in the request tenant's listed logs since @since and
@@ -106,7 +102,9 @@ WHERE li.start_time >= @since::timestamptz
 
 -- name: StatsHubInstances :many
 -- The request tenant's raids and dungeons with listed runs since @since, with
--- run counts (logical runs) since @since and since @since_recent.
+-- run counts (logical runs, so duplicate uploads count once) since @since and
+-- since @since_recent. A logical run has one instance name, so the hub's raid
+-- and dungeon totals are sums of these rows.
 SELECT
   li.name,
   li.category::text AS category,

@@ -313,8 +313,8 @@ func TestRefresh(t *testing.T) {
 		"recent": {"raids": 50, "dungeons": 0, "logs": 1, "players": 3},
 		"window": {"raids": 50, "dungeons": 1, "logs": 2, "players": 3},
 		"instances": [
-			{"name": "Molten Core", "slug": "molten-core", "category": "raid", "runs_recent": 50, "runs": 50, "speedruns": 1},
-			{"name": "The Deadmines", "slug": "the-deadmines", "category": "dungeon", "runs_recent": 0, "runs": 1, "speedruns": 0}
+			{"name": "Molten Core", "category": "raid", "runs_recent": 50, "runs": 50, "speedruns": 1},
+			{"name": "The Deadmines", "category": "dungeon", "runs_recent": 0, "runs": 1, "speedruns": 0}
 		]
 	}`, string(hub.Payload), "only alpha's listed logs count, per window")
 	require.EqualValues(t, 51, hub.SampleN)
@@ -416,7 +416,7 @@ func TestRefresh(t *testing.T) {
 	}
 	ok := request(alpha, "/stats")
 	require.Equal(t, http.StatusOK, ok.Code)
-	require.Contains(t, ok.Body.String(), "players uploaded 50 raids")
+	require.Contains(t, ok.Body.String(), "uploaded logs show 50 raids")
 	require.Equal(t, http.StatusOK, request(alpha, "/stats/probe/a").Code)
 	require.Equal(t, http.StatusNotFound, request(alpha, "/stats/probe/b").Code, "pruned")
 	require.Equal(t, http.StatusOK, request(alpha, "/stats/methodology").Code)

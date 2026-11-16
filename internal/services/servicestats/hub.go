@@ -19,6 +19,9 @@ const (
 	hubRecent    = 30 * 24 * time.Hour
 	hubMinSample = 10
 	hubTimeout   = 5 * time.Minute
+	// hubCadence: the players scan covers 180 days, so the hub refreshes
+	// every 3 hours rather than hourly.
+	hubCadence = 3 * time.Hour
 )
 
 type hubCounts struct {
@@ -30,11 +33,14 @@ type hubCounts struct {
 
 type hubInstance struct {
 	Name       string `json:"name"`
-	Slug       string `json:"slug"`
 	Category   string `json:"category"` // "raid" or "dungeon"
 	RunsRecent int64  `json:"runs_recent"`
 	Runs       int64  `json:"runs"`
 	Speedruns  int64  `json:"speedruns"`
+	// Path and SpeedrunsPath are set only when that page is stored for the
+	// tenant, so the hub never links to a page that would be 404.
+	Path          string `json:"path,omitempty"`
+	SpeedrunsPath string `json:"speedruns_path,omitempty"`
 }
 
 type hubPayload struct {
@@ -51,24 +57,27 @@ type hubProducer struct {
 }
 
 func (hubProducer) Key() string            { return hubKey }
-func (hubProducer) Cadence() time.Duration { return time.Hour }
+func (hubProducer) Cadence() time.Duration { return hubCadence }
 func (hubProducer) Timeout() time.Duration { return hubTimeout }
 
 func (p hubProducer) Compute(ctx context.Context, _ Tenant) ([]Output, error) {
-	now := p.now()
-	since, sinceRecent := timestamptz(now.Add(-ActivityWindow)), timestamptz(now.Add(-hubRecent))
+	// Windows start at a UTC day boundary, so the payload (and with it
+	// payload_changed_at and IndexNow) only changes when the data does or a
+	// day rolls over, not on every refresh.
+	day := p.now().UTC().Truncate(24 * time.Hour)
+	since, sinceRecent := timestamptz(day.Add(-ActivityWindow)), timestamptz(day.Add(-hubRecent))
 
-	activity, err := p.store.StatsHubActivity(ctx, database.StatsHubActivityParams{Since: since, SinceRecent: sinceRecent})
+	instances, err := p.store.StatsHubInstances(ctx, database.StatsHubInstancesParams{Since: since, SinceRecent: sinceRecent})
 	if err != nil {
-		return nil, fmt.Errorf("count activity: %w", err)
+		return nil, fmt.Errorf("list instances: %w", err)
+	}
+	logs, err := p.store.StatsHubLogs(ctx, database.StatsHubLogsParams{Since: since, SinceRecent: sinceRecent})
+	if err != nil {
+		return nil, fmt.Errorf("count logs: %w", err)
 	}
 	players, err := p.store.StatsHubPlayers(ctx, database.StatsHubPlayersParams{Since: since, SinceRecent: sinceRecent})
 	if err != nil {
 		return nil, fmt.Errorf("count players: %w", err)
-	}
-	instances, err := p.store.StatsHubInstances(ctx, database.StatsHubInstancesParams{Since: since, SinceRecent: sinceRecent})
-	if err != nil {
-		return nil, fmt.Errorf("list instances: %w", err)
 	}
 	speedrunRows, err := p.store.StatsHubSpeedruns(ctx)
 	if err != nil {
@@ -82,58 +91,43 @@ func (p hubProducer) Compute(ctx context.Context, _ Tenant) ([]Output, error) {
 	payload := hubPayload{
 		RecentDays: int(hubRecent.Hours() / 24),
 		WindowDays: int(ActivityWindow.Hours() / 24),
-		Recent:     hubCounts{Raids: activity.RaidsRecent, Dungeons: activity.DungeonsRecent, Logs: activity.LogsRecent, Players: players.PlayersRecent},
-		Window:     hubCounts{Raids: activity.Raids, Dungeons: activity.Dungeons, Logs: activity.Logs, Players: players.Players},
+		Recent:     hubCounts{Logs: logs.LogsRecent, Players: players.PlayersRecent},
+		Window:     hubCounts{Logs: logs.Logs, Players: players.Players},
 		Instances:  []hubInstance{},
 	}
 	for _, in := range instances {
-		slug := Slug(in.Name)
-		if slug == "" {
-			continue
+		// Each logical run has one instance name, so totals are sums.
+		if in.Category == "raid" {
+			payload.Recent.Raids += in.RunsRecent
+			payload.Window.Raids += in.Runs
+		} else {
+			payload.Recent.Dungeons += in.RunsRecent
+			payload.Window.Dungeons += in.Runs
 		}
-		payload.Instances = append(payload.Instances, hubInstance{
-			Name: in.Name, Slug: slug, Category: in.Category,
-			RunsRecent: in.RunsRecent, Runs: in.Runs, Speedruns: speedruns[in.Name],
-		})
+		hi := hubInstance{Name: in.Name, Category: in.Category, RunsRecent: in.RunsRecent, Runs: in.Runs, Speedruns: speedruns[in.Name]}
+		hi.Path, hi.SpeedrunsPath = instanceLinks(hi)
+		payload.Instances = append(payload.Instances, hi)
 	}
 	return []Output{{
 		Key:       hubKey,
 		Payload:   payload,
-		SampleN:   int(activity.Raids + activity.Dungeons),
+		SampleN:   int(payload.Window.Raids + payload.Window.Dungeons),
 		MinSample: hubMinSample,
 	}}, nil
+}
+
+// instanceLinks returns an instance's page and speedruns page paths when they
+// exist for the tenant. Per-instance pages arrive with A4/A5 under
+// /stats/raids/{instance} and /stats/dungeons/{instance} (shared helpers in
+// #2038). Until those families are registered there is nothing to link, so
+// the hub shows instance names as plain text.
+func instanceLinks(hubInstance) (path, speedrunsPath string) {
+	return "", ""
 }
 
 func hubFamily(store database.Store, now func() time.Time) Family {
 	return Family{Pattern: hubPath, Producer: hubProducer{store: store, now: now}, Render: renderHub}
 }
-
-// Slug turns an instance name into its /stats URL segment: lowercase words
-// joined by "-", apostrophes dropped ("Onyxia's Lair" -> "onyxias-lair",
-// "Temple of Ahn'Qiraj" -> "temple-of-ahnqiraj"). Empty if nothing is left.
-func Slug(name string) string {
-	var b strings.Builder
-	dash := false
-	for _, r := range strings.ToLower(name) {
-		switch {
-		case r == '\'' || r == '’':
-			continue
-		case r >= 'a' && r <= 'z' || r >= '0' && r <= '9':
-			if dash && b.Len() > 0 {
-				b.WriteByte('-')
-			}
-			dash = false
-			b.WriteRune(r)
-		default:
-			dash = true
-		}
-	}
-	return b.String()
-}
-
-// InstancePath and SpeedrunsPath are the per-instance /stats pages (A4/A5).
-func InstancePath(slug string) string  { return "/stats/" + slug }
-func SpeedrunsPath(slug string) string { return "/stats/" + slug + "/speedruns" }
 
 // topInstance returns the instance of a category with the most recent runs
 // (ties: more runs in the window, then name).
@@ -168,27 +162,26 @@ func plural(n int64, one, many string) string {
 }
 
 // hubLead builds the answer-first lead from the server's own numbers, so two
-// servers with different data never share a lead.
+// servers with different data never share a lead. Counts are by when the
+// raids happened, as recorded in uploaded logs.
 func hubLead(label string, asOf time.Time, p hubPayload) string {
 	date := FormatDate(asOf)
 	r := p.Recent
-	var lead string
 	if r.Raids+r.Dungeons > 0 {
-		lead = fmt.Sprintf("As of %s, players uploaded %s and %s from %s to Chronicle in the last %d days, in %s, with %s seen in those logs.",
+		lead := fmt.Sprintf("As of %s, uploaded logs show %s and %s on %s in the last %d days, from %s, with %s seen in them.",
 			date, plural(r.Raids, "raid", "raids"), plural(r.Dungeons, "dungeon run", "dungeon runs"), label, p.RecentDays,
 			plural(r.Logs, "log", "logs"), plural(r.Players, "player", "players"))
 		if top, ok := topInstance(p.Instances, "raid"); ok {
-			lead += fmt.Sprintf(" The most-logged raid is %s, with %s in that time.", top.Name, plural(top.RunsRecent, "run", "runs"))
+			lead += fmt.Sprintf(" The most-run raid in those logs is %s, with %s in that time.", top.Name, plural(top.RunsRecent, "run", "runs"))
 		} else if top, ok := topInstance(p.Instances, "dungeon"); ok {
-			lead += fmt.Sprintf(" The most-logged dungeon is %s, with %s in that time.", top.Name, plural(top.RunsRecent, "run", "runs"))
+			lead += fmt.Sprintf(" The most-run dungeon in those logs is %s, with %s in that time.", top.Name, plural(top.RunsRecent, "run", "runs"))
 		}
-	} else {
-		w := p.Window
-		lead = fmt.Sprintf("As of %s, no raids or dungeons from %s were uploaded to Chronicle in the last %d days. Over the last %d days players uploaded %s and %s, with %s seen in those logs.",
-			date, label, p.RecentDays, p.WindowDays, plural(w.Raids, "raid", "raids"), plural(w.Dungeons, "dungeon run", "dungeon runs"),
-			plural(w.Players, "player", "players"))
+		return lead
 	}
-	return lead
+	w := p.Window
+	return fmt.Sprintf("As of %s, uploaded logs show no raids or dungeon runs on %s in the last %d days. Over the last %d days they show %s and %s, from %s, with %s seen in them.",
+		date, label, p.RecentDays, p.WindowDays, plural(w.Raids, "raid", "raids"), plural(w.Dungeons, "dungeon run", "dungeon runs"),
+		plural(w.Logs, "log", "logs"), plural(w.Players, "player", "players"))
 }
 
 func renderHub(site Site, _ Page, snap Snapshot) (Content, error) {
@@ -201,12 +194,12 @@ func renderHub(site Site, _ Page, snap Snapshot) (Content, error) {
 	recent, window := fmt.Sprintf("Last %d days", p.RecentDays), fmt.Sprintf("Last %d days", p.WindowDays)
 
 	tables := []Table{{
-		Caption: fmt.Sprintf("Activity on %s, from uploaded combat logs", label),
+		Caption: fmt.Sprintf("Raids and dungeons run on %s, from uploaded logs", label),
 		Headers: []string{"Activity", recent, window},
 		Rows: [][]Cell{
 			{{Text: "Raids"}, {Text: FormatInt(p.Recent.Raids)}, {Text: FormatInt(p.Window.Raids)}},
 			{{Text: "Dungeon runs"}, {Text: FormatInt(p.Recent.Dungeons)}, {Text: FormatInt(p.Window.Dungeons)}},
-			{{Text: "Logs uploaded"}, {Text: FormatInt(p.Recent.Logs)}, {Text: FormatInt(p.Window.Logs)}},
+			{{Text: "Logs with those runs"}, {Text: FormatInt(p.Recent.Logs)}, {Text: FormatInt(p.Window.Logs)}},
 			{{Text: "Players seen in uploaded logs"}, {Text: FormatInt(p.Recent.Players)}, {Text: FormatInt(p.Window.Players)}},
 		},
 	}}
@@ -215,19 +208,19 @@ func renderHub(site Site, _ Page, snap Snapshot) (Content, error) {
 		for _, in := range p.Instances {
 			speedruns := Cell{Text: "-"}
 			if in.Speedruns > 0 {
-				speedruns = Cell{Text: plural(in.Speedruns, "speedrun", "speedruns"), Href: SpeedrunsPath(in.Slug)}
+				speedruns = Cell{Text: plural(in.Speedruns, "speedrun", "speedruns"), Href: in.SpeedrunsPath}
 			}
 			kind := "Raid"
 			if in.Category == "dungeon" {
 				kind = "Dungeon"
 			}
 			rows = append(rows, []Cell{
-				{Text: in.Name, Href: InstancePath(in.Slug)}, {Text: kind},
+				{Text: in.Name, Href: in.Path}, {Text: kind},
 				{Text: FormatInt(in.RunsRecent)}, {Text: FormatInt(in.Runs)}, speedruns,
 			})
 		}
 		tables = append(tables, Table{
-			Caption: fmt.Sprintf("Raids and dungeons logged on %s", label),
+			Caption: fmt.Sprintf("Runs per raid and dungeon on %s, from uploaded logs", label),
 			Headers: []string{"Instance", "Type", "Runs, " + strings.ToLower(recent), "Runs, " + strings.ToLower(window), "Qualified speedruns"},
 			Rows:    rows,
 		})
@@ -251,9 +244,9 @@ func renderHub(site Site, _ Page, snap Snapshot) (Content, error) {
 	return Content{
 		Title:       fmt.Sprintf("Raid logs, rankings and census for %s", label),
 		Description: lead,
-		Lead:        lead + " Counts cover logs players chose to upload, not everyone on the server.",
+		Lead:        lead + " Counts cover logs players chose to upload, by when each raid happened, not everyone on the server.",
 		SampleLabel: "raids and dungeon runs",
-		Window:      strings.ToLower(window),
+		Window:      fmt.Sprintf("last %d and %d days", p.RecentDays, p.WindowDays),
 		Tables:      tables,
 		Sections:    sections,
 		Links: []Link{

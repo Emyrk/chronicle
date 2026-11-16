@@ -134,13 +134,19 @@ are rejected by `New`.
 
 ## Pages today
 
-- `/stats`, the server hub (`hub.go`, family `hub`, hourly): raids, dungeon
-  runs, logs uploaded and players seen in uploaded logs over 30 and 180 days;
-  the raids and dungeons with listed runs, linking `/stats/<instance>` and,
-  when the instance has qualified speedruns, `/stats/<instance>/speedruns`;
-  census, gear and leaderboard links; and how to upload logs (left out when
-  the site has client uploads turned off). The lead is built from the
-  server's own numbers (`hubLead`).
+- `/stats`, the server hub (`hub.go`, family `hub`, every 3 hours): raids,
+  dungeon runs, logs with those runs and players seen in uploaded logs over
+  the last 30 and 180 days, counted by when each run happened, with windows
+  starting at a UTC day boundary so the payload only changes when the data
+  does. Raid and dungeon totals are sums of the per-instance rows; logs and
+  players are one cheap scan and one players join. The raids and dungeons
+  with runs are listed; an instance links to its page (and its speedruns
+  page) only when that page is stored for the tenant, so the hub never links
+  a 404. Instance pages arrive with A4/A5 under `/stats/raids/{instance}` and
+  `/stats/dungeons/{instance}` (`instanceLinks`). Also census, gear and
+  leaderboard links, and how to upload logs (left out when the site has
+  client uploads turned off). The lead is built from the server's own numbers
+  (`hubLead`).
 - `/stats/methodology` (static).
 - `/stats/about`, A1's placeholder, is a 301 to `/stats` (`DefaultRedirects`).
   Redirect sources must not be served by a family or static page.
@@ -170,8 +176,6 @@ are rejected by `New`.
      or other /stats pages.
    - `Sections`: extra prose, each with optional links. `Links`: SPA pages
      for the interactive view.
-   - Link per-instance pages with `InstancePath(Slug(name))` and
-     `SpeedrunsPath(Slug(name))` so every family agrees on instance URLs.
    - `Description` defaults to `Lead`.
    - Say what the numbers count: players seen in uploaded logs, not the
      server's population.
