@@ -3,8 +3,8 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import type { MeshBVH } from "three-mesh-bvh";
 import { loopingWhelpStand } from "./whelpAnimation";
+import { dungeonMeshProbes, type DungeonMeshCave } from "./dungeonMeshProbes";
 import { mapAssetUrl, type WowMapFloorBounds, type WowMapLayer, type WowMapMeshLiquid } from "@/pages/Technical/mapGallery";
 import type { MapCameraPose } from "./cameraPath";
 import type { DroneProbe } from "./droneCamera";
@@ -449,19 +449,12 @@ export interface MapSceneFocus {
   zoom: number;
 }
 
-interface DungeonMeshCave {
-  mesh: THREE.Mesh;
-  bvh: MeshBVH;
-  /** World -> mesh-local, for floor probes. */
-  inverse: THREE.Matrix4;
-}
-
 interface DungeonMesh {
   url: string;
   /** The entry's world bounds: the plan layer's world <-> scene transform. */
   bounds: WowMapFloorBounds;
   group: THREE.Group;
-  /** The walkable geometry (everything but the water planes). */
+  /** The walkable geometry (everything but the water planes and the `doodad` props, which are only drawn). */
   caves: DungeonMeshCave[];
   /** Water (and other liquid) planes: units stand on them, but they never block the camera. */
   liquids: DungeonMeshCave[];
@@ -5826,30 +5819,8 @@ async function parseDungeonMesh(request: DungeonMeshRequest): Promise<ParsedDung
     template.position.set(placement.x, 0, placement.z);
     template.add(gltf.scene);
     template.updateMatrixWorld(true);
-    const caves: DungeonMeshCave[] = [];
-    const liquids: DungeonMeshCave[] = [];
-    gltf.scene.traverse((child) => {
-      const mesh = child as THREE.Mesh;
-      if (!mesh.isMesh) return;
-      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-      if (isLiquid(mesh, gltf.scene)) {
-        // Water planes: translucent, drawn after the cave without writing
-        // depth; tinted when the entry says the liquid is not water.
-        for (const material of materials) {
-          material.transparent = true;
-          material.depthWrite = false;
-          if (request.liquid && "color" in material && material.color instanceof THREE.Color) {
-            material.color.set(request.liquid.color);
-            material.opacity = request.liquid.opacity;
-          }
-        }
-        mesh.renderOrder = 1;
-        liquids.push({ mesh, bvh: new MeshBVH(mesh.geometry), inverse: mesh.matrixWorld.clone().invert() });
-        return;
-      }
-      // Probes use the template's fixed transforms, which every clone shares.
-      caves.push({ mesh, bvh: new MeshBVH(mesh.geometry), inverse: mesh.matrixWorld.clone().invert() });
-    });
+    // Trees, grass and props (`doodad`) are drawn but are neither floor nor a camera blocker.
+    const { caves, liquids } = dungeonMeshProbes(gltf.scene, request.liquid, MeshBVH);
     if (caves.length === 0) return null;
     const radius = new THREE.Box3().setFromObject(template).getBoundingSphere(new THREE.Sphere()).radius;
     return { template, caves, liquids, scale: placement.scale, radius };
@@ -5904,15 +5875,6 @@ function bakedGeometry(mesh: THREE.Mesh): THREE.BufferGeometry {
   if (index) geometry.setIndex(new THREE.BufferAttribute(index.array.slice(), 1));
   geometry.computeVertexNormals();
   return geometry;
-}
-
-// The mesh's water planes are the `liquid_*` nodes (a multi-primitive node
-// becomes a group of meshes, so check the ancestors too).
-function isLiquid(object: THREE.Object3D, root: THREE.Object3D): boolean {
-  for (let node: THREE.Object3D | null = object; node && node !== root; node = node.parent) {
-    if (/^liquid/i.test(node.name)) return true;
-  }
-  return false;
 }
 
 // 16800 -> "16.8k", 1250000 -> "1.25M", 950 -> "950".
