@@ -179,3 +179,21 @@ host, and WebPage JSON-LD. Every page links the methodology at
 - No user-agent checks: content must be identical for every client.
 - No per-request queries beyond the snapshot read.
 - No per-character or per-raid pages (doorway/thin-page risk, see the plan).
+
+## Gear pages (`gear.go`)
+
+- `/stats/gear/{class}/{spec}` (family `gear`, nightly, 20-minute timeout):
+  the most-worn items per slot among the top 20 players of that class and
+  spec by boss-kill DPS in the last 60 days, from the same query as the gear
+  trends page (`GearTrendsSlotItems`; top 20 and minimum 5 match
+  `gearbuilderapi/trends.go`). The class/spec pairs come from the tenant's
+  rankings (`StatsGearCohorts`), so flavor-specific specs appear on their own.
+  A pair with no gear data emits no page (404, not in the sitemap); a pair
+  under 5 players emits a noindex page without tables. Items link to
+  `/wowdb/item?id=<id>`. Slugs: `death-knight`, `beast-mastery` (`GearPath`).
+- `/stats/gear` (family `gear-index`, hourly): the indexable gear pages, built
+  from the gear family's stored snapshot metadata, so it never repeats the
+  gear query. No indexable gear page means no index (404).
+- Cost: one gear query per class/spec pair with rankings (about 25-30 on a
+  busy server), each scanning the tenant's listed raids. Nightly because gear
+  changes slowly; page hits read one snapshot.

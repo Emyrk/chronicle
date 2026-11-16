@@ -1448,6 +1448,10 @@ type sqlcQuerier interface {
 	// Returns distinct realm names that have at least one qualified speedrun.
 	SpeedrunRealmNames(ctx context.Context) ([]string, error)
 	StarLuaProject(ctx context.Context, arg StarLuaProjectParams) error
+	// The class/spec pairs with boss-kill rankings since @since in the request
+	// tenant (RLS on wow_server_realms), for the /stats gear pages. Background
+	// job only.
+	StatsGearCohorts(ctx context.Context, since pgtype.Timestamptz) ([]StatsGearCohortsRow, error)
 	// Counts the request tenant's distinct players seen in listed logs since a
 	// cutoff. Heavier than the raid count, so the job runs it only when the raid
 	// count alone does not decide the threshold. Background job only.

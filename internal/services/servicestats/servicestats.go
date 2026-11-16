@@ -33,7 +33,7 @@ import (
 type Options struct {
 	Logger *slog.Logger
 	Store  database.Store
-	// Families defaults to DefaultFamilies().
+	// Families defaults to DefaultFamilies(Store, Now).
 	Families []Family
 	// Static defaults to DefaultStaticPages().
 	Static []StaticPage
@@ -78,8 +78,11 @@ func New(opts Options) (*Service, error) {
 	if opts.Logger == nil {
 		opts.Logger = slog.Default()
 	}
+	if opts.Now == nil {
+		opts.Now = time.Now
+	}
 	if opts.Families == nil {
-		opts.Families = DefaultFamilies()
+		opts.Families = DefaultFamilies(opts.Store, opts.Now)
 	}
 	if opts.Static == nil {
 		opts.Static = DefaultStaticPages()
@@ -87,9 +90,6 @@ func New(opts Options) (*Service, error) {
 	if opts.SiteFlavor == nil {
 		var datasets *servicedataset.Service
 		opts.SiteFlavor = datasets.SiteFlavor
-	}
-	if opts.Now == nil {
-		opts.Now = time.Now
 	}
 	s := &Service{
 		logger:        opts.Logger,
@@ -144,9 +144,12 @@ func New(opts Options) (*Service, error) {
 }
 
 // DefaultFamilies is the registry of /stats page families. Add new ones here.
-func DefaultFamilies() []Family {
+// now is the service clock.
+func DefaultFamilies(store database.Store, now func() time.Time) []Family {
 	return []Family{
 		aboutFamily(),
+		gearFamily(store, now),
+		gearIndexFamily(store),
 	}
 }
 

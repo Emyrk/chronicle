@@ -64,11 +64,11 @@ func renderAbout(site Site, _ Page, snap Snapshot) (Content, error) {
 		Lead:        summary + " These are raids seen in uploaded combat logs, not everything played on the server.",
 		SampleLabel: "raids",
 		Window:      window,
-		Table: &Table{
+		Tables: []Table{{
 			Caption: fmt.Sprintf("Raid activity on %s, %s", label, window),
 			Headers: []string{"Metric", "Count"},
 			Rows:    rows,
-		},
+		}},
 		Links: []Link{
 			{Text: "Recent raids", Href: "/recent"},
 			{Text: "Leaderboards", Href: "/leaderboards"},
