@@ -112,10 +112,11 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 	}
 	if invalid {
 		httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.InstanceParsesResponse{
-			Available: false,
-			Reason:    "invalid",
-			Metric:    string(metric),
-			Players:   []chroniclesdk.InstanceParsePlayer{},
+			Available:     false,
+			Reason:        "invalid",
+			Metric:        string(metric),
+			Players:       []chroniclesdk.InstanceParsePlayer{},
+			Invalidations: []chroniclesdk.InstanceParseInvalidation{},
 		})
 		return
 	}
@@ -173,6 +174,7 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 			SelectedEncounters: encounterNames,
 			Metric:             string(metric),
 			Players:            []chroniclesdk.InstanceParsePlayer{},
+			Invalidations:      []chroniclesdk.InstanceParseInvalidation{},
 		})
 		return
 	}
@@ -197,7 +199,7 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 		if !startTime.Valid {
 			httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.InstanceParsesResponse{
 				Available: false, Reason: "no_start_time", SelectedEncounters: encounterNames,
-				Metric: string(metric), Players: []chroniclesdk.InstanceParsePlayer{},
+				Metric: string(metric), Players: []chroniclesdk.InstanceParsePlayer{}, Invalidations: []chroniclesdk.InstanceParseInvalidation{},
 			})
 			return
 		}
