@@ -102,3 +102,11 @@ func TestParserPoolHooksPreserveTenantIsolation(t *testing.T) {
 	require.NoError(t, pool.QueryRow(ctx, "SELECT current_setting('app.tenant_bypass', true)").Scan(&bypass))
 	require.Empty(t, bypass)
 }
+
+func TestParserRequiresPositiveWorkers(t *testing.T) {
+	t.Parallel()
+	for _, count := range []string{"0", "-1"} {
+		err := ParserCmd().Invoke("--primary-url", "http://localhost:1", "--log-parsing-workers", count).WithContext(t.Context()).Run()
+		require.ErrorContains(t, err, "parser workers and compatibility interval must be positive")
+	}
+}

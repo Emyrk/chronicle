@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { IdentityCatalogueRecord, IdentityCatalogueResponse } from "@/api/typesGenerated";
-import { CatalogueEvidence, IdentityCatalogue, IdentityCatalogueView } from "./IdentityCatalogue";
+import { CatalogueEvidence, IdentityCatalogue, IdentityCatalogueDisclosure, IdentityCatalogueView } from "./IdentityCatalogue";
 
 const timestamp = "2026-01-01T00:00:00Z";
 const record: IdentityCatalogueRecord = {
@@ -20,6 +20,23 @@ function render(overrides: Partial<Parameters<typeof IdentityCatalogueView>[0]> 
 }
 
 describe("IdentityCatalogue", () => {
+  it("defaults to collapsed for admins without mounting a query", () => {
+    const markup = renderToStaticMarkup(<IdentityCatalogue logId="log" hasAdminLogs />);
+    expect(markup).toContain('aria-expanded="false"');
+    expect(markup).toContain("Identity catalogue");
+    expect(markup).not.toContain("Loading identity catalogue");
+    expect(markup).not.toContain("Catalogue review filters");
+  });
+
+  it("mounts expanded content only when the accessible disclosure is open", () => {
+    function QueryContent(): never { throw new Error("query mounted while collapsed"); }
+    expect(() => renderToStaticMarkup(<IdentityCatalogueDisclosure open={false} onToggle={noop}><QueryContent /></IdentityCatalogueDisclosure>)).not.toThrow();
+    const markup = renderToStaticMarkup(<IdentityCatalogueDisclosure open onToggle={noop}><p>Catalogue results</p></IdentityCatalogueDisclosure>);
+    expect(markup).toContain('aria-expanded="true"');
+    expect(markup).toContain("aria-controls=");
+    expect(markup).toContain("Catalogue results");
+  });
+
   it.each([false, undefined])("does not mount the query for admin permission%s", (hasAdminLogs) => {
     // No QueryClient provider: this would throw if an unauthorized query mounted.
     expect(renderToStaticMarkup(<IdentityCatalogue logId="log" hasAdminLogs={hasAdminLogs} />)).toBe("");

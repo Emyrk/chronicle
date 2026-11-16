@@ -522,24 +522,10 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		instFinalizeDuration := time.Since(finalizeStart)
 		totalFinalizeDuration += instFinalizeDuration
 
-		if finalized == nil || len(finalized.Encounters) == 0 {
-			continue
-		}
-
 		instanceName := inst.Name()
-		instParseDuration := encountersState.InstanceProcessDuration(inst)
-		instReport := chroniclesdk.InstanceReport{
-			Name:             instanceName,
-			ParseDuration:    chroniclesdk.DurationFrom(instParseDuration),
-			FinalizeDuration: chroniclesdk.DurationFrom(instFinalizeDuration),
-		}
-		metrics.instanceDuration.WithLabelValues(instanceName, "parse").Observe(instParseDuration.Seconds())
-		metrics.instanceDuration.WithLabelValues(instanceName, "finalize").Observe(instFinalizeDuration.Seconds())
-
-		if err != nil {
-			jobOut.InstanceFailures[fmt.Sprintf("%s_%d", inst.Name(), i)] = err.Error()
-			metrics.instanceFailures.Inc()
-			report.Instances = append(report.Instances, instReport)
+		instReport, proceed := recordInstanceFinalization(finalized, err, i, instanceName,
+			encountersState.InstanceProcessDuration(inst), instFinalizeDuration, &jobOut, report, metrics)
+		if !proceed {
 			continue
 		}
 
@@ -2126,4 +2112,29 @@ func findPlayerGuild(guilds map[string]map[guid.GUID]struct{}, playerGUID guid.G
 		}
 	}
 	return ""
+}
+
+// recordInstanceFinalization skips empty successful instances, but never hides
+// a finalization error merely because its result is nil or has no encounters.
+func recordInstanceFinalization(finalized *instances.FinalizedInstance, finalizeErr error, ordinal int, name string,
+	parseDuration, finalizeDuration time.Duration, jobOut *chroniclesdk.WoWParsedLogJobOutput,
+	report *chroniclesdk.LogParseReport, metrics *logParseMetrics,
+) (chroniclesdk.InstanceReport, bool) {
+	if finalizeErr == nil && (finalized == nil || len(finalized.Encounters) == 0) {
+		return chroniclesdk.InstanceReport{}, false
+	}
+	instReport := chroniclesdk.InstanceReport{
+		Name:             name,
+		ParseDuration:    chroniclesdk.DurationFrom(parseDuration),
+		FinalizeDuration: chroniclesdk.DurationFrom(finalizeDuration),
+	}
+	metrics.instanceDuration.WithLabelValues(name, "parse").Observe(parseDuration.Seconds())
+	metrics.instanceDuration.WithLabelValues(name, "finalize").Observe(finalizeDuration.Seconds())
+	if finalizeErr != nil {
+		jobOut.InstanceFailures[fmt.Sprintf("%s_%d", name, ordinal)] = finalizeErr.Error()
+		metrics.instanceFailures.Inc()
+		report.Instances = append(report.Instances, instReport)
+		return instReport, false
+	}
+	return instReport, true
 }

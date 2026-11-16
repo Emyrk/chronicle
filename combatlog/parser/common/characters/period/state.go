@@ -305,6 +305,23 @@ func supportedMessage(m messages.Message) error {
 		if m == nil {
 			return fmt.Errorf("nil dispel reference")
 		}
+	case *messages.LegacyCast:
+		if m == nil {
+			return fmt.Errorf("nil legacy_cast reference")
+		}
+	//nolint:staticcheck // Legacy retained events are supported explicitly.
+	case *messages.Cast:
+		if m == nil {
+			return fmt.Errorf("nil cast reference")
+		}
+	case *messages.AuraCast:
+		if m == nil {
+			return fmt.Errorf("nil aura_cast reference")
+		}
+	case *messages.SpellStart:
+		if m == nil {
+			return fmt.Errorf("nil spell_start reference")
+		}
 	case *messages.SpellGo:
 		if m == nil {
 			return fmt.Errorf("nil spell_go reference")

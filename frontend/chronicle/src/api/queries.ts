@@ -1318,10 +1318,10 @@ const terminalLogJobStates = new Set<RiverJobState>([
 ]);
 
 export function getLogGroupRefetchInterval(log: WoWLogGroupState | undefined): number | false {
-  if (!log || terminalLogJobStates.has(log.status.state)) {
-    return false;
-  }
-  return logGroupPollingInterval;
+  if (!log) return false;
+  // Native checkpoint acceptance can complete before its publication job starts.
+  if (log.publication_pending) return logGroupPollingInterval;
+  return terminalLogJobStates.has(log.status.state) ? false : logGroupPollingInterval;
 }
 
 export function useLogGroup(logId: string, options?: Omit<UseQueryOptions<WoWLogGroupState>, "queryKey" | "queryFn">) {

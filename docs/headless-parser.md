@@ -21,6 +21,21 @@ No new database environment variable is needed. `--primary-url` /
 `CHRONICLE_PRIMARY_URL` remains required. Exact compatibility is checked before
 starting the broker or connecting to PostgreSQL.
 
+## Primary offload configuration
+
+On the primary, `CHRONICLE_LOG_PARSING_WORKERS=0` (or
+`--log-parse-worker-count=0`) omits both legacy `log-parsing` and native
+`native-log-parsing` consumers without disabling enqueueing or other queues.
+`CHRONICLE_LOG_FINALIZING_WORKERS` / `--log-finalize-worker-count` independently
+controls native publication workers and defaults to 1; it must be positive.
+Parsing workers default to 1 per queue and may not be negative.
+
+The headless parser still requires a positive `CHRONICLE_LOG_PARSING_WORKERS`
+(or `--log-parsing-workers`). Set values per process, not a shared export of zero.
+It consumes native jobs only: legacy parse/reparse jobs remain queued until an
+ordinary daemon with parsing workers enabled consumes them. Native reparses are
+enqueued directly and remain available to the headless parser.
+
 ## Compatibility and recovery
 
 Native enqueue captures `version.ParserCompatibilityIdentity()`, not the display
@@ -50,8 +65,8 @@ on **both** primary and parser (in separate terminals, with the usual shared
 PostgreSQL and object-storage configuration):
 
 ```sh
-CHRONICLE_PARSER_DEV_IDENTITY=local-parser-v1 go run ./cmd/chronicled server
-CHRONICLE_PARSER_DEV_IDENTITY=local-parser-v1 go run ./cmd/chronicled parser --primary-url http://localhost:4000
+CHRONICLE_LOG_PARSING_WORKERS=0 CHRONICLE_LOG_FINALIZING_WORKERS=1 CHRONICLE_PARSER_DEV_IDENTITY=local-parser-v1 go run ./cmd/chronicled server
+CHRONICLE_LOG_PARSING_WORKERS=1 CHRONICLE_PARSER_DEV_IDENTITY=local-parser-v1 go run ./cmd/chronicled parser --primary-url http://localhost:4000
 ```
 
 For a debugger, add `CHRONICLE_PARSER_DEV_IDENTITY=local-parser-v1` to the debug

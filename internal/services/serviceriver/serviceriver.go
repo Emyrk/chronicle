@@ -51,8 +51,9 @@ type Service struct {
 	broker *services.Services
 
 	*riverqueue.Queues
-	logParsingWorkers int64
-	rankingWorkers    int64
+	logParsingWorkers    int64
+	logFinalizingWorkers int64
+	rankingWorkers       int64
 }
 
 func New(broker *services.Services) *Service {
@@ -83,7 +84,30 @@ func (s *Service) DependsOn() []string {
 	}
 }
 
+// logQueues controls consumption only; registered workers still permit enqueueing
+// onto queues consumed by another process.
+func (s *Service) logQueues() (map[string]river.QueueConfig, error) {
+	if s.logParsingWorkers < 0 {
+		return nil, fmt.Errorf("CHRONICLE_LOG_PARSING_WORKERS (--log-parse-worker-count) must be nonnegative")
+	}
+	if s.logFinalizingWorkers < 1 {
+		return nil, fmt.Errorf("CHRONICLE_LOG_FINALIZING_WORKERS (--log-finalize-worker-count) must be positive")
+	}
+	queues := map[string]river.QueueConfig{
+		chronicle.QueueLogFinalizing: {MaxWorkers: int(s.logFinalizingWorkers)},
+	}
+	if s.logParsingWorkers > 0 {
+		queues[riverqueue.QueueLogParsing] = river.QueueConfig{MaxWorkers: int(s.logParsingWorkers)}
+		queues[chronicle.QueueNativeLogParsing] = river.QueueConfig{MaxWorkers: int(s.logParsingWorkers)}
+	}
+	return queues, nil
+}
+
 func (s *Service) Start(ctx context.Context) error {
+	logQueues, err := s.logQueues()
+	if err != nil {
+		return err
+	}
 	logger := servicelogger.Logger(s.broker)
 	pool := servicepgxpool.PGXPool(s.broker)
 	chron := servicechronicle.Chronicle(s.broker)
@@ -101,11 +125,9 @@ func (s *Service) Start(ctx context.Context) error {
 
 	bot := servicebot.DiscordBot(s.broker)
 
-	q.AddQueue(riverqueue.QueueLogParsing, river.QueueConfig{
-		MaxWorkers: int(s.logParsingWorkers),
-	})
-	q.AddQueue(chronicle.QueueNativeLogParsing, river.QueueConfig{MaxWorkers: int(s.logParsingWorkers)})
-	q.AddQueue(chronicle.QueueLogFinalizing, river.QueueConfig{MaxWorkers: int(s.logParsingWorkers)})
+	for name, config := range logQueues {
+		q.AddQueue(name, config)
+	}
 	q.AddQueue(riverqueue.QueueDiscordSync, river.QueueConfig{
 		MaxWorkers: 2,
 	})
@@ -377,12 +399,20 @@ func (s *Service) Options() serpent.OptionSet {
 		},
 		{
 			Name:        "Log Parsing Worker Count",
-			Description: "Number of workers to use for parsing raid log files.",
+			Description: "Number of workers per legacy/native parse queue; zero disables local parsing consumption only.",
 			Required:    false,
 			Flag:        "log-parse-worker-count",
 			Env:         "CHRONICLE_LOG_PARSING_WORKERS",
 			Default:     "1",
 			Value:       serpent.Int64Of(&s.logParsingWorkers),
+		},
+		{
+			Name:        "Log Finalizing Worker Count",
+			Description: "Positive number of workers publishing native parse results on the primary.",
+			Flag:        "log-finalize-worker-count",
+			Env:         "CHRONICLE_LOG_FINALIZING_WORKERS",
+			Default:     "1",
+			Value:       serpent.Int64Of(&s.logFinalizingWorkers),
 		},
 	}
 }

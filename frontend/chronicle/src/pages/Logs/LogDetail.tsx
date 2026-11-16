@@ -284,6 +284,8 @@ const TERMINAL_STATES = [
 // Job kinds
 const JOB_KINDS = {
   logParse: "log-parse",
+  nativeParse: "native-log-parse",
+  finalize: "log-parse-finalize",
 } as const;
 
 function isJobComplete(state: RiverJobState): boolean {
@@ -291,13 +293,13 @@ function isJobComplete(state: RiverJobState): boolean {
 }
 
 function parseLogParseOutput(output: Record<string, string> | undefined, kind: string): WoWParsedLogJobOutput | null {
-  if (kind !== JOB_KINDS.logParse || !output) {
+  if ((kind !== JOB_KINDS.logParse && kind !== JOB_KINDS.finalize) || !output) {
     return null;
   }
   // The output from the API is Record<string, string>, but it's actually WoWParsedLogJobOutput
   // Cast it appropriately
   const parsed = output as unknown as WoWParsedLogJobOutput;
-  if (!parsed.instances) {
+  if (!Array.isArray(parsed.instances)) {
     return null;
   }
   return parsed;
@@ -316,15 +318,19 @@ function formatDuration(start: string, end: string): string {
 }
 
 function formatJobKind(kind: string): string {
-  // Convert snake_case or camelCase to readable format
+  if (kind === JOB_KINDS.logParse) return "Legacy log parsing";
+  if (kind === JOB_KINDS.nativeParse) return "Native parsing (checkpoint handoff)";
+  if (kind === JOB_KINDS.finalize) return "Instance publication (finalize)";
+  // Convert separators or camelCase to readable format.
   return kind
-    .replace(/_/g, " ")
+    .replace(/[_-]/g, " ")
     .replace(/([A-Z])/g, " $1")
     .replace(/^./, (str) => str.toUpperCase())
     .trim();
 }
 
-function StatusBadge({ state, errors }: { state: RiverJobState; errors?: readonly { error: string }[] }) {
+function StatusBadge({ state, errors, publicationPending = false }: { state: RiverJobState; errors?: readonly { error: string }[]; publicationPending?: boolean }) {
+  if (publicationPending && state === RIVER_STATES.completed) return <span className="text-sm font-medium text-blue-600">Awaiting publication</span>;
   switch (state) {
     case RIVER_STATES.completed:
       return (
@@ -910,7 +916,7 @@ function ParsedInstancesSection({
 }) {
   const parsedOutput = parseLogParseOutput(log.status.output, log.status.kind);
   
-  // Only show for log-parse jobs with output
+  // Legacy parses and native finalizers publish the same output contract.
   if (!parsedOutput) {
     return null;
   }
@@ -929,7 +935,9 @@ function ParsedInstancesSection({
       </div>
       
       {instances.length === 0 && !hasFailures ? (
-        complete ? (
+        log.publication_pending ? (
+          <p className="text-muted-foreground text-sm">Waiting for instance publication...</p>
+        ) : complete ? (
           <p className="text-muted-foreground text-sm">
             No instances were found in this log.
           </p>
@@ -967,6 +975,7 @@ function ParsedInstancesSection({
 
 /** Processing succeeded, or its record expired cleanly (parsed data is still there). */
 function isProcessingDone(log: WoWLogGroupState): boolean {
+  if (log.publication_pending || log.status.kind === JOB_KINDS.nativeParse) return false;
   return log.status.state === RIVER_STATES.completed ||
     (log.status.state === RIVER_STATES.discarded && log.status.errors.length === 0);
 }
@@ -1014,10 +1023,13 @@ function ProcessingStatusCard({ log }: { log: WoWLogGroupState }) {
   );
   const content = (
     <div className="space-y-4">
+      {(log.publication_pending || log.status.kind === JOB_KINDS.nativeParse) && log.status.state === RIVER_STATES.completed && (
+        <p role="status" className="rounded-lg bg-muted p-3 text-sm">Parsing checkpoint accepted. Waiting for instance publication; a completed producer job does not mean publication has finished.</p>
+      )}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <div>
           <p className="text-sm text-muted-foreground">Status</p>
-          <StatusBadge state={log.status.state} errors={log.status.errors} />
+          <StatusBadge state={log.status.state} errors={log.status.errors} publicationPending={log.publication_pending || log.status.kind === JOB_KINDS.nativeParse} />
         </div>
         <div>
           <p className="text-sm text-muted-foreground">Attempt</p>
@@ -1331,7 +1343,7 @@ export function LogDetailView({
                   Uploaded {formatDate(log.created_at)}
                   {log.owner_name && <> by <span className="text-foreground">{log.owner_name}</span></>}
                 </span>
-                <StatusBadge state={log.status.state} errors={log.status.errors} />
+                <StatusBadge state={log.status.state} errors={log.status.errors} publicationPending={log.publication_pending || log.status.kind === JOB_KINDS.nativeParse} />
                 {/* Instances section hosts this action; fall back here when it doesn't render. */}
                 {!parsedOutput && unlistedAction}
               </div>
@@ -1444,8 +1456,6 @@ export function LogDetailView({
             </p>
           )}
 
-          <IdentityCatalogue key={`${log.id}:${log.status.id}:${log.status.state}`} logId={log.id} hasAdminLogs={canProfile} />
-
           {/* Reparse format + flavor panel (admin) */}
           {canProfile && showReparseAxis && (
             <Card className="p-4 space-y-3 border-purple-500/40">
@@ -1523,7 +1533,7 @@ export function LogDetailView({
 
           {!processingDone && <ProcessingStatusCard log={log} />}
 
-          {/* Parsed Instances Section - only shows for log-parse jobs with output */}
+          {/* Parsed instances from legacy parsing or native finalization */}
           <ParsedInstancesSection
             log={log}
             canUploadYoutube={canUploadYoutube}
@@ -1609,7 +1619,7 @@ export function LogDetailView({
 
           {processingDone && <ProcessingStatusCard log={log} />}
 
-          {/* Timing Report - only shows for completed log-parse jobs with report */}
+          {/* Timing report from legacy parsing or native finalization */}
           {parsedOutput?.report && (
             <>
               <TimingSection report={parsedOutput.report} logId={log.id} />
@@ -1668,6 +1678,8 @@ export function LogDetailView({
               )}
             </Card>
           )}
+
+          <IdentityCatalogue key={`${log.id}:${log.status.id}:${log.status.state}`} logId={log.id} hasAdminLogs={canProfile} />
         </>
       )}
     </div>

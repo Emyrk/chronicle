@@ -3,10 +3,12 @@ package period
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/castv2"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 )
 
@@ -104,6 +106,51 @@ type dispelMessageValue struct {
 	Target    guid.GUID                 `json:"target"`
 }
 
+// These are additive retained-message kinds. Existing v1 kinds keep their
+// wire shape; older readers reject newly supported kinds explicitly.
+type legacyCastMessageValue struct {
+	Base   messages.MessageBaseState `json:"base"`
+	Caster guid.GUID                 `json:"caster"`
+	Target *guid.GUID                `json:"target"`
+	Spell  string                    `json:"spell"`
+}
+
+// Cast stores the legacy log's value spell descriptor, not a game DB owner.
+type castMessageValue struct {
+	Base      messages.MessageBaseState `json:"base"`
+	Caster    types.Unit                `json:"caster"`
+	Target    *types.Unit               `json:"target"`
+	Action    types.CastActions         `json:"action"`
+	SpellName string                    `json:"spell_name"`
+	SpellID   int                       `json:"spell_id"`
+	SpellRank *int                      `json:"spell_rank"`
+}
+type auraCastMessageValue struct {
+	Base            messages.MessageBaseState `json:"base"`
+	SpellPath       string                    `json:"spell_path"`
+	Caster          guid.GUID                 `json:"caster"`
+	Target          *guid.GUID                `json:"target"`
+	Effect          int                       `json:"effect"`
+	Amplitude       int32                     `json:"amplitude"`
+	EffectAuraName  uint32                    `json:"effect_aura_name"`
+	DurationMS      int32                     `json:"duration_ms"`
+	AuraCapStatus   int32                     `json:"aura_cap_status"`
+	EffectMiscValue int32                     `json:"effect_misc_value"`
+}
+
+type spellStartMessageValue struct {
+	Base            messages.MessageBaseState `json:"base"`
+	SpellPath       string                    `json:"spell_path"`
+	ItemID          *int32                    `json:"item_id"`
+	SpellID         chrondbc.SpellID          `json:"spell_id"`
+	Caster          guid.GUID                 `json:"caster"`
+	Target          *guid.GUID                `json:"target"`
+	Flags           types.CastFlags           `json:"flags"`
+	CastTime        time.Duration             `json:"cast_time"`
+	ChannelDuration time.Duration             `json:"channel_duration"`
+	SpellType       int32                     `json:"spell_type"`
+}
+
 type spellGoMessageValue struct {
 	Base             messages.MessageBaseState `json:"base"`
 	SpellPath        string                    `json:"spell_path"`
@@ -168,6 +215,39 @@ func CaptureMessage(m messages.Message, capture func(messages.Message) (string, 
 		}
 		kind = "dispel"
 		payload = dispelMessageValue{Base: m.CaptureState(), SpellPath: path, Caster: m.Caster, Target: m.Target}
+	case *messages.LegacyCast:
+		if m == nil {
+			return MessageState{}, fmt.Errorf("nil legacy_cast")
+		}
+		kind = "legacy_cast"
+		payload = legacyCastMessageValue{Base: m.CaptureState(), Caster: m.Caster, Target: copyPointer(m.Target), Spell: m.Spell}
+	//nolint:staticcheck // Retained legacy events remain part of the snapshot contract.
+	case *messages.Cast:
+		if m == nil {
+			return MessageState{}, fmt.Errorf("nil cast")
+		}
+		kind = "cast"
+		payload = castMessageValue{Base: m.CaptureState(), Caster: m.Caster, Target: copyPointer(m.Target), Action: m.Action, SpellName: m.Spell.Name, SpellID: m.Spell.ID, SpellRank: copyPointer(m.Spell.Rank)}
+	case *messages.AuraCast:
+		if m == nil {
+			return MessageState{}, fmt.Errorf("nil aura_cast")
+		}
+		path, err := captureRetainedSpell(m.Spell, spell)
+		if err != nil {
+			return MessageState{}, err
+		}
+		kind = "aura_cast"
+		payload = auraCastMessageValue{Base: m.CaptureState(), SpellPath: path, Caster: m.Caster, Target: copyPointer(m.Target), Effect: int(m.Effect), Amplitude: m.Amplitude, EffectAuraName: uint32(m.EffectAuraName), DurationMS: m.DurationMS, AuraCapStatus: m.AuraCapStatus, EffectMiscValue: m.EffectMiscValue}
+	case *messages.SpellStart:
+		if m == nil {
+			return MessageState{}, fmt.Errorf("nil spell_start")
+		}
+		path, err := captureRetainedSpell(m.SpellData, spell)
+		if err != nil {
+			return MessageState{}, err
+		}
+		kind = "spell_start"
+		payload = spellStartMessageValue{Base: m.CaptureState(), SpellPath: path, ItemID: copyPointer(m.ItemID), SpellID: m.SpellID, Caster: m.Caster, Target: copyPointer(m.Target), Flags: m.Flags, CastTime: m.CastTime, ChannelDuration: m.ChannelDuration, SpellType: m.SpellType}
 	case *messages.SpellGo:
 		if m == nil {
 			return MessageState{}, fmt.Errorf("nil spell_go")
@@ -261,6 +341,14 @@ func (s MessageState) decodePayload() (any, error) {
 		v = &healMessageValue{}
 	case "dispel":
 		v = &dispelMessageValue{}
+	case "legacy_cast":
+		v = &legacyCastMessageValue{}
+	case "cast":
+		v = &castMessageValue{}
+	case "aura_cast":
+		v = &auraCastMessageValue{}
+	case "spell_start":
+		v = &spellStartMessageValue{}
 	case "spell_go":
 		v = &spellGoMessageValue{}
 	case "aura":
@@ -292,6 +380,14 @@ func (s MessageState) decodePayload() (any, error) {
 	case *healMessageValue:
 		base = &v.Base
 	case *dispelMessageValue:
+		base = &v.Base
+	case *legacyCastMessageValue:
+		base = &v.Base
+	case *castMessageValue:
+		base = &v.Base
+	case *auraCastMessageValue:
+		base = &v.Base
+	case *spellStartMessageValue:
 		base = &v.Base
 	case *spellGoMessageValue:
 		base = &v.Base
@@ -361,6 +457,23 @@ func (s MessageState) Restore(resolve func(string) (messages.Message, error), sp
 			return nil, err
 		}
 		return &messages.Dispel{MessageBase: v.Base.Restore(), Spell: sp, Caster: v.Caster, Target: v.Target}, nil
+	case *legacyCastMessageValue:
+		return &messages.LegacyCast{MessageBase: v.Base.Restore(), Caster: v.Caster, Target: v.Target, Spell: v.Spell}, nil
+	case *castMessageValue:
+		//nolint:staticcheck // Restore the legacy event without converting its semantics.
+		return &messages.Cast{MessageBase: v.Base.Restore(), CastV2: castv2.CastV2{Caster: v.Caster, Target: v.Target, Action: v.Action, Spell: types.Spell{Name: v.SpellName, ID: v.SpellID, Rank: v.SpellRank}}}, nil
+	case *auraCastMessageValue:
+		sp, err := resolveRetainedSpell(v.SpellPath, spell)
+		if err != nil {
+			return nil, err
+		}
+		return &messages.AuraCast{MessageBase: v.Base.Restore(), Spell: sp, Caster: v.Caster, Target: v.Target, Effect: chrondbc.Effect(v.Effect), Amplitude: v.Amplitude, EffectAuraName: chrondbc.AuraEffect(v.EffectAuraName), DurationMS: v.DurationMS, AuraCapStatus: v.AuraCapStatus, EffectMiscValue: v.EffectMiscValue}, nil
+	case *spellStartMessageValue:
+		sp, err := resolveRetainedSpell(v.SpellPath, spell)
+		if err != nil {
+			return nil, err
+		}
+		return &messages.SpellStart{MessageBase: v.Base.Restore(), SpellData: sp, ItemID: v.ItemID, SpellID: v.SpellID, Caster: v.Caster, Target: v.Target, Flags: v.Flags, CastTime: v.CastTime, ChannelDuration: v.ChannelDuration, SpellType: v.SpellType}, nil
 	case *spellGoMessageValue:
 		sp, err := resolveRetainedSpell(v.SpellPath, spell)
 		if err != nil {

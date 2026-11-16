@@ -45,6 +45,19 @@ func RegisterGraphOwners(r *ownergraph.Registry) error {
 	if e := registerRetainedMessage[messages.Dispel](r, "messages.Dispel"); e != nil {
 		return e
 	}
+	if e := registerRetainedMessage[messages.LegacyCast](r, "messages.LegacyCast"); e != nil {
+		return e
+	}
+	//nolint:staticcheck // Legacy retained events are supported explicitly.
+	if e := registerRetainedMessage[messages.Cast](r, "messages.Cast"); e != nil {
+		return e
+	}
+	if e := registerRetainedMessage[messages.AuraCast](r, "messages.AuraCast"); e != nil {
+		return e
+	}
+	if e := registerRetainedMessage[messages.SpellStart](r, "messages.SpellStart"); e != nil {
+		return e
+	}
 	if e := registerRetainedMessage[messages.SpellGo](r, "messages.SpellGo"); e != nil {
 		return e
 	}

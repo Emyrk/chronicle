@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { IdentityCatalogueRecord, IdentityCatalogueResponse } from "@/api/typesGenerated";
 import { fetchIdentityCatalogue, identityCatalogueDownloadURL, type CatalogueCursor, type CatalogueReview } from "@/api/identityCatalogue";
@@ -8,7 +8,26 @@ const button = "rounded-md border border-input px-3 py-1.5 text-sm hover:bg-mute
 /** Fail closed before mounting the query: raw-log download permission is insufficient. */
 export function IdentityCatalogue({ logId, hasAdminLogs = false }: { logId: string; hasAdminLogs?: boolean }) {
   if (!hasAdminLogs) return null;
-  return <CatalogueQuery key={logId} logId={logId} />;
+  return <CatalogueDisclosure key={logId} logId={logId} />;
+}
+
+function CatalogueDisclosure({ logId }: { logId: string }) {
+  const [open, setOpen] = useState(false);
+  return <IdentityCatalogueDisclosure open={open} onToggle={() => setOpen(!open)}>
+    <CatalogueQuery logId={logId} />
+  </IdentityCatalogueDisclosure>;
+}
+
+/** The query child is not mounted while collapsed, including on initial page load. */
+export function IdentityCatalogueDisclosure({ open, onToggle, children }: { open: boolean; onToggle: () => void; children: ReactNode }) {
+  const id = useId();
+  return <section aria-label="Identity catalogue disclosure" className="min-w-0 rounded-lg border">
+    <button type="button" aria-expanded={open} aria-controls={id} onClick={onToggle} className="flex w-full items-center gap-2 p-4 text-left font-semibold hover:bg-muted/40">
+      <span aria-hidden="true">{open ? "▾" : "▸"}</span>Identity catalogue
+      <span className="text-xs font-normal text-muted-foreground">Admin review</span>
+    </button>
+    <div id={id} hidden={!open}>{open ? children : null}</div>
+  </section>;
 }
 
 function CatalogueQuery({ logId }: { logId: string }) {

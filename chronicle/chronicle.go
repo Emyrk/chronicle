@@ -1019,8 +1019,8 @@ func (c *Chronicle) WoWLogGroup(ctx context.Context, groupID uuid.UUID) (*chroni
 	}
 
 	var jobStatus chroniclesdk.JobStatus
-	if len(list.Jobs) > 0 {
-		jobStatus = db2sdk.JobStatus(*(list.Jobs[0]))
+	if statusJob := logGroupStatusJob(list.Jobs); statusJob != nil {
+		jobStatus = db2sdk.JobStatus(*statusJob)
 	} else {
 		jobStatus = chroniclesdk.JobStatus{
 			ID:          0,

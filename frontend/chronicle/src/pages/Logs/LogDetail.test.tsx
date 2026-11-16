@@ -2,7 +2,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { WoWLogArtifact, WoWLogFile } from "@/api/queries";
+import type { WoWLogArtifact, WoWLogFile, WoWLogGroupState } from "@/api/queries";
+import { getLogGroupRefetchInterval } from "@/api/queries";
 import { LogDetailView, UploadedArtifactRow, UploadedLogFileRows } from "./LogDetail";
 
 const artifact: WoWLogArtifact = {
@@ -125,7 +126,7 @@ describe("LogDetailView admin tool placement", () => {
             logLoading={false} logError={null} onDelete={noop} isDeleting={false} showDeleteConfirm={false} setShowDeleteConfirm={noop}
             onReparse={noop} isReparsing={false} canReparse canProfile={hasAdminLogs}
             onDeleteFiles={noop} isDeletingFiles={false} canDeleteFiles={false} canDownloadFiles={false}
-            canUploadYoutube={false} canDeleteInstance={false} onDeleteInstance={noop} isDeletingInstance={false}
+            canUploadYoutube={false} canDeleteInstance={true} onDeleteInstance={noop} isDeletingInstance={false}
             onRefresh={noop} isRefreshing={false} canMarkUnlisted={false} onMarkUnlisted={noop} isMarkingUnlisted={false}
           />
         </MemoryRouter>
@@ -136,10 +137,60 @@ describe("LogDetailView admin tool placement", () => {
     expect(header).not.toContain('id="parser-engine"');
     expect(header).not.toContain("Admin parser tools");
     expect(markup.includes('aria-label="Admin parser tools"')).toBe(hasAdminLogs);
+    if (hasAdminLogs) {
+      expect(markup.indexOf('aria-label="Identity catalogue disclosure"')).toBeGreaterThan(markup.indexOf("Danger Zone"));
+      expect(markup).toMatch(/aria-label="Identity catalogue disclosure"[\s\S]*aria-expanded="false"/);
+      expect(markup).not.toContain("Catalogue review filters");
+    } else {
+      expect(markup).not.toContain("Identity catalogue disclosure");
+    }
     if (!hasAdminLogs) {
       expect(header).toContain("Reparse");
       expect(markup).not.toContain("Verbose");
       expect(markup).not.toContain("CPU Profile");
     }
+  });
+});
+
+
+describe("published job output", () => {
+  function makeLog(kind: string, pending = false): WoWLogGroupState {
+    return {
+      id: artifact.log_group_id, publication_pending: pending, owner: "owner", log_type: "vanilla", upload_source: "web", unlisted: false, raw_files_pinned: false, parsed_bytes: 0, created_at: artifact.created_at, updated_at: artifact.updated_at, files: [],
+      status: { id: 1, state: "completed", kind, attempt: 1, max_attempts: 5, created_at: artifact.created_at, scheduled_at: artifact.created_at, attempted_at: null, finalized_at: null, errors: [], output: {
+        complete: artifact.created_at,
+        instances: [{ id: "published-id", slug: "stable-instance-slug", name: "Published raid", encounters: [], start_time: artifact.created_at, end_time: artifact.updated_at }],
+        instance_failures: {},
+        report: { total_lines: 10, total_duration_ms: 1000, load_file_duration_ms: 1, parse_duration_ms: 2, finalize_duration_ms: 3, db_insert_duration_ms: 4 },
+      } as unknown as Record<string, string> },
+    };
+  }
+  function render(log: WoWLogGroupState) {
+    const noop = () => {};
+    return renderToStaticMarkup(<QueryClientProvider client={new QueryClient()}><MemoryRouter>
+      <LogDetailView log={log} logLoading={false} logError={null} onDelete={noop} isDeleting={false} showDeleteConfirm={false} setShowDeleteConfirm={noop}
+        onReparse={noop} isReparsing={false} canReparse={false} canProfile={false} onDeleteFiles={noop} isDeletingFiles={false} canDeleteFiles={false} canDownloadFiles={false}
+        canUploadYoutube={false} canDeleteInstance={false} onDeleteInstance={noop} isDeletingInstance={false} onRefresh={noop} isRefreshing={false} canMarkUnlisted={false} onMarkUnlisted={noop} isMarkingUnlisted={false} />
+    </MemoryRouter></QueryClientProvider>);
+  }
+
+  it.each(["log-parse", "log-parse-finalize"])("shows published instance links and timing for%s", (kind) => {
+    const html = render(makeLog(kind));
+    expect(html).toContain('href="/instances/stable-instance-slug"');
+    expect(html).toContain("Timing Report");
+    expect(html).toContain("Detected Instances");
+    expect(html).toContain(kind === "log-parse" ? "Legacy log parsing" : "Instance publication (finalize)");
+    expect(getLogGroupRefetchInterval(makeLog(kind))).toBe(false);
+  });
+
+  it("shows native producer completion as checkpoint handoff waiting, not empty publication or success", () => {
+    const log = makeLog("native-log-parse", true);
+    const html = render(log);
+    expect(html).toContain("Parsing checkpoint accepted");
+    expect(html).toContain("Awaiting publication");
+    expect(html).toContain("Native parsing (checkpoint handoff)");
+    expect(html).not.toContain("No instances were found");
+    expect(html).not.toContain("Timing Report");
+    expect(getLogGroupRefetchInterval(log)).toBe(9000);
   });
 });
