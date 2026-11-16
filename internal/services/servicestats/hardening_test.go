@@ -279,18 +279,19 @@ func TestHiddenAndEncodedPaths404(t *testing.T) {
 	t.Parallel()
 	tenant := uuid.New()
 	store := &snapshotStore{}
-	store.about(tenant, `{"raids":80,"window_days":180}`, 80)
+	store.hub(tenant, hubJSON([4]int{80, 0, 20, 400}, [4]int{300, 0, 70, 900}), 300)
 	store.eligible(tenant, true)
 	hidden := forever
 	hidden.Discoverable = false
 
-	require.Equal(t, http.StatusNotFound, get(t, handler(newService(t, store), hidden), tenant, "/stats/about").Code)
+	require.Equal(t, http.StatusNotFound, get(t, handler(newService(t, store), hidden), tenant, "/stats").Code)
 	require.Equal(t, http.StatusNotFound, get(t, handler(newService(t, store), hidden), tenant, "/stats/methodology").Code)
 	h := handler(newService(t, store), forever)
-	require.Equal(t, http.StatusNotFound, get(t, h, tenant, "/stats/%61bout").Code)
+	require.Equal(t, http.StatusNotFound, get(t, h, tenant, "/st%61ts").Code)
+	require.Equal(t, http.StatusNotFound, get(t, h, tenant, "/stats/%61bout").Code, "an encoded redirect source is not redirected")
 	require.Equal(t, http.StatusNotFound, get(t, h, tenant, "/stats/methodolog%79").Code)
 	require.EqualValues(t, 0, store.reads.Load(), "decided before any database read")
-	require.Equal(t, http.StatusOK, get(t, h, tenant, "/stats/about").Code)
+	require.Equal(t, http.StatusOK, get(t, h, tenant, "/stats").Code)
 }
 
 // When the site lookup fails, pages with nothing behind them stay 404; only
@@ -299,16 +300,16 @@ func TestSiteLookupFailure(t *testing.T) {
 	t.Parallel()
 	served, empty := uuid.New(), uuid.New()
 	store := &snapshotStore{}
-	store.about(served, `{"raids":80,"window_days":180}`, 80)
+	store.hub(served, hubJSON([4]int{80, 0, 20, 400}, [4]int{300, 0, 70, 900}), 300)
 	store.eligible(served, true)
 	store.eligible(empty, false)
 	h := servicestatsHandlerWithError(t, store)
 
 	require.Equal(t, http.StatusNotFound, get(t, h, served, "/stats/nope").Code, "unknown path")
 	require.EqualValues(t, 0, store.reads.Load(), "an unknown path never reads")
-	require.Equal(t, http.StatusNotFound, get(t, h, empty, "/stats/about").Code, "no snapshot")
+	require.Equal(t, http.StatusNotFound, get(t, h, empty, "/stats").Code, "no snapshot")
 	require.Equal(t, http.StatusNotFound, get(t, h, empty, "/stats/methodology").Code, "ineligible tenant")
-	require.Equal(t, http.StatusInternalServerError, get(t, h, served, "/stats/about").Code)
+	require.Equal(t, http.StatusInternalServerError, get(t, h, served, "/stats").Code)
 	require.Equal(t, http.StatusInternalServerError, get(t, h, served, "/stats/methodology").Code)
 }
 
@@ -323,15 +324,15 @@ func servicestatsHandlerWithError(t *testing.T, store *snapshotStore) http.Handl
 func TestHiddenRootSite404(t *testing.T) {
 	t.Parallel()
 	store := &snapshotStore{}
-	store.about(uuid.Nil, `{"raids":80,"window_days":180}`, 80)
+	store.hub(uuid.Nil, hubJSON([4]int{80, 0, 20, 400}, [4]int{300, 0, 70, 900}), 300)
 	store.eligible(uuid.Nil, true)
 	hidden := servicestats.Site{Name: "Chronicle", Origin: "https://chronicleclassic.com", Discoverable: false}
 	visible := hidden
 	visible.Discoverable = true
 
-	require.Equal(t, http.StatusOK, get(t, handler(newService(t, store), visible), uuid.Nil, "/stats/about").Code)
+	require.Equal(t, http.StatusOK, get(t, handler(newService(t, store), visible), uuid.Nil, "/stats").Code)
 	reads := store.reads.Load()
-	for _, path := range []string{"/stats/about", "/stats/methodology"} {
+	for _, path := range []string{"/stats", "/stats/methodology"} {
 		require.Equal(t, http.StatusNotFound, get(t, handler(newService(t, store), hidden), uuid.Nil, path).Code, path)
 	}
 	require.Equal(t, reads, store.reads.Load(), "decided before any database read")

@@ -44,7 +44,7 @@
       {{- with .Content.Window}} &middot; Window: {{.}}{{end}}
       &middot; <a href="{{.Methodology}}">Methodology</a></p>
     {{- end}}
-    {{- with .Content.Table}}
+    {{- range .Content.Tables}}
     <table>
       {{- with .Caption}}
       <caption>{{.}}</caption>
@@ -66,6 +66,13 @@
       {{- end}}
       {{- range .Paragraphs}}
       <p>{{.}}</p>
+      {{- end}}
+      {{- with .Links}}
+      <ul class="links">
+        {{- range .}}
+        <li><a href="{{.Href}}">{{.Text}}</a></li>
+        {{- end}}
+      </ul>
       {{- end}}
     </section>
     {{- end}}

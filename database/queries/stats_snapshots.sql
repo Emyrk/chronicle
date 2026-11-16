@@ -72,3 +72,60 @@ JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
 JOIN log_instance_players lip ON lip.instance_id = li.id
 WHERE li.start_time >= @since::timestamptz
   AND li.invalidated_at IS NULL;
+
+-- name: StatsHubLogs :one
+-- The request tenant's listed logs with raids or dungeons that started since
+-- @since and since @since_recent (the later cutoff), in one scan without the
+-- players join. RLS on wow_server_realms scopes it. Background job only.
+SELECT
+  COUNT(DISTINCT li.log_group_id) FILTER (WHERE li.start_time >= @since_recent::timestamptz)::bigint AS logs_recent,
+  COUNT(DISTINCT li.log_group_id)::bigint AS logs
+FROM log_instances li
+JOIN wow_server_realms wsr ON wsr.id = li.realm_id
+JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
+WHERE li.start_time >= @since::timestamptz
+  AND li.invalidated_at IS NULL
+  AND li.category IN ('raid', 'dungeon');
+
+-- name: StatsHubPlayers :one
+-- Distinct players seen in the request tenant's listed logs since @since and
+-- since @since_recent, in one scan. Background job only.
+SELECT
+  COUNT(DISTINCT (li.realm_id, lip.unit_guid)) FILTER (WHERE li.start_time >= @since_recent::timestamptz)::bigint AS players_recent,
+  COUNT(DISTINCT (li.realm_id, lip.unit_guid))::bigint AS players
+FROM log_instances li
+JOIN wow_server_realms wsr ON wsr.id = li.realm_id
+JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
+JOIN log_instance_players lip ON lip.instance_id = li.id
+WHERE li.start_time >= @since::timestamptz
+  AND li.invalidated_at IS NULL;
+
+-- name: StatsHubInstances :many
+-- The request tenant's raids and dungeons with listed runs since @since, with
+-- run counts (logical runs, so duplicate uploads count once) since @since and
+-- since @since_recent. A logical run has one instance name, so the hub's raid
+-- and dungeon totals are sums of these rows.
+SELECT
+  li.name,
+  li.category::text AS category,
+  COUNT(DISTINCT COALESCE(li.duplicate_group_id, li.id)) FILTER (WHERE li.start_time >= @since_recent::timestamptz)::bigint AS runs_recent,
+  COUNT(DISTINCT COALESCE(li.duplicate_group_id, li.id))::bigint AS runs
+FROM log_instances li
+JOIN wow_server_realms wsr ON wsr.id = li.realm_id
+JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
+WHERE li.start_time >= @since::timestamptz
+  AND li.invalidated_at IS NULL
+  AND li.category IN ('raid', 'dungeon')
+GROUP BY li.name, li.category
+ORDER BY li.category DESC, runs DESC, li.name;
+
+-- name: StatsHubSpeedruns :many
+-- Qualified speedruns per instance name in the request tenant's listed,
+-- valid logs, all time (the speedrun boards' scope).
+SELECT sr.instance_name, COUNT(*)::bigint AS speedruns
+FROM instance_speedruns sr
+JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
+JOIN log_instances li ON li.id = sr.instance_id AND li.invalidated_at IS NULL
+JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
+WHERE sr.qualified
+GROUP BY sr.instance_name;

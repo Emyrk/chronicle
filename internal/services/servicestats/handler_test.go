@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"regexp"
 	"sort"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -71,8 +72,22 @@ func (s *snapshotStore) eligible(tenantID uuid.UUID, ok bool) {
 	s.put(tenantID, "_activity", "_activity", fmt.Sprintf(`{"raids":80,"window_days":180,"eligible":%t}`, ok), 80, 1<<31-1, computedAt, computedAt)
 }
 
-func (s *snapshotStore) about(tenantID uuid.UUID, payload string, sampleN int32) {
-	s.put(tenantID, "about", "about", payload, sampleN, 10, computedAt, changedAt)
+// hub stores a hub snapshot with the given payload.
+func (s *snapshotStore) hub(tenantID uuid.UUID, payload string, sampleN int32) {
+	s.put(tenantID, "hub", "hub", payload, sampleN, 10, computedAt, changedAt)
+}
+
+// hubJSON is a hub payload: 30-day raids/dungeons/logs/players, the same for
+// 180 days, and instances as raw JSON objects.
+func hubJSON(recent, window [4]int, instances ...string) string {
+	counts := func(c [4]int) string {
+		return fmt.Sprintf(`{"raids":%d,"dungeons":%d,"logs":%d,"players":%d}`, c[0], c[1], c[2], c[3])
+	}
+	list := "[]"
+	if len(instances) > 0 {
+		list = "[" + strings.Join(instances, ",") + "]"
+	}
+	return fmt.Sprintf(`{"recent_days":30,"window_days":180,"recent":%s,"window":%s,"instances":%s}`, counts(recent), counts(window), list)
 }
 
 var (
@@ -84,7 +99,7 @@ func newService(t *testing.T, store *snapshotStore, families ...servicestats.Fam
 	t.Helper()
 	opts := servicestats.Options{Logger: testutil.Logger(t), Store: store}
 	if len(families) > 0 {
-		opts.Families = append(servicestats.DefaultFamilies(), families...)
+		opts.Families = append(servicestats.DefaultFamilies(store, time.Now), families...)
 	}
 	svc, err := servicestats.New(opts)
 	require.NoError(t, err)
@@ -117,69 +132,89 @@ func jsonLD(t *testing.T, body string) map[string]any {
 
 var forever = servicestats.Site{Name: "WoW Forever", Origin: "https://forever.chronicleclassic.com", Discoverable: true}
 
-// The placeholder page is complete HTML without JS and carries every
-// page-spec element, and every hit reads only its snapshot row.
-func TestAboutPageSpec(t *testing.T) {
+const (
+	// Naxxramas has stored instance and speedrun pages; the Deadmines has none.
+	naxx = `{"name":"Naxxramas","category":"raid","runs_recent":40,"runs":210,"speedruns":3,"path":"/stats/raids/naxxramas","speedruns_path":"/stats/raids/naxxramas/speedruns"}`
+	dm   = `{"name":"The Deadmines","category":"dungeon","runs_recent":7,"runs":30,"speedruns":2}`
+)
+
+// The hub is complete HTML without JS and carries every page-spec element,
+// and every hit reads only its snapshot row.
+func TestHubPageSpec(t *testing.T) {
 	t.Parallel()
 	tenant := uuid.New()
 	store := &snapshotStore{}
-	store.about(tenant, `{"raids":1234,"players":5678,"window_days":180}`, 1234)
+	store.hub(tenant, hubJSON([4]int{1234, 56, 300, 5678}, [4]int{4000, 200, 900, 9000}, naxx, dm), 4200)
 	h := handler(newService(t, store), forever)
 
-	rec := get(t, h, tenant, "/stats/about")
+	rec := get(t, h, tenant, "/stats")
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, "text/html; charset=utf-8", rec.Header().Get("Content-Type"))
 	require.Equal(t, "public, max-age=300, s-maxage=3600", rec.Header().Get("Cache-Control"))
 	require.Empty(t, rec.Header().Get("X-Robots-Tag"))
 	body := rec.Body.String()
 
-	title := "How much raiding is logged on WoW Forever?"
+	title := "Raid logs, rankings and census for WoW Forever"
 	require.Contains(t, body, "<title>"+title+"</title>")
 	require.Contains(t, body, "<h1>"+title+"</h1>")
-	require.Contains(t, body, "As of 2026-11-14, players uploaded 1,234 raids with 5,678 distinct players from WoW Forever to Chronicle in the last 180 days.")
-	require.Contains(t, body, `Updated <time datetime="2026-11-14T06:30:00Z">2026-11-14</time>`, "the visible date is the last computation")
-	require.Contains(t, body, "Sample: 1,234 raids")
-	require.Contains(t, body, "Window: last 180 days")
+	require.Contains(t, body, "As of 2026-11-14, uploaded logs show 1,234 raids and 56 dungeon runs on WoW Forever in the last 30 days, from 300 logs, with 5,678 players seen in them. The most-run raid in those logs is Naxxramas, with 40 runs in that time.")
+	require.Contains(t, body, "by when each raid happened")
+	require.Contains(t, body, "Window: last 30 and 180 days", "the window line covers both windows the page shows")
+	require.Contains(t, body, "not everyone on the server")
+	require.Contains(t, body, `Updated <time datetime="2026-11-14T06:30:00Z">2026-11-14</time>`)
+	require.Contains(t, body, "Sample: 4,200 raids and dungeon runs")
 	require.Contains(t, body, `<a href="/stats/methodology">Methodology</a>`)
-	require.Contains(t, body, "<table>")
-	require.Contains(t, body, "<td>Raids logged</td><td>1,234</td>")
-	require.Contains(t, body, `<a href="/recent">Recent raids</a>`, "links into the SPA")
-	require.Contains(t, body, `<link rel="canonical" href="https://forever.chronicleclassic.com/stats/about">`)
-	require.Contains(t, body, `<meta name="description" content="As of 2026-11-14, players uploaded 1,234 raids`)
+	require.Contains(t, body, "<td>Players seen in uploaded logs</td><td>5,678</td><td>9,000</td>")
+	require.Contains(t, body, "<td>Logs with those runs</td><td>300</td><td>900</td>")
+	require.Contains(t, body, `<td><a href="/stats/raids/naxxramas">Naxxramas</a></td><td>Raid</td><td>40</td><td>210</td><td><a href="/stats/raids/naxxramas/speedruns">3 speedruns</a></td>`)
+	require.Contains(t, body, `<td>The Deadmines</td><td>Dungeon</td><td>7</td><td>30</td><td>2 speedruns</td>`, "no links to pages that aren't stored")
+	require.Contains(t, body, `<section id="upload">`)
+	require.Contains(t, body, `<a href="/upload">Upload a combat log</a>`)
+	require.Contains(t, body, `<a href="/download">Download the addon and Sidekick</a>`)
+	require.Contains(t, body, `<a href="/census">`)
+	require.Contains(t, body, `<a href="/gear/trends">`)
+	require.Contains(t, body, `<link rel="canonical" href="https://forever.chronicleclassic.com/stats">`)
 	require.NotContains(t, body, "robots")
 	require.NotContains(t, body, "nosnippet")
 	require.NotContains(t, body, `id="root"`, "not the SPA shell")
 
 	page := jsonLD(t, body)
+	require.Equal(t, title, page["name"])
 	require.Equal(t, "WebPage", page["@type"])
 	require.Equal(t, "2026-11-12T18:00:00Z", page["dateModified"], "dateModified is when the payload last changed")
-	require.Equal(t, "https://forever.chronicleclassic.com/stats/about", page["url"])
-	require.Equal(t, title, page["name"])
+	require.Equal(t, "https://forever.chronicleclassic.com/stats", page["url"])
 
-	require.Equal(t, http.StatusOK, get(t, h, tenant, "/stats/about").Code)
+	require.Equal(t, http.StatusOK, get(t, h, tenant, "/stats").Code)
 	require.EqualValues(t, 2, store.reads.Load(), "each hit is one snapshot read and nothing else")
+
+	// Sites without client uploads get no upload instructions.
+	noUploads := forever
+	noUploads.UploadsDisabled = true
+	body = get(t, handler(newService(t, store), noUploads), tenant, "/stats").Body.String()
+	require.NotContains(t, body, `id="upload"`)
+	require.NotContains(t, body, `href="/upload"`)
 }
 
-func TestAboutWithoutPlayerCount(t *testing.T) {
+// /stats/about, the old placeholder, redirects to the hub.
+func TestAboutRedirectsToHub(t *testing.T) {
 	t.Parallel()
-	tenant := uuid.New()
 	store := &snapshotStore{}
-	store.about(tenant, `{"raids":80,"window_days":180}`, 80)
-	body := get(t, handler(newService(t, store), forever), tenant, "/stats/about").Body.String()
-	require.Contains(t, body, "players uploaded 80 raids from WoW Forever to Chronicle in the last 180 days.")
-	require.NotContains(t, body, "Distinct players")
+	rec := get(t, handler(newService(t, store), forever), uuid.New(), "/stats/about")
+	require.Equal(t, http.StatusMovedPermanently, rec.Code)
+	require.Equal(t, "/stats", rec.Header().Get("Location"))
+	require.EqualValues(t, 0, store.reads.Load())
 }
 
 func TestTurtleForkLabel(t *testing.T) {
 	t.Parallel()
 	tenant := uuid.New()
 	store := &snapshotStore{}
-	store.about(tenant, `{"raids":80,"players":400,"window_days":180}`, 80)
+	store.hub(tenant, hubJSON([4]int{80, 0, 20, 400}, [4]int{300, 0, 70, 900}), 300)
 	site := servicestats.Site{Name: "Capybara", TurtleFork: true, Origin: "https://capybara.chronicleclassic.com", Discoverable: true}
 
-	body := get(t, handler(newService(t, store), site), tenant, "/stats/about").Body.String()
-	require.Contains(t, body, "<title>How much raiding is logged on Capybara (Turtle WoW fork)?</title>")
-	require.Contains(t, body, `<meta name="description" content="As of 2026-11-14, players uploaded 80 raids with 400 distinct players from Capybara (Turtle WoW fork)`)
+	body := get(t, handler(newService(t, store), site), tenant, "/stats").Body.String()
+	require.Contains(t, body, "<title>Raid logs, rankings and census for Capybara (Turtle WoW fork)</title>")
+	require.Contains(t, body, `<meta name="description" content="As of 2026-11-14, uploaded logs show 80 raids and 0 dungeon runs on Capybara (Turtle WoW fork)`)
 
 	require.Equal(t, "Turtle WoW", servicestats.Site{Name: "Turtle WoW", TurtleFork: true}.Label(), "no doubled suffix")
 }
@@ -190,18 +225,18 @@ func TestStatsNotFound(t *testing.T) {
 	t.Parallel()
 	active, inactive := uuid.New(), uuid.New()
 	store := &snapshotStore{}
-	store.about(active, `{"raids":80,"window_days":180}`, 80)
+	store.hub(active, hubJSON([4]int{80, 0, 20, 400}, [4]int{300, 0, 70, 900}), 300)
 	store.eligible(active, true)
 	store.eligible(inactive, false)
 	h := handler(newService(t, store), forever)
 
-	require.Equal(t, http.StatusOK, get(t, h, active, "/stats/about").Code)
-	require.Equal(t, http.StatusNotFound, get(t, h, inactive, "/stats/about").Code, "below-threshold tenant")
+	require.Equal(t, http.StatusOK, get(t, h, active, "/stats").Code)
+	require.Equal(t, http.StatusNotFound, get(t, h, inactive, "/stats").Code, "below-threshold tenant")
 	require.Equal(t, http.StatusNotFound, get(t, h, inactive, "/stats/methodology").Code, "below-threshold tenant, static page")
-	require.Equal(t, http.StatusNotFound, get(t, h, uuid.Nil, "/stats/about").Code, "root without snapshot")
+	require.Equal(t, http.StatusNotFound, get(t, h, uuid.Nil, "/stats").Code, "root without snapshot")
 	require.Equal(t, http.StatusNotFound, get(t, h, uuid.Nil, "/stats/methodology").Code, "root without activity check")
 	require.Equal(t, http.StatusNotFound, get(t, h, active, "/stats/nope").Code, "unknown page")
-	require.Equal(t, http.StatusNotFound, get(t, h, active, "/stats/about/").Code, "no path variants")
+	require.Equal(t, http.StatusNotFound, get(t, h, active, "/stats/").Code, "no path variants")
 	require.Equal(t, http.StatusNotFound, get(t, h, active, "/stats/_activity").Code, "internal rows are never routed")
 }
 
@@ -209,8 +244,8 @@ func TestStatsNoIndex(t *testing.T) {
 	t.Parallel()
 	tenant, small := uuid.New(), uuid.New()
 	store := &snapshotStore{}
-	store.about(tenant, `{"raids":80,"window_days":180}`, 80)
-	store.about(small, `{"raids":3,"window_days":180}`, 3)
+	store.hub(tenant, hubJSON([4]int{80, 0, 20, 400}, [4]int{300, 0, 70, 900}), 300)
+	store.hub(small, hubJSON([4]int{3, 0, 1, 20}, [4]int{3, 0, 1, 20}), 3)
 	h := handler(newService(t, store), forever)
 
 	noindex := func(rec *httptest.ResponseRecorder) {
@@ -218,12 +253,12 @@ func TestStatsNoIndex(t *testing.T) {
 		require.Equal(t, http.StatusOK, rec.Code)
 		require.Contains(t, rec.Body.String(), `<meta name="robots" content="noindex">`)
 		require.Equal(t, "noindex", rec.Header().Get("X-Robots-Tag"))
-		require.Contains(t, rec.Body.String(), `<link rel="canonical" href="https://forever.chronicleclassic.com/stats/about">`)
+		require.Contains(t, rec.Body.String(), `<link rel="canonical" href="https://forever.chronicleclassic.com/stats">`)
 	}
-	noindex(get(t, h, small, "/stats/about"))            // below the page's minimum sample
-	noindex(get(t, h, tenant, "/stats/about?sort=desc")) // query-parameter variant
+	noindex(get(t, h, small, "/stats"))            // below the page's minimum sample
+	noindex(get(t, h, tenant, "/stats?sort=desc")) // query-parameter variant
 
-	require.NotContains(t, get(t, h, tenant, "/stats/about").Body.String(), "noindex")
+	require.NotContains(t, get(t, h, tenant, "/stats").Body.String(), "noindex")
 }
 
 func TestMethodologyPage(t *testing.T) {
@@ -344,20 +379,21 @@ func TestFamilyMatchAndPathForKey(t *testing.T) {
 		require.False(t, ok, bad)
 	}
 
-	about := svc.Family("about")
-	key, ok = about.Match("/stats/about")
+	hub := svc.Family("hub")
+	key, ok = hub.Match("/stats")
 	require.True(t, ok)
-	require.Equal(t, "about", key)
+	require.Equal(t, "hub", key)
 }
 
 func TestSitemapEntries(t *testing.T) {
 	t.Parallel()
 	tenant, small, empty := uuid.New(), uuid.New(), uuid.New()
 	store := &snapshotStore{}
-	store.about(tenant, `{}`, 80)
+	store.hub(tenant, `{}`, 80)
 	store.eligible(tenant, true)
-	store.put(tenant, "about", "_ran:about", `{}`, 0, 1<<31-1, computedAt, computedAt)
-	store.about(small, `{}`, 3)
+	store.put(tenant, "hub", "_ran:hub", `{}`, 0, 1<<31-1, computedAt, computedAt)
+	store.put(tenant, "about", "about", `{}`, 80, 10, computedAt, changedAt) // retired family
+	store.hub(small, `{}`, 3)
 	svc := newService(t, store)
 
 	entries := func(id uuid.UUID) []servicestats.SitemapEntry {
@@ -365,7 +401,7 @@ func TestSitemapEntries(t *testing.T) {
 		require.NoError(t, err)
 		return got
 	}
-	require.Equal(t, []servicestats.SitemapEntry{{Path: "/stats/about", LastMod: changedAt}, {Path: "/stats/methodology"}}, entries(tenant))
+	require.Equal(t, []servicestats.SitemapEntry{{Path: "/stats", LastMod: changedAt}, {Path: "/stats/methodology"}}, entries(tenant))
 	require.Empty(t, entries(small), "below the minimum sample, and no static pages without indexable pages")
 	require.Empty(t, entries(empty))
 }

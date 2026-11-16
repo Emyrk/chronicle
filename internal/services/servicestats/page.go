@@ -287,6 +287,9 @@ type Site struct {
 	Origin string
 	// Discoverable is false for sites hidden from search engines.
 	Discoverable bool
+	// UploadsDisabled is true when players can't upload logs on this site
+	// (for example, servers that log server-side).
+	UploadsDisabled bool
 }
 
 // Label is the server name as titles and descriptions should show it. Turtle
@@ -313,8 +316,8 @@ type Content struct {
 	SampleLabel string
 	// Window is the data window, e.g. "last 180 days".
 	Window string
-	// Table is the page's data as a real HTML table.
-	Table *Table
+	// Tables hold the page's data as real HTML tables.
+	Tables []Table
 	// Sections are extra prose sections after the table.
 	Sections []Section
 	// Links point into the SPA for the full, interactive views.
@@ -334,11 +337,12 @@ type Cell struct {
 	Href string
 }
 
-// Section is a prose section with an optional anchor ID.
+// Section is a prose section with an optional anchor ID and links.
 type Section struct {
 	ID         string
 	Heading    string
 	Paragraphs []string
+	Links      []Link
 }
 
 // Link is a link into the SPA.

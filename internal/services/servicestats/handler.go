@@ -58,6 +58,11 @@ func (s *Service) Handler(resolve SiteResolver) http.Handler {
 			http.NotFound(w, r)
 			return
 		}
+		if to, ok := s.redirects[r.URL.Path]; ok {
+			w.Header().Set("Cache-Control", CacheControl)
+			http.Redirect(w, r, to, http.StatusMovedPermanently)
+			return
+		}
 		ctx := r.Context()
 		tenantID := servicetenant.TenantIDFromContext(ctx)
 		static, isStatic := s.static[r.URL.Path]

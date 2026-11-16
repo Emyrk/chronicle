@@ -15,9 +15,10 @@ import (
 // statsSiteFacts are the per-tenant facts a /stats page needs, cached so a
 // page hit runs no query beyond its snapshot read.
 type statsSiteFacts struct {
-	name         string
-	turtleFork   bool
-	discoverable bool
+	name            string
+	turtleFork      bool
+	discoverable    bool
+	uploadsDisabled bool
 }
 
 // mountStats routes the server-rendered /stats answer pages, ahead of the SPA
@@ -43,28 +44,30 @@ func (api *API) statsSiteResolver(r *http.Request) (servicestats.Site, error) {
 		return servicestats.Site{}, err
 	}
 	return servicestats.Site{
-		Name:         facts.name,
-		TurtleFork:   facts.turtleFork,
-		Origin:       canonicalScheme(api) + "://" + api.canonicalHosts(r)[0],
-		Discoverable: facts.discoverable,
+		Name:            facts.name,
+		TurtleFork:      facts.turtleFork,
+		Origin:          canonicalScheme(api) + "://" + api.canonicalHosts(r)[0],
+		Discoverable:    facts.discoverable,
+		UploadsDisabled: facts.uploadsDisabled,
 	}, nil
 }
 
-// loadStatsSiteFacts reads the name, flavor and discoverability of the
+// loadStatsSiteFacts reads the name, flavor, discoverability and upload setting of the
 // tenant in ctx (the root site when there is none).
 func (api *API) loadStatsSiteFacts(ctx context.Context) (statsSiteFacts, error) {
+	config, err := api.Opts.Zed.GetSiteConfig(ctx)
+	if err != nil {
+		return statsSiteFacts{}, err
+	}
+	t := servicetenant.TenantFromContext(ctx)
 	var facts statsSiteFacts
-	if t := servicetenant.TenantFromContext(ctx); t != nil {
+	if t != nil {
 		if branding := chroniclesdk.TenantFromDB(*t).Branding; branding != nil {
 			facts.name = branding.DisplayName
 		}
 		facts.name = firstNonEmpty(facts.name, t.Name)
 		facts.discoverable = t.Discoverable
 	} else {
-		config, err := api.Opts.Zed.GetSiteConfig(ctx)
-		if err != nil {
-			return statsSiteFacts{}, err
-		}
 		if branding := unmarshalBranding(config.Branding); branding != nil {
 			facts.name = branding.DisplayName
 		}
@@ -72,6 +75,8 @@ func (api *API) loadStatsSiteFacts(ctx context.Context) (statsSiteFacts, error) 
 	}
 	facts.name = firstNonEmpty(facts.name, "Chronicle")
 	facts.turtleFork = isTurtleFork(api.resolvedSiteFlavor(ctx))
+	// The same rule the SPA's upload page uses.
+	facts.uploadsDisabled = api.Opts.ClientUploadsDisabled || siteUploadRequestsDisabled(config, t)
 	return facts, nil
 }
 

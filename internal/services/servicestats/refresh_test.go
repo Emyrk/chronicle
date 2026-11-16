@@ -147,7 +147,19 @@ func TestRefresh(t *testing.T) {
 
 	// alpha clears the raid threshold exactly.
 	alpha, alphaRealm := tenantRealm("alpha", true)
-	instances(alphaRealm, servicestats.MinTenantRaids, "raid", false, nil)
+	alphaRaids := instances(alphaRealm, servicestats.MinTenantRaids, "raid", false, nil)
+	// For the hub: 3 players on one raid, a qualified speedrun, and a dungeon
+	// run 40 days ago (inside 180 days, outside 30) in a second log.
+	exec(`INSERT INTO log_instance_players (instance_id, unit_guid, name, level, class, race)
+		SELECT $1, format('0x%s', lpad(to_hex(g), 16, '0')), 'A' || g, 60, 'MAGE', 'Gnome'
+		FROM generate_series(1, 3) g`, alphaRaids[0])
+	exec(`INSERT INTO instance_speedruns (instance_id, instance_name, realm_id, qualified, start_time, completion_time, duration_ms, proof)
+		VALUES ($1, 'Molten Core', $2, true, $3, $3, 3600000, '{}')`, alphaRaids[1], alphaRealm, recent)
+	oldLog, oldDungeon := uuid.New(), uuid.New()
+	exec("INSERT INTO wow_log_groups (id, owner, created_at, updated_at) VALUES ($1, $2, now(), now())", oldLog, user)
+	exec("INSERT INTO parsed_log_group (id, finalized_at) VALUES ($1, now())", oldLog)
+	exec(`INSERT INTO log_instances (id, realm_id, log_group_id, name, start_time, category)
+		VALUES ($1, $2, $3, 'The Deadmines', now() - interval '40 days', 'dungeon')`, oldDungeon, alphaRealm, oldLog)
 	// beta: 45 raids, plus duplicates and unlisted logs that don't count.
 	// Below the entry threshold, above the keep threshold.
 	beta, betaRealm := tenantRealm("beta", true)
@@ -212,7 +224,7 @@ func TestRefresh(t *testing.T) {
 	svc, err := servicestats.New(servicestats.Options{
 		Logger:           testutil.Logger(t),
 		Store:            store,
-		Families:         append(servicestats.DefaultFamilies(), probe, slow, failing),
+		Families:         append(servicestats.DefaultFamilies(store, func() time.Time { return now }), probe, slow, failing),
 		AccessURL:        accessURL,
 		PrimaryDomain:    "chronicleclassic.com",
 		IndexNowKey:      "test-key-1234",
@@ -271,7 +283,7 @@ func TestRefresh(t *testing.T) {
 	require.True(t, tr.Eligible)
 	require.EqualValues(t, servicestats.MinTenantRaids, tr.Activity.Raids, "only alpha's raids count")
 	require.Nil(t, tr.Activity.Players)
-	require.ElementsMatch(t, []string{"about", "probe", "slow", "failing"}, producers())
+	require.ElementsMatch(t, []string{"hub", "probe", "slow", "failing"}, producers())
 
 	// Each family runs on its own: a timeout and an error don't stop the rest.
 	start := time.Now()
@@ -284,9 +296,9 @@ func TestRefresh(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 2, pr.Pages)
 	require.ElementsMatch(t, []string{"/stats/probe/a", "/stats/probe/b"}, pr.Changed)
-	_, err = svc.RefreshProducer(ctx, alpha, "about", time.Time{})
+	_, err = svc.RefreshProducer(ctx, alpha, "hub", time.Time{})
 	require.NoError(t, err)
-	require.ElementsMatch(t, []string{"_activity", "about", "_ran:about", "probe/a", "probe/b", "_ran:probe"}, keys(alpha))
+	require.ElementsMatch(t, []string{"_activity", "hub", "_ran:hub", "probe/a", "probe/b", "_ran:probe"}, keys(alpha))
 
 	got := probeTenant.Load()
 	require.NotNil(t, got.Row)
@@ -294,19 +306,28 @@ func TestRefresh(t *testing.T) {
 	require.True(t, got.Activity.Eligible)
 	require.NotEmpty(t, got.Flavor)
 
-	about, err := store.GetStatsSnapshot(servicetenant.WithTenantID(ctx, alpha), database.GetStatsSnapshotParams{TenantID: alpha, PageKey: "about"})
+	hub, err := store.GetStatsSnapshot(servicetenant.WithTenantID(ctx, alpha), database.GetStatsSnapshotParams{TenantID: alpha, PageKey: "hub"})
 	require.NoError(t, err)
-	require.JSONEq(t, `{"raids":50,"window_days":180}`, string(about.Payload), "the placeholder reuses the threshold count")
+	require.JSONEq(t, `{
+		"recent_days": 30, "window_days": 180,
+		"recent": {"raids": 50, "dungeons": 0, "logs": 1, "players": 3},
+		"window": {"raids": 50, "dungeons": 1, "logs": 2, "players": 3},
+		"instances": [
+			{"name": "Molten Core", "category": "raid", "runs_recent": 50, "runs": 50, "speedruns": 1},
+			{"name": "The Deadmines", "category": "dungeon", "runs_recent": 0, "runs": 1, "speedruns": 0}
+		]
+	}`, string(hub.Payload), "only alpha's listed logs count, per window")
+	require.EqualValues(t, 51, hub.SampleN)
 
 	pings := in.take()
-	require.Len(t, pings, 2) // probe, about
+	require.Len(t, pings, 2) // probe, hub
 	var urls []any
 	for _, p := range pings {
 		require.Equal(t, "alpha.chronicleclassic.com", p["host"])
 		require.Equal(t, "https://alpha.chronicleclassic.com/indexnow.txt", p["keyLocation"])
 		urls = append(urls, p["urlList"].([]any)...)
 	}
-	require.ElementsMatch(t, []any{"https://alpha.chronicleclassic.com/stats/probe/a", "https://alpha.chronicleclassic.com/stats/probe/b", "https://alpha.chronicleclassic.com/stats/about"}, urls)
+	require.ElementsMatch(t, []any{"https://alpha.chronicleclassic.com/stats/probe/a", "https://alpha.chronicleclassic.com/stats/probe/b", "https://alpha.chronicleclassic.com/stats"}, urls)
 
 	// Families that ran are not due again; the failed ones are retried.
 	_, err = svc.RefreshTenant(ctx, queue, alpha, false)
@@ -337,7 +358,7 @@ func TestRefresh(t *testing.T) {
 	third := rows(alpha)
 	require.True(t, third["probe/a"].changedAt.Equal(now))
 	require.NotContains(t, third, "probe/b")
-	require.Contains(t, third, "about")
+	require.Contains(t, third, "hub")
 	require.Len(t, in.take(), 1)
 
 	// Snapshots of unregistered families survive a week, for rolling deploys
@@ -393,12 +414,12 @@ func TestRefresh(t *testing.T) {
 		h.ServeHTTP(rec, req)
 		return rec
 	}
-	ok := request(alpha, "/stats/about")
+	ok := request(alpha, "/stats")
 	require.Equal(t, http.StatusOK, ok.Code)
-	require.Contains(t, ok.Body.String(), "players uploaded 50 raids")
+	require.Contains(t, ok.Body.String(), "uploaded logs show 50 raids")
 	require.Equal(t, http.StatusOK, request(alpha, "/stats/probe/a").Code)
 	require.Equal(t, http.StatusNotFound, request(alpha, "/stats/probe/b").Code, "pruned")
 	require.Equal(t, http.StatusOK, request(alpha, "/stats/methodology").Code)
 	require.Equal(t, http.StatusNotFound, request(hidden, "/stats/methodology").Code)
-	require.Equal(t, http.StatusNotFound, request(gamma, "/stats/about").Code)
+	require.Equal(t, http.StatusNotFound, request(gamma, "/stats").Code)
 }

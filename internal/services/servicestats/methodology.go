@@ -30,6 +30,7 @@ func methodologyPage() StaticPage {
 					},
 				},
 				Links: []Link{
+					{Text: fmt.Sprintf("%s server stats", label), Href: hubPath},
 					{Text: "Upload your logs", Href: "/upload"},
 					{Text: "Recent raids", Href: "/recent"},
 				},
