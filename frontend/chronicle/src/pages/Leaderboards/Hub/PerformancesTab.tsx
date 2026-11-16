@@ -1,11 +1,20 @@
 import { ChevronLeft, ChevronRight, Timer } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import type { RankingsLeaderboardResponse } from "@/api/typesGenerated"
+import { cn } from "@/lib/utils"
 import { CLASS_DISPLAY } from "@/pages/Rankings/classDisplay"
 import { RankingsTable } from "@/pages/Rankings/RankingsTable"
 import { MOBILE_EDGE_TO_EDGE } from "@/pages/Leaderboards/Hub/edgeToEdge"
 import type { RatingScope } from "@/pages/Leaderboards/Ratings/ratingBoards.fixtures"
+import { PERFORMANCE_PERIODS, type PerformancePeriod } from "../v2Selection"
 import { performanceEntries, type HubRole, type HubSubject } from "./hub.fixtures"
+
+const PERIOD_LABELS: Record<PerformancePeriod, string> = {
+  all: "All time",
+  "90d": "90d",
+  "30d": "30d",
+  "7d": "7d",
+}
 
 /**
  * Best single-log DPS or HPS: today's statistics leaderboard table, filtered by the hub instead of its
@@ -20,6 +29,8 @@ export function PerformancesTab({
   bosses,
   where,
   onSpeedruns,
+  period = "all",
+  onPeriod,
   page = 1,
   pageSize = 50,
   onPage,
@@ -33,6 +44,8 @@ export function PerformancesTab({
   bosses: readonly string[]
   where: string
   onSpeedruns: () => void
+  period?: PerformancePeriod
+  onPeriod?: (period: PerformancePeriod) => void
   page?: number
   pageSize?: number
   onPage?: (page: number) => void
@@ -66,13 +79,26 @@ export function PerformancesTab({
   const rankOffset = (page - 1) * pageSize
   return (
     <div className="space-y-3">
-      <div className="flex items-baseline justify-between px-1">
-        <h2 className="text-sm font-semibold">
-          Best {metric.toUpperCase()} · {where}
-        </h2>
-        <span className="text-xs text-muted-foreground">
-          {who} · {scope.boss ? "one kill each" : "best single kill on any boss"}
-        </span>
+      <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+        <div>
+          <h2 className="text-sm font-semibold">
+            Best {metric.toUpperCase()} · {where}
+          </h2>
+          <span className="text-xs text-muted-foreground">
+            {who} · {scope.boss ? "one kill each" : "best single kill on any boss"}
+          </span>
+        </div>
+        {onPeriod && (
+          <div className="flex rounded-md border bg-background/60 p-0.5 text-xs" role="group" aria-label="Performance period">
+            {PERFORMANCE_PERIODS.map((option) => (
+              <button key={option} type="button" aria-pressed={period === option} onClick={() => onPeriod(option)}
+                className={cn("cursor-pointer rounded px-2 py-1.5 font-medium transition-colors",
+                  period === option ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground")}>
+                {PERIOD_LABELS[option]}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       {live?.error ? (
         <div role="alert" className="rounded-xl border p-8 text-center text-muted-foreground">Could not load performances: {live.error.message}</div>

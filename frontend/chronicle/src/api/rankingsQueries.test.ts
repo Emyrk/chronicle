@@ -19,6 +19,17 @@ describe("rankings query cohort serialization", () => {
     expect(params.get("difficulty_names")).toBe("")
     expect(params.get("max_players")).toBe("0")
   })
+
+  it("serializes the performances period", async () => {
+    const fetcher = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ entries: [], total_count: 0 }) })
+    vi.stubGlobal("fetch", fetcher)
+    useRankingsLeaderboard({ instance_names: "Blackwing Lair", period: "90d" })
+    const options = vi.mocked(useQuery).mock.calls[0][0]
+    if (typeof options.queryFn !== "function") throw new Error("Expected rankings query function")
+    await options.queryFn({} as never)
+    const params = new URL(String(fetcher.mock.calls[0][0]), "http://localhost").searchParams
+    expect(params.get("period")).toBe("90d")
+  })
 })
 
 describe("kill time leaderboard serialization", () => {

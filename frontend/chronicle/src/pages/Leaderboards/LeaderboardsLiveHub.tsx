@@ -27,7 +27,7 @@ import { StatisticsTab, type LiveStatisticsData } from "./Hub/StatisticsTab"
 import { ParsingTab, type LiveParsingData } from "./Hub/ParsingTab"
 import { FULL_CLEAR, defaultSpeedrunsView, type EncounterSelection, type SpeedrunsView } from "./Hub/encounterSelection"
 import { liveHubBosses, liveHubPreset } from "./Hub/liveBosses"
-import { hubEncounterVariants, hubEncounterVariantParams, hubInstanceParams, hubParams, hubPath, hubRatingParams, hubRatingView, hubSubject, hubSubjectParams, hubTab, v2Selection } from "./v2Selection"
+import { hubEncounterVariants, hubEncounterVariantParams, hubInstanceParams, hubParams, hubPath, hubPerformancePeriod, hubPerformancePeriodParams, hubRatingParams, hubRatingView, hubSubject, hubSubjectParams, hubTab, v2Selection, type PerformancePeriod } from "./v2Selection"
 import type { RatingView } from "./Ratings/ratingThemes"
 import type { HubSubject } from "./Hub/hub.fixtures"
 import { legacyLeaderboardsTarget } from "./leaderboardsState"
@@ -303,6 +303,10 @@ function LiveHubContent({ context, summary, stale = false, realmName, realmIDs, 
       return next
     })
   }, [setParams])
+  const performancePeriod = hubPerformancePeriod(params)
+  const setPerformancePeriod = useCallback((period: PerformancePeriod) => {
+    setParams((previous) => hubPerformancePeriodParams(previous, period))
+  }, [setParams])
   const raids = summary.instances.filter((row) => row.instance_name === instanceName && row.category === "raid")
   const chosen = cohort && raids.some((row) => row.difficulty_name === cohort.difficulty_name && row.max_players === cohort.max_players) ? cohort : undefined
   // Hand-picked bosses (empty: the preset, i.e. whole-raid boards). One boss still has its own views.
@@ -317,8 +321,8 @@ function LiveHubContent({ context, summary, stale = false, realmName, realmIDs, 
   // Preserve zero-size cohorts explicitly; exact_cohort distinguishes them from an unfiltered board.
   const performance = useRankingsLeaderboard({ encounter_variants: activeVariants, instance_names: instanceName, encounter_names: pickedNames,
     difficulty_names: chosen?.difficulty_name, max_players: chosen?.max_players, exact_cohort: !!chosen, class: scope.cls, spec: scope.spec, sub_spec: scope.subSpec,
-    metric: role === "healing" ? "hps" : "dps", realm_names: realmName, limit: LEADERBOARD_PAGE_SIZE,
-    offset: (page - 1) * LEADERBOARD_PAGE_SIZE,
+    metric: role === "healing" ? "hps" : "dps", realm_names: realmName, period: performancePeriod === "all" ? undefined : performancePeriod,
+    limit: LEADERBOARD_PAGE_SIZE, offset: (page - 1) * LEADERBOARD_PAGE_SIZE,
   }, !overview && context.tab === "performances" && exact && realmIDs.length <= 1 && subject === "characters")
   // Speedruns shows one board at a time; only that board is fetched. Reset with the selection.
   const [speedViewState, setSpeedView] = useState<{ key: string; view: SpeedrunsView }>()
@@ -379,7 +383,7 @@ function LiveHubContent({ context, summary, stale = false, realmName, realmIDs, 
   if (context.tab === "performances") return !exact ? <CohortPrompt raids={raids} /> :
     <PerformancesTab instanceName={instanceName} scope={scope} role={role} subject={subject} bosses={picked}
       where={boss ?? (picked.length > 1 ? `${picked.length} bosses` : instanceName)} onSpeedruns={() => onTab("speedruns")}
-      page={page} pageSize={LEADERBOARD_PAGE_SIZE} onPage={setPage}
+      period={performancePeriod} onPeriod={setPerformancePeriod} page={page} pageSize={LEADERBOARD_PAGE_SIZE} onPage={setPage}
       live={{ response: performance.data, loading: performance.isPending, error: performance.isError ? performance.error : null }} />
   if (context.tab === "speedruns") return !exact ? <CohortPrompt raids={raids} /> :
     <SpeedrunsTab instanceName={instanceName} bosses={bosses} selection={selection}
