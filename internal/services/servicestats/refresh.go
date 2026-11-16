@@ -299,7 +299,7 @@ func computeWithTimeout(ctx context.Context, p Producer, tenant Tenant) ([]Outpu
 
 // tenant loads what producers get to know about the tenant.
 func (s *Service) tenant(ctx context.Context, tenantID uuid.UUID) (Tenant, error) {
-	t := Tenant{ID: tenantID, DatasetID: servicedataset.DefaultDatasetID}
+	t := Tenant{ID: tenantID, DatasetID: servicedataset.DefaultDatasetID, Store: s.store}
 	if tenantID != uuid.Nil {
 		row, err := s.store.GetTenantByID(servicetenant.AdminBypass(ctx), tenantID)
 		if err != nil {

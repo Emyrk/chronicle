@@ -107,6 +107,9 @@ func New(opts Options) (*Service, error) {
 		if err := f.compile(); err != nil {
 			return nil, fmt.Errorf("servicestats: %w", err)
 		}
+		if l, ok := f.Producer.(interface{ SetLogger(*slog.Logger) }); ok {
+			l.SetLogger(opts.Logger)
+		}
 		key := f.Producer.Key()
 		if s.byProducer[key] != nil {
 			return nil, fmt.Errorf("servicestats: duplicate producer key %q", key)
@@ -147,6 +150,8 @@ func New(opts Options) (*Service, error) {
 func DefaultFamilies() []Family {
 	return []Family{
 		aboutFamily(),
+		searchesIndexFamily(),
+		searchesFamily(),
 	}
 }
 
