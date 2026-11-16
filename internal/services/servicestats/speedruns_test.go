@@ -33,10 +33,10 @@ func TestSpeedrunsPage(t *testing.T) {
 	t.Parallel()
 	tenant := uuid.New()
 	store := &snapshotStore{}
-	store.put(tenant, "speedruns", "speedruns/molten-core", speedrunsPayloadJSON, 31, 3, computedAt, changedAt)
+	store.put(tenant, "speedruns-raids", "speedruns-raids/molten-core", speedrunsPayloadJSON, 31, 3, computedAt, changedAt)
 	h := handler(newService(t, store), forever)
 
-	rec := get(t, h, tenant, "/stats/molten-core/speedruns")
+	rec := get(t, h, tenant, "/stats/raids/molten-core/speedruns")
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Empty(t, rec.Header().Get("X-Robots-Tag"))
 	body := rec.Body.String()
@@ -48,7 +48,7 @@ func TestSpeedrunsPage(t *testing.T) {
 	require.Contains(t, body, "The fastest Molten Core (40 players) clear on WoW Forever is 38:12 by Nightfall, set 2026-11-10.")
 	require.Contains(t, body, "As of 2026-11-14, 31 guilds are ranked, each with its best valid full-raid clear.")
 	require.Contains(t, body, "Sample: 31 ranked guilds")
-	require.Contains(t, body, `<link rel="canonical" href="https://forever.chronicleclassic.com/stats/molten-core/speedruns">`)
+	require.Contains(t, body, `<link rel="canonical" href="https://forever.chronicleclassic.com/stats/raids/molten-core/speedruns">`)
 
 	require.Contains(t, body, `<th scope="col">Rank</th><th scope="col">Guild</th><th scope="col">Time</th><th scope="col">Date</th><th scope="col">Raid</th>`)
 	require.Contains(t, body, `<td>1</td><td><a href="/g/11111111-1111-1111-1111-111111111111">Nightfall</a></td><td>38:12</td><td>2026-11-10</td><td><a href="/instances/abc123">View raid</a></td>`)
@@ -65,8 +65,8 @@ func TestSpeedrunsSingleBoardLead(t *testing.T) {
 	t.Parallel()
 	tenant := uuid.New()
 	store := &snapshotStore{}
-	store.put(tenant, "speedruns", "speedruns/zul-gurub", `{"instance":"Zul'Gurub","boards":[{"difficulty":"","max_players":20,"ranked":1,"runs":[{"rank":1,"guild":"G","duration_ms":1500000,"completed_at":"2026-11-01T00:00:00Z","raid_id":"x"}]}]}`, 1, 3, computedAt, changedAt)
-	body := get(t, handler(newService(t, store), forever), tenant, "/stats/zul-gurub/speedruns").Body.String()
+	store.put(tenant, "speedruns-raids", "speedruns-raids/zul-gurub", `{"instance":"Zul'Gurub","boards":[{"difficulty":"","max_players":20,"ranked":1,"runs":[{"rank":1,"guild":"G","duration_ms":1500000,"completed_at":"2026-11-01T00:00:00Z","raid_id":"x"}]}]}`, 1, 3, computedAt, changedAt)
+	body := get(t, handler(newService(t, store), forever), tenant, "/stats/raids/zul-gurub/speedruns").Body.String()
 	require.Contains(t, body, "The fastest Zul&#39;Gurub clear on WoW Forever is 25:00 by G, set 2026-11-01.")
 	require.Contains(t, body, "1 guild is ranked")
 	require.Contains(t, body, `/leaderboards/Zul%27Gurub/speedruns`)
@@ -77,11 +77,12 @@ func TestSpeedrunsNoIndexAndSitemap(t *testing.T) {
 	t.Parallel()
 	tenant := uuid.New()
 	store := &snapshotStore{}
-	store.put(tenant, "speedruns", "speedruns/molten-core", speedrunsPayloadJSON, 2, 3, computedAt, changedAt)
-	store.put(tenant, "speedruns", "speedruns/naxxramas", speedrunsPayloadJSON, 20, 3, computedAt, changedAt)
+	store.put(tenant, "speedruns-raids", "speedruns-raids/molten-core", speedrunsPayloadJSON, 2, 3, computedAt, changedAt)
+	store.put(tenant, "speedruns-raids", "speedruns-raids/naxxramas", speedrunsPayloadJSON, 20, 3, computedAt, changedAt)
+	store.put(tenant, "speedruns-dungeons", "speedruns-dungeons/deadmines", speedrunsPayloadJSON, 20, 3, computedAt, changedAt)
 	svc := newService(t, store)
 
-	rec := get(t, handler(svc, forever), tenant, "/stats/molten-core/speedruns")
+	rec := get(t, handler(svc, forever), tenant, "/stats/raids/molten-core/speedruns")
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, "noindex", rec.Header().Get("X-Robots-Tag"))
 
@@ -91,8 +92,9 @@ func TestSpeedrunsNoIndexAndSitemap(t *testing.T) {
 	for _, e := range entries {
 		paths = append(paths, e.Path)
 	}
-	require.Contains(t, paths, "/stats/naxxramas/speedruns")
-	require.NotContains(t, paths, "/stats/molten-core/speedruns")
+	require.Contains(t, paths, "/stats/raids/naxxramas/speedruns")
+	require.Contains(t, paths, "/stats/dungeons/deadmines/speedruns")
+	require.NotContains(t, paths, "/stats/raids/molten-core/speedruns")
 }
 
 // An instance with no snapshot, or a path that is not a family page, is a 404.
@@ -101,9 +103,11 @@ func TestSpeedrunsNotFound(t *testing.T) {
 	tenant := uuid.New()
 	store := &snapshotStore{}
 	h := handler(newService(t, store), forever)
-	require.Equal(t, http.StatusNotFound, get(t, h, tenant, "/stats/blackwing-lair/speedruns").Code)
-	require.Equal(t, http.StatusNotFound, get(t, h, tenant, "/stats/Molten%20Core/speedruns").Code)
-	require.Equal(t, http.StatusNotFound, get(t, h, tenant, "/stats/molten-core/speedruns/extra").Code)
+	require.Equal(t, http.StatusNotFound, get(t, h, tenant, "/stats/raids/blackwing-lair/speedruns").Code)
+	require.Equal(t, http.StatusNotFound, get(t, h, tenant, "/stats/raids/Molten%20Core/speedruns").Code)
+	require.Equal(t, http.StatusNotFound, get(t, h, tenant, "/stats/raids/molten-core/speedruns/extra").Code)
+	require.Equal(t, http.StatusNotFound, get(t, h, tenant, "/stats/molten-core/speedruns").Code, "instance pages live under raids or dungeons")
+	require.Equal(t, http.StatusNotFound, get(t, h, tenant, "/stats/dungeons/molten-core/speedruns").Code)
 }
 
 // The producer, run against a real database through the service, ranks the
@@ -151,6 +155,8 @@ func TestSpeedrunsProducerAgainstDatabase(t *testing.T) {
 		return id
 	}
 	guild := func(name string) uuid.UUID { return guildIn(realm, name) }
+	// category is the log_instances.category of each seeded instance.
+	category := map[string]string{"Molten Core": "raid", "Naxxramas": "raid", "Onyxia's Lair": "raid", "Deadmines": "dungeon"}
 	// clearIn seeds one speedrun of instanceName on a realm, of the given raid size.
 	clearIn := func(r uuid.UUID, size int, instanceName string, g uuid.UUID, ms int64, qualified, unlisted bool, dup any, slug any) {
 		group, inst := uuid.New(), uuid.New()
@@ -158,7 +164,7 @@ func TestSpeedrunsProducerAgainstDatabase(t *testing.T) {
 		exec("INSERT INTO parsed_log_group (id, finalized_at) VALUES ($1, now())", group)
 		start := time.Now().Add(-48 * time.Hour)
 		exec(`INSERT INTO log_instances (id, realm_id, log_group_id, name, start_time, category, difficulty_name, max_players, hashed_slug, duplicate_group_id)
-			VALUES ($1, $2, $3, $4, $5, 'raid', '', $8, $6, $7)`, inst, r, group, instanceName, start, slug, dup, size)
+			VALUES ($1, $2, $3, $4, $5, $9, '', $8, $6, $7)`, inst, r, group, instanceName, start, slug, dup, size, category[instanceName])
 		exec(`INSERT INTO instance_speedruns (instance_id, instance_name, realm_id, guild_id, qualified, start_time, completion_time, duration_ms,
 				ranked_start_time, ranked_completion_time, ranked_duration_ms, boss_to_boss_start_time, boss_to_boss_completion_time, boss_to_boss_duration_ms, proof)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $6, $7, $8, $6, $7, $8, '{}'::jsonb)`,
@@ -187,6 +193,8 @@ func TestSpeedrunsProducerAgainstDatabase(t *testing.T) {
 	// Another tenant's faster clears are invisible here.
 	clearIn(otherRealm, 40, "Molten Core", guildIn(otherRealm, "Foreign Guild"), 900_000, true, false, nil, "slug-foreign")
 	clearIn(otherRealm, 40, "Naxxramas", guildIn(otherRealm, "Foreign Naxx"), 900_000, true, false, nil, nil)
+	// A dungeon clear lives in the dungeons namespace, not the raids one.
+	clearIn(realm, 5, "Deadmines", guild("Dungeon Guild"), 1_200_000, true, false, nil, "slug-dm")
 	clear("Onyxia's Lair", invalid, 900_000, false, false, nil, nil) // an instance with no valid run
 	clear("Onyxia's Lair", hidden, 800_000, true, true, nil, nil)
 
@@ -202,7 +210,9 @@ func TestSpeedrunsProducerAgainstDatabase(t *testing.T) {
 
 	_, err = svc.RefreshTenant(ctx, &recordingQueue{}, tenant, true)
 	require.NoError(t, err)
-	_, err = svc.RefreshProducer(ctx, tenant, "speedruns", time.Time{})
+	_, err = svc.RefreshProducer(ctx, tenant, "speedruns-raids", time.Time{})
+	require.NoError(t, err)
+	_, err = svc.RefreshProducer(ctx, tenant, "speedruns-dungeons", time.Time{})
 	require.NoError(t, err)
 
 	tenantCtx := servicetenant.WithTenantID(ctx, tenant)
@@ -210,13 +220,14 @@ func TestSpeedrunsProducerAgainstDatabase(t *testing.T) {
 	require.NoError(t, err)
 	var keys []string
 	for _, m := range meta {
-		if m.ProducerKey == "speedruns" && !strings.HasPrefix(m.PageKey, "_") {
+		if strings.HasPrefix(m.ProducerKey, "speedruns-") && !strings.HasPrefix(m.PageKey, "_") {
 			keys = append(keys, m.PageKey)
 		}
 	}
-	require.Equal(t, []string{"speedruns/molten-core"}, keys, "no page for Onyxia's Lair (unlisted or unqualified runs) or Naxxramas (another tenant's)")
+	require.ElementsMatch(t, []string{"speedruns-raids/molten-core", "speedruns-dungeons/deadmines"}, keys,
+		"no page for Onyxia's Lair (unlisted or unqualified runs) or Naxxramas (another tenant's); the dungeon is in its own namespace")
 
-	snap, err := store.GetStatsSnapshot(tenantCtx, database.GetStatsSnapshotParams{TenantID: tenant, PageKey: "speedruns/molten-core"})
+	snap, err := store.GetStatsSnapshot(tenantCtx, database.GetStatsSnapshotParams{TenantID: tenant, PageKey: "speedruns-raids/molten-core"})
 	require.NoError(t, err)
 	var payload struct {
 		Instance string `json:"instance"`
@@ -254,4 +265,10 @@ func TestSpeedrunsProducerAgainstDatabase(t *testing.T) {
 	require.Equal(t, "slug-small", small.Runs[0].RaidID)
 	require.EqualValues(t, 3, snap.SampleN, "the sample is the main board's ranked guilds")
 	require.NotContains(t, string(snap.Payload), "Foreign")
+
+	// The dungeon page is served at /stats/dungeons/..., and only there.
+	dungeon, err := store.GetStatsSnapshot(tenantCtx, database.GetStatsSnapshotParams{TenantID: tenant, PageKey: "speedruns-dungeons/deadmines"})
+	require.NoError(t, err)
+	require.Contains(t, string(dungeon.Payload), "Dungeon Guild")
+	require.Contains(t, string(dungeon.Payload), "slug-dm")
 }

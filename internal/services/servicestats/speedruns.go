@@ -12,7 +12,8 @@ import (
 	"github.com/Emyrk/chronicle/database"
 )
 
-// The speedruns page answers "what is the fastest <instance> clear?" from the
+// The speedruns page (/stats/{raids|dungeons}/{instance}/speedruns, see
+// SpeedrunsPath) answers "what is the fastest <instance> clear?" from the
 // speedrun leaderboard's own queries: SpeedrunInstanceBoards lists the boards
 // (instance, difficulty, raid size) that have a qualified run, and
 // SpeedrunLeaderboard ranks a board. The leaderboard's rules therefore apply as
@@ -67,21 +68,37 @@ type speedrunsPayload struct {
 	Boards []speedrunBoard `json:"boards"`
 }
 
-type speedrunsProducer struct{}
+// speedrunsProducer publishes one category's pages: raids and dungeons are
+// separate families (separate producers, so a failing one never blocks the
+// other), each under its own literal path segment.
+type speedrunsProducer struct{ category InstanceCategory }
 
-func (speedrunsProducer) Key() string            { return speedrunsKey }
+func (p speedrunsProducer) Key() string          { return speedrunsKey + "-" + string(p.category) }
 func (speedrunsProducer) Cadence() time.Duration { return speedrunsCadence }
 func (speedrunsProducer) Timeout() time.Duration { return speedrunsTimeout }
 
-func (speedrunsProducer) Compute(ctx context.Context, tenant Tenant) ([]Output, error) {
+func (p speedrunsProducer) Compute(ctx context.Context, tenant Tenant) ([]Output, error) {
 	boards, err := tenant.Store.SpeedrunInstanceBoards(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list speedrun boards: %w", err)
+	}
+	categoryRows, err := tenant.Store.StatsSpeedrunInstanceCategories(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list speedrun instance categories: %w", err)
+	}
+	categories := make(map[string]InstanceCategory, len(categoryRows))
+	for _, r := range categoryRows {
+		if c, ok := CategoryFromDB(r.Category.String); ok {
+			categories[r.InstanceName] = c
+		}
 	}
 	byInstance := map[string]*speedrunsPayload{}
 	slugOwner := map[string]string{}
 	var names []string
 	for _, b := range boards {
+		if categories[b.InstanceName] != p.category {
+			continue // another category's family publishes it, or it has no pages
+		}
 		slug := InstanceSlug(b.InstanceName)
 		if slug == "" {
 			continue
@@ -108,32 +125,39 @@ func (speedrunsProducer) Compute(ctx context.Context, tenant Tenant) ([]Output, 
 			continue
 		}
 		slugOwner[slug] = b.InstanceName
-		p := byInstance[slug]
-		if p == nil {
-			p = &speedrunsPayload{Instance: b.InstanceName}
-			byInstance[slug] = p
+		payload := byInstance[slug]
+		if payload == nil {
+			payload = &speedrunsPayload{Instance: b.InstanceName}
+			byInstance[slug] = payload
 			names = append(names, slug)
 		}
-		p.Boards = append(p.Boards, board)
+		payload.Boards = append(payload.Boards, board)
 	}
 
 	sort.Strings(names)
 	outputs := make([]Output, 0, len(names))
 	for _, slug := range names {
-		p := byInstance[slug]
-		sortSpeedrunBoards(p.Boards)
+		payload := byInstance[slug]
+		sortSpeedrunBoards(payload.Boards)
 		outputs = append(outputs, Output{
-			Key:       PageKey(speedrunsKey, slug),
-			Payload:   p,
-			SampleN:   p.Boards[0].Ranked,
+			Key:       PageKey(p.Key(), slug),
+			Payload:   payload,
+			SampleN:   payload.Boards[0].Ranked,
 			MinSample: speedrunsMinSample,
 		})
 	}
 	return outputs, nil
 }
 
-func speedrunsFamily() Family {
-	return Family{Pattern: "/stats/{instance}/speedruns", Producer: speedrunsProducer{}, Render: renderSpeedruns}
+// speedrunsFamily is the fastest-clears family of one category. Its pattern has
+// the category as a literal, and "speedruns" as a literal after the instance, so
+// it beats the boss family (/stats/{category}/{instance}/{boss}) on that URL.
+func speedrunsFamily(category InstanceCategory) Family {
+	return Family{
+		Pattern:  "/stats/" + string(category) + "/{instance}/speedruns",
+		Producer: speedrunsProducer{category: category},
+		Render:   renderSpeedruns,
+	}
 }
 
 // buildSpeedrunBoard ranks a leaderboard query's rows (already ordered fastest

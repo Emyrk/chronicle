@@ -2,6 +2,7 @@ package servicestats
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -101,9 +102,29 @@ func TestFormatClock(t *testing.T) {
 // speedrunStore serves boards and per-board leaderboards, and records the queries.
 type speedrunStore struct {
 	database.Store
-	boards []database.SpeedrunInstanceBoardsRow
-	rows   map[string][]database.SpeedrunLeaderboardRow // by instance|difficulty|size
-	params []database.SpeedrunLeaderboardParams
+	// categories maps an instance name to its log_instances.category; instances
+	// not listed are raids.
+	categories map[string]string
+	boards     []database.SpeedrunInstanceBoardsRow
+	rows       map[string][]database.SpeedrunLeaderboardRow // by instance|difficulty|size
+	params     []database.SpeedrunLeaderboardParams
+}
+
+func (s *speedrunStore) StatsSpeedrunInstanceCategories(context.Context) ([]database.StatsSpeedrunInstanceCategoriesRow, error) {
+	var out []database.StatsSpeedrunInstanceCategoriesRow
+	seen := map[string]bool{}
+	for _, b := range s.boards {
+		if seen[b.InstanceName] {
+			continue
+		}
+		seen[b.InstanceName] = true
+		category := "raid"
+		if c, ok := s.categories[b.InstanceName]; ok {
+			category = c
+		}
+		out = append(out, database.StatsSpeedrunInstanceCategoriesRow{InstanceName: b.InstanceName, Category: pgtype.Text{String: category, Valid: true}})
+	}
+	return out, nil
 }
 
 func (s *speedrunStore) SpeedrunInstanceBoards(context.Context) ([]database.SpeedrunInstanceBoardsRow, error) {
@@ -133,13 +154,13 @@ func TestSpeedrunsProducer(t *testing.T) {
 		},
 	}
 
-	out, err := speedrunsProducer{}.Compute(context.Background(), Tenant{Store: store})
+	out, err := speedrunsProducer{category: CategoryRaids}.Compute(context.Background(), Tenant{Store: store})
 	require.NoError(t, err)
 	keys := make([]string, len(out))
 	for i, o := range out {
 		keys[i] = o.Key
 	}
-	require.Equal(t, []string{"speedruns/molten-core", "speedruns/naxxramas"}, keys, "an instance with no ranked run gets no page")
+	require.Equal(t, []string{"speedruns-raids/molten-core", "speedruns-raids/naxxramas"}, keys, "an instance with no ranked run gets no page")
 
 	for _, p := range store.params {
 		require.True(t, p.FilterDifficulty)
@@ -170,7 +191,7 @@ func TestSpeedrunsProducerSlugCollision(t *testing.T) {
 			"Zul Gurub||2": {run("B", 1000, done, "b")},
 		},
 	}
-	out, err := speedrunsProducer{}.Compute(context.Background(), Tenant{Store: store})
+	out, err := speedrunsProducer{category: CategoryRaids}.Compute(context.Background(), Tenant{Store: store})
 	require.NoError(t, err)
 	require.Len(t, out, 1, "two instances that slug alike never share a page")
 	require.Equal(t, "Zul'Gurub", out[0].Payload.(*speedrunsPayload).Instance)
@@ -206,8 +227,92 @@ func TestSpeedrunsProducerSlugClaimedByRankedInstanceOnly(t *testing.T) {
 			"Zul'Gurub||2": {run("B", 1000, done, "b")},
 		},
 	}
-	out, err := speedrunsProducer{}.Compute(context.Background(), Tenant{Store: store})
+	out, err := speedrunsProducer{category: CategoryRaids}.Compute(context.Background(), Tenant{Store: store})
 	require.NoError(t, err)
 	require.Len(t, out, 1)
 	require.Equal(t, "Zul'Gurub", out[0].Payload.(*speedrunsPayload).Instance)
+}
+
+// Each category's producer publishes only its own instances, and an instance
+// whose category is neither raid nor dungeon has no page.
+func TestSpeedrunsProducerSplitsByCategory(t *testing.T) {
+	t.Parallel()
+	done := time.Now()
+	store := &speedrunStore{
+		categories: map[string]string{"Deadmines": "dungeon", "Mystery": "scenario"},
+		boards: []database.SpeedrunInstanceBoardsRow{
+			{InstanceName: "Deadmines", MaxPlayers: 5},
+			{InstanceName: "Molten Core", MaxPlayers: 40},
+			{InstanceName: "Mystery", MaxPlayers: 10},
+		},
+		rows: map[string][]database.SpeedrunLeaderboardRow{
+			"Deadmines||0":   {run("D", 1000, done, "d")},
+			"Molten Core||4": {run("M", 1000, done, "m")},
+			"Mystery||1":     {run("X", 1000, done, "x")},
+		},
+	}
+	keys := func(c InstanceCategory) []string {
+		out, err := speedrunsProducer{category: c}.Compute(context.Background(), Tenant{Store: store})
+		require.NoError(t, err)
+		var k []string
+		for _, o := range out {
+			k = append(k, o.Key)
+		}
+		return k
+	}
+	require.Equal(t, []string{"speedruns-raids/molten-core"}, keys(CategoryRaids))
+	require.Equal(t, []string{"speedruns-dungeons/deadmines"}, keys(CategoryDungeons))
+	require.Equal(t, "speedruns-raids", speedrunsProducer{category: CategoryRaids}.Key())
+	require.Equal(t, "speedruns-dungeons", speedrunsProducer{category: CategoryDungeons}.Key())
+}
+
+func TestInstancePaths(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "/stats/raids/molten-core", InstancePath(CategoryRaids, "molten-core"))
+	require.Equal(t, "/stats/dungeons/deadmines", InstancePath(CategoryDungeons, "deadmines"))
+	require.Equal(t, "/stats/raids/molten-core/speedruns", SpeedrunsPath(CategoryRaids, "molten-core"))
+	require.Equal(t, "/stats/dungeons/deadmines/speedruns", SpeedrunsPath(CategoryDungeons, "deadmines"))
+	require.Equal(t, "/stats/raids/molten-core/ragnaros", BossPath(CategoryRaids, "molten-core", "ragnaros"))
+	require.Equal(t, "/stats/raids/molten-core/majordomo-executus", BossPath(CategoryRaids, "molten-core", InstanceSlug("Majordomo Executus")))
+
+	// Bad input never becomes a URL no family serves.
+	require.Empty(t, InstancePath("", "molten-core"))
+	require.Empty(t, InstancePath("scenarios", "molten-core"))
+	require.Empty(t, InstancePath(CategoryRaids, ""))
+	require.Empty(t, InstancePath(CategoryRaids, "Molten Core"))
+	require.Empty(t, SpeedrunsPath(CategoryRaids, "../x"))
+	require.Empty(t, BossPath(CategoryRaids, "molten-core", ""))
+	require.Empty(t, BossPath(CategoryRaids, "molten-core", "Ragnaros"))
+	require.Empty(t, BossPath(CategoryRaids, "molten-core", "speedruns"), "that URL is the fastest-clears page")
+
+	for _, raw := range []string{"raid", "dungeon"} {
+		c, ok := CategoryFromDB(raw)
+		require.True(t, ok, raw)
+		require.True(t, c.Valid())
+	}
+	for _, raw := range []string{"", "scenario", "RAID"} {
+		_, ok := CategoryFromDB(raw)
+		require.False(t, ok, raw)
+	}
+
+	// Every path the helpers build is one the families route: a speedruns path
+	// matches its family, and a boss path would not.
+	svc, err := New(Options{Store: &speedrunStore{}, Logger: slog.New(slog.DiscardHandler)})
+	require.NoError(t, err)
+	for _, c := range []InstanceCategory{CategoryRaids, CategoryDungeons} {
+		f := svc.Family("speedruns-" + string(c))
+		require.NotNil(t, f)
+		key, ok := f.Match(SpeedrunsPath(c, "some-instance"))
+		require.True(t, ok)
+		require.Equal(t, "speedruns-"+string(c)+"/some-instance", key)
+		path, ok := f.PathForKey(key)
+		require.True(t, ok)
+		require.Equal(t, SpeedrunsPath(c, "some-instance"), path)
+		_, ok = f.Match(BossPath(c, "some-instance", "ragnaros"))
+		require.False(t, ok)
+	}
+	// A raid page is never served by the dungeons family.
+	_, ok := svc.Family("speedruns-dungeons").Match(SpeedrunsPath(CategoryRaids, "x"))
+	require.False(t, ok)
 }

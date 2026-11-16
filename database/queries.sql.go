@@ -33618,6 +33618,50 @@ func (q *sqlQuerier) SpeedrunRealmNames(ctx context.Context) ([]string, error) {
 	return items, nil
 }
 
+const statsSpeedrunInstanceCategories = `-- name: StatsSpeedrunInstanceCategories :many
+SELECT DISTINCT ON (sr.instance_name)
+    sr.instance_name,
+    li.category
+FROM instance_speedruns sr
+JOIN log_instances_resolved li ON li.id = sr.instance_id
+JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
+JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
+WHERE sr.qualified = true
+  AND NOT li.mixed_difficulty
+GROUP BY sr.instance_name, li.category
+ORDER BY sr.instance_name, COUNT(*) DESC, li.category
+`
+
+type StatsSpeedrunInstanceCategoriesRow struct {
+	InstanceName string      `db:"instance_name" json:"instance_name"`
+	Category     pgtype.Text `db:"category" json:"category"`
+}
+
+// Each instance's category ('raid' or 'dungeon', log_instances.category, the
+// same column the /stats threshold counts) over the qualified speedruns of
+// listed logs, for the /stats fastest-clear namespaces. An instance logged
+// under both categories gets the one most of its runs have. RLS on
+// wow_server_realms scopes it to the request tenant. Background job only.
+func (q *sqlQuerier) StatsSpeedrunInstanceCategories(ctx context.Context) ([]StatsSpeedrunInstanceCategoriesRow, error) {
+	rows, err := q.db.Query(ctx, statsSpeedrunInstanceCategories)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []StatsSpeedrunInstanceCategoriesRow
+	for rows.Next() {
+		var i StatsSpeedrunInstanceCategoriesRow
+		if err := rows.Scan(&i.InstanceName, &i.Category); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSpellEffectsForCheck = `-- name: ListSpellEffectsForCheck :many
 SELECT spell_id, difficulty_id, effect_index, source_id, effect_base_points_f
 FROM dbc_spell_effects

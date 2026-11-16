@@ -124,25 +124,56 @@ type StaticPage struct { Path string; Render func(site Site) Content }
 
 Pattern parameters are lowercase slugs (`[a-z0-9]` words joined by `-`); the
 page key is the family key followed by the parameter values in pattern order,
-e.g. pattern `/stats/{instance}/{boss}` with family `boss` gives key
-`boss/naxxramas/patchwerk`. When two families match a path, the one with a
-literal segment at the first difference wins, so `/stats/{instance}/speedruns`
-beats `/stats/{instance}/{boss}` for `/stats/naxxramas/speedruns`, and a
-`boss/naxxramas/speedruns` output from the boss family is skipped. Families
+e.g. pattern `/stats/raids/{instance}/{boss}` with family `boss` gives key
+`boss/naxxramas/patchwerk` (literal segments are not part of the key). When two families match a path, the one with a
+literal segment at the first difference wins, so `/stats/raids/{instance}/speedruns`
+beats `/stats/raids/{instance}/{boss}` for `/stats/raids/naxxramas/speedruns`, and
+a boss-family output for that URL is skipped. Families
 that would match exactly the same paths, and static pages a family matches,
 are rejected by `New`.
 
-## Instance slugs
+## Instance pages: URL scheme, slugs and path helpers
 
-Every page family that puts an instance in its path (`/stats/{instance}/speedruns`,
-and the boss pages `/stats/{instance}/{boss}`) builds the segment with
-`InstanceSlug(name)`: lowercase, each run of characters other than `[a-z0-9]`
-becomes one `-`, no leading or trailing `-`. "Molten Core" is `molten-core`,
-"Onyxia's Lair" is `onyxia-s-lair`, "Zul'Gurub" is `zul-gurub`. It is a pure
-function of the name, so a producer's page key and a link to it always agree.
-Two names that slug alike would share a URL; a producer keeps the first (by
-instance name) and skips the other (see the `speedruns` producer). Boss
-names should get the same treatment (one shared helper, same rule).
+Instance pages live in a namespace per category, so an instance name can never
+compete with the fixed pages (`/stats/methodology`, `/stats/census`,
+`/stats/about`, ...) for a URL:
+
+| URL | Page |
+| --- | --- |
+| `/stats/raids/{instance}` | a raid's page |
+| `/stats/raids/{instance}/speedruns` | its fastest clears |
+| `/stats/raids/{instance}/{boss}` | one boss |
+| `/stats/dungeons/...` | the same three, for dungeons |
+
+The category is the instance's `log_instances.category` (`raid` or `dungeon`,
+the column the tenant threshold also reads); `CategoryFromDB` maps it to the
+`InstanceCategory` (`CategoryRaids`, `CategoryDungeons`). Anything else has no
+pages. Build every instance URL, and every link to one, with the helpers in
+`slug.go`, never by hand:
+
+```go
+InstancePath(category, instanceSlug)      // /stats/raids/molten-core
+SpeedrunsPath(category, instanceSlug)     // /stats/raids/molten-core/speedruns
+BossPath(category, instanceSlug, bossSlug) // /stats/raids/molten-core/ragnaros
+```
+
+They take slugs, not names, and return `""` for an invalid category or a
+missing or malformed slug (and for the boss slug `speedruns`, which is the
+fastest-clears page), so a bad input never becomes a link to a URL nothing
+serves. A family registers one pattern per category (`/stats/raids/{instance}/speedruns`
+and `/stats/dungeons/{instance}/speedruns`, producers `speedruns-raids` and
+`speedruns-dungeons`), because a literal first segment is what lets the
+fastest-clears family beat the boss family on `/stats/raids/x/speedruns`
+(a `{category}` parameter would lose to the boss family's literal).
+
+Slugs come from `InstanceSlug(name)`: lowercase, each run of characters other
+than `[a-z0-9]` becomes one `-`, no leading or trailing `-`. "Molten Core" is
+`molten-core`, "Onyxia's Lair" is `onyxia-s-lair`, "Zul'Gurub" is `zul-gurub`.
+It is a pure function of the name, so a producer's page key and a link to it
+always agree. Two names that slug alike would share a URL; a producer keeps the
+first with a ranked clear (by instance name) and skips the other (see the
+`speedruns` producers). Boss names should get the same treatment (one shared
+helper, same rule).
 
 ## Adding a page family
 
