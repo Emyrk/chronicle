@@ -42,8 +42,10 @@ export type ChartType = 'damage' | 'healing' | 'taken' | 'mitigation'
 
 /** Parse pill data for a player row. */
 export interface ParsePillData {
-  /** Display score (0-100 integer). */
-  displayScore: number;
+  /** Display score or status symbol. */
+  displayScore: ReactNode;
+  /** Accessible label for non-numeric status symbols. */
+  ariaLabel?: string;
   /** Hex color for the score. */
   color: string;
   /** Sub-spec shown in player identity labels, when applicable. */
@@ -530,6 +532,7 @@ export function PlayerMetricRow({
               lineHeight: '1.3',
             }}
             onClick={(e) => e.stopPropagation()}
+            aria-label={parsePill.ariaLabel}
             data-lesson-target="parse-scores"
           >
             {parsePill.displayScore}

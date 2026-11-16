@@ -800,6 +800,25 @@ func (a *API) AdminInvalidateEncounter(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.Response{Message: "Encounter invalidated"})
 }
 
+func (a *API) AdminInvalidateEncounterPlayerPerformance(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	var req chroniclesdk.AdminInvalidateEncounterPlayerPerformanceRequest
+	if !httpapi.Read(ctx, w, r, &req) {
+		return
+	}
+	req.Reason = strings.TrimSpace(req.Reason)
+	if req.Reason == "" {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalidation reason is required"})
+		return
+	}
+	if err := a.Chronicle.InvalidateWoWLogEncounterPlayerPerformance(ctx, req.LogGroupID, req.InstanceID, req.RankingID, req.Reason); err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	a.enqueueRankingsSummaryRefresh(ctx, "player performance invalidation")
+	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.Response{Message: "Player performance invalidated"})
+}
+
 func (a *API) AdminClearEncounterInvalidation(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var req chroniclesdk.AdminEncounterRequest

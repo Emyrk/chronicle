@@ -22,6 +22,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -35,6 +36,23 @@ type noMembershipCohortStore struct {
 func (s *noMembershipCohortStore) GetParseScoreMembershipCohort(context.Context, database.GetParseScoreMembershipCohortParams) ([]float64, error) {
 	s.queries++
 	return nil, fmt.Errorf("membership cohort query must not run")
+}
+
+type rlsInvalidationStore struct {
+	database.Store
+	rows      []database.ListEncounterPlayerPerformanceInvalidationsForInstanceRow
+	sawBypass bool
+}
+
+func (s *rlsInvalidationStore) ListEncounterPlayerPerformanceInvalidationsForInstance(
+	ctx context.Context,
+	_ uuid.UUID,
+) ([]database.ListEncounterPlayerPerformanceInvalidationsForInstanceRow, error) {
+	s.sawBypass = servicetenant.IsBypass(ctx)
+	if !s.sawBypass {
+		return nil, nil
+	}
+	return s.rows, nil
 }
 
 // parsesTestFixture holds state for instance parses handler tests.
@@ -351,6 +369,70 @@ func TestHandleInstanceParses_InvalidInstanceIsUnavailable(t *testing.T) {
 	assert.Equal(t, "invalid", response.Reason)
 	assert.Equal(t, "hps", response.Metric)
 	assert.Empty(t, response.Players)
+}
+
+func TestHandleInstanceParses_ReturnsSelectedPerformanceInvalidation(t *testing.T) {
+	t.Parallel()
+	f := setupParsesTest(t)
+	f.insertSimpleRanking(t, "Ragnaros", "Player-1", 500, 0)
+
+	ctx := testutil.Context(t, testutil.WaitShort)
+	var rankingID uuid.UUID
+	require.NoError(t, f.pool.QueryRow(ctx, `
+		SELECT id
+		FROM encounter_dps_rankings
+		WHERE instance_id = $1 AND encounter_name = 'Ragnaros' AND player_guid = 'Player-1'`,
+		f.instanceID,
+	).Scan(&rankingID))
+
+	count, err := f.store.InvalidateLogEncounterPlayerPerformance(ctx, database.InvalidateLogEncounterPlayerPerformanceParams{
+		RankingID:  rankingID,
+		InstanceID: f.instanceID,
+		LogGroupID: f.logGroupID,
+		Reason:     "Incorrect specialization",
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, count)
+
+	response := requestInstanceParses(t, f.store, f.instanceID, "?encounter_names=Ragnaros&metric=dps")
+	require.True(t, response.Available)
+	assert.Empty(t, response.Players)
+	require.Len(t, response.Invalidations, 1)
+	assert.Equal(t, "Player-1", response.Invalidations[0].PlayerGUID)
+	assert.Equal(t, "Ragnaros", response.Invalidations[0].EncounterName)
+	assert.Equal(t, "Incorrect specialization", response.Invalidations[0].Reason)
+	assert.False(t, response.Invalidations[0].InvalidatedAt.IsZero())
+
+	filtered := requestInstanceParses(t, f.store, f.instanceID, "?encounter_names=Golemagg&metric=dps")
+	assert.Empty(t, filtered.Invalidations)
+}
+
+func TestHandleInstanceParses_LoadsInvalidationsAcrossTenantRLS(t *testing.T) {
+	t.Parallel()
+	f := setupParsesTest(t)
+	invalidatedAt := time.Now().UTC()
+	store := &rlsInvalidationStore{
+		Store: f.store,
+		rows: []database.ListEncounterPlayerPerformanceInvalidationsForInstanceRow{{
+			PlayerGuid:    "Player-1",
+			PlayerName:    "Speedhack",
+			EncounterName: "High Priestess Arlokk",
+			Reason:        "test",
+			InvalidatedAt: pgtype.Timestamptz{Time: invalidatedAt, Valid: true},
+		}},
+	}
+
+	response := requestInstanceParsesWithHandler(
+		t,
+		servicerankings.NewTestableParsesService(store, slog.Default()).HandleInstanceParses,
+		f.instanceID,
+		"?encounter_names=High%20Priestess%20Arlokk&metric=dps",
+	)
+
+	require.True(t, store.sawBypass)
+	require.Len(t, response.Invalidations, 1)
+	assert.Equal(t, "Speedhack", response.Invalidations[0].PlayerName)
+	assert.Equal(t, "test", response.Invalidations[0].Reason)
 }
 
 func TestHandleInstanceParses_PersistedProjection(t *testing.T) {

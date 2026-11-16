@@ -73,28 +73,28 @@ type RankingsEntry struct {
 // InstanceRankingRecord is a raw per-player ranking row recorded for one encounter
 // in a specific log instance. Zero-value metrics are retained for debugging.
 type InstanceRankingRecord struct {
-	EncounterVariant string `json:"encounter_variant,omitempty"`
-	Difficulty      string     `json:"difficulty"`
-	ID              uuid.UUID  `json:"id"`
-	EncounterID     *uuid.UUID `json:"encounter_id,omitempty"`
-	EncounterName   string     `json:"encounter_name"`
-	PlayerGUID      string     `json:"player_guid"`
-	PlayerName      string     `json:"player_name"`
-	PlayerClass     string     `json:"player_class"`
-	PlayerSpec      string     `json:"player_spec"`
-	PlayerSubSpec   string     `json:"player_sub_spec,omitempty"`
-	PlayerRole      string     `json:"player_role"`
-	PlayerLevel     int16      `json:"player_level"`
-	DamageDone      int64      `json:"damage_done"`
-	HealingDone     int64      `json:"healing_done"`
-	AbsorbedDone    int64      `json:"absorbed_done"`
-	AlivePercentage *float64   `json:"alive_percentage,omitempty"`
-	PlayerDeaths    *int32     `json:"player_deaths,omitempty"`
-	DurationSecs    float64    `json:"duration_secs"`
-	DPS             float64    `json:"dps"`
-	HPS             float64    `json:"hps"`
-	LogHashedSlug   string     `json:"log_hashed_slug"`
-	KilledAt        time.Time  `json:"killed_at"`
+	EncounterVariant string     `json:"encounter_variant,omitempty"`
+	Difficulty       string     `json:"difficulty"`
+	ID               uuid.UUID  `json:"id"`
+	EncounterID      *uuid.UUID `json:"encounter_id,omitempty"`
+	EncounterName    string     `json:"encounter_name"`
+	PlayerGUID       string     `json:"player_guid"`
+	PlayerName       string     `json:"player_name"`
+	PlayerClass      string     `json:"player_class"`
+	PlayerSpec       string     `json:"player_spec"`
+	PlayerSubSpec    string     `json:"player_sub_spec,omitempty"`
+	PlayerRole       string     `json:"player_role"`
+	PlayerLevel      int16      `json:"player_level"`
+	DamageDone       int64      `json:"damage_done"`
+	HealingDone      int64      `json:"healing_done"`
+	AbsorbedDone     int64      `json:"absorbed_done"`
+	AlivePercentage  *float64   `json:"alive_percentage,omitempty"`
+	PlayerDeaths     *int32     `json:"player_deaths,omitempty"`
+	DurationSecs     float64    `json:"duration_secs"`
+	DPS              float64    `json:"dps"`
+	HPS              float64    `json:"hps"`
+	LogHashedSlug    string     `json:"log_hashed_slug"`
+	KilledAt         time.Time  `json:"killed_at"`
 }
 
 // RankingsLeaderboardResponse wraps leaderboard entries with total count for pagination.
@@ -213,6 +213,18 @@ type InstanceParsesResponse struct {
 
 	// Players contains one entry per unique player GUID in the instance.
 	Players []InstanceParsePlayer `json:"players"`
+
+	// Invalidations contains manually invalidated performances for the selected encounters.
+	Invalidations []InstanceParseInvalidation `json:"invalidations"`
+}
+
+// InstanceParseInvalidation explains why one player's performance has no parse.
+type InstanceParseInvalidation struct {
+	PlayerGUID    string    `json:"player_guid"`
+	PlayerName    string    `json:"player_name"`
+	EncounterName string    `json:"encounter_name"`
+	Reason        string    `json:"reason"`
+	InvalidatedAt time.Time `json:"invalidated_at"`
 }
 
 // InstanceParsePlayer is a player's parse data across selected encounters.

@@ -1775,7 +1775,7 @@ export function useAdminInvalidateLogs() {
       }
       queryClient.invalidateQueries({ queryKey: ["instance"] });
       for (const instanceId of instanceIds) {
-        queryClient.invalidateQueries({ queryKey: ["instance-parses", instanceId] });
+        queryClient.invalidateQueries({ queryKey: ["rankings", "instance-parses", instanceId] });
         queryClient.invalidateQueries({ queryKey: ["instance-speedrun", instanceId] });
         queryClient.invalidateQueries({ queryKey: ["instance-ranking-records", instanceId] });
       }
@@ -1799,7 +1799,7 @@ export function useAdminInvalidateInstance() {
     onSuccess: (_data, { logGroupId, instanceId }) => {
       queryClient.invalidateQueries({ queryKey: ["logGroup", logGroupId] });
       queryClient.invalidateQueries({ queryKey: ["instance"] });
-      queryClient.invalidateQueries({ queryKey: ["instance-parses", instanceId] });
+      queryClient.invalidateQueries({ queryKey: ["rankings", "instance-parses", instanceId] });
       queryClient.invalidateQueries({ queryKey: ["instance-speedrun", instanceId] });
       queryClient.invalidateQueries({ queryKey: ["instance-ranking-records", instanceId] });
       queryClient.invalidateQueries({ queryKey: ["rankings"] });
@@ -1821,8 +1821,28 @@ export function useAdminInvalidateEncounter() {
     },
     onSuccess: (_data, { instanceId }) => {
       queryClient.invalidateQueries({ queryKey: ["instance"] });
-      queryClient.invalidateQueries({ queryKey: ["instance-parses", instanceId] });
+      queryClient.invalidateQueries({ queryKey: ["rankings", "instance-parses", instanceId] });
       queryClient.invalidateQueries({ queryKey: ["instance-speedrun", instanceId] });
+      queryClient.invalidateQueries({ queryKey: ["instance-ranking-records", instanceId] });
+      queryClient.invalidateQueries({ queryKey: ["rankings"] });
+    },
+  });
+}
+
+export function useAdminInvalidatePerformance() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ logGroupId, instanceId, rankingId, reason }: { logGroupId: string; instanceId: string; rankingId: string; reason: string }) => {
+      const response = await fetch("/api/v1/admin/performances/invalidate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ log_group_id: logGroupId, instance_id: instanceId, ranking_id: rankingId, reason }),
+      });
+      if (!response.ok) throw new Error("Failed to invalidate player performance");
+      return response.json() as Promise<{ message: string }>;
+    },
+    onSuccess: (_data, { instanceId }) => {
+      queryClient.invalidateQueries({ queryKey: ["rankings", "instance-parses", instanceId] });
       queryClient.invalidateQueries({ queryKey: ["instance-ranking-records", instanceId] });
       queryClient.invalidateQueries({ queryKey: ["rankings"] });
     },
@@ -1852,7 +1872,7 @@ export function useAdminClearLogInvalidation() {
       }
       queryClient.invalidateQueries({ queryKey: ["instance"] });
       for (const instanceId of instanceIds) {
-        queryClient.invalidateQueries({ queryKey: ["instance-parses", instanceId] });
+        queryClient.invalidateQueries({ queryKey: ["rankings", "instance-parses", instanceId] });
         queryClient.invalidateQueries({ queryKey: ["instance-speedrun", instanceId] });
         queryClient.invalidateQueries({ queryKey: ["instance-ranking-records", instanceId] });
       }
@@ -1876,7 +1896,7 @@ export function useAdminClearInstanceInvalidation() {
     onSuccess: (_data, { logGroupId, instanceId }) => {
       queryClient.invalidateQueries({ queryKey: ["logGroup", logGroupId] });
       queryClient.invalidateQueries({ queryKey: ["instance"] });
-      queryClient.invalidateQueries({ queryKey: ["instance-parses", instanceId] });
+      queryClient.invalidateQueries({ queryKey: ["rankings", "instance-parses", instanceId] });
       queryClient.invalidateQueries({ queryKey: ["instance-speedrun", instanceId] });
       queryClient.invalidateQueries({ queryKey: ["instance-ranking-records", instanceId] });
       queryClient.invalidateQueries({ queryKey: ["rankings"] });
@@ -1898,7 +1918,7 @@ export function useAdminClearEncounterInvalidation() {
     },
     onSuccess: (_data, { instanceId }) => {
       queryClient.invalidateQueries({ queryKey: ["instance"] });
-      queryClient.invalidateQueries({ queryKey: ["instance-parses", instanceId] });
+      queryClient.invalidateQueries({ queryKey: ["rankings", "instance-parses", instanceId] });
       queryClient.invalidateQueries({ queryKey: ["instance-speedrun", instanceId] });
       queryClient.invalidateQueries({ queryKey: ["instance-ranking-records", instanceId] });
       queryClient.invalidateQueries({ queryKey: ["rankings"] });

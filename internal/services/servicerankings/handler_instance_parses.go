@@ -30,6 +30,7 @@ type parsesQuerier interface {
 	IsLogInstanceInvalid(ctx context.Context, id uuid.UUID) (bool, error)
 	GetLogInstanceStartTime(ctx context.Context, id uuid.UUID) (pgtype.Timestamptz, error)
 	ListRankingsForInstance(ctx context.Context, instanceID uuid.UUID) ([]database.ListRankingsForInstanceRow, error)
+	ListEncounterPlayerPerformanceInvalidationsForInstance(ctx context.Context, instanceID uuid.UUID) ([]database.ListEncounterPlayerPerformanceInvalidationsForInstanceRow, error)
 	GetAnyParseScoreReceiptForTenantInstance(ctx context.Context, arg database.GetAnyParseScoreReceiptForTenantInstanceParams) (database.ParseScoreReceipt, error)
 	HasParseScoreResultsForTenantInstance(ctx context.Context, arg database.HasParseScoreResultsForTenantInstanceParams) (bool, error)
 	ListParseScoreResultsForContract(ctx context.Context, arg database.ListParseScoreResultsForContractParams) ([]database.ParseScoreResultsResolved, error)
@@ -237,6 +238,14 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 		}
 	}
 
+	invalidations, err := loadInstanceParseInvalidations(ctx, store, instanceID, encounterSet)
+	if err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{Message: "Failed to fetch performance invalidations", Detail: err.Error()},
+		})
+		return
+	}
+
 	// A complete receipt makes persisted historical results authoritative. This
 	// accepts both legacy snapshot-backed receipts and new windowed receipts.
 	if timeframe == "historical" && lookbackDays == parsepolicy.DefaultLookbackDays {
@@ -262,7 +271,7 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 				httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.InstanceParsesResponse{
 					Available: true, SnapshotID: receiptSnapshotID, Cutoff: receiptCutoff,
 					LookbackDays: int32(receipt.LookbackDays), CohortMode: string(persisted.cohortMode),
-					SelectedEncounters: encounterNames, Metric: string(metric), Players: persisted.players,
+					SelectedEncounters: encounterNames, Metric: string(metric), Players: persisted.players, Invalidations: invalidations,
 				})
 				return
 			}
@@ -281,7 +290,7 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 				}
 				httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.InstanceParsesResponse{
 					Available: true, Cutoff: cutoff, LookbackDays: int32(lookbackDays), CohortMode: string(cohortMode),
-					SelectedEncounters: encounterNames, Metric: string(metric), Players: persisted.players,
+					SelectedEncounters: encounterNames, Metric: string(metric), Players: persisted.players, Invalidations: invalidations,
 				})
 				return
 			}
@@ -462,7 +471,38 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 		SelectedEncounters: encounterNames,
 		Metric:             string(metric),
 		Players:            result,
+		Invalidations:      invalidations,
 	})
+}
+
+func loadInstanceParseInvalidations(
+	ctx context.Context,
+	store parsesQuerier,
+	instanceID uuid.UUID,
+	encounterSet map[string]struct{},
+) ([]chroniclesdk.InstanceParseInvalidation, error) {
+	// The instance ID already scopes this public parse response. Resolve markers
+	// across tenant RLS so root-domain and cross-community instance links show the
+	// same invalidation state as the instance itself.
+	rows, err := store.ListEncounterPlayerPerformanceInvalidationsForInstance(servicetenant.AdminBypass(ctx), instanceID)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]chroniclesdk.InstanceParseInvalidation, 0, len(rows))
+	for _, row := range rows {
+		if _, selected := encounterSet[row.EncounterName]; !selected {
+			continue
+		}
+		result = append(result, chroniclesdk.InstanceParseInvalidation{
+			PlayerGUID:    row.PlayerGuid,
+			PlayerName:    row.PlayerName,
+			EncounterName: row.EncounterName,
+			Reason:        row.Reason,
+			InvalidatedAt: row.InvalidatedAt.Time,
+		})
+	}
+	return result, nil
 }
 
 type instanceParseTenantConfig struct {

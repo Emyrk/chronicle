@@ -157,6 +157,13 @@ type AdminInvalidateEncounterRequest struct {
 	Reason      string    `json:"reason"`
 }
 
+type AdminInvalidateEncounterPlayerPerformanceRequest struct {
+	LogGroupID uuid.UUID `json:"log_group_id"`
+	InstanceID uuid.UUID `json:"instance_id"`
+	RankingID  uuid.UUID `json:"ranking_id"`
+	Reason     string    `json:"reason"`
+}
+
 type AdminEncounterRequest struct {
 	LogGroupID  uuid.UUID `json:"log_group_id"`
 	InstanceID  uuid.UUID `json:"instance_id"`

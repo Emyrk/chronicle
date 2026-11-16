@@ -606,6 +606,11 @@ func (api *API) Routes() chi.Router {
 					r.Post("/clear-invalidation", api.AdminClearEncounterInvalidation)
 				})
 
+				r.Route("/performances", func(r chi.Router) {
+					r.Use(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanInvalidate_logs_User))
+					r.Post("/invalidate", api.AdminInvalidateEncounterPlayerPerformance)
+				})
+
 				r.Route("/parses", func(r chi.Router) {
 					r.Use(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User))
 					r.Get("/rankings/status", api.AdminRankingsRefreshStatus)

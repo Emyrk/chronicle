@@ -27,7 +27,7 @@ import (
 
 func TestLeaderboardSourceActionsRetainRepairObligation(t *testing.T) {
 	t.Parallel()
-	for _, action := range []string{"delete_instance", "invalidate", "clear_invalidation", "invalidate_instance", "clear_instance_invalidation", "invalidate_encounter", "clear_encounter_invalidation", "reparse", "unlist_reparse_lock_order", "enqueue_failure"} {
+	for _, action := range []string{"delete_instance", "invalidate", "clear_invalidation", "invalidate_instance", "clear_instance_invalidation", "invalidate_encounter", "clear_encounter_invalidation", "invalidate_performance", "reparse", "unlist_reparse_lock_order", "enqueue_failure"} {
 		t.Run(action, func(t *testing.T) {
 			t.Parallel()
 			ctx := testutil.Context(t, testutil.WaitLong)
@@ -53,7 +53,8 @@ func TestLeaderboardSourceActionsRetainRepairObligation(t *testing.T) {
 			encounter := uuid.New()
 			_, err = store.InsertEncounter(admin, database.InsertEncounterParams{ID: encounter, InstanceID: instance, Name: "Boss", Boss: true, KillType: database.KillTypeClean, Remaining: guid.GUIDs{}, StartTime: database.Timestamptz(time.Now().Add(-time.Minute)), EndTime: database.Timestamptz(time.Now())})
 			require.NoError(t, err)
-			require.NoError(t, store.InsertEncounterDpsRanking(admin, database.InsertEncounterDpsRankingParams{InstanceID: instance, EncounterID: uuid.NullUUID{UUID: encounter, Valid: true}, InstanceName: "Molten Core", EncounterName: "Boss", RealmID: realm, RealmName: "Test Realm", DifficultyName: "Normal", MaxPlayers: 40, PlayerGuid: "Player", PlayerName: "Player", PlayerClass: "MAGE", PlayerSpec: "Frost", PlayerRole: "dps", Dps: 100, DurationSecs: 60, KilledAt: database.Timestamptz(time.Now())}))
+			rankingParams := database.InsertEncounterDpsRankingParams{InstanceID: instance, EncounterID: uuid.NullUUID{UUID: encounter, Valid: true}, InstanceName: "Molten Core", EncounterName: "Boss", RealmID: realm, RealmName: "Test Realm", DifficultyName: "Normal", MaxPlayers: 40, PlayerGuid: "Player", PlayerName: "Player", PlayerClass: "MAGE", PlayerSpec: "Frost", PlayerRole: "dps", Dps: 100, DurationSecs: 60, KilledAt: database.Timestamptz(time.Now())}
+			require.NoError(t, store.InsertEncounterDpsRanking(admin, rankingParams))
 			err = store.InTx(admin, func(tx database.Store) error {
 				sources, err := tx.RankingRunSources(admin, []uuid.UUID{instance})
 				if err != nil {
@@ -141,6 +142,17 @@ func TestLeaderboardSourceActionsRetainRepairObligation(t *testing.T) {
 				var invalidated bool
 				require.NoError(t, pool.QueryRow(admin, "SELECT invalidated_at IS NOT NULL FROM log_instance_encounters WHERE id=$1", encounter).Scan(&invalidated))
 				require.False(t, invalidated)
+			case "invalidate_performance":
+				var rankingID uuid.UUID
+				require.NoError(t, pool.QueryRow(admin, `SELECT id FROM encounter_dps_rankings WHERE instance_id=$1 AND encounter_id=$2 AND player_guid='Player'`, instance, encounter).Scan(&rankingID))
+				require.NoError(t, c.InvalidateWoWLogEncounterPlayerPerformance(ctx, group, instance, rankingID, "wrong spec"))
+				var rankingCount, invalidationCount int
+				require.NoError(t, pool.QueryRow(admin, `SELECT count(*) FROM encounter_dps_rankings WHERE id=$1`, rankingID).Scan(&rankingCount))
+				require.NoError(t, pool.QueryRow(admin, `SELECT count(*) FROM encounter_player_performance_invalidations WHERE id=$1 AND reason='wrong spec'`, rankingID).Scan(&invalidationCount))
+				require.NoError(t, store.InsertEncounterDpsRanking(admin, rankingParams))
+				require.NoError(t, pool.QueryRow(admin, `SELECT count(*) FROM encounter_dps_rankings WHERE instance_id=$1 AND encounter_id=$2 AND player_guid='Player'`, instance, encounter).Scan(&rankingCount))
+				require.Zero(t, rankingCount)
+				require.Equal(t, 1, invalidationCount)
 			case "unlist_reparse_lock_order":
 				holder, err := pool.Begin(ctx)
 				require.NoError(t, err)

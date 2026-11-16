@@ -1361,6 +1361,51 @@ func (c *Chronicle) InvalidateWoWLogEncounter(ctx context.Context, logID, instan
 	return nil
 }
 
+func (c *Chronicle) InvalidateWoWLogEncounterPlayerPerformance(ctx context.Context, logID, instanceID, rankingID uuid.UUID, reason string) error {
+	sourceCtx, resolveErr := serviceratings.GroupSourceContext(ctx, c.Zed, logID)
+	if resolveErr != nil {
+		return resolveErr
+	}
+	ctx = sourceCtx
+	identities, err := c.Zed.RankingRunIdentitiesByInstanceIDs(ctx, []uuid.UUID{instanceID})
+	if err != nil {
+		return fmt.Errorf("load ranking run identity: %w", err)
+	}
+	if len(identities) == 0 {
+		return sql.ErrNoRows
+	}
+	if err := c.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
+		if err := tx.AcquireRankingRunRefreshLock(ctx); err != nil {
+			return err
+		}
+		if _, err := tx.LockWoWLogGroupParseGeneration(ctx, logID); err != nil {
+			return err
+		}
+		if err := serviceratings.EnqueueSourceRepairTx(ctx, tx, []uuid.UUID{instanceID}); err != nil {
+			return err
+		}
+		invalidated, err := tx.InvalidateLogEncounterPlayerPerformance(ctx, database.InvalidateLogEncounterPlayerPerformanceParams{
+			LogGroupID: logID,
+			InstanceID: instanceID,
+			RankingID:  rankingID,
+			Reason:     reason,
+		})
+		if err != nil {
+			return err
+		}
+		if invalidated == 0 {
+			return sql.ErrNoRows
+		}
+		return c.EnqueueRankingRunRefreshTx(ctx, tx, rankingRunIdentitySeeds(identities)...)
+	}, nil); err != nil {
+		return fmt.Errorf("invalidate encounter player performance: %w", err)
+	}
+	if err := c.refreshParseScoreMemberships(ctx, logID); err != nil {
+		return fmt.Errorf("refresh DPS/HPS parse memberships after player performance invalidation: %w", err)
+	}
+	return nil
+}
+
 func (c *Chronicle) ClearWoWLogEncounterInvalidation(ctx context.Context, logID, instanceID, encounterID uuid.UUID) error {
 	sourceCtx, resolveErr := serviceratings.GroupSourceContext(ctx, c.Zed, logID)
 	if resolveErr != nil {

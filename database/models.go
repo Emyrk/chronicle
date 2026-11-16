@@ -1645,6 +1645,18 @@ type EncounterDpsRankingsResolved struct {
 	EncounterVariant   pgtype.Text        `db:"encounter_variant" json:"encounter_variant"`
 }
 
+type EncounterPlayerPerformanceInvalidation struct {
+	ID            uuid.UUID          `db:"id" json:"id"`
+	TenantID      uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	InstanceID    uuid.UUID          `db:"instance_id" json:"instance_id"`
+	EncounterID   uuid.UUID          `db:"encounter_id" json:"encounter_id"`
+	PlayerGuid    string             `db:"player_guid" json:"player_guid"`
+	PlayerName    string             `db:"player_name" json:"player_name"`
+	EncounterName string             `db:"encounter_name" json:"encounter_name"`
+	Reason        string             `db:"reason" json:"reason"`
+	InvalidatedAt pgtype.Timestamptz `db:"invalidated_at" json:"invalidated_at"`
+}
+
 type EventRepairItem struct {
 	OperationID  uuid.UUID `db:"operation_id" json:"operation_id"`
 	InstanceID   uuid.UUID `db:"instance_id" json:"instance_id"`
