@@ -105,7 +105,7 @@ func characterSpec(p database.GetGamePlayerByGUIDRow) string {
 	for i, tree := range p.Talents.Trees {
 		summary[i] = uint8(min(max(tree.PointsSpent, 0), math.MaxUint8))
 	}
-	spec := wowspec.InferSpec(string(p.Class), summary)
+	spec := wowspec.InferSpecAtLevel(string(p.Class), summary, int32(p.Level))
 	if spec == "Unknown" {
 		return ""
 	}

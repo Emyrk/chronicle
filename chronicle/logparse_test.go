@@ -231,6 +231,22 @@ func TestInferTalentSubSpec(t *testing.T) {
 	}
 }
 
+func TestExtractTalentInfoRejectsIncompleteSnapshot(t *testing.T) {
+	t.Parallel()
+
+	level := int32(60)
+	spec, subSpec, _, _ := extractTalentInfoFromSnapshot(
+		"WARRIOR",
+		&combatant.Talents{Summary: [3]uint8{5, 0, 0}},
+		"",
+		&level,
+		database.WoWFlavor{database.FlavorVanilla},
+		nil,
+	)
+	require.Equal(t, "Unknown", spec)
+	require.Empty(t, subSpec)
+}
+
 func TestExtractTalentInfoUsesObservedFeralForm(t *testing.T) {
 	t.Parallel()
 
@@ -279,7 +295,7 @@ func TestExtractTalentInfoUsesObservedFeralForm(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			_, subSpec, _, _ := extractTalentInfoFromSnapshot("DRUID", tt.talents, tt.observedForm, tt.flavor, treeData)
+			_, subSpec, _, _ := extractTalentInfoFromSnapshot("DRUID", tt.talents, tt.observedForm, nil, tt.flavor, treeData)
 			require.Equal(t, tt.want, subSpec)
 		})
 	}
