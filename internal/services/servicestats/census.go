@@ -14,23 +14,27 @@ import (
 
 // The census page answers "which classes and races are most common?" from the
 // characters seen in listed raid logs, over two windows. It runs one aggregate
-// per window (the same game_players scan the census page's own cache does) once
-// an hour, never on a page request.
+// (the same game_players scan the census page's own cache does, both windows in
+// one pass) once an hour, never on a page request.
 
 const (
 	censusKey = "census"
 	// censusCadence matches the census page cache's hourly refresh. The query is
-	// one indexed scan of the characters updated in the window (two per run, 30
-	// and 90 days), so hourly keeps the "Updated" line honest without load.
+	// one indexed scan of the characters updated in the longer window, counting
+	// both windows in that pass, so hourly keeps the "Updated" line honest
+	// without load.
 	censusCadence = time.Hour
 	// censusMinSample is the number of characters seen in the last 30 days
 	// below which the page is noindex: percentages over fewer are noise.
 	censusMinSample = 100
 )
 
-// censusWindowDays are the windows the page shows, shortest first. The first is
-// the one the lead and the sample size use.
-var censusWindowDays = []int{30, 90}
+// The windows the page shows. The recent one is what the lead and the sample
+// size use; the query counts both in a single pass.
+const (
+	censusRecentDays = 30
+	censusLongDays   = 90
+)
 
 const censusUnknown = "Unknown"
 
@@ -59,27 +63,60 @@ type censusPayload struct {
 	Windows []censusWindow `json:"windows"`
 }
 
-type censusProducer struct{}
+// censusCount is one class, race and faction group's characters in a window.
+type censusCount struct {
+	Class   database.WowPlayableClass
+	Race    database.WowPlayableRace
+	Faction database.NullWowPlayerFaction
+	Count   int64
+}
+
+// censusProducer computes the census. now overrides time.Now in tests.
+type censusProducer struct{ now func() time.Time }
 
 func (censusProducer) Key() string            { return censusKey }
 func (censusProducer) Cadence() time.Duration { return censusCadence }
 func (censusProducer) Timeout() time.Duration { return 0 }
 
-func (censusProducer) Compute(ctx context.Context, tenant Tenant) ([]Output, error) {
-	now := time.Now()
-	var payload censusPayload
-	for _, days := range censusWindowDays {
-		rows, err := tenant.Store.StatsCensusCounts(ctx, pgtype.Timestamptz{Time: now.AddDate(0, 0, -days), Valid: true})
-		if err != nil {
-			return nil, fmt.Errorf("census counts for %d days: %w", days, err)
-		}
-		payload.Windows = append(payload.Windows, buildCensusWindow(rows, days, tenant.Flavor))
+// censusCutoff is the start of a window of the given days, on a UTC day
+// boundary. Quantizing to the day keeps the window from sliding every hour, so
+// the payload (and with it payload_changed_at, the sitemap lastmod and the
+// IndexNow ping) changes only when counts really change: new characters, or a
+// character aging out at midnight.
+func censusCutoff(now time.Time, days int) time.Time {
+	day := now.UTC().Truncate(24 * time.Hour)
+	return day.AddDate(0, 0, -days)
+}
+
+func (p censusProducer) Compute(ctx context.Context, tenant Tenant) ([]Output, error) {
+	now := time.Now
+	if p.now != nil {
+		now = p.now
 	}
-	first := payload.Windows[0]
-	if first.Total == 0 {
+	rows, err := tenant.Store.StatsCensusCounts(ctx, database.StatsCensusCountsParams{
+		SinceRecent: pgtype.Timestamptz{Time: censusCutoff(now(), censusRecentDays), Valid: true},
+		SinceLong:   pgtype.Timestamptz{Time: censusCutoff(now(), censusLongDays), Valid: true},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("census counts: %w", err)
+	}
+	var recent, long []censusCount
+	for _, r := range rows {
+		if r.CountRecent > 0 {
+			recent = append(recent, censusCount{r.Class, r.Race, r.Faction, r.CountRecent})
+		}
+		if r.CountLong > 0 {
+			long = append(long, censusCount{r.Class, r.Race, r.Faction, r.CountLong})
+		}
+	}
+	payload := censusPayload{Windows: []censusWindow{
+		buildCensusWindow(recent, censusRecentDays, tenant.Flavor),
+		buildCensusWindow(long, censusLongDays, tenant.Flavor),
+	}}
+	if payload.Windows[0].Total == 0 {
 		return nil, nil
 	}
-	return []Output{{Key: censusKey, Payload: payload, SampleN: int(first.Total), MinSample: censusMinSample}}, nil
+	return []Output{{Key: censusKey, Payload: payload, SampleN: int(payload.Windows[0].Total), MinSample: censusMinSample}}, nil
 }
 
 func censusFamily() Family {
@@ -88,7 +125,7 @@ func censusFamily() Family {
 
 // buildCensusWindow groups the counts by class and by race, splitting each by
 // faction.
-func buildCensusWindow(rows []database.StatsCensusCountsRow, days int, flavor database.WoWFlavor) censusWindow {
+func buildCensusWindow(rows []censusCount, days int, flavor database.WoWFlavor) censusWindow {
 	w := censusWindow{Days: days}
 	classes := map[string]*censusRow{}
 	races := map[string]*censusRow{}
@@ -203,9 +240,16 @@ func renderCensus(site Site, _ Page, snap Snapshot) (Content, error) {
 	recent := p.Windows[0]
 
 	lead := fmt.Sprintf("As of %s, %s characters were seen in %s raid logs (last %d days).", asOf, FormatInt(recent.Total), label, recent.Days)
-	if top := mostCommon(recent.Classes); top != nil {
+	if top := mostCommon(recent.Classes); len(top) == 1 {
 		lead = fmt.Sprintf("As of %s, %s is the most common class among %s characters seen in %s raid logs (last %d days) at %s.",
-			asOf, top.Name, FormatInt(recent.Total), label, recent.Days, percent(top.total(), recent.Total))
+			asOf, top[0].Name, FormatInt(recent.Total), label, recent.Days, percent(top[0].total(), recent.Total))
+	} else if len(top) > 1 {
+		names := make([]string, len(top))
+		for i, r := range top {
+			names[i] = r.Name
+		}
+		lead = fmt.Sprintf("As of %s, %s are tied as the most common classes among %s characters seen in %s raid logs (last %d days) at %s each.",
+			asOf, joinNames(names), FormatInt(recent.Total), label, recent.Days, percent(top[0].total(), recent.Total))
 	}
 	if factions := factionSentence(recent); factions != "" {
 		lead += " " + factions
@@ -245,7 +289,7 @@ func renderCensus(site Site, _ Page, snap Snapshot) (Content, error) {
 		ID:      "what-this-counts",
 		Heading: "What these numbers count",
 		Paragraphs: []string{
-			"Each character counts once per window, however many raids it appeared in. The census counts characters seen in listed raid logs that players uploaded to Chronicle; characters seen only in unlisted logs or in invalidated logs are left out.",
+			"Each character counts once per window, however many raids it appeared in. The census counts characters seen in listed raid logs that players uploaded to Chronicle; characters seen only in unlisted logs, invalidated logs or dungeons are left out.",
 			"It is not the server's population: players who never upload, or raid with people who don't, do not appear. Percentages are shares of the characters counted in that window. Faction is the one the log recorded, or the race's faction when it did not.",
 		},
 	})
@@ -258,22 +302,39 @@ func renderCensus(site Site, _ Page, snap Snapshot) (Content, error) {
 	return content, nil
 }
 
-// mostCommon is the largest row that has a known name (the first on a tie), or nil.
-func mostCommon(rows []censusRow) *censusRow {
-	var top *censusRow
-	for i := range rows {
-		if rows[i].Name == censusUnknown || rows[i].total() == 0 {
+// mostCommon is every row with a known name that ties for the largest total
+// (rows are sorted, so ties are adjacent and in name order), or nil.
+func mostCommon(rows []censusRow) []censusRow {
+	var top []censusRow
+	for _, r := range rows {
+		if r.Name == censusUnknown || r.total() == 0 {
 			continue
 		}
-		if top == nil || rows[i].total() > top.total() {
-			top = &rows[i]
+		if len(top) > 0 && r.total() < top[0].total() {
+			continue
 		}
+		if len(top) > 0 && r.total() > top[0].total() {
+			top = nil
+		}
+		top = append(top, r)
 	}
 	return top
 }
 
-// factionSentence is "By faction, 61.2% are Horde and 38.8% Alliance." over the
-// characters with a known faction, or "" when none have one.
+// joinNames is "A", "A and B" or "A, B and C".
+func joinNames(names []string) string {
+	switch len(names) {
+	case 0:
+		return ""
+	case 1:
+		return names[0]
+	}
+	return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
+}
+
+// factionSentence says how the characters with a known faction split, naming
+// that denominator (it is smaller than the total when some characters have no
+// faction), or "" when none have one.
 func factionSentence(w censusWindow) string {
 	var horde, alliance int64
 	for _, c := range w.Classes {
@@ -284,7 +345,8 @@ func factionSentence(w censusWindow) string {
 	if known == 0 {
 		return ""
 	}
-	return fmt.Sprintf("By faction, %s are Horde and %s Alliance.", percent(horde, known), percent(alliance, known))
+	return fmt.Sprintf("Of the %s characters with a known faction, %s are Horde and %s Alliance.",
+		FormatInt(known), percent(horde, known), percent(alliance, known))
 }
 
 func windowLabel(windows []censusWindow) string {

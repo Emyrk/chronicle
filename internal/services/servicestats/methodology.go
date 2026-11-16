@@ -19,7 +19,7 @@ func methodologyPage() StaticPage {
 						Paragraphs: []string{
 							"Every number comes from combat logs uploaded to Chronicle. Only listed logs count; unlisted uploads and logs an admin invalidated are excluded.",
 							"A raid uploaded by several players counts once. Player counts are distinct characters seen in those logs, so they undercount everyone who plays on the server.",
-							"The class and race census counts each character once per window (30 and 90 days). A character seen only in unlisted or invalidated logs is left out; faction is the one the log recorded, or the race's faction when it did not.",
+							"The class and race census counts each character once per window (30 and 90 days). A character seen only in unlisted logs, invalidated logs or dungeons is left out; faction is the one the log recorded, or the race's faction when it did not.",
 						},
 					},
 					{
