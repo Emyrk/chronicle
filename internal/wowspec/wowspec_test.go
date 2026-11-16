@@ -77,6 +77,27 @@ func TestInferSpec(t *testing.T) {
 	}
 }
 
+func TestInferSpecAtLevel(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name     string
+		level    int32
+		talents  [3]uint8
+		expected string
+	}{
+		{name: "level 60 missing ten points", level: 60, talents: [3]uint8{41, 0, 0}, expected: "Unknown"},
+		{name: "level 60 missing nine points", level: 60, talents: [3]uint8{42, 0, 0}, expected: "Arms"},
+		{name: "low level may omit two points", level: 12, talents: [3]uint8{1, 0, 0}, expected: "Arms"},
+		{name: "unknown level skips completeness check", level: 0, talents: [3]uint8{5, 0, 0}, expected: "Arms"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.expected, wowspec.InferSpecAtLevel("WARRIOR", tt.talents, tt.level))
+		})
+	}
+}
+
 func TestInferRoles(t *testing.T) {
 	t.Parallel()
 

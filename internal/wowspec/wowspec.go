@@ -48,6 +48,27 @@ func InferSpec(class string, talentSummary [3]uint8) string {
 	return trees[best]
 }
 
+const incompleteTalentPointThreshold = 10
+
+// InferSpecAtLevel returns "Unknown" when the talent snapshot is missing at
+// least 10 points that the player could have earned at their level. A level of
+// zero or less means the level is unknown, so only the talent distribution is
+// used.
+func InferSpecAtLevel(class string, talentSummary [3]uint8, level int32) string {
+	if level > 0 {
+		expectedPoints := int(level) - 9
+		if expectedPoints < 0 {
+			expectedPoints = 0
+		}
+		spentPoints := int(talentSummary[0]) + int(talentSummary[1]) + int(talentSummary[2])
+		if expectedPoints-spentPoints >= incompleteTalentPointThreshold {
+			return "Unknown"
+		}
+	}
+
+	return InferSpec(class, talentSummary)
+}
+
 // Classes returns all recognized class names.
 func Classes() []string {
 	out := make([]string, 0, len(specMap))
