@@ -3149,6 +3149,18 @@ export interface InstanceParseBoss {
 
 // From chroniclesdk/rankings.go
 /**
+ * InstanceParseInvalidation explains why one player's performance has no parse.
+ */
+export interface InstanceParseInvalidation {
+    readonly player_guid: string;
+    readonly player_name: string;
+    readonly encounter_name: string;
+    readonly reason: string;
+    readonly invalidated_at: string;
+}
+
+// From chroniclesdk/rankings.go
+/**
  * InstanceParsePlayer is a player's parse data across selected encounters.
  */
 export interface InstanceParsePlayer {
@@ -3211,6 +3223,10 @@ export interface InstanceParsesResponse {
      * Players contains one entry per unique player GUID in the instance.
      */
     readonly players: readonly InstanceParsePlayer[];
+    /**
+     * Invalidations contains manually invalidated performances for the selected encounters.
+     */
+    readonly invalidations: readonly InstanceParseInvalidation[];
 }
 
 // From chroniclesdk/log.go

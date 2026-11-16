@@ -1775,7 +1775,7 @@ export function useAdminInvalidateLogs() {
       }
       queryClient.invalidateQueries({ queryKey: ["instance"] });
       for (const instanceId of instanceIds) {
-        queryClient.invalidateQueries({ queryKey: ["instance-parses", instanceId] });
+        queryClient.invalidateQueries({ queryKey: ["rankings", "instance-parses", instanceId] });
         queryClient.invalidateQueries({ queryKey: ["instance-speedrun", instanceId] });
         queryClient.invalidateQueries({ queryKey: ["instance-ranking-records", instanceId] });
       }
@@ -1799,7 +1799,7 @@ export function useAdminInvalidateInstance() {
     onSuccess: (_data, { logGroupId, instanceId }) => {
       queryClient.invalidateQueries({ queryKey: ["logGroup", logGroupId] });
       queryClient.invalidateQueries({ queryKey: ["instance"] });
-      queryClient.invalidateQueries({ queryKey: ["instance-parses", instanceId] });
+      queryClient.invalidateQueries({ queryKey: ["rankings", "instance-parses", instanceId] });
       queryClient.invalidateQueries({ queryKey: ["instance-speedrun", instanceId] });
       queryClient.invalidateQueries({ queryKey: ["instance-ranking-records", instanceId] });
       queryClient.invalidateQueries({ queryKey: ["rankings"] });
@@ -1821,7 +1821,7 @@ export function useAdminInvalidateEncounter() {
     },
     onSuccess: (_data, { instanceId }) => {
       queryClient.invalidateQueries({ queryKey: ["instance"] });
-      queryClient.invalidateQueries({ queryKey: ["instance-parses", instanceId] });
+      queryClient.invalidateQueries({ queryKey: ["rankings", "instance-parses", instanceId] });
       queryClient.invalidateQueries({ queryKey: ["instance-speedrun", instanceId] });
       queryClient.invalidateQueries({ queryKey: ["instance-ranking-records", instanceId] });
       queryClient.invalidateQueries({ queryKey: ["rankings"] });
@@ -1842,7 +1842,7 @@ export function useAdminInvalidatePerformance() {
       return response.json() as Promise<{ message: string }>;
     },
     onSuccess: (_data, { instanceId }) => {
-      queryClient.invalidateQueries({ queryKey: ["instance-parses", instanceId] });
+      queryClient.invalidateQueries({ queryKey: ["rankings", "instance-parses", instanceId] });
       queryClient.invalidateQueries({ queryKey: ["instance-ranking-records", instanceId] });
       queryClient.invalidateQueries({ queryKey: ["rankings"] });
     },
@@ -1872,7 +1872,7 @@ export function useAdminClearLogInvalidation() {
       }
       queryClient.invalidateQueries({ queryKey: ["instance"] });
       for (const instanceId of instanceIds) {
-        queryClient.invalidateQueries({ queryKey: ["instance-parses", instanceId] });
+        queryClient.invalidateQueries({ queryKey: ["rankings", "instance-parses", instanceId] });
         queryClient.invalidateQueries({ queryKey: ["instance-speedrun", instanceId] });
         queryClient.invalidateQueries({ queryKey: ["instance-ranking-records", instanceId] });
       }
@@ -1896,7 +1896,7 @@ export function useAdminClearInstanceInvalidation() {
     onSuccess: (_data, { logGroupId, instanceId }) => {
       queryClient.invalidateQueries({ queryKey: ["logGroup", logGroupId] });
       queryClient.invalidateQueries({ queryKey: ["instance"] });
-      queryClient.invalidateQueries({ queryKey: ["instance-parses", instanceId] });
+      queryClient.invalidateQueries({ queryKey: ["rankings", "instance-parses", instanceId] });
       queryClient.invalidateQueries({ queryKey: ["instance-speedrun", instanceId] });
       queryClient.invalidateQueries({ queryKey: ["instance-ranking-records", instanceId] });
       queryClient.invalidateQueries({ queryKey: ["rankings"] });
@@ -1918,7 +1918,7 @@ export function useAdminClearEncounterInvalidation() {
     },
     onSuccess: (_data, { instanceId }) => {
       queryClient.invalidateQueries({ queryKey: ["instance"] });
-      queryClient.invalidateQueries({ queryKey: ["instance-parses", instanceId] });
+      queryClient.invalidateQueries({ queryKey: ["rankings", "instance-parses", instanceId] });
       queryClient.invalidateQueries({ queryKey: ["instance-speedrun", instanceId] });
       queryClient.invalidateQueries({ queryKey: ["instance-ranking-records", instanceId] });
       queryClient.invalidateQueries({ queryKey: ["rankings"] });

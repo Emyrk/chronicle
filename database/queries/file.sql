@@ -551,6 +551,17 @@ deleted_speedruns AS (
 )
 SELECT count(*) FROM invalidated_encounter;
 
+-- name: ListEncounterPlayerPerformanceInvalidationsForInstance :many
+SELECT
+  player_guid,
+  player_name,
+  encounter_name,
+  reason,
+  invalidated_at
+FROM encounter_player_performance_invalidations
+WHERE instance_id = @instance_id
+ORDER BY encounter_name, player_name;
+
 -- name: InvalidateLogEncounterPlayerPerformance :one
 WITH target AS MATERIALIZED (
   SELECT

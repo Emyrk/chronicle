@@ -903,6 +903,7 @@ type sqlcQuerier interface {
 	ListDueLeaderboardD2(ctx context.Context, arg ListDueLeaderboardD2Params) ([]ListDueLeaderboardD2Row, error)
 	ListDueLeaderboardOperations(ctx context.Context, afterTenant uuid.UUID) ([]ListDueLeaderboardOperationsRow, error)
 	ListDueLeaderboardRuns(ctx context.Context, arg ListDueLeaderboardRunsParams) ([]uuid.UUID, error)
+	ListEncounterPlayerPerformanceInvalidationsForInstance(ctx context.Context, instanceID uuid.UUID) ([]ListEncounterPlayerPerformanceInvalidationsForInstanceRow, error)
 	ListEventRepairItems(ctx context.Context, arg ListEventRepairItemsParams) ([]EventRepairItem, error)
 	ListEventRepairOperations(ctx context.Context, arg ListEventRepairOperationsParams) ([]EventRepairOperation, error)
 	ListEventRepairPendingItems(ctx context.Context, arg ListEventRepairPendingItemsParams) ([]EventRepairItem, error)

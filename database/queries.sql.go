@@ -9437,6 +9437,52 @@ func (q *sqlQuerier) ListDistinctInstanceNames(ctx context.Context) ([]string, e
 	return items, nil
 }
 
+const listEncounterPlayerPerformanceInvalidationsForInstance = `-- name: ListEncounterPlayerPerformanceInvalidationsForInstance :many
+SELECT
+  player_guid,
+  player_name,
+  encounter_name,
+  reason,
+  invalidated_at
+FROM encounter_player_performance_invalidations
+WHERE instance_id = $1
+ORDER BY encounter_name, player_name
+`
+
+type ListEncounterPlayerPerformanceInvalidationsForInstanceRow struct {
+	PlayerGuid    string             `db:"player_guid" json:"player_guid"`
+	PlayerName    string             `db:"player_name" json:"player_name"`
+	EncounterName string             `db:"encounter_name" json:"encounter_name"`
+	Reason        string             `db:"reason" json:"reason"`
+	InvalidatedAt pgtype.Timestamptz `db:"invalidated_at" json:"invalidated_at"`
+}
+
+func (q *sqlQuerier) ListEncounterPlayerPerformanceInvalidationsForInstance(ctx context.Context, instanceID uuid.UUID) ([]ListEncounterPlayerPerformanceInvalidationsForInstanceRow, error) {
+	rows, err := q.db.Query(ctx, listEncounterPlayerPerformanceInvalidationsForInstance, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListEncounterPlayerPerformanceInvalidationsForInstanceRow
+	for rows.Next() {
+		var i ListEncounterPlayerPerformanceInvalidationsForInstanceRow
+		if err := rows.Scan(
+			&i.PlayerGuid,
+			&i.PlayerName,
+			&i.EncounterName,
+			&i.Reason,
+			&i.InvalidatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRawLogGroupsForQuotaCleanup = `-- name: ListRawLogGroupsForQuotaCleanup :many
 SELECT wlg.id
 FROM wow_log_groups wlg

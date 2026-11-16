@@ -353,6 +353,42 @@ func TestHandleInstanceParses_InvalidInstanceIsUnavailable(t *testing.T) {
 	assert.Empty(t, response.Players)
 }
 
+func TestHandleInstanceParses_ReturnsSelectedPerformanceInvalidation(t *testing.T) {
+	t.Parallel()
+	f := setupParsesTest(t)
+	f.insertSimpleRanking(t, "Ragnaros", "Player-1", 500, 0)
+
+	ctx := testutil.Context(t, testutil.WaitShort)
+	var rankingID uuid.UUID
+	require.NoError(t, f.pool.QueryRow(ctx, `
+		SELECT id
+		FROM encounter_dps_rankings
+		WHERE instance_id = $1 AND encounter_name = 'Ragnaros' AND player_guid = 'Player-1'`,
+		f.instanceID,
+	).Scan(&rankingID))
+
+	count, err := f.store.InvalidateLogEncounterPlayerPerformance(ctx, database.InvalidateLogEncounterPlayerPerformanceParams{
+		RankingID:  rankingID,
+		InstanceID: f.instanceID,
+		LogGroupID: f.logGroupID,
+		Reason:     "Incorrect specialization",
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, count)
+
+	response := requestInstanceParses(t, f.store, f.instanceID, "?encounter_names=Ragnaros&metric=dps")
+	require.True(t, response.Available)
+	assert.Empty(t, response.Players)
+	require.Len(t, response.Invalidations, 1)
+	assert.Equal(t, "Player-1", response.Invalidations[0].PlayerGUID)
+	assert.Equal(t, "Ragnaros", response.Invalidations[0].EncounterName)
+	assert.Equal(t, "Incorrect specialization", response.Invalidations[0].Reason)
+	assert.False(t, response.Invalidations[0].InvalidatedAt.IsZero())
+
+	filtered := requestInstanceParses(t, f.store, f.instanceID, "?encounter_names=Golemagg&metric=dps")
+	assert.Empty(t, filtered.Invalidations)
+}
+
 func TestHandleInstanceParses_PersistedProjection(t *testing.T) {
 	t.Parallel()
 
