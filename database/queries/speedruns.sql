@@ -557,3 +557,21 @@ WHERE lie.instance_id = ANY(@instance_ids :: uuid[])
   AND lie.kill_type IN ('clean', 'partial')
   AND lie.end_time > lie.start_time
 ORDER BY lie.instance_id, lie.end_time;
+
+-- name: StatsSpeedrunInstanceCategories :many
+-- Each instance's category ('raid' or 'dungeon', log_instances.category, the
+-- same column the /stats threshold counts) over the qualified speedruns of
+-- listed logs, for the /stats fastest-clear namespaces. An instance logged
+-- under both categories gets the one most of its runs have. RLS on
+-- wow_server_realms scopes it to the request tenant. Background job only.
+SELECT DISTINCT ON (sr.instance_name)
+    sr.instance_name,
+    li.category
+FROM instance_speedruns sr
+JOIN log_instances_resolved li ON li.id = sr.instance_id
+JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
+JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
+WHERE sr.qualified = true
+  AND NOT li.mixed_difficulty
+GROUP BY sr.instance_name, li.category
+ORDER BY sr.instance_name, COUNT(*) DESC, li.category;

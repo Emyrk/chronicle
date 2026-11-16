@@ -18,6 +18,7 @@ func methodologyPage() StaticPage {
 						Heading: "Where the numbers come from",
 						Paragraphs: []string{
 							"Every number comes from combat logs uploaded to Chronicle. Only listed logs count; unlisted uploads and logs an admin invalidated are excluded.",
+							"Fastest-clear pages rank each guild's best valid full-raid clear: qualified under the speedrun rules, in a listed log, one difficulty, a raid uploaded by several players counted once. They show guild names, never player lists.",
 							"A raid uploaded by several players counts once. Player counts are distinct characters seen in those logs, so they undercount everyone who plays on the server.",
 						},
 					},

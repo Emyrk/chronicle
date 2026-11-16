@@ -84,7 +84,18 @@ func newService(t *testing.T, store *snapshotStore, families ...servicestats.Fam
 	t.Helper()
 	opts := servicestats.Options{Logger: testutil.Logger(t), Store: store}
 	if len(families) > 0 {
-		opts.Families = append(servicestats.DefaultFamilies(), families...)
+		// A test family replaces the default family with the same producer key
+		// (e.g. a stand-in "speedruns"), so its pattern is registered once.
+		replaced := map[string]bool{}
+		for _, f := range families {
+			replaced[f.Producer.Key()] = true
+		}
+		for _, f := range servicestats.DefaultFamilies() {
+			if !replaced[f.Producer.Key()] {
+				opts.Families = append(opts.Families, f)
+			}
+		}
+		opts.Families = append(opts.Families, families...)
 	}
 	svc, err := servicestats.New(opts)
 	require.NoError(t, err)

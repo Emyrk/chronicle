@@ -1448,6 +1448,12 @@ type sqlcQuerier interface {
 	// Returns distinct realm names that have at least one qualified speedrun.
 	SpeedrunRealmNames(ctx context.Context) ([]string, error)
 	StarLuaProject(ctx context.Context, arg StarLuaProjectParams) error
+	// Each instance's category ('raid' or 'dungeon', log_instances.category, the
+	// same column the /stats threshold counts) over the qualified speedruns of
+	// listed logs, for the /stats fastest-clear namespaces. An instance logged
+	// under both categories gets the one most of its runs have. RLS on
+	// wow_server_realms scopes it to the request tenant. Background job only.
+	StatsSpeedrunInstanceCategories(ctx context.Context) ([]StatsSpeedrunInstanceCategoriesRow, error)
 	// Counts the request tenant's distinct players seen in listed logs since a
 	// cutoff. Heavier than the raid count, so the job runs it only when the raid
 	// count alone does not decide the threshold. Background job only.
