@@ -5,6 +5,9 @@ import { VIEW_ORDER, type RatingView } from "./Ratings/ratingThemes"
 
 const tabIDs = new Set<string>(TABS.map((tab) => tab.id))
 
+export const PERFORMANCE_PERIODS = ["all", "90d", "30d", "7d"] as const
+export type PerformancePeriod = (typeof PERFORMANCE_PERIODS)[number]
+
 /** Where the hub lives; each tab but Overview is a path segment under it. */
 export const HUB_BASE = "/leaderboards"
 
@@ -44,6 +47,21 @@ export function hubParams(params: URLSearchParams, key: "realm_ids" | "encounter
   if (key === "encounters") next.delete("encounter")
   if (value) next.set(key, value)
   else next.delete(key)
+  return next
+}
+
+/** The performances time window from the shareable query; omitted and invalid values mean all time. */
+export function hubPerformancePeriod(params: URLSearchParams): PerformancePeriod {
+  const value = params.get("period")
+  return PERFORMANCE_PERIODS.find((period) => period === value) ?? "all"
+}
+
+/** Keep a performances time window in the query; All time is the clean default URL. */
+export function hubPerformancePeriodParams(params: URLSearchParams, period: PerformancePeriod): URLSearchParams {
+  const next = new URLSearchParams(params)
+  if (period === "all") next.delete("period")
+  else next.set("period", period)
+  next.delete("page")
   return next
 }
 

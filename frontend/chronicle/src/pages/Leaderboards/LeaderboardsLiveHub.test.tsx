@@ -350,9 +350,11 @@ describe("live Storybook Hub", () => {
       isPending: false,
       isError: false,
     } as unknown as ReturnType<typeof useRankingsLeaderboard>)
-    const html = hub("/leaderboards/Molten-Core/performances?difficulty=Normal&size=40&page=3")
+    const html = hub("/leaderboards/Molten-Core/performances?difficulty=Normal&size=40&period=30d&page=3")
     const [params] = vi.mocked(useRankingsLeaderboard).mock.calls[0]
-    expect(params).toMatchObject({ limit: 50, offset: 100 })
+    expect(params).toMatchObject({ period: "30d", limit: 50, offset: 100 })
+    expect(html).toContain('aria-label="Performance period"')
+    expect(html).toMatch(/aria-pressed="true"[^>]*>30d</)
     expect(html).toContain(">101<")
     expect(html).toContain("Paged player")
     expect(html).toContain("Page 3 of 3")
@@ -365,6 +367,7 @@ describe("live Storybook Hub", () => {
     const [params, enabled] = vi.mocked(useRankingsLeaderboard).mock.calls[0]
     expect(enabled).toBe(true)
     expect(params).toMatchObject({ instance_names: "Molten Core", difficulty_names: "", exact_cohort: true, metric: "dps" })
+    expect(params.period).toBeUndefined()
     expect(params.role).toBeUndefined()
     expect(params.max_players).toBe(0)
     // The preset sends its bosses, never an empty list (which ranks every encounter, Trash included).

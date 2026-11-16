@@ -26,6 +26,7 @@ import type {
   SpeedrunGuildClearsEntry,
   SpeedrunLeaderboardEntry,
 } from "@/api/typesGenerated";
+import { hubPath } from "@/pages/Leaderboards/v2Selection";
 import { defaultRankingBossNames } from "@/pages/Rankings/rankingsEncounterSelection";
 import { resolveRankingEncounterSet } from "@/pages/Rankings/rankingEncounterSets";
 import { CLASS_CSS_VAR } from "@/pages/Rankings/classDisplay";
@@ -291,6 +292,7 @@ function MobileSpotlight({
   parses,
   guildClears,
   diffQS,
+  performancesHref,
 }: {
   raids: SpotlightRaid[];
   idx: number;
@@ -304,6 +306,7 @@ function MobileSpotlight({
   parses: readonly RankingsEntry[];
   guildClears: SpeedrunGuildClearsEntry[];
   diffQS: string;
+  performancesHref: string;
 }) {
   const [tab, setTab] = useState<MobileBoardTab>("speed");
 
@@ -317,7 +320,7 @@ function MobileSpotlight({
     tab === "speed"
       ? `/leaderboards/speedruns?instance=${encodeURIComponent(spot.name)}&timing=full${diffQS}`
       : tab === "dps"
-        ? `/leaderboards/statistics?instance=${encodeURIComponent(spot.name)}&tab=leaderboard${diffQS}`
+        ? performancesHref
         : null;
 
   const rowClass =
@@ -714,6 +717,12 @@ function RaidSpotlight() {
 
   // Deep-link params for "Full board →" links.
   const diffQS = difficultyFilter !== undefined ? `&diff=${encodeURIComponent(difficultyFilter)}` : "";
+  const performanceParams = new URLSearchParams();
+  if (activeBoard) {
+    performanceParams.set("difficulty", activeBoard.difficulty);
+    performanceParams.set("size", String(activeBoard.maxPlayers));
+  }
+  const performancesHref = spot ? hubPath("performances", performanceParams, spot.name) : "/leaderboards";
 
   if (raids.length === 0) return null;
 
@@ -731,6 +740,7 @@ function RaidSpotlight() {
         speedruns={speedruns ?? []}
         parses={parses}
         guildClears={guildClears ?? []}
+        performancesHref={performancesHref}
         diffQS={diffQS}
       />
     );
@@ -846,7 +856,7 @@ function RaidSpotlight() {
             <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/40">
               <span className="text-sm font-semibold">Top DPS · {spot.abbrev}</span>
               <Link
-                to={`/leaderboards/statistics?instance=${encodeURIComponent(spot.name)}&tab=leaderboard${diffQS}`}
+                to={performancesHref}
                 className="text-xs text-primary hover:underline"
               >
                 Full board →

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { hubEncounterVariants, hubEncounterVariantParams, hubInstanceParams, hubParams, hubPath, hubRatingParams, hubRatingView, hubSubject, hubSubjectParams, v2Selection } from "./v2Selection"
+import { hubEncounterVariants, hubEncounterVariantParams, hubInstanceParams, hubParams, hubPath, hubPerformancePeriod, hubPerformancePeriodParams, hubRatingParams, hubRatingView, hubSubject, hubSubjectParams, v2Selection } from "./v2Selection"
 
 describe("leaderboard hub selection", () => {
   it("opens the live overview without selecting a mock instance", () => {
@@ -39,6 +39,18 @@ describe("leaderboard hub selection", () => {
     expect(v2Selection(set).encounters).toEqual(["Lucifron", "Ragnaros"])
     expect(set.has("page")).toBe(false)
     expect(set.has("encounter")).toBe(false)
+  })
+
+  it("keeps a performances period in the query and resets pagination", () => {
+    for (const period of ["90d", "30d", "7d"] as const) {
+      const params = hubPerformancePeriodParams(new URLSearchParams("realm_ids=realm-1&page=3"), period)
+      expect(hubPerformancePeriod(params)).toBe(period)
+      expect(params.get("realm_ids")).toBe("realm-1")
+      expect(params.has("page")).toBe(false)
+    }
+
+    expect(hubPerformancePeriod(new URLSearchParams("period=unknown"))).toBe("all")
+    expect(hubPerformancePeriodParams(new URLSearchParams("period=30d"), "all").has("period")).toBe(false)
   })
 
   it("keeps the selected ratings board in a shareable query", () => {
@@ -86,6 +98,8 @@ describe("leaderboard hub selection", () => {
     expect(hubPath("performances", params, "Molten Core")).toBe("/leaderboards/Molten-Core/performances?encounters=Garr")
     expect(hubPath("overview", params, "Molten Core")).toBe("/leaderboards/Molten-Core?encounters=Garr")
     expect(hubPath("ratings", params)).toBe("/leaderboards/ratings?encounters=Garr")
+    expect(hubPath("performances", new URLSearchParams({ difficulty: "", size: "0" }), "Blackwing Lair"))
+      .toBe("/leaderboards/Blackwing-Lair/performances?difficulty=&size=0")
     expect(hubPath("overview", new URLSearchParams())).toBe("/leaderboards")
   })
 })
