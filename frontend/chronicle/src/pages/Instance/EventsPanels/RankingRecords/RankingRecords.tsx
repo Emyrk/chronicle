@@ -1,7 +1,12 @@
+import { useAdminInvalidatePerformance } from "@/api/queries";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
 import { difficultyLabel } from "@/lib/wowUtils";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Database, Loader2, Search } from "lucide-react";
+import { AlertTriangle, Ban, Database, Loader2, Search } from "lucide-react";
 import type { InstanceRankingRecord } from "@/api/typesGenerated";
 import type { ProcessorEvent } from "../processorTypes";
 import type { PanelDefinition, PanelRenderProps } from "../types";
@@ -9,6 +14,15 @@ import { shouldLoadPublicRankingData } from "../panelAvailability";
 import { rankingRecordsProcessor, type RankingRecordsResult } from "./rankingRecords.processor";
 import { filterRankingRecords } from "./rankingRecordsFilter";
 import { instanceEntityAttributes } from "@/components/ui/PlayerMetricChart/instanceEntity";
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function canInvalidatePerformanceRecord(
+  record: InstanceRankingRecord,
+  canInvalidateRankings: boolean | undefined,
+  logGroupId: string | undefined,
+): boolean {
+  return Boolean(canInvalidateRankings && logGroupId && record.encounter_id);
+}
 
 function formatNumber(value: number, maximumFractionDigits = 0): string {
   return value.toLocaleString(undefined, { maximumFractionDigits });
@@ -47,6 +61,34 @@ export function RankingRecordsContent({ context }: PanelRenderProps<RankingRecor
     retry: false,
     enabled: shouldLoadPublicRankingData(unlisted),
   });
+
+  const [recordToInvalidate, setRecordToInvalidate] = useState<InstanceRankingRecord | null>(null);
+  const [invalidReason, setInvalidReason] = useState("");
+  const invalidatePerformance = useAdminInvalidatePerformance();
+
+  const handleInvalidatePerformance = async () => {
+    const reason = invalidReason.trim();
+    const logGroupId = context.instance.logGroupId;
+    if (!recordToInvalidate || !logGroupId || !reason) return;
+
+    try {
+      await invalidatePerformance.mutateAsync({
+        logGroupId,
+        instanceId: instanceID,
+        rankingId: recordToInvalidate.id,
+        reason,
+      });
+      toast.success("Player performance invalidated", {
+        description: `${recordToInvalidate.player_name} on ${recordToInvalidate.encounter_name} no longer contributes to rankings or parses.`,
+      });
+      setRecordToInvalidate(null);
+      setInvalidReason("");
+    } catch (error) {
+      toast.error("Failed to invalidate player performance", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    }
+  };
 
   const records = query.data ?? [];
   const filteredRecords = useMemo(
@@ -120,6 +162,7 @@ export function RankingRecordsContent({ context }: PanelRenderProps<RankingRecor
               <th className="px-2 py-1.5 text-right font-medium">Absorb</th>
               <th className="px-2 py-1.5 text-right font-medium">HPS</th>
               <th className="px-2 py-1.5 text-right font-medium">Deaths</th>
+              {context.canInvalidateRankings && <th className="px-2 py-1.5 text-right font-medium">Actions</th>}
               <th className="px-2 py-1.5 text-right font-medium">Alive %</th>
             </tr>
           </thead>
@@ -152,6 +195,23 @@ export function RankingRecordsContent({ context }: PanelRenderProps<RankingRecor
                 <td className={record.player_deaths && record.player_deaths > 0 ? "px-2 py-1.5 text-right font-semibold text-red-400" : "px-2 py-1.5 text-right text-muted-foreground"}>
                   {record.player_deaths ?? "—"}
                 </td>
+                {context.canInvalidateRankings && (
+                  <td className="px-2 py-1.5 text-right">
+                    {canInvalidatePerformanceRecord(record, context.canInvalidateRankings, context.instance.logGroupId) ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 gap-1 text-destructive hover:text-destructive"
+                        onClick={() => setRecordToInvalidate(record)}
+                      >
+                        <Ban className="h-3.5 w-3.5" />
+                        Invalidate
+                      </Button>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
+                )}
                 <td className="px-2 py-1.5 text-right text-muted-foreground">
                   {record.alive_percentage === undefined ? "—" : `${record.alive_percentage.toFixed(1)}%`}
                 </td>
@@ -165,6 +225,63 @@ export function RankingRecordsContent({ context }: PanelRenderProps<RankingRecor
           </div>
         )}
       </div>
+      <Dialog
+        open={recordToInvalidate !== null}
+        onOpenChange={(open) => {
+          if (invalidatePerformance.isPending) return;
+          if (!open) {
+            setRecordToInvalidate(null);
+            setInvalidReason("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Invalidate this player performance?</DialogTitle>
+            <DialogDescription>
+              The encounter remains valid. Only this player&apos;s stored performance is removed from parses and rankings. A later reparse can recreate it from the source log.
+            </DialogDescription>
+          </DialogHeader>
+          {recordToInvalidate && (
+            <div className="rounded-md bg-muted px-3 py-2 text-sm">
+              <span className="font-medium">{recordToInvalidate.player_name}</span>
+              <span className="text-muted-foreground"> on {recordToInvalidate.encounter_name}</span>
+              <div className="mt-1 font-mono text-[10px] text-muted-foreground">{recordToInvalidate.player_guid}</div>
+            </div>
+          )}
+          <div className="space-y-2">
+            <label htmlFor="invalidate-performance-reason" className="text-sm font-medium">Reason</label>
+            <Input
+              id="invalidate-performance-reason"
+              value={invalidReason}
+              onChange={(event) => setInvalidReason(event.target.value)}
+              placeholder="Describe why this performance is invalid"
+              disabled={invalidatePerformance.isPending}
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRecordToInvalidate(null);
+                setInvalidReason("");
+              }}
+              disabled={invalidatePerformance.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => void handleInvalidatePerformance()}
+              disabled={invalidatePerformance.isPending || invalidReason.trim() === ""}
+            >
+              {invalidatePerformance.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              Invalidate performance
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

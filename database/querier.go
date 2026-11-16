@@ -815,6 +815,7 @@ type sqlcQuerier interface {
 	InstanceUnitsByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceUnit, error)
 	InstanceWithUnlisted(ctx context.Context, id uuid.UUID) (InstanceWithUnlistedRow, error)
 	InvalidateLogEncounter(ctx context.Context, arg InvalidateLogEncounterParams) (int64, error)
+	InvalidateLogEncounterPlayerPerformance(ctx context.Context, arg InvalidateLogEncounterPlayerPerformanceParams) (int64, error)
 	InvalidateLogInstance(ctx context.Context, arg InvalidateLogInstanceParams) (int64, error)
 	InvalidateOAuthDeviceSession(ctx context.Context, deviceSignature string) (int64, error)
 	InvalidateOAuthDeviceSessionsBySidekickInstallationID(ctx context.Context, sidekickInstallationID uuid.NullUUID) (int64, error)

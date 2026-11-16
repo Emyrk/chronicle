@@ -1218,6 +1218,20 @@ CREATE VIEW encounter_dps_rankings_resolved WITH (security_invoker='true') AS
      LEFT JOIN log_instance_encounters encounter ON ((encounter.id = ranking.encounter_id)))
   WHERE ((NOT instance.difficulty_normalized) OR ((ranking.difficulty_name = COALESCE(encounter.difficulty, instance.difficulty_name)) AND (ranking.max_players = instance.max_players)));
 
+CREATE TABLE encounter_player_performance_invalidations (
+    id uuid NOT NULL,
+    tenant_id uuid NOT NULL,
+    instance_id uuid NOT NULL,
+    encounter_id uuid NOT NULL,
+    player_guid text NOT NULL,
+    player_name text NOT NULL,
+    encounter_name text NOT NULL,
+    reason text NOT NULL,
+    invalidated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE ONLY encounter_player_performance_invalidations FORCE ROW LEVEL SECURITY;
+
 CREATE TABLE event_repair_items (
     operation_id uuid NOT NULL,
     instance_id uuid NOT NULL,
@@ -4294,6 +4308,12 @@ ALTER TABLE ONLY encounter_dps_rankings
 ALTER TABLE ONLY encounter_dps_rankings
     ADD CONSTRAINT encounter_dps_rankings_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY encounter_player_performance_invalidations
+    ADD CONSTRAINT encounter_player_performance__instance_id_encounter_id_play_key UNIQUE (instance_id, encounter_id, player_guid);
+
+ALTER TABLE ONLY encounter_player_performance_invalidations
+    ADD CONSTRAINT encounter_player_performance_invalidations_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY event_repair_items
     ADD CONSTRAINT event_repair_items_pkey PRIMARY KEY (operation_id, instance_id);
 
@@ -5033,6 +5053,8 @@ CREATE UNIQUE INDEX idx_edr_trash_unique ON encounter_dps_rankings USING btree (
 
 CREATE INDEX idx_encounter_dps_rankings_instance_id ON encounter_dps_rankings USING btree (instance_id);
 
+CREATE INDEX idx_encounter_player_performance_invalidations_instance ON encounter_player_performance_invalidations USING btree (instance_id);
+
 CREATE INDEX idx_game_player_gear_history_instance_id ON game_player_gear_history USING btree (instance_id);
 
 CREATE INDEX idx_game_players_guild ON game_players USING btree (guild_id) WHERE (guild_id IS NOT NULL);
@@ -5582,6 +5604,12 @@ ALTER TABLE ONLY encounter_dps_rankings
 
 ALTER TABLE ONLY encounter_dps_rankings
     ADD CONSTRAINT encounter_dps_rankings_talent_build_id_fkey FOREIGN KEY (talent_build_id) REFERENCES talent_builds(id);
+
+ALTER TABLE ONLY encounter_player_performance_invalidations
+    ADD CONSTRAINT encounter_player_performance_invalidations_encounter_id_fkey FOREIGN KEY (encounter_id) REFERENCES log_instance_encounters(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY encounter_player_performance_invalidations
+    ADD CONSTRAINT encounter_player_performance_invalidations_instance_id_fkey FOREIGN KEY (instance_id) REFERENCES log_instances(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY event_repair_items
     ADD CONSTRAINT event_repair_items_operation_id_fkey FOREIGN KEY (operation_id) REFERENCES event_repair_operations(id) ON DELETE CASCADE;
@@ -6179,6 +6207,8 @@ ALTER TABLE ONLY wow_servers
 
 ALTER TABLE encounter_dps_rankings ENABLE ROW LEVEL SECURITY;
 
+ALTER TABLE encounter_player_performance_invalidations ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE event_repair_items ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE event_repair_operations ENABLE ROW LEVEL SECURITY;
@@ -6285,6 +6315,8 @@ ALTER TABLE renown_kill_facts ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY tenant_admin_bypass ON encounter_dps_rankings USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
+CREATE POLICY tenant_admin_bypass ON encounter_player_performance_invalidations USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
 CREATE POLICY tenant_admin_bypass ON event_repair_items USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON event_repair_operations USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text)) WITH CHECK ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
@@ -6379,6 +6411,8 @@ CREATE POLICY tenant_admin_bypass ON wow_servers USING ((current_setting('app.te
 
 CREATE POLICY tenant_isolation ON encounter_dps_rankings USING ((realm_id IN ( SELECT wow_server_realms.id
    FROM wow_server_realms)));
+
+CREATE POLICY tenant_isolation ON encounter_player_performance_invalidations USING ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid))) WITH CHECK ((tenant_id = COALESCE((NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid, '00000000-0000-0000-0000-000000000000'::uuid)));
 
 CREATE POLICY tenant_isolation ON event_repair_items USING ((EXISTS ( SELECT 1
    FROM event_repair_operations o

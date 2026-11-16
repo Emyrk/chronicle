@@ -551,6 +551,53 @@ deleted_speedruns AS (
 )
 SELECT count(*) FROM invalidated_encounter;
 
+-- name: InvalidateLogEncounterPlayerPerformance :one
+WITH target AS MATERIALIZED (
+  SELECT
+    ranking.id,
+    ranking.instance_id,
+    ranking.encounter_id,
+    ranking.player_guid,
+    ranking.player_name,
+    ranking.encounter_name,
+    COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid) AS tenant_id
+  FROM encounter_dps_rankings ranking
+  JOIN log_instances instance ON instance.id = ranking.instance_id
+  JOIN wow_server_realms realm ON realm.id = instance.realm_id
+  JOIN wow_servers server ON server.id = realm.server_id
+  WHERE ranking.id = @ranking_id
+    AND ranking.instance_id = @instance_id
+    AND ranking.encounter_id IS NOT NULL
+    AND instance.log_group_id = @log_group_id
+),
+inserted_invalidation AS (
+  INSERT INTO encounter_player_performance_invalidations (
+    id, tenant_id, instance_id, encounter_id, player_guid,
+    player_name, encounter_name, reason
+  )
+  SELECT
+    id, tenant_id, instance_id, encounter_id, player_guid,
+    player_name, encounter_name, @reason
+  FROM target
+  ON CONFLICT (instance_id, encounter_id, player_guid) DO UPDATE SET
+    reason = EXCLUDED.reason,
+    invalidated_at = now()
+  RETURNING id
+),
+deleted_parse_results AS (
+  DELETE FROM parse_score_results result
+  USING target
+  WHERE result.instance_id = target.instance_id
+    AND result.encounter_name = target.encounter_name
+    AND result.player_guid = target.player_guid
+),
+deleted_ranking AS (
+  DELETE FROM encounter_dps_rankings ranking
+  USING target
+  WHERE ranking.id = target.id
+)
+SELECT count(*) FROM inserted_invalidation;
+
 -- name: ClearLogEncounterInvalidation :execrows
 UPDATE log_instance_encounters lie
 SET invalidated_at = NULL,

@@ -8897,6 +8897,73 @@ func (q *sqlQuerier) InvalidateLogEncounter(ctx context.Context, arg InvalidateL
 	return count, err
 }
 
+const invalidateLogEncounterPlayerPerformance = `-- name: InvalidateLogEncounterPlayerPerformance :one
+WITH target AS MATERIALIZED (
+  SELECT
+    ranking.id,
+    ranking.instance_id,
+    ranking.encounter_id,
+    ranking.player_guid,
+    ranking.player_name,
+    ranking.encounter_name,
+    COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid) AS tenant_id
+  FROM encounter_dps_rankings ranking
+  JOIN log_instances instance ON instance.id = ranking.instance_id
+  JOIN wow_server_realms realm ON realm.id = instance.realm_id
+  JOIN wow_servers server ON server.id = realm.server_id
+  WHERE ranking.id = $1
+    AND ranking.instance_id = $2
+    AND ranking.encounter_id IS NOT NULL
+    AND instance.log_group_id = $3
+),
+inserted_invalidation AS (
+  INSERT INTO encounter_player_performance_invalidations (
+    id, tenant_id, instance_id, encounter_id, player_guid,
+    player_name, encounter_name, reason
+  )
+  SELECT
+    id, tenant_id, instance_id, encounter_id, player_guid,
+    player_name, encounter_name, $4
+  FROM target
+  ON CONFLICT (instance_id, encounter_id, player_guid) DO UPDATE SET
+    reason = EXCLUDED.reason,
+    invalidated_at = now()
+  RETURNING id
+),
+deleted_parse_results AS (
+  DELETE FROM parse_score_results result
+  USING target
+  WHERE result.instance_id = target.instance_id
+    AND result.encounter_name = target.encounter_name
+    AND result.player_guid = target.player_guid
+),
+deleted_ranking AS (
+  DELETE FROM encounter_dps_rankings ranking
+  USING target
+  WHERE ranking.id = target.id
+)
+SELECT count(*) FROM inserted_invalidation
+`
+
+type InvalidateLogEncounterPlayerPerformanceParams struct {
+	RankingID  uuid.UUID `db:"ranking_id" json:"ranking_id"`
+	InstanceID uuid.UUID `db:"instance_id" json:"instance_id"`
+	LogGroupID uuid.UUID `db:"log_group_id" json:"log_group_id"`
+	Reason     string    `db:"reason" json:"reason"`
+}
+
+func (q *sqlQuerier) InvalidateLogEncounterPlayerPerformance(ctx context.Context, arg InvalidateLogEncounterPlayerPerformanceParams) (int64, error) {
+	row := q.db.QueryRow(ctx, invalidateLogEncounterPlayerPerformance,
+		arg.RankingID,
+		arg.InstanceID,
+		arg.LogGroupID,
+		arg.Reason,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const invalidateLogInstance = `-- name: InvalidateLogInstance :one
 WITH invalidated_instance AS (
   UPDATE log_instances li
@@ -28582,6 +28649,13 @@ WITH boss_insert AS (
         $24, $25, $26, $27, $28,
         $29, $30
     WHERE $1::uuid IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1
+        FROM encounter_player_performance_invalidations invalidation
+        WHERE invalidation.instance_id = $2
+          AND invalidation.encounter_id = $1
+          AND invalidation.player_guid = $5
+      )
     ON CONFLICT (instance_id, player_guid, encounter_name, difficulty_name, max_players)
         WHERE encounter_id IS NOT NULL
     DO UPDATE SET

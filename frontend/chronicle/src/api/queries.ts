@@ -1829,6 +1829,26 @@ export function useAdminInvalidateEncounter() {
   });
 }
 
+export function useAdminInvalidatePerformance() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ logGroupId, instanceId, rankingId, reason }: { logGroupId: string; instanceId: string; rankingId: string; reason: string }) => {
+      const response = await fetch("/api/v1/admin/performances/invalidate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ log_group_id: logGroupId, instance_id: instanceId, ranking_id: rankingId, reason }),
+      });
+      if (!response.ok) throw new Error("Failed to invalidate player performance");
+      return response.json() as Promise<{ message: string }>;
+    },
+    onSuccess: (_data, { instanceId }) => {
+      queryClient.invalidateQueries({ queryKey: ["instance-parses", instanceId] });
+      queryClient.invalidateQueries({ queryKey: ["instance-ranking-records", instanceId] });
+      queryClient.invalidateQueries({ queryKey: ["rankings"] });
+    },
+  });
+}
+
 export function useAdminClearLogInvalidation() {
   const queryClient = useQueryClient();
 

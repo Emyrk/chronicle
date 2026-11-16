@@ -1568,6 +1568,7 @@ interface EncounterDetailProps {
   instance: Instance;
   encounters: Encounter[];
   players: Record<string, InstancePlayer>;
+  canInvalidateRankings?: boolean;
   entitySelection: EntitySelection;
   layoutItems: GridEditorItem[];
   panelTypesById: Record<string, EventsPanelType>;
@@ -1627,6 +1628,7 @@ function EncounterDetail({
   instance,
   encounters,
   players,
+  canInvalidateRankings,
   entitySelection,
   layoutItems,
   panelTypesById,
@@ -1754,6 +1756,7 @@ function EncounterDetail({
   const panelContext: PanelContext = useMemo(
     () => ({
       instance,
+      canInvalidateRankings,
       selectedEncounterIds: selectedEncounterIDs,
       entitySelection: deferredEntitySelection,
       onSelectEncounters,
@@ -1764,6 +1767,7 @@ function EncounterDetail({
     }),
     [
       instance,
+      canInvalidateRankings,
       selectedEncounterIDs,
       deferredEntitySelection,
       onSelectEncounters,
@@ -4584,6 +4588,7 @@ function InstancePageViewContent({
             instance={instance}
             encounters={selectedEncounters}
             players={instance.players ?? {}}
+            canInvalidateRankings={canInvalidateLogs}
             entitySelection={entitySelection}
             layoutItems={activeLayoutItems}
             panelTypesById={panelTypesByID}

@@ -921,6 +921,13 @@ WITH boss_insert AS (
         @healing_done, @absorbed_done, @hps, @player_deaths, @alive_percentage,
         @log_hashed_slug, @killed_at
     WHERE @encounter_id::uuid IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1
+        FROM encounter_player_performance_invalidations invalidation
+        WHERE invalidation.instance_id = @instance_id
+          AND invalidation.encounter_id = @encounter_id
+          AND invalidation.player_guid = @player_guid
+      )
     ON CONFLICT (instance_id, player_guid, encounter_name, difficulty_name, max_players)
         WHERE encounter_id IS NOT NULL
     DO UPDATE SET

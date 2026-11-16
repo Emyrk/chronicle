@@ -258,6 +258,14 @@ export interface AdminInstanceRequest {
 }
 
 // From chroniclesdk/user.go
+export interface AdminInvalidateEncounterPlayerPerformanceRequest {
+    readonly log_group_id: string;
+    readonly instance_id: string;
+    readonly ranking_id: string;
+    readonly reason: string;
+}
+
+// From chroniclesdk/user.go
 export interface AdminInvalidateEncounterRequest {
     readonly log_group_id: string;
     readonly instance_id: string;

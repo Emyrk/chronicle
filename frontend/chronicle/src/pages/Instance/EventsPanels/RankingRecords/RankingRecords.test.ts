@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { InstanceRankingRecord } from "@/api/typesGenerated";
-import { createRankingRecordsPanel } from "./RankingRecords";
+import { canInvalidatePerformanceRecord, createRankingRecordsPanel } from "./RankingRecords";
 import { filterRankingRecords } from "./rankingRecordsFilter";
 
 const record = {
@@ -22,6 +22,14 @@ describe("Ranking Records panel", () => {
     const panel = createRankingRecordsPanel();
     expect(panel.selfManagesAggregation).toBe(true);
     expect(panel.streams).toEqual([]);
+  });
+
+  it("only offers invalidation for boss performance rows to authorized admins", () => {
+    const bossRecord = { ...record, encounter_id: "encounter-1" };
+    expect(canInvalidatePerformanceRecord(bossRecord, true, "log-1")).toBe(true);
+    expect(canInvalidatePerformanceRecord(bossRecord, false, "log-1")).toBe(false);
+    expect(canInvalidatePerformanceRecord(bossRecord, true, undefined)).toBe(false);
+    expect(canInvalidatePerformanceRecord({ ...record, encounter_id: undefined }, true, "log-1")).toBe(false);
   });
 
   it("searches player, encounter, role, and GUID fields", () => {

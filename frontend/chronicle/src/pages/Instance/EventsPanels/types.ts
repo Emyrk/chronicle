@@ -30,6 +30,9 @@ export interface PanelContext {
   /** The full instance data (players, encounters, metadata) */
   instance: Instance;
   
+  /** Whether the current user may invalidate stored ranking performances. */
+  canInvalidateRankings?: boolean;
+
   /** Currently selected encounter IDs */
   selectedEncounterIds: string[];
   
