@@ -8,7 +8,7 @@ import { parseHexColor } from "@/pages/Instance/parseColors"
 import { formatMetric, normalFitLabel } from "@/pages/Parsing/cohort/cohortStats"
 import { CLASS_CSS_VAR, CLASS_DISPLAY } from "@/pages/Rankings/classDisplay"
 import { formatBoxPlotTick } from "@/pages/Rankings/boxPlotScale"
-import { normalCurvePath, spreadBands, spreadCutoff, spreadScale, spreadSpecLabel, type SpreadScale } from "./spreadBands"
+import { spreadBands, spreadCutoff, spreadScale, spreadSpecLabel, type SpreadScale } from "./spreadBands"
 
 /** Tier cutoffs shown as columns beside each bar. */
 const COLUMN_FLOORS = [50, 75, 95, 99] as const
@@ -117,10 +117,6 @@ export function SpreadChart({
 
         {/* Legend */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 pt-2 text-[11px] text-muted-foreground">
-          <span className="flex items-center gap-1.5">
-            <span className="h-0.5 w-4 rounded-full bg-primary" aria-hidden />
-            Fitted normal curve
-          </span>
           <span>Parse</span>
           {LEGEND.map((tier) => (
             <span key={tier.floor} className="flex items-center gap-1">
@@ -215,7 +211,6 @@ function SpreadRow({
   const className = CLASS_DISPLAY[spread.player_class] ?? spread.player_class
   const specLabel = spreadSpecLabel(spread) || className
   const bands = spreadBands(spread)
-  const curvePath = spread.normal_fit ? normalCurvePath(spread.normal_fit, scale) : null
   const scored = spread.status !== "sample_too_small"
   const value = (floor: number) => {
     const cutoff = spreadCutoff(spread, floor)
@@ -282,17 +277,6 @@ function SpreadRow({
                   />
                 )
               })}
-              {curvePath && (
-                <svg
-                  viewBox="0 0 100 20"
-                  preserveAspectRatio="none"
-                  className="pointer-events-none absolute inset-0 h-full w-full"
-                  aria-hidden
-                >
-                  <path d={curvePath} fill="none" className="stroke-card" strokeWidth={4} vectorEffect="non-scaling-stroke" />
-                  <path d={curvePath} fill="none" className="stroke-primary" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
-                </svg>
-              )}
             </span>
 
             {COLUMN_FLOORS.map((floor) => (

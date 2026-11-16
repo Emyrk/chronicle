@@ -19,6 +19,11 @@ describe("SpreadsView entities", () => {
             median: 300,
             max: 500,
             cutoffs: [{ floor: 95, value: 450 }],
+            normal_fit: {
+              mean: 300,
+              standard_deviation: 75,
+              max_cdf_gap: 0.04,
+            },
           },
         ]}
         hidden={new Set()}
@@ -35,6 +40,10 @@ describe("SpreadsView entities", () => {
     expect(html).toContain('data-entity-kind="spec"')
     expect(html).toContain("Fire Mage")
     expect(html).toContain("Kills")
+    expect(html).toContain("Fit")
+    expect(html).toContain("4.0%")
+    expect(html).not.toContain("Fitted normal curve")
+    expect(html).not.toContain('viewBox="0 0 100 20"')
     expect(html).toContain("42")
   })
 })

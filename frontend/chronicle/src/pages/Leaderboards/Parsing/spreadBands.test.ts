@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest"
 import type { ParseScoreSpread } from "@/api/typesGenerated"
 import {
   difficultyLabel,
-  normalCurvePath,
   offRoleKeys,
   relativeTickLabel,
   relativeTimeScale,
@@ -76,25 +75,6 @@ describe("spreadScale", () => {
     expect(scale.max).toBeGreaterThanOrEqual(1000)
     expect(scale.ticks[0]).toBe(scale.min)
     expect(scale.ticks.at(-1)).toBe(scale.max)
-  })
-})
-
-describe("normalCurvePath", () => {
-  it("draws a bell curve on the spread scale", () => {
-    const path = normalCurvePath(
-      { mean: 500, standard_deviation: 100, max_cdf_gap: 0.04 },
-      { min: 0, max: 1000, ticks: [0, 500, 1000] },
-    )
-    expect(path).toMatch(/^M0\.00,/)
-    expect(path).toContain("L50.00,4.00")
-    expect(path).toContain("L100.00,")
-  })
-
-  it("omits a degenerate fit", () => {
-    expect(normalCurvePath(
-      { mean: 500, standard_deviation: 0, max_cdf_gap: 0 },
-      { min: 0, max: 1000, ticks: [] },
-    )).toBeNull()
   })
 })
 
