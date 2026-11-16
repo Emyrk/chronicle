@@ -301,6 +301,60 @@ Retained-type omissions were part of the reason the experiment was abandoned.
 **Extraction:** retain the design lesson only until a bounded serialization need
 exists. Do not cherry-pick `eaf37860e` without its snapshot dependencies.
 
+## Candidate 9: deterministic canonical export validation harness
+
+**Main status:** `scripts/parser-baseline` is absent at the pinned main baseline.
+The archived tool combines parsing and canonical export; only **export** is the
+proposed first extraction. This inventory does not authorize implementing it.
+
+**Pinned archive sources:**
+
+- [Scope and safety contract](https://github.com/Emyrk/chronicle/blob/f892a9b26cfd46b238fdaa419394cb3cd9afe423/scripts/parser-baseline/README.md).
+- [CLI guards and run provenance](https://github.com/Emyrk/chronicle/blob/f892a9b26cfd46b238fdaa419394cb3cd9afe423/scripts/parser-baseline/main.go).
+- [Canonical export and publication checks](https://github.com/Emyrk/chronicle/blob/f892a9b26cfd46b238fdaa419394cb3cd9afe423/scripts/parser-baseline/export.go).
+- [Semantic event decoding](https://github.com/Emyrk/chronicle/blob/f892a9b26cfd46b238fdaa419394cb3cd9afe423/scripts/parser-baseline/events.go).
+- [Export regressions](https://github.com/Emyrk/chronicle/blob/f892a9b26cfd46b238fdaa419394cb3cd9afe423/scripts/parser-baseline/export_test.go).
+- [CLI safeguard tests](https://github.com/Emyrk/chronicle/blob/f892a9b26cfd46b238fdaa419394cb3cd9afe423/scripts/parser-baseline/main_test.go).
+- [Publication coverage tests](https://github.com/Emyrk/chronicle/blob/f892a9b26cfd46b238fdaa419394cb3cd9afe423/scripts/parser-baseline/publication_test.go).
+
+**Bounded unit:** export already-published controlled fixtures in a repeatable-read,
+read-only transaction. Canonicalize generated identities and row order, decode
+protobuf events, and preserve semantic values and event order. Keep explicit field
+allowlists and exclusions. Matching exports prove only the declared coverage,
+not whole-database equality, universal parser parity, or production readiness.
+
+**Prerequisites:** adapt queries, database models, event decoders, publication
+visibility/generation checks, and output schema to current main. Archived README
+and implementation versions differ in places; code and adapted tests determine
+the new contract. Remove parsernext engine selection and the parse runner from
+this first slice rather than importing `RunLogParseBaseline`, checkpoint owners,
+or experimental migrations. Empty logs remain outside the archived first slice;
+any changed coverage requires an explicit versioned contract and tests.
+
+**Safety and provenance:** retain explicit disposable/local database opt-in,
+`parser_baseline_*` naming, loopback/socket and fallback-host checks, no default
+production DSN, and fresh-armory fixture provenance. A local tunnel is not proof
+of isolation. No automatic provisioning, migrations, reset, or private-data fetch.
+Keep source revision/dirty status, seed identity, and export schema separate from
+comparable semantic output. Archived exclusive-create provenance is run-only;
+an export-only adaptation must deliberately retain equivalent evidence without
+claiming that export produced the rows. Preserve exit-status checks and reject
+stale/incomplete publication rather than comparing empty or truncated artifacts.
+
+**Tests:** port deterministic ordering, ambiguous-key rejection, unknown/malformed
+protobuf rejection, missing streams, generation and expected-instance-count checks,
+and host/opt-in safeguards. Adapt ranking, structure, and publication tests only
+for explicitly retained allowlists. Use isolated fixtures, never user databases.
+
+**Risk/extraction:** reimplement or selectively port the exporter and safeguards
+as a separately approved tool. No whole-stack cherry-pick. Reference GUIDs/names
+can remain in semantic exports: keep resulting artifacts private and do not commit
+them as public fixtures. This documentation PR remains code-free.
+
+The [snapshot subprocess test](https://github.com/Emyrk/chronicle/blob/f892a9b26cfd46b238fdaa419394cb3cd9afe423/chronicle/logparse_checkpoint_subprocess_test.go)
+is **archive-only**: it depends on `CompleteFileSession`, checkpoint restoration,
+and prepared runtime dependencies. It is not part of the export-only extraction.
+
 ## Explicitly excluded from these candidates
 
 - Migration 388 (`log_identity_catalogues`) is historical experiment evidence.

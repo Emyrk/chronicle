@@ -21,6 +21,10 @@ prerequisites, tests, mainline status, and cherry-pick versus reimplementation r
 - **Shared connect-only pgxpool mode:** potentially useful to a real provisioned-DB
   caller; preserve existing configuration, diagnostics, role setup, and lifecycle.
 
+- **Deterministic validation exports:** evaluate an export-only extraction of
+  `scripts/parser-baseline`, adapting main's contracts and retaining local-only
+  safeguards/provenance. Parsernext execution and snapshot tests stay archived.
+
 ## Distinguish initial uploads from reparses
 
 Root **reparse** context recovery is already fixed by #2033 at pinned main
