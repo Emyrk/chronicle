@@ -84,7 +84,7 @@ func newService(t *testing.T, store *snapshotStore, families ...servicestats.Fam
 	t.Helper()
 	opts := servicestats.Options{Logger: testutil.Logger(t), Store: store}
 	if len(families) > 0 {
-		opts.Families = append(servicestats.DefaultFamilies(), families...)
+		opts.Families = append(servicestats.DefaultFamilies(store, time.Now), families...)
 	}
 	svc, err := servicestats.New(opts)
 	require.NoError(t, err)

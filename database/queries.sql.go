@@ -34346,6 +34346,45 @@ func (q *sqlQuerier) ListStatsSnapshotMeta(ctx context.Context, tenantID uuid.UU
 	return items, nil
 }
 
+const statsGearCohorts = `-- name: StatsGearCohorts :many
+SELECT DISTINCT edr.player_class, edr.player_spec
+FROM encounter_dps_rankings edr
+JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
+WHERE edr.encounter_id IS NOT NULL
+  AND edr.killed_at >= $1::timestamptz
+  AND edr.player_class NOT IN ('', 'Unknown')
+  AND edr.player_spec NOT IN ('', 'Unknown', 'Class')
+ORDER BY edr.player_class, edr.player_spec
+`
+
+type StatsGearCohortsRow struct {
+	PlayerClass string `db:"player_class" json:"player_class"`
+	PlayerSpec  string `db:"player_spec" json:"player_spec"`
+}
+
+// The class/spec pairs with boss-kill rankings since @since in the request
+// tenant (RLS on wow_server_realms), for the /stats gear pages. Background
+// job only.
+func (q *sqlQuerier) StatsGearCohorts(ctx context.Context, since pgtype.Timestamptz) ([]StatsGearCohortsRow, error) {
+	rows, err := q.db.Query(ctx, statsGearCohorts, since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []StatsGearCohortsRow
+	for rows.Next() {
+		var i StatsGearCohortsRow
+		if err := rows.Scan(&i.PlayerClass, &i.PlayerSpec); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const statsTenantPlayerCount = `-- name: StatsTenantPlayerCount :one
 SELECT COUNT(DISTINCT (li.realm_id, lip.unit_guid))::bigint
 FROM log_instances li

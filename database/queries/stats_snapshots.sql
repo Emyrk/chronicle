@@ -72,3 +72,16 @@ JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
 JOIN log_instance_players lip ON lip.instance_id = li.id
 WHERE li.start_time >= @since::timestamptz
   AND li.invalidated_at IS NULL;
+
+-- name: StatsGearCohorts :many
+-- The class/spec pairs with boss-kill rankings since @since in the request
+-- tenant (RLS on wow_server_realms), for the /stats gear pages. Background
+-- job only.
+SELECT DISTINCT edr.player_class, edr.player_spec
+FROM encounter_dps_rankings edr
+JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
+WHERE edr.encounter_id IS NOT NULL
+  AND edr.killed_at >= @since::timestamptz
+  AND edr.player_class NOT IN ('', 'Unknown')
+  AND edr.player_spec NOT IN ('', 'Unknown', 'Class')
+ORDER BY edr.player_class, edr.player_spec;

@@ -212,7 +212,7 @@ func TestRefresh(t *testing.T) {
 	svc, err := servicestats.New(servicestats.Options{
 		Logger:           testutil.Logger(t),
 		Store:            store,
-		Families:         append(servicestats.DefaultFamilies(), probe, slow, failing),
+		Families:         append(servicestats.DefaultFamilies(store, func() time.Time { return now }), probe, slow, failing),
 		AccessURL:        accessURL,
 		PrimaryDomain:    "chronicleclassic.com",
 		IndexNowKey:      "test-key-1234",
@@ -271,7 +271,7 @@ func TestRefresh(t *testing.T) {
 	require.True(t, tr.Eligible)
 	require.EqualValues(t, servicestats.MinTenantRaids, tr.Activity.Raids, "only alpha's raids count")
 	require.Nil(t, tr.Activity.Players)
-	require.ElementsMatch(t, []string{"about", "probe", "slow", "failing"}, producers())
+	require.ElementsMatch(t, []string{"about", "gear", "gear-index", "probe", "slow", "failing"}, producers())
 
 	// Each family runs on its own: a timeout and an error don't stop the rest.
 	start := time.Now()
@@ -286,7 +286,13 @@ func TestRefresh(t *testing.T) {
 	require.ElementsMatch(t, []string{"/stats/probe/a", "/stats/probe/b"}, pr.Changed)
 	_, err = svc.RefreshProducer(ctx, alpha, "about", time.Time{})
 	require.NoError(t, err)
-	require.ElementsMatch(t, []string{"_activity", "about", "_ran:about", "probe/a", "probe/b", "_ran:probe"}, keys(alpha))
+	// alpha has no rankings: the gear families run but emit no pages.
+	for _, key := range []string{"gear", "gear-index"} {
+		res, err := svc.RefreshProducer(ctx, alpha, key, time.Time{})
+		require.NoError(t, err)
+		require.Zero(t, res.Pages, key)
+	}
+	require.ElementsMatch(t, []string{"_activity", "about", "_ran:about", "probe/a", "probe/b", "_ran:probe", "_ran:gear", "_ran:gear-index"}, keys(alpha))
 
 	got := probeTenant.Load()
 	require.NotNil(t, got.Row)
