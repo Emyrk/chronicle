@@ -132,6 +132,25 @@ beats `/stats/{instance}/{boss}` for `/stats/naxxramas/speedruns`, and a
 that would match exactly the same paths, and static pages a family matches,
 are rejected by `New`.
 
+## Curated searches
+
+`searches_registry.go` lists named instance searches (slug, title with `{server}`,
+answer sentence, query). The `searches` family (`/stats/searches/{slug}`) runs
+each one nightly per tenant through the instance search engine, read-only, one
+after another, under the engine's statement timeout, and publishes the first 25
+runs with a link into the SPA's `/search` (`?q=` is the base64url JSON of the
+`where` tree plus `sort`/`order`). `searches-index` (`/stats/searches`) lists the
+searches that have results by reading the other family's snapshot metadata.
+
+- A search that errors keeps its previous page (the producer re-emits the stored
+  payload); with no previous page it is left out. An empty result is a page below
+  its minimum sample, so it is noindex and not in the sitemap.
+- `Requires` names a raid the tenant's flavor must register, so servers without
+  it run no query and store no page.
+- Every registry query must compile and cost no more than the anonymous search
+  budget (`TestCuratedSearchRegistry`).
+- A producer that implements `SetLogger(*slog.Logger)` gets the service's logger.
+
 ## Adding a page family
 
 1. **Write a producer.** Run the expensive queries in `Compute`. `ctx` is

@@ -18,6 +18,7 @@ func methodologyPage() StaticPage {
 						Heading: "Where the numbers come from",
 						Paragraphs: []string{
 							"Every number comes from combat logs uploaded to Chronicle. Only listed logs count; unlisted uploads and logs an admin invalidated are excluded.",
+							"Curated search pages run a fixed search over the same listed logs through Chronicle's raid search, once a night, and list the first matching runs; a search with no result stays out of search engines.",
 							"A raid uploaded by several players counts once. Player counts are distinct characters seen in those logs, so they undercount everyone who plays on the server.",
 						},
 					},
