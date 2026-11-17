@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRaidLogReparsePermission(t *testing.T) {
+func TestRaidLogReparseAndViewPermissions(t *testing.T) {
 	t.Parallel()
 
 	zed := serviceauthz.Authz(testservices.Authz(t))
@@ -60,11 +60,18 @@ func TestRaidLogReparsePermission(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, tc.allowed, allowed)
 
+			canView, err := zed.CheckOne(ctx, nil, log.CanView_User(user))
+			require.NoError(t, err)
+			require.Equal(t, tc.uploader || tc.allowed, canView)
+
 			if tc.role == "moderate_logs" {
 				require.NoError(t, zed.SetUserChronicleRoles(ctx, userID, nil))
 				allowed, err = zed.CheckOne(ctx, nil, log.CanReparse_User(user))
 				require.NoError(t, err)
 				require.False(t, allowed, "revoked moderators must lose reparse access")
+				canView, err = zed.CheckOne(ctx, nil, log.CanView_User(user))
+				require.NoError(t, err)
+				require.Equal(t, tc.uploader, canView, "revoked moderators only retain view access to their own logs")
 			}
 		})
 	}
