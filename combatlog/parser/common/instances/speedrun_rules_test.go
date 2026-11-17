@@ -176,8 +176,8 @@ func TestZulGurubRankedDurationTargets(t *testing.T) {
 
 			rules := ZulGurubFactory.FlavoredRankings(database.WoWFlavor{flavor})
 			require.Equal(t, rankings.DamageTargets{Mode: rankings.DamageTargetsBossOnly}, rules.DurationTargets("Gahz'ranka"))
-			// A boss-only selector would also include Ohgan (14988).
-			require.Equal(t, rankings.DamageTargets{Mode: rankings.DamageTargetsEntries, EntryIDs: []uint32{11382}}, rules.DurationTargets("Bloodlord Mandokir"))
+			// Ranked timing includes both Mandokir and Ohgan (14988).
+			require.Equal(t, rankings.DamageTargets{Mode: rankings.DamageTargetsEntries, EntryIDs: []uint32{11382, 14988}}, rules.DurationTargets("Bloodlord Mandokir"))
 			require.Equal(t, rankings.DamageTargets{}, rules.DurationTargets("Hakkar"))
 			require.Empty(t, rules.DamageByEncounter)
 		})

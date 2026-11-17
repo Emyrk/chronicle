@@ -240,8 +240,8 @@ var (
 				},
 				DurationByEncounter: map[string]rankings.DamageTargets{
 					"Gahz'ranka": {Mode: rankings.DamageTargetsBossOnly},
-					// Ohgan is also classified as a boss, so select Mandokir explicitly.
-					"Bloodlord Mandokir": {Mode: rankings.DamageTargetsEntries, EntryIDs: []uint32{11382}},
+					// Include both Mandokir and Ohgan, but exclude nearby trash.
+					"Bloodlord Mandokir": {Mode: rankings.DamageTargetsEntries, EntryIDs: []uint32{11382, 14988}},
 				},
 			}
 		},
