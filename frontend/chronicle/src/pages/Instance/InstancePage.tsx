@@ -315,21 +315,21 @@ export function InstancePage() {
     }
   }, [apiInstance?.slug, instanceId, navigate]);
 
-  // Check if user can delete this log (uploader or admin) - if so, show link to log detail
+  // Show the log detail link when the user can view this log.
   const { isAuthenticated } = useAuth();
   const logGroupId = apiInstance?.log_group_id;
   const authzChecks = useMemo(() => ({
-    delete: logGroupId ? `raid_log:${logGroupId}#delete` : "",
+    view: logGroupId ? `raid_log:${logGroupId}#view` : "",
     adminLogs: "chronicle:chronicle#admin_logs",
     invalidateLogs: "chronicle:chronicle#invalidate_logs",
   }), [logGroupId]);
   const { data: authz } = useAuthorizationCheck(authzChecks, {
     enabled: isAuthenticated && !!logGroupId,
   });
-  const canDeleteLog = authz?.delete ?? false;
+  const canViewLog = authz?.view ?? false;
   const canAdminLogs = authz?.adminLogs ?? false;
   const canInvalidateLogs = authz?.invalidateLogs ?? false;
-  const logDetailUrl = canDeleteLog && logGroupId ? `/logs/${logGroupId}` : undefined;
+  const logDetailUrl = canViewLog && logGroupId ? `/logs/${logGroupId}` : undefined;
 
   const instance = useMemo(() => {
     if (!apiInstance) return null;
