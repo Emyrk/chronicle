@@ -629,6 +629,14 @@ var fields = []*field{
 	// ---- Encounter scope (inside any_encounter / count_encounters) ------
 	{Name: "encounter.name", Scope: scopeEncounter, Type: typeString,
 		Doc: "Encounter name (boss name for boss fights).", value: column("{a}.name")},
+	// Mirror log_instances_resolved for legacy NULL difficulty without changing
+	// the raw instance fields. Resolve NULL before normalizing explicit empty
+	// difficulty, so a Normal pull never inherits a heroic parent.
+	{Name: "encounter.difficulty", Scope: scopeEncounter, Type: typeString,
+		Doc:   "Pull difficulty, e.g. normal or heroic; custom values allowed. Explicit empty means normal; legacy NULL inherits the resolved instance difficulty.",
+		value: column("COALESCE(NULLIF(COALESCE({a}.difficulty, CASE WHEN li.difficulty_normalized THEN li.difficulty_name WHEN li.dynamic_difficulty > 0 OR li.difficulty_name ILIKE '%heroic%' THEN 'heroic' ELSE '' END), ''), 'normal')")},
+	{Name: "encounter.variant", Scope: scopeEncounter, Type: typeString,
+		Doc: "Classified pull variant, e.g. normal or hard; custom values allowed. Missing classification is unknown, not normal.", value: column("{a}.encounter_variant")},
 	{Name: "encounter.boss", Scope: scopeEncounter, Type: typeBool,
 		Doc: "The encounter is a boss fight.", value: column("{a}.boss")},
 	{Name: "encounter.outcome", Scope: scopeEncounter, Type: typeEnum, Enum: outcomes,

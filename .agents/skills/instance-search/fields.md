@@ -41,6 +41,8 @@ Use inside `any_encounter` / `count_encounters`. One encounter is one pull.
 | Field | Type | Ops | Options | Description |
 |---|---|---|---|---|
 | `encounter.name` | string | =, !=, in, not_in, contains, starts_with |  | Encounter name (boss name for boss fights). |
+| `encounter.difficulty` | string | =, !=, in, not_in, contains, starts_with |  | Pull difficulty, e.g. normal or heroic; custom values allowed. Explicit empty means normal; legacy NULL inherits the resolved instance difficulty. |
+| `encounter.variant` | string | =, !=, in, not_in, contains, starts_with |  | Classified pull variant, e.g. normal or hard; custom values allowed. Missing classification is unknown, not normal. |
 | `encounter.boss` | bool | =, != |  | The encounter is a boss fight. |
 | `encounter.outcome` | enum: clean, partial, wipe, reset | =, !=, in, not_in |  | clean (kill), partial (kill with gaps), wipe or reset. |
 | `encounter.killed` | bool | =, != |  | The encounter ended in a kill (clean or partial). |

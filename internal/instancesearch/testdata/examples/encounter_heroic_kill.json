@@ -1,0 +1,26 @@
+{
+  "description": "A heroic Ragnaros kill on the same pull.",
+  "query": {
+    "where": {
+      "any_encounter": {
+        "and": [
+          {
+            "field": "encounter.name",
+            "op": "=",
+            "value": "Ragnaros"
+          },
+          {
+            "field": "encounter.difficulty",
+            "op": "=",
+            "value": "heroic"
+          },
+          {
+            "field": "encounter.killed",
+            "op": "=",
+            "value": true
+          }
+        ]
+      }
+    }
+  }
+}

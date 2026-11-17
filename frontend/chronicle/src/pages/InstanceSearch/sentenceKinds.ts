@@ -145,7 +145,7 @@ export function cleared(k: Kind): Partial<Form> {
     case "hasVideo":
       return { hasVideo: false };
     case "killed":
-      return { killed: [] };
+      return { killed: [], killedModifiers: {} };
     case "noWipes":
       return { noWipes: [] };
     case "bossesKilled":

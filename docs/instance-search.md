@@ -219,6 +219,36 @@ Keyset pagination on `(sort_key, li.id)` like `ListRecentInstances`. The fixed s
 
 ## Possible upgrades (not planned)
 
+### Encounter difficulty and variants
+
+`encounter.difficulty` and `encounter.variant` are independent, case-insensitive
+free-text fields, not closed enums. Both support `=`, `!=`, `in`, `not_in`,
+`contains`, and `starts_with`; empty partial-match strings are rejected. Custom
+keys are accepted without requiring a new allowlist. Use `normal`, not an empty
+string, to match Normal difficulty.
+
+- **Difficulty:** search for `normal` or `heroic`, or a custom difficulty key.
+  An explicitly empty stored encounter difficulty means Normal and is exposed
+  as `normal`, even when the parent instance is heroic. A NULL encounter
+  difficulty is historical: it inherits the resolved instance difficulty.
+  As in `log_instances_resolved`, normalized instance keys are preserved;
+  otherwise positive dynamic difficulty or a legacy label containing `heroic`
+  resolves to heroic, and other legacy labels resolve to Normal. Empty resolved
+  difficulty is normalized to `normal` only for this search field. This does not
+  change `instance.difficulty` or persisted values.
+- **Variant:** search for explicitly classified `normal`, `hard`, or a custom
+  variant key. NULL is unknown, never Normal. It does not match `= normal` or
+  `!= normal`; no difficulty or instance-level fallback invents a classification.
+
+These fields require `any_encounter` or `count_encounters`. Put boss name,
+killed, difficulty, and variant conditions inside **one** quantifier to require
+one pull to satisfy all conditions. Separate quantifiers may match different
+pulls. For example, `encounter_normal_hard_variant.json` requires a Normal
+hard-variant kill on the same pull.
+
+
+## Possible upgrades (not planned)
+
 - **Typo-tolerant name matching.** Today text fields support exact `=` / `in` and partial `contains` / `starts_with`, all ignoring case. To also match misspellings ("molten croe"):
   - Add `CREATE EXTENSION IF NOT EXISTS pg_trgm` in a migration. Production runs Postgres 17 with `pg_trgm` available but not installed. Creating it is quick and touches no data.
   - Add a `similar` operator using trigram similarity (`similarity(lower(col), lower($n)) >= threshold`, or the `%` operator).

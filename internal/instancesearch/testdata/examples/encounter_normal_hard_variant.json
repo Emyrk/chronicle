@@ -1,0 +1,26 @@
+{
+  "description": "An explicitly classified hard variant on Normal difficulty, on the same pull.",
+  "query": {
+    "where": {
+      "any_encounter": {
+        "and": [
+          {
+            "field": "encounter.difficulty",
+            "op": "=",
+            "value": "normal"
+          },
+          {
+            "field": "encounter.variant",
+            "op": "=",
+            "value": "hard"
+          },
+          {
+            "field": "encounter.killed",
+            "op": "=",
+            "value": true
+          }
+        ]
+      }
+    }
+  }
+}

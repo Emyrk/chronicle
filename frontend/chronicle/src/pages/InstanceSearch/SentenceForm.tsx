@@ -9,6 +9,7 @@ import { parseColor } from "@/pages/Instance/parseColors";
 import { TIER_COLOR } from "@/pages/Settings/billingPricing";
 import { ChipInput, NumberInput, Segmented, SuggestInput, ToggleChips } from "./controls";
 import { MATCH_OPTIONS, PARSE_SCOPE_OPTIONS, enumLabel } from "./fieldLabels";
+import { ENCOUNTER_DIFFICULTY_OPTIONS, ENCOUNTER_VARIANT_OPTIONS } from "./searchOptions";
 import { ClassSpecPicker } from "./ClassSpecPicker";
 import { toOptions, type Suggestion } from "./comboOptions";
 import type { SearchForm as Form, PlayerStatField, TextMatch } from "./queryModel";
@@ -101,8 +102,30 @@ export function SentenceForm({ form, onChange, zones, bosses, realms, classes, c
       case "killed":
         body = (
           <>
-            <BossToken values={form.killed} onChange={(v) => set("killed", v)} bosses={bosses} empty="a boss" autoOpen={auto} disabled={dis} />
+            <BossToken values={form.killed} onChange={(v) => patch({ killed: v, killedModifiers: Object.fromEntries(Object.entries(form.killedModifiers).filter(([boss]) => v.includes(boss))) })} bosses={bosses} empty="a boss" autoOpen={auto} disabled={dis} />
             <Word>{form.killed.length > 1 ? "all died" : "died"}</Word>
+            {form.killed.map((boss) => (
+              <span key={boss} className="inline-flex items-center gap-1 flex-wrap">
+                {form.killed.length > 1 && <Word>{boss}:</Word>}
+                {(["difficulty", "variant"] as const).map((key) => {
+                  const options = key === "difficulty" ? ENCOUNTER_DIFFICULTY_OPTIONS : ENCOUNTER_VARIANT_OPTIONS;
+                  const value = form.killedModifiers[boss]?.[key] ?? "";
+                  return (
+                    <Token key={key} label={options.find((o) => o.value === value)?.label ?? value} filled={!!value} empty={key === "difficulty" ? "any difficulty" : "any mode"} disabled={dis}>
+                      <p className="text-2xs text-muted-foreground mb-2">{key === "difficulty" ? "Difficulty" : "Mode"} on the same killed pull of {boss}.</p>
+                      <SuggestInput value={value} suggestions={options} placeholder={key === "difficulty" ? "Any difficulty" : "Any mode"} onChange={(v) => {
+                        const modifiers = { ...form.killedModifiers[boss], [key]: v };
+                        const active = Object.values(modifiers).some(Boolean);
+                        const next = { ...form.killedModifiers };
+                        if (active) next[boss] = modifiers;
+                        else delete next[boss];
+                        set("killedModifiers", next);
+                      }} />
+                    </Token>
+                  );
+                })}
+              </span>
+            ))}
           </>
         );
         break;

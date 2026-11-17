@@ -20,6 +20,8 @@ const FIELD_LABELS: Record<string, string> = {
   "instance.capability": "Log capability",
   "encounter.kill_time_parse": "Kill-time parse",
   "encounter.duration_ms": "Duration",
+  "encounter.difficulty": "Difficulty",
+  "encounter.variant": "Mode",
   "encounter.killed": "Killed",
   "player.guid": "GUID",
   "player.sub_spec": "Sub-spec",
@@ -45,7 +47,7 @@ const FIELD_GROUPS: [string, string[]][] = [
   ["Character", ["player.name", "player.guid", "player.class", "player.race", "player.level", "player.guild", "player.guild_id"]],
   ["In fights", ["player.spec", "player.role", "player.dps", "player.hps", "player.deaths", "player.avg_ilvl"]],
   ["Parses", ["player.parse"]],
-  ["Pull", ["encounter.name", "encounter.boss", "encounter.outcome", "encounter.killed", "encounter.duration_ms", "encounter.kill_time_parse"]],
+  ["Pull", ["encounter.name", "encounter.difficulty", "encounter.variant", "encounter.boss", "encounter.outcome", "encounter.killed", "encounter.duration_ms", "encounter.kill_time_parse"]],
 ];
 const GROUP_OF = new Map(FIELD_GROUPS.flatMap(([g, names], i) => names.map((n) => [n, [g, i] as const])));
 

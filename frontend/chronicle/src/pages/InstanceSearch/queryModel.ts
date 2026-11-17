@@ -180,6 +180,8 @@ export interface SearchForm {
   hasVideo: boolean;
 
   killed: string[];
+  /** Modifiers belong to the named killed pull, never a separate encounter. */
+  killedModifiers: Record<string, { difficulty?: string; variant?: string }>;
   noWipes: string[];
   parseScope: InstanceSearchParseScope;
   clearParseMin: number | null;
@@ -217,6 +219,7 @@ export function emptyForm(): SearchForm {
     maxPlayers: null,
     hasVideo: false,
     killed: [],
+    killedModifiers: {},
     noWipes: [],
     parseScope: "server",
     clearParseMin: null,
@@ -269,8 +272,11 @@ function nextDayStart(date: string): string {
   return d.toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 
-function killedNode(boss: string): Node {
-  return { any_encounter: { and: [pred("encounter.name", "=", boss), pred("encounter.killed", "=", true)] } };
+function killedNode(boss: string, modifiers: SearchForm["killedModifiers"][string] = {}): Node {
+  const and = [pred("encounter.name", "=", boss), pred("encounter.killed", "=", true)];
+  if (modifiers.difficulty) and.push(pred("encounter.difficulty", "=", modifiers.difficulty));
+  if (modifiers.variant) and.push(pred("encounter.variant", "=", modifiers.variant));
+  return { any_encounter: { and } };
 }
 
 function bossKillTimeNode(k: BossKillTime): Node {
@@ -327,7 +333,7 @@ export function formToTree(f: SearchForm): Node | undefined {
   if (f.maxPlayers != null) parts.push(pred("instance.max_players", "=", f.maxPlayers));
   if (f.hasVideo) parts.push(pred("instance.has_video", "=", true));
 
-  for (const boss of f.killed) parts.push(killedNode(boss));
+  for (const boss of f.killed) parts.push(killedNode(boss, f.killedModifiers[boss]));
   for (const boss of f.noWipes) parts.push(noWipeNode(boss));
   for (const k of f.bossKillTimes) if (k.boss.trim()) parts.push(bossKillTimeNode(k));
   if (f.bossesKilledMin != null) parts.push(pred("instance.bosses_killed", ">=", f.bossesKilledMin));
@@ -541,9 +547,23 @@ export function treeToForm(tree: Node | undefined): SearchForm | null {
         f.bossKillTimes.push(timed);
         continue;
       }
-      const boss = bossOf(n.any_encounter, (b) => isPred(b, "encounter.killed", "=") && b.value === true);
-      if (boss == null) return null;
+      const kids = n.any_encounter.and;
+      if (!kids || n.any_encounter.or) return null;
+      const name = kids.find((c) => isPred(c, "encounter.name", "=") && asString(c.value) != null);
+      const boss = name ? asString(name.value) : null;
+      if (boss == null || f.killed.includes(boss)) return null;
+      const modifiers: SearchForm["killedModifiers"][string] = {};
+      let killed = false;
+      for (const c of kids) {
+        if (c === name) continue;
+        if (isPred(c, "encounter.killed", "=") && c.value === true && !killed) killed = true;
+        else if (isPred(c, "encounter.difficulty", "=") && asString(c.value) && modifiers.difficulty === undefined) modifiers.difficulty = c.value as string;
+        else if (isPred(c, "encounter.variant", "=") && asString(c.value) && modifiers.variant === undefined) modifiers.variant = c.value as string;
+        else return null;
+      }
+      if (!killed) return null;
       f.killed.push(boss);
+      if (Object.keys(modifiers).length) f.killedModifiers[boss] = modifiers;
       continue;
     }
     if (n.not?.any_encounter) {

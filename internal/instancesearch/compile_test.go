@@ -455,3 +455,43 @@ func TestHostileCountNumericScope(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 51, compiled.Cost)
 }
+
+func TestEncounterDifficultyAndVariant(t *testing.T) {
+	t.Parallel()
+	for _, field := range []string{"encounter.difficulty", "encounter.variant"} {
+		t.Run(field, func(t *testing.T) {
+			t.Parallel()
+			for _, op := range []string{"=", "!=", "in", "not_in", "contains", "starts_with"} {
+				value := `"Custom Tier"`
+				if op == "in" || op == "not_in" {
+					value = `["normal", "Custom Tier"]`
+				}
+				q := where(t, `{"any_encounter":{"field":"`+field+`","op":"`+op+`","value":`+value+`}}`)
+				compiled, err := instancesearch.Compile(q, instancesearch.Options{})
+				require.NoError(t, err)
+				require.NotContains(t, compiled.SQL, "Custom Tier")
+				require.Contains(t, strings.ToLower(compiled.SQL), "lower(")
+			}
+			for _, raw := range []string{
+				`{"field":"` + field + `","op":"=","value":"normal"}`,
+				`{"any_player":{"field":"` + field + `","op":"=","value":"normal"}}`,
+				`{"any_encounter":{"field":"` + field + `","op":"contains","value":""}}`,
+			} {
+				_, err := instancesearch.Compile(where(t, raw), instancesearch.Options{})
+				require.Error(t, err)
+			}
+			q := where(t, `{"count_encounters":{"where":{"field":"`+field+`","op":"=","value":"normal"},"op":">=","value":2}}`)
+			_, err := instancesearch.Compile(q, instancesearch.Options{})
+			require.NoError(t, err)
+			for _, f := range instancesearch.Describe().Fields {
+				if f.Name != field {
+					continue
+				}
+				require.Equal(t, chroniclesdk.InstanceSearchFieldScopeEncounter, f.Scope)
+				require.Empty(t, f.Enum)
+				require.Contains(t, f.Ops, instancesearch.OpContains)
+				require.False(t, f.Anonymous)
+			}
+		})
+	}
+}
