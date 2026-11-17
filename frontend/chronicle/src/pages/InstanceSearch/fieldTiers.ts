@@ -4,8 +4,8 @@ import type { Node } from "./queryModel";
 /*
  * Who can search by a field. Anonymous users get the server's anonymous
  * fields; logged-in users get everything else except the costly fields below,
- * which require Honored, or Revered for encounter hostile counts. These locks are UI-only (the server
- * accepts these from anyone logged in), like the Code editor's.
+ * which require Honored or Revered. The server also enforces Revered access
+ * for encounter difficulty and variant filters.
  */
 
 /** The costly fields: player parses and stats, and boss / trash / idle time. */
@@ -19,12 +19,18 @@ export const HONORED_FIELDS: ReadonlySet<string> = new Set([
   "instance.idle_time_ms",
 ]);
 
+export const REVERED_FIELDS: ReadonlySet<string> = new Set([
+  "encounter.hostile_count",
+  "encounter.difficulty",
+  "encounter.variant",
+]);
+
 export type FieldLock = "honored" | "revered" | "login";
 
 /** Why the viewer can't use a field, or null when they can. Unknown access allows legacy fields; Revered fields fail closed. */
 export function fieldLock(field: InstanceSearchField, access: { honored?: boolean; revered?: boolean; loggedIn?: boolean }): FieldLock | null {
   if (access.loggedIn === false && !field.anonymous) return "login";
-  if (field.name === "encounter.hostile_count" && access.revered !== true) return "revered";
+  if (REVERED_FIELDS.has(field.name) && access.revered !== true) return "revered";
   if (access.honored === false && HONORED_FIELDS.has(field.name)) return "honored";
   return null;
 }
@@ -42,7 +48,7 @@ export function treeNeedsHonored(n: Node | undefined): boolean {
   return treeFields(n).some((f) => HONORED_FIELDS.has(f));
 }
 
-/** Frontend-only field gate, including imported, shared, and recent queries. */
+/** Field gate including imported, shared, code, and recent queries. */
 export function treeNeedsRevered(n: Node | undefined): boolean {
-  return treeFields(n).includes("encounter.hostile_count");
+  return treeFields(n).some((f) => REVERED_FIELDS.has(f));
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { InstanceSearchFieldsResponse } from "@/api/typesGenerated";
 import fixture from "./fixtures/searchFields.json";
-import { HONORED_FIELDS, fieldLock, treeNeedsHonored, treeNeedsRevered } from "./fieldTiers";
+import { HONORED_FIELDS, REVERED_FIELDS, fieldLock, treeNeedsHonored, treeNeedsRevered } from "./fieldTiers";
 import { KINDS } from "./sentenceKinds";
 import { emptyForm, formToTree, type SearchForm } from "./queryModel";
 
@@ -10,7 +10,7 @@ const field = (name: string) => desc.fields.find((f) => f.name === name)!;
 
 describe("fieldTiers", () => {
   it("names real fields", () => {
-    for (const name of HONORED_FIELDS) expect(desc.fields.some((f) => f.name === name), name).toBe(true);
+    for (const name of [...HONORED_FIELDS, ...REVERED_FIELDS]) expect(desc.fields.some((f) => f.name === name), name).toBe(true);
   });
 
   it("locks by tier", () => {
@@ -62,4 +62,23 @@ it("finds restricted fields in shared nested queries and fails closed while load
   expect(treeNeedsRevered({ not: { or: [{ count_encounters: { where: predicate, op: ">=", value: 1 } }] } })).toBe(true);
   expect(treeNeedsRevered({ any_encounter: predicate })).toBe(true);
   expect(treeNeedsRevered({ field: "player.dps", op: ">", value: 1 })).toBe(false);
+});
+
+
+it.each(["encounter.difficulty", "encounter.variant"])("requires Revered and charges expensive cost for %s", (name) => {
+  expect(fieldLock(field(name), {})).toBe("revered");
+  expect(fieldLock(field(name), { loggedIn: true, honored: true })).toBe("revered");
+  expect(fieldLock(field(name), { loggedIn: true, honored: true, revered: false })).toBe("revered");
+  expect(fieldLock(field(name), { loggedIn: true, honored: true, revered: true })).toBeNull();
+  expect(field(name).cost).toBe(40);
+  const predicate = { field: name, op: "=" as const, value: "custom" };
+  expect(treeNeedsRevered({ any_encounter: predicate })).toBe(true);
+  expect(treeNeedsRevered({ not: { or: [{ count_encounters: { where: predicate, op: ">=", value: 1 } }] } })).toBe(true);
+  expect(treeNeedsRevered(formToTree({ ...emptyForm(), killed: ["Hodir"], killedModifiers: { Hodir: { [name === "encounter.difficulty" ? "difficulty" : "variant"]: "custom" } } }))).toBe(true);
+});
+
+it("keeps basic named kills available without Revered", () => {
+  expect(fieldLock(field("encounter.name"), { loggedIn: true, revered: false })).toBeNull();
+  expect(fieldLock(field("encounter.killed"), { loggedIn: true, revered: false })).toBeNull();
+  expect(treeNeedsRevered(formToTree({ ...emptyForm(), killed: ["Hodir"] }))).toBe(false);
 });

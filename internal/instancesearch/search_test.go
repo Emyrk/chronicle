@@ -707,3 +707,77 @@ func TestRankedKillDuration(t *testing.T) {
 		})
 	}
 }
+
+// Use a separate fixture so parallel search tests never observe mutations.
+func TestSearchEncounterDifficultyAndVariant(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	ctx := testutil.Context(t, testutil.WaitLong)
+	cfg, err := pgxpool.ParseConfig(f.url)
+	require.NoError(t, err)
+	cfg.ConnConfig.RuntimeParams["app.tenant_bypass"] = "true"
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
+	require.NoError(t, err)
+	defer pool.Close()
+	exec := func(sql string, args ...any) {
+		t.Helper()
+		_, err := pool.Exec(ctx, sql, args...)
+		require.NoError(t, err)
+	}
+	// Legacy heroic labels and explicit normalized custom keys use the same
+	// fallback as log_instances_resolved. NULL encounter difficulty inherits it.
+	exec(`UPDATE log_instances SET difficulty_name = '25 Player Heroic' WHERE id = $1`, f.mc2)
+	exec(`UPDATE log_instances SET difficulty_normalized = true, difficulty_name = 'Mythic Custom' WHERE id = $1`, f.mc1)
+	exec(`UPDATE log_instance_encounters SET difficulty = '', encounter_variant = 'hard' WHERE instance_id = $1 AND name = 'Ragnaros'`, f.mc1)
+	exec(`UPDATE log_instance_encounters SET difficulty = 'Timewalking', encounter_variant = 'normal' WHERE instance_id = $1 AND name = 'Majordomo Executus'`, f.mc1)
+	exec(`UPDATE log_instance_encounters SET encounter_variant = 'Titan Tier 3' WHERE instance_id = $1 AND name = 'Lava Surger'`, f.mc1)
+	// Explicit Normal never inherits its heroic parent; the kill remains legacy.
+	exec(`UPDATE log_instance_encounters SET difficulty = '' WHERE instance_id = $1 AND kill_type = 'wipe'`, f.mc2)
+	// A non-heroic historical label resolves to Normal rather than a custom key.
+	exec(`UPDATE log_instances SET difficulty_name = '40 Player' WHERE id = $1`, f.other)
+
+	samePull := func(predicates ...string) string {
+		return `{"any_encounter":{"and":[` + strings.Join(predicates, ",") + `]}}`
+	}
+	pred := func(field, value string) string {
+		return fmt.Sprintf(`{"field":%q,"op":"=","value":%q}`, field, value)
+	}
+	tests := []struct {
+		name, query string
+		want        []uuid.UUID
+	}{
+		{"LegacyHeroic", samePull(pred("encounter.difficulty", "HEROIC")), []uuid.UUID{f.mc2}},
+		{"ExplicitNormalOverridesHeroic", samePull(pred("encounter.outcome", "wipe"), pred("encounter.difficulty", "normal")), []uuid.UUID{f.mc2}},
+		{"ExplicitNormalOverridesCustom", samePull(pred("encounter.name", "Ragnaros"), pred("encounter.difficulty", "normal")), []uuid.UUID{f.mc1, f.mc2}},
+		{"CustomDifficulty", samePull(pred("encounter.difficulty", "timewalking")), []uuid.UUID{f.mc1}},
+		{"NormalizedCustomFallback", samePull(pred("encounter.difficulty", "mythic custom")), []uuid.UUID{f.mc1}},
+		{"LegacyLabelIsNotCustom", samePull(pred("encounter.difficulty", "40 Player")), nil},
+		{"HardVariant", samePull(pred("encounter.variant", "HARD")), []uuid.UUID{f.mc1}},
+		{"NormalVariant", samePull(pred("encounter.variant", "normal")), []uuid.UUID{f.mc1}},
+		{"CustomVariant", samePull(pred("encounter.variant", "titan tier 3")), []uuid.UUID{f.mc1}},
+		{"UnknownVariantNotNormal", samePull(pred("encounter.name", "Ragnaros"), pred("encounter.variant", "normal")), nil},
+		{"UnknownVariantNotNotEqual", `{"and":[{"field":"instance.guild","op":"=","value":"Beta"},` + samePull(`{"field":"encounter.variant","op":"!=","value":"normal"}`) + `]}`, nil},
+		{"DifficultySamePull", samePull(pred("encounter.name", "Ragnaros"), pred("encounter.difficulty", "timewalking")), nil},
+		{"VariantSamePull", samePull(pred("encounter.difficulty", "timewalking"), pred("encounter.variant", "hard")), nil},
+		{"SeparatePullsMayMatch", `{"and":[` + samePull(pred("encounter.difficulty", "timewalking")) + `,` + samePull(pred("encounter.variant", "hard")) + `]}`, []uuid.UUID{f.mc1}},
+		{"CountNormalPulls", `{"count_encounters":{"where":{"field":"encounter.difficulty","op":"=","value":"normal"},"op":"=","value":1}}`, []uuid.UUID{f.mc1, f.mc2}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.ElementsMatch(t, tt.want, ids(f.search(t, f.tenantA, where(t, tt.query))))
+		})
+	}
+	t.Run("ExplainNormalAndVariant", func(t *testing.T) {
+		t.Parallel()
+		ex := f.explain(t, f.tenantA, samePull(pred("encounter.difficulty", "normal"), pred("encounter.variant", "hard")), f.mc1)
+		require.True(t, ex.Matched)
+		require.Len(t, ex.Evidence.Witnesses, 1)
+		require.Equal(t, "normal", ex.Evidence.Witnesses[0].Evidence.Children[0].Value)
+		require.Equal(t, "hard", ex.Evidence.Witnesses[0].Evidence.Children[1].Value)
+	})
+	t.Run("HistoricalNormalFallback", func(t *testing.T) {
+		t.Parallel()
+		require.ElementsMatch(t, []uuid.UUID{f.other}, ids(f.search(t, f.tenantB, where(t, samePull(pred("encounter.difficulty", "normal"))))))
+	})
+}

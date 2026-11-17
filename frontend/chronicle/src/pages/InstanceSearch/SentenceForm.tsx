@@ -2,6 +2,7 @@ import { useState, type KeyboardEvent, type ReactNode } from "react";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import { Check, Lock, Plus, X } from "lucide-react";
 import { Link } from "react-router-dom";
+import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages";
@@ -9,6 +10,7 @@ import { parseColor } from "@/pages/Instance/parseColors";
 import { TIER_COLOR } from "@/pages/Settings/billingPricing";
 import { ChipInput, NumberInput, Segmented, SuggestInput, ToggleChips } from "./controls";
 import { MATCH_OPTIONS, PARSE_SCOPE_OPTIONS, enumLabel } from "./fieldLabels";
+import { ENCOUNTER_DIFFICULTY_OPTIONS, ENCOUNTER_VARIANT_OPTIONS } from "./searchOptions";
 import { ClassSpecPicker } from "./ClassSpecPicker";
 import { toOptions, type Suggestion } from "./comboOptions";
 import type { SearchForm as Form, PlayerStatField, TextMatch } from "./queryModel";
@@ -34,6 +36,8 @@ export interface SearchFormProps {
   loggedIn: boolean;
   /** Honored supporters get the expensive conditions. */
   honored: boolean;
+  /** Encounter difficulty and mode fail closed until Revered access is known. */
+  revered?: boolean;
 }
 
 const TEXT_MATCH_OPTIONS: { value: TextMatch; label: string }[] = [
@@ -43,7 +47,7 @@ const TEXT_MATCH_OPTIONS: { value: TextMatch; label: string }[] = [
 
 const HONORED = TIER_COLOR.honored;
 
-export function SentenceForm({ form, onChange, zones, bosses, realms, classes, capabilities, loggedIn, honored }: SearchFormProps) {
+export function SentenceForm({ form, onChange, zones, bosses, realms, classes, capabilities, loggedIn, honored, revered }: SearchFormProps) {
   const patch = (p: Partial<Form>) => onChange({ ...form, ...p });
   const set = <K extends keyof Form>(key: K, value: Form[K]) => patch({ [key]: value } as Partial<Form>);
   // Conditions added but not filled in yet stay on screen.
@@ -101,8 +105,30 @@ export function SentenceForm({ form, onChange, zones, bosses, realms, classes, c
       case "killed":
         body = (
           <>
-            <BossToken values={form.killed} onChange={(v) => set("killed", v)} bosses={bosses} empty="a boss" autoOpen={auto} disabled={dis} />
+            <BossToken values={form.killed} onChange={(v) => patch({ killed: v, killedModifiers: Object.fromEntries(Object.entries(form.killedModifiers).filter(([boss]) => v.includes(boss))) })} bosses={bosses} empty="a boss" autoOpen={auto} disabled={dis} />
             <Word>{form.killed.length > 1 ? "all died" : "died"}</Word>
+            {form.killed.map((boss) => (
+              <span key={boss} className="inline-flex items-center gap-1 flex-wrap">
+                {form.killed.length > 1 && <Word>{boss}:</Word>}
+                {(["difficulty", "variant"] as const).map((key) => {
+                  const options = key === "difficulty" ? ENCOUNTER_DIFFICULTY_OPTIONS : ENCOUNTER_VARIANT_OPTIONS;
+                  const value = form.killedModifiers[boss]?.[key] ?? "";
+                  return (
+                    <Token key={key} label={options.find((o) => o.value === value)?.label ?? value} filled={!!value} empty={key === "difficulty" ? "any difficulty" : "any mode"} disabled={dis || revered !== true} reveredLocked={revered !== true}>
+                      <p className="text-2xs text-muted-foreground mb-2">{key === "difficulty" ? "Difficulty" : "Mode"} on the same killed pull of {boss}.</p>
+                      <SuggestInput disabled={dis || revered !== true} value={value} suggestions={options} placeholder={key === "difficulty" ? "Any difficulty" : "Any mode"} onChange={(v) => {
+                        const modifiers = { ...form.killedModifiers[boss], [key]: v };
+                        const active = Object.values(modifiers).some(Boolean);
+                        const next = { ...form.killedModifiers };
+                        if (active) next[boss] = modifiers;
+                        else delete next[boss];
+                        set("killedModifiers", next);
+                      }} />
+                    </Token>
+                  );
+                })}
+              </span>
+            ))}
           </>
         );
         break;
@@ -478,6 +504,7 @@ function Token({
   autoOpen,
   disabled,
   width = "w-72",
+  reveredLocked,
   className,
   children,
 }: {
@@ -488,14 +515,16 @@ function Token({
   autoOpen?: boolean;
   disabled?: boolean;
   width?: string;
+  reveredLocked?: boolean;
   className?: string;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(!!autoOpen && !disabled);
-  return (
+  const token = (
     <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
       <PopoverPrimitive.Trigger asChild disabled={disabled}>
         <button type="button" className={cn(TOKEN, tone === "muted" ? TOKEN_MUTED : filled ? TOKEN_FILLED : TOKEN_EMPTY, className)}>
+          {reveredLocked && <Lock className="h-3 w-3" style={{ color: TIER_COLOR.revered }} />}
           {filled ? label : empty}
         </button>
       </PopoverPrimitive.Trigger>
@@ -510,6 +539,18 @@ function Token({
         </PopoverPrimitive.Content>
       </PopoverPrimitive.Portal>
     </PopoverPrimitive.Root>
+  );
+  if (!reveredLocked) return token;
+  return (
+    <HintTooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex" title="Revered supporters can search by encounter difficulty and mode">{token}</span>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-64 p-3 text-left">
+        <p className="flex items-center gap-1 font-semibold" style={{ color: TIER_COLOR.revered }}><Lock className="h-3 w-3" /> Revered supporter perk</p>
+        <p className="mt-1">Encounter difficulty and mode are expensive filters requiring Revered supporter access.</p>
+      </TooltipContent>
+    </HintTooltip>
   );
 }
 
@@ -822,6 +863,8 @@ function AddConditionMenu({
   isLocked: (k: Kind) => boolean;
   loggedIn: boolean;
   honored: boolean;
+  /** Encounter difficulty and mode fail closed until Revered access is known. */
+  revered?: boolean;
   onAdd: (k: Kind) => void;
 }) {
   const [open, setOpen] = useState(false);

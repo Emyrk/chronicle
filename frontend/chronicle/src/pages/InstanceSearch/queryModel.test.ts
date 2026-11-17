@@ -264,3 +264,41 @@ describe("between ranges", () => {
     );
   });
 });
+
+
+describe("killed encounter modifiers", () => {
+  it.each([
+    ["normal", "normal"],
+    ["heroic", "hard"],
+    ["mythic", "custom-mode"],
+  ])("round-trips %s difficulty and %s mode on the same pull", (difficulty, variant) => {
+    const form = { ...emptyForm(), killed: ["Hodir", "Thorim"], killedModifiers: { Hodir: { difficulty, variant } } };
+    const tree = formToTree(form);
+    expect(tree).toEqual({ and: [
+      { any_encounter: { and: [
+        { field: "encounter.name", op: "=", value: "Hodir" },
+        { field: "encounter.killed", op: "=", value: true },
+        { field: "encounter.difficulty", op: "=", value: difficulty },
+        { field: "encounter.variant", op: "=", value: variant },
+      ] } },
+      { any_encounter: { and: [
+        { field: "encounter.name", op: "=", value: "Thorim" },
+        { field: "encounter.killed", op: "=", value: true },
+      ] } },
+    ] });
+    expect(treeToForm(tree)).toEqual(form);
+    expect(formToTree(treeToForm(tree)!)).toEqual(tree);
+  });
+
+  it("loads modifier predicates in any order without merging separate pulls", () => {
+    const inner = { and: [
+      { field: "encounter.variant", op: "=", value: "hard" },
+      { field: "encounter.killed", op: "=", value: true },
+      { field: "encounter.name", op: "=", value: "Hodir" },
+    ] } as Node;
+    expect(treeToForm({ any_encounter: inner })?.killedModifiers).toEqual({ Hodir: { variant: "hard" } });
+    // The sentence form cannot express two different pulls of the same boss.
+    expect(treeToForm({ and: [{ any_encounter: inner }, { any_encounter: inner }] })).toBeNull();
+    expect(treeToForm({ any_encounter: { field: "encounter.variant", op: "=", value: "normal" } })).toBeNull();
+  });
+});

@@ -344,7 +344,7 @@ export function InstanceSearchPage() {
   const results = useInfiniteQuery({
     queryKey: ["instance-search", "results", submittedParam, submittedSort, isAuthenticated, submittedReveredBlocked],
     queryFn: ({ pageParam }) => {
-      if (submittedReveredBlocked) throw new Error("Hostile count requires Revered supporter access.");
+      if (submittedReveredBlocked) throw new Error("Encounter difficulty, mode and hostile count require Revered supporter access.");
       return runSearch(buildQuery(submittedTree, isAuthenticated ? undefined : 25, submittedSort), pageParam);
     },
     initialPageParam: undefined as InstanceSearchCursor | undefined,
@@ -453,7 +453,7 @@ export function InstanceSearchPage() {
       </div>
 
       {(reveredBlocked || submittedReveredBlocked) && <p role="status" className="text-sm" style={{ color: TIER_COLOR.revered }}>
-        Hostile count requires Revered supporter access. <Link to="/supporter" className="font-semibold underline">View supporter perks</Link>
+        Encounter difficulty, mode and hostile count require Revered supporter access. <Link to="/supporter" className="font-semibold underline">View supporter perks</Link>
       </p>}
 
       {collapsed ? (
@@ -536,6 +536,7 @@ export function InstanceSearchPage() {
           capabilities={enumOf("instance.capability")}
           loggedIn={isAuthenticated}
           honored={advancedUnlocked}
+          revered={reveredUnlocked}
         />
       ) : (
         <div className="rounded-lg border border-border/60 bg-background/40 p-3 space-y-3">
@@ -580,7 +581,7 @@ export function InstanceSearchPage() {
         <Button
           onClick={submit}
           disabled={preview || anonBlocked || honoredBlocked || reveredBlocked || sortBlocked || codeInvalid || tooComplex || results.isFetching}
-          title={reveredBlocked ? "Hostile count requires Revered supporter access" : preview ? "Honored supporters can run code searches" : honoredBlocked ? "This search uses conditions for Honored supporters" : sortBlocked ? `This sort requires ${draftSortOption?.minimum_tier}` : undefined}
+          title={reveredBlocked ? "Encounter difficulty, mode and hostile count require Revered supporter access" : preview ? "Honored supporters can run code searches" : honoredBlocked ? "This search uses conditions for Honored supporters" : sortBlocked ? `This sort requires ${draftSortOption?.minimum_tier}` : undefined}
           className="gap-1.5"
         >
           {results.isFetching && !results.isFetchingNextPage ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}

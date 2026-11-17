@@ -81,3 +81,14 @@ export function bossOptions(instances: readonly SupportedInstance[]): ComboOptio
 export function realmOptions(realms: readonly WoWServerRealm[]): ComboOption[] {
   return [...new Set(realms.map((r) => r.name))].sort((a, b) => a.localeCompare(b)).map((name) => ({ value: name }));
 }
+
+/** Suggestions, not restrictions: servers may supply custom encounter modifiers. */
+export const ENCOUNTER_DIFFICULTY_OPTIONS: ComboOption[] = [
+  { value: "normal", label: "Normal" },
+  { value: "heroic", label: "Heroic" },
+];
+
+export const ENCOUNTER_VARIANT_OPTIONS: ComboOption[] = [
+  { value: "normal", label: "Normal" },
+  { value: "hard", label: "Hard" },
+];

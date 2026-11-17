@@ -1,0 +1,26 @@
+{
+  "description": "Custom difficulty and variant keys remain searchable together on one pull.",
+  "query": {
+    "where": {
+      "any_encounter": {
+        "and": [
+          {
+            "field": "encounter.difficulty",
+            "op": "=",
+            "value": "Timewalking"
+          },
+          {
+            "field": "encounter.variant",
+            "op": "=",
+            "value": "Titan Tier 3"
+          },
+          {
+            "field": "encounter.killed",
+            "op": "=",
+            "value": true
+          }
+        ]
+      }
+    }
+  }
+}

@@ -15,6 +15,7 @@ import { MATCH_OPTIONS, METRIC_OPTIONS, ON_OPTIONS, OP_LABELS, PARSE_SCOPE_OPTIO
 import { prune, type Node } from "./queryModel";
 import { COMPLEXITY_STYLE, complexity, queryCost } from "./searchCost";
 import type { ComboOption, Suggestion } from "./comboOptions";
+import { ENCOUNTER_DIFFICULTY_OPTIONS, ENCOUNTER_VARIANT_OPTIONS } from "./searchOptions";
 import { SelectCombo } from "./ComboInput";
 import { ClassSpecPicker } from "./ClassSpecPicker";
 import { ANY_CLASS_SPEC, type ClassSpec, classLabel, useSubSpecs } from "./classSpec";
@@ -522,6 +523,10 @@ function suggestionsFor(field: InstanceSearchField, ctx: BlockContext): readonly
   switch (field.name) {
     case "instance.name":
       return ctx.zones;
+    case "encounter.difficulty":
+      return ENCOUNTER_DIFFICULTY_OPTIONS;
+    case "encounter.variant":
+      return ENCOUNTER_VARIANT_OPTIONS;
     case "encounter.name":
       return ctx.bosses;
     case "instance.realm":
