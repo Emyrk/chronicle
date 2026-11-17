@@ -15,7 +15,6 @@ func TestRaidLogReparseAndViewPermissions(t *testing.T) {
 	t.Parallel()
 
 	zed := serviceauthz.Authz(testservices.Authz(t))
-	ctx := testutil.Context(t, testutil.WaitLong)
 
 	for _, tc := range []struct {
 		name     string
@@ -34,6 +33,7 @@ func TestRaidLogReparseAndViewPermissions(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+			ctx := testutil.Context(t, testutil.WaitLong)
 			p := policy.New()
 			userID := uuid.New()
 			user := p.User(userID)
