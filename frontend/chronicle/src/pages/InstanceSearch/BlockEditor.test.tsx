@@ -13,7 +13,7 @@ vi.mock("./ComboInput", async (importOriginal) => ({
   ...await importOriginal<typeof import("./ComboInput")>(),
   ComboInput: (props: ComponentProps<typeof ComboInput>) => {
     combos.push(props);
-    return <input role="combobox" value={props.text} readOnly />;
+    return <input role="combobox" value={props.text} disabled={props.disabled} readOnly />;
   },
 }));
 
@@ -33,7 +33,7 @@ describe("block duration inputs", () => {
   function render(tree: Node) {
     const onChange = vi.fn();
     const markup = renderToStaticMarkup(<BlockEditor tree={tree} onChange={onChange} ctx={{
-      fields: fields.fields as InstanceSearchField[], zones: [], bosses: [], loggedIn: true, honored: true,
+      fields: fields.fields as InstanceSearchField[], zones: [], bosses: [], loggedIn: true, honored: true, revered: true,
     }} />);
     return { markup, onChange };
   }
@@ -68,7 +68,7 @@ describe("encounter modifier inputs", () => {
   ])("offers editable suggestions for %s", (field, label, value, custom) => {
     const onChange = vi.fn();
     const markup = renderToStaticMarkup(<BlockEditor tree={{ any_encounter: { field, op: "=", value: "normal" } }} onChange={onChange} ctx={{
-      fields: fields.fields as InstanceSearchField[], zones: [], bosses: [], loggedIn: true, honored: true,
+      fields: fields.fields as InstanceSearchField[], zones: [], bosses: [], loggedIn: true, honored: true, revered: true,
     }} />);
     expect(markup).toContain('role="combobox"');
     const combo = combos.find((c) => c.text === "normal")!;
@@ -80,4 +80,16 @@ describe("encounter modifier inputs", () => {
     combo.onTextChange(custom);
     expect(onChange).toHaveBeenLastCalledWith({ and: [{ any_encounter: { and: [{ field, op: "=", value: custom }] } }] });
   });
+});
+
+
+it.each(["encounter.difficulty", "encounter.variant"])("disables imported %s values without known Revered access", (field) => {
+  for (const revered of [false, undefined]) {
+    combos.length = 0;
+    const markup = renderToStaticMarkup(<BlockEditor tree={{ any_encounter: { field, op: "=", value: "custom" } }} onChange={vi.fn()} ctx={{
+      fields: fields.fields as InstanceSearchField[], zones: [], bosses: [], loggedIn: true, honored: true, revered,
+    }} />);
+    expect(combos.find((c) => c.text === "custom")?.disabled).toBe(true);
+    expect(markup).toContain("Revered supporters can search by this");
+  }
 });

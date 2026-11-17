@@ -573,13 +573,13 @@
         "contains",
         "starts_with"
       ],
-      "doc": "Pull difficulty, e.g. normal or heroic; custom values allowed. Explicit empty means normal; legacy NULL inherits the resolved instance difficulty.",
+      "doc": "Revered+ supporter filter (40 tokens). Pull difficulty, e.g. normal or heroic; custom values allowed. Explicit empty means normal; legacy NULL inherits the resolved instance difficulty.",
       "bosses": false,
       "parse_scope": false,
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 2
+      "cost": 40
     },
     {
       "name": "encounter.variant",
@@ -593,13 +593,13 @@
         "contains",
         "starts_with"
       ],
-      "doc": "Classified pull variant, e.g. normal or hard; custom values allowed. Missing classification is unknown, not normal.",
+      "doc": "Revered+ supporter filter (40 tokens). Classified pull variant, e.g. normal or hard; custom values allowed. Missing classification is unknown, not normal.",
       "bosses": false,
       "parse_scope": false,
       "metric": false,
       "on": false,
       "anonymous": false,
-      "cost": 2
+      "cost": 40
     },
     {
       "name": "encounter.boss",

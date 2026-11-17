@@ -2,6 +2,7 @@ package serviceinstancesearch
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -138,4 +139,57 @@ func TestSearchGoCaller(t *testing.T) {
 	require.ErrorIs(t, result.Err, instancesearch.ErrNotFound)
 	require.Equal(t, 1, result.Cost)
 	require.False(t, errors.Is(result.Err, ErrInvalid))
+}
+
+func TestEncounterFilterAdmission(t *testing.T) {
+	t.Parallel()
+	for _, tier := range []string{"free", "honored", "revered", "exalted"} {
+		t.Run(tier, func(t *testing.T) {
+			t.Parallel()
+			db, _ := dbtestutil.NewDB(t)
+			// A non-refilling bucket makes exact no-charge assertions deterministic.
+			limit := ratelimit.Limit{Burst: 800}
+			s := New(testutil.Logger(t), db, prometheus.NewRegistry(), func(context.Context, uuid.UUID) (UserAccess, error) {
+				return UserAccess{Limit: limit, Tier: tier}, nil
+			})
+			s.runtimeCost = func(time.Duration) int { return 0 }
+			executed := 0
+			s.search = func(context.Context, database.Store, instancesearch.Compiled, instancesearch.SearchOptions) (instancesearch.Page, error) {
+				executed++
+				return instancesearch.Page{}, nil
+			}
+			s.explain = func(context.Context, database.Store, instancesearch.CompiledExplain, instancesearch.SearchOptions) (instancesearch.Explanation, error) {
+				executed++
+				return instancesearch.Explanation{}, nil
+			}
+			ctx := testutil.Context(t, testutil.WaitMedium)
+			for _, field := range []string{"encounter.difficulty", "encounter.variant"} {
+				// Test a nested predicate in a count, not only the simple any_encounter UI shape.
+				var q chroniclesdk.InstanceSearchQuery
+				require.NoError(t, json.Unmarshal([]byte(`{"where":{"not":{"count_encounters":{"where":{"or":[{"field":"`+field+`","op":"=","value":"hard"},{"field":"encounter.name","op":"=","value":"Hodir"}]},"op":">=","value":1}}}}`), &q))
+				for _, explain := range []bool{false, true} {
+					caller := Caller{UserID: uuid.New(), TenantID: uuid.New()}
+					before := executed
+					var result Result
+					if explain {
+						_, result = s.Explain(ctx, caller, q, uuid.New())
+					} else {
+						_, result = s.Search(ctx, caller, q)
+					}
+					if tier == "revered" || tier == "exalted" {
+						require.NoError(t, result.Err)
+						require.Equal(t, before+1, executed)
+						require.Equal(t, limit.Burst-float64(result.Cost), result.Status.Remaining)
+					} else {
+						require.ErrorIs(t, result.Err, ErrSupporterRequired)
+						require.Equal(t, "revered", result.RequiredTier)
+						require.Equal(t, field, result.RequiredField)
+						require.Equal(t, before, executed)
+						require.Equal(t, limit.Burst, result.Status.Remaining)
+						require.Zero(t, result.RuntimeCost)
+					}
+				}
+			}
+		})
+	}
 }

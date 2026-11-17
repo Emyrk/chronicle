@@ -75,9 +75,18 @@ func writeSearchResult(w http.ResponseWriter, r *http.Request, result serviceins
 		if result.RequiredTier == "honored" {
 			article = "an"
 		}
+		message := fmt.Sprintf("Sorting by this property is %s %s supporter perk.", article, tierName)
+		action := fmt.Sprintf("Become %s %s supporter to use this sort order.", article, tierName)
+		detail := ""
+		if result.RequiredField != "" {
+			message = fmt.Sprintf("Filtering by this property is %s %s supporter perk.", article, tierName)
+			action = fmt.Sprintf("Become %s %s supporter to use this filter.", article, tierName)
+			detail = result.RequiredField + " requires " + tierName + " or higher."
+		}
 		httpapi.Write(ctx, w, http.StatusForbidden, chroniclesdk.Response{
-			Message:      fmt.Sprintf("Sorting by this property is %s %s supporter perk.", article, tierName),
-			CallToAction: fmt.Sprintf("Become %s %s supporter to use this sort order.", article, tierName),
+			Message:      message,
+			CallToAction: action,
+			Detail:       detail,
 			Link:         "/supporter",
 			LinkText:     "View supporter perks",
 		})

@@ -56,12 +56,14 @@ func (t valueType) ops() []Op {
 
 // field is one searchable predicate.
 type field struct {
-	Name  string
-	Scope scopeKind
-	Type  valueType
-	Enum  []string
-	Unit  string
-	Doc   string
+	Name string
+	// MinimumTier restricts predicate access; empty means free.
+	MinimumTier string
+	Scope       scopeKind
+	Type        valueType
+	Enum        []string
+	Unit        string
+	Doc         string
 	// Bosses: the predicate accepts bosses + match.
 	Bosses bool
 	// ParseScope: the predicate accepts parse_scope.
@@ -632,11 +634,11 @@ var fields = []*field{
 	// Mirror log_instances_resolved for legacy NULL difficulty without changing
 	// the raw instance fields. Resolve NULL before normalizing explicit empty
 	// difficulty, so a Normal pull never inherits a heroic parent.
-	{Name: "encounter.difficulty", Scope: scopeEncounter, Type: typeString,
-		Doc:   "Pull difficulty, e.g. normal or heroic; custom values allowed. Explicit empty means normal; legacy NULL inherits the resolved instance difficulty.",
+	{Name: "encounter.difficulty", Cost: 40, MinimumTier: "revered", Scope: scopeEncounter, Type: typeString,
+		Doc:   "Revered+ supporter filter (40 tokens). Pull difficulty, e.g. normal or heroic; custom values allowed. Explicit empty means normal; legacy NULL inherits the resolved instance difficulty.",
 		value: column("COALESCE(NULLIF(COALESCE({a}.difficulty, CASE WHEN li.difficulty_normalized THEN li.difficulty_name WHEN li.dynamic_difficulty > 0 OR li.difficulty_name ILIKE '%heroic%' THEN 'heroic' ELSE '' END), ''), 'normal')")},
-	{Name: "encounter.variant", Scope: scopeEncounter, Type: typeString,
-		Doc: "Classified pull variant, e.g. normal or hard; custom values allowed. Missing classification is unknown, not normal.", value: column("{a}.encounter_variant")},
+	{Name: "encounter.variant", Cost: 40, MinimumTier: "revered", Scope: scopeEncounter, Type: typeString,
+		Doc: "Revered+ supporter filter (40 tokens). Classified pull variant, e.g. normal or hard; custom values allowed. Missing classification is unknown, not normal.", value: column("{a}.encounter_variant")},
 	{Name: "encounter.boss", Scope: scopeEncounter, Type: typeBool,
 		Doc: "The encounter is a boss fight.", value: column("{a}.boss")},
 	{Name: "encounter.outcome", Scope: scopeEncounter, Type: typeEnum, Enum: outcomes,
@@ -716,3 +718,12 @@ var fieldsByName = func() map[string]*field {
 	}
 	return m
 }()
+
+// FieldMinimumTier returns the supporter tier required to use a predicate.
+// Fields without a restriction retain free access.
+func FieldMinimumTier(name string) string {
+	if f, ok := fieldsByName[name]; ok && f.MinimumTier != "" {
+		return f.MinimumTier
+	}
+	return "free"
+}

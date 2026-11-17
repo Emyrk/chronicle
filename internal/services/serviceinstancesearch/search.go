@@ -83,12 +83,13 @@ type Service struct {
 	fieldUses         *prometheus.CounterVec
 }
 type Result struct {
-	Cost         int
-	RuntimeCost  int
-	Status       ratelimit.Status
-	RetryAfter   time.Duration
-	RequiredTier string
-	Err          error
+	Cost          int
+	RuntimeCost   int
+	Status        ratelimit.Status
+	RetryAfter    time.Duration
+	RequiredTier  string
+	RequiredField string
+	Err           error
 }
 
 var (
@@ -224,6 +225,17 @@ func (s *Service) run(ctx context.Context, c Caller, q chroniclesdk.InstanceSear
 		minimum := instancesearch.SortMinimumTier(compiled.Sort.Field)
 		if !tierAtLeast(access.Tier, string(minimum)) {
 			result.RequiredTier = string(minimum)
+			result.Status, _ = limiter.PeekWithLimit(ctx, subject, limit)
+			return fail(ErrSupporterRequired, "supporter_required")
+		}
+	}
+	// Check compiled predicates, including nested quantifiers, for both search
+	// and explain before anonymous admission or any token charge.
+	for _, field := range compiled.Fields {
+		minimum := instancesearch.FieldMinimumTier(field)
+		if !tierAtLeast(access.Tier, minimum) {
+			result.RequiredTier = minimum
+			result.RequiredField = field
 			result.Status, _ = limiter.PeekWithLimit(ctx, subject, limit)
 			return fail(ErrSupporterRequired, "supporter_required")
 		}

@@ -427,3 +427,72 @@ func TestInstanceSearchInternalHTTPParity(t *testing.T) {
 	require.GreaterOrEqual(t, after, remaining)
 	require.LessOrEqual(t, after, 100)
 }
+
+// Exercise direct JSON on both HTTP endpoints so UI restrictions cannot be bypassed.
+func TestInstanceSearchEncounterFilterTier(t *testing.T) {
+	t.Parallel()
+	for _, tier := range []string{"anonymous", "free", "honored", "revered", "exalted"} {
+		t.Run(tier, func(t *testing.T) {
+			t.Parallel()
+			api, _ := newInstanceSearchAPI(t)
+			api.instanceSearch.SetUserAccessResolver(func(context.Context, uuid.UUID) (serviceinstancesearch.UserAccess, error) {
+				return serviceinstancesearch.AccessForTier(tier), nil
+			})
+			user := uuid.New()
+			if tier == "anonymous" {
+				user = uuid.Nil
+			}
+			for _, field := range []string{"encounter.difficulty", "encounter.variant"} {
+				for _, explain := range []bool{false, true} {
+					body := `{"where":{"any_encounter":{"field":"` + field + `","op":"=","value":"normal"}}}`
+					if explain {
+						body = `{"query":` + body + `,"instance_id":"` + uuid.NewString() + `"}`
+					}
+					req := httptest.NewRequest(http.MethodPost, "/api/v1/raidlogs/search", strings.NewReader(body))
+					ctx := testutil.Context(t, testutil.WaitMedium)
+					if user != uuid.Nil {
+						ctx = chronauth.WithClaims(ctx, &claims.Claims{Subject: user})
+					}
+					rec := httptest.NewRecorder()
+					if explain {
+						api.InstanceSearchExplain(rec, req.WithContext(ctx))
+					} else {
+						api.InstanceSearch(rec, req.WithContext(ctx))
+					}
+					if tier == "revered" || tier == "exalted" {
+						status := http.StatusOK
+						if explain {
+							status = http.StatusNotFound
+						} // Missing run, not an access denial.
+						require.Equal(t, status, rec.Code, rec.Body.String())
+					} else {
+						require.Equal(t, http.StatusForbidden, rec.Code, rec.Body.String())
+						require.Contains(t, rec.Body.String(), "Revered supporter perk")
+						require.Contains(t, rec.Body.String(), field+" requires Revered or higher")
+						require.NotContains(t, rec.Body.String(), "Sorting")
+						require.Empty(t, rec.Header().Get(InstanceSearchRuntimeCostHeader))
+						limit := serviceinstancesearch.AccessForTier(tier).Limit.Burst
+						if user == uuid.Nil {
+							limit = serviceinstancesearch.AnonLimit.Burst
+						}
+						require.Equal(t, strconv.Itoa(int(limit)), rec.Header().Get("RateLimit-Remaining"))
+					}
+					cost := "45"
+					if explain {
+						cost = "12"
+					}
+					require.Equal(t, cost, rec.Header().Get(InstanceSearchCostHeader))
+				}
+			}
+			// These existing searches retain their prior access policy.
+			body := `{"where":{"field":"instance.difficulty","op":"=","value":"normal"}}`
+			require.Equal(t, http.StatusOK, doSearch(t, api, user, "10.0.0.1", body).Code)
+			if user != uuid.Nil {
+				body = `{"where":{"any_encounter":{"and":[{"field":"encounter.name","op":"=","value":"Ragnaros"},{"field":"encounter.killed","op":"=","value":true}]}}}`
+				require.Equal(t, http.StatusOK, doSearch(t, api, user, "10.0.0.1", body).Code)
+				body = `{"where":{"any_encounter":{"field":"encounter.hostile_count","op":">","value":3}}}`
+				require.Equal(t, http.StatusOK, doSearch(t, api, user, "10.0.0.1", body).Code)
+			}
+		})
+	}
+}

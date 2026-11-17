@@ -458,6 +458,12 @@ func TestHostileCountNumericScope(t *testing.T) {
 
 func TestEncounterDifficultyAndVariant(t *testing.T) {
 	t.Parallel()
+	combined, err := instancesearch.Compile(where(t, `{"any_encounter":{"and":[{"field":"encounter.difficulty","op":"=","value":"heroic"},{"field":"encounter.variant","op":"=","value":"hard"}]}}`), instancesearch.Options{})
+	require.NoError(t, err)
+	require.Equal(t, 85, combined.Cost) // base + quantifier + 40 for each field.
+	for _, field := range []string{"encounter.name", "encounter.killed", "encounter.hostile_count", "instance.difficulty"} {
+		require.Equal(t, "free", instancesearch.FieldMinimumTier(field))
+	}
 	for _, field := range []string{"encounter.difficulty", "encounter.variant"} {
 		t.Run(field, func(t *testing.T) {
 			t.Parallel()
@@ -469,6 +475,7 @@ func TestEncounterDifficultyAndVariant(t *testing.T) {
 				q := where(t, `{"any_encounter":{"field":"`+field+`","op":"`+op+`","value":`+value+`}}`)
 				compiled, err := instancesearch.Compile(q, instancesearch.Options{})
 				require.NoError(t, err)
+				require.Equal(t, 45, compiled.Cost)
 				require.NotContains(t, compiled.SQL, "Custom Tier")
 				require.Contains(t, strings.ToLower(compiled.SQL), "lower(")
 			}
@@ -491,6 +498,8 @@ func TestEncounterDifficultyAndVariant(t *testing.T) {
 				require.Empty(t, f.Enum)
 				require.Contains(t, f.Ops, instancesearch.OpContains)
 				require.False(t, f.Anonymous)
+				require.Equal(t, 40, f.Cost)
+				require.Equal(t, "revered", instancesearch.FieldMinimumTier(f.Name))
 			}
 		})
 	}

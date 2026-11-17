@@ -227,6 +227,13 @@ free-text fields, not closed enums. Both support `=`, `!=`, `in`, `not_in`,
 keys are accepted without requiring a new allowlist. Use `normal`, not an empty
 string, to match Normal difficulty.
 
+Both filters require **Revered or Exalted** and cost **40 tokens each** (plus
+base and quantifier costs). The shared search service enforces this for search
+and explain, including direct JSON requests, before execution or charging.
+Denied requests return 403 with the required tier and field. This does not gate
+encounter name/basic kill searches or `instance.difficulty`, and does not change
+the `encounter.hostile_count` policy.
+
 - **Difficulty:** search for `normal` or `heroic`, or a custom difficulty key.
   An explicitly empty stored encounter difficulty means Normal and is exposed
   as `normal`, even when the parent instance is heroic. A NULL encounter
