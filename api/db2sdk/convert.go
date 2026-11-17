@@ -867,20 +867,21 @@ func WoWEncounter(encounter database.LogInstanceEncounter, legacyDifficulty ...s
 		}
 	}
 	return chroniclesdk.WoWEncounter{
-		EncounterVariant: encounter.EncounterVariant.String,
-		RankingWindow:    window,
-		ID:               encounter.ID,
-		InstanceID:       encounter.InstanceID,
-		Boss:             encounter.Boss,
-		Name:             encounter.Name,
-		MapID:            int(encounter.MapID),
-		KillType:         chroniclesdk.KillType(encounter.KillType),
-		Remaining:        encounter.Remaining,
-		StartTime:        encounter.StartTime.Time,
-		EndTime:          encounter.EndTime.Time,
-		Difficulty:       difficulty,
-		InvalidatedAt:    invalidatedAt,
-		InvalidReason:    invalidReason,
+		EncounterVariant:        encounter.EncounterVariant.String,
+		EncounterVariantTooltip: encounter.EncounterVariantTooltip.String,
+		RankingWindow:           window,
+		ID:                      encounter.ID,
+		InstanceID:              encounter.InstanceID,
+		Boss:                    encounter.Boss,
+		Name:                    encounter.Name,
+		MapID:                   int(encounter.MapID),
+		KillType:                chroniclesdk.KillType(encounter.KillType),
+		Remaining:               encounter.Remaining,
+		StartTime:               encounter.StartTime.Time,
+		EndTime:                 encounter.EndTime.Time,
+		Difficulty:              difficulty,
+		InvalidatedAt:           invalidatedAt,
+		InvalidReason:           invalidReason,
 	}
 }
 

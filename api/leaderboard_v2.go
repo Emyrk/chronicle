@@ -9,6 +9,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/encountervariant"
 	"github.com/Emyrk/chronicle/internal/leaderboardread"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/google/uuid"
@@ -45,8 +46,8 @@ func (api *API) LeaderboardV2(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if req.EncounterVariant != "" && req.EncounterVariant != "normal" && req.EncounterVariant != "hard" {
-		bad("encounter_variant must be empty, normal, or hard")
+	if req.EncounterVariant != "" && !encountervariant.Valid(req.EncounterVariant) {
+		bad("encounter_variant must be empty or a supported exact variant")
 		return
 	}
 	if (req.EncounterVariant != "" || len(req.EncounterVariants) > 0) && q.Get("view") == "boss-leaders" {

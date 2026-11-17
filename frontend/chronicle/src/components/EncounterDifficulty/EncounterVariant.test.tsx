@@ -82,3 +82,21 @@ it("supports Vezax variants independently of other bosses", () => {
     expect(html).toContain(`aria-pressed="true" aria-label="General Vezax ${active === "hard" ? "Hard mode" : "Normal"}"`);
   }
 });
+
+it("keeps Yogg light-count cohorts exact and keeper details display-only", () => {
+  const variants = ["lights_0", "lights_1", "lights_2", "lights_3", "lights_4"] as const;
+  for (const [count, variant] of variants.entries()) {
+    const html = renderToStaticMarkup(<EncounterVariantChips boss="Yogg-Saron" active={variant} onSelect={() => {}} />);
+    expect(html.match(/aria-pressed="true"/g)).toHaveLength(1);
+    expect(html).toContain(`aria-label="Yogg-Saron ${count} Light"`);
+    expect(html).not.toContain('aria-label="Yogg-Saron Normal"');
+    const badge = renderToStaticMarkup(<EncounterVariantMark variant={variant} tooltip="Thorim: Fury of the Storm" />);
+    expect(badge).toContain(`>${count} Light<`);
+    expect(badge).toContain("Thorim: Fury of the Storm");
+  }
+  expect(withHighestEncounterVariants("Ulduar", ["Yogg-Saron", "Hodir"], { "Yogg-Saron": "lights_1" })).toEqual({ "Yogg-Saron": "lights_0", Hodir: "hard" });
+  expect(activeEncounterVariants("Ulduar", ["Yogg-Saron"], { "Yogg-Saron": "hard" })).toBeUndefined();
+  expect(activeEncounterVariants("Ulduar", ["Hodir"], { Hodir: "lights_0" })).toBeUndefined();
+  const disabled = renderToStaticMarkup(<EncounterVariantChips boss="Yogg-Saron" active="lights_1" disabledReason="Combined only" onSelect={() => {}} />);
+  expect(disabled.match(/disabled=""/g)).toHaveLength(6);
+});

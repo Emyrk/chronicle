@@ -100,6 +100,7 @@ export function transformToInstance(
       remaining: enc.remaining as string[] | undefined,
       difficulty: enc.difficulty,
       encounter_variant: enc.encounter_variant,
+      encounter_variant_tooltip: enc.encounter_variant_tooltip,
       invalidatedAt: enc.invalidated_at,
       invalidReason: enc.invalid_reason,
       phases: normalizeArray(enc.phases).map((phase) => ({

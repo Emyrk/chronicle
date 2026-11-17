@@ -20,6 +20,13 @@ func TestRankingEncounterVariants(t *testing.T) {
 		invalid           bool
 	}{
 		{name: "combined omitted"},
+		{name: "Yogg 0 Light", raw: `{"Yogg-Saron":"lights_0"}`, want: `{"Yogg-Saron":"lights_0"}`, instances: []string{"Ulduar"}, bosses: []string{"Yogg-Saron"}},
+		{name: "Yogg 1 Light", raw: `{"Yogg-Saron":"lights_1"}`, want: `{"Yogg-Saron":"lights_1"}`, instances: []string{"Ulduar"}, bosses: []string{"Yogg-Saron"}},
+		{name: "Yogg 2 Light", raw: `{"Yogg-Saron":"lights_2"}`, want: `{"Yogg-Saron":"lights_2"}`, instances: []string{"Ulduar"}, bosses: []string{"Yogg-Saron"}},
+		{name: "Yogg 3 Light", raw: `{"Yogg-Saron":"lights_3"}`, want: `{"Yogg-Saron":"lights_3"}`, instances: []string{"Ulduar"}, bosses: []string{"Yogg-Saron"}},
+		{name: "Yogg 4 Light", raw: `{"Yogg-Saron":"lights_4"}`, want: `{"Yogg-Saron":"lights_4"}`, instances: []string{"Ulduar"}, bosses: []string{"Yogg-Saron"}},
+		{name: "Yogg rejects binary tier", raw: `{"Yogg-Saron":"hard"}`, instances: []string{"Ulduar"}, bosses: []string{"Yogg-Saron"}, invalid: true},
+		{name: "Hodir rejects light tier", raw: `{"Hodir":"lights_0"}`, instances: []string{"Ulduar"}, bosses: []string{"Hodir"}, invalid: true},
 		{name: "combined empty map", raw: "{}"},
 		{name: "hard mixed selection", raw: ` { "Hodir" : "hard" } `, want: `{"Hodir":"hard"}`, instances: []string{"Ulduar"}, bosses: []string{"Hodir", "Freya"}},
 		{name: "two exact bosses", raw: `{"XT-002 Deconstructor":"normal","Hodir":"hard"}`, want: `{"Hodir":"hard","XT-002 Deconstructor":"normal"}`, instances: []string{"Ulduar"}, bosses: []string{"Hodir", "XT-002 Deconstructor"}},

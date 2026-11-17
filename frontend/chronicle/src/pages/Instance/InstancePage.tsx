@@ -74,6 +74,7 @@ export interface Encounter {
   difficulty: string;
   /** Proven encounter classification, independent of raid difficulty and size. */
   encounter_variant?: string;
+  encounter_variant_tooltip?: string;
   invalidatedAt?: string;
   invalidReason?: string;
   /** Optional phases within this encounter (sorted by order). */

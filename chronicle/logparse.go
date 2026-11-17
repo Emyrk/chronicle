@@ -738,19 +738,20 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 					rankingEnd = pgtype.Int8{Int64: enc.RankingWindow.End.Sub(enc.Combat.Start).Milliseconds(), Valid: true}
 				}
 				dbencounter, err := tx.InsertEncounter(ctx, database.InsertEncounterParams{
-					ID:                   enc.Combat.EncounterID,
-					InstanceID:           dbinstance.ID,
-					Name:                 enc.Name,
-					MapID:                int32(enc.Combat.MapID),
-					KillType:             database.KillType(enc.KillType),
-					Remaining:            enc.Remaining,
-					Boss:                 enc.Boss,
-					RankingStartOffsetMs: rankingStart,
-					RankingEndOffsetMs:   rankingEnd,
-					Difficulty:           pgtype.Text{String: enc.Combat.Difficulty, Valid: true},
-					EncounterVariant:     pgtype.Text{String: enc.Variant, Valid: enc.Variant != ""},
-					StartTime:            database.Timestamptz(enc.Combat.Start),
-					EndTime:              database.Timestamptz(enc.Combat.End),
+					ID:                      enc.Combat.EncounterID,
+					InstanceID:              dbinstance.ID,
+					Name:                    enc.Name,
+					MapID:                   int32(enc.Combat.MapID),
+					KillType:                database.KillType(enc.KillType),
+					Remaining:               enc.Remaining,
+					Boss:                    enc.Boss,
+					RankingStartOffsetMs:    rankingStart,
+					RankingEndOffsetMs:      rankingEnd,
+					Difficulty:              pgtype.Text{String: enc.Combat.Difficulty, Valid: true},
+					EncounterVariant:        pgtype.Text{String: enc.Variant, Valid: enc.Variant != ""},
+					EncounterVariantTooltip: pgtype.Text{String: enc.VariantTooltip, Valid: enc.VariantTooltip != ""},
+					StartTime:               database.Timestamptz(enc.Combat.Start),
+					EndTime:                 database.Timestamptz(enc.Combat.End),
 				})
 				if err != nil {
 					return fmt.Errorf("insert encounter: %w", err)

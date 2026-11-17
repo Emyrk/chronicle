@@ -68,7 +68,7 @@ type Hookable struct {
 	realm                *realm.Info       // mostly static
 	versions             map[string]string // addon/dependency versions from HEADER
 	recorderGUID         *guid.GUID        // recording player GUID from HEADER
-	encounterVariant     func(encounter.Encounter) string
+	encounterVariant     func(*encounter.Encounter) string
 	preprocessors        []instancehook.Preprocessor
 	hooks                []instancehook.Hook // TODO: unroll?
 	engagementTracker    *rankings.EngagementTracker
@@ -85,6 +85,8 @@ type Hookable struct {
 	derivedRankingRules     map[string]*rankings.Rankings
 
 	// Live tracking data
+	variantAuraSpells          map[int32]struct{}
+	variantAuraEvidence        map[uuid.UUID][]variantAuraObservation
 	Auras                      *auras.Tracking
 	Characters                 *characters.Characters
 	currentFight               *ongoingFight
@@ -109,14 +111,15 @@ type Hookable struct {
 }
 
 type InstanceParams struct {
-	Name             string
-	Category         InstanceCategory
-	MatchesZone      func(z zone.Zone) bool
-	Idf              *identifier.Identifier
-	Rankings         *rankings.Rankings
-	Preprocessors    []instancehook.Preprocessor
-	ExtraHooks       []instancehook.Hook
-	EncounterVariant func(encounter.Encounter) string
+	Name              string
+	Category          InstanceCategory
+	MatchesZone       func(z zone.Zone) bool
+	Idf               *identifier.Identifier
+	Rankings          *rankings.Rankings
+	Preprocessors     []instancehook.Preprocessor
+	VariantAuraSpells []int32
+	ExtraHooks        []instancehook.Hook
+	EncounterVariant  func(*encounter.Encounter) string
 }
 
 func (f *CommonFactory) NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z zone.Zone, flavor database.WoWFlavor) *Hookable {
@@ -136,18 +139,19 @@ func (f *CommonFactory) NewHookable(ctx context.Context, logger *slog.Logger, db
 	if f.Preprocessors != nil {
 		preprocessors = f.Preprocessors()
 	}
-	var variant func(encounter.Encounter) string
+	var variant func(*encounter.Encounter) string
 	if f.EncounterVariant != nil {
-		variant = func(enc encounter.Encounter) string { return f.EncounterVariant(enc, flavor, preprocessors) }
+		variant = func(enc *encounter.Encounter) string { return f.EncounterVariant(enc, flavor, preprocessors) }
 	}
 	return NewHookable(ctx, logger, db, z, InstanceParams{
-		Name:             name,
-		EncounterVariant: variant,
-		Category:         f.Category,
-		MatchesZone:      f.MatchZone,
-		Idf:              f.Hostiles(flavor),
-		Rankings:         r,
-		Preprocessors:    preprocessors,
+		Name:              name,
+		EncounterVariant:  variant,
+		VariantAuraSpells: f.VariantAuraSpells,
+		Category:          f.Category,
+		MatchesZone:       f.MatchZone,
+		Idf:               f.Hostiles(flavor),
+		Rankings:          r,
+		Preprocessors:     preprocessors,
 	})
 }
 
@@ -264,6 +268,8 @@ func NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z z
 		logger:                     logger,
 		units:                      db,
 		preprocessors:              ip.Preprocessors,
+		variantAuraSpells:          variantAuraSpellSet(ip.VariantAuraSpells),
+		variantAuraEvidence:        make(map[uuid.UUID][]variantAuraObservation),
 		encounterVariant:           ip.EncounterVariant,
 		CurrentZone:                z,
 		activeMapID:                z.MapID,
@@ -365,6 +371,7 @@ func (h *Hookable) AttachAuraProjection(tracker *auras.Tracking) {
 	})
 	h.Characters.RegisterHook(proj)
 	h.Auras = tracker
+	h.observeVariantAuras(tracker)
 	// Prepend so projection events are emitted before hooks that might read them.
 	h.hooks = append([]instancehook.Hook{proj}, h.hooks...)
 }
@@ -934,6 +941,7 @@ func (h *Hookable) FightDetectionHandler(m messages.Message) (func() error, erro
 	}
 
 	if !wasActive && h.currentFight.active() {
+		h.snapshotVariantAuras(m)
 		if h.raidGroupTracker != nil {
 			start := h.currentFight.Start.Timestamp.Date()
 			if observation, ok := h.raidGroupTracker.LatestBetween(h.CurrentZone.Seen, start); ok {
@@ -1308,8 +1316,15 @@ func (h *Hookable) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 			return nil, err
 		}
 		enc.RankingWindow = fight.RankingWindow
+		enc.VariantAuras = h.variantAurasDuring(fight)
+		for _, prior := range encounters {
+			if prior.Combat.End.After(prior.Combat.Start) && prior.Combat.End.Before(enc.Combat.Start) {
+				enc.HasEarlierEncounter = true
+				break
+			}
+		}
 		if h.encounterVariant != nil {
-			enc.Variant = h.encounterVariant(enc)
+			enc.Variant = h.encounterVariant(&enc)
 		}
 		encounters = append(encounters, enc)
 	}

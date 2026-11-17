@@ -36,6 +36,8 @@ describe("transformToInstance difficulty metadata", () => {
           start_time: "2026-10-10T13:00:00Z",
           end_time: "2026-10-10T13:10:00Z",
           difficulty: "heroic",
+          encounter_variant: "lights_1",
+          encounter_variant_tooltip: "Thorim: Fury of the Storm",
           hostiles: [],
         },
       ],
@@ -45,6 +47,6 @@ describe("transformToInstance difficulty metadata", () => {
 
     expect(instance.mixedDifficulty).toBe(true);
     expect(instance.difficulties).toEqual(["", "heroic", "mythic"]);
-    expect(instance.encounters[0]).toMatchObject({ difficulty: "heroic" });
+    expect(instance.encounters[0]).toMatchObject({ difficulty: "heroic", encounter_variant: "lights_1", encounter_variant_tooltip: "Thorim: Fury of the Storm" });
   });
 });

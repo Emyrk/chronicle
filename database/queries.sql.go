@@ -13344,7 +13344,7 @@ func (q *sqlQuerier) ListInferenceContextUsageByUser(ctx context.Context, arg Li
 }
 
 const listInferenceInstanceEncounters = `-- name: ListInferenceInstanceEncounters :many
-SELECT id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id, ranking_start_offset_ms, ranking_end_offset_ms, invalidated_at, invalid_reason, difficulty, encounter_variant
+SELECT id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id, ranking_start_offset_ms, ranking_end_offset_ms, invalidated_at, invalid_reason, difficulty, encounter_variant, encounter_variant_tooltip
 FROM log_instance_encounters
 WHERE instance_id = $1
 ORDER BY start_time, id
@@ -13376,6 +13376,7 @@ func (q *sqlQuerier) ListInferenceInstanceEncounters(ctx context.Context, instan
 			&i.InvalidReason,
 			&i.Difficulty,
 			&i.EncounterVariant,
+			&i.EncounterVariantTooltip,
 		); err != nil {
 			return nil, err
 		}
@@ -19011,11 +19012,11 @@ UNION ALL
 
 UNION ALL
 (SELECT DISTINCT ON (s.encounter_difficulty_name,s.encounter_max_players,s.encounter_name,s.encounter_variant,s.player_guid,s.player_class,s.player_spec,s.player_sub_spec,s.metric) 7::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.encounter_difficulty_name AS difficulty_name, s.encounter_max_players AS max_players, s.encounter_name AS encounter_name, s.encounter_variant AS encounter_variant, s.player_guid AS player_guid, s.player_class AS player_class, s.player_spec AS player_spec, s.player_sub_spec AS player_sub_spec, s.metric AS metric, s.metric_value AS metric_value, '00000000-0000-0000-0000-000000000000'::uuid AS guild_id, s.encounter_id AS source_encounter_id, s.ranking_id AS source_ranking_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_time_parse_score_id, 0::bigint AS duration_ms
- FROM player_metrics s WHERE s.variant_consistent AND s.encounter_variant IN ('normal', 'hard') AND s.metric_value>=0 AND s.metric_value<'Infinity'::double precision
+ FROM player_metrics s WHERE s.variant_consistent AND s.encounter_variant IN ('normal', 'hard', 'lights_0', 'lights_1', 'lights_2', 'lights_3', 'lights_4') AND s.metric_value>=0 AND s.metric_value<'Infinity'::double precision
  ORDER BY s.encounter_difficulty_name,s.encounter_max_players,s.encounter_name,s.encounter_variant,s.player_guid,s.player_class,s.player_spec,s.player_sub_spec,metric,metric_value DESC,source_encounter_id,source_ranking_id)
 UNION ALL
 (SELECT DISTINCT ON (s.encounter_difficulty_name,s.encounter_max_players,s.encounter_name,s.encounter_variant) 8::integer AS kind, s.tenant_id AS tenant_id, s.run_id AS run_id, s.source_instance_id AS source_instance_id, s.realm_id AS realm_id, s.instance_name AS instance_name, s.encounter_difficulty_name AS difficulty_name, s.encounter_max_players AS max_players, s.encounter_name AS encounter_name, s.encounter_variant AS encounter_variant, ''::text AS player_guid, ''::text AS player_class, ''::text AS player_spec, ''::text AS player_sub_spec, ''::text AS metric, 0::double precision AS metric_value, s.guild_id AS guild_id, s.encounter_id AS source_encounter_id, '00000000-0000-0000-0000-000000000000'::uuid AS source_ranking_id, s.time_score_id AS source_time_parse_score_id, s.duration_ms AS duration_ms
- FROM guild_bosses s WHERE s.encounter_variant IN ('normal', 'hard')
+ FROM guild_bosses s WHERE s.encounter_variant IN ('normal', 'hard', 'lights_0', 'lights_1', 'lights_2', 'lights_3', 'lights_4')
  ORDER BY s.encounter_difficulty_name,s.encounter_max_players,s.encounter_name,s.encounter_variant,s.duration_ms,s.encounter_id)
 ) SELECT kind, tenant_id, run_id, source_instance_id, realm_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, player_guid, player_class, player_spec, player_sub_spec, metric, metric_value, guild_id, source_encounter_id, source_ranking_id, source_time_parse_score_id, duration_ms FROM projected
 `
@@ -22500,7 +22501,7 @@ func (q *sqlQuerier) DeleteLogInstanceByIDAndGroup(ctx context.Context, arg Dele
 
 const encountersByInstanceID = `-- name: EncountersByInstanceID :many
 SELECT
-  id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id, ranking_start_offset_ms, ranking_end_offset_ms, invalidated_at, invalid_reason, difficulty, encounter_variant
+  id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id, ranking_start_offset_ms, ranking_end_offset_ms, invalidated_at, invalid_reason, difficulty, encounter_variant, encounter_variant_tooltip
 FROM
   log_instance_encounters
 WHERE
@@ -22532,6 +22533,7 @@ func (q *sqlQuerier) EncountersByInstanceID(ctx context.Context, instanceID uuid
 			&i.InvalidReason,
 			&i.Difficulty,
 			&i.EncounterVariant,
+			&i.EncounterVariantTooltip,
 		); err != nil {
 			return nil, err
 		}
@@ -22872,26 +22874,27 @@ func (q *sqlQuerier) GetParsedLogGroupByID(ctx context.Context, id uuid.UUID) (P
 
 const insertEncounter = `-- name: InsertEncounter :one
 INSERT INTO
-  log_instance_encounters (id, instance_id, name, map_id, kill_type, remaining, boss, start_time, end_time, ranking_start_offset_ms, ranking_end_offset_ms, difficulty, encounter_variant)
+  log_instance_encounters (id, instance_id, name, map_id, kill_type, remaining, boss, start_time, end_time, ranking_start_offset_ms, ranking_end_offset_ms, difficulty, encounter_variant, encounter_variant_tooltip)
 VALUES
-  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-RETURNING id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id, ranking_start_offset_ms, ranking_end_offset_ms, invalidated_at, invalid_reason, difficulty, encounter_variant
+  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+RETURNING id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id, ranking_start_offset_ms, ranking_end_offset_ms, invalidated_at, invalid_reason, difficulty, encounter_variant, encounter_variant_tooltip
 `
 
 type InsertEncounterParams struct {
-	ID                   uuid.UUID          `db:"id" json:"id"`
-	InstanceID           uuid.UUID          `db:"instance_id" json:"instance_id"`
-	Name                 string             `db:"name" json:"name"`
-	MapID                int32              `db:"map_id" json:"map_id"`
-	KillType             KillType           `db:"kill_type" json:"kill_type"`
-	Remaining            guid.GUIDs         `db:"remaining" json:"remaining"`
-	Boss                 bool               `db:"boss" json:"boss"`
-	StartTime            pgtype.Timestamptz `db:"start_time" json:"start_time"`
-	EndTime              pgtype.Timestamptz `db:"end_time" json:"end_time"`
-	RankingStartOffsetMs pgtype.Int8        `db:"ranking_start_offset_ms" json:"ranking_start_offset_ms"`
-	RankingEndOffsetMs   pgtype.Int8        `db:"ranking_end_offset_ms" json:"ranking_end_offset_ms"`
-	Difficulty           pgtype.Text        `db:"difficulty" json:"difficulty"`
-	EncounterVariant     pgtype.Text        `db:"encounter_variant" json:"encounter_variant"`
+	ID                      uuid.UUID          `db:"id" json:"id"`
+	InstanceID              uuid.UUID          `db:"instance_id" json:"instance_id"`
+	Name                    string             `db:"name" json:"name"`
+	MapID                   int32              `db:"map_id" json:"map_id"`
+	KillType                KillType           `db:"kill_type" json:"kill_type"`
+	Remaining               guid.GUIDs         `db:"remaining" json:"remaining"`
+	Boss                    bool               `db:"boss" json:"boss"`
+	StartTime               pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	EndTime                 pgtype.Timestamptz `db:"end_time" json:"end_time"`
+	RankingStartOffsetMs    pgtype.Int8        `db:"ranking_start_offset_ms" json:"ranking_start_offset_ms"`
+	RankingEndOffsetMs      pgtype.Int8        `db:"ranking_end_offset_ms" json:"ranking_end_offset_ms"`
+	Difficulty              pgtype.Text        `db:"difficulty" json:"difficulty"`
+	EncounterVariant        pgtype.Text        `db:"encounter_variant" json:"encounter_variant"`
+	EncounterVariantTooltip pgtype.Text        `db:"encounter_variant_tooltip" json:"encounter_variant_tooltip"`
 }
 
 func (q *sqlQuerier) InsertEncounter(ctx context.Context, arg InsertEncounterParams) (LogInstanceEncounter, error) {
@@ -22909,6 +22912,7 @@ func (q *sqlQuerier) InsertEncounter(ctx context.Context, arg InsertEncounterPar
 		arg.RankingEndOffsetMs,
 		arg.Difficulty,
 		arg.EncounterVariant,
+		arg.EncounterVariantTooltip,
 	)
 	var i LogInstanceEncounter
 	err := row.Scan(
@@ -22927,6 +22931,7 @@ func (q *sqlQuerier) InsertEncounter(ctx context.Context, arg InsertEncounterPar
 		&i.InvalidReason,
 		&i.Difficulty,
 		&i.EncounterVariant,
+		&i.EncounterVariantTooltip,
 	)
 	return i, err
 }

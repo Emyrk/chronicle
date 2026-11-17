@@ -7733,6 +7733,10 @@ export const WoWChangeDirections: WoWChangeDirection[] = ["Gain", "Loss"];
 // From chroniclesdk/log.go
 export interface WoWEncounter {
     /**
+     * EncounterVariantTooltip is display-only and does not affect ranking identity.
+     */
+    readonly encounter_variant_tooltip?: string;
+    /**
      * EncounterVariant is absent for unclassified/legacy kills, which belong only to Combined.
      */
     readonly encounter_variant?: string;

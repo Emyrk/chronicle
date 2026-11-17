@@ -15,12 +15,25 @@ import (
 
 func TestEncounterVariantMembershipsKeepCombinedAndIsolateMetrics(t *testing.T) {
 	t.Parallel()
+	for _, tc := range []struct {
+		boss     string
+		variants []string
+	}{
+		{"Hodir", []string{"normal", "hard"}},
+		{"Yogg-Saron", []string{"lights_0", "lights_1", "lights_2", "lights_3", "lights_4"}},
+	} {
+		t.Run(tc.boss, func(t *testing.T) { t.Parallel(); testVariantMemberships(t, tc.boss, tc.variants) })
+	}
+}
+
+func testVariantMemberships(t *testing.T, boss string, variants []string) {
+	t.Helper()
 	ctx := testutil.Context(t, testutil.WaitLong)
 	pool := newSingleConnectionPool(t)
 	store := database.New(pool)
 	cutoff := time.Date(2026, 1, 10, 0, 0, 0, 0, time.UTC)
 	fixture := setupScoringFixture(t, pool, store)
-	for i, variant := range []string{"normal", "hard", ""} {
+	for i, variant := range append(append([]string{}, variants...), "") {
 		if i > 0 {
 			fixture.instanceID = uuid.New()
 			_, err := store.InsertInstance(ctx, database.InsertInstanceParams{ID: fixture.instanceID, RealmID: fixture.realmID, LogGroupID: fixture.logGroupID, Name: "Molten Core", Capabilities: []string{}, StartTime: database.Timestamptz(cutoff.Add(-2 * time.Hour))})
@@ -29,7 +42,7 @@ func TestEncounterVariantMembershipsKeepCombinedAndIsolateMetrics(t *testing.T) 
 		encounterID := uuid.New()
 		killed := cutoff.Add(-time.Hour)
 		_, err := store.InsertEncounter(ctx, database.InsertEncounterParams{
-			ID: encounterID, InstanceID: fixture.instanceID, Name: "Hodir", Boss: true,
+			ID: encounterID, InstanceID: fixture.instanceID, Name: boss, Boss: true,
 			KillType: database.KillTypeClean, Remaining: guid.GUIDs{},
 			StartTime: database.Timestamptz(killed.Add(-time.Minute)), EndTime: database.Timestamptz(killed),
 			EncounterVariant: pgtype.Text{String: variant, Valid: variant != ""},
@@ -37,7 +50,7 @@ func TestEncounterVariantMembershipsKeepCombinedAndIsolateMetrics(t *testing.T) 
 		require.NoError(t, err)
 		require.NoError(t, store.InsertEncounterDpsRanking(ctx, database.InsertEncounterDpsRankingParams{
 			EncounterID: uuid.NullUUID{UUID: encounterID, Valid: true}, InstanceID: fixture.instanceID,
-			EncounterName: "Hodir", InstanceName: "Molten Core", PlayerGuid: "player", PlayerName: "Player",
+			EncounterName: boss, InstanceName: "Molten Core", PlayerGuid: "player", PlayerName: "Player",
 			PlayerClass: "WARRIOR", PlayerSpec: "Fury", PlayerRole: "dps", RealmID: fixture.realmID, RealmName: "test-realm",
 			DamageDone: int64((i + 1) * 10000), HealingDone: int64((i + 1) * 20000), DurationSecs: 100,
 			Dps: float64((i + 1) * 100), Hps: float64((i + 1) * 200), KilledAt: database.Timestamptz(killed),
@@ -53,15 +66,19 @@ func TestEncounterVariantMembershipsKeepCombinedAndIsolateMetrics(t *testing.T) 
 		}
 		combined, err := store.GetParseScoreMembershipCohort(ctx, database.GetParseScoreMembershipCohortParams{
 			Metric: metric, TenantID: uuid.Nil, PolicyVersion: parsepolicy.PolicyVersion, QueryVersion: parsepolicy.QueryVersion,
-			Cutoff: database.Timestamptz(cutoff), ExcludeRunID: uuid.New(), EncounterName: "Hodir", PlayerClass: "WARRIOR",
+			Cutoff: database.Timestamptz(cutoff), ExcludeRunID: uuid.New(), EncounterName: boss, PlayerClass: "WARRIOR",
 			CohortMode: string(parsepolicy.CohortModeSpec), PlayerSpec: "Fury",
 		})
 		require.NoError(t, err)
-		require.ElementsMatch(t, []float64{scale, scale * 2, scale * 3}, combined, "Combined includes unknown")
-		for i, variant := range []string{"normal", "hard"} {
+		expected := make([]float64, len(variants)+1)
+		for i := range expected {
+			expected[i] = scale * float64(i+1)
+		}
+		require.ElementsMatch(t, expected, combined, "Combined includes unknown and every exact tier")
+		for i, variant := range variants {
 			params := database.GetParseVariantMembershipCohortParams{
 				Metric: metric, TenantID: uuid.Nil, PolicyVersion: parsepolicy.PolicyVersion, QueryVersion: parsepolicy.QueryVersion,
-				Cutoff: database.Timestamptz(cutoff), ExcludeRunID: uuid.New(), EncounterName: "Hodir", PlayerClass: "WARRIOR",
+				Cutoff: database.Timestamptz(cutoff), ExcludeRunID: uuid.New(), EncounterName: boss, PlayerClass: "WARRIOR",
 				CohortMode: string(parsepolicy.CohortModeSpec), PlayerSpec: "Fury", EncounterVariant: variant,
 			}
 			cohort, err := store.GetParseVariantMembershipCohort(ctx, params)
@@ -81,8 +98,8 @@ func TestEncounterVariantMembershipsKeepCombinedAndIsolateMetrics(t *testing.T) 
 	require.NoError(t, store.DeleteParseScoreMembershipsByLogGroup(ctx, fixture.logGroupID))
 	normal, err := store.GetParseVariantMembershipCohort(ctx, database.GetParseVariantMembershipCohortParams{
 		Metric: "dps", TenantID: uuid.Nil, PolicyVersion: parsepolicy.PolicyVersion, QueryVersion: parsepolicy.QueryVersion,
-		Cutoff: database.Timestamptz(cutoff), ExcludeRunID: uuid.New(), EncounterName: "Hodir", PlayerClass: "WARRIOR",
-		CohortMode: string(parsepolicy.CohortModeSpec), PlayerSpec: "Fury", EncounterVariant: "normal",
+		Cutoff: database.Timestamptz(cutoff), ExcludeRunID: uuid.New(), EncounterName: boss, PlayerClass: "WARRIOR",
+		CohortMode: string(parsepolicy.CohortModeSpec), PlayerSpec: "Fury", EncounterVariant: variants[0],
 	})
 	require.NoError(t, err)
 	require.Empty(t, normal, "unlisting/deletion invalidates variant membership too")

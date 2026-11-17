@@ -1,4 +1,4 @@
-import { supportsEncounterVariant, type EncounterVariants } from "@/components/EncounterDifficulty/encounterVariant"
+import { encounterVariantOptions, isEncounterVariant, supportsEncounterVariant, type EncounterVariants } from "@/components/EncounterDifficulty/encounterVariant"
 import type { HubSubject } from "./Hub/hub.fixtures"
 import { TABS, type HubTab } from "./Hub/hubTabs"
 import { VIEW_ORDER, type RatingView } from "./Ratings/ratingThemes"
@@ -135,7 +135,7 @@ export function hubEncounterVariants(params: URLSearchParams, instance: string |
     const value: unknown = JSON.parse(params.get("encounter_variants") ?? "{}")
     if (!value || typeof value !== "object" || Array.isArray(value)) return {}
     return Object.fromEntries(Object.entries(value)
-      .filter(([boss, variant]) => instance !== null && supportsEncounterVariant(instance, boss) && (variant === "normal" || variant === "hard"))
+      .filter(([boss, variant]) => instance !== null && supportsEncounterVariant(instance, boss) && isEncounterVariant(variant) && encounterVariantOptions(boss).includes(variant))
       .sort(([a], [b]) => a.localeCompare(b))) as EncounterVariants
   } catch {
     return {}

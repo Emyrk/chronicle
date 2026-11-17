@@ -220,12 +220,13 @@ func TestVehicleControlMetadata(t *testing.T) {
 
 func TestEncounterVariantIndependentFromDifficulty(t *testing.T) {
 	t.Parallel()
-	for _, variant := range []string{"", "normal", "hard"} {
+	for _, variant := range []string{"", "normal", "hard", "lights_0", "lights_1", "lights_2", "lights_3", "lights_4"} {
 		t.Run(variant, func(t *testing.T) {
 			t.Parallel()
 			value := pgtype.Text{String: variant, Valid: variant != ""}
-			enc := WoWEncounter(database.LogInstanceEncounter{Difficulty: pgtype.Text{String: "heroic", Valid: true}, EncounterVariant: value})
+			enc := WoWEncounter(database.LogInstanceEncounter{Difficulty: pgtype.Text{String: "heroic", Valid: true}, EncounterVariant: value, EncounterVariantTooltip: pgtype.Text{String: "Thorim: Fury of the Storm", Valid: true}})
 			require.Equal(t, variant, enc.EncounterVariant)
+			require.Equal(t, "Thorim: Fury of the Storm", enc.EncounterVariantTooltip)
 			require.Equal(t, "heroic", enc.Difficulty)
 			records := InstanceRankingRecords([]database.EncounterDpsRanking{{DifficultyName: "heroic", EncounterVariant: value, Dps: 100, Hps: 50}})
 			require.Equal(t, variant, records[0].EncounterVariant)

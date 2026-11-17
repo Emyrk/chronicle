@@ -211,6 +211,8 @@ const (
 )
 
 type WoWEncounter struct {
+	// EncounterVariantTooltip is display-only and does not affect ranking identity.
+	EncounterVariantTooltip string `json:"encounter_variant_tooltip,omitempty"`
 	// EncounterVariant is absent for unclassified/legacy kills, which belong only to Combined.
 	EncounterVariant string            `json:"encounter_variant,omitempty"`
 	ID               uuid.UUID         `json:"id"`
