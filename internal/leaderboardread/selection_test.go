@@ -184,3 +184,15 @@ func TestXTAndHodirIndependentVariants(t *testing.T) {
 	r.EncounterVariants["XT-002 Deconstructor"] = "hard"
 	require.NotEqual(t, before, Fingerprint(uuid.Nil, r, selected))
 }
+
+func TestVezaxAndHodirIndependentVariants(t *testing.T) {
+	t.Parallel()
+	rows := []database.ResolveLeaderboardConfigurationRow{{Kind: "instance", InstanceName: "Ulduar"}, {Kind: "boss", InstanceName: "Ulduar", EncounterName: "Hodir"}, {Kind: "boss", InstanceName: "Ulduar", EncounterName: "General Vezax"}}
+	r := Request{Instance: "Ulduar", Subject: "player", Kind: "boss", Score: "peak", Metric: "dps", Bosses: []string{"Hodir", "General Vezax"}, EncounterVariants: map[string]string{"Hodir": "hard", "General Vezax": "normal"}}
+	selected, err := Select(rows, r)
+	require.NoError(t, err)
+	require.EqualValues(t, 2, selected.Denominator)
+	before := Fingerprint(uuid.Nil, r, selected)
+	r.EncounterVariants["General Vezax"] = "hard"
+	require.NotEqual(t, before, Fingerprint(uuid.Nil, r, selected))
+}

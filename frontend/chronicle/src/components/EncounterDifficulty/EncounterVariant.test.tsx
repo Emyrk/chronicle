@@ -70,3 +70,15 @@ it("keeps XT and Hodir independent through the hard-mode shortcut", () => {
  expect(withHighestEncounterVariants("Ulduar", selected, variants)).toEqual({ Hodir: "hard", "XT-002 Deconstructor": "hard" });
  expect(withHighestEncounterVariants("Ulduar", ["XT-002 Deconstructor"], variants, true)).toEqual({ Hodir: "normal" });
 });
+
+
+it("supports Vezax variants independently of other bosses", () => {
+  expect(supportsEncounterVariant("Ulduar", "General Vezax")).toBe(true);
+  expect(supportsEncounterVariant("Other", "General Vezax")).toBe(false);
+  const variants = { Hodir: "normal" as const, "General Vezax": "normal" as const };
+  expect(withHighestEncounterVariants("Ulduar", ["General Vezax"], variants)).toEqual({ Hodir: "normal", "General Vezax": "hard" });
+  for (const active of ["normal", "hard"] as const) {
+    const html = renderToStaticMarkup(<EncounterVariantChips boss="General Vezax" active={active} onSelect={() => {}} />);
+    expect(html).toContain(`aria-pressed="true" aria-label="General Vezax ${active === "hard" ? "Hard mode" : "Normal"}"`);
+  }
+});

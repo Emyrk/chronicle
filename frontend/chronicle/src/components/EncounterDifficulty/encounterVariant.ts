@@ -3,7 +3,7 @@ export type EncounterVariant = "normal" | "hard";
 export type EncounterVariants = Record<string, EncounterVariant>;
 
 export function supportsEncounterVariant(instance: string, boss: string): boolean {
-  return instance === "Ulduar" && (boss === "Hodir" || boss === "XT-002 Deconstructor");
+  return instance === "Ulduar" && (boss === "Hodir" || boss === "XT-002 Deconstructor" || boss === "General Vezax");
 }
 
 export function encounterVariantLabel(variant: EncounterVariant): string {

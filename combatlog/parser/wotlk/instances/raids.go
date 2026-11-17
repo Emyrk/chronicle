@@ -1055,6 +1055,6 @@ var UlduarFactory = &instances.CommonFactory{
 		return UlduarSpeedrunRequirements()
 	},
 	Preprocessors: func() []instancehook.Preprocessor {
-		return []instancehook.Preprocessor{&thorimArenaStarterCombat{}, &xtVariantEvidence{}}
+		return []instancehook.Preprocessor{&thorimArenaStarterCombat{}, &xtVariantEvidence{}, &vezaxVariantEvidence{}}
 	},
 }
