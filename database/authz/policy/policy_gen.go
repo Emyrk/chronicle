@@ -1198,7 +1198,7 @@ func (obj *ObjChronicle) CanAdminister_User(sub *ObjUser) rel.Relationship {
 
 // CanAdmin_logs_User checks if the subject has admin_logs permission
 // // Object: chronicle:<id>
-// Schema: permission admin_logs = administer + moderate_logs
+// Schema: permission admin_logs = administer
 func (obj *ObjChronicle) CanAdmin_logs_User(sub *ObjUser) rel.Relationship {
 	r, s := obj.src.Obj, sub.src
 	return rel.Relationship{
@@ -3614,7 +3614,7 @@ func (r *Raid_logRelates) Uploader(subs ...*ObjUser) *Raid_logRelates {
 
 // CanView_Chronicle checks if the subject has view permission
 // // Object: raid_log:<id>
-// Schema: permission view = uploader + chronicle->admin_logs
+// Schema: permission view = uploader + chronicle->admin_logs + chronicle->moderate_logs
 func (obj *ObjRaid_log) CanView_Chronicle(sub *ObjChronicle) rel.Relationship {
 	r, s := obj.src.Obj, sub.src
 	return rel.Relationship{
@@ -3629,7 +3629,7 @@ func (obj *ObjRaid_log) CanView_Chronicle(sub *ObjChronicle) rel.Relationship {
 
 // CanView_User checks if the subject has view permission
 // // Object: raid_log:<id>
-// Schema: permission view = uploader + chronicle->admin_logs
+// Schema: permission view = uploader + chronicle->admin_logs + chronicle->moderate_logs
 func (obj *ObjRaid_log) CanView_User(sub *ObjUser) rel.Relationship {
 	r, s := obj.src.Obj, sub.src
 	return rel.Relationship{
@@ -3674,7 +3674,7 @@ func (obj *ObjRaid_log) CanMark_unlisted_User(sub *ObjUser) rel.Relationship {
 
 // CanReparse_Chronicle checks if the subject has reparse permission
 // // Object: raid_log:<id>
-// Schema: permission reparse = chronicle->admin_logs + (uploader & chronicle->can_reparse)
+// Schema: permission reparse = chronicle->admin_logs + (uploader + chronicle->moderate_logs & chronicle->can_reparse)
 func (obj *ObjRaid_log) CanReparse_Chronicle(sub *ObjChronicle) rel.Relationship {
 	r, s := obj.src.Obj, sub.src
 	return rel.Relationship{
@@ -3689,7 +3689,7 @@ func (obj *ObjRaid_log) CanReparse_Chronicle(sub *ObjChronicle) rel.Relationship
 
 // CanReparse_User checks if the subject has reparse permission
 // // Object: raid_log:<id>
-// Schema: permission reparse = chronicle->admin_logs + (uploader & chronicle->can_reparse)
+// Schema: permission reparse = chronicle->admin_logs + (uploader + chronicle->moderate_logs & chronicle->can_reparse)
 func (obj *ObjRaid_log) CanReparse_User(sub *ObjUser) rel.Relationship {
 	r, s := obj.src.Obj, sub.src
 	return rel.Relationship{
