@@ -6,6 +6,7 @@ export const CEL_CHEATSHEET: [string, string][] = [
   [`instance.kill_time_parse({"bosses": ["Ragnaros", "Nefarian"], "match": "each"}) >= 90`, "any / each of a boss list"],
   [`encounters.exists(e, e.name == "Ragnaros" && e.killed == true)`, "a pull where…"],
   [`encounters.filter(e, e.outcome == "wipe").size() >= 5`, "count pulls"],
+  [`encounters.exists(e, e.name == "Hodir" && e.players.filter(p, p.class == "PRIEST").size() >= 3)`, "Revered: players in this exact stored boss kill; no player parses, trash or boss selectors"],
   [`players.exists(p, p.sub_spec == "Bear" && p.sub_spec == "Cat")`, "same player"],
   [`players.filter(p, p.class == "PRIEST").size() >= 3`, "count players"],
   [`p.spec({"on": "trash"}) == "Feral"`, "on: bosses (default), trash, any"],

@@ -93,3 +93,16 @@ it.each(["encounter.difficulty", "encounter.variant"])("disables imported %s val
     expect(markup).toContain("Revered supporters can search by this");
   }
 });
+
+it.each([true, false, undefined])("shows exact-pull player controls with Revered access %s", (revered) => {
+  const markup = renderToStaticMarkup(<BlockEditor tree={{ any_encounter: { any_player: { field: "player.dps", op: ">=", value: 1000 } } }} onChange={vi.fn()} ctx={{
+    fields: fields.fields as InstanceSearchField[], zones: [], bosses: [], loggedIn: true, honored: true, revered,
+  }} />);
+  expect(markup).toContain("+ A player…");
+  expect(markup).toContain("+ Count players…");
+  expect(markup).toContain("this exact stored boss kill");
+  expect(markup).not.toContain("Fight type");
+  // The player field selector excludes uncorrelated, latest-per-boss parses.
+  expect(combos.flatMap((c) => c.options).some((o) => o.value === "player.parse")).toBe(false);
+  if (revered !== true) expect(markup).toContain("Revered supporters can search players in a specific pull");
+});

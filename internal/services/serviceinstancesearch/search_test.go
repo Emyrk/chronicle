@@ -163,10 +163,14 @@ func TestEncounterFilterAdmission(t *testing.T) {
 				return instancesearch.Explanation{}, nil
 			}
 			ctx := testutil.Context(t, testutil.WaitMedium)
-			for _, field := range []string{"encounter.difficulty", "encounter.variant"} {
+			for _, field := range []string{"encounter.difficulty", "encounter.variant", "encounter.players"} {
 				// Test a nested predicate in a count, not only the simple any_encounter UI shape.
 				var q chroniclesdk.InstanceSearchQuery
 				require.NoError(t, json.Unmarshal([]byte(`{"where":{"not":{"count_encounters":{"where":{"or":[{"field":"`+field+`","op":"=","value":"hard"},{"field":"encounter.name","op":"=","value":"Hodir"}]},"op":">=","value":1}}}}`), &q))
+				if field == "encounter.players" {
+					q = chroniclesdk.InstanceSearchQuery{}
+					require.NoError(t, json.Unmarshal([]byte(`{"where":{"not":{"count_encounters":{"where":{"or":[{"any_player":{"field":"player.class","op":"=","value":"PRIEST"}},{"count_players":{"op":">=","value":1}}]},"op":">=","value":1}}}}`), &q))
+				}
 				for _, explain := range []bool{false, true} {
 					caller := Caller{UserID: uuid.New(), TenantID: uuid.New()}
 					before := executed

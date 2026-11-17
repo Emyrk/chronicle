@@ -185,8 +185,22 @@ Keyset pagination on `(sort_key, li.id)` like `ListRecentInstances`. The fixed s
 - Boss / trash / idle time use the Guild History definition (clip fights to
   the ranked clear window, merge overlapping pulls), not
   `instance_overview_metrics`.
-- Quantifiers can only be used at the instance level (no player-inside-encounter
-  nesting). Boss-based player fields take `bosses` + `match` instead.
+- **Revered+** can nest `any_player` / `count_players` inside `any_encounter`
+  / `count_encounters`. Membership and spec, role, DPS/HPS, deaths, and item
+  level are tied to that exact encounter ID, never another pull in the run.
+  Other quantifier nesting remains invalid. Raid-wide player filters keep
+  their existing `bosses` + `match` behavior.
+- Pull-scoped player membership uses stored `encounter_dps_rankings` rows.
+  These cover persisted boss kills, not wipes or individual trash pulls.
+  Missing membership makes `any_player` false and `count_players` zero;
+  negation and zero-count queries can therefore match pulls without data.
+  Add `encounter.killed = true` when asking about kills. Ranking storage
+  retains canonical boss occurrences, not every repeated kill.
+- Pull-scoped player filters reject `player.parse` (scores are per boss, not
+  per exact pull), `on: "trash"`, and `bosses` / `match` selectors. `on: "any"`
+  still reads only the exact pull. CEL renders nested players as `e.players`.
+  See `testdata/examples/pull_warrior_tank.json` for a Warrior tanking the
+  same General Vezax hard-mode kill.
 - `player.parse` reads the latest stored `parse_score_results` row per boss
   with status ok / low_confidence. It can differ from the instance page when
   a newer snapshot receipt exists.

@@ -175,6 +175,10 @@ class Parser {
       this.expectIdent("capabilities");
       return { field: "instance.capability", op: "=", value: t.value };
     }
+    if (t.kind === "ident" && scope.get(t.value) === "encounter" && this.isPunct(".", 1) && this.isIdent("players", 2)) {
+      this.i += 2;
+      return this.quantifier(scope, true);
+    }
     if (t.kind === "ident" && (t.value === "players" || t.value === "encounters") && this.isPunct(".", 1)) {
       return this.quantifier(scope);
     }
@@ -196,10 +200,10 @@ class Parser {
     return this.fail("Expected a condition");
   }
 
-  private quantifier(scope: Scope): Node {
+  private quantifier(scope: Scope, encounterPlayers = false): Node {
     const listTok = this.next() as { value: string; at: number };
     const kind = listTok.value === "players" ? "player" : "encounter";
-    if (scope.size > 0) this.fail("players / encounters can only be used at the top level", listTok as Tok);
+    if (scope.size > 0 && !encounterPlayers) this.fail("Use encounter.players inside an encounter; other quantifier nesting is not supported", listTok as Tok);
     this.expectPunct(".");
     const method = this.expectIdent();
     if (method === "size") {

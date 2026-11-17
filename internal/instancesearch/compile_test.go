@@ -326,7 +326,7 @@ func TestCompileErrors(t *testing.T) {
 		{"UnknownField", instancesearch.Query{Where: pred("instance.secret", instancesearch.OpEq, 1)}, `unknown field "instance.secret"`},
 		{"PlayerFieldAtTop", instancesearch.Query{Where: pred("player.class", instancesearch.OpEq, "MAGE")}, "must be used inside any_player or count_players"},
 		{"InstanceFieldInPlayer", instancesearch.Query{Where: &instancesearch.Node{AnyPlayer: pred("instance.name", instancesearch.OpEq, "x")}}, "must be used inside the top level"},
-		{"NestedQuantifier", instancesearch.Query{Where: &instancesearch.Node{AnyPlayer: &instancesearch.Node{AnyEncounter: pred("encounter.boss", instancesearch.OpEq, true)}}}, "only be used at the instance level"},
+		{"NestedQuantifier", instancesearch.Query{Where: &instancesearch.Node{AnyPlayer: &instancesearch.Node{AnyEncounter: pred("encounter.boss", instancesearch.OpEq, true)}}}, "quantifiers must be at instance level"},
 		{"BadOp", instancesearch.Query{Where: pred("instance.name", instancesearch.OpGt, "x")}, "supports =, !=, in, not_in"},
 		{"BadEnum", instancesearch.Query{Where: &instancesearch.Node{AnyPlayer: pred("player.class", instancesearch.OpEq, "BARD")}}, "must be one of"},
 		{"WrongType", instancesearch.Query{Where: pred("instance.max_players", instancesearch.OpEq, "forty")}, "must be an integer"},

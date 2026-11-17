@@ -140,7 +140,17 @@ Fields are prefixed by the row they describe, and must be used in that scope:
 - `player.*` only inside `any_player` / `count_players`.
 - `encounter.*` only inside `any_encounter` / `count_encounters`.
 
-Quantifiers can't nest inside each other. Everything inside one `any_player` refers to **the same player**:
+**Revered+** callers can nest `any_player` or `count_players` inside an encounter
+quantifier. This searches participants and metrics on that exact pull, using stored
+boss-kill ranking rows. Wipes and individual trash pulls have no searchable player
+membership; negation or zero-count conditions can still match those missing rows.
+Other quantifier nesting is rejected. Nested player fields reject `player.parse`
+(scores are per boss, not pull), `on: "trash"`, and `bosses` / `match` selectors.
+CEL uses `e.players.exists(...)` / `e.players.filter(...)` inside a pull.
+See `internal/instancesearch/testdata/examples/pull_warrior_tank.json` for a Warrior
+tanking the same Vezax hard-mode kill. Search and explain both require Revered.
+
+Everything inside one `any_player` refers to **the same player**:
 
 ```json
 {"any_player": {"and": [

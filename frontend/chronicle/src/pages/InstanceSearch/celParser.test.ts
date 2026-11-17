@@ -55,7 +55,7 @@ describe("parseCEL", () => {
     const cases: [string, RegExp][] = [
       [`instance.name ==`, /Expected a value/],
       [`p.class == "MAGE"`, /Unknown name "p"/],
-      [`players.exists(p, players.exists(q, q.name == "x"))`, /only be used at the top level/],
+      [`players.exists(p, players.exists(q, q.name == "x"))`, /other quantifier nesting/],
       [`instance.name == "unterminated`, /Unterminated string/],
       [`instance.name.endsWith("x")`, /Unknown method "endsWith"/],
       [`instance.kill_time_ms({"boss": ["Rag"]}) > 0`, /Unknown option "boss"/],
@@ -76,4 +76,25 @@ describe("parseCEL", () => {
   it("maps offsets to line and column", () => {
     expect(lineCol("ab\ncd", 4)).toEqual({ line: 2, col: 2 });
   });
+});
+
+it("round-trips encounter-scoped player quantifiers with local collections", () => {
+  const sources = [
+    'encounters.exists(e, e.name == "Hodir" && e.players.exists(p, p.class == "PRIEST"))',
+    'encounters.filter(e, e.players.filter(p, p.dps >= 1000).size() >= 3).size() >= 2',
+    'encounters.exists(e, e.players.size() == 0)',
+    'encounters.exists(pull, pull.players.exists(player, player.name == "Alice"))',
+  ];
+  for (const source of sources) {
+    const tree = parseCEL(source);
+    expect(formatCEL(tree)).toContain("e.players.");
+    expect(parseCEL(formatCEL(tree))).toEqual(tree);
+  }
+});
+it.each([
+  'encounters.exists(e, players.exists(p, p.class == "PRIEST"))',
+  'players.exists(p, encounters.exists(e, e.killed == true))',
+  'encounters.exists(e, e.players.exists(p, players.size() > 0))',
+])("rejects invalid quantifier nesting: %s", (source) => {
+  expect(() => parseCEL(source)).toThrow(CelParseError);
 });

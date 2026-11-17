@@ -450,6 +450,9 @@ func (c *compiler) rankingRows(s scope, on On) (from, alias string) {
 	default:
 		fights = fmt.Sprintf(" AND %s.encounter_id IS NOT NULL", alias)
 	}
+	if s.encounter != "" {
+		fights = fmt.Sprintf(" AND %s.encounter_id = %s.id", alias, s.encounter)
+	}
 	return fmt.Sprintf("encounter_dps_rankings %[1]s WHERE %[1]s.instance_id = li.id AND %[1]s.player_guid = %[2]s.unit_guid::text%[3]s",
 		alias, s.alias, fights), alias
 }

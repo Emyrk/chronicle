@@ -177,15 +177,15 @@ function AddRow({
 }) {
   // Anonymous searches are a flat list of run conditions.
   const anon = ctx.loggedIn === false;
-  const btn = (label: string, node: () => Node, title: string, needsLogin = false) => (
+  const btn = (label: string, node: () => Node, title: string, needsLogin = false, needsRevered = false) => (
     <Button
       key={label}
       type="button"
       size="sm"
       variant="outline"
       className="h-6 px-2 text-2xs"
-      disabled={ctx.disabled || depth >= 6 || (needsLogin && anon)}
-      title={needsLogin && anon ? "Log in to add groups, player and pull blocks" : title}
+      disabled={ctx.disabled || depth >= 6 || (needsLogin && anon) || (needsRevered && ctx.revered !== true)}
+      title={needsRevered && ctx.revered !== true ? "Revered supporters can search players in a specific pull" : needsLogin && anon ? "Log in to add groups, player and pull blocks" : title}
       onClick={() => onAdd(node())}
     >
       {label}
@@ -195,12 +195,14 @@ function AddRow({
     <div className="flex flex-wrap gap-1 pt-2">
       {btn("+ Condition", () => newPredicate(firstField(ctx, scope)), "Add a condition")}
       {btn("+ Group", () => ({ or: [newPredicate(firstField(ctx, scope))] }), "Add a nested group (any / all of)", true)}
-      {scope === "instance" && (
+      {(scope === "instance" || scope === "encounter") && (
         <>
-          {btn("+ A player…", () => ({ any_player: { and: [newPredicate(firstField(ctx, "player"))] } }), "Some player in the run matches all of these", true)}
-          {btn("+ Count players…", () => ({ count_players: { where: { and: [newPredicate(firstField(ctx, "player"))] }, op: ">=", value: 1 } }), "How many players match", true)}
+          {btn("+ A player…", () => ({ any_player: { and: [newPredicate(firstField(ctx, "player"))] } }), "Some player in the run matches all of these", true, scope === "encounter")}
+          {btn("+ Count players…", () => ({ count_players: { where: { and: [newPredicate(firstField(ctx, "player"))] }, op: ">=", value: 1 } }), "How many players match", true, scope === "encounter")}
+          {scope === "instance" && <>
           {btn("+ A pull…", () => ({ any_encounter: { and: [newPredicate(firstField(ctx, "encounter"))] } }), "Some pull (encounter) matches all of these", true)}
           {btn("+ Count pulls…", () => ({ count_encounters: { where: { and: [newPredicate(firstField(ctx, "encounter"))] }, op: ">=", value: 1 } }), "How many pulls match", true)}
+          </>}
         </>
       )}
     </div>
@@ -280,6 +282,12 @@ function NodeBlock({
   const quant = quantifierOf(inner);
   if (quant) {
     const childScope: InstanceSearchFieldScope = quant.list === "players" ? "player" : "encounter";
+    const encounterPlayers = scope === "encounter" && quant.list === "players";
+    const childCtx = encounterPlayers ? {
+      ...ctx,
+      disabled: ctx.disabled || ctx.revered !== true,
+      fields: ctx.fields.filter((f) => f.name !== "player.parse").map((f) => f.scope === "player" ? { ...f, bosses: false, on: false } : f),
+    } : ctx;
     const where = asGroup(quant.where);
     const rebuild = (count: InstanceSearchCount | null, w: Node) => setInner(makeQuantifier(quant.list, count, w));
     return (
@@ -288,7 +296,7 @@ function NodeBlock({
           <>
             <select
               className={NATIVE_SELECT}
-              disabled={ctx.disabled}
+              disabled={childCtx.disabled}
               value={quant.count ? "count" : "any"}
               onChange={(e) => rebuild(e.target.value === "count" ? { op: ">=", value: 1 } : null, where)}
             >
@@ -299,7 +307,7 @@ function NodeBlock({
               <>
                 <select
                   className={NATIVE_SELECT}
-                  disabled={ctx.disabled}
+                  disabled={childCtx.disabled}
                   value={quant.count.op}
                   onChange={(e) => rebuild({ ...quant.count!, op: e.target.value as InstanceSearchOp }, where)}
                 >
@@ -310,18 +318,18 @@ function NodeBlock({
                 <NumberInput
                   value={quant.count.value}
                   min={0}
-                  disabled={ctx.disabled}
+                  disabled={childCtx.disabled}
                   onChange={(v) => rebuild({ ...quant.count!, value: Math.max(0, Math.round(v ?? 0)) }, where)}
                 />
               </>
             )}
             <span className="text-2xs text-muted-foreground">
-              {quant.list === "players" ? "Every condition inside refers to the same player." : "Every condition inside refers to the same pull."}
+              {encounterPlayers ? "Revered: the same player in this exact stored boss kill. Wipes and trash are not included." : quant.list === "players" ? "Every condition inside refers to the same player." : "Every condition inside refers to the same pull."}
             </span>
           </>,
         )}
         <div className="pl-5">
-          <GroupBody group={where} scope={childScope} depth={depth + 1} onChange={(w) => rebuild(quant.count, w)} ctx={ctx} />
+          <GroupBody group={where} scope={childScope} depth={depth + 1} onChange={(w) => rebuild(quant.count, w)} ctx={childCtx} />
         </div>
       </div>
     );

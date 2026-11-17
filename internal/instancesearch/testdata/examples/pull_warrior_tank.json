@@ -1,0 +1,18 @@
+{
+  "description": "Revered: a Warrior tanked the exact General Vezax hard-mode kill, not another pull in the run.",
+  "query": {
+    "where": {
+      "any_encounter": {
+        "and": [
+          {"field": "encounter.name", "op": "=", "value": "General Vezax"},
+          {"field": "encounter.variant", "op": "=", "value": "hard"},
+          {"field": "encounter.killed", "op": "=", "value": true},
+          {"any_player": {"and": [
+            {"field": "player.class", "op": "=", "value": "WARRIOR"},
+            {"field": "player.role", "op": "=", "value": "tank"}
+          ]}}
+        ]
+      }
+    }
+  }
+}

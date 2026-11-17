@@ -28,7 +28,13 @@ func TestRuntimeSkillsComposeConcepts(t *testing.T) {
 func TestSearchSkillExamplesAndToolSchemas(t *testing.T) {
 	t.Parallel()
 	skill := runtimeSkills[instanceSearchSkillID]
+	require.NotContains(t, skill.Instructions, "encounter quantifiers; quantifiers cannot nest.")
+	require.Contains(t, skill.Instructions, "requires Revered")
+	require.Contains(t, skill.Instructions, "Nested player.parse is unsupported")
+	require.Contains(t, skill.Instructions, "on=trash is rejected")
+
 	for _, example := range []string{
+		`{"where":{"any_encounter":{"and":[{"field":"encounter.name","op":"=","value":"Hodir"},{"count_players":{"where":{"field":"player.class","op":"=","value":"PRIEST"},"op":">=","value":3}}]}}}`,
 		`{"where":{"field":"instance.category","op":"=","value":"raid"}}`,
 		`{"where":{"count_players":{"where":{"field":"player.class","op":"=","value":"PRIEST"},"op":">=","value":3}}}`,
 		`{"where":{"and":[{"field":"instance.category","op":"=","value":"raid"},{"any_player":{"and":[{"field":"player.class","op":"=","value":"DRUID"},{"field":"player.sub_spec","op":"=","value":"Bear"},{"field":"player.sub_spec","op":"=","value":"Cat"}]}}]}}`,

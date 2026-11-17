@@ -229,6 +229,14 @@ func (s *Service) run(ctx context.Context, c Caller, q chroniclesdk.InstanceSear
 			return fail(ErrSupporterRequired, "supporter_required")
 		}
 	}
+	// Encounter-scoped players are a Revered capability even when their
+	// predicates only use free fields (or a count has no predicate).
+	if hasEncounterPlayers(q.Where, false) && !tierAtLeast(access.Tier, billing.TierRevered) {
+		result.RequiredTier = billing.TierRevered
+		result.RequiredField = "encounter.players"
+		result.Status, _ = limiter.PeekWithLimit(ctx, subject, limit)
+		return fail(ErrSupporterRequired, "supporter_required")
+	}
 	// Check compiled predicates, including nested quantifiers, for both search
 	// and explain before anonymous admission or any token charge.
 	for _, field := range compiled.Fields {
@@ -315,4 +323,23 @@ func (s *Service) Explain(ctx context.Context, c Caller, q chroniclesdk.Instance
 		return instancesearch.Explanation{}, r
 	}
 	return v.(instancesearch.Explanation), r
+}
+
+// hasEncounterPlayers walks boolean groups without losing the enclosing scope.
+func hasEncounterPlayers(n *chroniclesdk.InstanceSearchNode, encounter bool) bool {
+	if n == nil {
+		return false
+	}
+	if encounter && (n.AnyPlayer != nil || n.CountPlayers != nil) {
+		return true
+	}
+	for _, child := range append(append([]chroniclesdk.InstanceSearchNode{}, n.And...), n.Or...) {
+		if hasEncounterPlayers(&child, encounter) {
+			return true
+		}
+	}
+	if hasEncounterPlayers(n.Not, encounter) || hasEncounterPlayers(n.AnyEncounter, true) {
+		return true
+	}
+	return n.CountEncounters != nil && hasEncounterPlayers(n.CountEncounters.Where, true)
 }

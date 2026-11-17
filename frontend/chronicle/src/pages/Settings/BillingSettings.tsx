@@ -346,7 +346,7 @@ const COMPARISON: { feature: string; description: string; friendly: string; hono
   {
     // Multipliers of the free search burst in api/instance_search.go (100 / 300 / 800 / 2000).
     feature: "Raid search bandwidth",
-    description: "Search every raid log by boss, player, gear, and more. Heavier searches cost more; higher tiers get a bigger budget that refills every minute.",
+    description: "Search every raid log by boss, player, gear, and more. Heavier searches cost more; higher tiers get a bigger budget that refills every minute. Revered unlocks player filters and counts within one specific stored boss kill.",
     friendly: "Standard",
     honored: "3×",
     revered: "8×",

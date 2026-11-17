@@ -677,9 +677,9 @@ function celNode(n: Node, v: string): string {
   if (n.and !== undefined) return celJoin(n.and, " && ", v, true);
   if (n.or !== undefined) return celJoin(n.or, " || ", v, false);
   if (n.not) return `!(${celNode(n.not, v)})`;
-  if (n.any_player) return `players.exists(p, ${celNode(n.any_player, "p")})`;
+  if (n.any_player) return `${v === "e" ? "e.players" : "players"}.exists(p, ${celNode(n.any_player, "p")})`;
   if (n.any_encounter) return `encounters.exists(e, ${celNode(n.any_encounter, "e")})`;
-  if (n.count_players) return celCount("players", "p", n.count_players);
+  if (n.count_players) return celCount(v === "e" ? "e.players" : "players", "p", n.count_players);
   if (n.count_encounters) return celCount("encounters", "e", n.count_encounters);
   if (n.field) return celPredicate(n, v);
   return "<invalid>";

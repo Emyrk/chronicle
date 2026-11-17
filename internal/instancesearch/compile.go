@@ -370,6 +370,8 @@ func (s scopeKind) String() string {
 type scope struct {
 	kind  scopeKind
 	alias string
+	// encounter pins nested player participation and metrics to one pull.
+	encounter string
 }
 
 type compiler struct {
@@ -486,8 +488,8 @@ func (c *compiler) group(children []Node, path, sep string, s scope, depth int) 
 // quantifier opens a player or encounter scope. any_* compiles to EXISTS;
 // count_* to a correlated count compared with the bound value.
 func (c *compiler) quantifier(where *Node, count *Count, path string, kind scopeKind, s scope, depth int) (string, error) {
-	if s.kind != scopeInstance {
-		return "", &Error{Path: path, Message: fmt.Sprintf("player and encounter quantifiers can only be used at the instance level, not inside a %s scope", s.kind)}
+	if s.kind != scopeInstance && (s.kind != scopeEncounter || kind != scopePlayer) {
+		return "", &Error{Path: path, Message: "quantifiers must be at instance level, except player quantifiers inside an encounter"}
 	}
 	var (
 		alias, from, distinct string
@@ -495,7 +497,7 @@ func (c *compiler) quantifier(where *Node, count *Count, path string, kind scope
 	switch kind {
 	case scopePlayer:
 		alias = c.alias("p")
-		from = fmt.Sprintf("log_instance_players %[1]s WHERE %[1]s.instance_id = li.id", alias)
+		from = c.playerRows(alias, s)
 		// log_instance_players has no unique key, so count each GUID once.
 		distinct = "DISTINCT " + alias + ".unit_guid"
 	case scopeEncounter:
@@ -507,7 +509,7 @@ func (c *compiler) quantifier(where *Node, count *Count, path string, kind scope
 	inner := "TRUE"
 	if where != nil {
 		var err error
-		inner, err = c.node(where, path+".where", scope{kind: kind, alias: alias}, depth+1)
+		inner, err = c.node(where, path+".where", quantifierScope(kind, alias, s), depth+1)
 		if err != nil {
 			return "", err
 		}
@@ -530,7 +532,34 @@ func (c *compiler) quantifier(where *Node, count *Count, path string, kind scope
 		distinct, from, inner, sqlOp(count.Op), c.arg(count.Value)), nil
 }
 
+// playerRows uses ranking membership, not the raid roster, for pull-scoped
+// players. Rankings currently persist boss kills only, not wipes or trash pulls.
+func (c *compiler) playerRows(alias string, parent scope) string {
+	from := fmt.Sprintf("log_instance_players %[1]s WHERE %[1]s.instance_id = li.id", alias)
+	if parent.kind == scopeEncounter {
+		r := c.alias("rp")
+		from += fmt.Sprintf(" AND EXISTS (SELECT 1 FROM encounter_dps_rankings %[1]s WHERE %[1]s.instance_id = li.id AND %[1]s.encounter_id = %[2]s.id AND %[1]s.player_guid = %[3]s.unit_guid::text)", r, parent.alias, alias)
+	}
+	return from
+}
+
+func quantifierScope(kind scopeKind, alias string, parent scope) scope {
+	sub := scope{kind: kind, alias: alias}
+	if parent.kind == scopeEncounter && kind == scopePlayer {
+		sub.encounter = parent.alias
+	}
+	return sub
+}
+
 func (c *compiler) predicate(n *Node, path string, s scope) (string, error) {
+	if s.encounter != "" {
+		if n.Field == "player.parse" {
+			return "", &Error{Path: path + ".field", Message: "player.parse is stored per boss, not per pull, and cannot be used inside an encounter"}
+		}
+		if n.On == OnTrash || len(n.Bosses) > 0 || n.Match != "" {
+			return "", &Error{Path: path, Message: "pull-scoped player fields cannot use trash, bosses, or match selectors"}
+		}
+	}
 	f, ok := fieldsByName[n.Field]
 	if !ok {
 		return "", &Error{Path: path + ".field", Message: fmt.Sprintf("unknown field %q", n.Field)}

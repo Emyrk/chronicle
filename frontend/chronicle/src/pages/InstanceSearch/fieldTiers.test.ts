@@ -82,3 +82,10 @@ it("keeps basic named kills available without Revered", () => {
   expect(fieldLock(field("encounter.killed"), { loggedIn: true, revered: false })).toBeNull();
   expect(treeNeedsRevered(formToTree({ ...emptyForm(), killed: ["Hodir"] }))).toBe(false);
 });
+
+it("requires Revered for encounter player structure without gated fields", () => {
+  const player = { any_player: { field: "player.class", op: "=" as const, value: "PRIEST" } };
+  expect(treeNeedsRevered(player)).toBe(false);
+  expect(treeNeedsRevered({ any_encounter: { and: [player] } })).toBe(true);
+  expect(treeNeedsRevered({ not: { count_encounters: { where: { or: [{ count_players: { op: ">=", value: 1 } }] }, op: ">=", value: 1 } } })).toBe(true);
+});

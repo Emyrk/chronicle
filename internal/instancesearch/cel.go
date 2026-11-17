@@ -55,17 +55,24 @@ func celNode(n *Node, v string) string {
 	case n.Not != nil:
 		return "!(" + celNode(n.Not, v) + ")"
 	case n.AnyPlayer != nil:
-		return fmt.Sprintf("players.exists(p, %s)", celNode(n.AnyPlayer, "p"))
+		return fmt.Sprintf("%s.exists(p, %s)", playerList(v), celNode(n.AnyPlayer, "p"))
 	case n.AnyEncounter != nil:
 		return fmt.Sprintf("encounters.exists(e, %s)", celNode(n.AnyEncounter, "e"))
 	case n.CountPlayers != nil:
-		return celCount("players", "p", n.CountPlayers)
+		return celCount(playerList(v), "p", n.CountPlayers)
 	case n.CountEncounters != nil:
 		return celCount("encounters", "e", n.CountEncounters)
 	case n.Field != "":
 		return celPredicate(n, v)
 	}
 	return "<invalid>"
+}
+
+func playerList(v string) string {
+	if v == "e" {
+		return "e.players"
+	}
+	return "players"
 }
 
 func celCount(list, v string, c *Count) string {

@@ -50,5 +50,14 @@ export function treeNeedsHonored(n: Node | undefined): boolean {
 
 /** Field gate including imported, shared, code, and recent queries. */
 export function treeNeedsRevered(n: Node | undefined): boolean {
-  return treeFields(n).some((f) => REVERED_FIELDS.has(f));
+  return treeFields(n).some((f) => REVERED_FIELDS.has(f)) || hasEncounterPlayers(n);
+}
+
+/** Player participation and metrics bound to a single stored boss kill. */
+function hasEncounterPlayers(n: Node | undefined, encounter = false): boolean {
+  if (!n) return false;
+  if (encounter && (n.any_player || n.count_players)) return true;
+  return [...(n.and ?? []), ...(n.or ?? []), n.not].some((k) => hasEncounterPlayers(k, encounter))
+    || hasEncounterPlayers(n.any_encounter, true)
+    || hasEncounterPlayers(n.count_encounters?.where, true);
 }

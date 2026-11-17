@@ -97,13 +97,13 @@ func (c *compiler) explainNode(n *Node, path string, s scope, depth int) (string
 		}
 		return fmt.Sprintf("jsonb_build_object('kind', 'not', 'children', jsonb_build_array(%s))", inner), nil
 	case n.AnyPlayer != nil:
-		return c.explainQuantifier(n.AnyPlayer, nil, chroniclesdk.InstanceSearchEvidenceAnyPlayer, path+".any_player", scopePlayer, depth)
+		return c.explainQuantifier(n.AnyPlayer, nil, chroniclesdk.InstanceSearchEvidenceAnyPlayer, path+".any_player", scopePlayer, s, depth)
 	case n.CountPlayers != nil:
-		return c.explainQuantifier(n.CountPlayers.Where, n.CountPlayers, chroniclesdk.InstanceSearchEvidenceCountPlayers, path+".count_players", scopePlayer, depth)
+		return c.explainQuantifier(n.CountPlayers.Where, n.CountPlayers, chroniclesdk.InstanceSearchEvidenceCountPlayers, path+".count_players", scopePlayer, s, depth)
 	case n.AnyEncounter != nil:
-		return c.explainQuantifier(n.AnyEncounter, nil, chroniclesdk.InstanceSearchEvidenceAnyEncounter, path+".any_encounter", scopeEncounter, depth)
+		return c.explainQuantifier(n.AnyEncounter, nil, chroniclesdk.InstanceSearchEvidenceAnyEncounter, path+".any_encounter", scopeEncounter, s, depth)
 	case n.CountEncounters != nil:
-		return c.explainQuantifier(n.CountEncounters.Where, n.CountEncounters, chroniclesdk.InstanceSearchEvidenceCountEncounters, path+".count_encounters", scopeEncounter, depth)
+		return c.explainQuantifier(n.CountEncounters.Where, n.CountEncounters, chroniclesdk.InstanceSearchEvidenceCountEncounters, path+".count_encounters", scopeEncounter, s, depth)
 	default:
 		return c.explainPredicate(n, path, s)
 	}
@@ -152,12 +152,12 @@ func (c *compiler) explainPredicate(n *Node, path string, s scope) (string, erro
 // The witness subquery reuses the quantifier's alias for both the base table
 // and the derived rows, so the subtree's condition (inside) and its evidence
 // (outside) are compiled once against the same alias.
-func (c *compiler) explainQuantifier(where *Node, count *Count, kind EvidenceKind, path string, qk scopeKind, depth int) (string, error) {
+func (c *compiler) explainQuantifier(where *Node, count *Count, kind EvidenceKind, path string, qk scopeKind, parent scope, depth int) (string, error) {
 	var alias, from, distinct, pick, witness, order string
 	switch qk {
 	case scopePlayer:
 		alias = c.alias("w")
-		from = fmt.Sprintf("log_instance_players %[1]s WHERE %[1]s.instance_id = li.id", alias)
+		from = c.playerRows(alias, parent)
 		distinct = "DISTINCT " + alias + ".unit_guid"
 		pick = fmt.Sprintf("SELECT DISTINCT ON (%[1]s.unit_guid) %[1]s.* FROM %[2]s AND (%%s) ORDER BY %[1]s.unit_guid LIMIT %[3]d", alias, from, maxWitnesses)
 		witness = fmt.Sprintf("'name', %[1]s.name, 'guid', %[1]s.unit_guid::text, 'class', %[1]s.class::text", alias)
@@ -173,7 +173,7 @@ func (c *compiler) explainQuantifier(where *Node, count *Count, kind EvidenceKin
 
 	inner, innerEvidence := "TRUE", "NULL::jsonb"
 	if where != nil {
-		sub := scope{kind: qk, alias: alias}
+		sub := quantifierScope(qk, alias, parent)
 		var err error
 		if inner, err = c.node(where, path+".where", sub, depth+1); err != nil {
 			return "", err
