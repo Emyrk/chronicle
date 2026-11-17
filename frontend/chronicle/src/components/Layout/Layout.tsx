@@ -3,7 +3,6 @@ import { Outlet, useLocation } from "react-router-dom";
 import { NavBar } from "../NavBar/NavBar";
 import { Footer } from "../Footer/Footer";
 import { SupportBanner } from "../SupportBanner";
-import { LetterBanner } from "../LetterBanner/LetterBanner";
 import { ChooseArrivalNotice } from "../ChooseArrivalNotice/ChooseArrivalNotice";
 import {
   RootCommunityBanner,
@@ -38,7 +37,6 @@ export function Layout() {
             <>
               <NoticeBanner notices={noticeResponse?.notices ?? []} />
               <RootCommunityBanner />
-              <LetterBanner />
               <SupportBanner />
               <NavBar />
             </>
