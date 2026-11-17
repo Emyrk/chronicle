@@ -24,6 +24,7 @@ DEFAULTS = {
     "workdir": "~/.cache/chronicle-render-map",
     "blender": "/Applications/Blender.app/Contents/MacOS/Blender",  # pinned to 4.3 by render_set.py
     "python": None,  # interpreter for render_set's sub-steps; None = the one running the tool
+    "gltfpack": "gltfpack",  # command for pack_glb.py (render_set --glb); validated on 1.3
     "mpq_clients": {},  # name -> 1.12 client directory (holds Data/); opened read-only
     "foundry": {"host": "telemetry.chronicleclassic.com", "namespace": None},
     "log_hosts": ["octo.chronicleclassic.com"],  # check_log_positions.py --host default = the first

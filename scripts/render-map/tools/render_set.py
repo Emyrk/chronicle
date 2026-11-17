@@ -22,6 +22,7 @@ overwritten) with:
   --glb adds (export_glb.py; Blizzard-derived, gitignored like the images):
   <slug>-open-top.glb  cutaway 3D model: ceilings/vault/upper walls removed by the support cull
   <slug>-full.glb      every face, only with --glb-full
+  *-meshopt.glb        each GLB packed by gltfpack (pack_glb.py): the file to publish
   height.png           16-bit top-down elevation, same camera frame as the passes (height.json)
   perspective-*.png    3/4 proof renders from the re-imported GLB (+ previews)
   log.txt            everything the tools printed
@@ -47,12 +48,13 @@ import yaml
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import floor_config  # noqa: E402
+import pack_glb  # noqa: E402
 import rmconfig  # noqa: E402
 ROOT = rmconfig.workdir()  # maps/, cache/, data/ (local.yaml `workdir`)
 BLENDER = rmconfig.expand(rmconfig.CFG["blender"])
 BLENDER_PINNED = "Blender 4.3"  # major.minor the tools were validated on
 TOOLS = ["blender_topdown.py", "composite_water.py", "align_to_real.py", "wmo2obj.py", "adt2obj.py", "fetch_map.py", "mpq_chain.py",
-         "render_set.py", "preview.py", "export_glb.py", "m2obj.py", "m2fetch.py", "floor_config.py", "rmconfig.py"]
+         "render_set.py", "preview.py", "export_glb.py", "m2obj.py", "m2fetch.py", "floor_config.py", "rmconfig.py", "pack_glb.py"]
 
 
 def sha(path):
@@ -347,7 +349,12 @@ def main():
         if not a.glb_full:
             gl.append("--skip-full")
         run(gl, must_write=os.path.join(out, "%s-open-top.glb" % glb_slug))
+        for n in sorted(os.listdir(out)):
+            if n.endswith(".glb"):
+                src = os.path.join(out, n)
+                run([py, "-I", os.path.join(HERE, "pack_glb.py"), src], must_write=pack_glb.packed_path(src))
         glb = json.load(open(os.path.join(out, "height.json")))
+        glb["gltfpack"] = {"version": pack_glb.version(), "flags": pack_glb.FLAGS}
         glb["files"] = {n: {"bytes": os.path.getsize(os.path.join(out, n)), "sha256_file": sha(os.path.join(out, n))}
                         for n in sorted(os.listdir(out)) if n.endswith(".glb")}
 

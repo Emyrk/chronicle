@@ -14,6 +14,10 @@ blender: /Applications/Blender.app/Contents/MacOS/Blender
 # Default: the interpreter running the tool, i.e. scripts/render-map/.venv/bin/python.
 # python: ~/somewhere/.venv/bin/python
 
+# gltfpack 1.3 (npm install -g gltfpack@1.3.0): render_set.py --glb packs every GLB with it
+# (pack_glb.py). A command line is fine, e.g. `npx -y gltfpack@1.3.0`.
+gltfpack: gltfpack
+
 # 1.12 (MPQ) clients, by name: map.yaml `client: <name>` and every --client accept the name.
 # The directory holds Data/. Opened read-only; never write into a client someone plays from.
 mpq_clients: {}

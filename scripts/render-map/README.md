@@ -14,7 +14,7 @@ is wired into the Makefile, CI or any package manifest.
 
 ## Quick start (nothing → a rendered `v000`)
 
-Needs: macOS or Linux, Python 3.11+ (validated on 3.12; use `python3.12 -m venv` if your `python3`'s venv/ensurepip is broken), `git`, `cmake`, `clang++` (CascLib build), Blender **4.3**
+Needs (for `--glb`, also gltfpack 1.3: `npm install -g gltfpack@1.3.0`): macOS or Linux, Python 3.11+ (validated on 3.12; use `python3.12 -m venv` if your `python3`'s venv/ensurepip is broken), `git`, `cmake`, `clang++` (CascLib build), Blender **4.3**
 (default path `/Applications/Blender.app/Contents/MacOS/Blender`; elsewhere → `blender:` in local.yaml).
 
 ```bash
@@ -75,7 +75,10 @@ is used whole.
                      │
  4. --glb: export_glb.py ┤  same OBJ -> <slug>-open-top.glb (support cull, WebP textures, Y-up,
                      │   centred), height.png (16-bit elevation, same frame), perspective-*.png
-                     ▼   proofs from the re-imported GLB; height.json; all in the same vNNN folder
+                     │   proofs from the re-imported GLB; height.json; all in the same vNNN folder
+                     ▼
+ 5. pack_glb.py ─────┤  gltfpack -cc -kn -km -ke -vp 16 -> <name>-meshopt.glb beside each GLB (meshopt +
+                         quantized geometry, ~5x smaller). Publish this one; Blender needs the raw GLB.
 ```
 
 ```bash

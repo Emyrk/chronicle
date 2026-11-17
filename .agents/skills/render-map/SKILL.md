@@ -66,7 +66,11 @@ holes where floor should be?) and reporting it.
    grey is linear since 2026-10-18 — older versions are sRGB-encoded, their `encoding` lacks the
    "linear" prefix — and Pillow drops 16-bit RGBA to 8 bit: read it the way
    `tools/check_log_positions.py` does), and
-   `perspective-*.png` proofs rendered from the re-imported GLB. `--glb-full` adds the uncut
+   `perspective-*.png` proofs rendered from the re-imported GLB. Every GLB is then packed by
+   `tools/pack_glb.py` (gltfpack 1.3, local.yaml `gltfpack`) into `<name>-meshopt.glb`: meshopt
+   + quantized geometry, ~5x smaller geometry. **Publish the `-meshopt.glb`**; keep the raw GLB
+   for Blender (`view_glb.py` and the proofs cannot import meshopt). An older version folder
+   without one: `.venv/bin/python -I tools/pack_glb.py <raw.glb>`. `--glb-full` adds the uncut
    model; `--glb-format AUTO` embeds PNG instead of WebP (4x bigger, no EXT_texture_webp
    needed). The cull is numeric — floor = upward patches >= 10 sq yd, keep a face iff floor
    surface within 8 yd (3 yd for downward faces), props resting on floor kept whole — and its
@@ -135,8 +139,9 @@ holes where floor should be?) and reporting it.
      uploaded. Map button → boss in the left list → wait for "Follow" → screenshot the canvas.
    - **Lava streams down walls** (Molten Core `bm_brspire_lavafloortrans`) slope upward, so they are
      FLOOR seeds and survive 140 yd above the floor: `--glb-args "--seed-exclude lavafloortrans"`.
-   - **Size:** ZG's 38 MB terrain GLB (510k faces) was ready 3.1 s after the toggle, +~200 MB heap.
-     Textures are about half the file: the knob if a map is too heavy.
+   - **Size:** ZG's 38 MB terrain GLB (510k faces) was ready 3.1 s after the toggle, +~200 MB heap;
+     packed it is 22.8 MB. Textures are then most of the file (ZG: 14 of 18.8 MB are nine baked
+     terrain textures up to 3200 px): the knob if a map is still too heavy.
    - **Publish** — only on the operator's explicit go, naming the map and the namespace. See
      "Publishing through the Map Foundry" below; never with R2 tokens.
 
@@ -162,7 +167,8 @@ floor passes its render, mesh, and real-log checks:
 
 The staging JSON has `namespace`, `mapID`, `name`, and `floors[]`. Each floor supplies `floor`, optional
 `name`, optional `preferred2D`, and complete `render` and `mesh` objects. Both assets need absolute local
-`path`, `bytes`, `sha256`, and identical `bounds`; the render also needs `width`/`height`; the mesh needs
+`path`, `bytes`, `sha256`, and identical `bounds`; the render also needs `width`/`height`; the mesh (the
+`-meshopt.glb`) needs
 `zMin`/`zMax`, `frame: "wow-yup-mirrored-x"`, and optional `liquid`. `preferred2D` accepts `renders` or
 `art`: omitted means `renders`; `art` requests native floor art where usable. Never invent `art` for a
 stage that did not request it.
@@ -202,7 +208,8 @@ available. Do not use it as the default multi-floor workflow.
    The Foundry names the file itself, content-addressed
    (`3d/<mapID>-<sha256[:16 hex]>-<slugified filename>.glb`, `renders/<mapID>-...png`): use the
    returned `path` (and, for renders, `width`/`height`). Never write a literal `<slug>-open-top.glb`
-   path into a draft or a ticket. Upload the GLB from the version folder and the PNG from `$PUB`.
+   path into a draft or a ticket. Upload the `-meshopt.glb` from the version folder (pack it first if it is
+   missing) and the PNG from `$PUB`.
 4. **Save the draft:** `PUT $API/draft` with JSON `{"version": <draft_version>, "renders": [...],
    "meshes": [...]}`. Each array is the layer's FULL instance list — every existing entry from step 2
    unchanged, plus/replacing this `mapID` and floor; a missing entry or floor is unpublished. Preserve
