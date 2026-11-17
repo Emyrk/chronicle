@@ -238,6 +238,11 @@ var (
 					Requirements: ZulGurubSpeedrunRequirements(fl),
 					LevelRange:   Level60Cap(fl),
 				},
+				DurationByEncounter: map[string]rankings.DamageTargets{
+					"Gahz'ranka": {Mode: rankings.DamageTargetsBossOnly},
+					// Ohgan is also classified as a boss, so select Mandokir explicitly.
+					"Bloodlord Mandokir": {Mode: rankings.DamageTargetsEntries, EntryIDs: []uint32{11382}},
+				},
 			}
 		},
 	}
