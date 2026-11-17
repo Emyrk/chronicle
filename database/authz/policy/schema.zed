@@ -286,7 +286,7 @@ definition raid_log {
 
   permission view = uploader + chronicle->admin_logs
   permission mark_unlisted = chronicle->admin_logs + (uploader & chronicle->mark_log_unlisted)
-  permission reparse = chronicle->admin_logs + (uploader & chronicle->can_reparse)
+  permission reparse = chronicle->admin_logs + ((uploader + chronicle->moderate_logs) & chronicle->can_reparse)
   permission append = chronicle->admin_logs + (uploader & chronicle->append_log)
   permission delete_files = uploader + chronicle->admin_logs
   permission upload_youtube = uploader + chronicle->admin_logs
