@@ -1,3 +1,4 @@
+import { guildAttributes } from "@/components/EntityMenu/leaderboardEntities"
 import { useMemo, useState, type CSSProperties, type ReactNode } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Link } from "react-router-dom"
@@ -277,7 +278,7 @@ export function RatingFullList({
                             {/* Zero-width basis: past the line's minimum width the guild never widens the
                                 column; it fills the room the name and spec leave and truncates. */}
                             {entry.guild && (
-                              <span className="w-0 min-w-0 flex-1 truncate" title={entry.guild}>
+                              <span className="w-0 min-w-0 flex-1 truncate" title={entry.guild} {...guildAttributes(entry.guildId, entry.guild)}>
                                 {spec && <span className="md:hidden">{"\u00a0·\u00a0"}</span>}&lt;{entry.guild}&gt;
                               </span>
                             )}

@@ -452,9 +452,11 @@ VALUES ('00000000-0000-4000-8000-000000000001','Class raid','',0,'Ragnaros','000
 	require.Empty(t, rows[0].PlayerClass, "identity stays classless")
 	require.Equal(t, "WARLOCK", rows[0].SubjectClass)
 	require.Equal(t, "Shadow Pact", rows[0].GuildName)
+	require.Equal(t, "00000000-0000-4000-8000-0000000000a5", rows[0].GuildID)
 	require.Empty(t, rows[0].LogoUrl, "players carry no logo")
 	require.Empty(t, rows[1].SubjectClass, "an unknown character has no class")
 	require.Empty(t, rows[1].GuildName, "an unknown character has no guild")
+	require.Empty(t, rows[1].GuildID)
 
 	// Guild boards return the guild page's logo; a guild without a page has none.
 	_, err = conn.Exec(ctx, `
@@ -474,6 +476,7 @@ VALUES ('00000000-0000-4000-8000-000000000001','Class raid','',0,'Ragnaros','000
 	require.Equal(t, "/static/guilds/shadow-pact.png", guilds[0].LogoUrl)
 	require.Empty(t, guilds[1].LogoUrl)
 	require.Empty(t, guilds[0].GuildName, "guild rows carry no player guild")
+	require.Empty(t, guilds[0].GuildID)
 }
 
 // The overview's boss cards read each boss's #1 for every board in one query;

@@ -42,6 +42,19 @@ describe("published rating icons", () => {
     expect(renderToStaticMarkup(<SpecIcon cls="" spec="Unknown" />)).toBe("")
   })
 
+  it("marks a character's guild separately in both row sizes", () => {
+    const entry = { id: "one", name: "Raider", realm: "Turtle", guid: "Player-1", guild: "Raiders", guildId: "guild-1", cls: "MAGE", spec: "Fire", subSpec: "", score: 10, detail: "Turtle" }
+    for (const size of ["sm", "lg"] as const) {
+      const html = renderToStaticMarkup(<EntryRow entry={entry} theme={METRIC_THEMES.peak} size={size} />)
+      expect(html).toMatch(/<span[^>]*data-entity-kind="guild"[^>]*>&lt;Raiders&gt;<\/span>/)
+      expect(html).toContain('&quot;id&quot;:&quot;guild-1&quot;')
+      expect(html).toContain('data-entity-kind="character"')
+      const withoutID = renderToStaticMarkup(<EntryRow entry={{ ...entry, guildId: undefined }} theme={METRIC_THEMES.peak} size={size} />)
+      expect(withoutID).toContain("&lt;Raiders&gt;")
+      expect(withoutID).not.toContain('data-entity-kind="guild"')
+    }
+  })
+
   it("marks published character and guild names for Alt+click", () => {
     const character = renderToStaticMarkup(<EntryRow entry={{ id: "one", name: "Raider", realm: "Turtle", guid: "Player-1", cls: "MAGE", spec: "Fire", subSpec: "", score: 10, detail: "Turtle" }} theme={METRIC_THEMES.peak} size="sm" />)
     const guild = renderToStaticMarkup(<GuildName guild="Raiders" guildId="guild-1" />)

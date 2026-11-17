@@ -8,7 +8,7 @@ import type { RatingLiveData } from "./ratingLiveData"
 
 vi.mock("@tanstack/react-query", () => ({ useQuery: vi.fn() }))
 
-const entry = { id: "realm:mage", name: "Actual Mage", realm: "Realm", guid: "mage-guid", cls: "MAGE", spec: "Fire", subSpec: "", score: 72, detail: "Realm" }
+const entry = { id: "realm:mage", name: "Actual Mage", realm: "Realm", guid: "mage-guid", guild: "Actual Guild", guildId: "guild-1", cls: "MAGE", spec: "Fire", subSpec: "", score: 72, detail: "Realm" }
 const live: RatingLiveData = {
   pageKey: "cohort-1", board: () => ({ status: "loading" }),
   loadPage: vi.fn(async () => ({ rows: [], total: 0, page: 0, hasPreviousPage: false, hasNextPage: false })),
@@ -95,6 +95,8 @@ describe("Storybook full-list live data", () => {
     expect(html).toContain("Actual Mage")
     expect(html).toContain('data-entity-kind="character"')
     expect(html).toContain('&quot;guid&quot;:&quot;mage-guid&quot;')
+    expect(html).toMatch(/<span[^>]*data-entity-kind="guild"[^>]*>(?:<span[^>]*>[^<]*<\/span>)?&lt;Actual Guild&gt;<\/span>/)
+    expect(html).toContain('&quot;id&quot;:&quot;guild-1&quot;')
     expect(html).toContain("200 ranked")
     expect(html).not.toContain("Browse published ratings")
     const options = vi.mocked(useQuery).mock.lastCall![0] as unknown as { queryKey: unknown[]; enabled: boolean }

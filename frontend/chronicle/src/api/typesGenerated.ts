@@ -4532,6 +4532,10 @@ export interface LeaderboardV2Entry {
      */
     readonly guild_name: string;
     /**
+     * GuildID identifies the current guild for navigation; absent without a player guild.
+     */
+    readonly guild_id?: string;
+    /**
      * LogoURL is a guild subject's page logo for display; empty for players and guilds without one.
      */
     readonly logo_url: string;

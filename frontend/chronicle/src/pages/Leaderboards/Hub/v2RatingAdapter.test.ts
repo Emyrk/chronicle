@@ -263,9 +263,12 @@ it("preserves returned cohort identity for two specs of the same player", () => 
     player_sub_spec: "",
     subject_class: "MAGE",
     guild_name: "Arcane Circle",
+    guild_id: "guild-1",
     logo_url: "",
   };
   const frost = v2PlayerEntry(common, new URLSearchParams(), "peak");
+  expect(frost.guildId).toBe("guild-1");
+  expect(v2PlayerEntry({ ...common, guild_id: undefined }, new URLSearchParams(), "peak").guildId).toBeUndefined();
   const arcane = v2PlayerEntry(
     { ...common, player_spec: "Arcane" },
     new URLSearchParams(),
