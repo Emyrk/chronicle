@@ -315,23 +315,21 @@ export function InstancePage() {
     }
   }, [apiInstance?.slug, instanceId, navigate]);
 
-  // Show the log detail link when the user can delete or reparse this log.
+  // Show the log detail link when the user can view this log.
   const { isAuthenticated } = useAuth();
   const logGroupId = apiInstance?.log_group_id;
   const authzChecks = useMemo(() => ({
-    delete: logGroupId ? `raid_log:${logGroupId}#delete` : "",
-    reparse: logGroupId ? `raid_log:${logGroupId}#reparse` : "",
+    view: logGroupId ? `raid_log:${logGroupId}#view` : "",
     adminLogs: "chronicle:chronicle#admin_logs",
     invalidateLogs: "chronicle:chronicle#invalidate_logs",
   }), [logGroupId]);
   const { data: authz } = useAuthorizationCheck(authzChecks, {
     enabled: isAuthenticated && !!logGroupId,
   });
-  const canDeleteLog = authz?.delete ?? false;
-  const canReparseLog = authz?.reparse ?? false;
+  const canViewLog = authz?.view ?? false;
   const canAdminLogs = authz?.adminLogs ?? false;
   const canInvalidateLogs = authz?.invalidateLogs ?? false;
-  const logDetailUrl = (canDeleteLog || canReparseLog) && logGroupId ? `/logs/${logGroupId}` : undefined;
+  const logDetailUrl = canViewLog && logGroupId ? `/logs/${logGroupId}` : undefined;
 
   const instance = useMemo(() => {
     if (!apiInstance) return null;
