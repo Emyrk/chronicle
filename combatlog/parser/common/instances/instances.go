@@ -238,6 +238,11 @@ var (
 					Requirements: ZulGurubSpeedrunRequirements(fl),
 					LevelRange:   Level60Cap(fl),
 				},
+				DurationByEncounter: map[string]rankings.DamageTargets{
+					"Gahz'ranka": {Mode: rankings.DamageTargetsBossOnly},
+					// Include both Mandokir and Ohgan, but exclude nearby trash.
+					"Bloodlord Mandokir": {Mode: rankings.DamageTargetsEntries, EntryIDs: []uint32{11382, 14988}},
+				},
 			}
 		},
 	}
