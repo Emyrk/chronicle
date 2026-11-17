@@ -30,6 +30,8 @@ type LeaderboardV2Entry struct {
 	SubjectClass string `json:"subject_class"`
 	// GuildName is a player's current guild for display; empty for guilds and guildless players.
 	GuildName string `json:"guild_name"`
+	// GuildID identifies the current guild for navigation; absent without a player guild.
+	GuildID string `json:"guild_id,omitempty"`
 	// LogoURL is a guild subject's page logo for display; empty for players and guilds without one.
 	LogoURL     string              `json:"logo_url"`
 	Score       float64             `json:"score"`

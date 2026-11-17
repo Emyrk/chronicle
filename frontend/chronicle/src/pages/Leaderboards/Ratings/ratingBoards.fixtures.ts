@@ -19,6 +19,7 @@ export interface RatingEntry {
   realmLabel?: string
   guid?: string
   guild?: string
+  guildId?: string
   /** Guild subjects only: the guild page's logo, for display. */
   logo?: string
   cls: string

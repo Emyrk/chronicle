@@ -102,6 +102,7 @@ export function v2PlayerEntry(
     ]),
     name: row.name,
     guild: row.guild_name || undefined,
+    guildId: row.guild_id || undefined,
     logo: row.logo_url || undefined,
     realm: row.realm_id,
     realmLabel: row.realm_name?.trim() || "Unknown realm",

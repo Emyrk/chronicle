@@ -1,3 +1,4 @@
+import { guildAttributes } from "@/components/EntityMenu/leaderboardEntities"
 import type { ReactNode } from "react"
 import { cn } from "@/lib/utils"
 import { ClassIcon } from "@/pages/RaidPlanner/ClassIcon"
@@ -43,7 +44,7 @@ export function EntryRow({ entry, rank, theme, size }: { entry: RatingEntry; ran
           >
             {entry.name}
           </span>
-          {entry.guild && <span className="min-w-0 truncate text-xs text-muted-foreground">&lt;{entry.guild}&gt;</span>}
+          {entry.guild && <span className="min-w-0 truncate text-xs text-muted-foreground" {...guildAttributes(entry.guildId, entry.guild)}>&lt;{entry.guild}&gt;</span>}
         </span>
         <span className="block truncate text-[11px] text-muted-foreground">
           {[entry.spec, entry.realmLabel?.trim() || "Unknown realm"].filter(Boolean).join(" · ")}

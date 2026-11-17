@@ -133,6 +133,9 @@ SELECT page.*, COALESCE((SELECT NULLIF(r.name,'') FROM wow_server_realms r WHERE
  COALESCE(CASE WHEN @subject_kind::text = 'player' THEN
  (SELECT g.name FROM game_players p JOIN guilds g ON g.id = p.guild_id WHERE p.realm_id = page.realm_id AND p.id = page.subject_id)
  END, '')::text AS guild_name,
+ COALESCE(CASE WHEN @subject_kind::text = 'player' THEN
+ (SELECT g.id::text FROM game_players p JOIN guilds g ON g.id = p.guild_id WHERE p.realm_id = page.realm_id AND p.id = page.subject_id)
+ END, '')::text AS guild_id,
  -- Display only: a guild subject's page logo, empty for players and guilds without one.
  COALESCE(CASE WHEN @subject_kind::text = 'guild' THEN
  (SELECT gp.theme->>'logo_url' FROM guild_pages gp WHERE gp.guild_id = page.subject_id::uuid)
