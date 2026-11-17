@@ -110,6 +110,7 @@ func NewCharacterFactories(flavor database.WoWFlavor) []characters.CharacterFact
 			NewGunshipBattleCharacter,
 			NewProfessorPutricide,
 			NewFlameLeviathan,
+			NewGeneralVezax,
 			NewMechanolift,
 			NewVortex,
 			NewKologarnEncounterCharacter,

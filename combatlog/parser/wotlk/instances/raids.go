@@ -782,6 +782,8 @@ func UlduarHostiles() map[uint32]instances.Identity {
 		33983: "Constrictor Tentacle",
 		33988: "Immortal Guardian",
 		32955: "Collapsing Star",
+		33488: "Saronite Vapors",
+		33524: "Saronite Animus",
 	})
 	instances.LoadBosses(hostile, map[uint32]string{
 		32845: "Hodir",

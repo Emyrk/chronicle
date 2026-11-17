@@ -24,3 +24,15 @@ func NewFlameLeviathan(id guid.GUID, all *characters.Characters) (characters.Cha
 		34113, // Steelforged Defender
 	), true
 }
+
+func NewGeneralVezax(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
+	entry, ok := id.GetEntry()
+	if !ok || (entry != 33449 && entry != 33271) {
+		return nil, false
+	}
+
+	return characters.NewAdsGoWithBoss(entry,
+		33488, // Vapor
+		33524, // Animus
+	)(id, all)
+}
