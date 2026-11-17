@@ -25,6 +25,14 @@ func ulduarEncounterVariant(enc encounter.Encounter, flavor database.WoWFlavor, 
 		}
 		return ""
 	}
+	if enc.Name == "General Vezax" {
+		for _, pre := range preprocessors {
+			if evidence, ok := pre.(*vezaxVariantEvidence); ok {
+				return evidence.variant(enc)
+			}
+		}
+		return ""
+	}
 	if enc.Name != "Hodir" {
 		return ""
 	}
