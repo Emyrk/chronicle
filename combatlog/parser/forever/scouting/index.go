@@ -19,9 +19,13 @@ type Scouting struct {
 // is an insertion label: when there are no named observations, it falls back to
 // the first source's nonempty player name without inventing an observation time.
 type PlayerSnapshot struct {
-	Name     string
-	LastSeen int64
-	Known    KnownFields
+	// RealmCandidates contains every distinct source scalar, including empty
+	// when a source is unknown. No timestamp or source ordering proves which
+	// conflicting realm is authoritative; persistence must resolve or reject all.
+	RealmCandidates []string
+	Name            string
+	LastSeen        int64
+	Known           KnownFields
 }
 
 // New preserves supplied source order. Within a source, raw GUID keys are sorted
@@ -40,6 +44,7 @@ func New(sources []Source) (*Scouting, error) {
 				return nil, err
 			}
 			player := source.Players[key]
+			player.Gender = cloneValue(player.Gender)
 			player.Observations = slices.Clone(player.Observations)
 			for i := range player.Observations {
 				player.Observations[i] = cloneObservation(player.Observations[i])
@@ -101,7 +106,9 @@ func (s *Scouting) Latest(id guid.GUID) (PlayerSnapshot, bool) {
 		return PlayerSnapshot{}, false
 	}
 	snapshot := PlayerSnapshot{Known: s.KnownAt(id, math.MaxInt64)}
+	realms := make(map[string]struct{})
 	for _, player := range players {
+		realms[player.Realm] = struct{}{}
 		snapshot.LastSeen = max(snapshot.LastSeen, player.LastSeen)
 		for _, observation := range player.Observations {
 			snapshot.LastSeen = max(snapshot.LastSeen, observation.At)
@@ -113,6 +120,10 @@ func (s *Scouting) Latest(id guid.GUID) (PlayerSnapshot, bool) {
 	if snapshot.Known.Name != nil {
 		snapshot.Name = snapshot.Known.Name.Name
 	}
+	for realm := range realms {
+		snapshot.RealmCandidates = append(snapshot.RealmCandidates, realm)
+	}
+	slices.Sort(snapshot.RealmCandidates)
 	return snapshot, true
 }
 

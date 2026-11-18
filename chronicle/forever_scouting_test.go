@@ -33,7 +33,7 @@ func TestScoutingPayloadIndependentFreshness(t *testing.T) {
 			{At: 15, Name: "Nearby", Level: ptr.Ref(21), Guild: ptr.Ref("Stale")},
 		}},
 	}}
-	payload, err := scoutingPayload(newTestScouting(t, players), uuid.New())
+	payload, err := scoutingPayload(newTestScouting(t, players), testScoutingRealms(players))
 	require.NoError(t, err)
 	var rows []scoutingPlayerInput
 	require.NoError(t, json.Unmarshal(payload, &rows))
@@ -55,7 +55,7 @@ func TestScoutingPayloadThousandPlayers(t *testing.T) {
 	for i := 1; i <= 1000; i++ {
 		players[guid.GUID(i)] = []scouting.Player{{Name: fmt.Sprintf("Nearby%d", i), LastSeen: 20, Observations: []scouting.Observation{{At: 10, Name: fmt.Sprintf("Nearby%d", i)}}}}
 	}
-	payload, err := scoutingPayload(newTestScouting(t, players), uuid.New())
+	payload, err := scoutingPayload(newTestScouting(t, players), testScoutingRealms(players))
 	require.NoError(t, err)
 	var rows []scoutingPlayerInput
 	require.NoError(t, json.Unmarshal(payload, &rows))
@@ -75,7 +75,8 @@ func TestScoutingTimelineDoesNotBackfillFutureEvidence(t *testing.T) {
 	before := &messages.Unit{MessageBase: messages.Base(time.Unix(5, 0)), Info: unitinfo.Info{Guid: 1, Owner: ptr.Ref(guid.GUID(2))}}
 	after := &messages.Unit{MessageBase: messages.Base(time.Unix(15, 0)), Info: unitinfo.Info{Guid: 1, CanCooperate: true}}
 	known := &messages.Unit{MessageBase: messages.Base(time.Unix(25, 0)), Info: unitinfo.Info{Guid: 1, Name: "Combat", Level: 60}}
-	source := scoutingAdvancer{source: scoutingTestSource{messages: []messages.Message{before, after, known}}, players: newTestScouting(t, map[guid.GUID][]scouting.Player{1: {{Name: "Scout", LastSeen: 30, Observations: []scouting.Observation{
+	realmID := uuid.New()
+	source := scoutingAdvancer{realms: map[guid.GUID]uuid.UUID{1: realmID}, uploadRealmID: realmID, source: scoutingTestSource{messages: []messages.Message{before, after, known}}, players: newTestScouting(t, map[guid.GUID][]scouting.Player{1: {{Name: "Scout", LastSeen: 30, Observations: []scouting.Observation{
 		{At: 10, Name: "Scout", Level: ptr.Ref(20), Guild: ptr.Ref("Ignored")},
 		{At: 20, Name: "Later", Level: ptr.Ref(21)},
 	}}}})}
@@ -132,4 +133,13 @@ func newTestScouting(t *testing.T, players map[guid.GUID][]scouting.Player) *sco
 	index, err := scouting.New(sources)
 	require.NoError(t, err)
 	return index
+}
+
+func testScoutingRealms(players map[guid.GUID][]scouting.Player) map[guid.GUID]uuid.UUID {
+	realms := make(map[guid.GUID]uuid.UUID)
+	realm := uuid.New()
+	for id := range players {
+		realms[id] = realm
+	}
+	return realms
 }
