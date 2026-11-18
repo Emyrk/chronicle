@@ -103,7 +103,7 @@ func TestMoltenCoreHazardScopeAndBoundaries(t *testing.T) {
 		for _, area := range []string{"Molten Core", "Blackwing Lair"} {
 			_, process := hazardPipeline(t, flavor)
 			process(hazardZone(area), hazardBoss(ragGUID))
-			for _, source := range []guid.GUID{lavaGUID, flameGUID, 0xF13002B7A8000001, 0xF11000335C000001, 0xF14000335C000001, ragGUID} {
+			for _, source := range []guid.GUID{lavaGUID, flameGUID, 0xF13002B7A8000001, 0xF11000335C000001, 0xF14000335C000001, 0xF11002B6284D39B8, 0xF11002B7F405853A, ragGUID} {
 				damage := hazardDamage(source, hazardTime)
 				process(damage)
 				expected := flavor.Has(database.FlavorNightmareOfUrsol) && area == "Molten Core" && (source == lavaGUID || source == flameGUID)

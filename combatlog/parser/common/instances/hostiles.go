@@ -309,6 +309,8 @@ func BlackrockSpireHostiles() map[uint32]Identity {
 func MoltenCoreIdentifier(fl database.WoWFlavor) *identifier.Identifier {
 	idf := identifier.NewIdentifier(MoltenCoreHostiles())
 	if fl.Has(database.FlavorNightmareOfUrsol) {
+		idf.AddObjectEntryId(177704, Identity{Name: "Lava Bomb", Category: unitdb.CategoryEnvironment, Affiliation: types.AffiliationUnknown})
+		idf.AddObjectEntryId(178164, Identity{Name: "Hot Coal", Category: unitdb.CategoryEnvironment, Affiliation: types.AffiliationUnknown})
 		// VMaNGOS boss_ragnaros.cpp: GO_LAVA_BURST and the knockback trigger.
 		idf.AddObjectEntryId(178088, Identity{Name: "Ragnaros", Category: unitdb.CategoryEnvironment, Affiliation: types.AffiliationUnknown})
 		idf.AddEntryId(13148, Identity{Name: "Flame of Ragnaros", Category: unitdb.CategoryEnvironment, Affiliation: types.AffiliationUnknown})

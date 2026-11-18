@@ -1362,7 +1362,7 @@ func TestFinalizeMoltenCoreEnvironmentFlavor(t *testing.T) {
 	} {
 		db := unitdb.New(flavor)
 		h := &Hookable{units: db, Identifier: MoltenCoreFactory.Hostiles(flavor)}
-		hazards := []guid.GUID{objectGUID(178088, 1), creatureGUID(13148, 1)}
+		hazards := []guid.GUID{objectGUID(178088, 1), creatureGUID(13148, 1), objectGUID(177704, 1), objectGUID(178164, 1)}
 		for _, id := range hazards {
 			msg := &messages.Unit{Info: unitinfo.Info{Guid: id}}
 			db.Update(msg.Info)

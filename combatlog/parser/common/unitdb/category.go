@@ -6,6 +6,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/traps"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/warlockdemon"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/database"
 )
 
 // Category describes a unit's semantic role, independently of GUID structure,
@@ -32,6 +33,7 @@ var knownObjects = map[uint32]Category{
 	2061:   CategoryEnvironment, // Campfire
 	176296: CategoryObject,      // Portal to Stormwind
 	176497: CategoryObject,      // Portal to Ironforge
+	181102: CategoryObject,      // Lightwell
 }
 
 // CategoryIdentifier supplies zone definitions without coupling the shared unit
@@ -64,6 +66,9 @@ func (us *Units) Category(g guid.GUID, identifiers ...CategoryIdentifier) Catego
 	// unknown, and creature entry IDs must not collide with gameobject entries.
 	if g.IsObject() {
 		entry, _ := g.GetEntry()
+		if entry == 176399 && us.flavor.Has(database.FlavorNightmareOfUrsol) {
+			return CategoryObject // Portal to Theramore
+		}
 		if category, ok := knownObjects[entry]; ok {
 			return category
 		}
