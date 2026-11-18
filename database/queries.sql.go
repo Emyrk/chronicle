@@ -13344,7 +13344,7 @@ func (q *sqlQuerier) ListInferenceContextUsageByUser(ctx context.Context, arg Li
 }
 
 const listInferenceInstanceEncounters = `-- name: ListInferenceInstanceEncounters :many
-SELECT id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id, ranking_start_offset_ms, ranking_end_offset_ms, invalidated_at, invalid_reason, difficulty, encounter_variant, encounter_variant_tooltip
+SELECT id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id, ranking_start_offset_ms, ranking_end_offset_ms, invalidated_at, invalid_reason, difficulty, encounter_variant, encounter_variant_tooltip, encounter_variant_tooltip_data
 FROM log_instance_encounters
 WHERE instance_id = $1
 ORDER BY start_time, id
@@ -13377,6 +13377,7 @@ func (q *sqlQuerier) ListInferenceInstanceEncounters(ctx context.Context, instan
 			&i.Difficulty,
 			&i.EncounterVariant,
 			&i.EncounterVariantTooltip,
+			&i.EncounterVariantTooltipData,
 		); err != nil {
 			return nil, err
 		}
@@ -22501,7 +22502,7 @@ func (q *sqlQuerier) DeleteLogInstanceByIDAndGroup(ctx context.Context, arg Dele
 
 const encountersByInstanceID = `-- name: EncountersByInstanceID :many
 SELECT
-  id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id, ranking_start_offset_ms, ranking_end_offset_ms, invalidated_at, invalid_reason, difficulty, encounter_variant, encounter_variant_tooltip
+  id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id, ranking_start_offset_ms, ranking_end_offset_ms, invalidated_at, invalid_reason, difficulty, encounter_variant, encounter_variant_tooltip, encounter_variant_tooltip_data
 FROM
   log_instance_encounters
 WHERE
@@ -22534,6 +22535,7 @@ func (q *sqlQuerier) EncountersByInstanceID(ctx context.Context, instanceID uuid
 			&i.Difficulty,
 			&i.EncounterVariant,
 			&i.EncounterVariantTooltip,
+			&i.EncounterVariantTooltipData,
 		); err != nil {
 			return nil, err
 		}
@@ -22874,27 +22876,28 @@ func (q *sqlQuerier) GetParsedLogGroupByID(ctx context.Context, id uuid.UUID) (P
 
 const insertEncounter = `-- name: InsertEncounter :one
 INSERT INTO
-  log_instance_encounters (id, instance_id, name, map_id, kill_type, remaining, boss, start_time, end_time, ranking_start_offset_ms, ranking_end_offset_ms, difficulty, encounter_variant, encounter_variant_tooltip)
+  log_instance_encounters (id, instance_id, name, map_id, kill_type, remaining, boss, start_time, end_time, ranking_start_offset_ms, ranking_end_offset_ms, difficulty, encounter_variant, encounter_variant_tooltip, encounter_variant_tooltip_data)
 VALUES
-  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-RETURNING id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id, ranking_start_offset_ms, ranking_end_offset_ms, invalidated_at, invalid_reason, difficulty, encounter_variant, encounter_variant_tooltip
+  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+RETURNING id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id, ranking_start_offset_ms, ranking_end_offset_ms, invalidated_at, invalid_reason, difficulty, encounter_variant, encounter_variant_tooltip, encounter_variant_tooltip_data
 `
 
 type InsertEncounterParams struct {
-	ID                      uuid.UUID          `db:"id" json:"id"`
-	InstanceID              uuid.UUID          `db:"instance_id" json:"instance_id"`
-	Name                    string             `db:"name" json:"name"`
-	MapID                   int32              `db:"map_id" json:"map_id"`
-	KillType                KillType           `db:"kill_type" json:"kill_type"`
-	Remaining               guid.GUIDs         `db:"remaining" json:"remaining"`
-	Boss                    bool               `db:"boss" json:"boss"`
-	StartTime               pgtype.Timestamptz `db:"start_time" json:"start_time"`
-	EndTime                 pgtype.Timestamptz `db:"end_time" json:"end_time"`
-	RankingStartOffsetMs    pgtype.Int8        `db:"ranking_start_offset_ms" json:"ranking_start_offset_ms"`
-	RankingEndOffsetMs      pgtype.Int8        `db:"ranking_end_offset_ms" json:"ranking_end_offset_ms"`
-	Difficulty              pgtype.Text        `db:"difficulty" json:"difficulty"`
-	EncounterVariant        pgtype.Text        `db:"encounter_variant" json:"encounter_variant"`
-	EncounterVariantTooltip pgtype.Text        `db:"encounter_variant_tooltip" json:"encounter_variant_tooltip"`
+	ID                          uuid.UUID          `db:"id" json:"id"`
+	InstanceID                  uuid.UUID          `db:"instance_id" json:"instance_id"`
+	Name                        string             `db:"name" json:"name"`
+	MapID                       int32              `db:"map_id" json:"map_id"`
+	KillType                    KillType           `db:"kill_type" json:"kill_type"`
+	Remaining                   guid.GUIDs         `db:"remaining" json:"remaining"`
+	Boss                        bool               `db:"boss" json:"boss"`
+	StartTime                   pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	EndTime                     pgtype.Timestamptz `db:"end_time" json:"end_time"`
+	RankingStartOffsetMs        pgtype.Int8        `db:"ranking_start_offset_ms" json:"ranking_start_offset_ms"`
+	RankingEndOffsetMs          pgtype.Int8        `db:"ranking_end_offset_ms" json:"ranking_end_offset_ms"`
+	Difficulty                  pgtype.Text        `db:"difficulty" json:"difficulty"`
+	EncounterVariant            pgtype.Text        `db:"encounter_variant" json:"encounter_variant"`
+	EncounterVariantTooltip     pgtype.Text        `db:"encounter_variant_tooltip" json:"encounter_variant_tooltip"`
+	EncounterVariantTooltipData []byte             `db:"encounter_variant_tooltip_data" json:"encounter_variant_tooltip_data"`
 }
 
 func (q *sqlQuerier) InsertEncounter(ctx context.Context, arg InsertEncounterParams) (LogInstanceEncounter, error) {
@@ -22913,6 +22916,7 @@ func (q *sqlQuerier) InsertEncounter(ctx context.Context, arg InsertEncounterPar
 		arg.Difficulty,
 		arg.EncounterVariant,
 		arg.EncounterVariantTooltip,
+		arg.EncounterVariantTooltipData,
 	)
 	var i LogInstanceEncounter
 	err := row.Scan(
@@ -22932,6 +22936,7 @@ func (q *sqlQuerier) InsertEncounter(ctx context.Context, arg InsertEncounterPar
 		&i.Difficulty,
 		&i.EncounterVariant,
 		&i.EncounterVariantTooltip,
+		&i.EncounterVariantTooltipData,
 	)
 	return i, err
 }

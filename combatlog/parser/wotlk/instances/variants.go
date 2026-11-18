@@ -12,6 +12,7 @@ import (
 // does not alter difficulty, ranking windows, or speedrun eligibility/timing.
 func ulduarEncounterVariant(enc *encounter.Encounter, flavor database.WoWFlavor, preprocessors []instancehook.Preprocessor) string {
 	enc.VariantTooltip = ""
+	enc.VariantTooltipData = nil
 	if !flavor.Has(database.FlavorWrath) || !enc.Boss || enc.Combat.MapID != 603 {
 		return ""
 	}

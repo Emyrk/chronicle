@@ -866,22 +866,30 @@ func WoWEncounter(encounter database.LogInstanceEncounter, legacyDifficulty ...s
 			DurationMs:    end - start,
 		}
 	}
+	var tooltipData *chroniclesdk.EncounterVariantTooltipData
+	if len(encounter.EncounterVariantTooltipData) > 0 {
+		// Invalid or older metadata must not prevent the text fallback from rendering.
+		if err := json.Unmarshal(encounter.EncounterVariantTooltipData, &tooltipData); err != nil {
+			tooltipData = nil
+		}
+	}
 	return chroniclesdk.WoWEncounter{
-		EncounterVariant:        encounter.EncounterVariant.String,
-		EncounterVariantTooltip: encounter.EncounterVariantTooltip.String,
-		RankingWindow:           window,
-		ID:                      encounter.ID,
-		InstanceID:              encounter.InstanceID,
-		Boss:                    encounter.Boss,
-		Name:                    encounter.Name,
-		MapID:                   int(encounter.MapID),
-		KillType:                chroniclesdk.KillType(encounter.KillType),
-		Remaining:               encounter.Remaining,
-		StartTime:               encounter.StartTime.Time,
-		EndTime:                 encounter.EndTime.Time,
-		Difficulty:              difficulty,
-		InvalidatedAt:           invalidatedAt,
-		InvalidReason:           invalidReason,
+		EncounterVariant:            encounter.EncounterVariant.String,
+		EncounterVariantTooltip:     encounter.EncounterVariantTooltip.String,
+		EncounterVariantTooltipData: tooltipData,
+		RankingWindow:               window,
+		ID:                          encounter.ID,
+		InstanceID:                  encounter.InstanceID,
+		Boss:                        encounter.Boss,
+		Name:                        encounter.Name,
+		MapID:                       int(encounter.MapID),
+		KillType:                    chroniclesdk.KillType(encounter.KillType),
+		Remaining:                   encounter.Remaining,
+		StartTime:                   encounter.StartTime.Time,
+		EndTime:                     encounter.EndTime.Time,
+		Difficulty:                  difficulty,
+		InvalidatedAt:               invalidatedAt,
+		InvalidReason:               invalidReason,
 	}
 }
 

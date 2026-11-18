@@ -1116,7 +1116,8 @@ CREATE TABLE log_instance_encounters (
     invalid_reason text DEFAULT ''::text NOT NULL,
     difficulty text,
     encounter_variant text,
-    encounter_variant_tooltip text
+    encounter_variant_tooltip text,
+    encounter_variant_tooltip_data jsonb
 );
 
 CREATE TABLE log_instances (

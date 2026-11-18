@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounter"
+	"github.com/Emyrk/chronicle/internal/encountervariant"
 )
 
 var yoggKeepers = []struct {
@@ -23,9 +24,11 @@ func yoggEncounterVariant(enc *encounter.Encounter) string {
 		return ""
 	}
 	var keepers []string
+	auras := make([]int32, 0, 4)
 	for _, keeper := range yoggKeepers {
 		if slices.Contains(enc.VariantAuras, keeper.spell) {
 			keepers = append(keepers, keeper.label)
+			auras = append(auras, keeper.spell)
 		}
 	}
 	// Absence requires earlier recorded encounter coverage in this instance.
@@ -34,6 +37,7 @@ func yoggEncounterVariant(enc *encounter.Encounter) string {
 	if len(keepers) < 4 && !enc.HasEarlierEncounter {
 		return ""
 	}
+	enc.VariantTooltipData = &encountervariant.Tooltip{Type: "yogg-light", Auras: auras}
 	enc.VariantTooltip = strings.Join(keepers, "\n")
 	if len(keepers) == 0 {
 		enc.VariantTooltip = "No keepers assisting."

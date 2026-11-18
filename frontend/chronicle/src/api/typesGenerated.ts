@@ -1834,6 +1834,15 @@ export interface EncounterKillTime {
 }
 
 // From chroniclesdk/log.go
+/**
+ * EncounterVariantTooltipData is optional rich display metadata, never a ranking dimension.
+ */
+export interface EncounterVariantTooltipData {
+    readonly type: string;
+    readonly auras: readonly number[];
+}
+
+// From chroniclesdk/log.go
 export type EndState = "reset" | "slain" | "timeout";
 
 export const EndStates: EndState[] = ["reset", "slain", "timeout"];
@@ -7732,6 +7741,7 @@ export const WoWChangeDirections: WoWChangeDirection[] = ["Gain", "Loss"];
 
 // From chroniclesdk/log.go
 export interface WoWEncounter {
+    readonly encounter_variant_tooltip_data?: EncounterVariantTooltipData;
     /**
      * EncounterVariantTooltip is display-only and does not affect ranking identity.
      */

@@ -7,7 +7,7 @@ import { InstanceEventsProvider } from "@/hooks/instanceEvents";
 import { DatasetProvider } from "@/hooks/useDatasetId";
 import { PlayerSpecializationProvider } from "@/components/ui/PlayerMetricChart/PlayerSpecializationContext";
 import { PlayerCosmeticsProvider } from "@/components/ui/PlayerMetricChart/PlayerCosmeticsContext";
-import type { ActivityPeriod, EventRepairReceipt, InstancePlayer, KillType, VehicleControlMetadata } from "@/api/typesGenerated";
+import type { ActivityPeriod, EncounterVariantTooltipData, EventRepairReceipt, InstancePlayer, KillType, VehicleControlMetadata } from "@/api/typesGenerated";
 import type { ResolvedInstanceUnit } from "./instanceUnits";
 import { transformToInstance } from "./transformInstance";
 import { Card } from "@/components/ui/Card/Card";
@@ -75,6 +75,7 @@ export interface Encounter {
   /** Proven encounter classification, independent of raid difficulty and size. */
   encounter_variant?: string;
   encounter_variant_tooltip?: string;
+  encounter_variant_tooltip_data?: EncounterVariantTooltipData;
   invalidatedAt?: string;
   invalidReason?: string;
   /** Optional phases within this encounter (sorted by order). */

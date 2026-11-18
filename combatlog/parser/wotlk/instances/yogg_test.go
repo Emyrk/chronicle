@@ -104,10 +104,18 @@ func TestYoggFinalizedVariants(t *testing.T) {
 			switch tc.want {
 			case "":
 				require.Empty(t, got.VariantTooltip)
+				require.Nil(t, got.VariantTooltipData)
 			case "lights_0":
 				require.Equal(t, "No keepers assisting.", got.VariantTooltip)
+				require.NotNil(t, got.VariantTooltipData)
+				require.Equal(t, "yogg-light", got.VariantTooltipData.Type)
+				require.NotNil(t, got.VariantTooltipData.Auras)
+				require.Empty(t, got.VariantTooltipData.Auras)
 			default:
 				require.Contains(t, got.VariantTooltip, "Thorim: Fury of the Storm")
+				require.NotNil(t, got.VariantTooltipData)
+				require.Equal(t, "yogg-light", got.VariantTooltipData.Type)
+				require.ElementsMatch(t, got.VariantAuras, got.VariantTooltipData.Auras)
 			}
 		})
 	}

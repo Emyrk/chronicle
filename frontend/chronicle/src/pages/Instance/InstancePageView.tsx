@@ -828,7 +828,7 @@ function EncounterSidebar({
                 <span className="truncate flex-1">
                   {encounter.boss ? encounter.name : <span className="italic">{encounter.name}</span>}
                 </span>
-                {encounter.boss && <><EncounterDifficultyMark difficulty={encounter.difficulty} /><EncounterVariantMark variant={encounter.encounter_variant} tooltip={encounter.encounter_variant_tooltip} /></>}
+                {encounter.boss && <><EncounterDifficultyMark difficulty={encounter.difficulty} /><EncounterVariantMark variant={encounter.encounter_variant} tooltip={encounter.encounter_variant_tooltip} tooltipData={encounter.encounter_variant_tooltip_data} /></>}
                 <span className={cn("text-xs shrink-0 font-mono", isSelected ? "opacity-70" : "text-muted-foreground")}>
                   {formatEncounterTime(encounter)}
                 </span>
@@ -899,7 +899,7 @@ function EncounterSidebar({
                 )}
                 <span className={cn("truncate flex-1", isSelected && "font-semibold")}>{encounter.name}</span>
                 <EncounterDifficultyMark difficulty={encounter.difficulty} />
-                <EncounterVariantMark variant={encounter.encounter_variant} tooltip={encounter.encounter_variant_tooltip} />
+                <EncounterVariantMark variant={encounter.encounter_variant} tooltip={encounter.encounter_variant_tooltip} tooltipData={encounter.encounter_variant_tooltip_data} />
                 <span className={cn("text-xs shrink-0 font-mono", isSelected ? "opacity-70" : "text-muted-foreground")}>
                   {formatEncounterTime(encounter)}
                 </span>

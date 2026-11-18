@@ -24,3 +24,9 @@ func Supported(instance, boss, key string) bool {
 		return false
 	}
 }
+
+// Tooltip is optional display metadata. It must never participate in cohort keys.
+type Tooltip struct {
+	Type  string  `json:"type"`
+	Auras []int32 `json:"auras"`
+}

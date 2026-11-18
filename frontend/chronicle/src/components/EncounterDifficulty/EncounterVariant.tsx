@@ -1,13 +1,53 @@
+import type { EncounterVariantTooltipData } from "@/api/typesGenerated";
+import { SpellIdTooltip } from "@/components/ui/SpellIdTooltip/SpellIdTooltip";
+import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { cn } from "@/lib/utils";
 import { CHIP, difficultyChipClassName } from "./encounterDifficulty";
 import { encounterVariantLabel, encounterVariantOptions, isEncounterVariant, isHardEncounterVariant, type EncounterVariant } from "./encounterVariant";
 
-/** Report-only annotation. Unknown and historical kills remain unclassified. */
-export function EncounterVariantMark({ variant, tooltip }: { variant?: string; tooltip?: string }) {
+const YOGG_AURAS: Record<number, { keeper: string; name: string }> = {
+  62670: { keeper: "Freya", name: "Resilience of Nature" },
+  62650: { keeper: "Hodir", name: "Fortitude of Frost" },
+  62702: { keeper: "Thorim", name: "Fury of the Storm" },
+  62671: { keeper: "Mimiron", name: "Speed of Invention" },
+};
+
+function supportsRichTooltip(data?: EncounterVariantTooltipData): data is EncounterVariantTooltipData {
+  return data?.type === "yogg-light" && Array.isArray(data.auras) && data.auras.every(id => Number.isInteger(id) && Object.hasOwn(YOGG_AURAS, id));
+}
+
+/** Display-only content. SpellIdTooltip resolves icons against the instance dataset. */
+export function EncounterVariantTooltipContent({ data, fallback }: { data: EncounterVariantTooltipData; fallback?: string }) {
+  if (!supportsRichTooltip(data)) return <span>{fallback}</span>;
+  const auras = [...new Set(data.auras)];
+  if (auras.length === 0) return <p>No keepers assisting.</p>;
+  return <ul className="space-y-2">
+    {auras.map(id => <li key={id} className="flex flex-col gap-1">
+      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{YOGG_AURAS[id].keeper}</span>
+      <SpellIdTooltip spellId={id} name={YOGG_AURAS[id].name} size={24} />
+    </li>)}
+  </ul>;
+}
+
+/** Report-only annotation. Text remains available to consumers without rich tooltip support. */
+export function EncounterVariantMark({ variant, tooltip, tooltipData }: {
+  variant?: string; tooltip?: string; tooltipData?: EncounterVariantTooltipData;
+}) {
   if (!isEncounterVariant(variant)) return null;
-  return <span className={difficultyChipClassName(isHardEncounterVariant(variant) ? "hard" : "")} title={tooltip ? `Encounter variant: ${encounterVariantLabel(variant)}\n${tooltip}` : `Encounter variant: ${encounterVariantLabel(variant)}`}>
+  const description = tooltip ? `Encounter variant: ${encounterVariantLabel(variant)}\n${tooltip}` : `Encounter variant: ${encounterVariantLabel(variant)}`;
+  const rich = supportsRichTooltip(tooltipData);
+  const badge = <span className={difficultyChipClassName(isHardEncounterVariant(variant) ? "hard" : "")}
+    title={rich ? undefined : description} aria-label={description} tabIndex={rich ? 0 : undefined}>
     {variant === "hard" ? "HM" : variant === "normal" ? "N" : encounterVariantLabel(variant)}
   </span>;
+  if (!rich) return badge;
+  return <HintTooltip>
+    <TooltipTrigger asChild>{badge}</TooltipTrigger>
+    <TooltipContent side="right" sideOffset={6} className="max-w-xs p-3">
+      <div className="mb-2 font-semibold">{encounterVariantLabel(variant)}</div>
+      <EncounterVariantTooltipContent data={tooltipData} fallback={tooltip} />
+    </TooltipContent>
+  </HintTooltip>;
 }
 
 export function EncounterVariantChips({ boss, active, onSelect, disabledReason }: {

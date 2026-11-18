@@ -1,7 +1,7 @@
 import { StatisticsTab } from "@/pages/Leaderboards/Hub/StatisticsTab";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
-import { EncounterVariantChips, EncounterVariantMark } from "./EncounterVariant";
+import { describe, expect, it, vi } from "vitest";
+import { EncounterVariantChips, EncounterVariantMark, EncounterVariantTooltipContent } from "./EncounterVariant";
 import { activeEncounterVariants, encounterVariantsEnabled, supportsEncounterVariant, withHighestEncounterVariants } from "./encounterVariant";
 
 describe("encounter variant presentation", () => {
@@ -99,4 +99,31 @@ it("keeps Yogg light-count cohorts exact and keeper details display-only", () =>
   expect(activeEncounterVariants("Ulduar", ["Hodir"], { Hodir: "lights_0" })).toBeUndefined();
   const disabled = renderToStaticMarkup(<EncounterVariantChips boss="Yogg-Saron" active="lights_1" disabledReason="Combined only" onSelect={() => {}} />);
   expect(disabled.match(/disabled=""/g)).toHaveLength(6);
+});
+
+vi.mock("@/components/ui/SpellIdTooltip/SpellIdTooltip", () => ({
+  SpellIdTooltip: ({ spellId, name, size }: { spellId: number; name: string; size: number }) => <img src={`spell:${spellId}`} alt={name} width={size} />,
+}));
+
+it("renders only present auras through the shared spell icon component", () => {
+  const html = renderToStaticMarkup(<EncounterVariantTooltipContent data={{ type: "yogg-light", auras: [62702, 62670, 62702] }} />);
+  expect(html).toContain('src="spell:62702"');
+  expect(html).toContain('alt="Fury of the Storm"');
+  expect(html).toContain('src="spell:62670"');
+  expect(html).toContain('width="24"');
+  expect(html.match(/<img /g)).toHaveLength(2);
+  expect(html).not.toContain("spell:62650");
+  expect(html).not.toContain("spell:62671");
+});
+
+it("supports empty rich tooltips and preserves fallback for unknown formats", () => {
+  expect(renderToStaticMarkup(<EncounterVariantTooltipContent data={{ type: "yogg-light", auras: [] }} />)).toContain("No keepers assisting.");
+  for (const data of [{ type: "future-format", auras: [62702] }, { type: "yogg-light", auras: [999] }]) {
+    const html = renderToStaticMarkup(<EncounterVariantMark variant="lights_1" tooltip="Thorim: Fury of the Storm" tooltipData={data} />);
+    expect(html).toContain('title="Encounter variant: 1 Light');
+    expect(html).toContain("Thorim: Fury of the Storm");
+  }
+  const rich = renderToStaticMarkup(<EncounterVariantMark variant="lights_1" tooltip="Thorim: Fury of the Storm" tooltipData={{ type: "yogg-light", auras: [62702] }} />);
+  expect(rich).toContain('tabindex="0"');
+  expect(rich).toContain('aria-label="Encounter variant: 1 Light');
 });

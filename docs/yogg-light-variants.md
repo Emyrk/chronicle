@@ -40,7 +40,17 @@ uninterrupted; stopping and restarting recording in one file is not detected.
 The report badge shows the exact light count. Its optional tooltip lists the
 observed keepers and buffs, or says no keepers assisted for a classified 0 Light.
 `encounter_variant_tooltip` is display-only. It is not copied to ranking rows,
-cohort keys, filters, fingerprints, or scoring inputs. Different keeper choices
+cohort keys, filters, fingerprints, or scoring inputs.
+
+New parses also persist `encounter_variant_tooltip_data`, for example
+`{"type":"yogg-light","auras":[62702]}`. Report badges use this optional payload
+to show dataset-aware spell icons and keeper names. Zero Light uses an empty
+array. Unknown formats or absent structured data retain the plain-text tooltip.
+The plain-text field remains unchanged for consumers without rich rendering.
+Existing text-only rows need a source reparse to gain the structured payload;
+there is no inferred conversion from prose or automatic backfill.
+
+Different keeper choices
 with the same count share one cohort.
 
 Career ratings, Renown, summaries, and speedruns retain their existing Combined
@@ -63,3 +73,6 @@ Deploying an older binary will not provide the new selectors or detection.
 Start rollout with a bounded source reparse. Verify the report badge and tooltip,
 exact DPS/HPS parse membership, and exact player/guild rating publication. Keep
 Combined results and speedrun timing unchanged before requesting wider reparses.
+
+Migration 000390 adds only the nullable JSONB tooltip payload column, without a
+default or backfill. It uses the same five-second metadata-lock timeout.

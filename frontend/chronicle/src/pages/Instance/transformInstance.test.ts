@@ -38,6 +38,7 @@ describe("transformToInstance difficulty metadata", () => {
           difficulty: "heroic",
           encounter_variant: "lights_1",
           encounter_variant_tooltip: "Thorim: Fury of the Storm",
+          encounter_variant_tooltip_data: { type: "yogg-light", auras: [62702] },
           hostiles: [],
         },
       ],
@@ -47,6 +48,6 @@ describe("transformToInstance difficulty metadata", () => {
 
     expect(instance.mixedDifficulty).toBe(true);
     expect(instance.difficulties).toEqual(["", "heroic", "mythic"]);
-    expect(instance.encounters[0]).toMatchObject({ difficulty: "heroic", encounter_variant: "lights_1", encounter_variant_tooltip: "Thorim: Fury of the Storm" });
+    expect(instance.encounters[0]).toMatchObject({ difficulty: "heroic", encounter_variant: "lights_1", encounter_variant_tooltip: "Thorim: Fury of the Storm", encounter_variant_tooltip_data: { type: "yogg-light", auras: [62702] } });
   });
 });

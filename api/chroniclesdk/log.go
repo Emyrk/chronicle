@@ -210,7 +210,14 @@ const (
 	KillTypeReset KillType = "reset"
 )
 
+// EncounterVariantTooltipData is optional rich display metadata, never a ranking dimension.
+type EncounterVariantTooltipData struct {
+	Type  string  `json:"type"`
+	Auras []int32 `json:"auras"`
+}
+
 type WoWEncounter struct {
+	EncounterVariantTooltipData *EncounterVariantTooltipData `json:"encounter_variant_tooltip_data,omitempty"`
 	// EncounterVariantTooltip is display-only and does not affect ranking identity.
 	EncounterVariantTooltip string `json:"encounter_variant_tooltip,omitempty"`
 	// EncounterVariant is absent for unclassified/legacy kills, which belong only to Combined.

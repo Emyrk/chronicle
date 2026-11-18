@@ -236,3 +236,31 @@ func TestEncounterVariantIndependentFromDifficulty(t *testing.T) {
 		})
 	}
 }
+
+func TestEncounterVariantTooltipData(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, data string
+		want       bool
+		auras      []int32
+	}{
+		{"legacy", "", false, nil},
+		{"invalid", "not json", false, nil},
+		{"null", "null", false, nil},
+		{"one light", `{"type":"yogg-light","auras":[62702]}`, true, []int32{62702}},
+		{"zero light", `{"type":"yogg-light","auras":[]}`, true, []int32{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := WoWEncounter(database.LogInstanceEncounter{EncounterVariantTooltip: pgtype.Text{String: "fallback", Valid: true}, EncounterVariantTooltipData: []byte(tc.data)})
+			require.Equal(t, "fallback", got.EncounterVariantTooltip)
+			if !tc.want {
+				require.Nil(t, got.EncounterVariantTooltipData)
+				return
+			}
+			require.NotNil(t, got.EncounterVariantTooltipData)
+			require.Equal(t, "yogg-light", got.EncounterVariantTooltipData.Type)
+			require.Equal(t, tc.auras, got.EncounterVariantTooltipData.Auras)
+		})
+	}
+}
