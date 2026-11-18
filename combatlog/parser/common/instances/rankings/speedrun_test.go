@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/characters"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
@@ -515,11 +516,23 @@ func TestSpeedrunTracker_BossToBossTimeIncludesFirstBossWipe(t *testing.T) {
 	assert.Equal(t, 7*time.Minute, result.BossToBossDuration)
 }
 
-func TestSpeedrunTrackerIgnoresCritterKills(t *testing.T) {
+func TestSpeedrunTrackerIgnoresNeverActiveCharacters(t *testing.T) {
 	t.Parallel()
-	tracker := NewSpeedrunTracker(singleBossRules("Rat", 4075), nil, nil)
-	tracker.ActivityChange(msg(t0), &stubChar{id: makeCreatureGUID(4075, 1), endState: period.EndStateSlain, hasPeriod: true})
-	require.Equal(t, 1, tracker.remaining)
-	require.Empty(t, tracker.state[0].kills)
-	require.Empty(t, tracker.seenGUIDs)
+	for _, tc := range []struct {
+		name  string
+		entry uint32
+	}{
+		{name: "critter", entry: 4075},
+		{name: "non-critter", entry: 11583},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			tracker := NewSpeedrunTracker(singleBossRules(tc.name, tc.entry), nil, nil)
+			char := characters.NewNeverActive(makeCreatureGUID(tc.entry, 1))
+			tracker.ActivityChange(msg(t0), char)
+			require.Equal(t, 1, tracker.remaining)
+			require.Empty(t, tracker.state[0].kills)
+			require.Empty(t, tracker.seenGUIDs)
+		})
+	}
 }

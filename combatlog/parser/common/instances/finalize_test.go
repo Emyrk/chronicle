@@ -1320,7 +1320,7 @@ func TestFinalizeCatalogueIncludesUnknownOwnedAndPassiveUnits(t *testing.T) {
 	require.NotContains(t, otherResult.UnknownUnits, uint32(12345))
 }
 
-func TestCritterMessagesDoNotAdvanceInstanceLifecycleClock(t *testing.T) {
+func TestCritterMessagesAdvanceProcessingWithoutInstanceActivity(t *testing.T) {
 	t.Parallel()
 	db := unitdb.New()
 	base := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
@@ -1328,7 +1328,7 @@ func TestCritterMessagesDoNotAdvanceInstanceLifecycleClock(t *testing.T) {
 	require.NoError(t, h.Process(&messages.Timeout{MessageBase: messages.Base(base)}))
 	critter := creatureGUID(2914, 1)
 	require.NoError(t, h.Process(&messages.Damage{MessageBase: messages.Base(base.Add(time.Hour)), Target: critter, Amount: 10}))
-	require.Equal(t, base, h.lastProcessedAt)
+	require.Equal(t, base.Add(time.Hour), h.lastProcessedAt)
 	require.Equal(t, base, h.lastActivity)
 	result, err := h.Finalize(context.Background())
 	require.NoError(t, err)
