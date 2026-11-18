@@ -357,10 +357,13 @@ export function useRankingsKillTimeLeaderboard(params: {
   period?: string;
   limit?: number;
   offset?: number;
+  /** guild keeps each guild's fastest kill; the API ranks every kill by default. */
+  board?: "guild" | "all";
 }, enabled = true) {
   const searchParams = new URLSearchParams();
   searchParams.set("instance_name", params.instance_name);
   if (params.encounter_name) searchParams.set("encounter_name", params.encounter_name);
+  if (params.board) searchParams.set("board", params.board);
   if (params.difficulty_name !== undefined) searchParams.set("difficulty_name", params.difficulty_name);
   if (params.max_players !== undefined) searchParams.set("max_players", String(params.max_players));
   if (params.period) searchParams.set("period", params.period);

@@ -734,6 +734,8 @@ func handleClearTimesWithStore(store clearTimeStatsQuerier, w http.ResponseWrite
 // handleKillTimeLeaderboard returns a paginated leaderboard of fastest encounter kills.
 //
 //	GET /kill-time-leaderboard?instance_name=Molten+Core&encounter_name=Ragnaros&period=90d
+//
+// board=guild keeps each guild's fastest kill per boss; by default every kill ranks.
 func (s *Service) handleKillTimeLeaderboard(w http.ResponseWriter, r *http.Request) {
 	handleKillTimeLeaderboardWithStore(s.store, w, r)
 }
@@ -808,7 +810,14 @@ func handleKillTimeLeaderboardWithStore(store killTimeLeaderboardQuerier, w http
 		return
 	}
 
+	board := q.Get("board")
+	if board != "" && board != "guild" && board != "all" {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "board query parameter must be guild or all"})
+		return
+	}
+
 	rows, err := store.RankingsKillTimeLeaderboard(ctx, database.RankingsKillTimeLeaderboardParams{
+		GuildBest:        board == "guild",
 		FilterDifficulty: q.Has("difficulty_name"), DifficultyName: q.Get("difficulty_name"),
 		FilterMaxPlayers: q.Has("max_players"), MaxPlayers: maxPlayers,
 		InstanceName:  instanceName,

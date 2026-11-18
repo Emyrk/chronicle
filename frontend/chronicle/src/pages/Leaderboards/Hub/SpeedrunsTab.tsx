@@ -1,8 +1,9 @@
 import { useState, type ReactNode } from "react"
-import { ChevronLeft, ChevronRight, Timer, Users } from "lucide-react"
+import { ChevronLeft, ChevronRight, LockKeyhole, Timer, Users } from "lucide-react"
 import type { KillTimeLeaderboardEntry, SpeedrunLeaderboardEntry } from "@/api/typesGenerated"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { TierPill } from "@/components/Supporter/Supporter"
 import { MOBILE_EDGE_TO_EDGE } from "@/pages/Leaderboards/Hub/edgeToEdge"
 import { guildAttributes, killAttributes, speedrunClearAttributes } from "@/components/EntityMenu/leaderboardEntities"
 import { Podium } from "@/pages/Leaderboard/Podium"
@@ -10,6 +11,9 @@ import { formatClock, speedruns } from "./hub.fixtures"
 import { defaultSpeedrunsView, selectedBosses, type EncounterSelection, type SpeedrunsView } from "./encounterSelection"
 
 type LiveList<T> = { entries?: readonly T[]; loading?: boolean; error?: Error | null }
+
+/** Each guild's best run, or every qualifying run (a Revered perk). */
+export type RunsBoard = "guild" | "all"
 
 /**
  * Speedruns, its own tab, with two boards: full clears (whole-raid runs) and
@@ -22,8 +26,9 @@ export function SpeedrunsTab({
   selection,
   view: controlledView,
   onView,
-  clearBoard = "guild",
-  onClearBoard,
+  runsBoard = "guild",
+  onRunsBoard,
+  allRunsLocked = false,
   killPage = 1,
   killPageSize = 50,
   onKillPage,
@@ -35,8 +40,11 @@ export function SpeedrunsTab({
   /** Controlled view, so a host only loads the board that is shown. */
   view?: SpeedrunsView
   onView?: (view: SpeedrunsView) => void
-  clearBoard?: "guild" | "all"
-  onClearBoard?: (board: "guild" | "all") => void
+  /** Full clears and a single boss's kill times rank each guild's best run, or every run. */
+  runsBoard?: RunsBoard
+  onRunsBoard?: (board: RunsBoard) => void
+  /** Below Revered, "All runs" becomes an upsell link instead of an option. */
+  allRunsLocked?: boolean
   killPage?: number
   killPageSize?: number
   onKillPage?: (page: number) => void
@@ -61,25 +69,14 @@ export function SpeedrunsTab({
             type="button"
             aria-pressed={view === id}
             onClick={() => setView(id)}
-            className={cn(
-              "cursor-pointer rounded px-2.5 py-1 font-medium transition-colors sm:px-3 sm:py-1.5",
-              view === id ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
-            )}
+            className={segment(view === id)}
           >
             {label}
           </button>
         ))}
       </nav>
-      {view === "clear" && onClearBoard && (
-        <label className="flex items-center gap-2 text-xs text-muted-foreground">
-          Runs
-          <select aria-label="Full clear ranking" value={clearBoard}
-            onChange={(event) => onClearBoard(event.target.value as "guild" | "all")}
-            className="cursor-pointer rounded-md border bg-card px-2 py-1.5 text-foreground">
-            <option value="guild">Guild best</option>
-            <option value="all">All runs</option>
-          </select>
-        </label>
+      {onRunsBoard && (view === "clear" || chosen.length === 1) && (
+        <RunsToggle board={runsBoard} onBoard={onRunsBoard} locked={allRunsLocked} />
       )}
     </div>
   )
@@ -91,6 +88,40 @@ export function SpeedrunsTab({
       {switcher}
       <KillTimes instanceName={instanceName} bosses={chosen} allBosses={bosses} page={killPage} pageSize={killPageSize}
         onPage={onKillPage} live={live?.kills} story={!live} />
+    </div>
+  )
+}
+
+const segment = (active: boolean) =>
+  cn(
+    "inline-flex cursor-pointer items-center gap-1.5 rounded px-2.5 py-1 font-medium transition-colors sm:px-3 sm:py-1.5",
+    active ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
+  )
+
+/** Guild best or every run, styled like the board switch. Locked, "All runs" links to /supporter. */
+function RunsToggle({ board, onBoard, locked }: { board: RunsBoard; onBoard: (board: RunsBoard) => void; locked: boolean }) {
+  return (
+    <div role="radiogroup" aria-label="Run ranking" className="inline-flex items-center rounded-md border bg-card p-0.5 text-xs sm:text-sm">
+      <button type="button" role="radio" aria-checked={board === "guild"} onClick={() => onBoard("guild")} className={segment(board === "guild")}>
+        Guild best
+      </button>
+      {locked ? (
+        <a
+          href="/supporter"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Rank every run, not just each guild's best, with Chronicle – Revered"
+          className={segment(false)}
+        >
+          <LockKeyhole className="size-3.5 shrink-0" aria-hidden="true" />
+          All runs
+          <TierPill tier="revered" />
+        </a>
+      ) : (
+        <button type="button" role="radio" aria-checked={board === "all"} onClick={() => onBoard("all")} className={segment(board === "all")}>
+          All runs
+        </button>
+      )}
     </div>
   )
 }

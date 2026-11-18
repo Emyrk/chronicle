@@ -1121,7 +1121,8 @@ HAVING COUNT(*) > 0;
 -- name: RankingsKillTimeLeaderboard :many
 -- Paginated leaderboard of fastest encounter kills, ordered by duration.
 -- Deduplicates encounters across duplicate log groups (keeps fastest per group)
--- and excludes invalidated instances and encounters.
+-- and excludes invalidated instances and encounters. With guild_best, each guild
+-- ranks once per boss with its fastest kill and kills without a guild are excluded.
 WITH deduped AS (
     SELECT DISTINCT ON (lie.name, COALESCE(li.duplicate_group_id, li.id))
         lie.id AS encounter_id,
@@ -1162,6 +1163,17 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
       END
     ORDER BY lie.name, COALESCE(li.duplicate_group_id, li.id),
              duration_secs ASC
+), kept AS (
+    SELECT DISTINCT ON (
+        d.encounter_name,
+        CASE WHEN @guild_best::boolean THEN d.guild_id ELSE d.encounter_id::text END
+    ) d.*
+    FROM deduped d
+    WHERE d.duration_secs > 0
+      AND (NOT @guild_best::boolean OR d.guild_id != '')
+    ORDER BY d.encounter_name,
+             CASE WHEN @guild_best::boolean THEN d.guild_id ELSE d.encounter_id::text END,
+             d.duration_secs ASC, d.killed_at ASC
 )
 SELECT
     d.encounter_id,
@@ -1175,8 +1187,7 @@ SELECT
     d.duration_secs,
     d.killed_at,
     COUNT(*) OVER() AS total_count
-FROM deduped d
-WHERE d.duration_secs > 0
+FROM kept d
 ORDER BY d.duration_secs ASC
 LIMIT @query_limit::bigint OFFSET @query_offset::bigint;
 

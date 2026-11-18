@@ -1237,7 +1237,8 @@ type sqlcQuerier interface {
 	RankingsInstanceSummaries(ctx context.Context, tenantID uuid.UUID) ([]RankingsInstanceSummariesRow, error)
 	// Paginated leaderboard of fastest encounter kills, ordered by duration.
 	// Deduplicates encounters across duplicate log groups (keeps fastest per group)
-	// and excludes invalidated instances and encounters.
+	// and excludes invalidated instances and encounters. With guild_best, each guild
+	// ranks once per boss with its fastest kill and kills without a guild are excluded.
 	RankingsKillTimeLeaderboard(ctx context.Context, arg RankingsKillTimeLeaderboardParams) ([]RankingsKillTimeLeaderboardRow, error)
 	// Box plot stats on encounter duration (seconds) per encounter name.
 	// Deduplicates encounters across duplicate log groups and excludes invalidated data.

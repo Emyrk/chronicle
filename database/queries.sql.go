@@ -29607,6 +29607,17 @@ JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.u
       END
     ORDER BY lie.name, COALESCE(li.duplicate_group_id, li.id),
              duration_secs ASC
+), kept AS (
+    SELECT DISTINCT ON (
+        d.encounter_name,
+        CASE WHEN $10::boolean THEN d.guild_id ELSE d.encounter_id::text END
+    ) d.encounter_id, d.encounter_name, d.instance_id, d.log_hashed_slug, d.instance_name, d.guild_name, d.guild_id, d.realm_name, d.duration_secs, d.killed_at
+    FROM deduped d
+    WHERE d.duration_secs > 0
+      AND (NOT $10::boolean OR d.guild_id != '')
+    ORDER BY d.encounter_name,
+             CASE WHEN $10::boolean THEN d.guild_id ELSE d.encounter_id::text END,
+             d.duration_secs ASC, d.killed_at ASC
 )
 SELECT
     d.encounter_id,
@@ -29620,8 +29631,7 @@ SELECT
     d.duration_secs,
     d.killed_at,
     COUNT(*) OVER() AS total_count
-FROM deduped d
-WHERE d.duration_secs > 0
+FROM kept d
 ORDER BY d.duration_secs ASC
 LIMIT $2::bigint OFFSET $1::bigint
 `
@@ -29636,6 +29646,7 @@ type RankingsKillTimeLeaderboardParams struct {
 	MaxPlayers       int32  `db:"max_players" json:"max_players"`
 	EncounterName    string `db:"encounter_name" json:"encounter_name"`
 	SinceDays        int64  `db:"since_days" json:"since_days"`
+	GuildBest        bool   `db:"guild_best" json:"guild_best"`
 }
 
 type RankingsKillTimeLeaderboardRow struct {
@@ -29654,7 +29665,8 @@ type RankingsKillTimeLeaderboardRow struct {
 
 // Paginated leaderboard of fastest encounter kills, ordered by duration.
 // Deduplicates encounters across duplicate log groups (keeps fastest per group)
-// and excludes invalidated instances and encounters.
+// and excludes invalidated instances and encounters. With guild_best, each guild
+// ranks once per boss with its fastest kill and kills without a guild are excluded.
 func (q *sqlQuerier) RankingsKillTimeLeaderboard(ctx context.Context, arg RankingsKillTimeLeaderboardParams) ([]RankingsKillTimeLeaderboardRow, error) {
 	rows, err := q.db.Query(ctx, rankingsKillTimeLeaderboard,
 		arg.QueryOffset,
@@ -29666,6 +29678,7 @@ func (q *sqlQuerier) RankingsKillTimeLeaderboard(ctx context.Context, arg Rankin
 		arg.MaxPlayers,
 		arg.EncounterName,
 		arg.SinceDays,
+		arg.GuildBest,
 	)
 	if err != nil {
 		return nil, err

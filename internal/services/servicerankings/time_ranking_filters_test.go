@@ -15,6 +15,7 @@ type timeRankingFilterStore struct {
 	difficulty       string
 	filterMaxPlayers bool
 	maxPlayers       int32
+	guildBest        bool
 	calls            int
 }
 
@@ -31,6 +32,7 @@ func (s *timeRankingFilterStore) RankingsClearTimeStats(_ context.Context, p dat
 	return nil, nil
 }
 func (s *timeRankingFilterStore) RankingsKillTimeLeaderboard(_ context.Context, p database.RankingsKillTimeLeaderboardParams) ([]database.RankingsKillTimeLeaderboardRow, error) {
+	s.guildBest = p.GuildBest
 	s.record(p.FilterDifficulty, p.DifficultyName, p.FilterMaxPlayers, p.MaxPlayers)
 	return nil, nil
 }
@@ -115,5 +117,25 @@ func TestTimeRankingEndpointsDifficultyFilters(t *testing.T) {
 				require.Zero(t, store.calls)
 			}
 		})
+	}
+}
+
+func TestKillTimeLeaderboardBoard(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		query     string
+		status    int
+		guildBest bool
+	}{
+		{query: "", status: http.StatusOK},
+		{query: "&board=all", status: http.StatusOK},
+		{query: "&board=guild", status: http.StatusOK, guildBest: true},
+		{query: "&board=bad", status: http.StatusBadRequest},
+	} {
+		store := &timeRankingFilterStore{}
+		rec := httptest.NewRecorder()
+		handleKillTimeLeaderboardWithStore(store, rec, httptest.NewRequest(http.MethodGet, "/?instance_name=Raid&encounter_name=Boss"+tc.query, nil))
+		require.Equal(t, tc.status, rec.Code, tc.query)
+		require.Equal(t, tc.guildBest, store.guildBest, tc.query)
 	}
 }
