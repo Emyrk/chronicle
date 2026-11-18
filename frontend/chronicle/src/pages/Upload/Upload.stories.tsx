@@ -17,6 +17,7 @@ const defaultProps: UploadViewProps = {
   combatLog: null,
   rawCombatLog: null,
   sidekickStorage: null,
+  foreverEvents: null,
   uploading: false,
   uploadProgress: 0,
   error: null,
@@ -124,3 +125,12 @@ export const WotlkSidekickAttached: Story = {
     sidekickStorage: new File(["content"], "ChronicleSidekickBridgeWoTLK.lua", { type: "text/plain" }),
   },
 }
+
+export const ForeverEvents: Story = {
+  args: {
+    ...defaultProps,
+    effectiveFormat: "v22-cleu",
+    combatLog: mockFile,
+    foreverEvents: new File(["{}"], "forever-events-v1.json", { type: "application/json" }),
+  },
+};
