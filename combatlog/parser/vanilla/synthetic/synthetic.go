@@ -35,8 +35,8 @@ type Synthetic struct {
 	razuvious    *razuviousOverkill
 	wowDB        gamedb.GameDB
 	knownArmor   *knownArmor
-	vanillaPlus  *vanillaplus
-	moltenCore   *moltenCore
+	vanillaPlus  *shadowBosses
+	moltenCore   *shadowBosses
 	absorption   *Absorption
 	auraOwner    *auraOwnership
 
@@ -65,7 +65,7 @@ func New(ctx context.Context, logger *slog.Logger, wowDB gamedb.GameDB, opts ...
 		razuvious:    newRazuviousOverkill(),
 		knownArmor:   newKnownArmor(),
 		vanillaPlus:  newVanillaPlus(),
-		moltenCore:   &moltenCore{},
+		moltenCore:   newMoltenCore(),
 		absorption:   NewAbsorption(logger),
 		wowDB:        wowDB,
 		flavor:       fl,
