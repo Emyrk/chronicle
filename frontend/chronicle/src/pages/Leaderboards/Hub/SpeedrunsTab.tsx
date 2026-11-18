@@ -9,7 +9,7 @@ import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Too
 import { TIER_COLOR } from "@/pages/Settings/billingPricing"
 import { MOBILE_EDGE_TO_EDGE } from "@/pages/Leaderboards/Hub/edgeToEdge"
 import { guildAttributes, killAttributes, speedrunClearAttributes } from "@/components/EntityMenu/leaderboardEntities"
-import { Podium } from "@/pages/Leaderboard/Podium"
+import { NoGuild, Podium } from "@/pages/Leaderboard/Podium"
 import { formatClock, speedruns } from "./hub.fixtures"
 import { defaultSpeedrunsView, selectedBosses, type EncounterSelection, type SpeedrunsView } from "./encounterSelection"
 
@@ -98,7 +98,8 @@ export function SpeedrunsTab({
 const segment = (active: boolean) =>
   cn(
     "inline-flex cursor-pointer items-center gap-1.5 rounded px-2.5 py-1 font-medium transition-colors sm:px-3 sm:py-1.5",
-    active ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
+    // Tinted with an inset ring, like the ratings metric tabs, so the selected side reads at a glance.
+    active ? "bg-primary/15 text-primary ring-1 ring-inset ring-primary/40" : "text-muted-foreground hover:text-foreground",
   )
 
 /** Guild best or every run, styled like the board switch. Locked, "All runs" links to /supporter. */
@@ -214,7 +215,7 @@ function KillTimes({
                     <li key={r.key} className="flex items-center gap-3 border-b border-white/5 px-4 py-2 text-sm last:border-b-0">
                       <span className="w-8 font-mono text-xs text-muted-foreground">{rankOffset + i + 1}</span>
                       <span className="min-w-0 flex-1 truncate text-amber-500" {...guildAttributes(r.guildId, r.guild)}>
-                        &lt;{r.guild || "No guild"}&gt;
+                        {r.guild ? <>&lt;{r.guild}&gt;</> : <NoGuild />}
                       </span>
                       <span className="hidden truncate text-xs text-muted-foreground sm:inline">{r.realm}</span>
                       {r.entry ? (
@@ -308,7 +309,7 @@ function ClearBoard({ instanceName, bosses, live, story, switcher }: { instanceN
                     ) : (
                       <span className="size-5 shrink-0" aria-hidden />
                     )}
-                    <span className="truncate" {...guildAttributes(r.guild_id, r.guild_name)}>{r.guild_name || "No guild"}</span>
+                    <span className="truncate" {...guildAttributes(r.guild_id, r.guild_name)}>{r.guild_name || <NoGuild />}</span>
                   </span>
                 </td>
                 <td className="px-2 py-2 text-right font-mono tabular-nums">
