@@ -107,3 +107,13 @@ UPDATE wow_server_upload_keys SET last_used_at = now() WHERE id = $1;
 -- Assigns or removes a default dataset from a server.
 -- Pass NULL to remove the assignment.
 UPDATE wow_servers SET default_dataset_id = $2 WHERE id = $1;
+
+-- name: GetRealmTenantSlug :one
+-- The slug of the tenant that owns a realm's server. NULL when the server
+-- belongs to the root site. Canonical URLs for tenant-owned pages (guilds,
+-- characters) use it to point at the owning tenant's host.
+SELECT t.slug
+FROM wow_server_realms r
+JOIN wow_servers s ON s.id = r.server_id
+LEFT JOIN tenants t ON t.id = s.tenant_id
+WHERE r.id = @realm_id;

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	pathpkg "path"
 	"slices"
 	"strconv"
 	"strings"
@@ -105,7 +106,9 @@ func (api *API) brandingResolver(r *http.Request) *frontend.HTMLBranding {
 			}
 		}
 	}
-	resolved.JSONLD = websiteJSONLD(resolved.SiteName, resolved.Description, resolved.CanonicalURL, resolved.ImageURL)
+	// The WebSite entity describes the site serving the request, even when the
+	// page itself is canonical on another host.
+	resolved.JSONLD = websiteJSONLD(resolved.SiteName, resolved.Description, canonicalOrigin(api, r), resolved.ImageURL)
 	return resolved
 }
 
@@ -141,12 +144,49 @@ func ogHost(r *http.Request) string {
 	return host
 }
 
+// canonicalRequestURL returns the request's canonical URL: the request host,
+// or the shared-content tenant's host for pages identical on every host.
 func canonicalRequestURL(api *API, r *http.Request) string {
 	path := r.URL.EscapedPath()
 	if path == "" {
 		path = "/"
 	}
+	if host := api.sharedCanonicalHost(r, r.URL.Path); host != "" {
+		return canonicalScheme(api) + "://" + host + path
+	}
 	return canonicalOrigin(api, r) + path
+}
+
+// sharedCanonicalHost returns the shared-content tenant's host (see
+// servicetenant.SharedContentSlug) when path is a page every host serves
+// identically and that tenant serves it too, or "" when path is canonical on
+// the host serving it. A blog post counts only when the shared-content
+// tenant's flavor serves it, by the same rule as the blog route.
+func (api *API) sharedCanonicalHost(r *http.Request, path string) string {
+	if api.Opts.Tenant == nil {
+		return ""
+	}
+	if host := api.Opts.Tenant.SharedPageHost(path); host != "" {
+		return host
+	}
+	if !strings.HasPrefix(path, "/blog/") {
+		return ""
+	}
+	home, host, ok := api.Opts.Tenant.SharedContentTenant()
+	if !ok {
+		return ""
+	}
+	clean := pathpkg.Clean(path)
+	for _, post := range api.blogPosts(r) {
+		if post.Path == clean {
+			homeFlavor := api.blogFlavorResolver(r.WithContext(servicetenant.WithTenant(r.Context(), home)))
+			if post.AllowedFor(homeFlavor) {
+				return host
+			}
+			return ""
+		}
+	}
+	return ""
 }
 
 // canonicalOrigin returns the canonical scheme and host for SEO URLs.
@@ -439,8 +479,20 @@ func (api *API) sitemapXML(w http.ResponseWriter, r *http.Request) {
 
 func (api *API) renderSitemap(r *http.Request, base string, dynamic *sitemapDynamic) ([]byte, error) {
 	set := sitemapURLSet{XMLNS: "http://www.sitemaps.org/schemas/sitemap/0.9"}
+	// A sitemap lists only URLs canonical on its own host: shared pages
+	// canonical on the shared-content tenant's host are left to its sitemap.
+	host := strings.TrimPrefix(base, canonicalScheme(api)+"://")
+	canonicalHere := func(path string) bool {
+		shared := api.sharedCanonicalHost(r, path)
+		return shared == "" || shared == host
+	}
+	// The blog hub's lastmod still covers every post this host serves: its
+	// /blog index lists them all.
 	blog := api.sitemapBlogURLs(r)
 	for _, p := range sitemapPaths {
+		if !canonicalHere(p.path) {
+			continue
+		}
 		u := sitemapURL{Location: base + p.path}
 		switch p.lastMod {
 		case sitemapLastModInstances:
@@ -453,7 +505,9 @@ func (api *API) renderSitemap(r *http.Request, base string, dynamic *sitemapDyna
 		set.URLs = append(set.URLs, u)
 	}
 	for _, u := range blog {
-		set.URLs = append(set.URLs, sitemapURL{Location: base + u.Location, LastMod: u.LastMod})
+		if canonicalHere(u.Location) {
+			set.URLs = append(set.URLs, sitemapURL{Location: base + u.Location, LastMod: u.LastMod})
+		}
 	}
 	if dynamic != nil {
 		for _, u := range dynamic.urls {
@@ -489,8 +543,8 @@ func (api *API) canonicalHosts(r *http.Request) []string {
 	}
 	var hosts []string
 	if t := servicetenant.TenantFromContext(r.Context()); t != nil {
-		if t.Slug.Valid && t.Slug.String != "" && primary != "" {
-			hosts = append(hosts, strings.ToLower(t.Slug.String)+"."+primary)
+		if host := api.Opts.Tenant.TenantHost(t.Slug.String); host != "" {
+			hosts = append(hosts, host)
 		}
 	} else {
 		if api.Opts.AccessURL != nil && api.Opts.AccessURL.Host != "" {
@@ -529,17 +583,7 @@ func acceptsGzip(r *http.Request) bool {
 // sitemapBlogURLs lists the blog posts the request's site serves, by the same
 // flavor rule as the blog route. Locations are paths.
 func (api *API) sitemapBlogURLs(r *http.Request) []sitemapURL {
-	siteFS := api.sitemapBlogFS
-	if siteFS == nil {
-		siteFS = frontend.FS()
-	}
-	posts, err := frontend.BlogPosts(siteFS)
-	if err != nil {
-		if api.Opts.Logger != nil {
-			api.Opts.Logger.WarnContext(r.Context(), "read blog manifest for sitemap", "error", err)
-		}
-		return nil
-	}
+	posts := api.blogPosts(r)
 	flavor := api.blogFlavorResolver(r)
 	urls := make([]sitemapURL, 0, len(posts))
 	for _, post := range posts {
@@ -548,6 +592,22 @@ func (api *API) sitemapBlogURLs(r *http.Request) []sitemapURL {
 		}
 	}
 	return urls
+}
+
+// blogPosts lists the posts in the blog manifest, or none when it cannot be read.
+func (api *API) blogPosts(r *http.Request) []frontend.BlogPost {
+	siteFS := api.sitemapBlogFS
+	if siteFS == nil {
+		siteFS = frontend.FS()
+	}
+	posts, err := frontend.BlogPosts(siteFS)
+	if err != nil {
+		if api.Opts.Logger != nil {
+			api.Opts.Logger.WarnContext(r.Context(), "read blog manifest", "error", err)
+		}
+		return nil
+	}
+	return posts
 }
 
 // loadSitemapURLs reads the tenant's guild, character and raid pages. ctx
