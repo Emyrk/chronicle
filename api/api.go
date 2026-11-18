@@ -132,6 +132,9 @@ type Options struct {
 	// OG resolves route-specific Open Graph metadata. When nil, OGRoutes uses a
 	// static-only service so pages retain their pre-generated metadata.
 	OG OGService
+	// SEO renders crawlable summaries for indexable instance and character
+	// pages. When nil, those pages are served without a summary.
+	SEO SEOSummaryService
 	// LandingFeaturedID is the deployment default for the /start hero's
 	// featured instance, used when the site setting is empty.
 	LandingFeaturedID uuid.UUID

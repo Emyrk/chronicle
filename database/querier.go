@@ -886,6 +886,11 @@ type sqlcQuerier interface {
 	ListCareerGuildRenownInputs(ctx context.Context, arg ListCareerGuildRenownInputsParams) ([]ListCareerGuildRenownInputsRow, error)
 	ListCareerPlayerBossInputs(ctx context.Context, arg ListCareerPlayerBossInputsParams) ([]ListCareerPlayerBossInputsRow, error)
 	ListCareerPlayerRenownInputs(ctx context.Context, arg ListCareerPlayerRenownInputsParams) ([]ListCareerPlayerRenownInputsRow, error)
+	// A character's most recent listed, valid, finalized instance logs for the
+	// server-rendered character page summary. Walks
+	// idx_log_instance_players_unit_guid_instance for the one character, and
+	// keeps one upload per duplicate group.
+	ListCharacterSummaryInstances(ctx context.Context, arg ListCharacterSummaryInstancesParams) ([]ListCharacterSummaryInstancesRow, error)
 	ListClassBuffIgnorePolicies(ctx context.Context) ([]ListClassBuffIgnorePoliciesRow, error)
 	ListClassBuffPoliciesForDataset(ctx context.Context, datasetID uuid.UUID) ([]ListClassBuffPoliciesForDatasetRow, error)
 	ListConsumableDisambiguationsByDataset(ctx context.Context, datasetID uuid.UUID) ([]ListConsumableDisambiguationsByDatasetRow, error)

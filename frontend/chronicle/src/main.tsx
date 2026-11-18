@@ -17,6 +17,8 @@ window.addEventListener('vite:preloadError', (event) => {
 })
 
 const queryClient = new QueryClient()
+// The server renders a hidden crawlable summary for some pages; the app replaces it.
+document.getElementById('seo-summary')?.remove()
 const root = document.getElementById('root')!
 const isBlogRoute = window.location.pathname === '/blog' || window.location.pathname.startsWith('/blog/')
 

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/frontend"
 	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
@@ -78,6 +79,36 @@ func TestBrandingResolverNoIndex(t *testing.T) {
 	require.Empty(t, api.brandingResolver(tenantSEORequest(t, "/blog", true)).Robots)
 	require.Empty(t, api.brandingResolver(tenantSEORequest(t, "/blog/instance-search", true)).Robots)
 	require.Equal(t, "noindex, nofollow", api.brandingResolver(tenantSEORequest(t, "/recent", false)).Robots)
+}
+
+// fakeSEOSummaries returns one summary for every request and counts calls.
+type fakeSEOSummaries struct{ calls int }
+
+func (f *fakeSEOSummaries) Summary(*http.Request) *frontend.PageSummary {
+	f.calls++
+	return &frontend.PageSummary{Description: "summary", HTML: "<h1>summary</h1>"}
+}
+
+func TestBrandingResolverPageSummary(t *testing.T) {
+	t.Parallel()
+	api := testSEOAPI(t)
+	require.Nil(t, api.brandingResolver(tenantSEORequest(t, "/instances/abc", true)).Summary, "no service, no summary")
+
+	summaries := &fakeSEOSummaries{}
+	api.Opts.SEO = summaries
+	require.Equal(t, "summary", api.brandingResolver(tenantSEORequest(t, "/instances/abc", true)).Summary.Description)
+	require.Equal(t, 1, summaries.calls)
+
+	// Noindex pages never render a summary.
+	for _, request := range []*http.Request{
+		tenantSEORequest(t, "/instances/abc", false),
+		tenantSEORequest(t, "/admin/users", true),
+	} {
+		metadata := api.brandingResolver(request)
+		require.Equal(t, "noindex, nofollow", metadata.Robots)
+		require.Nil(t, metadata.Summary)
+	}
+	require.Equal(t, 1, summaries.calls)
 }
 
 func TestBrandingResolverIndexablePaths(t *testing.T) {
@@ -148,11 +179,16 @@ func TestBrandingResolverNoIndexesUnlistedInstances(t *testing.T) {
 
 	api := testSEOAPI(t)
 	api.Zed = zed
+	summaries := &fakeSEOSummaries{}
+	api.Opts.SEO = summaries
 	for _, identifier := range []string{instanceID.String(), slug} {
 		request := httptest.NewRequest(http.MethodGet, "https://everlook.chronicleclassic.com/instances/"+identifier, nil)
 		request = request.WithContext(servicetenant.WithTenant(ctx, database.Tenant{Discoverable: true}))
-		require.Equal(t, "noindex, nofollow", api.brandingResolver(request).Robots)
+		metadata := api.brandingResolver(request)
+		require.Equal(t, "noindex, nofollow", metadata.Robots)
+		require.Nil(t, metadata.Summary)
 	}
+	require.Zero(t, summaries.calls, "unlisted instances never render a summary")
 }
 
 func TestTenantRobotsAndSitemap(t *testing.T) {
