@@ -1,16 +1,19 @@
 package unitdb
 
 import (
+	"slices"
 	"time"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 )
 
 type Units struct {
+	flavor database.WoWFlavor
 	// TODO: Slain to remove units?
 	Info         map[guid.GUID]unitinfo.Info
 	Players      map[guid.GUID]combatant.Combatant
@@ -26,8 +29,9 @@ type Units struct {
 	directOwners map[guid.GUID]guid.GUID
 }
 
-func New() *Units {
+func New(flavor database.WoWFlavor) *Units {
 	return &Units{
+		flavor:               slices.Clone(flavor),
 		Info:                 make(map[guid.GUID]unitinfo.Info),
 		Players:              make(map[guid.GUID]combatant.Combatant),
 		PlayerByName:         make(map[string]guid.GUID),
@@ -309,7 +313,7 @@ func (us *Units) UpdateUnitName(gid guid.GUID, name string) {
 		return
 	}
 
-	us.Info[gid] = unitinfo.Info{Name: name}
+	us.Info[gid] = unitinfo.Info{Guid: gid, Name: name}
 }
 
 // InvalidatePlayerTalents clears the talents used by encounter ranking snapshots.
@@ -341,3 +345,6 @@ func (us *Units) UpdatePlayer(c combatant.Combatant) {
 	us.Players[c.Guid] = c
 	us.PlayerByName[c.Name] = c.Guid
 }
+
+// Flavor returns the server mechanics selected for this unit database.
+func (us *Units) Flavor() database.WoWFlavor { return slices.Clone(us.flavor) }

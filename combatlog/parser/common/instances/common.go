@@ -22,10 +22,11 @@ import (
 	"github.com/Emyrk/chronicle/database"
 )
 
-// UnknownUnit represents a creature entry not found in the hostiles map.
+// UnknownUnit represents an unresolved entry observed in this instance.
 type UnknownUnit struct {
-	Name  string `json:"name"`
-	Count int    `json:"count"`
+	Name    string      `json:"name"`
+	Count   int         `json:"count"`
+	Samples []guid.GUID `json:"samples,omitempty"`
 }
 
 type FinalizedInstance struct {
@@ -41,11 +42,12 @@ type FinalizedInstance struct {
 	// RankingRules carries the eligibility rules (level range, etc.) for this instance.
 	// Nil if this instance has no ranking configuration.
 	RankingRules *rankings.Rankings
-	// UnknownUnits maps creature entry IDs not in the hostiles map to their name and hit count.
+	// UnknownUnits groups unresolved entries by name, unique spawn count and samples.
 	UnknownUnits map[uint32]UnknownUnit
-	// PersistedUnits contains observed units that requested instance metadata
-	// persistence without participating in encounter activity.
+	// PersistedUnits contains every nonzero GUID observed in this instance,
+	// including passive references and messages outside retained encounters.
 	PersistedUnits     []guid.GUID
+	UnitCategories     map[guid.GUID]unitdb.Category
 	VehicleMetadata    vehicles.Metadata
 	RaidGroupSnapshots []raidgroups.InstanceSnapshot
 }

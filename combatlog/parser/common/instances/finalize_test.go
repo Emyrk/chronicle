@@ -3,6 +3,7 @@ package instances
 import (
 	"bytes"
 	"context"
+	"io"
 	"log/slog"
 	"testing"
 	"time"
@@ -79,7 +80,7 @@ func newFinalizeTestHookableWithHostiles(t *testing.T, hostiles map[uint32]Ident
 func newFinalizeTestHookableWithContext(t *testing.T, ctx context.Context, hostiles map[uint32]Identity, extraHooks ...instancehook.Hook) *Hookable {
 	t.Helper()
 
-	return NewHookable(ctx, slog.Default(), unitdb.New(), zone.Zone{Name: "test instance"}, InstanceParams{
+	return NewHookable(ctx, slog.Default(), unitdb.New(database.WoWFlavor{}), zone.Zone{Name: "test instance"}, InstanceParams{
 		Name:       "Test Instance",
 		Idf:        identifier.NewIdentifier(hostiles),
 		ExtraHooks: extraHooks,
@@ -253,7 +254,7 @@ func TestFinalize_King_AllAddsKilled_BossAbsent_IsWipe(t *testing.T) {
 	hostiles := TowerOfKarazhanHostiles()
 	h := &Hookable{
 		Identifier:      identifier.NewIdentifier(hostiles),
-		units:           unitdb.New(),
+		units:           unitdb.New(database.WoWFlavor{}),
 		completedFights: []encounter.Fight{fight},
 	}
 
@@ -271,7 +272,7 @@ func TestFinalize_King_AllAddsKilled_BossAbsent_IsWipe(t *testing.T) {
 func TestFinalizeIncludesNamedNeverActiveUnitsForPersistence(t *testing.T) {
 	t.Parallel()
 
-	db := unitdb.New()
+	db := unitdb.New(database.WoWFlavor{})
 	idf := identifier.NewIdentifier(map[uint32]identifier.Identity{})
 	sifID := creatureGUID(33196, 1)
 	plainID := creatureGUID(30084, 1)
@@ -295,15 +296,17 @@ func TestFinalizeIncludesNamedNeverActiveUnitsForPersistence(t *testing.T) {
 		units:      db,
 		Characters: chars,
 	}
+	h.ObserveUnits(&messages.Unit{Info: unitinfo.Info{Guid: sifID}})
+	h.ObserveUnits(&messages.Unit{Info: unitinfo.Info{Guid: plainID}})
 	result, err := h.Finalize(context.Background())
 	require.NoError(t, err)
-	require.Equal(t, []guid.GUID{sifID}, result.PersistedUnits)
+	require.ElementsMatch(t, []guid.GUID{sifID, plainID}, result.PersistedUnits)
 }
 
 func TestFinalizePersistsOwnedUnitInfoWithoutChangingCharacterFallback(t *testing.T) {
 	t.Parallel()
 
-	db := unitdb.New()
+	db := unitdb.New(database.WoWFlavor{})
 	idf := identifier.NewIdentifier(map[uint32]identifier.Identity{})
 	chars := characters.NewCharacters(db, nil, idf)
 	petID := guid.GUID(0xF1400234DC000005)
@@ -329,9 +332,14 @@ func TestFinalizePersistsOwnedUnitInfoWithoutChangingCharacterFallback(t *testin
 		units:      db,
 		Characters: chars,
 	}
+	for _, id := range []guid.GUID{trapID, totemID, petID} {
+		info, _ := db.Get(id)
+		h.ObserveUnits(&messages.Unit{Info: info})
+	}
 	result, err := h.Finalize(context.Background())
 	require.NoError(t, err)
-	require.Equal(t, []guid.GUID{trapID, totemID, petID}, result.PersistedUnits)
+	require.ElementsMatch(t, []guid.GUID{ownerID, trapID, totemID, petID}, result.PersistedUnits)
+	require.NotContains(t, result.UnitCategories, unownedID, "shared metadata is not instance membership")
 	require.False(t, char.IsActive())
 }
 
@@ -348,7 +356,7 @@ func TestFinalize_InconsistentHostileIDMapping_ReturnsError(t *testing.T) {
 
 	h := &Hookable{
 		Identifier: identifier.NewIdentifier(TowerOfKarazhanHostiles()),
-		units:      unitdb.New(),
+		units:      unitdb.New(database.WoWFlavor{}),
 		completedFights: []encounter.Fight{{
 			EncounterID: uuid.New(),
 			Hostiles: map[guid.GUID]encounter.CharacterFight{
@@ -388,7 +396,7 @@ func TestFinalize_AQ40OuroSpawnerNamesOuro(t *testing.T) {
 
 	h := &Hookable{
 		Identifier: identifier.NewIdentifier(TempleOfAhnQirajHostiles()),
-		units:      unitdb.New(),
+		units:      unitdb.New(database.WoWFlavor{}),
 		completedFights: []encounter.Fight{{
 			EncounterID: uuid.New(),
 			Hostiles: map[guid.GUID]encounter.CharacterFight{
@@ -438,7 +446,7 @@ func TestFinalize_AQ40PrefersEarliestNamedHostile(t *testing.T) {
 
 	h := &Hookable{
 		Identifier: identifier.NewIdentifier(TempleOfAhnQirajHostiles()),
-		units:      unitdb.New(),
+		units:      unitdb.New(database.WoWFlavor{}),
 		completedFights: []encounter.Fight{{
 			EncounterID: uuid.New(),
 			Hostiles: map[guid.GUID]encounter.CharacterFight{
@@ -1276,4 +1284,71 @@ func countCall(calls []string, want string) int {
 		}
 	}
 	return count
+}
+
+func TestFinalizeCatalogueIncludesUnknownOwnedAndPassiveUnits(t *testing.T) {
+	t.Parallel()
+	db := unitdb.New(database.WoWFlavor{})
+	owner := guid.GUID(1)
+	unknown, secondSpawn := creatureGUID(12345, 1), creatureGUID(12345, 2)
+	known, critter := creatureGUID(222, 1), creatureGUID(2914, 1)
+	otherInstance := creatureGUID(999, 1)
+	db.Update(unitinfo.Info{Guid: otherInstance, Owner: &owner})
+	h := &Hookable{units: db, Identifier: identifier.NewIdentifier(map[uint32]identifier.Identity{222: {Name: "Ordinary"}})}
+	for _, id := range []guid.GUID{unknown, secondSpawn, known, critter} {
+		msg := &messages.Unit{Info: unitinfo.Info{Guid: id, Owner: &owner}}
+		db.Update(msg.Info)
+		h.ObserveUnits(msg)
+		h.ObserveUnits(msg) // repeated metadata must not inflate spawn counts
+	}
+	// Late enrichment supplies the unknown name before finalization.
+	db.UpdateUnitName(unknown, "Unresolved summon")
+	result, err := h.Finalize(context.Background())
+	require.NoError(t, err)
+	require.ElementsMatch(t, []guid.GUID{owner, unknown, secondSpawn, known, critter}, result.PersistedUnits)
+	require.Equal(t, unitdb.CategoryOrdinary, result.UnitCategories[known])
+	require.Equal(t, unitdb.CategoryCritter, result.UnitCategories[critter])
+	require.Len(t, result.UnknownUnits, 1)
+	require.Equal(t, 2, result.UnknownUnits[12345].Count)
+	require.Equal(t, "Unresolved summon", result.UnknownUnits[12345].Name)
+	require.Equal(t, []guid.GUID{unknown, secondSpawn}, result.UnknownUnits[12345].Samples)
+	other := &Hookable{units: db, Identifier: identifier.NewIdentifier(map[uint32]identifier.Identity{})}
+	other.ObserveUnits(&messages.UnitTarget{Unit: otherInstance})
+	otherResult, err := other.Finalize(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, []guid.GUID{otherInstance}, otherResult.PersistedUnits)
+	require.NotContains(t, otherResult.UnknownUnits, uint32(12345))
+}
+
+func TestCritterMessagesAdvanceProcessingWithoutInstanceActivity(t *testing.T) {
+	t.Parallel()
+	db := unitdb.New(database.WoWFlavor{})
+	base := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+	h := NewHookable(context.Background(), slog.New(slog.NewTextHandler(io.Discard, nil)), db, zone.Zone{}, InstanceParams{Idf: identifier.NewIdentifier(map[uint32]identifier.Identity{})})
+	require.NoError(t, h.Process(&messages.Timeout{MessageBase: messages.Base(base)}))
+	critter := creatureGUID(2914, 1)
+	require.NoError(t, h.Process(&messages.Damage{MessageBase: messages.Base(base.Add(time.Hour)), Target: critter, Amount: 10}))
+	require.Equal(t, base.Add(time.Hour), h.lastProcessedAt)
+	require.Equal(t, base, h.lastActivity)
+	result, err := h.Finalize(context.Background())
+	require.NoError(t, err)
+	require.Contains(t, result.PersistedUnits, critter)
+	require.Empty(t, result.Encounters)
+}
+
+func TestFinalizeUnknownGUIDWithoutMeaningfulEntry(t *testing.T) {
+	t.Parallel()
+	noEntry := guid.GUID(0xF160000000000001)
+	zeroEntry := guid.GUID(0xF130000000000001)
+	_, hasEntry := noEntry.GetEntry()
+	require.False(t, hasEntry)
+	h := &Hookable{units: unitdb.New(database.WoWFlavor{}), Identifier: identifier.NewIdentifier(map[uint32]identifier.Identity{})}
+	for _, id := range []guid.GUID{0, noEntry, zeroEntry, noEntry} {
+		h.ObserveUnits(&messages.UnitTarget{Unit: id})
+	}
+	result, err := h.Finalize(context.Background())
+	require.NoError(t, err)
+	require.ElementsMatch(t, []guid.GUID{noEntry, zeroEntry}, result.PersistedUnits)
+	require.Equal(t, 2, result.UnknownUnits[0].Count)
+	require.ElementsMatch(t, []guid.GUID{noEntry, zeroEntry}, result.UnknownUnits[0].Samples)
 }

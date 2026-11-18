@@ -4,6 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/Emyrk/chronicle/api/chronicleproto"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/combatmetrics"
@@ -17,12 +24,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
-	"os"
-	"path/filepath"
-	"sort"
-	"strings"
-	"testing"
-	"time"
 )
 
 // TestLucifronCapturedSourceReplay is an opt-in acceptance check for privately
@@ -137,7 +138,7 @@ func TestLucifronCapturedSourceReplay(t *testing.T) {
 		replay = append(replay, razorgoreReplayEvent{index: a.Meta.Index, at: at, message: &messages.PossessionChange{MessageBase: messages.Base(at), Target: target, Controller: caster, Spell: &chrondbc.Spell{ID: chrondbc.SpellID(a.Spell.Id)}, Gained: true, Duration: time.Duration(a.DurationMS) * time.Millisecond}})
 	}
 	sort.Slice(replay, func(i, j int) bool { return replay[i].index < replay[j].index })
-	units := unitdb.New()
+	units := unitdb.New(database.FlavorFromStrings(e.Group.Flavor))
 	tracker := rankings.NewDPSTracker(units, nil, rankings.DamageRuleNone)
 	tracker.FightStarted(c.ID, nil)
 	var damage []*messages.Damage

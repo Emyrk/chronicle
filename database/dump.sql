@@ -2872,7 +2872,8 @@ CREATE TABLE log_instance_units (
     unit_guid wow_guid NOT NULL,
     name text NOT NULL,
     entry integer NOT NULL,
-    owner_guid wow_guid
+    owner_guid wow_guid,
+    category text DEFAULT 'unknown'::text NOT NULL
 );
 
 COMMENT ON TABLE log_instance_units IS 'Stores all units (NPCs, not players) that participated in an instance.';

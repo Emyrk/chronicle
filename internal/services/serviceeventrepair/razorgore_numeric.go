@@ -106,7 +106,7 @@ func evaluateRazorgoreNumeric(e razorgoreEvidence, p *RazorgoreRepairPlan) error
 	if err != nil {
 		return err
 	}
-	units := unitdb.New()
+	units := unitdb.New(database.FlavorFromStrings(e.Group.Flavor))
 	tracker := rankings.NewDPSTracker(units, nil, rankings.DamageRuleNone)
 	life := rankings.NewSurvivabilityTracker()
 	tracker.FightStarted(c.ID, nil)

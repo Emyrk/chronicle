@@ -10,12 +10,13 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/stretchr/testify/require"
 )
 
 func newMajordomoTestCharacters() *characters.Characters {
 	return characters.NewCharacters(
-		unitdb.New(),
+		unitdb.New(database.WoWFlavor{database.FlavorVanilla}),
 		[]characters.CharacterFactory{NewMajordomoPartyCharacter},
 		identifier.NewIdentifier(map[uint32]identifier.Identity{}),
 	)

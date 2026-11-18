@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Emyrk/chronicle/database"
 	"github.com/stretchr/testify/require"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
@@ -16,7 +17,7 @@ import (
 func TestIgnoreActivityMarkPreventsDamageBump(t *testing.T) {
 	t.Parallel()
 
-	chars := NewCharacters(unitdb.New(), nil, identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+	chars := NewCharacters(unitdb.New(database.WoWFlavor{}), nil, identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 	boss := guid.GUID(0xF130000001000001)
 	player := guid.GUID(1)
 	start := time.Date(2026, time.August, 9, 12, 0, 0, 0, time.UTC)
@@ -50,7 +51,7 @@ func TestIgnoreActivityMarkPreventsDamageBump(t *testing.T) {
 func TestExplicitEncounterSuppressesTimeoutAndEndsActiveCharacters(t *testing.T) {
 	t.Parallel()
 
-	chars := NewCharacters(unitdb.New(), nil, identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+	chars := NewCharacters(unitdb.New(database.WoWFlavor{}), nil, identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 	boss := guid.GUID(0xF130000001000001)
 	player := guid.GUID(1)
 	start := time.Date(2026, time.September, 8, 12, 0, 0, 0, time.UTC)

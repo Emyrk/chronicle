@@ -28,7 +28,7 @@ func TestVanillaEncounterFactoriesRejectPetEntries(t *testing.T) {
 	t.Parallel()
 
 	chars := characters.NewCharacters(
-		unitdb.New(),
+		unitdb.New(database.WoWFlavor{database.FlavorVanilla}),
 		nil,
 		identifier.NewIdentifier(map[uint32]identifier.Identity{}),
 	)
@@ -43,7 +43,7 @@ func TestNewObjectRequiresObjectGUID(t *testing.T) {
 	t.Parallel()
 
 	chars := characters.NewCharacters(
-		unitdb.New(),
+		unitdb.New(database.WoWFlavor{database.FlavorVanilla}),
 		nil,
 		identifier.NewIdentifier(map[uint32]identifier.Identity{}),
 	)

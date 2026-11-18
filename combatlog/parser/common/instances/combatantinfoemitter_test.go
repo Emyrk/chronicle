@@ -11,6 +11,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -20,7 +21,7 @@ func TestCombatantInfoEmitter_FightStarted(t *testing.T) {
 	t.Parallel()
 
 	playerGUID := mustGUID(t, "0x0000000000000001")
-	units := unitdb.New()
+	units := unitdb.New(database.WoWFlavor{})
 	tracker := armory.New(units)
 	tracker.Players[playerGUID] = combatant.Combatant{
 		Name: "TestPlayer",
@@ -67,7 +68,7 @@ func TestCombatantInfoEmitter_FightStartedUsesParseWidePlayerData(t *testing.T) 
 	t.Parallel()
 
 	playerGUID := mustGUID(t, "0x0000000000000001")
-	units := unitdb.New()
+	units := unitdb.New(database.WoWFlavor{})
 	units.UpdatePlayer(combatant.Combatant{
 		Name: "TestPlayer",
 		Guid: playerGUID,
@@ -114,7 +115,7 @@ func TestCombatantInfoEmitter_NoDataInArmory(t *testing.T) {
 	t.Parallel()
 
 	playerGUID := mustGUID(t, "0x0000000000000001")
-	units := unitdb.New()
+	units := unitdb.New(database.WoWFlavor{})
 	tracker := armory.New(units)
 	// Don't add any player data to the armory.
 

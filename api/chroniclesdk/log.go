@@ -323,32 +323,51 @@ type MissedSpell struct {
 
 // InstanceReport contains timing details for a single parsed instance.
 type InstanceReport struct {
+	Zone             string   `json:"zone,omitempty"`
 	Name             string   `json:"name"`
 	ParseDuration    Duration `json:"parse_duration_ms"`
 	FinalizeDuration Duration `json:"finalize_duration_ms"`
 	DBInsertDuration Duration `json:"db_insert_duration_ms"`
 	EncounterCount   int      `json:"encounter_count"`
-	// UnknownUnits maps creature entry IDs not in the hostiles map to name and hit count.
+	// UnknownUnits groups finalized uncategorized GUIDs by entry ID (zero when unavailable).
 	UnknownUnits map[uint32]UnknownUnit `json:"unknown_units,omitempty"`
 }
 
-// UnknownUnit represents a creature entry not found in the hostiles map.
+// UnknownUnit counts unique observed GUIDs within one finalized instance.
 type UnknownUnit struct {
-	Name  string `json:"name"`
-	Count int    `json:"count"`
+	Samples []string `json:"samples,omitempty"`
+	Name    string   `json:"name"`
+	Count   int      `json:"count"`
 }
 
-// IdentityReport contains all creatures and spells seen in a parsed log,
-// organized by zone. Used for programming raid encounter definitions.
+// IdentityReport contains finalized unit categories and spell diagnostics.
 type IdentityReport struct {
-	// ZonedUnits maps zone name → list of creatures seen in that zone.
+	// PossibleHostilesGoCode is a review-required candidate scaffold, not a hostile classification.
+	PossibleHostilesGoCode string `json:"possible_hostiles_go_code,omitempty"`
+	// Instances contains finalized observed units, including instances without retained encounters.
+	Instances []IdentityInstance `json:"instances,omitempty"`
+	// ZonedUnits is retained for reading legacy stored reports.
 	ZonedUnits map[string][]IdentityCreature `json:"zoned_units,omitempty"`
 	// ZoneSpells maps zone name → list of spells seen in that zone.
 	ZoneSpells map[string][]IdentitySpell `json:"zone_spells,omitempty"`
 	// UnitSpells maps creature entry ID → list of spell names that creature cast.
 	UnitSpells map[uint32][]string `json:"unit_spells,omitempty"`
-	// GoCode contains generated Go source code for instance definitions.
-	GoCode string `json:"go_code,omitempty"`
+}
+
+// IdentityInstance groups units by category and entry within one parser instance.
+type IdentityInstance struct {
+	Name  string         `json:"name"`
+	Zone  string         `json:"zone"`
+	Units []IdentityUnit `json:"units"`
+}
+
+type IdentityUnit struct {
+	Boss        bool     `json:"boss,omitempty"`
+	Category    string   `json:"category"`
+	EntryID     uint32   `json:"entry_id"`
+	Name        string   `json:"name"`
+	UniqueCount int      `json:"unique_count"`
+	Samples     []string `json:"samples"`
 }
 
 // IdentityCreature represents a creature seen during identity mode parsing.
@@ -378,9 +397,10 @@ type WoWSimpleParsedInstance struct {
 }
 
 type InstanceUnit struct {
-	Name  string     `json:"name,omitempty"`
-	Owner *guid.GUID `json:"owner,omitempty"`
-	Entry uint32     `json:"entry"`
+	Category string     `json:"category"`
+	Name     string     `json:"name,omitempty"`
+	Owner    *guid.GUID `json:"owner,omitempty"`
+	Entry    uint32     `json:"entry"`
 }
 
 type InstancePlayer struct {

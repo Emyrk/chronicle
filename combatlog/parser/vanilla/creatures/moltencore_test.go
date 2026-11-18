@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Emyrk/chronicle/database"
 	"github.com/stretchr/testify/require"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters"
@@ -26,7 +27,7 @@ const (
 func TestSonOfFlame_BumpsRagnarosDuringSubmerge(t *testing.T) {
 	t.Parallel()
 
-	chars := characters.NewCharacters(unitdb.New(), creatures.TurtleCharacterFactories(), identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+	chars := characters.NewCharacters(unitdb.New(database.WoWFlavor{database.FlavorVanilla}), creatures.TurtleCharacterFactories(), identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 
 	player := guid.GUID(0x1)
 	ragnaros := creatureGUID(ragnarosEntry, 0x1)
@@ -66,7 +67,7 @@ func TestSonOfFlame_BumpsRagnarosDuringSubmerge(t *testing.T) {
 func TestSonOfFlame_RepeatedBumpsKeepRagnarosAlive(t *testing.T) {
 	t.Parallel()
 
-	chars := characters.NewCharacters(unitdb.New(), creatures.TurtleCharacterFactories(), identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+	chars := characters.NewCharacters(unitdb.New(database.WoWFlavor{database.FlavorVanilla}), creatures.TurtleCharacterFactories(), identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 
 	player := guid.GUID(0x1)
 	ragnaros := creatureGUID(ragnarosEntry, 0x1)
@@ -102,7 +103,7 @@ func TestSonOfFlame_DoesNotStartOrResurrectRagnaros(t *testing.T) {
 
 	t.Run("ragnaros_absent", func(t *testing.T) {
 		t.Parallel()
-		chars := characters.NewCharacters(unitdb.New(), creatures.TurtleCharacterFactories(), identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+		chars := characters.NewCharacters(unitdb.New(database.WoWFlavor{database.FlavorVanilla}), creatures.TurtleCharacterFactories(), identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 
 		player := guid.GUID(0x1)
 		son := creatureGUID(sonOfFlame, 0x2)
@@ -120,7 +121,7 @@ func TestSonOfFlame_DoesNotStartOrResurrectRagnaros(t *testing.T) {
 
 	t.Run("ragnaros_timed_out", func(t *testing.T) {
 		t.Parallel()
-		chars := characters.NewCharacters(unitdb.New(), creatures.TurtleCharacterFactories(), identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+		chars := characters.NewCharacters(unitdb.New(database.WoWFlavor{database.FlavorVanilla}), creatures.TurtleCharacterFactories(), identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 
 		player := guid.GUID(0x1)
 		ragnaros := creatureGUID(ragnarosEntry, 0x1)
@@ -152,7 +153,7 @@ func TestSonOfFlame_DoesNotStartOrResurrectRagnaros(t *testing.T) {
 
 	t.Run("ragnaros_slain", func(t *testing.T) {
 		t.Parallel()
-		chars := characters.NewCharacters(unitdb.New(), creatures.TurtleCharacterFactories(), identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+		chars := characters.NewCharacters(unitdb.New(database.WoWFlavor{database.FlavorVanilla}), creatures.TurtleCharacterFactories(), identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 
 		player := guid.GUID(0x1)
 		ragnaros := creatureGUID(ragnarosEntry, 0x1)
@@ -182,7 +183,7 @@ func TestSonOfFlame_DoesNotStartOrResurrectRagnaros(t *testing.T) {
 func TestSonOfFlame_FactoryMatchesCorrectEntry(t *testing.T) {
 	t.Parallel()
 
-	chars := characters.NewCharacters(unitdb.New(), creatures.TurtleCharacterFactories(), identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+	chars := characters.NewCharacters(unitdb.New(database.WoWFlavor{database.FlavorVanilla}), creatures.TurtleCharacterFactories(), identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 
 	// Son of Flame should match.
 	sonID := creatureGUID(sonOfFlame, 0x1)
@@ -210,7 +211,7 @@ func TestSonOfFlame_FactoryMatchesCorrectEntry(t *testing.T) {
 func TestSonOfFlameTimeoutIsDeathWhileRagnarosAlive(t *testing.T) {
 	t.Parallel()
 
-	chars := characters.NewCharacters(unitdb.New(), creatures.TurtleCharacterFactories(), identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+	chars := characters.NewCharacters(unitdb.New(database.WoWFlavor{database.FlavorVanilla}), creatures.TurtleCharacterFactories(), identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 
 	player := guid.GUID(0x1)
 	ragnaros := creatureGUID(ragnarosEntry, 0x1)
@@ -237,7 +238,7 @@ func TestSonOfFlameTimeoutIsDeathWhileRagnarosAlive(t *testing.T) {
 func TestCoreRagerTimeoutIsDeathWhileGolemaggAlive(t *testing.T) {
 	t.Parallel()
 
-	chars := characters.NewCharacters(unitdb.New(), creatures.TurtleCharacterFactories(), identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+	chars := characters.NewCharacters(unitdb.New(database.WoWFlavor{database.FlavorVanilla}), creatures.TurtleCharacterFactories(), identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 
 	player := guid.GUID(0x1)
 	golemagg := creatureGUID(11988, 0x1)

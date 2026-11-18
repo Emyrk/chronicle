@@ -158,7 +158,13 @@ func (c *Characters) Add(id guid.GUID, now time.Time) (_ Character, newChar bool
 	char, exists := c.All.Get(id)
 	if !exists {
 		newChar = true
+		if c.db.Category(id, c.idf) == unitdb.CategoryCritter {
+			char = NewNeverActive(id)
+		}
 		for _, factory := range c.factories {
+			if char != nil {
+				break
+			}
 			if specialChar, ok := factory(id, c); ok {
 				char = specialChar
 				break

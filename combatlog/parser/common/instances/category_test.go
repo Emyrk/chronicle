@@ -29,7 +29,7 @@ func TestCommonFactoryCopiesCategoryToDynamicInstance(t *testing.T) {
 		},
 	}
 
-	instance := factory.New(context.Background(), slog.Default(), unitdb.New(), zone.Zone{}, database.WoWFlavor{})
+	instance := factory.New(context.Background(), slog.Default(), unitdb.New(database.WoWFlavor{}), zone.Zone{}, database.WoWFlavor{})
 	require.Equal(t, InstanceCategoryRaid, instance.Category)
 	require.Equal(t, "Zone-Derived Name", instance.Name())
 

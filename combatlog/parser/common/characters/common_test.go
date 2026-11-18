@@ -10,6 +10,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/stretchr/testify/require"
 )
 
@@ -18,7 +19,7 @@ import (
 func TestOwnerSlain_PermanentPetDies(t *testing.T) {
 	t.Parallel()
 
-	db := unitdb.New()
+	db := unitdb.New(database.WoWFlavor{})
 	chars := NewCharacters(db, nil, identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 
 	owner := guid.GUID(0x0000000000000001)
@@ -60,7 +61,7 @@ func TestOwnerSlain_PermanentPetDies(t *testing.T) {
 func TestOwnerSlain_PossessedUnitSurvives(t *testing.T) {
 	t.Parallel()
 
-	db := unitdb.New()
+	db := unitdb.New(database.WoWFlavor{})
 	chars := NewCharacters(db, nil, identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 
 	controller := guid.GUID(0x0000000000000001)
@@ -100,7 +101,7 @@ func TestOwnerSlain_PossessedUnitSurvives(t *testing.T) {
 func TestOwnerSlain_PossessedPetDiesWithPermanentOwner(t *testing.T) {
 	t.Parallel()
 
-	db := unitdb.New()
+	db := unitdb.New(database.WoWFlavor{})
 	chars := NewCharacters(db, nil, identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 
 	owner := guid.GUID(0x0000000000000001)
@@ -151,7 +152,7 @@ func TestTimeoutAsDeathIfEntryAlive(t *testing.T) {
 	trashID := entryGUID(0xF130000000000000, trashEntry)
 
 	chars := NewCharacters(
-		unitdb.New(),
+		unitdb.New(database.WoWFlavor{}),
 		[]CharacterFactory{
 			func(id guid.GUID, all *Characters) (Character, bool) {
 				switch id {
@@ -190,7 +191,7 @@ func TestTimeoutAsDeathIfEntryAliveRequiresActiveEntry(t *testing.T) {
 	trashID := entryGUID(0xF130000000000000, trashEntry)
 
 	chars := NewCharacters(
-		unitdb.New(),
+		unitdb.New(database.WoWFlavor{}),
 		[]CharacterFactory{
 			func(id guid.GUID, all *Characters) (Character, bool) {
 				switch id {

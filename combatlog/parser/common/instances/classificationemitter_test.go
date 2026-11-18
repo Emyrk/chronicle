@@ -11,6 +11,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -26,7 +27,7 @@ func mustGUID(t *testing.T, s string) guid.GUID {
 func TestClassificationEmitter_InjectsKnownHostileVehicleOnFirstSeen(t *testing.T) {
 	t.Parallel()
 
-	units := unitdb.New()
+	units := unitdb.New(database.WoWFlavor{})
 	const entry uint32 = 33293
 	idf := identifier.NewIdentifier(map[uint32]identifier.Identity{
 		entry: {
@@ -56,7 +57,7 @@ func TestClassificationEmitter_InjectsKnownHostileVehicleOnFirstSeen(t *testing.
 func TestClassificationEmitter_DoesNotInjectKnownHostileCreatureOnFirstSeen(t *testing.T) {
 	t.Parallel()
 
-	units := unitdb.New()
+	units := unitdb.New(database.WoWFlavor{})
 	const entry uint32 = 33293
 	idf := identifier.NewIdentifier(map[uint32]identifier.Identity{
 		entry: {
@@ -86,7 +87,7 @@ func TestClassificationEmitter_DoesNotInjectKnownHostileCreatureOnFirstSeen(t *t
 func TestClassificationEmitter_PossessionChange(t *testing.T) {
 	t.Parallel()
 
-	units := unitdb.New()
+	units := unitdb.New(database.WoWFlavor{})
 	playerGUID := mustGUID(t, "0x0000000000000001")
 	creatureGUID := mustGUID(t, "0x0030000000000002")
 
@@ -144,7 +145,7 @@ func TestClassificationEmitter_PossessionChange(t *testing.T) {
 func TestClassificationEmitter_EmitsRegardlessOfFightState(t *testing.T) {
 	t.Parallel()
 
-	units := unitdb.New()
+	units := unitdb.New(database.WoWFlavor{})
 	creatureGUID := mustGUID(t, "0x0030000000000002")
 	units.Update(unitinfo.Info{Guid: creatureGUID, CanCooperate: false})
 
@@ -175,7 +176,7 @@ func TestClassificationEmitter_EmitsRegardlessOfFightState(t *testing.T) {
 func TestClassificationEmitter_NewOwner(t *testing.T) {
 	t.Parallel()
 
-	units := unitdb.New()
+	units := unitdb.New(database.WoWFlavor{})
 	creatureGUID := mustGUID(t, "0x0030000000000002")
 	ownerGUID := mustGUID(t, "0x0000000000000001")
 	units.Update(unitinfo.Info{Guid: creatureGUID, CanCooperate: true})

@@ -27,7 +27,7 @@ func newUlduarTestInstance(t *testing.T) *commoninstances.Hookable {
 	return UlduarFactory.New(
 		ctx,
 		slog.Default(),
-		unitdb.New(),
+		unitdb.New(database.WoWFlavor{database.FlavorWrath}),
 		zone.Zone{Name: "Ulduar", MapID: 603},
 		database.WoWFlavor{database.FlavorWrath},
 	)

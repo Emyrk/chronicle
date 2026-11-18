@@ -7,7 +7,7 @@ describe("resolveInstanceUnits", () => {
       {
         "totem-1": { entry: 7424 },
         "totem-2": { entry: 7424 },
-        boss: { name: "Boss", entry: 123 },
+        boss: { name: "Boss", entry: 123, category: "ordinary" },
       },
       { 7424: "Fire Resistance Totem" },
       { player: ["totem-1", "totem-2"] },
@@ -16,7 +16,7 @@ describe("resolveInstanceUnits", () => {
     expect(units).toEqual({
       "totem-1": { name: "Fire Resistance Totem", entry: 7424, owner: "player" },
       "totem-2": { name: "Fire Resistance Totem", entry: 7424, owner: "player" },
-      boss: { name: "Boss", entry: 123 },
+      boss: { name: "Boss", entry: 123, category: "ordinary" },
     });
   });
 

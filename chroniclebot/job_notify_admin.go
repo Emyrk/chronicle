@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/Emyrk/chronicle/chronicle/riverqueue/riverconst"
 	"github.com/bwmarrin/discordgo"
@@ -26,12 +27,25 @@ type ArgsNotifyAdmin struct {
 	Title     string                   `json:"title"`
 	URL       string                   `json:"url"`
 	Fields    []AdminNotificationField `json:"fields"`
-	ChannelID string                   `json:"channel_id"`
+	ChannelID string                   `json:"channel_id" river:"unique"`
+	// UniqueKey opts into deduplication without including changing evidence in
+	// the identity. Existing callers without a key remain non-unique.
+	UniqueKey      string        `json:"unique_key,omitempty" river:"unique"`
+	DeduplicateFor time.Duration `json:"-"`
+	// MaxAttempts overrides the default only at insertion; River persists the limit.
+	MaxAttempts int `json:"-"`
 }
 
 func (ArgsNotifyAdmin) Kind() string { return KindNotifyAdmin }
-func (ArgsNotifyAdmin) InsertOpts() river.InsertOpts {
-	return river.InsertOpts{Queue: riverconst.QueueDiscordAnnouncements, MaxAttempts: 3}
+func (a ArgsNotifyAdmin) InsertOpts() river.InsertOpts {
+	opts := river.InsertOpts{Queue: riverconst.QueueDiscordAnnouncements, MaxAttempts: 3}
+	if a.MaxAttempts > 0 {
+		opts.MaxAttempts = a.MaxAttempts
+	}
+	if a.UniqueKey != "" {
+		opts.UniqueOpts = river.UniqueOpts{ByArgs: true, ByPeriod: a.DeduplicateFor}
+	}
+	return opts
 }
 
 // AdminNotificationInserter is the small River surface needed to enqueue alerts.

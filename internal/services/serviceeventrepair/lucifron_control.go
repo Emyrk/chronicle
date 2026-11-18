@@ -52,7 +52,7 @@ func validateLucifronControl(e razorgoreEvidence, c database.LogInstanceEncounte
 			return errors.New("ambiguous control event chronology")
 		}
 	}
-	units := unitdb.New()
+	units := unitdb.New(database.FlavorFromStrings(e.Group.Flavor))
 	matched := map[int32]bool{}
 	controllers := map[guid.GUID]bool{}
 	for _, cast := range casts {

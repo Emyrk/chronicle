@@ -100,6 +100,7 @@ func (t *SpeedrunTracker) ActivityChange(m messages.Message, chars ...characters
 			continue
 		}
 
+		// NeverActive characters (including critters) have no period to count.
 		p, ok := c.CurrentPeriod()
 		if !ok || p.EndState != period.EndStateSlain {
 			continue

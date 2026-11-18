@@ -19,7 +19,7 @@ import (
 
 func newKologarnTestCharacters() *characters.Characters {
 	return characters.NewCharacters(
-		unitdb.New(),
+		unitdb.New(database.WoWFlavor{database.FlavorVanilla, database.FlavorWrath}),
 		NewCharacterFactories(database.WoWFlavor{database.FlavorVanilla, database.FlavorWrath}),
 		identifier.NewIdentifier(map[uint32]identifier.Identity{}),
 	)

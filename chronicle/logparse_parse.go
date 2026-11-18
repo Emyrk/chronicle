@@ -109,7 +109,7 @@ func (w *WorkerLogParse) parseCombatLog(
 	// zones Chronicle does not know yet.
 	var encountersState *encounters.State
 	if logFormat == database.LogFormatAzerothcoreMod {
-		encountersState = azencounters.New(ctx, logLogger, reg)
+		encountersState = azencounters.New(ctx, logLogger, reg, reg.Flavor())
 	} else {
 		encountersState = encounters.New(ctx, logLogger, reg)
 	}
@@ -143,7 +143,7 @@ func (w *WorkerLogParse) parseCombatLog(
 	var creaturesState *creatures.Creatures
 	var c *consumers.Consumers
 	if identityMode {
-		creaturesState = creatures.New(logLogger)
+		creaturesState = creatures.New(logLogger, flavor)
 		c = consumers.New(logLogger, encountersState, creaturesState)
 	} else {
 		c = consumers.New(logLogger, encountersState)

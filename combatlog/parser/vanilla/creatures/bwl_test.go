@@ -51,7 +51,7 @@ func TestBroodlordEncounterExcludesWhelpsActiveBeforeEngagement(t *testing.T) {
 	h := instances.BlackwingLairFactory.New(
 		context.Background(),
 		slog.Default(),
-		unitdb.New(),
+		unitdb.New(database.WoWFlavor{database.FlavorVanilla}),
 		zone.Zone{Name: "blackwing lair"},
 		database.WoWFlavor{database.FlavorVanilla},
 	)
@@ -79,7 +79,7 @@ func TestBroodlordEncounterExcludesWhelpsActiveBeforeEngagement(t *testing.T) {
 func TestBroodlordEngagementEndsWhelpActivity(t *testing.T) {
 	t.Parallel()
 
-	chars := characters.NewCharacters(unitdb.New(),
+	chars := characters.NewCharacters(unitdb.New(database.WoWFlavor{database.FlavorVanilla}),
 		creatures.VanillaCharacterFactories(database.WoWFlavor{database.FlavorVanilla}),
 		identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 
@@ -109,7 +109,7 @@ func TestBroodlordEngagementEndsWhelpActivity(t *testing.T) {
 func TestBroodlordWhelpTimeoutIsDeathWhileBossAlive(t *testing.T) {
 	t.Parallel()
 
-	chars := characters.NewCharacters(unitdb.New(),
+	chars := characters.NewCharacters(unitdb.New(database.WoWFlavor{database.FlavorVanilla}),
 		creatures.VanillaCharacterFactories(database.WoWFlavor{database.FlavorVanilla}),
 		identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 
@@ -136,7 +136,7 @@ func TestBroodlordWhelpTimeoutIsDeathWhileBossAlive(t *testing.T) {
 func TestBroodlordDeathKillsActiveWhelps(t *testing.T) {
 	t.Parallel()
 
-	chars := characters.NewCharacters(unitdb.New(),
+	chars := characters.NewCharacters(unitdb.New(database.WoWFlavor{database.FlavorVanilla}),
 		creatures.VanillaCharacterFactories(database.WoWFlavor{database.FlavorVanilla}),
 		identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 
@@ -167,7 +167,7 @@ func TestRazorgoreEggs_VanillaPlus_KillsAddsAt30(t *testing.T) {
 	t.Parallel()
 
 	flavor := database.WoWFlavor{database.FlavorVanilla, database.FlavorVanillaPlus}
-	chars := characters.NewCharacters(unitdb.New(),
+	chars := characters.NewCharacters(unitdb.New(database.WoWFlavor{database.FlavorVanilla}),
 		creatures.VanillaCharacterFactories(flavor),
 		identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 
@@ -217,7 +217,7 @@ func TestRazorgoreEggs_NightmareOfUrsol_KillsAddsAt20(t *testing.T) {
 	t.Parallel()
 
 	flavor := database.WoWFlavor{database.FlavorVanilla, database.FlavorNightmareOfUrsol}
-	chars := characters.NewCharacters(unitdb.New(),
+	chars := characters.NewCharacters(unitdb.New(database.WoWFlavor{database.FlavorVanilla}),
 		creatures.VanillaCharacterFactories(flavor),
 		identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 
@@ -268,7 +268,7 @@ func TestRazorAdCharacter_NightmareOfUrsolTimeoutsAsDeath(t *testing.T) {
 	t.Parallel()
 
 	flavor := database.WoWFlavor{database.FlavorVanilla, database.FlavorNightmareOfUrsol}
-	chars := characters.NewCharacters(unitdb.New(),
+	chars := characters.NewCharacters(unitdb.New(database.WoWFlavor{database.FlavorVanilla}),
 		creatures.VanillaCharacterFactories(flavor),
 		identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 
@@ -307,7 +307,7 @@ func TestRazorgoreRankingsPhaseTwoOnly(t *testing.T) {
 			add := creatureGUID(blackwingLegionnaire, 2)
 			flavor := database.WoWFlavor{database.FlavorVanilla, tc.flavor}
 			ctx := parsectx.With(context.Background(), parsectx.Context{Flavor: flavor})
-			units := unitdb.New()
+			units := unitdb.New(database.WoWFlavor{database.FlavorVanilla})
 			units.Info[player] = unitinfo.Info{Guid: player, Name: "Hunter", IsPlayer: true, CanCooperate: true}
 			units.Info[razor] = unitinfo.Info{Guid: razor, Name: "Razorgore the Untamed", Boss: true}
 			units.Info[add] = unitinfo.Info{Guid: add, Name: "Blackwing Legionnaire"}
@@ -371,7 +371,7 @@ func TestRazorgoreDeathRequiresDestroyedEggs(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			chars := characters.NewCharacters(unitdb.New(),
+			chars := characters.NewCharacters(unitdb.New(database.WoWFlavor{database.FlavorVanilla, tc.flavor}),
 				creatures.VanillaCharacterFactories(database.WoWFlavor{database.FlavorVanilla, tc.flavor}),
 				identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 			base := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
@@ -395,7 +395,7 @@ func TestRazorgoreDeathRequiresDestroyedEggs(t *testing.T) {
 
 func TestRazorgoreEggsResetAfterPhaseTwoTimeout(t *testing.T) {
 	t.Parallel()
-	chars := characters.NewCharacters(unitdb.New(),
+	chars := characters.NewCharacters(unitdb.New(database.WoWFlavor{database.FlavorVanilla, database.FlavorNightmareOfUrsol}),
 		creatures.VanillaCharacterFactories(database.WoWFlavor{database.FlavorVanilla, database.FlavorNightmareOfUrsol}),
 		identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 	base := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
@@ -419,7 +419,7 @@ func TestRazorgorePhaseOneAddActivityKeepsBossActive(t *testing.T) {
 	t.Parallel()
 
 	flavor := database.WoWFlavor{database.FlavorVanilla, database.FlavorVanillaPlus}
-	chars := characters.NewCharacters(unitdb.New(),
+	chars := characters.NewCharacters(unitdb.New(database.WoWFlavor{database.FlavorVanilla}),
 		creatures.VanillaCharacterFactories(flavor),
 		identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 
@@ -461,7 +461,7 @@ func TestRazorgoreEggs_UnsupportedFlavor_NoKill(t *testing.T) {
 	t.Parallel()
 
 	flavor := database.WoWFlavor{database.FlavorVanilla}
-	chars := characters.NewCharacters(unitdb.New(),
+	chars := characters.NewCharacters(unitdb.New(database.WoWFlavor{database.FlavorVanilla}),
 		creatures.VanillaCharacterFactories(flavor),
 		identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 
@@ -502,7 +502,7 @@ func TestRazorgoreEggs_CountResetsOnBossReset(t *testing.T) {
 	t.Parallel()
 
 	flavor := database.WoWFlavor{database.FlavorVanilla, database.FlavorVanillaPlus}
-	chars := characters.NewCharacters(unitdb.New(),
+	chars := characters.NewCharacters(unitdb.New(database.WoWFlavor{database.FlavorVanilla}),
 		creatures.VanillaCharacterFactories(flavor),
 		identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 
@@ -564,7 +564,7 @@ func TestRazorgorePhaseTransition_EmitsOnThreshold(t *testing.T) {
 	t.Parallel()
 
 	flavor := database.WoWFlavor{database.FlavorVanilla, database.FlavorNightmareOfUrsol}
-	chars := characters.NewCharacters(unitdb.New(),
+	chars := characters.NewCharacters(unitdb.New(database.WoWFlavor{database.FlavorVanilla}),
 		creatures.VanillaCharacterFactories(flavor),
 		identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 
@@ -615,7 +615,7 @@ func TestRazorgorePhaseTransition_ResetsOnBossReset(t *testing.T) {
 	t.Parallel()
 
 	flavor := database.WoWFlavor{database.FlavorVanilla, database.FlavorVanillaPlus}
-	chars := characters.NewCharacters(unitdb.New(),
+	chars := characters.NewCharacters(unitdb.New(database.WoWFlavor{database.FlavorVanilla}),
 		creatures.VanillaCharacterFactories(flavor),
 		identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 
@@ -659,7 +659,7 @@ func TestRazorgorePhaseDefinitions_PhaseProvider(t *testing.T) {
 	t.Parallel()
 
 	flavor := database.WoWFlavor{database.FlavorVanilla, database.FlavorNightmareOfUrsol}
-	chars := characters.NewCharacters(unitdb.New(),
+	chars := characters.NewCharacters(unitdb.New(database.WoWFlavor{database.FlavorVanilla}),
 		creatures.VanillaCharacterFactories(flavor),
 		identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 
@@ -691,7 +691,7 @@ func TestRazorgorePhaseDefinitions_UnsupportedFlavor(t *testing.T) {
 	t.Parallel()
 
 	flavor := database.WoWFlavor{database.FlavorVanilla}
-	chars := characters.NewCharacters(unitdb.New(),
+	chars := characters.NewCharacters(unitdb.New(database.WoWFlavor{database.FlavorVanilla}),
 		creatures.VanillaCharacterFactories(flavor),
 		identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 
@@ -714,7 +714,7 @@ func TestRazorgorePhaseDefinitions_UnsupportedFlavor(t *testing.T) {
 func TestNefarianPhaseTransition_EmitsOnFirstDamage(t *testing.T) {
 	t.Parallel()
 
-	chars := characters.NewCharacters(unitdb.New(),
+	chars := characters.NewCharacters(unitdb.New(database.WoWFlavor{database.FlavorVanilla}),
 		creatures.VanillaCharacterFactories(database.WoWFlavor{database.FlavorVanilla}),
 		identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 
@@ -754,7 +754,7 @@ func TestNefarianPhaseTransition_EmitsOnFirstDamage(t *testing.T) {
 func TestNefarianPhaseTransition_ResetsWithEncounter(t *testing.T) {
 	t.Parallel()
 
-	chars := characters.NewCharacters(unitdb.New(),
+	chars := characters.NewCharacters(unitdb.New(database.WoWFlavor{database.FlavorVanilla}),
 		creatures.VanillaCharacterFactories(database.WoWFlavor{database.FlavorVanilla}),
 		identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 
@@ -780,7 +780,7 @@ func TestNefarianPhaseTransition_ResetsWithEncounter(t *testing.T) {
 func TestNefarianPhaseTransition_ResetsAfterInactivityWipe(t *testing.T) {
 	t.Parallel()
 
-	chars := characters.NewCharacters(unitdb.New(),
+	chars := characters.NewCharacters(unitdb.New(database.WoWFlavor{database.FlavorVanilla}),
 		creatures.VanillaCharacterFactories(database.WoWFlavor{database.FlavorVanilla}),
 		identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 
@@ -807,7 +807,7 @@ func TestNefarianPhaseTransition_ResetsAfterInactivityWipe(t *testing.T) {
 func TestNefarianPhaseDefinitions_PhaseProvider(t *testing.T) {
 	t.Parallel()
 
-	chars := characters.NewCharacters(unitdb.New(),
+	chars := characters.NewCharacters(unitdb.New(database.WoWFlavor{database.FlavorVanilla}),
 		creatures.VanillaCharacterFactories(database.WoWFlavor{database.FlavorVanilla}),
 		identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 

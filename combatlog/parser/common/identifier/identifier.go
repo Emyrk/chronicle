@@ -1,10 +1,8 @@
 package identifier
 
 import (
-	"github.com/Emyrk/chronicle/combatlog/parser/common/critters"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounter"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/totems"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/warlockdemon"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 )
@@ -20,6 +18,9 @@ type EncounterFuncResult struct {
 
 type Identity struct {
 	Affiliation types.Affiliation
+	// Category optionally overrides the ordinary category of a known zone entry.
+	// Boss remains an independent encounter role, not a semantic category.
+	Category unitdb.Category
 	// Name is the display name for this unit (e.g. "Lava Surger", "Ragnaros").
 	Name string
 	// EncounterName, if set, will be used to identify a named encounter.
@@ -38,14 +39,12 @@ func (id Identity) CanBattle() bool {
 }
 
 type Identifier struct {
-	byEntryId    map[uint32]Identity
-	unknownUnits map[uint32]int // unclassified creature entry IDs, with hit count
+	byEntryId map[uint32]Identity
 }
 
 func NewIdentifier(byEntryId map[uint32]Identity) *Identifier {
 	return &Identifier{
-		byEntryId:    byEntryId,
-		unknownUnits: make(map[uint32]int),
+		byEntryId: byEntryId,
 	}
 }
 
@@ -70,23 +69,32 @@ func (i *Identifier) IdentifyUnit(id guid.GUID) Identity {
 
 	identity, exists := i.byEntryId[entryID]
 	if !exists {
-		_, isTotem := totems.IsTotem(id)
-		_, isWarlockDemon := warlockdemon.IsWarlockDemon(id)
-		if !critters.IsCritter(id) && !isTotem && !isWarlockDemon {
-			i.unknownUnits[entryID]++
-		}
 		return Identity{Affiliation: types.AffiliationUnknown}
 	}
 	return identity
 }
 
-// UnknownUnits returns unclassified creature entry IDs that were looked up but not
-// found in the hostiles map, with the number of times each was seen.
-func (i *Identifier) UnknownUnits() map[uint32]int {
-	return i.unknownUnits
-}
-
 // HostileEntries returns the raw creature entry → Identity map.
 func (i *Identifier) HostileEntries() map[uint32]Identity {
 	return i.byEntryId
+}
+
+// UnitCategory resolves only explicitly registered zone entries. It has no
+// lookup-count side effects; unknown reporting uses observed instance membership.
+func (i *Identifier) UnitCategory(id guid.GUID) unitdb.Category {
+	if i == nil || id.IsZero() || id.IsPlayer() || id.IsPet() {
+		return unitdb.CategoryUnknown
+	}
+	entry, ok := id.GetEntry()
+	if !ok {
+		return unitdb.CategoryUnknown
+	}
+	identity, exists := i.byEntryId[entry]
+	if !exists {
+		return unitdb.CategoryUnknown
+	}
+	if identity.Category != "" {
+		return identity.Category
+	}
+	return unitdb.CategoryOrdinary
 }

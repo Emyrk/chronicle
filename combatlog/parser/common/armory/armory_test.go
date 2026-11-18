@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Emyrk/chronicle/database"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -86,7 +87,7 @@ func TestPersistedPlayerLevel(t *testing.T) {
 	unitLevel := int32(79)
 	combatantLevel := int32(80)
 
-	units := unitdb.New()
+	units := unitdb.New(database.WoWFlavor{})
 	units.Update(unitinfo.Info{Guid: playerID, Level: unitLevel})
 
 	assert.Equal(t, int16(80), persistedPlayerLevel(combatant.Combatant{
@@ -107,7 +108,7 @@ func TestUnitRespecAuraInvalidatesOnlyFirstObservation(t *testing.T) {
 	player, err := guid.FromString("0x0000000000000001")
 	require.NoError(t, err)
 
-	units := unitdb.New()
+	units := unitdb.New(database.WoWFlavor{})
 	tracker := New(units)
 	initial := combatant.Combatant{
 		Name: "Mage",
@@ -162,7 +163,7 @@ func TestUnitRespecAuraExpiryAllowsSameBuildRepair(t *testing.T) {
 	player, err := guid.FromString("0x0000000000000001")
 	require.NoError(t, err)
 
-	units := unitdb.New()
+	units := unitdb.New(database.WoWFlavor{})
 	tracker := New(units)
 	initial := combatant.Combatant{
 		Name: "Hunter",
@@ -219,7 +220,7 @@ func TestRespecAuraExpiryAllowsSameBuildRepair(t *testing.T) {
 	player, err := guid.FromString("0x0000000000000001")
 	require.NoError(t, err)
 
-	units := unitdb.New()
+	units := unitdb.New(database.WoWFlavor{})
 	tracker := New(units)
 	initial := combatant.Combatant{
 		Name: "Hunter",
@@ -273,7 +274,7 @@ func TestRespecInvalidatesRankingTalentsUntilFreshUpdate(t *testing.T) {
 	player, err := guid.FromString("0x0000000000000001")
 	require.NoError(t, err)
 
-	units := unitdb.New()
+	units := unitdb.New(database.WoWFlavor{})
 	tracker := New(units)
 	initial := combatant.Combatant{
 		Name: "Mage",

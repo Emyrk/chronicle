@@ -65,7 +65,7 @@ func TestCommonFactoryInjectsSingleKnownMapID(t *testing.T) {
 		},
 	}
 
-	instance := factory.New(context.Background(), slog.Default(), unitdb.New(), zone.Zone{Name: "emerald sanctum"}, database.WoWFlavor{})
+	instance := factory.New(context.Background(), slog.Default(), unitdb.New(database.WoWFlavor{}), zone.Zone{Name: "emerald sanctum"}, database.WoWFlavor{})
 	require.Equal(t, uint32(807), instance.CurrentZone.MapID)
 	require.Equal(t, uint32(807), instance.activeMapID)
 }
@@ -81,7 +81,7 @@ func TestCommonFactoryDoesNotInjectAmbiguousMapID(t *testing.T) {
 		},
 	}
 
-	instance := factory.New(context.Background(), slog.Default(), unitdb.New(), zone.Zone{Name: "multi-map raid"}, database.WoWFlavor{})
+	instance := factory.New(context.Background(), slog.Default(), unitdb.New(database.WoWFlavor{}), zone.Zone{Name: "multi-map raid"}, database.WoWFlavor{})
 	require.Zero(t, instance.CurrentZone.MapID)
 	require.Zero(t, instance.activeMapID)
 }

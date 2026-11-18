@@ -1,10 +1,13 @@
 import type { InstanceUnit } from "@/api/typesGenerated";
 
-type WireInstanceUnit = Omit<InstanceUnit, "owner"> & {
+type WireInstanceUnit = Omit<InstanceUnit, "owner" | "category"> & {
+  category?: string;
   owner?: InstanceUnit["owner"] | string;
 };
 
-export type ResolvedInstanceUnit = Omit<InstanceUnit, "name" | "owner"> & {
+export type ResolvedInstanceUnit = Omit<InstanceUnit, "name" | "owner" | "category"> & {
+  /** Older cached data and local fixtures may not carry a category. */
+  category?: string;
   name: string;
   owner?: string;
   /** Fixture-only expiry for static objects (e.g. an egg that hatches). */

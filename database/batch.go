@@ -1752,9 +1752,9 @@ func (b *InsertInstancePlayersBatchResults) Close() error {
 
 const insertInstanceUnits = `-- name: InsertInstanceUnits :batchexec
 INSERT INTO
-  log_instance_units (instance_id, unit_guid, name, entry, owner_guid)
+  log_instance_units (instance_id, unit_guid, name, entry, owner_guid, category)
 VALUES
-  ($1, $2, $3, $4, $5)
+  ($1, $2, $3, $4, $5, $6)
 `
 
 type InsertInstanceUnitsBatchResults struct {
@@ -1769,6 +1769,7 @@ type InsertInstanceUnitsParams struct {
 	Name       string     `db:"name" json:"name"`
 	Entry      int32      `db:"entry" json:"entry"`
 	OwnerGuid  *guid.GUID `db:"owner_guid" json:"owner_guid"`
+	Category   string     `db:"category" json:"category"`
 }
 
 func (q *sqlQuerier) InsertInstanceUnits(ctx context.Context, arg []InsertInstanceUnitsParams) *InsertInstanceUnitsBatchResults {
@@ -1780,6 +1781,7 @@ func (q *sqlQuerier) InsertInstanceUnits(ctx context.Context, arg []InsertInstan
 			a.Name,
 			a.Entry,
 			a.OwnerGuid,
+			a.Category,
 		}
 		batch.Queue(insertInstanceUnits, vals...)
 	}

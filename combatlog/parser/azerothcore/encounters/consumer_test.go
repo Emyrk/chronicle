@@ -27,7 +27,7 @@ func TestServerSideKnownInstanceUsesRegistryRankings(t *testing.T) {
 		Flavor: flavor,
 	})
 	logger := slog.Default()
-	state := New(ctx, logger, registry.RegistryForFlavor(logger, flavor))
+	state := New(ctx, logger, registry.RegistryForFlavor(logger, flavor), flavor)
 
 	state.Zone(messages.Zone{Zone: zone.Zone{
 		Name:       "Molten Core",
@@ -56,7 +56,7 @@ func TestServerSideUnknownInstanceFallsBackToGeneric(t *testing.T) {
 		Flavor: flavor,
 	})
 	logger := slog.Default()
-	state := New(ctx, logger, registry.RegistryForFlavor(logger, flavor))
+	state := New(ctx, logger, registry.RegistryForFlavor(logger, flavor), flavor)
 
 	state.Zone(messages.Zone{Zone: zone.Zone{
 		Name:       "Unknown OctoWoW Instance",

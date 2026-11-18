@@ -2831,12 +2831,29 @@ export interface IdentityCreature {
 
 // From chroniclesdk/log.go
 /**
- * IdentityReport contains all creatures and spells seen in a parsed log,
- * organized by zone. Used for programming raid encounter definitions.
+ * IdentityInstance groups units by category and entry within one parser instance.
+ */
+export interface IdentityInstance {
+    readonly name: string;
+    readonly zone: string;
+    readonly units: readonly IdentityUnit[];
+}
+
+// From chroniclesdk/log.go
+/**
+ * IdentityReport contains finalized unit categories and spell diagnostics.
  */
 export interface IdentityReport {
     /**
-     * ZonedUnits maps zone name → list of creatures seen in that zone.
+     * PossibleHostilesGoCode is a review-required candidate scaffold, not a hostile classification.
+     */
+    readonly possible_hostiles_go_code?: string;
+    /**
+     * Instances contains finalized observed units, including instances without retained encounters.
+     */
+    readonly instances?: readonly IdentityInstance[];
+    /**
+     * ZonedUnits is retained for reading legacy stored reports.
      */
     readonly zoned_units?: Record<string, IdentityCreature[]>;
     /**
@@ -2847,10 +2864,6 @@ export interface IdentityReport {
      * UnitSpells maps creature entry ID → list of spell names that creature cast.
      */
     readonly unit_spells?: Record<number, string[]>;
-    /**
-     * GoCode contains generated Go source code for instance definitions.
-     */
-    readonly go_code?: string;
 }
 
 // From chroniclesdk/log.go
@@ -2860,6 +2873,16 @@ export interface IdentityReport {
 export interface IdentitySpell {
     readonly spell_id: number;
     readonly count: number;
+}
+
+// From chroniclesdk/log.go
+export interface IdentityUnit {
+    readonly boss?: boolean;
+    readonly category: string;
+    readonly entry_id: number;
+    readonly name: string;
+    readonly unique_count: number;
+    readonly samples: readonly string[];
 }
 
 // From chroniclesdk/inference.go
@@ -3410,13 +3433,14 @@ export interface InstanceRatingPlayerRenownFact {
  * InstanceReport contains timing details for a single parsed instance.
  */
 export interface InstanceReport {
+    readonly zone?: string;
     readonly name: string;
     readonly parse_duration_ms: Duration;
     readonly finalize_duration_ms: Duration;
     readonly db_insert_duration_ms: Duration;
     readonly encounter_count: number;
     /**
-     * UnknownUnits maps creature entry IDs not in the hostiles map to name and hit count.
+     * UnknownUnits groups finalized uncategorized GUIDs by entry ID (zero when unavailable).
      */
     readonly unknown_units?: Record<number, UnknownUnit>;
 }
@@ -3912,6 +3936,7 @@ export interface InstanceTimeParsesResponse {
 
 // From chroniclesdk/log.go
 export interface InstanceUnit {
+    readonly category: string;
     readonly name?: string;
     readonly owner?: GUID;
     readonly entry: number;
@@ -7188,9 +7213,10 @@ export interface UIUsageRequest {
 
 // From chroniclesdk/log.go
 /**
- * UnknownUnit represents a creature entry not found in the hostiles map.
+ * UnknownUnit counts unique observed GUIDs within one finalized instance.
  */
 export interface UnknownUnit {
+    readonly samples?: readonly string[];
     readonly name: string;
     readonly count: number;
 }

@@ -64,7 +64,7 @@ func TestLucifronPlayerControlMatchesParserDamageSemantics(t *testing.T) {
 	// Independent production-tracker replay demonstrates the non-obvious rule:
 	// hostile controlled players still own their outgoing damage; damage INTO a
 	// controlled player never counts. At the exact expiry instant control is live.
-	units := unitdb.New()
+	units := unitdb.New(database.FlavorFromStrings(e.Group.Flavor))
 	for _, text := range []string{lucifronTestBoss, lucifronTestProtector, lucifronTestHound} {
 		g, err := guid.FromString(text)
 		require.NoError(t, err)

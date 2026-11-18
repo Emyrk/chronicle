@@ -112,7 +112,7 @@ func (s *Service) Start(ctx context.Context) error {
 	})
 
 	riverqueue.AddWorker(q, &serviceeventrepair.Worker{Service: serviceeventrepair.New(servicedbstore.DatabaseStore(s.broker), q)})
-	riverqueue.AddWorker(q, chron.NewWorkerLogParse())
+	riverqueue.AddWorker(q, chron.NewWorkerLogParse(bot))
 	riverqueue.AddWorker(q, chron.NewWorkerReLogParse())
 	riverqueue.AddWorker(q, chron.NewWorkerRegressionSnapshot())
 	var leaveDiscordGuild func(string) error

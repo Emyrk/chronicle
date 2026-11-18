@@ -9,6 +9,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/stretchr/testify/require"
 )
 
@@ -16,7 +17,7 @@ func TestKingAllowsExtendedChessPieceActivityGap(t *testing.T) {
 	t.Parallel()
 
 	all := characters.NewCharacters(
-		unitdb.New(),
+		unitdb.New(database.WoWFlavor{database.FlavorVanilla}),
 		nil,
 		identifier.NewIdentifier(map[uint32]identifier.Identity{}),
 	)

@@ -27,7 +27,7 @@ func TestZoneInstanceMetadataUpgradeCreatesInstance(t *testing.T) {
 
 	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	state := NewWithInstanceResolver(ctx, logger, func(_ bool, firstZone zone.Zone, db *unitdb.Units) *instances.Hookable {
+	state := NewWithInstanceResolver(ctx, logger, database.WoWFlavor{}, func(_ bool, firstZone zone.Zone, db *unitdb.Units) *instances.Hookable {
 		if firstZone.Name != "木喉要塞" || !firstZone.IsInstance || firstZone.InstanceType != "raid" {
 			return nil
 		}
@@ -63,7 +63,7 @@ func TestSyntheticZoneAdoptsLateCompanionDifficulty(t *testing.T) {
 
 	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	state := NewWithInstanceResolver(ctx, logger, func(_ bool, firstZone zone.Zone, db *unitdb.Units) *instances.Hookable {
+	state := NewWithInstanceResolver(ctx, logger, database.WoWFlavor{}, func(_ bool, firstZone zone.Zone, db *unitdb.Units) *instances.Hookable {
 		if firstZone.Name != "ulduar" {
 			return nil
 		}
@@ -112,7 +112,7 @@ func TestLocalizedZoneMetadataPreservesSyntheticInstance(t *testing.T) {
 
 	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	state := NewWithInstanceResolver(ctx, logger, func(_ bool, firstZone zone.Zone, db *unitdb.Units) *instances.Hookable {
+	state := NewWithInstanceResolver(ctx, logger, database.WoWFlavor{}, func(_ bool, firstZone zone.Zone, db *unitdb.Units) *instances.Hookable {
 		if firstZone.Name != "icecrown citadel" {
 			return nil
 		}
@@ -191,7 +191,7 @@ func TestZoneReentryDoesNotReuseDifferentDifficulty(t *testing.T) {
 
 	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	state := NewWithInstanceResolver(ctx, logger, func(_ bool, firstZone zone.Zone, db *unitdb.Units) *instances.Hookable {
+	state := NewWithInstanceResolver(ctx, logger, database.WoWFlavor{}, func(_ bool, firstZone zone.Zone, db *unitdb.Units) *instances.Hookable {
 		if firstZone.Name != "naxxramas" {
 			return nil
 		}
@@ -237,7 +237,7 @@ func TestIncompleteRaidReentryStartsNewInstanceAfterDefaultGap(t *testing.T) {
 
 	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	state := NewWithInstanceResolver(ctx, logger, func(_ bool, firstZone zone.Zone, db *unitdb.Units) *instances.Hookable {
+	state := NewWithInstanceResolver(ctx, logger, database.WoWFlavor{}, func(_ bool, firstZone zone.Zone, db *unitdb.Units) *instances.Hookable {
 		return instances.NewHookable(ctx, logger, db, firstZone, instances.InstanceParams{
 			Name:        "Naxxramas",
 			MatchesZone: func(z zone.Zone) bool { return z.Name == "naxxramas" },
@@ -281,7 +281,7 @@ func TestEncounterUsesSingleKnownMapWhenZoneOmitsIt(t *testing.T) {
 			return identifier.NewIdentifier(hostiles)
 		},
 	}
-	state := NewWithInstanceResolver(ctx, logger, func(_ bool, z zone.Zone, db *unitdb.Units) *instances.Hookable {
+	state := NewWithInstanceResolver(ctx, logger, database.WoWFlavor{}, func(_ bool, z zone.Zone, db *unitdb.Units) *instances.Hookable {
 		if !factory.MatchZone(z) {
 			return nil
 		}
@@ -330,7 +330,7 @@ func TestEncountersRetainMapAtFightStart(t *testing.T) {
 			return identifier.NewIdentifier(hostiles)
 		},
 	}
-	state := NewWithInstanceResolver(ctx, logger, func(_ bool, z zone.Zone, db *unitdb.Units) *instances.Hookable {
+	state := NewWithInstanceResolver(ctx, logger, database.WoWFlavor{}, func(_ bool, z zone.Zone, db *unitdb.Units) *instances.Hookable {
 		if !factory.MatchZone(z) {
 			return nil
 		}
@@ -394,7 +394,7 @@ func TestDerivedInstanceFightStartsNewInstance(t *testing.T) {
 			return identifier.NewIdentifier(hostiles)
 		},
 	}
-	state := NewWithInstanceResolver(ctx, logger, func(_ bool, z zone.Zone, db *unitdb.Units) *instances.Hookable {
+	state := NewWithInstanceResolver(ctx, logger, database.WoWFlavor{}, func(_ bool, z zone.Zone, db *unitdb.Units) *instances.Hookable {
 		if !factory.MatchZone(z) {
 			return nil
 		}
@@ -441,7 +441,7 @@ func TestVersionsApplyAcrossLogInstances(t *testing.T) {
 
 	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	state := NewWithInstanceResolver(ctx, logger, func(_ bool, firstZone zone.Zone, db *unitdb.Units) *instances.Hookable {
+	state := NewWithInstanceResolver(ctx, logger, database.WoWFlavor{}, func(_ bool, firstZone zone.Zone, db *unitdb.Units) *instances.Hookable {
 		return instances.NewHookable(ctx, logger, db, firstZone, instances.InstanceParams{
 			Name: firstZone.Name,
 			MatchesZone: func(z zone.Zone) bool {
@@ -486,7 +486,7 @@ func TestRaidGroupTrackerAttachedToNewInstance(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	hostiles := make(map[uint32]instances.Identity)
 	instances.LoadBosses(hostiles, map[uint32]string{bossEntry: "Raid Group Test Boss"})
-	state := NewWithInstanceResolver(ctx, logger, func(_ bool, firstZone zone.Zone, db *unitdb.Units) *instances.Hookable {
+	state := NewWithInstanceResolver(ctx, logger, database.WoWFlavor{}, func(_ bool, firstZone zone.Zone, db *unitdb.Units) *instances.Hookable {
 		return instances.NewHookable(ctx, logger, db, firstZone, instances.InstanceParams{
 			Name:        firstZone.Name,
 			MatchesZone: func(z zone.Zone) bool { return z.Name == firstZone.Name },
@@ -557,7 +557,7 @@ func TestSameSizeModeChangesDoNotSplitInstance(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	state := NewWithInstanceResolver(ctx, logger, func(_ bool, z zone.Zone, db *unitdb.Units) *instances.Hookable {
+	state := NewWithInstanceResolver(ctx, logger, database.WoWFlavor{}, func(_ bool, z zone.Zone, db *unitdb.Units) *instances.Hookable {
 		return instances.NewHookable(ctx, logger, db, z, instances.InstanceParams{Name: "Icecrown Citadel", MatchesZone: func(other zone.Zone) bool { return other.Name == z.Name }, Idf: identifier.NewIdentifier(map[uint32]instances.Identity{})})
 	})
 	z := zone.Zone{Name: "icecrown citadel", InstanceType: "raid", IsInstance: true, MaxPlayers: 25, DifficultyIndex: 2, DifficultyName: "25 Player"}
@@ -581,4 +581,34 @@ func TestSameSizeModeChangesDoNotSplitInstance(t *testing.T) {
 	state.Zone(messages.Zone{Zone: z})
 	require.Len(t, state.Instances, 2)
 	require.NotSame(t, first, state.CurrentInstance)
+}
+
+func TestInstanceCatalogueIncludesMetadataOnlyAndOutOfCombatMessages(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	state := NewWithInstanceResolver(ctx, logger, database.WoWFlavor{}, func(_ bool, z zone.Zone, db *unitdb.Units) *instances.Hookable {
+		return instances.NewHookable(ctx, logger, db, z, instances.InstanceParams{Name: z.Name, MatchesZone: func(other zone.Zone) bool { return other.Name == z.Name }, Idf: identifier.NewIdentifier(map[uint32]instances.Identity{})})
+	})
+	at := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+	state.Zone(messages.Zone{Zone: zone.Zone{Name: "first", Seen: at}})
+	first := state.CurrentInstance
+	vehicle := guid.GUID(0xF150000123000001)
+	controller, member := guid.GUID(1), guid.GUID(2)
+	group := &messages.RaidGroup{MessageBase: messages.Base(at)}
+	group.Groups[0][0] = member
+	require.NoError(t, state.Process(group))
+	require.NoError(t, state.Process(&messages.VehicleControl{MessageBase: messages.Base(at), VehicleGUID: vehicle, ControllerGUID: controller}))
+	require.NoError(t, state.Process(&messages.UnitTarget{MessageBase: messages.Base(at), Unit: controller, Target: &vehicle}))
+	state.Zone(messages.Zone{Zone: zone.Zone{Name: "second", Seen: at.Add(time.Minute)}})
+	second := state.CurrentInstance
+	other := guid.GUID(0xF130000555000001)
+	require.NoError(t, state.Process(&messages.UnitTarget{MessageBase: messages.Base(at.Add(time.Minute)), Unit: other}))
+	result, err := first.Finalize(ctx)
+	require.NoError(t, err)
+	require.Empty(t, result.Encounters)
+	require.ElementsMatch(t, []guid.GUID{vehicle, controller, member}, result.PersistedUnits)
+	secondResult, err := second.Finalize(ctx)
+	require.NoError(t, err)
+	require.Equal(t, []guid.GUID{other}, secondResult.PersistedUnits)
 }

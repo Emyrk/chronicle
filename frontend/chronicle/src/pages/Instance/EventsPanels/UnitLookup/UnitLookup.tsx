@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- Panel factory and colocated view components intentionally share this module. */
 /**
  * Unit Lookup panel – displays all known units, merging static instance
  * data with temporal unit_classification events.
@@ -7,6 +8,8 @@ import { useState } from "react";
 import { Search } from "lucide-react";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import { unitLookupProcessor, type UnitLookupResult, type UnitEntry } from "./unitLookup.processor";
+
+type DisplayUnitEntry = UnitEntry & { category: string };
 
 const UNIT_TYPE_LABELS: Record<number, string> = {
   0: "Unknown",
@@ -46,12 +49,13 @@ function UnitLookupContent({ result, context }: PanelRenderProps<UnitLookupResul
   // No useMemo — processEvent mutates the classifications Map in-place and
   // shallowClone only creates a new top-level result object, so the Map ref
   // is stable across ticks. Computing on every render is cheap (small collections).
-  const map = new Map<string, UnitEntry>();
+  const map = new Map<string, DisplayUnitEntry>();
   const staticUnits = context.instance.units;
   for (const [guid, unit] of Object.entries(staticUnits ?? {})) {
     map.set(guid, {
       guid,
       name: unit.name,
+      category: unit.category ?? "unknown",
       entry: unit.entry,
       owner: unit.owner?.toString() ?? null,
       controller: null,
@@ -61,7 +65,7 @@ function UnitLookupContent({ result, context }: PanelRenderProps<UnitLookupResul
     });
   }
   for (const [guid, entry] of result.classifications) {
-    map.set(guid, entry);
+    map.set(guid, { ...entry, category: map.get(guid)?.category ?? (context.instance.players?.[guid] ? "player" : "unknown") });
   }
   const merged = Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
 
@@ -70,7 +74,8 @@ function UnitLookupContent({ result, context }: PanelRenderProps<UnitLookupResul
         (u) =>
           u.name.toLowerCase().includes(searchLower) ||
           u.guid.toLowerCase().includes(searchLower) ||
-          u.entry.toString().includes(searchLower),
+          u.entry.toString().includes(searchLower) ||
+          u.category.includes(searchLower),
       )
     : merged;
 
@@ -100,6 +105,7 @@ function UnitLookupContent({ result, context }: PanelRenderProps<UnitLookupResul
             <tr className="border-b border-border text-left text-muted-foreground">
               <th className="py-1 px-1 font-medium">Name</th>
               <th className="py-1 px-1 font-medium">Entry</th>
+              <th className="py-1 px-1 font-medium">Category</th>
               <th className="py-1 px-1 font-medium">Type</th>
               <th className="py-1 px-1 font-medium">Affil.</th>
               <th className="py-1 px-1 font-medium">Owner</th>
@@ -118,7 +124,7 @@ function UnitLookupContent({ result, context }: PanelRenderProps<UnitLookupResul
   );
 }
 
-function UnitRow({ unit }: { unit: UnitEntry }) {
+function UnitRow({ unit }: { unit: DisplayUnitEntry }) {
   const aff = AFFILIATION_LABELS[unit.affiliation] ?? AFFILIATION_LABELS[0];
   const isPossessed = unit.controller !== null;
 
@@ -130,6 +136,7 @@ function UnitRow({ unit }: { unit: UnitEntry }) {
         {unit.name}
       </td>
       <td className="py-0.5 px-1 tabular-nums">{unit.entry || "—"}</td>
+      <td className="py-0.5 px-1 capitalize">{unit.category.replaceAll("_", " ")}</td>
       <td className="py-0.5 px-1">{UNIT_TYPE_LABELS[unit.unitType] ?? "?"}</td>
       <td className={`py-0.5 px-1 ${aff.color}`}>{aff.label}</td>
       <td className="py-0.5 px-1 truncate max-w-[100px] text-muted-foreground" title={unit.owner ?? ""}>

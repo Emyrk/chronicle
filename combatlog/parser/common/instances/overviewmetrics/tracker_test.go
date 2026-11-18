@@ -3,6 +3,7 @@ package overviewmetrics
 import (
 	"testing"
 
+	"github.com/Emyrk/chronicle/database"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -17,7 +18,7 @@ import (
 func TestTrackerAggregatesIncomingDamageToPlayersAndPets(t *testing.T) {
 	t.Parallel()
 
-	units := unitdb.New()
+	units := unitdb.New(database.WoWFlavor{})
 	player := guid.GUID(1)
 	pet := guid.GUID(0xF140000001000001)
 	hostile := guid.GUID(0xF130000002000001)
@@ -55,7 +56,7 @@ func TestTrackerAggregatesIncomingDamageToPlayersAndPets(t *testing.T) {
 func TestTrackerIncludesAbsorbedIncomingDamage(t *testing.T) {
 	t.Parallel()
 
-	units := unitdb.New()
+	units := unitdb.New(database.WoWFlavor{})
 	player := guid.GUID(1)
 	units.Info[player] = unitinfo.Info{Guid: player, Name: "Player", IsPlayer: true, CanCooperate: true}
 	tracker := NewTracker(units)
@@ -88,7 +89,7 @@ func TestTrackerIncludesAbsorbedIncomingDamage(t *testing.T) {
 func TestTrackerKeepsTopTenAbilities(t *testing.T) {
 	t.Parallel()
 
-	units := unitdb.New()
+	units := unitdb.New(database.WoWFlavor{})
 	player := guid.GUID(1)
 	units.Info[player] = unitinfo.Info{Guid: player, Name: "Player", IsPlayer: true, CanCooperate: true}
 	tracker := NewTracker(units)

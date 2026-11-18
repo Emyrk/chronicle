@@ -23472,7 +23472,7 @@ func (q *sqlQuerier) InstanceRaidGroupSnapshots(ctx context.Context, instanceID 
 
 const instanceUnitsByInstanceID = `-- name: InstanceUnitsByInstanceID :many
 SELECT
-  instance_id, unit_guid, name, entry, owner_guid
+  instance_id, unit_guid, name, entry, owner_guid, category
 FROM
   log_instance_units
 WHERE
@@ -23494,6 +23494,7 @@ func (q *sqlQuerier) InstanceUnitsByInstanceID(ctx context.Context, instanceID u
 			&i.Name,
 			&i.Entry,
 			&i.OwnerGuid,
+			&i.Category,
 		); err != nil {
 			return nil, err
 		}

@@ -6,19 +6,20 @@ import (
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures"
+	"github.com/Emyrk/chronicle/database"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
-	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/stretchr/testify/require"
 )
 
 func TestCthun_EyeDeathPendingUntilBodyActive(t *testing.T) {
 	t.Parallel()
 
-	chars := characters.NewCharacters(unitdb.New(), creatures.TurtleCharacterFactories(), identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+	chars := characters.NewCharacters(unitdb.New(database.WoWFlavor{database.FlavorVanilla}), creatures.TurtleCharacterFactories(), identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 
 	player := guid.GUID(0x1)
 	eye := cthunCreatureGUID(15589, 0x1)
@@ -52,7 +53,7 @@ func TestCthun_EyeDeathPendingUntilBodyActive(t *testing.T) {
 func TestCthun_EyePendingDeathTimesOutWithoutBody(t *testing.T) {
 	t.Parallel()
 
-	chars := characters.NewCharacters(unitdb.New(), creatures.TurtleCharacterFactories(), identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+	chars := characters.NewCharacters(unitdb.New(database.WoWFlavor{database.FlavorVanilla}), creatures.TurtleCharacterFactories(), identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 
 	player := guid.GUID(0x1)
 	eye := cthunCreatureGUID(15589, 0x10)
@@ -83,7 +84,7 @@ func TestCthun_EyePendingDeathTimesOutWithoutBody(t *testing.T) {
 func TestNewCthun_MatchesEyeAndBodyEntries(t *testing.T) {
 	t.Parallel()
 
-	chars := characters.NewCharacters(unitdb.New(), creatures.TurtleCharacterFactories(), identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+	chars := characters.NewCharacters(unitdb.New(database.WoWFlavor{database.FlavorVanilla}), creatures.TurtleCharacterFactories(), identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 
 	for _, entry := range []uint32{15589, 15727} {
 		id := cthunCreatureGUID(entry, entry)

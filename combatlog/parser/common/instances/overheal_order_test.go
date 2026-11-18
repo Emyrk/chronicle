@@ -33,7 +33,7 @@ func TestOverhealingHookRunsBeforeTrackers(t *testing.T) {
 			t.Parallel()
 
 			ctx := parsectx.With(context.Background(), parsectx.Context{Format: format})
-			db := unitdb.New()
+			db := unitdb.New(database.WoWFlavor{})
 			h := NewHookable(ctx, slog.Default(), db, zone.Zone{Name: "molten core"}, InstanceParams{
 				Name:     "Molten Core",
 				Rankings: &rankings.Rankings{},

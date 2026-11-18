@@ -463,7 +463,7 @@ func TestParseV22AdvancedCombatOwnerIsAuthoritative(t *testing.T) {
 	p, err := New(context.Background(), slog.Default(), strings.NewReader(input), hermesProxyTestDB{}, hermesProxyTestDB{}, nil, database.LogFormatV22Cleu)
 	require.NoError(t, err)
 
-	units := unitdb.New()
+	units := unitdb.New(database.WoWFlavor{database.FlavorVanilla, database.FlavorWoWForever})
 	var owners []*messages.NewOwner
 	for {
 		batch, advanceErr := p.Advance(context.Background())

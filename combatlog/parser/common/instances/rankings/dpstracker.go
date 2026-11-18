@@ -148,6 +148,11 @@ func (t *DPSTracker) ClassifyDamage(encounterID uuid.UUID, rule DamageTargets, m
 	if eligible <= 0 {
 		return
 	}
+	// Critter damage is retained in the event stream, never in ranked totals.
+	if t.units.Category(msg.Target, t.identifier) == unitdb.CategoryCritter || (msg.Caster != nil && t.units.Category(*msg.Caster, t.identifier) == unitdb.CategoryCritter) {
+		msg.Unranked = eligible
+		return
+	}
 	ranked := window == nil || (!msg.Date().Before(window.Start) && !msg.Date().After(window.End))
 	if t.assemblyOfIron != nil {
 		if t.assemblyExcluded[msg] || !ranked {
@@ -267,6 +272,9 @@ func (t *DPSTracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message
 			}
 		}
 		caster := *msg.Caster
+		if t.units.Category(caster, t.identifier) == unitdb.CategoryCritter {
+			return nil
+		}
 		casterCls := t.units.Classify(caster)
 
 		// Determine who gets credit for this damage.
@@ -288,6 +296,9 @@ func (t *DPSTracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message
 
 		if targetCls.Affiliation == unitdb.AffiliationHostile {
 			t.damageDone[creditGUID] += effectiveDamage
+			if t.units.Category(msg.Target, t.identifier) == unitdb.CategoryCritter {
+				return nil
+			}
 			t.damageCredits[msg] = creditGUID
 			if t.assemblyOfIron != nil && t.assemblyOfIron.trackDamage(msg.Target, creditGUID, effectiveDamage) {
 				t.assemblyPending[msg.Target] = append(t.assemblyPending[msg.Target], msg)
@@ -314,7 +325,7 @@ func (t *DPSTracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message
 	case *messages.Heal:
 		// Match the Healing Done panel: only count effective healing to players
 		// and player-owned pets. Healing friendly NPCs is not rankable healing.
-		if !combatmetrics.IsPlayerOrPlayerOwned(t.units, msg.Target) {
+		if t.units.Category(msg.Caster, t.identifier) == unitdb.CategoryCritter || t.units.Category(msg.Target, t.identifier) == unitdb.CategoryCritter || !combatmetrics.IsPlayerOrPlayerOwned(t.units, msg.Target) {
 			return nil
 		}
 		effective := int64(msg.Amount) - int64(msg.Overheal)
@@ -326,7 +337,7 @@ func (t *DPSTracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message
 	case *messages.Absorbed:
 		// Match the Healing Done panel: only count damage prevented on players
 		// and player-owned pets, credited to the shield caster.
-		if !combatmetrics.IsPlayerOrPlayerOwned(t.units, msg.Target) {
+		if t.units.Category(msg.Caster, t.identifier) == unitdb.CategoryCritter || t.units.Category(msg.Target, t.identifier) == unitdb.CategoryCritter || !combatmetrics.IsPlayerOrPlayerOwned(t.units, msg.Target) {
 			return nil
 		}
 		if msg.Amount > 0 && !msg.Caster.IsZero() {
@@ -383,14 +394,15 @@ func (t *DPSTracker) FightEnded(encounterID uuid.UUID, m messages.Message) {
 			observedForm = t.forms.Dominant(g, fightEnd).String()
 		}
 		stats := &UnitCombatStats{
-			DamageDone:       t.damageDone[g],
-			RankedDamageDone: t.rankedDamageDone[g],
-			DamageTaken:      t.damageTaken[g],
-			HealingDone:      t.healingDone[g],
-			HealingAbsorbed:  t.absorbDone[g],
-			IsPlayer:         isPlayer,
-			Talents:          talents,
-			ObservedForm:     observedForm,
+			DamageDone:         t.damageDone[g],
+			RankedDamageDone:   t.rankedDamageDone[g],
+			UnrankedDamageDone: t.damageDone[g] - t.rankedDamageDone[g],
+			DamageTaken:        t.damageTaken[g],
+			HealingDone:        t.healingDone[g],
+			HealingAbsorbed:    t.absorbDone[g],
+			IsPlayer:           isPlayer,
+			Talents:            talents,
+			ObservedForm:       observedForm,
 		}
 		if cls.Relation.HasOwner() {
 			owner := *cls.Relation.Owner

@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Emyrk/chronicle/database"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,12 +30,7 @@ func makePetGUID(entryID uint32, spawnID uint32) guid.GUID {
 }
 
 func newTestUnits() *unitdb.Units {
-	return &unitdb.Units{
-		Info:         make(map[guid.GUID]unitinfo.Info),
-		Players:      make(map[guid.GUID]combatant.Combatant),
-		PlayerByName: make(map[string]guid.GUID),
-		Possessed:    make(map[guid.GUID]unitdb.PossessionState),
-	}
+	return unitdb.New(database.WoWFlavor{})
 }
 
 func TestEngagementTracker_BasicEngagement(t *testing.T) {
@@ -532,4 +528,23 @@ func TestSpeedrunTracker_LevelRange_MissingLevelDisqualifies(t *testing.T) {
 	require.Len(t, result.LevelRange.Violators, 1)
 	assert.Equal(t, "MysteryPlayer", result.LevelRange.Violators[0].PlayerName)
 	assert.Equal(t, int32(0), result.LevelRange.Violators[0].Level)
+}
+
+func TestEngagementTrackerIgnoresCritterInteractions(t *testing.T) {
+	t.Parallel()
+	units := newTestUnits()
+	player := makePlayerGUID(1)
+	rat := makeCreatureGUID(4075, 1)
+	units.Info[player] = unitinfo.Info{Guid: player, IsPlayer: true, CanCooperate: true}
+	units.Info[rat] = unitinfo.Info{Guid: rat, Owner: &player}
+	tracker := NewEngagementTracker(units)
+	encID := uuid.New()
+	tracker.FightStarted(encID, nil)
+	require.NoError(t, tracker.ProcessMessage(true, encID, &messages.Damage{Caster: &player, Target: rat, Amount: 10}))
+	require.Empty(t, tracker.engaged, "critter damage must not engage its attacker")
+	tracker.classify(rat)
+	require.Empty(t, tracker.engaged, "hostile critter metadata must not engage its owner")
+	tracker.classify(player)
+	tracker.markEngaged(player)
+	require.NotContains(t, tracker.engaged, rat, "engaged owners must not engage critters")
 }

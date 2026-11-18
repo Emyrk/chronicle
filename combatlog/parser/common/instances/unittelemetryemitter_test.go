@@ -23,7 +23,7 @@ func TestUnitTelemetryEmitter_OnlyRegisteredForV22(t *testing.T) {
 
 	newHookable := func(format database.LogFormat) *Hookable {
 		ctx := parsectx.With(context.Background(), parsectx.Context{Format: format})
-		return NewHookable(ctx, slog.Default(), unitdb.New(), zone.Zone{}, InstanceParams{})
+		return NewHookable(ctx, slog.Default(), unitdb.New(database.WoWFlavor{}), zone.Zone{}, InstanceParams{})
 	}
 	hasEmitter := func(h *Hookable) bool {
 		for _, hook := range h.hooks {
@@ -46,7 +46,7 @@ func TestUnitTelemetryEmitter_FightStartEmitsPlayersAndActiveCharacters(t *testi
 	player := guid.GUID(1)
 	creature := guid.GUID(0xF130000001000001)
 
-	chars := characters.NewCharacters(unitdb.New(), nil, nil)
+	chars := characters.NewCharacters(unitdb.New(database.WoWFlavor{}), nil, nil)
 	activeCreature := characters.NewCommonCharacter(creature, chars)
 	chars.All.Add(activeCreature, before)
 	activeCreature.Start("test", &messages.Damage{MessageBase: messages.Base(before)})
@@ -96,7 +96,7 @@ func TestUnitTelemetryEmitter_ActiveCharacterSkipsTelemetryAlreadyEmitted(t *tes
 	activeAt := before.Add(time.Second)
 	creature := guid.GUID(0xF130000001000001)
 
-	chars := characters.NewCharacters(unitdb.New(), nil, nil)
+	chars := characters.NewCharacters(unitdb.New(database.WoWFlavor{}), nil, nil)
 	char := characters.NewCommonCharacter(creature, chars)
 	char.Start("test", &messages.Damage{MessageBase: messages.Base(activeAt)})
 
@@ -133,7 +133,7 @@ func TestUnitTelemetryEmitter_ActivityMessageDoesNotDuplicateTelemetry(t *testin
 	activeAt := before.Add(time.Second)
 	creature := guid.GUID(0xF130000001000001)
 
-	chars := characters.NewCharacters(unitdb.New(), nil, nil)
+	chars := characters.NewCharacters(unitdb.New(database.WoWFlavor{}), nil, nil)
 	char := characters.NewCommonCharacter(creature, chars)
 	char.Start("test", &messages.Damage{MessageBase: messages.Base(activeAt)})
 

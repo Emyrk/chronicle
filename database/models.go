@@ -3007,6 +3007,7 @@ type LogInstanceUnit struct {
 	Name       string     `db:"name" json:"name"`
 	Entry      int32      `db:"entry" json:"entry"`
 	OwnerGuid  *guid.GUID `db:"owner_guid" json:"owner_guid"`
+	Category   string     `db:"category" json:"category"`
 }
 
 type LogInstanceYoutubeTimestamped struct {

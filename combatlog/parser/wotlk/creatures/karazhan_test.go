@@ -19,7 +19,7 @@ func TestMountedAttumenKeepsEarlierFormsActiveAndKillsThem(t *testing.T) {
 	t.Parallel()
 
 	all := characters.NewCharacters(
-		unitdb.New(),
+		unitdb.New(database.WoWFlavor{database.FlavorTBC}),
 		NewCharacterFactories(database.WoWFlavor{database.FlavorTBC}),
 		identifier.NewIdentifier(map[uint32]identifier.Identity{}),
 	)

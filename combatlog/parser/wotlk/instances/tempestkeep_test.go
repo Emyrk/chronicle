@@ -27,7 +27,7 @@ func newTempestKeepTestInstance(t *testing.T) *commoninstances.Hookable {
 	return TempestKeepFactory.New(
 		ctx,
 		slog.Default(),
-		unitdb.New(),
+		unitdb.New(database.WoWFlavor{database.FlavorTBC}),
 		zone.Zone{Name: "Tempest Keep", MapID: 550},
 		database.WoWFlavor{database.FlavorTBC},
 	)

@@ -25,9 +25,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/rankings"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/totems"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/warlockdemon"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
@@ -141,13 +139,15 @@ func replacementParseFailureRefreshIDs(ctx context.Context, job *river.Job[ArgsL
 
 type WorkerLogParse struct {
 	parent *Chronicle
+	bot    *chroniclebot.Bot
 
 	river.WorkerDefaults[ArgsLogParse]
 }
 
-func (c *Chronicle) NewWorkerLogParse() river.Worker[ArgsLogParse] {
+func (c *Chronicle) NewWorkerLogParse(bot *chroniclebot.Bot) river.Worker[ArgsLogParse] {
 	return &WorkerLogParse{
 		parent: c,
+		bot:    bot,
 	}
 }
 
@@ -482,6 +482,10 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		instFinalizeDuration := time.Since(finalizeStart)
 		totalFinalizeDuration += instFinalizeDuration
 
+		if report.Identity != nil && finalized != nil && err == nil {
+			report.Identity.Instances = append(report.Identity.Instances, buildIdentityInstance(inst.Name(), inst.CurrentZone.Name, finalized, encountersState.Units, inst.Identifier))
+		}
+
 		if finalized == nil || len(finalized.Encounters) == 0 {
 			continue
 		}
@@ -490,6 +494,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		instParseDuration := encountersState.InstanceProcessDuration(inst)
 		instReport := chroniclesdk.InstanceReport{
 			Name:             instanceName,
+			Zone:             inst.CurrentZone.Name,
 			ParseDuration:    chroniclesdk.DurationFrom(instParseDuration),
 			FinalizeDuration: chroniclesdk.DurationFrom(instFinalizeDuration),
 		}
@@ -507,9 +512,14 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		if len(finalized.UnknownUnits) > 0 {
 			instReport.UnknownUnits = make(map[uint32]chroniclesdk.UnknownUnit, len(finalized.UnknownUnits))
 			for entryID, u := range finalized.UnknownUnits {
+				samples := make([]string, 0, len(u.Samples))
+				for _, sample := range u.Samples {
+					samples = append(samples, sample.String())
+				}
 				instReport.UnknownUnits[entryID] = chroniclesdk.UnknownUnit{
-					Name:  u.Name,
-					Count: u.Count,
+					Samples: samples,
+					Name:    u.Name,
+					Count:   u.Count,
 				}
 			}
 		}
@@ -715,6 +725,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 				return fmt.Errorf("insert events: %w", err)
 			}
 
+			builder.categories = finalized.UnitCategories
 			for id := range finalized.Participants.Active {
 				builder.seen(id)
 			}
@@ -1140,10 +1151,17 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 	// Set total duration right before recording output (not in defer)
 	report.TotalDuration = chroniclesdk.DurationFrom(time.Since(jobStart))
 
+	if report.Identity != nil {
+		report.Identity.PossibleHostilesGoCode = report.Identity.GeneratePossibleHostilesGoCode()
+	}
 	jobOut.Report = report
 	jobOut.Complete = ptr.Ref(time.Now())
 	jobResult = "success"
-	_ = river.RecordOutput(ctx, jobOut)
+	if err := river.RecordOutput(ctx, jobOut); err != nil {
+		w.parent.logger.WarnContext(ctx, "failed to record parse report; skipping unknown unit notification", slog.Any("error", err))
+	} else {
+		w.notifyUnknownUnits(ctx, job.Args.TenantID, job.Args.LogID, job.ID, report.Instances)
+	}
 
 	if w.parent.queue == nil || !publicLog {
 		return nil
@@ -1188,9 +1206,10 @@ type logParseInstanceBuilder struct {
 	db         *unitdb.Units
 	instanceID uuid.UUID
 
-	accounted map[guid.GUID]struct{}
-	units     []database.InsertInstanceUnitsParams
-	players   []database.InsertInstancePlayersParams
+	categories map[guid.GUID]unitdb.Category
+	accounted  map[guid.GUID]struct{}
+	units      []database.InsertInstanceUnitsParams
+	players    []database.InsertInstancePlayersParams
 
 	participantAccounted map[guid.GUID]struct{}
 	participants         []database.InsertInstancePlayersParams
@@ -1323,6 +1342,10 @@ func (w *logParseInstanceBuilder) seen(ids ...guid.GUID) {
 			continue
 		}
 
+		category := w.categories[id]
+		if category == "" {
+			category = w.db.Category(id)
+		}
 		entry, _ := id.GetEntry()
 		unitInfo, ok := w.db.Get(id)
 		if ok {
@@ -1332,6 +1355,7 @@ func (w *logParseInstanceBuilder) seen(ids ...guid.GUID) {
 				Name:       unitInfo.Name,
 				Entry:      int32(entry),
 				OwnerGuid:  unitInfo.Owner,
+				Category:   string(category),
 			})
 			continue
 		}
@@ -1340,6 +1364,7 @@ func (w *logParseInstanceBuilder) seen(ids ...guid.GUID) {
 			InstanceID: w.instanceID,
 			UnitGuid:   id,
 			Name:       unitname.ByGUID(id),
+			Category:   string(category),
 			Entry:      int32(entry),
 		})
 	}
@@ -1347,26 +1372,8 @@ func (w *logParseInstanceBuilder) seen(ids ...guid.GUID) {
 
 func buildIdentityReport(cs *creatures.Creatures) *chroniclesdk.IdentityReport {
 	rpt := &chroniclesdk.IdentityReport{
-		ZonedUnits: make(map[string][]chroniclesdk.IdentityCreature),
 		ZoneSpells: make(map[string][]chroniclesdk.IdentitySpell),
 		UnitSpells: make(map[uint32][]string),
-	}
-
-	for zone, units := range cs.ZonedUnits {
-		for entryID, name := range units {
-			if _, ok := totems.EntryIsTotem(entryID); ok {
-				continue
-			}
-			if _, ok := warlockdemon.IsWarlockDemonEntry(entryID); ok {
-				continue
-			}
-			count := len(cs.UnitQuantity[entryID])
-			rpt.ZonedUnits[zone] = append(rpt.ZonedUnits[zone], chroniclesdk.IdentityCreature{
-				EntryID:     entryID,
-				Name:        name,
-				UniqueCount: count,
-			})
-		}
 	}
 
 	for zone, spells := range cs.ZoneSpells {
@@ -1385,8 +1392,6 @@ func buildIdentityReport(cs *creatures.Creatures) *chroniclesdk.IdentityReport {
 		}
 		rpt.UnitSpells[entryID] = names
 	}
-
-	rpt.GoCode = rpt.GenerateGoCode()
 
 	return rpt
 }

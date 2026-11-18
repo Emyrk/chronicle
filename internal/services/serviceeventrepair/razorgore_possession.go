@@ -118,7 +118,7 @@ func replayRazorgoreClassified(e razorgoreEvidence, c database.LogInstanceEncoun
 	if len(reports) > 0 {
 		report = reports[0]
 	}
-	units := unitdb.New()
+	units := unitdb.New(database.FlavorFromStrings(e.Group.Flavor))
 	tracker := rankings.NewDPSTracker(units, nil, rankings.DamageRuleNone)
 	life := rankings.NewSurvivabilityTracker()
 	tracker.FightStarted(c.ID, nil)
