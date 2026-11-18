@@ -1,4 +1,7 @@
 import { useRef, useState, type FormEvent } from "react"
+import { useQuery } from "@tanstack/react-query"
+import { useAuth } from "@/hooks/useAuth"
+import { getDeveloperApp } from "./developerAppApi"
 import { KeyRound, LoaderCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,6 +14,14 @@ type Props = {
 }
 
 export function ExplorerAuthentication({ connected, onConnect, sessionRef }: Props) {
+  const { session: userSession, isAuthenticated } = useAuth()
+  const { data: app } = useQuery({
+    queryKey: ["developer-app", userSession?.user_id ?? ""],
+    queryFn: getDeveloperApp,
+    enabled: isAuthenticated && !connected,
+    retry: false,
+  })
+  const [clientID, setClientID] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const secretRef = useRef<HTMLInputElement>(null)
@@ -55,7 +66,7 @@ export function ExplorerAuthentication({ connected, onConnect, sessionRef }: Pro
       </div>
       <p className="mt-3 text-xs leading-6 text-slate-400">{connected ? "Explorer requests and quota checks use your app. Tokens stay in memory and are cleared when you disconnect or leave this page." : "Test your own app here. Your secret goes only to Chronicle's token endpoint and is cleared after submission. Tokens are kept in memory, never browser storage."}</p>
       {!connected && <form onSubmit={(event) => void connect(event)} autoComplete="off" className="mt-4 grid gap-4 sm:grid-cols-2">
-        <div><label htmlFor="explorer-client-id" className="text-xs text-slate-300">Client ID</label><Input id="explorer-client-id" name="client_id" required disabled={pending} autoComplete="off" className="mt-1 border-white/15 bg-slate-900" placeholder="chronicle-app-…" /></div>
+        <div><label htmlFor="explorer-client-id" className="text-xs text-slate-300">Client ID</label><Input id="explorer-client-id" name="client_id" value={clientID ?? app?.client_id ?? ""} onChange={(event) => setClientID(event.target.value)} required disabled={pending} autoComplete="off" className="mt-1 border-white/15 bg-slate-900" placeholder="chronicle-app-…" /></div>
         <div><label htmlFor="explorer-client-secret" className="text-xs text-slate-300">Client secret</label><Input ref={secretRef} id="explorer-client-secret" name="client_secret" type="password" required disabled={pending} autoComplete="off" className="mt-1 border-white/15 bg-slate-900" /></div>
         <div className="sm:col-span-2"><Button type="submit" disabled={pending} className="bg-cyan-300 text-slate-950 hover:bg-cyan-200">{pending && <LoaderCircle className="size-4 animate-spin" />}{pending ? "Authenticating…" : "Authenticate"}</Button></div>
       </form>}
