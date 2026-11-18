@@ -37,6 +37,7 @@ import (
 	"github.com/Emyrk/chronicle/frontend"
 	"github.com/Emyrk/chronicle/internal/billing"
 	"github.com/Emyrk/chronicle/internal/itempricing"
+	"github.com/Emyrk/chronicle/internal/pageload"
 	"github.com/Emyrk/chronicle/internal/services/serviceapplication"
 	"github.com/Emyrk/chronicle/internal/services/serviceblog"
 	"github.com/Emyrk/chronicle/internal/services/servicecache"
@@ -939,7 +940,12 @@ func (api *API) Routes() chi.Router {
 		}
 	})
 
-	r.NotFound(frontend.Handler(frontend.FS(), api.OGRoutes(), api.brandingResolver, api.blogFlavorResolver).ServeHTTP)
+	// One page lookup cache per HTML request, shared by the indexing check,
+	// the page summary and the Open Graph metadata.
+	pages := frontend.Handler(frontend.FS(), api.OGRoutes(), api.brandingResolver, api.blogFlavorResolver)
+	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
+		pages.ServeHTTP(w, r.WithContext(pageload.WithCache(r.Context())))
+	})
 
 	return r
 }
