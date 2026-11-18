@@ -2934,6 +2934,38 @@ export interface InferenceClientCapability {
 }
 
 // From chroniclesdk/inference.go
+export interface InferenceClientPageContext {
+    readonly assistant_id: string;
+    readonly assistant_name: string;
+    readonly prompt: string;
+    readonly skills: readonly InferenceClientSkill[];
+    readonly instructions: string;
+}
+
+// From chroniclesdk/inference.go
+/**
+ * InferenceClientSkill identifies canonical, static guidance for the current page.
+ */
+export interface InferenceClientSkill {
+    readonly id: string;
+    readonly name: string;
+    readonly version: string;
+}
+
+// From chroniclesdk/inference.go
+export interface InferenceClientSkillResponse {
+    readonly id: string;
+    readonly name: string;
+    readonly version: string;
+    readonly instructions: string;
+}
+
+// From chroniclesdk/inference.go
+export interface InferenceClientSkillsResponse {
+    readonly skills: readonly InferenceClientSkill[];
+}
+
+// From chroniclesdk/inference.go
 export interface InferenceClientToolResultRequest {
     readonly client_session_id: string;
     readonly capability_id: string;

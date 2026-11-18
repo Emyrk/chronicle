@@ -48,7 +48,10 @@ vi.mock("react-router-dom", async importOriginal => ({
   useLocation: () => hooks.router!.state.location,
   useBlocker: (active: boolean) => hooks.router!.getBlocker("local-mcp", () => active),
 }))
-vi.mock("../runtime", () => ({ useInferenceRuntime: () => ({ sessionId: "test-session" }) }))
+vi.mock("../runtime", () => {
+  const registerCapability = vi.fn(() => () => {})
+  return { useInferenceRuntime: () => ({ sessionId: "test-session", registerCapability }) }
+})
 vi.mock("./browserTools", () => ({ loadToolCatalog: async () => [], availableBrowserTools: () => [] }))
 vi.mock("./localBridge", () => ({ connectLocalMcp: vi.fn() }))
 

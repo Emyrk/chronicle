@@ -14,6 +14,8 @@ import (
 )
 
 const (
+	pageGuidanceCapabilityID      = "page-guidance"
+	pageGuidanceCapabilityVersion = 1
 	searchPageCapabilityID        = "search-page"
 	searchPageCapabilityVersion   = 1
 	instancePageCapabilityID      = "instance-page"
@@ -49,6 +51,13 @@ type clientToolDefinition struct {
 	CapabilityVersion int
 	Effect            string
 	Confirmation      string
+}
+
+// Guidance tools are advertised only by the browser bridge, not UI assistants.
+var pageGuidanceClientTools = []clientToolDefinition{
+	{ToolDefinition: ToolDefinition{Name: "gen_page_context", Description: "Get the current page's canonical assistant prompt and guidance. Call list_skill and read_skill for relevant instructions; use only advertised tools.", Parameters: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)}, CapabilityID: pageGuidanceCapabilityID, CapabilityVersion: pageGuidanceCapabilityVersion, Effect: "read", Confirmation: "never"},
+	{ToolDefinition: ToolDefinition{Name: "list_skill", Description: "List canonical skills relevant to the current page.", Parameters: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)}, CapabilityID: pageGuidanceCapabilityID, CapabilityVersion: pageGuidanceCapabilityVersion, Effect: "read", Confirmation: "never"},
+	{ToolDefinition: ToolDefinition{Name: "read_skill", Description: "Read a canonical skill listed for the current page.", Parameters: json.RawMessage(`{"type":"object","properties":{"skill_id":{"type":"string","minLength":1,"maxLength":100}},"required":["skill_id"],"additionalProperties":false}`)}, CapabilityID: pageGuidanceCapabilityID, CapabilityVersion: pageGuidanceCapabilityVersion, Effect: "read", Confirmation: "never"},
 }
 
 var searchPageClientTools = []clientToolDefinition{
@@ -117,7 +126,7 @@ var (
 	searchPageCapability   = clientCapabilityDefinition{ID: searchPageCapabilityID, Version: searchPageCapabilityVersion, ScopeType: "search_page", Tools: searchPageClientTools}
 	instancePageCapability = clientCapabilityDefinition{ID: instancePageCapabilityID, Version: instancePageCapabilityVersion, ScopeType: "instance", Tools: instancePageClientTools}
 	luaEditorCapability    = clientCapabilityDefinition{ID: luaEditorCapabilityID, Version: luaEditorCapabilityVersion, ScopeType: "lua_project", Tools: luaEditorClientTools}
-	clientCapabilities     = map[string]clientCapabilityDefinition{searchPageCapabilityID: searchPageCapability, instancePageCapabilityID: instancePageCapability, luaEditorCapabilityID: luaEditorCapability}
+	clientCapabilities     = map[string]clientCapabilityDefinition{pageGuidanceCapabilityID: {ID: pageGuidanceCapabilityID, Version: pageGuidanceCapabilityVersion, ScopeType: "page", Tools: pageGuidanceClientTools}, searchPageCapabilityID: searchPageCapability, instancePageCapabilityID: instancePageCapability, luaEditorCapabilityID: luaEditorCapability}
 )
 
 func clientToolByName(capabilityID, name string) (clientToolDefinition, bool) {
@@ -180,7 +189,14 @@ func validateClientToolArguments(name, raw string) (json.RawMessage, error) {
 		return nil, errors.New("tool arguments too large")
 	}
 	switch name {
-	case "inspect_search_draft":
+	case "read_skill":
+		var input struct {
+			SkillID string `json:"skill_id"`
+		}
+		if err := decodeStrict(raw, &input); err != nil || strings.TrimSpace(input.SkillID) == "" || len(input.SkillID) > 100 {
+			return nil, errors.New("invalid read_skill arguments")
+		}
+	case "gen_page_context", "list_skill", "inspect_search_draft":
 		var input struct{}
 		if strings.TrimSpace(raw) == "null" {
 			return nil, errors.New("invalid inspect_search_draft arguments")

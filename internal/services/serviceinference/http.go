@@ -177,6 +177,9 @@ func (s *Service) routes() http.Handler {
 	// Catalog and validation need permission, but no configured inference provider.
 	r.Get("/client-tools", s.listClientTools)
 	r.Post("/client-tools/validate", s.validateClientTool)
+	r.Get("/client-tools/context", s.clientPageContext)
+	r.Get("/client-tools/skills", s.listClientSkills)
+	r.Get("/client-tools/skills/{skillID}", s.readClientSkill)
 	r.Group(func(r chi.Router) {
 		r.Use(s.requireEnabled)
 		r.Get("/connections", s.listConnections)
