@@ -17,6 +17,7 @@ describe("identity category report", () => {
     for (const text of ["4 unknown", "Category filter", "scripted_object", "totem", "guardian", "0xF13000002A000001", "Instance 1", "Spell 123", "Fireball"]) expect(html).toContain(text);
     expect(html).toContain('<option value="object">object (1)</option>');
     expect(html).toContain('<option value="environment">environment (7)</option>');
+    expect(html).toContain("Copy unknowns for instance 1: Raid");
     expect(html).toContain("Portal to Stormwind");
     expect(html).toContain("Lava Fissure");
     expect(html).not.toContain("Generated Go Code");
@@ -27,6 +28,7 @@ describe("identity category report", () => {
     expect(html).toContain("unclassified, not necessarily unknown");
     expect(html).toContain("Old creature");
     expect(html).not.toContain("LoadAdds");
+    expect(html).not.toContain("Copy unknowns");
   });
 });
 
