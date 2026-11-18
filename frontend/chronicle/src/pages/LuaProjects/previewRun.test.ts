@@ -1,5 +1,5 @@
 import { create, toBinary } from "@bufbuild/protobuf"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { DamageSchema } from "@/api/proto/chronicle_pb"
 import type { PanelPackage } from "../Guides/package/panelLoader"
 import { createPanelWorkerHandler } from "../Guides/runtime/panelWorker"
@@ -62,6 +62,21 @@ describe("runPreview", () => {
   it("finishes after startup for panels without a stream", async () => {
     const result = await runPreview({ panel: panel(`CreateFrame("Frame", "only", UIParent)`, []), encounterIds: [] }, undefined, fakeWorker)
     expect(result).toMatchObject({ ok: true, nodes: 1, output: 'frame "only" 1x1 at 0,0' })
+  })
+
+  it.each(["", 'CreateFrame("Frame", "only", UIParent)'])("finishes synchronously at ready without a timer: %s", async (source) => {
+    const messages: unknown[] = []
+    const terminate = vi.fn()
+    const handle = createPanelWorkerHandler(data => messages.push(data))
+    const worker: PreviewWorker = {
+      onmessage: null, onerror: null, terminate,
+      postMessage: message => handle(message as Parameters<typeof handle>[0]),
+    }
+    const pending = runPreview({ panel: panel(source, []), encounterIds: [] }, undefined, () => worker)
+    for (const data of messages) worker.onmessage?.({ data })
+    // No timers or microtasks are advanced: ready itself completes the preview.
+    expect(terminate).toHaveBeenCalledOnce()
+    expect(await pending).toMatchObject({ ok: true, nodes: source ? 1 : 0 })
   })
 
   it("stops when the caller aborts", async () => {

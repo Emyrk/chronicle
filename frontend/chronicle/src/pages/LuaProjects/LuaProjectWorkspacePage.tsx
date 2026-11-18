@@ -10,6 +10,7 @@ import { useConfirmLinkNavigation } from "@/hooks/useConfirmLinkNavigation"
 import { modulePath, createRelease, getProject, getProjectPage, latestRelease, nextReleaseTag, type LuaProject } from "./api"
 import { useModulePage } from "./moduleRoute"
 import { LuaBrowserTest } from "./LuaBrowserTest"
+import { useOptionalLocalMcp } from "@/features/chat/mcp/LocalMcpProvider"
 import { panelPackageFromWorkingCopy, validateEditorFiles, type EditorFiles } from "./editorFiles"
 import { applyLuaFileEdit, editorFileKey, LUA_EDITOR_CAPABILITY, parseLuaFileEdit, workingCopyFiles, type LuaToolFile } from "./luaEditorTools"
 import { createCachedStreamProvider, loadPreviewStreams } from "./previewStream"
@@ -83,7 +84,9 @@ export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { pro
     queryFn: () => getProjectPage(projectId).then(page => page.permissions), retry: false })
   const canTagReleases = permissionsQuery.data?.release ?? false
   const [copy, setCopy] = useState<LuaWorkingCopy | null>(null)
-  useConfirmLinkNavigation(!!copy?.dirty, "Leave the Module Workshop and discard your unsaved source changes?")
+  const localMcp = useOptionalLocalMcp()
+  // The connected-tab guard includes unsaved changes; avoid prompting twice.
+  useConfirmLinkNavigation(!!copy?.dirty && !localMcp?.active, "Leave the Module Workshop and discard your unsaved source changes?")
   const [proposal, setProposal] = useState<LuaSourceProposal | null>(null)
   // Reopen the preview on the instance and encounters last used for this module.
   const [savedSelection] = useState(() => readPreviewSelection(projectId))
@@ -232,6 +235,15 @@ export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { pro
         try { validateEditorFiles(project, after) } catch (error) { validation = errorMessage(error, "Invalid working copy.") }
         return { applied: true, revision: result.revision, validation_error: validation }
       },
+      save_lua_files: async (args, { signal }) => {
+        const current = requireCopy()
+        const input = args as { expected_revision?: unknown } | null
+        if (!input || !Number.isSafeInteger(input.expected_revision) || input.expected_revision !== current.revision) throw new Error("stale_state")
+        signal.throwIfAborted()
+        if (!current.valid || current.saving || publishing) return { ok: false, error: "The working copy is invalid or a save/release is in progress." }
+        const result = await editorHandle.current?.save(current.revision) ?? { ok: false, error: "The editor is still loading." }
+        return { ...result, revision: current.revision, saved_to: "main", released: false }
+      },
       run_preview: async (args, { signal }) => {
         const current = requireCopy()
         let requested: string[] | undefined
@@ -311,6 +323,11 @@ export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { pro
       <span className="font-mono text-xs text-muted-foreground">{project.slug}</span>
       <a className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground" href="/modules/api" target="_blank" rel="noreferrer"
         title="Module API reference and FAQ (opens in a new tab)"><BookOpen className="size-3.5" /> API reference</a>
+      <button type="button" className={paneButton} disabled={!localMcp || new URLSearchParams(window.location.search).get("safe") === "1"}
+        title="Allow the local MCP server at 127.0.0.1:17643 to run local Lua previews and read output, player names, and encounter context. Nothing is saved or released."
+        onClick={() => { if (localMcp?.active) localMcp.disconnect(); else localMcp?.connect(); setSideTab("preview"); setLayout({ sideOpen: true }) }}>
+        {localMcp?.active ? "Disconnect local MCP" : "Connect to local MCP"}
+      </button>
       <div className="ml-auto flex flex-wrap items-center gap-2">
         <span role="status" className="flex items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground" title={copy?.validation || undefined}>
           <span aria-hidden className={`size-2 rounded-full ${status.tone}`} />{status.label}

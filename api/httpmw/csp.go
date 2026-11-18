@@ -41,7 +41,7 @@ func ContentSecurityPolicy(adsEnabled func(*http.Request) bool, additionalConnec
 				"font-src 'self'" + fontAdSources,
 				"img-src 'self' data: blob: https://www.googletagmanager.com https://cdn.brandfetch.io https://icons.chronicleclassic.com https://cdn.discordapp.com https://i.imgur.com https://avatars.githubusercontent.com" + httpsSource,
 				mediaSources,
-				"connect-src 'self' blob: https://raw.githubusercontent.com https://www.googletagmanager.com https://www.google-analytics.com https://region1.google-analytics.com https://analytics.google.com https://stats.g.doubleclick.net https://www.google.com https://icons.chronicleclassic.com https://models.chronicleclassic.com" + connectSources + httpsSource,
+				"connect-src 'self' blob:" + moduleDevSource(r.URL.Path) + " https://raw.githubusercontent.com https://www.googletagmanager.com https://www.google-analytics.com https://region1.google-analytics.com https://analytics.google.com https://stats.g.doubleclick.net https://www.google.com https://icons.chronicleclassic.com https://models.chronicleclassic.com" + connectSources + httpsSource,
 				"worker-src 'self' blob:",
 				"frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com" + httpsSource,
 				"frame-ancestors 'none'",
@@ -51,4 +51,13 @@ func ContentSecurityPolicy(adsEnabled func(*http.Request) bool, additionalConnec
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// Only the module workshop can contact the fixed loopback development bridge.
+// This permits data connections, never local scripts or arbitrary local ports.
+func moduleDevSource(path string) string {
+	if strings.HasPrefix(path, "/modules/") && strings.HasSuffix(path, "/edit") {
+		return " http://127.0.0.1:17643"
+	}
+	return ""
 }

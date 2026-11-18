@@ -81,16 +81,20 @@ var instancePageClientTools = []clientToolDefinition{
 	},
 }
 
-// luaEditorClientTools operate on the unsaved browser working copy only. The
-// server never reads or writes Lua drafts on the assistant's behalf.
+// luaEditorClientTools operate through the browser-owned working copy. The
+// inference server never reads or writes Lua drafts on the assistant's behalf.
 var luaEditorClientTools = []clientToolDefinition{
 	{
 		ToolDefinition: ToolDefinition{Name: "read_lua_files", Description: "Read the current unsaved working copy: every file by path (project.json, README.md and the .lua files, e.g. main.lua), the working-copy revision, and any validation error.", Parameters: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)},
 		CapabilityID:   luaEditorCapabilityID, CapabilityVersion: luaEditorCapabilityVersion, Effect: "read", Confirmation: "never",
 	},
 	{
-		ToolDefinition: ToolDefinition{Name: "edit_lua_file", Description: "Edit one file in the unsaved working copy: project.json, README.md (Markdown shown on the addon's page) or a .lua file returned by read_lua_files. Provide either edits (each old_text must appear exactly once in the current file) or content to replace the whole file. Pass expected_revision from read_lua_files; after stale_state, read again before retrying once. Edits are never saved or published; the user saves explicitly.", Parameters: json.RawMessage(`{"type":"object","properties":{"file":{"type":"string","maxLength":200,"pattern":"^(?:project\\.json|README\\.md|(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_-][A-Za-z0-9_.-]*\\.lua)$"},"expected_revision":{"type":"integer","minimum":0},"edits":{"type":"array","minItems":1,"maxItems":20,"items":{"type":"object","properties":{"old_text":{"type":"string","minLength":1},"new_text":{"type":"string"}},"required":["old_text","new_text"],"additionalProperties":false}},"content":{"type":"string","minLength":1}},"required":["file","expected_revision"],"additionalProperties":false}`)},
+		ToolDefinition: ToolDefinition{Name: "edit_lua_file", Description: "Edit one file in the unsaved working copy: project.json, README.md (Markdown shown on the addon's page) or a .lua file returned by read_lua_files. Provide either edits (each old_text must appear exactly once in the current file) or content to replace the whole file. Pass expected_revision from read_lua_files; after stale_state, read again before retrying once. Edits are not saved or published; use save_lua_files to save to main after review.", Parameters: json.RawMessage(`{"type":"object","properties":{"file":{"type":"string","maxLength":200,"pattern":"^(?:project\\.json|README\\.md|(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_-][A-Za-z0-9_.-]*\\.lua)$"},"expected_revision":{"type":"integer","minimum":0},"edits":{"type":"array","minItems":1,"maxItems":20,"items":{"type":"object","properties":{"old_text":{"type":"string","minLength":1},"new_text":{"type":"string"}},"required":["old_text","new_text"],"additionalProperties":false}},"content":{"type":"string","minLength":1}},"required":["file","expected_revision"],"additionalProperties":false}`)},
 		CapabilityID:   luaEditorCapabilityID, CapabilityVersion: luaEditorCapabilityVersion, Effect: "view_mutation", Confirmation: "never",
+	},
+	{
+		ToolDefinition: ToolDefinition{Name: "save_lua_files", Description: "Save the browser working copy to main. This does not create a tag or publish a release. Pass expected_revision from the latest read or edit result. Requires approval unless YOLO is enabled. After stale_state, read again before retrying once; do not retry after user_rejected or capability_unavailable.", Parameters: json.RawMessage(`{"type":"object","properties":{"expected_revision":{"type":"integer","minimum":0}},"required":["expected_revision"],"additionalProperties":false}`)},
+		CapabilityID:   luaEditorCapabilityID, CapabilityVersion: luaEditorCapabilityVersion, Effect: "view_mutation", Confirmation: "unless_yolo",
 	},
 	{
 		ToolDefinition: ToolDefinition{Name: "run_preview", Description: "Replay the current unsaved working copy in a fresh sandboxed browser worker against the instance the user picked in the Preview pane, exactly like the preview. Pass encounter_ids to choose encounters (this also selects them in the user's Preview pane); omit it to use the user's current selection. Every result lists the instance's encounters (id, name, boss, kill_type, selected) so you can choose. Returns ok, the panel's error message if it stopped, event and timing metrics, and an indented text outline of every UI object it drew (kind, id, text, size, position, colors, hidden). If it reports that an instance must be selected first, ask the user to pick one in the Preview pane.", Parameters: json.RawMessage(`{"type":"object","properties":{"encounter_ids":{"type":"array","minItems":1,"maxItems":100,"uniqueItems":true,"items":{"type":"string","minLength":1,"maxLength":200}}},"additionalProperties":false}`)},
@@ -183,6 +187,13 @@ func validateClientToolArguments(name, raw string) (json.RawMessage, error) {
 		}
 		if err := decodeStrict(raw, &input); err != nil {
 			return nil, errors.New("invalid inspect_search_draft arguments")
+		}
+	case "save_lua_files":
+		var input struct {
+			ExpectedRevision *int64 `json:"expected_revision"`
+		}
+		if err := decodeStrict(raw, &input); err != nil || input.ExpectedRevision == nil || *input.ExpectedRevision < 0 {
+			return nil, errors.New("invalid save_lua_files arguments")
 		}
 	case "set_search_draft":
 		var input struct {

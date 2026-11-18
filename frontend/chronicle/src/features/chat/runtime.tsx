@@ -83,6 +83,7 @@ interface StoredCapability {
 
 export interface InferenceRuntimeClient {
   getClientDescriptor: () => InferenceClientDescriptor;
+  getAvailableTools?: () => { capability: InferenceCapabilityDescriptor; names: string[] }[];
   executeClientTool: (
     request: ClientToolRequestEvent,
     signal: AbortSignal,
@@ -167,6 +168,10 @@ export class InferenceRuntime implements InferenceRuntimeClient {
     session_id: this.sessionId,
     capabilities: this.getCapabilities(),
   });
+
+  getAvailableTools = () => [...this.capabilities.values()]
+    .filter(capability => capability.isAvailable())
+    .map(capability => ({ capability: capability.descriptor, names: Object.keys(capability.tools) }));
 
   registerCapability = (registration: InferenceCapabilityRegistration): (() => void) => {
     if (!registration.id || !registration.version) {
@@ -417,6 +422,7 @@ export function InferenceRuntimeProvider({ children }: { children: ReactNode }) 
     resolveConfirmation,
     registerCapability: runtime.registerCapability,
     getClientDescriptor: runtime.getClientDescriptor,
+    getAvailableTools: runtime.getAvailableTools,
     executeClientTool: runtime.executeClientTool,
   }), [capabilities, confirmation, resolveConfirmation, runtime, updateYolo, yoloEnabled]);
 

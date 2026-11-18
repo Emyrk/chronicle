@@ -1,13 +1,14 @@
 import { HomeBootstrapContext, type HomeBootstrap } from "./home/bootstrap"
 import { StrictMode, type ReactNode } from 'react'
 import { createRoot, hydrateRoot } from 'react-dom/client'
-import { BrowserRouter } from 'react-router-dom'
+import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 import './debug/sizes'
 import './index.css'
 import App from './App.tsx'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BlogApp } from './blog/BlogApp'
 import { InferenceRuntimeProvider } from './features/chat/runtime'
+import { LocalMcpProvider } from './features/chat/mcp/LocalMcpProvider'
 import { reloadAfterRouteLoadFailure } from './lib/routeLoadRecovery'
 
 window.addEventListener('vite:preloadError', (event) => {
@@ -34,17 +35,18 @@ async function mount() {
   ) : (
     <QueryClientProvider client={queryClient}>
       <InferenceRuntimeProvider>
-        <HomeBootstrapContext.Provider value={homeBootstrap}><App homeLanding={homeLanding} /></HomeBootstrapContext.Provider>
+        <LocalMcpProvider><HomeBootstrapContext.Provider value={homeBootstrap}><App homeLanding={homeLanding} /></HomeBootstrapContext.Provider></LocalMcpProvider>
       </InferenceRuntimeProvider>
     </QueryClientProvider>
   )
 
+  // Keep App/BlogApp's existing descendant routes unchanged. The data-router
+  // boundary enables supported navigation blocking for an explicitly connected MCP tab.
+  const router = createBrowserRouter([{ path: "*", element: application }])
   const tree = (
     <StrictMode>
       {/* Show Suspense fallbacks immediately instead of keeping the previous route visible. */}
-      <BrowserRouter useTransitions={false}>
-        {application}
-      </BrowserRouter>
+      <RouterProvider router={router} useTransitions={false} />
     </StrictMode>
   )
 

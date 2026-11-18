@@ -81,7 +81,7 @@ export type LuaWorkingCopy = {
   saving: boolean
 }
 /** Lets the page save from anywhere (header, publish) while the editor keeps owning its draft baseline. */
-export type LuaSourceEditorHandle = { save(): Promise<{ ok: boolean; error?: string }> }
+export type LuaSourceEditorHandle = { save(expectedRevision?: number): Promise<{ ok: boolean; error?: string }> }
 /** Replaces working-copy files if the revision still matches; used by AI tools and undo. */
 const tabLabel: Record<keyof EditorFiles, string> = { lua: "main.lua", manifest: "project.json", readme: "README.md" }
 const statusHint: Record<keyof EditorFiles, string> = {
@@ -179,7 +179,8 @@ export function LuaSourceEditor({ project, onUploaded, onWorkingCopy, proposedSo
     setFiles(current => current ? { ...current, [field]: value } : current)
   }
 
-  async function save(): Promise<{ ok: boolean; error?: string }> {
+  async function save(expectedRevision?: number): Promise<{ ok: boolean; error?: string }> {
+    if (expectedRevision !== undefined && expectedRevision !== localRevision.current) throw new Error("stale_state")
     if (!files || loading) return { ok: false, error: "The editor is still loading." }
     if (validation) return { ok: false, error: validation }
     if (!dirty) return { ok: true }
@@ -204,7 +205,7 @@ export function LuaSourceEditor({ project, onUploaded, onWorkingCopy, proposedSo
   }
   const saveRef = useRef(save)
   saveRef.current = save
-  useImperativeHandle(handleRef, () => ({ save: () => saveRef.current() }), [])
+  useImperativeHandle(handleRef, () => ({ save: (expectedRevision) => saveRef.current(expectedRevision) }), [])
 
   const message = error || validation
   return <section aria-label="Lua source editor" className="flex h-full min-h-0 flex-col bg-background">

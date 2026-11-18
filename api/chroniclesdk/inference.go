@@ -169,3 +169,29 @@ type InferenceContributorUsage struct {
 	Author   string         `json:"author,omitempty"`
 	Usage    InferenceUsage `json:"usage"`
 }
+
+// InferenceBrowserTool describes a server-defined tool executed only by an active browser capability.
+type InferenceBrowserTool struct {
+	Name              string          `json:"name"`
+	Description       string          `json:"description"`
+	InputSchema       json.RawMessage `json:"input_schema"`
+	CapabilityID      string          `json:"capability_id"`
+	CapabilityVersion int             `json:"capability_version"`
+	Effect            string          `json:"effect"`
+	Confirmation      string          `json:"confirmation"`
+}
+
+type InferenceClientToolsResponse struct {
+	Tools []InferenceBrowserTool `json:"tools"`
+}
+
+type InferenceValidateClientToolRequest struct {
+	Name              string          `json:"name"`
+	CapabilityID      string          `json:"capability_id"`
+	CapabilityVersion int             `json:"capability_version"`
+	Arguments         json.RawMessage `json:"arguments"`
+}
+
+type InferenceValidateClientToolResponse struct {
+	Arguments json.RawMessage `json:"arguments"`
+}

@@ -85,3 +85,24 @@ func TestContentSecurityPolicyAllowsAdResourcesOnlyWhenEnabled(t *testing.T) {
 		})
 	}
 }
+
+func TestContentSecurityPolicyModuleDevelopment(t *testing.T) {
+	t.Parallel()
+	for _, path := range []string{"/modules/author/example/edit", "/modules/id/project/edit", "/modules", "/modules/author/example", "/instances/example"} {
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+			handler := httpmw.ContentSecurityPolicy(nil)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+			csp := rec.Header().Get("Content-Security-Policy")
+			assert.Equal(t, strings.HasSuffix(path, "/edit"), strings.Contains(csp, "http://127.0.0.1:17643"))
+			assert.NotContains(t, csp, "http://localhost")
+			assert.NotContains(t, csp, "http://127.0.0.1:*")
+			for _, directive := range strings.Split(csp, "; ") {
+				if !strings.HasPrefix(directive, "connect-src ") {
+					assert.NotContains(t, directive, "127.0.0.1")
+				}
+			}
+		})
+	}
+}
