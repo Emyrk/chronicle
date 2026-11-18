@@ -52,7 +52,8 @@ type Tracker struct {
 	// COMBATANT_INFO messages cannot repair invalidation with the same talents.
 	invalidatedTalentBuild map[guid.GUID]*combatant.Talents
 
-	PlayerLevel map[guid.GUID]int32
+	PlayerLevel      map[guid.GUID]int32
+	metadataObserved map[guid.GUID]metadataObservations
 }
 
 func New(units *unitdb.Units) *Tracker {
@@ -243,10 +244,19 @@ func (g *Tracker) Insert(ctx context.Context, udb *unitdb.Units, instanceID uuid
 			}
 		}
 
+		observed := g.playerObservations(player)
 		inserts = append(inserts, database.UpsertPlayersParams{
-			ID:      player.Guid,
-			RealmID: playerRealms[playerGUID],
-			Name:    player.Name,
+			NameObservedAt:    observed.Name,
+			ClassObservedAt:   observed.Class,
+			RaceObservedAt:    observed.Race,
+			GenderObservedAt:  observed.Gender,
+			FactionObservedAt: observed.Faction,
+			LevelObservedAt:   observed.Level,
+			GuildObservedAt:   observed.Guild,
+			GuildKnown:        player.Guild != nil,
+			ID:                player.Guid,
+			RealmID:           playerRealms[playerGUID],
+			Name:              player.Name,
 			GuildID: uuid.NullUUID{
 				UUID:  guildID,
 				Valid: guildID != uuid.Nil,
@@ -557,10 +567,24 @@ func (g *Tracker) Unit(unit *messages.Unit) {
 		return
 	}
 
+	previous := g.Players[unit.Guid]
+	observed := g.playerObservations(previous)
+	if prior, ok := g.metadataObserved[unit.Guid]; ok {
+		observed = prior
+	}
+	seen := unit.Date()
+	if unit.LevelObservedAt != nil {
+		seen = *unit.LevelObservedAt
+	}
+	if observed.Level.Valid && seen.Before(observed.Level.Time) {
+		return
+	}
+	observed.Level = database.Timestamptz(seen)
+	g.setPlayerObservations(unit.Guid, observed)
 	g.PlayerLevel[unit.Guid] = unit.Level
-	exists, ok := g.Players[unit.Guid]
-	if ok && (exists.Level == nil || *exists.Level <= 0) {
-		exists.Level = &unit.Level
+	if exists, ok := g.Players[unit.Guid]; ok {
+		level := unit.Level
+		exists.Level = &level
 		g.Players[unit.Guid] = exists
 	}
 }
@@ -580,6 +604,7 @@ func (g *Tracker) Player(msg *messages.Combatant) {
 	}
 
 	previous, ok := g.Players[gid]
+	raw := c
 	if ok {
 		c.MergeExisting(previous)
 		gearExists := false
@@ -593,6 +618,18 @@ func (g *Tracker) Player(msg *messages.Combatant) {
 			c.GearSetups = previous.GearSetups
 		}
 	}
+
+	observed := g.playerObservations(previous)
+	if prior, exists := g.metadataObserved[gid]; exists {
+		observed = prior
+	}
+	if previous.Level == nil {
+		if level, exists := g.PlayerLevel[gid]; exists {
+			previous.Level = &level
+		}
+	}
+	observed.merge(&c, raw, previous)
+	g.setPlayerObservations(gid, observed)
 
 	if c.Level == nil || *c.Level <= 0 {
 		lvl, uok := g.PlayerLevel[gid]
