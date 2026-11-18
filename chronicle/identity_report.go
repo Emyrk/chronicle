@@ -4,6 +4,7 @@ import (
 	"slices"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
@@ -11,7 +12,7 @@ import (
 
 // Use the final zone-resolved catalogue, not the collector's missing-name
 // observation counters. Counts are distinct GUIDs within this instance.
-func buildIdentityInstance(name, zone string, finalized *instances.FinalizedInstance, units *unitdb.Units) chroniclesdk.IdentityInstance {
+func buildIdentityInstance(name, zone string, finalized *instances.FinalizedInstance, units *unitdb.Units, idf *identifier.Identifier) chroniclesdk.IdentityInstance {
 	report := chroniclesdk.IdentityInstance{Name: name, Zone: zone, Units: []chroniclesdk.IdentityUnit{}}
 	type key struct {
 		category unitdb.Category
@@ -42,6 +43,9 @@ func buildIdentityInstance(name, zone string, finalized *instances.FinalizedInst
 		}
 		if info, ok := units.Get(id); ok && u.Name == "" {
 			u.Name = info.Name
+		}
+		if idf != nil {
+			u.Boss = u.Boss || idf.IdentifyUnit(id).Boss
 		}
 		u.UniqueCount++
 		if len(u.Samples) < 3 {

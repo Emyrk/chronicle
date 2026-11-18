@@ -23,3 +23,13 @@ describe("identity category report", () => {
     expect(html).not.toContain("LoadAdds");
   });
 });
+
+it("offers a collapsed review-required export without reusing legacy go_code", () => {
+  const code = "func RaidHostiles() map[uint32]Identity {}";
+  const html = renderToStaticMarkup(<IdentitySection identity={{ possible_hostiles_go_code: code }} />);
+  expect(html).toContain("<details><summary");
+  expect(html).toContain("Possible hostiles Go export (review required)");
+  expect(html).toContain("Unknown category does not prove hostility");
+  expect(html).toContain("Copy possible hostiles Go code");
+  expect(html).toContain(code);
+});

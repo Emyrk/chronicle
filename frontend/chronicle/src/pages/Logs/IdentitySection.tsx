@@ -1,3 +1,4 @@
+import { copyPossibleHostilesCode } from "./possibleHostilesExport";
 import { useState } from "react";
 import { ChevronRight, Fingerprint } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
@@ -7,6 +8,7 @@ export function IdentitySection({ identity }: { identity: IdentityReport }) {
   const zonedUnits = identity.zoned_units ? Object.entries(identity.zoned_units) : [];
   const zoneSpells = identity.zone_spells ? Object.entries(identity.zone_spells) : [];
   const unitSpells = identity.unit_spells ? Object.entries(identity.unit_spells) : [];
+  const [copyStatus, setCopyStatus] = useState("");
   const [category, setCategory] = useState("all");
   const instances = identity.instances ?? [];
   const unknownCount = instances.flatMap(i => i.units).filter(u => u.category === "unknown").reduce((sum, u) => sum + u.unique_count, 0);
@@ -40,6 +42,15 @@ export function IdentitySection({ identity }: { identity: IdentityReport }) {
         </summary>
 
         <div className="mt-4 space-y-4">
+          {identity.possible_hostiles_go_code && (
+            <details>
+              <summary className="cursor-pointer text-sm font-medium">Possible hostiles Go export (review required)</summary>
+              <p className="my-2 text-sm text-muted-foreground">Unknown category does not prove hostility. This scaffold includes only unknown and ordinary entries. Review affiliation, boss roles, encounter names and hooks before registering the factory. Known boss flags are preserved; this is not a replacement for existing encounter definitions.</p>
+              <button type="button" className="rounded bg-muted px-2 py-1 text-xs" onClick={async () => setCopyStatus(await copyPossibleHostilesCode(identity.possible_hostiles_go_code!))}>Copy possible hostiles Go code</button>
+              <span role="status" className="ml-2 text-xs">{copyStatus}</span>
+              <pre className="styled-scrollbar mt-2 max-h-96 overflow-auto rounded bg-muted/50 p-3 text-xs whitespace-pre">{identity.possible_hostiles_go_code}</pre>
+            </details>
+          )}
           {instances.length > 0 && (
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground">Final categories for observed GUIDs, including passive references and instances without retained encounters. Counts are unique GUIDs per instance, not event counts. Up to three sample GUIDs per entry.</p>

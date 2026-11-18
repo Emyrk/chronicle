@@ -342,6 +342,8 @@ type UnknownUnit struct {
 
 // IdentityReport contains finalized unit categories and spell diagnostics.
 type IdentityReport struct {
+	// PossibleHostilesGoCode is a review-required candidate scaffold, not a hostile classification.
+	PossibleHostilesGoCode string `json:"possible_hostiles_go_code,omitempty"`
 	// Instances contains finalized observed units, including instances without retained encounters.
 	Instances []IdentityInstance `json:"instances,omitempty"`
 	// ZonedUnits is retained for reading legacy stored reports.
@@ -360,6 +362,7 @@ type IdentityInstance struct {
 }
 
 type IdentityUnit struct {
+	Boss        bool     `json:"boss,omitempty"`
 	Category    string   `json:"category"`
 	EntryID     uint32   `json:"entry_id"`
 	Name        string   `json:"name"`

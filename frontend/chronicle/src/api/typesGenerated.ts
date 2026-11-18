@@ -2845,6 +2845,10 @@ export interface IdentityInstance {
  */
 export interface IdentityReport {
     /**
+     * PossibleHostilesGoCode is a review-required candidate scaffold, not a hostile classification.
+     */
+    readonly possible_hostiles_go_code?: string;
+    /**
      * Instances contains finalized observed units, including instances without retained encounters.
      */
     readonly instances?: readonly IdentityInstance[];
@@ -2873,6 +2877,7 @@ export interface IdentitySpell {
 
 // From chroniclesdk/log.go
 export interface IdentityUnit {
+    readonly boss?: boolean;
     readonly category: string;
     readonly entry_id: number;
     readonly name: string;

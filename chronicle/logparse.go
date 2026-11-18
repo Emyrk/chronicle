@@ -483,7 +483,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		totalFinalizeDuration += instFinalizeDuration
 
 		if report.Identity != nil && finalized != nil && err == nil {
-			report.Identity.Instances = append(report.Identity.Instances, buildIdentityInstance(inst.Name(), inst.CurrentZone.Name, finalized, encountersState.Units))
+			report.Identity.Instances = append(report.Identity.Instances, buildIdentityInstance(inst.Name(), inst.CurrentZone.Name, finalized, encountersState.Units, inst.Identifier))
 		}
 
 		if finalized == nil || len(finalized.Encounters) == 0 {
@@ -1151,6 +1151,9 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 	// Set total duration right before recording output (not in defer)
 	report.TotalDuration = chroniclesdk.DurationFrom(time.Since(jobStart))
 
+	if report.Identity != nil {
+		report.Identity.PossibleHostilesGoCode = report.Identity.GeneratePossibleHostilesGoCode()
+	}
 	jobOut.Report = report
 	jobOut.Complete = ptr.Ref(time.Now())
 	jobResult = "success"

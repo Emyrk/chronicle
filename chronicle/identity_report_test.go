@@ -2,6 +2,7 @@ package chronicle
 
 import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/creatures"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
@@ -20,7 +21,7 @@ func TestIdentityInstanceFinalizedCatalogue(t *testing.T) {
 		PersistedUnits: []guid.GUID{ordinary, unknown + 3, unknown + 2, unknown + 1, unknown, unknown, 0},
 		UnitCategories: map[guid.GUID]unitdb.Category{unknown: unitdb.CategoryUnknown, ordinary: unitdb.CategoryOrdinary},
 	}
-	report := buildIdentityInstance("Raid", "Zone", finalized, units)
+	report := buildIdentityInstance("Raid", "Zone", finalized, units, nil)
 	require.Equal(t, "Zone", report.Zone)
 	require.Len(t, report.Units, 2)
 	require.Equal(t, "unknown", report.Units[0].Category)
@@ -29,7 +30,7 @@ func TestIdentityInstanceFinalizedCatalogue(t *testing.T) {
 	require.Equal(t, []string{unknown.String(), (unknown + 1).String(), (unknown + 2).String()}, report.Units[0].Samples)
 	require.Equal(t, "ordinary", report.Units[1].Category)
 	require.Equal(t, uint32(0x844), report.Units[1].EntryID)
-	require.Equal(t, report, buildIdentityInstance("Raid", "Zone", finalized, units))
+	require.Equal(t, report, buildIdentityInstance("Raid", "Zone", finalized, units, nil))
 }
 
 func TestIdentityReportPreservesSpellDiagnostics(t *testing.T) {
@@ -49,7 +50,7 @@ func TestIdentityInstancePreservesAllCategories(t *testing.T) {
 		finalized.PersistedUnits = append(finalized.PersistedUnits, id)
 		finalized.UnitCategories[id] = category
 	}
-	report := buildIdentityInstance("Raid", "Zone", finalized, unitdb.New())
+	report := buildIdentityInstance("Raid", "Zone", finalized, unitdb.New(), nil)
 	require.Len(t, report.Units, len(categories))
 	for _, category := range categories {
 		found := false
@@ -61,4 +62,13 @@ func TestIdentityInstancePreservesAllCategories(t *testing.T) {
 		}
 		require.True(t, found, "category %s", category)
 	}
+}
+
+func TestIdentityReportPreservesRegisteredBoss(t *testing.T) {
+	t.Parallel()
+	id := guid.GUID(0xF130000844003FB5)
+	finalized := &instances.FinalizedInstance{PersistedUnits: []guid.GUID{id}, UnitCategories: map[guid.GUID]unitdb.Category{id: unitdb.CategoryOrdinary}}
+	idf := identifier.NewIdentifier(map[uint32]identifier.Identity{0x844: {Boss: true}})
+	report := buildIdentityInstance("Raid", "Zone", finalized, unitdb.New(), idf)
+	require.True(t, report.Units[0].Boss)
 }
