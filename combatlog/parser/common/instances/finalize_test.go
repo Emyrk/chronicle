@@ -3,6 +3,7 @@ package instances
 import (
 	"bytes"
 	"context"
+	"io"
 	"log/slog"
 	"testing"
 	"time"
@@ -1317,4 +1318,20 @@ func TestFinalizeCatalogueIncludesUnknownOwnedAndPassiveUnits(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []guid.GUID{otherInstance}, otherResult.PersistedUnits)
 	require.NotContains(t, otherResult.UnknownUnits, uint32(12345))
+}
+
+func TestCritterMessagesDoNotAdvanceInstanceLifecycleClock(t *testing.T) {
+	t.Parallel()
+	db := unitdb.New()
+	base := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+	h := NewHookable(context.Background(), slog.New(slog.NewTextHandler(io.Discard, nil)), db, zone.Zone{}, InstanceParams{Idf: identifier.NewIdentifier(map[uint32]identifier.Identity{})})
+	require.NoError(t, h.Process(&messages.Timeout{MessageBase: messages.Base(base)}))
+	critter := creatureGUID(2914, 1)
+	require.NoError(t, h.Process(&messages.Damage{MessageBase: messages.Base(base.Add(time.Hour)), Target: critter, Amount: 10}))
+	require.Equal(t, base, h.lastProcessedAt)
+	require.Equal(t, base, h.lastActivity)
+	result, err := h.Finalize(context.Background())
+	require.NoError(t, err)
+	require.Contains(t, result.PersistedUnits, critter)
+	require.Empty(t, result.Encounters)
 }

@@ -773,7 +773,9 @@ func (h *Hookable) process(m messages.Message) (finalError error) {
 		actChange = actChange || endedActivity
 	}
 
-	h.lastProcessedAt = m.Date()
+	if !h.units.MessageHasCategory(m, unitdb.CategoryCritter, h.Identifier) {
+		h.lastProcessedAt = m.Date()
+	}
 
 	if actChange {
 		// Only need to update the fight detection if there is a change in character activity.
