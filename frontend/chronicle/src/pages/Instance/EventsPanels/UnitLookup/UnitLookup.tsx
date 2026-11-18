@@ -136,7 +136,7 @@ function UnitRow({ unit }: { unit: DisplayUnitEntry }) {
         {unit.name}
       </td>
       <td className="py-0.5 px-1 tabular-nums">{unit.entry || "—"}</td>
-      <td className="py-0.5 px-1 capitalize">{unit.category}</td>
+      <td className="py-0.5 px-1 capitalize">{unit.category.replaceAll("_", " ")}</td>
       <td className="py-0.5 px-1">{UNIT_TYPE_LABELS[unit.unitType] ?? "?"}</td>
       <td className={`py-0.5 px-1 ${aff.color}`}>{aff.label}</td>
       <td className="py-0.5 px-1 truncate max-w-[100px] text-muted-foreground" title={unit.owner ?? ""}>

@@ -10,7 +10,9 @@ describe("Unit Lookup categories", () => {
       context: {
         instance: {
           units: {
-            boss: { name: "Boss", entry: 123, category: "boss" },
+            boss: { name: "Boss", entry: 123, category: "ordinary" },
+            guardian: { name: "Guardian", entry: 125, category: "guardian" },
+            scripted: { name: "Scripted object", entry: 126, category: "scripted_object" },
             legacy: { name: "Legacy", entry: 124 },
           },
           players: {},
@@ -26,7 +28,9 @@ describe("Unit Lookup categories", () => {
     } as unknown as PanelRenderProps<UnitLookupResult>;
     const markup = renderToStaticMarkup(createUnitLookupPanel().render(props));
     expect(markup).toContain(">Category</th>");
-    expect(markup).toContain(">boss</td>");
+    expect(markup).toContain(">ordinary</td>");
+    expect(markup).toContain(">guardian</td>");
+    expect(markup).toContain(">scripted object</td>");
     expect(markup).toContain(">unknown</td>");
     expect(markup).toContain(">Hostile</td>");
   });

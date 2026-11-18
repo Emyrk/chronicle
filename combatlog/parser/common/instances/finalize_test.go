@@ -1335,3 +1335,20 @@ func TestCritterMessagesDoNotAdvanceInstanceLifecycleClock(t *testing.T) {
 	require.Contains(t, result.PersistedUnits, critter)
 	require.Empty(t, result.Encounters)
 }
+
+func TestFinalizeUnknownGUIDWithoutMeaningfulEntry(t *testing.T) {
+	t.Parallel()
+	noEntry := guid.GUID(0xF160000000000001)
+	zeroEntry := guid.GUID(0xF130000000000001)
+	_, hasEntry := noEntry.GetEntry()
+	require.False(t, hasEntry)
+	h := &Hookable{units: unitdb.New(), Identifier: identifier.NewIdentifier(map[uint32]identifier.Identity{})}
+	for _, id := range []guid.GUID{0, noEntry, zeroEntry, noEntry} {
+		h.ObserveUnits(&messages.UnitTarget{Unit: id})
+	}
+	result, err := h.Finalize(context.Background())
+	require.NoError(t, err)
+	require.ElementsMatch(t, []guid.GUID{noEntry, zeroEntry}, result.PersistedUnits)
+	require.Equal(t, 2, result.UnknownUnits[0].Count)
+	require.ElementsMatch(t, []guid.GUID{noEntry, zeroEntry}, result.UnknownUnits[0].Samples)
+}

@@ -27,9 +27,9 @@ func TestGUIDStringJSON(t *testing.T) {
 func TestInstanceUnitOwnerJSON(t *testing.T) {
 	t.Parallel()
 
-	withoutOwner, err := json.Marshal(InstanceUnit{Name: "Boss", Entry: 1, Category: "boss"})
+	withoutOwner, err := json.Marshal(InstanceUnit{Name: "Boss", Entry: 1, Category: "ordinary"})
 	require.NoError(t, err)
-	require.JSONEq(t, `{"name":"Boss","entry":1,"category":"boss"}`, string(withoutOwner))
+	require.JSONEq(t, `{"name":"Boss","entry":1,"category":"ordinary"}`, string(withoutOwner))
 
 	withoutName, err := json.Marshal(InstanceUnit{Entry: 1, Category: "unknown"})
 	require.NoError(t, err)

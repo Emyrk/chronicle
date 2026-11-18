@@ -18,6 +18,9 @@ type EncounterFuncResult struct {
 
 type Identity struct {
 	Affiliation types.Affiliation
+	// Category optionally overrides the ordinary category of a known zone entry.
+	// Boss remains an independent encounter role, not a semantic category.
+	Category unitdb.Category
 	// Name is the display name for this unit (e.g. "Lava Surger", "Ragnaros").
 	Name string
 	// EncounterName, if set, will be used to identify a named encounter.
@@ -90,8 +93,8 @@ func (i *Identifier) UnitCategory(id guid.GUID) unitdb.Category {
 	if !exists {
 		return unitdb.CategoryUnknown
 	}
-	if identity.Boss {
-		return unitdb.CategoryBoss
+	if identity.Category != "" {
+		return identity.Category
 	}
 	return unitdb.CategoryOrdinary
 }

@@ -41,7 +41,7 @@ func EnqueueUnknownUnitNotifications(ctx context.Context, queue AdminNotificatio
 	}
 	entries := make([]uint32, 0, len(units))
 	for entry, unit := range units {
-		if entry != 0 && entry <= 0xFFFFFF && unit.Count > 0 {
+		if entry <= 0xFFFFFF && unit.Count > 0 {
 			entries = append(entries, entry)
 		}
 	}
@@ -55,7 +55,8 @@ func EnqueueUnknownUnitNotifications(ctx context.Context, queue AdminNotificatio
 		}
 		samples := make([]guid.GUID, 0, len(unit.Samples))
 		for _, sample := range unit.Samples {
-			if sampleEntry, ok := sample.GetEntry(); ok && sampleEntry == entry {
+			sampleEntry, _ := sample.GetEntry()
+			if !sample.IsZero() && sampleEntry == entry {
 				samples = append(samples, sample)
 			}
 		}
@@ -68,9 +69,13 @@ func EnqueueUnknownUnitNotifications(ctx context.Context, queue AdminNotificatio
 		for _, sample := range samples {
 			sampleText = append(sampleText, sample.String())
 		}
+		entryText := fmt.Sprint(entry)
+		if entry == 0 {
+			entryText = "No meaningful entry ID (unresolved GUID structure or zero template ID)"
+		}
 		fields := []AdminNotificationField{
 			{Name: "Zone", Value: boundedUnknownUnitField(zone), Inline: true},
-			{Name: "Creature entry", Value: fmt.Sprint(entry), Inline: true},
+			{Name: "Entry ID", Value: entryText, Inline: true},
 			{Name: "Name", Value: boundedUnknownUnitField(name)},
 			{Name: "Unique observed GUIDs", Value: fmt.Sprint(unit.Count), Inline: true},
 		}

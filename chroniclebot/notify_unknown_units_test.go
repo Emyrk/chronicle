@@ -34,7 +34,7 @@ func TestUnknownUnitNotifications(t *testing.T) {
 	first := guid.GUID(0xF130000000000001 | uint64(42)<<24)
 	second := first + 1
 	units := map[uint32]UnknownUnitCategory{
-		0: {Count: 10}, 0x1000000: {Count: 1}, 100: {Count: 0},
+		0x1000000: {Count: 1}, 100: {Count: 0},
 		42: {Name: "Mystery", Count: 20, Samples: []guid.GUID{second, first, first, first + 1<<24, 0}},
 		43: {Count: 1},
 	}
@@ -47,7 +47,7 @@ func TestUnknownUnitNotifications(t *testing.T) {
 	require.Equal(t, "admins", job.ChannelID)
 	require.Equal(t, []AdminNotificationField{
 		{Name: "Zone", Value: "Test zone", Inline: true},
-		{Name: "Creature entry", Value: "42", Inline: true},
+		{Name: "Entry ID", Value: "42", Inline: true},
 		{Name: "Name", Value: "Mystery"},
 		{Name: "Unique observed GUIDs", Value: "20", Inline: true},
 		{Name: "Sample GUIDs", Value: first.String() + "\n" + second.String()},
@@ -102,4 +102,23 @@ func TestUnknownUnitNotificationBounds(t *testing.T) {
 		require.LessOrEqual(t, len(field.Value), 1024)
 	}
 	require.Len(t, strings.Split(queue.jobs[0].Fields[4].Value, "\n"), 5)
+}
+
+func TestUnknownUnitNotificationsWithoutMeaningfulEntry(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	bot, err := New(ctx, testutil.Logger(t), Config{Token: "test", AdminNotificationsChannelID: "admins"})
+	require.NoError(t, err)
+	queue := &unknownUnitQueue{}
+	noEntry := guid.GUID(0xF160000000000001)
+	zeroEntry := guid.GUID(0xF130000000000001)
+	units := map[uint32]UnknownUnitCategory{0: {Count: 2, Samples: []guid.GUID{noEntry, zeroEntry, 0}}}
+	require.NoError(t, EnqueueUnknownUnitNotifications(ctx, queue, bot, UnknownUnitNotificationContext{Zone: "Test zone", InstanceURL: "https://chronicle.example/instances/test"}, units))
+	require.Len(t, queue.jobs, 1)
+	require.Contains(t, queue.jobs[0].Fields[1].Value, "No meaningful entry ID")
+	require.Equal(t, "2", queue.jobs[0].Fields[3].Value)
+	require.Contains(t, queue.jobs[0].Fields[4].Value, noEntry.String())
+	require.Contains(t, queue.jobs[0].Fields[4].Value, zeroEntry.String())
+	require.NotContains(t, queue.jobs[0].Fields[4].Value, guid.GUID(0).String())
+	require.Equal(t, 24*time.Hour, queue.jobs[0].InsertOpts().UniqueOpts.ByPeriod)
 }

@@ -9,19 +9,20 @@ import (
 )
 
 // Category describes a unit's semantic role, independently of GUID structure,
-// affiliation, ownership and temporary control.
+// affiliation, ownership, encounter boss role and temporary control.
 type Category string
 
 const (
-	CategoryUnknown  Category = "unknown"
-	CategoryOrdinary Category = "ordinary"
-	CategoryBoss     Category = "boss"
-	CategoryCritter  Category = "critter"
-	CategoryTotem    Category = "totem"
-	CategoryTrap     Category = "trap"
-	CategoryDemon    Category = "demon"
-	CategoryPlayer   Category = "player"
-	CategoryPet      Category = "pet"
+	CategoryUnknown        Category = "unknown"
+	CategoryOrdinary       Category = "ordinary"
+	CategoryGuardian       Category = "guardian"
+	CategoryScriptedObject Category = "scripted_object"
+	CategoryCritter        Category = "critter"
+	CategoryTotem          Category = "totem"
+	CategoryTrap           Category = "trap"
+	CategoryDemon          Category = "demon"
+	CategoryPlayer         Category = "player"
+	CategoryPet            Category = "pet"
 )
 
 // CategoryIdentifier supplies zone definitions without coupling the shared unit

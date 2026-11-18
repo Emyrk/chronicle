@@ -18,10 +18,10 @@ func TestInstanceBuilderCategories(t *testing.T) {
 	player := guid.GUID(1)
 	units.Info[boss] = unitinfo.Info{Name: "Boss"}
 	builder := newInstanceBuilder(units, uuid.New())
-	builder.categories = map[guid.GUID]unitdb.Category{boss: "boss"}
+	builder.categories = map[guid.GUID]unitdb.Category{boss: unitdb.CategoryOrdinary}
 	builder.seen(boss, ordinary, player, boss)
 	require.Len(t, builder.units, 2)
-	require.Equal(t, "boss", builder.units[0].Category)
+	require.Equal(t, "ordinary", builder.units[0].Category)
 	require.Equal(t, string(units.Category(ordinary)), builder.units[1].Category)
 	require.NotEmpty(t, builder.units[1].Category)
 	require.Len(t, builder.players, 1)
