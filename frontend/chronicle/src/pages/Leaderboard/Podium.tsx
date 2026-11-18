@@ -754,6 +754,12 @@ interface PodiumProps {
   compact?: boolean
 }
 
+/** A run without a guild: italic and muted so it never reads as a guild named "No guild". */
+export function NoGuild() {
+  // Italic glyphs lean past their box; the padding keeps the final "d" inside truncating parents.
+  return <span className="pr-[0.15em] font-normal italic text-muted-foreground">No guild</span>
+}
+
 export function Podium({ entries, instanceName, compact }: PodiumProps) {
   if (entries.length === 0) return null
   const theme = INSTANCE_THEMES[instanceName] ?? DEFAULT_THEME
@@ -806,7 +812,7 @@ export function Podium({ entries, instanceName, compact }: PodiumProps) {
                 className={`${style.name} font-bold ${isFirst ? "text-white" : colors.text} truncate w-full`}
                 {...guildAttributes(entry.guild_id, entry.guild_name)}
               >
-                {entry.guild_name || "Unknown Guild"}
+                {entry.guild_name || <NoGuild />}
               </span>
               <span className={`${style.duration} font-mono font-bold text-foreground mt-1`}>
                 <span {...speedrunClearAttributes(entry, instanceName)}>{formatDuration(entry.duration_ms)}</span>
@@ -851,7 +857,7 @@ export function PodiumList({ entries, instanceName }: PodiumProps) {
                 className={`block truncate text-sm font-semibold ${rank === 0 ? "text-white" : MEDAL_COLORS[rank].text}`}
                 {...guildAttributes(entry.guild_id, entry.guild_name)}
               >
-                {entry.guild_name || "Unknown Guild"}
+                {entry.guild_name || <NoGuild />}
               </span>
               <span className="flex items-center gap-1.5 truncate text-[11px] text-muted-foreground">
                 {entry.player_count > 0 && (

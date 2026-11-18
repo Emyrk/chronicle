@@ -1,15 +1,22 @@
 import { useState, type ReactNode } from "react"
-import { ChevronLeft, ChevronRight, Timer, Users } from "lucide-react"
+import { BadgeCheck, ChevronLeft, ChevronRight, ListOrdered, LockKeyhole, Timer, Users } from "lucide-react"
+import { Link } from "react-router-dom"
 import type { KillTimeLeaderboardEntry, SpeedrunLeaderboardEntry } from "@/api/typesGenerated"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { TierPill } from "@/components/Supporter/Supporter"
+import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip"
+import { TIER_COLOR } from "@/pages/Settings/billingPricing"
 import { MOBILE_EDGE_TO_EDGE } from "@/pages/Leaderboards/Hub/edgeToEdge"
 import { guildAttributes, killAttributes, speedrunClearAttributes } from "@/components/EntityMenu/leaderboardEntities"
-import { Podium } from "@/pages/Leaderboard/Podium"
+import { NoGuild, Podium } from "@/pages/Leaderboard/Podium"
 import { formatClock, speedruns } from "./hub.fixtures"
 import { defaultSpeedrunsView, selectedBosses, type EncounterSelection, type SpeedrunsView } from "./encounterSelection"
 
 type LiveList<T> = { entries?: readonly T[]; loading?: boolean; error?: Error | null }
+
+/** Each guild's best run, or every qualifying run (a Revered perk). */
+export type RunsBoard = "guild" | "all"
 
 /**
  * Speedruns, its own tab, with two boards: full clears (whole-raid runs) and
@@ -22,6 +29,12 @@ export function SpeedrunsTab({
   selection,
   view: controlledView,
   onView,
+  runsBoard = "guild",
+  onRunsBoard,
+  allRunsLocked = false,
+  clearPage = 1,
+  clearPageSize = 50,
+  onClearPage,
   killPage = 1,
   killPageSize = 50,
   onKillPage,
@@ -33,48 +46,120 @@ export function SpeedrunsTab({
   /** Controlled view, so a host only loads the board that is shown. */
   view?: SpeedrunsView
   onView?: (view: SpeedrunsView) => void
+  /** Full clears and a single boss's kill times rank each guild's best run, or every run. */
+  runsBoard?: RunsBoard
+  onRunsBoard?: (board: RunsBoard) => void
+  /** Below Revered, "All runs" becomes an upsell link instead of an option. */
+  allRunsLocked?: boolean
+  clearPage?: number
+  clearPageSize?: number
+  onClearPage?: (page: number) => void
   killPage?: number
   killPageSize?: number
   onKillPage?: (page: number) => void
   /** When provided, use only parent-loaded API results, never story fixtures. */
-  live?: { clears?: LiveList<SpeedrunLeaderboardEntry>; kills?: LiveList<KillTimeLeaderboardEntry> & { totalCount?: number } }
+  live?: { clears?: LiveList<SpeedrunLeaderboardEntry> & { hasNextPage?: boolean }; kills?: LiveList<KillTimeLeaderboardEntry> & { totalCount?: number } }
 }) {
   const [ownView, setOwnView] = useState<SpeedrunsView>(defaultSpeedrunsView(selection))
   const view = controlledView ?? ownView
   const setView = onView ?? setOwnView
   const chosen = selectedBosses(selection, bosses)
   const switcher = (
-    <nav aria-label="Speedrun board" className="inline-flex rounded-md border bg-card p-0.5 text-xs sm:text-sm">
-      {(
-        [
-          ["clear", "Full clear"],
-          ["kills", `Kill times${chosen.length ? ` · ${chosen.length === 1 ? chosen[0] : `${chosen.length} bosses`}` : ""}`],
-        ] as const
-      ).map(([id, label]) => (
-        <button
-          key={id}
-          type="button"
-          aria-pressed={view === id}
-          onClick={() => setView(id)}
-          className={cn(
-            "cursor-pointer rounded px-2.5 py-1 font-medium transition-colors sm:px-3 sm:py-1.5",
-            view === id ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
-          )}
-        >
-          {label}
-        </button>
-      ))}
-    </nav>
+    <div className="flex flex-wrap items-center gap-2">
+      <nav aria-label="Speedrun board" className="inline-flex rounded-md border bg-card p-0.5 text-xs sm:text-sm">
+        {(
+          [
+            ["clear", "Full clear"],
+            ["kills", `Kill times${chosen.length ? ` · ${chosen.length === 1 ? chosen[0] : `${chosen.length} bosses`}` : ""}`],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            aria-pressed={view === id}
+            onClick={() => setView(id)}
+            className={segment(view === id)}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
+      {onRunsBoard && (view === "clear" || chosen.length === 1) && (
+        <RunsToggle board={runsBoard} onBoard={onRunsBoard} locked={allRunsLocked} />
+      )}
+    </div>
   )
   // Full clears carry the switch in the podium card's header; kill times have no podium, so it sits above.
   return view === "clear" ? (
-    <ClearBoard instanceName={instanceName} live={live?.clears} story={!live} bosses={bosses} switcher={switcher} />
+    <ClearBoard instanceName={instanceName} live={live?.clears} story={!live} bosses={bosses} switcher={switcher} page={clearPage} pageSize={clearPageSize} onPage={onClearPage} />
   ) : (
     <div className="space-y-3 sm:space-y-5">
       {switcher}
       <KillTimes instanceName={instanceName} bosses={chosen} allBosses={bosses} page={killPage} pageSize={killPageSize}
         onPage={onKillPage} live={live?.kills} story={!live} />
     </div>
+  )
+}
+
+const segment = (active: boolean) =>
+  cn(
+    "inline-flex cursor-pointer items-center gap-1.5 rounded px-2.5 py-1 font-medium transition-colors sm:px-3 sm:py-1.5",
+    // Tinted with an inset ring, like the ratings metric tabs, so the selected side reads at a glance.
+    active ? "bg-primary/15 text-primary ring-1 ring-inset ring-primary/40" : "text-muted-foreground hover:text-foreground",
+  )
+
+/** Guild best or every run, styled like the board switch. Locked, "All runs" links to /supporter. */
+function RunsToggle({ board, onBoard, locked }: { board: RunsBoard; onBoard: (board: RunsBoard) => void; locked: boolean }) {
+  return (
+    <div role="radiogroup" aria-label="Run ranking" className="inline-flex items-center rounded-md border bg-card p-0.5 text-xs sm:text-sm">
+      <button type="button" role="radio" aria-checked={board === "guild"} onClick={() => onBoard("guild")} className={segment(board === "guild")}>
+        Guild best
+      </button>
+      {locked ? (
+        <HintTooltip delayDuration={150}>
+          <TooltipTrigger asChild>
+            <a href="/supporter" target="_blank" rel="noopener noreferrer" className={segment(false)}>
+              <LockKeyhole className="size-3.5 shrink-0" aria-hidden="true" />
+              All runs
+              <TierPill tier="revered" />
+            </a>
+          </TooltipTrigger>
+          <AllRunsRequirements />
+        </HintTooltip>
+      ) : (
+        <button type="button" role="radio" aria-checked={board === "all"} onClick={() => onBoard("all")} className={segment(board === "all")}>
+          All runs
+        </button>
+      )}
+    </div>
+  )
+}
+
+/** What All runs adds and how to unlock it, in the style of the guild claim requirements. */
+function AllRunsRequirements() {
+  const revered = TIER_COLOR.revered
+  return (
+    <TooltipContent side="bottom" sideOffset={6} className="w-80 max-w-[calc(100vw-2rem)] p-4 text-left text-sm text-pretty">
+      <p className="flex items-center gap-2 font-semibold" style={{ color: revered }}>
+        <LockKeyhole className="h-4 w-4" /> All runs is a Revered perk
+      </p>
+      <ul className="mt-3 space-y-2.5">
+        <li className="flex gap-2">
+          <ListOrdered className="mt-0.5 h-4 w-4 shrink-0 text-sky-400" />
+          <span><span className="font-medium text-white">Every run ranks.</span> Guild best shows each guild's fastest run once. All runs lists every qualifying run, so one guild can hold several spots.</span>
+        </li>
+        <li className="flex gap-2">
+          <Timer className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+          <span><span className="font-medium text-white">Clears and kills.</span> Works on full clears and on a single boss's kill times.</span>
+        </li>
+        <li className="flex gap-2">
+          <BadgeCheck className="mt-0.5 h-4 w-4 shrink-0" style={{ color: revered }} />
+          <span><span className="font-medium text-white">Revered or above.</span>{" "}
+            <Link to="/supporter" className="underline underline-offset-2 hover:brightness-125" style={{ color: revered }}>Become a Revered supporter</Link> to unlock all runs.
+          </span>
+        </li>
+      </ul>
+    </TooltipContent>
   )
 }
 
@@ -136,14 +221,14 @@ function KillTimes({
                     <li key={r.key} className="flex items-center gap-3 border-b border-white/5 px-4 py-2 text-sm last:border-b-0">
                       <span className="w-8 font-mono text-xs text-muted-foreground">{rankOffset + i + 1}</span>
                       <span className="min-w-0 flex-1 truncate text-amber-500" {...guildAttributes(r.guildId, r.guild)}>
-                        &lt;{r.guild || "Unknown guild"}&gt;
+                        {r.guild ? <>&lt;{r.guild}&gt;</> : <NoGuild />}
                       </span>
                       <span className="hidden truncate text-xs text-muted-foreground sm:inline">{r.realm}</span>
                       {r.entry ? (
                         <a
                           href={`/instances/${r.entry.log_hashed_slug || r.entry.instance_id}`}
                           className="font-mono tabular-nums hover:underline"
-                          aria-label={`Open ${boss} kill log for ${r.guild || "Unknown guild"}`}
+                          aria-label={`Open ${boss} kill log for ${r.guild || "No guild"}`}
                           {...killAttributes(r.entry)}
                         >
                           {formatClock(r.ms)}
@@ -182,7 +267,10 @@ function KillTimes({
 }
 
 /** Fastest full clears: the podium and the table below it. */
-function ClearBoard({ instanceName, bosses, live, story, switcher }: { instanceName: string; bosses: readonly string[]; live?: LiveList<SpeedrunLeaderboardEntry>; story: boolean; switcher: ReactNode }) {
+function ClearBoard({ instanceName, bosses, live, story, switcher, page, pageSize, onPage }: {
+  instanceName: string; bosses: readonly string[]; live?: LiveList<SpeedrunLeaderboardEntry> & { hasNextPage?: boolean }
+  story: boolean; switcher: ReactNode; page: number; pageSize: number; onPage?: (page: number) => void
+}) {
   const runs = story ? speedruns(undefined, bosses, instanceName) : (live?.entries ?? [])
   const what = "Fastest full clears"
   const status = (children: ReactNode, alert?: boolean) => (
@@ -190,13 +278,22 @@ function ClearBoard({ instanceName, bosses, live, story, switcher }: { instanceN
   )
   if (live?.error) return status(<>Could not load speedruns: {live.error.message}</>, true)
   if (!story && (live?.loading || !live?.entries)) return status("Loading speedruns…")
-  if (!story && runs.length === 0) return status("No speedruns found for the current filters.")
+  const pagination = !story && onPage && (page > 1 || live?.hasNextPage) ? (
+    <nav aria-label="Full clear pages" className="flex items-center justify-end gap-2 px-1 pt-2">
+      <Button variant="outline" size="sm" className="h-7 w-7 p-0" disabled={page <= 1}
+        aria-label="Previous page" onClick={() => onPage(page - 1)}><ChevronLeft className="h-4 w-4" /></Button>
+      <span className="text-xs text-muted-foreground">Page {page}</span>
+      <Button variant="outline" size="sm" className="h-7 w-7 p-0" disabled={!live?.hasNextPage}
+        aria-label="Next page" onClick={() => onPage(page + 1)}><ChevronRight className="h-4 w-4" /></Button>
+    </nav>
+  ) : null
+  if (!story && runs.length === 0) return <>{status("No speedruns found for the current filters.")}{pagination}</>
 
   return (
     <div className="space-y-3 sm:space-y-5">
       {/* The board switch heads the podium card: a row above the steps until the screen is wide enough
           for the empty corner beside the shorter #2 step, where it costs no height. */}
-      <section className="relative overflow-hidden rounded-xl border bg-card">
+      {page === 1 ? <section className="relative overflow-hidden rounded-xl border bg-card">
         <div className="relative z-10 px-3 pt-3 sm:px-4 xl:absolute xl:top-3 xl:left-4 xl:p-0">{switcher}</div>
         {/* A phone has room for the winner only; the table below lists the rest. */}
         <div className="px-4 pt-3 sm:hidden">
@@ -205,7 +302,7 @@ function ClearBoard({ instanceName, bosses, live, story, switcher }: { instanceN
         <div className="hidden px-4 pt-4 sm:block xl:pt-10">
           <Podium entries={runs.slice(0, 3)} instanceName={instanceName} />
         </div>
-      </section>
+      </section> : switcher}
       <section aria-label={what} className={cn("overflow-hidden rounded-xl border bg-card", MOBILE_EDGE_TO_EDGE)}>
         <table className="w-full text-sm">
           <thead className="border-b text-[11px] tracking-wider text-muted-foreground uppercase">
@@ -221,7 +318,7 @@ function ClearBoard({ instanceName, bosses, live, story, switcher }: { instanceN
           <tbody>
             {runs.map((r, i) => (
               <tr key={r.instance_id} className="border-b border-white/5 last:border-b-0 hover:bg-white/[.03]">
-                <td className="px-4 py-2 font-mono text-xs text-muted-foreground">{i + 1}</td>
+                <td className="px-4 py-2 font-mono text-xs text-muted-foreground">{(page - 1) * pageSize + i + 1}</td>
                 <td className="px-2 py-2 font-medium">
                   {/* Same treatment as today's speedrun table: the guild's logo, when it has one, left of the name. */}
                   <span className="flex min-w-0 items-center gap-2">
@@ -230,14 +327,14 @@ function ClearBoard({ instanceName, bosses, live, story, switcher }: { instanceN
                     ) : (
                       <span className="size-5 shrink-0" aria-hidden />
                     )}
-                    <span className="truncate" {...guildAttributes(r.guild_id, r.guild_name)}>{r.guild_name}</span>
+                    <span className="truncate" {...guildAttributes(r.guild_id, r.guild_name)}>{r.guild_name || <NoGuild />}</span>
                   </span>
                 </td>
                 <td className="px-2 py-2 text-right font-mono tabular-nums">
                   <a
                     href={`/instances/${r.slug || r.instance_id}`}
                     className="hover:underline"
-                    aria-label={`Open ${instanceName} speedrun log for ${r.guild_name || "Unknown guild"}`}
+                    aria-label={`Open ${instanceName} speedrun log for ${r.guild_name || "No guild"}`}
                     {...speedrunClearAttributes(r, instanceName)}
                   >
                     {formatClock(r.duration_ms)}
@@ -258,6 +355,7 @@ function ClearBoard({ instanceName, bosses, live, story, switcher }: { instanceN
           </tbody>
         </table>
       </section>
+      {pagination}
     </div>
   )
 }

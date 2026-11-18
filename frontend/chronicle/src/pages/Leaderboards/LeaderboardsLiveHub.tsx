@@ -22,7 +22,8 @@ import { LiveHubRatings } from "./Hub/LiveHubRatings"
 import { BoardSkeleton, MetricTabs } from "./Ratings/RatingLeaderboard"
 import { RulesetInstanceView } from "./RulesetInstanceView"
 import { PerformancesTab } from "./Hub/PerformancesTab"
-import { SpeedrunsTab } from "./Hub/SpeedrunsTab"
+import { SpeedrunsTab, type RunsBoard } from "./Hub/SpeedrunsTab"
+import { useSupporterTier } from "@/hooks/useSupporterTier"
 import { StatisticsTab, type LiveStatisticsData } from "./Hub/StatisticsTab"
 import { ParsingTab, type LiveParsingData } from "./Hub/ParsingTab"
 import { FULL_CLEAR, defaultSpeedrunsView, type EncounterSelection, type SpeedrunsView } from "./Hub/encounterSelection"
@@ -325,6 +326,11 @@ function LiveHubContent({ context, summary, stale = false, realmName, realmIDs, 
     limit: LEADERBOARD_PAGE_SIZE, offset: (page - 1) * LEADERBOARD_PAGE_SIZE,
   }, !overview && context.tab === "performances" && exact && realmIDs.length <= 1 && subject === "characters")
   // Speedruns shows one board at a time; only that board is fetched. Reset with the selection.
+  // Every run, beyond each guild's best, is a Revered perk; assume access while the session loads.
+  const supporter = useSupporterTier()
+  const allRunsLocked = !supporter.isLoading && !supporter.atLeast("revered")
+  const [runsBoardState, setRunsBoard] = useState<RunsBoard>("guild")
+  const runsBoard: RunsBoard = allRunsLocked ? "guild" : runsBoardState
   const [speedViewState, setSpeedView] = useState<{ key: string; view: SpeedrunsView }>()
   const selectionKey = picked.join(",")
   const speedView = speedViewState?.key === selectionKey ? speedViewState.view : defaultSpeedrunsView(selection)
@@ -337,15 +343,18 @@ function LiveHubContent({ context, summary, stale = false, realmName, realmIDs, 
     max_players: chosen?.max_players,
     limit: LEADERBOARD_PAGE_SIZE,
     offset: (page - 1) * LEADERBOARD_PAGE_SIZE,
+    board: runsBoard,
   }, !overview && context.tab === "speedruns" && speedView === "kills" && !!singleKillBoss)
   const multiKills = useRankingsKillTimesByBoss(instanceName, killBosses, 3,
     !overview && context.tab === "speedruns" && speedView === "kills" && killBosses.length > 1)
   const kills = singleKillBoss ? singleKills : multiKills
   const speed = useQuery<SpeedrunLeaderboardEntry[]>({
-    queryKey: ["hub-live-speedruns", instanceName, realmName, chosen?.difficulty_name, chosen?.max_players],
+    queryKey: ["hub-live-speedruns", instanceName, realmName, chosen?.difficulty_name, chosen?.max_players, runsBoard, page],
     queryFn: async () => {
+      // One lookahead row enables Next without a separate count query.
       const query = new URLSearchParams({ instance_name: instanceName, difficulty_name: chosen!.difficulty_name,
-        instance_max_players: String(chosen!.max_players), timing: "full" })
+        instance_max_players: String(chosen!.max_players), timing: "full", board: runsBoard,
+        limit: String(LEADERBOARD_PAGE_SIZE + 1), offset: String((page - 1) * LEADERBOARD_PAGE_SIZE) })
       if (realmName) query.append("realm_name", realmName)
       const response = await fetch(`/api/v1/rankings/speedrun?${query}`)
       if (!response.ok) throw new Error(`Speedruns request failed (${response.status})`)
@@ -387,10 +396,12 @@ function LiveHubContent({ context, summary, stale = false, realmName, realmIDs, 
       live={{ response: performance.data, loading: performance.isPending, error: performance.isError ? performance.error : null }} />
   if (context.tab === "speedruns") return !exact ? <CohortPrompt raids={raids} /> :
     <SpeedrunsTab instanceName={instanceName} bosses={bosses} selection={selection}
-      view={speedView} onView={(view) => setSpeedView({ key: selectionKey, view })}
+      runsBoard={runsBoard} allRunsLocked={allRunsLocked} onRunsBoard={(next) => { setRunsBoard(next); setPage(1) }}
+      view={speedView} onView={(view) => { setSpeedView({ key: selectionKey, view }); setPage(1) }}
+      clearPage={page} clearPageSize={LEADERBOARD_PAGE_SIZE} onClearPage={setPage}
       killPage={page} killPageSize={LEADERBOARD_PAGE_SIZE} onKillPage={setPage}
       live={{
-        clears: { entries: speed.data, loading: speed.isPending, error: speed.isError ? speed.error : null },
+        clears: { entries: speed.data?.slice(0, LEADERBOARD_PAGE_SIZE), hasNextPage: (speed.data?.length ?? 0) > LEADERBOARD_PAGE_SIZE, loading: speed.isPending, error: speed.isError ? speed.error : null },
         kills: { entries: kills.data?.entries, totalCount: kills.data?.total_count, loading: kills.isPending, error: kills.isError ? kills.error : null },
       }} />
   if (context.tab === "statistics") {

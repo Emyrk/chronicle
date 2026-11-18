@@ -67,6 +67,26 @@ func TestRankingsKillTimeTopPerEncounter(t *testing.T) {
 	require.InDelta(t, 60, rows[1].DurationSecs, 1e-6)
 	require.InDelta(t, 180, rows[2].DurationSecs, 1e-6)
 	require.InDelta(t, 200, rows[3].DurationSecs, 1e-6)
+
+	// The paginated single-boss board ranks every kill by default, or each guild's best.
+	for _, tc := range []struct {
+		guildBest bool
+		want      []float64
+	}{
+		{false, []float64{40, 50, 60, 70}},
+		{true, []float64{50, 60}},
+	} {
+		leaders, err := store.RankingsKillTimeLeaderboard(ctx, database.RankingsKillTimeLeaderboardParams{
+			InstanceName: "Molten Core", EncounterName: "Lucifron", GuildBest: tc.guildBest, QueryLimit: 10,
+		})
+		require.NoError(t, err)
+		got := make([]float64, 0, len(leaders))
+		for _, row := range leaders {
+			got = append(got, row.DurationSecs)
+			require.EqualValues(t, len(tc.want), row.TotalCount)
+		}
+		require.InDeltaSlice(t, tc.want, got, 1e-6, "guild best %v", tc.guildBest)
+	}
 }
 
 func TestRankingsKillTimesExcludeInvalidatedData(t *testing.T) {

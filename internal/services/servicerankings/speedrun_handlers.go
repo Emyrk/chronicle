@@ -1,6 +1,7 @@
 package servicerankings
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -28,6 +29,8 @@ func speedrunUsesRankedTiming(value string) (bool, bool) {
 //	GET /speedrun?instance_name=Molten+Core&realm_name=Turtle+WoW&timing=ranked
 //
 // timing defaults to full; ranked re-ranks by the boss-to-boss duration.
+// board defaults to guild best; all keeps every distinct qualifying run.
+// limit defaults to 50 (maximum 200); offset defaults to zero.
 func (s *Service) handleSpeedrunLeaderboard(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -79,7 +82,22 @@ func (s *Service) handleSpeedrunLeaderboard(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	board := r.URL.Query().Get("board")
+	if board != "" && board != "guild" && board != "all" {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "board query parameter must be guild or all"})
+		return
+	}
+
+	limit, offset, err := speedrunPagination(r)
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: err.Error()})
+		return
+	}
+
 	rows, err := s.store.SpeedrunLeaderboard(ctx, database.SpeedrunLeaderboardParams{
+		ResultLimit:              limit,
+		ResultOffset:             offset,
+		AllRuns:                  board == "all",
 		InstanceName:             instanceName,
 		RealmNames:               realmNames,
 		MinPlayers:               minPlayers,
@@ -103,6 +121,26 @@ func (s *Service) handleSpeedrunLeaderboard(w http.ResponseWriter, r *http.Reque
 	}
 
 	httpapi.Write(ctx, w, http.StatusOK, slice.List(rows, db2sdk.SpeedrunLeaderboardEntry))
+}
+
+// speedrunPagination keeps the legacy 50-row default and bounds public page sizes.
+func speedrunPagination(r *http.Request) (int64, int64, error) {
+	limit, offset := int64(50), int64(0)
+	if value := r.URL.Query().Get("limit"); value != "" {
+		parsed, err := strconv.ParseInt(value, 10, 64)
+		if err != nil || parsed < 1 {
+			return 0, 0, fmt.Errorf("limit must be a positive integer")
+		}
+		limit = min(parsed, 200)
+	}
+	if value := r.URL.Query().Get("offset"); value != "" {
+		parsed, err := strconv.ParseInt(value, 10, 64)
+		if err != nil || parsed < 0 {
+			return 0, 0, fmt.Errorf("offset must be a non-negative integer")
+		}
+		offset = parsed
+	}
+	return limit, offset, nil
 }
 
 // handleSpeedrunInstances returns the list of (instance, difficulty) boards
