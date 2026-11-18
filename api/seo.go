@@ -226,30 +226,46 @@ func pathHasPrefix(path string, prefixes []string) bool {
 	return false
 }
 
-var sitemapPaths = []string{
-	"/",
-	"/recent",
-	"/guilds",
-	"/armory",
-	"/leaderboards",
-	"/leaderboards/statistics",
-	"/leaderboards/speedruns",
-	"/talents",
-	"/talents/warrior",
-	"/talents/paladin",
-	"/talents/hunter",
-	"/talents/rogue",
-	"/talents/priest",
-	"/talents/shaman",
-	"/talents/mage",
-	"/talents/warlock",
-	"/talents/druid",
-	"/wowdb",
-	"/technical",
-	"/census",
-	"/speedrunning",
-	"/tools",
-	"/blog",
+// sitemapPath is a static sitemap entry. lastMod says where its <lastmod>
+// comes from; truly static pages carry none rather than a made-up date.
+type sitemapPath struct {
+	path    string
+	lastMod sitemapLastModSource
+}
+
+type sitemapLastModSource int
+
+const (
+	// sitemapLastModInstances is the newest instance the sitemap lists.
+	sitemapLastModInstances sitemapLastModSource = iota + 1
+	// sitemapLastModBlog is the newest blog post the sitemap lists.
+	sitemapLastModBlog
+)
+
+var sitemapPaths = []sitemapPath{
+	{path: "/"},
+	{path: "/recent", lastMod: sitemapLastModInstances},
+	{path: "/guilds", lastMod: sitemapLastModInstances},
+	{path: "/armory", lastMod: sitemapLastModInstances},
+	{path: "/leaderboards", lastMod: sitemapLastModInstances},
+	{path: "/leaderboards/statistics", lastMod: sitemapLastModInstances},
+	{path: "/leaderboards/speedruns", lastMod: sitemapLastModInstances},
+	{path: "/talents"},
+	{path: "/talents/warrior"},
+	{path: "/talents/paladin"},
+	{path: "/talents/hunter"},
+	{path: "/talents/rogue"},
+	{path: "/talents/priest"},
+	{path: "/talents/shaman"},
+	{path: "/talents/mage"},
+	{path: "/talents/warlock"},
+	{path: "/talents/druid"},
+	{path: "/wowdb"},
+	{path: "/technical"},
+	{path: "/census"},
+	{path: "/speedrunning"},
+	{path: "/tools"},
+	{path: "/blog", lastMod: sitemapLastModBlog},
 }
 
 func (api *API) robotsTXT(w http.ResponseWriter, r *http.Request) {
@@ -267,8 +283,23 @@ func (api *API) robotsTXT(w http.ResponseWriter, r *http.Request) {
 // sitemap file may hold, so /sitemap.xml needs no sitemap index.
 const (
 	sitemapGuildLimit     = 1000
-	sitemapCharacterLimit = 5000
+	sitemapCharacterLimit = 2000
 	sitemapInstanceLimit  = 1000
+)
+
+// Bars a database-backed page must clear to be listed, so the sitemap lists
+// pages worth finding rather than thousands of near-empty ones. "Listed
+// instances" are listed, valid, finalized logs.
+const (
+	// Guilds without an edited page need this many listed runs.
+	sitemapGuildMinInstances = 3
+	// Characters need a known class, this many listed instances and a
+	// sighting within sitemapCharacterRecency.
+	sitemapCharacterMinInstances = 3
+	sitemapCharacterRecency      = 90 * 24 * time.Hour
+	// Instances need a boss kill, this many minutes and this many players.
+	sitemapInstanceMinMinutes = 10
+	sitemapInstanceMinPlayers = 3
 )
 
 type sitemapURLSet struct {
@@ -287,6 +318,9 @@ type sitemapURL struct {
 // when to re-render.
 type sitemapDynamic struct {
 	urls []sitemapURL
+	// newestInstance is the newest lastmod among the listed instances, the
+	// lastmod of the hubs that list them. Empty when none are listed.
+	newestInstance string
 }
 
 // sitemapRenderKey identifies one rendered sitemap. host is always one of the
@@ -398,10 +432,20 @@ func (api *API) sitemapXML(w http.ResponseWriter, r *http.Request) {
 
 func (api *API) renderSitemap(r *http.Request, base string, dynamic *sitemapDynamic) ([]byte, error) {
 	set := sitemapURLSet{XMLNS: "http://www.sitemaps.org/schemas/sitemap/0.9"}
-	for _, path := range sitemapPaths {
-		set.URLs = append(set.URLs, sitemapURL{Location: base + path})
+	blog := api.sitemapBlogURLs(r)
+	for _, p := range sitemapPaths {
+		u := sitemapURL{Location: base + p.path}
+		switch p.lastMod {
+		case sitemapLastModInstances:
+			if dynamic != nil {
+				u.LastMod = dynamic.newestInstance
+			}
+		case sitemapLastModBlog:
+			u.LastMod = newestLastMod(blog)
+		}
+		set.URLs = append(set.URLs, u)
 	}
-	for _, u := range api.sitemapBlogURLs(r) {
+	for _, u := range blog {
 		set.URLs = append(set.URLs, sitemapURL{Location: base + u.Location, LastMod: u.LastMod})
 	}
 	if dynamic != nil {
@@ -508,22 +552,36 @@ func (api *API) loadSitemapURLs(ctx context.Context) (*sitemapDynamic, error) {
 	}
 	db := api.Opts.Zed
 
-	guilds, err := db.ListSitemapGuilds(ctx, database.ListSitemapGuildsParams{TenantID: tenantID, ResultLimit: sitemapGuildLimit})
+	guilds, err := db.ListSitemapGuilds(ctx, database.ListSitemapGuildsParams{
+		TenantID:     tenantID,
+		MinInstances: sitemapGuildMinInstances,
+		ResultLimit:  sitemapGuildLimit,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("list sitemap guilds: %w", err)
 	}
-	characters, err := db.ListSitemapCharacters(ctx, database.ListSitemapCharactersParams{TenantID: tenantID, ResultLimit: sitemapCharacterLimit})
+	characters, err := db.ListSitemapCharacters(ctx, database.ListSitemapCharactersParams{
+		TenantID:     tenantID,
+		SeenSince:    database.Timestamptz(time.Now().Add(-sitemapCharacterRecency)),
+		MinInstances: sitemapCharacterMinInstances,
+		ResultLimit:  sitemapCharacterLimit,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("list sitemap characters: %w", err)
 	}
-	instances, err := db.ListSitemapInstances(ctx, database.ListSitemapInstancesParams{TenantID: tenantID, ResultLimit: sitemapInstanceLimit})
+	instances, err := db.ListSitemapInstances(ctx, database.ListSitemapInstancesParams{
+		TenantID:    tenantID,
+		MinMinutes:  sitemapInstanceMinMinutes,
+		MinPlayers:  sitemapInstanceMinPlayers,
+		ResultLimit: sitemapInstanceLimit,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("list sitemap instances: %w", err)
 	}
 
 	urls := make([]sitemapURL, 0, len(guilds)+len(characters)+len(instances))
 	for _, g := range guilds {
-		urls = append(urls, sitemapURL{Location: "/g/" + g.ID.String(), LastMod: sitemapLastMod(g.PageUpdatedAt)})
+		urls = append(urls, sitemapURL{Location: "/g/" + g.ID.String(), LastMod: sitemapLastMod(g.LastModified)})
 	}
 	for _, c := range characters {
 		urls = append(urls, sitemapURL{
@@ -538,7 +596,17 @@ func (api *API) loadSitemapURLs(ctx context.Context) (*sitemapDynamic, error) {
 		}
 		urls = append(urls, sitemapURL{Location: "/instances/" + url.PathEscape(identifier), LastMod: sitemapLastMod(inst.UpdatedAt)})
 	}
-	return &sitemapDynamic{urls: urls}, nil
+	return &sitemapDynamic{urls: urls, newestInstance: newestLastMod(urls[len(urls)-len(instances):])}, nil
+}
+
+// newestLastMod returns the latest lastmod among urls. Lastmods are RFC 3339
+// times or dates in UTC, so they order as strings.
+func newestLastMod(urls []sitemapURL) string {
+	newest := ""
+	for _, u := range urls {
+		newest = max(newest, u.LastMod)
+	}
+	return newest
 }
 
 func sitemapLastMod(t pgtype.Timestamptz) string {
