@@ -756,7 +756,8 @@ interface PodiumProps {
 
 /** A run without a guild: italic and muted so it never reads as a guild named "No guild". */
 export function NoGuild() {
-  return <span className="font-normal italic text-muted-foreground">No guild</span>
+  // Italic glyphs lean past their box; the padding keeps the final "d" inside truncating parents.
+  return <span className="pr-[0.15em] font-normal italic text-muted-foreground">No guild</span>
 }
 
 export function Podium({ entries, instanceName, compact }: PodiumProps) {
