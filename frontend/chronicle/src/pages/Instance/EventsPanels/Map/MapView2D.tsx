@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Navigation, PawPrint, Skull } from "lucide-react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { Flag, Navigation, PawPrint, Skull } from "lucide-react";
 import {
   mapAssetUrl,
   overlayTilePlacement,
@@ -74,7 +74,8 @@ function MapTiles({ ground: { canvas, iconBaseUrl, overlays } }: { ground: MapSc
   );
 }
 
-export function MapArtworkLayer({ ground, viewport }: { ground: MapSceneGround; viewport: MapViewport }) {
+/** `underlay` draws in canvas percent space under the markers and zooms with the artwork (e.g. a schematic or objective layer). */
+export function MapArtworkLayer({ ground, viewport, underlay }: { ground: MapSceneGround; viewport: MapViewport; underlay?: ReactNode }) {
   return (
     <div
       className="absolute inset-0 origin-top-left"
@@ -83,6 +84,7 @@ export function MapArtworkLayer({ ground, viewport }: { ground: MapSceneGround; 
       }}
     >
       <MapTiles ground={ground} />
+      {underlay}
     </div>
   );
 }
@@ -176,6 +178,13 @@ function MapMarker({ marker, viewport }: { marker: MapSceneMarker; viewport: Map
           />
         )}
         {marker.kind === "pet" && <PawPrint className="absolute -bottom-1.5 -right-1.5 h-2.5 w-2.5 rounded-full bg-black/80 p-0.5 text-cyan-200" />}
+        {marker.carrying && (
+          <Flag
+            className="absolute -right-2 -top-2 h-3 w-3 drop-shadow-[0_0_2px_rgba(0,0,0,1)]"
+            style={{ color: marker.carrying.color, fill: marker.carrying.color }}
+            aria-label={marker.carrying.title}
+          />
+        )}
         {marker.kind === "hostile" && <Skull className="absolute -bottom-1.5 -right-1.5 h-2.5 w-2.5 rounded-full bg-black/80 p-0.5 text-rose-200" />}
       </div>
       {marker.bar && marker.health && <HealthBar health={marker.health} />}
@@ -186,8 +195,10 @@ function MapMarker({ marker, viewport }: { marker: MapSceneMarker; viewport: Map
   );
 }
 
-export function MapView2D({ ground, markers, projectSample, trailSeconds, view, onUserViewport }: {
+export function MapView2D({ ground, markers, projectSample, trailSeconds, view, onUserViewport, underlay }: {
   ground: MapSceneGround;
+  /** Drawn under the markers inside the zoomed artwork layer (see MapArtworkLayer). */
+  underlay?: ReactNode;
   markers: MapSceneMarker[];
   projectSample: (sample: MapPositionSample) => MapPoint | null;
   trailSeconds: number;
@@ -296,7 +307,7 @@ export function MapView2D({ ground, markers, projectSample, trailSeconds, view, 
       className={`relative mx-auto h-full max-w-full touch-none overflow-hidden bg-[#11100d] ${viewport.zoom > 1 ? "cursor-grab active:cursor-grabbing" : ""}`}
       style={{ aspectRatio: `${ground.canvas.width} / ${ground.canvas.height}` }}
     >
-      <MapArtworkLayer ground={ground} viewport={viewport} />
+      <MapArtworkLayer ground={ground} viewport={viewport} underlay={underlay} />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_45%,rgba(0,0,0,.28))]" />
       <MovementTrails markers={markers} viewport={viewport} trailSeconds={trailSeconds} projectSample={projectSample} />
       {markers.map((marker) => <MapMarker key={marker.guid} marker={marker} viewport={viewport} />)}

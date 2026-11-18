@@ -359,6 +359,9 @@ export interface MapTrailPoint {
 
 /** Gap between projected movement-trail points. */
 export const TRAIL_STEP_MS = 100;
+// Faster than any run, charge or mount (50 yd/s): a graveyard respawn or a
+// port, which the trail must not draw as a streak across the map.
+const TRAIL_TELEPORT_DISTANCE = 5;
 
 /** Project a unit's recent movement, newest first, stopping at its first sample or a map change. */
 export function movementTrailPoints(
@@ -370,11 +373,14 @@ export function movementTrailPoints(
 ): MapTrailPoint[] {
   const trail: MapTrailPoint[] = [];
   const first = positions[0];
+  let previous: MapPositionSample | null = null;
   for (let ago = 0; ago <= spanMs; ago += TRAIL_STEP_MS) {
     const at = sample.timestampMs - ago;
     if (!first || at < first.timestampMs) break;
     const past = ago === 0 ? sample : replayPositionAt(positions, at, showInitialPosition);
     if (!past || past.mapId !== sample.mapId) break;
+    if (previous && Math.hypot(past.x - previous.x, past.y - previous.y) > TRAIL_TELEPORT_DISTANCE) break;
+    previous = past;
     const point = projectSample(past);
     if (!point) break;
     trail.push({ point, z: past.z });
