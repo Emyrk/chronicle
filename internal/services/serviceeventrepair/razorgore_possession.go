@@ -123,7 +123,7 @@ func replayRazorgoreClassified(e razorgoreEvidence, c database.LogInstanceEncoun
 	life := rankings.NewSurvivabilityTracker()
 	tracker.FightStarted(c.ID, nil)
 	life.FightStarted(c.ID, nil)
-	knownHostiles := instances.BlackwingLairHostiles(database.WoWFlavor{}).HostileEntries()
+	knownHostiles := instances.BlackwingLairHostiles(database.WoWFlavor{})
 	var damage []*messages.Damage
 	classified := map[guid.GUID]bool{}
 	for _, event := range events {
@@ -162,8 +162,7 @@ func replayRazorgoreClassified(e razorgoreEvidence, c database.LogInstanceEncoun
 				if !classified[m.Target] && m.Target.IsPlayer() {
 					info.Affiliation = unitdb.AffiliationFriendly
 				} else if !classified[m.Target] {
-					entry, _ := m.Target.GetEntry()
-					if _, ok := knownHostiles[entry]; !ok {
+					if !knownHostiles.IdentifyUnit(m.Target).CanBattle() {
 						return nil, nil, errors.New("unknown pre-possession affiliation")
 					}
 					info.Affiliation = unitdb.AffiliationHostile
@@ -175,8 +174,7 @@ func replayRazorgoreClassified(e razorgoreEvidence, c database.LogInstanceEncoun
 					units.ClearPossessed(m.Target)
 				} else {
 					if !m.Controller.IsPlayer() && !classified[*m.Controller] {
-						entry, _ := m.Controller.GetEntry()
-						if _, known := knownHostiles[entry]; !known {
+						if !knownHostiles.IdentifyUnit(*m.Controller).CanBattle() {
 							return nil, nil, errors.New("unknown possession controller affiliation")
 						}
 						units.Info[*m.Controller] = unitinfo.Info{Guid: *m.Controller, Affiliation: unitdb.AffiliationHostile}
@@ -195,8 +193,7 @@ func replayRazorgoreClassified(e razorgoreEvidence, c database.LogInstanceEncoun
 				return nil, nil, errors.New("invalid damage amount")
 			}
 			if _, ok := units.Info[m.Target]; !ok && !m.Target.IsPlayer() {
-				entry, _ := m.Target.GetEntry()
-				if _, known := knownHostiles[entry]; known {
+				if knownHostiles.IdentifyUnit(m.Target).CanBattle() {
 					units.Info[m.Target] = unitinfo.Info{Guid: m.Target, Affiliation: unitdb.AffiliationHostile}
 				}
 			}

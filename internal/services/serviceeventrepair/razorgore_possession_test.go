@@ -195,3 +195,48 @@ func TestRazorgorePlayerControlEvidence(t *testing.T) {
 		})
 	}
 }
+
+func TestRazorgoreRepairTemplateNamespaces(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"creature", "vehicle", "object", "pet"} {
+		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
+			e := fixtureRazorgorePossession(t)
+			c := e.Encounters[0]
+			// A different GUID with Razorgore's template entry, without metadata.
+			entry, ok := e.Hostiles[0].ID.GetEntry()
+			require.True(t, ok)
+			high := map[string]uint64{"creature": 0xF130, "vehicle": 0xF150, "object": 0xF110, "pet": 0xF140}[kind]
+			target := guid.GUID(high<<48 | uint64(entry)<<24 | 99).String()
+			for i, row := range e.Events {
+				if row.Type != database.LogInstanceEventTypeDamage {
+					continue
+				}
+				raw, err := razorgoreFrame(row.Events, c.ID, c.StartTime.Time)
+				require.NoError(t, err)
+				var events []proto.Message
+				for _, b := range raw {
+					m := &chronicleproto.Damage{}
+					require.NoError(t, proto.Unmarshal(b, m))
+					if m.Meta.Index == 85 {
+						m.Target = target
+					}
+					events = append(events, m)
+				}
+				e.Events[i].Events = numericFrame(t, e, events...)
+			}
+			report := &RazorgoreRepairPlan{Details: map[string]any{}}
+			window := &encounter.RankingWindow{Start: c.StartTime.Time.Add(30 * time.Second), End: c.EndTime.Time}
+			_, _, err := replayRazorgoreClassified(e, c, window, database.LogFormat112aCcAddon, report)
+			require.NoError(t, err)
+			if kind == "object" || kind == "pet" {
+				require.Equal(t, []razorgoreOmission{{
+					EncounterID: c.ID, Stream: "damage", UnitGUID: target, Amount: 20, Count: 1,
+					Reason: "target ownership or hostility is not known at event time",
+				}}, report.Details["omissions"])
+			} else {
+				require.Empty(t, report.Details["omissions"])
+			}
+		})
+	}
+}

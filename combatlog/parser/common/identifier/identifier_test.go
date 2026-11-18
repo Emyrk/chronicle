@@ -48,3 +48,36 @@ func TestUnitCategories(t *testing.T) {
 func creatureGUID(entryID uint32) guid.GUID {
 	return guid.GUID(0xF130000000000001 | uint64(entryID&0xFFFFFF)<<24)
 }
+
+func TestTemplateNamespaces(t *testing.T) {
+	t.Parallel()
+	creatureIdentity := Identity{Name: "Boss", Boss: true, Affiliation: types.AffiliationHostile}
+	objectIdentity := Identity{Name: "Environment", Category: unitdb.CategoryEnvironment}
+	idf := NewIdentifier(map[uint32]Identity{100: creatureIdentity, 101: creatureIdentity})
+	idf.AddObjectEntryId(100, objectIdentity)
+	idf.AddObjectEntryId(102, objectIdentity)
+	units := unitdb.New(database.WoWFlavor{})
+	for _, test := range []struct {
+		name     string
+		id       guid.GUID
+		identity Identity
+		category unitdb.Category
+	}{
+		{"creature", creatureGUID(100), creatureIdentity, unitdb.CategoryOrdinary},
+		{"vehicle", guid.GUID(0xF150000000000001 | uint64(100)<<24), creatureIdentity, unitdb.CategoryOrdinary},
+		{"object", guid.GUID(0xF110000000000001 | uint64(100)<<24), objectIdentity, unitdb.CategoryEnvironment},
+		{"object cannot inherit boss", guid.GUID(0xF110000000000001 | uint64(101)<<24), Identity{}, unitdb.CategoryUnknown},
+		{"creature cannot inherit object", creatureGUID(102), Identity{}, unitdb.CategoryUnknown},
+		{"vehicle cannot inherit object", guid.GUID(0xF150000000000001 | uint64(102)<<24), Identity{}, unitdb.CategoryUnknown},
+		{"pet", guid.GUID(0xF140000000000001 | uint64(100)<<24), Identity{}, unitdb.CategoryPet},
+		{"player", guid.GUID(uint64(100)<<24 | 1), Identity{}, unitdb.CategoryPlayer},
+		{"zero", 0, Identity{}, unitdb.CategoryUnknown},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, test.identity, idf.IdentifyUnit(test.id))
+			require.Equal(t, test.category, units.Category(test.id, idf))
+		})
+	}
+	require.Equal(t, map[uint32]Identity{100: creatureIdentity, 101: creatureIdentity}, idf.HostileEntries())
+}

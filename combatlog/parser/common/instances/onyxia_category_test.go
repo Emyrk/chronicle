@@ -28,6 +28,10 @@ func TestOnyxiaEnvironmentCategories(t *testing.T) {
 		identity := onyxia.IdentifyUnit(id)
 		require.Equal(t, Identity{Category: unitdb.CategoryEnvironment, Affiliation: types.AffiliationUnknown}, identity)
 		require.False(t, identity.CanBattle())
+		creature := guid.GUID(0xF130000000000001 | uint64(entry)<<24)
+		require.Equal(t, unitdb.CategoryUnknown, units.Category(creature, onyxia))
+		require.Equal(t, Identity{Affiliation: types.AffiliationUnknown}, onyxia.IdentifyUnit(creature))
+		require.NotContains(t, onyxia.HostileEntries(), entry)
 		for _, otherFlavor := range []database.WoWFlavor{{database.FlavorVanilla}, {database.FlavorWrath}, {database.FlavorEpoch}} {
 			require.Equal(t, unitdb.CategoryUnknown, units.Category(id, OnyxiaHostiles(otherFlavor)))
 		}
@@ -40,12 +44,15 @@ func TestOnyxiaEnvironmentCategories(t *testing.T) {
 			count++
 		}
 	}
-	require.Equal(t, len(entries), count)
+	require.Zero(t, count)
 	for _, entry := range []uint32{10184, 12129, 11262} {
 		id := guid.GUID(0xF130000000000001 | uint64(entry)<<24)
 		require.Equal(t, unitdb.CategoryOrdinary, units.Category(id, onyxia))
 		require.True(t, onyxia.IdentifyUnit(id).CanBattle())
 		require.Equal(t, entry == 10184, onyxia.IdentifyUnit(id).Boss)
+		object := objectGUID(entry, 1)
+		require.Equal(t, unitdb.CategoryUnknown, units.Category(object, onyxia))
+		require.Equal(t, Identity{Affiliation: types.AffiliationUnknown}, onyxia.IdentifyUnit(object))
 	}
 	portal := guid.GUID(0xF11002B0A84D39A5)
 	require.Equal(t, unitdb.CategoryObject, units.Category(portal, onyxia))

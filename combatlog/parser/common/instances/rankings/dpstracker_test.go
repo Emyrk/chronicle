@@ -825,3 +825,16 @@ func TestDPSTrackerCrittersAreUnranked(t *testing.T) {
 	require.EqualValues(t, 500, damage.Unranked)
 	require.NotContains(t, tracker.Result()[encID].Units, rat)
 }
+
+func TestRankedDamageTargetTemplateNamespaces(t *testing.T) {
+	t.Parallel()
+	idf := identifier.NewIdentifier(map[uint32]identifier.Identity{100: {Boss: true}})
+	idf.AddObjectEntryId(101, identifier.Identity{Boss: true})
+	tracker := NewDPSTracker(newTestUnits(), idf, DamageRuleNone)
+	require.True(t, tracker.isRankedDamageTarget(makeCreatureGUID(100, 1)))
+	require.True(t, tracker.isRankedDamageTarget(guid.GUID(0xF150000000000001|uint64(100)<<24)))
+	require.False(t, tracker.isRankedDamageTarget(guid.GUID(0xF110000000000001|uint64(100)<<24)))
+	require.False(t, tracker.isRankedDamageTarget(guid.GUID(0xF140000000000001|uint64(100)<<24)))
+	require.False(t, tracker.isRankedDamageTarget(makeCreatureGUID(101, 1)))
+	require.True(t, tracker.isRankedDamageTarget(guid.GUID(0xF110000000000001|uint64(101)<<24)))
+}

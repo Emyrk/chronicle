@@ -57,7 +57,7 @@ type AzerothCoreInstanceHook struct {
 func (a AzerothCoreInstanceHook) ProcessMessage(_ bool, _ uuid.UUID, m messages.Message) error {
 	switch msg := m.(type) {
 	case *messages.Unit:
-		if msg.Guid.IsPlayer() {
+		if !msg.Guid.IsCreature() && !msg.Guid.IsVehicle() && !msg.Guid.IsObject() {
 			return nil
 		}
 
@@ -66,23 +66,18 @@ func (a AzerothCoreInstanceHook) ProcessMessage(_ bool, _ uuid.UUID, m messages.
 			return nil
 		}
 
-		identity, known := a.ID.HostileEntries()[entry]
-		if known {
-			// Preserve configured encounter names and custom encounter functions,
-			// while preferring server-reported classification metadata.
-			identity.Affiliation = msg.Affiliation
-			if msg.Name != "" {
-				identity.Name = msg.Name
-			}
-			identity.Boss = identity.Boss || msg.Boss
-		} else {
-			identity = instances.Identity{
-				Affiliation: msg.Affiliation,
-				Name:        msg.Name,
-				Boss:        msg.Boss,
-			}
+		// Preserve configured hooks from the matching template namespace only.
+		identity := a.ID.IdentifyUnit(msg.Guid)
+		identity.Affiliation = msg.Affiliation
+		if msg.Name != "" {
+			identity.Name = msg.Name
 		}
-		a.ID.AddEntryId(entry, identity)
+		identity.Boss = identity.Boss || msg.Boss
+		if msg.Guid.IsObject() {
+			a.ID.AddObjectEntryId(entry, identity)
+		} else {
+			a.ID.AddEntryId(entry, identity)
+		}
 	}
 	return nil
 }
