@@ -4,6 +4,7 @@ import { useBlocker, useLocation } from "react-router-dom"
 import { useInferenceRuntime } from "../runtime"
 import { availableBrowserTools, executeBrowserCommand, loadToolCatalog, type BrowserPage } from "./browserTools"
 import { connectLocalMcp } from "./localBridge"
+import { pageGuidanceRegistration } from "./pageGuidance"
 
 interface LocalMcpContextValue { active: boolean; connect: () => void; disconnect: () => void }
 const LocalMcpContext = createContext<LocalMcpContextValue | null>(null)
@@ -34,6 +35,12 @@ export function LocalMcpProvider({ children }: { children: ReactNode }) {
     if (safeMode) return
     setError(""); setConnected(false); setActive(true)
   }, [safeMode])
+
+  const registerCapability = runtime.registerCapability
+  useEffect(() => {
+    if (!active || safeMode) return
+    return registerCapability(pageGuidanceRegistration(current.current, () => currentRuntime()))
+  }, [active, safeMode, location.key, url, runtime.sessionId, registerCapability])
 
   useEffect(() => {
     if (!active || safeMode) return

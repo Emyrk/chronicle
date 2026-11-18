@@ -195,3 +195,29 @@ type InferenceValidateClientToolRequest struct {
 type InferenceValidateClientToolResponse struct {
 	Arguments json.RawMessage `json:"arguments"`
 }
+
+// InferenceClientSkill identifies canonical, static guidance for the current page.
+type InferenceClientSkill struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Version string `json:"version"`
+}
+
+type InferenceClientSkillsResponse struct {
+	Skills []InferenceClientSkill `json:"skills"`
+}
+
+type InferenceClientSkillResponse struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Version      string `json:"version"`
+	Instructions string `json:"instructions"`
+}
+
+type InferenceClientPageContext struct {
+	AssistantID   string                 `json:"assistant_id"`
+	AssistantName string                 `json:"assistant_name"`
+	Prompt        string                 `json:"prompt"`
+	Skills        []InferenceClientSkill `json:"skills"`
+	Instructions  string                 `json:"instructions"`
+}
