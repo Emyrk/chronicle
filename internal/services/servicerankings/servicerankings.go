@@ -927,15 +927,16 @@ func periodToDays(period string) int64 {
 	}
 }
 
-// timeRankingMaxPlayers keeps an absent filter distinct from an explicit value.
+// timeRankingMaxPlayers keeps an absent filter distinct from an explicit value,
+// including zero for legacy cohorts without a recorded raid size.
 func timeRankingMaxPlayers(w http.ResponseWriter, r *http.Request) (int32, bool) {
 	q := r.URL.Query()
 	if !q.Has("max_players") {
 		return 0, true
 	}
 	value, err := strconv.ParseInt(q.Get("max_players"), 10, 16)
-	if err != nil || value <= 0 {
-		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "max_players must be a positive integer no greater than 32767"})
+	if err != nil || value < 0 {
+		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "max_players must be a nonnegative integer no greater than 32767"})
 		return 0, false
 	}
 	return int32(value), true

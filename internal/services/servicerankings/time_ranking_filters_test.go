@@ -86,7 +86,28 @@ func TestTimeRankingEndpointsDifficultyFilters(t *testing.T) {
 			handler(store, rec, httptest.NewRequest(http.MethodGet, "/?instance_name=Raid", nil))
 			require.Equal(t, http.StatusOK, rec.Code)
 			require.False(t, store.filterMaxPlayers)
-			for _, value := range []string{"", "0", "-1", "bad", "32768"} {
+			for _, tc := range []struct {
+				value string
+				size  int32
+			}{
+				{value: "0", size: 0},
+				{value: "1", size: 1},
+				{value: "32767", size: 32767},
+			} {
+				t.Run("size="+tc.value, func(t *testing.T) {
+					t.Parallel()
+					store := &timeRankingFilterStore{}
+					rec := httptest.NewRecorder()
+					handler(store, rec, httptest.NewRequest(http.MethodGet, "/?instance_name=Lower+Tower+of+Karazhan&encounter_name=Brood+Queen+Araxxna&difficulty_name=&max_players="+tc.value+"&limit=50&offset=0", nil))
+					require.Equal(t, http.StatusOK, rec.Code)
+					require.Equal(t, 1, store.calls)
+					require.True(t, store.filterDifficulty)
+					require.Empty(t, store.difficulty)
+					require.True(t, store.filterMaxPlayers)
+					require.Equal(t, tc.size, store.maxPlayers)
+				})
+			}
+			for _, value := range []string{"", "-1", "bad", "1.5", "32768"} {
 				store := &timeRankingFilterStore{}
 				rec := httptest.NewRecorder()
 				handler(store, rec, httptest.NewRequest(http.MethodGet, "/?instance_name=Raid&max_players="+value, nil))
