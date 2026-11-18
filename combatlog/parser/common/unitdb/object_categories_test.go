@@ -23,7 +23,7 @@ func TestPortalAndLightwellObjectCategories(t *testing.T) {
 				if id.IsPet() {
 					want = unitdb.CategoryPet
 				}
-				if id.IsObject() && (entry == 181102 || flavor.Has(database.FlavorNightmareOfUrsol)) {
+				if id.IsObject() && flavor.Has(database.FlavorNightmareOfUrsol) {
 					want = unitdb.CategoryObject
 				}
 				require.Equal(t, want, units.Category(id), "flavor %v GUID %s", flavor, id)
