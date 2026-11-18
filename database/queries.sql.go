@@ -33141,9 +33141,10 @@ type ListSitemapCharactersRow struct {
 
 // Characters with a known class, seen since @seen_since, whose latest sighting
 // is a listed log and who appear in at least min_instances listed, valid,
-// finalized logs. Walks idx_game_players_updated_at newest-first and stops at
-// the limit; the instance count probes idx_log_instance_players_unit_guid_instance
-// and stops at min_instances.
+// finalized logs. It evaluates every candidate seen since @seen_since before
+// sorting, so the recency window, not the limit, bounds the work (see the
+// EXPLAIN in #2070). The instance count probes
+// idx_log_instance_players_unit_guid_instance and stops at min_instances.
 func (q *sqlQuerier) ListSitemapCharacters(ctx context.Context, arg ListSitemapCharactersParams) ([]ListSitemapCharactersRow, error) {
 	rows, err := q.db.Query(ctx, listSitemapCharacters,
 		arg.TenantID,

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"regexp"
+	"sync"
 	"testing"
 	"testing/fstest"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/frontend"
 	"github.com/Emyrk/chronicle/internal/services/servicedataset"
+	"github.com/Emyrk/chronicle/internal/services/serviceseo"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 )
 
@@ -54,7 +56,7 @@ func newCanonicalSite(t *testing.T, foreverDiscoverable bool) canonicalSite {
 	t.Helper()
 	vanilla, turtle := uuid.New(), uuid.New()
 	forever := database.Tenant{
-		ID: uuid.New(), Slug: pgtype.Text{String: servicetenant.SharedContentSlug, Valid: true},
+		ID: uuid.New(), Slug: pgtype.Text{String: serviceseo.SharedContentSlug, Valid: true},
 		Discoverable: foreverDiscoverable, DefaultDatasetID: uuid.NullUUID{UUID: vanilla, Valid: true},
 	}
 	everlook := database.Tenant{
@@ -146,13 +148,13 @@ func TestBlogPostCanonicalHost(t *testing.T) {
 		// The root (legacy) site resolves its canonical the same way. Its
 		// branding needs a database, so check the URL directly.
 		require.Equal(t, "https://forever.chronicleclassic.com/blog/global",
-			canonicalRequestURL(site.api, site.request(nil, "https://legacy.chronicleclassic.com/blog/global")))
+			site.api.canonical().URL(site.request(nil, "https://legacy.chronicleclassic.com/blog/global")))
 		require.Equal(t, "https://legacy.chronicleclassic.com/blog",
-			canonicalRequestURL(site.api, site.request(nil, "https://legacy.chronicleclassic.com/blog")), "the blog index lists posts by flavor, so it is not shared")
+			site.api.canonical().URL(site.request(nil, "https://legacy.chronicleclassic.com/blog")), "the blog index lists posts by flavor, so it is not shared")
 		require.Equal(t, "https://forever.chronicleclassic.com/privacy",
-			canonicalRequestURL(site.api, site.request(nil, "https://legacy.chronicleclassic.com/privacy")))
+			site.api.canonical().URL(site.request(nil, "https://legacy.chronicleclassic.com/privacy")))
 		require.Equal(t, "https://legacy.chronicleclassic.com/recent",
-			canonicalRequestURL(site.api, site.request(nil, "https://legacy.chronicleclassic.com/recent")))
+			site.api.canonical().URL(site.request(nil, "https://legacy.chronicleclassic.com/recent")))
 	})
 
 	t.Run("UndiscoverableForeverIsNotCanonical", func(t *testing.T) {
@@ -161,7 +163,7 @@ func TestBlogPostCanonicalHost(t *testing.T) {
 		canonical, _, _ := hidden.serve(t, hidden.request(&hidden.everlook, "https://everlook.chronicleclassic.com/blog/global"))
 		require.Equal(t, "https://everlook.chronicleclassic.com/blog/global", canonical)
 		require.Equal(t, "https://legacy.chronicleclassic.com/privacy",
-			canonicalRequestURL(hidden.api, hidden.request(nil, "https://legacy.chronicleclassic.com/privacy")))
+			hidden.api.canonical().URL(hidden.request(nil, "https://legacy.chronicleclassic.com/privacy")))
 	})
 }
 
@@ -200,4 +202,42 @@ func TestSitemapListsOnlySelfCanonicalURLs(t *testing.T) {
 	require.Contains(t, foreverLocs, forever+"/blog/global")
 	require.Contains(t, foreverLocs, forever+"/tools")
 	require.NotContains(t, foreverLocs, forever+"/blog/turtle-only")
+}
+
+// countingDatasets serves datasets from memory and counts lookups per ID.
+type countingDatasets struct {
+	servicedataset.DatasetStore
+	byID  map[uuid.UUID]database.Dataset
+	mu    *sync.Mutex
+	calls map[uuid.UUID]int
+}
+
+func (s countingDatasets) GetDataset(_ context.Context, id uuid.UUID) (database.Dataset, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.calls[id]++
+	return s.byID[id], nil
+}
+
+// A sitemap render resolves the shared-content tenant's flavor once, not once
+// per blog post it checks.
+func TestSitemapResolvesSharedContentOnce(t *testing.T) {
+	t.Parallel()
+	site := newCanonicalSite(t, true)
+	home, own := site.forever.DefaultDatasetID.UUID, site.everlook.DefaultDatasetID.UUID
+	datasets := countingDatasets{
+		byID: map[uuid.UUID]database.Dataset{
+			home: {ID: home, DefaultFlavor: []string{"vanilla"}},
+			own:  {ID: own, DefaultFlavor: []string{"vanilla", "turtle"}},
+		},
+		mu:    &sync.Mutex{},
+		calls: map[uuid.UUID]int{},
+	}
+	site.api.Opts.Dataset = servicedataset.NewTest(datasets)
+
+	const everlook = "https://everlook.chronicleclassic.com"
+	_, err := site.api.renderSitemap(site.request(&site.everlook, everlook+"/sitemap.xml"), everlook, nil)
+	require.NoError(t, err)
+	require.Equal(t, 1, datasets.calls[home], "the shared-content tenant's flavor")
+	require.Equal(t, 1, datasets.calls[own], "the serving site's flavor, for its blog posts")
 }

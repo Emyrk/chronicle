@@ -21,6 +21,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/frontend"
 	"github.com/Emyrk/chronicle/internal/pageload"
+	"github.com/Emyrk/chronicle/internal/services/serviceseo"
 	"github.com/Emyrk/chronicle/internal/wowspec"
 )
 
@@ -32,9 +33,9 @@ func (s *Service) Routes() []frontend.OGRoute {
 		routes = append(routes, frontend.OGRoute{
 			Pattern: pattern,
 			Resolve: func(r *http.Request) *frontend.OGData {
-				og := flavorStaticOG(pattern, seoProductName(s.resolvedSiteFlavor(r.Context())), metadata, canonicalRequestURL(s, r))
+				og := flavorStaticOG(pattern, seoProductName(s.resolvedSiteFlavor(r.Context())), metadata, s.canonical.URL(r))
 				if metadata.Image != "" {
-					og.ImageURL = canonicalOrigin(s, r) + metadata.Image
+					og.ImageURL = s.canonical.Origin(r) + metadata.Image
 				}
 				return og
 			},
@@ -231,22 +232,9 @@ func talentBuildSummary(build string) (summary [3]uint8, total int) {
 	return summary, total
 }
 
-// ogHost returns the request host for og:url construction (keeping tenant
-// subdomains like capy.chronicleclassic.com), falling back to the canonical
-// domain when the Host header contains anything unexpected. The og:url meta
-// is rendered by text/template (no HTML escaping), so the host must be
-// strictly validated before echoing.
+// ogHost returns the validated request host (see serviceseo.RequestHost).
 func ogHost(r *http.Request) string {
-	host := strings.ToLower(r.Host)
-	for _, ch := range host {
-		if (ch < 'a' || ch > 'z') && (ch < '0' || ch > '9') && ch != '.' && ch != '-' && ch != ':' {
-			return "chronicleclassic.com"
-		}
-	}
-	if host == "" {
-		return "chronicleclassic.com"
-	}
-	return host
+	return serviceseo.RequestHost(r)
 }
 
 // sanitizeBuildParam keeps only the characters valid in a positional build
@@ -435,9 +423,7 @@ func (s *Service) buildInstanceOG(ctx context.Context, r *http.Request, host str
 		identifier = inst.HashedSlug.String
 	}
 
-	if tenantHost := s.tenant.TenantHost(inst.TenantSlug.String); tenantHost != "" {
-		host = tenantHost
-	}
+	host = s.canonical.OwnerHost(r.Context(), inst.TenantSlug.String, host)
 
 	og := &frontend.OGData{
 		Title:       title.String(),

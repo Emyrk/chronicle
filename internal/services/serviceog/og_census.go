@@ -23,7 +23,7 @@ var censusOGMetadata = staticOGMetadata{Title: "Realm Census", Description: "Exp
 // (e.g. a realm that only logs Unknown races), withBrandOG gives the brand card.
 func (s *Service) censusOG(r *http.Request) *frontend.OGData {
 	flavor := s.resolvedSiteFlavor(r.Context())
-	og := flavorStaticOG("/census", seoProductName(flavor), censusOGMetadata, canonicalRequestURL(s, r))
+	og := flavorStaticOG("/census", seoProductName(flavor), censusOGMetadata, s.canonical.URL(r))
 	if !s.ogServiceConfigured() || s.store == nil {
 		return og
 	}

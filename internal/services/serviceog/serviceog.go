@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/Gophercraft/core/vsn"
 	"github.com/google/uuid"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
@@ -16,9 +15,9 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
-	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/Emyrk/chronicle/internal/services/serviceratings"
+	"github.com/Emyrk/chronicle/internal/services/serviceseo"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/tenantcache"
 )
@@ -70,6 +69,7 @@ type Service struct {
 	ogSiteStats     tenantcache.Cache[database.SiteStatsRow]
 	ogCensus        tenantcache.Cache[[]database.CensusPlayerCountsRow]
 	ogHighlights    tenantcache.Cache[[]chroniclesdk.HubLandingPreview]
+	canonical       *serviceseo.Canonical
 }
 
 func New(opts Options) *Service {
@@ -84,73 +84,39 @@ func New(opts Options) *Service {
 		signingKey:    opts.OGSigningKey,
 		playerCareer:  opts.PlayerCareer,
 		careerLeaders: opts.CareerLeaders,
+		canonical: serviceseo.NewCanonical(serviceseo.CanonicalOptions{
+			Logger:    opts.Logger,
+			Tenant:    opts.Tenant,
+			Dataset:   opts.Dataset,
+			AccessURL: opts.AccessURL,
+		}),
 	}
 }
 
 func (s *Service) resolvedSiteFlavor(ctx context.Context) database.WoWFlavor {
+	var dataset *servicedataset.Service
 	if s != nil {
-		tenant := servicetenant.TenantFromContext(ctx)
-		if tenant != nil && tenant.DefaultDatasetID.Valid && s.dataset != nil {
-			dataset, err := s.dataset.GetDataset(ctx, tenant.DefaultDatasetID.UUID)
-			if err == nil {
-				flavor := database.FlavorFromStrings(dataset.DefaultFlavor).
-					Merge(database.FlavorFromStrings(tenant.AdditionalFlavor))
-				if len(flavor) > 0 {
-					return flavor
-				}
-			}
-		}
+		dataset = s.dataset
 	}
-
-	base := database.FlavorVanilla
-	if services.ServerBuild == vsn.V3_3_5a {
-		base = database.FlavorWrath
-	}
-	return database.ServerFlavor(services.ServerName, base)
-}
-
-// canonicalRequestURL returns the request's canonical URL: the request host,
-// or the shared-content tenant's host for pages identical on every host.
-func canonicalRequestURL(s *Service, r *http.Request) string {
-	path := r.URL.EscapedPath()
-	if path == "" {
-		path = "/"
-	}
-	if s != nil {
-		if host := s.tenant.SharedPageHost(r.URL.Path); host != "" {
-			return canonicalScheme(s) + "://" + host + path
-		}
-	}
-	return canonicalOrigin(s, r) + path
-}
-
-func canonicalOrigin(s *Service, r *http.Request) string {
-	return canonicalScheme(s) + "://" + ogHost(r)
-}
-
-func canonicalScheme(s *Service) string {
-	if s != nil && s.accessURL != nil && s.accessURL.Scheme != "" {
-		return s.accessURL.Scheme
-	}
-	return "https"
+	return dataset.SiteFlavor(ctx)
 }
 
 // realmOwnerHost returns the host of the tenant that owns realmID, so
 // tenant-owned pages (guilds, characters) are canonical on their owner's host
-// like instances. It returns fallback when the realm belongs to the root site
-// or the owner cannot be resolved.
+// like instances (see serviceseo.Canonical.OwnerHost). It returns fallback
+// when the realm belongs to the root site or the owner cannot be resolved.
 func (s *Service) realmOwnerHost(ctx context.Context, realmID uuid.UUID, fallback string) string {
 	if s.store == nil {
 		return fallback
 	}
 	slug, err := s.store.GetRealmTenantSlug(ctx, realmID)
 	if err != nil {
+		if s.logger != nil {
+			s.logger.DebugContext(ctx, "resolve realm owner for canonical host, keeping the request host", "realm_id", realmID, "host", fallback, "error", err)
+		}
 		return fallback
 	}
-	if host := s.tenant.TenantHost(slug.String); host != "" {
-		return host
-	}
-	return fallback
+	return s.canonical.OwnerHost(ctx, slug.String, fallback)
 }
 
 // ogCacheWait bounds how long a page waits for a card's first cached fetch.
