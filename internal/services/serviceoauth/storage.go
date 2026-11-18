@@ -25,6 +25,9 @@ const (
 
 type oauthStore interface {
 	GetOrCreateOAuthServerSecret(context.Context, []byte) ([]byte, error)
+	GetOAuthDeveloperAppByID(context.Context, uuid.UUID) (database.OauthDeveloperApp, error)
+	GetOAuthDeveloperAppByUser(context.Context, uuid.UUID) (database.OauthDeveloperApp, error)
+	CreateOAuthDeveloperApp(context.Context, database.CreateOAuthDeveloperAppParams) (database.OauthDeveloperApp, error)
 	CreateOAuthDeviceSession(context.Context, database.CreateOAuthDeviceSessionParams) error
 	GetOAuthDeviceSession(context.Context, string) (database.GetOAuthDeviceSessionRow, error)
 	UpdateOAuthDeviceSessionByUserSignature(context.Context, database.UpdateOAuthDeviceSessionByUserSignatureParams) (string, error)
@@ -32,6 +35,8 @@ type oauthStore interface {
 	DeleteExpiredOAuthDeviceSessions(context.Context) (int64, error)
 	CreateOAuthTokenSession(context.Context, database.CreateOAuthTokenSessionParams) error
 	GetOAuthTokenSession(context.Context, database.GetOAuthTokenSessionParams) ([]byte, error)
+	GetUsedOAuthRefreshToken(context.Context, string) ([]byte, error)
+	DeleteExpiredUsedOAuthRefreshTokens(context.Context) (int64, error)
 	DeleteOAuthTokenSession(context.Context, database.DeleteOAuthTokenSessionParams) (int64, error)
 	DeleteExpiredOAuthTokenSessions(context.Context) (int64, error)
 	RevokeOAuthTokenSessions(context.Context, database.RevokeOAuthTokenSessionsParams) (int64, error)
@@ -172,7 +177,10 @@ func (s *storage) cleanupExpired(ctx context.Context) error {
 	if _, err := s.db.DeleteExpiredOAuthDeviceSessions(ctx); err != nil {
 		return err
 	}
-	_, err := s.db.DeleteExpiredOAuthTokenSessions(ctx)
+	if _, err := s.db.DeleteExpiredOAuthTokenSessions(ctx); err != nil {
+		return err
+	}
+	_, err := s.db.DeleteExpiredUsedOAuthRefreshTokens(ctx)
 	return err
 }
 
@@ -212,7 +220,7 @@ func encodeRequest(request fosite.Requester) ([]byte, error) {
 	return json.Marshal(stored)
 }
 
-func decodeRequest(data []byte, session fosite.Session, device bool) (fosite.Requester, error) {
+func (s *storage) decodeRequest(ctx context.Context, data []byte, session fosite.Session, device bool) (fosite.Requester, error) {
 	var stored storedRequest
 	if err := json.Unmarshal(data, &stored); err != nil {
 		return nil, err
@@ -224,13 +232,14 @@ func decodeRequest(data []byte, session fosite.Session, device bool) (fosite.Req
 	}
 	*defaultSession = stored.Session
 
-	if stored.ClientID != compiledClient.ID {
-		return nil, errors.New("serviceoauth: stored request has unknown client")
+	client, err := s.GetClient(ctx, stored.ClientID)
+	if err != nil {
+		return nil, err
 	}
 	request := fosite.NewRequest()
 	request.ID = stored.ID
 	request.RequestedAt = stored.RequestedAt
-	request.Client = compiledClient
+	request.Client = client
 	request.RequestedScope = stored.RequestedScope
 	request.GrantedScope = stored.GrantedScope
 	request.Form = stored.Form
@@ -248,11 +257,26 @@ func decodeRequest(data []byte, session fosite.Session, device bool) (fosite.Req
 	return deviceRequest, nil
 }
 
-func (s *storage) GetClient(_ context.Context, id string) (fosite.Client, error) {
-	if id != compiledClient.ID {
+func (s *storage) GetClient(ctx context.Context, id string) (fosite.Client, error) {
+	if id == compiledClient.ID {
+		return compiledClient, nil
+	}
+	appID, ok := developerAppID(id)
+	if !ok {
 		return nil, fosite.ErrNotFound
 	}
-	return compiledClient, nil
+	app, err := s.db.GetOAuthDeveloperAppByID(ctx, appID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, fosite.ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &fosite.DefaultClient{
+		ID: id, Secret: app.SecretHash,
+		GrantTypes: []string{"client_credentials", "refresh_token"},
+		Scopes:     []string{ScopeExternalRead},
+	}, nil
 }
 
 func (s *storage) ClientAssertionJWTValid(context.Context, string) error          { return nil }
@@ -290,7 +314,7 @@ func (s *storage) GetDeviceCodeSession(ctx context.Context, signature string, se
 	if err != nil {
 		return nil, err
 	}
-	decoded, err := decodeRequest(row.Request, session, true)
+	decoded, err := s.decodeRequest(ctx, row.Request, session, true)
 	if err != nil {
 		return nil, err
 	}
@@ -320,7 +344,7 @@ func (s *storage) approveDevice(ctx context.Context, userSignature, subject stri
 	if err != nil {
 		return err
 	}
-	decoded, err := decodeRequest(row.Request, &fosite.DefaultSession{}, true)
+	decoded, err := s.decodeRequest(ctx, row.Request, &fosite.DefaultSession{}, true)
 	if err != nil {
 		return err
 	}
@@ -421,13 +445,26 @@ func (s *storage) createToken(ctx context.Context, tokenType, signature, accessS
 
 func (s *storage) getToken(ctx context.Context, tokenType, signature string, session fosite.Session) (fosite.Requester, error) {
 	encoded, err := s.dbFor(ctx).GetOAuthTokenSession(ctx, database.GetOAuthTokenSessionParams{TokenType: tokenType, Signature: signature})
+	if errors.Is(err, pgx.ErrNoRows) && tokenType == tokenTypeRefresh {
+		used, usedErr := s.dbFor(ctx).GetUsedOAuthRefreshToken(ctx, signature)
+		if usedErr == nil {
+			request, decodeErr := s.decodeRequest(ctx, used, session, false)
+			if decodeErr != nil {
+				return nil, decodeErr
+			}
+			return request, fosite.ErrInactiveToken
+		}
+		if !errors.Is(usedErr, pgx.ErrNoRows) {
+			return nil, usedErr
+		}
+	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, fosite.ErrNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
-	return decodeRequest(encoded, session, false)
+	return s.decodeRequest(ctx, encoded, session, false)
 }
 
 func (s *storage) deleteToken(ctx context.Context, tokenType, signature string) error {

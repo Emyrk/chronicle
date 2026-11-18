@@ -152,6 +152,17 @@ func TestDeviceAuthorizationRefreshAndRevocation(t *testing.T) {
 	require.NotEmpty(t, initial.RefreshToken)
 	require.Equal(t, ScopeAll, initial.Scope)
 	require.Equal(t, "bearer", strings.ToLower(initial.TokenType))
+	identity, err := service.ValidateAccessToken(ctx, initial.AccessToken)
+	require.NoError(t, err)
+	require.Equal(t, ClientID, identity.ClientID)
+	require.Equal(t, uuid.Nil, identity.DeveloperAppID)
+	require.Equal(t, ScopeAll, identity.Scope)
+	validated := postForm[struct {
+		Active   bool   `json:"active"`
+		ClientID string `json:"client_id"`
+	}](t, service, "/validate", url.Values{"token": {initial.AccessToken}}, http.StatusOK)
+	require.True(t, validated.Active)
+	require.Equal(t, ClientID, validated.ClientID)
 	assertBearerIdentity(t, service, initial.AccessToken, userID, http.StatusNoContent)
 	assertOAuthAuthenticationMiddleware(t, service, initial.AccessToken, userID, http.StatusNoContent)
 	installations, err := db.ListSidekickInstallationsByUser(ctx, userID)

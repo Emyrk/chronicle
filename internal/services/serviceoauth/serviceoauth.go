@@ -24,14 +24,17 @@ import (
 	"github.com/google/uuid"
 	"github.com/ory/fosite"
 	"github.com/ory/fosite/compose"
+	"github.com/ory/fosite/handler/oauth2"
 	"github.com/ory/fosite/handler/rfc8628"
 )
 
 const (
-	ClientID          = "chronicle-sidekick"
-	ScopeAll          = "all"
-	accessTokenPrefix = "ory_at_"
-	deviceGrantType   = "urn:ietf:params:oauth:grant-type:device_code"
+	ClientID                = "chronicle-sidekick"
+	ScopeAll                = "all"
+	ScopeExternalRead       = "external:read"
+	DeveloperClientIDPrefix = "chronicle-app-"
+	accessTokenPrefix       = "ory_at_"
+	deviceGrantType         = "urn:ietf:params:oauth:grant-type:device_code"
 
 	installationIDParam       = "installation_id"
 	installationNameParam     = "installation_name"
@@ -106,6 +109,7 @@ type Service struct {
 	deviceStrategy  rfc8628.RFC8628CodeStrategy
 	router          chi.Router
 	browserApproval http.Handler
+	browserApps     http.Handler
 	deviceLimiter   *deviceAuthorizationLimiter
 }
 
@@ -144,7 +148,7 @@ func (s *Service) configure(ctx context.Context, db oauthStore, accessURL string
 		GlobalSecret:                   secret,
 		AccessTokenLifespan:            time.Hour,
 		RefreshTokenLifespan:           30 * 24 * time.Hour,
-		RefreshTokenScopes:             []string{ScopeAll},
+		RefreshTokenScopes:             []string{ScopeAll, ScopeExternalRead},
 		DeviceAndUserCodeLifespan:      10 * time.Minute,
 		DeviceAuthTokenPollingInterval: 5 * time.Second,
 		DeviceVerificationURL:          verificationURL,
@@ -168,10 +172,19 @@ func (s *Service) configure(ctx context.Context, db oauthStore, accessURL string
 		CoreStrategy:        coreStrategy,
 		RFC8628CodeStrategy: deviceStrategy,
 	}
+	config.ClientAuthenticationStrategy = func(ctx context.Context, r *http.Request, form url.Values) (fosite.Client, error) {
+		return s.authenticateRefreshClient(ctx, r, form, coreStrategy)
+	}
 	s.provider = compose.Compose(config, s.store, strategy,
 		compose.RFC8628DeviceFactory,
 		compose.RFC8628DeviceAuthorizationTokenFactory,
 		compose.OAuth2RefreshTokenGrantFactory,
+		func(config fosite.Configurator, _ interface{}, _ interface{}) interface{} {
+			return &developerCredentialsHandler{
+				ClientCredentialsGrantHandler: compose.OAuth2ClientCredentialsGrantFactory(config, s.store, strategy).(*oauth2.ClientCredentialsGrantHandler),
+				store:                         s.store, refresh: coreStrategy,
+			}
+		},
 		compose.OAuth2TokenIntrospectionFactory,
 		compose.OAuth2TokenRevocationFactory,
 	)
@@ -182,6 +195,11 @@ func (s *Service) configure(ctx context.Context, db oauthStore, accessURL string
 	s.router.Handle("/device", http.HandlerFunc(s.serveBrowserApproval))
 	s.router.Post("/token", s.token)
 	s.router.Post("/revoke", s.revoke)
+	s.router.Post("/validate", s.validate)
+	s.router.Get("/apps", s.serveDeveloperApps)
+	s.router.Post("/apps", s.serveDeveloperApps)
+	s.router.Delete("/apps", s.serveDeveloperApps)
+	s.router.Post("/apps/rotate", s.serveDeveloperApps)
 	return nil
 }
 
@@ -195,6 +213,11 @@ func (s *Service) SetBrowserAuth(middlewares ...func(http.Handler) http.Handler)
 		handler = middlewares[i](handler)
 	}
 	s.browserApproval = handler
+	var apps http.Handler = http.HandlerFunc(s.developerAppsHandler)
+	for i := len(middlewares) - 1; i >= 0; i-- {
+		apps = middlewares[i](apps)
+	}
+	s.browserApps = apps
 }
 
 func (s *Service) serveBrowserApproval(w http.ResponseWriter, r *http.Request) {
@@ -369,18 +392,14 @@ func (s *Service) authenticateBearer(r *http.Request) (context.Context, bool) {
 	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") || !strings.HasPrefix(parts[1], accessTokenPrefix) {
 		return r.Context(), false
 	}
-	session := &fosite.DefaultSession{}
-	_, request, err := s.provider.IntrospectToken(r.Context(), parts[1], fosite.AccessToken, session, ScopeAll)
-	if err != nil {
+	identity, err := s.ValidateAccessToken(r.Context(), parts[1])
+	if err != nil || identity.DeveloperAppID != uuid.Nil {
 		return r.Context(), false
 	}
-	userID, err := uuid.Parse(request.GetSession().GetSubject())
-	if err != nil {
-		return r.Context(), false
-	}
+	userID := identity.UserID
 	ctx := chronauth.WithClaims(r.Context(), &claims.Claims{Subject: userID})
-	if installationID, ok := sidekickInstallationIDFromSession(request.GetSession()); ok {
-		ctx = withSidekickInstallationID(ctx, installationID)
+	if identity.SidekickInstallationID != uuid.Nil {
+		ctx = withSidekickInstallationID(ctx, identity.SidekickInstallationID)
 	}
 	return authz.AsUser(ctx, userID), true
 }

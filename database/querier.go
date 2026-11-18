@@ -177,6 +177,7 @@ type sqlcQuerier interface {
 	CreateLuaProject(ctx context.Context, arg CreateLuaProjectParams) (LuaProject, error)
 	// Tags the current main. Bumping the revision keeps a stale page from tagging a newer main by mistake.
 	CreateLuaProjectRelease(ctx context.Context, arg CreateLuaProjectReleaseParams) (LuaProjectRelease, error)
+	CreateOAuthDeveloperApp(ctx context.Context, arg CreateOAuthDeveloperAppParams) (OauthDeveloperApp, error)
 	CreateOAuthDeviceSession(ctx context.Context, arg CreateOAuthDeviceSessionParams) error
 	CreateOAuthTokenSession(ctx context.Context, arg CreateOAuthTokenSessionParams) error
 	CreateRaidComposition(ctx context.Context, arg CreateRaidCompositionParams) (RaidComposition, error)
@@ -209,6 +210,7 @@ type sqlcQuerier interface {
 	DeleteExpiredOAuthDeviceSessions(ctx context.Context) (int64, error)
 	DeleteExpiredOAuthRelayCodes(ctx context.Context) (int64, error)
 	DeleteExpiredOAuthTokenSessions(ctx context.Context) (int64, error)
+	DeleteExpiredUsedOAuthRefreshTokens(ctx context.Context) (int64, error)
 	DeleteGearList(ctx context.Context, arg DeleteGearListParams) (int64, error)
 	DeleteGearProgression(ctx context.Context, arg DeleteGearProgressionParams) (int64, error)
 	DeleteGearStatWeight(ctx context.Context, arg DeleteGearStatWeightParams) (int64, error)
@@ -234,6 +236,8 @@ type sqlcQuerier interface {
 	DeleteLuaProjectContributor(ctx context.Context, arg DeleteLuaProjectContributorParams) (int64, error)
 	DeleteLuaProjectRelease(ctx context.Context, arg DeleteLuaProjectReleaseParams) (int64, error)
 	DeleteModificationRequest(ctx context.Context, id uuid.UUID) error
+	DeleteOAuthDeveloperAppByUser(ctx context.Context, userID uuid.UUID) (uuid.UUID, error)
+	DeleteOAuthDeveloperAppTokens(ctx context.Context, appID string) (int64, error)
 	DeleteOAuthTokenSession(ctx context.Context, arg DeleteOAuthTokenSessionParams) (int64, error)
 	DeleteOAuthTokenSessionsByRequestID(ctx context.Context, requestID string) (int64, error)
 	DeleteObsoleteRankingRuns(ctx context.Context, arg DeleteObsoleteRankingRunsParams) ([]uuid.UUID, error)
@@ -530,6 +534,8 @@ type sqlcQuerier interface {
 	GetModificationRequestByID(ctx context.Context, id uuid.UUID) (ApplicationModificationRequest, error)
 	GetModuleAuthorByName(ctx context.Context, name string) (AddonAuthor, error)
 	GetModuleAuthorByUser(ctx context.Context, userID uuid.UUID) (AddonAuthor, error)
+	GetOAuthDeveloperAppByID(ctx context.Context, id uuid.UUID) (OauthDeveloperApp, error)
+	GetOAuthDeveloperAppByUser(ctx context.Context, userID uuid.UUID) (OauthDeveloperApp, error)
 	GetOAuthDeviceSession(ctx context.Context, signature string) (GetOAuthDeviceSessionRow, error)
 	GetOAuthTokenSession(ctx context.Context, arg GetOAuthTokenSessionParams) ([]byte, error)
 	GetOrCreateInferenceThread(ctx context.Context, arg GetOrCreateInferenceThreadParams) (InferenceThread, error)
@@ -592,6 +598,7 @@ type sqlcQuerier interface {
 	GetTimeParseScoringInstance(ctx context.Context, arg GetTimeParseScoringInstanceParams) (GetTimeParseScoringInstanceRow, error)
 	GetUploadKey(ctx context.Context, id uuid.UUID) (WowServerUploadKey, error)
 	GetUploadKeyByHash(ctx context.Context, secretHash string) (GetUploadKeyByHashRow, error)
+	GetUsedOAuthRefreshToken(ctx context.Context, signature string) ([]byte, error)
 	GetUserActionBarSlots(ctx context.Context, userID uuid.UUID) (GetUserActionBarSlotsRow, error)
 	GetUserAuthByLinkedID(ctx context.Context, arg GetUserAuthByLinkedIDParams) (UserAuthLink, error)
 	GetUserAuthLinkByUserID(ctx context.Context, userID uuid.UUID) (UserAuthLink, error)
@@ -1510,6 +1517,7 @@ type sqlcQuerier interface {
 	UpdateInferenceThreadTitleByOwner(ctx context.Context, arg UpdateInferenceThreadTitleByOwnerParams) (InferenceThread, error)
 	UpdateModificationRequestPayload(ctx context.Context, arg UpdateModificationRequestPayloadParams) error
 	UpdateModificationRequestStatus(ctx context.Context, arg UpdateModificationRequestStatusParams) error
+	UpdateOAuthDeveloperAppSecret(ctx context.Context, arg UpdateOAuthDeveloperAppSecretParams) (int64, error)
 	UpdateOAuthDeviceSessionByUserSignature(ctx context.Context, arg UpdateOAuthDeviceSessionByUserSignatureParams) (string, error)
 	// Ownership is NOT filtered here: SpiceDB gates edit access so granted
 	// editors can update too. Handlers must check the edit permission first.

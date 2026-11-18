@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -59,6 +60,32 @@ func TestExternalIPLimiter(t *testing.T) {
 
 	stillRejected := request("/openapi.json", "192.0.2.1")
 	require.Equal(t, http.StatusTooManyRequests, stillRejected.Code)
+}
+
+func TestExternalAppRateLimitKey(t *testing.T) {
+	t.Parallel()
+	appID := uuid.New()
+	limiter := newExternalIPLimiterWithConfig(1, 2)
+	handler := limiter.middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	request := func(ip string, app uuid.UUID) int {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.Header.Set("X-Forwarded-For", ip)
+		if app != uuid.Nil {
+			req = req.WithContext(withDeveloperAppID(req.Context(), app))
+		}
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	require.Equal(t, http.StatusNoContent, request("192.0.2.1", appID))
+	require.Equal(t, http.StatusNoContent, request("192.0.2.2", appID))
+	require.Equal(t, http.StatusTooManyRequests, request("192.0.2.3", appID))
+	require.Equal(t, http.StatusNoContent, request("192.0.2.1", uuid.Nil))
+	require.Equal(t, http.StatusNoContent, request("192.0.2.1", uuid.New()))
 }
 
 func TestExternalClientIP(t *testing.T) {

@@ -97,6 +97,11 @@ WITH deleted_refresh AS (
     AND oauth_token_sessions.token_type = 'refresh'
     AND oauth_token_sessions.signature = @refresh_signature
     AND expires_at > NOW()
+  RETURNING signature, request_id, request, expires_at
+), used_refresh AS (
+  INSERT INTO oauth_used_refresh_tokens (signature, request_id, request, expires_at)
+  SELECT signature, request_id, request, expires_at FROM deleted_refresh
+  WHERE request->>'client_id' <> 'chronicle-sidekick'
   RETURNING 1
 ), deleted_access AS (
   DELETE FROM oauth_token_sessions
@@ -105,3 +110,31 @@ WITH deleted_refresh AS (
     AND EXISTS (SELECT 1 FROM deleted_refresh)
 )
 SELECT COUNT(*) FROM deleted_refresh;
+
+-- name: CreateOAuthDeveloperApp :one
+INSERT INTO oauth_developer_apps (id, user_id, name, secret_hash)
+VALUES (@id, @user_id, @name, @secret_hash)
+RETURNING *;
+
+-- name: GetOAuthDeveloperAppByID :one
+SELECT * FROM oauth_developer_apps WHERE id = @id;
+
+-- name: GetOAuthDeveloperAppByUser :one
+SELECT * FROM oauth_developer_apps WHERE user_id = @user_id;
+
+-- name: DeleteOAuthDeveloperAppByUser :one
+DELETE FROM oauth_developer_apps WHERE user_id = @user_id RETURNING id;
+
+-- name: DeleteOAuthDeveloperAppTokens :execrows
+DELETE FROM oauth_token_sessions
+WHERE request->>'client_id' = 'chronicle-app-' || @app_id::text;
+
+-- name: UpdateOAuthDeveloperAppSecret :execrows
+UPDATE oauth_developer_apps SET secret_hash = @secret_hash WHERE user_id = @user_id;
+
+-- name: GetUsedOAuthRefreshToken :one
+SELECT request FROM oauth_used_refresh_tokens
+WHERE signature = @signature AND expires_at > NOW();
+
+-- name: DeleteExpiredUsedOAuthRefreshTokens :execrows
+DELETE FROM oauth_used_refresh_tokens WHERE expires_at <= NOW();

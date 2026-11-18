@@ -22038,6 +22038,37 @@ func (q *sqlQuerier) RedeemOAuthRelayCode(ctx context.Context, codeHash []byte) 
 	return i, err
 }
 
+const createOAuthDeveloperApp = `-- name: CreateOAuthDeveloperApp :one
+INSERT INTO oauth_developer_apps (id, user_id, name, secret_hash)
+VALUES ($1, $2, $3, $4)
+RETURNING id, user_id, name, secret_hash, created_at
+`
+
+type CreateOAuthDeveloperAppParams struct {
+	ID         uuid.UUID `db:"id" json:"id"`
+	UserID     uuid.UUID `db:"user_id" json:"user_id"`
+	Name       string    `db:"name" json:"name"`
+	SecretHash []byte    `db:"secret_hash" json:"secret_hash"`
+}
+
+func (q *sqlQuerier) CreateOAuthDeveloperApp(ctx context.Context, arg CreateOAuthDeveloperAppParams) (OauthDeveloperApp, error) {
+	row := q.db.QueryRow(ctx, createOAuthDeveloperApp,
+		arg.ID,
+		arg.UserID,
+		arg.Name,
+		arg.SecretHash,
+	)
+	var i OauthDeveloperApp
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Name,
+		&i.SecretHash,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const createOAuthDeviceSession = `-- name: CreateOAuthDeviceSession :exec
 INSERT INTO oauth_device_sessions (
   device_signature, user_signature, request, expires_at,
@@ -22141,6 +22172,42 @@ func (q *sqlQuerier) DeleteExpiredOAuthTokenSessions(ctx context.Context) (int64
 	return result.RowsAffected(), nil
 }
 
+const deleteExpiredUsedOAuthRefreshTokens = `-- name: DeleteExpiredUsedOAuthRefreshTokens :execrows
+DELETE FROM oauth_used_refresh_tokens WHERE expires_at <= NOW()
+`
+
+func (q *sqlQuerier) DeleteExpiredUsedOAuthRefreshTokens(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredUsedOAuthRefreshTokens)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteOAuthDeveloperAppByUser = `-- name: DeleteOAuthDeveloperAppByUser :one
+DELETE FROM oauth_developer_apps WHERE user_id = $1 RETURNING id
+`
+
+func (q *sqlQuerier) DeleteOAuthDeveloperAppByUser(ctx context.Context, userID uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, deleteOAuthDeveloperAppByUser, userID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const deleteOAuthDeveloperAppTokens = `-- name: DeleteOAuthDeveloperAppTokens :execrows
+DELETE FROM oauth_token_sessions
+WHERE request->>'client_id' = 'chronicle-app-' || $1::text
+`
+
+func (q *sqlQuerier) DeleteOAuthDeveloperAppTokens(ctx context.Context, appID string) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteOAuthDeveloperAppTokens, appID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteOAuthTokenSession = `-- name: DeleteOAuthTokenSession :execrows
 DELETE FROM oauth_token_sessions
 WHERE token_type = $1 AND signature = $2
@@ -22170,6 +22237,40 @@ func (q *sqlQuerier) DeleteOAuthTokenSessionsByRequestID(ctx context.Context, re
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const getOAuthDeveloperAppByID = `-- name: GetOAuthDeveloperAppByID :one
+SELECT id, user_id, name, secret_hash, created_at FROM oauth_developer_apps WHERE id = $1
+`
+
+func (q *sqlQuerier) GetOAuthDeveloperAppByID(ctx context.Context, id uuid.UUID) (OauthDeveloperApp, error) {
+	row := q.db.QueryRow(ctx, getOAuthDeveloperAppByID, id)
+	var i OauthDeveloperApp
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Name,
+		&i.SecretHash,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getOAuthDeveloperAppByUser = `-- name: GetOAuthDeveloperAppByUser :one
+SELECT id, user_id, name, secret_hash, created_at FROM oauth_developer_apps WHERE user_id = $1
+`
+
+func (q *sqlQuerier) GetOAuthDeveloperAppByUser(ctx context.Context, userID uuid.UUID) (OauthDeveloperApp, error) {
+	row := q.db.QueryRow(ctx, getOAuthDeveloperAppByUser, userID)
+	var i OauthDeveloperApp
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Name,
+		&i.SecretHash,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const getOAuthDeviceSession = `-- name: GetOAuthDeviceSession :one
@@ -22242,6 +22343,18 @@ func (q *sqlQuerier) GetOrCreateOAuthServerSecret(ctx context.Context, secret []
 	return secret_2, err
 }
 
+const getUsedOAuthRefreshToken = `-- name: GetUsedOAuthRefreshToken :one
+SELECT request FROM oauth_used_refresh_tokens
+WHERE signature = $1 AND expires_at > NOW()
+`
+
+func (q *sqlQuerier) GetUsedOAuthRefreshToken(ctx context.Context, signature string) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getUsedOAuthRefreshToken, signature)
+	var request []byte
+	err := row.Scan(&request)
+	return request, err
+}
+
 const invalidateOAuthDeviceSession = `-- name: InvalidateOAuthDeviceSession :execrows
 UPDATE oauth_device_sessions
 SET invalidated = TRUE
@@ -22299,6 +22412,11 @@ WITH deleted_refresh AS (
     AND oauth_token_sessions.token_type = 'refresh'
     AND oauth_token_sessions.signature = $2
     AND expires_at > NOW()
+  RETURNING signature, request_id, request, expires_at
+), used_refresh AS (
+  INSERT INTO oauth_used_refresh_tokens (signature, request_id, request, expires_at)
+  SELECT signature, request_id, request, expires_at FROM deleted_refresh
+  WHERE request->>'client_id' <> 'chronicle-sidekick'
   RETURNING 1
 ), deleted_access AS (
   DELETE FROM oauth_token_sessions
@@ -22319,6 +22437,23 @@ func (q *sqlQuerier) RotateOAuthRefreshToken(ctx context.Context, arg RotateOAut
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const updateOAuthDeveloperAppSecret = `-- name: UpdateOAuthDeveloperAppSecret :execrows
+UPDATE oauth_developer_apps SET secret_hash = $1 WHERE user_id = $2
+`
+
+type UpdateOAuthDeveloperAppSecretParams struct {
+	SecretHash []byte    `db:"secret_hash" json:"secret_hash"`
+	UserID     uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) UpdateOAuthDeveloperAppSecret(ctx context.Context, arg UpdateOAuthDeveloperAppSecretParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateOAuthDeveloperAppSecret, arg.SecretHash, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updateOAuthDeviceSessionByUserSignature = `-- name: UpdateOAuthDeviceSessionByUserSignature :one
