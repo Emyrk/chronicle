@@ -45,6 +45,7 @@ describe("modules home", () => {
     client.setQueryData(["module-author", "me"], null)
     const html = render(<LuaProjectsPage />, client)
     expect(html).toContain("Making modules is a Revered perk")
+    expect(html).toContain("The module_creator role also grants creation access.")
     expect(html).toContain('href="/supporter"')
     expect(html).not.toContain("Make your first module")
     expect(html).not.toContain("Claim name")
@@ -97,7 +98,7 @@ describe("new module form", () => {
   it("explains a denied permission instead of showing the form", () => {
     vi.mocked(useAuthorizationCheck).mockReturnValue({ data: { createLuaProject: false }, isPending: false } as unknown as ReturnType<typeof useAuthorizationCheck>)
     const html = render(<NewModuleForm author="steven" />)
-    expect(html).toContain("You need Revered or Exalted supporter status to create modules")
+    expect(html).toContain("You need Revered or Exalted supporter status, or the module_creator role, to create modules")
     expect(html).not.toContain("Create and open the Workshop")
     expect(useAuthorizationCheck).toHaveBeenCalledWith({ createLuaProject: "chronicle:chronicle#create_lua_project" }, { enabled: true })
   })
