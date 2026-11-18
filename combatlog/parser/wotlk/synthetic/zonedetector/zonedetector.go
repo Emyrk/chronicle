@@ -61,6 +61,9 @@ func New(logger *slog.Logger, reg *registry.Registry) *ZoneDetector {
 // ignore are some entry ids that should not be used for zone detection.
 func ignore() map[uint32]struct{} {
 	return map[uint32]struct{}{
+		// Summoned by both ZG Voodoo Slaves and Nefarian in BWL. Exclude
+		// even when only one of those instances is in the active registry.
+		14668: {}, // Corrupted Infernal
 		// Trial of the Crusader
 		35314: {}, // Orgrimmar Champion
 		35323: {}, // Sen'jin Champion

@@ -599,6 +599,7 @@ func RagefireChasmHostiles() map[uint32]Identity {
 func ZulGurubHostiles(fl database.WoWFlavor) *identifier.Identifier {
 	hostile := make(map[uint32]Identity)
 	LoadAdds(hostile, map[uint32]string{
+		14668: "Corrupted Infernal", // Voodoo Slave summon; also used by Nefarian in BWL.
 		11352: "Gurubashi Berserker",
 		11391: "Vilebranch Speaker",
 		14881: "Spider",

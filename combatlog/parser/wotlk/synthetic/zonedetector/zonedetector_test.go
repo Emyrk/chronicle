@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
@@ -161,4 +162,35 @@ func TestZoneDetector_NoEmitForSameZoneAsReal(t *testing.T) {
 	result = zd.ProcessMessages([]messages.Message{msg})
 	assert.Len(t, result, 1, "should not emit synthetic zone for same zone as real")
 	assert.Equal(t, "the nexus", zd.LastZone())
+}
+
+func TestZoneDetector_CorruptedInfernalDoesNotIdentifyZone(t *testing.T) {
+	t.Parallel()
+	flavor := database.WoWFlavor{database.FlavorVanilla}
+	bwl := instances.BlackwingLairHostiles(flavor).HostileEntries()
+	zg := instances.ZulGurubHostiles(flavor).HostileEntries()
+	require.Contains(t, bwl, uint32(14668))
+	require.Contains(t, zg, uint32(14668))
+
+	for _, initialZone := range []string{"", "zul'gurub"} {
+		t.Run("initial="+initialZone, func(t *testing.T) {
+			t.Parallel()
+			// Only BWL is registered: the explicit exclusion, not duplicate
+			// detection, must prevent this shared summon from identifying BWL.
+			reg := registry.NewRegistry(testutil.Logger(t), flavor)
+			reg.RegisterEntry(registry.Entry{ZoneNames: []string{"blackwing lair"}, HostileEntries: bwl})
+			zd := zonedetector.New(testutil.Logger(t), reg)
+			ts := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
+			if initialZone != "" {
+				zd.ProcessMessages([]messages.Message{&messages.Zone{
+					MessageBase: messages.Base(ts),
+					Zone:        zone.Zone{Seen: ts, Name: initialZone, IsInstance: true},
+				}})
+			}
+			msg := unitMsg(ts, creatureGUID(14668))
+			result := zd.ProcessMessages([]messages.Message{msg})
+			require.Equal(t, []messages.Message{msg}, result)
+			assert.Equal(t, initialZone, zd.LastZone())
+		})
+	}
 }
