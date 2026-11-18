@@ -793,3 +793,35 @@ func results(t *DPSTracker, encID uuid.UUID) map[guid.GUID]*UnitCombatStats {
 	}
 	return nil
 }
+
+func TestDPSTrackerCrittersAreUnranked(t *testing.T) {
+	t.Parallel()
+	tracker, units := setupDPSTracker()
+	player := makePlayerGUID(1)
+	rat := makeCreatureGUID(4075, 1)
+	units.Info[player] = unitinfo.Info{Guid: player, IsPlayer: true, CanCooperate: true}
+	// Even hostile metadata or a boss flag must not make critters rankable.
+	units.Info[rat] = unitinfo.Info{Guid: rat, Boss: true}
+	encID := uuid.New()
+	tracker.FightStarted(encID, nil)
+	damage := &messages.Damage{Caster: &player, Target: rat, Amount: 500, HitType: types.HitTypeHit}
+	require.NoError(t, tracker.ProcessMessage(true, encID, damage))
+	require.NoError(t, tracker.ProcessMessage(true, encID, &messages.Heal{Caster: rat, Target: player, Amount: 100}))
+	require.NoError(t, tracker.ProcessMessage(true, encID, &messages.Absorbed{Caster: rat, Target: player, Amount: 100}))
+	// A player owner must not turn a critter into a ranked healing target.
+	units.Info[rat] = unitinfo.Info{Guid: rat, Owner: &player, CanCooperate: true}
+	require.NoError(t, tracker.ProcessMessage(true, encID, &messages.Heal{Caster: player, Target: rat, Amount: 100}))
+	require.NoError(t, tracker.ProcessMessage(true, encID, &messages.Absorbed{Caster: player, Target: rat, Amount: 100}))
+	tracker.FightEnded(encID, nil)
+	tracker.ClassifyDamage(encID, DamageTargets{}, damage, nil)
+	stats := tracker.Result()[encID].Units[player]
+	require.NotNil(t, stats)
+	require.Equal(t, int64(500), stats.DamageDone)
+	require.Zero(t, stats.RankedDamageDone)
+	require.Zero(t, stats.HealingDone)
+	require.Zero(t, stats.HealingAbsorbed)
+	require.Equal(t, int64(500), stats.UnrankedDamageDone)
+	require.Equal(t, int32(500), damage.Amount)
+	require.EqualValues(t, 500, damage.Unranked)
+	require.NotContains(t, tracker.Result()[encID].Units, rat)
+}

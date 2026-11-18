@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/stretchr/testify/require"
@@ -84,4 +85,36 @@ func TestCharactersByEntryOnlyIndexesCreatures(t *testing.T) {
 	require.NotNil(t, vehicle)
 	require.NotNil(t, object)
 	require.Equal(t, []Character{creature}, chars.ByEntry[entry])
+}
+
+func TestCrittersDoNotDriveCharacterActivity(t *testing.T) {
+	t.Parallel()
+	chars := NewCharacters(unitdb.New(), nil, identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+	player := guid.GUID(1)
+	rat := entryGUID(0xF130000000000000, 4075)
+	boss := entryGUID(0xF130000000000000, 11583)
+	at := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	damage := func(target guid.GUID, when time.Time) {
+		_, err := chars.Process(&messages.Damage{MessageBase: messages.Base(when), Caster: &player, Target: target, Amount: 10})
+		require.NoError(t, err)
+	}
+	damage(rat, at)
+	for _, id := range []guid.GUID{player, rat} {
+		char, ok := chars.Get(id)
+		require.True(t, ok, "critter identity is retained")
+		require.False(t, char.IsActive(), "critter combat cannot start activity")
+	}
+	damage(boss, at.Add(time.Second))
+	bossChar, _ := chars.Get(boss)
+	playerChar, _ := chars.Get(player)
+	require.True(t, bossChar.IsActive())
+	before, _ := playerChar.CurrentPeriod()
+	damage(rat, at.Add(2*time.Second))
+	after, _ := playerChar.CurrentPeriod()
+	require.Equal(t, before, after, "critter damage cannot extend activity")
+	damage(rat, at.Add(time.Hour))
+	require.True(t, bossChar.IsActive(), "critter events cannot expire other activity")
+	_, err := chars.Process(messages.TimedOut(at.Add(time.Hour)))
+	require.NoError(t, err)
+	require.False(t, bossChar.IsActive(), "normal timeouts still work")
 }

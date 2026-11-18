@@ -533,3 +533,22 @@ func TestSpeedrunTracker_LevelRange_MissingLevelDisqualifies(t *testing.T) {
 	assert.Equal(t, "MysteryPlayer", result.LevelRange.Violators[0].PlayerName)
 	assert.Equal(t, int32(0), result.LevelRange.Violators[0].Level)
 }
+
+func TestEngagementTrackerIgnoresCritterInteractions(t *testing.T) {
+	t.Parallel()
+	units := newTestUnits()
+	player := makePlayerGUID(1)
+	rat := makeCreatureGUID(4075, 1)
+	units.Info[player] = unitinfo.Info{Guid: player, IsPlayer: true, CanCooperate: true}
+	units.Info[rat] = unitinfo.Info{Guid: rat, Owner: &player}
+	tracker := NewEngagementTracker(units)
+	encID := uuid.New()
+	tracker.FightStarted(encID, nil)
+	require.NoError(t, tracker.ProcessMessage(true, encID, &messages.Damage{Caster: &player, Target: rat, Amount: 10}))
+	require.Empty(t, tracker.engaged, "critter damage must not engage its attacker")
+	tracker.classify(rat)
+	require.Empty(t, tracker.engaged, "hostile critter metadata must not engage its owner")
+	tracker.classify(player)
+	tracker.markEngaged(player)
+	require.NotContains(t, tracker.engaged, rat, "engaged owners must not engage critters")
+}

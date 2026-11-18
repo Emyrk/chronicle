@@ -158,7 +158,13 @@ func (c *Characters) Add(id guid.GUID, now time.Time) (_ Character, newChar bool
 	char, exists := c.All.Get(id)
 	if !exists {
 		newChar = true
+		if c.db.Category(id, c.idf) == unitdb.CategoryCritter {
+			char = NewNeverActive(id)
+		}
 		for _, factory := range c.factories {
+			if char != nil {
+				break
+			}
 			if specialChar, ok := factory(id, c); ok {
 				char = specialChar
 				break
@@ -244,6 +250,12 @@ func (c *Characters) notifyActivityChanged(m messages.Message) bool {
 func (c *Characters) Process(m messages.Message) (bool, error) {
 	defer func() { c.activityChanged = nil }()
 	c.processNewCharacters(m)
+
+	// Retain critter identities, but do not let their events start, refresh, or
+	// expire activity periods. Encounter event storage runs independently.
+	if c.db.MessageHasCategory(m, unitdb.CategoryCritter, c.idf) {
+		return false, nil
+	}
 
 	boundary, isBoundary := m.(*messages.EncounterBoundary)
 	if isBoundary {

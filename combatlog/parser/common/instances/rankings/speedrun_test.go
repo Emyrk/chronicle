@@ -514,3 +514,12 @@ func TestSpeedrunTracker_BossToBossTimeIncludesFirstBossWipe(t *testing.T) {
 	assert.Equal(t, killEnd, result.BossToBossCompletionTime)
 	assert.Equal(t, 7*time.Minute, result.BossToBossDuration)
 }
+
+func TestSpeedrunTrackerIgnoresCritterKills(t *testing.T) {
+	t.Parallel()
+	tracker := NewSpeedrunTracker(singleBossRules("Rat", 4075), nil, nil)
+	tracker.ActivityChange(msg(t0), &stubChar{id: makeCreatureGUID(4075, 1), endState: period.EndStateSlain, hasPeriod: true})
+	require.Equal(t, 1, tracker.remaining)
+	require.Empty(t, tracker.state[0].kills)
+	require.Empty(t, tracker.seenGUIDs)
+}

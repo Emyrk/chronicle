@@ -5,11 +5,11 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/Emyrk/chronicle/combatlog/parser/guid"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/totems"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/instancehook"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/totems"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 )
 
 // UnitCategory classifies a GUID into one of the known unit types.
@@ -120,6 +120,10 @@ func (t *EngagementTracker) AllEngagedPlayers() map[guid.GUID]struct{} {
 // classifyAndEngage classifies both GUIDs (if new) and propagates engagement
 // between them. If either is engaged, the other becomes engaged too.
 func (t *EngagementTracker) classifyAndEngage(a, b guid.GUID) {
+	// Critter interactions do not establish combat participation on either side.
+	if t.units.Category(a) == unitdb.CategoryCritter || t.units.Category(b) == unitdb.CategoryCritter {
+		return
+	}
 	t.classify(a)
 	t.classify(b)
 
@@ -173,6 +177,9 @@ func (t *EngagementTracker) classify(g guid.GUID) {
 // markEngaged marks a unit as engaged and propagates to its owner (if pet/totem)
 // or to its pets/totems (if owner).
 func (t *EngagementTracker) markEngaged(g guid.GUID) {
+	if t.units.Category(g) == unitdb.CategoryCritter {
+		return
+	}
 	if _, already := t.engaged[g]; already {
 		return
 	}

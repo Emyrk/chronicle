@@ -96,7 +96,7 @@ func (t *SpeedrunTracker) ActivityChange(m messages.Message, chars ...characters
 	}
 
 	for _, c := range chars {
-		if c.IsActive() {
+		if t.units.Category(c.ID()) == unitdb.CategoryCritter || c.IsActive() {
 			continue
 		}
 
