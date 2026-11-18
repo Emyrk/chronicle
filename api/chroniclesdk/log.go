@@ -338,17 +338,31 @@ type UnknownUnit struct {
 	Count int    `json:"count"`
 }
 
-// IdentityReport contains all creatures and spells seen in a parsed log,
-// organized by zone. Used for programming raid encounter definitions.
+// IdentityReport contains finalized unit categories and spell diagnostics.
 type IdentityReport struct {
-	// ZonedUnits maps zone name → list of creatures seen in that zone.
+	// Instances contains finalized observed units, including instances without retained encounters.
+	Instances []IdentityInstance `json:"instances,omitempty"`
+	// ZonedUnits is retained for reading legacy stored reports.
 	ZonedUnits map[string][]IdentityCreature `json:"zoned_units,omitempty"`
 	// ZoneSpells maps zone name → list of spells seen in that zone.
 	ZoneSpells map[string][]IdentitySpell `json:"zone_spells,omitempty"`
 	// UnitSpells maps creature entry ID → list of spell names that creature cast.
 	UnitSpells map[uint32][]string `json:"unit_spells,omitempty"`
-	// GoCode contains generated Go source code for instance definitions.
-	GoCode string `json:"go_code,omitempty"`
+}
+
+// IdentityInstance groups units by category and entry within one parser instance.
+type IdentityInstance struct {
+	Name  string         `json:"name"`
+	Zone  string         `json:"zone"`
+	Units []IdentityUnit `json:"units"`
+}
+
+type IdentityUnit struct {
+	Category    string   `json:"category"`
+	EntryID     uint32   `json:"entry_id"`
+	Name        string   `json:"name"`
+	UniqueCount int      `json:"unique_count"`
+	Samples     []string `json:"samples"`
 }
 
 // IdentityCreature represents a creature seen during identity mode parsing.

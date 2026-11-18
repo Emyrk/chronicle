@@ -2831,12 +2831,25 @@ export interface IdentityCreature {
 
 // From chroniclesdk/log.go
 /**
- * IdentityReport contains all creatures and spells seen in a parsed log,
- * organized by zone. Used for programming raid encounter definitions.
+ * IdentityInstance groups units by category and entry within one parser instance.
+ */
+export interface IdentityInstance {
+    readonly name: string;
+    readonly zone: string;
+    readonly units: readonly IdentityUnit[];
+}
+
+// From chroniclesdk/log.go
+/**
+ * IdentityReport contains finalized unit categories and spell diagnostics.
  */
 export interface IdentityReport {
     /**
-     * ZonedUnits maps zone name → list of creatures seen in that zone.
+     * Instances contains finalized observed units, including instances without retained encounters.
+     */
+    readonly instances?: readonly IdentityInstance[];
+    /**
+     * ZonedUnits is retained for reading legacy stored reports.
      */
     readonly zoned_units?: Record<string, IdentityCreature[]>;
     /**
@@ -2847,10 +2860,6 @@ export interface IdentityReport {
      * UnitSpells maps creature entry ID → list of spell names that creature cast.
      */
     readonly unit_spells?: Record<number, string[]>;
-    /**
-     * GoCode contains generated Go source code for instance definitions.
-     */
-    readonly go_code?: string;
 }
 
 // From chroniclesdk/log.go
@@ -2860,6 +2869,15 @@ export interface IdentityReport {
 export interface IdentitySpell {
     readonly spell_id: number;
     readonly count: number;
+}
+
+// From chroniclesdk/log.go
+export interface IdentityUnit {
+    readonly category: string;
+    readonly entry_id: number;
+    readonly name: string;
+    readonly unique_count: number;
+    readonly samples: readonly string[];
 }
 
 // From chroniclesdk/inference.go

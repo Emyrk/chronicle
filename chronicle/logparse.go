@@ -25,9 +25,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/rankings"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/totems"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/warlockdemon"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
@@ -483,6 +481,10 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		finalized, err := inst.Finalize(ctx)
 		instFinalizeDuration := time.Since(finalizeStart)
 		totalFinalizeDuration += instFinalizeDuration
+
+		if report.Identity != nil && finalized != nil && err == nil {
+			report.Identity.Instances = append(report.Identity.Instances, buildIdentityInstance(inst.Name(), inst.CurrentZone.Name, finalized, encountersState.Units))
+		}
 
 		if finalized == nil || len(finalized.Encounters) == 0 {
 			continue
@@ -1357,26 +1359,8 @@ func (w *logParseInstanceBuilder) seen(ids ...guid.GUID) {
 
 func buildIdentityReport(cs *creatures.Creatures) *chroniclesdk.IdentityReport {
 	rpt := &chroniclesdk.IdentityReport{
-		ZonedUnits: make(map[string][]chroniclesdk.IdentityCreature),
 		ZoneSpells: make(map[string][]chroniclesdk.IdentitySpell),
 		UnitSpells: make(map[uint32][]string),
-	}
-
-	for zone, units := range cs.ZonedUnits {
-		for entryID, name := range units {
-			if _, ok := totems.EntryIsTotem(entryID); ok {
-				continue
-			}
-			if _, ok := warlockdemon.IsWarlockDemonEntry(entryID); ok {
-				continue
-			}
-			count := len(cs.UnitQuantity[entryID])
-			rpt.ZonedUnits[zone] = append(rpt.ZonedUnits[zone], chroniclesdk.IdentityCreature{
-				EntryID:     entryID,
-				Name:        name,
-				UniqueCount: count,
-			})
-		}
 	}
 
 	for zone, spells := range cs.ZoneSpells {
@@ -1395,8 +1379,6 @@ func buildIdentityReport(cs *creatures.Creatures) *chroniclesdk.IdentityReport {
 		}
 		rpt.UnitSpells[entryID] = names
 	}
-
-	rpt.GoCode = rpt.GenerateGoCode()
 
 	return rpt
 }
