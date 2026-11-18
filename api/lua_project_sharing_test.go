@@ -36,6 +36,8 @@ func TestLuaProjectOwnershipQuotas(t *testing.T) {
 		role  string
 		limit int
 	}{
+		{name: "module creator", role: "module-creator", limit: 5},
+		{name: "technical admin", role: "technical_admin", limit: 5},
 		{name: "revered", role: "revered", limit: 5},
 		{name: "exalted", role: "exalted", limit: 20},
 	} {

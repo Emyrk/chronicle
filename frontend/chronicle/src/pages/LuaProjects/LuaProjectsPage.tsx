@@ -34,7 +34,7 @@ export function LuaProjectsPage() {
   const shown = useMemo(() => galleryOrder(publicQuery.data ?? [], sort, query), [publicQuery.data, sort, query])
   // Newcomers get the welcome until their first module exists: sign in, claim a name, then create.
   const newcomer = !sessionLoading && (!session || (authorQuery.isSuccess && (author === null || (mineQuery.isSuccess && mineQuery.data.length === 0))))
-  // Signed-in newcomers below Revered get an upsell instead, so they never claim an author name they cannot use.
+  // Signed-in newcomers without creation access get an upsell instead, so they never claim an author name they cannot use.
   const permission = useAuthorizationCheck({ createLuaProject: "chronicle:chronicle#create_lua_project" }, { enabled: !!session })
   const welcome = newcomer && (!session || permission.data?.createLuaProject === true)
   const upsell = newcomer && !!session && permission.data?.createLuaProject === false

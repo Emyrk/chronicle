@@ -167,7 +167,11 @@ func (z *Authz) UserChronicleRoles(ctx context.Context, user uuid.UUID) ([]strin
 		}
 		// Check if this relationship's subject is our user
 		//if r.SubjectType == usr.Object().ObjectType && r.SubjectID == usr.Object().ObjectId {
-		roles = append(roles, r.ResourceRelation)
+		role := r.ResourceRelation
+		if role == "module_creator" {
+			role = "module-creator"
+		}
+		roles = append(roles, role)
 		//}
 	}
 
@@ -390,6 +394,7 @@ func (z *Authz) SetUserChronicleRoles(ctx context.Context, userID uuid.UUID, rol
 		"inference_capable",
 		"inference_debug_capable",
 		"lua_project_author",
+		"module_creator",
 		"moderate_logs",
 		"moderate_guilds",
 		"is_admin_users",
@@ -437,6 +442,8 @@ func (z *Authz) SetUserChronicleRoles(ctx context.Context, userID uuid.UUID, rol
 			gChron.Inference_debug_capable(usr)
 		case "lua_project_author":
 			gChron.Lua_project_author(usr)
+		case "module-creator", "module_creator":
+			gChron.Module_creator(usr)
 		case "moderate_logs":
 			gChron.Moderate_logs(usr)
 		case "moderate_guilds":

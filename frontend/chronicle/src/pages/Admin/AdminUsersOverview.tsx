@@ -11,6 +11,7 @@ import {
   RefreshCw,
   Users,
   ShieldCheck,
+  Laptop,
   Shield,
   Loader2,
   HardDrive,
@@ -49,6 +50,7 @@ import { toast } from "sonner";
 // ---------------------------------------------------------------------------
 
 const ASSIGNABLE_ROLES = [
+  { value: "module-creator", label: "module-creator", icon: Laptop, className: "bg-violet-500/15 text-violet-400" },
   { value: "technical_admin", label: "Tech Admin", icon: ShieldCheck, className: "bg-purple-500/15 text-purple-400" },
   { value: "admin", label: "Admin", icon: Shield, className: "bg-blue-500/15 text-blue-400" },
   { value: "upload_capable", label: "Upload Capable", icon: Upload, className: "bg-green-500/15 text-green-400" },

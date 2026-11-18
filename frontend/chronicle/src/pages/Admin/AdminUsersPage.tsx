@@ -38,6 +38,11 @@ import {
 } from "lucide-react";
 
 const ROLE_CONFIG: Record<string, { icon: React.ReactNode; label: string; className: string }> = {
+  "module-creator": {
+    icon: <Laptop className="h-3 w-3" />,
+    label: "module-creator",
+    className: "bg-violet-500/15 text-violet-500",
+  },
   technical_admin: {
     icon: <ShieldCheck className="h-3 w-3" />,
     label: "Tech Admin",
