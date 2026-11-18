@@ -33,7 +33,7 @@ func TestWotLKEncounterFactoriesTreatIronConstructTimeoutAsDeath(t *testing.T) {
 			t.Parallel()
 
 			all := characters.NewCharacters(
-				unitdb.New(),
+				unitdb.New(database.WoWFlavor{database.FlavorVanilla, database.FlavorWrath}),
 				NewCharacterFactories(database.WoWFlavor{database.FlavorVanilla, database.FlavorWrath}),
 				identifier.NewIdentifier(map[uint32]identifier.Identity{}),
 			)
@@ -68,7 +68,7 @@ func TestWotLKEncounterFactoriesKillTempestMinionsWithEmalon(t *testing.T) {
 			t.Parallel()
 
 			all := characters.NewCharacters(
-				unitdb.New(),
+				unitdb.New(database.WoWFlavor{database.FlavorVanilla, database.FlavorWrath}),
 				NewCharacterFactories(database.WoWFlavor{database.FlavorVanilla, database.FlavorWrath}),
 				identifier.NewIdentifier(map[uint32]identifier.Identity{}),
 			)
@@ -111,7 +111,7 @@ func TestWotLKEncounterFactoriesKillSteelforgedDefendersWithFlameLeviathan(t *te
 			t.Parallel()
 
 			all := characters.NewCharacters(
-				unitdb.New(),
+				unitdb.New(database.WoWFlavor{database.FlavorVanilla, database.FlavorWrath}),
 				NewCharacterFactories(database.WoWFlavor{database.FlavorVanilla, database.FlavorWrath}),
 				identifier.NewIdentifier(map[uint32]identifier.Identity{}),
 			)
@@ -157,7 +157,7 @@ func TestFlameLeviathanIgnoresPostDeathCast(t *testing.T) {
 			t.Parallel()
 
 			all := characters.NewCharacters(
-				unitdb.New(),
+				unitdb.New(database.WoWFlavor{database.FlavorVanilla, database.FlavorWrath}),
 				NewCharacterFactories(database.WoWFlavor{database.FlavorVanilla, database.FlavorWrath}),
 				identifier.NewIdentifier(map[uint32]identifier.Identity{}),
 			)
@@ -193,7 +193,7 @@ func TestWotLKEncounterFactoriesRejectPetEntries(t *testing.T) {
 	t.Parallel()
 
 	chars := characters.NewCharacters(
-		unitdb.New(),
+		unitdb.New(database.WoWFlavor{database.FlavorVanilla, database.FlavorWrath}),
 		nil,
 		identifier.NewIdentifier(map[uint32]identifier.Identity{}),
 	)
@@ -216,7 +216,7 @@ func TestWotLKEncounterFactoriesUseNeverActiveVortex(t *testing.T) {
 	t.Parallel()
 
 	chars := characters.NewCharacters(
-		unitdb.New(),
+		unitdb.New(database.WoWFlavor{database.FlavorVanilla, database.FlavorWrath}),
 		nil,
 		identifier.NewIdentifier(map[uint32]identifier.Identity{}),
 	)
@@ -238,7 +238,7 @@ func TestWotLKEncounterFactoriesUseNeverActiveMechanolift(t *testing.T) {
 	t.Parallel()
 
 	chars := characters.NewCharacters(
-		unitdb.New(),
+		unitdb.New(database.WoWFlavor{database.FlavorWrath}),
 		nil,
 		identifier.NewIdentifier(map[uint32]identifier.Identity{}),
 	)
@@ -268,7 +268,7 @@ func TestWotLKEncounterFactoriesAcceptYoggSaronVehicle(t *testing.T) {
 	t.Parallel()
 
 	chars := characters.NewCharacters(
-		unitdb.New(),
+		unitdb.New(database.WoWFlavor{database.FlavorVanilla, database.FlavorWrath}),
 		nil,
 		identifier.NewIdentifier(map[uint32]identifier.Identity{}),
 	)
@@ -290,7 +290,7 @@ func TestWotLKEncounterFactoriesAcceptMimironVehicle(t *testing.T) {
 	t.Parallel()
 
 	chars := characters.NewCharacters(
-		unitdb.New(),
+		unitdb.New(database.WoWFlavor{database.FlavorWrath}),
 		nil,
 		identifier.NewIdentifier(map[uint32]identifier.Identity{}),
 	)
@@ -312,7 +312,7 @@ func TestAzerothServersideFactoryStillAcceptsPets(t *testing.T) {
 	t.Parallel()
 
 	chars := characters.NewCharacters(
-		unitdb.New(),
+		unitdb.New(database.WoWFlavor{database.FlavorWrath}),
 		nil,
 		identifier.NewIdentifier(map[uint32]identifier.Identity{}),
 	)

@@ -20,7 +20,7 @@ import (
 
 func newIcecrownTestCharacters() *characters.Characters {
 	return characters.NewCharacters(
-		unitdb.New(),
+		unitdb.New(database.WoWFlavor{database.FlavorWrath}),
 		NewCharacterFactories(database.WoWFlavor{database.FlavorWrath}),
 		identifier.NewIdentifier(map[uint32]identifier.Identity{}),
 	)

@@ -22,7 +22,7 @@ func TestNightmareOfUrsolRegistryResolvesRockOfDesolation(t *testing.T) {
 		context.Background(),
 		false,
 		zone.Zone{Name: "荒芜巨岩", IsInstance: true, InstanceType: "raid"},
-		unitdb.New(),
+		unitdb.New(flavor),
 		flavor,
 	)
 
@@ -40,7 +40,7 @@ func TestNightmareOfUrsolRegistryResolvesChineseTimbermawHoldOnlyAsRaid(t *testi
 		context.Background(),
 		false,
 		zone.Zone{Name: "木喉要塞", IsInstance: false, InstanceType: "none"},
-		unitdb.New(),
+		unitdb.New(flavor),
 		flavor,
 	)
 	require.Nil(t, overworld)
@@ -49,7 +49,7 @@ func TestNightmareOfUrsolRegistryResolvesChineseTimbermawHoldOnlyAsRaid(t *testi
 		context.Background(),
 		false,
 		zone.Zone{Name: "木喉要塞", IsInstance: true, InstanceType: "raid"},
-		unitdb.New(),
+		unitdb.New(flavor),
 		flavor,
 	)
 	require.NotNil(t, raid)

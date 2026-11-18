@@ -21,7 +21,7 @@ func TestVanillaPlusMograine_IgnoresPhaseOneDeath(t *testing.T) {
 
 	flavor := database.WoWFlavor{database.FlavorVanilla, database.FlavorVanillaPlus}
 	chars := characters.NewCharacters(
-		unitdb.New(),
+		unitdb.New(database.WoWFlavor{database.FlavorVanilla}),
 		creatures.VanillaCharacterFactories(flavor),
 		identifier.NewIdentifier(map[uint32]identifier.Identity{}),
 	)
@@ -75,7 +75,7 @@ func TestVanillaPlusMograine_InfersResurrectionFromOffensiveActivity(t *testing.
 
 	flavor := database.WoWFlavor{database.FlavorVanilla, database.FlavorVanillaPlus}
 	chars := characters.NewCharacters(
-		unitdb.New(),
+		unitdb.New(database.WoWFlavor{database.FlavorVanilla}),
 		creatures.VanillaCharacterFactories(flavor),
 		identifier.NewIdentifier(map[uint32]identifier.Identity{}),
 	)
@@ -114,7 +114,7 @@ func TestVanillaPlusMograine_ResetsAfterWipe(t *testing.T) {
 
 	flavor := database.WoWFlavor{database.FlavorVanilla, database.FlavorVanillaPlus}
 	chars := characters.NewCharacters(
-		unitdb.New(),
+		unitdb.New(database.WoWFlavor{database.FlavorVanilla}),
 		creatures.VanillaCharacterFactories(flavor),
 		identifier.NewIdentifier(map[uint32]identifier.Identity{}),
 	)
@@ -148,7 +148,7 @@ func TestVanillaMograine_UsesDefaultDeathHandling(t *testing.T) {
 
 	flavor := database.WoWFlavor{database.FlavorVanilla}
 	chars := characters.NewCharacters(
-		unitdb.New(),
+		unitdb.New(database.WoWFlavor{database.FlavorVanilla}),
 		creatures.VanillaCharacterFactories(flavor),
 		identifier.NewIdentifier(map[uint32]identifier.Identity{}),
 	)

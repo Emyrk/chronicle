@@ -9,6 +9,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/Gophercraft/core/i18n"
 	"github.com/stretchr/testify/assert"
@@ -60,7 +61,7 @@ func TestClassify_Basic(t *testing.T) {
 	creatureGUID := mustGUID("0x0030000000000002")
 	vehicleGUID := mustGUID("0x0050000000000003")
 
-	units := unitdb.New()
+	units := unitdb.New(database.WoWFlavor{})
 	units.Update(unitinfo.Info{
 		Guid:         playerGUID,
 		IsPlayer:     true,
@@ -116,7 +117,7 @@ func TestClassify_ExplicitAffiliation(t *testing.T) {
 
 	friendlyGUID := mustGUID("0x0030000000000002")
 	neutralVehicleGUID := mustGUID("0x0050000000000003")
-	units := unitdb.New()
+	units := unitdb.New(database.WoWFlavor{})
 	units.Update(unitinfo.Info{
 		Guid:         friendlyGUID,
 		CanCooperate: false,
@@ -138,7 +139,7 @@ func TestClassify_WithOwner(t *testing.T) {
 	playerGUID := mustGUID("0x0000000000000001")
 	petGUID := mustGUID("0x0040000000000002")
 
-	units := unitdb.New()
+	units := unitdb.New(database.WoWFlavor{})
 	units.Update(unitinfo.Info{
 		Guid:         petGUID,
 		Name:         "Imp",
@@ -160,7 +161,7 @@ func TestClassify_Possession(t *testing.T) {
 	mobGUID := mustGUID("0x0030000000000002")
 	now := time.Now()
 
-	units := unitdb.New()
+	units := unitdb.New(database.WoWFlavor{})
 	units.Update(unitinfo.Info{
 		Guid:         mobGUID,
 		Name:         "Scarlet Monk",
@@ -196,7 +197,7 @@ func TestPossession_ExpiresAutomatically(t *testing.T) {
 	mobGUID := mustGUID("0x0030000000000002")
 	now := time.Now()
 
-	units := unitdb.New()
+	units := unitdb.New(database.WoWFlavor{})
 	units.Update(unitinfo.Info{
 		Guid:         mobGUID,
 		Name:         "Scarlet Monk",
@@ -232,7 +233,7 @@ func TestPossession_NoDuration_NoExpiry(t *testing.T) {
 	mobGUID := mustGUID("0x0030000000000002")
 	now := time.Now()
 
-	units := unitdb.New()
+	units := unitdb.New(database.WoWFlavor{})
 	units.Update(unitinfo.Info{
 		Guid:         mobGUID,
 		Name:         "Scarlet Monk",
@@ -267,7 +268,7 @@ func TestUpdate_PossessionControllerNotPersistedAsOwner(t *testing.T) {
 	mobGUID := mustGUID("0x0030000000000002")
 	now := time.Now()
 
-	units := unitdb.New()
+	units := unitdb.New(database.WoWFlavor{})
 	units.Update(unitinfo.Info{
 		Guid:         mobGUID,
 		Name:         "Razorgore the Untamed",
@@ -297,7 +298,7 @@ func TestUpdate_PossessionDoesNotPersistTemporaryAffiliation(t *testing.T) {
 	mobGUID := mustGUID("0x0030000000000002")
 	now := time.Now()
 
-	units := unitdb.New()
+	units := unitdb.New(database.WoWFlavor{})
 	units.Update(unitinfo.Info{
 		Guid:         mobGUID,
 		Name:         "Razorgore the Untamed",
@@ -327,7 +328,7 @@ func TestProcessMessage_NewOwner(t *testing.T) {
 	petGUID := mustGUID("0x0040000000000002")
 	now := time.Now()
 
-	units := unitdb.New()
+	units := unitdb.New(database.WoWFlavor{})
 	units.Update(unitinfo.Info{
 		Guid: petGUID,
 		Name: "Imp",
@@ -376,7 +377,7 @@ func TestProcessMessage_NewOwnerFlattensOwnershipChains(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			units := unitdb.New()
+			units := unitdb.New(database.WoWFlavor{})
 			units.Update(unitinfo.Info{Guid: totemGUID, Name: "Fire Elemental Totem"})
 			units.Update(unitinfo.Info{Guid: elementalGUID, Name: "Greater Fire Elemental"})
 
@@ -401,7 +402,7 @@ func TestProcessMessage_NewOwnerReflattensAfterOwnerChanges(t *testing.T) {
 	secondPlayerGUID := mustGUID("0x0000000000000002")
 	totemGUID := mustGUID("0x0030000000000003")
 	elementalGUID := mustGUID("0x0040000000000004")
-	units := unitdb.New()
+	units := unitdb.New(database.WoWFlavor{})
 	units.Update(unitinfo.Info{Guid: totemGUID, Name: "Fire Elemental Totem"})
 	units.Update(unitinfo.Info{Guid: elementalGUID, Name: "Greater Fire Elemental"})
 
@@ -420,7 +421,7 @@ func TestUpdate_FlattensOwnershipChains(t *testing.T) {
 	playerGUID := mustGUID("0x0000000000000001")
 	totemGUID := mustGUID("0x0030000000000002")
 	elementalGUID := mustGUID("0x0040000000000003")
-	units := unitdb.New()
+	units := unitdb.New(database.WoWFlavor{})
 
 	units.Update(unitinfo.Info{Guid: elementalGUID, Name: "Greater Fire Elemental", Owner: &totemGUID})
 	units.Update(unitinfo.Info{Guid: totemGUID, Name: "Fire Elemental Totem", Owner: &playerGUID})
@@ -435,7 +436,7 @@ func TestProcessMessage_NewOwnerRejectsCycles(t *testing.T) {
 
 	firstGUID := mustGUID("0x0030000000000001")
 	secondGUID := mustGUID("0x0030000000000002")
-	units := unitdb.New()
+	units := unitdb.New(database.WoWFlavor{})
 	units.Update(unitinfo.Info{Guid: firstGUID, Name: "First"})
 	units.Update(unitinfo.Info{Guid: secondGUID, Name: "Second"})
 
@@ -456,7 +457,7 @@ func TestProcessMessage_PossessionGainAndRelease(t *testing.T) {
 	now := time.Now()
 	mcSpell := makeSpell("Mind Control")
 
-	units := unitdb.New()
+	units := unitdb.New(database.WoWFlavor{})
 	units.Update(unitinfo.Info{
 		Guid:         mobGUID,
 		Name:         "Scarlet Monk",

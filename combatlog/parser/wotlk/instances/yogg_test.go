@@ -56,7 +56,7 @@ func TestYoggFinalizedVariants(t *testing.T) {
 			t.Parallel()
 			flavor := database.WoWFlavor{database.FlavorWrath}
 			ctx := parsectx.With(context.Background(), parsectx.Context{Flavor: flavor})
-			inst := UlduarFactory.New(ctx, slog.New(slog.NewTextHandler(io.Discard, nil)), unitdb.New(), zone.Zone{Name: "Ulduar", MapID: 603}, flavor)
+			inst := UlduarFactory.New(ctx, slog.New(slog.NewTextHandler(io.Discard, nil)), unitdb.New(database.WoWFlavor{database.FlavorWrath}), zone.Zone{Name: "Ulduar", MapID: 603}, flavor)
 			tracker := auras.New(nil)
 			inst.AttachAuraProjection(tracker)
 			// Match consumer ordering: instance hooks first, canonical tracker second.

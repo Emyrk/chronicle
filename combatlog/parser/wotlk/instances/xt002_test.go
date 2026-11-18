@@ -2,6 +2,11 @@ package instances
 
 import (
 	"context"
+	"io"
+	"log/slog"
+	"testing"
+	"time"
+
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounter"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/instancehook"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
@@ -13,10 +18,6 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/stretchr/testify/require"
-	"io"
-	"log/slog"
-	"testing"
-	"time"
 )
 
 // Minimal deterministic events model the observed Heartbreak and Exposed Heart wire signals.
@@ -39,7 +40,7 @@ func TestXTFinalizedVariants(t *testing.T) {
 			t.Parallel()
 			flavor := database.WoWFlavor{database.FlavorWrath}
 			ctx := parsectx.With(context.Background(), parsectx.Context{Flavor: flavor})
-			inst := UlduarFactory.New(ctx, slog.New(slog.NewTextHandler(io.Discard, nil)), unitdb.New(), zone.Zone{Name: "Ulduar", MapID: 603}, flavor)
+			inst := UlduarFactory.New(ctx, slog.New(slog.NewTextHandler(io.Discard, nil)), unitdb.New(database.WoWFlavor{database.FlavorWrath}), zone.Zone{Name: "Ulduar", MapID: 603}, flavor)
 			start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 			boss, heart, player := creatureGUID(33293), creatureGUID(33329), guid.GUID(1)
 			aura := func(at int, unit guid.GUID, spell chrondbc.SpellID, tr messages.AuraTransition) {
@@ -129,7 +130,7 @@ func TestXTSameGUIDRetryDoesNotInheritHardMode(t *testing.T) {
 	t.Parallel()
 	flavor := database.WoWFlavor{database.FlavorWrath}
 	ctx := parsectx.With(context.Background(), parsectx.Context{Flavor: flavor})
-	inst := UlduarFactory.New(ctx, slog.New(slog.NewTextHandler(io.Discard, nil)), unitdb.New(), zone.Zone{Name: "Ulduar", MapID: 603}, flavor)
+	inst := UlduarFactory.New(ctx, slog.New(slog.NewTextHandler(io.Discard, nil)), unitdb.New(database.WoWFlavor{database.FlavorWrath}), zone.Zone{Name: "Ulduar", MapID: 603}, flavor)
 	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	boss, heart, player := creatureGUID(33293), creatureGUID(33329), guid.GUID(1)
 	for attempt := 0; attempt < 2; attempt++ {

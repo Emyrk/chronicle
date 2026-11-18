@@ -44,7 +44,7 @@ func TestVezaxFinalizedVariants(t *testing.T) {
 			t.Parallel()
 			flavor := database.WoWFlavor{database.FlavorWrath}
 			ctx := parsectx.With(context.Background(), parsectx.Context{Flavor: flavor})
-			inst := UlduarFactory.New(ctx, slog.New(slog.NewTextHandler(io.Discard, nil)), unitdb.New(), zone.Zone{Name: "Ulduar", MapID: 603}, flavor)
+			inst := UlduarFactory.New(ctx, slog.New(slog.NewTextHandler(io.Discard, nil)), unitdb.New(database.WoWFlavor{database.FlavorWrath}), zone.Zone{Name: "Ulduar", MapID: 603}, flavor)
 			start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 			boss, player := creatureGUID(tc.boss), guid.GUID(1)
 			for at := 0; at <= 102; at++ {
@@ -131,7 +131,7 @@ func TestVezaxSameGUIDRetry(t *testing.T) {
 	t.Parallel()
 	flavor := database.WoWFlavor{database.FlavorWrath}
 	ctx := parsectx.With(context.Background(), parsectx.Context{Flavor: flavor})
-	inst := UlduarFactory.New(ctx, slog.New(slog.NewTextHandler(io.Discard, nil)), unitdb.New(), zone.Zone{Name: "Ulduar", MapID: 603}, flavor)
+	inst := UlduarFactory.New(ctx, slog.New(slog.NewTextHandler(io.Discard, nil)), unitdb.New(database.WoWFlavor{database.FlavorWrath}), zone.Zone{Name: "Ulduar", MapID: 603}, flavor)
 	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	boss, player := creatureGUID(33271), guid.GUID(1)
 	for attempt := 0; attempt < 2; attempt++ {

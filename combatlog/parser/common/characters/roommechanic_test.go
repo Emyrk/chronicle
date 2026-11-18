@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Emyrk/chronicle/database"
 	"github.com/stretchr/testify/require"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
@@ -15,7 +16,7 @@ import (
 func TestRoomMechanicResetRoomRebuildsMembership(t *testing.T) {
 	t.Parallel()
 
-	all := NewCharacters(unitdb.New(), nil, identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+	all := NewCharacters(unitdb.New(database.WoWFlavor{}), nil, identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 	bossID := guid.GUID(0xF130000000000001 | uint64(100)<<24)
 	addID := guid.GUID(0xF130000000000001 | uint64(101)<<24)
 	boss, ok := NewRoomMechanic(bossID, 100, all)

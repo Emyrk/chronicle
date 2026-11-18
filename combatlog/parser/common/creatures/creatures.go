@@ -13,6 +13,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 )
 
@@ -36,10 +37,10 @@ type Creatures struct {
 	Units *unitdb.Units
 }
 
-func New(logger *slog.Logger) *Creatures {
+func New(logger *slog.Logger, flavor database.WoWFlavor) *Creatures {
 	s := &Creatures{
 		logger:       logger,
-		Units:        unitdb.New(),
+		Units:        unitdb.New(flavor),
 		CurrentZone:  zone.Zone{},
 		UnknownUnits: make(map[string]map[uint32]int),
 		ZoneSpells:   make(map[string]map[chrondbc.SpellID]int),

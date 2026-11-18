@@ -17,7 +17,7 @@ import (
 
 func newKaelThasTestCharacters() *characters.Characters {
 	return characters.NewCharacters(
-		unitdb.New(),
+		unitdb.New(database.WoWFlavor{database.FlavorTBC}),
 		NewCharacterFactories(database.WoWFlavor{database.FlavorTBC}),
 		identifier.NewIdentifier(map[uint32]identifier.Identity{}),
 	)

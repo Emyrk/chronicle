@@ -7,13 +7,14 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/phases"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/stretchr/testify/require"
 )
 
 func TestWrapPhaseProvider(t *testing.T) {
 	t.Parallel()
 
-	all := NewCharacters(unitdb.New(), nil, identifier.NewIdentifier(nil))
+	all := NewCharacters(unitdb.New(database.WoWFlavor{}), nil, identifier.NewIdentifier(nil))
 	definitions := &phases.EncounterPhases{EncounterName: "Test Boss"}
 	original := &phaseAwareCharacter{
 		Common:      NewCommonCharacter(guid.GUID(1), all),

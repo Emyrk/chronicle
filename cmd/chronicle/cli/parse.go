@@ -8,19 +8,21 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/combatlog/consumers"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/consumeeach"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/creatures"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/encounters"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/zoner"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/logfile"
 	"github.com/Emyrk/chronicle/combatlog/parser/merge"
 	"github.com/Emyrk/chronicle/combatlog/parser/sorter"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/parserv2"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/consumeeach"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/creatures"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/encounters"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/zoner"
+	"github.com/Emyrk/chronicle/combatlog/parser/vanilla"
+	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/parserv2"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
@@ -83,7 +85,8 @@ func ParseV2Cmd() *serpent.Command {
 				return fmt.Errorf("creating parser: %w", err)
 			}
 
-			output := encounters.New(ctx, logger, nil)
+			// These diagnostic commands parse vanilla logs without server-flavor metadata.
+			output := encounters.New(ctx, logger, registry.RegistryForFlavor(logger, database.WoWFlavor{database.FlavorVanilla}))
 			c := consumers.New(logger, output)
 			err = c.ConsumeAll(ctx, p)
 			if err != nil {
@@ -164,7 +167,8 @@ func ParseCmd() *serpent.Command {
 			}
 
 			p := vanilla.NewFromScanner(ctx, logger, liner, scan, nil)
-			output := encounters.New(ctx, logger, nil)
+			// These diagnostic commands parse vanilla logs without server-flavor metadata.
+			output := encounters.New(ctx, logger, registry.RegistryForFlavor(logger, database.WoWFlavor{database.FlavorVanilla}))
 			c := consumers.New(logger, output)
 			err = c.ConsumeAll(ctx, p)
 			if err != nil {
@@ -275,7 +279,8 @@ func CreaturesCmd() *serpent.Command {
 				p = vanilla.NewFromScanner(ctx, logger, liner, scan, nil)
 			}
 
-			output := creatures.New(logger)
+			// No server-flavor metadata is available in this vanilla-only diagnostic command.
+			output := creatures.New(logger, database.WoWFlavor{database.FlavorVanilla})
 			err = output.Consume(ctx, p)
 			if err != nil {
 				return err

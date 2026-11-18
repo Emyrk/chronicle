@@ -1,17 +1,19 @@
 package identifier
 
 import (
+	"testing"
+
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestUnitCategories(t *testing.T) {
 	t.Parallel()
-	units := unitdb.New()
+	units := unitdb.New(database.WoWFlavor{})
 	zone := NewIdentifier(map[uint32]Identity{1: {Boss: true}, 2: {Name: "Ordinary"}, 3: {Boss: true, Category: unitdb.CategoryGuardian}, 4: {Category: unitdb.CategoryScriptedObject}})
 	otherZone := NewIdentifier(map[uint32]Identity{})
 	for _, test := range []struct {

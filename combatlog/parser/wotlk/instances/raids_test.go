@@ -114,7 +114,7 @@ func TestOnyxiaZoneName(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			instance := OnyxiaFactory.New(tt.ctx, slog.Default(), unitdb.New(), tt.zone, tt.flavor)
+			instance := OnyxiaFactory.New(tt.ctx, slog.Default(), unitdb.New(tt.flavor), tt.zone, tt.flavor)
 			require.Equal(t, tt.want, instance.Name())
 		})
 	}
@@ -195,7 +195,7 @@ func TestTrialOfTheCrusaderFactionChampionEncounter(t *testing.T) {
 	instance := TrialOfTheCrusaderFactory.New(
 		ctx,
 		slog.Default(),
-		unitdb.New(),
+		unitdb.New(database.WoWFlavor{database.FlavorWrath}),
 		zone.Zone{Name: "trial of the crusader", MapID: 649},
 		database.WoWFlavor{database.FlavorWrath},
 	)
@@ -265,7 +265,7 @@ func TestUlduarRazorscaleFriendlyHelpersDoNotExtendEncounter(t *testing.T) {
 	instance := UlduarFactory.New(
 		ctx,
 		slog.Default(),
-		unitdb.New(),
+		unitdb.New(database.WoWFlavor{database.FlavorWrath}),
 		zone.Zone{Name: "Ulduar", MapID: 603},
 		database.WoWFlavor{database.FlavorWrath},
 	)
@@ -340,7 +340,7 @@ func TestUlduarHodirScriptedDefeat(t *testing.T) {
 	instance := UlduarFactory.New(
 		ctx,
 		slog.Default(),
-		unitdb.New(),
+		unitdb.New(database.WoWFlavor{database.FlavorWrath}),
 		zone.Zone{Name: "Ulduar", MapID: 603},
 		database.WoWFlavor{database.FlavorWrath},
 	)
@@ -426,7 +426,7 @@ func TestUlduarThorimEncounterPhases(t *testing.T) {
 	instance := UlduarFactory.New(
 		ctx,
 		slog.Default(),
-		unitdb.New(),
+		unitdb.New(database.WoWFlavor{database.FlavorWrath}),
 		zone.Zone{Name: "Ulduar", MapID: 603},
 		database.WoWFlavor{database.FlavorWrath},
 	)
@@ -687,7 +687,7 @@ func TestUlduarAlgalonAuraCleanupWithLivingPlayerIsCleanKill(t *testing.T) {
 	instance := UlduarFactory.New(
 		ctx,
 		slog.Default(),
-		unitdb.New(),
+		unitdb.New(database.WoWFlavor{database.FlavorWrath}),
 		zone.Zone{Name: "Ulduar", MapID: 603},
 		database.WoWFlavor{database.FlavorWrath},
 	)
@@ -750,7 +750,7 @@ func TestUlduarYoggSaronEncounterPhases(t *testing.T) {
 	instance := UlduarFactory.New(
 		ctx,
 		slog.Default(),
-		unitdb.New(),
+		unitdb.New(database.WoWFlavor{database.FlavorWrath}),
 		zone.Zone{Name: "Ulduar", MapID: 603},
 		database.WoWFlavor{database.FlavorWrath},
 	)
@@ -873,7 +873,7 @@ func TestUlduarAssemblyRespawnStartsNewEncounter(t *testing.T) {
 	instance := UlduarFactory.New(
 		ctx,
 		slog.Default(),
-		unitdb.New(),
+		unitdb.New(database.WoWFlavor{database.FlavorWrath}),
 		zone.Zone{Name: "Ulduar", MapID: 603},
 		database.WoWFlavor{database.FlavorWrath},
 	)
@@ -1023,7 +1023,7 @@ func TestObsidianSanctumSartharionKillFinalizesDrakes(t *testing.T) {
 			instance := ObsidianSanctumFactory.New(
 				ctx,
 				slog.Default(),
-				unitdb.New(),
+				unitdb.New(database.WoWFlavor{database.FlavorWrath}),
 				zone.Zone{Name: "the obsidian sanctum", MapID: 615},
 				flavor,
 			)
@@ -1112,7 +1112,7 @@ func TestIcecrownCitadelFactoryEnablesRankings(t *testing.T) {
 	instance := IcecrownCitadelFactory.New(
 		ctx,
 		slog.Default(),
-		unitdb.New(),
+		unitdb.New(database.WoWFlavor{database.FlavorWrath}),
 		zone.Zone{Name: "Icecrown Citadel", MapID: 631},
 		flavor,
 	)
@@ -1135,7 +1135,7 @@ func TestIcecrownGunshipScriptedVictory(t *testing.T) {
 	instance := IcecrownCitadelFactory.New(
 		ctx,
 		slog.Default(),
-		unitdb.New(),
+		unitdb.New(database.WoWFlavor{database.FlavorWrath}),
 		zone.Zone{Name: "Icecrown Citadel", MapID: 631},
 		database.WoWFlavor{database.FlavorWrath},
 	)
@@ -1175,7 +1175,7 @@ func TestIcecrownValithriaScriptedVictory(t *testing.T) {
 	instance := IcecrownCitadelFactory.New(
 		ctx,
 		slog.Default(),
-		unitdb.New(),
+		unitdb.New(database.WoWFlavor{database.FlavorWrath}),
 		zone.Zone{Name: "Icecrown Citadel", MapID: 631},
 		database.WoWFlavor{database.FlavorWrath},
 	)

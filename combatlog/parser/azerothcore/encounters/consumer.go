@@ -13,11 +13,12 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/google/uuid"
 )
 
-func New(ctx context.Context, logger *slog.Logger, reg *registry.Registry) *encounters.State {
-	return encounters.NewWithInstanceResolver(ctx, logger, func(verbose bool, z zone.Zone, db *unitdb.Units) *instances.Hookable {
+func New(ctx context.Context, logger *slog.Logger, reg *registry.Registry, flavor database.WoWFlavor) *encounters.State {
+	return encounters.NewWithInstanceResolver(ctx, logger, flavor, func(verbose bool, z zone.Zone, db *unitdb.Units) *instances.Hookable {
 		if reg != nil {
 			if inst := reg.GetInstance(ctx, verbose, z, db, reg.Flavor()); inst != nil {
 				inst.AddHook(&AzerothCoreInstanceHook{ID: inst.Identifier})

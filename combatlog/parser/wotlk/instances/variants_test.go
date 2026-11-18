@@ -30,7 +30,7 @@ func TestUlduarHodirVariantBoundaries(t *testing.T) {
 			t.Parallel()
 			flavor := database.WoWFlavor{database.FlavorWrath}
 			ctx := parsectx.With(context.Background(), parsectx.Context{Flavor: flavor})
-			instance := UlduarFactory.New(ctx, slog.Default(), unitdb.New(), zone.Zone{Name: "Ulduar", MapID: 603}, flavor)
+			instance := UlduarFactory.New(ctx, slog.Default(), unitdb.New(database.WoWFlavor{database.FlavorWrath}), zone.Zone{Name: "Ulduar", MapID: 603}, flavor)
 			start := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 			boss := creatureGUID(32845)
 			player := guid.GUID(1)

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Emyrk/chronicle/database"
 	"github.com/stretchr/testify/require"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
@@ -38,7 +39,7 @@ func TestPreprocessorRunsBeforeCharacterAndFightProcessing(t *testing.T) {
 	boss := creatureGUID(preprocessorTestBossEntry, 1)
 	hostiles := make(map[uint32]Identity)
 	LoadBosses(hostiles, map[uint32]string{preprocessorTestBossEntry: "Preprocessed Boss"})
-	h := NewHookable(context.Background(), slog.Default(), unitdb.New(), zone.Zone{Name: "test"}, InstanceParams{
+	h := NewHookable(context.Background(), slog.Default(), unitdb.New(database.WoWFlavor{}), zone.Zone{Name: "test"}, InstanceParams{
 		Name:          "Test",
 		Idf:           identifier.NewIdentifier(hostiles),
 		Preprocessors: []instancehook.Preprocessor{targetPreprocessor{from: originalTarget, to: boss}},

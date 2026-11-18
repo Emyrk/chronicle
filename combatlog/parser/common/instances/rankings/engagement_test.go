@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Emyrk/chronicle/database"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,12 +30,7 @@ func makePetGUID(entryID uint32, spawnID uint32) guid.GUID {
 }
 
 func newTestUnits() *unitdb.Units {
-	return &unitdb.Units{
-		Info:         make(map[guid.GUID]unitinfo.Info),
-		Players:      make(map[guid.GUID]combatant.Combatant),
-		PlayerByName: make(map[string]guid.GUID),
-		Possessed:    make(map[guid.GUID]unitdb.PossessionState),
-	}
+	return unitdb.New(database.WoWFlavor{})
 }
 
 func TestEngagementTracker_BasicEngagement(t *testing.T) {

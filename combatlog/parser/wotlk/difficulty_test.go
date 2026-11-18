@@ -12,6 +12,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/stretchr/testify/require"
 )
 
@@ -29,7 +30,7 @@ func TestDifficultyTransitionsThroughWrathWire(t *testing.T) {
 	t.Cleanup(func() { require.NoError(t, file.Close()) })
 	parser, err := New(ctx, logger, file, auraTestDB{}, auraTestDB{}, nil)
 	require.NoError(t, err)
-	state := encounters.NewWithInstanceResolver(ctx, logger, func(_ bool, z zone.Zone, db *unitdb.Units) *instances.Hookable {
+	state := encounters.NewWithInstanceResolver(ctx, logger, database.WoWFlavor{database.FlavorWrath}, func(_ bool, z zone.Zone, db *unitdb.Units) *instances.Hookable {
 		hostiles := map[uint32]instances.Identity{}
 		instances.LoadBosses(hostiles, map[uint32]string{36612: "Lord Marrowgar"})
 		return instances.NewHookable(ctx, logger, db, z, instances.InstanceParams{

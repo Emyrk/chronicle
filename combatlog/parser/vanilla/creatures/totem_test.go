@@ -9,12 +9,13 @@ import (
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures"
+	"github.com/Emyrk/chronicle/database"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/lines"
 	"github.com/Emyrk/chronicle/combatlog/parser/merge"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/stretchr/testify/require"
 )
@@ -32,7 +33,7 @@ func TestTotemicRecall(t *testing.T) {
 	liner := lines.NewLiner()
 	p := vanilla.NewFromScanner(context.Background(), logger, liner, merge.FromIOReader(liner, strings.NewReader(logs)), nil)
 
-	db := unitdb.New()
+	db := unitdb.New(database.WoWFlavor{database.FlavorVanilla})
 	c := characters.NewCharacters(db, creatures.TurtleCharacterFactories(), identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 	for {
 		msgs, err := p.Advance(context.Background())

@@ -18,7 +18,7 @@ func TestMalygosRemainsActiveDuringPhaseTwo(t *testing.T) {
 	t.Parallel()
 
 	all := characters.NewCharacters(
-		unitdb.New(),
+		unitdb.New(database.WoWFlavor{database.FlavorVanilla, database.FlavorWrath}),
 		NewCharacterFactories(database.WoWFlavor{database.FlavorVanilla, database.FlavorWrath}),
 		identifier.NewIdentifier(map[uint32]identifier.Identity{}),
 	)

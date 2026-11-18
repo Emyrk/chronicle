@@ -8,6 +8,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/stretchr/testify/require"
 )
 
@@ -49,7 +50,7 @@ func TestNamedNeverActivePreservesUnitName(t *testing.T) {
 	t.Parallel()
 
 	chars := NewCharacters(
-		unitdb.New(),
+		unitdb.New(database.WoWFlavor{}),
 		nil,
 		identifier.NewIdentifier(map[uint32]identifier.Identity{}),
 	)
@@ -69,7 +70,7 @@ func TestCharactersByEntryOnlyIndexesCreatures(t *testing.T) {
 	t.Parallel()
 
 	chars := NewCharacters(
-		unitdb.New(),
+		unitdb.New(database.WoWFlavor{}),
 		nil,
 		identifier.NewIdentifier(map[uint32]identifier.Identity{}),
 	)
@@ -89,7 +90,7 @@ func TestCharactersByEntryOnlyIndexesCreatures(t *testing.T) {
 
 func TestCrittersRemainInactiveWithoutSuppressingOtherActivity(t *testing.T) {
 	t.Parallel()
-	chars := NewCharacters(unitdb.New(), nil, identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+	chars := NewCharacters(unitdb.New(database.WoWFlavor{}), nil, identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 	player := guid.GUID(1)
 	rat := entryGUID(0xF130000000000000, 4075)
 	boss := entryGUID(0xF130000000000000, 11583)

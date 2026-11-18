@@ -19,6 +19,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/zoner"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/realm"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb"
 )
 
@@ -84,11 +85,11 @@ type State struct {
 	instanceProcessDuration   map[*instances.Hookable]time.Duration
 }
 
-func NewWithInstanceResolver(ctx context.Context, logger *slog.Logger, res InstanceResolver) *State {
+func NewWithInstanceResolver(ctx context.Context, logger *slog.Logger, flavor database.WoWFlavor, res InstanceResolver) *State {
 	s := &State{
 		ctx:              ctx,
 		logger:           logger,
-		Units:            unitdb.New(),
+		Units:            unitdb.New(flavor),
 		Vehicles:         vehicles.New(),
 		RaidGroups:       raidgroups.New(),
 		CurrentZone:      zoner.NewLocation(),
@@ -110,7 +111,7 @@ func NewWithInstanceResolver(ctx context.Context, logger *slog.Logger, res Insta
 }
 
 func New(ctx context.Context, logger *slog.Logger, reg *registry.Registry) *State {
-	return NewWithInstanceResolver(ctx, logger, func(verbose bool, z zone.Zone, db *unitdb.Units) *instances.Hookable {
+	return NewWithInstanceResolver(ctx, logger, reg.Flavor(), func(verbose bool, z zone.Zone, db *unitdb.Units) *instances.Hookable {
 		return reg.GetInstance(ctx, verbose, z, db, reg.Flavor())
 	})
 }

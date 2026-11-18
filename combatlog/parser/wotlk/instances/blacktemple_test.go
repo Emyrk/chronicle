@@ -27,7 +27,7 @@ func newBlackTempleTestInstance(t *testing.T) *commoninstances.Hookable {
 	return BlackTempleFactory.New(
 		ctx,
 		slog.Default(),
-		unitdb.New(),
+		unitdb.New(database.WoWFlavor{database.FlavorTBC}),
 		zone.Zone{Name: "Black Temple", MapID: 564},
 		database.WoWFlavor{database.FlavorTBC},
 	)

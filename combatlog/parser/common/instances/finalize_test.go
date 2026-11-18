@@ -80,7 +80,7 @@ func newFinalizeTestHookableWithHostiles(t *testing.T, hostiles map[uint32]Ident
 func newFinalizeTestHookableWithContext(t *testing.T, ctx context.Context, hostiles map[uint32]Identity, extraHooks ...instancehook.Hook) *Hookable {
 	t.Helper()
 
-	return NewHookable(ctx, slog.Default(), unitdb.New(), zone.Zone{Name: "test instance"}, InstanceParams{
+	return NewHookable(ctx, slog.Default(), unitdb.New(database.WoWFlavor{}), zone.Zone{Name: "test instance"}, InstanceParams{
 		Name:       "Test Instance",
 		Idf:        identifier.NewIdentifier(hostiles),
 		ExtraHooks: extraHooks,
@@ -254,7 +254,7 @@ func TestFinalize_King_AllAddsKilled_BossAbsent_IsWipe(t *testing.T) {
 	hostiles := TowerOfKarazhanHostiles()
 	h := &Hookable{
 		Identifier:      identifier.NewIdentifier(hostiles),
-		units:           unitdb.New(),
+		units:           unitdb.New(database.WoWFlavor{}),
 		completedFights: []encounter.Fight{fight},
 	}
 
@@ -272,7 +272,7 @@ func TestFinalize_King_AllAddsKilled_BossAbsent_IsWipe(t *testing.T) {
 func TestFinalizeIncludesNamedNeverActiveUnitsForPersistence(t *testing.T) {
 	t.Parallel()
 
-	db := unitdb.New()
+	db := unitdb.New(database.WoWFlavor{})
 	idf := identifier.NewIdentifier(map[uint32]identifier.Identity{})
 	sifID := creatureGUID(33196, 1)
 	plainID := creatureGUID(30084, 1)
@@ -306,7 +306,7 @@ func TestFinalizeIncludesNamedNeverActiveUnitsForPersistence(t *testing.T) {
 func TestFinalizePersistsOwnedUnitInfoWithoutChangingCharacterFallback(t *testing.T) {
 	t.Parallel()
 
-	db := unitdb.New()
+	db := unitdb.New(database.WoWFlavor{})
 	idf := identifier.NewIdentifier(map[uint32]identifier.Identity{})
 	chars := characters.NewCharacters(db, nil, idf)
 	petID := guid.GUID(0xF1400234DC000005)
@@ -356,7 +356,7 @@ func TestFinalize_InconsistentHostileIDMapping_ReturnsError(t *testing.T) {
 
 	h := &Hookable{
 		Identifier: identifier.NewIdentifier(TowerOfKarazhanHostiles()),
-		units:      unitdb.New(),
+		units:      unitdb.New(database.WoWFlavor{}),
 		completedFights: []encounter.Fight{{
 			EncounterID: uuid.New(),
 			Hostiles: map[guid.GUID]encounter.CharacterFight{
@@ -396,7 +396,7 @@ func TestFinalize_AQ40OuroSpawnerNamesOuro(t *testing.T) {
 
 	h := &Hookable{
 		Identifier: identifier.NewIdentifier(TempleOfAhnQirajHostiles()),
-		units:      unitdb.New(),
+		units:      unitdb.New(database.WoWFlavor{}),
 		completedFights: []encounter.Fight{{
 			EncounterID: uuid.New(),
 			Hostiles: map[guid.GUID]encounter.CharacterFight{
@@ -446,7 +446,7 @@ func TestFinalize_AQ40PrefersEarliestNamedHostile(t *testing.T) {
 
 	h := &Hookable{
 		Identifier: identifier.NewIdentifier(TempleOfAhnQirajHostiles()),
-		units:      unitdb.New(),
+		units:      unitdb.New(database.WoWFlavor{}),
 		completedFights: []encounter.Fight{{
 			EncounterID: uuid.New(),
 			Hostiles: map[guid.GUID]encounter.CharacterFight{
@@ -1288,7 +1288,7 @@ func countCall(calls []string, want string) int {
 
 func TestFinalizeCatalogueIncludesUnknownOwnedAndPassiveUnits(t *testing.T) {
 	t.Parallel()
-	db := unitdb.New()
+	db := unitdb.New(database.WoWFlavor{})
 	owner := guid.GUID(1)
 	unknown, secondSpawn := creatureGUID(12345, 1), creatureGUID(12345, 2)
 	known, critter := creatureGUID(222, 1), creatureGUID(2914, 1)
@@ -1322,7 +1322,7 @@ func TestFinalizeCatalogueIncludesUnknownOwnedAndPassiveUnits(t *testing.T) {
 
 func TestCritterMessagesAdvanceProcessingWithoutInstanceActivity(t *testing.T) {
 	t.Parallel()
-	db := unitdb.New()
+	db := unitdb.New(database.WoWFlavor{})
 	base := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
 	h := NewHookable(context.Background(), slog.New(slog.NewTextHandler(io.Discard, nil)), db, zone.Zone{}, InstanceParams{Idf: identifier.NewIdentifier(map[uint32]identifier.Identity{})})
 	require.NoError(t, h.Process(&messages.Timeout{MessageBase: messages.Base(base)}))
@@ -1342,7 +1342,7 @@ func TestFinalizeUnknownGUIDWithoutMeaningfulEntry(t *testing.T) {
 	zeroEntry := guid.GUID(0xF130000000000001)
 	_, hasEntry := noEntry.GetEntry()
 	require.False(t, hasEntry)
-	h := &Hookable{units: unitdb.New(), Identifier: identifier.NewIdentifier(map[uint32]identifier.Identity{})}
+	h := &Hookable{units: unitdb.New(database.WoWFlavor{}), Identifier: identifier.NewIdentifier(map[uint32]identifier.Identity{})}
 	for _, id := range []guid.GUID{0, noEntry, zeroEntry, noEntry} {
 		h.ObserveUnits(&messages.UnitTarget{Unit: id})
 	}

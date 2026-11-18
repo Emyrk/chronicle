@@ -6,13 +6,14 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
 func TestInstanceBuilderCategories(t *testing.T) {
 	t.Parallel()
-	units := unitdb.New()
+	units := unitdb.New(database.WoWFlavor{})
 	boss := guid.GUID(0xF13000007B000001)
 	ordinary := guid.GUID(0xF13000007C000001)
 	player := guid.GUID(1)

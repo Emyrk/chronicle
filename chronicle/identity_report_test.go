@@ -1,19 +1,21 @@
 package chronicle
 
 import (
+	"testing"
+
 	"github.com/Emyrk/chronicle/combatlog/parser/common/creatures"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestIdentityInstanceFinalizedCatalogue(t *testing.T) {
 	t.Parallel()
-	units := unitdb.New()
+	units := unitdb.New(database.WoWFlavor{})
 	unknown := guid.GUID(0xF130000844003FB5)
 	ordinary := unknown + 10
 	units.Info[unknown] = unitinfo.Info{Name: "Named but unresolved"}
@@ -50,7 +52,7 @@ func TestIdentityInstancePreservesAllCategories(t *testing.T) {
 		finalized.PersistedUnits = append(finalized.PersistedUnits, id)
 		finalized.UnitCategories[id] = category
 	}
-	report := buildIdentityInstance("Raid", "Zone", finalized, unitdb.New(), nil)
+	report := buildIdentityInstance("Raid", "Zone", finalized, unitdb.New(database.WoWFlavor{}), nil)
 	require.Len(t, report.Units, len(categories))
 	for _, category := range categories {
 		found := false
@@ -69,6 +71,6 @@ func TestIdentityReportPreservesRegisteredBoss(t *testing.T) {
 	id := guid.GUID(0xF130000844003FB5)
 	finalized := &instances.FinalizedInstance{PersistedUnits: []guid.GUID{id}, UnitCategories: map[guid.GUID]unitdb.Category{id: unitdb.CategoryOrdinary}}
 	idf := identifier.NewIdentifier(map[uint32]identifier.Identity{0x844: {Boss: true}})
-	report := buildIdentityInstance("Raid", "Zone", finalized, unitdb.New(), idf)
+	report := buildIdentityInstance("Raid", "Zone", finalized, unitdb.New(database.WoWFlavor{}), idf)
 	require.True(t, report.Units[0].Boss)
 }

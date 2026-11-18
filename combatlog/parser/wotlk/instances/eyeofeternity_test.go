@@ -22,7 +22,7 @@ func TestEyeOfEternityFactoryInstallsMalygosDamageCredit(t *testing.T) {
 	instance := EyeOfEternityFactory.New(
 		context.Background(),
 		slog.Default(),
-		unitdb.New(),
+		unitdb.New(database.WoWFlavor{database.FlavorWrath}),
 		zone.Zone{Name: "Eye of Eternity", MapID: 616},
 		database.WoWFlavor{database.FlavorWrath},
 	)
