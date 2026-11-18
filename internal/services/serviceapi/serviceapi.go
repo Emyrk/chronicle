@@ -44,6 +44,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicerankings"
 	"github.com/Emyrk/chronicle/internal/services/serviceratings"
 	"github.com/Emyrk/chronicle/internal/services/serviceriver"
+	"github.com/Emyrk/chronicle/internal/services/serviceseo"
 	"github.com/Emyrk/chronicle/internal/services/servicesidekick"
 	"github.com/Emyrk/chronicle/internal/services/servicestorage"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
@@ -317,6 +318,7 @@ func (s *Service) Start(ctx context.Context) error {
 		GA4ID:                    s.ga4MeasurementID,
 		ShortLinkDomain:          s.shortLinkDomain,
 		OG:                       ogSvc,
+		SEO:                      serviceseo.New(zed),
 		LandingFeaturedID:        landingFeaturedID,
 		ClientUploadsDisabled:    s.clientUploadsDisabled,
 		BillingEnabled:           servicebilling.BillingEnabled(s.broker),

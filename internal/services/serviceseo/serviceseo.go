@@ -1,0 +1,407 @@
+// Package serviceseo renders the small crawlable summaries and meta
+// descriptions that Chronicle serves in the first HTML response for SPA pages
+// that would otherwise reach crawlers with an empty body.
+package serviceseo
+
+import (
+	"bytes"
+	"cmp"
+	"context"
+	"fmt"
+	"html/template"
+	"net/http"
+	"net/url"
+	"slices"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/frontend"
+)
+
+const (
+	// lookupTimeout bounds the summary queries; they run while the page HTML
+	// is served, so a slow lookup drops the summary instead of the page.
+	lookupTimeout = 2 * time.Second
+	// maxSummaryPlayers caps the instance roster in the summary.
+	maxSummaryPlayers = 60
+	// recentInstanceLimit caps the character's linked recent instances.
+	recentInstanceLimit = 10
+	// descriptionInstanceNames caps the raid names in a character description.
+	descriptionInstanceNames = 3
+)
+
+// Store is the read access the summaries need. *authz.Authz satisfies it;
+// RLS on the request context scopes every lookup to the tenant.
+type Store interface {
+	PublicInstance(ctx context.Context, id uuid.UUID) (database.LogInstancesGuild, error)
+	PublicInstanceBySlug(ctx context.Context, hashedSlug pgtype.Text) (database.LogInstancesGuild, error)
+	EncountersByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]database.LogInstanceEncounter, error)
+	InstancePlayersByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]database.LogInstancePlayer, error)
+	GetWoWServerRealmByName(ctx context.Context, name string) (database.WowServerRealm, error)
+	GetGamePlayerByGUID(ctx context.Context, arg database.GetGamePlayerByGUIDParams) (database.GetGamePlayerByGUIDRow, error)
+	ListCharacterSummaryInstances(ctx context.Context, arg database.ListCharacterSummaryInstancesParams) ([]database.ListCharacterSummaryInstancesRow, error)
+}
+
+// Service renders page summaries for instance and character pages.
+type Service struct {
+	store Store
+}
+
+// New returns a summary service. With a nil store it renders nothing.
+func New(store Store) *Service {
+	return &Service{store: store}
+}
+
+// Summary returns the crawlable summary for /instances/{idOrSlug} and
+// /armory/{realm}/{player}, or nil for other paths and for pages that cannot
+// be resolved. Unlisted instances never resolve: the lookups only return
+// listed logs.
+func (s *Service) Summary(r *http.Request) *frontend.PageSummary {
+	if s == nil || s.store == nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), lookupTimeout)
+	defer cancel()
+
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	switch {
+	case len(parts) == 2 && parts[0] == "instances" && parts[1] != "":
+		return s.instanceSummary(ctx, parts[1])
+	case len(parts) == 3 && parts[0] == "armory" && parts[1] != "" && parts[2] != "":
+		return s.characterSummary(ctx, parts[1], parts[2])
+	}
+	return nil
+}
+
+func (s *Service) instanceSummary(ctx context.Context, idOrSlug string) *frontend.PageSummary {
+	var inst database.LogInstancesGuild
+	var err error
+	if id, parseErr := uuid.Parse(idOrSlug); parseErr == nil {
+		inst, err = s.store.PublicInstance(ctx, id)
+	} else {
+		inst, err = s.store.PublicInstanceBySlug(ctx, pgtype.Text{String: idOrSlug, Valid: true})
+	}
+	if err != nil {
+		return nil
+	}
+	encounters, err := s.store.EncountersByInstanceID(ctx, inst.ID)
+	if err != nil {
+		return nil
+	}
+	players, err := s.store.InstancePlayersByInstanceID(ctx, inst.ID)
+	if err != nil {
+		return nil
+	}
+	return renderInstance(inst, encounters, players)
+}
+
+func (s *Service) characterSummary(ctx context.Context, realm, player string) *frontend.PageSummary {
+	realmID, err := uuid.Parse(realm)
+	if err != nil {
+		row, err := s.store.GetWoWServerRealmByName(ctx, realm)
+		if err != nil {
+			return nil
+		}
+		realmID = row.ID
+	}
+	p, err := s.store.GetGamePlayerByGUID(ctx, database.GetGamePlayerByGUIDParams{
+		RealmID:    realmID,
+		Identifier: parsePlayerGUID(player),
+		Name:       player,
+	})
+	if err != nil {
+		return nil
+	}
+	recent, err := s.store.ListCharacterSummaryInstances(ctx, database.ListCharacterSummaryInstancesParams{
+		PlayerGuid:  p.ID,
+		RealmID:     p.RealmID,
+		ResultLimit: recentInstanceLimit,
+	})
+	if err != nil {
+		return nil
+	}
+	return renderCharacter(p, recent)
+}
+
+// parsePlayerGUID reads the armory route's player segment the same way the
+// armory page does: a hex GUID or a decimal low GUID, otherwise a name.
+func parsePlayerGUID(player string) guid.GUID {
+	if id, err := guid.FromString(player); err == nil {
+		return id
+	}
+	if id, err := strconv.ParseUint(player, 10, 32); err == nil {
+		return guid.GUID(id)
+	}
+	return 0
+}
+
+type link struct {
+	Name string
+	Href string
+}
+
+type bossKill struct {
+	Name string
+	Time string
+}
+
+type rosterEntry struct {
+	link
+	Class string
+}
+
+type instanceView struct {
+	Zone      string
+	Verb      string
+	Guild     *link
+	Date      string
+	BossKills int
+	BossTotal int
+	Duration  string
+	Players   int
+	Kills     []bossKill
+	Roster    []rosterEntry
+}
+
+var instanceTemplate = template.Must(template.New("instance").Parse(
+	`<h1>{{.Zone}}{{with .Guild}} by {{.Name}}{{end}}</h1>` +
+		`<p>{{.Zone}} {{.Verb}}{{with .Guild}} by {{if .Href}}<a href="{{.Href}}">{{.Name}}</a>{{else}}{{.Name}}{{end}}{{end}}` +
+		`{{with .Date}} on {{.}}{{end}}{{if .BossTotal}}: {{.BossKills}}/{{.BossTotal}} bosses{{with .Duration}} in {{.}}{{end}}{{end}}.` +
+		`{{if .Players}} {{.Players}} players.{{end}}</p>` +
+		`{{if .Kills}}<h2>Bosses killed</h2><ul>{{range .Kills}}<li>{{.Name}}{{with .Time}} in {{.}}{{end}}</li>{{end}}</ul>{{end}}` +
+		`{{if .Roster}}<h2>Players</h2><ul>{{range .Roster}}<li><a href="{{.Href}}">{{.Name}}</a>{{with .Class}} ({{.}}){{end}}</li>{{end}}</ul>{{end}}`,
+))
+
+func renderInstance(inst database.LogInstancesGuild, encounters []database.LogInstanceEncounter, players []database.LogInstancePlayer) *frontend.PageSummary {
+	zone := strings.TrimSpace(inst.Name)
+	if zone == "" {
+		return nil
+	}
+	view := instanceView{Zone: zone, Verb: "run", Players: len(players)}
+	if name := inst.GuildName.String; name != "" {
+		view.Guild = &link{Name: name}
+		if inst.GuildID.Valid {
+			view.Guild.Href = "/g/" + inst.GuildID.UUID.String()
+		}
+	}
+
+	encounters = slices.Clone(encounters)
+	slices.SortFunc(encounters, func(a, b database.LogInstanceEncounter) int {
+		return a.StartTime.Time.Compare(b.StartTime.Time)
+	})
+	var first, last time.Time
+	attempted := map[string]bool{}
+	killed := map[string]bool{}
+	for _, e := range encounters {
+		if e.StartTime.Valid && (first.IsZero() || e.StartTime.Time.Before(first)) {
+			first = e.StartTime.Time
+		}
+		if e.EndTime.Valid && e.EndTime.Time.After(last) {
+			last = e.EndTime.Time
+		}
+		if !e.Boss {
+			continue
+		}
+		attempted[e.Name] = true
+		if e.KillType != database.KillTypeClean && e.KillType != database.KillTypePartial {
+			continue
+		}
+		kill := bossKill{Name: e.Name}
+		if e.StartTime.Valid && e.EndTime.Valid {
+			kill.Time = formatDuration(e.EndTime.Time.Sub(e.StartTime.Time))
+		}
+		view.Kills = append(view.Kills, kill)
+		killed[e.Name] = true
+	}
+	view.BossKills, view.BossTotal = len(killed), len(attempted)
+	if view.BossTotal > 0 && view.BossKills == view.BossTotal {
+		view.Verb = "clear"
+	}
+	if first.IsZero() && inst.StartTime.Valid {
+		first = inst.StartTime.Time
+	}
+	if !first.IsZero() {
+		view.Date = first.UTC().Format("Jan 2, 2006")
+	}
+	if !first.IsZero() && last.After(first) {
+		view.Duration = formatDuration(last.Sub(first))
+	}
+
+	players = slices.Clone(players)
+	slices.SortFunc(players, func(a, b database.LogInstancePlayer) int {
+		return cmp.Or(cmp.Compare(className(a.Class), className(b.Class)), cmp.Compare(a.Name, b.Name))
+	})
+	for _, p := range players[:min(len(players), maxSummaryPlayers)] {
+		view.Roster = append(view.Roster, rosterEntry{
+			link:  link{Name: p.Name, Href: armoryPath(inst.RealmName, p.UnitGuid)},
+			Class: className(p.Class),
+		})
+	}
+
+	var buf bytes.Buffer
+	if err := instanceTemplate.Execute(&buf, view); err != nil {
+		return nil
+	}
+	return &frontend.PageSummary{Description: instanceDescription(view), HTML: buf.String()}
+}
+
+// instanceDescription reads like "Molten Core clear by Guild on Jan 2, 2026:
+// 10/10 bosses in 42:10. Damage, healing and deaths for 40 players."
+func instanceDescription(v instanceView) string {
+	var b strings.Builder
+	b.WriteString(v.Zone + " " + v.Verb)
+	if v.Guild != nil {
+		b.WriteString(" by " + v.Guild.Name)
+	}
+	if v.Date != "" {
+		b.WriteString(" on " + v.Date)
+	}
+	if v.BossTotal > 0 {
+		fmt.Fprintf(&b, ": %d/%d bosses", v.BossKills, v.BossTotal)
+		if v.Duration != "" {
+			b.WriteString(" in " + v.Duration)
+		}
+	}
+	b.WriteString(".")
+	if v.Players > 0 {
+		fmt.Fprintf(&b, " Damage, healing and deaths for %d players.", v.Players)
+	} else {
+		b.WriteString(" Damage, healing and deaths by encounter.")
+	}
+	return b.String()
+}
+
+type recentInstance struct {
+	link
+	Date string
+}
+
+type characterView struct {
+	Name       string
+	Descriptor string
+	Realm      string
+	Guild      *link
+	Recent     []recentInstance
+}
+
+var characterTemplate = template.Must(template.New("character").Parse(
+	`<h1>{{.Name}}</h1>` +
+		`<p>{{.Name}}{{with .Descriptor}}, {{.}}{{end}}{{with .Realm}} on {{.}}{{end}}` +
+		`{{with .Guild}}, member of {{if .Href}}<a href="{{.Href}}">{{.Name}}</a>{{else}}{{.Name}}{{end}}{{end}}.</p>` +
+		`{{if .Recent}}<h2>Recent raids and instances</h2><ul>{{range .Recent}}<li><a href="{{.Href}}">{{.Name}}</a>{{with .Date}} on {{.}}{{end}}</li>{{end}}</ul>{{end}}`,
+))
+
+func renderCharacter(p database.GetGamePlayerByGUIDRow, recent []database.ListCharacterSummaryInstancesRow) *frontend.PageSummary {
+	if p.Name == "" {
+		return nil
+	}
+	var descriptor []string
+	if p.Level > 0 {
+		descriptor = append(descriptor, "level "+strconv.Itoa(int(p.Level)))
+	}
+	if race := raceName(p.Race); race != "" {
+		descriptor = append(descriptor, race)
+	}
+	if class := className(p.Class); class != "" {
+		descriptor = append(descriptor, class)
+	}
+	view := characterView{Name: p.Name, Descriptor: strings.Join(descriptor, " "), Realm: p.RealmName}
+	if name := p.GuildName.String; name != "" {
+		view.Guild = &link{Name: name}
+		if p.GuildID.Valid {
+			view.Guild.Href = "/g/" + p.GuildID.UUID.String()
+		}
+	}
+	for _, inst := range recent {
+		identifier := inst.ID.String()
+		if inst.HashedSlug.Valid && inst.HashedSlug.String != "" {
+			identifier = inst.HashedSlug.String
+		}
+		entry := recentInstance{link: link{Name: inst.Name, Href: "/instances/" + url.PathEscape(identifier)}}
+		if inst.StartTime.Valid {
+			entry.Date = inst.StartTime.Time.UTC().Format("Jan 2, 2006")
+		}
+		view.Recent = append(view.Recent, entry)
+	}
+
+	var buf bytes.Buffer
+	if err := characterTemplate.Execute(&buf, view); err != nil {
+		return nil
+	}
+	return &frontend.PageSummary{Description: characterDescription(view), HTML: buf.String()}
+}
+
+// characterDescription reads like "Zeezee, level 60 Gnome Warlock of
+// <Guild>. Recent raids: Molten Core, Onyxia's Lair. Raid logs on
+// Chronicle." Unknown fields are left out, and the realm is not named.
+func characterDescription(v characterView) string {
+	var b strings.Builder
+	b.WriteString(v.Name)
+	if v.Descriptor != "" {
+		b.WriteString(", " + v.Descriptor)
+	}
+	if v.Guild != nil {
+		b.WriteString(" of <" + v.Guild.Name + ">")
+	}
+	b.WriteString(".")
+	var names []string
+	for _, inst := range v.Recent {
+		if inst.Name != "" && !slices.Contains(names, inst.Name) && len(names) < descriptionInstanceNames {
+			names = append(names, inst.Name)
+		}
+	}
+	if len(names) > 0 {
+		b.WriteString(" Recent raids: " + strings.Join(names, ", ") + ".")
+	}
+	b.WriteString(" Raid logs and performance on Chronicle.")
+	return b.String()
+}
+
+func armoryPath(realmName string, player guid.GUID) string {
+	return "/armory/" + url.PathEscape(realmName) + "/" + player.String()
+}
+
+// className returns the display name of a playable class, or "" when unknown.
+func className(class database.WowPlayableClass) string {
+	switch class {
+	case "", database.WowPlayableClassUNKNOWN:
+		return ""
+	case database.WowPlayableClassDEATHKNIGHT:
+		return "Death Knight"
+	case database.WowPlayableClassDEMONHUNTER:
+		return "Demon Hunter"
+	}
+	s := strings.ToLower(string(class))
+	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+// raceName returns the display name of a playable race, or "" when unknown.
+func raceName(race database.WowPlayableRace) string {
+	switch race {
+	case "", database.WowPlayableRaceUnknown:
+		return ""
+	case database.WowPlayableRaceScourge:
+		return "Undead"
+	case database.WowPlayableRaceNightElf:
+		return "Night Elf"
+	case database.WowPlayableRaceBloodElf:
+		return "Blood Elf"
+	}
+	return string(race)
+}
+
+// formatDuration renders a duration as m:ss, or h:mm:ss from an hour.
+func formatDuration(d time.Duration) string {
+	total := int(d.Round(time.Second).Seconds())
+	h, m, s := total/3600, total/60%60, total%60
+	if h > 0 {
+		return fmt.Sprintf("%d:%02d:%02d", h, m, s)
+	}
+	return fmt.Sprintf("%d:%02d", m, s)
+}

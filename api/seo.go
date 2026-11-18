@@ -48,6 +48,11 @@ var noIndexPrefixes = []string{
 	"/modules/new", "/modules/id",
 }
 
+// SEOSummaryService renders crawlable summaries for SPA pages.
+type SEOSummaryService interface {
+	Summary(r *http.Request) *frontend.PageSummary
+}
+
 func (api *API) brandingResolver(r *http.Request) *frontend.HTMLBranding {
 	resolved := &frontend.HTMLBranding{
 		CanonicalURL: canonicalRequestURL(api, r),
@@ -85,6 +90,8 @@ func (api *API) brandingResolver(r *http.Request) *frontend.HTMLBranding {
 
 	if !discoverable || !isIndexablePath(r.URL.Path) || pathHasPrefix(r.URL.Path, noIndexPrefixes) || isPrivateGuildPath(r.URL.Path) || api.isUnlistedInstancePath(r) {
 		resolved.Robots = "noindex, nofollow"
+	} else if api.Opts.SEO != nil {
+		resolved.Summary = api.Opts.SEO.Summary(r)
 	}
 	if r.URL.Path == "/" {
 		config, err := api.Opts.Zed.GetSiteConfig(r.Context())

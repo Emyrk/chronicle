@@ -102,3 +102,36 @@ func TestHomeManifestOptionalForDevelopment(t *testing.T) {
 	require.Empty(t, markup)
 	require.Empty(t, bootstrap)
 }
+
+func TestPageSummaryInjection(t *testing.T) {
+	t.Parallel()
+	siteFS := fstest.MapFS{
+		"index.html": {Data: []byte(`<meta name="description" content="{{ if .SummaryDescription }}{{ .SummaryDescription }}{{ else if .OGDescription }}{{ .OGDescription }}{{ else }}default{{ end }}" /><meta property="og:description" content="{{ .OGDescription }}" /><div id="root"></div>`)},
+	}
+	summaries := map[string]*PageSummary{
+		"/instances/abc": {Description: `Molten Core clear by <Guild> & co`, HTML: `<h1>Molten Core</h1>`},
+	}
+	ogRoutes := []OGRoute{{Pattern: "/instances/{id}", Resolve: func(*http.Request) *OGData {
+		return &OGData{Description: "og text"}
+	}}}
+	handler := Handler(siteFS, ogRoutes, func(r *http.Request) *HTMLBranding {
+		return &HTMLBranding{Summary: summaries[r.URL.Path]}
+	}, nil)
+
+	serve := func(path string) string {
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "https://forever.test"+path, nil))
+		require.Equal(t, http.StatusOK, recorder.Code)
+		return recorder.Body.String()
+	}
+
+	body := serve("/instances/abc")
+	require.Contains(t, body, `<meta name="description" content="Molten Core clear by &lt;Guild&gt; &amp; co" />`)
+	require.Contains(t, body, `<meta property="og:description" content="og text" />`, "Open Graph metadata is unchanged")
+	require.Contains(t, body, `<div id="seo-summary" style="`)
+	require.Contains(t, body, `<h1>Molten Core</h1></div><div id="root"></div>`, "summary sits beside an empty #root")
+
+	body = serve("/instances/other")
+	require.Contains(t, body, `<meta name="description" content="og text" />`)
+	require.NotContains(t, body, "seo-summary")
+}
