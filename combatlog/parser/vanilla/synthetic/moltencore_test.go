@@ -195,3 +195,45 @@ func TestMoltenCoreHazardsNeverCreateOrExtendActivity(t *testing.T) {
 		}
 	}
 }
+
+func TestMoltenCoreParsedZoneScope(t *testing.T) {
+	t.Parallel()
+	// Legacy ZONE_INFO has no map ID and normalizes names to lowercase. Use the
+	// public parser so the scope regression covers real parser output, not just
+	// hand-built title-case zone messages.
+	parsed, err := zone.ParseZoneInfo(nil, "ZONE_INFO: "+hazardTime.Format(types.AddonDateFormat)+"&Molten Core&42")
+	require.NoError(t, err)
+	require.Equal(t, "molten core", parsed.Name)
+	require.Zero(t, parsed.MapID)
+	for _, test := range []struct {
+		name       string
+		zone       zone.Zone
+		attributed bool
+	}{
+		{"parsed legacy record", parsed, true},
+		{"title case", zone.Zone{Name: "Molten Core"}, true},
+		{"mixed case", zone.Zone{Name: "mOlTeN cOrE"}, true},
+		{"map ID", zone.Zone{Name: "localized name", MapID: 409}, true},
+		{"unrelated zone", zone.Zone{Name: "blackwing lair", MapID: 469}, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			_, process := hazardPipeline(t, database.WoWFlavor{database.FlavorTurtle})
+			process(&messages.Zone{MessageBase: messages.Base(hazardTime), Zone: test.zone}, hazardBoss(ragGUID))
+			for _, source := range []guid.GUID{lavaGUID, flameGUID} {
+				damage := hazardDamage(source, hazardTime)
+				process(damage)
+				expected := source
+				if test.attributed {
+					expected = ragGUID
+				}
+				require.Equal(t, expected, *damage.Caster)
+				require.Equal(t, int32(317), damage.Amount)
+				for _, id := range []guid.GUID{source, ragGUID, damage.Target} {
+					_, ignored := damage.MarkHas(messages.MarkTypeIgnoreActivity, id)
+					require.Equal(t, test.attributed, ignored)
+				}
+			}
+		})
+	}
+}
