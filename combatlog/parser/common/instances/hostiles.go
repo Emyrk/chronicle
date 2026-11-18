@@ -693,9 +693,7 @@ func ZulGurubHostiles(fl database.WoWFlavor) *identifier.Identifier {
 	if fl.Has(database.FlavorTurtle) {
 		// Category-only identities verified in Turtle Zul'Gurub logs. Do not
 		// infer hostility or activity behavior from their semantic category.
-		id.AddObjectEntryId(2061, Identity{Category: unitdb.CategoryEnvironment}) // Campfire
-		id.AddEntryId(14122, Identity{Category: unitdb.CategoryEnvironment})      // Massive Geyser
-		id.AddEntryId(10218, Identity{Category: unitdb.CategoryTotem})            // Superior Healing Ward
+		id.AddEntryId(14122, Identity{Category: unitdb.CategoryEnvironment}) // Massive Geyser
 	}
 	return id
 }
