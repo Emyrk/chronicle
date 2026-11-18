@@ -172,8 +172,17 @@ var (
 			})
 		},
 		DerivedRankings: map[string]func(database.WoWFlavor) *rankings.Rankings{
-			"Lower Tower of Karazhan": func(database.WoWFlavor) *rankings.Rankings {
+			"Lower Tower of Karazhan": func(fl database.WoWFlavor) *rankings.Rankings {
+				var damageRules map[string]rankings.DamageTargets
+				if fl.Has(database.FlavorNightmareOfUrsol) {
+					damageRules = map[string]rankings.DamageTargets{
+						"Clawlord Howlfang": {Mode: rankings.DamageTargetsBossOnly},
+						"Grizikil":          {Mode: rankings.DamageTargetsBossOnly},
+						"Moroes":            {Mode: rankings.DamageTargetsBossOnly},
+					}
+				}
 				return &rankings.Rankings{
+					DamageByEncounter: damageRules,
 					Speedrun: &rankings.SpeedrunRules{
 						Requirements: LowerTowerOfKarazhanSpeedrunRequirements(),
 					},

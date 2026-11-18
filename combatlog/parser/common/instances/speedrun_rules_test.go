@@ -63,6 +63,40 @@ func TestMoltenCoreDamageTargets(t *testing.T) {
 	}
 }
 
+func TestLowerTowerOfKarazhanDamageTargets(t *testing.T) {
+	t.Parallel()
+
+	for _, flavor := range []database.FlavorTag{
+		database.FlavorNightmareOfUrsol,
+		database.FlavorTurtle,
+		database.FlavorOctoWoW,
+		database.FlavorVanilla,
+	} {
+		t.Run(string(flavor), func(t *testing.T) {
+			t.Parallel()
+
+			rules := TowerOfKarazhanFactory.DerivedRankings["Lower Tower of Karazhan"](database.WoWFlavor{database.FlavorVanilla, flavor})
+			if flavor != database.FlavorNightmareOfUrsol {
+				require.Empty(t, rules.DamageByEncounter)
+				return
+			}
+
+			bossOnly := rankings.DamageTargets{Mode: rankings.DamageTargetsBossOnly}
+			require.Equal(t, map[string]rankings.DamageTargets{
+				"Clawlord Howlfang": bossOnly,
+				"Grizikil":          bossOnly,
+				"Moroes":            bossOnly,
+			}, rules.DamageByEncounter)
+			for name := range rules.DamageByEncounter {
+				require.Equal(t, bossOnly, rules.DurationTargets(name))
+			}
+			require.Equal(t, rankings.DamageTargets{}, rules.DurationTargets("Lord Blackwald II"))
+			require.Equal(t, rankings.DamageTargets{}, rules.DurationTargets("Brood Queen Araxxna"))
+			require.Empty(t, TowerOfKarazhanFactory.DerivedRankings["Upper Tower of Karazhan"](database.WoWFlavor{flavor}).DamageByEncounter)
+		})
+	}
+}
+
 func TestBlackwingLairDamageTargets(t *testing.T) {
 	t.Parallel()
 
