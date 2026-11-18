@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Link } from "react-router-dom"
 import { Activity, AlertTriangle, ArrowUpRight, Braces, Check, ChevronDown, Clipboard, Clock3, ExternalLink, KeyRound, LoaderCircle, Play, RefreshCw, Terminal } from "lucide-react"
@@ -14,6 +14,9 @@ import {
   type OpenAPIDocument,
   type RateLimitStatus,
 } from "./apiExplorerLogic"
+
+import { ExplorerAuthentication } from "./ExplorerAuthentication"
+import { ExplorerOAuthSession, type ExplorerFetch } from "./explorerOAuth"
 
 const SPEC_URL = "/api/external/v1/openapi.json"
 
@@ -44,16 +47,18 @@ type RateLimitCheck = RateLimitStatus & {
   checkedAt: Date
 }
 
-async function fetchRateLimitStatus(server: string): Promise<RateLimitCheck> {
-  const response = await fetch(`${server}/health`, { cache: "no-store" })
+async function fetchRateLimitStatus(server: string, request: ExplorerFetch): Promise<RateLimitCheck> {
+  const response = await request(`${server}/health`, { cache: "no-store" })
   if (!response.ok) throw new Error(`Health request failed with ${response.status}`)
   return { ...rateLimitStatusFromHeaders(response.headers), checkedAt: new Date() }
 }
 
-function RateLimitStatusCard({ server }: { server: string }) {
+function RateLimitStatusCard({ server, request, authenticated }: { server: string; request: ExplorerFetch; authenticated: boolean }) {
   const { data, error, isFetching, refetch } = useQuery({
-    queryKey: ["external-api", "rate-limit", server],
-    queryFn: () => fetchRateLimitStatus(server),
+    queryKey: ["external-api", "rate-limit", server, authenticated],
+    queryFn: () => fetchRateLimitStatus(server, request),
+    gcTime: 0,
+    retry: false,
     enabled: false,
   })
 
@@ -65,7 +70,7 @@ function RateLimitStatusCard({ server }: { server: string }) {
         <div>
           <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.2em] text-cyan-300">
             <Activity className="h-3.5 w-3.5" />
-            Anonymous rate limit
+            {authenticated ? "App rate limit" : "Anonymous rate limit"}
             {data && <span className="ml-auto h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_10px_rgba(110,231,183,0.8)]" aria-label="API online" />}
           </div>
 
@@ -101,7 +106,7 @@ function RateLimitStatusCard({ server }: { server: string }) {
             Continuous refill
           </div>
           <p className="mt-2 text-xs leading-5 text-slate-500">
-            The per-IP bucket holds {RATE_LIMIT_BURST} requests and refills one request each second, an average of {data?.limit ?? 60} per minute.
+            The {authenticated ? "per-app" : "per-IP"} bucket holds {RATE_LIMIT_BURST} requests and refills one request each second, an average of {data?.limit ?? 60} per minute.
           </p>
           <p className="mt-1 text-xs leading-5 text-slate-600">
             Every response includes <code className="text-slate-400">RateLimit-Limit</code>. Most responses also include <code className="text-slate-400">RateLimit-Remaining</code>; successful leaderboard responses omit it because cached responses do not consume the origin rate limit. A <code className="text-slate-400">429</code> response also includes <code className="text-slate-400">Retry-After</code>. This health check reports the allowance without consuming a request.
@@ -123,7 +128,7 @@ function RateLimitStatusCard({ server }: { server: string }) {
   )
 }
 
-function EndpointCard({ endpoint, server }: { endpoint: APIEndpoint; server: string }) {
+function EndpointCard({ endpoint, server, request, authenticated }: { endpoint: APIEndpoint; server: string; request: ExplorerFetch; authenticated: boolean }) {
   const parameters = endpoint.operation.parameters ?? []
   const [values, setValues] = useState<Record<string, string>>(() =>
     Object.fromEntries(parameters.map((parameter) => [parameterKey(parameter), String(parameter.example ?? "")])),
@@ -146,7 +151,7 @@ function EndpointCard({ endpoint, server }: { endpoint: APIEndpoint; server: str
     const started = performance.now()
 
     try {
-      const result = await fetch(url, { method: endpoint.method.toUpperCase() })
+      const result = await request(url, { method: endpoint.method.toUpperCase() })
       const contentType = result.headers.get("content-type") ?? ""
       const body = contentType.includes("application/json") ? await result.json() : await result.text()
       setResponse({
@@ -169,7 +174,7 @@ function EndpointCard({ endpoint, server }: { endpoint: APIEndpoint; server: str
 
   const copyCurl = async () => {
     const url = buildRequestURL(server, endpoint.path, parameters, values)
-    await navigator.clipboard.writeText(`curl -X ${endpoint.method.toUpperCase()} '${window.location.origin}${url}'`)
+    await navigator.clipboard.writeText(`curl -X ${endpoint.method.toUpperCase()}${authenticated ? " -H 'Authorization: Bearer <access_token>'" : ""} '${window.location.origin}${url}'`)
     setCopied(true)
     window.setTimeout(() => setCopied(false), 1500)
   }
@@ -295,6 +300,16 @@ function EndpointCard({ endpoint, server }: { endpoint: APIEndpoint; server: str
 }
 
 export function APIExplorer() {
+  const sessionRef = useRef<ExplorerOAuthSession | null>(null)
+  const [session, setSession] = useState<ExplorerOAuthSession | null>(null)
+  const [authVersion, setAuthVersion] = useState(0)
+  useEffect(() => () => sessionRef.current?.disconnect(), [])
+  const setAuth = (next: ExplorerOAuthSession | null) => {
+    setSession(next)
+    setAuthVersion((version) => version + 1)
+  }
+  const request = useCallback<ExplorerFetch>((url, init) => session ? session.fetch(url, init) : fetch(url, init), [session])
+
   const { data, error, isLoading } = useQuery({
     queryKey: ["external-api", "openapi"],
     queryFn: fetchDocument,
@@ -341,7 +356,8 @@ export function APIExplorer() {
             </span>
             <ArrowUpRight className="size-5 shrink-0 text-cyan-300" />
           </Link>
-          <RateLimitStatusCard server={server} />
+          <ExplorerAuthentication connected={!!session} onConnect={setAuth} sessionRef={sessionRef} />
+          <RateLimitStatusCard key={authVersion} server={server} request={request} authenticated={!!session} />
           {data && (
             <div className="mt-10 flex flex-wrap gap-x-8 gap-y-3 border-t border-white/10 pt-5 font-mono text-xs text-slate-500">
               <span><strong className="text-slate-200">{endpoints.length}</strong> documented endpoint{endpoints.length === 1 ? "" : "s"}</span>
@@ -378,7 +394,7 @@ export function APIExplorer() {
               </div>
               <div className="space-y-4">
                 {group.endpoints.map((endpoint) => (
-                  <EndpointCard key={`${endpoint.method}:${endpoint.path}`} endpoint={endpoint} server={server} />
+                  <EndpointCard key={`${authVersion}:${endpoint.method}:${endpoint.path}`} endpoint={endpoint} server={server} request={request} authenticated={!!session} />
                 ))}
               </div>
             </section>

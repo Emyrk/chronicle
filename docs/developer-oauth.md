@@ -39,6 +39,12 @@ Save the new access **and** refresh tokens atomically. Refresh rotates both toke
 
 Call the read-only external API with `Authorization: Bearer <access_token>`. These app tokens never grant owner permissions on `/api/v1`. Sidekick continues to use its separate device flow.
 
+## Authenticate the API explorer
+
+The public explorer at `/developers/api` can test requests as your developer app. Enter your client ID and secret in **Authenticate as your app**. The explorer clears the secret field after submission and keeps access and refresh tokens only in memory for the current page. It refreshes expired access tokens before requests and uses the app's quota for health checks. Disconnecting, leaving the page, or reloading clears the local session. Copied curl examples use an access-token placeholder, never the entered credentials.
+
+This is for testing your own app on Chronicle, not for embedding secrets in a publicly shipped frontend.
+
 ## Validate a token
 
 `POST /oauth/validate` checks any Chronicle-issued OAuth access token, including Sidekick's. Pass `token=<access_token>` as a form field or use `Authorization: Bearer <access_token>`. Active tokens return `active: true`, `client_id`, `user_id`, `scope`, and `expires_at` (plus a developer app ID where applicable). Expired, revoked, refresh, and non-OAuth tokens return `{"active":false}`. This endpoint does not accept Chronicle browser-session JWTs.
