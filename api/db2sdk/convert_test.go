@@ -171,7 +171,7 @@ func TestInstanceUnitsCompactsNamesAndOwners(t *testing.T) {
 	converted, namesByEntry, summonsByOwner := InstanceUnits([]database.LogInstanceUnit{
 		{UnitGuid: firstTotem, Name: "Fire Resistance Totem", Entry: 7424, OwnerGuid: &owner},
 		{UnitGuid: secondTotem, Name: "Fire Resistance Totem", Entry: 7424, OwnerGuid: &owner},
-		{UnitGuid: boss, Name: "Boss", Entry: 123},
+		{UnitGuid: boss, Name: "Boss", Entry: 123, Category: "boss"},
 		{UnitGuid: conflictA, Name: "First Name", Entry: 9},
 		{UnitGuid: conflictB, Name: "Second Name", Entry: 9},
 	})
@@ -180,6 +180,7 @@ func TestInstanceUnitsCompactsNamesAndOwners(t *testing.T) {
 	require.Empty(t, converted[firstTotem].Name)
 	require.Empty(t, converted[secondTotem].Name)
 	require.Equal(t, "Boss", converted[boss].Name)
+	require.Equal(t, "boss", converted[boss].Category)
 	require.Equal(t, "First Name", converted[conflictA].Name)
 	require.Equal(t, "Second Name", converted[conflictB].Name)
 	require.Nil(t, converted[firstTotem].Owner)

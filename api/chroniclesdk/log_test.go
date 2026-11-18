@@ -27,18 +27,18 @@ func TestGUIDStringJSON(t *testing.T) {
 func TestInstanceUnitOwnerJSON(t *testing.T) {
 	t.Parallel()
 
-	withoutOwner, err := json.Marshal(InstanceUnit{Name: "Boss", Entry: 1})
+	withoutOwner, err := json.Marshal(InstanceUnit{Name: "Boss", Entry: 1, Category: "boss"})
 	require.NoError(t, err)
-	require.JSONEq(t, `{"name":"Boss","entry":1}`, string(withoutOwner))
+	require.JSONEq(t, `{"name":"Boss","entry":1,"category":"boss"}`, string(withoutOwner))
 
-	withoutName, err := json.Marshal(InstanceUnit{Entry: 1})
+	withoutName, err := json.Marshal(InstanceUnit{Entry: 1, Category: "unknown"})
 	require.NoError(t, err)
-	require.JSONEq(t, `{"entry":1}`, string(withoutName))
+	require.JSONEq(t, `{"entry":1,"category":"unknown"}`, string(withoutName))
 
 	owner := guid.GUID(0xF140000000000001)
-	withOwner, err := json.Marshal(InstanceUnit{Name: "Pet", Owner: &owner, Entry: 2})
+	withOwner, err := json.Marshal(InstanceUnit{Name: "Pet", Owner: &owner, Entry: 2, Category: "pet"})
 	require.NoError(t, err)
-	require.JSONEq(t, `{"name":"Pet","owner":"0xF140000000000001","entry":2}`, string(withOwner))
+	require.JSONEq(t, `{"name":"Pet","owner":"0xF140000000000001","entry":2,"category":"pet"}`, string(withOwner))
 }
 
 func TestWoWAttendanceInstanceJSON(t *testing.T) {

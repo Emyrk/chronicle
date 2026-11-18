@@ -199,9 +199,9 @@ WHERE
 
 -- name: InsertInstanceUnits :batchexec
 INSERT INTO
-  log_instance_units (instance_id, unit_guid, name, entry, owner_guid)
+  log_instance_units (instance_id, unit_guid, name, entry, owner_guid, category)
 VALUES
-  ($1, $2, $3, $4, $5)
+  ($1, $2, $3, $4, $5, $6)
 ;
 
 -- name: InsertInstancePlayers :batchexec

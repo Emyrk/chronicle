@@ -717,6 +717,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 				return fmt.Errorf("insert events: %w", err)
 			}
 
+			builder.categories = finalized.UnitCategories
 			for id := range finalized.Participants.Active {
 				builder.seen(id)
 			}
@@ -1190,9 +1191,10 @@ type logParseInstanceBuilder struct {
 	db         *unitdb.Units
 	instanceID uuid.UUID
 
-	accounted map[guid.GUID]struct{}
-	units     []database.InsertInstanceUnitsParams
-	players   []database.InsertInstancePlayersParams
+	categories map[guid.GUID]unitdb.Category
+	accounted  map[guid.GUID]struct{}
+	units      []database.InsertInstanceUnitsParams
+	players    []database.InsertInstancePlayersParams
 
 	participantAccounted map[guid.GUID]struct{}
 	participants         []database.InsertInstancePlayersParams
@@ -1325,6 +1327,10 @@ func (w *logParseInstanceBuilder) seen(ids ...guid.GUID) {
 			continue
 		}
 
+		category := w.categories[id]
+		if category == "" {
+			category = w.db.Category(id)
+		}
 		entry, _ := id.GetEntry()
 		unitInfo, ok := w.db.Get(id)
 		if ok {
@@ -1334,6 +1340,7 @@ func (w *logParseInstanceBuilder) seen(ids ...guid.GUID) {
 				Name:       unitInfo.Name,
 				Entry:      int32(entry),
 				OwnerGuid:  unitInfo.Owner,
+				Category:   string(category),
 			})
 			continue
 		}
@@ -1342,6 +1349,7 @@ func (w *logParseInstanceBuilder) seen(ids ...guid.GUID) {
 			InstanceID: w.instanceID,
 			UnitGuid:   id,
 			Name:       unitname.ByGUID(id),
+			Category:   string(category),
 			Entry:      int32(entry),
 		})
 	}

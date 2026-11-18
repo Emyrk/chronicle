@@ -402,8 +402,9 @@ func InstanceUnits(units []database.LogInstanceUnit) (
 			name = ""
 		}
 		instanceUnits[unit.UnitGuid] = chroniclesdk.InstanceUnit{
-			Name:  name,
-			Entry: entry,
+			Name:     name,
+			Entry:    entry,
+			Category: unit.Category,
 		}
 		if unit.OwnerGuid != nil {
 			if summonsByOwner == nil {

@@ -378,9 +378,10 @@ type WoWSimpleParsedInstance struct {
 }
 
 type InstanceUnit struct {
-	Name  string     `json:"name,omitempty"`
-	Owner *guid.GUID `json:"owner,omitempty"`
-	Entry uint32     `json:"entry"`
+	Category string     `json:"category"`
+	Name     string     `json:"name,omitempty"`
+	Owner    *guid.GUID `json:"owner,omitempty"`
+	Entry    uint32     `json:"entry"`
 }
 
 type InstancePlayer struct {
