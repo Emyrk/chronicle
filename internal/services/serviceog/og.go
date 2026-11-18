@@ -19,8 +19,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/Emyrk/chronicle/database"
-	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/frontend"
+	"github.com/Emyrk/chronicle/internal/pageload"
 	"github.com/Emyrk/chronicle/internal/wowspec"
 )
 
@@ -352,7 +352,7 @@ func (s *Service) instanceOG(r *http.Request, host, idOrSlug string) *frontend.O
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
-	inst, err := resolveInstance(ctx, s.store, idOrSlug)
+	inst, err := pageload.PublicInstance(ctx, s.store, idOrSlug)
 	if err != nil {
 		return nil
 	}
@@ -390,10 +390,8 @@ func (s *Service) shareOG(r *http.Request, host, code string) *frontend.OGData {
 // /s/{code} share payload, nil for the instance page itself: when its view
 // selects one player and one boss kill, the image is the parse card.
 func (s *Service) buildInstanceOG(ctx context.Context, r *http.Request, host string, inst database.LogInstancesGuild, sharePayload []byte) *frontend.OGData {
-	db := s.store
-
-	encounters, _ := db.EncountersByInstanceID(ctx, inst.ID)
-	players, playersErr := db.InstancePlayersByInstanceID(ctx, inst.ID)
+	encounters, _ := pageload.Encounters(ctx, s.store, inst.ID)
+	players, playersErr := pageload.Players(ctx, s.store, inst.ID)
 
 	var startDate time.Time
 	var endDate time.Time
@@ -526,11 +524,9 @@ func (s *Service) armoryOG(r *http.Request, realm, player string) *frontend.OGDa
 	defer cancel()
 	host := ogHost(r)
 
-	db := s.store
-
 	realmID, err := uuid.Parse(realm)
 	if err != nil {
-		r, dbErr := s.store.GetWoWServerRealmByName(ctx, realm)
+		r, dbErr := pageload.RealmByName(ctx, s.store, realm)
 		if dbErr != nil {
 			return nil
 		}
@@ -539,7 +535,7 @@ func (s *Service) armoryOG(r *http.Request, realm, player string) *frontend.OGDa
 
 	identifier := parseArmoryPlayerGUID(player)
 
-	p, err := db.GetGamePlayerByGUID(ctx, database.GetGamePlayerByGUIDParams{
+	p, err := pageload.Player(ctx, s.store, database.GetGamePlayerByGUIDParams{
 		RealmID:    realmID,
 		Identifier: identifier,
 		Name:       player,
@@ -603,12 +599,4 @@ func (s *Service) armoryOG(r *http.Request, realm, player string) *frontend.OGDa
 		}
 	}
 	return og
-}
-
-func resolveInstance(ctx context.Context, db *authz.Authz, idOrSlug string) (database.LogInstancesGuild, error) {
-	id, err := uuid.Parse(idOrSlug)
-	if err == nil {
-		return db.PublicInstance(ctx, id)
-	}
-	return db.PublicInstanceBySlug(ctx, pgtype.Text{String: idOrSlug, Valid: true})
 }

@@ -17,9 +17,10 @@ import (
 )
 
 // fakeStore serves one instance (by ID or slug) and one character. Anything
-// else is not found, as an unlisted instance is for the Public* lookups.
+// else is not found.
 type fakeStore struct {
 	instance   database.LogInstancesGuild
+	unlisted   bool
 	encounters []database.LogInstanceEncounter
 	players    []database.LogInstancePlayer
 	realm      database.WowServerRealm
@@ -27,18 +28,34 @@ type fakeStore struct {
 	recent     []database.ListCharacterSummaryInstancesRow
 }
 
-func (f *fakeStore) PublicInstance(_ context.Context, id uuid.UUID) (database.LogInstancesGuild, error) {
-	if id != f.instance.ID {
-		return database.LogInstancesGuild{}, pgx.ErrNoRows
+func (f *fakeStore) PublicInstance(ctx context.Context, id uuid.UUID) (database.LogInstancesGuild, error) {
+	row, err := f.InstanceWithUnlisted(ctx, id)
+	if err == nil && row.Unlisted {
+		err = pgx.ErrNoRows
 	}
-	return f.instance, nil
+	return row.LogInstancesGuild, err
 }
 
-func (f *fakeStore) PublicInstanceBySlug(_ context.Context, slug pgtype.Text) (database.LogInstancesGuild, error) {
-	if slug != f.instance.HashedSlug {
-		return database.LogInstancesGuild{}, pgx.ErrNoRows
+func (f *fakeStore) PublicInstanceBySlug(ctx context.Context, slug pgtype.Text) (database.LogInstancesGuild, error) {
+	row, err := f.InstanceBySlugWithUnlisted(ctx, slug)
+	if err == nil && row.Unlisted {
+		err = pgx.ErrNoRows
 	}
-	return f.instance, nil
+	return row.LogInstancesGuild, err
+}
+
+func (f *fakeStore) InstanceWithUnlisted(_ context.Context, id uuid.UUID) (database.InstanceWithUnlistedRow, error) {
+	if id != f.instance.ID {
+		return database.InstanceWithUnlistedRow{}, pgx.ErrNoRows
+	}
+	return database.InstanceWithUnlistedRow{LogInstancesGuild: f.instance, Unlisted: f.unlisted}, nil
+}
+
+func (f *fakeStore) InstanceBySlugWithUnlisted(_ context.Context, slug pgtype.Text) (database.InstanceBySlugWithUnlistedRow, error) {
+	if slug != f.instance.HashedSlug {
+		return database.InstanceBySlugWithUnlistedRow{}, pgx.ErrNoRows
+	}
+	return database.InstanceBySlugWithUnlistedRow{LogInstancesGuild: f.instance, Unlisted: f.unlisted}, nil
 }
 
 func (f *fakeStore) EncountersByInstanceID(context.Context, uuid.UUID) ([]database.LogInstanceEncounter, error) {
@@ -118,7 +135,12 @@ func testStore() *fakeStore {
 
 func summary(t *testing.T, store Store, path string) (description, html string, ok bool) {
 	t.Helper()
-	got := New(store).Summary(httptest.NewRequest(http.MethodGet, "https://forever.chronicleclassic.com"+path, nil))
+	return summaryWith(t, Options{Store: store}, path)
+}
+
+func summaryWith(t *testing.T, opts Options, path string) (description, html string, ok bool) {
+	t.Helper()
+	got := New(opts).Summary(httptest.NewRequest(http.MethodGet, "https://forever.chronicleclassic.com"+path, nil))
 	if got == nil {
 		return "", "", false
 	}
@@ -132,9 +154,9 @@ func TestInstanceSummary(t *testing.T) {
 	for _, identifier := range []string{store.instance.ID.String(), store.instance.HashedSlug.String} {
 		description, html, ok := summary(t, store, "/instances/"+identifier)
 		require.True(t, ok)
-		require.Equal(t, "Molten Core clear by Hand of Ragnaros on Mar 4, 2026: 3/3 bosses in 36:10. Damage, healing and deaths for 3 players.", description)
+		require.Equal(t, "Molten Core run by Hand of Ragnaros on Mar 4, 2026: 3 bosses killed in 36:10. Damage, healing and deaths for 3 players.", description)
 		require.Equal(t, `<h1>Molten Core by Hand of Ragnaros</h1>`+
-			`<p>Molten Core clear by <a href="/g/`+store.instance.GuildID.UUID.String()+`">Hand of Ragnaros</a> on Mar 4, 2026: 3/3 bosses in 36:10. 3 players.</p>`+
+			`<p>Molten Core run by <a href="/g/`+store.instance.GuildID.UUID.String()+`">Hand of Ragnaros</a> on Mar 4, 2026: 3 bosses killed in 36:10. 3 players.</p>`+
 			`<h2>Bosses killed</h2><ul><li>Lucifron in 1:23</li><li>Magmadar in 1:35</li><li>Gehennas in 1:10</li></ul>`+
 			`<h2>Players</h2><ul>`+
 			`<li><a href="/armory/Normal-EU/0x0000000000000003">Mystery</a></li>`+
@@ -154,10 +176,87 @@ func TestInstanceSummaryWithoutGuildOrFullClear(t *testing.T) {
 
 	description, html, ok := summary(t, store, "/instances/"+store.instance.ID.String())
 	require.True(t, ok)
-	require.Equal(t, "Molten Core run on Mar 4, 2026: 3/4 bosses in 2:03:20. Damage, healing and deaths for 3 players.", description)
-	require.Contains(t, html, `<h1>Molten Core</h1><p>Molten Core run on Mar 4, 2026: 3/4 bosses in 2:03:20. 3 players.</p>`)
+	require.Equal(t, "Molten Core run on Mar 4, 2026: 3 bosses killed in 2:03:20. Damage, healing and deaths for 3 players.", description)
+	require.Contains(t, html, `<h1>Molten Core</h1><p>Molten Core run on Mar 4, 2026: 3 bosses killed in 2:03:20. 3 players.</p>`)
 	require.NotContains(t, html, "/g/")
 	require.Contains(t, html, `href="/armory/Realm%20With%20Spaces/0x0000000000000002"`)
+}
+
+// registry stands in for the boss registry's progression lookup.
+func registry(progression []string, count *int) ProgressionBosses {
+	return func(context.Context, string) ([]string, *int) { return progression, count }
+}
+
+func TestInstanceSummaryBossProgress(t *testing.T) {
+	t.Parallel()
+	ten := 10
+	mc := []string{"Lucifron", "Magmadar", "Gehennas", "Garr", "Shazzrah", "Baron Geddon", "Golemagg the Incinerator", "Sulfuron Harbinger", "Majordomo Executus", "Ragnaros"}
+	for _, tc := range []struct {
+		name     string
+		bosses   ProgressionBosses
+		killAll  bool
+		progress string
+		verb     string
+	}{
+		// Three of ten registry bosses killed: a run, not a clear.
+		{name: "partial", bosses: registry(mc, &ten), progress: "3/10 bosses", verb: "run"},
+		{name: "full clear", bosses: registry(mc, &ten), killAll: true, progress: "10/10 bosses", verb: "clear"},
+		// A canonical count without a list still gives a total.
+		{name: "count only", bosses: registry(nil, &ten), progress: "3/10 bosses", verb: "run"},
+		{name: "unknown zone", bosses: registry(nil, nil), progress: "3 bosses killed", verb: "run"},
+		{name: "no registry", progress: "3 bosses killed", verb: "run"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			store := testStore()
+			if tc.killAll {
+				for i, name := range mc[3:] {
+					store.encounters = append(store.encounters, encounter(name, true, database.KillTypeClean, 40+5*i, 60))
+				}
+			}
+			description, html, ok := summaryWith(t, Options{Store: store, ProgressionBosses: tc.bosses}, "/instances/"+store.instance.ID.String())
+			require.True(t, ok)
+			require.Contains(t, description, "Molten Core "+tc.verb+" by Hand of Ragnaros on Mar 4, 2026: "+tc.progress+" in ")
+			require.Contains(t, html, "Mar 4, 2026: "+tc.progress+" in ")
+		})
+	}
+}
+
+func TestInstanceSummarySingleKillUnknownTotal(t *testing.T) {
+	t.Parallel()
+	store := testStore()
+	store.encounters = store.encounters[1:2]
+	description, _, ok := summary(t, store, "/instances/"+store.instance.ID.String())
+	require.True(t, ok)
+	require.Contains(t, description, ": 1 boss killed in 1:23.")
+}
+
+func TestInstanceSummarySkipsInvalidatedAndDuplicateKills(t *testing.T) {
+	t.Parallel()
+	ten := 10
+	store := testStore()
+	invalid := encounter("Garr", true, database.KillTypeClean, 50, 60)
+	invalid.InvalidatedAt = database.Timestamptz(raidStart)
+	store.encounters = append(store.encounters,
+		invalid,
+		// Magmadar killed again later: listed once, at the first kill.
+		encounter("Magmadar", true, database.KillTypeClean, 60, 50),
+	)
+	description, html, ok := summaryWith(t, Options{Store: store, ProgressionBosses: registry(nil, &ten)}, "/instances/"+store.instance.ID.String())
+	require.True(t, ok)
+	require.Contains(t, description, ": 3/10 bosses in ")
+	require.Contains(t, html, `<h2>Bosses killed</h2><ul><li>Lucifron in 1:23</li><li>Magmadar in 1:35</li><li>Gehennas in 1:10</li></ul>`)
+	require.NotContains(t, html, "Garr")
+}
+
+func TestInstanceSummaryUnlisted(t *testing.T) {
+	t.Parallel()
+	store := testStore()
+	store.unlisted = true
+	for _, identifier := range []string{store.instance.ID.String(), store.instance.HashedSlug.String} {
+		_, _, ok := summary(t, store, "/instances/"+identifier)
+		require.False(t, ok, identifier)
+	}
 }
 
 func TestInstanceSummaryEscapesNames(t *testing.T) {

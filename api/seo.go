@@ -19,6 +19,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/frontend"
+	"github.com/Emyrk/chronicle/internal/pageload"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -122,11 +123,7 @@ func (api *API) isUnlistedInstancePath(r *http.Request) bool {
 		return false
 	}
 
-	if id, err := uuid.Parse(parts[1]); err == nil {
-		instance, err := api.Zed.InstanceWithUnlisted(r.Context(), id)
-		return err == nil && instance.Unlisted
-	}
-	instance, err := api.Zed.InstanceBySlugWithUnlisted(r.Context(), pgtype.Text{String: parts[1], Valid: true})
+	instance, err := pageload.InstanceWithUnlisted(r.Context(), api.Zed, parts[1])
 	return err == nil && instance.Unlisted
 }
 

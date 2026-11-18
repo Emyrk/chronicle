@@ -318,7 +318,7 @@ func (s *Service) Start(ctx context.Context) error {
 		GA4ID:                    s.ga4MeasurementID,
 		ShortLinkDomain:          s.shortLinkDomain,
 		OG:                       ogSvc,
-		SEO:                      serviceseo.New(zed),
+		SEO:                      serviceseo.New(serviceseo.Options{Store: zed, Logger: logger, ProgressionBosses: ogSvc.ProgressionBosses}),
 		LandingFeaturedID:        landingFeaturedID,
 		ClientUploadsDisabled:    s.clientUploadsDisabled,
 		BillingEnabled:           servicebilling.BillingEnabled(s.broker),

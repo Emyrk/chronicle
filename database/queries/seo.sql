@@ -6,7 +6,9 @@
 SELECT id, hashed_slug, name, start_time
 FROM (
   SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
-    li.id, li.hashed_slug, li.name, li.start_time
+    li.id, li.hashed_slug,
+    COALESCE(NULLIF(btrim(li.name), ''), NULLIF(btrim(sm.instance_name), ''), li.name) AS name,
+    li.start_time
   FROM log_instance_players lip
   JOIN log_instances li ON li.id = lip.instance_id
   JOIN wow_log_groups wlg ON wlg.id = li.log_group_id
@@ -15,6 +17,7 @@ FROM (
   JOIN parsed_log_group plg ON plg.id = li.log_group_id
     AND plg.parse_generation = wlg.parse_generation
     AND plg.finalized_at IS NOT NULL
+  LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
   WHERE lip.unit_guid = @player_guid
     AND li.realm_id = @realm_id
     AND li.start_time IS NOT NULL
