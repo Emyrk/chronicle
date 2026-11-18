@@ -54,6 +54,9 @@ type UploadInput struct {
 
 const ArtifactKindSidekickStorage = "sidekick-storage"
 
+// ArtifactKindForeverEvents is retained as opaque JSON, without enrichment parsing.
+const ArtifactKindForeverEvents = "forever-events"
+
 // ArtifactInput represents a typed artifact that enriches a logical log group.
 // Artifacts are persisted independently from combat-log files so reparses can
 // reuse them without changing the parser's file-count contract.

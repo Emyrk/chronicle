@@ -140,93 +140,111 @@ func TestAppendUserLogFreesStorageWithoutDeletingActiveGroup(t *testing.T) {
 
 func TestAppendUserLogPersistsArtifactIdempotently(t *testing.T) {
 	t.Parallel()
-	ctx := testutil.Context(t, testutil.WaitMedium)
-	pool, _ := dbtestutil.NewPGXPool(t)
-	store := database.New(pool)
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	riverClient, err := river.NewClient(riverpgxv5.New(pool), &river.Config{})
-	require.NoError(t, err)
-	queue := &riverqueue.Queues{Client: riverClient}
-	objectStorage, err := storage.NewLocalStorageAt(t.TempDir())
-	require.NoError(t, err)
-	chron := &Chronicle{
-		Storage: objectStorage,
-		logger:  logger,
-		queue:   queue,
-		Zed:     authz.NewDatabaseOnly(logger, store),
+	for _, tc := range []struct {
+		kind     string
+		payload  string
+		version  int32
+		mime     string
+		filename string
+		format   database.LogFormat
+	}{
+		{ArtifactKindSidekickStorage, "ChronicleSidekickBridgeWoTLKDB = { position_payload = {} }", 2, "text/plain;charset=UTF-8", "ChronicleSidekickBridgeWoTLK.lua", database.LogFormat335aCcAddon},
+		{ArtifactKindForeverEvents, ` {"future":{"scouting_lua":"not executed()"}} `, 1, "application/json", "forever-events-v1.json", database.LogFormatV22Cleu},
+	} {
+		t.Run(tc.kind, func(t *testing.T) {
+			t.Parallel()
+			ctx := testutil.Context(t, testutil.WaitMedium)
+			pool, _ := dbtestutil.NewPGXPool(t)
+			store := database.New(pool)
+			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+			riverClient, err := river.NewClient(riverpgxv5.New(pool), &river.Config{})
+			require.NoError(t, err)
+			queue := &riverqueue.Queues{Client: riverClient}
+			objectStorage, err := storage.NewLocalStorageAt(t.TempDir())
+			require.NoError(t, err)
+			chron := &Chronicle{
+				Storage: objectStorage,
+				logger:  logger,
+				queue:   queue,
+				Zed:     authz.NewDatabaseOnly(logger, store),
+			}
+
+			ownerID := uuid.New()
+			_, err = store.InsertUser(ctx, database.InsertUserParams{
+				ID: ownerID, Username: "append-artifact-" + ownerID.String(), Email: ownerID.String() + "@example.com",
+			})
+			require.NoError(t, err)
+			_, err = store.UpsertDataGrant(ctx, database.UpsertDataGrantParams{
+				UserID: ownerID, Source: "test", StorageBytes: 1 << 20,
+				Description: pgtype.Text{String: "test quota", Valid: true},
+			})
+			require.NoError(t, err)
+
+			now := database.Timestamptz(time.Now())
+			group, err := store.InsertWoWLogGroup(ctx, database.InsertWoWLogGroupParams{
+				ID: uuid.New(), Owner: ownerID, LogType: database.LogTypeAzerothcoreClientside,
+				Format:    database.NullLogFormat{LogFormat: tc.format, Valid: true},
+				CreatedAt: now, UpdatedAt: now,
+			})
+			require.NoError(t, err)
+			fileID := uuid.New()
+			_, err = store.InsertLogFile(ctx, database.InsertLogFileParams{
+				ID: fileID, Owner: ownerID, Hash: uuid.NewString(), WowLogID: group.ID,
+				SizeBytes: 10, MimeType: "text/plain;charset=UTF-8",
+				CompressedSizeBytes: pgtype.Int8{Int64: 10, Valid: true},
+				ContentEncoding:     pgtype.Text{String: "gzip", Valid: true},
+				CreatedAt:           now, UpdatedAt: now,
+			})
+			require.NoError(t, err)
+
+			var compressed bytes.Buffer
+			gz := gzip.NewWriter(&compressed)
+			_, err = gz.Write([]byte("10/30 12:00:00.000  SPELL_DAMAGE,example\n"))
+			require.NoError(t, err)
+			require.NoError(t, gz.Close())
+			uploadID := uuid.New()
+			artifactBytes := []byte(tc.payload)
+			artifact := func() *ArtifactInput {
+				return &ArtifactInput{
+					Kind: tc.kind, SchemaVersion: tc.version,
+					Reader: bytes.NewReader(artifactBytes), MimeType: tc.mime,
+					OriginalFilename: tc.filename,
+				}
+			}
+
+			err = chron.AppendUserLog(ctx, group, bytes.NewReader(compressed.Bytes()), artifact(), uuid.Nil, LogAppendMeta{
+				UploadID: uploadID, SourceSequence: pgtype.Int8{Int64: 1, Valid: true},
+			}, 5)
+			require.NoError(t, err)
+
+			parts, err := store.ListFinalizedLogFileParts(ctx, fileID)
+			require.NoError(t, err)
+			require.Len(t, parts, 1)
+			artifacts, err := store.ListLogGroupArtifacts(ctx, group.ID)
+			require.NoError(t, err)
+			require.Len(t, artifacts, 1)
+			require.Equal(t, parts[0].ID, artifacts[0].LogFilePartID.UUID)
+			require.Equal(t, int64(len(artifactBytes)), artifacts[0].SizeBytes)
+			require.Equal(t, tc.kind, artifacts[0].Kind)
+			require.Equal(t, tc.mime, artifacts[0].MimeType)
+			require.Equal(t, tc.filename, artifacts[0].OriginalFilename.String)
+			storedArtifact, err := objectStorage.DownloadFile(ctx, BucketRaidLogs, artifacts[0].ObjectKey)
+			require.NoError(t, err)
+			require.Equal(t, artifactBytes, storedArtifact)
+
+			err = chron.AppendUserLog(ctx, group, bytes.NewReader(compressed.Bytes()), artifact(), uuid.Nil, LogAppendMeta{
+				UploadID: uploadID, SourceSequence: pgtype.Int8{Int64: 1, Valid: true},
+			}, 5)
+			require.NoError(t, err)
+			artifacts, err = store.ListLogGroupArtifacts(ctx, group.ID)
+			require.NoError(t, err)
+			require.Len(t, artifacts, 1)
+
+			owner, err := store.GetUserByID(context.Background(), ownerID)
+			require.NoError(t, err)
+			require.Equal(t, int64(10+compressed.Len()+len(artifactBytes)), owner.ConsumedStorageBytes)
+		})
 	}
-
-	ownerID := uuid.New()
-	_, err = store.InsertUser(ctx, database.InsertUserParams{
-		ID: ownerID, Username: "append-artifact-" + ownerID.String(), Email: ownerID.String() + "@example.com",
-	})
-	require.NoError(t, err)
-	_, err = store.UpsertDataGrant(ctx, database.UpsertDataGrantParams{
-		UserID: ownerID, Source: "test", StorageBytes: 1 << 20,
-		Description: pgtype.Text{String: "test quota", Valid: true},
-	})
-	require.NoError(t, err)
-
-	now := database.Timestamptz(time.Now())
-	group, err := store.InsertWoWLogGroup(ctx, database.InsertWoWLogGroupParams{
-		ID: uuid.New(), Owner: ownerID, LogType: database.LogTypeAzerothcoreClientside,
-		Format:    database.NullLogFormat{LogFormat: database.LogFormat335aCcAddon, Valid: true},
-		CreatedAt: now, UpdatedAt: now,
-	})
-	require.NoError(t, err)
-	fileID := uuid.New()
-	_, err = store.InsertLogFile(ctx, database.InsertLogFileParams{
-		ID: fileID, Owner: ownerID, Hash: uuid.NewString(), WowLogID: group.ID,
-		SizeBytes: 10, MimeType: "text/plain;charset=UTF-8",
-		CompressedSizeBytes: pgtype.Int8{Int64: 10, Valid: true},
-		ContentEncoding:     pgtype.Text{String: "gzip", Valid: true},
-		CreatedAt:           now, UpdatedAt: now,
-	})
-	require.NoError(t, err)
-
-	var compressed bytes.Buffer
-	gz := gzip.NewWriter(&compressed)
-	_, err = gz.Write([]byte("10/30 12:00:00.000  SPELL_DAMAGE,example\n"))
-	require.NoError(t, err)
-	require.NoError(t, gz.Close())
-	uploadID := uuid.New()
-	artifactBytes := []byte("ChronicleSidekickBridgeWoTLKDB = { position_payload = {} }")
-	artifact := func() *ArtifactInput {
-		return &ArtifactInput{
-			Kind: ArtifactKindSidekickStorage, SchemaVersion: 2,
-			Reader: bytes.NewReader(artifactBytes), MimeType: "text/plain;charset=UTF-8",
-			OriginalFilename: "ChronicleSidekickBridgeWoTLK.lua",
-		}
-	}
-
-	err = chron.AppendUserLog(ctx, group, bytes.NewReader(compressed.Bytes()), artifact(), uuid.Nil, LogAppendMeta{
-		UploadID: uploadID, SourceSequence: pgtype.Int8{Int64: 1, Valid: true},
-	}, 5)
-	require.NoError(t, err)
-
-	parts, err := store.ListFinalizedLogFileParts(ctx, fileID)
-	require.NoError(t, err)
-	require.Len(t, parts, 1)
-	artifacts, err := store.ListLogGroupArtifacts(ctx, group.ID)
-	require.NoError(t, err)
-	require.Len(t, artifacts, 1)
-	require.Equal(t, parts[0].ID, artifacts[0].LogFilePartID.UUID)
-	require.Equal(t, int64(len(artifactBytes)), artifacts[0].SizeBytes)
-	storedArtifact, err := objectStorage.DownloadFile(ctx, BucketRaidLogs, artifacts[0].ObjectKey)
-	require.NoError(t, err)
-	require.Equal(t, artifactBytes, storedArtifact)
-
-	err = chron.AppendUserLog(ctx, group, bytes.NewReader(compressed.Bytes()), artifact(), uuid.Nil, LogAppendMeta{
-		UploadID: uploadID, SourceSequence: pgtype.Int8{Int64: 1, Valid: true},
-	}, 5)
-	require.NoError(t, err)
-	artifacts, err = store.ListLogGroupArtifacts(ctx, group.ID)
-	require.NoError(t, err)
-	require.Len(t, artifacts, 1)
-
-	owner, err := store.GetUserByID(context.Background(), ownerID)
-	require.NoError(t, err)
-	require.Equal(t, int64(10+compressed.Len()+len(artifactBytes)), owner.ConsumedStorageBytes)
 }
 
 type failingAppendUploadStorage struct{ storage.ObjectStorage }
