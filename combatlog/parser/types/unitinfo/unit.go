@@ -38,9 +38,11 @@ type Info struct {
 	Owner        *guid.GUID
 	Buffs        []Buff
 	Level        int32
-	Challenges   []string
-	Charm        *guid.GUID
-	MaxHealth    int64
+	// LevelObservedAt preserves supplemental metadata freshness independently of the unit event.
+	LevelObservedAt *time.Time
+	Challenges      []string
+	Charm           *guid.GUID
+	MaxHealth       int64
 
 	// Affiliation is the unit's hostility relative to the player.
 	// Set by AzerothCore's CHRONICLE_UNIT_INFO; empty for vanilla addon logs.

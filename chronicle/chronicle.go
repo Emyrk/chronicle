@@ -54,7 +54,8 @@ type UploadInput struct {
 
 const ArtifactKindSidekickStorage = "sidekick-storage"
 
-// ArtifactKindForeverEvents is retained as opaque JSON, without enrichment parsing.
+// ArtifactKindForeverEvents retains the original JSON. Supported scouting data
+// is interpreted during Forever parsing without rewriting the stored artifact.
 const ArtifactKindForeverEvents = "forever-events"
 
 // ArtifactInput represents a typed artifact that enriches a logical log group.

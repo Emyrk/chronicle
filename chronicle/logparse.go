@@ -443,6 +443,30 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 	}
 	report.CPUProfileAvailable = profileCaptured
 
+	// Scouting includes nearby players outside every encounter. Persist it once
+	// for the validated file realm, independently of instance/gear publication.
+	if len(parsed.scouting) > 0 {
+		if preRealmID == uuid.Nil || preRealmID == dbstatic.RealmUnknown() {
+			return fmt.Errorf("cannot persist scouting without a known realm")
+		}
+		if keep, reason := w.validateRealmTenant(ctx, db, resolvedRealm{ID: preRealmID, Name: preRealmName}, job.Args.TenantID, logFormat, job.Args.LogID); !keep {
+			return river.JobCancel(fmt.Errorf("scouting realm tenant mismatch: %s", reason))
+		}
+		payload, err := scoutingPayload(parsed.scouting, preRealmID)
+		if err != nil {
+			return fmt.Errorf("encode scouting players: %w", err)
+		}
+		if err := db.InTx(ctx, func(tx *authz.AuthzTX) error {
+			if err := lockExpectedParseGeneration(ctx, tx, job.Args.LogID, parseGeneration); err != nil {
+				return err
+			}
+			_, err := tx.UpsertScoutedPlayers(ctx, payload)
+			return err
+		}, nil); err != nil {
+			return fmt.Errorf("persist scouting players: %w", err)
+		}
+	}
+
 	logCapabilities := parsed.logCapabilities
 	encountersState := parsed.encountersState
 
