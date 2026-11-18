@@ -113,7 +113,7 @@ export function DeveloperAppPage() {
             </section>
           ) : loadError ? (
             <section className="rounded-lg border border-rose-400/20 bg-rose-400/5 p-7 text-sm text-rose-200" role="alert">
-              <p>Could not load your developer app. Please try again.</p>
+              <p>Could not load your developer app: {loadError instanceof Error ? loadError.message : "Please try again."}</p>
               <Button variant="outline" className="mt-4" onClick={() => void refetch()}>Retry</Button>
             </section>
           ) : (

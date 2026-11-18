@@ -93,6 +93,7 @@ export default defineConfig({
     allowedHosts: true,
     proxy: {
       "/api": backendProxy(),
+      "/oauth": backendProxy(),
       "/auth": backendProxy(),
       "/static": backendProxy(),
     }
