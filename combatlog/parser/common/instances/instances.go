@@ -150,7 +150,7 @@ var (
 		Category:  InstanceCategoryRaid,
 		ZoneNames: []string{"molten core", "熔火之心"},
 		MapIDs:    []uint32{409},
-		Hostiles:  FromMap(MoltenCoreHostiles()),
+		Hostiles:  MoltenCoreIdentifier,
 		FlavoredRankings: func(fl database.WoWFlavor) *rankings.Rankings {
 			return &rankings.Rankings{
 				DamageByEncounter: MoltenCoreDamageTargets(fl),

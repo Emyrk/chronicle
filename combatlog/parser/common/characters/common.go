@@ -105,14 +105,15 @@ func IsImmobilizeCC(spellName string) bool {
 // nolint: staticcheck
 func ProcessCommonActivity(c CharacterBase, m messages.Message) error {
 	if m.MarksExist() {
+		if _, ok := m.MarkHas(messages.MarkTypeIgnoreActivity, c.ID()); ok {
+			return nil
+		}
+
 		if reason, ok := m.MarkHas(messages.MarkTypeStart, c.ID()); ok {
 			c.Start(reason, m)
 		}
 		if reason, ok := m.MarkHas(messages.MarkTypeBump, c.ID()); ok {
 			c.Bump(reason, m)
-		}
-		if _, ok := m.MarkHas(messages.MarkTypeIgnoreActivity, c.ID()); ok {
-			return nil
 		}
 		// Let the regular logic apply.
 	}

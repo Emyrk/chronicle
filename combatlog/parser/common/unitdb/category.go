@@ -31,6 +31,7 @@ const (
 var knownObjects = map[uint32]Category{
 	2061:   CategoryEnvironment, // Campfire
 	176296: CategoryObject,      // Portal to Stormwind
+	176497: CategoryObject,      // Portal to Ironforge
 }
 
 // CategoryIdentifier supplies zone definitions without coupling the shared unit

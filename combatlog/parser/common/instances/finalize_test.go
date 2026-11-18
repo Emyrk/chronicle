@@ -1352,3 +1352,62 @@ func TestFinalizeUnknownGUIDWithoutMeaningfulEntry(t *testing.T) {
 	require.Equal(t, 2, result.UnknownUnits[0].Count)
 	require.ElementsMatch(t, []guid.GUID{noEntry, zeroEntry}, result.UnknownUnits[0].Samples)
 }
+
+func TestFinalizeMoltenCoreEnvironmentFlavor(t *testing.T) {
+	t.Parallel()
+	for _, flavor := range []database.WoWFlavor{
+		{database.FlavorVanilla, database.FlavorNightmareOfUrsol},
+		{database.FlavorTurtle},
+		{database.FlavorVanillaPlus},
+	} {
+		db := unitdb.New(flavor)
+		h := &Hookable{units: db, Identifier: MoltenCoreFactory.Hostiles(flavor)}
+		hazards := []guid.GUID{objectGUID(178088, 1), creatureGUID(13148, 1)}
+		for _, id := range hazards {
+			msg := &messages.Unit{Info: unitinfo.Info{Guid: id}}
+			db.Update(msg.Info)
+			h.ObserveUnits(msg)
+			h.ObserveUnits(msg)
+		}
+		result, err := h.Finalize(t.Context())
+		require.NoError(t, err)
+		require.ElementsMatch(t, hazards, result.PersistedUnits)
+		for _, id := range hazards {
+			entry, ok := id.GetEntry()
+			require.True(t, ok)
+			if flavor.Has(database.FlavorNightmareOfUrsol) {
+				require.Equal(t, unitdb.CategoryEnvironment, result.UnitCategories[id])
+				require.NotContains(t, result.UnknownUnits, entry)
+			} else {
+				require.Equal(t, unitdb.CategoryUnknown, result.UnitCategories[id])
+				require.Equal(t, 1, result.UnknownUnits[entry].Count)
+				require.Equal(t, []guid.GUID{id}, result.UnknownUnits[entry].Samples)
+			}
+		}
+	}
+}
+
+func TestFinalizeExcludesRaidMarkerOnlyReferences(t *testing.T) {
+	t.Parallel()
+	flavor := database.WoWFlavor{database.FlavorVanilla, database.FlavorNightmareOfUrsol}
+	db := unitdb.New(flavor)
+	markerOnly := creatureGUID(12435, 1) // Razorgore, known in the shared DB from BWL.
+	laterObserved := creatureGUID(13996, 1)
+	db.Update(unitinfo.Info{Guid: markerOnly, Name: "Razorgore the Untamed"})
+	db.Update(unitinfo.Info{Guid: laterObserved, Name: "Blackwing Technician"})
+	h := &Hookable{units: db, Identifier: MoltenCoreFactory.Hostiles(flavor)}
+	for _, id := range []guid.GUID{markerOnly, laterObserved} {
+		for _, index := range []uint8{1, 1, 0} {
+			h.ObserveUnits(&messages.RaidMark{Unit: id, Index: index})
+		}
+	}
+	h.ObserveUnits(&messages.Unit{Info: unitinfo.Info{Guid: laterObserved}})
+	result, err := h.Finalize(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, []guid.GUID{laterObserved}, result.PersistedUnits)
+	require.NotContains(t, result.UnitCategories, markerOnly)
+	require.NotContains(t, result.UnknownUnits, uint32(12435))
+	require.Equal(t, unitdb.CategoryUnknown, result.UnitCategories[laterObserved])
+	require.Equal(t, 1, result.UnknownUnits[13996].Count)
+	require.Equal(t, []guid.GUID{laterObserved}, result.UnknownUnits[13996].Samples)
+}

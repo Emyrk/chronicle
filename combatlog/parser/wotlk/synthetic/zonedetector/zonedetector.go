@@ -64,6 +64,8 @@ func ignore() map[uint32]struct{} {
 		// Summoned by both ZG Voodoo Slaves and Nefarian in BWL. Exclude
 		// even when only one of those instances is in the active registry.
 		14668: {}, // Corrupted Infernal
+		// Shared/mind-controlled outside BRS; not evidence of entering BRS.
+		9098: {}, // Scarshield Spellbinder
 		// Trial of the Crusader
 		35314: {}, // Orgrimmar Champion
 		35323: {}, // Sen'jin Champion

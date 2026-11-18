@@ -194,3 +194,31 @@ func TestZoneDetector_CorruptedInfernalDoesNotIdentifyZone(t *testing.T) {
 		})
 	}
 }
+func TestZoneDetector_ScarshieldSpellbinderDoesNotIdentifyZone(t *testing.T) {
+	t.Parallel()
+	flavor := database.WoWFlavor{database.FlavorVanilla}
+	brs := instances.BlackrockSpireHostiles()
+	require.Contains(t, brs, uint32(9098))
+
+	for _, initialZone := range []string{"", "molten core"} {
+		t.Run("initial="+initialZone, func(t *testing.T) {
+			t.Parallel()
+			// Only BRS is registered: the explicit exclusion, not duplicate
+			// detection, must prevent this shared unit from identifying BRS.
+			reg := registry.NewRegistry(testutil.Logger(t), flavor)
+			reg.RegisterEntry(registry.Entry{ZoneNames: []string{"blackrock spire"}, HostileEntries: brs})
+			zd := zonedetector.New(testutil.Logger(t), reg)
+			ts := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
+			if initialZone != "" {
+				zd.ProcessMessages([]messages.Message{&messages.Zone{
+					MessageBase: messages.Base(ts),
+					Zone:        zone.Zone{Seen: ts, Name: initialZone, IsInstance: true},
+				}})
+			}
+			msg := unitMsg(ts, creatureGUID(9098))
+			result := zd.ProcessMessages([]messages.Message{msg})
+			require.Equal(t, []messages.Message{msg}, result)
+			assert.Equal(t, initialZone, zd.LastZone())
+		})
+	}
+}

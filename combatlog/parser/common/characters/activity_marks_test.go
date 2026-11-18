@@ -93,3 +93,25 @@ func TestExplicitEncounterSuppressesTimeoutAndEndsActiveCharacters(t *testing.T)
 	require.Equal(t, end, activity[0].End.Timestamp.Date())
 	require.Equal(t, period.EndStateReset, activity[0].EndState)
 }
+
+func TestIgnoreActivityOverridesExplicitMarks(t *testing.T) {
+	t.Parallel()
+	chars := NewCharacters(unitdb.New(database.WoWFlavor{}), nil, identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+	boss := guid.GUID(0xF130000001000001)
+	player := guid.GUID(1)
+	start := time.Date(2026, time.August, 9, 12, 0, 0, 0, time.UTC)
+	damage := &messages.Damage{MessageBase: messages.Base(start), Caster: &boss, Target: player, Amount: 1}
+	for _, id := range damage.Affects() {
+		damage.MarkActivityStart("hook requests start", id)
+		damage.MarkActivityBump("hook requests bump", id)
+		damage.MarkActivityIgnore("persistent environment effect", id)
+	}
+	_, err := chars.Process(damage)
+	require.NoError(t, err)
+	for _, id := range damage.Affects() {
+		char, ok := chars.Get(id)
+		require.True(t, ok)
+		require.False(t, char.IsActive())
+		require.Empty(t, char.Periods())
+	}
+}

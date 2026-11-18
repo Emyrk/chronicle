@@ -5,6 +5,11 @@ import "github.com/Emyrk/chronicle/combatlog/parser/guid"
 // ObservedGUIDs is metadata membership, not combat activity. Affects deliberately
 // omits some passive references, so never use it alone to catalogue an instance.
 func ObservedGUIDs(m Message) []guid.GUID {
+	// Raid markers can reference units from a previous instance. Assignment or
+	// removal alone is not evidence of presence; keep Affects for marker consumers.
+	if _, ok := m.(*RaidMark); ok {
+		return nil
+	}
 	ids := append([]guid.GUID(nil), m.Affects()...)
 	add := func(id *guid.GUID) {
 		if id != nil {

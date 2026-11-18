@@ -35,7 +35,8 @@ type Synthetic struct {
 	razuvious    *razuviousOverkill
 	wowDB        gamedb.GameDB
 	knownArmor   *knownArmor
-	vanillaPlus  *vanillaplus
+	vanillaPlus  *shadowBosses
+	moltenCore   *shadowBosses
 	absorption   *Absorption
 	auraOwner    *auraOwnership
 
@@ -64,6 +65,7 @@ func New(ctx context.Context, logger *slog.Logger, wowDB gamedb.GameDB, opts ...
 		razuvious:    newRazuviousOverkill(),
 		knownArmor:   newKnownArmor(),
 		vanillaPlus:  newVanillaPlus(),
+		moltenCore:   newMoltenCore(),
 		absorption:   NewAbsorption(logger),
 		wowDB:        wowDB,
 		flavor:       fl,
@@ -94,6 +96,10 @@ func (s *Synthetic) ProcessMessages(msgs []messages.Message) ([]messages.Message
 		now := time.Now()
 		s.auraOwner.ProcessMessages(msgs)
 		s.auraOwnerDur += time.Since(now)
+	}
+
+	if s.flavor.Has(database.FlavorNightmareOfUrsol) {
+		s.moltenCore.ProcessMessages(msgs)
 	}
 
 	now := time.Now()

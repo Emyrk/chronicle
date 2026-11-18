@@ -304,6 +304,18 @@ func BlackrockSpireHostiles() map[uint32]Identity {
 	return hostile
 }
 
+// MoltenCoreIdentifier adds flavor-scoped, category-only environment identities
+// without changing the hostile map used by repair jobs.
+func MoltenCoreIdentifier(fl database.WoWFlavor) *identifier.Identifier {
+	idf := identifier.NewIdentifier(MoltenCoreHostiles())
+	if fl.Has(database.FlavorNightmareOfUrsol) {
+		// VMaNGOS boss_ragnaros.cpp: GO_LAVA_BURST and the knockback trigger.
+		idf.AddObjectEntryId(178088, Identity{Name: "Ragnaros", Category: unitdb.CategoryEnvironment, Affiliation: types.AffiliationUnknown})
+		idf.AddEntryId(13148, Identity{Name: "Flame of Ragnaros", Category: unitdb.CategoryEnvironment, Affiliation: types.AffiliationUnknown})
+	}
+	return idf
+}
+
 func MoltenCoreHostiles() map[uint32]Identity {
 	hostile := make(map[uint32]Identity)
 	LoadAdds(hostile, map[uint32]string{
