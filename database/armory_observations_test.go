@@ -116,6 +116,14 @@ func TestPlayerObservationOrdering(t *testing.T) {
 	require.Equal(t, database.WowPlayableClassMAGE, get().Class)
 	scout(28, map[string]any{"name": "IdentityOnly", "name_observed_at": nil})
 	require.Equal(t, "Scout", get().Name)
+	// The tracker sentinel is absent metadata, even with an explicit clock.
+	beforeUnknownName := get().NameObservedAt
+	legacy(29, func(p *database.UpsertPlayersParams) { p.Name = "Unknown" })
+	require.Equal(t, "Scout", get().Name)
+	require.Equal(t, beforeUnknownName, get().NameObservedAt)
+	scout(30, map[string]any{"name": "Unknown"})
+	require.Equal(t, "Scout", get().Name)
+	require.Equal(t, beforeUnknownName, get().NameObservedAt)
 	// Equal-time retry cannot change the observed value.
 	scout(20, map[string]any{"level": 62})
 	require.Equal(t, int16(60), get().Level)
@@ -159,6 +167,17 @@ func TestScoutedPlayersThousandBatch(t *testing.T) {
 	require.Len(t, result, 1000)
 	_, err = db.UpsertScoutedPlayers(ctx, payload)
 	require.NoError(t, err)
+	unknownPayload, err := json.Marshal([]map[string]any{{
+		"id": guid.GUID(1001).String(), "realm_id": realm.ID, "name": "Unknown",
+		"observed_at":      time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+		"name_observed_at": time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+	}})
+	require.NoError(t, err)
+	_, err = db.UpsertScoutedPlayers(ctx, unknownPayload)
+	require.NoError(t, err)
+	unknown, err := db.GetGamePlayerByGUID(ctx, database.GetGamePlayerByGUIDParams{RealmID: realm.ID, Identifier: guid.GUID(1001)})
+	require.NoError(t, err)
+	require.False(t, unknown.NameObservedAt.Valid)
 	var guildID uuid.UUID
 	for i := range rows {
 		row, err := db.GetGamePlayerByGUID(ctx, database.GetGamePlayerByGUIDParams{RealmID: realm.ID, Identifier: guid.GUID(i + 1)})
