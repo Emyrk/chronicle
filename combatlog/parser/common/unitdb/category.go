@@ -36,6 +36,11 @@ var knownObjects = map[uint32]Category{
 	181102: CategoryObject,      // Lightwell
 }
 
+// knownUrsolObjects recognizes gameobjects specific to Nightmare of Ursol.
+var knownUrsolObjects = map[uint32]Category{
+	176399: CategoryObject, // Portal to Theramore
+}
+
 // CategoryIdentifier supplies zone definitions without coupling the shared unit
 // database to an instance or retaining zone classifications across instances.
 type CategoryIdentifier interface {
@@ -66,8 +71,10 @@ func (us *Units) Category(g guid.GUID, identifiers ...CategoryIdentifier) Catego
 	// unknown, and creature entry IDs must not collide with gameobject entries.
 	if g.IsObject() {
 		entry, _ := g.GetEntry()
-		if entry == 176399 && us.flavor.Has(database.FlavorNightmareOfUrsol) {
-			return CategoryObject // Portal to Theramore
+		if us.flavor.Has(database.FlavorNightmareOfUrsol) {
+			if category, ok := knownUrsolObjects[entry]; ok {
+				return category
+			}
 		}
 		if category, ok := knownObjects[entry]; ok {
 			return category
