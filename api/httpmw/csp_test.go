@@ -29,7 +29,7 @@ func TestContentSecurityPolicy(t *testing.T) {
 	assert.Contains(t, csp, "default-src 'self'")
 	assert.Contains(t, csp, "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:")
 	assert.Contains(t, csp, "img-src 'self' data: blob: https://www.googletagmanager.com")
-	assert.Contains(t, csp, "connect-src 'self' blob: https://raw.githubusercontent.com https://www.googletagmanager.com https://www.google-analytics.com https://region1.google-analytics.com https://analytics.google.com https://stats.g.doubleclick.net https://www.google.com")
+	assert.Contains(t, csp, "connect-src 'self' blob: http://127.0.0.1:17643 https://raw.githubusercontent.com https://www.googletagmanager.com https://www.google-analytics.com https://region1.google-analytics.com https://analytics.google.com https://stats.g.doubleclick.net https://www.google.com")
 	assert.NotContains(t, csp, "tweakcn.com")
 	assert.NotContains(t, csp, "fonts.googleapis.com")
 	assert.NotContains(t, csp, "fonts.gstatic.com")
@@ -81,21 +81,22 @@ func TestContentSecurityPolicyAllowsAdResourcesOnlyWhenEnabled(t *testing.T) {
 			assert.Equal(t, test.allowsHTTPS, strings.Contains(csp, "style-src 'self' 'unsafe-inline' https:"))
 			assert.Equal(t, test.allowsHTTPS, strings.Contains(csp, "font-src 'self' https:"))
 			assert.Equal(t, test.allowsHTTPS, strings.Contains(csp, "media-src 'self' data: blob: https:"))
-			assert.Contains(t, csp, "connect-src 'self' blob: ")
+			assert.Contains(t, csp, "connect-src 'self' blob: http://127.0.0.1:17643 ")
 		})
 	}
 }
 
-func TestContentSecurityPolicyModuleDevelopment(t *testing.T) {
+func TestContentSecurityPolicyLocalMCPAcrossRoutes(t *testing.T) {
 	t.Parallel()
-	for _, path := range []string{"/modules/author/example/edit", "/modules/id/project/edit", "/modules", "/modules/author/example", "/instances/example"} {
+	// CSP belongs to the initial document and persists through SPA navigation.
+	for _, path := range []string{"/", "/modules/author/example/edit", "/modules/id/project/edit", "/modules", "/modules/author/example", "/instances/example"} {
 		t.Run(path, func(t *testing.T) {
 			t.Parallel()
 			handler := httpmw.ContentSecurityPolicy(nil)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
 			csp := rec.Header().Get("Content-Security-Policy")
-			assert.Equal(t, strings.HasSuffix(path, "/edit"), strings.Contains(csp, "http://127.0.0.1:17643"))
+			assert.Contains(t, csp, "connect-src 'self' blob: http://127.0.0.1:17643 ")
 			assert.NotContains(t, csp, "http://localhost")
 			assert.NotContains(t, csp, "http://127.0.0.1:*")
 			for _, directive := range strings.Split(csp, "; ") {
