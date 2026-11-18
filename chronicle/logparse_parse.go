@@ -19,7 +19,6 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
 	"github.com/Emyrk/chronicle/combatlog/parser/forever/scouting"
-	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/messagesource"
 	"github.com/Emyrk/chronicle/combatlog/parser/reorder"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/realm"
@@ -64,7 +63,7 @@ func (f overrideGameDB) SpellsByName(ctx context.Context, name string) ([]*chron
 // parseResult holds everything produced by the parse phase that the
 // finalization phase needs.
 type parseResult struct {
-	scouting        map[guid.GUID][]scouting.Player
+	scouting        *scouting.Scouting
 	encountersState *encounters.State
 	creaturesState  *creatures.Creatures
 	consumers       *consumers.Consumers
@@ -105,7 +104,7 @@ func (w *WorkerLogParse) parseCombatLog(
 	}
 
 	logCapabilities := initialLogCapabilities(logFormat)
-	var scoutPlayers map[guid.GUID][]scouting.Player
+	var scoutPlayers *scouting.Scouting
 	if logFormat == database.LogFormatV22Cleu {
 		var err error
 		scoutPlayers, err = w.loadForeverScouting(ctx, artifacts)
@@ -296,7 +295,7 @@ func (w *WorkerLogParse) parseCombatLog(
 		if logFormat == database.LogFormatV22Cleu {
 			encountersState.Units.SetPlayerRealmLookup(p)
 			parseAdvancer = reorder.New(p, blizzardmodern.ReorderWindow)
-			if len(scoutPlayers) > 0 {
+			if scoutPlayers.Len() > 0 {
 				parseAdvancer = &scoutingAdvancer{source: parseAdvancer, players: scoutPlayers}
 			}
 		}

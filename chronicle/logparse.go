@@ -445,7 +445,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 
 	// Scouting includes nearby players outside every encounter. Persist it once
 	// for the validated file realm, independently of instance/gear publication.
-	if len(parsed.scouting) > 0 {
+	if parsed.scouting.Len() > 0 {
 		if preRealmID == uuid.Nil || preRealmID == dbstatic.RealmUnknown() {
 			return fmt.Errorf("cannot persist scouting without a known realm")
 		}
