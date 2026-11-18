@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Gophercraft/core/vsn"
+	"github.com/google/uuid"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/chronicle"
@@ -108,20 +109,48 @@ func (s *Service) resolvedSiteFlavor(ctx context.Context) database.WoWFlavor {
 	return database.ServerFlavor(services.ServerName, base)
 }
 
+// canonicalRequestURL returns the request's canonical URL: the request host,
+// or the shared-content tenant's host for pages identical on every host.
 func canonicalRequestURL(s *Service, r *http.Request) string {
 	path := r.URL.EscapedPath()
 	if path == "" {
 		path = "/"
 	}
+	if s != nil {
+		if host := s.tenant.SharedPageHost(r.URL.Path); host != "" {
+			return canonicalScheme(s) + "://" + host + path
+		}
+	}
 	return canonicalOrigin(s, r) + path
 }
 
 func canonicalOrigin(s *Service, r *http.Request) string {
-	scheme := "https"
+	return canonicalScheme(s) + "://" + ogHost(r)
+}
+
+func canonicalScheme(s *Service) string {
 	if s != nil && s.accessURL != nil && s.accessURL.Scheme != "" {
-		scheme = s.accessURL.Scheme
+		return s.accessURL.Scheme
 	}
-	return scheme + "://" + ogHost(r)
+	return "https"
+}
+
+// realmOwnerHost returns the host of the tenant that owns realmID, so
+// tenant-owned pages (guilds, characters) are canonical on their owner's host
+// like instances. It returns fallback when the realm belongs to the root site
+// or the owner cannot be resolved.
+func (s *Service) realmOwnerHost(ctx context.Context, realmID uuid.UUID, fallback string) string {
+	if s.store == nil {
+		return fallback
+	}
+	slug, err := s.store.GetRealmTenantSlug(ctx, realmID)
+	if err != nil {
+		return fallback
+	}
+	if host := s.tenant.TenantHost(slug.String); host != "" {
+		return host
+	}
+	return fallback
 }
 
 // ogCacheWait bounds how long a page waits for a card's first cached fetch.

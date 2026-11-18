@@ -1257,6 +1257,24 @@ func (q *sqlQuerier) DeleteWoWServerRealm(ctx context.Context, id uuid.UUID) err
 	return err
 }
 
+const getRealmTenantSlug = `-- name: GetRealmTenantSlug :one
+SELECT t.slug
+FROM wow_server_realms r
+JOIN wow_servers s ON s.id = r.server_id
+LEFT JOIN tenants t ON t.id = s.tenant_id
+WHERE r.id = $1
+`
+
+// The slug of the tenant that owns a realm's server. NULL when the server
+// belongs to the root site. Canonical URLs for tenant-owned pages (guilds,
+// characters) use it to point at the owning tenant's host.
+func (q *sqlQuerier) GetRealmTenantSlug(ctx context.Context, realmID uuid.UUID) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, getRealmTenantSlug, realmID)
+	var slug pgtype.Text
+	err := row.Scan(&slug)
+	return slug, err
+}
+
 const getUploadKey = `-- name: GetUploadKey :one
 SELECT id, realm_id, secret_hash, description, created_at, last_used_at, created_by FROM wow_server_upload_keys WHERE id = $1
 `

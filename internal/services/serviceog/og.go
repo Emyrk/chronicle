@@ -437,8 +437,8 @@ func (s *Service) buildInstanceOG(ctx context.Context, r *http.Request, host str
 		identifier = inst.HashedSlug.String
 	}
 
-	if inst.TenantSlug.Valid && inst.TenantSlug.String != "" && s.tenant != nil && s.tenant.PrimaryDomain() != "" {
-		host = inst.TenantSlug.String + "." + s.tenant.PrimaryDomain()
+	if tenantHost := s.tenant.TenantHost(inst.TenantSlug.String); tenantHost != "" {
+		host = tenantHost
 	}
 
 	og := &frontend.OGData{
@@ -589,7 +589,7 @@ func (s *Service) armoryOG(r *http.Request, realm, player string) *frontend.OGDa
 	og := &frontend.OGData{
 		Title:       title.String(),
 		Description: desc.String(),
-		URL:         fmt.Sprintf("https://%s/armory/%s/%s", host, realm, p.ID),
+		URL:         fmt.Sprintf("https://%s/armory/%s/%s", s.realmOwnerHost(ctx, p.RealmID, host), realm, p.ID),
 	}
 	// Skip the stat lookups when there's no OG service to draw the card.
 	if s.imageBaseURL != nil && s.signingKey != "" {

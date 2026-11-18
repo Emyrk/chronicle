@@ -557,6 +557,10 @@ type sqlcQuerier interface {
 	GetPublicLuaProject(ctx context.Context, id uuid.UUID) (LuaProject, error)
 	GetPublishedLuaProjectArtifact(ctx context.Context, arg GetPublishedLuaProjectArtifactParams) (GetPublishedLuaProjectArtifactRow, error)
 	GetRaidCompositionByID(ctx context.Context, id uuid.UUID) (RaidComposition, error)
+	// The slug of the tenant that owns a realm's server. NULL when the server
+	// belongs to the root site. Canonical URLs for tenant-owned pages (guilds,
+	// characters) use it to point at the owning tenant's host.
+	GetRealmTenantSlug(ctx context.Context, realmID uuid.UUID) (pgtype.Text, error)
 	// Returns all realm IDs that have an applicable retention policy
 	// (either directly or through their server).
 	GetRealmsWithRetentionPolicies(ctx context.Context) ([]uuid.UUID, error)
