@@ -199,3 +199,15 @@ func (c *HooktoothFrenzy) Process(m messages.Message) error {
 
 	return nil
 }
+
+// NewPortalOfMadness excludes the Ursol summon controller from combat activity.
+// Registered only for Nightmare of Ursol; its summons retain their own activity.
+func NewPortalOfMadness(id guid.GUID, _ *characters.Characters) (characters.Character, bool) {
+	if !id.IsCreature() {
+		return nil, false
+	}
+	if entry, ok := id.GetEntry(); !ok || entry != 15141 {
+		return nil, false
+	}
+	return characters.NewNeverActive(id), true
+}
