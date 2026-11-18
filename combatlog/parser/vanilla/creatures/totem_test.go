@@ -3,9 +3,12 @@ package creatures_test
 import (
 	"context"
 	"errors"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures"
@@ -45,5 +48,39 @@ func TestTotemicRecall(t *testing.T) {
 			_, err := c.Process(msg)
 			require.NoError(t, err)
 		}
+	}
+}
+
+func TestSuperiorHealingWardFactoryAndLifetime(t *testing.T) {
+	t.Parallel()
+	all := characters.NewCharacters(unitdb.New(database.WoWFlavor{database.FlavorVanilla, database.FlavorTurtle}), nil, identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+	id := guid.GUID(0xF130000000000000 | uint64(10218)<<24 | 1)
+	var character characters.Character
+	for _, factory := range creatures.TurtleCharacterFactories() {
+		if c, ok := factory(id, all); ok {
+			character = c
+			break
+		}
+	}
+	require.IsType(t, &creatures.Totem{}, character)
+	ward := character.(*creatures.Totem)
+	require.Equal(t, id, ward.ID())
+	require.Equal(t, 30*time.Second, ward.Self.MaxDuration())
+	now := time.Date(2026, time.November, 16, 0, 0, 0, 0, time.UTC)
+	ward.Start("test", &messages.Heal{MessageBase: messages.Base(now), Caster: id})
+	require.True(t, ward.IsActive())
+	current, ok := ward.Activity.Current()
+	require.True(t, ok)
+	require.Equal(t, now.Add(30*time.Second), current.Meta.MaxLifetime)
+	// Extend inactivity beyond the lifetime to verify the hard expiration.
+	ward.Bump("test", &messages.Heal{MessageBase: messages.Base(now.Add(20 * time.Second)), Caster: id})
+	current.HandleTimeout(now.Add(29 * time.Second))
+	require.True(t, ward.IsActive())
+	current.HandleTimeout(now.Add(30*time.Second + time.Nanosecond))
+	require.False(t, ward.IsActive())
+	for _, high := range []uint64{0xF110000000000000, 0xF140000000000000, 0xF150000000000000} {
+		c, ok := creatures.NewTotemCharacter(guid.GUID(high|uint64(10218)<<24|1), all)
+		require.False(t, ok)
+		require.Nil(t, c)
 	}
 }

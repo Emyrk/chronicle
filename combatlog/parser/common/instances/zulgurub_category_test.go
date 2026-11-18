@@ -80,7 +80,7 @@ func TestZulGurubShadeIdentity(t *testing.T) {
 	}
 }
 
-func TestGlobalCategoryOnlyIdentities(t *testing.T) {
+func TestGlobalCampfireAndWardCategories(t *testing.T) {
 	t.Parallel()
 	for _, flavor := range []database.WoWFlavor{
 		{database.FlavorVanilla, database.FlavorTurtle},
@@ -100,12 +100,12 @@ func TestGlobalCategoryOnlyIdentities(t *testing.T) {
 				want := unitdb.CategoryUnknown
 				if id.IsPet() {
 					want = unitdb.CategoryPet
-				} else if id.IsObject() == tc.object {
+				} else if (tc.object && id.IsObject()) || (!tc.object && id.IsCreature()) {
 					want = tc.category
 				}
 				require.Equal(t, want, units.Category(id), "flavor %v entry %d namespace %x", flavor, tc.entry, high)
 				_, behavioralTotem := totems.IsTotem(id)
-				require.False(t, behavioralTotem)
+				require.Equal(t, tc.entry == 10218 && id.IsCreature(), behavioralTotem)
 				for _, zone := range []*identifier.Identifier{ZulGurubHostiles(flavor), OnyxiaHostiles(flavor)} {
 					require.Equal(t, want, units.Category(id, zone))
 					require.Equal(t, unitdb.CategoryUnknown, zone.UnitCategory(id))

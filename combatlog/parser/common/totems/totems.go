@@ -183,6 +183,12 @@ func init() {
 		variant{nameOverride: "Corrupted Windfury Totem", id: 14666, duration: 0},
 	)
 
+	// Summon Totem (spell 15869) summons entry 10218 for 30 seconds.
+	// https://classicdb.ch/?spell=15869
+	register("Superior Healing Ward", 0,
+		variant{id: 10218, duration: 30 * time.Second},
+	)
+
 	register("Powerful Healing Ward", 0,
 		variant{id: 14987, duration: 60 * time.Second * 4},
 	)

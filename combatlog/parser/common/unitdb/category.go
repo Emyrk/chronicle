@@ -33,12 +33,6 @@ var knownObjects = map[uint32]Category{
 	176296: CategoryObject,      // Portal to Stormwind
 }
 
-// knownCreatures classifies creature templates (including vehicles) without
-// adding behavioral totems or changing affiliation or activity. Pets are excluded.
-var knownCreatures = map[uint32]Category{
-	10218: CategoryTotem, // Superior Healing Ward
-}
-
 // CategoryIdentifier supplies zone definitions without coupling the shared unit
 // database to an instance or retaining zone classifications across instances.
 type CategoryIdentifier interface {
@@ -70,12 +64,6 @@ func (us *Units) Category(g guid.GUID, identifiers ...CategoryIdentifier) Catego
 	if g.IsObject() {
 		entry, _ := g.GetEntry()
 		if category, ok := knownObjects[entry]; ok {
-			return category
-		}
-	}
-	if g.IsCreature() || g.IsVehicle() {
-		entry, _ := g.GetEntry()
-		if category, ok := knownCreatures[entry]; ok {
 			return category
 		}
 	}
