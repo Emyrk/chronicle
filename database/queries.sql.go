@@ -34218,7 +34218,7 @@ JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
         CASE WHEN $5::boolean
             THEN sr.boss_to_boss_duration_ms
             ELSE COALESCE(sr.ranked_duration_ms, sr.duration_ms)
-        END ASC
+        END ASC, sr.instance_id ASC
 ),
 best AS (
     SELECT DISTINCT ON (
@@ -34227,12 +34227,12 @@ best AS (
     FROM deduped
     ORDER BY
         CASE WHEN NOT $7::boolean AND $10 :: text = '' THEN guild_id ELSE instance_id END,
-        duration_ms ASC
+        duration_ms ASC, completion_time ASC, instance_id ASC
 )
 SELECT instance_id, instance_name, difficulty_name, guild_id, duration_ms, start_time, completion_time, qualified, addon_version, hashed_slug, duplicate_group_id, parser_version, guild_name, realm_name, player_count, guild_logo_url, has_youtube_video, youtube_url FROM best
 WHERE (CASE WHEN $1::bigint > 0 THEN player_count >= $1 ELSE true END)
   AND (CASE WHEN $2::bigint > 0 THEN player_count <= $2 ELSE true END)
-ORDER BY duration_ms ASC
+ORDER BY duration_ms ASC, completion_time ASC, instance_id ASC
 LIMIT CASE WHEN $4::bigint > 0 THEN $4::bigint ELSE 50 END
 OFFSET $3::bigint
 `

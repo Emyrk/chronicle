@@ -32,6 +32,9 @@ export function SpeedrunsTab({
   runsBoard = "guild",
   onRunsBoard,
   allRunsLocked = false,
+  clearPage = 1,
+  clearPageSize = 50,
+  onClearPage,
   killPage = 1,
   killPageSize = 50,
   onKillPage,
@@ -48,11 +51,14 @@ export function SpeedrunsTab({
   onRunsBoard?: (board: RunsBoard) => void
   /** Below Revered, "All runs" becomes an upsell link instead of an option. */
   allRunsLocked?: boolean
+  clearPage?: number
+  clearPageSize?: number
+  onClearPage?: (page: number) => void
   killPage?: number
   killPageSize?: number
   onKillPage?: (page: number) => void
   /** When provided, use only parent-loaded API results, never story fixtures. */
-  live?: { clears?: LiveList<SpeedrunLeaderboardEntry>; kills?: LiveList<KillTimeLeaderboardEntry> & { totalCount?: number } }
+  live?: { clears?: LiveList<SpeedrunLeaderboardEntry> & { hasNextPage?: boolean }; kills?: LiveList<KillTimeLeaderboardEntry> & { totalCount?: number } }
 }) {
   const [ownView, setOwnView] = useState<SpeedrunsView>(defaultSpeedrunsView(selection))
   const view = controlledView ?? ownView
@@ -85,7 +91,7 @@ export function SpeedrunsTab({
   )
   // Full clears carry the switch in the podium card's header; kill times have no podium, so it sits above.
   return view === "clear" ? (
-    <ClearBoard instanceName={instanceName} live={live?.clears} story={!live} bosses={bosses} switcher={switcher} />
+    <ClearBoard instanceName={instanceName} live={live?.clears} story={!live} bosses={bosses} switcher={switcher} page={clearPage} pageSize={clearPageSize} onPage={onClearPage} />
   ) : (
     <div className="space-y-3 sm:space-y-5">
       {switcher}
@@ -261,7 +267,10 @@ function KillTimes({
 }
 
 /** Fastest full clears: the podium and the table below it. */
-function ClearBoard({ instanceName, bosses, live, story, switcher }: { instanceName: string; bosses: readonly string[]; live?: LiveList<SpeedrunLeaderboardEntry>; story: boolean; switcher: ReactNode }) {
+function ClearBoard({ instanceName, bosses, live, story, switcher, page, pageSize, onPage }: {
+  instanceName: string; bosses: readonly string[]; live?: LiveList<SpeedrunLeaderboardEntry> & { hasNextPage?: boolean }
+  story: boolean; switcher: ReactNode; page: number; pageSize: number; onPage?: (page: number) => void
+}) {
   const runs = story ? speedruns(undefined, bosses, instanceName) : (live?.entries ?? [])
   const what = "Fastest full clears"
   const status = (children: ReactNode, alert?: boolean) => (
@@ -269,13 +278,22 @@ function ClearBoard({ instanceName, bosses, live, story, switcher }: { instanceN
   )
   if (live?.error) return status(<>Could not load speedruns: {live.error.message}</>, true)
   if (!story && (live?.loading || !live?.entries)) return status("Loading speedruns…")
-  if (!story && runs.length === 0) return status("No speedruns found for the current filters.")
+  const pagination = !story && onPage && (page > 1 || live?.hasNextPage) ? (
+    <nav aria-label="Full clear pages" className="flex items-center justify-end gap-2 px-1 pt-2">
+      <Button variant="outline" size="sm" className="h-7 w-7 p-0" disabled={page <= 1}
+        aria-label="Previous page" onClick={() => onPage(page - 1)}><ChevronLeft className="h-4 w-4" /></Button>
+      <span className="text-xs text-muted-foreground">Page {page}</span>
+      <Button variant="outline" size="sm" className="h-7 w-7 p-0" disabled={!live?.hasNextPage}
+        aria-label="Next page" onClick={() => onPage(page + 1)}><ChevronRight className="h-4 w-4" /></Button>
+    </nav>
+  ) : null
+  if (!story && runs.length === 0) return <>{status("No speedruns found for the current filters.")}{pagination}</>
 
   return (
     <div className="space-y-3 sm:space-y-5">
       {/* The board switch heads the podium card: a row above the steps until the screen is wide enough
           for the empty corner beside the shorter #2 step, where it costs no height. */}
-      <section className="relative overflow-hidden rounded-xl border bg-card">
+      {page === 1 ? <section className="relative overflow-hidden rounded-xl border bg-card">
         <div className="relative z-10 px-3 pt-3 sm:px-4 xl:absolute xl:top-3 xl:left-4 xl:p-0">{switcher}</div>
         {/* A phone has room for the winner only; the table below lists the rest. */}
         <div className="px-4 pt-3 sm:hidden">
@@ -284,7 +302,7 @@ function ClearBoard({ instanceName, bosses, live, story, switcher }: { instanceN
         <div className="hidden px-4 pt-4 sm:block xl:pt-10">
           <Podium entries={runs.slice(0, 3)} instanceName={instanceName} />
         </div>
-      </section>
+      </section> : switcher}
       <section aria-label={what} className={cn("overflow-hidden rounded-xl border bg-card", MOBILE_EDGE_TO_EDGE)}>
         <table className="w-full text-sm">
           <thead className="border-b text-[11px] tracking-wider text-muted-foreground uppercase">
@@ -300,7 +318,7 @@ function ClearBoard({ instanceName, bosses, live, story, switcher }: { instanceN
           <tbody>
             {runs.map((r, i) => (
               <tr key={r.instance_id} className="border-b border-white/5 last:border-b-0 hover:bg-white/[.03]">
-                <td className="px-4 py-2 font-mono text-xs text-muted-foreground">{i + 1}</td>
+                <td className="px-4 py-2 font-mono text-xs text-muted-foreground">{(page - 1) * pageSize + i + 1}</td>
                 <td className="px-2 py-2 font-medium">
                   {/* Same treatment as today's speedrun table: the guild's logo, when it has one, left of the name. */}
                   <span className="flex min-w-0 items-center gap-2">
@@ -337,6 +355,7 @@ function ClearBoard({ instanceName, bosses, live, story, switcher }: { instanceN
           </tbody>
         </table>
       </section>
+      {pagination}
     </div>
   )
 }

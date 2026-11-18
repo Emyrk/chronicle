@@ -228,7 +228,7 @@ JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
         CASE WHEN @use_ranked_timing::boolean
             THEN sr.boss_to_boss_duration_ms
             ELSE COALESCE(sr.ranked_duration_ms, sr.duration_ms)
-        END ASC
+        END ASC, sr.instance_id ASC
 ),
 -- By default with no guild filter: keep only the best run per guild.
 -- With all_runs or a guild filter: keep each distinct run.
@@ -239,12 +239,12 @@ best AS (
     FROM deduped
     ORDER BY
         CASE WHEN NOT @all_runs::boolean AND @guild_id :: text = '' THEN guild_id ELSE instance_id END,
-        duration_ms ASC
+        duration_ms ASC, completion_time ASC, instance_id ASC
 )
 SELECT * FROM best
 WHERE (CASE WHEN @min_players::bigint > 0 THEN player_count >= @min_players ELSE true END)
   AND (CASE WHEN @max_players::bigint > 0 THEN player_count <= @max_players ELSE true END)
-ORDER BY duration_ms ASC
+ORDER BY duration_ms ASC, completion_time ASC, instance_id ASC
 LIMIT CASE WHEN @result_limit::bigint > 0 THEN @result_limit::bigint ELSE 50 END
 OFFSET @result_offset::bigint;
 

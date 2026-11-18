@@ -386,6 +386,27 @@ func TestSpeedrunLeaderboardTimingModes(t *testing.T) {
 		require.Equal(t, unguilded, allRuns[len(allRuns)-1].InstanceID)
 		require.False(t, allRuns[len(allRuns)-1].GuildID.Valid)
 		require.Empty(t, allRuns[len(allRuns)-1].GuildName)
+		// Concatenating pages must preserve the board order after both kinds of deduplication.
+		for _, all := range []bool{false, true} {
+			params.AllRuns = all
+			var paged []database.SpeedrunLeaderboardRow
+			for offset := 0; ; offset += 2 {
+				params.ResultLimit, params.ResultOffset = 2, int64(offset)
+				rows, err := store.SpeedrunLeaderboard(ctx, params)
+				require.NoError(t, err)
+				paged = append(paged, rows...)
+				if len(rows) < 2 {
+					break
+				}
+			}
+			if all {
+				require.Equal(t, allRuns, paged)
+			} else {
+				require.Equal(t, guildBest, paged)
+			}
+		}
+		params.ResultLimit, params.ResultOffset = 0, 0
+
 		for _, run := range allRuns {
 			require.NotEqual(t, reupload, run.InstanceID, "duplicate uploads must not rank twice")
 			require.NotEqual(t, unguildedReupload, run.InstanceID, "non-guild duplicate uploads must not rank twice")

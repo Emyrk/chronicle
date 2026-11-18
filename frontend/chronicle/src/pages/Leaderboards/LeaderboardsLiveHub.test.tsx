@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query"
 import { useLandingHighlights } from "./Hub/landingHighlights"
 import { renderToStaticMarkup } from "react-dom/server"
 import { MemoryRouter, Route, Routes } from "react-router-dom"
@@ -49,7 +50,7 @@ vi.mock("./Hub/landingHighlights", async (importOriginal) => ({
   useLandingHighlights: vi.fn(),
 }))
 vi.mock("./Hub/hubSummaryAdapter", () => ({ useHubSummary: vi.fn() }))
-vi.mock("@tanstack/react-query", () => ({ keepPreviousData: undefined, useQuery: () => ({ data: [], isPending: false, isError: false }) }))
+vi.mock("@tanstack/react-query", () => ({ keepPreviousData: undefined, useQuery: vi.fn(() => ({ data: [], isPending: false, isError: false })) }))
 vi.mock("@/api/rankingsQueries", () => ({
   useRankingsLeaderboard: vi.fn(() => ({ data: { entries: [] }, isPending: false, isError: false })),
   useRankingsStats: () => ({ data: [], isPending: false, isError: false }),
@@ -122,6 +123,24 @@ describe("live Storybook Hub", () => {
     const combined = vi.mocked(useRankingsKillTimeLeaderboard).mock.calls.at(-1);
     hub("/leaderboards/Molten-Core/speedruns?encounters=Ragnaros&encounter_variant=hard");
     expect(vi.mocked(useRankingsKillTimeLeaderboard).mock.calls.at(-1)).toEqual(combined);
+  });
+
+  it("requests full-clear pages with one lookahead row and a page-specific cache key", async () => {
+    hub("/leaderboards/Molten-Core/speedruns?page=2");
+    const options = vi.mocked(useQuery).mock.calls.map(([options]) => options)
+      .find((options) => options.queryKey?.[0] === "hub-live-speedruns");
+    expect(options?.queryKey).toEqual(["hub-live-speedruns", "Molten Core", undefined, "Normal", 40, "guild", 2]);
+    const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => [] });
+    vi.stubGlobal("fetch", fetch);
+    try {
+      await (options?.queryFn as () => Promise<unknown>)();
+      const url = new URL(fetch.mock.calls[0][0], "https://example.com");
+      expect(url.searchParams.get("limit")).toBe("51");
+      expect(url.searchParams.get("offset")).toBe("50");
+      expect(url.searchParams.get("board")).toBe("guild");
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("paginates a single boss's kill times 50 at a time", () => {

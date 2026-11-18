@@ -349,10 +349,12 @@ function LiveHubContent({ context, summary, stale = false, realmName, realmIDs, 
     !overview && context.tab === "speedruns" && speedView === "kills" && killBosses.length > 1)
   const kills = singleKillBoss ? singleKills : multiKills
   const speed = useQuery<SpeedrunLeaderboardEntry[]>({
-    queryKey: ["hub-live-speedruns", instanceName, realmName, chosen?.difficulty_name, chosen?.max_players, runsBoard],
+    queryKey: ["hub-live-speedruns", instanceName, realmName, chosen?.difficulty_name, chosen?.max_players, runsBoard, page],
     queryFn: async () => {
+      // One lookahead row enables Next without a separate count query.
       const query = new URLSearchParams({ instance_name: instanceName, difficulty_name: chosen!.difficulty_name,
-        instance_max_players: String(chosen!.max_players), timing: "full", board: runsBoard })
+        instance_max_players: String(chosen!.max_players), timing: "full", board: runsBoard,
+        limit: String(LEADERBOARD_PAGE_SIZE + 1), offset: String((page - 1) * LEADERBOARD_PAGE_SIZE) })
       if (realmName) query.append("realm_name", realmName)
       const response = await fetch(`/api/v1/rankings/speedrun?${query}`)
       if (!response.ok) throw new Error(`Speedruns request failed (${response.status})`)
@@ -395,10 +397,11 @@ function LiveHubContent({ context, summary, stale = false, realmName, realmIDs, 
   if (context.tab === "speedruns") return !exact ? <CohortPrompt raids={raids} /> :
     <SpeedrunsTab instanceName={instanceName} bosses={bosses} selection={selection}
       runsBoard={runsBoard} allRunsLocked={allRunsLocked} onRunsBoard={(next) => { setRunsBoard(next); setPage(1) }}
-      view={speedView} onView={(view) => setSpeedView({ key: selectionKey, view })}
+      view={speedView} onView={(view) => { setSpeedView({ key: selectionKey, view }); setPage(1) }}
+      clearPage={page} clearPageSize={LEADERBOARD_PAGE_SIZE} onClearPage={setPage}
       killPage={page} killPageSize={LEADERBOARD_PAGE_SIZE} onKillPage={setPage}
       live={{
-        clears: { entries: speed.data, loading: speed.isPending, error: speed.isError ? speed.error : null },
+        clears: { entries: speed.data?.slice(0, LEADERBOARD_PAGE_SIZE), hasNextPage: (speed.data?.length ?? 0) > LEADERBOARD_PAGE_SIZE, loading: speed.isPending, error: speed.isError ? speed.error : null },
         kills: { entries: kills.data?.entries, totalCount: kills.data?.total_count, loading: kills.isPending, error: kills.isError ? kills.error : null },
       }} />
   if (context.tab === "statistics") {
