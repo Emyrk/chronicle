@@ -251,12 +251,6 @@ func (c *Characters) Process(m messages.Message) (bool, error) {
 	defer func() { c.activityChanged = nil }()
 	c.processNewCharacters(m)
 
-	// Retain critter identities, but do not let their events start, refresh, or
-	// expire activity periods. Encounter event storage runs independently.
-	if c.db.MessageHasCategory(m, unitdb.CategoryCritter, c.idf) {
-		return false, nil
-	}
-
 	boundary, isBoundary := m.(*messages.EncounterBoundary)
 	if isBoundary {
 		c.explicitEncounter = boundary.Active

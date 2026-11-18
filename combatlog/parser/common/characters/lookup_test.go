@@ -87,7 +87,7 @@ func TestCharactersByEntryOnlyIndexesCreatures(t *testing.T) {
 	require.Equal(t, []Character{creature}, chars.ByEntry[entry])
 }
 
-func TestCrittersDoNotDriveCharacterActivity(t *testing.T) {
+func TestCrittersRemainInactiveWithoutSuppressingOtherActivity(t *testing.T) {
 	t.Parallel()
 	chars := NewCharacters(unitdb.New(), nil, identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 	player := guid.GUID(1)
@@ -99,22 +99,27 @@ func TestCrittersDoNotDriveCharacterActivity(t *testing.T) {
 		require.NoError(t, err)
 	}
 	damage(rat, at)
-	for _, id := range []guid.GUID{player, rat} {
-		char, ok := chars.Get(id)
-		require.True(t, ok, "critter identity is retained")
-		require.False(t, char.IsActive(), "critter combat cannot start activity")
-	}
+	ratChar, ok := chars.Get(rat)
+	require.True(t, ok, "critter identity is retained")
+	require.IsType(t, NeverActive{}, ratChar)
+	require.False(t, ratChar.IsActive())
+	require.Empty(t, ratChar.Periods())
+	playerChar, ok := chars.Get(player)
+	require.True(t, ok)
+	require.True(t, playerChar.IsActive(), "critter combat still starts player activity")
 	damage(boss, at.Add(time.Second))
 	bossChar, _ := chars.Get(boss)
-	playerChar, _ := chars.Get(player)
 	require.True(t, bossChar.IsActive())
-	before, _ := playerChar.CurrentPeriod()
 	damage(rat, at.Add(2*time.Second))
-	after, _ := playerChar.CurrentPeriod()
-	require.Equal(t, before, after, "critter damage cannot extend activity")
+	after, ok := playerChar.CurrentPeriod()
+	require.True(t, ok)
+	require.Equal(t, at.Add(2*time.Second), after.LastActive.Timestamp.Date(), "critter damage refreshes player activity")
 	damage(rat, at.Add(time.Hour))
-	require.True(t, bossChar.IsActive(), "critter events cannot expire other activity")
-	_, err := chars.Process(messages.TimedOut(at.Add(time.Hour)))
+	require.False(t, bossChar.IsActive(), "critter events still expire unrelated activity")
+	require.True(t, playerChar.IsActive())
+	require.False(t, ratChar.IsActive())
+	require.Empty(t, ratChar.Periods(), "critters never gain their own activity periods")
+	_, err := chars.Process(messages.TimedOut(at.Add(2 * time.Hour)))
 	require.NoError(t, err)
-	require.False(t, bossChar.IsActive(), "normal timeouts still work")
+	require.False(t, playerChar.IsActive(), "normal player timeouts still work")
 }
