@@ -58,6 +58,8 @@ type Hookable struct {
 	timings     *timings.Accumulator
 	logger      *slog.Logger
 	units       *unitdb.Units
+	// observedUnits is instance-local membership; units is shared across the log.
+	observedUnits map[guid.GUID]struct{}
 
 	// Static
 	MatchesZoneF func(z zone.Zone) bool
@@ -347,6 +349,7 @@ func (h *Hookable) ObserveMetadataAt(at time.Time) {
 // ProcessRaidGroupMetadata keeps instance timing current and records composition
 // changes in the active encounter without running normal combat hooks.
 func (h *Hookable) ProcessRaidGroupMetadata(msg *messages.RaidGroup) error {
+	h.ObserveUnits(msg)
 	h.ObserveMetadataAt(msg.Date())
 	if h.currentFight == nil || !h.currentFight.active() {
 		return nil
@@ -624,10 +627,21 @@ func (h *Hookable) flushDeferredEncounterEndBefore(m messages.Message) error {
 	return nil
 }
 
+// ObserveUnits records passive metadata references without changing encounter activity.
+func (h *Hookable) ObserveUnits(m messages.Message) {
+	if h.observedUnits == nil {
+		h.observedUnits = make(map[guid.GUID]struct{})
+	}
+	for _, id := range messages.ObservedGUIDs(m) {
+		h.observedUnits[id] = struct{}{}
+	}
+}
+
 func (h *Hookable) Process(m messages.Message) error {
 	if h.finalizing || h.finalized {
 		return fmt.Errorf("cannot process message after instance finalization started")
 	}
+	h.ObserveUnits(m)
 	if at := m.Date(); at.After(h.lastActivity) {
 		h.lastActivity = at
 	}
@@ -1410,28 +1424,11 @@ func (h *Hookable) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 		vehicleMetadata = h.vehicleTracker.MetadataForRange(instanceStart, instanceEnd)
 	}
 
-	persistedUnitSet := make(map[guid.GUID]struct{})
-	if h.Characters != nil {
-		_ = h.Characters.All.ForEach(func(char characters.Character) error {
-			persist, ok := char.(characters.InstanceUnitPersister)
-			if ok && persist.PersistInInstance() {
-				persistedUnitSet[char.ID()] = struct{}{}
-			}
-			return nil
-		})
-	}
-	// Owned UNIT_INFO units should be available to metadata consumers such as
-	// Unit Lookup regardless of GUID type or whether they became active. This
-	// includes pets, creature-based totems, and object-based traps. This
-	// intentionally does not alter character factory selection or activity.
-	for id, info := range h.units.Info {
-		if info.Owner != nil {
-			persistedUnitSet[id] = struct{}{}
-		}
-	}
-	persistedUnits := make([]guid.GUID, 0, len(persistedUnitSet))
-	for id := range persistedUnitSet {
+	persistedUnits := make([]guid.GUID, 0, len(h.observedUnits))
+	unitCategories := make(map[guid.GUID]unitdb.Category, len(h.observedUnits))
+	for id := range h.observedUnits {
 		persistedUnits = append(persistedUnits, id)
+		unitCategories[id] = h.units.Category(id, h.Identifier)
 	}
 	slices.Sort(persistedUnits)
 
@@ -1449,6 +1446,7 @@ func (h *Hookable) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 		RankingRules:       activeRankingRules,
 		UnknownUnits:       h.resolveUnknownUnits(),
 		PersistedUnits:     persistedUnits,
+		UnitCategories:     unitCategories,
 		VehicleMetadata:    vehicleMetadata,
 		RaidGroupSnapshots: raidGroupSnapshots,
 
@@ -1460,56 +1458,32 @@ func (c *Hookable) DetailedTimes() map[string]time.Duration {
 	return c.timings.Snapshot()
 }
 
-// resolveUnknownUnits maps unknown creature entry IDs to their names using the unitdb.
-// Units are filtered out if they are players or have an owner (pets, totems, summons).
+// resolveUnknownUnits reports unresolved instance members after enrichment. Ownership
+// is a relationship, not evidence that an otherwise unknown summon is categorized.
 func (h *Hookable) resolveUnknownUnits() map[uint32]UnknownUnit {
-	raw := h.UnknownUnits()
-	if len(raw) == 0 {
-		return nil
+	result := make(map[uint32]UnknownUnit)
+	ids := make([]guid.GUID, 0, len(h.observedUnits))
+	for id := range h.observedUnits {
+		ids = append(ids, id)
 	}
-
-	// Build entry ID → name and owned status from unitdb.
-	type entryInfo struct {
-		name  string
-		owned bool // true if any GUID with this entry has an owner
-	}
-	entries := make(map[uint32]*entryInfo)
-	for gid, info := range h.units.Info {
-		if gid.IsPlayer() {
+	slices.Sort(ids)
+	for _, id := range ids {
+		if h.units.Category(id, h.Identifier) != unitdb.CategoryUnknown {
 			continue
 		}
-		entry, ok := gid.GetEntry()
-		if !ok {
+		entry, ok := id.GetEntry()
+		if !ok || entry == 0 {
 			continue
 		}
-		ei := entries[entry]
-		if ei == nil {
-			ei = &entryInfo{}
-			entries[entry] = ei
+		unit := result[entry]
+		if info, ok := h.units.Get(id); ok && info.Name != "" {
+			unit.Name = info.Name
 		}
-		if info.Name != "" {
-			ei.name = info.Name
+		unit.Count++
+		if len(unit.Samples) < 3 {
+			unit.Samples = append(unit.Samples, id)
 		}
-		if info.Owner != nil {
-			ei.owned = true
-		}
-	}
-
-	result := make(map[uint32]UnknownUnit, len(raw))
-	for entryID, count := range raw {
-		// Skip owned units — they're pets, totems, or other player summons.
-		if ei := entries[entryID]; ei != nil && ei.owned {
-			continue
-		}
-
-		name := ""
-		if ei := entries[entryID]; ei != nil {
-			name = ei.name
-		}
-		result[entryID] = UnknownUnit{
-			Name:  name,
-			Count: count,
-		}
+		result[entry] = unit
 	}
 	if len(result) == 0 {
 		return nil

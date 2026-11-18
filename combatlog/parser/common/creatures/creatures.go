@@ -167,16 +167,10 @@ func (s *Creatures) Combatant(c messages.Combatant) {
 }
 
 func (s *Creatures) Unit(u messages.Unit) {
-	if s.Skip(u.Guid) {
-		return
-	}
 	s.Units.Update(u.Info)
 }
 
 func (s *Creatures) UnitDied(u messages.UnitDied) {
-	if s.Skip(u.ID) {
-		return
-	}
 	s.Units.UpdateUnitName(u.ID, u.Name)
 }
 

@@ -4,6 +4,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/critters"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounter"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/totems"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/warlockdemon"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
@@ -89,4 +90,24 @@ func (i *Identifier) UnknownUnits() map[uint32]int {
 // HostileEntries returns the raw creature entry → Identity map.
 func (i *Identifier) HostileEntries() map[uint32]Identity {
 	return i.byEntryId
+}
+
+// UnitCategory resolves only explicitly registered zone entries. It has no
+// lookup-count side effects; unknown reporting uses observed instance membership.
+func (i *Identifier) UnitCategory(id guid.GUID) unitdb.Category {
+	if i == nil || id.IsZero() || id.IsPlayer() || id.IsPet() {
+		return unitdb.CategoryUnknown
+	}
+	entry, ok := id.GetEntry()
+	if !ok {
+		return unitdb.CategoryUnknown
+	}
+	identity, exists := i.byEntryId[entry]
+	if !exists {
+		return unitdb.CategoryUnknown
+	}
+	if identity.Boss {
+		return unitdb.CategoryBoss
+	}
+	return unitdb.CategoryOrdinary
 }

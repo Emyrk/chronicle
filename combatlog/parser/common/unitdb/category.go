@@ -1,0 +1,67 @@
+package unitdb
+
+import (
+	"github.com/Emyrk/chronicle/combatlog/parser/common/critters"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/totems"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/traps"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/warlockdemon"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+)
+
+// Category describes a unit's semantic role, independently of GUID structure,
+// affiliation, ownership and temporary control.
+type Category string
+
+const (
+	CategoryUnknown  Category = "unknown"
+	CategoryOrdinary Category = "ordinary"
+	CategoryBoss     Category = "boss"
+	CategoryCritter  Category = "critter"
+	CategoryTotem    Category = "totem"
+	CategoryTrap     Category = "trap"
+	CategoryDemon    Category = "demon"
+	CategoryPlayer   Category = "player"
+	CategoryPet      Category = "pet"
+)
+
+// CategoryIdentifier supplies zone definitions without coupling the shared unit
+// database to an instance or retaining zone classifications across instances.
+type CategoryIdentifier interface {
+	UnitCategory(guid.GUID) Category
+}
+
+func (us *Units) Category(g guid.GUID, identifiers ...CategoryIdentifier) Category {
+	if g.IsZero() {
+		return CategoryUnknown
+	}
+	if g.IsPlayer() {
+		return CategoryPlayer
+	}
+	// Pet entry bits are not creature template IDs.
+	if g.IsPet() {
+		return CategoryPet
+	}
+	if critters.IsCritter(g) {
+		return CategoryCritter
+	}
+	if _, ok := totems.IsTotem(g); ok {
+		return CategoryTotem
+	}
+	if _, ok := traps.IsTrap(g); ok {
+		return CategoryTrap
+	}
+	if g.IsCreature() {
+		if _, ok := warlockdemon.IsWarlockDemon(g); ok {
+			return CategoryDemon
+		}
+	}
+	for _, identifier := range identifiers {
+		if identifier != nil {
+			if category := identifier.UnitCategory(g); category != CategoryUnknown {
+				return category
+			}
+		}
+	}
+	// Neither a name, affiliation nor ownership proves a semantic category.
+	return CategoryUnknown
+}

@@ -309,7 +309,7 @@ func (us *Units) UpdateUnitName(gid guid.GUID, name string) {
 		return
 	}
 
-	us.Info[gid] = unitinfo.Info{Name: name}
+	us.Info[gid] = unitinfo.Info{Guid: gid, Name: name}
 }
 
 // InvalidatePlayerTalents clears the talents used by encounter ranking snapshots.

@@ -206,6 +206,11 @@ func (s *State) Process(m messages.Message) error {
 		}
 	}
 
+	// Metadata-only messages still belong to the selected instance catalogue.
+	if s.CurrentInstance != nil && !forwardToInstance {
+		s.CurrentInstance.ObserveUnits(m)
+	}
+
 	// UNIT_INFO reconciliation already updated canonical state. When the
 	// snapshot arrives during a fight, forward its synthetic differences into
 	// the active encounter before the metadata carrier itself.
