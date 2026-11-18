@@ -54,7 +54,7 @@ func TestMoltenCoreHazardAttribution(t *testing.T) {
 	for _, source := range []guid.GUID{lavaGUID, flameGUID} {
 		t.Run(source.String(), func(t *testing.T) {
 			t.Parallel()
-			_, process := hazardPipeline(t, database.WoWFlavor{database.FlavorTurtle})
+			_, process := hazardPipeline(t, database.WoWFlavor{database.FlavorVanilla, database.FlavorNightmareOfUrsol})
 			process(hazardZone("Molten Core"))
 			unseen := hazardDamage(source, hazardTime)
 			process(unseen)
@@ -99,14 +99,14 @@ func TestMoltenCoreHazardAttribution(t *testing.T) {
 
 func TestMoltenCoreHazardScopeAndBoundaries(t *testing.T) {
 	t.Parallel()
-	for _, flavor := range []database.WoWFlavor{{database.FlavorTurtle}, {database.FlavorVanilla}, {database.FlavorVanillaPlus}} {
+	for _, flavor := range []database.WoWFlavor{{database.FlavorVanilla, database.FlavorNightmareOfUrsol}, {database.FlavorTurtle}, {database.FlavorVanilla}, {database.FlavorVanillaPlus}} {
 		for _, area := range []string{"Molten Core", "Blackwing Lair"} {
 			_, process := hazardPipeline(t, flavor)
 			process(hazardZone(area), hazardBoss(ragGUID))
 			for _, source := range []guid.GUID{lavaGUID, flameGUID, 0xF13002B7A8000001, 0xF11000335C000001, 0xF14000335C000001, ragGUID} {
 				damage := hazardDamage(source, hazardTime)
 				process(damage)
-				expected := flavor.Has(database.FlavorTurtle) && area == "Molten Core" && (source == lavaGUID || source == flameGUID)
+				expected := flavor.Has(database.FlavorNightmareOfUrsol) && area == "Molten Core" && (source == lavaGUID || source == flameGUID)
 				_, ignored := damage.MarkHas(messages.MarkTypeIgnoreActivity, damage.Target)
 				require.Equal(t, expected, ignored)
 				if expected {
@@ -117,7 +117,7 @@ func TestMoltenCoreHazardScopeAndBoundaries(t *testing.T) {
 			}
 		}
 	}
-	_, process := hazardPipeline(t, database.WoWFlavor{database.FlavorTurtle})
+	_, process := hazardPipeline(t, database.WoWFlavor{database.FlavorVanilla, database.FlavorNightmareOfUrsol})
 	for _, boundary := range []messages.Message{hazardZone("Blackwing Lair"), &messages.Versions{MessageBase: messages.Base(hazardTime)}, &messages.Realm{MessageBase: messages.Base(hazardTime)}, &messages.EncounterBoundary{MessageBase: messages.Base(hazardTime)}, &messages.UnitEvade{MessageBase: messages.Base(hazardTime), UnitGUID: ragGUID}} {
 		process(hazardZone("Blackwing Lair"), hazardZone("Molten Core"), hazardBoss(ragGUID), boundary)
 		damage := hazardDamage(lavaGUID, hazardTime)
@@ -144,9 +144,9 @@ func TestMoltenCoreHazardsNeverCreateOrExtendActivity(t *testing.T) {
 	t.Parallel()
 	for _, observed := range []bool{false, true} {
 		for _, source := range []guid.GUID{lavaGUID, flameGUID} {
-			_, process := hazardPipeline(t, database.WoWFlavor{database.FlavorTurtle})
+			_, process := hazardPipeline(t, database.WoWFlavor{database.FlavorVanilla, database.FlavorNightmareOfUrsol})
 			process(hazardZone("Molten Core"))
-			chars := characters.NewCharacters(unitdb.New(database.WoWFlavor{database.FlavorTurtle}), []characters.CharacterFactory{creatures.NewRagnarosCharacter}, identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+			chars := characters.NewCharacters(unitdb.New(database.WoWFlavor{database.FlavorVanilla, database.FlavorNightmareOfUrsol}), []characters.CharacterFactory{creatures.NewRagnarosCharacter}, identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 			if observed {
 				process(hazardBoss(ragGUID))
 			}
@@ -218,7 +218,7 @@ func TestMoltenCoreParsedZoneScope(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			_, process := hazardPipeline(t, database.WoWFlavor{database.FlavorTurtle})
+			_, process := hazardPipeline(t, database.WoWFlavor{database.FlavorVanilla, database.FlavorNightmareOfUrsol})
 			process(&messages.Zone{MessageBase: messages.Base(hazardTime), Zone: test.zone}, hazardBoss(ragGUID))
 			for _, source := range []guid.GUID{lavaGUID, flameGUID} {
 				damage := hazardDamage(source, hazardTime)

@@ -7,7 +7,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
 )
 
-// Turtle's persistent hazards must not keep a pull alive through either the
+// Nightmare of Ursol's persistent hazards must not keep a pull alive through either the
 // attributed boss or their targets, even when no boss has been observed.
 func newMoltenCore() *shadowBosses {
 	return newShadowBosses(shadowBossOptions{

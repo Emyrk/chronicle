@@ -12,7 +12,7 @@ import (
 
 func TestMoltenCoreEnvironmentCategories(t *testing.T) {
 	t.Parallel()
-	for _, flavor := range []database.WoWFlavor{{database.FlavorVanilla, database.FlavorTurtle}, {database.FlavorVanilla}, {database.FlavorWrath}, {database.FlavorEpoch}} {
+	for _, flavor := range []database.WoWFlavor{{database.FlavorVanilla, database.FlavorNightmareOfUrsol}, {database.FlavorVanilla, database.FlavorTurtle}, {database.FlavorVanillaPlus}, {database.FlavorVanilla}, {database.FlavorWrath}, {database.FlavorEpoch}} {
 		units := unitdb.New(flavor)
 		mc := MoltenCoreFactory.Hostiles(flavor)
 		for entry, name := range map[uint32]string{178088: "Ragnaros", 13148: "Flame of Ragnaros"} {
@@ -20,7 +20,7 @@ func TestMoltenCoreEnvironmentCategories(t *testing.T) {
 				id := guid.GUID(high | uint64(entry)<<24 | 1)
 				want := unitdb.CategoryUnknown
 				identity := Identity{Affiliation: types.AffiliationUnknown}
-				if flavor.Has(database.FlavorTurtle) && ((entry == 178088 && id.IsObject()) || (entry == 13148 && (id.IsCreature() || id.IsVehicle()))) {
+				if flavor.Has(database.FlavorNightmareOfUrsol) && ((entry == 178088 && id.IsObject()) || (entry == 13148 && (id.IsCreature() || id.IsVehicle()))) {
 					want = unitdb.CategoryEnvironment
 					identity = Identity{Name: name, Category: want, Affiliation: types.AffiliationUnknown}
 				}
@@ -52,7 +52,7 @@ func TestMoltenCoreEnvironmentCategories(t *testing.T) {
 
 func TestMoltenCoreObservedGlobalIdentities(t *testing.T) {
 	t.Parallel()
-	for _, flavor := range []database.WoWFlavor{{database.FlavorTurtle}, {database.FlavorVanilla}, {database.FlavorWrath}} {
+	for _, flavor := range []database.WoWFlavor{{database.FlavorVanilla, database.FlavorNightmareOfUrsol}, {database.FlavorTurtle}, {database.FlavorVanilla}, {database.FlavorWrath}} {
 		units := unitdb.New(flavor)
 		for _, entry := range []uint32{176497, 7368, 15803, 7487} {
 			for _, high := range []uint64{0xF110000000000000, 0xF130000000000000, 0xF140000000000000, 0xF150000000000000} {

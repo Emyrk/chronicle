@@ -308,7 +308,7 @@ func BlackrockSpireHostiles() map[uint32]Identity {
 // without changing the hostile map used by repair jobs.
 func MoltenCoreIdentifier(fl database.WoWFlavor) *identifier.Identifier {
 	idf := identifier.NewIdentifier(MoltenCoreHostiles())
-	if fl.Has(database.FlavorTurtle) {
+	if fl.Has(database.FlavorNightmareOfUrsol) {
 		// VMaNGOS boss_ragnaros.cpp: GO_LAVA_BURST and the knockback trigger.
 		idf.AddObjectEntryId(178088, Identity{Name: "Ragnaros", Category: unitdb.CategoryEnvironment, Affiliation: types.AffiliationUnknown})
 		idf.AddEntryId(13148, Identity{Name: "Flame of Ragnaros", Category: unitdb.CategoryEnvironment, Affiliation: types.AffiliationUnknown})

@@ -16,7 +16,7 @@ func TestVanillaPlusShadowMappings(t *testing.T) {
 	} {
 		boss := guid.GUID(0xF130000000000001 | uint64(mapping.boss)<<24)
 		helper := guid.GUID(0xF130000000000002 | uint64(mapping.shadow)<<24)
-		for _, flavor := range []database.WoWFlavor{{database.FlavorVanillaPlus}, {database.FlavorTurtle}, {database.FlavorVanilla}} {
+		for _, flavor := range []database.WoWFlavor{{database.FlavorVanillaPlus}, {database.FlavorVanilla, database.FlavorNightmareOfUrsol}, {database.FlavorTurtle}, {database.FlavorVanilla}} {
 			_, process := hazardPipeline(t, flavor)
 			missing := hazardDamage(helper, hazardTime)
 			process(missing)

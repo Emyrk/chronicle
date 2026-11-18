@@ -98,7 +98,7 @@ func (s *Synthetic) ProcessMessages(msgs []messages.Message) ([]messages.Message
 		s.auraOwnerDur += time.Since(now)
 	}
 
-	if s.flavor.Has(database.FlavorTurtle) {
+	if s.flavor.Has(database.FlavorNightmareOfUrsol) {
 		s.moltenCore.ProcessMessages(msgs)
 	}
 
