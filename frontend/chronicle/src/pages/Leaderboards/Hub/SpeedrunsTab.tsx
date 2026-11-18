@@ -1,9 +1,12 @@
 import { useState, type ReactNode } from "react"
-import { ChevronLeft, ChevronRight, LockKeyhole, Timer, Users } from "lucide-react"
+import { BadgeCheck, ChevronLeft, ChevronRight, ListOrdered, LockKeyhole, Timer, Users } from "lucide-react"
+import { Link } from "react-router-dom"
 import type { KillTimeLeaderboardEntry, SpeedrunLeaderboardEntry } from "@/api/typesGenerated"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { TierPill } from "@/components/Supporter/Supporter"
+import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip"
+import { TIER_COLOR } from "@/pages/Settings/billingPricing"
 import { MOBILE_EDGE_TO_EDGE } from "@/pages/Leaderboards/Hub/edgeToEdge"
 import { guildAttributes, killAttributes, speedrunClearAttributes } from "@/components/EntityMenu/leaderboardEntities"
 import { Podium } from "@/pages/Leaderboard/Podium"
@@ -106,23 +109,50 @@ function RunsToggle({ board, onBoard, locked }: { board: RunsBoard; onBoard: (bo
         Guild best
       </button>
       {locked ? (
-        <a
-          href="/supporter"
-          target="_blank"
-          rel="noopener noreferrer"
-          title="Rank every run, not just each guild's best, with Chronicle – Revered"
-          className={segment(false)}
-        >
-          <LockKeyhole className="size-3.5 shrink-0" aria-hidden="true" />
-          All runs
-          <TierPill tier="revered" />
-        </a>
+        <HintTooltip delayDuration={150}>
+          <TooltipTrigger asChild>
+            <a href="/supporter" target="_blank" rel="noopener noreferrer" className={segment(false)}>
+              <LockKeyhole className="size-3.5 shrink-0" aria-hidden="true" />
+              All runs
+              <TierPill tier="revered" />
+            </a>
+          </TooltipTrigger>
+          <AllRunsRequirements />
+        </HintTooltip>
       ) : (
         <button type="button" role="radio" aria-checked={board === "all"} onClick={() => onBoard("all")} className={segment(board === "all")}>
           All runs
         </button>
       )}
     </div>
+  )
+}
+
+/** What All runs adds and how to unlock it, in the style of the guild claim requirements. */
+function AllRunsRequirements() {
+  const revered = TIER_COLOR.revered
+  return (
+    <TooltipContent side="bottom" sideOffset={6} className="w-80 max-w-[calc(100vw-2rem)] p-4 text-left text-sm text-pretty">
+      <p className="flex items-center gap-2 font-semibold" style={{ color: revered }}>
+        <LockKeyhole className="h-4 w-4" /> All runs is a Revered perk
+      </p>
+      <ul className="mt-3 space-y-2.5">
+        <li className="flex gap-2">
+          <ListOrdered className="mt-0.5 h-4 w-4 shrink-0 text-sky-400" />
+          <span><span className="font-medium text-white">Every run ranks.</span> Guild best shows each guild's fastest run once. All runs lists every qualifying run, so one guild can hold several spots.</span>
+        </li>
+        <li className="flex gap-2">
+          <Timer className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+          <span><span className="font-medium text-white">Clears and kills.</span> Works on full clears and on a single boss's kill times.</span>
+        </li>
+        <li className="flex gap-2">
+          <BadgeCheck className="mt-0.5 h-4 w-4 shrink-0" style={{ color: revered }} />
+          <span><span className="font-medium text-white">Revered or above.</span>{" "}
+            <Link to="/supporter" className="underline underline-offset-2 hover:brightness-125" style={{ color: revered }}>Become a Revered supporter</Link> to unlock all runs.
+          </span>
+        </li>
+      </ul>
+    </TooltipContent>
   )
 }
 
