@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	pathpkg "path"
 	"slices"
 	"strconv"
 	"strings"
@@ -20,6 +19,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/frontend"
 	"github.com/Emyrk/chronicle/internal/pageload"
+	"github.com/Emyrk/chronicle/internal/services/serviceseo"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -56,8 +56,9 @@ type SEOSummaryService interface {
 }
 
 func (api *API) brandingResolver(r *http.Request) *frontend.HTMLBranding {
+	canonical := api.canonical()
 	resolved := &frontend.HTMLBranding{
-		CanonicalURL: canonicalRequestURL(api, r),
+		CanonicalURL: canonical.URL(r),
 		GA4ID:        api.Opts.GA4ID,
 	}
 	t := servicetenant.TenantFromContext(r.Context())
@@ -84,7 +85,7 @@ func (api *API) brandingResolver(r *http.Request) *frontend.HTMLBranding {
 		resolved.Description = firstNonEmpty(branding.Description, branding.Tagline, defaultSEODescription)
 		resolved.Favicon = branding.Favicon
 		resolved.ThemeCSS = buildThemeCSS(branding)
-		resolved.ImageURL = absoluteAssetURL(api, r, firstNonEmpty(branding.BackgroundBanner, branding.LogoWide, branding.SquareLogo))
+		resolved.ImageURL = absoluteAssetURL(canonical, r, firstNonEmpty(branding.BackgroundBanner, branding.LogoWide, branding.SquareLogo))
 	} else {
 		resolved.SiteName = "Chronicle"
 		resolved.Description = defaultSEODescription
@@ -109,7 +110,7 @@ func (api *API) brandingResolver(r *http.Request) *frontend.HTMLBranding {
 	}
 	// The WebSite entity describes the site serving the request, even when the
 	// page itself is canonical on another host.
-	resolved.JSONLD = websiteJSONLD(resolved.SiteName, resolved.Description, canonicalOrigin(api, r), resolved.ImageURL)
+	resolved.JSONLD = websiteJSONLD(resolved.SiteName, resolved.Description, canonical.Origin(r), resolved.ImageURL)
 	return resolved
 }
 
@@ -127,78 +128,18 @@ func (api *API) isUnlistedInstancePath(r *http.Request) bool {
 	return err == nil && instance.Unlisted
 }
 
-// ogHost returns a validated request host for canonical URL construction.
-func ogHost(r *http.Request) string {
-	host := strings.ToLower(r.Host)
-	for _, ch := range host {
-		if (ch < 'a' || ch > 'z') && (ch < '0' || ch > '9') && ch != '.' && ch != '-' && ch != ':' {
-			return "chronicleclassic.com"
-		}
-	}
-	if host == "" {
-		return "chronicleclassic.com"
-	}
-	return host
+// canonical returns the canonical URL policy for the API's options.
+func (api *API) canonical() *serviceseo.Canonical {
+	return serviceseo.NewCanonical(serviceseo.CanonicalOptions{
+		Logger:    api.Opts.Logger,
+		Tenant:    api.Opts.Tenant,
+		Dataset:   api.Opts.Dataset,
+		AccessURL: api.Opts.AccessURL,
+		BlogFS:    api.sitemapBlogFS,
+	})
 }
 
-// canonicalRequestURL returns the request's canonical URL: the request host,
-// or the shared-content tenant's host for pages identical on every host.
-func canonicalRequestURL(api *API, r *http.Request) string {
-	path := r.URL.EscapedPath()
-	if path == "" {
-		path = "/"
-	}
-	if host := api.sharedCanonicalHost(r, r.URL.Path); host != "" {
-		return canonicalScheme(api) + "://" + host + path
-	}
-	return canonicalOrigin(api, r) + path
-}
-
-// sharedCanonicalHost returns the shared-content tenant's host (see
-// servicetenant.SharedContentSlug) when path is a page every host serves
-// identically and that tenant serves it too, or "" when path is canonical on
-// the host serving it. A blog post counts only when the shared-content
-// tenant's flavor serves it, by the same rule as the blog route.
-func (api *API) sharedCanonicalHost(r *http.Request, path string) string {
-	if api.Opts.Tenant == nil {
-		return ""
-	}
-	if host := api.Opts.Tenant.SharedPageHost(path); host != "" {
-		return host
-	}
-	if !strings.HasPrefix(path, "/blog/") {
-		return ""
-	}
-	home, host, ok := api.Opts.Tenant.SharedContentTenant()
-	if !ok {
-		return ""
-	}
-	clean := pathpkg.Clean(path)
-	for _, post := range api.blogPosts(r) {
-		if post.Path == clean {
-			homeFlavor := api.blogFlavorResolver(r.WithContext(servicetenant.WithTenant(r.Context(), home)))
-			if post.AllowedFor(homeFlavor) {
-				return host
-			}
-			return ""
-		}
-	}
-	return ""
-}
-
-// canonicalOrigin returns the canonical scheme and host for SEO URLs.
-func canonicalOrigin(api *API, r *http.Request) string {
-	return canonicalScheme(api) + "://" + ogHost(r)
-}
-
-func canonicalScheme(api *API) string {
-	if api.Opts.AccessURL != nil && api.Opts.AccessURL.Scheme != "" {
-		return api.Opts.AccessURL.Scheme
-	}
-	return "https"
-}
-
-func absoluteAssetURL(api *API, r *http.Request, raw string) string {
+func absoluteAssetURL(canonical *serviceseo.Canonical, r *http.Request, raw string) string {
 	if raw == "" {
 		return ""
 	}
@@ -215,11 +156,7 @@ func absoluteAssetURL(api *API, r *http.Request, raw string) string {
 	if !strings.HasPrefix(u.Path, "/") {
 		return ""
 	}
-	scheme := "https"
-	if api.Opts.AccessURL != nil && api.Opts.AccessURL.Scheme != "" {
-		scheme = api.Opts.AccessURL.Scheme
-	}
-	return scheme + "://" + ogHost(r) + u.String()
+	return canonical.Origin(r) + u.String()
 }
 
 func websiteJSONLD(name, description, canonical, image string) string {
@@ -319,7 +256,7 @@ func (api *API) robotsTXT(w http.ResponseWriter, r *http.Request) {
 		_, _ = fmt.Fprint(w, "User-agent: *\nDisallow: /\n")
 		return
 	}
-	_, _ = fmt.Fprintf(w, "User-agent: *\nDisallow: /api/\nDisallow: /admin/\nDisallow: /account/\nDisallow: /settings/\nDisallow: /debug/\nDisallow: /upload\nDisallow: /servers/\nSitemap: %s/sitemap.xml\n", strings.TrimSuffix(canonicalRequestURL(api, r), "/robots.txt"))
+	_, _ = fmt.Fprintf(w, "User-agent: *\nDisallow: /api/\nDisallow: /admin/\nDisallow: /account/\nDisallow: /settings/\nDisallow: /debug/\nDisallow: /upload\nDisallow: /servers/\nSitemap: %s/sitemap.xml\n", strings.TrimSuffix(api.canonical().URL(r), "/robots.txt"))
 }
 
 // Caps on the sitemap's database-backed URLs, newest first. With the static
@@ -456,7 +393,7 @@ func (api *API) sitemapXML(w http.ResponseWriter, r *http.Request) {
 	host := api.sitemapHost(r)
 	key := sitemapRenderKey{tenant: servicetenant.TenantIDFromContext(ctx), host: host}
 	rendered, err := api.sitemapRendered.get(key, dynamic, func() ([]byte, error) {
-		return api.renderSitemap(r, canonicalScheme(api)+"://"+host, dynamic)
+		return api.renderSitemap(r, api.canonical().Scheme()+"://"+host, dynamic)
 	})
 	if err != nil {
 		http.Error(w, "failed to render sitemap", http.StatusInternalServerError)
@@ -478,11 +415,11 @@ func (api *API) renderSitemap(r *http.Request, base string, dynamic *sitemapDyna
 	set := sitemapURLSet{XMLNS: "http://www.sitemaps.org/schemas/sitemap/0.9"}
 	// A sitemap lists only URLs canonical on its own host: shared pages
 	// canonical on the shared-content tenant's host are left to its sitemap.
-	host := strings.TrimPrefix(base, canonicalScheme(api)+"://")
-	canonicalHere := func(path string) bool {
-		shared := api.sharedCanonicalHost(r, path)
-		return shared == "" || shared == host
-	}
+	// The shared pages are resolved once for the whole render.
+	canonical := api.canonical()
+	host := strings.TrimPrefix(base, canonical.Scheme()+"://")
+	shared := canonical.SharedPages(r)
+	canonicalHere := func(path string) bool { return shared.IsCanonicalOn(host, path) }
 	// The blog hub's lastmod still covers every post this host serves: its
 	// /blog index lists them all.
 	blog := api.sitemapBlogURLs(r)
@@ -523,7 +460,7 @@ func (api *API) renderSitemap(r *http.Request, base string, dynamic *sitemapDyna
 // host. Arbitrary Host headers therefore never reach the render cache key.
 func (api *API) sitemapHost(r *http.Request) string {
 	hosts := api.canonicalHosts(r)
-	requested := ogHost(r)
+	requested := serviceseo.RequestHost(r)
 	if slices.Contains(hosts, requested) {
 		return requested
 	}
@@ -653,14 +590,17 @@ func (api *API) loadSitemapURLs(ctx context.Context) (*sitemapDynamic, error) {
 			LastMod:  sitemapLastMod(c.UpdatedAt),
 		})
 	}
+	newestInstance := ""
 	for _, inst := range instances {
 		identifier := inst.ID.String()
 		if inst.HashedSlug.Valid && inst.HashedSlug.String != "" {
 			identifier = inst.HashedSlug.String
 		}
-		urls = append(urls, sitemapURL{Location: "/instances/" + url.PathEscape(identifier), LastMod: sitemapLastMod(inst.UpdatedAt)})
+		lastMod := sitemapLastMod(inst.UpdatedAt)
+		newestInstance = max(newestInstance, lastMod)
+		urls = append(urls, sitemapURL{Location: "/instances/" + url.PathEscape(identifier), LastMod: lastMod})
 	}
-	return &sitemapDynamic{urls: urls, newestInstance: newestLastMod(urls[len(urls)-len(instances):])}, nil
+	return &sitemapDynamic{urls: urls, newestInstance: newestInstance}, nil
 }
 
 // newestLastMod returns the latest lastmod among urls. Lastmods are RFC 3339

@@ -101,6 +101,30 @@ func (s *Service) GetDataset(ctx context.Context, id uuid.UUID) (database.Datase
 	return s.db.GetDataset(ctx, id)
 }
 
+// SiteFlavor returns the flavor of the site serving ctx: the tenant's default
+// dataset flavor plus its additional flavors, or the deployment's server
+// flavor for the root site or when the dataset cannot be read. A nil Service
+// always returns the server flavor.
+func (s *Service) SiteFlavor(ctx context.Context) database.WoWFlavor {
+	tenant := servicetenant.TenantFromContext(ctx)
+	if s != nil && tenant != nil && tenant.DefaultDatasetID.Valid {
+		dataset, err := s.GetDataset(ctx, tenant.DefaultDatasetID.UUID)
+		if err == nil {
+			flavor := database.FlavorFromStrings(dataset.DefaultFlavor).
+				Merge(database.FlavorFromStrings(tenant.AdditionalFlavor))
+			if len(flavor) > 0 {
+				return flavor
+			}
+		}
+	}
+
+	base := database.FlavorVanilla
+	if services.ServerBuild == vsn.V3_3_5a {
+		base = database.FlavorWrath
+	}
+	return database.ServerFlavor(services.ServerName, base)
+}
+
 func (s *Service) ResolveDatasetForRealm(ctx context.Context, realmID uuid.UUID) uuid.UUID {
 	if resolved, ok := s.LookupDatasetForRealm(ctx, realmID); ok {
 		return resolved

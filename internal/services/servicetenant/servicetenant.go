@@ -271,6 +271,15 @@ func (s *Service) IsAllowedOrigin(origin string) bool {
 	return ok
 }
 
+// TenantHost returns the host a tenant's pages are served on, or "" when the
+// slug is empty or no primary domain is configured.
+func (s *Service) TenantHost(slug string) string {
+	if s == nil || s.primaryDomain == "" || slug == "" {
+		return ""
+	}
+	return strings.ToLower(slug) + "." + strings.ToLower(s.primaryDomain)
+}
+
 // PrimaryDomain returns the configured primary domain.
 func (s *Service) PrimaryDomain() string {
 	return s.primaryDomain

@@ -43,7 +43,7 @@ func (s *Service) leaderboardRoutes() []frontend.OGRoute {
 		return func(r *http.Request) *frontend.OGData {
 			flavor := s.resolvedSiteFlavor(r.Context())
 			seg, inst, t := chi.URLParam(r, segment), chi.URLParam(r, instance), chi.URLParam(r, tab)
-			og := leaderboardOG(seoProductName(flavor), canonicalRequestURL(s, r), seg, inst, t, r.URL.Query())
+			og := leaderboardOG(seoProductName(flavor), s.canonical.URL(r), seg, inst, t, r.URL.Query())
 			tabID, instanceName := leaderboardOGSelection(seg, inst, t)
 			og.ImageURL = s.leaderboardCardURL(r, flavor, tabID, instanceName)
 			return og

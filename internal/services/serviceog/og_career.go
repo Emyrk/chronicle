@@ -78,7 +78,7 @@ var careerOGViews = []careerOGView{
 func (s *Service) careerOG(r *http.Request) *frontend.OGData {
 	product := seoProductName(s.resolvedSiteFlavor(r.Context()))
 	query := r.URL.Query()
-	og := careerOGMetadata(product, canonicalRequestURL(s, r), query)
+	og := careerOGMetadata(product, s.canonical.URL(r), query)
 	og.ImageURL = s.careerCardURL(r, query)
 	return og
 }

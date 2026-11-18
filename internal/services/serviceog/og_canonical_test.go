@@ -14,6 +14,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/dbtestutil"
+	"github.com/Emyrk/chronicle/internal/services/serviceseo"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/testutil"
 )
@@ -110,7 +111,7 @@ func TestSharedStaticPageCanonical(t *testing.T) {
 	t.Parallel()
 	accessURL, err := url.Parse("https://legacy.chronicleclassic.com")
 	require.NoError(t, err)
-	forever := database.Tenant{Slug: pgtype.Text{String: servicetenant.SharedContentSlug, Valid: true}, Discoverable: true}
+	forever := database.Tenant{Slug: pgtype.Text{String: serviceseo.SharedContentSlug, Valid: true}, Discoverable: true}
 	svc := New(Options{AccessURL: accessURL, Tenant: servicetenant.NewTestWithTenants(*accessURL, "chronicleclassic.com", forever)})
 
 	resolve := func(path string) string {

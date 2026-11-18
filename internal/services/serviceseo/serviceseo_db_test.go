@@ -1,4 +1,4 @@
-package serviceseo
+package serviceseo_test
 
 import (
 	"context"
@@ -22,6 +22,7 @@ import (
 	"github.com/Emyrk/chronicle/database/dbtestutil"
 	"github.com/Emyrk/chronicle/internal/pageload"
 	"github.com/Emyrk/chronicle/internal/services/serviceog"
+	"github.com/Emyrk/chronicle/internal/services/serviceseo"
 	"github.com/Emyrk/chronicle/internal/testutil"
 )
 
@@ -95,7 +96,7 @@ func TestSummaryDatabase(t *testing.T) {
 	unnamed := seed("", "seo-unnamed", 4, false)
 	exec("INSERT INTO server_upload_meta (log_group_id, instance_id, instance_name) SELECT log_group_id, '533', 'Naxxramas' FROM log_instances WHERE id = $1", unnamed)
 
-	s := New(Options{Store: store})
+	s := serviceseo.New(serviceseo.Options{Store: store})
 	get := func(path string) (string, string, bool) {
 		got := s.Summary(httptest.NewRequest(http.MethodGet, "https://forever.chronicleclassic.com"+path, nil).WithContext(ctx))
 		if got == nil {
@@ -137,7 +138,7 @@ func TestSummaryDatabase(t *testing.T) {
 	for _, route := range og.Routes() {
 		ogRouter.Get(route.Pattern, func(_ http.ResponseWriter, r *http.Request) { route.Resolve(r) })
 	}
-	seo := New(Options{Store: counted})
+	seo := serviceseo.New(serviceseo.Options{Store: counted})
 	render := func(path string, cached bool) map[string]int {
 		counted.reset()
 		reqCtx := ctx

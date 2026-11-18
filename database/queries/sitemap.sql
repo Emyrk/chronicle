@@ -35,9 +35,10 @@ LIMIT @result_limit;
 -- name: ListSitemapCharacters :many
 -- Characters with a known class, seen since @seen_since, whose latest sighting
 -- is a listed log and who appear in at least min_instances listed, valid,
--- finalized logs. Walks idx_game_players_updated_at newest-first and stops at
--- the limit; the instance count probes idx_log_instance_players_unit_guid_instance
--- and stops at min_instances.
+-- finalized logs. It evaluates every candidate seen since @seen_since before
+-- sorting, so the recency window, not the limit, bounds the work (see the
+-- EXPLAIN in #2070). The instance count probes
+-- idx_log_instance_players_unit_guid_instance and stops at min_instances.
 SELECT gp.id, r.name AS realm_name, gp.updated_at
 FROM game_players gp
 JOIN wow_server_realms r ON r.id = gp.realm_id
