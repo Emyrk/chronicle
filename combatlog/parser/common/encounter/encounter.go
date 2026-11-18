@@ -14,6 +14,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
 	"github.com/Emyrk/chronicle/combatlog/parser/unitname"
+	"github.com/Emyrk/chronicle/internal/encountervariant"
 )
 
 // KillType represents the outcome of an encounter.
@@ -36,7 +37,14 @@ type Encounter struct {
 	Name string
 	// Variant is independent of difficulty and raid size. Empty means unclassified.
 	Variant string
-	Type    types.EncounterType
+	// VariantTooltip is display-only and never participates in cohort identity.
+	VariantTooltip     string
+	VariantTooltipData *encountervariant.Tooltip
+	// VariantAuras contains player auras observed active during this attempt.
+	// Nil means the shared aura tracker was unavailable.
+	VariantAuras        []int32
+	HasEarlierEncounter bool
+	Type                types.EncounterType
 
 	// Period identifies the start/end of combat
 	Combat Fight

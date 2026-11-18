@@ -118,10 +118,10 @@ func TestXTVariantScopeAndOutcomes(t *testing.T) {
 		if kill == encounter.KillTypeClean || kill == encounter.KillTypePartial {
 			want = "hard"
 		}
-		require.Equal(t, want, ulduarEncounterVariant(enc, database.WoWFlavor{database.FlavorWrath}, pre))
-		require.Empty(t, ulduarEncounterVariant(enc, database.WoWFlavor{}, pre))
+		require.Equal(t, want, ulduarEncounterVariant(&enc, database.WoWFlavor{database.FlavorWrath}, pre))
+		require.Empty(t, ulduarEncounterVariant(&enc, database.WoWFlavor{}, pre))
 		enc.Combat.MapID = 1
-		require.Empty(t, ulduarEncounterVariant(enc, database.WoWFlavor{database.FlavorWrath}, pre))
+		require.Empty(t, ulduarEncounterVariant(&enc, database.WoWFlavor{database.FlavorWrath}, pre))
 	}
 }
 

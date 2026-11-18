@@ -110,19 +110,19 @@ func TestVezaxEvidenceScope(t *testing.T) {
 			enc := encounter.Encounter{Name: "General Vezax", Boss: true, KillType: encounter.KillTypeClean, Combat: encounter.Fight{MapID: 603, Start: start, End: start.Add(100 * time.Second), Hostiles: map[guid.GUID]encounter.CharacterFight{boss: {}}}}
 			pre := []instancehook.Preprocessor{evidence}
 			flavor := database.WoWFlavor{database.FlavorWrath}
-			require.Equal(t, tc.want, ulduarEncounterVariant(enc, flavor, pre))
-			require.Empty(t, ulduarEncounterVariant(enc, database.WoWFlavor{}, pre))
+			require.Equal(t, tc.want, ulduarEncounterVariant(&enc, flavor, pre))
+			require.Empty(t, ulduarEncounterVariant(&enc, database.WoWFlavor{}, pre))
 			for _, kill := range []encounter.KillType{encounter.KillTypePartial, encounter.KillTypeWipe, encounter.KillTypeReset, ""} {
 				enc.KillType = kill
 				want := ""
 				if kill == encounter.KillTypePartial {
 					want = tc.want
 				}
-				require.Equal(t, want, ulduarEncounterVariant(enc, flavor, pre))
+				require.Equal(t, want, ulduarEncounterVariant(&enc, flavor, pre))
 			}
 			enc.KillType = encounter.KillTypeClean
 			enc.Combat.MapID = 1
-			require.Empty(t, ulduarEncounterVariant(enc, flavor, pre))
+			require.Empty(t, ulduarEncounterVariant(&enc, flavor, pre))
 		})
 	}
 }

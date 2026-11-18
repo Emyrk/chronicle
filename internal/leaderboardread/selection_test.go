@@ -196,3 +196,15 @@ func TestVezaxAndHodirIndependentVariants(t *testing.T) {
 	r.EncounterVariants["General Vezax"] = "hard"
 	require.NotEqual(t, before, Fingerprint(uuid.Nil, r, selected))
 }
+
+func TestYoggVariantKeys(t *testing.T) {
+	t.Parallel()
+	for _, key := range []string{"lights_0", "lights_1", "lights_2", "lights_3", "lights_4"} {
+		require.True(t, supportedEncounterVariant("Ulduar", "Yogg-Saron", key))
+		require.False(t, supportedEncounterVariant("Ulduar", "Hodir", key))
+		require.False(t, supportedEncounterVariant("Other", "Yogg-Saron", key))
+	}
+	for _, key := range []string{"", "normal", "hard", "lights_-1", "lights_5"} {
+		require.False(t, supportedEncounterVariant("Ulduar", "Yogg-Saron", key))
+	}
+}

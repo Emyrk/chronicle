@@ -9,6 +9,7 @@ import (
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
+	"github.com/Emyrk/chronicle/internal/encountervariant"
 )
 
 func decodeRankingEncounterVariants(q url.Values) (map[string]string, error) {
@@ -40,8 +41,8 @@ func rankingEncounterVariants(w http.ResponseWriter, r *http.Request, instances,
 				err = errors.New("encounter variant refers to an unselected boss")
 				break
 			}
-			if len(instances) != 1 || instances[0] != "Ulduar" || (boss != "Hodir" && boss != "XT-002 Deconstructor" && boss != "General Vezax") || (variant != "normal" && variant != "hard") {
-				err = errors.New("encounter variant is not supported for this boss; only Ulduar Hodir, XT-002 Deconstructor, and General Vezax normal or hard are supported")
+			if len(instances) != 1 || !encountervariant.Supported(instances[0], boss, variant) {
+				err = errors.New("encounter variant is not supported for this boss")
 				break
 			}
 		}

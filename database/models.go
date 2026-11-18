@@ -2924,21 +2924,23 @@ type LogInstanceDifficulty struct {
 }
 
 type LogInstanceEncounter struct {
-	ID                   uuid.UUID          `db:"id" json:"id"`
-	InstanceID           uuid.UUID          `db:"instance_id" json:"instance_id"`
-	Name                 string             `db:"name" json:"name"`
-	Remaining            guid.GUIDs         `db:"remaining" json:"remaining"`
-	Boss                 bool               `db:"boss" json:"boss"`
-	StartTime            pgtype.Timestamptz `db:"start_time" json:"start_time"`
-	EndTime              pgtype.Timestamptz `db:"end_time" json:"end_time"`
-	KillType             KillType           `db:"kill_type" json:"kill_type"`
-	MapID                int32              `db:"map_id" json:"map_id"`
-	RankingStartOffsetMs pgtype.Int8        `db:"ranking_start_offset_ms" json:"ranking_start_offset_ms"`
-	RankingEndOffsetMs   pgtype.Int8        `db:"ranking_end_offset_ms" json:"ranking_end_offset_ms"`
-	InvalidatedAt        pgtype.Timestamptz `db:"invalidated_at" json:"invalidated_at"`
-	InvalidReason        string             `db:"invalid_reason" json:"invalid_reason"`
-	Difficulty           pgtype.Text        `db:"difficulty" json:"difficulty"`
-	EncounterVariant     pgtype.Text        `db:"encounter_variant" json:"encounter_variant"`
+	ID                          uuid.UUID          `db:"id" json:"id"`
+	InstanceID                  uuid.UUID          `db:"instance_id" json:"instance_id"`
+	Name                        string             `db:"name" json:"name"`
+	Remaining                   guid.GUIDs         `db:"remaining" json:"remaining"`
+	Boss                        bool               `db:"boss" json:"boss"`
+	StartTime                   pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	EndTime                     pgtype.Timestamptz `db:"end_time" json:"end_time"`
+	KillType                    KillType           `db:"kill_type" json:"kill_type"`
+	MapID                       int32              `db:"map_id" json:"map_id"`
+	RankingStartOffsetMs        pgtype.Int8        `db:"ranking_start_offset_ms" json:"ranking_start_offset_ms"`
+	RankingEndOffsetMs          pgtype.Int8        `db:"ranking_end_offset_ms" json:"ranking_end_offset_ms"`
+	InvalidatedAt               pgtype.Timestamptz `db:"invalidated_at" json:"invalidated_at"`
+	InvalidReason               string             `db:"invalid_reason" json:"invalid_reason"`
+	Difficulty                  pgtype.Text        `db:"difficulty" json:"difficulty"`
+	EncounterVariant            pgtype.Text        `db:"encounter_variant" json:"encounter_variant"`
+	EncounterVariantTooltip     pgtype.Text        `db:"encounter_variant_tooltip" json:"encounter_variant_tooltip"`
+	EncounterVariantTooltipData []byte             `db:"encounter_variant_tooltip_data" json:"encounter_variant_tooltip_data"`
 }
 
 type LogInstanceEncounterDamageUnitSummary struct {

@@ -10,17 +10,22 @@ import (
 // For Hodir, trust the successful parsed encounter
 // duration, including its inferred start, as the ranking policy requires. This
 // does not alter difficulty, ranking windows, or speedrun eligibility/timing.
-func ulduarEncounterVariant(enc encounter.Encounter, flavor database.WoWFlavor, preprocessors []instancehook.Preprocessor) string {
+func ulduarEncounterVariant(enc *encounter.Encounter, flavor database.WoWFlavor, preprocessors []instancehook.Preprocessor) string {
+	enc.VariantTooltip = ""
+	enc.VariantTooltipData = nil
 	if !flavor.Has(database.FlavorWrath) || !enc.Boss || enc.Combat.MapID != 603 {
 		return ""
 	}
 	if enc.KillType != encounter.KillTypeClean && enc.KillType != encounter.KillTypePartial {
 		return ""
 	}
+	if enc.Name == "Yogg-Saron" {
+		return yoggEncounterVariant(enc)
+	}
 	if enc.Name == "XT-002 Deconstructor" {
 		for _, pre := range preprocessors {
 			if evidence, ok := pre.(*xtVariantEvidence); ok {
-				return evidence.variant(enc)
+				return evidence.variant(*enc)
 			}
 		}
 		return ""
@@ -28,7 +33,7 @@ func ulduarEncounterVariant(enc encounter.Encounter, flavor database.WoWFlavor, 
 	if enc.Name == "General Vezax" {
 		for _, pre := range preprocessors {
 			if evidence, ok := pre.(*vezaxVariantEvidence); ok {
-				return evidence.variant(enc)
+				return evidence.variant(*enc)
 			}
 		}
 		return ""

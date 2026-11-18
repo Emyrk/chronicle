@@ -2,6 +2,7 @@ package serviceratings
 
 import (
 	"context"
+	"fmt"
 	"github.com/jackc/pgx/v5/pgtype"
 	"testing"
 	"time"
@@ -15,10 +16,20 @@ import (
 // Unknown/legacy variant rows must remain Combined, never become Normal.
 func TestEncounterVariantPublicationAndInvalidation(t *testing.T) {
 	t.Parallel()
+	for _, pair := range [][2]string{{"normal", "hard"}, {"lights_1", "lights_0"}, {"lights_2", "lights_3"}, {"lights_4", "lights_0"}} {
+		t.Run(pair[0]+"-"+pair[1], func(t *testing.T) {
+			t.Parallel()
+			testVariantPublicationAndInvalidation(t, pair[0], pair[1])
+		})
+	}
+}
+
+func testVariantPublicationAndInvalidation(t *testing.T, firstVariant, secondVariant string) {
+	t.Helper()
 	s := newSourceFixture(t)
 	s.times()
 	sources := []*sourceFixture{s}
-	variants := []any{nil, "normal", "hard"}
+	variants := []any{nil, firstVariant, secondVariant}
 	values := []float64{1000, 100, 200}
 	for i := 1; i < len(variants); i++ {
 		next := &sourceFixture{fixture: s.fixture, instance: uuid.New(), encounter: uuid.New(), group: s.group, server: s.server}
@@ -77,7 +88,7 @@ func TestEncounterVariantPublicationAndInvalidation(t *testing.T) {
 	require.NoError(t, s.row(`SELECT kill_count FROM leaderboard_player_renown_counts WHERE tenant_id=$1`, s.tenant).Scan(&count))
 	require.EqualValues(t, 3, count)
 	// API reads use the independently published benchmark and subject statistics.
-	for _, variant := range []string{"", "normal", "hard"} {
+	for _, variant := range []string{"", firstVariant, secondVariant} {
 		result, err := s.db.ListLeaderboardV2(s.tenantctx(), database.ListLeaderboardV2Params{
 			TenantID: s.tenant, InstanceName: "Fixture raid", DifficultyName: "Normal", MaxPlayers: 40,
 			EncounterVariant: variant, SubjectKind: "player", BoardKind: "boss", ScoreMetric: "peak", Metric: "dps",
@@ -112,7 +123,7 @@ func TestEncounterVariantPublicationAndInvalidation(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Len(t, details, 1)
-		require.Equal(t, map[string]float64{"": 1000, "normal": 100, "hard": 200}[variant], details[0].RawPeak)
+		require.Equal(t, map[string]float64{"": 1000, firstVariant: 100, secondVariant: 200}[variant], details[0].RawPeak)
 	}
 	// Mixed selections use exact statistics for Boss and Combined for Other,
 	// with a fixed two-boss denominator. There is no per-subject fallback.
@@ -122,7 +133,7 @@ func TestEncounterVariantPublicationAndInvalidation(t *testing.T) {
 	 SELECT tenant_id,instance_name,difficulty_name,max_players,'Other',player_class,player_spec,player_sub_spec,metric,best_metric,projection_version,algorithm_version FROM leaderboard_player_boss_benchmarks WHERE tenant_id=$1`, s.tenant)
 	mixed, err := s.db.ListLeaderboardV2(s.tenantctx(), database.ListLeaderboardV2Params{
 		TenantID: s.tenant, InstanceName: "Fixture raid", DifficultyName: "Normal", MaxPlayers: 40,
-		EncounterVariants: []byte(`{"Boss":"hard"}`), SubjectKind: "player", BoardKind: "boss", ScoreMetric: "peak", Metric: "dps",
+		EncounterVariants: []byte(fmt.Sprintf(`{"Boss":%q}`, secondVariant)), SubjectKind: "player", BoardKind: "boss", ScoreMetric: "peak", Metric: "dps",
 		Bosses: []string{"Boss", "Other"}, Awards: []float64{10, 20}, Denominator: 2, PageSize: 50,
 	})
 	require.NoError(t, err)
@@ -131,7 +142,7 @@ func TestEncounterVariantPublicationAndInvalidation(t *testing.T) {
 	require.EqualValues(t, 4, mixed[0].SampleCount)
 	// Renown is the original base-boss aggregate, not a new hard-mode scale.
 	for _, subject := range []string{"player", "guild"} {
-		for _, variants := range []string{`{}`, `{"Boss":"normal"}`, `{"Boss":"hard"}`} {
+		for _, variants := range []string{`{}`, fmt.Sprintf(`{"Boss":%q}`, firstVariant), fmt.Sprintf(`{"Boss":%q}`, secondVariant)} {
 			result, err := s.db.ListLeaderboardV2(s.tenantctx(), database.ListLeaderboardV2Params{
 				TenantID: s.tenant, InstanceName: "Fixture raid", DifficultyName: "Normal", MaxPlayers: 40,
 				EncounterVariants: []byte(variants), SubjectKind: subject, BoardKind: "renown", ScoreMetric: "renown",
@@ -145,17 +156,17 @@ func TestEncounterVariantPublicationAndInvalidation(t *testing.T) {
 	}
 	// Relabeling a run removes old exact evidence and invalidates both old/new keys.
 	normal := sources[1]
-	s.exec(`UPDATE log_instance_encounters SET encounter_variant='hard' WHERE id=$1`, normal.encounter)
-	s.exec(`UPDATE encounter_dps_rankings SET encounter_variant='hard' WHERE encounter_id=$1`, normal.encounter)
+	s.exec(`UPDATE log_instance_encounters SET encounter_variant=$2 WHERE id=$1`, normal.encounter, secondVariant)
+	s.exec(`UPDATE encounter_dps_rankings SET encounter_variant=$2 WHERE encounter_id=$1`, normal.encounter, secondVariant)
 	require.NoError(t, normal.direct(normal.compute()))
 	drain()
-	require.NoError(t, s.row(`SELECT count(*) FROM leaderboard_variant_player_boss_subjects WHERE tenant_id=$1 AND encounter_variant='normal'`, s.tenant).Scan(&count))
+	require.NoError(t, s.row(`SELECT count(*) FROM leaderboard_variant_player_boss_subjects WHERE tenant_id=$1 AND encounter_variant=$2`, s.tenant, firstVariant).Scan(&count))
 	require.Zero(t, count)
-	require.NoError(t, s.row(`SELECT observation_count FROM leaderboard_variant_player_boss_subjects WHERE tenant_id=$1 AND encounter_variant='hard'`, s.tenant).Scan(&count))
+	require.NoError(t, s.row(`SELECT observation_count FROM leaderboard_variant_player_boss_subjects WHERE tenant_id=$1 AND encounter_variant=$2`, s.tenant, secondVariant).Scan(&count))
 	require.EqualValues(t, 2, count)
 	missing, err := s.db.ListLeaderboardV2(s.tenantctx(), database.ListLeaderboardV2Params{
 		TenantID: s.tenant, InstanceName: "Fixture raid", DifficultyName: "Normal", MaxPlayers: 40,
-		EncounterVariants: []byte(`{"Boss":"normal"}`), SubjectKind: "player", BoardKind: "boss", ScoreMetric: "peak", Metric: "dps",
+		EncounterVariants: []byte(fmt.Sprintf(`{"Boss":%q}`, firstVariant)), SubjectKind: "player", BoardKind: "boss", ScoreMetric: "peak", Metric: "dps",
 		Bosses: []string{"Boss", "Other"}, Denominator: 2, PageSize: 50,
 	})
 	require.NoError(t, err)
@@ -164,7 +175,7 @@ func TestEncounterVariantPublicationAndInvalidation(t *testing.T) {
 	// Source removal uses the same atomic old-key invalidation as Combined.
 	require.NoError(t, normal.direct(nil))
 	drain()
-	require.NoError(t, s.row(`SELECT observation_count FROM leaderboard_variant_player_boss_subjects WHERE tenant_id=$1 AND encounter_variant='hard'`, s.tenant).Scan(&count))
+	require.NoError(t, s.row(`SELECT observation_count FROM leaderboard_variant_player_boss_subjects WHERE tenant_id=$1 AND encounter_variant=$2`, s.tenant, secondVariant).Scan(&count))
 	require.EqualValues(t, 1, count)
 }
 

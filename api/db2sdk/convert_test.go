@@ -220,18 +220,47 @@ func TestVehicleControlMetadata(t *testing.T) {
 
 func TestEncounterVariantIndependentFromDifficulty(t *testing.T) {
 	t.Parallel()
-	for _, variant := range []string{"", "normal", "hard"} {
+	for _, variant := range []string{"", "normal", "hard", "lights_0", "lights_1", "lights_2", "lights_3", "lights_4"} {
 		t.Run(variant, func(t *testing.T) {
 			t.Parallel()
 			value := pgtype.Text{String: variant, Valid: variant != ""}
-			enc := WoWEncounter(database.LogInstanceEncounter{Difficulty: pgtype.Text{String: "heroic", Valid: true}, EncounterVariant: value})
+			enc := WoWEncounter(database.LogInstanceEncounter{Difficulty: pgtype.Text{String: "heroic", Valid: true}, EncounterVariant: value, EncounterVariantTooltip: pgtype.Text{String: "Thorim: Fury of the Storm", Valid: true}})
 			require.Equal(t, variant, enc.EncounterVariant)
+			require.Equal(t, "Thorim: Fury of the Storm", enc.EncounterVariantTooltip)
 			require.Equal(t, "heroic", enc.Difficulty)
 			records := InstanceRankingRecords([]database.EncounterDpsRanking{{DifficultyName: "heroic", EncounterVariant: value, Dps: 100, Hps: 50}})
 			require.Equal(t, variant, records[0].EncounterVariant)
 			require.Equal(t, "heroic", records[0].Difficulty)
 			require.Equal(t, float64(100), records[0].DPS)
 			require.Equal(t, float64(50), records[0].HPS)
+		})
+	}
+}
+
+func TestEncounterVariantTooltipData(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, data string
+		want       bool
+		auras      []int32
+	}{
+		{"legacy", "", false, nil},
+		{"invalid", "not json", false, nil},
+		{"null", "null", false, nil},
+		{"one light", `{"type":"yogg-light","auras":[62702]}`, true, []int32{62702}},
+		{"zero light", `{"type":"yogg-light","auras":[]}`, true, []int32{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := WoWEncounter(database.LogInstanceEncounter{EncounterVariantTooltip: pgtype.Text{String: "fallback", Valid: true}, EncounterVariantTooltipData: []byte(tc.data)})
+			require.Equal(t, "fallback", got.EncounterVariantTooltip)
+			if !tc.want {
+				require.Nil(t, got.EncounterVariantTooltipData)
+				return
+			}
+			require.NotNil(t, got.EncounterVariantTooltipData)
+			require.Equal(t, "yogg-light", got.EncounterVariantTooltipData.Type)
+			require.Equal(t, tc.auras, got.EncounterVariantTooltipData.Auras)
 		})
 	}
 }

@@ -134,3 +134,13 @@ it("round-trips independent XT and Hodir cohorts across unsupported tabs", () =>
  expect(hubEncounterVariants(params, "Other")).toEqual({});
  expect(hubPath("speedruns", params, "Ulduar")).toContain("encounter_variants=");
 });
+
+it("round-trips Yogg light tiers and rejects tiers belonging to another boss", () => {
+ for (const variant of ["lights_0", "lights_1", "lights_2", "lights_3", "lights_4"] as const) {
+  const variants = { "Yogg-Saron": variant, Hodir: "hard" as const };
+  const params = hubEncounterVariantParams(new URLSearchParams(), variants);
+  expect(hubEncounterVariants(params, "Ulduar")).toEqual(variants);
+ }
+ const invalid = new URLSearchParams({ encounter_variants: '{"Yogg-Saron":"hard","Hodir":"lights_0"}' });
+ expect(hubEncounterVariants(invalid, "Ulduar")).toEqual({});
+});

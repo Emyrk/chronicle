@@ -160,14 +160,16 @@ func TestEncounterVariantPersistenceSQL(t *testing.T) {
 	require.NoError(t, err)
 	_, err = tx.Exec(ctx, string(fixture))
 	require.NoError(t, err)
-	for _, variant := range []any{nil, "normal", "hard"} {
+	for _, variant := range []any{nil, "normal", "hard", "lights_0", "lights_1", "lights_2", "lights_3", "lights_4"} {
 		rows, err := tx.Query(ctx, difficultyQuery(t, "parsedlogs", "InsertEncounter"),
 			uuid.New(), uuid.MustParse("00000000-0000-0000-0000-000000000001"), "Hodir", 603, "clean", []uint64{}, true,
-			time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 1, 1, 0, 3, 0, 0, time.UTC), nil, nil, "", variant)
+			time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 1, 1, 0, 3, 0, 0, time.UTC), nil, nil, "", variant, "Thorim: Fury of the Storm", []byte(`{"type":"yogg-light","auras":[62702]}`))
 		require.NoError(t, err)
 		stored, err := pgx.CollectOneRow(rows, pgx.RowToMap)
 		require.NoError(t, err)
 		require.Equal(t, variant, stored["encounter_variant"])
+		require.Equal(t, "Thorim: Fury of the Storm", stored["encounter_variant_tooltip"])
+		require.Equal(t, map[string]any{"type": "yogg-light", "auras": []any{float64(62702)}}, stored["encounter_variant_tooltip_data"])
 		require.Equal(t, "", stored["difficulty"])
 	}
 }

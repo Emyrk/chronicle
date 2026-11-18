@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/encountervariant"
 	"github.com/google/uuid"
 )
 
@@ -44,8 +45,8 @@ type Selection struct {
 
 func Select(rows []database.ResolveLeaderboardConfigurationRow, r Request) (Selection, error) {
 	out := Selection{Bosses: []string{}, Awards: []float64{}, Denominator: 1}
-	if r.EncounterVariant != "" && r.EncounterVariant != "normal" && r.EncounterVariant != "hard" {
-		return out, errors.New("encounter_variant must be empty, normal, or hard")
+	if r.EncounterVariant != "" && !encountervariant.Valid(r.EncounterVariant) {
+		return out, errors.New("encounter_variant must be empty or a supported exact variant")
 	}
 	if (r.EncounterVariant != "" || len(r.EncounterVariants) > 0) && r.Kind != "boss" && r.Kind != "renown" {
 		return out, errors.New("encounter variants only apply to boss or Renown boards")
@@ -213,7 +214,7 @@ func Select(rows []database.ResolveLeaderboardConfigurationRow, r Request) (Sele
 // Only classified encounters expose exact boards. Combined is represented by
 // omitting the boss from EncounterVariants, not by inventing a variant value.
 func supportedEncounterVariant(instance, boss, variant string) bool {
-	return instance == "Ulduar" && (boss == "Hodir" || boss == "XT-002 Deconstructor" || boss == "General Vezax") && (variant == "normal" || variant == "hard")
+	return encountervariant.Supported(instance, boss, variant)
 }
 
 type Cursor struct {

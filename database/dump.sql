@@ -1115,7 +1115,9 @@ CREATE TABLE log_instance_encounters (
     invalidated_at timestamp with time zone,
     invalid_reason text DEFAULT ''::text NOT NULL,
     difficulty text,
-    encounter_variant text
+    encounter_variant text,
+    encounter_variant_tooltip text,
+    encounter_variant_tooltip_data jsonb
 );
 
 CREATE TABLE log_instances (
@@ -2505,8 +2507,7 @@ CREATE TABLE leaderboard_variant_dirty_guild_boss_benchmarks (
     CONSTRAINT leaderboard_dirty_guild_boss_benchmarks_encounter_name_check CHECK ((btrim(encounter_name) <> ''::text)),
     CONSTRAINT leaderboard_dirty_guild_boss_benchmarks_instance_name_check CHECK ((btrim(instance_name) <> ''::text)),
     CONSTRAINT leaderboard_dirty_guild_boss_benchmarks_max_players_check CHECK ((max_players >= 0)),
-    CONSTRAINT leaderboard_dirty_guild_boss_benchmarks_revision_check CHECK ((revision > 0)),
-    CONSTRAINT leaderboard_variant_dirty_guild_boss_be_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'hard'::text])))
+    CONSTRAINT leaderboard_dirty_guild_boss_benchmarks_revision_check CHECK ((revision > 0))
 );
 
 ALTER TABLE ONLY leaderboard_variant_dirty_guild_boss_benchmarks FORCE ROW LEVEL SECURITY;
@@ -2533,8 +2534,7 @@ CREATE TABLE leaderboard_variant_dirty_guild_boss_subjects (
     CONSTRAINT leaderboard_dirty_guild_boss_subjects_encounter_name_check CHECK ((btrim(encounter_name) <> ''::text)),
     CONSTRAINT leaderboard_dirty_guild_boss_subjects_instance_name_check CHECK ((btrim(instance_name) <> ''::text)),
     CONSTRAINT leaderboard_dirty_guild_boss_subjects_max_players_check CHECK ((max_players >= 0)),
-    CONSTRAINT leaderboard_dirty_guild_boss_subjects_revision_check CHECK ((revision > 0)),
-    CONSTRAINT leaderboard_variant_dirty_guild_boss_su_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'hard'::text])))
+    CONSTRAINT leaderboard_dirty_guild_boss_subjects_revision_check CHECK ((revision > 0))
 );
 
 ALTER TABLE ONLY leaderboard_variant_dirty_guild_boss_subjects FORCE ROW LEVEL SECURITY;
@@ -2566,8 +2566,7 @@ CREATE TABLE leaderboard_variant_dirty_player_boss_benchmarks (
     CONSTRAINT leaderboard_dirty_player_boss_benchmarks_metric_check CHECK ((metric = ANY (ARRAY['dps'::text, 'hps'::text]))),
     CONSTRAINT leaderboard_dirty_player_boss_benchmarks_player_class_check CHECK ((btrim(player_class) <> ''::text)),
     CONSTRAINT leaderboard_dirty_player_boss_benchmarks_player_spec_check CHECK ((btrim(player_spec) <> ''::text)),
-    CONSTRAINT leaderboard_dirty_player_boss_benchmarks_revision_check CHECK ((revision > 0)),
-    CONSTRAINT leaderboard_variant_dirty_player_boss_b_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'hard'::text])))
+    CONSTRAINT leaderboard_dirty_player_boss_benchmarks_revision_check CHECK ((revision > 0))
 );
 
 ALTER TABLE ONLY leaderboard_variant_dirty_player_boss_benchmarks FORCE ROW LEVEL SECURITY;
@@ -2602,8 +2601,7 @@ CREATE TABLE leaderboard_variant_dirty_player_boss_subjects (
     CONSTRAINT leaderboard_dirty_player_boss_subjects_player_class_check CHECK ((btrim(player_class) <> ''::text)),
     CONSTRAINT leaderboard_dirty_player_boss_subjects_player_guid_check CHECK ((btrim(player_guid) <> ''::text)),
     CONSTRAINT leaderboard_dirty_player_boss_subjects_player_spec_check CHECK ((btrim(player_spec) <> ''::text)),
-    CONSTRAINT leaderboard_dirty_player_boss_subjects_revision_check CHECK ((revision > 0)),
-    CONSTRAINT leaderboard_variant_dirty_player_boss_s_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'hard'::text])))
+    CONSTRAINT leaderboard_dirty_player_boss_subjects_revision_check CHECK ((revision > 0))
 );
 
 ALTER TABLE ONLY leaderboard_variant_dirty_player_boss_subjects FORCE ROW LEVEL SECURITY;
@@ -2624,8 +2622,7 @@ CREATE TABLE leaderboard_variant_guild_boss_benchmarks (
     CONSTRAINT leaderboard_guild_boss_benchmarks_encounter_name_check CHECK ((btrim(encounter_name) <> ''::text)),
     CONSTRAINT leaderboard_guild_boss_benchmarks_instance_name_check CHECK ((btrim(instance_name) <> ''::text)),
     CONSTRAINT leaderboard_guild_boss_benchmarks_max_players_check CHECK ((max_players >= 0)),
-    CONSTRAINT leaderboard_guild_boss_benchmarks_projection_version_check CHECK ((projection_version > 0)),
-    CONSTRAINT leaderboard_variant_guild_boss_benchmar_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'hard'::text])))
+    CONSTRAINT leaderboard_guild_boss_benchmarks_projection_version_check CHECK ((projection_version > 0))
 );
 
 ALTER TABLE ONLY leaderboard_variant_guild_boss_benchmarks FORCE ROW LEVEL SECURITY;
@@ -2650,8 +2647,7 @@ CREATE TABLE leaderboard_variant_guild_boss_observations (
     CONSTRAINT leaderboard_guild_boss_observations_encounter_name_check CHECK ((btrim(encounter_name) <> ''::text)),
     CONSTRAINT leaderboard_guild_boss_observations_instance_name_check CHECK ((btrim(instance_name) <> ''::text)),
     CONSTRAINT leaderboard_guild_boss_observations_max_players_check CHECK ((max_players >= 0)),
-    CONSTRAINT leaderboard_guild_boss_observations_projection_version_check CHECK ((projection_version > 0)),
-    CONSTRAINT leaderboard_variant_guild_boss_observat_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'hard'::text])))
+    CONSTRAINT leaderboard_guild_boss_observations_projection_version_check CHECK ((projection_version > 0))
 );
 
 ALTER TABLE ONLY leaderboard_variant_guild_boss_observations FORCE ROW LEVEL SECURITY;
@@ -2680,8 +2676,7 @@ CREATE TABLE leaderboard_variant_guild_boss_subjects (
     CONSTRAINT leaderboard_guild_boss_subjects_instance_name_check CHECK ((btrim(instance_name) <> ''::text)),
     CONSTRAINT leaderboard_guild_boss_subjects_max_players_check CHECK ((max_players >= 0)),
     CONSTRAINT leaderboard_guild_boss_subjects_observation_count_check CHECK ((observation_count > 0)),
-    CONSTRAINT leaderboard_guild_boss_subjects_projection_version_check CHECK ((projection_version > 0)),
-    CONSTRAINT leaderboard_variant_guild_boss_subjects_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'hard'::text])))
+    CONSTRAINT leaderboard_guild_boss_subjects_projection_version_check CHECK ((projection_version > 0))
 );
 
 ALTER TABLE ONLY leaderboard_variant_guild_boss_subjects FORCE ROW LEVEL SECURITY;
@@ -2717,8 +2712,7 @@ CREATE TABLE leaderboard_variant_player_boss_benchmarks (
     CONSTRAINT leaderboard_player_boss_benchmarks_metric_check CHECK ((metric = ANY (ARRAY['dps'::text, 'hps'::text]))),
     CONSTRAINT leaderboard_player_boss_benchmarks_player_class_check CHECK ((btrim(player_class) <> ''::text)),
     CONSTRAINT leaderboard_player_boss_benchmarks_player_spec_check CHECK ((btrim(player_spec) <> ''::text)),
-    CONSTRAINT leaderboard_player_boss_benchmarks_projection_version_check CHECK ((projection_version > 0)),
-    CONSTRAINT leaderboard_variant_player_boss_benchma_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'hard'::text])))
+    CONSTRAINT leaderboard_player_boss_benchmarks_projection_version_check CHECK ((projection_version > 0))
 );
 
 ALTER TABLE ONLY leaderboard_variant_player_boss_benchmarks FORCE ROW LEVEL SECURITY;
@@ -2758,8 +2752,7 @@ CREATE TABLE leaderboard_variant_player_boss_subjects (
     CONSTRAINT leaderboard_player_boss_subjects_raw_floor_check CHECK (((raw_floor >= (0)::double precision) AND (raw_floor < 'Infinity'::double precision))),
     CONSTRAINT leaderboard_player_boss_subjects_raw_form_check CHECK (((raw_form >= (0)::double precision) AND (raw_form < 'Infinity'::double precision))),
     CONSTRAINT leaderboard_player_boss_subjects_raw_peak_check CHECK (((raw_peak >= (0)::double precision) AND (raw_peak < 'Infinity'::double precision))),
-    CONSTRAINT leaderboard_player_peak_provenance_complete CHECK ((((peak_encounter_id IS NULL) AND (peak_duration_ms IS NULL)) OR ((peak_encounter_id IS NOT NULL) AND (peak_duration_ms IS NOT NULL) AND (peak_duration_ms > 0)))),
-    CONSTRAINT leaderboard_variant_player_boss_subject_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'hard'::text])))
+    CONSTRAINT leaderboard_player_peak_provenance_complete CHECK ((((peak_encounter_id IS NULL) AND (peak_duration_ms IS NULL)) OR ((peak_encounter_id IS NOT NULL) AND (peak_duration_ms IS NOT NULL) AND (peak_duration_ms > 0))))
 );
 
 ALTER TABLE ONLY leaderboard_variant_player_boss_subjects FORCE ROW LEVEL SECURITY;
@@ -2792,8 +2785,7 @@ CREATE TABLE leaderboard_variant_player_observations (
     CONSTRAINT leaderboard_player_observations_player_class_check CHECK ((btrim(player_class) <> ''::text)),
     CONSTRAINT leaderboard_player_observations_player_guid_check CHECK ((btrim(player_guid) <> ''::text)),
     CONSTRAINT leaderboard_player_observations_player_spec_check CHECK ((btrim(player_spec) <> ''::text)),
-    CONSTRAINT leaderboard_player_observations_projection_version_check CHECK ((projection_version > 0)),
-    CONSTRAINT leaderboard_variant_player_observations_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'hard'::text])))
+    CONSTRAINT leaderboard_player_observations_projection_version_check CHECK ((projection_version > 0))
 );
 
 ALTER TABLE ONLY leaderboard_variant_player_observations FORCE ROW LEVEL SECURITY;
@@ -3223,8 +3215,7 @@ CREATE TABLE parse_variant_memberships (
     killed_at timestamp with time zone NOT NULL,
     dps double precision NOT NULL,
     hps double precision DEFAULT 0 NOT NULL,
-    encounter_variant text NOT NULL,
-    CONSTRAINT parse_variant_memberships_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'hard'::text])))
+    encounter_variant text NOT NULL
 );
 
 CREATE TABLE parse_variant_results (
@@ -3241,7 +3232,6 @@ CREATE TABLE parse_variant_results (
     rank integer NOT NULL,
     sample_size integer NOT NULL,
     status text NOT NULL,
-    CONSTRAINT parse_variant_results_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'hard'::text]))),
     CONSTRAINT parse_variant_results_metric_check CHECK ((metric = ANY (ARRAY['dps'::text, 'hps'::text])))
 );
 
@@ -4572,23 +4562,44 @@ ALTER TABLE ONLY leaderboard_set_overrides
 ALTER TABLE ONLY leaderboard_sets
     ADD CONSTRAINT leaderboard_sets_pkey PRIMARY KEY (instance_name, set_key);
 
+ALTER TABLE leaderboard_variant_dirty_guild_boss_benchmarks
+    ADD CONSTRAINT leaderboard_variant_dirty_guild_boss_be_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'hard'::text, 'lights_0'::text, 'lights_1'::text, 'lights_2'::text, 'lights_3'::text, 'lights_4'::text]))) NOT VALID;
+
 ALTER TABLE ONLY leaderboard_variant_dirty_guild_boss_benchmarks
     ADD CONSTRAINT leaderboard_variant_dirty_guild_boss_benchmarks_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant);
+
+ALTER TABLE leaderboard_variant_dirty_guild_boss_subjects
+    ADD CONSTRAINT leaderboard_variant_dirty_guild_boss_su_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'hard'::text, 'lights_0'::text, 'lights_1'::text, 'lights_2'::text, 'lights_3'::text, 'lights_4'::text]))) NOT VALID;
 
 ALTER TABLE ONLY leaderboard_variant_dirty_guild_boss_subjects
     ADD CONSTRAINT leaderboard_variant_dirty_guild_boss_subjects_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, realm_id, guild_id);
 
+ALTER TABLE leaderboard_variant_dirty_player_boss_benchmarks
+    ADD CONSTRAINT leaderboard_variant_dirty_player_boss_b_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'hard'::text, 'lights_0'::text, 'lights_1'::text, 'lights_2'::text, 'lights_3'::text, 'lights_4'::text]))) NOT VALID;
+
 ALTER TABLE ONLY leaderboard_variant_dirty_player_boss_benchmarks
     ADD CONSTRAINT leaderboard_variant_dirty_player_boss_benchmarks_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, player_class, player_spec, player_sub_spec, metric);
+
+ALTER TABLE leaderboard_variant_dirty_player_boss_subjects
+    ADD CONSTRAINT leaderboard_variant_dirty_player_boss_s_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'hard'::text, 'lights_0'::text, 'lights_1'::text, 'lights_2'::text, 'lights_3'::text, 'lights_4'::text]))) NOT VALID;
 
 ALTER TABLE ONLY leaderboard_variant_dirty_player_boss_subjects
     ADD CONSTRAINT leaderboard_variant_dirty_player_boss_subjects_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid);
 
+ALTER TABLE leaderboard_variant_guild_boss_benchmarks
+    ADD CONSTRAINT leaderboard_variant_guild_boss_benchmar_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'hard'::text, 'lights_0'::text, 'lights_1'::text, 'lights_2'::text, 'lights_3'::text, 'lights_4'::text]))) NOT VALID;
+
 ALTER TABLE ONLY leaderboard_variant_guild_boss_benchmarks
     ADD CONSTRAINT leaderboard_variant_guild_boss_benchmarks_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant);
 
+ALTER TABLE leaderboard_variant_guild_boss_observations
+    ADD CONSTRAINT leaderboard_variant_guild_boss_observat_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'hard'::text, 'lights_0'::text, 'lights_1'::text, 'lights_2'::text, 'lights_3'::text, 'lights_4'::text]))) NOT VALID;
+
 ALTER TABLE ONLY leaderboard_variant_guild_boss_observations
     ADD CONSTRAINT leaderboard_variant_guild_boss_observations_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, run_id, realm_id, guild_id);
+
+ALTER TABLE leaderboard_variant_guild_boss_subjects
+    ADD CONSTRAINT leaderboard_variant_guild_boss_subjects_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'hard'::text, 'lights_0'::text, 'lights_1'::text, 'lights_2'::text, 'lights_3'::text, 'lights_4'::text]))) NOT VALID;
 
 ALTER TABLE ONLY leaderboard_variant_guild_boss_subjects
     ADD CONSTRAINT leaderboard_variant_guild_boss_subjects_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, realm_id, guild_id);
@@ -4596,11 +4607,20 @@ ALTER TABLE ONLY leaderboard_variant_guild_boss_subjects
 ALTER TABLE ONLY leaderboard_variant_overrides
     ADD CONSTRAINT leaderboard_variant_overrides_pkey PRIMARY KEY (layer_key, instance_name, difficulty_name, max_players);
 
+ALTER TABLE leaderboard_variant_player_boss_benchmarks
+    ADD CONSTRAINT leaderboard_variant_player_boss_benchma_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'hard'::text, 'lights_0'::text, 'lights_1'::text, 'lights_2'::text, 'lights_3'::text, 'lights_4'::text]))) NOT VALID;
+
 ALTER TABLE ONLY leaderboard_variant_player_boss_benchmarks
     ADD CONSTRAINT leaderboard_variant_player_boss_benchmarks_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, player_class, player_spec, player_sub_spec, metric);
 
+ALTER TABLE leaderboard_variant_player_boss_subjects
+    ADD CONSTRAINT leaderboard_variant_player_boss_subject_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'hard'::text, 'lights_0'::text, 'lights_1'::text, 'lights_2'::text, 'lights_3'::text, 'lights_4'::text]))) NOT VALID;
+
 ALTER TABLE ONLY leaderboard_variant_player_boss_subjects
     ADD CONSTRAINT leaderboard_variant_player_boss_subjects_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid);
+
+ALTER TABLE leaderboard_variant_player_observations
+    ADD CONSTRAINT leaderboard_variant_player_observations_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'hard'::text, 'lights_0'::text, 'lights_1'::text, 'lights_2'::text, 'lights_3'::text, 'lights_4'::text]))) NOT VALID;
 
 ALTER TABLE ONLY leaderboard_variant_player_observations
     ADD CONSTRAINT leaderboard_variant_player_observations_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, run_id, realm_id, player_guid, metric);
@@ -4710,11 +4730,17 @@ ALTER TABLE ONLY parse_score_receipts
 ALTER TABLE ONLY parse_score_results
     ADD CONSTRAINT parse_score_results_pkey PRIMARY KEY (id);
 
+ALTER TABLE parse_variant_memberships
+    ADD CONSTRAINT parse_variant_memberships_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'hard'::text, 'lights_0'::text, 'lights_1'::text, 'lights_2'::text, 'lights_3'::text, 'lights_4'::text]))) NOT VALID;
+
 ALTER TABLE ONLY parse_variant_memberships
     ADD CONSTRAINT parse_variant_memberships_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY parse_variant_memberships
     ADD CONSTRAINT parse_variant_memberships_tenant_id_policy_version_query_ve_key UNIQUE (tenant_id, policy_version, query_version, run_id, encounter_name, player_guid, difficulty_name, max_players, encounter_variant);
+
+ALTER TABLE parse_variant_results
+    ADD CONSTRAINT parse_variant_results_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'hard'::text, 'lights_0'::text, 'lights_1'::text, 'lights_2'::text, 'lights_3'::text, 'lights_4'::text]))) NOT VALID;
 
 ALTER TABLE ONLY parse_variant_results
     ADD CONSTRAINT parse_variant_results_pkey PRIMARY KEY (tenant_id, instance_id, encounter_name, difficulty_name, max_players, encounter_variant, player_guid, metric);
