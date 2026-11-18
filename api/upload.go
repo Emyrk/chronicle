@@ -1,7 +1,9 @@
 package api
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -478,6 +480,18 @@ func (api *API) WoWLogAppend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	effectiveFormat := group.WoWLogGroup.LogType.Format()
+	if group.WoWLogGroup.Format.Valid {
+		effectiveFormat = group.WoWLogGroup.Format.LogFormat
+	}
+	foreverArtifact, ok := foreverEventsArtifact(w, r, effectiveFormat)
+	if !ok {
+		return
+	}
+	if foreverArtifact != nil {
+		artifactInput = foreverArtifact
+	}
+
 	isAdmin, err := api.Zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanAdmin_logs_User(actor))
 	if err != nil {
 		httpapi.InternalServerError(w, err)
@@ -703,6 +717,18 @@ func (api *API) WoWLogUploadV2(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	effectiveFormat := meta.Format
+	if effectiveFormat == "" {
+		effectiveFormat = logType.Format()
+	}
+	foreverArtifact, ok := foreverEventsArtifact(w, r, effectiveFormat)
+	if !ok {
+		return
+	}
+	if foreverArtifact != nil {
+		artifactInputs = append(artifactInputs, *foreverArtifact)
+	}
+
 	unlisted, err := uploadUnlisted(r)
 	if err != nil {
 		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "unlisted must be a boolean"})
@@ -743,4 +769,50 @@ func (api *API) WoWLogUploadV2(w http.ResponseWriter, r *http.Request) {
 		Cleanup: report,
 		Files:   fileIDs,
 	})
+}
+
+// foreverEventsArtifact accepts opaque JSON for later interpretation. Do not
+// validate envelope fields or parse embedded Lua here: the payload will evolve.
+func foreverEventsArtifact(w http.ResponseWriter, r *http.Request, format database.LogFormat) (*chronicle.ArtifactInput, bool) {
+	file, header, err := r.FormFile("forever_events")
+	if errors.Is(err, http.ErrMissingFile) {
+		return nil, true
+	}
+	reject := func(message string, err error) (*chronicle.ArtifactInput, bool) {
+		response := chroniclesdk.Response{Message: message}
+		if err != nil {
+			response.Detail = err.Error()
+		}
+		httpapi.Write(r.Context(), w, http.StatusBadRequest, response)
+		return nil, false
+	}
+	if err != nil {
+		return reject("Failed to get Forever events file from form", err)
+	}
+	defer func() { _ = file.Close() }()
+	if format != database.LogFormatV22Cleu {
+		return reject("Forever events artifacts are only supported for v22-cleu logs", nil)
+	}
+	if header.Size > MaxLogArtifactSize {
+		return reject("Forever events file is too large, exceeds maximum allowed size of 8 MB", nil)
+	}
+	payload, err := io.ReadAll(io.LimitReader(file, MaxLogArtifactSize+1))
+	if err != nil {
+		return reject("Failed to read Forever events file", err)
+	}
+	if len(payload) > MaxLogArtifactSize {
+		return reject("Forever events file is too large, exceeds maximum allowed size of 8 MB", nil)
+	}
+	if !json.Valid(payload) {
+		return reject("Invalid Forever events JSON", nil)
+	}
+	return &chronicle.ArtifactInput{
+		Kind: chronicle.ArtifactKindForeverEvents,
+		// This identifies the opaque JSON storage contract, not a validated
+		// schema_version field in the supplied payload.
+		SchemaVersion:    1,
+		Reader:           bytes.NewReader(payload),
+		MimeType:         "application/json",
+		OriginalFilename: header.Filename,
+	}, true
 }

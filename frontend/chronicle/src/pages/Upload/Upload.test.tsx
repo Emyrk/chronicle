@@ -12,6 +12,7 @@ const defaultProps: UploadViewProps = {
   combatLog: null,
   rawCombatLog: null,
   sidekickStorage: null,
+  foreverEvents: null,
   uploading: false,
   uploadProgress: 0,
   error: null,
@@ -84,5 +85,34 @@ describe("UploadView cleanup", () => {
     expect(markup).toContain("Upload rejected");
     expect(markup).toContain('href="/logs/older-log"');
     expect(markup).toContain("Parsed reports are preserved.");
+  });
+});
+
+describe("UploadView Forever events", () => {
+  it("collapses the optional attachment for Forever uploads", () => {
+    const markup = render({ effectiveFormat: "v22-cleu" });
+    expect(markup).toContain("Attach Forever events");
+    expect(markup).not.toContain('accept=".json,application/json"');
+    expect(markup).not.toContain("Sidekick SavedVariables");
+  });
+
+  it("expands the JSON input when a file is attached", () => {
+    const markup = render({
+      effectiveFormat: "v22-cleu",
+      foreverEvents: new File(["{}"], "forever-events-v1.json"),
+    });
+    expect(markup).toContain("forever-events-v1.json");
+    expect(markup).toContain('accept=".json,application/json"');
+    expect(markup).toContain("not interpreted yet");
+  });
+
+  it.each(["1.12a-cc-addon", "3.3.5a-cc-addon"])("hides the attachment for %s", (effectiveFormat) => {
+    const markup = render({ effectiveFormat });
+    expect(markup).not.toContain("Forever events");
+  });
+
+  it("hides the attachment in legacy upload mode", () => {
+    const markup = render({ effectiveFormat: "v22-cleu", useV2Upload: false });
+    expect(markup).not.toContain("Forever events");
   });
 });

@@ -31,11 +31,13 @@ function FileDropZone({
   accept,
   onFile,
   label,
+  hint = ".txt or .gz, compressed in your browser before upload",
 }: {
   file: File | null;
   accept: string;
   onFile: (file: File) => void;
   label: string;
+  hint?: string;
 }) {
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -108,7 +110,7 @@ function FileDropZone({
         <div className="space-y-2">
           <UploadIcon className={`h-10 w-10 mx-auto ${dragging ? "text-primary" : "text-muted-foreground"}`} />
           <p className="text-sm font-medium">{dragging ? "Drop to select" : label}</p>
-          <p className="text-xs text-muted-foreground">.txt or .gz — compressed in your browser before upload</p>
+          <p className="text-xs text-muted-foreground">{hint}</p>
         </div>
       )}
     </div>
@@ -126,11 +128,12 @@ export interface UploadViewProps {
   combatLog: File | null;
   rawCombatLog: File | null;
   sidekickStorage: File | null;
+  foreverEvents: File | null;
   uploading: boolean;
   uploadProgress: number;
   error: { message: string; call_to_action?: string; detail?: string; link?: string; link_text?: string; cleanup?: RawLogCleanup } | null;
   success: { message: string; logId: string; cleanup?: RawLogCleanup } | null;
-  onFileDrop: (file: File, type: "combat" | "raw" | "sidekick") => void;
+  onFileDrop: (file: File, type: "combat" | "raw" | "sidekick" | "forever") => void;
   onUpload: () => void;
   useV2Upload: boolean;
   onToggleV2Upload: (checked: boolean) => void;
@@ -165,6 +168,7 @@ export function UploadView({
   combatLog,
   rawCombatLog,
   sidekickStorage,
+  foreverEvents,
   uploading,
   uploadProgress,
   error,
@@ -191,6 +195,8 @@ export function UploadView({
   // Sidekick SavedVariables is a rare, optional attachment; keep it tucked away unless opened or already attached.
   const [sidekickExpanded, setSidekickExpanded] = useState(false);
   const showSidekick = sidekickExpanded || sidekickStorage !== null;
+  const [foreverExpanded, setForeverExpanded] = useState(false);
+  const showForever = foreverExpanded || foreverEvents !== null;
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 sm:p-8 space-y-8">
@@ -345,6 +351,46 @@ export function UploadView({
                   >
                     <Plus className="h-3.5 w-3.5" />
                     Attach Sidekick SavedVariables
+                  </button>
+                ))}
+                {effectiveFormat === "v22-cleu" && (showForever ? (
+                  <div className="space-y-3 border-t pt-5 mt-5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h2 className="font-semibold">Forever events <span className="font-normal text-muted-foreground">(optional)</span></h2>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Attach an optional Forever events JSON file. It is saved with your log for future use, but is not interpreted yet.
+                        </p>
+                      </div>
+                      {foreverEvents === null && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 shrink-0 text-muted-foreground"
+                          aria-label="Hide Forever events"
+                          onClick={() => setForeverExpanded(false)}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                    <FileDropZone
+                      file={foreverEvents}
+                      accept=".json,application/json"
+                      onFile={(f) => onFileDrop(f, "forever")}
+                      label="Click or drag JSON file here"
+                      hint=".json, up to 8 MB. Uploaded unchanged."
+                    />
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => setForeverExpanded(true)}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Attach Forever events
                   </button>
                 ))}
               </div>
@@ -607,6 +653,7 @@ export function Upload() {
   const [combatLog, setCombatLog] = useState<File | null>(null);
   const [rawCombatLog, setRawCombatLog] = useState<File | null>(null);
   const [sidekickStorage, setSidekickStorage] = useState<File | null>(null);
+  const [foreverEvents, setForeverEvents] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState<{ message: string; call_to_action?: string; detail?: string; link?: string; link_text?: string; cleanup?: RawLogCleanup } | null>(null);
@@ -623,17 +670,20 @@ export function Upload() {
     setCombatLog(null);
     setRawCombatLog(null);
     setSidekickStorage(null);
+    setForeverEvents(null);
     setError(null);
     setSuccess(null);
   }, []);
 
-  const handleFileDrop = (file: File, type: "combat" | "raw" | "sidekick") => {
+  const handleFileDrop = (file: File, type: "combat" | "raw" | "sidekick" | "forever") => {
     if (type === "combat") {
       setCombatLog(file);
     } else if (type === "raw") {
       setRawCombatLog(file);
-    } else {
+    } else if (type === "sidekick") {
       setSidekickStorage(file);
+    } else {
+      setForeverEvents(file);
     }
   };
 
@@ -647,6 +697,11 @@ export function Upload() {
 
     if (effectiveFormat === "3.3.5a-cc-addon" && sidekickStorage && sidekickStorage.size > 8 * 1024 * 1024) {
       setError({ message: "Sidekick SavedVariables file is too large", detail: "Maximum allowed size is 8 MB." });
+      return;
+    }
+
+    if (effectiveFormat === "v22-cleu" && foreverEvents && foreverEvents.size > 8 * 1024 * 1024) {
+      setError({ message: "Forever events file is too large", detail: "Maximum allowed size is 8 MB." });
       return;
     }
 
@@ -670,6 +725,9 @@ export function Upload() {
         }
         if (effectiveFormat === "3.3.5a-cc-addon" && sidekickStorage) {
           formData.append("sidekick_storage", sidekickStorage, sidekickStorage.name);
+        }
+        if (effectiveFormat === "v22-cleu" && foreverEvents) {
+          formData.append("forever_events", foreverEvents, foreverEvents.name);
         }
       } else {
         // V1 upload: two files
@@ -777,7 +835,7 @@ export function Upload() {
         detail: err instanceof Error ? err.message : String(err),
       });
     }
-  }, [combatLog, rawCombatLog, sidekickStorage, useV2Upload, effectiveFormat, flavorOverride, unlistedLog]);
+  }, [combatLog, rawCombatLog, sidekickStorage, foreverEvents, useV2Upload, effectiveFormat, flavorOverride, unlistedLog]);
 
   if (isMultiple) {
     return <MultiUpload format={effectiveFormat} unlistedLog={unlistedLog} canMarkUnlisted={canMarkUnlisted} onUnlistedLogChange={setUnlistedLog} showUnlistedUpsell={showUnlistedUpsell} />;
@@ -816,6 +874,7 @@ export function Upload() {
       combatLog={combatLog}
       rawCombatLog={rawCombatLog}
       sidekickStorage={sidekickStorage}
+      foreverEvents={foreverEvents}
       uploading={uploading}
       uploadProgress={uploadProgress}
       error={error}
