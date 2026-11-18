@@ -295,9 +295,11 @@ func TestFinalizeIncludesNamedNeverActiveUnitsForPersistence(t *testing.T) {
 		units:      db,
 		Characters: chars,
 	}
+	h.ObserveUnits(&messages.Unit{Info: unitinfo.Info{Guid: sifID}})
+	h.ObserveUnits(&messages.Unit{Info: unitinfo.Info{Guid: plainID}})
 	result, err := h.Finalize(context.Background())
 	require.NoError(t, err)
-	require.Equal(t, []guid.GUID{sifID}, result.PersistedUnits)
+	require.ElementsMatch(t, []guid.GUID{sifID, plainID}, result.PersistedUnits)
 }
 
 func TestFinalizePersistsOwnedUnitInfoWithoutChangingCharacterFallback(t *testing.T) {
@@ -329,9 +331,14 @@ func TestFinalizePersistsOwnedUnitInfoWithoutChangingCharacterFallback(t *testin
 		units:      db,
 		Characters: chars,
 	}
+	for _, id := range []guid.GUID{trapID, totemID, petID} {
+		info, _ := db.Get(id)
+		h.ObserveUnits(&messages.Unit{Info: info})
+	}
 	result, err := h.Finalize(context.Background())
 	require.NoError(t, err)
-	require.Equal(t, []guid.GUID{trapID, totemID, petID}, result.PersistedUnits)
+	require.ElementsMatch(t, []guid.GUID{ownerID, trapID, totemID, petID}, result.PersistedUnits)
+	require.NotContains(t, result.UnitCategories, unownedID, "shared metadata is not instance membership")
 	require.False(t, char.IsActive())
 }
 
@@ -1276,4 +1283,38 @@ func countCall(calls []string, want string) int {
 		}
 	}
 	return count
+}
+
+func TestFinalizeCatalogueIncludesUnknownOwnedAndPassiveUnits(t *testing.T) {
+	t.Parallel()
+	db := unitdb.New()
+	owner := guid.GUID(1)
+	unknown, secondSpawn := creatureGUID(12345, 1), creatureGUID(12345, 2)
+	known, critter := creatureGUID(222, 1), creatureGUID(2914, 1)
+	otherInstance := creatureGUID(999, 1)
+	db.Update(unitinfo.Info{Guid: otherInstance, Owner: &owner})
+	h := &Hookable{units: db, Identifier: identifier.NewIdentifier(map[uint32]identifier.Identity{222: {Name: "Ordinary"}})}
+	for _, id := range []guid.GUID{unknown, secondSpawn, known, critter} {
+		msg := &messages.Unit{Info: unitinfo.Info{Guid: id, Owner: &owner}}
+		db.Update(msg.Info)
+		h.ObserveUnits(msg)
+		h.ObserveUnits(msg) // repeated metadata must not inflate spawn counts
+	}
+	// Late enrichment supplies the unknown name before finalization.
+	db.UpdateUnitName(unknown, "Unresolved summon")
+	result, err := h.Finalize(context.Background())
+	require.NoError(t, err)
+	require.ElementsMatch(t, []guid.GUID{owner, unknown, secondSpawn, known, critter}, result.PersistedUnits)
+	require.Equal(t, unitdb.CategoryOrdinary, result.UnitCategories[known])
+	require.Equal(t, unitdb.CategoryCritter, result.UnitCategories[critter])
+	require.Len(t, result.UnknownUnits, 1)
+	require.Equal(t, 2, result.UnknownUnits[12345].Count)
+	require.Equal(t, "Unresolved summon", result.UnknownUnits[12345].Name)
+	require.Equal(t, []guid.GUID{unknown, secondSpawn}, result.UnknownUnits[12345].Samples)
+	other := &Hookable{units: db, Identifier: identifier.NewIdentifier(map[uint32]identifier.Identity{})}
+	other.ObserveUnits(&messages.UnitTarget{Unit: otherInstance})
+	otherResult, err := other.Finalize(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, []guid.GUID{otherInstance}, otherResult.PersistedUnits)
+	require.NotContains(t, otherResult.UnknownUnits, uint32(12345))
 }
