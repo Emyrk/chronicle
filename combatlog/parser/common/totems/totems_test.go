@@ -46,3 +46,18 @@ func TestSuperiorHealingWard(t *testing.T) {
 		}
 	}
 }
+
+func TestVerifiedMCTotems(t *testing.T) {
+	t.Parallel()
+	for entry, name := range map[uint32]string{7368: "Stoneskin Totem", 15803: "Tranquil Air Totem", 7487: "Grace of Air Totem"} {
+		want := Totem{ID: entry, Name: name, NormalDuration: 120 * time.Second, Modifier: modifierTotemicMastery}
+		got, ok := EntryIsTotem(entry)
+		require.True(t, ok)
+		require.Equal(t, want, got)
+		require.Equal(t, 144*time.Second, got.MaxDuration())
+		for _, high := range []uint64{0xF130000000000000, 0xF140000000000000, 0xF150000000000000, 0xF110000000000000} {
+			_, ok := IsTotem(totemEntryGUID(high, entry))
+			require.Equal(t, high == 0xF130000000000000, ok)
+		}
+	}
+}
