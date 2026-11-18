@@ -17,6 +17,8 @@ const (
 	CategoryOrdinary       Category = "ordinary"
 	CategoryGuardian       Category = "guardian"
 	CategoryScriptedObject Category = "scripted_object"
+	CategoryObject         Category = "object"
+	CategoryEnvironment    Category = "environment"
 	CategoryCritter        Category = "critter"
 	CategoryTotem          Category = "totem"
 	CategoryTrap           Category = "trap"
@@ -50,6 +52,13 @@ func (us *Units) Category(g guid.GUID, identifiers ...CategoryIdentifier) Catego
 	}
 	if _, ok := traps.IsTrap(g); ok {
 		return CategoryTrap
+	}
+	// Only recognized gameobjects have an object category. Unknown objects stay
+	// unknown, and creature entry IDs must not collide with gameobject entries.
+	if g.IsObject() {
+		if entry, ok := g.GetEntry(); ok && entry == 176296 { // Portal to Stormwind
+			return CategoryObject
+		}
 	}
 	if g.IsCreature() {
 		if _, ok := warlockdemon.IsWarlockDemon(g); ok {

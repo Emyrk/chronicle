@@ -3,6 +3,7 @@ package instances
 import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounter"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/database"
 )
@@ -512,6 +513,13 @@ func TowerOfKarazhanHostiles() map[uint32]Identity {
 
 func OnyxiaHostiles(fl database.WoWFlavor) *identifier.Identifier {
 	hostile := make(map[uint32]Identity)
+	if fl.Has(database.FlavorTurtle) {
+		// Observed Lava Fissure gameobjects. Category only: do not use LoadAdds,
+		// which would change affiliation and make these encounter combatants.
+		for _, entry := range []uint32{176809, 176823, 176824, 176825, 176833, 176912, 176913} {
+			hostile[entry] = Identity{Category: unitdb.CategoryEnvironment, Affiliation: types.AffiliationUnknown}
+		}
+	}
 	LoadAdds(hostile, map[uint32]string{
 		12129: "Onyxian Warder",
 		11262: "Onyxian Whelp",

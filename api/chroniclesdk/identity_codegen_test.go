@@ -16,7 +16,7 @@ func TestPossibleHostilesGoCode(t *testing.T) {
 		{Zone: "Z Raid", Units: []IdentityUnit{{EntryID: 10, Category: "ordinary"}, {EntryID: 20, Name: "Boss", Category: "ordinary"}}},
 		{Zone: "1 raid", Units: []IdentityUnit{{EntryID: 3, Category: "unknown"}}},
 	}}
-	for i, category := range []string{"guardian", "scripted_object", "critter", "totem", "trap", "demon", "player", "pet", ""} {
+	for i, category := range []string{"guardian", "scripted_object", "object", "environment", "critter", "totem", "trap", "demon", "player", "pet", ""} {
 		report.Instances[0].Units = append(report.Instances[0].Units, IdentityUnit{EntryID: uint32(100 + i), Name: "Excluded", Category: category})
 	}
 	report.Instances[0].Units = append(report.Instances[0].Units, IdentityUnit{EntryID: 0, Name: "Zero", Category: "unknown"}, IdentityUnit{EntryID: 0x1000000, Name: "Invalid", Category: "ordinary"})

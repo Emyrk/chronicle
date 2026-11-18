@@ -21,6 +21,9 @@ func TestUnitCategories(t *testing.T) {
 		category unitdb.Category
 	}{
 		{creatureGUID(3), unitdb.CategoryGuardian}, {creatureGUID(4), unitdb.CategoryScriptedObject},
+		{guid.GUID(0xF11002B0A84D39A5), unitdb.CategoryObject},
+		{creatureGUID(176296), unitdb.CategoryUnknown},
+		{guid.GUID(0xF110000000000001 | uint64(176297)<<24), unitdb.CategoryUnknown},
 		{0, unitdb.CategoryUnknown}, {1, unitdb.CategoryPlayer},
 		{creatureGUID(1), unitdb.CategoryOrdinary}, {creatureGUID(2), unitdb.CategoryOrdinary},
 		{creatureGUID(2914), unitdb.CategoryCritter}, {creatureGUID(5925), unitdb.CategoryTotem},
@@ -30,6 +33,8 @@ func TestUnitCategories(t *testing.T) {
 	} {
 		require.Equal(t, test.category, units.Category(test.id, zone), test.id.String())
 	}
+	require.Equal(t, unitdb.CategoryObject, units.Category(guid.GUID(0xF11002B0A84D39A5)))
+	require.False(t, zone.IdentifyUnit(guid.GUID(0xF11002B0A84D39A5)).CanBattle())
 	require.True(t, zone.IdentifyUnit(creatureGUID(1)).Boss)
 	require.True(t, zone.IdentifyUnit(creatureGUID(3)).Boss)
 	require.Equal(t, unitdb.CategoryUnknown, units.Category(creatureGUID(3), otherZone))

@@ -45,7 +45,7 @@ func TestIdentityReportPreservesSpellDiagnostics(t *testing.T) {
 
 func TestIdentityInstancePreservesAllCategories(t *testing.T) {
 	t.Parallel()
-	categories := []unitdb.Category{unitdb.CategoryUnknown, unitdb.CategoryOrdinary, unitdb.CategoryGuardian, unitdb.CategoryScriptedObject, unitdb.CategoryCritter, unitdb.CategoryTotem, unitdb.CategoryTrap, unitdb.CategoryDemon, unitdb.CategoryPlayer, unitdb.CategoryPet}
+	categories := []unitdb.Category{unitdb.CategoryUnknown, unitdb.CategoryOrdinary, unitdb.CategoryGuardian, unitdb.CategoryScriptedObject, unitdb.CategoryObject, unitdb.CategoryEnvironment, unitdb.CategoryCritter, unitdb.CategoryTotem, unitdb.CategoryTrap, unitdb.CategoryDemon, unitdb.CategoryPlayer, unitdb.CategoryPet}
 	finalized := &instances.FinalizedInstance{UnitCategories: make(map[guid.GUID]unitdb.Category)}
 	for i, category := range categories {
 		id := guid.GUID(0xF130000844003FB5) + guid.GUID(i)
