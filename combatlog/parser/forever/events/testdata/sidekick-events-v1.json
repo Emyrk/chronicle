@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "kind": "sidekick-events",
+  "sources": [
+    {
+      "account": "EXAMPLE_ACCOUNT",
+      "source": "WTF/Account/EXAMPLE_ACCOUNT/SavedVariables/ChronicleCompanionForever.lua",
+      "collections_lua": "{\r\n[\"last_updated\"] = 1700000100,\r\n[\"scouting\"] = {\r\n[\"Version\"] = 1,\r\n[\"Players\"] = {\r\n[\"Player-0000-00000001\"] = {\r\n[\"At\"] = {1700000000, 1700000000, 1700000060},\r\n[\"Levels\"] = {17, \"_\", false},\r\n[\"Name\"] = \"Example-Character\",\r\n[\"LastSeen\"] = 1700000100,\r\n[\"Party\"] = {true, \"_\", false},\r\n[\"Guilds\"] = {false, \"\", \"Example Guild\"},\r\n},\r\n[\"Player-0000-00000002\"] = {\r\n[\"At\"] = {1700000000},\r\n[\"Levels\"] = {25},\r\n[\"Name\"] = \"玩家-Example\",\r\n[\"LastSeen\"] = 1700000060,\r\n[\"Party\"] = {false},\r\n[\"Guilds\"] = {\"Quoted \\\"Guild\\\"\"},\r\n},\r\n},\r\n},\r\n[\"future_collection\"] = { [\"unknown\"] = {true, false, \"_\"} },\r\n}"
+    }
+  ]
+}

@@ -14,6 +14,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/messagesource"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
+	"github.com/Emyrk/chronicle/internal/luadata"
 )
 
 const (
@@ -45,11 +46,11 @@ func (Decoder) Decode(ctx context.Context, reader io.Reader) (messagesource.Mess
 	if len(data) > maxSavedVariablesBytes {
 		return nil, fmt.Errorf("SavedVariables exceeds %d bytes", maxSavedVariablesBytes)
 	}
-	root, err := parseSavedVariables(string(data))
+	root, err := parseSavedVariables(ctx, string(data))
 	if err != nil {
 		return nil, err
 	}
-	payload, ok := root.fields["position_payload"]
+	payload, ok := root.Fields["position_payload"]
 	if !ok {
 		return nil, fmt.Errorf("sidekick SavedVariables position_payload not found")
 	}
@@ -97,8 +98,8 @@ func (s *Source) SchemaVersion() int32   { return s.schemaVersion }
 func (s *Source) SawUnitPosition() bool  { return s.sawUnitPosition }
 func (s *Source) SawUnitResources() bool { return s.sawUnitResources }
 
-func decodePayload(ctx context.Context, payload luaValue) ([]messages.Message, int32, error) {
-	if payload.kind != luaTable {
+func decodePayload(ctx context.Context, payload luadata.Value) ([]messages.Message, int32, error) {
+	if payload.Kind != luadata.Table {
 		return nil, 0, fmt.Errorf("payload must be a table")
 	}
 	schema, err := requiredUint(payload, "schema_version")
@@ -127,7 +128,7 @@ func decodePayload(ctx context.Context, payload luaValue) ([]messages.Message, i
 	}
 }
 
-func decodeGUIDs(ctx context.Context, payload luaValue) ([]guid.GUID, int, error) {
+func decodeGUIDs(ctx context.Context, payload luadata.Value) ([]guid.GUID, int, error) {
 	guidValues, err := requiredArray(payload, "guids")
 	if err != nil {
 		return nil, 0, err
@@ -142,28 +143,28 @@ func decodeGUIDs(ctx context.Context, payload luaValue) ([]guid.GUID, int, error
 		if err := ctx.Err(); err != nil {
 			return nil, 0, err
 		}
-		if value.kind != luaString {
+		if value.Kind != luadata.String {
 			return nil, 0, fmt.Errorf("guids[%d] must be a string", index+1)
 		}
-		if len(value.text) == 0 || len(value.text) > 64 || !isASCII(value.text) {
+		if len(value.Text) == 0 || len(value.Text) > 64 || !isASCII(value.Text) {
 			return nil, 0, fmt.Errorf("guids[%d] must be non-empty ASCII of at most 64 bytes", index+1)
 		}
-		key := strings.ToLower(value.text)
+		key := strings.ToLower(value.Text)
 		if _, exists := seenGUIDs[key]; exists {
-			return nil, 0, fmt.Errorf("duplicate GUID %q", value.text)
+			return nil, 0, fmt.Errorf("duplicate GUID %q", value.Text)
 		}
 		seenGUIDs[key] = struct{}{}
-		parsed, err := guid.FromString(value.text)
+		parsed, err := guid.FromString(value.Text)
 		if err != nil || parsed.IsZero() {
-			return nil, 0, fmt.Errorf("guids[%d] invalid GUID %q", index+1, value.text)
+			return nil, 0, fmt.Errorf("guids[%d] invalid GUID %q", index+1, value.Text)
 		}
 		guids[index] = parsed
-		guidBytes += len(value.text) + 1
+		guidBytes += len(value.Text) + 1
 	}
 	return guids, guidBytes, nil
 }
 
-func decodePayloadV1(ctx context.Context, payload luaValue) ([]messages.Message, error) {
+func decodePayloadV1(ctx context.Context, payload luadata.Value) ([]messages.Message, error) {
 	guids, guidBytes, err := decodeGUIDs(ctx, payload)
 	if err != nil {
 		return nil, err
@@ -181,14 +182,14 @@ func decodePayloadV1(ctx context.Context, payload luaValue) ([]messages.Message,
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if value.kind != luaString || value.text == "" || !isASCII(value.text) {
+		if value.Kind != luadata.String || value.Text == "" || !isASCII(value.Text) {
 			return nil, fmt.Errorf("chunks[%d] must be a non-empty ASCII string", chunkIndex+1)
 		}
-		encodedBytes += len(value.text)
+		encodedBytes += len(value.Text)
 		if encodedBytes > maxEncodedBytes {
 			return nil, fmt.Errorf("encoded content exceeds %d bytes", maxEncodedBytes)
 		}
-		ticks, err := decodeChunkV1(ctx, value.text, guids, &result, &positionCount)
+		ticks, err := decodeChunkV1(ctx, value.Text, guids, &result, &positionCount)
 		if err != nil {
 			return nil, fmt.Errorf("chunks[%d]: %w", chunkIndex+1, err)
 		}
@@ -213,15 +214,15 @@ type stateRecord struct {
 	state     vitalState
 }
 
-func decodePayloadV2(ctx context.Context, payload luaValue) ([]messages.Message, error) {
+func decodePayloadV2(ctx context.Context, payload luadata.Value) ([]messages.Message, error) {
 	return decodePayloadWithVitals(ctx, payload, false)
 }
 
-func decodePayloadV3(ctx context.Context, payload luaValue) ([]messages.Message, error) {
+func decodePayloadV3(ctx context.Context, payload luadata.Value) ([]messages.Message, error) {
 	return decodePayloadWithVitals(ctx, payload, true)
 }
 
-func decodePayloadWithVitals(ctx context.Context, payload luaValue, hasFloor bool) ([]messages.Message, error) {
+func decodePayloadWithVitals(ctx context.Context, payload luadata.Value, hasFloor bool) ([]messages.Message, error) {
 	guids, guidBytes, err := decodeGUIDs(ctx, payload)
 	if err != nil {
 		return nil, err
@@ -243,14 +244,14 @@ func decodePayloadWithVitals(ctx context.Context, payload luaValue, hasFloor boo
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if value.kind != luaString || value.text == "" || !isASCII(value.text) {
+		if value.Kind != luadata.String || value.Text == "" || !isASCII(value.Text) {
 			return nil, fmt.Errorf("state_chunks[%d] must be a non-empty ASCII string", chunkIndex+1)
 		}
-		encodedBytes += len(value.text)
+		encodedBytes += len(value.Text)
 		if encodedBytes > maxEncodedBytes {
 			return nil, fmt.Errorf("encoded content exceeds %d bytes", maxEncodedBytes)
 		}
-		records, err := decodeStateChunk(ctx, value.text, guids, &stateRecords)
+		records, err := decodeStateChunk(ctx, value.Text, guids, &stateRecords)
 		if err != nil {
 			return nil, fmt.Errorf("state_chunks[%d]: %w", chunkIndex+1, err)
 		}
@@ -269,14 +270,14 @@ func decodePayloadWithVitals(ctx context.Context, payload luaValue, hasFloor boo
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if value.kind != luaString || value.text == "" || !isASCII(value.text) {
+		if value.Kind != luadata.String || value.Text == "" || !isASCII(value.Text) {
 			return nil, fmt.Errorf("chunks[%d] must be a non-empty ASCII string", chunkIndex+1)
 		}
-		encodedBytes += len(value.text)
+		encodedBytes += len(value.Text)
 		if encodedBytes > maxEncodedBytes {
 			return nil, fmt.Errorf("encoded content exceeds %d bytes", maxEncodedBytes)
 		}
-		ticks, err := decodeChunkV2(ctx, value.text, guids, stateBatchesByEpoch, stateByGUID, &result, &positionCount, hasFloor)
+		ticks, err := decodeChunkV2(ctx, value.Text, guids, stateBatchesByEpoch, stateByGUID, &result, &positionCount, hasFloor)
 		if err != nil {
 			return nil, fmt.Errorf("chunks[%d]: %w", chunkIndex+1, err)
 		}
@@ -289,7 +290,7 @@ func decodePayloadWithVitals(ctx context.Context, payload luaValue, hasFloor boo
 	return result, nil
 }
 
-func validateDiagnostics(payload luaValue, chunks, stateChunks []luaValue, tickCount, positionCount, stateCount, encodedBytes uint64, lastChunkTicks, lastStateChunkRecords int) error {
+func validateDiagnostics(payload luadata.Value, chunks, stateChunks []luadata.Value, tickCount, positionCount, stateCount, encodedBytes uint64, lastChunkTicks, lastStateChunkRecords int) error {
 	checks := []struct {
 		name string
 		got  uint64
@@ -324,8 +325,8 @@ func validateDiagnostics(payload luaValue, chunks, stateChunks []luaValue, tickC
 	return nil
 }
 
-func validateOptionalCount(payload luaValue, name string, chunks, lastCount int) error {
-	value, ok := payload.fields[name]
+func validateOptionalCount(payload luadata.Value, name string, chunks, lastCount int) error {
+	value, ok := payload.Fields[name]
 	if !ok {
 		return nil
 	}
@@ -650,51 +651,62 @@ func decodeBase36(text string) (uint64, error) {
 	return value, nil
 }
 
-func requiredArray(table luaValue, name string) ([]luaValue, error) {
-	value, ok := table.fields[name]
-	if !ok || value.kind != luaTable {
+func requiredArray(table luadata.Value, name string) ([]luadata.Value, error) {
+	value, ok := table.Fields[name]
+	if !ok || value.Kind != luadata.Table {
 		return nil, fmt.Errorf("%s must be an array", name)
 	}
-	result := append([]luaValue(nil), value.array...)
-	for key, element := range value.fields {
+	result := append([]luadata.Value(nil), value.Array...)
+	// Preserve the legacy decoder's acceptance of string-encoded array indices.
+	fields := make(map[string]luadata.Value, len(value.Fields)+len(value.NumericFields))
+	for key, element := range value.Fields {
+		fields[key] = element
+	}
+	for key, element := range value.NumericFields {
+		if _, exists := fields[key]; exists {
+			return nil, fmt.Errorf("%s array index %s is duplicate", name, key)
+		}
+		fields[key] = element
+	}
+	for key, element := range fields {
 		index, err := strconv.Atoi(key)
 		if err != nil || index < 1 {
 			return nil, fmt.Errorf("%s must contain only positive integer keys", name)
 		}
-		if index <= len(value.array) || index > len(value.array)+len(value.fields) {
+		if index <= len(value.Array) || index > len(value.Array)+len(fields) {
 			return nil, fmt.Errorf("%s array index %d is duplicate or non-contiguous", name, index)
 		}
 		for len(result) < index {
-			result = append(result, luaValue{})
+			result = append(result, luadata.Value{})
 		}
 		result[index-1] = element
 	}
 	for index, element := range result {
-		if element.kind == luaNil {
+		if element.Kind == luadata.Nil {
 			return nil, fmt.Errorf("%s array index %d is missing", name, index+1)
 		}
 	}
 	return result, nil
 }
-func requiredString(table luaValue, name string) (string, error) {
-	value, ok := table.fields[name]
-	if !ok || value.kind != luaString {
+func requiredString(table luadata.Value, name string) (string, error) {
+	value, ok := table.Fields[name]
+	if !ok || value.Kind != luadata.String {
 		return "", fmt.Errorf("%s must be a string", name)
 	}
-	return value.text, nil
+	return value.Text, nil
 }
-func requiredUint(table luaValue, name string) (uint64, error) {
-	value, ok := table.fields[name]
+func requiredUint(table luadata.Value, name string) (uint64, error) {
+	value, ok := table.Fields[name]
 	if !ok {
 		return 0, fmt.Errorf("%s is required", name)
 	}
 	return valueUint(value, name)
 }
-func valueUint(value luaValue, name string) (uint64, error) {
-	if value.kind != luaNumber {
+func valueUint(value luadata.Value, name string) (uint64, error) {
+	if value.Kind != luadata.Number {
 		return 0, fmt.Errorf("%s must be a non-negative integer", name)
 	}
-	parsed, err := strconv.ParseUint(value.text, 10, 64)
+	parsed, err := strconv.ParseUint(value.Text, 10, 64)
 	if err != nil {
 		return 0, fmt.Errorf("%s must be a non-negative integer", name)
 	}
