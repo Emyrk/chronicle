@@ -1,3 +1,4 @@
+import { CopyUnknownsButton } from "./CopyUnknownsButton";
 import { copyPossibleHostilesCode } from "./possibleHostilesExport";
 import { useState } from "react";
 import { ChevronRight, Fingerprint } from "lucide-react";
@@ -66,6 +67,7 @@ export function IdentitySection({ identity }: { identity: IdentityReport }) {
               {instances.map((instance, index) => (
                 <details key={index} open>
                   <summary className="cursor-pointer text-sm font-medium">{instance.name} · {instance.zone} · Instance {index + 1}</summary>
+                  <CopyUnknownsButton instance={instance} instanceNumber={index + 1} />
                   <div className="styled-scrollbar mt-2 space-y-1 max-h-80 overflow-auto">
                     {instance.units.filter(u => category === "all" || u.category === category).map(unit => (
                       <div key={`${unit.category}:${unit.entry_id}`} className={`rounded p-2 text-xs ${unit.category === "unknown" ? "bg-amber-500/10 border border-amber-500/40" : "bg-muted/30"}`}>

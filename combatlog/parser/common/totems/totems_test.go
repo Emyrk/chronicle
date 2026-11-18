@@ -2,6 +2,7 @@ package totems
 
 import (
 	"testing"
+	"time"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/stretchr/testify/require"
@@ -27,5 +28,21 @@ func TestIsTotemRequiresCreatureGUID(t *testing.T) {
 	} {
 		_, ok := IsTotem(id)
 		require.False(t, ok)
+	}
+}
+
+func TestSuperiorHealingWard(t *testing.T) {
+	t.Parallel()
+	want := Totem{ID: 10218, Name: "Superior Healing Ward", NormalDuration: 30 * time.Second}
+	ward, ok := EntryIsTotem(10218)
+	require.True(t, ok)
+	require.Equal(t, want, ward)
+	require.Equal(t, 30*time.Second, ward.MaxDuration())
+	for _, high := range []uint64{0xF130000000000000, 0xF140000000000000, 0xF150000000000000, 0xF110000000000000} {
+		ward, ok := IsTotem(totemEntryGUID(high, 10218))
+		require.Equal(t, high == 0xF130000000000000, ok)
+		if ok {
+			require.Equal(t, want, ward)
+		}
 	}
 }

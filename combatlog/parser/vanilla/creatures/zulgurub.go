@@ -6,8 +6,8 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
-	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 )
 
 const (
@@ -45,6 +45,18 @@ func NewHighPriestArlokk(id guid.GUID, all *characters.Characters) (characters.C
 // They are insignificant, so just kill them with the boss.
 func NewJindoHexxer(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
 	return characters.NewAdsGoWithBoss(11380, 14826)(id, all)
+}
+
+// NewShadeOfJindo keeps Jin'do's shades from contributing encounter activity.
+// Their ordinary hostile identity is independent of this activity policy.
+func NewShadeOfJindo(id guid.GUID, _ *characters.Characters) (characters.Character, bool) {
+	if !id.IsCreature() {
+		return nil, false
+	}
+	if entry, ok := id.GetEntry(); !ok || entry != 14986 {
+		return nil, false
+	}
+	return characters.NewNeverActive(id), true
 }
 
 type HighPriestThekalParty struct {

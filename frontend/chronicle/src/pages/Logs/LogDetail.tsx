@@ -1,3 +1,4 @@
+import { CopyUnknownsButton } from "./CopyUnknownsButton";
 import { IdentitySection } from "./IdentitySection";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
@@ -541,6 +542,14 @@ function TimingSection({ report, logId }: { report: LogParseReport; logId: strin
                           <AlertTriangle className="h-3.5 w-3.5" />
                           Unknown Units ({Object.keys(inst.unknown_units).length})
                         </div>
+                        <CopyUnknownsButton instanceNumber={idx + 1} instance={{
+                          name: inst.name,
+                          zone: inst.zone ?? "",
+                          units: Object.entries(inst.unknown_units).map(([entry, unit]) => ({
+                            category: "unknown", entry_id: Number(entry), name: unit.name,
+                            unique_count: unit.count, samples: unit.samples ?? [],
+                          })),
+                        }} />
                         <div className="grid gap-1 text-xs">
                           {Object.entries(inst.unknown_units)
                             .sort(([, a], [, b]) => b.count - a.count)

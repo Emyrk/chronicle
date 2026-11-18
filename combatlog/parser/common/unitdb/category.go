@@ -29,7 +29,8 @@ const (
 
 // knownObjects recognizes specific gameobject templates, not every object GUID.
 var knownObjects = map[uint32]Category{
-	176296: CategoryObject, // Portal to Stormwind
+	2061:   CategoryEnvironment, // Campfire
+	176296: CategoryObject,      // Portal to Stormwind
 }
 
 // CategoryIdentifier supplies zone definitions without coupling the shared unit
