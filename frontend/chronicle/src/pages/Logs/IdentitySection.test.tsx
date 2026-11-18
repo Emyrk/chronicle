@@ -7,12 +7,18 @@ describe("identity category report", () => {
     const html = renderToStaticMarkup(<IdentitySection identity={{
       instances: [{ name: "Raid", zone: "Zone", units: [
         { category: "unknown", entry_id: 42, name: "", unique_count: 4, samples: ["0xF13000002A000001"] },
+        { category: "object", entry_id: 176296, name: "Portal to Stormwind", unique_count: 1, samples: [] },
+        { category: "environment", entry_id: 176809, name: "Lava Fissure", unique_count: 7, samples: [] },
         { category: "guardian", entry_id: 43, name: "Helper", unique_count: 1, samples: [] },
       ] }],
       zone_spells: { Zone: [{ spell_id: 123, count: 2 }] },
       unit_spells: { 43: ["Fireball"] },
     }} />);
     for (const text of ["4 unknown", "Category filter", "scripted_object", "totem", "guardian", "0xF13000002A000001", "Instance 1", "Spell 123", "Fireball"]) expect(html).toContain(text);
+    expect(html).toContain('<option value="object">object (1)</option>');
+    expect(html).toContain('<option value="environment">environment (7)</option>');
+    expect(html).toContain("Portal to Stormwind");
+    expect(html).toContain("Lava Fissure");
     expect(html).not.toContain("Generated Go Code");
   });
   it("renders legacy reports without claiming their units are unknown or showing unsafe code", () => {

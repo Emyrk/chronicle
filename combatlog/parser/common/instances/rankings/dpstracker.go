@@ -132,12 +132,7 @@ func (t *DPSTracker) isRankedDamageTarget(target guid.GUID) bool {
 	if t.identifier == nil {
 		return false
 	}
-	entry, ok := target.GetEntry()
-	if !ok {
-		return false
-	}
-	identity, ok := t.identifier.HostileEntries()[entry]
-	return ok && identity.Boss
+	return t.identifier.IdentifyUnit(target).Boss
 }
 
 // ClassifyDamage assigns the encounter's finalized target rule to a buffered

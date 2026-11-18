@@ -58,7 +58,7 @@ export function IdentitySection({ identity }: { identity: IdentityReport }) {
                 Category filter
                 <select aria-label="Category filter" className="ml-2 rounded border bg-background p-1" value={category} onChange={e => setCategory(e.target.value)}>
                   <option value="all">All categories</option>
-                  {["unknown", "ordinary", "guardian", "scripted_object", "critter", "totem", "trap", "demon", "player", "pet"].map(c => (
+                  {["unknown", "ordinary", "guardian", "scripted_object", "object", "environment", "critter", "totem", "trap", "demon", "player", "pet"].map(c => (
                     <option key={c} value={c}>{c} ({instances.flatMap(i => i.units).filter(u => u.category === c).reduce((sum, u) => sum + u.unique_count, 0)})</option>
                   ))}
                 </select>

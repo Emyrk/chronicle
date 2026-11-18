@@ -39,9 +39,11 @@ func (id Identity) CanBattle() bool {
 }
 
 type Identifier struct {
-	byEntryId map[uint32]Identity
+	byEntryId       map[uint32]Identity
+	byObjectEntryId map[uint32]Identity
 }
 
+// NewIdentifier registers creature templates, also used by vehicle GUIDs.
 func NewIdentifier(byEntryId map[uint32]Identity) *Identifier {
 	return &Identifier{
 		byEntryId: byEntryId,
@@ -52,22 +54,39 @@ func (i *Identifier) AddEntryId(entryId uint32, identity Identity) {
 	i.byEntryId[entryId] = identity
 }
 
-func (i *Identifier) IdentifyUnit(id guid.GUID) Identity {
-	if id.IsPlayer() {
-		return Identity{Affiliation: types.AffiliationUnknown}
+// AddObjectEntryId registers a gameobject template independently of creature
+// entries, which use a separate numeric namespace.
+func (i *Identifier) AddObjectEntryId(entryId uint32, identity Identity) {
+	if i.byObjectEntryId == nil {
+		i.byObjectEntryId = make(map[uint32]Identity)
 	}
-	if id.IsPet() {
-		// Pet entry IDs can collide with a regular unit ID.
-		// Since their entry ids are just like player IDs, they are random.
-		return Identity{Affiliation: types.AffiliationUnknown}
-	}
+	i.byObjectEntryId[entryId] = identity
+}
 
-	entryID, ok := id.GetEntry()
+func (i *Identifier) lookup(id guid.GUID) (Identity, bool) {
+	if i == nil {
+		return Identity{}, false
+	}
+	var entries map[uint32]Identity
+	switch {
+	case id.IsObject():
+		entries = i.byObjectEntryId
+	case id.IsCreature(), id.IsVehicle():
+		entries = i.byEntryId
+	default:
+		// Player and pet entry bits are not creature template IDs.
+		return Identity{}, false
+	}
+	entry, ok := id.GetEntry()
 	if !ok {
-		return Identity{Affiliation: types.AffiliationUnknown}
+		return Identity{}, false
 	}
+	identity, exists := entries[entry]
+	return identity, exists
+}
 
-	identity, exists := i.byEntryId[entryID]
+func (i *Identifier) IdentifyUnit(id guid.GUID) Identity {
+	identity, exists := i.lookup(id)
 	if !exists {
 		return Identity{Affiliation: types.AffiliationUnknown}
 	}
@@ -82,14 +101,7 @@ func (i *Identifier) HostileEntries() map[uint32]Identity {
 // UnitCategory resolves only explicitly registered zone entries. It has no
 // lookup-count side effects; unknown reporting uses observed instance membership.
 func (i *Identifier) UnitCategory(id guid.GUID) unitdb.Category {
-	if i == nil || id.IsZero() || id.IsPlayer() || id.IsPet() {
-		return unitdb.CategoryUnknown
-	}
-	entry, ok := id.GetEntry()
-	if !ok {
-		return unitdb.CategoryUnknown
-	}
-	identity, exists := i.byEntryId[entry]
+	identity, exists := i.lookup(id)
 	if !exists {
 		return unitdb.CategoryUnknown
 	}

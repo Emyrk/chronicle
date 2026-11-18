@@ -17,6 +17,8 @@ const (
 	CategoryOrdinary       Category = "ordinary"
 	CategoryGuardian       Category = "guardian"
 	CategoryScriptedObject Category = "scripted_object"
+	CategoryObject         Category = "object"
+	CategoryEnvironment    Category = "environment"
 	CategoryCritter        Category = "critter"
 	CategoryTotem          Category = "totem"
 	CategoryTrap           Category = "trap"
@@ -24,6 +26,11 @@ const (
 	CategoryPlayer         Category = "player"
 	CategoryPet            Category = "pet"
 )
+
+// knownObjects recognizes specific gameobject templates, not every object GUID.
+var knownObjects = map[uint32]Category{
+	176296: CategoryObject, // Portal to Stormwind
+}
 
 // CategoryIdentifier supplies zone definitions without coupling the shared unit
 // database to an instance or retaining zone classifications across instances.
@@ -50,6 +57,14 @@ func (us *Units) Category(g guid.GUID, identifiers ...CategoryIdentifier) Catego
 	}
 	if _, ok := traps.IsTrap(g); ok {
 		return CategoryTrap
+	}
+	// Only recognized gameobjects have an object category. Unknown objects stay
+	// unknown, and creature entry IDs must not collide with gameobject entries.
+	if g.IsObject() {
+		entry, _ := g.GetEntry()
+		if category, ok := knownObjects[entry]; ok {
+			return category
+		}
 	}
 	if g.IsCreature() {
 		if _, ok := warlockdemon.IsWarlockDemon(g); ok {
