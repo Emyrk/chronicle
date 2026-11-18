@@ -12,6 +12,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/forever/events"
 	"github.com/Emyrk/chronicle/combatlog/parser/forever/scouting"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/storage"
 	"github.com/google/uuid"
@@ -67,7 +68,7 @@ type scoutingPlayerInput struct {
 	Gender             *int       `json:"gender"`
 }
 
-func scoutingPayload(players *scouting.Scouting, realmID uuid.UUID) ([]byte, error) {
+func scoutingPayload(players *scouting.Scouting, realms map[guid.GUID]uuid.UUID) ([]byte, error) {
 	ids := players.PlayerIDs()
 	rows := make([]scoutingPlayerInput, 0, len(ids))
 	timestamp := func(o *scouting.Observation) *time.Time {
@@ -78,6 +79,10 @@ func scoutingPayload(players *scouting.Scouting, realmID uuid.UUID) ([]byte, err
 		return &t
 	}
 	for _, id := range ids {
+		realmID, ok := realms[id]
+		if !ok || realmID == uuid.Nil {
+			continue
+		}
 		snapshot, _ := players.Latest(id)
 		known := snapshot.Known
 		row := scoutingPlayerInput{ID: id.String(), RealmID: realmID, Name: snapshot.Name}
@@ -104,8 +109,10 @@ func scoutingPayload(players *scouting.Scouting, realmID uuid.UUID) ([]byte, err
 // Enrich only missing fields on existing unit messages. Never synthesize party,
 // affiliation, or guild membership, which could change raid ownership votes.
 type scoutingAdvancer struct {
-	source  consumers.Advancer
-	players *scouting.Scouting
+	realms        map[guid.GUID]uuid.UUID
+	uploadRealmID uuid.UUID
+	source        consumers.Advancer
+	players       *scouting.Scouting
 }
 
 func (s *scoutingAdvancer) Advance(ctx context.Context) ([]messages.Message, error) {
@@ -113,6 +120,9 @@ func (s *scoutingAdvancer) Advance(ctx context.Context) ([]messages.Message, err
 	for i, message := range batch {
 		unit, ok := message.(*messages.Unit)
 		if !ok {
+			continue
+		}
+		if realmID, resolved := s.realms[unit.Guid]; !resolved || realmID == uuid.Nil || realmID != s.uploadRealmID {
 			continue
 		}
 		known := s.players.KnownAt(unit.Guid, unit.Date().Unix())

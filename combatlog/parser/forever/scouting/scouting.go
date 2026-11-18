@@ -28,6 +28,11 @@ type Observation struct {
 }
 
 type Player struct {
+	// Identity scalars are latest retained metadata, not timestamped history.
+	// They must never be projected onto At observations.
+	Realm        string
+	Race         string
+	Gender       *int
 	Name         string
 	LastSeen     int64
 	Observations []Observation
@@ -151,6 +156,23 @@ func decodePlayer(id string, value luadata.Value) (Player, error) {
 		return p, fmt.Errorf("name must be a nonempty string")
 	}
 	p.Name = name.Text
+	for field, target := range map[string]*string{"Realm": &p.Realm, "Race": &p.Race} {
+		if scalar, exists := value.Fields[field]; exists && scalar.Kind != luadata.Nil {
+			if scalar.Kind != luadata.String || scalar.Text == "" {
+				return p, fmt.Errorf("%s must be a nonempty scalar string", field)
+			}
+			*target = scalar.Text
+		}
+	}
+	if scalar, exists := value.Fields["Gender"]; exists && scalar.Kind != luadata.Nil {
+		gender, err := integer(scalar)
+		if err != nil || gender < 1 || gender > 3 {
+			return p, fmt.Errorf("gender must be UnitSex 1, 2, or 3")
+		}
+		g := int(gender)
+		p.Gender = &g
+	}
+
 	last, err := integer(value.Fields["LastSeen"])
 	if err != nil || last < 0 {
 		return p, fmt.Errorf("LastSeen must be a nonnegative integer")
