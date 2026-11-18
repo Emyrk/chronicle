@@ -62,6 +62,7 @@ func VanillaCharacterFactories(flavor database.WoWFlavor) []characters.Character
 		NewHighPriestessJeklik,
 		NewHighPriestThekalParty,
 		NewJindoHexxer,
+		NewShadeOfJindo,
 		NewHooktoothFrenzy,
 		// Scholomance
 		NewJandiceBarov,

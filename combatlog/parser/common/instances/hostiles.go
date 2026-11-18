@@ -599,6 +599,7 @@ func RagefireChasmHostiles() map[uint32]Identity {
 func ZulGurubHostiles(fl database.WoWFlavor) *identifier.Identifier {
 	hostile := make(map[uint32]Identity)
 	LoadAdds(hostile, map[uint32]string{
+		14986: "Shade of Jin'do",
 		14668: "Corrupted Infernal", // Voodoo Slave summon; also used by Nefarian in BWL.
 		11352: "Gurubashi Berserker",
 		11391: "Vilebranch Speaker",
@@ -688,7 +689,15 @@ func ZulGurubHostiles(fl database.WoWFlavor) *identifier.Identifier {
 		})
 	}
 
-	return identifier.NewIdentifier(hostile)
+	id := identifier.NewIdentifier(hostile)
+	if fl.Has(database.FlavorTurtle) {
+		// Category-only identities verified in Turtle Zul'Gurub logs. Do not
+		// infer hostility or activity behavior from their semantic category.
+		id.AddObjectEntryId(2061, Identity{Category: unitdb.CategoryEnvironment}) // Campfire
+		id.AddEntryId(14122, Identity{Category: unitdb.CategoryEnvironment})      // Massive Geyser
+		id.AddEntryId(10218, Identity{Category: unitdb.CategoryTotem})            // Superior Healing Ward
+	}
+	return id
 }
 
 func RazorfenKraulHostiles() map[uint32]Identity {
