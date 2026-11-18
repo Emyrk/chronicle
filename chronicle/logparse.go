@@ -141,13 +141,15 @@ func replacementParseFailureRefreshIDs(ctx context.Context, job *river.Job[ArgsL
 
 type WorkerLogParse struct {
 	parent *Chronicle
+	bot    *chroniclebot.Bot
 
 	river.WorkerDefaults[ArgsLogParse]
 }
 
-func (c *Chronicle) NewWorkerLogParse() river.Worker[ArgsLogParse] {
+func (c *Chronicle) NewWorkerLogParse(bot *chroniclebot.Bot) river.Worker[ArgsLogParse] {
 	return &WorkerLogParse{
 		parent: c,
+		bot:    bot,
 	}
 }
 

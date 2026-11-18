@@ -8,13 +8,9 @@ import (
 	"log/slog"
 
 	"github.com/Emyrk/chronicle/combatlog/consumers"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/critters"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parseerrors"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/totems"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/traps"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/warlockdemon"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
@@ -124,10 +120,7 @@ func (s *Creatures) Process(m messages.Message) error {
 		}
 	}
 
-	for _, gid := range m.Affects() {
-		if s.Skip(gid) {
-			continue
-		}
+	for _, gid := range messages.ObservedGUIDs(m) {
 		if !gid.IsCreature() {
 			continue
 		}
@@ -156,7 +149,7 @@ func (s *Creatures) Process(m messages.Message) error {
 		if s.UnitQuantity[entry] == nil {
 			s.UnitQuantity[entry] = map[guid.GUID]struct{}{}
 		}
-		s.UnitQuantity[entry][unit.Guid] = struct{}{}
+		s.UnitQuantity[entry][gid] = struct{}{}
 	}
 
 	return nil
@@ -195,20 +188,4 @@ func (s *Creatures) Zone(z messages.Zone) {
 		slog.Uint64("exited_instance_id", uint64(s.CurrentZone.InstanceID)),
 		slog.Time("seen", z.Seen),
 	)
-}
-
-func (s *Creatures) Skip(id guid.GUID) bool {
-	if _, ok := totems.IsTotem(id); ok {
-		return true
-	}
-	if _, ok := traps.IsTrap(id); ok {
-		return true
-	}
-	if _, ok := warlockdemon.IsWarlockDemon(id); ok {
-		return true
-	}
-	if ok := critters.IsCritter(id); ok {
-		return true
-	}
-	return false
 }

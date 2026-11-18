@@ -549,6 +549,9 @@ func (h *Hookable) speedrunReentryBoundary() (time.Time, time.Duration, bool) {
 // ShouldSplitDerived reports whether m starts activity in a different derived
 // sub-instance after this segment has already completed a fight.
 func (h *Hookable) ShouldSplitDerived(m messages.Message) bool {
+	if h.units.MessageHasCategory(m, unitdb.CategoryCritter, h.Identifier) {
+		return false
+	}
 	if h.derivedName == nil || h.FightActive() || len(h.completedFights) == 0 {
 		return false
 	}
@@ -572,6 +575,9 @@ func (h *Hookable) FightActive() bool {
 }
 
 func (h *Hookable) bossDeathEndsCurrentFight(m messages.Message) bool {
+	if h.units.MessageHasCategory(m, unitdb.CategoryCritter, h.Identifier) {
+		return false
+	}
 	slain, ok := m.(*messages.Slain)
 	if !ok || !h.bossDeathEndsExplicitFight || h.currentFight == nil || !h.currentFight.active() || h.explicitEncounter == nil {
 		return false
@@ -642,7 +648,7 @@ func (h *Hookable) Process(m messages.Message) error {
 		return fmt.Errorf("cannot process message after instance finalization started")
 	}
 	h.ObserveUnits(m)
-	if at := m.Date(); at.After(h.lastActivity) {
+	if at := m.Date(); at.After(h.lastActivity) && !h.units.MessageHasCategory(m, unitdb.CategoryCritter, h.Identifier) {
 		h.lastActivity = at
 	}
 	return h.process(m)

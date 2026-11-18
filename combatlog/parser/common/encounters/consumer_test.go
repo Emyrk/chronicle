@@ -582,3 +582,33 @@ func TestSameSizeModeChangesDoNotSplitInstance(t *testing.T) {
 	require.Len(t, state.Instances, 2)
 	require.NotSame(t, first, state.CurrentInstance)
 }
+
+func TestInstanceCatalogueIncludesMetadataOnlyAndOutOfCombatMessages(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	state := NewWithInstanceResolver(ctx, logger, func(_ bool, z zone.Zone, db *unitdb.Units) *instances.Hookable {
+		return instances.NewHookable(ctx, logger, db, z, instances.InstanceParams{Name: z.Name, MatchesZone: func(other zone.Zone) bool { return other.Name == z.Name }, Idf: identifier.NewIdentifier(map[uint32]instances.Identity{})})
+	})
+	at := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+	state.Zone(messages.Zone{Zone: zone.Zone{Name: "first", Seen: at}})
+	first := state.CurrentInstance
+	vehicle := guid.GUID(0xF150000123000001)
+	controller, member := guid.GUID(1), guid.GUID(2)
+	group := &messages.RaidGroup{MessageBase: messages.Base(at)}
+	group.Groups[0][0] = member
+	require.NoError(t, state.Process(group))
+	require.NoError(t, state.Process(&messages.VehicleControl{MessageBase: messages.Base(at), VehicleGUID: vehicle, ControllerGUID: controller}))
+	require.NoError(t, state.Process(&messages.UnitTarget{MessageBase: messages.Base(at), Unit: controller, Target: &vehicle}))
+	state.Zone(messages.Zone{Zone: zone.Zone{Name: "second", Seen: at.Add(time.Minute)}})
+	second := state.CurrentInstance
+	other := guid.GUID(0xF130000555000001)
+	require.NoError(t, state.Process(&messages.UnitTarget{MessageBase: messages.Base(at.Add(time.Minute)), Unit: other}))
+	result, err := first.Finalize(ctx)
+	require.NoError(t, err)
+	require.Empty(t, result.Encounters)
+	require.ElementsMatch(t, []guid.GUID{vehicle, controller, member}, result.PersistedUnits)
+	secondResult, err := second.Finalize(ctx)
+	require.NoError(t, err)
+	require.Equal(t, []guid.GUID{other}, secondResult.PersistedUnits)
+}

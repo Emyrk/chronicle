@@ -10,6 +10,7 @@ import (
 
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // UnknownUnitCategory describes unique observed GUIDs that remain unclassified
@@ -100,4 +101,9 @@ func boundedUnknownUnitField(value string) string {
 		}
 	}
 	return value
+}
+
+// UnknownUnitInstanceURL uses the same tenant and durable-slug routing as raid announcements.
+func (b *Bot) UnknownUnitInstanceURL(instanceID uuid.UUID, slug, tenantSlug pgtype.Text) string {
+	return b.instanceURL(instanceID, slug, tenantSlug)
 }
