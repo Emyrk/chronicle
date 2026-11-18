@@ -757,7 +757,7 @@ INSERT INTO game_players (
 SELECT o.id, o.realm_id, o.name, COALESCE(o.class, 'UNKNOWN'),
   COALESCE(o.race, 'Unknown'), COALESCE(o.gender, 'Unknown'), o.faction,
   COALESCE(o.level, 0), g.id, '-infinity'::timestamptz,
-  CASE WHEN o.name <> '' THEN o.name_observed_at END,
+  CASE WHEN o.name NOT IN ('', 'Unknown') THEN o.name_observed_at END,
   CASE WHEN o.class <> 'UNKNOWN' THEN o.class_observed_at END,
   CASE WHEN o.race <> 'Unknown' THEN o.race_observed_at END,
   CASE WHEN o.gender NOT IN ('Unknown', 'NotSet') THEN o.gender_observed_at END,
@@ -768,8 +768,8 @@ FROM observations o LEFT JOIN observed_guilds g
   ON g.realm_id = o.realm_id AND g.name = o.guild_name AND o.guild_known
 ORDER BY o.realm_id, o.id
 ON CONFLICT (id, realm_id) DO UPDATE SET
-  name = CASE WHEN EXCLUDED.name_observed_at > COALESCE(game_players.name_observed_at, CASE WHEN game_players.scouting_last_seen_at IS NULL AND game_players.name <> '' THEN game_players.updated_at END, '-infinity'::timestamptz) THEN EXCLUDED.name ELSE game_players.name END,
-  name_observed_at = CASE WHEN EXCLUDED.name_observed_at > COALESCE(game_players.name_observed_at, CASE WHEN game_players.scouting_last_seen_at IS NULL AND game_players.name <> '' THEN game_players.updated_at END, '-infinity'::timestamptz) THEN EXCLUDED.name_observed_at ELSE COALESCE(game_players.name_observed_at, CASE WHEN game_players.scouting_last_seen_at IS NULL AND game_players.name <> '' THEN game_players.updated_at END) END,
+  name = CASE WHEN EXCLUDED.name_observed_at > COALESCE(game_players.name_observed_at, CASE WHEN game_players.scouting_last_seen_at IS NULL AND game_players.name NOT IN ('', 'Unknown') THEN game_players.updated_at END, '-infinity'::timestamptz) THEN EXCLUDED.name ELSE game_players.name END,
+  name_observed_at = CASE WHEN EXCLUDED.name_observed_at > COALESCE(game_players.name_observed_at, CASE WHEN game_players.scouting_last_seen_at IS NULL AND game_players.name NOT IN ('', 'Unknown') THEN game_players.updated_at END, '-infinity'::timestamptz) THEN EXCLUDED.name_observed_at ELSE COALESCE(game_players.name_observed_at, CASE WHEN game_players.scouting_last_seen_at IS NULL AND game_players.name NOT IN ('', 'Unknown') THEN game_players.updated_at END) END,
   class = CASE WHEN EXCLUDED.class_observed_at > COALESCE(game_players.class_observed_at, CASE WHEN game_players.scouting_last_seen_at IS NULL AND game_players.class <> 'UNKNOWN' THEN game_players.updated_at END, '-infinity'::timestamptz) THEN EXCLUDED.class ELSE game_players.class END,
   class_observed_at = CASE WHEN EXCLUDED.class_observed_at > COALESCE(game_players.class_observed_at, CASE WHEN game_players.scouting_last_seen_at IS NULL AND game_players.class <> 'UNKNOWN' THEN game_players.updated_at END, '-infinity'::timestamptz) THEN EXCLUDED.class_observed_at ELSE COALESCE(game_players.class_observed_at, CASE WHEN game_players.scouting_last_seen_at IS NULL AND game_players.class <> 'UNKNOWN' THEN game_players.updated_at END) END,
   race = CASE WHEN EXCLUDED.race_observed_at > COALESCE(game_players.race_observed_at, CASE WHEN game_players.scouting_last_seen_at IS NULL AND game_players.race <> 'Unknown' THEN game_players.updated_at END, '-infinity'::timestamptz) THEN EXCLUDED.race ELSE game_players.race END,
