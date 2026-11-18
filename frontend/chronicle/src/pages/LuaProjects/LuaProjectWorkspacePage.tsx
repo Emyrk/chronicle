@@ -10,6 +10,8 @@ import { useConfirmLinkNavigation } from "@/hooks/useConfirmLinkNavigation"
 import { modulePath, createRelease, getProject, getProjectPage, latestRelease, nextReleaseTag, type LuaProject } from "./api"
 import { useModulePage } from "./moduleRoute"
 import { LuaBrowserTest } from "./LuaBrowserTest"
+import { LocalModuleDev } from "./LocalModuleDev"
+import { moduleDevToken } from "./localModuleBridge"
 import { panelPackageFromWorkingCopy, validateEditorFiles, type EditorFiles } from "./editorFiles"
 import { applyLuaFileEdit, editorFileKey, LUA_EDITOR_CAPABILITY, parseLuaFileEdit, workingCopyFiles, type LuaToolFile } from "./luaEditorTools"
 import { createCachedStreamProvider, loadPreviewStreams } from "./previewStream"
@@ -166,7 +168,13 @@ export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { pro
   const [layout, setLayoutState] = useState(readLayout)
   const gridRef = useRef<HTMLDivElement>(null)
   const [dragWidth, setDragWidth] = useState<number | null>(null)
-  const [sideTab, setSideTab] = useState<"pane" | "preview">("pane")
+  const [devToken] = useState(() => typeof window === "undefined" ? null : moduleDevToken(window.location.hash))
+  // Pairing tokens must not remain in copied links or browser history after opening the workshop.
+  useEffect(() => {
+    if (devToken) window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search)
+  }, [devToken])
+  const [sideTab, setSideTab] = useState<"pane" | "preview">(devToken ? "preview" : "pane")
+  useEffect(() => { if (devToken) setLayoutState(current => ({ ...current, sideOpen: true })) }, [devToken])
   const [chatRequest, setChatRequest] = useState<WorkshopChatRequest>()
   const [aiEdit, setAiEdit] = useState<AiEdit | null>(null)
   const [diffOpen, setDiffOpen] = useState(false)
@@ -409,10 +417,11 @@ export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { pro
           {instanceId && !validInstanceIdentifier && <p role="alert" className="text-xs text-destructive">Enter a valid instance ID or slug.</p>}
           {instance.isFetching && <p role="status" className="text-xs text-muted-foreground">Loading encounters…</p>}
           {instance.isError && <p role="alert" className="text-xs text-destructive">Instance unavailable.</p>}
-          {localPanel?.error && <p role="alert" className="text-xs text-destructive">{localPanel.error}</p>}
-          {!copy?.valid && copy && <p className="text-xs text-muted-foreground">Fix the source errors to enable previews.</p>}
+          {devToken && <LocalModuleDev token={devToken} instanceId={instance.data ? instanceId : ""} encounterIds={encounterIds} units={previewUnits} events={events} />}
+          {!devToken && localPanel?.error && <p role="alert" className="text-xs text-destructive">{localPanel.error}</p>}
+          {!devToken && !copy?.valid && copy && <p className="text-xs text-muted-foreground">Fix the source errors to enable previews.</p>}
           {instance.data && encounterIds.length === 0 && <p className="text-xs text-muted-foreground">Select an encounter to preview. Ctrl/⌘-click selects several.</p>}
-          {instance.data && localPanel?.value && encounterIds.length > 0 && <Suspense fallback={<p role="status" className="text-xs">Loading local preview…</p>}>
+          {!devToken && instance.data && localPanel?.value && encounterIds.length > 0 && <Suspense fallback={<p role="status" className="text-xs">Loading local preview…</p>}>
             <LuaInstancePreview panel={localPanel.value} instanceId={instanceId} encounterIds={encounterIds} events={events} units={previewUnits} onAskAssistant={askAssistant} />
           </Suspense>}
         </div>

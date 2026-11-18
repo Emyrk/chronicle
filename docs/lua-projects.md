@@ -41,3 +41,22 @@ end)
 The server accepts only regular tar files, bounded to 8 MiB upload, 16 MiB expanded data, and 128 files. It rejects links, traversal, duplicate paths, unknown package file types, and reserved module paths; raster assets must be declared and have matching PNG/JPEG/WebP signatures. It repackages validated files as a sorted ZIP. The panel loader independently validates the ZIP before starting a dedicated Fengari worker. Lua callbacks have instruction limits, scene messages have size and geometry checks, damage projection has event and output limits, and the host terminates a worker that exceeds its time budget. Workers are not an OS memory sandbox; a malicious script can still consume CPU/memory up to browser limits.
 
 The public API catalog lists modules with an available release, but instance selectors currently list only modules the signed-in user owns or contributes to. Guide projects can be created and drafted but **cannot yet be published** through this project system; PR #1217's built-in guide format remains separate. There is currently no general network/API capability and no byte-accurate heap quota. The workshop assistant cannot run instance previews. Sharing a channel means the author's next publish can change what viewers run; there is no stored old artifact for rollback.
+
+## Local development bridge (prototype)
+
+The companion repository at `Emyrk/chronicle-module` provides a local-file workflow for Lua panel modules. Run its dev command with the full workshop URL, for example:
+
+```sh
+npm install
+npm run dev -- --url https://chronicleclassic.com/modules/<author>/<slug>/edit
+```
+
+Use the origin of the actual site hosting your module, including a tenant subdomain when applicable. Open the printed pairing link, select an instance and encounters in Preview, then explicitly **Connect local dev server**. Local file changes replace the ephemeral preview package and restart its worker. The companion's stdio MCP command exposes `preview`, which executes the current source snapshot in the approved browser and returns its revision, selected context, Lua errors, timings, and bounded scene outline. This requires an open, responsive browser tab and a Chronicle deployment containing the bridge. It is not available on older deployments simply by installing the companion repo.
+
+This prototype uses HTTP polling, not WebSockets. The dev server binds only `127.0.0.1:17643`; the browser permits no user-supplied address. Requests omit Chronicle cookies and require a random session token, an approved exact Origin, and a single browser lease. Pairing tokens arrive in the URL fragment and are removed from the workshop URL after opening. The module workshop's CSP permits only this fixed local data endpoint, not local scripts. The browser validates packages with the normal ZIP loader and runs them with existing worker limits. `?safe=1` disables the bridge.
+
+The browser keeps authorized raw event streams locally. Rendered output, which may contain player names, and selected encounter identifiers are shared with the paired local tools. Approve only a dev process and agent you trust. Disconnect aborts in-flight bridge previews; server leases expire when heartbeats stop. MCP previews have a bounded lifetime and pin their source revision so an edit cannot silently change what a pending request runs.
+
+Local source is **not** synchronized into the browser editor. **Save to main** and **Tag release** still act on that editor's working copy, not the local package. Local preview does not upload, save, or publish anything. To retry a failed bridge, disconnect and connect again. To pair after reloading the page, reopen the dev server's link.
+
+Browsers may require explicit local-network permission for an HTTPS page to contact loopback HTTP. Support depends on the browser's mixed-content and local-network policies. No security flags should be disabled as a workaround. Hosted MCP routing through Chronicle is a possible future alternative, not part of this prototype.

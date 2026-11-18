@@ -12,6 +12,8 @@ export type LuaPreviewEventProvider = Pick<PreviewStreamProvider, "getStream">
 export interface LuaInstancePreviewProps {
   /** Entire parsed package from current unsaved editor/archive bytes, never a saved draft or release. */
   panel: PanelPackage
+  /** Local development always starts with live reload enabled. */
+  autoRun?: boolean
   instanceId: string
   encounterIds: readonly string[]
   events: LuaPreviewEventProvider
@@ -36,11 +38,11 @@ function readAutoPreview(): boolean {
  * Ephemeral browser-only preview. No package lookup, upload or server execution. Runs on click, or
  * with Auto on, after every edit (including AI diffs) and encounter selection change.
  */
-export function LuaInstancePreview({ panel, instanceId, encounterIds, events, units, onAskAssistant }: LuaInstancePreviewProps) {
+export function LuaInstancePreview({ panel, instanceId, encounterIds, events, units, onAskAssistant, autoRun = false }: LuaInstancePreviewProps) {
   const [run, setRun] = useState<Run | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
-  const [auto, setAuto] = useState(readAutoPreview)
+  const [auto, setAuto] = useState(() => autoRun || readAutoPreview())
   const controller = useRef<AbortController | null>(null)
   const generation = useRef(0)
   const selection = JSON.stringify(encounterIds)
