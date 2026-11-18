@@ -1582,6 +1582,8 @@ type sqlcQuerier interface {
 	UpsertLuaProjectContributor(ctx context.Context, arg UpsertLuaProjectContributorParams) (LuaProjectContributor, error)
 	UpsertPendingModificationRequest(ctx context.Context, arg UpsertPendingModificationRequestParams) (ApplicationModificationRequest, error)
 	UpsertPlayerGearHistory(ctx context.Context, arg []UpsertPlayerGearHistoryParams) *UpsertPlayerGearHistoryBatchResults
+	// Freeze legacy known-value clocks before advancing snapshot freshness, even when
+	// incoming metadata is unknown. Unknown legacy values have no fallback clock.
 	UpsertPlayers(ctx context.Context, arg []UpsertPlayersParams) *UpsertPlayersBatchResults
 	UpsertRankingRun(ctx context.Context, arg UpsertRankingRunParams) (bool, error)
 	// Recompute and upsert the rankings summary for a single
@@ -1592,6 +1594,14 @@ type sqlcQuerier interface {
 	UpsertRetentionPolicy(ctx context.Context, arg UpsertRetentionPolicyParams) (RetentionPolicy, error)
 	UpsertRetentionPolicyByRealm(ctx context.Context, arg UpsertRetentionPolicyByRealmParams) (RetentionPolicy, error)
 	UpsertRetentionRule(ctx context.Context, arg UpsertRetentionRuleParams) (RetentionRule, error)
+	// Payload contains one row per (id, realm_id), with required name and observed_at.
+	// Explicit per-field clocks are required to update metadata; observed_at is only
+	// a last-seen fallback and guild creation time, never a known-observation clock.
+	// Strict > guards make equal timestamps first-writer-wins (retries are no-ops).
+	// Null/unknown fields are not observations. guild_known=true and empty guild_name
+	// explicitly observes guildlessness; false means membership was not observed.
+	// Scouting-only rows use -infinity snapshot freshness so any real gear can follow.
+	UpsertScoutedPlayers(ctx context.Context, payload []byte) ([]UpsertScoutedPlayersRow, error)
 	UpsertSidekickConfigOverride(ctx context.Context, arg UpsertSidekickConfigOverrideParams) ([]byte, error)
 	UpsertSidekickInstallation(ctx context.Context, arg UpsertSidekickInstallationParams) (SidekickInstallation, error)
 	UpsertSidekickWoWDirectory(ctx context.Context, arg UpsertSidekickWoWDirectoryParams) error
