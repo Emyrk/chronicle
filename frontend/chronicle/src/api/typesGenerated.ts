@@ -2905,6 +2905,20 @@ export interface InferenceAuthorizeResponse {
 }
 
 // From chroniclesdk/inference.go
+/**
+ * InferenceBrowserTool describes a server-defined tool executed only by an active browser capability.
+ */
+export interface InferenceBrowserTool {
+    readonly name: string;
+    readonly description: string;
+    readonly input_schema: Record<string, string>;
+    readonly capability_id: string;
+    readonly capability_version: number;
+    readonly effect: string;
+    readonly confirmation: string;
+}
+
+// From chroniclesdk/inference.go
 export interface InferenceClient {
     readonly session_id: string;
     readonly capabilities: readonly InferenceClientCapability[];
@@ -2933,6 +2947,11 @@ export interface InferenceClientToolResultRequest {
      * UsageEvents asks for a USAGE event after each model call. Older clients reject unknown events, so it is opt-in.
      */
     readonly usage_events?: boolean;
+}
+
+// From chroniclesdk/inference.go
+export interface InferenceClientToolsResponse {
+    readonly tools: readonly InferenceBrowserTool[];
 }
 
 // From chroniclesdk/inference.go
@@ -3079,6 +3098,19 @@ export interface InferenceUsage {
      */
     readonly cost_usd?: number;
     readonly calls: number;
+}
+
+// From chroniclesdk/inference.go
+export interface InferenceValidateClientToolRequest {
+    readonly name: string;
+    readonly capability_id: string;
+    readonly capability_version: number;
+    readonly arguments: Record<string, string>;
+}
+
+// From chroniclesdk/inference.go
+export interface InferenceValidateClientToolResponse {
+    readonly arguments: Record<string, string>;
 }
 
 // From chroniclesdk/characters.go

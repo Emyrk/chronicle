@@ -126,8 +126,8 @@ export function runPreview(input: PreviewRunInput, signal?: AbortSignal, createW
         if (parsed.type === "batch") scene = applySceneBatch(scene, parsed.operations)
         if (parsed.type === "ready") {
           if (replaying) { armWatchdog(); worker.postMessage({ type: "streams", streams, encounterIds: [...encounterIds] }) }
-          // Without a stream there is nothing to replay; the startup drawing arrives right after ready.
-          else queueMicrotask(() => setTimeout(() => finish({ ok: true }), 0))
+          // Ready follows all startup batches, including when the panel draws nothing.
+          else finish({ ok: true })
         }
       } catch (error) {
         finish({ ok: false, error: error instanceof Error ? error.message : "Invalid panel output" })

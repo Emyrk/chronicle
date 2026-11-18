@@ -65,7 +65,8 @@ export function createPanelWorkerHandler(send: (value: unknown) => void) {
         runtime = createGuideRuntime({ entrypoint: input.entrypoint, sources: input.sources,
           capabilities: input.capabilities, panelStreams: input.streams, units: input.units })
         const initial = runtime.start(); startupMs = performance.now() - started
-        send({ type: "ready", protocolVersion: 1 }); flush(initial)
+        // Ready is the startup barrier: every initial drawing batch has been sent.
+        flush(initial); send({ type: "ready", protocolVersion: 1 })
       } else if (input.type === "event") {
         if (!runtime) throw new Error("panel not started")
         phase = "onEvent"; delivered++

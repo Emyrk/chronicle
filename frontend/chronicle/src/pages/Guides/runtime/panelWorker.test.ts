@@ -48,6 +48,8 @@ describe("Lua panel worker capability boundary", () => {
     const messages = start(`for i = 1, 500 do UIParent:CreateFontString("t" .. i):SetText(string.rep("x", 1000)) end`, ["ui"])
     const batches = messages.filter((m): m is { type: "batch"; operations: unknown[] } => (m as { type: string }).type === "batch")
     expect(messages).not.toContainEqual(expect.objectContaining({ type: "error" }))
+    expect(messages.at(-1)).toEqual({ type: "ready", protocolVersion: 1 })
+    expect(messages.slice(0, -1)).toEqual(batches)
     expect(batches.length).toBeGreaterThan(1)
     expect(batches.flatMap(b => b.operations)).toHaveLength(1000)
     for (const batch of batches) expect(new TextEncoder().encode(JSON.stringify(batch)).byteLength).toBeLessThanOrEqual(64 * 1024)
@@ -62,6 +64,10 @@ describe("Lua panel worker capability boundary", () => {
     expect(applySceneBatch(createInitialScene(), operations).canvas).toEqual({ width: 640, height: 1200 })
     expect(start(`UIParent:SetHeight(0)`, ["ui"])).toContainEqual(expect.objectContaining({ type: "error", message: expect.stringMatching(/between 1 and 16384/) }))
     expect(start(`UIParent:SetText("x")`, ["ui"])).toContainEqual(expect.objectContaining({ type: "error", message: expect.stringMatching(/UIParent only supports SetSize/) }))
+  })
+
+  it("signals ready even when startup draws nothing", () => {
+    expect(start("", ["ui"])).toEqual([{ type: "ready", protocolVersion: 1 }])
   })
 
   it("allows UI without input callbacks", () => {

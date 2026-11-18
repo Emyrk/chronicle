@@ -56,6 +56,9 @@ export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "sele
     drawMs.current = 0
     const runtime = new Worker(new URL("../../../Guides/runtime/panelWorker.ts", import.meta.url), { type: "module" })
     workerRef.current = runtime
+    // Reset before startup batches arrive; ready must preserve the scene they built.
+    sceneRef.current = createInitialScene()
+    setScene(sceneRef.current); setError(null); setMetrics(null); setProgress(replaying ? 0 : null)
     let watchdog: ReturnType<typeof setTimeout> | undefined
     const stop = (reason: string, context?: ModuleErrorContext) => {
       clearTimeout(watchdog)
@@ -88,8 +91,6 @@ export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "sele
         }
         const message = parseWorkerMessage(data)
         if (message.type === "ready") {
-          sceneRef.current = createInitialScene()
-          setScene(sceneRef.current); setError(null); setMetrics(null); setProgress(replaying ? 0 : null)
           if (replaying) armWatchdog()
           else clearTimeout(watchdog)
         }
