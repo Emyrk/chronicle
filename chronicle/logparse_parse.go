@@ -18,6 +18,8 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounters"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
+	"github.com/Emyrk/chronicle/combatlog/parser/forever/scouting"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/messagesource"
 	"github.com/Emyrk/chronicle/combatlog/parser/reorder"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/realm"
@@ -62,6 +64,7 @@ func (f overrideGameDB) SpellsByName(ctx context.Context, name string) ([]*chron
 // parseResult holds everything produced by the parse phase that the
 // finalization phase needs.
 type parseResult struct {
+	scouting        map[guid.GUID][]scouting.Player
 	encountersState *encounters.State
 	creaturesState  *creatures.Creatures
 	consumers       *consumers.Consumers
@@ -102,6 +105,14 @@ func (w *WorkerLogParse) parseCombatLog(
 	}
 
 	logCapabilities := initialLogCapabilities(logFormat)
+	var scoutPlayers map[guid.GUID][]scouting.Player
+	if logFormat == database.LogFormatV22Cleu {
+		var err error
+		scoutPlayers, err = w.loadForeverScouting(ctx, artifacts)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	// Server-side logs still use the flavor registry for known instances so
 	// rankings and speedrun rules are attached. The AzerothCore resolver adds
@@ -284,6 +295,9 @@ func (w *WorkerLogParse) parseCombatLog(
 		var parseAdvancer consumers.Advancer = p
 		if logFormat == database.LogFormatV22Cleu {
 			parseAdvancer = reorder.New(p, blizzardmodern.ReorderWindow)
+			if len(scoutPlayers) > 0 {
+				parseAdvancer = &scoutingAdvancer{source: parseAdvancer, players: scoutPlayers}
+			}
 		}
 		consumeErr = c.ConsumeAll(ctx, parseAdvancer)
 		if consumeErr != nil && !errors.Is(consumeErr, io.EOF) {
@@ -357,6 +371,7 @@ func (w *WorkerLogParse) parseCombatLog(
 	}
 
 	return &parseResult{
+		scouting:        scoutPlayers,
 		encountersState: encountersState,
 		creaturesState:  creaturesState,
 		consumers:       c,

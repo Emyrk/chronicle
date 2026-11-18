@@ -120,7 +120,7 @@ func DecodeCollection(collection luadata.Value) (map[string]Player, error) {
 	}
 	players := collection.Fields["Players"]
 	if players.Kind != luadata.Table || len(players.Array) != 0 || len(players.NumericFields) != 0 {
-		return nil, fmt.Errorf("Players must be GUID-keyed")
+		return nil, fmt.Errorf("players must be GUID-keyed")
 	}
 	result := make(map[string]Player, len(players.Fields))
 	keys := make([]string, 0, len(players.Fields))
@@ -148,7 +148,7 @@ func decodePlayer(id string, value luadata.Value) (Player, error) {
 	}
 	name := value.Fields["Name"]
 	if name.Kind != luadata.String || name.Text == "" {
-		return p, fmt.Errorf("Name must be a nonempty string")
+		return p, fmt.Errorf("name must be a nonempty string")
 	}
 	p.Name = name.Text
 	last, err := integer(value.Fields["LastSeen"])
@@ -170,7 +170,7 @@ func decodePlayer(id string, value luadata.Value) (Player, error) {
 	for i, timestamp := range lists[0] {
 		at, err := integer(timestamp)
 		if err != nil || at < 0 || (i > 0 && at < previous.At) {
-			return p, fmt.Errorf("At[%d] must be a chronological nonnegative integer", i+1)
+			return p, fmt.Errorf("at[%d] must be a chronological nonnegative integer", i+1)
 		}
 		row := Observation{GUID: id, At: at, Name: p.Name}
 		for field, v := range []luadata.Value{lists[1][i], lists[2][i], lists[3][i]} {

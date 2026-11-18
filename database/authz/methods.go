@@ -334,6 +334,40 @@ func (z *interceptor) DeleteUploadKey(ctx context.Context, id uuid.UUID) error {
 	return z.Store.DeleteUploadKey(ctx, id)
 }
 
+// UpsertScoutedPlayers registers the same armory/guild relationships as the
+// individual writers, in one authorization batch for the whole scouting file.
+func (z *interceptor) UpsertScoutedPlayers(ctx context.Context, payload []byte) ([]database.UpsertScoutedPlayersRow, error) {
+	rows, err := z.Store.UpsertScoutedPlayers(ctx, payload)
+	if err != nil {
+		return nil, err
+	}
+	b := policy.New()
+	global := b.GlobalChronicle()
+	guilds := make(map[uuid.UUID]struct{})
+	for _, row := range rows {
+		b.Armory_player(row.ID).Chronicle(global)
+		for _, guild := range []uuid.NullUUID{row.GuildID, row.ObservedGuildID} {
+			if guild.Valid {
+				guilds[guild.UUID] = struct{}{}
+			}
+		}
+	}
+	for guild := range guilds {
+		b.Guild(guild).Chronicle(global)
+	}
+	// Keep each authorization request bounded, including files with thousands
+	// of nearby players and guilds. Database persistence remains one statement.
+	txn := *b.Txn()
+	for start := 0; start < len(txn.V1Updates); start += 500 {
+		batch := txn
+		batch.V1Updates = txn.V1Updates[start:min(start+500, len(txn.V1Updates))]
+		if _, err := z.Write(ctx, batch); err != nil {
+			return nil, fmt.Errorf("write scouting authz relations: %w", err)
+		}
+	}
+	return rows, nil
+}
+
 func (z *interceptor) UpsertPlayers(ctx context.Context, args []database.UpsertPlayersParams) *database.UpsertPlayersBatchResults {
 	b := policy.New()
 	g := b.GlobalChronicle()
